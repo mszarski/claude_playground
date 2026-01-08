@@ -5,16 +5,21 @@ This package provides tools for:
 - Converting spherical coordinates (lat/lon/alt) to local Cartesian
 - Extracting geometric features from trajectories
 - Classifying trajectory segments by motion pattern
+- Visualizing trajectories and classification results
 - (Future) Ranking and comparing trajectories via learning
 
 Example usage:
     from trajectory_classifier import classify_trajectory, generate_sample_trajectory
+    from trajectory_classifier.visualization import plot_classified_trajectory
 
     # Generate sample data
     df = generate_sample_trajectory('mixed')
 
     # Classify segments
     result = classify_trajectory(df)
+
+    # Visualize
+    plot_classified_trajectory(result)
 """
 
 from .classifier import classify_trajectory, TrajectoryClassifier
