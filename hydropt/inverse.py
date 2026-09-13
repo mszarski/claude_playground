@@ -46,6 +46,7 @@ class FitHistory:
     params: dict[str, list[list[float]]] = dc_field(default_factory=dict)
     extra: dict[str, list[float]] = dc_field(default_factory=dict)
     seconds: float = 0.0
+    skipped_steps: int = 0
 
     def record(self, loss: float, named: Iterable[tuple[str, Tensor]],
                extra: dict[str, float] | None = None) -> None:
@@ -108,6 +109,7 @@ def fit(
     sigma_t_schedule: float | tuple[float, float] = 3e-3,
     ray_chunk_size: int = 0,
     splat_kwargs: dict | None = None,
+    regulariser: Callable[[], Tensor] | None = None,
     project: Callable[[], None] | None = None,
     callback: Callable[[int, float], None] | None = None,
     log_every: int = 10,
@@ -132,6 +134,10 @@ def fit(
         ray_chunk_size: render in ray chunks of this size to bound memory
             (0 = one shot).
         splat_kwargs: extra arguments forwarded to the splatter.
+        regulariser: returns a scalar penalty added to the data misfit.  Ocean
+            inverse problems are routinely underdetermined -- many profiles or
+            seabeds explain the same arrivals -- and a smoothness penalty is the
+            standard way to pick the least contrived one.
         project: called after each step, under ``no_grad``, to re-impose
             physical constraints.
         callback: ``(iteration, loss)`` hook.
@@ -160,6 +166,7 @@ def fit(
 
     history = FitHistory()
     extra_fns = track or {}
+    n_skipped = 0
     started = time.perf_counter()
 
     for it in range(n_iters):
@@ -174,14 +181,30 @@ def fit(
             kw["chunk_size"] = ray_chunk_size
         pred = render(directions, grid, **kw)
 
-        loss = etc_loss(pred, target_etc, kind=loss_kind)
+        data_loss = etc_loss(pred, target_etc, kind=loss_kind)
+        loss = data_loss if regulariser is None else data_loss + regulariser()
         loss.backward()
-        opt.step()
+
+        # A single non-finite gradient would otherwise turn every parameter into
+        # NaN and silently waste the rest of the run.  Skipping the step keeps
+        # the fit alive and the count is reported, so the problem is visible
+        # rather than hidden.
+        bad = [n for n, p in named
+               if p.grad is not None and not torch.isfinite(p.grad).all()]
+        if bad:
+            n_skipped += 1
+            opt.zero_grad(set_to_none=True)
+            if verbose and n_skipped <= 3:
+                print(f"  iter {it:4d}  skipped: non-finite gradient on {', '.join(bad)}")
+        else:
+            opt.step()
         if project is not None:
             with torch.no_grad():
                 project()
 
         extras = {k: fn() for k, fn in extra_fns.items()}
+        if regulariser is not None:
+            extras.setdefault("data_loss", data_loss.item())
         history.record(loss.item(), named, extras)
         if callback is not None:
             callback(it, loss.item())
@@ -191,4 +214,7 @@ def fit(
                   f"sigma_d {sigma_d:7.2f}  {bits}")
 
     history.seconds = time.perf_counter() - started
+    history.skipped_steps = n_skipped
+    if n_skipped and verbose:
+        print(f"  note: {n_skipped} of {n_iters} steps skipped on non-finite gradients")
     return history

@@ -85,6 +85,9 @@ __all__ = [
 
 SplatMode = Literal["local_min", "global_min", "line_integral"]
 
+# Floor on squared lengths before sqrt, to keep the backward pass finite.
+_LEN_EPS = 1e-12
+
 
 def vertical_line_array(x: float, y: float, z_top: float, z_bottom: float, n: int,
                         *, dtype: torch.dtype | None = None,
@@ -127,10 +130,12 @@ def _closest_approach(
     """
     n_recv = int(receivers.shape[0])
     rel = receivers.view(1, 1, n_recv, 3) - p0.unsqueeze(2)  # [Rc, S, Nr, 3]
-    tstar = (rel * seg.unsqueeze(2)).sum(-1) / seg_len2.unsqueeze(2).clamp_min(1e-30)
+    tstar = (rel * seg.unsqueeze(2)).sum(-1) / seg_len2.unsqueeze(2).clamp_min(_LEN_EPS)
     tstar = tstar.clamp(0.0, 1.0)
     delta = rel - tstar.unsqueeze(-1) * seg.unsqueeze(2)
-    return tstar, delta.norm(dim=-1)
+    # Not delta.norm(): its backward is 0/0 at zero distance, which a ray passing
+    # exactly through a receiver would hit.
+    return tstar, (delta * delta).sum(-1).clamp_min(_LEN_EPS).sqrt()
 
 
 def splat_etc(
@@ -217,7 +222,12 @@ def splat_etc(
         p0, p1 = pos[lo:hi, :-1], pos[lo:hi, 1:]  # [Rc, S, 3]
         seg = p1 - p0
         seg_len2 = (seg * seg).sum(-1)
-        seg_len = seg_len2.clamp_min(0.0).sqrt()
+        # Retired rays are frozen in place and so have zero-length segments.
+        # sqrt(0) has an infinite derivative, and although those segments are
+        # masked out below, autograd still evaluates sqrt's backward on them as
+        # 0/0 = NaN -- which then poisons every parameter gradient.  The floor is
+        # 1e-12 m^2 against real segments of tens of metres.
+        seg_len = seg_len2.clamp_min(_LEN_EPS).sqrt()
 
         tstar, dist = _closest_approach(p0, seg, seg_len2, receivers)  # [Rc, S, Nr]
         live = (alive[lo:hi, :-1] * alive[lo:hi, 1:]) > 0  # [Rc, S]

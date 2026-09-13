@@ -226,7 +226,14 @@ def find_crossing(
 
     for _ in range(n_newton):
         g, dgdt = g_of(t)
-        step = g / torch.where(dgdt.abs() < 1e-30, torch.full_like(dgdt, 1e-30), dgdt)
+        # Floor the magnitude but keep the sign: substituting a fixed positive
+        # epsilon would flip the step direction for a negative slope, and a
+        # 1e-30 denominator makes the *gradient* through this division 1e30.
+        # dg/dt is normally of order the step size; it only collapses for a ray
+        # running parallel to the boundary, where the crossing is genuinely
+        # ill-conditioned and the clamp below is the real guard.
+        safe = dgdt.abs().clamp_min(1e-9)
+        step = g / torch.where(dgdt < 0, -safe, safe)
         t = (t - step).clamp(0.0, 1.0)
     return t
 

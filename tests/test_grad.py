@@ -229,3 +229,48 @@ def test_gradients_are_finite_and_nonzero_for_every_parameter_class():
         assert p.grad is not None, f"{name} has no gradient"
         assert torch.isfinite(p.grad).all(), f"{name} has a non-finite gradient"
         assert p.grad.abs().sum() > 0, f"{name} has an identically zero gradient"
+
+
+# --------------------------------------------------------------------------- #
+# Regressions
+# --------------------------------------------------------------------------- #
+def test_retired_rays_do_not_produce_nan_gradients():
+    """Regression: rays retired by max_bounces freeze in place, leaving
+    zero-length segments.  ``sqrt(0)`` has an infinite derivative, and although
+    those segments are masked out of the splat, autograd still evaluated
+    ``sqrt``'s backward on them as 0/0 -- which turned every parameter gradient,
+    and then every parameter, into NaN a few Adam steps later."""
+    scene = _tiny_scene(
+        bottom=BilinearHeightField(
+            torch.tensor([[198.0, 205.0, 202.0],
+                          [201.0, 196.0, 208.0],
+                          [199.0, 203.0, 197.0]], dtype=torch.float64),
+            origin=(-200.0, -600.0), spacing=(700.0, 1200.0)),
+        # Low enough that a good part of the fan is retired mid-flight.
+        max_bounces=2,
+        learn_source=True,
+    )
+    result = scene.trace(spherical_fan(24, 1, (-35.0, 35.0), (0.0, 0.0)))
+    assert (result.alive[:, -1] == 0).any(), "no ray was retired; test is not exercising the bug"
+
+    _render(scene, n_rays=24, sigma_d=150.0).sum().backward()
+    for name, p in scene.named_parameters():
+        assert p.grad is not None, f"{name} has no gradient"
+        assert torch.isfinite(p.grad).all(), f"{name} has a non-finite gradient"
+
+
+def test_ray_passing_exactly_through_a_receiver_has_finite_gradients():
+    """Zero miss distance is the other place a norm's backward is 0/0."""
+    scene = _tiny_scene(field=IsoProfile(1500.0), learn_source=True,
+                        receivers=torch.tensor([[900.0, 0.0, 60.0]]))
+    # Launched dead level from (0, 0, 60) straight at the receiver.
+    etc = scene.render(torch.tensor([[1.0, 0.0, 0.0]], dtype=torch.float64),
+                       make_time_grid(0.55, 0.75, 24), sigma_d=120.0, sigma_t=6e-3)
+    assert etc.sum() > 0
+    etc.sum().backward()
+    # This ray never bounces, so the boundary losses legitimately have no
+    # gradient at all; what matters is that nothing came back non-finite.
+    graded = {n: p.grad for n, p in scene.named_parameters() if p.grad is not None}
+    assert "source" in graded
+    for name, grad in graded.items():
+        assert torch.isfinite(grad).all(), f"{name} has a non-finite gradient"
