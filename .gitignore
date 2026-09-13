@@ -5,3 +5,9 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+__pycache__/
+*.pyc
+.beads/
+build/
+dist/
+*.egg-info/

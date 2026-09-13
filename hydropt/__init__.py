@@ -1,0 +1,60 @@
+"""hydropt -- a differentiable 3-D underwater acoustic ray tracer in PyTorch.
+
+Coordinates: ``x``, ``y`` horizontal (m); ``z`` depth (m, positive downward,
+zero at the sea surface).  Times in s, sound speed in m/s, losses in dB,
+frequencies in kHz.
+"""
+
+from .absorption import octave_bands, thorp_db_per_km
+from .boundaries import (
+    BilinearHeightField,
+    BoundaryLoss,
+    ConstantLoss,
+    FlatHeight,
+    HeightField,
+    RayleighBottomLoss,
+    find_crossing,
+    grazing_angle,
+    reflect,
+)
+from .fields import (
+    DepthProfile,
+    GriddedField,
+    IsoProfile,
+    LinearGradientProfile,
+    MunkProfile,
+    PiecewiseLinearProfile,
+    SoundSpeedField,
+)
+from .launch import (
+    directions_from_angles,
+    fan_2d,
+    fibonacci_cone,
+    fibonacci_sphere,
+    receiver_cone_importance,
+    spherical_fan,
+)
+from .receiver import (
+    horizontal_line_array,
+    make_time_grid,
+    splat_etc,
+    vertical_line_array,
+)
+from .scene import Scene
+from .tracer import RayState, TraceResult, trace
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "Scene", "trace", "TraceResult", "RayState",
+    "SoundSpeedField", "DepthProfile", "IsoProfile", "LinearGradientProfile",
+    "MunkProfile", "PiecewiseLinearProfile", "GriddedField",
+    "HeightField", "FlatHeight", "BilinearHeightField",
+    "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
+    "reflect", "grazing_angle", "find_crossing",
+    "thorp_db_per_km", "octave_bands",
+    "spherical_fan", "fan_2d", "fibonacci_sphere", "fibonacci_cone",
+    "receiver_cone_importance", "directions_from_angles",
+    "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
+    "__version__",
+]

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hydropt"
+version = "0.1.0"
+description = "Differentiable 3D underwater acoustic ray tracer in PyTorch"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.24",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+plotly = ["plotly>=5.18"]
+dev = ["pytest>=7.4"]
+
+[tool.setuptools]
+packages = ["hydropt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
