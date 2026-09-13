@@ -214,6 +214,7 @@ class PiecewiseLinearProfile(DepthProfile):
         depths: Sequence[float] | Tensor,
         values: Sequence[float] | Tensor,
         *,
+        learnable: bool = True,
         learn_depths: bool = False,
     ) -> None:
         super().__init__()
@@ -225,7 +226,10 @@ class PiecewiseLinearProfile(DepthProfile):
             raise ValueError("need at least two knots")
         if not bool((d[1:] > d[:-1]).all()):
             raise ValueError("depths must be strictly increasing")
-        self.values = nn.Parameter(v)
+        if learnable:
+            self.values = nn.Parameter(v)
+        else:
+            self.register_buffer("values", v)
         if learn_depths:
             self.depths = nn.Parameter(d)
         else:
