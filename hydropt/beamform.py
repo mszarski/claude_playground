@@ -93,6 +93,8 @@ def extract_arrivals(
     sigma_d: float,
     absorption=thorp_db_per_km,
     ray_weights: Tensor | None = None,
+    spreading: Tensor | None = None,
+    caustics: Tensor | None = None,
     spread_min_range: float = 1.0,
     space_gate: float = 6.0,
     max_arrivals: int | None = None,
@@ -113,6 +115,12 @@ def extract_arrivals(
         freqs_khz: ``[B]`` band centres.
         sigma_d: acceptance width (m); sets the amplitude weight, as in the
             energy renderer.
+        spreading: optional ``[R, S+1]`` intensity factor replacing ``1/s^2``,
+            from :func:`hydropt.spreading.ray_tube`.
+        caustics: optional ``[R, S+1]`` KMAH index from the same call.  Each
+            caustic the ray has passed advances the phase by ``-pi/2``; without
+            it, coherent results near a focus are wrong by multiples of a
+            quarter cycle.
         max_arrivals: keep only this many strongest arrivals.  Useful because
             a dense fan produces one arrival per ray that passes nearby, and
             for a coherent sum the near-duplicates add nothing but cost.
@@ -160,9 +168,16 @@ def extract_arrivals(
     weight = torch.exp(-0.5 * (d_sel / sigma_d) ** 2)
     if ray_weights is not None:
         weight = weight * ray_weights.to(dtype=dtype, device=device)[ri]
-    s_eff = s_c.clamp_min(spread_min_range)
+    if spreading is None:
+        s_eff = s_c.clamp_min(spread_min_range)
+        spread = 1.0 / (s_eff * s_eff)
+    else:
+        sp = spreading.to(dtype=dtype, device=device)
+        spread = sp[ri, si] + t_sel * (sp[ri, si + 1] - sp[ri, si])
+    if caustics is not None:
+        phase = phase - 0.5 * math.pi * caustics.to(dtype=dtype, device=device)[ri, si + 1]
     alpha = absorption(freqs_khz).view(1, -1)
-    energy = ((weight * (1.0 / (s_eff * s_eff)) * 10.0 ** (-db_c / 10.0)).unsqueeze(1)
+    energy = ((weight * spread * 10.0 ** (-db_c / 10.0)).unsqueeze(1)
               * 10.0 ** (-(alpha * s_c.unsqueeze(1)) / 1.0e4))
     amplitude = energy.clamp_min(0.0).sqrt()
 

@@ -42,6 +42,7 @@ from .launch import (
     fibonacci_sphere,
     receiver_cone_importance,
     spherical_fan,
+    structured_fan,
 )
 from .receiver import (
     horizontal_line_array,
@@ -56,6 +57,7 @@ from .reverb import (
     reverberation_arrivals,
 )
 from .scene import Scene
+from .spreading import RayTube, ray_tube, spherical_spreading
 from .tracer import BounceEvents, RayState, TraceResult, bounce_events, trace
 
 __version__ = "0.1.0"
@@ -68,7 +70,7 @@ __all__ = [
     "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
-    "spherical_fan", "fan_2d", "fibonacci_sphere", "fibonacci_cone",
+    "spherical_fan", "structured_fan", "fan_2d", "fibonacci_sphere", "fibonacci_cone",
     "receiver_cone_importance", "directions_from_angles",
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
     # active sonar
@@ -76,6 +78,8 @@ __all__ = [
     # coherent arrivals and beamforming
     "ArrivalSet", "extract_arrivals", "element_field", "beamform",
     "shading_window", "azimuth_steering",
+    # ray-tube spreading
+    "RayTube", "ray_tube", "spherical_spreading",
     # reverberation
     "LambertScattering", "reverberation_arrivals", "render_reverberation",
     "cone_solid_angle",

@@ -150,6 +150,7 @@ def splat_etc(
     absorption: Callable[[Tensor], Tensor] = thorp_db_per_km,
     ray_weights: Tensor | None = None,
     source_energy: Tensor | float = 1.0,
+    spreading: Tensor | None = None,
     spread_min_range: float = 1.0,
     space_gate: float = 6.0,
     time_gate: float = 5.0,
@@ -178,6 +179,10 @@ def splat_etc(
         mode: how per-segment closest approaches are reduced along each ray.
         absorption: ``f_khz -> dB/km``.
         ray_weights: optional ``[R]`` per-ray weight (e.g. solid angle).
+        spreading: optional ``[R, S+1]`` intensity factor replacing ``1/s^2``,
+            as produced by :func:`hydropt.spreading.ray_tube`.  ``1/s^2`` is
+            exact only in a homogeneous medium; in a refracting channel it can
+            be tens of dB wrong at a convergence zone.
         source_energy: scalar or ``[B]`` source level multiplier.
         spread_min_range: floor on ``s`` in ``1/s^2``, keeping the near field finite.
         space_gate, time_gate: sparsification cut-offs, in units of sigma.
@@ -268,8 +273,14 @@ def splat_etc(
         if ray_weights is not None:
             w_space = w_space * ray_weights.to(dtype=dtype, device=device)[lo:hi][ri]
 
-        s_eff = s_c.clamp_min(spread_min_range)
-        spread = 1.0 / (s_eff * s_eff)
+        if spreading is None:
+            s_eff = s_c.clamp_min(spread_min_range)
+            spread = 1.0 / (s_eff * s_eff)
+        else:
+            sp = spreading.to(dtype=dtype, device=device)[lo:hi]
+            # Linear across one step: spreading varies by O(2h/s) over a step,
+            # so this is far below the discretisation already in the path.
+            spread = sp[ri, si] + t_sel * (sp[ri, si + 1] - sp[ri, si])
         refl = 10.0 ** (-db_c / 10.0)
         # alpha [dB/km] * s [m] / 1000 -> dB, then energy factor 10^(-dB/10).
         absorb = 10.0 ** (-(alpha.view(1, n_band) * s_c.unsqueeze(1)) / 1.0e4)

@@ -11,6 +11,7 @@ Acceptance criterion: 2,000 rays x 3,000 RK4 steps in under 30 s on CPU.
 
 from __future__ import annotations
 
+import math
 import time
 
 import torch
@@ -18,9 +19,10 @@ import torch
 from _common import banner, check, save, setup, timed
 from hydropt import (
     ConstantLoss, FlatHeight, MunkProfile, Scene, make_time_grid, octave_bands,
-    spherical_fan, vertical_line_array,
+    structured_fan, vertical_line_array,
 )
 from hydropt.plot import plot_etc, plot_profile, plot_ray_projections, plot_rays_3d
+from hydropt.spreading import ray_tube, spherical_spreading
 
 AXIS_DEPTH = 1300.0
 WATER_DEPTH = 5000.0
@@ -58,8 +60,10 @@ def main() -> int:
     # For a source at 1000 m under a 1300 m axis, the channel traps launch
     # angles inside about +/-14 deg; going out to 20 deg means part of the fan
     # escapes and starts reflecting, so the plots show both regimes.
-    directions = spherical_fan(100, 20, elev_range_deg=(-20.0, 20.0),
-                               azim_range_deg=(-10.0, 10.0))
+    # A *structured* fan, because ray-tube spreading below needs to know which
+    # rays are neighbours and how far apart in launch angle they are.
+    directions, elev, azim = structured_fan(100, 20, elev_range_deg=(-20.0, 20.0),
+                                            azim_range_deg=(-10.0, 10.0))
     print(f"  {directions.shape[0]} rays x {scene.n_steps} RK4 steps "
           f"({scene.max_path_length / 1e3:.0f} km of path each)")
 
@@ -82,6 +86,29 @@ def main() -> int:
                            ray_chunk=400)
     print(f"  ETC shape {tuple(etc.shape)} = [receivers, bands, time bins]")
 
+    # ---- spreading: 1/s^2 against the ray tube ------------------------------ #
+    # 1/s^2 is exact only in a homogeneous medium.  A sound channel has
+    # convergence zones precisely because the ray tube collapses there, so this
+    # is not a refinement -- it is the difference between right and wrong levels.
+    banner("spreading: 1/s^2 vs the ray tube")
+    from hydropt import splat_etc
+    with torch.no_grad(), timed("ray tube"):
+        tube = ray_tube(result, elev, azim)
+    ratio = (tube.spreading / spherical_spreading(result))[tube.valid]
+    print(f"  ray-tube / (1/s^2): median {ratio.median():.2f}x "
+          f"({10 * math.log10(float(ratio.median())):+.1f} dB), "
+          f"90th pct {10 * math.log10(float(torch.quantile(ratio, 0.9))):+.1f} dB, "
+          f"max {10 * math.log10(float(ratio.max())):+.1f} dB")
+    print(f"  caustics: {int((tube.caustics[:, -1] > 0).sum())} of "
+          f"{directions.shape[0]} rays passed at least one")
+    with torch.no_grad():
+        etc_tube = splat_etc(result, scene.receivers, grid, scene.freqs_khz,
+                             sigma_d=120.0, sigma_t=4e-3, ray_chunk=400,
+                             spreading=tube.spreading)
+    delta = 10 * torch.log10((etc_tube.sum(-1) + 1e-300) / (etc.sum(-1) + 1e-300))
+    print("  received energy change per array element: "
+          + ", ".join(f"{float(v):+.1f} dB" for v in delta[:, 0]))
+
     depth = torch.linspace(0.0, WATER_DEPTH, 400)
     save(plot_profile({"Munk": (scene.field.c_of_z(depth).detach(), depth)},
                       title="Munk profile (axis at 1300 m)"), "01_profile.png")
@@ -95,6 +122,11 @@ def main() -> int:
     save(plot_etc(etc, grid, freqs_khz=scene.freqs_khz,
                   receiver_labels=[f"z = {z:.0f} m" for z in scene.receivers[:, 2]],
                   title=f"Energy-time curves at {RANGE / 1e3:.0f} km"), "01_etc.png")
+    save(plot_etc(etc_tube, grid, freqs_khz=scene.freqs_khz, compare=etc,
+                  compare_label="1/s^2",
+                  receiver_labels=[f"z = {z:.0f} m" for z in scene.receivers[:, 2]],
+                  title="Ray-tube spreading (solid) vs 1/s^2 (dashed)"),
+         "01_etc_spreading.png")
 
     banner("acceptance")
     ok = check("2,000 rays x 3,000 steps under 30 s on CPU", elapsed < 30.0,
@@ -102,6 +134,9 @@ def main() -> int:
     ok &= check("energy arrives at the array", etc.sum().item() > 0)
     ok &= check("channel paths exist (some rays never bounce)", no_bounce > 0,
                 f"{no_bounce} rays")
+    ok &= check("ray tube finds focusing that 1/s^2 cannot",
+                float(ratio.max()) > 10.0,
+                f"up to {10 * math.log10(float(ratio.max())):+.1f} dB")
     return 0 if ok else 1
 
 

@@ -16,6 +16,7 @@ from torch import Tensor
 __all__ = [
     "directions_from_angles",
     "spherical_fan",
+    "structured_fan",
     "fan_2d",
     "fibonacci_sphere",
     "fibonacci_cone",
@@ -54,6 +55,38 @@ def spherical_fan(
     else:
         azim = a0 + (a1 - a0) * torch.arange(n_azim, dtype=dtype, device=device) / n_azim
     return directions_from_angles(elev[:, None], azim[None, :]).reshape(-1, 3)
+
+
+def structured_fan(
+    n_elev: int,
+    n_azim: int,
+    elev_range_deg: tuple[float, float] = (-20.0, 20.0),
+    azim_range_deg: tuple[float, float] = (-20.0, 20.0),
+    *,
+    dtype: torch.dtype | None = None,
+    device: torch.device | str | None = None,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """A spherical fan that also reports its launch-angle grids.
+
+    Returns ``(directions, elev, azim)`` with ``directions`` of shape
+    ``[n_elev * n_azim, 3]`` laid out **elevation-major**, so ray
+    ``i * n_azim + j`` was launched at ``elev[i]``, ``azim[j]``.
+
+    Ray-tube spreading needs exactly this: the tube cross-section is built from
+    differences between *neighbouring launch angles*, so it needs to know which
+    rays are neighbours and how far apart in angle they are.  A Fibonacci fan
+    has no such neighbour structure, which is why it cannot be used for it.
+
+    Both endpoints are included on each axis, unlike :func:`spherical_fan`,
+    because a tube derivative needs the grid spacing to be uniform and known.
+    """
+    dtype = dtype or torch.get_default_dtype()
+    e0, e1 = (math.radians(v) for v in elev_range_deg)
+    a0, a1 = (math.radians(v) for v in azim_range_deg)
+    elev = torch.linspace(e0, e1, n_elev, dtype=dtype, device=device)
+    azim = torch.linspace(a0, a1, n_azim, dtype=dtype, device=device)
+    dirs = directions_from_angles(elev[:, None], azim[None, :]).reshape(-1, 3)
+    return dirs, elev, azim
 
 
 def fan_2d(

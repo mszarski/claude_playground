@@ -59,7 +59,7 @@ print(scene.bottom_loss.loss_db.grad)
 pip install -e .           # torch >= 2.2, numpy, matplotlib
 pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
-pytest                     # 64 tests
+pytest                     # 131 tests
 ```
 
 ## Coordinates and units
@@ -132,8 +132,8 @@ misuka's spectral rendering, transplanted. `francois_garrison_db_per_km` is a
 documented hook, not an implementation; see
 [Limitations](#limitations-and-what-is-deliberately-absent).
 
-Spreading is `1/s^2` in path length. Ray-tube (geometric Jacobian) spreading is
-a hook -- see [Limitations](#limitations-and-what-is-deliberately-absent).
+Spreading is `1/s^2` by default, or the true **ray-tube (geometric Jacobian)**
+spreading -- see [Spreading and caustics](#spreading-and-caustics).
 
 ### Receivers and energy-time curves
 
@@ -229,6 +229,66 @@ dominated by the loudest arrival and says almost nothing about the rest, and the
 log domain additionally linearises the `10^(-L/10)` dependence on boundary loss.
 It also handles sigma annealing, an optional smoothness `regulariser`, a
 `project` callback for physical constraints, and per-iteration `track`ing.
+
+## Spreading and caustics
+
+`1/s^2` is exact only in a homogeneous medium. A sound channel has convergence
+zones *because* the ray tube collapses there, so using `1/s^2` gets the arrival
+times right and the levels wrong -- and wrong *smoothly*, so a fit will absorb
+the error into whatever parameter is nearest. In the 50 km Munk channel of
+`examples/01` the correction is **+3 to +18 dB** at the array and up to **+30 dB**
+locally.
+
+Energy is conserved along a ray tube, so with `dOmega = cos(e) de da` at the
+source the intensity is
+
+```
+I = cos(e) / J,     J = |(dr/de x dr/da) . t|
+```
+
+The `de da` cancels, leaving something independent of how finely the fan was
+sampled. In a homogeneous medium `J = s^2 cos(e)` exactly and this collapses
+back to `1/s^2`, which is the anchor the tests use.
+
+**Two ways to get the derivatives, and both work.**
+
+`ray_tube` takes central differences between neighbouring rays of a
+`structured_fan`. Its error is not slop but exactly the central-difference
+truncation `(de^2 + da^2)/6`, matched to four significant figures at every
+resolution tried, converging at exactly 4x per halving:
+
+| fan | `d(theta)` | measured error | `(de^2+da^2)/6` | ratio |
+| --- | --- | --- | --- | --- |
+| 11 x 11 | 0.0698 | 1.626e-3 | 1.625e-3 | |
+| 21 x 21 | 0.0349 | 4.063e-4 | 4.062e-4 | 4.00x |
+| 41 x 41 | 0.0175 | 1.015e-4 | 1.015e-4 | 4.00x |
+| 81 x 81 | 0.0087 | 2.539e-5 | 2.538e-5 | 4.00x |
+
+`ray_tube_jvp` instead pushes forward-mode derivatives of ray position with
+respect to launch angle through the integrator, which is what the brief
+originally proposed. **It works** -- `torch.func.jvp` handles the whole tracer,
+reflections included, agreeing with a central difference to 1e-9
+(`scripts/check_jvp.py` is the evidence, not an assertion). It is exact rather
+than second-order (1.8e-15 against the homogeneous answer), needs no neighbour
+structure so it works on a Fibonacci fan, and needs no "same bounce history"
+mask. It costs three traces instead of one.
+
+Reverse-over-forward also works, which was the real question: gradients of
+spreading with respect to scene parameters agree between the two methods to
+three significant figures. Both are usable inside an inversion.
+
+A note on a result that looks like a bug and is not: the gradient of spreading
+with respect to Munk's `c1` is exactly zero. `c1` scales the whole profile, and
+Snell's law is scale-invariant, so a uniform change in `c` leaves ray geometry
+untouched. The gradient with respect to `eps`, which changes the channel's
+*shape*, is not zero -- and a test pins both.
+
+**Caustics.** The signed Jacobian changes sign wherever the tube turns inside
+out, so counting sign changes gives the KMAH index. Each caustic advances the
+phase by `-pi/2`, which `extract_arrivals` now applies via its `caustics`
+argument -- retiring what was previously a documented gap in the coherent path.
+Intensity is unbounded at a caustic, so `min_jacobian` floors the tube area;
+that is the crude fix, and Gaussian beams are the principled one.
 
 ## Active sonar and beamforming
 
@@ -449,7 +509,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 
 | example | what it does | measured result |
 | --- | --- | --- |
-| `01_forward_munk_3d.py` | Deep Munk channel over 50 km, 2,000 rays x 3,000 steps | 5.0 s (target: under 30 s) |
+| `01_forward_munk_3d.py` | Deep Munk channel over 50 km, 2,000 rays x 3,000 steps; `1/s^2` vs ray tube | 4.9 s (target: under 30 s); tube adds +3 to +18 dB at the array |
 | `02_inverse_seabed_loss.py` | Recovers hidden surface and seabed losses | 0.045 and 0.055 dB in 90 Adam steps (target: 0.5 dB in under 100) |
 | `03_inverse_profile.py` | Recovers `c(z)` from a vertical line array | 5.74 -> 3.15 m/s RMS over the illuminated band (45%) |
 | `04_inverse_bathymetry.py` | Recovers a seamount from a horizontal array | 38.2 -> 13.1 m RMS (66%; the brief asked 80%) |
@@ -490,20 +550,19 @@ everything below follows from that or from choices made for differentiability.
 * **No diffraction.** Nothing bends into a geometric shadow; energy behind a
   seamount is zero where the real field is merely quiet. The wavelength never
   enters the geometry.
-* **No caustic correction.** Where neighbouring rays cross, ray theory predicts
-  infinite intensity. hydropt does not detect caustics or apply the usual `pi/2`
-  phase advance, so levels near a convergence zone are wrong -- and it is a
-  *smooth* wrongness, so a fit will happily absorb it into other parameters.
+* **Caustics are detected but only crudely handled.** `hydropt.spreading`
+  counts them and applies the `-pi/2` KMAH phase, but intensity at a caustic is
+  bounded by flooring the tube area rather than by the principled fix, which is
+  Gaussian beams -- a finite-width beam that never divides by zero.
 * **Energy, not pressure** on the passive path. Arrivals are summed
   incoherently, with no phase, so there is no interference, no modal structure
   and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
   carry phase, but only differentially across an aperture -- see
   [Active sonar and beamforming](#active-sonar-and-beamforming).
-* **Spreading is approximated.** `1/s^2` is exact only for a homogeneous medium.
-  Real focusing and defocusing needs the ray-tube Jacobian -- the derivative of
-  ray position with respect to launch angle, cheapest via forward-mode AD over
-  the launch parameters. That is a hook, not an implementation, and it is the
-  single largest source of level error in a strongly refracting channel.
+* **Spreading** defaults to `1/s^2`, which is exact only for a homogeneous
+  medium. `hydropt.spreading` implements the true ray-tube law, but you have to
+  ask for it -- pass `spreading=` to the renderer. See
+  [Spreading and caustics](#spreading-and-caustics).
 * **No volume scattering and no rough-surface *reflection*.** Boundary
   reflection is specular. `hydropt.reverb` adds boundary *backscatter* on top
   of that, but the specular path itself is never roughened, so surface
@@ -542,6 +601,7 @@ hydropt/
   launch.py      spherical fans, Fibonacci sampling, receiver-cone importance
   tracer.py      RK4 integration -> paths, times, losses, bounce counts
   receiver.py    differentiable ETC splatting, receiver arrays
+  spreading.py   ray-tube (geometric Jacobian) spreading, caustics, KMAH
   active.py      two-way echoes through a scattering target
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
@@ -549,8 +609,8 @@ hydropt/
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
 examples/        01-05, each with acceptance checks
-scripts/         benchmark.py
-tests/           64 tests
+scripts/         benchmark.py, check_jvp.py
+tests/           131 tests
 ```
 
 ## References
