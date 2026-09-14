@@ -9,12 +9,20 @@ code that predicts a measurement can be run backwards to recover the ocean that
 produced it: seabed reflection loss, a sound-speed profile, a bathymetry field,
 or the position of the source.
 
-It is a 3-D, autograd-native reinterpretation of the forward model in the
-`underwater_acoustic_simulator.jsx` 2-D prototype, and it takes its overall shape
-from TU Berlin's *misuka* (Finnendahl et al., "Differentiable Geometric Acoustic
-Path Tracing using Time-Resolved Path Replay Backpropagation", ACM TOG 2025) --
-with ocean physics in place of room acoustics. See
-[Relation to misuka](#relation-to-misuka).
+It takes its overall shape from TU Berlin's *misuka* (Finnendahl et al.,
+"Differentiable Geometric Acoustic Path Tracing using Time-Resolved Path Replay
+Backpropagation", ACM TOG 2025) -- with ocean physics in place of room
+acoustics. See [Relation to misuka](#relation-to-misuka).
+
+> **Note on the 2-D prototype.** This package was specified as a 3-D,
+> autograd-native reinterpretation of a `underwater_acoustic_simulator.jsx`
+> prototype, but that file is not in this repository, so the physics here is
+> written from the standard references (Jensen et al.; Munk; Thorp) rather than
+> ported from it. If the prototype makes different modelling choices -- a
+> different Munk parameterisation, a different bottom-loss convention, a
+> different spreading law -- those differences will show up as disagreement in
+> absolute level, and the places to look are `fields.py`, `boundaries.py` and
+> the spreading term in `receiver.py`.
 
 ```python
 import torch
