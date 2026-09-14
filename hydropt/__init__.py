@@ -6,6 +6,15 @@ frequencies in kHz.
 """
 
 from .absorption import octave_bands, thorp_db_per_km
+from .active import EchoResult, PointTarget, compose_arrivals, render_echo, return_fan
+from .beamform import (
+    ArrivalSet,
+    azimuth_steering,
+    beamform,
+    element_field,
+    extract_arrivals,
+    shading_window,
+)
 from .boundaries import (
     BilinearHeightField,
     BoundaryLoss,
@@ -56,5 +65,10 @@ __all__ = [
     "spherical_fan", "fan_2d", "fibonacci_sphere", "fibonacci_cone",
     "receiver_cone_importance", "directions_from_angles",
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
+    # active sonar
+    "PointTarget", "EchoResult", "render_echo", "return_fan", "compose_arrivals",
+    # coherent arrivals and beamforming
+    "ArrivalSet", "extract_arrivals", "element_field", "beamform",
+    "shading_window", "azimuth_steering",
     "__version__",
 ]

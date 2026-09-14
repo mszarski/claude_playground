@@ -9,6 +9,10 @@ code that predicts a measurement can be run backwards to recover the ocean that
 produced it: seabed reflection loss, a sound-speed profile, a bathymetry field,
 or the position of the source.
 
+It also runs **active sonar**: two-way propagation through a scattering target,
+and coherent beamforming on a real array -- see
+[Active sonar and beamforming](#active-sonar-and-beamforming).
+
 It takes its overall shape from TU Berlin's *misuka* (Finnendahl et al.,
 "Differentiable Geometric Acoustic Path Tracing using Time-Resolved Path Replay
 Backpropagation", ACM TOG 2025) -- with ocean physics in place of room
@@ -226,6 +230,113 @@ log domain additionally linearises the `10^(-L/10)` dependence on boundary loss.
 It also handles sigma annealing, an optional smoothness `regulariser`, a
 `project` callback for physical constraints, and per-iteration `track`ing.
 
+## Active sonar and beamforming
+
+A passive scene renders one path, source to receiver. An active sonar renders
+two, and a beamformer needs something an energy model does not have.
+
+### Two-way propagation
+
+`hydropt.active.render_echo` composes projector-to-target and target-to-array.
+The obvious implementation, relaunching a fan for every incident arrival, is
+quadratic and unnecessary: for a target whose scattering does not depend on
+which path delivered the energy, the legs are separable, so the echo is the time
+convolution of the two one-way responses scaled by the cross-section. **Two
+renders, whatever the multipath complexity.** Spreading and absorption compose
+correctly on their own, and each leg is rendered at `sigma_t / sqrt(2)` so the
+convolution lands on the requested `sigma_t` rather than smearing by another
+root two.
+
+Verified against closed-form geometry: echoes arrive at `(d_in + d_out) / c` to
+13 us, monostatic echoes at `2d/c`, target strength scales the result by exactly
+`10^(TS/10)`, and with a surface present every in/out multipath pairing appears
+at its own predicted delay. `PointTarget` position and strength are both
+learnable, and gradients reach every scene parameter through both legs.
+
+### Why coherent splatting does not work, and what does
+
+Beamforming sums **complex pressure** across elements. Doing the same on energy
+throws away the array gain, the nulls and the sidelobe structure -- everything a
+beamformer exists for. But simply adding phase to the energy splatter fails,
+and the reason is quantitative. Ray-fan discretisation puts each arrival time
+out by microseconds because the nearest launch direction is not exactly the
+eigenray -- about 80 us at 3 km for a 600-ray fan, 13 us at 40 m for a 4000-ray
+cone. Against a 100 kHz quarter-wave period of 2.5 us:
+
+| frequency | phase error from fan discretisation alone |
+| --- | --- |
+| 20 kHz | 1.6 cycles |
+| 100 kHz | 8 cycles |
+| 300 kHz | 24 cycles |
+
+Independently-splatted elements would be mutually decorrelated and beamforming
+would return noise.
+
+What beamforming actually consumes is not absolute phase but *relative* phase
+across the aperture, and that is far better conditioned: at half-wave spacing
+adjacent elements are struck by essentially the same ray. So `hydropt.beamform`
+extracts arrivals at a single **phase centre** and propagates each across the
+aperture analytically as a plane wave along its own measured arrival direction,
+`tau_m = tau_0 + (r_m - r_0) . k / c`. The differential delays are then exact to
+the plane-wave approximation regardless of the absolute timing error.
+
+Absolute phase remains unreliable. Do not use these outputs for anything that
+compares phase *between* pings without first adding ray-tube interpolation.
+
+Steering is a true time delay folded into each arrival before synthesis, not a
+narrowband phase shift. A 32-element half-wave array at 100 kHz is 15.5
+wavelengths long, so the delay across it is ~155 us -- many times a short
+pulse's envelope width. Phase-only steering would align the carriers and leave
+the envelopes scattered, collapsing the beam even when pointed correctly.
+
+The tracer accumulates a per-vertex reflection *phase* alongside the loss: the
+sea surface is pressure-release, so every bounce flips the sign, and
+`RayleighBottomLoss` exposes `arg(R)`, which sweeps from -172 degrees at grazing
+incidence to zero at normal.
+
+### Measured against classical array theory
+
+A 32-element uniform line array at half-wave spacing, 100 kHz:
+
+| quantity | hydropt | theory |
+| --- | --- | --- |
+| mainlobe peak | 0.000 deg | 0 |
+| -3 dB beamwidth | 3.07 deg | 101.5/N = 3.17 |
+| first sidelobe (uniform) | -13.24 dB | -13.26 |
+| first nulls | +/-3.60, +/-7.20 deg | +/-3.58, +/-7.18 |
+| array gain | 32.000 | N = 32 |
+| Hamming sidelobe | -41.8 dB | ~-42.7 |
+| Blackman sidelobe | -58.2 dB | ~-58.1 |
+
+Steering reports true target bearings to 0.001 deg, two targets 27 deg apart
+resolve as two beams, and full-wavelength spacing produces grating lobes at
+endfire. End to end from traced rays, individual arrivals scatter about a degree
+in direction -- the nearest launch angle is not the eigenray -- yet the coherent
+sum still lands on the true bearing exactly.
+
+### What is still missing
+
+**Reverberation.** For active sonar this usually sets the detection limit, not
+noise, and a forward-looking geometry is the worst case: bottom return arrives
+at grazing angles smeared over a long range spread. hydropt reflects specularly
+and scatters nothing into non-specular directions. Adding it means discretising
+the insonified seabed into patches with a backscatter law (Lambert's
+`sigma = mu sin(theta_i) sin(theta_s)` is the usual start), which would make
+`mu` learnable.
+
+**Aspect-dependent targets.** `PointTarget` is isotropic. Aspect dependence
+breaks the separability that makes the two-leg convolution valid, because the
+outbound amplitude would then depend on the inbound direction.
+
+**Absorption above ~100 kHz.** Thorp is out of range; the Francois-Garrison
+hook needs implementing. Two-way absorption is 34 dB/km at 100 kHz and 67 dB/km
+at 300 kHz, so useful ranges are 100-300 m -- a regime where the high-frequency
+approximation behind ray theory is *better* justified than in the deep-water
+examples.
+
+**Caustic phase.** No KMAH index, so coherent results near focusing regions are
+wrong by multiples of pi/2.
+
 ## Autograd strategy
 
 Reverse mode through the unrolled RK4 integrator. `checkpoint_every` wraps each
@@ -311,6 +422,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `03_inverse_profile.py` | Recovers `c(z)` from a vertical line array | 5.74 -> 3.15 m/s RMS over the illuminated band (45%) |
 | `04_inverse_bathymetry.py` | Recovers a seamount from a horizontal array | 38.2 -> 13.1 m RMS (66%; the brief asked 80%) |
 | `05_source_localization.py` | Recovers source `(x, y, z)` on a 10 km shelf | 991 m -> 47.8 m (target: within 50 m) |
+| `06_active_beamformed_sonar.py` | Active forward-looking sonar: two-way echoes beamformed into a bearing-range image | both targets to 0.00 deg in bearing, 0.05 m in range |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -349,8 +461,11 @@ everything below follows from that or from choices made for differentiability.
   infinite intensity. hydropt does not detect caustics or apply the usual `pi/2`
   phase advance, so levels near a convergence zone are wrong -- and it is a
   *smooth* wrongness, so a fit will happily absorb it into other parameters.
-* **Energy, not pressure.** Arrivals are summed incoherently, with no phase.
-  There is no interference, so no modal structure and no Lloyd-mirror pattern.
+* **Energy, not pressure** on the passive path. Arrivals are summed
+  incoherently, with no phase, so there is no interference, no modal structure
+  and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
+  carry phase, but only differentially across an aperture -- see
+  [Active sonar and beamforming](#active-sonar-and-beamforming).
 * **Spreading is approximated.** `1/s^2` is exact only for a homogeneous medium.
   Real focusing and defocusing needs the ray-tube Jacobian -- the derivative of
   ray position with respect to launch angle, cheapest via forward-mode AD over
@@ -392,6 +507,8 @@ hydropt/
   launch.py      spherical fans, Fibonacci sampling, receiver-cone importance
   tracer.py      RK4 integration -> paths, times, losses, bounce counts
   receiver.py    differentiable ETC splatting, receiver arrays
+  active.py      two-way echoes through a scattering target
+  beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly

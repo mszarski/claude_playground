@@ -6,7 +6,9 @@ import math
 import pytest
 import torch
 
-from hydropt import FlatHeight, IsoProfile, Scene, directions_from_angles
+from hydropt import (
+    FlatHeight, GriddedField, IsoProfile, Scene, directions_from_angles,
+)
 from hydropt.fields import LinearGradientProfile, MunkProfile
 
 C0, G, Z_SRC = 1500.0, 0.016, 3000.0
@@ -111,10 +113,8 @@ def test_travel_time_matches_path_quadrature():
 # --------------------------------------------------------------------------- #
 # The 3-D case: a range-dependent field must bend rays *out* of the launch plane
 # --------------------------------------------------------------------------- #
-def _front(dcdy: float, c0: float = 1500.0) -> "GriddedField":
+def _front(dcdy: float, c0: float = 1500.0) -> GriddedField:
     """Uniform horizontal sound-speed gradient dc/dy, as a 3-D grid."""
-    from hydropt import GriddedField
-
     ny, nx, nz = 5, 5, 5
     dy, y0 = 5000.0, -10_000.0
     # Node values keyed to *world* y, so that c(x, y, z) = c0 + dcdy * y exactly

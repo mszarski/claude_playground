@@ -41,6 +41,7 @@ class RayState(NamedTuple):
     tau: Tensor  # [R] travel time (s)
     arclen: Tensor  # [R] path length (m)
     refl_db: Tensor  # [R] accumulated reflection loss (dB)
+    refl_phase: Tensor  # [R] accumulated reflection phase (rad), for coherent work
     alive: Tensor  # [R] 1.0 while the ray is still propagating
     n_surface: Tensor  # [R] surface bounce count (float, for batched maths)
     n_bottom: Tensor  # [R] bottom bounce count
@@ -53,6 +54,7 @@ class TraceResult(NamedTuple):
     tau: Tensor  # [R, S+1]
     arclen: Tensor  # [R, S+1]
     refl_db: Tensor  # [R, S+1]
+    refl_phase: Tensor  # [R, S+1]
     alive: Tensor  # [R, S+1]
     n_surface: Tensor  # [R]
     n_bottom: Tensor  # [R]
@@ -148,7 +150,7 @@ def _handle_boundaries(
 
     if not bool(any_hit.any()):
         return RayState(pos_n, slow_n, tau_n, state.arclen + h, state.refl_db,
-                        state.alive, state.n_surface, state.n_bottom)
+                        state.refl_phase, state.alive, state.n_surface, state.n_bottom)
 
     t_surf = find_crossing(pos_o, pos_n, surface, n_bisect=n_bisect, n_newton=n_newton)
     t_bot = find_crossing(pos_o, pos_n, bottom, n_bisect=n_bisect, n_newton=n_newton)
@@ -169,6 +171,10 @@ def _handle_boundaries(
 
     graze = grazing_angle(slow_hit, normal)
     loss = torch.where(use_surf, surface_loss(graze), bottom_loss(graze))
+    # Pressure phase imposed by the bounce.  Energy-only rendering ignores this;
+    # a beamformer cannot.
+    phase = torch.where(use_surf, surface_loss.reflection_phase(graze),
+                        bottom_loss.reflection_phase(graze))
 
     slow_refl = reflect(slow_hit, normal)
     dir_refl = slow_refl * c_hit.unsqueeze(-1)  # unit vector
@@ -190,6 +196,7 @@ def _handle_boundaries(
         tau=torch.where(mf > 0, tau_after, tau_n),
         arclen=torch.where(mf > 0, arclen_after, state.arclen + h),
         refl_db=state.refl_db + mf * loss,
+        refl_phase=state.refl_phase + mf * phase,
         alive=state.alive,
         n_surface=state.n_surface + (hit_surf & (state.alive > 0) & use_surf).to(mf.dtype),
         n_bottom=state.n_bottom + (hit_bot & (state.alive > 0) & ~use_surf).to(mf.dtype),
@@ -245,6 +252,7 @@ def _step(
         tau=torch.where(keep_1, nxt.tau, state.tau),
         arclen=torch.where(keep_1, nxt.arclen, state.arclen),
         refl_db=torch.where(keep_1, nxt.refl_db, state.refl_db),
+        refl_phase=torch.where(keep_1, nxt.refl_phase, state.refl_phase),
         alive=alive,
         n_surface=nxt.n_surface,
         n_bottom=nxt.n_bottom,
@@ -306,6 +314,7 @@ def trace(
         tau=zeros.clone(),
         arclen=zeros.clone(),
         refl_db=zeros.clone(),
+        refl_phase=zeros.clone(),
         alive=torch.ones_like(zeros),
         n_surface=zeros.clone(),
         n_bottom=zeros.clone(),
@@ -322,7 +331,7 @@ def trace(
     def run_chunk(k: int, *flat: Tensor) -> tuple[Tensor, ...]:
         """Advance ``k`` steps, returning stacked per-vertex outputs + final state."""
         st = RayState(*flat)
-        pos_l, tau_l, arc_l, db_l, al_l = [], [], [], [], []
+        pos_l, tau_l, arc_l, db_l, ph_l, al_l = [], [], [], [], [], []
         for _ in range(k):
             st = _step(scene.field, scene.surface, scene.bottom,
                        scene.surface_loss, scene.bottom_loss, st, h, **kw)
@@ -330,12 +339,14 @@ def trace(
             tau_l.append(st.tau)
             arc_l.append(st.arclen)
             db_l.append(st.refl_db)
+            ph_l.append(st.refl_phase)
             al_l.append(st.alive)
         return (
             torch.stack(pos_l, dim=1),
             torch.stack(tau_l, dim=1),
             torch.stack(arc_l, dim=1),
             torch.stack(db_l, dim=1),
+            torch.stack(ph_l, dim=1),
             torch.stack(al_l, dim=1),
             *st,
         )
@@ -344,6 +355,7 @@ def trace(
     tau_out = [state.tau.unsqueeze(1)]
     arc_out = [state.arclen.unsqueeze(1)]
     db_out = [state.refl_db.unsqueeze(1)]
+    ph_out = [state.refl_phase.unsqueeze(1)]
     al_out = [state.alive.unsqueeze(1)]
 
     step = n_steps if chunk <= 0 else min(chunk, n_steps)
@@ -361,8 +373,9 @@ def trace(
         tau_out.append(out[1])
         arc_out.append(out[2])
         db_out.append(out[3])
-        al_out.append(out[4])
-        state = RayState(*out[5:])
+        ph_out.append(out[4])
+        al_out.append(out[5])
+        state = RayState(*out[6:])
         done += k
 
     return TraceResult(
@@ -370,6 +383,7 @@ def trace(
         tau=torch.cat(tau_out, dim=1),
         arclen=torch.cat(arc_out, dim=1),
         refl_db=torch.cat(db_out, dim=1),
+        refl_phase=torch.cat(ph_out, dim=1),
         alive=torch.cat(al_out, dim=1),
         n_surface=state.n_surface,
         n_bottom=state.n_bottom,

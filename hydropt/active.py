@@ -48,12 +48,14 @@ from typing import NamedTuple
 import torch
 from torch import Tensor, nn
 
+from .beamform import ArrivalSet
 from .launch import fibonacci_cone, fibonacci_sphere
 from .receiver import splat_etc
 from .scene import Scene
 from .tracer import trace
 
-__all__ = ["PointTarget", "EchoResult", "return_fan", "render_echo"]
+__all__ = ["PointTarget", "EchoResult", "return_fan", "render_echo",
+           "compose_arrivals"]
 
 
 class PointTarget(nn.Module):
@@ -236,3 +238,49 @@ def render_echo(
         full = torch.nn.functional.pad(full, (0, pad))
     etc = full[..., offset : offset + n_echo]
     return EchoResult(etc=etc, inbound=inbound, outbound=outbound, leg_time_grid=leg_grid)
+
+
+def compose_arrivals(
+    inbound: ArrivalSet,
+    outbound: ArrivalSet,
+    target: PointTarget,
+    *,
+    max_arrivals: int | None = None,
+) -> ArrivalSet:
+    """Combine the two legs coherently into echo arrivals at the array.
+
+    The energy path in :func:`render_echo` convolves two splatted responses;
+    this is the same composition done on arrival *lists* instead, which keeps
+    phase and arrival direction intact so a beamformer can consume the result.
+
+    Every inbound arrival pairs with every outbound one: delays add, complex
+    amplitudes multiply, boundary phases add, and the scattering cross-section
+    enters once as an amplitude ``sqrt(sigma)``.  The direction is taken from
+    the outbound leg, because that is the one the array actually sees -- the
+    inbound leg only determines how much energy the target re-radiated and when.
+
+    The pair count is the product of the two arrival counts, so cap the legs
+    with ``extract_arrivals(..., max_arrivals=...)``; a dense fan yields many
+    near-duplicate arrivals that add cost without adding structure.
+    """
+    n_in, n_out = inbound.n_arrivals, outbound.n_arrivals
+    if n_in == 0 or n_out == 0:
+        z = inbound.time[:0]
+        return ArrivalSet(z, inbound.amplitude[:0], inbound.direction[:0], z, z, z)
+
+    amp_scale = target.cross_section().sqrt()
+    time = (inbound.time.view(-1, 1) + outbound.time.view(1, -1)).reshape(-1)
+    phase = (inbound.phase.view(-1, 1) + outbound.phase.view(1, -1)).reshape(-1)
+    amplitude = (inbound.amplitude.unsqueeze(1) * outbound.amplitude.unsqueeze(0)
+                 ).reshape(n_in * n_out, -1) * amp_scale
+    direction = outbound.direction.unsqueeze(0).expand(n_in, n_out, 3).reshape(-1, 3)
+    distance = outbound.distance.unsqueeze(0).expand(n_in, n_out).reshape(-1)
+    path = (inbound.path_length.view(-1, 1) + outbound.path_length.view(1, -1)).reshape(-1)
+
+    echo = ArrivalSet(time=time, amplitude=amplitude, direction=direction,
+                      phase=phase, distance=distance, path_length=path)
+    if max_arrivals is not None and echo.n_arrivals > max_arrivals:
+        order = echo.amplitude.detach().sum(1).argsort(descending=True)[:max_arrivals]
+        order = order[echo.time.detach()[order].argsort()]
+        echo = ArrivalSet(*(t[order] for t in echo))
+    return echo
