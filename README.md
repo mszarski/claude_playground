@@ -314,15 +314,47 @@ endfire. End to end from traced rays, individual arrivals scatter about a degree
 in direction -- the nearest launch angle is not the eigenray -- yet the coherent
 sum still lands on the true bearing exactly.
 
-### What is still missing
+### Reverberation
 
-**Reverberation.** For active sonar this usually sets the detection limit, not
-noise, and a forward-looking geometry is the worst case: bottom return arrives
-at grazing angles smeared over a long range spread. hydropt reflects specularly
-and scatters nothing into non-specular directions. Adding it means discretising
-the insonified seabed into patches with a backscatter law (Lambert's
-`sigma = mu sin(theta_i) sin(theta_s)` is the usual start), which would make
-`mu` learnable.
+For active sonar, reverberation -- not noise -- usually sets the detection
+limit. `hydropt.reverb` treats every boundary reflection in a traced bundle as
+one scattering patch, weighted by the solid angle its ray carries, so **one
+render yields the whole reverberation series** instead of one render per patch.
+Monostatic reciprocity closes the return path: the echo retraces its outbound
+ray, arriving at `2 tau`, carrying the outbound loss twice, and coming back
+along the reverse of its launch direction -- which is what gives each patch a
+bearing and lets reverberation be beamformed.
+
+Checked against the classical flat-bottom result. With Lambert scattering the
+energy density must decay as `r^-5` with absolute level `pi c mu H^2 / r^5`:
+
+| | hydropt | theory |
+| --- | --- | --- |
+| decay exponent | **-5.02** | -5 |
+| level at 100 m | 2.43e-6 | 2.35e-6 (+3.3%) |
+| level at 200 m | 7.42e-8 | 7.35e-8 (+1.1%) |
+| level at 400 m | 2.28e-9 | 2.30e-9 (-0.5%) |
+
+Matching the slope only would show the geometry is self-consistent; matching the
+*level* is what checks the solid-angle bookkeeping and the `1/sin(theta)`
+grazing projection of each ray's footprint onto the seabed.
+`LambertScattering.strength_db` is learnable, so a measured series inverts for
+the bottom type -- `examples/07` recovers a hidden -15 dB to 0.4 dB.
+
+Two traps worth naming, both of which bit during development:
+
+* **Cap patch counts by random subsampling, not by strength.** Keeping the
+  strongest patches is right for target echoes and badly wrong here: `r^-5`
+  makes the strongest patches the nearest ones, so the sample collapses onto
+  the first few range cells instead of filling the window. Random subsampling
+  with a compensating energy scale is unbiased and preserves the range spread.
+* **Transmit directivity applies once, not twice.** The outbound leg passes
+  through the projector's pattern; the return arrives at the receive array,
+  whose directivity is the beamformer's job. Squaring it -- tempting, since the
+  path is reciprocal in *geometry* -- suppresses off-axis patches twice over and
+  understated reverberation by 8.5 dB.
+
+### What is still missing
 
 **Aspect-dependent targets.** `PointTarget` is isotropic. Aspect dependence
 breaks the separability that makes the two-leg convolution valid, because the
@@ -423,6 +455,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `04_inverse_bathymetry.py` | Recovers a seamount from a horizontal array | 38.2 -> 13.1 m RMS (66%; the brief asked 80%) |
 | `05_source_localization.py` | Recovers source `(x, y, z)` on a 10 km shelf | 991 m -> 47.8 m (target: within 50 m) |
 | `06_active_beamformed_sonar.py` | Active forward-looking sonar: two-way echoes beamformed into a bearing-range image | both targets to 0.00 deg in bearing, 0.05 m in range |
+| `07_reverberation_limited_detection.py` | A small target on a rock seabed: is it detectable? | -0.9 dB at one element, +10.9 dB in the beam; bottom type recovered to 0.4 dB |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -471,9 +504,11 @@ everything below follows from that or from choices made for differentiability.
   ray position with respect to launch angle, cheapest via forward-mode AD over
   the launch parameters. That is a hook, not an implementation, and it is the
   single largest source of level error in a strongly refracting channel.
-* **No volume scattering, no bubbles, no rough-surface scattering.** Boundary
-  reflection is specular; `sigma_d` blurs the geometry but does not model
-  scattering physics.
+* **No volume scattering and no rough-surface *reflection*.** Boundary
+  reflection is specular. `hydropt.reverb` adds boundary *backscatter* on top
+  of that, but the specular path itself is never roughened, so surface
+  multipath at high frequency is an optimistic bound -- at 100 kHz a real sea
+  surface is very rough against a 15 mm wavelength.
 * **Reflection loss is frequency-independent.** hydropt accumulates one scalar
   reflection loss per ray, keeping path memory at `O(rays x steps)` rather than
   `O(rays x steps x bands)`; absorption carries all the spectral dependence. A
@@ -509,6 +544,7 @@ hydropt/
   receiver.py    differentiable ETC splatting, receiver arrays
   active.py      two-way echoes through a scattering target
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
+  reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly

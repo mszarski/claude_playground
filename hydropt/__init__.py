@@ -49,13 +49,19 @@ from .receiver import (
     splat_etc,
     vertical_line_array,
 )
+from .reverb import (
+    LambertScattering,
+    cone_solid_angle,
+    render_reverberation,
+    reverberation_arrivals,
+)
 from .scene import Scene
-from .tracer import RayState, TraceResult, trace
+from .tracer import BounceEvents, RayState, TraceResult, bounce_events, trace
 
 __version__ = "0.1.0"
 
 __all__ = [
-    "Scene", "trace", "TraceResult", "RayState",
+    "Scene", "trace", "TraceResult", "RayState", "BounceEvents", "bounce_events",
     "SoundSpeedField", "DepthProfile", "IsoProfile", "LinearGradientProfile",
     "MunkProfile", "PiecewiseLinearProfile", "GriddedField",
     "HeightField", "FlatHeight", "BilinearHeightField",
@@ -70,5 +76,8 @@ __all__ = [
     # coherent arrivals and beamforming
     "ArrivalSet", "extract_arrivals", "element_field", "beamform",
     "shading_window", "azimuth_steering",
+    # reverberation
+    "LambertScattering", "reverberation_arrivals", "render_reverberation",
+    "cone_solid_angle",
     "__version__",
 ]
