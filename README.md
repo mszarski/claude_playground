@@ -234,20 +234,35 @@ profile knots, bathymetry node heights, source position and receiver positions.
 
 ### Benchmark
 
-`python scripts/benchmark.py` reports the reference workload (5,000 rays x
-4,000 steps) on CPU and, when present, GPU. On the 4-core CPU container used to
-develop this, float32:
+`python scripts/benchmark.py` runs the reference workload, 5,000 rays x 4,000
+steps, on CPU and on GPU when one is present. Measured on the 4-core, 16 GB CPU
+container this was developed on, float32:
 
-| workload | time | memory |
+| 5,000 rays x 4,000 steps | time | peak RSS |
 | --- | --- | --- |
-| 2,000 rays x 3,000 steps, forward only | 4.2 s | 160 MiB stored path |
-| 2,000 rays x 3,000 steps, float64 | 6.2 s | 321 MiB stored path |
+| forward trace (`no_grad`) | 9.2 s | 534 MiB (the stored path) |
+| forward + backward, no checkpointing | 68.7 s | 13.2 GiB |
+| forward + backward, `checkpoint_every=100` | 54.5 s | 6.5 GiB |
 
-The stored path dominates: it is `O(rays x steps)` regardless of
-checkpointing, because the vertices are the renderer's input. Checkpointing
-bounds the *integrator* intermediates, which are what would otherwise make the
-backward pass 4-5x larger. Run the script for the full 5,000 x 4,000 figures on
-your own machine -- they depend strongly on core count and memory bandwidth.
+Checkpointing halves peak memory and, here, is also *faster* -- at this size the
+un-checkpointed graph is large enough that allocator and cache pressure cost
+more than recomputing the RK4 stages. On a machine with less than ~16 GB the
+un-checkpointed case is simply not runnable.
+
+Two things bound the remaining 6.5 GiB. The stored path is `O(rays x steps)`
+whatever you do, because the vertices are the renderer's input -- 534 MiB here.
+The rest is the splatting graph and the per-chunk recomputation. Checkpointing
+bounds only the *integrator* intermediates, which is where the 6.7 GiB saving
+comes from.
+
+Each case runs in its own process. That is not tidiness: sharing a process
+gives a misleading answer and can kill the run, because the allocator does not
+return one case's peak to the OS and the next case is then OOM-killed before it
+prints anything. Smaller GPU figures are not quoted here because this container
+has no CUDA device; run the script to get them.
+
+For reference, 2,000 rays x 3,000 steps forward-only is 4.2 s (float32) or
+6.2 s (float64), with 160 / 321 MiB of stored path.
 
 ### Relation to misuka
 
