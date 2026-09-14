@@ -75,6 +75,15 @@ from .reverb import (
     reverberation_arrivals,
 )
 from .scene import Scene
+from .sediments import (
+    SEDIMENTS,
+    Sediment,
+    critical_angle_deg,
+    impedance_contrast,
+    sediment,
+    sediment_loss,
+    sediment_names,
+)
 from .targets import (
     CylinderScattering,
     ExtendedTarget,
@@ -101,6 +110,9 @@ __all__ = [
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
     # active sonar
     "PointTarget", "EchoResult", "render_echo", "return_fan", "compose_arrivals",
+    # sediment presets
+    "Sediment", "SEDIMENTS", "sediment", "sediment_loss", "sediment_names",
+    "critical_angle_deg", "impedance_contrast",
     # environment generators
     "gaussian_seamount", "spectral_field", "pierson_moskowitz_surface",
     "fractal_bathymetry", "internal_wave_perturbation",

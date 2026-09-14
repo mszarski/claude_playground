@@ -378,6 +378,53 @@ beams = gaussian_beams(scene, elev, azim,
 etc = splat_etc(beams.result, receivers, grid, spreading=beams.spreading)
 ```
 
+### Seabeds by name
+
+`RayleighBottomLoss` is parameterised the way the physics is -- density, sound
+speed, attenuation -- which is correct and unhelpful when what you have is the
+word "sand". `hydropt.sediments` maps names onto numbers, from `rock` through
+`sand` to `clay`, and `sediment_loss("sand")` returns a learnable loss model
+because the usual reason to want a preset is to start an inversion from a
+plausible seabed rather than to assert one.
+
+**On provenance, plainly:** these are *representative* values drawn from the
+ranges in the marine-sediment literature (Hamilton 1980; Hamilton & Bachman 1982;
+Jackson & Richardson 2007; APL-UW 1994). They are **not** a transcription of any
+one published table and should not be cited as one -- I could not reach those
+tables from this environment to verify them, and inventing the precision would
+have been worse than saying so. Each preset carries the range it was drawn from,
+and real sediments vary by more than the gap between adjacent entries, so
+quantitative work wants measured values for the site rather than a name.
+
+What *is* verified is that the presets are physically coherent, and the ordering
+is the interesting part:
+
+| | `c2/c1` | critical angle | `R_0` |
+| --- | --- | --- | --- |
+| rock | 2.000 | 60.0 deg | +0.660 |
+| sand | 1.167 | 31.0 deg | +0.390 |
+| sandy silt | 1.040 | 15.9 deg | +0.267 |
+| clayey silt | 1.007 | 6.6 deg | +0.208 |
+| clay | 0.987 | **none** | +0.166 |
+
+Two things fall out that a single number per sediment would hide.
+
+**The critical angle closes, and then stops existing.** Total internal reflection
+needs `cos(theta_c) = c1/c2`, so a sediment only has a critical angle when it is
+faster than the water above it. Sand is, and is essentially lossless below about
+17 degrees grazing (not 31 -- attenuation bites before `theta_c`). Clay is
+*slower* than seawater, so it has no critical angle at all and no lossless regime
+anywhere: 0 of 60 sampled angles under 0.5 dB, against sand's 24. That is a
+qualitative difference between two rows of the same table, and it dominates how a
+shallow-water channel behaves.
+
+**Sound speed and impedance are separate axes.** My first draft of this asserted
+that `R_0` goes negative for clay, since clay is the slower medium. It does not:
+clay is slower *and denser*, so its impedance is still above the water's and
+`R_0` stays at +0.17. Speed sets the angular structure, impedance sets the
+strength, and reading one off the other gets it wrong. There is a test pinning
+that so the mistake cannot come back.
+
 ## Building an environment
 
 hydropt's fields take arrays, which is the right interface and an awkward place
@@ -858,6 +905,7 @@ hydropt/
   active.py      two-way echoes through a scattering target
   targets.py     extended multi-highlight targets, aspect-dependent patterns
   environment.py synthesised surfaces, bathymetry and sound-speed fields
+  sediments.py   named seabed presets -> RayleighBottomLoss
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
@@ -865,7 +913,7 @@ hydropt/
   plot.py        matplotlib views; optional plotly
 examples/        01-10, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
-tests/           182 tests
+tests/           207 tests
 ```
 
 ## References
