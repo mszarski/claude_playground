@@ -37,11 +37,16 @@ TRUE_SOURCE = (3200.0, 2600.0, 75.0)
 INITIAL_SOURCE = (3900.0, 3300.0, 130.0)  # ~1.1 km away in 3-D
 ARRAY_X, ARRAY_Y = 8000.0, 5000.0
 
-# As in example 04, SIGMA_T is set by what the geometry can actually resolve:
-# 50 m of position is about 33 ms of arrival time, so a 15 ms kernel is well
-# matched and a 4 ms one would only make the misfit spiky without adding
-# information.
-SIGMA_D, SIGMA_T = 150.0, 1.5e-2
+# Range and bearing are easy here; depth is not, and SIGMA_T is what decides
+# whether depth converges.  Scanning the misfit against source depth alone, the
+# minimum sits exactly on the true 75 m at every kernel width tried -- but the
+# bowl's depth is 0.046 across the whole water column at a 15 ms kernel against
+# 0.24 at 4 ms.  Depth is therefore a *shallow valley*: correctly oriented, but
+# five times weaker than at 4 ms, so at 15 ms it converges far more slowly than
+# range and bearing and can sit against its clamp while those two finish.
+# Tightening to 4 ms steepens it; the time grid is refined to match, since a
+# kernel narrower than one bin aliases.
+SIGMA_D, SIGMA_T = 150.0, 4.0e-3
 
 
 def l_array() -> torch.Tensor:
@@ -65,7 +70,7 @@ def build_scene(source, *, learn_source: bool) -> Scene:
         bottom_loss=ConstantLoss(3.5, learnable=False),
         freqs_khz=octave_bands(0.3, 2),
         step_size=30.0,
-        n_steps=320,
+        n_steps=290,
         domain=(-500.0, 10_500.0, -500.0, 10_500.0),
         learn_source=learn_source,
     )
@@ -84,7 +89,7 @@ def main() -> int:
     # bearing, and rays that never go towards the array carry no gradient.
     directions = spherical_fan(26, 30, elev_range_deg=(-26.0, 26.0),
                                azim_range_deg=(0.0, 360.0))
-    grid = make_time_grid(2.4, 5.2, 500)
+    grid = make_time_grid(2.4, 5.2, 1600)  # dt = 1.75 ms, ~2.3 bins per sigma_t
 
     truth = build_scene(TRUE_SOURCE, learn_source=False)
     with torch.no_grad():
@@ -116,7 +121,7 @@ def main() -> int:
             # moves per iteration.  It has to decay: at a fixed 12 m step the
             # fit plateaus around 120 m error simply because it cannot take a
             # step smaller than that.
-            n_iters=200, lr=12.0, lr_decay=0.02,
+            n_iters=200, lr=14.0, lr_decay=0.015,
             # sigma_d is held fixed: unlike the time kernel, widening the
             # spatial acceptance has no counterpart on the measurement side, so
             # annealing it would compare a model to data at a resolution the
