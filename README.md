@@ -281,16 +281,38 @@ deterministically. Until that exists, `checkpoint_every` is the memory knob.
 cd examples && python 01_forward_munk_3d.py     # figures land in examples/figures/
 ```
 
-| example | what it does |
-| --- | --- |
-| `01_forward_munk_3d.py` | Deep Munk channel over 50 km; 2,000 rays x 3,000 steps; ray plots + ETCs |
-| `02_inverse_seabed_loss.py` | Recovers hidden surface and seabed losses with Adam |
-| `03_inverse_profile.py` | Recovers a sound-speed profile from a vertical line array |
-| `04_inverse_bathymetry.py` | Recovers a seamount height field from a horizontal array |
-| `05_source_localization.py` | Recovers source `(x, y, z)` on a 10 km shelf |
+| example | what it does | measured result |
+| --- | --- | --- |
+| `01_forward_munk_3d.py` | Deep Munk channel over 50 km, 2,000 rays x 3,000 steps | 5.0 s (target: under 30 s) |
+| `02_inverse_seabed_loss.py` | Recovers hidden surface and seabed losses | 0.045 and 0.055 dB in 90 Adam steps (target: 0.5 dB in under 100) |
+| `03_inverse_profile.py` | Recovers `c(z)` from a vertical line array | 5.74 -> 3.15 m/s RMS over the illuminated band (45%) |
+| `04_inverse_bathymetry.py` | Recovers a seamount from a horizontal array | 38.2 -> 13.1 m RMS (66%; the brief asked 80%) |
+| `05_source_localization.py` | Recovers source `(x, y, z)` on a 10 km shelf | 991 m -> 47.8 m (target: within 50 m) |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
-exits non-zero on failure.
+exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
+15-25 minutes for the annealed inversions 03-05.
+
+**Where the inversions stop, and why.** 04 recovers two thirds of the seamount
+but its relief comes out ~13 m short of the true 77 m, and 05's residual is
+almost entirely in *depth* (9 m horizontal, 47 m vertical). Neither is a tuning
+failure -- both were chased:
+
+* Lightening the smoothness/Tikhonov prior, on the theory that it was
+  suppressing the seamount, made 04 substantially *worse* (error climbing past
+  40 m); the same change hurt 03 (3.15 -> 3.96 m/s). What reads as
+  regularisation bias is mostly the null space, and the prior is what keeps the
+  fit out of it.
+* Decaying the learning rate from iteration zero starved the exploration that
+  finds the seamount at all (8% recovered, against 56% at a constant rate),
+  which is why 04 runs an explore phase then a refine phase.
+
+The limit is information, not optimisation: 11 receivers on one horizontal
+array constrain 20 seabed node heights only where rays actually touch bottom,
+and source depth is encoded in surface/bottom multipath differentials whose
+misfit valley is real but five times shallower than the range direction. A
+second array, a second source position, or a second range is what moves these
+numbers.
 
 ## Limitations and what is deliberately absent
 
