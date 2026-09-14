@@ -47,7 +47,7 @@ print(scene.bottom_loss.loss_db.grad)
 pip install -e .           # torch >= 2.2, numpy, matplotlib
 pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
-pytest                     # 58 tests
+pytest                     # 64 tests
 ```
 
 ## Coordinates and units
@@ -352,7 +352,7 @@ hydropt/
   plot.py        matplotlib views; optional plotly
 examples/        01-05, each with acceptance checks
 scripts/         benchmark.py
-tests/           58 tests
+tests/           64 tests
 ```
 
 ## References

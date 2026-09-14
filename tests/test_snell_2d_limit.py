@@ -106,3 +106,61 @@ def test_travel_time_matches_path_quadrature():
     integrand = 1.0 / (C0 + G * z)
     tau_quad = torch.trapezoid(integrand, s)
     assert res.tau[0, -1].item() == pytest.approx(tau_quad.item(), rel=1e-8)
+
+
+# --------------------------------------------------------------------------- #
+# The 3-D case: a range-dependent field must bend rays *out* of the launch plane
+# --------------------------------------------------------------------------- #
+def _front(dcdy: float, c0: float = 1500.0) -> "GriddedField":
+    """Uniform horizontal sound-speed gradient dc/dy, as a 3-D grid."""
+    from hydropt import GriddedField
+
+    ny, nx, nz = 5, 5, 5
+    dy, y0 = 5000.0, -10_000.0
+    # Node values keyed to *world* y, so that c(x, y, z) = c0 + dcdy * y exactly
+    # and the analytic curvature below applies without an offset.
+    y = y0 + dy * torch.arange(ny, dtype=torch.get_default_dtype())
+    values = (c0 + dcdy * y).view(1, ny, 1).expand(nz, ny, nx).contiguous()
+    return GriddedField(values, origin=(-20_000.0, y0, -5000.0),
+                        spacing=(20_000.0, dy, 5000.0), learnable=False)
+
+
+@pytest.mark.parametrize("dcdy", [0.004, -0.004])
+def test_horizontal_gradient_bends_rays_towards_lower_sound_speed(dcdy):
+    """Snell's law in the horizontal plane: ``d(eta)/ds = -(1/c^2) dc/dy``, so a
+    ray launched along +x must curve towards whichever side is slower.
+
+    This is the check that the tracer is genuinely three-dimensional -- with the
+    horizontal components of grad c dropped it would pass every depth-only test
+    in this file and still be wrong here."""
+    scene = Scene(field=_front(dcdy), bottom=FlatHeight(1e7), surface=FlatHeight(-1e7),
+                  source=(0.0, 0.0, 0.0), step_size=25.0, n_steps=400)
+    res = scene.trace(torch.tensor([[1.0, 0.0, 0.0]]))
+    final_y = res.pos[0, -1, 1].item()
+
+    assert abs(final_y) > 1.0, "ray did not bend at all"
+    # Curves towards lower c: positive dc/dy means slower at -y.
+    assert math.copysign(1.0, final_y) == math.copysign(1.0, -dcdy)
+
+    # Radius of curvature in the horizontal plane is c / |dc/dy| for a ray
+    # travelling perpendicular to the gradient, so y ~ x^2 / (2 R).
+    x = res.pos[0, -1, 0].item()
+    radius = C0 / abs(dcdy)
+    assert abs(final_y) == pytest.approx(x**2 / (2 * radius), rel=0.02)
+
+
+def test_horizontal_gradient_leaves_depth_untouched():
+    """The same field has no vertical gradient, so a level ray must stay level."""
+    scene = Scene(field=_front(0.004), bottom=FlatHeight(1e7), surface=FlatHeight(-1e7),
+                  source=(0.0, 0.0, 0.0), step_size=25.0, n_steps=400)
+    res = scene.trace(torch.tensor([[1.0, 0.0, 0.0]]))
+    assert res.pos[..., 2].abs().max() < 1e-9
+
+
+def test_gridded_field_matches_its_analytic_values_and_gradient():
+    field = _front(0.004)
+    pts = torch.tensor([[0.0, 2500.0, 0.0], [1000.0, 7300.0, 100.0]])
+    c, grad = field.c_and_grad(pts)
+    assert torch.allclose(c, 1500.0 + 0.004 * pts[:, 1], atol=1e-9)
+    assert torch.allclose(grad[:, 1], torch.full((2,), 0.004), atol=1e-12)
+    assert grad[:, 0].abs().max() < 1e-12 and grad[:, 2].abs().max() < 1e-12
