@@ -125,6 +125,8 @@ def extract_arrivals(
         freqs_khz: ``[B]`` band centres.
         sigma_d: acceptance width (m); sets the amplitude weight, as in the
             energy renderer.
+        ray_weights: optional per-ray weight, ``[R]`` or ``[R, B]`` for one that
+            differs by band; see :func:`hydropt.rough.roughness_weights`.
         spreading: optional ``[R, S+1]`` intensity factor replacing ``1/s^2``,
             from :func:`hydropt.spreading.ray_tube`.
         caustics: optional ``[R, S+1]`` KMAH index from the same call.  Each
@@ -183,8 +185,19 @@ def extract_arrivals(
     launch_direction = first[ri]
 
     weight = torch.exp(-0.5 * (d_sel / sigma_d) ** 2)
+    band_weight = None
     if ray_weights is not None:
-        weight = weight * ray_weights.to(dtype=dtype, device=device)[ri]
+        rw = ray_weights.to(dtype=dtype, device=device)
+        if rw.ndim == 1:
+            weight = weight * rw[ri]
+        elif rw.ndim == 2:
+            if rw.shape[1] != int(freqs_khz.shape[0]):
+                raise ValueError(f"per-band ray_weights has {rw.shape[1]} bands, "
+                                 f"expected {int(freqs_khz.shape[0])}")
+            band_weight = rw[ri]  # applied once the band axis exists
+        else:
+            raise ValueError(f"ray_weights must be [R] or [R, B], got "
+                             f"{tuple(rw.shape)}")
     if spreading is None:
         s_eff = s_c.clamp_min(spread_min_range)
         spread = 1.0 / (s_eff * s_eff)
@@ -196,6 +209,8 @@ def extract_arrivals(
     alpha = absorption(freqs_khz).view(1, -1)
     energy = ((weight * spread * 10.0 ** (-db_c / 10.0)).unsqueeze(1)
               * 10.0 ** (-(alpha * s_c.unsqueeze(1)) / 1.0e4))
+    if band_weight is not None:
+        energy = energy * band_weight
     amplitude = energy.clamp_min(0.0).sqrt()
 
     if max_arrivals is not None and time.shape[0] > max_arrivals:

@@ -74,6 +74,13 @@ from .reverb import (
     render_reverberation,
     reverberation_arrivals,
 )
+from .rough import (
+    RoughSurfaceLoss,
+    coherent_reflection_loss_db,
+    rayleigh_roughness,
+    roughness_weights,
+    wind_sea_rms_height,
+)
 from .scene import Scene
 from .sediments import (
     SEDIMENTS,
@@ -110,6 +117,9 @@ __all__ = [
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
     # active sonar
     "PointTarget", "EchoResult", "render_echo", "return_fan", "compose_arrivals",
+    # rough-surface coherence loss
+    "RoughSurfaceLoss", "rayleigh_roughness", "coherent_reflection_loss_db",
+    "roughness_weights", "wind_sea_rms_height",
     # sediment presets
     "Sediment", "SEDIMENTS", "sediment", "sediment_loss", "sediment_names",
     "critical_angle_deg", "impedance_contrast",

@@ -178,7 +178,11 @@ def splat_etc(
         sigma_d, sigma_t: kernel widths (m, s); see the module docstring.
         mode: how per-segment closest approaches are reduced along each ray.
         absorption: ``f_khz -> dB/km``.
-        ray_weights: optional ``[R]`` per-ray weight (e.g. solid angle).
+        ray_weights: optional per-ray weight, ``[R]`` (e.g. solid angle) or
+            ``[R, B]`` for a weight that differs by band -- which is how
+            frequency-dependent boundary effects get in, since
+            :class:`hydropt.boundaries.BoundaryLoss` is frequency-independent by
+            design.  See :func:`hydropt.rough.roughness_weights`.
         spreading: optional ``[R, S+1]`` intensity factor replacing ``1/s^2``,
             as produced by :func:`hydropt.spreading.ray_tube`.  ``1/s^2`` is
             exact only in a homogeneous medium; in a refracting channel it can
@@ -270,8 +274,21 @@ def splat_etc(
             # Quadrature of the line integral, normalised so a ray passing
             # straight through the receiver contributes unit weight.
             w_space = w_space * len_sel / (math.sqrt(2.0 * math.pi) * sigma_d)
+        band_weight = None
         if ray_weights is not None:
-            w_space = w_space * ray_weights.to(dtype=dtype, device=device)[lo:hi][ri]
+            rw = ray_weights.to(dtype=dtype, device=device)
+            if rw.ndim == 1:
+                w_space = w_space * rw[lo:hi][ri]
+            elif rw.ndim == 2:
+                if rw.shape[1] != n_band:
+                    raise ValueError(
+                        f"per-band ray_weights has {rw.shape[1]} bands, "
+                        f"expected {n_band}")
+                # Held back until the band axis exists, below.
+                band_weight = rw[lo:hi][ri]
+            else:
+                raise ValueError(
+                    f"ray_weights must be [R] or [R, B], got {tuple(rw.shape)}")
 
         if spreading is None:
             s_eff = s_c.clamp_min(spread_min_range)
@@ -285,6 +302,8 @@ def splat_etc(
         # alpha [dB/km] * s [m] / 1000 -> dB, then energy factor 10^(-dB/10).
         absorb = 10.0 ** (-(alpha.view(1, n_band) * s_c.unsqueeze(1)) / 1.0e4)
         amp = (w_space * spread * refl).unsqueeze(1) * absorb  # [n, B]
+        if band_weight is not None:
+            amp = amp * band_weight
         if not isinstance(source_energy, (int, float)) or source_energy != 1.0:
             amp = amp * torch.as_tensor(source_energy, dtype=dtype, device=device)
 

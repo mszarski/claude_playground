@@ -494,6 +494,61 @@ control row is the other half of the point -- exactly zero, not nearly zero,
 because a depth-only profile keeping a ray in plane is a theorem rather than an
 approximation.
 
+### Rough boundaries: what a wind sea does to a specular reflection
+
+hydropt reflects specularly, so a height field bends the specular direction but
+says nothing about the energy a rough boundary scatters *out* of it. Above a few
+kHz that is nearly all of it. `hydropt.rough` adds the Eckart correction: a
+Gaussian height distribution of RMS `sigma` spreads the reflected phase by
+`Gamma = 2 k sigma sin(theta)` radians, costing `(10/ln 10) Gamma^2` dB of
+coherent energy -- 4.34 dB at `Gamma = 1`, 17.4 dB at `Gamma = 2`, matched to
+1e-12, with both limits (`sigma = 0`, grazing incidence) *exactly* zero.
+
+**It is a weight, not a `BoundaryLoss`, and that is a design consequence.**
+`BoundaryLoss` is deliberately frequency-independent -- the tracer accumulates one
+scalar per ray, keeping path memory at `O(rays x steps)`. Eckart loss is quadratic
+in frequency (verified: x4, x16, x64 for f x2, x4, x8), so putting it there would
+mean giving that up. `roughness_weights` instead computes it *after* the trace
+from the bounces already recorded, as an `[R, B]` factor passed to the renderer as
+`ray_weights` -- which now accepts a per-band weight for exactly this. Path memory
+is untouched and the frequency dependence is exact. `RoughSurfaceLoss` remains as
+a single-design-frequency drop-in for one-band scenes.
+
+**The energy goes somewhere hydropt does not put it.** This removes energy from
+the specular path and does not re-radiate it. Correct for a coherent calculation
+-- the beamformer should not see a ghost that is not there -- and one-sided for an
+energy budget. `reverb.py` models boundary backscatter separately and the two are
+not coupled, so a scene with roughness loss is *missing* that energy rather than
+redistributing it.
+
+**Example 06's flagged caveat, resolved -- and it needed an angle qualifier.** That
+example renders a 100 kHz FLS over a flat sea and calls its surface multipath "an
+optimistic bound". At 100 kHz the wavelength is 15 mm and 2 m/s of wind raises
+22 mm of RMS elevation, so the median surface-bounced path loses **43 orders of
+magnitude** and 91% of them lose over 20 dB. At that example's geometry -- vehicle
+at 10 m, target 40 m out, surface path near 25 degrees -- there is no coherent
+surface return at all.
+
+But my first draft of this said flatly that a rough sea destroys the specular path,
+and that is wrong. `Gamma` goes as `sin(theta)`, so a **near-grazing** ray sees a
+surface effectively flat along its own direction of travel and reflects coherently
+however rough it is. There is a cutoff, and it has a closed form: the loss reaches
+3 dB at `sin(theta) = sqrt(3 ln 10 / 10) / (2 k sigma)`.
+
+| grazing angle | loss at 100 kHz, 2 m/s sea | energy left |
+| --- | --- | --- |
+| 0.5 deg | 0.12 dB | 97% |
+| 2.0 deg | 1.87 dB | 65% |
+| **2.53 deg** | **3.00 dB** (the cutoff) | 50% |
+| 5 deg | 11.7 dB | 6.8% |
+| 30 deg | 383 dB | 0 |
+
+Measured against that: every ray in example 11 keeping over half its energy
+bounces at 2.21 degrees or shallower, against the 2.53 degree cutoff the formula
+predicts. So long-range shallow-water propagation, which lives at small grazing
+angles, keeps its surface bounces even at high frequency -- the window just
+narrows as `1/sigma`, and never closes.
+
 ## Active sonar and beamforming
 
 A passive scene renders one path, source to receiver. An active sonar renders
@@ -797,6 +852,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `08_gaussian_beams_caustic.py` | Gaussian beams through the Munk channel's caustics | 81 of 120 rays cross one; tube pinned at its floor, beam at `|det Q| = beta^2` exactly |
 | `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | hull glints (83% from one section, travelling along the body); discrete scatterers spread 2.07 deg vs a point's 0.53 |
 | `10_synthetic_environment.py` | A generated ocean: wind sea, power-law seabed, internal waves | out-of-plane deflection 0 m (control), 390 / 659 / 2.2 m by mechanism; refraction matches `L^2/2R` to 3% |
+| `11_rough_surface_coherence.py` | Eckart coherence loss, and example 06's surface ghost | median surface path at 100 kHz loses 43 orders of magnitude; survivors all within the 2.53 deg cutoff |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -862,6 +918,11 @@ everything below follows from that or from choices made for differentiability.
   diffraction dominates, and exactly zero edge-on or end-on. There is no
   circumferential (Lamb) wave structure, so a real elastic shell's mid-frequency
   response is missing, and no shadowing between highlights of the same body.
+* **Rough boundaries lose coherent energy but do not scatter it.**
+  `hydropt.rough` applies the Eckart coherent-reflection loss, which is the
+  correct thing for a specular/coherent calculation and one-sided for an energy
+  budget: the energy removed from the specular path is not re-radiated anywhere,
+  and is not coupled to `reverb.py`'s boundary backscatter.
 * **No volume scattering and no rough-surface *reflection*.** Boundary
   reflection is specular. `hydropt.reverb` adds boundary *backscatter* on top
   of that, but the specular path itself is never roughened, so surface
@@ -906,14 +967,15 @@ hydropt/
   targets.py     extended multi-highlight targets, aspect-dependent patterns
   environment.py synthesised surfaces, bathymetry and sound-speed fields
   sediments.py   named seabed presets -> RayleighBottomLoss
+  rough.py       Eckart coherent-reflection loss for rough boundaries
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
-examples/        01-10, each with acceptance checks
+examples/        01-11, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
-tests/           207 tests
+tests/           232 tests
 ```
 
 ## References
