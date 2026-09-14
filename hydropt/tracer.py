@@ -19,7 +19,7 @@ Every operation is batched over rays; the only Python-level loops are over
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Callable, NamedTuple
 
 import torch
 from torch import Tensor

@@ -37,7 +37,11 @@ TRUE_SOURCE = (3200.0, 2600.0, 75.0)
 INITIAL_SOURCE = (3900.0, 3300.0, 130.0)  # ~1.1 km away in 3-D
 ARRAY_X, ARRAY_Y = 8000.0, 5000.0
 
-SIGMA_D, SIGMA_T = 90.0, 4.0e-3
+# As in example 04, SIGMA_T is set by what the geometry can actually resolve:
+# 50 m of position is about 33 ms of arrival time, so a 15 ms kernel is well
+# matched and a 4 ms one would only make the misfit spiky without adding
+# information.
+SIGMA_D, SIGMA_T = 150.0, 1.5e-2
 
 
 def l_array() -> torch.Tensor:
@@ -109,8 +113,15 @@ def main() -> int:
         history = fit(
             scene, target, directions, time_grid=grid,
             n_iters=200, lr=12.0,  # parameter units are metres
-            sigma_d_schedule=(600.0, SIGMA_D),
+            # sigma_d is held fixed: unlike the time kernel, widening the
+            # spatial acceptance has no counterpart on the measurement side, so
+            # annealing it would compare a model to data at a resolution the
+            # data never had.  The fan is omnidirectional, so some ray passes
+            # near the array whatever the source position -- the difficulty is
+            # arrival time, which is what sigma_t anneals.
+            sigma_d_schedule=SIGMA_D,
             sigma_t_schedule=(2.5e-1, SIGMA_T),
+            target_sigma_t=SIGMA_T,
             project=keep_in_water,
             ray_chunk_size=200,
             log_every=25,

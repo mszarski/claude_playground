@@ -20,9 +20,6 @@ intersection is converged to machine precision -- with a loose bracket, the
 Newton residual itself jumps as the bracket does.
 """
 
-import math
-
-import pytest
 import torch
 from torch.autograd import gradcheck
 

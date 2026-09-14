@@ -175,6 +175,36 @@ its true position produces arrivals ~0.7 s from the measured ones against a 4 ms
 kernel -- every Gaussian product is `exp(-15000)`, and the gradient is zero in
 floating point.
 
+Two rules make annealing actually work, and both were learned the hard way here.
+
+**Blur the measurement to match.** Annealing the model's kernel while comparing
+against a fixed measurement fits a blurred prediction to a sharp
+measurement -- the misfit cannot reach zero and its gradient is biased. Pass
+`target_sigma_t` (the width the measurement was made at) and `fit` convolves the
+target up to the model's current width at every iteration. Because both kernels
+are unit-area Gaussians, blurring a measurement made at `sigma_meas` by
+`sqrt(sigma^2 - sigma_meas^2)` reproduces *exactly* what the model renders at
+`sigma`, so the comparison stays like-for-like throughout. `sigma_d` has no such
+counterpart -- widening spatial acceptance is not something you can do to a
+measurement -- so prefer to hold it fixed and let `sigma_t` do the annealing.
+
+**Stop annealing where the misfit stops being smooth.** Tightening `sigma_t`
+past what the geometry resolves does not sharpen the answer, it destroys the
+gradient. Scanning `examples/04`'s misfit against seamount amplitude:
+
+| `sigma_t` | 0% | 25% | 50% | 75% | **100%** | 125% | 150% | |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 40 ms | 0.74 | 0.54 | 0.24 | 0.08 | **0** | 0.15 | 0.69 | smooth bowl |
+| 20 ms | 0.89 | 0.66 | 0.40 | 0.19 | **0** | 0.38 | 0.71 | smooth bowl |
+| 15 ms | 0.93 | 0.68 | 0.51 | 0.29 | **0** | 0.56 | 0.78 | smooth bowl |
+| 10 ms | 1.05 | 0.79 | 0.82 | 0.59 | **0** | 0.90 | 1.03 | non-monotone |
+
+At 10 ms the misfit is a needle: zero exactly at the truth and noise everywhere
+else, with no usable descent direction. The smooth regime ends where `sigma_t`
+drops below the accuracy the measurement geometry actually carries, so scan
+before choosing an end point rather than annealing as far as the arithmetic
+allows.
+
 One coupling to the tracer: in `line_integral` mode the step length must be
 small compared with `sigma_d` (aim for `sigma_d >= 3 * step_size`). The default
 `local_min` mode has no such requirement.

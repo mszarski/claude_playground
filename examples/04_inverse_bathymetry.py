@@ -40,6 +40,13 @@ SEAMOUNT_HEIGHT = 80.0
 SEAMOUNT_XY = (4000.0, 0.0)
 SEAMOUNT_RADIUS = 1800.0
 
+# The measurement's resolution.  SIGMA_T is not a free knob: scanning the misfit
+# against seamount amplitude shows a clean monotone bowl down to 15 ms and pure
+# noise by 10 ms, because below that the kernel is asking for bathymetry
+# accuracy this geometry does not carry.  Annealing past the smooth regime is
+# what made an earlier version of this example diverge.
+SIGMA_D, SIGMA_T = 180.0, 1.5e-2
+
 
 def true_heights() -> torch.Tensor:
     """Flat seabed minus a Gaussian seamount (shallower = smaller depth)."""
@@ -86,7 +93,7 @@ def main() -> int:
 
     truth = build_scene(truth_h, learnable=False)
     with torch.no_grad():
-        target = truth.render(directions, grid, sigma_d=110.0, sigma_t=4e-3)
+        target = truth.render(directions, grid, sigma_d=SIGMA_D, sigma_t=SIGMA_T)
 
     scene = build_scene(flat_h, learnable=True)
     initial_rms = rms(scene.bottom.heights.detach(), truth_h)
@@ -98,18 +105,36 @@ def main() -> int:
     print(f"  {directions.shape[0]} rays, {scene.receivers.shape[0]} receivers")
 
     with torch.no_grad():
-        initial_etc = scene.render(directions, grid, sigma_d=110.0, sigma_t=4e-3)
+        initial_etc = scene.render(directions, grid, sigma_d=SIGMA_D, sigma_t=SIGMA_T)
 
     def keep_physical() -> None:
         # The seabed must stay below the array and above a plausible floor.
         scene.bottom.heights.clamp_(90.0, 320.0)
 
+    def prior() -> torch.Tensor:
+        """Smoothness, plus a light pull towards the flat prior.
+
+        Nodes at the edges of the grid are barely touched by any ray, so the
+        data say almost nothing about them.  Adam normalises per parameter, so
+        it hands those unconstrained nodes the *same* step size as
+        well-determined ones and they wander freely.  The Tikhonov term gives
+        them somewhere to sit; the weight is small enough (a few percent of the
+        data misfit at the true seabed) not to flatten the seamount itself.
+        """
+        h = scene.bottom.heights
+        dev = h - FLAT_DEPTH
+        curv_x = h[:, 2:] - 2 * h[:, 1:-1] + h[:, :-2]
+        curv_y = h[2:, :] - 2 * h[1:-1, :] + h[:-2, :]
+        return 2e-5 * dev.pow(2).mean() + 2e-5 * (curv_x.pow(2).mean() + curv_y.pow(2).mean())
+
     with timed("200 Adam steps"):
         history = fit(
             scene, target, directions, time_grid=grid,
             n_iters=200, lr=1.5,
-            sigma_d_schedule=(300.0, 110.0),
-            sigma_t_schedule=(3.0e-2, 4.0e-3),
+            sigma_d_schedule=SIGMA_D,
+            sigma_t_schedule=(4.0e-2, SIGMA_T),
+            target_sigma_t=SIGMA_T,
+            regulariser=prior,
             project=keep_physical,
             log_every=25,
             track={"rms_h": lambda: rms(scene.bottom.heights.detach(), truth_h)},
@@ -123,7 +148,7 @@ def main() -> int:
           f"max {scene.bottom.heights.max():.1f} m")
 
     with torch.no_grad():
-        final_etc = scene.render(directions, grid, sigma_d=110.0, sigma_t=4e-3)
+        final_etc = scene.render(directions, grid, sigma_d=SIGMA_D, sigma_t=SIGMA_T)
 
     extent = (X0 / 1e3, (X0 + (NX - 1) * DX) / 1e3,
               Y0 / 1e3, (Y0 + (NY - 1) * DY) / 1e3)

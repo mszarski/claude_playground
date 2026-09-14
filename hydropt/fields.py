@@ -20,7 +20,6 @@ which is what makes second-order terms in the inverse problems work.
 
 from __future__ import annotations
 
-import math
 from typing import Sequence
 
 import torch

@@ -29,11 +29,33 @@ from dataclasses import dataclass, field as dc_field
 from typing import Callable, Iterable, Literal, Sequence
 
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 
 from .scene import Scene
 
-__all__ = ["FitHistory", "etc_loss", "fit"]
+__all__ = ["FitHistory", "blur_time", "etc_loss", "fit"]
+
+
+def blur_time(etc: Tensor, sigma_bins: float) -> Tensor:
+    """Convolve an ETC along its time axis with a unit-area Gaussian.
+
+    Used to bring a measurement up to the model's current time resolution while
+    the kernel is being annealed.  Because both the splat kernel and this one
+    are unit-area Gaussians, blurring a measurement made at ``sigma_meas`` by
+    ``sqrt(sigma^2 - sigma_meas^2)`` reproduces *exactly* what the model would
+    render at ``sigma`` -- so the comparison stays like-for-like at every stage
+    instead of matching a blurred model against a sharp measurement.
+    """
+    if sigma_bins <= 1e-3:
+        return etc
+    radius = max(1, int(math.ceil(4.0 * sigma_bins)))
+    offsets = torch.arange(-radius, radius + 1, dtype=etc.dtype, device=etc.device)
+    kernel = torch.exp(-0.5 * (offsets / sigma_bins) ** 2)
+    kernel = kernel / kernel.sum()
+    flat = etc.reshape(-1, 1, etc.shape[-1])
+    padded = F.pad(flat, (radius, radius), mode="constant", value=0.0)
+    return F.conv1d(padded, kernel.view(1, 1, -1)).reshape(etc.shape)
 
 LossName = Literal["log_mse", "mse", "l1", "log_l1"]
 
@@ -51,6 +73,15 @@ class FitHistory:
     def record(self, loss: float, named: Iterable[tuple[str, Tensor]],
                extra: dict[str, float] | None = None) -> None:
         self.loss.append(float(loss))
+        self.snapshot(named, extra)
+
+    def snapshot(self, named: Iterable[tuple[str, Tensor]],
+                 extra: dict[str, float] | None = None) -> None:
+        """Record parameter values without a matching loss.
+
+        Used once after the loop closes, so the last entry in ``params`` is the
+        converged state rather than the state one Adam step before it.
+        """
         for name, tensor in named:
             self.params.setdefault(name, []).append(
                 tensor.detach().reshape(-1).tolist()
@@ -59,6 +90,12 @@ class FitHistory:
             self.extra.setdefault(key, []).append(float(value))
 
     def final(self, name: str) -> list[float]:
+        """Converged value of a parameter.
+
+        ``params`` carries one more entry than ``loss``: entry ``i`` holds the
+        parameters that *produced* ``loss[i]``, and the extra final entry is the
+        state after the last step.
+        """
         return self.params[name][-1]
 
     def __len__(self) -> int:
@@ -107,6 +144,7 @@ def fit(
     loss_kind: LossName = "log_mse",
     sigma_d_schedule: float | tuple[float, float] = 80.0,
     sigma_t_schedule: float | tuple[float, float] = 3e-3,
+    target_sigma_t: float | None = None,
     ray_chunk_size: int = 0,
     splat_kwargs: dict | None = None,
     regulariser: Callable[[], Tensor] | None = None,
@@ -131,6 +169,11 @@ def fit(
         loss_kind: see :func:`etc_loss`.
         sigma_d_schedule, sigma_t_schedule: constant, or ``(start, end)``
             annealed geometrically over the run.
+        target_sigma_t: the time-kernel width ``target_etc`` was measured at.
+            When given, the target is blurred at each iteration to match the
+            model's current ``sigma_t``, so an annealed model is never compared
+            against a sharper measurement.  Leave it ``None`` only if
+            ``sigma_t_schedule`` is constant.
         ray_chunk_size: render in ray chunks of this size to bound memory
             (0 = one shot).
         splat_kwargs: extra arguments forwarded to the splatter.
@@ -164,6 +207,14 @@ def fit(
             f"time grid has {grid.shape[0]} bins but target_etc has {target_etc.shape[-1]}"
         )
 
+    dt_grid = (grid[-1] - grid[0]) / max(grid.shape[0] - 1, 1)
+    if target_sigma_t is None and not isinstance(sigma_t_schedule, (int, float)):
+        raise ValueError(
+            "sigma_t_schedule anneals the model's time kernel, so target_sigma_t "
+            "must say what width the measurement was made at -- otherwise a "
+            "blurred prediction is being fitted to a sharp measurement."
+        )
+
     history = FitHistory()
     extra_fns = track or {}
     n_skipped = 0
@@ -181,7 +232,12 @@ def fit(
             kw["chunk_size"] = ray_chunk_size
         pred = render(directions, grid, **kw)
 
-        data_loss = etc_loss(pred, target_etc, kind=loss_kind)
+        reference = target_etc
+        if target_sigma_t is not None and sigma_t > target_sigma_t:
+            extra = math.sqrt(sigma_t**2 - target_sigma_t**2)
+            reference = blur_time(target_etc, extra / float(dt_grid))
+
+        data_loss = etc_loss(pred, reference, kind=loss_kind)
         loss = data_loss if regulariser is None else data_loss + regulariser()
         loss.backward()
 
@@ -189,6 +245,13 @@ def fit(
         # NaN and silently waste the rest of the run.  Skipping the step keeps
         # the fit alive and the count is reported, so the problem is visible
         # rather than hidden.
+        # Recorded after the backward pass but before the step, so that
+        # loss[i] and params[i] describe the same scene.
+        extras = {k: fn() for k, fn in extra_fns.items()}
+        if regulariser is not None:
+            extras.setdefault("data_loss", data_loss.item())
+        history.record(loss.item(), named, extras)
+
         bad = [n for n, p in named
                if p.grad is not None and not torch.isfinite(p.grad).all()]
         if bad:
@@ -201,11 +264,6 @@ def fit(
         if project is not None:
             with torch.no_grad():
                 project()
-
-        extras = {k: fn() for k, fn in extra_fns.items()}
-        if regulariser is not None:
-            extras.setdefault("data_loss", data_loss.item())
-        history.record(loss.item(), named, extras)
         if callback is not None:
             callback(it, loss.item())
         if verbose and (it % log_every == 0 or it == n_iters - 1):
@@ -213,6 +271,7 @@ def fit(
             print(f"  iter {it:4d}  loss {loss.item():.6e}  "
                   f"sigma_d {sigma_d:7.2f}  {bits}")
 
+    history.snapshot(named, {k: fn() for k, fn in extra_fns.items()})
     history.seconds = time.perf_counter() - started
     history.skipped_steps = n_skipped
     if n_skipped and verbose:
