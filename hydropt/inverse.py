@@ -141,6 +141,7 @@ def fit(
     n_iters: int = 100,
     optimizer: torch.optim.Optimizer | None = None,
     lr: float = 0.05,
+    lr_decay: float = 1.0,
     loss_kind: LossName = "log_mse",
     sigma_d_schedule: float | tuple[float, float] = 80.0,
     sigma_t_schedule: float | tuple[float, float] = 3e-3,
@@ -166,6 +167,14 @@ def fit(
         time_grid: time grid matching ``target_etc``; defaults to the scene's.
         n_iters: optimiser steps.
         optimizer: pre-built optimiser; if ``None``, Adam with ``lr``.
+        lr_decay: final learning rate as a fraction of ``lr``, applied
+            geometrically across the run (``1.0`` = no decay).  Adam takes a
+            step of roughly ``lr`` per iteration whatever the gradient
+            magnitude, so at a fixed rate it cannot settle: it oscillates around
+            the minimum at a fixed amplitude, and on an annealing schedule it
+            will happily wander back *out* of a good basin late in the run.
+            Decaying to a few percent is usually the difference between
+            converging and merely getting close.
         loss_kind: see :func:`etc_loss`.
         sigma_d_schedule, sigma_t_schedule: constant, or ``(start, end)``
             annealed geometrically over the run.
@@ -201,6 +210,12 @@ def fit(
 
     params = [p for _, p in named]
     opt = optimizer if optimizer is not None else torch.optim.Adam(params, lr=lr)
+    scheduler = None
+    if lr_decay != 1.0:
+        if lr_decay <= 0.0:
+            raise ValueError("lr_decay must be positive")
+        gamma = lr_decay ** (1.0 / max(n_iters - 1, 1))
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=gamma)
     grid = scene.default_time_grid() if time_grid is None else time_grid
     if grid.shape[0] != target_etc.shape[-1]:
         raise ValueError(
@@ -261,6 +276,8 @@ def fit(
                 print(f"  iter {it:4d}  skipped: non-finite gradient on {', '.join(bad)}")
         else:
             opt.step()
+        if scheduler is not None:
+            scheduler.step()
         if project is not None:
             with torch.no_grad():
                 project()

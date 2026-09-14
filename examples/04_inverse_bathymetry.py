@@ -68,8 +68,8 @@ def build_scene(heights: torch.Tensor, *, learnable: bool) -> Scene:
         surface_loss=ConstantLoss(0.5, learnable=False),
         bottom_loss=ConstantLoss(3.5, learnable=False),
         freqs_khz=octave_bands(0.3, 2),
-        step_size=25.0,
-        n_steps=420,
+        step_size=30.0,
+        n_steps=350,
         max_bounces=30,
     )
 
@@ -87,7 +87,7 @@ def main() -> int:
 
     # Azimuth spread matters here: a single vertical plane would only ever
     # sample one line across the seamount.
-    directions = spherical_fan(46, 13, elev_range_deg=(-22.0, -2.0),
+    directions = spherical_fan(46, 11, elev_range_deg=(-22.0, -2.0),
                                azim_range_deg=(-9.0, 9.0))
     grid = make_time_grid(4.9, 5.6, 340)
 
@@ -127,10 +127,13 @@ def main() -> int:
         curv_y = h[2:, :] - 2 * h[1:-1, :] + h[:-2, :]
         return 2e-5 * dev.pow(2).mean() + 2e-5 * (curv_x.pow(2).mean() + curv_y.pow(2).mean())
 
-    with timed("200 Adam steps"):
+    with timed("150 Adam steps"):
         history = fit(
             scene, target, directions, time_grid=grid,
-            n_iters=200, lr=1.5,
+            # Without lr_decay this fit reaches ~13 m RMS around iteration 75 and
+            # then drifts back out to ~17 m: Adam keeps taking full-size steps
+            # whatever the gradient, so it cannot settle into the basin it found.
+            n_iters=150, lr=1.5, lr_decay=0.03,
             sigma_d_schedule=SIGMA_D,
             sigma_t_schedule=(4.0e-2, SIGMA_T),
             target_sigma_t=SIGMA_T,
