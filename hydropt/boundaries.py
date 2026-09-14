@@ -257,6 +257,19 @@ class BoundaryLoss(nn.Module):
     def forward(self, grazing_rad: Tensor) -> Tensor:  # pragma: no cover - abstract
         raise NotImplementedError
 
+    def reflection_phase(self, grazing_rad: Tensor) -> Tensor:
+        """Phase shift imposed on the *pressure* by one bounce, in radians.
+
+        Zero by default.  This is what separates an energy model from a
+        coherent one: amplitude alone cannot beamform, and the two boundaries
+        behave completely differently.  The sea surface is a pressure-release
+        interface, so its reflection coefficient is -1 and every surface bounce
+        flips the sign -- a path with an odd number of them arrives inverted.
+        A seabed's phase is angle-dependent and comes out of the reflection
+        coefficient itself; see :class:`RayleighBottomLoss`.
+        """
+        return torch.zeros_like(grazing_rad)
+
 
 class ConstantLoss(BoundaryLoss):
     """Angle-independent loss of ``L`` dB per bounce.
@@ -266,16 +279,23 @@ class ConstantLoss(BoundaryLoss):
     of a mis-specified scene rather than something to hide behind a clamp.
     """
 
-    def __init__(self, loss_db: float = 1.0, *, learnable: bool = True) -> None:
+    def __init__(self, loss_db: float = 1.0, *, learnable: bool = True,
+                 pressure_release: bool = False) -> None:
         super().__init__()
         t = torch.as_tensor(float(loss_db))
         if learnable:
             self.loss_db = nn.Parameter(t)
         else:
             self.register_buffer("loss_db", t)
+        self.pressure_release = bool(pressure_release)
 
     def forward(self, grazing_rad: Tensor) -> Tensor:
         return self.loss_db.to(grazing_rad.dtype).expand(grazing_rad.shape).clone()
+
+    def reflection_phase(self, grazing_rad: Tensor) -> Tensor:
+        if not self.pressure_release:
+            return torch.zeros_like(grazing_rad)
+        return torch.full_like(grazing_rad, math.pi)
 
 
 class RayleighBottomLoss(BoundaryLoss):
@@ -318,7 +338,8 @@ class RayleighBottomLoss(BoundaryLoss):
         self.register_buffer("rho1", torch.as_tensor(float(rho1)))
         self.register_buffer("c1", torch.as_tensor(float(c1)))
 
-    def forward(self, grazing_rad: Tensor) -> Tensor:
+    def coefficient(self, grazing_rad: Tensor) -> Tensor:
+        """Complex pressure reflection coefficient ``R``."""
         dt = grazing_rad.dtype
         cdt = torch.complex128 if dt == torch.float64 else torch.complex64
 
@@ -343,6 +364,14 @@ class RayleighBottomLoss(BoundaryLoss):
         z1 = rho1.to(cdt) * c1.to(cdt) / sin1
         z2 = rho2.to(cdt) * c2c / sin2
 
-        r = (z2 - z1) / (z2 + z1)
+        return (z2 - z1) / (z2 + z1)
+
+    def forward(self, grazing_rad: Tensor) -> Tensor:
+        r = self.coefficient(grazing_rad)
         r2 = (r.real**2 + r.imag**2).clamp(1e-12, 1.0)
         return -10.0 * torch.log10(r2)
+
+    def reflection_phase(self, grazing_rad: Tensor) -> Tensor:
+        """``arg(R)``.  Below the critical angle this sweeps rapidly with angle,
+        which is exactly the behaviour an energy-only model throws away."""
+        return torch.angle(self.coefficient(grazing_rad))
