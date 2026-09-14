@@ -975,7 +975,7 @@ hydropt/
   plot.py        matplotlib views; optional plotly
 examples/        01-11, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
-tests/           232 tests
+tests/           261 tests
 ```
 
 ## References
