@@ -133,7 +133,9 @@ def main() -> int:
     with timed("140 Adam steps"):
         history = fit(
             scene, target, directions, time_grid=grid,
-            n_iters=140, lr=0.3,
+            # lr is in m/s per iteration; it decays so the fit can settle
+            # rather than orbit the minimum at a fixed step size.
+            n_iters=140, lr=0.3, lr_decay=0.04,
             sigma_d_schedule=SIGMA_D,
             sigma_t_schedule=(8.0e-2, SIGMA_T),
             target_sigma_t=SIGMA_T,

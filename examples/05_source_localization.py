@@ -112,7 +112,11 @@ def main() -> int:
     with timed("200 Adam steps"):
         history = fit(
             scene, target, directions, time_grid=grid,
-            n_iters=200, lr=12.0,  # parameter units are metres
+            # Parameter units are metres, so lr is roughly how far the source
+            # moves per iteration.  It has to decay: at a fixed 12 m step the
+            # fit plateaus around 120 m error simply because it cannot take a
+            # step smaller than that.
+            n_iters=200, lr=12.0, lr_decay=0.02,
             # sigma_d is held fixed: unlike the time kernel, widening the
             # spatial acceptance has no counterpart on the measurement side, so
             # annealing it would compare a model to data at a resolution the
