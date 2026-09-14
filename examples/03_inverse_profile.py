@@ -121,11 +121,14 @@ def main() -> int:
         Even among the knots the rays do sample, one array at one range leaves a
         null space: different profiles produce the same arrival times for this
         ray set.  A curvature penalty picks the least contrived of them.  The
-        weight is a few percent of the data misfit at the true profile, so it
-        does not flatten the channel the data genuinely resolve.
+        The weight matters: at 1e-4 the penalty was ~14% of the converged data
+        misfit and the recovered channel came out visibly flatter than the true
+        one, which is regularisation bias rather than a resolution limit.  At
+        2e-5 it is a few percent -- enough to suppress jagged null-space
+        structure, not enough to iron out the channel.
         """
         v = scene.field.values
-        return 1e-4 * (v[2:] - 2 * v[1:-1] + v[:-2]).pow(2).mean()
+        return 2e-5 * (v[2:] - 2 * v[1:-1] + v[:-2]).pow(2).mean()
 
     def keep_physical() -> None:
         scene.field.values.clamp_(1450.0, 1600.0)

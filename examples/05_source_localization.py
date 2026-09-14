@@ -87,7 +87,11 @@ def main() -> int:
 
     # The fan has to be wide in azimuth: the source may start on the wrong
     # bearing, and rays that never go towards the array carry no gradient.
-    directions = spherical_fan(26, 30, elev_range_deg=(-26.0, 26.0),
+    # Full azimuth, because the initial guess may be on the wrong bearing, but
+    # only shallow elevations: in a 200 m shelf a 26 deg ray bounces every 460 m
+    # and arrives 40 dB down, so steep rays cost tracing time without carrying
+    # much energy to the array.
+    directions = spherical_fan(18, 30, elev_range_deg=(-15.0, 15.0),
                                azim_range_deg=(0.0, 360.0))
     grid = make_time_grid(2.4, 5.2, 1600)  # dt = 1.75 ms, ~2.3 bins per sigma_t
 
@@ -114,14 +118,14 @@ def main() -> int:
         scene.source.data[1].clamp_(0.0, 10_000.0)
         scene.source.data[2].clamp_(5.0, WATER_DEPTH - 5.0)
 
-    with timed("200 Adam steps"):
+    with timed("260 Adam steps"):
         history = fit(
             scene, target, directions, time_grid=grid,
             # Parameter units are metres, so lr is roughly how far the source
             # moves per iteration.  It has to decay: at a fixed 12 m step the
             # fit plateaus around 120 m error simply because it cannot take a
             # step smaller than that.
-            n_iters=200, lr=14.0, lr_decay=0.015,
+            n_iters=260, lr=14.0, lr_decay=0.03,
             # sigma_d is held fixed: unlike the time kernel, widening the
             # spatial acceptance has no counterpart on the measurement side, so
             # annealing it would compare a model to data at a resolution the
