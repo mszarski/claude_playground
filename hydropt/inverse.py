@@ -241,17 +241,17 @@ def fit(
         loss = data_loss if regulariser is None else data_loss + regulariser()
         loss.backward()
 
-        # A single non-finite gradient would otherwise turn every parameter into
-        # NaN and silently waste the rest of the run.  Skipping the step keeps
-        # the fit alive and the count is reported, so the problem is visible
-        # rather than hidden.
-        # Recorded after the backward pass but before the step, so that
-        # loss[i] and params[i] describe the same scene.
+        # Recorded after the backward pass but before the step, so that loss[i]
+        # and params[i] describe the same scene.
         extras = {k: fn() for k, fn in extra_fns.items()}
         if regulariser is not None:
             extras.setdefault("data_loss", data_loss.item())
         history.record(loss.item(), named, extras)
 
+        # A single non-finite gradient would otherwise turn every parameter into
+        # NaN and silently waste the rest of the run.  Skipping the step keeps
+        # the fit alive, and the count is reported so the problem is visible
+        # rather than hidden.
         bad = [n for n, p in named
                if p.grad is not None and not torch.isfinite(p.grad).all()]
         if bad:
