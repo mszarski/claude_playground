@@ -502,20 +502,94 @@ Two traps worth naming, both of which bit during development:
   path is reciprocal in *geometry* -- suppresses off-axis patches twice over and
   understated reverberation by 8.5 dB.
 
-### What is still missing
+### Extended targets, and the glint that is not a highlight
 
-**Aspect-dependent targets.** `PointTarget` is isotropic. Aspect dependence
-breaks the separability that makes the two-leg convolution valid, because the
-outbound amplitude would then depend on the inbound direction.
+`hydropt.targets.ExtendedTarget` is a rigid cloud of highlights with a position
+and an orientation; a `ScatteringPattern` gives each highlight's bistatic
+cross-section in the body frame. Both plate and cylinder patterns are the
+standard physical-optics forms and both are pinned to their textbook values:
+
+| | closed form | hydropt |
+| --- | --- | --- |
+| plate, broadside backscatter | `sigma = (A/lambda)^2` | exact to 1e-12 |
+| plate nulls | `sin(theta) = lambda / 2a`, each side | on the predicted angle |
+| cylinder, broadside | `sigma = r L^2 / 2 lambda` (Urick) | exact to 1e-12 |
+| cylinder nulls | `sin(theta) = lambda / 2L` | on the predicted angle |
+| N sections of `L/N`, coherent | one cylinder of `L` | exact to 1e-12 |
+
+That last row is the one that ties the multi-highlight machinery to the
+single-body formula: amplitude per section is `(L/N) sqrt(r/2 lambda)`, so N of
+them in phase give `L sqrt(r/2 lambda)`, whose square is the whole cylinder's
+cross-section. If the per-section level were wrong by any factor it would not
+close.
+
+**Aspect dependence is exact on the coherent path.** `compose_arrivals` already
+pairs every inbound arrival with every outbound one, and that pair sum is exactly
+what a bistatic cross-section needs -- so each pair is weighted by `sigma` for
+*its own* geometry, with no approximation and no extra traces. Making that work
+needed one new thing: `ArrivalSet.launch_direction`, the direction a ray was
+*launched* in. It is not the same as `direction`, which is where the ray ended up
+going; refraction and reflection turn a ray in between, and what a scatterer
+needs is the direction the energy left it in. Producers that have no such
+direction to report -- reverberation -- leave the field `None` rather than
+filling it with something plausible, so a pattern that needs it fails loudly.
+
+**It is not available on the energy path, and that is structural.**
+`render_echo` is fast because the two legs are *separable*; a `sigma` depending
+on both directions at once is precisely what breaks that separability, and an
+energy render has already discarded the pairing a bistatic pattern consumes.
+`render_extended_echo` therefore handles multi-highlight targets exactly -- one
+inbound render, since the highlights are just several receive points, plus one
+outbound trace each -- and evaluates `sigma` at the straight-line aspect,
+documented as the approximation it is.
+
+**The finding that changed the example.** The natural expectation is that
+chopping a body into sections makes it "resolve into highlights" across its
+extent. It does not, and the reason is quantitative: a 0.8 m section at 100 kHz
+has a beamwidth of `lambda / 2a` = 0.54 deg, while a 4 m hull at 40 m subtends
+5.7 deg -- so its end sections see the sonar 2.9 deg off their own broadside,
+five beamwidths out, and return almost nothing. **A smooth hull glints.**
+Measured in `examples/09`: 83% of the echo energy from one section of five, with
+the ends at 0.5%.
+
+And the glint is not a feature of the hull. Sliding the body along its own axis
+leaves the glint at the specular point in the *world* while it travels along the
+*body*:
+
+| body centre | glint, world y | glint, along body | share |
+| --- | --- | --- | --- |
+| -1.60 m | +0.00 m | **+1.60 m** | 65% |
+| +0.00 m | +0.00 m | **+0.00 m** | 83% |
+| +1.60 m | +0.00 m | **-1.60 m** | 75% |
+
+What *does* spread across a body is a set of **discrete** scatterers -- edges,
+corners, fittings, a wreck's structure -- each small enough to be broad in
+aspect. Same layout, isotropic patterns: 2.07 deg of weighted bearing spread
+against the hull's 0.52 deg and a point target's 0.53 deg, out of 5.7 deg
+subtended.
+
+**Multipath fills the aspect nulls.** The measured aspect pattern sits a steady
++7.0 dB above the direct-path envelope `cos^2(theta)/(ka sin theta)^2` at every
+aspect off broadside, because a surface- or bottom-bounced ray strikes the hull
+at a different aspect than the direct one and so is not in the same null. A
+shallow-water FLS does not see a target's nulls as deeply as a free-field
+calculation predicts. Broadside over end-on is +68.8 dB.
+
+**Why the end caps exist.** Physical optics takes a cylinder's cross-section to
+*exactly zero* end-on, because the projected length vanishes -- a modelling
+artefact, not physics, and one that also means no gradient there. A real cylinder
+end-on returns its end cap, so a body that must stay visible at every aspect
+wants the cap as its own highlight. Adding two puts 60.0 dB back into the end-on
+echo, and that composability is the reason a target is built from parts rather
+than from one formula.
+
+### What is still missing
 
 **Absorption above ~100 kHz.** Thorp is out of range; the Francois-Garrison
 hook needs implementing. Two-way absorption is 34 dB/km at 100 kHz and 67 dB/km
 at 300 kHz, so useful ranges are 100-300 m -- a regime where the high-frequency
 approximation behind ray theory is *better* justified than in the deep-water
 examples.
-
-**Caustic phase.** No KMAH index, so coherent results near focusing regions are
-wrong by multiples of pi/2.
 
 ## Autograd strategy
 
@@ -605,6 +679,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `06_active_beamformed_sonar.py` | Active forward-looking sonar: two-way echoes beamformed into a bearing-range image | both targets to 0.00 deg in bearing, 0.05 m in range |
 | `07_reverberation_limited_detection.py` | A small target on a rock seabed: is it detectable? | -0.9 dB at one element, +10.9 dB in the beam; bottom type recovered to 0.4 dB |
 | `08_gaussian_beams_caustic.py` | Gaussian beams through the Munk channel's caustics | 81 of 120 rays cross one; tube pinned at its floor, beam at `|det Q| = beta^2` exactly |
+| `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | hull glints (83% from one section, travelling along the body); discrete scatterers spread 2.07 deg vs a point's 0.53 |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -658,6 +733,12 @@ everything below follows from that or from choices made for differentiability.
   beams) both implement better laws, but you have to ask for either -- pass
   `spreading=` to the renderer. See
   [Spreading and caustics](#spreading-and-caustics).
+* **Targets are specular or isotropic, and elastic.** `hydropt.targets` has
+  physical-optics plate and cylinder patterns, which is the high-frequency
+  specular limit: good near broadside, understating grazing aspects where edge
+  diffraction dominates, and exactly zero edge-on or end-on. There is no
+  circumferential (Lamb) wave structure, so a real elastic shell's mid-frequency
+  response is missing, and no shadowing between highlights of the same body.
 * **No volume scattering and no rough-surface *reflection*.** Boundary
   reflection is specular. `hydropt.reverb` adds boundary *backscatter* on top
   of that, but the specular path itself is never roughened, so surface
@@ -699,12 +780,13 @@ hydropt/
   spreading.py   ray-tube (geometric Jacobian) spreading, caustics, KMAH
   beams.py       Gaussian beams: complex beam parameter, finite at caustics
   active.py      two-way echoes through a scattering target
+  targets.py     extended multi-highlight targets, aspect-dependent patterns
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
-examples/        01-08, each with acceptance checks
+examples/        01-09, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
 tests/           146 tests
 ```

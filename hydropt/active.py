@@ -48,14 +48,15 @@ from typing import NamedTuple
 import torch
 from torch import Tensor, nn
 
-from .beamform import ArrivalSet
+from .beamform import ArrivalSet, extract_arrivals
 from .launch import fibonacci_cone, fibonacci_sphere
 from .receiver import splat_etc
 from .scene import Scene
+from .targets import ExtendedTarget
 from .tracer import trace
 
 __all__ = ["PointTarget", "EchoResult", "return_fan", "render_echo",
-           "compose_arrivals"]
+           "compose_arrivals", "render_extended_echo", "target_arrivals"]
 
 
 class PointTarget(nn.Module):
@@ -243,8 +244,10 @@ def render_echo(
 def compose_arrivals(
     inbound: ArrivalSet,
     outbound: ArrivalSet,
-    target: PointTarget,
+    target: PointTarget | ExtendedTarget,
     *,
+    highlight: int = 0,
+    freqs_khz: Tensor | None = None,
     max_arrivals: int | None = None,
 ) -> ArrivalSet:
     """Combine the two legs coherently into echo arrivals at the array.
@@ -262,13 +265,55 @@ def compose_arrivals(
     The pair count is the product of the two arrival counts, so cap the legs
     with ``extract_arrivals(..., max_arrivals=...)``; a dense fan yields many
     near-duplicate arrivals that add cost without adding structure.
+
+    **Aspect dependence is exact here.** Pass an :class:`hydropt.targets.\
+ExtendedTarget` with a ``highlight`` index and ``freqs_khz``, and each pair is
+    weighted by the bistatic cross-section for *that pair's own geometry*: the
+    incident direction is the inbound arrival's ``direction`` (where the energy
+    was going when it reached the target) and the scattered direction is the
+    outbound arrival's ``launch_direction`` (the direction it left in).  Nothing
+    is approximated and no extra traces are needed -- the pair sum this function
+    already performs is exactly the sum an aspect-dependent scatterer requires.
+    Contrast :func:`render_echo`, whose separability is what a two-directional
+    cross-section breaks.
+
+    Args:
+        inbound: arrivals at the target (or highlight).
+        outbound: arrivals at the array phase centre, from a trace launched at
+            the target.  Must carry ``launch_direction`` when ``target`` is
+            aspect-dependent.
+        target: a :class:`PointTarget`, or an ``ExtendedTarget``.
+        highlight: which highlight of an ``ExtendedTarget`` these legs belong to.
+        freqs_khz: band centres; required for an ``ExtendedTarget``, whose
+            cross-section is frequency-dependent.
+        max_arrivals: keep only this many strongest pairs.
     """
     n_in, n_out = inbound.n_arrivals, outbound.n_arrivals
     if n_in == 0 or n_out == 0:
         z = inbound.time[:0]
-        return ArrivalSet(z, inbound.amplitude[:0], inbound.direction[:0], z, z, z)
+        z3 = inbound.direction[:0]
+        return ArrivalSet(z, inbound.amplitude[:0], z3, z, z, z, z3)
+    if isinstance(target, ExtendedTarget):
+        if freqs_khz is None:
+            raise ValueError("an ExtendedTarget's cross-section is frequency "
+                             "dependent, so freqs_khz is required")
+        if outbound.launch_direction is None:
+            raise ValueError(
+                "aspect-dependent scattering needs the direction each outbound "
+                "ray left the target in, but this ArrivalSet has no "
+                "launch_direction.  extract_arrivals() populates it; producers "
+                "that cannot (reverberation) leave it None.")
+        # [n_in, 1, 3] against [1, n_out, 3] -- every pair, its own geometry.
+        sigma = target.cross_section(
+            highlight,
+            inbound.direction.unsqueeze(1),
+            outbound.launch_direction.unsqueeze(0),
+            freqs_khz,
+        )  # [n_in, n_out, B]
+        amp_scale = sigma.clamp_min(0.0).sqrt().reshape(n_in * n_out, -1)
+    else:
+        amp_scale = target.cross_section().sqrt()
 
-    amp_scale = target.cross_section().sqrt()
     time = (inbound.time.view(-1, 1) + outbound.time.view(1, -1)).reshape(-1)
     phase = (inbound.phase.view(-1, 1) + outbound.phase.view(1, -1)).reshape(-1)
     amplitude = (inbound.amplitude.unsqueeze(1) * outbound.amplitude.unsqueeze(0)
@@ -276,11 +321,227 @@ def compose_arrivals(
     direction = outbound.direction.unsqueeze(0).expand(n_in, n_out, 3).reshape(-1, 3)
     distance = outbound.distance.unsqueeze(0).expand(n_in, n_out).reshape(-1)
     path = (inbound.path_length.view(-1, 1) + outbound.path_length.view(1, -1)).reshape(-1)
+    if outbound.launch_direction is None:
+        launch = None
+    else:
+        launch = (outbound.launch_direction.unsqueeze(0)
+                  .expand(n_in, n_out, 3).reshape(-1, 3))
 
     echo = ArrivalSet(time=time, amplitude=amplitude, direction=direction,
-                      phase=phase, distance=distance, path_length=path)
+                      phase=phase, distance=distance, path_length=path,
+                      launch_direction=launch)
     if max_arrivals is not None and echo.n_arrivals > max_arrivals:
         order = echo.amplitude.detach().sum(1).argsort(descending=True)[:max_arrivals]
         order = order[echo.time.detach()[order].argsort()]
-        echo = ArrivalSet(*(t[order] for t in echo))
+        echo = _select(echo, order)
     return echo
+
+
+def _select(arrivals: ArrivalSet, index: Tensor) -> ArrivalSet:
+    """Index every populated field of an :class:`ArrivalSet` at once."""
+    return ArrivalSet(*(None if t is None else t[index] for t in arrivals))
+
+
+def target_arrivals(
+    scene: Scene,
+    target: ExtendedTarget,
+    tx_directions: Tensor,
+    *,
+    sigma_d: float,
+    phase_centre: Tensor | None = None,
+    rx_directions: Tensor | None = None,
+    n_rx_rays: int = 3000,
+    rx_half_angle_deg: float = 45.0,
+    tx_weights: Tensor | None = None,
+    max_arrivals_per_leg: int | None = 24,
+    max_arrivals: int | None = None,
+    trace_kwargs: dict | None = None,
+    generator: torch.Generator | None = None,
+    **extract_kwargs,
+) -> ArrivalSet:
+    """Coherent echo arrivals from every highlight of an extended target.
+
+    This is the function an imaging sonar wants: it returns one arrival list at
+    the array phase centre covering all highlights, with phase, direction and
+    exact aspect-dependent scattering intact, ready for
+    :func:`hydropt.beamform.beamform`.
+
+    Cost is **one** transmit trace plus one trace per highlight.  The transmit
+    trace is shared because the highlights are just several points to extract
+    arrivals at -- the fan that insonifies one insonifies them all.  Each
+    highlight then needs its own return trace, because each is a different
+    source position.
+
+    Args:
+        scene: the scene; its ``source`` is the projector, ``receivers`` the array.
+        target: the :class:`hydropt.targets.ExtendedTarget` to render.
+        tx_directions: projector launch directions, ``[Nt, 3]``.
+        sigma_d: arrival acceptance width (m), as in
+            :func:`hydropt.beamform.extract_arrivals`.
+        phase_centre: where to extract the returns; defaults to the array centroid.
+        rx_directions: return fan, ``[Nr, 3]``, shared by every highlight.  By
+            default each highlight aims its own cone at the phase centre.
+        n_rx_rays, rx_half_angle_deg: shape of the default per-highlight cone.
+        tx_weights: per-ray transmit weights, e.g. projector directivity.
+        max_arrivals_per_leg: cap each leg before pairing.  The pair count is a
+            product, so capping the legs is far more effective than capping the
+            result -- and a dense fan's extra arrivals are near-duplicates.
+        max_arrivals: cap the combined result.
+        trace_kwargs: forwarded to the tracer.
+        generator: RNG for the Fibonacci return fans.
+        extract_kwargs: forwarded to ``extract_arrivals`` for both legs.
+
+    Returns:
+        One :class:`hydropt.beamform.ArrivalSet` for the whole target,
+        differentiable in the target's position, orientation, highlight layout
+        and pattern parameters, and in every scene parameter.
+    """
+    if phase_centre is None:
+        phase_centre = scene.receivers.reshape(-1, 3).mean(0)
+    kw = dict(sigma_d=sigma_d, **extract_kwargs)
+    tkw = trace_kwargs or {}
+    freqs = scene.freqs_khz
+    world = target.world_positions()
+
+    # One transmit trace for every highlight: they are just several points to
+    # ask the same bundle about.
+    tx_result = trace(scene, tx_directions, **tkw)
+
+    parts: list[ArrivalSet] = []
+    for i in range(target.n_highlights):
+        pos_i = world[i]
+        inbound = extract_arrivals(tx_result, pos_i, freqs, ray_weights=tx_weights,
+                                   max_arrivals=max_arrivals_per_leg, **kw)
+        if inbound.n_arrivals == 0:
+            continue
+        if rx_directions is None:
+            axis = phase_centre.detach().reshape(3) - pos_i.detach().reshape(3)
+            rx_dirs = fibonacci_cone(n_rx_rays, axis, rx_half_angle_deg,
+                                     generator=generator)
+        else:
+            rx_dirs = rx_directions
+        outbound = extract_arrivals(
+            trace(_RelocatedScene(scene, pos_i), rx_dirs, **tkw),
+            phase_centre, freqs, max_arrivals=max_arrivals_per_leg, **kw,
+        )
+        if outbound.n_arrivals == 0:
+            continue
+        parts.append(compose_arrivals(inbound, outbound, target, highlight=i,
+                                      freqs_khz=freqs))
+
+    if not parts:
+        z = torch.zeros(0, dtype=world.dtype, device=world.device)
+        z3 = torch.zeros(0, 3, dtype=world.dtype, device=world.device)
+        return ArrivalSet(z, torch.zeros(0, int(freqs.shape[0]), dtype=world.dtype,
+                                         device=world.device), z3, z, z, z, z3)
+
+    echo = ArrivalSet(*(
+        None if parts[0][f] is None else torch.cat([p[f] for p in parts], dim=0)
+        for f in range(len(parts[0]))
+    ))
+    order = echo.time.detach().argsort()
+    echo = _select(echo, order)
+    if max_arrivals is not None and echo.n_arrivals > max_arrivals:
+        pick = echo.amplitude.detach().sum(1).argsort(descending=True)[:max_arrivals]
+        echo = _select(echo, pick[echo.time.detach()[pick].argsort()])
+    return echo
+
+
+def render_extended_echo(
+    scene: Scene,
+    target: ExtendedTarget,
+    tx_directions: Tensor,
+    echo_time_grid: Tensor,
+    *,
+    sigma_d: float,
+    sigma_t: float,
+    rx_directions: Tensor | None = None,
+    n_rx_rays: int = 3000,
+    rx_half_angle_deg: float = 45.0,
+    tx_weights: Tensor | None = None,
+    ray_chunk: int = 0,
+    trace_kwargs: dict | None = None,
+    generator: torch.Generator | None = None,
+    **splat_kwargs,
+) -> EchoResult:
+    """Energy-domain two-way echo from an extended target, summed incoherently.
+
+    Cost is one inbound render -- the highlights are just several receive points
+    for the same transmit bundle -- plus one outbound trace per highlight, and
+    the legs still compose by convolution, so this stays linear in highlights
+    rather than quadratic in arrivals.
+
+    **The aspect used here is the straight-line one.** ``sigma`` is evaluated for
+    each highlight at the geometry projector -> highlight -> array centroid,
+    ignoring which multipath actually delivered the energy.  That is exact for an
+    isotropic pattern and an approximation for any other; the approximation is
+    unavoidable on this path, because an energy render has already discarded the
+    pairing between inbound and outbound directions that a bistatic
+    cross-section needs.  When the aspect matters -- which is whenever you are
+    imaging rather than budgeting energy -- use :func:`target_arrivals`, where it
+    is exact.
+
+    Highlights are summed in **energy**, so this response has no interference
+    between them.  That too is what the coherent path is for.
+
+    Args:
+        rx_directions: return fan, ``[Nr, 3]``, shared by every highlight.  By
+            default each highlight gets its own Fibonacci cone aimed at the array
+            centroid, which is what you want; pass this when you need the fan
+            fixed, and then it is on you to cover every highlight.
+        n_rx_rays, rx_half_angle_deg: shape of the default per-highlight cone.
+    """
+    grid = echo_time_grid
+    n_echo = int(grid.shape[0])
+    if n_echo < 2:
+        raise ValueError("echo_time_grid needs at least two bins")
+    dt = (grid[-1] - grid[0]) / (n_echo - 1)
+    dt_f = float(dt)
+    if float(grid[0]) < 0.0:
+        raise ValueError("echo_time_grid must start at a non-negative time")
+
+    n_leg = int(math.ceil(float(grid[-1]) / dt_f)) + 1
+    leg_grid = torch.arange(n_leg, dtype=grid.dtype, device=grid.device) * dt
+    kw = dict(sigma_d=sigma_d, sigma_t=sigma_t / math.sqrt(2.0),
+              ray_chunk=ray_chunk, **splat_kwargs)
+    tkw = trace_kwargs or {}
+    freqs = scene.freqs_khz
+    world = target.world_positions()
+    centre = scene.receivers.reshape(-1, 3).mean(0)
+
+    # Leg 1, once: all highlights are receive points of the same bundle.
+    inbound = splat_etc(trace(scene, tx_directions, **tkw), world, leg_grid,
+                        freqs, ray_weights=tx_weights, **kw)  # [N, B, T]
+
+    n_fft = 1 << int(math.ceil(math.log2(max(2 * n_leg - 1, 2))))
+    spec_in = torch.fft.rfft(inbound, n=n_fft)
+
+    total = None
+    outbound_sum = None
+    for i in range(target.n_highlights):
+        pos_i = world[i]
+        if rx_directions is None:
+            axis = centre.detach().reshape(3) - pos_i.detach().reshape(3)
+            rx_dirs = fibonacci_cone(n_rx_rays, axis, rx_half_angle_deg,
+                                     generator=generator)
+        else:
+            rx_dirs = rx_directions
+        outbound = splat_etc(trace(_RelocatedScene(scene, pos_i), rx_dirs, **tkw),
+                             scene.receivers, leg_grid, freqs, **kw)
+        # Straight-line aspect: projector -> highlight -> array centroid.
+        inc = pos_i - scene.source_position().reshape(3)
+        inc = inc / inc.norm().clamp_min(1e-30)
+        sca = centre.reshape(3) - pos_i
+        sca = sca / sca.norm().clamp_min(1e-30)
+        sigma = target.cross_section(i, inc, sca, freqs).reshape(1, -1, 1)
+
+        spec = spec_in[i : i + 1] * torch.fft.rfft(outbound, n=n_fft)
+        full = torch.fft.irfft(spec, n=n_fft)[..., : 2 * n_leg - 1] * dt * sigma
+        total = full if total is None else total + full
+        outbound_sum = outbound if outbound_sum is None else outbound_sum + outbound
+
+    offset = int(round(float(grid[0]) / dt_f))
+    if offset + n_echo > total.shape[-1]:
+        total = torch.nn.functional.pad(total, (0, offset + n_echo - total.shape[-1]))
+    return EchoResult(etc=total[..., offset : offset + n_echo], inbound=inbound,
+                      outbound=outbound_sum, leg_time_grid=leg_grid)

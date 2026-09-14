@@ -77,6 +77,16 @@ class ArrivalSet(NamedTuple):
     phase: Tensor  # [A] accumulated boundary phase (rad)
     distance: Tensor  # [A] miss distance of the contributing ray (m)
     path_length: Tensor  # [A] path length at closest approach (m)
+    # [A, 3] unit direction the contributing ray was *launched* in, or None when
+    # the producer has none to report.  Not the same as `direction`: refraction
+    # and reflection turn a ray between its source and the point it arrives at.
+    # An aspect-dependent scatterer needs exactly this -- for a leg leaving a
+    # target it is the direction the energy was scattered into, where
+    # `direction` is only where that energy ended up going.  `None` rather than
+    # a plausible substitute, so a pattern that needs it fails loudly:
+    # reverberation arrivals, for instance, have no scatterer-frame launch
+    # direction to give.
+    launch_direction: Tensor | None = None
 
     @property
     def n_arrivals(self) -> int:
@@ -152,8 +162,9 @@ def extract_arrivals(
     ri, si = keep.nonzero(as_tuple=True)
     if ri.numel() == 0:
         z = torch.zeros(0, dtype=dtype, device=device)
+        z3 = torch.zeros(0, 3, dtype=dtype, device=device)
         return ArrivalSet(z, torch.zeros(0, freqs_khz.shape[0], dtype=dtype, device=device),
-                          torch.zeros(0, 3, dtype=dtype, device=device), z, z, z)
+                          z3, z, z, z, z3)
 
     t_sel = tstar[ri, si]
     d_sel = dist[ri, si]
@@ -164,6 +175,12 @@ def extract_arrivals(
     db_c = result.refl_db[ri, si + 1]
     phase = result.refl_phase[ri, si + 1]
     direction = seg[ri, si] / len_sel.unsqueeze(-1)
+    # The launch direction is the ray's first step.  Exact unless the ray hit a
+    # boundary inside that very first step, which needs the source to be within
+    # one step of a boundary.
+    first = pos[:, 1] - pos[:, 0]
+    first = first / first.norm(dim=-1, keepdim=True).clamp_min(1e-30)
+    launch_direction = first[ri]
 
     weight = torch.exp(-0.5 * (d_sel / sigma_d) ** 2)
     if ray_weights is not None:
@@ -187,9 +204,11 @@ def extract_arrivals(
         time, amplitude = time[order], amplitude[order]
         direction, phase = direction[order], phase[order]
         d_sel, s_c = d_sel[order], s_c[order]
+        launch_direction = launch_direction[order]
 
     return ArrivalSet(time=time, amplitude=amplitude, direction=direction,
-                      phase=phase, distance=d_sel, path_length=s_c)
+                      phase=phase, distance=d_sel, path_length=s_c,
+                      launch_direction=launch_direction)
 
 
 def shading_window(n: int, kind: WindowKind = "uniform", *,

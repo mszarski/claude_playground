@@ -6,7 +6,15 @@ frequencies in kHz.
 """
 
 from .absorption import octave_bands, thorp_db_per_km
-from .active import EchoResult, PointTarget, compose_arrivals, render_echo, return_fan
+from .active import (
+    EchoResult,
+    PointTarget,
+    compose_arrivals,
+    render_echo,
+    render_extended_echo,
+    return_fan,
+    target_arrivals,
+)
 from .beamform import (
     ArrivalSet,
     azimuth_steering,
@@ -58,6 +66,14 @@ from .reverb import (
     reverberation_arrivals,
 )
 from .scene import Scene
+from .targets import (
+    CylinderScattering,
+    ExtendedTarget,
+    IsotropicScattering,
+    PlateScattering,
+    ScatteringPattern,
+    rotation_matrix,
+)
 from .spreading import RayTube, ray_tube, ray_tube_jvp, spherical_spreading
 from .tracer import BounceEvents, RayState, TraceResult, bounce_events, trace
 
@@ -76,6 +92,10 @@ __all__ = [
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
     # active sonar
     "PointTarget", "EchoResult", "render_echo", "return_fan", "compose_arrivals",
+    # extended targets
+    "ExtendedTarget", "ScatteringPattern", "IsotropicScattering",
+    "PlateScattering", "CylinderScattering", "rotation_matrix",
+    "target_arrivals", "render_extended_echo",
     # coherent arrivals and beamforming
     "ArrivalSet", "extract_arrivals", "element_field", "beamform",
     "shading_window", "azimuth_steering",
