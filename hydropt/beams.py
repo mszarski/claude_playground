@@ -59,10 +59,14 @@ A wavelength or a few is the usual starting point, and
 
 Cost
 ----
-Six traces: one for the path, two for the launch-angle tangents and three for
-the source-position tangents.  That is the price of exactness; the geometric
-tube in :func:`hydropt.spreading.ray_tube` costs one trace and is second-order
-accurate, which is the right default for most work.
+Six traces -- one for the path, two launch-angle tangents, three source-position
+tangents -- but *not* six times the wall time.  Five of them are forward-mode
+dual traces, which neither fuse nor checkpoint, and measured on 120 rays x 1500
+steps they come to about **100x** a plain traced bundle (112 s against 1.1 s).
+That is the real price of exactness.  The geometric tube in
+:func:`hydropt.spreading.ray_tube` costs one trace plus a neighbour difference
+and is second-order accurate, which is the right default for most work; reach
+for beams when the amplitude at a caustic is the thing you actually need.
 """
 
 from __future__ import annotations

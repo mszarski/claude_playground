@@ -363,9 +363,11 @@ ray again with the singularity back, too large and arrivals merge.
 9.00 m at 500 Hz, 0.225 m at 20 kHz -- and the resulting `width` is returned so
 the effect of changing it is visible rather than hidden.
 
-Six traces: one for the path, two launch-angle tangents, three source-position
-tangents. `ray_tube` costs one trace and is second-order accurate, which remains
-the right default; reach for beams when the caustics matter.
+**Cost: six traces, but roughly 100x the wall time.** Five of the six are
+forward-mode dual traces, which neither fuse nor checkpoint -- on 120 rays x
+1,500 steps, 112 s against 1.1 s for a plain traced bundle. `ray_tube` stays the
+right default at one trace and second-order accuracy; reach for beams when the
+amplitude at a caustic is the thing you actually need.
 
 ```python
 from hydropt import gaussian_beams, suggest_beam_width, splat_etc
@@ -602,6 +604,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `05_source_localization.py` | Recovers source `(x, y, z)` on a 10 km shelf | 991 m -> 47.8 m (target: within 50 m) |
 | `06_active_beamformed_sonar.py` | Active forward-looking sonar: two-way echoes beamformed into a bearing-range image | both targets to 0.00 deg in bearing, 0.05 m in range |
 | `07_reverberation_limited_detection.py` | A small target on a rock seabed: is it detectable? | -0.9 dB at one element, +10.9 dB in the beam; bottom type recovered to 0.4 dB |
+| `08_gaussian_beams_caustic.py` | Gaussian beams through the Munk channel's caustics | 81 of 120 rays cross one; tube pinned at its floor, beam at `|det Q| = beta^2` exactly |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -638,10 +641,13 @@ everything below follows from that or from choices made for differentiability.
   enters the geometry.
 * **Caustic amplitudes need Gaussian beams, and `beta` is a choice.**
   `hydropt.spreading` counts caustics and applies the `-pi/2` KMAH phase but
-  floors the tube area; `hydropt.beams` removes that floor properly, at six
-  traces instead of one. What neither fixes is that the beam width `beta` is not
+  floors the tube area; `hydropt.beams` removes that floor properly, at about
+  100x the wall time. Two things neither fixes: the beam width `beta` is not
   determined by the theory, so the field near a caustic depends on a parameter
-  you pick. See [Gaussian beams](#gaussian-beams-finite-at-caustics-no-floor).
+  you pick; and a single beam is very wide at long range (4.7 km at 38 km for
+  `beta` = 24 m at 500 Hz), where a real Gaussian-beam field is a *sum* over
+  many narrow beams rather than one wide one. See
+  [Gaussian beams](#gaussian-beams-finite-at-caustics-no-floor).
 * **Energy, not pressure** on the passive path. Arrivals are summed
   incoherently, with no phase, so there is no interference, no modal structure
   and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
@@ -700,7 +706,7 @@ hydropt/
   plot.py        matplotlib views; optional plotly
 examples/        01-08, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
-tests/           131 tests
+tests/           146 tests
 ```
 
 ## References
