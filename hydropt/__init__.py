@@ -35,6 +35,15 @@ from .boundaries import (
     grazing_angle,
     reflect,
 )
+from .environment import (
+    fractal_bathymetry,
+    gaussian_seamount,
+    internal_wave_perturbation,
+    pierson_moskowitz_surface,
+    significant_wave_height_pm,
+    spectral_field,
+    wave_number_peak_pm,
+)
 from .fields import (
     DepthProfile,
     GriddedField,
@@ -92,6 +101,10 @@ __all__ = [
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
     # active sonar
     "PointTarget", "EchoResult", "render_echo", "return_fan", "compose_arrivals",
+    # environment generators
+    "gaussian_seamount", "spectral_field", "pierson_moskowitz_surface",
+    "fractal_bathymetry", "internal_wave_perturbation",
+    "significant_wave_height_pm", "wave_number_peak_pm",
     # extended targets
     "ExtendedTarget", "ScatteringPattern", "IsotropicScattering",
     "PlateScattering", "CylinderScattering", "rotation_matrix",

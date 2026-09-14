@@ -378,6 +378,75 @@ beams = gaussian_beams(scene, elev, azim,
 etc = splat_etc(beams.result, receivers, grid, spreading=beams.spreading)
 ```
 
+## Building an environment
+
+hydropt's fields take arrays, which is the right interface and an awkward place
+to start from. `hydropt.environment` builds those arrays -- a sea surface from a
+wind speed, a seabed from a roughness exponent, a range-dependent ocean from an
+internal-wave displacement -- and returns ordinary `BilinearHeightField` and
+`GriddedField` objects, so nothing downstream knows a generator was involved and
+every field stays learnable.
+
+Each generator is specified by a statistic, so each has something to check:
+
+| generator | specified by | measured off the realisation |
+| --- | --- | --- |
+| `pierson_moskowitz_surface` | `H_s = 0.22 U^2 / g`, RMS = `H_s/4` | exact to 1e-12 |
+| `fractal_bathymetry` | 2-D PSD `~ k^-gamma` | slope within 0.03 of `gamma`, at 2.5, 3.0 and 3.5 |
+| `internal_wave_perturbation` | `delta c = -(dc/dz) zeta` | exact to 1e-9, depth by depth |
+| `gaussian_seamount` | summit height above the seabed | exact to 1e-9 |
+
+**Normalisation is a choice, so it is one.** `normalise="sample"` (the default)
+scales a realisation so its *sample* RMS is exactly what you asked for -- a
+surface built for a 1.2 m significant wave height has one. That removes the
+variance-of-the-variance, so `normalise="ensemble"` gets the RMS right in
+expectation instead and leaves each draw's variance free to fluctuate. Since the
+RMS sets the level either way, the spectral prefactors cancel and only the
+wavenumber dependence matters -- which is why the wind sea takes its level from
+`H_s` rather than from Phillips' `alpha`.
+
+**Two details that are easy to get wrong, so they are tested.** The
+Pierson-Moskowitz *wavenumber* spectrum does not peak at `omega_p^2 / g`: the
+change of variables carries a Jacobian, so the `S(omega)` peak at `0.877 g/U`
+maps to `0.769 g/U^2` while `S(k)` peaks at `0.702 g/U^2`. Conflating them
+misplaces the dominant wavelength by 10%. And `gaussian_seamount` snaps its
+default centre to a *node*, because a summit landing between samples loses
+`exp(-(dr/width)^2)` of its height silently -- at 50 m nodes and a 400 m width
+that is 0.8%, and at coarser grids much more.
+
+**Internal waves are built from displacement, not from noise.** A parcel of water
+carries its sound speed, so a vertical displacement `zeta` shows up as
+`delta c = -(dc/dz) zeta`. Building it that way means the perturbation is
+automatically largest where the background gradient is steepest and *vanishes in
+an isothermal layer* -- which is what is observed, and is not something a field
+of independent noise would reproduce. A test pins the vanishing.
+
+### What makes a 3-D ocean 3-D
+
+A depth-only profile keeps a ray in its launch plane exactly, so every example
+before `10` is three-dimensional only in its bookkeeping. Example 10 launches
+rays at azimuth zero into a generated ocean and measures how far out of plane
+each mechanism takes them over 12 km:
+
+| | max out-of-plane | RMS |
+| --- | --- | --- |
+| depth-only control | **0** (exactly) | 0 |
+| wind sea, `H_s` = 3.2 m | 390 m | 43 m |
+| power-law seabed, 40 m RMS | 659 m | 61 m |
+| internal waves, 12 m heave | **2.2 m** | 0.7 m |
+| all three | 785 m | 77 m |
+
+The refraction row has a closed form to check against -- a horizontal gradient
+bends a ray on a radius `R = c/|dc/dy|`, offsetting it by `L^2/2R` over a path
+`L`, which predicts 2.32 m against the measured 2.24 m.
+
+It is also *two orders of magnitude weaker* than either boundary. That is worth
+knowing before reaching for a 3-D sound-speed field to explain out-of-plane
+energy: in shallow water it comes overwhelmingly from rough boundaries. The
+control row is the other half of the point -- exactly zero, not nearly zero,
+because a depth-only profile keeping a ray in plane is a theorem rather than an
+approximation.
+
 ## Active sonar and beamforming
 
 A passive scene renders one path, source to receiver. An active sonar renders
@@ -680,6 +749,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `07_reverberation_limited_detection.py` | A small target on a rock seabed: is it detectable? | -0.9 dB at one element, +10.9 dB in the beam; bottom type recovered to 0.4 dB |
 | `08_gaussian_beams_caustic.py` | Gaussian beams through the Munk channel's caustics | 81 of 120 rays cross one; tube pinned at its floor, beam at `|det Q| = beta^2` exactly |
 | `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | hull glints (83% from one section, travelling along the body); discrete scatterers spread 2.07 deg vs a point's 0.53 |
+| `10_synthetic_environment.py` | A generated ocean: wind sea, power-law seabed, internal waves | out-of-plane deflection 0 m (control), 390 / 659 / 2.2 m by mechanism; refraction matches `L^2/2R` to 3% |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -728,6 +798,12 @@ everything below follows from that or from choices made for differentiability.
   and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
   carry phase, but only differentially across an aperture -- see
   [Active sonar and beamforming](#active-sonar-and-beamforming).
+* **Generated environments are samples, not measurements.** `hydropt.environment`
+  gives a field the right RMS and the right spectral slope. It does not give it
+  crests, breaking, sandwaves or outcrops, and a Gaussian random field has no
+  skewness where a real wave field does. There is still no data import -- no
+  CTD, GEBCO or netCDF reader -- so measured environments come in as arrays you
+  build yourself.
 * **Spreading** defaults to `1/s^2`, which is exact only for a homogeneous
   medium. `hydropt.spreading` (geometric tube) and `hydropt.beams` (Gaussian
   beams) both implement better laws, but you have to ask for either -- pass
@@ -781,14 +857,15 @@ hydropt/
   beams.py       Gaussian beams: complex beam parameter, finite at caustics
   active.py      two-way echoes through a scattering target
   targets.py     extended multi-highlight targets, aspect-dependent patterns
+  environment.py synthesised surfaces, bathymetry and sound-speed fields
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
-examples/        01-09, each with acceptance checks
+examples/        01-10, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
-tests/           146 tests
+tests/           182 tests
 ```
 
 ## References
