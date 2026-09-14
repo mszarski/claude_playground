@@ -287,8 +287,94 @@ untouched. The gradient with respect to `eps`, which changes the channel's
 out, so counting sign changes gives the KMAH index. Each caustic advances the
 phase by `-pi/2`, which `extract_arrivals` now applies via its `caustics`
 argument -- retiring what was previously a documented gap in the coherent path.
-Intensity is unbounded at a caustic, so `min_jacobian` floors the tube area;
-that is the crude fix, and Gaussian beams are the principled one.
+Intensity is unbounded at a caustic, so `min_jacobian` floors the tube area.
+That is the crude fix; the principled one is below.
+
+### Gaussian beams: finite at caustics, no floor
+
+`hydropt.beams.gaussian_beams` replaces the infinitely thin ray with a beam of
+finite transverse width. The beam parameter is complex, so it cannot pass
+through zero, and the amplitude stays finite everywhere -- through caustics,
+through the source, through everything. `min_jacobian` is gone.
+
+The textbook route integrates the dynamic ray equations alongside the ray,
+
+```
+dq/ds = c p,    dp/ds = -(c_nn / c^2) q
+```
+
+which needs `c_nn`, the second derivative of sound speed transverse to the ray.
+hydropt cannot honestly supply it: a piecewise-linear profile has `d2c/dz2`
+equal to a train of delta functions at its knots, and a trilinear grid has it
+identically zero inside every cell. Dynamic ray tracing through either is
+ill-defined.
+
+But `q` and `p` describe how a *paraxial perturbation of the initial conditions*
+evolves, and the tracer can already be differentiated with respect to its
+initial conditions exactly. So the two fundamental solutions are just two
+forward-mode tangents:
+
+* **`Q1`** -- perturb the **launch angle**, source fixed. The ray starts at the
+  same point, so `Q1(0) = 0`: this is the point-source solution, and `det Q1` is
+  exactly the geometric ray tube.
+* **`Q2`** -- perturb the **source position** transversally, direction fixed, so
+  `Q2(0) = I`.
+
+Both come out of `torch.func.jvp` on the ordinary tracer. No second derivative
+of `c` is ever formed, and the result is exact rather than second-order. The
+beam is the complex combination
+
+```
+Q = Q1 + i beta Q2,    spreading = 1 / |det Q|
+```
+
+whose determinant cannot vanish where `det Q1` does, because the imaginary part
+is still there. `beta` is a transverse width scale at the source, in metres.
+
+**The homogeneous case is checkable by hand and checked to machine precision.**
+There `Q1 = s I` and `Q2 = I`, so `det Q = (s + i beta)^2`:
+
+| quantity | closed form | max relative error |
+| --- | --- | --- |
+| `1/|det Q|` | `1/(s^2 + beta^2)` | 2.5e-15 |
+| beam width `W` | `sqrt(c (s^2 + beta^2) / (omega beta))` | 1.7e-14 |
+
+At `s = 0` the geometric tube is singular (1e30, i.e. the clamp) and the beam is
+`1/beta^2 = 1.2346e-2` exactly. Far from the source the two agree: `1/(s^2 +
+beta^2) -> 1/s^2` once `s >> beta`. The width behaves as it should too -- 2.07 m
+at the source and 172.76 m at 750 m range for `beta = 9` m at 500 Hz.
+
+**And it holds in a channel that does have caustics.** 1,400 x 25 m through the
+Munk profile, `beta = 24` m:
+
+| | geometric tube | Gaussian beam |
+| --- | --- | --- |
+| min `|det|` | 1e-30 (clamped) | 576.0 = `beta^2` exactly |
+| max spreading | 1e30 (clamped) | 1.736e-3 = `1/beta^2` exactly |
+
+The bound `|det Q| >= beta^2` is not empirical, it is the structure of the
+method, and a test asserts it directly rather than asserting that some sampled
+profile happens to look smooth.
+
+**Choosing beta is the honest cost.** The theory does not pin it down, and
+Gaussian-beam codes differ on the choice: too small and the beam is a geometric
+ray again with the singularity back, too large and arrivals merge.
+`suggest_beam_width(freq_khz, wavelengths=3.0)` gives a few wavelengths --
+9.00 m at 500 Hz, 0.225 m at 20 kHz -- and the resulting `width` is returned so
+the effect of changing it is visible rather than hidden.
+
+Six traces: one for the path, two launch-angle tangents, three source-position
+tangents. `ray_tube` costs one trace and is second-order accurate, which remains
+the right default; reach for beams when the caustics matter.
+
+```python
+from hydropt import gaussian_beams, suggest_beam_width, splat_etc
+
+beams = gaussian_beams(scene, elev, azim,
+                       beam_width=suggest_beam_width(freq_khz=1.0),
+                       freq_khz=1.0)
+etc = splat_etc(beams.result, receivers, grid, spreading=beams.spreading)
+```
 
 ## Active sonar and beamforming
 
@@ -550,18 +636,21 @@ everything below follows from that or from choices made for differentiability.
 * **No diffraction.** Nothing bends into a geometric shadow; energy behind a
   seamount is zero where the real field is merely quiet. The wavelength never
   enters the geometry.
-* **Caustics are detected but only crudely handled.** `hydropt.spreading`
-  counts them and applies the `-pi/2` KMAH phase, but intensity at a caustic is
-  bounded by flooring the tube area rather than by the principled fix, which is
-  Gaussian beams -- a finite-width beam that never divides by zero.
+* **Caustic amplitudes need Gaussian beams, and `beta` is a choice.**
+  `hydropt.spreading` counts caustics and applies the `-pi/2` KMAH phase but
+  floors the tube area; `hydropt.beams` removes that floor properly, at six
+  traces instead of one. What neither fixes is that the beam width `beta` is not
+  determined by the theory, so the field near a caustic depends on a parameter
+  you pick. See [Gaussian beams](#gaussian-beams-finite-at-caustics-no-floor).
 * **Energy, not pressure** on the passive path. Arrivals are summed
   incoherently, with no phase, so there is no interference, no modal structure
   and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
   carry phase, but only differentially across an aperture -- see
   [Active sonar and beamforming](#active-sonar-and-beamforming).
 * **Spreading** defaults to `1/s^2`, which is exact only for a homogeneous
-  medium. `hydropt.spreading` implements the true ray-tube law, but you have to
-  ask for it -- pass `spreading=` to the renderer. See
+  medium. `hydropt.spreading` (geometric tube) and `hydropt.beams` (Gaussian
+  beams) both implement better laws, but you have to ask for either -- pass
+  `spreading=` to the renderer. See
   [Spreading and caustics](#spreading-and-caustics).
 * **No volume scattering and no rough-surface *reflection*.** Boundary
   reflection is specular. `hydropt.reverb` adds boundary *backscatter* on top
@@ -602,13 +691,14 @@ hydropt/
   tracer.py      RK4 integration -> paths, times, losses, bounce counts
   receiver.py    differentiable ETC splatting, receiver arrays
   spreading.py   ray-tube (geometric Jacobian) spreading, caustics, KMAH
+  beams.py       Gaussian beams: complex beam parameter, finite at caustics
   active.py      two-way echoes through a scattering target
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
-examples/        01-05, each with acceptance checks
+examples/        01-08, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py
 tests/           131 tests
 ```

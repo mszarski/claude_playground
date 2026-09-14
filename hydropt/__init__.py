@@ -15,6 +15,7 @@ from .beamform import (
     extract_arrivals,
     shading_window,
 )
+from .beams import GaussianBeams, gaussian_beams, suggest_beam_width
 from .boundaries import (
     BilinearHeightField,
     BoundaryLoss,
@@ -57,7 +58,7 @@ from .reverb import (
     reverberation_arrivals,
 )
 from .scene import Scene
-from .spreading import RayTube, ray_tube, spherical_spreading
+from .spreading import RayTube, ray_tube, ray_tube_jvp, spherical_spreading
 from .tracer import BounceEvents, RayState, TraceResult, bounce_events, trace
 
 __version__ = "0.1.0"
@@ -79,7 +80,9 @@ __all__ = [
     "ArrivalSet", "extract_arrivals", "element_field", "beamform",
     "shading_window", "azimuth_steering",
     # ray-tube spreading
-    "RayTube", "ray_tube", "spherical_spreading",
+    "RayTube", "ray_tube", "ray_tube_jvp", "spherical_spreading",
+    # Gaussian beams
+    "GaussianBeams", "gaussian_beams", "suggest_beam_width",
     # reverberation
     "LambertScattering", "reverberation_arrivals", "render_reverberation",
     "cone_solid_angle",
