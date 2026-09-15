@@ -56,13 +56,31 @@ the peak, so this is sparsification rather than approximation -- but it does
 make the gradient *exactly* zero for rays currently far from every receiver,
 which is the mechanism behind the annealing advice above.
 
-Absolute level
---------------
-Each ray carries unit energy scaled by ``1/s^2``; the acceptance kernel acts as
-an aperture whose effective area depends on ``sigma_d`` and on the fan density.
-ETC magnitudes are therefore calibrated only up to a scale factor.  Pass
-``ray_weights`` (per-ray solid angle) and ``source_energy`` for a physical
-level, or fit a scale alongside the other parameters.
+Absolute level, and a trap in it
+-------------------------------
+Each ray carries unit energy scaled by ``spreading`` (``1/s^2`` by default), and
+the acceptance kernel acts as an aperture of effective area ``2 pi sigma_d^2``.
+An earlier version of this note said ETC magnitudes are "calibrated only up to a
+scale factor".  That was wrong, and the error mattered: the aperture subtends a
+solid angle that *itself* shrinks as ``1/s^2``, so a dense-fan sum applies
+geometric spreading **twice** and the energy falls as ``1/R^4``.  The
+mis-calibration is a factor of ``s^2``, not a constant.
+
+So for an absolute or range-dependent level, pass ``ray_weights`` (per-ray solid
+angle ``cos(e) de da``) **and** unit ``spreading``, letting the ray *count* inside
+the acceptance supply the spreading -- which it does exactly.  Calibrated that
+way against free space, eigenray energies match the exact image-source solution
+to five or six figures; see ``tests/test_pekeris.py`` and
+``scripts/validate_pekeris.py``.
+
+Passing ``spreading=ray_tube(...).spreading`` double-counts in the same way, for
+the same reason: in a dense-fan sum, refractive focusing is already carried by
+where the rays land.  The ray tube is the right tool for an *eigenray* treatment,
+which this renderer is not.
+
+Ratios of two renders made the same way -- an inversion's prediction against its
+synthetic measurement, or one spreading law against another -- are unaffected,
+which is why this went unnoticed for so long.
 """
 
 from __future__ import annotations

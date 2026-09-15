@@ -549,6 +549,109 @@ predicts. So long-range shallow-water propagation, which lives at small grazing
 angles, keeps its surface bounces even at high frequency -- the window just
 narrows as `1/sigma`, and never closes.
 
+## Independent validation, and the defect it found
+
+Every check described so far compares ray theory against a closed form derived
+*within* the ray picture -- circular arcs, Snell's law, image sources, the ray
+tube's own truncation term. Those are sharp, and they share an assumption. A
+convention error consistent across the whole package would pass all of them.
+
+`hydropt.pekeris` is the outside check: a **normal-mode** solution of the Pekeris
+waveguide (isovelocity water over a fluid half-space), in numpy, with no torch in
+it and no code shared with the tracer. A different formulation of the same
+physics.
+
+**The reference is validated before it validates anything.** Eigenvalues satisfy
+the characteristic equation `tan(gamma H) = -rho2 gamma / rho1 beta` to 1e-8
+absolute; modes are orthonormal under `int Z_m Z_n / rho dz` to 2e-5, integrated
+over the evanescent tail as well as the water. The mode count comes out as
+`floor(2 H sin(theta_c) / lambda + 1/2)` -- which is the **ray critical angle**
+setting the number of trapped modes, the two pictures saying the same thing.
+
+The field's prefactor is the easiest thing in a mode sum to get wrong and the
+hardest to notice, so it is not taken on trust: `ideal_image_field` solves the
+ideal waveguide by the method of images instead, and the two expansions of the
+same Green's function agree to **3e-10** in the complex field across 75-300 Hz
+and every source/receiver depth tried.
+
+### What it found
+
+**`splat_etc` applies geometric spreading twice.** Each ray carries `1/s^2`, and
+the number of rays landing inside the fixed `sigma_d` acceptance *also* falls as
+`1/s^2`. They multiply, so ETC energy falls as `1/R^4`:
+
+| `spreading` | measured energy exponent vs range |
+| --- | --- |
+| default (`1/s^2`) | **4.00** |
+| `ray_tube(...).spreading` | **4.00** |
+| unit -- ray count supplies it | **2.00** |
+
+Converged, not a sampling artefact: 4.00 at fan densities from 100^2 to 400^2
+rays, with ray spacing from 1.76 m down to 0.44 m against `sigma_d` = 5 m. The
+old note in `receiver.py` claiming levels were "calibrated only up to a scale
+factor" was wrong -- the mis-calibration is a factor of `s^2`.
+
+With unit spreading it is **exactly** right. Calibrating the arbitrary scale once
+in free space and transferring it unchanged, each resolved eigenray in an ideal
+waveguide matches the exact image-source energy `n/R^2`:
+
+| eigenray | grazing | exact | hydropt / exact |
+| --- | --- | --- | --- |
+| direct | 0.0 deg | 1.00000e-06 | **1.0000** |
+| 1st | 5.7 deg | 1.98020e-06 | **1.0000** |
+| 4th | 21.8 deg | 1.72414e-06 | **1.0000** |
+| 8th | 38.7 deg | 1.21951e-06 | **1.0000** |
+
+and the free-space calibration constant is itself constant to 1.0000 across
+elevations 0-40 degrees and ranges 600-2000 m.
+
+**What this does and does not affect.** Ratios of two renders made the same way
+are untouched -- an inversion's prediction against its synthetic measurement, or
+one spreading law against another -- which is why it went unnoticed. Examples
+02-05 fit through the same renderer on both sides, so the error largely cancels;
+it does bias any parameter that trades against range, such as absorption against
+boundary loss per bounce. Absolute levels and level-versus-range are wrong by
+`20 log10 R` unless rendered as above. Reverberation is unaffected: `reverb.py`
+computes patch energy analytically rather than by ray counting, which is why its
+`r^-5` law validated correctly. Beamforming is within one range, so unaffected.
+
+A corollary I have reasoned but not measured in a refracting channel: since
+focusing is already carried by where rays land, example 01's "+3 to +18 dB" ray
+tube correction is a difference between two estimators rather than the physical
+correction it is described as. Verified only that the tube and `1/s^2` coincide
+in an isovelocity medium and that both give exponent 4.
+
+### Against the modes
+
+With the corrected estimator, hydropt against the incoherent mode sum, 200 Hz,
+15 trapped modes, source and receiver at 50 m:
+
+| range | ray TL | mode TL | diff |
+| --- | --- | --- | --- |
+| 1000 m | 49.307 | 47.684 | +1.623 |
+| 2000 m | 52.259 | 50.694 | +1.565 |
+| 3000 m | 54.116 | 52.455 | +1.661 |
+
+The **spread is 0.095 dB across a threefold change in range** -- that is the
+range dependence, and two independent formulations agree on it to a tenth of a dB.
+The constant offset turned out to be my choice of receiver depth. Sweeping depth
+at 2 km:
+
+| | ray vs mode |
+| --- | --- |
+| 17 of 18 depths | within +/-0.4 dB |
+| z = 50 m (= H/2 = source depth) | **+1.57 dB**, the outlier |
+| point-by-point mean | **+0.056 dB** |
+| depth-averaged intensity | **+0.077 dB** |
+
+`z = H/2` is both the source depth and the guide's symmetry plane, where half the
+modes have a node, so the incoherent mode sum is anomalous at exactly that depth
+and nowhere else. Away from it the two agree to a few tenths of a dB, and
+depth-averaged to **0.077 dB**.
+
+`scripts/validate_pekeris.py` prints all of this; `tests/test_pekeris.py` pins the
+reference and a fast version of the eigenray comparison.
+
 ## Active sonar and beamforming
 
 A passive scene renders one path, source to receiver. An active sonar renders
@@ -901,6 +1004,12 @@ everything below follows from that or from choices made for differentiability.
   and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
   carry phase, but only differentially across an aperture -- see
   [Active sonar and beamforming](#active-sonar-and-beamforming).
+* **Absolute ETC levels need the counted estimator.** The default `spreading`
+  double-counts geometric spreading in a dense-fan sum, giving `1/R^4`; see
+  [Independent validation](#independent-validation-and-the-defect-it-found) for
+  what to pass instead and for what is and is not affected. Not yet fixed by
+  changing the default, because the right default depends on whether the renderer
+  is meant to be a counted sum or an eigenray sum -- a design decision, not a typo.
 * **Generated environments are samples, not measurements.** `hydropt.environment`
   gives a field the right RMS and the right spectral slope. It does not give it
   crests, breaking, sandwaves or outcrops, and a Gaussian random field has no
@@ -968,14 +1077,15 @@ hydropt/
   environment.py synthesised surfaces, bathymetry and sound-speed fields
   sediments.py   named seabed presets -> RayleighBottomLoss
   rough.py       Eckart coherent-reflection loss for rough boundaries
+  pekeris.py     independent normal-mode reference (numpy; no torch)
   beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
 examples/        01-11, each with acceptance checks
-scripts/         benchmark.py, check_jvp.py
-tests/           261 tests
+scripts/         benchmark.py, check_jvp.py, validate_pekeris.py
+tests/           282 tests
 ```
 
 ## References
