@@ -421,18 +421,81 @@ def test_an_elongated_body_is_brighter_broadside_than_a_sphere():
     assert 10 * math.log10(ratio) == pytest.approx(20 * math.log10(3.0), abs=0.5)
 
 
+def _hull_and_transom(v, f):
+    """Split the shell facets from the flat transom cap that closes the stern."""
+    hub = v.shape[0] - 1
+    cap = (f == hub).any(dim=1)
+    return ~cap, cap
+
+
 def test_hull_normals_point_outward():
     """Culling is by the facet's own normal, so a hull wound inward would be
     invisible from outside and would return its far side instead.  This is
-    exactly the bug the dimensions-only check above did not catch."""
+    exactly the bug the dimensions-only check above did not catch.
+
+    The transom is excluded: it is an end cap, so "radially outward" is not the
+    right question for it -- :func:`test_transom_faces_aft` asks the right one.
+    """
     v, f = boat_hull_mesh(12.0, 3.0, 1.0, n_long=40, n_around=16)
     centroid, normal, area = facet_geometry(v, f)
+    shell, _ = _hull_and_transom(v, f)
     radial = torch.stack([torch.zeros_like(centroid[:, 1]),
                           centroid[:, 1], centroid[:, 2]], dim=-1)
     radial = radial / radial.norm(dim=-1, keepdim=True).clamp_min(1e-12)
-    outward = (normal * radial).sum(-1)
+    outward = (normal * radial).sum(-1)[shell]
     assert float(outward.min()) > 0.0
-    assert float((area * outward).sum() / area.sum()) > 0.5
+    a = area[shell]
+    assert float((a * outward).sum() / a.sum()) > 0.5
+
+
+def test_transom_faces_aft():
+    """A boat is not double-ended.  The stern is a flat plate carrying most of
+    the beam and draft, and it is one of the strongest features on the body
+    from astern -- so it has to exist, be closed, and point the right way."""
+    v, f = boat_hull_mesh(12.0, 3.0, 1.0, n_long=40, n_around=16)
+    centroid, normal, area = facet_geometry(v, f)
+    _, cap = _hull_and_transom(v, f)
+    assert int(cap.sum()) > 0
+    assert torch.allclose(normal[cap][:, 0],
+                          -torch.ones(int(cap.sum()), dtype=normal.dtype),
+                          atol=1e-9)
+    assert float(centroid[cap][:, 0].max()) == pytest.approx(-6.0, abs=1e-9)
+    assert float(area[cap].sum()) > 0.2
+
+
+def test_the_hull_is_not_double_ended():
+    """The stern carries real beam and draft; only the bow tapers to a point."""
+    v, f = boat_hull_mesh(12.0, 3.0, 1.0, n_long=41, n_around=9, transom=0.62)
+    stern = v[v[:, 0] < -5.99]
+    bow = v[v[:, 0] > 5.99]
+    assert float(stern[:, 1].abs().max()) > 0.4 * 1.5
+    assert float(stern[:, 2].max()) > 0.4 * 1.0
+    assert float(bow[:, 1].abs().max()) < 1e-9
+    # widest section is forward of the transom, not at it
+    ys = [float(v[v[:, 0].isclose(x, atol=1e-9)][:, 1].abs().max())
+          for x in v[:, 0].unique()]
+    assert max(ys) > float(stern[:, 1].abs().max()) * 1.2
+
+
+def test_deadrise_varies_from_boxy_aft_to_a_vee_forward():
+    """Sections go from flat-bottomed at the stern to a sharp V at the bow.
+
+    Measured as how much of the section's bounding box it fills: a boxy
+    section fills more of it than a V does.
+    """
+    v, f = boat_hull_mesh(12.0, 3.0, 1.0, n_long=21, n_around=21)
+    xs = v[:, 0].unique().sort().values
+
+    def fullness(x):
+        sec = v[v[:, 0].isclose(x, atol=1e-9)]
+        y, z = sec[:, 1].abs(), sec[:, 2]
+        if float(y.max()) < 1e-9 or float(z.max()) < 1e-9:
+            return float("nan")
+        # mean normalised depth across the section: 1.0 = rectangular, ~0.5 = V
+        return float((z / z.max()).mean())
+
+    aft, fwd = fullness(xs[1]), fullness(xs[-4])
+    assert aft > fwd, (aft, fwd)
 
 
 def test_hull_keel_faces_downward():
@@ -466,6 +529,6 @@ def test_hull_is_brightest_from_beneath():
 
     beneath = float(_mono(mesh, look(90.0, 89.0)))
     shallow = float(_mono(mesh, look(90.0, 10.4)))
-    assert beneath > shallow * 2.0          # ~7 dB, measured 4.8x
-    # but both are plainly visible: this hull is not a stealthy target
-    assert 10 * math.log10(shallow) > -6.0
+    assert beneath > shallow * 2.0
+    # and it is still a perfectly detectable target on the beam at that angle
+    assert 10 * math.log10(shallow) > -12.0

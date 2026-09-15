@@ -197,6 +197,22 @@ def triangle_phase_integral(tri: Tensor, q: Tensor, *, area: Tensor | None = Non
 # --------------------------------------------------------------------------- #
 # The pattern
 # --------------------------------------------------------------------------- #
+def _facet_block(tri: Tensor, normal: Tensor, area: Tensor, ki: Tensor,
+                 q: Tensor) -> Tensor:
+    """One block of facets' contribution to the scattering amplitude, ``[P, B]``.
+
+    Split out so it can be wrapped in :func:`torch.utils.checkpoint.checkpoint`:
+    the block's intermediates are the memory cost, and they are recomputed in
+    the backward pass rather than kept.
+    """
+    # Lit facets only: a facet turned away from the source does not radiate.
+    # Exactly zero behind, so no gradient there either -- the same convention
+    # PlateScattering's obliquity factor follows.
+    lit = (-(ki @ normal.T)).clamp_min(0.0)                      # [P, f]
+    integral = triangle_phase_integral(tri, q.unsqueeze(-2), area=area)
+    return (lit.unsqueeze(1).to(integral.dtype) * integral).sum(-1)
+
+
 class MeshScattering(ScatteringPattern):
     r"""Bistatic cross-section of a triangle mesh, by coherent physical optics.
 
@@ -210,6 +226,13 @@ class MeshScattering(ScatteringPattern):
         facet_chunk: facets summed per block.  The working set is
             ``pairs x bands x chunk``, so this trades memory against Python
             iterations; lower it for a big mesh or many directions.
+        checkpoint: recompute each block during the backward pass instead of
+            keeping its intermediates.  Without this, memory grows with the
+            *whole* mesh -- a 13,000-facet hull against a few hundred direction
+            pairs exhausted several GB and was killed -- because every block's
+            temporaries stay alive for backward.  With it, memory is set by
+            ``facet_chunk`` alone and the mesh can be as fine as the physics
+            needs, at approximately one extra forward evaluation.
 
     Validated against the closed forms the rest of `hydropt` uses: a faceted
     sphere reproduces :class:`hydropt.targets.CurvedSurfaceScattering`'s
@@ -219,7 +242,7 @@ class MeshScattering(ScatteringPattern):
 
     def __init__(self, vertices: Tensor, faces: Tensor, *,
                  sound_speed: float = 1500.0, learnable: bool = False,
-                 facet_chunk: int = 512) -> None:
+                 facet_chunk: int = 512, checkpoint: bool = True) -> None:
         super().__init__()
         v = torch.as_tensor(vertices, dtype=torch.get_default_dtype()).reshape(-1, 3)
         f = torch.as_tensor(faces, dtype=torch.long).reshape(-1, 3)
@@ -232,6 +255,7 @@ class MeshScattering(ScatteringPattern):
         self.register_buffer("faces", f)
         self.register_buffer("sound_speed", torch.as_tensor(float(sound_speed)))
         self.facet_chunk = int(facet_chunk)
+        self.checkpoint = bool(checkpoint)
 
     @property
     def n_facets(self) -> int:
@@ -271,12 +295,12 @@ class MeshScattering(ScatteringPattern):
         for start in range(0, tri.shape[0], self.facet_chunk):
             stop = start + self.facet_chunk
             t, n, a = tri[start:stop], normal[start:stop], area[start:stop]
-            # Lit facets only: a facet turned away from the source does not
-            # radiate.  Exactly zero behind, so no gradient there either -- the
-            # same convention PlateScattering's obliquity factor follows.
-            lit = (-(ki @ n.T)).clamp_min(0.0)                        # [P, f]
-            integral = triangle_phase_integral(t, q.unsqueeze(-2), area=a)
-            total = total + (lit.unsqueeze(1).to(integral.dtype) * integral).sum(-1)
+            if self.checkpoint and torch.is_grad_enabled() and q.requires_grad:
+                part = torch.utils.checkpoint.checkpoint(
+                    _facet_block, t, n, a, ki, q, use_reentrant=False)
+            else:
+                part = _facet_block(t, n, a, ki, q)
+            total = total + part
 
         amp = total / lam.reshape(1, -1).to(total.dtype)
         return (amp.real ** 2 + amp.imag ** 2).reshape(*shape, -1)
@@ -391,60 +415,84 @@ def icosphere(subdivisions: int = 3, radius: float = 1.0
 
 def boat_hull_mesh(length: float = 12.0, beam: float = 3.0, draft: float = 1.0,
                    *, n_long: int = 40, n_around: int = 16,
-                   fullness: float = 0.65) -> tuple[Tensor, Tensor]:
+                   transom: float = 0.62, deadrise_stern: float = 4.5,
+                   deadrise_bow: float = 1.25) -> tuple[Tensor, Tensor]:
     """A displacement hull's **wetted** surface: the part a sonar can see.
 
-    A parametric hull rather than a real one, but the right shape in the way
-    that matters acoustically: faired in both directions, so it presents a
-    specular point at every aspect instead of the single broadside flash a
-    straight cylinder gives.  Waterline and sections both taper toward bow and
-    stern; ``fullness`` sets how boxy the midships sections are (0.5 is a
-    V-hull, 1.0 nearly rectangular).
+    Parametric rather than a real lines plan, but the right shape in the ways
+    that matter acoustically, which a symmetric spindle is not:
+
+    * **A transom.** A boat is not double-ended.  It carries most of its beam
+      and draft to a flat stern, which is a large near-vertical plate and one of
+      the strongest features on the whole body from astern.  ``transom`` is the
+      fraction of full beam and draft carried aft; the transom face itself is
+      closed with facets, because below the waterline it is wetted surface.
+    * **Deadrise that varies.** Sections go from nearly flat-bottomed and boxy
+      at the stern to a sharp V at the bow, which is what a hull does and what
+      decides whether the bottom throws a specular return straight down.
+      Controlled by ``deadrise_stern`` / ``deadrise_bow``, the superellipse
+      exponents at each end: large is boxy, 2 is a half-ellipse, 1 is a V.
+    * **A fine entry.** The waterline tapers to a stem at the bow, so there is
+      no specular point facing forward -- which is exactly why a hull is weak
+      bow-on to a forward-looking sonar.
 
     Args:
         length, beam, draft: overall dimensions (m).
-        n_long, n_around: facets along the hull and around each section.  The
-            facets need to resolve curvature, about ``sqrt(lambda R)/3``; at
-            100 kHz on a 1 m radius that is 4 cm.
-        fullness: section shape exponent control.
+        n_long, n_around: facets along the hull and around each section.  Facets
+            must resolve curvature, about ``sqrt(lambda R)/3``; at 100 kHz on a
+            1 m radius that is 4 cm.
+        transom: fraction of full beam and draft carried to the stern.
+        deadrise_stern, deadrise_bow: section superellipse exponents.
 
-    Returns outward-wound ``(vertices, faces)`` centred on the hull, ``x``
-    forward, ``y`` to port, ``z`` **down** into the water to match the
-    depth-positive-down frame.  Outward matters: facets are culled by their own
-    normal, so an inward-wound hull is invisible from outside and returns the
-    far side instead.  Degenerate triangles at the bow and stern, where the
-    section rings collapse to a point, are dropped.
+    Returns outward-wound ``(vertices, faces)`` centred on the hull, ``+x``
+    forward to the bow, ``y`` to port, ``z`` **down** into the water to match
+    the depth-positive-down frame.  Outward matters: facets are culled by their
+    own normal, so an inward-wound hull is invisible from outside and returns
+    the far side instead.  Degenerate triangles at the stem are dropped.
     """
     dt = torch.get_default_dtype()
-    u = torch.linspace(-1.0, 1.0, n_long, dtype=dt)          # bow..stern
-    # Waterline half-beam and keel depth both taper as a smooth fullness curve.
-    taper = (1.0 - u.abs() ** (1.0 / max(fullness, 1e-3))).clamp_min(0.0) ** 0.5
-    half_beam = 0.5 * beam * taper
-    keel = draft * taper.clamp_min(0.0)
+    s = torch.linspace(0.0, 1.0, n_long, dtype=dt)        # 0 = stern, 1 = bow
+    x = (s - 0.5) * length
 
-    theta = torch.linspace(0.0, math.pi, n_around, dtype=dt)  # port..starboard
+    # Waterline and keel: taper to nothing at the bow, but stay full aft.
+    bow_taper = (1.0 - s ** 2.6).clamp_min(0.0) ** 0.5
+    keel_taper = (1.0 - s ** 3.2).clamp_min(0.0) ** 0.62
+    fill = transom + (1.0 - transom) * (s / 0.30).clamp(0.0, 1.0) ** 1.5
+    half_beam = 0.5 * beam * bow_taper * fill
+    keel = draft * keel_taper * fill
+
+    # Superellipse sections, boxy aft and V-shaped forward.
+    n_exp = deadrise_stern + (deadrise_bow - deadrise_stern) * s
+    theta = torch.linspace(0.0, math.pi, n_around, dtype=dt)
+    ct, st = torch.cos(theta), torch.sin(theta)
     rows = []
     for i in range(n_long):
-        y = half_beam[i] * torch.cos(theta)
-        z = keel[i] * torch.sin(theta)
-        x = torch.full_like(y, float(u[i]) * length / 2.0)
-        rows.append(torch.stack([x, y, z], dim=-1))
+        e = 2.0 / float(n_exp[i])
+        y = half_beam[i] * ct.sign() * ct.abs().clamp_min(1e-12) ** e
+        z = keel[i] * st.abs().clamp_min(1e-12) ** e
+        rows.append(torch.stack([x[i].expand(n_around), y, z], dim=-1))
     verts = torch.cat(rows, dim=0)
 
     faces = []
     for i in range(n_long - 1):
         for j in range(n_around - 1):
             a = i * n_around + j
-            b = a + 1
-            c = a + n_around
-            d = c + 1
+            b, c, d = a + 1, a + n_around, a + n_around + 1
             faces += [[a, b, c], [b, d, c]]
+
+    # Close the transom: a fan over the stern section, facing aft (-x).
+    stern_centre = verts[:n_around].mean(dim=0, keepdim=True)
+    hub = verts.shape[0]
+    verts = torch.cat([verts, stern_centre], dim=0)
+    for j in range(n_around - 1):
+        faces += [[hub, j + 1, j]]
+
     tri = torch.tensor(faces, dtype=torch.long)
-    # The bow and stern rings collapse to a point, so the triangles there are
-    # degenerate: zero area, and a normal that is whatever the division by a
-    # clamped zero produces.  They contribute nothing, so drop them rather than
-    # carry a facet whose orientation is undefined.
+    # The stem collapses to a point, so triangles there are degenerate: zero
+    # area, and a normal that is whatever dividing by a clamped zero gives.
+    # They contribute nothing, so drop them rather than carry a facet whose
+    # orientation is undefined.
     e1 = verts[tri[:, 1]] - verts[tri[:, 0]]
     e2 = verts[tri[:, 2]] - verts[tri[:, 0]]
     area = 0.5 * torch.linalg.cross(e1, e2, dim=-1).norm(dim=-1)
-    return verts, tri[area > 1e-12 * float(area.max())]
+    return verts, tri[area > 1e-9 * float(area.max())]

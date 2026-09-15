@@ -1161,16 +1161,72 @@ right for a convex body, but there is no ray-casting *between* facets, so a mesh
 that shadows itself keeps contributing from the hidden parts. Physical optics
 has no edge diffraction, so grazing returns are understated.
 
+**`boat_hull_mesh` is a hull, not a spindle.** The first version tapered to a
+point at *both* ends -- a canoe -- which showed up as an aspect pattern exactly
+symmetric fore and aft. A boat carries most of its beam and draft to a flat
+**transom**, which is a large near-vertical plate and one of the strongest
+features on the body from astern, so the generator now closes the stern with
+facets and only the bow tapers to a stem. Section shape varies too, from boxy
+and nearly flat-bottomed aft to a sharp V forward, which is what decides whether
+the bottom throws a specular return straight down. Two orientation bugs came
+with it -- the shell wound inward, then the transom cap wound forward -- both
+caught only after adding tests that check normal *orientation* rather than
+dimensions.
+
 **What the mesh then said about hulls**, which the analytic patch could not. At a
 forward-looking sonar's shallow depression angle (10.4 deg for the
 `examples/12` geometry) **aspect dominates**: the hull is a strong target on the
-beam (+0.1 dB) and 35 dB weaker bow-on, because below the waterline a hull's
+beam (-5.9 dB) and 28 dB weaker bow-on, because below the waterline a hull's
 outward normal tilts downward and toward the bow also swings forward, so a
-shallow look never finds the bow's specular point. From underneath, aspect
-almost stops mattering -- 1.8 dB spread across every heading, all of it around
-+6 to +8 dB -- because a shallow-draft hull's bottom is nearly flat and faces
-straight down whichever way the boat points. A downward-looking sonar sees a
-hull as an almost heading-independent target; a forward-looking one does not.
+shallow look never finds the bow's specular point.
+
+From underneath it is a **plate**, not a curved surface: a real hull has a flat
+run aft, and a flat surface seen near normal returns `(A/lambda)^2` -- enormous,
+but through a lobe whose first null is at `lambda/2L`, 2.2 arcmin for a 12 m
+bottom. Measured bow-on, TS climbs -16 -> +1 -> +15 -> +26 -> +31 dB from 70 to
+89 degrees and then rings violently inside the last degree. A downward-looking
+sonar gets a spectacular return off a hull and loses it for a degree of vehicle
+attitude.
+
+That second conclusion is the opposite of what the first version of this
+generator said, because that version was a round-bilged spindle with no flat
+bottom anywhere. Getting it right needed the hull to be a hull.
+
+### Imaging in metres, and what fills the picture
+
+`examples/15` puts the pieces together as a vehicle would carry them: a 100 kHz
+Mills cross on an AUV at 18 m in 30 m of water, a 12 m hull as a mesh on the
+surface at 55 m, a wind sea above and a sand seabed below, resampled onto a grid
+in **metres** rather than left as bearing x range. The resampling is bilinear
+and differentiable, so a loss written in metres -- where a target is, how long
+it is -- reaches the scene exactly as one on the beamformed rectangle does.
+
+Three things this surfaced that the earlier examples did not.
+
+**Reverberation is the picture.** `target_arrivals` returns target echoes only,
+so an image built from it alone shows a boat on a black background -- which is
+neither what a sonar displays nor what sets detection. Every bottom and surface
+bounce in the transmit fan is a scattering patch with its own bearing and range,
+so `reverberation_arrivals` sums with the echo *before* beamforming. The boat
+then stands +17 dB above the reverberation at its own range, which is the number
+that actually matters; against the *median* it would read 18 dB better, because
+reverberation is a speckle field and its median sits far below the level a
+detector competes with.
+
+**A regular fan images its own sampling.** A lattice in (elevation, azimuth)
+puts every bounce on a lattice too, and the seabed then renders as a set of
+clean concentric arcs. Jittering each ray within its own cell keeps the density
+and removes the artefact. Relatedly, a display much finer than the sonar's own
+resolution -- 0.2 m cells against 1.5 m of beamwidth -- shows the patch sampling
+rather than the seabed.
+
+**Autograd, not physics, sets the image size.** `beamform` keeps an
+`[arrivals, steer, time]` intermediate alive for the backward pass, which is
+`arrivals x bearings x time` whatever the chunk size; 40,000 patches over 181
+bearings and 500 bins wants ~29 GB and gets the process killed. Under `no_grad`
+the cost is one chunk. So the example renders the displayed ping dense and
+demonstrates differentiability on the same code path at a size that fits --
+worth knowing before putting an image this size in a training loop.
 
 ### What is still missing
 
@@ -1273,7 +1329,8 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `11_rough_surface_coherence.py` | Eckart coherence loss, and example 06's surface ghost | median surface path at 100 kHz loses 43 orders of magnitude; survivors all within the 2.53 deg cutoff |
 | `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 4.5 s per forward+backward step |
 | `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; hull resolved 6.0 deg at -3 dB against the 11.5 deg it subtends |
-| `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; gradient reaches the mesh vertices; 7.0 s forward |
+| `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; hull is a plate from beneath (47 dB fall from 89 to 70 deg); gradient reaches the mesh vertices |
+| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands 2.5 m outside a 3.2 m hull against 3.4 m of beamwidth; return spans 14 m for a 12 m boat; +17 dB over reverberation |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and

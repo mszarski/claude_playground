@@ -26,8 +26,8 @@ Acceptance criteria:
   * an ellipsoid reproduces `sigma = A^2 C^2 / 4 B^2`, which separates `R1` from
     `R2` in a way a sphere cannot;
   * at a forward-looking sonar's depression angle the hull's return depends
-    strongly on aspect, while from beneath it barely does -- the mesh says by
-    how much;
+    strongly on aspect, and from beneath the flat run aft returns like a plate
+    -- bright near normal, through a very narrow lobe;
   * a loss on the beamformed image reaches the mesh *vertices*, so the shape
     itself is learnable;
   * the cost of a mesh forward pass is measured, not asserted.
@@ -183,15 +183,23 @@ def main() -> int:
     print(f"     normal tilts downward, and toward the bow it also swings")
     print(f"     forward, so there is no aspect where a shallow look finds the")
     print(f"     bow's specular point.")
-    print(f"\n  2. From underneath, aspect stops mattering: {beneath_spread:.1f} dB")
-    print(f"     spread across every heading, all of it around "
-          f"{min(table[a][-1] for a in table):+.0f} to "
-          f"{max(table[a][-1] for a in table):+.0f} dB.")
-    print(f"     A shallow-draft hull's bottom is nearly flat and faces straight")
-    print(f"     down, so it presents the same broad specular whichever way the")
-    print(f"     boat is pointing.  A downward-looking sonar sees a hull as an")
-    print(f"     almost heading-independent target; a forward-looking one does")
-    print(f"     not, and has to care where the boat is heading.")
+    steep = [hull_ts(0.0, e) for e in (70.0, 80.0, 85.0, 88.0, 89.0)]
+    print(f"\n  2. From underneath it is a **plate**, not a curved surface.")
+    print(f"     A real hull has a flat run aft, and a flat surface seen near")
+    print(f"     normal returns (A/lambda)^2 -- enormous, but through a lobe")
+    print(f"     whose first null is at lambda/2L, "
+          f"{math.degrees(LAM / (2 * HULL_LENGTH)) * 60:.1f} arcmin for a")
+    print(f"     {HULL_LENGTH:.0f} m bottom.  Measured bow-on, TS climbs")
+    print(f"     {steep[0]:+.0f} -> {steep[1]:+.0f} -> {steep[2]:+.0f} -> "
+          f"{steep[3]:+.0f} -> {steep[4]:+.0f} dB from 70 to 89 deg,")
+    print(f"     then rings violently inside the last degree.  So a")
+    print(f"     downward-looking sonar gets a spectacular return off a hull")
+    print(f"     -- and loses it for a degree of vehicle attitude.")
+    print(f"\n     This is the opposite of what a round-bilged spindle would")
+    print(f"     say, and getting it right needed the hull to *be* a hull:")
+    print(f"     a transom aft, and deadrise that varies from nearly flat")
+    print(f"     aft to a sharp V forward.")
+
     print(f"\n  Note this is the *bare faired hull*.  A real one also carries a")
     print(f"  chine, keel, skeg, shafts, propeller and rudder -- hard features")
     print(f"  returning over a wide angle, which is why examples/12 keeps them")
@@ -260,9 +268,13 @@ def main() -> int:
                 shortcut_err > 6.0, f"{shortcut_err:+.1f} dB against the exact answer")
     ok &= check("the hull is a strong target on the beam at the FLS's own angle",
                 shallow > -6.0, f"{shallow:+.1f} dB at {fls_el:.0f} deg depression")
-    ok &= check("from beneath it is bright at every heading, aspect barely mattering",
-                worst_beneath > 0.0 and beneath - worst_beneath < 6.0,
-                f"{worst_beneath:+.1f} to {beneath:+.1f} dB across all aspects")
+    ok &= check("from beneath, the flat run aft returns like a plate",
+                max(steep) > 20.0,
+                f"{max(steep):+.1f} dB near normal, against "
+                f"{steep[0]:+.1f} dB at 70 deg")
+    ok &= check("and that plate's lobe is narrow, as (A/lambda)^2 requires",
+                max(steep) - steep[0] > 25.0,
+                f"{max(steep) - steep[0]:.0f} dB fall from 89 to 70 deg")
     ok &= check("but at a shallow angle aspect dominates: bow-on is far weaker",
                 beam_shallow - bow_shallow > 15.0,
                 f"beam {beam_shallow:+.1f} dB against bow {bow_shallow:+.1f} dB")
