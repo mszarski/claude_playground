@@ -21,6 +21,7 @@ from .beamform import (
     beamform,
     element_field,
     extract_arrivals,
+    line_array_factor,
     shading_window,
 )
 from .beams import (
@@ -138,7 +139,7 @@ __all__ = [
     "target_arrivals", "render_extended_echo",
     # coherent arrivals and beamforming
     "ArrivalSet", "extract_arrivals", "element_field", "beamform",
-    "shading_window", "azimuth_steering",
+    "shading_window", "azimuth_steering", "line_array_factor",
     # ray-tube spreading
     "RayTube", "ray_tube", "ray_tube_jvp", "spherical_spreading",
     # Gaussian beams

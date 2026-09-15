@@ -63,6 +63,7 @@ __all__ = [
     "azimuth_steering",
     "element_field",
     "beamform",
+    "line_array_factor",
 ]
 
 WindowKind = Literal["uniform", "hann", "hamming", "blackman"]
@@ -409,3 +410,45 @@ def beamform(
         b = field.sum(dim=1)  # coherent sum across the aperture
         out.append(b.real**2 + b.imag**2)
     return torch.cat(out, dim=0)
+
+
+def line_array_factor(sin_angle: Tensor, n_elements: int, *,
+                      spacing_wavelengths: float = 0.5,
+                      sin_steer: float = 0.0) -> Tensor:
+    r"""Power response of a uniform line array, for use as a **transmit** pattern.
+
+    .. math:: |AF|^2 = \left|\frac{\sin(N u / 2)}{N \sin(u / 2)}\right|^2,
+              \qquad u = 2\pi d (\sin\theta - \sin\theta_0) / \lambda
+
+    Normalised to one on the mainlobe.  This is the textbook array factor rather
+    than a Gaussian stand-in, so its nulls and sidelobes are where the geometry
+    puts them -- which matters for a projector, because a target in a sidelobe
+    still returns an echo and a Gaussian would quietly say it does not.
+
+    :func:`beamform` is the *receive* side, summing complex pressure across real
+    elements.  This is the transmit side, and it is a per-ray weight: pass it as
+    ``ray_weights`` to :func:`hydropt.receiver.splat_etc`,
+    :func:`hydropt.beamform.extract_arrivals` or
+    :func:`hydropt.active.target_arrivals`.
+
+    Together they make a **Mills cross**: a vertical transmit array setting the
+    elevation fan, a horizontal receive array setting the azimuth beams, each
+    array doing the axis the other cannot.  ``examples/13`` builds one.
+
+    Args:
+        sin_angle: ``sin`` of the angle from broadside, any shape.
+        n_elements: number of elements.
+        spacing_wavelengths: element spacing in wavelengths; 0.5 is half-wave,
+            and above 0.5 the array grows grating lobes.
+        sin_steer: ``sin`` of the electronic steering angle.
+    """
+    if n_elements < 1:
+        raise ValueError("an array needs at least one element")
+    u = 2.0 * math.pi * spacing_wavelengths * (sin_angle - sin_steer)
+    # Both numerator and denominator vanish on the mainlobe, where the limit is 1.
+    small = u.abs() < 1e-9
+    safe = torch.where(small, torch.ones_like(u), u)
+    ratio = torch.where(small, torch.ones_like(u),
+                        torch.sin(n_elements * safe / 2.0)
+                        / (n_elements * torch.sin(safe / 2.0)))
+    return ratio * ratio

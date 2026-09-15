@@ -259,3 +259,78 @@ def test_empty_arrival_set_is_handled():
     steer, _ = azimuth_steering(21, 30.0)
     power = beamform(arrivals, elements, scene.freqs_khz, grid, steer, sigma_t=3e-5)
     assert torch.equal(power, torch.zeros_like(power))
+
+
+# --------------------------------------------------------------------------- #
+# Transmit array factor (the other half of a Mills cross)
+# --------------------------------------------------------------------------- #
+def test_line_array_factor_peaks_at_one_on_the_mainlobe():
+    """Both numerator and denominator vanish there, so the limit has to be taken
+    rather than divided."""
+    from hydropt import line_array_factor
+
+    for n in (1, 2, 8, 64):
+        assert float(line_array_factor(torch.zeros(1), n)) == pytest.approx(1.0)
+    steered = line_array_factor(torch.tensor([0.5]), 16, sin_steer=0.5)
+    assert float(steered) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("n", [4, 8, 16, 64])
+def test_the_nulls_land_where_the_aperture_puts_them(n):
+    """A half-wave array of N elements has its first null at sin(theta) = 2/N."""
+    from hydropt import line_array_factor
+
+    null = float(line_array_factor(torch.tensor([2.0 / n]), n))
+    near = float(line_array_factor(torch.tensor([1.0 / n]), n))
+    assert null < 1e-20, f"N={n}: {null:.2e}"
+    assert near > 1e-3
+
+
+def test_beamwidth_follows_one_over_n():
+    """The -3 dB width should track 101.5/N degrees, measured off the factor."""
+    from hydropt import line_array_factor
+
+    angles = torch.linspace(-40.0, 40.0, 40001)
+    for n, expected in ((8, 101.5 / 8), (32, 101.5 / 32)):
+        response = line_array_factor(torch.sin(angles * math.pi / 180.0), n)
+        inside = angles[response > 0.5]
+        width = float(inside.max() - inside.min())
+        assert width == pytest.approx(expected, rel=0.06), f"N={n}: {width:.2f}"
+
+
+def test_wide_spacing_grows_a_grating_lobe():
+    """At one-wavelength spacing the array repeats its mainlobe at sin = 1, which
+    is why half-wave spacing is the default and not an arbitrary habit."""
+    from hydropt import line_array_factor
+
+    sin_angle = torch.linspace(-1.0, 1.0, 20001)
+    half = line_array_factor(sin_angle, 8, spacing_wavelengths=0.5)
+    full = line_array_factor(sin_angle, 8, spacing_wavelengths=1.0)
+    away = sin_angle.abs() > 0.5
+    assert float(half[away].max()) < 0.1
+    assert float(full[away].max()) > 0.9, "a full-wavelength array should repeat"
+
+
+def test_steering_moves_the_mainlobe_and_broadens_it():
+    """The 1/cos broadening that costs a flat array its edge beams."""
+    from hydropt import line_array_factor
+
+    angles = torch.linspace(-90.0, 90.0, 90001)
+    sin_a = torch.sin(angles * math.pi / 180.0)
+    widths = {}
+    for steer_deg in (0.0, 45.0, 60.0):
+        response = line_array_factor(sin_a, 32,
+                                     sin_steer=math.sin(math.radians(steer_deg)))
+        inside = angles[response > 0.5]
+        widths[steer_deg] = float(inside.max() - inside.min())
+        assert float(angles[response.argmax()]) == pytest.approx(steer_deg, abs=0.1)
+    for steer_deg in (45.0, 60.0):
+        predicted = widths[0.0] / math.cos(math.radians(steer_deg))
+        assert widths[steer_deg] == pytest.approx(predicted, rel=0.08), widths
+
+
+def test_an_empty_array_is_rejected():
+    from hydropt import line_array_factor
+
+    with pytest.raises(ValueError, match="at least one element"):
+        line_array_factor(torch.zeros(1), 0)

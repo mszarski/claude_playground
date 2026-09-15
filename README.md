@@ -574,6 +574,56 @@ imager; a real imaging FLS carries 128-256 elements. Range is unaffected
 (61.0 m against a true 60.0 m), because range comes from timing rather than from
 the aperture.
 
+### A Mills cross: 120 deg x 20 deg, 2 deg beams
+
+`examples/13` is the arrangement almost every real FLS and multibeam uses -- two
+perpendicular line arrays, each doing one axis:
+
+| | elements | aperture | measured |
+| --- | --- | --- | --- |
+| receive, horizontal | 64 | 47.3 cm | **2.33 deg** azimuth beams |
+| transmit, vertical | 6 | 4.5 cm | **17.2 deg** elevation fan |
+
+Neither could do it alone; their product is a 2 deg x 20 deg pencil sweeping 60
+beams across 120 deg. `line_array_factor` is the transmit half -- the textbook
+array factor rather than a Gaussian stand-in, so a target in a sidelobe still
+returns an echo instead of quietly vanishing.
+
+**The edge beams really are worse, by exactly the predicted amount.** A flat array
+steered off broadside sees a foreshortened aperture, so the beam widens as
+`1/cos(theta)`:
+
+| steered | measured | `1/cos` | ratio |
+| --- | --- | --- | --- |
+| 0 deg | 2.33 deg | 2.33 | 1.000 |
+| 20 deg | 2.43 deg | 2.48 | 0.978 |
+| 40 deg | 3.00 deg | 3.05 | 0.985 |
+| 55 deg | 4.09 deg | 4.07 | 1.004 |
+
+**And 2 deg beams do not resolve a 12 m boat**, which is the interesting part. The
+hull subtends 11.5 deg -- five beams -- so the naive expectation is a target five
+beams wide. It is one:
+
+| | beams | width |
+| --- | --- | --- |
+| above -3 dB | 1 | 0 deg |
+| above -10 dB | 3 | 4 deg |
+| above -20 dB | 4 | 6 deg |
+
+This is the smooth-hull glint of `examples/09` seen through a real aperture: the
+echo is dominated by the one section whose broadside faces the sonar, so the
+-3 dB extent is a single beamwidth however finely you resolve bearing. The body's
+extent appears only 20 dB down. **For imaging a smooth hull the binding
+constraint is dynamic range, not beamwidth** -- and that is what a 2 deg system
+has over a 47 deg one, where the weak returns sit inside the mainlobe of the
+strong one rather than beside it.
+
+The bearing of the glint itself is measured to +0.00 deg against a true 0.00.
+
+Full sector, still fully differentiable: **6.76 s forward, 1.84 s backward**,
+8.61 s per step, for 18,480 transmit rays. The sector is what costs -- a 30 deg
+cone at the target is 1,200 rays and 3.6 s.
+
 ### Making it fast enough to train
 
 The first working version took **67 s per forward-plus-backward step**. It now
@@ -1092,6 +1142,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `10_synthetic_environment.py` | A generated ocean: wind sea, power-law seabed, internal waves | out-of-plane deflection 0 m (control), 390 / 659 / 2.2 m by mechanism; refraction matches `L^2/2R` to 3% |
 | `11_rough_surface_coherence.py` | Eckart coherence loss, and example 06's surface ghost | median surface path at 100 kHz loses 43 orders of magnitude; survivors all within the 2.53 deg cutoff |
 | `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 3.6 s per forward+backward step |
+| `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; glint gives 1 beam at -3 dB, 6 deg at -20 |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -1226,9 +1277,9 @@ hydropt/
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
-examples/        01-12, each with acceptance checks
+examples/        01-13, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           293 tests
+tests/           299 tests
 ```
 
 ## References
