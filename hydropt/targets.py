@@ -70,6 +70,7 @@ __all__ = [
     "IsotropicScattering",
     "PlateScattering",
     "CylinderScattering",
+    "CurvedSurfaceScattering",
     "ExtendedTarget",
     "rotation_matrix",
     "sinc",
@@ -342,6 +343,86 @@ class CylinderScattering(ScatteringPattern):
     def extra_repr(self) -> str:
         return (f"length={float(self.length):.3f} m, "
                 f"radius={float(self.radius):.3f} m")
+
+
+class CurvedSurfaceScattering(ScatteringPattern):
+    r"""A doubly-curved convex surface -- and the reason a real hull is visible.
+
+    Geometric optics gives a convex surface with principal radii ``R1`` and
+    ``R2`` a backscattering cross-section
+
+    .. math:: \sigma = \frac{R_1 R_2}{4}
+
+    which is **independent of aspect and of frequency**.  Setting ``R1 = R2 = a``
+    recovers Urick's sphere, ``TS = 10 log10(a^2 / 4)``, and the tests check that
+    limit directly.
+
+    Why this exists.  :class:`CylinderScattering` is a *straight* cylinder, and a
+    straight cylinder of length ``L`` returns only within about ``lambda / 2L`` of
+    its own broadside -- 0.18 degrees for a 2.4 m section at 100 kHz.  Model a
+    boat hull as straight sections and it glints from one point and vanishes
+    elsewhere, which is not what sonars see.  A real hull is **curved in plan**:
+    the waterline is a curve, so the surface is doubly curved and there is a
+    specular point on it at *every* aspect.  With a section radius of 0.75 m and a
+    plan radius of 30 m that is ``sigma`` = 5.6 m^2, ``TS`` = +7.5 dB, all round --
+    an ordinary small-craft target strength, and visible.
+
+    So: use :class:`CylinderScattering` for something genuinely straight and
+    unfaired (a pipe, a mast, a torpedo body seen beam-on) and this for anything
+    with fairing in two directions, which is most of a hull.
+
+    What it leaves out, all of which make a real hull *more* visible rather than
+    less: roughness at the 15 mm scale from fouling, plating seams and fittings,
+    which scatters diffusely; the hull-air interface behind a thin shell, which
+    reflects almost everything; and for GRP craft, returns from the engine,
+    tanks and internal structure the sound reaches through the hull.
+
+    Args:
+        radius_1, radius_2: principal radii of curvature (m).  Learnable.
+        normal: optional body-frame outward normal.  Given one, the patch is
+            one-sided -- lit only from in front, with a smooth obliquity so the
+            gradient survives.  Omitted, it scatters from every direction, which
+            is what you want for a patch standing in for a whole convex body.
+        learnable: register the radii as parameters.
+    """
+
+    def __init__(self, radius_1: float, radius_2: float, *,
+                 normal: tuple[float, float, float] | Tensor | None = None,
+                 learnable: bool = True) -> None:
+        super().__init__()
+        for name, v in {"radius_1": radius_1, "radius_2": radius_2}.items():
+            t = torch.as_tensor(float(v))
+            if learnable:
+                setattr(self, name, nn.Parameter(t))
+            else:
+                self.register_buffer(name, t)
+        if normal is None:
+            self.register_buffer("normal", None)
+        else:
+            n = torch.as_tensor(normal, dtype=torch.get_default_dtype()).reshape(3)
+            self.register_buffer("normal", n / n.norm().clamp_min(_EPS))
+
+    def cross_section(self, incident: Tensor, scattered: Tensor,
+                      freqs_khz: Tensor) -> Tensor:
+        dtype = freqs_khz.dtype
+        incident = incident.to(dtype)
+        scattered = scattered.to(dtype)
+        sigma = (self.radius_1.to(dtype).abs() * self.radius_2.to(dtype).abs()
+                 / 4.0)
+        shape = torch.broadcast_shapes(incident.shape[:-1], scattered.shape[:-1])
+        out = sigma.expand(*shape, 1)
+        if self.normal is not None:
+            n = self.normal.to(dtype)
+            # Lit when the wave travels into the face, seen when it leaves it.
+            lit = (-(incident * n).sum(-1)).clamp_min(0.0)
+            seen = (scattered * n).sum(-1).clamp_min(0.0)
+            out = out * (lit * seen).unsqueeze(-1)
+        return out.expand(*shape, int(freqs_khz.shape[0]))
+
+    def extra_repr(self) -> str:
+        return (f"R1={float(self.radius_1):.3f} m, R2={float(self.radius_2):.3f} m"
+                + ("" if self.normal is None
+                   else f", normal={self.normal.tolist()}"))
 
 
 # --------------------------------------------------------------------------- #

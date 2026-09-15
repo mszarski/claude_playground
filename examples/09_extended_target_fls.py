@@ -51,7 +51,7 @@ from hydropt import (
     shading_window, target_arrivals, trace,
 )
 from hydropt.active import _RelocatedScene, return_fan
-from hydropt.launch import fibonacci_cone
+from hydropt.launch import fan_sigma_d, fibonacci_cone
 
 C = 1500.0
 FREQ_HZ = 100e3
@@ -69,7 +69,6 @@ TARGET_DEPTH = 14.0
 TX_RAYS = 5000
 RX_RAYS = 6000
 RX_HALF_ANGLE_DEG = 25.0
-SIGMA_D = 0.45
 
 
 def receive_array() -> torch.Tensor:
@@ -203,8 +202,7 @@ def main() -> int:
           f"(TS {10 * math.log10(HULL_RADIUS * HULL_LENGTH ** 2 / (2 * LAM)):+.1f} dB)")
 
     def arrivals_for(target, seed=3):
-        return target_arrivals(scene, target, tx_dirs, sigma_d=SIGMA_D,
-                               n_rx_rays=RX_RAYS,
+        return target_arrivals(scene, target, tx_dirs, n_rx_rays=RX_RAYS,
                                rx_half_angle_deg=RX_HALF_ANGLE_DEG,
                                tx_weights=tx_w, max_arrivals_per_leg=8,
                                generator=torch.Generator().manual_seed(seed))
@@ -261,12 +259,17 @@ def main() -> int:
     rx_dirs = return_fan(point, elements, RX_RAYS, half_angle_deg=45.0,
                          generator=torch.Generator().manual_seed(3))
     with timed("  point target, for contrast"):
-        inbound = extract_arrivals(trace(scene, tx_dirs), point.position,
-                                   scene.freqs_khz, sigma_d=SIGMA_D,
+        # Each leg's splat is sized to its own fan, exactly as `target_arrivals`
+        # does it above -- otherwise this contrast would be measured on a
+        # different yardstick than the target it is being compared against.
+        tx_res = trace(scene, tx_dirs)
+        inbound = extract_arrivals(tx_res, point.position, scene.freqs_khz,
+                                   sigma_d=fan_sigma_d(tx_dirs, tx_res.arclen),
                                    ray_weights=tx_w, max_arrivals=8)
+        rx_res = trace(_RelocatedScene(scene, point.position), rx_dirs)
         outbound = extract_arrivals(
-            trace(_RelocatedScene(scene, point.position), rx_dirs), centre,
-            scene.freqs_khz, sigma_d=SIGMA_D, max_arrivals=8)
+            rx_res, centre, scene.freqs_khz,
+            sigma_d=fan_sigma_d(rx_dirs, rx_res.arclen), max_arrivals=8)
         pt_arr = compose_arrivals(inbound, outbound, point)
     pt_rng, pt_brg = spreads(pt_arr)
 

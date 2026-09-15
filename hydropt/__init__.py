@@ -62,6 +62,8 @@ from .fields import (
 from .launch import (
     directions_from_angles,
     fan_2d,
+    fan_angular_spacing,
+    fan_sigma_d,
     fibonacci_cone,
     fibonacci_sphere,
     receiver_cone_importance,
@@ -98,6 +100,7 @@ from .sediments import (
     sediment_names,
 )
 from .targets import (
+    CurvedSurfaceScattering,
     CylinderScattering,
     ExtendedTarget,
     IsotropicScattering,
@@ -118,7 +121,8 @@ __all__ = [
     "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
-    "spherical_fan", "structured_fan", "fan_2d", "fibonacci_sphere", "fibonacci_cone",
+    "spherical_fan", "structured_fan", "fan_2d", "fan_angular_spacing",
+    "fan_sigma_d", "fibonacci_sphere", "fibonacci_cone",
     "receiver_cone_importance", "directions_from_angles",
     "vertical_line_array", "horizontal_line_array", "make_time_grid", "splat_etc",
     # active sonar
@@ -135,7 +139,8 @@ __all__ = [
     "significant_wave_height_pm", "wave_number_peak_pm",
     # extended targets
     "ExtendedTarget", "ScatteringPattern", "IsotropicScattering",
-    "PlateScattering", "CylinderScattering", "rotation_matrix",
+    "PlateScattering", "CylinderScattering", "CurvedSurfaceScattering",
+    "rotation_matrix",
     "target_arrivals", "render_extended_echo",
     # coherent arrivals and beamforming
     "ArrivalSet", "extract_arrivals", "element_field", "beamform",

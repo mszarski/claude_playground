@@ -18,6 +18,8 @@ __all__ = [
     "spherical_fan",
     "structured_fan",
     "fan_2d",
+    "fan_angular_spacing",
+    "fan_sigma_d",
     "fibonacci_sphere",
     "fibonacci_cone",
     "receiver_cone_importance",
@@ -203,3 +205,82 @@ def receiver_cone_importance(
         )
         dirs = torch.cat((dirs, bg), dim=0)
     return dirs
+
+
+def fan_angular_spacing(directions: Tensor, *, chunk: int = 512) -> Tensor:
+    """Angle from each ray to its nearest neighbour in the fan, ``[R]`` (rad).
+
+    This is the resolution the fan actually has.  It is measured from the
+    directions themselves rather than assumed from the generator's arguments, so
+    it is right for a fan that was aimed, weighted, concatenated or hand-built,
+    and it is per-ray, so it follows a fan whose density varies across it.
+
+    Why it matters: a splat that accepts arrivals within ``sigma_d`` of a point
+    (:func:`hydropt.beamform.extract_arrivals`) weights each ray by
+    ``exp(-0.5 (d / sigma_d)^2)`` on its miss distance ``d``.  If the fan's ray
+    spacing at the range of interest is much wider than ``sigma_d``, no ray
+    passes within ``sigma_d`` except by luck, and the amplitude measures that
+    luck instead of the field.  Pairing this with
+    :func:`fan_sigma_d` sizes the splat to the fan.
+
+    Computed in chunks, so a fan of tens of thousands of rays does not
+    materialise an ``R x R`` matrix.  Detached: this is a property of the
+    sampling, not of the scene, and should not carry gradient.
+    """
+    d = directions.detach().reshape(-1, 3)
+    d = d / d.norm(dim=-1, keepdim=True).clamp_min(1e-30)
+    n = d.shape[0]
+    if n < 2:
+        return torch.full((n,), math.pi, dtype=d.dtype, device=d.device)
+    out = torch.empty(n, dtype=d.dtype, device=d.device)
+    for i in range(0, n, chunk):
+        block = d[i:i + chunk]
+        cos = (block @ d.T).clamp(-1.0, 1.0)
+        # Exclude each ray's own entry, which is cos = 1.
+        rows = torch.arange(block.shape[0], device=d.device)
+        cos[rows, rows + i] = -1.0
+        out[i:i + chunk] = cos.max(dim=1).values.clamp(-1.0, 1.0).arccos()
+    return out
+
+
+def fan_sigma_d(directions: Tensor, arclen: Tensor, *, factor: float = 1.0,
+                floor: float = 0.0, spacing: Tensor | None = None) -> Tensor:
+    """Splat width matched to a fan's own ray spacing, ``[R, S+1]`` (m).
+
+    ``sigma_d = factor * spacing * arclen``: the fan's angular resolution
+    (:func:`fan_angular_spacing`) carried out to each vertex's range, which is
+    the transverse distance between neighbouring rays there.  Pass the result as
+    ``sigma_d`` to :func:`hydropt.beamform.extract_arrivals` or
+    :func:`hydropt.receiver.splat_etc`, both of which accept a per-ray,
+    per-vertex width.
+
+    This makes the extraction *sampling-invariant*: densify the fan and the
+    splat narrows in step, so the answer converges instead of drifting.  A fixed
+    scalar ``sigma_d`` has no such property -- it is only correct for one fan
+    density at one range.
+
+    Args:
+        directions: the fan that produced ``arclen``, ``[R, 3]``.
+        arclen: path length at each vertex, ``[R, S+1]`` -- ``TraceResult.arclen``.
+        factor: multiplier on the spacing.  1.0 puts neighbouring rays at
+            ``1 sigma``; larger overlaps them more, which smooths the result at
+            the cost of resolution.
+        floor: minimum width (m), for the vertices near the source where the
+            ray spacing collapses to nothing.
+        spacing: a precomputed :func:`fan_angular_spacing`, ``[R]``.  The search
+            is quadratic in the fan size, so pass it when calling this repeatedly
+            for the same fan.
+
+    For a physically derived width rather than a geometric one, use
+    :func:`hydropt.beams.beam_sum_kwargs`, which sizes each beam from the
+    frequency and the ray-tube dynamics.  This function is the cheap
+    alternative: it costs one nearest-neighbour search, not six traces.
+    """
+    if spacing is None:
+        spacing = fan_angular_spacing(directions)
+    spacing = spacing.detach().reshape(-1, 1)
+    s = arclen.detach().to(dtype=spacing.dtype, device=spacing.device)
+    if s.shape[0] != spacing.shape[0]:
+        raise ValueError(f"arclen has {s.shape[0]} rays, directions has "
+                         f"{spacing.shape[0]}")
+    return (factor * spacing * s).clamp_min(floor)

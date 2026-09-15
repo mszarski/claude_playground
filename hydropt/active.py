@@ -49,7 +49,8 @@ import torch
 from torch import Tensor, nn
 
 from .beamform import ArrivalSet, extract_arrivals
-from .launch import fibonacci_cone, fibonacci_sphere
+from .launch import (fan_angular_spacing, fan_sigma_d, fibonacci_cone,
+                     fibonacci_sphere)
 from .receiver import splat_etc
 from .scene import Scene
 from .targets import ExtendedTarget
@@ -347,7 +348,8 @@ def target_arrivals(
     target: ExtendedTarget,
     tx_directions: Tensor,
     *,
-    sigma_d: float,
+    sigma_d: float | Tensor | None = None,
+    sigma_d_factor: float = 1.0,
     phase_centre: Tensor | None = None,
     rx_directions: Tensor | None = None,
     n_rx_rays: int = 3000,
@@ -377,7 +379,18 @@ def target_arrivals(
         target: the :class:`hydropt.targets.ExtendedTarget` to render.
         tx_directions: projector launch directions, ``[Nt, 3]``.
         sigma_d: arrival acceptance width (m), as in
-            :func:`hydropt.beamform.extract_arrivals`.
+            :func:`hydropt.beamform.extract_arrivals`.  **Leave it unset.**  The
+            default sizes each leg's splat to that leg's own fan with
+            :func:`hydropt.launch.fan_sigma_d`, which is the only way the result
+            is independent of how densely you happened to sample.  A scalar is
+            correct for one fan density at one range and wrong either side of
+            it: the return fan is the trap, because it is spread over a wide
+            cone and is therefore far sparser than the transmit fan.  With 400
+            rays over a 40 deg cone at 60 m the rays are 3.6 m apart, so a
+            ``sigma_d`` of 0.4 m made eight *identical* highlights return
+            energies spanning 30 dB -- sampling luck, not physics.
+        sigma_d_factor: multiplier on the automatic width.  Larger overlaps
+            neighbouring beams more.  Ignored when ``sigma_d`` is given.
         phase_centre: where to extract the returns; defaults to the array centroid.
         rx_directions: return fan, ``[Nr, 3]``, shared by every highlight.  By
             default each highlight aims its own cone at the phase centre.
@@ -398,7 +411,8 @@ def target_arrivals(
     """
     if phase_centre is None:
         phase_centre = scene.receivers.reshape(-1, 3).mean(0)
-    kw = dict(sigma_d=sigma_d, **extract_kwargs)
+    auto_sigma_d = sigma_d is None
+    kw = dict(extract_kwargs)
     tkw = trace_kwargs or {}
     freqs = scene.freqs_khz
     world = target.world_positions()
@@ -406,6 +420,10 @@ def target_arrivals(
     # One transmit trace for every highlight: they are just several points to
     # ask the same bundle about.
     tx_result = trace(scene, tx_directions, **tkw)
+    tx_kw = dict(kw)
+    tx_kw["sigma_d"] = (fan_sigma_d(tx_directions, tx_result.arclen,
+                                    factor=sigma_d_factor)
+                        if auto_sigma_d else sigma_d)
 
     # Inbound first, so a highlight the projector never reached costs no return
     # trace at all.
@@ -413,7 +431,7 @@ def target_arrivals(
     for i in range(target.n_highlights):
         inbound = extract_arrivals(tx_result, world[i], freqs,
                                    ray_weights=tx_weights,
-                                   max_arrivals=max_arrivals_per_leg, **kw)
+                                   max_arrivals=max_arrivals_per_leg, **tx_kw)
         if inbound.n_arrivals > 0:
             inbound_by_highlight[i] = inbound
 
@@ -441,13 +459,32 @@ def target_arrivals(
                              for i, f in zip(lit, fans)], dim=0)
         batched = trace(_RelocatedScene(scene, sources), per_ray, **tkw)
 
+        spacings: dict[int, Tensor] = {}
         start = 0
         for i, fan in zip(lit, fans):
             stop = start + fan.shape[0]
             leg = TraceResult(*(t[start:stop] for t in batched))
+            leg_kw = dict(kw)
+            if auto_sigma_d:
+                # Measured on this fan alone.  The fans are concatenated for the
+                # trace but every one is a cone aimed at the same phase centre,
+                # so across the concatenation each ray has a near-duplicate in
+                # every other highlight's fan and the spacing would read as ~0.
+                # Cached by identity, because a caller-supplied `rx_directions`
+                # is the *same* tensor for every highlight and the search is
+                # quadratic in the fan size.
+                key = id(fan)
+                if key not in spacings:
+                    spacings[key] = fan_angular_spacing(fan)
+                leg_kw["sigma_d"] = fan_sigma_d(fan, leg.arclen,
+                                                factor=sigma_d_factor,
+                                                spacing=spacings[key])
+            else:
+                leg_kw["sigma_d"] = sigma_d
             start = stop
             outbound = extract_arrivals(leg, phase_centre, freqs,
-                                        max_arrivals=max_arrivals_per_leg, **kw)
+                                        max_arrivals=max_arrivals_per_leg,
+                                        **leg_kw)
             if outbound.n_arrivals == 0:
                 continue
             parts.append(compose_arrivals(inbound_by_highlight[i], outbound,

@@ -42,7 +42,8 @@ import torch
 
 from _common import banner, check, save, setup, timed
 from hydropt import (
-    ConstantLoss, CylinderScattering, ExtendedTarget, IsotropicScattering,
+    ConstantLoss, CurvedSurfaceScattering, CylinderScattering,
+    ExtendedTarget, IsotropicScattering,
     IsoProfile, PlateScattering, Scene, azimuth_steering, beamform,
     fractal_bathymetry, make_time_grid, pierson_moskowitz_surface, sediment_loss,
     shading_window, target_arrivals, wave_number_peak_pm, wind_sea_rms_height,
@@ -58,7 +59,8 @@ WIND = 5.0
 TARGET_RANGE = 60.0
 
 HULL_LENGTH = 12.0
-HULL_RADIUS = 0.75
+HULL_RADIUS = 0.75          # transverse section radius
+HULL_PLAN_RADIUS = 30.0     # curvature of the waterline in plan
 HULL_DEPTH = 1.0
 N_HULL_SECTIONS = 5
 
@@ -66,8 +68,11 @@ N_HULL_SECTIONS = 5
 # instead of 0.0), so this is as cheap as the scene goes while staying right.
 TX_RAYS = 1200
 RX_RAYS = 400
-SIGMA_D = 0.4
 SECTOR_DEG = 40.0
+# No SIGMA_D: `target_arrivals` sizes each leg's splat to that leg's own fan.
+# A fixed width was wrong here by a factor of nine -- 400 return rays over a
+# 40 deg cone are 3.5 m apart at 60 m, against the 0.4 m this used to pass --
+# and it made eight identical highlights return energies spanning 30 dB.
 
 
 # --------------------------------------------------------------------------- #
@@ -118,23 +123,37 @@ def build_scene(elements: torch.Tensor, *, seed: int = 0, learnable: bool = True
 
 
 def build_boat(bearing_deg: float = 0.0, heading_deg: float = 90.0, *,
-               learnable: bool = True) -> ExtendedTarget:
-    """A 12 m hull, plus the fittings that actually scatter broadly.
+               learnable: bool = True, hull: str = "curved") -> ExtendedTarget:
+    """A 12 m hull, plus the fittings, with the hull model as an argument.
 
-    `examples/09` measured why this split matters: a smooth hull returns from its
-    one specular point and almost nothing elsewhere, so a model made only of hull
-    sections vanishes the moment the boat turns.  The propeller, skeg and transom
-    are small against a 15 mm wavelength in at least one dimension, so they stay
-    visible at any aspect -- and they are what a sonar actually holds on to.
+    ``hull="curved"`` (the default, and the realistic one) makes each hull patch
+    a **doubly-curved convex surface**: a real hull is faired in two directions,
+    the waterline is a curve, so there is a specular point on it at every aspect
+    and ``sigma = R1 R2 / 4`` independent of aspect.  A 0.75 m section radius and
+    a 30 m plan radius give TS +7.5 dB all round, which is an ordinary small
+    craft -- and visible, which is what sonars actually report.
+
+    ``hull="straight"`` uses straight cylinder sections instead.  That is the
+    model this example shipped with first, and it is **wrong for a boat**: a
+    straight 2.4 m cylinder returns only within 0.18 deg of its own broadside at
+    100 kHz, so the hull glints from a single point and all but disappears
+    elsewhere.  It is kept because the comparison is the point -- and because it
+    is the right model for something genuinely unfaired, like a pipe or a mast.
     """
     section = HULL_LENGTH / N_HULL_SECTIONS
     xs = torch.linspace(-HULL_LENGTH / 2 + section / 2,
                         HULL_LENGTH / 2 - section / 2, N_HULL_SECTIONS)
-    hull = CylinderScattering(section, HULL_RADIUS, sound_speed=C,
-                              learnable=learnable)
+    if hull == "curved":
+        hull_pattern = CurvedSurfaceScattering(HULL_RADIUS, HULL_PLAN_RADIUS,
+                                               learnable=learnable)
+    elif hull == "straight":
+        hull_pattern = CylinderScattering(section, HULL_RADIUS, sound_speed=C,
+                                          learnable=learnable)
+    else:
+        raise ValueError(f"hull must be 'curved' or 'straight', got {hull!r}")
     offsets = [torch.stack([xs, torch.zeros(N_HULL_SECTIONS),
                             torch.zeros(N_HULL_SECTIONS)], dim=-1)]
-    patterns: list = [hull] * N_HULL_SECTIONS
+    patterns: list = [hull_pattern] * N_HULL_SECTIONS
 
     # Propeller and skeg at the stern, a little below the hull axis.
     offsets.append(torch.tensor([[-HULL_LENGTH / 2 + 0.6, 0.0, 0.5],
@@ -180,8 +199,16 @@ def render_image(scene, target, elements, *, n_bearings: int = 121,
     """
     tx_dirs, tx_weights = transmit(n_tx_rays)
     arrivals = target_arrivals(
-        scene, target, tx_dirs, sigma_d=SIGMA_D, n_rx_rays=n_rx_rays,
-        rx_half_angle_deg=40.0, tx_weights=tx_weights, max_arrivals_per_leg=6,
+        scene, target, tx_dirs, n_rx_rays=n_rx_rays,
+        rx_half_angle_deg=40.0, tx_weights=tx_weights,
+        # The library default (24), not the 6 this used to force.  With the
+        # splat sized to the fan, many rays legitimately pass within it along
+        # much the same path, so a tight cap spends its whole budget on
+        # direct-path near-duplicates and drops the bottom-bounced paths --
+        # which is where the sediment's gradient lives.  At 6 the sediment
+        # parameters came back with exactly zero gradient; 24 restores them
+        # for about 10% more time.
+        max_arrivals_per_leg=24,
         generator=torch.Generator().manual_seed(seed),
     )
     steer, bearings = azimuth_steering(n_bearings, SECTOR_DEG)
@@ -219,7 +246,7 @@ def main() -> int:
     print(f"  seabed {tuple(bottom.heights.shape)} nodes, relief RMS "
           f"{float((bottom.heights.detach() - WATER_DEPTH).std(unbiased=False)):.2f} m")
     print(f"  wave field {tuple(surface.heights.shape)} nodes")
-    print(f"  boat: {HULL_LENGTH:.0f} m hull as {N_HULL_SECTIONS} sections "
+    print(f"  boat: {HULL_LENGTH:.0f} m curved hull as {N_HULL_SECTIONS} patches "
           f"+ propeller, skeg, transom = {boat.n_highlights} highlights, beam-on "
           f"at {TARGET_RANGE:.0f} m")
 
@@ -240,8 +267,8 @@ def main() -> int:
     params = {
         "boat position (x, y, z)": boat.position,
         "boat heading (yaw/pitch/roll)": boat.orientation,
-        "hull section length": boat.pattern_for(0).length,
-        "hull radius": boat.pattern_for(0).radius,
+        "hull section radius": boat.pattern_for(0).radius_1,
+        "hull plan radius": boat.pattern_for(0).radius_2,
         "propeller target strength": boat.pattern_for(5).target_strength_db,
         "transom plate size": boat.pattern_for(7).length,
         "seabed heights": bottom.heights,

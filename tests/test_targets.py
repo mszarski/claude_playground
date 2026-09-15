@@ -15,7 +15,8 @@ import pytest
 import torch
 
 from hydropt import (
-    ConstantLoss, CylinderScattering, ExtendedTarget, FlatHeight, IsotropicScattering,
+    ConstantLoss, CurvedSurfaceScattering, CylinderScattering, ExtendedTarget,
+    FlatHeight, IsotropicScattering,
     IsoProfile, PiecewiseLinearProfile, PlateScattering, PointTarget, Scene,
     compose_arrivals, extract_arrivals, make_time_grid, render_echo,
     render_extended_echo, rotation_matrix, target_arrivals, trace,
@@ -585,3 +586,113 @@ def test_a_per_ray_source_is_what_makes_that_possible():
     from hydropt.active import _RelocatedScene
     result = trace(_RelocatedScene(scene, starts), dirs)
     assert torch.allclose(result.pos[:, 0], starts, atol=1e-12)
+
+
+# --------------------------------------------------------------------------- #
+# CurvedSurfaceScattering
+# --------------------------------------------------------------------------- #
+"""A convex surface faired in two directions has a specular point at *every*
+aspect, so physical optics gives ``sigma = R1 R2 / 4`` independent of both
+aspect and frequency.  That independence is the whole reason a boat hull is easy
+to see and a straight pipe is not, so it is what these tests pin.
+"""
+
+
+def _mono(pattern, aspect_deg, freqs=None):
+    a = math.radians(aspect_deg)
+    inc = torch.tensor([[math.sin(a), math.cos(a), 0.0]])
+    f = torch.tensor([FREQ_KHZ]) if freqs is None else freqs
+    return pattern.cross_section(inc, -inc, f)
+
+
+def test_sphere_limit_matches_urick():
+    """R1 = R2 = a gives TS = 10 log10(a^2 / 4), the textbook rigid sphere."""
+    for a in (0.5, 1.0, 2.0):
+        pat = CurvedSurfaceScattering(a, a, learnable=False)
+        got = 10.0 * math.log10(float(_mono(pat, 0.0).squeeze()))
+        assert got == pytest.approx(10.0 * math.log10(a * a / 4.0), abs=1e-12)
+
+
+def test_sphere_of_radius_two_metres_is_zero_db():
+    pat = CurvedSurfaceScattering(2.0, 2.0, learnable=False)
+    assert float(_mono(pat, 0.0).squeeze()) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_cross_section_is_aspect_independent():
+    """The property that distinguishes it from a straight cylinder."""
+    pat = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
+    levels = [float(_mono(pat, a).squeeze())
+              for a in (0.0, 1.0, 5.0, 17.0, 45.0, 90.0, 137.0, 180.0)]
+    assert max(levels) / min(levels) == pytest.approx(1.0, abs=1e-12)
+    assert levels[0] == pytest.approx(0.75 * 30.0 / 4.0, abs=1e-12)
+
+
+def test_a_straight_cylinder_is_not_aspect_independent():
+    """The contrast, measured: 2.4 m of straight cylinder collapses off broadside."""
+    straight = CylinderScattering(2.4, 0.75, sound_speed=C, learnable=False)
+    curved = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
+    at_5deg = float(_mono(straight, 5.0).squeeze()) / float(_mono(straight, 0.0).squeeze())
+    assert at_5deg < 1e-4          # 40 dB down 5 degrees off broadside
+    assert float(_mono(curved, 5.0).squeeze()) / float(_mono(curved, 0.0).squeeze()) \
+        == pytest.approx(1.0, abs=1e-12)
+
+
+def test_cross_section_is_frequency_independent():
+    freqs = torch.tensor([10.0, 100.0, 400.0])
+    pat = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
+    got = _mono(pat, 23.0, freqs).reshape(-1)
+    assert got.shape == (3,)
+    assert torch.allclose(got, got[:1].expand(3), atol=1e-12)
+
+
+def test_radii_are_symmetric_and_sign_insensitive():
+    a = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
+    b = CurvedSurfaceScattering(30.0, 0.75, learnable=False)
+    c = CurvedSurfaceScattering(-0.75, 30.0, learnable=False)
+    for other in (b, c):
+        assert float(_mono(other, 0.0).squeeze()) == pytest.approx(
+            float(_mono(a, 0.0).squeeze()), abs=1e-12)
+
+
+def test_a_normal_makes_it_one_sided():
+    """With a normal, a patch returns only where it is both lit and seen."""
+    pat = CurvedSurfaceScattering(1.0, 1.0, normal=(0.0, 1.0, 0.0), learnable=False)
+    f = torch.tensor([FREQ_KHZ])
+    face = torch.tensor([[0.0, -1.0, 0.0]])          # travelling onto the face
+    assert float(pat.cross_section(face, -face, f).squeeze()) > 0.0
+    behind = torch.tensor([[0.0, 1.0, 0.0]])         # arriving from behind it
+    assert float(pat.cross_section(behind, -behind, f).squeeze()) == pytest.approx(
+        0.0, abs=1e-14)
+
+
+def test_obliquity_follows_cos_squared():
+    pat = CurvedSurfaceScattering(1.0, 1.0, normal=(0.0, 1.0, 0.0), learnable=False)
+    f = torch.tensor([FREQ_KHZ])
+    full = float(pat.cross_section(torch.tensor([[0.0, -1.0, 0.0]]),
+                                   torch.tensor([[0.0, 1.0, 0.0]]), f).squeeze())
+    t = math.radians(40.0)
+    inc = torch.tensor([[math.sin(t), -math.cos(t), 0.0]])
+    got = float(pat.cross_section(inc, -inc, f).squeeze())
+    assert got / full == pytest.approx(math.cos(t) ** 2, abs=1e-12)
+
+
+def test_broadcasts_over_a_fan():
+    pat = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
+    inc = fibonacci_cone(17, torch.tensor([1.0, 0.0, 0.0]), 30.0)
+    freqs = torch.tensor([50.0, 100.0])
+    got = pat.cross_section(inc, -inc, freqs)
+    assert got.shape == (17, 2)
+    assert torch.allclose(got, torch.full((17, 2), 0.75 * 30.0 / 4.0), atol=1e-12)
+
+
+def test_radii_are_learnable_and_carry_gradient():
+    pat = CurvedSurfaceScattering(0.75, 30.0, learnable=True)
+    assert len(list(pat.parameters())) == 2
+    _mono(pat, 31.0).sum().backward()
+    for p in pat.parameters():
+        assert p.grad is not None and float(p.grad.abs()) > 0.0
+
+
+def test_not_learnable_registers_no_parameters():
+    pat = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
+    assert list(pat.parameters()) == []

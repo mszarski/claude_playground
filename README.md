@@ -974,6 +974,8 @@ standard physical-optics forms and both are pinned to their textbook values:
 | plate nulls | `sin(theta) = lambda / 2a`, each side | on the predicted angle |
 | cylinder, broadside | `sigma = r L^2 / 2 lambda` (Urick) | exact to 1e-12 |
 | cylinder nulls | `sin(theta) = lambda / 2L` | on the predicted angle |
+| doubly curved convex surface | `sigma = R1 R2 / 4` | exact to 1e-12, all aspects |
+| sphere limit `R1 = R2 = a` | `TS = 10 log10(a^2/4)` (Urick) | exact to 1e-12 |
 | N sections of `L/N`, coherent | one cylinder of `L` | exact to 1e-12 |
 
 That last row is the one that ties the multi-highlight machinery to the
@@ -1041,6 +1043,73 @@ end-on returns its end cap, so a body that must stay visible at every aspect
 wants the cap as its own highlight. Adding two puts 60.0 dB back into the end-on
 echo, and that composability is the reason a target is built from parts rather
 than from one formula.
+
+### Why a hull was invisible, and it was two separate bugs
+
+A user reported the model disagreeing with the sea: *"in reality I have no
+problems seeing boat hulls with my sonar."* They were right, and finding out why
+turned up two independent errors that had been masking each other.
+
+**1. A boat hull is not a straight cylinder.** Modelled as straight cylinder
+sections, a 2.4 m section at 100 kHz returns only within `lambda/2L` = **0.18
+degrees** of its own broadside and collapses 40 dB by 5 degrees off. A real hull
+is faired in two directions -- the waterline is a curve -- which makes it a
+doubly curved convex surface with a specular point at *every* aspect. Physical
+optics gives `sigma = R1 R2 / 4`, independent of aspect *and* of frequency;
+`CurvedSurfaceScattering` implements it and reduces to the textbook rigid sphere
+`TS = 10 log10(a^2/4)` when `R1 = R2 = a`, exact to 1e-12.
+
+| aspect off broadside | straight 2.4 m section | curved patch (R1=0.75, R2=30) |
+| --- | --- | --- |
+| 0 deg | +21.6 dB | +7.5 dB |
+| 5 deg | -26.7 dB | +7.5 dB |
+| 90 deg | -300 dB | +7.5 dB |
+| **averaged over aspect** | **-6.5 dB** | **+7.5 dB** |
+
+Within 20 dB of the curved level on **2.3%** of aspects, against 100%. That is
+the difference between a target you find on a random pass and one you do not.
+
+**2. The return fan's splat was sized by hand, and the hand was wrong.**
+`extract_arrivals` weights a ray by `exp(-0.5 (d/sigma_d)^2)` on its miss
+distance, with no normalisation for fan density -- so if the fan's ray spacing at
+the target exceeds `sigma_d`, the amplitude stops measuring the field and starts
+measuring whether a ray happened to pass close by. `examples/12` and `13` used
+400 return rays over a 40 degree cone with `sigma_d = 0.4` m; at 60 m those rays
+are **3.5 m apart**. Eight *identical* highlights, whose true spread is 0.08 dB,
+came back spanning **30 dB**:
+
+| return rays | `sigma_d` | spread across 8 identical highlights |
+| --- | --- | --- |
+| 400 | 0.4 m | **30.5 dB** |
+| 1600 | 0.4 m | 7.9 dB |
+| 6400 | 0.4 m | 3.3 dB |
+| 400 | **fan-matched** | **1.7 dB** |
+| 6400 | **fan-matched** | **1.3 dB** |
+
+`hydropt.launch.fan_sigma_d` sizes the splat to the fan's own measured ray
+spacing (`fan_angular_spacing`) carried out to each vertex's range, and
+`target_arrivals` now uses it per leg by default. The result is
+**sampling-invariant** -- mean energy 6.09e-7 / 6.07e-7 / 6.04e-7 across a 16x
+densification, where a fixed width drifted without bound. It is the cheap
+cousin of the Gaussian-beam width above: one nearest-neighbour search rather
+than six traces, geometric rather than physical, but it satisfies the same
+`amplitude * W^2 = constant` requirement well enough to converge.
+
+One consequence worth stating: with a correctly sized splat, many rays
+legitimately pass within it along much the same path, so an aggressive
+`max_arrivals_per_leg` now spends its budget on direct-path near-duplicates.
+At a cap of 6 the sediment parameters in `examples/12` came back with *exactly
+zero* gradient, because every bottom-bounced path had been discarded. The
+library default of 24 restores them for about 10% more time.
+
+**Together.** With both fixed, the 12 m hull at 60 m reads through the Mills
+cross as a resolved body 6 degrees wide at -3 dB against the 11.5 degrees it
+subtends, instead of a single 3 degree glint. The residual off-centre bias of
+the energy centroid is *not* a third bug: over a flat surface and flat seabed
+the same hull reads -1.4 degrees with its full extent, and swapping the curved
+patches for plain isotropic ones changes neither number. It is the wave and
+seabed realisation lighting one end more than the other, which is what a single
+ping in a real sea does.
 
 ### What is still missing
 
