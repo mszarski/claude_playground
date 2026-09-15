@@ -549,6 +549,67 @@ predicts. So long-range shallow-water propagation, which lives at small grazing
 angles, keeps its surface bounces even at high frequency -- the window just
 narrows as `1/sigma`, and never closes.
 
+## Using it as a learnable forward model
+
+`examples/12` is the template: a 100 kHz forward-looking sonar with a
+**four-element** array, a boat at 60 m, a Pierson-Moskowitz wind sea and a
+power-law sand seabed. The output is a beamformed bearing-range image, and a loss
+on that image reaches **every** parameter in the scene:
+
+| | gradient |
+| --- | --- |
+| boat position and heading | live |
+| hull section length, hull radius | live |
+| propeller / skeg target strength, transom size | live |
+| seabed heights (576 nodes) | live |
+| wave surface (4,225 nodes) | live |
+| sediment sound speed, density, attenuation | live |
+
+11 of 11 parameter classes, checked rather than asserted.
+
+**Four elements is the binding constraint.** At 100 kHz the array is 22.5 mm
+long -- 1.5 wavelengths -- so the mainlobe is 47 deg wide against 4.7 deg for 32
+elements in the same scene. That is a detector with coarse bearing, not an
+imager; a real imaging FLS carries 128-256 elements. Range is unaffected
+(61.0 m against a true 60.0 m), because range comes from timing rather than from
+the aperture.
+
+### Making it fast enough to train
+
+The first working version took **67 s per forward-plus-backward step**. It now
+takes **3.6 s**, from two changes worth knowing about:
+
+**Step size was free.** The water is isovelocity, so rays are exactly straight
+and RK4 is exact at any step; `step_size` only brackets boundary crossings, and
+`find_crossing` bisects *within* a step regardless. 0.3 m and 1.5 m give an
+identical answer to five significant figures, and 1.5 m is 4x cheaper. **In a
+refracting profile this freedom is gone** -- there the step really is integrating
+something.
+
+**Return traces now batch.** `target_arrivals` traced one return fan per
+highlight, which for eight highlights is eight Python loops over steps. It now
+traces them all in one pass by handing the tracer a **per-ray source position** --
+which needs no change to `trace`, because it already broadcasts the source
+against the directions, so an `[R, 3]` source is simply one row per ray. Eight
+highlights went from 7.6 s of tracing to 1.6 s, bit-identical (a test asserts
+`torch.equal`, not closeness).
+
+Measured, on four CPU cores:
+
+| configuration | forward | backward | step |
+| --- | --- | --- | --- |
+| 1,200 tx / 400 rx rays | 2.95 s | 0.66 s | **3.61 s** |
+| 4,000 tx / 1,200 rx rays | 4.87 s | 1.08 s | 5.95 s |
+
+At 800 tx / 250 rx the bearing estimate breaks (-2.7 deg instead of 0.0), so the
+cheaper row is the floor rather than a free choice.
+
+So a gradient-based inversion of ~100 steps is a few minutes, and a network
+trained with this in the loop is hours per thousand steps. That is workable for
+small studies and slow for anything larger; the obvious next lever is a GPU,
+which **hydropt has never been run on** -- there are likely device assumptions to
+fix before it would work at all.
+
 ## Independent validation, and the defect it found
 
 Every check described so far compares ray theory against a closed form derived
@@ -1030,6 +1091,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | hull glints (83% from one section, travelling along the body); discrete scatterers spread 2.07 deg vs a point's 0.53 |
 | `10_synthetic_environment.py` | A generated ocean: wind sea, power-law seabed, internal waves | out-of-plane deflection 0 m (control), 390 / 659 / 2.2 m by mechanism; refraction matches `L^2/2R` to 3% |
 | `11_rough_surface_coherence.py` | Eckart coherence loss, and example 06's surface ghost | median surface path at 100 kHz loses 43 orders of magnitude; survivors all within the 2.53 deg cutoff |
+| `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 3.6 s per forward+backward step |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -1085,6 +1147,10 @@ everything below follows from that or from choices made for differentiability.
   [The fix](#the-fix-gaussian-beam-summation). The *default* is still the
   double-counting one, because changing it would silently move every existing
   scene's levels -- callers opt in.
+* **Never run on a GPU.** Every timing here is four CPU cores. There are likely
+  device assumptions (generators, `.cpu()` calls, dtype defaults) to fix before a
+  GPU run would work, and that is the obvious lever if the 3.6 s training step
+  is the thing standing in your way.
 * **No image beams.** A Gaussian beam wider than the water column is not folded
   at the boundaries, which is what costs 2-3 dB in a 100 m channel at 200 Hz.
 * **Generated environments are samples, not measurements.** `hydropt.environment`
@@ -1160,9 +1226,9 @@ hydropt/
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
-examples/        01-11, each with acceptance checks
+examples/        01-12, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           291 tests
+tests/           293 tests
 ```
 
 ## References

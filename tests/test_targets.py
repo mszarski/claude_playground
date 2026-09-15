@@ -537,3 +537,51 @@ def test_isotropic_highlights_are_not_suppressed_off_axis():
     d = math.sin(theta) * axis + math.cos(theta) * broad
     assert float(iso.cross_section(d, -d, _f())) == pytest.approx(
         float(iso.cross_section(broad, -broad, _f())), rel=1e-12)
+
+
+def test_batched_return_traces_agree_with_tracing_each_highlight_separately():
+    """`target_arrivals` traces every highlight's return fan in one pass, by
+    handing the tracer a per-ray source position -- which works because `trace`
+    broadcasts the source against the directions, so an ``[R, 3]`` source is one
+    row per ray.
+
+    The speed-up is large (eight highlights went from 7.6 s of tracing to 1.6 s,
+    because it is one Python loop over steps instead of eight) and the arithmetic
+    is unchanged, so this pins bit-identical agreement rather than closeness.
+    """
+    from hydropt.active import _RelocatedScene
+    from hydropt.tracer import TraceResult
+
+    scene = _shelf_scene(torch.tensor([[60.0, 0.0, 10.0]]))
+    offsets = torch.tensor([[-1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [1.5, 0.0, 0.5]])
+    target = ExtendedTarget(offsets, -6.0, position=(40.0, 0.0, 14.0),
+                            learnable=False)
+    world = target.world_positions()
+    centre = scene.receivers.reshape(-1, 3).mean(0)
+    n = 200
+
+    fans = [fibonacci_cone(n, centre - world[i], 40.0,
+                           generator=torch.Generator().manual_seed(4))
+            for i in range(3)]
+    separate = [trace(_RelocatedScene(scene, world[i]), fans[i]) for i in range(3)]
+
+    sources = torch.cat([world[i].reshape(1, 3).expand(n, 3) for i in range(3)], 0)
+    batched = trace(_RelocatedScene(scene, sources), torch.cat(fans, 0))
+
+    for i in range(3):
+        sliced = TraceResult(*(t[i * n:(i + 1) * n] for t in batched))
+        assert torch.equal(sliced.pos, separate[i].pos), f"highlight {i} positions"
+        assert torch.equal(sliced.tau, separate[i].tau), f"highlight {i} times"
+        assert torch.equal(sliced.refl_db, separate[i].refl_db), f"highlight {i} loss"
+
+
+def test_a_per_ray_source_is_what_makes_that_possible():
+    """Pinned separately because it is a property of `trace` the batching relies
+    on: hand it one source row per ray and each ray starts from its own place."""
+    scene = _shelf_scene(torch.tensor([[60.0, 0.0, 10.0]]))
+    dirs = fibonacci_cone(12, torch.tensor([1.0, 0.0, 0.0]), 20.0)
+    starts = torch.stack([torch.linspace(10.0, 21.0, 12), torch.zeros(12),
+                          torch.full((12,), 12.0)], dim=-1)
+    from hydropt.active import _RelocatedScene
+    result = trace(_RelocatedScene(scene, starts), dirs)
+    assert torch.allclose(result.pos[:, 0], starts, atol=1e-12)
