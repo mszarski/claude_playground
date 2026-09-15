@@ -53,7 +53,7 @@ import torch
 from torch import Tensor
 
 from .absorption import thorp_db_per_km
-from .receiver import _closest_approach
+from .receiver import _as_vertex_field, _closest_approach
 from .tracer import TraceResult
 
 __all__ = [
@@ -100,7 +100,7 @@ def extract_arrivals(
     point: Tensor,
     freqs_khz: Tensor,
     *,
-    sigma_d: float,
+    sigma_d: float | Tensor,
     absorption=thorp_db_per_km,
     ray_weights: Tensor | None = None,
     spreading: Tensor | None = None,
@@ -123,8 +123,10 @@ def extract_arrivals(
         result: a traced bundle.
         point: ``[3]`` -- normally the array phase centre.
         freqs_khz: ``[B]`` band centres.
-        sigma_d: acceptance width (m); sets the amplitude weight, as in the
-            energy renderer.
+        sigma_d: acceptance width (m).  As in
+            :func:`hydropt.receiver.splat_etc`, a ``[R]`` or ``[R, S+1]`` tensor
+            gives a per-ray, optionally per-vertex width -- pass the beam width
+            to make this a Gaussian beam sum rather than an arbitrary aperture.
         ray_weights: optional per-ray weight, ``[R]`` or ``[R, B]`` for one that
             differs by band; see :func:`hydropt.rough.roughness_weights`.
         spreading: optional ``[R, S+1]`` intensity factor replacing ``1/s^2``,
@@ -159,7 +161,13 @@ def extract_arrivals(
     d_pad = torch.where(usable, dist.detach(), torch.full_like(dist, float("inf")))
     prev = torch.cat((big, d_pad[:, :-1]), dim=1)
     nxt = torch.cat((d_pad[:, 1:], big), dim=1)
-    keep = (d_pad <= prev) & (d_pad < nxt) & (dist < space_gate * sigma_d) & usable
+    sigma_d_t = _as_vertex_field(sigma_d, pos.shape[0], pos.shape[1], dtype, device,
+                                 name="sigma_d")
+    if sigma_d_t is None:
+        gate = space_gate * float(sigma_d)
+    else:
+        gate = space_gate * torch.maximum(sigma_d_t[:, :-1], sigma_d_t[:, 1:])
+    keep = (d_pad <= prev) & (d_pad < nxt) & (dist < gate) & usable
 
     ri, si = keep.nonzero(as_tuple=True)
     if ri.numel() == 0:
@@ -184,7 +192,12 @@ def extract_arrivals(
     first = first / first.norm(dim=-1, keepdim=True).clamp_min(1e-30)
     launch_direction = first[ri]
 
-    weight = torch.exp(-0.5 * (d_sel / sigma_d) ** 2)
+    if sigma_d_t is None:
+        sd_sel = sigma_d
+    else:
+        sd_sel = (sigma_d_t[ri, si]
+                  + t_sel * (sigma_d_t[ri, si + 1] - sigma_d_t[ri, si]))
+    weight = torch.exp(-0.5 * (d_sel / sd_sel) ** 2)
     band_weight = None
     if ray_weights is not None:
         rw = ray_weights.to(dtype=dtype, device=device)

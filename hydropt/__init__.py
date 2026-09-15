@@ -23,7 +23,12 @@ from .beamform import (
     extract_arrivals,
     shading_window,
 )
-from .beams import GaussianBeams, gaussian_beams, suggest_beam_width
+from .beams import (
+    GaussianBeams,
+    beam_sum_kwargs,
+    gaussian_beams,
+    suggest_beam_width,
+)
 from .boundaries import (
     BilinearHeightField,
     BoundaryLoss,
@@ -138,6 +143,7 @@ __all__ = [
     "RayTube", "ray_tube", "ray_tube_jvp", "spherical_spreading",
     # Gaussian beams
     "GaussianBeams", "gaussian_beams", "suggest_beam_width",
+    "beam_sum_kwargs",
     # reverberation
     "LambertScattering", "reverberation_arrivals", "render_reverberation",
     "cone_solid_angle",

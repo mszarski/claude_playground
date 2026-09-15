@@ -80,7 +80,8 @@ from torch import Tensor
 from .launch import directions_from_angles
 from .tracer import TraceResult, trace
 
-__all__ = ["GaussianBeams", "gaussian_beams", "suggest_beam_width"]
+__all__ = ["GaussianBeams", "gaussian_beams", "suggest_beam_width",
+           "beam_sum_kwargs"]
 
 
 class GaussianBeams(NamedTuple):
@@ -272,3 +273,40 @@ def gaussian_beams(
 
     return GaussianBeams(spreading=spreading, det_q=det, geometric=geometric,
                          width=width, caustics=caustics, result=result)
+
+
+def beam_sum_kwargs(beams: GaussianBeams) -> dict:
+    r"""Render ``beams`` as a **Gaussian beam sum**, not as an arbitrary aperture.
+
+    Returns the ``spreading`` and ``sigma_d`` to hand
+    :func:`hydropt.receiver.splat_etc` or
+    :func:`hydropt.beamform.extract_arrivals`::
+
+        beams = gaussian_beams(scene, elev, azim, beam_width=beta, freq_khz=f)
+        etc = splat_etc(beams.result, receivers, grid, freqs,
+                        ray_weights=solid_angle, sigma_t=..., **beam_sum_kwargs(beams))
+
+    Why this is the fix rather than a convenience.  A splat sums
+    ``amplitude * exp(-n^2 / W^2)`` over rays, and for a dense fan the number of
+    rays landing within ``W`` of a point falls as ``1/s^2``.  So the sum comes out
+    as ``amplitude * W^2 / s^2``, and reproducing free-field spreading needs
+    ``amplitude * W^2`` to be **constant**.  For Gaussian beams it is: the
+    amplitude is ``1/|det Q| = 1/(s^2 + beta^2)`` in a homogeneous medium and the
+    width obeys ``W^2 = c (s^2 + beta^2) / (omega beta)``, whose product is
+    ``c / (omega beta)`` at every range.  A *fixed* ``sigma_d`` breaks exactly that
+    cancellation, which is the ``1/R^4`` defect the README describes.
+
+    Measured: with the beam width as the kernel width the energy exponent is
+    2.000 and the calibration constant is flat to 1.001x -- and, the point of the
+    whole construction, **independent of beta** from 60 m to 1000 m, because beta
+    parameterises the decomposition and not the physics.
+
+    The ``sqrt(2)`` converts between the two Gaussian conventions: the renderer
+    weights by ``exp(-d^2 / 2 sigma_d^2)`` and a beam's profile is
+    ``exp(-n^2 / W^2)``.
+
+    ``ray_weights`` is still yours to supply -- the per-ray solid angle
+    ``cos(e) de da`` -- because only the caller knows how the fan was built.
+    """
+    return {"spreading": beams.spreading,
+            "sigma_d": beams.width / math.sqrt(2.0)}

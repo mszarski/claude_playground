@@ -156,13 +156,38 @@ def _closest_approach(
     return tstar, (delta * delta).sum(-1).clamp_min(_LEN_EPS).sqrt()
 
 
+def _as_vertex_field(value, n_rays: int, n_vertices: int, dtype, device, *,
+                     name: str) -> Tensor | None:
+    """Broadcast a scalar / ``[R]`` / ``[R, S+1]`` argument to ``[R, S+1]``.
+
+    Returns ``None`` for a plain float, so the scalar path stays exactly as it
+    was -- same arithmetic, same results, no broadcast machinery in the way.
+    """
+    if not isinstance(value, Tensor):
+        return None
+    v = value.to(dtype=dtype, device=device)
+    if v.ndim == 0:
+        return None
+    if v.ndim == 1:
+        if v.shape[0] != n_rays:
+            raise ValueError(f"{name} has {v.shape[0]} entries for {n_rays} rays")
+        return v.reshape(-1, 1).expand(n_rays, n_vertices)
+    if v.ndim == 2:
+        if tuple(v.shape) != (n_rays, n_vertices):
+            raise ValueError(f"{name} is {tuple(v.shape)}, expected "
+                             f"{(n_rays, n_vertices)}")
+        return v
+    raise ValueError(f"{name} must be a float, [R] or [R, S+1]; got "
+                     f"{tuple(v.shape)}")
+
+
 def splat_etc(
     result: TraceResult,
     receivers: Tensor,
     time_grid: Tensor,
     freqs_khz: Tensor,
     *,
-    sigma_d: float,
+    sigma_d: float | Tensor,
     sigma_t: float,
     mode: SplatMode = "local_min",
     absorption: Callable[[Tensor], Tensor] = thorp_db_per_km,
@@ -193,7 +218,16 @@ def splat_etc(
             this one batched call.
         time_grid: ``[T]`` uniform time grid (s).
         freqs_khz: ``[B]`` band centre frequencies (kHz).
-        sigma_d, sigma_t: kernel widths (m, s); see the module docstring.
+        sigma_d: acceptance width (m).  A float is one width for the whole
+            bundle.  A ``[R]`` or ``[R, S+1]`` tensor gives a **per-ray**, and
+            optionally per-vertex, width, interpolated at the arrival exactly as
+            ``spreading`` is -- which is what turns this from an arbitrary
+            aperture into a **Gaussian beam sum**: pass
+            ``sigma_d=beams.width / sqrt(2)`` alongside
+            ``spreading=beams.spreading`` and the amplitude-times-beam-area
+            product is constant, so the ray density supplies the geometric
+            spreading correctly.  See the module docstring.
+        sigma_t: time kernel width (s).
         mode: how per-segment closest approaches are reduced along each ray.
         absorption: ``f_khz -> dB/km``.
         ray_weights: optional per-ray weight, ``[R]`` (e.g. solid angle) or
@@ -241,6 +275,8 @@ def splat_etc(
     norm_t = 1.0 / (math.sqrt(2.0 * math.pi) * sigma_t)
 
     n_rays = int(pos.shape[0])
+    sigma_d_t = _as_vertex_field(sigma_d, pos.shape[0], pos.shape[1], dtype, device,
+                                 name="sigma_d")
     chunk = n_rays if ray_chunk <= 0 else int(ray_chunk)
     etc_flat = torch.zeros(n_recv * n_band * n_time, dtype=dtype, device=device)
 
@@ -259,7 +295,14 @@ def splat_etc(
         tstar, dist = _closest_approach(p0, seg, seg_len2, receivers)  # [Rc, S, Nr]
         live = (alive[lo:hi, :-1] * alive[lo:hi, 1:]) > 0  # [Rc, S]
         usable = (seg_len > 0).unsqueeze(2) & live.unsqueeze(2)
-        near = (dist < space_gate * sigma_d) & usable
+        if sigma_d_t is None:
+            gate = space_gate * float(sigma_d)
+        else:
+            # Gate on the wider end of each segment, so a growing beam is never
+            # clipped by a threshold taken at its narrow end.
+            seg_sigma = torch.maximum(sigma_d_t[lo:hi, :-1], sigma_d_t[lo:hi, 1:])
+            gate = (space_gate * seg_sigma).unsqueeze(2)
+        near = (dist < gate) & usable
 
         if mode == "line_integral":
             keep = near
@@ -287,11 +330,16 @@ def splat_etc(
         s_c = arclen[lo:hi][ri, si] + t_sel * len_sel
         db_c = refl_db[lo:hi][ri, si + 1]
 
-        w_space = torch.exp(-0.5 * (d_sel / sigma_d) ** 2)
+        if sigma_d_t is None:
+            sd_sel = sigma_d
+        else:
+            sd = sigma_d_t[lo:hi]
+            sd_sel = sd[ri, si] + t_sel * (sd[ri, si + 1] - sd[ri, si])
+        w_space = torch.exp(-0.5 * (d_sel / sd_sel) ** 2)
         if mode == "line_integral":
             # Quadrature of the line integral, normalised so a ray passing
             # straight through the receiver contributes unit weight.
-            w_space = w_space * len_sel / (math.sqrt(2.0 * math.pi) * sigma_d)
+            w_space = w_space * len_sel / (math.sqrt(2.0 * math.pi) * sd_sel)
         band_weight = None
         if ray_weights is not None:
             rw = ray_weights.to(dtype=dtype, device=device)

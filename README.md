@@ -652,6 +652,80 @@ depth-averaged to **0.077 dB**.
 `scripts/validate_pekeris.py` prints all of this; `tests/test_pekeris.py` pins the
 reference and a fast version of the eigenray comparison.
 
+### The fix: Gaussian beam summation
+
+The defect is not the amplitude, it is the **kernel width**. A splat sums
+`amplitude * exp(-n^2/W^2)` over rays, and for a dense fan the number of rays
+landing within `W` of a point falls as `1/s^2`, so the sum comes out as
+`amplitude * W^2 / s^2`. Reproducing free-field spreading therefore needs
+
+```
+amplitude * W^2 = constant
+```
+
+A fixed `sigma_d` breaks exactly that. **Gaussian beams satisfy it identically**:
+in a homogeneous medium `amplitude = 1/(s^2 + beta^2)` and
+`W^2 = c(s^2+beta^2)/(omega beta)`, whose product is `c/(omega beta)` at every
+range -- checked on the real beams, constant to 1e-9.
+
+So `sigma_d` now accepts a `[R]` or `[R, S+1]` tensor, interpolated at the arrival
+exactly as `spreading` is, and `beam_sum_kwargs(beams)` hands `splat_etc` the
+right pair:
+
+```python
+beams = gaussian_beams(scene, elev, azim, beam_width=beta, freq_khz=f)
+etc = splat_etc(beams.result, receivers, grid, freqs,
+                ray_weights=solid_angle, sigma_t=..., **beam_sum_kwargs(beams))
+```
+
+Scalar `sigma_d` is untouched and bit-identical, so nothing existing moves.
+
+**It is absolutely normalised, with nothing fitted.** `E s^2 = pi c / (omega beta)`,
+so `E s^2 omega beta / (pi c) = 1`:
+
+| `beta` | 600 m | 1200 m | 2400 m |
+| --- | --- | --- | --- |
+| 200 m | 1.001 | 1.000 | 1.000 |
+| 600 m | 1.002 | 1.001 | 1.001 |
+
+`E` is the ETC summed over bins **times `dt`** -- an ETC is an energy density in
+time, and forgetting that is a factor of `1/dt`, which is how this constant was
+first mis-measured as 531.
+
+**And the answer does not depend on `beta`**, from 200 m to 1200 m within 3%.
+That is the strongest evidence the sum reconstructs the field rather than
+depending on the decomposition: `beta` parameterises the beam family, not the
+physics. The fixed-width control, same beams and same amplitudes, gives an
+exponent near 4 instead of 2.
+
+### Where beam summation stops working
+
+Against the Pekeris modes, depth-averaged, 200 Hz:
+
+| range | 100 m channel | 1000 m channel |
+| --- | --- | --- |
+| 1500 m | +2.06 dB | **+0.22 dB** |
+| 2000 m | +2.27 dB | **+0.001 dB** |
+| 3000 m | +2.95 dB | **+0.081 dB** |
+
+Same beams, same frequency, same everything but the water depth. The Fresnel
+scale `sqrt(2 c s / omega)` is 69 m at 2 km, which fits comfortably inside 1000 m
+of water and not at all inside 100 m. A beam wider than the channel has its
+transverse Gaussian extending through both boundaries, and the sum here treats
+that profile as if it were in free space -- there is no folding of the beam at
+the surface and seabed. So:
+
+**beam summation is the right estimator when the beam fits in the waveguide, and
+is wrong by a couple of dB with a range trend when it does not.** In shallow
+water at low frequency the beams cannot be made narrower -- the minimum width
+over `beta` is the Fresnel scale, which is physics -- so that regime needs
+image beams, which is not implemented. The counted estimator, whose kernel is
+small compared to the channel, handles it: 0.095 dB of range trend against the
+same reference.
+
+Two estimators, each with a stated domain, is an honest answer; one estimator
+silently wrong by `20 log10 R` was not.
+
 ## Active sonar and beamforming
 
 A passive scene renders one path, source to receiver. An active sonar renders
@@ -1004,12 +1078,15 @@ everything below follows from that or from choices made for differentiability.
   and no Lloyd-mirror pattern. The coherent path in `hydropt.beamform` does
   carry phase, but only differentially across an aperture -- see
   [Active sonar and beamforming](#active-sonar-and-beamforming).
-* **Absolute ETC levels need the counted estimator.** The default `spreading`
-  double-counts geometric spreading in a dense-fan sum, giving `1/R^4`; see
-  [Independent validation](#independent-validation-and-the-defect-it-found) for
-  what to pass instead and for what is and is not affected. Not yet fixed by
-  changing the default, because the right default depends on whether the renderer
-  is meant to be a counted sum or an eigenray sum -- a design decision, not a typo.
+* **Absolute levels need an estimator chosen on purpose.** A fixed `sigma_d`
+  with the default `spreading` double-counts geometric spreading and gives
+  `1/R^4`. Use `beam_sum_kwargs` where the beam fits inside the waveguide, or the
+  counted estimator where it does not; see
+  [The fix](#the-fix-gaussian-beam-summation). The *default* is still the
+  double-counting one, because changing it would silently move every existing
+  scene's levels -- callers opt in.
+* **No image beams.** A Gaussian beam wider than the water column is not folded
+  at the boundaries, which is what costs 2-3 dB in a 100 m channel at 200 Hz.
 * **Generated environments are samples, not measurements.** `hydropt.environment`
   gives a field the right RMS and the right spectral slope. It does not give it
   crests, breaking, sandwaves or outcrops, and a Gaussian random field has no
@@ -1084,8 +1161,8 @@ hydropt/
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views; optional plotly
 examples/        01-11, each with acceptance checks
-scripts/         benchmark.py, check_jvp.py, validate_pekeris.py
-tests/           282 tests
+scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
+tests/           291 tests
 ```
 
 ## References
