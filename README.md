@@ -1111,6 +1111,67 @@ patches for plain isotropic ones changes neither number. It is the wave and
 seabed realisation lighting one end more than the other, which is what a single
 ping in a real sea does.
 
+### Targets from a triangle mesh
+
+`hydropt.mesh` takes a target as geometry rather than as hand-placed primitives.
+It needs **no new propagation machinery**: a `ScatteringPattern` answers "given
+an incident and a scattered direction, what is `sigma`?", and a mesh answers it
+by integrating the Kirchhoff surface integral over every facet and summing
+coherently. So `MeshScattering` drops into the same `ExtendedTarget`, traces the
+same two legs, and costs no extra rays.
+
+```python
+from hydropt.mesh import load_obj, mesh_target
+verts, faces = load_obj("boat.obj")            # or boat_hull_mesh(12, 3, 1)
+boat = mesh_target(verts, faces, position=(60.0, 0.0, 1.0), yaw=90.0,
+                   n_patches=4, learnable_shape=True)
+```
+
+**The facet integral has to be exact.** The tempting shortcut is to treat a
+facet as a point of amplitude `A e^{iq.c}`, valid only for `|q| d << 1`. At
+100 kHz with centimetre facets `|q| d` is about 25 radians, and that shortcut
+came out **16x too high even at 82,000 facets**, converging only as fast as
+facet area. The exact integral over a triangle is `2A` times the second divided
+difference of `exp` at the three vertex phases; the textbook form of that
+divides by vertex-phase differences which vanish precisely where the facet lies
+in a phase front, which is where the specular return comes from.
+`triangle_phase_integral` evaluates it as a nested divided difference that always
+puts the widest-separated pair in the denominator, falling back to a series only
+when all three collapse.
+
+Validated against every closed form that applies:
+
+| body | closed form | mesh |
+| --- | --- | --- |
+| flat facet, any aspect | `PlateScattering`, sincs and nulls included | **exact to 1e-10** |
+| sphere | `sigma = a^2/4` | 0.07 dB at 20k facets |
+| triaxial ellipsoid | `sigma = A^2 C^2 / 4 B^2` | **0.07 dB**, up to 3:1:0.5 |
+| back faces | culled | exactly zero |
+
+The ellipsoid is the one that matters: a sphere only exercises `R1 = R2`, while
+`A^2C^2/4B^2` separates the two principal radii and depends on all three axes.
+
+Facets must resolve the surface's **curvature**, not its phase -- about
+`sqrt(lambda R)/3`, so 3.5 cm for a 0.75 m radius at 100 kHz. Cost is set by the
+facet count times the number of direction pairs, not by ray count: 47,000 facets
+against 576 direction pairs is 4.5 s.
+
+**What it does not model.** Facets are culled by their own normal, which is
+right for a convex body, but there is no ray-casting *between* facets, so a mesh
+that shadows itself keeps contributing from the hidden parts. Physical optics
+has no edge diffraction, so grazing returns are understated.
+
+**What the mesh then said about hulls**, which the analytic patch could not. At a
+forward-looking sonar's shallow depression angle (10.4 deg for the
+`examples/12` geometry) **aspect dominates**: the hull is a strong target on the
+beam (+0.1 dB) and 35 dB weaker bow-on, because below the waterline a hull's
+outward normal tilts downward and toward the bow also swings forward, so a
+shallow look never finds the bow's specular point. From underneath, aspect
+almost stops mattering -- 1.8 dB spread across every heading, all of it around
++6 to +8 dB -- because a shallow-draft hull's bottom is nearly flat and faces
+straight down whichever way the boat points. A downward-looking sonar sees a
+hull as an almost heading-independent target; a forward-looking one does not.
+
 ### What is still missing
 
 **Absorption above ~100 kHz.** Thorp is out of range; the Francois-Garrison
@@ -1210,8 +1271,9 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | hull glints (83% from one section, travelling along the body); discrete scatterers spread 2.07 deg vs a point's 0.53 |
 | `10_synthetic_environment.py` | A generated ocean: wind sea, power-law seabed, internal waves | out-of-plane deflection 0 m (control), 390 / 659 / 2.2 m by mechanism; refraction matches `L^2/2R` to 3% |
 | `11_rough_surface_coherence.py` | Eckart coherence loss, and example 06's surface ghost | median surface path at 100 kHz loses 43 orders of magnitude; survivors all within the 2.53 deg cutoff |
-| `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 3.6 s per forward+backward step |
-| `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; glint gives 1 beam at -3 dB, 6 deg at -20 |
+| `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 4.5 s per forward+backward step |
+| `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; hull resolved 6.0 deg at -3 dB against the 11.5 deg it subtends |
+| `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; gradient reaches the mesh vertices; 7.0 s forward |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
