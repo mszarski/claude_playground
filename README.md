@@ -1180,7 +1180,13 @@ Two things it has to get right, and both are pinned:
 
 Measured on two identical panels, one directly behind the other: without
 occlusion they add coherently to **4x** the power of a single panel; with it,
-**1.00x**. Slid sideways so nothing is in the way, both give 4x. Bistatic needs
+**1.00x**.  On a scene it is quieter than that, and the geometry says why: a
+beam-on catamaran with 5 m between hulls loses **2.8 dB** when the sonar looks
+along the separation axis from 4 degrees up, and **nothing at all** from 17
+degrees up -- a ray clearing the near keel has risen 1.5 m by the far hull,
+which is more than its 0.9 m draught, so the shadow passes over it.  The peak is
+unaffected either way, because the peak is the near hull's own specular; what
+occlusion removes is spread along the far edge. Slid sideways so nothing is in the way, both give 4x. Bistatic needs
 both ends -- visible from the source is not the same as visible to the receiver,
 and they coincide only when monostatic.
 
@@ -1606,7 +1612,7 @@ hydropt/
   plot.py        matplotlib views, FLS sector display; optional plotly
 examples/        01-16, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           422 tests
+tests/           424 tests
 ```
 
 ## References

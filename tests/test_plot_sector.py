@@ -125,3 +125,25 @@ def test_rejects_a_transposed_image():
 def test_asymmetric_sectors_work():
     fig = plot_fls_sector(_power(), torch.linspace(-20.0, 70.0, 37), _ranges())
     assert fig.axes[0].get_xlim()[1] > fig.axes[0].get_xlim()[0]
+
+
+def test_a_shared_reference_makes_two_panels_comparable():
+    """Without it, a panel that is uniformly weaker looks identical to a strong
+    one, because each is normalised to its own peak -- which defeats the
+    purpose of putting them side by side."""
+    p = _power()
+    strong = plot_fls_sector(p, _bearings(), _ranges())
+    weak_own = plot_fls_sector(p * 0.25, _bearings(), _ranges())
+    ref = float(p.max())
+    weak_ref = plot_fls_sector(p * 0.25, _bearings(), _ranges(), reference=ref)
+
+    top = lambda fig: float(fig.axes[0].collections[0].get_array().max())
+    assert top(weak_own) == pytest.approx(top(strong), abs=1e-9)   # the problem
+    assert top(weak_ref) == pytest.approx(top(strong) - 6.0206, abs=0.01)
+
+
+def test_reference_does_not_change_the_geometry():
+    p = _power()
+    a = plot_fls_sector(p, _bearings(), _ranges())
+    b = plot_fls_sector(p, _bearings(), _ranges(), reference=float(p.max()) * 10)
+    assert a.axes[0].get_xlim() == pytest.approx(b.axes[0].get_xlim())

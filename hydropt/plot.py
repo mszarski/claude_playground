@@ -283,6 +283,7 @@ def plotly_rays(result: TraceResult, *, receivers: Tensor | None = None,
 
 def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
                     dynamic_range: float = 24.0, sound_speed: float = 1500.0,
+                    reference: float | None = None,
                     ring_step: float | None = None, cmap: str = "afmhot",
                     figsize=(8.0, 7.2), title: str = "Forward-looking sonar",
                     overlays: Sequence[tuple] = (), ax=None):
@@ -311,6 +312,10 @@ def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
         dynamic_range: dB below the peak to show.  A sonar display is a
             deliberately shallow window; 20-30 dB is typical, and showing 60
             turns the picture into reverberation.
+        reference: normalise to this level instead of the image's own peak.
+            Two panels each normalised to their own peak cannot be compared --
+            a change that lowers the whole image by 3 dB looks identical --
+            so pass a common reference when the comparison is the point.
         ring_step: metres between range rings; chosen automatically if omitted.
         overlays: ``(x, y, style, label)`` tuples drawn over the wedge, with
             ``x`` across track and ``y`` along track in metres.
@@ -331,7 +336,7 @@ def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
         raise ValueError(f"power is {p.shape}, but got {b.size} bearings and "
                          f"{r.size} ranges")
 
-    peak = max(float(p.max()), 1e-300)
+    peak = max(float(p.max()) if reference is None else float(reference), 1e-300)
     db = 10.0 * np.log10(np.maximum(p, peak * 10 ** (-dynamic_range / 10.0)) / peak)
 
     # Cell EDGES, not centres: with a curved mesh matplotlib cannot infer them,
