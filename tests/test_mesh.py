@@ -21,7 +21,7 @@ import torch
 from hydropt import CurvedSurfaceScattering, PlateScattering
 from hydropt.mesh import (
     MeshScattering, boat_hull_mesh, facet_geometry, icosphere, load_obj,
-    mesh_target, triangle_phase_integral,
+    mesh_target, triangle_phase_integral, visible_facets,
 )
 
 C = 1500.0
@@ -532,3 +532,191 @@ def test_hull_is_brightest_from_beneath():
     assert beneath > shallow * 2.0
     # and it is still a perfectly detectable target on the beam at that angle
     assert 10 * math.log10(shallow) > -12.0
+
+
+# --------------------------------------------------------------------------- #
+# self-occlusion
+# --------------------------------------------------------------------------- #
+"""Facets are culled by their own normal, which handles the far side of a convex
+body but not a facet hidden behind another one: a superstructure over a deck, a
+propeller behind a skeg, the far wall of anything concave.
+
+Ray-casting every facet against every other is O(F^2) per direction -- 225
+million tests for a 15,000-facet hull, and ``compose_arrivals`` asks for
+hundreds of directions.  A depth buffer is O(F), and measured 10% overhead on
+that hull.  What these tests pin is that it culls what is genuinely hidden,
+leaves everything else exactly alone, and in particular is a *no-op on a convex
+body*, which is the property a binning scheme is most likely to break.
+"""
+
+
+def _panel(cx, cz, w=1.0, n=20):
+    """A ``w`` x ``w`` panel at ``z = cz``, normal +z, split into n x n cells.
+
+    Asserts its own winding: getting this backwards silently culls the whole
+    panel as a back face and makes an occlusion test pass for the wrong reason.
+    """
+    g = torch.linspace(-w / 2, w / 2, n + 1)
+    X, Y = torch.meshgrid(g + cx, g, indexing="ij")
+    v = torch.stack([X.reshape(-1), Y.reshape(-1),
+                     torch.full(((n + 1) ** 2,), float(cz))], dim=-1)
+    f = []
+    for i in range(n):
+        for j in range(n):
+            a = i * (n + 1) + j
+            b, c, d = a + 1, a + n + 1, a + n + 2
+            f += [[a, c, b], [b, c, d]]
+    f = torch.tensor(f)
+    _, normal, _ = facet_geometry(v, f)
+    assert float(normal[:, 2].min()) > 0.99, "panel must face +z"
+    return v, f
+
+
+def _join(*meshes):
+    verts, faces, off = [], [], 0
+    for v, f in meshes:
+        verts.append(v)
+        faces.append(f + off)
+        off += v.shape[0]
+    return torch.cat(verts), torch.cat(faces)
+
+
+DOWN = [0.0, 0.0, -1.0]      # travelling -z: the observer is at +z, so a
+                             # panel at larger z is NEARER and hides one behind.
+
+
+def test_visible_facets_picks_the_nearest():
+    c = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 5.0], [3.0, 0.0, 5.0]])
+    seen = visible_facets(c, torch.tensor([[0.0, 0.0, 1.0]]), 0.5, tolerance=0.2)
+    assert seen.tolist() == [[True, False, True]]
+
+
+def test_visible_facets_follows_the_view_direction():
+    c = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 5.0]])
+    fwd = visible_facets(c, torch.tensor([[0.0, 0.0, 1.0]]), 0.5, tolerance=0.2)
+    back = visible_facets(c, torch.tensor([[0.0, 0.0, -1.0]]), 0.5, tolerance=0.2)
+    assert fwd.tolist() == [[True, False]]
+    assert back.tolist() == [[False, True]]
+
+
+def test_visible_facets_keeps_what_is_within_tolerance():
+    """A continuous surface must not shadow itself just by landing in one bin."""
+    c = torch.tensor([[0.0, 0.0, 0.0], [0.0, 0.0, 0.3]])
+    view = torch.tensor([[0.0, 0.0, 1.0]])
+    assert visible_facets(c, view, 0.5, tolerance=1.0).all()
+    assert not visible_facets(c, view, 0.5, tolerance=0.1).all()
+
+
+def test_visible_facets_shape_and_detachment():
+    c = torch.randn(17, 3, requires_grad=True)
+    seen = visible_facets(c, torch.randn(5, 3), 0.4, tolerance=0.5)
+    assert seen.shape == (5, 17) and seen.dtype == torch.bool
+    assert not seen.requires_grad
+
+
+@pytest.mark.parametrize("radius", [0.5, 1.0])
+def test_occlusion_is_a_no_op_on_a_convex_body(radius):
+    """The property a centroid depth buffer most easily breaks.
+
+    Near the limb a sphere runs almost along the line of sight, so one bin
+    spans a large depth range and a naive nearest-per-bin rule culls facets
+    that nothing is in front of -- it cost 0.26% of the return before the
+    margin was widened by obliquity.  A convex body is owed exactly zero.
+    """
+    v, f = icosphere(4, radius)
+    on = MeshScattering(v, f, sound_speed=C, facet_chunk=8192, occlusion=True)
+    off = MeshScattering(v, f, sound_speed=C, facet_chunk=8192, occlusion=False)
+    for look in ([0, 0, 1.0], [1, 1, 1.0], [-1, 2, 0.5]):
+        assert float(_mono(on, look)) == pytest.approx(float(_mono(off, look)),
+                                                       rel=1e-9), look
+
+
+def test_a_hidden_panel_stops_contributing():
+    near, far = _panel(0.0, 3.0), _panel(0.0, 0.0)
+    alone = MeshScattering(*near, sound_speed=C, occlusion=False)
+    both_v, both_f = _join(far, near)
+    truth = float(_mono(alone, DOWN))
+
+    off = float(_mono(MeshScattering(both_v, both_f, sound_speed=C,
+                                     occlusion=False), DOWN))
+    on = float(_mono(MeshScattering(both_v, both_f, sound_speed=C,
+                                    occlusion=True), DOWN))
+    # Two coherent copies give four times the power; occlusion must give one.
+    assert off / truth == pytest.approx(4.0, rel=0.02)
+    assert on / truth == pytest.approx(1.0, rel=0.02)
+
+
+def test_a_panel_that_is_not_in_the_way_is_left_alone():
+    far, aside = _panel(0.0, 0.0), _panel(4.0, 3.0)
+    v, f = _join(far, aside)
+    on = float(_mono(MeshScattering(v, f, sound_speed=C, occlusion=True), DOWN))
+    off = float(_mono(MeshScattering(v, f, sound_speed=C, occlusion=False), DOWN))
+    assert on == pytest.approx(off, rel=1e-9)
+
+
+def test_occlusion_follows_the_look_direction():
+    """Turn the body over and the other panel is the hidden one."""
+    v, f = _join(_panel(0.0, 0.0), _panel(0.0, 3.0))
+    mesh = MeshScattering(v, f, sound_speed=C, occlusion=True)
+    down = float(_mono(mesh, DOWN))
+    up = float(_mono(mesh, [0.0, 0.0, 1.0]))
+    # Each panel faces +z, so only one look direction lights anything at all.
+    assert down > 0.0
+    assert up == pytest.approx(0.0, abs=1e-12)
+
+
+def test_bistatic_needs_both_ends():
+    """Visible from the source is not the same as visible to the receiver."""
+    v, f = _join(_panel(0.0, 0.0), _panel(0.0, 2.0))
+    inc = torch.tensor([[0.3, 0.0, -1.0]], dtype=torch.get_default_dtype())
+    inc = inc / inc.norm()
+    sca = torch.tensor([[0.0, 0.0, 1.0]], dtype=inc.dtype)
+    freqs = _freq()
+    on = float(MeshScattering(v, f, sound_speed=C, occlusion=True)
+               .cross_section(inc, sca, freqs))
+    off = float(MeshScattering(v, f, sound_speed=C, occlusion=False)
+                .cross_section(inc, sca, freqs))
+    assert on < off * 0.5
+
+
+def test_occlusion_does_not_break_the_vertex_gradient():
+    v, f = _join(_panel(0.0, 0.0, n=6), _panel(0.0, 3.0, n=6))
+    mesh = MeshScattering(v, f, sound_speed=C, occlusion=True, learnable=True)
+    _mono(mesh, DOWN).sum().backward()
+    g = mesh.vertices.grad
+    assert g is not None and torch.isfinite(g).all() and float(g.abs().max()) > 0
+
+
+def test_occlusion_can_be_turned_off_for_the_old_behaviour():
+    v, f = _join(_panel(0.0, 0.0, n=6), _panel(0.0, 3.0, n=6))
+    mesh = MeshScattering(v, f, sound_speed=C, occlusion=False)
+    assert "occlusion=off" in repr(mesh)
+
+
+def test_mesh_target_forwards_the_occlusion_flag():
+    v, f = boat_hull_mesh(n_long=8, n_around=6)
+    on = mesh_target(v, f, n_patches=2, occlusion=True)
+    off = mesh_target(v, f, n_patches=2, occlusion=False)
+    assert on.pattern_for(0).occlusion is True
+    assert off.pattern_for(0).occlusion is False
+
+
+def test_splitting_confines_occlusion_to_a_patch():
+    """A documented limitation, pinned so it cannot change silently.
+
+    Each patch is its own MeshScattering, so one patch cannot hide another.
+    Two panels that fully occlude each other as one mesh stop doing so once
+    they are split apart.
+    """
+    v, f = _join(_panel(0.0, 0.0, n=8), _panel(0.0, 3.0, n=8))
+    whole = MeshScattering(v, f, sound_speed=C, occlusion=True)
+    split_far = MeshScattering(*_panel(0.0, 0.0, n=8), sound_speed=C,
+                               occlusion=True)
+    split_near = MeshScattering(*_panel(0.0, 3.0, n=8), sound_speed=C,
+                                occlusion=True)
+    d = torch.tensor([DOWN], dtype=torch.get_default_dtype())
+    freqs = _freq()
+    together = float(whole.cross_section(d, -d, freqs))
+    apart = (float(split_far.cross_section(d, -d, freqs))
+             + float(split_near.cross_section(d, -d, freqs)))
+    assert apart > together * 1.5

@@ -1156,10 +1156,43 @@ Facets must resolve the surface's **curvature**, not its phase -- about
 facet count times the number of direction pairs, not by ray count: 47,000 facets
 against 576 direction pairs is 4.5 s.
 
-**What it does not model.** Facets are culled by their own normal, which is
-right for a convex body, but there is no ray-casting *between* facets, so a mesh
-that shadows itself keeps contributing from the hidden parts. Physical optics
-has no edge diffraction, so grazing returns are understated.
+**Self-occlusion, by depth buffer.** Culling facets by their own normal handles
+the far side of a convex body but not a facet hidden *behind* another one: a
+superstructure over a deck, a propeller behind a skeg, the far wall of anything
+concave. Ray-casting every facet against every other is `O(F^2)` per direction
+-- 225 million tests for a 15,000-facet hull, and `compose_arrivals` asks for
+hundreds of directions. `visible_facets` projects the centroids onto the plane
+perpendicular to the line of sight, bins them and keeps the nearest per bin,
+which is `O(F)` and measured **10% overhead** on that hull.
+
+Two things it has to get right, and both are pinned:
+
+* **A convex body is owed exactly zero change.** Near the limb a sphere runs
+  almost along the line of sight, so one bin spans a large depth range and a
+  naive nearest-per-bin rule culls facets that nothing is in front of -- it cost
+  0.26% of the sphere's return before the depth margin was widened by obliquity
+  (`cell / |n.d|`, the depth a bin spans on a surface tilted that far). It is
+  now exact to 1e-9.
+* **A continuous surface must not shadow itself.** With a strict nearest-per-bin
+  rule, two facets of one lit surface landing in the same bin knock each other
+  out. So a facet is culled only when something sits more than a tolerance in
+  front of it -- on a real body, hidden parts are separated by many facets.
+
+Measured on two identical panels, one directly behind the other: without
+occlusion they add coherently to **4x** the power of a single panel; with it,
+**1.00x**. Slid sideways so nothing is in the way, both give 4x. Bistatic needs
+both ends -- visible from the source is not the same as visible to the receiver,
+and they coincide only when monostatic.
+
+The visibility mask is binary and detached, so occlusion carries no gradient;
+amplitudes of visible facets still do. And `mesh_target(n_patches > 1)` confines
+occlusion to *within* a patch, since each patch is its own `MeshScattering` --
+so one part of the body can no longer hide another. Use `n_patches=1` when that
+matters more than the target's extent in the image.
+
+**What it still does not model.** Physical optics has no edge diffraction, so
+grazing returns are understated, and the occlusion is a centroid test, so a
+facet much larger than a bin is treated as its centre point.
 
 **`boat_hull_mesh` is a hull, not a spindle.** The first version tapered to a
 point at *both* ends -- a canoe -- which showed up as an aspect pattern exactly
@@ -1573,7 +1606,7 @@ hydropt/
   plot.py        matplotlib views, FLS sector display; optional plotly
 examples/        01-16, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           408 tests
+tests/           422 tests
 ```
 
 ## References

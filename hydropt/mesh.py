@@ -56,6 +56,7 @@ __all__ = [
     "facet_geometry",
     "triangle_phase_integral",
     "MeshScattering",
+    "visible_facets",
     "mesh_target",
     "boat_hull_mesh",
     "icosphere",
@@ -197,8 +198,87 @@ def triangle_phase_integral(tri: Tensor, q: Tensor, *, area: Tensor | None = Non
 # --------------------------------------------------------------------------- #
 # The pattern
 # --------------------------------------------------------------------------- #
+def _view_basis(direction: Tensor) -> tuple[Tensor, Tensor]:
+    """Two unit vectors spanning the plane perpendicular to ``direction``."""
+    d = direction / direction.norm(dim=-1, keepdim=True).clamp_min(_EPS)
+    # Pick the axis least aligned with d, so the cross product is well conditioned.
+    alt = torch.zeros_like(d)
+    alt.scatter_(-1, d.abs().argmin(dim=-1, keepdim=True), 1.0)
+    u = torch.linalg.cross(d, alt, dim=-1)
+    u = u / u.norm(dim=-1, keepdim=True).clamp_min(_EPS)
+    v = torch.linalg.cross(d, u, dim=-1)
+    return u, v
+
+
+def visible_facets(centroid: Tensor, view: Tensor, cell: float,
+                   *, tolerance: float, normal: Tensor | None = None,
+                   grid: int = 512) -> Tensor:
+    r"""Which facets are not hidden behind another, seen along ``view``.
+
+    A depth buffer rather than ray-casting.  Casting every facet against every
+    other is :math:`O(F^2)` per direction -- 225 million tests for a
+    15,000-facet hull, and ``compose_arrivals`` asks for hundreds of directions
+    -- whereas projecting the centroids onto the plane perpendicular to the line
+    of sight, binning them, and keeping the nearest per bin is :math:`O(F)`.
+
+    Args:
+        centroid: ``[F, 3]`` facet centroids.
+        view: ``[P, 3]`` directions **from the observer towards the surface**.
+            For an incident direction that is the direction of travel; for a
+            scattered one it is its negation, because the receiver is downstream.
+        cell: bin size (m) on the view plane.  Should be about one facet across:
+            much larger and facets on the same surface compete with each other,
+            much smaller and nothing ever occludes anything.
+        tolerance: depth margin (m).  A facet is culled only when something sits
+            more than this in front of it.  **This is what keeps the answer
+            honest**: with a strict nearest-per-bin rule, two facets of one
+            continuous lit surface landing in the same bin would knock each
+            other out and the surface would lose energy for no physical reason.
+            Occlusion should only remove what is genuinely behind something
+            else, which on a real body means a separation of many facets.
+        normal: ``[F, 3]`` facet normals.  Given, the margin is widened where
+            the surface is seen obliquely, by ``cell / |n.d|`` -- the depth a
+            bin spans on a surface tilted that far.  Without it a convex body
+            culls its own limb, where the surface runs nearly along the line of
+            sight: on a sphere that cost 0.26% of the return, which is small but
+            is not the zero a convex body is owed.
+        grid: bins per axis; the projection is wrapped into this many, so a
+            body far larger than ``grid * cell`` will alias.
+
+    Returns:
+        ``[P, F]`` boolean, detached -- visibility is piecewise constant, so it
+        carries no useful gradient, exactly as back-face culling does not.
+    """
+    c = centroid.detach()
+    d = view.detach().reshape(-1, 3)
+    d = d / d.norm(dim=-1, keepdim=True).clamp_min(_EPS)
+    u, v = _view_basis(d)
+
+    depth = c @ d.T                                   # [F, P], along the view
+    a = torch.round((c @ u.T) / cell).long()
+    b = torch.round((c @ v.T) / cell).long()
+    key = (a % grid) * grid + (b % grid)              # [F, P]
+
+    p = d.shape[0]
+    big = torch.finfo(depth.dtype).max
+    flat = (torch.arange(p, device=c.device).reshape(1, -1) * (grid * grid)
+            + key).reshape(-1)
+    nearest = torch.full((p * grid * grid,), big, dtype=depth.dtype,
+                         device=c.device)
+    nearest = nearest.scatter_reduce(0, flat, depth.reshape(-1), reduce="amin",
+                                     include_self=True)
+    front = nearest[flat].reshape(depth.shape)
+    margin = tolerance
+    if normal is not None:
+        n = normal.detach()
+        n = n / n.norm(dim=-1, keepdim=True).clamp_min(_EPS)
+        obliquity = (n @ d.T).abs().clamp_min(1e-3)   # [F, P]
+        margin = tolerance + cell / obliquity
+    return (depth <= front + margin).T.contiguous()  # [P, F]
+
+
 def _facet_block(tri: Tensor, normal: Tensor, area: Tensor, ki: Tensor,
-                 q: Tensor) -> Tensor:
+                 q: Tensor, visible: Tensor | None = None) -> Tensor:
     """One block of facets' contribution to the scattering amplitude, ``[P, B]``.
 
     Split out so it can be wrapped in :func:`torch.utils.checkpoint.checkpoint`:
@@ -209,6 +289,8 @@ def _facet_block(tri: Tensor, normal: Tensor, area: Tensor, ki: Tensor,
     # Exactly zero behind, so no gradient there either -- the same convention
     # PlateScattering's obliquity factor follows.
     lit = (-(ki @ normal.T)).clamp_min(0.0)                      # [P, f]
+    if visible is not None:
+        lit = lit * visible.to(lit.dtype)
     integral = triangle_phase_integral(tri, q.unsqueeze(-2), area=area)
     return (lit.unsqueeze(1).to(integral.dtype) * integral).sum(-1)
 
@@ -223,6 +305,18 @@ class MeshScattering(ScatteringPattern):
         learnable: register ``vertices`` as a parameter, so a loss on the image
             can deform the shape.  The faces are fixed -- topology is not
             something a gradient can move.
+        occlusion: cull facets hidden behind other facets, by depth buffer
+            (:func:`visible_facets`).  Without it a mesh that shadows itself --
+            a superstructure over a deck, a propeller behind a skeg, the far
+            wall of anything concave -- keeps contributing from the hidden
+            parts.  A convex body has nothing to occlude, so this is a no-op
+            for a sphere or a faired hull and costs only the pass.
+            **Bistatic needs both ends**: a facet must be visible from the
+            source *and* from the receiver, which are the same test only when
+            they coincide.
+        occlusion_cell, occlusion_tolerance: bin size and depth margin (m),
+            both defaulting from the mesh's own median edge length.  See
+            :func:`visible_facets` for why the margin matters.
         facet_chunk: facets summed per block.  The working set is
             ``pairs x bands x chunk``, so this trades memory against Python
             iterations; lower it for a big mesh or many directions.
@@ -242,7 +336,9 @@ class MeshScattering(ScatteringPattern):
 
     def __init__(self, vertices: Tensor, faces: Tensor, *,
                  sound_speed: float = 1500.0, learnable: bool = False,
-                 facet_chunk: int = 512, checkpoint: bool = True) -> None:
+                 facet_chunk: int = 512, checkpoint: bool = True,
+                 occlusion: bool = True, occlusion_cell: float | None = None,
+                 occlusion_tolerance: float | None = None) -> None:
         super().__init__()
         v = torch.as_tensor(vertices, dtype=torch.get_default_dtype()).reshape(-1, 3)
         f = torch.as_tensor(faces, dtype=torch.long).reshape(-1, 3)
@@ -256,6 +352,15 @@ class MeshScattering(ScatteringPattern):
         self.register_buffer("sound_speed", torch.as_tensor(float(sound_speed)))
         self.facet_chunk = int(facet_chunk)
         self.checkpoint = bool(checkpoint)
+        self.occlusion = bool(occlusion)
+        # Sized from the mesh itself: a bin about one facet across, and a depth
+        # margin of a few bins so a continuous surface never shadows itself.
+        tri0 = v[f]
+        edge = float((tri0[:, 1] - tri0[:, 0]).norm(dim=-1).median())
+        self.occlusion_cell = float(occlusion_cell) if occlusion_cell else edge
+        self.occlusion_tolerance = (float(occlusion_tolerance)
+                                    if occlusion_tolerance
+                                    else 4.0 * self.occlusion_cell)
 
     @property
     def n_facets(self) -> int:
@@ -286,7 +391,19 @@ class MeshScattering(ScatteringPattern):
         # question in another.
         verts = self.vertices.to(dtype)
         tri = verts[self.faces]                                       # [F, 3, 3]
-        _, normal, area = facet_geometry(verts, self.faces)
+        centroid, normal, area = facet_geometry(verts, self.faces)
+
+        seen = None
+        if self.occlusion:
+            # From the source, and from the receiver.  `ki` travels towards the
+            # surface so it is already a view direction; `ks` travels away, so
+            # the receiver's line of sight is its negation.
+            seen = (visible_facets(centroid, ki, self.occlusion_cell,
+                                   tolerance=self.occlusion_tolerance,
+                                   normal=normal)
+                    & visible_facets(centroid, -ks, self.occlusion_cell,
+                                     tolerance=self.occlusion_tolerance,
+                                     normal=normal))
 
         complex_dtype = (torch.complex128 if dtype == torch.float64
                          else torch.complex64)
@@ -295,11 +412,12 @@ class MeshScattering(ScatteringPattern):
         for start in range(0, tri.shape[0], self.facet_chunk):
             stop = start + self.facet_chunk
             t, n, a = tri[start:stop], normal[start:stop], area[start:stop]
+            vis = None if seen is None else seen[:, start:stop]
             if self.checkpoint and torch.is_grad_enabled() and q.requires_grad:
                 part = torch.utils.checkpoint.checkpoint(
-                    _facet_block, t, n, a, ki, q, use_reentrant=False)
+                    _facet_block, t, n, a, ki, q, vis, use_reentrant=False)
             else:
-                part = _facet_block(t, n, a, ki, q)
+                part = _facet_block(t, n, a, ki, q, vis)
             total = total + part
 
         amp = total / lam.reshape(1, -1).to(total.dtype)
@@ -307,7 +425,8 @@ class MeshScattering(ScatteringPattern):
 
     def extra_repr(self) -> str:
         return (f"{int(self.vertices.shape[0])} vertices, {self.n_facets} facets, "
-                f"chunk={self.facet_chunk}")
+                f"chunk={self.facet_chunk}, "
+                f"occlusion={'on' if self.occlusion else 'off'}")
 
 
 # --------------------------------------------------------------------------- #
@@ -318,7 +437,7 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
                 yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0,
                 n_patches: int = 1, sound_speed: float = 1500.0,
                 learnable: bool = True, learnable_shape: bool = False,
-                facet_chunk: int = 512) -> ExtendedTarget:
+                facet_chunk: int = 512, occlusion: bool = True) -> ExtendedTarget:
     """An :class:`~hydropt.targets.ExtendedTarget` whose scattering is a mesh.
 
     Args:
@@ -334,7 +453,16 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
         learnable: position and orientation are parameters.
         learnable_shape: the vertices are parameters too, so a loss on the
             image reaches the geometry.
-        sound_speed, facet_chunk: passed to :class:`MeshScattering`.
+        sound_speed, facet_chunk, occlusion: passed to :class:`MeshScattering`.
+
+    **Splitting limits occlusion to within a patch.**  Each patch is its own
+    :class:`MeshScattering` and knows nothing of the others, so with
+    ``n_patches > 1`` one part of the body can no longer hide another -- a
+    superstructure in patch 3 will not shadow a deck in patch 4.  The split is
+    along the body's longest axis, so what survives is occlusion between facets
+    that are near each other, and what is lost is occlusion between distant
+    parts.  Use ``n_patches=1`` when shadowing between parts of the body
+    matters more than its extent in the image does.
 
     Each patch's highlight sits at its own facets' area-weighted centroid, and
     its pattern sees only its own facets, so the coherent sum within a patch and
@@ -362,7 +490,8 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
     offsets, patterns = [], []
     for group in groups:
         pattern = MeshScattering(v, group, sound_speed=sound_speed,
-                                 learnable=learnable_shape, facet_chunk=facet_chunk)
+                                 learnable=learnable_shape,
+                                 facet_chunk=facet_chunk, occlusion=occlusion)
         offsets.append(pattern.centroid().detach().reshape(1, 3))
         patterns.append(pattern)
     return ExtendedTarget(torch.cat(offsets, dim=0), patterns, position=position,
