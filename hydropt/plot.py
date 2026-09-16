@@ -22,6 +22,7 @@ __all__ = [
     "plot_profile",
     "plot_bathymetry",
     "plot_fit_history",
+    "plot_fls_sector",
     "plotly_rays",
 ]
 
@@ -277,4 +278,123 @@ def plotly_rays(result: TraceResult, *, receivers: Tensor | None = None,
     fig.update_layout(scene=dict(xaxis_title="x (m)", yaxis_title="y (m)",
                                  zaxis_title="depth (m)",
                                  zaxis=dict(autorange="reversed")))
+    return fig
+
+
+def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
+                    dynamic_range: float = 24.0, sound_speed: float = 1500.0,
+                    ring_step: float | None = None, cmap: str = "afmhot",
+                    figsize=(8.0, 7.2), title: str = "Forward-looking sonar",
+                    overlays: Sequence[tuple] = (), ax=None):
+    """The sector display a forward-looking sonar actually paints.
+
+    The wedge, apex at the vehicle, out to the range limit -- range rings and
+    bearing spokes over a dark ground, which is what an operator reads.
+
+    **Drawn on the beamformer's own grid, not resampled onto a raster.** The
+    bearing-range mesh maps to ``x = R cos B``, ``y = R sin B`` exactly, so
+    ``pcolormesh`` paints the true wedge with no interpolation and, more to the
+    point, no cells outside the swath: a rectangular grid has to pad the corners
+    with something, and padding a sonar image with zeros invents dark water the
+    sonar never looked at.  Cells here grow with range the way the beams do,
+    which is also the honest thing to show -- the far field really is sampled
+    more coarsely than the near.
+
+    Args:
+        power: ``[bearings, ranges]`` beam power, linear (not dB).  A full
+            ``[bearings, bands, time]`` image can be passed after selecting a
+            band, e.g. ``image[:, 0]``.
+        bearings: ``[bearings]`` in **degrees**, as
+            :func:`hydropt.beamform.azimuth_steering` returns.
+        ranges: ``[ranges]`` in metres, or the two-way time grid -- times are
+            detected by magnitude and converted with ``sound_speed``.
+        dynamic_range: dB below the peak to show.  A sonar display is a
+            deliberately shallow window; 20-30 dB is typical, and showing 60
+            turns the picture into reverberation.
+        ring_step: metres between range rings; chosen automatically if omitted.
+        overlays: ``(x, y, style, label)`` tuples drawn over the wedge, with
+            ``x`` across track and ``y`` along track in metres.
+        ax: draw into an existing axis instead of making a figure.
+
+    Returns the ``Figure``.
+    """
+    import matplotlib.pyplot as plt
+
+    p = _np(power)
+    if p.ndim != 2:
+        raise ValueError(f"power must be [bearings, ranges], got {p.shape}")
+    b = _np(bearings).reshape(-1)
+    r = _np(ranges).reshape(-1)
+    if r.max() < 1.0:  # a two-way time grid, not metres
+        r = r * sound_speed / 2.0
+    if p.shape != (b.size, r.size):
+        raise ValueError(f"power is {p.shape}, but got {b.size} bearings and "
+                         f"{r.size} ranges")
+
+    peak = max(float(p.max()), 1e-300)
+    db = 10.0 * np.log10(np.maximum(p, peak * 10 ** (-dynamic_range / 10.0)) / peak)
+
+    # Cell EDGES, not centres: with a curved mesh matplotlib cannot infer them,
+    # and each beam cell should be drawn at the extent it actually covers --
+    # which grows with range, as the beams do.
+    def edges(v):
+        mid = 0.5 * (v[1:] + v[:-1])
+        return np.concatenate(([v[0] - (mid[0] - v[0])], mid,
+                               [v[-1] + (v[-1] - mid[-1])]))
+
+    B, R = np.meshgrid(np.radians(edges(b)), edges(r), indexing="ij")
+    X, Y = R * np.cos(B), R * np.sin(B)      # x along track, y across track
+
+    fig = None
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+    ax.set_facecolor("#05070c")
+    mesh = ax.pcolormesh(Y, X, db, cmap=cmap, vmin=-dynamic_range, vmax=0.0,
+                         shading="flat", rasterized=True)
+
+    r_max = float(r.max())
+    if ring_step is None:
+        ring_step = max(10.0 ** np.floor(np.log10(r_max / 3.0)), 1.0)
+        while r_max / ring_step > 6:
+            ring_step *= 2.0
+    edge = np.radians(np.array([b.min(), b.max()]))
+    span = np.radians(np.linspace(b.min(), b.max(), 200))
+    ring = ring_step
+    while ring <= r_max + 1e-9:
+        ax.plot(ring * np.sin(span), ring * np.cos(span), color="#7fa8c8",
+                lw=0.6, alpha=0.35, zorder=3)
+        ax.annotate(f"{ring:g} m", (ring * np.sin(edge[1]), ring * np.cos(edge[1])),
+                    color="#7fa8c8", fontsize=7, alpha=0.8, zorder=4,
+                    xytext=(3, 2), textcoords="offset points")
+        ring += ring_step
+    for spoke in np.arange(np.ceil(b.min() / 15.0) * 15.0, b.max() + 1e-9, 15.0):
+        a = np.radians(spoke)
+        ax.plot([0, r_max * np.sin(a)], [0, r_max * np.cos(a)], color="#7fa8c8",
+                lw=0.5, alpha=0.22, zorder=3)
+        ax.annotate(f"{spoke:+.0f}", (r_max * np.sin(a) * 1.03,
+                                      r_max * np.cos(a) * 1.03),
+                    color="#7fa8c8", fontsize=7, alpha=0.75, ha="center",
+                    zorder=4)
+    for a in edge:  # the swath boundary
+        ax.plot([0, r_max * np.sin(a)], [0, r_max * np.cos(a)], color="#7fa8c8",
+                lw=0.9, alpha=0.5, zorder=3)
+
+    for item in overlays:
+        x, y, style, label = (list(item) + [None])[:4]
+        ax.plot(np.atleast_1d(x), np.atleast_1d(y), style, zorder=5,
+                **({} if label is None else {"label": label}))
+    ax.plot([0], [0], "^", color="#5ff0c0", ms=10, mec="k", mew=0.6, zorder=6)
+
+    ax.set_aspect("equal")
+    ax.set_xlabel("across track (m)")
+    ax.set_ylabel("along track (m)")
+    ax.set_title(title)
+    ax.set_xlim(r_max * np.sin(edge).min() * 1.08, r_max * np.sin(edge).max() * 1.08)
+    ax.set_ylim(-0.04 * r_max, r_max * 1.1)
+    cb = fig.colorbar(mesh, ax=ax, shrink=0.82, pad=0.02)
+    cb.set_label("dB re peak")
+    if any(len(i) > 3 and i[3] for i in overlays):
+        ax.legend(loc="lower right", fontsize=8, framealpha=0.3)
     return fig

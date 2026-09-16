@@ -1192,7 +1192,7 @@ That second conclusion is the opposite of what the first version of this
 generator said, because that version was a round-bilged spindle with no flat
 bottom anywhere. Getting it right needed the hull to be a hull.
 
-### Imaging in metres, and what fills the picture
+### The sector display, and what fills the picture
 
 `examples/15` puts the pieces together as a vehicle would carry them: a 100 kHz
 Mills cross on an AUV at 18 m in 30 m of water, a 12 m hull as a mesh on the
@@ -1219,6 +1219,20 @@ clean concentric arcs. Jittering each ray within its own cell keeps the density
 and removes the artefact. Relatedly, a display much finer than the sonar's own
 resolution -- 0.2 m cells against 1.5 m of beamwidth -- shows the patch sampling
 rather than the seabed.
+
+Arc-shaped *speckle* survives both fixes, and that one is real: the range ripple
+is unchanged from 32 to 128 elevation samples, so it is not sampling. At 50 m
+the beam is 1.4 m wide across but the pulse is 0.09 m deep, so a resolution cell
+is fifteen times longer tangentially than radially and speckle grains come out
+as arc segments. That is what sonar speckle looks like.
+
+**Draw the wedge, not a raster.** `hydropt.plot.plot_fls_sector` renders the
+sector display straight from the beamformer's own grid: the bearing-range mesh
+maps to `x = R cos B`, `y = R sin B` exactly, so nothing is interpolated and,
+more to the point, no cell falls outside the swath. A rectangular grid has to
+pad its corners with something, and padding a sonar image with zeros invents
+dark water the sonar never looked at. Cells grow with range the way the beams
+do, which is also the honest thing to show.
 
 **Autograd, not physics, sets the image size.** `beamform` keeps an
 `[arrivals, steer, time]` intermediate alive for the backward pass, which is
@@ -1456,6 +1470,7 @@ hydropt/
   beams.py       Gaussian beams: complex beam parameter, finite at caustics
   active.py      two-way echoes through a scattering target
   targets.py     extended multi-highlight targets, aspect-dependent patterns
+  mesh.py        triangle-mesh targets by exact Kirchhoff facet integration
   environment.py synthesised surfaces, bathymetry and sound-speed fields
   sediments.py   named seabed presets -> RayleighBottomLoss
   rough.py       Eckart coherent-reflection loss for rough boundaries
@@ -1464,10 +1479,10 @@ hydropt/
   reverb.py      seabed and surface reverberation from bounce events
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
-  plot.py        matplotlib views; optional plotly
-examples/        01-13, each with acceptance checks
+  plot.py        matplotlib views, FLS sector display; optional plotly
+examples/        01-15, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           299 tests
+tests/           389 tests
 ```
 
 ## References

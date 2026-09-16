@@ -42,6 +42,7 @@ from hydropt import (
 from hydropt.beamform import ArrivalSet
 from hydropt.launch import fibonacci_cone
 from hydropt.mesh import boat_hull_mesh, mesh_target
+from hydropt.plot import plot_fls_sector
 from hydropt.reverb import (
     LambertScattering, cone_solid_angle, reverberation_arrivals,
 )
@@ -382,7 +383,7 @@ def main() -> int:
     print(f"  scene just as one written on the bearing-range image does.")
 
     save(_plot(cart, gx, gy, image, bearings, grid, boat, verts, faces, tx, ty,
-               echo_cart), "15_auv_cartesian.png")
+               echo_img), "15_auv_cartesian.png")
 
     banner("acceptance")
     ok = check("the boat's echo lands on the boat, within a beamwidth",
@@ -404,7 +405,7 @@ def main() -> int:
 
 
 def _plot(cart, gx, gy, image, bearings, grid, boat, verts, faces, tx, ty,
-          echo_cart):
+          echo_img):
     import matplotlib.pyplot as plt
     import numpy as np
     from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -442,35 +443,27 @@ def _plot(cart, gx, gy, image, bearings, grid, boat, verts, faces, tx, ty,
     ax2.set_title("as beamformed: bearing x range", fontsize=10)
     fig.colorbar(m2, ax=ax2, label="dB re peak")
 
-    def cart_panel(axis, field, title, mark_boat):
-        d = db(field)
-        mm = axis.pcolormesh(gy.numpy(), gx.numpy(), d.T, cmap="inferno",
-                             vmin=-22, vmax=0, shading="auto")
-        axis.plot([0], [0], "^", color="#5ff0c0", ms=10, mec="k", mew=0.6)
-        axis.annotate("AUV", (0, 0), color="#5ff0c0", fontsize=8,
-                      xytext=(6, 4), textcoords="offset points")
-        if mark_boat:
-            w = boat.world_positions().detach().numpy()
-            axis.plot(w[:, 1], w[:, 0], "-", color="#7fdfff", lw=2.0, alpha=0.9)
-            axis.add_patch(plt.Circle((ty, tx), 11.0, fill=False,
-                                      ec="#7fdfff", lw=1.0, ls="--"))
-            axis.annotate("boat", (ty, tx), color="#7fdfff", fontsize=9,
-                          xytext=(13, 9), textcoords="offset points")
-        axis.set_aspect("equal")
-        axis.set_xlabel("across track (m)", fontsize=9)
-        axis.set_ylabel("along track (m)", fontsize=9)
-        axis.set_title(title, fontsize=10)
-        return mm
+    def sector(axis, img, title):
+        """The wedge, drawn on the beamformer's own grid.
 
-    ax3 = fig.add_subplot(2, 2, 3)
-    m3 = cart_panel(ax3, cart.detach().numpy(),
-                    "the ping in metres: boat, sea surface and seabed", True)
-    fig.colorbar(m3, ax=ax3, label="dB re peak")
+        Not the metric raster above: a rectangular grid has to pad the corners
+        outside the swath with something, and padding a sonar image with zeros
+        invents dark water the sonar never looked at.  The bearing-range mesh
+        maps to the wedge exactly, so nothing is interpolated and nothing is
+        invented.
+        """
+        plot_fls_sector(img[:, 0].detach(), bearings, grid, dynamic_range=24.0,
+                        sound_speed=C, title=title, ax=axis)
+        w = boat.world_positions().detach().numpy()
+        axis.plot(w[:, 1], w[:, 0], "-", color="#5ff0c0", lw=2.2, alpha=0.95,
+                  solid_capstyle="round", label="boat (truth)")
+        axis.legend(loc="lower right", fontsize=8, framealpha=0.25,
+                    labelcolor="#cfe6f5")
 
-    ax4 = fig.add_subplot(2, 2, 4)
-    m4 = cart_panel(ax4, echo_cart.numpy(),
-                    "the boat's echo alone -- what the reverberation hides", True)
-    fig.colorbar(m4, ax=ax4, label="dB re peak")
+    sector(fig.add_subplot(2, 2, 3), image,
+           "what the sonar shows: boat, sea surface and seabed")
+    sector(fig.add_subplot(2, 2, 4), echo_img,
+           "the boat's echo alone, same ping")
 
     fig.tight_layout()
     return fig
