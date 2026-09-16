@@ -354,6 +354,7 @@ def target_arrivals(
     rx_directions: Tensor | None = None,
     n_rx_rays: int = 3000,
     rx_half_angle_deg: float = 45.0,
+    rx_jitter: float = 0.0,
     tx_weights: Tensor | None = None,
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
@@ -395,13 +396,23 @@ def target_arrivals(
         rx_directions: return fan, ``[Nr, 3]``, shared by every highlight.  By
             default each highlight aims its own cone at the phase centre.
         n_rx_rays, rx_half_angle_deg: shape of the default per-highlight cone.
+        rx_jitter: randomise the default return fan by this fraction of a
+            sample spacing.  **Needed for ``generator`` to do anything**: a
+            Fibonacci cone is deterministic, so without jitter every seed gives
+            a bit-identical fan and the same answer.  Leave it at 0 for a
+            repeatable render; set it to 1 when you want *independent
+            realisations* of the same physical scene -- fitting a model to a
+            synthetic measurement is the case that needs it, because sharing the
+            fan between the two makes the inversion an inverse crime and hides
+            how much of the answer the sampling is setting.
         tx_weights: per-ray transmit weights, e.g. projector directivity.
         max_arrivals_per_leg: cap each leg before pairing.  The pair count is a
             product, so capping the legs is far more effective than capping the
             result -- and a dense fan's extra arrivals are near-duplicates.
         max_arrivals: cap the combined result.
         trace_kwargs: forwarded to the tracer.
-        generator: RNG for the Fibonacci return fans.
+        generator: RNG for the return fans.  Only has an effect when
+            ``rx_jitter`` is non-zero -- see above.
         extract_kwargs: forwarded to ``extract_arrivals`` for both legs.
 
     Returns:
@@ -451,6 +462,7 @@ def target_arrivals(
                 axis = (phase_centre.detach().reshape(3)
                         - world[i].detach().reshape(3))
                 fans.append(fibonacci_cone(n_rx_rays, axis, rx_half_angle_deg,
+                                           jitter=rx_jitter,
                                            generator=generator))
             else:
                 fans.append(rx_directions)

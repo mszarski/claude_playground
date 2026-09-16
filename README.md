@@ -1242,6 +1242,73 @@ the cost is one chunk. So the example renders the displayed ping dense and
 demonstrates differentiability on the same code path at a size that fits --
 worth knowing before putting an image this size in a training loop.
 
+### Is it invertible, or only differentiable?
+
+Every example before `16` checked that gradients were finite and non-zero. That
+is not the same as invertible, so `examples/16` starts the boat at the wrong
+position and heading and asks whether descending on an image loss recovers the
+right ones.
+
+**It works as a refiner, not as a search.** From within about 1-2 m it recovers
+position to a fraction of the 3.75 m bearing cell -- 0.25 to 1.3 m across
+realisations, three to fifteen times finer -- which is the point of fitting a
+model rather than reading a peak. From 3.6 m out it does not converge at all.
+So the pipeline is detection first (`examples/15` localises to ~2.5 m) and this
+as a refinement stage.
+
+| start error | final position | final heading |
+| --- | --- | --- |
+| 0.6 m, 2 deg | **1.29 m** (2.9x finer than the cell) | 14.6 deg |
+| 1.8 m, 6 deg | 0.57 m | 8.7 deg |
+| 3.6 m, 12 deg | 3.12 m | 15.5 deg |
+| 7.2 m, 25 deg | 7.11 m | 26.7 deg |
+
+**Heading looks broken in that table, and is not.** The boat is beam-on, and at
+broadside a hull's projected length is *stationary* in yaw: rotating it barely
+changes the image, so there is nothing for the gradient to hold. Turn it off
+broadside and heading comes back as well as position does -- 14.6 deg beam-on,
+**2.1 deg** at 70 degrees, **2.8 deg** at 45. A degeneracy of the geometry, not
+of the tracer, and one worth knowing before trying to fit heading on a beam
+aspect.
+
+Four things had to be right, and each was measured:
+
+* **Log compression.** On the raw image the loss is non-monotone in every
+  direction -- speckle -- and has nothing to descend. In log it climbs cleanly
+  to about 2 m and then *saturates*: past that the two images are uncorrelated
+  and no longer know which way the boat is. That saturation is the capture range.
+* **A finite-difference step scaled to the resolution cell.** Checking the
+  gradient with a 0.25 m step against a 0.09 m range cell measures a secant
+  across three cells and reports the gradient as **wrong** (cos = -0.98). At a
+  fifth of a cell it agrees (cos = +0.99). The check was broken, not the tracer
+  -- worth knowing before concluding otherwise from a failed gradient test.
+* **A learning rate annealed with the pulse.** The image decorrelates over about
+  one resolution cell, so a step much larger than a cell lands somewhere
+  uncorrelated and descent becomes a random walk. A fixed 0.45 m step against a
+  0.09 m cell drove the fit *away* from truth, 7.8 m to 15.1 m.
+* **An honest measurement.** Sharing the receive fan between the synthetic
+  measurement and the model is an inverse crime, and it was unavoidable until
+  now: `target_arrivals` documented a `generator` that did nothing, because a
+  Fibonacci cone is deterministic unless jittered. `rx_jitter` fixes that.
+
+**And that turned up a real defect in `fan_angular_spacing`.** It measured the
+*nearest-neighbour* distance, which reads the point pattern's regularity as much
+as its density: on a lattice the nearest neighbour sits one spacing away, on an
+irregular set of the same density about half that. So a jittered fan read as
+twice as dense, its `sigma_d` came out half as wide, and it captured **0.457x**
+the energy of the identical-density regular fan. It now estimates the density
+over a neighbourhood instead -- a cap of radius `r_k` holds about `k` rays, so
+the spacing is `r_k sqrt(pi/k)` -- which agrees between regular and jittered
+fans to a few percent and leaves the answer invariant to fan density.
+
+One consequence worth planning around: **realisation noise does not fall with
+fan density.** Because `sigma_d` is sized to the fan, densifying it narrows the
+splat in step and the effective number of contributing rays stays the same. The
+spread between independent realisations was 2.47% at 200, 800 and 3200 return
+rays alike. That is why recovered pose stops improving once the fan is adequate
+-- the residual is realisation noise, not ray count -- and why spending rays on
+it is the wrong lever.
+
 ### What is still missing
 
 **Absorption above ~100 kHz.** Thorp is out of range; the Francois-Garrison
@@ -1345,6 +1412,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; hull resolved 6.0 deg at -3 dB against the 11.5 deg it subtends |
 | `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; hull is a plate from beneath (47 dB fall from 89 to 70 deg); gradient reaches the mesh vertices |
 | `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands 2.5 m outside a 3.2 m hull against 3.4 m of beamwidth; return spans 14 m for a 12 m boat; +17 dB over reverberation |
+| `16_invert_pose_from_image.py` | recovering boat pose from the image by gradient descent | position 2.9x finer than the bearing cell from a 0.6 m start; heading 2.8 deg off broadside, degenerate on it; no convergence from 3.6 m |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
@@ -1480,9 +1548,9 @@ hydropt/
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views, FLS sector display; optional plotly
-examples/        01-15, each with acceptance checks
+examples/        01-16, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           389 tests
+tests/           396 tests
 ```
 
 ## References

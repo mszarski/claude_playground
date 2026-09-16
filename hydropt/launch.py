@@ -207,31 +207,57 @@ def receiver_cone_importance(
     return dirs
 
 
-def fan_angular_spacing(directions: Tensor, *, chunk: int = 512) -> Tensor:
-    """Angle from each ray to its nearest neighbour in the fan, ``[R]`` (rad).
+def fan_angular_spacing(directions: Tensor, *, neighbours: int = 8,
+                        chunk: int = 512) -> Tensor:
+    r"""The spacing a fan's *density* implies, per ray, ``[R]`` (rad).
 
     This is the resolution the fan actually has.  It is measured from the
     directions themselves rather than assumed from the generator's arguments, so
     it is right for a fan that was aimed, weighted, concatenated or hand-built,
     and it is per-ray, so it follows a fan whose density varies across it.
 
+    **Not the nearest-neighbour distance.**  That is the obvious estimator and
+    it is wrong, because it measures the point pattern's *regularity* as much as
+    its density.  On a lattice the nearest neighbour sits one spacing away; on
+    an irregular set of the same density it sits about half that, since some
+    pair is always closer than average.  A jittered fan therefore reads as twice
+    as dense as the identical-density regular one, and a ``sigma_d`` built from
+    it comes out half as wide and throws away more than half the energy --
+    measured at **0.457x** on an otherwise identical scene.
+
+    So the density is estimated over a neighbourhood instead.  A spherical cap
+    of angular radius :math:`r_k` holds about ``k`` rays and subtends
+    :math:`\pi r_k^2`, giving a local density :math:`\lambda = k / \pi r_k^2`
+    and a spacing :math:`\lambda^{-1/2} = r_k \sqrt{\pi / k}`.  With
+    ``neighbours`` at 8 that agrees to a few percent between a Fibonacci fan and
+    a jittered one of the same size, and reproduces :math:`\sqrt{\Omega / N}`
+    for a cone.
+
     Why it matters: a splat that accepts arrivals within ``sigma_d`` of a point
     (:func:`hydropt.beamform.extract_arrivals`) weights each ray by
     ``exp(-0.5 (d / sigma_d)^2)`` on its miss distance ``d``.  If the fan's ray
     spacing at the range of interest is much wider than ``sigma_d``, no ray
     passes within ``sigma_d`` except by luck, and the amplitude measures that
-    luck instead of the field.  Pairing this with
-    :func:`fan_sigma_d` sizes the splat to the fan.
+    luck instead of the field.  Pairing this with :func:`fan_sigma_d` sizes the
+    splat to the fan.
 
-    Computed in chunks, so a fan of tens of thousands of rays does not
-    materialise an ``R x R`` matrix.  Detached: this is a property of the
-    sampling, not of the scene, and should not carry gradient.
+    Args:
+        directions: ``[R, 3]``; need not be normalised.
+        neighbours: how many neighbours to estimate the local density over.
+            Clamped to the fan size.  Larger is steadier but blurs a fan whose
+            density varies sharply.
+        chunk: rays per block, so a fan of tens of thousands does not
+            materialise an ``R x R`` matrix.
+
+    Detached: this is a property of the sampling, not of the scene, and should
+    not carry gradient.
     """
     d = directions.detach().reshape(-1, 3)
     d = d / d.norm(dim=-1, keepdim=True).clamp_min(1e-30)
     n = d.shape[0]
     if n < 2:
         return torch.full((n,), math.pi, dtype=d.dtype, device=d.device)
+    k = max(1, min(int(neighbours), n - 1))
     out = torch.empty(n, dtype=d.dtype, device=d.device)
     for i in range(0, n, chunk):
         block = d[i:i + chunk]
@@ -239,7 +265,8 @@ def fan_angular_spacing(directions: Tensor, *, chunk: int = 512) -> Tensor:
         # Exclude each ray's own entry, which is cos = 1.
         rows = torch.arange(block.shape[0], device=d.device)
         cos[rows, rows + i] = -1.0
-        out[i:i + chunk] = cos.max(dim=1).values.clamp(-1.0, 1.0).arccos()
+        r_k = cos.topk(k, dim=1, largest=True).values[:, -1].clamp(-1.0, 1.0).arccos()
+        out[i:i + chunk] = r_k * math.sqrt(math.pi / k)
     return out
 
 

@@ -36,11 +36,40 @@ RANGE = 60.0
 # --------------------------------------------------------------------------- #
 # fan_angular_spacing
 # --------------------------------------------------------------------------- #
-def test_spacing_of_two_rays_is_the_angle_between_them():
-    a = math.radians(30.0)
-    dirs = torch.tensor([[1.0, 0.0, 0.0], [math.cos(a), math.sin(a), 0.0]])
-    got = fan_angular_spacing(dirs)
-    assert torch.allclose(got, torch.full((2,), a), atol=1e-12)
+def test_spacing_of_two_rays_is_proportional_to_their_separation():
+    """With only a pair, the neighbourhood is one ray and the density estimate
+    is ``r_1 sqrt(pi)`` -- crude, but it must still scale with the angle."""
+    for a in (math.radians(10.0), math.radians(30.0)):
+        dirs = torch.tensor([[1.0, 0.0, 0.0], [math.cos(a), math.sin(a), 0.0]])
+        got = fan_angular_spacing(dirs)
+        assert torch.allclose(got, torch.full((2,), a * math.sqrt(math.pi)),
+                              atol=1e-12)
+
+
+def test_spacing_measures_density_not_regularity():
+    """The defect this estimator exists to avoid.
+
+    A nearest-neighbour distance reads an irregular fan as about twice as dense
+    as a regular fan of the same size, because in an irregular set some pair is
+    always closer than average.  A sigma_d built on that comes out half as wide
+    and throws away more than half the energy.  The density estimate has to give
+    the same answer for both.
+    """
+    axis = torch.tensor([1.0, 0.0, 0.0])
+    for n in (400, 1600):
+        regular = fibonacci_cone(n, axis, 40.0)
+        jittered = fibonacci_cone(n, axis, 40.0, jitter=1.0,
+                                  generator=torch.Generator().manual_seed(1))
+        a = float(fan_angular_spacing(regular).median())
+        b = float(fan_angular_spacing(jittered).median())
+        assert b / a == pytest.approx(1.0, abs=0.12), (n, a, b)
+
+
+def test_spacing_is_insensitive_to_the_neighbour_count():
+    dirs = fibonacci_cone(900, torch.tensor([1.0, 0.0, 0.0]), 30.0)
+    a = float(fan_angular_spacing(dirs, neighbours=4).median())
+    b = float(fan_angular_spacing(dirs, neighbours=16).median())
+    assert b / a == pytest.approx(1.0, abs=0.15)
 
 
 def test_spacing_ignores_a_rays_own_entry():
@@ -251,3 +280,79 @@ def test_sigma_d_factor_widens_the_splat():
                         generator=torch.Generator().manual_seed(0))
     assert float((a.amplitude ** 2).sum()) > float((b.amplitude ** 2).sum())
     assert narrow > 0
+
+
+# --------------------------------------------------------------------------- #
+# rx_jitter: making `generator` mean something
+# --------------------------------------------------------------------------- #
+"""A Fibonacci cone is deterministic.  ``target_arrivals`` took a ``generator``
+and documented it as the RNG for the return fans, but never asked for any
+jitter, so every seed produced a bit-identical fan and a bit-identical answer.
+That is worse than a no-op: it makes an inversion look like it avoided the
+inverse crime when the model and the synthetic measurement in fact shared their
+sampling exactly.
+"""
+
+
+def _one_target_energy(seed, jitter, n_rx=200):
+    scene = _scene()
+    target = ExtendedTarget(torch.zeros(1, 3),
+                            IsotropicScattering(0.0, learnable=False),
+                            position=(RANGE, 0.0, 12.0), learnable=False)
+    tx = fibonacci_cone(600, torch.tensor([1.0, 0.0, 0.0]), 14.0)
+    a = target_arrivals(scene, target, tx, n_rx_rays=n_rx,
+                        rx_half_angle_deg=40.0, rx_jitter=jitter,
+                        max_arrivals_per_leg=6,
+                        generator=torch.Generator().manual_seed(seed))
+    return float((a.amplitude.detach() ** 2).sum())
+
+
+def test_without_jitter_the_generator_does_nothing():
+    """Pinned as the documented behaviour, not as an accident."""
+    assert _one_target_energy(1, 0.0) == _one_target_energy(2, 0.0)
+
+
+def test_with_jitter_different_seeds_are_different_realisations():
+    a, b = _one_target_energy(1, 1.0), _one_target_energy(2, 1.0)
+    assert a != b
+    assert a > 0 and b > 0
+
+
+def test_jitter_is_repeatable_for_a_given_seed():
+    assert _one_target_energy(5, 1.0) == _one_target_energy(5, 1.0)
+
+
+def test_jitter_does_not_bias_the_answer():
+    """It re-samples the fan; it must not change what the fan is estimating.
+
+    Averaged over realisations the jittered result has to agree with the
+    unjittered one, or 'avoiding the inverse crime' would mean fitting a
+    different scene.
+    """
+    ref = _one_target_energy(0, 0.0, n_rx=900)
+    draws = [_one_target_energy(s, 1.0, n_rx=900) for s in range(8)]
+    mean = sum(draws) / len(draws)
+    assert mean == pytest.approx(ref, rel=0.25)
+
+
+def test_realisation_noise_does_not_fall_with_fan_density():
+    """A property worth knowing before spending rays on it.
+
+    Because ``sigma_d`` is sized to the fan, densifying the fan narrows the
+    splat in step and the number of rays *effectively* contributing to an
+    arrival stays about the same.  So the spread between independent
+    realisations is set by that effective count, not by the fan size, and
+    throwing rays at the problem does not make the answer quieter -- it only
+    makes it converge, which is a different thing and is pinned above.
+
+    This is why pose recovered from these images stops improving once the fan
+    is adequate: the residual is realisation noise, not ray count.
+    """
+    def spread(n_rx):
+        draws = [_one_target_energy(s, 1.0, n_rx=n_rx) for s in range(6)]
+        m = sum(draws) / len(draws)
+        return (sum((x - m) ** 2 for x in draws) / len(draws)) ** 0.5 / m
+
+    coarse, fine = spread(300), spread(2400)
+    assert coarse > 0.0 and fine > 0.0
+    assert fine / coarse == pytest.approx(1.0, abs=0.6), (coarse, fine)
