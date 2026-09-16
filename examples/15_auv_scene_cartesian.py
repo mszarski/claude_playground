@@ -220,17 +220,17 @@ def main() -> int:
     # field leaves most of the image empty and the seabed reads as scattered
     # dots rather than a bottom.
     #
-    # What limits it is not the patches but autograd: `beamform` keeps an
-    # [arrivals, steer, time] intermediate alive for the backward pass -- that
-    # is arrivals x bearings x time whatever the chunk size -- and the trace
-    # retains its own graph.  Under `no_grad` neither cost is paid, so the
-    # displayed ping is dense, and differentiability is demonstrated further
-    # down on the same code path at a size that fits in memory.
+    # This used to force a split -- render the dense ping under `no_grad` and
+    # demonstrate gradients separately on a smaller one -- because `beamform`
+    # kept an [arrivals, steer, time] intermediate alive for the backward pass
+    # and 40,000 patches wanted about 29 GB.  It now blocks the arrival axis and
+    # recomputes each block in the backward pass, so the cost stops growing with
+    # the patch count and the *same* dense ping carries gradients.
     t0 = time.perf_counter()
-    with torch.no_grad():
-        with timed("  dense ping for the picture"):
-            echo, rev, dirs = ping(56, 330, 40000, 420, 24, 5)
-            image = render(combine(echo, rev))
+    with timed("  dense ping"):
+        echo, rev, dirs = ping(56, 330, 40000, 420, 24, 5)
+        image = render(combine(echo, rev))
+        with torch.no_grad():
             echo_img = render(echo)
     forward = time.perf_counter() - t0
     print(f"  {dirs.shape[0]} transmit rays -> {echo.n_arrivals} target "
@@ -346,26 +346,9 @@ def main() -> int:
           f"{10 * math.log10(max(seabed_power, 1e-30)):+.1f} dB re peak")
 
     banner("still differentiable, through the resampling")
-    print("  Same code path, a coarser fan and fewer patches, gradients on.")
-    print("  The size is a memory limit in `beamform` and in the trace's own")
-    print("  graph, not a limit of the method.")
+    print("  The same dense ping you are looking at, not a reduced stand-in.")
     t0 = time.perf_counter()
-    # cap 24, not 10: with a splat sized to the fan many rays pass within
-    # it along much the same path, so a tight cap spends its budget on
-    # direct-path near-duplicates and drops the bottom-bounced arrivals --
-    # which is where the sediment's gradient lives.  Reverberation barely
-    # constrains the sediment on its own: a first-bounce patch never passes
-    # through a bottom *reflection*, only the backscatter strength below.
-    # Its own coarser beamformer grid as well as a coarser fan: `beamform`
-    # retains [arrivals, steer, time] for the backward pass, so at the display
-    # grid's 181 bearings x 420 bins this alone would want several GB per
-    # intermediate on top of the 5 GB the dense ping already peaked at.
-    steer_g, brg_g = azimuth_steering(91, SECTOR_DEG)
-    grid_g = make_time_grid(2.0 * 8.0 / C, 2.0 * 95.0 / C, 200)
-    echo_g, rev_g, dirs_g = ping(16, 90, 900, 220, 24, 21)
-    cart_g, _, _ = to_cartesian(render(combine(echo_g, rev_g), steer_g, grid_g),
-                                brg_g, grid_g, n_x=120, n_y=120)
-    cart_g.sum().backward()
+    cart.sum().backward()
     backward = time.perf_counter() - t0
     live = {"boat position": boat.position, "boat heading": boat.orientation,
             "seabed": bottom.heights, "waves": surface.heights,
@@ -374,10 +357,9 @@ def main() -> int:
     states = {k: (p.grad is not None and torch.isfinite(p.grad).all()
                   and float(p.grad.abs().sum()) > 0) for k, p in live.items()}
     for name, ok_g in states.items():
-        print(f"  d(cartesian image)/d({name:<14s}): {'OK' if ok_g else 'ZERO'}")
-    print(f"\n  {dirs_g.shape[0]} rays, {echo_g.n_arrivals + rev_g.n_arrivals} "
-          f"arrivals: {backward:.1f} s for forward and backward together")
-    print(f"  (the dense picture above took {forward:.1f} s with no graph kept)")
+        print(f"  d(cartesian image)/d({name:<18s}): {'OK' if ok_g else 'ZERO'}")
+    print(f"\n  forward {forward:.1f} s + backward {backward:.1f} s over "
+          f"{echo.n_arrivals + rev.n_arrivals} arrivals")
     print(f"  The resampling is bilinear and differentiable, so a loss written")
     print(f"  in metres -- where a target is, how long it is -- reaches the")
     print(f"  scene just as one written on the bearing-range image does.")

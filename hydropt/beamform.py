@@ -351,6 +351,15 @@ def element_field(
     return _synthesise(arrivals, delays, weights, freqs_khz, time_grid, sigma_t, time_gate)
 
 
+def _slice_arrivals(a: ArrivalSet, lo: int, hi: int) -> ArrivalSet:
+    """A contiguous block of arrivals, keeping ``None`` fields ``None``."""
+    return ArrivalSet(*(None if t is None else t[lo:hi] for t in a))
+
+
+def _needs_grad(a: ArrivalSet) -> bool:
+    return any(t is not None and t.requires_grad for t in a)
+
+
 def beamform(
     arrivals: ArrivalSet,
     elements: Tensor,
@@ -364,6 +373,8 @@ def beamform(
     phase_centre: Tensor | None = None,
     time_gate: float = 5.0,
     steer_chunk: int = 0,
+    arrival_chunk: int = 2048,
+    checkpoint: bool = True,
 ) -> Tensor:
     """Delay-and-sum beam power, ``[steer_directions, bands, time_bins]``.
 
@@ -382,6 +393,31 @@ def beamform(
     Args:
         shading: ``[elements]`` amplitude weights; uniform if omitted.
         steer_chunk: process steering directions in chunks to bound memory.
+        arrival_chunk: arrivals synthesised per block, accumulating as it goes.
+            The kernel's working tensor is
+            ``[steer, elements, bands, arrivals, gate_width]`` -- note the
+            **element** axis, a 64x multiplier for a 64-element array, and the
+            gate width, which grows with ``sigma_t / bin_width``.  Materialising
+            that for every arrival at once is what makes a full-size image cost
+            gigabytes: 512 arrivals over 121 beams and 400 bins measured 5.2 GB
+            for a single step, and 40,000 reverberation patches over 181 beams
+            and 500 bins wants about 29 GB.  Blocking the arrival axis bounds it
+            instead, and the element axis is summed inside the loop so the
+            accumulator is only ``[steer, bands, time]``.  0 disables blocking.
+
+            The default is deliberately large.  Blocks are not free -- each is a
+            separate checkpoint region -- so *too small* costs more than none at
+            all: at 3000 arrivals, blocks of 256 came out worse (4.2 GB) than a
+            single block (2.2 GB), while blocks of 2048 were better (1.9 GB).
+            Around two thousand the cost stops growing with the arrival count
+            altogether: 1.94, 1.88 and 1.93 GB at 3000, 8000 and 20,000
+            arrivals, against 2.2, 5.1 and 9.6 GB unblocked.
+        checkpoint: recompute each block in the backward pass rather than
+            keeping its intermediates.  Blocking alone bounds only the *forward*
+            peak -- under autograd every block's temporaries stay alive to the
+            end, so the total is unchanged.  With this, memory is set by the
+            block size, at roughly one extra forward evaluation.  Ignored when
+            gradients are not being recorded.
 
     Returns:
         Real beam power ``|b|^2``.  Differentiable in element positions,
@@ -397,17 +433,34 @@ def beamform(
          if shading is None else shading.to(dtype=dtype, device=device))
 
     n_steer = int(steer.shape[0])
+    n_arr = int(arrivals.time.shape[0])
     chunk = n_steer if steer_chunk <= 0 else int(steer_chunk)
+    a_chunk = n_arr if arrival_chunk <= 0 else max(1, int(arrival_chunk))
+    n_band, n_time = int(freqs_khz.shape[0]), int(time_grid.shape[0])
+    complex_dtype = torch.complex128 if dtype == torch.float64 else torch.complex64
+
+    def block(sv, sub):
+        """One block of arrivals, summed over the aperture -> [S, B, T]."""
+        rel = sub.direction.view(1, 1, -1, 3) + sv.view(-1, 1, 1, 3)
+        delays = (offset.view(1, -1, 1, 3) * rel).sum(-1) / sound_speed
+        weights = w.view(1, -1, 1).expand_as(delays)
+        field = _synthesise(sub, delays, weights, freqs_khz, time_grid,
+                            sigma_t, time_gate)  # [S, M, B, T]
+        return field.sum(dim=1)  # coherent sum across the aperture
+
     out = []
     for lo in range(0, n_steer, chunk):
         sv = steer[lo : lo + chunk]  # [S, 3]
-        # [S, M, A] effective delay, then sum the element axis coherently.
-        rel = arrivals.direction.view(1, 1, -1, 3) + sv.view(-1, 1, 1, 3)
-        delays = (offset.view(1, -1, 1, 3) * rel).sum(-1) / sound_speed
-        weights = w.view(1, -1, 1).expand_as(delays)
-        field = _synthesise(arrivals, delays, weights, freqs_khz, time_grid,
-                            sigma_t, time_gate)  # [S, M, B, T]
-        b = field.sum(dim=1)  # coherent sum across the aperture
+        b = torch.zeros(sv.shape[0], n_band, n_time, dtype=complex_dtype,
+                        device=device)
+        for a_lo in range(0, n_arr, a_chunk):
+            sub = _slice_arrivals(arrivals, a_lo, a_lo + a_chunk)
+            if checkpoint and torch.is_grad_enabled() and _needs_grad(sub):
+                part = torch.utils.checkpoint.checkpoint(
+                    block, sv, sub, use_reentrant=False)
+            else:
+                part = block(sv, sub)
+            b = b + part
         out.append(b.real**2 + b.imag**2)
     return torch.cat(out, dim=0)
 

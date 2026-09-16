@@ -1234,13 +1234,36 @@ pad its corners with something, and padding a sonar image with zeros invents
 dark water the sonar never looked at. Cells grow with range the way the beams
 do, which is also the honest thing to show.
 
-**Autograd, not physics, sets the image size.** `beamform` keeps an
-`[arrivals, steer, time]` intermediate alive for the backward pass, which is
-`arrivals x bearings x time` whatever the chunk size; 40,000 patches over 181
-bearings and 500 bins wants ~29 GB and gets the process killed. Under `no_grad`
-the cost is one chunk. So the example renders the displayed ping dense and
-demonstrates differentiability on the same code path at a size that fits --
-worth knowing before putting an image this size in a training loop.
+**Autograd used to set the image size, and no longer does.** `beamform`'s
+kernel works on `[steer, elements, bands, arrivals, gate_width]` -- note the
+*element* axis, a 64x multiplier for a 64-element array, and the gate width,
+which grows with `sigma_t / bin_width`. Materialising that for every arrival at
+once is what made a full-size image cost gigabytes, and it forced `examples/15`
+to render its dense ping under `no_grad` and demonstrate gradients on a smaller
+stand-in.
+
+It now blocks the arrival axis and recomputes each block in the backward pass
+rather than keeping it, summing the element axis inside the loop so the
+accumulator is only `[steer, bands, time]`. With gradients on, 64 elements, 181
+beams and 500 bins:
+
+| arrivals | before | after |
+| --- | --- | --- |
+| 400 | 3.7 GB | 1.1 GB |
+| 800 | 5.7 GB | 1.2 GB |
+| 1600 | 10.7 GB | 1.5 GB |
+| 3000 | **exhausted a 14 GB machine** | 1.9 GB |
+| 20,000 | -- | 1.9 GB |
+
+The point is the last two rows: the cost stops growing with the arrival count.
+`examples/15` now carries gradients through the *same* dense 20,000-arrival ping
+it displays, and the split is gone.
+
+Blocks are not free -- each is a checkpoint region -- so *too small* costs more
+than none at all: at 3000 arrivals, blocks of 256 came out worse (4.2 GB) than a
+single block (2.2 GB), while blocks of 2048 were better (1.9 GB). Hence the
+large default. With gradients off there is no graph to trade and blocking alone
+bounds the forward peak (1.74 -> 0.59 GB on the same render).
 
 ### Is it invertible, or only differentiable?
 
@@ -1411,7 +1434,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 4.5 s per forward+backward step |
 | `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; hull resolved 6.0 deg at -3 dB against the 11.5 deg it subtends |
 | `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; hull is a plate from beneath (47 dB fall from 89 to 70 deg); gradient reaches the mesh vertices |
-| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands 2.5 m outside a 3.2 m hull against 3.4 m of beamwidth; return spans 14 m for a 12 m boat; +17 dB over reverberation |
+| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands on the hull against 3.4 m of beamwidth; return spans 15 m for a 12 m boat; +21 dB over reverberation; gradients through the full 20k-arrival image |
 | `16_invert_pose_from_image.py` | recovering boat pose from the image by gradient descent | position 2.9x finer than the bearing cell from a 0.6 m start; heading 2.8 deg off broadside, degenerate on it; no convergence from 3.6 m |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
@@ -1550,7 +1573,7 @@ hydropt/
   plot.py        matplotlib views, FLS sector display; optional plotly
 examples/        01-16, each with acceptance checks
 scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           396 tests
+tests/           408 tests
 ```
 
 ## References
