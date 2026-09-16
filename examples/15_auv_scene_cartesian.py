@@ -146,9 +146,16 @@ def main() -> int:
     mc = _mills()
     fls = mc._fls
 
+    # The array is built at examples/12's own vehicle depth, so it has to be
+    # moved with the projector.  Moving only `scene.source` leaves the projector
+    # at AUV_DEPTH and the receive array 6 m above it -- a bistatic pair on what
+    # is supposed to be one vehicle, which biases every range by half the
+    # difference in path length (0.7 m at 55 m here) and is silent, because the
+    # image still looks entirely reasonable.
     rx = mc.horizontal_array()
+    rx = torch.stack([rx[:, 0], rx[:, 1],
+                      torch.full_like(rx[:, 2], AUV_DEPTH)], dim=-1)
     scene, bottom, surface, sediment = fls.build_scene(rx)
-    # Put the sonar on the vehicle, deeper than examples/12's 12 m.
     scene.source = torch.tensor([0.0, 0.0, AUV_DEPTH])
     print(f"  {FREQ_KHZ:.0f} kHz, {N_RX} receive x {N_TX} transmit (Mills cross)")
     print(f"  AUV at {AUV_DEPTH:.0f} m in {WATER_DEPTH:.0f} m of water -- "

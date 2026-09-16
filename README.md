@@ -1371,6 +1371,40 @@ rays alike. That is why recovered pose stops improving once the fan is adequate
 -- the residual is realisation noise, not ray count -- and why spending rays on
 it is the wrong lever.
 
+### Multipath, and why a boat does not show a double return
+
+An image-source prediction is the cheapest check there is on a two-way model, so
+it is worth doing: put a point target where the boat is and see whether the
+bounce paths land where geometry says.  With the AUV at 18 m, a target at 1 m
+draught, 55 m out and 30 m of water:
+
+| path | predicted | measured |
+| --- | --- | --- |
+| direct | 57.57 m | 57.62 m |
+| surface bounce | 57.88 m | 57.84 m |
+| surface bounce, both legs | 58.19 m | 58.23 m |
+| bottom bounce | 63.08 m | 63.49 m |
+
+The first three agree to **5 cm**.  The bottom bounce is 0.4 m out, which is the
+seabed not being flat -- 0.8 m RMS of fractal relief means the bounce point is
+not at the ideal image-source depth.
+
+**The boat shows no resolved double return, and that is physics.**  Its six hull
+patches span 51.4 to 58.6 m in slant range, so the body smears 7.2 m -- twenty
+times the 0.3 m between the direct and surface arrivals.  A target longer than
+the multipath delay spread cannot separate them along its own length.  The
+bottom-bounce group at 63-65 m does stay distinct, because 5.5 m of delay is
+comfortably more than the hull's extent.
+
+Finding that turned up a **silent bug in `examples/15`**: `build_scene` builds
+the receive array at `examples/12`'s vehicle depth, and the example moved only
+`scene.source`.  So "an AUV at 18 m" was in fact a projector at 18 m and an
+array 6 m above it -- a bistatic pair on one vehicle, biasing every range by
+half the path difference (0.7 m at 55 m).  Nothing looked wrong; the image was
+entirely plausible.  It was caught only because the direct return landed 0.5 m
+short of the image-source prediction, which is the kind of error a picture
+cannot show you and a closed form can.
+
 ### What is still missing
 
 **Absorption above ~100 kHz.** Thorp is out of range; the Francois-Garrison
@@ -1473,7 +1507,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 4.5 s per forward+backward step |
 | `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; hull resolved 6.0 deg at -3 dB against the 11.5 deg it subtends |
 | `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; hull is a plate from beneath (47 dB fall from 89 to 70 deg); gradient reaches the mesh vertices |
-| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands on the hull against 3.4 m of beamwidth; return spans 15 m for a 12 m boat; +21 dB over reverberation; gradients through the full 20k-arrival image |
+| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands 2.9 m outside the hull against 3.4 m of beamwidth; return spans 10 m for a 12 m boat; +20 dB over reverberation; gradients through the full 20k-arrival image |
 | `16_invert_pose_from_image.py` | recovering boat pose from the image by gradient descent | position 2.9x finer than the bearing cell from a 0.6 m start; heading 2.8 deg off broadside, degenerate on it; no convergence from 3.6 m |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
