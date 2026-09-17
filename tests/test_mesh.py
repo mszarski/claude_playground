@@ -809,3 +809,29 @@ def test_facet_integral_survives_float32():
         ref = _duffy_reference(tri, q)
         got = complex(triangle_phase_integral(tri.float(), q.float())[0])
         assert abs(got - ref) / abs(ref) < 2e-5, f"|q| = {float(q.norm()):.1e}"
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_collapsed_facets_are_dropped_in_either_precision(dtype):
+    """The bow and keel tapers collapse facets to nothing, and what is left of
+    one is rounding: its normal points anywhere, and back-face culling will
+    happily let an inward-facing sliver scatter as the far side of the hull.
+
+    A fixed relative-area cutoff cannot catch them in both precisions -- the
+    collapsed facets land at 1e-17 of the largest in float64 but 1e-8 in
+    float32, on either side of the 1e-9 this used to use.
+    """
+    prev = torch.get_default_dtype()
+    torch.set_default_dtype(dtype)
+    try:
+        v, f = boat_hull_mesh(12.0, 3.0, 1.0, n_long=40, n_around=16)
+        centroid, normal, area = facet_geometry(v, f)
+        shell, _ = _hull_and_transom(v, f)
+        radial = torch.stack([torch.zeros_like(centroid[:, 1]),
+                              centroid[:, 1], centroid[:, 2]], dim=-1)
+        radial = radial / radial.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+        assert float((normal * radial).sum(-1)[shell].min()) > 0.0
+        assert int(f.shape[0]) == 1170       # the same hull in both precisions
+        assert float((area / area.max()).min()) > 1e-3
+    finally:
+        torch.set_default_dtype(prev)

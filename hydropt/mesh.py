@@ -670,4 +670,15 @@ def boat_hull_mesh(length: float = 12.0, beam: float = 3.0, draft: float = 1.0,
     e1 = verts[tri[:, 1]] - verts[tri[:, 0]]
     e2 = verts[tri[:, 2]] - verts[tri[:, 0]]
     area = 0.5 * torch.linalg.cross(e1, e2, dim=-1).norm(dim=-1)
-    return verts, tri[area > 1e-9 * float(area.max())]
+    # Drop the facets the bow and keel tapers collapse to nothing.  The cutoff
+    # has to scale with the dtype: a vertex carries an absolute error of about
+    # eps times its own size, so a facet whose relative area falls to eps has a
+    # normal made entirely of rounding, pointing anywhere.  In float64 those
+    # collapsed facets come out at 1e-17 of the largest and a fixed 1e-9 buries
+    # them; in float32 they come out at 1e-8 and a fixed 1e-9 KEEPS them, and
+    # three of the fourteen then face inward, where back-face culling lets them
+    # scatter as if they were the far side of the hull.  sqrt(eps) sits decades
+    # above the rounding floor in both, and decades below the smallest facet
+    # this generator means to make (2.8e-2 of the largest).
+    floor = float(torch.finfo(dt).eps) ** 0.5
+    return verts, tri[area > floor * float(area.max())]
