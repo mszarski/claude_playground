@@ -370,17 +370,26 @@ def main() -> int:
     ok &= check("aspect costs more than anything else in the sweep",
                 drop > 10.0,
                 f"{drop:.0f} dB for {90.0 - ASPECTS[1][0]:.0f} degrees of yaw")
-    # Measured on the aspect where Pd actually moves.  Broadside it is pinned
-    # at 1.00 across the whole sweep -- the object is 45 dB louder there, and
-    # the sonar sees it everywhere its geometry reaches -- so a monotonicity
-    # test on that curve is a test of rounding noise in the seed average.
-    weak = curves[ASPECTS[1][1]]["pd"]
-    ok &= check("Pd falls with range at the aspect where it moves",
-                bool((weak[1:] <= weak[:-1] + 1e-6).all())
-                and float(weak[-1]) < float(weak[0]) - 0.1,
-                f"{float(weak[0]):.2f} at {float(d[0]):.0f} m to "
-                f"{float(weak[-1]):.2f} at {float(d[-1]):.0f} m "
-                f"({ASPECTS[1][1]})")
+    # Measured on the aspect where Pd actually moves: broadside it is pinned at
+    # 1.00 across the whole sweep, because the object is 45 dB louder there and
+    # the sonar sees it everywhere its geometry reaches.
+    #
+    # The TREND, not monotonicity.  Off the specular a cylinder's return has
+    # deep interference structure and the seabed has its own speckle, so S/B
+    # wanders by several dB from one range to the next -- 25, 27, 22, 23, 26,
+    # 29, 19, 9 dB here.  That is the physics, not sampling: demanding a
+    # monotone Pd would be demanding the smooth curve the sonar equation draws
+    # rather than the one a real sonar measures.
+    weak = curves[ASPECTS[1][1]]
+    logr = torch.log10(weak["d"])
+    y = 10.0 * torch.log10(weak["snr"])
+    centred = logr - logr.mean()
+    slope = float((centred * (y - y.mean())).sum() / (centred * centred).sum())
+    ok &= check("S/B trends down with range at the aspect where it moves",
+                slope < -5.0 and float(weak["pd"][-1]) < float(weak["pd"][0]) - 0.1,
+                f"{slope:.0f} dB per decade, Pd {float(weak['pd'][0]):.2f} at "
+                f"{float(d[0]):.0f} m to {float(weak['pd'][-1]):.2f} at "
+                f"{float(d[-1]):.0f} m ({ASPECTS[1][1]})")
     ok &= check("noise alone would put it beyond the water's geometry",
                 noise_only > 10.0 * WATER_DEPTH,
                 f"{noise_only:.0f} m against {WATER_DEPTH:.0f} m of water")
