@@ -20,8 +20,8 @@ import torch
 
 from hydropt import CurvedSurfaceScattering, PlateScattering
 from hydropt.mesh import (
-    MeshScattering, boat_hull_mesh, facet_geometry, icosphere, load_obj,
-    mesh_target, triangle_phase_integral, visible_facets,
+    MeshScattering, boat_hull_mesh, cylinder_mesh, facet_geometry, icosphere,
+    load_obj, mesh_target, triangle_phase_integral, visible_facets,
 )
 
 C = 1500.0
@@ -835,3 +835,41 @@ def test_collapsed_facets_are_dropped_in_either_precision(dtype):
         assert float((area / area.max()).min()) > 1e-3
     finally:
         torch.set_default_dtype(prev)
+
+
+def test_cylinder_is_closed_and_outward_wound():
+    v, f = cylinder_mesh(2.0, 0.5, n_axial=12, n_around=48)
+    centroid, normal, area = facet_geometry(v, f)
+    radial = torch.stack([torch.zeros_like(centroid[:, 0]),
+                          centroid[:, 1], centroid[:, 2]], dim=-1)
+    on_side = radial.norm(dim=-1) > 0.9 * 0.5
+    radial = radial / radial.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+    assert float((normal * radial).sum(-1)[on_side].min()) > 0.99   # side: radial
+    caps = ~on_side
+    assert float(normal[caps][:, 0].abs().min()) == pytest.approx(1.0)  # ends: axial
+    # The caps point away from each other, not both the same way.
+    assert bool((normal[caps][:, 0] > 0).any() and (normal[caps][:, 0] < 0).any())
+    assert float(area.sum()) == pytest.approx(2 * math.pi * 0.5 * 2.0
+                                              + 2 * math.pi * 0.25, rel=2e-3)
+
+
+def test_cylinder_broadside_matches_the_closed_form():
+    """sigma = a L^2 / 2 lambda, the cylinder's answer to the plate's (A/lambda)^2.
+
+    It converges from below as the facets shrink, because flat facets sample a
+    curved surface: at a facet arc of one wavelength the specular is ~11 percent
+    low, and that is a property of the tessellation, not of the integrator.
+    """
+    length, radius, c = 2.0, 0.5, 1500.0
+    freqs = torch.tensor([100.0])
+    lam = c / (freqs[0].item() * 1e3)
+    expected = radius * length ** 2 / (2 * lam)
+    d = torch.tensor([[0.0, 1.0, 0.0]])          # broadside to the x axis
+
+    fine = cylinder_mesh(length, radius, n_axial=8, n_around=960)
+    got = float(MeshScattering(*fine, sound_speed=c).cross_section(d, -d, freqs))
+    assert got == pytest.approx(expected, rel=0.01)
+
+    coarse = cylinder_mesh(length, radius, n_axial=8, n_around=240)
+    rough = float(MeshScattering(*coarse, sound_speed=c).cross_section(d, -d, freqs))
+    assert rough < got and rough > 0.9 * got

@@ -676,6 +676,71 @@ def icosphere(subdivisions: int = 3, radius: float = 1.0
     return verts * float(radius), faces
 
 
+def cylinder_mesh(length: float = 2.0, radius: float = 0.5, *,
+                  n_axial: int = 24, n_around: int = 32, caps: bool = True
+                  ) -> tuple[Tensor, Tensor]:
+    """A closed circular cylinder along x, outward-wound.
+
+    The shape most bottom objects are modelled as -- a mine-like object, a
+    length of pipeline, a piling -- and one with a closed-form cross-section to
+    check against: broadside, physical optics gives ``sigma = a L^2 / 2 lambda``
+    in the backscattering convention this package uses throughout (the radar
+    ``2 pi a L^2 / lambda`` over ``4 pi``, the same factor that turns a sphere's
+    ``pi a^2`` into ``a^2 / 4``).  It is the cylinder's counterpart to the
+    plate's ``(A / lambda)^2``.
+
+    Tessellate it for the wavelength, not for the picture: flat facets sample a
+    curved surface, and the specular return is 11 percent low at a facet arc of
+    one wavelength.  Half a wavelength is within a percent.
+
+    Args:
+        length, radius: metres.
+        n_axial, n_around: rings along the axis, and points around each.
+        caps: close the ends.  An open tube scatters from its inside as well,
+            which is right for a pipe and wrong for a body.
+    """
+    dt = torch.get_default_dtype()
+    if length <= 0.0 or radius <= 0.0:
+        raise ValueError(f"length and radius must be positive, got "
+                         f"{length} and {radius}")
+    if n_axial < 2 or n_around < 3:
+        raise ValueError(f"need at least 2 rings of at least 3 points, got "
+                         f"{n_axial} and {n_around}")
+    x = torch.linspace(-0.5 * length, 0.5 * length, n_axial, dtype=dt)
+    theta = torch.arange(n_around, dtype=dt) * (2.0 * math.pi / n_around)
+    ring = torch.stack([torch.zeros_like(theta), radius * theta.cos(),
+                        radius * theta.sin()], dim=-1)
+    verts = (ring.unsqueeze(0) + torch.stack(
+        [x, torch.zeros_like(x), torch.zeros_like(x)], dim=-1).unsqueeze(1)
+    ).reshape(-1, 3)
+
+    faces = []
+    for i in range(n_axial - 1):
+        for j in range(n_around):
+            k = (j + 1) % n_around
+            a, b = i * n_around + j, i * n_around + k
+            c, d = a + n_around, b + n_around
+            # theta counterclockwise in y-z and x increasing put the right-hand
+            # normal radially outward for this winding.
+            faces += [[a, b, c], [b, d, c]]
+
+    if caps:
+        hub_lo, hub_hi = verts.shape[0], verts.shape[0] + 1
+        verts = torch.cat([verts,
+                           torch.tensor([[-0.5 * length, 0.0, 0.0],
+                                         [0.5 * length, 0.0, 0.0]], dtype=dt)])
+        top = (n_axial - 1) * n_around
+        for j in range(n_around):
+            k = (j + 1) % n_around
+            faces += [[hub_lo, k, j],                     # -x cap faces -x
+                      [hub_hi, top + j, top + k]]         # +x cap faces +x
+
+    tri = torch.tensor(faces, dtype=torch.long)
+    _, _, area = facet_geometry(verts, tri)
+    floor = float(torch.finfo(dt).eps) ** 0.5
+    return verts, tri[area > floor * float(area.max())]
+
+
 def boat_hull_mesh(length: float = 12.0, beam: float = 3.0, draft: float = 1.0,
                    *, n_long: int = 40, n_around: int = 16,
                    transom: float = 0.62, deadrise_stern: float = 4.5,

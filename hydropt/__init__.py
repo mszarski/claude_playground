@@ -62,10 +62,12 @@ from .fields import (
 from .mesh import (
     MeshScattering,
     boat_hull_mesh,
+    cylinder_mesh,
     facet_geometry,
     icosphere,
     load_obj,
     mesh_target,
+    segment_mesh_transmission,
     triangle_phase_integral,
 )
 from .launch import (
@@ -130,8 +132,9 @@ __all__ = [
     "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
-    "MeshScattering", "boat_hull_mesh", "facet_geometry", "icosphere",
-    "load_obj", "mesh_target", "triangle_phase_integral",
+    "MeshScattering", "boat_hull_mesh", "cylinder_mesh", "facet_geometry",
+    "icosphere", "load_obj", "mesh_target", "segment_mesh_transmission",
+    "triangle_phase_integral",
     "spherical_fan", "structured_fan", "fan_2d", "fan_angular_spacing",
     "fan_sigma_d", "fibonacci_sphere", "fibonacci_cone",
     "receiver_cone_importance", "directions_from_angles",
