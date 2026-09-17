@@ -65,7 +65,41 @@ from torch import Tensor, nn
 
 from .absorption import thorp_db_per_km
 from .beamform import ArrivalSet
+from .mesh import segment_mesh_transmission
 from .tracer import TraceResult, bounce_events
+
+
+def _lit_patches(result: TraceResult, events, occluders) -> Tensor:
+    """Which bounce events the occluding bodies still let the source reach.
+
+    The outbound leg is taken as the straight segment from wherever the ray last
+    left a boundary -- the source, for the first bounce -- to the patch.  Under
+    refraction that is an approximation, but a shadow is cast over the last few
+    tens of metres of a path, where the bending is far below the width of the
+    body casting it.
+
+    Monostatic, so one test does both legs: the return retraces the outbound
+    ray, and a patch the body hides on the way out is equally hidden on the way
+    back.
+    """
+    n = events.count
+    lit = torch.ones(n, dtype=torch.bool, device=events.position.device)
+    if n == 0:
+        return lit
+    source = result.pos[events.ray, 0].detach()
+    patch = events.position.detach()
+    if n > 1:
+        # bounce_events comes out sorted by (ray, step), so the previous event
+        # is the previous bounce whenever it belongs to the same ray.
+        same = (events.ray[1:] == events.ray[:-1]).unsqueeze(-1)
+        start = torch.cat([source[:1],
+                           torch.where(same, patch[:-1], source[1:])], dim=0)
+    else:
+        start = source
+    for vertices, faces in occluders:
+        lit = lit & (segment_mesh_transmission(start, patch,
+                                               vertices.detach(), faces) > 0.5)
+    return lit
 
 __all__ = [
     "LambertScattering",
@@ -123,6 +157,7 @@ def reverberation_arrivals(
     spread_min_range: float = 1.0,
     generator: torch.Generator | None = None,
     max_arrivals: int | None = None,
+    occluders=None,
 ) -> ArrivalSet:
     """Monostatic reverberation as an :class:`~hydropt.beamform.ArrivalSet`.
 
@@ -150,6 +185,12 @@ def reverberation_arrivals(
             every patch range by up to one step length -- a systematic error in
             the reverberation range scale, not noise.
         generator: seeds the random scattering phase and the subsampling.
+        occluders: bodies that cast shadows, as ``(vertices, faces)`` meshes in
+            the **world frame**.  A patch the body hides returns nothing, which
+            is how an object on the seabed paints the dark band behind itself --
+            and that band, not the object's own echo, is what an operator reads
+            its height from.  Without this a bottom object sits in the image
+            with the seabed showing straight through behind it.
         max_arrivals: cap the patch count by keeping a **random** subset and
             scaling its energy to compensate.  Keeping the *strongest* patches
             instead -- the sensible choice for target echoes -- is badly wrong
@@ -169,6 +210,9 @@ def reverberation_arrivals(
     if boundary == "surface":
         keep = ~events.is_bottom
         events = type(events)(*(t[keep] for t in events))
+    if occluders:
+        lit = _lit_patches(result, events, occluders)
+        events = type(events)(*(t[lit] for t in events))
     if events.count == 0:
         z = torch.zeros(0, dtype=dtype, device=device)
         return ArrivalSet(z, torch.zeros(0, int(freqs_khz.shape[0]), dtype=dtype,

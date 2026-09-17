@@ -104,3 +104,62 @@ def test_shadow_length_matches_the_grazing_geometry(height):
     # And the shadow is continuous from the body out to that edge.
     assert float(t[x <= far_edge].max()) == 0.0
     assert float(t[x > far_edge + 1e-6].min()) == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# The shadow in the reverberation itself
+# --------------------------------------------------------------------------- #
+SRC_Z, BOTTOM_Z, PLATE_X = 18.0, 30.0, 60.0
+
+
+def _vertical_fan(n=400, lo_deg=4.0, hi_deg=20.0):
+    """Rays in the x-z plane, spanning depression angles down onto the bottom."""
+    a = torch.linspace(math.radians(lo_deg), math.radians(hi_deg), n)
+    return torch.stack([a.cos(), torch.zeros_like(a), a.sin()], dim=-1)
+
+
+def _bottom_patches(occluders=None, height=2.0):
+    from hydropt import ConstantLoss, FlatHeight, IsoProfile, Scene
+    from hydropt.reverb import LambertScattering, reverberation_arrivals
+
+    scene = Scene(field=IsoProfile(1500.0), bottom=FlatHeight(BOTTOM_Z),
+                  surface=FlatHeight(-1e5), source=(0.0, 0.0, SRC_Z),
+                  freqs_khz=torch.tensor([100.0]),
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  step_size=1.0, n_steps=400, max_bounces=1)
+    dirs = _vertical_fan()
+    arrivals = reverberation_arrivals(
+        scene.trace(dirs), dirs, scene.freqs_khz,
+        scattering=LambertScattering(-27.0, learnable=False),
+        solid_angle_per_ray=1e-4, boundary="bottom",
+        surface=scene.surface, bottom=scene.bottom, occluders=occluders,
+        generator=torch.Generator().manual_seed(0))
+    # Two-way time back to the patch's horizontal distance from the sonar.
+    r = arrivals.time.detach() * 1500.0 / 2.0
+    return (r ** 2 - (BOTTOM_Z - SRC_Z) ** 2).clamp_min(0.0).sqrt()
+
+
+@pytest.mark.parametrize("height", [1.0, 3.0])
+def test_a_body_on_the_bottom_removes_exactly_the_patches_it_hides(height):
+    """The dark band has to start at the body and end where the geometry says.
+
+    Too short and the body looks lower than it is; too long and it looks
+    taller.  Since height is read straight off that length, the edge is the
+    measurement.
+    """
+    plate = _plate(height, PLATE_X, bottom=BOTTOM_Z)
+    lit = _bottom_patches()
+    shadowed = _bottom_patches(occluders=[plate], height=height)
+    far_edge = PLATE_X * (BOTTOM_Z - SRC_Z) / (BOTTOM_Z - height - SRC_Z)
+
+    assert lit.numel() > shadowed.numel() > 0
+    inside = (lit >= PLATE_X) & (lit <= far_edge)
+    assert int(lit.numel() - shadowed.numel()) == int(inside.sum())
+    # Nothing survives inside the band, and nothing outside it was touched.
+    assert not bool(((shadowed >= PLATE_X) & (shadowed <= far_edge)).any())
+    assert torch.equal(shadowed, lit[~inside])
+
+
+def test_no_occluders_changes_nothing():
+    """The feature has to be free when it is not used."""
+    assert torch.equal(_bottom_patches(), _bottom_patches(occluders=[]))
