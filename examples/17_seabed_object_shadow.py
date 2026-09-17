@@ -362,8 +362,12 @@ def main() -> int:
 
     banner("figure")
     with timed("  draw"):
+        # far_edge is a GROUND range; the image is in slant range.
+        predicted_slant = math.hypot(far_edge, altitude)
         fig = draw(power, flat.detach()[:, 0], bearings, ranges, profile,
-                   reference, edge, far_edge, recovered)
+                   reference, start, edge, predicted_slant, contact_slant,
+                   min(from_band, from_echo), max(from_band, from_echo),
+                   altitude)
         save(fig, "17_seabed_object_shadow.png")
 
     banner("acceptance")
@@ -388,40 +392,51 @@ def main() -> int:
     return 0 if ok else 1
 
 
-def draw(power, lit, bearings, ranges, profile, reference, edge, predicted,
-         recovered):
+def draw(power, lit, bearings, ranges, profile, seabed, start, edge, predicted,
+         contact, low, high, altitude):
     import matplotlib.pyplot as plt
     import numpy as np
     from hydropt.plot import plot_fls_sector
 
-    fig = plt.figure(figsize=(15.0, 6.2))
-    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 0.9], wspace=0.28)
-    ref = float(power.max())
+    fig = plt.figure(figsize=(15.5, 5.6))
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 1.0, 1.15], wspace=0.34)
+    # Referenced to the SEABED, not to the image's peak.  The shadow is a hole
+    # in the reverberation, and against a reference set by a target 25 dB
+    # brighter than the bottom the whole seabed is already black and the hole
+    # is invisible -- the picture would show a bright contact on a dark
+    # background and say nothing about the thing being measured.
+    ref = seabed * 10.0 ** 1.2
     for col, (img, title) in enumerate((
-            (lit, "no shadowing: the seabed shows through"),
-            (power, "the object blocks the seabed behind it"))):
+            (lit, "shadowing off: seabed shows through"),
+            (power, "shadowing on: the band behind it"))):
         ax = fig.add_subplot(gs[0, col])
-        plot_fls_sector(img, bearings, ranges, dynamic_range=26.0, reference=ref,
-                        ring_step=20.0, ax=ax, title=title)
-        ax.set_xlim(-8.0, 26.0)
-        ax.set_ylim(18.0, 58.0)
+        plot_fls_sector(img, bearings, ranges, dynamic_range=22.0, reference=ref,
+                        colorbar_label="dB re the seabed", ring_step=10.0,
+                        ax=ax, title=title)
+        ax.set_xlim(-2.0, 16.0)
+        ax.set_ylim(26.0, 50.0)
+        ax.set_aspect("equal")
 
     ax = fig.add_subplot(gs[0, 2])
     r = ranges.numpy()
-    ax.semilogy(r, profile.numpy(), lw=1.0, color="#1b3a5c",
-                label="5 beams across the contact")
-    ax.axhline(reference, ls=":", color="#888888", lw=1.0,
-               label="seabed level before it")
-    ax.axvspan(float(ranges.min()), edge, color="#d8e8f5", zorder=0)
-    ax.axvline(edge, color="#c2452d", lw=1.4, label=f"shadow edge, {edge:.1f} m")
-    ax.set_xlim(28.0, 52.0)
+    db = 10.0 * np.log10(np.maximum(profile.numpy(), seabed * 1e-4) / seabed)
+    ax.axvspan(start, edge, color="#dce9f4", zorder=0, label="the dark band")
+    ax.plot(r, db, lw=1.0, color="#1b3a5c")
+    ax.axhline(0.0, ls=":", color="#888888", lw=1.0)
+    ax.axvline(contact, color="#6a4fb0", lw=1.2, ls="-.", label="contact echo")
+    ax.axvline(edge, color="#c2452d", lw=1.5, label=f"measured edge {edge:.1f} m")
+    ax.axvline(predicted, color="#2e7d32", lw=1.5, ls="--",
+               label=f"predicted edge {predicted:.1f} m")
+    ax.set_xlim(contact - 8.0, edge + 10.0)
+    ax.set_ylim(-34.0, 30.0)
     ax.set_xlabel("slant range (m)")
-    ax.set_ylabel("beam power")
-    ax.set_title(f"height from the shadow: {recovered:.2f} m")
-    ax.legend(fontsize=8, loc="upper right")
-    fig.suptitle("A 4.0 x 1.5 m cylinder on the seabed at 35 m, seen from an AUV "
-                 "12 m above the bottom.\nThe echo says where it is; the shadow "
-                 "says how tall it is.", fontsize=11)
+    ax.set_ylabel("dB re the seabed level")
+    ax.set_title(f"height reads {low:.2f} - {high:.2f} m, true {OBJ_DIAMETER:.2f} m")
+    ax.legend(fontsize=8, loc="lower right")
+    fig.suptitle(f"A {OBJ_LENGTH:.1f} x {OBJ_DIAMETER:.1f} m cylinder on the "
+                 f"seabed at {OBJ_RANGE:.0f} m, from an AUV {altitude:.2f} m above "
+                 "the bottom.\nThe echo says where it is; the shadow says how "
+                 "tall it is.", fontsize=11)
     return fig
 
 
