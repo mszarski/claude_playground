@@ -291,8 +291,14 @@ def main() -> int:
         r_v = torch.tensor([row[3] for row in rows])
         b_v = torch.tensor([row[4] for row in rows])
         snr = s_v / b_v
-        curves[label] = dict(d=d, s=s_v, r=r_v, b=b_v, snr=snr,
-                             pd=swerling1_pd(snr, PFA),
+        pd = swerling1_pd(snr, PFA)
+        # Whether the sweep actually caught the crossing, or merely ran out.
+        # Reporting the last range either way would put a hard number on a
+        # detection range the run never reached, which is the kind of figure
+        # that gets quoted back without its caveat.
+        crossed = bool((10.0 * torch.log10(snr) < threshold_db).any())
+        curves[label] = dict(d=d, s=s_v, r=r_v, b=b_v, snr=snr, pd=pd,
+                             crossed=crossed,
                              detect=_crossing(d, 10.0 * torch.log10(snr),
                                               threshold_db))
 
@@ -329,9 +335,11 @@ def main() -> int:
     banner("and what really sets it")
     for _, label in ASPECTS:
         c = curves[label]
+        reach = (f"{c['detect']:.0f} m" if c["crossed"]
+                 else f"beyond {float(c['d'][-1]):.0f} m, where the sweep ends")
         print(f"  {label:22s}: echo at {float(c['d'][0]):.0f} m is "
               f"{10 * math.log10(float(c['s'][0])):6.1f} dB, "
-              f"detection range {c['detect']:.0f} m")
+              f"detection range {reach}")
     drop = (10 * math.log10(float(curves[ASPECTS[0][1]]['s'][0]))
             - 10 * math.log10(float(curves[ASPECTS[1][1]]['s'][0])))
     print(f"  turning the body {90.0 - ASPECTS[1][0]:.0f} degrees off broadside "
@@ -437,9 +445,12 @@ def draw(curves, noise, threshold_db):
     for (label, c), colour in zip(curves.items(), colours):
         ax.plot(c["d"].numpy(), 10 * np.log10(c["s"].numpy()), "o-",
                 color=colour, label=f"echo, {label}")
+        reach = (f"{c['detect']:.0f} m" if c["crossed"]
+                 else f"> {float(c['d'][-1]):.0f} m")
         bx.plot(c["d"].numpy(), c["pd"].numpy(), "o-", color=colour,
-                label=f"{label}: {c['detect']:.0f} m")
-        bx.axvline(c["detect"], color=colour, lw=1.0, ls="--")
+                label=f"{label}: {reach}")
+        if c["crossed"]:
+            bx.axvline(c["detect"], color=colour, lw=1.0, ls="--")
     ax.set_xscale("log")
     ax.set_xlabel("range (m)")
     ax.set_ylabel("dB re 1 uPa$^2$ in a beam and a cell")
