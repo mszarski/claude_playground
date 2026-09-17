@@ -19,11 +19,16 @@ outside the transmit beam altogether.  The image therefore starts at 40 m with
 nothing in it until about 50: a real long-range set has this gap, and pointing
 the fan down to close it costs the range that was the point.
 
-*Reverberation stops being the enemy.*  Bottom reverberation falls as ``r^-5``
-and the grazing angle falls with it, so past some range the competition is no
-longer the seabed but the ambient sea.  This example finds that crossover, and
-it is the number that decides which knob is worth turning: more power helps a
-noise-limited detection and does nothing for a reverberation-limited one.
+*Reverberation was supposed to stop being the enemy, and does not.*  Bottom
+reverberation falls as ``r^-5`` with the grazing angle falling too, so past some
+range the competition ought to become the ambient sea rather than the seabed --
+and that crossover is the number that decides which knob is worth turning, since
+more power helps a noise-limited detection and does nothing for a
+reverberation-limited one.  Measured here it is at about 360 m, *outside* the
+swath: at 300 m the reverberation is still 9 dB above the ambient.  So this
+whole 300 m picture is reverberation-limited end to end, and a louder projector
+would buy exactly nothing in it.  The example extrapolates its own measured
+falloff to say where that stops being true.
 
 The boat is rendered from its triangle mesh as before, its echo is summed with
 the reverberation *before* beamforming, and the whole image is put on an
@@ -34,8 +39,8 @@ Acceptance criteria:
   * the boat's echo lands on the boat, within a beamwidth at 250 m;
   * the seabed and sea surface fill the image out to 300 m rather than a
     black background;
-  * the image is reverberation-limited near and noise-limited far, and the
-    crossover range is reported;
+  * reverberation stays above the ambient across the whole swath, and the
+    range at which it would not is reported;
   * the absorption budget is reported and is the dominant loss at 300 m;
   * the image still carries gradients to the scene.
 """
@@ -280,21 +285,38 @@ def main() -> int:
         profile = rev_only[:, 0, :].mean(dim=0)
         prof_db = 10 * torch.log10(profile.clamp_min(1e-30))
         noise_db = 10 * math.log10(noise)
-        above = (profile > noise).nonzero().reshape(-1)
-        crossover = float(rng[int(above[-1])]) if above.numel() else float("nan")
         lit = profile > 0
         first_lit = float(rng[int(lit.nonzero()[0])]) if bool(lit.any()) else float("nan")
+        # Where reverberation would meet the noise floor, from the falloff it
+        # actually has over the outer half of the swath rather than from the
+        # r^-5 law -- the grazing angle is changing over that span too, and the
+        # point of measuring is not to assume how the two combine.
+        outer = (rng > 0.5 * FAR) & lit
+        lr = torch.log10(rng[outer])
+        pdb = prof_db[outer]
+        slope = float(((lr - lr.mean()) * (pdb - pdb.mean())).sum()
+                      / ((lr - lr.mean()) ** 2).sum())
+        crossover = float(10 ** (lr[-1] + (noise_db - pdb[-1]) / slope))
+        margin = float(pdb[-1]) - noise_db
     print(f"  reverberation at  50 m: "
           f"{float(prof_db[int((rng - 50.0).abs().argmin())]):6.1f} dB re 1 uPa^2")
     for r in (100.0, 150.0, 200.0, 250.0, 300.0):
         i = int((rng - r).abs().argmin())
         print(f"                   {r:4.0f} m: {float(prof_db[i]):6.1f} dB"
               f"{'  <-- noise floor ' + f'{noise_db:.1f}' if r == 300.0 else ''}")
-    print(f"  the noise floor is {noise_db:.1f} dB, so reverberation falls "
-          f"below it at {crossover:.0f} m")
-    print(f"  inside that the picture is reverberation-limited and more power "
-          f"buys nothing;")
-    print(f"  beyond it the picture is noise-limited and more power buys range.")
+    print(f"  the noise floor is {noise_db:.1f} dB, and reverberation is still "
+          f"{margin:.1f} dB above it")
+    print(f"  at {FAR:.0f} m.  Falling {slope:.0f} dB per decade of range over the "
+          f"outer half of the")
+    print(f"  swath, it would reach the floor at about {crossover:.0f} m -- "
+          f"outside this picture.")
+    print(f"  So the whole {FAR:.0f} m swath is REVERBERATION-limited: a louder "
+          f"projector")
+    print(f"  buys nothing here, and the way to see further is a lower "
+          f"frequency, a")
+    print(f"  narrower beam or a longer pulse, all of which change the ratio "
+          f"rather")
+    print(f"  than the level.")
     print(f"  (the first lit range is {first_lit:.0f} m -- the fan's own "
           f"near-field gap)")
 
@@ -367,10 +389,11 @@ def main() -> int:
                 float((profile > noise).to(profile.dtype).mean()) > 0.3,
                 f"{100 * float((profile > noise).to(profile.dtype).mean()):.0f}% "
                 f"of range bins above the noise floor")
-    ok &= check("reverberation-limited near, noise-limited far",
-                NEAR < crossover < FAR,
-                f"crossover at {crossover:.0f} m, between {NEAR:.0f} and "
-                f"{FAR:.0f} m")
+    ok &= check("the whole swath is reverberation-limited, and it says where "
+                "that ends",
+                margin > 3.0 and crossover > FAR,
+                f"still {margin:.1f} dB above the ambient at {FAR:.0f} m; "
+                f"crosses at about {crossover:.0f} m")
     ok &= check("absorption is the dominant loss at 300 m",
                 2 * alpha * FAR / 1000 > 15.0,
                 f"{2 * alpha * FAR / 1000:.1f} dB two-way at {FAR:.0f} m")
@@ -391,19 +414,17 @@ def _plot(cart, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind):
                    extent=[float(gx[0]), float(gx[-1]),
                            float(gy[0]), float(gy[-1])])
     th = np.linspace(-math.radians(SECTOR_DEG), math.radians(SECTOR_DEG), 200)
-    for r, style in ((blind, ":"), (crossover, "--")):
-        ax.plot(r * np.cos(th), r * np.sin(th), style, color="deepskyblue",
-                lw=1.0, alpha=0.8)
+    ax.plot(blind * np.cos(th), blind * np.sin(th), ":", color="deepskyblue",
+            lw=1.0, alpha=0.8)
     ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=16, mew=1.4)
     ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
                 xytext=(16, 10), color="white", fontsize=9)
-    ax.annotate(f"reverberation = noise, {crossover:.0f} m",
-                (crossover * math.cos(math.radians(-42)),
-                 crossover * math.sin(math.radians(-42))),
-                textcoords="offset points", xytext=(6, -14),
-                color="deepskyblue", fontsize=8)
-    ax.annotate(f"near-field gap, {blind:.0f} m", (blind, 6),
-                textcoords="offset points", xytext=(8, 4),
+    ax.annotate(f"reverberation-limited throughout;\nreaches the noise floor "
+                f"only at ~{crossover:.0f} m",
+                (0.03, 0.04), xycoords="axes fraction", color="deepskyblue",
+                fontsize=8)
+    ax.annotate(f"nothing on the bottom\ninside {blind:.0f} m", (blind, -20),
+                textcoords="offset points", xytext=(10, -20),
                 color="deepskyblue", fontsize=8)
     ax.set_aspect("equal")
     ax.set_xlabel("forward (m)")
@@ -419,9 +440,14 @@ def _plot(cart, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind):
                label=f"ambient noise, {noise_db:.0f} dB")
     bx.axvline(crossover, color="0.4", lw=0.8, ls=":")
     bx.axvline(BOAT_RANGE, color="tab:green", lw=0.8, ls="-.", label="the boat")
-    bx.annotate(f"{crossover:.0f} m", (crossover, noise_db + 3), fontsize=9,
+    bx.annotate(f"reaches the noise floor at about {crossover:.0f} m,\n"
+                f"which is past the end of the swath",
+                (0.97, 0.06), xycoords="axes fraction", ha="right", fontsize=9,
                 color="0.3")
     bx.set_xlim(NEAR, FAR)
+    # The unlit bins sit at -300 dB and would own the whole axis.
+    shown = prof_db.numpy()[np.isfinite(prof_db.numpy()) & (prof_db.numpy() > -200)]
+    bx.set_ylim(noise_db - 8.0, float(shown.max()) + 5.0)
     bx.set_xlabel("range (m)")
     bx.set_ylabel("dB re 1 uPa$^2$ in a beam and cell")
     bx.set_title("where the seabed stops being the competition")
