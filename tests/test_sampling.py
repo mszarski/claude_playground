@@ -356,3 +356,72 @@ def test_realisation_noise_does_not_fall_with_fan_density():
     coarse, fine = spread(300), spread(2400)
     assert coarse > 0.0 and fine > 0.0
     assert fine / coarse == pytest.approx(1.0, abs=0.6), (coarse, fine)
+
+
+# --------------------------------------------------------------------------- #
+# The transmit fan has to contain the target, not merely point at it
+# --------------------------------------------------------------------------- #
+def _lattice_fan(half_elev_deg: float, half_azim_deg: float, n_elev: int,
+                 n_azim: int, seed: int = 0) -> torch.Tensor:
+    """A jittered lattice about +x, the shape a real fan is sampled on."""
+    g = torch.Generator().manual_seed(seed)
+    el = torch.linspace(-math.radians(half_elev_deg), math.radians(half_elev_deg),
+                        n_elev)
+    az = torch.linspace(-math.radians(half_azim_deg), math.radians(half_azim_deg),
+                        n_azim)
+    e, a = torch.meshgrid(el, az, indexing="ij")
+    e, a = e.reshape(-1), a.reshape(-1)
+    if n_elev > 1:
+        e = e + (torch.rand(e.shape, generator=g, dtype=e.dtype) - 0.5) * (el[1] - el[0])
+    if n_azim > 1:
+        a = a + (torch.rand(a.shape, generator=g, dtype=a.dtype) - 0.5) * (az[1] - az[0])
+    return torch.stack([e.cos() * a.cos(), e.cos() * a.sin(), e.sin()], dim=-1)
+
+
+def _transmit_energy(half_azim_deg: float, n_elev: int, n_azim: int) -> float:
+    """Echo energy off a body 8 m long across the line of sight, at 40 m."""
+    scene = _scene()
+    target = ExtendedTarget(torch.tensor([[4.0, 0.0, 0.0], [-4.0, 0.0, 0.0]]),
+                            IsotropicScattering(0.0, learnable=False),
+                            position=(RANGE, 0.0, 12.0), yaw=90.0,
+                            learnable=False)
+    tx = _lattice_fan(6.0, half_azim_deg, n_elev, n_azim)
+    a = target_arrivals(scene, target, tx, n_rx_rays=400,
+                        rx_half_angle_deg=40.0, max_arrivals_per_leg=8,
+                        generator=torch.Generator().manual_seed(0))
+    return float((a.amplitude.detach() ** 2).sum())
+
+
+def test_result_is_invariant_to_transmit_fan_density():
+    """Densify the transmit fan 16x; the level must not move.
+
+    The return fan's invariance is pinned above; this is the outbound half,
+    and it is the one a caller controls directly when they choose how finely to
+    sample their projector.
+    """
+    coarse = _transmit_energy(12.0, 24, 16)
+    fine = _transmit_energy(12.0, 96, 64)
+    assert 10.0 * abs(math.log10(fine / coarse)) < 1.5
+
+
+def test_a_target_outside_the_fan_window_collapses_as_the_fan_densifies():
+    """The trap: a fan aimed at a body but narrower than it.
+
+    Each highlight is a point, and its echo is a Gaussian in the miss distance
+    of the rays passing it, with a width matched to the fan's spacing.  A
+    highlight outside the sampled window is reached only by the rays at the
+    edge, at an offset that does not shrink -- so refining the fan narrows the
+    splat while the offset stays put, and the level falls exponentially with
+    the very ray count that should have improved it.
+
+    An 8 m body at 40 m spans +/- 5.7 degrees.  Sampled over +/- 1.5 it does
+    not merely lose level under the same 16x refinement that moves it by under
+    1.5 dB with the window open -- the echo goes to **zero**, because at the
+    finer spacing the splat is narrow enough that the gate rejects every ray
+    the body has.  Nothing warns you: the fan is pointed straight at the
+    target and every ray in it is legitimate.
+    """
+    coarse = _transmit_energy(1.5, 24, 16)
+    fine = _transmit_energy(1.5, 96, 64)
+    assert coarse > 0.0
+    assert fine < coarse / 10.0
