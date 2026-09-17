@@ -284,6 +284,7 @@ def plotly_rays(result: TraceResult, *, receivers: Tensor | None = None,
 def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
                     dynamic_range: float = 24.0, sound_speed: float = 1500.0,
                     reference: float | None = None,
+                    colorbar_label: str | None = None,
                     ring_step: float | None = None, cmap: str = "afmhot",
                     figsize=(8.0, 7.2), title: str = "Forward-looking sonar",
                     overlays: Sequence[tuple] = (), ax=None):
@@ -316,6 +317,11 @@ def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
             Two panels each normalised to their own peak cannot be compared --
             a change that lowers the whole image by 3 dB looks identical --
             so pass a common reference when the comparison is the point.
+        colorbar_label: what the scale is relative to.  Defaults to "dB re
+            peak", which stops being true the moment ``reference`` is not the
+            peak: a shadow is a hole in the reverberation, and it is read by
+            normalising to the seabed, against which a label saying "peak" is
+            simply wrong.
         ring_step: metres between range rings; chosen automatically if omitted.
         overlays: ``(x, y, style, label)`` tuples drawn over the wedge, with
             ``x`` across track and ``y`` along track in metres.
@@ -399,7 +405,8 @@ def plot_fls_sector(power: Tensor, bearings: Tensor, ranges: Tensor, *,
     ax.set_xlim(r_max * np.sin(edge).min() * 1.08, r_max * np.sin(edge).max() * 1.08)
     ax.set_ylim(-0.04 * r_max, r_max * 1.1)
     cb = fig.colorbar(mesh, ax=ax, shrink=0.82, pad=0.02)
-    cb.set_label("dB re peak")
+    cb.set_label(colorbar_label
+                 or ("dB re peak" if reference is None else "dB re reference"))
     if any(len(i) > 3 and i[3] for i in overlays):
         ax.legend(loc="lower right", fontsize=8, framealpha=0.3)
     return fig

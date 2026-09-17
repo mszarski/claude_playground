@@ -147,3 +147,18 @@ def test_reference_does_not_change_the_geometry():
     a = plot_fls_sector(p, _bearings(), _ranges())
     b = plot_fls_sector(p, _bearings(), _ranges(), reference=float(p.max()) * 10)
     assert a.axes[0].get_xlim() == pytest.approx(b.axes[0].get_xlim())
+
+
+def test_the_colourbar_says_what_the_scale_is_relative_to():
+    """"dB re peak" stops being true as soon as a reference is passed."""
+    power = torch.rand(9, 30) + 1e-6
+    bearings = torch.linspace(-30.0, 30.0, 9)
+    ranges = torch.linspace(10.0, 60.0, 30)
+    import matplotlib.pyplot as plt
+    labels = []
+    for kw in ({}, {"reference": 4.0}, {"reference": 4.0,
+                                        "colorbar_label": "dB re the seabed"}):
+        fig = plot_fls_sector(power, bearings, ranges, **kw)
+        labels.append(fig.axes[-1].get_ylabel())
+        plt.close(fig)
+    assert labels == ["dB re peak", "dB re reference", "dB re the seabed"]
