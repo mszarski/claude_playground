@@ -29,9 +29,12 @@ same detect-then-refine shape a real system has, with a differentiable detector.
 Acceptance criteria:
   * the transport loss rises monotonically out to 50 m, where the image loss is
     flat -- the reason one can be descended on and the other cannot;
-  * a fit from 50 m out, on transport alone, lands within a few metres;
-  * handing that to the image-loss refiner recovers the pose to inside a
-    bearing cell;
+  * a fit from 50 m out, on transport alone, lands within a few metres -- and
+    it lands on a BIAS, a stable point about 4 m beyond the truth, not on the
+    truth itself;
+  * a ladder of capture ranges closes the gap: the image loss at the coarse
+    cell catches what transport hands it, and the fine cell finishes inside a
+    bearing cell.  Each rung has to reach as far as the one above it lands;
   * the image loss started from the same 50 m does not converge at all, which
     is the comparison that makes the point;
   * both stages carry gradients to the boat's pose.
@@ -78,6 +81,13 @@ REFINE = dict(near=45.0, far=75.0, n_bins=233, sigma_t=1.2e-4)
 # that the floor is inside the capture range of what comes next.
 BLUR_SCHEDULE = [(8.0, 15), (4.0, 10), (2.0, 20), (1.0, 20), (0.5, 25)]
 REFINE_STEPS = 30
+# The middle rung.  Transport does not land on the truth: it converges to a
+# stable point about 4.3 m beyond it in range, drifting along a shallow valley
+# with the error pinned at 4.80 m for its last dozen steps.  That is a bias in
+# the loss, not slow convergence -- and it means the handoff has to be caught by
+# something whose capture range covers 5 m.  The fine refiner's is 1-2 m, so the
+# image loss runs first at the SEARCH cell, where capture is about three cells.
+BRIDGE_STEPS = 25
 START = (50.0, 0.0, 0.0)          # dx, dy, dyaw -- 50 m out in range
 
 
@@ -194,7 +204,21 @@ def main() -> int:
     search_err = error(boat)
 
     # ---- 3. the handoff ----------------------------------------------------
-    banner("stage 2: the image loss finishes it")
+    banner("stage 2: the image loss, coarse first")
+    bridge_cell = SEARCH["sigma_t"] * C / 2.0
+    with timed("  bridge"):
+        opt = torch.optim.Adam([{"params": [boat.position],
+                                 "lr": 0.35 * bridge_cell}])
+        for _ in range(BRIDGE_STEPS):
+            opt.zero_grad()
+            image_loss(render_s(boat, 202), meas_s).backward()
+            with torch.no_grad():
+                boat.position.grad[2] = 0.0
+            opt.step()
+    bridge_err = error(boat)
+    print(f"  at the {bridge_cell:.2f} m cell: {search_err:.2f} m -> "
+          f"{bridge_err:.2f} m")
+
     cell = REFINE["sigma_t"] * C / 2.0
     with timed("  refine"):
         opt = torch.optim.Adam([{"params": [boat.position], "lr": 0.35 * cell}])
@@ -205,7 +229,8 @@ def main() -> int:
                 boat.position.grad[2] = 0.0
             opt.step()
     final_err = error(boat)
-    print(f"  {search_err:.2f} m -> {final_err:.2f} m "
+    print(f"  at the {cell:.2f} m cell: {bridge_err:.2f} m -> {final_err:.2f} m")
+    print(f"  end to end: {START[0]:.0f} m -> {final_err:.2f} m "
           f"({beam_m / max(final_err, 1e-9):.1f}x finer than the bearing cell)")
 
     # ---- 4. the control: the image loss alone, from the same start ---------
@@ -244,6 +269,10 @@ def main() -> int:
                 f"image loss {flat:.2f}x")
     ok &= check("transport alone walks it in from 50 m",
                 search_err < 6.0, f"{START[0]:.0f} m -> {search_err:.2f} m")
+    ok &= check("the coarse image loss catches what transport hands it",
+                bridge_err < search_err,
+                f"{search_err:.2f} m -> {bridge_err:.2f} m at a "
+                f"{bridge_cell:.2f} m cell")
     ok &= check("and the image loss then beats the bearing cell",
                 final_err < beam_m, f"{final_err:.2f} m against {beam_m:.2f} m")
     ok &= check("while the image loss alone gets nowhere from there",
