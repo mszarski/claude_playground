@@ -70,6 +70,13 @@ from .mesh import (
     segment_mesh_transmission,
     triangle_phase_integral,
 )
+from .noise import (
+    add_receiver_noise,
+    ambient_noise_db,
+    beam_noise_power,
+    calibrate,
+    line_array_directivity_db,
+)
 from .launch import (
     directions_from_angles,
     fan_2d,
@@ -132,6 +139,8 @@ __all__ = [
     "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
+    "add_receiver_noise", "ambient_noise_db", "beam_noise_power", "calibrate",
+    "line_array_directivity_db",
     "MeshScattering", "boat_hull_mesh", "cylinder_mesh", "facet_geometry",
     "icosphere", "load_obj", "mesh_target", "segment_mesh_transmission",
     "triangle_phase_integral",
