@@ -465,6 +465,26 @@ def beamform(
     return torch.cat(out, dim=0)
 
 
+def beam_power_scale(shading: Tensor, sigma_t: float) -> float:
+    """What :func:`beamform` multiplies an arrival's power by, at the peak.
+
+    ``(sum w)^2 / (2 pi sigma_t^2)``: the aperture sums coherently on target,
+    and the pulse envelope is normalised to unit area, which puts a ``1 /
+    sigma_t`` in the amplitude.  For a 64-element array and a 0.12 ms pulse
+    that is 70 dB, so an image is not a pressure and comparing one with a noise
+    level straight off is out by that much.
+
+    Dividing an image by this returns the received pressure squared, relative
+    to a unit source -- which is what :func:`hydropt.noise.calibrate` then puts
+    on an absolute scale.  Note that it removes the array gain along with
+    everything else, so the noise it is compared against must carry the
+    directivity index itself.
+    """
+    if sigma_t <= 0.0:
+        raise ValueError(f"sigma_t must be positive, got {sigma_t}")
+    return float(shading.sum()) ** 2 / (2.0 * math.pi * sigma_t ** 2)
+
+
 def line_array_factor(sin_angle: Tensor, n_elements: int, *,
                       spacing_wavelengths: float = 0.5,
                       sin_steer: float = 0.0) -> Tensor:

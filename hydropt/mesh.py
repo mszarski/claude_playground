@@ -267,7 +267,9 @@ def visible_facets(centroid: Tensor, view: Tensor, cell: float,
             sight: on a sphere that cost 0.26% of the return, which is small but
             is not the zero a convex body is owed.
         grid: bins per axis; the projection is wrapped into this many, so a
-            body far larger than ``grid * cell`` will alias.
+            body far larger than ``grid * cell`` will alias.  It costs no
+            memory -- the depth buffer is compacted onto the bins that facets
+            actually fall in -- so it can be raised freely to avoid aliasing.
 
     Returns:
         ``[P, F]`` boolean, detached -- visibility is piecewise constant, so it
@@ -287,11 +289,18 @@ def visible_facets(centroid: Tensor, view: Tensor, cell: float,
     big = torch.finfo(depth.dtype).max
     flat = (torch.arange(p, device=c.device).reshape(1, -1) * (grid * grid)
             + key).reshape(-1)
-    nearest = torch.full((p * grid * grid,), big, dtype=depth.dtype,
+    # Compact the keys before reducing.  A dense buffer over the whole index
+    # space is `p * grid^2` cells to hold at most `p * F` occupied ones, and
+    # that is not a constant factor: 9,216 directions at the default grid asked
+    # for 19 GB and fell over, while the facets actually landing in it were
+    # 23 million.  Reducing into the unique keys is the same answer with memory
+    # set by the data instead of by the resolution of the bins.
+    uniq, inverse = torch.unique(flat, return_inverse=True)
+    nearest = torch.full((int(uniq.numel()),), big, dtype=depth.dtype,
                          device=c.device)
-    nearest = nearest.scatter_reduce(0, flat, depth.reshape(-1), reduce="amin",
+    nearest = nearest.scatter_reduce(0, inverse, depth.reshape(-1), reduce="amin",
                                      include_self=True)
-    front = nearest[flat].reshape(depth.shape)
+    front = nearest[inverse].reshape(depth.shape)
     margin = tolerance
     if normal is not None:
         n = normal.detach()

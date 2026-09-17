@@ -873,3 +873,28 @@ def test_cylinder_broadside_matches_the_closed_form():
     coarse = cylinder_mesh(length, radius, n_axial=8, n_around=240)
     rough = float(MeshScattering(*coarse, sound_speed=c).cross_section(d, -d, freqs))
     assert rough < got and rough > 0.9 * got
+
+
+def test_occlusion_memory_does_not_scale_with_the_bin_grid():
+    """The depth buffer is compacted onto the bins facets actually fall in.
+
+    A dense buffer over the whole index space is ``P * grid^2`` cells to hold
+    at most ``P * F`` occupied ones.  That is not a constant factor: at the
+    default 512-bin grid, 9,216 directions asked for 19 GB and the allocator
+    refused, which is an out-of-memory failure produced entirely by the
+    resolution of the bins rather than by the size of the problem.
+    """
+    v, f = icosphere(2, 1.0)
+    centroid, normal, _ = facet_geometry(v, f)
+    n_dir = 4096
+    view = torch.randn(n_dir, 3, generator=torch.Generator().manual_seed(0))
+    view = view / view.norm(dim=-1, keepdim=True)
+    # 4096 x 512^2 doubles would be 8.6 GB; the same call on the compact buffer
+    # is a few MB, and the answer is the one the small-grid version gives.
+    seen = visible_facets(centroid, view, 0.05, tolerance=1e-3, normal=normal,
+                          grid=512)
+    assert seen.shape == (n_dir, f.shape[0])
+    # A convex body hides nothing that back-face culling has not already taken,
+    # so every facet facing the viewer survives.
+    facing = (normal @ view.T).T < 0.0
+    assert bool((seen | ~facing).all())

@@ -132,17 +132,28 @@ def beam_noise_power(freqs_khz: Tensor | float, *, bandwidth_hz: float,
     return 10.0 ** (level / 10.0)
 
 
-def calibrate(image: Tensor, source_level_db: float) -> Tensor:
-    """Put a relative image onto an absolute scale, uPa^2.
+def calibrate(image: Tensor, source_level_db: float, *,
+              beam_scale: float = 1.0) -> Tensor:
+    """Put a beamformed image onto an absolute scale, uPa^2.
 
-    Arrival amplitudes are relative to a unit source, so an image is in units
-    of the source's pressure squared at 1 m.  ``source_level_db`` is that
-    pressure in dB re 1 uPa at 1 m -- 210-220 dB for an imaging sonar -- and
-    scales the image onto the same axis as the noise.  Every statement about
-    detection needs both on one scale; without this, comparing an image with a
-    noise level is comparing a ratio with a pressure.
+    Two factors stand between an image and a pressure, and both are large:
+
+    * the beamformer's own normalisation -- the coherent sum over the aperture
+      and the unit-area pulse envelope, together 70 dB for a 64-element array
+      and a 0.12 ms pulse.  Pass it as ``beam_scale``, from
+      :func:`hydropt.beamform.beam_power_scale`;
+    * the source level.  Arrival amplitudes are relative to a unit source, so
+      an image is in units of the source's pressure squared at 1 m;
+      ``source_level_db`` is that pressure in dB re 1 uPa at 1 m, 210-220 dB
+      for an imaging sonar.
+
+    Without both, comparing an image with a noise level compares a ratio with a
+    pressure, and the error is not small enough to notice as a discrepancy --
+    it is large enough to look like a different question's answer.
     """
-    return image * 10.0 ** (source_level_db / 10.0)
+    if beam_scale <= 0.0:
+        raise ValueError(f"beam_scale must be positive, got {beam_scale}")
+    return image / beam_scale * 10.0 ** (source_level_db / 10.0)
 
 
 def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,

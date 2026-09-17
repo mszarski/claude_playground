@@ -151,3 +151,38 @@ def test_the_sampler_stays_differentiable_in_the_signal():
     add_receiver_noise(power, 1.0, generator=g).sum().backward()
     assert power.grad is not None and bool(torch.isfinite(power.grad).all())
     assert float(power.grad.abs().max()) > 0.0
+
+
+def test_the_beamformer_scale_is_what_the_beamformer_actually_does():
+    """Measured against beamform itself, not asserted from the algebra.
+
+    A single arrival of unit amplitude, on the beam that looks straight at it,
+    comes out at exactly (sum w)^2 / (2 pi sigma_t^2).  It is 70 dB for a
+    64-element array and a 0.12 ms pulse, so an image compared with a noise
+    level without dividing it out is not slightly wrong.
+    """
+    from hydropt import beam_power_scale, beamform, make_time_grid, shading_window
+    from hydropt.beamform import ArrivalSet
+
+    n, sigma_t = 64, 1.2e-4
+    elements = torch.stack([torch.zeros(n), (torch.arange(n) - (n - 1) / 2) * 0.0075,
+                            torch.zeros(n)], dim=-1)
+    look = torch.tensor([[1.0, 0.0, 0.0]])
+    arrival = ArrivalSet(time=torch.tensor([0.04]), amplitude=torch.ones(1, 1),
+                         direction=-look, phase=torch.zeros(1),
+                         distance=torch.zeros(1), path_length=torch.ones(1))
+    grid = make_time_grid(0.039, 0.041, 801)
+    for window in ("uniform", "hamming"):
+        w = shading_window(n, window)
+        image = beamform(arrival, elements, torch.tensor([100.0]), grid, look,
+                         sigma_t=sigma_t, shading=w)
+        assert float(image.max()) == pytest.approx(beam_power_scale(w, sigma_t),
+                                                   rel=1e-9)
+
+
+def test_calibrate_undoes_the_beamformer_and_applies_the_source_level():
+    image = torch.tensor([4.0])
+    out = calibrate(image, 210.0, beam_scale=4.0)
+    assert float(10 * torch.log10(out[0])) == pytest.approx(210.0)
+    with pytest.raises(ValueError, match="beam_scale"):
+        calibrate(image, 210.0, beam_scale=0.0)

@@ -16,6 +16,7 @@ from .active import (
     target_arrivals,
 )
 from .beamform import (
+    beam_power_scale,
     ArrivalSet,
     azimuth_steering,
     beamform,
@@ -139,7 +140,8 @@ __all__ = [
     "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
-    "add_receiver_noise", "ambient_noise_db", "beam_noise_power", "calibrate",
+    "add_receiver_noise", "ambient_noise_db", "beam_noise_power",
+    "beam_power_scale", "calibrate",
     "line_array_directivity_db",
     "MeshScattering", "boat_hull_mesh", "cylinder_mesh", "facet_geometry",
     "icosphere", "load_obj", "mesh_target", "segment_mesh_transmission",
