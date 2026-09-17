@@ -271,9 +271,17 @@ def main() -> int:
     print(f"  {int(on_wake.sum())} cells inside the wake band, "
           f"{int(off_wake.sum())} on clean surface beyond 55 m")
     print(f"  (both clear of the boat, which sits at the head of its own wake)")
-    print(f"  the band stands {band:+.1f} dB over the sea around it "
-          f"(put in: {BUBBLE_GAIN_DB:+.0f} dB on the surface patches; the")
-    print(f"  seabed under the band is unchanged and dilutes it)")
+    with torch.no_grad():
+        isolated = 10 * math.log10(float(det[on_wake].mean()
+                                         / tilt_c[on_wake].mean()))
+    print(f"  the band stands {band:+.1f} dB over the sea around it, which is")
+    print(f"  what an operator reads off the screen -- but that compares two")
+    print(f"  different patches of water.  The same cells with the bubbles and")
+    print(f"  without come out {isolated:+.1f} dB apart, against the "
+          f"{BUBBLE_GAIN_DB:+.0f} dB put on the")
+    print(f"  surface patches; the seabed under the band is ungained and")
+    print(f"  dilutes it, and the band sits nearer the beam axis than the sea")
+    print(f"  it is being compared with, which is the rest of the difference.")
 
     # Where the band's centre of brightness sits, against the track it came
     # from -- drawn at slant range, so the track has to be laid over too.
@@ -289,26 +297,49 @@ def main() -> int:
           f"{float((drawn - track.detach()).norm(dim=-1).max()):.1f} m here)")
 
     banner("the waves on their own, without the bubbles")
+    # Where the wake's waves actually are, sampled at each cell's true position
+    # on the water rather than where the image draws it.
     with torch.no_grad():
+        n_eta = eta.shape[0]
+        node = ((ground - torch.tensor([-20.0, -n_eta * SURFACE_SPACING / 2]))
+                / SURFACE_SPACING).round().long()
+        inside = ((node >= 0) & (node < n_eta)).all(-1)
+        node = node.clamp(0, n_eta - 1)
+        here = (eta.detach().reshape(-1)[node[:, 1] * n_eta + node[:, 0]]
+                * inside).reshape(det.shape)
+
         sea_only = lit & (rho.reshape(det.shape) > 55.0)
+        arms = sea_only & (here.abs() > here[sea_only].abs().quantile(0.9))
+        flat_sea = sea_only & (here.abs() < here[sea_only].abs().quantile(0.4))
         a, b, c = tilt_c[sea_only], bare_c[sea_only], again_c[sea_only]
         shift = 10 * math.log10(float(a.mean() / b.mean()))
-        control_shift = 10 * math.log10(float(c.mean() / b.mean()))
+        on_arms = 10 * math.log10(float(tilt_c[arms].mean()
+                                        / bare_c[arms].mean()))
+        off_arms = 10 * math.log10(float(tilt_c[flat_sea].mean()
+                                         / bare_c[flat_sea].mean()))
         per_cell = float((10 * torch.log10(a / b)).abs().mean())
         control_cell = float((10 * torch.log10(c / b)).abs().mean())
         speckle = float((10 * torch.log10(b / b.mean())).std())
-    looks = (speckle / max(abs(shift), 1e-6)) ** 2
+    looks = (speckle / max(abs(on_arms), 1e-6)) ** 2
     print(f"  over {int(sea_only.sum())} surface cells beyond 55 m:")
-    print(f"    mean level, waves vs no waves:  {shift:+.2f} dB")
-    print(f"    mean level, one re-deal of the speckle: {control_shift:+.2f} dB")
-    print(f"    typical cell, waves vs no waves:  {per_cell:.2f} dB")
-    print(f"    typical cell, one re-deal:        {control_cell:.2f} dB")
-    print(f"  The per-cell figures agree, so what the wave channel does to any")
-    print(f"  ONE cell is the dice, not the wake: tilting the water redistributes")
-    print(f"  backscatter, it does not add any.  What is left is the mean, and a")
-    print(f"  single look has a {speckle:.1f} dB spread, so resolving "
-          f"{abs(shift):.2f} dB of it")
-    print(f"  takes of order {looks:.0f} looks.")
+    print(f"    typical cell, waves vs no waves:   {per_cell:.2f} dB")
+    print(f"    typical cell, one re-deal of the phases: {control_cell:.2f} dB")
+    print(f"    mean level, everywhere:            {shift:+.2f} dB")
+    print(f"    mean level, on the wake's arms:    {on_arms:+.2f} dB "
+          f"({int(arms.sum())} cells)")
+    print(f"    mean level, on flat water:         {off_arms:+.2f} dB "
+          f"({int(flat_sea.sum())} cells)")
+    print(f"  So the waves do change the picture, and by more than the dice:")
+    print(f"  moving the surface moves where every ray lands, so the speckle is")
+    print(f"  re-arranged rather than merely re-dealt -- {per_cell:.1f} dB a cell "
+          f"against {control_cell:.1f} dB")
+    print(f"  for a re-deal of the same sea.  What it does NOT do is leave a")
+    print(f"  signature you could detect: the mean over the arms moves "
+          f"{abs(on_arms):.2f} dB,")
+    print(f"  no more than over flat water, and a single look has a "
+          f"{speckle:.1f} dB spread,")
+    print(f"  so it would take of order {looks:.0f} looks to tell them apart.")
+    print(f"  The image with a wake in it is DIFFERENT, not wake-SHAPED.")
     print(f"  -- which is why the wake you see in a sonar image is the bubbles,")
     print(f"     not the waves.  Both are in this picture; only one is obvious.")
 
@@ -352,16 +383,18 @@ def main() -> int:
                float(d.min()) < 8.0,
                f"{float(d.min()):.1f} m from the laid-over track")
     ok &= check("its contrast is the scattering gain we put in",
-                abs(band - BUBBLE_GAIN_DB) < 5.0,
-                f"{band:+.1f} dB measured against {BUBBLE_GAIN_DB:+.0f} dB in")
-    ok &= check("what the waves do to one cell is speckle, not signal",
-                abs(per_cell - control_cell) < 1.5,
-                f"{per_cell:.2f} dB against {control_cell:.2f} dB for a "
-                f"re-deal of the same scene")
-    ok &= check("and what is left is a mean shift no single look could see",
-                abs(shift) < 2.0 and looks > 50.0,
-                f"{shift:+.2f} dB under {speckle:.1f} dB of speckle, "
-                f"{looks:.0f} looks")
+                abs(isolated - BUBBLE_GAIN_DB) < 4.0,
+                f"{isolated:+.1f} dB on the same cells with and without, "
+                f"against {BUBBLE_GAIN_DB:+.0f} dB in ({band:+.1f} dB against "
+                f"the sea around it)")
+    ok &= check("the waves re-arrange the speckle, not merely re-deal it",
+                per_cell > 1.5 * control_cell,
+                f"{per_cell:.2f} dB a cell against {control_cell:.2f} dB for a "
+                f"re-deal of the same sea")
+    ok &= check("but leave no signature on their own arms to detect",
+                abs(on_arms) < 2.0 and looks > 50.0,
+                f"{on_arms:+.2f} dB on the arms against {off_arms:+.2f} dB on "
+                f"flat water, under {speckle:.1f} dB of speckle")
     ok &= check("the boat's own echo is still on the boat",
                 err < tol, f"{err:.1f} m outside the hull against {tol:.1f} m")
     ok &= check("the image carries gradients to the vessel's speed and turn",
