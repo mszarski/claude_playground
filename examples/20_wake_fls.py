@@ -12,10 +12,18 @@ same size.**
 *The waves.*  ``hydropt.wake`` gives the Kelvin pattern as a height field, which
 is added to the wind sea and reflects like any other surface.  The wake tilts
 the water, the tilt changes the grazing angle, and the grazing angle changes the
-backscatter.  Measured below, that is worth about a decibel.  It is real, and at
-a single look it is invisible: one ping of reverberation is Rayleigh speckle
-with a 5.6 dB spread, so a 1 dB modulation needs tens of looks to come out of
-the noise.  This example prints the number.
+backscatter.  Measured below, the wake's arms come out about a decibel darker
+than the flat water beside them -- real, and at a single look invisible: one
+ping of reverberation has a 10.9 dB spread here, so pulling a decibel out of it
+takes of order a hundred looks.  The example prints the number.
+
+Note what that decibel is *not*.  Putting the waves on the water changes a
+typical cell by 6.4 dB, against 2.3 dB for re-dealing the scattering phases on
+an unchanged sea -- so the waves genuinely re-arrange the image rather than
+merely re-deal it, because moving the surface moves where every ray lands.  It
+is only the *mean* that stays put.  At one look the image with a wake in it is
+different, not wake-shaped, and a control render is in here to keep that
+distinction honest.
 
 *The bubbles.*  What a sonar or a radar actually sees is the other wake: the
 band of entrained air and turbulence the hull and propeller leave along the
@@ -35,9 +43,11 @@ below allow for it; an operator reading ranges off the screen has to as well.
 
 Acceptance criteria:
   * the wake band lands along the vessel's track, allowing for layover;
-  * its contrast over the surface around it is the scattering gain we put in;
-  * the wave channel on its own is small, and the example says how small and
-    how many looks it would take to see;
+  * its contrast is the scattering gain we put in, measured on the same cells
+    with the bubbles and without rather than against a different patch of sea;
+  * the waves re-arrange the speckle by more than a re-deal of the phases does;
+  * and still leave only about a decibel on their own arms, far under the
+    single-look spread -- the example says how many looks that would take;
   * the boat's own echo is still on the boat;
   * the image carries gradients to the vessel's speed and rate of turn.
 """
@@ -320,7 +330,8 @@ def main() -> int:
         per_cell = float((10 * torch.log10(a / b)).abs().mean())
         control_cell = float((10 * torch.log10(c / b)).abs().mean())
         speckle = float((10 * torch.log10(b / b.mean())).std())
-    looks = (speckle / max(abs(on_arms), 1e-6)) ** 2
+    contrast = on_arms - off_arms          # what a detector would work with
+    looks = (speckle / max(abs(contrast), 1e-6)) ** 2
     print(f"  over {int(sea_only.sum())} surface cells beyond 55 m:")
     print(f"    typical cell, waves vs no waves:   {per_cell:.2f} dB")
     print(f"    typical cell, one re-deal of the phases: {control_cell:.2f} dB")
@@ -333,13 +344,15 @@ def main() -> int:
     print(f"  moving the surface moves where every ray lands, so the speckle is")
     print(f"  re-arranged rather than merely re-dealt -- {per_cell:.1f} dB a cell "
           f"against {control_cell:.1f} dB")
-    print(f"  for a re-deal of the same sea.  What it does NOT do is leave a")
-    print(f"  signature you could detect: the mean over the arms moves "
-          f"{abs(on_arms):.2f} dB,")
-    print(f"  no more than over flat water, and a single look has a "
-          f"{speckle:.1f} dB spread,")
-    print(f"  so it would take of order {looks:.0f} looks to tell them apart.")
-    print(f"  The image with a wake in it is DIFFERENT, not wake-SHAPED.")
+    print(f"  for a re-deal of the same sea.  There IS a signature in it, and it")
+    print(f"  is about a decibel: the arms come out {abs(contrast):.2f} dB darker "
+          f"than the flat")
+    print(f"  water beside them, which is the tilt channel doing what it should")
+    print(f"  -- a wave face turned away from the sonar returns less.  But one")
+    print(f"  look has a {speckle:.1f} dB spread, so pulling {abs(contrast):.2f} "
+          f"dB out of it takes of")
+    print(f"  order {looks:.0f} looks.  At one look the image with a wake in it is")
+    print(f"  DIFFERENT, not wake-SHAPED.")
     print(f"  -- which is why the wake you see in a sonar image is the bubbles,")
     print(f"     not the waves.  Both are in this picture; only one is obvious.")
 
@@ -391,10 +404,11 @@ def main() -> int:
                 per_cell > 1.5 * control_cell,
                 f"{per_cell:.2f} dB a cell against {control_cell:.2f} dB for a "
                 f"re-deal of the same sea")
-    ok &= check("but leave no signature on their own arms to detect",
-                abs(on_arms) < 2.0 and looks > 50.0,
+    ok &= check("and leave about a decibel on their arms, far under the speckle",
+                0.1 < abs(contrast) < 3.0 and looks > 20.0,
                 f"{on_arms:+.2f} dB on the arms against {off_arms:+.2f} dB on "
-                f"flat water, under {speckle:.1f} dB of speckle")
+                f"flat water = {contrast:+.2f} dB, under {speckle:.1f} dB of "
+                f"speckle: {looks:.0f} looks")
     ok &= check("the boat's own echo is still on the boat",
                 err < tol, f"{err:.1f} m outside the hull against {tol:.1f} m")
     ok &= check("the image carries gradients to the vessel's speed and turn",
