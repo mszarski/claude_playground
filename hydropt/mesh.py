@@ -435,7 +435,8 @@ class MeshScattering(ScatteringPattern):
 def mesh_target(vertices: Tensor, faces: Tensor, *,
                 position: tuple[float, float, float] | Tensor = (0.0, 0.0, 0.0),
                 yaw: float = 0.0, pitch: float = 0.0, roll: float = 0.0,
-                n_patches: int = 1, sound_speed: float = 1500.0,
+                n_patches: int = 1, split_axis: int | None = None,
+                sound_speed: float = 1500.0,
                 learnable: bool = True, learnable_shape: bool = False,
                 facet_chunk: int = 512, occlusion: bool = True) -> ExtendedTarget:
     """An :class:`~hydropt.targets.ExtendedTarget` whose scattering is a mesh.
@@ -450,10 +451,26 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
             partition the facets along the body's longest axis, giving each
             patch its own position, so the target acquires *extent* in range and
             bearing, at one return fan per patch.
+        split_axis: which body axis to partition along (0=x, 1=y, 2=z).  The
+            default picks the mesh's longest extent, which is what you want for
+            one hull.  **It is the wrong choice for a mesh of separate bodies**
+            -- a catamaran's longest extent is still its length, so every patch
+            would straddle both hulls and sit midway between them, at a range
+            that belongs to neither.  Pass the axis that separates the bodies
+            (``split_axis=1`` for hulls set apart athwartships) and each patch
+            then belongs to one hull.
         learnable: position and orientation are parameters.
         learnable_shape: the vertices are parameters too, so a loss on the
             image reaches the geometry.
         sound_speed, facet_chunk, occlusion: passed to :class:`MeshScattering`.
+
+    **Two bodies in one patch also interfere as though they were one.**  A
+    patch's facet phases are referred to its own centroid under a plane-wave
+    front, so a patch spanning bodies ``d`` apart at range ``R`` carries a
+    curvature error ``d^2 / 8R``; across a catamaran's 5 m gap at 85 m that is
+    2.4 wavelengths at 100 kHz, and the resulting cancellation is spurious.
+    Splitting across the gap keeps each body's phases referred to its own
+    centroid, where the same error is small.
 
     **Splitting limits occlusion to within a patch.**  Each patch is its own
     :class:`MeshScattering` and knows nothing of the others, so with
@@ -481,8 +498,13 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
     else:
         # Split along the body's longest extent: the axis that actually buys
         # resolvable separation in the image.
-        extent = centroid.max(0).values - centroid.min(0).values
-        axis = int(extent.argmax())
+        if split_axis is None:
+            extent = centroid.max(0).values - centroid.min(0).values
+            axis = int(extent.argmax())
+        elif split_axis not in (0, 1, 2):
+            raise ValueError(f"split_axis must be 0, 1 or 2, got {split_axis}")
+        else:
+            axis = int(split_axis)
         order = centroid[:, axis].argsort()
         groups = [f[chunk] for chunk in torch.chunk(order, n_patches)
                   if chunk.numel() > 0]

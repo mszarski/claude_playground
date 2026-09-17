@@ -720,3 +720,33 @@ def test_splitting_confines_occlusion_to_a_patch():
     apart = (float(split_far.cross_section(d, -d, freqs))
              + float(split_near.cross_section(d, -d, freqs)))
     assert apart > together * 1.5
+
+
+def test_split_axis_puts_each_hull_of_a_catamaran_in_its_own_patches():
+    """The default split axis is wrong for a mesh of separate bodies.
+
+    A catamaran's longest extent is still its length, so the automatic choice
+    makes every patch straddle both hulls and puts its highlight midway between
+    them -- at a lateral offset that belongs to neither.  Splitting across the
+    separation puts every highlight on a hull.
+    """
+    v, f = boat_hull_mesh(11.0, 2.4, 1.0, n_long=16, n_around=10)
+    sep = 5.0
+    both = torch.cat([v + torch.tensor([0.0, sep / 2, 0.0]),
+                      v - torch.tensor([0.0, sep / 2, 0.0])])
+    faces = torch.cat([f, f + v.shape[0]])
+
+    along = mesh_target(both, faces, n_patches=4).highlights
+    across = mesh_target(both, faces, n_patches=4, split_axis=1).highlights
+
+    # Splitting along the length: every highlight lands in the gap.
+    assert float(along[:, 1].abs().max()) < 0.1 * sep
+    # Splitting across it: every highlight sits on one hull or the other.
+    assert float(across[:, 1].abs().min()) > 0.3 * sep
+    assert (across[:, 1] > 0).any() and (across[:, 1] < 0).any()
+
+
+def test_split_axis_rejects_an_axis_that_is_not_one_of_three():
+    v, f = boat_hull_mesh(n_long=8, n_around=6)
+    with pytest.raises(ValueError, match="split_axis"):
+        mesh_target(v, f, n_patches=2, split_axis=3)
