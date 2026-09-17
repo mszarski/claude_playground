@@ -78,6 +78,11 @@ from .noise import (
     calibrate,
     line_array_directivity_db,
 )
+from .transport import (
+    sinkhorn_divergence,
+    sinkhorn_potentials,
+    symmetric_potential,
+)
 from .launch import (
     directions_from_angles,
     fan_2d,
@@ -140,6 +145,7 @@ __all__ = [
     "BoundaryLoss", "ConstantLoss", "RayleighBottomLoss",
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
+    "sinkhorn_divergence", "sinkhorn_potentials", "symmetric_potential",
     "add_receiver_noise", "ambient_noise_db", "beam_noise_power",
     "beam_power_scale", "calibrate",
     "line_array_directivity_db",
