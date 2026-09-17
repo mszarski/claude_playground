@@ -59,6 +59,16 @@ contrasts are in fact similar, about +20 dB near and +17.5 dB here.  The last
 section renders the same arrivals through a four-times-longer array to show the
 hull coming back as a shape.
 
+**And most of what "noisy" means here is the colour window.**  ``examples/15``
+draws 22 dB below its own peak, and its peak IS the boat -- the target is the
+brightest cell in that image.  Everything more than 22 dB under the boat is
+therefore clipped to black, which is most of its reverberation, and the picture
+comes out black with a clean return on it.  This image was drawn 45 dB below
+its peak, and its peak is the near-field seabed rather than the target, so the
+whole swath of reverberation sits inside the scale and the picture is full of
+it.  Same kind of scene, opposite conventions.  The figure shows this one under
+both, and the difference is larger than anything the physics does.
+
 **A display helps with one of those and not the other.**  Time-varying gain --
 here the swath's own mean at each range rather than a fixed ``30 log r`` law --
 is free: it is a per-range scalar, so it cancels exactly out of any
@@ -80,6 +90,9 @@ Acceptance criteria:
     while range multi-look measurably costs it;
   * the hull is under one beamwidth at 250 m and over two through an array
     four times longer, which is what "make it clearer" actually requires;
+  * the boat is NOT the brightest thing in this image the way it is at 90 m,
+    and the example says by how much -- which is what decides whether a
+    peak-anchored colour window leaves a clean picture or a full one;
   * the image still carries gradients to the scene.
 """
 
@@ -464,6 +477,30 @@ def main() -> int:
     print(f"  For an unresolved target that is the wrong way round, so the "
           f"default is off.")
 
+    banner("and why examples/15 looks black and this one does not")
+    with torch.no_grad():
+        peak_db = 10 * math.log10(float(torch.quantile(
+            raw_cart[raw_cart > 0].reshape(-1), 0.99995)))
+        boat_db = 10 * math.log10(float(raw_cart[near_boat].max()))
+        ring_db = 10 * math.log10(float(raw_cart[ring].mean()))
+    print(f"  brightest cell in this image (near-field seabed): "
+          f"{peak_db:.1f} dB")
+    print(f"  the boat:                                         "
+          f"{boat_db:.1f} dB, {peak_db - boat_db:.1f} dB below it")
+    print(f"  reverberation at the boat's range:                "
+          f"{ring_db:.1f} dB")
+    print(f"  examples/15 draws 22 dB below ITS peak, and there the peak is the")
+    print(f"  boat -- so everything more than 22 dB under the target is clipped")
+    print(f"  to black, which is most of its reverberation.  Here the peak is "
+          f"{peak_db - boat_db:.0f} dB")
+    print(f"  ABOVE the target, so the same 22 dB window would black out the "
+          f"boat too,")
+    print(f"  and a window wide enough to hold the near field is wide enough "
+          f"to show")
+    print(f"  the whole seabed.  That is the difference in look, and it is a "
+          f"choice,")
+    print(f"  not a measurement: the figure draws this image both ways.")
+
     banner("what it would take to make the boat look like a boat")
     print("  The hull is smaller than a beam here, so it draws as a point and a")
     print("  point in speckle is shaped like a speckle.  The only fix is to")
@@ -574,18 +611,19 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
     import matplotlib.pyplot as plt
     import numpy as np
 
-    fig = plt.figure(figsize=(18.0, 10.4))
+    fig = plt.figure(figsize=(18.0, 10.6))
     extent = [float(gx[0]), float(gx[-1]), float(gy[0]), float(gy[-1])]
     th = np.linspace(-math.radians(SECTOR_DEG), math.radians(SECTOR_DEG), 200)
 
-    def swath(pos, img, title, label, span):
+    def swath(pos, img, title, label, span, anchor=None):
         ax = fig.add_subplot(2, 3, pos)
         d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
-        pk = float(np.quantile(d[np.isfinite(d)], 0.9995))
+        finite = d[np.isfinite(d)]
+        pk = float(np.quantile(finite, 0.99995)) if anchor is None else anchor
         im = ax.imshow(d, origin="lower", cmap="inferno", vmin=pk - span,
                        vmax=pk, extent=extent)
         ax.plot(blind * np.cos(th), blind * np.sin(th), ":",
-                color="deepskyblue", lw=1.0, alpha=0.7)
+                color="deepskyblue", lw=0.9, alpha=0.6)
         ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=15, mew=1.3)
         ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
                     xytext=(14, 9), color="white", fontsize=8)
@@ -596,12 +634,41 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
                                                                fontsize=7)
         return ax
 
-    swath(1, raw, "as rendered: no gain\n(the far field lives in the bottom "
-          "few dB)", "dB re 1 uPa$^2$", 45.0).set_ylabel("across (m)")
-    swath(2, cart, "TVG from the swath's own mean\n(same arrivals, same "
-          "contrast, readable)", "dB re the background at that range", 20.0)
+    # 1. the convention examples/15 uses: 22 dB below the image's own peak.
+    swath(1, raw, "examples/15's convention: 22 dB below the peak\n"
+          "(black, with a return on it -- and no seabed)",
+          "dB re 1 uPa$^2$", 22.0).set_ylabel("across (m)")
+    # 2. wide enough to hold the whole scene, which is what fills it with colour
+    swath(2, raw, "45 dB below the peak\n(the same image, the whole seabed "
+          "visible)", "dB re 1 uPa$^2$", 45.0)
+    # 3. and the same again with the range gain taken out
+    swath(3, cart, "TVG from the swath's own mean\n(flat in range; contrast "
+          "unchanged)", "dB re the background at that range", 20.0)
 
-    bx = fig.add_subplot(2, 3, 3)
+    for k, (n, pos) in enumerate(((N_RX, 4), (4 * N_RX, 5))):
+        img, ang, zr, bw, span = zooms[n]
+        ax = fig.add_subplot(2, 3, pos)
+        d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
+        pk = float(d.max())
+        cross = BOAT_RANGE * np.radians(ang.numpy())
+        im = ax.pcolormesh(zr.numpy(), cross, d, cmap="inferno", vmin=pk - 25,
+                           vmax=pk, shading="auto")
+        ax.plot([BOAT_RANGE - HULL_LENGTH / 2, BOAT_RANGE + HULL_LENGTH / 2],
+                [-25, -25], color="white", lw=2.5, solid_capstyle="butt")
+        ax.annotate(f"{HULL_LENGTH:.0f} m hull", (BOAT_RANGE, -23),
+                    color="white", fontsize=8, ha="center")
+        ax.set_xlabel("range (m)")
+        ax.set_title(f"{n} elements, {n * LAMBDA / 2:.2f} m of array\n"
+                     f"beam {BOAT_RANGE * math.radians(bw):.1f} m at the boat: "
+                     f"hull is "
+                     f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} "
+                     f"beamwidths", fontsize=10)
+        if k == 0:
+            ax.set_ylabel("across-track (m)")
+        fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02).set_label("dB re peak",
+                                                               fontsize=7)
+
+    bx = fig.add_subplot(2, 3, 6)
     r = rng.numpy()
     bx.plot(r, prof_db.numpy(), lw=1.0, color="tab:orange",
             label="reverberation, swath mean")
@@ -621,54 +688,8 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
     bx.grid(alpha=0.3, lw=0.4)
     bx.legend(fontsize=8, loc="upper right")
 
-    for k, (n, pos) in enumerate(((N_RX, 4), (4 * N_RX, 5))):
-        img, ang, zr, bw, span = zooms[n]
-        ax = fig.add_subplot(2, 3, pos)
-        d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
-        pk = float(d.max())
-        cross = BOAT_RANGE * np.radians(ang.numpy())
-        im = ax.pcolormesh(zr.numpy(), cross, d, cmap="inferno", vmin=pk - 25,
-                           vmax=pk, shading="auto")
-        ax.axhline(0.0, color="white", lw=0.5, alpha=0.3)
-        ax.plot([BOAT_RANGE - HULL_LENGTH / 2, BOAT_RANGE + HULL_LENGTH / 2],
-                [-24, -24], color="white", lw=2.5, solid_capstyle="butt")
-        ax.annotate(f"{HULL_LENGTH:.0f} m", (BOAT_RANGE, -22), color="white",
-                    fontsize=8, ha="center")
-        ax.set_xlabel("range (m)")
-        ax.set_title(f"{n} elements, {n * LAMBDA / 2:.2f} m of array\n"
-                     f"beam {BOAT_RANGE * math.radians(bw):.1f} m: hull is "
-                     f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} "
-                     f"beamwidths", fontsize=10)
-        if k == 0:
-            ax.set_ylabel("across-track (m)")
-        fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02).set_label("dB re peak",
-                                                               fontsize=7)
-
-    tx_ax = fig.add_subplot(2, 3, 6)
-    tx_ax.axis("off")
-    tx_ax.text(0.0, 0.97,
-               "Why the 300 m picture reads worse than the 90 m one\n"
-               "--------------------------------------------------\n\n"
-               "NOT the dynamic range:  22.8 dB across the lit swath\n"
-               "                        against 21.0 dB at 90 m.\n\n"
-               "NOT the sampling:       0.99 patches per resolution cell\n"
-               "                        against 0.35 at 90 m, and the\n"
-               "                        background spread is 5.1 dB against\n"
-               "                        5.6 dB for textbook speckle.\n\n"
-               "IT IS the resolution:   the beam is 3.4 m of cross-range at\n"
-               "                        55 m and 15.6 m at 250 m, so a 12 m\n"
-               "                        hull goes from 3.5 beamwidths to\n"
-               "                        0.77 of one.  Near, the sonar draws\n"
-               "                        a boat.  Far, it draws a point --\n"
-               "                        and a point in speckle is shaped\n"
-               "                        like a speckle.\n\n"
-               "The contrast is nearly the same either way (+20 dB near,\n"
-               "+17.5 dB here), so this is recognition, not detection.\n"
-               "Aperture buys it back.  Power does not.",
-               fontsize=9, family="monospace", va="top", linespacing=1.35)
-
-    fig.suptitle("100 kHz FLS to 300 m: the same ping, displayed three ways "
-                 "and resolved two", y=0.995)
+    fig.suptitle("One ping at 300 m.  Top row: the same data under three "
+                 "colour windows.  Bottom: what aperture buys.", y=0.995)
     fig.tight_layout()
     return fig
 
