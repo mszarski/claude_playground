@@ -269,3 +269,52 @@ def test_no_bounces_gives_an_empty_arrival_set():
     grid = make_time_grid(0.0, 0.4, 200)
     etc = render_reverberation(arrivals, grid, sigma_t=2e-3)
     assert torch.equal(etc, torch.zeros_like(etc))
+
+
+def test_a_surface_gain_lifts_the_surface_patches_and_leaves_the_seabed_alone():
+    """A bubble wake is a local change in the surface, not in the whole boundary.
+
+    The grazing-angle law is one model for every patch on a boundary, which is
+    right for a wind sea and wrong wherever something has changed the water
+    locally.  The multiplier has to reach the surface patches it names and
+    nothing else -- in particular not the seabed, which shares the same
+    scattering model here.
+    """
+    dirs, omega = _downgoing(20_000)
+    scene = _scene(surface=FlatHeight(0.0), source=(0.0, 0.0, 25.0), max_bounces=3)
+    with torch.no_grad():
+        result = scene.trace(dirs)
+        kw = dict(scattering=LambertScattering(-27.0, learnable=False),
+                  solid_angle_per_ray=omega,
+                  surface=scene.surface, bottom=scene.bottom)
+        plain = reverberation_arrivals(result, dirs, scene.freqs_khz,
+                                       boundary="both", **kw)
+        # Ten times the strength on every surface patch, wherever it is.
+        lifted = reverberation_arrivals(
+            result, dirs, scene.freqs_khz, boundary="both",
+            surface_gain=lambda xy: torch.full(xy.shape[:-1], 10.0,
+                                               dtype=xy.dtype), **kw)
+        bottom = reverberation_arrivals(result, dirs, scene.freqs_khz,
+                                        boundary="bottom", **kw)
+    ratio = (lifted.amplitude / plain.amplitude.clamp_min(1e-30)) ** 2
+    # Amplitude is the square root of energy, so the ratio is 1 or 10 exactly.
+    on = ratio > 5.0
+    assert int(on.sum()) == plain.n_arrivals - bottom.n_arrivals
+    assert float(ratio[on].max()) == pytest.approx(10.0, rel=1e-9)
+    assert float(ratio[~on].max()) == pytest.approx(1.0, rel=1e-9)
+
+
+def test_a_surface_gain_carries_gradients_to_what_produced_it():
+    """The point of a differentiable gain: fit the thing that made the wake."""
+    dirs, omega = _downgoing(20_000)
+    scene = _scene(surface=FlatHeight(0.0), source=(0.0, 0.0, 25.0), max_bounces=3)
+    strength = torch.tensor(3.0, requires_grad=True)
+    result = scene.trace(dirs)
+    arrivals = reverberation_arrivals(
+        result, dirs, scene.freqs_khz,
+        scattering=LambertScattering(-27.0, learnable=False),
+        solid_angle_per_ray=omega, boundary="both",
+        surface=scene.surface, bottom=scene.bottom,
+        surface_gain=lambda xy: strength.expand(xy.shape[:-1]))
+    arrivals.amplitude.sum().backward()
+    assert strength.grad is not None and float(strength.grad) > 0.0

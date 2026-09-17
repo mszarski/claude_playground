@@ -48,7 +48,7 @@ from torch import Tensor
 from .boundaries import BilinearHeightField
 
 __all__ = ["wake_packets", "wake_elevation", "kelvin_wake_surface",
-           "froude_number"]
+           "bubble_wake_gain", "froude_number"]
 
 G = 9.80665
 
@@ -138,15 +138,26 @@ def wake_packets(track: Tensor, times: Tensor, *, n_directions: int = 64,
     # conserved as A^2 * width, and width grows with distance, so A falls as
     # 1/sqrt of it.
     #
-    # Clamped at a WAVELENGTH, not at a metre.  A group has not separated from
-    # the hull until it has travelled about one, and clamping closer lets the
-    # freshest groups keep an amplitude the far field cannot approach: at 6 m/s
-    # a 1 m floor makes the newest group 20 times the one 400 m astern, and the
-    # wake renders as a blob at the vessel with nothing behind it.
-    travelled = (c_g * age).clamp_min(2.0 * math.pi / k)
+    # A group is not a free wave until it has left the hull behind.  Within
+    # about a wavelength of where it was shed every direction's group is still
+    # sitting on top of every other one and still in phase, and summed they
+    # pile into a lump at the vessel several times the height of the wake
+    # itself -- the source singularity of the Kelvin integral, not a bow wave.
+    # Fading them in over that wavelength both removes the lump and stops the
+    # spreading term dividing by zero, and it is the honest statement of what
+    # this model knows: a linear far-field wake, and nothing within a hull
+    # length of the hull that made it.
+    #
+    # It matters for more than looks.  The height field is normalised on its
+    # peak, so a lump at the vessel sets the scale for the whole surface and
+    # starves the trail: at 6 m/s a 0.6 m peak left only 0.06 m of wave 40 m
+    # astern, a one-degree slope, which no sonar and no eye would see.
+    lam = 2.0 * math.pi / k
+    travelled = c_g * age
+    separated = -torch.expm1(-travelled / lam)
     amplitude = (ct.reshape(1, -1) ** directional_exponent
                  * torch.exp(-age / decay_time)
-                 / travelled.sqrt())
+                 * separated / (travelled + lam).sqrt())
 
     # Each group stands for a cell of (emission time, direction), so it is
     # spread over the patch that cell maps to -- the same reasoning as the
@@ -155,7 +166,7 @@ def wake_packets(track: Tensor, times: Tensor, *, n_directions: int = 64,
     # ...but never narrower than about a third of a wavelength, or the
     # envelope would cut into the wave it is carrying.
     d_theta = float(theta[1] - theta[0]) if n_directions > 1 else lim
-    width = (travelled * d_theta).clamp_min(0.35 * 2.0 * math.pi / k)
+    width = (travelled * d_theta).clamp_min(0.35 * lam)
     return (centre.reshape(-1, 2), wavevector.reshape(-1, 2),
             amplitude.reshape(-1), width.reshape(-1))
 
@@ -251,3 +262,86 @@ def kelvin_wake_surface(track: Tensor, times: Tensor, *, amplitude: float = 0.3,
                                spacing=(float(xs[1] - xs[0]),
                                         float(ys[1] - ys[0])),
                                learnable=learnable)
+
+
+def bubble_wake_gain(xy: Tensor, track: Tensor, times: Tensor, *,
+                     gain_db: float = 15.0, width: float = 4.0,
+                     spread_rate: float = 0.06, decay_time: float = 300.0,
+                     observation_time: float | None = None) -> Tensor:
+    """Scattering-strength multiplier of the turbulent wake, ``[N]`` linear.
+
+    The Kelvin height field above is the wake you *see* from a bridge wing.  It
+    is not, on its own, the wake a sonar sees.  Measured in this package, the
+    surface tilt a 0.6 m wake puts on the water moves the mean backscatter by
+    about 1 dB -- real, and buried under 5.6 dB of single-look speckle.  What
+    makes a wake the most conspicuous thing in a sonar or radar image is the
+    other wake: the band of entrained air and turbulence the hull and propeller
+    leave along the track, whose scattering strength runs tens of dB above the
+    sea around it and which persists for minutes after the vessel has gone.
+
+    So it is modelled as what it is -- a multiplier on the surface scattering
+    strength, over a band centred on the track:
+
+      * ``gain_db`` at the centreline, Gaussian across the band;
+      * the band starts at ``width`` (a hull beam or two) and widens as
+        ``spread_rate`` times the distance the vessel has since run, which is
+        the entrainment rate that makes an old wake a broad stripe rather than
+        a line;
+      * and it decays with ``decay_time`` as the bubbles rise out.
+
+    Differentiable in ``track``, so the course and speed that made the wake can
+    be fitted through an image of it, which is the point of having it here
+    rather than drawn on afterwards.
+
+    Args:
+        xy: ``[N, 2]`` horizontal positions to evaluate at, metres.
+        track, times: the vessel's course, as for :func:`wake_packets`.
+        gain_db: centreline enhancement over the ambient surface.
+        width: the band's half-width where it is laid down, metres.
+        spread_rate: how fast it widens, as a fraction of distance run.
+        decay_time: e-folding time of the enhancement, seconds.
+        observation_time: when the wake is being looked at; defaults to the
+            last track time.
+
+    Returns ``[N]`` multipliers, ``1`` well away from the track.
+    """
+    xy = xy.reshape(-1, 2)
+    track = track.reshape(-1, 2)
+    times = times.reshape(-1)
+    if track.shape[0] != times.shape[0]:
+        raise ValueError(f"track has {track.shape[0]} points but times has "
+                         f"{times.shape[0]}")
+    if track.shape[0] < 2:
+        raise ValueError("a track needs at least two points to have a heading")
+    if decay_time <= 0.0:
+        raise ValueError(f"decay_time must be positive, got {decay_time}")
+    t_obs = float(times[-1]) if observation_time is None else observation_time
+
+    a, b = track[:-1], track[1:]
+    live = (t_obs - 0.5 * (times[:-1] + times[1:])) >= 0.0
+    a, b = a[live], b[live]
+    if a.shape[0] == 0:
+        return torch.ones(xy.shape[0], dtype=xy.dtype, device=xy.device)
+    seg = b - a
+    length = seg.norm(dim=-1).clamp_min(1e-9)
+
+    # Distance from each point to each segment, and where along it that lands,
+    # so the age is the age of the water at the foot of the perpendicular
+    # rather than of the nearest track vertex.
+    rel = xy.unsqueeze(1) - a.unsqueeze(0)                    # [N, S, 2]
+    u = ((rel * seg.unsqueeze(0)).sum(-1)
+         / (length * length).unsqueeze(0)).clamp(0.0, 1.0)    # [N, S]
+    foot = a.unsqueeze(0) + u.unsqueeze(-1) * seg.unsqueeze(0)
+    dist = (xy.unsqueeze(1) - foot).norm(dim=-1)              # [N, S]
+
+    t_seg = times[:-1][live].unsqueeze(0) + u * (times[1:][live]
+                                                 - times[:-1][live]).unsqueeze(0)
+    age = (t_obs - t_seg).clamp_min(0.0)
+    run = (age * (length / (times[1:][live] - times[:-1][live])
+                  .clamp_min(1e-9)).unsqueeze(0))             # distance since run
+    half = width + spread_rate * run
+    lit = (torch.exp(-0.5 * (dist / half) ** 2)
+           * torch.exp(-age / decay_time))
+    # The strongest contribution wins rather than the sum: overlapping segments
+    # of one continuous wake are the same water, not two wakes stacked.
+    return 1.0 + (10.0 ** (gain_db / 10.0) - 1.0) * lit.amax(dim=1)

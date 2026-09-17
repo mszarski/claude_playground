@@ -17,7 +17,8 @@ import pytest
 import torch
 
 from hydropt.wake import (
-    froude_number, kelvin_wake_surface, wake_elevation, wake_packets,
+    bubble_wake_gain, froude_number, kelvin_wake_surface, wake_elevation,
+    wake_packets,
 )
 
 G = 9.80665
@@ -202,3 +203,93 @@ def test_bad_inputs_are_rejected():
         wake_packets(track, times, decay_time=0.0)
     with pytest.raises(ValueError, match="water depth"):
         froude_number(5.0, 0.0)
+
+
+def _elevation_near(track, times, distance, *, half=6.0, n=41, **kw):
+    """Peak |elevation| in a square patch ``distance`` metres astern."""
+    packets = wake_packets(track, times, **kw)
+    heading = track[-1] - track[-2]
+    heading = heading / heading.norm()
+    centre = track[-1] - distance * heading
+    g = torch.linspace(-half, half, n)
+    gx, gy = torch.meshgrid(g, g, indexing="xy")
+    xy = centre + torch.stack([gx.reshape(-1), gy.reshape(-1)], dim=-1)
+    return float(wake_elevation(xy, *packets).abs().max())
+
+
+def test_the_peak_is_not_at_the_vessel_and_the_trail_survives_astern():
+    """Where the source singularity of the Kelvin integral is, and is not.
+
+    At the emission point every direction's group is on top of every other one,
+    and the amplitude of a group whose front has not yet lengthened is
+    unbounded.  Fading each group in over the wavelength it has to travel to
+    separate from the hull takes the divergence out and moves the maximum
+    astern, where linear theory applies.
+
+    What it does NOT do is remove the pile-up entirely: the groups still carry
+    no intrinsic wave phase, so emission times within a few wavelengths remain
+    coherent and the field within about 30 m of a 6 m/s vessel is several times
+    the trail behind it.  That is claude_playground-62h, and until it is fixed
+    the near field of this model is not to be read as a bow wave.
+    """
+    track, times = _straight(6.0, duration=90.0, n=181)
+    at = {d: _elevation_near(track, times, d, n_directions=96,
+                             max_angle_deg=62.0, decay_time=1e6)
+          for d in (0.0, 30.0, 180.0)}
+    assert at[0.0] < at[30.0]                   # no spike where the hull is
+    assert at[180.0] > 0.03 * at[30.0]          # and a wake, not just a bow
+
+
+def test_the_bubble_wake_is_a_band_on_the_track_that_widens_with_age():
+    """Narrow and strong where it was just laid down, broad and faint later."""
+    track, times = _straight(6.0, duration=100.0, n=201)
+    fresh, old = track[-1], track[-1] - torch.tensor([400.0, 0.0])
+
+    def gain_db(point, across):
+        xy = (point + torch.tensor([0.0, across])).reshape(1, 2)
+        return 10 * math.log10(float(bubble_wake_gain(xy, track, times,
+                                                      gain_db=15.0)))
+
+    assert gain_db(fresh, 0.0) == pytest.approx(15.0, abs=0.1)
+    # Across the band: the fresh wake is a line, the old one a stripe.
+    assert gain_db(fresh, 12.0) < 3.0
+    assert gain_db(old, 12.0) > 8.0
+    # ...and away from it there is no wake at all.
+    assert gain_db(fresh, 120.0) == pytest.approx(0.0, abs=0.01)
+
+
+def test_the_bubble_wake_decays_and_follows_a_turn():
+    track, times = _turning(6.0, 120.0)
+    # A point on the track 30 s ago is lit; the mirror of it across the
+    # vessel's present heading -- where a straight wake would have been -- is
+    # not.  This is the same asymmetry the height field has, and the reason a
+    # curved track needs the track and not a formula.
+    on = track[len(track) // 2].reshape(1, 2)
+    chord = (2.0 * track[-1] - on).reshape(1, 2)
+    live = bubble_wake_gain(on, track, times, gain_db=15.0)
+    off = bubble_wake_gain(chord, track, times, gain_db=15.0)
+    assert float(live) > 10.0 and float(off) < 2.0
+    # Decay: the same point, remembered for five minutes or for five seconds.
+    slow = bubble_wake_gain(on, track, times, gain_db=15.0, decay_time=300.0)
+    fast = bubble_wake_gain(on, track, times, gain_db=15.0, decay_time=5.0)
+    assert float(fast) < 1.1 < float(slow)
+
+
+def test_the_bubble_wake_carries_a_gradient_to_the_track():
+    track, times = _straight(6.0, duration=60.0, n=121)
+    track = track.clone().requires_grad_(True)
+    xy = torch.tensor([[200.0, 8.0], [120.0, -14.0]])
+    bubble_wake_gain(xy, track, times).sum().backward()
+    assert track.grad is not None and bool(torch.isfinite(track.grad).all())
+    assert float(track.grad.abs().max()) > 0.0
+
+
+def test_the_bubble_wake_rejects_the_same_bad_inputs():
+    track, times = _straight(5.0, n=21)
+    xy = torch.zeros(3, 2)
+    with pytest.raises(ValueError, match="times"):
+        bubble_wake_gain(xy, track, times[:-1])
+    with pytest.raises(ValueError, match="two points"):
+        bubble_wake_gain(xy, track[:1], times[:1])
+    with pytest.raises(ValueError, match="decay_time"):
+        bubble_wake_gain(xy, track, times, decay_time=0.0)

@@ -158,6 +158,7 @@ def reverberation_arrivals(
     generator: torch.Generator | None = None,
     max_arrivals: int | None = None,
     occluders=None,
+    surface_gain=None,
 ) -> ArrivalSet:
     """Monostatic reverberation as an :class:`~hydropt.beamform.ArrivalSet`.
 
@@ -191,6 +192,16 @@ def reverberation_arrivals(
             and that band, not the object's own echo, is what an operator reads
             its height from.  Without this a bottom object sits in the image
             with the seabed showing straight through behind it.
+        surface_gain: ``f(xy) -> [P]`` linear multiplier on the *surface*
+            patches' scattering strength, from their horizontal position.  The
+            grazing-angle model is one law for the whole boundary, which is
+            right for a wind sea and wrong wherever something has changed the
+            surface locally -- a bubble wake being the case that matters here,
+            since it is tens of dB above the ambient sea and is what a wake
+            actually looks like in a sonar image.  A multiplier rather than a
+            replacement, so it composes with the angle law instead of
+            overriding it, and differentiable, so what produced the patch is
+            still fittable through it.
         max_arrivals: cap the patch count by keeping a **random** subset and
             scaling its energy to compensate.  Keeping the *strongest* patches
             instead -- the sensible choice for target echoes -- is badly wrong
@@ -222,6 +233,11 @@ def reverberation_arrivals(
     r = events.arclen.clamp_min(spread_min_range)
     graze = events.grazing.clamp_min(1e-6)
     sigma_b = scattering(graze, graze)
+    if surface_gain is not None:
+        gain = surface_gain(events.position[..., :2]).to(dtype=dtype,
+                                                         device=device)
+        sigma_b = sigma_b * torch.where(events.is_bottom,
+                                        torch.ones_like(gain), gain)
 
     # One-way loss to the patch: specular reflections already taken, plus
     # volume absorption over the outbound path.

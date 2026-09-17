@@ -79,6 +79,7 @@ from .noise import (
     line_array_directivity_db,
 )
 from .wake import (
+    bubble_wake_gain,
     froude_number,
     kelvin_wake_surface,
     wake_elevation,
@@ -152,7 +153,8 @@ __all__ = [
     "reflect", "grazing_angle", "find_crossing",
     "thorp_db_per_km", "octave_bands",
     "sinkhorn_divergence", "sinkhorn_potentials", "symmetric_potential",
-    "froude_number", "kelvin_wake_surface", "wake_elevation", "wake_packets",
+    "bubble_wake_gain", "froude_number", "kelvin_wake_surface",
+    "wake_elevation", "wake_packets",
     "add_receiver_noise", "ambient_noise_db", "beam_noise_power",
     "beam_power_scale", "calibrate",
     "line_array_directivity_db",
