@@ -35,6 +35,24 @@ the reverberation *before* beamforming, and the whole image is put on an
 absolute scale in uPa^2 with real ambient noise added at the correct Rice
 statistics, so "can you see it at 250 m" has an answer rather than a picture.
 
+**And then the picture needs a display, which at 300 m is not optional.**  Two
+things that a 90 m image gets away with stop being cosmetic here:
+
+*Range falloff.*  The reverberation runs 92 dB at 50 m and 54 dB at 300 m.  Any
+fixed colour scale wide enough to hold the near field leaves the far field in
+the bottom few dB of it, looking like noise.  Every real sonar applies a
+time-varying gain for this; the one here is measured rather than assumed -- the
+swath's own mean level at each range -- so the display shows each cell against
+the background at ITS range, which is what a detector sees.
+
+*Multi-look.*  The range cell is 0.22 m and a display pixel is 1.05 m, so each
+pixel spans about five independent range samples.  Point-sampling one of them
+throws four away and aliases the speckle; averaging them is free multi-look and
+drops the speckle by the square root of five.  It also covers the sampling: the
+fan puts only 0.6 to 1.2 patches in a resolution cell at these ranges, so
+individual cells are empty and the raw image is partly Monte-Carlo holes rather
+than speckle.  The example measures the difference both ways.
+
 Acceptance criteria:
   * the boat's echo lands on the boat, within a beamwidth at 250 m;
   * the seabed and sea surface fill the image out to 300 m rather than a
@@ -42,6 +60,8 @@ Acceptance criteria:
   * reverberation stays above the ambient across the whole swath, and the
     range at which it would not is reported;
   * the absorption budget is reported and is the dominant loss at 300 m;
+  * a display -- TVG and range multi-look -- measurably raises the boat over
+    its background and drops the speckle, and the example says by how much;
   * the image still carries gradients to the scene.
 """
 
@@ -95,7 +115,10 @@ BOAT_HEADING_DEG = 40.0
 HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 12.0, 3.2, 1.0
 
 N_ELEV, N_AZIM = 96, 330
-PATCHES = 40000
+# Every bounce the trace found, rather than a subsample: they are already paid
+# for, and at these ranges the fan puts only 0.6-1.2 patches in a resolution
+# cell, so throwing any away is throwing away the reverberation field itself.
+PATCHES = None
 SEED = 7
 
 
@@ -170,6 +193,35 @@ def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0):
     weights = line_array_factor(torch.sin(E), N_TX,
                                 sin_steer=math.sin(math.radians(TILT_DEG)))
     return dirs, weights
+
+
+def display(image, rng, *, pixel_m: float, tvg: bool = True):
+    """Range multi-look and TVG, on the [beams, bands, bins] image.
+
+    Both are display, not physics -- the arrivals are untouched -- but at 300 m
+    they are the difference between a picture and a mess, and neither is a
+    cosmetic choice:
+
+    * the multi-look window is set by the display's own pixel size, so it
+      averages exactly the samples the pixel was going to alias anyway;
+    * the gain is the swath's mean at each range, which is AGC rather than a
+      fixed ``30 log r + 2 alpha r`` law.  It costs nothing in truth here --
+      the target is one bearing in 181, so it cannot lift its own background
+      by more than a fraction of a dB -- and it does not need the falloff to
+      be guessed in advance, which at grazing incidence it would be.
+    """
+    bin_m = float(rng[1] - rng[0])
+    looks = max(1, int(round(pixel_m / bin_m)))
+    if looks % 2 == 0:
+        looks += 1                      # odd, so the window stays centred
+    out = image
+    if looks > 1:
+        out = torch.nn.functional.avg_pool1d(
+            out, kernel_size=looks, stride=1, padding=looks // 2,
+            count_include_pad=False)
+    if tvg:
+        out = out / out.mean(dim=0, keepdim=True).clamp_min(1e-30)
+    return out, looks
 
 
 def main() -> int:
@@ -321,17 +373,21 @@ def main() -> int:
           f"near-field gap)")
 
     banner("the same ping, on a grid in metres")
+    to_cart = lambda img: ex15.to_cartesian(img, bearings, grid, n_x=300,
+                                            n_y=300, x_range=(-10.0, 305.0),
+                                            y_range=(-260.0, 260.0))
+    pixel_m = 315.0 / 299.0
+    shown, looks = display(noisy, rng, pixel_m=pixel_m)
     with timed("  resample to Cartesian"):
-        cart, gx, gy = ex15.to_cartesian(noisy, bearings, grid, n_x=300, n_y=300,
-                                         x_range=(-10.0, 305.0),
-                                         y_range=(-260.0, 260.0))
+        cart, gx, gy = to_cart(shown)
     with torch.no_grad():
-        echo_cart, _, _ = ex15.to_cartesian(
-            calibrate(echo_img, SOURCE_LEVEL_DB, beam_scale=scale),
-            bearings, grid, n_x=300, n_y=300, x_range=(-10.0, 305.0),
-            y_range=(-260.0, 260.0))
+        raw_cart, _, _ = to_cart(noisy)
+        echo_cart, _, _ = to_cart(
+            calibrate(echo_img, SOURCE_LEVEL_DB, beam_scale=scale))
     print(f"  {cart.shape[1]} x {cart.shape[0]} cells, "
           f"{float(gx[1] - gx[0]):.2f} x {float(gy[1] - gy[0]):.2f} m each")
+    print(f"  {float(rng[1] - rng[0]):.2f} m range bins under a "
+          f"{pixel_m:.2f} m pixel -> {looks} looks averaged per pixel")
     beamwidth = 2.0 * math.degrees(math.asin(1.0 / (N_RX / 2.0)))
     beam_m = BOAT_RANGE * math.radians(beamwidth)
     print(f"  beamwidth {beamwidth:.2f} deg = {beam_m:.1f} m at the boat, "
@@ -354,14 +410,30 @@ def main() -> int:
         same_range = (rng_cell - BOAT_RANGE).abs() < 8.0
         off_target = (brg_cell - BOAT_BEARING_DEG).abs() > 6.0
         inside = brg_cell.abs() < SECTOR_DEG - 4.0
-        background = det[same_range & off_target & inside]
-        on_target = det[torch.hypot(GX - tx, GY - ty) < 12.0].max()
-        srn = 10 * math.log10(float(on_target / background.mean().clamp_min(1e-30)))
+        ring = same_range & off_target & inside
+        near_boat = torch.hypot(GX - tx, GY - ty) < 12.0
+
+        def contrast(img):
+            bg = img[ring]
+            peak = float(img[near_boat].max())
+            return (10 * math.log10(peak / float(bg.mean().clamp_min(1e-30))),
+                    float((10 * torch.log10(bg / bg.mean().clamp_min(1e-30))).std()))
+
+        srn, spread = contrast(det)
+        raw_srn, raw_spread = contrast(raw_cart)
     print(f"  the boat's echo peaks at ({px:+.1f}, {py:+.1f}) m, boat centred "
           f"on ({tx:+.1f}, {ty:+.1f})")
     print(f"  {err:.1f} m outside the hull, against {beam_m:.1f} m of beamwidth")
-    print(f"  it stands {srn:+.1f} dB over the reverberation and noise at its "
-          f"own range")
+    print(f"\n  point-sampled, no gain:  boat {raw_srn:+.1f} dB over its ring, "
+          f"background spread {raw_spread:.1f} dB")
+    print(f"  {looks} looks and TVG:      boat {srn:+.1f} dB over its ring, "
+          f"background spread {spread:.1f} dB")
+    print(f"  so the display is worth {srn - raw_srn:+.1f} dB of contrast and "
+          f"{raw_spread - spread:.1f} dB")
+    print(f"  of speckle -- against {10 * math.log10(math.sqrt(looks)):.1f} dB "
+          f"expected from averaging {looks} looks.  None of it is a change to")
+    print(f"  the physics: the arrivals are identical and only the display "
+          f"differs.")
 
     banner("still differentiable, at 300 m")
     t0 = time.perf_counter()
@@ -378,8 +450,8 @@ def main() -> int:
     print(f"\n  forward {forward:.1f} s + backward {backward:.1f} s over "
           f"{both.n_arrivals} arrivals")
 
-    save(_plot(det, gx, gy, rng, prof_db.detach(), noise_db, tx, ty, crossover,
-               blind), "21_long_range_300m.png")
+    save(_plot(det, raw_cart, gx, gy, rng, prof_db.detach(), noise_db, tx, ty,
+               crossover, blind, looks), "21_long_range_300m.png")
 
     banner("acceptance")
     ok = check("the boat's echo lands on the boat at 250 m",
@@ -397,62 +469,72 @@ def main() -> int:
     ok &= check("absorption is the dominant loss at 300 m",
                 2 * alpha * FAR / 1000 > 15.0,
                 f"{2 * alpha * FAR / 1000:.1f} dB two-way at {FAR:.0f} m")
+    ok &= check("the display raises the boat and flattens the speckle",
+                srn > raw_srn + 2.0 and spread < raw_spread - 1.0,
+                f"boat {raw_srn:+.1f} -> {srn:+.1f} dB, speckle "
+                f"{raw_spread:.1f} -> {spread:.1f} dB over {looks} looks")
     ok &= check("the image is still differentiable end to end",
                 all(states.values()), f"{sum(states.values())}/{len(states)} live")
     return 0 if ok else 1
 
 
-def _plot(cart, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind):
+def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
+          looks):
     import matplotlib.pyplot as plt
     import numpy as np
 
-    fig = plt.figure(figsize=(16.5, 7.4))
-    ax = fig.add_subplot(1, 2, 1)
-    d = 10 * np.log10(np.maximum(cart.numpy(), 1e-30))
-    pk = float(np.quantile(d[np.isfinite(d)], 0.9995))
-    im = ax.imshow(d, origin="lower", cmap="inferno", vmin=pk - 45, vmax=pk,
-                   extent=[float(gx[0]), float(gx[-1]),
-                           float(gy[0]), float(gy[-1])])
+    fig = plt.figure(figsize=(19.5, 6.6))
+    extent = [float(gx[0]), float(gx[-1]), float(gy[0]), float(gy[-1])]
     th = np.linspace(-math.radians(SECTOR_DEG), math.radians(SECTOR_DEG), 200)
-    ax.plot(blind * np.cos(th), blind * np.sin(th), ":", color="deepskyblue",
-            lw=1.0, alpha=0.8)
-    ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=16, mew=1.4)
-    ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
-                xytext=(16, 10), color="white", fontsize=9)
-    ax.annotate(f"reverberation-limited throughout;\nreaches the noise floor "
-                f"only at ~{crossover:.0f} m",
-                (0.03, 0.04), xycoords="axes fraction", color="deepskyblue",
-                fontsize=8)
-    ax.annotate(f"nothing on the bottom\ninside {blind:.0f} m", (blind, -20),
-                textcoords="offset points", xytext=(10, -20),
-                color="deepskyblue", fontsize=8)
-    ax.set_aspect("equal")
-    ax.set_xlabel("forward (m)")
-    ax.set_ylabel("across (m)")
-    ax.set_title("100 kHz FLS, 120 deg swath to 300 m (dB re 1 uPa$^2$)")
-    fig.colorbar(im, ax=ax, shrink=0.75, pad=0.02)
 
-    bx = fig.add_subplot(1, 2, 2)
+    def panel(pos, img, title, label):
+        ax = fig.add_subplot(1, 3, pos)
+        d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
+        finite = d[np.isfinite(d)]
+        pk = float(np.quantile(finite, 0.9995))
+        lo = pk - 45.0 if pos == 1 else pk - 22.0
+        im = ax.imshow(d, origin="lower", cmap="inferno", vmin=lo, vmax=pk,
+                       extent=extent)
+        ax.plot(blind * np.cos(th), blind * np.sin(th), ":",
+                color="deepskyblue", lw=1.0, alpha=0.7)
+        ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=16, mew=1.4)
+        ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
+                    xytext=(16, 10), color="white", fontsize=9)
+        ax.set_aspect("equal")
+        ax.set_xlabel("forward (m)")
+        ax.set_title(title, fontsize=11)
+        cb = fig.colorbar(im, ax=ax, shrink=0.72, pad=0.02)
+        cb.set_label(label, fontsize=8)
+        return ax
+
+    panel(1, raw, "one range bin per pixel, no gain\n(four of every five "
+          "samples thrown away)", "dB re 1 uPa$^2$").set_ylabel("across (m)")
+    panel(2, cart, f"{looks} looks per pixel, TVG from the swath's own mean\n"
+          "(the same arrivals, displayed)", "dB re the background at that range")
+
+    bx = fig.add_subplot(1, 3, 3)
     r = rng.numpy()
     bx.plot(r, prof_db.numpy(), lw=1.0, color="tab:orange",
             label="reverberation, swath mean")
     bx.axhline(noise_db, color="tab:blue", lw=1.0, ls="--",
                label=f"ambient noise, {noise_db:.0f} dB")
-    bx.axvline(crossover, color="0.4", lw=0.8, ls=":")
     bx.axvline(BOAT_RANGE, color="tab:green", lw=0.8, ls="-.", label="the boat")
+    shown = prof_db.numpy()
+    shown = shown[np.isfinite(shown) & (shown > -200)]
+    bx.set_xlim(NEAR, FAR)
+    bx.set_ylim(noise_db - 8.0, float(shown.max()) + 5.0)
     bx.annotate(f"reaches the noise floor at about {crossover:.0f} m,\n"
                 f"which is past the end of the swath",
                 (0.97, 0.06), xycoords="axes fraction", ha="right", fontsize=9,
                 color="0.3")
-    bx.set_xlim(NEAR, FAR)
-    # The unlit bins sit at -300 dB and would own the whole axis.
-    shown = prof_db.numpy()[np.isfinite(prof_db.numpy()) & (prof_db.numpy() > -200)]
-    bx.set_ylim(noise_db - 8.0, float(shown.max()) + 5.0)
     bx.set_xlabel("range (m)")
     bx.set_ylabel("dB re 1 uPa$^2$ in a beam and cell")
-    bx.set_title("where the seabed stops being the competition")
+    bx.set_title("38 dB of range falloff -- which is what\nthe gain in the "
+                 "middle panel is for", fontsize=11)
     bx.grid(alpha=0.3, lw=0.4)
-    bx.legend(fontsize=9)
+    bx.legend(fontsize=9, loc="upper right")
+    fig.suptitle("100 kHz FLS, 120 deg swath to 300 m: the same ping, "
+                 "undisplayed and displayed", y=1.0)
     fig.tight_layout()
     return fig
 
