@@ -18,23 +18,37 @@ that cost falls as the two approach from any separation.  On these images the
 Sinkhorn divergence grows as ``d^2`` from 5 m to 50 m while the squared error
 peaks at 10 m and then falls back, having saturated.
 
-**Two stages, because each is good at one thing.**  Transport has a floor: the
-measurement and the model are independent speckle realisations, so even at zero
-offset the divergence is not zero, and the position it can resolve is about
-``sqrt`` of that -- a few metres.  Descent on the image has no reach but,
-inside a metre or two, resolves to a fraction of a bearing cell.  So transport
-walks the boat in from 50 m and the image loss finishes the job, which is the
-same detect-then-refine shape a real system has, with a differentiable detector.
+**Where transport stops, and why it is not a bias.**  It walks in from 50 m and
+settles about 5 m out, which looks like a systematic offset and is not: scanned
+directly, the divergence has its minimum at *exactly* zero offset, for every
+blur and against the same speckle realisation or an independent one.  What it
+has is LOCAL minima.  A 12 m hull is a row of highlights, so sliding the model
+along range aligns its highlights with the wrong ones -- a cycle slip -- and
+the landscape reads 2.9 at the truth, 39 at 3 m, 25 at 4 m, 32 at 5 m.  That
+dip at 4 m is where the search lands.  The global basin is only about +/-2 m
+wide, and the coarse stages never get closer than 13 m, so the anneal delivers
+the boat outside it.
+
+**So the last step is a search, not more descent.**  Nine evaluations on a grid
+of range shifts spanning the local minima find the global basin; the fine image
+loss then polishes.  Annealing harder does not help and coarsening does not
+either -- measured, an image loss at a 3 m cell drives the fit AWAY from the
+truth from every start, and at 6 m it is worse still, so "a coarser stage has a
+wider capture range" is false here.
+
+**What is left at the end is not an optimisation failure.**  The residual is
+almost entirely across-track, and an across-track error inside one 3.75 m
+beamwidth barely changes the image -- there is no gradient to descend and no
+search that helps.  That is the array's angular resolution, and it takes
+another ping from another position to do better.
 
 Acceptance criteria:
   * the transport loss rises monotonically out to 50 m, where the image loss is
     flat -- the reason one can be descended on and the other cannot;
-  * a fit from 50 m out, on transport alone, lands within a few metres -- and
-    it lands on a BIAS, a stable point about 4 m beyond the truth, not on the
-    truth itself;
-  * a ladder of capture ranges closes the gap: the image loss at the coarse
-    cell catches what transport hands it, and the fine cell finishes inside a
-    bearing cell.  Each rung has to reach as far as the one above it lands;
+  * a fit from 50 m out, on transport alone, lands within a few metres -- in a
+    local minimum, not on the truth;
+  * a grid search over range shifts escapes it, and the fine image loss then
+    finishes inside a bearing cell;
   * the image loss started from the same 50 m does not converge at all, which
     is the comparison that makes the point;
   * both stages carry gradients to the boat's pose.
@@ -80,14 +94,11 @@ REFINE = dict(near=45.0, far=75.0, n_bins=233, sigma_t=1.2e-4)
 # reach and leaves the two stages unable to meet.  It has to go down far enough
 # that the floor is inside the capture range of what comes next.
 BLUR_SCHEDULE = [(8.0, 15), (4.0, 10), (2.0, 20), (1.0, 20), (0.5, 25)]
-REFINE_STEPS = 30
-# The middle rung.  Transport does not land on the truth: it converges to a
-# stable point about 4.3 m beyond it in range, drifting along a shallow valley
-# with the error pinned at 4.80 m for its last dozen steps.  That is a bias in
-# the loss, not slow convergence -- and it means the handoff has to be caught by
-# something whose capture range covers 5 m.  The fine refiner's is 1-2 m, so the
-# image loss runs first at the SEARCH cell, where capture is about three cells.
-BRIDGE_STEPS = 25
+REFINE_STEPS = 40
+# Range shifts to try after the anneal, spanning the local minima the hull's
+# repeated highlights create.  Nine renders, no gradients: descent cannot leave
+# a local minimum, and this is the cheapest thing that can.
+GRID_SHIFTS = [-6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0]
 START = (50.0, 0.0, 0.0)          # dx, dy, dyaw -- 50 m out in range
 
 
@@ -203,22 +214,25 @@ def main() -> int:
             print(f"    blur {blur:4.1f} m -> error {error(boat):6.2f} m")
     search_err = error(boat)
 
-    # ---- 3. the handoff ----------------------------------------------------
-    banner("stage 2: the image loss, coarse first")
-    bridge_cell = SEARCH["sigma_t"] * C / 2.0
-    with timed("  bridge"):
-        opt = torch.optim.Adam([{"params": [boat.position],
-                                 "lr": 0.35 * bridge_cell}])
-        for _ in range(BRIDGE_STEPS):
-            opt.zero_grad()
-            image_loss(render_s(boat, 202), meas_s).backward()
-            with torch.no_grad():
-                boat.position.grad[2] = 0.0
-            opt.step()
-    bridge_err = error(boat)
-    print(f"  at the {bridge_cell:.2f} m cell: {search_err:.2f} m -> "
-          f"{bridge_err:.2f} m")
+    # ---- 3. the escape -----------------------------------------------------
+    banner("stage 2: a grid search, because descent cannot leave a local minimum")
+    here = boat.position.detach().clone()
+    best_shift, best_loss = 0.0, float("inf")
+    with torch.no_grad():
+        for shift in GRID_SHIFTS:
+            trial = offset_boat(0.0, 0.0, 0.0, learnable=False)
+            trial.position.copy_(here + torch.tensor([shift, 0.0, 0.0]))
+            v = float(transport_loss(render_s(trial, 202), meas_s, 0.5))
+            err = float((trial.position - true_pos)[:2].norm())
+            print(f"    shift {shift:+5.1f} m -> loss {v:9.3f}   (error {err:5.2f} m)")
+            if v < best_loss:
+                best_loss, best_shift = v, shift
+    with torch.no_grad():
+        boat.position.copy_(here + torch.tensor([best_shift, 0.0, 0.0]))
+    grid_err = error(boat)
+    print(f"  picked {best_shift:+.1f} m: {search_err:.2f} m -> {grid_err:.2f} m")
 
+    banner("stage 3: the image loss polishes it")
     cell = REFINE["sigma_t"] * C / 2.0
     with timed("  refine"):
         opt = torch.optim.Adam([{"params": [boat.position], "lr": 0.35 * cell}])
@@ -229,7 +243,10 @@ def main() -> int:
                 boat.position.grad[2] = 0.0
             opt.step()
     final_err = error(boat)
-    print(f"  at the {cell:.2f} m cell: {bridge_err:.2f} m -> {final_err:.2f} m")
+    residual = (boat.position.detach() - true_pos)[:2]
+    print(f"  at the {cell:.2f} m cell: {grid_err:.2f} m -> {final_err:.2f} m")
+    print(f"  residual: {float(residual[0]):+.2f} m in range, "
+          f"{float(residual[1]):+.2f} m across -- against a {beam_m:.2f} m beam")
     print(f"  end to end: {START[0]:.0f} m -> {final_err:.2f} m "
           f"({beam_m / max(final_err, 1e-9):.1f}x finer than the bearing cell)")
 
@@ -269,12 +286,17 @@ def main() -> int:
                 f"image loss {flat:.2f}x")
     ok &= check("transport alone walks it in from 50 m",
                 search_err < 6.0, f"{START[0]:.0f} m -> {search_err:.2f} m")
-    ok &= check("the coarse image loss catches what transport hands it",
-                bridge_err < search_err,
-                f"{search_err:.2f} m -> {bridge_err:.2f} m at a "
-                f"{bridge_cell:.2f} m cell")
+    ok &= check("a grid search escapes the local minimum descent settled in",
+                grid_err < search_err - 1.0,
+                f"{search_err:.2f} m -> {grid_err:.2f} m on {len(GRID_SHIFTS)} "
+                f"renders")
     ok &= check("and the image loss then beats the bearing cell",
                 final_err < beam_m, f"{final_err:.2f} m against {beam_m:.2f} m")
+    ok &= check("what is left is across-track, inside a beamwidth",
+                abs(float(residual[1])) > abs(float(residual[0])) and
+                abs(float(residual[1])) < beam_m,
+                f"{float(residual[0]):+.2f} m range vs "
+                f"{float(residual[1]):+.2f} m across")
     ok &= check("while the image loss alone gets nowhere from there",
                 control_err > 3.0 * final_err,
                 f"{control_err:.2f} m against {final_err:.2f} m for the pair")
