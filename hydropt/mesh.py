@@ -128,6 +128,21 @@ def _sinhc(x: Tensor) -> Tensor:
     return torch.where(small, series, torch.sinh(safe) / safe)
 
 
+def _collapse_tol(dtype: torch.dtype) -> float:
+    """Vertex-phase gap below which the divided difference goes to the series.
+
+    Two errors race as the gap ``g`` closes.  The nested divided difference
+    subtracts two nearly equal terms and divides by ``g``, so it loses
+    ``eps / g``; the series truncates at the cubic term, so it loses ``~g^3``.
+    They cross at ``g = eps^(1/4)``, and that is the tolerance -- which is
+    ``1.2e-4`` in float64 but ``1.8e-2`` in float32.  A single hard-coded
+    constant cannot serve both: at float64's ``1e-5``, float32 keeps only two
+    digits through the subtraction, and the facet integral loses up to 1e-4
+    relative right where the specular return lives.
+    """
+    return float(torch.finfo(dtype).eps) ** 0.25
+
+
 def _dd1(a: Tensor, b: Tensor) -> Tensor:
     """First divided difference of ``exp``: ``(e^a - e^b)/(a - b)``.
 
@@ -179,18 +194,27 @@ def triangle_phase_integral(tri: Tensor, q: Tensor, *, area: Tensor | None = Non
     c = torch.where(widest == 0, z1, z2)
     b = torch.where(widest == 0, z2, torch.where(widest == 1, z0, z1))
 
+    # The widest gap IS |a - c| by construction, so one tolerance decides both
+    # the branch and whether the denominator is safe to divide by.
+    tol = _collapse_tol(phase.dtype)
+    collapsed = gaps.max(dim=-1).values < tol
     denom = a - c
-    safe = torch.where(denom.abs() < 1e-12, torch.ones_like(denom), denom)
+    safe = torch.where(collapsed, torch.ones_like(denom), denom)
     nested = (_dd1(a, b) - _dd1(b, c)) / safe
 
     # All three nodes together: the facet lies in a phase front.
     centre = z.mean(dim=-1)
     d = z - centre.unsqueeze(-1)
+    # Expanding about the mean node: with lambda over the unit simplex,
+    # int 1 = 1/2, int lambda_j = 1/6, int lambda_j^2 = 1/12 and
+    # int lambda_j lambda_k = 1/24, which puts BOTH quadratic terms at 1/48.
+    # (Both vanish analytically since d sums to zero; they are kept because it
+    # does not numerically.)  The truncation is then O(d^3) rather than O(d^2),
+    # which is what lets the tolerance above sit where float32 needs it.
     series = torch.exp(centre) * (0.5
                                   + d.sum(-1) / 6.0
-                                  + (d * d).sum(-1) / 24.0
-                                  + d.sum(-1) ** 2 / 36.0)
-    collapsed = (gaps.max(dim=-1).values < 1e-5).unsqueeze(-1).squeeze(-1)
+                                  + (d * d).sum(-1) / 48.0
+                                  + d.sum(-1) ** 2 / 48.0)
     dd2 = torch.where(collapsed, series, nested)
     return 2.0 * area.to(dd2.dtype) * dd2
 

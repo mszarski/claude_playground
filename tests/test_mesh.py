@@ -750,3 +750,62 @@ def test_split_axis_rejects_an_axis_that_is_not_one_of_three():
     v, f = boat_hull_mesh(n_long=8, n_around=6)
     with pytest.raises(ValueError, match="split_axis"):
         mesh_target(v, f, n_patches=2, split_axis=3)
+
+
+def _duffy_reference(tri, q, n=24):
+    """The facet integral by Gauss-Legendre under the Duffy transform.
+
+    Independent of the divided-difference machinery and accurate to roundoff
+    for a smooth integrand, which is what makes it a reference rather than
+    another copy of the thing under test.
+    """
+    import numpy as np
+    x, w = np.polynomial.legendre.leggauss(n)
+    x, w = 0.5 * (x + 1), 0.5 * w
+    u, v = np.meshgrid(x, x, indexing="ij")
+    s, t, jac = u, v * (1 - u), (1 - u)
+    v0, e1, e2 = (tri[0, 0].double().numpy(),
+                  (tri[0, 1] - tri[0, 0]).double().numpy(),
+                  (tri[0, 2] - tri[0, 0]).double().numpy())
+    p = v0 + s[..., None] * e1 + t[..., None] * e2
+    phase = p @ q[0].double().numpy()
+    area = 0.5 * np.linalg.norm(np.cross(e1, e2))
+    return complex((np.exp(1j * phase) * np.outer(w, w) * jac).sum() * 2 * area)
+
+
+def _phase_gap_sweep():
+    tri = torch.tensor([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]],
+                       dtype=torch.float64)
+    d = torch.tensor([[1.0, 0.3, 0.0]], dtype=torch.float64)
+    d = d / d.norm()
+    return tri, [d * (10.0 ** (0.5 - 0.5 * k)) for k in range(12)]
+
+
+def test_facet_integral_holds_accuracy_through_the_series_branch():
+    """The near-phase-front band is where the specular return lives.
+
+    The series the divided difference falls back to expands about the mean
+    node, where both quadratic terms carry 1/48 -- one of them was 1/24, which
+    only shows up as an O(gap^2) error inside the fallback, exactly where the
+    facet is aligned with a phase front and contributing most.
+    """
+    tri, qs = _phase_gap_sweep()
+    for q in qs:
+        ref = _duffy_reference(tri, q)
+        got = complex(triangle_phase_integral(tri, q)[0])
+        assert abs(got - ref) / abs(ref) < 1e-11, f"|q| = {float(q.norm()):.1e}"
+
+
+def test_facet_integral_survives_float32():
+    """The series tolerance has to follow the dtype, not a fixed constant.
+
+    Cancellation in the divided difference costs eps/gap and the series
+    truncates at gap^3, so they cross at eps^(1/4) -- 1.2e-4 in float64 but
+    1.8e-2 in float32.  Pinned at float64's value, float32 keeps two digits
+    through the subtraction and the integral loses 1e-4 relative.
+    """
+    tri, qs = _phase_gap_sweep()
+    for q in qs:
+        ref = _duffy_reference(tri, q)
+        got = complex(triangle_phase_integral(tri.float(), q.float())[0])
+        assert abs(got - ref) / abs(ref) < 2e-5, f"|q| = {float(q.norm()):.1e}"
