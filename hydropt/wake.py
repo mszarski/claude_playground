@@ -134,8 +134,16 @@ def wake_packets(track: Tensor, times: Tensor, *, n_directions: int = 64,
     wavevector = n_hat * k.unsqueeze(-1)
 
     # Amplitude: the hull's directional spread, the decay, and the geometric
-    # spreading of a group whose front lengthens as it travels.
-    travelled = (c_g * age).clamp_min(1.0)
+    # spreading of a group whose front lengthens as it travels -- energy is
+    # conserved as A^2 * width, and width grows with distance, so A falls as
+    # 1/sqrt of it.
+    #
+    # Clamped at a WAVELENGTH, not at a metre.  A group has not separated from
+    # the hull until it has travelled about one, and clamping closer lets the
+    # freshest groups keep an amplitude the far field cannot approach: at 6 m/s
+    # a 1 m floor makes the newest group 20 times the one 400 m astern, and the
+    # wake renders as a blob at the vessel with nothing behind it.
+    travelled = (c_g * age).clamp_min(2.0 * math.pi / k)
     amplitude = (ct.reshape(1, -1) ** directional_exponent
                  * torch.exp(-age / decay_time)
                  / travelled.sqrt())
