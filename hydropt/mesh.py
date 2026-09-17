@@ -454,6 +454,94 @@ class MeshScattering(ScatteringPattern):
 
 
 # --------------------------------------------------------------------------- #
+# What the body hides: segments through a mesh
+# --------------------------------------------------------------------------- #
+def segment_mesh_transmission(starts: Tensor, ends: Tensor, vertices: Tensor,
+                              faces: Tensor, *, facet_chunk: int = 2048
+                              ) -> Tensor:
+    """Which segments reach their far end without passing through the mesh.
+
+    ``[N]``, ``1`` where the straight segment from ``starts[i]`` to ``ends[i]``
+    misses the body and ``0`` where it crosses it.  This is what casts an
+    acoustic shadow: a body on the seabed blocks the path to the patches behind
+    it, and the dark patch that leaves is what an operator reads the body's
+    height from.
+
+    Args:
+        starts, ends: ``[N, 3]`` endpoints, world frame, metres.
+        vertices, faces: the occluding mesh, **world frame** -- place the body
+            before calling; this knows nothing of a target's pose.
+        facet_chunk: facets per block, to bound the ``[N, F]`` working set.
+
+    Segments are tested with Moller-Trumbore, **without back-face culling**:
+    the question is whether the path crosses the surface at all, and while a
+    body seen from outside presents its front facets, a patch under an overhang
+    or a source inside a hull presents its back ones.  Only segments whose
+    closest approach to the mesh's bounding sphere falls inside it are tested;
+    for a 12 m body at 85 m in a 120-degree fan that is a few percent of the
+    rays, and the rest cost one distance each.
+
+    **The mask is a step, so it has no gradient.**  The shadow's edge is
+    precisely the observable that carries the body's height, and a hard mask
+    puts a zero derivative on it, so a height cannot be fitted through this.
+    Softening it is not a matter of blending each facet's edges: the facets
+    along a silhouette are geometrically correlated, and treating them as
+    independent over-counts them badly (a ray a hand's breadth outside a
+    tessellated sphere comes back 99% occluded).  A differentiable edge needs a
+    distance to the body's *silhouette*, which is a separate piece of work.
+    """
+    starts = starts.reshape(-1, 3)
+    ends = ends.reshape(-1, 3)
+    if starts.shape != ends.shape:
+        raise ValueError(f"starts is {tuple(starts.shape)} but ends is "
+                         f"{tuple(ends.shape)}")
+    v = vertices.reshape(-1, 3)
+    f = faces.reshape(-1, 3)
+    out = torch.ones(starts.shape[0], dtype=starts.dtype, device=starts.device)
+    if f.shape[0] == 0 or starts.shape[0] == 0:
+        return out
+
+    # Bounding sphere, then each segment's closest approach to its centre.
+    lo, hi = v.min(dim=0).values, v.max(dim=0).values
+    centre = 0.5 * (lo + hi)
+    radius = (v - centre).norm(dim=-1).max()
+    seg = ends - starts
+    length2 = (seg * seg).sum(-1).clamp_min(_EPS)
+    t_near = (((centre - starts) * seg).sum(-1) / length2).clamp(0.0, 1.0)
+    miss = (starts + t_near.unsqueeze(-1) * seg - centre).norm(dim=-1)
+    near = miss <= radius
+    if not bool(near.any()):
+        return out
+
+    p0, d = starts[near], seg[near]
+    blocked = torch.zeros(p0.shape[0], dtype=torch.bool, device=p0.device)
+    for i in range(0, f.shape[0], facet_chunk):
+        tri = v[f[i:i + facet_chunk]]                        # [C, 3, 3]
+        n, c = p0.shape[0], tri.shape[0]
+        v0 = tri[:, 0].unsqueeze(0).expand(n, c, 3)
+        e1 = (tri[:, 1] - tri[:, 0]).unsqueeze(0).expand(n, c, 3)
+        e2 = (tri[:, 2] - tri[:, 0]).unsqueeze(0).expand(n, c, 3)
+        dd = d.unsqueeze(1).expand(n, c, 3)
+        pv = torch.linalg.cross(dd, e2, dim=-1)
+        det = (e1 * pv).sum(-1)                              # [N, C]
+        # A segment parallel to a facet is the only one with nothing to say.
+        parallel = det.abs() < _EPS
+        safe = torch.where(parallel, torch.ones_like(det), det)
+        sv = p0.unsqueeze(1) - v0
+        u = (sv * pv).sum(-1) / safe
+        qv = torch.linalg.cross(sv, e1, dim=-1)
+        w = (dd * qv).sum(-1) / safe
+        t = (e2 * qv).sum(-1) / safe
+        hit = ((t > 0.0) & (t < 1.0) & ~parallel
+               & (u >= 0.0) & (w >= 0.0) & (u + w <= 1.0))
+        blocked = blocked | hit.any(dim=1)
+
+    out = out.clone()
+    out[near] = (~blocked).to(out.dtype)
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Building a target from a mesh
 # --------------------------------------------------------------------------- #
 def mesh_target(vertices: Tensor, faces: Tensor, *,
