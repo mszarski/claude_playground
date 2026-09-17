@@ -21,10 +21,27 @@ import torch  # noqa: E402
 FIGURE_DIR = Path(__file__).resolve().parent / "figures"
 
 
+_DTYPES = {"float32": torch.float32, "float64": torch.float64}
+
+
 def setup(seed: int = 0, *, double: bool = True, threads: int | None = None) -> None:
-    """Deterministic, CPU-friendly defaults shared by every example."""
+    """Deterministic, CPU-friendly defaults shared by every example.
+
+    ``HYDROPT_EXAMPLE_DTYPE=float32`` overrides the precision, which is how an
+    example gets run in single precision without editing it -- the same switch
+    ``HYDROPT_TEST_DTYPE`` gives the test suite.  It matters for more than
+    speed: fp64 throughput is half of fp32 on a datacentre GPU and a
+    sixty-fourth of it on a consumer card, so whether the imaging path holds up
+    in float32 decides whether a GPU is worth anything here.
+    """
+    name = os.environ.get("HYDROPT_EXAMPLE_DTYPE")
+    if name is not None and name not in _DTYPES:
+        raise ValueError(f"HYDROPT_EXAMPLE_DTYPE must be one of "
+                         f"{sorted(_DTYPES)}, got {name!r}")
+    dtype = (_DTYPES[name] if name
+             else (torch.float64 if double else torch.float32))
     torch.manual_seed(seed)
-    torch.set_default_dtype(torch.float64 if double else torch.float32)
+    torch.set_default_dtype(dtype)
     torch.set_num_threads(threads or min(4, os.cpu_count() or 1))
 
 
