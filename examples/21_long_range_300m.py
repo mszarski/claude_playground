@@ -35,23 +35,39 @@ the reverberation *before* beamforming, and the whole image is put on an
 absolute scale in uPa^2 with real ambient noise added at the correct Rice
 statistics, so "can you see it at 250 m" has an answer rather than a picture.
 
-**And then the picture needs a display, which at 300 m is not optional.**  Two
-things that a 90 m image gets away with stop being cosmetic here:
+**Why this looks worse than the 90 m images, which is not what it seems.**  Set
+side by side with ``examples/15``, this picture reads as noisy and the boat
+reads as one bright speckle among many.  Three explanations suggest themselves
+and two of them are wrong, which is worth recording because they are the
+obvious two:
 
-*Range falloff.*  The reverberation runs 92 dB at 50 m and 54 dB at 300 m.  Any
-fixed colour scale wide enough to hold the near field leaves the far field in
-the bottom few dB of it, looking like noise.  Every real sonar applies a
-time-varying gain for this; the one here is measured rather than assumed -- the
-swath's own mean level at each range -- so the display shows each cell against
-the background at ITS range, which is what a detector sees.
+*Not the dynamic range.*  Measured the same way on both scenes, the swath-mean
+reverberation spans 22.8 dB over the lit part of this one and 21.0 dB over the
+90 m one.  Near enough identical.
 
-*Multi-look.*  The range cell is 0.22 m and a display pixel is 1.05 m, so each
-pixel spans about five independent range samples.  Point-sampling one of them
-throws four away and aliases the speckle; averaging them is free multi-look and
-drops the speckle by the square root of five.  It also covers the sampling: the
-fan puts only 0.6 to 1.2 patches in a resolution cell at these ranges, so
-individual cells are empty and the raw image is partly Monte-Carlo holes rather
-than speckle.  The example measures the difference both ways.
+*Not the sampling.*  This fan puts 0.99 scattering patches in a resolution
+cell; the 90 m example manages 0.35.  This scene is sampled three times better,
+and the background's spread comes out at 5.1 dB against the 5.6 dB of textbook
+Rayleigh speckle -- so the background is not noisy, it IS speckle, correctly.
+
+*It is the resolution.*  The beam is 3.58 degrees wide either way, which is
+3.4 m of cross-range at 55 m and 15.6 m at 250 m.  A 12 m hull is therefore
+3.5 beamwidths long in the near example and 0.77 of one here.  Near, the sonar
+draws a boat-shaped object; far, it draws a point -- and a point in a speckle
+field is shaped exactly like a bright speckle, whatever its contrast.  The
+contrasts are in fact similar, about +20 dB near and +17.5 dB here.  The last
+section renders the same arrivals through a four-times-longer array to show the
+hull coming back as a shape.
+
+**A display helps with one of those and not the other.**  Time-varying gain --
+here the swath's own mean at each range rather than a fixed ``30 log r`` law --
+is free: it is a per-range scalar, so it cancels exactly out of any
+target-to-background ratio while pulling the far field out of the bottom of the
+colour scale.  Range multi-look is NOT free, and the example measures the
+price: averaging the three range bins under a display pixel smears a target
+that occupies one of them, costing about 5 dB of contrast to buy 1.4 dB of
+background smoothness.  For an unresolved target that is the wrong trade, so it
+is off by default and reported rather than applied.
 
 Acceptance criteria:
   * the boat's echo lands on the boat, within a beamwidth at 250 m;
@@ -60,8 +76,10 @@ Acceptance criteria:
   * reverberation stays above the ambient across the whole swath, and the
     range at which it would not is reported;
   * the absorption budget is reported and is the dominant loss at 300 m;
-  * a display -- TVG and range multi-look -- measurably raises the boat over
-    its background and drops the speckle, and the example says by how much;
+  * the gain leaves the boat's contrast against its own background untouched,
+    while range multi-look measurably costs it;
+  * the hull is under one beamwidth at 250 m and over two through an array
+    four times longer, which is what "make it clearer" actually requires;
   * the image still carries gradients to the scene.
 """
 
@@ -195,7 +213,7 @@ def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0):
     return dirs, weights
 
 
-def display(image, rng, *, pixel_m: float, tvg: bool = True):
+def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1):
     """Range multi-look and TVG, on the [beams, bands, bins] image.
 
     Both are display, not physics -- the arrivals are untouched -- but at 300 m
@@ -210,10 +228,11 @@ def display(image, rng, *, pixel_m: float, tvg: bool = True):
       by more than a fraction of a dB -- and it does not need the falloff to
       be guessed in advance, which at grazing incidence it would be.
     """
-    bin_m = float(rng[1] - rng[0])
-    looks = max(1, int(round(pixel_m / bin_m)))
-    if looks % 2 == 0:
-        looks += 1                      # odd, so the window stays centred
+    if looks <= 0:
+        bin_m = float(rng[1] - rng[0])
+        looks = max(1, int(round(pixel_m / bin_m)))
+        if looks % 2 == 0:
+            looks += 1                  # odd, so the window stays centred
     out = image
     if looks > 1:
         out = torch.nn.functional.avg_pool1d(
@@ -377,11 +396,13 @@ def main() -> int:
                                             n_y=300, x_range=(-10.0, 305.0),
                                             y_range=(-260.0, 260.0))
     pixel_m = 315.0 / 299.0
-    shown, looks = display(noisy, rng, pixel_m=pixel_m)
+    shown, _ = display(noisy, rng, pixel_m=pixel_m)          # TVG only
+    smoothed, looks = display(noisy, rng, pixel_m=pixel_m, looks=0)
     with timed("  resample to Cartesian"):
         cart, gx, gy = to_cart(shown)
     with torch.no_grad():
         raw_cart, _, _ = to_cart(noisy)
+        look_cart, _, _ = to_cart(smoothed)
         echo_cart, _, _ = to_cart(
             calibrate(echo_img, SOURCE_LEVEL_DB, beam_scale=scale))
     print(f"  {cart.shape[1]} x {cart.shape[0]} cells, "
@@ -421,19 +442,81 @@ def main() -> int:
 
         srn, spread = contrast(det)
         raw_srn, raw_spread = contrast(raw_cart)
+        look_srn, look_spread = contrast(look_cart)
     print(f"  the boat's echo peaks at ({px:+.1f}, {py:+.1f}) m, boat centred "
           f"on ({tx:+.1f}, {ty:+.1f})")
     print(f"  {err:.1f} m outside the hull, against {beam_m:.1f} m of beamwidth")
-    print(f"\n  point-sampled, no gain:  boat {raw_srn:+.1f} dB over its ring, "
+    print(f"\n  the same arrivals, three displays:")
+    print(f"    no gain, one bin per pixel:  boat {raw_srn:+5.1f} dB, "
           f"background spread {raw_spread:.1f} dB")
-    print(f"  {looks} looks and TVG:      boat {srn:+.1f} dB over its ring, "
+    print(f"    TVG:                         boat {srn:+5.1f} dB, "
           f"background spread {spread:.1f} dB")
-    print(f"  so the display is worth {srn - raw_srn:+.1f} dB of contrast and "
-          f"{raw_spread - spread:.1f} dB")
-    print(f"  of speckle -- against {10 * math.log10(math.sqrt(looks)):.1f} dB "
-          f"expected from averaging {looks} looks.  None of it is a change to")
-    print(f"  the physics: the arrivals are identical and only the display "
-          f"differs.")
+    print(f"    TVG + {looks} looks:                boat {look_srn:+5.1f} dB, "
+          f"background spread {look_spread:.1f} dB")
+    print(f"  The gain is a per-range scalar, so it cancels out of the ratio "
+          f"exactly")
+    print(f"  ({srn - raw_srn:+.2f} dB) and only moves the far field up the "
+          f"colour scale.")
+    print(f"  Multi-look is not free: it smears a target that lives in one "
+          f"range bin")
+    print(f"  across {looks}, costing {look_srn - srn:+.1f} dB of contrast to "
+          f"buy {spread - look_spread:.1f} dB of smoothness.")
+    print(f"  For an unresolved target that is the wrong way round, so the "
+          f"default is off.")
+
+    banner("what it would take to make the boat look like a boat")
+    print("  The hull is smaller than a beam here, so it draws as a point and a")
+    print("  point in speckle is shaped like a speckle.  The only fix is to")
+    print("  resolve it -- the SAME arrivals, through a longer array.")
+
+    def zoom(n_elements, n_bearings=81, half_deg=7.0, n_bins=130):
+        """Re-beamform the same echoes around the boat, at a chosen aperture."""
+        y = (torch.arange(n_elements, dtype=torch.get_default_dtype())
+             - (n_elements - 1) / 2) * (LAMBDA / 2)
+        arr = torch.stack((torch.zeros_like(y), y,
+                           torch.full_like(y, AUV_DEPTH)), dim=-1)
+        ang = torch.linspace(BOAT_BEARING_DEG - half_deg,
+                             BOAT_BEARING_DEG + half_deg, n_bearings)
+        a = ang * math.pi / 180.0
+        look = torch.stack((a.cos(), a.sin(), torch.zeros_like(a)), dim=-1)
+        g = make_time_grid(2.0 * (BOAT_RANGE - 18.0) / C,
+                           2.0 * (BOAT_RANGE + 18.0) / C, n_bins)
+        img = beamform(both, arr, scene.freqs_khz, g, look, sigma_t=PULSE_S,
+                       shading=shading_window(n_elements, "hamming"),
+                       steer_chunk=8)[:, 0, :]
+        bw = 2.0 * math.degrees(math.asin(1.0 / (n_elements / 2.0)))
+        # The hull's apparent length: the -10 dB width of the peak in bearing,
+        # at the boat's range, which is what an operator would measure off it.
+        peak = int(img.reshape(-1).argmax())
+        column = img[:, peak % n_bins]
+        over = (column > column.max() * 10 ** (-1.0)).nonzero().reshape(-1)
+        width = (float(ang[int(over[-1])] - float(ang[int(over[0])]))
+                 if over.numel() > 1 else 0.0)
+        return img, ang, g * C / 2.0, bw, BOAT_RANGE * math.radians(width)
+
+    zooms = {}
+    for n in (N_RX, 4 * N_RX):
+        with timed(f"  {n} elements"):
+            with torch.no_grad():
+                zooms[n] = zoom(n)
+        img, ang, zr, bw, span = zooms[n]
+        print(f"    beam {bw:.2f} deg = {BOAT_RANGE * math.radians(bw):5.1f} m "
+              f"at the boat; a {HULL_LENGTH:.0f} m hull is "
+              f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} beamwidths")
+        print(f"    the echo measures {span:5.1f} m across at -10 dB "
+              f"({'a point -- the beam, not the boat' if span < 1.5 * HULL_LENGTH and HULL_LENGTH / (BOAT_RANGE * math.radians(bw)) < 1 else 'the hull, resolved'})")
+    wide_bw = 2.0 * math.degrees(math.asin(1.0 / (N_RX / 2.0)))
+    narrow_bw = 2.0 * math.degrees(math.asin(1.0 / (2.0 * N_RX)))
+    print(f"  {4 * N_RX} elements at half-wavelength is "
+          f"{4 * N_RX * LAMBDA / 2:.2f} m of array against "
+          f"{N_RX * LAMBDA / 2:.2f} m --")
+    print(f"  which is the real answer to 'make it clearer at 300 m': aperture,")
+    print(f"  not power and not processing.  Note it does NOT help detection: "
+          f"the")
+    print(f"  boat was already {srn:+.1f} dB over its background at "
+          f"{N_RX} elements.  It helps")
+    print(f"  recognition, which is a different question and the one the eye "
+          f"asks.")
 
     banner("still differentiable, at 300 m")
     t0 = time.perf_counter()
@@ -451,7 +534,7 @@ def main() -> int:
           f"{both.n_arrivals} arrivals")
 
     save(_plot(det, raw_cart, gx, gy, rng, prof_db.detach(), noise_db, tx, ty,
-               crossover, blind, looks), "21_long_range_300m.png")
+               crossover, blind, looks, zooms), "21_long_range_300m.png")
 
     banner("acceptance")
     ok = check("the boat's echo lands on the boat at 250 m",
@@ -469,50 +552,56 @@ def main() -> int:
     ok &= check("absorption is the dominant loss at 300 m",
                 2 * alpha * FAR / 1000 > 15.0,
                 f"{2 * alpha * FAR / 1000:.1f} dB two-way at {FAR:.0f} m")
-    ok &= check("the display raises the boat and flattens the speckle",
-                srn > raw_srn + 2.0 and spread < raw_spread - 1.0,
-                f"boat {raw_srn:+.1f} -> {srn:+.1f} dB, speckle "
-                f"{raw_spread:.1f} -> {spread:.1f} dB over {looks} looks")
+    ok &= check("the gain costs the boat nothing, and multi-look does",
+                abs(srn - raw_srn) < 0.5 and look_srn < srn - 2.0,
+                f"TVG {srn - raw_srn:+.2f} dB on the ratio; {looks} looks "
+                f"{look_srn - srn:+.1f} dB for {spread - look_spread:.1f} dB "
+                f"of smoothness")
+    wide = HULL_LENGTH / (BOAT_RANGE * math.radians(wide_bw))
+    narrow = HULL_LENGTH / (BOAT_RANGE * math.radians(narrow_bw))
+    ok &= check("the hull is a point at this aperture and a shape at four "
+                "times it",
+                wide < 1.0 < 2.0 < narrow,
+                f"{wide:.2f} beamwidths at {N_RX} elements, {narrow:.2f} at "
+                f"{4 * N_RX}")
     ok &= check("the image is still differentiable end to end",
                 all(states.values()), f"{sum(states.values())}/{len(states)} live")
     return 0 if ok else 1
 
 
 def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
-          looks):
+          looks, zooms):
     import matplotlib.pyplot as plt
     import numpy as np
 
-    fig = plt.figure(figsize=(19.5, 6.6))
+    fig = plt.figure(figsize=(18.0, 10.4))
     extent = [float(gx[0]), float(gx[-1]), float(gy[0]), float(gy[-1])]
     th = np.linspace(-math.radians(SECTOR_DEG), math.radians(SECTOR_DEG), 200)
 
-    def panel(pos, img, title, label):
-        ax = fig.add_subplot(1, 3, pos)
+    def swath(pos, img, title, label, span):
+        ax = fig.add_subplot(2, 3, pos)
         d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
-        finite = d[np.isfinite(d)]
-        pk = float(np.quantile(finite, 0.9995))
-        lo = pk - 45.0 if pos == 1 else pk - 22.0
-        im = ax.imshow(d, origin="lower", cmap="inferno", vmin=lo, vmax=pk,
-                       extent=extent)
+        pk = float(np.quantile(d[np.isfinite(d)], 0.9995))
+        im = ax.imshow(d, origin="lower", cmap="inferno", vmin=pk - span,
+                       vmax=pk, extent=extent)
         ax.plot(blind * np.cos(th), blind * np.sin(th), ":",
                 color="deepskyblue", lw=1.0, alpha=0.7)
-        ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=16, mew=1.4)
+        ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=15, mew=1.3)
         ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
-                    xytext=(16, 10), color="white", fontsize=9)
+                    xytext=(14, 9), color="white", fontsize=8)
         ax.set_aspect("equal")
         ax.set_xlabel("forward (m)")
-        ax.set_title(title, fontsize=11)
-        cb = fig.colorbar(im, ax=ax, shrink=0.72, pad=0.02)
-        cb.set_label(label, fontsize=8)
+        ax.set_title(title, fontsize=10)
+        fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02).set_label(label,
+                                                               fontsize=7)
         return ax
 
-    panel(1, raw, "one range bin per pixel, no gain\n(four of every five "
-          "samples thrown away)", "dB re 1 uPa$^2$").set_ylabel("across (m)")
-    panel(2, cart, f"{looks} looks per pixel, TVG from the swath's own mean\n"
-          "(the same arrivals, displayed)", "dB re the background at that range")
+    swath(1, raw, "as rendered: no gain\n(the far field lives in the bottom "
+          "few dB)", "dB re 1 uPa$^2$", 45.0).set_ylabel("across (m)")
+    swath(2, cart, "TVG from the swath's own mean\n(same arrivals, same "
+          "contrast, readable)", "dB re the background at that range", 20.0)
 
-    bx = fig.add_subplot(1, 3, 3)
+    bx = fig.add_subplot(2, 3, 3)
     r = rng.numpy()
     bx.plot(r, prof_db.numpy(), lw=1.0, color="tab:orange",
             label="reverberation, swath mean")
@@ -523,18 +612,63 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
     shown = shown[np.isfinite(shown) & (shown > -200)]
     bx.set_xlim(NEAR, FAR)
     bx.set_ylim(noise_db - 8.0, float(shown.max()) + 5.0)
-    bx.annotate(f"reaches the noise floor at about {crossover:.0f} m,\n"
-                f"which is past the end of the swath",
-                (0.97, 0.06), xycoords="axes fraction", ha="right", fontsize=9,
-                color="0.3")
+    bx.annotate(f"reaches the noise floor only at\nabout {crossover:.0f} m, "
+                f"past the swath", (0.97, 0.06), xycoords="axes fraction",
+                ha="right", fontsize=8, color="0.3")
     bx.set_xlabel("range (m)")
-    bx.set_ylabel("dB re 1 uPa$^2$ in a beam and cell")
-    bx.set_title("38 dB of range falloff -- which is what\nthe gain in the "
-                 "middle panel is for", fontsize=11)
+    bx.set_ylabel("dB re 1 uPa$^2$")
+    bx.set_title("reverberation-limited the whole way out", fontsize=10)
     bx.grid(alpha=0.3, lw=0.4)
-    bx.legend(fontsize=9, loc="upper right")
-    fig.suptitle("100 kHz FLS, 120 deg swath to 300 m: the same ping, "
-                 "undisplayed and displayed", y=1.0)
+    bx.legend(fontsize=8, loc="upper right")
+
+    for k, (n, pos) in enumerate(((N_RX, 4), (4 * N_RX, 5))):
+        img, ang, zr, bw, span = zooms[n]
+        ax = fig.add_subplot(2, 3, pos)
+        d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
+        pk = float(d.max())
+        cross = BOAT_RANGE * np.radians(ang.numpy())
+        im = ax.pcolormesh(zr.numpy(), cross, d, cmap="inferno", vmin=pk - 25,
+                           vmax=pk, shading="auto")
+        ax.axhline(0.0, color="white", lw=0.5, alpha=0.3)
+        ax.plot([BOAT_RANGE - HULL_LENGTH / 2, BOAT_RANGE + HULL_LENGTH / 2],
+                [-24, -24], color="white", lw=2.5, solid_capstyle="butt")
+        ax.annotate(f"{HULL_LENGTH:.0f} m", (BOAT_RANGE, -22), color="white",
+                    fontsize=8, ha="center")
+        ax.set_xlabel("range (m)")
+        ax.set_title(f"{n} elements, {n * LAMBDA / 2:.2f} m of array\n"
+                     f"beam {BOAT_RANGE * math.radians(bw):.1f} m: hull is "
+                     f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} "
+                     f"beamwidths", fontsize=10)
+        if k == 0:
+            ax.set_ylabel("across-track (m)")
+        fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02).set_label("dB re peak",
+                                                               fontsize=7)
+
+    tx_ax = fig.add_subplot(2, 3, 6)
+    tx_ax.axis("off")
+    tx_ax.text(0.0, 0.97,
+               "Why the 300 m picture reads worse than the 90 m one\n"
+               "--------------------------------------------------\n\n"
+               "NOT the dynamic range:  22.8 dB across the lit swath\n"
+               "                        against 21.0 dB at 90 m.\n\n"
+               "NOT the sampling:       0.99 patches per resolution cell\n"
+               "                        against 0.35 at 90 m, and the\n"
+               "                        background spread is 5.1 dB against\n"
+               "                        5.6 dB for textbook speckle.\n\n"
+               "IT IS the resolution:   the beam is 3.4 m of cross-range at\n"
+               "                        55 m and 15.6 m at 250 m, so a 12 m\n"
+               "                        hull goes from 3.5 beamwidths to\n"
+               "                        0.77 of one.  Near, the sonar draws\n"
+               "                        a boat.  Far, it draws a point --\n"
+               "                        and a point in speckle is shaped\n"
+               "                        like a speckle.\n\n"
+               "The contrast is nearly the same either way (+20 dB near,\n"
+               "+17.5 dB here), so this is recognition, not detection.\n"
+               "Aperture buys it back.  Power does not.",
+               fontsize=9, family="monospace", va="top", linespacing=1.35)
+
+    fig.suptitle("100 kHz FLS to 300 m: the same ping, displayed three ways "
+                 "and resolved two", y=0.995)
     fig.tight_layout()
     return fig
 
