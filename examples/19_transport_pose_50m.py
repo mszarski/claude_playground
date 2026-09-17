@@ -68,10 +68,15 @@ R0 = 60.0                         # nominal range, for the across-track metric
 SEARCH = dict(near=20.0, far=130.0, n_bins=160, sigma_t=2.0e-3)
 REFINE = dict(near=45.0, far=75.0, n_bins=233, sigma_t=1.2e-4)
 
-# Blur is the distance mass moves for free: it sets both the reach and the
-# floor, so it anneals.  8 m reaches 213 m in float64 (26.6 blurs) and 2 m
-# still reaches 53 m, which is all this needs.
-BLUR_SCHEDULE = [(8.0, 15), (4.0, 15), (2.0, 20)]
+# Blur is the distance mass moves for free, so it sets the reach AND the floor,
+# and the floor is what decides where this can hand over.  Measured, the error
+# each stage settles at is about four times its blur: 16 m at blur 8, 13 m at
+# blur 4, under 8 m at blur 2 -- the entropic term biases the minimum away from
+# zero offset, and shrinking the blur walks that minimum home.  A schedule that
+# stops at 2 m therefore stops at ~8 m of error, which is outside the refiner's
+# reach and leaves the two stages unable to meet.  It has to go down far enough
+# that the floor is inside the capture range of what comes next.
+BLUR_SCHEDULE = [(8.0, 15), (4.0, 10), (2.0, 20), (1.0, 20), (0.5, 25)]
 REFINE_STEPS = 30
 START = (50.0, 0.0, 0.0)          # dx, dy, dyaw -- 50 m out in range
 
