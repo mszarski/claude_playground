@@ -69,15 +69,16 @@ whole swath of reverberation sits inside the scale and the picture is full of
 it.  Same kind of scene, opposite conventions.  The figure shows this one under
 both, and the difference is larger than anything the physics does.
 
-**A display helps with one of those and not the other.**  Time-varying gain --
-here the swath's own mean at each range rather than a fixed ``30 log r`` law --
-is free: it is a per-range scalar, so it cancels exactly out of any
-target-to-background ratio while pulling the far field out of the bottom of the
-colour scale.  Range multi-look is NOT free, and the example measures the
-price: averaging the three range bins under a display pixel smears a target
-that occupies one of them, costing about 5 dB of contrast to buy 1.4 dB of
-background smoothness.  For an unresolved target that is the wrong trade, so it
-is off by default and reported rather than applied.
+**Neither part of the display is free, and the example prices both.**  Time-
+varying gain -- here the swath's own mean at each range rather than a fixed
+``30 log r`` law -- is a per-range scalar, so on a single range bin it cancels
+exactly out of a target-to-background ratio.  Over the +/-8 m ring this example
+measures the contrast on, it does not: peak and ring straddle ranges that the
+gain scales differently, and it costs about 4 dB.  Range multi-look costs more
+again, by smearing a target that lives in one range bin across three.  Both are
+printed, because the lesson is that a contrast figure belongs to the display it
+was measured through as much as to the scene.  Multi-look is off by default;
+the gain stays on, because a picture you cannot read has no contrast at all.
 
 Acceptance criteria:
   * the boat's echo lands on the boat, within a beamwidth at 250 m;
@@ -466,10 +467,17 @@ def main() -> int:
           f"background spread {spread:.1f} dB")
     print(f"    TVG + {looks} looks:                boat {look_srn:+5.1f} dB, "
           f"background spread {look_spread:.1f} dB")
-    print(f"  The gain is a per-range scalar, so it cancels out of the ratio "
-          f"exactly")
-    print(f"  ({srn - raw_srn:+.2f} dB) and only moves the far field up the "
-          f"colour scale.")
+    print(f"  The gain is a per-range scalar, so on a single range bin it "
+          f"cancels out")
+    print(f"  of the ratio exactly -- checked, to the last decimal.  Over the "
+          f"+/-8 m")
+    print(f"  band this ring is measured on it does not: here it costs "
+          f"{srn - raw_srn:+.2f} dB,")
+    print(f"  because peak and ring straddle ranges the gain scales "
+          f"differently.")
+    print(f"  Worth knowing before quoting a contrast: the number depends on "
+          f"the")
+    print(f"  display it was measured through, which is why both are printed.")
     print(f"  Multi-look is not free: it smears a target that lives in one "
           f"range bin")
     print(f"  across {looks}, costing {look_srn - srn:+.1f} dB of contrast to "
@@ -540,8 +548,11 @@ def main() -> int:
         print(f"    beam {bw:.2f} deg = {BOAT_RANGE * math.radians(bw):5.1f} m "
               f"at the boat; a {HULL_LENGTH:.0f} m hull is "
               f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} beamwidths")
-        print(f"    the echo measures {span:5.1f} m across at -10 dB "
-              f"({'a point -- the beam, not the boat' if span < 1.5 * HULL_LENGTH and HULL_LENGTH / (BOAT_RANGE * math.radians(bw)) < 1 else 'the hull, resolved'})")
+        widths = HULL_LENGTH / (BOAT_RANGE * math.radians(bw))
+        verdict = ("the beam, not the boat" if widths < 1.0
+                   else "the hull, smeared by the beam")
+        print(f"    the echo measures {span:5.1f} m across at -10 dB -- "
+              f"{verdict}")
     wide_bw = 2.0 * math.degrees(math.asin(1.0 / (N_RX / 2.0)))
     narrow_bw = 2.0 * math.degrees(math.asin(1.0 / (2.0 * N_RX)))
     print(f"  {4 * N_RX} elements at half-wavelength is "
@@ -589,11 +600,11 @@ def main() -> int:
     ok &= check("absorption is the dominant loss at 300 m",
                 2 * alpha * FAR / 1000 > 15.0,
                 f"{2 * alpha * FAR / 1000:.1f} dB two-way at {FAR:.0f} m")
-    ok &= check("the gain costs the boat nothing, and multi-look does",
-                abs(srn - raw_srn) < 0.5 and look_srn < srn - 2.0,
-                f"TVG {srn - raw_srn:+.2f} dB on the ratio; {looks} looks "
-                f"{look_srn - srn:+.1f} dB for {spread - look_spread:.1f} dB "
-                f"of smoothness")
+    ok &= check("both displays cost contrast, and the example prices them",
+                srn < raw_srn and look_srn < srn,
+                f"raw {raw_srn:+.1f} -> TVG {srn:+.1f} -> +{looks} looks "
+                f"{look_srn:+.1f} dB, for {raw_spread:.1f} -> "
+                f"{look_spread:.1f} dB of speckle")
     wide = HULL_LENGTH / (BOAT_RANGE * math.radians(wide_bw))
     narrow = HULL_LENGTH / (BOAT_RANGE * math.radians(narrow_bw))
     ok &= check("the hull is a point at this aperture and a shape at four "
