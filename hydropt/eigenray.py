@@ -406,10 +406,29 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
               * 10.0 ** (-(alpha * path_length.unsqueeze(1)) / 1.0e4)
               * coherence)
+    # A path the roughness has annihilated is not an arrival, and carrying it
+    # at exactly zero is worse than dropping it: the derivative of sqrt at zero
+    # is infinite, so a single underflowed path turns the whole gradient into
+    # NaN.  That is not hypothetical -- the Eckart factor for a surface bounce
+    # at 120 kHz over a 0.09 m sea underflows in float64, and it took the
+    # gradient to the target's own pose with it.
+    with torch.no_grad():
+        alive = energy.detach().max(dim=1).values > 0.0
+    if not bool(alive.any()):
+        z = torch.zeros(0, dtype=dtype, device=device)
+        return ArrivalSet(z, torch.zeros(0, int(freqs_khz.shape[0]),
+                                         dtype=dtype, device=device),
+                          torch.zeros(0, 3, dtype=dtype, device=device),
+                          z, z, z, torch.zeros(0, 3, dtype=dtype, device=device))
+    keep = alive.nonzero().reshape(-1)
+    time, energy = time[keep], energy[keep]
+    direction, phase = direction[keep], phase[keep]
+    miss, path_length, launch = miss[keep], path_length[keep], launch[keep]
+
     order = time.detach().argsort()
     return ArrivalSet(time=time[order],
-                      amplitude=energy.clamp_min(0.0).sqrt()[order],
+                      amplitude=energy.sqrt()[order],
                       direction=direction[order], phase=phase[order],
-                      distance=miss.norm(dim=-1)[order],
+                      distance=miss.norm(dim=-1).detach()[order],
                       path_length=path_length[order],
                       launch_direction=launch[order])
