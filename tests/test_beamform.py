@@ -334,3 +334,71 @@ def test_an_empty_array_is_rejected():
 
     with pytest.raises(ValueError, match="at least one element"):
         line_array_factor(torch.zeros(1), 0)
+
+
+def _mixed_arrivals(n_inside, n_outside, grid, *, seed=0):
+    """Half the arrivals inside the time grid, half far past its end."""
+    g = torch.Generator().manual_seed(seed)
+    n = n_inside + n_outside
+    inside = torch.rand(n_inside, generator=g) * (grid[-1] - grid[0]) + grid[0]
+    beyond = torch.rand(n_outside, generator=g) * 0.4 + float(grid[-1]) + 0.05
+    tau = torch.cat([inside, beyond])
+    d = torch.nn.functional.normalize(torch.randn(n, 3, generator=g), dim=-1)
+    return ArrivalSet(time=tau, amplitude=torch.rand(n, 1, generator=g),
+                      direction=d, phase=torch.rand(n, generator=g) * 2 * math.pi,
+                      distance=torch.zeros(n), path_length=tau * C,
+                      launch_direction=d)
+
+
+def test_arrivals_past_the_time_grid_change_nothing_at_all():
+    """Not "almost nothing" -- nothing, to the last bit.
+
+    A trace runs to a fixed path budget, not to the edge of the picture, so most
+    of what comes back lands outside the grid: 89,970 reverberation patches in
+    ``examples/21`` at 90 m, of which 19,219 are inside the swath.  The kernel
+    already multiplies every out-of-grid bin by zero, so those arrivals were
+    bought and thrown away.  Dropping them up front has to be exactly, and not
+    approximately, the same image -- otherwise it is a speed-up that quietly
+    changes the answer.
+    """
+    elements = torch.stack([torch.zeros(N_EL),
+                            (torch.arange(N_EL, dtype=torch.get_default_dtype())
+                             - (N_EL - 1) / 2) * LAMBDA / 2,
+                            torch.zeros(N_EL)], dim=-1)
+    grid = make_time_grid(0.02, 0.06, 120)
+    steer, _ = azimuth_steering(31, 30.0)
+    freqs = torch.tensor([FREQ_HZ / 1e3])
+    kw = dict(sigma_t=3e-4, shading=shading_window(N_EL, "hann"))
+
+    mixed = _mixed_arrivals(200, 800, grid)
+    only_inside = ArrivalSet(*(None if f is None else f[:200] for f in mixed))
+    with_junk = beamform(mixed, elements, freqs, grid, steer, **kw)
+    without = beamform(only_inside, elements, freqs, grid, steer, **kw)
+    assert torch.equal(with_junk, without)
+
+
+def test_an_arrival_just_past_the_last_bin_still_lands_in_it():
+    """The gate has to allow for the pulse AND the steering delay.
+
+    An arrival a fraction of a pulse past the last bin still puts energy in it,
+    and steering moves its centre by up to the time sound takes to cross the
+    aperture.  Trimming on the grid alone would clip both, which is a real
+    change to the image rather than a free one.
+    """
+    elements = torch.stack([torch.zeros(N_EL),
+                            (torch.arange(N_EL, dtype=torch.get_default_dtype())
+                             - (N_EL - 1) / 2) * LAMBDA / 2,
+                            torch.zeros(N_EL)], dim=-1)
+    grid = make_time_grid(0.02, 0.06, 120)
+    steer, _ = azimuth_steering(31, 30.0)
+    freqs = torch.tensor([FREQ_HZ / 1e3])
+    sigma_t = 3e-4
+    # One pulse-width past the end: the Gaussian still reaches the last bins.
+    tau = torch.tensor([float(grid[-1]) + sigma_t])
+    d = torch.tensor([[-1.0, 0.0, 0.0]])
+    late = ArrivalSet(time=tau, amplitude=torch.ones(1, 1), direction=d,
+                      phase=torch.zeros(1), distance=torch.zeros(1),
+                      path_length=tau * C, launch_direction=d)
+    image = beamform(late, elements, freqs, grid, steer, sigma_t=sigma_t,
+                     shading=shading_window(N_EL, "hann"))
+    assert float(image.max()) > 0.0, "the gate clipped an arrival that still contributes"

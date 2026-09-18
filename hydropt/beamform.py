@@ -432,8 +432,30 @@ def beamform(
     w = (shading_window(elements.shape[0], "uniform", dtype=dtype, device=device)
          if shading is None else shading.to(dtype=dtype, device=device))
 
+    # Arrivals that cannot reach the grid are dropped before any of the work,
+    # not inside it.  `_synthesise` already multiplies every bin outside the
+    # grid by zero, so this changes no number -- it only stops paying for them.
+    # The window is the pulse's own gate plus the largest steering delay the
+    # aperture can apply, which is what moves an arrival's centre between one
+    # look direction and another.  It is worth doing because a trace runs for a
+    # fixed path budget rather than to the edge of the picture: in examples/21
+    # at 90 m, 89,970 patches come back and 19,219 of them are inside the swath.
+    dt_grid = (time_grid[-1] - time_grid[0]) / max(int(time_grid.shape[0]) - 1, 1)
+    pad = (time_gate * sigma_t
+           + float(offset.detach().norm(dim=-1).max()) * 2.0 / sound_speed
+           + float(dt_grid))
+    with torch.no_grad():
+        t = arrivals.time.detach()
+        inside = (t >= time_grid[0] - pad) & (t <= time_grid[-1] + pad)
+    if not bool(inside.all()):
+        keep = inside.nonzero().reshape(-1)
+        arrivals = ArrivalSet(*(None if f is None else f[keep] for f in arrivals))
+
     n_steer = int(steer.shape[0])
     n_arr = int(arrivals.time.shape[0])
+    if n_arr == 0:
+        return torch.zeros(n_steer, int(freqs_khz.shape[0]),
+                           int(time_grid.shape[0]), dtype=dtype, device=device)
     chunk = n_steer if steer_chunk <= 0 else int(steer_chunk)
     a_chunk = n_arr if arrival_chunk <= 0 else max(1, int(arrival_chunk))
     n_band, n_time = int(freqs_khz.shape[0]), int(time_grid.shape[0])
