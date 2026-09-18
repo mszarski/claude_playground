@@ -42,6 +42,8 @@ beamformer consumes -- are built from arrival lists instead; see
 
 from __future__ import annotations
 
+import warnings
+
 import math
 from typing import NamedTuple
 
@@ -343,6 +345,33 @@ def _select(arrivals: ArrivalSet, index: Tensor) -> ArrivalSet:
     return ArrivalSet(*(None if t is None else t[index] for t in arrivals))
 
 
+def _warn_if_fan_too_coarse(fan: Tensor, arclen: Tensor,
+                            sigma_d: float | Tensor) -> None:
+    """Warn when the return fan cannot resolve the aperture it is collecting at.
+
+    With a physical ``sigma_d`` the fan has to put rays inside it.  If the rays
+    are further apart at the array than the aperture is wide, the extraction is
+    sampling the fan rather than the receiver: too few rays land, the level
+    depends on how many happened to, and each one's own direction is carried
+    into the beamformer as if it were the arrival's.
+    """
+    with torch.no_grad():
+        spacing = float(fan_angular_spacing(fan).median())
+        reach = float(arclen[:, -1].median())
+        transverse = spacing * reach
+        width = float(sigma_d if not torch.is_tensor(sigma_d)
+                      else torch.as_tensor(sigma_d).median())
+    if transverse > width:
+        warnings.warn(
+            f"return fan is coarser than the aperture it collects at: rays are "
+            f"{transverse:.2f} m apart at {reach:.0f} m but sigma_d is "
+            f"{width:.2f} m. The echo's level and its angular extent will both "
+            f"be set by the fan rather than by the target -- narrow "
+            f"rx_half_angle_deg or raise n_rx_rays until the spacing is at or "
+            f"below the aperture.",
+            RuntimeWarning, stacklevel=3)
+
+
 def target_arrivals(
     scene: Scene,
     target: ExtendedTarget,
@@ -355,6 +384,7 @@ def target_arrivals(
     n_rx_rays: int = 3000,
     rx_half_angle_deg: float = 45.0,
     rx_jitter: float = 0.0,
+    rx_sigma_d: float | Tensor | None = None,
     tx_weights: Tensor | None = None,
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
@@ -396,6 +426,28 @@ def target_arrivals(
         rx_directions: return fan, ``[Nr, 3]``, shared by every highlight.  By
             default each highlight aims its own cone at the phase centre.
         n_rx_rays, rx_half_angle_deg: shape of the default per-highlight cone.
+        rx_sigma_d: acceptance width for the RETURN leg, in metres.  Leave it
+            unset and the leg is sized by the fan's own spacing, like the
+            transmit leg -- which is right when a fan samples a field over a
+            wide area, and wrong here, because the return leg collects at a
+            **fixed physical aperture**: the array.
+
+            Tying the acceptance to the sampling means a coarse fan silently
+            enlarges the receiver.  Measured on a 0.31 m array at 250 m: a 45
+            degree cone of 420 rays gives a 7.8 degree spacing, so ``sigma_d``
+            comes out at 28 m -- ninety times the aperture -- and the leg
+            collects every ray that passes within 28 m of the array as though
+            it had arrived at it.  Two things follow, and both are artefacts.
+            The echo is too strong: narrowing the cone to 2 degrees, where
+            ``sigma_d`` falls to 0.30 m and matches the array, drops it by
+            6.9 dB.  And the rendered angular size of a target has a floor at
+            the fan's angular spacing, because each accepted ray keeps its own
+            direction: a 30 m hull subtending 4.8 degrees imaged as 12.6, so
+            its 25 m of across-bearing extent read as 54 m.
+
+            Pass the array's aperture, and make the fan fine enough to put rays
+            inside it -- the spacing at the target's range must be at or below
+            the aperture, which this function checks and warns about.
         rx_jitter: randomise the default return fan by this fraction of a
             sample spacing.  **Needed for ``generator`` to do anything**: a
             Fibonacci cone is deterministic, so without jitter every seed gives
@@ -477,7 +529,10 @@ def target_arrivals(
             stop = start + fan.shape[0]
             leg = TraceResult(*(t[start:stop] for t in batched))
             leg_kw = dict(kw)
-            if auto_sigma_d:
+            if rx_sigma_d is not None:
+                leg_kw["sigma_d"] = rx_sigma_d
+                _warn_if_fan_too_coarse(fan, leg.arclen, rx_sigma_d)
+            elif auto_sigma_d:
                 # Measured on this fan alone.  The fans are concatenated for the
                 # trace but every one is a cone aimed at the same phase centre,
                 # so across the concatenation each ray has a near-duplicate in

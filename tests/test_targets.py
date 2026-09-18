@@ -696,3 +696,72 @@ def test_radii_are_learnable_and_carry_gradient():
 def test_not_learnable_registers_no_parameters():
     pat = CurvedSurfaceScattering(0.75, 30.0, learnable=False)
     assert list(pat.parameters()) == []
+
+
+def test_the_return_leg_can_collect_at_a_physical_aperture():
+    """An array is 0.31 m wide however coarsely the return fan was sampled.
+
+    Sizing the return leg's acceptance from the fan's own spacing -- right for
+    the transmit leg, which samples a field over a wide area -- makes a coarse
+    fan into a huge receiver: measured, a 45 degree cone of 420 rays collects
+    over 28 m at 250 m range, against an array 0.31 m long.  The echo is then
+    too strong and its rendered angular size has a floor at the fan's spacing,
+    neither of which is a property of the target.
+    """
+    import math
+    import warnings as _w
+
+    import torch
+
+    from hydropt import (ConstantLoss, FlatHeight, IsoProfile, Scene,
+                         target_arrivals)
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    c, depth = 1500.0, 200.0
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = Scene(field=IsoProfile(c, learnable=False),
+                  bottom=FlatHeight(depth), surface=FlatHeight(-1e5),
+                  source=(0.0, 0.0, 50.0), receivers=elements,
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([100.0]),
+                  step_size=2.0, n_steps=200, max_bounces=0)
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                            [IsotropicScattering(1.0, learnable=False)],
+                            position=(250.0, 0.0, 50.0), learnable=False)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+
+    def echo(**kw):
+        with torch.no_grad():
+            return target_arrivals(scene, target, tx, max_arrivals_per_leg=400,
+                                   **kw)
+
+    # A physical aperture is honoured rather than overridden by the fan.
+    with _w.catch_warnings(record=True) as caught:
+        _w.simplefilter("always")
+        # 6000 rays over 1 degree is 0.046 deg of spacing = 0.20 m at 250 m,
+        # inside the 0.3 m aperture.  Over 2 degrees it would be 0.40 m and the
+        # warning fires -- the margin is that tight, which is the point.
+        fine = echo(n_rx_rays=6000, rx_half_angle_deg=1.0, rx_sigma_d=0.3)
+    assert not [w for w in caught if "coarser than the aperture" in str(w.message)]
+
+    # ...and a fan too coarse to put rays inside that aperture says so, rather
+    # than quietly reporting the fan's own resolution as the target's.
+    with _w.catch_warnings(record=True) as caught:
+        _w.simplefilter("always")
+        coarse = echo(n_rx_rays=420, rx_half_angle_deg=45.0, rx_sigma_d=0.3)
+    assert [w for w in caught if "coarser than the aperture" in str(w.message)]
+
+    # And the level a fan-sized acceptance reports is not the level a physical
+    # one does.  The SIGN of that is not universal -- in this geometry the fan
+    # under-reads by 9 dB, while in a 30 m hull at 250 m under examples/21 it
+    # over-read by 7 -- so this pins the dependence, not a correction factor.
+    # Which way it goes, and why, is claude_playground-gs1.
+    with _w.catch_warnings(record=True):
+        _w.simplefilter("ignore")
+        by_fan = echo(n_rx_rays=420, rx_half_angle_deg=45.0)
+    fine_e = float((fine.amplitude ** 2).sum())
+    fan_e = float((by_fan.amplitude ** 2).sum())
+    assert fine_e > 0.0 and fan_e > 0.0
+    assert abs(10 * math.log10(fan_e / fine_e)) > 3.0
