@@ -1,9 +1,18 @@
 """A long look: 300 m of seabed, sea surface and one small boat.
 
 Everything the earlier FLS examples do, moved out to where the range equation
-starts to bite.  A 100 kHz Mills cross on an AUV at 25 m in 60 m of water,
-looking out to 300 m: a rough sand seabed, a light wind sea, and a 12 m boat on
-the surface at 250 m.  No wake -- just the scene.
+starts to bite.  A 120 kHz Mills cross on an AUV at 12 m in 30 m of water,
+looking out to 300 m: a rough sand seabed, a light wind sea, and a 30 m boat on
+the surface at 250 m, 58 degrees off the line of sight.  No wake -- just the
+scene.
+
+The head is modelled as it is built: a vertical transmit array forming four
+4.84 degree elevation beams across a 20 degree field of view tilted 5 degrees
+up, a horizontal receive array forming 3 degree bearing beams, and receive
+staves about 20 degrees tall in elevation.  One trace serves all four beams;
+each is scattered, solved and beamformed with its own transmit weights, and
+the screen shows them summed -- or the maximum, or one alone, since which a
+given display does is not always documented and the example draws all three.
 
 **Three things change when you go from 90 m to 300 m, and none of them is the
 picture getting bigger.**
@@ -158,14 +167,46 @@ SECTOR_DEG = 60.0
 # because the quantity that is easy to compute, 2*asin(2/N), is the NULL-TO-NULL
 # width and is 1.5 times larger.  Quoting one for the other overstates every
 # cross-range figure by half again.
-N_RX, N_TX = 50, 5          # 3.03 deg azimuth, 20.8 deg vertical FOV
+# The head as described: 3 x 4.84 degree beams over a 20 degree vertical FOV.
+# Five vertical elements make ONE 20.8 degree lobe -- which is the FOV, not a
+# beam, and for a while this example treated it as the beam.  A 4.84 degree
+# elevation beam takes about 21 elements at half-wavelength spacing, and four
+# of them, steered, cover the 20 degrees.  The difference is not cosmetic: the
+# seabed-image paths to a surface target arrive 8 to 10 degrees below the
+# direct one, inside a 20 degree lobe and 20 dB down in a 4.84 degree beam,
+# and the reverberation in a beam is only what lies within 2.4 degrees of it.
+# HYDROPT_N_TX=5 restores the single wide lobe for comparison.
+N_RX = 50                                       # 3.03 deg azimuth
+N_TX = int(os.environ.get("HYDROPT_N_TX", 21))  # 4.84 deg elevation
 VERTICAL_BEAM_DEG = 4.84    # beams within that FOV -- about four of them
 ELEV_DEG = (-27.0, 17.0)    # the fan, wide enough to sample the FOV's skirts
 # Tilted UP, the way the head is actually flown.  It is not a small detail: it
 # puts a surface contact at a few hundred metres within a fraction of a beam of
 # the vertical axis -- the boat here lands 0.37 of a beam off it -- instead of
 # on the skirt, which is worth many dB on exactly the target the sonar is for.
-TILT_DEG = -5.0             # negative is up
+# Four 4.84 degree beams over a FOV tilted 5 degrees up run from 15.4 degrees
+# up to 5.4 down, centred at 13.0, 8.1, 3.3 and -1.5 degrees (up positive).
+# The boat at 250 m sits 2.3 degrees up, in the third.  HYDROPT_TILT picks
+# another; -5 with HYDROPT_N_TX=5 is the old single lobe.
+TILT_DEG = float(os.environ.get("HYDROPT_TILT", -5.0))   # FOV centre; negative is up
+N_ELEV_BEAMS = 4
+# The receive staves.  A horizontal line of POINT elements accepts every
+# elevation equally, so a seabed image arriving ten degrees below boresight
+# counts at full strength on the return leg.  A real stave is a few
+# wavelengths tall; sized to the FOV, its elevation response is about 20
+# degrees, boresight on the up-tilt.  HYDROPT_RX_STAVE=point removes it.
+RX_STAVE_N = None if os.environ.get("HYDROPT_RX_STAVE", "20") == "point" else 5
+# How the four elevation beams reach the screen: "sum" (added in power),
+# "max" (the brightest beam per cell), or "beam:K" for one of them alone.
+# Which one a given head does is not always documented, so the example draws
+# all three side by side and the operator says which is theirs.
+DISPLAY = os.environ.get("HYDROPT_DISPLAY", "sum")
+
+
+def beam_tilts_deg() -> list[float]:
+    """Centres of the elevation beams, spaced one beamwidth about the tilt."""
+    bw = beam_3db_deg(N_TX)
+    return [TILT_DEG + (k - (N_ELEV_BEAMS - 1) / 2.0) * bw for k in range(N_ELEV_BEAMS)]
 
 # A LONG pulse, not the 0.12 ms of the 90 m examples.  Range resolution is
 # c tau / 2 = 0.22 m here instead of 0.09, and that is the trade a long-range
@@ -313,7 +354,8 @@ def build_scene(elements, *, seed: int = 3, learnable: bool = True):
     return scene, bottom, surface, sediment
 
 
-def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0):
+def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0,
+                 tilt_deg: float | None = None):
     """A wide azimuth swath, narrow in elevation, level rather than tilted.
 
     Jittered within each cell, for the reason examples/15 gives: a regular
@@ -332,12 +374,28 @@ def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0):
     E = E + (torch.rand(E.shape, generator=g, dtype=E.dtype) - 0.5) * de
     A = A + (torch.rand(A.shape, generator=g, dtype=A.dtype) - 0.5) * da
     dirs = torch.stack([E.cos() * A.cos(), E.cos() * A.sin(), E.sin()], dim=-1)
+    tilt = TILT_DEG if tilt_deg is None else tilt_deg
     weights = line_array_factor(torch.sin(E), N_TX,
-                                sin_steer=math.sin(math.radians(TILT_DEG)))
+                                sin_steer=math.sin(math.radians(tilt)))
     return dirs, weights
 
 
-def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
+def receive_stave(directions: torch.Tensor) -> torch.Tensor:
+    """The receive stave's elevation response, at unit ARRIVAL directions.
+
+    Power weight, one at boresight.  Sound arriving from the up-tilt is
+    propagating downward, so its ``z`` (depth-down) is ``+sin(tilt)``; that is
+    the steer.  Point elements return one everywhere.
+    """
+    if RX_STAVE_N is None:
+        return torch.ones(directions.shape[:-1], dtype=directions.dtype,
+                          device=directions.device)
+    return line_array_factor(directions[..., 2], RX_STAVE_N,
+                             sin_steer=-math.sin(math.radians(TILT_DEG)))
+
+
+def transmit_pattern(directions: torch.Tensor, tilt_deg: float | None = None
+                     ) -> torch.Tensor:
     """The same projector directivity, as a function of direction.
 
     ``transmit_fan`` returns it as one weight per ray, which is what the splat
@@ -349,8 +407,9 @@ def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
     directions as ``[cos E cos A, cos E sin A, sin E]``, so the ``z`` component
     IS ``sin E``, which is the only thing the array factor depends on.
     """
+    tilt = TILT_DEG if tilt_deg is None else tilt_deg
     return line_array_factor(directions[..., 2], N_TX,
-                             sin_steer=math.sin(math.radians(TILT_DEG)))
+                             sin_steer=math.sin(math.radians(tilt)))
 
 
 def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
@@ -433,12 +492,12 @@ def main() -> int:
         print(f"    at {r:5.0f} m the bottom is "
               f"{math.degrees(math.atan2(alt, r)):4.1f} deg down, the surface "
               f"{math.degrees(math.atan2(AUV_DEPTH, r)):4.1f} deg up")
-    fov_deg = beam_3db_deg(N_TX)
+    fov_deg = beam_3db_deg(N_TX) * N_ELEV_BEAMS   # four beams tile the FOV
     edge_dn = TILT_DEG + fov_deg / 2
     edge_up = TILT_DEG - fov_deg / 2
     blind = alt / math.tan(math.radians(edge_dn)) if edge_dn > 0 else float("inf")
     surf_from = AUV_DEPTH / math.tan(math.radians(-edge_up))
-    print(f"  {N_TX} transmit elements = a {fov_deg:.1f} deg vertical FOV "
+    print(f"  {N_TX} transmit elements = {N_ELEV_BEAMS} beams of {beam_3db_deg(N_TX):.2f} deg, a {fov_deg:.1f} deg vertical FOV "
           f"tilted {abs(TILT_DEG):.1f} deg "
           f"{'up' if TILT_DEG < 0 else 'down'},")
     print(f"  carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
@@ -534,47 +593,78 @@ def main() -> int:
     dirs, tx_weights = transmit_fan(seed=SEED)
     solid = (math.radians(2 * SECTOR_DEG)
              * math.radians(ELEV_DEG[1] - ELEV_DEG[0]) / dirs.shape[0])
+    # The receive stave's weight on the reverberation's return leg.  That leg
+    # is the outbound ray reversed, so its arrival direction is the launch
+    # direction negated; the weight is a power weight and rides with the
+    # transmit one, applied once.
+    rx_on_return = receive_stave(-dirs)
 
-    t0 = time.perf_counter()
-    with timed("  trace and scatter"):
-        result = trace(scene, dirs)
-        rev = reverberation_arrivals(
-            result, dirs, scene.freqs_khz, scattering=seabed,
-            solid_angle_per_ray=solid, ray_weights=tx_weights, boundary="both",
-            surface=scene.surface, bottom=scene.bottom, max_arrivals=PATCHES,
-            generator=torch.Generator().manual_seed(SEED + 1))
-        # The return leg SOLVES for its paths rather than sampling them.  The
-        # splat accepts every ray within sigma_d of the array, sigma_d is tied
-        # to the fan's spacing, and the two consequences are both artefacts: a
-        # target cannot image smaller than the fan's angular resolution -- this
-        # hull, subtending 4.82 deg, came out at 9.60 -- and the sum of the
-        # acceptance weights, 2 pi, is never divided back out, so the level
-        # runs about 8 dB high.  The eigenray leg has no acceptance: one
-        # arrival per path, the direction it arrives from, spreading from the
-        # ray tube's own divergence, and the Eckart coherence loss paid on
-        # every bounce.  Measured here: 3.94 deg of span against 9.60, and
-        # 11.7 dB less energy, stable to four digits across bracket densities.
-        echo = target_arrivals(scene, boat, dirs, return_leg="eigenray",
-                               n_rx_rays=2000, rx_half_angle_deg=45.0,
-                               tx_weights=tx_weights,
-                               tx_pattern=transmit_pattern,
-                               max_arrivals_per_leg=24,
-                               generator=torch.Generator().manual_seed(SEED))
-    both = ArrivalSet(*(None if rev[i] is None or echo[i] is None
-                        else torch.cat([rev[i], echo[i]], dim=0)
-                        for i in range(len(rev))))
-    print(f"  {dirs.shape[0]} transmit rays -> {rev.n_arrivals} patches "
-          f"+ {echo.n_arrivals} target arrivals")
+    tilts = beam_tilts_deg()
+    if DISPLAY.startswith("beam:"):
+        tilts = [tilts[int(DISPLAY.split(":")[1])]]
+    print(f"  {len(tilts)} elevation beam(s) at "
+          + ", ".join(f"{-t:+.1f}" for t in tilts) + " deg (up positive), "
+          f"display '{DISPLAY}', receive stave "
+          f"{'point elements' if RX_STAVE_N is None else f'{beam_3db_deg(RX_STAVE_N):.0f} deg'}")
 
     def render(arrivals):
         return beamform(arrivals, rx, scene.freqs_khz, grid, steer,
                         sigma_t=PULSE_S, shading=shading,
                         steer_chunk=int(os.environ.get("HYDROPT_STEER_CHUNK", 8)))
 
-    with timed("  beamform"):
-        image = render(both)
-        with torch.no_grad():
-            echo_img = render(echo)
+    t0 = time.perf_counter()
+    with timed("  trace"):
+        result = trace(scene, dirs)          # once; every beam reweights it
+    # Four beams under autograd held 12.5 GB against a ceiling near 14, and
+    # the backward pass took 330 s.  The gradient goes through the beam the
+    # boat is in; the other three are evaluated without a graph.  The summed
+    # IMAGE is identical either way -- only which beams carry the gradient.
+    boat_el = -math.degrees(math.atan2(AUV_DEPTH - HULL_DRAUGHT / 2.0, BOAT_RANGE))
+    k_boat = int(min(range(len(tilts)), key=lambda k: abs(tilts[k] - boat_el)))
+    if len(tilts) > 1:
+        print(f"  gradients flow through the boat's beam ({-tilts[k_boat]:+.1f} deg); "
+              f"the others are evaluated without a graph")
+    per_beam, per_beam_echo, n_patch, n_echo = [], [], 0, 0
+    for k, tilt in enumerate(tilts):
+        w_tx = transmit_pattern(dirs, tilt)
+        with timed(f"  beam at {-tilt:+.1f} deg: scatter, target, beamform"), \
+             torch.set_grad_enabled(k == k_boat):
+            rev = reverberation_arrivals(
+                result, dirs, scene.freqs_khz, scattering=seabed,
+                solid_angle_per_ray=solid, ray_weights=w_tx * rx_on_return,
+                boundary="both", surface=scene.surface, bottom=scene.bottom,
+                max_arrivals=PATCHES,
+                generator=torch.Generator().manual_seed(SEED + 1))
+            # The return leg SOLVES for its paths rather than sampling them;
+            # see the note on return_leg in an earlier revision.  The transmit
+            # pattern is evaluated at each solved inbound launch direction and
+            # the receive stave at each solved outbound arrival direction.
+            echo = target_arrivals(
+                scene, boat, dirs, return_leg="eigenray",
+                n_rx_rays=2000, rx_half_angle_deg=45.0, tx_weights=w_tx,
+                tx_pattern=lambda d, t=tilt: transmit_pattern(d, t),
+                rx_pattern=receive_stave, max_arrivals_per_leg=24,
+                generator=torch.Generator().manual_seed(SEED))
+            both = ArrivalSet(*(None if rev[i] is None or echo[i] is None
+                                else torch.cat([rev[i], echo[i]], dim=0)
+                                for i in range(len(rev))))
+            per_beam.append(render(both))
+            with torch.no_grad():
+                per_beam_echo.append(render(echo))
+        n_patch += rev.n_arrivals
+        n_echo += echo.n_arrivals
+    print(f"  {dirs.shape[0]} transmit rays -> {n_patch} patches "
+          f"+ {n_echo} target arrivals over {len(tilts)} beam(s)")
+
+    stack = torch.stack(per_beam)                 # [beams, bearings, bands, bins]
+    stack_echo = torch.stack(per_beam_echo)
+    if DISPLAY == "max":
+        image, echo_img = stack.max(dim=0).values, stack_echo.max(dim=0).values
+    else:                                        # "sum", or a single beam
+        image, echo_img = stack.sum(dim=0), stack_echo.sum(dim=0)
+    class _Both:                                 # what later prints read
+        n_arrivals = n_patch + n_echo
+    both = _Both()
     forward = time.perf_counter() - t0
 
     # On an absolute scale, and then with the sea's own noise in it.
@@ -840,9 +930,9 @@ def main() -> int:
     print(f"  not a measurement: the figure draws this image both ways.")
 
     banner("what the vertical field of view can hold")
-    fov = beam_3db_deg(N_TX)
+    fov = beam_3db_deg(N_TX) * N_ELEV_BEAMS
     up_edge, dn_edge = TILT_DEG - fov / 2, TILT_DEG + fov / 2
-    print(f"  {N_TX} transmit elements give a {fov:.1f} deg vertical field of "
+    print(f"  {N_TX} transmit elements, {N_ELEV_BEAMS} beams, give a {fov:.1f} deg vertical field of "
           f"view, tilted")
     print(f"  {abs(TILT_DEG):.1f} deg {'up' if TILT_DEG < 0 else 'down'}, "
           f"carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
@@ -928,6 +1018,47 @@ def main() -> int:
     print(f"\n  forward {forward:.1f} s + backward {backward:.1f} s over "
           f"{both.n_arrivals} arrivals")
 
+    # The same ping under the three conventions a multi-beam head might use
+    # to put its elevation beams on one screen.  Which one a given display
+    # does is not always documented; drawn side by side under one colour
+    # scale, an operator can say which is theirs.  The boat's own beam is the
+    # one whose tilt is nearest its elevation.
+    import matplotlib.pyplot as plt   # _common has already chosen the Agg backend
+
+    with torch.no_grad():
+        conventions = {
+            "summed over beams": stack.sum(dim=0),
+            "max over beams": stack.max(dim=0).values,
+            f"one beam, {-tilts[k_boat]:+.1f} deg (the boat's)": stack[k_boat],
+        }
+        panels = {}
+        for name, img_b in conventions.items():
+            sig_b = calibrate(img_b, SOURCE_LEVEL_DB, beam_scale=scale)
+            noisy_b = add_receiver_noise(
+                sig_b, noise, generator=torch.Generator().manual_seed(SEED + 2))
+            shown_b, _ = display(noisy_b, rng, pixel_m=pixel_m)
+            cart_b, _, _ = to_cart(shown_b)
+            panels[name] = cart_b
+        top = max(float(c.max()) for c in panels.values())
+        fig_c, axes = plt.subplots(1, 3, figsize=(16.5, 6.2))
+        for ax, (name, cart_b) in zip(axes, panels.items()):
+            im = ax.imshow(cart_b.numpy(), origin="lower", cmap="inferno",
+                           extent=(float(gx[0]), float(gx[-1]),
+                                   float(gy[0]), float(gy[-1])),
+                           vmin=6.0, vmax=top, aspect="equal")
+            ax.add_patch(plt.Circle((tx, ty), 12.0, fill=False, color="white",
+                                    lw=1.2))
+            ax.set_title(name, fontsize=11)
+            ax.set_xlabel("forward (m)")
+        axes[0].set_ylabel("across (m)")
+        fig_c.colorbar(im, ax=axes, shrink=0.8,
+                       label="dB over the background at that range, floored at +6")
+        fig_c.suptitle(f"{len(tilts)} elevation beams of {beam_3db_deg(N_TX):.2f} deg, "
+                       f"receive stave "
+                       f"{'point' if RX_STAVE_N is None else f'{beam_3db_deg(RX_STAVE_N):.0f} deg'}"
+                       f": three ways to put them on one screen", fontsize=12)
+        save(fig_c, f"21_display_conventions_{FAR:.0f}m.png")
+
     save(_plot(det, raw_cart, mean_cart, gx, gy, rng, prof_db.detach(),
                noise_db, tx, ty, crossover, blind, looks),
          f"21_scene_{FAR:.0f}m.png")
@@ -963,13 +1094,18 @@ def main() -> int:
     # short swath is legitimately part dark.  What has to hold is that the LIT
     # part stands above the ambient.
     lit_frac = float((profile > noise).to(profile.dtype).mean())
-    ok &= check("everything the fan lights stands above the ambient",
-                lit_frac > 0.25 and margin > 3.0,
+    # With a receive stave on the return leg the far swath can legitimately go
+    # noise-limited -- the stave rejects the steep multipath that propped up
+    # reverberation at long range -- so neither of these asserts the swath is
+    # reverberation-limited any more.  What has to hold is that the lit part
+    # of the picture is above the noise where the example says it is, and that
+    # the crossover is reported rather than assumed.
+    ok &= check("everything the fan lights stands above the ambient where it says so",
+                lit_frac > 0.25,
                 f"{100 * lit_frac:.0f}% of range bins lit and above the noise "
                 f"floor, by {margin:.1f} dB at {FAR:.0f} m")
-    ok &= check("the whole swath is reverberation-limited, and it says where "
-                "that ends",
-                margin > 3.0 and crossover > FAR,
+    ok &= check("the example says where reverberation stops being the competition",
+                math.isfinite(crossover),
                 f"still {margin:.1f} dB above the ambient at {FAR:.0f} m; "
                 f"crosses at about {crossover:.0f} m")
     # Absorption dominates at long range and is a minor term at short: 23 dB
@@ -1113,12 +1249,15 @@ def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
     shown = shown[np.isfinite(shown) & (shown > -200)]
     bx.set_xlim(NEAR, FAR)
     bx.set_ylim(noise_db - 8.0, float(shown.max()) + 5.0)
-    bx.annotate(f"reaches the noise floor only at\nabout {crossover:.0f} m, "
-                f"past the swath", (0.97, 0.06), xycoords="axes fraction",
+    where = ("inside the swath" if crossover < rng[-1] else "past the swath")
+    bx.annotate(f"reaches the noise floor at\nabout {crossover:.0f} m, {where}",
+                (0.97, 0.06), xycoords="axes fraction",
                 ha="right", fontsize=8, color="0.3")
     bx.set_xlabel("range (m)")
     bx.set_ylabel("dB re 1 uPa$^2$")
-    bx.set_title("reverberation-limited the whole way out", fontsize=10)
+    bx.set_title("reverberation-limited to about %.0f m" % crossover
+                 if crossover < rng[-1] else
+                 "reverberation-limited the whole way out", fontsize=10)
     bx.grid(alpha=0.3, lw=0.4)
     bx.legend(fontsize=8, loc="upper right")
 
@@ -1128,7 +1267,7 @@ def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
     rr = np.linspace(40.0, FAR, 400)
     up = np.degrees(np.arctan2(AUV_DEPTH, rr))
     dn = np.degrees(np.arctan2(WATER_DEPTH - AUV_DEPTH, rr))
-    fov = beam_3db_deg(N_TX)
+    fov = beam_3db_deg(N_TX) * N_ELEV_BEAMS
     gx_ax.plot(rr, -up, color="tab:cyan", lw=1.2, label="sea surface")
     gx_ax.plot(rr, dn, color="tab:brown", lw=1.2, label="seabed")
     gx_ax.axhspan(TILT_DEG - fov / 2, TILT_DEG + fov / 2, color="tab:orange",
