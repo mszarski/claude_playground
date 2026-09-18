@@ -243,13 +243,22 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
         m, st, fr = _closest(r, receiver)
         return torch.stack([(m * e1).sum(-1), (m * e2).sum(-1)], dim=-1), r, st, fr
 
-    for it in range(n_refine):
-        last = it == n_refine - 1
+    # Converge under no_grad, then ALWAYS take one more step with gradient
+    # tracking.  Breaking out of the loop the moment the residual is small
+    # skips that step and the launch direction comes back a constant -- which
+    # is exactly what happened once solving on the mean planes made the
+    # refinement converge in two or three iterations instead of grinding:
+    # the speed-up and a dead gradient to the target's own pose were the same
+    # change.  The final step is what carries the implicit derivative, so it
+    # is not optional and cannot be skipped for being unnecessary numerically.
+    for it in range(n_refine + 1):
+        last = it == n_refine
         with torch.set_grad_enabled(last):
             src = source if last else source.detach()
             base, _, _, _ = probe(uv, src)
             if not last and float(base.norm(dim=-1).max()) < tol:
-                break
+                uv = uv.detach()
+                continue
             # 2x2 Jacobian by central differences on the two offsets.
             with torch.no_grad():
                 jac = []
