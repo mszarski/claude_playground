@@ -173,10 +173,10 @@ SOURCE_LEVEL_DB = 210.0     # dB re 1 uPa at 1 m
 BOAT_RANGE = 250.0
 BOAT_BEARING_DEG = -18.0
 BOAT_HEADING_DEG = 40.0
-# 30 m long with 3.2 m of beam is a ratio of 9.4 -- narrower than any real
-# vessel of that length, which would carry 7 to 8 m.  It is what was asked for
-# and it is what is modelled; say the word and the beam grows with it.
-HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 30.0, 3.2, 4.0
+# A 30 m hull drawing 4 m is a trawler or a small coaster, and those carry 7 to
+# 9 m of beam: 8.0 gives a length-to-beam of 3.75 and about 490 tonnes, which
+# are the proportions of a real vessel rather than of a rowing shell.
+HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 30.0, 8.0, 4.0
 
 N_ELEV, N_AZIM = 96, 330
 # Every bounce the trace found, rather than a subsample: they are already paid
@@ -392,11 +392,15 @@ def main() -> int:
 
     banner("ping")
     b = math.radians(BOAT_BEARING_DEG)
-    # Facets scaled with the hull so they stay the size they were at 12 m,
-    # rather than getting coarser as the boat grows.
-    verts, faces = boat_hull_mesh(HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT,
-                                  n_long=int(round(110 * HULL_LENGTH / 12.0)),
-                                  n_around=34)
+    # Facets scaled with the hull -- along it with the length, around it with
+    # the girth -- so they stay the size they were rather than coarsening as
+    # the boat grows.  A facet has to resolve the curvature it stands in, so
+    # letting them grow with the vessel would quietly change the scattering.
+    girth = HULL_BEAM + 2.0 * HULL_DRAUGHT
+    verts, faces = boat_hull_mesh(
+        HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT,
+        n_long=int(round(110 * HULL_LENGTH / 12.0)),
+        n_around=int(round(34 * girth / (3.2 + 2.0 * 4.0))))
     boat = mesh_target(
         verts, faces,
         # z=0, not the draught: boat_hull_mesh returns the WETTED surface with
