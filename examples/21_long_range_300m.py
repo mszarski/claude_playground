@@ -69,16 +69,17 @@ whole swath of reverberation sits inside the scale and the picture is full of
 it.  Same kind of scene, opposite conventions.  The figure shows this one under
 both, and the difference is larger than anything the physics does.
 
-**Neither part of the display is free, and the example prices both.**  Time-
-varying gain -- here the swath's own mean at each range rather than a fixed
-``30 log r`` law -- is a per-range scalar, so on a single range bin it cancels
-exactly out of a target-to-background ratio.  Over the +/-8 m ring this example
-measures the contrast on, it does not: peak and ring straddle ranges that the
-gain scales differently, and it costs about 4 dB.  Range multi-look costs more
-again, by smearing a target that lives in one range bin across three.  Both are
-printed, because the lesson is that a contrast figure belongs to the display it
-was measured through as much as to the scene.  Multi-look is off by default;
-the gain stays on, because a picture you cannot read has no contrast at all.
+**And the gain has a trap in it that cost 4 dB before it was found.**  Taking
+the swath's level at each range from the MEAN over beams lets a target suppress
+itself: the boat's echo lifts the mean at its own range bin by 6.3 dB, and the
+gain then divides that straight back out, turning +17.5 dB of contrast into
++13.5 dB.  It hides from a ring measurement, because spread over a +/-8 m band
+the lift is under a decibel.  A MEDIAN over 181 beams cannot be moved by a
+handful of bright ones and keeps the contrast in full, which is the ordinary
+reason CFAR and AGC references are order statistics rather than means -- here
+it is worth 4.7 dB.  Range multi-look is a genuine cost either way, smearing a
+target that lives in one range bin across three, so it is off by default and
+priced rather than applied.
 
 Acceptance criteria:
   * the boat's echo lands on the boat, within a beamwidth at 250 m;
@@ -227,7 +228,8 @@ def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0):
     return dirs, weights
 
 
-def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1):
+def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
+            reference: str = "median"):
     """Range multi-look and TVG, on the [beams, bands, bins] image.
 
     Both are display, not physics -- the arrivals are untouched -- but at 300 m
@@ -236,11 +238,22 @@ def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1):
 
     * the multi-look window is set by the display's own pixel size, so it
       averages exactly the samples the pixel was going to alias anyway;
-    * the gain is the swath's mean at each range, which is AGC rather than a
-      fixed ``30 log r + 2 alpha r`` law.  It costs nothing in truth here --
-      the target is one bearing in 181, so it cannot lift its own background
-      by more than a fraction of a dB -- and it does not need the falloff to
-      be guessed in advance, which at grazing incidence it would be.
+    * the gain is the swath's own level at each range, which is AGC rather than
+      a fixed ``30 log r + 2 alpha r`` law, so the falloff does not have to be
+      guessed in advance -- which at grazing incidence it would be.
+
+    ``reference`` decides how that level is taken, and it is not a detail.  The
+    obvious choice, the mean over beams, lets a target suppress itself: the
+    boat here lifts the mean at its own range bin by **6.3 dB**, and the gain
+    then divides it straight back out, costing 4 dB of the contrast it was
+    supposed to leave alone (+17.5 dB becomes +13.5 dB).  Averaged over the
+    ring the effect hides -- the lift is only 0.75 dB over a +/-8 m band --
+    because the echo is concentrated in a couple of bins and the band is
+    thirty.  A median over 181 beams cannot be moved by a handful of bright
+    ones, and it recovers the contrast in full (+18.2 dB, marginally over the
+    raw figure, whose ring mean is itself tilted by the falloff across the
+    band).  This is the standard reason CFAR and AGC references are order
+    statistics rather than means.
     """
     if looks <= 0:
         bin_m = float(rng[1] - rng[0])
@@ -253,7 +266,14 @@ def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1):
             out, kernel_size=looks, stride=1, padding=looks // 2,
             count_include_pad=False)
     if tvg:
-        out = out / out.mean(dim=0, keepdim=True).clamp_min(1e-30)
+        if reference == "median":
+            level = out.median(dim=0, keepdim=True).values
+        elif reference == "mean":
+            level = out.mean(dim=0, keepdim=True)
+        else:
+            raise ValueError(f"reference must be 'median' or 'mean', got "
+                             f"{reference!r}")
+        out = out / level.clamp_min(1e-30)
     return out, looks
 
 
@@ -410,12 +430,14 @@ def main() -> int:
                                             n_y=300, x_range=(-10.0, 305.0),
                                             y_range=(-260.0, 260.0))
     pixel_m = 315.0 / 299.0
-    shown, _ = display(noisy, rng, pixel_m=pixel_m)          # TVG only
+    shown, _ = display(noisy, rng, pixel_m=pixel_m)          # median TVG
+    by_mean, _ = display(noisy, rng, pixel_m=pixel_m, reference="mean")
     smoothed, looks = display(noisy, rng, pixel_m=pixel_m, looks=0)
     with timed("  resample to Cartesian"):
         cart, gx, gy = to_cart(shown)
     with torch.no_grad():
         raw_cart, _, _ = to_cart(noisy)
+        mean_cart, _, _ = to_cart(by_mean)
         look_cart, _, _ = to_cart(smoothed)
         echo_cart, _, _ = to_cart(
             calibrate(echo_img, SOURCE_LEVEL_DB, beam_scale=scale))
@@ -457,27 +479,35 @@ def main() -> int:
         srn, spread = contrast(det)
         raw_srn, raw_spread = contrast(raw_cart)
         look_srn, look_spread = contrast(look_cart)
+        mean_srn, mean_spread = contrast(mean_cart)
     print(f"  the boat's echo peaks at ({px:+.1f}, {py:+.1f}) m, boat centred "
           f"on ({tx:+.1f}, {ty:+.1f})")
     print(f"  {err:.1f} m outside the hull, against {beam_m:.1f} m of beamwidth")
-    print(f"\n  the same arrivals, three displays:")
-    print(f"    no gain, one bin per pixel:  boat {raw_srn:+5.1f} dB, "
+    print(f"\n  the same arrivals, four displays:")
+    print(f"    no gain at all:           boat {raw_srn:+5.1f} dB, "
           f"background spread {raw_spread:.1f} dB")
-    print(f"    TVG:                         boat {srn:+5.1f} dB, "
+    print(f"    TVG from the mean:        boat {mean_srn:+5.1f} dB, "
+          f"background spread {mean_spread:.1f} dB")
+    print(f"    TVG from the median:      boat {srn:+5.1f} dB, "
           f"background spread {spread:.1f} dB")
-    print(f"    TVG + {looks} looks:                boat {look_srn:+5.1f} dB, "
+    print(f"    median TVG + {looks} looks:      boat {look_srn:+5.1f} dB, "
           f"background spread {look_spread:.1f} dB")
-    print(f"  The gain is a per-range scalar, so on a single range bin it "
-          f"cancels out")
-    print(f"  of the ratio exactly -- checked, to the last decimal.  Over the "
-          f"+/-8 m")
-    print(f"  band this ring is measured on it does not: here it costs "
-          f"{srn - raw_srn:+.2f} dB,")
-    print(f"  because peak and ring straddle ranges the gain scales "
-          f"differently.")
-    print(f"  Worth knowing before quoting a contrast: the number depends on "
-          f"the")
-    print(f"  display it was measured through, which is why both are printed.")
+    print(f"  A gain taken from the MEAN lets the boat suppress itself: its "
+          f"echo lifts")
+    print(f"  the mean at its own range bin by about 6 dB, and the gain "
+          f"divides that")
+    print(f"  straight back out -- {mean_srn - raw_srn:+.1f} dB, hidden over "
+          f"the ring because the lift is")
+    print(f"  under a dB when smeared across a 16 m band.  A MEDIAN over "
+          f"{len(bearings)} beams")
+    print(f"  cannot be moved by a handful of bright ones, and keeps the "
+          f"contrast")
+    print(f"  ({srn - raw_srn:+.1f} dB).  This is why CFAR and AGC references "
+          f"are order statistics.")
+    print(f"  Multi-look is a real cost either way: it smears a target living "
+          f"in one")
+    print(f"  range bin across {looks}, for {look_srn - srn:+.1f} dB, buying "
+          f"{spread - look_spread:.1f} dB of smoothness.")
     print(f"  Multi-look is not free: it smears a target that lives in one "
           f"range bin")
     print(f"  across {looks}, costing {look_srn - srn:+.1f} dB of contrast to "
@@ -600,11 +630,14 @@ def main() -> int:
     ok &= check("absorption is the dominant loss at 300 m",
                 2 * alpha * FAR / 1000 > 15.0,
                 f"{2 * alpha * FAR / 1000:.1f} dB two-way at {FAR:.0f} m")
-    ok &= check("both displays cost contrast, and the example prices them",
-                srn < raw_srn and look_srn < srn,
-                f"raw {raw_srn:+.1f} -> TVG {srn:+.1f} -> +{looks} looks "
-                f"{look_srn:+.1f} dB, for {raw_spread:.1f} -> "
-                f"{look_spread:.1f} dB of speckle")
+    ok &= check("a median gain keeps the contrast where a mean gain eats it",
+                srn > raw_srn - 1.0 and mean_srn < raw_srn - 2.0,
+                f"raw {raw_srn:+.1f}, mean {mean_srn:+.1f}, median "
+                f"{srn:+.1f} dB")
+    ok &= check("multi-look costs a target smaller than the cell it averages",
+                look_srn < srn - 0.5 and look_spread < spread - 0.8,
+                f"{look_srn - srn:+.1f} dB of contrast for "
+                f"{spread - look_spread:.1f} dB of speckle over {looks} looks")
     wide = HULL_LENGTH / (BOAT_RANGE * math.radians(wide_bw))
     narrow = HULL_LENGTH / (BOAT_RANGE * math.radians(narrow_bw))
     ok &= check("the hull is a point at this aperture and a shape at four "
