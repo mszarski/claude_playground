@@ -898,3 +898,19 @@ def test_occlusion_memory_does_not_scale_with_the_bin_grid():
     # so every facet facing the viewer survives.
     facing = (normal @ view.T).T < 0.0
     assert bool((seen | ~facing).all())
+
+
+def test_a_hull_mesh_hangs_from_its_waterline():
+    """z=0 is the waterline and z=draft the keel, which decides where it floats.
+
+    The whole mesh is the WETTED surface, so a scene places the body at z=0 and
+    gets a boat floating correctly.  Placing it at z=draught -- which reads
+    plausibly and which three examples did -- sinks it by its own draught: a 1 m
+    error for a launch, and a 4 m draught entirely under water.
+    """
+    from hydropt.mesh import boat_hull_mesh
+
+    for draft in (0.8, 4.0):
+        verts, _ = boat_hull_mesh(12.0, 3.2, draft, n_long=30, n_around=12)
+        assert float(verts[:, 2].min()) == pytest.approx(0.0, abs=1e-6)
+        assert float(verts[:, 2].max()) == pytest.approx(draft, rel=0.05)

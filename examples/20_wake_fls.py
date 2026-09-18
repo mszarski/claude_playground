@@ -425,7 +425,8 @@ def _boat(track):
     heading = end[-1] - end[-2]
     return mesh_target(
         verts, faces,
-        position=(float(end[-1, 0]), float(end[-1, 1]), HULL_DRAUGHT),
+        # z=0: the mesh's waterline is already at z=0 (see examples/15).
+        position=(float(end[-1, 0]), float(end[-1, 1]), 0.0),
         yaw=math.degrees(math.atan2(float(heading[1]), float(heading[0]))),
         n_patches=6, sound_speed=C, learnable=False, learnable_shape=False,
         facet_chunk=256)

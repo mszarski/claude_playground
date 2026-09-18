@@ -173,7 +173,7 @@ SOURCE_LEVEL_DB = 210.0     # dB re 1 uPa at 1 m
 BOAT_RANGE = 250.0
 BOAT_BEARING_DEG = -18.0
 BOAT_HEADING_DEG = 40.0
-HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 12.0, 3.2, 1.0
+HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 12.0, 3.2, 4.0
 
 N_ELEV, N_AZIM = 96, 330
 # Every bounce the trace found, rather than a subsample: they are already paid
@@ -393,17 +393,26 @@ def main() -> int:
                                   n_long=110, n_around=34)
     boat = mesh_target(
         verts, faces,
-        position=(BOAT_RANGE * math.cos(b), BOAT_RANGE * math.sin(b),
-                  HULL_DRAUGHT),
+        # z=0, not the draught: boat_hull_mesh returns the WETTED surface with
+        # its waterline at z=0, so placing the body at z=draught sinks the boat
+        # by its own draught.  At 1 m that hid; at 4 m it put the hull at 5.0 to
+        # 6.25 m depth, entirely submerged, which is a different target.
+        position=(BOAT_RANGE * math.cos(b), BOAT_RANGE * math.sin(b), 0.0),
         yaw=BOAT_HEADING_DEG, n_patches=6, sound_speed=C,
         learnable=True, learnable_shape=False, facet_chunk=256)
     tx = BOAT_RANGE * math.cos(b)
     ty = BOAT_RANGE * math.sin(b)
     print(f"  {HULL_LENGTH:.0f} m boat at {BOAT_RANGE:.0f} m, bearing "
           f"{BOAT_BEARING_DEG:+.0f} deg, heading {BOAT_HEADING_DEG:.0f} deg")
-    print(f"  we look up at it by "
-          f"{math.degrees(math.atan2(AUV_DEPTH - HULL_DRAUGHT, BOAT_RANGE)):.1f} deg; "
-          f"it subtends {math.degrees(HULL_LENGTH / BOAT_RANGE):.1f} deg")
+    print(f"  draught {HULL_DRAUGHT:.1f} m, so the wetted hull hangs from the "
+          f"surface to {HULL_DRAUGHT:.1f} m")
+    print(f"  we look up at its keel by "
+          f"{math.degrees(math.atan2(AUV_DEPTH - HULL_DRAUGHT, BOAT_RANGE)):.2f} deg "
+          f"and at its waterline by "
+          f"{math.degrees(math.atan2(AUV_DEPTH, BOAT_RANGE)):.2f} deg;")
+    print(f"  it subtends {math.degrees(HULL_LENGTH / BOAT_RANGE):.2f} deg in "
+          f"bearing and {math.degrees(HULL_DRAUGHT / BOAT_RANGE):.2f} deg in "
+          f"elevation")
 
     steer, bearings = azimuth_steering(181, SECTOR_DEG)
     grid = make_time_grid(2.0 * NEAR / C, 2.0 * FAR / C, N_BINS)

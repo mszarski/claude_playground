@@ -168,7 +168,11 @@ def main() -> int:
     b = math.radians(BOAT_BEARING_DEG)
     boat = mesh_target(
         verts, faces,
-        position=(BOAT_RANGE * math.cos(b), BOAT_RANGE * math.sin(b), BOAT_DRAUGHT),
+        # z=0, not the draught: boat_hull_mesh returns the WETTED surface with
+        # its waterline at z=0, so placing the body at z=draught sinks the boat
+        # by its own draught.  At 1 m that is a 1 m error and nearly invisible;
+        # at a 4 m draught it puts the hull entirely under water.
+        position=(BOAT_RANGE * math.cos(b), BOAT_RANGE * math.sin(b), 0.0),
         yaw=BOAT_HEADING_DEG, n_patches=6, sound_speed=C,
         learnable=True, learnable_shape=False, facet_chunk=256)
     print(f"  boat: {HULL_LENGTH:.0f} m hull as {faces.shape[0]} facets in "
