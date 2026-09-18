@@ -719,6 +719,39 @@ def main() -> int:
         mean_srn, mean_spread = contrast(mean_cart)
     print(f"  the boat's echo peaks at ({px:+.1f}, {py:+.1f}) m, boat centred "
           f"on ({tx:+.1f}, {ty:+.1f})")
+    # The ghost.  The array's seabed image is 2 * WATER_DEPTH - AUV_DEPTH deep,
+    # so a leg via the seabed to the hull is longer than the direct one by a
+    # known amount, and the hull is imaged again beyond itself at the same
+    # bearing: once bounced at half that extra length in displayed range,
+    # twice bounced at the full amount.  Measured off the target channel's
+    # range profile along the boat's bearing, so the geometry is checked and
+    # not eyeballed.
+    with torch.no_grad():
+        seabed_image = 2.0 * WATER_DEPTH - AUV_DEPTH
+        keel = HULL_DRAUGHT / 2.0
+        direct = math.hypot(BOAT_RANGE, AUV_DEPTH - keel)
+        via_bed = math.hypot(BOAT_RANGE, seabed_image - keel)
+        extra = via_bed - direct
+        beam_ix = int((torch.as_tensor(bearings) - BOAT_BEARING_DEG).abs().argmin())
+        prof = echo_img[beam_ix, 0].detach()
+    print(f"  seabed image {seabed_image:.0f} m deep: a bounced leg is {extra:.2f} m "
+          f"longer, so the ghosts sit {extra / 2:.1f} and {extra:.1f} m beyond the hull")
+    if prof is not None:
+        r = rng.detach()
+        hull_far = BOAT_RANGE + along / 2.0
+        beyond = (r > hull_far + 0.5) & (r < hull_far + 3.0 * extra)
+        if bool(beyond.any()):
+            seg = prof.clone(); seg[~beyond] = 0.0
+            pk = float(prof[(r - BOAT_RANGE).abs() < along].max())
+            tops = []
+            for _ in range(2):
+                i = int(seg.argmax())
+                if float(seg[i]) <= 0.0:
+                    break
+                tops.append((float(r[i]) - hull_far, 10 * math.log10(float(seg[i]) / pk)))
+                seg[(r - r[i]).abs() < 1.0] = 0.0
+            print("  target channel beyond the hull's far edge: "
+                  + ", ".join(f"{d:+.1f} m at {db:+.1f} dB" for d, db in tops))
     print(f"  {err:.1f} m outside the hull, against {beam_m:.1f} m of beamwidth")
     print(f"  {n_over} of the {n_bg} gain-corrected cells in the swath are "
           f"brighter than it")
