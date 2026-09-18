@@ -626,8 +626,20 @@ def main() -> int:
             return (10 * math.log10(peak / float(bg.mean().clamp_min(1e-30))),
                     float((10 * torch.log10(bg / bg.mean().clamp_min(1e-30))).std()))
 
+        # Everything in the picture the boat has to beat, which is not the
+        # same as everything at its own range.  A first attempt used the ring
+        # -- a few thousand cells within 8 m of the boat's range -- and the
+        # oblique boat beat all of them while being invisible in the image.
+        # It was not a contradiction: reverberation falls as r^-5, so at 250 m
+        # the boat IS the brightest thing in its own range band while tens of
+        # thousands of cells further in are brighter still.  A range-normalised
+        # display is exactly what removes that excuse, so the comparison has to
+        # be made on the gain-corrected image, against the whole lit swath.
+        lit_cell = (rng_cell > NEAR) & (rng_cell < FAR) & inside
+        clutter = lit_cell & (torch.hypot(GX - tx, GY - ty) > 3.0 * beam_m)
+
         def false_alarms(img):
-            """What fraction of the clutter is brighter than the target.
+            """What fraction of the picture is brighter than the target.
 
             This, and not the contrast in decibels, is whether you can see it.
             Contrast compares the target's PEAK against the background's MEAN,
@@ -637,22 +649,22 @@ def main() -> int:
             would raise this fraction of the background with it, which is the
             false-alarm rate, and it is the number an operator lives with.
             """
-            bg = img[ring]
+            bg = img[clutter]
             peak = float(img[near_boat].max())
-            return float((bg > peak).to(bg.dtype).mean()), int(bg.numel())
+            return int((bg > peak).sum()), int(bg.numel())
 
         srn, spread = contrast(det)
-        p_fa, n_bg = false_alarms(raw_cart)
+        n_over, n_bg = false_alarms(det)
         raw_srn, raw_spread = contrast(raw_cart)
         look_srn, look_spread = contrast(look_cart)
         mean_srn, mean_spread = contrast(mean_cart)
     print(f"  the boat's echo peaks at ({px:+.1f}, {py:+.1f}) m, boat centred "
           f"on ({tx:+.1f}, {ty:+.1f})")
     print(f"  {err:.1f} m outside the hull, against {beam_m:.1f} m of beamwidth")
-    print(f"  {100 * p_fa:.2f}% of the {n_bg} clutter cells at this range are "
+    print(f"  {n_over} of the {n_bg} gain-corrected cells in the swath are "
           f"brighter than it")
-    print(f"  ({'a detection' if p_fa < 1e-3 else 'NOT a detection'} -- the "
-          f"fraction, not the contrast, is what decides that)")
+    print(f"  ({'a detection' if n_over == 0 else 'NOT a detection'} -- the "
+          f"count, not the contrast, is what decides that)")
     print(f"\n  the same arrivals, four displays:")
     print(f"    no gain at all:           boat {raw_srn:+5.1f} dB, "
           f"background spread {raw_spread:.1f} dB")
@@ -842,11 +854,17 @@ def main() -> int:
     # own range is brighter than the boat.  A detection means a threshold set
     # at the target lets almost no background through; 1e-3 over a ring of a
     # few thousand cells is already a handful of false alarms per ping.
-    ok &= check("the boat stands above the clutter it competes with",
-                p_fa < 1e-3,
-                f"{100 * p_fa:.2f}% of {n_bg} cells at the same range are "
+    # Zero, not "few".  A threshold set at the target's level should raise
+    # nothing else in the picture -- that is what being able to point at it
+    # and say "that is the boat" means.  A first attempt allowed one tenth of
+    # a percent, which at this swath size is 43 cells, and passed a boat that
+    # was one bright speck among twenty-three.  The count is reported either
+    # way, so a near miss is legible rather than a bare FAIL.
+    ok &= check("the boat stands above every other cell in the picture",
+                n_over == 0,
+                f"{n_over} of {n_bg} gain-corrected cells in the swath are "
                 f"brighter than the boat's peak"
-                + (" -- a detection" if p_fa < 1e-3 else
+                + (" -- a detection" if n_over == 0 else
                    " -- NOT a detection, whatever the contrast in dB says"))
     # What fraction of the swath is lit is geometry, not a target: with the fan
     # tilted up, the surface only enters at 44 m and the seabed at 191, so a
