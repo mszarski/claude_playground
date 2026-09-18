@@ -300,3 +300,60 @@ def test_solving_one_leg_and_splatting_the_other_is_not_half_right():
     excess_db = 10.0 * math.log10(got["splat"] / got["eigenray"])
     assert excess_db > 14.0, (f"the splat is only {excess_db:.2f} dB over the "
                               "solved pair -- one leg is not being solved")
+
+
+def test_the_splat_over_reads_an_image_by_twice_what_it_over_reads_energy():
+    """The check that ``sum |a|^2`` does not make, and why it matters.
+
+    A splat returns N replicas of ONE path.  Summed in energy they add as
+    ``sum(w^2)``; the beamformer sums them COHERENTLY, as ``(sum w)^2``.  For
+    Gaussian acceptance weights on a lattice ``sum(w) = 2 sum(w^2)``, so an
+    image over-reads by about twice the decibels an energy check sees.
+
+    Measured: +17.10 dB of energy and +31.10 dB of image, from 14,641 arrivals
+    standing in for one path.  The energy figure was the one quoted while the
+    images were being judged, and it understated the error in the pictures by
+    fourteen decibels -- enough that a target which is not a detection reads as
+    a confident one.
+    """
+    import warnings as _w
+
+    from hydropt import azimuth_steering, beamform, shading_window
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = Scene(field=IsoProfile(1500.0, learnable=False),
+                  bottom=FlatHeight(1e5), surface=FlatHeight(-1e5),
+                  source=(0.0, 0.0, 50.0), receivers=elements,
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([10.0]),
+                  step_size=2.0, n_steps=400, max_bounces=0)
+    rng = 250.0
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                            [IsotropicScattering(0.0, learnable=False)],
+                            position=(rng, 0.0, 50.0), learnable=False)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+    steer, _ = azimuth_steering(21, 15.0)
+    grid = make_time_grid(2 * (rng - 8) / 1500.0, 2 * (rng + 8) / 1500.0, 160)
+
+    energy, image = {}, {}
+    for leg in ("splat", "eigenray"):
+        with _w.catch_warnings(), torch.no_grad():
+            _w.simplefilter("ignore")
+            echo = target_arrivals(scene, target, tx, return_leg=leg,
+                                   n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                   max_arrivals_per_leg=400)
+            img = beamform(echo, elements, scene.freqs_khz, grid, steer,
+                           sigma_t=1e-4, shading=shading_window(16, "uniform"),
+                           steer_chunk=8)
+        energy[leg] = float((echo.amplitude ** 2).sum())
+        image[leg] = float(img.max())
+
+    energy_db = 10.0 * math.log10(energy["splat"] / energy["eigenray"])
+    image_db = 10.0 * math.log10(image["splat"] / image["eigenray"])
+    assert image_db > energy_db + 10.0, (
+        f"image {image_db:.2f} dB against energy {energy_db:.2f} dB -- the "
+        "coherent penalty has gone, so one of the two sums has changed")
