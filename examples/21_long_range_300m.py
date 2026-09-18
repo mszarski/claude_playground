@@ -169,6 +169,11 @@ TILT_DEG = -5.0             # negative is up
 PULSE_S = 3.0e-4
 N_BINS = 520
 SOURCE_LEVEL_DB = 210.0     # dB re 1 uPa at 1 m
+# Display floor for the target picture, in dB over the local background after
+# the gain has flattened it.  At +6 dB under 2 percent of a Rayleigh background
+# survives, so the picture goes black and what is left is worth looking at --
+# at every range, which is the thing a fixed window cannot do.
+THRESHOLD_DB = 6.0
 
 BOAT_RANGE = 250.0
 BOAT_BEARING_DEG = -18.0
@@ -611,6 +616,28 @@ def main() -> int:
           f"in a")
     print(f"  scene where this boat stood {raw_srn + 8:.0f} dB over its "
           f"background the mean gain cost 4 dB.")
+    with torch.no_grad():
+        bg = det[ring]
+        over = lambda t: 100.0 * float((bg > 10 ** (t / 10.0)
+                                        * bg.median()).to(bg.dtype).mean())
+    print(f"\n  Flattened, the background is what a THRESHOLD can be set "
+          f"against -- and that")
+    print(f"  is what makes a picture black with a return on it.  Of the "
+          f"background here:")
+    for t in (3.0, 6.0, 8.0):
+        print(f"    above +{t:.0f} dB over its own median: {over(t):5.2f}% of "
+              f"cells survive")
+    print(f"  and the boat stands {srn:+.1f} dB, so a +"
+          f"{THRESHOLD_DB:.0f} dB floor leaves it on near-black")
+    print(f"  at EVERY range.  A fixed window anchored on the image peak can "
+          f"only do")
+    print(f"  that at one range, which is why the 90 m examples look empty "
+          f"and this")
+    print(f"  does not: their swath spans {94 / 27:.1f}x in range and this one "
+          f"{FAR / 44:.1f}x, so the")
+    print(f"  reverberation falls {50 * math.log10(FAR / 44) - 50 * math.log10(94 / 27):.0f} dB "
+          f"further across it.")
+
     print(f"  Multi-look is a cost either way: it smears a target living in "
           f"one range")
     print(f"  bin across {looks}, for {look_srn - srn:+.1f} dB, buying "
@@ -791,9 +818,21 @@ def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
           "in it)", "dB re 1 uPa$^2$", 45.0)
     swath(3, cart, "median TVG, 20 dB window\n(flat in range, contrast "
           "kept)", "dB re the background at that range", 20.0)
-    swath(4, by_mean, "TVG from the MEAN instead\n(the boat lifts the "
-          "reference and loses 4 dB)",
-          "dB re the background at that range", 20.0).set_ylabel("across (m)")
+    # The target display: flattened, then floored just above the background.
+    ax4 = fig.add_subplot(2, 3, 4)
+    d4 = 10 * np.log10(np.maximum(cart.numpy(), 1e-30))
+    im4 = ax4.imshow(d4, origin="lower", cmap="inferno", vmin=THRESHOLD_DB,
+                     vmax=THRESHOLD_DB + 12.0, extent=extent)
+    ax4.plot([tx], [ty], "o", mfc="none", mec="white", ms=15, mew=1.3)
+    ax4.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
+                 xytext=(14, 9), color="white", fontsize=8)
+    ax4.set_aspect("equal")
+    ax4.set_xlabel("forward (m)")
+    ax4.set_ylabel("across (m)")
+    ax4.set_title(f"median TVG, floored at +{THRESHOLD_DB:.0f} dB\n"
+                  f"(black with a return on it -- at every range)", fontsize=10)
+    fig.colorbar(im4, ax=ax4, shrink=0.7, pad=0.02).set_label(
+        "dB over the background at that range", fontsize=7)
 
     bx = fig.add_subplot(2, 3, 5)
     r = rng.numpy()
