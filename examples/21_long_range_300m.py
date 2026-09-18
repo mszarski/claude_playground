@@ -485,8 +485,20 @@ def main() -> int:
             solid_angle_per_ray=solid, ray_weights=tx_weights, boundary="both",
             surface=scene.surface, bottom=scene.bottom, max_arrivals=PATCHES,
             generator=torch.Generator().manual_seed(SEED + 1))
-        echo = target_arrivals(scene, boat, dirs, n_rx_rays=420,
-                               rx_half_angle_deg=45.0, tx_weights=tx_weights,
+        # The return leg SOLVES for its paths rather than sampling them.  The
+        # splat accepts every ray within sigma_d of the array, sigma_d is tied
+        # to the fan's spacing, and the two consequences are both artefacts: a
+        # target cannot image smaller than the fan's angular resolution -- this
+        # hull, subtending 4.82 deg, came out at 9.60 -- and the sum of the
+        # acceptance weights, 2 pi, is never divided back out, so the level
+        # runs about 8 dB high.  The eigenray leg has no acceptance: one
+        # arrival per path, the direction it arrives from, spreading from the
+        # ray tube's own divergence, and the Eckart coherence loss paid on
+        # every bounce.  Measured here: 3.94 deg of span against 9.60, and
+        # 11.7 dB less energy, stable to four digits across bracket densities.
+        echo = target_arrivals(scene, boat, dirs, return_leg="eigenray",
+                               n_rx_rays=2000, rx_half_angle_deg=45.0,
+                               tx_weights=tx_weights,
                                max_arrivals_per_leg=24,
                                generator=torch.Generator().manual_seed(SEED))
     both = ArrivalSet(*(None if rev[i] is None or echo[i] is None

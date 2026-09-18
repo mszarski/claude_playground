@@ -50,6 +50,7 @@ gate, and the same the tracer has at every accept/reject.
 from __future__ import annotations
 
 import math
+import warnings
 
 import torch
 from torch import Tensor
@@ -369,6 +370,14 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
         # discontinuity is the ordinary explanation, and letting it through
         # multiplies the energy by the reciprocal of however small it got.
         spherical = path_length.detach().clamp_min(spread_min_range) ** 2
+        clamped = int((area < 1e-2 * spherical).sum())
+        if clamped:
+            warnings.warn(
+                f"{clamped} of {int(area.numel())} ray tubes came back tighter "
+                f"than a hundredth of spherical and were clamped. That is "
+                f"usually a Jacobian straddling a discontinuity rather than "
+                f"real focusing, and the level leans on the clamp.",
+                RuntimeWarning, stacklevel=2)
         area = area.clamp_min(1e-2 * spherical)
     spread = 1.0 / area
 
