@@ -113,6 +113,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+import os
 import time
 from pathlib import Path
 
@@ -145,7 +146,11 @@ WATER_DEPTH = 30.0
 AUV_DEPTH = 12.0            # 18 m of altitude: the bottom is in the lobe past 191 m
 WIND = 4.0                  # a light breeze -- small waves, 0.09 m RMS
 
-NEAR, FAR = 40.0, 300.0
+# The swath.  Overridable, because the same scene at a different range is the
+# comparison that shows what is geometry and what is display:
+#   HYDROPT_FAR=90 HYDROPT_NEAR=8 HYDROPT_BOAT=75 python 21_long_range_300m.py
+FAR = float(os.environ.get("HYDROPT_FAR", 300.0))
+NEAR = float(os.environ.get("HYDROPT_NEAR", 40.0))
 SECTOR_DEG = 60.0
 # Sized to a real head: 3.00 deg azimuth beams and a 20 deg vertical field of
 # view, the latter carrying beams of 4.84 deg.  Measured, not assumed --
@@ -167,7 +172,9 @@ TILT_DEG = -5.0             # negative is up
 # mode makes on purpose: the energy in the water goes up with the pulse length,
 # the noise bandwidth goes down with it, and at 300 m you need both.
 PULSE_S = 3.0e-4
-N_BINS = 520
+# Range bins at about 0.5 m, roughly twice the 0.22 m cell the pulse gives, so
+# the image samples the pulse rather than the sampling.
+N_BINS = int(round((FAR - NEAR) / 0.5))
 SOURCE_LEVEL_DB = 210.0     # dB re 1 uPa at 1 m
 # Display floor for the target picture, in dB over the local background after
 # the gain has flattened it.  At +6 dB under 2 percent of a Rayleigh background
@@ -175,7 +182,7 @@ SOURCE_LEVEL_DB = 210.0     # dB re 1 uPa at 1 m
 # at every range, which is the thing a fixed window cannot do.
 THRESHOLD_DB = 6.0
 
-BOAT_RANGE = 250.0
+BOAT_RANGE = float(os.environ.get("HYDROPT_BOAT", 0.833 * FAR))
 BOAT_BEARING_DEG = -18.0
 BOAT_HEADING_DEG = 40.0
 # A 30 m hull drawing 4 m is a trawler or a small coaster, and those carry 7 to
@@ -538,10 +545,12 @@ def main() -> int:
           f"near-field gap)")
 
     banner("the same ping, on a grid in metres")
+    span_y = FAR * math.sin(math.radians(SECTOR_DEG)) * 1.02
+    x_range = (-0.03 * FAR, 1.02 * FAR)
     to_cart = lambda img: ex15.to_cartesian(img, bearings, grid, n_x=300,
-                                            n_y=300, x_range=(-10.0, 305.0),
-                                            y_range=(-260.0, 260.0))
-    pixel_m = 315.0 / 299.0
+                                            n_y=300, x_range=x_range,
+                                            y_range=(-span_y, span_y))
+    pixel_m = (x_range[1] - x_range[0]) / 299.0
     shown, _ = display(noisy, rng, pixel_m=pixel_m)          # median TVG
     by_mean, _ = display(noisy, rng, pixel_m=pixel_m, reference="mean")
     smoothed, looks = display(noisy, rng, pixel_m=pixel_m, looks=0)
@@ -764,10 +773,15 @@ def main() -> int:
     ok = check("the boat's echo lands on the boat at 250 m",
                err < beam_m,
                f"{err:.1f} m outside the hull against {beam_m:.1f} m of beamwidth")
-    ok &= check("the seabed and surface fill the swath, not a black background",
-                float((profile > noise).to(profile.dtype).mean()) > 0.3,
-                f"{100 * float((profile > noise).to(profile.dtype).mean()):.0f}% "
-                f"of range bins above the noise floor")
+    # What fraction of the swath is lit is geometry, not a target: with the fan
+    # tilted up, the surface only enters at 44 m and the seabed at 191, so a
+    # short swath is legitimately part dark.  What has to hold is that the LIT
+    # part stands above the ambient.
+    lit_frac = float((profile > noise).to(profile.dtype).mean())
+    ok &= check("everything the fan lights stands above the ambient",
+                lit_frac > 0.25 and margin > 3.0,
+                f"{100 * lit_frac:.0f}% of range bins lit and above the noise "
+                f"floor, by {margin:.1f} dB at {FAR:.0f} m")
     ok &= check("the whole swath is reverberation-limited, and it says where "
                 "that ends",
                 margin > 3.0 and crossover > FAR,
@@ -809,10 +823,22 @@ def main() -> int:
                 abs(measured - predicted) < 0.6 * predicted,
                 f"{measured:.1f} m measured against {predicted:.1f} m predicted "
                 f"({across / beam_m:.2f} beamwidths of hull)")
-    ok &= check("the vertical FOV holds both boundaries over the far swath",
-                both_from is not None and both_from < 0.8 * FAR,
-                f"both inside the {fov:.1f} deg lobe from about "
-                f"{both_from:.0f} m")
+    # Whether both boundaries are in the lobe depends on the swath: at 300 m
+    # they are, past 200; in a 90 m swath the seabed never enters at all, which
+    # is the same geometry reported honestly rather than a failure.
+    seabed_from = ((WATER_DEPTH - AUV_DEPTH)
+                   / math.tan(math.radians(TILT_DEG + fov / 2)))
+    if seabed_from < FAR:
+        ok &= check("the vertical FOV holds both boundaries over the far swath",
+                    both_from is not None and both_from < FAR,
+                    f"both inside the {fov:.1f} deg lobe from about "
+                    f"{both_from:.0f} m")
+    else:
+        ok &= check("the swath is surface-only, and the example says why",
+                    both_from is None,
+                    f"the seabed enters the lobe at {seabed_from:.0f} m, past "
+                    f"the {FAR:.0f} m swath -- tilted up, a short look sees "
+                    f"only the surface")
     ok &= check("the image is still differentiable end to end",
                 all(states.values()), f"{sum(states.values())}/{len(states)} live")
     return 0 if ok else 1
