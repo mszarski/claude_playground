@@ -15,13 +15,19 @@ absorption for beams 1.7 times wider.  The budget is printed.
 
 *The near field goes dark, and the vertical FOV is why.*  The head here is the
 real thing: 3.00 degree azimuth beams and a 20 degree vertical field of view
-carrying beams of 4.84 degrees, about four of them.  Twenty degrees is not much
-at 300 m, and it is the quantity that decides whether the surface and the
-seabed are both in the picture: they sit 33 degrees apart at 100 m and 11 at
-300, so a single tilt holds both only past about 170 m and holds whichever is
-nearer its axis inside that.  No vehicle depth fixes it -- the separation
-depends only on the total water depth -- so it is geometry rather than a
-shortage of power.
+carrying beams of 4.84 degrees, about four of them, flown tilted 5 degrees UP.
+
+Twenty degrees is not much at 300 m, and it is the quantity that decides what
+is in the picture at all.  Tilted up, the lobe runs from 15.4 degrees above the
+horizontal to 5.4 below, so the sea surface is in it from 54 m out -- which is
+the point of flying that way, since a surface contact at a few hundred metres
+then sits within a fraction of a beam of the axis rather than on its skirt.
+The seabed only enters where ``altitude <= 0.094 x range``: under 24 m of
+altitude at 250 m.  In 30 m of water flown mid-column that is satisfied past
+about 160 m, so the near field of this image is sea surface alone and the
+seabed joins it halfway out.  In 60 m of water, with the same attitude, the
+bottom would not be in the lobe anywhere inside 300 m.  Geometry, not power:
+tilt, altitude and field of view between them decide what a ping can contain.
 
 *Reverberation was supposed to stop being the enemy, and does not.*  Bottom
 reverberation falls as ``r^-5`` with the grazing angle falling too, so past some
@@ -128,8 +134,12 @@ from hydropt.tracer import trace
 C = 1500.0
 FREQ_KHZ = 120.0
 LAMBDA = C / (FREQ_KHZ * 1e3)
-WATER_DEPTH = 60.0
-AUV_DEPTH = 25.0            # 35 m of altitude: enough to see 300 m of bottom
+# 30 m of water, flown mid-column.  Not arbitrary: with the fan tilted UP the
+# seabed only enters the main lobe where `altitude <= 0.094 x range`, which at
+# 250 m means under 24 m of altitude.  In 60 m of water the bottom falls out of
+# the beam entirely at these ranges and the picture is surface-only.
+WATER_DEPTH = 30.0
+AUV_DEPTH = 15.0            # 15 m of altitude: the bottom is in the lobe past 160 m
 WIND = 4.0                  # a light breeze -- small waves, 0.09 m RMS
 
 NEAR, FAR = 40.0, 300.0
@@ -142,8 +152,12 @@ SECTOR_DEG = 60.0
 # cross-range figure by half again.
 N_RX, N_TX = 50, 5          # 3.03 deg azimuth, 20.8 deg vertical FOV
 VERTICAL_BEAM_DEG = 4.84    # beams within that FOV -- about four of them
-ELEV_DEG = (-20.0, 23.0)    # the fan, wide enough to sample the FOV's skirts
-TILT_DEG = 1.5              # down: what holds surface AND seabed past 170 m
+ELEV_DEG = (-27.0, 17.0)    # the fan, wide enough to sample the FOV's skirts
+# Tilted UP, the way the head is actually flown.  It is not a small detail: it
+# puts a surface contact at a few hundred metres within a fraction of a beam of
+# the vertical axis -- the boat here lands 0.37 of a beam off it -- instead of
+# on the skirt, which is worth many dB on exactly the target the sonar is for.
+TILT_DEG = -5.0             # negative is up
 
 # A LONG pulse, not the 0.12 ms of the 90 m examples.  Range resolution is
 # c tau / 2 = 0.22 m here instead of 0.09, and that is the trade a long-range
@@ -209,7 +223,7 @@ def build_scene(elements, *, seed: int = 3, learnable: bool = True):
     band at the outside of the image and nowhere else.
     """
     bottom = fractal_bathymetry((44, 44), (16.0, 16.0), base_depth=WATER_DEPTH,
-                                rms=1.2, exponent=3.0, origin=(-40.0, -350.0),
+                                rms=0.9, exponent=3.0, origin=(-40.0, -350.0),
                                 learnable=learnable,
                                 generator=torch.Generator().manual_seed(seed))
     # Eight nodes across the wind sea's peak wavelength, as always -- but over
@@ -328,16 +342,27 @@ def main() -> int:
               f"{math.degrees(math.atan2(alt, r)):4.1f} deg down, the surface "
               f"{math.degrees(math.atan2(AUV_DEPTH, r)):4.1f} deg up")
     fov_deg = beam_3db_deg(N_TX)
-    blind = alt / math.tan(math.radians(TILT_DEG + fov_deg / 2))
+    edge_dn = TILT_DEG + fov_deg / 2
+    edge_up = TILT_DEG - fov_deg / 2
+    blind = alt / math.tan(math.radians(edge_dn)) if edge_dn > 0 else float("inf")
+    surf_from = AUV_DEPTH / math.tan(math.radians(-edge_up))
     print(f"  {N_TX} transmit elements = a {fov_deg:.1f} deg vertical FOV "
-          f"tilted {TILT_DEG:.1f} deg down,")
+          f"tilted {abs(TILT_DEG):.1f} deg "
+          f"{'up' if TILT_DEG < 0 else 'down'},")
     print(f"  carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
-          f"{fov_deg / VERTICAL_BEAM_DEG:.0f} of them.  Its lower edge is")
-    print(f"  {TILT_DEG + fov_deg / 2:.1f} deg down, so the bottom inside "
-          f"{blind:.0f} m is in the skirts, not the beam.")
+          f"{fov_deg / VERTICAL_BEAM_DEG:.0f} of them.  The lobe runs "
+          f"{-edge_up:.1f} deg up to {edge_dn:.1f} deg down,")
+    print(f"  so the sea surface is in it from {surf_from:.0f} m and the "
+          f"seabed from {blind:.0f} m:")
+    print(f"  the near field of this picture is surface alone.")
     print(f"  {N_RX} receive elements = "
           f"{beam_3db_deg(N_RX, shading_window(N_RX, 'hamming')):.2f} deg "
           f"azimuth beams at half power.")
+    boat_el = -math.degrees(math.atan2(AUV_DEPTH - HULL_DRAUGHT, BOAT_RANGE))
+    print(f"  the boat at {BOAT_RANGE:.0f} m sits {-boat_el:.2f} deg up, "
+          f"{abs(boat_el - TILT_DEG):.2f} deg off the vertical axis")
+    print(f"  = {abs(boat_el - TILT_DEG) / VERTICAL_BEAM_DEG:.2f} of a beam, "
+          f"which is what the up-tilt is for.")
 
     banner("the range budget")
     alpha = float(thorp_db_per_km(scene.freqs_khz))
@@ -584,35 +609,35 @@ def main() -> int:
 
     banner("what the vertical field of view can hold")
     fov = beam_3db_deg(N_TX)
+    up_edge, dn_edge = TILT_DEG - fov / 2, TILT_DEG + fov / 2
     print(f"  {N_TX} transmit elements give a {fov:.1f} deg vertical field of "
           f"view, tilted")
-    print(f"  {TILT_DEG:.1f} deg down, carrying beams of "
-          f"{VERTICAL_BEAM_DEG:.2f} deg -- about "
-          f"{fov / VERTICAL_BEAM_DEG:.0f} of them.")
-    print(f"  That FOV is the whole reason this scene has both boundaries in "
-          f"it:")
-    print(f"\n   range   surface   seabed   apart   inside a "
-          f"{fov:.0f} deg FOV?")
+    print(f"  {abs(TILT_DEG):.1f} deg {'up' if TILT_DEG < 0 else 'down'}, "
+          f"carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
+          f"{fov / VERTICAL_BEAM_DEG:.0f} of them.  The lobe runs")
+    print(f"  {up_edge:+.1f} to {dn_edge:+.1f} deg, taking down as positive, "
+          f"and that decides what")
+    print(f"  a ping can contain at all:")
+    print(f"\n   range   surface   seabed   in the lobe")
     both_from = None
-    for r in (100.0, 150.0, 200.0, 250.0, FAR):
-        up = math.degrees(math.atan2(AUV_DEPTH, r))
+    for r in (60.0, 100.0, 160.0, 200.0, 250.0, FAR):
+        up = -math.degrees(math.atan2(AUV_DEPTH, r))
         dn = math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, r))
-        fits = up + dn <= fov
-        if fits and both_from is None:
+        s_ok, b_ok = up_edge <= up <= dn_edge, up_edge <= dn <= dn_edge
+        if s_ok and b_ok and both_from is None:
             both_from = r
-        print(f"   {r:5.0f} m  {up:5.2f} up  {dn:5.2f} dn  {up + dn:5.2f}   "
-              f"{'yes' if fits else 'no -- one or the other'}")
-    r = 1.0
-    while (math.degrees(math.atan2(AUV_DEPTH, r))
-           + math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, r))) > fov:
-        r += 1.0
-    print(f"\n  Both fit beyond about {r:.0f} m.  Inside that the FOV holds "
-          f"whichever")
-    print(f"  boundary is nearer its axis, and the other is in the skirts -- "
-          f"which is")
-    print(f"  a geometry limit, not a power one: no vehicle depth fixes it, "
-          f"because")
-    print(f"  the separation depends only on the total water depth.")
+        print(f"   {r:5.0f} m  {up:+6.2f}   {dn:+6.2f}   "
+              f"{'surface and seabed' if s_ok and b_ok else ('surface only' if s_ok else 'neither')}")
+    print(f"\n  The seabed enters where altitude <= "
+          f"{math.tan(math.radians(dn_edge)):.3f} x range, so past about "
+          f"{both_from:.0f} m")
+    print(f"  here.  Flying the same head at the same attitude over "
+          f"{WATER_DEPTH * 2:.0f} m of water")
+    print(f"  would put the bottom outside the lobe everywhere inside "
+          f"{FAR:.0f} m: tilt,")
+    print(f"  altitude and field of view between them decide what is in the "
+          f"picture,")
+    print(f"  and none of the three is a power setting.")
     print(f"\n  And across the beam: {beamwidth:.2f} deg is {beam_m:.1f} m at "
           f"the boat, so a")
     print(f"  {HULL_LENGTH:.0f} m hull is {HULL_LENGTH / beam_m:.2f} "
@@ -677,7 +702,8 @@ def main() -> int:
                 f"{HULL_LENGTH / beam_m:.2f} beamwidths at {beamwidth:.2f} deg")
     ok &= check("the vertical FOV holds both boundaries over the far swath",
                 both_from is not None and both_from < 0.8 * FAR,
-                f"both inside {fov:.1f} deg beyond about {r:.0f} m")
+                f"both inside the {fov:.1f} deg lobe from about "
+                f"{both_from:.0f} m")
     ok &= check("the image is still differentiable end to end",
                 all(states.values()), f"{sum(states.values())}/{len(states)} live")
     return 0 if ok else 1
