@@ -289,6 +289,7 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
                       freqs_khz: Tensor, *, absorption=thorp_db_per_km,
                       spread_min_range: float = 1.0,
                       accept: float | None = None,
+                      coherent: bool = False,
                       **kwargs) -> ArrivalSet:
     """One arrival per path from ``source`` to ``receiver``, no splat.
 
@@ -299,6 +300,12 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     it comes out as ``L^2`` exactly, which is the check in the tests.
 
     Args:
+        coherent: multiply each bounce path by its Eckart coherence factor, for
+            a receiver that needs the coherent field at a point.  Off by
+            default: an imaging sonar collects the bounce's energy across
+            elevation whatever the surface did to its phase, and the ghost
+            returns a shallow-water operator expects come from exactly these
+            paths.  See the note at the calculation.
         accept: discard paths that still miss by more than this (m).  Defaults
             to a hundredth of the source-receiver separation; a path that will
             not converge is one the bracket found and the refinement could not
@@ -396,17 +403,30 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     # magnitude, i.e. a coherent surface bounce at these frequencies is
     # nothing.  The energy the roughness scatters elsewhere is reverberation
     # and is somebody else's job.
-    # `up_to_step`, because the path ENDS at the receiver.  The trace runs a
-    # fixed number of steps, so a ray that reaches the receiver early keeps
-    # flying -- 330 m further, in the 90 m case -- and meets boundaries out
-    # there that are no part of the path that arrived.  Counting them charged
-    # the direct path a surface bounce it never made, and at 120 kHz over a
-    # 0.09 m sea that is annihilation, not attenuation: the boat left the image.
-    coherence = roughness_weights(
-        result, freqs_khz, surface_rms=smooth.surface_rms,
-        bottom_rms=smooth.bottom_rms, surface=smooth.surface,
-        bottom=smooth.bottom, up_to_step=step, sound_speed=float(scene.field(
-            source.reshape(1, 3)).reshape(-1)[0]))
+    # Bounce paths keep their ENERGY, deliberately.  A rough sea at 120 kHz
+    # destroys the coherent reflection -- the Eckart factor is ~-100 dB -- but
+    # a pressure-release surface reflects all of the energy; roughness smears
+    # the bounce over a few degrees of elevation, and a horizontal line array
+    # has no elevation resolution, so it collects that energy regardless.
+    # Charging the coherence loss here (which this solver briefly did) deleted
+    # every bounce path -- 8 per highlight down to the direct one -- and with
+    # them the hull's ghost a few metres beyond it that every operator knows
+    # from shallow water.  Eckart is for a coherent field at a point; an
+    # imaging sonar's echo is an energy quantity across elevation.
+    #
+    # `coherent=True` restores the factor, evaluated `up_to_step` because the
+    # path ends at the receiver and the trace does not: a ray that arrives
+    # early keeps flying, and a bounce it makes out there is no part of the
+    # path.  Counting it once charged the direct path a surface bounce it never
+    # made, and the boat left the image.
+    if coherent:
+        coherence = roughness_weights(
+            result, freqs_khz, surface_rms=smooth.surface_rms,
+            bottom_rms=smooth.bottom_rms, surface=smooth.surface,
+            bottom=smooth.bottom, up_to_step=step, sound_speed=float(scene.field(
+                source.reshape(1, 3)).reshape(-1)[0]))
+    else:
+        coherence = torch.ones(p, int(freqs_khz.shape[0]), dtype=dtype, device=device)
 
     alpha = absorption(freqs_khz).view(1, -1)
     energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
