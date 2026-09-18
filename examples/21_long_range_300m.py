@@ -173,7 +173,10 @@ SOURCE_LEVEL_DB = 210.0     # dB re 1 uPa at 1 m
 BOAT_RANGE = 250.0
 BOAT_BEARING_DEG = -18.0
 BOAT_HEADING_DEG = 40.0
-HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 12.0, 3.2, 4.0
+# 30 m long with 3.2 m of beam is a ratio of 9.4 -- narrower than any real
+# vessel of that length, which would carry 7 to 8 m.  It is what was asked for
+# and it is what is modelled; say the word and the beam grows with it.
+HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 30.0, 3.2, 4.0
 
 N_ELEV, N_AZIM = 96, 330
 # Every bounce the trace found, rather than a subsample: they are already paid
@@ -389,8 +392,11 @@ def main() -> int:
 
     banner("ping")
     b = math.radians(BOAT_BEARING_DEG)
+    # Facets scaled with the hull so they stay the size they were at 12 m,
+    # rather than getting coarser as the boat grows.
     verts, faces = boat_hull_mesh(HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT,
-                                  n_long=110, n_around=34)
+                                  n_long=int(round(110 * HULL_LENGTH / 12.0)),
+                                  n_around=34)
     boat = mesh_target(
         verts, faces,
         # z=0, not the draught: boat_hull_mesh returns the WETTED surface with
@@ -413,6 +419,15 @@ def main() -> int:
     print(f"  it subtends {math.degrees(HULL_LENGTH / BOAT_RANGE):.2f} deg in "
           f"bearing and {math.degrees(HULL_DRAUGHT / BOAT_RANGE):.2f} deg in "
           f"elevation")
+    # Which axis the hull's length lands on decides whether it is resolved:
+    # range resolution is the pulse and is the same everywhere, bearing
+    # resolution is the beam and grows linearly with range.
+    aspect = math.radians(BOAT_HEADING_DEG - BOAT_BEARING_DEG)
+    across = abs(HULL_LENGTH * math.sin(aspect))
+    along = abs(HULL_LENGTH * math.cos(aspect))
+    print(f"  it lies {math.degrees(aspect):.0f} deg off the line of sight, so "
+          f"its {HULL_LENGTH:.0f} m splits into")
+    print(f"  {across:.1f} m across bearing and {along:.1f} m along range")
 
     steer, bearings = azimuth_steering(181, SECTOR_DEG)
     grid = make_time_grid(2.0 * NEAR / C, 2.0 * FAR / C, N_BINS)
