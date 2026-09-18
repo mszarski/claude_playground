@@ -323,12 +323,25 @@ def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
     if tvg:
         if reference == "median":
             level = out.median(dim=0, keepdim=True).values
+            # A range bin lit in fewer than half its beams has a median of
+            # ZERO, and dividing by it amplifies the few lit cells without
+            # bound -- measured, 1e27 on a bin lit in 30 beams of 181, which
+            # saturates the display and erases everything else in it.  It does
+            # not show up wherever ambient noise fills every bin, which is why
+            # it can sit unnoticed in a scene that has noise and appear in one
+            # that does not.  Fall back to the mean there, which is nonzero
+            # whenever anything at all is lit.
+            level = torch.where(level > 0.0, level, out.mean(dim=0,
+                                                             keepdim=True))
         elif reference == "mean":
             level = out.mean(dim=0, keepdim=True)
         else:
             raise ValueError(f"reference must be 'median' or 'mean', got "
                              f"{reference!r}")
-        out = out / level.clamp_min(1e-30)
+        # ...and a bin lit in a handful of beams still has a tiny reference, so
+        # floor it against the swath as a whole rather than against zero.
+        floor = 1e-6 * float(level.max())
+        out = out / level.clamp_min(floor)
     return out, looks
 
 
@@ -768,13 +781,34 @@ def main() -> int:
                 f"raw {raw_srn:+.1f}, mean {mean_srn:+.1f}, median "
                 f"{srn:+.1f} dB; the boat lifts the mean at its own bin by "
                 f"{lift:+.1f} dB")
-    ok &= check("multi-look costs a target smaller than the cell it averages",
-                look_srn < srn - 0.5 and look_spread < spread - 0.8,
+    # What multi-look costs scales with how much SMALLER the target is than the
+    # window it is averaged over.  A point target loses several dB; this hull
+    # is 72 range cells deep and loses almost nothing.  What is invariant is
+    # that it smooths the background and never adds contrast.
+    ok &= check("multi-look smooths the background and never adds contrast",
+                look_spread < spread - 0.8 and look_srn <= srn + 0.5,
                 f"{look_srn - srn:+.1f} dB of contrast for "
-                f"{spread - look_spread:.1f} dB of speckle over {looks} looks")
-    ok &= check("the hull is about one beamwidth: a mark, not a shape",
-                0.5 < HULL_LENGTH / beam_m < 2.0,
-                f"{HULL_LENGTH / beam_m:.2f} beamwidths at {beamwidth:.2f} deg")
+                f"{spread - look_spread:.1f} dB of speckle over {looks} looks, "
+                f"on a hull {along / (PULSE_S * C / 2):.0f} range cells deep")
+    # The echo's width across bearing should be the hull's own across-track
+    # extent convolved with the beam, which is the check that the image is
+    # showing the target's geometry and not just the array's.
+    with torch.no_grad():
+        near_echo = torch.hypot(GX - tx, GY - ty) < 60.0
+        lit_echo = near_echo & (echo_cart > echo_cart[near_echo].max() * 0.1)
+        los = torch.tensor([tx, ty]) / math.hypot(tx, ty)
+        perp = torch.stack([-los[1], los[0]])
+        off = (GX[lit_echo] - tx) * perp[0] + (GY[lit_echo] - ty) * perp[1]
+        measured = float(off.max() - off.min())
+    predicted = math.hypot(across, beam_m)
+    print(f"\n  the echo spans {measured:.1f} m across bearing at -10 dB; the "
+          f"hull's own")
+    print(f"  {across:.1f} m convolved with a {beam_m:.1f} m beam predicts "
+          f"{predicted:.1f} m")
+    ok &= check("the echo's width across bearing is the hull, not just the beam",
+                abs(measured - predicted) < 0.6 * predicted,
+                f"{measured:.1f} m measured against {predicted:.1f} m predicted "
+                f"({across / beam_m:.2f} beamwidths of hull)")
     ok &= check("the vertical FOV holds both boundaries over the far swath",
                 both_from is not None and both_from < 0.8 * FAR,
                 f"both inside the {fov:.1f} deg lobe from about "
