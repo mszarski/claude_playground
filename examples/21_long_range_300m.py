@@ -723,18 +723,29 @@ def main() -> int:
             both_from = r
         print(f"   {r:5.0f} m  {up:+6.2f}   {dn:+6.2f}   "
               f"{'surface and seabed' if s_ok and b_ok else ('surface only' if s_ok else 'neither')}")
+    enters = ((WATER_DEPTH - AUV_DEPTH)
+              / math.tan(math.radians(dn_edge)) if dn_edge > 0
+              else float("inf"))
     print(f"\n  The seabed enters where altitude <= "
-          f"{math.tan(math.radians(dn_edge)):.3f} x range, so past about "
-          f"{both_from:.0f} m")
-    print(f"  with {WATER_DEPTH - AUV_DEPTH:.0f} m of altitude: the inner part "
-          f"of this swath is sea surface")
-    print(f"  alone.  The same head at the same attitude over "
-          f"{WATER_DEPTH * 2:.0f} m of water would have")
-    print(f"  no bottom in the lobe anywhere inside {FAR:.0f} m.  Tilt, "
-          f"altitude and field of")
-    print(f"  view between them decide what a ping can contain, and none of "
-          f"the three")
-    print(f"  is a power setting.")
+          f"{math.tan(math.radians(dn_edge)):.3f} x range, which with "
+          f"{WATER_DEPTH - AUV_DEPTH:.0f} m of")
+    if enters < FAR:
+        print(f"  altitude is {enters:.0f} m: the inner part of this swath is "
+              f"sea surface alone,")
+        print(f"  and the seabed joins it from there out.")
+    else:
+        print(f"  altitude is {enters:.0f} m -- beyond this {FAR:.0f} m swath "
+              f"entirely.  Tilted up,")
+        print(f"  a short look sees the sea surface and nothing of the bottom "
+              f"at all; the")
+        print(f"  seabed is in the lobe's lower skirt, not its main beam.")
+    print(f"  The same head at the same attitude over "
+          f"{WATER_DEPTH * 2:.0f} m of water would have no")
+    print(f"  bottom in the lobe anywhere inside {FAR:.0f} m either.  Tilt, "
+          f"altitude and")
+    print(f"  field of view between them decide what a ping can contain, and "
+          f"none of")
+    print(f"  the three is a power setting.")
     print(f"\n  It is also a quiet geometry: the seabed is at "
           f"{math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, FAR)):.2f} deg "
           f"of grazing at {FAR:.0f} m and")
