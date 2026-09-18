@@ -186,20 +186,24 @@ BOAT_RANGE = float(os.environ.get("HYDROPT_BOAT", 0.833 * FAR))
 BOAT_BEARING_DEG = -18.0
 BOAT_HEADING_DEG = float(os.environ.get("HYDROPT_HEADING", 40.0))
 # Lambert strength of the hull's own surface and structure: the parameter that
-# decides whether the vessel is visible anywhere but beam-on.  This is the same
-# -27 dB this example gives the sand seabed, used as a STAND-IN and not as a
-# measurement -- a hull's plating, ribs, rudder and prop are not sand.  It is
-# quoted rather than hidden because it is the weakest assumption in the scene,
-# and it is a learnable parameter, so an image of a real vessel at a known
-# aspect can fit it instead.
+# decides whether the vessel is visible anywhere but beam-on.  It is set by
+# matching a MEASURED property of real vessels rather than by making the boat
+# appear: surface ships and submarines are reported at about 25 dB of target
+# strength at beam aspect and 10 to 12 dB bow-on and stern-on, a swing of 10
+# to 15 dB (Urick; DTIC AD0039542 and AD0531451).  On this hull, measured at
+# the scene's elevation with the corrected mesh:
 #
-# The conclusion does not rest on the number.  At this heading, measured:
-#     mirror   boat +10.4 dB, 22 of 43629 cells brighter  -- not a detection
-#     -30 dB   boat +22.4 dB,  0 of 43629 cells brighter  -- a detection
-#     -20 dB   boat +32.1 dB,  0 of 43629 cells brighter  -- a detection
-# Detection flips between a mirror and any real roughness, not between one
-# plausible roughness and another.
-_diffuse = os.environ.get("HYDROPT_DIFFUSE", "-27")
+#     mu      TS beam   TS 40 deg   swing
+#     mirror   +15.4     -28.2      43.7 dB
+#     -27      +15.5     -10.9      26.4      (sand, the earlier stand-in)
+#     -15      +15.7      +1.0      14.8      <- the literature's range
+#     -10      +16.3      +6.0      10.3      <-
+#
+# -12 dB is the middle of that range.  Beam aspect is unmoved by any of these
+# -- the diffuse channel fills the nulls the mirror leaves and inflates
+# nothing.  It is a learnable parameter, so an image of a real vessel at a
+# known aspect can fit it instead of assuming it.
+_diffuse = os.environ.get("HYDROPT_DIFFUSE", "-12")
 DIFFUSE_DB = None if _diffuse == "off" else float(_diffuse)
 # A 30 m hull drawing 4 m is a trawler or a small coaster, and those carry 7 to
 # 9 m of beam: 8.0 gives a length-to-beam of 3.75 and about 490 tonnes, which
@@ -281,11 +285,25 @@ def build_scene(elements, *, seed: int = 3, learnable: bool = True):
                                         learnable=learnable,
                                         generator=torch.Generator().manual_seed(seed + 1))
     sediment = sediment_loss("sand", learnable=learnable)
+    # The boundaries conserve energy on a bounce, deliberately.  A rough sea
+    # at 120 kHz destroys the COHERENT reflection -- the Eckart loss is
+    # thousands of decibels -- but a pressure-release surface reflects all of
+    # the energy; roughness randomises its phase and spreads it over a few
+    # degrees, it removes nothing.  Reverberation is an energy quantity and a
+    # Lambert patch does not care about the phase of what reaches it, so a ray
+    # continuing down the waveguide after a surface bounce at full energy is
+    # right, and the surface-bottom multipath it produces is real shallow-water
+    # physics: 12.5 dB of it at 250 m here.  Charging Eckart on the bounce
+    # (which this scene briefly did) removed that, and the "sonar equation"
+    # level it then matched is the direct-path-only textbook form.  Eckart
+    # belongs on the target's coherent bounce paths, where the eigenray legs
+    # already pay it.
     scene = Scene(
         field=IsoProfile(C, learnable=False), bottom=bottom, surface=surface,
         source=(0.0, 0.0, AUV_DEPTH), receivers=elements,
         surface_loss=ConstantLoss(0.0, learnable=False, pressure_release=True),
-        bottom_loss=sediment, freqs_khz=torch.tensor([FREQ_KHZ]),
+        bottom_loss=sediment,
+        freqs_khz=torch.tensor([FREQ_KHZ]),
         # 2 m steps and 200 of them is 400 m of path -- enough that a ray still
         # has budget left after reaching 300 m.  Stopping at the range of
         # interest is the classic way to invent a detection limit out of the

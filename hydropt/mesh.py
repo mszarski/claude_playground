@@ -804,6 +804,14 @@ def cylinder_mesh(length: float = 2.0, radius: float = 0.5, *,
     return verts, tri[area > floor * float(area.max())]
 
 
+def _interp1d(xq: Tensor, x: Tensor, y: Tensor) -> Tensor:
+    """Linear interpolation of ``y(x)`` at ``xq``; ``x`` non-decreasing."""
+    idx = torch.searchsorted(x, xq).clamp(1, x.shape[0] - 1)
+    x0, x1 = x[idx - 1], x[idx]
+    t = ((xq - x0) / (x1 - x0).clamp_min(1e-30)).clamp(0.0, 1.0)
+    return y[idx - 1] + t * (y[idx] - y[idx - 1])
+
+
 def boat_hull_mesh(length: float = 12.0, beam: float = 3.0, draft: float = 1.0,
                    *, n_long: int = 40, n_around: int = 16,
                    transom: float = 0.62, deadrise_stern: float = 4.5,
@@ -848,19 +856,48 @@ def boat_hull_mesh(length: float = 12.0, beam: float = 3.0, draft: float = 1.0,
     # Waterline and keel: taper to nothing at the bow, but stay full aft.
     bow_taper = (1.0 - s ** 2.6).clamp_min(0.0) ** 0.5
     keel_taper = (1.0 - s ** 3.2).clamp_min(0.0) ** 0.62
-    fill = transom + (1.0 - transom) * (s / 0.30).clamp(0.0, 1.0) ** 1.5
+    # A smooth blend from the transom to full section, not a clamped power.
+    # The clamp put a slope discontinuity at s = 0.3, and the half-beam peaks
+    # EXACTLY there -- so the hull's widest point, where the beam-aspect
+    # specular sits, was a knuckle running round the hull.  Physical optics on
+    # a crease does not converge: the return jumped 25 dB between mesh
+    # resolutions while the same kernel was exact on every smooth shape.  A
+    # real waterline is smooth at its widest point.  The smoothstep has zero
+    # slope at both ends, so the blend meets the full section tangentially.
+    t = (s / 0.30).clamp(0.0, 1.0)
+    fill = transom + (1.0 - transom) * (t * t * (3.0 - 2.0 * t))
     half_beam = 0.5 * beam * bow_taper * fill
     keel = draft * keel_taper * fill
 
     # Superellipse sections, boxy aft and V-shaped forward.
     n_exp = deadrise_stern + (deadrise_bow - deadrise_stern) * s
-    theta = torch.linspace(0.0, math.pi, n_around, dtype=dt)
-    ct, st = torch.cos(theta), torch.sin(theta)
+    # Stations by ARC LENGTH around each section, not by parameter angle.  A
+    # superellipse sampled uniformly in theta puts z = draft * sin(theta)^(2/n)
+    # at the waterline, and for n = 2.9 that exponent is 0.69: the first facet
+    # below the waterline was 0.62 m tall at the resolution examples/21 used,
+    # against the 0.075 m physical optics needs there at 120 kHz, and
+    # quadrupling n_around shrank it by only 2.6x.  That is exactly where the
+    # specular point sits for a sonar looking up at a hull, so the return there
+    # never converged -- it jumped 25 dB between resolutions -- while the same
+    # kernel was exact on a plate, a sphere and a cylinder.  Uniform arc length
+    # makes every facet in a section the same size, so refinement reaches it.
+    fine = torch.linspace(0.0, math.pi, 4096, dtype=dt)
+    cf, sf = torch.cos(fine), torch.sin(fine)
+    stations = torch.linspace(0.0, 1.0, n_around, dtype=dt)
     rows = []
     for i in range(n_long):
         e = 2.0 / float(n_exp[i])
-        y = half_beam[i] * ct.sign() * ct.abs().clamp_min(1e-12) ** e
-        z = keel[i] * st.abs().clamp_min(1e-12) ** e
+        yf = half_beam[i] * cf.sign() * cf.abs().clamp_min(1e-12) ** e
+        zf = keel[i] * sf.abs().clamp_min(1e-12) ** e
+        seg = torch.hypot(yf[1:] - yf[:-1], zf[1:] - zf[:-1])
+        arc = torch.cat([seg.new_zeros(1), seg.cumsum(0)])
+        if float(arc[-1]) > 0.0:
+            arc = arc / arc[-1]
+            y = _interp1d(stations, arc, yf)
+            z = _interp1d(stations, arc, zf)
+        else:  # a collapsed section at the stem: every station at the point
+            y = yf[:1].expand(n_around)
+            z = zf[:1].expand(n_around)
         rows.append(torch.stack([x[i].expand(n_around), y, z], dim=-1))
     verts = torch.cat(rows, dim=0)
 

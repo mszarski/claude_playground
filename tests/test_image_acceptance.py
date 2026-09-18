@@ -48,9 +48,12 @@ PULSE_S, RANGE_CELL_M, N_BEAMS = 3e-4, 0.8, 31
 N_ELEV, N_AZIM = 40, 256
 BOAT_RANGE, BOAT_BEARING_DEG, BOAT_HEADING_DEG = 65.0, -10.0, 40.0
 HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 12.0, 3.2, 1.6
-# The seabed's own Lambert strength, borrowed as a stand-in for the hull's
-# plating and structure.  A mirror-smooth hull is the comparison, not the model.
-DIFFUSE_DB = -27.0
+# Set by matching the 10 to 15 dB beam-to-off-beam swing measured on real
+# vessels (Urick; DTIC AD0039542, AD0531451): on this hull that is mu between
+# -15 and -10 dB.  The sand seabed's -27 dB, used earlier as a stand-in, gives
+# a 26 dB swing and a hull twice as dim off beam aspect as any vessel measured.
+# A mirror-smooth hull (43.7 dB of swing) is the comparison, not the model.
+DIFFUSE_DB = -12.0
 
 
 def _array():
@@ -66,6 +69,11 @@ def _scene(elements, seed=3):
     surface = pierson_moskowitz_surface((40, 40), (5.0, 5.0), 4.0,
                                         origin=(-20.0, -100.0), learnable=True,
                                         generator=torch.Generator().manual_seed(seed + 1))
+    # Energy-conserving boundaries: a rough sea randomises the phase of what
+    # bounces off it and spreads it over a few degrees, but reflects all of
+    # the energy, and reverberation is an energy quantity.  The multipath a
+    # continuing ray produces is real shallow-water physics, not double
+    # counting.  Eckart belongs on the target's coherent bounce paths only.
     scene = Scene(
         field=IsoProfile(C, learnable=False), bottom=bottom, surface=surface,
         source=(0.0, 0.0, AUV_DEPTH), receivers=elements,
