@@ -385,6 +385,7 @@ def target_arrivals(
     rx_half_angle_deg: float = 45.0,
     rx_jitter: float = 0.0,
     rx_sigma_d: float | Tensor | None = None,
+    return_leg: str = "splat",
     tx_weights: Tensor | None = None,
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
@@ -448,6 +449,19 @@ def target_arrivals(
             Pass the array's aperture, and make the fan fine enough to put rays
             inside it -- the spacing at the target's range must be at or below
             the aperture, which this function checks and warns about.
+        return_leg: ``"splat"`` (the default, unchanged) or ``"eigenray"``.
+
+            The splat accepts every return ray passing within ``sigma_d`` of
+            the array and gives each its own direction, which makes a target's
+            rendered angular size no smaller than the fan's angular spacing --
+            a 30 m hull subtending 4.8 degrees at 250 m images as 12.6.
+            ``"eigenray"`` solves for the discrete paths instead
+            (:mod:`hydropt.eigenray`): one arrival per path, the direction it
+            actually arrives from, spreading from the ray tube's own
+            divergence, and no ``sigma_d`` at all.
+
+            Not the default yet, because it moves every target level in the
+            package and that change wants isolating rather than smuggling.
         rx_jitter: randomise the default return fan by this fraction of a
             sample spacing.  **Needed for ``generator`` to do anything**: a
             Fibonacci cone is deterministic, so without jitter every seed gives
@@ -505,9 +519,25 @@ def target_arrivals(
     # integrate together in a single pass.  That is the same arithmetic (verified
     # bit-identical) with one Python loop over steps instead of N, which is most
     # of the cost at these fan sizes: 8 highlights went from 7.6 s to 1.6 s.
+    if return_leg not in ("splat", "eigenray"):
+        raise ValueError(f"return_leg must be 'splat' or 'eigenray', got "
+                         f"{return_leg!r}")
+
     lit = list(inbound_by_highlight)
     parts: list[ArrivalSet] = []
-    if lit:
+    if lit and return_leg == "eigenray":
+        from .eigenray import eigenray_arrivals
+        for i in lit:
+            outbound = eigenray_arrivals(
+                scene, world[i], phase_centre, freqs,
+                bracket_rays=n_rx_rays,
+                bracket_half_angle_deg=rx_half_angle_deg,
+                trace_kwargs=tkw)
+            if outbound.n_arrivals == 0:
+                continue
+            parts.append(compose_arrivals(inbound_by_highlight[i], outbound,
+                                          target, highlight=i, freqs_khz=freqs))
+    elif lit:
         fans = []
         for i in lit:
             if rx_directions is None:

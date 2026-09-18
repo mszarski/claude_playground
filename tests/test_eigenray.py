@@ -148,3 +148,84 @@ def test_the_travel_time_gradient_is_the_one_fermat_predicts():
     a.time.sum().backward()
     unit = (rcv - base) / (rcv - base).norm()
     assert torch.allclose(src.grad, -unit / C, rtol=0.05, atol=1e-8)
+
+
+def test_it_returns_one_arrival_s_worth_where_the_splat_returns_two_pi():
+    """The offset that makes this worth having, as a number.
+
+    ``extract_arrivals`` sums ``exp(-d^2/2 sigma^2)/s^2`` over every ray inside
+    its acceptance and never divides by the sum of those weights.  On a lattice
+    of pitch ``p`` with ``sigma = factor * p`` that sum is ``2 pi factor^2``, so
+    the splat reports about 2 pi times one arrival's worth of energy -- eight
+    decibels, invariant to how the fan was sampled and therefore invisible to
+    any convergence test.
+
+    An eigenray has no acceptance and no weights: one path, one arrival, the
+    energy the tube's divergence gives.  So the two differ by roughly 2 pi, and
+    the eigenray is the one that reduces to ``1/L^2``.
+    """
+    import warnings as _w
+
+    from hydropt import target_arrivals
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = _scene()
+    scene.receivers = elements
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                            [IsotropicScattering(1.0, learnable=False)],
+                            position=(250.0, 0.0, 50.0), learnable=False)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+
+    got = {}
+    for leg in ("splat", "eigenray"):
+        with _w.catch_warnings(), torch.no_grad():
+            _w.simplefilter("ignore")
+            a = target_arrivals(scene, target, tx, return_leg=leg,
+                                n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                max_arrivals_per_leg=400)
+        got[leg] = float((a.amplitude ** 2).sum())
+        assert a.n_arrivals > 0
+    ratio = got["splat"] / got["eigenray"]
+    assert 3.0 < ratio < 15.0, f"expected about 2 pi, got {ratio:.2f}"
+
+    # And the eigenray leg gives one arrival per path, where the splat gives
+    # one per ray that happened to pass nearby.
+    with _w.catch_warnings(), torch.no_grad():
+        _w.simplefilter("ignore")
+        n_splat = target_arrivals(scene, target, tx, return_leg="splat",
+                                  n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                  max_arrivals_per_leg=400).n_arrivals
+        n_eig = target_arrivals(scene, target, tx, return_leg="eigenray",
+                                n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                max_arrivals_per_leg=400).n_arrivals
+    assert n_splat > 50 * n_eig
+
+
+def test_the_eigenray_leg_does_not_care_how_the_bracket_was_sampled():
+    """No acceptance width means nothing to tie to the fan's spacing."""
+    import warnings as _w
+
+    from hydropt import target_arrivals
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = _scene()
+    scene.receivers = elements
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                            [IsotropicScattering(1.0, learnable=False)],
+                            position=(250.0, 0.0, 50.0), learnable=False)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+    seen = []
+    for half, n in ((45.0, 420), (20.0, 1500), (5.0, 6000)):
+        with _w.catch_warnings(), torch.no_grad():
+            _w.simplefilter("ignore")
+            a = target_arrivals(scene, target, tx, return_leg="eigenray",
+                                n_rx_rays=n, rx_half_angle_deg=half,
+                                max_arrivals_per_leg=400)
+        seen.append(float((a.amplitude ** 2).sum()))
+    assert max(seen) / min(seen) < 1.05
