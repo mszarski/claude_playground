@@ -357,3 +357,44 @@ def test_the_splat_over_reads_an_image_by_twice_what_it_over_reads_energy():
     assert image_db > energy_db + 10.0, (
         f"image {image_db:.2f} dB against energy {energy_db:.2f} dB -- the "
         "coherent penalty has gone, so one of the two sums has changed")
+
+
+def test_a_receive_pattern_weights_each_solved_return_path_by_its_arrival():
+    """What a stave's height does, pinned on the one path a free field has.
+
+    With source and receiver together and no boundaries there is exactly one
+    outbound path, arriving along the line from target to array.  A receive
+    pattern returning 0.25 for every direction must quarter the echo energy,
+    and one returning 1 must leave it alone -- the weight is a power weight
+    applied once, on the return leg only.
+    """
+    import warnings as _w
+
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = Scene(field=IsoProfile(1500.0, learnable=False),
+                  bottom=FlatHeight(1e5), surface=FlatHeight(-1e5),
+                  source=(0.0, 0.0, 50.0), receivers=elements,
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([10.0]),
+                  step_size=2.0, n_steps=400, max_bounces=0)
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                            [IsotropicScattering(0.0, learnable=False)],
+                            position=(250.0, 0.0, 50.0), learnable=False)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+
+    got = {}
+    for name, pat in (("none", None), ("unity", lambda d: torch.ones(d.shape[0])),
+                      ("quarter", lambda d: torch.full((d.shape[0],), 0.25))):
+        with _w.catch_warnings(), torch.no_grad():
+            _w.simplefilter("ignore")
+            echo = target_arrivals(scene, target, tx, return_leg="eigenray",
+                                   n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                   max_arrivals_per_leg=400, rx_pattern=pat)
+        got[name] = float((echo.amplitude ** 2).sum())
+    assert got["unity"] == pytest.approx(got["none"], rel=1e-9)
+    assert got["quarter"] == pytest.approx(0.25 * got["none"], rel=1e-9)

@@ -388,6 +388,7 @@ def target_arrivals(
     return_leg: str = "splat",
     tx_weights: Tensor | None = None,
     tx_pattern=None,
+    rx_pattern=None,
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
     trace_kwargs: dict | None = None,
@@ -483,6 +484,15 @@ def target_arrivals(
             left in.  Passing neither leaves the projector omnidirectional,
             which is a real choice and not a default worth making silently, so
             it warns.
+        rx_pattern: the receive element's own directivity, ``f(directions)``
+            over ``[N, 3]`` unit ARRIVAL directions (the way the sound is
+            travelling when it reaches the array), returning a power weight.
+            Applied to each solved outbound path, so it is what a receive
+            stave's height does: a horizontal line of point elements accepts
+            every elevation equally, and a seabed image arriving ten degrees
+            below boresight then counts at full strength on the return leg.  A
+            real stave is a few wavelengths tall and puts that on its skirt.
+            Eigenray legs only; ``None`` is point elements.
         max_arrivals_per_leg: cap each leg before pairing.  The pair count is a
             product, so capping the legs is far more effective than capping the
             result -- and a dense fan's extra arrivals are near-duplicates.
@@ -577,6 +587,11 @@ def target_arrivals(
                 trace_kwargs=tkw)
             if outbound.n_arrivals == 0:
                 continue
+            if rx_pattern is not None:
+                w = rx_pattern(outbound.direction)
+                w = w.reshape(-1, 1) if w.ndim == 1 else w
+                outbound = outbound._replace(
+                    amplitude=outbound.amplitude * w.sqrt().to(outbound.amplitude))
             parts.append(compose_arrivals(inbound_by_highlight[i], outbound,
                                           target, highlight=i, freqs_khz=freqs))
     elif lit:
