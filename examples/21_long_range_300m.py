@@ -626,13 +626,33 @@ def main() -> int:
             return (10 * math.log10(peak / float(bg.mean().clamp_min(1e-30))),
                     float((10 * torch.log10(bg / bg.mean().clamp_min(1e-30))).std()))
 
+        def false_alarms(img):
+            """What fraction of the clutter is brighter than the target.
+
+            This, and not the contrast in decibels, is whether you can see it.
+            Contrast compares the target's PEAK against the background's MEAN,
+            and one-look speckle is exponential: its own peaks run about 10 dB
+            over its mean routinely, so a target at "+10 dB" is simply one more
+            bright cell among thousands.  A detector set at the target's level
+            would raise this fraction of the background with it, which is the
+            false-alarm rate, and it is the number an operator lives with.
+            """
+            bg = img[ring]
+            peak = float(img[near_boat].max())
+            return float((bg > peak).to(bg.dtype).mean()), int(bg.numel())
+
         srn, spread = contrast(det)
+        p_fa, n_bg = false_alarms(raw_cart)
         raw_srn, raw_spread = contrast(raw_cart)
         look_srn, look_spread = contrast(look_cart)
         mean_srn, mean_spread = contrast(mean_cart)
     print(f"  the boat's echo peaks at ({px:+.1f}, {py:+.1f}) m, boat centred "
           f"on ({tx:+.1f}, {ty:+.1f})")
     print(f"  {err:.1f} m outside the hull, against {beam_m:.1f} m of beamwidth")
+    print(f"  {100 * p_fa:.2f}% of the {n_bg} clutter cells at this range are "
+          f"brighter than it")
+    print(f"  ({'a detection' if p_fa < 1e-3 else 'NOT a detection'} -- the "
+          f"fraction, not the contrast, is what decides that)")
     print(f"\n  the same arrivals, four displays:")
     print(f"    no gain at all:           boat {raw_srn:+5.1f} dB, "
           f"background spread {raw_spread:.1f} dB")
@@ -809,9 +829,25 @@ def main() -> int:
          f"21_scene_{FAR:.0f}m.png")
 
     banner("acceptance")
-    ok = check(f"the boat's echo lands on the boat at {BOAT_RANGE:.0f} m",
+    # Two different questions, and only the second one is "can you see it".
+    # The first reads the TARGET CHANNEL ALONE, so its peak is on the boat by
+    # construction however faint the boat is -- it checks the geometry of the
+    # echo, never its detectability, and for a long time it was the only check
+    # here and it passed on a boat that was invisible in the image.
+    ok = check(f"the target channel puts its echo on the boat at "
+               f"{BOAT_RANGE:.0f} m",
                err < beam_m,
                f"{err:.1f} m outside the hull against {beam_m:.1f} m of beamwidth")
+    # The second reads the WHOLE IMAGE: how much of the clutter at the boat's
+    # own range is brighter than the boat.  A detection means a threshold set
+    # at the target lets almost no background through; 1e-3 over a ring of a
+    # few thousand cells is already a handful of false alarms per ping.
+    ok &= check("the boat stands above the clutter it competes with",
+                p_fa < 1e-3,
+                f"{100 * p_fa:.2f}% of {n_bg} cells at the same range are "
+                f"brighter than the boat's peak"
+                + (" -- a detection" if p_fa < 1e-3 else
+                   " -- NOT a detection, whatever the contrast in dB says"))
     # What fraction of the swath is lit is geometry, not a target: with the fan
     # tilted up, the surface only enters at 44 m and the seabed at 191, so a
     # short swath is legitimately part dark.  What has to hold is that the LIT
