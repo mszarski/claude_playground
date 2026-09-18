@@ -914,3 +914,92 @@ def test_a_hull_mesh_hangs_from_its_waterline():
         verts, _ = boat_hull_mesh(12.0, 3.2, draft, n_long=30, n_around=12)
         assert float(verts[:, 2].min()) == pytest.approx(0.0, abs=1e-6)
         assert float(verts[:, 2].max()) == pytest.approx(draft, rel=0.05)
+
+
+def test_the_diffuse_term_is_exactly_lambert_on_the_facets():
+    """The arithmetic, against a closed form, on a shape that has one.
+
+    A single flat facet of area ``A`` at normal incidence scatters
+    ``mu A cos(theta_i) cos(theta_s)`` = ``mu A`` into the backscatter
+    direction.  Summed in POWER, so the diffuse part of the cross-section has
+    to be exactly that, and exactly additive with the coherent part -- the
+    diffuse term redistributes nothing, it adds a channel the mirror does not
+    have.
+    """
+    import math
+
+    from hydropt.mesh import MeshScattering
+
+    # One square metre, in the x=0 plane, normal along +x.
+    verts = torch.tensor([[0.0, -0.5, -0.5], [0.0, 0.5, -0.5],
+                          [0.0, 0.5, 0.5], [0.0, -0.5, 0.5]])
+    faces = torch.tensor([[0, 1, 2], [0, 2, 3]])
+    freqs = torch.tensor([100.0])
+    # `incident` is a PROPAGATION direction, so sound that strikes a facet
+    # whose outward normal is +x has to be travelling in -x.  Aim it the other
+    # way and the facet is unlit, the coherent sum is zero, and so is this.
+    ki = torch.tensor([[-1.0, 0.0, 0.0]])
+    mu_db = -20.0
+
+    smooth = MeshScattering(verts, faces, occlusion=False)
+    rough = MeshScattering(verts, faces, occlusion=False, diffuse_db=mu_db)
+    added = float((rough(ki, -ki, freqs) - smooth(ki, -ki, freqs)).detach())
+    assert added == pytest.approx(10.0 ** (mu_db / 10.0) * 1.0, rel=1e-6)
+
+    # And off normal it follows the two cosines, not one of them.
+    a = math.radians(50.0)
+    kio = torch.tensor([[-math.cos(a), -math.sin(a), 0.0]])
+    off = float((rough(kio, -kio, freqs) - smooth(kio, -kio, freqs)).detach())
+    assert off == pytest.approx(10.0 ** (mu_db / 10.0) * math.cos(a) ** 2, rel=1e-6)
+
+
+def test_a_diffuse_term_brings_the_aspect_swing_down_to_a_real_hull_s():
+    """What makes a body visible anywhere but beam-on.
+
+    Physical optics on a smooth mesh is a mirror: it returns where a facet
+    points back at you and cancels everywhere else.  A faired hull measured
+    +10.1 dB of target strength at beam aspect and -23.9 dB at 40 degrees of
+    yaw -- 34 dB of swing, which is why an obliquely-viewed vessel vanished
+    from ``examples/21`` entirely.  Real vessels carry ribs, plating seams,
+    appendages and internal structure, lose 10 to 20 dB off beam aspect, and
+    stay detectable.
+
+    Note what is NOT asserted here: that the diffuse term leaves the specular
+    peak alone.  It leaves the peak alone only where the peak is strong, and
+    how strong physical optics makes it depends on how finely the mesh
+    resolves the curvature that produces it.  On the coarse mesh a test can
+    afford, beam aspect comes out near -12 dB rather than +10, and a -20 dB
+    diffuse term is then comparable to it.  The additivity test above pins the
+    arithmetic; this one pins the consequence.
+    """
+    import math
+
+    from hydropt.mesh import MeshScattering, boat_hull_mesh
+
+    verts, faces = boat_hull_mesh(30.0, 8.0, 4.0, n_long=80, n_around=20)
+    freqs = torch.tensor([120.0])
+
+    def ts(pattern, yaw_deg):
+        a = math.radians(yaw_deg)
+        ki = torch.tensor([[math.cos(a), math.sin(a), 0.0]])
+        return 10 * math.log10(float(pattern(ki, -ki, freqs).detach().max()))
+
+    smooth = MeshScattering(verts, faces, sound_speed=1500.0)
+    rough = MeshScattering(verts, faces, sound_speed=1500.0, diffuse_db=-20.0)
+
+    swing_smooth = ts(smooth, 90.0) - ts(smooth, 40.0)
+    swing_rough = ts(rough, 90.0) - ts(rough, 40.0)
+    assert ts(rough, 40.0) > ts(smooth, 40.0) + 5.0
+    assert swing_rough < swing_smooth - 5.0
+
+
+def test_no_diffuse_term_by_default_changes_nothing():
+    """``diffuse_db=None`` has to be the mesh that was there before."""
+    from hydropt.mesh import MeshScattering, boat_hull_mesh
+
+    verts, faces = boat_hull_mesh(12.0, 3.2, 1.6, n_long=40, n_around=14)
+    freqs = torch.tensor([100.0])
+    ki = torch.tensor([[1.0, 0.0, 0.0], [0.6, 0.8, 0.0]])
+    plain = MeshScattering(verts, faces)
+    explicit_off = MeshScattering(verts, faces, diffuse_db=None)
+    assert torch.equal(plain(ki, -ki, freqs), explicit_off(ki, -ki, freqs))

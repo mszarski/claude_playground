@@ -328,6 +328,24 @@ def _facet_block(tri: Tensor, normal: Tensor, area: Tensor, ki: Tensor,
     return (lit.unsqueeze(1).to(integral.dtype) * integral).sum(-1)
 
 
+def _diffuse_block(normal: Tensor, area: Tensor, ki: Tensor, ks: Tensor,
+                   visible: Tensor | None = None) -> Tensor:
+    """One block of facets' INCOHERENT contribution, ``[P]``.
+
+    Lambert on each facet: ``mu A cos(theta_i) cos(theta_s)``, summed in power
+    with no phase, so it survives where the coherent sum cancels.  The ``mu``
+    is applied by the caller.  Frequency-flat, which is what "diffuse" means
+    here -- the roughness responsible for it is assumed fine compared with
+    every wavelength in the band.
+    """
+    ci = (-(ki @ normal.T)).clamp_min(0.0)                       # [P, f]
+    cs = (ks @ normal.T).clamp_min(0.0)                          # [P, f]
+    w = ci * cs * area.reshape(1, -1)
+    if visible is not None:
+        w = w * visible.to(w.dtype)
+    return w.sum(-1)
+
+
 class MeshScattering(ScatteringPattern):
     r"""Bistatic cross-section of a triangle mesh, by coherent physical optics.
 
@@ -338,6 +356,21 @@ class MeshScattering(ScatteringPattern):
         learnable: register ``vertices`` as a parameter, so a loss on the image
             can deform the shape.  The faces are fixed -- topology is not
             something a gradient can move.
+        diffuse_db: Lambert scattering strength ``mu`` of the surface, in dB.
+            ``None`` (the default) leaves the body a pure mirror, which is what
+            physical optics on a smooth mesh describes and is wrong for
+            anything built by people.  A smooth analytic hull measured +14.4 dB
+            of target strength at beam aspect and -21.8 dB at 58 degrees off
+            it: 36 dB, because away from specular there is nothing left to
+            return.  A real vessel carries ribs, plating seams, a rudder, a
+            prop and internal structure, loses perhaps 10 to 20 dB off beam
+            aspect rather than 36, and stays detectable at every heading.  This
+            term is what represents that: ``mu A cos(theta_i) cos(theta_s)``
+            per facet, summed in POWER rather than amplitude, so it does not
+            cancel where the coherent sum does.  The same Lambert form the
+            seabed uses, and frequency-flat for the same reason.
+        learnable_diffuse: register ``diffuse_db`` as a parameter, so a loss on
+            the image can fit the surface's roughness.
         occlusion: cull facets hidden behind other facets, by depth buffer
             (:func:`visible_facets`).  Without it a mesh that shadows itself --
             a superstructure over a deck, a propeller behind a skeg, the far
@@ -369,6 +402,8 @@ class MeshScattering(ScatteringPattern):
 
     def __init__(self, vertices: Tensor, faces: Tensor, *,
                  sound_speed: float = 1500.0, learnable: bool = False,
+                 diffuse_db: float | None = None,
+                 learnable_diffuse: bool = True,
                  facet_chunk: int = 512, checkpoint: bool = True,
                  occlusion: bool = True, occlusion_cell: float | None = None,
                  occlusion_tolerance: float | None = None) -> None:
@@ -383,6 +418,14 @@ class MeshScattering(ScatteringPattern):
             self.register_buffer("vertices", v)
         self.register_buffer("faces", f)
         self.register_buffer("sound_speed", torch.as_tensor(float(sound_speed)))
+        if diffuse_db is None:
+            self.diffuse_db = None
+        else:
+            mu = torch.as_tensor(float(diffuse_db))
+            if learnable_diffuse:
+                self.diffuse_db = nn.Parameter(mu)
+            else:
+                self.register_buffer("diffuse_db", mu)
         self.facet_chunk = int(facet_chunk)
         self.checkpoint = bool(checkpoint)
         self.occlusion = bool(occlusion)
@@ -442,6 +485,7 @@ class MeshScattering(ScatteringPattern):
                          else torch.complex64)
         total = torch.zeros(q.shape[0], q.shape[1], dtype=complex_dtype,
                             device=q.device)
+        diffuse = torch.zeros(q.shape[0], dtype=dtype, device=q.device)
         for start in range(0, tri.shape[0], self.facet_chunk):
             stop = start + self.facet_chunk
             t, n, a = tri[start:stop], normal[start:stop], area[start:stop]
@@ -452,9 +496,15 @@ class MeshScattering(ScatteringPattern):
             else:
                 part = _facet_block(t, n, a, ki, q, vis)
             total = total + part
+            if self.diffuse_db is not None:
+                diffuse = diffuse + _diffuse_block(n, a, ki, ks, vis)
 
         amp = total / lam.reshape(1, -1).to(total.dtype)
-        return (amp.real ** 2 + amp.imag ** 2).reshape(*shape, -1)
+        sigma = amp.real ** 2 + amp.imag ** 2
+        if self.diffuse_db is not None:
+            mu = 10.0 ** (self.diffuse_db.to(dtype) / 10.0)
+            sigma = sigma + (mu * diffuse).unsqueeze(-1)
+        return sigma.reshape(*shape, -1)
 
     def extra_repr(self) -> str:
         return (f"{int(self.vertices.shape[0])} vertices, {self.n_facets} facets, "
@@ -559,6 +609,7 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
                 n_patches: int = 1, split_axis: int | None = None,
                 sound_speed: float = 1500.0,
                 learnable: bool = True, learnable_shape: bool = False,
+                diffuse_db: float | None = None,
                 facet_chunk: int = 512, occlusion: bool = True) -> ExtendedTarget:
     """An :class:`~hydropt.targets.ExtendedTarget` whose scattering is a mesh.
 
@@ -583,7 +634,9 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
         learnable: position and orientation are parameters.
         learnable_shape: the vertices are parameters too, so a loss on the
             image reaches the geometry.
-        sound_speed, facet_chunk, occlusion: passed to :class:`MeshScattering`.
+        sound_speed, diffuse_db, facet_chunk, occlusion: passed to
+            :class:`MeshScattering`.  ``diffuse_db`` is the one that decides
+            whether the body is visible anywhere but beam-on.
 
     **Two bodies in one patch also interfere as though they were one.**  A
     patch's facet phases are referred to its own centroid under a plane-wave
@@ -634,6 +687,7 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
     for group in groups:
         pattern = MeshScattering(v, group, sound_speed=sound_speed,
                                  learnable=learnable_shape,
+                                 diffuse_db=diffuse_db,
                                  facet_chunk=facet_chunk, occlusion=occlusion)
         offsets.append(pattern.centroid().detach().reshape(1, 3))
         patterns.append(pattern)
