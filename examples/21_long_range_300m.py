@@ -134,12 +134,14 @@ from hydropt.tracer import trace
 C = 1500.0
 FREQ_KHZ = 120.0
 LAMBDA = C / (FREQ_KHZ * 1e3)
-# 30 m of water, flown mid-column.  Not arbitrary: with the fan tilted UP the
-# seabed only enters the main lobe where `altitude <= 0.094 x range`, which at
-# 250 m means under 24 m of altitude.  In 60 m of water the bottom falls out of
-# the beam entirely at these ranges and the picture is surface-only.
+# 12 m down in 30 m of water, as flown.  With the fan tilted UP the seabed only
+# enters the main lobe where `altitude <= 0.094 x range`: 18 m of altitude puts
+# it at 191 m, so the inner two thirds of this swath is sea surface alone.  The
+# grazing angles that result are the other consequence -- 3.4 degrees on the
+# bottom at 300 m and 2.3 on the surface -- and Lambert scattering goes as
+# sin(theta), so a tilted-up geometry is a quiet one.
 WATER_DEPTH = 30.0
-AUV_DEPTH = 15.0            # 15 m of altitude: the bottom is in the lobe past 160 m
+AUV_DEPTH = 12.0            # 18 m of altitude: the bottom is in the lobe past 191 m
 WIND = 4.0                  # a light breeze -- small waves, 0.09 m RMS
 
 NEAR, FAR = 40.0, 300.0
@@ -631,13 +633,26 @@ def main() -> int:
     print(f"\n  The seabed enters where altitude <= "
           f"{math.tan(math.radians(dn_edge)):.3f} x range, so past about "
           f"{both_from:.0f} m")
-    print(f"  here.  Flying the same head at the same attitude over "
-          f"{WATER_DEPTH * 2:.0f} m of water")
-    print(f"  would put the bottom outside the lobe everywhere inside "
-          f"{FAR:.0f} m: tilt,")
-    print(f"  altitude and field of view between them decide what is in the "
-          f"picture,")
-    print(f"  and none of the three is a power setting.")
+    print(f"  with {WATER_DEPTH - AUV_DEPTH:.0f} m of altitude: the inner part "
+          f"of this swath is sea surface")
+    print(f"  alone.  The same head at the same attitude over "
+          f"{WATER_DEPTH * 2:.0f} m of water would have")
+    print(f"  no bottom in the lobe anywhere inside {FAR:.0f} m.  Tilt, "
+          f"altitude and field of")
+    print(f"  view between them decide what a ping can contain, and none of "
+          f"the three")
+    print(f"  is a power setting.")
+    print(f"\n  It is also a quiet geometry: the seabed is at "
+          f"{math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, FAR)):.2f} deg "
+          f"of grazing at {FAR:.0f} m and")
+    print(f"  the surface at "
+          f"{math.degrees(math.atan2(AUV_DEPTH, FAR)):.2f} deg, and Lambert "
+          f"scattering goes as sin(theta),")
+    print(f"  so both boundaries return far less than they would to a "
+          f"downward-looking")
+    print(f"  fan.  Whether that leaves the picture reverberation-limited or "
+          f"noise-limited")
+    print(f"  is measured above, not assumed.")
     print(f"\n  And across the beam: {beamwidth:.2f} deg is {beam_m:.1f} m at "
           f"the boat, so a")
     print(f"  {HULL_LENGTH:.0f} m hull is {HULL_LENGTH / beam_m:.2f} "
