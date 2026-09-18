@@ -185,6 +185,22 @@ THRESHOLD_DB = 6.0
 BOAT_RANGE = float(os.environ.get("HYDROPT_BOAT", 0.833 * FAR))
 BOAT_BEARING_DEG = -18.0
 BOAT_HEADING_DEG = float(os.environ.get("HYDROPT_HEADING", 40.0))
+# Lambert strength of the hull's own surface and structure: the parameter that
+# decides whether the vessel is visible anywhere but beam-on.  This is the same
+# -27 dB this example gives the sand seabed, used as a STAND-IN and not as a
+# measurement -- a hull's plating, ribs, rudder and prop are not sand.  It is
+# quoted rather than hidden because it is the weakest assumption in the scene,
+# and it is a learnable parameter, so an image of a real vessel at a known
+# aspect can fit it instead.
+#
+# The conclusion does not rest on the number.  At this heading, measured:
+#     mirror   boat +10.4 dB, 22 of 43629 cells brighter  -- not a detection
+#     -30 dB   boat +22.4 dB,  0 of 43629 cells brighter  -- a detection
+#     -20 dB   boat +32.1 dB,  0 of 43629 cells brighter  -- a detection
+# Detection flips between a mirror and any real roughness, not between one
+# plausible roughness and another.
+_diffuse = os.environ.get("HYDROPT_DIFFUSE", "-27")
+DIFFUSE_DB = None if _diffuse == "off" else float(_diffuse)
 # A 30 m hull drawing 4 m is a trawler or a small coaster, and those carry 7 to
 # 9 m of beam: 8.0 gives a length-to-beam of 3.75 and about 490 tonnes, which
 # are the proportions of a real vessel rather than of a rowing shell.
@@ -446,6 +462,14 @@ def main() -> int:
         # 6.25 m depth, entirely submerged, which is a different target.
         position=(BOAT_RANGE * math.cos(b), BOAT_RANGE * math.sin(b), 0.0),
         yaw=BOAT_HEADING_DEG, n_patches=6, sound_speed=C,
+        # Without this the hull is a mirror and exists only at beam aspect:
+        # +10.1 dB of target strength broadside against -23.9 dB at the 58
+        # degrees off the line of sight this scene views it at.  A real vessel
+        # swings 10 to 20 dB across that, not 34, because of everything a
+        # faired analytic surface does not have -- ribs, seams, a rudder, a
+        # prop.  HYDROPT_DIFFUSE=off restores the mirror, which is the
+        # comparison that shows what it is worth.
+        diffuse_db=DIFFUSE_DB,
         learnable=True, learnable_shape=False, facet_chunk=256)
     tx = BOAT_RANGE * math.cos(b)
     ty = BOAT_RANGE * math.sin(b)
