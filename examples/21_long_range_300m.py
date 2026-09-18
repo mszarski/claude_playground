@@ -509,7 +509,8 @@ def main() -> int:
 
     def render(arrivals):
         return beamform(arrivals, rx, scene.freqs_khz, grid, steer,
-                        sigma_t=PULSE_S, shading=shading, steer_chunk=8)
+                        sigma_t=PULSE_S, shading=shading,
+                        steer_chunk=int(os.environ.get("HYDROPT_STEER_CHUNK", 8)))
 
     with timed("  beamform"):
         image = render(both)
