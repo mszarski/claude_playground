@@ -128,7 +128,7 @@ from pathlib import Path
 
 import torch
 
-from _common import banner, check, save, setup, timed
+from _common import FIGURE_DIR, banner, check, save, setup, timed
 from hydropt import (
     ConstantLoss, IsoProfile, Scene, add_receiver_noise, azimuth_steering,
     beam_noise_power, beam_power_scale, beamform, calibrate,
@@ -1038,7 +1038,14 @@ def main() -> int:
                 sig_b, noise, generator=torch.Generator().manual_seed(SEED + 2))
             shown_b, _ = display(noisy_b, rng, pixel_m=pixel_m)
             cart_b, _, _ = to_cart(shown_b)
-            panels[name] = cart_b
+            # In decibels over the background at that range, as the main
+            # figure's fourth panel is; the first draft plotted linear power
+            # against a dB floor and came out black but for the boat's peak.
+            panels[name] = 10.0 * torch.log10(cart_b.clamp_min(1e-30))
+        # The per-beam stack, so this figure can be redrawn without a run.
+        torch.save({"stack": stack.detach().cpu(), "tilts": tilts,
+                    "bearings": bearings, "grid": grid.detach().cpu(),
+                    "k_boat": k_boat}, FIGURE_DIR / f"21_beams_{FAR:.0f}m.pt")
         top = max(float(c.max()) for c in panels.values())
         fig_c, axes = plt.subplots(1, 3, figsize=(16.5, 6.2))
         for ax, (name, cart_b) in zip(axes, panels.items()):
