@@ -793,7 +793,7 @@ def main() -> int:
 
     save(_plot(det, raw_cart, mean_cart, gx, gy, rng, prof_db.detach(),
                noise_db, tx, ty, crossover, blind, looks),
-         "21_long_range_300m.png")
+         f"21_scene_{FAR:.0f}m.png")
 
     banner("acceptance")
     ok = check(f"the boat's echo lands on the boat at {BOAT_RANGE:.0f} m",
@@ -904,13 +904,15 @@ def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
         pk = float(np.quantile(d[np.isfinite(d)], 0.99995))
         im = ax.imshow(d, origin="lower", cmap="inferno", vmin=pk - span,
                        vmax=pk, extent=extent)
-        if ring:
+        if ring and blind < FAR:
             ax.plot(blind * np.cos(th), blind * np.sin(th), ":",
                     color="deepskyblue", lw=0.9, alpha=0.6)
         ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=15, mew=1.3)
         ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
                     xytext=(14, 9), color="white", fontsize=8)
         ax.set_aspect("equal")
+        ax.set_xlim(extent[0], extent[1])
+        ax.set_ylim(extent[2], extent[3])
         ax.set_xlabel("forward (m)")
         ax.set_title(title, fontsize=10)
         fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02).set_label(label,
@@ -932,6 +934,8 @@ def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
     ax4.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
                  xytext=(14, 9), color="white", fontsize=8)
     ax4.set_aspect("equal")
+    ax4.set_xlim(extent[0], extent[1])
+    ax4.set_ylim(extent[2], extent[3])
     ax4.set_xlabel("forward (m)")
     ax4.set_ylabel("across (m)")
     ax4.set_title(f"median TVG, floored at +{THRESHOLD_DB:.0f} dB\n"
