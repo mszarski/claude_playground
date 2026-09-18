@@ -396,10 +396,16 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     # magnitude, i.e. a coherent surface bounce at these frequencies is
     # nothing.  The energy the roughness scatters elsewhere is reverberation
     # and is somebody else's job.
+    # `up_to_step`, because the path ENDS at the receiver.  The trace runs a
+    # fixed number of steps, so a ray that reaches the receiver early keeps
+    # flying -- 330 m further, in the 90 m case -- and meets boundaries out
+    # there that are no part of the path that arrived.  Counting them charged
+    # the direct path a surface bounce it never made, and at 120 kHz over a
+    # 0.09 m sea that is annihilation, not attenuation: the boat left the image.
     coherence = roughness_weights(
         result, freqs_khz, surface_rms=smooth.surface_rms,
         bottom_rms=smooth.bottom_rms, surface=smooth.surface,
-        bottom=smooth.bottom, sound_speed=float(scene.field(
+        bottom=smooth.bottom, up_to_step=step, sound_speed=float(scene.field(
             source.reshape(1, 3)).reshape(-1)[0]))
 
     alpha = absorption(freqs_khz).view(1, -1)

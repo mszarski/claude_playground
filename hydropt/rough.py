@@ -69,7 +69,7 @@ import torch
 from torch import Tensor, nn
 
 from .boundaries import BoundaryLoss, ConstantLoss, HeightField
-from .tracer import TraceResult, bounce_events
+from .tracer import BounceEvents, TraceResult, bounce_events
 
 __all__ = [
     "rayleigh_roughness",
@@ -146,6 +146,14 @@ class RoughSurfaceLoss(BoundaryLoss):
             boundary, which is what a pressure-release sea surface is *before*
             roughness -- and after it, at any useful frequency, is not.
         sound_speed: for the wavenumber (m/s).
+        up_to_step: ``[R]`` vertex index per ray; bounces recorded *after* it do
+            not count.  A trace runs for a fixed number of steps, so a ray aimed
+            at a receiver part-way along keeps going once it has passed -- and
+            the boundary it meets out there is not on the path that arrived.
+            Charging it is not a small error: a direct path over a 0.09 m sea at
+            120 kHz is annihilated by one spurious bounce, so the target
+            disappears from the image entirely.  Omit it when the whole traced
+            ray IS the path, which is the usual case.
         pressure_release: forwarded to the default ``smooth`` loss; ignored when
             ``smooth`` is given.
 
@@ -208,6 +216,7 @@ def roughness_weights(
     bottom: HeightField | None = None,
     sound_speed: float = 1500.0,
     min_grazing: float = 1e-9,
+    up_to_step: Tensor | None = None,
 ) -> Tensor:
     r"""Per-ray, per-band coherent-reflection factor from a bundle's bounces.
 
@@ -233,6 +242,14 @@ def roughness_weights(
             onto the boundary.  Without them the grazing angles are the recorded
             ones, which are biased by up to one step.
         sound_speed: for the wavenumber (m/s).
+        up_to_step: ``[R]`` vertex index per ray; bounces recorded *after* it do
+            not count.  A trace runs for a fixed number of steps, so a ray aimed
+            at a receiver part-way along keeps going once it has passed -- and
+            the boundary it meets out there is not on the path that arrived.
+            Charging it is not a small error: a direct path over a 0.09 m sea at
+            120 kHz is annihilated by one spurious bounce, so the target
+            disappears from the image entirely.  Omit it when the whole traced
+            ray IS the path, which is the usual case.
 
     Returns:
         ``[R, B]`` energy factors in ``(0, 1]``, differentiable in nothing by
@@ -250,6 +267,10 @@ def roughness_weights(
 
     events = bounce_events(result, surface=surface, bottom=bottom,
                            min_grazing=min_grazing)
+    if up_to_step is not None and events.count > 0:
+        limit = up_to_step.reshape(-1).to(events.step.device)
+        keep = (events.step <= limit[events.ray.to(limit.device)]).nonzero().reshape(-1)
+        events = BounceEvents(*(t[keep] for t in events))
     if events.count == 0:
         return torch.ones(n_rays, n_band, dtype=dtype, device=device)
 

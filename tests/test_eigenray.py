@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from hydropt import ConstantLoss, FlatHeight, IsoProfile, Scene
+from hydropt.absorption import thorp_db_per_km
 from hydropt.eigenray import eigenray_arrivals, find_eigenrays
 
 C = 1500.0
@@ -229,3 +230,46 @@ def test_the_eigenray_leg_does_not_care_how_the_bracket_was_sampled():
                                 max_arrivals_per_leg=400)
         seen.append(float((a.amplitude ** 2).sum()))
     assert max(seen) / min(seen) < 1.05
+
+
+def test_a_direct_path_is_not_charged_for_what_the_ray_hits_afterwards():
+    """The path ends at the receiver, and the trace does not.
+
+    A trace runs a fixed number of steps.  A receiver reached early leaves the
+    ray flying on, and whatever boundary it meets out there belongs to no path
+    that arrived.  Charging the roughness of it is not a rounding error: one
+    spurious surface bounce over a wind sea at 120 kHz annihilates the arrival,
+    and the target vanishes from the image.  That is exactly what happened to
+    the boat in ``examples/21`` at 90 m while the same scene at 300 m was fine,
+    because there the overshoot was too short to reach the seabed.
+
+    Built shallow and rough so the overshoot cannot miss the bottom, and with a
+    clean line of sight so the true answer is known: one direct arrival.
+    """
+    scene = Scene(field=IsoProfile(C, learnable=False),
+                  bottom=FlatHeight(30.0), surface=FlatHeight(0.0),
+                  source=(0.0, 0.0, 12.0), receivers=torch.zeros(1, 3),
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([120.0]),
+                  step_size=2.0, n_steps=200, max_bounces=6)
+    src = torch.tensor([61.6, -31.4, 1.9])       # a hull patch near the surface
+    rcv = torch.tensor([0.0, 0.0, 12.0])         # the array, 70 m away
+    arrivals = eigenray_arrivals(scene, src, rcv, scene.freqs_khz,
+                                 bracket_rays=2000,
+                                 bracket_half_angle_deg=45.0)
+    # 70 m of the 400 m the trace covers, so the direct ray overshoots by 330 m
+    # and reaches the seabed well beyond the receiver.
+    assert arrivals.n_arrivals >= 1, "the direct path was annihilated by a bounce it never made"
+
+    span = float((rcv - src).norm())
+    direct = int(arrivals.time.detach().argmin())
+    assert float(arrivals.time[direct]) == pytest.approx(span / C, rel=1e-3)
+    # Unobstructed and unbounced, so the only things it pays are spherical
+    # spreading and Thorp -- 2.7 dB over 70 m at 120 kHz, which is most of the
+    # 27% this sits below 1/L.  A single spurious 120 kHz surface bounce would
+    # put it at zero, not merely low.
+    alpha = float(thorp_db_per_km(torch.tensor([120.0])))
+    expected = (1.0 / span) * 10.0 ** (-alpha * span / 20000.0)
+    amp = float(arrivals.amplitude[direct].max())
+    assert amp == pytest.approx(expected, rel=0.05)
