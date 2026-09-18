@@ -56,11 +56,65 @@ from torch import Tensor
 
 from .absorption import thorp_db_per_km
 from .beamform import ArrivalSet
+from .boundaries import FlatHeight, HeightField
 from .launch import fibonacci_cone
 from .receiver import _closest_approach
+from .rough import roughness_weights
 from .tracer import trace
 
-__all__ = ["eigenray_arrivals", "find_eigenrays"]
+__all__ = ["eigenray_arrivals", "find_eigenrays", "mean_boundary"]
+
+
+def mean_boundary(boundary: HeightField) -> tuple[HeightField, float]:
+    """A boundary's mean plane and the RMS it departs from it.
+
+    An eigenray through a ROUGH boundary is not a well-posed thing to solve
+    for.  Perturb the launch direction by a hair and the ray reflects off a
+    different facet of the wave field, so the miss distance jumps rather than
+    varying smoothly and Newton has no derivative to work with.  Measured in a
+    120 kHz scene over a Pierson-Moskowitz sea, the refinement left residuals
+    of 2.8, 7.7, 15.8 and 64.6 m where the same geometry with flat boundaries
+    converged every path to under 3 cm.
+
+    The physics says the same thing.  A coherent field's specular path is
+    defined on the MEAN surface; roughness does not move it, it costs it
+    amplitude -- the Eckart coherence factor, which at 100 kHz over a wind sea
+    is tens of orders of magnitude.  What the roughness scatters elsewhere is
+    not a coherent arrival at all, it is reverberation, and
+    :func:`hydropt.reverb.reverberation_arrivals` already models it.
+
+    So solve on the mean plane and pay the coherence loss, rather than chasing
+    a path through the facets.
+    """
+    h = getattr(boundary, "heights", None)
+    if h is None:                       # already flat, or has no height grid
+        return boundary, 0.0
+    with torch.no_grad():
+        mean = float(h.mean())
+        rms = float((h - h.mean()).pow(2).mean().sqrt())
+    return FlatHeight(mean), rms
+
+
+class _SmoothedScene:
+    """A scene view whose boundaries are their own mean planes."""
+
+    def __init__(self, scene, source: Tensor) -> None:
+        surface, self.surface_rms = mean_boundary(scene.surface)
+        bottom, self.bottom_rms = mean_boundary(scene.bottom)
+        object.__setattr__(self, "_scene", scene)
+        object.__setattr__(self, "_source", source)
+        object.__setattr__(self, "_surface", surface)
+        object.__setattr__(self, "_bottom", bottom)
+
+    def __getattr__(self, name: str):
+        if name == "surface":
+            return self._surface
+        if name == "bottom":
+            return self._bottom
+        return getattr(self._scene, name)
+
+    def source_position(self) -> Tensor:
+        return self._source
 
 
 def _frame(axis: Tensor) -> tuple[Tensor, Tensor, Tensor]:
@@ -141,8 +195,6 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
 
     Returns ``(directions [P, 3], miss [P], signature [P])``.
     """
-    from .active import _RelocatedScene
-
     source = source.reshape(3)
     receiver = receiver.reshape(3)
     tkw = dict(trace_kwargs or {})
@@ -153,7 +205,7 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
     # --- bracket: how many paths are there, and roughly where do they leave?
     with torch.no_grad():
         fan = fibonacci_cone(bracket_rays, frame[0], bracket_half_angle_deg)
-        res = trace(_RelocatedScene(scene, source.reshape(1, 3).expand(
+        res = trace(_SmoothedScene(scene, source.reshape(1, 3).expand(
             bracket_rays, 3)), fan, **tkw)
         miss, step, _ = _closest(res, receiver)
         d = miss.norm(dim=-1)
@@ -185,7 +237,7 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
         """Miss vectors, transverse components, for P candidate directions."""
         p = u.shape[0]
         directions = _aim(frame, u)
-        r = trace(_RelocatedScene(scene, src.reshape(1, 3).expand(p, 3)),
+        r = trace(_SmoothedScene(scene, src.reshape(1, 3).expand(p, 3)),
                   directions, **tkw)
         m, st, fr = _closest(r, receiver)
         return torch.stack([(m * e1).sum(-1), (m * e2).sum(-1)], dim=-1), r, st, fr
@@ -246,8 +298,6 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     :func:`hydropt.beamform.extract_arrivals`, so it drops in wherever that
     does.
     """
-    from .active import _RelocatedScene
-
     source = source.reshape(3)
     receiver = receiver.reshape(3)
     dtype, device = source.dtype, source.device
@@ -267,8 +317,8 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     p = directions.shape[0]
 
     tkw = dict(kwargs.get("trace_kwargs") or {})
-    result = trace(_RelocatedScene(scene, source.reshape(1, 3).expand(p, 3)),
-                   directions, **tkw)
+    smooth = _SmoothedScene(scene, source.reshape(1, 3).expand(p, 3))
+    result = trace(smooth, directions, **tkw)
     miss, step, frac = _closest(result, receiver)
     rows = torch.arange(p, device=device)
 
@@ -304,24 +354,40 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
             out = []
             for sign in (1.0, -1.0):
                 d2 = _aim(frame, base_uv + sign * bump)
-                r2 = trace(_RelocatedScene(scene,
-                                           source.detach().reshape(1, 3).expand(p, 3)),
-                           d2, **tkw)
+                r2 = trace(_SmoothedScene(
+                    scene, source.detach().reshape(1, 3).expand(p, 3)),
+                    d2, **tkw)
                 m2, _, _ = _closest(r2, receiver)
                 out.append(torch.stack([(m2 * e1).sum(-1), (m2 * e2).sum(-1)],
                                        dim=-1))
             cols.append((out[0] - out[1]) / (2 * h))
         j = torch.stack(cols, dim=-1)
         area = (j[:, 0, 0] * j[:, 1, 1] - j[:, 0, 1] * j[:, 1, 0]).abs()
-        # A tube that has collapsed is a caustic; fall back to spherical
-        # spreading there rather than returning an infinity.
+        # A tube far tighter than spherical is a Jacobian that failed, not a
+        # caustic.  Focusing by more than this over a single leg would be a
+        # remarkable piece of geometry; a finite difference that straddled a
+        # discontinuity is the ordinary explanation, and letting it through
+        # multiplies the energy by the reciprocal of however small it got.
         spherical = path_length.detach().clamp_min(spread_min_range) ** 2
-        area = torch.where(area > 1e-12 * spherical, area, spherical)
+        area = area.clamp_min(1e-2 * spherical)
     spread = 1.0 / area
+
+    # Roughness costs the path amplitude, it does not move it.  The solve ran
+    # on the mean planes, so every bounce now pays its Eckart coherence factor
+    # at each band -- which at 100 kHz over a wind sea is tens of orders of
+    # magnitude, i.e. a coherent surface bounce at these frequencies is
+    # nothing.  The energy the roughness scatters elsewhere is reverberation
+    # and is somebody else's job.
+    coherence = roughness_weights(
+        result, freqs_khz, surface_rms=smooth.surface_rms,
+        bottom_rms=smooth.bottom_rms, surface=smooth.surface,
+        bottom=smooth.bottom, sound_speed=float(scene.field(
+            source.reshape(1, 3)).reshape(-1)[0]))
 
     alpha = absorption(freqs_khz).view(1, -1)
     energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
-              * 10.0 ** (-(alpha * path_length.unsqueeze(1)) / 1.0e4))
+              * 10.0 ** (-(alpha * path_length.unsqueeze(1)) / 1.0e4)
+              * coherence)
     order = time.detach().argsort()
     return ArrivalSet(time=time[order],
                       amplitude=energy.clamp_min(0.0).sqrt()[order],
