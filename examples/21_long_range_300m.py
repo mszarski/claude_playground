@@ -198,6 +198,18 @@ PATCHES = None
 SEED = 7
 
 
+def _range_marks(n: int = 3):
+    """Ranges to tabulate, spread across whatever swath is configured.
+
+    Hard-coding 100, 200, 300 quietly tabulates ranges outside a 90 m swath,
+    and a table that reports what happens at 200 m in a 90 m picture is worse
+    than no table -- it decided, once, that both boundaries were in the lobe
+    when neither was inside the swath at all.
+    """
+    lo = max(NEAR, 0.2 * FAR)
+    return [lo + (FAR - lo) * i / (n - 1) for i in range(n)]
+
+
 def beam_3db_deg(n: int, shading=None) -> float:
     """Half-power beamwidth of an ``n``-element half-wavelength line array.
 
@@ -367,7 +379,7 @@ def main() -> int:
     print(f"  wind {WIND:.0f} m/s: sea "
           f"{float(surface.heights.detach().std()):.3f} m RMS, "
           f"seabed {tuple(bottom.heights.shape)} nodes over 688 m")
-    for r in (100.0, 200.0, FAR):
+    for r in _range_marks():
         print(f"    at {r:5.0f} m the bottom is "
               f"{math.degrees(math.atan2(alt, r)):4.1f} deg down, the surface "
               f"{math.degrees(math.atan2(AUV_DEPTH, r)):4.1f} deg up")
@@ -403,7 +415,7 @@ def main() -> int:
     shading = shading_window(N_RX, "hamming")
     scale = beam_power_scale(shading, PULSE_S)
     print(f"  absorption {alpha:.1f} dB/km at {FREQ_KHZ:.0f} kHz:")
-    for r in (100.0, 200.0, FAR):
+    for r in _range_marks():
         print(f"    {r:5.0f} m: {2 * alpha * r / 1000:5.1f} dB two-way "
               f"absorption, {40 * math.log10(r):5.1f} dB two-way spreading")
     at_60 = float(thorp_db_per_km(torch.tensor([60.0])))
@@ -703,7 +715,7 @@ def main() -> int:
     print(f"  a ping can contain at all:")
     print(f"\n   range   surface   seabed   in the lobe")
     both_from = None
-    for r in (60.0, 100.0, 160.0, 200.0, 250.0, FAR):
+    for r in _range_marks(6):
         up = -math.degrees(math.atan2(AUV_DEPTH, r))
         dn = math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, r))
         s_ok, b_ok = up_edge <= up <= dn_edge, up_edge <= dn <= dn_edge
@@ -736,8 +748,11 @@ def main() -> int:
     print(f"  is measured above, not assumed.")
     print(f"\n  And across the beam: {beamwidth:.2f} deg is {beam_m:.1f} m at "
           f"the boat, so a")
-    print(f"  {HULL_LENGTH:.0f} m hull is {HULL_LENGTH / beam_m:.2f} "
-          f"beamwidths -- about one.  It is a mark at")
+    widths = across / beam_m
+    verdict = ("a mark, not a shape" if widths < 1.2
+               else f"resolved, {widths:.1f} beams of extent")
+    print(f"  {HULL_LENGTH:.0f} m hull lies {across:.1f} m across bearing = "
+          f"{widths:.2f} beamwidths -- {verdict}.  It stands at")
     print(f"  {srn:+.1f} dB, which is a detection, not a shape.  Resolving it "
           f"needs more")
     print(f"  wavelengths across the aperture: at 300 kHz this same "
@@ -770,7 +785,7 @@ def main() -> int:
          "21_long_range_300m.png")
 
     banner("acceptance")
-    ok = check("the boat's echo lands on the boat at 250 m",
+    ok = check(f"the boat's echo lands on the boat at {BOAT_RANGE:.0f} m",
                err < beam_m,
                f"{err:.1f} m outside the hull against {beam_m:.1f} m of beamwidth")
     # What fraction of the swath is lit is geometry, not a target: with the fan
@@ -787,9 +802,21 @@ def main() -> int:
                 margin > 3.0 and crossover > FAR,
                 f"still {margin:.1f} dB above the ambient at {FAR:.0f} m; "
                 f"crosses at about {crossover:.0f} m")
-    ok &= check("absorption is the dominant loss at 300 m",
-                2 * alpha * FAR / 1000 > 15.0,
-                f"{2 * alpha * FAR / 1000:.1f} dB two-way at {FAR:.0f} m")
+    # Absorption dominates at long range and is a minor term at short: 23 dB
+    # two-way at 300 m against 6.9 at 90.  Which regime you are in decides
+    # whether a lower frequency is worth its wider beams, so the example has
+    # to say which, not assert one.
+    absorbed = 2 * alpha * FAR / 1000
+    if FAR >= 200.0:
+        ok &= check("absorption is the dominant loss at this range",
+                    absorbed > 15.0,
+                    f"{absorbed:.1f} dB two-way at {FAR:.0f} m -- more than "
+                    f"the {margin:.1f} dB of margin over the ambient")
+    else:
+        ok &= check("absorption is a minor term at this range",
+                    absorbed < 10.0,
+                    f"{absorbed:.1f} dB two-way at {FAR:.0f} m, against "
+                    f"{40 * math.log10(FAR):.0f} dB of spreading")
     ok &= check("a median gain never does worse than a mean one",
                 srn >= mean_srn - 0.2,
                 f"raw {raw_srn:+.1f}, mean {mean_srn:+.1f}, median "
@@ -799,11 +826,18 @@ def main() -> int:
     # window it is averaged over.  A point target loses several dB; this hull
     # is 72 range cells deep and loses almost nothing.  What is invariant is
     # that it smooths the background and never adds contrast.
-    ok &= check("multi-look smooths the background and never adds contrast",
-                look_spread < spread - 0.8 and look_srn <= srn + 0.5,
-                f"{look_srn - srn:+.1f} dB of contrast for "
-                f"{spread - look_spread:.1f} dB of speckle over {looks} looks, "
-                f"on a hull {along / (PULSE_S * C / 2):.0f} range cells deep")
+    if looks > 1:
+        ok &= check("multi-look smooths the background and never adds contrast",
+                    look_spread < spread - 0.8 and look_srn <= srn + 0.5,
+                    f"{look_srn - srn:+.1f} dB of contrast for "
+                    f"{spread - look_spread:.1f} dB of speckle over {looks} "
+                    f"looks, on a hull "
+                    f"{along / (PULSE_S * C / 2):.0f} range cells deep")
+    else:
+        ok &= check("no multi-look to do: the display pixel is one range bin",
+                    look_srn == srn and look_spread == spread,
+                    f"{pixel_m:.2f} m pixel against "
+                    f"{float(rng[1] - rng[0]):.2f} m bins -- nothing to average")
     # The echo's width across bearing should be the hull's own across-track
     # extent convolved with the beam, which is the check that the image is
     # showing the target's geometry and not just the array's.
