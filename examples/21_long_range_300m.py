@@ -184,7 +184,7 @@ THRESHOLD_DB = 6.0
 
 BOAT_RANGE = float(os.environ.get("HYDROPT_BOAT", 0.833 * FAR))
 BOAT_BEARING_DEG = -18.0
-BOAT_HEADING_DEG = 40.0
+BOAT_HEADING_DEG = float(os.environ.get("HYDROPT_HEADING", 40.0))
 # A 30 m hull drawing 4 m is a trawler or a small coaster, and those carry 7 to
 # 9 m of beam: 8.0 gives a length-to-beam of 3.75 and about 490 tonnes, which
 # are the proportions of a real vessel rather than of a rowing shell.
