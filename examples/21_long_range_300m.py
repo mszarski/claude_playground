@@ -13,11 +13,15 @@ picture getting bigger.**
 the reason a 300 m set is usually built at 60 kHz or below, trading 13 dB of
 absorption for beams 1.7 times wider.  The budget is printed.
 
-*The near field goes dark.*  A forward-looking fan is narrow in elevation, and
-from 35 m of altitude a ray steep enough to reach the seabed inside 60 m is
-outside the transmit beam altogether.  The image therefore starts at 40 m with
-nothing in it until about 50: a real long-range set has this gap, and pointing
-the fan down to close it costs the range that was the point.
+*The near field goes dark, and the vertical FOV is why.*  The head here is the
+real thing: 3.00 degree azimuth beams and a 20 degree vertical field of view
+carrying beams of 4.84 degrees, about four of them.  Twenty degrees is not much
+at 300 m, and it is the quantity that decides whether the surface and the
+seabed are both in the picture: they sit 33 degrees apart at 100 m and 11 at
+300, so a single tilt holds both only past about 170 m and holds whichever is
+nearer its axis inside that.  No vehicle depth fixes it -- the separation
+depends only on the total water depth -- so it is geometry rather than a
+shortage of power.
 
 *Reverberation was supposed to stop being the enemy, and does not.*  Bottom
 reverberation falls as ``r^-5`` with the grazing angle falling too, so past some
@@ -122,7 +126,7 @@ from hydropt.reverb import LambertScattering, reverberation_arrivals
 from hydropt.tracer import trace
 
 C = 1500.0
-FREQ_KHZ = 100.0
+FREQ_KHZ = 120.0
 LAMBDA = C / (FREQ_KHZ * 1e3)
 WATER_DEPTH = 60.0
 AUV_DEPTH = 25.0            # 35 m of altitude: enough to see 300 m of bottom
@@ -130,9 +134,16 @@ WIND = 4.0                  # a light breeze -- small waves, 0.09 m RMS
 
 NEAR, FAR = 40.0, 300.0
 SECTOR_DEG = 60.0
-N_RX, N_TX = 64, 6
-ELEV_DEG = (-28.0, 28.0)    # the fan; the 6-element array's beam is inside it
-TILT_DEG = 0.0              # level: the boat is 4.8 deg up, the bottom 6.7 down
+# Sized to a real head: 3.00 deg azimuth beams and a 20 deg vertical field of
+# view, the latter carrying beams of 4.84 deg.  Measured, not assumed --
+# `beam_3db_deg` below finds the half-power width of the actual array factor,
+# because the quantity that is easy to compute, 2*asin(2/N), is the NULL-TO-NULL
+# width and is 1.5 times larger.  Quoting one for the other overstates every
+# cross-range figure by half again.
+N_RX, N_TX = 50, 5          # 3.03 deg azimuth, 20.8 deg vertical FOV
+VERTICAL_BEAM_DEG = 4.84    # beams within that FOV -- about four of them
+ELEV_DEG = (-20.0, 23.0)    # the fan, wide enough to sample the FOV's skirts
+TILT_DEG = 1.5              # down: what holds surface AND seabed past 170 m
 
 # A LONG pulse, not the 0.12 ms of the 90 m examples.  Range resolution is
 # c tau / 2 = 0.22 m here instead of 0.09, and that is the trade a long-range
@@ -153,6 +164,26 @@ N_ELEV, N_AZIM = 96, 330
 # cell, so throwing any away is throwing away the reverberation field itself.
 PATCHES = None
 SEED = 7
+
+
+def beam_3db_deg(n: int, shading=None) -> float:
+    """Half-power beamwidth of an ``n``-element half-wavelength line array.
+
+    Measured off the array factor rather than taken from a formula.  The
+    convenient closed form, ``2 asin(2/N)``, is the first-null spacing, and for
+    a Hamming-shaded 64-element array it gives 3.58 degrees where the half-power
+    width is 2.36 -- so using it silently inflates every cross-range extent, and
+    with it every claim about what is and is not resolved.
+    """
+    a = torch.linspace(-0.6, 0.6, 200001, dtype=torch.float64)
+    w = (torch.ones(n, dtype=torch.float64) if shading is None
+         else shading.to(torch.float64))
+    m = torch.arange(n, dtype=torch.float64) - (n - 1) / 2
+    af = (w.reshape(1, -1)
+          * torch.exp(1j * math.pi * a.reshape(-1, 1) * m.reshape(1, -1))
+          ).sum(-1).abs() ** 2
+    over = (af / af.max() > 0.5).nonzero().reshape(-1)
+    return 2.0 * math.degrees(math.asin(float(a[int(over[-1])])))
 
 
 def _ex15():
@@ -296,9 +327,17 @@ def main() -> int:
         print(f"    at {r:5.0f} m the bottom is "
               f"{math.degrees(math.atan2(alt, r)):4.1f} deg down, the surface "
               f"{math.degrees(math.atan2(AUV_DEPTH, r)):4.1f} deg up")
-    blind = alt / math.tan(math.radians(ELEV_DEG[1]))
-    print(f"  the fan stops at {ELEV_DEG[1]:.0f} deg down, so nothing on the "
-          f"bottom inside {blind:.0f} m is lit")
+    fov_deg = beam_3db_deg(N_TX)
+    blind = alt / math.tan(math.radians(TILT_DEG + fov_deg / 2))
+    print(f"  {N_TX} transmit elements = a {fov_deg:.1f} deg vertical FOV "
+          f"tilted {TILT_DEG:.1f} deg down,")
+    print(f"  carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
+          f"{fov_deg / VERTICAL_BEAM_DEG:.0f} of them.  Its lower edge is")
+    print(f"  {TILT_DEG + fov_deg / 2:.1f} deg down, so the bottom inside "
+          f"{blind:.0f} m is in the skirts, not the beam.")
+    print(f"  {N_RX} receive elements = "
+          f"{beam_3db_deg(N_RX, shading_window(N_RX, 'hamming')):.2f} deg "
+          f"azimuth beams at half power.")
 
     banner("the range budget")
     alpha = float(thorp_db_per_km(scene.freqs_khz))
@@ -445,10 +484,14 @@ def main() -> int:
           f"{float(gx[1] - gx[0]):.2f} x {float(gy[1] - gy[0]):.2f} m each")
     print(f"  {float(rng[1] - rng[0]):.2f} m range bins under a "
           f"{pixel_m:.2f} m pixel -> {looks} looks averaged per pixel")
-    beamwidth = 2.0 * math.degrees(math.asin(1.0 / (N_RX / 2.0)))
+    beamwidth = beam_3db_deg(N_RX, shading)
     beam_m = BOAT_RANGE * math.radians(beamwidth)
-    print(f"  beamwidth {beamwidth:.2f} deg = {beam_m:.1f} m at the boat, "
-          f"range cell {PULSE_S * C / 2:.2f} m")
+    print(f"  beam {beamwidth:.2f} deg at half power = {beam_m:.1f} m at the "
+          f"boat, range cell {PULSE_S * C / 2:.2f} m")
+    print(f"  (the first-null spacing is "
+          f"{2 * math.degrees(math.asin(2.0 / N_RX)):.2f} deg -- quoting that "
+          f"as the beamwidth")
+    print(f"   inflates every cross-range figure by half again)")
 
     banner("can you see it at 250 m")
     det = cart.detach()
@@ -539,62 +582,52 @@ def main() -> int:
           f"choice,")
     print(f"  not a measurement: the figure draws this image both ways.")
 
-    banner("what it would take to make the boat look like a boat")
-    print("  The hull is smaller than a beam here, so it draws as a point and a")
-    print("  point in speckle is shaped like a speckle.  The only fix is to")
-    print("  resolve it -- the SAME arrivals, through a longer array.")
-
-    def zoom(n_elements, n_bearings=81, half_deg=7.0, n_bins=130):
-        """Re-beamform the same echoes around the boat, at a chosen aperture."""
-        y = (torch.arange(n_elements, dtype=torch.get_default_dtype())
-             - (n_elements - 1) / 2) * (LAMBDA / 2)
-        arr = torch.stack((torch.zeros_like(y), y,
-                           torch.full_like(y, AUV_DEPTH)), dim=-1)
-        ang = torch.linspace(BOAT_BEARING_DEG - half_deg,
-                             BOAT_BEARING_DEG + half_deg, n_bearings)
-        a = ang * math.pi / 180.0
-        look = torch.stack((a.cos(), a.sin(), torch.zeros_like(a)), dim=-1)
-        g = make_time_grid(2.0 * (BOAT_RANGE - 18.0) / C,
-                           2.0 * (BOAT_RANGE + 18.0) / C, n_bins)
-        img = beamform(both, arr, scene.freqs_khz, g, look, sigma_t=PULSE_S,
-                       shading=shading_window(n_elements, "hamming"),
-                       steer_chunk=8)[:, 0, :]
-        bw = 2.0 * math.degrees(math.asin(1.0 / (n_elements / 2.0)))
-        # The hull's apparent length: the -10 dB width of the peak in bearing,
-        # at the boat's range, which is what an operator would measure off it.
-        peak = int(img.reshape(-1).argmax())
-        column = img[:, peak % n_bins]
-        over = (column > column.max() * 10 ** (-1.0)).nonzero().reshape(-1)
-        width = (float(ang[int(over[-1])] - float(ang[int(over[0])]))
-                 if over.numel() > 1 else 0.0)
-        return img, ang, g * C / 2.0, bw, BOAT_RANGE * math.radians(width)
-
-    zooms = {}
-    for n in (N_RX, 4 * N_RX):
-        with timed(f"  {n} elements"):
-            with torch.no_grad():
-                zooms[n] = zoom(n)
-        img, ang, zr, bw, span = zooms[n]
-        print(f"    beam {bw:.2f} deg = {BOAT_RANGE * math.radians(bw):5.1f} m "
-              f"at the boat; a {HULL_LENGTH:.0f} m hull is "
-              f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} beamwidths")
-        widths = HULL_LENGTH / (BOAT_RANGE * math.radians(bw))
-        verdict = ("the beam, not the boat" if widths < 1.0
-                   else "the hull, smeared by the beam")
-        print(f"    the echo measures {span:5.1f} m across at -10 dB -- "
-              f"{verdict}")
-    wide_bw = 2.0 * math.degrees(math.asin(1.0 / (N_RX / 2.0)))
-    narrow_bw = 2.0 * math.degrees(math.asin(1.0 / (2.0 * N_RX)))
-    print(f"  {4 * N_RX} elements at half-wavelength is "
-          f"{4 * N_RX * LAMBDA / 2:.2f} m of array against "
-          f"{N_RX * LAMBDA / 2:.2f} m --")
-    print(f"  which is the real answer to 'make it clearer at 300 m': aperture,")
-    print(f"  not power and not processing.  Note it does NOT help detection: "
-          f"the")
-    print(f"  boat was already {srn:+.1f} dB over its background at "
-          f"{N_RX} elements.  It helps")
-    print(f"  recognition, which is a different question and the one the eye "
-          f"asks.")
+    banner("what the vertical field of view can hold")
+    fov = beam_3db_deg(N_TX)
+    print(f"  {N_TX} transmit elements give a {fov:.1f} deg vertical field of "
+          f"view, tilted")
+    print(f"  {TILT_DEG:.1f} deg down, carrying beams of "
+          f"{VERTICAL_BEAM_DEG:.2f} deg -- about "
+          f"{fov / VERTICAL_BEAM_DEG:.0f} of them.")
+    print(f"  That FOV is the whole reason this scene has both boundaries in "
+          f"it:")
+    print(f"\n   range   surface   seabed   apart   inside a "
+          f"{fov:.0f} deg FOV?")
+    both_from = None
+    for r in (100.0, 150.0, 200.0, 250.0, FAR):
+        up = math.degrees(math.atan2(AUV_DEPTH, r))
+        dn = math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, r))
+        fits = up + dn <= fov
+        if fits and both_from is None:
+            both_from = r
+        print(f"   {r:5.0f} m  {up:5.2f} up  {dn:5.2f} dn  {up + dn:5.2f}   "
+              f"{'yes' if fits else 'no -- one or the other'}")
+    r = 1.0
+    while (math.degrees(math.atan2(AUV_DEPTH, r))
+           + math.degrees(math.atan2(WATER_DEPTH - AUV_DEPTH, r))) > fov:
+        r += 1.0
+    print(f"\n  Both fit beyond about {r:.0f} m.  Inside that the FOV holds "
+          f"whichever")
+    print(f"  boundary is nearer its axis, and the other is in the skirts -- "
+          f"which is")
+    print(f"  a geometry limit, not a power one: no vehicle depth fixes it, "
+          f"because")
+    print(f"  the separation depends only on the total water depth.")
+    print(f"\n  And across the beam: {beamwidth:.2f} deg is {beam_m:.1f} m at "
+          f"the boat, so a")
+    print(f"  {HULL_LENGTH:.0f} m hull is {HULL_LENGTH / beam_m:.2f} "
+          f"beamwidths -- about one.  It is a mark at")
+    print(f"  {srn:+.1f} dB, which is a detection, not a shape.  Resolving it "
+          f"needs more")
+    print(f"  wavelengths across the aperture: at 300 kHz this same "
+          f"{N_RX * LAMBDA / 2:.2f} m array")
+    print(f"  would be {2 * (N_RX * LAMBDA / 2) / (C / 300e3):.0f} elements "
+          f"and about "
+          f"{beam_3db_deg(int(2 * (N_RX * LAMBDA / 2) / (C / 300e3)), None):.2f} deg, "
+          f"but it would cost")
+    print(f"  {2 * (float(thorp_db_per_km(torch.tensor([300.0]))) - alpha) * FAR / 1000:.0f} dB "
+          f"more absorption at {FAR:.0f} m.  Aperture in WAVELENGTHS is the")
+    print(f"  variable, and frequency is the cheap way to buy it.")
 
     banner("still differentiable, at 300 m")
     t0 = time.perf_counter()
@@ -611,8 +644,9 @@ def main() -> int:
     print(f"\n  forward {forward:.1f} s + backward {backward:.1f} s over "
           f"{both.n_arrivals} arrivals")
 
-    save(_plot(det, raw_cart, gx, gy, rng, prof_db.detach(), noise_db, tx, ty,
-               crossover, blind, looks, zooms), "21_long_range_300m.png")
+    save(_plot(det, raw_cart, mean_cart, gx, gy, rng, prof_db.detach(),
+               noise_db, tx, ty, crossover, blind, looks),
+         "21_long_range_300m.png")
 
     banner("acceptance")
     ok = check("the boat's echo lands on the boat at 250 m",
@@ -638,20 +672,19 @@ def main() -> int:
                 look_srn < srn - 0.5 and look_spread < spread - 0.8,
                 f"{look_srn - srn:+.1f} dB of contrast for "
                 f"{spread - look_spread:.1f} dB of speckle over {looks} looks")
-    wide = HULL_LENGTH / (BOAT_RANGE * math.radians(wide_bw))
-    narrow = HULL_LENGTH / (BOAT_RANGE * math.radians(narrow_bw))
-    ok &= check("the hull is a point at this aperture and a shape at four "
-                "times it",
-                wide < 1.0 < 2.0 < narrow,
-                f"{wide:.2f} beamwidths at {N_RX} elements, {narrow:.2f} at "
-                f"{4 * N_RX}")
+    ok &= check("the hull is about one beamwidth: a mark, not a shape",
+                0.5 < HULL_LENGTH / beam_m < 2.0,
+                f"{HULL_LENGTH / beam_m:.2f} beamwidths at {beamwidth:.2f} deg")
+    ok &= check("the vertical FOV holds both boundaries over the far swath",
+                both_from is not None and both_from < 0.8 * FAR,
+                f"both inside {fov:.1f} deg beyond about {r:.0f} m")
     ok &= check("the image is still differentiable end to end",
                 all(states.values()), f"{sum(states.values())}/{len(states)} live")
     return 0 if ok else 1
 
 
-def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
-          looks, zooms):
+def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
+          crossover, blind, looks):
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -659,15 +692,15 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
     extent = [float(gx[0]), float(gx[-1]), float(gy[0]), float(gy[-1])]
     th = np.linspace(-math.radians(SECTOR_DEG), math.radians(SECTOR_DEG), 200)
 
-    def swath(pos, img, title, label, span, anchor=None):
+    def swath(pos, img, title, label, span, ring=True):
         ax = fig.add_subplot(2, 3, pos)
         d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
-        finite = d[np.isfinite(d)]
-        pk = float(np.quantile(finite, 0.99995)) if anchor is None else anchor
+        pk = float(np.quantile(d[np.isfinite(d)], 0.99995))
         im = ax.imshow(d, origin="lower", cmap="inferno", vmin=pk - span,
                        vmax=pk, extent=extent)
-        ax.plot(blind * np.cos(th), blind * np.sin(th), ":",
-                color="deepskyblue", lw=0.9, alpha=0.6)
+        if ring:
+            ax.plot(blind * np.cos(th), blind * np.sin(th), ":",
+                    color="deepskyblue", lw=0.9, alpha=0.6)
         ax.plot([tx], [ty], "o", mfc="none", mec="white", ms=15, mew=1.3)
         ax.annotate("boat, 250 m", (tx, ty), textcoords="offset points",
                     xytext=(14, 9), color="white", fontsize=8)
@@ -678,41 +711,17 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
                                                                fontsize=7)
         return ax
 
-    # 1. the convention examples/15 uses: 22 dB below the image's own peak.
-    swath(1, raw, "examples/15's convention: 22 dB below the peak\n"
-          "(black, with a return on it -- and no seabed)",
-          "dB re 1 uPa$^2$", 22.0).set_ylabel("across (m)")
-    # 2. wide enough to hold the whole scene, which is what fills it with colour
-    swath(2, raw, "45 dB below the peak\n(the same image, the whole seabed "
-          "visible)", "dB re 1 uPa$^2$", 45.0)
-    # 3. and the same again with the range gain taken out
-    swath(3, cart, "TVG from the swath's own mean\n(flat in range; contrast "
-          "unchanged)", "dB re the background at that range", 20.0)
+    swath(1, raw, "no gain, 22 dB window\n(examples/15's convention: black, "
+          "and no seabed)", "dB re 1 uPa$^2$", 22.0).set_ylabel("across (m)")
+    swath(2, raw, "no gain, 45 dB window\n(the same data, the whole seabed "
+          "in it)", "dB re 1 uPa$^2$", 45.0)
+    swath(3, cart, "median TVG, 20 dB window\n(flat in range, contrast "
+          "kept)", "dB re the background at that range", 20.0)
+    swath(4, by_mean, "TVG from the MEAN instead\n(the boat lifts the "
+          "reference and loses 4 dB)",
+          "dB re the background at that range", 20.0).set_ylabel("across (m)")
 
-    for k, (n, pos) in enumerate(((N_RX, 4), (4 * N_RX, 5))):
-        img, ang, zr, bw, span = zooms[n]
-        ax = fig.add_subplot(2, 3, pos)
-        d = 10 * np.log10(np.maximum(img.numpy(), 1e-30))
-        pk = float(d.max())
-        cross = BOAT_RANGE * np.radians(ang.numpy())
-        im = ax.pcolormesh(zr.numpy(), cross, d, cmap="inferno", vmin=pk - 25,
-                           vmax=pk, shading="auto")
-        ax.plot([BOAT_RANGE - HULL_LENGTH / 2, BOAT_RANGE + HULL_LENGTH / 2],
-                [-25, -25], color="white", lw=2.5, solid_capstyle="butt")
-        ax.annotate(f"{HULL_LENGTH:.0f} m hull", (BOAT_RANGE, -23),
-                    color="white", fontsize=8, ha="center")
-        ax.set_xlabel("range (m)")
-        ax.set_title(f"{n} elements, {n * LAMBDA / 2:.2f} m of array\n"
-                     f"beam {BOAT_RANGE * math.radians(bw):.1f} m at the boat: "
-                     f"hull is "
-                     f"{HULL_LENGTH / (BOAT_RANGE * math.radians(bw)):.2f} "
-                     f"beamwidths", fontsize=10)
-        if k == 0:
-            ax.set_ylabel("across-track (m)")
-        fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02).set_label("dB re peak",
-                                                               fontsize=7)
-
-    bx = fig.add_subplot(2, 3, 6)
+    bx = fig.add_subplot(2, 3, 5)
     r = rng.numpy()
     bx.plot(r, prof_db.numpy(), lw=1.0, color="tab:orange",
             label="reverberation, swath mean")
@@ -732,8 +741,35 @@ def _plot(cart, raw, gx, gy, rng, prof_db, noise_db, tx, ty, crossover, blind,
     bx.grid(alpha=0.3, lw=0.4)
     bx.legend(fontsize=8, loc="upper right")
 
-    fig.suptitle("One ping at 300 m.  Top row: the same data under three "
-                 "colour windows.  Bottom: what aperture buys.", y=0.995)
+    # the vertical geometry, which is what decides whether both boundaries are
+    # in the picture at all
+    gx_ax = fig.add_subplot(2, 3, 6)
+    rr = np.linspace(40.0, FAR, 400)
+    up = np.degrees(np.arctan2(AUV_DEPTH, rr))
+    dn = np.degrees(np.arctan2(WATER_DEPTH - AUV_DEPTH, rr))
+    fov = beam_3db_deg(N_TX)
+    gx_ax.plot(rr, -up, color="tab:cyan", lw=1.2, label="sea surface")
+    gx_ax.plot(rr, dn, color="tab:brown", lw=1.2, label="seabed")
+    gx_ax.axhspan(TILT_DEG - fov / 2, TILT_DEG + fov / 2, color="tab:orange",
+                  alpha=0.18, label=f"{fov:.0f} deg vertical FOV")
+    for k in range(int(fov / VERTICAL_BEAM_DEG) + 1):
+        e = TILT_DEG - fov / 2 + k * VERTICAL_BEAM_DEG
+        gx_ax.axhline(e, color="tab:orange", lw=0.5, alpha=0.5)
+    gx_ax.axvline(BOAT_RANGE, color="tab:green", lw=0.8, ls="-.")
+    gx_ax.set_xlim(40.0, FAR)
+    gx_ax.set_ylim(TILT_DEG + fov, TILT_DEG - fov)
+    gx_ax.set_xlabel("range (m)")
+    gx_ax.set_ylabel("elevation (deg, down positive)")
+    gx_ax.set_title(f"{fov:.0f} deg FOV in beams of "
+                    f"{VERTICAL_BEAM_DEG:.2f} deg:\nboth boundaries only "
+                    f"where they fit inside it", fontsize=10)
+    gx_ax.grid(alpha=0.3, lw=0.4)
+    gx_ax.legend(fontsize=8, loc="lower right")
+
+    fig.suptitle(f"{FREQ_KHZ:.0f} kHz, {N_RX} x {N_TX}: "
+                 f"{beam_3db_deg(N_RX, shading_window(N_RX, 'hamming')):.2f} "
+                 f"deg x {VERTICAL_BEAM_DEG:.2f} deg beams over a "
+                 f"{fov:.0f} deg vertical FOV, out to {FAR:.0f} m", y=0.995)
     fig.tight_layout()
     return fig
 
