@@ -151,7 +151,7 @@ def test_the_travel_time_gradient_is_the_one_fermat_predicts():
     assert torch.allclose(src.grad, -unit / C, rtol=0.05, atol=1e-8)
 
 
-def test_it_returns_one_arrival_s_worth_where_the_splat_returns_two_pi():
+def test_it_returns_one_arrival_s_worth_where_the_splat_returns_two_pi_per_leg():
     """The offset that makes this worth having, as a number.
 
     ``extract_arrivals`` sums ``exp(-d^2/2 sigma^2)/s^2`` over every ray inside
@@ -190,7 +190,10 @@ def test_it_returns_one_arrival_s_worth_where_the_splat_returns_two_pi():
         got[leg] = float((a.amplitude ** 2).sum())
         assert a.n_arrivals > 0
     ratio = got["splat"] / got["eigenray"]
-    assert 3.0 < ratio < 15.0, f"expected about 2 pi, got {ratio:.2f}"
+    two_pi_squared = (2.0 * math.pi) ** 2
+    assert 0.5 * two_pi_squared < ratio < 2.0 * two_pi_squared, (
+        f"expected about (2 pi)^2 = {two_pi_squared:.1f} for two legs, "
+        f"got {ratio:.2f}")
 
     # And the eigenray leg gives one arrival per path, where the splat gives
     # one per ray that happened to pass nearby.

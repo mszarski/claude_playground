@@ -16,7 +16,9 @@ from hydropt import (
     ConstantLoss, FlatHeight, IsoProfile, Scene, make_time_grid,
     PiecewiseLinearProfile,
 )
-from hydropt.active import PointTarget, render_echo, return_fan
+from hydropt.active import (
+    PointTarget, render_echo, return_fan, target_arrivals,
+)
 from hydropt.launch import fibonacci_cone
 
 C = 1500.0
@@ -206,3 +208,95 @@ def test_echo_result_exposes_both_legs():
     # Each leg peaks at its own one-way time.
     t_in = result.leg_time_grid[result.inbound[0, 0].argmax()].item()
     assert t_in == pytest.approx(math.dist(SOURCE, TARGET) / C, abs=5e-5)
+
+
+def test_the_echo_from_a_known_scatterer_is_the_sonar_equation_s():
+    """Both legs, in absolute terms, against a closed form with no free parameter.
+
+    A unit point scatterer in a free field with source and receiver together
+    returns ``sigma / R^4`` in energy: two-way spherical spreading and nothing
+    else.  Every factor is known, so this is the calibration and not a
+    regression baseline.
+
+    It is here because nothing pinned it for a long time.  ``extract_arrivals``
+    sums ``exp(-d^2 / 2 sigma_d^2)`` over every ray that passes within its
+    acceptance and never divides by the sum of those weights, and on a lattice
+    that sum is about ``2 pi`` -- so the splat reports roughly eight decibels
+    per leg more energy than the path carries.  Measured here: 17.10 dB with
+    the splat on both legs, and it was invisible because it is invariant to how
+    the fan was sampled, so no convergence test could see it.  A target
+    seventeen decibels too bright reads as a confident detection when it is
+    none, which is exactly what it did.
+    """
+    import warnings as _w
+
+    from hydropt.absorption import thorp_db_per_km
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = Scene(field=IsoProfile(1500.0, learnable=False),
+                  bottom=FlatHeight(1e5), surface=FlatHeight(-1e5),
+                  source=(0.0, 0.0, 50.0), receivers=elements,
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([10.0]),
+                  step_size=2.0, n_steps=400, max_bounces=0)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+    alpha = float(thorp_db_per_km(torch.tensor([10.0])))
+
+    for rng in (100.0, 250.0):
+        target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                                [IsotropicScattering(0.0, learnable=False)],
+                                position=(rng, 0.0, 50.0), learnable=False)
+        with _w.catch_warnings(), torch.no_grad():
+            _w.simplefilter("ignore")
+            echo = target_arrivals(scene, target, tx, return_leg="eigenray",
+                                   n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                   max_arrivals_per_leg=400)
+        # sigma = 1 m^2 (TS = 0 dB), two-way spreading, two-way Thorp over 2R.
+        want = (1.0 / rng ** 2) ** 2 * 10.0 ** (-alpha * 2 * rng / 10000.0)
+        assert float((echo.amplitude ** 2).sum()) == pytest.approx(want, rel=1e-3)
+
+
+def test_solving_one_leg_and_splatting_the_other_is_not_half_right():
+    """Why both legs had to change together.
+
+    The splat's over-read is per leg, so a mixed pair leaves half of it -- and
+    half an error is the harder one to notice, because the number moves in the
+    right direction.  This pins that both legs are solved whenever the return
+    leg is, rather than leaving the inbound one to a splat that cannot be
+    normalised without grouping its rays by path.
+    """
+    import warnings as _w
+
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = Scene(field=IsoProfile(1500.0, learnable=False),
+                  bottom=FlatHeight(1e5), surface=FlatHeight(-1e5),
+                  source=(0.0, 0.0, 50.0), receivers=elements,
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([10.0]),
+                  step_size=2.0, n_steps=400, max_bounces=0)
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0]]),
+                            [IsotropicScattering(0.0, learnable=False)],
+                            position=(250.0, 0.0, 50.0), learnable=False)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 6.0)
+
+    got = {}
+    for leg in ("splat", "eigenray"):
+        with _w.catch_warnings(), torch.no_grad():
+            _w.simplefilter("ignore")
+            echo = target_arrivals(scene, target, tx, return_leg=leg,
+                                   n_rx_rays=1500, rx_half_angle_deg=20.0,
+                                   max_arrivals_per_leg=400)
+        got[leg] = float((echo.amplitude ** 2).sum())
+    # Two legs of about 2 pi each, in energy: roughly 17 dB, not 8.5.
+    excess_db = 10.0 * math.log10(got["splat"] / got["eigenray"])
+    assert excess_db > 14.0, (f"the splat is only {excess_db:.2f} dB over the "
+                              "solved pair -- one leg is not being solved")

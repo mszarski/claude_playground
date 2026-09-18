@@ -319,6 +319,22 @@ def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0):
     return dirs, weights
 
 
+def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
+    """The same projector directivity, as a function of direction.
+
+    ``transmit_fan`` returns it as one weight per ray, which is what the splat
+    inbound leg indexes.  An eigenray inbound leg solves for paths and has no
+    ray to index, so it needs the pattern evaluated at the launch direction the
+    path actually left in.
+
+    Exactly the same function, not an approximation of it: the fan builds its
+    directions as ``[cos E cos A, cos E sin A, sin E]``, so the ``z`` component
+    IS ``sin E``, which is the only thing the array factor depends on.
+    """
+    return line_array_factor(directions[..., 2], N_TX,
+                             sin_steer=math.sin(math.radians(TILT_DEG)))
+
+
 def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
             reference: str = "median"):
     """Range multi-look and TVG, on the [beams, bands, bins] image.
@@ -523,6 +539,7 @@ def main() -> int:
         echo = target_arrivals(scene, boat, dirs, return_leg="eigenray",
                                n_rx_rays=2000, rx_half_angle_deg=45.0,
                                tx_weights=tx_weights,
+                               tx_pattern=transmit_pattern,
                                max_arrivals_per_leg=24,
                                generator=torch.Generator().manual_seed(SEED))
     both = ArrivalSet(*(None if rev[i] is None or echo[i] is None

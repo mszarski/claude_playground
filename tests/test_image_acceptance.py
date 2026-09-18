@@ -103,6 +103,17 @@ def _fan(seed=0):
     return dirs, weights
 
 
+def _pattern(directions):
+    """The projector's directivity as a function of direction, not of ray.
+
+    A solved inbound path has no ray index to look ``tx_weights`` up by.  This
+    is the same function, exactly: ``_fan`` builds directions as
+    ``[cos E cos A, cos E sin A, sin E]``, so ``z`` IS ``sin E``.
+    """
+    return line_array_factor(directions[..., 2], N_TX,
+                             sin_steer=math.sin(math.radians(TILT_DEG)))
+
+
 @pytest.fixture(scope="module")
 def ping():
     """One reverberation, three target channels.
@@ -131,7 +142,7 @@ def ping():
             echo = target_arrivals(
                 scene, target, dirs, return_leg="eigenray", n_rx_rays=400,
                 rx_half_angle_deg=45.0, tx_weights=weights,
-                max_arrivals_per_leg=16,
+                tx_pattern=_pattern, max_arrivals_per_leg=16,
                 generator=torch.Generator().manual_seed(0))
             if echo.n_arrivals:
                 arrivals = ArrivalSet(*(

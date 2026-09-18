@@ -387,6 +387,7 @@ def target_arrivals(
     rx_sigma_d: float | Tensor | None = None,
     return_leg: str = "splat",
     tx_weights: Tensor | None = None,
+    tx_pattern=None,
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
     trace_kwargs: dict | None = None,
@@ -472,6 +473,16 @@ def target_arrivals(
             fan between the two makes the inversion an inverse crime and hides
             how much of the answer the sampling is setting.
         tx_weights: per-ray transmit weights, e.g. projector directivity.
+            Indexed by ``tx_directions``, so it is what the SPLAT inbound leg
+            uses and an eigenray inbound leg cannot: a solved path has no ray.
+        tx_pattern: the same directivity as a function instead of an array --
+            ``f(directions) -> [N]`` or ``[N, B]`` for a pattern that differs
+            by band, taking ``[N, 3]`` unit launch directions.  Required by
+            ``return_leg="eigenray"``, which solves the inbound leg too and so
+            evaluates the projector at the launch direction each path actually
+            left in.  Passing neither leaves the projector omnidirectional,
+            which is a real choice and not a default worth making silently, so
+            it warns.
         max_arrivals_per_leg: cap each leg before pairing.  The pair count is a
             product, so capping the legs is far more effective than capping the
             result -- and a dense fan's extra arrivals are near-duplicates.
@@ -504,13 +515,44 @@ def target_arrivals(
 
     # Inbound first, so a highlight the projector never reached costs no return
     # trace at all.
+    #
+    # Both legs or neither.  The splat over-reads by about 2 pi -- it sums
+    # acceptance weights over the rays that pass near the point and never
+    # divides by their sum -- and that is per leg: measured against a unit
+    # point scatterer in a free field, 17.10 dB with the splat on both legs and
+    # 8.55 dB with an eigenray return leg alone.  Solving one leg and splatting
+    # the other leaves half the error in place and is the harder thing to
+    # notice, because the number looks better.
     inbound_by_highlight: dict[int, ArrivalSet] = {}
-    for i in range(target.n_highlights):
-        inbound = extract_arrivals(tx_result, world[i], freqs,
-                                   ray_weights=tx_weights,
-                                   max_arrivals=max_arrivals_per_leg, **tx_kw)
-        if inbound.n_arrivals > 0:
+    if return_leg == "eigenray":
+        from .eigenray import eigenray_arrivals
+        if tx_pattern is None and tx_weights is not None:
+            warnings.warn(
+                "return_leg='eigenray' solves the inbound leg, which has no ray "
+                "index to look tx_weights up by; pass tx_pattern=f(directions) "
+                "for the same directivity as a function.  The projector is "
+                "omnidirectional in this call.", RuntimeWarning, stacklevel=2)
+        source = scene.source_position().reshape(3)
+        for i in range(target.n_highlights):
+            inbound = eigenray_arrivals(
+                scene, source, world[i], freqs,
+                bracket_rays=n_rx_rays, bracket_half_angle_deg=rx_half_angle_deg,
+                trace_kwargs=tkw)
+            if inbound.n_arrivals == 0:
+                continue
+            if tx_pattern is not None:
+                w = tx_pattern(inbound.launch_direction)
+                w = w.reshape(-1, 1) if w.ndim == 1 else w
+                inbound = inbound._replace(
+                    amplitude=inbound.amplitude * w.sqrt().to(inbound.amplitude))
             inbound_by_highlight[i] = inbound
+    else:
+        for i in range(target.n_highlights):
+            inbound = extract_arrivals(tx_result, world[i], freqs,
+                                       ray_weights=tx_weights,
+                                       max_arrivals=max_arrivals_per_leg, **tx_kw)
+            if inbound.n_arrivals > 0:
+                inbound_by_highlight[i] = inbound
 
     # One batched return trace for every lit highlight, not one per highlight.
     # `trace` reads the source through `scene.source_position()` and immediately
