@@ -534,7 +534,7 @@ class ExtendedTarget(nn.Module):
         return self.pattern_for(index).cross_section(inc, sca, freqs_khz)
 
     def extra_repr(self) -> str:
-        yaw, pitch, roll = (float(a) * 180.0 / math.pi for a in self.orientation)
+        yaw, pitch, roll = (float(a) * 180.0 / math.pi for a in self.orientation.detach())
         return (f"{self.n_highlights} highlights, position={self.position.tolist()}, "
                 f"yaw={yaw:.1f} deg, pitch={pitch:.1f} deg, roll={roll:.1f} deg")
 

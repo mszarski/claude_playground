@@ -59,7 +59,7 @@ print(scene.bottom_loss.loss_db.grad)
 pip install -e .           # torch >= 2.2, numpy, matplotlib
 pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
-pytest                     # 131 tests
+python -m pytest tests -q  # 548 tests, ~22 min on 4 cores
 ```
 
 ## Coordinates and units
@@ -655,10 +655,104 @@ At 800 tx / 250 rx the bearing estimate breaks (-2.7 deg instead of 0.0), so the
 cheaper row is the floor rather than a free choice.
 
 So a gradient-based inversion of ~100 steps is a few minutes, and a network
-trained with this in the loop is hours per thousand steps. That is workable for
-small studies and slow for anything larger; the obvious next lever is a GPU,
-which **hydropt has never been run on** -- there are likely device assumptions to
-fix before it would work at all.
+trained with this in the loop is hours per thousand steps.  The rest of this
+section is where the time goes in the full-size picture of `examples/21` and
+what a GPU would do to it.
+
+### Where the time goes now
+
+`examples/21`'s 300 m picture -- 31,680 transmit rays, a 50-element receive
+array, 181 beams x 520 range bins, a 26,304-facet hull -- measured stage by
+stage in float32, alone on the same four cores (`scripts/timing_picture.py`,
+run from `examples/`; every number is the better of two runs):
+
+| stage | forward | notes |
+| --- | --- | --- |
+| trace: RK4 fan with bounces | 10.4 s | a Python loop over steps; the one stage that does not batch away |
+| reverberation patches from the trace | 0.3 s | 90,171 patches |
+| boat echo: method of images + physical optics, 6 patches | 1.6 s | one 4,096-facet block per patch, kept for backward |
+| beamform, FFT kernel, all 91,320 arrivals | 0.85 s | |
+| beamform, reverberation alone, complex (once per fit) | 0.8 s | |
+| beamform, boat alone, coherent FFT | 0.12 s | |
+| beamform, boat alone, incoherent direct kernel | 0.35 s | the fit's model picture |
+| calibrate, noise, median gain, resample to metres | < 0.01 s | |
+
+So a first picture is about 13 s, of which the trace is four fifths, and a
+second picture of the same scene with a moved target is under 3 s: the trace
+and the reverberation are formed once, the beamformer is linear in the
+arrivals, and only the target's arrivals and beams are redone.  With a graph
+on the target's position:
+
+| a step of a fit | forward + backward | of which backward |
+| --- | --- | --- |
+| coherent picture (`examples/21`'s) | 2.6 s | 0.76 s |
+| incoherent picture (the model side of `examples/22`'s fit) | 4.2 s | 1.5 s |
+
+`examples/22`'s 48-step fit is 145 s all in.  Two things got it there from
+the 7.9 s a step it started at, and neither was precision: float32 against
+float64 is 12 % of a step here.  The hull's physical-optics integral was
+chunked at 256 facets with checkpointing -- 108 blocks per echo, each
+recomputed in the backward pass -- and one block per patch kept for backward
+is 2.5x faster at 6 MB of working set (`mesh_target(...,
+facet_chunk=4096, checkpoint=False)`; the library default stays
+conservative because a big mesh against many directions does need it).  And
+the return leg is solved by the method of images rather than traced whenever
+the profile is isovelocity, which took the target's arrivals from 17 s to
+under 2 s.
+
+### Running on a GPU: what it needs, what to expect
+
+hydropt has not been run on a GPU.  `scripts/benchmark.py` has a CUDA path
+for the tracer alone, never exercised.  What the rest of the pipeline needs
+is small and known, from a static audit of the modules the picture goes
+through:
+
+* **Tensors made without a device.**  32 sites construct a tensor with no
+  `device=` (`mesh.py` 20, `beamform.py` 4, `reverb.py` 2, `targets.py` 2,
+  one each in `active.py`, `wake.py`, `rough.py`, `scene.py`); every other
+  construction already follows its inputs.  Under
+  `torch.set_default_device("cuda")` (PyTorch 2.x) all of them land on the
+  GPU without edits, so the fix is a device switch in `examples/_common.setup`
+  (`HYDROPT_DEVICE`), and the sites can then be tidied at leisure.
+* **Random number generators.**  `torch.Generator()` objects are CPU
+  generators, and `randn(..., generator=g)` on a CUDA tensor with a CPU
+  generator raises.  One in the library (`fish_school`'s default) and every
+  seeded generator in the examples (reverberation, target rays, receiver
+  noise) need `torch.Generator(device=...)`.
+* **Host round trips.**  About 150 `float(...)` conversions in the library
+  (bounds, floors, sizes) are each a device sync.  They are correct on a GPU
+  and cost latency, not results; the ones inside per-step loops (the tracer's
+  crossing test, the eigenray solver's convergence masks) are the ones worth
+  removing first.
+* **CPU-only pieces.**  `pekeris.py` is numpy by design (an independent
+  reference), `plot.py` moves to numpy to draw, and `examples/25` uses scipy
+  on a finished picture.  None is in the differentiable path.
+
+What to expect is set by which stages are large tensor arithmetic and which
+are Python loops over small kernels, and the numbers above make that split
+explicit:
+
+| stage | CPU now | on a GPU | why |
+| --- | --- | --- | --- |
+| FFT beamformer, 91k arrivals | 0.85 s | ~0.05 s | `elements x arrivals x gate` complex FMAs and FFTs: bandwidth-bound, 20-50x |
+| physical optics over the hull | 1.6 s | ~0.15 s | facets x direction pairs of complex sinc arithmetic, 10-20x |
+| incoherent direct beamformer | 0.35 s | ~0.03 s | the same shape of work |
+| reverberation patches, display | 0.3 s | ~0.05 s | scatter-adds and reductions |
+| eigenrays by images | < 0.5 s | ~0.3 s | small tensors, Python-bound: little gain |
+| trace, 31,680 rays | 10.4 s | 2-4 s | a Python loop of ~2,000 RK4 steps launching small kernels; launch-bound, 3-5x, more with CUDA graphs or a fused step |
+
+So the second-and-later pictures of a scene -- what a fit or a training loop
+pays for -- go from ~3 s to well under half a second, a step of the fit from
+4 s to ~0.5 s, and the first picture from 13 s to 3-5 s until the tracer's
+step loop is fused.  Two things temper this.  Run it in **float32**: consumer
+GPUs do float64 at a thirty-second to a sixty-fourth of their float32 rate,
+and float32 is fine for pictures and for the fit (measured in
+`examples/22`; only the wavelength-scale gradient check of the coherent
+picture needs float64, and it is a diagnostic).  And the FFT beamformer's
+element field is `elements x arrivals x fine gate` complex values, chunked
+by `arrival_chunk`; at 2,048 arrivals a chunk that is a few hundred MB,
+which any card holds, but a card with 8 GB should keep the chunking and a
+card with 24 GB could drop it.
 
 ## Independent validation, and the defect it found
 
@@ -1231,6 +1325,68 @@ That second conclusion is the opposite of what the first version of this
 generator said, because that version was a round-bilged spindle with no flat
 bottom anywhere. Getting it right needed the hull to be a hull.
 
+### Importing a mesh, and placing it
+
+Any triangle mesh is a target.  `load_obj` reads a Wavefront `.obj` (only
+`v` and `f` records; polygons are fan-triangulated; relative indices work),
+and `mesh_target` turns vertices and faces into an `ExtendedTarget` with a
+position and an orientation of its own:
+
+```python
+from hydropt.mesh import load_obj, mesh_target, facet_geometry
+
+verts, faces = load_obj("crate.obj")                 # [V, 3] metres, [F, 3] long
+centroid, normal, area = facet_geometry(verts, faces)
+assert bool(((normal * centroid).sum(-1) > 0).all())  # outward-wound? see below
+
+crate = mesh_target(verts, faces,
+                    position=(120.0, -15.0, 29.5),   # world: x forward, y port, z DOWN
+                    yaw=35.0, pitch=0.0, roll=0.0,    # degrees, about the body's own axes
+                    n_patches=1, split_axis=None,     # patches: see below
+                    sound_speed=1500.0,
+                    diffuse_db=-10.0,                 # rough-surface channel, dB (None: mirror only)
+                    learnable=True,                   # position and orientation get gradients
+                    learnable_shape=False,            # the vertices themselves can too
+                    facet_chunk=4096, checkpoint=False)
+```
+
+Four things to get right, in the order they bite:
+
+* **Frame and units.**  hydropt is metres, `x` forward, `y` to port, `z`
+  down, the body's origin wherever the mesh's is (the boat generator puts it
+  amidships at the waterline).  A mesh authored `y`-up in millimetres is
+  brought over before `mesh_target` sees it, as any linear map of the
+  vertices: `verts = (verts * 1e-3) @ R.T` with `R` the rotation that sends
+  the file's up to `-z`.  The winding survives a rotation and a uniform
+  scale; a reflection (a negative determinant) flips it.
+* **Winding.**  The facet normal follows the winding by the right-hand rule,
+  and `MeshScattering` lights only facets whose normal faces the sound, so
+  the mesh must be wound outward.  The `facet_geometry` check above is the
+  test for a convex or star-shaped body (normal dotted with the centroid
+  from the body's centre); for a hull, look at a few facets.  `faces[:, [0,
+  2, 1]]` flips every triangle.
+* **Patches.**  `n_patches` splits the mesh along one body axis into groups
+  of facets that are summed coherently within a group and given their own
+  path (range, bearing, multipath) each.  One patch is right for a body
+  smaller than a resolution cell or where shadowing of one part by another
+  matters more than extent; a 30 m hull at 120 kHz gets six along its
+  length, and the 300 m breakwater of `examples/23` 150.  The physical
+  optics inside a patch assumes a plane wave, so a patch much larger than
+  the Fresnel zone `sqrt(lambda R)` (1-2 m at these ranges) has its coherent
+  part wrong and its diffuse part right; see the limitations.
+* **Placement is a parameter.**  `crate.position` and `crate.orientation`
+  (yaw, pitch, roll in radians) are `nn.Parameter`s when `learnable=True`,
+  which is what `examples/16`, `19` and `22` descend on.  To place the same
+  vertices in the world by hand -- as an occluder for the reverberation, say
+  -- rotate and translate them the way `mesh_target` does (the `place`
+  helper in `examples/23`-`25`) and pass them to `reverberation_arrivals(...,
+  occluders=[(world_verts, faces)])`.
+
+`box_mesh`, `cylinder_mesh`, `icosphere`, `boat_hull_mesh` and
+`seawall_mesh` generate outward-wound meshes for the common cases; several
+bodies become one target by concatenating vertices and offsetting faces
+(`examples/25`'s armour layer does this for 900 cubes).
+
 ### The sector display, and what fills the picture
 
 `examples/15` puts the pieces together as a vehicle would carry them: a 100 kHz
@@ -1371,6 +1527,44 @@ rays alike. That is why recovered pose stops improving once the fan is adequate
 -- the residual is realisation noise, not ray count -- and why spending rays on
 it is the wrong lever.
 
+### Fitting a pose to the picture, done properly
+
+`examples/22` descends on the 300 m picture from 7 m out and lands 0.27 m
+from the truth.  Getting the gradient to be the gradient of the picture, at
+the scale of a wavelength, found three things that any fit through this
+display must respect:
+
+* **Freeze the display gain.**  The median TVG's reference is an order
+  statistic, and the derivative of an order statistic is that of whichever
+  beam holds it while a finite step sees the median hop between beams: an
+  analytic gradient six times the finite difference.  `display_gain` takes
+  the gain from the measurement once and `display(..., gain=)` applies it
+  to every trial picture.
+* **Add the noise to the field.**  The Rice model through the power passes
+  through `sqrt(S) = |b|`, which has a kink at every null of the field, and
+  a coherent hull's fringes put a null within a sixteenth of a wavelength
+  of a quarter of its cells.  `add_receiver_noise` takes the complex beams
+  (`beamform(..., complex_output=True)`) and returns `|b + n|^2`: the same
+  statistics, smooth in the field.
+* **Do not descend on the coherent picture.**  Its gradient is right (checked
+  to 1.5 % against a lambda/64 finite difference in float64), but it is the
+  slope of the nearest fringe: the coherent image of a 30 m hull is a
+  speckle pattern in the hull's position, rearranged by 5 cm across track,
+  so the loss is a cusp at the truth on a plateau 2 m wide at any blur.  The
+  model's picture for the loss is rendered with `beamform(...,
+  coherent=False)`, the expected intensity over its arrivals' phases, which
+  moves smoothly with the pose, against the fully coherent measurement.
+  Then coarse to fine on the picture -- 4, 2 and 0.5 m of blur -- with the
+  last stage that fine because the direct return and the surface ghost of
+  each hull patch, 0.2 m apart here, interfere with a phase that turns along
+  the hull and shift the blurred blob's centre by 1.75 m in range.
+
+Precision belongs with this.  Pictures and the fit are fine in float32, and
+21-26 run in it; the coherent picture's loss scatters by 2e-5 between
+points 0.05 mm apart in float32, more than it changes over 0.4 mm, so the
+wavelength-scale check of its gradient needs float64
+(`HYDROPT_EXAMPLE_DTYPE=float64`) and 22 skips it otherwise, with a note.
+
 ### Multipath, and why a boat does not show a double return
 
 An image-source prediction is the cheapest check there is on a two-way model, so
@@ -1501,18 +1695,33 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `06_active_beamformed_sonar.py` | Active forward-looking sonar: two-way echoes beamformed into a bearing-range image | both targets to 0.00 deg in bearing, 0.05 m in range |
 | `07_reverberation_limited_detection.py` | A small target on a rock seabed: is it detectable? | -0.9 dB at one element, +10.9 dB in the beam; bottom type recovered to 0.4 dB |
 | `08_gaussian_beams_caustic.py` | Gaussian beams through the Munk channel's caustics | 81 of 120 rays cross one; tube pinned at its floor, beam at `|det Q| = beta^2` exactly |
-| `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | hull glints (83% from one section, travelling along the body); discrete scatterers spread 2.07 deg vs a point's 0.53 |
+| `09_extended_target_fls.py` | FLS against a 4 m hull and a wreck-like body of discrete scatterers | 99% of a smooth hull's echo from one specular section, which travels along the body as it slides; discrete scatterers spread 2.02 deg of the 5.73 subtended, a point 0.66 |
 | `10_synthetic_environment.py` | A generated ocean: wind sea, power-law seabed, internal waves | out-of-plane deflection 0 m (control), 390 / 659 / 2.2 m by mechanism; refraction matches `L^2/2R` to 3% |
 | `11_rough_surface_coherence.py` | Eckart coherence loss, and example 06's surface ghost | median surface path at 100 kHz loses 43 orders of magnitude; survivors all within the 2.53 deg cutoff |
-| `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; 4.5 s per forward+backward step |
+| `12_fls_boat_learnable.py` | 100 kHz FLS, 4 hydrophones, boat over a rough seabed, wind sea | 11/11 parameter classes carry gradients; boat at 61.2 m against 60.0; bearing +0.00 deg |
 | `13_mills_cross_fls.py` | Mills cross: 120 x 20 deg, 2 deg beams, 64 + 6 elements | beams 2.33 deg, broadening matches `1/cos` to 2.2%; hull resolved 6.0 deg at -3 dB against the 11.5 deg it subtends |
-| `14_mesh_boat.py` | a boat as 15k triangles, Kirchhoff facet scattering | ellipsoid matches `A^2C^2/4B^2` to 0.07 dB; hull is a plate from beneath (47 dB fall from 89 to 70 deg); gradient reaches the mesh vertices |
-| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | boat lands 2.9 m outside the hull against 3.4 m of beamwidth; return spans 10 m for a 12 m boat; +20 dB over reverberation; gradients through the full 20k-arrival image |
-| `16_invert_pose_from_image.py` | recovering boat pose from the image by gradient descent | position 2.9x finer than the bearing cell from a 0.6 m start; heading 2.8 deg off broadside, degenerate on it; no convergence from 3.6 m |
+| `14_mesh_boat.py` | a boat as 26k triangles, Kirchhoff facet scattering | sphere to 1.6 dB, ellipsoid `A^2C^2/4B^2` to 0.07 dB; the flat run aft is a plate from beneath (41 dB fall from 89 to 70 deg); gradient reaches the mesh vertices |
+| `15_auv_scene_cartesian.py` | AUV FLS: boat, wind sea and seabed, imaged in metres | echo 0.8 m outside the hull against 3.4 m of beam; 10.1 m return for a 12 m boat; +32 dB over reverberation; 6/6 gradients live |
+| `16_invert_pose_from_image.py` | recovering boat pose from the image by gradient descent | 0.11 m against a 3.75 m cell from inside the capture range; yaw ripples at 0.1 deg; honestly fails from 7 m out |
+| `17_seabed_object_shadow.py` | a 1.5 m object on the seabed, and its shadow | shadow 10 dB below the seabed beyond it; height read off the shadow 1.53-1.90 m, true 1.50 |
+| `18_detection_range.py` | how far a seabed object is detectable, and what limits it | direct-path echo follows spreading + absorption to 3.4 dB; aspect costs 36 dB over 23 deg of yaw; the waveguide holds S/B to the end of the sweep |
+| `19_transport_pose_50m.py` | an optimal-transport loss that reaches from 50 m out | transport walks 50 m -> 13 m, a grid search 13 -> 1.5 m, the image loss then 1.51 m against a 3.75 m cell; image loss alone: nowhere |
+| `20_wake_fls.py` | a manoeuvring vessel's Kelvin wake and bubble band in the picture | band on the track to 1.2 m; +13.8 dB of contrast for 15 dB put in; gradients to speed and turn |
+| `21_long_range_300m.py` | the reference picture: 120 kHz, 50 x 5 Mills cross, 120 deg to 300 m, a 30 m boat at 250 m | boat 0.0 m outside the hull against a 13.2 m beam; brightest cell of 43,629; 12.5 dB over ambient at 300 m; a median gain never worse than a mean; 6/6 gradients live |
+| `22_inverse_fit_animation.py` | the inverse fit, frame by frame, into a GIF | 7.2 m -> 0.27 m in 48 steps (145 s); fit gradient = secant (cosine 1.000); coherent picture's gradient = lambda/64 finite difference (float64) |
+| `23_harbour_scenarios.py` | 21's picture plus a breakwater, a vessel with wake, a school of fish | wall +38 dB along its line; wake band +8.7 dB over the sea beside it (+0.8 bare); school +15 dB over its cells |
+| `24_noise_spoke.py` | what lights a whole bearing: emission from the boat against a glint | propeller in view: +11.3 dB along the bearing at every range; bow-on the hull passes 2 of 14 paths and the spoke is gone; a 12 dB brighter glint draws none |
+| `25_rubble_breakwater.py` | a rubble mound with 3 m armour cubes: grains of rice | 12.4 dB of texture against the caisson's 3.8; ahead, grains 4 m long against a 6.3 m beam, one per 13 m |
+| `26_kelp_buoy_shoal.py` | a kelp forest, a buoy moored with a chain, a packed shoal | kelp +19 dB at its front fading to +4 at its back; buoy +46 dB, its chain a line at +33 dB; shoal +14 dB |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
-exits non-zero on failure. Runtimes on a 4-core CPU are seconds for 01-02 and
-15-25 minutes for the annealed inversions 03-05.
+exits non-zero on failure.  Runtimes on a 4-core CPU are seconds for 01-02,
+15-25 minutes for the annealed inversions 03-05, and one to four minutes for
+each of 21-26 (22 is the longest at about five).  21-26 share one sonar,
+environment and picture: 22-26 import `21_long_range_300m.py` for their
+settings, so `HYDROPT_FAR`, `HYDROPT_BOAT`, `HYDROPT_HEADING` and
+`HYDROPT_EXAMPLE_DTYPE` carry through, and `HYDROPT_SCENARIO` picks one
+scenario of 23-26.  How to add one is in `CLAUDE.md`.
 
 **Where the inversions stop, and why.** 04 recovers two thirds of the seamount
 but its relief comes out ~13 m short of the true 77 m, and 05's residual is
@@ -1633,20 +1842,28 @@ hydropt/
   spreading.py   ray-tube (geometric Jacobian) spreading, caustics, KMAH
   beams.py       Gaussian beams: complex beam parameter, finite at caustics
   active.py      two-way echoes through a scattering target
-  targets.py     extended multi-highlight targets, aspect-dependent patterns
-  mesh.py        triangle-mesh targets by exact Kirchhoff facet integration
+  targets.py     extended multi-highlight targets, aspect-dependent patterns, fish schools
+  mesh.py        triangle-mesh targets by exact Kirchhoff facet integration; OBJ import,
+                 box / cylinder / sphere / hull / seawall generators, occlusion
+  eigenray.py    the discrete paths between two points: traced Newton solve, or the
+                 method of images for an isovelocity channel, batched over pairs
   environment.py synthesised surfaces, bathymetry and sound-speed fields
   sediments.py   named seabed presets -> RayleighBottomLoss
   rough.py       Eckart coherent-reflection loss for rough boundaries
   pekeris.py     independent normal-mode reference (numpy; no torch)
-  beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams
-  reverb.py      seabed and surface reverberation from bounce events
+  beamform.py    coherent arrivals, aperture synthesis, delay-and-sum beams (FFT and
+                 direct kernels, complex or power output, coherent or incoherent)
+  reverb.py      seabed and surface reverberation from bounce events, with occluders
+  noise.py       ambient noise, calibration to uPa, receiver noise on a picture or a field
+  wake.py        a vessel's Kelvin wake as a height field, and its bubble band
+  transport.py   Sinkhorn divergence between images, for a loss that reaches
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views, FLS sector display; optional plotly
-examples/        01-16, each with acceptance checks
-scripts/         benchmark.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           424 tests
+examples/        01-26, each with acceptance checks; 21-26 share one scene
+scripts/         benchmark.py, timing_picture.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
+tests/           548 tests
+CLAUDE.md        how to work in this repository: conventions, what was learned, adding an example
 ```
 
 ## References

@@ -2,7 +2,193 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+This repository holds two independent projects.  **hydropt** (`hydropt/`,
+`examples/`, `tests/`, `scripts/`, the root `README.md`) is the active one: a
+differentiable 3-D underwater acoustic ray tracer and sonar simulator in
+PyTorch.  `trajectory_classifier/` is a separate, older package with its own
+tests, described at the end of this file.
+
+# hydropt
+
+## What it is, in one paragraph
+
+A forward model from an ocean (sound-speed field, rough sea surface, rough
+seabed, absorption) and a sonar (transmit fan, receive array, pulse) to what
+the sonar records: traced rays, reverberation patches, target echoes off
+point, analytic and triangle-mesh scatterers, coherently beamformed into a
+bearing-range image and displayed in metres -- every stage differentiable, so
+a loss on the picture reaches the scene's and the targets' parameters.
+`README.md` is the long-form account: the physics, the validation, what each
+piece is for and what it cost to get right.  Read the section for whatever
+you touch before touching it; most non-obvious choices in the code have a
+paragraph there explaining the bug that forced them.
+
+## Commands
+
+```bash
+pip install -e '.[dev]' && pip install scipy   # torch >= 2.2; scipy for examples 19 and 25
+
+python -m pytest tests -q                 # 548 tests, ~22 min on 4 cores
+python -m pytest tests/test_beamform.py -q -x
+python -m pytest tests -q -k "incoherent"
+
+cd examples && python 21_long_range_300m.py        # figures -> examples/figures/ (gitignored)
+cd examples && HYDROPT_SCENARIO=wake python 23_harbour_scenarios.py
+cd examples && HYDROPT_EXAMPLE_DTYPE=float64 python 22_inverse_fit_animation.py
+cd examples && python ../scripts/timing_picture.py # stage timings of 21's picture
+```
+
+Switches every 21-derived example honours (21-26): `HYDROPT_FAR` (m, default
+300), `HYDROPT_NEAR` (40), `HYDROPT_BOAT` (range, 250), `HYDROPT_HEADING`
+(deg, 40), `HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO`
+(one scenario of 23-26).  Each example prints `[PASS]`/`[FAIL]` lines for
+its acceptance criteria and exits non-zero on a failure.
+
+## Layout
+
+See the `Layout` section at the end of `README.md` for the module map.  The
+path a picture takes: `scene.py` (the container) -> `tracer.py` (RK4 fan) ->
+`reverb.py` (patches from bounces) and `active.py` (target echoes: outbound
+from the trace, return leg by `eigenray.py`) -> `beamform.py` (FFT or direct
+delay-and-sum) -> `noise.py` (calibrate, receiver noise) -> the example's
+`display` (median gain, in `21`) -> `examples/15`'s `to_cartesian`.  Targets
+are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
+(triangle meshes by physical optics, `load_obj`, generators, occlusion).
+
+## Conventions
+
+* **Frame and units.**  Metres, seconds, kHz, dB.  `x` forward, `y` to port,
+  `z` DOWN (depth).  Bearings positive to port.  A mesh's body frame is the
+  same, its origin wherever the mesh's is.
+* **Examples are the specification.**  Each is a numbered script with a
+  docstring that says what it shows, why, and its acceptance criteria; the
+  criteria are checked with `_common.check` and reported, and the figures
+  are saved with `_common.save`.  Numbers quoted in a docstring or in the
+  README come from a run and say so.
+* **21-26 share one scene.**  22-26 import `21_long_range_300m.py` for the
+  sonar, environment, boat and display (`_ex21()`), and 23-26 follow one
+  pattern: the bare picture once, then each scenario as its own ping,
+  measured against the bare picture, with a `bare | scenario | difference`
+  figure under 21's own window (`vmin=THRESHOLD_DB`, `vmax` the bare
+  picture's peak) and a gradient-liveness check on the scenario's own
+  parameters.  Copy 23's skeleton for a new scenario example.
+* **Float32 by default for pictures and fits** (`setup(double=False)`);
+  float64 only where a wavelength-scale gradient is being *checked* against a
+  finite difference (22 does this under `HYDROPT_EXAMPLE_DTYPE=float64` and
+  skips it otherwise).  Measured: the coherent picture's loss in float32
+  scatters by 2e-5 between points 0.05 mm apart, more than it changes over
+  0.4 mm; the incoherent picture's is linear at that scale in both.
+* **Docstrings carry the reasoning.**  Every module, class and public
+  function has one, and the long ones explain a measured failure.  Keep
+  that: a change that reverses a documented decision must say what was
+  measured.  Comments in the code are for the line they sit on.
+* **Tests pin what was learned.**  A bug fixed gets a test that fails
+  without the fix (`tests/test_beamform.py` has the pattern: the
+  wavelength-scale gradient, the incoherent kernel, complex beams that add).
+* **Beads (`bd`) for task tracking**, never markdown TODOs; `bd remember`
+  for durable insight.  The stored memories (`bd prime` prints them) are
+  the short list of things that were expensive to learn -- read them.
+
+## Rules that were expensive to learn
+
+* Never take `sqrt` of a beamformed image without a floor: an exactly-zero
+  cell puts NaN into every parameter's gradient (`noise.py`,
+  `active.compose_arrivals`).
+* The eigenray solver never caps bracketed paths by miss distance (it
+  dropped the direct path), and the spreading Jacobian is taken in the
+  path's own launch and arrival frames, not the chord's tangent plane
+  (bounce paths read +3 dB otherwise).
+* A fit through the median-TVG display freezes the gain from the
+  measurement (`display_gain`, `display(gain=)`): a median re-derived per
+  trial image gives an analytic gradient six times the finite difference.
+* Receiver noise goes on the complex field (`add_receiver_noise` with
+  `complex_output=True` beams), not the power: the power route has a kink at
+  every null of the field.
+* A pose is fitted on the model's *incoherent* picture (`beamform(...,
+  coherent=False)`) against the coherent measurement.  The coherent
+  picture's gradient is exactly right and useless for descent: speckle in
+  the pose, a cusp on a 2 m plateau.  Finish the blur schedule at ~0.5 m;
+  coarser blurs have a biased minimum from the direct/surface-ghost fringe.
+* `mesh_target(..., facet_chunk=4096, checkpoint=False)` for a hull against
+  a few hundred direction pairs: 2.5x faster than the library's default
+  chunking, 6 MB of working set.  The default stays conservative for big
+  meshes against many directions.
+* Precision is not where the time goes: float32 vs float64 is ~12 % of a
+  fit step.  The trace (10 s at 300 m) and the physical-optics integral
+  (1.6 s) are; see the README's "Where the time goes now".
+* The method of images (`eigenray_arrivals_batched(method="auto")`) replaces
+  the traced return leg whenever the profile is isovelocity: 17 s -> 2 s for
+  a target's arrivals.  Keep the traced path for refracting profiles.
+* Rx patterns see arrival directions: `rx_pattern=lambda d: pattern(-d)`
+  when a transmit pattern is reused for receive.
+* Physical optics per patch is a plane wave per patch: a patch larger than
+  the Fresnel zone (`sqrt(lambda R)`, 1-2 m here) has its coherent part
+  wrong.  A 4 m cylinder at 30 m needs `n_patches=1` (bead `cva`).
+* An occluder is binary (`segment_mesh_transmission`); translucent things
+  (kelp) are attenuated instead (`examples/26`).
+
+## Operating notes
+
+* Four cores.  Run examples one at a time and never alongside the test
+  suite: a second 4-thread process oversubscribes OpenMP and both slow by
+  10x or more, not 2x.  Background a long run, poll its log, and do the
+  editing while it runs.
+* Do not commit unexercised code: run the example (or the scenario) after
+  editing it and read its `[PASS]`/`[FAIL]` lines and its figure before
+  committing.  Library changes get the full suite.
+* `examples/figures/*.png`, `*.gif` and `*.pt` are gitignored; send figures
+  to the person, do not commit them.  `.beads/interactions.jsonl` is
+  tracked but gitignored: `git add -f` it.
+* Timings quoted anywhere come from `scripts/timing_picture.py` or an
+  example's own stage timers, run alone.
+
+## Adding an example
+
+1. `bd create` an issue for it first.
+2. Copy the nearest pattern: `23_harbour_scenarios.py` for a scenario on
+   21's picture, `22_inverse_fit_animation.py` for a fit, `21` itself for a
+   new sonar or environment.  Number it next in sequence.
+3. Write the docstring first: what it shows, the physics in a paragraph
+   each, the acceptance criteria as bullets.  Quantities in it should be
+   ones the script prints.
+4. Build the scenario from library pieces (`targets.py`, `mesh.py`,
+   `wake.py`, `reverb.py` occluders).  A missing piece goes in the library
+   with a docstring and a test, not in the example.
+5. Metrics against the bare picture, `check(...)` for each criterion, a
+   gradient-liveness check on the scenario's parameters, a figure per
+   scenario under 21's window.
+6. Run it alone; read the numbers and look at the figure -- a passing check
+   on a wrong picture is the usual failure.  Fix thresholds from what the
+   physics allows, never from what the run gave.
+7. Add its row to the README's examples table with the measured result,
+   commit the example and the row, close the bead.
+
+## Importing a mesh and placing it
+
+`load_obj` -> re-frame to metres, `x` forward, `z` down -> check the winding
+with `facet_geometry` (normals outward; `faces[:, [0, 2, 1]]` flips) ->
+`mesh_target(verts, faces, position=(x, y, z), yaw=, pitch=, roll=,
+n_patches=, diffuse_db=, learnable=True)`.  Position and orientation are
+`nn.Parameter`s.  For an occluder, place the vertices in the world with the
+`place` helper of `examples/23`-`25` and pass `(world_verts, faces)` to
+`reverberation_arrivals(occluders=...)`.  The README's "Importing a mesh, and
+placing it" has the worked snippet and the four things that go wrong.
+
+## Performance and GPU
+
+Float32, 4 cores, 21's 300 m picture: trace 10.4 s, reverberation 0.3 s,
+boat echo 1.6 s, FFT beamform of 91k arrivals 0.85 s, display < 0.01 s; a
+second picture of the same scene under 3 s; a fit step 2.6 s (coherent) or
+4.2 s (incoherent), 22's 48 steps in 145 s.  hydropt has never run on a GPU;
+what it needs (a device switch in `_common.setup`, per-device generators, 32
+device-less tensor constructions that `torch.set_default_device` already
+covers) and what to expect (the beamformer and physical optics 10-50x, the
+tracer 3-5x until its step loop is fused, float32 only) are in the README's
+"Running on a GPU".
+
+---
+
+# trajectory_classifier
 
 This is a Python trajectory classification package (`trajectory_classifier`) for analyzing and classifying vehicle trajectory segments. It supports:
 - Converting spherical coordinates (lat/lon/alt) to local Cartesian (ENU)

@@ -1,3 +1,24 @@
+## hydropt
+
+The active project in this repository is **hydropt**, the differentiable
+sonar simulator in `hydropt/` with its examples in `examples/`.  `CLAUDE.md`
+carries the working guidance for it -- commands, conventions, the rules that
+were expensive to learn, how to add an example, how to import and place a
+mesh, performance and GPU notes -- and `README.md` the physics and the
+validation.  Read both before changing anything; the short version of the
+rules:
+
+* metres, `x` forward, `y` port, `z` down; float32 for pictures and fits,
+  float64 only to check a wavelength-scale gradient;
+* examples are the specification: docstring with acceptance criteria,
+  `[PASS]`/`[FAIL]` checks, a figure; 22-26 import 21 for their scene;
+* run an example alone (four cores; never alongside the test suite) and read
+  its numbers and figure before committing it; library changes get the full
+  suite (`python -m pytest tests -q`, ~22 min);
+* a fit on a picture freezes the display gain, puts the noise on the field
+  and descends on the model's incoherent picture -- see `CLAUDE.md`;
+* `bd` for tasks, `bd remember` for insight, never markdown TODOs.
+
 ## Issue Tracking
 
 Use the `bd` command for all issue tracking instead of markdown TODOs:
