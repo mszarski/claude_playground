@@ -63,6 +63,7 @@ from .fields import (
 from .mesh import (
     MeshScattering,
     boat_hull_mesh,
+    box_mesh,
     cylinder_mesh,
     facet_geometry,
     icosphere,
@@ -160,7 +161,7 @@ __all__ = [
     "add_receiver_noise", "ambient_noise_db", "beam_noise_power",
     "beam_power_scale", "calibrate",
     "line_array_directivity_db",
-    "MeshScattering", "boat_hull_mesh", "cylinder_mesh", "facet_geometry",
+    "MeshScattering", "boat_hull_mesh", "box_mesh", "cylinder_mesh", "facet_geometry",
     "icosphere", "load_obj", "mesh_target", "seawall_mesh",
     "segment_mesh_transmission", "triangle_phase_integral", "fish_school",
     "spherical_fan", "structured_fan", "fan_2d", "fan_angular_spacing",

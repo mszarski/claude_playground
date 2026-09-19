@@ -1019,3 +1019,19 @@ def test_a_seawall_faces_the_water_and_has_the_area_it_should():
             assert float(verts[:, 1].abs().max()) < 1e-9            # vertical: no set-back
         else:
             assert float(verts[:, 1].min()) < -12.0                 # leans away from the water
+
+
+def test_a_box_is_closed_outward_and_has_the_area_it_should():
+    from hydropt.mesh import box_mesh, facet_geometry
+
+    verts, faces = box_mesh((2.0, 3.0, 5.0))
+    assert verts.shape == (8, 3) and faces.shape == (12, 3)
+    centroid, normal, area = facet_geometry(verts, faces)
+    assert bool(((normal * centroid).sum(-1) > 0).all())          # outward
+    assert float(area.sum()) == pytest.approx(2 * (2 * 3 + 3 * 5 + 5 * 2))
+    # every edge is shared by exactly two facets: closed
+    edges = torch.cat([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]]).sort(dim=1).values
+    _, counts = torch.unique(edges, dim=0, return_counts=True)
+    assert bool((counts == 2).all())
+    with pytest.raises(ValueError):
+        box_mesh((1.0, 0.0, 1.0))

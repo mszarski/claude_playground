@@ -59,6 +59,7 @@ __all__ = [
     "visible_facets",
     "mesh_target",
     "boat_hull_mesh",
+    "box_mesh",
     "icosphere",
 ]
 
@@ -739,6 +740,34 @@ def icosphere(subdivisions: int = 3, radius: float = 1.0
         verts = torch.stack(rows)
         faces = torch.tensor(new_faces, dtype=torch.long)
     return verts * float(radius), faces
+
+
+def box_mesh(size=(1.0, 1.0, 1.0)) -> tuple[Tensor, Tensor]:
+    """A closed box centred on the origin, outward-wound: 8 vertices, 12 facets.
+
+    ``size`` is the full extent along ``x``, ``y`` and ``z``.  A concrete
+    armour unit on a breakwater, a container, a crate on the seabed: flat
+    faces that flash when one points at the sonar, and nothing in between,
+    which at 120 kHz is a lobe a third of a degree wide.  Rotate and place
+    it with :func:`mesh_target`; pile several into one mesh by concatenating
+    vertices and offset faces.
+    """
+    h = torch.as_tensor(size, dtype=torch.get_default_dtype()).reshape(3) / 2.0
+    if bool((h <= 0.0).any()):
+        raise ValueError(f"box size must be positive on every axis, got {size}")
+    corners = torch.tensor([[x, y, z] for x in (-1.0, 1.0) for y in (-1.0, 1.0)
+                            for z in (-1.0, 1.0)])
+    verts = corners * h
+    # each face as a quad, split into two triangles; winding fixed below
+    quads = [(0, 1, 3, 2), (4, 6, 7, 5),      # -x, +x
+             (0, 4, 5, 1), (2, 3, 7, 6),      # -y, +y
+             (0, 2, 6, 4), (1, 5, 7, 3)]      # -z, +z
+    faces = torch.tensor([[q[0], q[1], q[2]] for q in quads]
+                         + [[q[0], q[2], q[3]] for q in quads], dtype=torch.long)
+    centroid, normal, _ = facet_geometry(verts, faces)
+    inward = (normal * centroid).sum(-1) < 0.0
+    faces[inward] = faces[inward][:, [0, 2, 1]]
+    return verts, faces
 
 
 def cylinder_mesh(length: float = 2.0, radius: float = 0.5, *,
