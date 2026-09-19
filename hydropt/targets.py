@@ -537,3 +537,35 @@ class ExtendedTarget(nn.Module):
         yaw, pitch, roll = (float(a) * 180.0 / math.pi for a in self.orientation)
         return (f"{self.n_highlights} highlights, position={self.position.tolist()}, "
                 f"yaw={yaw:.1f} deg, pitch={pitch:.1f} deg, roll={roll:.1f} deg")
+
+
+def fish_school(n_fish: int, centre, radii=(15.0, 8.0, 3.0), *,
+                target_strength_db: float = -40.0, yaw: float = 0.0,
+                learnable: bool = True,
+                generator: torch.Generator | None = None) -> ExtendedTarget:
+    """A school of fish as a cloud of point scatterers in an ellipsoid.
+
+    Each fish is one :class:`IsotropicScattering` highlight, all sharing one
+    target strength (a swim-bladder fish of 20-30 cm reads about -40 dB at
+    100 kHz; the shared parameter is learnable), scattered uniformly through
+    an ellipsoid of the given semi-axes (along, across, vertical, metres)
+    about ``centre``.  The school's position and yaw are the target's own
+    parameters, so an image loss reaches where the school is and which way
+    it is heading; ``learnable_layout`` is left off, the fish being no
+    particular place.
+
+    Incoherently the school returns ``n`` times one fish; coherently, in an
+    image, it returns speckle about that, which is what a school looks like.
+    """
+    if n_fish < 1:
+        raise ValueError("a school needs at least one fish")
+    g = generator if generator is not None else torch.Generator().manual_seed(0)
+    r = torch.as_tensor(radii, dtype=torch.get_default_dtype()).reshape(3)
+    # uniform in the unit ball: a direction, and a radius with the cube law
+    u = torch.randn(n_fish, 3, generator=g, dtype=r.dtype)
+    u = u / u.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+    rad = torch.rand(n_fish, 1, generator=g, dtype=r.dtype) ** (1.0 / 3.0)
+    offsets = u * rad * r
+    pattern = IsotropicScattering(target_strength_db, learnable=learnable)
+    return ExtendedTarget(offsets, pattern, position=centre, yaw=yaw,
+                          learnable=learnable)

@@ -206,3 +206,48 @@ def test_an_exactly_zero_cell_does_not_poison_the_gradient():
     noisy.sum().backward()
     assert torch.isfinite(scale.grad).all()
     assert float(scale.grad) > 0
+
+
+def test_a_complex_field_gets_the_same_noise_and_a_smooth_gradient():
+    """Noise on the field: the same Rice statistics, without the kink at a null.
+
+    ``|b + n|^2`` and ``(sqrt(|b|^2) + x)^2 + y^2`` have the same distribution;
+    but the second passes through ``|b|``, whose derivative jumps where the
+    field crosses zero.  A finite difference across that kink disagrees with
+    the analytic gradient; through the field the two agree.
+    """
+    import torch
+    from hydropt.noise import add_receiver_noise, calibrate
+
+    g = torch.Generator().manual_seed(3)
+    s, n = 9.0, 1.0
+    field = torch.full((400_000,), s ** 0.5, dtype=torch.complex128)
+    out = add_receiver_noise(field, n, generator=g)
+    assert float(out.mean()) == pytest.approx(s + n, rel=0.01)
+    assert float(out.var()) == pytest.approx(n * n + 2 * s * n, rel=0.05)
+
+    # calibrate scales a field's amplitude so its power comes out as the image's
+    b = torch.tensor([1.0 + 1.0j, 0.5j], dtype=torch.complex128)
+    assert torch.allclose(calibrate(b, 200.0, beam_scale=3.0).abs() ** 2,
+                          calibrate(b.abs() ** 2, 200.0, beam_scale=3.0))
+
+    # a field passing through a null: two phasors cancelling at phi = pi
+    def image(phi, through_field):
+        b = 1.0 + torch.exp(1j * phi)               # |b| -> 0 at phi = pi
+        gen = torch.Generator().manual_seed(7)
+        if through_field:
+            return add_receiver_noise(b.reshape(1), 0.5, generator=gen).sum()
+        return add_receiver_noise((b.real ** 2 + b.imag ** 2).reshape(1), 0.5,
+                                  generator=gen).sum()
+
+    h = 1e-3
+    for through_field in (True, False):
+        phi = torch.tensor(math.pi + 0.3 * h, dtype=torch.float64, requires_grad=True)
+        image(phi, through_field).backward()
+        with torch.no_grad():
+            fd = (float(image(phi + h, through_field)) - float(image(phi - h, through_field))) / (2 * h)
+        rel = abs(float(phi.grad) - fd) / max(abs(fd), 1e-12)
+        if through_field:
+            assert rel < 1e-4
+        else:
+            assert rel > 0.1        # the kink: the power route disagrees

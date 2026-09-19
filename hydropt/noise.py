@@ -147,13 +147,20 @@ def calibrate(image: Tensor, source_level_db: float, *,
       ``source_level_db`` is that pressure in dB re 1 uPa at 1 m, 210-220 dB
       for an imaging sonar.
 
+    A complex ``image`` is taken to be the beamformed FIELD (``beamform(...,
+    complex_output=True)``) and is scaled by the square root of the same
+    factor, so that ``|calibrate(b)|^2 == calibrate(|b|^2)``.
+
     Without both, comparing an image with a noise level compares a ratio with a
     pressure, and the error is not small enough to notice as a discrepancy --
     it is large enough to look like a different question's answer.
     """
     if beam_scale <= 0.0:
         raise ValueError(f"beam_scale must be positive, got {beam_scale}")
-    return image / beam_scale * 10.0 ** (source_level_db / 10.0)
+    factor = 10.0 ** (source_level_db / 10.0) / beam_scale
+    if image.is_complex():
+        return image * math.sqrt(factor)       # a field: the amplitude scales
+    return image * factor
 
 
 def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,
@@ -173,16 +180,30 @@ def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,
 
     ``noise_power`` broadcasts against ``power``, so a per-band noise level can
     be applied to a ``[beams, bands, bins]`` image directly.
+
+    **Given the field instead** -- a complex ``power``, from ``beamform(...,
+    complex_output=True)`` -- the noise phasor is added to it and the result is
+    ``|b + n|^2``: the same statistics, but smooth in the field.  That matters
+    for a gradient.  Through the power alone the model passes through
+    ``sqrt(S) = |b|``, which has a kink wherever the field goes through a null,
+    and a coherent target's fringes put a null within a sixteenth of a
+    wavelength of a quarter of its cells: measured on ``examples/22``, the
+    analytic gradient of the noisy image was five times a wavelength-scale
+    finite difference through the power and agreed with it through the field.
     """
-    n = torch.as_tensor(noise_power, dtype=power.dtype, device=power.device)
+    real_dtype = power.real.dtype if power.is_complex() else power.dtype
+    n = torch.as_tensor(noise_power, dtype=real_dtype, device=power.device)
     if bool((n < 0).any()):
         raise ValueError("noise power must be non-negative")
     sigma = (0.5 * n).sqrt()
     shape = torch.broadcast_shapes(power.shape, n.shape)
-    x = torch.randn(shape, dtype=power.dtype, device=power.device,
+    x = torch.randn(shape, dtype=real_dtype, device=power.device,
                     generator=generator) * sigma
-    y = torch.randn(shape, dtype=power.dtype, device=power.device,
+    y = torch.randn(shape, dtype=real_dtype, device=power.device,
                     generator=generator) * sigma
+    if power.is_complex():
+        re, im = power.real + x, power.imag + y
+        return re * re + im * im
     # Floored at the smallest normal number, not at zero.  The derivative of
     # sqrt at exactly zero is infinite, and a cell the beamformer left at
     # exactly zero (an empty bin, or a value that underflowed) then turns the
@@ -190,5 +211,5 @@ def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,
     # image's sum sees every cell.  It happened on a 90 m image with two such
     # cells.  At the floor the slope is large but finite, and it multiplies a
     # zero, so the cell contributes exactly nothing, as it should.
-    tiny = torch.finfo(power.dtype).tiny
+    tiny = torch.finfo(real_dtype).tiny
     return (power.clamp_min(tiny).sqrt() + x) ** 2 + y ** 2

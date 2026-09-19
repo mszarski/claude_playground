@@ -505,3 +505,22 @@ def test_a_zero_cross_section_pair_does_not_poison_the_gradient():
     assert pattern.level.grad is not None
     assert torch.isfinite(pattern.level.grad).all()
     assert float(pattern.level.grad) > 0
+
+
+def test_a_fish_school_is_n_fish_in_an_ellipsoid():
+    from hydropt.targets import fish_school
+    school = fish_school(200, (100.0, 20.0, 15.0), radii=(15.0, 8.0, 3.0),
+                         target_strength_db=-40.0, yaw=30.0, learnable=False,
+                         generator=torch.Generator().manual_seed(3))
+    assert school.n_highlights == 200
+    body = school.highlights
+    inside = ((body / torch.tensor([15.0, 8.0, 3.0])) ** 2).sum(-1)
+    assert float(inside.max()) <= 1.0 + 1e-9
+    assert float(inside.mean()) > 0.3                     # filled, not hollow or clumped
+    # every fish is one -40 dB scatterer, whichever way it is looked at
+    ki = torch.tensor([[[1.0, 0.0, 0.0]]])
+    sigma = school.cross_section(7, ki, -ki, torch.tensor([120.0]))
+    assert float(10 * torch.log10(sigma.reshape(-1)[0])) == pytest.approx(-40.0, abs=1e-6)
+    # the school's centre is where it was put, and its world layout is rotated
+    world = school.world_positions()
+    assert torch.allclose(world.mean(0), torch.tensor([100.0, 20.0, 15.0]), atol=1.5)

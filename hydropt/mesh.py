@@ -935,3 +935,49 @@ def boat_hull_mesh(length: float = 12.0, beam: float = 3.0, draft: float = 1.0,
     # this generator means to make (2.8e-2 of the largest).
     floor = float(torch.finfo(dt).eps) ** 0.5
     return verts, tri[area > floor * float(area.max())]
+
+
+def seawall_mesh(length: float = 100.0, height: float = 10.0, *,
+                 slope_deg: float = 90.0, n_along: int = 40, n_up: int = 8
+                 ) -> tuple[Tensor, Tensor]:
+    """One face of a seawall or breakwater, wound to face ``+y``.
+
+    Body frame: the wall runs along ``x``, its toe along ``z = 0`` and its
+    crest ``height`` above it (``z`` is depth-down, so the crest is at
+    ``-height``).  ``slope_deg`` is the face's angle from horizontal: 90 is a
+    vertical caisson wall, 34 or so a rubble-mound armour slope, which leans
+    away from the water as it rises.  The water is on the ``+y`` side.
+
+    Place it with :func:`mesh_target` -- ``yaw`` along the wall's line, the
+    toe on the seabed -- and give it the diffuse channel a rock or concrete
+    face has (``diffuse_db`` of -5 to -10): seen along its length from a
+    sonar in the harbour, a wall is at grazing incidence, where a flat face
+    has no specular return at all and everything it shows is roughness.
+    Hand the same mesh to :func:`hydropt.reverb.reverberation_arrivals` as
+    an occluder and it shadows the water beyond it.
+    """
+    if length <= 0.0 or height <= 0.0:
+        raise ValueError("a wall needs a positive length and height")
+    if not 0.0 < slope_deg <= 90.0:
+        raise ValueError(f"slope_deg must be in (0, 90], got {slope_deg}")
+    run = height / math.tan(math.radians(slope_deg))      # horizontal set-back
+    xs = torch.linspace(-length / 2.0, length / 2.0, n_along + 1)
+    t = torch.linspace(0.0, 1.0, n_up + 1)
+    X, T = torch.meshgrid(xs, t, indexing="ij")           # [n_along+1, n_up+1]
+    Y = -run * T                                          # leans away from +y
+    Z = -height * T                                       # rises (depth down)
+    verts = torch.stack([X, Y, Z], dim=-1).reshape(-1, 3)
+    faces = []
+    for i in range(n_along):
+        for j in range(n_up):
+            a = i * (n_up + 1) + j
+            b = a + (n_up + 1)
+            # wound so the normal points to +y (the water side): right-hand
+            # rule on (a, b, a+1) gives x-along cross z-up ... = +y
+            faces.append([a, b, a + 1])
+            faces.append([a + 1, b, b + 1])
+    faces_t = torch.tensor(faces, dtype=torch.long)
+    _, normal, _ = facet_geometry(verts, faces_t)
+    if float(normal[:, 1].mean()) < 0.0:                  # face the water
+        faces_t = faces_t[:, [0, 2, 1]]
+    return verts, faces_t

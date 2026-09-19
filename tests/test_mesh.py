@@ -1003,3 +1003,19 @@ def test_no_diffuse_term_by_default_changes_nothing():
     plain = MeshScattering(verts, faces)
     explicit_off = MeshScattering(verts, faces, diffuse_db=None)
     assert torch.equal(plain(ki, -ki, freqs), explicit_off(ki, -ki, freqs))
+
+
+def test_a_seawall_faces_the_water_and_has_the_area_it_should():
+    from hydropt.mesh import facet_geometry, seawall_mesh
+    for slope in (90.0, 34.0):
+        verts, faces = seawall_mesh(120.0, 12.0, slope_deg=slope, n_along=24, n_up=6)
+        _, normal, area = facet_geometry(verts, faces)
+        assert float(normal[:, 1].min()) > 0.0                    # every facet faces +y
+        face_length = 12.0 / math.sin(math.radians(slope))         # up the slope
+        assert float(area.sum()) == pytest.approx(120.0 * face_length, rel=1e-6)
+        assert float(verts[:, 2].min()) == pytest.approx(-12.0)    # crest 12 m up
+        assert float(verts[:, 2].max()) == pytest.approx(0.0)      # toe at z = 0
+        if slope == 90.0:
+            assert float(verts[:, 1].abs().max()) < 1e-9            # vertical: no set-back
+        else:
+            assert float(verts[:, 1].min()) < -12.0                 # leans away from the water

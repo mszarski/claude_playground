@@ -69,6 +69,7 @@ from .mesh import (
     load_obj,
     mesh_target,
     segment_mesh_transmission,
+    seawall_mesh,
     triangle_phase_integral,
 )
 from .noise import (
@@ -137,6 +138,7 @@ from .targets import (
     IsotropicScattering,
     PlateScattering,
     ScatteringPattern,
+    fish_school,
     rotation_matrix,
 )
 from .spreading import RayTube, ray_tube, ray_tube_jvp, spherical_spreading
@@ -159,8 +161,8 @@ __all__ = [
     "beam_power_scale", "calibrate",
     "line_array_directivity_db",
     "MeshScattering", "boat_hull_mesh", "cylinder_mesh", "facet_geometry",
-    "icosphere", "load_obj", "mesh_target", "segment_mesh_transmission",
-    "triangle_phase_integral",
+    "icosphere", "load_obj", "mesh_target", "seawall_mesh",
+    "segment_mesh_transmission", "triangle_phase_integral", "fish_school",
     "spherical_fan", "structured_fan", "fan_2d", "fan_angular_spacing",
     "fan_sigma_d", "fibonacci_sphere", "fibonacci_cone",
     "receiver_cone_importance", "directions_from_angles",

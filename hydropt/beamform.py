@@ -283,8 +283,18 @@ def _synthesise(
     time_grid: Tensor,
     sigma_t: float,
     time_gate: float,
+    aperture: int | None = None,
 ) -> Tensor:
-    """Common complex splatting kernel.  Returns ``[..., B, T]``."""
+    """Common complex splatting kernel.  Returns ``[..., B, T]``.
+
+    With ``aperture`` -- the index of an axis of ``delays`` that runs over the
+    array's elements -- the elements are summed BEFORE the arrivals are, and
+    each arrival's power is what is scattered: the incoherent image
+    ``sum_a |sum_m ...|^2``, real, with that axis gone.  The bin window is then
+    placed at each arrival's aperture-mean time, shared by the elements (their
+    delays differ by a fraction of a bin, and the envelope is still evaluated
+    at each element's exact lag).
+    """
     dtype = time_grid.dtype
     device = time_grid.device
     n_time = int(time_grid.shape[0])
@@ -309,7 +319,8 @@ def _synthesise(
     t0_64, dt_64 = t0.to(f64), dt.to(f64)
     omega = 2.0 * math.pi * freqs_khz.to(f64) * 1.0e3                  # [B] rad/s
 
-    centre = torch.round((tau.detach() - t0_64) / dt_64).long()
+    tau_c = tau if aperture is None else tau.mean(dim=aperture, keepdim=True)
+    centre = torch.round((tau_c.detach() - t0_64) / dt_64).long()
     bins = centre.unsqueeze(-1) + offsets  # [..., A, W]
     valid = (bins >= 0) & (bins < n_time)
     bins_c = bins.clamp(0, n_time - 1)
@@ -328,6 +339,11 @@ def _synthesise(
     vals = carrier.unsqueeze(-1) * env.unsqueeze(-3).to(carrier.dtype)  # [..., B, A, W]
 
     lead = delays.shape[:-1]
+    if aperture is not None:
+        vals = vals.sum(dim=aperture)                  # the aperture, coherently
+        vals = vals.real ** 2 + vals.imag ** 2         # each arrival's power
+        bins_c = bins_c.squeeze(aperture)
+        lead = lead[:aperture] + lead[aperture + 1:]
     n_lead = int(torch.tensor(lead).prod()) if lead else 1
     n_band = int(freqs_khz.shape[0])
     flat_bins = bins_c.reshape(n_lead, 1, -1).expand(n_lead, n_band, -1)
@@ -392,6 +408,8 @@ def beamform(
     checkpoint: bool = True,
     method: str = "fft",
     oversample: int | None = None,
+    complex_output: bool = False,
+    coherent: bool = True,
 ) -> Tensor:
     """Delay-and-sum beam power, ``[steer_directions, bands, time_bins]``.
 
@@ -461,10 +479,32 @@ def beamform(
             that meets the 1.8; the coarse-grid values are then the samples
             the direct kernel would have produced.
 
+        complex_output: return the complex beams ``b`` instead of ``|b|^2``.
+            The beamformer is linear in the arrivals, so the beams of two
+            arrival sets add: a static background (reverberation) can be
+            formed once and a moving target's beams added to it per step,
+            with ``|b_a + b_b|^2`` exactly the image of the combined set.
+
+        coherent: ``False`` adds the arrivals in POWER after each one's own
+            aperture sum: ``sum_a |b_a|^2`` rather than ``|sum_a b_a|^2``.
+            That is the expected intensity of the image over the arrivals'
+            phases -- speckle-free -- which is what a template for fitting
+            wants: the coherent image of an extended target is a speckle
+            pattern in its position, rearranged by a shift of a fraction of a
+            wavelength, and a loss against it is a cusp on a rough plateau
+            (``examples/22`` measured +-2 m of plateau at 250 m).  The
+            expected intensity moves smoothly with the target.  The
+            reverberation of a scene, and a measurement, stay coherent; the
+            incoherent picture is for the model side of a fit.  Direct kernel
+            only, real output.
+
     Returns:
-        Real beam power ``|b|^2``.  Differentiable in element positions,
-        shading weights and every scene parameter behind ``arrivals``.
+        Real beam power ``|b|^2`` (or the complex beams).  Differentiable in
+        element positions, shading weights and every scene parameter behind
+        ``arrivals``.
     """
+    if not coherent and complex_output:
+        raise ValueError("an incoherent image has no complex beams")
     dtype, device = time_grid.dtype, time_grid.device
     elements = elements.reshape(-1, 3).to(dtype=dtype, device=device)
     steer = steer_directions.reshape(-1, 3).to(dtype=dtype, device=device)
@@ -496,21 +536,31 @@ def beamform(
     n_steer = int(steer.shape[0])
     n_arr = int(arrivals.time.shape[0])
     if n_arr == 0:
+        cdt = torch.complex128 if dtype == torch.float64 else torch.complex64
         return torch.zeros(n_steer, int(freqs_khz.shape[0]),
-                           int(time_grid.shape[0]), dtype=dtype, device=device)
+                           int(time_grid.shape[0]),
+                           dtype=cdt if complex_output else dtype, device=device)
     if method not in ("fft", "direct"):
         raise ValueError(f"method must be 'fft' or 'direct', got {method!r}")
+    if not coherent:
+        return _beamform_direct(arrivals, offset, w, freqs_khz, time_grid, steer,
+                                sigma_t=sigma_t, sound_speed=sound_speed,
+                                time_gate=time_gate, steer_chunk=steer_chunk,
+                                arrival_chunk=arrival_chunk, checkpoint=checkpoint,
+                                coherent=False)
     kernel = _beamform_fft if method == "fft" and int(time_grid.shape[0]) > 1 \
         else _beamform_direct
     return kernel(arrivals, offset, w, freqs_khz, time_grid, steer,
                   sigma_t=sigma_t, sound_speed=sound_speed, time_gate=time_gate,
                   steer_chunk=steer_chunk, arrival_chunk=arrival_chunk,
-                  checkpoint=checkpoint, oversample=oversample)
+                  checkpoint=checkpoint, oversample=oversample,
+                  complex_output=complex_output)
 
 
 def _beamform_direct(arrivals, offset, w, freqs_khz, time_grid, steer, *,
                      sigma_t, sound_speed, time_gate, steer_chunk,
-                     arrival_chunk, checkpoint, oversample=None) -> Tensor:
+                     arrival_chunk, checkpoint, oversample=None,
+                     complex_output=False, coherent=True) -> Tensor:
     """Every look direction's delay folded into every arrival, then synthesised."""
     dtype, device = time_grid.dtype, time_grid.device
     n_steer, n_arr = int(steer.shape[0]), int(arrivals.time.shape[0])
@@ -524,6 +574,9 @@ def _beamform_direct(arrivals, offset, w, freqs_khz, time_grid, steer, *,
         rel = sub.direction.view(1, 1, -1, 3) + sv.view(-1, 1, 1, 3)
         delays = (offset.view(1, -1, 1, 3) * rel).sum(-1) / sound_speed
         weights = w.view(1, -1, 1).expand_as(delays)
+        if not coherent:
+            return _synthesise(sub, delays, weights, freqs_khz, time_grid,
+                               sigma_t, time_gate, aperture=1)  # [S, B, T] power
         field = _synthesise(sub, delays, weights, freqs_khz, time_grid,
                             sigma_t, time_gate)  # [S, M, B, T]
         return field.sum(dim=1)  # coherent sum across the aperture
@@ -531,8 +584,8 @@ def _beamform_direct(arrivals, offset, w, freqs_khz, time_grid, steer, *,
     out = []
     for lo in range(0, n_steer, chunk):
         sv = steer[lo : lo + chunk]  # [S, 3]
-        b = torch.zeros(sv.shape[0], n_band, n_time, dtype=complex_dtype,
-                        device=device)
+        b = torch.zeros(sv.shape[0], n_band, n_time,
+                        dtype=complex_dtype if coherent else dtype, device=device)
         for a_lo in range(0, n_arr, a_chunk):
             sub = _slice_arrivals(arrivals, a_lo, a_lo + a_chunk)
             if checkpoint and torch.is_grad_enabled() and _needs_grad(sub):
@@ -541,13 +594,16 @@ def _beamform_direct(arrivals, offset, w, freqs_khz, time_grid, steer, *,
             else:
                 part = block(sv, sub)
             b = b + part
-        out.append(b.real**2 + b.imag**2)
+        if not coherent:
+            out.append(b)
+        else:
+            out.append(b if complex_output else b.real**2 + b.imag**2)
     return torch.cat(out, dim=0)
 
 
 def _beamform_fft(arrivals, offset, w, freqs_khz, time_grid, steer, *,
                   sigma_t, sound_speed, time_gate, steer_chunk, arrival_chunk,
-                  checkpoint, oversample) -> Tensor:
+                  checkpoint, oversample, complex_output=False) -> Tensor:
     """The field at each element once, then each look direction as a delay.
 
     Stage one is :func:`element_field` in blocks: every arrival lands on
@@ -617,7 +673,7 @@ def _beamform_fft(arrivals, offset, w, freqs_khz, time_grid, steer, *,
         weight = torch.polar(torch.ones_like(phase), phase) * shade   # [S, M, B, F]
         b_f = (weight * spectrum.unsqueeze(0)).sum(dim=1)             # [S, B, F]
         b = torch.fft.ifft(b_f, dim=-1)[..., lo_bin:hi_bin:r]         # [S, B, T]
-        out.append(b.real**2 + b.imag**2)
+        out.append(b if complex_output else b.real**2 + b.imag**2)
     return torch.cat(out, dim=0)
 
 

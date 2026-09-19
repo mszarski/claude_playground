@@ -525,3 +525,113 @@ def test_a_hamming_shaded_array_factor_has_low_sidelobes():
     assert float(db_plain[past_first_null].max()) > -14.0   # the -13 dB first sidelobe
     # and its mainlobe is wider
     assert int((db_shaded > -3.0).sum()) > int((db_plain > -3.0).sum())
+
+
+def test_complex_beams_square_to_the_power_and_add():
+    """|b|^2 is the image, and the beams of two arrival sets add.
+
+    That is what lets a static background be formed once and a target's beams
+    added to it per step of a fit: |b_rev + b_echo|^2 is exactly the image of
+    the combined arrival set, from either kernel.
+    """
+    from hydropt.beamform import _slice_arrivals
+
+    elements = _ula(16)
+    grid = make_time_grid(0.050, 0.070, 61)
+    freqs = torch.tensor([FREQ_HZ / 1e3])
+    steer, _ = azimuth_steering(21, 60.0)
+    arrivals = _random_arrivals(120, grid)
+    a, b = _slice_arrivals(arrivals, 0, 80), _slice_arrivals(arrivals, 80, 120)
+    for method in ("fft", "direct"):
+        kw = dict(sigma_t=1.5e-4, method=method)
+        power = beamform(arrivals, elements, freqs, grid, steer, **kw)
+        beams = beamform(arrivals, elements, freqs, grid, steer, complex_output=True, **kw)
+        assert beams.is_complex()
+        assert torch.allclose(beams.real ** 2 + beams.imag ** 2, power, rtol=1e-10, atol=1e-12 * float(power.max()))
+        ba = beamform(a, elements, freqs, grid, steer, complex_output=True, **kw)
+        bb = beamform(b, elements, freqs, grid, steer, complex_output=True, **kw)
+        assert torch.allclose(ba + bb, beams, rtol=1e-9, atol=1e-9 * float(beams.abs().max()))
+    empty = ArrivalSet(*(None if f is None else f[:0] for f in arrivals))
+    z = beamform(empty, elements, freqs, grid, steer, sigma_t=1.5e-4, complex_output=True)
+    assert z.is_complex() and torch.equal(z.abs(), torch.zeros_like(z.abs()))
+
+
+def test_the_image_gradient_is_the_wavelength_scale_finite_difference_in_float64():
+    """d(image)/d(arrival time) against a finite difference of lambda/16.
+
+    A coherent image ripples at the wavelength: a step of a fraction of a
+    cell is a secant across many ripples, so the derivative can only be
+    checked with a step inside one.  In float64 the analytic gradient of the
+    log of a beamformed image, with respect to the arrival times, is that
+    finite difference to a part in a thousand.  (In float32 it is not, even
+    in sign, at 120 kHz: the backward pass sums products carrying the
+    carrier's 7.5e5 rad/s and loses their cancellation.  Pictures in single
+    precision, gradients in double.)
+    """
+    torch.manual_seed(2)
+    f_khz = 120.0
+    lam = C / (f_khz * 1e3)
+    elements = _ula(24, spacing=lam / 2)
+    grid = make_time_grid(0.300, 0.320, 61)
+    freqs = torch.tensor([f_khz])
+    steer, _ = azimuth_steering(41, 60.0)
+    base = _random_arrivals(400, grid, seed=8)
+
+    with torch.no_grad():
+        floor = float(beamform(base, elements, freqs, grid, steer, sigma_t=1.5e-4).max()) * 1e-4
+
+    def image(dt):
+        # the floor is fixed: recomputing it from each shifted image's peak
+        # would put the peak's own derivative into the finite difference
+        a = base._replace(time=base.time + dt)
+        power = beamform(a, elements, freqs, grid, steer, sigma_t=1.5e-4)
+        return torch.log10(power + floor).mean()
+
+    shift = torch.zeros(400, dtype=torch.float64, requires_grad=True)
+    image(shift).backward()
+    g = shift.grad.clone()
+    h = lam / 16.0 / C                              # a sixteenth of a wavelength, in time
+    probe = torch.randn(400, dtype=torch.float64); probe = probe / probe.norm()
+    with torch.no_grad():
+        fd = (float(image(h * probe)) - float(image(-h * probe))) / (2 * h)
+    analytic = float((g * probe).sum())
+    # a quarter of a percent: the pulse gate's window steps by a fine bin as
+    # an arrival's time crosses one, at exp(-12.5) of the pulse, and the log
+    # of a low cell magnifies that; the secant carries a little curvature too
+    assert analytic == pytest.approx(fd, rel=5e-3)
+
+
+def test_an_incoherent_image_is_the_sum_of_each_arrivals_own_power():
+    """coherent=False adds arrivals in power: sum |b_a|^2, not |sum b_a|^2.
+
+    One arrival images identically either way; two arrivals on top of each
+    other give twice one's power incoherently and four times coherently; and
+    the incoherent image of a set is the sum of its members' images, arrival
+    by arrival, which is the expected intensity over their phases.
+    """
+    from hydropt.beamform import _slice_arrivals
+
+    elements = _ula(16)
+    grid = make_time_grid(0.050, 0.070, 61)
+    freqs = torch.tensor([FREQ_HZ / 1e3])
+    steer, _ = azimuth_steering(21, 60.0)
+    kw = dict(sigma_t=1.5e-4, method="direct")
+    arrivals = _random_arrivals(24, grid)
+    one = _slice_arrivals(arrivals, 0, 1)
+    coh = beamform(one, elements, freqs, grid, steer, **kw)
+    inc = beamform(one, elements, freqs, grid, steer, coherent=False, **kw)
+    assert not inc.is_complex()
+    assert torch.allclose(coh, inc, rtol=1e-8, atol=1e-10 * float(coh.max()))
+
+    twice = ArrivalSet(*(None if f is None else torch.cat([f, f]) for f in one))
+    assert torch.allclose(beamform(twice, elements, freqs, grid, steer, **kw), 4.0 * coh,
+                          rtol=1e-8, atol=1e-10 * float(coh.max()))
+    assert torch.allclose(beamform(twice, elements, freqs, grid, steer, coherent=False, **kw),
+                          2.0 * coh, rtol=1e-8, atol=1e-10 * float(coh.max()))
+
+    whole = beamform(arrivals, elements, freqs, grid, steer, coherent=False, **kw)
+    parts = sum(beamform(_slice_arrivals(arrivals, i, i + 1), elements, freqs, grid, steer, **kw)
+                for i in range(arrivals.n_arrivals))
+    assert torch.allclose(whole, parts, rtol=1e-8, atol=1e-10 * float(whole.max()))
+    with pytest.raises(ValueError):
+        beamform(arrivals, elements, freqs, grid, steer, coherent=False, complex_output=True, **kw)
