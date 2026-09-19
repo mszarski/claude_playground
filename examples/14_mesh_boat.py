@@ -217,9 +217,15 @@ def main() -> int:
           f"{boat.pattern_for(0).n_facets} facets each")
     tx_dirs, tx_w = fls.transmit(fls.TX_RAYS)
     t0 = time.perf_counter()
+    # The return leg is SOLVED (method of images where the sound speed is
+    # constant, traced rays otherwise), not splatted: the splat summed
+    # acceptance weights over every ray passing a point without dividing by
+    # their sum, +31 dB in the image.  The projector's pattern is then needed
+    # as a function of direction, since a solved path has no ray to index.
     arrivals = target_arrivals(scene, boat, tx_dirs, n_rx_rays=fls.RX_RAYS,
                                rx_half_angle_deg=40.0, tx_weights=tx_w,
                                max_arrivals_per_leg=24,
+                               return_leg="eigenray", tx_pattern=fls.transmit_pattern,
                                generator=torch.Generator().manual_seed(3))
     steer, bearings = azimuth_steering(121, fls.SECTOR_DEG)
     grid = make_time_grid(2 * (fls.TARGET_RANGE - 25.0) / C,

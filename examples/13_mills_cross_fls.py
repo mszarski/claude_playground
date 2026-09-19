@@ -103,6 +103,13 @@ def transmit_fan(n_elev: int = 56, n_azim: int = 330):
     return dirs, weights.contiguous(), elev, azim
 
 
+def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
+    """The same vertical array factor, as a function of direction (``z`` is
+    ``sin`` of the elevation), for a solved path that has no ray to index."""
+    return line_array_factor(directions[..., 2], N_TX,
+                             sin_steer=math.sin(math.radians(-TILT_DEG)))
+
+
 def measure_beamwidth(elements, steer_deg: float, n_probe: int = 721,
                       half_span: float = 14.0) -> tuple[float, float]:
     """Beamwidth and peak bearing from a synthetic plane wave, in degrees.
@@ -187,9 +194,15 @@ def main() -> int:
     grid = make_time_grid(2.0 * (TARGET_RANGE - 20.0) / C,
                           2.0 * (TARGET_RANGE + 20.0) / C, 500)
     t0 = time.perf_counter()
+    # The return leg is SOLVED (method of images where the sound speed is
+    # constant, traced rays otherwise), not splatted: the splat summed
+    # acceptance weights over every ray passing a point without dividing by
+    # their sum, +31 dB in the image.  The projector's pattern is then needed
+    # as a function of direction, since a solved path has no ray to index.
     arrivals = target_arrivals(scene, boat, dirs,
                                n_rx_rays=400, rx_half_angle_deg=40.0,
                                tx_weights=weights, max_arrivals_per_leg=24,
+                               return_leg="eigenray", tx_pattern=transmit_pattern,
                                generator=torch.Generator().manual_seed(3))
     image = beamform(arrivals, rx, scene.freqs_khz, grid, steer, sigma_t=3e-5,
                      shading=shading_window(N_RX, "hamming"), steer_chunk=16)

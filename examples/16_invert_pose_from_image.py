@@ -38,8 +38,9 @@ Acceptance criteria:
     to the resolution cell;
   * a fit started inside the capture range recovers position to a fraction of a
     bearing cell;
-  * heading is recovered off broadside, and is degenerate exactly at broadside
-    -- where rotating the hull barely changes the image;
+  * heading is NOT captured from degrees away at any aspect: with every path
+    solved the loss against yaw ripples at a tenth of a degree, the scale at
+    which the hull's ends move by a wavelength;
   * a fit started outside it does not -- and the example says so.
 """
 
@@ -105,6 +106,7 @@ def main() -> int:
         a = target_arrivals(scene, boat, tx_dirs, n_rx_rays=RX_RAYS,
                             rx_half_angle_deg=40.0, rx_jitter=1.0,
                             tx_weights=tx_w, max_arrivals_per_leg=8,
+                            return_leg="eigenray", tx_pattern=fls.transmit_pattern,
                             generator=torch.Generator().manual_seed(seed))
         grid = make_time_grid(2 * 45 / C, 2 * 75 / C, n_bins)
         return beamform(a, elements, scene.freqs_khz, grid, steer,
@@ -309,12 +311,29 @@ def main() -> int:
                 near[3] < beam_m / 2.0,
                 f"{near[3]:.2f} m against a {beam_m:.2f} m cell "
                 f"({beam_m / max(near[3], 1e-9):.1f}x finer)")
-    ok &= check("heading is recovered off broadside",
-                aspect[45.0][1] < 6.0, f"{aspect[45.0][1]:.2f} deg at 45 deg aspect")
-    ok &= check("and is degenerate at broadside, where yaw barely moves the image",
-                aspect[90.0][1] > aspect[45.0][1],
-                f"{aspect[90.0][1]:.2f} deg beam-on against "
-                f"{aspect[45.0][1]:.2f} deg at 45 deg")
+    # Heading is another matter, and this example used to claim it was
+    # recovered off broadside.  That was the splatted echo's smear talking.
+    # With every path solved the image is coherent across the hull's five
+    # sections, 2.4 m apart in a 3.75 m beam cell, and rotating the hull by
+    # a tenth of a degree moves its ends by a wavelength: the loss against
+    # yaw RIPPLES at that scale, measured below, so descent captures heading
+    # only from within a fraction of a degree, at any aspect.  Position is
+    # unaffected, because a shift moves every section's phase together.
+    ripple = {}
+    with torch.no_grad():
+        base = offset_boat(0.0, 0.0, 0.0, learnable=False)
+        ref_yaw = render(base, sigma_t, n_bins, MODEL_SEED)
+        for dyaw in (0.1, 0.2):
+            img = render(offset_boat(0.0, 0.0, dyaw, learnable=False), sigma_t,
+                         n_bins, MODEL_SEED)
+            ripple[dyaw] = float(loss_against(img, ref_yaw))
+    print(f"  yaw landscape at broadside: loss {ripple[0.1]:.5f} at 0.1 deg, "
+          f"{ripple[0.2]:.5f} at 0.2 deg -- it ripples")
+    ok &= check("the loss against yaw ripples at a tenth of a degree, so heading "
+                "is not captured from degrees away",
+                ripple[0.1] > ripple[0.2] and aspect[45.0][1] > 1.0,
+                f"{ripple[0.1]:.5f} at 0.1 deg against {ripple[0.2]:.5f} at 0.2 deg; "
+                f"{aspect[45.0][1]:.2f} deg left at 45 deg aspect")
     ok &= check("and from far outside it, it honestly does not converge",
                 not far[5], f"{far[3]:.2f} m from a {math.hypot(far[0], far[1]):.1f} m start")
     return 0 if ok else 1

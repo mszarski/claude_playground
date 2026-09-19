@@ -82,7 +82,11 @@ R0 = 60.0                         # nominal range, for the across-track metric
 
 # The search stage: a wide window and a coarse cell, because the boat may be
 # anywhere in it.  The refine stage is examples/16's own resolution.
-SEARCH = dict(near=20.0, far=130.0, n_bins=160, sigma_t=2.0e-3)
+# The window reaches 60 m past the start: solved, the echo is compact and its
+# ghosts trail it by up to 20 m, and a start at the window's edge lost that
+# tail off the end -- which moved the mass's centroid inward and turned the
+# transport's pull outward.
+SEARCH = dict(near=20.0, far=170.0, n_bins=218, sigma_t=2.0e-3)
 REFINE = dict(near=45.0, far=75.0, n_bins=233, sigma_t=1.2e-4)
 
 # Blur is the distance mass moves for free, so it sets the reach AND the floor,
@@ -93,12 +97,22 @@ REFINE = dict(near=45.0, far=75.0, n_bins=233, sigma_t=1.2e-4)
 # stops at 2 m therefore stops at ~8 m of error, which is outside the refiner's
 # reach and leaves the two stages unable to meet.  It has to go down far enough
 # that the floor is inside the capture range of what comes next.
-BLUR_SCHEDULE = [(8.0, 15), (4.0, 10), (2.0, 20), (1.0, 20), (0.5, 25)]
+# More steps per stage than the splatted echo needed: solved, the echo is a
+# glint a cell wide rather than a smear, and the transport's pull on it is
+# weaker for the same offset.
+BLUR_SCHEDULE = [(8.0, 40), (4.0, 30), (2.0, 30), (1.0, 25), (0.5, 25)]
 REFINE_STEPS = 40
 # Range shifts to try after the anneal, spanning the local minima the hull's
 # repeated highlights create.  Nine renders, no gradients: descent cannot leave
 # a local minimum, and this is the cheapest thing that can.
-GRID_SHIFTS = [-6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0]
+# Wide enough for the ghosts as well as the hull: with every path solved the
+# boat trails its seabed images 10-14 m behind it, and the anneal can lock the
+# guess's own echo onto the measurement's ghost.
+GRID_SHIFTS = [float(v) for v in range(-14, 3, 2)]
+# And across-track as well: the anneal can settle a hull length to one side,
+# where the guess's hull overlaps the measurement's, and a shift in range
+# alone cannot leave that minimum either.
+ACROSS_SHIFTS = [float(v) for v in range(-14, 15, 2)]
 START = (50.0, 0.0, 0.0)          # dx, dy, dyaw -- 50 m out in range
 
 
@@ -139,6 +153,7 @@ def main() -> int:
             a = target_arrivals(scene, boat, tx_dirs, n_rx_rays=RX_RAYS,
                                 rx_half_angle_deg=40.0, rx_jitter=1.0,
                                 tx_weights=tx_w, max_arrivals_per_leg=8,
+                                return_leg="eigenray", tx_pattern=fls.transmit_pattern,
                                 generator=torch.Generator().manual_seed(seed))
             return beamform(a, elements, scene.freqs_khz, grid, steer,
                             sigma_t=stage["sigma_t"], shading=shade,
@@ -204,33 +219,54 @@ def main() -> int:
     with timed("  search"):
         for blur, n_steps in BLUR_SCHEDULE:
             opt = torch.optim.Adam([{"params": [boat.position], "lr": 0.5 * blur}])
+            reached = True
             for _ in range(n_steps):
                 opt.zero_grad()
-                L = transport_loss(render_s(boat, 202), meas_s, blur)
+                try:
+                    L = transport_loss(render_s(boat, 202), meas_s, blur)
+                except ValueError as stuck:
+                    # The kernel no longer spans the two images: the anneal
+                    # has settled in a local minimum further out than this
+                    # blur can see across.  Smaller blurs cannot help; the
+                    # range shifts below are what is for that.
+                    print(f"    blur {blur:4.1f} m: cannot reach -- "
+                          f"{str(stuck).split(' -- ')[0]}")
+                    reached = False
+                    break
                 L.backward()
                 with torch.no_grad():
                     boat.position.grad[2] = 0.0
                 opt.step()
+            if not reached:
+                break
             print(f"    blur {blur:4.1f} m -> error {error(boat):6.2f} m")
     search_err = error(boat)
 
     # ---- 3. the escape -----------------------------------------------------
     banner("stage 2: a grid search, because descent cannot leave a local minimum")
     here = boat.position.detach().clone()
-    best_shift, best_loss = 0.0, float("inf")
+    best_shift, best_loss = (0.0, 0.0), float("inf")
+    n_renders = 0
     with torch.no_grad():
+        trial = offset_boat(0.0, 0.0, 0.0, learnable=False)
         for shift in GRID_SHIFTS:
-            trial = offset_boat(0.0, 0.0, 0.0, learnable=False)
-            trial.position.copy_(here + torch.tensor([shift, 0.0, 0.0]))
-            v = float(transport_loss(render_s(trial, 202), meas_s, 0.5))
-            err = float((trial.position - true_pos)[:2].norm())
-            print(f"    shift {shift:+5.1f} m -> loss {v:9.3f}   (error {err:5.2f} m)")
-            if v < best_loss:
-                best_loss, best_shift = v, shift
+            row = []
+            for dy in ACROSS_SHIFTS:          # not `across`: that is the metric
+                trial.position.copy_(here + torch.tensor([shift, dy, 0.0]))
+                v = float(transport_loss(render_s(trial, 202), meas_s, 2.0))   # a blur that still reaches
+                n_renders += 1
+                row.append(v)
+                if v < best_loss:
+                    best_loss, best_shift = v, (shift, dy)
+            print(f"    range {shift:+5.1f} m: best across {ACROSS_SHIFTS[row.index(min(row))]:+5.1f} m, "
+                  f"loss {min(row):9.3f}")
     with torch.no_grad():
-        boat.position.copy_(here + torch.tensor([best_shift, 0.0, 0.0]))
+        boat.position.copy_(here + torch.tensor([best_shift[0], best_shift[1], 0.0]))
     grid_err = error(boat)
-    print(f"  picked {best_shift:+.1f} m: {search_err:.2f} m -> {grid_err:.2f} m")
+    off = (boat.position.detach() - true_pos)
+    print(f"  picked range {best_shift[0]:+.1f} m, across {best_shift[1]:+.1f} m: "
+          f"{search_err:.2f} m -> {grid_err:.2f} m "
+          f"(range {float(off[0]):+.2f} m, across {float(off[1]):+.2f} m)")
 
     banner("stage 3: the image loss polishes it")
     cell = REFINE["sigma_t"] * C / 2.0
@@ -284,8 +320,12 @@ def main() -> int:
                 rises and flat < 1.5,
                 f"transport {ot[-1] / ot[far[0]]:.0f}x over 5-50 m, "
                 f"image loss {flat:.2f}x")
-    ok &= check("transport alone walks it in from 50 m",
-                search_err < 6.0, f"{START[0]:.0f} m -> {search_err:.2f} m")
+    # Within the grid's reach, not within the refiner's: with the echo solved
+    # the anneal settles a hull length to one side (12-13 m), and the 2-D
+    # grid below is what takes it from there.
+    ok &= check("transport alone walks it in from 50 m to within the grid's reach",
+                search_err < max(abs(v) for v in ACROSS_SHIFTS),
+                f"{START[0]:.0f} m -> {search_err:.2f} m")
     ok &= check("a grid search escapes the local minimum descent settled in",
                 grid_err < search_err - 1.0,
                 f"{search_err:.2f} m -> {grid_err:.2f} m on {len(GRID_SHIFTS)} "

@@ -205,6 +205,7 @@ def main() -> int:
         return target_arrivals(scene, target, tx_dirs, n_rx_rays=RX_RAYS,
                                rx_half_angle_deg=RX_HALF_ANGLE_DEG,
                                tx_weights=tx_w, max_arrivals_per_leg=8,
+                               return_leg="eigenray", tx_pattern=transmit_shading,
                                generator=torch.Generator().manual_seed(seed))
 
     # ---- 1. a smooth hull glints; discrete scatterers spread ----------------- #

@@ -110,6 +110,13 @@ def transmit_fan(n_elev: int = 56, n_azim: int = 330, *, seed: int = 0):
     return dirs, weights
 
 
+def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
+    """The fan's vertical array factor as a function of direction (``z`` is
+    ``sin`` of the elevation), for a solved path that has no ray to index."""
+    return line_array_factor(directions[..., 2], N_TX,
+                             sin_steer=math.sin(math.radians(-TILT_DEG)))
+
+
 def to_cartesian(image, bearings, grid, *, n_x: int = 240, n_y: int = 240,
                  x_range=(-7.0, 90.0), y_range=(-70.0, 70.0)):
     """Resample a [bearing, range] image onto a metric grid, differentiably.
@@ -174,6 +181,13 @@ def main() -> int:
         # at a 4 m draught it puts the hull entirely under water.
         position=(BOAT_RANGE * math.cos(b), BOAT_RANGE * math.sin(b), 0.0),
         yaw=BOAT_HEADING_DEG, n_patches=6, sound_speed=C,
+        # Without this the hull is a mirror: with the return leg solved
+        # exactly, a faired hull's echo is one glint 3.7 m long at -10 dB on
+        # a 12 m boat.  A real vessel returns 10 to 15 dB below its beam
+        # glint from everything a smooth surface lacks -- ribs, seams, a
+        # rudder, a prop -- and that is what makes its echo boat-sized.
+        # examples/21 takes the same figure from the literature.
+        diffuse_db=-12.0,
         learnable=True, learnable_shape=False, facet_chunk=256)
     print(f"  boat: {HULL_LENGTH:.0f} m hull as {faces.shape[0]} facets in "
           f"{boat.n_highlights} patches,")
@@ -213,9 +227,12 @@ def main() -> int:
 
     def ping(n_elev, n_azim, n_patches, n_rx_rays, cap, seed):
         dirs, weights = transmit_fan(n_elev, n_azim, seed=seed)
+        # Solved return leg, not splatted (the splat over-read by +31 dB in
+        # the image); the projector's pattern goes in as a function.
         echo = target_arrivals(scene, boat, dirs, n_rx_rays=n_rx_rays,
                                rx_half_angle_deg=45.0, tx_weights=weights,
                                max_arrivals_per_leg=cap,
+                               return_leg="eigenray", tx_pattern=transmit_pattern,
                                generator=torch.Generator().manual_seed(seed))
         # The seabed and the sea surface are not scenery: every bottom and
         # surface bounce in the transmit fan is a scattering patch with its own

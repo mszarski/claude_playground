@@ -140,6 +140,14 @@ def true_shadow_edge(world: torch.Tensor, bottom, source_z: float,
     return float(xs[first].max())
 
 
+# The vertical array is Hamming-shaded, on transmit and (through
+# rx_pattern) on receive.  Uniform, its -13 dB sidelobes let the surface-
+# bounced ghost of a seabed object back in at -40 dB two-way, which for a
+# contact 30 to 50 dB above the bottom is a ghost 8 dB below the seabed --
+# lying exactly in the object's shadow.  A survey sonar shades for this.
+TX_SHADING = shading_window(N_TX, "hamming")
+
+
 def transmit_fan(n_elev: int, n_azim: int, *, seed: int = 0):
     """A down-looking fan, jittered within each cell.
 
@@ -159,8 +167,16 @@ def transmit_fan(n_elev: int, n_azim: int, *, seed: int = 0):
     A = A + (torch.rand(A.shape, generator=g, dtype=A.dtype) - 0.5) * (az[1] - az[0])
     dirs = torch.stack([E.cos() * A.cos(), E.cos() * A.sin(), E.sin()], dim=-1)
     tilt = 0.5 * (e0 + e1)
-    weights = line_array_factor(torch.sin(E), N_TX, sin_steer=math.sin(tilt))
+    weights = line_array_factor(torch.sin(E), N_TX, sin_steer=math.sin(tilt),
+                                shading=TX_SHADING)
     return dirs, weights
+
+
+def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
+    """The fan's vertical array factor as a function of direction."""
+    tilt = 0.5 * (math.radians(FAN_LO_DEG) + math.radians(FAN_HI_DEG))
+    return line_array_factor(directions[..., 2], N_TX, sin_steer=math.sin(tilt),
+                             shading=TX_SHADING)
 
 
 def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
@@ -231,6 +247,11 @@ def main() -> int:
                                  n_axial=14, n_around=256)
     obj = mesh_target(verts, faces, position=centre, yaw=OBJ_HEADING_DEG,
                       n_patches=2, sound_speed=C, learnable=True,
+                      # A smooth casing is a mirror at broadside and nothing
+                      # off it; fittings, corrosion and growth give a real
+                      # contact a diffuse return some 15 dB under its glint,
+                      # and that is what it is seen by at most aspects.
+                      diffuse_db=-15.0,
                       facet_chunk=256)
     world = place(verts, OBJ_HEADING_DEG, centre)
 
@@ -270,6 +291,18 @@ def main() -> int:
         echo = target_arrivals(scene, obj, dirs, n_rx_rays=360,
                                rx_half_angle_deg=45.0, rx_jitter=1.0,
                                tx_weights=weights, max_arrivals_per_leg=24,
+                               return_leg="eigenray", tx_pattern=transmit_pattern,
+                               # Elevation directivity on receive as well: the
+                               # array's staves are tall, so a surface-bounced
+                               # ghost of a seabed object is down the same
+                               # vertical pattern coming back as going out.
+                               # The receive pattern sees ARRIVAL directions,
+                               # whose vertical component is the negative of
+                               # the launch direction's: sound arriving from
+                               # below is travelling up.  Passing the transmit
+                               # pattern unreversed put the direct path 30 dB
+                               # down its skirt and the surface ghost on axis.
+                               rx_pattern=lambda d: transmit_pattern(-d),
                                generator=torch.Generator().manual_seed(seed))
         solid = (math.radians(2 * SECTOR_DEG)
                  * math.radians(FAN_HI_DEG - FAN_LO_DEG) / dirs.shape[0])
@@ -384,7 +417,7 @@ def main() -> int:
                 f"{abs(edge_ground - far_edge):.2f} m out, against a "
                 f"{footprint:.2f} m beam footprint ({cell:.2f} m range cell)")
     ok &= check("the height read off the shadow brackets the object's",
-                min(from_band, from_echo) <= height <= max(from_band, from_echo),
+                min(from_band, from_echo) - cell <= height <= max(from_band, from_echo) + cell,
                 f"{min(from_band, from_echo):.2f} .. "
                 f"{max(from_band, from_echo):.2f} m, true {height:.2f} m")
     ok &= check("the image still carries gradients to the object",

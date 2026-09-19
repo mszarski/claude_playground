@@ -173,16 +173,21 @@ def build_boat(bearing_deg: float = 0.0, heading_deg: float = 90.0, *,
                           yaw=heading_deg, learnable=learnable)
 
 
+def transmit_pattern(directions: torch.Tensor) -> torch.Tensor:
+    """The projector's shading as a function of direction: a Gaussian in
+    azimuth about ahead and in elevation about the aim at the boat."""
+    az = torch.atan2(directions[..., 1], directions[..., 0])
+    el = (torch.asin(directions[..., 2].clamp(-1.0, 1.0))
+          - math.atan2(HULL_DEPTH - SONAR_DEPTH, TARGET_RANGE))
+    return (torch.exp(-0.5 * (az / math.radians(20.0)) ** 2)
+            * torch.exp(-0.5 * (el / math.radians(12.0)) ** 2))
+
+
 def transmit(n_rays: int = TX_RAYS):
     """Projector fan, aimed forward and slightly up at the boat, with shading."""
     axis = torch.tensor([TARGET_RANGE, 0.0, HULL_DEPTH - SONAR_DEPTH])
     dirs = fibonacci_cone(n_rays, axis, 30.0)
-    az = torch.atan2(dirs[:, 1], dirs[:, 0])
-    el = torch.asin(dirs[:, 2].clamp(-1.0, 1.0)) - math.atan2(HULL_DEPTH - SONAR_DEPTH,
-                                                              TARGET_RANGE)
-    weights = (torch.exp(-0.5 * (az / math.radians(20.0)) ** 2)
-               * torch.exp(-0.5 * (el / math.radians(12.0)) ** 2))
-    return dirs, weights
+    return dirs, transmit_pattern(dirs)
 
 
 # --------------------------------------------------------------------------- #
@@ -198,9 +203,15 @@ def render_image(scene, target, elements, *, n_bearings: int = 121,
     parameter, which is what lets a loss on it train anything upstream.
     """
     tx_dirs, tx_weights = transmit(n_tx_rays)
+    # The return leg is SOLVED (method of images where the sound speed is
+    # constant, traced rays otherwise), not splatted: the splat summed
+    # acceptance weights over every ray passing a point without dividing by
+    # their sum, +31 dB in the image.  The projector's pattern is then needed
+    # as a function of direction, since a solved path has no ray to index.
     arrivals = target_arrivals(
         scene, target, tx_dirs, n_rx_rays=n_rx_rays,
         rx_half_angle_deg=40.0, tx_weights=tx_weights,
+        return_leg="eigenray", tx_pattern=transmit_pattern,
         # The library default (24), not the 6 this used to force.  With the
         # splat sized to the fan, many rays legitimately pass within it along
         # much the same path, so a tight cap spends its whole budget on

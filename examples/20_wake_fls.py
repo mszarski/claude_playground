@@ -227,6 +227,8 @@ def main() -> int:
                                    rx_half_angle_deg=45.0,
                                    tx_weights=tx_weights,
                                    max_arrivals_per_leg=24,
+                                   return_leg="eigenray",
+                                   tx_pattern=ex15.transmit_pattern,
                                    generator=torch.Generator().manual_seed(SEED))
             rev = ArrivalSet(*(None if rev[i] is None or echo[i] is None
                                else torch.cat([rev[i], echo[i]], dim=0)
