@@ -464,3 +464,44 @@ def test_reciprocal_return_leg_is_the_solved_one(solver):
         target_arrivals(bistatic, target, tx, return_leg="eigenray",
                         n_rx_rays=1500, rx_half_angle_deg=40.0, reciprocal=True,
                         eigenray_method=solver)
+
+
+def test_a_zero_cross_section_pair_does_not_poison_the_gradient():
+    """sqrt'(0) is infinite; a pair the target cannot scatter contributes 0, not NaN.
+
+    A hull patch whose facets all face away from a steep bounce path has a
+    bistatic cross-section of exactly zero.  compose_arrivals takes the square
+    root of every pair's cross-section, and at zero its derivative is
+    infinite, which 0 * inf turns into NaN for every parameter the image
+    reaches.  Seen on example 15's boat once the image solver supplied the
+    steep paths.
+    """
+    from hydropt.active import compose_arrivals
+    from hydropt.beamform import ArrivalSet
+    from hydropt.targets import ExtendedTarget, ScatteringPattern
+
+    class HalfBlind(ScatteringPattern):
+        """Scatters only what arrives from above, with a learnable level."""
+
+        def __init__(self):
+            super().__init__()
+            self.level = torch.nn.Parameter(torch.tensor(1.0))
+
+        def cross_section(self, ki, ks, freqs_khz):
+            shape = torch.broadcast_shapes(ki.shape[:-1], ks.shape[:-1])
+            from_above = (ki[..., 2] > 0).to(ki.dtype)     # z is depth-down
+            return (self.level * from_above).expand(shape).unsqueeze(-1).expand(
+                *shape, int(freqs_khz.shape[0]))
+
+    pattern = HalfBlind()
+    target = ExtendedTarget(torch.zeros(1, 3), [pattern], position=(50.0, 0.0, 10.0),
+                            learnable=True)
+    down = torch.tensor([[0.8, 0.0, 0.6], [0.8, 0.0, -0.6]])       # one from above, one from below
+    leg = ArrivalSet(time=torch.tensor([0.05, 0.06]), amplitude=torch.ones(2, 1),
+                     direction=down, phase=torch.zeros(2), distance=torch.zeros(2),
+                     path_length=torch.full((2,), 75.0), launch_direction=-down)
+    echo = compose_arrivals(leg, leg, target, highlight=0, freqs_khz=torch.tensor([10.0]))
+    (echo.amplitude ** 2).sum().backward()
+    assert pattern.level.grad is not None
+    assert torch.isfinite(pattern.level.grad).all()
+    assert float(pattern.level.grad) > 0

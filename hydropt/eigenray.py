@@ -377,10 +377,90 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
     return directions, residual, signature
 
 
+_BOUNCE_MODES = ("split", "specular", "coherent")
+
+
+def _hashed_phase(identity: Tensor) -> Tensor:
+    """A phase in [0, 2 pi) that is a fixed function of an integer identity.
+
+    Not a random draw: the same path gets the same phase every call, however
+    the endpoints move, so an image is a smooth function of a target's pose
+    rather than a fresh speckle realisation at every step.
+    """
+    x = identity.to(torch.float64)
+    frac = torch.frac(torch.sin(x * 12.9898 + 78.233) * 43758.5453)
+    return (2.0 * math.pi * frac.abs())
+
+
+def _split_by_coherence(energy: Tensor, coherence: Tensor, phase: Tensor,
+                        identity: Tensor, bounce: str):
+    """The arrivals a set of paths becomes, given each path's coherent fraction.
+
+    ``energy`` and ``coherence`` are ``[P, B]``, the path's full energy and the
+    fraction of it that is still specular after its bounces (the product of
+    the Eckart factors, one for a flat boundary); ``phase`` ``[P]`` is the
+    specular phase.  Returns ``(rows, amplitude, phase)``: which path each
+    arrival comes from ``[Q]``, and its amplitude ``[Q, B]`` and phase ``[Q]``.
+
+    ``bounce="specular"`` keeps every path whole at its specular phase, which
+    is a flat-boundary model.  ``"coherent"`` keeps only the specular part,
+    which is what a coherent field at a point needs.  ``"split"`` (the
+    default) keeps both: the specular part at its phase, and the rest as a
+    second arrival at a phase fixed by the path's identity -- the energy a
+    rough boundary scatters out of the specular direction still reaches an
+    imaging sonar, but with no phase relation to the direct path, so it has
+    to add in power, not in amplitude.  Adding it in amplitude on the mean
+    plane puts Lloyd's-mirror fringes on a target under a rough sea that the
+    sea does not have: measured on a boat 1 m under a 0.09 m sea at 100 kHz,
+    the echo swung 60x with a few metres of range and every gradient with it.
+    """
+    if bounce not in _BOUNCE_MODES:
+        raise ValueError(f"bounce must be one of {_BOUNCE_MODES}, got {bounce!r}")
+    tiny = torch.finfo(energy.dtype).tiny
+    p = int(energy.shape[0])
+    rows = torch.arange(p, device=energy.device)
+    if bounce == "specular":
+        return rows, energy.clamp_min(tiny).sqrt(), phase
+    spec = energy * coherence
+    if bounce == "coherent":
+        return rows, spec.clamp_min(tiny).sqrt(), phase
+    rest = energy * (1.0 - coherence)
+    with torch.no_grad():
+        has_spec = (coherence.detach().max(dim=1).values > 1e-12).nonzero().reshape(-1)
+        has_rest = ((1.0 - coherence.detach()).max(dim=1).values > 1e-12).nonzero().reshape(-1)
+    rows = torch.cat([rows[has_spec], rows[has_rest]])
+    amplitude = torch.cat([spec[has_spec].clamp_min(tiny).sqrt(),
+                           rest[has_rest].clamp_min(tiny).sqrt()], dim=0)
+    scrambled = phase + _hashed_phase(identity).to(phase.dtype)
+    phase = torch.cat([phase[has_spec], scrambled[has_rest]])
+    return rows, amplitude, phase
+
+
+def _plane_depth(boundary: HeightField, dtype, device) -> Tensor:
+    """A boundary's mean depth as a differentiable scalar."""
+    h = getattr(boundary, "heights", None)
+    if h is not None:
+        return h.to(dtype).mean()
+    probe = torch.zeros(1, 2, dtype=dtype, device=device)
+    return boundary.height(probe).reshape(())
+
+
+def _into_channel(z: Tensor, depth: Tensor, margin: Tensor,
+                  slack_surface: Tensor, slack_bottom: Tensor) -> Tensor:
+    """Depths below the mean surface, moved just inside the channel when they
+    lie a little outside it, and NaN when they lie further out than that."""
+    above = z < margin
+    below = z > depth - margin
+    too_far = (z < -slack_surface) | (z > depth + slack_bottom)
+    fixed = torch.where(above, margin.expand_as(z), z)
+    fixed = torch.where(below, (depth - margin).expand_as(z), fixed)
+    return torch.where(too_far, torch.full_like(z, float("nan")), fixed)
+
+
 def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
                            freqs_khz: Tensor, *, absorption=thorp_db_per_km,
                            spread_min_range: float = 1.0,
-                           coherent: bool = False,
+                           bounce: str = "split",
                            max_bounces: int | None = None) -> list[ArrivalSet]:
     """Every path between ``N`` pairs by the method of images, no tracing.
 
@@ -402,10 +482,16 @@ def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
     route by default whenever the profile is an :class:`IsoProfile`; a
     refracting profile needs the traced solve, which stays what it was.
 
-    Two things differ from the traced solve, both deliberate.  Every path up
-    to ``max_bounces`` (the scene's, unless given) is returned, not only
-    those inside a bracket cone and a step budget; and a pair whose source
-    or receiver lies outside the channel gets no paths at all.
+    Three things differ from the traced solve, all deliberate.  Every path
+    up to ``max_bounces`` (the scene's, unless given) is returned, not only
+    those inside a bracket cone and a step budget.  The mean planes keep
+    their gradient, so a learnable boundary sees d/d(mean depth) through the
+    bounces.  And an endpoint a little outside the channel (within three RMS
+    of that boundary's roughness, or one percent of the depth) is moved just
+    inside it for the path geometry rather than given no paths: a waterline
+    patch in a wave crest or a highlight on a seabed object where the bed
+    dips below its mean is in the water locally.  Further out than that, a
+    pair gets no paths at all.
 
     Returns a list of ``N`` :class:`~hydropt.beamform.ArrivalSet`, sorted by
     time, in the same shape :func:`eigenray_arrivals_batched` returns.
@@ -422,19 +508,35 @@ def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
                          f"{type(scene.field).__name__}.  Use method='trace'.")
     n_max = int(scene.max_bounces if max_bounces is None else max_bounces)
 
-    surface, surface_rms = mean_boundary(scene.surface)
-    bottom, bottom_rms = mean_boundary(scene.bottom)
-    probe = torch.zeros(1, 2, dtype=dtype, device=device)
-    z_s = surface.height(probe).reshape(()).detach()
-    z_b = bottom.height(probe).reshape(()).detach()
+    # The mean planes, WITH their gradient: a specular path's length and
+    # bounce angles depend on where the mean boundary is, so a learnable
+    # height field gets d/d(mean) through every bounce -- uniform over its
+    # nodes, which is the part of the boundary a coherent path can see.  (The
+    # traced solve builds its planes under no_grad and so cannot pass this
+    # on.)  What the roughness about the mean does to the path is a loss, not
+    # a displacement, and reverberation is where its gradient lives.
+    _, surface_rms = mean_boundary(scene.surface)
+    _, bottom_rms = mean_boundary(scene.bottom)
+    z_s = _plane_depth(scene.surface, dtype, device)
+    z_b = _plane_depth(scene.bottom, dtype, device)
     depth = z_b - z_s
     if float(depth) <= 0.0:
         raise ValueError("the seabed must lie below the sea surface")
     c = scene.field(sources[:1].detach()).reshape(-1)[0].to(dtype)
 
-    # Depths below the mean surface, and the receiver's images.
-    s = sources[:, 2] - z_s                                              # [N]
-    r = receivers[:, 2] - z_s
+    # Depths below the mean surface, and the receiver's images.  An endpoint
+    # a little OUTSIDE the channel -- a waterline patch in a wave crest, a
+    # highlight on a seabed object where the bed lies below its mean -- is in
+    # the water locally and only outside the mean plane, so it is moved just
+    # inside for the path geometry (an error of at most the roughness it sits
+    # in) rather than given no paths at all.  "A little" is three RMS of that
+    # boundary's roughness, or one percent of the depth for a flat one; any
+    # further out and there are no paths.
+    margin = 1e-3 * depth.detach()
+    slack_s = torch.maximum(3.0 * surface_rms * torch.ones_like(margin), 1e-2 * depth.detach())
+    slack_b = torch.maximum(3.0 * bottom_rms * torch.ones_like(margin), 1e-2 * depth.detach())
+    s = _into_channel(sources[:, 2] - z_s, depth, margin, slack_s, slack_b)   # [N]
+    r = _into_channel(receivers[:, 2] - z_s, depth, margin, slack_s, slack_b)
     m = torch.arange(-(n_max // 2 + 2), n_max // 2 + 3, device=device)  # [M]
     z_img = torch.stack([2.0 * m.to(dtype) * depth + r.view(-1, 1),
                          2.0 * m.to(dtype) * depth - r.view(-1, 1)],
@@ -455,7 +557,7 @@ def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
                  - torch.div(j_lo - 1, 2, rounding_mode="floor"))
         n_surf = torch.where(n_bounce > 0, evens, torch.zeros_like(evens))
         n_bot = n_bounce - n_surf
-        inside = ((s > 0) & (s < depth) & (r > 0) & (r < depth)).view(-1, 1)
+        inside = (torch.isfinite(s) & torch.isfinite(r)).view(-1, 1)
         keep = (n_bounce <= n_max) & inside.expand_as(n_bounce)
         pair_k = torch.arange(n_pairs, device=device).view(-1, 1).expand_as(n_bounce)
         sel = keep.reshape(-1).nonzero().reshape(-1)
@@ -483,7 +585,10 @@ def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
     time = length / c
     spread = 1.0 / length.clamp_min(spread_min_range) ** 2
 
-    if coherent and (surface_rms > 0.0 or bottom_rms > 0.0):
+    # The fraction of each path that is still specular after its bounces: the
+    # Eckart factor per bounce, one for a flat boundary.  What the split does
+    # with the rest is _split_by_coherence's business.
+    if surface_rms > 0.0 or bottom_rms > 0.0:
         cs = coherent_reflection_loss_db(graze.view(-1, 1), surface_rms,
                                          freqs_khz.view(1, -1), float(c))
         cb = coherent_reflection_loss_db(graze.view(-1, 1), bottom_rms,
@@ -494,11 +599,14 @@ def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
 
     alpha = absorption(freqs_khz).view(1, -1)
     energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
-              * 10.0 ** (-(alpha * length.unsqueeze(1)) / 1.0e4)
-              * coherence)
+              * 10.0 ** (-(alpha * length.unsqueeze(1)) / 1.0e4))
+    identity = pair * 4096 + sel % z_img.shape[1]          # which pair, which image
+    rows, amplitude, phase = _split_by_coherence(energy, coherence, phase,
+                                                 identity, bounce)
+    time, direction, launch = time[rows], direction[rows], launch[rows]
+    length, pair = length[rows], pair[rows]
     with torch.no_grad():
-        alive = energy.detach().max(dim=1).values > 0.0
-    amplitude = energy.sqrt()
+        alive = amplitude.detach().max(dim=1).values > 0.0
     distance = torch.zeros_like(length)
 
     out: list[ArrivalSet] = []
@@ -519,7 +627,7 @@ def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
                               freqs_khz: Tensor, *, absorption=thorp_db_per_km,
                               spread_min_range: float = 1.0,
                               accept: float | None = None,
-                              coherent: bool = False,
+                              bounce: str = "split",
                               method: str = "auto",
                               **kwargs) -> list[ArrivalSet]:
     """:func:`eigenray_arrivals` for ``N`` pairs: one solve, ``N`` arrival sets.
@@ -541,7 +649,7 @@ def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
     if method == "images" or (method == "auto" and isinstance(scene.field, IsoProfile)):
         return image_arrivals_batched(
             scene, sources, receivers, freqs_khz, absorption=absorption,
-            spread_min_range=spread_min_range, coherent=coherent,
+            spread_min_range=spread_min_range, bounce=bounce,
             max_bounces=kwargs.get("max_bounces"))
     sources = sources.reshape(-1, 3)
     receivers = receivers.reshape(-1, 3)
@@ -633,35 +741,34 @@ def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
         area = area.clamp_min(1e-2 * spherical)
     spread = 1.0 / area
 
-    # Bounce paths keep their ENERGY, deliberately.  A rough sea at 120 kHz
-    # destroys the coherent reflection -- the Eckart factor is ~-100 dB -- but
-    # a pressure-release surface reflects all of the energy; roughness smears
-    # the bounce over a few degrees of elevation, and a horizontal line array
-    # has no elevation resolution, so it collects that energy regardless.
-    # Charging the coherence loss here (which this solver briefly did) deleted
-    # every bounce path -- 8 per highlight down to the direct one -- and with
-    # them the hull's ghost a few metres beyond it that every operator knows
-    # from shallow water.  Eckart is for a coherent field at a point; an
-    # imaging sonar's echo is an energy quantity across elevation.
-    #
-    # `coherent=True` restores the factor, evaluated `up_to_step` because the
-    # path ends at the receiver and the trace does not: a ray that arrives
-    # early keeps flying, and a bounce it makes out there is no part of the
-    # path.  Counting it once charged the direct path a surface bounce it never
-    # made, and the boat left the image.
-    if coherent:
-        coherence = roughness_weights(
-            result, freqs_khz, surface_rms=smooth.surface_rms,
-            bottom_rms=smooth.bottom_rms, surface=smooth.surface,
-            bottom=smooth.bottom, up_to_step=step, sound_speed=float(scene.field(
-                src_p[:1].detach()).reshape(-1)[0]))
-    else:
-        coherence = torch.ones(p, n_bands, dtype=dtype, device=device)
+    # The fraction of each path still specular after its bounces (the Eckart
+    # factors along it), evaluated `up_to_step` because the path ends at the
+    # receiver and the trace does not: a ray that arrives early keeps flying,
+    # and a bounce it makes out there is no part of the path.  Counting it
+    # once charged the direct path a surface bounce it never made, and the
+    # boat left the image.  What becomes of the non-specular remainder is
+    # _split_by_coherence's business; by default it keeps its energy at a
+    # phase of its own, because a rough boundary scatters it, it does not
+    # absorb it -- and the ghosts a shallow-water operator expects are made of
+    # exactly that energy.
+    coherence = roughness_weights(
+        result, freqs_khz, surface_rms=smooth.surface_rms,
+        bottom_rms=smooth.bottom_rms, surface=smooth.surface,
+        bottom=smooth.bottom, up_to_step=step, sound_speed=float(scene.field(
+            src_p[:1].detach()).reshape(-1)[0]))
 
     alpha = absorption(freqs_khz).view(1, -1)
     energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
-              * 10.0 ** (-(alpha * path_length.unsqueeze(1)) / 1.0e4)
-              * coherence)
+              * 10.0 ** (-(alpha * path_length.unsqueeze(1)) / 1.0e4))
+    # A path's identity for the hashed phase: its pair, its bounce signature
+    # and which way it left, which tells a surface-then-bottom path from a
+    # bottom-then-surface one.
+    sig = _bounce_signature(result, step)
+    identity = pair * 4096 + sig * 2 + (launch[:, 2].detach() > 0).long()
+    rows, amplitude, phase = _split_by_coherence(energy, coherence, phase,
+                                                 identity, bounce)
+    time, direction, launch = time[rows], direction[rows], launch[rows]
+    path_length, miss, pair = path_length[rows], miss[rows], pair[rows]
     # A path the roughness has annihilated is not an arrival, and carrying it
     # at exactly zero is worse than dropping it: the derivative of sqrt at zero
     # is infinite, so a single underflowed path turns the whole gradient into
@@ -669,8 +776,7 @@ def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
     # at 120 kHz over a 0.09 m sea underflows in float64, and it took the
     # gradient to the target's own pose with it.
     with torch.no_grad():
-        alive = energy.detach().max(dim=1).values > 0.0
-    amplitude = energy.sqrt()
+        alive = amplitude.detach().max(dim=1).values > 0.0
     distance = miss.norm(dim=-1).detach()
 
     out: list[ArrivalSet] = []
@@ -692,7 +798,7 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
                       freqs_khz: Tensor, *, absorption=thorp_db_per_km,
                       spread_min_range: float = 1.0,
                       accept: float | None = None,
-                      coherent: bool = False,
+                      bounce: str = "split",
                       method: str = "auto",
                       **kwargs) -> ArrivalSet:
     """One arrival per path from ``source`` to ``receiver``, no splat.
@@ -705,12 +811,14 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     comes out as the unfolded ``L^2``, which is the check in the tests.
 
     Args:
-        coherent: multiply each bounce path by its Eckart coherence factor, for
-            a receiver that needs the coherent field at a point.  Off by
-            default: an imaging sonar collects the bounce's energy across
-            elevation whatever the surface did to its phase, and the ghost
-            returns a shallow-water operator expects come from exactly these
-            paths.  See the note at the calculation.
+        bounce: what a bounce off a rough boundary becomes.  ``"split"`` (the
+            default): its specular part, weighted by the Eckart factor, plus
+            the rest of its energy as a second arrival at a phase fixed by the
+            path's identity, so it adds in power with the direct path as
+            incoherently scattered energy does.  ``"specular"``: the whole
+            path at its specular phase, a flat-boundary model.  ``"coherent"``:
+            the specular part alone, for a coherent field at a point.  A flat
+            boundary makes the three identical.
         accept: discard paths that still miss by more than this (m).  Defaults
             to a hundredth of the source-receiver separation; a path that will
             not converge is one the bracket found and the refinement could not
@@ -723,4 +831,4 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     return eigenray_arrivals_batched(
         scene, source.reshape(1, 3), receiver.reshape(1, 3), freqs_khz,
         absorption=absorption, spread_min_range=spread_min_range,
-        accept=accept, coherent=coherent, method=method, **kwargs)[0]
+        accept=accept, bounce=bounce, method=method, **kwargs)[0]

@@ -430,6 +430,55 @@ def test_a_receiver_outside_the_channel_gets_no_images():
     assert arr.n_arrivals == 0
 
 
+def test_a_receiver_just_outside_the_channel_is_moved_just_inside():
+    """A waterline patch in a wave crest still gets its paths.
+
+    Within one percent of the depth (a flat boundary) the endpoint is placed
+    just inside the plane: the direct and surface paths then nearly cancel,
+    which is Lloyd's mirror, not a missing target.
+    """
+    scene = _channel(1)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    crest = torch.tensor([200.0, 0.0, -0.5])          # 0.5 m above the plane
+    arr = eigenray_arrivals(scene, src, crest, torch.tensor([10.0]), method="images")
+    assert arr.n_arrivals == 3
+    # placed one thousandth of the depth (0.12 m) below the plane: the surface
+    # path is longer than the direct one by 2 r sin(theta), and no more
+    direct, surface = arr.time[0], arr.time[1]
+    r = 1e-3 * 120.0
+    want = (math.sqrt(200.0 ** 2 + (50.0 + r) ** 2)
+            - math.sqrt(200.0 ** 2 + (50.0 - r) ** 2)) / C
+    assert float(surface - direct) == pytest.approx(want, rel=1e-3)
+
+
+def test_the_images_carry_a_gradient_to_a_learnable_boundary():
+    """The mean plane keeps its gradient: a learnable seabed's nodes all see
+    d/d(mean depth) through a bounce, uniformly, and the surface likewise."""
+    from hydropt import fractal_bathymetry
+
+    bottom = fractal_bathymetry((8, 8), (50.0, 50.0), base_depth=120.0, rms=0.5,
+                                exponent=3.0, origin=(-100.0, -100.0),
+                                learnable=True,
+                                generator=torch.Generator().manual_seed(2))
+    scene = Scene(field=IsoProfile(C, learnable=False),
+                  bottom=bottom, surface=FlatHeight(0.0, learnable=True),
+                  source=(0.0, 0.0, 50.0), receivers=torch.zeros(1, 3),
+                  bottom_loss=ConstantLoss(3.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False,
+                                            pressure_release=True),
+                  freqs_khz=torch.tensor([10.0]),
+                  step_size=2.0, n_steps=400, max_bounces=1)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcv = torch.tensor([200.0, 3.0, 61.0])
+    arr = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="images")
+    arr.time.sum().backward()
+    g = bottom.heights.grad
+    assert g is not None and torch.isfinite(g).all()
+    assert float(g.abs().sum()) > 0
+    assert torch.allclose(g, g.mean() * torch.ones_like(g))   # uniform: the mean
+    assert scene.surface.z0.grad is not None and float(scene.surface.z0.grad) != 0
+
+
 def test_auto_takes_the_images_for_a_constant_profile_only():
     from hydropt import LinearGradientProfile
     scene = _channel(1)
@@ -450,3 +499,93 @@ def test_auto_takes_the_images_for_a_constant_profile_only():
     bent = eigenray_arrivals(refracting, src, rcv, torch.tensor([10.0]),
                              bracket_rays=600, bracket_half_angle_deg=30.0)
     assert bent.n_arrivals == 1                        # auto fell back to the trace
+
+
+def _rough_channel(rms: float, freq_khz: float, bounces: int = 1):
+    """A 120 m channel with a flat, pressure-release surface over a rough seabed."""
+    from hydropt import fractal_bathymetry
+    bottom = fractal_bathymetry((16, 16), (40.0, 40.0), base_depth=120.0, rms=rms,
+                                exponent=3.0, origin=(-100.0, -100.0),
+                                learnable=False,
+                                generator=torch.Generator().manual_seed(4))
+    return Scene(field=IsoProfile(C, learnable=False),
+                 bottom=bottom, surface=FlatHeight(0.0),
+                 source=(0.0, 0.0, 50.0), receivers=torch.zeros(1, 3),
+                 bottom_loss=ConstantLoss(0.0, learnable=False),
+                 surface_loss=ConstantLoss(0.0, learnable=False,
+                                           pressure_release=True),
+                 freqs_khz=torch.tensor([freq_khz]),
+                 step_size=2.0, n_steps=400, max_bounces=bounces)
+
+
+def test_a_flat_channel_makes_the_three_bounce_modes_identical():
+    scene = _channel(2)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcv = torch.tensor([200.0, 3.0, 61.0])
+    got = {m: eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), bounce=m)
+           for m in ("split", "specular", "coherent")}
+    for m in ("specular", "coherent"):
+        assert torch.equal(got[m].time, got["split"].time)
+        assert torch.equal(got[m].amplitude, got["split"].amplitude)
+        assert torch.equal(got[m].phase, got["split"].phase)
+
+
+def test_a_rough_seabed_splits_its_bounce_into_specular_and_scattered():
+    """Energy conserved, phase not: the bounce's coherent fraction is Eckart's.
+
+    At 10 kHz over a 0.5 m seabed the bottom bounce is entirely scattered
+    (Gamma ~ 10), so it comes back as one arrival with the whole path's energy
+    and a phase of its own.  At 100 Hz (Gamma ~ 0.1) it comes back as two:
+    the specular part at exp(-Gamma^2) of the energy, the rest scattered.
+    """
+    from hydropt.rough import rayleigh_roughness
+
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcv = torch.tensor([200.0, 3.0, 61.0])
+    for freq in (10.0, 0.1):
+        scene = _rough_channel(0.5, freq)
+        f = torch.tensor([freq])
+        whole = eigenray_arrivals(scene, src, rcv, f, bounce="specular")
+        split = eigenray_arrivals(scene, src, rcv, f, bounce="split")
+        assert whole.n_arrivals == 3                    # direct, surface, bottom
+        k = int(whole.time.argmax())                    # the bottom bounce is longest
+        # every joule of the bounce is still there, in one part or two
+        e_whole = float(whole.amplitude[k, 0] ** 2)
+        via_bottom = (split.time - whole.time[k]).abs() < 1e-9
+        e_split = float((split.amplitude[via_bottom, 0] ** 2).sum())
+        assert e_split == pytest.approx(e_whole, rel=1e-6)
+        # the direct path is untouched
+        assert torch.allclose(split.amplitude[0], whole.amplitude[0])
+        assert float(split.phase[0]) == float(whole.phase[0])
+        graze = math.atan2(2 * 120.0 - 50.0 - 61.0, math.hypot(200.0, 3.0))
+        gamma = float(rayleigh_roughness(graze, 0.5, freq, C))
+        if freq == 10.0:
+            assert gamma > 5.0
+            assert int(via_bottom.sum()) == 1              # scattered only
+            d_phase = float((split.phase[via_bottom] - whole.phase[k]) % (2 * math.pi))
+            assert 1e-3 < d_phase < 2 * math.pi - 1e-3   # a phase of its own
+        else:
+            assert gamma < 0.5
+            assert int(via_bottom.sum()) == 2              # specular and scattered
+            parts = split.amplitude[via_bottom, 0] ** 2
+            spec = float(parts.max() / parts.sum())
+            assert spec == pytest.approx(math.exp(-gamma * gamma), rel=1e-3)
+
+
+def test_the_scattered_phase_belongs_to_the_path_not_the_position():
+    """Move the receiver half a metre: the scattered part keeps its phase offset.
+
+    That is what makes an image a smooth function of a target's pose under a
+    rough boundary, rather than a new speckle draw at every step.
+    """
+    scene = _rough_channel(0.5, 10.0)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    offsets = []
+    for dx in (0.0, 0.5):
+        rcv = torch.tensor([200.0 + dx, 3.0, 61.0])
+        whole = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), bounce="specular")
+        split = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), bounce="split")
+        k = int(whole.time.argmax())
+        j = int((split.time - whole.time[k]).abs().argmin())
+        offsets.append(float((split.phase[j] - whole.phase[k]) % (2 * math.pi)))
+    assert offsets[0] == pytest.approx(offsets[1], abs=1e-9)

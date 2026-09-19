@@ -499,3 +499,29 @@ def test_the_kernels_agree_in_float32_at_long_range_too():
     lit = a > a.max() * 1e-4
     ddb = 10 * torch.log10(b[lit].double() / a[lit].double())
     assert float(ddb.abs().max()) < 0.05
+
+
+def test_a_shaded_array_factor_is_the_closed_form_when_uniform():
+    from hydropt.beamform import line_array_factor
+    s = torch.linspace(-1.0, 1.0, 2001, dtype=torch.float64)
+    plain = line_array_factor(s, 8, sin_steer=0.2)
+    shaded = line_array_factor(s, 8, sin_steer=0.2, shading=torch.ones(8, dtype=torch.float64))
+    assert torch.allclose(plain, shaded, atol=1e-12)
+
+
+def test_a_hamming_shaded_array_factor_has_low_sidelobes():
+    from hydropt.beamform import line_array_factor, shading_window
+    s = torch.linspace(-1.0, 1.0, 4001, dtype=torch.float64)
+    plain = line_array_factor(s, 16)
+    shaded = line_array_factor(s, 16, shading=shading_window(16, "hamming"))
+    assert float(shaded.max()) == pytest.approx(1.0, abs=1e-12)
+    db_plain = 10 * torch.log10(plain.clamp_min(1e-30))
+    db_shaded = 10 * torch.log10(shaded.clamp_min(1e-30))
+    # outside the mainlobe (past the second null of the uniform array) the
+    # shaded pattern is below -40 dB everywhere; the uniform one is at -13
+    outside = s.abs() > 0.5                     # well past the Hamming mainlobe of 16
+    assert float(db_shaded[outside].max()) < -35.0    # -39 dB at 16 elements
+    past_first_null = s.abs() > 2.0 / 16
+    assert float(db_plain[past_first_null].max()) > -14.0   # the -13 dB first sidelobe
+    # and its mainlobe is wider
+    assert int((db_shaded > -3.0).sum()) > int((db_plain > -3.0).sum())

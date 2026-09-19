@@ -643,7 +643,8 @@ def beam_power_scale(shading: Tensor, sigma_t: float) -> float:
 
 def line_array_factor(sin_angle: Tensor, n_elements: int, *,
                       spacing_wavelengths: float = 0.5,
-                      sin_steer: float = 0.0) -> Tensor:
+                      sin_steer: float = 0.0,
+                      shading: Tensor | None = None) -> Tensor:
     r"""Power response of a uniform line array, for use as a **transmit** pattern.
 
     .. math:: |AF|^2 = \left|\frac{\sin(N u / 2)}{N \sin(u / 2)}\right|^2,
@@ -670,9 +671,27 @@ def line_array_factor(sin_angle: Tensor, n_elements: int, *,
         spacing_wavelengths: element spacing in wavelengths; 0.5 is half-wave,
             and above 0.5 the array grows grating lobes.
         sin_steer: ``sin`` of the electronic steering angle.
+        shading: ``[n_elements]`` amplitude weights, as from
+            :func:`shading_window`; ``None`` is uniform, which is the closed
+            form above.  A shaded array trades mainlobe width for sidelobes
+            exactly as it does on receive, and a projector that has to keep
+            a surface-bounced ghost out of a seabed object's shadow needs
+            them low.
     """
     if n_elements < 1:
         raise ValueError("an array needs at least one element")
+    if shading is not None:
+        w = shading.reshape(-1).to(dtype=sin_angle.dtype, device=sin_angle.device)
+        if int(w.shape[0]) != n_elements:
+            raise ValueError(f"shading has {int(w.shape[0])} weights for "
+                             f"{n_elements} elements")
+        u = 2.0 * math.pi * spacing_wavelengths * (sin_angle - sin_steer)
+        n = (torch.arange(n_elements, dtype=sin_angle.dtype, device=sin_angle.device)
+             - (n_elements - 1) / 2.0)
+        ph = u.unsqueeze(-1) * n                                  # [..., N]
+        re = (w * torch.cos(ph)).sum(-1)
+        im = (w * torch.sin(ph)).sum(-1)
+        return (re * re + im * im) / float(w.sum()) ** 2
     u = 2.0 * math.pi * spacing_wavelengths * (sin_angle - sin_steer)
     # Both numerator and denominator vanish on the mainlobe, where the limit is 1.
     small = u.abs() < 1e-9

@@ -313,7 +313,13 @@ ExtendedTarget` with a ``highlight`` index and ``freqs_khz``, and each pair is
             outbound.launch_direction.unsqueeze(0),
             freqs_khz,
         )  # [n_in, n_out, B]
-        amp_scale = sigma.clamp_min(0.0).sqrt().reshape(n_in * n_out, -1)
+        # Floored at the smallest normal number, not at zero: a pair whose
+        # facets all face away from one of its legs has a cross-section of
+        # exactly zero, and the derivative of sqrt there is infinite -- which
+        # 0 * inf then turns into NaN for every parameter the image reaches.
+        # At the floor the slope is finite and multiplies a zero.
+        tiny = torch.finfo(sigma.dtype).tiny
+        amp_scale = sigma.clamp_min(tiny).sqrt().reshape(n_in * n_out, -1)
     else:
         amp_scale = target.cross_section().sqrt()
 
@@ -393,6 +399,7 @@ def target_arrivals(
     max_arrivals: int | None = None,
     reciprocal: bool | None = None,
     eigenray_method: str = "auto",
+    bounce: str = "split",
     trace_kwargs: dict | None = None,
     generator: torch.Generator | None = None,
     **extract_kwargs,
@@ -513,6 +520,8 @@ def target_arrivals(
             form, constant sound speed), ``"trace"`` (bracket and refine on
             traced rays, any profile) or ``"auto"``, the images whenever the
             profile allows.  See :func:`hydropt.eigenray.eigenray_arrivals`.
+        bounce: what a bounce off a rough boundary becomes on a solved leg;
+            see :func:`hydropt.eigenray.eigenray_arrivals`.
         trace_kwargs: forwarded to the tracer.
         generator: RNG for the return fans.  Only has an effect when
             ``rx_jitter`` is non-zero -- see above.
@@ -565,7 +574,7 @@ def target_arrivals(
         n_hl = target.n_highlights
         inbounds = eigenray_arrivals_batched(
             scene, source.reshape(1, 3).expand(n_hl, 3), world, freqs,
-            method=eigenray_method,
+            method=eigenray_method, bounce=bounce,
             bracket_rays=n_rx_rays, bracket_half_angle_deg=rx_half_angle_deg,
             trace_kwargs=tkw)
         for i, inbound in enumerate(inbounds):
@@ -624,7 +633,7 @@ def target_arrivals(
         else:
             outbounds = dict(zip(lit, eigenray_arrivals_batched(
                 scene, world[lit], phase_centre.reshape(1, 3).expand(len(lit), 3),
-                freqs, method=eigenray_method, bracket_rays=n_rx_rays,
+                freqs, method=eigenray_method, bounce=bounce, bracket_rays=n_rx_rays,
                 bracket_half_angle_deg=rx_half_angle_deg, trace_kwargs=tkw)))
         for i in lit:
             outbound = outbounds.get(i)
