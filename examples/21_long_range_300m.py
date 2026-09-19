@@ -455,8 +455,60 @@ def transmit_pattern(directions: torch.Tensor, tilt_deg: float | None = None
                              sin_steer=math.sin(math.radians(TILT_DEG)))
 
 
+def _multilook(image, rng, *, pixel_m: float, looks: int = 1):
+    """Range multi-look on the [beams, bands, bins] image; the window is odd."""
+    if looks <= 0:
+        bin_m = float(rng[1] - rng[0])
+        looks = max(1, int(round(pixel_m / bin_m)))
+        if looks % 2 == 0:
+            looks += 1                  # odd, so the window stays centred
+    out = image
+    if looks > 1:
+        out = torch.nn.functional.avg_pool1d(
+            out, kernel_size=looks, stride=1, padding=looks // 2,
+            count_include_pad=False)
+    return out, looks
+
+
+def display_gain(image, rng, *, pixel_m: float, looks: int = 1,
+                 reference: str = "median"):
+    """The level ``display`` divides by: the swath's own level at each range.
+
+    Returned so that another image can be shown at THIS image's gain -- a
+    model picture at the gain of the measurement it is being fitted to, which
+    is what ``examples/22`` needs.  A gain re-derived from every trial picture
+    is not differentiable in any useful sense when the reference is a median:
+    the derivative of an order statistic is that of whichever beam holds it,
+    while a finite step sees the median hop between beams (measured at 300 m,
+    the analytic gradient through a re-derived median gain was six times the
+    finite difference; through a fixed gain, or a mean, it agreed to 7 %).
+    """
+    out, _ = _multilook(image, rng, pixel_m=pixel_m, looks=looks)
+    if reference == "median":
+        level = out.median(dim=0, keepdim=True).values
+        # A range bin lit in fewer than half its beams has a median of
+        # ZERO, and dividing by it amplifies the few lit cells without
+        # bound -- measured, 1e27 on a bin lit in 30 beams of 181, which
+        # saturates the display and erases everything else in it.  It does
+        # not show up wherever ambient noise fills every bin, which is why
+        # it can sit unnoticed in a scene that has noise and appear in one
+        # that does not.  Fall back to the mean there, which is nonzero
+        # whenever anything at all is lit.
+        level = torch.where(level > 0.0, level, out.mean(dim=0,
+                                                         keepdim=True))
+    elif reference == "mean":
+        level = out.mean(dim=0, keepdim=True)
+    else:
+        raise ValueError(f"reference must be 'median' or 'mean', got "
+                         f"{reference!r}")
+    # ...and a bin lit in a handful of beams still has a tiny reference, so
+    # floor it against the swath as a whole rather than against zero.
+    floor = 1e-6 * float(level.detach().max())
+    return level.clamp_min(floor)
+
+
 def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
-            reference: str = "median"):
+            reference: str = "median", gain=None):
     """Range multi-look and TVG, on the [beams, bands, bins] image.
 
     Both are display, not physics -- the arrivals are untouched -- but at 300 m
@@ -480,39 +532,16 @@ def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
     handful of bright ones and never does worse than the mean, which is the
     standard reason CFAR and AGC references are order statistics.  The example
     measures the lift each run rather than quoting a number from another scene.
+
+    ``gain``, when given, is the level to divide by instead -- one that
+    ``display_gain`` took from another image, at the same ``looks``.
     """
-    if looks <= 0:
-        bin_m = float(rng[1] - rng[0])
-        looks = max(1, int(round(pixel_m / bin_m)))
-        if looks % 2 == 0:
-            looks += 1                  # odd, so the window stays centred
-    out = image
-    if looks > 1:
-        out = torch.nn.functional.avg_pool1d(
-            out, kernel_size=looks, stride=1, padding=looks // 2,
-            count_include_pad=False)
+    out, looks = _multilook(image, rng, pixel_m=pixel_m, looks=looks)
     if tvg:
-        if reference == "median":
-            level = out.median(dim=0, keepdim=True).values
-            # A range bin lit in fewer than half its beams has a median of
-            # ZERO, and dividing by it amplifies the few lit cells without
-            # bound -- measured, 1e27 on a bin lit in 30 beams of 181, which
-            # saturates the display and erases everything else in it.  It does
-            # not show up wherever ambient noise fills every bin, which is why
-            # it can sit unnoticed in a scene that has noise and appear in one
-            # that does not.  Fall back to the mean there, which is nonzero
-            # whenever anything at all is lit.
-            level = torch.where(level > 0.0, level, out.mean(dim=0,
-                                                             keepdim=True))
-        elif reference == "mean":
-            level = out.mean(dim=0, keepdim=True)
-        else:
-            raise ValueError(f"reference must be 'median' or 'mean', got "
-                             f"{reference!r}")
-        # ...and a bin lit in a handful of beams still has a tiny reference, so
-        # floor it against the swath as a whole rather than against zero.
-        floor = 1e-6 * float(level.max())
-        out = out / level.clamp_min(floor)
+        if gain is None:
+            gain = display_gain(out, rng, pixel_m=pixel_m, looks=1,
+                                reference=reference)
+        out = out / gain
     return out, looks
 
 
