@@ -102,6 +102,11 @@ def _ex21():
     return mod
 
 
+_EX = _ex21()
+S = _EX.FAR / 300.0     # the scene was laid out for the 120 kHz head's 300 m swath; scale with it
+WALL_Y, WALL_FROM, WALL_TO, AHEAD_X = WALL_Y * S, WALL_FROM * S, WALL_TO * S, AHEAD_X * S
+
+
 def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
     """Body-frame points into the world, as mesh_target places its mesh."""
     c, s = math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg))
@@ -151,7 +156,7 @@ def armour_layer(length: float, height: float, slope_deg: float, *, water_depth:
 def main() -> int:
     setup(double=False)
     banner("25 -- a rubble-mound breakwater: grains of rice")
-    ex = _ex21()
+    ex = _EX
     ex15 = ex._ex15()
     C = ex.C
     rx = ex.horizontal_array()
@@ -208,7 +213,7 @@ def main() -> int:
     w_tx = ex.transmit_pattern(dirs)
     tilt = ex.passes_deg()[0]
     rx_beam = lambda d: ex.receive_beam(d, tilt)
-    steer, bearings = azimuth_steering(181, ex.SECTOR_DEG)
+    steer, bearings = azimuth_steering(ex.N_BEAMS, ex.SECTOR_DEG)
     grid = make_time_grid(2.0 * ex.NEAR / C, 2.0 * ex.FAR / C, ex.N_BINS)
     rng = grid * C / 2.0
     shading = shading_window(ex.N_RX, "hamming")
@@ -275,9 +280,9 @@ def main() -> int:
         Bdeg = torch.rad2deg(torch.atan2(Y, X))
         infan = (R < 0.98 * ex.FAR) & (Bdeg.abs() < ex.SECTOR_DEG - 2.0)
         if name == "caisson":
-            band = ((Y + WALL_Y).abs() < 6.0) & (X > 80.0) & (X < 290.0) & infan
+            band = ((Y + WALL_Y).abs() < 6.0) & (X > 80.0 * S) & (X < 290.0 * S) & infan
         elif name == "rubble":
-            band = (Y < -WALL_Y + 2.0) & (Y > -WALL_Y - wet_run) & (X > 80.0) & (X < 290.0) & infan
+            band = (Y < -WALL_Y + 2.0) & (Y > -WALL_Y - wet_run) & (X > 80.0 * S) & (X < 290.0 * S) & infan
         else:
             band = (X > AHEAD_X - 2.0) & (X < AHEAD_X + wet_run) & infan
         db = 10.0 * torch.log10(cart.clamp_min(1e-30))
@@ -322,8 +327,8 @@ def main() -> int:
     names = [n for n in ("caisson", "rubble", "ahead") if n in pictures]
     top = max(float(p[1].max()) for p in pictures.values())
     ext = [float(gx.min()), float(gx.max()), float(gy.min()), float(gy.max())]
-    zoom = {"caisson": (60, 300, -175, -85), "rubble": (60, 300, -175, -85),
-            "ahead": (60, 160, -120, 120)}
+    zoom = {"caisson": (60 * S, 300 * S, -175 * S, -85 * S), "rubble": (60 * S, 300 * S, -175 * S, -85 * S),
+            "ahead": (60 * S, 160 * S, -120 * S, 120 * S)}
     fig, axes = plt.subplots(2, len(names), figsize=(6.3 * len(names), 12),
                              squeeze=False)
     for j, name in enumerate(names):
@@ -343,7 +348,7 @@ def main() -> int:
     fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS, {2 * ex.SECTOR_DEG:.0f} deg to {ex.FAR:.0f} m, "
                  f"median TVG floored at +{ex.THRESHOLD_DB:.0f} dB: a caisson face and a "
                  f"rubble mound with {UNIT:.0f} m armour cubes")
-    save(fig, "25_rubble_breakwater.png")
+    save(fig, f"25_rubble_breakwater{ex.TAG}.png")
     return 0 if ok else 1
 
 

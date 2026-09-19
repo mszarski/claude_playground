@@ -34,15 +34,21 @@ python -m pytest tests -q -k "incoherent"
 
 cd examples && python 21_long_range_300m.py        # figures -> examples/figures/ (gitignored)
 cd examples && HYDROPT_SCENARIO=wake python 23_harbour_scenarios.py
+cd examples && HYDROPT_SONAR=330 python 21_long_range_300m.py   # the 1.4 x 2.8 deg head
 cd examples && HYDROPT_EXAMPLE_DTYPE=float64 python 22_inverse_fit_animation.py
 cd examples && python ../scripts/timing_picture.py # stage timings of 21's picture
 ```
 
-Switches every 21-derived example honours (21-26): `HYDROPT_FAR` (m, default
-300), `HYDROPT_NEAR` (40), `HYDROPT_BOAT` (range, 250), `HYDROPT_HEADING`
-(deg, 40), `HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO`
-(one scenario of 23-26).  Each example prints `[PASS]`/`[FAIL]` lines for
-its acceptance criteria and exits non-zero on a failure.
+Switches every 21-derived example honours (21-26): `HYDROPT_SONAR` (`120`,
+the default: 120 kHz, 3.0 x 4.8 deg beams, 300 m; or `330`: 330 kHz, 1.4 x
+2.8 deg beams, 150 m, figures tagged `_330k`), `HYDROPT_FAR` (m),
+`HYDROPT_NEAR`, `HYDROPT_BOAT` (range), `HYDROPT_HEADING` (deg, 40),
+`HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO` (one
+scenario of 23-26).  22-26 lay their scenes out for the 120 kHz head's 300 m
+and scale every absolute position by `FAR / 300` (`S` in each), so a new
+scenario's positions go in as 300 m values times `S`.  Each example prints
+`[PASS]`/`[FAIL]` lines for its acceptance criteria and exits non-zero on a
+failure.
 
 ## Layout
 

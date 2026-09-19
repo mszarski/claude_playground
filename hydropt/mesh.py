@@ -575,8 +575,16 @@ def segment_mesh_transmission(starts: Tensor, ends: Tensor, vertices: Tensor,
 
     p0, d = starts[near], seg[near]
     blocked = torch.zeros(p0.shape[0], dtype=torch.bool, device=p0.device)
-    for i in range(0, f.shape[0], facet_chunk):
-        tri = v[f[i:i + facet_chunk]]                        # [C, 3, 3]
+    # The block is [N, C] with N the segments near the body and C the facets
+    # in it, and seven [N, C, 3] temporaries are alive at once.  N is set by
+    # the scene, not the caller: a 300 m breakwater in a picture of 317,000
+    # reverberation patches has every patch near it, and at C = 2048 that is
+    # 7.8 GB a temporary -- the process was killed at 14 GB.  So the facet
+    # block is bounded by the PRODUCT, at 4 M elements (50 MB a temporary),
+    # with `facet_chunk` the cap when N is small.
+    chunk = max(1, min(int(facet_chunk), (1 << 22) // max(int(p0.shape[0]), 1)))
+    for i in range(0, f.shape[0], chunk):
+        tri = v[f[i:i + chunk]]                              # [C, 3, 3]
         n, c = p0.shape[0], tri.shape[0]
         v0 = tri[:, 0].unsqueeze(0).expand(n, c, 3)
         e1 = (tri[:, 1] - tri[:, 0]).unsqueeze(0).expand(n, c, 3)

@@ -1710,9 +1710,9 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `21_long_range_300m.py` | the reference picture: 120 kHz, 50 x 5 Mills cross, 120 deg to 300 m, a 30 m boat at 250 m | boat 0.0 m outside the hull against a 13.2 m beam; brightest cell of 43,629; 12.5 dB over ambient at 300 m; a median gain never worse than a mean; 6/6 gradients live |
 | `22_inverse_fit_animation.py` | the inverse fit, frame by frame, into a GIF | 7.2 m -> 0.27 m in 48 steps (145 s); fit gradient = secant (cosine 1.000); coherent picture's gradient = lambda/64 finite difference (float64) |
 | `23_harbour_scenarios.py` | 21's picture plus a breakwater, a vessel with wake, a school of fish | wall +38 dB along its line; wake band +8.7 dB over the sea beside it (+0.8 bare); school +15 dB over its cells |
-| `24_noise_spoke.py` | what lights a whole bearing: emission from the boat against a glint | propeller in view: +11.3 dB along the bearing at every range; bow-on the hull passes 2 of 14 paths and the spoke is gone; a 12 dB brighter glint draws none |
+| `24_noise_spoke.py` | what lights a whole bearing: emission from the boat against a glint | propeller in view: +22.9 dB along the propeller's bearing at every range; bow-on the hull passes 2 of 14 paths and the spoke is gone; a 12 dB brighter glint draws none |
 | `25_rubble_breakwater.py` | a rubble mound with 3 m armour cubes: grains of rice | 12.4 dB of texture against the caisson's 3.8; ahead, grains 4 m long against a 6.3 m beam, one per 13 m |
-| `26_kelp_buoy_shoal.py` | a kelp forest, a buoy moored with a chain, a packed shoal | kelp +19 dB at its front fading to +4 at its back; buoy +46 dB, its chain a line at +33 dB; shoal +14 dB |
+| `26_kelp_buoy_shoal.py` | a kelp forest, a buoy moored with a chain, a packed shoal | kelp +24 dB at its front fading to +7 at its back; buoy +46 dB, its chain a line at +33 dB; shoal +14 dB |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure.  Runtimes on a 4-core CPU are seconds for 01-02,
@@ -1722,6 +1722,35 @@ environment and picture: 22-26 import `21_long_range_300m.py` for their
 settings, so `HYDROPT_FAR`, `HYDROPT_BOAT`, `HYDROPT_HEADING` and
 `HYDROPT_EXAMPLE_DTYPE` carry through, and `HYDROPT_SCENARIO` picks one
 scenario of 23-26.  How to add one is in `CLAUDE.md`.
+
+**Two heads.**  `HYDROPT_SONAR=330` runs the same six examples with a
+higher-resolution head: 330 kHz, 1.4 x 2.8 degree beams (108 receive
+elements and 36 per elevation beam at half-wavelength spacing, seven
+elevation beams across the same 20.8 degree FOV, 361 azimuth beams, a fan
+three times denser so the reverberation still has rays per cell), and a
+150 m swath by default -- absorption is 72.5 dB/km at 330 kHz against 38.3
+at 120 and the ambient 7 dB higher, so 150 m has the two-way absorption
+budget (21.7 dB) the 120 kHz head has at 300, and at 300 m the head would
+be noise-limited beyond about 170 m.  22-26 scale their scenes with the
+swath and tag their figures `_330k`.  A picture costs about four times as
+much (trace 32-37 s, beamform 13 s).  Measured, every check passing:
+
+| example at 330 kHz, 1.4 x 2.8 deg, 150 m | measured result |
+| --- | --- |
+| `21` | boat 0.0 m outside the hull against a 3.0 m beam; 13.2 dB over ambient at 150 m, the noise floor at 241 m; absorption 21.7 dB two-way, the dominant loss; the seabed enters the lobe at 191 m, past the swath, so the picture is surface reverberation |
+| `22` | 7.2 m -> 0.22 m in 48 steps (175 s), fit gradient = secant (cosine 1.000) |
+| `23` | wall +33.5 dB inboard; wake band +11.6 dB over the sea beside it (-0.2 bare); school +7.2 dB over its cells |
+| `24` | spoke +14 dB on the PROPELLER's bearing, 6.5 deg off the boat's at 125 m; bow-on 7 of 13 paths clear and no spoke; the glint comparison is reported, not checked -- a 0.75 m Fresnel zone against 5 m hull patches is beyond the plane-wave physical optics |
+| `25` | 27.5 dB of texture against the caisson's 14.7; ahead the grains are the units themselves, 1.4 m against a 1.7 m beam, 24 per 100 m |
+| `26` | kelp +13.5 dB at its front fading to +2.5 at its back; buoy +40 dB, its chain +23 dB; shoal +8.3 dB |
+
+Two things the higher head taught.  The rubble breakwater's grains resolve
+into the armour units at 1.4 degrees, which is what an operator sees on such
+a head and what `examples/25` could only approach at 120 kHz.  And the
+specular flash off a hull is a Fresnel-zone effect that the plane-wave
+physical optics per patch cannot form once the zone (`sqrt(lambda R)`,
+0.75 m here) is well under the patch (bead `cva`); `examples/24` checks its
+glint only where the model can resolve one, and says so otherwise.
 
 **Where the inversions stop, and why.** 04 recovers two thirds of the seamount
 but its relief comes out ~13 m short of the true 77 m, and 05's residual is

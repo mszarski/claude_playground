@@ -99,6 +99,12 @@ def _ex21():
     return mod
 
 
+_EX = _ex21()
+S = _EX.FAR / 300.0     # the scene was laid out for the 120 kHz head's 300 m swath; scale with it
+WALL_Y, WALL_FROM, WALL_TO = WALL_Y * S, WALL_FROM * S, WALL_TO * S
+SCHOOL_RANGE = SCHOOL_RANGE * S
+
+
 def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
     """Body-frame vertices into the world, for the occlusion test."""
     c, s = math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg))
@@ -109,7 +115,7 @@ def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
 def main() -> int:
     setup(double=False)     # float32: a picture and its gradients' liveness need no more
     banner("23 -- three scenarios at 21's settings: " + ", ".join(SCENARIOS))
-    ex = _ex21()
+    ex = _EX
     ex15 = ex._ex15()
     C = ex.C
     rx = ex.horizontal_array()
@@ -161,7 +167,7 @@ def main() -> int:
     w_tx = ex.transmit_pattern(dirs)
     tilt = ex.passes_deg()[0]
     rx_beam = lambda d: ex.receive_beam(d, tilt)
-    steer, bearings = azimuth_steering(181, ex.SECTOR_DEG)
+    steer, bearings = azimuth_steering(ex.N_BEAMS, ex.SECTOR_DEG)
     grid = make_time_grid(2.0 * ex.NEAR / C, 2.0 * ex.FAR / C, ex.N_BINS)
     rng = grid * C / 2.0
     shading = shading_window(ex.N_RX, "hamming")
@@ -270,7 +276,7 @@ def main() -> int:
         # ---- measured on the picture ------------------------------------- #
         if name == "seawall":
             d_off = Y + WALL_Y                                       # 0 on the wall's line
-            inswath = (X > 80.0) & (R < ex.FAR * 0.95)
+            inswath = (X > 80.0 * S) & (R < ex.FAR * 0.95)
             on_wall = (d_off.abs() < 6.0) & inswath
             beside = (d_off > 15.0) & (d_off < 40.0) & inswath
             over_bare = float((cart_db - bare_db)[on_wall].median())
@@ -283,9 +289,13 @@ def main() -> int:
             rel = torch.stack([X - float(head[0]), Y - float(head[1])], dim=-1)
             astern = -(rel[..., 0] * math.cos(h) + rel[..., 1] * math.sin(h))
             abeam = (-rel[..., 0] * math.sin(h) + rel[..., 1] * math.cos(h)).abs()
-            inswath = (R < ex.FAR * 0.95) & (R > ex.NEAR + 10)
-            band = (astern > 25.0) & (astern < 150.0) & (abeam < 5.0) & inswath
-            side = (astern > 25.0) & (astern < 150.0) & (abeam > 20.0) & (abeam < 45.0) & inswath
+            # the band astern, inside the fan: the distances astern scale with
+            # the swath (the boat sits at 0.83 of it), the widths are the wake's
+            inswath = ((R < ex.FAR * 0.95) & (R > ex.NEAR + 10)
+                       & (torch.rad2deg(torch.atan2(Y, X)).abs() < ex.SECTOR_DEG - 3.0))
+            band = (astern > 25.0 * S) & (astern < 150.0 * S) & (abeam < 5.0) & inswath
+            side = ((astern > 25.0 * S) & (astern < 150.0 * S) & (abeam > 20.0) & (abeam < 45.0)
+                    & inswath)
             over = float(cart_db[band].median() - cart_db[side].median())
             over_bare = float(bare_db[band].median() - bare_db[side].median())
             print(f"  the band astern stands {over:+.1f} dB over the sea beside it "
@@ -335,7 +345,7 @@ def main() -> int:
             ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
         fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS, {2 * ex.SECTOR_DEG:.0f} deg to {ex.FAR:.0f} m, "
                      f"median TVG floored at +{ex.THRESHOLD_DB:.0f} dB: what {CAPTION[name]} adds to 21's picture")
-        save(fig, f"23_scenario_{name}.png")
+        save(fig, f"23_scenario_{name}{ex.TAG}.png")
 
     return 0 if ok else 1
 

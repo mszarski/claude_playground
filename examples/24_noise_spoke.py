@@ -86,7 +86,7 @@ CAPTION = {"emission": "the propeller radiating, stern towards the sonar",
            "bow-on": "the propeller radiating, bow-on: the hull in the way",
            "glint": "the boat broadside: a glint, and no emission"}
 
-EMISSION_DB_HZ = 115.0          # radiated noise at 120 kHz, dB re 1 uPa^2/Hz at 1 m
+EMISSION_DB_HZ = 115.0          # radiated noise at 120 kHz, dB re 1 uPa^2/Hz at 1 m (scaled below)
 PROPELLER = (-15.6, 0.0, 2.0)   # hull frame: 0.6 m aft of the transom, 2 m down
 SHADOW_REACH = 35.0             # metres of each path tested against the hull
 BOW_ON_HEADING = 162.0          # bow towards the sonar (bearing -18 + 180)
@@ -101,6 +101,13 @@ def _ex21():
     return mod
 
 
+_EX = _ex21()
+S = _EX.FAR / 300.0     # the scene was laid out for the 120 kHz head's 300 m swath; scale with it
+# radiated noise falls about 6 dB an octave above a few kHz: scale the level
+# quoted at 120 kHz to the head's frequency
+EMISSION_DB_HZ = EMISSION_DB_HZ - 20.0 * math.log10(_EX.FREQ_KHZ / 120.0)
+
+
 def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
     """Body-frame points into the world, as mesh_target places its mesh."""
     c, s = math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg))
@@ -111,7 +118,7 @@ def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
 def main() -> int:
     setup(double=False)
     banner("24 -- a spoke: emission from the boat against a glint off it")
-    ex = _ex21()
+    ex = _EX
     ex15 = ex._ex15()
     C = ex.C
     rx = ex.horizontal_array()
@@ -137,7 +144,7 @@ def main() -> int:
     w_tx = ex.transmit_pattern(dirs)
     tilt = ex.passes_deg()[0]
     rx_beam = lambda d: ex.receive_beam(d, tilt)
-    steer, bearings = azimuth_steering(181, ex.SECTOR_DEG)
+    steer, bearings = azimuth_steering(ex.N_BEAMS, ex.SECTOR_DEG)
     grid = make_time_grid(2.0 * ex.NEAR / C, 2.0 * ex.FAR / C, ex.N_BINS)
     rng = grid * C / 2.0
     shading = shading_window(ex.N_RX, "hamming")
@@ -238,13 +245,22 @@ def main() -> int:
     ext = [float(gx.min()), float(gx.max()), float(gy.min()), float(gy.max())]
     beam_deg = ex.beam_3db_deg(ex.N_RX, shading)
     # the bearing, away from the boat, and its neighbours at the same ranges
-    off = (B - ex.BOAT_BEARING_DEG).abs()
     away = (R > ex.NEAR + 15.0) & (R < ex.BOAT_RANGE - 25.0)
-    on_bearing = (off < 0.5 * beam_deg) & away
-    beside = (off > 3.0 * beam_deg) & (off < 8.0 * beam_deg) & away
-    spoke_of = lambda img: float(img[on_bearing].median() - img[beside].median())
+
+    def spoke_of(img, bearing_deg):
+        """The bearing, away from the boat, over its neighbours at the same ranges.
+
+        A spoke lies on the bearing of what EMITS -- the propeller, 15 m aft
+        of the boat's centre, which at 125 m is six degrees off the boat's own
+        bearing -- so the bearing is the caller's to give.
+        """
+        off = (B - bearing_deg).abs()
+        on_bearing = (off < 0.5 * beam_deg) & away
+        beside = (off > 3.0 * beam_deg) & (off < 8.0 * beam_deg) & away
+        return float(img[on_bearing].median() - img[beside].median())
+
     at_boat = (X - head[0]) ** 2 + (Y - head[1]) ** 2 < 20.0 ** 2
-    bare_spoke = spoke_of(bare_db)
+    bare_spoke = spoke_of(bare_db, ex.BOAT_BEARING_DEG)
     bare_peak = float(bare_db[at_boat].max())
     print(f"  the boat's bearing away from the boat reads {bare_spoke:+.1f} dB over its "
           f"neighbours; the boat peaks at {bare_peak:+.1f} dB")
@@ -254,9 +270,12 @@ def main() -> int:
         banner(f"scenario: {name}")
         if name == "glint":
             heading, extra, n_clear, n_paths = BROADSIDE_HEADING, None, 0, 0
+            spoke_bearing = ex.BOAT_BEARING_DEG
             print(f"  heading {heading:.0f} deg: the side square to the line of sight")
         else:
             heading = ex.BOAT_HEADING_DEG if name == "emission" else BOW_ON_HEADING
+            prop = place(torch.tensor([PROPELLER]), heading, head).reshape(3)
+            spoke_bearing = math.degrees(math.atan2(float(prop[1]), float(prop[0])))
             with torch.no_grad(), timed("  the emission's paths"):
                 extra, n_clear, n_paths = emission(heading)
             print(f"  heading {heading:.0f} deg; the propeller at {EMISSION_DB_HZ:.0f} dB/Hz "
@@ -266,7 +285,10 @@ def main() -> int:
         with torch.no_grad(), timed("  ping"):
             cart, _, _, polar = ping(boat=boat, extra=extra)
         cart_db = db(cart)
-        spoke = spoke_of(cart_db)
+        spoke = spoke_of(cart_db, spoke_bearing)
+        if name != "glint":
+            print(f"  the propeller lies on bearing {spoke_bearing:+.1f} deg, the boat's centre on "
+                  f"{ex.BOAT_BEARING_DEG:+.1f}")
         peak = float(cart_db[at_boat].max())
         print(f"  the boat's bearing away from the boat reads {spoke:+.1f} dB over its "
               f"neighbours ({bare_spoke:+.1f} dB bare); the boat peaks at {peak:+.1f} dB "
@@ -281,6 +303,19 @@ def main() -> int:
                         spoke < spoke_seen - 6.0 if "emission" in SCENARIOS else spoke < 3.0,
                         f"{spoke:+.1f} dB along the bearing, {n_clear} of {n_paths} paths clear")
         else:
+            # The specular flash is a Fresnel-zone effect, and the physical
+            # optics here is a plane wave per patch: a hull patch 5 m long
+            # against a Fresnel zone sqrt(lambda R) of 1.8 m at 120 kHz and
+            # 250 m is already stretching it, and 0.75 m at 330 kHz and 125 m
+            # is past it -- the model cannot form the flash there (the
+            # spherical-wave integral is the open issue, bead cva).  So the
+            # comparison is checked only where the model can resolve a
+            # specular, and reported otherwise.
+            fresnel = math.sqrt(ex.LAMBDA * ex.BOAT_RANGE)
+            patch_len = ex.HULL_LENGTH / 6.0
+            resolves = fresnel >= 0.3 * patch_len
+            print(f"  Fresnel zone {fresnel:.2f} m against {patch_len:.1f} m hull patches: the "
+                  f"plane-wave physical optics {'can' if resolves else 'cannot'} form the flash here")
             # The ring: the glint's range bins over the bearings away from the
             # boat, against the ranges beside them -- on the calibrated image
             # BEFORE the display, because the median gain takes each range
@@ -297,9 +332,14 @@ def main() -> int:
             print(f"  at the glint's range, before the gain, the bearings away from the boat "
                   f"read {arc:+.1f} dB over the ranges beside them: the sidelobes' arc, "
                   f"which the median gain then removes")
-            ok &= check("broadside, the glint is far brighter than 21's aspect and draws no spoke",
-                        peak > bare_peak + 6.0 and spoke < 2.0,
-                        f"peak {peak:+.1f} vs {bare_peak:+.1f} dB; {spoke:+.1f} dB along the bearing")
+            if resolves:
+                ok &= check("broadside, the glint is far brighter than 21's aspect and draws no spoke",
+                            peak > bare_peak + 6.0 and spoke < 2.0,
+                            f"peak {peak:+.1f} vs {bare_peak:+.1f} dB; {spoke:+.1f} dB along the bearing")
+            else:
+                ok &= check("broadside, whatever the hull returns, it draws no spoke",
+                            spoke < 2.0, f"peak {peak:+.1f} vs {bare_peak:+.1f} dB (not checked: "
+                            f"beyond the plane-wave physical optics); {spoke:+.1f} dB along the bearing")
 
         # ---- the figure --------------------------------------------------- #
         ref = float(bare_db.max())
@@ -315,12 +355,13 @@ def main() -> int:
         fig.colorbar(im, ax=axes[1], fraction=0.04, label="dB re the background at that range")
         fig.colorbar(m, ax=axes[2], fraction=0.04, label="dB")
         for ax in axes:
-            ax.plot([0.0, ex.FAR * math.cos(b)], [0.0, ex.FAR * math.sin(b)], "c:", lw=0.8, alpha=0.6)
+            sb_ = math.radians(spoke_bearing)
+            ax.plot([0.0, ex.FAR * math.cos(sb_)], [0.0, ex.FAR * math.sin(sb_)], "c:", lw=0.8, alpha=0.6)
             ax.plot(head[0], head[1], "c+", ms=10, mew=1.5)
             ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
         fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS, {2 * ex.SECTOR_DEG:.0f} deg to {ex.FAR:.0f} m, "
                      f"median TVG floored at +{ex.THRESHOLD_DB:.0f} dB: {CAPTION[name]}")
-        save(fig, f"24_spoke_{name}.png")
+        save(fig, f"24_spoke_{name}{ex.TAG}.png")
 
     return 0 if ok else 1
 

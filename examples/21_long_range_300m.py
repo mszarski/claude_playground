@@ -143,8 +143,25 @@ from hydropt.reverb import LambertScattering, reverberation_arrivals
 from hydropt.tracer import trace
 
 C = 1500.0
-FREQ_KHZ = 120.0
+# Two heads, one switch.  HYDROPT_SONAR=120 (the default) is the head this
+# example was written around: 120 kHz, 3.0 x 4.8 degree beams, a 300 m
+# swath.  HYDROPT_SONAR=330 is a higher-resolution head of the same design
+# -- 330 kHz, 1.4 x 2.8 degree beams -- which takes 108 receive elements
+# for the azimuth beam and 36 per elevation beam at half-wavelength spacing
+# (2.3 mm), seven elevation beams across the same 20.8 degree FOV the five
+# transmit elements flood, and 361 azimuth beams to sample them.  Its swath
+# defaults to 150 m: Thorp absorption is 72.5 dB/km at 330 kHz against 38.3
+# at 120, and the ambient 7 dB higher, so at 150 m it has the two-way
+# absorption budget (21.7 dB) the 120 kHz head has at 300, and at 300 m it
+# would be noise-limited beyond about 170 m.  Every 21-derived example reads
+# these, scales its scene with the swath, and tags its figures `_330k`.
+SONAR = os.environ.get("HYDROPT_SONAR", "120")
+if SONAR not in ("120", "330"):
+    raise SystemExit(f"HYDROPT_SONAR must be '120' or '330', got {SONAR!r}")
+HIGH_RES = SONAR == "330"
+FREQ_KHZ = 330.0 if HIGH_RES else 120.0
 LAMBDA = C / (FREQ_KHZ * 1e3)
+TAG = "_330k" if HIGH_RES else ""     # figure-name suffix, so both heads' pictures coexist
 # 12 m down in 30 m of water, as flown.  With the fan tilted UP the seabed only
 # enters the main lobe where `altitude <= 0.094 x range`: 18 m of altitude puts
 # it at 191 m, so the inner two thirds of this swath is sea surface alone.  The
@@ -158,8 +175,8 @@ WIND = 4.0                  # a light breeze -- small waves, 0.09 m RMS
 # The swath.  Overridable, because the same scene at a different range is the
 # comparison that shows what is geometry and what is display:
 #   HYDROPT_FAR=90 HYDROPT_NEAR=8 HYDROPT_BOAT=75 python 21_long_range_300m.py
-FAR = float(os.environ.get("HYDROPT_FAR", 300.0))
-NEAR = float(os.environ.get("HYDROPT_NEAR", 40.0))
+FAR = float(os.environ.get("HYDROPT_FAR", 150.0 if HIGH_RES else 300.0))
+NEAR = float(os.environ.get("HYDROPT_NEAR", 20.0 if HIGH_RES else 40.0))
 SECTOR_DEG = 60.0
 # Sized to a real head: 3.00 deg azimuth beams and a 20 deg vertical field of
 # view, the latter carrying beams of 4.84 deg.  Measured, not assumed --
@@ -184,9 +201,10 @@ SECTOR_DEG = 60.0
 # surface.  And receive-formed beams come from one flooded ping, where
 # transmit-steered ones cost four.  The SUMMED picture is the same either way,
 # to first order: it depends only on the two-way pattern.
-N_RX = 50                                          # 3.03 deg azimuth
+N_RX = 108 if HIGH_RES else 50                     # 1.40 / 3.03 deg azimuth (Hamming)
+N_BEAMS = 361 if HIGH_RES else 181                 # azimuth beams across the sector
 N_TX = int(os.environ.get("HYDROPT_N_TX", 5))      # floods the 20.8 deg FOV
-VERTICAL_BEAM_DEG = 4.84    # beams within that FOV -- about four of them
+VERTICAL_BEAM_DEG = 2.8 if HIGH_RES else 4.84   # beams within that FOV: seven, or about four
 ELEV_DEG = (-27.0, 17.0)    # the fan, wide enough to sample the FOV's skirts
 # Four 4.84 degree beams over a FOV tilted 5 degrees up run from 15.4 degrees
 # up to 5.4 down, centred at 12.3, 7.4, 2.6 and -2.3 degrees (up positive);
@@ -218,8 +236,8 @@ TILT_DEG = float(os.environ.get("HYDROPT_TILT", -5.0))   # FOV centre; negative 
 ELEVATION = os.environ.get("HYDROPT_ELEVATION", "envelope")
 if ELEVATION not in ("envelope", "beams"):
     raise SystemExit(f"HYDROPT_ELEVATION must be 'envelope' or 'beams', got {ELEVATION!r}")
-N_RX_ELEV = int(os.environ.get("HYDROPT_N_RX_ELEV", 21))   # the head's beams, either way
-N_ELEV_BEAMS = int(os.environ.get("HYDROPT_N_ELEV_BEAMS", 4))
+N_RX_ELEV = int(os.environ.get("HYDROPT_N_RX_ELEV", 36 if HIGH_RES else 21))   # the head's beams
+N_ELEV_BEAMS = int(os.environ.get("HYDROPT_N_ELEV_BEAMS", 7 if HIGH_RES else 4))
 # The envelope is the SUM of the four beam patterns, not a beam as wide as the
 # four.  Measured: a 5-element receive beam reproduced the summed display's
 # contrast to 0.2 dB and its clutter to 0.1, and widened the hull's echo
@@ -290,7 +308,10 @@ DIFFUSE_DB = None if _diffuse == "off" else float(_diffuse)
 # are the proportions of a real vessel rather than of a rowing shell.
 HULL_LENGTH, HULL_BEAM, HULL_DRAUGHT = 30.0, 8.0, 4.0
 
-N_ELEV, N_AZIM = 96, 330
+# The fan: sized so the reverberation has a few rays per resolution cell.
+# The high-resolution head's cells are 2.2x narrower in azimuth and 1.7x in
+# elevation, so its fan is denser in both, 3x the rays and 3x the trace.
+N_ELEV, N_AZIM = (160, 700) if HIGH_RES else (96, 330)
 # Every bounce the trace found, rather than a subsample: they are already paid
 # for, and at these ranges the fan puts only 0.6-1.2 patches in a resolution
 # cell, so throwing any away is throwing away the reverberation field itself.
@@ -664,7 +685,7 @@ def main() -> int:
           f"its {HULL_LENGTH:.0f} m splits into")
     print(f"  {across:.1f} m across bearing and {along:.1f} m along range")
 
-    steer, bearings = azimuth_steering(181, SECTOR_DEG)
+    steer, bearings = azimuth_steering(N_BEAMS, SECTOR_DEG)
     grid = make_time_grid(2.0 * NEAR / C, 2.0 * FAR / C, N_BINS)
     seabed = LambertScattering(-27.0, learnable=True)
     dirs, tx_weights = transmit_fan(seed=SEED)
@@ -1169,7 +1190,7 @@ def main() -> int:
         # The per-beam stack, so this figure can be redrawn without a run.
         torch.save({"stack": stack.detach().cpu(), "tilts": tilts,
                     "bearings": bearings, "grid": grid.detach().cpu(),
-                    "k_boat": k_boat}, FIGURE_DIR / f"21_beams_{FAR:.0f}m.pt")
+                    "k_boat": k_boat}, FIGURE_DIR / f"21_beams_{FAR:.0f}m{TAG}.pt")
         top = max(float(c.max()) for c in panels.values())
         fig_c, axes = plt.subplots(1, 3, figsize=(16.5, 6.2))
         for ax, (name, cart_b) in zip(axes, panels.items()):
@@ -1187,11 +1208,11 @@ def main() -> int:
         fig_c.suptitle(f"{len(tilts)} receive elevation beams of {beam_3db_deg(N_RX_ELEV):.2f} deg "
                        f"under one flooded transmit: three ways to put them on one screen",
                        fontsize=12)
-        save(fig_c, f"21_display_conventions_{FAR:.0f}m.png")
+        save(fig_c, f"21_display_conventions_{FAR:.0f}m{TAG}.png")
 
     save(_plot(det, raw_cart, mean_cart, gx, gy, rng, prof_db.detach(),
                noise_db, tx, ty, crossover, blind, looks),
-         f"21_scene_{FAR:.0f}m.png")
+         f"21_scene_{FAR:.0f}m{TAG}.png")
 
     banner("acceptance")
     # Two different questions, and only the second one is "can you see it".
@@ -1239,13 +1260,15 @@ def main() -> int:
                 f"still {margin:.1f} dB above the ambient at {FAR:.0f} m; "
                 f"crosses at about {crossover:.0f} m")
     # Absorption dominates at long range and is a minor term at short: 23 dB
-    # two-way at 300 m against 6.9 at 90.  Which regime you are in decides
-    # whether a lower frequency is worth its wider beams, so the example has
-    # to say which, not assert one.
+    # two-way at 300 m against 6.9 at 90 for the 120 kHz head, and 21.7 dB
+    # at 150 m for the 330 kHz one.  Which regime you are in decides whether
+    # a lower frequency is worth its wider beams, so the example has to say
+    # which, not assert one -- and the regime is the absorbed decibels, not
+    # the range: the same 150 m is minor at 120 kHz and dominant at 330.
     absorbed = 2 * alpha * FAR / 1000
-    if FAR >= 200.0:
+    if absorbed >= 15.0:
         ok &= check("absorption is the dominant loss at this range",
-                    absorbed > 15.0,
+                    absorbed > margin,
                     f"{absorbed:.1f} dB two-way at {FAR:.0f} m -- more than "
                     f"the {margin:.1f} dB of margin over the ambient")
     else:

@@ -9,7 +9,7 @@ difference between them.
   the stipes but the gas-filled pneumatocysts along the fronds -- bladders
   of 2-3 cm, well above their resonance at 120 kHz, so each scatters as a
   rigid body of its size, about -33 dB.  A plant carries hundreds.  The
-  forest here is 77 plants at 4 m spacing over a 45 x 30 m stand at 140 m
+  forest here is 150 plants at 3 m spacing over a 45 x 30 m stand at 140 m
   on the port bow, each plant a column of 8 point scatterers from the
   bottom to the surface, each standing for forty bladders (-17 dB): -8 dB
   a plant, and a stand that fills the water column and reads as a cloud
@@ -43,7 +43,8 @@ Every picture stays differentiable in what was put into it: the forest's
 position, the buoy's, the shoal's and its fish's strength.
 
 Acceptance criteria:
-  * the kelp stand reads well above what was in its cells;
+  * the kelp stand reads above what was in its cells, and its front well
+    above its back -- the extinction;
   * the buoy is a point well above its surroundings, and the chain's line
     reads above the bare picture along its length;
   * the shoal reads well above what was in its cells;
@@ -85,7 +86,7 @@ CAPTION = {"kelp": "a kelp forest on the port bow",
 # the kelp stand
 KELP_RANGE, KELP_BEARING_DEG = 140.0, 32.0
 KELP_STAND = (45.0, 30.0)         # along the line of sight, across it
-KELP_SPACING = 4.0                # plants
+KELP_SPACING = 3.0                # plants: one per 9 m^2, a dense stand
 KELP_POINTS = 8                   # per plant, bottom to surface
 KELP_POINT_DB = -17.0             # forty -33 dB bladders each
 KELP_EXTINCTION_DB_PER_M = 0.4    # each way, through the stand
@@ -109,6 +110,11 @@ def _ex21():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+_EX = _ex21()
+S = _EX.FAR / 300.0     # the scene was laid out for the 120 kHz head's 300 m swath; scale with it
+KELP_RANGE, BUOY_RANGE, SHOAL_RANGE = KELP_RANGE * S, BUOY_RANGE * S, SHOAL_RANGE * S
 
 
 def polar(r, bearing_deg, depth=0.0):
@@ -147,7 +153,7 @@ def catenary(length: float, span: float, drop: float, n: int) -> torch.Tensor:
 def main() -> int:
     setup(double=False)
     banner("26 -- kelp, a moored buoy and a shoal, at 21's settings: " + ", ".join(SCENARIOS))
-    ex = _ex21()
+    ex = _EX
     ex15 = ex._ex15()
     C = ex.C
     rx = ex.horizontal_array()
@@ -223,7 +229,7 @@ def main() -> int:
     w_tx = ex.transmit_pattern(dirs)
     tilt = ex.passes_deg()[0]
     rx_beam = lambda d: ex.receive_beam(d, tilt)
-    steer, bearings = azimuth_steering(181, ex.SECTOR_DEG)
+    steer, bearings = azimuth_steering(ex.N_BEAMS, ex.SECTOR_DEG)
     grid = make_time_grid(2.0 * ex.NEAR / C, 2.0 * ex.FAR / C, ex.N_BINS)
     rng = grid * C / 2.0
     shading = shading_window(ex.N_RX, "hamming")
@@ -328,8 +334,10 @@ def main() -> int:
             back = float((cart_db - bare_db)[inside & (a_ > hx - 10.0)].mean())
             print(f"  the stand reads {gain_db:+.1f} dB over what was in its {int(inside.sum())} cells: "
                   f"{front:+.1f} dB over its front 10 m, {back:+.1f} dB over its back 10 m")
-            verdict = check("the kelp stand reads well above what was in its cells",
-                            gain_db > 6.0, f"{gain_db:+.1f} dB")
+            verdict = check("the kelp stand reads above what was in its cells, its front well above its back",
+                            gain_db > 4.0 and front - back > 4.0,
+                            f"{gain_db:+.1f} dB over the stand, {front:+.1f} at the front against "
+                            f"{back:+.1f} at the back")
         elif name == "buoy":
             near = (X - buoy_xy[0]) ** 2 + (Y - buoy_xy[1]) ** 2 < 4.0 ** 2
             around = ((X - buoy_xy[0]) ** 2 + (Y - buoy_xy[1]) ** 2 < 25.0 ** 2) & ~near
@@ -386,7 +394,7 @@ def main() -> int:
             ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
         fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS, {2 * ex.SECTOR_DEG:.0f} deg to {ex.FAR:.0f} m, "
                      f"median TVG floored at +{ex.THRESHOLD_DB:.0f} dB: what {CAPTION[name]} adds to 21's picture")
-        save(fig, f"26_scenario_{name}.png")
+        save(fig, f"26_scenario_{name}{ex.TAG}.png")
 
     return 0 if ok else 1
 

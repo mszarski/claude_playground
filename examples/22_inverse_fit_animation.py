@@ -190,7 +190,7 @@ def main() -> int:
     w_tx = ex.transmit_pattern(dirs)
     tilt = ex.passes_deg()[0]
     rx_beam = lambda d: ex.receive_beam(d, tilt)
-    steer, bearings = azimuth_steering(181, ex.SECTOR_DEG)
+    steer, bearings = azimuth_steering(ex.N_BEAMS, ex.SECTOR_DEG)
     grid = make_time_grid(2.0 * ex.NEAR / C, 2.0 * ex.FAR / C, ex.N_BINS)
     rng = grid * C / 2.0
     shading = shading_window(ex.N_RX, "hamming")
@@ -467,12 +467,12 @@ def main() -> int:
 
     anim = animation.FuncAnimation(fig, draw, frames=len(frames), interval=200, blit=False)
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    gif = FIGURE_DIR / "22_inverse_fit.gif"
+    gif = FIGURE_DIR / f"22_inverse_fit{ex.TAG}.gif"
     with timed("  gif"):
         anim.save(gif, writer=animation.PillowWriter(fps=5))
     print(f"  wrote {gif}")
     draw(len(frames) - 1)
-    save(fig, "22_inverse_fit.png")
+    save(fig, f"22_inverse_fit{ex.TAG}.png")
 
     banner("acceptance")
     ok = check("the gradient is finite and points where the secant does",
