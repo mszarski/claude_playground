@@ -635,7 +635,12 @@ def main() -> int:
         # prop.  HYDROPT_DIFFUSE=off restores the mirror, which is the
         # comparison that shows what it is worth.
         diffuse_db=DIFFUSE_DB,
-        learnable=True, learnable_shape=False, facet_chunk=256)
+        # One block of facets per patch, kept for the backward pass: against a
+        # few hundred direction pairs that is 6 MB of working set, and it is
+        # 2.5x faster than 256-facet blocks recomputed in the backward (the
+        # library's default, sized for meshes and direction counts that need
+        # it): measured, 5.8 s to 2.3 s for the echo's forward and backward.
+        learnable=True, learnable_shape=False, facet_chunk=4096, checkpoint=False)
     tx = BOAT_RANGE * math.cos(b)
     ty = BOAT_RANGE * math.sin(b)
     print(f"  {HULL_LENGTH:.0f} m boat at {BOAT_RANGE:.0f} m, bearing "

@@ -610,7 +610,8 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
                 sound_speed: float = 1500.0,
                 learnable: bool = True, learnable_shape: bool = False,
                 diffuse_db: float | None = None,
-                facet_chunk: int = 512, occlusion: bool = True) -> ExtendedTarget:
+                facet_chunk: int = 512, checkpoint: bool = True,
+                occlusion: bool = True) -> ExtendedTarget:
     """An :class:`~hydropt.targets.ExtendedTarget` whose scattering is a mesh.
 
     Args:
@@ -634,7 +635,7 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
         learnable: position and orientation are parameters.
         learnable_shape: the vertices are parameters too, so a loss on the
             image reaches the geometry.
-        sound_speed, diffuse_db, facet_chunk, occlusion: passed to
+        sound_speed, diffuse_db, facet_chunk, checkpoint, occlusion: passed to
             :class:`MeshScattering`.  ``diffuse_db`` is the one that decides
             whether the body is visible anywhere but beam-on.
 
@@ -688,7 +689,8 @@ def mesh_target(vertices: Tensor, faces: Tensor, *,
         pattern = MeshScattering(v, group, sound_speed=sound_speed,
                                  learnable=learnable_shape,
                                  diffuse_db=diffuse_db,
-                                 facet_chunk=facet_chunk, occlusion=occlusion)
+                                 facet_chunk=facet_chunk, checkpoint=checkpoint,
+                                 occlusion=occlusion)
         offsets.append(pattern.centroid().detach().reshape(1, 3))
         patterns.append(pattern)
     return ExtendedTarget(torch.cat(offsets, dim=0), patterns, position=position,

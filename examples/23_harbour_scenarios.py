@@ -5,14 +5,14 @@ cross on an AUV at 12 m in 30 m of water, a light wind sea over rough sand,
 the median-TVG image on a grid in metres out to 300 m -- each time with ONE
 thing added, and the bare picture beside it under the same colour scale:
 
-* **a breakwater along the right-hand edge of the field of view**, the whole
-  way out: 300 m of vertical caisson face, seen along its length from a sonar
-  8 m off its line in the harbour.  That is grazing incidence -- ten degrees
-  down to one and a half -- where a flat face has no specular return, so what it
-  shows is its roughness, a diffuse channel of -6 dB for concrete and marine
-  growth, and it is bright anyway, because there is so much of it in every
-  beam.  It is also an *occluder*: the water beyond it is not lit, and the
-  reverberation there is gone.
+* **a breakwater along the right-hand side of the picture**, straight in
+  Cartesian: 300 m of vertical caisson face parallel to the sonar's heading,
+  110 m to starboard, from the near range to the far edge.  Seen from the
+  sonar that is 60 degrees of grazing where it enters the fan down to 20 at
+  300 m, off the face's specular direction the whole way, so what it shows
+  is its roughness -- a diffuse channel of -6 dB for concrete and marine
+  growth -- and the sidelobes of its 2 m patches.  It is also an *occluder*:
+  the water beyond it is not lit, and the reverberation there is gone.
 * **a vessel under way, with its wake.**  The 30 m boat of ``examples/21``,
   now the head of a 90 s straight track at 6 m/s.  Its Kelvin wake is added to
   the wind sea as a height field, and -- the part a sonar actually sees, as
@@ -66,19 +66,16 @@ SCENARIO = os.environ.get("HYDROPT_SCENARIO", "all")
 if SCENARIO not in ("all", "seawall", "wake", "fish"):
     raise SystemExit(f"HYDROPT_SCENARIO must be all, seawall, wake or fish, got {SCENARIO!r}")
 SCENARIOS = ("seawall", "wake", "fish") if SCENARIO == "all" else (SCENARIO,)
-CAPTION = {"seawall": "a breakwater along the right-hand edge",
+CAPTION = {"seawall": "a breakwater along the right-hand side",
            "wake": "a vessel under way, with its wake",
            "fish": "a school of fish"}
 
-# the breakwater: along the FOV's right-hand edge.  Its line runs at -50 deg,
-# 8 m outboard of the sonar, so seen from the sonar it enters the 60 deg edge
-# of the fan at the near range and converges on -51.5 deg by 300 m: inside
-# the swath the whole way, 1.5 to 10 degrees of grazing.  (A line parallel to
-# the edge itself is either outside the fan along its whole length or, offset
-# the other way, in front of the sonar.)
-WALL_BEARING_DEG = -50.0
-WALL_OFFSET = 8.0                 # metres outboard of the line through the sonar
-WALL_FROM, WALL_TO = 20.0, 320.0  # along that line
+# the breakwater: a straight line in the picture, y = -WALL_Y, parallel to
+# the heading and to starboard of the boat's track (the boat is at y = -77).
+# It enters the 60 deg edge of the fan at x = 64 m and sits at -20 deg by
+# 300 m, so the fan's right-hand corner beyond it is in its shadow.
+WALL_Y = 110.0                    # metres to starboard
+WALL_FROM, WALL_TO = 20.0, 320.0  # along x
 WALL_ABOVE_WATER = 3.0
 WALL_DIFFUSE_DB = -6.0
 # the vessel: 21's boat as the head of a straight track
@@ -110,7 +107,7 @@ def place(vertices: torch.Tensor, yaw_deg: float, position) -> torch.Tensor:
 
 
 def main() -> int:
-    setup()          # float64: see the note on precision in the docstring
+    setup(double=False)     # float32: a picture and its gradients' liveness need no more
     banner("23 -- three scenarios at 21's settings: " + ", ".join(SCENARIOS))
     ex = _ex21()
     ex15 = ex._ex15()
@@ -133,7 +130,7 @@ def main() -> int:
         return mesh_target(verts, faces, position=(float(head[0]), float(head[1]), 0.0),
                            yaw=ex.BOAT_HEADING_DEG, n_patches=6, sound_speed=C,
                            diffuse_db=ex.DIFFUSE_DB, learnable=True,
-                           learnable_shape=False, facet_chunk=256)
+                           learnable_shape=False, facet_chunk=4096, checkpoint=False)
 
     times = torch.linspace(0.0, TRACK_SECONDS, N_TRACK)
     track = head + SPEED * (times - times[-1]).unsqueeze(-1) * torch.tensor([math.cos(h), math.sin(h)])
@@ -143,17 +140,14 @@ def main() -> int:
     extent = ((origin[0], origin[0] + (n - 1) * dx), (origin[1], origin[1] + (n - 1) * dx))
 
     # ---- the breakwater --------------------------------------------------- #
-    th = math.radians(WALL_BEARING_DEG)
-    along = torch.tensor([math.cos(th), math.sin(th)])
-    inboard = torch.tensor([-math.sin(th), math.cos(th)])      # toward the swath
-    wall_mid = 0.5 * (WALL_FROM + WALL_TO) * along - WALL_OFFSET * inboard
+    # the mesh runs along its own x and faces +y, which is inboard here: no yaw
     w_verts, w_faces = seawall_mesh(WALL_TO - WALL_FROM, ex.WATER_DEPTH + WALL_ABOVE_WATER,
                                     slope_deg=90.0, n_along=150, n_up=4)
-    wall_pos = (float(wall_mid[0]), float(wall_mid[1]), ex.WATER_DEPTH)
-    wall = mesh_target(w_verts, w_faces, position=wall_pos, yaw=WALL_BEARING_DEG,
+    wall_pos = (0.5 * (WALL_FROM + WALL_TO), -WALL_Y, ex.WATER_DEPTH)
+    wall = mesh_target(w_verts, w_faces, position=wall_pos, yaw=0.0,
                        n_patches=150, split_axis=0, sound_speed=C,   # 2 m along: under the pixel
-                       diffuse_db=WALL_DIFFUSE_DB, learnable=False, facet_chunk=256)
-    wall_world = place(w_verts, WALL_BEARING_DEG, wall_pos)
+                       diffuse_db=WALL_DIFFUSE_DB, learnable=False, facet_chunk=4096, checkpoint=False)
+    wall_world = place(w_verts, 0.0, wall_pos)
 
     # ---- the school ------------------------------------------------------- #
     sb = math.radians(SCHOOL_BEARING_DEG)
@@ -227,16 +221,13 @@ def main() -> int:
         banner(f"scenario: {name}")
         overlays = []
         if name == "seawall":
-            print(f"  {WALL_TO - WALL_FROM:.0f} m of vertical face along bearing "
-                  f"{WALL_BEARING_DEG:+.0f} deg, {WALL_OFFSET:.0f} m outboard of the sonar's "
-                  f"line, seabed to {WALL_ABOVE_WATER:.0f} m above the water, diffuse "
-                  f"{WALL_DIFFUSE_DB:.0f} dB; the boat at rest as in 21")
+            print(f"  {WALL_TO - WALL_FROM:.0f} m of vertical face parallel to the heading, "
+                  f"{WALL_Y:.0f} m to starboard, seabed to {WALL_ABOVE_WATER:.0f} m above the "
+                  f"water, diffuse {WALL_DIFFUSE_DB:.0f} dB; the boat at rest as in 21")
             boat = make_boat()
             targets, surface, gain, occl = [boat, wall], sea, None, [(wall_world, w_faces)]
             live = {"vessel position": boat.position}
-            p0 = WALL_FROM * along - WALL_OFFSET * inboard
-            p1 = WALL_TO * along - WALL_OFFSET * inboard
-            overlays.append(("c--", [float(p0[0]), float(p1[0])], [float(p0[1]), float(p1[1])]))
+            overlays.append(("c--", [WALL_FROM, WALL_TO], [-WALL_Y, -WALL_Y]))
         elif name == "wake":
             print(f"  the {ex.HULL_LENGTH:.0f} m boat under way at {SPEED:.0f} m/s, heading "
                   f"{ex.BOAT_HEADING_DEG:.0f} deg, {SPEED * TRACK_SECONDS:.0f} m of track "
@@ -278,10 +269,10 @@ def main() -> int:
 
         # ---- measured on the picture ------------------------------------- #
         if name == "seawall":
-            s_along = X * along[0] + Y * along[1]
-            d_off = X * inboard[0] + Y * inboard[1] + WALL_OFFSET     # 0 on the wall's line
-            on_wall = (d_off.abs() < 6.0) & (s_along > 60.0) & (s_along < ex.FAR * 0.95)
-            beside = (d_off > 15.0) & (d_off < 40.0) & (s_along > 60.0) & (s_along < ex.FAR * 0.95)
+            d_off = Y + WALL_Y                                       # 0 on the wall's line
+            inswath = (X > 80.0) & (R < ex.FAR * 0.95)
+            on_wall = (d_off.abs() < 6.0) & inswath
+            beside = (d_off > 15.0) & (d_off < 40.0) & inswath
             over_bare = float((cart_db - bare_db)[on_wall].median())
             over_beside = float(cart_db[on_wall].median() - cart_db[beside].median())
             print(f"  along its line the wall reads {over_bare:+.1f} dB over the bare picture, "

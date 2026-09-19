@@ -8,19 +8,27 @@ measurement set.  What is new is that the boat starts in the wrong place and
 the image loss walks it home, frame by frame, into
 ``figures/22_inverse_fit.gif``.
 
-The fit compares the measurement with a TEMPLATE: the same ping with the
-boat's arrivals added in power rather than in field (``beamform(...,
-coherent=False)``), which is the expected intensity of its image over the
-phases of its patches.  The coherent image of a 30 m hull is a speckle
-pattern in the hull's position -- 5 cm across track rearranges the
-interference between its patches, a wavelength in range does the same
-against its ghosts -- so a loss against the coherent picture is a cusp at
+The fit is of the model's pose to the image, by descent on the gradient of
+the image with respect to the pose, through every stage of the picture --
+paths, scattering, beamformer, gain, resampling.  One thing is different
+about how the MODEL's picture is rendered for the loss: its arrivals are
+added in power rather than in field (``beamform(..., coherent=False)``),
+which is the expected intensity of its image over the phases of its
+patches.  The measurement stays fully coherent.  The reason is not taste.
+The coherent image of a 30 m hull is a speckle pattern in the hull's
+position -- 5 cm across track rearranges the interference between its
+patches, a wavelength in range does the same against its ghosts -- and the
+gradient of that picture, though exactly right (it is checked below at a
+sixty-fourth of a wavelength), is the slope of the nearest fringe.  It says
+nothing about a boat 6 m away.  A loss on the coherent picture is a cusp at
 the truth on a rough plateau, measured here to be +-2 m wide however much
 the pictures are blurred first (the residual speckle of a 6 m blur is still
-a tenth of the level, and it decorrelates within half a metre).  The
+a tenth of the level, and it decorrelates within half a metre), and descent
+on it walks by luck: from 4 m out it stalled at 4, from 2 m out at 3.  The
 expected intensity moves smoothly with the boat, and the measurement's own
-speckle, which does not move, costs a floor on the loss and not a minimum in
-the wrong place.  That is what a sonar template match does, and it is why.
+speckle, which does not move, costs a floor on the loss and not a minimum
+in the wrong place.  This is how model-based pose estimation on sonar and
+radar imagery is done, for this reason.
 
 Three things make it cheap enough to watch:
 
@@ -29,13 +37,18 @@ Three things make it cheap enough to watch:
 * **the reverberation is formed once.**  The beamformer is linear in the
   arrivals, so the seabed's and surface's complex beams are computed a single
   time and the boat's beams added to them on every step: ``|b_rev +
-  b_boat|^2`` is exactly the image of the whole ping, and the template adds
-  the boat's expected intensity to ``|b_rev + noise|^2``;
+  b_boat|^2`` is exactly the image of the whole ping, and the model's
+  incoherent picture adds the boat's expected intensity to ``|b_rev +
+  noise|^2``;
 * **only the boat carries a graph.**  The scene is built non-learnable; the
-  gradient has one place to go.
+  gradient has one place to go;
+* **the hull's physical optics is one block per patch**, kept for the
+  backward pass rather than recomputed (``facet_chunk=4096,
+  checkpoint=False``): 6 MB of working set here, and 2.5x faster than the
+  library's conservative default.  A step of the fit is 3 s in float32.
 
 And one thing makes it honest: before the descent, the analytic gradient is
-checked against a finite difference -- on the template's loss with the step
+checked against a finite difference -- on the fit's own loss with the step
 scaled to each axis's own resolution (a fifth of a range cell, a fifth of a
 beam), as ``examples/16`` does; and on the coherent picture itself, at a
 sixteenth, a thirty-second and a sixty-fourth of a wavelength, inside one
@@ -62,7 +75,7 @@ move by a wavelength, so heading is captured only from within a fraction of a
 degree and is held at the truth here.
 
 Acceptance criteria:
-  * the template's gradient agrees with the secant (cosine over 0.85), and
+  * the fit's gradient agrees with the secant (cosine over 0.85), and
     the coherent picture's is the wavelength-scale finite difference;
   * the fit closes more than 90 % of the gap between the loss where it
     started and the loss at the truth;
@@ -70,16 +83,18 @@ Acceptance criteria:
     across-track away, through a coarse-to-fine schedule of blurs on the
     picture (see ``SCHEDULE``).
 
-**Double precision, deliberately.**  A picture is fine in float32; a gradient
-through it is not.  The image is a coherent sum of ninety thousand phasors
-whose derivatives carry the carrier's 7.5e5 rad/s, and in single precision
-the backward pass loses the cancellation between them: measured at 90 m, the
-float64 gradient of the displayed image matched a 0.8 mm finite difference to
-0.3 percent, and the float32 one had the wrong sign.  So this example ignores
-``HYDROPT_EXAMPLE_DTYPE`` in spirit -- run it in float64, which is the
-default -- and checks the derivative at that scale before trusting it.  The
-other switches of ``examples/21`` (``HYDROPT_FAR``, ``HYDROPT_BOAT``, ...)
-carry through, since that module is imported for its settings.
+**Single precision, by default.**  The fit runs in float32: its loss is the
+incoherent picture, whose gradient does not pass through the carrier phase
+between arrivals, and in float32 it matches the secant as it does in
+float64.  What float32 cannot do is resolve the coherent picture at the
+scale its wavelength check needs: an arrival time of 0.33 s is quantised to
+40 ns in single precision, 30 um of path, and the check's step of a
+sixty-fourth of a wavelength is seven of those, so its finite differences
+scatter and the check is skipped, with a note, unless the example is run
+with ``HYDROPT_EXAMPLE_DTYPE=float64`` -- in which case it passes (1.09,
+1.02, 1.015 at a 16th, 32nd, 64th).  The other switches of ``examples/21``
+(``HYDROPT_FAR``, ``HYDROPT_BOAT``, ...) carry through, since that module
+is imported for its settings.
 """
 
 from __future__ import annotations
@@ -112,7 +127,7 @@ from hydropt.mesh import boat_hull_mesh, mesh_target
 # track the basin is the beam, 13 m at this range.
 START_OFFSET = (4.0, -6.0)      # metres: range, across-track
 # Coarse to fine, on the PICTURE: both are blurred by a few metres first, which
-# widens the basin (the measurement's speckle is fixed, so the template's loss
+# widens the basin (the measurement's speckle is fixed, so the fit's loss
 # is smooth at any blur; the blur is against the speckle's contribution to the
 # loss, not its roughness), and the blur then shrinks to half a pixel.  It
 # has to: measured along range, the loss at 2 and 4 m of blur is LOWER 1.75 m
@@ -121,7 +136,7 @@ START_OFFSET = (4.0, -6.0)      # metres: range, across-track
 # and its surface image are 0.2 m apart in range here (2 z_s z_t / R), inside
 # one range cell, and they interfere with a phase that turns through two
 # radians along the hull's 16 m of range extent: an 8 m fringe over the
-# measured blob that the template, which adds them in power, does not have,
+# measured blob that the incoherent picture, adding them in power, does not have,
 # and which moves the blurred blob's centre.  At half a metre of blur the
 # resolved structure pins the truth (a clean V, 15 % deeper than its
 # neighbours a quarter of a metre away), so the last stage is done there.
@@ -141,7 +156,7 @@ def _ex21():
 
 
 def main() -> int:
-    setup()          # float64: see the note on precision in the docstring
+    setup(double=False)     # float32; see the note on precision in the docstring
     banner("22 -- the inverse fit, frame by frame")
     ex = _ex21()
     ex15 = ex._ex15()
@@ -165,7 +180,7 @@ def main() -> int:
                       ex.BOAT_RANGE * math.sin(b) + dy, 0.0),
             yaw=ex.BOAT_HEADING_DEG, n_patches=6, sound_speed=C,
             diffuse_db=ex.DIFFUSE_DB, learnable=learnable,
-            learnable_shape=False, facet_chunk=256)
+            learnable_shape=False, facet_chunk=4096, checkpoint=False)
 
     truth = build_boat(learnable=False)
     true_xy = truth.position.detach()[:2].clone()
@@ -218,21 +233,21 @@ def main() -> int:
 
     scale = beam_power_scale(shading, ex.PULSE_S)
 
-    def received(boat, *, template=False):
+    def received(boat, *, incoherent=False):
         """The calibrated, noisy [beams, bands, bins] image of a ping.
 
         Coherent -- the ping as the sonar would record it -- or, as the
-        ``template``, with the boat's expected intensity added to the
+        ``incoherent``, with the boat's expected intensity added to the
         reverberation and noise (see the docstring).
         """
         arr = echo(boat)
-        if template:
+        if incoherent:
             back = calibrate(b_rev, ex.SOURCE_LEVEL_DB, beam_scale=scale)
             noisy = add_receiver_noise(back, noise,
                                        generator=torch.Generator().manual_seed(ex.SEED + 2))
             boat_power = beamform(arr, rx, scene.freqs_khz, grid, steer,
                                   sigma_t=ex.PULSE_S, shading=shading, steer_chunk=8,
-                                  coherent=False)
+                                  coherent=False, checkpoint=False)   # small: keep it
             return noisy + calibrate(boat_power, ex.SOURCE_LEVEL_DB, beam_scale=scale)
         field = calibrate(b_rev + beams(arr, ex.PULSE_S), ex.SOURCE_LEVEL_DB,
                           beam_scale=scale)
@@ -243,15 +258,15 @@ def main() -> int:
 
     # The display gain is the MEASUREMENT's, taken once and held: the model
     # picture is shown at the gain of the picture it is fitted to, as a sonar
-    # would show a template over its own AGC'd image.  Re-deriving a median
+    # would show a model over its own AGC'd image.  Re-deriving a median
     # gain from every trial picture would also break the gradient -- the
     # derivative of an order statistic is that of one beam, while a finite
     # step sees the median hop between beams; measured, six times off.
     gain = []
 
-    def picture(boat, *, template=False):
+    def picture(boat, *, incoherent=False):
         """The displayed image, in metres, differentiable in the boat."""
-        noisy = received(boat, template=template)
+        noisy = received(boat, incoherent=incoherent)
         if not gain:
             gain.append(ex.display_gain(noisy.detach(), rng, pixel_m=pixel_m))
         shown, _ = ex.display(noisy, rng, pixel_m=pixel_m, gain=gain[0])
@@ -290,7 +305,7 @@ def main() -> int:
     banner("the gradient, against a finite difference")
     BLUR = SCHEDULE[-1][0]      # the finest stage's loss, the one the fit ends on
     boat = build_boat(*START_OFFSET, learnable=True)
-    cart, _, _ = picture(boat, template=True)
+    cart, _, _ = picture(boat, incoherent=True)
     L0 = loss_of(cart, BLUR)
     L0.backward()
     g = boat.position.grad.detach()[:2].clone()
@@ -305,14 +320,14 @@ def main() -> int:
                 d[k] = sign * h
                 trial = build_boat(START_OFFSET[0] + d[0], START_OFFSET[1] + d[1],
                                    learnable=False)
-                vals.append(float(loss_of(picture(trial, template=True)[0], BLUR)))
+                vals.append(float(loss_of(picture(trial, incoherent=True)[0], BLUR)))
             fd[k] = (vals[0] - vals[1]) / (2 * h)
     # compare in cell units, as 16 does, so neither axis dominates the cosine
     units = torch.tensor([cell_range, cell_bearing])
     cos = float((g * units * fd * units).sum()
                 / ((g * units).norm() * (fd * units).norm()).clamp_min(1e-30))
     finite = bool(torch.isfinite(g).all()) and float(g.abs().sum()) > 0
-    print(f"  template: d loss / d(range, across): analytic {g[0]:+.3e}, {g[1]:+.3e}; "
+    print(f"  the fit's loss: d / d(range, across): analytic {g[0]:+.3e}, {g[1]:+.3e}; "
           f"secant over a fifth of a cell {fd[0]:+.3e}, {fd[1]:+.3e}")
     print(f"  cosine in cell units: {cos:+.3f}  (steps of {0.2 * cell_range:.3f} m "
           f"and {0.2 * cell_bearing:.2f} m)")
@@ -327,14 +342,20 @@ def main() -> int:
     # wavelength, and a sixteenth-wavelength step reads that at 64 %.  The
     # ratio has to CONVERGE on one as the step shrinks; the check is at the
     # finest step.
-    coh = build_boat(*START_OFFSET, learnable=True)
-    L_coh = loss_of(picture(coh)[0], BLUR)
-    L_coh.backward()
-    g_coh = coh.position.grad.detach()[:2].clone()
-    print(f"  the coherent picture: d loss / d(range, across) = {g_coh[0]:+.3e}, {g_coh[1]:+.3e}")
     fine = {}
+    double = torch.get_default_dtype() == torch.float64
+    if not double:
+        print("  the coherent picture's wavelength-scale check needs float64 (a 0.33 s "
+              "arrival time is quantised to 40 ns in float32, 30 um of path; the check "
+              "steps 0.2 mm): run with HYDROPT_EXAMPLE_DTYPE=float64 to see it")
+    else:
+        coh = build_boat(*START_OFFSET, learnable=True)
+        L_coh = loss_of(picture(coh)[0], BLUR)
+        L_coh.backward()
+        g_coh = coh.position.grad.detach()[:2].clone()
+        print(f"  the coherent picture: d loss / d(range, across) = {g_coh[0]:+.3e}, {g_coh[1]:+.3e}")
     with torch.no_grad():
-        for div in (16, 32, 64):
+        for div in (16, 32, 64) if double else ():
             h_fine = ex.LAMBDA / div
             fd_fine = torch.zeros(2)
             for k in range(2):
@@ -353,7 +374,7 @@ def main() -> int:
             print(f"  at a wavelength / {div} ({h_fine * 1e3:.2f} mm): finite difference "
                   f"{fd_fine[0]:+.3e}, {fd_fine[1]:+.3e}; |analytic| / |fd| = {ratio:.3f}, "
                   f"cosine {cos_fine:+.3f}")
-    h_fine, ratio, cos_fine = fine[64]
+    h_fine, ratio, cos_fine = fine.get(64, (ex.LAMBDA / 64.0, float("nan"), float("nan")))
 
     # ---- the fit ---------------------------------------------------------- #
     N_STEPS = sum(n for _, n in SCHEDULE)
@@ -373,7 +394,7 @@ def main() -> int:
         last = stage == len(SCHEDULE) - 1
         for k in range(n_steps + (1 if last else 0)):
             opt.zero_grad()
-            cart, _, _ = picture(boat, template=True)
+            cart, _, _ = picture(boat, incoherent=True)
             L = loss_of(cart, sigma_m)
             stepping = k < n_steps
             if stepping:
@@ -403,7 +424,7 @@ def main() -> int:
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     im = axes[0].imshow(frames[0].numpy(), origin="lower", extent=ext, vmin=vmin,
                         vmax=vmax, cmap="inferno", aspect="equal")
-    axes[0].set_title("the template, where the fit thinks the boat is")
+    axes[0].set_title("the model, where the fit thinks the boat is")
     axes[1].imshow(meas_db.numpy(), origin="lower", extent=ext, vmin=vmin, vmax=vmax,
                    cmap="inferno", aspect="equal")
     axes[1].set_title("the measurement")
@@ -440,7 +461,7 @@ def main() -> int:
         trail.set_data(xs, ys)
         lloss.set_data(steps[:i + 1], losses[:i + 1])
         lerr.set_data(steps[:i + 1], errs[:i + 1])
-        axes[0].set_title(f"the template, step {i} (loss at a {history[i][5]:.2f} m blur): "
+        axes[0].set_title(f"the model (incoherent), step {i}, {history[i][5]:.2f} m blur: "
                           f"{errs[i]:.2f} m from the truth")
         return im, dot, trail, lloss, lerr
 
@@ -456,14 +477,17 @@ def main() -> int:
     banner("acceptance")
     ok = check("the gradient is finite and points where the secant does",
                finite and cos > 0.85, f"cosine {cos:+.3f} over a fifth of a cell")
-    ok &= check("and inside one ripple it IS the finite difference, in size and direction",
-                cos_fine > 0.99 and 0.9 < ratio < 1.1,
-                f"|analytic| / |fd| = {ratio:.3f}, cosine {cos_fine:+.3f} at {h_fine * 1e3:.2f} mm")
+    if double:
+        ok &= check("and inside one ripple the coherent picture's IS the finite difference",
+                    cos_fine > 0.99 and 0.9 < ratio < 1.1,
+                    f"|analytic| / |fd| = {ratio:.3f}, cosine {cos_fine:+.3f} at {h_fine * 1e3:.2f} mm")
+    else:
+        print("  [SKIP] the coherent picture's wavelength-scale check -- float64 only")
     with torch.no_grad():
-        L_end = float(loss_of(picture(boat, template=True)[0], BLUR))
+        L_end = float(loss_of(picture(boat, incoherent=True)[0], BLUR))
         L_start = float(loss_of(picture(build_boat(*START_OFFSET, learnable=False),
-                                        template=True)[0], BLUR))
-        L_true = float(loss_of(picture(truth, template=True)[0], BLUR))
+                                        incoherent=True)[0], BLUR))
+        L_true = float(loss_of(picture(truth, incoherent=True)[0], BLUR))
     ok &= check("the fit closes more than 90 % of the gap to the loss at the truth",
                 L_end - L_true < 0.1 * (L_start - L_true),
                 f"{L_start:.5f} at the start, {L_end:.5f} at the end, {L_true:.5f} at the truth")
