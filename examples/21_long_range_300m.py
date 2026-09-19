@@ -186,19 +186,46 @@ SECTOR_DEG = 60.0
 # to first order: it depends only on the two-way pattern.
 N_RX = 50                                          # 3.03 deg azimuth
 N_TX = int(os.environ.get("HYDROPT_N_TX", 5))      # floods the 20.8 deg FOV
-N_RX_ELEV = int(os.environ.get("HYDROPT_N_RX_ELEV", 21))  # vertical receive: 4.84 deg beams
 VERTICAL_BEAM_DEG = 4.84    # beams within that FOV -- about four of them
 ELEV_DEG = (-27.0, 17.0)    # the fan, wide enough to sample the FOV's skirts
-# Tilted UP, the way the head is actually flown.  It is not a small detail: it
-# puts a surface contact at a few hundred metres within a fraction of a beam of
-# the vertical axis -- the boat here lands 0.37 of a beam off it -- instead of
-# on the skirt, which is worth many dB on exactly the target the sonar is for.
 # Four 4.84 degree beams over a FOV tilted 5 degrees up run from 15.4 degrees
-# up to 5.4 down, centred at 13.0, 8.1, 3.3 and -1.5 degrees (up positive).
-# The boat at 250 m sits 2.3 degrees up, in the third.  HYDROPT_TILT picks
-# another; -5 with HYDROPT_N_TX=5 is the old single lobe.
+# up to 5.4 down, centred at 12.3, 7.4, 2.6 and -2.3 degrees (up positive);
+# the boat at 250 m sits 2.3 degrees up, in the third.  HYDROPT_TILT moves
+# the FOV centre.
 TILT_DEG = float(os.environ.get("HYDROPT_TILT", -5.0))   # FOV centre; negative is up
-N_ELEV_BEAMS = 4
+# Two ways to run the elevation, one switch:
+#
+#   HYDROPT_ELEVATION=envelope   (the default)  One pass, with the receive
+#       weight the SUM of the four beam patterns.  The beamformer is linear
+#       in the arrivals, so every arrival's own energy lands exactly where
+#       the four-beam sum would put it; what differs is the cross-terms.
+#       Two arrivals in different beams add in power under the four-beam
+#       sum and interfere under the envelope (Cauchy-Schwarz: the envelope's
+#       cross weight is never smaller).  Measured against the four beams
+#       summed, at 300 m: contrast +36.0 against +35.8 dB, clutter 63.4
+#       against 63.6, the +1.0 m ghost -6.9 against -8.3 dB, and the hull's
+#       width across bearing 31.1 against 27.4 m (28.7 predicted) -- a
+#       quarter of the arrivals, and no per-elevation attribution.
+#
+#   HYDROPT_ELEVATION=beams      Four 4.84 degree receive beams across the
+#       FOV, each scattered, solved and beamformed on its own, and combined
+#       per HYDROPT_DISPLAY (sum, max, beam:K).  Four times the cost; the
+#       per-beam pictures for seafloor / water column / surface attribution,
+#       the three-convention figure, and the saved stack that
+#       21_redraw_conventions.py reads.
+#
+# The per-beam element count and beam count can still be set directly.
+ELEVATION = os.environ.get("HYDROPT_ELEVATION", "envelope")
+if ELEVATION not in ("envelope", "beams"):
+    raise SystemExit(f"HYDROPT_ELEVATION must be 'envelope' or 'beams', got {ELEVATION!r}")
+N_RX_ELEV = int(os.environ.get("HYDROPT_N_RX_ELEV", 21))   # the head's beams, either way
+N_ELEV_BEAMS = int(os.environ.get("HYDROPT_N_ELEV_BEAMS", 4))
+# The envelope is the SUM of the four beam patterns, not a beam as wide as the
+# four.  Measured: a 5-element receive beam reproduced the summed display's
+# contrast to 0.2 dB and its clutter to 0.1, and put the hull's width across
+# bearing back to 34.8 m from 27.4 -- because its -13 dB sidelobes admit the
+# seabed-image paths ten degrees down that four tiled 21-element beams reject
+# at their sharp edge.  Same shortcut, the right envelope.
 # HYDROPT_RX_ELEV=point makes the receive side accept every elevation
 # equally, which is what a horizontal line of point elements does and what
 # made a seabed image ten degrees below boresight count at full strength.
@@ -211,9 +238,14 @@ DISPLAY = os.environ.get("HYDROPT_DISPLAY", "sum")
 
 
 def beam_tilts_deg() -> list[float]:
-    """Centres of the elevation beams, spaced one beamwidth about the tilt."""
+    """Centres of the head's elevation beams, spaced one beamwidth about the tilt."""
     bw = beam_3db_deg(N_RX_ELEV)
     return [TILT_DEG + (k - (N_ELEV_BEAMS - 1) / 2.0) * bw for k in range(N_ELEV_BEAMS)]
+
+
+def passes_deg() -> list[float]:
+    """What the example actually loops over: every beam, or one envelope pass."""
+    return beam_tilts_deg() if ELEVATION == "beams" else [TILT_DEG]
 
 # A LONG pulse, not the 0.12 ms of the 90 m examples.  Range resolution is
 # c tau / 2 = 0.22 m here instead of 0.09, and that is the trade a long-range
@@ -397,6 +429,11 @@ def receive_beam(directions: torch.Tensor, tilt_deg: float) -> torch.Tensor:
     if not RX_ELEV_BEAMS:
         return torch.ones(directions.shape[:-1], dtype=directions.dtype,
                           device=directions.device)
+    if ELEVATION == "envelope":
+        # the sum of the head's beams, in power -- see the note at ELEVATION
+        return sum(line_array_factor(directions[..., 2], N_RX_ELEV,
+                                     sin_steer=-math.sin(math.radians(t)))
+                   for t in beam_tilts_deg())
     return line_array_factor(directions[..., 2], N_RX_ELEV,
                              sin_steer=-math.sin(math.radians(tilt_deg)))
 
@@ -605,7 +642,7 @@ def main() -> int:
     # is a power weight that rides with the transmit one, applied once.
     w_tx = transmit_pattern(dirs)
 
-    tilts = beam_tilts_deg()
+    tilts = passes_deg()
     if DISPLAY.startswith("beam:"):
         tilts = [tilts[int(DISPLAY.split(":")[1])]]
     print(f"  {len(tilts)} elevation beam(s) at "
@@ -1031,7 +1068,8 @@ def main() -> int:
     # one whose tilt is nearest its elevation.
     import matplotlib.pyplot as plt   # _common has already chosen the Agg backend
 
-    with torch.no_grad():
+    if len(tilts) > 1:
+      with torch.no_grad():
         conventions = {
             "summed over beams": stack.sum(dim=0),
             "max over beams": stack.max(dim=0).values,

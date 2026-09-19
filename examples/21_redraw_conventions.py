@@ -36,7 +36,15 @@ def main() -> int:
 
     ex = _ex21()
     far = float(os.environ.get("HYDROPT_FAR", 300.0))
-    saved = torch.load(FIGURE_DIR / f"21_beams_{far:.0f}m.pt")
+    stack_path = FIGURE_DIR / f"21_beams_{far:.0f}m.pt"
+    if not stack_path.exists():
+        print(f"  no saved stack at {stack_path.name}: the example only writes one "
+              f"under HYDROPT_ELEVATION=beams (the default, 'envelope', is a single "
+              f"receive beam and has nothing to compare).  Run\n"
+              f"      HYDROPT_ELEVATION=beams HYDROPT_FAR={far:.0f} python 21_long_range_300m.py\n"
+              f"  first.")
+        return 1
+    saved = torch.load(stack_path)
     stack, tilts, k_boat = saved["stack"], saved["tilts"], saved["k_boat"]
     bearings, grid = saved["bearings"], saved["grid"]
     rng = grid * ex.C / 2.0
