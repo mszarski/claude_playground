@@ -202,9 +202,9 @@ TILT_DEG = float(os.environ.get("HYDROPT_TILT", -5.0))   # FOV centre; negative 
 #       Two arrivals in different beams add in power under the four-beam
 #       sum and interfere under the envelope (Cauchy-Schwarz: the envelope's
 #       cross weight is never smaller).  Measured against the four beams
-#       summed, at 300 m: contrast +36.0 against +35.8 dB, clutter 63.4
-#       against 63.6, the +1.0 m ghost -6.9 against -8.3 dB, and the hull's
-#       width across bearing 31.1 against 27.4 m (28.7 predicted) -- a
+#       summed, at 300 m: contrast +41.2 against +41.0 dB, clutter 63.5
+#       against 63.6, the +1.0 m ghost -13.0 against -14.5 dB, and the
+#       hull's width across bearing 22.5 m in both (28.7 predicted) -- a
 #       quarter of the arrivals, and no per-elevation attribution.
 #
 #   HYDROPT_ELEVATION=beams      Four 4.84 degree receive beams across the
@@ -222,8 +222,8 @@ N_RX_ELEV = int(os.environ.get("HYDROPT_N_RX_ELEV", 21))   # the head's beams, e
 N_ELEV_BEAMS = int(os.environ.get("HYDROPT_N_ELEV_BEAMS", 4))
 # The envelope is the SUM of the four beam patterns, not a beam as wide as the
 # four.  Measured: a 5-element receive beam reproduced the summed display's
-# contrast to 0.2 dB and its clutter to 0.1, and put the hull's width across
-# bearing back to 34.8 m from 27.4 -- because its -13 dB sidelobes admit the
+# contrast to 0.2 dB and its clutter to 0.1, and widened the hull's echo
+# across bearing by a third -- because its -13 dB sidelobes admit the
 # seabed-image paths ten degrees down that four tiled 21-element beams reject
 # at their sharp edge.  Same shortcut, the right envelope.
 # HYDROPT_RX_ELEV=point makes the receive side accept every elevation
