@@ -398,3 +398,66 @@ def test_a_receive_pattern_weights_each_solved_return_path_by_its_arrival():
         got[name] = float((echo.amplitude ** 2).sum())
     assert got["unity"] == pytest.approx(got["none"], rel=1e-9)
     assert got["quarter"] == pytest.approx(0.25 * got["none"], rel=1e-9)
+
+
+def test_reciprocal_return_leg_is_the_solved_one():
+    """A monostatic sonar's return paths are its outbound paths reversed.
+
+    Solving the return leg separately can only reproduce the inbound solve
+    to within its tolerance, so the default reuses it.  Pinned against the
+    two-solve answer in a scene with a bottom bounce, so the reversal has a
+    reflected path to get right: same count, same energies, and the return
+    leg's arrival direction is the inbound launch direction reversed.
+    """
+    import warnings as _w
+
+    from hydropt.launch import fibonacci_cone
+    from hydropt.targets import ExtendedTarget, IsotropicScattering
+
+    elements = torch.stack([torch.zeros(16), (torch.arange(16.0) - 7.5) * 0.02,
+                            torch.full((16,), 50.0)], dim=-1)
+    scene = Scene(field=IsoProfile(1500.0, learnable=False),
+                  bottom=FlatHeight(120.0), surface=FlatHeight(-1e5),
+                  source=(0.0, 0.0, 50.0), receivers=elements,
+                  bottom_loss=ConstantLoss(0.0, learnable=False),
+                  surface_loss=ConstantLoss(0.0, learnable=False),
+                  freqs_khz=torch.tensor([10.0]),
+                  step_size=2.0, n_steps=400, max_bounces=2)
+    tx = fibonacci_cone(4000, torch.tensor([1.0, 0.0, 0.0]), 30.0)
+    target = ExtendedTarget(torch.tensor([[0.0, 0.0, 0.0], [0.0, 3.0, 1.0]]),
+                            [IsotropicScattering(0.0, learnable=False)] * 2,
+                            position=(200.0, 0.0, 60.0), learnable=False)
+    got = {}
+    with _w.catch_warnings(), torch.no_grad():
+        _w.simplefilter("ignore")
+        for name, flag in (("reciprocal", None), ("two solves", False)):
+            got[name] = target_arrivals(scene, target, tx, return_leg="eigenray",
+                                        n_rx_rays=1500, rx_half_angle_deg=40.0,
+                                        max_arrivals_per_leg=400, reciprocal=flag)
+    a, b = got["reciprocal"], got["two solves"]
+    assert a.n_arrivals == b.n_arrivals >= 4      # direct+bounce, squared, per highlight
+
+    # The two mixed pairs (direct in, bounce out; bounce in, direct out) land
+    # at the same time -- exactly so under reciprocity, a hair apart from two
+    # solves -- so a sort by time puts them either way round.  Order by the
+    # arrival direction as well before comparing.
+    def ordered(e):
+        key = e.time.double() * 1e3 + e.direction[:, 2].double() * 1e-3
+        return type(e)(*(None if f is None else f[key.argsort()] for f in e))
+    a, b = ordered(a), ordered(b)
+    assert torch.allclose(a.time, b.time, rtol=0, atol=1e-6)
+    assert torch.allclose(a.amplitude, b.amplitude, rtol=1e-2, atol=0)   # 0.04 dB
+    assert torch.allclose(a.direction, b.direction, atol=2e-3)
+    assert torch.allclose(a.launch_direction, b.launch_direction, atol=2e-3)
+
+    # And it refuses when the receiver is somewhere else.
+    bistatic = Scene(field=IsoProfile(1500.0, learnable=False),
+                     bottom=FlatHeight(120.0), surface=FlatHeight(-1e5),
+                     source=(0.0, 0.0, 50.0), receivers=elements + torch.tensor([0.0, 20.0, 0.0]),
+                     bottom_loss=ConstantLoss(0.0, learnable=False),
+                     surface_loss=ConstantLoss(0.0, learnable=False),
+                     freqs_khz=torch.tensor([10.0]),
+                     step_size=2.0, n_steps=400, max_bounces=2)
+    with pytest.raises(ValueError), torch.no_grad():
+        target_arrivals(bistatic, target, tx, return_leg="eigenray",
+                        n_rx_rays=1500, rx_half_angle_deg=40.0, reciprocal=True)

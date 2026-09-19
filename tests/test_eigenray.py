@@ -276,3 +276,77 @@ def test_a_direct_path_is_not_charged_for_what_the_ray_hits_afterwards():
     expected = (1.0 / span) * 10.0 ** (-alpha * span / 20000.0)
     amp = float(arrivals.amplitude[direct].max())
     assert amp == pytest.approx(expected, rel=0.05)
+
+
+def test_batched_solve_matches_one_pair_at_a_time():
+    """Several pairs in one solve are the same paths as one solve per pair.
+
+    A bottom-bounce scene, so each pair has a direct and a reflected path;
+    three receivers at different ranges, so the pairs converge at different
+    iterations and the per-pair stopping has something to do.
+    """
+    from hydropt.eigenray import eigenray_arrivals_batched
+
+    scene = _scene(depth=120.0, bounces=2)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcvs = torch.tensor([[200.0, 10.0, 60.0], [350.0, -30.0, 40.0],
+                         [500.0, 25.0, 80.0]])
+    kw = dict(bracket_rays=800, bracket_half_angle_deg=40.0)
+    together = eigenray_arrivals_batched(
+        scene, src.reshape(1, 3).expand(3, 3), rcvs, torch.tensor([10.0]), **kw)
+    for n in range(3):
+        alone = eigenray_arrivals(scene, src, rcvs[n], torch.tensor([10.0]), **kw)
+        got = together[n]
+        assert got.n_arrivals == alone.n_arrivals >= 2
+        assert torch.allclose(got.time, alone.time, rtol=0, atol=1e-7)
+        assert torch.allclose(got.amplitude, alone.amplitude, rtol=1e-4, atol=0)
+        assert torch.allclose(got.direction, alone.direction, atol=1e-4)
+        assert torch.allclose(got.launch_direction, alone.launch_direction, atol=1e-4)
+
+
+def test_a_bounce_path_spreads_as_its_unfolded_length_both_ways():
+    """1/L^2 for the reflected path too, and the same from either end.
+
+    The tube Jacobian used to be taken in the chord's tangent-plane offsets,
+    which are angles only for a path along the chord: a flat-bottom bounce
+    30 degrees off it read +2.7 dB over 1/L^2 one way and +3.4 dB the other.
+    In the path's own frames both directions read the unfolded length.
+    """
+    from hydropt.absorption import thorp_db_per_km
+
+    scene = _scene(depth=120.0, bounces=2)
+    alpha = float(thorp_db_per_km(torch.tensor([10.0])))
+    a = torch.tensor([0.0, 0.0, 50.0])
+    b = torch.tensor([200.0, 3.0, 61.0])
+    for src, rcv in ((a, b), (b, a)):
+        arr = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]),
+                                bracket_rays=1500, bracket_half_angle_deg=40.0)
+        assert arr.n_arrivals == 2                      # direct and one bounce
+        for k in range(2):
+            L = float(arr.path_length[k])
+            want = 10.0 ** (-alpha * L / 1e4) / L ** 2
+            got = float(arr.amplitude[k, 0] ** 2)
+            assert abs(10.0 * math.log10(got / want)) < 0.05
+    # the bounce path's length is the image-source one
+    unfolded = math.sqrt(200.0 ** 2 + 3.0 ** 2 + (2 * 120.0 - 50.0 - 61.0) ** 2)
+    assert float(arr.path_length[1]) == pytest.approx(unfolded, abs=0.05)
+
+
+def test_the_bracket_keeps_the_direct_path_in_a_busy_channel():
+    """Every low-order path survives the bracket when many bounces are allowed.
+
+    Shallow water, six bounces: more distinct signatures reach the receiver
+    than an 8-path cap would keep, and which ones the cap dropped was decided
+    by where the fan's rays fell.  On one leg it dropped the direct path.  Now
+    the bracket keeps every path it finds, and the direct, single-surface and
+    single-bottom paths are all there, from either end.
+    """
+    scene = _scene(depth=30.0, surface=0.0, bounces=6, n_steps=200)
+    src = torch.tensor([0.0, 0.0, 12.0])
+    rcv = torch.tensor([228.0, -85.0, 2.0])
+    for s, r in ((src, rcv), (rcv, src)):
+        _, residual, signature = find_eigenrays(scene, s, r, bracket_rays=2000,
+                                                bracket_half_angle_deg=45.0)
+        sig = set(int(v) for v in signature[residual < 2.5])
+        assert {0, 1, 1000} <= sig, sig
+        assert len(sig) > 8

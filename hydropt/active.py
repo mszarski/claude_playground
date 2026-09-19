@@ -391,6 +391,7 @@ def target_arrivals(
     rx_pattern=None,
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
+    reciprocal: bool | None = None,
     trace_kwargs: dict | None = None,
     generator: torch.Generator | None = None,
     **extract_kwargs,
@@ -497,6 +498,16 @@ def target_arrivals(
             product, so capping the legs is far more effective than capping the
             result -- and a dense fan's extra arrivals are near-duplicates.
         max_arrivals: cap the combined result.
+        reciprocal: with ``return_leg="eigenray"``, build the return leg
+            from the inbound solve reversed instead of solving it again.  The
+            paths between two points are the same paths in either direction,
+            with the same length, bounces, reflection loss and ray-tube
+            spreading (the geometrical spreading of a ray is reciprocal), so
+            when the projector and the receiver's phase centre coincide the
+            second solve can only reproduce the first to within its own
+            tolerance.  ``None`` (the default) does this exactly when the two
+            points coincide; ``True`` insists and raises if they do not;
+            ``False`` solves both legs.
         trace_kwargs: forwarded to the tracer.
         generator: RNG for the return fans.  Only has an effect when
             ``rx_jitter`` is non-zero -- see above.
@@ -515,14 +526,6 @@ def target_arrivals(
     freqs = scene.freqs_khz
     world = target.world_positions()
 
-    # One transmit trace for every highlight: they are just several points to
-    # ask the same bundle about.
-    tx_result = trace(scene, tx_directions, **tkw)
-    tx_kw = dict(kw)
-    tx_kw["sigma_d"] = (fan_sigma_d(tx_directions, tx_result.arclen,
-                                    factor=sigma_d_factor)
-                        if auto_sigma_d else sigma_d)
-
     # Inbound first, so a highlight the projector never reached costs no return
     # trace at all.
     #
@@ -535,7 +538,7 @@ def target_arrivals(
     # notice, because the number looks better.
     inbound_by_highlight: dict[int, ArrivalSet] = {}
     if return_leg == "eigenray":
-        from .eigenray import eigenray_arrivals
+        from .eigenray import eigenray_arrivals_batched
         if tx_pattern is None and tx_weights is not None:
             warnings.warn(
                 "return_leg='eigenray' solves the inbound leg, which has no ray "
@@ -543,11 +546,23 @@ def target_arrivals(
                 "for the same directivity as a function.  The projector is "
                 "omnidirectional in this call.", RuntimeWarning, stacklevel=2)
         source = scene.source_position().reshape(3)
-        for i in range(target.n_highlights):
-            inbound = eigenray_arrivals(
-                scene, source, world[i], freqs,
-                bracket_rays=n_rx_rays, bracket_half_angle_deg=rx_half_angle_deg,
-                trace_kwargs=tkw)
+        monostatic = bool((phase_centre.detach().reshape(3) - source.detach()
+                           ).norm() <= 1e-6)
+        if reciprocal and not monostatic:
+            raise ValueError(
+                "reciprocal=True needs the receiver's phase centre at the "
+                "source; here they are "
+                f"{float((phase_centre.detach().reshape(3) - source.detach()).norm()):.3g} m "
+                "apart.  Pass reciprocal=False to solve both legs.")
+        use_reciprocity = monostatic if reciprocal is None else bool(reciprocal)
+        # Every highlight in one solve: one bracket trace and one probe trace
+        # per Newton step for all of them, instead of that many per highlight.
+        n_hl = target.n_highlights
+        inbounds = eigenray_arrivals_batched(
+            scene, source.reshape(1, 3).expand(n_hl, 3), world, freqs,
+            bracket_rays=n_rx_rays, bracket_half_angle_deg=rx_half_angle_deg,
+            trace_kwargs=tkw)
+        for i, inbound in enumerate(inbounds):
             if inbound.n_arrivals == 0:
                 continue
             if tx_pattern is not None:
@@ -557,6 +572,13 @@ def target_arrivals(
                     amplitude=inbound.amplitude * w.sqrt().to(inbound.amplitude))
             inbound_by_highlight[i] = inbound
     else:
+        # One transmit trace for every highlight: they are just several points
+        # to ask the same bundle about.
+        tx_result = trace(scene, tx_directions, **tkw)
+        tx_kw = dict(kw)
+        tx_kw["sigma_d"] = (fan_sigma_d(tx_directions, tx_result.arclen,
+                                        factor=sigma_d_factor)
+                            if auto_sigma_d else sigma_d)
         for i in range(target.n_highlights):
             inbound = extract_arrivals(tx_result, world[i], freqs,
                                        ray_weights=tx_weights,
@@ -578,14 +600,29 @@ def target_arrivals(
     lit = list(inbound_by_highlight)
     parts: list[ArrivalSet] = []
     if lit and return_leg == "eigenray":
-        from .eigenray import eigenray_arrivals
+        if use_reciprocity:
+            # The same paths, walked the other way: they leave the highlight
+            # along the reverse of the direction they arrived in, and arrive
+            # at the sonar along the reverse of the direction they left it.
+            # Time, length, bounces, loss and spreading are the path's own and
+            # do not care which way it is walked.  The inbound amplitude has
+            # the projector's pattern on it already, so the raw solve is
+            # reversed and the receive pattern goes on afterwards, as it would
+            # on a second solve.
+            outbounds = {}
+            for i, raw in enumerate(inbounds):
+                if raw.n_arrivals > 0:
+                    outbounds[i] = raw._replace(
+                        direction=-raw.launch_direction,
+                        launch_direction=-raw.direction)
+        else:
+            outbounds = dict(zip(lit, eigenray_arrivals_batched(
+                scene, world[lit], phase_centre.reshape(1, 3).expand(len(lit), 3),
+                freqs, bracket_rays=n_rx_rays,
+                bracket_half_angle_deg=rx_half_angle_deg, trace_kwargs=tkw)))
         for i in lit:
-            outbound = eigenray_arrivals(
-                scene, world[i], phase_centre, freqs,
-                bracket_rays=n_rx_rays,
-                bracket_half_angle_deg=rx_half_angle_deg,
-                trace_kwargs=tkw)
-            if outbound.n_arrivals == 0:
+            outbound = outbounds.get(i)
+            if outbound is None or outbound.n_arrivals == 0:
                 continue
             if rx_pattern is not None:
                 w = rx_pattern(outbound.direction)

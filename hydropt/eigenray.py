@@ -59,11 +59,12 @@ from .absorption import thorp_db_per_km
 from .beamform import ArrivalSet
 from .boundaries import FlatHeight, HeightField
 from .launch import fibonacci_cone
-from .receiver import _closest_approach
+from .receiver import _LEN_EPS
 from .rough import roughness_weights
 from .tracer import trace
 
-__all__ = ["eigenray_arrivals", "find_eigenrays", "mean_boundary"]
+__all__ = ["eigenray_arrivals", "eigenray_arrivals_batched", "find_eigenrays",
+           "find_eigenrays_batched", "mean_boundary"]
 
 
 def mean_boundary(boundary: HeightField) -> tuple[HeightField, float]:
@@ -118,28 +119,39 @@ class _SmoothedScene:
         return self._source
 
 
+def _frames(axes: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    """Orthonormal ``(a, e1, e2)``, each ``[N, 3]``, with ``a`` along each row."""
+    a = axes.reshape(-1, 3)
+    a = a / a.norm(dim=-1, keepdim=True).clamp_min(1e-30)
+    z = torch.tensor([0.0, 0.0, 1.0], dtype=a.dtype, device=a.device)
+    x = torch.tensor([1.0, 0.0, 0.0], dtype=a.dtype, device=a.device)
+    other = torch.where(a[:, 2:3].abs() < 0.9, z.view(1, 3), x.view(1, 3))
+    e1 = torch.linalg.cross(a, other.expand_as(a), dim=-1)
+    e1 = e1 / e1.norm(dim=-1, keepdim=True).clamp_min(1e-30)
+    return a, e1, torch.linalg.cross(a, e1, dim=-1)
+
+
 def _frame(axis: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     """Orthonormal ``(a, e1, e2)`` with ``a`` along ``axis``."""
-    a = axis.reshape(3) / axis.reshape(3).norm().clamp_min(1e-30)
-    other = (torch.tensor([0.0, 0.0, 1.0], dtype=a.dtype, device=a.device)
-             if abs(float(a[2])) < 0.9
-             else torch.tensor([1.0, 0.0, 0.0], dtype=a.dtype, device=a.device))
-    e1 = torch.linalg.cross(a, other)
-    e1 = e1 / e1.norm().clamp_min(1e-30)
-    return a, e1, torch.linalg.cross(a, e1)
+    a, e1, e2 = _frames(axis.reshape(1, 3))
+    return a[0], e1[0], e2[0]
 
 
 def _aim(frame: tuple[Tensor, Tensor, Tensor], uv: Tensor) -> Tensor:
-    """Unit directions from 2-D transverse offsets ``uv`` ``[P, 2]``."""
-    a, e1, e2 = frame
-    d = (a.reshape(1, 3) + uv[:, :1] * e1.reshape(1, 3)
-         + uv[:, 1:2] * e2.reshape(1, 3))
+    """Unit directions from 2-D transverse offsets ``uv`` ``[P, 2]``.
+
+    The frame is one ``[3]`` triple shared by every row, or ``[P, 3]`` triples,
+    one per row.
+    """
+    a, e1, e2 = (f.reshape(-1, 3) for f in frame)
+    d = a + uv[:, :1] * e1 + uv[:, 1:2] * e2
     return d / d.norm(dim=-1, keepdim=True).clamp_min(1e-30)
 
 
 def _closest(result, point: Tensor):
     """Per-ray closest approach to ``point``: miss vector and where it happened.
 
+    ``point`` is one ``[3]`` point for every ray or ``[R, 3]``, one per ray.
     Returns ``(miss [R, 3], step [R], frac [R])`` -- the vector from the point
     to the ray at closest approach, the segment it fell in and how far along it.
     """
@@ -147,8 +159,14 @@ def _closest(result, point: Tensor):
     p0, p1 = pos[:, :-1], pos[:, 1:]
     seg = p1 - p0
     seg_len2 = (seg * seg).sum(-1)
-    tstar, dist = _closest_approach(p0, seg, seg_len2, point.reshape(1, 3))
-    tstar, dist = tstar[..., 0], dist[..., 0]                    # [R, S]
+    target = point.reshape(-1, 1, 3)                             # [R or 1, 1, 3]
+    rel = target - p0                                            # [R, S, 3]
+    tstar = (rel * seg).sum(-1) / seg_len2.clamp_min(_LEN_EPS)
+    tstar = tstar.clamp(0.0, 1.0)
+    delta = rel - tstar.unsqueeze(-1) * seg
+    # Not delta.norm(): its backward is 0/0 at zero distance, which a ray passing
+    # exactly through a receiver would hit.
+    dist = (delta * delta).sum(-1).clamp_min(_LEN_EPS).sqrt()   # [R, S]
     live = (result.alive[:, :-1] * result.alive[:, 1:]) > 0
     dist = torch.where(live & (seg_len2 > 0), dist,
                        torch.full_like(dist, float("inf")))
@@ -156,7 +174,7 @@ def _closest(result, point: Tensor):
     rows = torch.arange(pos.shape[0], device=pos.device)
     frac = tstar[rows, step]
     at = p0[rows, step] + frac.unsqueeze(-1) * seg[rows, step]
-    return at - point.reshape(1, 3), step, frac
+    return at - target[:, 0], step, frac
 
 
 def _bounce_signature(result, step: Tensor) -> Tensor:
@@ -174,10 +192,156 @@ def _bounce_signature(result, step: Tensor) -> Tensor:
     return surface * 1000 + bottom
 
 
+def _empty_arrivals(n_bands: int, dtype, device) -> ArrivalSet:
+    z = torch.zeros(0, dtype=dtype, device=device)
+    return ArrivalSet(z, torch.zeros(0, n_bands, dtype=dtype, device=device),
+                      torch.zeros(0, 3, dtype=dtype, device=device),
+                      z, z, z, torch.zeros(0, 3, dtype=dtype, device=device))
+
+
+def find_eigenrays_batched(scene, sources: Tensor, receivers: Tensor, *,
+                           bracket_rays: int = 2000,
+                           bracket_half_angle_deg: float = 60.0,
+                           max_paths: int | None = None, n_refine: int = 8,
+                           tolerance: float | None = None,
+                           trace_kwargs: dict | None = None):
+    """:func:`find_eigenrays` for ``N`` source-receiver pairs in one go.
+
+    Every pair's bracket fan goes into one trace and every pair's refinement
+    probes into one trace per Newton iteration, so the cost of a solve is one
+    Python loop over steps rather than one per pair -- which is most of it at
+    these fan sizes.  Each pair converges on its own tolerance and stops
+    stepping on its own; the arithmetic per path is what the single-pair
+    solve does.
+
+    Returns ``(directions [P, 3], miss [P], signature [P], pair [P])``, the
+    last being which pair each path belongs to.
+    """
+    sources = sources.reshape(-1, 3)
+    receivers = receivers.reshape(-1, 3)
+    n_pairs = int(sources.shape[0])
+    if receivers.shape[0] != n_pairs:
+        raise ValueError("sources and receivers must pair up, one row each: got "
+                         f"{n_pairs} and {int(receivers.shape[0])}")
+    dtype, device = sources.dtype, sources.device
+    tkw = dict(trace_kwargs or {})
+    span = (receivers - sources).detach().norm(dim=-1)                  # [N]
+    tol = (span * 1e-3 if tolerance is None
+           else torch.full_like(span, float(tolerance)))
+    a_n, e1_n, e2_n = _frames((receivers - sources).detach())
+
+    def empty():
+        z = torch.zeros(0, dtype=dtype, device=device)
+        return (torch.zeros(0, 3, dtype=dtype, device=device), z, z.long(),
+                z.long())
+
+    # --- bracket: how many paths are there, and roughly where do they leave?
+    with torch.no_grad():
+        fan = torch.cat([fibonacci_cone(bracket_rays, a_n[n], bracket_half_angle_deg)
+                         for n in range(n_pairs)], dim=0)                # [N B, 3]
+        ray_src = sources.detach().repeat_interleave(bracket_rays, dim=0)
+        ray_rcv = receivers.detach().repeat_interleave(bracket_rays, dim=0)
+        res = trace(_SmoothedScene(scene, ray_src), fan, **tkw)
+        miss, step, _ = _closest(res, ray_rcv)
+        d = miss.norm(dim=-1)
+        sig = _bounce_signature(res, step)
+        pick_ray, pick_pair, pick_sig = [], [], []
+        for n in range(n_pairs):
+            lo = n * bracket_rays
+            d_n, sig_n = d[lo:lo + bracket_rays], sig[lo:lo + bracket_rays]
+            picks = []
+            for s in sig_n.unique():
+                same = (sig_n == s).nonzero().reshape(-1)
+                best = same[d_n[same].argmin()]
+                picks.append((float(d_n[best]), int(best), int(s)))
+            picks.sort()
+            for _, i, s in picks[:max_paths]:
+                pick_ray.append(lo + i)
+                pick_pair.append(n)
+                pick_sig.append(s)
+    if not pick_ray:
+        return empty()
+
+    pair = torch.tensor(pick_pair, device=device)                        # [P]
+    signature = torch.tensor(pick_sig, device=device)
+    a, e1, e2 = a_n[pair], e1_n[pair], e2_n[pair]                        # [P, 3]
+    frame = (a, e1, e2)
+    src_p, rcv_p = sources[pair], receivers[pair]
+    tol_p, span_p = tol[pair], span[pair]
+
+    # Work in the transverse offsets of the frame: a launch direction is
+    # `normalise(a + u e1 + v e2)`, so the miss is a smooth function of (u, v)
+    # and a 2x2 Newton step is all that is needed.
+    dirs = fan[pick_ray]
+    uv = torch.stack([(dirs * e1).sum(-1) / (dirs * a).sum(-1).clamp_min(1e-9),
+                      (dirs * e2).sum(-1) / (dirs * a).sum(-1).clamp_min(1e-9)],
+                     dim=-1)
+    step_uv = (0.25 * tol_p / span_p.clamp_min(1e-9)).clamp_min(1e-6)    # [P]
+
+    def probe(u: Tensor, src: Tensor):
+        """Miss vectors, transverse components, for every candidate direction."""
+        directions = _aim(frame, u)
+        r = trace(_SmoothedScene(scene, src), directions, **tkw)
+        m, st, fr = _closest(r, rcv_p)
+        return torch.stack([(m * e1).sum(-1), (m * e2).sum(-1)], dim=-1), r, st, fr
+
+    # Converge under no_grad, then ALWAYS take one more step with gradient
+    # tracking.  Breaking out of the loop the moment the residual is small
+    # skips that step and the launch direction comes back a constant -- which
+    # is exactly what happened once solving on the mean planes made the
+    # refinement converge in two or three iterations instead of grinding:
+    # the speed-up and a dead gradient to the target's own pose were the same
+    # change.  The final step is what carries the implicit derivative, so it
+    # is not optional and cannot be skipped for being unnecessary numerically.
+    #
+    # A pair whose paths have all landed within its tolerance stops stepping
+    # (its rows are masked out) while the others carry on, exactly as it would
+    # have stopped in a solve of its own.
+    for it in range(n_refine + 1):
+        last = it == n_refine
+        with torch.set_grad_enabled(last):
+            src = src_p if last else src_p.detach()
+            base, _, _, _ = probe(uv, src)
+            if last:
+                active = torch.ones_like(tol_p, dtype=torch.bool)
+            else:
+                worst = torch.zeros_like(tol).scatter_reduce(
+                    0, pair, base.detach().norm(dim=-1), reduce="amax",
+                    include_self=False)
+                active = (worst >= tol)[pair]
+                if not bool(active.any()):
+                    uv = uv.detach()
+                    continue
+            # 2x2 Jacobian by central differences on the two offsets.
+            with torch.no_grad():
+                jac = []
+                for k in range(2):
+                    bump = torch.zeros_like(uv)
+                    bump[:, k] = step_uv
+                    plus, _, _, _ = probe(uv.detach() + bump, src_p.detach())
+                    minus, _, _, _ = probe(uv.detach() - bump, src_p.detach())
+                    jac.append((plus - minus) / (2 * step_uv.unsqueeze(-1)))
+                j = torch.stack(jac, dim=-1)                     # [P, 2, 2]
+                det = j[:, 0, 0] * j[:, 1, 1] - j[:, 0, 1] * j[:, 1, 0]
+                ok = (det.abs() > 1e-12) & active
+            inv = torch.zeros_like(j)
+            safe = torch.where(ok, det, torch.ones_like(det)).reshape(-1, 1, 1)
+            inv[:, 0, 0], inv[:, 1, 1] = j[:, 1, 1], j[:, 0, 0]
+            inv[:, 0, 1], inv[:, 1, 0] = -j[:, 0, 1], -j[:, 1, 0]
+            stepv = (inv / safe @ base.unsqueeze(-1)).squeeze(-1)
+            uv = uv - torch.where(ok.reshape(-1, 1), stepv,
+                                  torch.zeros_like(stepv))
+
+    with torch.no_grad():
+        final, _, _, _ = probe(uv.detach(), src_p.detach())
+        residual = final.norm(dim=-1)
+    return _aim(frame, uv), residual, signature, pair
+
+
 def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
                    bracket_rays: int = 2000,
                    bracket_half_angle_deg: float = 60.0,
-                   max_paths: int = 8, n_refine: int = 8,
+                   max_paths: int | None = None, n_refine: int = 8,
                    tolerance: float | None = None,
                    trace_kwargs: dict | None = None):
     """Launch directions of every path from ``source`` to ``receiver``.
@@ -189,154 +353,65 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
             the paths and bracket them.  It needs to be wide enough to contain
             the bounces you care about -- that is what a 45 degree cone was
             doing right -- and only coarse enough to separate them.
-        max_paths: keep this many distinct paths, nearest first.
+        max_paths: keep at most this many distinct paths, nearest first.
+            ``None``, the default, keeps every path the bracket finds.  A cap
+            is a trap: which paths lie nearest is decided by where the fan's
+            rays happened to fall, not by how much energy they carry, and a
+            cap of 8 in a six-bounce channel was found dropping the DIRECT
+            path on five of six highlights on one leg and the surface bounce
+            on the other.  The refinement is cheap once it is batched; there
+            is nothing to save.
         n_refine: Newton steps.  All but the last run under ``no_grad``.
         tolerance: stop refining a path once it lands this close (m).  Defaults
             to a thousandth of the source-receiver separation.
 
-    Returns ``(directions [P, 3], miss [P], signature [P])``.
+    Returns ``(directions [P, 3], miss [P], signature [P])``.  Several pairs
+    at once: :func:`find_eigenrays_batched`.
     """
-    source = source.reshape(3)
-    receiver = receiver.reshape(3)
-    tkw = dict(trace_kwargs or {})
-    span = float((receiver - source).detach().norm())
-    tol = tolerance if tolerance is not None else 1e-3 * span
-    frame = _frame((receiver - source).detach())
-
-    # --- bracket: how many paths are there, and roughly where do they leave?
-    with torch.no_grad():
-        fan = fibonacci_cone(bracket_rays, frame[0], bracket_half_angle_deg)
-        res = trace(_SmoothedScene(scene, source.reshape(1, 3).expand(
-            bracket_rays, 3)), fan, **tkw)
-        miss, step, _ = _closest(res, receiver)
-        d = miss.norm(dim=-1)
-        sig = _bounce_signature(res, step)
-        picks = []
-        for s in sig.unique():
-            same = (sig == s).nonzero().reshape(-1)
-            best = same[d[same].argmin()]
-            picks.append((float(d[best]), int(best), int(s)))
-        picks.sort()
-        picks = picks[:max_paths]
-    if not picks:
-        empty = torch.zeros(0, 3, dtype=source.dtype, device=source.device)
-        z = torch.zeros(0, dtype=source.dtype, device=source.device)
-        return empty, z, z.long()
-
-    # Work in the transverse offsets of the frame: a launch direction is
-    # `normalise(a + u e1 + v e2)`, so the miss is a smooth function of (u, v)
-    # and a 2x2 Newton step is all that is needed.
-    a, e1, e2 = frame
-    dirs = fan[[i for _, i, _ in picks]]
-    uv = torch.stack([(dirs * e1).sum(-1) / (dirs * a).sum(-1).clamp_min(1e-9),
-                      (dirs * e2).sum(-1) / (dirs * a).sum(-1).clamp_min(1e-9)],
-                     dim=-1)
-    signature = torch.tensor([s for _, _, s in picks], device=source.device)
-    step_uv = max(1e-6, 0.25 * tol / max(span, 1e-9))
-
-    def probe(u: Tensor, src: Tensor):
-        """Miss vectors, transverse components, for P candidate directions."""
-        p = u.shape[0]
-        directions = _aim(frame, u)
-        r = trace(_SmoothedScene(scene, src.reshape(1, 3).expand(p, 3)),
-                  directions, **tkw)
-        m, st, fr = _closest(r, receiver)
-        return torch.stack([(m * e1).sum(-1), (m * e2).sum(-1)], dim=-1), r, st, fr
-
-    # Converge under no_grad, then ALWAYS take one more step with gradient
-    # tracking.  Breaking out of the loop the moment the residual is small
-    # skips that step and the launch direction comes back a constant -- which
-    # is exactly what happened once solving on the mean planes made the
-    # refinement converge in two or three iterations instead of grinding:
-    # the speed-up and a dead gradient to the target's own pose were the same
-    # change.  The final step is what carries the implicit derivative, so it
-    # is not optional and cannot be skipped for being unnecessary numerically.
-    for it in range(n_refine + 1):
-        last = it == n_refine
-        with torch.set_grad_enabled(last):
-            src = source if last else source.detach()
-            base, _, _, _ = probe(uv, src)
-            if not last and float(base.norm(dim=-1).max()) < tol:
-                uv = uv.detach()
-                continue
-            # 2x2 Jacobian by central differences on the two offsets.
-            with torch.no_grad():
-                jac = []
-                for k in range(2):
-                    bump = torch.zeros_like(uv)
-                    bump[:, k] = step_uv
-                    plus, _, _, _ = probe(uv.detach() + bump, source.detach())
-                    minus, _, _, _ = probe(uv.detach() - bump, source.detach())
-                    jac.append((plus - minus) / (2 * step_uv))
-                j = torch.stack(jac, dim=-1)                     # [P, 2, 2]
-                det = j[:, 0, 0] * j[:, 1, 1] - j[:, 0, 1] * j[:, 1, 0]
-                ok = det.abs() > 1e-12
-            inv = torch.zeros_like(j)
-            safe = torch.where(ok, det, torch.ones_like(det)).reshape(-1, 1, 1)
-            inv[:, 0, 0], inv[:, 1, 1] = j[:, 1, 1], j[:, 0, 0]
-            inv[:, 0, 1], inv[:, 1, 0] = -j[:, 0, 1], -j[:, 1, 0]
-            stepv = (inv / safe @ base.unsqueeze(-1)).squeeze(-1)
-            uv = uv - torch.where(ok.reshape(-1, 1), stepv,
-                                  torch.zeros_like(stepv))
-
-    with torch.no_grad():
-        final, _, _, _ = probe(uv.detach(), source.detach())
-        residual = final.norm(dim=-1)
-    return _aim(frame, uv), residual, signature
+    directions, residual, signature, _ = find_eigenrays_batched(
+        scene, source.reshape(1, 3), receiver.reshape(1, 3),
+        bracket_rays=bracket_rays, bracket_half_angle_deg=bracket_half_angle_deg,
+        max_paths=max_paths, n_refine=n_refine, tolerance=tolerance,
+        trace_kwargs=trace_kwargs)
+    return directions, residual, signature
 
 
-def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
-                      freqs_khz: Tensor, *, absorption=thorp_db_per_km,
-                      spread_min_range: float = 1.0,
-                      accept: float | None = None,
-                      coherent: bool = False,
-                      **kwargs) -> ArrivalSet:
-    """One arrival per path from ``source`` to ``receiver``, no splat.
+def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
+                              freqs_khz: Tensor, *, absorption=thorp_db_per_km,
+                              spread_min_range: float = 1.0,
+                              accept: float | None = None,
+                              coherent: bool = False,
+                              **kwargs) -> list[ArrivalSet]:
+    """:func:`eigenray_arrivals` for ``N`` pairs: one solve, ``N`` arrival sets.
 
-    The amplitude carries the ray tube's own divergence rather than an assumed
-    ``1/L^2``: the 2x2 Jacobian ``d(miss)/d(launch offsets)`` that the
-    refinement needs IS the tube's cross-section per unit solid angle, so its
-    determinant is the spreading.  For a straight ray in a homogeneous medium
-    it comes out as ``L^2`` exactly, which is the check in the tests.
-
-    Args:
-        coherent: multiply each bounce path by its Eckart coherence factor, for
-            a receiver that needs the coherent field at a point.  Off by
-            default: an imaging sonar collects the bounce's energy across
-            elevation whatever the surface did to its phase, and the ghost
-            returns a shallow-water operator expects come from exactly these
-            paths.  See the note at the calculation.
-        accept: discard paths that still miss by more than this (m).  Defaults
-            to a hundredth of the source-receiver separation; a path that will
-            not converge is one the bracket found and the refinement could not
-            close, and reporting it as an arrival would be inventing one.
-
-    Returns an :class:`~hydropt.beamform.ArrivalSet` shaped exactly like
-    :func:`hydropt.beamform.extract_arrivals`, so it drops in wherever that
-    does.
+    ``sources`` and ``receivers`` are ``[N, 3]``, paired row by row.  Returns a
+    list of ``N`` :class:`~hydropt.beamform.ArrivalSet`, each sorted by time
+    and possibly empty, differentiable in its own pair's endpoints and in the
+    scene.
     """
-    source = source.reshape(3)
-    receiver = receiver.reshape(3)
-    dtype, device = source.dtype, source.device
+    sources = sources.reshape(-1, 3)
+    receivers = receivers.reshape(-1, 3)
+    n_pairs = int(sources.shape[0])
+    dtype, device = sources.dtype, sources.device
     freqs_khz = freqs_khz.to(dtype=dtype, device=device)
-    span = float((receiver - source).detach().norm())
-    keep_within = accept if accept is not None else 1e-2 * span
+    n_bands = int(freqs_khz.shape[0])
+    span = (receivers - sources).detach().norm(dim=-1)                  # [N]
+    keep_within = (1e-2 * span if accept is None
+                   else torch.full_like(span, float(accept)))
 
-    directions, residual, _ = find_eigenrays(scene, source, receiver, **kwargs)
-    good = residual <= keep_within
+    directions, residual, _, pair = find_eigenrays_batched(
+        scene, sources, receivers, **kwargs)
+    good = residual <= keep_within[pair]
     if int(good.sum()) == 0:
-        z = torch.zeros(0, dtype=dtype, device=device)
-        return ArrivalSet(z, torch.zeros(0, int(freqs_khz.shape[0]),
-                                         dtype=dtype, device=device),
-                          torch.zeros(0, 3, dtype=dtype, device=device),
-                          z, z, z, torch.zeros(0, 3, dtype=dtype, device=device))
-    directions = directions[good]
-    p = directions.shape[0]
+        return [_empty_arrivals(n_bands, dtype, device) for _ in range(n_pairs)]
+    directions, pair = directions[good], pair[good]
+    p = int(directions.shape[0])
+    src_p, rcv_p = sources[pair], receivers[pair]
 
     tkw = dict(kwargs.get("trace_kwargs") or {})
-    smooth = _SmoothedScene(scene, source.reshape(1, 3).expand(p, 3))
+    smooth = _SmoothedScene(scene, src_p)
     result = trace(smooth, directions, **tkw)
-    miss, step, frac = _closest(result, receiver)
+    miss, step, frac = _closest(result, rcv_p)
     rows = torch.arange(p, device=device)
 
     tau_a, tau_b = result.tau[rows, step], result.tau[rows, step + 1]
@@ -350,32 +425,38 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     db = result.refl_db[rows, step + 1]
     phase = result.refl_phase[rows, step + 1]
 
-    # Ray-tube divergence, from the same Jacobian the refinement used.  The
-    # tube's cross-section at the receiver per unit solid angle at the source is
-    # |det d(transverse position)/d(launch offsets)|, and intensity is its
-    # reciprocal.  Straight ray, homogeneous medium: the offsets are angles, the
-    # transverse position grows as L times the angle, so |det| = L^2 and this is
-    # 1/L^2 -- the spherical spreading it has to reduce to.
-    frame = _frame((receiver - source).detach())
-    a, e1, e2 = frame
+    # Ray-tube divergence.  The tube's cross-section at the receiver per unit
+    # solid angle at the source is |det d(transverse position)/d(launch
+    # angle)|, and intensity is its reciprocal.  Straight ray, homogeneous
+    # medium: the transverse position grows as L times the angle, so |det| =
+    # L^2 and this is 1/L^2 -- the spherical spreading it has to reduce to.
+    #
+    # In the PATH'S OWN frames, not the refinement's.  The Newton solve works
+    # in offsets on the source-receiver chord's tangent plane, which is a fine
+    # parametrisation to converge in and a wrong one to measure a tube in: an
+    # offset there is an angle only for a path that leaves along the chord.
+    # A bottom bounce leaving 30 degrees off it moves by cos^2 of that per
+    # unit offset, and its miss, read in the chord's transverse plane, is
+    # foreshortened by another cosine at arrival.  Measured on a flat-bottom
+    # bounce with the chord-plane Jacobian: +2.7 dB over 1/L^2 one way and
+    # +3.4 dB the other, on the same path.  So: bump the converged launch
+    # direction by a true angle in a frame perpendicular to IT, and read the
+    # miss in a frame perpendicular to the ARRIVING ray, which the miss vector
+    # already lies in.  Both legs of a path then agree, and both read 1/L^2.
     with torch.no_grad():
-        base_uv = torch.stack(
-            [(directions * e1).sum(-1) / (directions * a).sum(-1).clamp_min(1e-9),
-             (directions * e2).sum(-1) / (directions * a).sum(-1).clamp_min(1e-9)],
-            dim=-1)
-        h = max(1e-6, 1e-4)
+        d0 = directions.detach()
+        _, f1, f2 = _frames(d0)                       # perpendicular to launch
+        _, g1, g2 = _frames(direction.detach())       # perpendicular to arrival
+        h = 1e-4                                      # radians
         cols = []
-        for k in range(2):
-            bump = torch.zeros_like(base_uv)
-            bump[:, k] = h
+        for f in (f1, f2):
             out = []
             for sign in (1.0, -1.0):
-                d2 = _aim(frame, base_uv + sign * bump)
-                r2 = trace(_SmoothedScene(
-                    scene, source.detach().reshape(1, 3).expand(p, 3)),
-                    d2, **tkw)
-                m2, _, _ = _closest(r2, receiver)
-                out.append(torch.stack([(m2 * e1).sum(-1), (m2 * e2).sum(-1)],
+                d2 = d0 + sign * h * f
+                d2 = d2 / d2.norm(dim=-1, keepdim=True)
+                r2 = trace(_SmoothedScene(scene, src_p.detach()), d2, **tkw)
+                m2, _, _ = _closest(r2, rcv_p)
+                out.append(torch.stack([(m2 * g1).sum(-1), (m2 * g2).sum(-1)],
                                        dim=-1))
             cols.append((out[0] - out[1]) / (2 * h))
         j = torch.stack(cols, dim=-1)
@@ -397,12 +478,6 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
         area = area.clamp_min(1e-2 * spherical)
     spread = 1.0 / area
 
-    # Roughness costs the path amplitude, it does not move it.  The solve ran
-    # on the mean planes, so every bounce now pays its Eckart coherence factor
-    # at each band -- which at 100 kHz over a wind sea is tens of orders of
-    # magnitude, i.e. a coherent surface bounce at these frequencies is
-    # nothing.  The energy the roughness scatters elsewhere is reverberation
-    # and is somebody else's job.
     # Bounce paths keep their ENERGY, deliberately.  A rough sea at 120 kHz
     # destroys the coherent reflection -- the Eckart factor is ~-100 dB -- but
     # a pressure-release surface reflects all of the energy; roughness smears
@@ -424,9 +499,9 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
             result, freqs_khz, surface_rms=smooth.surface_rms,
             bottom_rms=smooth.bottom_rms, surface=smooth.surface,
             bottom=smooth.bottom, up_to_step=step, sound_speed=float(scene.field(
-                source.reshape(1, 3)).reshape(-1)[0]))
+                src_p[:1].detach()).reshape(-1)[0]))
     else:
-        coherence = torch.ones(p, int(freqs_khz.shape[0]), dtype=dtype, device=device)
+        coherence = torch.ones(p, n_bands, dtype=dtype, device=device)
 
     alpha = absorption(freqs_khz).view(1, -1)
     energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
@@ -440,21 +515,56 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     # gradient to the target's own pose with it.
     with torch.no_grad():
         alive = energy.detach().max(dim=1).values > 0.0
-    if not bool(alive.any()):
-        z = torch.zeros(0, dtype=dtype, device=device)
-        return ArrivalSet(z, torch.zeros(0, int(freqs_khz.shape[0]),
-                                         dtype=dtype, device=device),
-                          torch.zeros(0, 3, dtype=dtype, device=device),
-                          z, z, z, torch.zeros(0, 3, dtype=dtype, device=device))
-    keep = alive.nonzero().reshape(-1)
-    time, energy = time[keep], energy[keep]
-    direction, phase = direction[keep], phase[keep]
-    miss, path_length, launch = miss[keep], path_length[keep], launch[keep]
+    amplitude = energy.sqrt()
+    distance = miss.norm(dim=-1).detach()
 
-    order = time.detach().argsort()
-    return ArrivalSet(time=time[order],
-                      amplitude=energy.sqrt()[order],
-                      direction=direction[order], phase=phase[order],
-                      distance=miss.norm(dim=-1).detach()[order],
-                      path_length=path_length[order],
-                      launch_direction=launch[order])
+    out: list[ArrivalSet] = []
+    for n in range(n_pairs):
+        keep = ((pair == n) & alive).nonzero().reshape(-1)
+        if keep.numel() == 0:
+            out.append(_empty_arrivals(n_bands, dtype, device))
+            continue
+        keep = keep[time.detach()[keep].argsort()]
+        out.append(ArrivalSet(time=time[keep], amplitude=amplitude[keep],
+                              direction=direction[keep], phase=phase[keep],
+                              distance=distance[keep],
+                              path_length=path_length[keep],
+                              launch_direction=launch[keep]))
+    return out
+
+
+def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
+                      freqs_khz: Tensor, *, absorption=thorp_db_per_km,
+                      spread_min_range: float = 1.0,
+                      accept: float | None = None,
+                      coherent: bool = False,
+                      **kwargs) -> ArrivalSet:
+    """One arrival per path from ``source`` to ``receiver``, no splat.
+
+    The amplitude carries the ray tube's own divergence rather than an assumed
+    ``1/L^2``: the 2x2 Jacobian ``d(transverse miss)/d(launch angle)``, taken
+    in frames perpendicular to the path's own launch and arrival directions,
+    IS the tube's cross-section per unit solid angle, so its determinant is
+    the spreading.  For any ray in a homogeneous medium, bounces included, it
+    comes out as the unfolded ``L^2``, which is the check in the tests.
+
+    Args:
+        coherent: multiply each bounce path by its Eckart coherence factor, for
+            a receiver that needs the coherent field at a point.  Off by
+            default: an imaging sonar collects the bounce's energy across
+            elevation whatever the surface did to its phase, and the ghost
+            returns a shallow-water operator expects come from exactly these
+            paths.  See the note at the calculation.
+        accept: discard paths that still miss by more than this (m).  Defaults
+            to a hundredth of the source-receiver separation; a path that will
+            not converge is one the bracket found and the refinement could not
+            close, and reporting it as an arrival would be inventing one.
+
+    Returns an :class:`~hydropt.beamform.ArrivalSet` shaped exactly like
+    :func:`hydropt.beamform.extract_arrivals`, so it drops in wherever that
+    does.  Several pairs at once: :func:`eigenray_arrivals_batched`.
+    """
+    return eigenray_arrivals_batched(
+        scene, source.reshape(1, 3), receiver.reshape(1, 3), freqs_khz,
+        absorption=absorption, spread_min_range=spread_min_range,
+        accept=accept, coherent=coherent, **kwargs)[0]

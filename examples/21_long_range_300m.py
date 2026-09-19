@@ -683,7 +683,7 @@ def main() -> int:
             # see the note on return_leg in an earlier revision.  The transmit
             # pattern is evaluated at each solved inbound launch direction and
             # the receive stave at each solved outbound arrival direction.
-            with timed("    target (eigenray solves on both legs)"):
+            with timed("    target (eigenray solves, one per highlight)"):
               echo = target_arrivals(
                 scene, boat, dirs, return_leg="eigenray",
                 n_rx_rays=2000, rx_half_angle_deg=45.0, tx_weights=w_tx,
@@ -725,9 +725,30 @@ def main() -> int:
         # one beam and cell.  The mean, not the median: reverberation is a
         # speckle field and its median sits far below the level a detector
         # competes with.
-        with timed("  beamform (reverberation alone, for the profile)"):
-            rev_only = calibrate(render(rev), SOURCE_LEVEL_DB, beam_scale=scale)
-        profile = rev_only[:, 0, :].mean(dim=0)
+        # Not a second beamform of every patch.  The image IS the reverberation
+        # image wherever the target's arrivals wrote nothing, and the pulse
+        # gate says exactly where they wrote: within the synthesis window of
+        # their earliest and latest times, widened by the largest steering
+        # delay the aperture can apply.  Only that window is re-formed with
+        # the patches alone, on the same bins, and spliced in; the rest is
+        # read off the image.  Measured identical to the full re-render, at a
+        # quarter of its cost.
+        with timed("  beamform (reverberation alone, over the target's bins)"):
+            dt_grid = float(grid[1] - grid[0])
+            half_w = math.ceil(5.0 * PULSE_S / dt_grid)          # beamform's gate
+            reach = (2.0 * float((rx - rx.mean(0)).norm(dim=-1).max()) / C
+                     + (half_w + 2) * dt_grid)
+            t_lo = float(echo.time.min()) - reach
+            t_hi = float(echo.time.max()) + reach
+            lo = int(max(0, int(((t_lo - float(grid[0])) / dt_grid))))
+            hi = int(min(int(grid.shape[0]), int(((t_hi - float(grid[0])) / dt_grid)) + 2))
+            profile = signal.detach()[:, 0, :].mean(dim=0).clone()
+            if hi - lo >= 2:
+                window = beamform(rev, rx, scene.freqs_khz, grid[lo:hi], steer,
+                                  sigma_t=PULSE_S, shading=shading,
+                                  steer_chunk=int(os.environ.get("HYDROPT_STEER_CHUNK", 8)))
+                window = calibrate(window, SOURCE_LEVEL_DB, beam_scale=scale)
+                profile[lo:hi] = window[:, 0, :].mean(dim=0)
         prof_db = 10 * torch.log10(profile.clamp_min(1e-30))
         noise_db = 10 * math.log10(noise)
         lit = profile > 0
@@ -1064,6 +1085,20 @@ def main() -> int:
         print(f"  d(image)/d({name:<18s}): {'OK' if ok_g else 'ZERO'}")
     print(f"\n  forward {forward:.1f} s + backward {backward:.1f} s over "
           f"{both.n_arrivals} arrivals")
+    # HYDROPT_DUMP=<file> saves the image, the target channel, the profile
+    # and every gradient, so a change meant to leave the picture alone can be
+    # diffed against a run from before it rather than eyeballed.
+    if os.environ.get("HYDROPT_DUMP"):
+        torch.save({"image": image.detach().cpu(),
+                    "echo": echo_img.detach().cpu(),
+                    "profile": profile.detach().cpu(),
+                    "grads": {k: p.grad.detach().cpu() for k, p in live.items()
+                              if p.grad is not None},
+                    "forward_s": forward, "backward_s": backward,
+                    "n_patch": n_patch, "n_echo": n_echo},
+                   os.environ["HYDROPT_DUMP"])
+        print(f"  dumped image, target channel, profile and gradients to "
+              f"{os.environ['HYDROPT_DUMP']}")
 
     # The same ping under the three conventions a multi-beam head might use
     # to put its elevation beams on one screen.  Which one a given display
