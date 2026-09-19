@@ -55,7 +55,7 @@ def test_the_arrival_is_the_closed_form_one():
     scene = _scene()
     src = torch.tensor([0.0, 0.0, 50.0])
     rcv = torch.tensor([300.0, 40.0, 70.0])
-    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]),
+    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="trace",
                           bracket_rays=600, bracket_half_angle_deg=30.0)
     assert a.n_arrivals == 1
     length = float((rcv - src).norm())
@@ -104,7 +104,7 @@ def test_multipath_comes_back_as_separate_paths_not_one_smeared_one():
     scene = _scene(depth=60.0, surface=0.0, bounces=2)
     src = torch.tensor([200.0, 0.0, 4.0])
     rcv = torch.tensor([0.0, 0.0, 20.0])
-    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]),
+    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="trace",
                           bracket_rays=4000, bracket_half_angle_deg=45.0,
                           max_paths=4)
     assert a.n_arrivals >= 2
@@ -124,7 +124,7 @@ def test_it_stays_differentiable_through_the_refinement():
     scene = _scene()
     src = torch.tensor([0.0, 0.0, 50.0], requires_grad=True)
     rcv = torch.tensor([300.0, 40.0, 70.0])
-    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]),
+    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="trace",
                           bracket_rays=600, bracket_half_angle_deg=30.0)
     a.time.sum().backward()
     assert src.grad is not None and bool(torch.isfinite(src.grad).all())
@@ -144,7 +144,7 @@ def test_the_travel_time_gradient_is_the_one_fermat_predicts():
     rcv = torch.tensor([300.0, 40.0, 70.0])
     base = torch.tensor([0.0, 0.0, 50.0])
     src = base.clone().requires_grad_(True)
-    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]),
+    a = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="trace",
                           bracket_rays=600, bracket_half_angle_deg=30.0)
     a.time.sum().backward()
     unit = (rcv - base) / (rcv - base).norm()
@@ -258,7 +258,7 @@ def test_a_direct_path_is_not_charged_for_what_the_ray_hits_afterwards():
                   step_size=2.0, n_steps=200, max_bounces=6)
     src = torch.tensor([61.6, -31.4, 1.9])       # a hull patch near the surface
     rcv = torch.tensor([0.0, 0.0, 12.0])         # the array, 70 m away
-    arrivals = eigenray_arrivals(scene, src, rcv, scene.freqs_khz,
+    arrivals = eigenray_arrivals(scene, src, rcv, scene.freqs_khz, method="trace",
                                  bracket_rays=2000,
                                  bracket_half_angle_deg=45.0)
     # 70 m of the 400 m the trace covers, so the direct ray overshoots by 330 m
@@ -293,9 +293,10 @@ def test_batched_solve_matches_one_pair_at_a_time():
                          [500.0, 25.0, 80.0]])
     kw = dict(bracket_rays=800, bracket_half_angle_deg=40.0)
     together = eigenray_arrivals_batched(
-        scene, src.reshape(1, 3).expand(3, 3), rcvs, torch.tensor([10.0]), **kw)
+        scene, src.reshape(1, 3).expand(3, 3), rcvs, torch.tensor([10.0]),
+        method="trace", **kw)
     for n in range(3):
-        alone = eigenray_arrivals(scene, src, rcvs[n], torch.tensor([10.0]), **kw)
+        alone = eigenray_arrivals(scene, src, rcvs[n], torch.tensor([10.0]), method="trace", **kw)
         got = together[n]
         assert got.n_arrivals == alone.n_arrivals >= 2
         assert torch.allclose(got.time, alone.time, rtol=0, atol=1e-7)
@@ -319,7 +320,7 @@ def test_a_bounce_path_spreads_as_its_unfolded_length_both_ways():
     a = torch.tensor([0.0, 0.0, 50.0])
     b = torch.tensor([200.0, 3.0, 61.0])
     for src, rcv in ((a, b), (b, a)):
-        arr = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]),
+        arr = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="trace",
                                 bracket_rays=1500, bracket_half_angle_deg=40.0)
         assert arr.n_arrivals == 2                      # direct and one bounce
         for k in range(2):
@@ -350,3 +351,102 @@ def test_the_bracket_keeps_the_direct_path_in_a_busy_channel():
         sig = set(int(v) for v in signature[residual < 2.5])
         assert {0, 1, 1000} <= sig, sig
         assert len(sig) > 8
+
+
+def _channel(bounces: int = 2):
+    """A 120 m channel with a pressure-release surface and a lossy seabed."""
+    return Scene(field=IsoProfile(C, learnable=False),
+                 bottom=FlatHeight(120.0), surface=FlatHeight(0.0),
+                 source=(0.0, 0.0, 50.0), receivers=torch.zeros(1, 3),
+                 bottom_loss=ConstantLoss(3.0, learnable=False),
+                 surface_loss=ConstantLoss(0.0, learnable=False,
+                                           pressure_release=True),
+                 freqs_khz=torch.tensor([10.0]),
+                 step_size=2.0, n_steps=400, max_bounces=bounces)
+
+
+def test_the_images_are_the_traced_paths():
+    """Method of images against the traced solve, path by path.
+
+    Same channel, both solvers: every path the trace finds, the images find
+    at the same time (to the tracer's own step error), the same energy, the
+    same reflection phase and the same launch and arrival directions.  The
+    images may find more, never fewer: the bracket's fan can miss a path,
+    the enumeration cannot.
+    """
+    scene = _channel(2)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcv = torch.tensor([200.0, 3.0, 61.0])
+    traced = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="trace",
+                               bracket_rays=3000, bracket_half_angle_deg=80.0)
+    images = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="images")
+    assert images.n_arrivals >= traced.n_arrivals >= 4
+    for k in range(traced.n_arrivals):
+        j = int((images.time - traced.time[k]).abs().argmin())
+        assert abs(float(images.time[j] - traced.time[k])) < 2e-6
+        e_db = 10 * math.log10(float(images.amplitude[j, 0] ** 2 / traced.amplitude[k, 0] ** 2))
+        assert abs(e_db) < 0.05
+        assert float((images.phase[j] - traced.phase[k]).abs()) < 1e-6
+        assert torch.allclose(images.direction[j], traced.direction[k], atol=2e-3)
+        assert torch.allclose(images.launch_direction[j], traced.launch_direction[k], atol=2e-3)
+    # the bounce paths carry the seabed's 3 dB per bounce and the surface's pi
+    assert float(images.phase.abs().max()) > 3.0
+
+
+def test_the_images_are_exact_and_differentiable():
+    """Closed form: every path is a straight line to an image of the receiver.
+
+    The direct path and the single surface and seabed bounces have lengths
+    you can write down; the arrival time's gradient in the receiver position
+    is the arrival direction over the sound speed, by Fermat; and the
+    seabed loss parameter gets a gradient through the bounce.
+    """
+    scene = _channel(1)
+    scene.bottom_loss.loss_db.requires_grad_(True)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcv = torch.tensor([200.0, 3.0, 61.0], requires_grad=True)
+    arr = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="images")
+    assert arr.n_arrivals == 3
+    direct = math.sqrt(200.0 ** 2 + 3.0 ** 2 + 11.0 ** 2)
+    via_surface = math.sqrt(200.0 ** 2 + 3.0 ** 2 + (50.0 + 61.0) ** 2)
+    via_bottom = math.sqrt(200.0 ** 2 + 3.0 ** 2 + (70.0 + 59.0) ** 2)
+    assert arr.path_length.detach().tolist() == pytest.approx(
+        [direct, via_surface, via_bottom], abs=1e-6)
+    for k in range(3):
+        rcv.grad = None
+        arr.time[k].backward(retain_graph=True)
+        want = arr.direction[k].detach() / C
+        assert torch.allclose(rcv.grad, want, atol=1e-9)
+    (arr.amplitude ** 2).sum().backward()
+    assert scene.bottom_loss.loss_db.grad is not None
+    assert float(scene.bottom_loss.loss_db.grad) < 0      # more loss, less energy
+
+
+def test_a_receiver_outside_the_channel_gets_no_images():
+    scene = _channel(2)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    above = torch.tensor([200.0, 0.0, -2.0])
+    arr = eigenray_arrivals(scene, src, above, torch.tensor([10.0]), method="images")
+    assert arr.n_arrivals == 0
+
+
+def test_auto_takes_the_images_for_a_constant_profile_only():
+    from hydropt import LinearGradientProfile
+    scene = _channel(1)
+    src = torch.tensor([0.0, 0.0, 50.0])
+    rcv = torch.tensor([200.0, 3.0, 61.0])
+    auto = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]))
+    images = eigenray_arrivals(scene, src, rcv, torch.tensor([10.0]), method="images")
+    assert torch.equal(auto.time, images.time)
+    refracting = Scene(field=LinearGradientProfile(C, 0.016, learnable=False),
+                       bottom=FlatHeight(120.0), surface=FlatHeight(0.0),
+                       source=(0.0, 0.0, 50.0), receivers=torch.zeros(1, 3),
+                       bottom_loss=ConstantLoss(0.0, learnable=False),
+                       surface_loss=ConstantLoss(0.0, learnable=False),
+                       freqs_khz=torch.tensor([10.0]),
+                       step_size=2.0, n_steps=400, max_bounces=0)
+    with pytest.raises(ValueError):
+        eigenray_arrivals(refracting, src, rcv, torch.tensor([10.0]), method="images")
+    bent = eigenray_arrivals(refracting, src, rcv, torch.tensor([10.0]),
+                             bracket_rays=600, bracket_half_angle_deg=30.0)
+    assert bent.n_arrivals == 1                        # auto fell back to the trace

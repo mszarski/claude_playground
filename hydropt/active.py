@@ -392,6 +392,7 @@ def target_arrivals(
     max_arrivals_per_leg: int | None = 24,
     max_arrivals: int | None = None,
     reciprocal: bool | None = None,
+    eigenray_method: str = "auto",
     trace_kwargs: dict | None = None,
     generator: torch.Generator | None = None,
     **extract_kwargs,
@@ -508,6 +509,10 @@ def target_arrivals(
             tolerance.  ``None`` (the default) does this exactly when the two
             points coincide; ``True`` insists and raises if they do not;
             ``False`` solves both legs.
+        eigenray_method: how the legs are solved: ``"images"`` (closed
+            form, constant sound speed), ``"trace"`` (bracket and refine on
+            traced rays, any profile) or ``"auto"``, the images whenever the
+            profile allows.  See :func:`hydropt.eigenray.eigenray_arrivals`.
         trace_kwargs: forwarded to the tracer.
         generator: RNG for the return fans.  Only has an effect when
             ``rx_jitter`` is non-zero -- see above.
@@ -560,6 +565,7 @@ def target_arrivals(
         n_hl = target.n_highlights
         inbounds = eigenray_arrivals_batched(
             scene, source.reshape(1, 3).expand(n_hl, 3), world, freqs,
+            method=eigenray_method,
             bracket_rays=n_rx_rays, bracket_half_angle_deg=rx_half_angle_deg,
             trace_kwargs=tkw)
         for i, inbound in enumerate(inbounds):
@@ -618,7 +624,7 @@ def target_arrivals(
         else:
             outbounds = dict(zip(lit, eigenray_arrivals_batched(
                 scene, world[lit], phase_centre.reshape(1, 3).expand(len(lit), 3),
-                freqs, bracket_rays=n_rx_rays,
+                freqs, method=eigenray_method, bracket_rays=n_rx_rays,
                 bracket_half_angle_deg=rx_half_angle_deg, trace_kwargs=tkw)))
         for i in lit:
             outbound = outbounds.get(i)

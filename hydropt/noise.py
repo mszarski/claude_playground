@@ -183,4 +183,12 @@ def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,
                     generator=generator) * sigma
     y = torch.randn(shape, dtype=power.dtype, device=power.device,
                     generator=generator) * sigma
-    return (power.clamp_min(0.0).sqrt() + x) ** 2 + y ** 2
+    # Floored at the smallest normal number, not at zero.  The derivative of
+    # sqrt at exactly zero is infinite, and a cell the beamformer left at
+    # exactly zero (an empty bin, or a value that underflowed) then turns the
+    # gradient of EVERY parameter into NaN, because 0 * inf is NaN and the
+    # image's sum sees every cell.  It happened on a 90 m image with two such
+    # cells.  At the floor the slope is large but finite, and it multiplies a
+    # zero, so the cell contributes exactly nothing, as it should.
+    tiny = torch.finfo(power.dtype).tiny
+    return (power.clamp_min(tiny).sqrt() + x) ** 2 + y ** 2

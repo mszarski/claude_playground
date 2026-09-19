@@ -58,13 +58,14 @@ from torch import Tensor
 from .absorption import thorp_db_per_km
 from .beamform import ArrivalSet
 from .boundaries import FlatHeight, HeightField
+from .fields import IsoProfile
 from .launch import fibonacci_cone
 from .receiver import _LEN_EPS
-from .rough import roughness_weights
+from .rough import coherent_reflection_loss_db, roughness_weights
 from .tracer import trace
 
 __all__ = ["eigenray_arrivals", "eigenray_arrivals_batched", "find_eigenrays",
-           "find_eigenrays_batched", "mean_boundary"]
+           "find_eigenrays_batched", "image_arrivals_batched", "mean_boundary"]
 
 
 def mean_boundary(boundary: HeightField) -> tuple[HeightField, float]:
@@ -376,11 +377,150 @@ def find_eigenrays(scene, source: Tensor, receiver: Tensor, *,
     return directions, residual, signature
 
 
+def image_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
+                           freqs_khz: Tensor, *, absorption=thorp_db_per_km,
+                           spread_min_range: float = 1.0,
+                           coherent: bool = False,
+                           max_bounces: int | None = None) -> list[ArrivalSet]:
+    """Every path between ``N`` pairs by the method of images, no tracing.
+
+    The eigenray solve already runs on the boundaries' mean planes.  When the
+    sound speed is constant as well, rays are straight lines between two
+    parallel mirrors, and every path is a straight line to an image of the
+    receiver: unfold the channel about its planes and the receiver appears
+    at depths ``2 m H +/- r`` for every integer ``m``.  The planes the straight
+    line crosses on its way to that image are the bounces, in order, at one
+    grazing angle for all of them.  Launch direction, length, arrival
+    direction, bounce count and grazing angle are all closed-form, and the
+    spreading is exactly ``1/L^2``.
+
+    So there is no fan, no Newton refinement and no ray-tube Jacobian: the
+    whole solve is a few tensor expressions over ``N x (2 max_bounces + 1)``
+    candidates, and it is differentiable in the endpoints, the sound speed
+    and every boundary-loss parameter through the same loss modules the
+    tracer calls at a bounce.  :func:`eigenray_arrivals_batched` picks this
+    route by default whenever the profile is an :class:`IsoProfile`; a
+    refracting profile needs the traced solve, which stays what it was.
+
+    Two things differ from the traced solve, both deliberate.  Every path up
+    to ``max_bounces`` (the scene's, unless given) is returned, not only
+    those inside a bracket cone and a step budget; and a pair whose source
+    or receiver lies outside the channel gets no paths at all.
+
+    Returns a list of ``N`` :class:`~hydropt.beamform.ArrivalSet`, sorted by
+    time, in the same shape :func:`eigenray_arrivals_batched` returns.
+    """
+    sources = sources.reshape(-1, 3)
+    receivers = receivers.reshape(-1, 3)
+    n_pairs = int(sources.shape[0])
+    dtype, device = sources.dtype, sources.device
+    freqs_khz = freqs_khz.to(dtype=dtype, device=device).reshape(-1)
+    n_bands = int(freqs_khz.shape[0])
+    if not isinstance(scene.field, IsoProfile):
+        raise ValueError("the method of images needs a constant sound speed "
+                         f"(IsoProfile); this scene's profile is "
+                         f"{type(scene.field).__name__}.  Use method='trace'.")
+    n_max = int(scene.max_bounces if max_bounces is None else max_bounces)
+
+    surface, surface_rms = mean_boundary(scene.surface)
+    bottom, bottom_rms = mean_boundary(scene.bottom)
+    probe = torch.zeros(1, 2, dtype=dtype, device=device)
+    z_s = surface.height(probe).reshape(()).detach()
+    z_b = bottom.height(probe).reshape(()).detach()
+    depth = z_b - z_s
+    if float(depth) <= 0.0:
+        raise ValueError("the seabed must lie below the sea surface")
+    c = scene.field(sources[:1].detach()).reshape(-1)[0].to(dtype)
+
+    # Depths below the mean surface, and the receiver's images.
+    s = sources[:, 2] - z_s                                              # [N]
+    r = receivers[:, 2] - z_s
+    m = torch.arange(-(n_max // 2 + 2), n_max // 2 + 3, device=device)  # [M]
+    z_img = torch.stack([2.0 * m.to(dtype) * depth + r.view(-1, 1),
+                         2.0 * m.to(dtype) * depth - r.view(-1, 1)],
+                        dim=-1).reshape(n_pairs, -1)                     # [N, K]
+    s_k = s.view(-1, 1).expand_as(z_img)
+
+    # The planes crossed between the source depth and the image depth are the
+    # bounces: plane j sits at depth j H, even j is the surface and its
+    # images, odd j the seabed and its.
+    with torch.no_grad():
+        eps = 1e-9 * float(depth)
+        lo = torch.minimum(s_k, z_img.detach()) / depth
+        hi = torch.maximum(s_k, z_img.detach()) / depth
+        j_lo = torch.ceil(lo + eps).long()
+        j_hi = torch.floor(hi - eps).long()
+        n_bounce = (j_hi - j_lo + 1).clamp_min(0)
+        evens = (torch.div(j_hi, 2, rounding_mode="floor")
+                 - torch.div(j_lo - 1, 2, rounding_mode="floor"))
+        n_surf = torch.where(n_bounce > 0, evens, torch.zeros_like(evens))
+        n_bot = n_bounce - n_surf
+        inside = ((s > 0) & (s < depth) & (r > 0) & (r < depth)).view(-1, 1)
+        keep = (n_bounce <= n_max) & inside.expand_as(n_bounce)
+        pair_k = torch.arange(n_pairs, device=device).view(-1, 1).expand_as(n_bounce)
+        sel = keep.reshape(-1).nonzero().reshape(-1)
+    if sel.numel() == 0:
+        return [_empty_arrivals(n_bands, dtype, device) for _ in range(n_pairs)]
+
+    pair = pair_k.reshape(-1)[sel]
+    n_surf = n_surf.reshape(-1)[sel].to(dtype)
+    n_bot = n_bot.reshape(-1)[sel].to(dtype)
+    n_bounce = n_bounce.reshape(-1)[sel]
+    dz = (z_img - s_k).reshape(-1)[sel]                                  # [P]
+    dxy = (receivers[:, :2] - sources[:, :2])[pair]                      # [P, 2]
+    rho = dxy.norm(dim=-1)
+    length = torch.sqrt(rho * rho + dz * dz)
+    length_safe = length.clamp_min(1e-30)
+
+    launch = torch.cat([dxy, dz.view(-1, 1)], dim=-1) / length_safe.view(-1, 1)
+    flip = torch.where(n_bounce % 2 == 1, -torch.ones_like(dz), torch.ones_like(dz))
+    direction = torch.cat([dxy, (flip * dz).view(-1, 1)], dim=-1) / length_safe.view(-1, 1)
+    graze = torch.asin((dz.abs() / length_safe).clamp(0.0, 1.0))         # [P]
+
+    db = n_surf * scene.surface_loss(graze) + n_bot * scene.bottom_loss(graze)
+    phase = (n_surf * scene.surface_loss.reflection_phase(graze)
+             + n_bot * scene.bottom_loss.reflection_phase(graze))
+    time = length / c
+    spread = 1.0 / length.clamp_min(spread_min_range) ** 2
+
+    if coherent and (surface_rms > 0.0 or bottom_rms > 0.0):
+        cs = coherent_reflection_loss_db(graze.view(-1, 1), surface_rms,
+                                         freqs_khz.view(1, -1), float(c))
+        cb = coherent_reflection_loss_db(graze.view(-1, 1), bottom_rms,
+                                         freqs_khz.view(1, -1), float(c))
+        coherence = 10.0 ** (-(n_surf.view(-1, 1) * cs + n_bot.view(-1, 1) * cb) / 10.0)
+    else:
+        coherence = torch.ones(int(sel.numel()), n_bands, dtype=dtype, device=device)
+
+    alpha = absorption(freqs_khz).view(1, -1)
+    energy = ((spread * 10.0 ** (-db / 10.0)).unsqueeze(1)
+              * 10.0 ** (-(alpha * length.unsqueeze(1)) / 1.0e4)
+              * coherence)
+    with torch.no_grad():
+        alive = energy.detach().max(dim=1).values > 0.0
+    amplitude = energy.sqrt()
+    distance = torch.zeros_like(length)
+
+    out: list[ArrivalSet] = []
+    for n in range(n_pairs):
+        rows = ((pair == n) & alive).nonzero().reshape(-1)
+        if rows.numel() == 0:
+            out.append(_empty_arrivals(n_bands, dtype, device))
+            continue
+        rows = rows[time.detach()[rows].argsort()]
+        out.append(ArrivalSet(time=time[rows], amplitude=amplitude[rows],
+                              direction=direction[rows], phase=phase[rows],
+                              distance=distance[rows], path_length=length[rows],
+                              launch_direction=launch[rows]))
+    return out
+
+
 def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
                               freqs_khz: Tensor, *, absorption=thorp_db_per_km,
                               spread_min_range: float = 1.0,
                               accept: float | None = None,
                               coherent: bool = False,
+                              method: str = "auto",
                               **kwargs) -> list[ArrivalSet]:
     """:func:`eigenray_arrivals` for ``N`` pairs: one solve, ``N`` arrival sets.
 
@@ -388,7 +528,21 @@ def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
     list of ``N`` :class:`~hydropt.beamform.ArrivalSet`, each sorted by time
     and possibly empty, differentiable in its own pair's endpoints and in the
     scene.
+
+    ``method``: ``"images"`` is :func:`image_arrivals_batched`, closed-form
+    and exact for a constant sound speed; ``"trace"`` brackets with a fan and
+    refines with Newton on traced rays, and is what a refracting profile
+    needs; ``"auto"`` (the default) takes the images whenever the profile is
+    an :class:`IsoProfile`.  Only the traced solve reads the bracket
+    arguments in ``kwargs``.
     """
+    if method not in ("auto", "images", "trace"):
+        raise ValueError(f"method must be 'auto', 'images' or 'trace', got {method!r}")
+    if method == "images" or (method == "auto" and isinstance(scene.field, IsoProfile)):
+        return image_arrivals_batched(
+            scene, sources, receivers, freqs_khz, absorption=absorption,
+            spread_min_range=spread_min_range, coherent=coherent,
+            max_bounces=kwargs.get("max_bounces"))
     sources = sources.reshape(-1, 3)
     receivers = receivers.reshape(-1, 3)
     n_pairs = int(sources.shape[0])
@@ -400,7 +554,8 @@ def eigenray_arrivals_batched(scene, sources: Tensor, receivers: Tensor,
                    else torch.full_like(span, float(accept)))
 
     directions, residual, _, pair = find_eigenrays_batched(
-        scene, sources, receivers, **kwargs)
+        scene, sources, receivers,
+        **{k: v for k, v in kwargs.items() if k != "max_bounces"})
     good = residual <= keep_within[pair]
     if int(good.sum()) == 0:
         return [_empty_arrivals(n_bands, dtype, device) for _ in range(n_pairs)]
@@ -538,6 +693,7 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
                       spread_min_range: float = 1.0,
                       accept: float | None = None,
                       coherent: bool = False,
+                      method: str = "auto",
                       **kwargs) -> ArrivalSet:
     """One arrival per path from ``source`` to ``receiver``, no splat.
 
@@ -567,4 +723,4 @@ def eigenray_arrivals(scene, source: Tensor, receiver: Tensor,
     return eigenray_arrivals_batched(
         scene, source.reshape(1, 3), receiver.reshape(1, 3), freqs_khz,
         absorption=absorption, spread_min_range=spread_min_range,
-        accept=accept, coherent=coherent, **kwargs)[0]
+        accept=accept, coherent=coherent, method=method, **kwargs)[0]

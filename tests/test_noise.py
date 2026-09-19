@@ -186,3 +186,23 @@ def test_calibrate_undoes_the_beamformer_and_applies_the_source_level():
     assert float(10 * torch.log10(out[0])) == pytest.approx(210.0)
     with pytest.raises(ValueError, match="beam_scale"):
         calibrate(image, 210.0, beam_scale=0.0)
+
+
+def test_an_exactly_zero_cell_does_not_poison_the_gradient():
+    """sqrt'(0) is infinite; a zero cell must contribute nothing, not NaN.
+
+    A beamformed image can hold cells that are exactly zero -- bins no arrival
+    reached, or values that underflowed -- and the Rice noise model takes the
+    square root of every cell.  Its derivative at zero is infinite, and
+    ``0 * inf`` is NaN, which the image's sum spreads to every parameter's
+    gradient.  Seen on a 90 m image with two such cells.
+    """
+    import torch
+    from hydropt.noise import add_receiver_noise
+
+    scale = torch.tensor(1.0, requires_grad=True)
+    power = torch.tensor([0.0, 1e-30, 1.0, 4.0]) * scale
+    noisy = add_receiver_noise(power, 0.5, generator=torch.Generator().manual_seed(1))
+    noisy.sum().backward()
+    assert torch.isfinite(scale.grad).all()
+    assert float(scale.grad) > 0

@@ -202,8 +202,8 @@ TILT_DEG = float(os.environ.get("HYDROPT_TILT", -5.0))   # FOV centre; negative 
 #       Two arrivals in different beams add in power under the four-beam
 #       sum and interfere under the envelope (Cauchy-Schwarz: the envelope's
 #       cross weight is never smaller).  Measured against the four beams
-#       summed, at 300 m: contrast +41.2 against +41.0 dB, clutter 63.5
-#       against 63.6, the +1.0 m ghost -13.0 against -14.5 dB, and the
+#       summed, at 300 m: contrast +41.5 against +41.3 dB, clutter 63.5
+#       against 63.6, the +1.0 m ghost -8.8 against -10.2 dB, and the
 #       hull's width across bearing 22.5 m in both (28.7 predicted) -- a
 #       quarter of the arrivals, and no per-elevation attribution.
 #
@@ -687,12 +687,17 @@ def main() -> int:
             # see the note on return_leg in an earlier revision.  The transmit
             # pattern is evaluated at each solved inbound launch direction and
             # the receive stave at each solved outbound arrival direction.
-            with timed("    target (eigenray solves, one per highlight)"):
+            with timed("    target (eigenray paths, one solve per highlight)"):
               echo = target_arrivals(
                 scene, boat, dirs, return_leg="eigenray",
                 n_rx_rays=2000, rx_half_angle_deg=45.0, tx_weights=w_tx,
                 tx_pattern=transmit_pattern,
                 rx_pattern=rx_beam, max_arrivals_per_leg=24,
+                # HYDROPT_EIGENRAY=trace brackets and refines the paths on
+                # traced rays, as a refracting profile would need; the
+                # default takes them in closed form by the method of images,
+                # which this constant-sound-speed scene allows.
+                eigenray_method=os.environ.get("HYDROPT_EIGENRAY", "auto"),
                 generator=torch.Generator().manual_seed(SEED))
             both = ArrivalSet(*(None if rev[i] is None or echo[i] is None
                                 else torch.cat([rev[i], echo[i]], dim=0)

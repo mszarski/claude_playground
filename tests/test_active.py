@@ -400,7 +400,8 @@ def test_a_receive_pattern_weights_each_solved_return_path_by_its_arrival():
     assert got["quarter"] == pytest.approx(0.25 * got["none"], rel=1e-9)
 
 
-def test_reciprocal_return_leg_is_the_solved_one():
+@pytest.mark.parametrize("solver", ["trace", "images"])
+def test_reciprocal_return_leg_is_the_solved_one(solver):
     """A monostatic sonar's return paths are its outbound paths reversed.
 
     Solving the return leg separately can only reproduce the inbound solve
@@ -433,7 +434,8 @@ def test_reciprocal_return_leg_is_the_solved_one():
         for name, flag in (("reciprocal", None), ("two solves", False)):
             got[name] = target_arrivals(scene, target, tx, return_leg="eigenray",
                                         n_rx_rays=1500, rx_half_angle_deg=40.0,
-                                        max_arrivals_per_leg=400, reciprocal=flag)
+                                        max_arrivals_per_leg=400, reciprocal=flag,
+                                        eigenray_method=solver)
     a, b = got["reciprocal"], got["two solves"]
     assert a.n_arrivals == b.n_arrivals >= 4      # direct+bounce, squared, per highlight
 
@@ -460,4 +462,5 @@ def test_reciprocal_return_leg_is_the_solved_one():
                      step_size=2.0, n_steps=400, max_bounces=2)
     with pytest.raises(ValueError), torch.no_grad():
         target_arrivals(bistatic, target, tx, return_leg="eigenray",
-                        n_rx_rays=1500, rx_half_angle_deg=40.0, reciprocal=True)
+                        n_rx_rays=1500, rx_half_angle_deg=40.0, reciprocal=True,
+                        eigenray_method=solver)
