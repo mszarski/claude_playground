@@ -39,12 +39,12 @@ cd examples && HYDROPT_EXAMPLE_DTYPE=float64 python 22_inverse_fit_animation.py
 cd examples && python ../scripts/timing_picture.py # stage timings of 21's picture
 ```
 
-Switches every 21-derived example honours (21-26): `HYDROPT_SONAR` (`120`,
+Switches every 21-derived example honours (21-27): `HYDROPT_SONAR` (`120`,
 the default: 120 kHz, 3.0 x 4.8 deg beams, 300 m; or `330`: 330 kHz, 1.4 x
 2.8 deg beams, 150 m, figures tagged `_330k`), `HYDROPT_FAR` (m),
 `HYDROPT_NEAR`, `HYDROPT_BOAT` (range), `HYDROPT_HEADING` (deg, 40),
 `HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO` (one
-scenario of 23-26).  22-26 lay their scenes out for the 120 kHz head's 300 m
+scenario of 23-27).  22-27 lay their scenes out for the 120 kHz head's 300 m
 and scale every absolute position by `FAR / 300` (`S` in each), so a new
 scenario's positions go in as 300 m values times `S`.  Each example prints
 `[PASS]`/`[FAIL]` lines for its acceptance criteria and exits non-zero on a
@@ -71,8 +71,8 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
   criteria are checked with `_common.check` and reported, and the figures
   are saved with `_common.save`.  Numbers quoted in a docstring or in the
   README come from a run and say so.
-* **21-26 share one scene.**  22-26 import `21_long_range_300m.py` for the
-  sonar, environment, boat and display (`_ex21()`), and 23-26 follow one
+* **21-27 share one scene.**  22-27 import `21_long_range_300m.py` for the
+  sonar, environment, boat and display (`_ex21()`), and 23-27 follow one
   pattern: the bare picture once, then each scenario as its own ping,
   measured against the bare picture, with a `bare | scenario | difference`
   figure under 21's own window (`vmin=THRESHOLD_DB`, `vmax` the bare

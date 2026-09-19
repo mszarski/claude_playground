@@ -24,15 +24,19 @@ difference between them.
 * **a buoy moored with a chain.**  A steel buoy of 0.75 m radius at the
   surface (a rigid sphere, ``sigma = a^2/4``, -8.5 dB at every aspect), its
   chain a catenary 45 m long from the buoy to a concrete sinker 30 m along
-  the bottom -- 32 mm stud link, five 20 cm links a metre of -20 dB each,
-  sampled as 200 point scatterers along the curve -- and the sinker itself,
+  the bottom -- 32 mm stud link, five 20 cm links a metre of -26 dB each
+  (the specular off the bar's bend, ``pi R1 R2``, at any aspect), sampled
+  as 200 point scatterers along the curve -- and the sinker itself,
   a 0.8 m concrete block on the seabed off the mesh.  The buoy is a point;
   the chain is the line under it that gives a moored buoy away, and whether
   it shows depends on how it lies.  A range cell is 0.22 m deep and a beam
   wide: a chain running along the line of sight puts one link in a cell, a
   chain lying across it puts a beam's width of links in one, 8 m of chain
   at this range, 25 dB more.  This one lies across, as a chain in a
-  cross-current does.
+  cross-current does.  ``examples/27`` takes the chain's lie further -- and
+  finds that in this quiet, up-tilted geometry a chain shows however it
+  lies, and that what a harbour mooring actually looks like is set by its
+  slack, not its direction.
 * **a shoal**: a second school of fish, unlike 23's.  Small pelagic fish,
   800 of them at -43 dB (12 cm), packed in a 12 x 10 x 4 m ball at 8 m
   depth, 100 m away on the port bow: -14 dB incoherently in a body a
@@ -94,7 +98,10 @@ KELP_EXTINCTION_DB_PER_M = 0.4    # each way, through the stand
 BUOY_RANGE, BUOY_BEARING_DEG = 120.0, 8.0
 BUOY_RADIUS = 0.75
 CHAIN_LENGTH, CHAIN_SCOPE = 45.0, 30.0    # metres of chain, horizontal span to the sinker
-CHAIN_LINK_DB, LINKS_PER_M, CHAIN_POINTS = -20.0, 5.0, 200    # 32 mm stud link
+# a 32 mm stud link: its bar is a bent cylinder, and the specular point on a
+# doubly curved surface returns sigma = pi R1 R2 whatever the aspect --
+# 16 mm of bar radius by about 50 mm of bend, 2.5e-3 m^2, -26 dB
+CHAIN_LINK_DB, LINKS_PER_M, CHAIN_POINTS = -26.0, 5.0, 200
 CHAIN_DIRECTION_DEG = BUOY_BEARING_DEG + 90.0   # across the line of sight: a cross-current
 SINKER = 0.8                      # a concrete block, metres
 # the shoal
