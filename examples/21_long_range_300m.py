@@ -175,9 +175,18 @@ SECTOR_DEG = 60.0
 # seabed-image paths to a surface target arrive 8 to 10 degrees below the
 # direct one, inside a 20 degree lobe and 20 dB down in a 4.84 degree beam,
 # and the reverberation in a beam is only what lies within 2.4 degrees of it.
-# HYDROPT_N_TX=5 restores the single wide lobe for comparison.
-N_RX = 50                                       # 3.03 deg azimuth
-N_TX = int(os.environ.get("HYDROPT_N_TX", 21))  # 4.84 deg elevation
+# Which leg carries them is the design question, and the answer for a head
+# that classifies seafloor, water column and surface is RECEIVE: receive
+# beams sort each return by the elevation it ARRIVES from, which is what
+# attribution needs -- the seabed's return from below, the surface's from
+# above, a hull's seabed-image ghost in the lower beam where it belongs.
+# Transmit-steered beams sort by where the sound went and tag that ghost as
+# surface.  And receive-formed beams come from one flooded ping, where
+# transmit-steered ones cost four.  The SUMMED picture is the same either way,
+# to first order: it depends only on the two-way pattern.
+N_RX = 50                                          # 3.03 deg azimuth
+N_TX = int(os.environ.get("HYDROPT_N_TX", 5))      # floods the 20.8 deg FOV
+N_RX_ELEV = int(os.environ.get("HYDROPT_N_RX_ELEV", 21))  # vertical receive: 4.84 deg beams
 VERTICAL_BEAM_DEG = 4.84    # beams within that FOV -- about four of them
 ELEV_DEG = (-27.0, 17.0)    # the fan, wide enough to sample the FOV's skirts
 # Tilted UP, the way the head is actually flown.  It is not a small detail: it
@@ -190,12 +199,10 @@ ELEV_DEG = (-27.0, 17.0)    # the fan, wide enough to sample the FOV's skirts
 # another; -5 with HYDROPT_N_TX=5 is the old single lobe.
 TILT_DEG = float(os.environ.get("HYDROPT_TILT", -5.0))   # FOV centre; negative is up
 N_ELEV_BEAMS = 4
-# The receive staves.  A horizontal line of POINT elements accepts every
-# elevation equally, so a seabed image arriving ten degrees below boresight
-# counts at full strength on the return leg.  A real stave is a few
-# wavelengths tall; sized to the FOV, its elevation response is about 20
-# degrees, boresight on the up-tilt.  HYDROPT_RX_STAVE=point removes it.
-RX_STAVE_N = None if os.environ.get("HYDROPT_RX_STAVE", "20") == "point" else 5
+# HYDROPT_RX_ELEV=point makes the receive side accept every elevation
+# equally, which is what a horizontal line of point elements does and what
+# made a seabed image ten degrees below boresight count at full strength.
+RX_ELEV_BEAMS = os.environ.get("HYDROPT_RX_ELEV", "beams") != "point"
 # How the four elevation beams reach the screen: "sum" (added in power),
 # "max" (the brightest beam per cell), or "beam:K" for one of them alone.
 # Which one a given head does is not always documented, so the example draws
@@ -205,7 +212,7 @@ DISPLAY = os.environ.get("HYDROPT_DISPLAY", "sum")
 
 def beam_tilts_deg() -> list[float]:
     """Centres of the elevation beams, spaced one beamwidth about the tilt."""
-    bw = beam_3db_deg(N_TX)
+    bw = beam_3db_deg(N_RX_ELEV)
     return [TILT_DEG + (k - (N_ELEV_BEAMS - 1) / 2.0) * bw for k in range(N_ELEV_BEAMS)]
 
 # A LONG pulse, not the 0.12 ms of the 90 m examples.  Range resolution is
@@ -374,24 +381,24 @@ def transmit_fan(n_elev: int = N_ELEV, n_azim: int = N_AZIM, *, seed: int = 0,
     E = E + (torch.rand(E.shape, generator=g, dtype=E.dtype) - 0.5) * de
     A = A + (torch.rand(A.shape, generator=g, dtype=A.dtype) - 0.5) * da
     dirs = torch.stack([E.cos() * A.cos(), E.cos() * A.sin(), E.sin()], dim=-1)
-    tilt = TILT_DEG if tilt_deg is None else tilt_deg
     weights = line_array_factor(torch.sin(E), N_TX,
-                                sin_steer=math.sin(math.radians(tilt)))
+                                sin_steer=math.sin(math.radians(TILT_DEG)))
     return dirs, weights
 
 
-def receive_stave(directions: torch.Tensor) -> torch.Tensor:
-    """The receive stave's elevation response, at unit ARRIVAL directions.
+def receive_beam(directions: torch.Tensor, tilt_deg: float) -> torch.Tensor:
+    """One receive elevation beam, at unit ARRIVAL directions.
 
-    Power weight, one at boresight.  Sound arriving from the up-tilt is
-    propagating downward, so its ``z`` (depth-down) is ``+sin(tilt)``; that is
-    the steer.  Point elements return one everywhere.
+    Power weight, one on the beam's axis.  Sound arriving from ``tilt_deg``
+    up is propagating downward, so its ``z`` (depth-down) is ``+sin(tilt)``;
+    that is the steer.  Point elements (``HYDROPT_RX_ELEV=point``) return one
+    everywhere.
     """
-    if RX_STAVE_N is None:
+    if not RX_ELEV_BEAMS:
         return torch.ones(directions.shape[:-1], dtype=directions.dtype,
                           device=directions.device)
-    return line_array_factor(directions[..., 2], RX_STAVE_N,
-                             sin_steer=-math.sin(math.radians(TILT_DEG)))
+    return line_array_factor(directions[..., 2], N_RX_ELEV,
+                             sin_steer=-math.sin(math.radians(tilt_deg)))
 
 
 def transmit_pattern(directions: torch.Tensor, tilt_deg: float | None = None
@@ -407,9 +414,8 @@ def transmit_pattern(directions: torch.Tensor, tilt_deg: float | None = None
     directions as ``[cos E cos A, cos E sin A, sin E]``, so the ``z`` component
     IS ``sin E``, which is the only thing the array factor depends on.
     """
-    tilt = TILT_DEG if tilt_deg is None else tilt_deg
     return line_array_factor(directions[..., 2], N_TX,
-                             sin_steer=math.sin(math.radians(tilt)))
+                             sin_steer=math.sin(math.radians(TILT_DEG)))
 
 
 def display(image, rng, *, pixel_m: float, tvg: bool = True, looks: int = 1,
@@ -492,12 +498,12 @@ def main() -> int:
         print(f"    at {r:5.0f} m the bottom is "
               f"{math.degrees(math.atan2(alt, r)):4.1f} deg down, the surface "
               f"{math.degrees(math.atan2(AUV_DEPTH, r)):4.1f} deg up")
-    fov_deg = beam_3db_deg(N_TX) * N_ELEV_BEAMS   # four beams tile the FOV
+    fov_deg = beam_3db_deg(N_TX)   # the flooded transmit lobe IS the FOV
     edge_dn = TILT_DEG + fov_deg / 2
     edge_up = TILT_DEG - fov_deg / 2
     blind = alt / math.tan(math.radians(edge_dn)) if edge_dn > 0 else float("inf")
     surf_from = AUV_DEPTH / math.tan(math.radians(-edge_up))
-    print(f"  {N_TX} transmit elements = {N_ELEV_BEAMS} beams of {beam_3db_deg(N_TX):.2f} deg, a {fov_deg:.1f} deg vertical FOV "
+    print(f"  {N_TX} transmit elements flood a {fov_deg:.1f} deg vertical FOV; {N_RX_ELEV} vertical receive elements form {N_ELEV_BEAMS} beams of {beam_3db_deg(N_RX_ELEV):.2f} deg "
           f"tilted {abs(TILT_DEG):.1f} deg "
           f"{'up' if TILT_DEG < 0 else 'down'},")
     print(f"  carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
@@ -593,19 +599,19 @@ def main() -> int:
     dirs, tx_weights = transmit_fan(seed=SEED)
     solid = (math.radians(2 * SECTOR_DEG)
              * math.radians(ELEV_DEG[1] - ELEV_DEG[0]) / dirs.shape[0])
-    # The receive stave's weight on the reverberation's return leg.  That leg
-    # is the outbound ray reversed, so its arrival direction is the launch
-    # direction negated; the weight is a power weight and rides with the
-    # transmit one, applied once.
-    rx_on_return = receive_stave(-dirs)
+    # One flooded transmit serves every beam.  Each receive beam's weight on
+    # the reverberation's return leg: that leg is the outbound ray reversed,
+    # so its arrival direction is the launch direction negated, and the weight
+    # is a power weight that rides with the transmit one, applied once.
+    w_tx = transmit_pattern(dirs)
 
     tilts = beam_tilts_deg()
     if DISPLAY.startswith("beam:"):
         tilts = [tilts[int(DISPLAY.split(":")[1])]]
     print(f"  {len(tilts)} elevation beam(s) at "
           + ", ".join(f"{-t:+.1f}" for t in tilts) + " deg (up positive), "
-          f"display '{DISPLAY}', receive stave "
-          f"{'point elements' if RX_STAVE_N is None else f'{beam_3db_deg(RX_STAVE_N):.0f} deg'}")
+          f"display '{DISPLAY}', formed on receive"
+          f"{'' if RX_ELEV_BEAMS else ' -- DISABLED, point elements'}")
 
     def render(arrivals):
         return beamform(arrivals, rx, scene.freqs_khz, grid, steer,
@@ -626,12 +632,12 @@ def main() -> int:
               f"the others are evaluated without a graph")
     per_beam, per_beam_echo, n_patch, n_echo = [], [], 0, 0
     for k, tilt in enumerate(tilts):
-        w_tx = transmit_pattern(dirs, tilt)
+        rx_beam = lambda d, t=tilt: receive_beam(d, t)
         with timed(f"  beam at {-tilt:+.1f} deg: scatter, target, beamform"), \
              torch.set_grad_enabled(k == k_boat):
             rev = reverberation_arrivals(
                 result, dirs, scene.freqs_khz, scattering=seabed,
-                solid_angle_per_ray=solid, ray_weights=w_tx * rx_on_return,
+                solid_angle_per_ray=solid, ray_weights=w_tx * rx_beam(-dirs),
                 boundary="both", surface=scene.surface, bottom=scene.bottom,
                 max_arrivals=PATCHES,
                 generator=torch.Generator().manual_seed(SEED + 1))
@@ -642,8 +648,8 @@ def main() -> int:
             echo = target_arrivals(
                 scene, boat, dirs, return_leg="eigenray",
                 n_rx_rays=2000, rx_half_angle_deg=45.0, tx_weights=w_tx,
-                tx_pattern=lambda d, t=tilt: transmit_pattern(d, t),
-                rx_pattern=receive_stave, max_arrivals_per_leg=24,
+                tx_pattern=transmit_pattern,
+                rx_pattern=rx_beam, max_arrivals_per_leg=24,
                 generator=torch.Generator().manual_seed(SEED))
             both = ArrivalSet(*(None if rev[i] is None or echo[i] is None
                                 else torch.cat([rev[i], echo[i]], dim=0)
@@ -930,9 +936,9 @@ def main() -> int:
     print(f"  not a measurement: the figure draws this image both ways.")
 
     banner("what the vertical field of view can hold")
-    fov = beam_3db_deg(N_TX) * N_ELEV_BEAMS
+    fov = beam_3db_deg(N_TX)
     up_edge, dn_edge = TILT_DEG - fov / 2, TILT_DEG + fov / 2
-    print(f"  {N_TX} transmit elements, {N_ELEV_BEAMS} beams, give a {fov:.1f} deg vertical field of "
+    print(f"  {N_TX} transmit elements flood a {fov:.1f} deg vertical field of "
           f"view, tilted")
     print(f"  {abs(TILT_DEG):.1f} deg {'up' if TILT_DEG < 0 else 'down'}, "
           f"carrying beams of {VERTICAL_BEAM_DEG:.2f} deg -- about "
@@ -1060,10 +1066,9 @@ def main() -> int:
         axes[0].set_ylabel("across (m)")
         fig_c.colorbar(im, ax=axes, shrink=0.8,
                        label="dB over the background at that range, floored at +6")
-        fig_c.suptitle(f"{len(tilts)} elevation beams of {beam_3db_deg(N_TX):.2f} deg, "
-                       f"receive stave "
-                       f"{'point' if RX_STAVE_N is None else f'{beam_3db_deg(RX_STAVE_N):.0f} deg'}"
-                       f": three ways to put them on one screen", fontsize=12)
+        fig_c.suptitle(f"{len(tilts)} receive elevation beams of {beam_3db_deg(N_RX_ELEV):.2f} deg "
+                       f"under one flooded transmit: three ways to put them on one screen",
+                       fontsize=12)
         save(fig_c, f"21_display_conventions_{FAR:.0f}m.png")
 
     save(_plot(det, raw_cart, mean_cart, gx, gy, rng, prof_db.detach(),
@@ -1274,7 +1279,7 @@ def _plot(cart, raw, by_mean, gx, gy, rng, prof_db, noise_db, tx, ty,
     rr = np.linspace(40.0, FAR, 400)
     up = np.degrees(np.arctan2(AUV_DEPTH, rr))
     dn = np.degrees(np.arctan2(WATER_DEPTH - AUV_DEPTH, rr))
-    fov = beam_3db_deg(N_TX) * N_ELEV_BEAMS
+    fov = beam_3db_deg(N_TX)
     gx_ax.plot(rr, -up, color="tab:cyan", lw=1.2, label="sea surface")
     gx_ax.plot(rr, dn, color="tab:brown", lw=1.2, label="seabed")
     gx_ax.axhspan(TILT_DEG - fov / 2, TILT_DEG + fov / 2, color="tab:orange",

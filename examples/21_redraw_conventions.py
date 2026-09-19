@@ -60,11 +60,21 @@ def main() -> int:
     to_cart = lambda img: ex15.to_cartesian(img, bearings, grid, n_x=300, n_y=300,
                                             x_range=x_range, y_range=(-span_y, span_y))
 
-    conventions = {
-        "summed over beams": stack.sum(dim=0),
-        "max over beams": stack.max(dim=0).values,
-        f"one beam, {-tilts[k_boat]:+.1f} deg (the boat's)": stack[k_boat],
-    }
+    # HYDROPT_REDRAW=beams draws every elevation beam on its own panel instead
+    # -- the attribution view, where the seabed's return should sit in the
+    # lower beams, the surface's in the upper, and a hull's seabed-image ghost
+    # in the beam below the hull's own.
+    if os.environ.get("HYDROPT_REDRAW", "conventions") == "beams":
+        conventions = {f"beam {k}: {-t:+.1f} deg" + (" (the boat's)" if k == k_boat else ""):
+                       stack[k] for k, t in enumerate(tilts)}
+        out_name = f"21_elevation_beams_{far:.0f}m.png"
+    else:
+        conventions = {
+            "summed over beams": stack.sum(dim=0),
+            "max over beams": stack.max(dim=0).values,
+            f"one beam, {-tilts[k_boat]:+.1f} deg (the boat's)": stack[k_boat],
+        }
+        out_name = f"21_display_conventions_{far:.0f}m.png"
     panels, extent = {}, None
     with torch.no_grad():
         for name, img in conventions.items():
@@ -79,7 +89,7 @@ def main() -> int:
     b = math.radians(ex.BOAT_BEARING_DEG)
     tx, ty = ex.BOAT_RANGE * math.cos(b), ex.BOAT_RANGE * math.sin(b)
 
-    fig, axes = plt.subplots(1, 3, figsize=(16.5, 6.2))
+    fig, axes = plt.subplots(1, len(panels), figsize=(5.5 * len(panels), 6.2))
     for ax, (name, cart) in zip(axes, panels.items()):
         im = ax.imshow(cart.numpy(), origin="lower", cmap="inferno", extent=extent,
                        vmin=6.0, vmax=top, aspect="equal")
@@ -89,9 +99,11 @@ def main() -> int:
     axes[0].set_ylabel("across (m)")
     fig.colorbar(im, ax=axes, shrink=0.8,
                  label="dB over the background at that range, floored at +6")
-    fig.suptitle(f"{len(tilts)} elevation beams of {ex.beam_3db_deg(ex.N_TX):.2f} deg: "
-                 f"three ways to put them on one screen", fontsize=12)
-    save(fig, f"21_display_conventions_{far:.0f}m.png")
+    tail = ("each on its own panel" if os.environ.get("HYDROPT_REDRAW") == "beams"
+            else "three ways to put them on one screen")
+    fig.suptitle(f"{len(tilts)} receive elevation beams of "
+                 f"{ex.beam_3db_deg(ex.N_RX_ELEV):.2f} deg: " + tail, fontsize=12)
+    save(fig, out_name)
     return 0
 
 
