@@ -402,3 +402,100 @@ def test_an_arrival_just_past_the_last_bin_still_lands_in_it():
     image = beamform(late, elements, freqs, grid, steer, sigma_t=sigma_t,
                      shading=shading_window(N_EL, "hann"))
     assert float(image.max()) > 0.0, "the gate clipped an arrival that still contributes"
+
+
+def _random_arrivals(n: int, grid: torch.Tensor, seed: int = 5) -> ArrivalSet:
+    """Arrivals over the whole grid and a little past it, from every bearing."""
+    g = torch.Generator().manual_seed(seed)
+    t0, t1 = float(grid[0]), float(grid[-1])
+    time = t0 + (t1 - t0) * (torch.rand(n, generator=g, dtype=torch.float64) * 1.1 - 0.05)
+    az = (torch.rand(n, generator=g, dtype=torch.float64) - 0.5) * math.radians(150.0)
+    el = (torch.rand(n, generator=g, dtype=torch.float64) - 0.5) * math.radians(30.0)
+    direction = -torch.stack([az.cos() * el.cos(), az.sin() * el.cos(), el.sin()], dim=-1)
+    amp = torch.rand(n, 1, generator=g, dtype=torch.float64) + 0.1
+    phase = torch.rand(n, generator=g, dtype=torch.float64) * 2 * math.pi
+    return ArrivalSet(time=time, amplitude=amp, direction=direction, phase=phase,
+                      distance=torch.zeros(n), path_length=torch.ones(n))
+
+
+def test_fft_beamformer_matches_the_direct_kernel():
+    """Steering the element field is the same sum as steering every arrival.
+
+    On a grid coarser than the pulse (0.45 bins per sigma, as an imaging grid
+    is), with arrivals from every bearing, every phase, and some overhanging
+    the grid at both ends: the two kernels agree to a fraction of a
+    thousandth of a decibel everywhere within 60 dB of the peak, and their
+    gradients in the element positions and the shading agree too.
+    """
+    elements = _ula(24).requires_grad_(True)
+    shading = shading_window(24, "hamming").requires_grad_(True)
+    grid = make_time_grid(0.050, 0.070, 61)             # 0.33 ms bins
+    sigma_t = 1.5e-4                                     # 0.45 bins per sigma
+    freqs = torch.tensor([FREQ_HZ / 1e3])
+    steer, _ = azimuth_steering(41, 60.0)
+    arrivals = _random_arrivals(300, grid)
+
+    images, grads = {}, {}
+    for method in ("direct", "fft"):
+        elements.grad = shading.grad = None
+        power = beamform(arrivals, elements, freqs, grid, steer, sigma_t=sigma_t,
+                         shading=shading, method=method, steer_chunk=7,
+                         arrival_chunk=64)
+        power.sum().backward()
+        images[method] = power.detach()
+        grads[method] = (elements.grad.clone(), shading.grad.clone())
+
+    a, b = images["direct"], images["fft"]
+    peak = a.max()
+    lit = a > peak * 1e-6
+    ddb = 10 * torch.log10(b[lit] / a[lit])
+    assert float(ddb.abs().max()) < 1e-3
+    # The residual is the pulse gate: both kernels cut the envelope at
+    # time_gate sigmas, the direct one on the coarse bins about each look
+    # direction's shifted centre, the fft one on the fine bins before the
+    # shift.  The cut is at exp(-12.5) of the peak, so the two differ there
+    # by parts in a million of it.
+    assert float((a - b).abs().max() / peak) < 1e-6
+    for ga, gb in zip(grads["direct"], grads["fft"]):
+        assert float((ga - gb).norm() / ga.norm()) < 1e-6
+
+
+def test_fft_beamformer_on_a_fine_grid_needs_no_oversampling():
+    """When sigma_t already spans two bins the fine grid is the grid itself."""
+    elements = _ula(16)
+    grid = make_time_grid(0.008, 0.012, 801)             # 5 us bins, sigma 40 bins
+    freqs = torch.tensor([FREQ_HZ / 1e3])
+    steer, _ = azimuth_steering(31, 45.0)
+    arrivals = _random_arrivals(50, grid, seed=9)
+    a = beamform(arrivals, elements, freqs, grid, steer, sigma_t=2e-4, method="direct")
+    b = beamform(arrivals, elements, freqs, grid, steer, sigma_t=2e-4, method="fft")
+    c = beamform(arrivals, elements, freqs, grid, steer, sigma_t=2e-4, method="fft",
+                 oversample=1)
+    assert torch.equal(b, c)
+    assert float((a - b).abs().max() / a.max()) < 1e-6           # the gate, as above
+
+
+def test_the_kernels_agree_in_float32_at_long_range_too():
+    """Single precision, 0.4 s of travel: the same image from both kernels.
+
+    At 120 kHz the carrier phase there is 3e5 radians, which float32 resolves
+    to a degree, and a degree per arrival per element per look direction is a
+    different speckle realisation for every summation order.  The synthesis
+    forms its times and phases in float64 whatever the working precision, so
+    the two kernels agree in float32 to a few hundredths of a decibel within
+    40 dB of the peak, and not to a few tenths.
+    """
+    f32 = torch.float32
+    elements = _ula(24).to(f32)
+    shading = shading_window(24, "hamming").to(f32)
+    grid = make_time_grid(0.390, 0.410, 61, dtype=f32)             # 0.33 ms bins
+    freqs = torch.tensor([120.0], dtype=f32)
+    steer, _ = azimuth_steering(41, 60.0)
+    arrivals = _random_arrivals(300, grid.double())
+    arrivals = ArrivalSet(*(None if t is None else t.to(f32) for t in arrivals))
+    kw = dict(sigma_t=1.5e-4, shading=shading, steer_chunk=7, arrival_chunk=64)
+    a = beamform(arrivals, elements, freqs, grid, steer.to(f32), method="direct", **kw)
+    b = beamform(arrivals, elements, freqs, grid, steer.to(f32), method="fft", **kw)
+    lit = a > a.max() * 1e-4
+    ddb = 10 * torch.log10(b[lit].double() / a[lit].double())
+    assert float(ddb.abs().max()) < 0.05

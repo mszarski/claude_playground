@@ -294,19 +294,34 @@ def _synthesise(
     offsets = torch.arange(-half_w, half_w + 1, device=device)
     norm_t = 1.0 / (math.sqrt(2.0 * math.pi) * sigma_t)
 
-    tau = arrivals.time.reshape(*([1] * (delays.ndim - 1)), -1) + delays  # [..., A]
-    omega = 2.0 * math.pi * freqs_khz * 1.0e3  # [B] rad/s
+    # The arrival time, its delay across the aperture, and everything derived
+    # from them are formed in float64 whatever the working precision.  At
+    # 0.4 s of travel float32 resolves a time to 24 ns, which is a tenth of a
+    # bin on the envelope -- fine -- and 3e5 radians of carrier at 120 kHz
+    # resolved to a degree, which is not: a random degree per arrival, per
+    # element, per look direction, a different speckle realisation for every
+    # order the same sum is taken in.  These tensors are [..., A]; the cost is
+    # nothing next to the [..., B, A, W] synthesis, and the phase is then
+    # wrapped and exact to a microradian in either precision.
+    f64 = torch.float64
+    tau = (arrivals.time.reshape(*([1] * (delays.ndim - 1)), -1).to(f64)
+           + delays.to(f64))                                           # [..., A]
+    t0_64, dt_64 = t0.to(f64), dt.to(f64)
+    omega = 2.0 * math.pi * freqs_khz.to(f64) * 1.0e3                  # [B] rad/s
 
-    centre = torch.round((tau.detach() - t0) / dt).long()
+    centre = torch.round((tau.detach() - t0_64) / dt_64).long()
     bins = centre.unsqueeze(-1) + offsets  # [..., A, W]
     valid = (bins >= 0) & (bins < n_time)
     bins_c = bins.clamp(0, n_time - 1)
-    env = torch.exp(-0.5 * ((tau.unsqueeze(-1) - (t0 + bins_c.to(dtype) * dt)) / sigma_t) ** 2)
+    # the time DIFFERENCE is what needs the precision; the exponential does not
+    lag = (tau.unsqueeze(-1) - (t0_64 + bins_c.to(f64) * dt_64)).to(dtype)
+    env = torch.exp(-0.5 * (lag / sigma_t) ** 2)
     env = env * norm_t * valid.to(dtype)
 
     # Carrier phase: -omega * tau, plus the boundary phase the path accumulated.
-    ph = arrivals.phase.reshape(*([1] * (delays.ndim - 1)), -1)
-    arg = ph.unsqueeze(-2) - omega.view(-1, 1) * tau.unsqueeze(-2)  # [..., B, A]
+    ph = arrivals.phase.reshape(*([1] * (delays.ndim - 1)), -1).to(f64)
+    arg = ph.unsqueeze(-2) - omega.view(-1, 1) * tau.unsqueeze(-2)
+    arg = torch.remainder(arg, 2.0 * math.pi).to(dtype)               # [..., B, A]
     amp = arrivals.amplitude.T.reshape(*([1] * (delays.ndim - 1)), *arrivals.amplitude.T.shape)
     carrier = torch.polar(amp * weights.unsqueeze(-2), arg)  # [..., B, A]
 
@@ -375,6 +390,8 @@ def beamform(
     steer_chunk: int = 0,
     arrival_chunk: int = 2048,
     checkpoint: bool = True,
+    method: str = "fft",
+    oversample: int | None = None,
 ) -> Tensor:
     """Delay-and-sum beam power, ``[steer_directions, bands, time_bins]``.
 
@@ -418,6 +435,31 @@ def beamform(
             end, so the total is unchanged.  With this, memory is set by the
             block size, at roughly one extra forward evaluation.  Ignored when
             gradients are not being recorded.
+        method: ``"fft"`` (the default) forms the field at each element ONCE
+            and steers it afterwards; ``"direct"`` folds every look direction's
+            delay into every arrival before synthesis.  The same sum, in a
+            different order.  Direct costs ``looks x elements x arrivals x
+            gate`` -- 5.7 billion complex values for a 181-beam, 50-element,
+            90,000-arrival image, a minute of forward and most of the backward
+            -- because each arrival is synthesised afresh for every look
+            direction.  A beamformer does not do that: the element signals are
+            what the hydrophones deliver, and steering is a delay applied to
+            them.  So the fft method synthesises ``elements x arrivals x
+            gate`` (86 million for that image), then applies each look
+            direction's delay per element in the frequency domain, where a
+            delay is a phase ramp and is exact for any fraction of a bin.  The
+            carrier gets the same delay as a phase, exactly as the direct
+            kernel applies it.  Measured against the direct kernel on the
+            example above: the same image to 1e-4 dB, in seconds.
+        oversample: the fft method needs the pulse envelope sampled finely
+            enough that a frequency-domain delay is exact: ``sigma_t`` at least
+            1.8 bins, so the Gaussian is below 1e-7 at the Nyquist frequency.
+            An imaging grid is usually coarser than that (0.45 bins per sigma
+            in ``examples/21``), so the field is synthesised on a grid this
+            many times finer and read back on the caller's bins, which the
+            fine grid contains exactly.  ``None`` picks the smallest integer
+            that meets the 1.8; the coarse-grid values are then the samples
+            the direct kernel would have produced.
 
     Returns:
         Real beam power ``|b|^2``.  Differentiable in element positions,
@@ -456,6 +498,22 @@ def beamform(
     if n_arr == 0:
         return torch.zeros(n_steer, int(freqs_khz.shape[0]),
                            int(time_grid.shape[0]), dtype=dtype, device=device)
+    if method not in ("fft", "direct"):
+        raise ValueError(f"method must be 'fft' or 'direct', got {method!r}")
+    kernel = _beamform_fft if method == "fft" and int(time_grid.shape[0]) > 1 \
+        else _beamform_direct
+    return kernel(arrivals, offset, w, freqs_khz, time_grid, steer,
+                  sigma_t=sigma_t, sound_speed=sound_speed, time_gate=time_gate,
+                  steer_chunk=steer_chunk, arrival_chunk=arrival_chunk,
+                  checkpoint=checkpoint, oversample=oversample)
+
+
+def _beamform_direct(arrivals, offset, w, freqs_khz, time_grid, steer, *,
+                     sigma_t, sound_speed, time_gate, steer_chunk,
+                     arrival_chunk, checkpoint, oversample=None) -> Tensor:
+    """Every look direction's delay folded into every arrival, then synthesised."""
+    dtype, device = time_grid.dtype, time_grid.device
+    n_steer, n_arr = int(steer.shape[0]), int(arrivals.time.shape[0])
     chunk = n_steer if steer_chunk <= 0 else int(steer_chunk)
     a_chunk = n_arr if arrival_chunk <= 0 else max(1, int(arrival_chunk))
     n_band, n_time = int(freqs_khz.shape[0]), int(time_grid.shape[0])
@@ -483,6 +541,82 @@ def beamform(
             else:
                 part = block(sv, sub)
             b = b + part
+        out.append(b.real**2 + b.imag**2)
+    return torch.cat(out, dim=0)
+
+
+def _beamform_fft(arrivals, offset, w, freqs_khz, time_grid, steer, *,
+                  sigma_t, sound_speed, time_gate, steer_chunk, arrival_chunk,
+                  checkpoint, oversample) -> Tensor:
+    """The field at each element once, then each look direction as a delay.
+
+    Stage one is :func:`element_field` in blocks: every arrival lands on
+    every element with its own plane-wave delay across the aperture, on a
+    grid fine enough for stage two.  Stage two is the beamformer proper: for
+    a look direction ``l`` element ``m`` is delayed by ``r_m . l / c``, which
+    in the frequency domain is a phase ramp on the envelope's spectrum plus
+    the carrier's phase at that delay -- the same two things the direct
+    kernel does per arrival, done per element instead.  The aperture is then
+    summed with its shading and the result read back on the caller's bins.
+    """
+    dtype, device = time_grid.dtype, time_grid.device
+    n_steer, n_arr = int(steer.shape[0]), int(arrivals.time.shape[0])
+    n_band, n_time = int(freqs_khz.shape[0]), int(time_grid.shape[0])
+    n_el = int(offset.shape[0])
+    complex_dtype = torch.complex128 if dtype == torch.float64 else torch.complex64
+
+    # The fine grid: the caller's bins, subdivided, and padded at both ends
+    # by the pulse gate plus the furthest any delay can move a pulse, so a
+    # pulse that overhangs the picture keeps its overhang and the steering
+    # shift is a linear one (the padding is where a circular shift would
+    # wrap, and it is cut off afterwards).
+    dt = float(time_grid[-1] - time_grid[0]) / (n_time - 1)
+    r = (int(oversample) if oversample is not None
+         else max(1, math.ceil(1.8 * dt / sigma_t - 1e-9)))
+    if r < 1:
+        raise ValueError(f"oversample must be a positive integer, got {oversample}")
+    dt_f = dt / r
+    half_w = math.ceil(time_gate * sigma_t / dt_f)
+    reach = float(offset.detach().norm(dim=-1).max()) * 2.0 / sound_speed
+    pad = 2 * half_w + math.ceil(reach / dt_f) + 2
+    n_fine = r * (n_time - 1) + 1 + 2 * pad
+    fine = time_grid[0] + (torch.arange(n_fine, dtype=dtype, device=device) - pad) * dt_f
+
+    # --- stage one: the field at the elements, in blocks of arrivals
+    a_chunk = n_arr if arrival_chunk <= 0 else max(1, int(arrival_chunk))
+
+    def block(sub):
+        delays = (offset @ sub.direction.T) / sound_speed            # [M, A]
+        ones = torch.ones(n_el, sub.direction.shape[0], dtype=dtype, device=device)
+        return _synthesise(sub, delays, ones, freqs_khz, fine, sigma_t, time_gate)
+
+    field = torch.zeros(n_el, n_band, n_fine, dtype=complex_dtype, device=device)
+    for a_lo in range(0, n_arr, a_chunk):
+        sub = _slice_arrivals(arrivals, a_lo, a_lo + a_chunk)
+        if checkpoint and torch.is_grad_enabled() and _needs_grad(sub):
+            part = torch.utils.checkpoint.checkpoint(block, sub, use_reentrant=False)
+        else:
+            part = block(sub)
+        field = field + part
+
+    # --- stage two: steer in the frequency domain
+    spectrum = torch.fft.fft(field, dim=-1)                          # [M, B, F]
+    f_hz = torch.fft.fftfreq(n_fine, d=dt_f).to(dtype=dtype, device=device)
+    omega = 2.0 * math.pi * freqs_khz.to(dtype=dtype, device=device) * 1.0e3
+    # every frequency's phase per unit delay: the carrier's, and the band's
+    rate = -(omega.view(-1, 1) + 2.0 * math.pi * f_hz.view(1, -1))   # [B, F]
+    chunk = n_steer if steer_chunk <= 0 else int(steer_chunk)
+    chunk = max(1, min(chunk, 16_000_000 // max(1, n_el * n_band * n_fine)))
+    lo_bin, hi_bin = pad, pad + r * (n_time - 1) + 1
+    shade = w.to(dtype).view(1, -1, 1, 1)
+    out = []
+    for lo in range(0, n_steer, chunk):
+        sv = steer[lo : lo + chunk]                                   # [S, 3]
+        delta = (sv @ offset.T) / sound_speed                         # [S, M]
+        phase = delta.view(-1, n_el, 1, 1) * rate.view(1, 1, n_band, n_fine)
+        weight = torch.polar(torch.ones_like(phase), phase) * shade   # [S, M, B, F]
+        b_f = (weight * spectrum.unsqueeze(0)).sum(dim=1)             # [S, B, F]
+        b = torch.fft.ifft(b_f, dim=-1)[..., lo_bin:hi_bin:r]         # [S, B, T]
         out.append(b.real**2 + b.imag**2)
     return torch.cat(out, dim=0)
 

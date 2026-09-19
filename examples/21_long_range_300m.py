@@ -650,10 +650,14 @@ def main() -> int:
           f"display '{DISPLAY}', formed on receive"
           f"{'' if RX_ELEV_BEAMS else ' -- DISABLED, point elements'}")
 
-    def render(arrivals):
-        return beamform(arrivals, rx, scene.freqs_khz, grid, steer,
+    # HYDROPT_BEAMFORM=direct runs the arrival-by-arrival kernel instead of
+    # the element-then-steer one, for checking that the two agree.
+    def render(arrivals, time_grid=None):
+        return beamform(arrivals, rx, scene.freqs_khz,
+                        grid if time_grid is None else time_grid, steer,
                         sigma_t=PULSE_S, shading=shading,
-                        steer_chunk=int(os.environ.get("HYDROPT_STEER_CHUNK", 8)))
+                        steer_chunk=int(os.environ.get("HYDROPT_STEER_CHUNK", 8)),
+                        method=os.environ.get("HYDROPT_BEAMFORM", "fft"))
 
     t0 = time.perf_counter()
     with timed("  trace"):
@@ -744,10 +748,8 @@ def main() -> int:
             hi = int(min(int(grid.shape[0]), int(((t_hi - float(grid[0])) / dt_grid)) + 2))
             profile = signal.detach()[:, 0, :].mean(dim=0).clone()
             if hi - lo >= 2:
-                window = beamform(rev, rx, scene.freqs_khz, grid[lo:hi], steer,
-                                  sigma_t=PULSE_S, shading=shading,
-                                  steer_chunk=int(os.environ.get("HYDROPT_STEER_CHUNK", 8)))
-                window = calibrate(window, SOURCE_LEVEL_DB, beam_scale=scale)
+                window = calibrate(render(rev, grid[lo:hi]), SOURCE_LEVEL_DB,
+                                   beam_scale=scale)
                 profile[lo:hi] = window[:, 0, :].mean(dim=0)
         prof_db = 10 * torch.log10(profile.clamp_min(1e-30))
         noise_db = 10 * math.log10(noise)
