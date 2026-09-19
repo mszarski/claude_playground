@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "claude_playground",
+  "project_id": "e143478b-c634-442b-b8f0-9bd9a6eaa1b4"
+}
