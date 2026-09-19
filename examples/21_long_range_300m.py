@@ -672,7 +672,8 @@ def main() -> int:
         rx_beam = lambda d, t=tilt: receive_beam(d, t)
         with timed(f"  beam at {-tilt:+.1f} deg: scatter, target, beamform"), \
              torch.set_grad_enabled(k == k_boat):
-            rev = reverberation_arrivals(
+            with timed("    scatter (reverberation patches)"):
+              rev = reverberation_arrivals(
                 result, dirs, scene.freqs_khz, scattering=seabed,
                 solid_angle_per_ray=solid, ray_weights=w_tx * rx_beam(-dirs),
                 boundary="both", surface=scene.surface, bottom=scene.bottom,
@@ -682,7 +683,8 @@ def main() -> int:
             # see the note on return_leg in an earlier revision.  The transmit
             # pattern is evaluated at each solved inbound launch direction and
             # the receive stave at each solved outbound arrival direction.
-            echo = target_arrivals(
+            with timed("    target (eigenray solves on both legs)"):
+              echo = target_arrivals(
                 scene, boat, dirs, return_leg="eigenray",
                 n_rx_rays=2000, rx_half_angle_deg=45.0, tx_weights=w_tx,
                 tx_pattern=transmit_pattern,
@@ -691,8 +693,9 @@ def main() -> int:
             both = ArrivalSet(*(None if rev[i] is None or echo[i] is None
                                 else torch.cat([rev[i], echo[i]], dim=0)
                                 for i in range(len(rev))))
-            per_beam.append(render(both))
-            with torch.no_grad():
+            with timed("    beamform (patches + target)"):
+                per_beam.append(render(both))
+            with torch.no_grad(), timed("    beamform (target alone)"):
                 per_beam_echo.append(render(echo))
         n_patch += rev.n_arrivals
         n_echo += echo.n_arrivals
@@ -722,7 +725,8 @@ def main() -> int:
         # one beam and cell.  The mean, not the median: reverberation is a
         # speckle field and its median sits far below the level a detector
         # competes with.
-        rev_only = calibrate(render(rev), SOURCE_LEVEL_DB, beam_scale=scale)
+        with timed("  beamform (reverberation alone, for the profile)"):
+            rev_only = calibrate(render(rev), SOURCE_LEVEL_DB, beam_scale=scale)
         profile = rev_only[:, 0, :].mean(dim=0)
         prof_db = 10 * torch.log10(profile.clamp_min(1e-30))
         noise_db = 10 * math.log10(noise)
