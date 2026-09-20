@@ -64,7 +64,8 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
 `Trajectory`), `emission.py` is what a vessel radiates (a spoke, with
 `propeller_directivity`: shielded forward by the hull, notched astern), and
 `labels.py` reads a box, a mask and a class per target off the fields
-(`picture(..., labels=True)`; the class is the target's `label` attribute).
+(`picture(..., labels=True)`; the class is the target's `label` attribute;
+`examples/LABELS.md` is the how-to and the record format).
 
 ## Conventions
 

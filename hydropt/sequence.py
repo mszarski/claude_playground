@@ -405,7 +405,8 @@ class PictureRenderer:
                 rest = (total - be_c).abs() ** 2
                 labs.append(label_from_beams(
                     name, "emission", be_c.abs() ** 2, rest, margin_db=self.label_margin_db,
-                    to_cartesian=self.to_cartesian))
+                    to_cartesian=self.to_cartesian, bearings_deg=self.bearings_deg,
+                    ranges_m=self.ranges_m))
         return labs
 
     def sequence(self, builder: Callable[[float, float, float], object],

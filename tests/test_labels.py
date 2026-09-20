@@ -96,6 +96,11 @@ def test_faint_target_is_not_visible_and_emission_spans_every_bin():
     assert spoke.name == "noise spoke" and spoke.kind == "emission" and spoke.visible
     b0, b1, k0, k1 = spoke.polar_box
     assert k0 == 0 and k1 == 119 and b0 <= int(bearings.abs().argmin()) <= b1
+    # an emission has a metric box too (it is what gets drawn): the whole
+    # range of the grid along the emitter's bearing
+    x0, y0, x1, y1 = spoke.box_m
+    assert x0 < 21.0 and x1 > 79.0 and y0 < 0.0 < y1
+    assert spoke.geometry_box_m is None
 
 
 def test_labels_agree_with_the_noisy_picture():

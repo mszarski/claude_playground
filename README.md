@@ -1699,6 +1699,111 @@ geometry box is where the object is; and their overlap, per frame, is how
 much of the object the picture reveals.  Instance masks come free with
 them, as does the polar (beam, bin) form for a network that works on the
 sonar's own rectangle rather than the resampled picture.
+`examples/LABELS.md` is the how-to: which files a run writes, the record
+format, and how to label a scene of one's own.
+
+### Towards ML: what a differentiable simulator buys a detector, a tracker and an identifier
+
+The labelled pictures above are the ordinary use of a simulator for
+machine learning: synthetic data with free ground truth.  What is
+different about this one is that every picture is differentiable in the
+scene, the sonar and the targets, and that opens four uses the ordinary
+kind cannot offer.  In the order they are worth trying:
+
+1. **Forward mode at scale: a randomised generator of pictures and
+   labels.**  Everything 21-29 hold as a constant is a distribution to
+   draw from -- the head (frequency, elements, tilt, pulse), the sea
+   (wind, and the surface realisation's seed), the seabed (relief, sediment,
+   its seed), the noise, the boat (hull length and draught, heading, range,
+   diffuse level, speed and track, whether it radiates), what else is in the
+   water (buoys, kelp, schools, walls), the ownship's own track -- and the
+   renderer already forms the background once per pose and the targets on
+   top, so a scene of N targets costs one trace and N echoes.  A production
+   generator is a loop over `Scene` and target factories fed by a sampler,
+   writing the polar image, the Cartesian picture, the labels and the
+   sampled parameters per frame; `examples/28` and `29` are its two
+   templates (fixed sonar, moving sonar) and `LABELS.md` its record.  The
+   randomisation that matters most for transfer to real pictures is the
+   one the physics says matters: the display gain and its floor, the
+   speckle (the surface and seabed seeds, the receive-fan seed), the
+   ambient level, the head's tilt and altitude, and the target's diffuse
+   level -- the things that change between two real pings of the same
+   scene.  Sequences are cheap: 1.6 s a frame for a moving target, 10 s
+   for a moving sonar.
+
+2. **Fitting a real picture: pose and identity by the inverse.**
+   `examples/22` fits a boat's position to a simulated picture by descent
+   through the whole pipeline, and its three findings (freeze the display
+   gain, put the noise on the field, descend on the model's *incoherent*
+   picture with a blur schedule) are what a fit to a *real* picture needs
+   too, with two more.  The real picture's gain is unknown, so the fit
+   compares pictures after each has been normalised by its own
+   median-per-range (the display already does this: `display_gain` from
+   the measurement, held).  And the real sea is not this sea, so the
+   loss must be one that does not care about the background's speckle:
+   a loss on the *difference* to the model's own bare picture is not
+   available for a real picture, but a loss restricted to the target's
+   labelled region (the signal box the model predicts, dilated) is, and
+   it is what the model-based trackers in radar do.  The fit then answers
+   pose (range, bearing, heading) and, run over a library of hulls, the
+   identity: the hull whose fitted picture fits best.  Heading is the hard
+   axis (`examples/16` measured why: at broadside the projected length is
+   stationary in yaw); a sequence resolves it, since the track constrains
+   the heading and the frames share one hull.  This is a tracker: a pose
+   per frame by refinement from the last frame's, with the picture's
+   gradient as the innovation, and a detector's box as the initialisation
+   (`examples/19` shows what to do when the start is far out).
+
+3. **Training a detector *through* the simulator.**  Because the picture
+   is differentiable in the scene, a detector can be trained against the
+   simulator rather than only on its output: (a) *adversarial scenes* --
+   for a trained detector, descend the scene parameters (the boat's
+   diffuse level, heading, the sea state, the gain) to *lower* the
+   detector's confidence on a target that is still there by the labels,
+   and add those pictures to the training set: the simulator searches for
+   the detector's failure modes with gradients instead of by sampling;
+   (b) *physics-consistent augmentation* -- instead of rotating and
+   scaling pictures (which a sonar picture does not do: a boat further
+   out is not a smaller boat, it is a fainter, wider one), re-render the
+   same scene at the perturbed pose, which the gradient makes cheap to
+   linearise: `d picture / d pose` gives a first-order augmentation of
+   every frame at the cost of one backward pass; (c) *the reverse*: a
+   detector whose output is differentiable in its input (a CNN) composed
+   with the renderer gives `d detection / d scene`, which says which
+   physical parameters the detector relies on -- the diagnostic that
+   distinguishes a detector that has learned hulls from one that has
+   learned this simulator's speckle.
+
+4. **Something new: the simulator as the tracker's model, and the
+   detector as its prior.**  Put a learned detector and the differentiable
+   renderer in one loop.  The detector proposes boxes and classes on a
+   real ping; for each proposal the renderer is fitted (item 2) from the
+   box's centre and the class's hull, and the fit's residual -- how well a
+   physical hull at that pose explains the pixels -- is the score, in place
+   of the detector's confidence.  Proposals that no physical object
+   explains (a bright speckle, a sidelobe, a spoke without a propeller)
+   score badly however confident the detector was; a faint contact that a
+   hull explains well is kept.  Over a sequence the fitted poses become
+   tracks with a physical motion model (the `Trajectory` of 28), and the
+   residual's gradient in the hull's parameters (length, draught, diffuse
+   level: all learnable in `mesh_target`) refines the identity as the
+   track lengthens.  The detector learns from the fits that confirm or
+   reject it -- self-supervised on real data, with the physics as the
+   teacher.  Nothing in that loop is beyond what the examples already do
+   one piece at a time; 22 is the fit, 28 the sequence, the labels the
+   proposals, and the missing piece is the loss on a real picture's
+   normalised, region-restricted pixels, which is a few lines.
+
+What is honestly not there yet: the simulator has never been compared with
+a real picture (its levels are from the sonar equation and its
+scattering from physical optics and Lambert, all standard, none
+validated on this head); real pictures carry the vehicle's motion during
+the ping, the head's actual beam patterns and its processing chain's
+gain, which 21's display approximates; and a real hull's return is
+fittings and wake as much as steel, which `diffuse_db` stands in for.
+The first real picture will move some numbers, and the differentiable
+model is also how to move them: fit the *scene* (sea state, seabed
+strength, gain) to a real bare picture before fitting a boat to it.
 
 ### Multipath, and why a boat does not show a double return
 
