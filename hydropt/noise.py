@@ -164,7 +164,8 @@ def calibrate(image: Tensor, source_level_db: float, *,
 
 
 def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,
-                       generator: torch.Generator | None = None) -> Tensor:
+                       generator: torch.Generator | None = None,
+                       complex_output: bool = False) -> Tensor:
     """One realisation of ``|signal + noise|^2``, from the signal's power alone.
 
     The beamformer returns ``|b|^2``, having already thrown away the phase, and
@@ -203,7 +204,13 @@ def add_receiver_noise(power: Tensor, noise_power: Tensor | float, *,
                     generator=generator) * sigma
     if power.is_complex():
         re, im = power.real + x, power.imag + y
+        if complex_output:
+            # the noisy FIELD itself, the same draw: a label needs the
+            # phasor of everything in a cell, not only its power
+            return torch.complex(re, im)
         return re * re + im * im
+    if complex_output:
+        raise ValueError("complex_output needs a complex field, not a power image")
     # Floored at the smallest normal number, not at zero.  The derivative of
     # sqrt at exactly zero is infinite, and a cell the beamformer left at
     # exactly zero (an empty bin, or a value that underflowed) then turns the

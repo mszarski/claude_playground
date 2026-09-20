@@ -59,7 +59,7 @@ print(scene.bottom_loss.loss_db.grad)
 pip install -e .           # torch >= 2.2, numpy, matplotlib
 pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
-python -m pytest tests -q  # 563 tests, ~22 min on 4 cores
+python -m pytest tests -q  # 574 tests, ~22 min on 4 cores
 ```
 
 ## Coordinates and units
@@ -1650,6 +1650,56 @@ calls the pattern once per highlight, so a 1200-point kelp stand's echo
 took 80 s until the tilts were cached (now under a second: keep the
 patterns cheap).
 
+### Labels from the forward pass: boxes, masks and classes
+
+A simulator knows what is in its picture, so a training set should not need
+a detector to label it.  `hydropt/labels.py` reads the labels off the
+fields the renderer already forms: `PictureRenderer` beamforms every
+target on its own before adding it to the reverberation, and for a target
+`A` in a picture whose noisy field is `b = b_rev + sum b_k + n`, the cells
+where `|b_A|^2` stands over `|b - b_A|^2` -- over everything else, the other
+targets and the noise included -- by 3 dB are the cells the picture shows
+as `A`.  That is `A`'s **mask** (in beams and bins, and through the
+example's own `to_cartesian` in metres), its **signal box** is the mask's
+bounding box (polar and Cartesian; the polar one is tight for a spoke, one
+beam wide and every bin long), its **centroid** and **peak** are read off
+`|b_A|^2` over the mask, its **contrast** is `|b_A|^2` over the rest at
+the peak, and its **class** is the target's `label` attribute (`"boat
+hull"`, `"buoy"`, `"mooring chain"`, `"kelp forest"`, `"noise spoke"`).
+Its **geometry box** is what the object physically spans -- every vertex
+of a mesh, every highlight of an extended target, carried into the world
+-- dilated by one beam width and one range cell, and it does not depend on
+visibility: a shadowed hull has a geometry box and an empty mask, and
+`visible` is a non-empty mask with the peak over the margin.  An emission
+(a propeller's spoke) is labelled the same way from its own beams.
+
+Two gates were needed before the boxes were right, and both are physics
+rather than tuning.  A +48 dB echo throws a sidelobe ring round the swath
+at its range that is 43 dB down under a Hamming window and so still 5 dB
+over the reverberation: the first boxes spanned the whole swath across.  A
+cell now has to be within 35 dB of the target's own brightest cell as
+well.  And a target with geometry is gated to its own extent plus two
+beams, two range cells short and five metres long (`polar_gate`; the
+surface- and bottom-image paths arrive later than the direct one, never
+earlier), so whatever leaks further is leakage.  `picture(...,
+labels=True)`, `sequence(..., labels=True)` and `ownship_sequence(...,
+labels=True)` return a `Label` per target and per emitter with every
+frame; `Label.to_dict()` is a JSON record and `draw_labels` puts the boxes
+on an axis.  Examples 28 and 29 draw them on their GIFs, write a JSON of
+labels per frame (`figures/28_labels_<scenario>.json`, `29_labels_...`)
+and check them against the truth: the "boat hull" box on the boat in every
+frame, the "noise spoke" label present exactly when the stern is towards
+the sonar, and in 29 each obstacle's label visible in every ping with its
+box within a beam of where the ownship pose puts it and more than half of
+it inside its geometry box.
+
+The two boxes answer different questions for a detector.  The signal box
+is what the sonar shows and what a detector can be asked to find; the
+geometry box is where the object is; and their overlap, per frame, is how
+much of the object the picture reveals.  Instance masks come free with
+them, as does the polar (beam, bin) form for a network that works on the
+sonar's own rectangle rather than the resampled picture.
+
 ### Multipath, and why a boat does not show a double return
 
 An image-source prediction is the cheapest check there is on a two-way model, so
@@ -1799,8 +1849,8 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `25_rubble_breakwater.py` | a rubble mound with 3 m armour cubes: grains of rice | 12.4 dB of texture against the caisson's 3.8; ahead, grains 4 m long against a 6.3 m beam, one per 13 m |
 | `26_kelp_buoy_shoal.py` | a kelp forest, a buoy moored with a chain, a packed shoal | kelp +24 dB at its front fading to +7 at its back; buoy +44 dB, its chain a line at +27 dB; shoal +14 dB |
 | `27_buoy_moorings.py` | the buoy three ways: chain across, along, and a slack mooring on the bottom | across and along, a line the mooring's span long (30 m) either way, one beam wide at half power; slack, a 13 m tail under the buoy at +25 dB and the ground chain 9 dB fainter in the lobe's skirt |
-| `28_boat_sequence.py` | the boat under way: 16 pings through a U-turn into a GIF, quiet and with its propeller radiating | quiet, echo centroid within 9.8 m of the boat in every frame (tolerance 27.7) and no spoke (-0.3 dB); radiating, the spoke +18.5 to +20.9 dB with the stern within 60 deg and -0.6 to +0.7 dB with the bow within 60 deg; 1.6 s a frame (1.8 radiating) against 10.1 s for the background |
-| `29_ownship_sequence.py` | the sonar under way through a still world, three scenarios on one track: a moored boat, a buoy on its chain, a kelp stand; 12 pings each into a GIF, the sea re-traced at every pose | boat centroid within 9.7 m (tolerance 22.1); buoy 25-43 dB over its surroundings where the pose puts it, back in the world at (201.3, 43.5) m against (200, 40) with 3.9 m RMS scatter (a 6.8 m beam); kelp +18.6 dB; consecutive pings' seas correlate at 0.09, the same pose twice at 1.000; 10.4 s a ping traced, 0.8-3.4 s with the backgrounds kept |
+| `28_boat_sequence.py` | the boat under way: 16 pings through a U-turn into a GIF, quiet and with its propeller radiating, every frame labelled | quiet, echo centroid within 9.8 m of the boat in every frame (tolerance 27.7) and no spoke (-0.3 dB); radiating, the spoke +18.5 to +20.9 dB with the stern within 60 deg and -0.6 to +0.7 dB with the bow within 60 deg; the "boat hull" label's box on the boat in 32 of 32 frames (contrast +3 to +55 dB), the "noise spoke" label in every stern-on frame and no bow-on one; 1.4 s a frame (1.6 radiating) against 10.3 s for the background |
+| `29_ownship_sequence.py` | the sonar under way through a still world, three scenarios on one track: a moored boat, a buoy on its chain, a kelp stand; 12 pings each into a GIF, the sea re-traced at every pose, every ping labelled | boat centroid within 9.7 m (tolerance 22.1); buoy 25-43 dB over its surroundings where the pose puts it, back in the world at (201.3, 43.5) m against (200, 40) with 3.9 m RMS scatter (a 6.8 m beam); kelp +18.6 dB; consecutive pings' seas correlate at 0.09, the same pose twice at 1.000; the "boat hull", "buoy" and "kelp forest" labels visible in 12 of 12 pings each, boxes on the pose's place, the smaller of signal and geometry box 78-84 % inside the other; 10.4 s a ping traced, 0.8-3.4 s with the backgrounds kept |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure.  Runtimes on a 4-core CPU are seconds for 01-02,
@@ -1832,8 +1882,8 @@ much (trace 32-37 s, beamform 13 s).  Measured, every check passing:
 | `25` | 27.5 dB of texture against the caisson's 14.7; ahead the grains are the units themselves, 1.4 m against a 1.7 m beam, 24 per 100 m |
 | `26` | kelp +13.5 dB at its front fading to +2.5 at its back; buoy +38 dB, its chain +17 dB; shoal +8.3 dB |
 | `27` | across, 25.5 m of the 30 m span bright at +8 dB (a 1.5 m beam holds seven links, not sixty); along, 30 m long and 1.5 m wide at half power; slack, the 13 m tail at +12 dB and the ground chain at +8 |
-| `28` | quiet, echo centroid within 9.9 m of the boat in every frame (tolerance 17.9), no spoke (-0.2 dB); radiating, the spoke +8.4 to +13.4 dB with the stern within 60 deg and -0.7 to +0.4 dB with the bow within 60 deg; 2.2 s a frame against 19.3 s for the background |
-| `29` | boat centroid within 9.3 m (tolerance 16.6); buoy 35-48 dB over its surroundings where each pose puts it, back in the world at (101.3, 20.8) m against (100, 20) with 1.3 m RMS scatter (a 1.6 m beam); kelp +15.1 dB; consecutive pings' seas correlate at 0.06, the same pose twice at 1.000; 19.9 s a ping traced, 1.3-4.3 s with the backgrounds kept |
+| `28` | quiet, echo centroid within 9.9 m of the boat in every frame (tolerance 17.9), no spoke (-0.2 dB); radiating, the spoke +8.4 to +13.4 dB with the stern within 60 deg and -0.7 to +0.4 dB with the bow within 60 deg; the "boat hull" label on the boat in 32 of 32 frames (+18 to +75 dB), the "noise spoke" label stern-on only; 1.3-1.7 s a frame against 20.1 s for the background |
+| `29` | boat centroid within 9.3 m (tolerance 16.6); buoy 35-48 dB over its surroundings where each pose puts it, back in the world at (101.3, 20.8) m against (100, 20) with 1.3 m RMS scatter (a 1.6 m beam); kelp +15.1 dB; consecutive pings' seas correlate at 0.06, the same pose twice at 1.000; the three labels visible in 12 of 12 pings each, boxes within 1.9 m of the pose's place, the smaller box 68-83 % inside the other; 19.9 s a ping traced, 1.3-4.3 s with the backgrounds kept |
 
 Two things the higher head taught.  The rubble breakwater's grains resolve
 into the armour units at 1.4 degrees, which is what an operator sees on such
@@ -1978,6 +2028,7 @@ hydropt/
   emission.py    what a vessel radiates, as a random-phase pulse train on its one-way paths
   sequence.py    a Trajectory of poses, and a PictureRenderer: background once, a picture per pose;
                  the ownship moving through a still world (relative_pose, reframe_height_field)
+  labels.py      boxes, masks, centroids and classes per target from the fields, in the forward pass
   wake.py        a vessel's Kelvin wake as a height field, and its bubble band
   transport.py   Sinkhorn divergence between images, for a loss that reaches
   scene.py       Scene container
@@ -1985,7 +2036,7 @@ hydropt/
   plot.py        matplotlib views, FLS sector display; optional plotly
 examples/        01-29, each with acceptance checks; 21-29 share one scene
 scripts/         benchmark.py, timing_picture.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           563 tests
+tests/           574 tests
 CLAUDE.md        how to work in this repository: conventions, what was learned, adding an example
 ```
 

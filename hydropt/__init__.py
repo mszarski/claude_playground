@@ -124,6 +124,8 @@ from .rough import (
 )
 from .scene import Scene
 from .emission import emission_arrivals, propeller_directivity
+from .labels import (Label, draw_labels, geometry_box, label_from_beams, polar_gate,
+                     signal_mask, world_geometry)
 from .sequence import PictureRenderer, Trajectory, reframe_height_field, relative_pose
 from .sediments import (
     SEDIMENTS,
@@ -201,5 +203,7 @@ __all__ = [
     # sequences
     "Trajectory", "PictureRenderer", "relative_pose", "reframe_height_field",
     "emission_arrivals", "propeller_directivity",
+    "Label", "label_from_beams", "signal_mask", "polar_gate", "geometry_box", "world_geometry",
+    "draw_labels",
     "__version__",
 ]

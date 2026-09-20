@@ -28,7 +28,7 @@ paragraph there explaining the bug that forced them.
 ```bash
 pip install -e '.[dev]' && pip install scipy   # torch >= 2.2; scipy for examples 19 and 25
 
-python -m pytest tests -q                 # 563 tests, ~22 min on 4 cores
+python -m pytest tests -q                 # 574 tests, ~22 min on 4 cores
 python -m pytest tests/test_beamform.py -q -x
 python -m pytest tests -q -k "incoherent"
 
@@ -61,8 +61,10 @@ delay-and-sum) -> `noise.py` (calibrate, receiver noise) -> the example's
 are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
 (triangle meshes by physical optics, `load_obj`, generators, occlusion).
 `sequence.py` wraps that path for a moving target (`PictureRenderer`,
-`Trajectory`), and `emission.py` is what a vessel radiates (a spoke, with
-`propeller_directivity`: shielded forward by the hull, notched astern).
+`Trajectory`), `emission.py` is what a vessel radiates (a spoke, with
+`propeller_directivity`: shielded forward by the hull, notched astern), and
+`labels.py` reads a box, a mask and a class per target off the fields
+(`picture(..., labels=True)`; the class is the target's `label` attribute).
 
 ## Conventions
 
@@ -149,6 +151,10 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
   wrong.  A 4 m cylinder at 30 m needs `n_patches=1` (bead `cva`).
 * An occluder is binary (`segment_mesh_transmission`); translucent things
   (kelp) are attenuated instead (`examples/26`).
+* A label's mask is where the target's own power beats everything else by
+  3 dB AND is within 35 dB of its own peak AND lies within its geometry
+  plus two beams: without the second gate a +48 dB echo's Hamming
+  sidelobes (-43 dB) label the whole swath at its range as the target.
 
 ## Operating notes
 

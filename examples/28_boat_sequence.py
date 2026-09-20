@@ -58,7 +58,11 @@ Acceptance criteria:
     that sees the stern within 60 degrees, and under 3 dB in every frame
     that sees the bow within 60 degrees (the spoke comes and goes with the
     aspect); quiet, under 2 dB in the median frame;
-  * a frame costs less than the background did.
+  * a frame costs less than the background did;
+  * the labels the forward pass writes (``hydropt.labels``: a box, a mask
+    and a class per target from its own beams) agree with the truth: the
+    "boat hull" box is on the boat in every frame, and the "noise spoke"
+    label is there whenever the stern is towards us and never bow-on.
 
 The track and its speed scale with the head's swath (``HYDROPT_SONAR=330``
 halves both); ``HYDROPT_SCENARIO`` picks ``quiet``, ``emission`` or ``all``,
@@ -68,6 +72,7 @@ halves both); ``HYDROPT_SCENARIO`` picks ``quiet``, ``emission`` or ``all``,
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 import os
 import time
@@ -82,8 +87,8 @@ import torch
 from _common import FIGURE_DIR, banner, check, save, setup, timed
 from hydropt import (
     LambertScattering, PictureRenderer, Trajectory, azimuth_steering, beam_noise_power,
-    emission_arrivals, line_array_directivity_db, make_time_grid, propeller_directivity,
-    shading_window,
+    draw_labels, emission_arrivals, line_array_directivity_db, make_time_grid,
+    propeller_directivity, shading_window,
 )
 from hydropt.mesh import boat_hull_mesh, mesh_target
 
@@ -190,9 +195,11 @@ def main() -> int:
                                   n_around=int(round(34 * girth / (3.2 + 2.0 * 4.0))))
 
     def boat(x, y, heading_deg):
-        return mesh_target(verts, faces, position=(x, y, 0.0), yaw=heading_deg, n_patches=6,
-                           sound_speed=C, diffuse_db=ex.DIFFUSE_DB, learnable=False,
-                           learnable_shape=False, facet_chunk=4096, checkpoint=False)
+        t = mesh_target(verts, faces, position=(x, y, 0.0), yaw=heading_deg, n_patches=6,
+                        sound_speed=C, diffuse_db=ex.DIFFUSE_DB, learnable=False,
+                        learnable_shape=False, facet_chunk=4096, checkpoint=False)
+        t.label = "boat hull"            # the class its label carries
+        return t
 
     centre = rx.mean(dim=0)
 
@@ -208,6 +215,8 @@ def main() -> int:
             generator=torch.Generator().manual_seed(ex.SEED + 3 + frame))
         clear.append((n_clear, n_paths))
         return arr
+
+    propeller.label = "noise spoke"
 
     # ---- the track --------------------------------------------------------- #
     traj = track()
@@ -261,9 +270,13 @@ def main() -> int:
         clear = []
         emitters = [propeller] if name == "emission" else []
         frames, poses, cents, peaks, spokes, costs, aspects = [], [], [], [], [], [], []
+        labels, records = [], []
         last = time.perf_counter()
-        for k, (t, pose, (cart, _, _)) in enumerate(
-                renderer.sequence(boat, traj, times, emitters=emitters)):
+        for k, (t, pose, (cart, _, _), labs) in enumerate(
+                renderer.sequence(boat, traj, times, emitters=emitters, labels=True)):
+            labels.append(labs)
+            records.append(dict(frame=k, t=float(t), pose=list(pose),
+                                labels=[l.to_dict() for l in labs]))
             now = time.perf_counter()          # the generator worked between yields
             costs.append(now - last)
             last = now
@@ -283,6 +296,40 @@ def main() -> int:
                   f"peak {p_err:5.1f} m off; spoke {spokes[-1]:+5.1f} dB{note}")
         per_frame = sum(costs) / len(costs)
         tol = 0.5 * ex.HULL_LENGTH + math.radians(beam_deg) * 0.8 * ex.FAR
+        # the labels, read off the fields: the hull's box against its true
+        # place, and the spoke's presence against the aspect
+        hull = [next(l for l in labs if l.name == "boat hull") for labs in labels]
+        hull_off = []
+        for l, (x, y, _) in zip(hull, poses):
+            if l.box_m is None:
+                hull_off.append(float("inf")); continue
+            x0, y0, x1, y1 = l.box_m
+            hull_off.append(math.hypot(max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)))
+        n_vis = sum(l.visible for l in hull)
+        print(f"  labels: 'boat hull' visible in {n_vis} of {len(hull)} frames, its box within "
+              f"{max(hull_off):.1f} m of the boat's centre at most; contrast "
+              f"{min(l.contrast_db for l in hull):+.1f} to {max(l.contrast_db for l in hull):+.1f} dB")
+        ok &= check(f"{name}: the 'boat hull' label is on the boat in every frame",
+                    n_vis == len(hull) and max(hull_off) < math.radians(beam_deg) * 0.8 * ex.FAR,
+                    f"visible {n_vis}/{len(hull)}, box within {max(hull_off):.1f} m of the centre")
+        if name == "emission":
+            # a spoke is an emission label that runs along the bearing: seen
+            # when visible and spanning more than half the range bins
+            spk = [next((l for l in labs if l.name == "noise spoke"), None) for labs in labels]
+            span = [0.0 if (l is None or not l.visible)
+                    else (l.polar_box[3] - l.polar_box[2] + 1) / ex.N_BINS for l in spk]
+            seen = [sp > 0.5 for sp in span]
+            astern_seen = [v for v, a in zip(seen, aspects) if a < 60.0]
+            ahead_seen = [v for v, a in zip(seen, aspects) if a > 120.0]
+            print(f"  labels: 'noise spoke' spans over half the range bins in {sum(seen)} of "
+                  f"{len(seen)} frames (up to {max(span) * 100:.0f} %)")
+            ok &= check("the 'noise spoke' label follows the aspect: stern-on yes, bow-on no",
+                        all(astern_seen) and not any(ahead_seen),
+                        f"stern-on {sum(astern_seen)}/{len(astern_seen)}, bow-on "
+                        f"{sum(ahead_seen)}/{len(ahead_seen)}")
+        with open(FIGURE_DIR / f"28_labels_{name}{ex.TAG}.json", "w") as fh:
+            json.dump(dict(example=28, scenario=name, sonar=ex.SONAR, frames=records), fh, indent=1)
+        print(f"  wrote figures/28_labels_{name}{ex.TAG}.json")
         print(f"  {len(frames)} frames, {per_frame:.1f} s each; centroid off by "
               f"{max(cents):.1f} m at most (tolerance {tol:.1f} m), peak by {max(peaks):.1f} m; "
               f"spoke median {sorted(spokes)[len(spokes) // 2]:+.1f} dB")
@@ -314,6 +361,7 @@ def main() -> int:
         ax.plot(traj.positions[:, 0].numpy(), traj.positions[:, 1].numpy(), "c:", lw=0.8, alpha=0.6)
         dot, = ax.plot([], [], "c+", ms=12, mew=1.5)
         arrow, = ax.plot([], [], "c-", lw=1.2)
+        boxes = []
         ax.set_xlabel("forward (m)"); ax.set_ylabel("across (m)")
         ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
         fig.colorbar(im, ax=ax, fraction=0.04, label="dB re the background at that range")
@@ -326,9 +374,15 @@ def main() -> int:
             dot.set_data([x], [y])
             hx, hy = math.cos(math.radians(h)), math.sin(math.radians(h))
             arrow.set_data([x, x + 0.5 * ex.HULL_LENGTH * hx], [y, y + 0.5 * ex.HULL_LENGTH * hy])
+            for b in boxes:
+                b.remove()
+            boxes.clear()
+            n_p, n_t = len(ax.patches), len(ax.texts)
+            draw_labels(ax, [l for l in labels[i] if l.visible])
+            boxes.extend(ax.patches[n_p:]); boxes.extend(ax.texts[n_t:])
             ax.set_title(f"t = {times[i]:.0f} s: the boat at ({x:.0f}, {y:.0f}) m, "
                          f"heading {h:.0f} deg")
-            return im, dot, arrow
+            return im, dot, arrow, *boxes
 
         anim = animation.FuncAnimation(fig, draw, frames=len(frames), interval=250, blit=False)
         gif = FIGURE_DIR / f"28_sequence_{name}{ex.TAG}.gif"
@@ -344,6 +398,7 @@ def main() -> int:
             im = ax.imshow(frames[i].numpy(), origin="lower", extent=ext, vmin=ex.THRESHOLD_DB,
                            vmax=ref, cmap="inferno", aspect="equal")
             ax.plot(x, y, "c+", ms=10, mew=1.2)
+            draw_labels(ax, [l for l in labels[i] if l.visible])
             ax.set_title(f"t = {times[i]:.0f} s, heading {h:.0f} deg")
             ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
         fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS to {ex.FAR:.0f} m: {CAPTION[name]}, "

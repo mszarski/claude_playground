@@ -51,6 +51,7 @@ from torch import Tensor
 from .active import target_arrivals
 from .boundaries import BilinearHeightField
 from .beamform import ArrivalSet, beamform
+from .labels import Label, label_from_beams, world_geometry
 from .noise import add_receiver_noise, calibrate
 from .reverb import reverberation_arrivals
 from .tracer import trace
@@ -201,6 +202,12 @@ class PictureRenderer:
         seed: reverberation and target rays are drawn from it; the receiver
             noise from ``seed + 2 + frame``.
         steer_chunk: the beamformer's.
+        beam_deg, sound_speed, label_margin_db: for the labels
+            (:mod:`hydropt.labels`): the beam's half-power width (by default
+            ``101.5 / n`` degrees, 1.3 times that under a shading window),
+            the sound speed that turns the time grid into range, and the
+            margin a target must stand over everything else in a cell to
+            be in its mask.
     """
 
     def __init__(self, scene, *, elements: Tensor, directions: Tensor, tx_weights: Tensor,
@@ -211,7 +218,8 @@ class PictureRenderer:
                  occluders=None, surface_gain=None, max_arrivals: int | None = None,
                  display: Callable | None = None, to_cartesian: Callable | None = None,
                  target_kwargs: dict | None = None, seed: int = 0,
-                 steer_chunk: int = 8) -> None:
+                 steer_chunk: int = 8, beam_deg: float | None = None,
+                 sound_speed: float = 1500.0, label_margin_db: float = 3.0) -> None:
         from .beamform import beam_power_scale, shading_window
         self.scene = scene
         self.elements = elements
@@ -246,6 +254,13 @@ class PictureRenderer:
         self.beam_scale = beam_power_scale(w, self.sigma_t)
         self._background: Tensor | None = None
         self.n_reverberation = 0
+        self.beam_deg = float(beam_deg) if beam_deg is not None else (
+            101.5 / n * (1.3 if shading is not None else 1.0))
+        self.sound_speed = float(sound_speed)
+        self.range_cell_m = 2.355 * self.sigma_t * self.sound_speed / 2.0   # the pulse's FWHM
+        self.label_margin_db = float(label_margin_db)
+        self.bearings_deg = torch.rad2deg(torch.atan2(steer[:, 1], steer[:, 0]))
+        self.ranges_m = time_grid * self.sound_speed / 2.0
 
     def set_scene(self, scene, background: Tensor | None = None) -> None:
         """A new scene (the world re-expressed at another ownship pose).
@@ -290,7 +305,8 @@ class PictureRenderer:
                                **self.target_kwargs)
 
     def picture(self, targets: Sequence, *, extra_arrivals: Sequence = (),
-                frame: int = 0, coherent: bool = True):
+                frame: int = 0, coherent: bool = True, labels: bool = False,
+                extra_names: Sequence[str] = ()):
         """The picture with ``targets`` in the scene.
 
         ``extra_arrivals`` are :class:`ArrivalSet`s formed and added
@@ -299,18 +315,45 @@ class PictureRenderer:
         ``coherent=False`` adds the targets' arrivals in power (their expected
         intensity, for a fit's model side); the background stays coherent.
         Returns what ``to_cartesian`` returns, or the displayed polar image.
+
+        ``labels=True`` (coherent only) also returns a list of
+        :class:`~hydropt.labels.Label`, one per target label and per extra
+        arrival set, from each one's own beams against everything else's:
+        the class is the target's ``label`` attribute (``extra_names`` for
+        the extra arrivals; targets sharing a label are one label, their
+        beams summed and their geometry pooled -- a buoy with its chain),
+        its mask and boxes are where its energy stands over the rest by
+        ``label_margin_db``, and its geometry box is its world extent
+        dilated by the resolution (:mod:`hydropt.labels`).
         """
         b_rev = self.background()
+        own_extra = []
         for arr in extra_arrivals:
             if arr is not None:
-                b_rev = b_rev + self.beams(arr)
+                be = self.beams(arr)
+                own_extra.append(be)
+                b_rev = b_rev + be
+            else:
+                own_extra.append(None)
         noise_gen = torch.Generator().manual_seed(self.seed + 2 + int(frame))
         if coherent:
             b = b_rev
+            own = []
             for t in targets:
-                b = b + self.beams(self.echo(t))
+                bt = self.beams(self.echo(t))
+                own.append(bt)
+                b = b + bt
             field = calibrate(b, self.source_level_db, beam_scale=self.beam_scale)
             noisy = add_receiver_noise(field, self.noise_power, generator=noise_gen)
+            if labels:
+                # the noisy field itself: |b + n|^2 is what add_receiver_noise
+                # returns, and its phasor is recovered up to the noise's own
+                # phase by drawing the same noise again on the field
+                noise_field = add_receiver_noise(field, self.noise_power,
+                                                 generator=torch.Generator().manual_seed(
+                                                     self.seed + 2 + int(frame)),
+                                                 complex_output=True)
+                labs = self._labels(targets, own, own_extra, extra_names, noise_field)
         else:
             back = calibrate(b_rev, self.source_level_db, beam_scale=self.beam_scale)
             noisy = add_receiver_noise(back, self.noise_power, generator=noise_gen)
@@ -321,12 +364,54 @@ class PictureRenderer:
                                  coherent=False, checkpoint=False)
                 noisy = noisy + calibrate(power, self.source_level_db, beam_scale=self.beam_scale)
         shown = noisy if self.display is None else self.display(noisy)
-        return shown if self.to_cartesian is None else self.to_cartesian(shown)
+        out = shown if self.to_cartesian is None else self.to_cartesian(shown)
+        if labels and coherent:
+            return out, labs
+        return out
+
+    def _labels(self, targets, own, own_extra, extra_names, noisy_field) -> list[Label]:
+        """One label per target and per extra arrival set, from the beams."""
+        scale = math.sqrt(10.0 ** (self.source_level_db / 10.0) / self.beam_scale)
+        cal = lambda bb: bb * scale                      # calibrate() on a field
+        total = noisy_field
+        labs = []
+        with torch.no_grad():
+            # targets sharing a label are one thing to the picture (a buoy
+            # and its chain, a hull and its fittings): their beams are
+            # summed and their geometry pooled before the mask is taken
+            groups: dict[str, tuple[Tensor, list]] = {}
+            for t, bt in zip(targets, own):
+                name = getattr(t, "label", type(t).__name__)
+                pts = world_geometry(t)
+                if name in groups:
+                    b0, p0 = groups[name]
+                    groups[name] = (b0 + bt, p0 + [pts])
+                else:
+                    groups[name] = (bt, [pts])
+            for name, (bt, pts) in groups.items():
+                bt_c = cal(bt)
+                rest = (total - bt_c).abs() ** 2
+                labs.append(label_from_beams(
+                    name, "target", bt_c.abs() ** 2, rest,
+                    margin_db=self.label_margin_db, to_cartesian=self.to_cartesian,
+                    geometry_points=torch.cat(pts, dim=0), beam_deg=self.beam_deg,
+                    range_m=self.range_cell_m, bearings_deg=self.bearings_deg,
+                    ranges_m=self.ranges_m))
+            names = list(extra_names) + ["emission"] * (len(own_extra) - len(extra_names))
+            for be, name in zip(own_extra, names):
+                if be is None:
+                    continue
+                be_c = cal(be)
+                rest = (total - be_c).abs() ** 2
+                labs.append(label_from_beams(
+                    name, "emission", be_c.abs() ** 2, rest, margin_db=self.label_margin_db,
+                    to_cartesian=self.to_cartesian))
+        return labs
 
     def sequence(self, builder: Callable[[float, float, float], object],
                  trajectory: Trajectory, times: Iterable[float], *,
                  extra_targets: Sequence = (), emitters: Sequence[Callable] = (),
-                 coherent: bool = True):
+                 coherent: bool = True, labels: bool = False):
         """Frames of a target moved along ``trajectory``: ``(t, pose, picture)`` per time.
 
         ``builder(x, y, heading_deg)`` returns the target at that pose (a
@@ -335,20 +420,25 @@ class PictureRenderer:
         ``f(x, y, heading_deg, frame) -> ArrivalSet | None``, what the vessel
         radiates from that pose (its propeller, through
         :func:`~hydropt.emission.emission_arrivals`), added to the field.
-        A generator, so frames can be drawn and dropped as they come.
+        A generator, so frames can be drawn and dropped as they come.  With
+        ``labels=True`` each frame is ``(t, pose, picture, labels)``, the
+        emitters' labels named by their ``label`` attribute.
         """
+        names = [getattr(e, "label", "emission") for e in emitters]
         for k, t in enumerate(times):
             pose = trajectory.at(float(t))
             target = builder(*pose)
             with torch.no_grad():
                 extra = [e(*pose, k) for e in emitters]
-                pic = self.picture([target, *extra_targets], extra_arrivals=extra,
-                                   frame=k, coherent=coherent)
-            yield float(t), pose, pic
+                out = self.picture([target, *extra_targets], extra_arrivals=extra,
+                                   frame=k, coherent=coherent, labels=labels,
+                                   extra_names=names)
+            yield (float(t), pose, *out) if labels else (float(t), pose, out)
 
     def ownship_sequence(self, world_targets: Sequence, trajectory: Trajectory,
                          times: Iterable[float], *, scene_at: Callable | None = None,
-                         emitters: Sequence[Callable] = (), coherent: bool = True):
+                         emitters: Sequence[Callable] = (), coherent: bool = True,
+                         labels: bool = False):
         """Frames of the SONAR moved along ``trajectory`` through stationary targets.
 
         ``world_targets`` are ``(world_pose, builder)`` pairs: the pose
@@ -363,8 +453,10 @@ class PictureRenderer:
         background is kept, which freezes the sea to the sonar and is only
         right for a flat, featureless one.  ``emitters`` are as in :meth:`sequence` but
         are called with the OWNSHIP pose, for things that radiate on the
-        sonar's own platform.  Yields ``(t, ownship_pose, picture)``.
+        sonar's own platform.  Yields ``(t, ownship_pose, picture)``, or
+        ``(t, ownship_pose, picture, labels)`` with ``labels=True``.
         """
+        names = [getattr(e, "label", "emission") for e in emitters]
         for k, t in enumerate(times):
             pose = trajectory.at(float(t))
             with torch.no_grad():
@@ -376,5 +468,6 @@ class PictureRenderer:
                         self.set_scene(seen)
                 targets = [build(*relative_pose(wp, pose)) for wp, build in world_targets]
                 extra = [e(*pose, k) for e in emitters]
-                pic = self.picture(targets, extra_arrivals=extra, frame=k, coherent=coherent)
-            yield float(t), pose, pic
+                out = self.picture(targets, extra_arrivals=extra, frame=k, coherent=coherent,
+                                   labels=labels, extra_names=names)
+            yield (float(t), pose, *out) if labels else (float(t), pose, out)

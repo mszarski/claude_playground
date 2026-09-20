@@ -56,7 +56,15 @@ Acceptance criteria (each on its own scenario):
     is rendered anew at each pose, not carried along), while a ping
     rendered twice at one pose correlates at 1;
   * a frame's cost is reported: a whole picture in the first scenario,
-    the echoes alone after.
+    the echoes alone after;
+  * the labels the forward pass writes (``hydropt.labels``: a box, a mask
+    and a class per target from its own beams; the buoy, its chain and its
+    sinker share the label "buoy", since the chain is what the sonar shows
+    of a moored buoy and the sphere alone barely stands over it) are on
+    the obstacle in every ping: visible, the box within a beam of where the
+    pose puts it,
+    and the smaller of its signal and geometry boxes more than half inside
+    the other.
 
 ``HYDROPT_FRAMES`` sets the number of pings (12); the track and the world
 scale with the head's swath (``HYDROPT_SONAR=330``).
@@ -65,6 +73,7 @@ scale with the head's swath (``HYDROPT_SONAR=330``).
 from __future__ import annotations
 
 import importlib.util
+import json
 import math
 import os
 import time
@@ -79,7 +88,7 @@ import torch
 from _common import FIGURE_DIR, banner, check, save, setup, timed
 from hydropt import (
     CurvedSurfaceScattering, ExtendedTarget, IsotropicScattering, LambertScattering,
-    PictureRenderer, Trajectory, azimuth_steering, beam_noise_power, box_mesh,
+    PictureRenderer, Trajectory, azimuth_steering, beam_noise_power, box_mesh, draw_labels,
     fractal_bathymetry, line_array_directivity_db, make_time_grid, pierson_moskowitz_surface,
     reframe_height_field, relative_pose, shading_window, wave_number_peak_pm,
 )
@@ -215,17 +224,22 @@ def main() -> int:
                                   n_long=int(round(110 * ex.HULL_LENGTH / 12.0)),
                                   n_around=int(round(34 * girth / (3.2 + 2.0 * 4.0))))
 
+    def labelled(target, name):
+        target.label = name              # the class its label carries
+        return target
+
     def boat(x, y, heading_deg):
-        return mesh_target(verts, faces, position=(x, y, 0.0), yaw=heading_deg, n_patches=6,
-                           sound_speed=C, diffuse_db=ex.DIFFUSE_DB, learnable=False,
-                           learnable_shape=False, facet_chunk=4096, checkpoint=False)
+        return labelled(mesh_target(verts, faces, position=(x, y, 0.0), yaw=heading_deg,
+                                    n_patches=6, sound_speed=C, diffuse_db=ex.DIFFUSE_DB,
+                                    learnable=False, learnable_shape=False, facet_chunk=4096,
+                                    checkpoint=False), "boat hull")
 
     buoy_depth = BUOY_RADIUS * 0.6
 
     def buoy(x, y, heading_deg):
-        return ExtendedTarget(torch.zeros(1, 3),
-                              CurvedSurfaceScattering(BUOY_RADIUS, BUOY_RADIUS, learnable=False),
-                              position=(x, y, buoy_depth), learnable=False)
+        return labelled(ExtendedTarget(
+            torch.zeros(1, 3), CurvedSurfaceScattering(BUOY_RADIUS, BUOY_RADIUS, learnable=False),
+            position=(x, y, buoy_depth), learnable=False), "buoy")
 
     chain_pts = catenary(CHAIN_LENGTH, CHAIN_SCOPE, ex.WATER_DEPTH - buoy_depth - 0.4, CHAIN_POINTS)
     link_db = CHAIN_LINK_DB + 10 * math.log10(LINKS_PER_M * CHAIN_LENGTH / CHAIN_POINTS)
@@ -233,15 +247,16 @@ def main() -> int:
     def chain(x, y, heading_deg):
         # the chain hangs from the buoy along the world's CHAIN_DIRECTION: its
         # heading in the sonar frame is that direction less the ownship's
-        return ExtendedTarget(chain_pts, IsotropicScattering(link_db, learnable=False),
-                              position=(x, y, buoy_depth), yaw=heading_deg, learnable=False)
+        return labelled(ExtendedTarget(chain_pts, IsotropicScattering(link_db, learnable=False),
+                                       position=(x, y, buoy_depth), yaw=heading_deg,
+                                       learnable=False), "buoy")     # the mooring is the buoy's label
 
     s_verts, s_faces = box_mesh((SINKER, SINKER, SINKER))
 
     def sinker(x, y, heading_deg):
-        return mesh_target(s_verts, s_faces, position=(x, y, ex.WATER_DEPTH - SINKER / 2),
-                           yaw=heading_deg, n_patches=1, sound_speed=C, diffuse_db=-10.0,
-                           learnable=False, facet_chunk=4096, checkpoint=False)
+        return labelled(mesh_target(s_verts, s_faces, position=(x, y, ex.WATER_DEPTH - SINKER / 2),
+                                    yaw=heading_deg, n_patches=1, sound_speed=C, diffuse_db=-10.0,
+                                    learnable=False, facet_chunk=4096, checkpoint=False), "buoy")
 
     # the kelp stand, as 26 builds it: plants on a jittered grid, eight points
     # each from the bottom to the surface, and an extinction along the
@@ -266,8 +281,8 @@ def main() -> int:
     kelp_list = [kelp_patterns[int(b)] for b in bins]
 
     def kelp(x, y, heading_deg):
-        return ExtendedTarget(kelp_offsets, kelp_list, position=(x, y, ex.WATER_DEPTH / 2),
-                              yaw=heading_deg, learnable=False)
+        return labelled(ExtendedTarget(kelp_offsets, kelp_list, position=(x, y, ex.WATER_DEPTH / 2),
+                                       yaw=heading_deg, learnable=False), "kelp forest")
 
     sc = lambda x, y, h=None: ((x * S, y * S) if h is None else (x * S, y * S, h))
     boat_w = sc(*BOAT_WORLD)
@@ -365,9 +380,14 @@ def main() -> int:
         banner(f"scenario: {name} -- {CAPTION[name]}")
         frames, bares, poses, costs = [], [], [], []
         buoy_err, buoy_over, buoy_world, boat_err, kelp_db = [], [], [], [], []
+        labels, records = [], []
         last = time.perf_counter()
-        for k, (t, pose, (cart, gx, gy)) in enumerate(
-                renderer.ownship_sequence(worlds[name], traj, times, scene_at=scene_at)):
+        for k, (t, pose, (cart, gx, gy), labs) in enumerate(
+                renderer.ownship_sequence(worlds[name], traj, times, scene_at=scene_at,
+                                          labels=True)):
+            labels.append(labs)
+            records.append(dict(frame=k, t=float(t), ownship_pose=list(pose),
+                                labels=[l.to_dict() for l in labs]))
             key = (round(pose[0], 3), round(pose[1], 3), round(pose[2], 3))
             kept.setdefault(key, (renderer.scene, renderer.background()))
             # the same ping without its target: the background is cached, so
@@ -427,6 +447,36 @@ def main() -> int:
         print(f"  {len(frames)} pings, {per_ping:.1f} s each "
               + ("(a whole picture: trace, reverberation, the echoes, two beamformed pictures)"
                  if bares_seen is None else "(the echoes and two beamformed pictures; the backgrounds kept)"))
+
+        # ---- the labels, read off the fields -------------------------------- #
+        main_label = {"boat": "boat hull", "buoy": "buoy", "kelp": "kelp forest"}[name]
+        world_pose = {"boat": boat_w, "buoy": buoy_w, "kelp": kelp_w}[name]
+        lab_off, lab_vis, lab_overlap = [], [], []
+        for labs, pose in zip(labels, poses):
+            l = next(x for x in labs if x.name == main_label)
+            lab_vis.append(l.visible)
+            px, py, _ = relative_pose(world_pose, pose)
+            if l.box_m is None:
+                lab_off.append(float("inf")); lab_overlap.append(0.0); continue
+            x0, y0, x1, y1 = l.box_m
+            lab_off.append(math.hypot(max(x0 - px, 0.0, px - x1), max(y0 - py, 0.0, py - y1)))
+            # the smaller of the two boxes mostly inside the other: the signal
+            # box is the mainlobe's width (two beams to -35 dB) where the
+            # geometry box is the object's plus one, so neither contains the other
+            g0, h0, g1, h1 = l.geometry_box_m
+            inter = max(0.0, min(x1, g1) - max(x0, g0)) * max(0.0, min(y1, h1) - max(y0, h0))
+            lab_overlap.append(inter / max(min((x1 - x0) * (y1 - y0), (g1 - g0) * (h1 - h0)), 1e-9))
+        print(f"  labels: '{main_label}' visible in {sum(lab_vis)} of {len(lab_vis)} pings, its box "
+              f"within {max(lab_off):.1f} m of the pose's place at most, the smaller box "
+              f"{min(lab_overlap) * 100:.0f} % inside the other at least; "
+              + ", ".join(f"'{x.name}' {x.contrast_db:+.0f} dB" for x in labels[-1]))
+        ok &= check(f"{name}: the '{main_label}' label is on it in every ping",
+                    all(lab_vis) and max(lab_off) < bw(ex.FAR) and min(lab_overlap) > 0.5,
+                    f"visible {sum(lab_vis)}/{len(lab_vis)}, box within {max(lab_off):.1f} m, "
+                    f"the smaller box {min(lab_overlap) * 100:.0f} % inside the other")
+        with open(FIGURE_DIR / f"29_labels_{name}{ex.TAG}.json", "w") as fh:
+            json.dump(dict(example=29, scenario=name, sonar=ex.SONAR, frames=records), fh, indent=1)
+        print(f"  wrote figures/29_labels_{name}{ex.TAG}.json")
 
         # ---- the checks ---------------------------------------------------- #
         if bares_seen is None:
@@ -490,9 +540,10 @@ def main() -> int:
             for m in marks:
                 m.remove()
             marks.clear()
-            n0 = len(ax.lines)
+            n0, n_p, n_t = len(ax.lines), len(ax.patches), len(ax.texts)
             overlays(ax, name, poses[i])
-            marks.extend(ax.lines[n0:])
+            draw_labels(ax, [l for l in labels[i] if l.visible])
+            marks.extend(ax.lines[n0:]); marks.extend(ax.patches[n_p:]); marks.extend(ax.texts[n_t:])
             x, y, h = poses[i]
             ax.set_title(f"t = {times[i]:.0f} s: ownship at ({x:.0f}, {y:.0f}) m heading {h:.0f} deg")
             return [im, *marks]
@@ -511,6 +562,7 @@ def main() -> int:
             ax.imshow(frames[i].numpy(), origin="lower", extent=ext, vmin=ex.THRESHOLD_DB, vmax=ref,
                       cmap="inferno", aspect="equal")
             overlays(ax, name, poses[i])
+            draw_labels(ax, [l for l in labels[i] if l.visible])
             ax.set_title(f"t = {times[i]:.0f} s: ownship ({x:.0f}, {y:.0f}) m, heading {h:.0f} deg")
             ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
         # the world: the track and the target (and where the buoy was seen from each ping)
