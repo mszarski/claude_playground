@@ -68,7 +68,7 @@ print(scene.bottom_loss.loss_db.grad)
 pip install -e .           # torch >= 2.2, numpy, matplotlib
 pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
-python -m pytest tests -q  # 578 tests, ~22 min on 4 cores
+python -m pytest tests -q  # 579 tests, ~22 min on 4 cores
 ```
 
 ## Using it: the examples, in order
@@ -97,6 +97,7 @@ cores; a second process slows both by 10x).  What to run for what:
 | **a moving sonar**: the ownship past a moored boat, a buoy, a kelp stand | `29` | the sea re-traced at every pose; the three scenarios share the backgrounds |
 | **labelled images for ML** | `28` and `29` write boxes, masks and classes per frame | `examples/LABELS.md`: the files, the record, how to label your own scene |
 | **fit the scene to a real picture** (seabed, surface, tilt, gain, noise) | `30` | `load_picture` takes an image in dB with its axes; the fit is on the level against range |
+| **the full inverse on a picture with a boat**: scene, detection, heading, position | `31` | the boat fitted on a background the model never shares |
 | stage timings of the 300 m picture | `scripts/timing_picture.py` | the numbers in "Where the time goes now" |
 
 The switches every 21-derived example honours: `HYDROPT_SONAR` (`120`
@@ -1647,6 +1648,66 @@ floor IS inside the swath, and the same fit recovers the noise level to
 0.3 degrees and the surface to 1.1 dB (misfit 172 to 0.9 dB^2, 10 s a
 step): what a picture determines is what its geometry puts in it.
 
+### Then the boat: the full inverse on a picture the model has never seen
+
+`examples/31` puts the two fits together on a picture with a boat in it,
+rendered with hidden scene values and a hidden pose and independent
+realisations of everything random, loaded from a file.  Four stages, each
+measured at 120 kHz over 300 m:
+
+1. **The scene**, fitted on the swath's level with the boat in the picture:
+   the observable is a median over 60 beams, which one boat cannot move,
+   and the seabed and gain come out as they did without it (−0.8 and
+   +0.3 dB).
+2. **The detection**: the real picture over its own level against range is
+   an excess map (+45 dB at the boat), whose brightest cell lands 6.6 m from
+   the hull's centre against a 12 m beam.
+3. **The heading**, read off the echo and then scanned, never descended
+   (`examples/16` measured why: the loss ripples in yaw at a tenth of a
+   degree).  The excess above 10 dB round the detection is the hull's
+   echo, elongated along the hull, so its centroid is the hull's centre
+   (7.1 m off here; the peak is one bead, at a fine head an end of the
+   hull) and its principal axis the heading to a hull's 180 degree
+   ambiguity: 53.7 degrees for 55.  The last degree matters more than it
+   looks.  A 5 m hull patch glints through a lobe `lambda / 5 m` wide,
+   0.14 degrees at 120 kHz, so a model 1.3 degrees off has different
+   patches lit than the real hull, its loss is four times too high, and
+   the position it descends to is 3.6 m off where the same descent at
+   55.0 reaches 0.45 m.  So after the coarse position stages the heading
+   is scanned at half a lobe's step over 1.5 degrees either side of the
+   axis (41 headings, 64 s), and the deep, narrow minimum is the heading:
+   55.16 degrees.  Everything coarser was tried first and is worse,
+   all measured: a grid at 15 degree steps scored at the detection read
+   75 for 55 (a hull centred on its own end overlaps the real echo better
+   turned than straight), and searches at 5 and 2.5 degree steps about the
+   axis walked 53.7 to 64 to 71, because steps wider than the lobe see
+   only the ripple's envelope, whose minimum is elsewhere.
+4. **The position**, by 22's descent on the fitted background
+   (`SceneFit.renderer` makes the fitted scene a `PictureRenderer`): the
+   model's incoherent picture, the display gain frozen from the real
+   picture, a blur schedule 8/4/2/0.5 m (the 8 m stage wider than the
+   hull's 5 m bead spacing, which at 330 kHz a 4 m blur could not see
+   past), the heading scan between the 4 m and 2 m stages, and the loss
+   restricted to a disc round the centroid -- half a hull plus a beam
+   plus 5 m, so the hull is inside it whichever way it lies (a box one
+   beam wide clipped the hull at 330 kHz, where a beam is 2.8 m against a
+   30 m hull, and a clipped hull has no elongation to read).  From 7.1 m it
+   ends 0.15 m from the truth, 48 steps at 4.2 s; the same descent with
+   the true heading and no scan ends at 0.45 m.  At 330 kHz the axis
+   reads the heading exactly (55.0), the scan -- 115 headings at 0.026
+   degree steps, since the lobe is 0.05 degrees -- drifts it to 53.5, and
+   the position still ends 0.29 m from the truth, because at 2.8 m beams
+   the position is set by the beads and not by which patch glints; the
+   reference descent there, straight through the schedule with the true
+   heading, falls into a bead-spacing minimum 15 m away, which says what
+   the scan's coarse stage buys besides the heading.
+
+This is the pipeline a real ping would go through, and what it says about
+a real ping is the honest part: on a background the model does not share,
+a quarter of a beam in position and five degrees in heading is where one
+ping's fit stops; a second ping from another position, or a sequence, is
+what resolves the rest (`examples/28` has the sequence).
+
 ### A boat under way: a picture per ping
 
 `examples/28` moves 21's hull along a track -- in from port heading at the
@@ -2039,17 +2100,18 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `28_boat_sequence.py` | the boat under way: 16 pings through a U-turn into a GIF, quiet and with its propeller radiating, every frame labelled | quiet, echo centroid within 9.8 m of the boat in every frame (tolerance 27.7) and no spoke (-0.3 dB); radiating, the spoke +18.5 to +20.9 dB with the stern within 60 deg and -0.6 to +0.7 dB with the bow within 60 deg; the "boat hull" label's box on the boat in 32 of 32 frames (contrast +3 to +55 dB), the "noise spoke" label in every stern-on frame and no bow-on one; 1.4 s a frame (1.6 radiating) against 10.3 s for the background |
 | `29_ownship_sequence.py` | the sonar under way through a still world, three scenarios on one track: a moored boat, a buoy on its chain, a kelp stand; 12 pings each into a GIF, the sea re-traced at every pose, every ping labelled | boat centroid within 9.7 m (tolerance 22.1); buoy 25-43 dB over its surroundings where the pose puts it, back in the world at (201.3, 43.5) m against (200, 40) with 3.9 m RMS scatter (a 6.8 m beam); kelp +18.6 dB; consecutive pings' seas correlate at 0.09, the same pose twice at 1.000; the "boat hull", "buoy" and "kelp forest" labels visible in 12 of 12 pings each, boxes on the pose's place, the smaller of signal and geometry box 78-84 % inside the other; 10.4 s a ping traced, 0.8-3.4 s with the backgrounds kept |
 | `30_fit_scene_to_picture.py` | the scene fitted to a picture loaded from a file: seabed, surface, tilt, gain, noise from the level against range | from 21's defaults on a picture with hidden values and its own seeds: misfit 147 -> 2.3 dB^2 in 40 steps (1.8 s each); seabed -0.8 dB, gain +0.2 dB, tilt -0.5 deg, surface +0.7 dB from the truth; the noise level undetermined at 120 kHz (the floor 12 dB under the reverberation) and reported; gradient = finite difference (cosine 1.000) |
+| `31_fit_scene_and_boat.py` | the full inverse on a picture with a boat in it, loaded from a file: the scene on the swath's level, the boat detected as the excess, its heading from the echo's axis and a fine scan, its position by descent on the fitted background | scene as 30's with the boat in the picture (seabed -0.8, gain +0.3 dB); detection 6.6 m off, the centroid 7.1; heading 53.7 from the axis and 55.16 after the scan, against 55; position 0.15 m from the truth on a background the model never saw (0.45 m with the true heading and no scan); 48 steps at 4.2 s |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure.  Runtimes on a 4-core CPU are seconds for 01-02,
 15-25 minutes for the annealed inversions 03-05, and one to four minutes for
-each of 21-30 (22 is the longest at about five).  21-30 share one sonar,
-environment and picture: 22-30 import `21_long_range_300m.py` for their
+each of 21-31 (31 is the longest at about ten).  21-31 share one sonar,
+environment and picture: 22-31 import `21_long_range_300m.py` for their
 settings, so `HYDROPT_FAR`, `HYDROPT_BOAT`, `HYDROPT_HEADING` and
 `HYDROPT_EXAMPLE_DTYPE` carry through, and `HYDROPT_SCENARIO` picks one
 scenario of 23-29.  How to add one is in `CLAUDE.md`.
 
-**Two heads.**  `HYDROPT_SONAR=330` runs the same ten examples with a
+**Two heads.**  `HYDROPT_SONAR=330` runs the same eleven examples with a
 higher-resolution head: 330 kHz, 1.4 x 2.8 degree beams (108 receive
 elements and 36 per elevation beam at half-wavelength spacing, seven
 elevation beams across the same 20.8 degree FOV, 361 azimuth beams, a fan
@@ -2057,7 +2119,7 @@ three times denser so the reverberation still has rays per cell), and a
 150 m swath by default -- absorption is 72.5 dB/km at 330 kHz against 38.3
 at 120 and the ambient 7 dB higher, so 150 m has the two-way absorption
 budget (21.7 dB) the 120 kHz head has at 300, and at 300 m the head would
-be noise-limited beyond about 170 m.  22-30 scale their scenes with the
+be noise-limited beyond about 170 m.  22-31 scale their scenes with the
 swath and tag their figures `_330k`.  A picture costs about four times as
 much (trace 32-37 s, beamform 13 s).  Measured, every check passing:
 
@@ -2071,6 +2133,7 @@ much (trace 32-37 s, beamform 13 s).  Measured, every check passing:
 | `26` | kelp +13.5 dB at its front fading to +2.5 at its back; buoy +38 dB, its chain +17 dB; shoal +8.3 dB |
 | `27` | across, 25.5 m of the 30 m span bright at +8 dB (a 1.5 m beam holds seven links, not sixty); along, 30 m long and 1.5 m wide at half power; slack, the 13 m tail at +12 dB and the ground chain at +8 |
 | `28` | quiet, echo centroid within 9.9 m of the boat in every frame (tolerance 17.9), no spoke (-0.2 dB); radiating, the spoke +8.4 to +13.4 dB with the stern within 60 deg and -0.7 to +0.4 dB with the bow within 60 deg; the "boat hull" label on the boat in 32 of 32 frames (+18 to +75 dB), the "noise spoke" label stern-on only; 1.3-1.7 s a frame against 20.1 s for the background |
+| `31` | scene as 30's with the boat in the picture (seabed -0.8, gain +0.1 dB); detection 7.4 m off, the centroid 9.2; heading 55.0 from the axis, 53.5 after the scan of 115 headings (204 s), against 55; position 0.29 m from the truth (the reference descent without the scan: 14.8 m, a bead-spacing minimum); 48 steps at 7.9 s |
 | `30` | misfit 172 -> 0.9 dB^2 in 40 steps (10.3 s each); seabed -0.9 dB, gain 0.0 dB, tilt -0.3 deg, surface +1.1 dB, and the noise level -0.1 dB -- determined here because the floor is inside the 150 m swath |
 | `29` | boat centroid within 9.3 m (tolerance 16.6); buoy 35-48 dB over its surroundings where each pose puts it, back in the world at (101.3, 20.8) m against (100, 20) with 1.3 m RMS scatter (a 1.6 m beam); kelp +15.1 dB; consecutive pings' seas correlate at 0.06, the same pose twice at 1.000; the three labels visible in 12 of 12 pings each, boxes within 1.9 m of the pose's place, the smaller box 68-83 % inside the other; 19.9 s a ping traced, 1.3-4.3 s with the backgrounds kept |
 
@@ -2122,12 +2185,13 @@ learned, for an agent without the `bd` tool):
 2. **The first real picture.**  The scene fit exists (`examples/30`,
    `hydropt/scenefit.py`: seabed, surface, tilt, gain and noise from the
    swath's level against range, a real picture loaded from a file) and is
-   proven on a rendered picture with hidden values and independent seeds;
-   what remains is a real ping through `load_picture`, and then a boat
-   fitted on the fitted background with 22's rules and a loss restricted
-   to the labelled region so the real sea's speckle does not count.  This
-   is also where the levels get validated: nothing here has been compared
-   with a real head yet.
+   proven on a rendered picture with hidden values and independent seeds,
+   and `examples/31` runs the whole inverse on a picture with a boat in it
+   (scene, detection, heading by search, position by descent on the fitted
+   background with the loss restricted to a box round the detection).
+   What remains is a real ping through `load_picture`.  That is also where
+   the levels get validated: nothing here has been compared with a real
+   head yet.
 3. **Pose, track and identity by the inverse** ("Towards ML" above): a
    detector's box initialises 22's fit on a real frame, the fit's residual
    scores the proposal, the poses chain into a `Trajectory`, and the hull's
@@ -2268,15 +2332,16 @@ hydropt/
                  the ownship moving through a still world (relative_pose, reframe_height_field)
   labels.py      boxes, masks, centroids and classes per target from the fields, in the forward pass
   scenefit.py    the scene fitted to a real picture: seabed, surface, tilt, gain, noise from the
-                 swath's level against range (load_picture, range_profile, SceneFit, fit_scene)
+                 swath's level against range (load_picture, range_profile, SceneFit, fit_scene);
+                 SceneFit.renderer() makes the fitted scene a PictureRenderer for the boat's fit
   wake.py        a vessel's Kelvin wake as a height field, and its bubble band
   transport.py   Sinkhorn divergence between images, for a loss that reaches
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views, FLS sector display; optional plotly
-examples/        01-30, each with acceptance checks; 21-30 share one scene
+examples/        01-31, each with acceptance checks; 21-31 share one scene
 scripts/         benchmark.py, timing_picture.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           578 tests
+tests/           579 tests
 CLAUDE.md        how to work in this repository: conventions, what was learned, adding an example
 ```
 

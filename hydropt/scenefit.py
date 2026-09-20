@@ -274,6 +274,39 @@ class SceneFit(nn.Module):
         return {k: float(getattr(self, k).detach()) for k in
                 ("seabed_db", "surface_db", "tilt_deg", "gain_db", "noise_db")}
 
+    def renderer(self, *, tx_pattern: Callable, display: Callable | None = None,
+                 to_cartesian: Callable | None = None, target_kwargs: dict | None = None,
+                 **kwargs):
+        """The fitted scene as a :class:`~hydropt.sequence.PictureRenderer`.
+
+        Its background is this fit's picture (same patches, same noise draw
+        at frame 0, the gain folded into the source level and the noise),
+        so a target can now be fitted or labelled on the fitted background.
+        ``tx_pattern`` is the projector's pattern as a function of direction
+        for the target's solved return leg (``examples/21``'s
+        ``transmit_pattern``); the receive pattern is the fitted envelope.
+        """
+        from .sequence import PictureRenderer
+        with torch.no_grad():
+            tilt = self.tilt_deg.detach().clone()
+            gain = 10.0 ** (float(self.surface_db.detach()) / 10.0)
+            tx = line_array_factor(torch.sin(self.elev), self.n_tx,
+                                   sin_steer=torch.sin(torch.deg2rad(tilt)))
+        rx = lambda d: rx_envelope(d, tilt, n_elements=self.n_rx_elev,
+                                   n_beams=self.n_elev_beams, beam_deg=self.elev_beam_deg)
+        g = float(self.gain_db.detach())
+        r = PictureRenderer(
+            self.scene, elements=self.elements, directions=self.directions, tx_weights=tx,
+            tx_pattern=tx_pattern, rx_pattern=rx, time_grid=self.time_grid, steer=self.steer,
+            sigma_t=self.sigma_t, shading=self.shading, source_level_db=self.source_level_db + g,
+            noise_power=self.noise_power * 10.0 ** ((float(self.noise_db.detach()) + g) / 10.0),
+            scattering=LambertScattering(float(self.seabed_db.detach()), learnable=False),
+            solid_angle_per_ray=self.solid, boundary="both",
+            surface_gain=lambda xy: torch.full(xy.shape[:-1], gain, dtype=xy.dtype),
+            max_arrivals=self.max_arrivals, display=display, to_cartesian=to_cartesian,
+            target_kwargs=target_kwargs, seed=self.seed, steer_chunk=self.steer_chunk, **kwargs)
+        return r
+
 
 def fit_scene(model: SceneFit, real: RealPicture, *, steps: int = 40, lr: float = 0.5,
               sectors_deg=((-60.0, -20.0), (-20.0, 20.0), (20.0, 60.0)), smooth_m: float = 5.0,

@@ -99,3 +99,14 @@ def test_load_picture_npz_polar_and_cartesian(tmp_path):
     assert float((q.image_db - polar)[inner].abs().max()) < 0.3
     with pytest.raises(ValueError):
         load_picture(tmp_path / "c.npz")
+
+
+def test_renderer_reproduces_the_fitted_picture():
+    r, grid, bearings = _renderer()
+    m = _model(r, seabed_db=-24.0, surface_db=2.0, gain_db=3.0, noise_db=1.0, tilt_deg=-3.0,
+               fit=(), seed=9)
+    with torch.no_grad():
+        mine = m.picture()
+        one = lambda d: torch.ones(d.shape[:-1], dtype=d.dtype)
+        theirs = m.renderer(tx_pattern=one).picture([], frame=0)
+    assert torch.allclose(mine, theirs, rtol=1e-4, atol=1e-6 * float(mine.max()))

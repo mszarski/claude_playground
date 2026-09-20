@@ -16,7 +16,7 @@ rules:
   (28 moves the boat, 29 the sonar: `PictureRenderer` + `Trajectory` in
   `hydropt/sequence.py`; `labels=True` gives boxes, masks and classes per
   target from the fields, `hydropt/labels.py`; 30 fits the scene to a real
-  picture, `hydropt/scenefit.py`);
+  picture and 31 a boat on the fitted scene, `hydropt/scenefit.py`);
 * run an example alone (four cores; never alongside the test suite) and read
   its numbers and figure before committing it; library changes get the full
   suite (`python -m pytest tests -q`, ~22 min);
