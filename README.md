@@ -59,7 +59,7 @@ print(scene.bottom_loss.loss_db.grad)
 pip install -e .           # torch >= 2.2, numpy, matplotlib
 pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
-python -m pytest tests -q  # 548 tests, ~22 min on 4 cores
+python -m pytest tests -q  # 562 tests, ~22 min on 4 cores
 ```
 
 ## Coordinates and units
@@ -1610,6 +1610,42 @@ radiating.  Anything
 `extra_targets` are rendered in every frame as they are, so a scene from
 23-27 can sit under a moving boat.
 
+### The sonar under way: the ownship moves, the world stands still
+
+`examples/29` is the usual case for a forward-looking sonar on an AUV or a
+launch: the sonar moves and everything in the picture is stationary -- 21's
+boat moored across the swath, 26's buoy on its chain, 26's kelp stand.  The
+frame is turned inside out.  The sonar stays where 21 built it, at its own
+frame's origin looking along `+x`, and each ping re-expresses the world in
+that frame: every target's world pose becomes a pose relative to the
+ownship (`relative_pose`), and the world's sea and seabed -- built once at
+world scale, 1000 m square, by 21's own generators -- are resampled onto
+21's grids at the ownship pose (`reframe_height_field`) so that 21's
+`build_scene` can be rebuilt there and re-traced.  That is what makes a
+ping cost a whole picture rather than an echo: 15 s at 300 m (trace,
+reverberation, five echoes, two beamformed pictures), against 1.6 s for a
+frame of 28.  It has to.  Keeping one background would freeze the sea's
+speckle to the sonar, and the picture would say the sea moved with the
+boat; measured, consecutive pings' target-free pictures correlate at 0.09
+at most while the same pose rendered twice correlates at 1.000.
+
+`PictureRenderer.ownship_sequence(world_targets, trajectory, times,
+scene_at=)` does it per ping: `world_targets` are `(world_pose, builder)`
+pairs, `scene_at(x, y, heading)` returns the scene seen from the pose, and
+the renderer's `set_scene` drops the cached background.  Measured over 12
+pings of a 145 m run at 6 knots with a 30 degree turn: the buoy stands
+25-43 dB over the 25 m disc around where each pose puts it, its peak within
+10.5 m of that place (its blob is a beam wide, 10.8 m at 204 m); carried
+back into the world by the ownship poses it lands at (201.3, 43.4) m
+against (200, 40) with 4.0 m of RMS scatter against a 6.8 m beam at its
+mean range; the moored boat's echo centroid stays within 9.6 m of
+the boat (tolerance 22.1); the kelp reads +18.7 dB over its cells in the
+median ping.  One cost surfaced on the way: 21's receive-beam pattern
+re-measured the head's beam width on every call, and `target_arrivals`
+calls the pattern once per highlight, so a 1200-point kelp stand's echo
+took 80 s until the tilts were cached (now under a second: keep the
+patterns cheap).
+
 ### Multipath, and why a boat does not show a double return
 
 An image-source prediction is the cheapest check there is on a two-way model, so
@@ -1752,7 +1788,7 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `18_detection_range.py` | how far a seabed object is detectable, and what limits it | direct-path echo follows spreading + absorption to 3.4 dB; aspect costs 36 dB over 23 deg of yaw; the waveguide holds S/B to the end of the sweep |
 | `19_transport_pose_50m.py` | an optimal-transport loss that reaches from 50 m out | transport walks 50 m -> 13 m, a grid search 13 -> 1.5 m, the image loss then 1.51 m against a 3.75 m cell; image loss alone: nowhere |
 | `20_wake_fls.py` | a manoeuvring vessel's Kelvin wake and bubble band in the picture | band on the track to 1.2 m; +13.8 dB of contrast for 15 dB put in; gradients to speed and turn |
-| `21_long_range_300m.py` | the reference picture: 120 kHz, 50 x 5 Mills cross, 120 deg to 300 m, a 30 m boat at 250 m | boat 0.0 m outside the hull against a 13.2 m beam; brightest cell of 43,629; 12.5 dB over ambient at 300 m; a median gain never worse than a mean; 6/6 gradients live |
+| `21_long_range_300m.py` | the reference picture: 120 kHz, 50 x 5 Mills cross, 120 deg to 300 m, a 30 m boat at 250 m | boat 0.0 m outside the hull against a 13.2 m beam; brightest cell of 43,630; 12.5 dB over ambient at 300 m; a median gain never worse than a mean; 6/6 gradients live |
 | `22_inverse_fit_animation.py` | the inverse fit, frame by frame, into a GIF | 7.2 m -> 0.27 m in 48 steps (145 s); fit gradient = secant (cosine 1.000); coherent picture's gradient = lambda/64 finite difference (float64) |
 | `23_harbour_scenarios.py` | 21's picture plus a breakwater, a vessel with wake, a school of fish | wall +38 dB along its line; wake band +8.7 dB over the sea beside it (+0.8 bare); school +15 dB over its cells |
 | `24_noise_spoke.py` | what lights a whole bearing: emission from the boat against a glint | propeller in view: +22.9 dB along the propeller's bearing at every range; bow-on the hull passes 2 of 14 paths and the spoke is gone; a 12 dB brighter glint draws none |
@@ -1760,17 +1796,18 @@ cd examples && python 01_forward_munk_3d.py     # figures land in examples/figur
 | `26_kelp_buoy_shoal.py` | a kelp forest, a buoy moored with a chain, a packed shoal | kelp +24 dB at its front fading to +7 at its back; buoy +44 dB, its chain a line at +27 dB; shoal +14 dB |
 | `27_buoy_moorings.py` | the buoy three ways: chain across, along, and a slack mooring on the bottom | across and along, a line the mooring's span long (30 m) either way, one beam wide at half power; slack, a 13 m tail under the buoy at +25 dB and the ground chain 9 dB fainter in the lobe's skirt |
 | `28_boat_sequence.py` | the boat under way: 16 pings through a U-turn into a GIF, quiet and with its propeller radiating | quiet, echo centroid within 9.8 m of the boat in every frame (tolerance 27.7) and no spoke (-0.3 dB); radiating, the spoke +18.5 to +20.9 dB with the stern within 60 deg and -0.6 to +0.7 dB with the bow within 60 deg; 1.6 s a frame (1.8 radiating) against 10.1 s for the background |
+| `29_ownship_sequence.py` | the sonar under way through a still world: moored boat, buoy and chain, kelp, 12 pings into a GIF, the sea re-traced at every pose | buoy 25-43 dB over its surroundings where the pose puts it, back in the world at (201.3, 43.4) m against (200, 40) with 4.0 m RMS scatter (a 6.8 m beam); boat centroid within 9.6 m (tolerance 22.1); kelp +18.7 dB; consecutive pings' seas correlate at 0.09, the same pose twice at 1.000; 15 s a ping |
 
 Each prints explicit `[PASS]`/`[FAIL]` lines for its acceptance criteria and
 exits non-zero on failure.  Runtimes on a 4-core CPU are seconds for 01-02,
 15-25 minutes for the annealed inversions 03-05, and one to four minutes for
-each of 21-28 (22 is the longest at about five).  21-28 share one sonar,
-environment and picture: 22-28 import `21_long_range_300m.py` for their
+each of 21-29 (22 is the longest at about five).  21-29 share one sonar,
+environment and picture: 22-29 import `21_long_range_300m.py` for their
 settings, so `HYDROPT_FAR`, `HYDROPT_BOAT`, `HYDROPT_HEADING` and
 `HYDROPT_EXAMPLE_DTYPE` carry through, and `HYDROPT_SCENARIO` picks one
 scenario of 23-28.  How to add one is in `CLAUDE.md`.
 
-**Two heads.**  `HYDROPT_SONAR=330` runs the same eight examples with a
+**Two heads.**  `HYDROPT_SONAR=330` runs the same nine examples with a
 higher-resolution head: 330 kHz, 1.4 x 2.8 degree beams (108 receive
 elements and 36 per elevation beam at half-wavelength spacing, seven
 elevation beams across the same 20.8 degree FOV, 361 azimuth beams, a fan
@@ -1778,7 +1815,7 @@ three times denser so the reverberation still has rays per cell), and a
 150 m swath by default -- absorption is 72.5 dB/km at 330 kHz against 38.3
 at 120 and the ambient 7 dB higher, so 150 m has the two-way absorption
 budget (21.7 dB) the 120 kHz head has at 300, and at 300 m the head would
-be noise-limited beyond about 170 m.  22-28 scale their scenes with the
+be noise-limited beyond about 170 m.  22-29 scale their scenes with the
 swath and tag their figures `_330k`.  A picture costs about four times as
 much (trace 32-37 s, beamform 13 s).  Measured, every check passing:
 
@@ -1792,6 +1829,7 @@ much (trace 32-37 s, beamform 13 s).  Measured, every check passing:
 | `26` | kelp +13.5 dB at its front fading to +2.5 at its back; buoy +38 dB, its chain +17 dB; shoal +8.3 dB |
 | `27` | across, 25.5 m of the 30 m span bright at +8 dB (a 1.5 m beam holds seven links, not sixty); along, 30 m long and 1.5 m wide at half power; slack, the 13 m tail at +12 dB and the ground chain at +8 |
 | `28` | quiet, echo centroid within 9.9 m of the boat in every frame (tolerance 17.9), no spoke (-0.2 dB); radiating, the spoke +8.4 to +13.4 dB with the stern within 60 deg and -0.7 to +0.4 dB with the bow within 60 deg; 2.2 s a frame against 19.3 s for the background |
+| `29` | buoy 35-48 dB over its surroundings where each pose puts it, back in the world at (101.3, 20.8) m against (100, 20) with 1.3 m RMS scatter (a 1.6 m beam); boat centroid within 9.2 m (tolerance 16.6); kelp +15.2 dB; consecutive pings' seas correlate at 0.05, the same pose twice at 1.000; 25.6 s a ping |
 
 Two things the higher head taught.  The rubble breakwater's grains resolve
 into the armour units at 1.4 degrees, which is what an operator sees on such
@@ -1934,15 +1972,16 @@ hydropt/
   reverb.py      seabed and surface reverberation from bounce events, with occluders
   noise.py       ambient noise, calibration to uPa, receiver noise on a picture or a field
   emission.py    what a vessel radiates, as a random-phase pulse train on its one-way paths
-  sequence.py    a Trajectory of poses, and a PictureRenderer: background once, a picture per pose
+  sequence.py    a Trajectory of poses, and a PictureRenderer: background once, a picture per pose;
+                 the ownship moving through a still world (relative_pose, reframe_height_field)
   wake.py        a vessel's Kelvin wake as a height field, and its bubble band
   transport.py   Sinkhorn divergence between images, for a loss that reaches
   scene.py       Scene container
   inverse.py     fit() with annealing, regularisation and logging
   plot.py        matplotlib views, FLS sector display; optional plotly
-examples/        01-28, each with acceptance checks; 21-28 share one scene
+examples/        01-29, each with acceptance checks; 21-29 share one scene
 scripts/         benchmark.py, timing_picture.py, check_jvp.py, validate_pekeris.py, validate_beamsum.py
-tests/           548 tests
+tests/           562 tests
 CLAUDE.md        how to work in this repository: conventions, what was learned, adding an example
 ```
 

@@ -13,7 +13,8 @@ rules:
 * examples are the specification: docstring with a "Construction and
   assumptions" block and acceptance criteria,
   `[PASS]`/`[FAIL]` checks, a figure; 22-28 import 21 for their scene
-  (28 moves the boat: `PictureRenderer` + `Trajectory` in `hydropt/sequence.py`);
+  (28 moves the boat, 29 the sonar: `PictureRenderer` + `Trajectory` in
+  `hydropt/sequence.py`);
 * run an example alone (four cores; never alongside the test suite) and read
   its numbers and figure before committing it; library changes get the full
   suite (`python -m pytest tests -q`, ~22 min);

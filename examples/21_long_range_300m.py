@@ -155,6 +155,7 @@ Acceptance criteria:
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import math
 import os
@@ -290,8 +291,15 @@ RX_ELEV_BEAMS = os.environ.get("HYDROPT_RX_ELEV", "beams") != "point"
 DISPLAY = os.environ.get("HYDROPT_DISPLAY", "sum")
 
 
+@functools.lru_cache(maxsize=None)
 def beam_tilts_deg() -> list[float]:
-    """Centres of the head's elevation beams, spaced one beamwidth about the tilt."""
+    """Centres of the head's elevation beams, spaced one beamwidth about the tilt.
+
+    Cached: it measures the beam's width on a fine grid (``beam_3db_deg``,
+    70 ms), and ``receive_beam`` needs it for every call -- once per
+    highlight in ``target_arrivals``, which made a 1200-point kelp stand's
+    echo cost 80 s instead of one (``examples/26``, ``examples/29``).
+    """
     bw = beam_3db_deg(N_RX_ELEV)
     return [TILT_DEG + (k - (N_ELEV_BEAMS - 1) / 2.0) * bw for k in range(N_ELEV_BEAMS)]
 
