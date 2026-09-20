@@ -21,7 +21,10 @@ rules:
   suite (`python -m pytest tests -q`, ~22 min);
 * a fit on a picture freezes the display gain, puts the noise on the field
   and descends on the model's incoherent picture -- see `CLAUDE.md`;
-* `bd` for tasks, `bd remember` for insight, never markdown TODOs.
+* `bd` for tasks, `bd remember` for insight, never markdown TODOs;
+* what comes next is the README's "Next steps" (a randomised labelled-picture
+  generator, the GPU port, the first real picture, the inverse on real
+  frames) and the open beads.
 
 ## Issue Tracking
 

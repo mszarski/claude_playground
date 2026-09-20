@@ -171,6 +171,20 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
   tracked but gitignored: `git add -f` it.
 * Timings quoted anywhere come from `scripts/timing_picture.py` or an
   example's own stage timers, run alone.
+* 21's speckle-sensitive numbers (the raw contrast, the swath cell count)
+  repeat bit for bit between runs made alone, and differ between runs made
+  under different load (float32 reduction order).  Compare a change
+  against a run made alone in the same session, not against an old log.
+
+## Next steps
+
+The README's "Next steps" is the list; in short: a randomised generator of
+labelled pictures on top of `PictureRenderer` (28 and 29 are the
+templates, `examples/LABELS.md` the record), the GPU port that makes it
+fast, the first real picture (fit the scene before the boat; the levels are
+unvalidated), pose/track/identity by the inverse on real frames, a detector
+trained through the simulator, and the physics owed in the open beads
+(`bd list --status=open`: spherical-wave PO `cva` first).
 
 ## Adding an example
 
@@ -186,7 +200,10 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
    with a docstring and a test, not in the example.
 5. Metrics against the bare picture, `check(...)` for each criterion, a
    gradient-liveness check on the scenario's parameters, a figure per
-   scenario under 21's window.
+   scenario under 21's window.  A sequence example renders through
+   `PictureRenderer` with `labels=True`, gives every target a `label`
+   (its class), draws the boxes with `draw_labels`, writes the JSON of
+   records per frame, and checks the labels against the truth (28, 29).
 6. Run it alone; read the numbers and look at the figure -- a passing check
    on a wrong picture is the usual failure.  Fix thresholds from what the
    physics allows, never from what the run gave.

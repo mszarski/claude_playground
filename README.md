@@ -11,7 +11,16 @@ or the position of the source.
 
 It also runs **active sonar**: two-way propagation through a scattering target,
 and coherent beamforming on a real array -- see
-[Active sonar and beamforming](#active-sonar-and-beamforming).
+[Active sonar and beamforming](#active-sonar-and-beamforming).  On top of
+that it is a **sonar picture simulator**: a forward-looking sonar's
+bearing-range image of a rough sea, a rough seabed and whatever is in the
+water -- boat hulls as triangle meshes, buoys on their chains, kelp, schools
+of fish, breakwaters, a vessel's wake and the spoke its propeller draws --
+calibrated in microPascals with ambient noise, displayed in metres the way
+a head displays it, and rendered as **sequences** with the target or the
+sonar under way, every frame **labelled** in the forward pass with a box, a
+mask and a class per thing in it.  See [Using it](#using-it-the-examples-in-order),
+and `examples/LABELS.md` for the labelled data.
 
 It takes its overall shape from TU Berlin's *misuka* (Finnendahl et al.,
 "Differentiable Geometric Acoustic Path Tracing using Time-Resolved Path Replay
@@ -61,6 +70,42 @@ pip install -e '.[dev]'    # + pytest
 pip install -e '.[plotly]' # + interactive 3-D ray plots
 python -m pytest tests -q  # 574 tests, ~22 min on 4 cores
 ```
+
+## Using it: the examples, in order
+
+Everything the package does is shown by a numbered example in `examples/`,
+each a script with a docstring that says what it shows, how it is built
+("Construction and assumptions") and what it checks, printing
+`[PASS]`/`[FAIL]` lines and saving its figures to `examples/figures/`
+(gitignored).  Run them from the `examples` directory, one at a time (four
+cores; a second process slows both by 10x).  What to run for what:
+
+| I want to ... | run | notes |
+| --- | --- | --- |
+| trace rays through an ocean and see the energy-time curves | `01` | a Munk channel over 50 km; `1/s^2` against the ray tube |
+| recover something from a passive measurement by descent | `02` losses, `03` a profile, `04` a seamount, `05` a source | 03-05 anneal their kernels and take 15-25 min each |
+| see a beamformed active-sonar picture | `06`, then `07` with reverberation | 100 kHz, 32 elements, point targets |
+| understand what an extended target looks like | `09` (glints), `14` (a triangle mesh by physical optics) | and why a hull is not a row of highlights |
+| build a synthetic ocean and a rough sea | `10`, `11` | out-of-plane deflection; the Eckart coherence loss |
+| put a boat, a sea and a seabed under a Mills cross and learn from the picture | `12`, `13`, `15` | 15 is the first Cartesian picture with reverberation |
+| fit a pose to a picture | `16` (refiner), `19` (from 50 m out, by transport), `22` (through the full 300 m pipeline, animated) | 22's three rules are in "Fitting a pose to the picture, done properly" |
+| read a seabed object's height off its shadow, and how far it is seen | `17`, `18` | occlusion; the sonar equation with noise |
+| a wake | `20` (up close), `23` (at 300 m) | Kelvin waves and the bubble band |
+| **the reference picture**: 120 kHz, 300 m, a rough sea, sand, a 30 m boat | `21` | every later example imports it; `HYDROPT_SONAR=330` is the 1.4 x 2.8 deg head |
+| harbour things in that picture | `23` seawall / wake / school, `24` a noise spoke, `25` a rubble breakwater, `26` kelp / buoy / shoal, `27` moorings | `HYDROPT_SCENARIO=<name>` runs one |
+| **a moving target**: the boat under way, quiet and radiating, into a GIF | `28` | `PictureRenderer` + `Trajectory`; the spoke comes and goes with the aspect |
+| **a moving sonar**: the ownship past a moored boat, a buoy, a kelp stand | `29` | the sea re-traced at every pose; the three scenarios share the backgrounds |
+| **labelled images for ML** | `28` and `29` write boxes, masks and classes per frame | `examples/LABELS.md`: the files, the record, how to label your own scene |
+| stage timings of the 300 m picture | `scripts/timing_picture.py` | the numbers in "Where the time goes now" |
+
+The switches every 21-derived example honours: `HYDROPT_SONAR` (`120`
+or `330`), `HYDROPT_FAR` and `HYDROPT_NEAR` (the swath, m), `HYDROPT_BOAT`
+(the boat's range), `HYDROPT_HEADING`, `HYDROPT_EXAMPLE_DTYPE`
+(`float32`, the default, or `float64`), `HYDROPT_SCENARIO` (23-29),
+`HYDROPT_FRAMES` (28, 29).  22-29 lay their scenes out for the 300 m swath
+and scale every position by `FAR / 300`.  `CLAUDE.md` is the working guide
+for changing any of this: conventions, the rules that were expensive to
+learn, and how to add an example.
 
 ## Coordinates and units
 
@@ -2018,6 +2063,50 @@ and source depth is encoded in surface/bottom multipath differentials whose
 misfit valley is real but five times shallower than the range direction. A
 second array, a second source position, or a second range is what moves these
 numbers.
+
+## Next steps
+
+In the order they are worth doing, with what each needs:
+
+1. **A randomised generator of labelled pictures** (production forward
+   mode).  A sampler over the distributions 21-29 hold as constants -- the
+   head, the wind and the seeds, the seabed, the noise, the boat's hull,
+   pose, track, diffuse level and whether it radiates, what else is in the
+   water, the ownship's track -- feeding `PictureRenderer` and writing the
+   polar image, the Cartesian picture, `LABELS.md`'s records and the
+   sampled parameters per frame.  28 and 29 are the templates; the
+   renderer already shares a pose's background across targets.  The GPU
+   port ("Running on a GPU") is what makes this fast: the beamformer and
+   the physical optics 10-50x, the tracer 3-5x.
+2. **The first real picture.**  Fit the scene (wind, seabed strength, gain,
+   tilt) to a real bare ping before fitting a boat to it, with 22's rules
+   (gain frozen from the measurement, noise on the field, the model's
+   incoherent picture, a blur schedule ending near half a metre) and a loss
+   restricted to the labelled region so the real sea's speckle does not
+   count.  This is also where the levels get validated: nothing here has
+   been compared with a real head yet.
+3. **Pose, track and identity by the inverse** ("Towards ML" above): a
+   detector's box initialises 22's fit on a real frame, the fit's residual
+   scores the proposal, the poses chain into a `Trajectory`, and the hull's
+   learnable parameters refine the identity as the track lengthens.  22
+   (the fit), 28 (the sequence) and the labels (the proposals) are the
+   pieces; the region-restricted loss is the missing one.
+4. **Training a detector through the simulator**: adversarial scenes by
+   descent on the scene parameters, augmentation from `d picture / d pose`,
+   and `d detection / d scene` as the diagnostic of what a detector has
+   learned.
+5. **Physics still owed** (the open beads, `bd list`): spherical-wave
+   physical optics for patches larger than the Fresnel zone (`cva`: a 4 m
+   cylinder at 30 m, a hull's glint at 330 kHz); the reverberation's return
+   leg summing the image paths as the targets' do (`e9z`); occlusion
+   culling on a fine mesh (`5we`); a differentiable shadow edge (`d3n`);
+   wake wave phase in the near field (`62h`); image beams at the waveguide
+   boundaries (`7ck`); Francois-Garrison absorption above 100 kHz; the
+   PRB-style backward pass (`du6`) if memory in a fit ever binds.
+6. **Sequences that are physically complete**: the vehicle's motion
+   during a ping, a head's measured beam patterns and processing gain in
+   place of 21's display, and a rubble breakwater that looks right at
+   120 kHz (25's grains resolve into armour units only at 330).
 
 ## Limitations and what is deliberately absent
 

@@ -1,8 +1,23 @@
-"""hydropt -- a differentiable 3-D underwater acoustic ray tracer in PyTorch.
+"""hydropt -- a differentiable 3-D underwater acoustic ray tracer and sonar simulator in PyTorch.
 
-Coordinates: ``x``, ``y`` horizontal (m); ``z`` depth (m, positive downward,
-zero at the sea surface).  Times in s, sound speed in m/s, losses in dB,
-frequencies in kHz.
+From an ocean (:class:`Scene`: a sound-speed field, a rough sea surface, a
+rough seabed, boundary losses, absorption) and a sonar (a transmit fan, a
+receive array, a pulse) to what the sonar records: traced rays
+(:func:`trace`), energy-time curves, reverberation patches
+(:func:`reverberation_arrivals`), target echoes off points, analytic
+patterns and triangle meshes (:func:`target_arrivals`, :func:`mesh_target`),
+coherently beamformed (:func:`beamform`), calibrated and noised
+(:func:`calibrate`, :func:`add_receiver_noise`); sequences with the target
+or the sonar under way (:class:`PictureRenderer`, :class:`Trajectory`),
+what a vessel radiates (:func:`emission_arrivals`), and a box, a mask and a
+class per thing in every picture, read off the fields
+(:mod:`hydropt.labels`).  Every stage is differentiable, so a loss on the
+picture reaches the scene's and the targets' parameters.  The examples
+are the specification; the README is the account.
+
+Coordinates: ``x`` forward, ``y`` to port (m); ``z`` depth (m, positive
+downward, zero at the sea surface).  Times in s, sound speed in m/s, losses
+in dB, frequencies in kHz.
 """
 
 from .absorption import octave_bands, thorp_db_per_km

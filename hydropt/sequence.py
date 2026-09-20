@@ -33,6 +33,11 @@ a rough seabed's texture with it; keeping one background would freeze the
 sea to the sonar), and the targets are rebuilt at their relative poses.  A
 frame then costs a whole picture, not an echo; ``examples/29`` measures it.
 
+Every picture can label itself (``labels=True``): the renderer holds each
+target's beams on their own, and :mod:`hydropt.labels` turns them into a
+box, a mask, a centroid, a contrast and a class per target and per emitter,
+so a sequence is a labelled dataset as it renders.
+
 The display (gain, floor) and the resampling to metres are the example's
 own conventions and are passed in as callables, so the renderer knows only
 ``[beams, bands, bins]`` images until they are applied.  Receiver noise is
