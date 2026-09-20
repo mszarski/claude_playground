@@ -28,7 +28,7 @@ paragraph there explaining the bug that forced them.
 ```bash
 pip install -e '.[dev]' && pip install scipy   # torch >= 2.2; scipy for examples 19 and 25
 
-python -m pytest tests -q                 # 562 tests, ~22 min on 4 cores
+python -m pytest tests -q                 # 563 tests, ~22 min on 4 cores
 python -m pytest tests/test_beamform.py -q -x
 python -m pytest tests -q -k "incoherent"
 
@@ -44,7 +44,7 @@ the default: 120 kHz, 3.0 x 4.8 deg beams, 300 m; or `330`: 330 kHz, 1.4 x
 2.8 deg beams, 150 m, figures tagged `_330k`), `HYDROPT_FAR` (m),
 `HYDROPT_NEAR`, `HYDROPT_BOAT` (range), `HYDROPT_HEADING` (deg, 40),
 `HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO` (one
-scenario of 23-28), `HYDROPT_FRAMES` (28's and 29's pings).  22-29 lay their scenes out for the 120 kHz head's 300 m
+scenario of 23-29), `HYDROPT_FRAMES` (28's and 29's pings).  22-29 lay their scenes out for the 120 kHz head's 300 m
 and scale every absolute position by `FAR / 300` (`S` in each), so a new
 scenario's positions go in as 300 m values times `S`.  Each example prints
 `[PASS]`/`[FAIL]` lines for its acceptance criteria and exits non-zero on a

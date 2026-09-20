@@ -2,11 +2,13 @@
 
 ``examples/28`` moved a boat past a fixed sonar.  This is the other case,
 the usual one for a forward-looking sonar on an AUV or a survey launch: the
-sonar moves and everything in the picture is stationary -- a boat moored
-across the swath, a buoy on its chain, a stand of kelp -- so that every
-frame is a new view of the same world.  The ownship runs 145 m forward at
-6 knots with a 30 degree turn to port, a ping every few seconds, and each
-ping is rendered as ``examples/21`` renders one.
+sonar moves and everything in the picture is stationary, so that every
+frame is a new view of the same world.  Three scenarios, one obstacle
+each (``HYDROPT_SCENARIO=boat``, ``buoy``, ``kelp`` or ``all``): a boat
+moored across the swath; a buoy on its chain with its sinker; a stand of
+kelp.  In each the ownship runs the same track, 145 m forward at 6 knots
+with a 30 degree turn to port, a ping every few seconds, and each ping is
+rendered as ``examples/21`` renders one.
 
 **Construction and assumptions.**  The sonar is 21's, untouched: it sits at the origin of
 its own frame looking along ``+x``, with 21's fan, beams, display and grid
@@ -22,18 +24,22 @@ in metres.  What moves is the world, re-expressed in that frame per ping:
   traced afresh for every ping.  That is what makes a frame cost a whole
   picture (10 s at 300 m) rather than an echo: keeping one background
   would freeze the sea's speckle to the sonar, and the picture would say
-  the sea moved with the boat;
-* **the targets** are 21's boat, moored; 26's buoy with its chain and
-  sinker; and 26's kelp stand (with the plants' per-bin extinction along
-  the stand's own axis, fixed in the world, not along the changing line of
-  sight -- a stand seen end-on from the side reads a little bright at its
-  far end).  Each has a world pose, and each ping rebuilds it at its pose
-  relative to the ownship (``hydropt.relative_pose``): position turned and
-  shifted, heading less the ownship's;
+  the sea moved with the boat.  The three scenarios share the track, so
+  each pose's traced background is kept from the first scenario and the
+  others pay only their echoes (``scene_at`` hands the renderer the kept
+  beams);
+* **the targets**, one scenario each: 21's boat, moored; 26's buoy with
+  its chain and sinker; 26's kelp stand (with the plants' per-bin
+  extinction along the stand's own axis, fixed in the world, not along the
+  changing line of sight -- a stand seen end-on from the side reads a
+  little bright at its far end).  Each has a world pose, and each ping
+  rebuilds it at its pose relative to the ownship
+  (``hydropt.relative_pose``): position turned and shifted, heading less
+  the ownship's;
 * **the display gain** is taken from the first ping and held, as 28 does
   and as an AGC would; the receiver noise is drawn afresh per ping.
 
-Acceptance criteria:
+Acceptance criteria (each on its own scenario):
   * the buoy, a point, stands more than 10 dB over the 25 m disc around
     where the ownship pose says it should be, in every ping, with its
     peak within one beam width at its range plus 3 m of that place;
@@ -49,7 +55,8 @@ Acceptance criteria:
   * consecutive pings' target-free pictures correlate below 0.5 (the sea
     is rendered anew at each pose, not carried along), while a ping
     rendered twice at one pose correlates at 1;
-  * a frame's cost is reported (a whole picture each, see above).
+  * a frame's cost is reported: a whole picture in the first scenario,
+    the echoes alone after.
 
 ``HYDROPT_FRAMES`` sets the number of pings (12); the track and the world
 scale with the head's swath (``HYDROPT_SONAR=330``).
@@ -78,6 +85,13 @@ from hydropt import (
 )
 from hydropt.mesh import boat_hull_mesh, mesh_target
 
+SCENARIO = os.environ.get("HYDROPT_SCENARIO", "all")
+if SCENARIO not in ("all", "boat", "buoy", "kelp"):
+    raise SystemExit(f"HYDROPT_SCENARIO must be all, boat, buoy or kelp, got {SCENARIO!r}")
+SCENARIOS = ("boat", "buoy", "kelp") if SCENARIO == "all" else (SCENARIO,)
+CAPTION = {"boat": "a boat moored across the swath",
+           "buoy": "a buoy on its chain, with its sinker",
+           "kelp": "a stand of kelp"}
 N_FRAMES = int(os.environ.get("HYDROPT_FRAMES", 12))
 SPEED = 3.0                       # m/s, 6 knots: a survey speed
 WORLD_M = 1000.0                  # the world's sea and seabed, a square this wide (at 300 m)
@@ -180,8 +194,13 @@ def main() -> int:
           f"nodes at {float(world_surface.spacing[0]):.2f} m, {WORLD_M * S:.0f} m square; "
           f"21's grids are {tuple(bottom0.shape)} and {tuple(surface0.shape)}")
 
+    kept = {}          # pose -> (scene, its reverberation's complex beams), across scenarios
+
     def scene_at(x, y, heading_deg):
-        """21's scene with the world's heights read at the ownship pose."""
+        """21's scene with the world's heights read at the ownship pose (kept once traced)."""
+        key = (round(x, 3), round(y, 3), round(heading_deg, 3))
+        if key in kept:
+            return kept[key]
         b = reframe_height_field(world_bottom, shape=bottom0.shape, spacing=bottom0.spacing.tolist(),
                                  origin=bottom0.origin.tolist(), x=x, y=y, heading_deg=heading_deg)
         s = reframe_height_field(world_surface, shape=surface0.shape,
@@ -257,7 +276,9 @@ def main() -> int:
     chain_w = (buoy_w[0], buoy_w[1], CHAIN_DIRECTION_DEG)
     sinker_w = (buoy_w[0] + CHAIN_SCOPE * math.cos(cd), buoy_w[1] + CHAIN_SCOPE * math.sin(cd), 0.0)
     kelp_w = sc(*KELP_WORLD)
-    world = [(boat_w, boat), (buoy_w, buoy), (chain_w, chain), (sinker_w, sinker), (kelp_w, kelp)]
+    worlds = {"boat": [(boat_w, boat)],
+              "buoy": [(buoy_w, buoy), (chain_w, chain), (sinker_w, sinker)],
+              "kelp": [(kelp_w, kelp)]}
     print(f"  the boat moored at ({boat_w[0]:.0f}, {boat_w[1]:.0f}) m heading {boat_w[2]:.0f} deg; "
           f"the buoy at ({buoy_w[0]:.0f}, {buoy_w[1]:.0f}) m, its chain to port; the kelp stand "
           f"{KELP_STAND[0]:.0f} x {KELP_STAND[1]:.0f} m at ({kelp_w[0]:.0f}, {kelp_w[1]:.0f}) m, "
@@ -306,194 +327,220 @@ def main() -> int:
           f"({float(traj.positions[-1, 0]):.0f}, {float(traj.positions[-1, 1]):.0f}) m heading "
           f"{float(traj.headings_deg[-1]):.0f} deg")
 
-    # ---- the frames -------------------------------------------------------- #
-    banner("the pings")
+    # ---- the frames, a scenario at a time ---------------------------------- #
     beam_deg = ex.beam_3db_deg(ex.N_RX, shading)
+    bw = lambda r: math.radians(beam_deg) * r
     db = lambda t: 10.0 * torch.log10(t.detach().clamp_min(1e-30))
-    frames, bares, poses, costs = [], [], [], []
-    buoy_err, buoy_over, buoy_world, boat_err, kelp_db = [], [], [], [], []
-    X = Y = B = R = None
-    last = time.perf_counter()
-    for k, (t, pose, (cart, gx, gy)) in enumerate(
-            renderer.ownship_sequence(world, traj, times, scene_at=scene_at)):
-        # the same ping without its targets: the background is cached, so
-        # this is one beamformed picture more, and the noise draw is the same
-        with torch.no_grad():
-            bare, _, _ = renderer.picture([], frame=k)
-        now = time.perf_counter()
-        costs.append(now - last)
-        last = now
-        if X is None:
-            X, Y = torch.meshgrid(gx, gy, indexing="xy")
-            R = torch.hypot(X, Y)
-            B = torch.rad2deg(torch.atan2(Y, X))
-        cart_db, bare_db = db(cart), db(bare)
-        frames.append(cart_db); bares.append(bare_db); poses.append(pose)
-        # the buoy: the brightest cell within a beam of where the pose puts
-        # it, and how far that stands over the 25 m disc around it (the chain
-        # and the sinker are in that disc, so the peak is looked for locally)
-        bx, by, _ = relative_pose(buoy_w, pose)
-        rb = math.hypot(bx, by)
-        window = (X - bx) ** 2 + (Y - by) ** 2 < (math.radians(beam_deg) * rb + 3.0) ** 2
-        disc = (X - bx) ** 2 + (Y - by) ** 2 < 25.0 ** 2
-        j = int((cart_db * window - 1e6 * (~window)).argmax())
-        px, py = float(X.reshape(-1)[j]), float(Y.reshape(-1)[j])
-        buoy_err.append(math.hypot(px - bx, py - by))
-        buoy_over.append(float(cart_db.reshape(-1)[j] - cart_db[disc].median()))
-        # ... and carried back into the world by the ownship pose
-        c, s = math.cos(math.radians(pose[2])), math.sin(math.radians(pose[2]))
-        buoy_world.append((pose[0] + c * px - s * py, pose[1] + s * px + c * py))
-        # the boat: the centroid of the excess over the bare ping near it
-        hx, hy, hh = relative_pose(boat_w, pose)
-        disc = (X - hx) ** 2 + (Y - hy) ** 2 < 40.0 ** 2
-        lit = (cart_db - bare_db).clamp_min(0.0) * disc * (cart_db > ex.THRESHOLD_DB)
-        w = lit.sum()
-        cx, cy = (float((lit * X).sum() / w), float((lit * Y).sum() / w)) if float(w) > 0 else (1e9, 1e9)
-        boat_err.append(math.hypot(cx - hx, cy - hy))
-        # the kelp: its cells over the same cells bare
-        kx, ky, kh = relative_pose(kelp_w, pose)
-        ck, sk = math.cos(math.radians(kh)), math.sin(math.radians(kh))
-        along = ck * (X - kx) + sk * (Y - ky)
-        across = -sk * (X - kx) + ck * (Y - ky)
-        stand = (along.abs() < KELP_STAND[0] / 2) & (across.abs() < KELP_STAND[1] / 2)
-        kelp_db.append(float(cart_db[stand].mean() - bare_db[stand].mean()))
-        print(f"  t = {t:5.1f} s  ownship ({pose[0]:6.1f}, {pose[1]:6.1f}) m heading {pose[2]:5.1f} deg, "
-              f"{costs[-1]:5.1f} s: buoy {buoy_err[-1]:4.1f} m off its place at {rb:.0f} m, "
-              f"{buoy_over[-1]:+5.1f} dB over its surroundings; "
-              f"boat centroid {boat_err[-1]:4.1f} m off; kelp {kelp_db[-1]:+5.1f} dB")
-
-    # the same pose rendered twice: identical (the sea is a function of the pose)
-    with torch.no_grad():
-        renderer.set_scene(scene_at(*poses[-1]))
-        again, _, _ = renderer.picture([], frame=len(poses) - 1)
-    # correlate over the swath's cells only, at the display's floor: the
-    # cells outside the sector are zero in every ping and would correlate
-    # any two pictures at one
-    swath = (R > ex.NEAR + 5.0) & (R < ex.FAR - 5.0) & (B.abs() < ex.SECTOR_DEG - 2.0)
+    FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+    ok = True
+    X = Y = B = R = swath = None
+    bares_seen = None
 
     def corr(a, b):
+        # over the swath's cells only, at the display's floor: the cells
+        # outside the sector are zero in every ping and would correlate any
+        # two pictures at one
         a = a[swath].clamp_min(ex.THRESHOLD_DB); b = b[swath].clamp_min(ex.THRESHOLD_DB)
         return float(torch.corrcoef(torch.stack([a - a.mean(), b - b.mean()]))[0, 1])
-    self_corr = corr(bares[-1], db(again))
-    step_corr = [corr(bares[i], bares[i + 1]) for i in range(len(bares) - 1)]
-    bw = lambda r: math.radians(beam_deg) * r
-    tol_boat = [0.5 * ex.HULL_LENGTH + bw(math.hypot(*relative_pose(boat_w, p)[:2])) for p in poses]
-    bwx = torch.tensor([p[0] for p in buoy_world]); bwy = torch.tensor([p[1] for p in buoy_world])
-    # RMS over the pings: the buoy's blob is a beam wide, and its peak wanders
-    # within it as the multipath fringes shift with the range, so one ping can
-    # sit a beam off and the twelve together still say where the buoy is
-    scatter = float(torch.hypot(bwx - bwx.mean(), bwy - bwy.mean()).pow(2).mean().sqrt())
-    mean_range = sum(math.hypot(*relative_pose(buoy_w, p)[:2]) for p in poses) / len(poses)
-    med_kelp = sorted(kelp_db)[len(kelp_db) // 2]
-    print(f"  {len(frames)} pings, {sum(costs) / len(costs):.1f} s each (a whole picture: trace, "
-          f"reverberation, five echoes, two beamformed pictures)")
-    print(f"  the buoy carried back into the world: ({bwx.mean():.1f}, {bwy.mean():.1f}) m against "
-          f"({buoy_w[0]:.1f}, {buoy_w[1]:.1f}), RMS scatter {scatter:.1f} m over the pings, a beam "
-          f"{bw(mean_range):.1f} m at its mean range of {mean_range:.0f} m")
-    print(f"  consecutive bare pings correlate at {min(step_corr):+.2f} to {max(step_corr):+.2f}; "
-          f"the same pose twice at {self_corr:+.3f}")
+
+    def overlays(ax, name, pose):
+        """Where the pose puts the scenario's target, in the sonar's frame."""
+        if name == "buoy":
+            bx, by, _ = relative_pose(buoy_w, pose)
+            ax.plot(bx, by, "co", ms=8, mfc="none", mew=1.2)
+        elif name == "boat":
+            hx, hy, hh = relative_pose(boat_w, pose)
+            h = math.radians(hh)
+            ax.plot([hx - 15 * math.cos(h), hx + 15 * math.cos(h)],
+                    [hy - 15 * math.sin(h), hy + 15 * math.sin(h)], "c-", lw=1.0)
+        else:
+            kx, ky, kh = relative_pose(kelp_w, pose)
+            ck, sk = math.cos(math.radians(kh)), math.sin(math.radians(kh))
+            a, b = KELP_STAND[0] / 2, KELP_STAND[1] / 2
+            corners = [(a, b), (-a, b), (-a, -b), (a, -b), (a, b)]
+            ax.plot([kx + ck * u - sk * v for u, v in corners],
+                    [ky + sk * u + ck * v for u, v in corners], "c--", lw=0.8)
+
+    for name in SCENARIOS:
+        banner(f"scenario: {name} -- {CAPTION[name]}")
+        frames, bares, poses, costs = [], [], [], []
+        buoy_err, buoy_over, buoy_world, boat_err, kelp_db = [], [], [], [], []
+        last = time.perf_counter()
+        for k, (t, pose, (cart, gx, gy)) in enumerate(
+                renderer.ownship_sequence(worlds[name], traj, times, scene_at=scene_at)):
+            key = (round(pose[0], 3), round(pose[1], 3), round(pose[2], 3))
+            kept.setdefault(key, (renderer.scene, renderer.background()))
+            # the same ping without its target: the background is cached, so
+            # this is one beamformed picture more, and the noise draw is the same
+            with torch.no_grad():
+                bare, _, _ = renderer.picture([], frame=k)
+            now = time.perf_counter()
+            costs.append(now - last)
+            last = now
+            if X is None:
+                X, Y = torch.meshgrid(gx, gy, indexing="xy")
+                R = torch.hypot(X, Y)
+                B = torch.rad2deg(torch.atan2(Y, X))
+                swath = (R > ex.NEAR + 5.0) & (R < ex.FAR - 5.0) & (B.abs() < ex.SECTOR_DEG - 2.0)
+            cart_db, bare_db = db(cart), db(bare)
+            frames.append(cart_db); bares.append(bare_db); poses.append(pose)
+            line = (f"  t = {t:5.1f} s  ownship ({pose[0]:6.1f}, {pose[1]:6.1f}) m heading "
+                    f"{pose[2]:5.1f} deg, {costs[-1]:5.1f} s: ")
+            if name == "buoy":
+                # the brightest cell within a beam of where the pose puts the
+                # buoy, and how far it stands over the 25 m disc around it (the
+                # chain and the sinker are in that disc, so the peak is local)
+                bx, by, _ = relative_pose(buoy_w, pose)
+                rb = math.hypot(bx, by)
+                window = (X - bx) ** 2 + (Y - by) ** 2 < (bw(rb) + 3.0) ** 2
+                disc = (X - bx) ** 2 + (Y - by) ** 2 < 25.0 ** 2
+                j = int((cart_db * window - 1e6 * (~window)).argmax())
+                px, py = float(X.reshape(-1)[j]), float(Y.reshape(-1)[j])
+                buoy_err.append(math.hypot(px - bx, py - by))
+                buoy_over.append(float(cart_db.reshape(-1)[j] - cart_db[disc].median()))
+                # ... and carried back into the world by the ownship pose
+                c, s_ = math.cos(math.radians(pose[2])), math.sin(math.radians(pose[2]))
+                buoy_world.append((pose[0] + c * px - s_ * py, pose[1] + s_ * px + c * py))
+                line += (f"buoy {buoy_err[-1]:4.1f} m off its place at {rb:.0f} m, "
+                         f"{buoy_over[-1]:+5.1f} dB over its surroundings")
+            elif name == "boat":
+                # the centroid of the excess over the bare ping near the boat
+                hx, hy, hh = relative_pose(boat_w, pose)
+                disc = (X - hx) ** 2 + (Y - hy) ** 2 < 40.0 ** 2
+                lit = (cart_db - bare_db).clamp_min(0.0) * disc * (cart_db > ex.THRESHOLD_DB)
+                w = lit.sum()
+                cx, cy = ((float((lit * X).sum() / w), float((lit * Y).sum() / w))
+                          if float(w) > 0 else (1e9, 1e9))
+                boat_err.append(math.hypot(cx - hx, cy - hy))
+                line += f"boat centroid {boat_err[-1]:4.1f} m off, at {math.hypot(hx, hy):.0f} m"
+            else:
+                # the stand's cells over the same cells bare
+                kx, ky, kh = relative_pose(kelp_w, pose)
+                ck, sk = math.cos(math.radians(kh)), math.sin(math.radians(kh))
+                along = ck * (X - kx) + sk * (Y - ky)
+                across = -sk * (X - kx) + ck * (Y - ky)
+                stand = (along.abs() < KELP_STAND[0] / 2) & (across.abs() < KELP_STAND[1] / 2)
+                kelp_db.append(float(cart_db[stand].mean() - bare_db[stand].mean()))
+                line += f"kelp {kelp_db[-1]:+5.1f} dB over its cells, at {math.hypot(kx, ky):.0f} m"
+            print(line)
+        per_ping = sum(costs) / len(costs)
+        print(f"  {len(frames)} pings, {per_ping:.1f} s each "
+              + ("(a whole picture: trace, reverberation, the echoes, two beamformed pictures)"
+                 if bares_seen is None else "(the echoes and two beamformed pictures; the backgrounds kept)"))
+
+        # ---- the checks ---------------------------------------------------- #
+        if bares_seen is None:
+            # the same pose rendered twice: identical (the sea is a function of the pose)
+            with torch.no_grad():
+                renderer.set_scene(*scene_at(*poses[-1]))
+                again, _, _ = renderer.picture([], frame=len(poses) - 1)
+            self_corr = corr(bares[-1], db(again))
+            step_corr = [corr(bares[i], bares[i + 1]) for i in range(len(bares) - 1)]
+            print(f"  consecutive bare pings correlate at {min(step_corr):+.2f} to {max(step_corr):+.2f}; "
+                  f"the same pose twice at {self_corr:+.3f}")
+            ok &= check("the sea is rendered anew at each pose",
+                        max(step_corr) < 0.5 and self_corr > 0.999,
+                        f"consecutive pings {max(step_corr):+.2f} at most, the same pose twice {self_corr:+.3f}")
+            bares_seen = True
+        if name == "buoy":
+            bwx = torch.tensor([p[0] for p in buoy_world]); bwy = torch.tensor([p[1] for p in buoy_world])
+            # RMS over the pings: the buoy's blob is a beam wide, and its peak
+            # wanders within it as the multipath fringes shift with the range
+            scatter = float(torch.hypot(bwx - bwx.mean(), bwy - bwy.mean()).pow(2).mean().sqrt())
+            mean_range = sum(math.hypot(*relative_pose(buoy_w, p)[:2]) for p in poses) / len(poses)
+            mean_off = math.hypot(float(bwx.mean()) - buoy_w[0], float(bwy.mean()) - buoy_w[1])
+            print(f"  the buoy carried back into the world: ({bwx.mean():.1f}, {bwy.mean():.1f}) m against "
+                  f"({buoy_w[0]:.1f}, {buoy_w[1]:.1f}), RMS scatter {scatter:.1f} m over the pings, a beam "
+                  f"{bw(mean_range):.1f} m at its mean range of {mean_range:.0f} m")
+            ok &= check("the buoy is where the ownship pose puts it in every ping",
+                        min(buoy_over) > 10.0,
+                        f"{min(buoy_over):+.1f} dB over its surroundings at least, within "
+                        f"{max(buoy_err):.1f} m of its place")
+            # the mean may sit a beam plus the buoy's radius off: the peak is
+            # the sphere's specular point on its near face, not its centre
+            ok &= check("carried back into the world, the buoy stands still",
+                        scatter < bw(mean_range) and mean_off < bw(mean_range) + BUOY_RADIUS,
+                        f"RMS scatter {scatter:.1f} m, the mean {mean_off:.1f} m from the truth, "
+                        f"a beam {bw(mean_range):.1f} m")
+        elif name == "boat":
+            tol_boat = [0.5 * ex.HULL_LENGTH + bw(math.hypot(*relative_pose(boat_w, p)[:2])) for p in poses]
+            ok &= check("the moored boat's echo is at the boat in every ping",
+                        all(e < t for e, t in zip(boat_err, tol_boat)),
+                        f"centroid off by {max(boat_err):.1f} m at most, tolerance {min(tol_boat):.1f} m")
+        else:
+            med_kelp = sorted(kelp_db)[len(kelp_db) // 2]
+            ok &= check("the kelp stand reads over its cells", med_kelp > 4.0,
+                        f"{med_kelp:+.1f} dB in the median ping")
+
+        # ---- the figures --------------------------------------------------- #
+        ref = float(max(f.max() for f in bares))
+        ext = [float(gx.min()), float(gx.max()), float(gy.min()), float(gy.max())]
+        fig, ax = plt.subplots(figsize=(9, 7.5))
+        im = ax.imshow(frames[0].numpy(), origin="lower", extent=ext, vmin=ex.THRESHOLD_DB, vmax=ref,
+                       cmap="inferno", aspect="equal")
+        ax.set_xlabel("forward (m)"); ax.set_ylabel("across (m)")
+        ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
+        fig.colorbar(im, ax=ax, fraction=0.04, label="dB re the background at that range")
+        fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS, {2 * ex.SECTOR_DEG:.0f} deg to {ex.FAR:.0f} m: "
+                     f"the sonar under way, {CAPTION[name]}")
+        marks = []
+
+        def draw(i):
+            im.set_data(frames[i].numpy())
+            for m in marks:
+                m.remove()
+            marks.clear()
+            n0 = len(ax.lines)
+            overlays(ax, name, poses[i])
+            marks.extend(ax.lines[n0:])
+            x, y, h = poses[i]
+            ax.set_title(f"t = {times[i]:.0f} s: ownship at ({x:.0f}, {y:.0f}) m heading {h:.0f} deg")
+            return [im, *marks]
+
+        anim = animation.FuncAnimation(fig, draw, frames=len(frames), interval=300, blit=False)
+        gif = FIGURE_DIR / f"29_ownship_{name}{ex.TAG}.gif"
+        with timed("  gif"):
+            anim.save(gif, writer=animation.PillowWriter(fps=3))
+        print(f"  wrote {gif}")
+        plt.close(fig)
+
+        pick = [int(round(i)) for i in torch.linspace(0, len(frames) - 1, 5).tolist()]
+        fig, axes = plt.subplots(2, 3, figsize=(17, 9.5))
+        for ax, i in zip(axes.ravel()[:5], pick):
+            x, y, h = poses[i]
+            ax.imshow(frames[i].numpy(), origin="lower", extent=ext, vmin=ex.THRESHOLD_DB, vmax=ref,
+                      cmap="inferno", aspect="equal")
+            overlays(ax, name, poses[i])
+            ax.set_title(f"t = {times[i]:.0f} s: ownship ({x:.0f}, {y:.0f}) m, heading {h:.0f} deg")
+            ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
+        # the world: the track and the target (and where the buoy was seen from each ping)
+        ax = axes.ravel()[5]
+        ax.plot(traj.positions[:, 0].numpy(), traj.positions[:, 1].numpy(), "k-", lw=1, label="the track")
+        for p in poses:
+            ax.plot(p[0], p[1], "k.", ms=4)
+        if name == "buoy":
+            ax.plot(buoy_w[0], buoy_w[1], "bo", mfc="none", label="buoy")
+            ax.plot(bwx, bwy, "b.", ms=3, label="seen from each ping")
+            ax.plot([buoy_w[0], sinker_w[0]], [buoy_w[1], sinker_w[1]], "b:", lw=0.8, label="chain")
+        elif name == "boat":
+            h = math.radians(boat_w[2])
+            ax.plot([boat_w[0] - 15 * math.cos(h), boat_w[0] + 15 * math.cos(h)],
+                    [boat_w[1] - 15 * math.sin(h), boat_w[1] + 15 * math.sin(h)], "r-", lw=2, label="boat")
+        else:
+            ck, sk = math.cos(math.radians(kelp_w[2])), math.sin(math.radians(kelp_w[2]))
+            a, b = KELP_STAND[0] / 2, KELP_STAND[1] / 2
+            corners = [(a, b), (-a, b), (-a, -b), (a, -b), (a, b)]
+            ax.plot([kelp_w[0] + ck * u - sk * v for u, v in corners],
+                    [kelp_w[1] + sk * u + ck * v for u, v in corners], "g--", label="kelp")
+        ax.set_aspect("equal"); ax.legend(fontsize=8); ax.set_title("the world")
+        ax.set_xlabel("x (m)"); ax.set_ylabel("y (m)")
+        fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS to {ex.FAR:.0f} m: the sonar under way, "
+                     f"{CAPTION[name]}, five of {len(frames)} pings")
+        save(fig, f"29_ownship_{name}{ex.TAG}.png")
+        plt.close(fig)
 
     banner("acceptance")
-    ok = True
-    ok &= check("the buoy is where the ownship pose puts it in every ping",
-                min(buoy_over) > 10.0,
-                f"{min(buoy_over):+.1f} dB over its surroundings at least, within "
-                f"{max(buoy_err):.1f} m of its place")
-    # the mean may sit a beam plus the buoy's radius off: the peak is the
-    # sphere's specular point on its near face, not its centre
-    ok &= check("carried back into the world, the buoy stands still",
-                scatter < bw(mean_range) and
-                math.hypot(float(bwx.mean()) - buoy_w[0], float(bwy.mean()) - buoy_w[1])
-                < bw(mean_range) + BUOY_RADIUS,
-                f"RMS scatter {scatter:.1f} m, the mean "
-                f"{math.hypot(float(bwx.mean()) - buoy_w[0], float(bwy.mean()) - buoy_w[1]):.1f} m "
-                f"from the truth, a beam {bw(mean_range):.1f} m")
-    ok &= check("the moored boat's echo is at the boat in every ping",
-                all(e < t for e, t in zip(boat_err, tol_boat)),
-                f"centroid off by {max(boat_err):.1f} m at most, tolerance {min(tol_boat):.1f} m")
-    ok &= check("the kelp stand reads over its cells", med_kelp > 4.0,
-                f"{med_kelp:+.1f} dB in the median ping")
-    ok &= check("the sea is rendered anew at each pose",
-                max(step_corr) < 0.5 and self_corr > 0.999,
-                f"consecutive pings {max(step_corr):+.2f} at most, the same pose twice {self_corr:+.3f}")
-
-    # ---- the figures ------------------------------------------------------- #
-    FIGURE_DIR.mkdir(parents=True, exist_ok=True)
-    ref = float(max(f.max() for f in bares))
-    ext = [float(gx.min()), float(gx.max()), float(gy.min()), float(gy.max())]
-
-    def overlays(ax, pose):
-        """Where the pose puts each target, in the sonar's frame."""
-        bx, by, _ = relative_pose(buoy_w, pose)
-        hx, hy, hh = relative_pose(boat_w, pose)
-        kx, ky, kh = relative_pose(kelp_w, pose)
-        ax.plot(bx, by, "co", ms=8, mfc="none", mew=1.2)
-        h = math.radians(hh)
-        ax.plot([hx - 15 * math.cos(h), hx + 15 * math.cos(h)],
-                [hy - 15 * math.sin(h), hy + 15 * math.sin(h)], "c-", lw=1.0)
-        ck, sk = math.cos(math.radians(kh)), math.sin(math.radians(kh))
-        a, b = KELP_STAND[0] / 2, KELP_STAND[1] / 2
-        corners = [(a, b), (-a, b), (-a, -b), (a, -b), (a, b)]
-        ax.plot([kx + ck * u - sk * v for u, v in corners], [ky + sk * u + ck * v for u, v in corners],
-                "c--", lw=0.8)
-
-    fig, ax = plt.subplots(figsize=(9, 7.5))
-    im = ax.imshow(frames[0].numpy(), origin="lower", extent=ext, vmin=ex.THRESHOLD_DB, vmax=ref,
-                   cmap="inferno", aspect="equal")
-    ax.set_xlabel("forward (m)"); ax.set_ylabel("across (m)")
-    ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
-    fig.colorbar(im, ax=ax, fraction=0.04, label="dB re the background at that range")
-    fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS, {2 * ex.SECTOR_DEG:.0f} deg to {ex.FAR:.0f} m: "
-                 f"the sonar under way, the world still")
-    marks = []
-
-    def draw(i):
-        im.set_data(frames[i].numpy())
-        for m in marks:
-            m.remove()
-        marks.clear()
-        n0 = len(ax.lines)
-        overlays(ax, poses[i])
-        marks.extend(ax.lines[n0:])
-        x, y, h = poses[i]
-        ax.set_title(f"t = {times[i]:.0f} s: ownship at ({x:.0f}, {y:.0f}) m heading {h:.0f} deg")
-        return [im, *marks]
-
-    anim = animation.FuncAnimation(fig, draw, frames=len(frames), interval=300, blit=False)
-    gif = FIGURE_DIR / f"29_ownship{ex.TAG}.gif"
-    with timed("  gif"):
-        anim.save(gif, writer=animation.PillowWriter(fps=3))
-    print(f"  wrote {gif}")
-    plt.close(fig)
-
-    pick = [int(round(i)) for i in torch.linspace(0, len(frames) - 1, 5).tolist()]
-    fig, axes = plt.subplots(2, 3, figsize=(17, 9.5))
-    for ax, i in zip(axes.ravel()[:5], pick):
-        x, y, h = poses[i]
-        ax.imshow(frames[i].numpy(), origin="lower", extent=ext, vmin=ex.THRESHOLD_DB, vmax=ref,
-                  cmap="inferno", aspect="equal")
-        overlays(ax, poses[i])
-        ax.set_title(f"t = {times[i]:.0f} s: ownship ({x:.0f}, {y:.0f}) m, heading {h:.0f} deg")
-        ax.set_xlim(ext[0], ext[1]); ax.set_ylim(ext[2], ext[3])
-    # the world: the track, the targets, and where the buoy was seen from each ping
-    ax = axes.ravel()[5]
-    ax.plot(traj.positions[:, 0].numpy(), traj.positions[:, 1].numpy(), "k-", lw=1, label="the track")
-    for p in poses:
-        ax.plot(p[0], p[1], "k.", ms=4)
-    ax.plot(buoy_w[0], buoy_w[1], "bo", mfc="none", label="buoy"); ax.plot(bwx, bwy, "b.", ms=3)
-    h = math.radians(boat_w[2])
-    ax.plot([boat_w[0] - 15 * math.cos(h), boat_w[0] + 15 * math.cos(h)],
-            [boat_w[1] - 15 * math.sin(h), boat_w[1] + 15 * math.sin(h)], "r-", lw=2, label="boat")
-    ck, sk = math.cos(math.radians(kelp_w[2])), math.sin(math.radians(kelp_w[2]))
-    a, b = KELP_STAND[0] / 2, KELP_STAND[1] / 2
-    corners = [(a, b), (-a, b), (-a, -b), (a, -b), (a, b)]
-    ax.plot([kelp_w[0] + ck * u - sk * v for u, v in corners],
-            [kelp_w[1] + sk * u + ck * v for u, v in corners], "g--", label="kelp")
-    ax.set_aspect("equal"); ax.legend(fontsize=8); ax.set_title("the world, and the buoy seen from each ping")
-    ax.set_xlabel("x (m)"); ax.set_ylabel("y (m)")
-    fig.suptitle(f"{ex.FREQ_KHZ:.0f} kHz FLS to {ex.FAR:.0f} m: the sonar under way, "
-                 f"five of {len(frames)} pings")
-    save(fig, f"29_ownship{ex.TAG}.png")
+    print(f"  {'all checks passed' if ok else 'a check FAILED'}")
     return 0 if ok else 1
 
 

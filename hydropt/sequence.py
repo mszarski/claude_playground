@@ -247,10 +247,16 @@ class PictureRenderer:
         self._background: Tensor | None = None
         self.n_reverberation = 0
 
-    def set_scene(self, scene) -> None:
-        """A new scene (the world re-expressed at another ownship pose): the background goes."""
+    def set_scene(self, scene, background: Tensor | None = None) -> None:
+        """A new scene (the world re-expressed at another ownship pose).
+
+        The cached background goes with it -- unless ``background`` is the
+        complex beams of this scene's reverberation, formed earlier by
+        :meth:`background` and kept by the caller (a pose visited again in
+        another scenario costs its echoes and no trace).
+        """
         self.scene = scene
-        self._background = None
+        self._background = background
 
     def beams(self, arrivals: ArrivalSet) -> Tensor:
         """The complex beams of an arrival set."""
@@ -350,10 +356,12 @@ class PictureRenderer:
         heading_deg)`` making it at a pose in the sonar's frame (as
         :meth:`sequence` takes).  ``scene_at(x, y, heading_deg)`` returns
         the scene as seen from the ownship pose (the world's sea and seabed
-        through :func:`reframe_height_field`); given, the background is
-        re-traced for every frame, and without it the one background is
-        kept, which freezes the sea to the sonar and is only right for a
-        flat, featureless one.  ``emitters`` are as in :meth:`sequence` but
+        through :func:`reframe_height_field`), or ``(scene, background)``
+        with that scene's reverberation beams from an earlier visit (see
+        :meth:`set_scene`); given, the background is re-traced for every
+        frame it is not supplied for, and without ``scene_at`` the one
+        background is kept, which freezes the sea to the sonar and is only
+        right for a flat, featureless one.  ``emitters`` are as in :meth:`sequence` but
         are called with the OWNSHIP pose, for things that radiate on the
         sonar's own platform.  Yields ``(t, ownship_pose, picture)``.
         """
@@ -361,7 +369,11 @@ class PictureRenderer:
             pose = trajectory.at(float(t))
             with torch.no_grad():
                 if scene_at is not None:
-                    self.set_scene(scene_at(*pose))
+                    seen = scene_at(*pose)
+                    if isinstance(seen, tuple):
+                        self.set_scene(*seen)
+                    else:
+                        self.set_scene(seen)
                 targets = [build(*relative_pose(wp, pose)) for wp, build in world_targets]
                 extra = [e(*pose, k) for e in emitters]
                 pic = self.picture(targets, extra_arrivals=extra, frame=k, coherent=coherent)

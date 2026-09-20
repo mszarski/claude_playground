@@ -278,3 +278,26 @@ def test_ownship_sequence_rebuilds_the_scene_and_places_targets_relative():
         onset = int((excess > 0.1 * excess.max()).nonzero()[0])
         expect = (math.dist((0, 0, 10), (x, 0, 12)) + math.dist((x, 0, 12), (0.5, 0, 10))) / C
         assert float(grid[onset]) == pytest.approx(expect, abs=2.0 * float(grid[1] - grid[0]))
+
+
+def test_ownship_sequence_takes_a_kept_background():
+    r, grid, _ = _renderer(noise_power=0.0)
+    traces = []
+    kept = {}
+
+    def scene_at(x, y, h):
+        if x in kept:
+            return r.scene, kept[x]
+        traces.append(x)
+        return r.scene
+
+    tr = Trajectory([0.0, 10.0], [[0.0, 0.0], [20.0, 0.0]], [0.0, 0.0])
+    world = [((60.0, 0.0, 0.0), _target)]
+    first = []
+    for t, pose, pic in r.ownship_sequence(world, tr, [0.0, 10.0], scene_at=scene_at):
+        kept[pose[0]] = r.background()
+        first.append(pic)
+    again = [pic for _, _, pic in r.ownship_sequence(world, tr, [0.0, 10.0], scene_at=scene_at)]
+    assert traces == [0.0, 20.0]                       # the second pass traced nothing
+    for a, b in zip(first, again):
+        assert torch.equal(a, b)
