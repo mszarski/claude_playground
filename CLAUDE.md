@@ -28,7 +28,7 @@ paragraph there explaining the bug that forced them.
 ```bash
 pip install -e '.[dev]' && pip install scipy   # torch >= 2.2; scipy for examples 19 and 25
 
-python -m pytest tests -q                 # 574 tests, ~22 min on 4 cores
+python -m pytest tests -q                 # 578 tests, ~22 min on 4 cores
 python -m pytest tests/test_beamform.py -q -x
 python -m pytest tests -q -k "incoherent"
 
@@ -39,12 +39,13 @@ cd examples && HYDROPT_EXAMPLE_DTYPE=float64 python 22_inverse_fit_animation.py
 cd examples && python ../scripts/timing_picture.py # stage timings of 21's picture
 ```
 
-Switches every 21-derived example honours (21-29): `HYDROPT_SONAR` (`120`,
+Switches every 21-derived example honours (21-30): `HYDROPT_SONAR` (`120`,
 the default: 120 kHz, 3.0 x 4.8 deg beams, 300 m; or `330`: 330 kHz, 1.4 x
 2.8 deg beams, 150 m, figures tagged `_330k`), `HYDROPT_FAR` (m),
 `HYDROPT_NEAR`, `HYDROPT_BOAT` (range), `HYDROPT_HEADING` (deg, 40),
 `HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO` (one
-scenario of 23-29), `HYDROPT_FRAMES` (28's and 29's pings).  22-29 lay their scenes out for the 120 kHz head's 300 m
+scenario of 23-29), `HYDROPT_FRAMES` (28's and 29's pings), `HYDROPT_STEPS`
+(30's fit).  22-30 lay their scenes out for the 120 kHz head's 300 m
 and scale every absolute position by `FAR / 300` (`S` in each), so a new
 scenario's positions go in as 300 m values times `S`.  Each example prints
 `[PASS]`/`[FAIL]` lines for its acceptance criteria and exits non-zero on a
@@ -65,7 +66,9 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
 `propeller_directivity`: shielded forward by the hull, notched astern), and
 `labels.py` reads a box, a mask and a class per target off the fields
 (`picture(..., labels=True)`; the class is the target's `label` attribute;
-`examples/LABELS.md` is the how-to and the record format).
+`examples/LABELS.md` is the how-to and the record format).  `scenefit.py`
+fits the scene to a real picture (`load_picture` -> `SceneFit` ->
+`fit_scene` on `range_profile`, the level against range; `30`).
 
 ## Conventions
 
@@ -77,7 +80,7 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
   criteria are checked with `_common.check` and reported, and the figures
   are saved with `_common.save`.  Numbers quoted in a docstring or in the
   README come from a run and say so.
-* **21-29 share one scene.**  22-29 import `21_long_range_300m.py` for the
+* **21-30 share one scene.**  22-30 import `21_long_range_300m.py` for the
   sonar, environment, boat and display (`_ex21()`), and 23-27 follow one
   pattern: the bare picture once, then each scenario as its own ping,
   measured against the bare picture, with a `bare | scenario | difference`
@@ -159,6 +162,12 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
   3 dB AND is within 35 dB of its own peak AND lies within its geometry
   plus two beams: without the second gate a +48 dB echo's Hamming
   sidelobes (-43 dB) label the whole swath at its range as the target.
+* A scene is fitted to a real picture on the swath's level against range
+  (`range_profile`, a sector median), never on the picture: two pictures
+  never share a speckle realisation.  Levels and the tilt are smooth in
+  the coherent picture (nothing moves a scatterer), so no incoherent
+  model is needed there; the noise level is undetermined where the floor
+  is under the reverberation, and the fit leaves it wherever it lands.
 
 ## Operating notes
 

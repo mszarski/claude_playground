@@ -141,6 +141,8 @@ from .scene import Scene
 from .emission import emission_arrivals, propeller_directivity
 from .labels import (Label, draw_labels, geometry_box, label_from_beams, polar_gate,
                      signal_mask, world_geometry)
+from .scenefit import (RealPicture, SceneFit, cartesian_to_polar, fit_scene, load_picture,
+                       range_profile)
 from .sequence import PictureRenderer, Trajectory, reframe_height_field, relative_pose
 from .sediments import (
     SEDIMENTS,
@@ -220,5 +222,7 @@ __all__ = [
     "emission_arrivals", "propeller_directivity",
     "Label", "label_from_beams", "signal_mask", "polar_gate", "geometry_box", "world_geometry",
     "draw_labels",
+    # fitting the scene to a real picture
+    "RealPicture", "SceneFit", "fit_scene", "range_profile", "cartesian_to_polar", "load_picture",
     "__version__",
 ]
