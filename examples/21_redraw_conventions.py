@@ -8,6 +8,13 @@ scale, in seconds.
 
     python 21_redraw_conventions.py            # figures/21_beams_300m.pt
     HYDROPT_FAR=90 python 21_redraw_conventions.py
+
+**Construction and assumptions.**  Nothing is simulated here: the file
+``figures/21_beams_<FAR>m.pt`` written by ``21_long_range_300m.py`` under
+``HYDROPT_ELEVATION=beams`` holds the polar image of each elevation beam,
+and this draws their sum, their maximum per cell and each alone, through
+21's own ``display`` and ``to_cartesian`` under one colour window.  Change
+the combination rule here, not in 21.
 """
 
 from __future__ import annotations

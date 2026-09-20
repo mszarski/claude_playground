@@ -16,6 +16,34 @@ The brief's acceptance criterion was an 80% reduction in bathymetry RMS error
 from a flat start.  This geometry delivers about 66%, and the check below is set
 there; see the README for why the gap is a limit on the information in one
 horizontal array rather than something tuning closes.
+
+**Construction and assumptions.**
+
+* *Environment*: a 200 m shelf whose seabed is a 5 x 4 node bilinear height
+  field over 8 km x 3 km (2 km x 1 km nodes, ``X0, Y0, DX, DY``); the truth
+  is that plane less a Gaussian seamount 80 m high and 1.8 km wide at
+  (4 km, 0), the guess is flat.  A fixed two-knot profile (1505 m/s at the
+  surface, 1500 at the bottom), a flat surface, constant losses (0.5 and
+  3.5 dB); four octave bands 0.3-2 kHz; 25 m steps, 420 of them, up to 30
+  bounces.
+* *Source and receivers*: the source 30 m deep at ``x = 200`` m; an
+  eleven-element horizontal line array across the track at 7.6 km, 60 m
+  deep, spanning +/-1.1 km in ``y``.
+* *The fan*: 46 elevations from -22 to -2 deg (downward: the seabed is the
+  object) by 13 azimuths over +/-9 deg, because one vertical plane samples
+  one line across the seamount.
+* *The measurement and the fit*: the ETC on 4.9-5.6 s in 340 bins,
+  ``sigma_d`` 180 m and ``sigma_t`` 15 ms (the width the geometry
+  resolves, see ``SIGMA_T``); two Adam phases -- explore at 1.5 m a step
+  with the kernel annealed 40 -> 20 ms, refine at 0.35 m decaying with the
+  kernel 20 -> 15 ms -- under a smoothness-plus-flat-prior regulariser at
+  2e-5 and the heights clamped to 90-320 m.
+* *Assumptions*: the seabed is bilinear between nodes this coarse (so its
+  relief is what one array can resolve); the losses do not depend on
+  grazing angle; the measurement is noise-free and from the same model.
+* *To vary*: a finer grid needs more independent arrivals (a second array
+  or source position) or it is underdetermined; keep ``SIGMA_T`` in the
+  regime where the misfit against seamount height is a monotone bowl.
 """
 
 from __future__ import annotations

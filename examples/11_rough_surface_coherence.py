@@ -27,6 +27,32 @@ for this sea at 100 kHz is 2.5 degrees.  Below that the ghost is real; above abo
 its surface path at roughly 25 degrees, so for *that* geometry the ghost should
 indeed not be there -- but the reason is the angle, not the frequency alone.
 
+**Construction and assumptions.**
+
+* *The closed form*: ``coherent_reflection_loss_db`` against
+  ``(10 / ln 10) Gamma^2`` at 30 deg grazing and 1 kHz for ``Gamma`` from
+  0.1 to 3, and its frequency scaling for a 10 m/s wind sea
+  (``wind_sea_rms_height``).
+* *The channel*: 50 m of water under a three-knot profile (1510 m/s at the
+  surface, 1500 at 25 m, 1498 at the bottom), a pressure-release surface
+  without loss and a sand bottom (``sediment_loss``); the source and one
+  receiver at 25 m depth, 400 m apart; 600 rays in the vertical plane
+  within +/-35 deg (``fan_2d``); 1 m steps, 700 of them, up to 20 bounces;
+  bands 0.5, 2 and 8 kHz with 5 cm of chop, and 100 kHz for the winds
+  0, 2, 5 and 10 m/s.
+* *The measure*: ``roughness_weights`` (Eckart, from the recorded bounces
+  and their grazing angles) applied as per-ray weights to ``splat_etc``
+  (``sigma_d`` 1 m, ``sigma_t`` 0.2 ms); the 100 kHz survivors are read off
+  the surface bounces' grazing angles.
+* *Assumptions*: Gaussian surface heights of one RMS, uncorrelated between
+  bounces; coherent loss only -- the energy scattered out of the specular
+  direction is removed, not redistributed (``reverb.py`` is separate);
+  the bottom is smooth.
+* *To vary*: ``SURFACE_RMS`` and the winds; the cutoff angle
+  (``cutoff_angle_deg``) is the number to watch when moving a sonar's
+  geometry, since a surface path within a couple of degrees of grazing
+  keeps its ghost at any frequency.
+
 Acceptance criteria:
   * the loss matches `(10/ln 10) Gamma^2` and scales as frequency squared;
   * rays that never touched a boundary are left *exactly* alone;

@@ -41,6 +41,19 @@ drawn close up about the buoy:
 * **slack**: a catenary of parameter 5 m from the buoy to a touchdown on
   the seabed, then 40 m of ground chain on the bottom to the anchor.
 
+**Construction and assumptions.**  21's sonar and scene (see 21's
+docstring) and 26's buoy, chain and sinker (``taut_catenary``,
+``slack_mooring``), positions times ``S``.  What this varies: the chain's
+direction relative to the line of sight (``across``: yaw = bearing + 90;
+``along``: yaw = bearing) and its scope (``slack``: a catenary of parameter
+``SLACK_A`` with ``GROUND_CHAIN`` m lying on the bottom, ``CHAIN_STEP`` m
+of chain per point).  The line
+is measured along the chain's projection (``along_line``) at ``BRIGHT_DB``
+over the bare picture and across it at half power.  Assumptions: as 26's;
+the links are isotropic points, so the chain's brightness is a count of
+links per cell, which is why a beam that holds seven of them at 330 kHz
+reads fainter than one holding sixty.
+
 Acceptance criteria:
   * across and along, the bright line under the buoy is about as long as
     the mooring's plan span, and the along one is one beam wide;

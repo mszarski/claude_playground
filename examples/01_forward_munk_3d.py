@@ -6,6 +6,29 @@ never touch either boundary, so they propagate for tens of kilometres with no
 reflection loss at all.  Rays launched steeply escape the channel and start
 bouncing.
 
+**Construction and assumptions.**
+
+* *Environment*: a Munk profile (``c1`` 1500 m/s, axis 1300 m, ``B`` 1300 m,
+  ``eps`` 7.37e-3) in 5000 m of water; both boundaries flat, with constant
+  losses per bounce (0.5 dB surface, 6 dB bottom); Thorp absorption in four
+  octave bands, 0.5-4 kHz.  The profile is range-independent.
+* *Source and receivers*: the source at 1000 m depth at the origin; a
+  six-element vertical line array 50 km along ``+x`` at 600-2000 m depth.
+* *The fan*: ``structured_fan(100, 20)`` over +/-20 deg elevation and +/-10
+  deg azimuth -- structured, so the ray-tube spreading knows each ray's
+  neighbours; 20 m RK4 steps, 3000 of them (60 km of path), up to 40
+  bounces.
+* *The rendering*: ``scene.render`` splats each ray's energy onto the
+  energy-time curve with a 120 m receiver capture width (``sigma_d``) and a
+  4 ms time kernel (``sigma_t``), first with ``1/s^2`` spreading and then
+  with the ray tube's.
+* *Assumptions*: geometric acoustics (no diffraction, no phase -- the ETC is
+  an energy quantity); smooth boundaries; the source omnidirectional.
+* *To vary*: move the source or the axis to change the trapped-angle window
+  (about +/-14 deg here); widen the azimuth fan if the receivers leave the
+  ``y = 0`` plane; keep ``n_steps * step_size`` beyond the range along the
+  most steeply cycling ray or the fan runs out of path before the array.
+
 Acceptance criterion: 2,000 rays x 3,000 RK4 steps in under 30 s on CPU.
 """
 

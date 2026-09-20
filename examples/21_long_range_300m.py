@@ -101,6 +101,41 @@ and AGC references are order statistics rather than means.  Range multi-look is 
 target that lives in one range bin across three, so it is off by default and
 priced rather than applied.
 
+**Construction and assumptions** (the scene 22-29 import; every knob is a
+module constant or a ``HYDROPT_*`` switch, see the comments at each):
+
+* *Sonar*: ``HYDROPT_SONAR=120`` (default) is 120 kHz with 50 receive
+  elements (3.0 deg Hamming beams, 181 across +/-60 deg) and 21 per
+  elevation beam (4.84 deg, four across a 20.8 deg FOV tilted 5 deg up);
+  ``330`` is 330 kHz with 108 and 36 (1.4 x 2.8 deg, seven beams, 361
+  azimuth beams).  Five transmit elements flood the FOV
+  (``transmit_fan``: a jittered ``N_ELEV x N_AZIM`` lattice over
+  ``ELEV_DEG`` and the sector, weighted by the transmit array's factor
+  steered to ``TILT_DEG``); the receive elevation pattern
+  (``receive_beam``) is the sum of the head's beams (``envelope``) or one
+  at a time (``HYDROPT_ELEVATION=beams``); a 0.3 ms pulse
+  (``PULSE_S``), 210 dB source level, 0.5 m range bins from ``NEAR`` to
+  ``FAR`` (300 m, or 150 at 330 kHz).
+* *Environment* (``build_scene``): isovelocity 1500 m/s in 30 m of water,
+  the AUV at 12 m; a fractal seabed of 0.9 m RMS on 16 m nodes over
+  700 m, a Pierson-Moskowitz sea for a 4 m/s wind at eight nodes per
+  peak wavelength, sand (``sediment_loss``), a lossless pressure-release
+  surface (the docstring in ``build_scene`` says why no Eckart loss on
+  the bounce); 2 m steps, 200 of them, up to 6 bounces; Lambert
+  reverberation at -27 dB on both boundaries.
+* *Target*: a 30 x 8 x 4 m wetted hull mesh (``boat_hull_mesh``) in six
+  patches with ``DIFFUSE_DB`` of diffuse return, at ``BOAT_RANGE`` on
+  ``BOAT_BEARING_DEG`` heading ``BOAT_HEADING_DEG``, waterline at
+  ``z = 0``; the return leg solved by the method of images.
+* *The picture*: echo and reverberation beamformed together
+  (``beamform``), ``calibrate`` to uPa^2, ambient noise at the correct
+  Rice statistics (``add_receiver_noise``), the median-TVG ``display``
+  (gain from ``display_gain``, range multi-look priced not applied), and
+  ``examples/15``'s ``to_cartesian`` onto 300 x 300 cells in metres.
+* *Assumptions*: Lambert backscatter; plane-wave physical optics per hull
+  patch (a patch larger than the Fresnel zone has its coherent part
+  wrong, bead ``cva``); the ambient noise is Wenz at the wind; one ping.
+
 Acceptance criteria:
   * the boat's echo lands on the boat, within a beamwidth at 250 m;
   * the seabed and sea surface fill the image out to 300 m rather than a
@@ -365,26 +400,32 @@ def horizontal_array(n: int = N_RX) -> torch.Tensor:
                         torch.full_like(y, AUV_DEPTH)), dim=-1)
 
 
-def build_scene(elements, *, seed: int = 3, learnable: bool = True):
+def build_scene(elements, *, seed: int = 3, learnable: bool = True, bottom=None, surface=None):
     """A 60 m shelf, 700 m across, under a light wind sea.
 
     Both grids have to cover the whole of a 300 m swath and then some, because
     a ray that leaves the grid is clamped to its edge rather than refused, and a
     clamped seabed is a flat one -- which would show up as a suspiciously clean
     band at the outside of the image and nowhere else.
+
+    ``bottom`` and ``surface``, when given, replace the two generated height
+    fields and everything else stays (``examples/29`` passes the world's
+    heights resampled at an ownship pose).
     """
-    bottom = fractal_bathymetry((44, 44), (16.0, 16.0), base_depth=WATER_DEPTH,
-                                rms=0.9, exponent=3.0, origin=(-40.0, -350.0),
-                                learnable=learnable,
-                                generator=torch.Generator().manual_seed(seed))
+    if bottom is None:
+        bottom = fractal_bathymetry((44, 44), (16.0, 16.0), base_depth=WATER_DEPTH,
+                                    rms=0.9, exponent=3.0, origin=(-40.0, -350.0),
+                                    learnable=learnable,
+                                    generator=torch.Generator().manual_seed(seed))
     # Eight nodes across the wind sea's peak wavelength, as always -- but over
     # 700 m rather than 180, which is what makes this the big array in the scene.
-    dx = 2.0 * math.pi / wave_number_peak_pm(WIND) / 8.0
-    n = int(math.ceil(700.0 / dx)) + 1
-    surface = pierson_moskowitz_surface((n, n), (dx, dx), WIND,
-                                        origin=(-40.0, -n * dx / 2),
-                                        learnable=learnable,
-                                        generator=torch.Generator().manual_seed(seed + 1))
+    if surface is None:
+        dx = 2.0 * math.pi / wave_number_peak_pm(WIND) / 8.0
+        n = int(math.ceil(700.0 / dx)) + 1
+        surface = pierson_moskowitz_surface((n, n), (dx, dx), WIND,
+                                            origin=(-40.0, -n * dx / 2),
+                                            learnable=learnable,
+                                            generator=torch.Generator().manual_seed(seed + 1))
     sediment = sediment_loss("sand", learnable=learnable)
     # The boundaries conserve energy on a bounce, deliberately.  A rough sea
     # at 120 kHz destroys the COHERENT reflection -- the Eckart loss is

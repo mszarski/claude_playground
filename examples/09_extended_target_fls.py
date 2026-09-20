@@ -27,6 +27,31 @@ modelling artefact, not physics: a real cylinder end-on returns its end cap.  Th
 caps are what keep the target visible at every aspect, and they are the reason an
 extended target is built from parts rather than from one formula.
 
+**Construction and assumptions.**
+
+* *Sonar and environment*: 06's -- 100 kHz, 32 elements at half a
+  wavelength at 10 m in 30 m of water, the same profile, pressure-release
+  surface with 2 dB and Rayleigh sand bottom; 0.2 m steps, 600 of them,
+  up to 4 bounces; the same 14 x 8 deg Gaussian projector directivity.
+* *Targets* (``build_target``, ``build_discrete``): a 4 m hull of radius
+  0.25 m as five 0.8 m ``CylinderScattering`` sections along the body's
+  ``x`` with two ``PlateScattering`` end caps (a disc of the same area,
+  normal along the axis), at 40 m dead ahead, 14 m deep, at a yaw
+  (0 end-on, 90 broadside); the same layout as five isotropic -12 dB
+  scatterers; and a 0 dB point at the same place for contrast.
+* *The picture*: 5000 transmit rays over the 45 deg sector,
+  ``target_arrivals`` with an eigenray return leg (6000 rays within 25
+  deg, 8 arrivals a leg); energy shares by nearest highlight bearing,
+  energy-weighted spreads in range and bearing.
+* *Assumptions*: physical-optics patterns per section (a plane wave on a
+  rigid body -- zero end-on, which is why the caps exist), with the
+  sections' returns added in energy; isotropic discrete scatterers as the
+  broad-aspect limit; the hull rigid and smooth.
+* *To vary*: ``N_SECTIONS`` sets how finely the glint can be placed;
+  ``HULL_LENGTH / LAM`` sets how narrow each section's lobe is (the
+  reasoning in the docstring above scales with it); a triangle-mesh hull
+  (``examples/14``) replaces the sections with facets.
+
 Acceptance criteria:
   * the smooth hull's echo concentrates on its specular section, and that
     section moves when the body slides along its own axis;

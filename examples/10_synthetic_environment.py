@@ -27,6 +27,33 @@ two orders of magnitude -- sloped facets deflect hundreds of metres where
 horizontal refraction manages a couple, which is worth knowing before reaching
 for a 3-D sound-speed field to explain out-of-plane energy.
 
+**Construction and assumptions.**
+
+* *The base ocean*: a Munk profile with its axis at 1000 m in 2000 m of
+  water, the source 300 m deep at the origin; constant losses (0.5 and
+  6 dB); one band at 1 kHz; 20 m steps, 900 of them (18 km of path for a
+  12 km range), up to 30 bounces.  Flat boundaries are the control.
+* *The three generated fields*, all seeded from ``SEED`` and spanning 1.3
+  times the range with the source 15 % in from the near edge:
+  a wind sea for 12 m/s at eight nodes per peak wavelength
+  (``pierson_moskowitz_surface``, RMS set by ``H_s / 4``); a fractal
+  seabed of 40 m RMS relief and spectral exponent 3 on 200 m nodes
+  (``fractal_bathymetry``); an internal-wave sound-speed perturbation
+  from 12 m RMS of heave with a 2 km correlation length on 500 m x 100 m
+  nodes (``internal_wave_perturbation``), the seabed and the field
+  learnable.
+* *The experiment*: 400 rays in the ``x-z`` plane within +/-14 deg
+  (``fan_2d`` at azimuth zero), traced under each field alone and all
+  together; the out-of-plane measure is ``|y|`` over live vertices.
+* *Assumptions*: geometric acoustics at 1 kHz on a sea with 100 m
+  wavelengths (a boundary bends the specular direction and nothing else;
+  ``examples/11`` is the coherent loss); the internal-wave field is a
+  frozen realisation; the check against ``L^2 / 2R`` uses the RMS
+  gradient, so the ratio is checked to a factor of three.
+* *To vary*: the wind, ``SEABED_RMS`` and ``RMS_DISPLACEMENT`` scale each
+  mechanism; keep the grids' extent over the whole fan or a ray leaving a
+  grid is clamped to its edge (flat).
+
 Acceptance criteria:
   * the generated fields match the statistics they were specified by;
   * the depth-only control keeps every ray in its launch plane to machine

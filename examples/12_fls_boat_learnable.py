@@ -24,6 +24,33 @@ hull *glints* rather than resolving, so the wetted hull is specular cylinder
 sections and the things that scatter broadly -- propeller, skeg, transom -- are
 separate highlights.
 
+**Construction and assumptions.**
+
+* *Sonar*: 100 kHz; a projector at the vehicle (12 m deep) with a Gaussian
+  pattern 20 deg wide in azimuth and 12 deg in elevation, aimed at the
+  boat (``transmit_pattern``), 1200 rays in a 30 deg cone about that aim
+  (``transmit``); a horizontal receive array of four elements at half a
+  wavelength (``array``), and 32 for the comparison.
+* *Environment* (``build_scene``): isovelocity 1500 m/s in 30 m of water
+  (rays are straight, so 1.5 m steps suffice); a fractal seabed of 0.8 m
+  RMS relief on 24 x 24 nodes at 10 m, a Pierson-Moskowitz sea for a
+  5 m/s wind at eight nodes per peak wavelength over 180 m, a sand
+  sediment (``sediment_loss``) and a lossless pressure-release surface,
+  all learnable; up to 8 bounces.
+* *Target* (``build_boat``): a 12 m boat at 60 m, beam-on, 1 m deep --
+  five hull patches as doubly-curved surfaces (0.75 m section radius,
+  30 m plan radius: +7.5 dB at every aspect), a propeller (-8 dB) and skeg
+  (-14 dB) as isotropic points at the stern, a 2.4 x 1.2 m transom plate;
+  all learnable, hull sections optionally straight cylinders.
+* *The picture* (``render_image``): ``target_arrivals`` with the return
+  leg solved (method of images, 400 rays within 40 deg, 24 arrivals a
+  leg), beamformed into 121 Hamming beams on a time grid about the boat.
+* *Assumptions*: physical-optics patterns per highlight added in energy;
+  no reverberation or noise in this picture (``examples/15`` adds them);
+  specular boundaries with the sea's roughness in the height field only.
+* *To vary*: ``array(n)`` for the element count; ``build_boat(hull=)`` for
+  the hull model; ``TX_RAYS`` / ``RX_RAYS`` are at their measured floor.
+
 Acceptance criteria:
   * the beamformed image carries a finite non-zero gradient to every learnable
     parameter class in the scene;

@@ -123,6 +123,8 @@ from .rough import (
     wind_sea_rms_height,
 )
 from .scene import Scene
+from .emission import emission_arrivals, propeller_directivity
+from .sequence import PictureRenderer, Trajectory, reframe_height_field, relative_pose
 from .sediments import (
     SEDIMENTS,
     Sediment,
@@ -196,5 +198,8 @@ __all__ = [
     # reverberation
     "LambertScattering", "reverberation_arrivals", "render_reverberation",
     "cone_solid_angle",
+    # sequences
+    "Trajectory", "PictureRenderer", "relative_pose", "reframe_height_field",
+    "emission_arrivals", "propeller_directivity",
     "__version__",
 ]

@@ -43,6 +43,21 @@ Two scenarios, each against the bare picture (21's boat at rest, heading
   what that does: an arc across bearing at the boat's range, from the
   Hamming window's sidelobes, and nothing along its bearing.
 
+**Construction and assumptions.**  21's sonar, scene and boat (see 21's
+docstring); the boat is ``make_boat(heading)`` at 21's place.  What this
+adds: the propeller at ``PROPELLER`` in the hull frame radiating
+``EMISSION_DB_HZ`` (scaled 6 dB an octave from 120 kHz to the head's
+frequency) as a random-phase pulse train on every one-way path from it to
+the array's centre by the method of images, each path's first
+``SHADOW_REACH`` metres tested against the hull mesh
+(``segment_mesh_transmission``); the spoke read as the propeller's bearing
+over its neighbours at ranges short of the boat (``spoke_of``); the glint
+scenario the boat broadside with no emission.  Assumptions: the emission
+is band-limited noise at the receiver's bandwidth, omnidirectional but for
+the hull's shadow (``examples/28`` adds the propeller's directivity); the
+glint is plane-wave physical optics, so it is checked only where the
+Fresnel zone is comparable to the patch.
+
 Acceptance criteria:
   * with the propeller in view, the boat's bearing reads well above its
     neighbours at every range away from the boat -- a spoke -- and does not

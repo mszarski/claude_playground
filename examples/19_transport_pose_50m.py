@@ -42,6 +42,31 @@ beamwidth barely changes the image -- there is no gradient to descend and no
 search that helps.  That is the array's angular resolution, and it takes
 another ping from another position to do better.
 
+**Construction and assumptions.**
+
+* *Sonar and scene*: 16's -- 12's 100 kHz FLS with 64 elements, its
+  channel non-learnable, 300 transmit rays and 400 return rays, 61
+  Hamming beams across +/-30 deg -- at two resolutions: a SEARCH stage
+  (20-170 m in 218 bins, 2 ms pulse) and a REFINE stage (16's own,
+  45-75 m in 233 bins, 0.12 ms).
+* *Target*: 12's boat beam-on at 60 m; the truth rendered with one seed,
+  the model with another; the start ``START`` 50 m out in range.
+* *The losses*: the mean squared log10 image loss of 16 on the refine
+  images; on the search images a Sinkhorn divergence
+  (``sinkhorn_divergence``) in metres on both axes (bearing as arc
+  length at ``R0``), at blurs from 8 m down to 0.5 m
+  (``BLUR_SCHEDULE``, steps per blur), then a grid search of range
+  shifts (``GRID_SHIFTS``) at a 2 m blur, then ``REFINE_STEPS`` of the
+  image loss; Adam on position only at 0.5 blur (search) or 0.35 cell
+  (refine) per step.
+* *Assumptions*: position only (yaw is degenerate beam-on, per 16); a
+  scene otherwise known; the transport plan is between the images as
+  distributions of energy, so a global change of level is invisible to it.
+* *To vary*: ``START`` maps the reach; ``BLUR_SCHEDULE`` and
+  ``GRID_SHIFTS`` are set by the hull's highlight spacing (the local
+  minima the docstring describes), so a different target needs different
+  shifts.
+
 Acceptance criteria:
   * the transport loss rises monotonically out to 50 m, where the image loss is
     flat -- the reason one can be descended on and the other cannot;

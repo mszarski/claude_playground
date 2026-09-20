@@ -10,6 +10,30 @@ a curved valley rather than a round basin.  What breaks the degeneracy is that
 different rays reach the array with different bounce *ratios*, and that a
 vertical array sees several of them at once.
 
+**Construction and assumptions.**
+
+* *Environment*: a 200 m shelf under a fixed piecewise-linear profile
+  (1510 m/s at the surface, 1500 at 60 m, 1505 at the bottom: a
+  downward-then-upward refracting layer that sends every ray to the
+  boundaries); both boundaries flat; the losses are constants per bounce and
+  are the unknowns (true 0.8 dB surface, 4.5 dB bottom; the guess 3.0 and
+  1.0).  Four octave bands 0.2-2 kHz; 25 m steps, 260 of them.
+* *Source and receivers*: the source 50 m deep at the origin; a four-element
+  vertical array 4 km along ``+x`` at 40-180 m depth.
+* *The fan*: 140 rays in one vertical plane, +/-30 deg -- the receivers are
+  on ``y = 0``, so this is a 2-D problem.
+* *The measurement*: the ETC on 2.6-3.1 s in 260 bins, ``sigma_d`` 60 m and
+  ``sigma_t`` 2 ms, from the true scene; the fit minimises the log-domain
+  ETC misfit (``hydropt.inverse.fit``) with Adam at 1.0 dB a step for 90
+  steps, without annealing, because the losses do not move the rays.
+* *Assumptions*: the losses are angle-independent; the measurement is
+  noise-free and from the same model (an inverse crime, on purpose: the
+  question is whether the two losses are separable at all, not robustness).
+* *To vary*: replace ``ConstantLoss`` with ``RayleighBottomLoss`` or a
+  ``sediment_loss`` preset to make the loss grazing-angle dependent -- then
+  the array's spread of grazing angles is what separates the two; add
+  noise to ``target`` to test robustness.
+
 Acceptance criterion: both losses to within 0.5 dB in under 100 Adam steps on CPU.
 """
 

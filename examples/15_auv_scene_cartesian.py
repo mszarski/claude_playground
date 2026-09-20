@@ -16,6 +16,35 @@ seabed ridge is a curve and a 12 m boat is a bearing extent that shrinks with
 range, so you cannot read geometry off it directly.  Resampled onto a grid in
 metres, the scene is laid out the way it really is.
 
+**Construction and assumptions.**
+
+* *Sonar*: 13's Mills cross (64 receive along ``y`` at half a wavelength,
+  6 transmit along ``z``) moved to an AUV at 18 m; the fan
+  (``transmit_fan``) a jittered 56 x 330 lattice over +/-60 deg azimuth
+  and -20 to +26 deg elevation, tilted 12 deg up, weighted by the
+  transmit array's factor; a 0.12 ms pulse (9 cm), 181 Hamming beams,
+  a 420-bin grid from 8 to 95 m.
+* *Environment*: 12's -- isovelocity 30 m channel, 5 m/s wind sea, 0.8 m
+  RMS fractal seabed on 10 m nodes, sand -- with the source moved to the
+  AUV's depth (and the array with it: a bistatic pair biases every range).
+* *Targets and reverberation*: the 12 m boat as a wetted hull mesh
+  (``boat_hull_mesh`` 110 x 34) in six patches with -12 dB of diffuse
+  return, at 55 m on bearing +12 deg heading 55 deg, waterline at ``z = 0``;
+  every seabed and surface bounce of the fan a Lambert patch at -27 dB,
+  up to 40,000 of them (``reverberation_arrivals``), summed with the echo
+  BEFORE beamforming.
+* *The picture*: ``beamform`` with the arrival axis blocked (so the dense
+  ping carries gradients), then ``to_cartesian``: a bilinear resample of
+  the bearing-range image onto a 240 x 240 grid in metres (``grid_sample``,
+  differentiable), ``x`` forward and ``y`` to port.
+* *Assumptions*: Lambert backscatter on both boundaries, patches at the
+  fan's own sampling (so the fan is jittered to keep them from ruling
+  arcs); the boat's diffuse term stands in for fittings a smooth mesh
+  lacks; no ambient or receiver noise here (``examples/21`` adds them).
+* *To vary*: ``BOAT_RANGE``, ``BOAT_BEARING_DEG``, ``BOAT_HEADING_DEG``;
+  ``PULSE_S`` sets range resolution; ``ping(n_elev, n_azim, n_patches,
+  ...)`` trades density for cost; ``to_cartesian``'s ranges and grid.
+
 Acceptance criteria:
   * the boat appears in the Cartesian image within a beamwidth of where it is;
   * its along-track extent in metres is consistent with a 12 m hull, which is

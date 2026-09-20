@@ -12,6 +12,29 @@ vanish where `det Q1` does, and the amplitude is finite everywhere with no clamp
 at all.  The bound `|det Q| >= beta^2` is structural, and this example checks it
 on a bundle that really does cross a caustic.
 
+**Construction and assumptions.**
+
+* *Environment*: 01's Munk channel (axis 1300 m, 5000 m of water, flat
+  boundaries, constant losses); one octave band at 0.5 kHz; 25 m steps,
+  1500 of them, up to 20 bounces.
+* *Source and receivers*: the source 1000 m deep; a five-element vertical
+  array 32 km away at 800-1800 m.
+* *The bundle*: a structured fan of 40 elevations within +/-12 deg by 3
+  azimuths within +/-4 deg -- three, because the geometric tube's central
+  difference needs neighbours; the beams do not.  The beam width ``beta``
+  is eight wavelengths (``suggest_beam_width``).
+* *The comparison*: the same bundle rendered three ways onto a 700-bin
+  ETC (``sigma_d`` 150 m, ``sigma_t`` 5 ms): ``1/s^2``, the ray tube (with
+  ``ray_tube``'s ``min_jacobian`` floor of 1e-3), and the Gaussian beam's
+  ``1/|det Q|``; and the beam checked against ``1/(s^2 + beta^2)`` in a
+  homogeneous 20 km slab.
+* *Assumptions*: a single beam per ray with one fixed initial width, which
+  at 500 Hz over tens of km is kilometres wide -- the limit the run prints;
+  a real Gaussian-beam field sums many narrower beams.
+* *To vary*: ``FREQ_KHZ`` sets ``beta`` and the beam's growth; a higher
+  frequency or a wider ``wavelengths`` makes the beam narrower and the
+  caustic level closer to the tube's away from the focus.
+
 Acceptance criteria:
   * the bundle really crosses caustics (signed tube area changes sign);
   * the geometric tube is sitting on its `min_jacobian` floor there, away from

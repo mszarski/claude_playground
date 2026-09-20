@@ -31,6 +31,29 @@ Four things had to be right, and each was measured rather than assumed:
    because a Fibonacci cone is deterministic unless jittered.  `rx_jitter` fixes
    that, and the numbers here use independent realisations.
 
+**Construction and assumptions.**
+
+* *Sonar and scene*: 12's 100 kHz FLS with a 64-element array
+  (``fls.array``), its isovelocity 30 m channel, wind sea and seabed
+  built non-learnable (3 m steps, 45 of them: bit-identical for straight
+  rays), 300 transmit rays in 12's aimed cone, 81 Hamming beams across
+  +/-30 deg, a grid from 45 to 75 m.
+* *Target*: 12's boat, beam-on at 60 m; the unknowns are range,
+  across-track and yaw, the truth rendered with one receive-fan seed and
+  every model image with another (``rx_jitter``), so there is no shared
+  fan between measurement and model.
+* *The loss*: mean squared log10 of the images with a floor at 1e-4 of
+  the measurement's peak (the linear loss is shown to be speckle);
+  Adam on the boat's position and yaw with a learning rate of 0.35
+  range cells, annealed with the pulse through ``SCHEDULE`` (pulse,
+  bins, steps), the depth and the other two angles held.
+* *Assumptions*: the scene is known and only the boat moves; no
+  reverberation or noise in the image; the gradient check's step is a
+  fraction of a range cell (the docstring above says why).
+* *To vary*: the starting offsets in ``starts`` map the capture range;
+  ``SCHEDULE`` sets how coarse the first stage is; a different heading
+  in ``fit(heading=)`` shows where yaw is and is not observable.
+
 Acceptance criteria:
   * the log loss climbs monotonically near the truth where the linear loss does
     not, and saturates beyond the capture range;

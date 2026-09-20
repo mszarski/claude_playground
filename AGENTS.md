@@ -10,8 +10,10 @@ rules:
 
 * metres, `x` forward, `y` port, `z` down; float32 for pictures and fits,
   float64 only to check a wavelength-scale gradient;
-* examples are the specification: docstring with acceptance criteria,
-  `[PASS]`/`[FAIL]` checks, a figure; 22-26 import 21 for their scene;
+* examples are the specification: docstring with a "Construction and
+  assumptions" block and acceptance criteria,
+  `[PASS]`/`[FAIL]` checks, a figure; 22-28 import 21 for their scene
+  (28 moves the boat: `PictureRenderer` + `Trajectory` in `hydropt/sequence.py`);
 * run an example alone (four cores; never alongside the test suite) and read
   its numbers and figure before committing it; library changes get the full
   suite (`python -m pytest tests -q`, ~22 min);

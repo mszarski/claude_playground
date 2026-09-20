@@ -74,6 +74,19 @@ against yaw ripples at a tenth of a degree, the scale at which a hull's ends
 move by a wavelength, so heading is captured only from within a fraction of a
 degree and is held at the truth here.
 
+**Construction and assumptions.**  The sonar, sea, seabed, boat, display
+and Cartesian grid are ``examples/21``'s (its docstring lists them), built
+non-learnable except the boat.  What this adds: the reverberation's complex
+beams formed once (``beamform(complex_output=True)``) and the boat's added
+per step; the boat's echo by ``target_arrivals`` with the return leg solved
+(2000 rays, 24 arrivals a leg, ``facet_chunk=4096, checkpoint=False``); the
+display gain frozen from the measurement; the receiver noise on the field;
+the model's picture incoherent (``coherent=False``); a Gaussian blur of the
+pictures in metres per stage of ``SCHEDULE`` with Adam at ``LR`` per stage
+on position only, from ``START_OFFSET``.  Assumptions: the scene is known
+and the boat's heading is; the measurement is a different noise draw from
+the model's.  ``HYDROPT_FIT_SCALE`` scales the offsets and blurs together.
+
 Acceptance criteria:
   * the fit's gradient agrees with the secant (cosine over 0.85), and
     the coherent picture's is the wavelength-scale finite difference;

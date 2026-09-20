@@ -35,6 +35,18 @@ Three pictures: 23's caisson alongside, the rubble mound alongside in the
 same place, and the rubble mound across the picture ahead, square to the
 line of sight, where the grains lie along it.
 
+**Construction and assumptions.**  21's sonar, scene and boat (see 21's
+docstring).  What this adds: a rubble mound as a sloped mesh (``MOUND_SLOPE_DEG``,
+diffuse ``MOUND_DIFFUSE_DB``) along the wall's line of 23 (``WALL_Y``,
+``WALL_FROM``, ``WALL_TO``), with armour units as ``UNIT`` m cubes
+(``box_mesh``) on a ``PITCH`` grid jittered by ``JITTER``, each a
+``mesh_target`` with ``UNIT_DIFFUSE_DB``; the caisson of 23
+(``CAISSON_DIFFUSE_DB``) as the comparison; a second mound dead ahead at ``AHEAD_X`` for the grain
+profile, whose grains are found by ``scipy.signal.find_peaks``.
+Assumptions: as 21's; the units are rigid cubes with one plane-wave patch
+each, so at 330 kHz they are the grains themselves and at 120 kHz the
+grains are their interference; no multiple scattering between units.
+
 Acceptance criteria:
   * the rubble band's texture (its 95th percentile over its median, over
     the band's area) exceeds the caisson's by more than 4 dB: grains, not a

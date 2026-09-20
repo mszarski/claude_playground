@@ -17,6 +17,30 @@ range and depth and the horizontal leg supplies bearing.
 arrivals about 0.7 s away from the measured ones, against a 4 ms kernel at
 convergence -- no overlap, no gradient.  The fit opens at 250 ms.
 
+**Construction and assumptions.**
+
+* *Environment*: a 10 km x 10 km x 200 m shelf (``domain``) under a fixed
+  three-knot profile (1512 m/s at the surface, 1500 at 50 m, 1506 at the
+  bottom), flat boundaries, constant losses (0.5 and 3.5 dB); four octave
+  bands 0.3-2 kHz; 30 m steps, 290 of them.
+* *Source and receivers*: the source is the unknown, truly at (3200, 2600,
+  75) m and guessed 1.1 km away; the array is L-shaped at (8000, 5000):
+  five elements vertically from 40 to 180 m (range and depth) and five
+  horizontally across +/-1.2 km in ``y`` at 100 m depth (bearing).
+* *The fan*: 18 elevations within +/-15 deg by 30 azimuths over the full
+  360 deg, since the guess may be on any bearing; steeper rays arrive
+  40 dB down in a 200 m shelf and are left out.
+* *The measurement and the fit*: the ETC on 2.4-5.2 s in 1600 bins (1.75
+  ms, two bins per final kernel), ``sigma_d`` 150 m held fixed and
+  ``sigma_t`` annealed from 250 ms to 4 ms over 260 Adam steps at 14 m a
+  step decaying at 3 %, the source clamped inside the water.
+* *Assumptions*: the source is a point radiating equally in every
+  direction; the profile and the losses are known; the measurement is
+  noise-free and from the same model.
+* *To vary*: without the horizontal leg, bearing is unobservable (the
+  docstring above says why); a weaker depth constraint appears at wider
+  ``SIGMA_T`` -- the bowl against depth is five times shallower at 15 ms.
+
 Acceptance criterion: converge to within 50 m of the true source.
 """
 

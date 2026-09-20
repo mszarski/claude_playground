@@ -41,6 +41,35 @@ than a decoration on it.
 farther out than it lies -- 2.8 m at 57 m range from 18 m of depth.  The masks
 below allow for it; an operator reading ranges off the screen has to as well.
 
+**Construction and assumptions.**
+
+* *Sonar*: 15's -- 13's Mills cross on an AUV at 18 m, the jittered 56 x
+  330 fan tilted up, 181 Hamming beams, the 8-95 m grid, ``PULSE_S`` --
+  imported from 15, with 12's channel and sand seabed (learnable) and a
+  Lambert seabed at -27 dB.
+* *The sea*: a Pierson-Moskowitz surface for a 3 m/s wind on a 1.2 m grid
+  over 180 m (``SURFACE_SPACING``, fine enough for the wake's shortest
+  waves) plus the Kelvin wake of the track (``kelvin_wake_surface``, peak
+  0.6 m), and the bubble band as a scattering gain on the surface
+  (``bubble_wake_gain``: 15 dB, 4 m half-width, decaying over 300 s),
+  passed as ``surface_gain``.
+* *The vessel*: 15's 12 m hull mesh, now at ``VESSEL_AT`` heading
+  ``VESSEL_HEADING_DEG``, having sailed a 60 s track (``N_TRACK``
+  samples) at 6 m/s turning at ``TURN_RATE``; the track is built from
+  speed and turn rate, so both carry gradients.
+* *The picture*: echo and 40,000 reverberation patches
+  (``reverberation_arrivals`` on both boundaries) beamformed together,
+  then 15's ``to_cartesian``; renders with and without the bubbles and
+  with the waves alone separate the two routes, and a re-deal of the
+  scattering phases is the control.
+* *Assumptions*: the wake is a frozen height field at the instant of the
+  ping; the bubbles change the surface's backscatter, not its shape or
+  the sound speed; layover (slant range) is allowed for in the masks;
+  the wind sea is calm enough for the wake to show.
+* *To vary*: ``SPEED``, ``TURN_RATE`` and ``TRACK_SECONDS`` shape the
+  wake; ``BUBBLE_GAIN_DB`` is what the contrast check recovers; ``WIND``
+  is the competition.
+
 Acceptance criteria:
   * the wake band lands along the vessel's track, allowing for layover;
   * its contrast is the scattering gain we put in, measured on the same cells

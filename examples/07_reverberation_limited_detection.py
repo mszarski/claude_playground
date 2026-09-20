@@ -21,6 +21,33 @@ asserting it.
 **Scattering strength is invertible.**  ``LambertScattering.strength_db`` is a
 parameter like any other, so a measured reverberation series can be fitted for
 the bottom type.  The last section recovers a hidden value from the ETC alone.
+
+**Construction and assumptions.**
+
+* *Sonar and environment*: 06's -- 100 kHz, 32 elements at half a
+  wavelength at 10 m depth in 30 m of water, the same profile, surface and
+  Rayleigh sand bottom loss -- with 0.25 m steps, 600 of them, up to 3
+  bounces.
+* *Reverberation*: a 30,000-ray Fibonacci cone over the 45 deg sector
+  (``N_TX``), each bounce on the seabed or the surface a Lambert patch of
+  strength -15 dB (``TRUE_BOTTOM_DB``, rock) with the ray's share of the
+  cone's solid angle, and up to 4000 patches kept (900 for the beamformed
+  pass) from one seeded draw.
+* *Target*: a -32 dB point at 45 m on bearing -12 deg, 16 m deep -- small
+  against rock on purpose, so the single-element ratio is near zero.
+* *The picture*: arrivals composed as in 06 (8 a leg), rendered as energy
+  at the centre element (``render_reverberation``, ``sigma_t`` 30 us) and
+  beamformed into 181 Hamming beams; the ratio is echo peak over
+  reverberation peak within +/-1 m of the target's range.  The inversion
+  fits ``LambertScattering.strength_db`` by Adam (60 steps at 0.4 dB) on
+  the log-domain reverberation series.
+* *Assumptions*: Lambert scattering at every bounce, with one strength for
+  both boundaries; the patches are a random subsample, so the level and
+  range spread are unbiased and only the speckle is coarse; no absorption
+  difference between the paths worth mentioning at 45 m.
+* *To vary*: ``TRUE_BOTTOM_DB`` -24 for sand makes it noise-limited (the
+  comment on it says by how much); ``TARGET["ts_db"]`` and range set the
+  margin; more beams or elements raise the array gain the run measures.
 """
 
 from __future__ import annotations

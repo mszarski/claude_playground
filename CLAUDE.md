@@ -39,12 +39,12 @@ cd examples && HYDROPT_EXAMPLE_DTYPE=float64 python 22_inverse_fit_animation.py
 cd examples && python ../scripts/timing_picture.py # stage timings of 21's picture
 ```
 
-Switches every 21-derived example honours (21-27): `HYDROPT_SONAR` (`120`,
+Switches every 21-derived example honours (21-28): `HYDROPT_SONAR` (`120`,
 the default: 120 kHz, 3.0 x 4.8 deg beams, 300 m; or `330`: 330 kHz, 1.4 x
 2.8 deg beams, 150 m, figures tagged `_330k`), `HYDROPT_FAR` (m),
 `HYDROPT_NEAR`, `HYDROPT_BOAT` (range), `HYDROPT_HEADING` (deg, 40),
 `HYDROPT_EXAMPLE_DTYPE` (`float32`/`float64`), `HYDROPT_SCENARIO` (one
-scenario of 23-27).  22-27 lay their scenes out for the 120 kHz head's 300 m
+scenario of 23-28), `HYDROPT_FRAMES` (28's pings, 16).  22-28 lay their scenes out for the 120 kHz head's 300 m
 and scale every absolute position by `FAR / 300` (`S` in each), so a new
 scenario's positions go in as 300 m values times `S`.  Each example prints
 `[PASS]`/`[FAIL]` lines for its acceptance criteria and exits non-zero on a
@@ -60,6 +60,9 @@ delay-and-sum) -> `noise.py` (calibrate, receiver noise) -> the example's
 `display` (median gain, in `21`) -> `examples/15`'s `to_cartesian`.  Targets
 are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
 (triangle meshes by physical optics, `load_obj`, generators, occlusion).
+`sequence.py` wraps that path for a moving target (`PictureRenderer`,
+`Trajectory`), and `emission.py` is what a vessel radiates (a spoke, with
+`propeller_directivity`: shielded forward by the hull, notched astern).
 
 ## Conventions
 
@@ -71,19 +74,28 @@ are `targets.py` (points, analytic patterns, `fish_school`) and `mesh.py`
   criteria are checked with `_common.check` and reported, and the figures
   are saved with `_common.save`.  Numbers quoted in a docstring or in the
   README come from a run and say so.
-* **21-27 share one scene.**  22-27 import `21_long_range_300m.py` for the
+* **21-28 share one scene.**  22-28 import `21_long_range_300m.py` for the
   sonar, environment, boat and display (`_ex21()`), and 23-27 follow one
   pattern: the bare picture once, then each scenario as its own ping,
   measured against the bare picture, with a `bare | scenario | difference`
   figure under 21's own window (`vmin=THRESHOLD_DB`, `vmax` the bare
   picture's peak) and a gradient-liveness check on the scenario's own
-  parameters.  Copy 23's skeleton for a new scenario example.
+  parameters.  Copy 23's skeleton for a new scenario example.  A moving
+  thing is a sequence (`28`): `PictureRenderer` from 21's settings forms
+  the background once, `Trajectory` gives the poses, `sequence(builder,
+  trajectory, times, emitters=)` yields a picture per ping; hold the
+  display gain from the first frame.
 * **Float32 by default for pictures and fits** (`setup(double=False)`);
   float64 only where a wavelength-scale gradient is being *checked* against a
   finite difference (22 does this under `HYDROPT_EXAMPLE_DTYPE=float64` and
   skips it otherwise).  Measured: the coherent picture's loss in float32
   scatters by 2e-5 between points 0.05 mm apart, more than it changes over
   0.4 mm; the incoherent picture's is linear at that scale in both.
+* **Every example's docstring has a "Construction and assumptions" block**:
+  the sonar, the environment, the targets, the picture pipeline, the
+  assumptions the physics makes, and what to vary -- so a variant is a
+  matter of changing the named constants.  21's is the base the later
+  ones cite; a new example gets its own.
 * **Docstrings carry the reasoning.**  Every module, class and public
   function has one, and the long ones explain a measured failure.  Keep
   that: a change that reverses a documented decision must say what was

@@ -28,6 +28,36 @@ worth computing rather than assuming: it says a quieter sea, a quieter vehicle
 or a bigger array buys nothing here, and only a narrower beam or a shorter
 pulse -- a smaller resolution cell, holding less seabed -- will move it.
 
+**Construction and assumptions.**
+
+* *Sonar*: 13's Mills cross on an AUV at 18 m in 30 m (12's scene with
+  the source and array moved), a Hamming-shaded 6-element vertical fan
+  aimed at each range's depression (``transmit_fan``), 0.12 ms pulse,
+  a 210 dB source level, five beams 3 deg apart about the object's
+  bearing; 200 trace steps so the rays reach 175 m.
+* *Environment*: 12's isovelocity channel, wind sea and seabed; a Lambert
+  seabed at -25 dB, reverberation from a 420 x 32 fan over
+  ``FAN_LO_DEG``-``FAN_HI_DEG`` of depression on ``boundary="bottom"``,
+  once with the scene's bounces and once capped at one (the waveguide
+  comparison); noise from the Wenz spectrum at a 5 m/s wind through the
+  array's directivity index and the pulse's bandwidth
+  (``beam_noise_power``); everything put on an absolute scale by
+  ``calibrate`` with ``beam_power_scale``.
+* *Target*: 17's 4 x 1.5 m cylinder mesh on the local seabed at each of
+  ``RANGES``, at two aspects (``ASPECTS``: broadside and 23 deg off),
+  its echo averaged over ``N_SEEDS`` receive-fan realisations in a
+  160-bin grid about its slant range.
+* *Detection*: Swerling 1, ``Pd = Pfa ^ (B / (S + B))`` at ``PFA`` 1e-4
+  and ``PD`` 0.5, so the threshold is a signal-to-background ratio
+  applied to the echo against reverberation plus noise in one beam and
+  cell.
+* *Assumptions*: the echo fluctuates Rayleigh (a many-highlight body);
+  reverberation and noise add in power; the background in the object's
+  cell is the seabed's mean level at that range from one ping.
+* *To vary*: ``SOURCE_LEVEL_DB``, ``WIND_SPEED``, ``N_RX`` and ``PULSE_S``
+  move the noise and the cell; the example shows which of them move the
+  range here (only the cell does) and which do not.
+
 Acceptance criteria:
   * the echo falls with range the way spreading and absorption say it must;
   * aspect dominates: the same body 23 degrees off broadside is far weaker, and

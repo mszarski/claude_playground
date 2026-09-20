@@ -18,6 +18,32 @@ is about 25 radians.  That shortcut came out 16x too high even at 82,000
 facets, converging only as fast as facet area.  With the exact integral the
 same sphere is right to 0.1 dB at 20,000.
 
+**Construction and assumptions.**
+
+* *The bodies*: an icosphere (``icosphere``, 4-5 subdivisions, radius 0.5
+  and 1 m); the same sphere scaled to an ellipsoid; 12's boat as a wetted
+  hull mesh (``boat_hull_mesh``, 12 x 3 x 1 m, 160 x 48 = 9 cm facets,
+  a third of ``sqrt(lambda R)`` for the tightest curvature) -- each as a
+  ``MeshScattering`` pattern at 100 kHz, ``facet_chunk`` 4096.
+* *The measurements*: the monostatic cross-section (``cross_section`` with
+  the scattered direction the reverse of the incident) against the
+  closed forms ``a^2 / 4`` and ``A^2 C^2 / 4 B^2``; the hull against
+  12's analytic curved patch beam-on; a table of aspect against
+  depression angle; the point-facet shortcut on the same sphere, for the
+  trap it is.
+* *The scene* (for the gradient and the timing): 12's, imported -- its
+  isovelocity 30 m channel, wind sea and seabed, the 64-element array of
+  13 -- with the mesh in ``mesh_target`` at the boat's place, learnable
+  in its vertices, and the image beamformed as 13 does.
+* *Assumptions*: Kirchhoff physical optics on a rigid body -- each lit
+  facet integrated exactly, shadowed facets dropped, no multiple
+  scattering or edge diffraction (so a plate's lobe is the sinc of its
+  size, and the hull is silent where no facet faces the sonar); a plane
+  incident wave per facet.
+* *To vary*: ``N_LONG, N_AROUND`` set the facet size, which must resolve
+  the curvature (``sqrt(lambda R) / 3``) or the specular point is
+  mis-sampled; ``load_obj`` (README) brings in any hull.
+
 Acceptance criteria:
   * a faceted sphere reproduces the analytic `sigma = a^2/4` at every aspect,
     and the point-facet shortcut visibly does not;

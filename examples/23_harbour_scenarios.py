@@ -30,6 +30,21 @@ into its own figure.  The bare picture is formed once and shared.  Every
 scenario's image stays differentiable in what was put into it: the vessel's
 position, the school's.
 
+**Construction and assumptions.**  21's sonar, sea, seabed, boat, display
+and grid (see 21's docstring); the bare picture once, then each scenario
+as its own ping.  What each adds, all positions in 300 m-swath metres
+times ``S``: the *breakwater* a straight ``seawall_mesh`` at ``WALL_Y``
+from ``WALL_FROM`` to ``WALL_TO`` in 150 patches, a caisson face with
+``WALL_DIFFUSE_DB``; the *wake* 20's Kelvin surface and bubble band
+(``kelvin_wake_surface`` at ``WAKE_AMPLITUDE``, ``bubble_wake_gain`` at
+``BUBBLE_GAIN_DB`` over ``BUBBLE_WIDTH``) laid along the boat's track
+astern; the *school* ``N_FISH`` fish (``fish_school``) at ``FISH_TS_DB``
+each in ``SCHOOL_RADII`` at ``SCHOOL_RANGE``.  Each is
+measured against the bare picture on its own cells, and a gradient
+liveness check reaches its own parameters.  Assumptions: as 21's, plus
+the wall an occluder-free reflector (it does not shadow the sea behind it
+here), the fish isotropic points.
+
 Acceptance criteria:
   * the breakwater stands well above the reverberation at its own range,
     along its whole length;

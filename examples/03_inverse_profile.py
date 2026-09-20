@@ -29,6 +29,31 @@ Adam normalises each parameter by its own gradient history, so a knot with
 essentially no gradient still moves a full step every iteration.  The accuracy
 check below is made over the sampled band, which is the honest statement of what
 one array at one range measures.
+
+**Construction and assumptions.**
+
+* *Environment*: 3000 m of water under a piecewise-linear profile with
+  knots at 0, 400, 1000, 1800 and 3000 m (``KNOT_DEPTHS``); the truth has
+  its axis near 1000 m (``TRUE_VALUES``), the guess a weaker channel with
+  the axis too deep (``INITIAL_VALUES``).  Flat boundaries with fixed
+  losses (0.5 and 5 dB) that no ray reaches; four octave bands 0.2-2 kHz;
+  30 m steps, 570 of them.
+* *Source and receivers*: the source on the axis, 1000 m deep; a
+  six-element vertical array 15 km away at 600-1600 m.
+* *The fan*: 100 rays in one vertical plane within +/-9 deg, all trapped.
+* *The measurement and the fit*: the ETC on 9.5-10.5 s in 500 bins,
+  ``sigma_d`` 120 m; the time kernel is annealed from 80 ms to 10 ms over
+  240 Adam steps at 0.35 m/s a step with decay, a curvature penalty of
+  1e-4 on the knots, the values clamped to 1450-1600 m/s, and the surface
+  and bottom knots frozen by a gradient mask (``FREE_KNOTS``).
+* *Assumptions*: the profile is range-independent and piecewise linear
+  between the knots; the depths of the knots are known; the measurement is
+  noise-free and from the same model.
+* *To vary*: more knots need more independent data (a second range or
+  source depth), not more iterations -- the fit plateaus in this
+  experiment's null space; a shelf profile makes the misfit chaotic (the
+  docstring above says why) and needs the transport loss of ``examples/19``
+  rather than descent.
 """
 
 from __future__ import annotations

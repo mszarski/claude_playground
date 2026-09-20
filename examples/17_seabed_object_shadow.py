@@ -18,6 +18,36 @@ The height comes out of the geometry, not out of the echo.  A body of height
 measuring the shadow's length ``L`` inverts to ``h = L (z_b - z_s) / (D + L)``.
 That is how an operator reads a contact, and it is what this example checks.
 
+**Construction and assumptions.**
+
+* *Sonar*: 13's Mills cross on an AUV at 18 m (12 m of altitude), looking
+  DOWN: the fan (``transmit_fan``) a jittered lattice from ``FAN_LO_DEG``
+  to ``FAN_HI_DEG`` of depression weighted by the vertical array's
+  factor, the same factor reversed on receive (arrival directions); a
+  0.12 ms pulse, 81 Hamming beams across the sector, a 620-bin grid
+  between ``RANGE_NEAR`` and ``RANGE_FAR``.
+* *Environment*: 12's isovelocity channel, wind sea and 0.8 m RMS
+  seabed, with the source and array at the AUV's depth; the seabed a
+  Lambert scatterer at -25 dB, learnable; ``boundary="bottom"`` only.
+* *Target*: a 4 x 1.5 m cylinder mesh (``cylinder_mesh``, 14 x 256) in two
+  patches with -15 dB of diffuse return, lying ON the local seabed
+  height (not the nominal 30 m) at 35 m on its bearing and heading; the
+  same mesh, placed in the world, is the occluder that shadows the
+  reverberation (``reverberation_arrivals(occluders=)``).
+* *The picture*: echo (``target_arrivals``, return leg solved, 360 rays)
+  and reverberation summed before ``beamform``; the shadow is measured
+  on the object's bearing as a range profile against the seabed either
+  side (``measure_shadow``), and inverted for height by the closed form
+  in the docstring above.
+* *Assumptions*: occlusion is binary and geometric -- a path whose
+  segment crosses the mesh is gone, with no diffraction into the shadow;
+  the shadow's edge therefore has no gradient; Lambert seabed; the
+  object rigid, its diffuse term standing in for fittings.
+* *To vary*: ``OBJ_RANGE`` against the beamwidth decides whether a shadow
+  is a hole or a dip (the note at ``PULSE_S`` gives the rule);
+  ``OBJ_DIAMETER`` is the height the shadow measures; ``OBJ_HEADING_DEG``
+  the aspect of the glint.
+
 Acceptance criteria:
   * the object's echo lands within a beamwidth of the **body** -- not of its
     centre, which is a different and wrong question for a target 7 degrees

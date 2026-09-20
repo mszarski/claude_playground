@@ -46,6 +46,22 @@ difference between them.
 Every picture stays differentiable in what was put into it: the forest's
 position, the buoy's, the shoal's and its fish's strength.
 
+**Construction and assumptions.**  21's sonar, scene and boat (see 21's
+docstring), positions in 300 m metres times ``S``.  What each adds: the
+*kelp* a stand ``KELP_STAND`` at ``KELP_RANGE`` on ``KELP_BEARING_DEG`` of
+plants ``KELP_SPACING`` apart, ``KELP_POINTS`` isotropic points a plant at
+``KELP_POINT_DB`` from bottom to surface, attenuated
+``KELP_EXTINCTION_DB_PER_M`` each way along the stand's axis (binned into
+patterns 2 m deep); the *buoy* a ``CurvedSurfaceScattering`` sphere of
+``BUOY_RADIUS`` with a ``catenary`` chain of ``CHAIN_LENGTH`` over
+``CHAIN_SCOPE`` in ``CHAIN_POINTS`` isotropic links (``CHAIN_LINK_DB``
+each, ``LINKS_PER_M``) running ``CHAIN_DIRECTION_DEG`` to a ``SINKER`` m
+concrete block (``box_mesh``); the *shoal* ``N_SHOAL`` fish at
+``SHOAL_TS_DB`` in ``SHOAL_RADII``.  ``LEGS`` caps the return paths per
+point for the many-point targets.  Assumptions: as 21's; kelp as a
+scatterer with extinction, not a refracting medium; the chain's links
+isotropic at the level a curved bar gives (the docstring above derives it).
+
 Acceptance criteria:
   * the kelp stand reads above what was in its cells, and its front well
     above its back -- the extinction;

@@ -23,6 +23,30 @@ measure.
 Everything stays differentiable, so this is a usable forward model for learning;
 the cost of a training step is reported at the end.
 
+**Construction and assumptions.**
+
+* *Sonar*: 100 kHz; a vertical transmit array of 6 elements
+  (``vertical_array``) whose array factor (``line_array_factor``) steered
+  10.4 deg up is the fan's elevation weight, and a horizontal receive
+  array of 64 elements at half a wavelength (``horizontal_array``), both
+  at the vehicle's 12 m; 61 Hamming beams across +/-60 deg.
+* *The fan* (``transmit_fan``): a structured rectangle of 56 x 330 rays
+  over 1.05 times the sector and 1.6 times the vertical fan, 0.38 deg
+  apart, set by the receiver acceptance at the boat's range.
+* *Environment and target*: 12's, imported -- the isovelocity 30 m
+  channel with its fractal seabed, wind sea and sand, and the 12 m boat
+  beam-on at 60 m.
+* *The picture*: ``target_arrivals`` with the return leg solved (400 rays,
+  24 arrivals a leg) and ``beamform`` on a 500-bin grid +/-20 m about the
+  boat; the beamwidths are measured on a synthetic plane wave
+  (``measure_beamwidth``), not quoted.
+* *Assumptions*: the transmit array's pattern is applied as a weight on
+  each ray (the projector's sidelobes still illuminate); the two arrays
+  share one phase centre; as 12, no reverberation or noise.
+* *To vary*: ``N_RX`` sets the beam (101.5/N deg, times 1.3 for Hamming),
+  ``N_TX`` the fan, ``BEAM_SPACING_DEG`` the sampling; the fan's density
+  must stay finer than the receiver acceptance at the target's range.
+
 Acceptance criteria:
   * the horizontal array delivers the 2 deg beamwidth its aperture implies;
   * the vertical array delivers the 20 deg fan its aperture implies;

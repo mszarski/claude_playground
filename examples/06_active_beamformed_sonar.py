@@ -19,6 +19,34 @@ intact.
 
 The vehicle is at 10 m depth in 30 m of water with a 32-element half-wavelength
 array at 100 kHz, looking into a 45 degree sector.
+
+**Construction and assumptions.**
+
+* *Sonar*: 100 kHz; a 32-element horizontal line array along ``y`` at
+  half-wavelength spacing (233 mm aperture) on a vehicle at 10 m depth,
+  the projector at the array's centre; a Gaussian projector directivity
+  14 deg wide in azimuth and 8 deg in elevation (``transmit_shading``),
+  applied as a per-ray weight so the sidelobes still illuminate.
+* *Environment*: 30 m of water under a three-knot profile (1512 m/s at the
+  surface, 1505 at the vehicle, 1503 at the bottom), both boundaries flat;
+  the surface pressure-release with 2 dB per bounce (an optimistic stand-in
+  for a rough sea at 15 mm wavelength), the bottom a Rayleigh sand
+  (1900 kg/m^3, 1650 m/s, 0.8 dB per wavelength); 0.2 m steps, 700 of
+  them, up to 4 bounces.
+* *Targets*: two point scatterers (``TARGETS``): 0 dB at 35 m on bearing
+  -18 deg, 12 m deep; -6 dB at 55 m on +10 deg, 14 m deep.
+* *The picture*: a 14,000-ray Fibonacci cone over the 45 deg sector out,
+  a return fan from the target back; stage 1 composes the two legs'
+  energy responses (``render_echo``, ``sigma_d`` 0.45 m, ``sigma_t`` 30
+  us); stage 2 extracts up to 10 arrivals a leg at the array's centre,
+  composes them (``compose_arrivals``) and beamforms 541 Hamming-shaded
+  beams across the sector (``beamform``) on a 2600-bin time grid.
+* *Assumptions*: point targets with an isotropic target strength; specular
+  boundaries (surface multipath is a bound on the ghosting a real sea
+  gives); each arrival crosses the aperture as a plane wave.
+* *To vary*: ``TARGETS`` and ``TS`` for other contacts; ``N_ELEMENTS`` sets
+  the beam width; ``shading_window`` the sidelobes (the beam-pattern figure
+  compares uniform, Hamming and Blackman).
 """
 
 from __future__ import annotations
