@@ -2066,7 +2066,9 @@ numbers.
 
 ## Next steps
 
-In the order they are worth doing, with what each needs:
+In the order they are worth doing, with what each needs (`HANDOFF.md` at
+the root has each as a task with its acceptance criteria, and every lesson
+learned, for an agent without the `bd` tool):
 
 1. **A randomised generator of labelled pictures** (production forward
    mode).  A sampler over the distributions 21-29 hold as constants -- the
@@ -2095,7 +2097,8 @@ In the order they are worth doing, with what each needs:
    descent on the scene parameters, augmentation from `d picture / d pose`,
    and `d detection / d scene` as the diagnostic of what a detector has
    learned.
-5. **Physics still owed** (the open beads, `bd list`): spherical-wave
+5. **Physics still owed** (the open beads, `bd list`, written out in full
+   in `HANDOFF.md` for anyone without `bd`): spherical-wave
    physical optics for patches larger than the Fresnel zone (`cva`: a 4 m
    cylinder at 30 m, a hull's glint at 330 kHz); the reverberation's return
    leg summing the image paths as the targets' do (`e9z`); occlusion

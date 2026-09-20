@@ -21,7 +21,9 @@ rules:
   suite (`python -m pytest tests -q`, ~22 min);
 * a fit on a picture freezes the display gain, puts the noise on the field
   and descends on the model's incoherent picture -- see `CLAUDE.md`;
-* `bd` for tasks, `bd remember` for insight, never markdown TODOs;
+* `bd` for tasks and `bd remember` for insight where the tool exists;
+  without it, `HANDOFF.md` is the task list and the memory (append status
+  and lessons there); never markdown TODOs elsewhere;
 * what comes next is the README's "Next steps" and the beads `claude_playground-oer`
   (external positions, example 30), `claude_playground-d58` (the labelled-picture
   generator), `claude_playground-4qf` (the GPU port) and `claude_playground-2dd` (the CV detector through
