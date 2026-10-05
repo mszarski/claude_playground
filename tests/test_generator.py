@@ -61,3 +61,13 @@ def test_generate_returns_plan_duration():
     out = generate_batch(net, fit_stats(S), plans, "cpu", steps=2)
     assert [len(A) for A in out] == [50, 75]
     assert all(np.isfinite(A).all() and A.shape[1] == 9 for A in out)
+
+
+def test_generate_without_lowpass():
+    S = samples_from_moves(_moves())
+    net = MotionGenerator(**TINY).eval()
+    plans = [{"duration": 2.0, "keys": [{"t": 0, "pitch": 0}]}]
+    raw = generate_batch(net, fit_stats(S), plans, "cpu", steps=2, lowpass_hz=0)[0]
+    smooth = generate_batch(net, fit_stats(S), plans, "cpu", steps=2)[0]
+    assert raw.shape == smooth.shape == (50, 9)
+    assert np.abs(np.diff(raw, axis=0)).sum() > np.abs(np.diff(smooth, axis=0)).sum()

@@ -52,7 +52,7 @@ def generate_batch(net, stats, plans, dev, seeds=None, steps=8, cfg=1.5, lowpass
             v_cond, v_uncond = v[:B], v[B:]
             v = v_uncond + cfg * (v_cond - v_uncond)
         x = x - v / steps
-    b, a = butter(4, lowpass_hz / (FPS / 2))
+    b, a = butter(4, lowpass_hz / (FPS / 2)) if lowpass_hz else (None, None)
     out = []
     for i in range(B):
         A = x[i, :Ts[i]].cpu().numpy() * SD + MU

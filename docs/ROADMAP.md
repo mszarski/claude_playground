@@ -7,22 +7,24 @@ the reference implementation's results, which are our targets.
 
 `rmr/motion.py`, `rmr/plan.py`, `rmr/recipe.py`, `rmr/reach.py`, plus tests. CPU only, no network.
 
-## 2. Generator (plan → 25 Hz motion) 🟡
+## 2. Generator (plan → 25 Hz motion) ✅
 
-**Status.** `rmr/generator/` and `rmr/library.py` are implemented and tested. Without Hugging Face access, the
-only real motion is Pollen's dance collection rendered procedurally (`--dances`, 20 moves × 3 tempos, no network),
-which was enough to check that training runs end to end on CPU. **Next session (with network access to
-`huggingface.co`):**
+**Status.** Trained on the Hub libraries (85 emotions + 19 dances, 12 emotions held out) for 5,000 steps on CPU
+(0.82 s/step); the best held-out checkpoint is from step 2,750. It identifies **91.7%** of held-out emotions [89%],
+and head and antenna speeds match real motion. Sustained high-energy recipes (sobbing, shivering) come out too
+calm. Details and the demo-recipe check: [results/generator.md](results/generator.md).
 
 ```bash
-python -m rmr.generator train --hub --steps 5000 --ckpt checkpoints/generator.pt   # emotions + dances, ~3.3 h on 4 CPU cores
-python -m rmr.generator evaluate --hub --ckpt checkpoints/generator.pt            # target: top-1 ~89% on the 12 held-out emotions
+python -m rmr.generator train --hub --steps 5000 --ckpt checkpoints/generator.pt
+python -m rmr.generator evaluate --hub --ckpt checkpoints/generator.pt
 python -m rmr.generator sample --ckpt checkpoints/generator.pt --recipes examples/demo_recipes.json --out runs/samples
 ```
 
 `--hub` downloads the libraries through `huggingface_hub` (`pip install -e ".[hf]"`). Checkpoints are gitignored:
 publish them as a release or to the Hub rather than committing them.
 
+Possible follow-ups: more weight on high-energy clips, or guidance applied to the energy channel only, to fix the
+energy undershoot without making the motion jittery.
 
 Needs Pollen's [emotions](https://huggingface.co/datasets/pollen-robotics/reachy-mini-emotions-library) and
 [dances](https://huggingface.co/datasets/pollen-robotics/reachy-mini-dances-library) libraries from Hugging Face
