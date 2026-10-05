@@ -15,6 +15,9 @@ import os
 import shlex
 
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
+# Hub patterns are fnmatch-style: "rmr/**/*.py" needs a subdirectory, so the package's top level is listed apart.
+CODE_PATTERNS = ["rmr/*.py", "rmr/*/*.py", "rmr/assets/*", "pyproject.toml", "README.md", "NOTICE", "LICENSE",
+                 "data/teacher/val.jsonl", "data/teacher/eval_prompts.txt"]
 IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm"
 PACKAGES = ["torch", "transformers>=5.5", "trl>=0.29", "peft>=0.18", "datasets", "accelerate", "bitsandbytes",
             "kernels", "flash-linear-attention", "huggingface_hub>=1.0", "numpy", "scipy"]
@@ -56,9 +59,7 @@ def submit(a):
     hours = a.max_usd / price
     api.create_repo(data_repo, repo_type="dataset", private=True, exist_ok=True)
     api.upload_folder(folder_path=ROOT, repo_id=data_repo, repo_type="dataset", path_in_repo="code",
-                      allow_patterns=["rmr/**/*.py", "rmr/assets/*", "pyproject.toml", "README.md", "NOTICE", "LICENSE",
-                                      "data/teacher/val.jsonl", "data/teacher/eval_prompts.txt"],
-                      commit_message="planner job: code")
+                      allow_patterns=CODE_PATTERNS, commit_message="planner job: code")
     api.upload_folder(folder_path=a.data, repo_id=data_repo, repo_type="dataset", path_in_repo="sft",
                       allow_patterns=["train.jsonl", "val.jsonl", "leaked.json"], commit_message="planner job: SFT set")
     train_args = a.train_args

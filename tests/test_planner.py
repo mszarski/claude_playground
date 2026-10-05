@@ -116,3 +116,20 @@ def test_hfjob_script_renders():
                             samples=1)
     assert "finetune train --data /work/sft --out /work/out --model Qwen/Qwen3.5-4B --max-steps 2" in s
     assert "trap upload EXIT" in s and 'glob.glob(f"/work/out/{p}")' in s and "{sub or 'planner'}" in s
+
+
+def test_hfjob_uploads_the_whole_package():
+    import glob
+    import os
+
+    from huggingface_hub.utils import filter_repo_objects
+
+    from rmr.planner import hfjob
+
+    root = os.path.abspath(hfjob.ROOT)
+    files = [os.path.relpath(p, root) for p in glob.glob(os.path.join(root, "rmr", "**", "*"), recursive=True)
+             if os.path.isfile(p) and "__pycache__" not in p]
+    sent = set(filter_repo_objects(files, allow_patterns=hfjob.CODE_PATTERNS))
+    assert {"rmr/__init__.py", "rmr/library.py", "rmr/planner/finetune.py", "rmr/generator/model.py",
+            "rmr/assets/kinematics_data.json"} <= sent
+    assert {f for f in files if f.endswith(".py")} <= sent
