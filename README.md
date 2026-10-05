@@ -39,7 +39,7 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Planner: LoRA fine-tune of Qwen3.5-4B on the teacher data (HF Jobs, $5.79) | `rmr/planner/` | ✅ probes 0.88 / 0.81, real clips 28% top-1 (reference 4B: 0.91 / 0.875, 32%). See [results](docs/results/planner_finetune.md) |
 | Offline pipeline (text → reachable moves) | `rmr/pipeline.py` | ✅ done |
 | MuJoCo renderer: videos, contact sheets, grids (official Reachy Mini model, SDK IK, 500 Hz physics) | `rmr/renderer/` | ✅ done, tested |
-| Browser visualizer | | ⏳ |
+| Browser viewer (three.js): gallery of results, drop any move JSON | `visualizer/`, `rmr/viewer.py` | ✅ done; browser IK checked against the SDK's to 1e-9 rad |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan of each step.

@@ -9,3 +9,9 @@ Third-party material included here, all Apache-2.0:
 - data/teacher/*: the teacher dataset, validation set, seed recipes and evaluation prompts from
   pham-tuan-binh/reachy-motion-generator (distill_data/ and planner/examples/).
 - rmr/assets/kinematics_data.json: from pollen-robotics/reachy_mini.
+- visualizer/: adapted from pham-tuan-binh/reachy-motion-generator (visualizer/). Its 3D model, meshes
+  (visualizer/assets/), scene and passive-joint kinematics come from
+  https://huggingface.co/spaces/8bitkick/reachy_mini_3d_web_viz (visualizer/LICENSE-reachy_mini_3d_web_viz.txt);
+  visualizer/src/StewartIK.js ports pollen-robotics/reachy_mini_rust_kinematics.
+- visualizer/examples/examples.json: includes 12 clips of pollen-robotics/reachy-mini-emotions-library
+  (resampled to 25 Hz) for comparison with generated motions.
