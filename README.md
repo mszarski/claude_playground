@@ -34,7 +34,7 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Plans: extract from any clip, interpolate to frames | `rmr/plan.py` | ✅ done, tested |
 | Recipe language: parse, validate, expand, randomised variants | `rmr/recipe.py` | ✅ done, tested on all teacher recipes |
 | Reachability projection (Stewart-platform IK) | `rmr/reach.py` | ✅ done, tested |
-| Generator: 21.8M flow-matching transformer | `rmr/generator/` | ⏳ next: needs Pollen's clips from Hugging Face |
+| Generator: 21.8M flow-matching transformer | `rmr/generator/` | 🟡 code done and tested; trains on CPU (~2.4 s/step on 4 cores). Needs the real emotion clips from Hugging Face |
 | Planner: LoRA fine-tune of Qwen on the teacher data | `rmr/planner/` | ⏳ needs a GPU and Hugging Face |
 | Offline pipeline + MuJoCo renderer, browser visualizer | | ⏳ |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |

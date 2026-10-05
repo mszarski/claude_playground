@@ -1,0 +1,7 @@
+{
+ "sneezing. You build up and then sneeze loudly.": "go .6 e=40 p=-6 z=4 E=1 | go 1 p=-16 z=10 e=70 E=3 | hold .6 E=6 | go .12 p=18 z=-8 e=100 E=10 | go 1 p=2 z=2 e=30 E=1 | hold .6",
+ "sobbing. You cry uncontrollably.": "go 1 e=150 p=22 z=-16 E=5 | osc 3 z 4 .9 E=6 | hold 1 E=4",
+ "brave. You face something frightening and stand your ground.": "go .4 e=40 p=5 z=-5 E=2 | hold .6 E=3 | go .6 e=0 p=-5 z=12 E=2 | hold 1.5 E=1",
+ "shivering. You are very cold and trembling.": "go .8 e=110 p=10 z=-10 E=6 | hold 3 E=7 | osc 1 r 3 .8",
+ "conducting. You lead an imaginary orchestra with sweeping gestures.": "go .5 e=0 p=-8 z=10 E=4 | osc 2.5 y 20 1.4 E=5 | osc 2 p 12 1 | go .4 p=10 E=3 | hold .6"
+}
