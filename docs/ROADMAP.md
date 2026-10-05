@@ -89,8 +89,16 @@ Before training, a frontier LLM stands in as a zero-shot planner (`rmr.planner.w
 
 ## 4. Pipeline, rendering, visualizer
 
-**Status.** `python -m rmr.pipeline` runs prompts (or recipes) → plans → motions → reachable move JSON. Rendering
-and the viewer remain.
+**Status.** `python -m rmr.pipeline` runs prompts (or recipes) → plans → motions → reachable move JSON, and with
+`--render` → MuJoCo videos and a grid. `rmr/renderer/` (`python -m rmr.renderer video|sheet|grid`) plays a move on
+Pollen's official MJCF model like the SDK's MuJoCo backend: SDK IK per frame, 500 Hz physics, settle-and-ramp reset.
+Checked against the commands: on real emotion clips the simulated head follows the commanded rotation to a 1.9°
+median error once its ~120 ms servo lag is allowed for, and +20° pitch / +15 mm height come out as 20° / 15 mm in
+the tests. The three.js viewer remains.
+
+Two environment notes. Headless on CPU needs `MUJOCO_GL=osmesa` (about 0.6 s per 520×420 frame). With OSMesa,
+`rmr.renderer` must be imported before `mujoco` when torch is also used in the process: it preloads Triton,
+whose statically linked LLVM otherwise collides with Mesa's and segfaults torch training.
 
 `prompts → recipes → plans → motions → videos`, rendered in MuJoCo (`reachy-mini` model files, `MUJOCO_GL=egl` when
 headless), plus a three.js viewer that plays move JSON.

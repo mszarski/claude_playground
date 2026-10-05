@@ -38,7 +38,8 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Planner, zero-shot stand-in: open-weight LLM via HF Inference Providers, probe suite | `rmr/planner/` | ✅ Kimi-K3 passes 16/16 probes; real clips 20% top-1 (reference zero-shot 22%). See [results](docs/results/planner_zeroshot.md) |
 | Planner: LoRA fine-tune of Qwen3.5-4B on the teacher data (HF Jobs, $5.79) | `rmr/planner/` | ✅ probes 0.88 / 0.81, real clips 28% top-1 (reference 4B: 0.91 / 0.875, 32%). See [results](docs/results/planner_finetune.md) |
 | Offline pipeline (text → reachable moves) | `rmr/pipeline.py` | ✅ done |
-| MuJoCo renderer, browser visualizer | | ⏳ |
+| MuJoCo renderer: videos, contact sheets, grids (official Reachy Mini model, SDK IK, 500 Hz physics) | `rmr/renderer/` | ✅ done, tested |
+| Browser visualizer | | ⏳ |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan of each step.
@@ -50,14 +51,17 @@ pip install -e ".[ik,dev]"   # core + Stewart-platform IK + pytest
 pytest
 ```
 
-Extras for later steps: `generator` (torch), `hf` (Hugging Face Hub and datasets), `planner` (transformers, PEFT, TRL).
+Extras for later steps: `generator` (torch), `hf` (Hugging Face Hub and datasets), `planner` (transformers, PEFT, TRL),
+`render` (MuJoCo, imageio, Pillow; plus `pip install --no-deps reachy-mini` for the robot's model files and, headless
+on CPU, `apt install libosmesa6` with `MUJOCO_GL=osmesa`).
 
 Text to motion, end to end (zero-shot planner through Hugging Face, so `HF_TOKEN` is needed; the trained
 generator is in the private Hub repo `mszarski/reachy-motion-generator`):
 
 ```bash
 python -m rmr.pipeline --prompt "sneezing. You build up and then sneeze." --out runs/one \
-    --ckpt hf://mszarski/reachy-motion-generator/generator.pt
+    --ckpt hf://mszarski/reachy-motion-generator/generator.pt --render      # + videos/ and grid.mp4
+python -m rmr.renderer sheet runs/one/motions/*.json --out runs/one/sheet.png  # contact sheet
 ```
 
 ```python

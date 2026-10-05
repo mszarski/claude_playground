@@ -11,6 +11,7 @@ dependencies = ["numpy>=1.26", "scipy>=1.11"]
 ik = ["reachy-mini-rust-kinematics>=1.0.3"]
 generator = ["torch>=2.3"]
 hf = ["huggingface-hub>=0.24", "datasets"]
+render = ["mujoco>=3.3", "imageio[ffmpeg]>=2.34", "pillow>=10"]   # + `pip install --no-deps reachy-mini`
 planner = ["transformers>=5.5", "peft>=0.18", "trl>=0.29", "datasets", "accelerate"]
 dev = ["pytest"]
 
@@ -19,7 +20,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["rmr", "rmr.generator", "rmr.planner"]
+packages = ["rmr", "rmr.generator", "rmr.planner", "rmr.renderer"]
 
 [tool.setuptools.package-data]
 rmr = ["assets/*.json"]

@@ -1,4 +1,4 @@
-"""Text prompts -> reachable Reachy Mini moves, end to end (no rendering yet).
+"""Text prompts -> reachable Reachy Mini moves, end to end, optionally rendered to video.
 
   python -m rmr.pipeline --recipes examples/demo_recipes.json --out runs/demo            # no LLM
   python -m rmr.pipeline --prompt "startled. A door slams behind you." --out runs/one     # zero-shot LLM planner
@@ -10,6 +10,8 @@ Stages (each writes into --out):
                               (--planner, rmr.planner.finetune; a GPU helps), or --recipes
   2. planner   plans.jsonl    each recipe -> N randomised plans (amplitude, tempo, mirror)
   3. generator motions/       plan -> 25 Hz motion (flow model) -> projected onto the reachable set
+  4. renderer  videos/        MuJoCo playback -> mp4 per motion + grid.mp4 (--render; ``render`` extra, and
+                              MUJOCO_GL=egl with a GPU or MUJOCO_GL=osmesa on CPU when headless)
 
 Plans are expanded as the reference serves them (``fc=2``, ``kdt=0.25``): fast events stay fast.
 
@@ -36,8 +38,10 @@ def main():
     ap.add_argument("--seeds", type=int, default=1)
     ap.add_argument("--cfg", type=float, default=1.5)
     ap.add_argument("--ckpt", default="checkpoints/generator.pt", help="path or hf://<repo id>/<file>")
+    ap.add_argument("--render", action="store_true", help="also render videos/ and grid.mp4 in MuJoCo")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    n = 4 if a.render else 3
 
     rec_path = os.path.join(a.out, "recipes.json")
     if a.recipes:
@@ -47,7 +51,7 @@ def main():
     elif a.planner:
         from .planner.finetune import Planner
         prompts = read_lines(a.prompts) if a.prompts else a.prompt
-        print(f"[1/3] planner: {len(prompts)} prompts -> recipes ({a.planner})", flush=True)
+        print(f"[1/{n}] planner: {len(prompts)} prompts -> recipes ({a.planner})", flush=True)
         P, recipes = Planner(a.planner), {}
         for p in prompts:
             try:
@@ -59,11 +63,11 @@ def main():
     else:
         from .planner.write import write_recipes
         prompts = read_lines(a.prompts) if a.prompts else a.prompt
-        print(f"[1/3] planner: {len(prompts)} prompts -> recipes ({a.model or 'default model'})", flush=True)
+        print(f"[1/{n}] planner: {len(prompts)} prompts -> recipes ({a.model or 'default model'})", flush=True)
         recipes = write_recipes(prompts, rec_path, model=a.model)
 
     from .recipe import variants
-    print(f"[2/3] planner: {len(recipes)} recipes x {a.variants} variants -> plans", flush=True)
+    print(f"[2/{n}] planner: {len(recipes)} recipes x {a.variants} variants -> plans", flush=True)
     plans = []
     for i, (prompt, rec) in enumerate(recipes.items()):
         for v, pl in enumerate(variants(rec, a.variants, seed=i, fc=2.0, kdt=0.25)):
@@ -74,7 +78,7 @@ def main():
     from .generator.sample import generate_batch, load
     from .motion import FPS, traj_to_move
     from .reach import Reach
-    print(f"[3/3] generator: {len(plans)} plans x {a.seeds} seeds -> motions", flush=True)
+    print(f"[3/{n}] generator: {len(plans)} plans x {a.seeds} seeds -> motions", flush=True)
     net, stats, dev = load(a.ckpt)
     R = Reach()
     mdir = os.path.join(a.out, "motions")
@@ -87,6 +91,12 @@ def main():
             with open(os.path.join(mdir, name + ".json"), "w") as f:
                 json.dump(move, f)
             print(f"  {name:44s} {len(A) / FPS:5.1f}s  projected {100 * frac:4.1f}% of frames", flush=True)
+    if a.render:
+        from .renderer.outputs import grid, videos
+        paths = sorted(os.path.join(mdir, f) for f in os.listdir(mdir) if f.endswith(".json"))
+        print(f"[4/4] renderer: {len(paths)} motions -> videos", flush=True)
+        videos(paths, os.path.join(a.out, "videos"))
+        grid(paths[:36], os.path.join(a.out, "grid.mp4"))
     print(f"done -> {a.out}")
 
 
