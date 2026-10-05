@@ -11,7 +11,9 @@ echo "Setting up development environment..."
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip install -e "$CLAUDE_PROJECT_DIR[ik,dev]"
+pip install -e "$CLAUDE_PROJECT_DIR[ik,dev,generator]"
+# Pollen's procedural dances: the collection needs only numpy, so skip the robot SDK dependency
+pip install --no-deps reachy-mini-dances-library
 
 # Install bd (beads issue tracker)
 echo "Setting up bd (beads issue tracker)..."

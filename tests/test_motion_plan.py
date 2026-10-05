@@ -53,3 +53,14 @@ def test_frames_interpolates_and_holds_missing_channels():
     assert F.shape == (25, 8)
     assert F[12, 2] == pytest.approx(10 * 12 / 25)
     assert np.all(F[:, 5] == 5)
+
+
+def test_procedural_dances_load():
+    import importlib.util
+    if importlib.util.find_spec("reachy_mini_dances_library") is None:
+        pytest.skip("pip install --no-deps reachy-mini-dances-library")
+    from rmr.library import dances
+    moves = dances(bpms=(114,), beats=8, project=False)
+    assert len(moves) >= 19
+    A = move_to_traj(moves[0][1])
+    assert A.shape[1] == 9 and len(A) >= 100 and np.ptp(A, 0).max() > 0
