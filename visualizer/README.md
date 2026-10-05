@@ -8,6 +8,9 @@ python scripts/build_gallery.py --ckpt hf://mszarski/reachy-motion-generator/gen
 python -m http.server -d visualizer 8000                                                     # open localhost:8000
 ```
 
+Hosted copy: the private Space [mszarski/reachy-mini-motions](https://huggingface.co/spaces/mszarski/reachy-mini-motions)
+(a static Space holding this folder plus a README with the Space header; re-upload the folder to update it).
+
 `python -m rmr.viewer runs/one="my prompts"` builds the gallery from any pipeline output folders instead.
 `?prompt=sneezing` opens the first entry whose prompt starts with that text.
 
