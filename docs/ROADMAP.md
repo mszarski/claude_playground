@@ -44,14 +44,19 @@ Needs Pollen's [emotions](https://huggingface.co/datasets/pollen-robotics/reachy
 - **Eval.** Generate from the true plan of each held-out emotion and check whether it is closer to its own real
   clip than to the other 11 [89%]. Compare head and antenna speeds against the real clips.
 
-## 3. Planner (text → recipe) 🟡
+## 3. Planner (text → recipe) ✅
 
 **Status.** The zero-shot stand-in works: `rmr/planner/` holds the reference's prompts, a client for any
 OpenAI-compatible endpoint (default: Hugging Face Inference Providers with `HF_TOKEN`, model `moonshotai/Kimi-K3`),
 the validate-and-fix writer, the 16 physical-check probes and an evaluation. Kimi-K3 passes 16/16 probes and gets
 20% real-clip top-1 [zero-shot 22%; fine-tuned 27B 27%]. See [results/planner_zeroshot.md](results/planner_zeroshot.md).
 
-The fine-tune is implemented and runs on Hugging Face Jobs (one A100, with a timeout derived from a dollar cap):
+**Fine-tuned.** Qwen3.5-4B, 2 epochs on one A100 ($5.79 in total): probes 0.88 OOD-core / 0.81 skill, plan
+agreement 0.65, real clips 28% top-1 [4B: 0.91 / 0.875 / 0.69 / 32%]. Weakest probe: yawning (2/12). See
+[results/planner_finetune.md](results/planner_finetune.md). Weights: private repo `mszarski/reachy-mini-planner-4b`.
+Possible follow-ups: the 27B (better on multi-phase probes in the reference), or LoRA on the DeltaNet projections too.
+
+How to reproduce it on Hugging Face Jobs (one A100, with a timeout derived from a dollar cap):
 
 ```bash
 python -m rmr.planner.sft --out runs/sft                                  # 17,364 rows; leak filter drops 45 prompts

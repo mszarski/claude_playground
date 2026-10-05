@@ -3,9 +3,11 @@
   python -m rmr.pipeline --recipes examples/demo_recipes.json --out runs/demo            # no LLM
   python -m rmr.pipeline --prompt "startled. A door slams behind you." --out runs/one     # zero-shot LLM planner
   python -m rmr.pipeline --prompts my_prompts.txt --model deepseek-ai/DeepSeek-V4-Pro --out runs/many
+  python -m rmr.pipeline --prompt "sneezing." --planner mszarski/reachy-mini-planner-4b --out runs/ft  # fine-tuned
 
 Stages (each writes into --out):
-  1. planner   recipes.json   a recipe per prompt from the zero-shot LLM (rmr.planner.write), or --recipes
+  1. planner   recipes.json   a recipe per prompt: the zero-shot LLM (rmr.planner.write), a fine-tuned planner
+                              (--planner, rmr.planner.finetune; a GPU helps), or --recipes
   2. planner   plans.jsonl    each recipe -> N randomised plans (amplitude, tempo, mirror)
   3. generator motions/       plan -> 25 Hz motion (flow model) -> projected onto the reachable set
 
@@ -29,6 +31,7 @@ def main():
     src.add_argument("--recipes", help="skip the planner: a {prompt: recipe} JSON file")
     ap.add_argument("--out", required=True)
     ap.add_argument("--model", help="zero-shot planner model (default: rmr.planner.llm.DEFAULT_MODEL)")
+    ap.add_argument("--planner", help="fine-tuned planner instead: a merged model dir or Hub repo id")
     ap.add_argument("--variants", type=int, default=2)
     ap.add_argument("--seeds", type=int, default=1)
     ap.add_argument("--cfg", type=float, default=1.5)
@@ -39,6 +42,18 @@ def main():
     rec_path = os.path.join(a.out, "recipes.json")
     if a.recipes:
         recipes = json.load(open(a.recipes))
+        with open(rec_path, "w") as f:
+            json.dump(recipes, f, indent=1)
+    elif a.planner:
+        from .planner.finetune import Planner
+        prompts = read_lines(a.prompts) if a.prompts else a.prompt
+        print(f"[1/3] planner: {len(prompts)} prompts -> recipes ({a.planner})", flush=True)
+        P, recipes = Planner(a.planner), {}
+        for p in prompts:
+            try:
+                recipes[p] = P.plan(p)
+            except ValueError as e:
+                print(f"  FAILED {p[:60]!r}: {e}")
         with open(rec_path, "w") as f:
             json.dump(recipes, f, indent=1)
     else:

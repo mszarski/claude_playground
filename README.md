@@ -36,7 +36,7 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Reachability projection (Stewart-platform IK) | `rmr/reach.py` | ✅ done, tested |
 | Generator: 21.8M flow-matching transformer | `rmr/generator/` | ✅ trained on Hub emotions + dances (69 min on 4 CPU cores): 91.7% top-1 on the 12 held-out emotions (reference 89%). See [results](docs/results/generator.md) |
 | Planner, zero-shot stand-in: open-weight LLM via HF Inference Providers, probe suite | `rmr/planner/` | ✅ Kimi-K3 passes 16/16 probes; real clips 20% top-1 (reference zero-shot 22%). See [results](docs/results/planner_zeroshot.md) |
-| Planner: LoRA fine-tune of Qwen on the teacher data | `rmr/planner/` | ⏳ needs a GPU |
+| Planner: LoRA fine-tune of Qwen3.5-4B on the teacher data (HF Jobs, $5.79) | `rmr/planner/` | ✅ probes 0.88 / 0.81, real clips 28% top-1 (reference 4B: 0.91 / 0.875, 32%). See [results](docs/results/planner_finetune.md) |
 | Offline pipeline (text → reachable moves) | `rmr/pipeline.py` | ✅ done |
 | MuJoCo renderer, browser visualizer | | ⏳ |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |

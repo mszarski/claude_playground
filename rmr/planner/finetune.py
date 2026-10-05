@@ -107,13 +107,24 @@ def merge(base, adapter, out):
     print(f"merged {injected} LoRA layers (max weight change {delta:.2e}) -> {out}", flush=True)
 
 
+def resolve(path):
+    """A merged model directory, or a Hub repo id holding one under ``merged/`` (as ``hfjob`` uploads it)."""
+    if os.path.isdir(path):
+        return path
+    from huggingface_hub import snapshot_download
+
+    return os.path.join(snapshot_download(path, allow_patterns=["merged/*"]), "merged")
+
+
 class Planner:
-    """A fine-tuned planner on plain transformers: batched decoding of ``{"idea", "recipe"}`` answers."""
+    """A fine-tuned planner on plain transformers: batched decoding of ``{"idea", "recipe"}`` answers.
+    ``path``: a merged model directory or a Hub repo id (``resolve``)."""
 
     def __init__(self, path, max_tokens=600):
         import torch
         from transformers import AutoTokenizer
 
+        path = resolve(path)
         self.torch, self.max_tokens = torch, max_tokens
         self.tok = AutoTokenizer.from_pretrained(path, padding_side="left")
         dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -134,6 +145,20 @@ class Planner:
                 g = self.llm.generate(**enc, max_new_tokens=self.max_tokens, pad_token_id=self.tok.pad_token_id, **kw)
             outs += self.tok.batch_decode(g[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
         return outs
+
+
+    def plan(self, prompt, seed=0, retries=2):
+        """Greedy recipe; if it is invalid, up to ``retries`` samples at temperature 0.7. Raises ``ValueError``."""
+        from .evaluate import parse_answer
+
+        rec = parse_answer(self.complete([prompt])[0])
+        for k in range(retries):
+            if rec:
+                break
+            rec = parse_answer(self.complete([prompt], temperature=0.7, seed=seed + k + 1)[0])
+        if rec is None:
+            raise ValueError("planner did not produce a valid recipe")
+        return rec
 
 
 def generate(a):
