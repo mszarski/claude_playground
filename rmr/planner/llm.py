@@ -15,7 +15,7 @@ import urllib.error
 import urllib.request
 
 BASE_URL = os.environ.get("PLANNER_BASE_URL", "https://router.huggingface.co/v1")
-DEFAULT_MODEL = os.environ.get("PLANNER_MODEL", "zai-org/GLM-5.3")
+DEFAULT_MODEL = os.environ.get("PLANNER_MODEL", "moonshotai/Kimi-K3")
 
 
 def _key():

@@ -35,8 +35,10 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Recipe language: parse, validate, expand, randomised variants | `rmr/recipe.py` | ✅ done, tested on all teacher recipes |
 | Reachability projection (Stewart-platform IK) | `rmr/reach.py` | ✅ done, tested |
 | Generator: 21.8M flow-matching transformer | `rmr/generator/` | ✅ trained on Hub emotions + dances (69 min on 4 CPU cores): 91.7% top-1 on the 12 held-out emotions (reference 89%). See [results](docs/results/generator.md) |
-| Planner: LoRA fine-tune of Qwen on the teacher data | `rmr/planner/` | ⏳ needs a GPU and Hugging Face |
-| Offline pipeline + MuJoCo renderer, browser visualizer | | ⏳ |
+| Planner, zero-shot stand-in: open-weight LLM via HF Inference Providers, probe suite | `rmr/planner/` | ✅ Kimi-K3 passes 16/16 probes; real clips 20% top-1 (reference zero-shot 22%). See [results](docs/results/planner_zeroshot.md) |
+| Planner: LoRA fine-tune of Qwen on the teacher data | `rmr/planner/` | ⏳ needs a GPU |
+| Offline pipeline (text → reachable moves) | `rmr/pipeline.py` | ✅ done |
+| MuJoCo renderer, browser visualizer | | ⏳ |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for the plan of each step.
@@ -49,6 +51,14 @@ pytest
 ```
 
 Extras for later steps: `generator` (torch), `hf` (Hugging Face Hub and datasets), `planner` (transformers, PEFT, TRL).
+
+Text to motion, end to end (zero-shot planner through Hugging Face, so `HF_TOKEN` is needed; the trained
+generator is in the private Hub repo `mszarski/reachy-motion-generator`):
+
+```bash
+python -m rmr.pipeline --prompt "sneezing. You build up and then sneeze." --out runs/one \
+    --ckpt hf://mszarski/reachy-motion-generator/generator.pt
+```
 
 ```python
 from rmr.recipe import variants

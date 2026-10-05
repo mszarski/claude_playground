@@ -44,7 +44,14 @@ Needs Pollen's [emotions](https://huggingface.co/datasets/pollen-robotics/reachy
 - **Eval.** Generate from the true plan of each held-out emotion and check whether it is closer to its own real
   clip than to the other 11 [89%]. Compare head and antenna speeds against the real clips.
 
-## 3. Planner (text → recipe)
+## 3. Planner (text → recipe) 🟡
+
+**Status.** The zero-shot stand-in works: `rmr/planner/` holds the reference's prompts, a client for any
+OpenAI-compatible endpoint (default: Hugging Face Inference Providers with `HF_TOKEN`, model `moonshotai/Kimi-K3`),
+the validate-and-fix writer, the 16 physical-check probes and an evaluation. Kimi-K3 passes 16/16 probes and gets
+20% real-clip top-1 [zero-shot 22%; fine-tuned 27B 27%]. See [results/planner_zeroshot.md](results/planner_zeroshot.md).
+Next is the LoRA fine-tune below, which needs a GPU. The probes and `rmr.planner.evaluate` are ready to score it.
+
 
 Use `data/teacher/dataset.jsonl` with all sources except `astra`. Each row becomes a chat example: a compact system
 prompt (~330 words: units, the recipe grammar, four motion rules, three examples), the user prompt, and a JSON answer
@@ -58,10 +65,13 @@ prompt (~330 words: units, the recipe grammar, four motion rules, three examples
 - **Eval.** 16 out-of-distribution probes, each with a physical check (does the sneeze release move the head
   *down*?), 12 samples each [27B 0.96 / 4B 0.91 / 0.8B 0.66].
 
-Before training, a frontier LLM can stand in as a zero-shot planner (with the system prompt above) to exercise the
-whole pipeline.
+Before training, a frontier LLM stands in as a zero-shot planner (`rmr.planner.write`, with the teacher prompt
+`SYSTEM`) to exercise the whole pipeline.
 
 ## 4. Pipeline, rendering, visualizer
+
+**Status.** `python -m rmr.pipeline` runs prompts (or recipes) → plans → motions → reachable move JSON. Rendering
+and the viewer remain.
 
 `prompts → recipes → plans → motions → videos`, rendered in MuJoCo (`reachy-mini` model files, `MUJOCO_GL=egl` when
 headless), plus a three.js viewer that plays move JSON.

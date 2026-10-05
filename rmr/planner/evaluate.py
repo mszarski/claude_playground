@@ -1,6 +1,6 @@
 """Score a planner on prompts outside its training data.
 
-  python -m rmr.planner.evaluate --model zai-org/GLM-5.3 --out runs/planner_eval.json
+  python -m rmr.planner.evaluate --model moonshotai/Kimi-K3 --out runs/planner_eval.json
 
   probes  16 out-of-distribution prompts with a physical check each (``probes.PROBES``), ``--samples`` recipes per
           prompt at temperature 0.7: OOD-core (concepts in no training data) and skill pass rates
