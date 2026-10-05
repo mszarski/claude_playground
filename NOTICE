@@ -1,0 +1,11 @@
+reachy-motion-recreation
+
+This project recreates the system described in "The best expressive harness for robots" by Binh Pham
+(https://garden.binhph.am/articles/the-best-expressive-harness-for-robots), whose reference implementation is
+https://github.com/pham-tuan-binh/reachy-motion-generator (Apache-2.0). Modules under rmr/ are ports of that
+implementation and say which file they follow.
+
+Third-party material included here, all Apache-2.0:
+- data/teacher/*: the teacher dataset, validation set, seed recipes and evaluation prompts from
+  pham-tuan-binh/reachy-motion-generator (distill_data/ and planner/examples/).
+- rmr/assets/kinematics_data.json: from pollen-robotics/reachy_mini.

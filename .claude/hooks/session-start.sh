@@ -11,10 +11,7 @@ echo "Setting up development environment..."
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip install -r "$CLAUDE_PROJECT_DIR/trajectory_classifier/requirements.txt"
-
-# Install pytest for testing
-pip install pytest
+pip install -e "$CLAUDE_PROJECT_DIR[ik,dev]"
 
 # Install bd (beads issue tracker)
 echo "Setting up bd (beads issue tracker)..."

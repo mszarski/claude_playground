@@ -2,54 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## Project
 
-This is a Python trajectory classification package (`trajectory_classifier`) for analyzing and classifying vehicle trajectory segments. It supports:
-- Converting spherical coordinates (lat/lon/alt) to local Cartesian (ENU)
-- Extracting geometric features (speed, heading, curvature, jerk)
-- Classifying segments as STRAIGHT, TURN, or WIGGLE
-- Computing trajectory similarity (DTW, Fréchet, Hausdorff distances)
-- Learning-based trajectory ranking and quality scoring
+A recreation of the Reachy Mini text-to-motion system from
+[pham-tuan-binh/reachy-motion-generator](https://github.com/pham-tuan-binh/reachy-motion-generator)
+(the blog post *The best expressive harness for robots*). The pipeline:
+text → **planner** (LLM) → **recipe** → `rmr.recipe.variants` → **plan** → **generator** (flow matching) →
+25 Hz 9-DoF trajectory → `rmr.reach.Reach.project` → reachable **move** JSON.
 
-## Build and Test Commands
+README.md has the status table; docs/ROADMAP.md has the plan for each remaining step.
+
+## Commands
 
 ```bash
-# Install dependencies
-pip install -r trajectory_classifier/requirements.txt
-
-# Run all tests
-pytest trajectory_classifier/tests/
-
-# Run a single test file
-pytest trajectory_classifier/tests/test_classifier.py -v
-
-# Run a specific test
-pytest trajectory_classifier/tests/test_classifier.py::TestClassifier::test_classify_straight_trajectory -v
+pip install -e ".[ik,dev]"
+pytest                                   # all tests
+pytest tests/test_recipe.py -v           # one file
 ```
 
-## Architecture
+## Conventions
 
-### Core Modules
-
-- **coordinates.py**: Geodetic (lat/lon/alt) → ECEF → ENU (East-North-Up) local Cartesian conversion using WGS84 ellipsoid
-- **features.py**: Extracts per-point features (speed, acceleration, heading, curvature) and trajectory-level statistics (sinuosity, path efficiency)
-- **classifier.py**: Sliding-window classifier that assigns STRAIGHT/TURN/WIGGLE labels based on heading change patterns
-- **av_features.py**: AV-style metrics including longitudinal/lateral jerk decomposition, comfort scores, smoothness scores
-- **similarity.py**: DTW (with Sakoe-Chiba band optimization), Fréchet distance, Hausdorff distance for trajectory comparison
-- **ranking.py**: HeuristicRanker (weighted AV scores), LearnedRanker (sklearn-based pointwise/pairwise learning)
-
-### Data Flow
-
-1. Input: DataFrame with `timestamp`, `latitude`, `longitude`, `altitude` columns
-2. `coordinates.to_local_cartesian()` → adds `x`, `y`, `z` (meters, ENU frame)
-3. `features.extract_features()` → adds `speed`, `heading`, `curvature`, etc.
-4. `classifier.classify_trajectory()` → returns `ClassificationResult` with per-point labels and contiguous `ClassifiedSegment` objects
-
-### Classification Logic
-
-- **STRAIGHT**: `|heading_change| < straight_threshold` (default 5°)
-- **TURN**: Sustained `|heading_change| > turn_threshold` (default 15°)
-- **WIGGLE**: Multiple sign changes in heading within window (oscillating/unstable)
+- `rmr/` modules are ports of the reference. Each docstring names the file it follows. Keep the semantics
+  identical (units, channel order, limits, randomisation ranges), because the teacher data and published models
+  depend on them; `tests/test_recipe.py::test_every_teacher_recipe_is_valid` guards the recipe language.
+- Units: trajectories are SI (m, rad); plans and recipes are deg and mm. Plan channel order is `rmr.plan.CH`.
+  The right antenna droops with negative angles, the left with positive.
+- 25 Hz everywhere (`rmr.motion.FPS`). Library clips are ~100 Hz and must be resampled on their `time` array.
+- `data/teacher/val.jsonl` and the held-out emotions are evaluation only: never train on them.
+- Hugging Face and GPU-dependent work: put downloads behind the `hf` extra and keep the core importable without torch.
 
 ## Issue Tracking
 
