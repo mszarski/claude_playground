@@ -15,7 +15,9 @@ function show(entry) {
     current = entry; sample = 0;
     $('prompt').textContent = entry.prompt || '';
     $('recipe').textContent = entry.recipe || '—';
-    $('meta').textContent = entry.source || '';
+    $('idea').textContent = entry.idea || ''; $('idea-row').hidden = !entry.idea;
+    const t = entry.timing_ms;
+    $('meta').textContent = t ? `generated live · planner ${t.planner} ms · generator ${t.generator} ms` : (entry.source || '');
     const tabs = $('samples'); tabs.innerHTML = '';
     if (entry.moves.length > 1) entry.moves.forEach((_, i) => {
         const b = document.createElement('button'); b.textContent = `variant ${i + 1}`; b.className = i === 0 ? 'on' : '';
@@ -62,6 +64,27 @@ async function loadGallery() {
     if (start) show(start);
 }
 
+// Live mode: when a server answers /api/health (python -m rmr.server), show the prompt box.
+async function enableLive() {
+    try { if (!(await fetch('api/health')).ok) return; } catch { return; }
+    $('live').hidden = false;
+    $('live').onsubmit = async (e) => {
+        e.preventDefault();
+        const prompt = $('ask').value.trim();
+        if (!prompt) return status('Type what the robot should express first.', 'err');
+        $('go').disabled = true; status('Planning and generating… (about 5–15 s)');
+        try {
+            const r = await fetch('api/generate', { method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ prompt, n: +$('n').value, seed: Math.floor(Math.random() * 1e6) }) });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(body.detail || `server error ${r.status}`);
+            show(body); status('');
+        } catch (err) { status(`Generation failed: ${err.message}`, 'err'); }
+        finally { $('go').disabled = false; }
+    };
+    $('ask').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('live').requestSubmit(); } });
+}
+
 async function main() {
     status('Loading the robot…');
     const scene = new SceneManager($('container'));
@@ -90,6 +113,7 @@ async function main() {
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => { e.preventDefault(); e.dataTransfer.files[0] && openFile(e.dataTransfer.files[0]); });
 
+    await enableLive();
     await loadGallery();
     window.__ready = true;
 }

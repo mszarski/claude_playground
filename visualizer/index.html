@@ -12,11 +12,20 @@
   <aside id="panel">
     <h1>Reachy Mini Motions</h1>
     <p class="sub">Text-to-motion results from this recreation, played in 3D in your browser.</p>
+    <form id="live" hidden>
+      <label for="ask">Prompt</label>
+      <textarea id="ask" rows="2" maxlength="300" placeholder="a cat stalking prey. You crouch low, freeze, and creep forward slowly."></textarea>
+      <div class="row">
+        <select id="n" aria-label="number of variants"><option value="1">1 variant</option><option value="2" selected>2 variants</option><option value="4">4 variants</option></select>
+        <button id="go" class="primary" type="submit">Generate</button>
+      </div>
+    </form>
     <div id="status"></div>
 
     <div id="result" hidden>
       <div class="kv"><span>prompt</span><p id="prompt"></p></div>
       <div id="samples"></div>
+      <div class="kv" id="idea-row" hidden><span>idea</span><p id="idea"></p></div>
       <div class="kv"><span>recipe</span><code id="recipe"></code></div>
       <div id="meta"></div>
     </div>

@@ -51,3 +51,5 @@ button:disabled { opacity: .5; cursor: wait; }
   h1 { font-size: 16px; } .sub { display: none; }
 }
 #status:empty { display: none; }
+#live { margin-top: 4px; }
+#idea-row p { color: var(--text); }

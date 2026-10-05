@@ -12,6 +12,7 @@ ik = ["reachy-mini-rust-kinematics>=1.0.3"]
 generator = ["torch>=2.3"]
 hf = ["huggingface-hub>=0.24", "datasets"]
 render = ["mujoco>=3.3", "imageio[ffmpeg]>=2.34", "pillow>=10"]   # + `pip install --no-deps reachy-mini`
+serve = ["fastapi>=0.110", "uvicorn>=0.29"]
 planner = ["transformers>=5.5", "peft>=0.18", "trl>=0.29", "datasets", "accelerate"]
 dev = ["pytest"]
 

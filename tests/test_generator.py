@@ -71,3 +71,15 @@ def test_generate_without_lowpass():
     smooth = generate_batch(net, fit_stats(S), plans, "cpu", steps=2)[0]
     assert raw.shape == smooth.shape == (50, 9)
     assert np.abs(np.diff(raw, axis=0)).sum() > np.abs(np.diff(smooth, axis=0)).sum()
+
+
+def test_simplified_plans_keep_energy_and_train():
+    S = samples_from_moves(_moves(), simplified=True)
+    assert all(len(s) == 3 and s[2].shape == s[1].shape for s in S)
+    assert all(np.allclose(s[2][:, 7], s[1][:, 7]) for s in S)                  # energy unchanged
+    assert np.mean([np.abs(np.diff(s[2][:, 2], 2)).sum() <= np.abs(np.diff(s[1][:, 2], 2)).sum() + 1e-6 for s in S]) > 0.8
+    stats = fit_stats(S)
+    b = bucketize(S, stats, "cpu")[0]
+    assert b["Q2"].shape == b["Q"].shape
+    net = MotionGenerator(**TINY)
+    assert torch.isfinite(loss_fn(net, b["X"], b["Q2"], b["M"]))
