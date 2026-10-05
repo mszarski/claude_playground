@@ -50,7 +50,21 @@ Needs Pollen's [emotions](https://huggingface.co/datasets/pollen-robotics/reachy
 OpenAI-compatible endpoint (default: Hugging Face Inference Providers with `HF_TOKEN`, model `moonshotai/Kimi-K3`),
 the validate-and-fix writer, the 16 physical-check probes and an evaluation. Kimi-K3 passes 16/16 probes and gets
 20% real-clip top-1 [zero-shot 22%; fine-tuned 27B 27%]. See [results/planner_zeroshot.md](results/planner_zeroshot.md).
-Next is the LoRA fine-tune below, which needs a GPU. The probes and `rmr.planner.evaluate` are ready to score it.
+
+The fine-tune is implemented and runs on Hugging Face Jobs (one A100, with a timeout derived from a dollar cap):
+
+```bash
+python -m rmr.planner.sft --out runs/sft                                  # 17,364 rows; leak filter drops 45 prompts
+python -m rmr.planner.hfjob submit --data runs/sft --max-usd 9            # train + merge + generate on an A100
+python -m rmr.planner.hfjob fetch --out runs/4b
+python -m rmr.planner.evaluate --generations runs/4b/generations.json      # probes, agreement, real clips (CPU)
+```
+
+Differences from the reference: plain TRL + PEFT instead of Unsloth (same LoRA, lr, schedule and best-by-val-loss
+selection), and prompts rendered with `enable_thinking=False` during training, as at inference. Qwen3.5's template
+otherwise ends the training prompt inside an open `<think>` block and misaligns the answer-only loss mask. The job
+installs `flash-linear-attention`; without it the Gated DeltaNet layers fall back to PyTorch and training is 1.5×
+slower (7.5 s instead of 11.3 s per step of 32 rows on an A100).
 
 
 Use `data/teacher/dataset.jsonl` with all sources except `astra`. Each row becomes a chat example: a compact system
