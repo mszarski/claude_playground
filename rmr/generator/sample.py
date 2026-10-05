@@ -12,8 +12,13 @@ from .model import MotionGenerator, device
 
 
 def load(ckpt, dev=None):
-    """Checkpoint -> ``(net, stats, device)``."""
+    """Checkpoint -> ``(net, stats, device)``. ``ckpt`` is a path or ``hf://<repo id>/<file>`` (``hf`` extra)."""
     dev = dev or device()
+    if ckpt.startswith("hf://"):
+        from huggingface_hub import hf_hub_download
+
+        repo, _, fname = ckpt[5:].rpartition("/")
+        ckpt = hf_hub_download(repo, fname)
     ck = torch.load(ckpt, map_location=dev, weights_only=False)
     net = MotionGenerator(**ck.get("config", {})).to(dev)
     net.load_state_dict(ck["sd"])
