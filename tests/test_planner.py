@@ -89,3 +89,30 @@ def test_held_out_prompts_cover_every_held_out_emotion():
     assert list(d) == library.HELD_OUT_EMOTIONS
     assert all(p.split(".")[0] == h.rstrip("0123456789") for h, p in d.items())
     assert slug("A cat stalking prey. You crouch.") == "a_cat_stalking_prey"
+
+
+def test_sft_build_blocks_ood_concepts_and_val_prompts():
+    import os
+    import re
+
+    from rmr.planner.sft import BLOCK, DATA, build
+
+    tr, val, leaked = build(os.path.join(DATA, "dataset.jsonl"), os.path.join(DATA, "val.jsonl"),
+                            os.path.join(DATA, "eval_prompts.txt"), leak=1, log=lambda s: None)
+    prompts = [r["messages"][1]["content"] for r in tr]
+    val_prompts = {v["messages"][1]["content"] for v in val}
+    assert len(val) == 39 and not leaked and not val_prompts & set(prompts)
+    assert not any(re.search(BLOCK, p, re.I) for p in prompts)
+    assert {r["source"] for r in tr} == {"claude", "claude_events", "seed", "astra_lively"}
+    assert "cheerful." in prompts and "You are in a bright, sunny mood." in prompts     # word / sentence variants
+    answer = json.loads(tr[0]["messages"][2]["content"])
+    assert set(answer) == {"idea", "recipe"} and check(answer["recipe"]) is None
+
+
+def test_hfjob_script_renders():
+    from rmr.planner import hfjob
+
+    s = hfjob.SCRIPT.format(packages="torch", data_repo="u/d", model="Qwen/Qwen3.5-4B", train_args="--max-steps 2",
+                            samples=1)
+    assert "finetune train --data /work/sft --out /work/out --model Qwen/Qwen3.5-4B --max-steps 2" in s
+    assert "trap upload EXIT" in s and 'glob.glob(f"/work/out/{p}")' in s and "{sub or 'planner'}" in s
