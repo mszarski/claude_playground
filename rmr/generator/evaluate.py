@@ -4,6 +4,9 @@
   (chance = 1 / number of held-out clips)
 - speed: 95th-percentile and peak head-pitch / antenna speeds, generated vs real
   (too slow = sluggish, too fast = jittery)
+- energy_hold: generated / requested fast-detail energy on a held pose with constant energy, as recipes write it
+  (``hold 5 E=6``); 1 = the energy channel is followed. Real plans hide the problem: their posture curves carry
+  traces of the detail, which the reference's training lets the generator read instead of the energy channel.
 
 Reference: ``generator/evaluate.py`` in pham-tuan-binh/reachy-motion-generator (Apache-2.0).
 """
@@ -47,6 +50,21 @@ def speeds(A):
     return np.percentile(pitch, 95), pitch.max(), np.percentile(ear, 95), ear.max()
 
 
+def energy_hold(net, stats, dev, levels=(2, 4, 6, 8), seeds=3, steps=8):
+    """``{level: generated / requested energy}`` over the hold, with the sampler's default settings."""
+    from ..recipe import variants
+    from .sample import generate_batch
+
+    out = {}
+    for e in levels:
+        plans = [variants(f"go .5 e=40 p=8 z=-4 E={e} | hold 5 E={e}", 1, seed=s)[0] for s in range(seeds)]
+        G = generate_batch(net, stats, plans, dev, seeds=list(range(seeds)), steps=steps)
+        got = [PL.frames(PL.extract(A), len(A))[FPS:, 7].mean() for A in G]
+        req = [PL.frames(p, len(A))[FPS:, 7].mean() for p, A in zip(plans, G)]
+        out[str(e)] = float(np.mean(got) / np.mean(req))
+    return out
+
+
 def evaluate(net, stats, dev, moves, held_out, seeds=3, steps=100):
     from .sample import generate
 
@@ -64,4 +82,5 @@ def evaluate(net, stats, dev, moves, held_out, seeds=3, steps=100):
     return {"n_clips": len(H.real), "n": len(r), "top1": float((r == 1).mean()), "mean_rank": float(r.mean()),
             "chance": 1 / max(1, len(H.real)),
             "pitch_speed_p95": [float(g[0]), float(q[0])], "pitch_speed_peak": [float(g[1]), float(q[1])],
-            "ear_speed_p95": [float(g[2]), float(q[2])], "ear_speed_peak": [float(g[3]), float(q[3])]}
+            "ear_speed_p95": [float(g[2]), float(q[2])], "ear_speed_peak": [float(g[3]), float(q[3])],
+            "energy_hold": energy_hold(net, stats, dev)}
