@@ -35,8 +35,10 @@ def lm_class(path):
 
 
 def _prompt_completion(row):
+    """Chat row -> TRL prompt/completion, rendered without thinking as at inference (``Planner.text``): Qwen3.5's
+    template otherwise ends the prompt inside an open ``<think>`` and the answer-only loss mask misaligns."""
     m = row["messages"]
-    return {"prompt": m[:-1], "completion": m[-1:]}
+    return {"prompt": m[:-1], "completion": m[-1:], "chat_template_kwargs": {"enable_thinking": False}}
 
 
 def train(a):

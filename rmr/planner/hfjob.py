@@ -17,7 +17,7 @@ import shlex
 ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
 IMAGE = "ghcr.io/astral-sh/uv:python3.12-bookworm"
 PACKAGES = ["torch", "transformers>=5.5", "trl>=0.29", "peft>=0.18", "datasets", "accelerate", "bitsandbytes",
-            "kernels", "huggingface_hub>=1.0", "numpy", "scipy"]
+            "kernels", "flash-linear-attention", "huggingface_hub>=1.0", "numpy", "scipy"]
 
 SCRIPT = r"""
 set -euo pipefail
