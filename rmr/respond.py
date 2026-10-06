@@ -40,8 +40,10 @@ SCHEMA = {"type": "object", "additionalProperties": False, "required": ["feeling
 def user_message(heard, tone=True):
     """``tone=False`` leaves out the voice reading (words only)."""
     parts = [f'They said: "{heard.get("text") or "(no words)"}"']
+    if heard.get("context"):             # the last lines of the conversation, oldest first
+        parts.insert(0, "Earlier in the conversation:\n" + "\n".join(f'- "{c}"' for c in heard["context"]))
     if not tone:
-        return parts[0] + "\n(No reading of their voice is available.)"
+        return "\n".join(parts) + "\n(No reading of their voice is available.)"
     if heard.get("emotion"):
         parts.append(f'Their voice sounds {heard["emotion"]} (confidence {heard.get("confidence", 0):.0%}).')
     if "arousal" in heard and "valence" in heard:

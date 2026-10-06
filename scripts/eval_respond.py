@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--models", nargs="+", default=["Qwen/Qwen3-Next-80B-A3B-Instruct", "Qwen/Qwen3-4B-Instruct-2507"])
     ap.add_argument("--out", default="runs/respond_eval")
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--context", action="store_true", help="give the responder the two previous lines of the dialogue")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -71,6 +72,12 @@ def main():
                 if i % 20 == 0:
                     print(f"  heard {i}", flush=True)
     rows = [json.loads(l) for l in open(heard_path)]
+    if a.context:
+        df = pd.read_csv(hf_hub_download("ajyy/MELD_audio", "test.csv", repo_type="dataset"))
+        lines = {(r.Dialogue_ID, r.Utterance_ID): r.Utterance for r in df.itertuples()}
+        for r in rows:
+            d, u = (int(x) for x in r["clip"].split("dia")[1].split(".")[0].split("_utt"))
+            r["context"] = [c for c in (lines.get((d, u - 2)), lines.get((d, u - 1))) if c]
     from rmr.voice import TO_CANON
     tone = [TO_CANON.get(r["emotion"], "other") for r in rows]
     report = {"n": len(rows), "tone_only": ua([r["label"] for r in rows], tone)}
@@ -79,7 +86,7 @@ def main():
     from rmr.planner.write import _batch
     from rmr.respond import respond
     for model in a.models:
-        tag = model.split("/")[-1]
+        tag = model.split("/")[-1] + ("+context" if a.context else "")
         path = os.path.join(a.out, f"{tag}.jsonl")
         done = {json.loads(l)["clip"]: json.loads(l) for l in open(path)} if os.path.exists(path) else {}
 
