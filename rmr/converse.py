@@ -21,12 +21,14 @@ def main():
     ap.add_argument("--model", help="zero-shot planner LLM (default: rmr.planner.llm.DEFAULT_MODEL)")
     ap.add_argument("--responder", help="LLM deciding the response (default: --model)")
     ap.add_argument("--planner", help="fine-tuned planner (dir or Hub repo id) instead of the zero-shot LLM")
+    ap.add_argument("--voice-model", help="distilled responder: response + recipe in one local call "
+                                          "(e.g. mszarski/reachy-voice:student/v1)")
     ap.add_argument("--variants", type=int, default=2)
     ap.add_argument("--render", action="store_true")
     a = ap.parse_args()
     from .server import Engine
 
-    eng = Engine(a.ckpt, a.model, a.planner, a.responder)
+    eng = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model)
     with open(a.audio, "rb") as f:
         r = eng.respond(f.read(), n=a.variants)
     mdir = os.path.join(a.out, "motions")

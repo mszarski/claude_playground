@@ -49,6 +49,44 @@ the recipe in plain transformers, unquantised). The small model judges worse: it
 sad clip as cheerful and shared the joy. For local use, a quantised model in Ollama or llama.cpp is much faster, and a
 larger instruct model (or the fine-tuned planner for the recipe) responds better.
 
+## End-to-end evaluation (200 MELD test clips)
+
+`scripts/eval_respond.py`: 50 clips each of neutral, joy, sadness and anger from MELD's test split (real dialogue).
+Reading = the responder's `feeling` against MELD's human label (4-class unweighted accuracy, chance 25%). Response =
+physical checks on the motion recipe against how the person actually felt (sad → gentle, angry → calm, happy →
+joyful, neutral → attentive), with a missing recipe counted as a failure. With the two previous lines of the dialogue
+as context.
+
+| responder | reads tone only | words only | words + tone | appropriate response | valid recipe | LLM calls |
+|---|---|---|---|---|---|---|
+| voice model alone | 33% | | | | | |
+| Qwen3-Next-80B-A3B-Instruct (hosted) | | 45% | **48%** | **66%** | 97% | 2 |
+| Qwen3-4B-Instruct-2507 (local, off the shelf) | | 48% | 37% | 58% | 78% | 2 |
+| **student**: Qwen3-4B distilled (local) | | | 46% | 64% | **100%** | **1** |
+
+- The voice reading adds little: nothing for the 80B (45% → 48% is within noise for 200 clips), and it misleads the
+  off-the-shelf 4B (48% → 37%), which over-trusts it.
+- Context (the previous two lines) changed little for either model.
+- The most common error for every model is anger read as happiness (16-18 of 40 angry clips): MELD's anger is
+  often sarcastic, and the voice model hears it as happy.
+
+## The distilled student
+
+One local model does the responder's and the planner's job in one call: heard → `{feeling, reading, response,
+recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v1`).
+
+- Data: 4,898 MELD *training* clips, listened to on a GPU job (`scripts/listen_meld.py`, $0.57); the 80B teacher
+  labelled each (`scripts/label_respond.py`); kept only answers whose `feeling` matches MELD's human label and whose
+  recipe passes the physical check: 1,870 examples (teacher agreement by label: happy 62%, sad 47%, angry 35%,
+  surprised 30%, neutral 26%, anxious 24%).
+- Training: LoRA on Qwen3-4B-Instruct-2507 (Apache-2.0), 2 epochs, one A10G, 26 min ($0.55); val loss 1.37 → 0.44.
+- Result: reads people about as well as the 80B (46% vs 48%), always writes a valid recipe (100% vs 78% for the base
+  4B), responds appropriately 64% of the time (base 4B 58%, 80B 66%), in one call instead of two. On the "bad news
+  told as a joke" clip the voice model hears *happy*; the base 4B shared the joy, the student read "overwhelmed by
+  loss, despite a happy tone in their voice" and gave three slow, comforting nods.
+- Speed: 0.65 s per answer batched on an A10G. On a 4-core CPU, unquantised in transformers, a cold process takes
+  about 70 s (model loading included); a quantised build (GGUF for llama.cpp / Ollama) is the next step for laptops.
+
 ## Running it locally
 
 ```bash
@@ -56,8 +94,9 @@ pip install -e ".[ik,generator,hf,serve,voice]"
 # any OpenAI-compatible local server, e.g. Ollama or llama.cpp serving Qwen3-4B-Instruct-2507 (GGUF)
 PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
   python -m rmr.server --model <served model name> --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
-# or without any server: the LLM in-process with transformers (slow on CPU)
-PLANNER_BASE_URL=local python -m rmr.converse clip.wav --model Qwen/Qwen3-4B-Instruct-2507 --out runs/converse
+# or the distilled student, one local call, no server and no network after the first download
+python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v1 --out runs/converse
+python -m rmr.server --voice-model mszarski/reachy-voice:student/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 ```
 
 Open `http://localhost:7860` and hold the mic button (browsers allow the microphone on localhost and HTTPS).

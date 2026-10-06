@@ -34,13 +34,14 @@ class Engine:
     (merged model dir or Hub repo id, run in-process). ``responder``: the LLM that turns what it heard into a
     response prompt (``rmr.respond``); voice models load on the first ``/api/respond``."""
 
-    def __init__(self, ckpt, model=None, planner=None, responder=None):
+    def __init__(self, ckpt, model=None, planner=None, responder=None, voice_model=None):
         from .generator.sample import load
 
         self.net, self.stats, self.dev = load(ckpt)
         self.reach, self.model, self.ckpt = Reach(), model, ckpt
         self.responder, self.listener = responder or model, None
-        self.finetuned = None
+        self.finetuned, self.voice_model = None, voice_model
+        self.student = None
         if planner:
             from .planner.finetune import Planner
             self.finetuned = Planner(planner)
@@ -63,8 +64,15 @@ class Engine:
             self.listener = Listener()
         heard = self.listener.hear(audio)
         t1 = time.time()
-        r = respond(heard, model=self.responder)
-        out = self.generate(r["response"], n=n, seed=seed)
+        if self.voice_model:              # the distilled student: response and recipe in one call
+            from .respond import Student
+            if self.student is None:
+                self.student = Student(self.voice_model)
+            r = self.student(heard)
+            out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
+        else:
+            r = respond(heard, model=self.responder)
+            out = self.generate(r["response"], n=n, seed=seed)
         out["heard"] = {k: v for k, v in heard.items() if k != "probs"}
         out["reading"] = r["reading"]
         out["feeling"] = r.get("feeling")
@@ -72,11 +80,11 @@ class Engine:
         out["timing_ms"]["total"] = int(1000 * (time.time() - t0))
         return out
 
-    def generate(self, prompt, n=1, seed=0):
+    def generate(self, prompt, n=1, seed=0, recipe=None):
         from .generator.sample import generate_batch
 
         t0 = time.time()
-        idea, recipe = self.plan(prompt)
+        idea, recipe = ("", recipe) if recipe else self.plan(prompt)
         t1 = time.time()
         plans = variants(recipe, n, seed=seed, fc=2.0, kdt=0.25)
         trajs = generate_batch(self.net, self.stats, plans, self.dev, seeds=[seed * 7919 + k for k in range(n)])
@@ -138,6 +146,8 @@ def main():
                     help="fine-tuned planner (dir or Hub repo id) instead of the zero-shot LLM")
     ap.add_argument("--responder", default=os.environ.get("RESPONDER_MODEL"),
                     help="LLM that decides how to respond to speech (default: --model)")
+    ap.add_argument("--voice-model", default=os.environ.get("VOICE_MODEL"),
+                    help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v1")
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--host", default="0.0.0.0")
@@ -145,7 +155,7 @@ def main():
     a = ap.parse_args()
     import uvicorn
 
-    engine = Engine(a.ckpt, a.model, a.planner, a.responder)
+    engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model)
     if a.preload_voice:
         import threading
 

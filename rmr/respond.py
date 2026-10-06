@@ -87,3 +87,38 @@ def student_messages(heard, answer=None):
         m.append({"role": "assistant", "content": json.dumps({k: answer[k] for k in ("feeling", "reading", "response",
                                                                                          "recipe")})})
     return m
+
+
+class Student:
+    """The distilled responder, run in-process: heard -> {"feeling", "reading", "response", "recipe"} in one call.
+    ``path``: merged model dir, Hub repo id, or ``repo:sub/dir`` (e.g. ``mszarski/reachy-voice:student/v1``)."""
+
+    def __init__(self, path, max_tokens=400):
+        import torch
+        from transformers import AutoTokenizer
+
+        from .planner.finetune import lm_class, resolve
+
+        path = resolve(path)
+        self.torch, self.max_tokens = torch, max_tokens
+        self.tok = AutoTokenizer.from_pretrained(path)
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        self.m = lm_class(path).from_pretrained(path, dtype=torch.bfloat16).to(dev).eval()
+
+    def __call__(self, heard):
+        from .planner.evaluate import parse_answer
+        from .planner.llm import parse_json
+
+        text = self.tok.apply_chat_template(student_messages(heard), tokenize=False, add_generation_prompt=True,
+                                            enable_thinking=False)
+        enc = self.tok(text, return_tensors="pt").to(self.m.device)
+        with self.torch.no_grad():
+            g = self.m.generate(**enc, max_new_tokens=self.max_tokens, do_sample=False,
+                                pad_token_id=self.tok.pad_token_id or self.tok.eos_token_id)
+        d = parse_json(self.tok.decode(g[0, enc["input_ids"].shape[1]:], skip_special_tokens=True))
+        recipe = d.get("recipe") if isinstance(d.get("recipe"), str) else None
+        if not recipe or not parse_answer(__import__("json").dumps({"recipe": recipe})):
+            raise ValueError("the voice model did not produce a valid recipe")
+        feeling = str(d.get("feeling", "")).lower()
+        return {"feeling": feeling if feeling in FEELINGS else "neutral", "reading": str(d.get("reading", "")),
+                "response": str(d.get("response", "")), "recipe": recipe}

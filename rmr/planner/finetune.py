@@ -108,12 +108,15 @@ def merge(base, adapter, out):
 
 
 def resolve(path):
-    """A merged model directory, or a Hub repo id holding one under ``merged/`` (as ``hfjob`` uploads it)."""
+    """A merged model directory, or a Hub repo id holding one under ``merged/`` (as ``hfjob`` uploads it);
+    ``repo:sub/dir`` points at ``sub/dir/merged`` inside the repo."""
     if os.path.isdir(path):
         return path
     from huggingface_hub import snapshot_download
 
-    return os.path.join(snapshot_download(path, allow_patterns=["merged/*"]), "merged")
+    repo, _, sub = path.partition(":")
+    sub = f"{sub.strip('/')}/merged" if sub else "merged"
+    return os.path.join(snapshot_download(repo, allow_patterns=[f"{sub}/*"]), sub)
 
 
 class Planner:
