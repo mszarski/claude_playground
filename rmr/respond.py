@@ -25,7 +25,9 @@ Respond like a kind, emotionally intelligent companion, not a mirror:
 - neutral or a question -> attentive listening: a curious tilt, a small nod
 Keep it to one short beat (3-6 seconds) that fits the moment.
 
-Reply with JSON only: {"reading": "<one sentence: how they seem>", "response": "<word>. <one sentence: what Reachy does, starting with 'You'>"}"""
+Reply with JSON only: {"reading": "<one sentence: how they seem>", "response": "<attitude>. <one sentence: what Reachy
+does, starting with 'You'>"}, where <attitude> is one or two words naming Reachy's stance, e.g. "comforting",
+"sharing the joy", "calm attention", "curious" (not an interjection like "Hmm" or "Wow")."""
 
 SCHEMA = {"type": "object", "additionalProperties": False, "required": ["reading", "response"],
           "properties": {"reading": {"type": "string"}, "response": {"type": "string"}}}

@@ -133,3 +133,9 @@ def test_hfjob_uploads_the_whole_package():
     assert {"rmr/__init__.py", "rmr/library.py", "rmr/planner/finetune.py", "rmr/generator/model.py",
             "rmr/assets/kinematics_data.json"} <= sent
     assert {f for f in files if f.endswith(".py")} <= sent
+
+
+def test_batch_accepts_a_single_answer_without_the_exact_prompt():
+    chat = lambda msgs, schema, name, model=None: {"idea": "x", "recipe": "go 1 p=10 | hold 1"}
+    got, errors = _batch(["comforting. You lean in."], None, chat=chat)
+    assert got["comforting. You lean in."]["recipe"] == "go 1 p=10 | hold 1" and not errors

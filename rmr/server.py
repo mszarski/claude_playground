@@ -137,12 +137,24 @@ def main():
                     help="fine-tuned planner (dir or Hub repo id) instead of the zero-shot LLM")
     ap.add_argument("--responder", default=os.environ.get("RESPONDER_MODEL"),
                     help="LLM that decides how to respond to speech (default: --model)")
+    ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
+                    help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
     a = ap.parse_args()
     import uvicorn
 
-    uvicorn.run(create_app(Engine(a.ckpt, a.model, a.planner, a.responder)), host=a.host, port=a.port)
+    engine = Engine(a.ckpt, a.model, a.planner, a.responder)
+    if a.preload_voice:
+        import threading
+
+        from .voice import Listener
+
+        def _load():
+            engine.listener = Listener()
+            print("voice models loaded", flush=True)
+        threading.Thread(target=_load, daemon=True).start()
+    uvicorn.run(create_app(engine), host=a.host, port=a.port)
 
 
 if __name__ == "__main__":

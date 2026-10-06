@@ -19,7 +19,11 @@ def _batch(prompts, model, max_fix=2, chat=None):
     for _ in range(max_fix + 1):
         msgs = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_message(todo, errors)}]
         out = chat(msgs, SCHEMA, "motion_recipes", model=model)
-        by_prompt = {m["prompt"].strip(): m for m in out.get("motions", []) if isinstance(m, dict) and "prompt" in m}
+        motions = out.get("motions") if isinstance(out.get("motions"), list) else ([out] if "recipe" in out else [])
+        motions = [m for m in motions if isinstance(m, dict)]
+        by_prompt = {m["prompt"].strip(): m for m in motions if isinstance(m.get("prompt"), str)}
+        if len(todo) == 1 and len(motions) == 1:          # one prompt, one answer: small models rarely copy it exactly
+            by_prompt = {todo[0].strip(): motions[0]}
         errors = {}
         for p in todo:
             m = by_prompt.get(p.strip())

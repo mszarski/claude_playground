@@ -54,7 +54,13 @@ def _key():
 
 def _post(payload, timeout=180):
     if os.environ.get("PLANNER_BASE_URL") == "local":
-        payload = {k: v for k, v in payload.items() if k != "response_format"}
+        payload = dict(payload)
+        rf = payload.pop("response_format", None)
+        if rf:      # transformers cannot enforce the schema: state it in the prompt instead
+            schema = json.dumps(rf["json_schema"]["schema"])
+            msgs = [dict(m) for m in payload["messages"]]
+            msgs[-1]["content"] += f"\n\nAnswer with one JSON object that matches this JSON schema exactly:\n{schema}"
+            payload["messages"] = msgs
         return _post_local(payload)
     req = urllib.request.Request(BASE_URL.rstrip("/") + "/chat/completions", data=json.dumps(payload).encode(),
                                  headers={"Authorization": f"Bearer {_key()}", "Content-Type": "application/json"})
