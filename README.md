@@ -34,7 +34,7 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Plans: extract from any clip, interpolate to frames | `rmr/plan.py` | ✅ done, tested |
 | Recipe language: parse, validate, expand, randomised variants | `rmr/recipe.py` | ✅ done, tested on all teacher recipes |
 | Reachability projection (Stewart-platform IK) | `rmr/reach.py` | ✅ done, tested |
-| Generator: 21.8M flow-matching transformer | `rmr/generator/` | ✅ trained on Hub emotions + dances (69 min on 4 CPU cores): 91.7% top-1 on the 12 held-out emotions (reference 89%). See [results](docs/results/generator.md) |
+| Generator: 21.8M flow-matching transformer | `rmr/generator/` | ✅ 91.7% top-1 on the 12 held-out emotions (reference 89%); v2 trained on recipe-like plans matches real motion's liveliness in deployment. See [results](docs/results/generator.md) |
 | Planner, zero-shot stand-in: open-weight LLM via HF Inference Providers, probe suite | `rmr/planner/` | ✅ Kimi-K3 passes 16/16 probes; real clips 20% top-1 (reference zero-shot 22%). See [results](docs/results/planner_zeroshot.md) |
 | Planner: LoRA fine-tune of Qwen3.5-4B on the teacher data (HF Jobs, $5.79) | `rmr/planner/` | ✅ probes 0.88 / 0.81, real clips 28% top-1 (reference 4B: 0.91 / 0.875, 32%). See [results](docs/results/planner_finetune.md) |
 | Offline pipeline (text → reachable moves) | `rmr/pipeline.py` | ✅ done |
@@ -61,7 +61,7 @@ generator is in the private Hub repo `mszarski/reachy-motion-generator`):
 
 ```bash
 python -m rmr.pipeline --prompt "sneezing. You build up and then sneeze." --out runs/one \
-    --ckpt hf://mszarski/reachy-motion-generator/generator.pt --render      # + videos/ and grid.mp4
+    --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt --render      # + videos/ and grid.mp4
 python -m rmr.renderer sheet runs/one/motions/*.json --out runs/one/sheet.png  # contact sheet
 ```
 

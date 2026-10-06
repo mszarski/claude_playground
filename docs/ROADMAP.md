@@ -12,7 +12,7 @@ the reference implementation's results, which are our targets.
 **Status.** Trained on the Hub libraries (85 emotions + 19 dances, 12 emotions held out) for 5,000 steps on CPU
 (0.82 s/step); the best held-out checkpoint is from step 2,750. It identifies **91.7%** of held-out emotions [89%],
 and head and antenna speeds match real motion. Sustained high-energy recipes (sobbing, shivering) come out too
-calm (see below). Details and the demo-recipe check: [results/generator.md](results/generator.md).
+calm on recipe plans (fixed in v2, below). Details and the demo-recipe check: [results/generator.md](results/generator.md).
 
 ```bash
 python -m rmr.generator train --hub --steps 5000 --ckpt checkpoints/generator.pt
@@ -23,9 +23,9 @@ python -m rmr.generator sample --ckpt checkpoints/generator.pt --recipes example
 `--hub` downloads the libraries through `huggingface_hub` (`pip install -e ".[hf]"`). Checkpoints are gitignored:
 publish them as a release or to the Hub rather than committing them.
 
-The energy undershoot is diagnosed in [results/generator.md](results/generator.md): the generator reads liveliness
-from posture traces and follows energy changes, not held levels. `--simplify` training (real clips only) makes it use
-the energy channel (real-plan energy 0.77× → 0.99×); sampler tricks and synthetic trembling were rejected.
+**v2.** Trained on recipe-like plans of the real clips (`--simplify 1.0`), which is what it sees in deployment: on
+deployment-like plans its detail matches real clips (0.96× vs 0.63×) and speeds move toward real, identification
+unchanged (5-seed GPU sweep, $1.68). See [results/generator.md](results/generator.md).
 
 Needs Pollen's [emotions](https://huggingface.co/datasets/pollen-robotics/reachy-mini-emotions-library) and
 [dances](https://huggingface.co/datasets/pollen-robotics/reachy-mini-dances-library) libraries from Hugging Face
