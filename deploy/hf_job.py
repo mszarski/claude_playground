@@ -56,7 +56,7 @@ def main():
     data_repo = f"{api.whoami()['name']}/reachy-planner-sft"
     price = {h.name: h.unit_cost_usd for h in list_jobs_hardware()}[a.flavor] * 60
     api.upload_folder(folder_path=ROOT, repo_id=data_repo, repo_type="dataset", path_in_repo="code",
-                      allow_patterns=CODE_PATTERNS + ["scripts/*.py"], commit_message=f"job code: {a.name}")
+                      allow_patterns=CODE_PATTERNS + ["scripts/*.py", "scripts/*.sh"], commit_message=f"job code: {a.name}")
     script = SCRIPT.format(data_repo=data_repo, packages=" ".join(shlex.quote(p) for p in shlex.split(a.packages)),
                            command=" ".join(shlex.quote(c) for c in cmd))
     job = run_job(image=IMAGE, command=["bash", "-c", script], flavor=a.flavor, timeout=int(a.max_usd / price * 3600),

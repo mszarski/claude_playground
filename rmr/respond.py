@@ -51,10 +51,19 @@ def user_message(heard, tone=True):
     return "\n".join(parts)
 
 
-def respond(heard, model=None, chat=None, tone=True, temperature=0.4):
-    """``heard`` (from ``rmr.voice.Listener.hear``) -> ``{"feeling", "reading", "response"}``."""
+def respond(heard, model=None, chat=None, tone=True, temperature=0.4, hint=None):
+    """``heard`` (from ``rmr.voice.Listener.hear``) -> ``{"feeling", "reading", "response"}``.
+
+    ``hint`` (training data only): a human annotator's label. The teacher is asked to find the cues that support
+    it and respond accordingly; the student trained on the answer never sees the hint."""
     chat = chat or llm.chat_json
-    out = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_message(heard, tone)}],
+    msg = user_message(heard, tone)
+    if hint:
+        msg += (f"\n\n(For training: a human annotator who saw the whole scene says this person is {hint}. Find the "
+                f"cues in their words, the conversation and their voice that show it, write your reading from those "
+                f"cues as if you noticed them yourself, set feeling to {hint}, and respond accordingly. Do not mention "
+                f"the annotator.)")
+    out = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": msg}],
                SCHEMA, "reachy_response", model=model, temperature=temperature)
     resp = (out.get("response") or "").strip()
     if not resp:
