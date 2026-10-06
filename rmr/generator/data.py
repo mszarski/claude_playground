@@ -31,6 +31,15 @@ def simplified_plan(B, P, rng):
     return S
 
 
+def simplified_plan_dict(A, rng):
+    """Plan dict counterpart of ``simplified_plan`` for evaluation: posture from a smoother, sparser extraction,
+    energy from the standard one (deployment-like: recipe plans are smooth too)."""
+    P, S = PL.extract(A), PL.extract(A, fc=rng.uniform(0.3, 0.6), kdt=float(rng.choice([0.5, 0.75, 1.0])))
+    for k in S["keys"]:
+        k["energy"] = P["keys"][min(len(P["keys"]) - 1, int(round(k["t"] / PL.KDT)))]["energy"]
+    return S
+
+
 def samples_from_moves(moves, simplified=False, seed=0):
     """``[(motion, plan)]``, or ``[(motion, plan, simplified plan)]`` with ``simplified``."""
     rng, out = np.random.default_rng(seed), []

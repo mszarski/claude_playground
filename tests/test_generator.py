@@ -84,3 +84,20 @@ def test_simplified_plans_keep_energy_and_train():
     net = MotionGenerator(**TINY)
     assert torch.isfinite(loss_fn(net, b["X"], b["Q2"], b["M"]))
 
+
+
+def test_energy_ada_starts_as_the_reference_and_responds_to_energy():
+    torch.manual_seed(0)
+    ref, ea = MotionGenerator(**TINY), MotionGenerator(**TINY, energy_ada=True)
+    for blk in ref.blocks:
+        torch.nn.init.normal_(blk.ada[1].weight, std=0.02)
+    torch.nn.init.normal_(ref.out.weight, std=0.02)
+    ea.load_state_dict({**ea.state_dict(), **ref.state_dict()})
+    x, t, Q = torch.randn(2, 40, 9), torch.rand(2), torch.randn(2, 40, 8)
+    has, pad = torch.ones(2, 1, 1), torch.zeros(2, 40, dtype=torch.bool)
+    assert torch.allclose(ref(x, t, Q, has, pad), ea(x, t, Q, has, pad), atol=1e-6)    # zero-init: same model
+    torch.nn.init.normal_(ea.eemb[2].weight, std=0.1)
+    Q2 = Q.clone()
+    Q2[..., 7] += 2.0                                                                 # only energy changes
+    assert not torch.allclose(ea(x, t, Q, has, pad), ea(x, t, Q2, has, pad))
+    assert MotionGenerator(**ea.config).energy_ada                                    # survives a checkpoint
