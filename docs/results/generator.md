@@ -63,40 +63,35 @@ with the plan it was generated from (correlation / RMS error over the clip):
 - Conducting's sweeping yaw (±20° at 1.4 s) runs into the head's reach, which is why up to 40% of its frames are
   projected.
 
-## Fixing the held-energy undershoot (2026-10-06)
+## The held-energy undershoot (2026-10-06)
 
-`energy_hold` (now part of `python -m rmr.generator evaluate`) asks for a held pose at constant energy, as recipes
-write it, and reports generated / requested energy. The reference-trained generator scores 0.15-0.21.
+`energy_hold` (in `python -m rmr.generator evaluate`) asks for a held pose at constant energy, as recipes write it
+(`hold 3 E=7`), and reports generated / requested energy. The reference-trained generator scores 0.15-0.21. This is
+a diagnostic, not a target to reach 1: Pollen's clips almost never tremble on a still pose (only 6% of high-energy
+frames have a still posture), so a realistic generator should not simply add trembling when a recipe asks for it.
 
-What the undershoot is:
+Diagnosis:
 
-- On real plans the generator's energy is calibrated (held-out median ratio 1.07), so the problem is specific to
-  recipe plans.
+- On real plans the generator's energy is calibrated (held-out median ratio 1.07); the gap is specific to recipe plans.
 - Shortcut: freezing a real plan's posture curves (energy kept) drops its generated energy to 0.24×, while zeroing
   its energy (posture kept) only drops it to 0.45×. The generator reads liveliness mostly from traces of the fast
   motion left in the 1 Hz posture curves, which recipe plans do not have.
-- Level vs change: even with posture frozen, setting a plan's energy to its own peak for the whole clip drops the
-  response from 0.53× to 0.19×. In training, energy is always relative to calmer parts of a clip (bursts at sharp
-  transitions; only 6% of high-energy frames have a still posture), so energy held over most of a clip reads as
-  baseline.
+- Level vs change: with posture frozen, setting a plan's energy to its own peak for the whole clip drops the response
+  from 0.53× to 0.19×. In training, energy is always relative to calmer parts of a clip, so energy held over most of
+  a clip reads as baseline.
 
 What was tried (energy_hold at E = 2 / 4 / 6 / 8, held-out top-1, antenna speed p95; real clips 230 °/s):
 
-| generator | energy_hold | top-1 | antenna p95 | notes |
-|---|---|---|---|---|
-| reference training | 0.21 / 0.15 / 0.16 / 0.17 | 91.7% | 228 | |
-| guidance 3.0 (sampler) | | 94.4% | 449 | all speeds double |
-| energy guidance (sampler, vs the plan with low energy) | ≈ 1 at E ≥ 8 | | | overshoots real plans by 35-58% |
-| `--simplify 0.5` (smoother, sparser plan posture in training) | 0.25 / 0.17 / 0.28 / 0.31 | 91.7% | 263 | real plans 0.77× → 0.99×; shortcut halved |
-| `--simplify 0.5 --tremor 0.5` (+ synthetic trembling copies) | 0.17 / 0.16 / 0.25 / 0.36 | 86.1% | 237 | |
-| **reference training + gated energy completion** | **0.90 / 0.91 / 0.91 / 0.92** | **91.7%** | **239** | pitch p95 34 (real 31) |
+| generator | energy_hold | top-1 | antenna p95 | real plans: energy followed | status |
+|---|---|---|---|---|---|
+| reference training | 0.21 / 0.15 / 0.16 / 0.17 | 91.7% | 228 | 0.77× | in use |
+| guidance 3.0 (sampler) | | 94.4% | 449 | | rejected: all speeds double |
+| energy guidance (sampler, vs the plan with low energy) | ≈ 1 at E ≥ 8 | | | 1.35-1.58× | rejected: overshoots real plans |
+| **`--simplify 0.5`**: real clips, conditioned half the time on a smoother, sparser version of their own plan | 0.25 / 0.17 / 0.28 / 0.31 | 91.7% | 263 | **0.99×** | candidate (`generator_simplify.pt`) |
+| `--simplify 0.5` + synthetic trembling copies of clips | 0.17 / 0.16 / 0.25 / 0.36 | 86.1% | 237 | 0.88× | removed: synthetic motion in training |
+| reference + post-hoc noise where energy falls short | 0.90 / 0.91 / 0.91 / 0.92 | 91.7% | 239 | | removed: adds synthetic jitter after the model |
 
-Energy completion (`generate_batch(..., fill_energy=True)`, on by default in `rmr.pipeline` and `rmr.server`):
-after sampling, wherever the generated detail is below half the requested energy, add 1.5-4 Hz noise on the head
-rotations and antennas with RMS √(requested² − generated²), measured the way `plan.extract` measures energy.
-Frames where the generator already delivers are untouched, which keeps real plans and held-out identification
-unchanged. Demo recipes, energy asked → got: sobbing 4.8 → 0.9 before, 4.2 after; shivering 6.1 → 1.2 / 5.3;
-conducting 4.3 → 1.9 / 3.5; sneezing 3.3 → 2.8 / 2.9.
-
-The training options stay available (opt-in, default off) but are not used: with completion on top they add
-nothing and raise antenna speeds.
+`--simplify` is the only change that improves the model itself without synthetic motion: it makes the energy channel,
+not the posture curves, carry the detail (real-plan energy 0.77× → 0.99×, shortcut halved) with identification
+unchanged and antennas about 15% livelier than real. Whether it replaces the reference-trained generator is a visual
+judgement (`runs/original_vs_retrained.mp4` compares them on the sobbing and shivering recipes).

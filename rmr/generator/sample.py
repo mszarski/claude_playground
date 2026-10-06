@@ -26,44 +26,13 @@ def load(ckpt, dev=None):
     return net, ck["stats"], dev
 
 
-def complete_energy(A, plan, seed=0, gate=0.5):
-    """Add band-limited trembling where ``A``'s fast detail falls short of the plan's energy (opt-in).
-
-    The generator follows changes in energy but not a level held over most of a clip, which recipes write for
-    sobbing or shivering (``hold 3 E=7``): its training clips only ever have energy relative to calmer parts.
-    Where the generated detail is below ``gate`` x the requested energy (the held-energy dead zone; on real plans
-    the generator is within that), this adds 1.5-4 Hz noise on the head rotations and antennas with RMS
-    sqrt(requested^2 - generated^2), measured the way ``plan.extract`` measures energy, so the result carries the
-    requested energy; other frames are left alone.
-    """
-    from .data import TREMOR_BAND, TREMOR_SCALE
-
-    T = len(A)
-    want = PL.frames(plan, T)[:, 7]
-    have = PL.frames(PL.extract(A), T)[:, 7]
-    add = np.sqrt(np.clip(want ** 2 - have ** 2, 0, None))          # deg RMS still missing
-    add[have >= gate * want] = 0
-    if T < 30 or add.max() < 0.3:
-        return A
-    # extract's energy is the RMS over earR earL pitch roll yaw; the noise has TREMOR_SCALE per channel
-    scale = TREMOR_SCALE / np.sqrt(np.mean(TREMOR_SCALE ** 2))
-    env = PL.lowpass(add, 1.0)
-    b, a = butter(2, [f / (FPS / 2) for f in TREMOR_BAND], "band")
-    noise = filtfilt(b, a, np.random.default_rng(seed).standard_normal((T, 5)), axis=0)
-    noise /= noise.std(0) + 1e-9
-    B = A.copy()
-    B[:, 3:8] += noise * np.radians(np.clip(env, 0, None))[:, None] * scale
-    return B
-
-
 @torch.no_grad()
-def generate_batch(net, stats, plans, dev, seeds=None, steps=8, cfg=1.5, lowpass_hz=4.0, fill_energy=False):
+def generate_batch(net, stats, plans, dev, seeds=None, steps=8, cfg=1.5, lowpass_hz=4.0):
     """Plans -> list of ``(T_i, 9)`` trajectories.
 
     Euler integration of the flow from noise (t=1) to data (t=0) with classifier-free guidance ``cfg`` on
     the plan, then a low-pass at ``lowpass_hz`` (the robot's useful bandwidth). All plans (padded, masked)
     and both guidance branches share one forward pass per step. Duration comes from the plan.
-    ``fill_energy``: finish with ``complete_energy`` (off by default, as in the reference).
     """
     MU, SD, PMU, PSD = (np.array(stats[k]) for k in ("MU", "SD", "PMU", "PSD"))
     Ps = [PL.frames(p)[:net.maxlen] for p in plans]
@@ -94,8 +63,6 @@ def generate_batch(net, stats, plans, dev, seeds=None, steps=8, cfg=1.5, lowpass
         A = x[i, :Ts[i]].cpu().numpy() * SD + MU
         if Ts[i] > 20 and lowpass_hz:
             A = filtfilt(b, a, A, axis=0, padlen=min(Ts[i] - 1, 15))
-        if fill_energy:
-            A = complete_energy(A, plans[i], seed=int(seeds[i]) if seeds is not None else i)
         out.append(A)
     return out
 

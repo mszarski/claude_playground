@@ -5,8 +5,8 @@
 - speed: 95th-percentile and peak head-pitch / antenna speeds, generated vs real
   (too slow = sluggish, too fast = jittery)
 - energy_hold: generated / requested fast-detail energy on a held pose with constant energy, as recipes write it
-  (``hold 5 E=6``); 1 = the energy channel is followed. Real plans hide the problem: their posture curves carry
-  traces of the detail, which the reference's training lets the generator read instead of the energy channel.
+  (``hold 5 E=6``). A diagnostic of how much the energy channel itself drives the detail, not a target of 1: real
+  clips rarely tremble on a still pose (see docs/results/generator.md).
 
 Reference: ``generator/evaluate.py`` in pham-tuan-binh/reachy-motion-generator (Apache-2.0).
 """
