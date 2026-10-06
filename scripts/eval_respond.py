@@ -57,8 +57,14 @@ def main():
     ap.add_argument("--out", default="runs/respond_eval")
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--context", action="store_true", help="give the responder the two previous lines of the dialogue")
+    ap.add_argument("--score", nargs="*", default=[], help="only score existing answer files (e.g. a student's)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    if a.score:
+        for path in a.score:
+            res = [json.loads(l) for l in open(path)]
+            print_row(os.path.basename(path).replace(".jsonl", ""), summarize(res))
+        return
 
     heard_path = os.path.join(a.out, "heard.jsonl")
     if not os.path.exists(heard_path):
@@ -111,18 +117,28 @@ def main():
             res = list(ex.map(run, rows))
         with open(path, "w") as f:
             f.writelines(json.dumps(x) + "\n" for x in res)
-        labels = [x["label"] for x in res]
-        rep = {}
-        for cond in ("words", "both"):
-            rep[cond] = ua(labels, [x[cond].get("feeling", "error") for x in res])
-        ok = {c: [physical_ok(x["label"], x["recipe"]) for x in res if x["label"] == c and x["recipe"]] for c in CLASSES}
-        rep["response_ok"] = {c: float(np.mean(v)) if v else None for c, v in ok.items()}
-        rep["response_ok_mean"] = float(np.mean([v for v in rep["response_ok"].values() if v is not None]))
-        rep["recipes_valid"] = float(np.mean([x["recipe"] is not None for x in res]))
-        report[tag] = rep
-        print(f"{tag:28s} words only UA {rep['words']['ua']:.2f} | words+tone UA {rep['both']['ua']:.2f} | "
-              f"response appropriate {rep['response_ok_mean']:.2f} {rep['response_ok']} | valid recipes {rep['recipes_valid']:.2f}", flush=True)
+        report[tag] = summarize(res)
+        print_row(tag, report[tag])
     json.dump(report, open(os.path.join(a.out, "report.json"), "w"), indent=1)
+
+
+def summarize(res, conds=("words", "both")):
+    """Reading accuracy per condition, physical appropriateness of the responses, share of valid recipes."""
+    labels = [x["label"] for x in res]
+    rep = {c: ua(labels, [x[c].get("feeling", "error") for x in res]) for c in conds if all(c in x for x in res)}
+    ok = {c: [physical_ok(x["label"], x["recipe"]) for x in res if x["label"] == c and x["recipe"]] for c in CLASSES}
+    rep["response_ok"] = {c: float(np.mean(v)) if v else None for c, v in ok.items()}
+    rep["response_ok_mean"] = float(np.mean([v for v in rep["response_ok"].values() if v is not None]))
+    # appropriate AND produced: a missing recipe counts as a failure to respond
+    rep["response_ok_all"] = float(np.mean([bool(x["recipe"]) and physical_ok(x["label"], x["recipe"]) for x in res]))
+    rep["recipes_valid"] = float(np.mean([x["recipe"] is not None for x in res]))
+    return rep
+
+
+def print_row(tag, rep):
+    cond = " | ".join(f"{c} UA {rep[c]['ua']:.2f}" for c in ("words", "both") if c in rep)
+    print(f"{tag:34s} {cond} | response appropriate {rep['response_ok_mean']:.2f} (counting missing as failures "
+          f"{rep['response_ok_all']:.2f}) | valid recipes {rep['recipes_valid']:.2f}", flush=True)
 
 
 def ua(labels, preds):
