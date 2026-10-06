@@ -94,3 +94,15 @@ def test_tremor_raises_plan_energy_but_not_posture():
     assert np.abs(P1[:, 2:5] - P0[:, 2:5]).max() < 1.0              # posture (deg) barely moves
     S = samples_from_moves(_moves(), simplified=True, tremor=1.0)
     assert len(S) == 2 * len(samples_from_moves(_moves()))
+
+
+def test_complete_energy_fills_held_energy_and_leaves_lively_motion_alone():
+    from rmr.generator.sample import complete_energy
+    plan = {"duration": 6.0, "keys": [{"t": t / 2, "energy": 5.0} for t in range(13)]}
+    still = np.zeros((150, 9))
+    filled = complete_energy(still, plan)
+    got = PL.frames(PL.extract(filled), 150)[25:-25, 7].mean()
+    assert 4.0 < got < 5.5
+    assert np.abs(filled[:, :3]).max() == 0 and np.abs(filled[:, 8]).max() == 0     # only rotations + antennas
+    lively = complete_energy(filled, plan)                                           # already has the energy
+    assert np.abs(lively - filled).max() < 1e-12

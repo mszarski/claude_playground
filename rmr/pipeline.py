@@ -39,6 +39,8 @@ def main():
     ap.add_argument("--cfg", type=float, default=1.5)
     ap.add_argument("--ckpt", default="checkpoints/generator.pt", help="path or hf://<repo id>/<file>")
     ap.add_argument("--render", action="store_true", help="also render videos/ and grid.mp4 in MuJoCo")
+    ap.add_argument("--no-fill-energy", action="store_true",
+                    help="skip energy completion (rmr.generator.sample.complete_energy), as in the reference")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     n = 4 if a.render else 3
@@ -84,7 +86,8 @@ def main():
     mdir = os.path.join(a.out, "motions")
     os.makedirs(mdir, exist_ok=True)
     for s in range(a.seeds):
-        trajs = generate_batch(net, stats, plans, dev, seeds=[s * 7919 + k for k in range(len(plans))], cfg=a.cfg)
+        trajs = generate_batch(net, stats, plans, dev, seeds=[s * 7919 + k for k in range(len(plans))], cfg=a.cfg,
+                               fill_energy=not a.no_fill_energy)
         for p, A in zip(plans, trajs):
             move, frac = R.project(traj_to_move(A, p["prompt"]))
             name = p["name"] + (f"_s{s}" if a.seeds > 1 else "")

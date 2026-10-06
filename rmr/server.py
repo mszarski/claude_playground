@@ -6,7 +6,7 @@
 ``POST /api/generate`` takes ``{"prompt", "n", "seed"}`` and returns ``{"prompt", "idea", "recipe", "moves",
 "timing_ms"}``: the zero-shot planner (``rmr.planner.write``, Hugging Face Inference Providers) writes a recipe,
 it expands into ``n`` randomised plans as served (``fc=2``, ``kdt=0.25``), the generator turns them into 25 Hz
-motion on CPU, and each motion is projected onto the reachable set. ``GET /api/health`` tells the viewer to show
+motion on CPU (with ``fill_energy``, so held energy is honoured), and each motion is projected onto the reachable set. ``GET /api/health`` tells the viewer to show
 its prompt box. Everything else is the viewer in ``visualizer/``.
 
 Reference: ``inference/server.py`` in pham-tuan-binh/reachy-motion-generator (Apache-2.0), which serves the
@@ -45,7 +45,8 @@ class Engine:
         idea, recipe = self.plan(prompt)
         t1 = time.time()
         plans = variants(recipe, n, seed=seed, fc=2.0, kdt=0.25)
-        trajs = generate_batch(self.net, self.stats, plans, self.dev, seeds=[seed * 7919 + k for k in range(n)])
+        trajs = generate_batch(self.net, self.stats, plans, self.dev, seeds=[seed * 7919 + k for k in range(n)],
+                               fill_energy=True)
         moves = [self.reach.project(traj_to_move(A, prompt))[0] for A in trajs]
         t2 = time.time()
         return {"prompt": prompt, "idea": idea, "recipe": recipe, "moves": moves,
