@@ -1,0 +1,54 @@
+"""What should Reachy do when it hears someone? An open LLM turns (transcript + how they sound) into a motion prompt.
+
+  from rmr.respond import respond
+  respond({"text": "I didn't get the job", "emotion": "sad", "confidence": 0.6, "arousal": 0.3, "valence": 0.2})
+  -> {"reading": "...", "response": "consoling. You lean in slowly and stay close, ears softly lowered."}
+
+The response is a prompt in the planner's format ("word. one sentence."), so it goes straight into the motion
+pipeline. Any OpenAI-compatible endpoint works (``PLANNER_BASE_URL``: Ollama, llama.cpp, vLLM, Hugging Face), or
+``PLANNER_BASE_URL=local`` runs a model in-process with transformers (see ``rmr.planner.llm``).
+"""
+from .planner import llm
+
+SYSTEM = """You decide how Reachy Mini, a small expressive desktop robot (a head that tilts, nods and turns, two
+antennas like ears, a rotating body, no arms, no face), responds with body language to what a person just said.
+
+You get the person's words and an automatic reading of how their voice sounds: an emotion with a confidence, and
+arousal (calm 0 .. activated 1) and valence (negative 0 .. positive 1). The voice reading is often wrong; when it
+disagrees with the words, trust the words. When both are unclear, respond with warm, attentive interest.
+
+Respond like a kind, emotionally intelligent companion, not a mirror:
+- sad, hurt or tired -> gentle, slow, close: lean in, soft lowered ears, small comforting nods
+- angry or frustrated -> calm and steady attention, never anger back, no sudden moves
+- anxious or afraid -> reassuring, slow and grounded
+- happy, excited or proud -> share the joy: perk up, bounce, ears up
+- neutral or a question -> attentive listening: a curious tilt, a small nod
+Keep it to one short beat (3-6 seconds) that fits the moment.
+
+Reply with JSON only: {"reading": "<one sentence: how they seem>", "response": "<word>. <one sentence: what Reachy does, starting with 'You'>"}"""
+
+SCHEMA = {"type": "object", "additionalProperties": False, "required": ["reading", "response"],
+          "properties": {"reading": {"type": "string"}, "response": {"type": "string"}}}
+
+
+def user_message(heard):
+    parts = [f'They said: "{heard.get("text") or "(no words)"}"']
+    if heard.get("emotion"):
+        parts.append(f'Their voice sounds {heard["emotion"]} (confidence {heard.get("confidence", 0):.0%}).')
+    if "arousal" in heard and "valence" in heard:
+        parts.append(f'Arousal {heard["arousal"]:.2f}, valence {heard["valence"]:.2f}.')
+    return "\n".join(parts)
+
+
+def respond(heard, model=None, chat=None):
+    """``heard`` (from ``rmr.voice.Listener.hear``) -> ``{"reading", "response"}``."""
+    chat = chat or llm.chat_json
+    out = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_message(heard)}],
+               SCHEMA, "reachy_response", model=model, temperature=0.4)
+    resp = (out.get("response") or "").strip()
+    if not resp:
+        raise ValueError("the responder returned no response")
+    head = resp.split(".", 1)[0]
+    if "." not in resp or len(head.split()) > 3:      # the planner expects "word. sentence."
+        resp = "responding. " + resp
+    return {"reading": (out.get("reading") or "").strip(), "response": resp}

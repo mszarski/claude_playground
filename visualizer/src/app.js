@@ -16,8 +16,13 @@ function show(entry) {
     $('prompt').textContent = entry.prompt || '';
     $('recipe').textContent = entry.recipe || '—';
     $('idea').textContent = entry.idea || ''; $('idea-row').hidden = !entry.idea;
+    const h = entry.heard;
+    $('heard').textContent = h ? `“${h.text || '…'}” · sounds ${h.emotion} (${Math.round(100 * h.confidence)}%)` +
+        (h.arousal !== undefined ? ` · arousal ${h.arousal.toFixed(2)} · valence ${h.valence.toFixed(2)}` : '') : '';
+    $('heard-row').hidden = !h;
+    $('reading').textContent = entry.reading || ''; $('reading-row').hidden = !entry.reading;
     const t = entry.timing_ms;
-    $('meta').textContent = t ? `generated live · planner ${t.planner} ms · generator ${t.generator} ms` : (entry.source || '');
+    $('meta').textContent = t ? `generated live · ${t.listen !== undefined ? `listening ${t.listen} ms · ` : ''}planner ${t.planner} ms · generator ${t.generator} ms` : (entry.source || '');
     const tabs = $('samples'); tabs.innerHTML = '';
     if (entry.moves.length > 1) entry.moves.forEach((_, i) => {
         const b = document.createElement('button'); b.textContent = `variant ${i + 1}`; b.className = i === 0 ? 'on' : '';
@@ -64,10 +69,59 @@ async function loadGallery() {
     if (start) show(start);
 }
 
+// Voice: record while the button is held, encode 16 kHz mono WAV here, POST it to /api/respond.
+function encodeWav(chunks, rate) {
+    const n = chunks.reduce((s, c) => s + c.length, 0), x = new Float32Array(n);
+    let o = 0; for (const c of chunks) { x.set(c, o); o += c.length; }
+    const step = rate / 16000, m = Math.floor(n / step), pcm = new Int16Array(m);
+    for (let i = 0; i < m; i++) { const v = Math.max(-1, Math.min(1, x[Math.floor(i * step)])); pcm[i] = v * 32767; }
+    const buf = new ArrayBuffer(44 + pcm.length * 2), d = new DataView(buf);
+    const w = (p, s) => [...s].forEach((ch, i) => d.setUint8(p + i, ch.charCodeAt(0)));
+    w(0, 'RIFF'); d.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); d.setUint32(16, 16, true);
+    d.setUint16(20, 1, true); d.setUint16(22, 1, true); d.setUint32(24, 16000, true); d.setUint32(28, 32000, true);
+    d.setUint16(32, 2, true); d.setUint16(34, 16, true); w(36, 'data'); d.setUint32(40, pcm.length * 2, true);
+    new Int16Array(buf, 44).set(pcm);
+    return new Blob([buf], { type: 'audio/wav' });
+}
+
+function enableTalk() {
+    let rec = null;
+    const start = async (e) => {
+        e.preventDefault(); if (rec) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
+            const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
+            const chunks = []; node.onaudioprocess = (ev) => chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+            src.connect(node); node.connect(ctx.destination);
+            rec = { stream, ctx, chunks, t0: performance.now() };
+            $('talk').classList.add('on'); status('Listening… release to send.');
+        } catch (err) { status(`Microphone unavailable: ${err.message}`, 'err'); }
+    };
+    const stop = async (e) => {
+        e.preventDefault(); if (!rec) return;
+        const { stream, ctx, chunks, t0 } = rec; rec = null; $('talk').classList.remove('on');
+        stream.getTracks().forEach((t) => t.stop()); const rate = ctx.sampleRate; await ctx.close();
+        if (performance.now() - t0 < 500) return status('Hold the button while you speak.', 'err');
+        status('Listening to what you said and how you sound…');
+        try {
+            const r = await fetch(`api/respond?n=${+$('n').value}&seed=${Math.floor(Math.random() * 1e6)}`,
+                { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: encodeWav(chunks, rate) });
+            const body = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(body.detail || `server error ${r.status}`);
+            show(body); status('');
+        } catch (err) { status(`Response failed: ${err.message}`, 'err'); }
+    };
+    const b = $('talk');
+    b.addEventListener('pointerdown', start); b.addEventListener('pointerup', stop); b.addEventListener('pointerleave', stop);
+    b.addEventListener('keydown', (e) => { if (e.key === ' ' && !e.repeat) start(e); });
+    b.addEventListener('keyup', (e) => { if (e.key === ' ') stop(e); });
+}
+
 // Live mode: when a server answers /api/health (python -m rmr.server), show the prompt box.
 async function enableLive() {
     try { if (!(await fetch('api/health')).ok) return; } catch { return; }
     $('live').hidden = false;
+    enableTalk();
     $('live').onsubmit = async (e) => {
         e.preventDefault();
         const prompt = $('ask').value.trim();

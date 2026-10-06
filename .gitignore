@@ -6,3 +6,7 @@ __pycache__/
 runs/
 checkpoints/
 *.pt
+
+# model caches written into the working directory (SpeechBrain)
+wav2vec2_checkpoints/
+pretrained_models/

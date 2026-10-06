@@ -1,8 +1,10 @@
 """OpenAI-compatible Chat Completions client for the zero-shot planner (stdlib only).
 
 Defaults to Hugging Face Inference Providers (``https://router.huggingface.co/v1``, authenticated with
-``HF_TOKEN``). Any OpenAI-compatible endpoint works: set ``PLANNER_BASE_URL`` and ``PLANNER_API_KEY``.
-``PLANNER_MODEL`` overrides the default model.
+``HF_TOKEN``). Any OpenAI-compatible endpoint works: set ``PLANNER_BASE_URL`` and ``PLANNER_API_KEY``, e.g. a local
+Ollama (``http://localhost:11434/v1``, model ``qwen3.5:4b``) or llama.cpp server. ``PLANNER_BASE_URL=local`` runs the
+model in-process with transformers instead (fully offline, no server; slow on CPU). ``PLANNER_MODEL`` overrides
+the default model.
 
 Reference: ``planner/gateway.py`` in pham-tuan-binh/reachy-motion-generator (Apache-2.0), which calls the
 Vercel AI Gateway with the ``openai`` package instead.
@@ -18,6 +20,31 @@ BASE_URL = os.environ.get("PLANNER_BASE_URL", "https://router.huggingface.co/v1"
 DEFAULT_MODEL = os.environ.get("PLANNER_MODEL", "moonshotai/Kimi-K3")
 
 
+_LOCAL = {}
+
+
+def _post_local(payload):
+    """In-process chat completion with transformers, returning an OpenAI-shaped reply (no schema enforcement:
+    the prompt asks for JSON and ``parse_json`` extracts it)."""
+    import torch
+    from transformers import AutoTokenizer
+
+    from .finetune import lm_class
+
+    name = payload["model"]
+    if name not in _LOCAL:
+        tok = AutoTokenizer.from_pretrained(name)
+        _LOCAL[name] = (tok, lm_class(name).from_pretrained(name, dtype=torch.bfloat16).eval())
+    tok, m = _LOCAL[name]
+    text = tok.apply_chat_template(payload["messages"], tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    enc = tok(text, return_tensors="pt")
+    t = payload.get("temperature", 0.7)
+    kw = dict(do_sample=True, temperature=t, top_p=0.95) if t else dict(do_sample=False)
+    with torch.no_grad():
+        g = m.generate(**enc, max_new_tokens=payload.get("max_tokens", 600), pad_token_id=tok.eos_token_id, **kw)
+    return {"choices": [{"message": {"content": tok.decode(g[0, enc["input_ids"].shape[1]:], skip_special_tokens=True)}}]}
+
+
 def _key():
     key = os.environ.get("PLANNER_API_KEY") or os.environ.get("HF_TOKEN")
     if not key:
@@ -26,6 +53,9 @@ def _key():
 
 
 def _post(payload, timeout=180):
+    if os.environ.get("PLANNER_BASE_URL") == "local":
+        payload = {k: v for k, v in payload.items() if k != "response_format"}
+        return _post_local(payload)
     req = urllib.request.Request(BASE_URL.rstrip("/") + "/chat/completions", data=json.dumps(payload).encode(),
                                  headers={"Authorization": f"Bearer {_key()}", "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:

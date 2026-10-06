@@ -16,6 +16,7 @@
       <label for="ask">Prompt</label>
       <textarea id="ask" rows="2" maxlength="300" placeholder="a cat stalking prey. You crouch low, freeze, and creep forward slowly."></textarea>
       <div class="row">
+        <button id="talk" type="button" title="Hold to talk; Reachy responds to what you say and how you sound">🎙 Hold to talk</button>
         <select id="n" aria-label="number of variants"><option value="1">1 variant</option><option value="2" selected>2 variants</option><option value="4">4 variants</option></select>
         <button id="go" class="primary" type="submit">Generate</button>
       </div>
@@ -25,6 +26,8 @@
     <div id="result" hidden>
       <div class="kv"><span>prompt</span><p id="prompt"></p></div>
       <div id="samples"></div>
+      <div class="kv" id="heard-row" hidden><span>heard</span><p id="heard"></p></div>
+      <div class="kv" id="reading-row" hidden><span>reading</span><p id="reading"></p></div>
       <div class="kv" id="idea-row" hidden><span>idea</span><p id="idea"></p></div>
       <div class="kv"><span>recipe</span><code id="recipe"></code></div>
       <div id="meta"></div>
