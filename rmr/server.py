@@ -67,6 +67,7 @@ class Engine:
         out = self.generate(r["response"], n=n, seed=seed)
         out["heard"] = {k: v for k, v in heard.items() if k != "probs"}
         out["reading"] = r["reading"]
+        out["feeling"] = r.get("feeling")
         out["timing_ms"]["listen"] = int(1000 * (t1 - t0))
         out["timing_ms"]["total"] = int(1000 * (time.time() - t0))
         return out

@@ -25,16 +25,23 @@ Respond like a kind, emotionally intelligent companion, not a mirror:
 - neutral or a question -> attentive listening: a curious tilt, a small nod
 Keep it to one short beat (3-6 seconds) that fits the moment.
 
-Reply with JSON only: {"reading": "<one sentence: how they seem>", "response": "<attitude>. <one sentence: what Reachy
-does, starting with 'You'>"}, where <attitude> is one or two words naming Reachy's stance, e.g. "comforting",
-"sharing the joy", "calm attention", "curious" (not an interjection like "Hmm" or "Wow")."""
+Reply with JSON only: {"feeling": "<one of: neutral, happy, sad, angry, anxious, surprised>", "reading": "<one
+sentence: how they seem>", "response": "<attitude>. <one sentence: what Reachy does, starting with 'You'>"}, where
+<attitude> is one or two words naming Reachy's stance, e.g. "comforting", "sharing the joy", "calm attention",
+"curious" (not an interjection like "Hmm" or "Wow")."""
 
-SCHEMA = {"type": "object", "additionalProperties": False, "required": ["reading", "response"],
-          "properties": {"reading": {"type": "string"}, "response": {"type": "string"}}}
+FEELINGS = ["neutral", "happy", "sad", "angry", "anxious", "surprised"]
+
+SCHEMA = {"type": "object", "additionalProperties": False, "required": ["feeling", "reading", "response"],
+          "properties": {"feeling": {"type": "string", "enum": FEELINGS}, "reading": {"type": "string"},
+                         "response": {"type": "string"}}}
 
 
-def user_message(heard):
+def user_message(heard, tone=True):
+    """``tone=False`` leaves out the voice reading (words only)."""
     parts = [f'They said: "{heard.get("text") or "(no words)"}"']
+    if not tone:
+        return parts[0] + "\n(No reading of their voice is available.)"
     if heard.get("emotion"):
         parts.append(f'Their voice sounds {heard["emotion"]} (confidence {heard.get("confidence", 0):.0%}).')
     if "arousal" in heard and "valence" in heard:
@@ -42,15 +49,39 @@ def user_message(heard):
     return "\n".join(parts)
 
 
-def respond(heard, model=None, chat=None):
-    """``heard`` (from ``rmr.voice.Listener.hear``) -> ``{"reading", "response"}``."""
+def respond(heard, model=None, chat=None, tone=True, temperature=0.4):
+    """``heard`` (from ``rmr.voice.Listener.hear``) -> ``{"feeling", "reading", "response"}``."""
     chat = chat or llm.chat_json
-    out = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_message(heard)}],
-               SCHEMA, "reachy_response", model=model, temperature=0.4)
+    out = chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": user_message(heard, tone)}],
+               SCHEMA, "reachy_response", model=model, temperature=temperature)
     resp = (out.get("response") or "").strip()
     if not resp:
         raise ValueError("the responder returned no response")
     head = resp.split(".", 1)[0]
     if "." not in resp or len(head.split()) > 3:      # the planner expects "word. sentence."
         resp = "responding. " + resp
-    return {"reading": (out.get("reading") or "").strip(), "response": resp}
+    feeling = str(out.get("feeling") or "").strip().lower()
+    return {"feeling": feeling if feeling in FEELINGS else "neutral", "reading": (out.get("reading") or "").strip(),
+            "response": resp}
+
+
+# A distilled student does the responder's and the planner's job in one call: heard -> feeling, reading, response
+# and the motion recipe (see scripts/label_respond.py and docs/results/voice.md).
+STUDENT_SYSTEM = """You are Reachy Mini, a small expressive robot (head that tilts, nods and turns, two antenna ears,
+a rotating body). Someone just spoke to you. From their words and an automatic, often wrong, reading of their voice,
+judge how they feel (trust the words when they disagree) and respond with kind body language: gentle with sadness,
+calm with anger, reassuring with fear, joyful with joy, attentive otherwise. Write the motion as a recipe:
+  go D k=v ... | hold D [E=v] | osc D ch amp per   channels e (ears: 0 up, 15 relaxed, 150 drooped), p (pitch, + = down),
+  r (roll), y (yaw), z (height mm), b (body), E (energy: 0 still, 1 calm, 3 lively, 6+ shaking)
+Reply with JSON only: {"feeling": "...", "reading": "...", "response": "...", "recipe": "..."}"""
+
+
+def student_messages(heard, answer=None):
+    """Chat messages for the distilled responder; with ``answer`` (a dict), the training target is appended."""
+    import json
+
+    m = [{"role": "system", "content": STUDENT_SYSTEM}, {"role": "user", "content": user_message(heard)}]
+    if answer is not None:
+        m.append({"role": "assistant", "content": json.dumps({k: answer[k] for k in ("feeling", "reading", "response",
+                                                                                         "recipe")})})
+    return m

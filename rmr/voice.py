@@ -106,12 +106,12 @@ def _msp_model(repo):
 class EmotionModel:
     """``predict(wav16k)`` -> ``{label: probability}`` in the model's own labels (lower-case)."""
 
-    def __init__(self, name="msp"):
+    def __init__(self, name="msp", device="cpu"):
         import torch
 
-        self.name, self.torch = name, torch
+        self.name, self.torch, self.device = name, torch, device
         if name in ("msp", "msp-dims"):
-            self.m = _msp_model(MODELS[name])
+            self.m = _msp_model(MODELS[name]).to(device)
             self.labels = self.m.labels
         elif name == "speechbrain":
             from speechbrain.inference.interfaces import foreign_class
@@ -132,8 +132,8 @@ class EmotionModel:
         torch = self.torch
         with torch.no_grad():
             if self.name in ("msp", "msp-dims"):
-                x = torch.tensor((wav - self.m.mean) / (self.m.std + 1e-6)).unsqueeze(0)
-                out = self.m(x)[0]
+                x = torch.tensor((wav - self.m.mean) / (self.m.std + 1e-6)).unsqueeze(0).to(self.device)
+                out = self.m(x)[0].cpu()
                 if self.name == "msp-dims":       # attributes, roughly 0..1
                     return {k: float(v) for k, v in zip(self.labels, out)}
                 p = torch.softmax(out, -1)
@@ -159,12 +159,12 @@ class EmotionModel:
 class Listener:
     """Transcript + categorical emotion + arousal / valence / dominance for one utterance."""
 
-    def __init__(self, asr="openai/whisper-small", emotion="msp", dims=True):
+    def __init__(self, asr="openai/whisper-small", emotion="msp", dims=True, device="cpu"):
         from transformers import pipeline
 
-        self.asr = pipeline("automatic-speech-recognition", model=asr, device="cpu")
-        self.emo = EmotionModel(emotion)
-        self.dims = EmotionModel("msp-dims") if dims else None
+        self.asr = pipeline("automatic-speech-recognition", model=asr, device=device)
+        self.emo = EmotionModel(emotion, device=device)
+        self.dims = EmotionModel("msp-dims", device=device) if dims else None
 
     def hear(self, src):
         wav = load_audio(src)
