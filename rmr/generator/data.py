@@ -4,9 +4,10 @@ Reference: ``generator/data.py`` in pham-tuan-binh/reachy-motion-generator (Apac
 """
 import numpy as np
 import torch
+from scipy.signal import butter, filtfilt
 
 from .. import plan as PL
-from ..motion import mirror, move_to_traj, stretch
+from ..motion import FPS, mirror, move_to_traj, stretch
 
 BUCKETS = [104, 176, 296, 496, 720]   # frames at 25 fps (4.2 s ... 28.8 s)
 STRETCH = (0.8, 1.0, 1.25)
@@ -31,14 +32,40 @@ def simplified_plan(B, P, rng):
     return S
 
 
-def samples_from_moves(moves, simplified=False, seed=0):
-    """``[(motion, plan)]``, or ``[(motion, plan, simplified plan)]`` with ``simplified``."""
+TREMOR_BAND = (1.5, 4.0)                              # Hz: above the plan's 1 Hz posture, below the 4 Hz low-pass
+TREMOR_SCALE = np.array([0.6, 1.0, 0.8, 2.5, 2.5])     # roll pitch yaw earR earL, relative to the amplitude
+
+
+def add_tremor(A, rng, amp_deg=None):
+    """``A`` with band-limited trembling on the head rotations and antennas over a random 1-4 s window.
+
+    In Pollen's clips high energy mostly comes from sharp transitions; trembling on a still pose, which recipes
+    ask for (``hold 3 E=7``), is rare, so the generator cannot learn it. The plan is re-extracted from the
+    augmented motion, so its energy channel measures exactly the detail that was added."""
+    T = len(A)
+    amp = rng.uniform(1, 7) if amp_deg is None else amp_deg
+    n = min(T, int(rng.uniform(1, 4) * FPS))
+    s = int(rng.integers(0, T - n + 1))
+    env = np.zeros(T)
+    env[s:s + n] = np.sin(np.linspace(0, np.pi, n)) ** 0.5
+    b, a = butter(2, [f / (FPS / 2) for f in TREMOR_BAND], "band")
+    noise = filtfilt(b, a, rng.standard_normal((T, 5)), axis=0)
+    noise /= noise[s:s + n].std(0) + 1e-9
+    B = A.copy()
+    B[:, 3:8] += noise * np.radians(amp) * TREMOR_SCALE * env[:, None]
+    return B
+
+
+def samples_from_moves(moves, simplified=False, tremor=0.0, seed=0):
+    """``[(motion, plan)]``, or ``[(motion, plan, simplified plan)]`` with ``simplified``. With ``tremor``, that
+    share of the augmented clips also gets a copy with synthetic trembling (``add_tremor``)."""
     rng, out = np.random.default_rng(seed), []
     for _, m in moves:
         for B in augment(move_to_traj(m)):
             B = B[:BUCKETS[-1]]
-            P = PL.frames(PL.extract(B), len(B))
-            out.append((B, P, simplified_plan(B, P, rng)) if simplified else (B, P))
+            for C in [B] + ([add_tremor(B, rng)] if tremor and rng.random() < tremor else []):
+                P = PL.frames(PL.extract(C), len(C))
+                out.append((C, P, simplified_plan(C, P, rng)) if simplified else (C, P))
     return out
 
 

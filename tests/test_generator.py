@@ -83,3 +83,14 @@ def test_simplified_plans_keep_energy_and_train():
     assert b["Q2"].shape == b["Q"].shape
     net = MotionGenerator(**TINY)
     assert torch.isfinite(loss_fn(net, b["X"], b["Q2"], b["M"]))
+
+
+def test_tremor_raises_plan_energy_but_not_posture():
+    from rmr.generator.data import add_tremor
+    A = np.zeros((150, 9))
+    B = add_tremor(A, np.random.default_rng(0), amp_deg=5)
+    P0, P1 = PL.frames(PL.extract(A), 150), PL.frames(PL.extract(B), 150)
+    assert P1[:, 7].max() > 4 and P0[:, 7].max() < 0.1
+    assert np.abs(P1[:, 2:5] - P0[:, 2:5]).max() < 1.0              # posture (deg) barely moves
+    S = samples_from_moves(_moves(), simplified=True, tremor=1.0)
+    assert len(S) == 2 * len(samples_from_moves(_moves()))

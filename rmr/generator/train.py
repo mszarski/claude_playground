@@ -38,18 +38,19 @@ def loss_fn(net, x0, Q, M, plan_drop=0.1, vel_w=1.0):
 
 
 def train(moves, held_out, out="checkpoints/generator.pt", steps=5000, bs=16, lr=3e-4, eval_every=250, seed=0,
-          model_kw=None, simplify=0.0, log=print):
+          model_kw=None, simplify=0.0, tremor=0.0, log=print):
     """``moves``: ``[(name, move)]``; clips named in ``held_out`` are used only for the held-out loss.
 
     ``simplify``: share of training samples conditioned on a smoother, sparser version of their plan
     (``data.simplified_plan``) so the energy channel, not the posture curves, carries the fast detail. 0 is the
-    reference's training; the held-out loss always uses the true plans."""
+    reference's training; the held-out loss always uses the true plans. ``tremor``: share of training clips that
+    also get a copy with synthetic trembling and its re-extracted plan (``data.add_tremor``); 0 = reference."""
     dev = device()
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     train_moves = [(n, m) for n, m in moves if n not in held_out]
     val_moves = [(n, m) for n, m in moves if n in held_out]
-    S = samples_from_moves(train_moves, simplified=simplify > 0, seed=seed)
+    S = samples_from_moves(train_moves, simplified=simplify > 0, tremor=tremor, seed=seed)
     stats = fit_stats(S)
     buckets = bucketize(S, stats, dev)
     val_buckets = bucketize(samples_from_moves(val_moves), stats, dev) if val_moves else []
@@ -88,7 +89,7 @@ def train(moves, held_out, out="checkpoints/generator.pt", steps=5000, bs=16, lr
             if not val_buckets or val < best[0]:
                 best = (val, step)
                 torch.save({"sd": net.state_dict(), "stats": stats, "step": step, "held_out": list(held_out),
-                            "config": net.config, "simplify": simplify}, out)
+                            "config": net.config, "simplify": simplify, "tremor": tremor}, out)
             train_loss = float(np.mean(hist[-eval_every:]))
             history.append({"step": step, "train": train_loss, "held_out": val})
             log(f"[generator] step {step:5d}/{steps} train {train_loss:.4f} held-out {val:.4f} "
