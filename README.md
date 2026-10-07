@@ -43,7 +43,7 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Listening: while you talk, Reachy leans in, nods at your pauses and perks its antennas when your voice lifts (live in the viewer, no model) | `rmr/listen.py`, `visualizer/src/Listen.js` | ✅ done; the JS port matches Python exactly (tested). `python -m rmr.listen talk.wav --video out.mp4` |
 | Learned listening head: a GRU trained on 25 h of real listeners (Seamless Interaction, CC-BY-NC; optional) | `rmr/listen_model.py`, `scripts/train_listener.py` | ✅ moves like real listeners (RMS, speed, nod rate); real listeners' nods are not pause-timed, the rules' are. See [results](docs/results/listening.md) |
 | Robot: listen, nod along and answer on a Reachy Mini; models stay on the server | `rmr/robot.py` | ✅ tested on the SDK's MuJoCo simulator; not yet on hardware |
-| Human ratings: blind A/B page for responses; ratings on training clips become DPO pairs | `scripts/rating_set.py`, `deploy/rating_page.html`, `scripts/dpo_from_ratings.py` | 🟡 page built; waiting for ratings |
+| Human ratings: blind A/B page for responses; ratings on training clips become DPO pairs | `scripts/rating_set.py`, `deploy/rating_page.html`, `scripts/dpo_from_ratings.py` | 🟡 [page](https://claude.ai/artifact/B3Wykm586R236hRP7rZ8Rk) live with 79 comparisons (40 test, 39 training); waiting for ratings |
 | MuJoCo renderer: videos, contact sheets, grids (official Reachy Mini model, SDK IK, 500 Hz physics) | `rmr/renderer/` | ✅ done, tested |
 | Browser viewer (three.js): gallery of results, drop any move JSON | `visualizer/`, `rmr/viewer.py` | ✅ done; browser IK checked against the SDK's to 1e-9 rad |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |
