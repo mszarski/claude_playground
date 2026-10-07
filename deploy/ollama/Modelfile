@@ -1,9 +1,9 @@
 # The distilled voice responder for Ollama:
-#   hf download mszarski/reachy-voice gguf/v1/reachy-voice-4b-Q4_K_M.gguf --local-dir .
+#   hf download mszarski/reachy-voice gguf/v2/reachy-voice-4b-Q4_K_M.gguf --local-dir .
 #   ollama create reachy-voice -f deploy/ollama/Modelfile
 #   python -m rmr.server --voice-model "http://localhost:11434/v1#reachy-voice" --ckpt ...
 # Qwen3 chat format (ChatML); the system prompt comes from rmr.respond.STUDENT_SYSTEM in each request.
-FROM ../../gguf/v1/reachy-voice-4b-Q4_K_M.gguf
+FROM ../../gguf/v2/reachy-voice-4b-Q4_K_M.gguf
 TEMPLATE """{{- range .Messages }}<|im_start|>{{ .Role }}
 {{ .Content }}<|im_end|>
 {{ end }}<|im_start|>assistant

@@ -147,7 +147,7 @@ def main():
     ap.add_argument("--responder", default=os.environ.get("RESPONDER_MODEL"),
                     help="LLM that decides how to respond to speech (default: --model)")
     ap.add_argument("--voice-model", default=os.environ.get("VOICE_MODEL"),
-                    help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v1")
+                    help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v2")
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--host", default="0.0.0.0")

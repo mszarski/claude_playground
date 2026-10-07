@@ -60,20 +60,21 @@ as context.
 | responder | reads tone only | words only | words + tone | appropriate response | valid recipe | LLM calls |
 |---|---|---|---|---|---|---|
 | voice model alone | 33% | | | | | |
-| Qwen3-Next-80B-A3B-Instruct (hosted) | | 45% | **48%** | **66%** | 97% | 2 |
+| Qwen3-Next-80B-A3B-Instruct (hosted) | | 45% | 48% | 66% | 97% | 2 |
 | Qwen3-4B-Instruct-2507 (local, off the shelf) | | 48% | 37% | 58% | 78% | 2 |
-| **student**: Qwen3-4B distilled (local) | | | 46% | 64% | **100%** | **1** |
+| student v1: Qwen3-4B distilled (local) | | | 46% | 64% | **100%** | **1** |
+| **student v2**: + hinted relabelling (local) | | | **49%** | **74%** | **100%** | **1** |
 
 - The voice reading adds little: nothing for the 80B (45% → 48% is within noise for 200 clips), and it misleads the
   off-the-shelf 4B (48% → 37%), which over-trusts it.
 - Context (the previous two lines) changed little for either model.
-- The most common error for every model is anger read as happiness (16-18 of 40 angry clips): MELD's anger is
-  often sarcastic, and the voice model hears it as happy.
+- The most common error for the 80B and student v1 is anger read as happiness (16-18 of 50 angry clips): MELD's
+  anger is often sarcastic, and the voice model hears it as happy. Student v2 fixes most of it (3 of 50).
 
 ## The distilled student
 
 One local model does the responder's and the planner's job in one call: heard → `{feeling, reading, response,
-recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v1`).
+recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v2`).
 
 - Data: 4,898 MELD *training* clips, listened to on a GPU job (`scripts/listen_meld.py`, $0.57); the 80B teacher
   labelled each (`scripts/label_respond.py`); kept only answers whose `feeling` matches MELD's human label and whose
@@ -87,10 +88,35 @@ recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v1
 - Speed: 0.65 s per answer batched on an A10G. On a 4-core CPU, unquantised in transformers, a cold process takes
   about 70 s (model loading included).
 
+### Student v2: learning from the teacher's mistakes
+
+v1 only learned from clips the teacher read right, so it never saw the hard ones: the teacher agreed with the human
+label on just 35% of angry clips, and the angry clips it got right were the obvious ones. For v2 the teacher answered
+each of the 2,971 clips it had misread again, this time told the human label and asked to find the cues for it in the
+words, the conversation and the voice, and to write its reading as if it had noticed them itself (rationalisation, as
+in STaR). The student is trained on that answer without the hint, so at test time it has to find the cues itself.
+4,609 training examples (v1: 1,770; angry 1,155 vs about 400), same training recipe, 69 min of training on an A10G (about $1.25 for the job).
+
+Reading per true feeling, out of 50 clips each (rows: MELD label; columns: the model's reading):
+
+| | v1 → neutral | happy | sad | angry | other | v2 → neutral | happy | sad | angry | other |
+|---|---|---|---|---|---|---|---|---|---|---|
+| neutral | 16 | 15 | 8 | 2 | 9 | **24** | 5 | 6 | 5 | 10 |
+| happy | 7 | **34** | 2 | 1 | 6 | 8 | 27 | 1 | 8 | 6 |
+| sad | 2 | 10 | **25** | 4 | 9 | 7 | 5 | 20 | 12 | 6 |
+| angry | 3 | 16 | 4 | 18 | 9 | 6 | 3 | 3 | **27** | 11 |
+
+- Anger read as happiness: 16 → 3; angry recall 36% → 54%; neutral read as happy 15 → 5.
+- The cost: v2 now reads some sad (12) and happy (8) clips as angry; it over-learned anger a little. Hinting
+  every misread clip shifted the label balance toward the classes the teacher found hardest; rebalancing the
+  hinted set is the obvious next tweak.
+- Responses improve more than readings (64% → 74%, above the 80B teacher's 66%): reading sadness as anger still
+  gets a calm, slow response, which suits both, while reading anger as joy got a bouncy one.
+
 ### Quantised for laptops (GGUF)
 
 `scripts/gguf_student.sh` (a CPU job, $0.02) converts the merged student with llama.cpp to
-`mszarski/reachy-voice/gguf/v1`: `reachy-voice-4b-Q4_K_M.gguf` (2.5 GB) and `Q8_0` (4.3 GB). On a balanced 60-clip
+`mszarski/reachy-voice/gguf/v1` and `gguf/v2`: `reachy-voice-4b-Q4_K_M.gguf` (2.5 GB) and `Q8_0` (4.3 GB). On a balanced 60-clip
 subset of the evaluation, Q4_K_M behind `llama-server` vs the full-precision student:
 
 | student v1 | reads people (UA) | appropriate response | valid recipe | same feeling as bf16 | seconds per answer |
@@ -109,11 +135,11 @@ pip install -e ".[ik,generator,hf,serve,voice]"
 PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
   python -m rmr.server --model <served model name> --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the distilled student, one local call, no server and no network after the first download
-python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v1 --out runs/converse
-python -m rmr.server --voice-model mszarski/reachy-voice:student/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v2 --out runs/converse
+python -m rmr.server --voice-model mszarski/reachy-voice:student/v2 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the quantised student behind llama.cpp (2.5 GB, CPU is fine) ...
-hf download mszarski/reachy-voice gguf/v1/reachy-voice-4b-Q4_K_M.gguf --local-dir .
-llama-server -m gguf/v1/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
+hf download mszarski/reachy-voice gguf/v2/reachy-voice-4b-Q4_K_M.gguf --local-dir .
+llama-server -m gguf/v2/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
 python -m rmr.server --voice-model http://localhost:8080/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # ... or Ollama (deploy/ollama/Modelfile)
 ollama create reachy-voice -f deploy/ollama/Modelfile
