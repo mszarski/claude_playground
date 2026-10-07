@@ -124,8 +124,12 @@ def fit(a):
     import numpy as np
 
     items = {it["id"]: it for it in json.load(open(os.path.join(a.out, "pairs.json")))}
-    raw = json.load(open(a.ratings))
-    docs = raw if isinstance(raw, list) else raw.get("documents", [])
+    if os.path.isdir(a.ratings):        # the ArtifactData export: one JSON file per rater
+        docs = [json.load(open(os.path.join(dp, f))) for dp, _, fs in os.walk(a.ratings) for f in fs
+                if f.endswith(".json")]
+    else:
+        raw = json.load(open(a.ratings))
+        docs = raw if isinstance(raw, list) else raw.get("documents", [])
     games = []
     for d in docs:
         for pid, v in ((d.get("data", d)).get("votes") or {}).items():
@@ -193,7 +197,7 @@ def main():
     g.add_argument("--html", default="runs/listen_rating/reachy_listening.html")
     f = sub.add_parser("fit")
     f.add_argument("--out", default="runs/listen_rating")
-    f.add_argument("--ratings", required=True)
+    f.add_argument("--ratings", required=True, help="the exported votes: a folder of JSON files or one JSON list")
     a = ap.parse_args()
     {"render": render_all, "pairs": pairs, "page": page, "fit": fit}[a.cmd](a)
 
