@@ -1,7 +1,7 @@
 """Run the voice loop on a Reachy Mini (or its simulator): listen, nod along, answer with a generated move.
 
   # the brain: the server with a voice model (a laptop, or the Space)
-  python -m rmr.server --voice-model mszarski/reachy-voice:student/v2 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+  python -m rmr.server --voice-model mszarski/reachy-voice:student/v3 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
   # the body: on the robot, or any machine that reaches its daemon
   python -m rmr.robot --server http://localhost:7860                       # robot microphone, hands-free
   python -m rmr.robot --server http://localhost:7860 --wav talk.wav        # a recording instead of the mic

@@ -63,7 +63,9 @@ as context.
 | Qwen3-Next-80B-A3B-Instruct (hosted) | | 45% | 48% | 66% | 97% | 2 |
 | Qwen3-4B-Instruct-2507 (local, off the shelf) | | 48% | 37% | 58% | 78% | 2 |
 | student v1: Qwen3-4B distilled (local) | | | 46% | 64% | **100%** | **1** |
-| **student v2**: + hinted relabelling (local) | | | **49%** | **74%** | **100%** | **1** |
+| student v2: + hinted relabelling (local) | | | 49% | 74% | **100%** | **1** |
+| **student v3**: + per-feeling cap, recipe first (local) | | | **50%** | **73%** | **100%** | **1** |
+| student v3 small: same data on Qwen3-1.7B (local) | | | 45% | 71% | **100%** | **1** |
 
 - The voice reading adds little: nothing for the 80B (45% → 48% is within noise for 200 clips), and it misleads the
   off-the-shelf 4B (48% → 37%), which over-trusts it.
@@ -74,7 +76,7 @@ as context.
 ## The distilled student
 
 One local model does the responder's and the planner's job in one call: heard → `{feeling, reading, response,
-recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v2`).
+recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v3`).
 
 - Data: 4,898 MELD *training* clips, listened to on a GPU job (`scripts/listen_meld.py`, $0.57); the 80B teacher
   labelled each (`scripts/label_respond.py`); kept only answers whose `feeling` matches MELD's human label and whose
@@ -113,10 +115,38 @@ Reading per true feeling, out of 50 clips each (rows: MELD label; columns: the m
 - Responses improve more than readings (64% → 74%, above the 80B teacher's 66%): reading sadness as anger still
   gets a calm, slow response, which suits both, while reading anger as joy got a bouncy one.
 
+### Student v3: balanced, and the recipe first
+
+v2 over-learned anger, because hinting every misread clip gave it 1,155 angry examples to 541 sad ones. For v3,
+`scripts/label_respond.py --cap 700` keeps at most 700 examples per feeling, preferring answers the teacher got right
+unaided (3,460 examples). The answer also changed order to feeling, response, recipe, reading, so a streaming client
+can start the motion before the reading is written (`rmr.respond.ANSWER_ORDER`).
+
+| reading, of 50 clips each | v2: sad → angry | happy → angry | angry → angry | angry → happy |
+|---|---|---|---|---|
+| v2 | 12 | 8 | 27 | 3 |
+| v3 | **5** | **4** | 23 | 6 |
+| v3 small (1.7B) | 5 | 6 | 21 | 7 |
+
+The cap removes most of v2's false anger at a small cost in angry recall, with overall reading (50%) and responses
+(73%) unchanged. Training cost about $1.20 (4B) and $0.50 (1.7B) on an A10G.
+
+**Speed with streaming** (Q4_K_M behind `llama-server`, 4-vCPU cloud VM, CPU only, median over 10 clips):
+
+| | first motion | full answer |
+|---|---|---|
+| v3 (4B, 2.5 GB) | 15.0 s | 19.4 s |
+| v3 small (1.7B, 1.1 GB) | **5.8 s** | 7.5 s |
+
+`/api/respond?stream=1` sends the motion as soon as the recipe is complete; on this CPU the 1.7B student starts
+moving in under 6 s. On a GPU both are well under a second. Pick v3 for the best reading, v3 small for a CPU-only
+laptop. The small model is a hybrid thinking model: start `llama-server` with
+`--chat-template-kwargs '{"enable_thinking":false}'`, as it was trained.
+
 ### Quantised for laptops (GGUF)
 
 `scripts/gguf_student.sh` (a CPU job, $0.02) converts the merged student with llama.cpp to
-`mszarski/reachy-voice/gguf/v1` and `gguf/v2`: `reachy-voice-4b-Q4_K_M.gguf` (2.5 GB) and `Q8_0` (4.3 GB). On a balanced 60-clip
+`mszarski/reachy-voice/gguf/{v1,v2,v3}` and `gguf/v3-1.7b` (1.1 GB; same file name): `reachy-voice-4b-Q4_K_M.gguf` (2.5 GB) and `Q8_0` (4.3 GB). On a balanced 60-clip
 subset of the evaluation, Q4_K_M behind `llama-server` vs the full-precision student:
 
 | student v1 | reads people (UA) | appropriate response | valid recipe | same feeling as bf16 | seconds per answer |
@@ -135,11 +165,12 @@ pip install -e ".[ik,generator,hf,serve,voice]"
 PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
   python -m rmr.server --model <served model name> --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the distilled student, one local call, no server and no network after the first download
-python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v2 --out runs/converse
-python -m rmr.server --voice-model mszarski/reachy-voice:student/v2 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v3 --out runs/converse
+python -m rmr.server --voice-model mszarski/reachy-voice:student/v3 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the quantised student behind llama.cpp (2.5 GB, CPU is fine) ...
-hf download mszarski/reachy-voice gguf/v2/reachy-voice-4b-Q4_K_M.gguf --local-dir .
-llama-server -m gguf/v2/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
+hf download mszarski/reachy-voice gguf/v3/reachy-voice-4b-Q4_K_M.gguf --local-dir .
+llama-server -m gguf/v3/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
+# (the 1.7B: gguf/v3-1.7b/..., and add --chat-template-kwargs '{"enable_thinking":false}')
 python -m rmr.server --voice-model http://localhost:8080/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # ... or Ollama (deploy/ollama/Modelfile)
 ollama create reachy-voice -f deploy/ollama/Modelfile
@@ -148,7 +179,27 @@ python -m rmr.server --voice-model "http://localhost:11434/v1#reachy-voice" --ck
 
 The llama.cpp route is tested here; the Ollama Modelfile is not (Ollama wasn't installable in this environment).
 
-Open `http://localhost:7860` and hold the mic button (browsers allow the microphone on localhost and HTTPS).
+Open `http://localhost:7860` and hold the mic button, or press **Hands-free** and just talk: the viewer sends each
+turn when you pause for 0.9 s (after at least 0.6 s of speech), and doesn't take a new turn while Reachy answers.
+Browsers allow the microphone on localhost and HTTPS.
+
+## On the robot
+
+`rmr/robot.py` runs the same loop on a Reachy Mini: the robot's microphone feeds the listening controller at 25 Hz
+(`set_target` on every frame), the end of a turn is posted to the server (`/api/respond?stream=1`), and the answer is
+played frame by frame as soon as it arrives. The models stay on the server, a laptop or the Space, so the robot side
+needs only the `reachy-mini` SDK.
+
+```bash
+python -m rmr.robot --server http://<laptop>:7860                 # robot mic, hands-free
+python -m rmr.robot --server http://localhost:7860 --wav talk.wav  # a recording instead of the mic
+```
+
+Tested against the SDK's MuJoCo simulator (`reachy-mini-daemon --sim --headless --no-media`), not yet on hardware:
+a 3.7 s MELD clip → heard after 5.7 s (Whisper and the voice models on CPU) → moving after 24.5 s with the v2 4B
+student on CPU (with v3 small, about 12 s: 5.7 s to hear plus 5.8 s to the first motion). The simulated head follows the streamed frames with a median error of 2.3°
+(about two frames of lag). Untested on hardware: the robot's own microphone path (`mini.media.get_audio_sample`),
+and how loud its motors are in its own mic while it moves.
 
 ## Listening while you talk
 
@@ -165,7 +216,7 @@ small controller on your voice's loudness, 25 times a second (`visualizer/src/Li
 The noise floor is tracked continuously (it drops at once and creeps up slowly), so the thresholds follow the room. No
 model and no network: it reacts within a frame. After you let go it keeps listening to the silence (the closing nod)
 until the response move arrives. The constants were set by ear on read speech and a few MELD clips, not fitted to
-data; backchannel timing models trained on dialogue corpora (e.g. Switchboard) are the next step if it feels mechanical.
+data. A learned alternative for the head is in [listening.md](listening.md).
 
 ```bash
 python -m rmr.listen talk.wav --video listening.mp4 --json listening.json   # render it, with the speech as soundtrack

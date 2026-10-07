@@ -22,7 +22,7 @@ def main():
     ap.add_argument("--responder", help="LLM deciding the response (default: --model)")
     ap.add_argument("--planner", help="fine-tuned planner (dir or Hub repo id) instead of the zero-shot LLM")
     ap.add_argument("--voice-model", help="distilled responder: response + recipe in one local call "
-                                          "(e.g. mszarski/reachy-voice:student/v2)")
+                                          "(e.g. mszarski/reachy-voice:student/v3)")
     ap.add_argument("--variants", type=int, default=2)
     ap.add_argument("--render", action="store_true")
     a = ap.parse_args()

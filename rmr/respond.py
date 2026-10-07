@@ -106,7 +106,7 @@ def student_messages(heard, answer=None, order=ANSWER_ORDER):
 class Student:
     """The distilled responder: heard -> {"feeling", "reading", "response", "recipe"} in one call.
 
-    ``path``: merged model dir, Hub repo id, or ``repo:sub/dir`` (e.g. ``mszarski/reachy-voice:student/v2``), run
+    ``path``: merged model dir, Hub repo id, or ``repo:sub/dir`` (e.g. ``mszarski/reachy-voice:student/v3``), run
     in-process with transformers; or the URL of an OpenAI-compatible server running the GGUF build, e.g.
     ``http://localhost:8080/v1`` (llama-server) or ``http://localhost:11434/v1#reachy-voice`` (Ollama, ``#model``)."""
 
