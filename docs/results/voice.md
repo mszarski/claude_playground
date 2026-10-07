@@ -85,7 +85,21 @@ recipe}` (`rmr.respond.Student`, `--voice-model mszarski/reachy-voice:student/v1
   told as a joke" clip the voice model hears *happy*; the base 4B shared the joy, the student read "overwhelmed by
   loss, despite a happy tone in their voice" and gave three slow, comforting nods.
 - Speed: 0.65 s per answer batched on an A10G. On a 4-core CPU, unquantised in transformers, a cold process takes
-  about 70 s (model loading included); a quantised build (GGUF for llama.cpp / Ollama) is the next step for laptops.
+  about 70 s (model loading included).
+
+### Quantised for laptops (GGUF)
+
+`scripts/gguf_student.sh` (a CPU job, $0.02) converts the merged student with llama.cpp to
+`mszarski/reachy-voice/gguf/v1`: `reachy-voice-4b-Q4_K_M.gguf` (2.5 GB) and `Q8_0` (4.3 GB). On a balanced 60-clip
+subset of the evaluation, Q4_K_M behind `llama-server` vs the full-precision student:
+
+| student v1 | reads people (UA) | appropriate response | valid recipe | same feeling as bf16 | seconds per answer |
+|---|---|---|---|---|---|
+| bf16, transformers | 40% | 57% | 100% | | 0.65 batched (A10G GPU) |
+| Q4_K_M, llama.cpp | 35% | 63% | 100% | 55 / 60 | 15.5 median, 24 max (4 vCPU, CPU only) |
+
+The differences are within noise for 60 clips (3-4 clips each way). 15 s is on a small 4-vCPU cloud VM (8 tokens/s);
+a laptop with Metal or any GPU is several times faster, and a recent 8-core CPU about twice as fast.
 
 ## Running it locally
 
@@ -97,9 +111,39 @@ PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
 # or the distilled student, one local call, no server and no network after the first download
 python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v1 --out runs/converse
 python -m rmr.server --voice-model mszarski/reachy-voice:student/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+# or the quantised student behind llama.cpp (2.5 GB, CPU is fine) ...
+hf download mszarski/reachy-voice gguf/v1/reachy-voice-4b-Q4_K_M.gguf --local-dir .
+llama-server -m gguf/v1/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
+python -m rmr.server --voice-model http://localhost:8080/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+# ... or Ollama (deploy/ollama/Modelfile)
+ollama create reachy-voice -f deploy/ollama/Modelfile
+python -m rmr.server --voice-model "http://localhost:11434/v1#reachy-voice" --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 ```
 
+The llama.cpp route is tested here; the Ollama Modelfile is not (Ollama wasn't installable in this environment).
+
 Open `http://localhost:7860` and hold the mic button (browsers allow the microphone on localhost and HTTPS).
+
+## Listening while you talk
+
+Responding only after you finish feels like talking to a voicemail. While you hold the mic button, the viewer runs a
+small controller on your voice's loudness, 25 times a second (`visualizer/src/Listen.js`, a line-for-line port of
+`rmr/listen.py`; `tests/test_listen.py` checks they agree to 1e-9):
+
+- **attentive pose** while you speak: leans in a little, tilts its head (alternating sides each time you start
+  again), antennas slightly up; relaxes to neutral 4 s after you stop.
+- **nods** at your pauses: 0.3 s of silence after at least 1 s of speech earns a nod, after 3 s a double nod (at most
+  one every 1.2 s).
+- **antenna perks** when your voice lifts (the fast loudness envelope 8 dB above the slow one, at most every 3 s).
+
+The noise floor is tracked continuously (it drops at once and creeps up slowly), so the thresholds follow the room. No
+model and no network: it reacts within a frame. After you let go it keeps listening to the silence (the closing nod)
+until the response move arrives. The constants were set by ear on read speech and a few MELD clips, not fitted to
+data; backchannel timing models trained on dialogue corpora (e.g. Switchboard) are the next step if it feels mechanical.
+
+```bash
+python -m rmr.listen talk.wav --video listening.mp4 --json listening.json   # render it, with the speech as soundtrack
+```
 
 ## Caveats
 

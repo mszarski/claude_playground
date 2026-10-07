@@ -40,6 +40,7 @@ text ──planner (fine-tuned LLM)──► recipe ──expand──► plan (
 | Offline pipeline (text → reachable moves) | `rmr/pipeline.py` | ✅ done |
 | Live server: type a prompt, watch it in the viewer (zero-shot planner + CPU generator) | `rmr/server.py`, `deploy/` | ✅ private Docker Space `mszarski/reachy-mini-motions-live` |
 | Voice: hold to talk; Reachy responds to what you say and how you sound (open models, runs locally) | `rmr/voice.py`, `rmr/respond.py`, `rmr/converse.py` | ✅ reads people right 48% (4 classes, real dialogue), responds appropriately 66%; a distilled local 4B does it in one call (46%, 64%). See [results](docs/results/voice.md) |
+| Listening: while you talk, Reachy leans in, nods at your pauses and perks its antennas when your voice lifts (live in the viewer, no model) | `rmr/listen.py`, `visualizer/src/Listen.js` | ✅ done; the JS port matches Python exactly (tested). `python -m rmr.listen talk.wav --video out.mp4` |
 | MuJoCo renderer: videos, contact sheets, grids (official Reachy Mini model, SDK IK, 500 Hz physics) | `rmr/renderer/` | ✅ done, tested |
 | Browser viewer (three.js): gallery of results, drop any move JSON | `visualizer/`, `rmr/viewer.py` | ✅ done; browser IK checked against the SDK's to 1e-9 rad |
 | Serving (FP8, MTP speculative decoding, CUDA graphs) | | optional |

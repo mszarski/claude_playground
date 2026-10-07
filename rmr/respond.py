@@ -99,10 +99,18 @@ def student_messages(heard, answer=None):
 
 
 class Student:
-    """The distilled responder, run in-process: heard -> {"feeling", "reading", "response", "recipe"} in one call.
-    ``path``: merged model dir, Hub repo id, or ``repo:sub/dir`` (e.g. ``mszarski/reachy-voice:student/v1``)."""
+    """The distilled responder: heard -> {"feeling", "reading", "response", "recipe"} in one call.
+
+    ``path``: merged model dir, Hub repo id, or ``repo:sub/dir`` (e.g. ``mszarski/reachy-voice:student/v1``), run
+    in-process with transformers; or the URL of an OpenAI-compatible server running the GGUF build, e.g.
+    ``http://localhost:8080/v1`` (llama-server) or ``http://localhost:11434/v1#reachy-voice`` (Ollama, ``#model``)."""
 
     def __init__(self, path, max_tokens=400):
+        if path.startswith(("http://", "https://")):
+            self.url, _, self.model = path.partition("#")
+            self.max_tokens = max_tokens
+            return
+        self.url = None
         import torch
         from transformers import AutoTokenizer
 
@@ -114,17 +122,30 @@ class Student:
         dev = "cuda" if torch.cuda.is_available() else "cpu"
         self.m = lm_class(path).from_pretrained(path, dtype=torch.bfloat16).to(dev).eval()
 
-    def __call__(self, heard):
-        from .planner.evaluate import parse_answer
-        from .planner.llm import parse_json
+    def _generate(self, heard):
+        if self.url:
+            import json
+            import urllib.request
 
+            body = {"model": self.model or "reachy-voice", "messages": student_messages(heard), "temperature": 0,
+                    "max_tokens": self.max_tokens}
+            req = urllib.request.Request(self.url.rstrip("/") + "/chat/completions", json.dumps(body).encode(),
+                                         {"content-type": "application/json"})
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return json.load(r)["choices"][0]["message"]["content"]
         text = self.tok.apply_chat_template(student_messages(heard), tokenize=False, add_generation_prompt=True,
                                             enable_thinking=False)
         enc = self.tok(text, return_tensors="pt").to(self.m.device)
         with self.torch.no_grad():
             g = self.m.generate(**enc, max_new_tokens=self.max_tokens, do_sample=False,
                                 pad_token_id=self.tok.pad_token_id or self.tok.eos_token_id)
-        d = parse_json(self.tok.decode(g[0, enc["input_ids"].shape[1]:], skip_special_tokens=True))
+        return self.tok.decode(g[0, enc["input_ids"].shape[1]:], skip_special_tokens=True)
+
+    def __call__(self, heard):
+        from .planner.evaluate import parse_answer
+        from .planner.llm import parse_json
+
+        d = parse_json(self._generate(heard))
         recipe = d.get("recipe") if isinstance(d.get("recipe"), str) else None
         if not recipe or not parse_answer(__import__("json").dumps({"recipe": recipe})):
             raise ValueError("the voice model did not produce a valid recipe")

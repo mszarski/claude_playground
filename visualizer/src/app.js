@@ -1,6 +1,7 @@
 import { SceneManager } from './SceneManager.js';
 import { RobotManager } from './RobotManager.js';
 import { Player } from './Player.js';
+import { Listener, FPS, dbfs } from './Listen.js';
 
 // Gallery of motions built by `python -m rmr.viewer` (examples/examples.json):
 // [{prompt, recipe, source, moves: [move, ...]}], grouped in the panel by source.
@@ -12,7 +13,7 @@ let player, current = null, sample = 0;
 function status(msg, kind = '') { const s = $('status'); s.textContent = msg; s.className = kind; }
 
 function show(entry) {
-    current = entry; sample = 0;
+    current = entry; sample = 0; player.live = null;
     $('prompt').textContent = entry.prompt || '';
     $('recipe').textContent = entry.recipe || '—';
     $('idea').textContent = entry.idea || ''; $('idea-row').hidden = !entry.idea;
@@ -85,31 +86,44 @@ function encodeWav(chunks, rate) {
 }
 
 function enableTalk() {
-    let rec = null;
+    let rec = null, idle = null;
+    // While you speak, the robot listens: loudness every 1/25 s drives rmr/listen.py's controller (Listen.js).
+    // After you let go it keeps listening to the silence (the closing nod) until the response move arrives.
+    const stopIdle = () => { clearInterval(idle); idle = null; };
     const start = async (e) => {
         e.preventDefault(); if (rec) return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
-            const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
-            const chunks = []; node.onaudioprocess = (ev) => chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+            const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(1024, 1, 1);
+            const hop = Math.round(ctx.sampleRate / FPS), lis = new Listener();
+            let acc = 0, n = 0;
+            const chunks = []; node.onaudioprocess = (ev) => {
+                const x = ev.inputBuffer.getChannelData(0); chunks.push(new Float32Array(x));
+                for (let i = 0; i < x.length; i++) {
+                    acc += x[i] * x[i];
+                    if (++n === hop) { player.live = lis.step(dbfs(acc / hop)); acc = 0; n = 0; }
+                }
+            };
             src.connect(node); node.connect(ctx.destination);
-            rec = { stream, ctx, chunks, t0: performance.now() };
+            stopIdle();
+            rec = { stream, ctx, chunks, lis, t0: performance.now() };
             $('talk').classList.add('on'); status('Listening… release to send.');
         } catch (err) { status(`Microphone unavailable: ${err.message}`, 'err'); }
     };
     const stop = async (e) => {
         e.preventDefault(); if (!rec) return;
-        const { stream, ctx, chunks, t0 } = rec; rec = null; $('talk').classList.remove('on');
+        const { stream, ctx, chunks, lis, t0 } = rec; rec = null; $('talk').classList.remove('on');
         stream.getTracks().forEach((t) => t.stop()); const rate = ctx.sampleRate; await ctx.close();
-        if (performance.now() - t0 < 500) return status('Hold the button while you speak.', 'err');
+        if (performance.now() - t0 < 500) { player.live = null; return status('Hold the button while you speak.', 'err'); }
+        idle = setInterval(() => { player.live = lis.step(-100); }, 1000 / FPS);
         status('Listening to what you said and how you sound…');
         try {
             const r = await fetch(`api/respond?n=${+$('n').value}&seed=${Math.floor(Math.random() * 1e6)}`,
                 { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: encodeWav(chunks, rate) });
             const body = await r.json().catch(() => ({}));
             if (!r.ok) throw new Error(body.detail || `server error ${r.status}`);
-            show(body); status('');
-        } catch (err) { status(`Response failed: ${err.message}`, 'err'); }
+            stopIdle(); show(body); status('');
+        } catch (err) { stopIdle(); player.live = null; status(`Response failed: ${err.message}`, 'err'); }
     };
     const b = $('talk');
     b.addEventListener('pointerdown', start); b.addEventListener('pointerup', stop); b.addEventListener('pointerleave', stop);

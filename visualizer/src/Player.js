@@ -9,6 +9,7 @@ export class Player {
         this.robot = robotManager; this.onTick = onTick;
         this.frames = null; this.times = null; this.t0 = 0; this.pausedAt = null;
         this.speed = 1; this.loop = true;
+        this.live = null;   // a joint state set from outside (the listening behaviour) overrides the move
         requestAnimationFrame(this.tick.bind(this));
     }
 
@@ -53,7 +54,8 @@ export class Player {
     }
 
     tick() {
-        if (this.frames) {
+        if (this.live) this.robot.updateJoints(this.live);
+        else if (this.frames) {
             const e = this.elapsed();
             let i = this.times.findIndex((x) => x > e); if (i < 0) i = this.times.length; i = Math.max(0, i - 1);
             this.robot.updateJoints(this.frames[i]);
