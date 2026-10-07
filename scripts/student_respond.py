@@ -18,8 +18,15 @@ def main():
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--workers", type=int, default=1, help="parallel requests (endpoint only)")
     ap.add_argument("--limit", type=int, default=None, help="only the first N clips")
+    ap.add_argument("--samples", type=int, default=1, help="answers per clip (endpoint only; use --temperature)")
+    ap.add_argument("--temperature", type=float, default=0.0)
+    ap.add_argument("--seed", type=int, default=0, help="with --limit: a random subset instead of the first N")
     a = ap.parse_args()
-    rows = [json.loads(line) for line in open(a.heard)][:a.limit]
+    rows = [json.loads(line) for line in open(a.heard)]
+    if a.seed and a.limit:
+        import random
+        rows = random.Random(a.seed).sample(rows, a.limit)
+    rows = rows[:a.limit]
     if a.model.startswith(("http://", "https://")):
         return endpoint(a, rows)
     import torch
@@ -67,7 +74,8 @@ def endpoint(a, rows):
 
     from rmr.respond import Student
 
-    st = Student(a.model)
+    st = Student(a.model, temperature=a.temperature)
+    rows = [r for r in rows for _ in range(a.samples)]
 
     def one(r):
         t = time.time()

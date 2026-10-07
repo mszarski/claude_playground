@@ -43,6 +43,7 @@ class Engine:
         self.responder, self.listener = responder or model, None
         self.finetuned, self.voice_model = None, voice_model
         self.student = None
+        self.listener_weights = None        # path of the learned listener's JSON weights, served to the viewer
         if planner:
             from .planner.finetune import Planner
             self.finetuned = Planner(planner)
@@ -168,6 +169,14 @@ def create_app(engine):
         except Exception as e:
             raise HTTPException(502, f"{type(e).__name__}: {e}")
 
+    @app.get("/api/listener")
+    def listener_weights():
+        """The learned listener's weights (rmr.listen_model), when the server was given them (CC-BY-NC)."""
+        if not engine.listener_weights:
+            raise HTTPException(404, "no learned listener configured (--listener-model)")
+        from fastapi.responses import FileResponse
+        return FileResponse(engine.listener_weights, media_type="application/json")
+
     app.mount("/", StaticFiles(directory=VIEWER, html=True), name="viewer")
     return app
 
@@ -187,10 +196,22 @@ def main():
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
+    ap.add_argument("--listener-model", default=os.environ.get("LISTENER_MODEL"),
+                    help="learned listener weights (rmr.listen_model; CC-BY-NC) for the viewer's head motion while "
+                         "you talk, a path or hf://<owner>/<repo>/<path>, e.g. "
+                         "hf://mszarski/reachy-listening/listener/v1/listener.json")
     a = ap.parse_args()
     import uvicorn
 
     engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model)
+    if a.listener_model:
+        path = a.listener_model
+        if path.startswith("hf://"):
+            from huggingface_hub import hf_hub_download
+
+            owner, repo, fname = path[5:].split("/", 2)
+            path = hf_hub_download(f"{owner}/{repo}", fname)
+        engine.listener_weights = path
     if a.preload_voice:
         import threading
 

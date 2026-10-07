@@ -69,3 +69,36 @@ def test_js_port_matches_python():
     # pitch from the pose matrix is exact for R = Ry(pitch) Rx(roll): atan2(sp*cr, cp*cr)
     assert np.allclose(np.array(js["out"]), py_cols, atol=1e-9)
     assert [(round(t, 2), e) for t, e in js["events"]] == lis.events
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_learned_head_js_matches_python(tmp_path):
+    torch = pytest.importorskip("torch")
+    from rmr.listen_model import LearnedHead, export, make_net
+    from rmr.listen import loudness
+
+    torch.manual_seed(0)
+    w = export(make_net())
+    (tmp_path / "w.json").write_text(json.dumps(w))
+    x, sr = _speech()
+    db = loudness(x, sr).tolist() + [-100.0] * 30
+    u = np.random.default_rng(1).random(len(db) * 3).tolist()
+    head = LearnedHead(w)
+    it = iter(u)
+    head.rng = type("R", (), {"random": lambda self, n: np.array([next(it) for _ in range(n)])})()
+    lis = Listener(head=head)
+    py = np.array([lis.step(v) for v in db])
+    js_src = (f"import {{ Listener }} from '{ROOT}/visualizer/src/Listen.js';"
+              f"import {{ LearnedHead }} from '{ROOT}/visualizer/src/ListenModel.js';"
+              f"import fs from 'fs';"
+              f"const w = JSON.parse(fs.readFileSync('{tmp_path / 'w.json'}'));"
+              f"const u = {json.dumps(u)}; let i = 0;"
+              f"const l = new Listener(1.0, new LearnedHead(w, undefined, () => u[i++]));"
+              f"const db = {json.dumps(db)};"
+              f"const out = db.map((v) => {{ const s = l.step(v); const h = s.head_pose;"
+              f" return [Math.atan2(-h[8], Math.hypot(h[0], h[4])), Math.atan2(h[4], h[0]), Math.atan2(h[9], h[10])]; }});"
+              f"console.log(JSON.stringify(out));")
+    r = subprocess.run(["node", "--input-type=module", "-e", js_src], capture_output=True, text=True, check=True)
+    js = np.array(json.loads(r.stdout))
+    assert np.abs(py[:, 4]).max() > 0.01                       # the learned head moves (random weights)
+    assert np.allclose(js, py[:, [4, 5, 3]], atol=1e-6)        # pitch, yaw, roll

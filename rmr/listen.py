@@ -62,7 +62,13 @@ class Listener:
     pose for that frame. ``events`` collects ``(t, "nod" | "nod2" | "perk" | "turn")``; ``turn_end`` is
     ``(start, end)`` on the frame that ends a turn (``END_OF_TURN`` s of silence after ``MIN_TURN`` s of speech)."""
 
-    def __init__(self, side=1.0):
+    def __init__(self, side=1.0, head=None):
+        """``head``: an optional ``rmr.listen_model.LearnedHead``; it then drives the head's pitch, yaw and roll
+        (learned from real listeners) in place of the rule-based nods."""
+        self.head = head
+        if head is not None:
+            from .listen_model import SpeakerFeatures
+            self.feats = SpeakerFeatures()
         self.dt = 1.0 / FPS
         self.t = 0.0
         self.floor = None
@@ -115,7 +121,8 @@ class Listener:
             self.nods.append((t, 1.0, NOD_S))
             if double:
                 self.nods.append((t + NOD_S * 0.9, 0.6, NOD_S * 0.8))
-            self.events.append((round(t, 2), "nod2" if double else "nod"))
+            if self.head is None:          # the learned head makes its own nods; these aren't applied then
+                self.events.append((round(t, 2), "nod2" if double else "nod"))
             self.last_nod, self.talk = t, 0.0
         # the voice lifts: perk the antennas
         if (voiced and self.fast is not None and self.fast - self.slow > RISE_DB
@@ -134,12 +141,18 @@ class Listener:
         perk = 0.0 if u < 0 else (u / PERK_ATTACK if u < PERK_ATTACK else math.exp(-(u - PERK_ATTACK) / PERK_DECAY))
 
         ears = pose["ears"] - PERK_EARS * perk
+        yaw = 0.0
+        if self.head is not None:          # learned head motion replaces the rule-based nods
+            hp, hy, hr = self.head.step(self.feats.step(db, speaking))
+            nod, yaw = 0.0, hy
+            pose["pitch"] += hp
+            pose["roll"] += hr
         pitch = pose["pitch"] + NOD_DEG * nod + PERK_PITCH * perk
         z = pose["z"] + NOD_Z * nod + PERK_Z * perk + BREATH_MM * math.sin(2 * math.pi * t / BREATH_S)
         self.t += dt
         r = math.radians
         # plan units -> trajectory: earR = -antenna_right, earL = +antenna_left (rmr.plan.posture)
-        return [0.0, 0.0, z / 1000, r(pose["roll"]), r(pitch), 0.0, -r(ears), r(ears), 0.0]
+        return [0.0, 0.0, z / 1000, r(pose["roll"]), r(pitch), r(yaw), -r(ears), r(ears), 0.0]
 
 
 def loudness(audio, sr, fps=FPS):
@@ -150,21 +163,21 @@ def loudness(audio, sr, fps=FPS):
     return 10 * np.log10(np.mean(x ** 2, axis=1) + 1e-10)
 
 
-def listening_traj(audio, sr, tail=1.5):
+def listening_traj(audio, sr, tail=1.5, head=None):
     """Run ``Listener`` over a recording (plus ``tail`` s of silence, so the last phrase gets its nod).
-    Returns ``(trajectory (T, 9), events)``."""
+    Returns ``(trajectory (T, 9), events)``. ``head``: optional learned head (``rmr.listen_model.LearnedHead``)."""
     db = np.concatenate([loudness(audio, sr), np.full(int(tail * FPS), -100.0)])
-    lis = Listener()
+    lis = Listener(head=head)
     A = np.array([lis.step(float(v)) for v in db])
     return A, lis.events
 
 
-def listening_move(audio, sr, description="listening"):
-    A, events = listening_traj(audio, sr)
+def listening_move(audio, sr, description="listening", head=None):
+    A, events = listening_traj(audio, sr, head=head)
     return traj_to_move(A, description), events
 
 
-def render(audio_path, out, width=520, height=420):
+def render(audio_path, out, width=520, height=420, head=None, title=None):
     """Render the listening move for ``audio_path`` to ``out`` (.mp4, with the speech as its soundtrack)."""
     import os
     import subprocess
@@ -177,15 +190,16 @@ def render(audio_path, out, width=520, height=420):
     from .voice import load_audio
 
     sr = 16000
-    move, events = listening_move(load_audio(audio_path), sr)
+    move, events = listening_move(load_audio(audio_path), sr, head=head)
     Reach().project(move)
     frames = Sim(width, height).play(move)
-    shown = {int(round(t * FPS)): e for t, e in events}
+    names = {"nod": "nod", "nod2": "double nod", "perk": "antennas perk"}
+    shown = {int(round(t * FPS)): names[e] for t, e in events if e in names}
     label, until = "", -1
     for i in range(len(frames)):
         if i in shown:
-            label, until = {"nod": "nod", "nod2": "double nod", "perk": "antennas perk"}[shown[i]], i + FPS
-        frames[i] = _label(frames[i], label if i < until else "")
+            label, until = shown[i], i + FPS
+        frames[i] = _label(frames[i], " · ".join(x for x in (title, label if i < until else "") if x))
     silent = out[:-4] + ".silent.mp4"
     _write(silent, frames)
     # pad the speech with silence to the video's length, so the closing nod isn't cut off
@@ -204,12 +218,19 @@ def main():
     ap.add_argument("audio")
     ap.add_argument("--video", help="output .mp4 (needs the render extra)")
     ap.add_argument("--json", help="output move .json")
+    ap.add_argument("--listener-model", help="learned listener weights (rmr.listen_model, CC-BY-NC) for the head")
+    ap.add_argument("--title", help="caption at the top of the video")
     a = ap.parse_args()
+    head = None
+    if a.listener_model:
+        from .listen_model import LearnedHead
+        with open(a.listener_model) as f:
+            head = LearnedHead(json.load(f))
     if a.video:
-        move, events = render(a.audio, a.video)
+        move, events = render(a.audio, a.video, head=head, title=a.title)
     else:
         from .voice import load_audio
-        move, events = listening_move(load_audio(a.audio), 16000)
+        move, events = listening_move(load_audio(a.audio), 16000, head=head)
     if a.json:
         with open(a.json, "w") as f:
             json.dump(move, f)

@@ -117,9 +117,10 @@ def mic_frames(mini=None, wav=None, tail=4.0):
             buf = buf[hop:]
 
 
-def run(mini, server, frames, n=1, headers=None, log=print):
-    """The voice loop. Returns the list of ``(t, event)`` it went through (for tests and logs)."""
-    lis, body, ring, events = Listener(), Body(mini), [], []
+def run(mini, server, frames, n=1, headers=None, log=print, head=None):
+    """The voice loop. Returns the list of ``(t, event)`` it went through (for tests and logs).
+    ``head``: an optional ``rmr.listen_model.LearnedHead`` for the head motion while listening."""
+    lis, body, ring, events = Listener(head=head), Body(mini), [], []
 
     def answer(audio, t):
         t0 = time.monotonic()
@@ -170,6 +171,7 @@ def main():
     ap.add_argument("--play", help="just play this move JSON and exit")
     ap.add_argument("--host", default="reachy-mini.local")
     ap.add_argument("--n", type=int, default=1)
+    ap.add_argument("--listener-model", help="learned listener weights (JSON, CC-BY-NC) instead of the rule-based nods")
     a = ap.parse_args()
     from reachy_mini import ReachyMini
 
@@ -190,7 +192,12 @@ def _main(a, mini):
             time.sleep(1 / FPS)
         return
     headers = {"authorization": f"Bearer {os.environ['HF_TOKEN']}"} if "hf.space" in a.server else None
-    run(mini, a.server, mic_frames(mini, a.wav), a.n, headers)
+    head = None
+    if a.listener_model:
+        from .listen_model import LearnedHead
+        with open(a.listener_model) as f:
+            head = LearnedHead(json.load(f))
+    run(mini, a.server, mic_frames(mini, a.wav), a.n, headers, head=head)
 
 
 if __name__ == "__main__":

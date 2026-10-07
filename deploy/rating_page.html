@@ -1,0 +1,206 @@
+<title>Reachy Response Ratings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one comparison at a time, a quote card over two robot clips side by side, choice bar below. */
+:root {
+  --bg: #eef1f2;          /* porcelain: the robot's white shell under studio light */
+  --panel: #ffffff;
+  --ink: #15262b;
+  --muted: #5b6c71;
+  --line: #d3dcdf;
+  --accent: #0d6e74;      /* deep teal, the viewer's floor */
+  --accent-ink: #ffffff;
+  --pick: #c2560e;        /* antenna orange, for the chosen clip */
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1719; --panel: #172226; --ink: #e3ecee; --muted: #93a6ab; --line: #2a3a3f;
+  --accent: #4fb5ba; --accent-ink: #062022; --pick: #f08a45; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1719; --panel: #172226; --ink: #e3ecee; --muted: #93a6ab; --line: #2a3a3f;
+  --accent: #4fb5ba; --accent-ink: #062022; --pick: #f08a45; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+h1 { font: 700 clamp(22px, 4vw, 30px)/1.1 var(--display); margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+.progress { font: 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.intro { color: var(--muted); max-width: 64ch; margin: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; min-width: 0; }
+.context { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; color: var(--muted); font-size: 14px; }
+.context li::before { content: "earlier: "; font: 12px var(--mono); letter-spacing: 0.04em; }
+.said { font: 600 clamp(19px, 3.2vw, 24px)/1.3 var(--display); margin: 0; text-wrap: balance; }
+.said::before { content: "\201C"; } .said::after { content: "\201D"; }
+.chip { justify-self: start; font: 12px var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.clip { display: grid; gap: 8px; align-content: start; min-width: 0; border: 2px solid transparent; border-radius: 10px; padding: 6px; }
+.clip.picked { border-color: var(--pick); }
+.clip .tag { font: 600 12px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+video { width: 100%; max-width: 100%; aspect-ratio: 6 / 5; background: var(--line); border-radius: 6px; display: block; }
+.thinks { font-size: 14px; margin: 0; color: var(--ink); }
+.thinks b { font: 600 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); display: block; }
+.choices { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+button { font: 600 15px var(--body); border-radius: 8px; padding: 12px 14px; cursor: pointer; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink); }
+button.main { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:focus-visible { outline: 3px solid var(--pick); outline-offset: 2px; }
+button:disabled { opacity: 0.5; cursor: default; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 13px; }
+.status { min-height: 1.5em; color: var(--muted); font-size: 14px; }
+.status.err { color: var(--pick); }
+details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+summary { cursor: pointer; font: 600 15px var(--display); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tablewrap { overflow-x: auto; }
+.done { text-align: center; padding: 30px 18px; }
+@media (max-width: 560px) { .choices { grid-template-columns: 1fr 1fr; } .choices .same { grid-column: 1 / -1; order: 3; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Which response fits better?</h1>
+    <span class="progress" id="progress">0 rated</span>
+  </header>
+  <p class="intro">Someone said this to Reachy Mini, a small robot that answers with body language. Watch both clips and pick the one that responds better to how the person feels. Keys: ← left, ↓ about the same, → right.</p>
+
+  <section class="card" id="item" aria-live="polite">
+    <ul class="context" id="context"></ul>
+    <p class="said" id="said">Loading the first comparison…</p>
+    <span class="chip" id="voice"></span>
+    <div class="pair">
+      <div class="clip" id="clipL"><span class="tag">Left</span><video id="vidL" muted playsinline loop preload="auto"></video>
+        <p class="thinks"><b>Reachy reads them as</b><span id="thinkL"></span></p></div>
+      <div class="clip" id="clipR"><span class="tag">Right</span><video id="vidR" muted playsinline loop preload="auto"></video>
+        <p class="thinks"><b>Reachy reads them as</b><span id="thinkR"></span></p></div>
+    </div>
+    <div class="choices">
+      <button class="main" id="pickL">◀ Left fits better</button>
+      <button class="same" id="pickS">About the same</button>
+      <button class="main" id="pickR">Right fits better ▶</button>
+    </div>
+    <div class="row"><span>Clips loop; tap one to replay it from the start.</span><button id="skip">Skip</button></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card done" id="done" hidden>
+    <p class="said" style="quotes:none">That's all of them. Thank you!</p>
+    <p class="intro" style="margin:0 auto">Your choices are saved. You can close this page.</p>
+  </section>
+
+  <details id="results" hidden>
+    <summary>Results so far (only you see this)</summary>
+    <div class="tablewrap"><table id="resultsTable"></table></div>
+    <p class="intro" id="resultsNote"></p>
+  </details>
+</div>
+
+<script id="items" type="application/json">__ITEMS__</script>
+<script>
+const ITEMS = JSON.parse(document.getElementById('items').textContent);
+const $ = (id) => document.getElementById(id);
+let db = null, uid = null, mine = {}, order = [], idx = 0, writing = Promise.resolve(), readOnly = false, current = null;
+
+function status(msg, err = false) { $('status').textContent = msg; $('status').className = 'status' + (err ? ' err' : ''); }
+
+// a per-rater order, so different people see the comparisons in different orders
+function shuffled(seed) {
+  let h = 2166136261; for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  const rnd = () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909)) >>> 0) / 4294967296;
+  const a = ITEMS.map((_, i) => i);
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+function render() {
+  const done = Object.keys(mine).length;
+  $('progress').textContent = `${done} of ${ITEMS.length} rated`;
+  while (idx < order.length && mine[ITEMS[order[idx]].id]) idx++;
+  if (idx >= order.length) { $('item').hidden = true; $('done').hidden = false; return; }
+  const it = ITEMS[order[idx]];
+  const flip = (order[idx] + (uid ? uid.length : 0)) % 2 === 1;      // which answer shows on the left
+  current = { it, left: flip ? 'b' : 'a', right: flip ? 'a' : 'b' };
+  $('context').replaceChildren(...(it.context || []).slice(-2).map((t) => { const li = document.createElement('li'); li.textContent = t; return li; }));
+  $('said').textContent = it.text;
+  $('voice').textContent = `their voice sounded ${it.voice}`;
+  for (const [side, key] of [['L', current.left], ['R', current.right]]) {
+    const v = $('vid' + side); v.src = it[key].url; v.play().catch(() => {});
+    $('think' + side).textContent = it[key].reading || '…';
+    $('clip' + side).classList.remove('picked');
+  }
+  for (const b of ['pickL', 'pickS', 'pickR']) $(b).disabled = readOnly;
+}
+
+async function choose(which) {
+  if (!current || readOnly) return;
+  const { it, left, right } = current;
+  const choice = which === 'S' ? 'same' : (which === 'L' ? left : right);
+  if (which !== 'S') $('clip' + which).classList.add('picked');
+  const vote = { choice, left, at: new Date().toISOString(), pool: it.pool };
+  mine = { ...mine, [it.id]: vote };
+  idx++;
+  setTimeout(render, 250);
+  if (!db || !uid) { status('Not saved: sign in to claude.ai so your choices count.', true); return; }
+  // one write at a time to this rater's document
+  writing = writing.then(async () => {
+    try { await db.doc('ratings/' + uid).set({ votes: mine, updated: vote.at }); status(''); }
+    catch (e) {
+      if (e && e.code === 'invalid_argument') { readOnly = true; status('This link lets you watch but not rate. Ask the owner for Contributor access.', true); render(); }
+      else status(`Couldn't save that choice (${e && e.code || 'error'}). It will be saved with your next one.`, true);
+    }
+  });
+}
+
+async function showResults() {
+  try {
+    const snap = await db.collection('ratings').get();
+    const tally = {}, train = { decisive: 0, same: 0 }; let raters = 0;
+    const byId = Object.fromEntries(ITEMS.map((it) => [it.id, it]));
+    for (const d of snap.docs) {
+      const votes = (d.data() || {}).votes || {}; if (Object.keys(votes).length) raters++;
+      for (const [id, v] of Object.entries(votes)) {
+        const it = byId[id]; if (!it) continue;
+        if (it.pool === 'train') { v.choice === 'same' ? train.same++ : train.decisive++; continue; }
+        const name = v.choice === 'same' ? 'about the same' : it[v.choice].model;
+        tally[name] = (tally[name] || 0) + 1;
+      }
+    }
+    const total = Object.values(tally).reduce((a, b) => a + b, 0);
+    const rows = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+    $('resultsTable').innerHTML = '<tr><th>Test clips: preferred</th><th>Votes</th><th>Share</th></tr>';
+    for (const [k, n] of rows) {
+      const tr = document.createElement('tr');
+      for (const t of [k, String(n), total ? `${Math.round(100 * n / total)}%` : '—']) { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); }
+      $('resultsTable').appendChild(tr);
+    }
+    $('resultsNote').textContent = `${raters} rater${raters === 1 ? '' : 's'} so far. Training clips: ${train.decisive} decisive choices usable for preference tuning, ${train.same} ties.`;
+    $('results').hidden = false;
+  } catch { /* results are optional */ }
+}
+
+for (const [b, w] of [['pickL', 'L'], ['pickS', 'S'], ['pickR', 'R']]) $(b).addEventListener('click', () => choose(w));
+$('skip').addEventListener('click', () => { idx++; if (idx >= order.length) idx = 0; render(); });
+for (const s of ['L', 'R']) $('clip' + s).addEventListener('click', (e) => { if (e.target.tagName === 'VIDEO') { e.target.currentTime = 0; e.target.play().catch(() => {}); } });
+document.addEventListener('keydown', (e) => {
+  if (e.target.closest && e.target.closest('input, textarea')) return;
+  if (e.key === 'ArrowLeft') choose('L'); else if (e.key === 'ArrowRight') choose('R'); else if (e.key === 'ArrowDown') { e.preventDefault(); choose('S'); }
+});
+
+order = shuffled('anon'); render();
+(async () => {
+  const claude = window.claude;
+  if (!claude) { status('Open this page on claude.ai to save your choices.', true); return; }
+  const [user, store] = await Promise.all([claude.use('user'), claude.use('db')]);
+  db = store; uid = user ? await user.id() : null;
+  if (!db || !uid) { status('Sign in to claude.ai to save your choices.', true); return; }
+  if ((await user.can('data.write')) === false) { /* own subtree may still be writable; let a write decide */ }
+  order = shuffled(uid); idx = 0;
+  try { const d = await db.doc('ratings/' + uid).get(); if (d.exists) mine = { ...((d.data() || {}).votes || {}) }; } catch { /* start fresh */ }
+  render();
+  if (user && await user.isOwner()) showResults();
+})();
+</script>

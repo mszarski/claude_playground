@@ -2,6 +2,7 @@ import { SceneManager } from './SceneManager.js';
 import { RobotManager } from './RobotManager.js';
 import { Player } from './Player.js';
 import { Listener, FPS, dbfs } from './Listen.js';
+import { LearnedHead } from './ListenModel.js';
 
 // Gallery of motions built by `python -m rmr.viewer` (examples/examples.json):
 // [{prompt, recipe, source, moves: [move, ...]}], grouped in the panel by source.
@@ -9,6 +10,8 @@ import { Listener, FPS, dbfs } from './Listen.js';
 
 const $ = (id) => document.getElementById(id);
 let player, current = null, sample = 0;
+let listenerWeights = null;     // learned listener (api/listener), if the server has one
+const newListener = () => new Listener(1.0, listenerWeights ? new LearnedHead(listenerWeights) : null);
 
 function status(msg, kind = '') { const s = $('status'); s.textContent = msg; s.className = kind; }
 
@@ -142,7 +145,7 @@ function enableTalk() {
     const start = async (e) => {
         e.preventDefault(); if (rec || free) return;
         try {
-            const lis = new Listener(), chunks = [];
+            const lis = newListener(), chunks = [];
             let feed = null;
             const mic = await openMic((x) => { chunks.push(x); feed?.(x); });
             feed = listenerFeed(lis, mic.rate, () => true);
@@ -176,7 +179,7 @@ function enableTalk() {
             hf.classList.remove('on'); hf.textContent = '👂 Hands-free'; return status('');
         }
         try {
-            const lis = new Listener(), ring = [];       // ring: recent sample blocks, ~30 s
+            const lis = newListener(), ring = [];       // ring: recent sample blocks, ~30 s
             let total = 0, busyUntil = 0, feed = null, mic = null;
             const busy = () => performance.now() < busyUntil;
             const onSamples = (x) => {
@@ -207,6 +210,7 @@ function enableTalk() {
 async function enableLive() {
     try { if (!(await fetch('api/health')).ok) return; } catch { return; }
     $('live').hidden = false;
+    try { const r = await fetch('api/listener'); if (r.ok) listenerWeights = await r.json(); } catch { /* rules only */ }
     enableTalk();
     $('live').onsubmit = async (e) => {
         e.preventDefault();

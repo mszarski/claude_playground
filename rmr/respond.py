@@ -110,7 +110,8 @@ class Student:
     in-process with transformers; or the URL of an OpenAI-compatible server running the GGUF build, e.g.
     ``http://localhost:8080/v1`` (llama-server) or ``http://localhost:11434/v1#reachy-voice`` (Ollama, ``#model``)."""
 
-    def __init__(self, path, max_tokens=400):
+    def __init__(self, path, max_tokens=400, temperature=0.0):
+        self.temperature = temperature
         if path.startswith(("http://", "https://")):
             self.url, _, self.model = path.partition("#")
             self.max_tokens = max_tokens
@@ -134,8 +135,8 @@ class Student:
         if self.url:
             import urllib.request
 
-            body = {"model": self.model or "reachy-voice", "messages": student_messages(heard), "temperature": 0,
-                    "max_tokens": self.max_tokens, "stream": True}
+            body = {"model": self.model or "reachy-voice", "messages": student_messages(heard),
+                    "temperature": self.temperature, "max_tokens": self.max_tokens, "stream": True}
             req = urllib.request.Request(self.url.rstrip("/") + "/chat/completions", json.dumps(body).encode(),
                                          {"content-type": "application/json"})
             with urllib.request.urlopen(req, timeout=300) as r:
@@ -155,7 +156,8 @@ class Student:
                                             enable_thinking=False)
         enc = self.tok(text, return_tensors="pt").to(self.m.device)
         streamer = TextIteratorStreamer(self.tok, skip_prompt=True, skip_special_tokens=True)
-        kw = dict(**enc, max_new_tokens=self.max_tokens, do_sample=False, streamer=streamer,
+        sampling = {"do_sample": True, "temperature": self.temperature} if self.temperature else {"do_sample": False}
+        kw = dict(**enc, max_new_tokens=self.max_tokens, **sampling, streamer=streamer,
                   pad_token_id=self.tok.pad_token_id or self.tok.eos_token_id)
         th = Thread(target=lambda: self.torch.no_grad()(self.m.generate)(**kw), daemon=True)
         th.start()
