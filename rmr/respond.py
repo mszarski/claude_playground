@@ -87,14 +87,19 @@ calm with anger, reassuring with fear, joyful with joy, attentive otherwise. Wri
 Reply with JSON only: {"feeling": "...", "reading": "...", "response": "...", "recipe": "..."}"""
 
 
-def student_messages(heard, answer=None):
+# Field order of the student's answer. Since v3 the recipe comes before the reading, so a streaming caller can start
+# the motion as soon as the recipe is complete; the short response (the motion idea) still comes first. v1/v2 were
+# trained on ("feeling", "reading", "response", "recipe"); parsing doesn't depend on the order.
+ANSWER_ORDER = ("feeling", "response", "recipe", "reading")
+
+
+def student_messages(heard, answer=None, order=ANSWER_ORDER):
     """Chat messages for the distilled responder; with ``answer`` (a dict), the training target is appended."""
     import json
 
     m = [{"role": "system", "content": STUDENT_SYSTEM}, {"role": "user", "content": user_message(heard)}]
     if answer is not None:
-        m.append({"role": "assistant", "content": json.dumps({k: answer[k] for k in ("feeling", "reading", "response",
-                                                                                         "recipe")})})
+        m.append({"role": "assistant", "content": json.dumps({k: answer[k] for k in order})})
     return m
 
 
@@ -122,33 +127,89 @@ class Student:
         dev = "cuda" if torch.cuda.is_available() else "cpu"
         self.m = lm_class(path).from_pretrained(path, dtype=torch.bfloat16).to(dev).eval()
 
-    def _generate(self, heard):
+    def stream(self, heard):
+        """Yield the answer text as it grows (one chunk per token or so)."""
+        import json
+
         if self.url:
-            import json
             import urllib.request
 
             body = {"model": self.model or "reachy-voice", "messages": student_messages(heard), "temperature": 0,
-                    "max_tokens": self.max_tokens}
+                    "max_tokens": self.max_tokens, "stream": True}
             req = urllib.request.Request(self.url.rstrip("/") + "/chat/completions", json.dumps(body).encode(),
                                          {"content-type": "application/json"})
             with urllib.request.urlopen(req, timeout=300) as r:
-                return json.load(r)["choices"][0]["message"]["content"]
+                for line in r:                      # server-sent events: "data: {...}" ... "data: [DONE]"
+                    line = line.decode().strip()
+                    if not line.startswith("data:") or line.endswith("[DONE]"):
+                        continue
+                    delta = json.loads(line[5:])["choices"][0].get("delta", {}).get("content")
+                    if delta:
+                        yield delta
+            return
+        from threading import Thread
+
+        from transformers import TextIteratorStreamer
+
         text = self.tok.apply_chat_template(student_messages(heard), tokenize=False, add_generation_prompt=True,
                                             enable_thinking=False)
         enc = self.tok(text, return_tensors="pt").to(self.m.device)
-        with self.torch.no_grad():
-            g = self.m.generate(**enc, max_new_tokens=self.max_tokens, do_sample=False,
-                                pad_token_id=self.tok.pad_token_id or self.tok.eos_token_id)
-        return self.tok.decode(g[0, enc["input_ids"].shape[1]:], skip_special_tokens=True)
+        streamer = TextIteratorStreamer(self.tok, skip_prompt=True, skip_special_tokens=True)
+        kw = dict(**enc, max_new_tokens=self.max_tokens, do_sample=False, streamer=streamer,
+                  pad_token_id=self.tok.pad_token_id or self.tok.eos_token_id)
+        th = Thread(target=lambda: self.torch.no_grad()(self.m.generate)(**kw), daemon=True)
+        th.start()
+        yield from streamer
+        th.join()
 
-    def __call__(self, heard):
-        from .planner.evaluate import parse_answer
+    def _generate(self, heard):
+        return "".join(self.stream(heard))
+
+    def answers(self, heard):
+        """Yield ``(early, answer)``: once the recipe is complete (``early=True``; feeling, response and recipe
+        only, if they come first, as in v3), then the full answer. Raises ``ValueError`` without a valid recipe."""
+        text, sent = "", False
+        for chunk in self.stream(heard):
+            text += chunk
+            if not sent:
+                got = partial_fields(text)
+                if {"feeling", "recipe"} <= got.keys() and "reading" not in got and _valid_recipe(got["recipe"]):
+                    sent = True
+                    yield True, _clean(got)
         from .planner.llm import parse_json
 
-        d = parse_json(self._generate(heard))
-        recipe = d.get("recipe") if isinstance(d.get("recipe"), str) else None
-        if not recipe or not parse_answer(__import__("json").dumps({"recipe": recipe})):
+        d = parse_json(text)
+        if not _valid_recipe(d.get("recipe")):
             raise ValueError("the voice model did not produce a valid recipe")
-        feeling = str(d.get("feeling", "")).lower()
-        return {"feeling": feeling if feeling in FEELINGS else "neutral", "reading": str(d.get("reading", "")),
-                "response": str(d.get("response", "")), "recipe": recipe}
+        yield False, _clean(d)
+
+    def __call__(self, heard):
+        return list(self.answers(heard))[-1][1]
+
+
+def partial_fields(text):
+    """The string fields already complete in a JSON object that is still being written."""
+    import json
+    import re
+
+    out = {}
+    for m in re.finditer(r'"(\w+)"\s*:\s*("(?:[^"\\]|\\.)*")', text):
+        try:
+            out[m.group(1)] = json.loads(m.group(2))
+        except ValueError:
+            pass
+    return out
+
+
+def _valid_recipe(recipe):
+    import json
+
+    from .planner.evaluate import parse_answer
+
+    return isinstance(recipe, str) and bool(recipe) and bool(parse_answer(json.dumps({"recipe": recipe})))
+
+
+def _clean(d):
+    feeling = str(d.get("feeling", "")).lower()
+    return {"feeling": feeling if feeling in FEELINGS else "neutral", "reading": str(d.get("reading", "")),
+            "response": str(d.get("response", "")), "recipe": d["recipe"]}

@@ -30,6 +30,8 @@ def test_nods_at_pauses_and_perks_on_emphasis():
     A, events = listening_traj(x, sr)
     kinds = [e for _, e in events]
     nods = [t for t, e in events if e.startswith("nod")]
+    turns = [t for t, e in events if e == "turn"]
+    assert turns == [pytest.approx(5.6 + 0.9, abs=0.1)]   # 0.6 s gaps between phrases don't end the turn
     assert "perk" in kinds and len(nods) == 2            # phrase 1 and 2 earn nods; the 0.6 s phrase 3 is too short
     assert 2.2 <= nods[0] < 2.6 and 4.6 <= nods[1] < 5.0   # ~0.3 s into each pause
     assert dict((e, t) for t, e in events)["perk"] == pytest.approx(3.4, abs=0.1)

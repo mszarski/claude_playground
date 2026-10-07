@@ -85,50 +85,122 @@ function encodeWav(chunks, rate) {
     return new Blob([buf], { type: 'audio/wav' });
 }
 
+/** Send one turn of speech; the server answers in stages (heard, motion, done) as newline-delimited JSON, and the
+ * robot starts moving at "motion", before the reading is written. Resolves with the motion's duration (s). */
+async function respondTo(wav, onMotion) {
+    const r = await fetch(`api/respond?stream=1&n=${+$('n').value}&seed=${Math.floor(Math.random() * 1e6)}`,
+        { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `server error ${r.status}`);
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '', entry = {}, duration = 0;
+    for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+            const part = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
+            if (part.stage === 'error') throw new Error(part.detail);
+            entry = { ...entry, ...part, timing_ms: { ...entry.timing_ms, ...part.timing_ms } };
+            if (part.stage === 'heard') status(`Heard “${part.heard.text || '…'}”. Thinking…`);
+            if (part.stage === 'motion') { onMotion?.(); show(entry); status('Reading you…'); duration = player.duration(); }
+            if (part.stage === 'done') {
+                $('reading').textContent = entry.reading || ''; $('reading-row').hidden = !entry.reading; status('');
+                const t = entry.timing_ms;
+                $('meta').textContent = `generated live · listening ${t.listen} ms · first motion ${t.first_motion} ms · total ${t.total} ms`;
+            }
+        }
+    }
+    return duration;
+}
+
+/** Microphone -> onSamples(Float32Array) per ~21 ms block. Returns {rate, close()}. */
+async function openMic(onSamples) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
+    const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(1024, 1, 1);
+    node.onaudioprocess = (ev) => onSamples(new Float32Array(ev.inputBuffer.getChannelData(0)));
+    src.connect(node); node.connect(ctx.destination);
+    return { rate: ctx.sampleRate, close: async () => { stream.getTracks().forEach((t) => t.stop()); await ctx.close(); } };
+}
+
+/** Feeds samples to a Listener at 25 Hz and drives the robot with its pose while `active()`. */
+function listenerFeed(lis, rate, active) {
+    const hop = Math.round(rate / FPS); let acc = 0, n = 0;
+    return (x) => {
+        for (let i = 0; i < x.length; i++) {
+            acc += x[i] * x[i];
+            if (++n === hop) { const s = lis.step(dbfs(acc / hop)); if (active()) player.live = s; acc = 0; n = 0; }
+        }
+    };
+}
+
 function enableTalk() {
-    let rec = null, idle = null;
-    // While you speak, the robot listens: loudness every 1/25 s drives rmr/listen.py's controller (Listen.js).
+    let rec = null, idle = null, free = null;
+    // Hold to talk: while you speak, the robot listens (nods, perks; rmr/listen.py's controller in Listen.js).
     // After you let go it keeps listening to the silence (the closing nod) until the response move arrives.
     const stopIdle = () => { clearInterval(idle); idle = null; };
     const start = async (e) => {
-        e.preventDefault(); if (rec) return;
+        e.preventDefault(); if (rec || free) return;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
-            const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(1024, 1, 1);
-            const hop = Math.round(ctx.sampleRate / FPS), lis = new Listener();
-            let acc = 0, n = 0;
-            const chunks = []; node.onaudioprocess = (ev) => {
-                const x = ev.inputBuffer.getChannelData(0); chunks.push(new Float32Array(x));
-                for (let i = 0; i < x.length; i++) {
-                    acc += x[i] * x[i];
-                    if (++n === hop) { player.live = lis.step(dbfs(acc / hop)); acc = 0; n = 0; }
-                }
-            };
-            src.connect(node); node.connect(ctx.destination);
+            const lis = new Listener(), chunks = [];
+            let feed = null;
+            const mic = await openMic((x) => { chunks.push(x); feed?.(x); });
+            feed = listenerFeed(lis, mic.rate, () => true);
             stopIdle();
-            rec = { stream, ctx, chunks, lis, t0: performance.now() };
+            rec = { mic, chunks, lis, t0: performance.now() };
             $('talk').classList.add('on'); status('Listening… release to send.');
         } catch (err) { status(`Microphone unavailable: ${err.message}`, 'err'); }
     };
     const stop = async (e) => {
         e.preventDefault(); if (!rec) return;
-        const { stream, ctx, chunks, lis, t0 } = rec; rec = null; $('talk').classList.remove('on');
-        stream.getTracks().forEach((t) => t.stop()); const rate = ctx.sampleRate; await ctx.close();
+        const { mic, chunks, lis, t0 } = rec; rec = null; $('talk').classList.remove('on');
+        const rate = mic.rate; await mic.close();
         if (performance.now() - t0 < 500) { player.live = null; return status('Hold the button while you speak.', 'err'); }
         idle = setInterval(() => { player.live = lis.step(-100); }, 1000 / FPS);
         status('Listening to what you said and how you sound…');
-        try {
-            const r = await fetch(`api/respond?n=${+$('n').value}&seed=${Math.floor(Math.random() * 1e6)}`,
-                { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: encodeWav(chunks, rate) });
-            const body = await r.json().catch(() => ({}));
-            if (!r.ok) throw new Error(body.detail || `server error ${r.status}`);
-            stopIdle(); show(body); status('');
-        } catch (err) { stopIdle(); player.live = null; status(`Response failed: ${err.message}`, 'err'); }
+        try { await respondTo(encodeWav(chunks, rate), stopIdle); }
+        catch (err) { player.live = null; status(`Response failed: ${err.message}`, 'err'); }
+        finally { stopIdle(); }
     };
-    const b = $('talk');
+        const b = $('talk');
     b.addEventListener('pointerdown', start); b.addEventListener('pointerup', stop); b.addEventListener('pointerleave', stop);
     b.addEventListener('keydown', (e) => { if (e.key === ' ' && !e.repeat) start(e); });
     b.addEventListener('keyup', (e) => { if (e.key === ' ') stop(e); });
+
+    // Hands-free: the mic stays open; the end of each turn (0.9 s of silence after 0.6 s of speech, Listen.js) sends
+    // that turn. While the robot answers (waiting, then playing its move) it doesn't take a new turn.
+    const hf = $('handsfree');
+    hf.onclick = async () => {
+        if (free) {
+            await free.mic.close(); free = null; player.live = null;
+            hf.classList.remove('on'); hf.textContent = '👂 Hands-free'; return status('');
+        }
+        try {
+            const lis = new Listener(), ring = [];       // ring: recent sample blocks, ~30 s
+            let total = 0, busyUntil = 0, feed = null, mic = null;
+            const busy = () => performance.now() < busyUntil;
+            const onSamples = (x) => {
+                ring.push([total, x]); total += x.length;
+                while (ring.length && total - ring[0][0] > 30 * mic.rate) ring.shift();
+                feed(x);
+                const te = lis.turnEnd;
+                if (!te || busy()) return;
+                const hop = Math.round(mic.rate / FPS);
+                const s0 = Math.max(0, Math.round((te[0] - 0.3) * FPS) * hop), s1 = Math.round(te[1] * FPS) * hop;
+                const parts = ring.filter(([s, b]) => s + b.length > s0 && s < s1)
+                    .map(([s, b]) => b.subarray(Math.max(0, s0 - s), Math.min(b.length, s1 - s)));
+                busyUntil = performance.now() + 120000;    // until the answer has been played
+                status('Listening to what you said and how you sound…');
+                respondTo(encodeWav(parts, mic.rate))
+                    .then((d) => { busyUntil = performance.now() + 1000 * (d + 0.5); setTimeout(() => { if (free) status('Hands-free: just talk.'); }, 1000 * d); })
+                    .catch((err) => { busyUntil = 0; status(`Response failed: ${err.message}`, 'err'); });
+            };
+            mic = await openMic((x) => onSamples(x));
+            feed = listenerFeed(lis, mic.rate, () => !busy());
+            free = { mic };
+            hf.classList.add('on'); hf.textContent = '👂 Listening (tap to stop)'; status('Hands-free: just talk.');
+        } catch (err) { status(`Microphone unavailable: ${err.message}`, 'err'); }
+    };
 }
 
 // Live mode: when a server answers /api/health (python -m rmr.server), show the prompt box.

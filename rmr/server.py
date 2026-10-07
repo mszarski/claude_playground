@@ -5,7 +5,8 @@
 
 ``POST /api/respond`` takes a WAV recording (request body) and answers like ``/api/generate`` plus ``heard``
 (transcript, voice emotion, arousal / valence / dominance) and ``reading``: speech -> ``rmr.voice`` -> ``rmr.respond``
--> the same motion pipeline.
+-> the same motion pipeline. With ``?stream=1`` it answers in stages as newline-delimited JSON (heard, motion,
+done), so the robot can start moving before the reading is written.
 
 ``POST /api/generate`` takes ``{"prompt", "n", "seed"}`` and returns ``{"prompt", "idea", "recipe", "moves",
 "timing_ms"}``: the zero-shot planner (``rmr.planner.write``, Hugging Face Inference Providers) writes a recipe,
@@ -56,6 +57,18 @@ class Engine:
 
     def respond(self, audio, n=1, seed=0):
         """Recorded speech -> what Reachy heard, how it reads the person, and its response motion."""
+        out = {}
+        for part in self.respond_stream(audio, n, seed):
+            timing = {**out.get("timing_ms", {}), **part.get("timing_ms", {})}
+            out.update(part)
+            out["timing_ms"] = timing
+        out.pop("stage", None)
+        return out
+
+    def respond_stream(self, audio, n=1, seed=0):
+        """Like ``respond``, in stages, so a client can act on each as soon as it exists:
+        ``{"stage": "heard", "heard"}``, then ``{"stage": "motion", "moves", "recipe", "feeling", "idea", ...}`` as
+        soon as the recipe is written (with a v3 student, before the reading), then ``{"stage": "done", "reading"}``."""
         from .respond import respond
         from .voice import Listener
 
@@ -64,21 +77,30 @@ class Engine:
             self.listener = Listener()
         heard = self.listener.hear(audio)
         t1 = time.time()
+        yield {"stage": "heard", "heard": {k: v for k, v in heard.items() if k != "probs"},
+               "timing_ms": {"listen": int(1000 * (t1 - t0))}}
         if self.voice_model:              # the distilled student: response and recipe in one call
             from .respond import Student
             if self.student is None:
                 self.student = Student(self.voice_model)
-            r = self.student(heard)
-            out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
+            moved = False
+            for early, r in self.student.answers(heard):
+                if not moved:
+                    out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
+                    out["timing_ms"]["planner"] = int(1000 * (time.time() - t1)) - out["timing_ms"]["generator"]
+                    out["timing_ms"]["first_motion"] = int(1000 * (time.time() - t0))
+                    yield {"stage": "motion", **out, "idea": r["response"], "feeling": r["feeling"]}
+                    moved = True
+                if not early:
+                    yield {"stage": "done", "reading": r["reading"], "feeling": r["feeling"],
+                           "timing_ms": {"total": int(1000 * (time.time() - t0))}}
         else:
             r = respond(heard, model=self.responder)
             out = self.generate(r["response"], n=n, seed=seed)
-        out["heard"] = {k: v for k, v in heard.items() if k != "probs"}
-        out["reading"] = r["reading"]
-        out["feeling"] = r.get("feeling")
-        out["timing_ms"]["listen"] = int(1000 * (t1 - t0))
-        out["timing_ms"]["total"] = int(1000 * (time.time() - t0))
-        return out
+            out["timing_ms"]["first_motion"] = int(1000 * (time.time() - t0))
+            yield {"stage": "motion", **out, "feeling": r.get("feeling")}
+            yield {"stage": "done", "reading": r["reading"], "feeling": r.get("feeling"),
+                   "timing_ms": {"total": int(1000 * (time.time() - t0))}}
 
     def generate(self, prompt, n=1, seed=0, recipe=None):
         from .generator.sample import generate_batch
@@ -107,6 +129,7 @@ def create_app(engine):
         seed: int = Field(0, ge=0, le=2 ** 31 - 1)
 
     app = FastAPI(title="Reachy Mini text-to-motion")
+    app.state.engine = engine
 
     @app.get("/api/health")
     def health():
@@ -122,10 +145,22 @@ def create_app(engine):
             raise HTTPException(502, f"{type(e).__name__}: {e}")
 
     @app.post("/api/respond")
-    async def respond(request: Request, n: int = 1, seed: int = 0):
+    async def respond(request: Request, n: int = 1, seed: int = 0, stream: bool = False):
         audio = await request.body()
         if not 1000 < len(audio) < 8_000_000:
             raise HTTPException(422, "send a WAV recording between 0.1 s and about 4 minutes")
+        if stream:                      # newline-delimited JSON, one line per stage (Engine.respond_stream)
+            import json
+
+            from fastapi.responses import StreamingResponse
+
+            def lines():
+                try:
+                    for part in engine.respond_stream(audio, max(1, min(4, n)), seed):
+                        yield json.dumps(part) + "\n"
+                except Exception as e:
+                    yield json.dumps({"stage": "error", "detail": f"{type(e).__name__}: {e}"}) + "\n"
+            return StreamingResponse(lines(), media_type="application/x-ndjson")
         try:
             return await run_in_threadpool(engine.respond, audio, max(1, min(4, n)), seed)
         except ValueError as e:

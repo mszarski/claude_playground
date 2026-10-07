@@ -54,5 +54,6 @@ button:disabled { opacity: .5; cursor: wait; }
 #live { margin-top: 4px; }
 #idea-row p { color: var(--text); }
 #talk { flex: 0 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
-#talk.on { border-color: var(--err); color: var(--err); }
+#talk.on, #handsfree.on { border-color: var(--err); color: var(--err); }
+#handsfree { flex: 0 0 auto; }
 #heard-row p, #reading-row p { color: var(--text); }

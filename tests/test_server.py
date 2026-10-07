@@ -41,3 +41,27 @@ def test_generate_rejects_bad_requests(client):
     assert client.post("/api/generate", json={"prompt": "x", "n": 9}).status_code == 422
     assert client.post("/api/generate", json={"prompt": "fail"}).status_code == 422
     assert client.get("/").status_code == 200          # the viewer
+
+
+class _Heard:
+    def hear(self, audio):
+        return {"text": "I got the job!", "emotion": "happy", "confidence": 0.8, "probs": {}}
+
+
+class _Student:
+    def answers(self, heard):
+        r = {"feeling": "happy", "response": "sharing the joy. You perk up.", "recipe": "go .3 e=-10 p=-8 z=10 E=4 | hold 1"}
+        yield True, {**r, "reading": ""}
+        yield False, {**r, "reading": "They're thrilled."}
+
+
+def test_respond_streams_motion_before_reading(client):
+    eng = client.app.state.engine
+    eng.listener, eng.voice_model, eng.student = _Heard(), "fake", _Student()
+    r = client.post("/api/respond?stream=1&n=1", content=b"\0" * 2000)
+    parts = [__import__("json").loads(line) for line in r.text.splitlines()]
+    assert [p["stage"] for p in parts] == ["heard", "motion", "done"]
+    assert parts[1]["moves"] and "reading" not in parts[1] and parts[2]["reading"] == "They're thrilled."
+    whole = client.post("/api/respond", content=b"\0" * 2000).json()       # non-streaming: merged
+    assert whole["reading"] == "They're thrilled." and whole["moves"] and whole["heard"]["text"] == "I got the job!"
+    assert {"listen", "first_motion", "total"} <= set(whole["timing_ms"])

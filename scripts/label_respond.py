@@ -29,6 +29,8 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--val", type=int, default=100)
+    ap.add_argument("--cap", type=int, default=0,
+                    help="at most this many examples per feeling, answers the teacher got right first (0 = no cap)")
     ap.add_argument("--hinted", action="store_true",
                     help="also re-ask the teacher, with the human label as a hint, on clips it misread (labels_hinted.jsonl)")
     a = ap.parse_args()
@@ -86,7 +88,9 @@ def main():
         t, want = labels.get(r["clip"]), MELD[r["meld_emotion"]]
         s = stats.setdefault(want, [0, 0, 0])
         s[0] += 1
+        was_hinted = False
         if not (t and t.get("ok") and t.get("recipe")) or t["feeling"] != want:
+            was_hinted = True
             t = hinted.get(r["clip"])                 # the teacher misread it: use its hinted answer, if any
             if not (t and t.get("ok") and t.get("recipe")) or t["feeling"] != want:
                 continue
@@ -94,8 +98,14 @@ def main():
         if want in ("neutral", "happy", "sad", "angry") and not physical_ok(want, t["recipe"]):
             continue
         s[2] += 1
-        keep.append({"messages": student_messages(r, t), "label": want, "clip": r["clip"]})
+        keep.append({"messages": student_messages(r, t), "label": want, "clip": r["clip"], "hinted": was_hinted})
     random.Random(0).shuffle(keep)
+    if a.cap:      # hinting every misread clip over-represents the feelings the teacher found hardest (v2: angry)
+        keep.sort(key=lambda x: x["hinted"])          # stable: unhinted first, shuffled within each group
+        n = {}
+        keep = [x for x in keep if n.setdefault(x["label"], 0) < a.cap and not n.update({x["label"]: n[x["label"]] + 1})]
+        random.Random(1).shuffle(keep)
+        print("after the cap:", dict(sorted(n.items())))
     val, train = keep[:a.val], keep[a.val:]
     for name, rs in (("train", train), ("val", val)):
         with open(os.path.join(a.out, f"{name}.jsonl"), "w") as f:

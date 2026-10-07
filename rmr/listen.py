@@ -35,6 +35,8 @@ REFRACTORY = 1.2       # minimum time between two nods
 PERK_GAP = 3.0         # ... and between two antenna perks, which lose their meaning when frequent
 ENGAGED = 4.0          # stay attentive this long after the last speech
 FAST, SLOW = 0.5, 0.05 # one-pole smoothing of the loudness envelopes
+END_OF_TURN = 0.9      # silence that ends the speaker's turn (hands-free mode sends the turn) ...
+MIN_TURN = 0.6         # ... once they have spoken at least this long in it
 RISE_DB = 8.0          # fast envelope this far above the slow one = the voice lifted
 
 # Gestures (plan units: deg, mm)
@@ -57,7 +59,8 @@ def _bump(u):
 
 class Listener:
     """Feed ``step(db)`` once per frame (``1 / FPS`` s) with the speaker's loudness in dBFS; it returns the 9-DoF
-    pose for that frame. ``events`` collects ``(t, "nod" | "nod2" | "perk")`` for inspection."""
+    pose for that frame. ``events`` collects ``(t, "nod" | "nod2" | "perk" | "turn")``; ``turn_end`` is
+    ``(start, end)`` on the frame that ends a turn (``END_OF_TURN`` s of silence after ``MIN_TURN`` s of speech)."""
 
     def __init__(self, side=1.0):
         self.dt = 1.0 / FPS
@@ -71,6 +74,9 @@ class Listener:
         self.perk_t = -1e9
         self.side = side           # which way the head tilts; alternates every time the speaker starts again
         self.engaged = 0.0         # 0 = idle pose, 1 = attentive pose (smoothed)
+        self.turn_talk = 0.0       # s of speech in the current turn
+        self.turn_start = None     # t of the turn's first speech frame
+        self.turn_end = None       # (start, end) on the frame the turn ended, else None
         self.events = []
 
     def step(self, db):
@@ -92,6 +98,15 @@ class Listener:
         speaking = self.since_voice < HANGOVER
         if speaking:
             self.talk += dt
+            self.turn_talk += dt
+            if self.turn_start is None:
+                self.turn_start = t
+        self.turn_end = None
+        if self.turn_start is not None and self.since_voice >= END_OF_TURN:
+            if self.turn_talk >= MIN_TURN:
+                self.turn_end = (self.turn_start, t)
+                self.events.append((round(t, 2), "turn"))
+            self.turn_start, self.turn_talk = None, 0.0
 
         # a pause after a phrase: nod (twice after a long stretch)
         if (not speaking and self.since_voice >= PAUSE and self.talk >= MIN_TALK

@@ -8,6 +8,7 @@ import { headJoints } from './StewartIK.js';
  */
 export const FPS = 25;
 const FLOOR_RISE = 0.004, VOICE_DB = 9.0, MIN_DB = -55.0, HANGOVER = 0.2, PAUSE = 0.3, MIN_TALK = 1.0;
+const END_OF_TURN = 0.9, MIN_TURN = 0.6;
 const DOUBLE_TALK = 3.0, REFRACTORY = 1.2, PERK_GAP = 3.0, ENGAGED = 4.0, FAST = 0.5, SLOW = 0.05, RISE_DB = 8.0;
 const NOD_DEG = 7.0, NOD_S = 0.55, NOD_Z = -2.0;
 const PERK_EARS = 25.0, PERK_ATTACK = 0.12, PERK_DECAY = 0.8, PERK_PITCH = -3.0, PERK_Z = 3.0;
@@ -29,6 +30,7 @@ export class Listener {
         this.dt = 1 / FPS; this.t = 0; this.floor = null; this.fast = this.slow = null;
         this.sinceVoice = 1e9; this.talk = 0; this.lastNod = this.lastPerk = -1e9;
         this.nods = []; this.perkT = -1e9; this.side = side; this.engaged = 0; this.events = [];
+        this.turnTalk = 0; this.turnStart = null; this.turnEnd = null;   // turnEnd: [start, end] on the ending frame
     }
 
     /** One frame: the speaker's loudness in dBFS -> viewer joint state. */
@@ -44,7 +46,15 @@ export class Listener {
             this.slow = this.slow === null ? db : this.slow + SLOW * (db - this.slow);
         } else this.sinceVoice += dt;
         const speaking = this.sinceVoice < HANGOVER;
-        if (speaking) this.talk += dt;
+        if (speaking) {
+            this.talk += dt; this.turnTalk += dt;
+            if (this.turnStart === null) this.turnStart = t;
+        }
+        this.turnEnd = null;
+        if (this.turnStart !== null && this.sinceVoice >= END_OF_TURN) {
+            if (this.turnTalk >= MIN_TURN) { this.turnEnd = [this.turnStart, t]; this.events.push([t, 'turn']); }
+            this.turnStart = null; this.turnTalk = 0;
+        }
 
         if (!speaking && this.sinceVoice >= PAUSE && this.talk >= MIN_TALK && t - this.lastNod >= REFRACTORY) {
             const double = this.talk >= DOUBLE_TALK;
