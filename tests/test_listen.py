@@ -102,3 +102,24 @@ def test_learned_head_js_matches_python(tmp_path):
     js = np.array(json.loads(r.stdout))
     assert np.abs(py[:, 4]).max() > 0.01                       # the learned head moves (random weights)
     assert np.allclose(js, py[:, [4, 5, 3]], atol=1e-6)        # pitch, yaw, roll
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_styled_listener_js_matches_python():
+    style = {"nod_deg": 4.0, "pause": 0.2, "min_talk": 0.6, "double_talk": 99.0, "lean": 1.5, "perk": 0.5,
+             "sway_deg": 2.0, "glances": 30.0}
+    x, sr = _speech(seconds=12.0)
+    from rmr.listen import loudness
+    db = loudness(x, sr).tolist() + [-100.0] * 30
+    lis = Listener(style=style, seed=7)
+    py = np.array([lis.step(v) for v in db])
+    js_src = (f"import {{ Listener }} from '{ROOT}/visualizer/src/Listen.js';"
+              f"const l = new Listener(1.0, null, {json.dumps(style)}, 7); const db = {json.dumps(db)};"
+              f"const out = db.map((v) => {{ const s = l.step(v); const h = s.head_pose;"
+              f" return [Math.atan2(-h[8], Math.hypot(h[0], h[4])), Math.atan2(h[4], h[0]), Math.atan2(h[9], h[10]),"
+              f" h[11], s.antennas_position[1]]; }});"
+              f"console.log(JSON.stringify(out));")
+    r = subprocess.run(["node", "--input-type=module", "-e", js_src], capture_output=True, text=True, check=True)
+    js = np.array(json.loads(r.stdout))
+    assert np.degrees(np.ptp(py[:, 5])) > 5                  # glances happened (yaw)
+    assert np.allclose(js, py[:, [4, 5, 3, 2, 7]], atol=1e-9)

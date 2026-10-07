@@ -17,6 +17,25 @@ const ATTENTIVE = { ears: 6.0, pitch: -2.0, roll: 6.0, z: 5.0 };
 const IDLE = { ears: 15.0, pitch: 0.0, roll: 0.0, z: 3.0 };
 const POSE_TAU = 0.6, BREATH_MM = 1.2, BREATH_S = 4.0;
 
+/** The listening style (rmr.listen.STYLE): what a person tunes by comparing listeners side by side. */
+export const STYLE = { nod_deg: NOD_DEG, pause: PAUSE, min_talk: MIN_TALK, double_talk: DOUBLE_TALK, lean: 1.0, perk: 1.0,
+    sway_deg: 0.0, glances: 0.0 };
+const GLANCE_DEG = 8.0, GLANCE_S = 1.2;
+const SWAY_HZ = [[0.11, 0.23, 0.41], [0.07, 0.17, 0.31], [0.13, 0.19, 0.37]];   // pitch, yaw, roll
+
+/** mulberry32, the same 32-bit arithmetic as rmr.listen._rng. */
+function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+const ease = (u) => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+
 const bump = (u) => (u <= 0 || u >= 1) ? 0 : Math.sin(Math.PI * u ** 0.7) ** 2;
 const rad = (d) => d * Math.PI / 180;
 
@@ -30,9 +49,13 @@ function pose(z, roll, pitch, yaw = 0) {
 }
 
 export class Listener {
-    /** head: optional LearnedHead (ListenModel.js); it then drives pitch, yaw and roll in place of the rule nods. */
-    constructor(side = 1.0, head = null) {
+    /** head: optional LearnedHead (ListenModel.js); it then drives pitch, yaw and roll in place of the rule nods.
+     *  style: overrides of STYLE; seed: for the sway phases and the glances. */
+    constructor(side = 1.0, head = null, style = null, seed = 1) {
         this.head = head; this.feats = head ? new SpeakerFeatures() : null;
+        this.style = { ...STYLE, ...(style || {}) }; this.rng = rng(seed);
+        this.phase = [0, 1, 2].map(() => [0, 1, 2].map(() => 2 * Math.PI * this.rng()));
+        this.glance = null;
         this.dt = 1 / FPS; this.t = 0; this.floor = null; this.fast = this.slow = null;
         this.sinceVoice = 1e9; this.talk = 0; this.lastNod = this.lastPerk = -1e9;
         this.nods = []; this.perkT = -1e9; this.side = side; this.engaged = 0; this.events = [];
@@ -62,14 +85,15 @@ export class Listener {
             this.turnStart = null; this.turnTalk = 0;
         }
 
-        if (!speaking && this.sinceVoice >= PAUSE && this.talk >= MIN_TALK && t - this.lastNod >= REFRACTORY) {
-            const double = this.talk >= DOUBLE_TALK;
+        const st = this.style;
+        if (st.nod_deg > 0 && !speaking && this.sinceVoice >= st.pause && this.talk >= st.min_talk && t - this.lastNod >= REFRACTORY) {
+            const double = this.talk >= st.double_talk;
             this.nods.push([t, 1.0, NOD_S]);
             if (double) this.nods.push([t + NOD_S * 0.9, 0.6, NOD_S * 0.8]);
             if (!this.head) this.events.push([t, double ? 'nod2' : 'nod']);
             this.lastNod = t; this.talk = 0;
         }
-        if (voiced && this.fast !== null && this.fast - this.slow > RISE_DB && t - this.lastPerk >= PERK_GAP) {
+        if (st.perk > 0 && voiced && this.fast !== null && this.fast - this.slow > RISE_DB && t - this.lastPerk >= PERK_GAP) {
             this.perkT = this.lastPerk = t;
             this.events.push([t, 'perk']);
         }
@@ -77,21 +101,36 @@ export class Listener {
         const target = this.sinceVoice < ENGAGED ? 1 : 0;
         this.engaged += (target - this.engaged) * (1 - Math.exp(-dt / POSE_TAU));
         const p = {};
-        for (const k in IDLE) p[k] = IDLE[k] + this.engaged * (ATTENTIVE[k] - IDLE[k]);
+        for (const k in IDLE) p[k] = IDLE[k] + st.lean * this.engaged * (ATTENTIVE[k] - IDLE[k]);
         p.roll *= this.side;
 
         const nod = this.nods.reduce((s, [s0, a, d]) => s + a * bump((t - s0) / d), 0);
         this.nods = this.nods.filter((n) => t - n[0] < n[2]);
         const u = t - this.perkT;
-        const perk = u < 0 ? 0 : (u < PERK_ATTACK ? u / PERK_ATTACK : Math.exp(-(u - PERK_ATTACK) / PERK_DECAY));
+        const perk = st.perk * (u < 0 ? 0 : (u < PERK_ATTACK ? u / PERK_ATTACK : Math.exp(-(u - PERK_ATTACK) / PERK_DECAY)));
 
         const ears = p.ears - PERK_EARS * perk;
-        let yaw = 0, n = nod;
+        const sway = [0, 1, 2].map((a) => st.sway_deg * this.engaged *
+            SWAY_HZ[a].reduce((s, f, i) => s + Math.sin(2 * Math.PI * f * t + this.phase[a][i]), 0) / 3);
+        let g = 0;
+        if (this.glance === null && st.glances > 0 && this.engaged > 0.5) {
+            if (this.rng() < st.glances / 60 / FPS) {
+                const dir = this.rng() < 0.5 ? 1 : -1;
+                this.glance = [t, dir * GLANCE_DEG * (0.6 + 0.4 * this.rng())];
+            }
+        }
+        if (this.glance !== null) {
+            const v = t - this.glance[0];
+            g = this.glance[1] * (ease(v / 0.25) - ease((v - GLANCE_S + 0.35) / 0.35));
+            if (v >= GLANCE_S) this.glance = null;
+        }
+        p.pitch += sway[0]; p.roll += sway[2];
+        let yaw = sway[1] + g, n = nod;
         if (this.head) {
             const [hp, hy, hr] = this.head.step(this.feats.step(db, speaking));
-            n = 0; yaw = hy; p.pitch += hp; p.roll += hr;
+            n = 0; yaw += hy; p.pitch += hp; p.roll += hr;
         }
-        const pitch = p.pitch + NOD_DEG * n + PERK_PITCH * perk;
+        const pitch = p.pitch + st.nod_deg * n + PERK_PITCH * perk;
         const z = p.z + NOD_Z * n + PERK_Z * perk + BREATH_MM * Math.sin(2 * Math.PI * t / BREATH_S);
         this.t += dt;
         const head = pose(z / 1000, rad(p.roll), rad(pitch), rad(yaw));

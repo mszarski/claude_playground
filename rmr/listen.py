@@ -49,6 +49,41 @@ IDLE = {"ears": 15.0, "pitch": 0.0, "roll": 0.0, "z": 3.0}        # rmr.recipe.N
 POSE_TAU = 0.6                    # seconds to settle into / out of the attentive pose
 BREATH_MM, BREATH_S = 1.2, 4.0    # slow breathing on z, so the robot never freezes
 
+# The listening *style*: what a person tunes by comparing listeners side by side (scripts/listen_rating.py).
+# The defaults are the original hand-set behaviour; ``sway`` and ``glances`` are off unless a style turns them on.
+STYLE = {
+    "nod_deg": NOD_DEG,     # nod size (0 = never nod)
+    "pause": PAUSE,         # silence that earns a nod ...
+    "min_talk": MIN_TALK,   # ... after this much speech
+    "double_talk": DOUBLE_TALK,   # a double nod after this much speech (a large value = never)
+    "lean": 1.0,            # how far into the attentive pose it leans (1 = ATTENTIVE)
+    "perk": 1.0,            # antenna perks when the voice lifts (0 = off)
+    "sway_deg": 0.0,        # gentle continuous head motion while listening, deg (pitch, yaw, roll)
+    "glances": 0.0,         # quick looks aside per minute while listening
+}
+GLANCE_DEG, GLANCE_S = 8.0, 1.2   # a glance turns this far (x 0.6-1.0) and lasts this long
+SWAY_HZ = ((0.11, 0.23, 0.41), (0.07, 0.17, 0.31), (0.13, 0.19, 0.37))   # per axis: pitch, yaw, roll
+
+
+def _rng(seed):
+    """mulberry32: a tiny seeded generator with the same 32-bit arithmetic as Listen.js."""
+    state = [seed & 0xFFFFFFFF]
+
+    def imul(a, b):
+        return (a * b) & 0xFFFFFFFF
+
+    def nxt():
+        state[0] = (state[0] + 0x6D2B79F5) & 0xFFFFFFFF
+        t = state[0]
+        t = imul(t ^ (t >> 15), t | 1)
+        t ^= (t + imul(t ^ (t >> 7), t | 61)) & 0xFFFFFFFF
+        return ((t ^ (t >> 14)) & 0xFFFFFFFF) / 4294967296
+    return nxt
+
+
+def _ease(u):
+    return 0.0 if u <= 0 else 1.0 if u >= 1 else u * u * (3 - 2 * u)
+
 
 def _bump(u):
     """0 -> 1 -> 0 over u in [0, 1], quicker down than up (a nod drops, then recovers)."""
@@ -62,10 +97,15 @@ class Listener:
     pose for that frame. ``events`` collects ``(t, "nod" | "nod2" | "perk" | "turn")``; ``turn_end`` is
     ``(start, end)`` on the frame that ends a turn (``END_OF_TURN`` s of silence after ``MIN_TURN`` s of speech)."""
 
-    def __init__(self, side=1.0, head=None):
+    def __init__(self, side=1.0, head=None, style=None, seed=1):
         """``head``: an optional ``rmr.listen_model.LearnedHead``; it then drives the head's pitch, yaw and roll
-        (learned from real listeners) in place of the rule-based nods."""
+        (learned from real listeners) in place of the rule-based nods. ``style``: overrides of ``STYLE``;
+        ``seed``: for the sway phases and the glances."""
         self.head = head
+        self.style = {**STYLE, **(style or {})}
+        self.rng = _rng(seed)
+        self.phase = [[2 * math.pi * self.rng() for _ in range(3)] for _ in range(3)]
+        self.glance = None         # (start, direction * amplitude) of the current glance
         if head is not None:
             from .listen_model import SpeakerFeatures
             self.feats = SpeakerFeatures()
@@ -114,10 +154,11 @@ class Listener:
                 self.events.append((round(t, 2), "turn"))
             self.turn_start, self.turn_talk = None, 0.0
 
+        st = self.style
         # a pause after a phrase: nod (twice after a long stretch)
-        if (not speaking and self.since_voice >= PAUSE and self.talk >= MIN_TALK
+        if (st["nod_deg"] > 0 and not speaking and self.since_voice >= st["pause"] and self.talk >= st["min_talk"]
                 and t - self.last_nod >= REFRACTORY):
-            double = self.talk >= DOUBLE_TALK
+            double = self.talk >= st["double_talk"]
             self.nods.append((t, 1.0, NOD_S))
             if double:
                 self.nods.append((t + NOD_S * 0.9, 0.6, NOD_S * 0.8))
@@ -125,14 +166,14 @@ class Listener:
                 self.events.append((round(t, 2), "nod2" if double else "nod"))
             self.last_nod, self.talk = t, 0.0
         # the voice lifts: perk the antennas
-        if (voiced and self.fast is not None and self.fast - self.slow > RISE_DB
+        if (st["perk"] > 0 and voiced and self.fast is not None and self.fast - self.slow > RISE_DB
                 and t - self.last_perk >= PERK_GAP):
             self.perk_t = self.last_perk = t
             self.events.append((round(t, 2), "perk"))
 
         target = 1.0 if self.since_voice < ENGAGED else 0.0
         self.engaged += (target - self.engaged) * (1 - math.exp(-dt / POSE_TAU))
-        pose = {k: IDLE[k] + self.engaged * (ATTENTIVE[k] - IDLE[k]) for k in IDLE}
+        pose = {k: IDLE[k] + st["lean"] * self.engaged * (ATTENTIVE[k] - IDLE[k]) for k in IDLE}
         pose["roll"] *= self.side
 
         nod = sum(a * _bump((t - s) / d) for s, a, d in self.nods)
@@ -140,14 +181,31 @@ class Listener:
         u = t - self.perk_t
         perk = 0.0 if u < 0 else (u / PERK_ATTACK if u < PERK_ATTACK else math.exp(-(u - PERK_ATTACK) / PERK_DECAY))
 
+        perk *= st["perk"]
         ears = pose["ears"] - PERK_EARS * perk
         yaw = 0.0
+        # sway: slow, smooth motion on all three axes while engaged (three incommensurate sines per axis)
+        sway = [st["sway_deg"] * self.engaged * sum(math.sin(2 * math.pi * f * t + ph) for f, ph in
+                                                    zip(SWAY_HZ[a], self.phase[a])) / 3 for a in range(3)]
+        # glances: now and then a quick look aside and back, only while engaged
+        g = 0.0
+        if self.glance is None and st["glances"] > 0 and self.engaged > 0.5:
+            if self.rng() < st["glances"] / 60 / FPS:
+                self.glance = (t, (1 if self.rng() < 0.5 else -1) * GLANCE_DEG * (0.6 + 0.4 * self.rng()))
+        if self.glance is not None:
+            u = t - self.glance[0]
+            g = self.glance[1] * (_ease(u / 0.25) - _ease((u - GLANCE_S + 0.35) / 0.35))
+            if u >= GLANCE_S:
+                self.glance = None
+        pose["pitch"] += sway[0]
+        yaw = sway[1] + g
+        pose["roll"] += sway[2]
         if self.head is not None:          # learned head motion replaces the rule-based nods
             hp, hy, hr = self.head.step(self.feats.step(db, speaking))
-            nod, yaw = 0.0, hy
+            nod, yaw = 0.0, yaw + hy
             pose["pitch"] += hp
             pose["roll"] += hr
-        pitch = pose["pitch"] + NOD_DEG * nod + PERK_PITCH * perk
+        pitch = pose["pitch"] + st["nod_deg"] * nod + PERK_PITCH * perk
         z = pose["z"] + NOD_Z * nod + PERK_Z * perk + BREATH_MM * math.sin(2 * math.pi * t / BREATH_S)
         self.t += dt
         r = math.radians
@@ -163,21 +221,22 @@ def loudness(audio, sr, fps=FPS):
     return 10 * np.log10(np.mean(x ** 2, axis=1) + 1e-10)
 
 
-def listening_traj(audio, sr, tail=1.5, head=None):
+def listening_traj(audio, sr, tail=1.5, head=None, style=None, seed=1):
     """Run ``Listener`` over a recording (plus ``tail`` s of silence, so the last phrase gets its nod).
-    Returns ``(trajectory (T, 9), events)``. ``head``: optional learned head (``rmr.listen_model.LearnedHead``)."""
+    Returns ``(trajectory (T, 9), events)``. ``head``: optional learned head (``rmr.listen_model.LearnedHead``);
+    ``style``: overrides of ``STYLE``."""
     db = np.concatenate([loudness(audio, sr), np.full(int(tail * FPS), -100.0)])
-    lis = Listener(head=head)
+    lis = Listener(head=head, style=style, seed=seed)
     A = np.array([lis.step(float(v)) for v in db])
     return A, lis.events
 
 
-def listening_move(audio, sr, description="listening", head=None):
-    A, events = listening_traj(audio, sr, head=head)
+def listening_move(audio, sr, description="listening", head=None, style=None, seed=1):
+    A, events = listening_traj(audio, sr, head=head, style=style, seed=seed)
     return traj_to_move(A, description), events
 
 
-def render(audio_path, out, width=520, height=420, head=None, title=None):
+def render(audio_path, out, width=520, height=420, head=None, title=None, style=None, seed=1, labels=True):
     """Render the listening move for ``audio_path`` to ``out`` (.mp4, with the speech as its soundtrack)."""
     import os
     import subprocess
@@ -190,7 +249,7 @@ def render(audio_path, out, width=520, height=420, head=None, title=None):
     from .voice import load_audio
 
     sr = 16000
-    move, events = listening_move(load_audio(audio_path), sr, head=head)
+    move, events = listening_move(load_audio(audio_path), sr, head=head, style=style, seed=seed)
     Reach().project(move)
     frames = Sim(width, height).play(move)
     names = {"nod": "nod", "nod2": "double nod", "perk": "antennas perk"}
@@ -199,7 +258,8 @@ def render(audio_path, out, width=520, height=420, head=None, title=None):
     for i in range(len(frames)):
         if i in shown:
             label, until = shown[i], i + FPS
-        frames[i] = _label(frames[i], " · ".join(x for x in (title, label if i < until else "") if x))
+        if labels:
+            frames[i] = _label(frames[i], " · ".join(x for x in (title, label if i < until else "") if x))
     silent = out[:-4] + ".silent.mp4"
     _write(silent, frames)
     # pad the speech with silence to the video's length, so the closing nod isn't cut off
