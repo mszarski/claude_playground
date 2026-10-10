@@ -463,13 +463,57 @@ class Game {
       setTimeoutSim(this, 30, () => { if (this.world.buildings.has(home.id)) { this.staff.push(new Staff(this, h.role, home)); this.spend(5000, 'ops'); } });
     }
   }
-  killDino(d, cause) {
+  killDino(d, cause, natural = false) {
     if (d.dead) return;
     d.dead = true;
     this.stats.dinoDeaths++;
+    if (natural) {
+      this.burst(d.x, d.y, '#e8e0c0', 10);
+      this.log(`${d.name} the ${d.sp.name} died peacefully of old age after ${Math.floor(d.ageDays)} days.`, 'warn', { x: d.x, y: d.y }, true);
+      return;
+    }
     this.burst(d.x, d.y, '#8a2a20', 16);
     this.log(`${d.name} the ${d.sp.name} has died (${cause}).`, 'bad', { x: d.x, y: d.y }, true);
     this.reputation = Math.max(0, this.reputation - 2);
+  }
+
+  // Life finds a way: comfortable adult pairs sometimes produce a hatchling
+  breed() {
+    if (this.breedingOff) return;
+    const w = this.world;
+    if (this.dinos.length >= 70) return;
+    const byReg = new Map();
+    for (const d of this.dinos) {
+      if (d.loose || d.carried || d.sedatedT > 0 || d.growth < 1 || d.elderly) continue;
+      const r = w.region[w.idx(d.tx, d.ty)];
+      if (r < 0) continue;
+      if (!byReg.has(r)) byReg.set(r, []);
+      byReg.get(r).push(d);
+    }
+    for (const [rid, list] of byReg) {
+      const reg = w.regions[rid];
+      const all = this.dinos.filter((d) => !d.carried && w.region[w.idx(d.tx, d.ty)] === rid);
+      const used = all.reduce((a, d) => a + d.sp.space, 0);
+      const bySp = {};
+      for (const d of list) (bySp[d.species] = bySp[d.species] || []).push(d);
+      for (const [sp, ds] of Object.entries(bySp)) {
+        if (ds.length < 2) continue;
+        const S = SPECIES[sp];
+        if (used + S.space > reg.size) continue;
+        const comfy = ds.filter((d) => d.comfort >= 68 && d.hunger < 60).length;
+        if (comfy < 2) continue;
+        if (!chance(S.diet === 'carn' ? 0.12 : 0.22)) continue;
+        const parent = ds[0];
+        const baby = new Dino(this, sp, parent.tx, parent.ty);
+        baby.growth = 0.5;
+        this.dinos.push(baby);
+        this.stats.born = (this.stats.born || 0) + 1;
+        this.burst(parent.x, parent.y, '#f0e8c8', 12);
+        this.log(`Life finds a way: ${parent.name} the ${S.name} had a hatchling, ${baby.name}!`, 'good', baby, true);
+        this.sound('hatch');
+        break;
+      }
+    }
   }
   removeGuest(gu, leftNormally) {
     gu.dead = true;
@@ -862,6 +906,7 @@ class Game {
     this.peakGuests = this.guests.length;
     this.stats.fledToday = 0;
     this.events.onNewDay(day);
+    this.breed();
     this.emit('day', day);
     // game over checks
     if (this.money < -100000) {

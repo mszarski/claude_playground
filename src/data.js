@@ -23,73 +23,73 @@ const FENCE_DEF = {
 // space: tiles needed each; social: preferred minimum group; unlock: star rating needed
 const SPECIES = {
   galli: {
-    name: 'Gallimimus', sci: 'Gallimimus bullatus', diet: 'herb', cost: 22000, appeal: 3, strength: 1, danger: 1,
+    name: 'Gallimimus', sci: 'Gallimimus bullatus', diet: 'herb', life: 38, cost: 22000, appeal: 3, strength: 1, danger: 1,
     speed: 3.4, hp: 60, tranq: 1, space: 14, social: 3, forest: 0.15, unlock: 0, size: 1,
     colors: { O: '#2a1d14', B: '#b88a4a', D: '#8a5e32', L: '#e8d0a0', S: '#7a4a2a', E: '#141018' },
     desc: 'Fast, skittish flock runner. Happiest in large groups.'
   },
   para: {
-    name: 'Parasaurolophus', sci: 'Parasaurolophus walkeri', diet: 'herb', cost: 34000, appeal: 4, strength: 2, danger: 0,
+    name: 'Parasaurolophus', sci: 'Parasaurolophus walkeri', diet: 'herb', life: 45, cost: 34000, appeal: 4, strength: 2, danger: 0,
     speed: 2.2, hp: 90, tranq: 1, space: 18, social: 2, forest: 0.3, unlock: 0, size: 2,
     colors: { O: '#1e1a12', B: '#5f8a4a', D: '#3f6232', L: '#d8d0a0', S: '#c85a2a', E: '#141018' },
     desc: 'Gentle crested herbivore. Hooting herds delight guests.'
   },
   dilo: {
-    name: 'Dilophosaurus', sci: 'Dilophosaurus wetherilli', diet: 'carn', cost: 45000, appeal: 5, strength: 2, danger: 4,
+    name: 'Dilophosaurus', sci: 'Dilophosaurus wetherilli', diet: 'carn', life: 45, cost: 45000, appeal: 5, strength: 2, danger: 4,
     speed: 3.0, hp: 70, tranq: 1, space: 16, social: 1, forest: 0.4, unlock: 0, size: 1,
     colors: { O: '#14181a', B: '#7a9a52', D: '#4a6a3a', L: '#e0d890', S: '#e86a2a', E: '#f8e040' },
     desc: 'Frilled venom-spitter. Small, but nasty when loose.'
   },
   trike: {
-    name: 'Triceratops', sci: 'Triceratops horridus', diet: 'herb', cost: 60000, appeal: 6, strength: 6, danger: 2,
+    name: 'Triceratops', sci: 'Triceratops horridus', diet: 'herb', life: 60, cost: 60000, appeal: 6, strength: 6, danger: 2,
     speed: 1.5, hp: 180, tranq: 2, space: 30, social: 1, forest: 0.2, unlock: 1, size: 2,
     colors: { O: '#1a1410', B: '#8a6a52', D: '#5e4636', L: '#c8b090', S: '#b84a2a', E: '#141018' },
     desc: 'Armored and stubborn. Charges fences when stressed.'
   },
   stego: {
-    name: 'Stegosaurus', sci: 'Stegosaurus stenops', diet: 'herb', cost: 52000, appeal: 5, strength: 4, danger: 1,
+    name: 'Stegosaurus', sci: 'Stegosaurus stenops', diet: 'herb', life: 60, cost: 52000, appeal: 5, strength: 4, danger: 1,
     speed: 1.3, hp: 160, tranq: 2, space: 26, social: 2, forest: 0.3, unlock: 1, size: 2,
     colors: { O: '#18160e', B: '#6a7a4a', D: '#4a5632', L: '#c8c890', S: '#d07a2a', E: '#141018' },
     desc: 'Plated giant with a spiked tail. Mostly peaceful.'
   },
   raptor: {
-    name: 'Velociraptor', sci: 'Velociraptor antirrhopus', diet: 'carn', cost: 95000, appeal: 8, strength: 3, danger: 8,
+    name: 'Velociraptor', sci: 'Velociraptor antirrhopus', diet: 'carn', life: 45, cost: 95000, appeal: 8, strength: 3, danger: 8,
     speed: 4.4, hp: 90, tranq: 2, space: 20, social: 3, forest: 0.35, unlock: 2, size: 1, clever: true,
     colors: { O: '#16120e', B: '#a0784a', D: '#6a4a2a', L: '#e0c898', S: '#4a3020', E: '#f8d040' },
     desc: 'Pack hunter. Systematically tests fences for weaknesses.'
   },
   anky: {
-    name: 'Ankylosaurus', sci: 'Ankylosaurus magniventris', diet: 'herb', cost: 72000, appeal: 5, strength: 7, danger: 2,
+    name: 'Ankylosaurus', sci: 'Ankylosaurus magniventris', diet: 'herb', life: 70, cost: 72000, appeal: 5, strength: 7, danger: 2,
     speed: 1.1, hp: 240, tranq: 3, space: 26, social: 1, forest: 0.2, unlock: 2, size: 2,
     colors: { O: '#14120e', B: '#7a6a4a', D: '#4e4232', L: '#b8a880', S: '#3e3428', E: '#141018' },
     desc: 'Living tank with a club tail. Fences beware.'
   },
   brachio: {
-    name: 'Brachiosaurus', sci: 'Brachiosaurus altithorax', diet: 'herb', cost: 130000, appeal: 10, strength: 8, danger: 1,
+    name: 'Brachiosaurus', sci: 'Brachiosaurus altithorax', diet: 'herb', life: 90, cost: 130000, appeal: 10, strength: 8, danger: 1,
     speed: 0.9, hp: 400, tranq: 4, space: 50, social: 2, forest: 0.45, unlock: 3, size: 3,
     colors: { O: '#141a18', B: '#6a8a7a', D: '#4a6258', L: '#b8c8a8', S: '#587868', E: '#141018' },
     desc: 'The welcome-to-the-park moment. Guests adore it.'
   },
   trex: {
-    name: 'Tyrannosaurus', sci: 'Tyrannosaurus rex', diet: 'carn', cost: 220000, appeal: 14, strength: 10, danger: 10,
+    name: 'Tyrannosaurus', sci: 'Tyrannosaurus rex', diet: 'carn', life: 75, cost: 220000, appeal: 14, strength: 10, danger: 10,
     speed: 2.6, hp: 380, tranq: 5, space: 60, social: 1, forest: 0.25, unlock: 3, size: 3, territorial: true,
     colors: { O: '#140e0a', B: '#7a5a3e', D: '#4e3624', L: '#b89a72', S: '#5a3a24', E: '#f0a020' },
     desc: 'The main attraction. Do not let her out. Ever.'
   },
   spino: {
-    name: 'Spinosaurus', sci: 'Spinosaurus aegyptiacus', diet: 'carn', cost: 280000, appeal: 15, strength: 10, danger: 10,
+    name: 'Spinosaurus', sci: 'Spinosaurus aegyptiacus', diet: 'carn', life: 75, cost: 280000, appeal: 15, strength: 10, danger: 10,
     speed: 2.4, hp: 420, tranq: 6, space: 60, social: 1, forest: 0.2, unlock: 4, size: 3, territorial: true,
     colors: { O: '#120e0e', B: '#6a5a5e', D: '#443a3e', L: '#b8a8a0', S: '#c84a3a', E: '#f8c020' },
     desc: 'Sail-backed apex predator. Needs water in its paddock.'
   },
   indom: {
-    name: 'Indominus', sci: 'Indominus rex (hybrid)', diet: 'carn', cost: 600000, appeal: 26, strength: 12, danger: 10,
+    name: 'Indominus', sci: 'Indominus rex (hybrid)', diet: 'carn', life: 90, cost: 600000, appeal: 26, strength: 12, danger: 10,
     speed: 2.8, hp: 500, tranq: 8, space: 80, social: 1, forest: 0.3, unlock: 5, size: 3, territorial: true, clever: true, camo: true,
     colors: { O: '#1a1a1e', B: '#d8d8d0', D: '#a8a8a0', L: '#f0f0e8', S: '#8a8a84', E: '#e83020' },
     desc: 'Genetically engineered showstopper. Clever, enormous, and can camouflage itself.'
   },
   ptera: {
-    name: 'Pteranodon', sci: 'Pteranodon longiceps', diet: 'carn', cost: 65000, appeal: 7, strength: 1, danger: 5,
+    name: 'Pteranodon', sci: 'Pteranodon longiceps', diet: 'carn', life: 50, cost: 65000, appeal: 7, strength: 1, danger: 5,
     speed: 3.5, hp: 70, tranq: 1, space: 0, social: 1, forest: 0, unlock: 2, size: 1, flying: true,
     colors: { O: '#2a1a14', B: '#9a6a4a', D: '#6a4a32', L: '#d8b890', S: '#c84a2a', E: '#f8d040' },
     desc: 'Lives in an Aviary. If the dome is damaged, they fly free and snatch guests.'

@@ -25,7 +25,11 @@ class Dino {
     this.roarCD = randf(5, 20);
     this.lastBreach = 0;
     this.growth = 0.6; // hatchlings grow up over a couple of days
+    this.ageDays = 0;
+    this.lifespan = this.sp.life * randf(0.9, 1.15);
   }
+  get elderly() { return this.ageDays > this.lifespan * 0.8; }
+  get sellValue() { return Math.round(this.sp.cost * (this.growth < 1 ? 0.25 : this.elderly ? 0.15 : 0.35)); }
   get str() { return this.sp.strength * this.growth; }
 
   get tx() { return Math.floor(this.x); }
@@ -35,6 +39,7 @@ class Dino {
     let s = this.sp.speed * 0.55;
     if (this.hp < this.sp.hp * 0.4) s *= 0.7;
     if (this.sick > 0) s *= 0.7;
+    if (this.elderly) s *= 0.8;
     return s;
   }
 
@@ -45,6 +50,8 @@ class Dino {
     if (this.flash > 0) this.flash -= dt;
     if (this.carried) return;
     this.age += dt;
+    this.ageDays += dt / (g.secPerHour * 24);
+    if (this.ageDays > this.lifespan && !this.loose && this.sedatedT <= 0) { g.killDino(this, 'old age', true); return; }
     if (this.growth < 1) {
       this.growth = Math.min(1, this.growth + dt / 150);
       if (this.growth >= 1) g.log(`${this.name} the ${this.sp.name} is fully grown.`, 'info', this);

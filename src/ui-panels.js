@@ -33,6 +33,7 @@ class UIPanels {
       const lbl = { space: 'Space', forest: 'Cover', water: 'Water', social: 'Social', food: 'Food', fear: 'Predators', loose: 'Loose', base: '' };
       const parts = Object.keys(p).filter((k) => lbl[k]).map((k) => `<span class="tag" style="background:${p[k] < 0 ? '#7a2018' : p[k] >= 10 ? '#2a5a2a' : '#5a5a2a'}">${lbl[k]} ${p[k] >= 0 ? '+' : ''}${Math.round(p[k])}</span>`).join('');
       html += `<div>${parts}</div>`;
+      if (d.ageDays !== undefined) html += `<div class="row"><span>Age</span><span>${Math.floor(d.ageDays)} days${d.growth < 1 ? ' · hatchling' : d.elderly ? ' · elderly' : ''}</span></div>`;
       html += `<div class="row"><span>Appeal</span><span>${sp.appeal}</span></div><div class="row"><span>Danger</span><span>${'☠'.repeat(Math.ceil(sp.danger / 2)) || '—'}</span></div>`;
       if (d.kills) html += `<div class="row"><span>Kills</span><span style="color:#e04838">${d.kills}</span></div>`;
       html += `<div class="sub">${sp.desc}</div>`;
@@ -40,7 +41,7 @@ class UIPanels {
       html += `<button data-a="sedate" ${d.sedatedT > 0 || d.carried || !g.hasBuilding('ranger') ? 'disabled' : ''} title="Rangers will tranquilize it">${d.orderSedate ? 'Sedating…' : 'Sedate'}</button>`;
       if (d.loose && d.sedatedT <= 0 && !d.carried) html += `<button data-a="strike" ${g.helis.length ? '' : 'disabled'} title="Helicopter darts it from the air ($8k)">ACU Strike $8k</button>`;
       html += `<button data-a="relocate" ${!g.hasBuilding('helipad') || d.carried || d.isPtera ? 'disabled' : ''} title="Pick a destination paddock; rangers sedate it and the ACU flies it there">Move…</button>`;
-      html += `<button data-a="sell" class="danger" title="Ship to another facility">Sell ${fmtMoney(sp.cost * 0.4)}</button></div>`;
+      html += `<button data-a="sell" class="danger" title="Ship to another facility">Sell ${fmtMoney(d.sellValue || sp.cost * 0.35)}</button></div>`;
       portrait = () => {
         const c = $('#portrait'); if (!c) return;
         const S = DINO_SPRITES[d.species];
@@ -118,7 +119,7 @@ class UIPanels {
     if (a === 'relocate' && o) { this.moveDino = o; this.setTool('movedest'); this.toast(`Click inside the paddock where ${o.name} should go (Esc to cancel).`, 'info'); }
     if (a === 'sell' && o) {
       if (o.carried) return;
-      g.earn(o.sp.cost * 0.4, 'grants'); o.dead = true;
+      g.earn(o.sellValue || o.sp.cost * 0.35, 'grants'); o.dead = true;
       g.log(`${o.name} the ${o.sp.name} was shipped to another facility.`, 'info');
       this.select(null); return;
     }
@@ -180,7 +181,7 @@ class UIPanels {
       const order = [...all].sort((a, b) => (b.loose - a.loose) || (b.stress - a.stress));
       for (const d of order) {
         const st = d.carried ? '<span style="color:#70b8f0">AIRLIFT</span>' : d.sedatedT > 0 ? '<span style="color:#a8a8f0">SEDATED</span>' : d.loose ? '<span style="color:#ff6040">LOOSE!</span>' : d.sick > 0 ? '<span style="color:#9ae060">SICK</span>' : d.stress > 65 ? '<span style="color:#f0a030">AGITATED</span>' : '<span style="color:#8ad06a">OK</span>';
-        html += `<div class="rrow" data-id="${d.id}"><canvas data-dspr="${d.species}"></canvas><span><b>${d.name}</b> <span style="color:#9ab08a">${d.sp.name}</span></span>${mini(d.hp / d.sp.hp * 100, '#5ac85a')}${mini(d.hunger, d.hunger > 70 ? '#e04838' : '#f0a030')}<span class="hide">${mini(d.stress, d.stress > 65 ? '#e04838' : '#c8a040')}</span><span>${st}</span></div>`;
+        html += `<div class="rrow" data-id="${d.id}"><canvas data-dspr="${d.species}"></canvas><span><b>${d.name}</b> <span style="color:#9ab08a">${d.sp.name}${d.ageDays !== undefined ? ' · ' + Math.floor(d.ageDays) + 'd' + (d.growth < 1 ? ' baby' : d.elderly ? ' old' : '') : ''}</span></span>${mini(d.hp / d.sp.hp * 100, '#5ac85a')}${mini(d.hunger, d.hunger > 70 ? '#e04838' : '#f0a030')}<span class="hide">${mini(d.stress, d.stress > 65 ? '#e04838' : '#c8a040')}</span><span>${st}</span></div>`;
       }
       html += `</div>`;
     }
@@ -253,6 +254,7 @@ class UIPanels {
     let html = `<h1>MENU</h1><div class="btns" style="flex-direction:column;align-items:stretch;gap:6px">
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
+      <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;
     this.showModal(html);
     for (const b of document.querySelectorAll('[data-m]')) b.onclick = () => {
@@ -261,6 +263,7 @@ class UIPanels {
       else if (m === 'save') { const ok = saveGame(this.game); this.closeModal(); this.toast(ok ? 'Park saved.' : 'Could not save (storage unavailable).', ok ? 'good' : 'bad'); }
       else if (m === 'load') { this.closeModal(); loadGameFromStorage(); }
       else if (m === 'help') this.showHelp();
+      else if (m === 'breed') { this.game.breedingOff = !this.game.breedingOff; this.showMenu(); }
       else if (m === 'advisor') { this.game.advisorOn = this.game.advisorOn === false; this.showMenu(); }
       else if (m === 'new') { this.closeModal(); showTitle(); }
     };
