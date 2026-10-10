@@ -230,6 +230,7 @@ class UI {
       else if (k === '1') this.setSpeed(1);
       else if (k === '2') this.setSpeed(2);
       else if (k === '3') this.setSpeed(4);
+      else if (k === '4') this.setSpeed(8);
       else if (k === 'escape') { if ($('#modal').style.display === 'flex') this.closeModal(); else if (this.tool !== 'inspect') { this.setTool('inspect'); this.closeFlyout(); } else if (this.selected) this.select(null); else this.showMenu(); }
       else if (k === 'e') this.toggleAlarm();
       else if (k === 'o') this.toggleOverlay('power');

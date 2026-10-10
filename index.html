@@ -117,6 +117,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 #miniBtns { display: flex; gap: 3px; margin-top: 3px; }
 #miniBtns button { font-size: 14px; padding: 0 5px; flex: 1; }
 
+/* breach cam */
+#pip:not([hidden]) ~ #info { top: 230px; }
+#pip { position: absolute; right: 6px; top: 54px; z-index: 7; padding: 4px; cursor: pointer; }
+#pip canvas { display: block; width: 240px; height: 150px; image-rendering: pixelated; }
+.pipbar { display: flex; justify-content: space-between; align-items: center; font-family: 'Press Start 2P'; font-size: 8px; color: #ff6040; margin-bottom: 3px; }
+.pipbar button { font-size: 12px; padding: 0 4px; }
+@media (max-width: 760px) { #pip { top: auto; bottom: 110px; } #pip canvas { width: 160px; height: 100px; } }
 /* tooltip */
 #tip { position: fixed; z-index: 30; pointer-events: none; background: rgba(8,12,8,0.94); border: 2px solid var(--hi); padding: 3px 8px; font-size: 17px; display: none; max-width: 280px; }
 
@@ -200,7 +207,8 @@ table.fin td:last-child { text-align: right; }
     <button data-speed="0" title="Pause (Space)">❚❚</button>
     <button data-speed="1" class="on" title="Normal (1)">▶</button>
     <button data-speed="2" title="Fast (2)">▶▶</button>
-    <button data-speed="4" title="Fastest (3)">▶▶▶</button>
+    <button data-speed="4" title="Fast x4 (3)">▶▶▶</button>
+    <button data-speed="8" title="Ultra x8 (4)">×8</button>
   </div>
   <button id="alarmBtn" title="Sound the evacuation alarm (E)">⚠ ALARM</button>
   <div class="grp">
@@ -223,6 +231,7 @@ table.fin td:last-child { text-align: right; }
 <div id="mini" class="panel"><canvas id="minimap" width="216" height="162"></canvas>
   <div id="miniBtns"><button data-ov="power" title="Power overlay (O)">Power</button><button data-ov="paddock" title="Paddock overlay (K)">Paddocks</button><button id="findBtn" title="Jump to next loose dino (L)">Loose</button></div>
 </div>
+<div id="pip" class="panel" hidden><div class="pipbar"><span id="pipLabel">BREACH CAM</span><button id="pipClose" title="Hide">✕</button></div><canvas id="pipCanvas" width="240" height="150"></canvas></div>
 <div id="tip"></div>
 <div id="modal"><div class="box panel" id="modalBox"></div></div>
 

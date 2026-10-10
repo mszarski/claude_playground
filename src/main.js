@@ -182,6 +182,21 @@ function loop(now) {
     // ambient jungle
     if (UIX.speed > 0 && Math.random() < dtReal * 0.35) SFX.play(GAME.isNight ? 'cricket' : (Math.random() < 0.15 ? 'caw' : 'chirp'), 0.8);
     RENDER.draw(dtReal, UIX);
+    // breach cam follows the most dangerous loose creature
+    const pip = document.getElementById('pip');
+    const looseC = GAME.creatures().filter((d) => d.loose && !d.carried && !d.camouflaged);
+    if (looseC.length && !UIX.pipHidden) {
+      looseC.sort((a, b) => b.sp.danger - a.sp.danger);
+      const tgt = looseC[0];
+      if (pip.hidden) { pip.hidden = false; pip.onclick = (e) => { if (e.target.id === 'pipClose') { UIX.pipHidden = true; pip.hidden = true; return; } UIX.centerOn(UIX.pipTarget.x, UIX.pipTarget.y); UIX.select(UIX.pipTarget); }; }
+      UIX.pipTarget = tgt;
+      document.getElementById('pipLabel').textContent = `BREACH CAM · ${tgt.name.toUpperCase()}`;
+      const pc = document.getElementById('pipCanvas');
+      RENDER.drawPip(pc.getContext('2d'), pc.width, pc.height, tgt, UIX);
+    } else {
+      if (!pip.hidden) pip.hidden = true;
+      if (!looseC.length) UIX.pipHidden = false;
+    }
     RENDER.miniT = (RENDER.miniT || 0) + 1;
     if (RENDER.miniT % 3 === 0) {
       const mm = document.getElementById('minimap');

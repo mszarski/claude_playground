@@ -333,6 +333,7 @@ class Renderer {
     for (const p of g.pteros) if (!p.carried && vis(p.tx, p.ty)) this.drawPtera(ctx, p, ui);
     // helicopters
     for (const h of g.helis) this.drawHeli(ctx, h);
+    this.drawClouds(ctx, dt);
     this.drawFlyers(ctx, dt);
 
     // glow particles
@@ -530,6 +531,31 @@ class Renderer {
       ctx.fillStyle = '#fff'; ctx.fillRect(x + 2, y - 4, 1, 2); ctx.fillRect(x + 2, y - 1, 1, 1);
     }
     if (ui.selected === p) { ctx.strokeStyle = '#f8f080'; ctx.strokeRect(x - 1.5, y - 1.5, 9, 13); }
+  }
+
+  drawClouds(ctx, dt) {
+    const w = this.game.world;
+    if (!this.clouds) {
+      this.clouds = [];
+      const r = mulberry32(5);
+      for (let i = 0; i < 7; i++) {
+        const blobs = [];
+        for (let k = 0; k < 6; k++) blobs.push([r() * 90 - 45, r() * 30 - 15, 18 + r() * 26]);
+        this.clouds.push({ x: r() * w.W * TILE, y: r() * w.H * TILE, blobs, s: 4 + r() * 4 });
+      }
+    }
+    const storm = this.game.events.storm;
+    ctx.fillStyle = storm ? 'rgba(10,20,40,0.12)' : 'rgba(10,20,40,0.07)';
+    for (const c of this.clouds) {
+      c.x += c.s * dt * (storm ? 3 : 1);
+      if (c.x > w.W * TILE + 80) c.x = -80;
+      for (const [bx, by, br] of c.blobs) {
+        // chunky pixel blobs
+        const x = Math.round((c.x + bx) / 4) * 4, y = Math.round((c.y + by) / 4) * 4, rr = Math.round(br / 4) * 4;
+        ctx.fillRect(x - rr, y - rr / 2, rr * 2, rr);
+        ctx.fillRect(x - rr / 2, y - rr, rr, rr * 2);
+      }
+    }
   }
 
   // Purely decorative pterosaurs gliding over the island
@@ -822,6 +848,41 @@ class Renderer {
       ctx.fillStyle = `rgba(255,255,255,${g.events.lightning * 2})`;
       ctx.fillRect(0, 0, cw, ch);
     }
+  }
+
+  // ---------- breach cam (picture-in-picture) ----------
+  drawPip(pctx, pw, ph, target, ui) {
+    const g = this.game, w = g.world;
+    const z = 3;
+    const camX = Math.round(target.x * TILE - pw / z / 2), camY = Math.round(target.y * TILE - ph / z / 2);
+    pctx.imageSmoothingEnabled = false;
+    pctx.setTransform(1, 0, 0, 1, 0, 0);
+    pctx.fillStyle = '#1a4a7a'; pctx.fillRect(0, 0, pw, ph);
+    pctx.setTransform(z, 0, 0, z, -camX * z, -camY * z);
+    pctx.drawImage(this.cache[Math.floor(this.time * 1.4) % 2][0], 0, 0);
+    const x0 = camX / TILE - 3, y0 = camY / TILE - 3, x1 = (camX + pw / z) / TILE + 3, y1 = (camY + ph / z) / TILE + 4;
+    const vis = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    const items = [];
+    for (const b of w.buildings.values()) if (vis(b.x, b.y) || vis(b.x + b.w, b.y + b.h)) items.push({ y: b.y + b.h, t: 0, o: b });
+    for (const d of g.dinos) if (!d.carried && vis(d.x, d.y)) items.push({ y: d.y, t: 1, o: d });
+    for (const gu of g.guests) if (!gu.hidden && vis(gu.x, gu.y)) items.push({ y: gu.y, t: 2, o: gu });
+    for (const s of g.staff) if (vis(s.x, s.y)) items.push({ y: s.y, t: 2, o: s });
+    for (const j of g.jeeps) if (vis(j.x, j.y)) items.push({ y: j.y, t: 5, o: j });
+    items.sort((a, b) => a.y - b.y);
+    const noSel = { selected: null };
+    for (const it of items) {
+      if (it.t === 0) this.drawBuilding(pctx, it.o, noSel);
+      else if (it.t === 1) this.drawDino(pctx, it.o, noSel);
+      else if (it.t === 2) this.drawPerson(pctx, it.o, noSel);
+      else this.drawJeep(pctx, it.o);
+    }
+    for (const p of g.pteros) if (vis(p.x, p.y)) this.drawPtera(pctx, p, noSel);
+    for (const h of g.helis) if (vis(h.x, h.y)) this.drawHeli(pctx, h);
+    pctx.setTransform(1, 0, 0, 1, 0, 0);
+    // scanlines + REC dot
+    pctx.fillStyle = 'rgba(0,0,0,0.12)';
+    for (let y = 0; y < ph; y += 3) pctx.fillRect(0, y, pw, 1);
+    if (Math.floor(this.time * 2) % 2) { pctx.fillStyle = '#ff2020'; pctx.beginPath(); pctx.arc(10, 10, 4, 0, Math.PI * 2); pctx.fill(); }
   }
 
   // ---------- minimap ----------
