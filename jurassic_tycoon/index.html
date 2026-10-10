@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Jurassic Tycoon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0e140e;
+  --panel: #1c2a1a;
+  --panel2: #253822;
+  --edge: #070b07;
+  --hi: #3e5a36;
+  --text: #e8f0d8;
+  --dim: #9ab08a;
+  --gold: #f8d040;
+  --red: #e04838;
+  --green: #7ad04a;
+  --blue: #70b8f0;
+  --orange: #f0a030;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: 'VT323', 'Courier New', monospace; font-size: 18px; user-select: none; -webkit-user-select: none; touch-action: none; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; display: block; }
+.px { font-family: 'Press Start 2P', monospace; }
+.panel { background: var(--panel); border: 3px solid var(--edge); box-shadow: inset 0 0 0 2px var(--hi), 0 4px 0 rgba(0,0,0,0.4); }
+button { font-family: 'VT323', monospace; font-size: 18px; color: var(--text); background: var(--panel2); border: 2px solid var(--edge);
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,0.35), inset 0 2px 0 rgba(255,255,255,0.08); padding: 2px 8px; cursor: pointer; line-height: 1.1; }
+button:hover { background: #33492e; }
+button:active { box-shadow: inset 0 3px 0 rgba(0,0,0,0.35); }
+button.on { background: #5a7a2a; color: #fff; box-shadow: inset 0 0 0 2px var(--gold); }
+button.danger { background: #7a2018; }
+button.danger:hover { background: #9a2a1e; }
+button:disabled { opacity: 0.45; cursor: default; }
+
+/* top bar */
+#topbar { position: absolute; top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 8px; z-index: 10;
+  background: linear-gradient(#24361f, #172414); border-bottom: 3px solid var(--edge); box-shadow: 0 2px 0 var(--hi); white-space: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+#topbar::-webkit-scrollbar { display: none; }
+#logo { font-family: 'Press Start 2P'; font-size: 11px; color: var(--gold); text-shadow: 2px 2px 0 #7a2010; letter-spacing: 1px; line-height: 1.2; }
+#logo small { display: block; font-size: 7px; color: var(--orange); text-shadow: none; }
+.stat { display: flex; flex-direction: column; line-height: 0.95; padding: 0 6px; border-left: 2px solid #0a120a; }
+.stat .k { font-size: 13px; color: var(--dim); }
+.stat .v { font-size: 21px; }
+.stat .v.neg { color: var(--red); }
+#stars { color: var(--gold); letter-spacing: -1px; font-size: 20px; }
+#powerbar { width: 70px; height: 8px; background: #000; border: 1px solid #444; margin-top: 3px; position: relative; }
+#powerbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); }
+.spacer { flex: 1; }
+.grp { display: flex; gap: 3px; }
+#alarmBtn { background: #6a1810; font-weight: bold; }
+#alarmBtn.on { animation: blink 0.5s steps(2) infinite; background: #e02010; box-shadow: inset 0 0 0 2px #fff; }
+@keyframes blink { 50% { background: #600; } }
+
+/* alert strip */
+#alerts { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; }
+.alert { pointer-events: auto; font-family: 'Press Start 2P'; font-size: 10px; padding: 7px 12px; border: 3px solid #000; cursor: pointer; display: flex; gap: 10px; align-items: center; }
+.alert.red { background: #b01e10; color: #fff; animation: pulse 0.8s steps(2) infinite; }
+.alert.amber { background: #c88010; color: #1a0a00; }
+.alert.blue { background: #2a5a9a; color: #fff; }
+.alert button { font-size: 16px; padding: 0 6px; }
+@keyframes pulse { 50% { background: #7a0e06; } }
+
+/* toast */
+#toasts { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; }
+.toast { font-size: 18px; padding: 4px 14px; background: rgba(10,16,10,0.92); border: 2px solid var(--edge); box-shadow: inset 0 0 0 2px var(--hi); transition: opacity 0.5s; max-width: 80vw; text-align: center; }
+.toast.bad { box-shadow: inset 0 0 0 2px var(--red); color: #ffd0c8; }
+.toast.good { box-shadow: inset 0 0 0 2px var(--green); }
+.toast.goal { box-shadow: inset 0 0 0 2px var(--gold); color: var(--gold); }
+.toast.warn { box-shadow: inset 0 0 0 2px var(--orange); color: #ffe0b0; }
+
+/* toolbar */
+#toolbar { position: absolute; left: 6px; top: 54px; z-index: 10; display: flex; flex-direction: column; gap: 4px; padding: 5px; }
+.cat { width: 48px; height: 48px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; }
+.cat canvas { width: 32px; height: 32px; image-rendering: pixelated; }
+#flyout { position: absolute; left: 70px; top: 54px; z-index: 10; padding: 6px; display: none; max-height: calc(100vh - 230px); overflow-y: auto; min-width: 230px; }
+#flyout h3 { margin: 0 0 6px; font-family: 'Press Start 2P'; font-size: 10px; color: var(--gold); }
+.tool { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin-bottom: 3px; padding: 3px 6px; }
+.tool canvas { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
+.tool .nm { flex: 1; }
+.tool .c { color: var(--gold); font-size: 16px; }
+.tool .k { color: var(--dim); font-size: 14px; }
+
+/* goal */
+#goal { position: absolute; left: 70px; bottom: 8px; z-index: 6; padding: 6px 10px; max-width: min(420px, 45vw); font-size: 18px; }
+#goal b { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); display: block; margin-bottom: 3px; }
+
+/* info panel */
+#info { position: absolute; right: 6px; top: 54px; width: 270px; z-index: 10; padding: 8px; display: none; max-height: calc(100vh - 250px); overflow-y: auto; }
+#info h2 { margin: 0; font-family: 'Press Start 2P'; font-size: 11px; color: var(--gold); line-height: 1.4; }
+#info .sub { color: var(--dim); font-style: italic; font-size: 16px; }
+#info canvas.portrait { image-rendering: pixelated; display: block; margin: 6px auto; background: #2c4426; border: 2px solid var(--edge); }
+.bar { height: 10px; background: #000; border: 1px solid #555; margin: 1px 0 5px; position: relative; }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+.row { display: flex; justify-content: space-between; font-size: 17px; }
+.row span:last-child { color: var(--gold); }
+.tag { display: inline-block; padding: 0 5px; font-size: 15px; border: 1px solid #000; margin: 2px 2px 2px 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#info .close { position: absolute; right: 6px; top: 4px; padding: 0 6px; }
+
+/* log */
+#log { position: absolute; right: 6px; bottom: 166px; width: 330px; z-index: 6; font-size: 17px; pointer-events: none; display: flex; flex-direction: column; justify-content: flex-end; }
+#log div { background: rgba(8,12,8,0.75); padding: 1px 6px; margin-top: 2px; border-left: 3px solid #555; pointer-events: auto; cursor: pointer; }
+#log .bad { border-color: var(--red); color: #ffc0b0; }
+#log .good { border-color: var(--green); }
+#log .warn { border-color: var(--orange); color: #ffe0b0; }
+#log .goal { border-color: var(--gold); color: var(--gold); }
+
+/* minimap */
+#mini { position: absolute; right: 6px; bottom: 6px; z-index: 6; padding: 4px; }
+#minimap { display: block; width: 216px; height: 162px; image-rendering: pixelated; cursor: pointer; }
+#miniBtns { display: flex; gap: 3px; margin-top: 3px; }
+#miniBtns button { font-size: 14px; padding: 0 5px; flex: 1; }
+
+/* breach cam */
+#pip:not([hidden]) ~ #info { top: 230px; }
+#pip { position: absolute; right: 6px; top: 54px; z-index: 7; padding: 4px; cursor: pointer; }
+#pip canvas { display: block; width: 240px; height: 150px; image-rendering: pixelated; }
+.pipbar { display: flex; justify-content: space-between; align-items: center; font-family: 'Press Start 2P'; font-size: 8px; color: #ff6040; margin-bottom: 3px; }
+.pipbar button { font-size: 12px; padding: 0 4px; }
+@media (max-width: 760px) { #pip { top: auto; bottom: 110px; } #pip canvas { width: 160px; height: 100px; } }
+/* tooltip */
+#tip { position: fixed; z-index: 30; pointer-events: none; background: rgba(8,12,8,0.94); border: 2px solid var(--hi); padding: 3px 8px; font-size: 17px; display: none; max-width: 280px; }
+
+/* modal */
+#modal { position: absolute; inset: 0; z-index: 40; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; }
+#modal .box { max-width: min(760px, 94vw); max-height: 90vh; overflow-y: auto; padding: 16px 18px; }
+#modal h1 { font-family: 'Press Start 2P'; color: var(--gold); font-size: 16px; margin: 0 0 12px; text-shadow: 2px 2px 0 #7a2010; line-height: 1.5; }
+#modal h2 { font-family: 'Press Start 2P'; color: var(--gold); font-size: 10px; margin: 14px 0 6px; }
+#modal p { margin: 4px 0; font-size: 19px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 6px; }
+.card { padding: 6px; background: var(--panel2); border: 2px solid var(--edge); cursor: pointer; text-align: center; font-size: 16px; }
+.card:hover { box-shadow: inset 0 0 0 2px var(--gold); }
+.card.locked { opacity: 0.45; cursor: not-allowed; }
+.card canvas { image-rendering: pixelated; height: 64px; }
+.card .nm { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); margin: 4px 0; }
+.roster { display: flex; flex-direction: column; gap: 3px; }
+.rrow { display: grid; grid-template-columns: 56px 1fr 70px 70px 70px 90px; gap: 8px; align-items: center; padding: 3px 6px; background: var(--panel2); border: 2px solid var(--edge); cursor: pointer; font-size: 17px; }
+.rrow:hover { box-shadow: inset 0 0 0 2px var(--gold); }
+.rrow canvas { image-rendering: pixelated; height: 28px; justify-self: center; }
+.rrow .mini { height: 6px; background: #000; border: 1px solid #555; position: relative; }
+.rrow .mini i { position: absolute; left: 0; top: 0; bottom: 0; }
+.rhead { font-size: 14px; color: var(--dim); display: grid; grid-template-columns: 56px 1fr 70px 70px 70px 90px; gap: 8px; padding: 0 8px; }
+@media (max-width: 760px) { .rrow, .rhead { grid-template-columns: 40px 1fr 50px 50px 70px; } .rrow .hide, .rhead .hide { display: none; } }
+#ticker { position: absolute; left: 70px; right: 240px; bottom: 60px; z-index: 5; overflow: hidden; height: 24px; pointer-events: none; display: none; }
+#ticker span { position: absolute; white-space: nowrap; font-size: 18px; color: #f8e8b0; background: rgba(60,20,10,0.85); border: 2px solid #000; padding: 0 10px; }
+table.fin { width: 100%; border-collapse: collapse; font-size: 18px; }
+table.fin td { padding: 1px 6px; border-bottom: 1px solid #2a3a26; }
+table.fin td:last-child { text-align: right; }
+
+/* title */
+#title { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; flex-direction: column;
+  background: radial-gradient(ellipse at center, #1e3a1a 0%, #0a120a 75%); }
+#title canvas#tbg { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: 0.85; }
+#title .tbox { position: relative; text-align: center; padding: 22px 26px; max-width: 92vw; }
+#title h1 { font-family: 'Press Start 2P'; font-size: clamp(20px, 5vw, 42px); color: var(--gold); margin: 0; text-shadow: 4px 4px 0 #7a2010, 0 0 30px rgba(248,160,40,0.4); letter-spacing: 2px; }
+#title .tag2 { font-family: 'Press Start 2P'; font-size: clamp(8px, 1.5vw, 11px); color: var(--orange); margin: 10px 0 18px; }
+#title .menu { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+#scenMenu button, #diffMenu button { width: min(560px, 90vw); }
+#title .menu button { font-family: 'Press Start 2P'; font-size: 12px; padding: 10px 16px; min-width: 260px; }
+#title .credits { margin-top: 16px; color: var(--dim); font-size: 16px; }
+
+#gameover { text-align: center; }
+
+@media (max-width: 760px) {
+  #log { display: none; }
+  #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 150px); font-size: 15px; }
+  #minimap { width: 128px; height: 96px; }
+  #miniBtns { display: none; }
+  #info { width: calc(100vw - 80px); top: auto; bottom: 120px; max-height: 45vh; }
+  .stat .v { font-size: 18px; }
+  .stat .k { font-size: 12px; }
+  .stat { padding: 0 4px; }
+  #logo { display: none; }
+  #topbar { height: auto; flex-wrap: wrap; row-gap: 4px; padding: 4px 6px; overflow: visible; }
+  #topbar .spacer { display: none; }
+  #topbar button { padding: 1px 5px; font-size: 15px; }
+  #powerbar { width: 48px; }
+  #toolbar { top: 78px; padding: 3px; }
+  .cat { width: 42px; height: 42px; font-size: 12px; }
+  .cat canvas { width: 24px; height: 24px; }
+  #flyout { top: 78px; left: 58px; min-width: 0; width: calc(100vw - 66px); max-height: 55vh; }
+  #alerts { top: 80px; width: calc(100vw - 70px); left: 62px; transform: none; }
+  .alert { font-size: 8px; }
+  #toasts { top: 140px; }
+  .toast { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="topbar">
+  <div id="logo">JURASSIC<br>TYCOON<small>CONTAINMENT EDITION</small></div>
+  <div class="stat"><span class="k">Funds</span><span class="v" id="sMoney">$0</span></div>
+  <div class="stat"><span class="k">Guests</span><span class="v" id="sGuests">0</span></div>
+  <div class="stat"><span class="k" id="sDay">Day 1</span><span class="v" id="sTime">08:00</span></div>
+  <div class="stat"><span class="k">Rating</span><span class="v" id="stars">☆☆☆☆☆</span></div>
+  <div class="stat"><span class="k">Reputation</span><span class="v" id="sRep">50</span></div>
+  <div class="stat"><span class="k" id="sPowK">Power</span><div id="powerbar"><i></i></div><span class="k" id="sPow" style="font-size:13px">0/0 MW</span></div>
+  <div class="spacer"></div>
+  <div class="grp" id="speedBtns">
+    <button data-speed="0" title="Pause (Space)">❚❚</button>
+    <button data-speed="1" class="on" title="Normal (1)">▶</button>
+    <button data-speed="2" title="Fast (2)">▶▶</button>
+    <button data-speed="4" title="Fast x4 (3)">▶▶▶</button>
+    <button data-speed="8" title="Ultra x8 (4)">×8</button>
+  </div>
+  <button id="alarmBtn" title="Sound the evacuation alarm (E)">⚠ ALARM</button>
+  <div class="grp">
+    <button id="undoBtn" title="Undo last construction (U / Ctrl+Z)">↶</button>
+    <button id="rosterBtn" title="Dinosaur roster (G)">🦖</button>
+    <button id="finBtn" title="Finances (F2)">$</button>
+    <button id="disBtn" title="Disasters">☄</button>
+    <button id="sndBtn" title="Sound: music / effects / mute">♫</button>
+    <button id="menuBtn" title="Menu (Esc)">☰</button>
+  </div>
+</div>
+
+<div id="alerts"></div>
+<div id="toasts"></div>
+<div id="toolbar" class="panel"></div>
+<div id="flyout" class="panel"></div>
+<div id="goal" class="panel"></div>
+<div id="info" class="panel"></div>
+<div id="log"></div>
+<div id="ticker"></div>
+<div id="mini" class="panel"><canvas id="minimap" width="216" height="162"></canvas>
+  <div id="miniBtns"><button data-ov="power" title="Power overlay (O)">Power</button><button data-ov="paddock" title="Paddock overlay (K)">Paddocks</button><button id="findBtn" title="Jump to next loose dino (L)">Loose</button></div>
+</div>
+<div id="pip" class="panel" hidden><div class="pipbar"><span id="pipLabel">BREACH CAM</span><button id="pipClose" title="Hide">✕</button></div><canvas id="pipCanvas" width="240" height="150"></canvas></div>
+<div id="tip"></div>
+<div id="modal"><div class="box panel" id="modalBox"></div></div>
+
+<div id="title">
+  <canvas id="tbg"></canvas>
+  <div class="tbox">
+    <h1>JURASSIC<br>TYCOON</h1>
+    <div class="tag2">BUILD THE PARK. CONTAIN THE CHAOS.</div>
+    <div class="menu">
+      <button id="btnNew">NEW ISLAND</button>
+      <button id="btnContinue" style="display:none">CONTINUE</button>
+      <button id="btnScen">SCENARIOS</button>
+      <button id="btnSandbox">SANDBOX MODE</button>
+      <button id="btnHelp">HOW TO PLAY</button>
+    </div>
+    <div class="menu" id="scenMenu" hidden></div>
+    <div class="menu" id="diffMenu" hidden>
+      <button data-diff="easy">RELAXED<br><small style="font-size:8px;color:#9ab08a">MORE MONEY, FEWER DISASTERS</small></button>
+      <button data-diff="normal">STANDARD<br><small style="font-size:8px;color:#9ab08a">THE INTENDED EXPERIENCE</small></button>
+      <button data-diff="chaos">CHAOS THEORY<br><small style="font-size:8px;color:#9ab08a">DISASTERS EVERY DAY OR TWO</small></button>
+      <button id="diffBack">BACK</button>
+    </div>
+    <div class="credits">A pixel park-builder. Life, uh, finds a way.</div>
+  </div>
+</div>
+
+<script src="src/util.js"></script>
+<script src="src/data.js"></script>
+<script src="src/sprites.js"></script>
+<script src="src/world.js"></script>
+<script src="src/entities/common.js"></script>
+<script src="src/entities/dino.js"></script>
+<script src="src/entities/guest.js"></script>
+<script src="src/entities/staff.js"></script>
+<script src="src/entities/ptera.js"></script>
+<script src="src/entities/vehicles.js"></script>
+<script src="src/events.js"></script>
+<script src="src/game.js"></script>
+<script src="src/scenarios.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/render.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/ui-panels.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
