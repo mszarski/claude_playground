@@ -12,8 +12,13 @@ function startGame(opts = {}) {
   if (window.innerWidth < 700) RENDER.cam.zoom = 2;
   if (!opts.loaded) {
     UIX.centerOn(g.start.x, g.start.y - 6);
-    if (!opts.scenario) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
+    if (!opts.scenario && !opts.tutorial) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
   }
+  if (opts.tutorial) {
+    g.tutorial = true; g.events.auto = false; g.advisorOn = false;
+    document.getElementById('goal').hidden = true;
+    UIX.tutorial = new Tutorial(UIX);
+  } else if (UIX.tutorial) { UIX.tutorial.finish(); }
   hideTitle();
 }
 
@@ -101,6 +106,9 @@ function showTitle() {
   let has = false;
   try { has = !!localStorage.getItem('jt_save'); } catch (e) { /* storage unavailable */ }
   document.getElementById('btnContinue').style.display = has ? '' : 'none';
+  let tutDone = false;
+  try { tutDone = !!localStorage.getItem('jt_tutorial_done'); } catch (e) { /* storage unavailable */ }
+  document.getElementById('btnTut').textContent = tutDone ? 'TUTORIAL' : '★ TUTORIAL (START HERE) ★';
   if (GAME) UIX.setSpeed(0);
   startTitleAnim();
 }
@@ -180,6 +188,7 @@ function loop(now) {
       }
     }
     UIX.frame(dtReal);
+    if (UIX.tutorial) UIX.tutorial.update(dtReal);
     if (GAME.alarm && UIX.speed > 0) SFX.play('alarm', 0.35);
     // ambient jungle
     if (UIX.speed > 0 && Math.random() < dtReal * 0.35) SFX.play(GAME.isNight ? 'cricket' : (Math.random() < 0.15 ? 'caw' : 'chirp'), 0.8);
@@ -247,6 +256,7 @@ function boot() {
     document.getElementById('scenBack').onclick = () => { document.querySelector('#title .menu').hidden = false; m.hidden = true; };
   };
   document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
+  document.getElementById('btnTut').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ tutorial: true, difficulty: 'easy' }); };
   document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true }); };
   document.getElementById('btnContinue').onclick = () => { SFX.ensure(); if (!loadGameFromStorage()) { startGame(); } };
   document.getElementById('btnHelp').onclick = () => {

@@ -117,6 +117,15 @@ button:disabled { opacity: 0.45; cursor: default; }
 #miniBtns { display: flex; gap: 3px; margin-top: 3px; }
 #miniBtns button { font-size: 14px; padding: 0 5px; flex: 1; }
 
+/* tutorial */
+#tut { position: absolute; left: 70px; bottom: 8px; z-index: 12; padding: 8px 12px; width: min(440px, calc(100vw - 300px)); font-size: 19px; }
+#tut b { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); display: block; margin-bottom: 4px; }
+#tut div b { display: inline; font-family: inherit; font-size: inherit; color: var(--gold); }
+#tut .sub { color: var(--dim); font-size: 17px; margin-top: 4px; }
+#tutHl { position: fixed; z-index: 35; pointer-events: none; border: 3px solid var(--gold); box-shadow: 0 0 0 3px #000, 0 0 18px var(--gold); animation: tutpulse 0.9s ease-in-out infinite alternate; }
+@keyframes tutpulse { from { opacity: 1; } to { opacity: 0.35; } }
+@media (max-width: 760px) { #tut { left: 6px; width: calc(100vw - 150px); font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { #tutHl { animation: none; } }
 /* breach cam */
 #pip:not([hidden]) ~ #info { top: 230px; }
 #pip { position: absolute; right: 6px; top: 54px; z-index: 7; padding: 4px; cursor: pointer; }
@@ -234,6 +243,8 @@ table.fin td:last-child { text-align: right; }
   <div id="miniBtns"><button data-ov="power" title="Power overlay (O)">Power</button><button data-ov="paddock" title="Paddock overlay (K)">Paddocks</button><button id="findBtn" title="Jump to next loose dino (L)">Loose</button></div>
 </div>
 <div id="pip" class="panel" hidden><div class="pipbar"><span id="pipLabel">BREACH CAM</span><button id="pipClose" title="Hide">✕</button></div><canvas id="pipCanvas" width="240" height="150"></canvas></div>
+<div id="tut" class="panel" hidden></div>
+<div id="tutHl" hidden></div>
 <div id="tip"></div>
 <div id="modal"><div class="box panel" id="modalBox"></div></div>
 
@@ -243,6 +254,7 @@ table.fin td:last-child { text-align: right; }
     <h1>JURASSIC<br>TYCOON</h1>
     <div class="tag2">BUILD THE PARK. CONTAIN THE CHAOS.</div>
     <div class="menu">
+      <button id="btnTut">TUTORIAL</button>
       <button id="btnNew">NEW ISLAND</button>
       <button id="btnContinue" style="display:none">CONTINUE</button>
       <button id="btnScen">SCENARIOS</button>
@@ -277,6 +289,7 @@ table.fin td:last-child { text-align: right; }
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>
 <script src="src/ui-panels.js"></script>
+<script src="src/tutorial.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>
