@@ -187,6 +187,40 @@ class Game {
     return null;
   }
 
+  // ------------- undo -------------
+  startBatch() { this.curBatch = []; }
+  recordUndo(e) { if (this.curBatch) this.curBatch.push(e); }
+  endBatch(label) {
+    if (this.curBatch && this.curBatch.length) {
+      (this.undoStack = this.undoStack || []).push({ label, items: this.curBatch });
+      if (this.undoStack.length > 25) this.undoStack.shift();
+    }
+    this.curBatch = null;
+  }
+  undo() {
+    const w = this.world;
+    const batch = (this.undoStack || []).pop();
+    if (!batch) return null;
+    let refund = 0;
+    for (const e of batch.items.slice().reverse()) {
+      const i = e.x !== undefined ? w.idx(e.x, e.y) : -1;
+      let ok = false;
+      if (e.kind === 'path' && w.path[i]) { w.path[i] = 0; w.terrain[i] = e.prevT; ok = true; }
+      else if (e.kind === 'track' && w.track[i] && w.fence[i] !== F_GATE) { w.track[i] = 0; w.terrain[i] = e.prevT; ok = true; }
+      else if ((e.kind === 'fence' || e.kind === 'gate') && w.fence[i] === e.now) {
+        w.fence[i] = e.prev; w.fenceHp[i] = e.prevHp; w.fenceOrig[i] = e.prevOrig;
+        if (e.kind === 'gate') w.track[i] = 0;
+        if (e.prevT !== undefined) w.terrain[i] = e.prevT;
+        ok = true;
+      }
+      else if (e.kind === 'terrain' && w.terrain[i] === e.now) { w.terrain[i] = e.prev; ok = true; }
+      else if (e.kind === 'bld') { const b = w.buildings.get(e.id); if (b) { this.removeBuildingFx(b); ok = true; } }
+      if (ok) { refund += e.cost; if (i >= 0) w.invalidate(e.x, e.y); }
+    }
+    this.money += refund; this.ledger.construction -= refund;
+    return { label: batch.label, refund };
+  }
+
   // ------------- construction -------------
   placePath(x, y, free = false) {
     const w = this.world;
@@ -194,7 +228,9 @@ class Game {
     const i = w.idx(x, y);
     if (w.path[i] || w.track[i]) return false;
     if (w.fence[i] === F_BROKEN) return false;
-    if (!free) { const c = TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0); if (!this.canAfford(c)) return false; this.spend(c); }
+    let c = 0;
+    if (!free) { c = TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0); if (!this.canAfford(c)) return false; this.spend(c); }
+    this.recordUndo({ kind: 'path', x, y, prevT: w.terrain[i], cost: c });
     w.path[i] = 1;
     if (w.terrain[i] === T_FOREST) w.terrain[i] = T_GRASS;
     w.invalidate(x, y);
@@ -202,12 +238,24 @@ class Game {
   }
   placeTrack(x, y) {
     const w = this.world;
-    if (!w.canBuildAt(x, y)) return false;
+    if (!w.inb(x, y)) return false;
     const i = w.idx(x, y);
+    if ((w.fence[i] === F_ELECTRIC || w.fence[i] === F_WALL) && !w.track[i] && !w.bld[i]) {
+      // crossing a fence: build a gate jeeps can drive through
+      const c = FENCE_DEF[F_GATE].cost + TOOL_INFO.track.cost;
+      if (!this.canAfford(c)) return false;
+      this.spend(c);
+      this.recordUndo({ kind: 'gate', x, y, prev: w.fence[i], prevHp: w.fenceHp[i], prevOrig: w.fenceOrig[i], now: F_GATE, cost: c });
+      w.track[i] = 1; w.fence[i] = F_GATE; w.fenceHp[i] = FENCE_DEF[F_GATE].hp; w.fenceOrig[i] = F_GATE;
+      w.invalidate(x, y);
+      return true;
+    }
+    if (!w.canBuildAt(x, y)) return false;
     if (w.track[i] || w.path[i] || w.fence[i] === F_BROKEN) return false;
     const c = TOOL_INFO.track.cost + (w.terrain[i] === T_FOREST ? 40 : 0);
     if (!this.canAfford(c)) return false;
     this.spend(c);
+    this.recordUndo({ kind: 'track', x, y, prevT: w.terrain[i], cost: c });
     w.track[i] = 1;
     if (w.terrain[i] === T_FOREST) w.terrain[i] = T_GRASS;
     w.invalidate(x, y);
@@ -219,12 +267,18 @@ class Game {
     const i = w.idx(x, y);
     const t = w.terrain[i];
     if (!(t === T_SAND || t === T_GRASS || t === T_FOREST || t === T_BASALT)) return false;
-    if (w.bld[i] || w.path[i] || w.track[i]) return false;
+    if (w.bld[i] || w.path[i]) return false;
+    if (w.track[i]) {
+      // fence across the tour track becomes a gate
+      if (w.fence[i] === F_GATE) return false;
+      type = F_GATE;
+    }
     if (w.fence[i] === type) return false;
     if (this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried)) return false;
     const c = FENCE_DEF[type].cost + (t === T_FOREST ? 40 : 0);
     if (!this.canAfford(c)) return false;
     this.spend(c);
+    this.recordUndo({ kind: 'fence', x, y, prev: w.fence[i], prevHp: w.fenceHp[i], prevOrig: w.fenceOrig[i], prevT: w.terrain[i], now: type, cost: c });
     w.fence[i] = type; w.fenceHp[i] = FENCE_DEF[type].hp; w.fenceOrig[i] = type;
     if (t === T_FOREST) w.terrain[i] = T_GRASS;
     w.invalidate(x, y);
@@ -267,6 +321,7 @@ class Game {
     this.spend(def.cost);
     const b = w.addBuilding(type, x, y);
     b.placedAt = this.time;
+    this.recordUndo({ kind: 'bld', id: b.id, cost: def.cost });
     if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
     if (type === 'helipad') this.helis.push(new Helicopter(this, b));
     if (type === 'tour') { b.queue = []; b.jeepT = 0; }
@@ -280,6 +335,7 @@ class Game {
     if (w.terrain[i] !== T_GRASS || w.path[i] || w.bld[i] || w.fence[i]) return false;
     if (!this.canAfford(TOOL_INFO.trees.cost)) return false;
     this.spend(TOOL_INFO.trees.cost);
+    this.recordUndo({ kind: 'terrain', x, y, prev: w.terrain[i], now: T_FOREST, cost: TOOL_INFO.trees.cost });
     w.terrain[i] = T_FOREST; w.invalidate(x, y);
     return true;
   }
@@ -290,6 +346,7 @@ class Game {
     if (w.terrain[i] !== T_FOREST) return false;
     if (!this.canAfford(TOOL_INFO.clear.cost)) return false;
     this.spend(TOOL_INFO.clear.cost);
+    this.recordUndo({ kind: 'terrain', x, y, prev: w.terrain[i], now: T_GRASS, cost: TOOL_INFO.clear.cost });
     w.terrain[i] = T_GRASS; w.invalidate(x, y);
     return true;
   }
@@ -332,7 +389,7 @@ class Game {
   damageFence(x, y, dmg, dino) {
     const w = this.world, i = w.idx(x, y);
     const f = w.fence[i];
-    if (f !== F_ELECTRIC && f !== F_WALL) return;
+    if (!isSolidFence(f)) return;
     w.fenceHp[i] -= dmg;
     w.markDirty(x, y);
     if (w.fenceHp[i] <= 0) {
@@ -370,7 +427,7 @@ class Game {
   // Instant fence rebuild at triple cost
   emergencyRepair(x, y) {
     const w = this.world, i = w.idx(x, y);
-    if (w.fence[i] !== F_BROKEN && !((w.fence[i] === F_ELECTRIC || w.fence[i] === F_WALL) && w.fenceHp[i] < FENCE_DEF[w.fence[i]].hp)) return 'Nothing to repair.';
+    if (w.fence[i] !== F_BROKEN && !((isSolidFence(w.fence[i])) && w.fenceHp[i] < FENCE_DEF[w.fence[i]].hp)) return 'Nothing to repair.';
     if (this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried)) return 'A dinosaur is standing in the gap!';
     const orig = w.fence[i] === F_BROKEN ? (w.fenceOrig[i] || F_ELECTRIC) : w.fence[i];
     const cost = FENCE_DEF[orig].cost * 3;

@@ -123,7 +123,7 @@ class Staff {
             }
           }
           this.state = 'idle';
-        } else if (f === F_ELECTRIC || f === F_WALL) {
+        } else if (isSolidFence(f)) {
           const max = FENCE_DEF[f].hp;
           w.fenceHp[j] = Math.min(max, w.fenceHp[j] + dt * 22);
           g.spend(dt * 6, 'repairs');
@@ -157,7 +157,7 @@ class Staff {
       if (g.threatNear(x + 0.5, y + 0.5, 8)) return false;
       const f = w.fence[j];
       if (f === F_BROKEN) return true;
-      if ((f === F_ELECTRIC || f === F_WALL) && w.fenceHp[j] < FENCE_DEF[f].hp * 0.98) return true;
+      if ((isSolidFence(f)) && w.fenceHp[j] < FENCE_DEF[f].hp * 0.98) return true;
       const b = w.buildings.get(w.bld[j]);
       if (b && b.hp < b.maxHp * 0.95 && !claimed.has('b' + b.id)) return true;
       return false;

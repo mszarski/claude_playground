@@ -1164,6 +1164,14 @@ function buildIcons() {
     'OO          ',
   ], { O: '#1a1a1a', a: '#8a8a8a', B: '#8a5a2a' });
   ICONS.trees = iconFrom(TILES.trees[1]);
+  ICONS.route = mk([
+    'GGGGGGGGGGGG',
+    'GddddGGGGGGG',
+    'GGGGdGGGGGGG',
+    'GGGGddddGGGG',
+    'GGGGGGGdGGGG',
+    'GGGGGGGdddyG',
+  ], { G: '#4f8a32', d: '#c8a878', y: '#f8d040' });
   ICONS.track = mk([
     'GGaaaaaaaGGG',
     'GGaaayaaaGGG',

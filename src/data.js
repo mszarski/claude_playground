@@ -9,11 +9,13 @@ const MAP_H = 54;
 const T_DEEP = 0, T_WATER = 1, T_SAND = 2, T_GRASS = 3, T_FOREST = 4, T_ROCK = 5, T_LAVA = 6, T_BASALT = 7, T_VOLCANO = 8;
 
 // Fence ids (stored per tile)
-const F_NONE = 0, F_ELECTRIC = 1, F_WALL = 2, F_BROKEN = 3;
+const F_NONE = 0, F_ELECTRIC = 1, F_WALL = 2, F_BROKEN = 3, F_GATE = 4;
+const isSolidFence = (f) => f === F_ELECTRIC || f === F_WALL || f === F_GATE;
 
 const FENCE_DEF = {
   [F_ELECTRIC]: { name: 'Electric Fence', hp: 100, cost: 250, power: 0.5 },
   [F_WALL]: { name: 'Concrete Wall', hp: 420, cost: 900, power: 0 },
+  [F_GATE]: { name: 'Track Gate', hp: 320, cost: 1500, power: 0 },
 };
 
 // Dinosaur species
@@ -148,7 +150,7 @@ const BUILDINGS = {
 
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
-  { id: 'build', label: 'Build', tools: ['path', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
+  { id: 'build', label: 'Build', tools: ['path', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
   { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'hotel', 'shelter', 'lamp', 'lagoon'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
@@ -158,7 +160,8 @@ const TOOL_GROUPS = [
 const TOOL_INFO = {
   inspect: { name: 'Inspect', desc: 'Click anything to see details.', key: 'Q' },
   path: { name: 'Footpath', cost: 60, desc: 'Drag to lay paths. Guests only walk on paths.', key: 'P' },
-  track: { name: 'Tour Track', cost: 150, desc: 'Drag to lay the jeep tour track. Run it past paddocks and loop it back to a Tour Station.', key: 'J' },
+  route: { name: 'Smart Path', cost: 60, desc: 'Drag from one point to another: builds the cheapest footpath route, reusing existing paths.', key: 'N' },
+  track: { name: 'Tour Track', cost: 150, desc: 'Drag to lay the jeep tour track. Crossing a fence builds a Track Gate ($1,500) so jeeps can drive through paddocks.', key: 'J' },
   fence: { name: 'Electric Fence', cost: 250, desc: 'Drag a line of electric fence. Needs power!', key: 'F' },
   paddock: { name: 'Paddock', cost: 250, desc: 'Drag a rectangle to build a fenced paddock.', key: 'R' },
   wall: { name: 'Concrete Wall', cost: 900, desc: 'Drag. Very strong, needs no power.', key: 'V' },

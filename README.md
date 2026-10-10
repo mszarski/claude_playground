@@ -34,7 +34,8 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 | O / K | Power / paddock overlays |
 | L | Jump to loose dinosaur |
 | G | Dinosaur roster |
-| Q P J F R V X T C H | Tools: inspect, path, tour track, fence, paddock, wall, demolish, trees, clear, hatch |
+| U or Ctrl+Z | Undo last construction (refunded) |
+| Q P N J F R V X T C H | Tools: inspect, path, smart path, tour track, fence, paddock, wall, demolish, trees, clear, hatch |
 
 ## Development
 

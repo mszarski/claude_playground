@@ -242,7 +242,7 @@ class Dino {
     const isFence = (x, y) => {
       if (!w.inb(x, y)) return false;
       const f = w.fence[w.idx(x, y)];
-      return f === F_ELECTRIC || f === F_WALL;
+      return isSolidFence(f);
     };
     let goalFence = null;
     if (clever) {
@@ -286,7 +286,7 @@ class Dino {
       const x = this.tx + dx, y = this.ty + dy;
       if (!w.inb(x, y)) continue;
       const j = w.idx(x, y);
-      if (!this.attackBuilding && (w.fence[j] === F_ELECTRIC || w.fence[j] === F_WALL)) { tgt = { x, y, j, fence: true }; break; }
+      if (!this.attackBuilding && (isSolidFence(w.fence[j]))) { tgt = { x, y, j, fence: true }; break; }
       if (this.attackBuilding && w.bld[j]) { tgt = { x, y, j, b: w.buildings.get(w.bld[j]) }; break; }
     }
     if (!tgt) { this.state = 'idle'; this.stateT = 1; this.attackBuilding = false; return; }
@@ -308,7 +308,7 @@ class Dino {
           this.stress = Math.min(100, this.stress + 4);
           this.state = 'idle'; this.stateT = 2;
         }
-      } else if (type === F_WALL) {
+      } else if (type === F_WALL || type === F_GATE) {
         dmg = str * 1.4;
         g.burst(tgt.x + 0.5, tgt.y + 0.5, '#9a9a90', 4);
         g.soundAt('thud', tgt.x, tgt.y, 0.6);
@@ -336,9 +336,11 @@ class Dino {
         if (d < bd) { bd = d; best = h; }
       }
     }
-    if (this.loose && this.sp.size >= 2) {
+    const angry = !this.loose && this.sp.size >= 3 && this.stress > 75;
+    if ((this.loose || angry) && this.sp.size >= 2) {
       for (const j of g.jeeps) {
         if (j.wrecked || !j.riders.length) continue;
+        if (angry && g.world.region[g.world.idx(j.tx, j.ty)] !== g.world.region[g.world.idx(this.tx, this.ty)]) continue;
         const d = dist2(this.x, this.y, j.x, j.y);
         if (d < bd) { bd = d; best = j; }
       }

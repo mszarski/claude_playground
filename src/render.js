@@ -196,7 +196,7 @@ class Renderer {
     const conn = (dx, dy) => {
       if (!w.inb(x + dx, y + dy)) return false;
       const j = w.idx(x + dx, y + dy);
-      return w.fence[j] === F_ELECTRIC || w.fence[j] === F_WALL || (w.bld[j] && f !== F_BROKEN);
+      return isSolidFence(w.fence[j]) || (w.bld[j] && f !== F_BROKEN);
     };
     const L = conn(-1, 0), R = conn(1, 0), U = conn(0, -1), D = conn(0, 1);
     if (f === F_ELECTRIC) {
@@ -228,6 +228,19 @@ class Renderer {
       // hazard stripe
       if (!D) { for (let k = x0; k < x1; k += 4) { ctx.fillStyle = '#e8c020'; ctx.fillRect(px + k, py + y1, 2, 1); } }
       if (hp < 0.5) { ctx.fillStyle = '#2a2a28'; ctx.fillRect(px + 5, py + 3, 1, 3); ctx.fillRect(px + 6, py + 5, 2, 1); ctx.fillRect(px + 10, py + 6, 1, 3); }
+    } else if (f === F_GATE) {
+      // heavy wooden gate frame straddling the track
+      const vertical = L || R ? false : true; // fence runs left-right -> gate posts left/right
+      const hp = w.fenceHp[i] / FENCE_DEF[F_GATE].hp;
+      ctx.fillStyle = '#2a1a0c';
+      if (!vertical) { ctx.fillRect(px, py - 6, 3, 18); ctx.fillRect(px + 13, py - 6, 3, 18); ctx.fillRect(px, py - 7, 16, 3); }
+      else { ctx.fillRect(px, py, 16, 3); ctx.fillRect(px, py + 13, 16, 3); ctx.fillRect(px - 1, py - 2, 3, 18); }
+      ctx.fillStyle = '#6a4a28';
+      if (!vertical) { ctx.fillRect(px + 1, py - 5, 1, 16); ctx.fillRect(px + 14, py - 5, 1, 16); ctx.fillRect(px + 1, py - 6, 14, 1); }
+      else { ctx.fillRect(px + 1, py + 1, 14, 1); ctx.fillRect(px + 1, py + 14, 14, 1); }
+      ctx.fillStyle = '#f8d040';
+      for (let k = 2; k < 14; k += 4) { if (!vertical) ctx.fillRect(px + k, py - 6, 2, 1); }
+      if (hp < 0.5) { ctx.fillStyle = '#c84020'; ctx.fillRect(px + 6, py - 6, 3, 1); }
     } else if (f === F_BROKEN) {
       ctx.drawImage(RUBBLE_SPR, px, py + 8);
       ctx.fillStyle = '#26262a'; ctx.fillRect(px + 3, py + 6, 2, 6); ctx.fillRect(px + 5, py + 5, 1, 2);
@@ -757,7 +770,7 @@ class Renderer {
     }
     if (ui.dragTiles && ui.dragTiles.length) {
       for (const [x, y] of ui.dragTiles) {
-        ctx.fillStyle = tool === 'demolish' ? 'rgba(255,60,60,0.4)' : tool === 'path' ? 'rgba(232,200,140,0.6)' : tool === 'track' ? 'rgba(90,90,88,0.7)' : tool === 'trees' ? 'rgba(60,160,60,0.5)' : tool === 'clear' ? 'rgba(200,160,80,0.4)' : 'rgba(248,224,64,0.5)';
+        ctx.fillStyle = tool === 'demolish' ? 'rgba(255,60,60,0.4)' : tool === 'path' || tool === 'route' ? 'rgba(232,200,140,0.6)' : tool === 'track' ? 'rgba(90,90,88,0.7)' : tool === 'trees' ? 'rgba(60,160,60,0.5)' : tool === 'clear' ? 'rgba(200,160,80,0.4)' : 'rgba(248,224,64,0.5)';
         ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
       }
     }
@@ -901,6 +914,7 @@ class Renderer {
         if (w.track[i]) c = [90, 90, 88];
         if (w.fence[i] === F_ELECTRIC) c = w.fencePowered[i] ? [248, 224, 64] : [200, 60, 40];
         if (w.fence[i] === F_WALL) c = [200, 200, 196];
+        if (w.fence[i] === F_GATE) c = [140, 100, 50];
         if (w.fence[i] === F_BROKEN) c = [255, 0, 0];
         if (w.bld[i]) c = [240, 236, 224];
         img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;

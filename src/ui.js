@@ -2,7 +2,7 @@
 'use strict';
 
 const $ = (s) => document.querySelector(s);
-const LINE_TOOLS = ['path', 'track', 'fence', 'wall'];
+const LINE_TOOLS = ['path', 'route', 'track', 'fence', 'wall'];
 const RECT_TOOLS = ['demolish', 'trees', 'clear'];
 
 class UI {
@@ -155,7 +155,7 @@ class UI {
       }
       if (this.drag && this.dragTiles) {
         const cost = this.dragCost();
-        this.showTip(e, `${this.dragTiles.length} tiles${cost ? ' · ' + fmtMoney(cost) : ''}`);
+        this.showTip(e, this.tool === 'route' && this.routeFail ? '<span style="color:#ff9080">No route between these points</span>' : `${this.dragTiles.length} tiles${cost ? ' · ' + fmtMoney(cost) : ''}`);
       } else if (e.target === cv && BUILDINGS[this.tool]) {
         this.showTip(e, `${BUILDINGS[this.tool].name} · ${fmtMoney(BUILDINGS[this.tool].cost)}`);
       } else if (e.target === cv && this.tool === 'hatch' && this.species) {
@@ -244,6 +244,8 @@ class UI {
       else if (k === 'k') this.toggleOverlay('paddock');
       else if (k === 'l') this.jumpToLoose();
       else if (k === 'g') this.showRoster();
+      else if (k === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.doUndo(); }
+      else if (k === 'u') this.doUndo();
       else if (k === '=' || k === '+') this.zoomAt(1, window.innerWidth / 2, window.innerHeight / 2);
       else if (k === '-') this.zoomAt(-1, window.innerWidth / 2, window.innerHeight / 2);
       else {
@@ -286,6 +288,12 @@ class UI {
   updateDrag(t) {
     const d = this.drag;
     const tiles = [];
+    if (this.tool === 'route') {
+      const r = this.game.world.route(d.x, d.y, t.x, t.y);
+      this.dragTiles = r || [[d.x, d.y]];
+      this.routeFail = !r;
+      return;
+    }
     if (LINE_TOOLS.includes(this.tool)) {
       // L-shaped: along x first then y
       const sx = Math.sign(t.x - d.x) || 1, sy = Math.sign(t.y - d.y) || 1;
@@ -312,7 +320,7 @@ class UI {
     let c = 0;
     for (const [x, y] of this.dragTiles) {
       const i = w.idx(x, y);
-      if (tool === 'path' && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.path.cost;
+      if ((tool === 'path' || tool === 'route') && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0);
       else if (tool === 'track' && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.track.cost;
       else if ((tool === 'fence' || tool === 'paddock') && w.fence[i] !== F_ELECTRIC && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_ELECTRIC].cost;
       else if (tool === 'wall' && w.fence[i] !== F_WALL && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_WALL].cost;
@@ -326,9 +334,10 @@ class UI {
     const g = this.game, tool = this.tool;
     if (!this.dragTiles) return;
     let n = 0;
+    if (tool !== 'demolish') g.startBatch();
     for (const [x, y] of this.dragTiles) {
       let ok = false;
-      if (tool === 'path') ok = g.placePath(x, y);
+      if (tool === 'path' || tool === 'route') ok = g.placePath(x, y);
       else if (tool === 'track') ok = g.placeTrack(x, y);
       else if (tool === 'fence' || tool === 'paddock') ok = g.placeFence(x, y, F_ELECTRIC);
       else if (tool === 'wall') ok = g.placeFence(x, y, F_WALL);
@@ -342,6 +351,7 @@ class UI {
       else if (tool === 'clear') ok = g.clearLand(x, y);
       if (ok) n++;
     }
+    g.endBatch((TOOL_INFO[tool] || {}).name || tool);
     if (n) this.sfx.play(tool === 'demolish' ? 'demolish' : 'build');
     else this.sfx.play('error');
     if (n && (tool === 'fence' || tool === 'paddock')) {
@@ -359,7 +369,9 @@ class UI {
     if (BUILDINGS[tool]) {
       const def = BUILDINGS[tool];
       const bx = t.x - Math.floor((def.w - 1) / 2), by = t.y - Math.floor((def.h - 1) / 2);
+      g.startBatch();
       const b = g.placeBuilding(tool, bx, by);
+      g.endBatch(def.name);
       if (b) {
         this.hideTip();
         this.sfx.play('build');
@@ -449,6 +461,7 @@ class UI {
     for (const b of document.querySelectorAll('#speedBtns button')) b.onclick = () => { this.setSpeed(+b.dataset.speed); this.sfx.play('click'); };
     $('#alarmBtn').onclick = () => this.toggleAlarm();
     $('#finBtn').onclick = () => this.showFinances();
+    $('#undoBtn').onclick = () => this.doUndo();
     $('#rosterBtn').onclick = () => this.showRoster();
     $('#disBtn').onclick = () => this.showDisasters();
     $('#sndBtn').onclick = () => {
@@ -474,6 +487,13 @@ class UI {
     window.addEventListener('mouseup', () => { this.mmDrag = false; });
     mm.addEventListener('touchstart', (e) => { e.preventDefault(); mmNav(e.touches[0]); }, { passive: false });
     $('#modal').addEventListener('mousedown', (e) => { if (e.target.id === 'modal' && !this.modalLocked) this.closeModal(); });
+  }
+
+  doUndo() {
+    const r = this.game.undo();
+    if (!r) { this.toast('Nothing to undo.', 'info'); this.sfx.play('error'); return; }
+    this.toast(`Undid ${r.label} (+${fmtMoney(r.refund)})`, 'good');
+    this.sfx.play('demolish');
   }
 
   setSpeed(s) {

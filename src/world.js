@@ -140,7 +140,7 @@ class World {
     const t = this.terrain[i];
     if (!(t === T_SAND || t === T_GRASS || t === T_FOREST || t === T_BASALT)) return false;
     const f = this.fence[i];
-    if (f === F_ELECTRIC || f === F_WALL) return false;
+    if (isSolidFence(f)) return false;
     if (this.bld[i]) return false;
     return true;
   }
@@ -151,7 +151,7 @@ class World {
     const i = this.idx(x, y);
     const t = this.terrain[i];
     if (!(t === T_SAND || t === T_GRASS || t === T_BASALT || (allowForest && t === T_FOREST))) return false;
-    if (this.fence[i] === F_ELECTRIC || this.fence[i] === F_WALL) return false;
+    if (isSolidFence(this.fence[i])) return false;
     if (this.bld[i]) return false;
     return true;
   }
@@ -385,6 +385,44 @@ class World {
     }
     this.flowCache.set(key, f);
     return f;
+  }
+
+  // ---------- cheapest footpath route (Dijkstra with a bucket queue) ----------
+  // Existing paths are nearly free; open land costs more; forest costs extra. Returns [[x,y],...] or null.
+  route(sx, sy, tx, ty) {
+    const W = this.W, N = W * this.H;
+    const cost = (i) => {
+      if (this.path[i]) return 1;
+      const x = i % W, y = (i / W) | 0;
+      if (!this.canBuildAt(x, y) || this.track[i] || this.fence[i] === F_BROKEN) return 0;
+      return this.terrain[i] === T_FOREST ? 7 : 4;
+    };
+    const s = this.idx(sx, sy), t = this.idx(tx, ty);
+    if (!cost(s) || !cost(t)) return null;
+    const distA = new Int32Array(N).fill(1 << 30), prev = new Int32Array(N).fill(-1);
+    const buckets = [[s]]; distA[s] = 0;
+    for (let d = 0; d < buckets.length; d++) {
+      const b = buckets[d]; if (!b) continue;
+      for (const c of b) {
+        if (distA[c] !== d) continue;
+        if (c === t) {
+          const out = []; let k = t;
+          while (k >= 0) { out.push([k % W, (k / W) | 0]); k = prev[k]; }
+          return out.reverse();
+        }
+        const x = c % W, y = (c / W) | 0;
+        for (const [dx, dy] of DIRS4) {
+          const nx = x + dx, ny = y + dy;
+          if (!this.inb(nx, ny)) continue;
+          const j = this.idx(nx, ny), cj = cost(j);
+          if (!cj) continue;
+          const nd = d + cj;
+          if (nd < distA[j]) { distA[j] = nd; prev[j] = c; (buckets[nd] = buckets[nd] || []).push(j); }
+        }
+      }
+      if (d > 40000) break;
+    }
+    return null;
   }
 
   // ---------- generic BFS for free-roaming agents ----------

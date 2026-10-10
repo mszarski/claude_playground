@@ -66,7 +66,7 @@ class Events {
         for (let k = 0; k < 14; k++) {
           const x = randi(1, w.W - 2), y = randi(1, w.H - 2);
           const j = w.idx(x, y);
-          if (w.fence[j] === F_ELECTRIC || w.fence[j] === F_WALL) g.damageFence(x, y, randf(15, 45), null);
+          if (isSolidFence(w.fence[j])) g.damageFence(x, y, randf(15, 45), null);
         }
         for (const b of w.buildings.values()) if (chance(0.06)) g.damageBuilding(b, randf(15, 50), null);
       }
@@ -224,7 +224,7 @@ class Events {
       for (let k = 0; k < 60; k++) {
         const x = randi(1, w.W - 2), y = randi(1, w.H - 2);
         const f = w.fence[w.idx(x, y)];
-        if (f === F_ELECTRIC || f === F_WALL) { tx = x; ty = y; break; }
+        if (isSolidFence(f)) { tx = x; ty = y; break; }
       }
     }
     if (tx === undefined) { tx = randi(2, w.W - 3); ty = randi(2, w.H - 3); }
@@ -232,7 +232,7 @@ class Events {
     this.bolts.push({ x: tx + 0.5, y: ty + 0.5, life: 0.35, seed: randi(0, 9999) });
     g.soundAt('thunder', tx, ty, 1);
     const j = w.idx(tx, ty);
-    if (w.fence[j] === F_ELECTRIC || w.fence[j] === F_WALL) g.damageFence(tx, ty, randf(50, 110), null);
+    if (isSolidFence(w.fence[j])) g.damageFence(tx, ty, randf(50, 110), null);
     const b = w.buildings.get(w.bld[j]);
     if (b) {
       g.damageBuilding(b, randf(40, 120), null);
