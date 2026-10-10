@@ -376,7 +376,8 @@ function buildDinoSprites() {
     // Normalize sizes to same canvas
     const norm = (src) => { const [c, ctx] = makeCanvas(w, h); ctx.drawImage(src, 0, h - src.height); return c; };
     const a = norm(fa), b = norm(fb), s = norm(sl);
-    const vs = (front) => [makeView(key, front, 0), makeView(key, front, 1)];
+    const mv = typeof VIEW_ART !== 'undefined' && VIEW_ART[key] ? makeViewArt : makeView;
+    const vs = (front) => [mv(key, front, 0), mv(key, front, 1)];
     DINO_SPRITES[key] = {
       w, h,
       up: vs(false), down: vs(true),

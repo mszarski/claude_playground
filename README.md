@@ -45,7 +45,8 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 
 All code is plain JavaScript in `src/` loaded by `index.html`:
 
-- `sprites.js` — all pixel art (dinosaurs are hand-drawn character grids, buildings are procedural)
+- `sprites.js` — pixel art (dinosaurs are hand-drawn character grids, buildings are procedural)
+- `sprites-views.js` — hand-drawn front/back dinosaur views
 - `world.js` — terrain generation, paddock region detection, power grid, pathfinding
 - `entities/` — `dino.js`, `ptera.js`, `guest.js`, `staff.js` (rangers, engineers), `vehicles.js` (tour jeeps, ACU helicopter)
 - `events.js` — disasters
