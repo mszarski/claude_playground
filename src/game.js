@@ -2,20 +2,20 @@
 'use strict';
 
 const GOALS = [
-  { id: 'hatchery', text: 'Build a Hatchery', reward: 10000, check: (g) => g.hasBuilding('hatchery') },
-  { id: 'power', text: 'Build a Power Plant', reward: 10000, check: (g) => g.hasBuilding('power') },
-  { id: 'paddock', text: 'Fence a paddock (use the Paddock tool) and add a feeder inside', reward: 15000,
+  { id: 'hatchery', tool: 'hatchery', text: 'Build a Hatchery', reward: 10000, check: (g) => g.hasBuilding('hatchery') },
+  { id: 'power', tool: 'power', text: 'Build a Power Plant', reward: 10000, check: (g) => g.hasBuilding('power') },
+  { id: 'paddock', tool: 'paddock', text: 'Fence a paddock (use the Paddock tool) and add a feeder inside', reward: 15000,
     check: (g) => g.world.regions.some((r) => !r.public && r.size >= 20 && (r.feeders.herb.length + r.feeders.carn.length) > 0) },
-  { id: 'hatch1', text: 'Hatch your first dinosaur', reward: 20000, check: (g) => g.dinos.length > 0 },
-  { id: 'guests20', text: 'Connect paths to attractions and welcome 20 guests', reward: 15000, check: (g) => g.guests.length >= 20 },
-  { id: 'ranger', text: 'Build a Ranger Station (rangers tranquilize escapees)', reward: 10000, check: (g) => g.hasBuilding('ranger') },
-  { id: 'maint', text: 'Build a Maintenance Shed (engineers repair fences)', reward: 10000, check: (g) => g.hasBuilding('maint') },
-  { id: 'species3', text: 'Exhibit 3 different species', reward: 30000, check: (g) => g.speciesCount() >= 3 },
+  { id: 'hatch1', tool: 'hatch', text: 'Hatch your first dinosaur', reward: 20000, check: (g) => g.dinos.length > 0 },
+  { id: 'guests20', tool: 'visitor', text: 'Connect paths to attractions and welcome 20 guests', reward: 15000, check: (g) => g.guests.length >= 20 },
+  { id: 'ranger', tool: 'ranger', text: 'Build a Ranger Station (rangers tranquilize escapees)', reward: 10000, check: (g) => g.hasBuilding('ranger') },
+  { id: 'maint', tool: 'maint', text: 'Build a Maintenance Shed (engineers repair fences)', reward: 10000, check: (g) => g.hasBuilding('maint') },
+  { id: 'species3', tool: 'hatch', text: 'Exhibit 3 different species', reward: 30000, check: (g) => g.speciesCount() >= 3 },
   { id: 'star2', text: 'Reach a 2-star park rating', reward: 40000, check: (g) => g.stars >= 2 },
-  { id: 'carn', text: 'Hatch a carnivore (keep it away from herbivores!)', reward: 30000, check: (g) => g.dinos.some((d) => d.sp.diet === 'carn') },
-  { id: 'helipad', text: 'Build an ACU Helipad', reward: 25000, check: (g) => g.hasBuilding('helipad') },
+  { id: 'carn', tool: 'hatch', text: 'Hatch a carnivore (keep it away from herbivores!)', reward: 30000, check: (g) => g.dinos.some((d) => d.sp.diet === 'carn') },
+  { id: 'helipad', tool: 'helipad', text: 'Build an ACU Helipad', reward: 25000, check: (g) => g.hasBuilding('helipad') },
   { id: 'guests150', text: 'Have 150 guests in the park at once', reward: 60000, check: (g) => g.guests.length >= 150 },
-  { id: 'trex', text: 'Exhibit a Tyrannosaurus rex', reward: 80000, check: (g) => g.dinos.some((d) => d.species === 'trex' && !d.loose) },
+  { id: 'trex', tool: 'hatch', text: 'Exhibit a Tyrannosaurus rex', reward: 80000, check: (g) => g.dinos.some((d) => d.species === 'trex' && !d.loose) },
   { id: 'star4', text: 'Reach a 4-star rating', reward: 100000, check: (g) => g.stars >= 4 },
   { id: 'million', text: 'Have $2,000,000 in the bank', reward: 0, check: (g) => g.money >= 2000000 },
   { id: 'star5', text: 'Reach a 5-star rating: the greatest park on Earth', reward: 250000, check: (g) => g.stars >= 5 },
@@ -54,6 +54,9 @@ class Game {
     this.listeners = {};
     this.soundHook = null;
     this.looseCount = 0;
+    this.difficulty = opts.difficulty || 'normal';
+    const DIFF = { easy: { money: 650000, evMul: 0.5 }, normal: { money: 450000, evMul: 1 }, chaos: { money: 400000, evMul: 1.8 } }[this.difficulty];
+    this.money = DIFF.money; this.events.evMul = DIFF.evMul;
     if (opts.skipSetup) this.start = this.world.findStartSpot();
     else this.setupStart();
     this.world.computeRegions();
@@ -228,7 +231,8 @@ class Game {
     const b = w.buildings.get(w.bld[i]);
     if (b) {
       if (b.type === 'gate' && this.buildingsOfType('gate').length <= 1) { this.log('You need at least one Main Gate.', 'warn'); return false; }
-      const refund = BUILDINGS[b.type].cost * 0.25;
+      const recent = b.placedAt !== undefined && this.time - b.placedAt < 2; // within ~5s at normal speed
+      const refund = BUILDINGS[b.type].cost * (recent ? 1 : 0.25);
       this.money += refund; this.ledger.construction -= refund;
       this.removeBuildingFx(b);
       return true;
@@ -255,6 +259,7 @@ class Game {
     if (!this.canAfford(def.cost)) { this.log('Not enough money!', 'warn'); return null; }
     this.spend(def.cost);
     const b = w.addBuilding(type, x, y);
+    b.placedAt = this.time;
     if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
     if (type === 'helipad') this.helis.push(new Helicopter(this, b));
     if (type === 'tour') { b.queue = []; b.jeepT = 0; }
@@ -330,7 +335,7 @@ class Game {
       this.soundAt('crash', x, y, 1);
       this.shake = Math.max(this.shake, 3);
       const who = dino ? `${dino.name} the ${dino.sp.name} broke through a fence!` : 'A fence has collapsed!';
-      this.log(who, dino ? 'bad' : 'warn', { x: x + 0.5, y: y + 0.5 }, !!dino);
+      this.log(who, dino ? 'bad' : 'warn', { x: x + 0.5, y: y + 0.5, kind: 'fence', fx: x, fy: y }, !!dino);
     }
   }
   damageBuilding(b, dmg, dino) {
@@ -344,6 +349,33 @@ class Game {
       this.removeBuildingFx(b);
     }
   }
+  // Player-ordered helicopter tranquilizer run
+  acuStrike(d) {
+    const h = this.helis.find((x) => x.state === 'parked' && !x.cargo) || this.helis.find((x) => x.state === 'return' && !x.cargo);
+    if (!h) return 'All helicopters are busy.';
+    if (!this.canAfford(8000)) return 'Not enough money ($8k).';
+    this.spend(8000, 'ops');
+    h.target = d; h.state = 'strike'; h.shotT = 0.5;
+    this.soundAt('heli', h.x, h.y, 1);
+    this.log(`ACU helicopter scrambled to tranquilize ${d.name} the ${d.sp.name}.`, 'info', d, true);
+    return null;
+  }
+  // Instant fence rebuild at triple cost
+  emergencyRepair(x, y) {
+    const w = this.world, i = w.idx(x, y);
+    if (w.fence[i] !== F_BROKEN && !((w.fence[i] === F_ELECTRIC || w.fence[i] === F_WALL) && w.fenceHp[i] < FENCE_DEF[w.fence[i]].hp)) return 'Nothing to repair.';
+    if (this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried)) return 'A dinosaur is standing in the gap!';
+    const orig = w.fence[i] === F_BROKEN ? (w.fenceOrig[i] || F_ELECTRIC) : w.fence[i];
+    const cost = FENCE_DEF[orig].cost * 3;
+    if (!this.canAfford(cost)) return 'Not enough money.';
+    this.spend(cost, 'repairs');
+    const wasBroken = w.fence[i] === F_BROKEN;
+    w.fence[i] = orig; w.fenceHp[i] = FENCE_DEF[orig].hp;
+    if (wasBroken) w.invalidate(x, y); else w.markDirty(x, y);
+    this.sparks(x + 0.5, y + 0.5, '#f8e080', 12);
+    return null;
+  }
+
   onFenceRebuilt(x, y) { this.burst(x + 0.5, y + 0.5, '#f8e080', 6); }
 
   humanKilled(h, dino) {

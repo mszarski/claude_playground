@@ -23,6 +23,7 @@
   --orange: #f0a030;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
   font-family: 'VT323', 'Courier New', monospace; font-size: 18px; user-select: none; -webkit-user-select: none; touch-action: none; }
 #view { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; display: block; }
@@ -235,6 +236,12 @@ table.fin td:last-child { text-align: right; }
       <button id="btnContinue" style="display:none">CONTINUE</button>
       <button id="btnSandbox">SANDBOX MODE</button>
       <button id="btnHelp">HOW TO PLAY</button>
+    </div>
+    <div class="menu" id="diffMenu" hidden>
+      <button data-diff="easy">RELAXED<br><small style="font-size:8px;color:#9ab08a">MORE MONEY, FEWER DISASTERS</small></button>
+      <button data-diff="normal">STANDARD<br><small style="font-size:8px;color:#9ab08a">THE INTENDED EXPERIENCE</small></button>
+      <button data-diff="chaos">CHAOS THEORY<br><small style="font-size:8px;color:#9ab08a">DISASTERS EVERY DAY OR TWO</small></button>
+      <button id="diffBack">BACK</button>
     </div>
     <div class="credits">A pixel park-builder. Life, uh, finds a way.</div>
   </div>

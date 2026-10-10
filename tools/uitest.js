@@ -10,7 +10,7 @@ const SP = process.argv[2];
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
   await page.goto('file://' + path.resolve(__dirname, '../index.html'));
   await page.waitForTimeout(500);
-  await page.click('#btnNew');
+  await page.click('#btnNew'); await page.click('[data-diff=normal]');
   await page.waitForTimeout(300);
   // helper: tile -> screen
   const toScreen = async (tx, ty) => page.evaluate(([tx, ty]) => { const c = RENDER.cam; return [(tx * 16 + 8 - c.x) * c.zoom, (ty * 16 + 8 - c.y) * c.zoom]; }, [tx, ty]);

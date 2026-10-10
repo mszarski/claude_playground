@@ -532,7 +532,8 @@ class UI {
     el.className = e.type;
     const hh = String(Math.floor(e.hour)).padStart(2, '0');
     el.textContent = `D${e.day} ${hh}h · ${e.msg}`;
-    if (e.ref) el.onclick = () => { const ent = e.ref.entity; if (ent && ent.x !== undefined && !ent.dead) { this.centerOn(ent.kind ? ent.x : ent.x + (ent.w || 0) / 2, ent.kind ? ent.y : ent.y + (ent.h || 0) / 2); if (ent.kind) this.select(ent); } else this.centerOn(e.ref.x, e.ref.y); };
+    if (e.ref && e.ref.entity && e.ref.entity.kind === 'fence') el.onclick = () => { this.centerOn(e.ref.x, e.ref.y); this.select({ kind: 'fence', x: e.ref.entity.fx, y: e.ref.entity.fy }); };
+    else if (e.ref) el.onclick = () => { const ent = e.ref.entity; if (ent && ent.x !== undefined && !ent.dead) { this.centerOn(ent.kind ? ent.x : ent.x + (ent.w || 0) / 2, ent.kind ? ent.y : ent.y + (ent.h || 0) / 2); if (ent.kind) this.select(ent); } else this.centerOn(e.ref.x, e.ref.y); };
     box.appendChild(el);
     while (box.children.length > 6) box.removeChild(box.firstChild);
     if (e.type === 'goal') this.renderGoal();
@@ -543,7 +544,17 @@ class UI {
     const el = $('#goal');
     if (g.goalIdx >= GOALS.length) { el.innerHTML = `<b>ALL GOALS COMPLETE</b>Spared no expense. Keep building!`; return; }
     const goal = GOALS[g.goalIdx];
-    el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}`;
+    el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}${goal.tool ? ' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>' : ''}`;
+    const gb = $('#goalBtn');
+    if (gb) gb.onclick = () => {
+      this.sfx.play('click');
+      if (goal.tool === 'hatch') { this.showSpeciesPicker(); return; }
+      const grp = TOOL_GROUPS.find((gr) => gr.tools.includes(goal.tool));
+      this.setTool(goal.tool);
+      if (grp && window.innerWidth >= 760) this.openFlyout(grp);
+      const tips = { paddock: 'Drag a rectangle inside the blue power coverage, then put a Feeder inside.', power: 'Place it near where your paddocks will go. Fences only work in its blue radius.', visitor: 'Build it next to a path, and connect paths from the gate past your paddocks.' };
+      this.toast(tips[goal.tool] || `Selected: ${(BUILDINGS[goal.tool] || TOOL_INFO[goal.tool]).name}. Click on the map to place it.`, 'info');
+    };
   }
 
   // ---------------- HUD ----------------
@@ -647,6 +658,7 @@ class UI {
       html += `<div class="sub">${sp.desc}</div>`;
       html += `<div class="btns"><button data-a="follow" class="${this.follow ? 'on' : ''}">Follow</button>`;
       html += `<button data-a="sedate" ${d.sedatedT > 0 || d.carried || !g.hasBuilding('ranger') ? 'disabled' : ''} title="Rangers will tranquilize it">${d.orderSedate ? 'Sedating…' : 'Sedate'}</button>`;
+      if (d.loose && d.sedatedT <= 0 && !d.carried) html += `<button data-a="strike" ${g.helis.length ? '' : 'disabled'} title="Helicopter darts it from the air ($8k)">ACU Strike $8k</button>`;
       html += `<button data-a="relocate" ${d.sedatedT <= 0 || !g.hasBuilding('helipad') || d.carried ? 'disabled' : ''} title="ACU airlifts it to a safe paddock">Airlift</button>`;
       html += `<button data-a="sell" class="danger" title="Ship to another facility">Sell ${fmtMoney(sp.cost * 0.4)}</button></div>`;
       portrait = () => {
@@ -677,6 +689,8 @@ class UI {
         html += `<div class="row"><span>Integrity</span><span>${Math.round(w.fenceHp[i])}/${def.hp}</span></div>${this.bar(w.fenceHp[i], def.hp, '#5ac85a')}`;
         if (f === F_ELECTRIC) html += `<div class="row"><span>Power</span><span style="color:${w.fencePowered[i] ? '#f8d040' : '#e04838'}">${w.fencePowered[i] ? 'LIVE' : 'OFFLINE'}</span></div>`;
       }
+      const orig = f === F_BROKEN ? (w.fenceOrig[i] || F_ELECTRIC) : f;
+      if (f === F_BROKEN || w.fenceHp[i] < def.hp) html += `<div class="btns"><button data-a="erepair" class="danger">Emergency repair ${fmtMoney(FENCE_DEF[orig].cost * 3)}</button></div>`;
     } else if (o.kind === 'paddock') {
       const reg = w.regionAt(o.x, o.y);
       if (!reg || reg.public) { this.selected = null; el.style.display = 'none'; return; }
@@ -719,6 +733,8 @@ class UI {
     if (a === 'close') { this.select(null); return; }
     if (a === 'follow') { this.follow = !this.follow; }
     if (a === 'sedate' && o) { o.orderSedate = true; g.log(`Rangers dispatched to sedate ${o.name}.`, 'info', o); }
+    if (a === 'strike' && o) { const err = g.acuStrike(o); if (err) this.toast(err, 'warn'); }
+    if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }
     if (a === 'relocate' && o) { o.relocate = true; g.log(`ACU will airlift ${o.name} to a safe paddock.`, 'info', o); }
     if (a === 'sell' && o) {
       if (o.carried) return;

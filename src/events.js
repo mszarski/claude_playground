@@ -142,7 +142,8 @@ class Events {
       ['volcano', day > 12 ? 6 : 0],
     ];
     const ev = weightedPick(opts, (o) => o[1]);
-    this.nextDay = day + randi(2, 4);
+    const m = this.evMul || 1;
+    this.nextDay = day + Math.max(1, Math.round(randi(2, 4) / m));
     if (ev) this.trigger(ev[0]);
   }
 

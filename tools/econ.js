@@ -1,5 +1,5 @@
 (() => {
-  document.getElementById('btnNew').click();
+  startGame({ difficulty: 'normal' });
   const g = window.GAME, w = g.world, s = g.start;
   g.events.auto = false;
   T.clear(s.x - 18, s.y - 28, s.x + 18, s.y - 1);

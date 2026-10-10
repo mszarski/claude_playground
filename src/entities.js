@@ -1025,6 +1025,21 @@ class Helicopter {
           if (t) { this.target = t; this.state = 'fetch'; g.soundAt('heli', this.x, this.y, 0.8); }
         }
         break;
+      case 'strike': {
+        // ACU gunship run: fly over the target and dart it from the air
+        this.alt = Math.min(2.5, this.alt + dt * 2);
+        const t = this.target;
+        if (!t || t.dead || t.carried || t.sedatedT > 0) { this.target = null; this.state = 'return'; break; }
+        if (dist(this.x, this.y, t.x, t.y) > 2.5) { fly(t.x, t.y, 6.5); break; }
+        fly(t.x + Math.cos(g.time * 3) * 1.5, t.y + Math.sin(g.time * 3) * 1.5, 4);
+        this.shotT = (this.shotT || 0) - dt;
+        if (this.shotT <= 0) {
+          this.shotT = 0.9;
+          g.darts.push({ x: this.x, y: this.y - this.alt, t, life: 1.5 });
+          g.soundAt('dart', this.x, this.y, 0.8);
+        }
+        break;
+      }
       case 'fetch': {
         this.alt = Math.min(2.5, this.alt + dt * 2);
         const t = this.target;

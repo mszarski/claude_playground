@@ -1,6 +1,6 @@
 // A scripted "competent player" over many days with random disasters on.
 (() => {
-  document.getElementById('btnNew').click();
+  startGame({ difficulty: 'normal' });
   const g = window.GAME, w = g.world, s = g.start;
   T.clear(s.x - 26, s.y - 34, s.x + 26, s.y - 1);
   const out = [];

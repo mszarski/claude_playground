@@ -34,7 +34,7 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, seed: g.seed, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
+    v: 1, seed: g.seed, diff: g.difficulty, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
@@ -48,7 +48,7 @@ function saveGame(g) {
 
 function loadGame(json) {
   const s = JSON.parse(json);
-  const g = new Game(s.seed, { skipSetup: true });
+  const g = new Game(s.seed, { skipSetup: true, difficulty: s.diff });
   const w = g.world;
   w.terrain.set(unb64(s.terrain, Uint8Array));
   w.fence.set(unb64(s.fence, Uint8Array));
@@ -199,7 +199,18 @@ function boot() {
     if (RENDER) { RENDER.resize(window.innerWidth, window.innerHeight); UIX.clampCam(); }
     if (titleAnim) startTitleAnim();
   });
-  document.getElementById('btnNew').onclick = () => { SFX.ensure(); SFX.play('click'); startGame(); };
+  document.getElementById('btnNew').onclick = () => {
+    SFX.ensure(); SFX.play('click');
+    document.querySelector('#title .menu').hidden = true;
+    document.getElementById('diffMenu').hidden = false;
+  };
+  for (const b of document.querySelectorAll('#diffMenu [data-diff]')) b.onclick = () => {
+    SFX.play('click');
+    document.querySelector('#title .menu').hidden = false;
+    document.getElementById('diffMenu').hidden = true;
+    startGame({ difficulty: b.dataset.diff });
+  };
+  document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
   document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true }); };
   document.getElementById('btnContinue').onclick = () => { SFX.ensure(); if (!loadGameFromStorage()) { startGame(); } };
   document.getElementById('btnHelp').onclick = () => {
