@@ -1,7 +1,7 @@
 // Random-action fuzzer: throws on exceptions or invalid state.
 (() => {
   const results = [];
-  for (let run = 0; run < 3; run++) {
+  for (let run = 0; run < (window.FUZZ_RUNS || 3); run++) {
     startGame({ difficulty: 'chaos', sandbox: true });
     let g = GAME; const w = g.world, s = g.start;
     const btypes = Object.keys(BUILDINGS).filter((b) => b !== 'gate');

@@ -56,4 +56,4 @@ All code is plain JavaScript in `src/` loaded by `index.html`:
 - `game.js` — economy, goals, simulation loop
 - `render.js`, `ui.js` (input, toolbar, HUD), `ui-panels.js` (info panel, dialogs), `audio.js`, `main.js`
 
-`tools/` holds headless Playwright smoke tests (`node tools/smoke.js out.png tools/play1.js`).
+`tools/` holds headless Playwright tests. `node tools/ci.js` runs the suite that GitHub Actions runs on every push (boot every mode, complete the tutorial, fuzz with save/load round trips, open every panel). Other scripts are scripted playthroughs, e.g. `node tools/smoke.js out.png tools/long.js`.

@@ -5,7 +5,7 @@ let GAME = null, RENDER = null, UIX = null, SFX = null;
 let lastT = 0, titleAnim = null;
 
 function startGame(opts = {}) {
-  const seed = opts.seed || (Math.floor(Math.random() * 1e9) + 1);
+  const seed = opts.seed || window.TEST_SEED || (Math.floor(Math.random() * 1e9) + 1);
   const g = new Game(seed, opts);
   if (opts.sandbox) { g.sandbox = true; g.money = 5000000; }
   setActiveGame(g);

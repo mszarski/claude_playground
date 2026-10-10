@@ -1,5 +1,5 @@
 // Walk through the first goals the way a new player would, using only the UI.
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('./pw');
 const path = require('path');
 const SP = process.argv[2];
 (async () => {

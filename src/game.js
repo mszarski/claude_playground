@@ -463,11 +463,24 @@ class Game {
     this.log(`ACU helicopter scrambled to tranquilize ${d.name} the ${d.sp.name}.`, 'info', d, true);
     return null;
   }
+  // Drag any sedated dinosaur out of a fence gap so it can be rebuilt. Returns true if the gap is clear.
+  clearGap(x, y) {
+    const w = this.world;
+    for (const d of this.dinos) {
+      if (d.carried || d.tx !== x || d.ty !== y) continue;
+      if (d.sedatedT <= 0) return false;
+      const spot = DIRS4.map(([dx, dy]) => [x + dx, y + dy]).find(([nx, ny]) => w.dinoPass(nx, ny) && w.fence[w.idx(nx, ny)] !== F_BROKEN);
+      if (!spot) return false;
+      d.x = spot[0] + 0.5; d.y = spot[1] + 0.5;
+    }
+    return true;
+  }
+
   // Instant fence rebuild at triple cost
   emergencyRepair(x, y) {
     const w = this.world, i = w.idx(x, y);
     if (w.fence[i] !== F_BROKEN && !((isSolidFence(w.fence[i])) && w.fenceHp[i] < FENCE_DEF[w.fence[i]].hp)) return 'Nothing to repair.';
-    if (this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried)) return 'A dinosaur is standing in the gap!';
+    if (!this.clearGap(x, y)) return 'A dinosaur is standing in the gap! Sedate it first.';
     const orig = w.fence[i] === F_BROKEN ? (w.fenceOrig[i] || F_ELECTRIC) : w.fence[i];
     const cost = FENCE_DEF[orig].cost * 3;
     if (!this.canAfford(cost)) return 'Not enough money.';

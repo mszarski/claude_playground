@@ -17,10 +17,12 @@
   T.place('ranger', s.x - 12, s.y - 9); tick(1); log.push('ranger->' + at());
   log.push('loose=' + g.looseCount + ' broken=' + g.countBrokenFences());
   UIX.toggleAlarm(); tick(1); log.push('alarm->' + at());
-  tick(60);
-  // repair any broken fence
-  for (let i = 0; i < w.fence.length; i++) if (w.fence[i] === F_BROKEN) g.emergencyRepair(i % w.W, (i / w.W) | 0);
-  tick(20); log.push('contain->' + at() + ' loose=' + g.looseCount + ' broken=' + g.countBrokenFences());
+  // wait for the rangers, retrying the emergency repair like a player would
+  for (let k = 0; k < 18 && at() === 9; k++) {
+    tick(10);
+    for (let i = 0; i < w.fence.length; i++) if (w.fence[i] === F_BROKEN) g.emergencyRepair(i % w.W, (i / w.W) | 0);
+  }
+  tick(1); log.push('contain->' + at() + ' loose=' + g.looseCount + ' broken=' + g.countBrokenFences());
   UIX.toggleAlarm(); tick(1); log.push('alarmoff->' + at());
   const nb = document.getElementById('tutNext'); if (nb) nb.click(); log.push('final->' + at());
   return log;

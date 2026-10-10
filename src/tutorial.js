@@ -90,7 +90,7 @@ function tutStageBreach(g) {
   if (!p || !p.length) return;
   const [fx, fy] = p[p.length - 1];
   g.damageFence(fx, fy, 99999, null);
-  d.stress = 80; d.x = fx + 0.5; d.y = fy + 0.5;
+  d.stress = 30; // a calm escapee so the first breach is easy to resolve
   w.computeRegions(); g.updateLoose();
 }
 

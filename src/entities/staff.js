@@ -112,7 +112,7 @@ class Staff {
         const f = w.fence[j];
         if (f === F_BROKEN) {
           // rebuild if no dino standing there
-          const blocked = g.dinos.some((d) => d.tx === fx && d.ty === fy && !d.carried);
+          const blocked = !g.clearGap(fx, fy);
           if (!blocked) {
             const orig = w.fenceOrig[j] || F_ELECTRIC;
             const cost = Math.round(FENCE_DEF[orig].cost * 0.6);
