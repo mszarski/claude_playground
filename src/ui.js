@@ -80,6 +80,7 @@ class UI {
       const cost = BUILDINGS[t] ? BUILDINGS[t].cost : (TOOL_INFO[t].cost || 0);
       const nm = document.createElement('span'); nm.className = 'nm'; nm.innerHTML = `${info.name}${TOOL_INFO[t] && TOOL_INFO[t].key ? ` <span class="k">[${TOOL_INFO[t].key}]</span>` : ''}`;
       b.appendChild(nm);
+      if (BUILDINGS[t] && BUILDINGS[t].unlockStars && this.game.stars < BUILDINGS[t].unlockStars && !this.game.sandbox) { b.style.opacity = 0.5; nm.innerHTML += ` <span class="k">${'★'.repeat(BUILDINGS[t].unlockStars)}</span>`; }
       if (cost) { const cs = document.createElement('span'); cs.className = 'c'; cs.textContent = fmtMoney(cost) + (LINE_TOOLS.includes(t) || RECT_TOOLS.includes(t) || t === 'paddock' ? '/t' : ''); b.appendChild(cs); }
       b.onmouseenter = (e) => this.showTip(e, `<b>${info.name}</b><br>${info.desc}` + (BUILDINGS[t] && BUILDINGS[t].upkeep ? `<br><span style="color:#9ab08a">Upkeep ${fmtMoney(BUILDINGS[t].upkeep)}/day${BUILDINGS[t].power ? ' · ' + BUILDINGS[t].power + ' MW' : ''}</span>` : ''));
       b.onmouseleave = () => this.hideTip();
@@ -359,7 +360,8 @@ class UI {
         if (def.feeds) { const reg = w.regionAt(bx + 1, by) || w.regionAt(bx - 1, by) || w.regionAt(bx, by + 1) || w.regionAt(bx, by - 1); if (reg && reg.public) this.toast('Feeders should go inside a fenced paddock.', 'warn'); }
       } else {
         this.sfx.play('error');
-        if (!g.canAfford(def.cost)) this.toast(`Not enough money for a ${def.name}.`, 'warn');
+        if (def.unlockStars && g.stars < def.unlockStars && !g.sandbox) this.toast(`The ${def.name} unlocks at ${def.unlockStars} stars.`, 'warn');
+        else if (!g.canAfford(def.cost)) this.toast(`Not enough money for a ${def.name}.`, 'warn');
         else if (def.unique && g.hasBuilding(tool) && tool !== 'gate') this.toast(`You can only have one ${def.name}.`, 'warn');
         else this.toast(`Can't build there — needs ${def.w}×${def.h} clear land (no water, rock, paths or fences).`, 'warn');
       }

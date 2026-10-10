@@ -435,6 +435,7 @@ class Renderer {
       ctx.fillStyle = fl ? '#f8e060' : '#f88020';
       ctx.fillRect(x + 6, y - 2, 2, 3); ctx.fillRect(x + spr.canvas.width - 8, y - 2, 2, 3);
     }
+    if (b.type === 'lagoon' && !b.escaped) this.drawMosasaur(ctx, b, x, y + spr.extra);
     if (b.type === 'hatchery' && g.eggs.length) {
       ctx.fillStyle = Math.sin(this.time * 6) > 0 ? '#f8f080' : '#e0c040';
       ctx.fillRect(x + 22, y + 1, 4, 1);
@@ -553,6 +554,32 @@ class Renderer {
       ctx.drawImage(img, Math.round(f.x - img.width / 2), Math.round(f.y));
     }
     this.flyers = this.flyers.filter((f) => f.x > -100 && f.x < w.W * TILE + 100);
+  }
+
+  drawMosasaur(ctx, b, x, y) {
+    const t = this.time + b.id * 3;
+    const W = b.w * TILE;
+    if (b.leap > 0) {
+      // breach: arc out of the water
+      const ph = 1 - b.leap / 2.2;
+      const cx = x + W * (0.25 + ph * 0.5), cy = y + 46 - Math.sin(ph * Math.PI) * 34;
+      ctx.save(); ctx.translate(Math.round(cx), Math.round(cy)); ctx.rotate((ph - 0.5) * 1.6);
+      ctx.fillStyle = '#1a2a2a'; ctx.fillRect(-21, -5, 42, 10);
+      ctx.fillStyle = '#4a6a68'; ctx.fillRect(-20, -4, 40, 8);
+      ctx.fillStyle = '#c8d0b8'; ctx.fillRect(-14, 2, 30, 2);
+      ctx.fillStyle = '#4a6a68'; ctx.fillRect(14, -2, 10, 6); ctx.fillRect(-26, -2, 7, 3); ctx.fillRect(-30, -5, 5, 4); ctx.fillRect(-30, 1, 5, 4);
+      ctx.fillStyle = '#f4f0e0'; for (let k = 0; k < 4; k++) ctx.fillRect(16 + k * 2, 3, 1, 2);
+      ctx.fillStyle = '#f8d040'; ctx.fillRect(17, -1, 2, 1);
+      ctx.fillStyle = '#4a6a68'; ctx.fillRect(-6, 4, 6, 4); ctx.fillRect(6, 4, 6, 4);
+      ctx.restore();
+    } else {
+      // dark shape cruising under the surface
+      const cx = x + W / 2 + Math.cos(t * 0.5) * (W / 2 - 22), cy = y + 46 + Math.sin(t * 0.5) * 12;
+      ctx.globalAlpha = 0.55; ctx.fillStyle = '#0a2440';
+      ctx.fillRect(Math.round(cx - 16), Math.round(cy - 3), 32, 6); ctx.fillRect(Math.round(cx - 22), Math.round(cy - 1), 6, 2);
+      ctx.globalAlpha = 1;
+      if (Math.sin(t * 2) > 0.7) { ctx.fillStyle = '#a8d8f0'; ctx.fillRect(Math.round(cx + 10), Math.round(cy - 4), 3, 1); }
+    }
   }
 
   drawPtera(ctx, p, ui) {

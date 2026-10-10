@@ -256,6 +256,7 @@ class Game {
     const w = this.world, def = BUILDINGS[type];
     if (!w.canPlaceBuilding(type, x, y)) return null;
     if (def.unique && this.hasBuilding(type) && type !== 'gate') { this.log(`You can only have one ${def.name}.`, 'warn'); return null; }
+    if (def.unlockStars && this.stars < def.unlockStars && !this.sandbox) return null;
     for (const d of this.dinos) if (!d.carried && d.tx >= x && d.tx < x + def.w && d.ty >= y && d.ty < y + def.h) return null;
     if (!this.canAfford(def.cost)) { this.log('Not enough money!', 'warn'); return null; }
     this.spend(def.cost);
@@ -500,6 +501,7 @@ class Game {
     for (const h of this.helis) h.update(dt);
     this.helis = this.helis.filter((h) => !h.dead);
     this.updateTours(dt);
+    this.updateLagoons(dt);
 
     // darts
     for (const dt_ of this.darts) {
@@ -554,6 +556,26 @@ class Game {
     }
     for (const j of this.jeeps) j.update(dt);
     this.jeeps = this.jeeps.filter((j) => !j.dead);
+  }
+
+  updateLagoons(dt) {
+    for (const b of this.buildingsOfType('lagoon')) {
+      b.showT = (b.showT === undefined ? randf(5, 15) : b.showT) - dt;
+      if (b.leap > 0) b.leap -= dt;
+      if (b.showT <= 0 && b.powered) {
+        b.showT = randf(25, 40);
+        b.leap = 2.2;
+        this.soundAt('bellow', b.x + 3, b.y + 3, 1);
+        setTimeoutSim(this, 1.1, () => { this.burst(b.x + 3, b.y + 3.2, '#a8d8f0', 30); this.soundAt('crash', b.x + 3, b.y + 3, 0.6); this.shake = Math.max(this.shake, 1); });
+        // nearby guests love it
+        for (const gu of this.guests) if (!gu.hidden && dist2(gu.x, gu.y, b.x + 3, b.y + 2.5) < 81) { gu.happy = Math.min(100, gu.happy + 15); if (chance(0.2)) { gu.thought = 'WOW!'; gu.thoughtT = 2; } this.earn(5, 'shops'); }
+      }
+      if (b.hp < b.maxHp * 0.25 && !b.escaped) {
+        b.escaped = true;
+        this.reputation = Math.max(0, this.reputation - 10);
+        this.log('The Mosasaur Lagoon cracked open and the Mosasaurus escaped into the ocean!', 'bad', { x: b.x + 3, y: b.y + 2 }, true);
+      }
+    }
   }
 
   jeepAttacked(j, dino) {
@@ -677,7 +699,7 @@ class Game {
       species.add(d.species);
     }
     att += species.size * 5;
-    for (const b of this.world.buildings.values()) att += (BUILDINGS[b.type].appeal || 0) * (b.powered ? 1 : 0.5);
+    for (const b of this.world.buildings.values()) att += (BUILDINGS[b.type].appeal || 0) * (b.powered ? 1 : 0.5) * (b.escaped ? 0 : 1);
     this.attraction = att;
     const score = att + this.reputation * 0.9;
     let s = 0;

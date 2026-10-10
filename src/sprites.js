@@ -920,6 +920,19 @@ function buildBuildingSprites() {
     p.r(W / 2 - 14, H - 10, 28, 7, '#2a1a0c'); drawText3(ctx, 'AVIARY', W / 2 - 12, H - 9, '#f8d040');
   });
 
+  make('lagoon', 14, (p, W, H, ctx) => {
+    // bleachers along the top, deep pool below
+    p.r(0, 0, W, 22, '#5a5a58');
+    for (let r = 0; r < 4; r++) { p.r(2, 2 + r * 5, W - 4, 3, r % 2 ? '#8a8a84' : '#a8a8a0'); }
+    for (let x = 4; x < W - 4; x += 3) p.px(x, 3 + ((x * 7) % 4) * 5, ['#e04838', '#3878c8', '#f8e060', '#68a088'][x % 4]);
+    p.r(0, 22, W, H - 22, '#3a3a38');
+    p.r(3, 25, W - 6, H - 28, '#1e5a8a');
+    p.r(5, 27, W - 10, H - 32, '#18487a');
+    for (let k = 0; k < 30; k++) p.px(6 + (k * 37) % (W - 12), 28 + (k * 23) % (H - 34), '#3a88c8');
+    p.r(0, 22, W, 2, '#c8c8c0');
+    drawText3(ctx, 'LAGOON', W / 2 - 12, H - 7, '#f8d040');
+  });
+
   make('siren', 14, (p, W, H) => {
     p.r(7, 6, 2, H - 6, '#5a5a58');
     p.r(4, H - 2, 8, 2, '#3a3a38');

@@ -5,6 +5,16 @@ A pixel-art park builder in the spirit of SimCity, set on a dinosaur island wher
 Build paddocks, power the electric fences, hatch dinosaurs, lay paths for guests — then survive storms,
 grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 
+## Features
+
+- **Paddocks & power** — electric fences only work inside a power plant's coverage (extend it with pylons). Concrete walls need no power but cost more.
+- **11 species** from Gallimimus to T. rex, plus Pteranodons in an Aviary and an endgame Indominus hybrid that camouflages itself.
+- **Dinosaur needs** — space, tree cover, water, herd size, food, and fear of predators all feed a comfort score. Stressed dinos test the fences; raptors look for the weakest spot.
+- **Guests** walk paths, eat, shop, ride the electric **jeep tour**, watch **Mosasaur** feeding shows, and flee to shelters when the alarm sounds.
+- **Disasters** — tropical storms with lightning, grid sabotage, earthquakes, volcanic eruptions, outbreaks, rampages, raptor probes, safety inspections. Trigger them yourself from the ☄ menu.
+- **Response tools** — evacuation alarm, siren towers, rangers with tranquilizer rifles, engineers, ACU helicopter airlifts and strikes, emergency fence repair, backup generators, vet clinics.
+- Goals, star rating, finances, a news ticker, save/load, three difficulty levels, sandbox mode, synthesized sound.
+
 ## Play
 
 Open `index.html` in any modern browser. No build step, no dependencies.
@@ -22,7 +32,8 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 | E | Evacuation alarm |
 | O / K | Power / paddock overlays |
 | L | Jump to loose dinosaur |
-| Q P F R V X T C H | Tools: inspect, path, fence, paddock, wall, demolish, trees, clear, hatch |
+| G | Dinosaur roster |
+| Q P J F R V X T C H | Tools: inspect, path, tour track, fence, paddock, wall, demolish, trees, clear, hatch |
 
 ## Development
 

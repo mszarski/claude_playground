@@ -130,6 +130,8 @@ const BUILDINGS = {
     desc: 'Treats sick dinosaurs and stops outbreaks.' },
   aviary: { name: 'Aviary', w: 5, h: 5, cost: 110000, upkeep: 500, power: 4, cat: 'dino', hp: 700, appeal: 6,
     desc: 'Mesh dome for Pteranodons (up to 6). Below 35% condition, they escape. Needs a path for guests to enjoy it.' },
+  lagoon: { name: 'Mosasaur Lagoon', w: 6, h: 5, cost: 380000, upkeep: 1500, power: 10, cat: 'guest', hp: 900, appeal: 30, income: 30, unlockStars: 4,
+    desc: 'A Mosasaurus in a giant pool. Feeding shows draw huge crowds. Needs 4 stars.' },
   hatchery: { name: 'Hatchery', w: 3, h: 2, cost: 40000, upkeep: 300, power: 4, cat: 'dino', hp: 300, unique: true,
     desc: 'Required to hatch dinosaurs.' },
   feeder_h: { name: 'Herbivore Feeder', w: 1, h: 1, cost: 2500, upkeep: 20, power: 0, cat: 'dino', hp: 120, feeds: 'herb',
@@ -147,7 +149,7 @@ const BUILDINGS = {
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
   { id: 'build', label: 'Build', tools: ['path', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
-  { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'hotel', 'shelter', 'lamp'] },
+  { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'hotel', 'shelter', 'lamp', 'lagoon'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
   { id: 'dino', label: 'Dinos', tools: ['hatchery', 'feeder_h', 'feeder_c', 'aviary', 'hatch'] },
