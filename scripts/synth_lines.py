@@ -15,8 +15,10 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 
 FEELINGS = ["neutral", "happy", "sad", "angry", "anxious", "surprised"]      # rmr.respond FEELINGS
-STYLES = ["openly", "subtly, the words alone barely show it", "with sarcasm or irony", "tiredly", "in a rush",
-          "to a friend", "talking to the robot directly", "on the phone, half to themselves"]
+STYLES = ["openly", "subtly, the words alone barely show it", "in a rush", "to a friend", "talking to the robot directly",
+          "on the phone, half to themselves"]
+# styles that would change the feeling itself (sarcasm reads as annoyance, tiredness as sadness) only where they fit
+EXTRA_STYLES = {"angry": ["with sarcasm or irony", "tiredly"], "sad": ["tiredly"], "anxious": ["tiredly"]}
 TOPICS = ["work", "school", "family", "a partner", "kids", "a pet", "food and cooking", "the weather", "the news",
           "money", "health", "a hobby", "sport", "travel", "the house", "neighbours", "a TV show", "a game",
           "shopping", "a friend", "plans for the weekend", "the robot itself", "technology", "the commute", "sleep",
@@ -48,11 +50,12 @@ def main():
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--feelings", nargs="+", default=FEELINGS)
+    ap.add_argument("--prefix", default="s", help="id prefix (to merge several runs)")
     a = ap.parse_args()
     from rmr.planner.llm import chat_json
 
     rng = random.Random(a.seed)
-    jobs = [(f, rng.choice(STYLES), rng.choice(TOPICS), rng.choice(SPEAKERS)) for f in a.feelings
+    jobs = [(f, rng.choice(STYLES + EXTRA_STYLES.get(f, [])), rng.choice(TOPICS), rng.choice(SPEAKERS)) for f in a.feelings
             for _ in range(max(1, a.per_feeling // a.batch))]
 
     def one(job):
@@ -76,7 +79,7 @@ def main():
         key = r["line"].strip().lower()
         if key and key not in seen:
             seen.add(key)
-            uniq.append({**r, "id": f"s{len(uniq):04d}"})
+            uniq.append({**r, "id": f"{a.prefix}{len(uniq):04d}"})
     with open(a.out, "w") as f:
         f.writelines(json.dumps(r) + "\n" for r in uniq)
     print(f"{len(uniq)} lines -> {a.out}")

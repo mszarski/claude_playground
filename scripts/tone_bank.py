@@ -19,7 +19,18 @@ import json
 import os
 
 CREMA = ["Anger", "Disgust", "Fear", "Happy", "Neutral", "Sad"]          # mteb/crema-d label order
+SENTENCES = {"DFA": "Don't forget a jacket.", "IEO": "It's eleven o'clock.", "IOM": "I'm on my way to the meeting.",
+             "ITH": "I think I have a doctor's appointment.", "ITS": "I think I've seen this before.",
+             "IWL": "I would like a new alarm clock.", "IWW": "I wonder what this is about.",
+             "MTI": "Maybe tomorrow it will be cold.", "TAI": "The airplane is almost full.",
+             "TIE": "That is exactly what happened.", "TSI": "The surface is slick.",
+             "WSI": "We'll stop in a couple of minutes."}
 FEELING = {"Anger": "angry", "Disgust": "angry", "Fear": "anxious", "Happy": "happy", "Neutral": "neutral", "Sad": "sad"}
+
+
+def held_out(actor):
+    """Every fifth actor (18 of 91) is kept for evaluation (scripts/eval_clean.py), never for training data."""
+    return int(actor) % 5 == 0
 
 
 def main():
