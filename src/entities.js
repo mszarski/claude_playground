@@ -564,9 +564,12 @@ class Guest {
     let field = null;
     if (this.state === 'flee') {
       field = g.shelterField();
-      if (field[here] === -1 || !g.anyShelterSpace()) { field = g.gateField(); this.state = 'flee'; this.fleeGate = true; }
+      if (field[here] === -1 || !g.anyShelterSpace()) {
+        if (g.gateLocked) field = null; // nowhere to run: panic in place
+        else { field = g.gateField(); this.state = 'flee'; this.fleeGate = true; }
+      }
     } else if (this.state === 'leave') {
-      field = g.gateField();
+      field = g.gateLocked ? null : g.gateField();
     } else {
       if (!this.goal || (this.goal !== 'gate' && !w.buildings.has(this.goal.id))) { this.goal = chance(0.25) ? this.pickGoal() : null; }
       if (this.goal && this.goal !== 'gate') field = g.buildingField(this.goal);

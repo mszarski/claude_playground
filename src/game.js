@@ -723,7 +723,7 @@ class Game {
     const w = this.world;
     const h = this.hour;
     const gates = this.buildingsOfType('gate');
-    if (!gates.length || this.alarm || (this.events.storm && this.events.storm.phase === 'active')) return;
+    if (!gates.length || this.alarm || this.gateLocked || (this.events.storm && this.events.storm.phase === 'active')) return;
     if (h < 7 || h > 20) return;
     const desired = this.desiredGuests();
     if (this.guests.length >= desired) return;

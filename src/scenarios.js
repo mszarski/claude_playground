@@ -63,7 +63,7 @@ const SCENARIOS = {
       const P = buildStarterPark(g, { staff: true });
       spawnIn(g, 'galli', P[0], 3); spawnIn(g, 'para', P[0], 2);
       spawnIn(g, 'trex', P[1], 1);
-      spawnIn(g, 'raptor', P[2], 3);
+      spawnIn(g, 'raptor', P[2], 4);
       g.time = 15;
       g.events.auto = false;
       g.scenarioState = { struck: false };
@@ -74,10 +74,12 @@ const SCENARIOS = {
         g.spend(50000, 'fines');
         g.events.trigger('outage');
         g.world.power.outage = 150;
-        g.log('Dennis Nedry has stolen the embryos (-$50k) and shut down the park. "Ah ah ah!"', 'bad', null, true);
+        g.gateLocked = true;
+        g.log('Dennis Nedry has stolen the embryos (-$50k), shut down the grid and sealed the main gate. Guests cannot leave: build Bunkers! "Ah ah ah!"', 'bad', null, true);
       }
     },
     check(g) {
+      if (g.gateLocked && g.world.power.outage <= 0 && g.looseCount === 0) { g.gateLocked = false; g.log('The main gate is unlocked again.', 'good', null, true); }
       if (g.stats.deaths >= 4) return 'lose';
       if (g.time >= 24 * 2 + 8) return 'win';
       return null;
@@ -114,7 +116,7 @@ const SCENARIOS = {
   storms: {
     name: 'Storm Season',
     blurb: 'Monsoon season. A storm hits every single day, knocking out power and fences. Keep the park profitable anyway.',
-    objective: 'Reach $900,000 in the bank by Day 12',
+    objective: 'Reach $650,000 in the bank by Day 12',
     setup(g) {
       g.money = 250000;
       const P = buildStarterPark(g, { staff: true });
@@ -128,10 +130,10 @@ const SCENARIOS = {
       if (g.day > g.scenarioState.lastStorm && g.hour >= 11) { g.scenarioState.lastStorm = g.day; g.events.trigger('storm'); }
     },
     check(g) {
-      if (g.money >= 900000) return 'win';
+      if (g.money >= 650000) return 'win';
       if (g.day > 12) return 'lose';
       return null;
     },
-    progress(g) { return `${fmtMoney(g.money)} / $900k · Day ${g.day}/12`; },
+    progress(g) { return `${fmtMoney(g.money)} / $650k · Day ${g.day}/12`; },
   },
 };
