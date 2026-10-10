@@ -225,6 +225,9 @@ def fit(a):
     pairs_file = os.path.join(a.out, "pairs.json")
     items = {it["id"]: it for it in json.load(open(pairs_file))} if os.path.exists(pairs_file) else {}
     games, repeats = games_from(load_votes(a.ratings), items)
+    unslug = {slug(n): n for n in POOL}                     # the pages use file-name slugs ("sway_only")
+    games = [(unslug.get(x, x), unslug.get(y, y), w) for x, y, w in games]
+    repeats = [(unslug.get(x, x) if x else x, unslug.get(y, y) if y else y) for x, y in repeats]
     names = sorted({n for g in games for n in g[:2]})
     s = bradley_terry(names, games)
     rng = np.random.default_rng(0)
