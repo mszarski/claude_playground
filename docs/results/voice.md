@@ -165,19 +165,21 @@ pip install -e ".[ik,generator,hf,serve,voice]"
 PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
   python -m rmr.server --model <served model name> --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the distilled student, one local call, no server and no network after the first download
-python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v3 --out runs/converse
-python -m rmr.server --voice-model mszarski/reachy-voice:student/v3 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v5 --out runs/converse
+python -m rmr.server --voice-model mszarski/reachy-voice:student/v5 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the quantised student behind llama.cpp (2.5 GB, CPU is fine) ...
-hf download mszarski/reachy-voice gguf/v3/reachy-voice-4b-Q4_K_M.gguf --local-dir .
-llama-server -m gguf/v3/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
-# (the 1.7B: gguf/v3-1.7b/..., and add --chat-template-kwargs '{"enable_thinking":false}')
+hf download mszarski/reachy-voice gguf/v5/reachy-voice-4b-Q4_K_M.gguf --local-dir .
+llama-server -m gguf/v5/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
+# (the 1.7B: gguf/v5-1.7b/... (file name says 4b), and add --chat-template-kwargs '{"enable_thinking":false}')
 python -m rmr.server --voice-model http://localhost:8080/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # ... or Ollama (deploy/ollama/Modelfile)
 ollama create reachy-voice -f deploy/ollama/Modelfile
 python -m rmr.server --voice-model "http://localhost:11434/v1#reachy-voice" --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 ```
 
-The llama.cpp route is tested here; the Ollama Modelfile is not (Ollama wasn't installable in this environment).
+With a student, the server calibrates the voice readings per session by default (`--no-calibrate` to turn it
+off); v5 is the licence-clean student. The quantised v5 1.7B (Q4_K_M, 1.1 GB) agrees with full precision on 47 of
+60 tone-test clips and scores the same (19 of 60), with every recipe valid. The llama.cpp route is tested here; the Ollama Modelfile is not (Ollama wasn't installable in this environment).
 
 Open `http://localhost:7860` and hold the mic button, or press **Hands-free** and just talk: the viewer sends each
 turn when you pause for 0.9 s (after at least 0.6 s of speech), and doesn't take a new turn while Reachy answers.
