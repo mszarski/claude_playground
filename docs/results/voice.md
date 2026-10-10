@@ -285,6 +285,28 @@ recipe passes the physical check (as on MELD).
 
 Data: `mszarski/reachy-voice` `synth/v4/` (lines, readings, tone bank), `student/v5`, `student/v5-1.7b`.
 
+### Which teacher? (bake-off, 2026-10-10)
+
+The teacher answers every training example: it reads the person, writes the response and the recipe. Each of four
+open models (Hugging Face Inference Providers) acted as the full responder on the clean tests and on MELD. Reads =
+UA of the feeling; OK = the response's recipe passes the physical check. The teacher prompt now names the feeling
+shown, not one imagined underneath it (complaints and blame are angry); with Qwen3-Next that took the fresh lines
+from 43% to 51% (angry 24% → 60%) and left tone and MELD unchanged.
+
+| teacher | tone test reads / OK | fresh lines reads / OK | MELD reads / OK |
+|---|---|---|---|
+| Qwen3-Next-80B-A3B (until now) | **40%** / 67% | 51% / 74% | **47.5%** / 66% |
+| Kimi-K3 | 39% / 78% | 55% / **90%** | 47% / **72%** |
+| GLM-5.3 | 36% / **79%** | **60%** / 90% | 45.5% / 70% |
+| DeepSeek-V4-Pro | 29% / 77% | 59% / 89% | 47% / 72% |
+
+The frontier models do not read people better: tone is limited by the voice model's readings, and they lean on the
+words, so they call flat sentences neutral. They respond much better, though: 72-90% of their responses pass the
+physical check, against 66-74%. The hinted relabelling already fixes the feeling labels, so a stronger teacher
+helps where it counts, in the responses and recipes. Kimi-K3 is the new teacher: it gives the best responses on MELD
+and the lines, reads tone best of the three, and was the only model to pass every planner probe. GLM-5.3 stays the
+judge (`scripts/judge_ratings.py`), so no model grades its own answers.
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
