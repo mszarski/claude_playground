@@ -8,7 +8,7 @@
   python scripts/dpo_from_ratings.py train --data runs/rating/dpo.jsonl --model mszarski/reachy-voice:student/v3 \
       --out /work/out
 
-Only the page's *train* pool counts (MELD train clips, sampled answers of the student): the eval pool is MELD test
+Only the page's *train* pool counts (synthetic training lines, sampled answers of the student): the eval pool is the held-out test
 data and stays held out. A pick between two answers gives one {prompt, chosen, rejected} pair; best and worst among
 k answers give 2k - 3 (best over each other, each other over worst). With several raters, a pair's majority wins and
 ties are dropped.

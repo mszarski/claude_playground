@@ -1,15 +1,15 @@
 """Build the items for the human rating page: one heard clip and k of Reachy's responses, rendered as robot videos.
 
-  python scripts/rating_set.py --out runs/rating/v2 --k 4 \
-      --eval runs/respond_eval/{student_v3,student_v3-1.7b,Qwen3-Next-80B-A3B-Instruct,Qwen3-4B-Instruct-2507}+context.jsonl \
-      --heard runs/respond_eval/heard_ctx.jsonl --n-eval 40 \
-      --train runs/rating/train_samples.jsonl runs/rating/train_samples_more.jsonl --train-heard runs/listen_train/heard.jsonl
+  python scripts/rating_set.py --out runs/rating_clean/set --k 4 \
+      --eval runs/rating_clean/{v5,v5-1.7b,v3,teacher}.jsonl --heard runs/rating_clean/heard_eval.jsonl --n-eval 42 \
+      --train runs/rating_clean/train_samples_v5.jsonl --train-heard runs/synth_v4/heard_v5.jsonl --n-train 40
 
-Two pools, mixed on the page:
-* ``eval``: MELD *test* clips, one answer from each model in ``--eval`` (k models). They give a human score for the
-  models and are never trained on.
-* ``train``: MELD *train* clips, k sampled answers of the student (``--train``, from ``scripts/student_respond.py
-  --samples N --temperature 0.9``). Preferences on these are the data for preference tuning (DPO).
+Two pools, mixed on the page (licence-clean: no MELD; see docs/results/voice.md):
+* ``eval``: the held-out test items of scripts/eval_clean.py (tone test and fresh lines), one answer from each model
+  in ``--eval`` (k models). They give a human score for the models and are never trained on.
+* ``train``: synthetic training lines (scripts/synth_heard.py), k sampled answers of the student (``--train``, from
+  ``scripts/student_respond.py --samples N --temperature 0.9``). Preferences on these are the data for preference
+  tuning (DPO).
 
 With k = 2 a rater picks the better one; with k > 2 the best and the worst (best-worst scaling): one judgement then
 orders 2k - 3 of the k(k - 1)/2 pairs, five of six for k = 4, so each minute of rating yields several preference
@@ -17,7 +17,7 @@ pairs instead of one.
 
 Writes ``items.json`` (``[{id, pool, clip, label, context, text, voice, answers: [{model, feeling, response,
 reading, recipe, video}, ...]}]``) and ``videos/<hash>.mp4``, named by recipe so later rounds reuse renders.
-Audio is not included: MELD is cut from a TV show, so raters read the transcript and the voice model's reading.
+Audio is not included: raters read the words and the voice model's reading (what the responder itself sees).
 """
 import argparse
 import hashlib
@@ -45,10 +45,10 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--k", type=int, default=2, help="answers per item")
     ap.add_argument("--eval", nargs="+", help="k answer files on the test clips, one per model")
-    ap.add_argument("--heard", default="runs/respond_eval/heard_ctx.jsonl")
+    ap.add_argument("--heard", default="runs/rating_clean/heard_eval.jsonl")
     ap.add_argument("--n-eval", type=int, default=40)
     ap.add_argument("--train", nargs="+", help="student samples on train clips (several answers per clip id)")
-    ap.add_argument("--train-heard", default="runs/listen_train/heard.jsonl")
+    ap.add_argument("--train-heard", default="runs/synth_v4/heard_v5.jsonl")
     ap.add_argument("--n-train", type=int, default=40)
     ap.add_argument("--ckpt", default="hf://mszarski/reachy-motion-generator/generator_v2.pt")
     ap.add_argument("--size", type=int, nargs=2, default=(360, 300))

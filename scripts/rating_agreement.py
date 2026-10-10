@@ -1,13 +1,13 @@
 """Do the automatic checks agree with the human ratings? (Answer after rating, before trusting the metrics again.)
 
-  python scripts/rating_agreement.py --items runs/rating/v2/items.json --ratings runs/rating/ratings_export
+  python scripts/rating_agreement.py --items runs/rating_clean/set/items.json --ratings runs/rating_clean/ratings_export
 
 For every best-worst judgement (or a/b pick) on the response rating page, compares the two ends with the metrics
 scripts/eval_respond.py reports:
-* the physical check (``physical_ok`` against MELD's label: sad / angry -> calm and slow, happy -> lively,
+* the physical check (``physical_ok`` against the item's label: sad / angry -> calm and slow, happy -> lively,
   neutral -> attentive): among judgements where exactly one of the two passes, how often is it the one the human
   picked as better? 50% = the check says nothing about what people prefer.
-* the reading: among judgements where exactly one of the two read the person's feeling as MELD labels it, how often
+* the reading: among judgements where exactly one of the two read the person's feeling as labelled, how often
   is that the human's pick?
 
 With 40 or so judgements the interval is wide (shown as a 90% Wilson interval), but a check that people disagree
