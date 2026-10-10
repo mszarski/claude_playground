@@ -215,9 +215,25 @@ class Game {
       }
       else if (e.kind === 'terrain' && w.terrain[i] === e.now) { w.terrain[i] = e.prev; ok = true; }
       else if (e.kind === 'bld') { const b = w.buildings.get(e.id); if (b) { this.removeBuildingFx(b); ok = true; } }
-      if (ok) { refund += e.cost; if (i >= 0) w.invalidate(e.x, e.y); }
+      else if (e.kind === 'unbld') {
+        // put a demolished building back (and take back the demolition refund)
+        if (w.canPlaceBuilding(e.type, e.bx, e.by)) {
+          const b = w.addBuilding(e.type, e.bx, e.by); b.hp = e.hp; b.built = 1;
+          const def = BUILDINGS[e.type];
+          if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
+          if (e.type === 'helipad') this.helis.push(new Helicopter(this, b));
+          if (e.type === 'tour') { b.queue = []; b.jeepT = 0; }
+          ok = true;
+        }
+      }
+      else if (e.kind === 'unfence' && !w.fence[i] && !w.bld[i] && !w.path[i] && !this.dinos.some((d) => d.tx === e.x && d.ty === e.y)) { w.fence[i] = e.f; w.fenceHp[i] = e.hp; w.fenceOrig[i] = e.orig; ok = true; }
+      else if (e.kind === 'unpath' && !w.path[i] && w.canBuildAt(e.x, e.y) && !w.track[i]) { w.path[i] = 1; ok = true; }
+      else if (e.kind === 'untrack' && !w.track[i] && !w.path[i]) { w.track[i] = 1; ok = true; }
+      else if (e.kind === 'egg') { const k = this.eggs.indexOf(e.egg); if (k >= 0) { this.eggs.splice(k, 1); ok = true; } }
+      if (ok) { if (e.kind === 'egg') { this.money += e.cost; this.ledger.dinos -= e.cost; } else refund += e.cost; if (i >= 0) w.invalidate(e.x, e.y); }
     }
     this.money += refund; this.ledger.construction -= refund;
+    for (const e of batch.items) if (e.kind === 'egg') refund += e.cost;
     return { label: batch.label, refund };
   }
 
@@ -294,12 +310,13 @@ class Game {
       const recent = b.placedAt !== undefined && this.time - b.placedAt < 2; // within ~5s at normal speed
       const refund = BUILDINGS[b.type].cost * (recent ? 1 : 0.25);
       this.money += refund; this.ledger.construction -= refund;
+      this.recordUndo({ kind: 'unbld', type: b.type, bx: b.x, by: b.y, hp: b.hp, cost: -refund });
       this.removeBuildingFx(b);
       return true;
     }
-    if (w.fence[i]) { w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(x, y); return true; }
-    if (w.path[i]) { w.path[i] = 0; w.invalidate(x, y); return true; }
-    if (w.track[i]) { w.track[i] = 0; w.invalidate(x, y); return true; }
+    if (w.fence[i]) { this.recordUndo({ kind: 'unfence', x, y, f: w.fence[i], hp: w.fenceHp[i], orig: w.fenceOrig[i], cost: 0 }); w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(x, y); return true; }
+    if (w.path[i]) { this.recordUndo({ kind: 'unpath', x, y, cost: 0 }); w.path[i] = 0; w.invalidate(x, y); return true; }
+    if (w.track[i]) { this.recordUndo({ kind: 'untrack', x, y, cost: 0 }); w.track[i] = 0; w.invalidate(x, y); return true; }
     return false;
   }
   removeBuildingFx(b) {
@@ -380,7 +397,9 @@ class Game {
     if (err) { this.log(err, 'warn'); return false; }
     const sp = SPECIES[species];
     this.spend(sp.cost, 'dinos');
-    this.eggs.push({ species, x, y, t: 8, max: 8 });
+    const egg = { species, x, y, t: 8, max: 8 };
+    this.eggs.push(egg);
+    this.recordUndo({ kind: 'egg', egg, cost: sp.cost });
     this.sound('build');
     return true;
   }

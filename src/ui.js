@@ -157,11 +157,24 @@ class UI {
         const cost = this.dragCost();
         this.showTip(e, this.tool === 'route' && this.routeFail ? '<span style="color:#ff9080">No route between these points</span>' : `${this.dragTiles.length} tiles${cost ? ' · ' + fmtMoney(cost) : ''}`);
       } else if (e.target === cv && BUILDINGS[this.tool]) {
-        this.showTip(e, `${BUILDINGS[this.tool].name} · ${fmtMoney(BUILDINGS[this.tool].cost)}`);
+        const def = BUILDINGS[this.tool], w = this.game.world;
+        const bx = t.x - Math.floor((def.w - 1) / 2), by = t.y - Math.floor((def.h - 1) / 2);
+        let why = null;
+        for (let dy = 0; dy < def.h && !why; dy++) for (let dx = 0; dx < def.w && !why; dx++) {
+          why = w.placementBlock(bx + dx, by + dy);
+          if (!why && this.game.dinos.some((d) => d.tx === bx + dx && d.ty === by + dy)) why = 'a dinosaur';
+        }
+        if (!why && !this.game.canAfford(def.cost)) why = 'not enough money';
+        this.showTip(e, `${def.name} · ${fmtMoney(def.cost)}${why ? `<br><span style="color:#ff9080">Blocked by ${why}</span>` : ''}`);
       } else if (e.target === cv && this.tool === 'hatch' && this.species) {
         const err = this.game.canHatchAt(this.species, t.x, t.y);
         this.showTip(e, err ? `<span style="color:#ff9080">${err}</span>` : `Hatch ${SPECIES[this.species].name} · ${fmtMoney(SPECIES[this.species].cost)}`);
-      } else if (e.target === cv) this.hideTip();
+      } else if (e.target === cv) {
+        // hover a dinosaur for a quick read on how it's doing
+        const d = (this.tool === 'inspect' || !BUILDINGS[this.tool]) && this.pickAt(t.wx, t.wy);
+        if (d && d.kind === 'dino') this.showTip(e, this.dinoTip(d));
+        else this.hideTip();
+      }
     });
     window.addEventListener('mouseup', (e) => {
       if (!this.mouse.down) return;
@@ -334,7 +347,7 @@ class UI {
     const g = this.game, tool = this.tool;
     if (!this.dragTiles) return;
     let n = 0;
-    if (tool !== 'demolish') g.startBatch();
+    g.startBatch();
     for (const [x, y] of this.dragTiles) {
       let ok = false;
       if (tool === 'path' || tool === 'route') ok = g.placePath(x, y);
@@ -351,7 +364,7 @@ class UI {
       else if (tool === 'clear') ok = g.clearLand(x, y);
       if (ok) n++;
     }
-    g.endBatch((TOOL_INFO[tool] || {}).name || tool);
+    g.endBatch(tool === 'demolish' ? 'demolition' : (TOOL_INFO[tool] || {}).name || tool);
     if (n) this.sfx.play(tool === 'demolish' ? 'demolish' : 'build');
     else this.sfx.play('error');
     if (n && (tool === 'fence' || tool === 'paddock')) {
@@ -391,10 +404,10 @@ class UI {
       if (!this.species) { this.showSpeciesPicker(); return; }
       const err = g.canHatchAt(this.species, t.x, t.y);
       if (err) { this.toast(err, 'warn'); this.sfx.play('error'); }
-      else if (g.hatch(this.species, t.x, t.y)) this.sfx.play('build');
+      else { g.startBatch(); const ok = g.hatch(this.species, t.x, t.y); g.endBatch(SPECIES[this.species].name + ' egg'); if (ok) this.sfx.play('build'); }
       return;
     }
-    if (tool === 'demolish') { if (g.demolishAt(t.x, t.y)) this.sfx.play('demolish'); return; }
+    if (tool === 'demolish') { g.startBatch(); const ok = g.demolishAt(t.x, t.y); g.endBatch('demolition'); if (ok) this.sfx.play('demolish'); return; }
     if (tool === 'movedest') {
       const d = this.moveDino, w2 = g.world;
       const reg = w2.regionAt(t.x, t.y);
@@ -489,10 +502,20 @@ class UI {
     $('#modal').addEventListener('mousedown', (e) => { if (e.target.id === 'modal' && !this.modalLocked) this.closeModal(); });
   }
 
+  dinoTip(d) {
+    const status = d.carried ? 'Being airlifted' : d.sedatedT > 0 ? 'Sedated' : d.loose ? '<span style="color:#ff6040">LOOSE!</span>' : d.sick > 0 ? '<span style="color:#9ae060">Sick</span>' : d.sleeping ? 'Sleeping' : 'Contained';
+    const lbl = { space: 'too crowded', forest: 'wants tree cover', water: 'no water nearby', social: d.sp.territorial ? 'rival nearby' : 'lonely', food: 'no food source', fear: 'scared of predators', loose: 'out of its paddock' };
+    let worst = null, wv = 1e9;
+    const max = { space: 30, forest: 18, water: 12, social: 15, food: 15, fear: 0, loose: 0 };
+    for (const k in d.comfortParts || {}) { if (!(k in lbl)) continue; const gap = d.comfortParts[k] - (max[k] || 0); if (gap < wv && gap < -3) { wv = gap; worst = k; } }
+    const mood = d.stress > 65 ? '<span style="color:#ff9080">agitated</span>' : d.stress > 40 ? 'uneasy' : 'calm';
+    return `<b>${d.name}</b> · ${d.sp.name}${d.growth < 1 ? ' (hatchling)' : d.elderly ? ' (elderly)' : ''}<br>${status} · ${mood}<br>Hunger ${Math.round(d.hunger)}% · Health ${Math.round(d.hp / d.sp.hp * 100)}%${worst && !d.isPtera ? `<br><span style="color:#f0c060">Problem: ${lbl[worst]}</span>` : ''}`;
+  }
+
   doUndo() {
     const r = this.game.undo();
     if (!r) { this.toast('Nothing to undo.', 'info'); this.sfx.play('error'); return; }
-    this.toast(`Undid ${r.label} (+${fmtMoney(r.refund)})`, 'good');
+    this.toast(`Undid ${r.label}${r.refund ? ` (${r.refund > 0 ? '+' : '−'}${fmtMoney(Math.abs(r.refund))})` : ''}`, 'good');
     this.sfx.play('demolish');
   }
 

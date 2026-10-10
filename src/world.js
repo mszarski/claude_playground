@@ -158,6 +158,21 @@ class World {
     return true;
   }
 
+  // Why a building can't go on this tile (null = fine)
+  placementBlock(x, y) {
+    if (!this.inb(x, y)) return 'edge of the map';
+    const i = this.idx(x, y), t = this.terrain[i];
+    if (t === T_WATER || t === T_DEEP) return 'water';
+    if (t === T_ROCK) return 'rock';
+    if (t === T_VOLCANO) return 'the volcano';
+    if (t === T_LAVA) return 'lava';
+    if (this.bld[i]) return 'another building';
+    if (this.path[i]) return 'a path';
+    if (this.track[i]) return 'tour track';
+    if (this.fence[i]) return 'a fence';
+    return null;
+  }
+
   // ---------- buildings ----------
   canPlaceBuilding(type, x, y) {
     const def = BUILDINGS[type];

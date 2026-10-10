@@ -122,7 +122,7 @@ class UIPanels {
       if (err) { this.toast(err, 'warn'); return; }
       this.select(null); return;
     }
-    if (a === 'demolish' && o) { if (g.demolishAt(o.x, o.y)) this.sfx.play('demolish'); this.select(null); return; }
+    if (a === 'demolish' && o) { g.startBatch(); const ok = g.demolishAt(o.x, o.y); g.endBatch('demolition'); if (ok) this.sfx.play('demolish'); this.select(null); return; }
     this.renderInfo(true);
   }
 
