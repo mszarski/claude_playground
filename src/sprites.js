@@ -356,6 +356,10 @@ const DINO_TEMPLATES = {
   },
 };
 
+DINO_TEMPLATES.indom = {
+  body: DINO_TEMPLATES.trex.body.map((r, i) => i === 1 ? r.replace('OBBBBBBBO', 'OSBSBSBSO') : i === 9 ? r.replace('OBBBBBBBLOO', 'OBSBSBBBLOO') : r),
+  legsA: DINO_TEMPLATES.trex.legsA, legsB: DINO_TEMPLATES.trex.legsB,
+};
 const DINO_SPRITES = {}; // species -> {right:[a,b], left:[a,b], sleep:{right,left}, w, h}
 
 function buildDinoSprites() {

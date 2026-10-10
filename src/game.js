@@ -140,7 +140,8 @@ class Game {
     for (const d of this.creatures()) {
       if (!d.loose || d.carried || d.sedatedT > 0) continue;
       if (d.sp.danger < 2) continue;
-      if (dist2(x, y, d.x, d.y) < r * r) return d;
+      const rr = d.camouflaged ? Math.min(r, 2.5) : r;
+      if (dist2(x, y, d.x, d.y) < rr * rr) return d;
     }
     return null;
   }

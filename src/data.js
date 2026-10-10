@@ -80,6 +80,12 @@ const SPECIES = {
     colors: { O: '#120e0e', B: '#6a5a5e', D: '#443a3e', L: '#b8a8a0', S: '#c84a3a', E: '#f8c020' },
     desc: 'Sail-backed apex predator. Needs water in its paddock.'
   },
+  indom: {
+    name: 'Indominus', sci: 'Indominus rex (hybrid)', diet: 'carn', cost: 600000, appeal: 26, strength: 12, danger: 10,
+    speed: 2.8, hp: 500, tranq: 8, space: 80, social: 1, forest: 0.3, unlock: 5, size: 3, territorial: true, clever: true, camo: true,
+    colors: { O: '#1a1a1e', B: '#d8d8d0', D: '#a8a8a0', L: '#f0f0e8', S: '#8a8a84', E: '#e83020' },
+    desc: 'Genetically engineered showstopper. Clever, enormous, and can camouflage itself.'
+  },
   ptera: {
     name: 'Pteranodon', sci: 'Pteranodon longiceps', diet: 'carn', cost: 65000, appeal: 7, strength: 1, danger: 5,
     speed: 3.5, hp: 70, tranq: 1, space: 0, social: 1, forest: 0, unlock: 2, size: 1, flying: true,
@@ -87,7 +93,7 @@ const SPECIES = {
     desc: 'Lives in an Aviary. If the dome is damaged, they fly free and snatch guests.'
   },
 };
-const SPECIES_ORDER = ['galli', 'para', 'dilo', 'trike', 'stego', 'raptor', 'anky', 'brachio', 'ptera', 'trex', 'spino'];
+const SPECIES_ORDER = ['galli', 'para', 'dilo', 'trike', 'stego', 'raptor', 'anky', 'brachio', 'ptera', 'trex', 'spino', 'indom'];
 
 // Buildings. w/h are tile footprint.
 // cat: 'guest' (needs path access), 'infra', 'dino', 'staff', 'decor'

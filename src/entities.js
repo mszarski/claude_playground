@@ -47,6 +47,7 @@ class Dino {
 
   get tx() { return Math.floor(this.x); }
   get ty() { return Math.floor(this.y); }
+  get camouflaged() { return !!(this.sp.camo && this.loose && this.state !== 'hunt' && this.state !== 'attack' && this.sedatedT <= 0); }
   get speed() {
     let s = this.sp.speed * 0.55;
     if (this.hp < this.sp.hp * 0.4) s *= 0.7;
@@ -107,6 +108,7 @@ class Dino {
     if (g.events.storm && g.events.storm.phase === 'active') target += 18;
     if (g.events.quake > 0) target += 30;
     if (this.loose) target += 15;
+    if (g.isNight && this.sp.clever) target += 12; // raptors prowl at night
     target = clamp(target, 0, 100);
     this.stress += (target - this.stress) * Math.min(1, dt * 0.08);
     if (this.deterT > 0) this.deterT -= dt;
@@ -194,6 +196,9 @@ class Dino {
       const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => !!w.buildingAt(x, y), 900);
       if (p && p.length) { p.pop(); this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = true; return; }
     }
+    // Herbivores mostly sleep through the night
+    if (g.isNight && this.sp.diet === 'herb' && !this.loose && this.hunger < 70 && chance(0.8)) { this.state = 'idle'; this.stateT = randf(6, 12); this.sleeping = true; return; }
+    this.sleeping = false;
     // Wander
     if (chance(0.7)) {
       const rad = this.loose ? 10 : 7;
@@ -660,6 +665,7 @@ class Staff {
       for (const d of g.creatures()) {
         if (d.carried || d.sedatedT > 0) continue;
         if (!d.loose && !d.orderSedate) continue;
+        if (d.camouflaged && dist2(this.x, this.y, d.x, d.y) > 9) continue;
         const s = d.sp.danger * 10 - dist(this.x, this.y, d.x, d.y);
         if (s > bs) { bs = s; best = d; }
       }

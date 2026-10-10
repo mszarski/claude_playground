@@ -465,7 +465,7 @@ class Renderer {
 
   drawDino(ctx, d, ui) {
     const S = DINO_SPRITES[d.species];
-    const sleeping = d.sedatedT > 0;
+    const sleeping = d.sedatedT > 0 || (d.sleeping && d.state === 'idle');
     let img;
     const animRate = d.speed * 2.2;
     const fr = d.moving ? Math.floor(d.anim * animRate) % 2 : 0;
@@ -477,13 +477,15 @@ class Renderer {
     if (d.lunge > 0) { d.lunge -= 1 / 60; lx = d.facing * 2; }
     const bob = d.moving && fr === 1 ? -1 : 0;
     const x = Math.round(d.x * TILE - S.w / 2 + lx), y = Math.round(d.y * TILE - S.h + 5 + bob + (sleeping ? 2 : 0));
+    if (d.camouflaged) ctx.globalAlpha = 0.15 + Math.max(0, Math.sin(this.time * 1.3 + d.id)) * 0.2;
     ctx.drawImage(img, x, y);
+    ctx.globalAlpha = 1;
     if (sleeping) {
       const t = this.time * 1.5 + d.id;
       const ph = t % 1;
       drawText3(ctx, 'Z', x + S.w - 4 + Math.round(ph * 3), y - 2 - Math.round(ph * 6), '#ffffff');
     }
-    if (d.loose && !sleeping) {
+    if (d.loose && !sleeping && !d.camouflaged) {
       if (Math.floor(this.time * 4) % 2 === 0) {
         ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + S.w / 2 - 2, y - 10, 5, 8);
         ctx.fillStyle = '#ff3020'; ctx.fillRect(x + S.w / 2 - 1, y - 9, 3, 6);
