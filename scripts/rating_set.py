@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--size", type=int, nargs=2, default=(360, 300))
     ap.add_argument("--workers", type=int, default=os.cpu_count())
     ap.add_argument("--shard", default="0/1", help="i/n: render only every n-th video, from the i-th (parallel jobs)")
+    ap.add_argument("--reverse", action="store_true", help="render the shard from its end (to meet another job)")
     a = ap.parse_args()
     rng = random.Random(0)
     items = []
@@ -96,7 +97,7 @@ def main():
     jobs = {x["video"]: (x["recipe"], x["response"], os.path.join(a.out, "videos", x["video"]))
             for row in rows for x in row["answers"]}
     i, n = map(int, a.shard.split("/"))
-    todo = [j for k, j in enumerate(sorted(jobs.values())) if k % n == i]
+    todo = [j for k, j in enumerate(sorted(jobs.values())) if k % n == i][::-1 if a.reverse else 1]
     print(f"{len(rows)} items ({sum(r['pool'] == 'eval' for r in rows)} eval), {len(jobs)} videos, "
           f"{len(todo)} in shard {a.shard}", flush=True)
     from multiprocessing import Pool
