@@ -65,3 +65,29 @@ def test_respond_streams_motion_before_reading(client):
     whole = client.post("/api/respond", content=b"\0" * 2000).json()       # non-streaming: merged
     assert whole["reading"] == "They're thrilled." and whole["moves"] and whole["heard"]["text"] == "I got the job!"
     assert {"listen", "first_motion", "total"} <= set(whole["timing_ms"])
+
+
+class _Seq:
+    def __init__(self):
+        self.n, self.seen = 0, []
+
+    def hear(self, audio):
+        self.n += 1
+        return {"text": f"line {self.n}", "emotion": "neutral", "confidence": 0.5, "probs": {}}
+
+
+class _Recorder(_Student):
+    def __init__(self):
+        self.contexts = []
+
+    def answers(self, heard):
+        self.contexts.append(heard.get("context"))
+        yield from super().answers(heard)
+
+
+def test_session_memory_gives_the_last_lines_as_context(client):
+    eng = client.app.state.engine
+    eng.listener, eng.voice_model, eng.student, eng.history = _Seq(), "fake", _Recorder(), {}
+    for session in ("a", "a", "a", "b"):
+        client.post(f"/api/respond?session={session}", content=b"\0" * 2000)
+    assert eng.student.contexts == [None, ["line 1"], ["line 1", "line 2"], None]

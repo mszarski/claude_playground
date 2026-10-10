@@ -10,7 +10,8 @@ import { LearnedHead } from './ListenModel.js';
 
 const $ = (id) => document.getElementById(id);
 let player, current = null, sample = 0;
-let listenerWeights = null;     // learned listener (api/listener), if the server has one
+let listenerWeights = null;
+const SESSION = Math.random().toString(36).slice(2, 12);   // the server remembers this conversation's last lines     // learned listener (api/listener), if the server has one
 const newListener = () => new Listener(1.0, listenerWeights ? new LearnedHead(listenerWeights) : null);
 
 function status(msg, kind = '') { const s = $('status'); s.textContent = msg; s.className = kind; }
@@ -91,7 +92,7 @@ function encodeWav(chunks, rate) {
 /** Send one turn of speech; the server answers in stages (heard, motion, done) as newline-delimited JSON, and the
  * robot starts moving at "motion", before the reading is written. Resolves with the motion's duration (s). */
 async function respondTo(wav, onMotion) {
-    const r = await fetch(`api/respond?stream=1&n=${+$('n').value}&seed=${Math.floor(Math.random() * 1e6)}`,
+    const r = await fetch(`api/respond?stream=1&session=${SESSION}&n=${+$('n').value}&seed=${Math.floor(Math.random() * 1e6)}`,
         { method: 'POST', headers: { 'content-type': 'audio/wav' }, body: wav });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `server error ${r.status}`);
     const reader = r.body.getReader(), dec = new TextDecoder();

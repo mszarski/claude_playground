@@ -28,6 +28,7 @@ from .motion import FPS
 
 SR = 16000
 PREROLL = 0.3     # s of audio kept before the turn's first speech frame
+SESSION = f"robot{int(time.time())}"   # one conversation per run: the server keeps its last lines as context
 
 
 def wav_bytes(x, sr=SR):
@@ -40,7 +41,8 @@ def wav_bytes(x, sr=SR):
 
 def respond_stream(server, wav, n=1, headers=None):
     """POST a turn to the server; yield its stages (heard, motion, done)."""
-    req = urllib.request.Request(f"{server.rstrip('/')}/api/respond?stream=1&n={n}&seed={int(time.time()) % 100000}",
+    req = urllib.request.Request(f"{server.rstrip('/')}/api/respond?stream=1&session={SESSION}&n={n}"
+                                 f"&seed={int(time.time()) % 100000}",
                                  wav, {"content-type": "audio/wav", **(headers or {})})
     with urllib.request.urlopen(req, timeout=300) as r:
         for line in r:

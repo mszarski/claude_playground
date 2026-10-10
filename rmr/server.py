@@ -44,6 +44,7 @@ class Engine:
         self.finetuned, self.voice_model = None, voice_model
         self.student = None
         self.listener_weights = None        # path of the learned listener's JSON weights, served to the viewer
+        self.history = {}                   # session -> [(time, what they said)], the conversation so far
         if planner:
             from .planner.finetune import Planner
             self.finetuned = Planner(planner)
@@ -56,17 +57,36 @@ class Engine:
             raise ValueError(f"the planner did not produce a valid recipe: {errors.get(prompt, 'no answer')}")
         return got[prompt]["idea"], got[prompt]["recipe"]
 
-    def respond(self, audio, n=1, seed=0):
+    HISTORY_TURNS, HISTORY_S, MAX_SESSIONS = 2, 300.0, 1000
+
+    def remember(self, session, heard):
+        """Give ``heard`` the person's last few lines in this session as context (the student was trained with the
+        two previous lines of the dialogue, oldest first), then remember this one."""
+        if not session:
+            return
+        now = time.time()
+        past = [(t, x) for t, x in self.history.get(session, []) if now - t < self.HISTORY_S]
+        if past:
+            heard["context"] = [x for _, x in past[-self.HISTORY_TURNS:]]
+        if heard.get("text"):
+            past.append((now, heard["text"]))
+        self.history[session] = past[-self.HISTORY_TURNS:]
+        if len(self.history) > self.MAX_SESSIONS:                # forget the stalest sessions
+            for k in sorted(self.history, key=lambda k: self.history[k][-1][0] if self.history[k] else 0)[
+                    :len(self.history) - self.MAX_SESSIONS]:
+                del self.history[k]
+
+    def respond(self, audio, n=1, seed=0, session=None):
         """Recorded speech -> what Reachy heard, how it reads the person, and its response motion."""
         out = {}
-        for part in self.respond_stream(audio, n, seed):
+        for part in self.respond_stream(audio, n, seed, session):
             timing = {**out.get("timing_ms", {}), **part.get("timing_ms", {})}
             out.update(part)
             out["timing_ms"] = timing
         out.pop("stage", None)
         return out
 
-    def respond_stream(self, audio, n=1, seed=0):
+    def respond_stream(self, audio, n=1, seed=0, session=None):
         """Like ``respond``, in stages, so a client can act on each as soon as it exists:
         ``{"stage": "heard", "heard"}``, then ``{"stage": "motion", "moves", "recipe", "feeling", "idea", ...}`` as
         soon as the recipe is written (with a v3 student, before the reading), then ``{"stage": "done", "reading"}``."""
@@ -77,6 +97,7 @@ class Engine:
         if self.listener is None:
             self.listener = Listener()
         heard = self.listener.hear(audio)
+        self.remember(session, heard)
         t1 = time.time()
         yield {"stage": "heard", "heard": {k: v for k, v in heard.items() if k != "probs"},
                "timing_ms": {"listen": int(1000 * (t1 - t0))}}
@@ -146,7 +167,7 @@ def create_app(engine):
             raise HTTPException(502, f"{type(e).__name__}: {e}")
 
     @app.post("/api/respond")
-    async def respond(request: Request, n: int = 1, seed: int = 0, stream: bool = False):
+    async def respond(request: Request, n: int = 1, seed: int = 0, stream: bool = False, session: str = ""):
         audio = await request.body()
         if not 1000 < len(audio) < 8_000_000:
             raise HTTPException(422, "send a WAV recording between 0.1 s and about 4 minutes")
@@ -157,13 +178,13 @@ def create_app(engine):
 
             def lines():
                 try:
-                    for part in engine.respond_stream(audio, max(1, min(4, n)), seed):
+                    for part in engine.respond_stream(audio, max(1, min(4, n)), seed, session[:64] or None):
                         yield json.dumps(part) + "\n"
                 except Exception as e:
                     yield json.dumps({"stage": "error", "detail": f"{type(e).__name__}: {e}"}) + "\n"
             return StreamingResponse(lines(), media_type="application/x-ndjson")
         try:
-            return await run_in_threadpool(engine.respond, audio, max(1, min(4, n)), seed)
+            return await run_in_threadpool(engine.respond, audio, max(1, min(4, n)), seed, session[:64] or None)
         except ValueError as e:
             raise HTTPException(422, str(e))
         except Exception as e:
