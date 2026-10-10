@@ -898,6 +898,54 @@ function buildMisc() {
   ], { O: '#3a3a38', a: '#8a8a84', b: '#b0b0a8' });
 }
 
+// Volcano: a cone ~7 tiles wide, crater at the top
+let VOLCANO_SPR = null;
+function buildVolcano() {
+  const W = 112, H = 84;
+  const [c, ctx] = makeCanvas(W, H);
+  const r = mulberry32(99);
+  const cx = W / 2;
+  for (let y = 0; y < H; y++) {
+    const t = y / (H - 1);
+    const half = 9 + Math.pow(t, 0.85) * (W / 2 - 9);
+    for (let x = Math.floor(cx - half); x < Math.ceil(cx + half); x++) {
+      const rel = (x - (cx - half)) / (half * 2); // 0 left .. 1 right
+      let col;
+      if (rel < 0.18) col = '#7a6656';
+      else if (rel < 0.42) col = '#5e4c40';
+      else if (rel < 0.75) col = '#4a3c34';
+      else col = '#382c26';
+      // ridges
+      const ridge = Math.sin(x * 0.45 + y * 0.12) > 0.82;
+      if (ridge) col = rel < 0.5 ? '#86705e' : '#2e241f';
+      if (r() < 0.05) col = '#2a201c';
+      if (y > H - 10 && r() < 0.25 + (y - (H - 10)) * 0.07) col = r() < 0.5 ? '#4f8a32' : '#3e7228';
+      ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  // outline edges
+  ctx.fillStyle = '#1e1714';
+  for (let y = 0; y < H - 8; y++) {
+    const t = y / (H - 1);
+    const half = 9 + Math.pow(t, 0.85) * (W / 2 - 9);
+    ctx.fillRect(Math.floor(cx - half), y, 1, 1); ctx.fillRect(Math.ceil(cx + half) - 1, y, 1, 1);
+  }
+  // crater rim + glow
+  ctx.fillStyle = '#1e1714'; ctx.fillRect(cx - 10, 0, 20, 5);
+  ctx.fillStyle = '#c83a10'; ctx.fillRect(cx - 8, 1, 16, 3);
+  ctx.fillStyle = '#f8a030'; ctx.fillRect(cx - 5, 1, 10, 2);
+  ctx.fillStyle = '#f8e070'; ctx.fillRect(cx - 2, 1, 4, 1);
+  // old lava channels
+  for (const [sx, len] of [[-4, 30], [3, 44], [7, 22]]) {
+    let x = cx + sx;
+    for (let y = 4; y < 4 + len; y++) {
+      x += (r() - 0.5) * 1.6 + sx * 0.03;
+      ctx.fillStyle = '#6a2a16'; ctx.fillRect(Math.round(x), y, 2, 1);
+    }
+  }
+  VOLCANO_SPR = c;
+}
+
 // Toolbar icons (24x24) generated from sprites
 const ICONS = {};
 function iconFrom(src, bg) {
@@ -995,5 +1043,6 @@ function buildAllSprites() {
   buildTiles();
   buildBuildingSprites();
   buildMisc();
+  buildVolcano();
   buildIcons();
 }

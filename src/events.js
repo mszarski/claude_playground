@@ -111,9 +111,9 @@ class Events {
       for (let i = 0; i < w.W * w.H; i++) {
         if (w.terrain[i] !== T_LAVA) continue;
         w.lavaT[i] -= 1;
-        if (w.lavaT[i] <= 0 && !this.volcano) { w.terrain[i] = T_BASALT; changed = true; }
+        if (w.lavaT[i] <= 0 && !this.volcano) { w.terrain[i] = T_BASALT; changed = true; w.markDirty(i % w.W, (i / w.W) | 0); }
       }
-      if (changed) w.invalidate();
+      if (changed) { w.regionsDirty = true; w.flowCache.clear(); w.pathVersion++; }
     }
 
     // ----- Disease spread -----
@@ -236,7 +236,7 @@ class Events {
       g.damageBuilding(b, randf(40, 120), null);
       if (b.type === 'power') { b.offline = randf(12, 25); w.powerDirty = true; g.log('Lightning struck a Power Plant! It is offline.', 'bad', b); }
     }
-    if (w.terrain[j] === T_FOREST && chance(0.3)) { w.terrain[j] = T_GRASS; w.invalidate(); }
+    if (w.terrain[j] === T_FOREST && chance(0.3)) { w.terrain[j] = T_GRASS; w.invalidate(tx, ty); }
     g.sparks(tx + 0.5, ty + 0.5, '#f8f8a0', 10);
     for (const d of g.dinos) if (dist2(d.x, d.y, tx, ty) < 36) d.stress = Math.min(100, d.stress + 15);
   }
@@ -274,6 +274,6 @@ class Events {
     // creatures caught in lava
     for (const d of g.dinos) if (!d.carried && d.tx === nx && d.ty === ny) g.killDino(d, 'lava');
     for (const h of g.humans()) if (!h.hidden && h.tx === nx && h.ty === ny) g.humanKilled(h, null);
-    w.invalidate();
+    w.invalidate(nx, ny);
   }
 }

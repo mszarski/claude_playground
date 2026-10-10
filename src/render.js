@@ -30,15 +30,34 @@ class Renderer {
   // ---------- terrain cache ----------
   redrawTerrain() {
     const w = this.game.world;
-    for (let f = 0; f < 2; f++) this.drawTerrainFrame(this.cache[f][1], f);
+    for (let f = 0; f < 2; f++) this.drawTerrainFrame(this.cache[f][1], f, 0, 0, w.W - 1, w.H - 1);
     w.dirtyTerrain = false;
+    w.dirtyRects = [];
   }
 
-  drawTerrainFrame(ctx, frame) {
+  redrawDirty() {
+    const w = this.game.world;
+    const rects = w.dirtyRects;
+    w.dirtyRects = [];
+    if (rects.length > 120) { this.redrawTerrain(); return; }
+    for (const [x, y, rw, rh] of rects) {
+      // include neighbours: autotiled paths/fences/foam depend on them; trees overlap the row above
+      const x0 = Math.max(0, x - 1), y0 = Math.max(0, y - 1), x1 = Math.min(w.W - 1, x + rw), y1 = Math.min(w.H - 1, y + rh);
+      for (let f = 0; f < 2; f++) {
+        const ctx = this.cache[f][1];
+        ctx.save();
+        ctx.beginPath(); ctx.rect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE); ctx.clip();
+        this.drawTerrainFrame(ctx, f, x0, y0, x1, y1);
+        ctx.restore();
+      }
+    }
+  }
+
+  drawTerrainFrame(ctx, frame, bx0, by0, bx1, by1) {
     const w = this.game.world;
     const W = w.W, H = w.H;
     ctx.imageSmoothingEnabled = false;
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
       const i = w.idx(x, y), t = w.terrain[i], v = w.variant[i];
       const px = x * TILE, py = y * TILE;
       let img;
@@ -97,14 +116,6 @@ class Renderer {
         const above = w.terrainAt(x, y - 1);
         if (above !== T_ROCK && above !== T_VOLCANO) { ctx.fillStyle = '#a8a294'; ctx.fillRect(px, py, 16, 1); }
       }
-      if (t === T_VOLCANO) {
-        const vx = w.volcano.x, vy = w.volcano.y;
-        if (x === vx && y === vy) {
-          ctx.fillStyle = '#2a1a16'; ctx.fillRect(px - 6, py - 4, 28, 22);
-          ctx.fillStyle = frame ? '#e85a1a' : '#c83a10'; ctx.fillRect(px - 2, py, 20, 14);
-          ctx.fillStyle = '#f8c040'; ctx.fillRect(px + 3, py + 4, 10, 5);
-        }
-      }
       if (t === T_LAVA) {
         ctx.fillStyle = frame ? 'rgba(248,200,64,0.6)' : 'rgba(248,140,40,0.4)';
         ctx.fillRect(px + ((v + frame * 5) % 12), py + ((v >> 2) % 12), 3, 2);
@@ -113,12 +124,13 @@ class Renderer {
       if (w.path[i]) this.drawPath(ctx, x, y, px, py, v);
     }
     // fences & trees row by row so taller objects overlap correctly
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
+    const fx0 = Math.max(0, bx0 - 1), fx1 = Math.min(W - 1, bx1 + 1);
+    for (let y = by0; y <= Math.min(H - 1, by1 + 1); y++) {
+      for (let x = fx0; x <= fx1; x++) {
         const i = w.idx(x, y);
         if (w.fence[i]) this.drawFence(ctx, x, y, frame);
       }
-      for (let x = 0; x < W; x++) {
+      for (let x = fx0; x <= fx1; x++) {
         const i = w.idx(x, y);
         if (w.terrain[i] === T_FOREST && !w.bld[i]) {
           const v = w.variant[i];
@@ -203,6 +215,7 @@ class Renderer {
     const g = this.game, w = g.world;
     this.time += dt;
     if (w.dirtyTerrain) this.redrawTerrain();
+    else if (w.dirtyRects && w.dirtyRects.length) this.redrawDirty();
     const ctx = this.ctx;
     const cw = this.canvas.width, ch = this.canvas.height;
     const z = this.cam.zoom;
@@ -224,6 +237,14 @@ class Renderer {
     // overlays beneath entities
     this.drawOverlays(ctx, ui, vx0, vy0, vx1, vy1);
 
+    // dead electric fences blink a red warning light on each post
+    if (Math.floor(this.time * 2) % 2 === 0) {
+      ctx.fillStyle = '#ff3020';
+      for (let y = Math.max(0, vy0); y <= Math.min(w.H - 1, vy1); y++) for (let x = Math.max(0, vx0); x <= Math.min(w.W - 1, vx1); x++) {
+        const i = w.idx(x, y);
+        if (w.fence[i] === F_ELECTRIC && !w.fencePowered[i]) ctx.fillRect(x * TILE + 7, y * TILE + 1, 2, 2);
+      }
+    }
     // fence sparkle
     if (w.power.ratio > 0) {
       ctx.fillStyle = '#ffffc0';
@@ -240,6 +261,7 @@ class Renderer {
     for (const gu of g.guests) if (!gu.hidden && vis(gu.tx, gu.ty)) items.push({ y: gu.y, t: 2, o: gu });
     for (const s of g.staff) if (vis(s.tx, s.ty)) items.push({ y: s.y, t: 2, o: s });
     for (const e of g.eggs) items.push({ y: e.y + 0.6, t: 3, o: e });
+    if (w.volcano && vis(w.volcano.x, w.volcano.y)) items.push({ y: w.volcano.y + 3, t: 4, o: w.volcano });
     items.sort((a, b) => a.y - b.y);
 
     // shadows first
@@ -252,6 +274,7 @@ class Renderer {
       if (it.t === 0) this.drawBuilding(ctx, it.o, ui);
       else if (it.t === 1) this.drawDino(ctx, it.o, ui);
       else if (it.t === 2) this.drawPerson(ctx, it.o, ui);
+      else if (it.t === 4) this.drawVolcano(ctx, it.o);
       else this.drawEgg(ctx, it.o);
     }
 
@@ -462,6 +485,39 @@ class Renderer {
       ctx.fillStyle = '#fff'; ctx.fillRect(x + 2, y - 4, 1, 2); ctx.fillRect(x + 2, y - 1, 1, 1);
     }
     if (ui.selected === p) { ctx.strokeStyle = '#f8f080'; ctx.strokeRect(x - 1.5, y - 1.5, 9, 13); }
+  }
+
+  drawVolcano(ctx, v) {
+    const g = this.game;
+    const x = Math.round((v.x + 0.5) * TILE - VOLCANO_SPR.width / 2), y = Math.round((v.y + 3) * TILE - VOLCANO_SPR.height);
+    ctx.drawImage(VOLCANO_SPR, x, y);
+    const ev = g.events.volcano;
+    const hot = ev ? (ev.phase === 'erupt' ? 1 : 0.6) : 0.25;
+    // crater flicker
+    const fl = Math.sin(this.time * (ev ? 14 : 3)) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(248,${Math.round(150 + fl * 80)},60,${0.4 + hot * 0.6})`;
+    ctx.fillRect(x + VOLCANO_SPR.width / 2 - 6, y + 1, 12, 2);
+    if (ev && ev.phase === 'erupt') {
+      // lava fountain
+      for (let k = 0; k < 14; k++) {
+        const ph = (this.time * 1.8 + k / 14) % 1;
+        const ang = (k * 2.39) % 1 - 0.5;
+        const px = x + VOLCANO_SPR.width / 2 + ang * 40 * ph;
+        const py = y - 30 * Math.sin(ph * Math.PI) + ph * 10;
+        ctx.fillStyle = ph < 0.5 ? '#f8e070' : '#f86a20';
+        ctx.fillRect(Math.round(px), Math.round(py), 2, 2);
+      }
+    }
+    // smoke
+    const n = ev ? 9 : 4;
+    for (let k = 0; k < n; k++) {
+      const ph = (this.time * (ev ? 0.35 : 0.12) + k / n) % 1;
+      const r = 3 + ph * (ev ? 18 : 10);
+      ctx.globalAlpha = (ev ? 0.55 : 0.35) * (1 - ph);
+      ctx.fillStyle = ev && ev.phase === 'erupt' ? '#3a3030' : '#d8d0c8';
+      ctx.fillRect(Math.round(x + VOLCANO_SPR.width / 2 + Math.sin(ph * 4 + k) * 5 + ph * 20 - r / 2), Math.round(y - ph * (ev ? 70 : 40) - r / 2), Math.round(r), Math.round(r));
+    }
+    ctx.globalAlpha = 1;
   }
 
   drawEgg(ctx, e) {

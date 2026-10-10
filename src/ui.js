@@ -345,12 +345,19 @@ class UI {
         this.sfx.play('build');
         if (def.cat === 'guest' && !w.accessTiles(b).length) this.toast(`Connect the ${def.name} to a path!`, 'warn');
         if (def.feeds) { const reg = w.regionAt(bx + 1, by) || w.regionAt(bx - 1, by) || w.regionAt(bx, by + 1) || w.regionAt(bx, by - 1); if (reg && reg.public) this.toast('Feeders should go inside a fenced paddock.', 'warn'); }
-      } else this.sfx.play('error');
+      } else {
+        this.sfx.play('error');
+        if (!g.canAfford(def.cost)) this.toast(`Not enough money for a ${def.name}.`, 'warn');
+        else if (def.unique && g.hasBuilding(tool) && tool !== 'gate') this.toast(`You can only have one ${def.name}.`, 'warn');
+        else this.toast(`Can't build there — needs ${def.w}×${def.h} clear land (no water, rock, paths or fences).`, 'warn');
+      }
       return;
     }
     if (tool === 'hatch') {
       if (!this.species) { this.showSpeciesPicker(); return; }
-      if (g.hatch(this.species, t.x, t.y)) this.sfx.play('build'); else this.sfx.play('error');
+      const err = g.canHatchAt(this.species, t.x, t.y);
+      if (err) { this.toast(err, 'warn'); this.sfx.play('error'); }
+      else if (g.hatch(this.species, t.x, t.y)) this.sfx.play('build');
       return;
     }
     if (tool === 'demolish') { if (g.demolishAt(t.x, t.y)) this.sfx.play('demolish'); return; }

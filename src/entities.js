@@ -391,7 +391,7 @@ class Guest {
     this.state = 'walk';
     this.hunger = randf(0, 40); this.toilet = randf(0, 30); this.shopUrge = randf(0, 60);
     this.happy = 60; this.fear = 0;
-    this.stay = randf(14, 30); // hours in park
+    this.stay = randf(8, 18); // hours in park
     this.goal = null; this.insideT = 0; this.hidden = false; this.dead = false;
     this.anim = rand(); this.facing = 1;
     this.seenSpecies = new Set();
@@ -650,6 +650,13 @@ class Staff {
         this.path = null;
         return;
       }
+      if (dd < 2.2 && d.sp.danger >= 4 && !this.retreating) {
+        // too close: back off
+        const ax = this.x - d.x, ay = this.y - d.y, al = Math.hypot(ax, ay) || 1;
+        const nx = this.x + ax / al * 2.1 * dt, ny = this.y + ay / al * 2.1 * dt;
+        if (w.humanPass(Math.floor(nx), Math.floor(ny))) { this.x = nx; this.y = ny; this.moving = true; }
+        return;
+      }
       if (dd <= 3.8) { this.path = null; return; }
     }
     if (this.path) { if (stepAlong(this, dt, 1.9, w.humanPass, w)) this.path = null; }
@@ -657,6 +664,18 @@ class Staff {
 
   updateWorker(dt) {
     const g = this.game, w = g.world;
+    // Engineers are not heroes: drop everything and run from loose predators
+    const threat = g.threatNear(this.x, this.y, 6);
+    if (threat && this.state !== 'flee') {
+      this.state = 'flee'; this.job = null;
+      const hx = this.home.x, hy = this.home.y;
+      this.path = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => dist2(x, y, hx, hy) < 6, 5000);
+      this.pi = 0;
+    }
+    if (this.state === 'flee') {
+      if (!this.path || stepAlong(this, dt, 2.2, w.humanPass, w)) { this.path = null; if (!g.threatNear(this.x, this.y, 9)) this.state = 'idle'; }
+      return;
+    }
     if (this.state === 'repair') {
       const j = this.job;
       const fx = j % w.W, fy = (j / w.W) | 0;
@@ -675,7 +694,7 @@ class Staff {
             if (g.money > -50000) {
               g.spend(cost, 'repairs');
               w.fence[j] = orig; w.fenceHp[j] = FENCE_DEF[orig].hp * 0.4;
-              w.invalidate(); g.onFenceRebuilt(fx, fy);
+              w.invalidate(fx, fy); g.onFenceRebuilt(fx, fy);
             }
           }
           this.state = 'idle';
@@ -683,7 +702,7 @@ class Staff {
           const max = FENCE_DEF[f].hp;
           w.fenceHp[j] = Math.min(max, w.fenceHp[j] + dt * 22);
           g.spend(dt * 6, 'repairs');
-          if (w.fenceHp[j] >= max) { this.state = 'idle'; w.dirtyTerrain = true; }
+          if (w.fenceHp[j] >= max) { this.state = 'idle'; w.markDirty(fx, fy); }
         } else this.state = 'idle';
       } else if (this.jobType === 'building') {
         const b = this.jobB;
@@ -710,6 +729,7 @@ class Staff {
       if (!w.inb(x, y)) return false;
       const j = w.idx(x, y);
       if (claimed.has(j)) return false;
+      if (g.threatNear(x + 0.5, y + 0.5, 8)) return false;
       const f = w.fence[j];
       if (f === F_BROKEN) return true;
       if ((f === F_ELECTRIC || f === F_WALL) && w.fenceHp[j] < FENCE_DEF[f].hp * 0.98) return true;

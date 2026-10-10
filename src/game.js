@@ -21,7 +21,7 @@ const GOALS = [
   { id: 'star5', text: 'Reach a 5-star rating: the greatest park on Earth', reward: 250000, check: (g) => g.stars >= 5 },
 ];
 
-const STAR_THRESH = [0, 70, 140, 240, 380, 560];
+const STAR_THRESH = [0, 60, 120, 200, 300, 430];
 
 class Game {
   constructor(seed, opts = {}) {
@@ -187,7 +187,7 @@ class Game {
     if (!free) { const c = TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0); if (!this.canAfford(c)) return false; this.spend(c); }
     w.path[i] = 1;
     if (w.terrain[i] === T_FOREST) w.terrain[i] = T_GRASS;
-    w.invalidate();
+    w.invalidate(x, y);
     return true;
   }
   placeFence(x, y, type) {
@@ -204,7 +204,7 @@ class Game {
     this.spend(c);
     w.fence[i] = type; w.fenceHp[i] = FENCE_DEF[type].hp; w.fenceOrig[i] = type;
     if (t === T_FOREST) w.terrain[i] = T_GRASS;
-    w.invalidate();
+    w.invalidate(x, y);
     return true;
   }
   demolishAt(x, y) {
@@ -219,8 +219,8 @@ class Game {
       this.removeBuildingFx(b);
       return true;
     }
-    if (w.fence[i]) { w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(); return true; }
-    if (w.path[i]) { w.path[i] = 0; w.invalidate(); return true; }
+    if (w.fence[i]) { w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(x, y); return true; }
+    if (w.path[i]) { w.path[i] = 0; w.invalidate(x, y); return true; }
     return false;
   }
   removeBuildingFx(b) {
@@ -251,7 +251,7 @@ class Game {
     if (w.terrain[i] !== T_GRASS || w.path[i] || w.bld[i] || w.fence[i]) return false;
     if (!this.canAfford(TOOL_INFO.trees.cost)) return false;
     this.spend(TOOL_INFO.trees.cost);
-    w.terrain[i] = T_FOREST; w.invalidate();
+    w.terrain[i] = T_FOREST; w.invalidate(x, y);
     return true;
   }
   clearLand(x, y) {
@@ -261,7 +261,7 @@ class Game {
     if (w.terrain[i] !== T_FOREST) return false;
     if (!this.canAfford(TOOL_INFO.clear.cost)) return false;
     this.spend(TOOL_INFO.clear.cost);
-    w.terrain[i] = T_GRASS; w.invalidate();
+    w.terrain[i] = T_GRASS; w.invalidate(x, y);
     return true;
   }
 
@@ -296,10 +296,10 @@ class Game {
     const f = w.fence[i];
     if (f !== F_ELECTRIC && f !== F_WALL) return;
     w.fenceHp[i] -= dmg;
-    w.dirtyTerrain = true;
+    w.markDirty(x, y);
     if (w.fenceHp[i] <= 0) {
       w.fence[i] = F_BROKEN; w.fenceHp[i] = 0;
-      w.invalidate();
+      w.invalidate(x, y);
       this.burst(x + 0.5, y + 0.5, '#9a9a90', 12);
       this.soundAt('crash', x, y, 1);
       this.shake = Math.max(this.shake, 3);
@@ -590,9 +590,9 @@ class Game {
     while (this.goalIdx < GOALS.length && GOALS[this.goalIdx].check(this)) {
       const g = GOALS[this.goalIdx];
       if (g.reward) this.earn(g.reward, 'grants');
+      this.goalIdx++;
       this.log(`Goal complete: ${g.text}${g.reward ? ' (+' + fmtMoney(g.reward) + ')' : ''}`, 'goal', null, true);
       this.sound('fanfare');
-      this.goalIdx++;
       if (this.goalIdx >= GOALS.length && !this.victory) { this.victory = true; this.emit('victory'); }
     }
   }

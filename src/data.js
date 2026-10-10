@@ -86,7 +86,7 @@ const SPECIES_ORDER = ['galli', 'para', 'dilo', 'trike', 'stego', 'raptor', 'ank
 // Buildings. w/h are tile footprint.
 // cat: 'guest' (needs path access), 'infra', 'dino', 'staff', 'decor'
 const BUILDINGS = {
-  gate: { name: 'Main Gate', w: 3, h: 2, cost: 15000, upkeep: 100, power: 2, cat: 'guest', hp: 300, unique: true,
+  gate: { name: 'Main Gate', w: 3, h: 2, cost: 15000, upkeep: 100, power: 0, cat: 'guest', hp: 300, unique: true,
     desc: 'Guests enter and exit here. Must touch a path.' },
   visitor: { name: 'Visitor Center', w: 3, h: 3, cost: 60000, upkeep: 400, power: 6, cat: 'guest', hp: 400, shelter: 60, income: 6, appeal: 8,
     desc: 'Guest hub and emergency shelter for 60 guests.' },

@@ -174,14 +174,14 @@ class World {
       this.bld[i] = b.id;
       if (this.terrain[i] === T_FOREST) this.terrain[i] = T_GRASS;
     }
-    this.invalidate();
+    this.invalidate(x, y, def.w, def.h);
     return b;
   }
 
   removeBuilding(b) {
     for (let dy = 0; dy < b.h; dy++) for (let dx = 0; dx < b.w; dx++) this.bld[this.idx(b.x + dx, b.y + dy)] = 0;
     this.buildings.delete(b.id);
-    this.invalidate();
+    this.invalidate(b.x, b.y, b.w, b.h);
   }
 
   buildingAt(x, y) { return this.inb(x, y) ? this.buildings.get(this.bld[this.idx(x, y)]) : null; }
@@ -211,8 +211,14 @@ class World {
     return out;
   }
 
-  invalidate() {
-    this.dirtyTerrain = true;
+  // Mark a tile rect for terrain-cache redraw (partial). No args = everything.
+  markDirty(x, y, w = 1, h = 1) {
+    (this.dirtyRects = this.dirtyRects || []).push([x, y, w, h]);
+  }
+
+  invalidate(x, y, w = 1, h = 1) {
+    if (x === undefined) this.dirtyTerrain = true;
+    else this.markDirty(x, y, w, h);
     this.pathVersion++;
     this.flowCache.clear();
     this.regionsDirty = true;
@@ -279,6 +285,8 @@ class World {
   computePower(game) {
     const W = this.W, H = this.H;
     this.covered.fill(0);
+    const prevPowered = this._prevPowered || (this._prevPowered = new Uint8Array(W * H));
+    prevPowered.set(this.fencePowered);
     this.fencePowered.fill(0);
     let supply = 0;
     const outage = this.power.outage > 0;
@@ -337,7 +345,7 @@ class World {
     this.power.supply = supply; this.power.demand = demand;
     this.power.ratio = demand > 0 ? Math.min(1, supply / demand) : 1;
     this.powerDirty = false;
-    this.dirtyTerrain = true;
+    for (let i = 0; i < W * H; i++) if (prevPowered[i] !== this.fencePowered[i]) this.markDirty(i % W, (i / W) | 0);
   }
 
   // ---------- guest flow fields over path tiles ----------
