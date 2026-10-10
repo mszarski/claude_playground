@@ -22,6 +22,7 @@
 :root[data-theme="dark"] {
   --bg: #0f1719; --panel: #172226; --ink: #e3ecee; --muted: #93a6ab; --line: #2a3a3f;
   --accent: #4fb5ba; --accent-ink: #062022; --pick: #f08a45; color-scheme: dark }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font: 16px/1.5 var(--body); }
 .wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 40px; display: grid; gap: 18px; }
 header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
@@ -214,7 +215,6 @@ async function showResults() {
 $('submit').addEventListener('click', () => save());
 $('same').addEventListener('click', () => save(true));
 $('skip').addEventListener('click', () => { idx++; if (idx >= order.length) idx = 0; render(); });
-for (const s of ['L', 'R']) $('clip' + s).addEventListener('click', (e) => { if (e.target.tagName === 'VIDEO') { e.target.currentTime = 0; e.target.play().catch(() => {}); } });
 order = shuffled('anon'); render();
 (async () => {
   const claude = window.claude;

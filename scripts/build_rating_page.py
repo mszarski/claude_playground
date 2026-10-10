@@ -14,6 +14,14 @@ import os
 TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "deploy", "rating_page.html")
 
 
+def fix_text(t):
+    """MELD's transcripts carry Windows-1252 punctuation as raw bytes (\x92 for an apostrophe): repair them."""
+    try:
+        return t.encode("latin-1").decode("cp1252")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return t
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--items", required=True)
@@ -26,7 +34,8 @@ def main():
         answers = it.get("answers") or [it["a"], it["b"]]          # k answers (or the first round's a / b)
         if not all(x["video"] in urls for x in answers):
             continue
-        items.append({"id": it["id"], "pool": it["pool"], "context": it["context"][-2:], "text": it["text"],
+        items.append({"id": it["id"], "pool": it["pool"], "context": [fix_text(c) for c in it["context"][-2:]],
+                      "text": fix_text(it["text"]),
                       "voice": it["voice"],
                       "answers": [{"model": x["model"], "reading": x["reading"], "url": urls[x["video"]]}
                                   for x in answers]})

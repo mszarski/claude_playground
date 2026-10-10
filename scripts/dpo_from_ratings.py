@@ -26,8 +26,14 @@ def pairs(a):
     for line in open(a.heard):
         r = json.loads(line)
         heard[r["clip"]] = r
-    raw = json.load(open(a.ratings))
-    docs = raw if isinstance(raw, list) else raw.get("documents", raw.get("docs", []))
+    import os
+
+    if os.path.isdir(a.ratings):            # the ArtifactData export: one JSON file per rater
+        docs = [json.load(open(os.path.join(dp, f))) for dp, _, fs in os.walk(a.ratings) for f in fs
+                if f.endswith(".json")]
+    else:
+        raw = json.load(open(a.ratings))
+        docs = raw if isinstance(raw, list) else raw.get("documents", raw.get("docs", []))
     # each judgement -> ordered pairs (winner index, loser index): a/b votes give one; best-worst over k answers gives
     # best > every other and every other > worst (2k - 3 pairs). Several raters: a pair's majority wins, ties drop.
     prefs = collections.defaultdict(collections.Counter)
