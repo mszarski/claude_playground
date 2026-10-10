@@ -51,6 +51,14 @@ button:disabled { opacity: 0.45; cursor: default; }
 #stars { color: var(--gold); letter-spacing: -1px; font-size: 20px; }
 #powerbar { width: 70px; height: 8px; background: #000; border: 1px solid #444; margin-top: 3px; position: relative; }
 #powerbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); }
+.pbar { width: 70px; height: 8px; background: #000; border: 1px solid #444; margin-top: 5px; position: relative; }
+.pbar i { position: absolute; left: 0; top: 0; bottom: 0; background: #9a7ac8; }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.rcard { padding: 6px 8px; background: var(--panel2); border: 2px solid var(--edge); font-size: 16px; display: flex; flex-direction: column; gap: 2px; }
+.rcard .nm { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); line-height: 1.4; }
+.rcard.done { opacity: 0.6; box-shadow: inset 0 0 0 2px var(--green); }
+.rcard.locked { opacity: 0.45; }
+.rcard.active { box-shadow: inset 0 0 0 2px #9a7ac8; }
 .spacer { flex: 1; }
 .grp { display: flex; gap: 3px; }
 #alarmBtn { background: #6a1810; font-weight: bold; }
@@ -211,6 +219,7 @@ table.fin td:last-child { text-align: right; }
   <div class="stat"><span class="k" id="sDay">Day 1</span><span class="v" id="sTime">08:00</span></div>
   <div class="stat"><span class="k">Rating</span><span class="v" id="stars">☆☆☆☆☆</span></div>
   <div class="stat"><span class="k">Reputation</span><span class="v" id="sRep">50</span></div>
+  <div class="stat" id="resStat" hidden><span class="k" id="resK">Research</span><div id="resbar" class="pbar"><i></i></div></div>
   <div class="stat"><span class="k" id="sPowK">Power</span><div id="powerbar"><i></i></div><span class="k" id="sPow" style="font-size:13px">0/0 MW</span></div>
   <div class="spacer"></div>
   <div class="grp" id="speedBtns">
@@ -222,6 +231,7 @@ table.fin td:last-child { text-align: right; }
   </div>
   <button id="alarmBtn" title="Sound the evacuation alarm (E)">⚠ ALARM</button>
   <div class="grp">
+    <button id="resBtn" title="Research (Y)">🔬</button>
     <button id="undoBtn" title="Undo last construction (U / Ctrl+Z)">↶</button>
     <button id="rosterBtn" title="Dinosaur roster (G)">🦖</button>
     <button id="finBtn" title="Finances (F2)">$</button>
@@ -283,6 +293,7 @@ table.fin td:last-child { text-align: right; }
 <script src="src/entities/ptera.js"></script>
 <script src="src/entities/vehicles.js"></script>
 <script src="src/events.js"></script>
+<script src="src/research.js"></script>
 <script src="src/game.js"></script>
 <script src="src/scenarios.js"></script>
 <script src="src/audio.js"></script>

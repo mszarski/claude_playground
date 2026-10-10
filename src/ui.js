@@ -259,6 +259,7 @@ class UI {
       else if (k === 'g') this.showRoster();
       else if (k === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this.doUndo(); }
       else if (k === 'u') this.doUndo();
+      else if (k === 'y') this.showResearch();
       else if (k === '=' || k === '+') this.zoomAt(1, window.innerWidth / 2, window.innerHeight / 2);
       else if (k === '-') this.zoomAt(-1, window.innerWidth / 2, window.innerHeight / 2);
       else {
@@ -475,6 +476,7 @@ class UI {
     $('#alarmBtn').onclick = () => this.toggleAlarm();
     $('#finBtn').onclick = () => this.showFinances();
     $('#undoBtn').onclick = () => this.doUndo();
+    $('#resBtn').onclick = () => this.showResearch();
     $('#rosterBtn').onclick = () => this.showRoster();
     $('#disBtn').onclick = () => this.showDisasters();
     $('#sndBtn').onclick = () => {
@@ -529,6 +531,9 @@ class UI {
     const g = this.game;
     g.alarm = !g.alarm;
     $('#alarmBtn').classList.toggle('on', g.alarm);
+    const ra = g.research.active;
+    $('#resStat').hidden = !ra;
+    if (ra) { const r = RESEARCH_BY_ID[ra.id]; $('#resK').textContent = (g.research.labs() ? '' : 'NO LAB POWER · ') + r.name; $('#resbar i').style.width = (ra.progress / r.hours * 100) + '%'; }
     if (g.alarm) { g.log('EVACUATION ALARM: guests are heading to shelters.', 'warn', null, true); this.sfx.play('alarm'); }
     else g.log('All clear. Guests may leave the shelters.', 'good', null, true);
   }

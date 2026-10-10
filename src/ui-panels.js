@@ -199,6 +199,26 @@ class UIPanels {
     $('[data-close]').onclick = () => this.closeModal();
   }
 
+  showResearch() {
+    const g = this.game, rs = g.research;
+    const labs = g.buildingsOfType('lab').length;
+    let html = `<h1>RESEARCH</h1><p>${labs ? `${labs} lab${labs > 1 ? 's' : ''} (${rs.labs()} powered). Extra labs speed research up.` : '<span style="color:#ff9080">Build a Research Lab (Dinos menu) to start researching.</span>'}</p><div class="rgrid">`;
+    for (const r of RESEARCH) {
+      const done = rs.has(r.id), active = rs.active && rs.active.id === r.id, avail = rs.available(r);
+      const cls = done ? 'done' : active ? 'active' : avail ? '' : 'locked';
+      let foot;
+      if (done) foot = '<span style="color:#8ad06a">✓ Complete</span>';
+      else if (active) foot = `<div class="pbar" style="width:100%"><i style="width:${rs.active.progress / r.hours * 100}%"></i></div>`;
+      else if (!avail) foot = `<span style="color:#9ab08a">Needs: ${r.req.filter((q) => !rs.has(q)).map((q) => RESEARCH_BY_ID[q].name).join(', ')}</span>`;
+      else foot = `<button data-r="${r.id}" ${!labs || rs.active ? 'disabled' : ''}>Research ${fmtMoney(r.cost)} · ${r.hours}h</button>`;
+      html += `<div class="rcard ${cls}"><div class="nm">${r.name.toUpperCase()}</div><div>${r.desc}</div>${foot}</div>`;
+    }
+    html += `</div><div class="btns" style="justify-content:flex-end;margin-top:8px"><button data-close>Close</button></div>`;
+    this.showModal(html);
+    for (const b of document.querySelectorAll('[data-r]')) b.onclick = () => { const err = rs.start(b.dataset.r); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); this.showResearch(); };
+    $('[data-close]').onclick = () => this.closeModal();
+  }
+
   showFinances() {
     const g = this.game;
     const L = g.ledger;

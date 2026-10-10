@@ -1039,6 +1039,18 @@ function buildBuildingSprites() {
     drawText3(ctx, 'LAGOON', W / 2 - 12, H - 7, '#f8d040');
   });
 
+  make('lab', 12, (p, W, H, ctx) => {
+    p.box(2, 14, W - 4, H - 16, '#e8ecf0', '#3a4a5a');
+    windowRow(p, 4, 20, W - 8, 3, false);
+    p.r(12, H - 11, 8, 9, '#3a4a5a'); p.r(13, H - 10, 6, 8, '#a8d8f0');
+    roofFlat(p, 0, 6, W, 9, '#7a5aa8', '#9a7ac8', '#4a3478');
+    // satellite dish + antenna
+    p.r(6, 1, 8, 2, '#c8c8c8'); p.r(5, 3, 10, 2, '#a8a8a8'); p.r(9, 5, 2, 2, '#5a5a5a');
+    p.r(24, 0, 1, 7, '#5a5a5a'); p.px(24, 0, '#e04838');
+    // DNA helix sign
+    for (let k = 0; k < 6; k++) { p.px(18 + (k % 2), 7 + k, '#7ad04a'); p.px(21 - (k % 2), 7 + k, '#70b8f0'); }
+  });
+
   make('siren', 14, (p, W, H) => {
     p.r(7, 6, 2, H - 6, '#5a5a58');
     p.r(4, H - 2, 8, 2, '#3a3a38');

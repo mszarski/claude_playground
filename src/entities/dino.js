@@ -34,7 +34,7 @@ class Dino {
 
   get tx() { return Math.floor(this.x); }
   get ty() { return Math.floor(this.y); }
-  get camouflaged() { return !!(this.sp.camo && this.loose && this.state !== 'hunt' && this.state !== 'attack' && this.sedatedT <= 0); }
+  get camouflaged() { return !!(this.sp.camo && !this.game.research.has('sensors') && this.loose && this.state !== 'hunt' && this.state !== 'attack' && this.sedatedT <= 0); }
   get speed() {
     let s = this.sp.speed * 0.55;
     if (this.hp < this.sp.hp * 0.4) s *= 0.7;
@@ -89,8 +89,9 @@ class Dino {
     if (this.hunger >= 100) this.hp -= dt * 0.8;
     if (this.sick > 0) {
       // Vets cure quickly; untreated illness slowly runs its course but costs health
-      if (g.hasBuilding('vet')) { this.sick -= dt * 2.5; }
-      else { this.sick -= dt * 0.12; this.hp -= dt * (this.hunger > 60 ? 0.3 : 0.14); }
+      const med = g.research.has('medicine') ? 2 : 1;
+      if (g.hasBuilding('vet')) { this.sick -= dt * 2.5 * med; }
+      else { this.sick -= dt * 0.12 * med; this.hp -= dt * (this.hunger > 60 ? 0.3 : 0.14); }
       if (this.sick <= 0) { this.sick = 0; g.log(`${this.name} the ${this.sp.name} has recovered.`, 'good', this); }
     }
     if (this.hp <= 0) { g.killDino(this, this.hunger >= 100 ? 'starvation' : this.sick > 0 ? 'illness' : 'injuries'); return; }
@@ -225,7 +226,7 @@ class Dino {
     if (this.state === 'tofeed') {
       const f = this.feederTarget;
       if (f && w.buildings.has(f.id)) {
-        const cost = this.sp.diet === 'carn' ? 400 : 150;
+        const cost = (this.sp.diet === 'carn' ? 400 : 150) * (g.research.has('feeders') ? 0.5 : 1);
         g.spend(cost, 'food');
         this.hunger = Math.max(0, this.hunger - 80);
         this.state = 'eat'; this.stateT = 3;
@@ -305,13 +306,14 @@ class Dino {
       let dmg;
       if (type === F_ELECTRIC && w.fencePowered[tgt.j]) {
         // ZAP
-        dmg = str >= 8 && this.stress > 85 ? str * 0.8 : str * 0.25;
+        const brute = str >= (g.research.has('fence3') ? 11 : 8) && this.stress > 85;
+        dmg = brute ? str * 0.8 : str * 0.25;
         this.flash = 0.25;
         this.hp -= 3;
         g.sparks(tgt.x + 0.5, tgt.y + 0.5);
         g.soundAt('zap', tgt.x, tgt.y, 1);
-        if (!(str >= 8 && this.stress > 85)) {
-          this.deterT = randf(20, 40) * (this.sp.clever ? 0.6 : 1);
+        if (!brute) {
+          this.deterT = randf(20, 40) * (this.sp.clever ? 0.6 : 1) * (g.research.has('fence3') ? 1.6 : 1);
           this.stress = Math.min(100, this.stress + 4);
           this.state = 'idle'; this.stateT = 2;
         }

@@ -30,6 +30,8 @@ class Game {
     this.world = new World(seed);
     this.world.generate();
     this.events = new Events(this);
+    this.research = new ResearchState(this);
+    this.research.apply();
     this.money = 450000;
     this.time = 7.5; // hours since start (day 1 07:30)
     this.secPerHour = 2.5;
@@ -145,7 +147,8 @@ class Game {
     for (const d of this.creatures()) {
       if (!d.loose || d.carried || d.sedatedT > 0) continue;
       if (d.sp.danger < 2) continue;
-      const rr = d.camouflaged ? Math.min(r, 2.5) : r;
+      const sens = this.research.has('sensors');
+      const rr = d.camouflaged && !sens ? Math.min(r, 2.5) : r * (sens ? 1.4 : 1);
       if (dist2(x, y, d.x, d.y) < rr * rr) return d;
     }
     return null;
@@ -368,14 +371,14 @@ class Game {
     return true;
   }
 
-  isUnlocked(species) { return this.stars >= SPECIES[species].unlock || this.sandbox; }
+  isUnlocked(species) { return this.stars >= SPECIES[species].unlock || this.sandbox || this.research.has('gen_' + species); }
 
   canHatchAt(species, x, y) {
     const w = this.world;
     const sp = SPECIES[species];
     if (!this.hasBuilding('hatchery')) return 'Build a Hatchery first.';
     if (!this.buildingsOfType('hatchery').some((b) => b.powered)) return 'The Hatchery has no power.';
-    if (!this.isUnlocked(species)) return `Requires a ${sp.unlock}-star rating.`;
+    if (!this.isUnlocked(species)) return `Requires a ${sp.unlock}-star rating (or genome research).`;
     if (sp.flying) {
       const b = w.buildingAt(x, y);
       if (!b || b.type !== 'aviary') return 'Pteranodons hatch inside an Aviary. Click on one.';
@@ -448,8 +451,9 @@ class Game {
   acuStrike(d) {
     const h = this.helis.find((x) => x.state === 'parked' && !x.cargo) || this.helis.find((x) => x.state === 'return' && !x.cargo);
     if (!h) return 'All helicopters are busy.';
-    if (!this.canAfford(8000)) return 'Not enough money ($8k).';
-    this.spend(8000, 'ops');
+    const cost = this.research.has('acu') ? 3000 : 8000;
+    if (!this.canAfford(cost)) return `Not enough money (${fmtMoney(cost)}).`;
+    this.spend(cost, 'ops');
     h.target = d; h.state = 'strike'; h.shotT = 0.5;
     this.soundAt('heli', h.x, h.y, 1);
     this.log(`ACU helicopter scrambled to tranquilize ${d.name} the ${d.sp.name}.`, 'info', d, true);
@@ -643,6 +647,7 @@ class Game {
     for (const h of this.helis) h.update(dt);
     this.helis = this.helis.filter((h) => !h.dead);
     this.updateTours(dt);
+    this.research.update(dt);
     this.updateLagoons(dt);
 
     // darts
@@ -655,7 +660,7 @@ class Game {
         dt_.life = 0;
         if (!t.dead && !t.carried && t.sedatedT <= 0) {
           t.sedation += 1; t.flash = 0.15;
-          if (t.sedation >= t.sp.tranq) t.sedate();
+          if (t.sedation >= Math.max(1, t.sp.tranq - (this.research.has('darts') ? 1 : 0))) t.sedate();
           else t.stress = Math.min(100, t.stress + 10);
         }
       } else { dt_.x += dx / dd * sp; dt_.y += dy / dd * sp; dt_.a = Math.atan2(dy, dx); }
@@ -883,7 +888,8 @@ class Game {
     const priceF = clamp(1.7 - this.ticket / 150, 0.1, 1.5);
     const repF = 0.4 + this.reputation / 80;
     const night = this.isNight ? 0.5 : 1;
-    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night));
+    const mkt = this.research.has('marketing') ? 1.15 : 1;
+    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night * mkt));
   }
 
   updateRating() {
