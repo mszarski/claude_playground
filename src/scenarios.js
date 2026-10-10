@@ -53,11 +53,17 @@ function spawnIn(g, sp, box, n = 1) {
   }
 }
 
-function roamSpawn(g, sp, n, minDist = 14) {
+function mainRegion(g) {
   const w = g.world, s = g.start;
-  for (let k = 0; k < n; k++) for (let t = 0; t < 300; t++) {
+  w.computeRegions();
+  const r = w.regionAt(s.x, s.y - 2) || w.regionAt(s.x, s.y - 3);
+  return r ? r.id : -1;
+}
+function roamSpawn(g, sp, n, minDist = 14) {
+  const w = g.world, s = g.start, main = mainRegion(g);
+  for (let k = 0; k < n; k++) for (let t = 0; t < 400; t++) {
     const x = randi(4, w.W - 5), y = randi(4, w.H - 5);
-    if (w.dinoPass(x, y) && dist(x, y, s.x, s.y) > minDist) { const d = new Dino(g, sp, x, y); d.growth = 1; d.stress = 20; g.dinos.push(d); break; }
+    if (w.dinoPass(x, y) && dist(x, y, s.x, s.y) > minDist && w.region[w.idx(x, y)] === main) { const d = new Dino(g, sp, x, y); d.growth = 1; d.stress = 20; g.dinos.push(d); break; }
   }
 }
 
@@ -99,17 +105,12 @@ const SCENARIOS = {
     blurb: 'A rival company abandoned this island. Dinosaurs roam free. Build paddocks and get every animal contained.',
     objective: 'Contain every dinosaur by the end of Day 10',
     setup(g) {
-      g.money = 520000;
       const w = g.world, s = g.start;
-      g.placeBuilding('helipad', s.x + 4, s.y - 4) || g.placeBuilding('helipad', s.x - 6, s.y - 4);
+      for (let y = s.y - 10; y <= s.y - 6; y++) for (let x = s.x + 3; x <= s.x + 7; x++) { const i = w.idx(x, y); w.terrain[i] = T_GRASS; w.path[i] = 0; w.fence[i] = 0; }
+      w.invalidate();
+      g.money = 1e9; g.placeBuilding('helipad', s.x + 4, s.y - 9);
       g.money = 520000;
-      const roam = (sp, n) => {
-        for (let k = 0; k < n; k++) for (let t = 0; t < 200; t++) {
-          const x = randi(4, w.W - 5), y = randi(4, w.H - 5);
-          if (w.dinoPass(x, y) && dist(x, y, s.x, s.y) > 14) { const d = new Dino(g, sp, x, y); d.growth = 1; d.stress = 20; g.dinos.push(d); break; }
-        }
-      };
-      roam('galli', 4); roam('para', 3); roam('stego', 2); roam('trike', 1); roam('dilo', 2);
+      roamSpawn(g, 'galli', 4); roamSpawn(g, 'para', 3); roamSpawn(g, 'stego', 2); roamSpawn(g, 'trike', 1); roamSpawn(g, 'dilo', 2, 20);
       w.computeRegions(); g.updateLoose();
       g.events.auto = false;
     },

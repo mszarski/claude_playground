@@ -66,7 +66,7 @@ const SPECIES = {
   },
   brachio: {
     name: 'Brachiosaurus', sci: 'Brachiosaurus altithorax', diet: 'herb', life: 90, cost: 130000, appeal: 10, strength: 8, danger: 1,
-    speed: 0.9, hp: 400, tranq: 4, space: 50, social: 2, forest: 0.45, unlock: 3, size: 3,
+    speed: 0.9, hp: 400, tranq: 4, space: 50, social: 2, forest: 0.45, unlock: 2, size: 3,
     colors: { O: '#141a18', B: '#6a8a7a', D: '#4a6258', L: '#b8c8a8', S: '#587868', E: '#141018' },
     desc: 'The welcome-to-the-park moment. Guests adore it.'
   },

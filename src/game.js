@@ -21,7 +21,7 @@ const GOALS = [
   { id: 'star5', text: 'Reach a 5-star rating: the greatest park on Earth', reward: 250000, check: (g) => g.stars >= 5 },
 ];
 
-const STAR_THRESH = [0, 55, 110, 175, 260, 370];
+const STAR_THRESH = [0, 55, 110, 165, 245, 350];
 
 class Game {
   constructor(seed, opts = {}) {
