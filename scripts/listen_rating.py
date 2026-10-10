@@ -4,6 +4,7 @@
       [--listener-model runs/listener/listener.json]          # the learned (CC-BY-NC) model, as a yardstick only
   python scripts/listen_rating.py pairs --out runs/listen_rating
   python scripts/listen_rating.py page --urls runs/listen_rating/urls.json      # after uploading pairs/*.mp4
+  python scripts/listen_rating.py duel-page --urls runs/listen_rating/render_urls.json   # the adaptive page
   python scripts/listen_rating.py fit --out runs/listen_rating --ratings runs/listen_rating/ratings.json
 
 ``render`` renders every candidate style in ``STYLES`` (rmr.listen.STYLE overrides) listening to every clip, with no
@@ -34,6 +35,30 @@ STYLES = {
 }
 LEARNED = "learned"
 
+# The ranges the explored styles are drawn from (rmr.listen.STYLE keys). double nods are on or off.
+BOX = {"nod_deg": (0.0, 10.0), "pause": (0.15, 0.6), "min_talk": (0.5, 2.5), "lean": (0.5, 2.0),
+       "perk": (0.0, 1.5), "sway_deg": (0.0, 2.5), "glances": (0.0, 4.0), "doubles": (0.0, 1.0)}
+
+
+def to_style(u):
+    """A point of BOX (dict of numbers) -> rmr.listen.STYLE overrides."""
+    st = {k: round(float(v), 2) for k, v in u.items() if k != "doubles"}
+    st["double_talk"] = 2.5 if u["doubles"] >= 0.5 else 99.0
+    return st
+
+
+def explored(n=14, seed=0):
+    """``n`` styles spread evenly over BOX (Latin hypercube), named x01..xNN."""
+    from scipy.stats import qmc
+
+    pts = qmc.LatinHypercube(d=len(BOX), seed=seed).random(n)
+    keys = list(BOX)
+    return {f"x{i + 1:02d}": to_style({k: BOX[k][0] + p[j] * (BOX[k][1] - BOX[k][0]) for j, k in enumerate(keys)})
+            for i, p in enumerate(pts)}
+
+
+POOL = {**STYLES, **explored()}
+
 
 def slug(name):
     return name.replace(" ", "_")
@@ -58,7 +83,7 @@ def render_all(a):
 
     clips = sorted(f for f in os.listdir(a.clips) if f.endswith(".wav"))
     os.makedirs(os.path.join(a.out, "renders"), exist_ok=True)
-    styles = dict(STYLES)
+    styles = dict(POOL)
     jobs = []
     for c in clips:
         for name, style in styles.items():
@@ -120,29 +145,87 @@ def bradley_terry(names, games, iters=500):
     return s
 
 
+def load_votes(path):
+    """The exported votes: a folder of JSON files (ArtifactData export, one per rater) or one JSON list."""
+    if os.path.isdir(path):
+        return [json.load(open(os.path.join(dp, f))) for dp, _, fs in os.walk(path) for f in fs if f.endswith(".json")]
+    raw = json.load(open(path))
+    return raw if isinstance(raw, list) else raw.get("documents", [])
+
+
+def games_from(docs, items=None):
+    """-> (games [(winner, loser, weight)], repeats [(first choice, repeat choice)]). Two vote formats: the adaptive
+    page's list of duels {l, r, clip, choice, repeat?}, or the fixed page's {pair id: {choice}} with ``items``."""
+    games, repeats = [], []
+    for d in docs:
+        votes = (d.get("data", d)).get("votes") or {}
+        if isinstance(votes, list):
+            seen = {}
+            for v in votes:
+                key = (frozenset((v["l"], v["r"])), v["clip"])
+                win = {"left": v["l"], "right": v["r"]}.get(v["choice"])
+                if v.get("repeat"):
+                    if key in seen:
+                        repeats.append((seen[key], win))
+                    continue
+                seen.setdefault(key, win)
+                games += ([(win, v["r"] if win == v["l"] else v["l"], 1.0)] if win else
+                          [(v["l"], v["r"], 0.5), (v["r"], v["l"], 0.5)])
+        else:
+            for pid, v in votes.items():
+                it = (items or {}).get(pid)
+                if not it:
+                    continue
+                if v["choice"] == "same":
+                    games += [(it["left"], it["right"], 0.5), (it["right"], it["left"], 0.5)]
+                else:
+                    win = it[v["choice"]]
+                    games.append((win, it["right"] if win == it["left"] else it["left"], 1.0))
+    return games, repeats
+
+
+def features(style):
+    """A style -> numbers in [0, 1] per BOX dimension (unset keys take rmr.listen.STYLE's defaults)."""
+    from rmr.listen import STYLE
+
+    st = {**STYLE, **style}
+    u = {k: (st[k] - lo) / (hi - lo) for k, (lo, hi) in BOX.items() if k != "doubles"}
+    u["doubles"] = 1.0 if st["double_talk"] < 50 else 0.0
+    return [u[k] for k in BOX]
+
+
+def suggest(s, names, rng):
+    """Fit log-strength ~ quadratic in the style settings (ridge, rule styles only) and return the best point under
+    that fit within a small neighbourhood of the three strongest styles (so settings the votes say little about stay
+    near the winners' values). A guess to test next, not a result."""
+    import numpy as np
+
+    rows = [n for n in names if n in POOL]
+    X = np.array([features(POOL[n]) for n in rows])
+    y = np.log([s[n] for n in rows])
+
+    def phi(X):
+        return np.hstack([np.ones((len(X), 1)), X, X[:, :-1] ** 2])
+    F = phi(X)
+    w = np.linalg.solve(F.T @ F + 1.0 * np.eye(F.shape[1]), F.T @ y)
+    cand = rng.random((20000, len(BOX)))
+    cand[:, -1] = np.round(cand[:, -1])
+    top = X[np.argsort(-y)[:3]]                                                  # refine around the winners
+    near = np.min(((cand[:, None, :] - top[None]) ** 2).sum(-1), 1) < 0.15
+    cand = cand[near] if near.any() else top
+    best = cand[np.argmax(phi(cand) @ w)]
+    keys = list(BOX)
+    return to_style({k: BOX[k][0] + best[j] * (BOX[k][1] - BOX[k][0]) for j, k in enumerate(keys)}), \
+        float(np.corrcoef(F @ w, y)[0, 1])
+
+
 def fit(a):
     import numpy as np
 
-    items = {it["id"]: it for it in json.load(open(os.path.join(a.out, "pairs.json")))}
-    if os.path.isdir(a.ratings):        # the ArtifactData export: one JSON file per rater
-        docs = [json.load(open(os.path.join(dp, f))) for dp, _, fs in os.walk(a.ratings) for f in fs
-                if f.endswith(".json")]
-    else:
-        raw = json.load(open(a.ratings))
-        docs = raw if isinstance(raw, list) else raw.get("documents", [])
-    games = []
-    for d in docs:
-        for pid, v in ((d.get("data", d)).get("votes") or {}).items():
-            it = items.get(pid)
-            if not it:
-                continue
-            if v["choice"] == "same":
-                games += [(it["left"], it["right"], 0.5), (it["right"], it["left"], 0.5)]
-            else:
-                win = it[v["choice"]]
-                lose = it["right"] if win == it["left"] else it["left"]
-                games.append((win, lose, 1.0))
-    names = sorted({n for it in items.values() for n in (it["left"], it["right"])})
+    pairs_file = os.path.join(a.out, "pairs.json")
+    items = {it["id"]: it for it in json.load(open(pairs_file))} if os.path.exists(pairs_file) else {}
+    games, repeats = games_from(load_votes(a.ratings), items)
+    names = sorted({n for g in games for n in g[:2]})
     s = bradley_terry(names, games)
     rng = np.random.default_rng(0)
     boots = {n: [] for n in names}
@@ -154,17 +237,25 @@ def fit(a):
         for n in names:
             boots[n].append(np.log(bs[n]))
     ranked = sorted(names, key=lambda n: -s[n])
-    print(f"{len(decisive)} decisive votes, {len(ties) // 2} ties\n")
-    print(f"{'style':12s} {'strength':>9s} {'90% interval':>18s}  win rate vs the average style")
+    print(f"{len(decisive)} decisive votes, {len(ties) // 2} ties")
+    if repeats:
+        same = sum(x == y for x, y in repeats)
+        print(f"consistency: {same} of {len(repeats)} repeated duels got the same answer")
+    print(f"\n{'style':12s} {'strength':>9s} {'90% interval':>18s}  win rate vs the average style")
     rows = []
     for n in ranked:
         lo, hi = np.exp(np.percentile(boots[n], [5, 95]))
         p = s[n] / (s[n] + 1)
         rows.append({"style": n, "strength": round(s[n], 3), "lo": round(lo, 3), "hi": round(hi, 3),
-                     "params": STYLES.get(n, "learned model")})
+                     "params": POOL.get(n, "learned model")})
         print(f"{n:12s} {s[n]:9.2f} {lo:8.2f} - {hi:6.2f}   {p:.0%}")
+    out = {"ranking": rows, "repeats": len(repeats)}
+    if len([n for n in names if n in POOL]) >= 8:
+        st, r = suggest(s, names, rng)
+        out["suggested"] = st
+        print(f"\nsuggested next style (fit across settings, r = {r:.2f}; test it before trusting it):\n  {st}")
     with open(os.path.join(a.out, "fit.json"), "w") as f:
-        json.dump(rows, f, indent=1)
+        json.dump(out, f, indent=1)
 
 
 def page(a):
@@ -177,6 +268,22 @@ def page(a):
     with open(a.html, "w") as f:
         f.write(tpl.replace("__ITEMS__", json.dumps(items).replace("</", "<\\/")))
     print(f"{len(items)} comparisons -> {a.html}")
+
+
+def duel_page(a):
+    """The adaptive page: every style's render of every clip, chosen in the page from the votes so far."""
+    clips = json.load(open(os.path.join(a.clips, "clips.json")))
+    urls = json.load(open(a.urls))
+    keys = [f[:-4] for f in urls if "__" in f]
+    styles = sorted({k.split("__")[1] for k in keys})
+    clip_ids = sorted({k.split("__")[0] for k in keys})
+    complete = [st for st in styles if all(f"{c}__{st}.mp4" in urls for c in clip_ids)]
+    data = {"styles": complete, "clips": [{"clip": c["clip"], "text": c["text"]} for c in clips if c["clip"] in clip_ids],
+            "urls": {k: urls[k + ".mp4"] for k in keys}}
+    tpl = open(os.path.join(os.path.dirname(__file__), "..", "deploy", "listen_duel_page.html")).read()
+    with open(a.html, "w") as f:
+        f.write(tpl.replace("__DATA__", json.dumps(data).replace("</", "<\\/")))
+    print(f"{len(complete)} styles x {len(clip_ids)} clips -> {a.html}")
 
 
 def main():
@@ -195,11 +302,15 @@ def main():
     g.add_argument("--clips", default="runs/listen_rating/clips")
     g.add_argument("--urls", required=True, help="video file name -> asset URL")
     g.add_argument("--html", default="runs/listen_rating/reachy_listening.html")
+    dp = sub.add_parser("duel-page")
+    dp.add_argument("--clips", default="runs/listen_rating/clips")
+    dp.add_argument("--urls", required=True, help="render file name (c0__current.mp4) -> asset URL")
+    dp.add_argument("--html", default="runs/listen_rating/reachy_listening.html")
     f = sub.add_parser("fit")
     f.add_argument("--out", default="runs/listen_rating")
     f.add_argument("--ratings", required=True, help="the exported votes: a folder of JSON files or one JSON list")
     a = ap.parse_args()
-    {"render": render_all, "pairs": pairs, "page": page, "fit": fit}[a.cmd](a)
+    {"render": render_all, "pairs": pairs, "page": page, "duel-page": duel_page, "fit": fit}[a.cmd](a)
 
 
 if __name__ == "__main__":
