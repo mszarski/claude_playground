@@ -22,7 +22,7 @@ import json
 import os
 import random
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
@@ -82,9 +82,14 @@ def describe(recipe):
 
 
 def judge(a):
-    from rmr.planner.llm import chat_json
+    from rmr.planner.llm import _post, chat_json
+
+    def post(kw):                                    # a slow provider queue should not hold an item for minutes
+        return _post(kw, timeout=90)
 
     items = json.load(open(a.items))
+    part = a.out + ".part"                           # one vote per line as they come in, so a rerun resumes
+    done = dict(json.loads(x) for x in open(part)) if os.path.exists(part) else {}
 
     def one(it):
         k = len(it["answers"])
@@ -97,18 +102,24 @@ def judge(a):
         ctx = "".join(f'Earlier: "{c}"\n' for c in (it.get("context") or [])[-2:])
         msg = PROMPT.format(context=ctx, text=it["text"], voice=it["voice"], answers="\n".join(lines))
         try:
-            out = chat_json([{"role": "user", "content": msg}], SCHEMA, "pick", model=a.model, temperature=0.0)
+            out = chat_json([{"role": "user", "content": msg}], SCHEMA, "pick", model=a.model, temperature=0.0,
+                            post=post)
             b, w = (ord(str(out[key]).strip().upper()[:1]) - 65 for key in ("best", "worst"))
             if not (0 <= b < k and 0 <= w < k) or b == w:
                 raise ValueError(f"bad picks {out}")
-            print(it["id"], "done", flush=True)
             return it["id"], {"best": order[b], "worst": order[w], "why": out.get("why", "")}
         except Exception as e:
             print(f"{it['id']}: {type(e).__name__}: {e}", flush=True)
             return it["id"], None
 
-    with ThreadPoolExecutor(a.workers) as ex:
-        votes = {i: v for i, v in ex.map(one, items) if v}
+    votes = dict(done)
+    with ThreadPoolExecutor(a.workers) as ex, open(part, "a") as f:
+        for fut in as_completed([ex.submit(one, it) for it in items if it["id"] not in done]):
+            i, v = fut.result()
+            if v:
+                votes[i] = v
+                f.write(json.dumps([i, v]) + "\n")
+                f.flush()
     with open(a.out, "w") as f:
         json.dump({"rater": a.model, "votes": votes}, f, indent=1)
     score = {}
