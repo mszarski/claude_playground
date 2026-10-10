@@ -1,5 +1,5 @@
 // Drive the real UI with mouse events.
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('./pw');
 const path = require('path');
 const SP = process.argv[2];
 (async () => {

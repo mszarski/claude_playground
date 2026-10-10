@@ -134,6 +134,8 @@ const BUILDINGS = {
     desc: 'Mesh dome for Pteranodons (up to 6). Below 35% condition, they escape. Needs a path for guests to enjoy it.' },
   lagoon: { name: 'Mosasaur Lagoon', w: 6, h: 5, cost: 380000, upkeep: 1500, power: 10, cat: 'guest', hp: 900, appeal: 30, income: 30, unlockStars: 4,
     desc: 'A Mosasaurus in a giant pool. Feeding shows draw huge crowds. Needs 4 stars.' },
+  lab: { name: 'Research Lab', w: 2, h: 2, cost: 35000, upkeep: 400, power: 3, cat: 'dino', hp: 260,
+    desc: 'Researches upgrades and dinosaur genomes. More labs research faster.' },
   hatchery: { name: 'Hatchery', w: 3, h: 2, cost: 40000, upkeep: 300, power: 4, cat: 'dino', hp: 300, unique: true,
     desc: 'Required to hatch dinosaurs.' },
   feeder_h: { name: 'Herbivore Feeder', w: 1, h: 1, cost: 2500, upkeep: 20, power: 0, cat: 'dino', hp: 120, feeds: 'herb',
@@ -148,13 +150,21 @@ const BUILDINGS = {
     desc: 'Guests in range evacuate instantly when an alarm sounds.' },
 };
 
+// A year is 28 days: four 7-day seasons
+const SEASONS = [
+  { name: 'Spring', guests: 1, storm: 1, hunger: 1, tint: null, desc: 'Mild weather. Business as usual.' },
+  { name: 'Summer', guests: 1.2, storm: 0.6, hunger: 1.15, tint: 'rgba(255,200,80,0.06)', desc: 'Peak tourist season: more visitors, hungrier dinosaurs.' },
+  { name: 'Monsoon', guests: 0.8, storm: 3, hunger: 1, tint: 'rgba(40,60,90,0.10)', desc: 'Storm season. Fewer visitors and frequent tropical storms.' },
+  { name: 'Cool Season', guests: 0.9, storm: 0.5, hunger: 0.9, tint: 'rgba(160,200,255,0.05)', desc: 'Quieter days and calmer weather.' },
+];
+
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
   { id: 'build', label: 'Build', tools: ['path', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
   { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'hotel', 'shelter', 'lamp', 'lagoon'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
-  { id: 'dino', label: 'Dinos', tools: ['hatchery', 'feeder_h', 'feeder_c', 'aviary', 'hatch'] },
+  { id: 'dino', label: 'Dinos', tools: ['hatchery', 'lab', 'feeder_h', 'feeder_c', 'aviary', 'hatch'] },
 ];
 
 const TOOL_INFO = {

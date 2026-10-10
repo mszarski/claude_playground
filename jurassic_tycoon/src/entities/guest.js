@@ -60,6 +60,15 @@ class Guest {
       }
       if (this.state !== 'flee') this.lookAtDinos();
       if (this.hunger > 85 || this.toilet > 85) this.happy -= 1.5;
+      if (g.crowd) {
+        let c = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = this.cx + dx, y = this.cy + dy; if (g.world.inb(x, y)) c += g.crowd[g.world.idx(x, y)]; }
+        if (c > 18) {
+          this.happy -= (c - 18) * 0.04;
+          this.crowded = true;
+          if (chance(0.03)) { this.thought = 'CROWDED'; this.thoughtT = 1.5; }
+        } else this.crowded = false;
+      }
       if (g.hour >= 20 || g.hour < 6) { if (!g.litNear(this.x, this.y)) this.happy -= 0.3; }
       this.happy = clamp(this.happy, 0, 100);
       if (this.happy < 12 && this.state === 'walk') this.state = 'leave';
@@ -168,7 +177,22 @@ class Guest {
       if (w.path[j] && j !== this.prev) opts.push([nx, ny]);
     }
     if (!opts.length && this.prev >= 0 && w.path[this.prev]) opts.push([this.prev % w.W, (this.prev / w.W) | 0]);
-    if (opts.length) { const o = pick(opts); this.nx = o[0]; this.ny = o[1]; }
+    if (opts.length > 1) {
+      // At a junction: favour directions that lead toward species this guest hasn't seen yet
+      const weight = (o) => {
+        const px = this.cx + (o[0] - this.cx) * 5, py = this.cy + (o[1] - this.cy) * 5;
+        let wgt = 1;
+        for (const d of g.creatures()) {
+          if (d.loose || d.carried || this.seenSpecies.has(d.species)) continue;
+          if (dist2(px, py, d.x, d.y) < 64) wgt += 3;
+        }
+        // and away from packed crowds
+        const c = g.crowd ? g.crowd[w.idx(o[0], o[1])] : 0;
+        return wgt / (1 + c * 0.15);
+      };
+      const o = weightedPick(opts, weight) || pick(opts);
+      this.nx = o[0]; this.ny = o[1];
+    } else if (opts.length) { this.nx = opts[0][0]; this.ny = opts[0][1]; }
   }
 
   arriveAt() {

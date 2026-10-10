@@ -136,7 +136,7 @@ class Helicopter {
         this.alt = Math.min(2.5, this.alt + dt * 2);
         const t = this.target;
         if (!t || t.dead || t.carried || t.sedatedT > 0) { this.target = null; this.state = 'return'; break; }
-        if (dist(this.x, this.y, t.x, t.y) > 2.5) { fly(t.x, t.y, 6.5); break; }
+        if (dist(this.x, this.y, t.x, t.y) > 2.5) { fly(t.x, t.y, g.research.has('acu') ? 9 : 6.5); break; }
         fly(t.x + Math.cos(g.time * 3) * 1.5, t.y + Math.sin(g.time * 3) * 1.5, 4);
         this.shotT = (this.shotT || 0) - dt;
         if (this.shotT <= 0) {

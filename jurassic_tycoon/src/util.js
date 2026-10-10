@@ -68,6 +68,14 @@ function makeNoise(seed) {
   };
 }
 
+function seedCode(n) { return (n >>> 0).toString(36).toUpperCase(); }
+function parseSeed(str) {
+  const s = String(str || '').trim();
+  if (!s) return null;
+  const n = parseInt(s, 36);
+  return Number.isFinite(n) && n > 0 ? n % 4294967296 : null;
+}
+
 function fmtMoney(v) {
   const neg = v < 0; v = Math.abs(Math.round(v));
   let s;

@@ -5,15 +5,20 @@ let GAME = null, RENDER = null, UIX = null, SFX = null;
 let lastT = 0, titleAnim = null;
 
 function startGame(opts = {}) {
-  const seed = opts.seed || (Math.floor(Math.random() * 1e9) + 1);
+  const seed = opts.seed || window.TEST_SEED || (Math.floor(Math.random() * 1e9) + 1);
   const g = new Game(seed, opts);
   if (opts.sandbox) { g.sandbox = true; g.money = 5000000; }
   setActiveGame(g);
   if (window.innerWidth < 700) RENDER.cam.zoom = 2;
   if (!opts.loaded) {
     UIX.centerOn(g.start.x, g.start.y - 6);
-    if (!opts.scenario) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
+    if (!opts.scenario && !opts.tutorial) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
   }
+  if (opts.tutorial) {
+    g.tutorial = true; g.events.auto = false; g.advisorOn = false;
+    document.getElementById('goal').hidden = true;
+    UIX.tutorial = new Tutorial(UIX);
+  } else if (UIX.tutorial) { UIX.tutorial.finish(); }
   hideTitle();
 }
 
@@ -34,7 +39,7 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
+    v: 1, sph: g.secPerHour, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
@@ -75,6 +80,8 @@ function loadGame(json) {
   g.stats = Object.assign(g.stats, s.stats); g.history = s.history || []; g.deathLog = s.deathLog || [];
   g.events.auto = s.auto; g.events.nextDay = s.nextDay; g.start = s.start;
   g.lastDay = g.day;
+  if (s.sph) g.secPerHour = s.sph;
+  if (s.research) { g.research.done = new Set(s.research.done); g.research.active = s.research.active; g.research.apply(); }
   if (s.scen) { g.scenario = s.scen; g.scenarioState = s.scenState || {}; }
   w.invalidate(); w.computeRegions(); w.computePower(g); g.updateLoose();
   for (const d of g.dinos) d.wasLooseFlag = d.loose;
@@ -101,6 +108,9 @@ function showTitle() {
   let has = false;
   try { has = !!localStorage.getItem('jt_save'); } catch (e) { /* storage unavailable */ }
   document.getElementById('btnContinue').style.display = has ? '' : 'none';
+  let tutDone = false;
+  try { tutDone = !!localStorage.getItem('jt_tutorial_done'); } catch (e) { /* storage unavailable */ }
+  document.getElementById('btnTut').textContent = tutDone ? 'TUTORIAL' : '★ TUTORIAL (START HERE) ★';
   if (GAME) UIX.setSpeed(0);
   startTitleAnim();
 }
@@ -180,7 +190,9 @@ function loop(now) {
       }
     }
     UIX.frame(dtReal);
+    if (UIX.tutorial) UIX.tutorial.update(dtReal);
     if (GAME.alarm && UIX.speed > 0) SFX.play('alarm', 0.35);
+    SFX.tense = GAME.looseCount > 0 || GAME.world.power.outage > 0 || GAME.alarm;
     // ambient jungle
     if (UIX.speed > 0 && Math.random() < dtReal * 0.35) SFX.play(GAME.isNight ? 'cricket' : (Math.random() < 0.15 ? 'caw' : 'chirp'), 0.8);
     RENDER.draw(dtReal, UIX);
@@ -232,12 +244,13 @@ function boot() {
     SFX.play('click');
     document.querySelector('#title .menu').hidden = false;
     document.getElementById('diffMenu').hidden = true;
-    startGame({ difficulty: b.dataset.diff });
+    startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength(), seed: parseSeed(document.getElementById('seedIn').value) || undefined });
   };
   document.getElementById('btnScen').onclick = () => {
     SFX.ensure(); SFX.play('click');
     const m = document.getElementById('scenMenu');
-    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
+    const won = loadMedals();
+    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${won[k] ? MEDAL_ICON[won[k].medal] + ' ' : ''}${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
     document.querySelector('#title .menu').hidden = true; m.hidden = false;
     for (const b of m.querySelectorAll('[data-scen]')) b.onclick = () => {
       document.querySelector('#title .menu').hidden = false; m.hidden = true;
@@ -246,7 +259,16 @@ function boot() {
     };
     document.getElementById('scenBack').onclick = () => { document.querySelector('#title .menu').hidden = false; m.hidden = true; };
   };
+  const lens = ['normal', 'long', 'short'];
+  let dayLen = 'normal';
+  try { dayLen = localStorage.getItem('jt_daylen') || 'normal'; } catch (e) { /* storage unavailable */ }
+  const dlb = document.getElementById('dayLenBtn');
+  const showLen = () => { dlb.innerHTML = `DAY LENGTH: ${dayLen.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${{ short: '40 SECONDS PER DAY', normal: '60 SECONDS PER DAY', long: '90 SECONDS PER DAY' }[dayLen]}</small>`; };
+  showLen();
+  dlb.onclick = () => { dayLen = lens[(lens.indexOf(dayLen) + 1) % 3]; try { localStorage.setItem('jt_daylen', dayLen); } catch (e) { /* storage unavailable */ } showLen(); SFX.play('click'); };
+  window.currentDayLength = () => dayLen;
   document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
+  document.getElementById('btnTut').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ tutorial: true, difficulty: 'easy' }); };
   document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true }); };
   document.getElementById('btnContinue').onclick = () => { SFX.ensure(); if (!loadGameFromStorage()) { startGame(); } };
   document.getElementById('btnHelp').onclick = () => {

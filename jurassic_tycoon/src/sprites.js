@@ -376,7 +376,8 @@ function buildDinoSprites() {
     // Normalize sizes to same canvas
     const norm = (src) => { const [c, ctx] = makeCanvas(w, h); ctx.drawImage(src, 0, h - src.height); return c; };
     const a = norm(fa), b = norm(fb), s = norm(sl);
-    const vs = (front) => [makeView(key, front, 0), makeView(key, front, 1)];
+    const mv = typeof VIEW_ART !== 'undefined' && VIEW_ART[key] ? makeViewArt : makeView;
+    const vs = (front) => [mv(key, front, 0), mv(key, front, 1)];
     DINO_SPRITES[key] = {
       w, h,
       up: vs(false), down: vs(true),
@@ -1037,6 +1038,18 @@ function buildBuildingSprites() {
     for (let k = 0; k < 30; k++) p.px(6 + (k * 37) % (W - 12), 28 + (k * 23) % (H - 34), '#3a88c8');
     p.r(0, 22, W, 2, '#c8c8c0');
     drawText3(ctx, 'LAGOON', W / 2 - 12, H - 7, '#f8d040');
+  });
+
+  make('lab', 12, (p, W, H, ctx) => {
+    p.box(2, 14, W - 4, H - 16, '#e8ecf0', '#3a4a5a');
+    windowRow(p, 4, 20, W - 8, 3, false);
+    p.r(12, H - 11, 8, 9, '#3a4a5a'); p.r(13, H - 10, 6, 8, '#a8d8f0');
+    roofFlat(p, 0, 6, W, 9, '#7a5aa8', '#9a7ac8', '#4a3478');
+    // satellite dish + antenna
+    p.r(6, 1, 8, 2, '#c8c8c8'); p.r(5, 3, 10, 2, '#a8a8a8'); p.r(9, 5, 2, 2, '#5a5a5a');
+    p.r(24, 0, 1, 7, '#5a5a5a'); p.px(24, 0, '#e04838');
+    // DNA helix sign
+    for (let k = 0; k < 6; k++) { p.px(18 + (k % 2), 7 + k, '#7ad04a'); p.px(21 - (k % 2), 7 + k, '#70b8f0'); }
   });
 
   make('siren', 14, (p, W, H) => {

@@ -51,6 +51,14 @@ button:disabled { opacity: 0.45; cursor: default; }
 #stars { color: var(--gold); letter-spacing: -1px; font-size: 20px; }
 #powerbar { width: 70px; height: 8px; background: #000; border: 1px solid #444; margin-top: 3px; position: relative; }
 #powerbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--gold); }
+.pbar { width: 70px; height: 8px; background: #000; border: 1px solid #444; margin-top: 5px; position: relative; }
+.pbar i { position: absolute; left: 0; top: 0; bottom: 0; background: #9a7ac8; }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.rcard { padding: 6px 8px; background: var(--panel2); border: 2px solid var(--edge); font-size: 16px; display: flex; flex-direction: column; gap: 2px; }
+.rcard .nm { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); line-height: 1.4; }
+.rcard.done { opacity: 0.6; box-shadow: inset 0 0 0 2px var(--green); }
+.rcard.locked { opacity: 0.45; }
+.rcard.active { box-shadow: inset 0 0 0 2px #9a7ac8; }
 .spacer { flex: 1; }
 .grp { display: flex; gap: 3px; }
 #alarmBtn { background: #6a1810; font-weight: bold; }
@@ -117,6 +125,15 @@ button:disabled { opacity: 0.45; cursor: default; }
 #miniBtns { display: flex; gap: 3px; margin-top: 3px; }
 #miniBtns button { font-size: 14px; padding: 0 5px; flex: 1; }
 
+/* tutorial */
+#tut { position: absolute; left: 70px; bottom: 8px; z-index: 12; padding: 8px 12px; width: min(440px, calc(100vw - 300px)); font-size: 19px; }
+#tut b { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); display: block; margin-bottom: 4px; }
+#tut div b { display: inline; font-family: inherit; font-size: inherit; color: var(--gold); }
+#tut .sub { color: var(--dim); font-size: 17px; margin-top: 4px; }
+#tutHl { position: fixed; z-index: 35; pointer-events: none; border: 3px solid var(--gold); box-shadow: 0 0 0 3px #000, 0 0 18px var(--gold); animation: tutpulse 0.9s ease-in-out infinite alternate; }
+@keyframes tutpulse { from { opacity: 1; } to { opacity: 0.35; } }
+@media (max-width: 760px) { #tut { left: 6px; width: calc(100vw - 150px); font-size: 16px; } }
+@media (prefers-reduced-motion: reduce) { #tutHl { animation: none; } }
 /* breach cam */
 #pip:not([hidden]) ~ #info { top: 230px; }
 #pip { position: absolute; right: 6px; top: 54px; z-index: 7; padding: 4px; cursor: pointer; }
@@ -202,6 +219,7 @@ table.fin td:last-child { text-align: right; }
   <div class="stat"><span class="k" id="sDay">Day 1</span><span class="v" id="sTime">08:00</span></div>
   <div class="stat"><span class="k">Rating</span><span class="v" id="stars">☆☆☆☆☆</span></div>
   <div class="stat"><span class="k">Reputation</span><span class="v" id="sRep">50</span></div>
+  <div class="stat" id="resStat" hidden><span class="k" id="resK">Research</span><div id="resbar" class="pbar"><i></i></div></div>
   <div class="stat"><span class="k" id="sPowK">Power</span><div id="powerbar"><i></i></div><span class="k" id="sPow" style="font-size:13px">0/0 MW</span></div>
   <div class="spacer"></div>
   <div class="grp" id="speedBtns">
@@ -213,6 +231,7 @@ table.fin td:last-child { text-align: right; }
   </div>
   <button id="alarmBtn" title="Sound the evacuation alarm (E)">⚠ ALARM</button>
   <div class="grp">
+    <button id="resBtn" title="Research (Y)">🔬</button>
     <button id="undoBtn" title="Undo last construction (U / Ctrl+Z)">↶</button>
     <button id="rosterBtn" title="Dinosaur roster (G)">🦖</button>
     <button id="finBtn" title="Finances (F2)">$</button>
@@ -234,6 +253,8 @@ table.fin td:last-child { text-align: right; }
   <div id="miniBtns"><button data-ov="power" title="Power overlay (O)">Power</button><button data-ov="paddock" title="Paddock overlay (K)">Paddocks</button><button id="findBtn" title="Jump to next loose dino (L)">Loose</button></div>
 </div>
 <div id="pip" class="panel" hidden><div class="pipbar"><span id="pipLabel">BREACH CAM</span><button id="pipClose" title="Hide">✕</button></div><canvas id="pipCanvas" width="240" height="150"></canvas></div>
+<div id="tut" class="panel" hidden></div>
+<div id="tutHl" hidden></div>
 <div id="tip"></div>
 <div id="modal"><div class="box panel" id="modalBox"></div></div>
 
@@ -243,6 +264,7 @@ table.fin td:last-child { text-align: right; }
     <h1>JURASSIC<br>TYCOON</h1>
     <div class="tag2">BUILD THE PARK. CONTAIN THE CHAOS.</div>
     <div class="menu">
+      <button id="btnTut">TUTORIAL</button>
       <button id="btnNew">NEW ISLAND</button>
       <button id="btnContinue" style="display:none">CONTINUE</button>
       <button id="btnScen">SCENARIOS</button>
@@ -251,9 +273,12 @@ table.fin td:last-child { text-align: right; }
     </div>
     <div class="menu" id="scenMenu" hidden></div>
     <div class="menu" id="diffMenu" hidden>
+      <button data-diff="calm">CALM<br><small style="font-size:8px;color:#9ab08a">PURE BUILDING, NO DISASTERS</small></button>
       <button data-diff="easy">RELAXED<br><small style="font-size:8px;color:#9ab08a">MORE MONEY, FEWER DISASTERS</small></button>
       <button data-diff="normal">STANDARD<br><small style="font-size:8px;color:#9ab08a">THE INTENDED EXPERIENCE</small></button>
       <button data-diff="chaos">CHAOS THEORY<br><small style="font-size:8px;color:#9ab08a">DISASTERS EVERY DAY OR TWO</small></button>
+      <div style="display:flex;gap:6px;align-items:center;justify-content:center;font-size:18px"><label for="seedIn">Island code</label><input id="seedIn" placeholder="random" maxlength="8" style="font-family:'Press Start 2P';font-size:11px;width:150px;padding:6px;background:#0a120a;color:var(--gold);border:2px solid var(--edge);text-transform:uppercase"></div>
+      <button id="dayLenBtn">DAY LENGTH: NORMAL</button>
       <button id="diffBack">BACK</button>
     </div>
     <div class="credits">A pixel park-builder. Life, uh, finds a way.</div>
@@ -263,6 +288,7 @@ table.fin td:last-child { text-align: right; }
 <script src="src/util.js"></script>
 <script src="src/data.js"></script>
 <script src="src/sprites.js"></script>
+<script src="src/sprites-views.js"></script>
 <script src="src/world.js"></script>
 <script src="src/entities/common.js"></script>
 <script src="src/entities/dino.js"></script>
@@ -271,12 +297,14 @@ table.fin td:last-child { text-align: right; }
 <script src="src/entities/ptera.js"></script>
 <script src="src/entities/vehicles.js"></script>
 <script src="src/events.js"></script>
+<script src="src/research.js"></script>
 <script src="src/game.js"></script>
 <script src="src/scenarios.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>
 <script src="src/ui-panels.js"></script>
+<script src="src/tutorial.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

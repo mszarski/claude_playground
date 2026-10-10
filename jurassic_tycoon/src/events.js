@@ -137,7 +137,7 @@ class Events {
     if (g.dinos.length === 0) { this.nextDay = day + 1; return; }
     const early = day < 8;
     const opts = [
-      ['storm', 30], ['outage', early ? 4 : 14], ['quake', early ? 3 : 10], ['disease', early ? 5 : 14], ['rampage', early ? 4 : 12],
+      ['storm', 30 * g.season.storm], ['outage', early ? 4 : 14], ['quake', early ? 3 : 10], ['disease', early ? 5 : 14], ['rampage', early ? 4 : 12],
       ['raptors', g.dinos.some((d) => d.species === 'raptor') ? 14 : 0], ['inspection', 12],
       ['volcano', day > 12 ? 6 : 0],
     ];

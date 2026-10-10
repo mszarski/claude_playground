@@ -30,6 +30,8 @@ class Game {
     this.world = new World(seed);
     this.world.generate();
     this.events = new Events(this);
+    this.research = new ResearchState(this);
+    this.research.apply();
     this.money = 450000;
     this.time = 7.5; // hours since start (day 1 07:30)
     this.secPerHour = 2.5;
@@ -55,8 +57,10 @@ class Game {
     this.soundHook = null;
     this.looseCount = 0;
     this.difficulty = opts.difficulty || 'normal';
-    const DIFF = { easy: { money: 650000, evMul: 0.5 }, normal: { money: 450000, evMul: 1 }, chaos: { money: 400000, evMul: 1.8 } }[this.difficulty];
+    const DIFF = { calm: { money: 650000, evMul: 0 }, easy: { money: 650000, evMul: 0.5 }, normal: { money: 450000, evMul: 1 }, chaos: { money: 400000, evMul: 1.8 } }[this.difficulty] || { money: 450000, evMul: 1 };
     this.money = DIFF.money; this.events.evMul = DIFF.evMul;
+    if (this.difficulty === 'calm') this.events.auto = false;
+    this.secPerHour = { short: 1.67, normal: 2.5, long: 3.75 }[opts.dayLength || 'normal'] || 2.5;
     if (opts.skipSetup) this.start = this.world.findStartSpot();
     else this.setupStart();
     this.world.computeRegions();
@@ -75,6 +79,8 @@ class Game {
 
   get day() { return Math.floor(this.time / 24) + 1; }
   get hour() { return this.time % 24; }
+  get seasonIdx() { return Math.floor((this.day - 1) / 7) % 4; }
+  get season() { return SEASONS[this.seasonIdx]; }
   get isNight() { const h = this.hour; return h >= 20 || h < 6; }
   get darkness() {
     const h = this.hour;
@@ -145,7 +151,8 @@ class Game {
     for (const d of this.creatures()) {
       if (!d.loose || d.carried || d.sedatedT > 0) continue;
       if (d.sp.danger < 2) continue;
-      const rr = d.camouflaged ? Math.min(r, 2.5) : r;
+      const sens = this.research.has('sensors');
+      const rr = d.camouflaged && !sens ? Math.min(r, 2.5) : r * (sens ? 1.4 : 1);
       if (dist2(x, y, d.x, d.y) < rr * rr) return d;
     }
     return null;
@@ -215,9 +222,25 @@ class Game {
       }
       else if (e.kind === 'terrain' && w.terrain[i] === e.now) { w.terrain[i] = e.prev; ok = true; }
       else if (e.kind === 'bld') { const b = w.buildings.get(e.id); if (b) { this.removeBuildingFx(b); ok = true; } }
-      if (ok) { refund += e.cost; if (i >= 0) w.invalidate(e.x, e.y); }
+      else if (e.kind === 'unbld') {
+        // put a demolished building back (and take back the demolition refund)
+        if (w.canPlaceBuilding(e.type, e.bx, e.by)) {
+          const b = w.addBuilding(e.type, e.bx, e.by); b.hp = e.hp; b.built = 1;
+          const def = BUILDINGS[e.type];
+          if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
+          if (e.type === 'helipad') this.helis.push(new Helicopter(this, b));
+          if (e.type === 'tour') { b.queue = []; b.jeepT = 0; }
+          ok = true;
+        }
+      }
+      else if (e.kind === 'unfence' && !w.fence[i] && !w.bld[i] && !w.path[i] && !this.dinos.some((d) => d.tx === e.x && d.ty === e.y)) { w.fence[i] = e.f; w.fenceHp[i] = e.hp; w.fenceOrig[i] = e.orig; ok = true; }
+      else if (e.kind === 'unpath' && !w.path[i] && w.canBuildAt(e.x, e.y) && !w.track[i]) { w.path[i] = 1; ok = true; }
+      else if (e.kind === 'untrack' && !w.track[i] && !w.path[i]) { w.track[i] = 1; ok = true; }
+      else if (e.kind === 'egg') { const k = this.eggs.indexOf(e.egg); if (k >= 0) { this.eggs.splice(k, 1); ok = true; } }
+      if (ok) { if (e.kind === 'egg') { this.money += e.cost; this.ledger.dinos -= e.cost; } else refund += e.cost; if (i >= 0) w.invalidate(e.x, e.y); }
     }
     this.money += refund; this.ledger.construction -= refund;
+    for (const e of batch.items) if (e.kind === 'egg') refund += e.cost;
     return { label: batch.label, refund };
   }
 
@@ -294,12 +317,13 @@ class Game {
       const recent = b.placedAt !== undefined && this.time - b.placedAt < 2; // within ~5s at normal speed
       const refund = BUILDINGS[b.type].cost * (recent ? 1 : 0.25);
       this.money += refund; this.ledger.construction -= refund;
+      this.recordUndo({ kind: 'unbld', type: b.type, bx: b.x, by: b.y, hp: b.hp, cost: -refund });
       this.removeBuildingFx(b);
       return true;
     }
-    if (w.fence[i]) { w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(x, y); return true; }
-    if (w.path[i]) { w.path[i] = 0; w.invalidate(x, y); return true; }
-    if (w.track[i]) { w.track[i] = 0; w.invalidate(x, y); return true; }
+    if (w.fence[i]) { this.recordUndo({ kind: 'unfence', x, y, f: w.fence[i], hp: w.fenceHp[i], orig: w.fenceOrig[i], cost: 0 }); w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(x, y); return true; }
+    if (w.path[i]) { this.recordUndo({ kind: 'unpath', x, y, cost: 0 }); w.path[i] = 0; w.invalidate(x, y); return true; }
+    if (w.track[i]) { this.recordUndo({ kind: 'untrack', x, y, cost: 0 }); w.track[i] = 0; w.invalidate(x, y); return true; }
     return false;
   }
   removeBuildingFx(b) {
@@ -351,14 +375,14 @@ class Game {
     return true;
   }
 
-  isUnlocked(species) { return this.stars >= SPECIES[species].unlock || this.sandbox; }
+  isUnlocked(species) { return this.stars >= SPECIES[species].unlock || this.sandbox || this.research.has('gen_' + species); }
 
   canHatchAt(species, x, y) {
     const w = this.world;
     const sp = SPECIES[species];
     if (!this.hasBuilding('hatchery')) return 'Build a Hatchery first.';
     if (!this.buildingsOfType('hatchery').some((b) => b.powered)) return 'The Hatchery has no power.';
-    if (!this.isUnlocked(species)) return `Requires a ${sp.unlock}-star rating.`;
+    if (!this.isUnlocked(species)) return `Requires a ${sp.unlock}-star rating (or genome research).`;
     if (sp.flying) {
       const b = w.buildingAt(x, y);
       if (!b || b.type !== 'aviary') return 'Pteranodons hatch inside an Aviary. Click on one.';
@@ -380,7 +404,9 @@ class Game {
     if (err) { this.log(err, 'warn'); return false; }
     const sp = SPECIES[species];
     this.spend(sp.cost, 'dinos');
-    this.eggs.push({ species, x, y, t: 8, max: 8 });
+    const egg = { species, x, y, t: 8, max: 8 };
+    this.eggs.push(egg);
+    this.recordUndo({ kind: 'egg', egg, cost: sp.cost });
     this.sound('build');
     return true;
   }
@@ -429,18 +455,32 @@ class Game {
   acuStrike(d) {
     const h = this.helis.find((x) => x.state === 'parked' && !x.cargo) || this.helis.find((x) => x.state === 'return' && !x.cargo);
     if (!h) return 'All helicopters are busy.';
-    if (!this.canAfford(8000)) return 'Not enough money ($8k).';
-    this.spend(8000, 'ops');
+    const cost = this.research.has('acu') ? 3000 : 8000;
+    if (!this.canAfford(cost)) return `Not enough money (${fmtMoney(cost)}).`;
+    this.spend(cost, 'ops');
     h.target = d; h.state = 'strike'; h.shotT = 0.5;
     this.soundAt('heli', h.x, h.y, 1);
     this.log(`ACU helicopter scrambled to tranquilize ${d.name} the ${d.sp.name}.`, 'info', d, true);
     return null;
   }
+  // Drag any sedated dinosaur out of a fence gap so it can be rebuilt. Returns true if the gap is clear.
+  clearGap(x, y) {
+    const w = this.world;
+    for (const d of this.dinos) {
+      if (d.carried || d.tx !== x || d.ty !== y) continue;
+      if (d.sedatedT <= 0) return false;
+      const spot = DIRS4.map(([dx, dy]) => [x + dx, y + dy]).find(([nx, ny]) => w.dinoPass(nx, ny) && w.fence[w.idx(nx, ny)] !== F_BROKEN);
+      if (!spot) return false;
+      d.x = spot[0] + 0.5; d.y = spot[1] + 0.5;
+    }
+    return true;
+  }
+
   // Instant fence rebuild at triple cost
   emergencyRepair(x, y) {
     const w = this.world, i = w.idx(x, y);
     if (w.fence[i] !== F_BROKEN && !((isSolidFence(w.fence[i])) && w.fenceHp[i] < FENCE_DEF[w.fence[i]].hp)) return 'Nothing to repair.';
-    if (this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried)) return 'A dinosaur is standing in the gap!';
+    if (!this.clearGap(x, y)) return 'A dinosaur is standing in the gap! Sedate it first.';
     const orig = w.fence[i] === F_BROKEN ? (w.fenceOrig[i] || F_ELECTRIC) : w.fence[i];
     const cost = FENCE_DEF[orig].cost * 3;
     if (!this.canAfford(cost)) return 'Not enough money.';
@@ -624,6 +664,7 @@ class Game {
     for (const h of this.helis) h.update(dt);
     this.helis = this.helis.filter((h) => !h.dead);
     this.updateTours(dt);
+    this.research.update(dt);
     this.updateLagoons(dt);
 
     // darts
@@ -636,7 +677,7 @@ class Game {
         dt_.life = 0;
         if (!t.dead && !t.carried && t.sedatedT <= 0) {
           t.sedation += 1; t.flash = 0.15;
-          if (t.sedation >= t.sp.tranq) t.sedate();
+          if (t.sedation >= Math.max(1, t.sp.tranq - (this.research.has('darts') ? 1 : 0))) t.sedate();
           else t.stress = Math.min(100, t.stress + 10);
         }
       } else { dt_.x += dx / dd * sp; dt_.y += dy / dd * sp; dt_.a = Math.atan2(dy, dx); }
@@ -651,6 +692,14 @@ class Game {
     this.floats = this.floats.filter((f) => f.life > 0);
 
     this.spawnGuests(dt);
+    this.crowdT = (this.crowdT || 0) - dt;
+    if (this.crowdT <= 0) {
+      this.crowdT = 0.5;
+      const w = this.world;
+      if (!this.crowd) this.crowd = new Uint16Array(w.W * w.H);
+      this.crowd.fill(0);
+      for (const gu of this.guests) if (!gu.hidden) this.crowd[w.idx(gu.tx, gu.ty)]++;
+    }
     if (this.guests.length > (this.peakGuests || 0)) this.peakGuests = this.guests.length;
 
     // per-second bookkeeping
@@ -754,6 +803,8 @@ class Game {
     if (this.guests.length > 30 && !this.hasBuilding('restroom')) issues.push([35, 'Guests are desperate for a Restroom.', null]);
     if (this.guests.length > 30 && !this.hasBuilding('restaurant')) issues.push([35, 'Hungry guests have nowhere to eat. Build a Restaurant.', null]);
     if (this.guests.length > 60 && !this.hasBuilding('tour') && this.stars >= 1) issues.push([20, 'A Tour Station with a loop of Tour Track past the paddocks is the best crowd-pleaser.', null]);
+    const crowded = this.guests.filter((gu) => gu.crowded);
+    if (crowded.length > 25) issues.push([45, 'Paths are overcrowded and guests are unhappy. Widen busy paths or add a second route.', crowded[0]]);
     if (this.money < 30000) issues.push([55, 'Funds are low. Raise ticket prices a little or add shops along busy paths.', gb]);
     this.adviceSaid = this.adviceSaid || {};
     issues.sort((a, b) => b[0] - a[0]);
@@ -864,7 +915,8 @@ class Game {
     const priceF = clamp(1.7 - this.ticket / 150, 0.1, 1.5);
     const repF = 0.4 + this.reputation / 80;
     const night = this.isNight ? 0.5 : 1;
-    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night));
+    const mkt = this.research.has('marketing') ? 1.15 : 1;
+    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night * mkt * this.season.guests));
   }
 
   updateRating() {
@@ -917,6 +969,7 @@ class Game {
     this.ledger = this.newLedger();
     this.peakGuests = this.guests.length;
     this.stats.fledToday = 0;
+    if ((day - 1) % 7 === 0 && day > 1) { const s = this.season; this.log(`${s.name} has arrived. ${s.desc}`, 'info', null, true); }
     this.events.onNewDay(day);
     this.breed();
     this.emit('day', day);

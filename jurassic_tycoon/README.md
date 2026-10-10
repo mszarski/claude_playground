@@ -14,6 +14,9 @@ grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 - **Disasters** — tropical storms with lightning, grid sabotage, earthquakes, volcanic eruptions, outbreaks, rampages, raptor probes, safety inspections. Trigger them yourself from the ☄ menu.
 - **Response tools** — evacuation alarm, siren towers, rangers with tranquilizer rifles, engineers, ACU helicopter airlifts and strikes, emergency fence repair, backup generators, vet clinics.
 - **Scenarios** — Nedry's Night, Isla Sorna Cleanup, The Lost World, Opening Day, Raptor Siege and Storm Season: prebuilt crises with objectives and deadlines.
+- **Research Lab** — upgrades (reinforced fences, high-voltage grid, faster darts, ranger training, turbines, medicine, feeders, motion sensors, ACU gunship, marketing) and genome research that unlocks species without stars.
+- **Seasons** — Spring, Summer (tourist peak), Monsoon (storms) and Cool Season; adjustable day length; a Calm mode with no disasters.
+- **Island codes** to share a map, and **medals** for each scenario with your best result saved.
 - Goals, an advisor, star rating, finances with history graphs, a news ticker, a breach cam, save/load, three difficulty levels, sandbox mode, synthesized sound effects and an original chiptune soundtrack.
 
 ## Play
@@ -34,19 +37,23 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 | O / K | Power / paddock overlays |
 | L | Jump to loose dinosaur |
 | G | Dinosaur roster |
-| U or Ctrl+Z | Undo last construction (refunded) |
+| U or Ctrl+Z | Undo last construction, demolition or egg |
+| Y | Research |
 | Q P N J F R V X T C H | Tools: inspect, path, smart path, tour track, fence, paddock, wall, demolish, trees, clear, hatch |
 
 ## Development
 
 All code is plain JavaScript in `src/` loaded by `index.html`:
 
-- `sprites.js` — all pixel art (dinosaurs are hand-drawn character grids, buildings are procedural)
+- `sprites.js` — pixel art (dinosaurs are hand-drawn character grids, buildings are procedural)
+- `sprites-views.js` — hand-drawn front/back dinosaur views
 - `world.js` — terrain generation, paddock region detection, power grid, pathfinding
 - `entities/` — `dino.js`, `ptera.js`, `guest.js`, `staff.js` (rangers, engineers), `vehicles.js` (tour jeeps, ACU helicopter)
 - `events.js` — disasters
 - `scenarios.js` — scenario setups and win/lose checks
+- `tutorial.js` — guided first session
+- `research.js` — research projects and their effects
 - `game.js` — economy, goals, simulation loop
 - `render.js`, `ui.js` (input, toolbar, HUD), `ui-panels.js` (info panel, dialogs), `audio.js`, `main.js`
 
-`tools/` holds headless Playwright smoke tests (`node tools/smoke.js out.png tools/play1.js`).
+`tools/` holds headless Playwright tests. `node tools/ci.js` runs the suite that GitHub Actions runs on every push (boot every mode, complete the tutorial, fuzz with save/load round trips, open every panel). Other scripts are scripted playthroughs, e.g. `node tools/smoke.js out.png tools/long.js`.

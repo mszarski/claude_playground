@@ -613,7 +613,7 @@ class Renderer {
       }
     }
     const storm = this.game.events.storm;
-    ctx.fillStyle = storm ? 'rgba(10,20,40,0.12)' : 'rgba(10,20,40,0.07)';
+    ctx.fillStyle = storm ? 'rgba(10,20,40,0.08)' : 'rgba(10,20,40,0.045)';
     for (const c of this.clouds) {
       c.x += c.s * dt * (storm ? 3 : 1);
       if (c.x > w.W * TILE + 80) c.x = -80;
@@ -809,8 +809,19 @@ class Renderer {
       ctx.globalAlpha = 0.65;
       ctx.drawImage(spr.canvas, bx * TILE, (by + def.h) * TILE - spr.canvas.height);
       ctx.globalAlpha = 1;
-      ctx.fillStyle = ok ? 'rgba(80,255,80,0.25)' : 'rgba(255,60,60,0.35)';
+      ctx.fillStyle = ok ? 'rgba(80,255,80,0.25)' : 'rgba(255,60,60,0.25)';
       ctx.fillRect(bx * TILE, by * TILE, def.w * TILE, def.h * TILE);
+      if (!ok) {
+        // mark exactly which tiles are in the way
+        ctx.strokeStyle = '#ff3020'; ctx.lineWidth = 2;
+        for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) {
+          const tx = bx + dx, ty = by + dy;
+          if (!w.placementBlock(tx, ty) && !g.dinos.some((d) => d.tx === tx && d.ty === ty)) continue;
+          ctx.beginPath(); ctx.moveTo(tx * TILE + 3, ty * TILE + 3); ctx.lineTo(tx * TILE + 13, ty * TILE + 13);
+          ctx.moveTo(tx * TILE + 13, ty * TILE + 3); ctx.lineTo(tx * TILE + 3, ty * TILE + 13); ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+      }
       if (def.range) {
         ctx.strokeStyle = 'rgba(120,200,255,0.8)';
         ctx.beginPath(); ctx.arc((bx + def.w / 2) * TILE, (by + def.h / 2) * TILE, def.range * TILE, 0, Math.PI * 2); ctx.stroke();
@@ -882,6 +893,8 @@ class Renderer {
         ctx.globalCompositeOperation = 'source-over';
       }
     }
+    const tint = this.game.season.tint;
+    if (tint) { ctx.fillStyle = tint; ctx.fillRect(0, 0, cw, ch); }
     // power outage tint: flashing red edge
     if (w.power.outage > 0 || g.looseCount > 0 || g.alarm) {
       const a = (Math.sin(this.time * 5) * 0.5 + 0.5) * 0.25;

@@ -3,7 +3,8 @@
 
 class Sfx {
   constructor() {
-    this.ctx = null; this.muted = false; this.vol = 0.5;
+    this.ctx = null; this.muted = false; this.vol = 0.5; this.sfxVol = 1; this.musicVol = 1; this.tense = false;
+    try { const a = JSON.parse(localStorage.getItem('jt_audio_levels') || 'null'); if (a) { this.vol = a.vol; this.sfxVol = a.sfx; this.musicVol = a.music; } } catch (e) { /* storage unavailable */ }
     this.last = {};
     this.alarmT = 0;
   }
@@ -11,7 +12,8 @@ class Sfx {
     if (this.ctx) return true;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this.master = this.ctx.createGain(); this.master.gain.value = this.vol; this.master.connect(this.ctx.destination);
+      this.master = this.ctx.createGain(); this.master.gain.value = this.muted ? 0 : this.vol; this.master.connect(this.ctx.destination);
+      this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = this.sfxVol; this.sfxBus.connect(this.master);
       const len = this.ctx.sampleRate;
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noise.getChannelData(0);
@@ -25,20 +27,20 @@ class Sfx {
     o.type = type; o.frequency.setValueAtTime(f0, t);
     if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
     g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+    o.connect(g); g.connect(this.sfxBus); o.start(t); o.stop(t + dur + 0.02);
   }
   noiseBurst(dur, vol = 0.3, filt = 1000, q = 1, delay = 0, type = 'lowpass') {
     const c = this.ctx, t = c.currentTime + delay;
     const s = c.createBufferSource(); s.buffer = this.noise;
     const f = c.createBiquadFilter(); f.type = type; f.frequency.value = filt; f.Q.value = q;
     const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t + dur + 0.02);
+    s.connect(f); f.connect(g); g.connect(this.sfxBus); s.start(t); s.stop(t + dur + 0.02);
   }
   // ---- original chiptune loop: scheduled a bar ahead ----
   startMusic() {
     if (!this.ensure() || this.musicOn) return;
     this.musicOn = true;
-    this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = 0.22; this.musicGain.connect(this.master);
+    this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = 0.22 * this.musicVol; this.musicGain.connect(this.master);
     this.bar = 0; this.nextBarT = this.ctx.currentTime + 0.1;
     this.musicTimer = setInterval(() => this.scheduleMusic(), 200);
   }
@@ -72,6 +74,7 @@ class Sfx {
       [[0, 74, 4]],
     ];
     while (this.nextBarT < c.currentTime + 1.2) {
+      if (this.tense) { this.scheduleTenseBar(); continue; }
       const t0 = this.nextBarT, i = this.bar % 8, chord = prog[i];
       const quiet = Math.floor(this.bar / 8) % 2 === 1; // every other phrase: no lead, just the bed
       this.note('triangle', hz(chord[0] - 12), t0, beat * 3.8, 0.22);
@@ -80,6 +83,25 @@ class Sfx {
       else this.note('sine', hz(chord[1] + 12), t0, beat * 4, 0.05);
       this.nextBarT += beat * 4; this.bar++;
     }
+  }
+
+  // Breach music: D minor ostinato, pounding low pulse, faster tempo
+  scheduleTenseBar() {
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    const beat = 60 / 132, t0 = this.nextBarT;
+    const roots = [38, 38, 41, 36], r = roots[this.tenseBar = ((this.tenseBar || 0) + 1) % 4];
+    for (let k = 0; k < 8; k++) this.note('sawtooth', hz(r + (k % 2 ? 12 : 0)), t0 + k * beat / 2, beat * 0.4, 0.05);
+    for (let k = 0; k < 4; k++) this.note('sine', hz(r - 12), t0 + k * beat, beat * 0.5, 0.25);
+    const stab = [62, 65, 64, 61][this.tenseBar];
+    this.note('square', hz(stab), t0, beat * 1.5, 0.04); this.note('square', hz(stab + 3), t0 + beat * 2, beat * 1.5, 0.035);
+    this.nextBarT += beat * 4; this.bar++;
+  }
+  setLevels(vol, sfx, music) {
+    this.vol = vol; this.sfxVol = sfx; this.musicVol = music;
+    if (this.master && !this.muted) this.master.gain.value = vol;
+    if (this.sfxBus) this.sfxBus.gain.value = sfx;
+    if (this.musicGain) this.musicGain.gain.value = 0.22 * music;
+    try { localStorage.setItem('jt_audio_levels', JSON.stringify({ vol, sfx, music })); } catch (e) { /* storage unavailable */ }
   }
 
   play(name, vol = 1) {

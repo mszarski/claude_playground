@@ -122,7 +122,7 @@ class UIPanels {
       if (err) { this.toast(err, 'warn'); return; }
       this.select(null); return;
     }
-    if (a === 'demolish' && o) { if (g.demolishAt(o.x, o.y)) this.sfx.play('demolish'); this.select(null); return; }
+    if (a === 'demolish' && o) { g.startBatch(); const ok = g.demolishAt(o.x, o.y); g.endBatch('demolition'); if (ok) this.sfx.play('demolish'); this.select(null); return; }
     this.renderInfo(true);
   }
 
@@ -199,6 +199,42 @@ class UIPanels {
     $('[data-close]').onclick = () => this.closeModal();
   }
 
+  showResearch() {
+    const g = this.game, rs = g.research;
+    const labs = g.buildingsOfType('lab').length;
+    let html = `<h1>RESEARCH</h1><p>${labs ? `${labs} lab${labs > 1 ? 's' : ''} (${rs.labs()} powered). Extra labs speed research up.` : '<span style="color:#ff9080">Build a Research Lab (Dinos menu) to start researching.</span>'}</p><div class="rgrid">`;
+    for (const r of RESEARCH) {
+      const done = rs.has(r.id), active = rs.active && rs.active.id === r.id, avail = rs.available(r);
+      const cls = done ? 'done' : active ? 'active' : avail ? '' : 'locked';
+      let foot;
+      if (done) foot = '<span style="color:#8ad06a">✓ Complete</span>';
+      else if (active) foot = `<div class="pbar" style="width:100%"><i style="width:${rs.active.progress / r.hours * 100}%"></i></div>`;
+      else if (!avail) foot = `<span style="color:#9ab08a">Needs: ${r.req.filter((q) => !rs.has(q)).map((q) => RESEARCH_BY_ID[q].name).join(', ')}</span>`;
+      else foot = `<button data-r="${r.id}" ${!labs || rs.active ? 'disabled' : ''}>Research ${fmtMoney(r.cost)} · ${r.hours}h</button>`;
+      html += `<div class="rcard ${cls}"><div class="nm">${r.name.toUpperCase()}</div><div>${r.desc}</div>${foot}</div>`;
+    }
+    html += `</div><div class="btns" style="justify-content:flex-end;margin-top:8px"><button data-close>Close</button></div>`;
+    this.showModal(html);
+    for (const b of document.querySelectorAll('[data-r]')) b.onclick = () => { const err = rs.start(b.dataset.r); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); this.showResearch(); };
+    $('[data-close]').onclick = () => this.closeModal();
+  }
+
+  showAudio() {
+    const s = this.sfx;
+    const row = (id, label, v) => `<div class="row" style="align-items:center;gap:10px"><label for="${id}" style="min-width:90px">${label}</label><input type="range" id="${id}" min="0" max="100" value="${Math.round(v * 100)}" style="flex:1;accent-color:#f8d040"><span id="${id}V" style="min-width:40px;text-align:right">${Math.round(v * 100)}%</span></div>`;
+    const html = `<h1>SOUND</h1>${row('volM', 'Master', s.vol * 2)}${row('volS', 'Effects', s.sfxVol)}${row('volU', 'Music', s.musicVol)}
+      <p style="color:#9ab08a">The music turns tense during breaches, power failures and alarms.</p>
+      <div class="btns" style="justify-content:flex-end"><button data-close>Done</button></div>`;
+    this.showModal(html);
+    const upd = () => {
+      const m = $('#volM').value / 100, e = $('#volS').value / 100, u = $('#volU').value / 100;
+      for (const id of ['volM', 'volS', 'volU']) $('#' + id + 'V').textContent = $('#' + id).value + '%';
+      s.setLevels(m / 2, e, u);
+    };
+    for (const id of ['volM', 'volS', 'volU']) $('#' + id).oninput = upd;
+    $('[data-close]').onclick = () => { this.closeModal(); this.sfx.play('click'); };
+  }
+
   showFinances() {
     const g = this.game;
     const L = g.ledger;
@@ -254,6 +290,8 @@ class UIPanels {
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
+      <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)} (copy)</button>
+      <button data-m="audio">Sound settings</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;
     this.showModal(html);
     for (const b of document.querySelectorAll('[data-m]')) b.onclick = () => {
@@ -262,6 +300,12 @@ class UIPanels {
       else if (m === 'save') { const ok = saveGame(this.game); this.closeModal(); this.toast(ok ? 'Park saved.' : 'Could not save (storage unavailable).', ok ? 'good' : 'bad'); }
       else if (m === 'load') { this.closeModal(); loadGameFromStorage(); }
       else if (m === 'help') this.showHelp();
+      else if (m === 'audio') this.showAudio();
+      else if (m === 'seed') {
+        const code = seedCode(this.game.seed);
+        if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => this.toast(`Copied island code ${code}`, 'good'), () => this.toast(`Island code: ${code}`, 'info'));
+        else this.toast(`Island code: ${code}`, 'info');
+      }
       else if (m === 'breed') { this.game.breedingOff = !this.game.breedingOff; this.showMenu(); }
       else if (m === 'advisor') { this.game.advisorOn = this.game.advisorOn === false; this.showMenu(); }
       else if (m === 'new') { this.closeModal(); showTitle(); }
@@ -304,7 +348,11 @@ class UIPanels {
     this.setSpeed(0);
     const win = r === 'win';
     if (win) this.sfx.play('fanfare');
+    const medal = win && sc.medal ? sc.medal(g) : null;
+    const best = medal ? saveMedal(g.scenario, medal, g.day) : false;
     const html = `<div id="gameover"><h1>${win ? 'SCENARIO COMPLETE' : 'SCENARIO FAILED'}</h1><p style="font-size:22px">${sc.name}: ${win ? 'you did it.' : 'the island won this time.'}</p>
+      ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
+      ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
       <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
       <div class="btns" style="justify-content:center"><button data-m="again">Try again</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
     this.showModal(html, true);

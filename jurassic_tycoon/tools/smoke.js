@@ -1,6 +1,6 @@
 // Headless smoke test: boot the game, build a park via the API, run the sim, screenshot.
 const path = require('path');
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('./pw');
 (async () => {
   const out = process.argv[2] || 'shot.png';
   const script = process.argv[3] ? require('fs').readFileSync(path.resolve(__dirname, 'helpers.js'), 'utf8') + '\n' + require('fs').readFileSync(process.argv[3], 'utf8') : '';

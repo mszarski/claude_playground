@@ -1,5 +1,5 @@
 // Usage: node tools/shot.js <url-or-file> <out.png> [w] [h] [waitMs] [evalScript]
-const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+const { chromium } = require('./pw');
 (async () => {
   const [, , target, out, w = 1400, h = 1000, wait = 500, evalJs] = process.argv;
   const browser = await chromium.launch();

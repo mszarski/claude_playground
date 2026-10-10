@@ -67,7 +67,7 @@ class Staff {
     if (this.target) {
       const d = this.target;
       const dd = dist(this.x, this.y, d.x, d.y);
-      if (dd <= 4.5 && this.cd <= 0 && !d.carried && d.sedatedT <= 0) {
+      if (dd <= (g.research.has('rangers') ? 5.5 : 4.5) && this.cd <= 0 && !d.carried && d.sedatedT <= 0) {
         this.cd = 1.6;
         this.facing = d.x > this.x ? 1 : -1;
         g.darts.push({ x: this.x, y: this.y - 0.3, t: d, life: 1.5 });
@@ -84,7 +84,7 @@ class Staff {
       }
       if (dd <= 3.8) { this.path = null; return; }
     }
-    if (this.path) { if (stepAlong(this, dt, 1.9, w.humanPass, w)) this.path = null; }
+    if (this.path) { if (stepAlong(this, dt, g.research.has('rangers') ? 2.5 : 1.9, w.humanPass, w)) this.path = null; }
   }
 
   updateWorker(dt) {
@@ -112,7 +112,7 @@ class Staff {
         const f = w.fence[j];
         if (f === F_BROKEN) {
           // rebuild if no dino standing there
-          const blocked = g.dinos.some((d) => d.tx === fx && d.ty === fy && !d.carried);
+          const blocked = !g.clearGap(fx, fy);
           if (!blocked) {
             const orig = w.fenceOrig[j] || F_ELECTRIC;
             const cost = Math.round(FENCE_DEF[orig].cost * 0.6);
