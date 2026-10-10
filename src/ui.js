@@ -381,6 +381,10 @@ class UI {
       const x0 = d.x * TILE - S.w / 2, y0 = d.y * TILE - S.h + 5;
       if (px >= x0 && px <= x0 + S.w && py >= y0 && py <= y0 + S.h + 2 && d.y > by) { best = d; by = d.y; }
     }
+    for (const p of g.pteros) {
+      const ay = p.sedatedT > 0 ? 0 : p.alt * TILE;
+      if (Math.abs(px - p.x * TILE) < 10 && py > p.y * TILE - ay - 14 && py < p.y * TILE - ay + 4) return p;
+    }
     if (best) return best;
     for (const h of g.humans()) {
       const x0 = h.x * TILE - 4, y0 = h.y * TILE - 10;
@@ -455,7 +459,7 @@ class UI {
   }
 
   jumpToLoose() {
-    const loose = this.game.dinos.filter((d) => d.loose && !d.carried);
+    const loose = this.game.creatures().filter((d) => d.loose && !d.carried);
     if (!loose.length) { this.toast('No dinosaurs are loose. For now.', 'good'); return; }
     this.looseIdx = ((this.looseIdx || 0) + 1) % loose.length;
     const d = loose[this.looseIdx];
@@ -573,7 +577,7 @@ class UI {
   renderAlerts() {
     const g = this.game, w = g.world;
     const out = [];
-    const loose = g.dinos.filter((d) => d.loose && !d.carried);
+    const loose = g.creatures().filter((d) => d.loose && !d.carried);
     if (loose.length) {
       const sed = loose.filter((d) => d.sedatedT > 0).length;
       out.push(`<div class="alert red" data-act="loose">⚠ ${loose.length} DINOSAUR${loose.length > 1 ? 'S' : ''} LOOSE${sed ? ` (${sed} SEDATED)` : ''}${!g.hasBuilding('ranger') ? ' · NO RANGERS!' : ''}</div>`);
@@ -633,7 +637,7 @@ class UI {
       html += `<div class="row"><span>Health</span><span>${Math.round(d.hp)}/${sp.hp}</span></div>${this.bar(d.hp, sp.hp, '#5ac85a')}`;
       html += `<div class="row"><span>Hunger</span><span>${Math.round(d.hunger)}%</span></div>${this.bar(d.hunger, 100, d.hunger > 70 ? '#e04838' : '#f0a030')}`;
       html += `<div class="row"><span>Stress</span><span>${Math.round(d.stress)}%</span></div>${this.bar(d.stress, 100, d.stress > 65 ? '#e04838' : '#c8a040')}`;
-      html += `<div class="row"><span>Comfort</span><span>${Math.round(d.comfort)}%</span></div>${this.bar(d.comfort, 100, '#70b8f0')}`;
+      if (!d.isPtera) html += `<div class="row"><span>Comfort</span><span>${Math.round(d.comfort)}%</span></div>${this.bar(d.comfort, 100, '#70b8f0')}`;
       const p = d.comfortParts || {};
       const lbl = { space: 'Space', forest: 'Cover', water: 'Water', social: 'Social', food: 'Food', fear: 'Predators', loose: 'Loose', base: '' };
       const parts = Object.keys(p).filter((k) => lbl[k]).map((k) => `<span class="tag" style="background:${p[k] < 0 ? '#7a2018' : p[k] >= 10 ? '#2a5a2a' : '#5a5a2a'}">${lbl[k]} ${p[k] >= 0 ? '+' : ''}${Math.round(p[k])}</span>`).join('');
@@ -737,7 +741,7 @@ class UI {
 
   showSpeciesPicker() {
     const g = this.game;
-    let html = `<h1>HATCHERY</h1><p>Choose a species, then click inside a fenced paddock (no paths inside!). Carnivores will eat herbivores that share their paddock.</p>`;
+    let html = `<h1>HATCHERY</h1><p>Choose a species, then click inside a fenced paddock (no paths inside!). Carnivores will eat herbivores that share their paddock. Pteranodons hatch inside an Aviary.</p>`;
     if (!g.hasBuilding('hatchery')) html += `<p style="color:#ff9080">You need to build a Hatchery first (Dinos menu).</p>`;
     html += `<div class="cards">`;
     for (const k of SPECIES_ORDER) {
@@ -746,7 +750,7 @@ class UI {
       html += `<div class="card ${locked ? 'locked' : ''}" data-sp="${k}"><canvas data-spr="${k}"></canvas><div class="nm">${sp.name.toUpperCase()}</div>
         <div>${sp.diet === 'carn' ? '<span style="color:#f08a5a">Carnivore</span>' : '<span style="color:#8ad06a">Herbivore</span>'} · ${fmtMoney(sp.cost)}</div>
         <div style="color:#9ab08a">Appeal ${sp.appeal} · Danger ${sp.danger} · Str ${sp.strength}</div>
-        <div style="color:#9ab08a">Needs ${sp.space} tiles${sp.social > 1 ? ' · groups of ' + sp.social : ''}</div>
+        <div style="color:#9ab08a">${sp.flying ? 'Needs an Aviary' : `Needs ${sp.space} tiles${sp.social > 1 ? ' · groups of ' + sp.social : ''}`}</div>
         ${locked ? `<div style="color:#f8d040">Unlocks at ${'★'.repeat(sp.unlock)}</div>` : ''}</div>`;
     }
     html += `</div><div class="btns" style="justify-content:flex-end"><button data-close>Close</button></div>`;
@@ -772,11 +776,12 @@ class UI {
   showRoster() {
     const g = this.game;
     const mini = (v, col) => `<div class="mini"><i style="width:${clamp(v, 0, 100)}%;background:${col}"></i></div>`;
-    let html = `<h1>DINOSAURS (${g.dinos.length})</h1>`;
-    if (!g.dinos.length) html += `<p>No dinosaurs yet. Build a Hatchery, fence a paddock, then use Hatch.</p>`;
+    const all = g.creatures();
+    let html = `<h1>DINOSAURS (${all.length})</h1>`;
+    if (!all.length) html += `<p>No dinosaurs yet. Build a Hatchery, fence a paddock, then use Hatch.</p>`;
     else {
       html += `<div class="rhead"><span></span><span>Name</span><span>Health</span><span>Hunger</span><span class="hide">Stress</span><span>Status</span></div><div class="roster">`;
-      const order = [...g.dinos].sort((a, b) => (b.loose - a.loose) || (b.stress - a.stress));
+      const order = [...all].sort((a, b) => (b.loose - a.loose) || (b.stress - a.stress));
       for (const d of order) {
         const st = d.carried ? '<span style="color:#70b8f0">AIRLIFT</span>' : d.sedatedT > 0 ? '<span style="color:#a8a8f0">SEDATED</span>' : d.loose ? '<span style="color:#ff6040">LOOSE!</span>' : d.sick > 0 ? '<span style="color:#9ae060">SICK</span>' : d.stress > 65 ? '<span style="color:#f0a030">AGITATED</span>' : '<span style="color:#8ad06a">OK</span>';
         html += `<div class="rrow" data-id="${d.id}"><canvas data-dspr="${d.species}"></canvas><span><b>${d.name}</b> <span style="color:#9ab08a">${d.sp.name}</span></span>${mini(d.hp / d.sp.hp * 100, '#5ac85a')}${mini(d.hunger, d.hunger > 70 ? '#e04838' : '#f0a030')}<span class="hide">${mini(d.stress, d.stress > 65 ? '#e04838' : '#c8a040')}</span><span>${st}</span></div>`;
@@ -792,7 +797,7 @@ class UI {
       c.style.width = Math.min(52, S.w * 28 / S.h) + 'px';
     }
     for (const r of document.querySelectorAll('.rrow')) r.onclick = () => {
-      const d = g.dinos.find((x) => x.id === +r.dataset.id);
+      const d = g.creatures().find((x) => x.id === +r.dataset.id);
       if (d) { this.closeModal(); this.centerOn(d.x, d.y); this.select(d); }
     };
     $('[data-close]').onclick = () => this.closeModal();

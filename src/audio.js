@@ -37,7 +37,7 @@ class Sfx {
   play(name, vol = 1) {
     if (this.muted || !this.ensure()) return;
     const now = performance.now();
-    const minGap = { roar: 900, zap: 120, thud: 100, scream: 400, dart: 80, chomp: 150, alarm: 2500, thunder: 300, crash: 200 }[name] || 60;
+    const minGap = { screech: 700, honk: 600, bellow: 1500, roar: 900, zap: 120, thud: 100, scream: 400, dart: 80, chomp: 150, alarm: 2500, thunder: 300, crash: 200 }[name] || 60;
     if (this.last[name] && now - this.last[name] < minGap) return;
     this.last[name] = now;
     const v = clamp(vol, 0, 1.2);
@@ -49,6 +49,9 @@ class Sfx {
       case 'cash': this.tone('square', 1320, 1320, 0.05, 0.08 * v); this.tone('square', 1760, 1760, 0.08, 0.08 * v, 0.05); break;
       case 'roar':
         this.noiseBurst(1.2, 0.5 * v, 400, 4); this.tone('sawtooth', 90, 45, 1.2, 0.25 * v); this.tone('sawtooth', 140, 60, 1.0, 0.15 * v, 0.05); break;
+      case 'screech': this.tone('sawtooth', 1400, 2400, 0.12, 0.08 * v); this.tone('sawtooth', 2200, 900, 0.35, 0.08 * v, 0.1); this.noiseBurst(0.3, 0.1 * v, 3000, 3, 0.05, 'bandpass'); break;
+      case 'honk': this.tone('triangle', 220, 260, 0.35, 0.12 * v); this.tone('triangle', 330, 300, 0.4, 0.06 * v); break;
+      case 'bellow': this.tone('sine', 70, 55, 1.4, 0.3 * v); this.tone('triangle', 140, 110, 1.2, 0.08 * v); break;
       case 'zap': this.noiseBurst(0.15, 0.25 * v, 4000, 2, 0, 'highpass'); this.tone('square', 1800, 300, 0.12, 0.1 * v); break;
       case 'thud': this.tone('sine', 120, 40, 0.18, 0.4 * v); this.noiseBurst(0.1, 0.2 * v, 300); break;
       case 'crash': this.noiseBurst(0.6, 0.5 * v, 900); this.tone('sawtooth', 80, 30, 0.5, 0.25 * v); break;

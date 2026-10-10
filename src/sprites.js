@@ -293,6 +293,28 @@ const DINO_TEMPLATES = {
       '       OOOOOOOO',
     ],
   },
+  ptera: {
+    body: [
+      '     OOO',
+      '   OOSSSOOO',
+      ' OOSSBBEBBOOOOO',
+      '     OBBBOOOOOOO',
+      '     OBBO',
+      '    OBLBO',
+      '  OOBLLBOO',
+      ' OBDBLLBDBO',
+      'OBDDOOBBOODDBO',
+      'OOO  OBBO  OOO',
+    ],
+    legsA: [
+      '     ODOODO',
+      '    OOO OOO',
+    ],
+    legsB: [
+      '     ODOODO',
+      '     OOOOOO',
+    ],
+  },
   brachio: {
     body: [
       '                        OOOO',
@@ -861,6 +883,37 @@ function buildBuildingSprites() {
     drawText3(ctx, 'TOUR', 8, 1, '#2a1408');
     // turnstile
     p.r(12, H - 8, 8, 2, '#5a5a5a');
+  });
+
+  make('aviary', 12, (p, W, H, ctx) => {
+    // concrete base ring
+    p.r(2, H - 14, W - 4, 12, '#6a6a64'); p.r(3, H - 13, W - 6, 2, '#9a9a92');
+    // inner habitat: rocks and trees
+    p.r(6, H - 26, W - 12, 13, '#4f8a32');
+    p.r(10, H - 24, 12, 6, '#7a7468'); p.r(12, H - 26, 6, 3, '#9c968a');
+    p.r(W - 26, H - 22, 8, 7, '#2e6a20'); p.r(W - 24, H - 26, 4, 5, '#3f8a2a');
+    // dome mesh
+    const cx = W / 2, cy = H - 12, rx = W / 2 - 2, ry = 58;
+    for (let y = 0; y < ry; y++) {
+      const t = 1 - y / ry;
+      const half = Math.round(rx * Math.sqrt(1 - t * t));
+      const yy = cy - ry + y;
+      p.px(cx - half, yy, '#3a3a3a'); p.px(cx + half - 1, yy, '#3a3a3a');
+      if (y % 7 === 0) for (let x = cx - half; x < cx + half; x++) if ((x + y) % 2 === 0) p.px(x, yy, 'rgba(220,230,235,0.55)');
+      if (y < 3) for (let x = cx - half; x < cx + half; x++) p.px(x, yy, '#3a3a3a');
+    }
+    for (let k = -3; k <= 3; k++) {
+      // meridians
+      for (let y = 0; y < ry; y++) {
+        const t = 1 - y / ry;
+        const half = rx * Math.sqrt(1 - t * t);
+        const x = Math.round(cx + half * k / 3.5);
+        if (y % 2 === 0) p.px(x, cy - ry + y, 'rgba(200,210,215,0.7)');
+      }
+    }
+    p.r(cx - 3, cy - ry - 2, 6, 3, '#3a3a3a');
+    // sign
+    p.r(W / 2 - 14, H - 10, 28, 7, '#2a1a0c'); drawText3(ctx, 'AVIARY', W / 2 - 12, H - 9, '#f8d040');
   });
 
   make('siren', 14, (p, W, H) => {

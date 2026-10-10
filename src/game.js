@@ -33,7 +33,7 @@ class Game {
     this.money = 450000;
     this.time = 7.5; // hours since start (day 1 07:30)
     this.secPerHour = 2.5;
-    this.dinos = []; this.guests = []; this.staff = []; this.helis = []; this.eggs = []; this.jeeps = [];
+    this.dinos = []; this.guests = []; this.staff = []; this.helis = []; this.eggs = []; this.jeeps = []; this.pteros = [];
     this.particles = []; this.floats = []; this.darts = [];
     this.logs = [];
     this.reputation = 50; this.stars = 0; this.attraction = 0; this.safety = 100;
@@ -128,12 +128,13 @@ class Game {
   }
   hasBuilding(type) { return this.buildingsOfType(type).length > 0; }
   speciesCount() { return new Set(this.dinos.filter((d) => !d.loose).map((d) => d.species)).size; }
+  creatures() { return this.pteros.length ? this.dinos.concat(this.pteros) : this.dinos; }
   *humans() {
     for (const g of this.guests) if (!g.hidden && !g.dead) yield g;
     for (const s of this.staff) if (!s.dead) yield s;
   }
   threatNear(x, y, r) {
-    for (const d of this.dinos) {
+    for (const d of this.creatures()) {
       if (!d.loose || d.carried || d.sedatedT > 0) continue;
       if (d.sp.danger < 2) continue;
       if (dist2(x, y, d.x, d.y) < r * r) return d;
@@ -289,6 +290,15 @@ class Game {
     if (!this.hasBuilding('hatchery')) return 'Build a Hatchery first.';
     if (!this.buildingsOfType('hatchery').some((b) => b.powered)) return 'The Hatchery has no power.';
     if (!this.isUnlocked(species)) return `Requires a ${sp.unlock}-star rating.`;
+    if (sp.flying) {
+      const b = w.buildingAt(x, y);
+      if (!b || b.type !== 'aviary') return 'Pteranodons hatch inside an Aviary. Click on one.';
+      if (b.hp < b.maxHp * 0.6) return 'The Aviary needs repairs first.';
+      const n = this.pteros.filter((p) => !p.dead && p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h).length + this.eggs.filter((e) => e.species === 'ptera').length;
+      if (n >= 6) return 'This Aviary is full (6 Pteranodons).';
+      if (!this.canAfford(sp.cost)) return 'Not enough money.';
+      return null;
+    }
     if (!w.dinoPass(x, y)) return 'Pick an open tile inside a paddock.';
     const reg = w.regionAt(x, y);
     if (!reg || reg.public) return 'Dinosaurs must hatch inside a fenced paddock with no paths.';
@@ -346,7 +356,7 @@ class Game {
       this.reputation = Math.max(0, this.reputation - 5);
       this.spend(30000, 'fines');
       this.removeGuest(h, false);
-      this.log(dino ? `A guest was eaten by ${dino.name} the ${dino.sp.name}! Lawsuit: -$30k` : 'A guest was killed! Lawsuit: -$30k', 'bad', { x: h.x, y: h.y }, true);
+      this.log(dino ? `A guest was ${dino.isPtera ? 'carried off' : 'eaten'} by ${dino.name} the ${dino.sp.name}! Lawsuit: -$30k` : 'A guest was killed! Lawsuit: -$30k', 'bad', { x: h.x, y: h.y }, true);
     } else {
       this.stats.staffDeaths++;
       this.reputation = Math.max(0, this.reputation - 2);
@@ -377,6 +387,12 @@ class Game {
 
   findPaddockFor(d) {
     const w = this.world;
+    if (d.isPtera) {
+      const av = this.buildingsOfType('aviary').filter((a) => a.hp >= a.maxHp * 0.5);
+      if (!av.length) return null;
+      const a = pick(av);
+      return { x: a.x + 2, y: a.y + 2 };
+    }
     const ok = (reg) => {
       if (!reg || reg.public || reg.size < 12 || reg.size > 1200) return false;
       for (const o of this.dinos) {
@@ -422,8 +438,9 @@ class Game {
       e.t -= dt;
       if (e.t <= 0) {
         const reg = w.regionAt(e.x, e.y);
-        const d = new Dino(this, e.species, e.x, e.y);
-        this.dinos.push(d); this.stats.hatched++;
+        const d = SPECIES[e.species].flying ? new Ptera(this, e.x, e.y) : new Dino(this, e.species, e.x, e.y);
+        if (d.isPtera) this.pteros.push(d); else this.dinos.push(d);
+        this.stats.hatched++;
         this.burst(e.x + 0.5, e.y + 0.5, '#f0e8c8', 14);
         this.log(`${d.name} the ${d.sp.name} has hatched!`, 'good', d);
         this.sound('hatch');
@@ -438,6 +455,8 @@ class Game {
 
     for (const d of this.dinos) d.update(dt);
     if (this.dinos.some((d) => d.dead)) { this.dinos = this.dinos.filter((d) => !d.dead); }
+    for (const p of this.pteros) p.update(dt);
+    if (this.pteros.some((d) => d.dead)) this.pteros = this.pteros.filter((d) => !d.dead);
     // rage timers
     for (const d of this.dinos) if (d.rageT > 0) { d.rageT -= dt; d.stress = 100; }
 
@@ -481,6 +500,7 @@ class Game {
       this.secondT = 1;
       this.updateRating();
       this.checkGoals();
+      this.looseCount = this.creatures().filter((d) => d.loose && !d.carried).length;
     }
 
     if (Math.floor(this.time / 24) + 1 !== this.lastDay) this.newDay();
@@ -616,7 +636,7 @@ class Game {
   updateRating() {
     let att = 0;
     const species = new Set();
-    for (const d of this.dinos) {
+    for (const d of this.creatures()) {
       if (d.loose || d.carried) continue;
       att += d.sp.appeal * (d.sick > 0 ? 0.5 : 1) * (0.6 + d.comfort / 250);
       species.add(d.species);

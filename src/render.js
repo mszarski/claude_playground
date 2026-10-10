@@ -329,6 +329,8 @@ class Renderer {
       ctx.globalAlpha = 1;
     }
 
+    // pteranodons fly above everything on the ground
+    for (const p of g.pteros) if (!p.carried && vis(p.tx, p.ty)) this.drawPtera(ctx, p, ui);
     // helicopters
     for (const h of g.helis) this.drawHeli(ctx, h);
     this.drawFlyers(ctx, dt);
@@ -414,6 +416,11 @@ class Renderer {
     const spr = BSPR[b.type];
     const def = BUILDINGS[b.type];
     const x = b.x * TILE, y = (b.y + b.h) * TILE - spr.canvas.height;
+    if (b.type !== 'helipad') {
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(x + spr.canvas.width, y + Math.min(spr.extra + 6, spr.canvas.height - 4), 4, spr.canvas.height - Math.min(spr.extra + 6, spr.canvas.height - 4));
+      ctx.fillRect(x + 3, y + spr.canvas.height, spr.canvas.width, 2);
+    }
     ctx.drawImage(spr.canvas, x, y);
     // torches flicker on gate
     if (b.type === 'gate') {
@@ -537,6 +544,26 @@ class Renderer {
       ctx.drawImage(img, Math.round(f.x - img.width / 2), Math.round(f.y));
     }
     this.flyers = this.flyers.filter((f) => f.x > -100 && f.x < w.W * TILE + 100);
+  }
+
+  drawPtera(ctx, p, ui) {
+    const x = Math.round(p.x * TILE), y = Math.round(p.y * TILE);
+    if (p.sedatedT > 0 && p.alt <= 0.05) {
+      const S = DINO_SPRITES.ptera;
+      ctx.drawImage(p.facing > 0 ? S.sleepR : S.sleepL, x - S.w / 2, y - S.h + 5);
+      const ph = (this.time * 1.5 + p.id) % 1;
+      drawText3(ctx, 'Z', x + 4 + Math.round(ph * 3), y - S.h - Math.round(ph * 6), '#ffffff');
+    } else {
+      const ay = Math.round(p.alt * TILE);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(x - 6, y + 2, 12, 2);
+      const fr = Math.sin(p.anim * (p.loose ? 9 : 6)) > 0 ? 0 : 1;
+      const img = (p.facing > 0 ? PTERO.R : PTERO.L)[fr];
+      ctx.drawImage(p.flash > 0 ? tintCanvas(img, '#fff', 0.8) : img, x - Math.floor(img.width / 2), y - ay - img.height);
+      if (p.loose && Math.floor(this.time * 4) % 2 === 0) {
+        ctx.fillStyle = '#ff3020'; ctx.fillRect(x - 1, y - ay - img.height - 7, 3, 5);
+      }
+    }
+    if (ui.selected === p) { ctx.strokeStyle = '#f8f080'; ctx.strokeRect(x - 10.5, y - Math.round(p.alt * TILE) - 12.5, 21, 16); }
   }
 
   drawJeep(ctx, j) {
@@ -785,7 +812,7 @@ class Renderer {
     }
     mctx.imageSmoothingEnabled = false;
     mctx.drawImage(this.miniC, 0, 0, mw, mh);
-    for (const d of g.dinos) {
+    for (const d of g.creatures()) {
       if (d.carried) continue;
       mctx.fillStyle = d.loose ? (Math.floor(this.time * 4) % 2 ? '#ff2020' : '#ffffff') : (d.sp.diet === 'carn' ? '#e07030' : '#70e070');
       mctx.fillRect(Math.floor(d.x * sx) - 1, Math.floor(d.y * sy) - 1, 3, 3);

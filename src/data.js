@@ -80,8 +80,14 @@ const SPECIES = {
     colors: { O: '#120e0e', B: '#6a5a5e', D: '#443a3e', L: '#b8a8a0', S: '#c84a3a', E: '#f8c020' },
     desc: 'Sail-backed apex predator. Needs water in its paddock.'
   },
+  ptera: {
+    name: 'Pteranodon', sci: 'Pteranodon longiceps', diet: 'carn', cost: 65000, appeal: 7, strength: 1, danger: 5,
+    speed: 3.5, hp: 70, tranq: 1, space: 0, social: 1, forest: 0, unlock: 2, size: 1, flying: true,
+    colors: { O: '#2a1a14', B: '#9a6a4a', D: '#6a4a32', L: '#d8b890', S: '#c84a2a', E: '#f8d040' },
+    desc: 'Lives in an Aviary. If the dome is damaged, they fly free and snatch guests.'
+  },
 };
-const SPECIES_ORDER = ['galli', 'para', 'dilo', 'trike', 'stego', 'raptor', 'anky', 'brachio', 'trex', 'spino'];
+const SPECIES_ORDER = ['galli', 'para', 'dilo', 'trike', 'stego', 'raptor', 'anky', 'brachio', 'ptera', 'trex', 'spino'];
 
 // Buildings. w/h are tile footprint.
 // cat: 'guest' (needs path access), 'infra', 'dino', 'staff', 'decor'
@@ -116,6 +122,8 @@ const BUILDINGS = {
     desc: 'Asset Containment helicopter airlifts sedated dinos home.' },
   vet: { name: 'Vet Clinic', w: 2, h: 2, cost: 30000, upkeep: 350, power: 2, cat: 'staff', hp: 220,
     desc: 'Treats sick dinosaurs and stops outbreaks.' },
+  aviary: { name: 'Aviary', w: 5, h: 5, cost: 110000, upkeep: 500, power: 4, cat: 'dino', hp: 700, appeal: 6,
+    desc: 'Mesh dome for Pteranodons (up to 6). Below 35% condition, they escape. Needs a path for guests to enjoy it.' },
   hatchery: { name: 'Hatchery', w: 3, h: 2, cost: 40000, upkeep: 300, power: 4, cat: 'dino', hp: 300, unique: true,
     desc: 'Required to hatch dinosaurs.' },
   feeder_h: { name: 'Herbivore Feeder', w: 1, h: 1, cost: 2500, upkeep: 20, power: 0, cat: 'dino', hp: 120, feeds: 'herb',
@@ -136,7 +144,7 @@ const TOOL_GROUPS = [
   { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'hotel', 'shelter', 'lamp'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
-  { id: 'dino', label: 'Dinos', tools: ['hatchery', 'feeder_h', 'feeder_c', 'hatch'] },
+  { id: 'dino', label: 'Dinos', tools: ['hatchery', 'feeder_h', 'feeder_c', 'aviary', 'hatch'] },
 ];
 
 const TOOL_INFO = {

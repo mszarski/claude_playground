@@ -38,7 +38,7 @@ function serialize(g) {
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
-    dinos: g.dinos.filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills })),
+    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills })),
   });
 }
 
@@ -66,9 +66,9 @@ function loadGame(json) {
     if (bd.type === 'tour') { b.queue = []; b.jeepT = 0; }
   }
   for (const dd of s.dinos) {
-    const d = new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));
+    const d = SPECIES[dd.s].flying ? new Ptera(g, Math.floor(dd.x), Math.floor(dd.y)) : new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));
     d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0;
-    g.dinos.push(d);
+    if (d.isPtera) g.pteros.push(d); else g.dinos.push(d);
   }
   g.money = s.money; g.time = s.time; g.reputation = s.rep; g.ticket = s.ticket; g.goalIdx = s.goalIdx; g.sandbox = s.sandbox;
   g.stats = Object.assign(g.stats, s.stats); g.history = s.history || []; g.deathLog = s.deathLog || [];
@@ -135,7 +135,7 @@ function startTitleAnim() {
     for (let i = 0; i < 6; i++) { const ph = (t * 0.1 + i / 6) % 1; ctx.fillRect(W * 0.28 - 3 + Math.sin(ph * 5 + i) * 6 + ph * 18, H * 0.38 - ph * H * 0.25, 4 + ph * 8, 4 + ph * 8); }
     ctx.fillStyle = '#2a141a'; ctx.fillRect(0, H * 0.75, W, H * 0.25);
     // trees
-    for (const tr of trees) { ctx.globalAlpha = 0.9; ctx.drawImage(TILES.trees[tr.v], Math.round(tr.x), Math.round(H * 0.75 - 24 - tr.s * 6)); }
+    for (const tr of trees) ctx.drawImage(treeSil(tr.v), Math.round(tr.x), Math.round(H * 0.75 - 24 - tr.s * 6));
     ctx.globalAlpha = 1;
     // dinos
     for (const p of parade) {
@@ -151,6 +151,11 @@ function startTitleAnim() {
   requestAnimationFrame(step);
 }
 const _silCache = {};
+function treeSil(v) {
+  const k = 'tree' + v;
+  if (!_silCache[k]) _silCache[k] = tintCanvas(TILES.trees[v], '#24121a', 0.9);
+  return _silCache[k];
+}
 function tintCanvasCached(sp, fr) {
   const k = sp + fr;
   if (!_silCache[k]) _silCache[k] = tintCanvas(DINO_SPRITES[sp].right[fr], '#1a0c10', 0.92);
