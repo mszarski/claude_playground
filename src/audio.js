@@ -34,6 +34,54 @@ class Sfx {
     const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t + dur + 0.02);
   }
+  // ---- original chiptune loop: scheduled a bar ahead ----
+  startMusic() {
+    if (!this.ensure() || this.musicOn) return;
+    this.musicOn = true;
+    this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = 0.22; this.musicGain.connect(this.master);
+    this.bar = 0; this.nextBarT = this.ctx.currentTime + 0.1;
+    this.musicTimer = setInterval(() => this.scheduleMusic(), 200);
+  }
+  stopMusic() {
+    this.musicOn = false;
+    clearInterval(this.musicTimer);
+    if (this.musicGain) { this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2); this.musicGain = null; }
+  }
+  note(type, freq, t, dur, vol) {
+    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(this.musicGain); o.start(t); o.stop(t + dur + 0.05);
+  }
+  scheduleMusic() {
+    if (!this.musicOn || !this.musicGain) return;
+    const c = this.ctx;
+    const beat = 60 / 84;
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    // D major: I  V  vi  IV / I  IV  V  V  (MIDI roots)
+    const prog = [[50, 54, 57], [57, 61, 64], [59, 62, 66], [55, 59, 62], [50, 54, 57], [55, 59, 62], [57, 61, 64], [57, 61, 64]];
+    // melody per bar: [beat offset, midi, length in beats]
+    const mel = [
+      [[0, 74, 1.5], [1.5, 76, 0.5], [2, 78, 2]],
+      [[0, 76, 1], [1, 73, 1], [2, 69, 2]],
+      [[0, 71, 1.5], [1.5, 73, 0.5], [2, 74, 1], [3, 76, 1]],
+      [[0, 74, 3], [3, 71, 1]],
+      [[0, 74, 1.5], [1.5, 76, 0.5], [2, 78, 1], [3, 81, 1]],
+      [[0, 79, 2], [2, 78, 1], [3, 76, 1]],
+      [[0, 76, 1], [1, 78, 1], [2, 76, 1], [3, 73, 1]],
+      [[0, 74, 4]],
+    ];
+    while (this.nextBarT < c.currentTime + 1.2) {
+      const t0 = this.nextBarT, i = this.bar % 8, chord = prog[i];
+      const quiet = Math.floor(this.bar / 8) % 2 === 1; // every other phrase: no lead, just the bed
+      this.note('triangle', hz(chord[0] - 12), t0, beat * 3.8, 0.22);
+      for (let k = 0; k < 8; k++) this.note('triangle', hz(chord[k % 3] + (k >= 4 ? 12 : 0)), t0 + k * beat / 2, beat * 0.45, 0.07);
+      if (!quiet) for (const [o, m, l] of mel[i]) this.note('square', hz(m), t0 + o * beat, l * beat * 0.95, 0.045);
+      else this.note('sine', hz(chord[1] + 12), t0, beat * 4, 0.05);
+      this.nextBarT += beat * 4; this.bar++;
+    }
+  }
+
   play(name, vol = 1) {
     if (this.muted || !this.ensure()) return;
     const now = performance.now();

@@ -450,7 +450,15 @@ class UI {
     $('#finBtn').onclick = () => this.showFinances();
     $('#rosterBtn').onclick = () => this.showRoster();
     $('#disBtn').onclick = () => this.showDisasters();
-    $('#sndBtn').onclick = () => { this.sfx.muted = !this.sfx.muted; $('#sndBtn').textContent = this.sfx.muted ? '♪̸' : '♪'; $('#sndBtn').classList.toggle('on', this.sfx.muted); };
+    $('#sndBtn').onclick = () => {
+      // Sound + music -> sound only -> mute -> ...
+      const s = this.sfx;
+      if (!s.muted && s.musicOn) { s.stopMusic(); s.wantMusic = false; this.toast('Music off', 'info'); }
+      else if (!s.muted) { s.muted = true; if (s.master) s.master.gain.value = 0; this.toast('All sound off', 'info'); }
+      else { s.muted = false; if (s.master) s.master.gain.value = s.vol; s.wantMusic = true; s.startMusic(); this.toast('Sound and music on', 'info'); }
+      $('#sndBtn').textContent = s.muted ? '✕' : s.musicOn ? '♫' : '♪';
+      try { localStorage.setItem('jt_audio', s.muted ? 'mute' : s.musicOn ? 'all' : 'sfx'); } catch (e) { /* storage unavailable */ }
+    };
     $('#menuBtn').onclick = () => this.showMenu();
     for (const b of document.querySelectorAll('#miniBtns button[data-ov]')) b.onclick = () => this.toggleOverlay(b.dataset.ov);
     $('#findBtn').onclick = () => this.jumpToLoose();

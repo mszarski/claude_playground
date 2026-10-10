@@ -211,6 +211,12 @@ function loop(now) {
 function boot() {
   buildAllSprites();
   SFX = new Sfx();
+  let pref = 'all';
+  try { pref = localStorage.getItem('jt_audio') || 'all'; } catch (e) { /* storage unavailable */ }
+  SFX.wantMusic = pref === 'all'; SFX.muted = pref === 'mute';
+  // browsers only allow audio after a user gesture
+  const kick = () => { if (SFX.wantMusic && !SFX.muted) SFX.startMusic(); document.getElementById('sndBtn').textContent = SFX.muted ? '✕' : SFX.musicOn ? '♫' : '♪'; window.removeEventListener('pointerdown', kick); };
+  window.addEventListener('pointerdown', kick);
   window.addEventListener('resize', () => {
     if (RENDER) { RENDER.resize(window.innerWidth, window.innerHeight); UIX.clampCam(); }
     if (titleAnim) startTitleAnim();
