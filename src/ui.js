@@ -335,6 +335,13 @@ class UI {
     }
     if (n) this.sfx.play(tool === 'demolish' ? 'demolish' : 'build');
     else this.sfx.play('error');
+    if (n && (tool === 'fence' || tool === 'paddock')) {
+      const w = g.world;
+      w.computePower(g);
+      let off = 0, total = 0;
+      for (const [x, y] of this.dragTiles) { const i = w.idx(x, y); if (w.fence[i] === F_ELECTRIC) { total++; if (!w.fencePowered[i]) off++; } }
+      if (off) this.toast(`${off} of ${total} fence tiles have no power (blinking red). Build a Power Plant or Pylon nearby.`, 'warn');
+    }
   }
 
   click(t) {
@@ -481,9 +488,9 @@ class UI {
     el.className = 'toast ' + type; el.textContent = msg;
     const box = $('#toasts');
     box.appendChild(el);
-    while (box.children.length > 4) box.removeChild(box.firstChild);
-    setTimeout(() => { el.style.opacity = '0'; }, 3800);
-    setTimeout(() => el.remove(), 4400);
+    while (box.children.length > 3) box.removeChild(box.firstChild);
+    setTimeout(() => { el.style.opacity = '0'; }, 3200);
+    setTimeout(() => el.remove(), 3800);
   }
 
   headline(e) {

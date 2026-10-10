@@ -389,7 +389,14 @@ class Renderer {
     if (showPower) {
       for (let y = Math.max(0, vy0); y <= Math.min(w.H - 1, vy1); y++) for (let x = Math.max(0, vx0); x <= Math.min(w.W - 1, vx1); x++) {
         const i = w.idx(x, y);
-        if (w.covered[i]) { ctx.fillStyle = 'rgba(80,160,255,0.16)'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE); }
+        if (w.covered[i]) {
+          ctx.fillStyle = 'rgba(80,160,255,0.16)'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+          ctx.fillStyle = 'rgba(140,200,255,0.75)';
+          if (x > 0 && !w.covered[i - 1]) ctx.fillRect(x * TILE, y * TILE, 1, TILE);
+          if (x < w.W - 1 && !w.covered[i + 1]) ctx.fillRect(x * TILE + TILE - 1, y * TILE, 1, TILE);
+          if (y > 0 && !w.covered[i - w.W]) ctx.fillRect(x * TILE, y * TILE, TILE, 1);
+          if (y < w.H - 1 && !w.covered[i + w.W]) ctx.fillRect(x * TILE, y * TILE + TILE - 1, TILE, 1);
+        }
         if (w.fence[i] === F_ELECTRIC && !w.fencePowered[i]) { ctx.fillStyle = 'rgba(255,40,40,0.45)'; ctx.fillRect(x * TILE, y * TILE, TILE, TILE); }
       }
     }
