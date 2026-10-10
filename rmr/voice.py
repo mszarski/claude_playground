@@ -156,6 +156,44 @@ class EmotionModel:
         return {k: v / s for k, v in q.items()}
 
 
+DIMS = ("arousal", "dominance", "valence")
+# Mean attributes of the tone bank (scripts/tone_bank.py: the voice model on all of CREMA-D), the level the
+# licence-clean students were trained at. Conversational speech on a headset (AMI) reads close to it; TV dialogue
+# (MELD) reads about 0.2 higher on every attribute.
+REFERENCE = {"arousal": 0.404, "dominance": 0.446, "valence": 0.376}
+
+
+class Calibration:
+    """Per-device level correction of arousal / dominance / valence.
+
+    The attributes depend on the microphone, the room and the speaker as much as on the feeling, so an absolute
+    0.55 valence means "happy" on one device and "flat" on another. This keeps a running mean of the readings coming
+    from one device (or conversation) and shifts each reading so that mean sits at ``REFERENCE``. ``prior_n`` pseudo
+    readings at the reference keep the first few utterances from swinging it. ``fixed`` (a dict of means) calibrates a
+    whole recorded set at once instead (evaluation on another corpus).
+    """
+
+    def __init__(self, prior_n=20, ref=REFERENCE, fixed=None):
+        self.ref, self.fixed = dict(ref), fixed
+        self.n, self.sum = prior_n, {k: ref[k] * prior_n for k in DIMS}
+
+    def mean(self):
+        return self.fixed or {k: self.sum[k] / self.n for k in DIMS}
+
+    def __call__(self, heard, update=True):
+        if not all(k in heard for k in DIMS):
+            return heard
+        if update and not self.fixed:
+            self.n += 1
+            for k in DIMS:
+                self.sum[k] += heard[k]
+        m = self.mean()
+        out = dict(heard, raw={k: heard[k] for k in DIMS})
+        for k in DIMS:
+            out[k] = float(min(1.0, max(0.0, heard[k] - m[k] + self.ref[k])))
+        return out
+
+
 class Listener:
     """Transcript + categorical emotion + arousal / valence / dominance for one utterance."""
 
