@@ -420,13 +420,31 @@ function makePersonFrames(opts) {
   return frames;
 }
 
-const PEOPLE = { guests: [], ranger: null, worker: null, vet: null };
+function makeKidFrames(opts) {
+  const { skin, hair, shirt, pants } = opts;
+  const frames = [];
+  for (let f = 0; f < 2; f++) {
+    const [c, ctx] = makeCanvas(6, 10);
+    const p = (x, y, col) => { ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1); };
+    p(2, 3, hair); p(3, 3, hair); p(1, 3, hair); p(4, 3, hair);
+    p(2, 4, skin); p(3, 4, skin); p(1, 4, hair); p(4, 4, hair);
+    for (let x = 1; x < 5; x++) { p(x, 5, shirt); p(x, 6, shirt); }
+    p(0, 5 + f, skin); p(5, 6 - f, skin);
+    p(1, 7, pants); p(2, 7, pants); p(3, 7, pants); p(4, 7, pants);
+    if (f === 0) { p(1, 8, '#201810'); p(4, 8, '#201810'); } else { p(2, 8, '#201810'); p(3, 8, '#201810'); }
+    frames.push(c);
+  }
+  return frames;
+}
+
+const PEOPLE = { guests: [], kids: [], ranger: null, worker: null, vet: null };
 function buildPeople() {
   const r = mulberry32(1234);
   const pk = (a) => a[Math.floor(r() * a.length)];
   for (let i = 0; i < 40; i++) {
     PEOPLE.guests.push(makePersonFrames({ skin: pk(SKIN), hair: pk(HAIR), shirt: pk(SHIRT), pants: pk(PANTS), hat: r() < 0.25 ? pk(['#e8e0c0', '#e04838', '#3878c8', '#f8e060']) : null }));
   }
+  for (let i = 0; i < 16; i++) PEOPLE.kids.push(makeKidFrames({ skin: pk(SKIN), hair: pk(HAIR), shirt: pk(SHIRT), pants: pk(PANTS) }));
   PEOPLE.ranger = makePersonFrames({ skin: '#d8a078', hair: '#2a1a10', shirt: '#8a7a4a', pants: '#5a4a2a', hat: '#c8b078' });
   PEOPLE.worker = makePersonFrames({ skin: '#b07850', hair: '#1a1a1a', shirt: '#3a5a8a', pants: '#2a3a5a', hat: '#f8e060', vest: '#f08020' });
 }

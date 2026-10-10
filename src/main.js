@@ -38,7 +38,7 @@ function serialize(g) {
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
-    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills })),
+    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills, gr: d.growth })),
   });
 }
 
@@ -67,7 +67,7 @@ function loadGame(json) {
   }
   for (const dd of s.dinos) {
     const d = SPECIES[dd.s].flying ? new Ptera(g, Math.floor(dd.x), Math.floor(dd.y)) : new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));
-    d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0;
+    d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0; if (dd.gr !== undefined) d.growth = dd.gr;
     if (d.isPtera) g.pteros.push(d); else g.dinos.push(d);
   }
   g.money = s.money; g.time = s.time; g.reputation = s.rep; g.ticket = s.ticket; g.goalIdx = s.goalIdx; g.sandbox = s.sandbox;

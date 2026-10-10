@@ -30,6 +30,12 @@ class UI {
     game.on('gameover', (reason) => this.showGameOver(reason));
     game.on('victory', () => this.showVictory());
     game.on('breach', () => { if (this.speed > 1) this.setSpeed(1); });
+    game.on('day', () => {
+      const h = game.history[game.history.length - 1];
+      if (!h) return;
+      const net = h.income - h.expense;
+      this.toast(`Day ${h.day} report: ${net >= 0 ? '+' : '−'}${fmtMoney(Math.abs(net)).replace('-', '')} net · ${h.peak} guests at peak · ${'★'.repeat(game.stars) || 'no stars yet'}`, net >= 0 ? 'good' : 'warn');
+    });
     game.soundHook = (name, vol, x, y) => {
       if (x !== undefined) {
         // attenuate by distance from camera center
@@ -860,14 +866,21 @@ class UI {
     const c = $('#finChart'), x = c.getContext('2d');
     const H = g.history.slice(-40);
     if (H.length > 1) {
-      const vals = H.map((h) => h.money);
-      const mn = Math.min(0, ...vals), mx = Math.max(...vals);
-      const sy = (v) => 140 - (v - mn) / Math.max(1, mx - mn) * 130;
-      x.strokeStyle = '#3a4a36'; x.beginPath(); x.moveTo(0, sy(0)); x.lineTo(680, sy(0)); x.stroke();
-      x.strokeStyle = '#f8d040'; x.lineWidth = 2; x.beginPath();
-      H.forEach((h, i) => { const px = i / (H.length - 1) * 670 + 5; if (i) x.lineTo(px, sy(h.money)); else x.moveTo(px, sy(h.money)); });
-      x.stroke();
-      x.fillStyle = '#9ab08a'; x.font = '14px VT323'; x.fillText(fmtMoney(mx), 6, 14); x.fillText(fmtMoney(mn), 6, 146);
+      const line = (vals, col, labelY) => {
+        const mn = Math.min(0, ...vals), mx = Math.max(1, ...vals);
+        const sy = (v) => 138 - (v - mn) / Math.max(1, mx - mn) * 112;
+        x.strokeStyle = col; x.lineWidth = 2; x.beginPath();
+        vals.forEach((v, i) => { const px = i / (vals.length - 1) * 670 + 5; if (i) x.lineTo(px, sy(v)); else x.moveTo(px, sy(v)); });
+        x.stroke();
+        return [mn, mx, sy];
+      };
+      const [mn, mx, sy] = line(H.map((h) => h.money), '#f8d040');
+      x.strokeStyle = '#3a4a36'; x.lineWidth = 1; x.beginPath(); x.moveTo(0, sy(0)); x.lineTo(680, sy(0)); x.stroke();
+      const [, gmx] = line(H.map((h) => h.peak || h.guests), '#70b8f0');
+      x.font = '15px VT323';
+      x.fillStyle = '#f8d040'; x.fillText('Funds ' + fmtMoney(mx) + ' max', 6, 14);
+      x.fillStyle = '#70b8f0'; x.fillText('Peak guests ' + gmx, 160, 14);
+      x.fillStyle = '#9ab08a'; x.fillText('Day ' + H[0].day, 6, 148); x.fillText('Day ' + H[H.length - 1].day, 630, 148);
     } else { x.fillStyle = '#9ab08a'; x.font = '18px VT323'; x.fillText('History appears after day 1.', 10, 80); }
   }
 

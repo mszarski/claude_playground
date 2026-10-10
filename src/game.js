@@ -533,6 +533,7 @@ class Game {
     this.floats = this.floats.filter((f) => f.life > 0);
 
     this.spawnGuests(dt);
+    if (this.guests.length > (this.peakGuests || 0)) this.peakGuests = this.guests.length;
 
     // per-second bookkeeping
     this.secondT -= dt;
@@ -740,9 +741,10 @@ class Game {
     this.reputation = clamp(this.reputation, 0, 100);
     const inc = this.ledger.tickets + this.ledger.shops + this.ledger.grants;
     const exp = this.ledger.upkeep + this.ledger.food + this.ledger.repairs + this.ledger.construction + this.ledger.dinos + this.ledger.fines + this.ledger.ops;
-    this.history.push({ day: day - 1, money: this.money, guests: this.guests.length, income: inc, expense: exp, rep: this.reputation, stars: this.stars, ledger: this.ledger });
+    this.history.push({ day: day - 1, money: this.money, guests: this.guests.length, peak: this.peakGuests || 0, income: inc, expense: exp, rep: this.reputation, stars: this.stars, ledger: this.ledger });
     if (this.history.length > 120) this.history.shift();
     this.ledger = this.newLedger();
+    this.peakGuests = this.guests.length;
     this.stats.fledToday = 0;
     this.events.onNewDay(day);
     this.emit('day', day);

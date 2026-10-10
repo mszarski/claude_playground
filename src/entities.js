@@ -43,7 +43,9 @@ class Dino {
     this.comfortParts = {};
     this.roarCD = randf(5, 20);
     this.lastBreach = 0;
+    this.growth = 0.6; // hatchlings grow up over a couple of days
   }
+  get str() { return this.sp.strength * this.growth; }
 
   get tx() { return Math.floor(this.x); }
   get ty() { return Math.floor(this.y); }
@@ -62,6 +64,10 @@ class Dino {
     if (this.flash > 0) this.flash -= dt;
     if (this.carried) return;
     this.age += dt;
+    if (this.growth < 1) {
+      this.growth = Math.min(1, this.growth + dt / 150);
+      if (this.growth >= 1) g.log(`${this.name} the ${this.sp.name} is fully grown.`, 'info', this);
+    }
 
     // Sedation
     if (this.sedatedT > 0) {
@@ -305,7 +311,7 @@ class Dino {
     if (!tgt) { this.state = 'idle'; this.stateT = 1; this.attackBuilding = false; return; }
     this.facing = tgt.x + 0.5 > this.x ? 1 : -1;
     this.lunge = 0.25;
-    const str = this.sp.strength;
+    const str = this.str;
     if (tgt.fence) {
       const type = w.fence[tgt.j];
       let dmg;
@@ -384,7 +390,7 @@ class Dino {
         this.state = 'eat'; this.stateT = 6; this.target = null; return;
       }
       if (t.kind === 'dino') {
-        t.hp -= this.sp.strength * (t.sp.territorial ? 2.5 : 12);
+        t.hp -= this.str * (t.sp.territorial ? 2.5 : 12);
         t.flash = 0.2; t.stress = 100;
         if (t.sp.territorial && t.state !== 'hunt') { t.state = 'hunt'; t.target = this; }
         g.shake = Math.max(g.shake, t.sp.size >= 3 ? 2.5 : 0.5);
@@ -434,7 +440,8 @@ class Guest {
     this.x = this.cx + 0.5 + randf(-0.25, 0.25); this.y = this.cy + 0.5 + randf(-0.25, 0.25);
     this.nx = this.cx; this.ny = this.cy; this.prev = -1;
     this.ox = randf(-0.28, 0.28); this.oy = randf(-0.28, 0.28);
-    this.sprite = pick(PEOPLE.guests);
+    this.kid = chance(0.22);
+    this.sprite = pick(this.kid ? PEOPLE.kids : PEOPLE.guests);
     this.state = 'walk';
     this.hunger = randf(0, 40); this.toilet = randf(0, 30); this.shopUrge = randf(0, 60);
     this.happy = 60; this.fear = 0;

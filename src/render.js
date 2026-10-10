@@ -485,33 +485,35 @@ class Renderer {
     let lx = 0;
     if (d.lunge > 0) { d.lunge -= 1 / 60; lx = d.facing * 2; }
     const bob = d.moving && fr === 1 ? -1 : 0;
-    const x = Math.round(d.x * TILE - S.w / 2 + lx), y = Math.round(d.y * TILE - S.h + 5 + bob + (sleeping ? 2 : 0));
+    const gs = d.growth === undefined || d.growth >= 1 ? 1 : Math.round(d.growth * 10) / 10;
+    const dw = Math.round(S.w * gs), dh = Math.round(S.h * gs);
+    const x = Math.round(d.x * TILE - dw / 2 + lx), y = Math.round(d.y * TILE - dh + 5 + bob + (sleeping ? 2 : 0));
     if (d.camouflaged) ctx.globalAlpha = 0.15 + Math.max(0, Math.sin(this.time * 1.3 + d.id)) * 0.2;
-    ctx.drawImage(img, x, y);
+    if (gs === 1) ctx.drawImage(img, x, y); else ctx.drawImage(img, x, y, dw, dh);
     ctx.globalAlpha = 1;
     if (sleeping) {
       const t = this.time * 1.5 + d.id;
       const ph = t % 1;
-      drawText3(ctx, 'Z', x + S.w - 4 + Math.round(ph * 3), y - 2 - Math.round(ph * 6), '#ffffff');
+      drawText3(ctx, 'Z', x + dw - 4 + Math.round(ph * 3), y - 2 - Math.round(ph * 6), '#ffffff');
     }
     if (d.loose && !sleeping && !d.camouflaged) {
       if (Math.floor(this.time * 4) % 2 === 0) {
-        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + S.w / 2 - 2, y - 10, 5, 8);
-        ctx.fillStyle = '#ff3020'; ctx.fillRect(x + S.w / 2 - 1, y - 9, 3, 6);
-        ctx.fillStyle = '#fff'; ctx.fillRect(x + S.w / 2, y - 8, 1, 3); ctx.fillRect(x + S.w / 2, y - 4, 1, 1);
+        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(x + dw / 2 - 2, y - 10, 5, 8);
+        ctx.fillStyle = '#ff3020'; ctx.fillRect(x + dw / 2 - 1, y - 9, 3, 6);
+        ctx.fillStyle = '#fff'; ctx.fillRect(x + dw / 2, y - 8, 1, 3); ctx.fillRect(x + dw / 2, y - 4, 1, 1);
       }
     }
     if (d.sick > 0 && Math.floor(this.time * 2 + d.id) % 3 === 0) {
-      ctx.fillStyle = '#7ad04a'; ctx.fillRect(x + S.w / 2 + 3, y - 3 - Math.round((this.time * 4) % 4), 2, 2);
+      ctx.fillStyle = '#7ad04a'; ctx.fillRect(x + dw / 2 + 3, y - 3 - Math.round((this.time * 4) % 4), 2, 2);
     }
     if (ui.selected === d) {
       ctx.strokeStyle = '#f8f080'; ctx.lineWidth = 1;
-      ctx.strokeRect(x - 1.5, y - 1.5, S.w + 3, S.h + 3);
+      ctx.strokeRect(x - 1.5, y - 1.5, dw + 3, dh + 3);
     }
     // stress meter when very stressed
     if (!sleeping && d.stress > 70 && !d.loose) {
       ctx.fillStyle = Math.floor(this.time * 3) % 2 ? '#f8a020' : '#e04020';
-      ctx.fillRect(x + S.w / 2, y - 5, 1, 3); ctx.fillRect(x + S.w / 2, y - 1, 1, 1);
+      ctx.fillRect(x + dw / 2, y - 5, 1, 3); ctx.fillRect(x + dw / 2, y - 1, 1, 1);
     }
   }
 
