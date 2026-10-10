@@ -352,6 +352,7 @@ class UI {
       const bx = t.x - Math.floor((def.w - 1) / 2), by = t.y - Math.floor((def.h - 1) / 2);
       const b = g.placeBuilding(tool, bx, by);
       if (b) {
+        this.hideTip();
         this.sfx.play('build');
         if (def.cat === 'guest' && !w.accessTiles(b).length) this.toast(`Connect the ${def.name} to a path!`, 'warn');
         if (tool === 'tour' && !w.trackAccess(b).length) this.toast('Now lay Tour Track from the station past your paddocks, ideally in a loop.', 'info');

@@ -178,6 +178,7 @@ function loop(now) {
       }
     }
     UIX.frame(dtReal);
+    if (GAME.alarm && UIX.speed > 0) SFX.play('alarm', 0.35);
     // ambient jungle
     if (UIX.speed > 0 && Math.random() < dtReal * 0.35) SFX.play(GAME.isNight ? 'cricket' : (Math.random() < 0.15 ? 'caw' : 'chirp'), 0.8);
     RENDER.draw(dtReal, UIX);

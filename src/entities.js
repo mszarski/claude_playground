@@ -166,6 +166,16 @@ class Dino {
       const prey = this.findPrey(this.loose ? 10 : 30);
       if (prey) { this.state = 'hunt'; this.target = prey; this.thinkT = 0; return; }
     }
+    // Territorial giants fight rivals that share their paddock
+    if (this.sp.territorial && this.stress > 40 && !this.loose) {
+      const myReg = w.region[w.idx(this.tx, this.ty)];
+      const rival = g.dinos.find((o) => o !== this && o.sp.territorial && !o.carried && o.sedatedT <= 0 && w.region[w.idx(o.tx, o.ty)] === myReg);
+      if (rival && chance(0.5)) {
+        this.state = 'hunt'; this.target = rival; this.thinkT = 0;
+        if (!this.fightLogged) { this.fightLogged = true; g.log(`${this.name} the ${this.sp.name} is fighting ${rival.name} the ${rival.sp.name}! Separate them.`, 'bad', this, true); g.soundAt('roar', this.x, this.y, 1); }
+        return;
+      }
+    }
     // Hungry: go to feeder
     if (this.hunger > 50 && reg) {
       const feeders = reg.feeders[this.sp.diet];
@@ -374,11 +384,13 @@ class Dino {
         this.state = 'eat'; this.stateT = 6; this.target = null; return;
       }
       if (t.kind === 'dino') {
-        t.hp -= this.sp.strength * 12;
+        t.hp -= this.sp.strength * (t.sp.territorial ? 2.5 : 12);
         t.flash = 0.2; t.stress = 100;
+        if (t.sp.territorial && t.state !== 'hunt') { t.state = 'hunt'; t.target = this; }
+        g.shake = Math.max(g.shake, t.sp.size >= 3 ? 2.5 : 0.5);
         g.burst(t.x, t.y, '#c83020', 6);
         g.soundAt('chomp', t.x, t.y, 1);
-        if (t.hp <= 0) { g.killDino(t, `eaten by ${this.name} the ${this.sp.name}`); this.hunger = 0; this.kills++; this.state = 'eat'; this.stateT = 6; this.target = null; }
+        if (t.hp <= 0) { g.killDino(t, t.sp.territorial ? `killed in a fight with ${this.name} the ${this.sp.name}` : `eaten by ${this.name} the ${this.sp.name}`); this.hunger = 0; this.kills++; this.state = 'eat'; this.stateT = 6; this.target = null; }
       } else {
         g.humanKilled(t, this);
         this.hunger = Math.max(0, this.hunger - 50); this.kills++;

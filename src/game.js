@@ -652,6 +652,8 @@ class Game {
       this.guests.push(gu);
       this.stats.guestsTotal++;
       this.earn(this.ticket, 'tickets');
+      this.floatT = (this.floatT || 0) - 1;
+      if (this.floatT <= 0) { this.floatT = 4; this.addFloat(gate.x + 1.5, gate.y - 0.5, '+$' + this.ticket, '#f8d040'); }
     }
   }
 
