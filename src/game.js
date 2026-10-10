@@ -413,6 +413,18 @@ class Game {
       this.removeBuildingFx(b);
     }
   }
+  sellDino(d) {
+    if (d.carried) return 'It is being airlifted.';
+    if (d.loose && d.sedatedT <= 0) return 'Sedate it first. Nobody ships an angry dinosaur.';
+    if (this.scenario === 'lostworld' && d.loose) return 'The buyers want it delivered from a paddock. Airlift it into one first.';
+    const v = d.sellValue || Math.round(d.sp.cost * 0.35);
+    this.earn(v, 'grants'); d.dead = true;
+    this.stats.sold = (this.stats.sold || 0) + 1;
+    (this.stats.soldSpecies = this.stats.soldSpecies || []).push(d.species);
+    this.log(`${d.name} the ${d.sp.name} was shipped to the mainland (+${fmtMoney(v)}).`, 'info');
+    return null;
+  }
+
   // Player-ordered helicopter tranquilizer run
   acuStrike(d) {
     const h = this.helis.find((x) => x.state === 'parked' && !x.cargo) || this.helis.find((x) => x.state === 'return' && !x.cargo);

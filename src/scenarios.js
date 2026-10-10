@@ -53,6 +53,14 @@ function spawnIn(g, sp, box, n = 1) {
   }
 }
 
+function roamSpawn(g, sp, n, minDist = 14) {
+  const w = g.world, s = g.start;
+  for (let k = 0; k < n; k++) for (let t = 0; t < 300; t++) {
+    const x = randi(4, w.W - 5), y = randi(4, w.H - 5);
+    if (w.dinoPass(x, y) && dist(x, y, s.x, s.y) > minDist) { const d = new Dino(g, sp, x, y); d.growth = 1; d.stress = 20; g.dinos.push(d); break; }
+  }
+}
+
 const SCENARIOS = {
   nedry: {
     name: "Nedry's Night",
@@ -112,6 +120,95 @@ const SCENARIOS = {
       return null;
     },
     progress(g) { const n = g.dinos.filter((d) => d.loose || d.carried).length; return `${g.dinos.length - n}/${g.dinos.length} contained · Day ${g.day}/10`; },
+  },
+  lostworld: {
+    name: 'The Lost World',
+    blurb: 'A mainland zoo wants specimens. Build a holding paddock, sedate the wild dinosaurs, airlift them in, then sell them from the paddock.',
+    objective: 'Ship 6 dinosaurs, including the T. rex, by the end of Day 6',
+    setup(g) {
+      g.money = 220000;
+      const s = g.start, w = g.world;
+      for (let y = s.y - 10; y <= s.y - 6; y++) for (let x = s.x + 3; x <= s.x + 7; x++) { const i = w.idx(x, y); w.terrain[i] = T_GRASS; w.path[i] = 0; w.fence[i] = 0; }
+      w.invalidate();
+      g.money = 1e9; g.placeBuilding('helipad', s.x + 4, s.y - 9);
+      g.money = 260000;
+      roamSpawn(g, 'galli', 3); roamSpawn(g, 'para', 2); roamSpawn(g, 'stego', 2); roamSpawn(g, 'trike', 1); roamSpawn(g, 'trex', 1, 22);
+      g.world.computeRegions(); g.updateLoose();
+      g.events.auto = false;
+    },
+    check(g) {
+      const sold = g.stats.sold || 0, rex = (g.stats.soldSpecies || []).includes('trex');
+      if (sold >= 6 && rex) return 'win';
+      if (!g.dinos.some((d) => d.species === 'trex') && !rex) return 'lose';
+      if (g.day > 6) return 'lose';
+      return null;
+    },
+    progress(g) { return `Shipped ${g.stats.sold || 0}/6 · T. rex ${(g.stats.soldSpecies || []).includes('trex') ? 'shipped' : 'still wild'} · Day ${g.day}/6`; },
+  },
+  opening: {
+    name: 'Opening Day',
+    blurb: 'The new park opens to record crowds and your star attraction is an Indominus. On day two she figures out the walls.',
+    objective: 'Welcome 1,800 guests by Day 5 with fewer than 6 casualties',
+    setup(g) {
+      g.money = 300000;
+      const P = buildStarterPark(g, { staff: true, rexWall: true });
+      spawnIn(g, 'galli', P[0], 3); spawnIn(g, 'para', P[0], 2);
+      spawnIn(g, 'indom', P[1], 1);
+      spawnIn(g, 'stego', P[2], 2); spawnIn(g, 'trike', P[2], 1);
+      const s = g.start;
+      g.money = 1e9; g.placeBuilding('hotel', s.x - 22, s.y - 6); g.placeBuilding('shelter', s.x + 18, s.y - 4); g.money = 300000;
+      g.reputation = 85; g.events.auto = false;
+      g.scenarioState = { broke: false };
+    },
+    tick(g) {
+      if (!g.scenarioState.broke && g.day >= 2 && g.hour >= 14) {
+        g.scenarioState.broke = true;
+        const d = g.dinos.find((x) => x.species === 'indom');
+        if (d) {
+          d.rageT = 60; d.stress = 100; d.deterT = 0;
+          // she clawed through a weak spot in the wall nearest her
+          const w = g.world;
+          const p = w.bfs(d.tx, d.ty, w.dinoPass, (x, y) => isSolidFence(w.fence[w.idx(x, y)]), 4000);
+          if (p && p.length) { const [fx, fy] = p[p.length - 1]; g.damageFence(fx, fy, 99999, d); }
+          g.log(`${d.name} the Indominus vanished from the paddock cameras... then tore through the wall!`, 'bad', d, true);
+        }
+      }
+    },
+    check(g) {
+      if (g.stats.deaths >= 6) return 'lose';
+      if (g.stats.guestsTotal >= 1800) return 'win';
+      if (g.day > 5) return 'lose';
+      return null;
+    },
+    progress(g) { return `Guests ${g.stats.guestsTotal}/1800 · Casualties ${g.stats.deaths}/5 · Day ${g.day}/5`; },
+  },
+  siege: {
+    name: 'Raptor Siege',
+    blurb: 'A raptor pack is loose and the gate is sealed. The rescue helicopter lands on Day 3 at noon. Keep the guests alive until then.',
+    objective: 'Lose fewer than 8 guests before Day 3, 12:00',
+    setup(g) {
+      g.money = 200000;
+      const P = buildStarterPark(g, { staff: true });
+      spawnIn(g, 'galli', P[0], 2); spawnIn(g, 'para', P[2], 2);
+      const w = g.world, s = g.start;
+      // the raptors are already out, prowling the east side
+      for (let k = 0; k < 6; k++) for (let t = 0; t < 200; t++) {
+        const x = s.x + randi(10, 24), y = s.y - randi(2, 8);
+        if (w.dinoPass(x, y) && !w.path[w.idx(x, y)]) { const d = new Dino(g, 'raptor', x, y); d.growth = 1; d.hunger = 40; g.dinos.push(d); break; }
+      }
+      w.computeRegions(); g.updateLoose();
+      g.time = 9; g.gateLocked = true; g.events.auto = false;
+      // pre-fill the park with guests
+      const gate = g.buildingsOfType('gate')[0];
+      const acc = w.accessTiles(gate);
+      for (let k = 0; k < 120 && acc.length; k++) { const gu = new Guest(g, pick(acc)); for (let m = 0; m < 30; m++) gu.update(0.5); g.guests.push(gu); }
+    },
+    check(g) {
+      if (g.stats.deaths >= 8) return 'lose';
+      if (g.time >= 48 + 12) { g.gateLocked = false; return 'win'; }
+      return null;
+    },
+    progress(g) { const h = Math.max(0, 60 - g.time); return `Casualties ${g.stats.deaths}/7 · Rescue in ${Math.floor(h)}h`; },
   },
   storms: {
     name: 'Storm Season',

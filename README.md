@@ -13,7 +13,7 @@ grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 - **Guests** walk paths, eat, shop, ride the electric **jeep tour**, watch **Mosasaur** feeding shows, and flee to shelters when the alarm sounds.
 - **Disasters** — tropical storms with lightning, grid sabotage, earthquakes, volcanic eruptions, outbreaks, rampages, raptor probes, safety inspections. Trigger them yourself from the ☄ menu.
 - **Response tools** — evacuation alarm, siren towers, rangers with tranquilizer rifles, engineers, ACU helicopter airlifts and strikes, emergency fence repair, backup generators, vet clinics.
-- **Scenarios** — Nedry's Night, Isla Sorna Cleanup and Storm Season: prebuilt crises with objectives and deadlines.
+- **Scenarios** — Nedry's Night, Isla Sorna Cleanup, The Lost World, Opening Day, Raptor Siege and Storm Season: prebuilt crises with objectives and deadlines.
 - Goals, an advisor, star rating, finances with history graphs, a news ticker, a breach cam, save/load, three difficulty levels, sandbox mode, synthesized sound effects and an original chiptune soundtrack.
 
 ## Play

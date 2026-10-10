@@ -118,9 +118,8 @@ class UIPanels {
     if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }
     if (a === 'relocate' && o) { this.moveDino = o; this.setTool('movedest'); this.toast(`Click inside the paddock where ${o.name} should go (Esc to cancel).`, 'info'); }
     if (a === 'sell' && o) {
-      if (o.carried) return;
-      g.earn(o.sellValue || o.sp.cost * 0.35, 'grants'); o.dead = true;
-      g.log(`${o.name} the ${o.sp.name} was shipped to another facility.`, 'info');
+      const err = g.sellDino(o);
+      if (err) { this.toast(err, 'warn'); return; }
       this.select(null); return;
     }
     if (a === 'demolish' && o) { if (g.demolishAt(o.x, o.y)) this.sfx.play('demolish'); this.select(null); return; }
