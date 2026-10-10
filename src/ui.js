@@ -900,6 +900,7 @@ class UI {
     try { has = !!localStorage.getItem('jt_save'); } catch (e) { /* storage unavailable */ }
     let html = `<h1>MENU</h1><div class="btns" style="flex-direction:column;align-items:stretch;gap:6px">
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
+      <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;
     this.showModal(html);
     for (const b of document.querySelectorAll('[data-m]')) b.onclick = () => {
@@ -908,6 +909,7 @@ class UI {
       else if (m === 'save') { const ok = saveGame(this.game); this.closeModal(); this.toast(ok ? 'Park saved.' : 'Could not save (storage unavailable).', ok ? 'good' : 'bad'); }
       else if (m === 'load') { this.closeModal(); loadGameFromStorage(); }
       else if (m === 'help') this.showHelp();
+      else if (m === 'advisor') { this.game.advisorOn = this.game.advisorOn === false; this.showMenu(); }
       else if (m === 'new') { this.closeModal(); showTitle(); }
     };
   }

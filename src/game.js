@@ -541,6 +541,8 @@ class Game {
       this.secondT = 1;
       this.updateRating();
       this.checkGoals();
+      this.adviseT = (this.adviseT === undefined ? 20 : this.adviseT) - 1;
+      if (this.adviseT <= 0) { this.adviseT = 45; if (this.advisorOn !== false) this.advise(); }
       this.looseCount = this.creatures().filter((d) => d.loose && !d.carried).length;
     }
 
@@ -594,6 +596,51 @@ class Game {
     this.shake = Math.max(this.shake, 4);
     this.soundAt('crash', j.x, j.y, 1);
     this.log(`${dino.name} the ${dino.sp.name} flipped a tour jeep!${n ? ' ' + n + ' guest' + (n > 1 ? 's' : '') + ' lost.' : ''}`, 'bad', { x: j.x, y: j.y }, true);
+  }
+
+  // Advisor: find the most pressing issue the player can act on
+  advise() {
+    const w = this.world;
+    const issues = [];
+    const cre = this.creatures();
+    const contained = this.dinos.filter((d) => !d.loose && !d.carried);
+    const carn = cre.some((d) => d.sp.danger >= 4);
+    let unpowered = null;
+    for (let i = 0; i < w.fence.length; i++) if (w.fence[i] === F_ELECTRIC && !w.fencePowered[i]) {
+      unpowered = { x: i % w.W, y: (i / w.W) | 0 }; break;
+    }
+    if (unpowered && cre.length) issues.push([90, 'Some electric fences have no power. Add a Pylon or Power Plant nearby.', unpowered]);
+    if (carn && !this.hasBuilding('ranger')) issues.push([85, 'You have dangerous carnivores but no Ranger Station. Nobody can tranquilize an escapee.', null]);
+    if (carn && !this.shelters().length) issues.push([70, 'There is nowhere for guests to shelter. A Visitor Center, Hotel or Bunker saves lives during a breach.', null]);
+    if (cre.length && !this.hasBuilding('maint')) issues.push([65, 'Without a Maintenance Shed, damaged fences are never repaired.', null]);
+    if (this.hasBuilding('power') && !this.hasBuilding('backup') && cre.some((d) => d.sp.strength >= 6)) issues.push([45, 'A Backup Generator keeps fences live during a grid failure.', null]);
+    for (const d of contained) {
+      const reg = w.regionAt(d.tx, d.ty);
+      if (!reg) continue;
+      const p = d.comfortParts || {};
+      if (d.hunger > 75) issues.push([80, `${d.name} the ${d.sp.name} is starving. Put a ${d.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder in its paddock.`, d]);
+      else if (p.fear < 0) issues.push([75, `${d.name} the ${d.sp.name} is terrified: it shares a paddock with a carnivore. Use Move… to separate them.`, d]);
+      else if (p.social < 0) issues.push([75, `${d.name} the ${d.sp.name} is fighting a rival. Move one of them to its own paddock.`, d]);
+      else if (d.sp.social > 1 && p.social < 10) issues.push([40, `${d.name} the ${d.sp.name} is lonely. ${d.sp.name}s like groups of ${d.sp.social}.`, d]);
+      else if (p.space < 18) issues.push([50, `${d.name}'s paddock is crowded. Enlarge it or move some dinosaurs out.`, d]);
+      else if (p.forest < 8 && d.sp.forest > 0.2) issues.push([30, `${d.name} the ${d.sp.name} wants more tree cover. Plant trees in its paddock.`, d]);
+      else if (d.sick > 0 && !this.hasBuilding('vet')) issues.push([60, `${d.name} is sick. A Vet Clinic would cure it quickly.`, d]);
+    }
+    const gb = this.buildingsOfType('gate')[0];
+    if (this.guests.length > 30 && !this.hasBuilding('restroom')) issues.push([35, 'Guests are desperate for a Restroom.', null]);
+    if (this.guests.length > 30 && !this.hasBuilding('restaurant')) issues.push([35, 'Hungry guests have nowhere to eat. Build a Restaurant.', null]);
+    if (this.guests.length > 60 && !this.hasBuilding('tour') && this.stars >= 1) issues.push([20, 'A Tour Station with a loop of Tour Track past the paddocks is the best crowd-pleaser.', null]);
+    if (this.money < 30000) issues.push([55, 'Funds are low. Raise ticket prices a little or add shops along busy paths.', gb]);
+    this.adviceSaid = this.adviceSaid || {};
+    issues.sort((a, b) => b[0] - a[0]);
+    for (const [, msg, ref] of issues) {
+      const last = this.adviceSaid[msg];
+      if (last !== undefined && this.time - last < 48) continue;
+      this.adviceSaid[msg] = this.time;
+      this.log('Advisor: ' + msg, 'warn', ref, true);
+      return msg;
+    }
+    return null;
   }
 
   updateLoose() {
