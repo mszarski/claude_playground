@@ -16,6 +16,7 @@ grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 - **Scenarios** — Nedry's Night, Isla Sorna Cleanup, The Lost World, Opening Day, Raptor Siege and Storm Season: prebuilt crises with objectives and deadlines.
 - **Research Lab** — upgrades (reinforced fences, high-voltage grid, faster darts, ranger training, turbines, medicine, feeders, motion sensors, ACU gunship, marketing) and genome research that unlocks species without stars.
 - **Seasons** — Spring, Summer (tourist peak), Monsoon (storms) and Cool Season; adjustable day length; a Calm mode with no disasters.
+- **Island codes** to share a map, and **medals** for each scenario with your best result saved.
 - Goals, an advisor, star rating, finances with history graphs, a news ticker, a breach cam, save/load, three difficulty levels, sandbox mode, synthesized sound effects and an original chiptune soundtrack.
 
 ## Play

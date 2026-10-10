@@ -274,6 +274,7 @@ class UIPanels {
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
+      <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)} (copy)</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;
     this.showModal(html);
     for (const b of document.querySelectorAll('[data-m]')) b.onclick = () => {
@@ -282,6 +283,11 @@ class UIPanels {
       else if (m === 'save') { const ok = saveGame(this.game); this.closeModal(); this.toast(ok ? 'Park saved.' : 'Could not save (storage unavailable).', ok ? 'good' : 'bad'); }
       else if (m === 'load') { this.closeModal(); loadGameFromStorage(); }
       else if (m === 'help') this.showHelp();
+      else if (m === 'seed') {
+        const code = seedCode(this.game.seed);
+        if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => this.toast(`Copied island code ${code}`, 'good'), () => this.toast(`Island code: ${code}`, 'info'));
+        else this.toast(`Island code: ${code}`, 'info');
+      }
       else if (m === 'breed') { this.game.breedingOff = !this.game.breedingOff; this.showMenu(); }
       else if (m === 'advisor') { this.game.advisorOn = this.game.advisorOn === false; this.showMenu(); }
       else if (m === 'new') { this.closeModal(); showTitle(); }
@@ -324,7 +330,11 @@ class UIPanels {
     this.setSpeed(0);
     const win = r === 'win';
     if (win) this.sfx.play('fanfare');
+    const medal = win && sc.medal ? sc.medal(g) : null;
+    const best = medal ? saveMedal(g.scenario, medal, g.day) : false;
     const html = `<div id="gameover"><h1>${win ? 'SCENARIO COMPLETE' : 'SCENARIO FAILED'}</h1><p style="font-size:22px">${sc.name}: ${win ? 'you did it.' : 'the island won this time.'}</p>
+      ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
+      ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
       <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
       <div class="btns" style="justify-content:center"><button data-m="again">Try again</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
     this.showModal(html, true);

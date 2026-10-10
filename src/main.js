@@ -243,12 +243,13 @@ function boot() {
     SFX.play('click');
     document.querySelector('#title .menu').hidden = false;
     document.getElementById('diffMenu').hidden = true;
-    startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength() });
+    startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength(), seed: parseSeed(document.getElementById('seedIn').value) || undefined });
   };
   document.getElementById('btnScen').onclick = () => {
     SFX.ensure(); SFX.play('click');
     const m = document.getElementById('scenMenu');
-    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
+    const won = loadMedals();
+    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${won[k] ? MEDAL_ICON[won[k].medal] + ' ' : ''}${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
     document.querySelector('#title .menu').hidden = true; m.hidden = false;
     for (const b of m.querySelectorAll('[data-scen]')) b.onclick = () => {
       document.querySelector('#title .menu').hidden = false; m.hidden = true;

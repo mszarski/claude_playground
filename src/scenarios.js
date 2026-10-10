@@ -67,6 +67,17 @@ function roamSpawn(g, sp, n, minDist = 14) {
   }
 }
 
+const MEDAL_ICON = { gold: '🥇', silver: '🥈', bronze: '🥉' };
+const MEDAL_RANK = { bronze: 1, silver: 2, gold: 3 };
+function loadMedals() { try { return JSON.parse(localStorage.getItem('jt_medals') || '{}'); } catch (e) { return {}; } }
+function saveMedal(id, medal, day) {
+  const m = loadMedals();
+  const prev = m[id];
+  const better = !prev || MEDAL_RANK[medal] > MEDAL_RANK[prev.medal] || (MEDAL_RANK[medal] === MEDAL_RANK[prev.medal] && day < prev.day);
+  if (better) { m[id] = { medal, day }; try { localStorage.setItem('jt_medals', JSON.stringify(m)); } catch (e) { /* storage unavailable */ } }
+  return better;
+}
+
 const SCENARIOS = {
   nedry: {
     name: "Nedry's Night",
@@ -92,6 +103,8 @@ const SCENARIOS = {
         g.log('Dennis Nedry has stolen the embryos (-$50k), shut down the grid and sealed the main gate. Guests cannot leave: build Bunkers! "Ah ah ah!"', 'bad', null, true);
       }
     },
+    medal(g) { const d = g.stats.deaths; return d === 0 ? 'gold' : d <= 1 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: no casualties · Silver: 1 casualty',
     check(g) {
       if (g.gateLocked && g.world.power.outage <= 0 && g.looseCount === 0) { g.gateLocked = false; g.log('The main gate is unlocked again.', 'good', null, true); }
       if (g.stats.deaths >= 4) return 'lose';
@@ -114,6 +127,8 @@ const SCENARIOS = {
       w.computeRegions(); g.updateLoose();
       g.events.auto = false;
     },
+    medal(g) { return g.day <= 5 ? 'gold' : g.day <= 7 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 5 · Silver: by Day 7',
     check(g) {
       if (!g.dinos.length) return 'lose';
       if (g.dinos.every((d) => !d.loose && !d.carried && d.sedatedT <= 0)) return 'win';
@@ -137,6 +152,8 @@ const SCENARIOS = {
       g.world.computeRegions(); g.updateLoose();
       g.events.auto = false;
     },
+    medal(g) { return g.day <= 3 ? 'gold' : g.day <= 4 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 3 · Silver: by Day 4',
     check(g) {
       const sold = g.stats.sold || 0, rex = (g.stats.soldSpecies || []).includes('trex');
       if (sold >= 6 && rex) return 'win';
@@ -175,6 +192,8 @@ const SCENARIOS = {
         }
       }
     },
+    medal(g) { const d = g.stats.deaths; return d === 0 && g.day <= 4 ? 'gold' : d <= 2 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: no casualties by Day 4 · Silver: 2 or fewer casualties',
     check(g) {
       if (g.stats.deaths >= 6) return 'lose';
       if (g.stats.guestsTotal >= 1800) return 'win';
@@ -204,6 +223,8 @@ const SCENARIOS = {
       const acc = w.accessTiles(gate);
       for (let k = 0; k < 120 && acc.length; k++) { const gu = new Guest(g, pick(acc)); for (let m = 0; m < 30; m++) gu.update(0.5); g.guests.push(gu); }
     },
+    medal(g) { const d = g.stats.deaths; return d === 0 ? 'gold' : d <= 3 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: no casualties · Silver: 3 or fewer',
     check(g) {
       if (g.stats.deaths >= 8) return 'lose';
       if (g.time >= 48 + 12) { g.gateLocked = false; return 'win'; }
@@ -227,6 +248,8 @@ const SCENARIOS = {
     tick(g) {
       if (g.day > g.scenarioState.lastStorm && g.hour >= 11) { g.scenarioState.lastStorm = g.day; g.events.trigger('storm'); }
     },
+    medal(g) { return g.day <= 8 ? 'gold' : g.day <= 10 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 8 · Silver: by Day 10',
     check(g) {
       if (g.money >= 650000) return 'win';
       if (g.day > 12) return 'lose';
