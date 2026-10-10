@@ -21,7 +21,7 @@ const GOALS = [
   { id: 'star5', text: 'Reach a 5-star rating: the greatest park on Earth', reward: 250000, check: (g) => g.stars >= 5 },
 ];
 
-const STAR_THRESH = [0, 60, 120, 200, 300, 430];
+const STAR_THRESH = [0, 55, 110, 175, 260, 370];
 
 class Game {
   constructor(seed, opts = {}) {
@@ -37,7 +37,7 @@ class Game {
     this.particles = []; this.floats = []; this.darts = [];
     this.logs = [];
     this.reputation = 50; this.stars = 0; this.attraction = 0; this.safety = 100;
-    this.ticket = 80; this.priceMul = 1;
+    this.ticket = 100; this.priceMul = 1;
     this.alarm = false; this.sirenAlarm = false;
     this.shake = 0;
     this.goalIdx = 0;
@@ -607,10 +607,10 @@ class Game {
     // Need something to see / do beyond the gate
     const hasThings = this.world.buildings.size > 1;
     if (!hasThings) return 0;
-    const priceF = clamp(1.6 - this.ticket / 130, 0.1, 1.5);
+    const priceF = clamp(1.7 - this.ticket / 150, 0.1, 1.5);
     const repF = 0.4 + this.reputation / 80;
     const night = this.isNight ? 0.5 : 1;
-    return Math.min(450, Math.floor((6 + attractions * 2.2) * priceF * repF * night));
+    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night));
   }
 
   updateRating() {

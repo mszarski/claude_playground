@@ -19,7 +19,7 @@ class Events {
     this.quake = 0;
     this.volcano = null;
     this.auto = true;
-    this.nextDay = 3;
+    this.nextDay = 4;
     this.lightning = 0; // flash timer
     this.bolts = [];
     this.history = [];
@@ -124,7 +124,7 @@ class Events {
       if (sick.length && !g.hasBuilding('vet')) {
         for (const s of sick) for (const d of g.dinos) {
           if (d.sick > 0 || d.carried) continue;
-          if (dist2(d.x, d.y, s.x, s.y) < 25 && chance(0.12)) { d.sick = 20; g.log(`${d.name} the ${d.sp.name} has caught the illness!`, 'warn', d); }
+          if (dist2(d.x, d.y, s.x, s.y) < 16 && chance(0.05)) { d.sick = 20; g.log(`${d.name} the ${d.sp.name} has caught the illness!`, 'warn', d); }
         }
       }
     }
@@ -135,8 +135,9 @@ class Events {
     if (day < this.nextDay) return;
     const g = this.game;
     if (g.dinos.length === 0) { this.nextDay = day + 1; return; }
+    const early = day < 8;
     const opts = [
-      ['storm', 30], ['outage', 14], ['quake', 10], ['disease', 14], ['rampage', 12],
+      ['storm', 30], ['outage', early ? 4 : 14], ['quake', early ? 3 : 10], ['disease', early ? 5 : 14], ['rampage', early ? 4 : 12],
       ['raptors', g.dinos.some((d) => d.species === 'raptor') ? 14 : 0], ['inspection', 12],
       ['volcano', day > 12 ? 6 : 0],
     ];
@@ -197,7 +198,7 @@ class Events {
         const broken = g.countBrokenFences();
         const recent = g.recentDeaths();
         if (loose || recent > 0 || broken > 3) {
-          const fine = 40000 + loose * 25000 + recent * 30000 + broken * 2000;
+          const fine = Math.min(120000, 25000 + loose * 10000 + recent * 15000 + broken * 1000);
           g.spend(fine, 'fines');
           g.reputation = Math.max(0, g.reputation - 6);
           g.log(`Safety inspector fined the park ${fmtMoney(fine)}!`, 'bad', null, true);
@@ -262,7 +263,7 @@ class Events {
     if (!opts.length) return;
     const o = weightedPick(opts, (q) => q[2]);
     const [nx, ny] = o;
-    if (dist(nx, ny, vx, vy) > 16) return;
+    if (dist(nx, ny, vx, vy) > 12) return;
     const j = w.idx(nx, ny);
     w.terrain[j] = T_LAVA; w.lavaT[j] = randf(35, 60);
     w.path[j] = 0;

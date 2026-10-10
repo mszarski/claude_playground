@@ -65,6 +65,21 @@ class Dino {
     // Sedation
     if (this.sedatedT > 0) {
       this.sedatedT -= dt;
+      // No helicopter? A ground crew trucks sedated escapees home (slow and pricey)
+      if ((this.loose || this.relocate) && !g.hasBuilding('helipad')) {
+        this.truckT = (this.truckT || 0) + dt;
+        if (this.truckT > 18) {
+          const dest = g.findPaddockFor(this);
+          if (dest) {
+            g.spend(12000, 'ops');
+            g.burst(this.x, this.y, '#e8d8a0', 8);
+            this.x = dest.x + 0.5; this.y = dest.y + 0.5; this.home = { x: dest.x, y: dest.y };
+            this.loose = false; this.relocate = false; this.orderSedate = false; this.sedatedT = 3; this.truckT = 0;
+            g.world.regionsDirty = true;
+            g.log(`Ground crew trucked ${this.name} the ${this.sp.name} back to a paddock (-$12k). A helipad is faster.`, 'good', this);
+          } else this.truckT = 10;
+        }
+      } else this.truckT = 0;
       if (this.sedatedT <= 0) {
         this.sedation = 0; this.stress = Math.max(0, this.stress - 30);
         this.state = 'idle'; this.stateT = 1;
@@ -78,8 +93,9 @@ class Dino {
     this.hunger = Math.min(100, this.hunger + dt * hrate * (this.loose ? 1.4 : 1));
     if (this.hunger >= 100) this.hp -= dt * 0.8;
     if (this.sick > 0) {
+      // Vets cure quickly; untreated illness slowly runs its course but costs health
       if (g.hasBuilding('vet')) { this.sick -= dt * 2.5; }
-      else { this.sick = Math.min(100, this.sick + dt * 0.3); this.hp -= dt * 0.35; }
+      else { this.sick -= dt * 0.12; this.hp -= dt * (this.hunger > 60 ? 0.3 : 0.14); }
       if (this.sick <= 0) { this.sick = 0; g.log(`${this.name} the ${this.sp.name} has recovered.`, 'good', this); }
     }
     if (this.hp <= 0) { g.killDino(this, this.hunger >= 100 ? 'starvation' : this.sick > 0 ? 'illness' : 'injuries'); return; }
@@ -184,6 +200,8 @@ class Dino {
         const tx = this.tx + randi(-rad, rad), ty = this.ty + randi(-rad, rad);
         if (!w.dinoPass(tx, ty)) continue;
         if (!this.loose && w.region[w.idx(tx, ty)] !== w.region[w.idx(this.tx, this.ty)]) continue;
+        // calm grazers stay near home even if a fence is down
+        if (this.loose && this.sp.danger < 4 && this.stress < 55 && (dist2(tx, ty, this.home.x, this.home.y) > 36 || w.path[w.idx(tx, ty)])) continue;
         const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => x === tx && y === ty, 1500);
         if (p && p.length) { this.path = p; this.pi = 0; this.state = 'walk'; return; }
       }
