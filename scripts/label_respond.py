@@ -1,4 +1,4 @@
-"""Teacher-label MELD training clips for the distilled responder, keeping only answers the human labels agree with.
+"""Teacher-label MELD training clips (or synthetic lines, scripts/synth_heard.py) for the distilled responder, keeping only answers the human labels agree with.
 
   python scripts/label_respond.py --heard runs/listen_train/heard.jsonl --teacher Qwen/Qwen3-Next-80B-A3B-Instruct \
       --out runs/respond_sft
@@ -20,6 +20,11 @@ from eval_respond import physical_ok  # noqa: E402
 
 MELD = {"neutral": "neutral", "joy": "happy", "sadness": "sad", "anger": "angry", "disgust": "angry",
         "fear": "anxious", "surprise": "surprised"}
+
+
+def label_of(r):
+    """The human label: MELD's, or the feeling a synthetic line was written with (scripts/synth_heard.py)."""
+    return r.get("feeling") or MELD[r["meld_emotion"]]
 
 
 def main():
@@ -64,10 +69,10 @@ def main():
         hint_path = os.path.join(a.out, "labels_hinted.jsonl")
         hdone = {json.loads(l)["clip"] for l in open(hint_path)} if os.path.exists(hint_path) else set()
         wrong = [r for r in rows if r["clip"] not in hdone and not (labels.get(r["clip"], {}).get("ok")
-                 and labels[r["clip"]].get("feeling") == MELD[r["meld_emotion"]])]
+                 and labels[r["clip"]].get("feeling") == label_of(r))]
 
         def label_hinted(r):
-            want = MELD[r["meld_emotion"]]
+            want = label_of(r)
             try:
                 t = respond(r, model=a.teacher, temperature=0.4, hint=want)
                 got, _ = _batch([t["response"]], a.teacher)
@@ -85,7 +90,7 @@ def main():
         hinted = {json.loads(l)["clip"]: json.loads(l) for l in open(hint_path)}
     keep, stats = [], {}
     for r in rows:
-        t, want = labels.get(r["clip"]), MELD[r["meld_emotion"]]
+        t, want = labels.get(r["clip"]), label_of(r)
         s = stats.setdefault(want, [0, 0, 0])
         s[0] += 1
         was_hinted = False
