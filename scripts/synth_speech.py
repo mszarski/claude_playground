@@ -53,7 +53,6 @@ def main():
     a = ap.parse_args()
     import soundfile as sf
     import torch
-    import torchaudio
     from zonos.conditioning import make_cond_dict
     from zonos.model import Zonos
 
@@ -62,11 +61,15 @@ def main():
     rng = random.Random(a.seed)
     torch.manual_seed(a.seed)
     model = Zonos.from_pretrained("Zyphra/Zonos-v0.1-transformer", device="cuda")
+    # Zonos builds its speaker-embedding model inside a GPU device context, where torchaudio's filterbank code mixes
+    # devices; build that small model on the CPU instead and move the embeddings over.
+    from zonos.speaker_cloning import SpeakerEmbeddingLDA
+    model.spk_clone_model = SpeakerEmbeddingLDA(device=torch.device("cpu"))
     refs = []
     for f in sorted(os.listdir(a.refs)):
         if f.endswith(".wav"):
-            wav, sr = torchaudio.load(os.path.join(a.refs, f))
-            refs.append(model.make_speaker_embedding(wav.mean(0, keepdim=True), sr))
+            x, sr = sf.read(os.path.join(a.refs, f), dtype="float32", always_2d=True)   # (no torchcodec needed)
+            refs.append(model.make_speaker_embedding(torch.from_numpy(x.mean(1))[None], sr).to("cuda"))
     voices = []
     for v in range(a.voices):                       # blends of two references: nobody's real voice
         i, j = rng.sample(range(len(refs)), 2)
