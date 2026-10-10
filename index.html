@@ -131,6 +131,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 .card.locked { opacity: 0.45; cursor: not-allowed; }
 .card canvas { image-rendering: pixelated; height: 64px; }
 .card .nm { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); margin: 4px 0; }
+.roster { display: flex; flex-direction: column; gap: 3px; }
+.rrow { display: grid; grid-template-columns: 56px 1fr 70px 70px 70px 90px; gap: 8px; align-items: center; padding: 3px 6px; background: var(--panel2); border: 2px solid var(--edge); cursor: pointer; font-size: 17px; }
+.rrow:hover { box-shadow: inset 0 0 0 2px var(--gold); }
+.rrow canvas { image-rendering: pixelated; height: 28px; justify-self: center; }
+.rrow .mini { height: 6px; background: #000; border: 1px solid #555; position: relative; }
+.rrow .mini i { position: absolute; left: 0; top: 0; bottom: 0; }
+.rhead { font-size: 14px; color: var(--dim); display: grid; grid-template-columns: 56px 1fr 70px 70px 70px 90px; gap: 8px; padding: 0 8px; }
+@media (max-width: 760px) { .rrow, .rhead { grid-template-columns: 40px 1fr 50px 50px 70px; } .rrow .hide, .rhead .hide { display: none; } }
+#ticker { position: absolute; left: 70px; right: 240px; bottom: 60px; z-index: 5; overflow: hidden; height: 24px; pointer-events: none; display: none; }
+#ticker span { position: absolute; white-space: nowrap; font-size: 18px; color: #f8e8b0; background: rgba(60,20,10,0.85); border: 2px solid #000; padding: 0 10px; }
 table.fin { width: 100%; border-collapse: collapse; font-size: 18px; }
 table.fin td { padding: 1px 6px; border-bottom: 1px solid #2a3a26; }
 table.fin td:last-child { text-align: right; }
@@ -193,6 +203,7 @@ table.fin td:last-child { text-align: right; }
   </div>
   <button id="alarmBtn" title="Sound the evacuation alarm (E)">⚠ ALARM</button>
   <div class="grp">
+    <button id="rosterBtn" title="Dinosaur roster (G)">🦖</button>
     <button id="finBtn" title="Finances (F2)">$</button>
     <button id="disBtn" title="Disasters">☄</button>
     <button id="sndBtn" title="Sound">♪</button>
@@ -207,6 +218,7 @@ table.fin td:last-child { text-align: right; }
 <div id="goal" class="panel"></div>
 <div id="info" class="panel"></div>
 <div id="log"></div>
+<div id="ticker"></div>
 <div id="mini" class="panel"><canvas id="minimap" width="216" height="162"></canvas>
   <div id="miniBtns"><button data-ov="power" title="Power overlay (O)">Power</button><button data-ov="paddock" title="Paddock overlay (K)">Paddocks</button><button id="findBtn" title="Jump to next loose dino (L)">Loose</button></div>
 </div>

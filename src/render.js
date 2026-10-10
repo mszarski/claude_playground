@@ -331,6 +331,7 @@ class Renderer {
 
     // helicopters
     for (const h of g.helis) this.drawHeli(ctx, h);
+    this.drawFlyers(ctx, dt);
 
     // glow particles
     ctx.globalCompositeOperation = 'lighter';
@@ -512,6 +513,30 @@ class Renderer {
       ctx.fillStyle = '#fff'; ctx.fillRect(x + 2, y - 4, 1, 2); ctx.fillRect(x + 2, y - 1, 1, 1);
     }
     if (ui.selected === p) { ctx.strokeStyle = '#f8f080'; ctx.strokeRect(x - 1.5, y - 1.5, 9, 13); }
+  }
+
+  // Purely decorative pterosaurs gliding over the island
+  drawFlyers(ctx, dt) {
+    const w = this.game.world;
+    this.flyers = this.flyers || [];
+    this.flyT = (this.flyT || 8) - dt;
+    if (this.flyT <= 0 && this.game.darkness < 0.6) {
+      this.flyT = randf(20, 45);
+      const dir = chance(0.5) ? 1 : -1;
+      const y0 = randf(4, w.H - 8) * TILE;
+      const n = randi(1, 4);
+      for (let k = 0; k < n; k++) this.flyers.push({ x: dir > 0 ? -40 - k * 22 : w.W * TILE + 40 + k * 22, y: y0 + randf(-20, 20), dir, vy: randf(-6, 6), ph: rand() * 6, alt: randf(40, 70) });
+    }
+    for (const f of this.flyers) {
+      f.x += f.dir * 34 * dt; f.y += f.vy * dt; f.ph += dt * 5;
+      const fr = Math.sin(f.ph) > 0 ? 0 : 1;
+      const img = (f.dir > 0 ? PTERO.R : PTERO.L)[fr];
+      ctx.globalAlpha = 0.18; ctx.fillStyle = '#000';
+      ctx.fillRect(Math.round(f.x - 6), Math.round(f.y + f.alt), 12, 2);
+      ctx.globalAlpha = 1;
+      ctx.drawImage(img, Math.round(f.x - img.width / 2), Math.round(f.y));
+    }
+    this.flyers = this.flyers.filter((f) => f.x > -100 && f.x < w.W * TILE + 100);
   }
 
   drawJeep(ctx, j) {

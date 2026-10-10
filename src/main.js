@@ -173,6 +173,8 @@ function loop(now) {
       }
     }
     UIX.frame(dtReal);
+    // ambient jungle
+    if (UIX.speed > 0 && Math.random() < dtReal * 0.35) SFX.play(GAME.isNight ? 'cricket' : (Math.random() < 0.15 ? 'caw' : 'chirp'), 0.8);
     RENDER.draw(dtReal, UIX);
     RENDER.miniT = (RENDER.miniT || 0) + 1;
     if (RENDER.miniT % 3 === 0) {

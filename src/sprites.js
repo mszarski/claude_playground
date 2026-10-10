@@ -871,6 +871,7 @@ function buildBuildingSprites() {
   });
 }
 
+let PTERO = null;
 let JEEP_R = null, JEEP_L = null, JEEP_WRECK = null;
 // Egg sprite
 let EGG_SPR = null, HELI_SPR = null, HELI_SHADOW = null, RUBBLE_SPR = null, JEEP_SPR = null;
@@ -917,6 +918,27 @@ function buildMisc() {
   ], { O: '#1a1a1a', G: '#3a8a3a', R: '#c8381e', Y: '#f8d040', j: '#88c8e8', k: '#3a3a3a', L: '#f8f0a0' });
   JEEP_L = flipCanvas(JEEP_R);
   JEEP_WRECK = (() => { const [c, ctx] = makeCanvas(16, 16); ctx.translate(8, 8); ctx.rotate(Math.PI / 2); ctx.drawImage(JEEP_R, -8, -5); return c; })();
+
+  const ptPal = { O: '#2a1a14', B: '#9a6a4a', D: '#6a4a32', S: '#c84a2a' };
+  const up = gridToCanvas([
+    'OO             OO',
+    'OBOO         OOBO',
+    ' OBBOO     OOBBO ',
+    '  ODBBOOOOOBBDO  ',
+    '   OODBBBBBDOOSSO',
+    '     OOOBBOOOOO  ',
+    '       OOO       ',
+  ], ptPal);
+  const down = gridToCanvas([
+    '                 ',
+    '                 ',
+    '      OOOOO   SSO',
+    '   OOOBBBBBOOOO  ',
+    ' OOBBDBBBBBDBBOO ',
+    'OBBOO OOBBO  OOBO',
+    'OO      O      OO',
+  ], ptPal);
+  PTERO = { R: [up, down], L: [flipCanvas(up), flipCanvas(down)] };
 
   RUBBLE_SPR = gridToCanvas([
     '    O    O      ',

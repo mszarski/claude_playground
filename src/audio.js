@@ -62,6 +62,9 @@ class Sfx {
       case 'powerup': this.tone('sawtooth', 60, 440, 1.0, 0.15 * v); break;
       case 'hatch': this.tone('triangle', 660, 990, 0.1, 0.15 * v); this.tone('triangle', 990, 1320, 0.15, 0.15 * v, 0.1); break;
       case 'fanfare': [523, 659, 784, 1046].forEach((f, i) => this.tone('square', f, f, 0.18, 0.09 * v, i * 0.12)); break;
+      case 'chirp': { const f = 2000 + Math.random() * 1800; this.tone('sine', f, f * 1.3, 0.07, 0.025 * v); this.tone('sine', f * 1.1, f * 0.9, 0.08, 0.025 * v, 0.1); break; }
+      case 'cricket': for (let i = 0; i < 3; i++) this.tone('square', 4200, 4300, 0.03, 0.008 * v, i * 0.06); break;
+      case 'caw': this.tone('sawtooth', 700, 420, 0.25, 0.03 * v); break;
       case 'heli': this.noiseBurst(0.8, 0.15 * v, 200, 6); break;
     }
   }

@@ -234,6 +234,7 @@ class UI {
       else if (k === 'o') this.toggleOverlay('power');
       else if (k === 'k') this.toggleOverlay('paddock');
       else if (k === 'l') this.jumpToLoose();
+      else if (k === 'g') this.showRoster();
       else if (k === '=' || k === '+') this.zoomAt(1, window.innerWidth / 2, window.innerHeight / 2);
       else if (k === '-') this.zoomAt(-1, window.innerWidth / 2, window.innerHeight / 2);
       else {
@@ -415,6 +416,7 @@ class UI {
     for (const b of document.querySelectorAll('#speedBtns button')) b.onclick = () => { this.setSpeed(+b.dataset.speed); this.sfx.play('click'); };
     $('#alarmBtn').onclick = () => this.toggleAlarm();
     $('#finBtn').onclick = () => this.showFinances();
+    $('#rosterBtn').onclick = () => this.showRoster();
     $('#disBtn').onclick = () => this.showDisasters();
     $('#sndBtn').onclick = () => { this.sfx.muted = !this.sfx.muted; $('#sndBtn').textContent = this.sfx.muted ? '♪̸' : '♪'; $('#sndBtn').classList.toggle('on', this.sfx.muted); };
     $('#menuBtn').onclick = () => this.showMenu();
@@ -480,8 +482,47 @@ class UI {
     setTimeout(() => el.remove(), 4400);
   }
 
+  headline(e) {
+    const m = e.msg;
+    const H = [
+      [/eaten|flipped a tour jeep/, ['ISLAND PARK UNDER FIRE AFTER "UNFORTUNATE INCIDENT"', 'LAWYERS BOOK FLIGHTS TO ISLA NUBLAR', 'CEO INSISTS PARK IS "PERFECTLY SAFE"', 'VISITOR ASKS FOR REFUND, IS INFORMED HE IS LUNCH']],
+      [/CONTAINMENT BREACH/, ['WITNESSES REPORT "VERY LARGE CHICKEN" ON THE LOOSE', 'PARK SPOKESMAN: "EVERYTHING IS UNDER CONTROL"', 'CHAOS THEORIST: "TOLD YOU SO"']],
+      [/SYSTEM FAILURE/, ['IT DEPARTMENT BLAMES SINGLE UNDERPAID PROGRAMMER', 'POWER OUTAGE: "AH AH AH, YOU DIDN\'T SAY THE MAGIC WORD"']],
+      [/storm has hit/, ['TROPICAL STORM BATTERS DINO ISLAND', 'BOAT TO MAINLAND CANCELLED, AGAIN']],
+      [/ERUPTION/, ['VOLCANO ERUPTS. EXPERTS ASK WHY THE PARK WAS BUILT NEXT TO A VOLCANO']],
+      [/EARTHQUAKE/, ['QUAKE ROCKS ISLAND, RIPPLES SPOTTED IN WATER GLASSES']],
+      [/has hatched/, ['NEW ARRIVAL AT THE HATCHERY: "SHE\'S A GIRL. THEY\'RE ALL GIRLS."', 'SCIENTISTS CELEBRATE LATEST HATCHLING', 'PARK SPARES NO EXPENSE ON NEW HATCHLING']],
+      [/rated \d star/, ['PARK RATING SOARS: CRITICS CALL IT "WONDERFUL"', 'TRAVEL GUIDES ADD DINO ISLAND TO MUST-SEE LIST']],
+      [/sedated/, ['RANGERS RESTORE ORDER WITH TRANQUILIZER DARTS']],
+      [/inspection passed/, ['INSPECTOR IMPRESSED: "SURPRISINGLY FEW TEETH MARKS"']],
+      [/inspector fined/, ['SAFETY INSPECTOR: "I HAVE NEVER SEEN SO MANY BITE MARKS"']],
+    ];
+    for (const [re, opts] of H) if (re.test(m)) return pick(opts);
+    return null;
+  }
+
+  showTicker(text) {
+    const box = $('#ticker');
+    box.style.display = 'block';
+    box.innerHTML = '';
+    const s = document.createElement('span');
+    s.textContent = '📰 ' + text;
+    box.appendChild(s);
+    const W = box.clientWidth;
+    let x = W;
+    const anim = () => {
+      x -= 1.6;
+      s.style.left = x + 'px';
+      if (x > -s.offsetWidth && s.parentNode) requestAnimationFrame(anim);
+      else if (s.parentNode) box.style.display = 'none';
+    };
+    anim();
+  }
+
   onLog(e) {
     if (e.big) this.toast(e.msg, e.type);
+    const hl = (e.type === 'bad' || e.type === 'good' || e.type === 'goal') ? this.headline(e) : null;
+    if (hl && (!this.tickerT || performance.now() - this.tickerT > 15000)) { this.tickerT = performance.now(); this.showTicker(hl); }
     const box = $('#log');
     const el = document.createElement('div');
     el.className = e.type;
@@ -725,6 +766,35 @@ class UI {
         this.toast(`Click inside a paddock to hatch a ${SPECIES[this.species].name}.`);
       };
     }
+    $('[data-close]').onclick = () => this.closeModal();
+  }
+
+  showRoster() {
+    const g = this.game;
+    const mini = (v, col) => `<div class="mini"><i style="width:${clamp(v, 0, 100)}%;background:${col}"></i></div>`;
+    let html = `<h1>DINOSAURS (${g.dinos.length})</h1>`;
+    if (!g.dinos.length) html += `<p>No dinosaurs yet. Build a Hatchery, fence a paddock, then use Hatch.</p>`;
+    else {
+      html += `<div class="rhead"><span></span><span>Name</span><span>Health</span><span>Hunger</span><span class="hide">Stress</span><span>Status</span></div><div class="roster">`;
+      const order = [...g.dinos].sort((a, b) => (b.loose - a.loose) || (b.stress - a.stress));
+      for (const d of order) {
+        const st = d.carried ? '<span style="color:#70b8f0">AIRLIFT</span>' : d.sedatedT > 0 ? '<span style="color:#a8a8f0">SEDATED</span>' : d.loose ? '<span style="color:#ff6040">LOOSE!</span>' : d.sick > 0 ? '<span style="color:#9ae060">SICK</span>' : d.stress > 65 ? '<span style="color:#f0a030">AGITATED</span>' : '<span style="color:#8ad06a">OK</span>';
+        html += `<div class="rrow" data-id="${d.id}"><canvas data-dspr="${d.species}"></canvas><span><b>${d.name}</b> <span style="color:#9ab08a">${d.sp.name}</span></span>${mini(d.hp / d.sp.hp * 100, '#5ac85a')}${mini(d.hunger, d.hunger > 70 ? '#e04838' : '#f0a030')}<span class="hide">${mini(d.stress, d.stress > 65 ? '#e04838' : '#c8a040')}</span><span>${st}</span></div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<div class="btns" style="justify-content:flex-end;margin-top:8px"><button data-close>Close</button></div>`;
+    this.showModal(html);
+    for (const c of document.querySelectorAll('canvas[data-dspr]')) {
+      const S = DINO_SPRITES[c.dataset.dspr];
+      c.width = S.w; c.height = S.h;
+      c.getContext('2d').drawImage(S.right[0], 0, 0);
+      c.style.width = Math.min(52, S.w * 28 / S.h) + 'px';
+    }
+    for (const r of document.querySelectorAll('.rrow')) r.onclick = () => {
+      const d = g.dinos.find((x) => x.id === +r.dataset.id);
+      if (d) { this.closeModal(); this.centerOn(d.x, d.y); this.select(d); }
+    };
     $('[data-close]').onclick = () => this.closeModal();
   }
 
