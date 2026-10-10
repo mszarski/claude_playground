@@ -75,3 +75,18 @@ def test_respond_endpoint(monkeypatch):
     assert d["heard"]["text"] == "hello robot" and d["reading"] == "cheerful" and d["feeling"] == "happy" and d["prompt"] == "greeting. You perk up."
     assert len(d["moves"]) == 1 and "listen" in d["timing_ms"]
     assert c.post("/api/respond", content=b"\0" * 10).status_code == 422
+
+
+def test_calibration_moves_a_loud_device_to_the_reference_level():
+    from rmr.voice import REFERENCE, Calibration
+
+    cal, loud = Calibration(prior_n=5), {"arousal": 0.65, "dominance": 0.65, "valence": 0.6, "text": "hi"}
+    outs = [cal(dict(loud)) for _ in range(200)]
+    assert outs[0]["valence"] > outs[-1]["valence"]                    # the prior holds the first readings back
+    for k in REFERENCE:
+        assert abs(outs[-1][k] - REFERENCE[k]) < 0.01 and outs[-1]["raw"][k] == loud[k]
+    hi = cal({"arousal": 0.65, "dominance": 0.65, "valence": 0.8})   # a reading above the device's level stays above
+    assert hi["valence"] > REFERENCE["valence"] + 0.15
+    assert cal({"text": "no attributes"}) == {"text": "no attributes"}
+    fixed = Calibration(fixed={"arousal": 0.6, "dominance": 0.6, "valence": 0.6})
+    assert abs(fixed({"arousal": 0.6, "dominance": 0.6, "valence": 0.7})["valence"] - (REFERENCE["valence"] + 0.1)) < 1e-9

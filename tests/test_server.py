@@ -99,3 +99,30 @@ def test_idle_endpoint_returns_a_move(client):
     d = r.json()
     from rmr.idle import IDLES, SLEEPY
     assert d["idea"] in {**IDLES, **SLEEPY} and d["moves"] and len(d["moves"][0]["time"]) > 25
+
+
+class _Loud(_Seq):
+    def hear(self, audio):
+        return {**super().hear(audio), "arousal": 0.7, "dominance": 0.7, "valence": 0.65}
+
+
+class _Valence(_Student):
+    def __init__(self):
+        self.valence = []
+
+    def answers(self, heard):
+        self.valence.append(heard["valence"])
+        yield from super().answers(heard)
+
+
+def test_calibration_per_session(client):
+    eng = client.app.state.engine
+    eng.listener, eng.voice_model, eng.student, eng.calibrate = _Loud(), "fake", _Valence(), True
+    try:
+        for _ in range(30):
+            client.post("/api/respond?session=c", content=b"\0" * 2000)
+        client.post("/api/respond?session=d", content=b"\0" * 2000)
+    finally:
+        eng.calibrate = False
+    v = eng.student.valence
+    assert v[0] > v[29] and v[29] < 0.5 and v[30] == v[0]       # drifts to the reference; a new session starts afresh

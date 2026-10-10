@@ -35,7 +35,7 @@ class Engine:
     (merged model dir or Hub repo id, run in-process). ``responder``: the LLM that turns what it heard into a
     response prompt (``rmr.respond``); voice models load on the first ``/api/respond``."""
 
-    def __init__(self, ckpt, model=None, planner=None, responder=None, voice_model=None):
+    def __init__(self, ckpt, model=None, planner=None, responder=None, voice_model=None, calibrate=False):
         from .generator.sample import load
 
         self.net, self.stats, self.dev = load(ckpt)
@@ -45,6 +45,8 @@ class Engine:
         self.student = None
         self.listener_weights = None        # path of the learned listener's JSON weights, served to the viewer
         self.history = {}                   # session -> [(time, what they said)], the conversation so far
+        self.calibrate = calibrate          # per-session level correction of the voice attributes (rmr.voice)
+        self.calibrations = {}              # session -> rmr.voice.Calibration
         if planner:
             from .planner.finetune import Planner
             self.finetuned = Planner(planner)
@@ -97,6 +99,11 @@ class Engine:
         if self.listener is None:
             self.listener = Listener()
         heard = self.listener.hear(audio)
+        if self.calibrate:
+            from .voice import Calibration
+            if len(self.calibrations) > self.MAX_SESSIONS:
+                self.calibrations.clear()
+            heard = self.calibrations.setdefault(session or "", Calibration())(heard)
         self.remember(session, heard)
         t1 = time.time()
         yield {"stage": "heard", "heard": {k: v for k, v in heard.items() if k != "probs"},
@@ -225,6 +232,9 @@ def main():
                     help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v3")
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
+    ap.add_argument("--calibrate", action="store_true", default=bool(os.environ.get("CALIBRATE_VOICE")),
+                    help="shift arousal / valence / dominance per session so their running mean sits at the level "
+                         "the licence-clean students were trained at (rmr.voice.Calibration)")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
     ap.add_argument("--listener-model", default=os.environ.get("LISTENER_MODEL"),
@@ -234,7 +244,7 @@ def main():
     a = ap.parse_args()
     import uvicorn
 
-    engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model)
+    engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model, calibrate=a.calibrate)
     if a.listener_model:
         path = a.listener_model
         if path.startswith("hf://"):
