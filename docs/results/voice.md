@@ -263,10 +263,14 @@ recipe passes the physical check (as on MELD).
 | v4 4B (lines only) | 28% | **64%** | 34% | 64% |
 | **v5 4B (lines + tone clips)** | **47%** | 63% | 37% / **42%** calibrated | 60% / **72%** calibrated |
 | v5 1.7B | 41% | 59% | 40% / 40% calibrated | 69% / 72% calibrated |
+| v6 4B (2.5x the tone clips) | 48% | 62% | 40% calibrated | 72% calibrated |
 
 - **v5 uses tone.** On the tone test it beats the teacher and every earlier student. A logistic regression on the
   same readings (held-out actors) reaches 51% (54% with all class probabilities), so v5 is close to what the
   readings allow. v4, without the tone-only clips, ignored tone: it read the words.
+- v6, with 2.5 times the tone-only clips (1,740), is no better than v5: tone is now limited by what the readings
+  carry, not by examples. The next step there is a better tone model (the readings come from a categorical model
+  trained on podcasts, plus attributes), not more data. v5 stays the licence-clean default.
 - The fresh lines favour v4 / v5 (same writer as their training data); take that column as in-distribution.
 - **Calibration** (`rmr.voice.Calibration`, `python -m rmr.server --calibrate`). The readings depend on the
   microphone and room. Mean valence is 0.38 on CREMA-D, 0.43 on meeting talk (AMI, `scripts/calibrate_tone.py`) and
