@@ -61,6 +61,11 @@ class Game {
     else this.setupStart();
     this.world.computeRegions();
     this.world.computePower(this);
+    if (opts.scenario && SCENARIOS[opts.scenario]) {
+      this.scenario = opts.scenario;
+      SCENARIOS[opts.scenario].setup(this);
+      this.goalIdx = GOALS.length; // scenarios replace the goal chain
+    }
   }
 
   on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); }
@@ -540,7 +545,13 @@ class Game {
     if (this.secondT <= 0) {
       this.secondT = 1;
       this.updateRating();
-      this.checkGoals();
+      if (!this.scenario) this.checkGoals();
+      else {
+        const sc = SCENARIOS[this.scenario];
+        if (sc.tick) sc.tick(this);
+        const r = sc.check(this);
+        if (r && !this.scenarioDone) { this.scenarioDone = r; this.emit('scenario', r); }
+      }
       this.adviseT = (this.adviseT === undefined ? 20 : this.adviseT) - 1;
       if (this.adviseT <= 0) { this.adviseT = 45; if (this.advisorOn !== false) this.advise(); }
       this.looseCount = this.creatures().filter((d) => d.loose && !d.carried).length;
@@ -801,6 +812,7 @@ class Game {
       if (this.brokeDays === 1) this.log('WARNING: The park is deeply in debt. 5 days until the investors pull out!', 'bad', null, true);
       if (this.brokeDays >= 5) this.endGame('Bankrupt! The investors have pulled their funding.');
     } else this.brokeDays = 0;
+    if (this.scenario && SCENARIOS[this.scenario].tick && this.scenarioDone) { /* finished */ }
     if (this.recentDeaths(14) >= 12) this.endGame('Too many casualties. The board has shut the park down.');
   }
 

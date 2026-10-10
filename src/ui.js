@@ -29,6 +29,7 @@ class UI {
     game.on('log', (e) => this.onLog(e));
     game.on('gameover', (reason) => this.showGameOver(reason));
     game.on('victory', () => this.showVictory());
+    game.on('scenario', (r) => this.showScenarioEnd(r));
     game.on('breach', () => { if (this.speed > 1) this.setSpeed(1); });
     game.on('day', () => {
       const h = game.history[game.history.length - 1];
@@ -578,6 +579,11 @@ class UI {
   renderGoal() {
     const g = this.game;
     const el = $('#goal');
+    if (g.scenario) {
+      const sc = SCENARIOS[g.scenario];
+      el.innerHTML = `<b>SCENARIO · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>`;
+      return;
+    }
     if (g.goalIdx >= GOALS.length) { el.innerHTML = `<b>ALL GOALS COMPLETE</b>Spared no expense. Keep building!`; return; }
     const goal = GOALS[g.goalIdx];
     el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}${goal.tool ? ' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>' : ''}`;
@@ -617,6 +623,7 @@ class UI {
     $('#sPowK').style.color = p.outage > 0 ? '#e04838' : '';
     $('#alarmBtn').classList.toggle('on', g.alarm);
     this.renderAlerts();
+    if (g.scenario) { const p = $('#scProg'); if (p) p.textContent = SCENARIOS[g.scenario].progress(g); }
     this.infoT -= 0.2;
     if (this.infoT <= 0) { this.infoT = 0.4; this.renderInfo(false); }
   }
@@ -951,6 +958,20 @@ class UI {
       <div class="btns" style="justify-content:center"><button data-m="new">Try a new island</button></div></div>`;
     this.showModal(html, true);
     $('[data-m="new"]').onclick = () => { this.closeModal(); showTitle(); };
+  }
+
+  showScenarioEnd(r) {
+    const g = this.game, sc = SCENARIOS[g.scenario];
+    this.setSpeed(0);
+    const win = r === 'win';
+    if (win) this.sfx.play('fanfare');
+    const html = `<div id="gameover"><h1>${win ? 'SCENARIO COMPLETE' : 'SCENARIO FAILED'}</h1><p style="font-size:22px">${sc.name}: ${win ? 'you did it.' : 'the island won this time.'}</p>
+      <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
+      <div class="btns" style="justify-content:center"><button data-m="again">Try again</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
+    this.showModal(html, true);
+    $('[data-m="again"]').onclick = () => { this.closeModal(); startGame({ scenario: g.scenario, difficulty: 'normal' }); };
+    $('[data-m="title"]').onclick = () => { this.closeModal(); showTitle(); };
+    $('[data-close]').onclick = () => { this.closeModal(); this.setSpeed(1); };
   }
 
   showVictory() {

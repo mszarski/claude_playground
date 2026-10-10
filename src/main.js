@@ -12,7 +12,7 @@ function startGame(opts = {}) {
   if (window.innerWidth < 700) RENDER.cam.zoom = 2;
   if (!opts.loaded) {
     UIX.centerOn(g.start.x, g.start.y - 6);
-    g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
+    if (!opts.scenario) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
   }
   hideTitle();
 }
@@ -34,7 +34,7 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, seed: g.seed, diff: g.difficulty, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
+    v: 1, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
@@ -74,6 +74,7 @@ function loadGame(json) {
   g.stats = Object.assign(g.stats, s.stats); g.history = s.history || []; g.deathLog = s.deathLog || [];
   g.events.auto = s.auto; g.events.nextDay = s.nextDay; g.start = s.start;
   g.lastDay = g.day;
+  if (s.scen) { g.scenario = s.scen; g.scenarioState = s.scenState || {}; }
   w.invalidate(); w.computeRegions(); w.computePower(g); g.updateLoose();
   for (const d of g.dinos) d.wasLooseFlag = d.loose;
   return g;
@@ -231,6 +232,18 @@ function boot() {
     document.querySelector('#title .menu').hidden = false;
     document.getElementById('diffMenu').hidden = true;
     startGame({ difficulty: b.dataset.diff });
+  };
+  document.getElementById('btnScen').onclick = () => {
+    SFX.ensure(); SFX.play('click');
+    const m = document.getElementById('scenMenu');
+    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
+    document.querySelector('#title .menu').hidden = true; m.hidden = false;
+    for (const b of m.querySelectorAll('[data-scen]')) b.onclick = () => {
+      document.querySelector('#title .menu').hidden = false; m.hidden = true;
+      startGame({ scenario: b.dataset.scen, difficulty: 'normal' });
+      UIX.toast(SCENARIOS[b.dataset.scen].blurb, 'warn');
+    };
+    document.getElementById('scenBack').onclick = () => { document.querySelector('#title .menu').hidden = false; m.hidden = true; };
   };
   document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
   document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true }); };

@@ -243,9 +243,11 @@ table.fin td:last-child { text-align: right; }
     <div class="menu">
       <button id="btnNew">NEW ISLAND</button>
       <button id="btnContinue" style="display:none">CONTINUE</button>
+      <button id="btnScen">SCENARIOS</button>
       <button id="btnSandbox">SANDBOX MODE</button>
       <button id="btnHelp">HOW TO PLAY</button>
     </div>
+    <div class="menu" id="scenMenu" hidden></div>
     <div class="menu" id="diffMenu" hidden>
       <button data-diff="easy">RELAXED<br><small style="font-size:8px;color:#9ab08a">MORE MONEY, FEWER DISASTERS</small></button>
       <button data-diff="normal">STANDARD<br><small style="font-size:8px;color:#9ab08a">THE INTENDED EXPERIENCE</small></button>
@@ -263,6 +265,7 @@ table.fin td:last-child { text-align: right; }
 <script src="src/entities.js"></script>
 <script src="src/events.js"></script>
 <script src="src/game.js"></script>
+<script src="src/scenarios.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>
