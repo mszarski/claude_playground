@@ -101,6 +101,7 @@ def judge(a):
             b, w = (ord(str(out[key]).strip().upper()[:1]) - 65 for key in ("best", "worst"))
             if not (0 <= b < k and 0 <= w < k) or b == w:
                 raise ValueError(f"bad picks {out}")
+            print(it["id"], "done", flush=True)
             return it["id"], {"best": order[b], "worst": order[w], "why": out.get("why", "")}
         except Exception as e:
             print(f"{it['id']}: {type(e).__name__}: {e}", flush=True)
