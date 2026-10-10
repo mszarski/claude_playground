@@ -150,6 +150,14 @@ const BUILDINGS = {
     desc: 'Guests in range evacuate instantly when an alarm sounds.' },
 };
 
+// A year is 28 days: four 7-day seasons
+const SEASONS = [
+  { name: 'Spring', guests: 1, storm: 1, hunger: 1, tint: null, desc: 'Mild weather. Business as usual.' },
+  { name: 'Summer', guests: 1.2, storm: 0.6, hunger: 1.15, tint: 'rgba(255,200,80,0.06)', desc: 'Peak tourist season: more visitors, hungrier dinosaurs.' },
+  { name: 'Monsoon', guests: 0.8, storm: 3, hunger: 1, tint: 'rgba(40,60,90,0.10)', desc: 'Storm season. Fewer visitors and frequent tropical storms.' },
+  { name: 'Cool Season', guests: 0.9, storm: 0.5, hunger: 0.9, tint: 'rgba(160,200,255,0.05)', desc: 'Quieter days and calmer weather.' },
+];
+
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
   { id: 'build', label: 'Build', tools: ['path', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },

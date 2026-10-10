@@ -84,7 +84,7 @@ class Dino {
     if (this.sedation > 0) this.sedation = Math.max(0, this.sedation - dt * 0.02);
 
     // Needs
-    const hrate = this.sp.diet === 'carn' ? 1.0 : 0.85;
+    const hrate = (this.sp.diet === 'carn' ? 1.0 : 0.85) * g.season.hunger;
     this.hunger = Math.min(100, this.hunger + dt * hrate * (this.loose ? 1.4 : 1));
     if (this.hunger >= 100) this.hp -= dt * 0.8;
     if (this.sick > 0) {

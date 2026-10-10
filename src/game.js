@@ -57,8 +57,10 @@ class Game {
     this.soundHook = null;
     this.looseCount = 0;
     this.difficulty = opts.difficulty || 'normal';
-    const DIFF = { easy: { money: 650000, evMul: 0.5 }, normal: { money: 450000, evMul: 1 }, chaos: { money: 400000, evMul: 1.8 } }[this.difficulty];
+    const DIFF = { calm: { money: 650000, evMul: 0 }, easy: { money: 650000, evMul: 0.5 }, normal: { money: 450000, evMul: 1 }, chaos: { money: 400000, evMul: 1.8 } }[this.difficulty] || { money: 450000, evMul: 1 };
     this.money = DIFF.money; this.events.evMul = DIFF.evMul;
+    if (this.difficulty === 'calm') this.events.auto = false;
+    this.secPerHour = { short: 1.67, normal: 2.5, long: 3.75 }[opts.dayLength || 'normal'] || 2.5;
     if (opts.skipSetup) this.start = this.world.findStartSpot();
     else this.setupStart();
     this.world.computeRegions();
@@ -77,6 +79,8 @@ class Game {
 
   get day() { return Math.floor(this.time / 24) + 1; }
   get hour() { return this.time % 24; }
+  get seasonIdx() { return Math.floor((this.day - 1) / 7) % 4; }
+  get season() { return SEASONS[this.seasonIdx]; }
   get isNight() { const h = this.hour; return h >= 20 || h < 6; }
   get darkness() {
     const h = this.hour;
@@ -889,7 +893,7 @@ class Game {
     const repF = 0.4 + this.reputation / 80;
     const night = this.isNight ? 0.5 : 1;
     const mkt = this.research.has('marketing') ? 1.15 : 1;
-    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night * mkt));
+    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night * mkt * this.season.guests));
   }
 
   updateRating() {
@@ -942,6 +946,7 @@ class Game {
     this.ledger = this.newLedger();
     this.peakGuests = this.guests.length;
     this.stats.fledToday = 0;
+    if ((day - 1) % 7 === 0 && day > 1) { const s = this.season; this.log(`${s.name} has arrived. ${s.desc}`, 'info', null, true); }
     this.events.onNewDay(day);
     this.breed();
     this.emit('day', day);

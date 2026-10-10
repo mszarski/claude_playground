@@ -656,7 +656,7 @@ class UI {
     const m = $('#sMoney');
     m.textContent = fmtMoney(g.money); m.classList.toggle('neg', g.money < 0);
     $('#sGuests').textContent = g.guests.length;
-    $('#sDay').textContent = 'Day ' + g.day;
+    $('#sDay').textContent = 'Day ' + g.day + ' · ' + g.season.name;
     const h = Math.floor(g.hour), mi = Math.floor((g.hour % 1) * 60 / 15) * 15;
     $('#sTime').textContent = `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}${g.isNight ? ' ☾' : ''}`;
     $('#stars').textContent = '★'.repeat(g.stars) + '☆'.repeat(5 - g.stars);

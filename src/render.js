@@ -893,6 +893,8 @@ class Renderer {
         ctx.globalCompositeOperation = 'source-over';
       }
     }
+    const tint = this.game.season.tint;
+    if (tint) { ctx.fillStyle = tint; ctx.fillRect(0, 0, cw, ch); }
     // power outage tint: flashing red edge
     if (w.power.outage > 0 || g.looseCount > 0 || g.alarm) {
       const a = (Math.sin(this.time * 5) * 0.5 + 0.5) * 0.25;

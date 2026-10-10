@@ -39,7 +39,7 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
+    v: 1, sph: g.secPerHour, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
@@ -80,6 +80,7 @@ function loadGame(json) {
   g.stats = Object.assign(g.stats, s.stats); g.history = s.history || []; g.deathLog = s.deathLog || [];
   g.events.auto = s.auto; g.events.nextDay = s.nextDay; g.start = s.start;
   g.lastDay = g.day;
+  if (s.sph) g.secPerHour = s.sph;
   if (s.research) { g.research.done = new Set(s.research.done); g.research.active = s.research.active; g.research.apply(); }
   if (s.scen) { g.scenario = s.scen; g.scenarioState = s.scenState || {}; }
   w.invalidate(); w.computeRegions(); w.computePower(g); g.updateLoose();
@@ -242,7 +243,7 @@ function boot() {
     SFX.play('click');
     document.querySelector('#title .menu').hidden = false;
     document.getElementById('diffMenu').hidden = true;
-    startGame({ difficulty: b.dataset.diff });
+    startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength() });
   };
   document.getElementById('btnScen').onclick = () => {
     SFX.ensure(); SFX.play('click');
@@ -256,6 +257,14 @@ function boot() {
     };
     document.getElementById('scenBack').onclick = () => { document.querySelector('#title .menu').hidden = false; m.hidden = true; };
   };
+  const lens = ['normal', 'long', 'short'];
+  let dayLen = 'normal';
+  try { dayLen = localStorage.getItem('jt_daylen') || 'normal'; } catch (e) { /* storage unavailable */ }
+  const dlb = document.getElementById('dayLenBtn');
+  const showLen = () => { dlb.innerHTML = `DAY LENGTH: ${dayLen.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${{ short: '40 SECONDS PER DAY', normal: '60 SECONDS PER DAY', long: '90 SECONDS PER DAY' }[dayLen]}</small>`; };
+  showLen();
+  dlb.onclick = () => { dayLen = lens[(lens.indexOf(dayLen) + 1) % 3]; try { localStorage.setItem('jt_daylen', dayLen); } catch (e) { /* storage unavailable */ } showLen(); SFX.play('click'); };
+  window.currentDayLength = () => dayLen;
   document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
   document.getElementById('btnTut').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ tutorial: true, difficulty: 'easy' }); };
   document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true }); };
