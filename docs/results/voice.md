@@ -285,13 +285,17 @@ Data: `mszarski/reachy-voice` `synth/v4/` (lines, readings, tone bank), `student
 Reachy's answers as robot videos, with Reachy's reading under each. Raters mark the best and the worst
 (best-worst scaling; with two answers, the better one). Two pools:
 
-- **test clips** (MELD test, never trained on): one answer from each of four models (student v3, student v3 small,
-  the 80B teacher, the off-the-shelf 4B), a human score for each: (times best - times worst) / times shown.
-- **training clips**: four sampled answers of student v3. A best-worst judgement orders five of the six pairs, so each
-  becomes five DPO pairs (`scripts/dpo_from_ratings.py`), against one from an a/b pick.
+- **test items** (the held-out tone test and fresh lines of `scripts/eval_clean.py`, never trained on; 42 items,
+  seven per feeling): one answer from each of four models (student v5, v5 1.7B, the MELD-trained v3, the 80B teacher).
+  Each gets a human score: (times best - times worst) / times shown.
+- **training lines** (synthetic, from v5's training set): four sampled answers of student v5. A best-worst judgement
+  orders five of the six pairs, so each becomes five DPO pairs (`scripts/dpo_from_ratings.py`), where an a/b pick
+  gives one.
+
+The page was rebuilt on these licence-clean items before any votes came in. The first version used MELD clips.
 
 `scripts/rating_agreement.py` then asks whether the automatic checks agree with people: when exactly one of the two
-ends passes the physical check (or reads the feeling as MELD labels it), how often is it the one people preferred?
+ends passes the physical check (or reads the feeling as labelled), how often is it the one people preferred?
 If the checks agree, they can steer future experiments without asking anyone; if not, they need fixing first.
 
 ## Caveats
