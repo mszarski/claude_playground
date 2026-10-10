@@ -91,3 +91,11 @@ def test_session_memory_gives_the_last_lines_as_context(client):
     for session in ("a", "a", "a", "b"):
         client.post(f"/api/respond?session={session}", content=b"\0" * 2000)
     assert eng.student.contexts == [None, ["line 1"], ["line 1", "line 2"], None]
+
+
+def test_idle_endpoint_returns_a_move(client):
+    r = client.get("/api/idle?silence=90&seed=3")
+    assert r.status_code == 200
+    d = r.json()
+    from rmr.idle import IDLES, SLEEPY
+    assert d["idea"] in {**IDLES, **SLEEPY} and d["moves"] and len(d["moves"][0]["time"]) > 25

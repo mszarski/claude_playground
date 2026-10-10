@@ -176,24 +176,25 @@ function enableTalk() {
     const hf = $('handsfree');
     hf.onclick = async () => {
         if (free) {
-            await free.mic.close(); free = null; player.live = null;
+            clearInterval(free.idleTimer); await free.mic.close(); free = null; player.live = null; player.loop = true;
             hf.classList.remove('on'); hf.textContent = '👂 Hands-free'; return status('');
         }
         try {
             const lis = newListener(), ring = [];       // ring: recent sample blocks, ~30 s
-            let total = 0, busyUntil = 0, feed = null, mic = null;
+            let total = 0, busyUntil = 0, feed = null, mic = null, idling = false;
             const busy = () => performance.now() < busyUntil;
             const onSamples = (x) => {
                 ring.push([total, x]); total += x.length;
                 while (ring.length && total - ring[0][0] > 30 * mic.rate) ring.shift();
                 feed(x);
+                if (idling && lis.sinceVoice === 0) { idling = false; busyUntil = 0; player.loop = true; }   // you spoke: listen
                 const te = lis.turnEnd;
                 if (!te || busy()) return;
                 const hop = Math.round(mic.rate / FPS);
                 const s0 = Math.max(0, Math.round((te[0] - 0.3) * FPS) * hop), s1 = Math.round(te[1] * FPS) * hop;
                 const parts = ring.filter(([s, b]) => s + b.length > s0 && s < s1)
                     .map(([s, b]) => b.subarray(Math.max(0, s0 - s), Math.min(b.length, s1 - s)));
-                busyUntil = performance.now() + 120000;    // until the answer has been played
+                idling = false; busyUntil = performance.now() + 120000;    // until the answer has been played
                 status('Listening to what you said and how you sound…');
                 respondTo(encodeWav(parts, mic.rate))
                     .then((d) => { busyUntil = performance.now() + 1000 * (d + 0.5); setTimeout(() => { if (free) status('Hands-free: just talk.'); }, 1000 * d); })
@@ -201,7 +202,22 @@ function enableTalk() {
             };
             mic = await openMic((x) => onSamples(x));
             feed = listenerFeed(lis, mic.rate, () => !busy());
-            free = { mic };
+            // idle behaviour (rmr/idle.py): when the room has been quiet for a while, now and then do something small
+            let nextIdle = performance.now() + 10000;
+            const idleTimer = setInterval(async () => {
+                const quiet = lis.sinceVoice;                     // s since anyone spoke
+                if (busy() || quiet < 10 || performance.now() < nextIdle) return;
+                nextIdle = performance.now() + 12000 + Math.random() * 13000;
+                try {
+                    const r = await fetch(`api/idle?silence=${Math.round(Math.min(quiet, 1e4))}&seed=${Math.floor(Math.random() * 1e6)}`);
+                    if (!r.ok || busy() || lis.sinceVoice < 10) return;
+                    const m = await r.json();
+                    player.live = null; player.load(m.moves[0]); player.loop = false; idling = true;
+                    busyUntil = performance.now() + 1000 * (player.duration() + 0.3);
+                    setTimeout(() => { idling = false; player.loop = true; }, 1000 * (player.duration() + 0.3));
+                } catch { /* idle is optional */ }
+            }, 1000);
+            free = { mic, idleTimer };
             hf.classList.add('on'); hf.textContent = '👂 Listening (tap to stop)'; status('Hands-free: just talk.');
         } catch (err) { status(`Microphone unavailable: ${err.message}`, 'err'); }
     };

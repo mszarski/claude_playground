@@ -190,6 +190,16 @@ def create_app(engine):
         except Exception as e:
             raise HTTPException(502, f"{type(e).__name__}: {e}")
 
+    @app.get("/api/idle")
+    async def idle(silence: float = 0.0, seed: int = 0):
+        """An idle move (rmr.idle) for after ``silence`` seconds of quiet: looking around, stretching, drowsing."""
+        import random
+
+        from .idle import pick
+        name, recipe = pick(silence, random.Random(seed))
+        out = await run_in_threadpool(engine.generate, name, 1, seed, recipe)
+        return {**out, "idea": name}
+
     @app.get("/api/listener")
     def listener_weights():
         """The learned listener's weights (rmr.listen_model), when the server was given them (CC-BY-NC)."""

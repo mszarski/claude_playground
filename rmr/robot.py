@@ -17,6 +17,7 @@ The robot client needs only ``reachy_mini`` and numpy; the models stay on the se
 """
 import io
 import json
+import random
 import threading
 import time
 import urllib.request
@@ -53,6 +54,13 @@ def respond_stream(server, wav, n=1, headers=None):
                 yield part
 
 
+def idle_move(server, silence, headers=None):
+    """GET an idle move (rmr.idle via /api/idle) for after ``silence`` seconds of quiet."""
+    url = f"{server.rstrip('/')}/api/idle?silence={int(silence)}&seed={int(time.time() * 1000) % 1000000}"
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers or {}), timeout=60) as r:
+        return json.load(r)["moves"][0]
+
+
 def listening_target(state):
     """``Listener.step`` output (9-DoF) -> ``(head 4x4, antennas)`` for ``set_target``."""
     from .motion import traj_to_move
@@ -67,9 +75,15 @@ class Body:
     def __init__(self, mini):
         self.mini, self.move, self.i, self.lock = mini, None, 0, threading.Lock()
 
-    def play(self, move):
+    def play(self, move, idle=False):
         with self.lock:
-            self.move, self.i = move["set_target_data"], 0
+            self.move, self.i, self.idle = move["set_target_data"], 0, idle
+
+    def stop_idle(self):
+        """Someone spoke: drop an idle move at once (an answer keeps playing)."""
+        with self.lock:
+            if self.move is not None and getattr(self, "idle", False):
+                self.move = None
 
     @property
     def busy(self):
@@ -119,9 +133,11 @@ def mic_frames(mini=None, wav=None, tail=4.0):
             buf = buf[hop:]
 
 
-def run(mini, server, frames, n=1, headers=None, log=print, head=None):
+def run(mini, server, frames, n=1, headers=None, log=print, head=None, idle=True):
     """The voice loop. Returns the list of ``(t, event)`` it went through (for tests and logs).
-    ``head``: an optional ``rmr.listen_model.LearnedHead`` for the head motion while listening."""
+    ``head``: an optional ``rmr.listen_model.LearnedHead`` for the head motion while listening. ``idle``: when the
+    room has been quiet (``rmr.idle.QUIET_S``), now and then play an idle move from the server."""
+    from .idle import GAP_S, QUIET_S
     lis, body, ring, events = Listener(head=head), Body(mini), [], []
 
     def answer(audio, t):
@@ -142,13 +158,31 @@ def run(mini, server, frames, n=1, headers=None, log=print, head=None):
         finally:
             pending.clear()
 
-    pending = []
+    pending, next_idle = [], QUIET_S
+
+    def fetch_idle(silence):
+        try:
+            move = idle_move(server, silence, headers)
+            if lis.since_voice >= QUIET_S and not body.busy:
+                body.play(move, idle=True)
+                events.append((round(lis.t, 2), "idle"))
+        except Exception as e:
+            log(f"  idle failed: {type(e).__name__}: {e}")
+        finally:
+            pending.clear()
+
     for x in frames:
         ring.append(x)
         del ring[:-30 * FPS]
         state = lis.step(float(10 * np.log10(np.mean(np.asarray(x, np.float64) ** 2) + 1e-10)))
+        if lis.since_voice == 0:
+            body.stop_idle()
         body.tick(state)
-        if lis.turn_end and not pending and not body.busy:
+        if (idle and not pending and not body.busy and lis.since_voice >= QUIET_S and lis.t >= next_idle):
+            next_idle = lis.t + random.uniform(*GAP_S)
+            pending.append(threading.Thread(target=fetch_idle, args=(min(lis.since_voice, lis.t),), daemon=True))
+            pending[0].start()
+        if lis.turn_end and not pending and (not body.busy or getattr(body, "idle", False)):
             start, end = lis.turn_end
             k = int(round((end - start + PREROLL) * FPS))
             audio = np.concatenate(ring[-k:])
@@ -174,6 +208,7 @@ def main():
     ap.add_argument("--host", default="reachy-mini.local")
     ap.add_argument("--n", type=int, default=1)
     ap.add_argument("--listener-model", help="learned listener weights (JSON, CC-BY-NC) instead of the rule-based nods")
+    ap.add_argument("--no-idle", action="store_true", help="stay still between conversations")
     a = ap.parse_args()
     from reachy_mini import ReachyMini
 
@@ -199,7 +234,7 @@ def _main(a, mini):
         from .listen_model import LearnedHead
         with open(a.listener_model) as f:
             head = LearnedHead(json.load(f))
-    run(mini, a.server, mic_frames(mini, a.wav), a.n, headers, head=head)
+    run(mini, a.server, mic_frames(mini, a.wav), a.n, headers, head=head, idle=not a.no_idle)
 
 
 if __name__ == "__main__":

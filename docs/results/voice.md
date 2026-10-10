@@ -222,6 +222,16 @@ data. A learned alternative for the head is in [listening.md](listening.md).
 python -m rmr.listen talk.wav --video listening.mp4 --json listening.json   # render it, with the speech as soundtrack
 ```
 
+## Conversation memory and idle behaviour
+
+- **Memory**: the server keeps each session's last two lines (for five minutes) and passes them to the responder as
+  "earlier in the conversation", the same format the student was trained on (MELD's previous two lines). The viewer
+  and the robot send a session id; sessions are separate, and at most 1,000 are kept.
+- **Idle** (`rmr/idle.py`, `/api/idle`): after 10 s of quiet, every 12 to 25 s, a small move (look around, stretch,
+  curious tilt, antenna twitch, settle, glance up; drowsy after a minute), written as recipes and generated, so no
+  two repeat. In the viewer's hands-free mode and in `rmr.robot` (`--no-idle` to turn it off); speaking cuts an idle
+  short at once.
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
