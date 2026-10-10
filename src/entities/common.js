@@ -12,6 +12,7 @@ function stepAlong(e, dt, speed, passFn, world) {
   const d = Math.sqrt(dx * dx + dy * dy);
   const s = speed * dt;
   if (Math.abs(dx) > 0.02) e.facing = dx > 0 ? 1 : -1;
+  e.vdir = Math.abs(dy) > Math.abs(dx) * 1.5 ? (dy > 0 ? 1 : -1) : 0;
   if (d <= s) { e.x = tx; e.y = ty; e.pi++; return e.pi >= e.path.length; }
   e.x += (dx / d) * s; e.y += (dy / d) * s;
   e.moving = true;

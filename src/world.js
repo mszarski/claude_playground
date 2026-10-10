@@ -8,6 +8,7 @@ class World {
     const N = this.W * this.H;
     this.terrain = new Uint8Array(N);
     this.variant = new Uint8Array(N);
+    this.height = new Uint8Array(N); // elevation band 0-7, for shading only
     this.fence = new Uint8Array(N);
     this.fenceHp = new Float32Array(N);
     this.fenceOrig = new Uint8Array(N);
@@ -65,6 +66,7 @@ class World {
       }
       this.terrain[i] = t;
       this.variant[i] = Math.floor(r() * 251);
+      this.height[i] = clamp(Math.floor((h - 0.18) / 0.06), 0, 7);
     }
     // Map border: always deep water
     for (let x = 0; x < W; x++) { this.terrain[this.idx(x, 0)] = T_DEEP; this.terrain[this.idx(x, H - 1)] = T_DEEP; }

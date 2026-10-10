@@ -120,6 +120,20 @@ class Renderer {
         ctx.fillStyle = frame ? 'rgba(248,200,64,0.6)' : 'rgba(248,140,40,0.4)';
         ctx.fillRect(px + ((v + frame * 5) % 12), py + ((v >> 2) % 12), 3, 2);
       }
+      // elevation: lighter uplands, darker lowlands, a step edge where the land drops a band
+      if (t === T_GRASS || t === T_FOREST || t === T_SAND || t === T_BASALT) {
+        const hh = w.height[i];
+        if (hh >= 4) { ctx.fillStyle = `rgba(255,250,200,${(hh - 3) * 0.035})`; ctx.fillRect(px, py, 16, 16); }
+        else if (hh <= 1) { ctx.fillStyle = `rgba(0,30,20,${(2 - hh) * 0.05})`; ctx.fillRect(px, py, 16, 16); }
+        if (y + 1 < H) {
+          const hb = w.height[i + W], tb = w.terrain[i + W];
+          if (hb < hh && (tb === T_GRASS || tb === T_FOREST || tb === T_SAND)) {
+            ctx.fillStyle = 'rgba(30,50,20,0.35)'; ctx.fillRect(px, py + 14, 16, 2);
+            ctx.fillStyle = 'rgba(255,255,220,0.12)'; ctx.fillRect(px, py + 13, 16, 1);
+          }
+        }
+        if (x + 1 < W && w.height[i + 1] < hh && (w.terrain[i + 1] === T_GRASS || w.terrain[i + 1] === T_FOREST)) { ctx.fillStyle = 'rgba(30,50,20,0.2)'; ctx.fillRect(px + 15, py, 1, 16); }
+      }
       // paths
       if (w.path[i]) this.drawPath(ctx, x, y, px, py, v);
       if (w.track[i]) this.drawTrack(ctx, x, y, px, py);
@@ -306,7 +320,7 @@ class Renderer {
     // shadows first
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     for (const it of items) {
-      if (it.t === 1) { const d = it.o; const sw = DINO_SPRITES[d.species].w * 0.7; ctx.fillRect(Math.round(d.x * TILE - sw / 2), Math.round(d.y * TILE + 2), Math.round(sw), 3); }
+      if (it.t === 1) { const d = it.o; const S0 = DINO_SPRITES[d.species]; const sw = (d.moving && d.vdir ? S0.up[0].width * 0.8 : S0.w * 0.7) * (d.growth < 1 ? d.growth : 1); ctx.fillRect(Math.round(d.x * TILE - sw / 2), Math.round(d.y * TILE + 2), Math.round(sw), 3); }
       else if (it.t === 2) ctx.fillRect(Math.round(it.o.x * TILE - 3), Math.round(it.o.y * TILE), 6, 2);
     }
     for (const it of items) {
@@ -442,7 +456,9 @@ class Renderer {
       ctx.fillRect(x + spr.canvas.width, y + Math.min(spr.extra + 6, spr.canvas.height - 4), 4, spr.canvas.height - Math.min(spr.extra + 6, spr.canvas.height - 4));
       ctx.fillRect(x + 3, y + spr.canvas.height, spr.canvas.width, 2);
     }
-    ctx.drawImage(spr.canvas, x, y);
+    const lit = spr.night && g.darkness > 0.3 && (b.powered || !def.power);
+    ctx.drawImage(lit ? spr.night : spr.canvas, x, y);
+    this.animateBuilding(ctx, b, x, y, spr);
     // torches flicker on gate
     if (b.type === 'gate') {
       const fl = Math.sin(this.time * 20) > 0;
@@ -485,6 +501,42 @@ class Renderer {
     }
   }
 
+  animateBuilding(ctx, b, x, y, spr) {
+    const t = this.time + b.id * 0.7;
+    const on = b.powered || !BUILDINGS[b.type].power;
+    switch (b.type) {
+      case 'restaurant':
+        if (!on) break;
+        for (let k = 0; k < 3; k++) {
+          const ph = (t * 0.5 + k / 3) % 1;
+          ctx.globalAlpha = 0.5 * (1 - ph); ctx.fillStyle = '#e8e8e0';
+          ctx.fillRect(Math.round(x + 25 + Math.sin(ph * 5 + k) * 2 + ph * 4), Math.round(y + 2 - ph * 14), 2 + Math.round(ph * 2), 2 + Math.round(ph * 2));
+        }
+        ctx.globalAlpha = 1;
+        break;
+      case 'ranger': {
+        const f = Math.floor(t * 4) % 2;
+        ctx.fillStyle = '#f8d040'; ctx.fillRect(x + 29, y + f, 3 + f, 3);
+        ctx.fillStyle = '#c8381e'; ctx.fillRect(x + 29, y + 1 + f, 3 + f, 1);
+        break;
+      }
+      case 'visitor': {
+        const f = Math.floor(t * 2) % 2;
+        ctx.fillStyle = '#e04838'; ctx.fillRect(x + 8 + f, y + spr.extra + 30, 3, 8); ctx.fillRect(x + spr.canvas.width - 11 - f, y + spr.extra + 30, 3, 8);
+        break;
+      }
+      case 'helipad':
+        if (Math.floor(t * 1.5) % 2) { ctx.fillStyle = '#ff5040'; for (const [px, py] of [[3, 3], [44, 3], [3, 44], [44, 44]]) ctx.fillRect(x + px, y + py, 2, 2); }
+        break;
+      case 'feeder_c':
+        if (Math.floor(t * 1.3) % 3 === 0) { ctx.fillStyle = '#e8e4dc'; ctx.fillRect(x + 8, y + spr.extra + 3, 3, 2); }
+        break;
+      case 'shop':
+        if (on && Math.floor(t * 3) % 2) { ctx.fillStyle = '#f8f080'; ctx.fillRect(x + 4, y + 4, 1, 1); ctx.fillRect(x + 27, y + 4, 1, 1); }
+        break;
+    }
+  }
+
   drawDino(ctx, d, ui) {
     const S = DINO_SPRITES[d.species];
     const sleeping = d.sedatedT > 0 || (d.sleeping && d.state === 'idle');
@@ -494,12 +546,13 @@ class Renderer {
     if (sleeping) img = d.facing > 0 ? S.sleepR : S.sleepL;
     else if (d.flash > 0) img = (d.facing > 0 ? S.flashR : S.flashL)[fr];
     else if (d.sick > 0) img = (d.facing > 0 ? S.sickR : S.sickL)[fr];
+    else if (d.moving && d.vdir && S.up) img = (d.vdir > 0 ? S.down : S.up)[fr];
     else img = (d.facing > 0 ? S.right : S.left)[fr];
     let lx = 0;
     if (d.lunge > 0) { d.lunge -= 1 / 60; lx = d.facing * 2; }
     const bob = d.moving && fr === 1 ? -1 : 0;
     const gs = d.growth === undefined || d.growth >= 1 ? 1 : Math.round(d.growth * 10) / 10;
-    const dw = Math.round(S.w * gs), dh = Math.round(S.h * gs);
+    const dw = Math.round(img.width * gs), dh = Math.round(img.height * gs);
     const x = Math.round(d.x * TILE - dw / 2 + lx), y = Math.round(d.y * TILE - dh + 5 + bob + (sleeping ? 2 : 0));
     if (d.camouflaged) ctx.globalAlpha = 0.15 + Math.max(0, Math.sin(this.time * 1.3 + d.id)) * 0.2;
     if (gs === 1) ctx.drawImage(img, x, y); else ctx.drawImage(img, x, y, dw, dh);

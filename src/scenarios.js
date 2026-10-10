@@ -25,16 +25,16 @@ function buildStarterPark(g, opts = {}) {
   put('power', s.x - 14, s.y - 6); put('power', s.x + 12, s.y - 6);
   put('pylon', s.x - 1, s.y - 20);
   put('hatchery', s.x + 5, s.y - 4);
-  put('visitor', s.x + 2, s.y - 8 + 0); put('restaurant', s.x - 4, s.y - 7); put('restroom', s.x - 6, s.y - 7);
-  put('shop', s.x - 9, s.y - 7);
+  put('visitor', s.x + 2, s.y - 8); put('restaurant', s.x - 4, s.y - 8); put('restroom', s.x - 6, s.y - 8);
+  put('shop', s.x - 9, s.y - 8);
   // paddocks north of the boulevard
-  const P = [[s.x - 22, s.y - 26, s.x - 9, s.y - 11], [s.x - 7, s.y - 26, s.x + 7, s.y - 11], [s.x + 9, s.y - 26, s.x + 22, s.y - 11]];
+  const P = [[s.x - 22, s.y - 26, s.x - 9, s.y - 12], [s.x - 7, s.y - 26, s.x + 7, s.y - 12], [s.x + 9, s.y - 26, s.x + 22, s.y - 12]];
   P.forEach(([x0, y0, x1, y1], k) => {
     fenceRect(x0, y0, x1, y1, k === 1 && opts.rexWall ? F_WALL : F_ELECTRIC);
     forest(x0 + 1, y0 + 1, x0 + 4, y0 + 4);
   });
-  put('feeder_h', s.x - 15, s.y - 12); put('feeder_c', s.x, s.y - 12); put('feeder_c', s.x + 15, s.y - 12);
-  put('viewing', s.x - 12, s.y - 11 + 0);
+  put('feeder_h', s.x - 15, s.y - 13); put('feeder_c', s.x, s.y - 13); put('feeder_c', s.x + 15, s.y - 13);
+  put('viewing', s.x - 12, s.y - 11);
   if (opts.staff) { put('ranger', s.x + 15, s.y - 7); put('maint', s.x - 20, s.y - 7); }
   w.invalidate(); w.computeRegions(); w.computePower(g);
   g.money = money;
@@ -156,7 +156,7 @@ const SCENARIOS = {
       spawnIn(g, 'indom', P[1], 1);
       spawnIn(g, 'stego', P[2], 2); spawnIn(g, 'trike', P[2], 1);
       const s = g.start;
-      g.money = 1e9; g.placeBuilding('hotel', s.x - 22, s.y - 6); g.placeBuilding('shelter', s.x + 18, s.y - 4); g.money = 300000;
+      g.money = 1e9; g.placeBuilding('hotel', s.x - 17, s.y - 8); g.placeBuilding('shelter', s.x + 18, s.y - 8); g.money = 300000;
       g.reputation = 85; g.events.auto = false;
       g.scenarioState = { broke: false };
     },

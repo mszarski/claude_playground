@@ -376,8 +376,10 @@ function buildDinoSprites() {
     // Normalize sizes to same canvas
     const norm = (src) => { const [c, ctx] = makeCanvas(w, h); ctx.drawImage(src, 0, h - src.height); return c; };
     const a = norm(fa), b = norm(fb), s = norm(sl);
+    const vs = (front) => [makeView(key, front, 0), makeView(key, front, 1)];
     DINO_SPRITES[key] = {
       w, h,
+      up: vs(false), down: vs(true),
       right: [a, b], left: [flipCanvas(a), flipCanvas(b)],
       sleepR: s, sleepL: flipCanvas(s),
       flashR: [tintCanvas(a, '#ffffff', 0.85), tintCanvas(b, '#ffffff', 0.85)],
@@ -386,6 +388,92 @@ function buildDinoSprites() {
       sickL: [tintCanvas(flipCanvas(a), '#7ad04a', 0.35), tintCanvas(flipCanvas(b), '#7ad04a', 0.35)],
     };
   }
+}
+
+// ---------------- Front/back views (walking toward / away from the camera) ----------------
+const VIEW_SHAPES = {
+  galli: { w: 7, h: 8, legs: 2, tail: 7, neck: 7, head: 3 },
+  para: { w: 9, h: 10, legs: 2, tail: 7, neck: 4, head: 4, crest: true },
+  dilo: { w: 8, h: 9, legs: 2, tail: 7, neck: 3, head: 4, frill: true },
+  raptor: { w: 7, h: 9, legs: 2, tail: 8, neck: 2, head: 4 },
+  trike: { w: 13, h: 12, legs: 4, tail: 4, neck: 0, head: 6, horns: true },
+  stego: { w: 12, h: 13, legs: 4, tail: 7, neck: 1, head: 3, plates: true },
+  anky: { w: 15, h: 11, legs: 4, tail: 6, neck: 0, head: 4, spikes: true },
+  brachio: { w: 13, h: 14, legs: 4, tail: 7, neck: 14, head: 4 },
+  trex: { w: 12, h: 13, legs: 2, tail: 9, neck: 2, head: 7, teeth: true },
+  spino: { w: 12, h: 13, legs: 2, tail: 9, neck: 3, head: 6, sail: true },
+  indom: { w: 13, h: 14, legs: 2, tail: 9, neck: 2, head: 7, teeth: true },
+  ptera: { w: 6, h: 7, legs: 2, tail: 2, neck: 2, head: 3 },
+};
+
+function makeView(spKey, front, frame) {
+  const sh = VIEW_SHAPES[spKey], C = SPECIES[spKey].colors;
+  const W = sh.w + 10, Hh = sh.h + sh.tail + sh.neck + sh.head + 8;
+  const [c, ctx] = makeCanvas(W, Hh);
+  const p = (x, y, col) => { if (x >= 0 && y >= 0 && x < W && y < Hh) { ctx.fillStyle = col; ctx.fillRect(x, y, 1, 1); } };
+  const cx = Math.floor(W / 2);
+  const oval = (ocx, ocy, rx, ry, fill, line, belly) => {
+    for (let y = -ry; y <= ry; y++) {
+      const half = Math.round(rx * Math.sqrt(Math.max(0, 1 - (y * y) / (ry * ry))));
+      for (let x = -half; x <= half; x++) {
+        const edge = Math.abs(x) === half || Math.abs(y) === ry;
+        p(ocx + x, ocy + y, edge ? line : (belly && y > ry * 0.2 && Math.abs(x) < half - 1 ? belly : fill));
+      }
+    }
+  };
+  // vertical layout (top to bottom). Back view: head at top, tail toward viewer at bottom. Front view: reversed.
+  const bodyRY = Math.floor(sh.h / 2), bodyRX = Math.floor(sh.w / 2);
+  const headTop = 2, neckLen = sh.neck, headH = sh.head;
+  const bodyCY = front ? 2 + sh.tail + bodyRY : headTop + headH + neckLen + bodyRY;
+  const legOff = frame ? 1 : -1;
+  // legs (drawn first so the body overlaps)
+  const legY = bodyCY + bodyRY - 2;
+  const legX = sh.legs === 4 ? [-bodyRX + 1, -bodyRX + 3, bodyRX - 3, bodyRX - 1] : [-Math.max(2, bodyRX - 2), Math.max(2, bodyRX - 2)];
+  legX.forEach((lx, k) => {
+    const up = (k % 2 === 0) === !!frame ? -1 : 0;
+    for (let y = 0; y < 4; y++) { p(cx + lx, legY + y + up, C.D); p(cx + lx + 1, legY + y + up, C.D); }
+    p(cx + lx, legY + 4 + up, C.O); p(cx + lx + 1, legY + 4 + up, C.O);
+  });
+  if (!front) {
+    // tail toward the viewer
+    for (let t = 0; t < sh.tail; t++) {
+      const tw = Math.max(1, Math.round((sh.tail - t) / sh.tail * (bodyRX * 0.6)));
+      const ty = bodyCY + bodyRY - 1 + t, sway = Math.round(Math.sin((t / sh.tail) * 2 + legOff) * t * 0.15);
+      for (let x = -tw; x <= tw; x++) p(cx + x + sway, ty, Math.abs(x) === tw ? C.O : C.B);
+    }
+  } else {
+    // tail tip peeking out behind
+    const tl = Math.min(4, sh.tail), top = 2 + sh.tail - tl;
+    for (let t = 0; t < tl; t++) { const tw = 1 + Math.round(t / tl * Math.max(1, bodyRX * 0.4)); for (let x = -tw; x <= tw; x++) p(cx + x + (t === 0 ? legOff : 0), top + t, Math.abs(x) === tw ? C.O : C.B); }
+  }
+  oval(cx, bodyCY, bodyRX, bodyRY, C.B, C.O, front ? C.L : null);
+  if (!front) for (let y = -bodyRY + 2; y < bodyRY - 1; y++) p(cx, bodyCY + y, C.D); // spine
+  if (sh.plates) for (let y = -bodyRY + 1; y < bodyRY; y += 3) { p(cx - 1, bodyCY + y, C.S); p(cx + 1, bodyCY + y + 1, C.S); p(cx, bodyCY + y - 1, C.O); }
+  if (sh.sail) for (let y = -bodyRY - 2; y < bodyRY - 1; y++) { p(cx, bodyCY + y, C.S); if (y % 3 === 0) p(cx, bodyCY + y, C.O); }
+  if (sh.spikes) for (let y = -bodyRY + 2; y < bodyRY - 1; y += 2) { p(cx - bodyRX - 1, bodyCY + y, C.S); p(cx + bodyRX + 1, bodyCY + y, C.S); }
+  // neck + head
+  if (!front) {
+    for (let n = 0; n < neckLen; n++) { const y = bodyCY - bodyRY - n; p(cx - 1, y, C.O); p(cx, y, C.B); p(cx + 1, y, C.B); p(cx + 2, y, C.O); }
+    const hy = bodyCY - bodyRY - neckLen - Math.floor(headH / 2);
+    oval(cx, hy, Math.max(2, Math.floor(headH / 2)), Math.max(1, Math.floor(headH / 2)), C.B, C.O);
+    if (sh.crest) for (let k = 0; k < 4; k++) p(cx, hy + 1 + k, C.S);
+    if (sh.horns) { oval(cx, hy + 1, bodyRX - 1, 3, C.S, C.O); }
+    if (sh.frill) { p(cx - 3, hy, C.S); p(cx + 3, hy, C.S); }
+  } else {
+    const headCY = bodyCY + bodyRY + Math.floor(headH / 2) - 1 + (neckLen > 4 ? 0 : 0);
+    if (neckLen > 4) for (let n = 0; n < Math.min(neckLen, 6); n++) { const y = bodyCY + bodyRY - 2 + n; p(cx - 1, y, C.O); p(cx, y, C.B); p(cx + 1, y, C.B); p(cx + 2, y, C.O); }
+    const hy = neckLen > 4 ? bodyCY + bodyRY + 4 : headCY;
+    if (sh.horns) oval(cx, hy - 2, bodyRX, 4, C.S, C.O); // frill behind the face
+    if (sh.frill) { oval(cx, hy - 1, 4, 3, C.S, C.O); }
+    if (sh.crest) for (let k = 0; k < 4; k++) p(cx, hy - 3 - k, C.S);
+    const hrx = Math.max(2, Math.floor(headH / 2)), hry = Math.max(2, Math.floor(headH / 2));
+    oval(cx, hy, hrx, hry, C.B, C.O);
+    p(cx - Math.max(1, hrx - 1), hy - 1, C.E); p(cx + Math.max(1, hrx - 1), hy - 1, C.E);
+    p(cx, hy + hry - 1, C.D);
+    if (sh.teeth) for (let x = -hrx + 2; x <= hrx - 2; x += 2) p(cx + x, hy + hry - 2, '#f4f0e0');
+    if (sh.horns) { p(cx - 2, hy - hry - 1, '#efe6c8'); p(cx + 2, hy - hry - 1, '#efe6c8'); p(cx, hy + 1, '#efe6c8'); }
+  }
+  return c;
 }
 
 // ---------------- People ----------------
@@ -1192,11 +1280,30 @@ function buildIcons() {
   ICONS.siren_btn = ICONS.siren;
 }
 
+// Night variants: window glass pixels become warm light
+function buildNightBuildings() {
+  const glass = new Set(['106,176,216', '58,122,168', '168,216,240']);
+  for (const k of Object.keys(BSPR)) {
+    const src = BSPR[k].canvas;
+    const [c, ctx] = makeCanvas(src.width, src.height);
+    ctx.drawImage(src, 0, 0);
+    const im = ctx.getImageData(0, 0, c.width, c.height);
+    let n = 0;
+    for (let i = 0; i < im.data.length; i += 4) {
+      const key = im.data[i] + ',' + im.data[i + 1] + ',' + im.data[i + 2];
+      if (glass.has(key)) { im.data[i] = 248; im.data[i + 1] = 216; im.data[i + 2] = key === '58,122,168' ? 96 : 128; n++; }
+    }
+    ctx.putImageData(im, 0, 0);
+    BSPR[k].night = n ? c : null;
+  }
+}
+
 function buildAllSprites() {
   buildDinoSprites();
   buildPeople();
   buildTiles();
   buildBuildingSprites();
+  buildNightBuildings();
   buildMisc();
   buildVolcano();
   buildIcons();

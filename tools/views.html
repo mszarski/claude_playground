@@ -1,0 +1,9 @@
+<!doctype html><html><body style="background:#4f8a32;margin:0">
+<canvas id="c" width="1300" height="400"></canvas>
+<script src="../src/util.js"></script><script src="../src/data.js"></script><script src="../src/sprites.js"></script>
+<script>
+buildAllSprites();
+const ctx = document.getElementById('c').getContext('2d'); ctx.imageSmoothingEnabled=false;
+let x=10;
+for(const k of SPECIES_ORDER){ const S=DINO_SPRITES[k]; ctx.drawImage(S.up[0],x,10,S.up[0].width*4,S.up[0].height*4); ctx.drawImage(S.down[1],x,200,S.down[1].width*4,S.down[1].height*4); x+=S.up[0].width*4+8; }
+</script></body></html>
