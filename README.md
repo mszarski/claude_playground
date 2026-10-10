@@ -42,10 +42,10 @@ All code is plain JavaScript in `src/` loaded by `index.html`:
 
 - `sprites.js` — all pixel art (dinosaurs are hand-drawn character grids, buildings are procedural)
 - `world.js` — terrain generation, paddock region detection, power grid, pathfinding
-- `entities.js` — dinosaurs, guests, rangers, engineers, the ACU helicopter
+- `entities/` — `dino.js`, `ptera.js`, `guest.js`, `staff.js` (rangers, engineers), `vehicles.js` (tour jeeps, ACU helicopter)
 - `events.js` — disasters
 - `scenarios.js` — scenario setups and win/lose checks
 - `game.js` — economy, goals, simulation loop
-- `render.js`, `ui.js`, `audio.js`, `main.js`
+- `render.js`, `ui.js` (input, toolbar, HUD), `ui-panels.js` (info panel, dialogs), `audio.js`, `main.js`
 
 `tools/` holds headless Playwright smoke tests (`node tools/smoke.js out.png tools/play1.js`).
