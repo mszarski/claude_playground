@@ -229,12 +229,13 @@ def main():
     ap.add_argument("--responder", default=os.environ.get("RESPONDER_MODEL"),
                     help="LLM that decides how to respond to speech (default: --model)")
     ap.add_argument("--voice-model", default=os.environ.get("VOICE_MODEL"),
-                    help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v3")
+                    help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v5")
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
-    ap.add_argument("--calibrate", action="store_true", default=bool(os.environ.get("CALIBRATE_VOICE")),
+    ap.add_argument("--calibrate", action=argparse.BooleanOptionalAction, default=None,
                     help="correct the voice readings per session (attribute levels and category priors) toward what "
-                         "the licence-clean students were trained on (rmr.voice.Calibration)")
+                         "the licence-clean students were trained on (rmr.voice.Calibration); on by default with "
+                         "--voice-model, off for the zero-shot responder (env CALIBRATE_VOICE=1/0)")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
     ap.add_argument("--listener-model", default=os.environ.get("LISTENER_MODEL"),
@@ -244,6 +245,9 @@ def main():
     a = ap.parse_args()
     import uvicorn
 
+    if a.calibrate is None:
+        env = os.environ.get("CALIBRATE_VOICE")
+        a.calibrate = env not in ("0", "false", "") if env is not None else bool(a.voice_model)
     engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model, calibrate=a.calibrate)
     if a.listener_model:
         path = a.listener_model
