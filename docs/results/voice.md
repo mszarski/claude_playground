@@ -232,6 +232,53 @@ python -m rmr.listen talk.wav --video listening.mp4 --json listening.json   # re
   two repeat. In the viewer's hands-free mode and in `rmr.robot` (`--no-idle` to turn it off); speaking cuts an idle
   short at once.
 
+## Licence-clean voice data (no MELD)
+
+MELD is cut from a TV show, so students trained on it inherit that. Student v5 is trained without it:
+
+- **Words**: about 4,200 lines written by the open teacher (`scripts/synth_lines.py`): six feelings, a random topic
+  and speaker per batch, styles that fit the feeling (sarcasm only for anger, tiredness for sad / angry / anxious).
+  Neutral lines first came out sarcastic or weary ("Beautiful overcast perfect day to feel emotionally drained"),
+  and the teacher read 56% of them as sad, so styles are now per feeling.
+- **Tone**: every line gets the voice reading of a *real* recording of the same feeling: the voice model run on all
+  7,442 CREMA-D clips (`scripts/tone_bank.py`; ODbL, 91 actors). Only the readings are used, not the audio or the
+  words. TTS was tried first (`scripts/synth_speech.py`, Zonos, Apache-2.0, blended voices), but its voices read as sad
+  whatever the emotion setting (sad 100%, angry 7%, happy 27%), so the tone would have been made up.
+- **Tone-only examples**: 800 CREMA-D clips with their flat sentence as the words ("It's eleven o'clock."), so only
+  the reading tells the feeling. This is where the student learns what this voice model's readings mean on real
+  voices: it hardly ever says "happy" for a happy actor (they read as neutral or surprise), and it hears fear as sad.
+- Teacher labels with the hinted relabelling and a per-feeling cap, as in v3 (`scripts/label_respond.py`, which now
+  takes a written feeling as the label). 18 of the 91 actors are held out of everything for evaluation.
+
+**Evaluation without MELD** (`scripts/eval_clean.py`): a *tone test* (300 clips from the held-out actors, five
+feelings, flat sentences: words alone score chance) and 255 *fresh lines* (another writer seed, none seen in
+training, readings from held-out actors). UA = unweighted accuracy of the feeling; physical = the response's
+recipe passes the physical check (as on MELD).
+
+| | tone test UA (chance 20%) | fresh lines UA (chance 17%) | MELD test UA | MELD appropriate |
+|---|---|---|---|---|
+| teacher, words only | 20% | 42% | | |
+| teacher (80B), words + tone | 40% | 43% | 48% | 66% |
+| v3 4B (MELD-trained) | 32% | 52% | **50%** | **74%** |
+| v4 4B (lines only) | 28% | **64%** | 34% | 64% |
+| **v5 4B (lines + tone clips)** | **47%** | 63% | 37% / **42%** calibrated | 60% / **72%** calibrated |
+| v5 1.7B | 41% | 59% | 40% / 40% calibrated | 69% / 72% calibrated |
+
+- **v5 uses tone.** On the tone test it beats the teacher and every earlier student. A logistic regression on the
+  same readings (held-out actors) reaches 51% (54% with all class probabilities), so v5 is close to what the
+  readings allow. v4, without the tone-only clips, ignored tone: it read the words.
+- The fresh lines favour v4 / v5 (same writer as their training data); take that column as in-distribution.
+- **Calibration** (`rmr.voice.Calibration`, `python -m rmr.server --calibrate`). The readings depend on the
+  microphone and room. Mean valence is 0.38 on CREMA-D, 0.43 on meeting talk (AMI, `scripts/calibrate_tone.py`) and
+  0.56 on MELD. The voice model says "happy" for 1% of CREMA-D clips, 16% of AMI and 40% of MELD (laugh tracks, loud
+  delivery). Uncalibrated, v5 read MELD as happy (24 of 50 neutral clips). Calibration keeps a running mean per
+  session and shifts the attributes so that mean sits at the tone bank's level. It also rescales the category
+  probabilities by the tone bank's prior over the session's (a prior-shift correction). On MELD (corrected with
+  MELD test's own means) v5 goes from 37% to 42% UA and from 60% to 72% appropriate. That is within two points of
+  v3, which was trained on MELD itself.
+
+Data: `mszarski/reachy-voice` `synth/v4/` (lines, readings, tone bank), `student/v5`, `student/v5-1.7b`.
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
