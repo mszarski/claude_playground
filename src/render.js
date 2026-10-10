@@ -122,6 +122,7 @@ class Renderer {
       }
       // paths
       if (w.path[i]) this.drawPath(ctx, x, y, px, py, v);
+      if (w.track[i]) this.drawTrack(ctx, x, y, px, py);
     }
     // fences & trees row by row so taller objects overlap correctly
     const fx0 = Math.max(0, bx0 - 1), fx1 = Math.min(W - 1, bx1 + 1);
@@ -161,6 +162,30 @@ class Renderer {
     if (!isP(0, 1)) ctx.fillRect(px, py + 15, 16, 1);
     if (!isP(-1, 0)) ctx.fillRect(px, py, 1, 16);
     if (!isP(1, 0)) ctx.fillRect(px + 15, py, 1, 16);
+  }
+
+  drawTrack(ctx, x, y, px, py) {
+    const w = this.game.world;
+    const isT = (dx, dy) => w.inb(x + dx, y + dy) && (w.track[w.idx(x + dx, y + dy)] || (w.bld[w.idx(x + dx, y + dy)] && w.buildings.get(w.bld[w.idx(x + dx, y + dy)]).type === 'tour'));
+    const L = isT(-1, 0), R = isT(1, 0), U = isT(0, -1), D = isT(0, 1);
+    ctx.fillStyle = '#4f8a32'; ctx.fillRect(px, py, 16, 16);
+    ctx.fillStyle = '#5a5a58';
+    ctx.fillRect(px + 3, py + 3, 10, 10);
+    if (L) ctx.fillRect(px, py + 3, 3, 10);
+    if (R) ctx.fillRect(px + 13, py + 3, 3, 10);
+    if (U) ctx.fillRect(px + 3, py, 10, 3);
+    if (D) ctx.fillRect(px + 3, py + 13, 10, 3);
+    ctx.fillStyle = '#6a6a66';
+    ctx.fillRect(px + 4, py + 4, 8, 1);
+    // guide rail slot
+    ctx.fillStyle = '#2a2a28';
+    if (L) ctx.fillRect(px, py + 8, 8, 1);
+    if (R) ctx.fillRect(px + 8, py + 8, 8, 1);
+    if (U) ctx.fillRect(px + 8, py, 1, 8);
+    if (D) ctx.fillRect(px + 8, py + 8, 1, 8);
+    ctx.fillStyle = '#f8d040';
+    if (L || R) { ctx.fillRect(px + 2, py + 5, 2, 1); ctx.fillRect(px + 11, py + 5, 2, 1); }
+    if (U || D) { ctx.fillRect(px + 5, py + 2, 1, 2); ctx.fillRect(px + 5, py + 11, 1, 2); }
   }
 
   drawFence(ctx, x, y, frame) {
@@ -260,6 +285,7 @@ class Renderer {
     for (const d of g.dinos) if (!d.carried && vis(d.tx, d.ty)) items.push({ y: d.y, t: 1, o: d });
     for (const gu of g.guests) if (!gu.hidden && vis(gu.tx, gu.ty)) items.push({ y: gu.y, t: 2, o: gu });
     for (const s of g.staff) if (vis(s.tx, s.ty)) items.push({ y: s.y, t: 2, o: s });
+    for (const j of g.jeeps) if (vis(j.tx, j.ty)) items.push({ y: j.y + 0.2, t: 5, o: j });
     for (const e of g.eggs) items.push({ y: e.y + 0.6, t: 3, o: e });
     if (w.volcano && vis(w.volcano.x, w.volcano.y)) items.push({ y: w.volcano.y + 3, t: 4, o: w.volcano });
     items.sort((a, b) => a.y - b.y);
@@ -275,6 +301,7 @@ class Renderer {
       else if (it.t === 1) this.drawDino(ctx, it.o, ui);
       else if (it.t === 2) this.drawPerson(ctx, it.o, ui);
       else if (it.t === 4) this.drawVolcano(ctx, it.o);
+      else if (it.t === 5) this.drawJeep(ctx, it.o);
       else this.drawEgg(ctx, it.o);
     }
 
@@ -487,6 +514,23 @@ class Renderer {
     if (ui.selected === p) { ctx.strokeStyle = '#f8f080'; ctx.strokeRect(x - 1.5, y - 1.5, 9, 13); }
   }
 
+  drawJeep(ctx, j) {
+    const x = Math.round(j.x * TILE - 8), y = Math.round(j.y * TILE - 8);
+    if (j.wrecked) { ctx.drawImage(JEEP_WRECK, x, y - 2); if (Math.floor(this.time * 3) % 2) { ctx.fillStyle = 'rgba(60,60,60,0.6)'; ctx.fillRect(x + 6, y - 6 - (this.time * 8 % 6), 3, 3); } return; }
+    const bob = j.moving && Math.floor(j.anim * 8) % 2 ? 1 : 0;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x + 1, y + 9, 14, 2);
+    ctx.drawImage(j.facing > 0 ? JEEP_R : JEEP_L, x, y + bob);
+    // passengers' heads
+    for (let k = 0; k < j.riders.length; k++) {
+      ctx.fillStyle = ['#f0c8a0', '#b07850', '#d8a078', '#8a5a3a'][k % 4];
+      ctx.fillRect(x + 4 + k * 2 + (j.facing > 0 ? 0 : 1), y + 1 + bob, 1, 2);
+    }
+    const g = this.game;
+    if (j.state !== 'parked' && (!j.station.powered || g.world.power.outage > 0) && Math.floor(this.time * 2) % 2) {
+      drawText3(ctx, '!', x + 6, y - 7, '#ff4030');
+    }
+  }
+
   drawVolcano(ctx, v) {
     const g = this.game;
     const x = Math.round((v.x + 0.5) * TILE - VOLCANO_SPR.width / 2), y = Math.round((v.y + 3) * TILE - VOLCANO_SPR.height);
@@ -597,7 +641,7 @@ class Renderer {
     }
     if (ui.dragTiles && ui.dragTiles.length) {
       for (const [x, y] of ui.dragTiles) {
-        ctx.fillStyle = tool === 'demolish' ? 'rgba(255,60,60,0.4)' : tool === 'path' ? 'rgba(232,200,140,0.6)' : tool === 'trees' ? 'rgba(60,160,60,0.5)' : tool === 'clear' ? 'rgba(200,160,80,0.4)' : 'rgba(248,224,64,0.5)';
+        ctx.fillStyle = tool === 'demolish' ? 'rgba(255,60,60,0.4)' : tool === 'path' ? 'rgba(232,200,140,0.6)' : tool === 'track' ? 'rgba(90,90,88,0.7)' : tool === 'trees' ? 'rgba(60,160,60,0.5)' : tool === 'clear' ? 'rgba(200,160,80,0.4)' : 'rgba(248,224,64,0.5)';
         ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
       }
     }
@@ -703,6 +747,7 @@ class Renderer {
       for (let i = 0; i < w.W * w.H; i++) {
         let c = col(w.terrain[i]);
         if (w.path[i]) c = [210, 180, 130];
+        if (w.track[i]) c = [90, 90, 88];
         if (w.fence[i] === F_ELECTRIC) c = w.fencePowered[i] ? [248, 224, 64] : [200, 60, 40];
         if (w.fence[i] === F_WALL) c = [200, 200, 196];
         if (w.fence[i] === F_BROKEN) c = [255, 0, 0];

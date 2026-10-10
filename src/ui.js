@@ -2,7 +2,7 @@
 'use strict';
 
 const $ = (s) => document.querySelector(s);
-const LINE_TOOLS = ['path', 'fence', 'wall'];
+const LINE_TOOLS = ['path', 'track', 'fence', 'wall'];
 const RECT_TOOLS = ['demolish', 'trees', 'clear'];
 
 class UI {
@@ -87,7 +87,7 @@ class UI {
         this.sfx.play('click');
         if (t === 'hatch') { this.showSpeciesPicker(); return; }
         this.setTool(t);
-        this.openFlyout(grp);
+        if (window.innerWidth < 760) this.closeFlyout(); else this.openFlyout(grp);
       };
       f.appendChild(b);
     }
@@ -302,7 +302,8 @@ class UI {
     let c = 0;
     for (const [x, y] of this.dragTiles) {
       const i = w.idx(x, y);
-      if (tool === 'path' && !w.path[i] && w.canBuildAt(x, y)) c += TOOL_INFO.path.cost;
+      if (tool === 'path' && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.path.cost;
+      else if (tool === 'track' && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.track.cost;
       else if ((tool === 'fence' || tool === 'paddock') && w.fence[i] !== F_ELECTRIC && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_ELECTRIC].cost;
       else if (tool === 'wall' && w.fence[i] !== F_WALL && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_WALL].cost;
       else if (tool === 'trees' && w.terrain[i] === T_GRASS && !w.path[i] && !w.bld[i] && !w.fence[i]) c += TOOL_INFO.trees.cost;
@@ -318,6 +319,7 @@ class UI {
     for (const [x, y] of this.dragTiles) {
       let ok = false;
       if (tool === 'path') ok = g.placePath(x, y);
+      else if (tool === 'track') ok = g.placeTrack(x, y);
       else if (tool === 'fence' || tool === 'paddock') ok = g.placeFence(x, y, F_ELECTRIC);
       else if (tool === 'wall') ok = g.placeFence(x, y, F_WALL);
       else if (tool === 'demolish') {
@@ -344,6 +346,7 @@ class UI {
       if (b) {
         this.sfx.play('build');
         if (def.cat === 'guest' && !w.accessTiles(b).length) this.toast(`Connect the ${def.name} to a path!`, 'warn');
+        if (tool === 'tour' && !w.trackAccess(b).length) this.toast('Now lay Tour Track from the station past your paddocks, ideally in a loop.', 'info');
         if (def.feeds) { const reg = w.regionAt(bx + 1, by) || w.regionAt(bx - 1, by) || w.regionAt(bx, by + 1) || w.regionAt(bx, by - 1); if (reg && reg.public) this.toast('Feeders should go inside a fenced paddock.', 'warn'); }
       } else {
         this.sfx.play('error');
@@ -648,6 +651,10 @@ class UI {
       if (def.power) html += `<div class="row"><span>Power</span><span style="color:${o.powered ? '#f8d040' : '#e04838'}">${o.powered ? 'ON' : 'NO POWER'}</span></div>`;
       if (o.type === 'power') html += `<div class="row"><span>Output</span><span>${o.offline > 0 || w.power.outage > 0 ? 'OFFLINE' : def.supply + ' MW'}</span></div>`;
       if (def.cat === 'guest' && !w.accessTiles(o).length) html += `<div class="sub" style="color:#ff9080">Not connected to a path!</div>`;
+      if (o.type === 'tour') {
+        html += `<div class="row"><span>Queue</span><span>${(o.queue || []).length}</span></div><div class="row"><span>Jeeps</span><span>${g.jeeps.filter((j) => j.station === o).length}</span></div>`;
+        if (!w.trackAccess(o).length) html += `<div class="sub" style="color:#ff9080">Needs Tour Track next to it!</div>`;
+      }
       if (def.income) html += `<div class="row"><span>Visitors</span><span>${o.visitors}</span></div><div class="row"><span>Revenue</span><span>${fmtMoney(o.revenue || 0)}</span></div>`;
       if (def.shelter) html += `<div class="row"><span>Sheltering</span><span>${o.inside}/${def.shelter}</span></div>`;
       if (def.upkeep) html += `<div class="row"><span>Upkeep</span><span>${fmtMoney(def.upkeep)}/day</span></div>`;
@@ -763,7 +770,8 @@ class UI {
   }
 
   showMenu() {
-    const has = !!localStorage.getItem('jt_save');
+    let has = false;
+    try { has = !!localStorage.getItem('jt_save'); } catch (e) { /* storage unavailable */ }
     let html = `<h1>MENU</h1><div class="btns" style="flex-direction:column;align-items:stretch;gap:6px">
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;
@@ -787,7 +795,7 @@ class UI {
       3. Put a <b>Feeder</b> inside (herbivore or carnivore).<br>
       4. Build a <b>Hatchery</b>, then <b>Hatch</b> a species inside the paddock.</p>
       <h2>GUESTS</h2>
-      <p>Guests arrive at the Main Gate and only walk on paths. Lead paths past paddocks (dinos within ~6 tiles are visible) and add Viewing Platforms, food, shops and restrooms.</p>
+      <p>Guests arrive at the Main Gate and only walk on paths. Lead paths past paddocks (dinos within ~6 tiles are visible) and add Viewing Platforms, food, shops and restrooms. A <b>Tour Station</b> with a loop of <b>Tour Track</b> running past the paddocks is the biggest crowd-pleaser — but the electric jeeps stall when the power goes out.</p>
       <h2>WHEN THINGS GO WRONG</h2>
       <p>Stressed or hungry dinosaurs attack fences. Unpowered fences fall fast. When a dinosaur escapes: sound the <b>ALARM</b> (guests run to the Visitor Center, Hotel or Bunkers), let <b>Rangers</b> tranquilize it, and the <b>ACU Helipad</b> airlifts it home. <b>Engineers</b> from Maintenance Sheds repair fences. Build a <b>Backup Generator</b> for grid failures and a <b>Vet Clinic</b> for outbreaks.</p>
       <h2>CONTROLS</h2>

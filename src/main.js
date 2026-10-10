@@ -9,6 +9,7 @@ function startGame(opts = {}) {
   const g = new Game(seed, opts);
   if (opts.sandbox) { g.sandbox = true; g.money = 5000000; }
   setActiveGame(g);
+  if (window.innerWidth < 700) RENDER.cam.zoom = 2;
   if (!opts.loaded) {
     UIX.centerOn(g.start.x, g.start.y - 6);
     g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
@@ -35,7 +36,7 @@ function serialize(g) {
   return JSON.stringify({
     v: 1, seed: g.seed, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
-    terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
+    terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
     dinos: g.dinos.filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills })),
   });
@@ -53,6 +54,7 @@ function loadGame(json) {
   w.fence.set(unb64(s.fence, Uint8Array));
   w.fenceOrig.set(unb64(s.fenceOrig, Uint8Array));
   w.path.set(unb64(s.path, Uint8Array));
+  if (s.track) w.track.set(unb64(s.track, Uint8Array));
   w.fenceHp.set(unb64(s.fenceHp, Float32Array));
   for (const b of Array.from(w.buildings.values())) w.removeBuilding(b);
   for (const bd of s.buildings) {
@@ -61,6 +63,7 @@ function loadGame(json) {
     const def = BUILDINGS[bd.type];
     if (def.staff) for (let k = 0; k < def.staffN; k++) g.staff.push(new Staff(g, def.staff, b));
     if (bd.type === 'helipad') g.helis.push(new Helicopter(g, b));
+    if (bd.type === 'tour') { b.queue = []; b.jeepT = 0; }
   }
   for (const dd of s.dinos) {
     const d = new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));

@@ -13,6 +13,7 @@ class World {
     this.fenceOrig = new Uint8Array(N);
     this.fencePowered = new Uint8Array(N);
     this.path = new Uint8Array(N);
+    this.track = new Uint8Array(N);
     this.bld = new Int32Array(N); // building id or 0
     this.region = new Int32Array(N);
     this.covered = new Uint8Array(N); // power coverage
@@ -122,7 +123,8 @@ class World {
         const t = this.terrain[this.idx(x + dx, y + dy)];
         if (t === T_GRASS || t === T_FOREST || t === T_SAND) ok++;
       }
-      const score = ok * 10 + y * 2 - Math.abs(x - W / 2) * 1.5;
+      let score = ok * 10 + y * 2 - Math.abs(x - W / 2) * 1.5;
+      if (this.volcano && dist(x, y, this.volcano.x, this.volcano.y) < 16) score -= 1000;
       if (ok >= 60 && score > bestScore) { bestScore = score; best = { x, y }; }
     }
     return best || { x: Math.floor(W / 2), y: Math.floor(H * 0.75) };
@@ -159,7 +161,7 @@ class World {
     const def = BUILDINGS[type];
     for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) {
       if (!this.canBuildAt(x + dx, y + dy)) return false;
-      if (this.path[this.idx(x + dx, y + dy)]) return false;
+      if (this.path[this.idx(x + dx, y + dy)] || this.track[this.idx(x + dx, y + dy)]) return false;
       if (this.fence[this.idx(x + dx, y + dy)] === F_BROKEN) return false;
     }
     return true;
@@ -195,6 +197,18 @@ class World {
       if (corner || inside) continue;
       const x = b.x + dx, y = b.y + dy;
       if (this.inb(x, y) && this.path[this.idx(x, y)]) out.push(this.idx(x, y));
+    }
+    return out;
+  }
+
+  trackAccess(b) {
+    const out = [];
+    for (let dy = -1; dy <= b.h; dy++) for (let dx = -1; dx <= b.w; dx++) {
+      const corner = (dx === -1 || dx === b.w) && (dy === -1 || dy === b.h);
+      const inside = dx >= 0 && dx < b.w && dy >= 0 && dy < b.h;
+      if (corner || inside) continue;
+      const x = b.x + dx, y = b.y + dy;
+      if (this.inb(x, y) && this.track[this.idx(x, y)]) out.push([x, y]);
     }
     return out;
   }

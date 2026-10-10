@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <style>
 :root {
+  color-scheme: dark;
   --bg: #0e140e;
   --panel: #1c2a1a;
   --panel2: #253822;
@@ -154,7 +155,21 @@ table.fin td:last-child { text-align: right; }
   #miniBtns { display: none; }
   #info { width: calc(100vw - 80px); top: auto; bottom: 120px; max-height: 45vh; }
   .stat .v { font-size: 18px; }
+  .stat .k { font-size: 12px; }
+  .stat { padding: 0 4px; }
   #logo { display: none; }
+  #topbar { height: auto; flex-wrap: wrap; row-gap: 4px; padding: 4px 6px; overflow: visible; }
+  #topbar .spacer { display: none; }
+  #topbar button { padding: 1px 5px; font-size: 15px; }
+  #powerbar { width: 48px; }
+  #toolbar { top: 78px; padding: 3px; }
+  .cat { width: 42px; height: 42px; font-size: 12px; }
+  .cat canvas { width: 24px; height: 24px; }
+  #flyout { top: 78px; left: 58px; min-width: 0; width: calc(100vw - 66px); max-height: 55vh; }
+  #alerts { top: 80px; width: calc(100vw - 70px); left: 62px; transform: none; }
+  .alert { font-size: 8px; }
+  #toasts { top: 140px; }
+  .toast { font-size: 16px; }
 }
 </style>
 </head>

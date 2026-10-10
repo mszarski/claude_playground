@@ -124,14 +124,16 @@ const BUILDINGS = {
     desc: 'Live goats. Place inside a paddock. Each meal costs $400.' },
   lamp: { name: 'Lamp Post', w: 1, h: 1, cost: 300, upkeep: 2, power: 0.2, cat: 'decor', hp: 60, light: true,
     desc: 'Lights the night. Guests feel safer.' },
+  tour: { name: 'Tour Station', w: 2, h: 2, cost: 35000, upkeep: 300, power: 3, cat: 'guest', hp: 250, income: 25, appeal: 6, need: 'tour',
+    desc: 'Electric jeeps carry guests along Tour Track past the paddocks. Must touch a path and a track.' },
   siren: { name: 'Siren Tower', w: 1, h: 1, cost: 6000, upkeep: 20, power: 1, cat: 'infra', hp: 120, range: 14,
     desc: 'Guests in range evacuate instantly when an alarm sounds.' },
 };
 
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
-  { id: 'build', label: 'Build', tools: ['path', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
-  { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'hotel', 'shelter', 'lamp'] },
+  { id: 'build', label: 'Build', tools: ['path', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
+  { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'hotel', 'shelter', 'lamp'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
   { id: 'dino', label: 'Dinos', tools: ['hatchery', 'feeder_h', 'feeder_c', 'hatch'] },
@@ -140,6 +142,7 @@ const TOOL_GROUPS = [
 const TOOL_INFO = {
   inspect: { name: 'Inspect', desc: 'Click anything to see details.', key: 'Q' },
   path: { name: 'Footpath', cost: 60, desc: 'Drag to lay paths. Guests only walk on paths.', key: 'P' },
+  track: { name: 'Tour Track', cost: 150, desc: 'Drag to lay the jeep tour track. Run it past paddocks and loop it back to a Tour Station.', key: 'J' },
   fence: { name: 'Electric Fence', cost: 250, desc: 'Drag a line of electric fence. Needs power!', key: 'F' },
   paddock: { name: 'Paddock', cost: 250, desc: 'Drag a rectangle to build a fenced paddock.', key: 'R' },
   wall: { name: 'Concrete Wall', cost: 900, desc: 'Drag. Very strong, needs no power.', key: 'V' },

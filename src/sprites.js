@@ -851,6 +851,18 @@ function buildBuildingSprites() {
     p.r(5, 0, 6, 5, '#2a2a2a'); p.r(6, 1, 4, 3, '#f8e080');
   });
 
+  make('tour', 14, (p, W, H, ctx) => {
+    // open-sided station with a big canopy, like a ride platform
+    p.r(1, 14, W - 2, H - 16, '#8a7a5a');
+    p.r(2, 15, W - 4, H - 18, '#b8a878');
+    for (let x = 4; x < W - 3; x += 8) p.r(x, 14, 2, H - 16, '#5a3a1c');
+    roofGable(p, 0, 4, W, 12, '#c8381e', '#e85a3a', '#7a2010');
+    p.r(4, 0, W - 8, 6, '#2a1a0c'); p.r(5, 1, W - 10, 4, '#f8d040');
+    drawText3(ctx, 'TOUR', 8, 1, '#2a1408');
+    // turnstile
+    p.r(12, H - 8, 8, 2, '#5a5a5a');
+  });
+
   make('siren', 14, (p, W, H) => {
     p.r(7, 6, 2, H - 6, '#5a5a58');
     p.r(4, H - 2, 8, 2, '#3a3a38');
@@ -859,6 +871,7 @@ function buildBuildingSprites() {
   });
 }
 
+let JEEP_R = null, JEEP_L = null, JEEP_WRECK = null;
 // Egg sprite
 let EGG_SPR = null, HELI_SPR = null, HELI_SHADOW = null, RUBBLE_SPR = null, JEEP_SPR = null;
 function buildMisc() {
@@ -888,6 +901,22 @@ function buildMisc() {
     '       OOOOOOOOOOOOOO',
   ], { O: '#1a1a1a', Y: '#e8b020', G: '#88c8e8', K: '#2a2a2a' });
   HELI_SHADOW = tintCanvas(HELI_SPR, '#000000', 1);
+
+  // Tour jeep: green body, yellow stripe, red band (classic park explorer look)
+  JEEP_R = gridToCanvas([
+    '     OOOOOOO    ',
+    '    OjjOjjjjO   ',
+    '   OjjjOjjjjjO  ',
+    'OOOOOOOOOOOOOOOO',
+    'OGGGGGGGGGGGGGLO',
+    'ORRRRRRRRRRRRRRO',
+    'OYYYYYYYYYYYYYYO',
+    'OGGOOOGGGGGOOOGO',
+    ' OOkkkOOOOOkkkO ',
+    '   OkO     OkO  ',
+  ], { O: '#1a1a1a', G: '#3a8a3a', R: '#c8381e', Y: '#f8d040', j: '#88c8e8', k: '#3a3a3a', L: '#f8f0a0' });
+  JEEP_L = flipCanvas(JEEP_R);
+  JEEP_WRECK = (() => { const [c, ctx] = makeCanvas(16, 16); ctx.translate(8, 8); ctx.rotate(Math.PI / 2); ctx.drawImage(JEEP_R, -8, -5); return c; })();
 
   RUBBLE_SPR = gridToCanvas([
     '    O    O      ',
@@ -952,8 +981,8 @@ function iconFrom(src, bg) {
   const S = 24;
   const [c, ctx] = makeCanvas(S, S);
   if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S); }
-  const sc = Math.min(1, (S - 2) / src.width, (S - 2) / src.height);
-  const s2 = sc < 1 ? (sc >= 0.5 ? 0.5 : 0.25 * Math.floor(sc * 4) || 0.25) : 1;
+  const fit = Math.min((S - 2) / src.width, (S - 2) / src.height);
+  const s2 = fit >= 2 ? 2 : fit >= 1 ? 1 : fit >= 0.5 ? 0.5 : 0.25;
   const w = Math.round(src.width * s2), h = Math.round(src.height * s2);
   ctx.drawImage(src, Math.floor((S - w) / 2), Math.floor((S - h) / 2), w, h);
   return c;
@@ -1025,6 +1054,14 @@ function buildIcons() {
     'OO          ',
   ], { O: '#1a1a1a', a: '#8a8a8a', B: '#8a5a2a' });
   ICONS.trees = iconFrom(TILES.trees[1]);
+  ICONS.track = mk([
+    'GGaaaaaaaGGG',
+    'GGaaayaaaGGG',
+    'GGaaaaaaaGGG',
+    'GGaaayaaaGGG',
+    'GGaaaaaaaGGG',
+    'GGaaayaaaGGG',
+  ], { G: '#4f8a32', a: '#5a5a58', y: '#f8d040' });
   ICONS.clear = mk([
     '   OOOOOOO  ',
     '  OyyyyyyyO ',

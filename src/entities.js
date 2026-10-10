@@ -315,6 +315,13 @@ class Dino {
         if (d < bd) { bd = d; best = h; }
       }
     }
+    if (this.loose && this.sp.size >= 2) {
+      for (const j of g.jeeps) {
+        if (j.wrecked || !j.riders.length) continue;
+        const d = dist2(this.x, this.y, j.x, j.y);
+        if (d < bd) { bd = d; best = j; }
+      }
+    }
     // Contained carnivores (or loose ones) can also eat herbivores in their region
     const myReg = g.world.region[g.world.idx(this.tx, this.ty)];
     for (const d of g.dinos) {
@@ -330,7 +337,7 @@ class Dino {
   updateHunt(dt) {
     const g = this.game, w = g.world;
     const t = this.target;
-    if (!t || t.dead || t.hidden || t.carried) { this.state = 'idle'; this.stateT = 1; this.target = null; return; }
+    if (!t || t.dead || t.hidden || t.carried || t.wrecked) { this.state = 'idle'; this.stateT = 1; this.target = null; return; }
     const d = dist(this.x, this.y, t.x, t.y);
     if (d > 16) { this.state = 'idle'; this.stateT = 1; this.target = null; return; }
     if (d < 0.75) {
@@ -338,6 +345,10 @@ class Dino {
       if (this.attackCD > 0) return;
       this.attackCD = 1.2;
       this.lunge = 0.3;
+      if (t.kind === 'jeep') {
+        g.jeepAttacked(t, this); this.kills++; this.hunger = Math.max(0, this.hunger - 60);
+        this.state = 'eat'; this.stateT = 6; this.target = null; return;
+      }
       if (t.kind === 'dino') {
         t.hp -= this.sp.strength * 12;
         t.flash = 0.2; t.stress = 100;
@@ -408,6 +419,12 @@ class Guest {
     const g = this.game, w = g.world;
     this.anim += dt;
     const hrs = dt / g.secPerHour;
+    if (this.state === 'ride') { if (this.inJeep) { this.x = this.inJeep.x; this.y = this.inJeep.y; } return; }
+    if (this.state === 'queue') {
+      this.insideT -= dt;
+      if (this.insideT <= 0) { this.happy -= 8; this.hidden = false; this.state = 'walk'; }
+      return;
+    }
     if (this.state === 'inside' || this.state === 'shelter') {
       this.insideT -= dt;
       if (this.state === 'shelter') {
@@ -490,7 +507,7 @@ class Guest {
     else if (this.toilet > 60) type = 'restroom';
     else if ((g.hour >= 19 || g.hour < 6) && this.stay > 4) type = 'hotel';
     else if (this.shopUrge > 70) type = 'shop';
-    else if (chance(0.3)) type = pick(['viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
+    else if (chance(0.45)) type = pick(['tour', 'tour', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
     if (!type) return null;
     const cands = g.buildingsOfType(type).filter((b) => b.powered || !BUILDINGS[b.type].power);
     if (!cands.length) { if (type === 'restroom' || type === 'restaurant') this.happy -= 2; return null; }
@@ -553,6 +570,12 @@ class Guest {
     const def = BUILDINGS[b.type];
     if (def.power && !b.powered) { this.happy -= 3; return; }
     if (b.type === 'viewing') { this.happy = Math.min(100, this.happy + 4); this.lookAtDinos(); return; }
+    if (b.type === 'tour') {
+      if (!b.queue) b.queue = [];
+      if (b.queue.length >= 16) { this.happy -= 3; return; }
+      b.queue.push(this); this.state = 'queue'; this.hidden = true; this.inBuilding = null; this.insideT = 40;
+      return;
+    }
     // Enter
     this.inBuilding = b; b.inside++;
     this.hidden = true; this.state = 'inside';
@@ -754,6 +777,101 @@ class Staff {
         if (hp) { this.path = hp; this.pi = 0; this.state = 'move'; }
       }
     }
+  }
+}
+
+// ---------------- Tour jeeps ----------------
+class Jeep {
+  constructor(game, station) {
+    this.id = _eid++;
+    this.kind = 'jeep';
+    this.game = game; this.station = station;
+    const acc = game.world.trackAccess(station);
+    const [hx, hy] = acc[0];
+    this.home = { x: hx, y: hy };
+    this.x = hx + 0.5; this.y = hy + 0.5; this.cx = hx; this.cy = hy; this.nx = hx; this.ny = hy; this.prev = -1;
+    this.state = 'parked'; this.riders = []; this.trip = 0; this.facing = 1; this.dir = 0;
+    this.waitT = 0; this.viewT = 0; this.wrecked = 0; this.dead = false; this.anim = 0;
+  }
+  get tx() { return Math.floor(this.x); }
+  get ty() { return Math.floor(this.y); }
+  remove() { for (const r of this.riders) this.unload(r); this.riders = []; this.dead = true; }
+  unload(r) {
+    const w = this.game.world;
+    const acc = w.accessTiles(this.station);
+    r.hidden = false; r.inJeep = null;
+    if (acc.length) { const t = pick(acc); r.cx = r.nx = t % w.W; r.cy = r.ny = (t / w.W) | 0; r.x = r.cx + 0.5; r.y = r.cy + 0.5; }
+    r.state = r.stay <= 0 ? 'leave' : 'walk';
+  }
+  update(dt) {
+    const g = this.game, w = g.world;
+    this.anim += dt;
+    if (this.wrecked > 0) { this.wrecked -= dt; if (this.wrecked <= 0) this.dead = true; return; }
+    if (!w.buildings.has(this.station.id)) { this.remove(); return; }
+    const powered = this.station.powered && w.power.outage <= 0;
+    if (this.state === 'parked') {
+      this.moving = false;
+      const q = this.station.queue || [];
+      this.waitT += dt;
+      if (q.length && powered && (q.length >= 3 || this.waitT > 5)) {
+        const other = g.jeeps.find((j) => j !== this && j.station === this.station && j.state === 'parked' && j.id < this.id);
+        if (other) return; // first jeep in line loads first
+        this.riders = q.splice(0, 6);
+        for (const r of this.riders) { r.state = 'ride'; r.inJeep = this; g.earn(BUILDINGS.tour.income * g.priceMul, 'shops'); r.spent += BUILDINGS.tour.income; this.station.visitors++; this.station.revenue = (this.station.revenue || 0) + BUILDINGS.tour.income; }
+        this.state = 'tour'; this.trip = 0; this.tripLen = randi(26, 46); this.waitT = 0;
+      }
+      return;
+    }
+    if (!powered) { this.moving = false; return; } // electric jeeps stall during outages
+    this.viewT -= dt;
+    if (this.viewT <= 0) {
+      this.viewT = 1;
+      for (const r of this.riders) {
+        let joy = 0;
+        for (const d of g.dinos) {
+          if (d.carried || d.loose) continue;
+          if (dist2(this.x, this.y, d.x, d.y) > 64) continue;
+          const fresh = !r.seenSpecies.has(d.species);
+          if (fresh) r.seenSpecies.add(d.species);
+          joy += d.sp.appeal * (fresh ? 1.5 : 0.2);
+        }
+        r.happy = Math.min(100, r.happy + Math.min(joy, 15) + 0.5);
+      }
+    }
+    const sp = 2.3;
+    const tx = this.nx + 0.5, ty = this.ny + 0.5;
+    const dx = tx - this.x, dy = ty - this.y, d = Math.sqrt(dx * dx + dy * dy);
+    if (d > sp * dt) {
+      this.x += dx / d * sp * dt; this.y += dy / d * sp * dt; this.moving = true;
+      if (Math.abs(dx) > 0.05) this.facing = dx > 0 ? 1 : -1;
+      return;
+    }
+    this.x = tx; this.y = ty;
+    this.prev = w.idx(this.cx, this.cy); this.cx = this.nx; this.cy = this.ny;
+    const here = w.idx(this.cx, this.cy);
+    if (!w.track[here]) { this.remove(); return; }
+    this.trip++;
+    if (this.state === 'return' || this.trip >= this.tripLen) {
+      if (this.cx === this.home.x && this.cy === this.home.y) {
+        for (const r of this.riders) { r.happy = Math.min(100, r.happy + 8); this.unload(r); }
+        this.riders = []; this.state = 'parked'; this.moving = false; return;
+      }
+      if (this.state !== 'return' || !this.path || !this.path.length) {
+        this.state = 'return';
+        this.path = w.bfs(this.cx, this.cy, (x, y) => w.inb(x, y) && !!w.track[w.idx(x, y)], (x, y) => x === this.home.x && y === this.home.y, 4000);
+        if (!this.path) { this.state = 'tour'; this.tripLen += 10; }
+      }
+      if (this.path && this.path.length) { const [nx, ny] = this.path.shift(); this.nx = nx; this.ny = ny; return; }
+    }
+    const opts = [];
+    for (const [ddx, ddy] of DIRS4) {
+      const nx = this.cx + ddx, ny = this.cy + ddy;
+      if (!w.inb(nx, ny)) continue;
+      const j = w.idx(nx, ny);
+      if (w.track[j] && j !== this.prev) opts.push([nx, ny]);
+    }
+    if (!opts.length && this.prev >= 0 && w.track[this.prev]) opts.push([this.prev % w.W, (this.prev / w.W) | 0]);
+    if (opts.length) { const o = pick(opts); this.nx = o[0]; this.ny = o[1]; }
   }
 }
 

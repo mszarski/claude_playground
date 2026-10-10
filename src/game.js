@@ -33,7 +33,7 @@ class Game {
     this.money = 450000;
     this.time = 7.5; // hours since start (day 1 07:30)
     this.secPerHour = 2.5;
-    this.dinos = []; this.guests = []; this.staff = []; this.helis = []; this.eggs = [];
+    this.dinos = []; this.guests = []; this.staff = []; this.helis = []; this.eggs = []; this.jeeps = [];
     this.particles = []; this.floats = []; this.darts = [];
     this.logs = [];
     this.reputation = 50; this.stars = 0; this.attraction = 0; this.safety = 100;
@@ -182,10 +182,23 @@ class Game {
     const w = this.world;
     if (!w.canBuildAt(x, y)) return false;
     const i = w.idx(x, y);
-    if (w.path[i]) return false;
+    if (w.path[i] || w.track[i]) return false;
     if (w.fence[i] === F_BROKEN) return false;
     if (!free) { const c = TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0); if (!this.canAfford(c)) return false; this.spend(c); }
     w.path[i] = 1;
+    if (w.terrain[i] === T_FOREST) w.terrain[i] = T_GRASS;
+    w.invalidate(x, y);
+    return true;
+  }
+  placeTrack(x, y) {
+    const w = this.world;
+    if (!w.canBuildAt(x, y)) return false;
+    const i = w.idx(x, y);
+    if (w.track[i] || w.path[i] || w.fence[i] === F_BROKEN) return false;
+    const c = TOOL_INFO.track.cost + (w.terrain[i] === T_FOREST ? 40 : 0);
+    if (!this.canAfford(c)) return false;
+    this.spend(c);
+    w.track[i] = 1;
     if (w.terrain[i] === T_FOREST) w.terrain[i] = T_GRASS;
     w.invalidate(x, y);
     return true;
@@ -196,7 +209,7 @@ class Game {
     const i = w.idx(x, y);
     const t = w.terrain[i];
     if (!(t === T_SAND || t === T_GRASS || t === T_FOREST || t === T_BASALT)) return false;
-    if (w.bld[i] || w.path[i]) return false;
+    if (w.bld[i] || w.path[i] || w.track[i]) return false;
     if (w.fence[i] === type) return false;
     if (this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried)) return false;
     const c = FENCE_DEF[type].cost + (t === T_FOREST ? 40 : 0);
@@ -221,6 +234,7 @@ class Game {
     }
     if (w.fence[i]) { w.fence[i] = F_NONE; w.fenceHp[i] = 0; w.fenceOrig[i] = 0; w.invalidate(x, y); return true; }
     if (w.path[i]) { w.path[i] = 0; w.invalidate(x, y); return true; }
+    if (w.track[i]) { w.track[i] = 0; w.invalidate(x, y); return true; }
     return false;
   }
   removeBuildingFx(b) {
@@ -230,6 +244,7 @@ class Game {
     w.removeBuilding(b);
     this.burst(b.x + b.w / 2, b.y + b.h / 2, '#8a8a84', 14);
     for (const h of this.helis) if (h.pad === b) h.dead = true;
+    for (const j of this.jeeps) if (j.station === b) j.remove();
   }
   placeBuilding(type, x, y) {
     const w = this.world, def = BUILDINGS[type];
@@ -241,6 +256,7 @@ class Game {
     const b = w.addBuilding(type, x, y);
     if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
     if (type === 'helipad') this.helis.push(new Helicopter(this, b));
+    if (type === 'tour') { b.queue = []; b.jeepT = 0; }
     this.burst(x + def.w / 2, y + def.h / 2, '#e8d8b0', 12);
     return b;
   }
@@ -431,6 +447,7 @@ class Game {
     this.staff = this.staff.filter((s) => !s.dead);
     for (const h of this.helis) h.update(dt);
     this.helis = this.helis.filter((h) => !h.dead);
+    this.updateTours(dt);
 
     // darts
     for (const dt_ of this.darts) {
@@ -467,6 +484,35 @@ class Game {
     }
 
     if (Math.floor(this.time / 24) + 1 !== this.lastDay) this.newDay();
+  }
+
+  updateTours(dt) {
+    const w = this.world;
+    for (const st of this.buildingsOfType('tour')) {
+      if (!st.queue) st.queue = [];
+      st.queue = st.queue.filter((gu) => !gu.dead && gu.state === 'queue');
+      const mine = this.jeeps.filter((j) => j.station === st && !j.dead);
+      // keep two jeeps per station when track is connected
+      st.jeepT = (st.jeepT || 0) - dt;
+      if (mine.length < 3 && st.jeepT <= 0 && w.trackAccess(st).length) {
+        st.jeepT = mine.length ? 20 : 0.5;
+        this.jeeps.push(new Jeep(this, st));
+      }
+    }
+    for (const j of this.jeeps) j.update(dt);
+    this.jeeps = this.jeeps.filter((j) => !j.dead);
+  }
+
+  jeepAttacked(j, dino) {
+    if (j.wrecked) return;
+    j.wrecked = 8;
+    const n = j.riders.length;
+    for (const r of j.riders) { r.hidden = false; r.x = j.x; r.y = j.y; this.humanKilled(r, null); }
+    j.riders = [];
+    this.burst(j.x, j.y, '#3a8a3a', 14); this.burst(j.x, j.y, '#c82020', n * 4);
+    this.shake = Math.max(this.shake, 4);
+    this.soundAt('crash', j.x, j.y, 1);
+    this.log(`${dino.name} the ${dino.sp.name} flipped a tour jeep!${n ? ' ' + n + ' guest' + (n > 1 ? 's' : '') + ' lost.' : ''}`, 'bad', { x: j.x, y: j.y }, true);
   }
 
   updateLoose() {
