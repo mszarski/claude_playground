@@ -3,7 +3,7 @@
   python scripts/build_rating_page.py --items runs/rating/v1/items.json --urls runs/rating/urls.json \
       --out runs/rating/reachy_ratings.html
 
-``--urls`` maps a video file name to its URL in the artifact's asset store. The page carries only
+``--urls`` maps a video (or audio, scripts/rating_audio.py) file name to its URL in the artifact's asset store. The page carries only
 what raters see (the transcript, two earlier lines, the voice reading, Reachy's reading per clip) plus the model
 name per side for the owner's results panel; MELD's label and the recipes stay out.
 """
@@ -37,6 +37,7 @@ def main():
         items.append({"id": it["id"], "pool": it["pool"], "context": [fix_text(c) for c in it["context"][-2:]],
                       "text": fix_text(it["text"]),
                       "voice": it["voice"],
+                      **({"audio": urls[it["audio"]]} if it.get("audio") in urls else {}),
                       "answers": [{"model": x["model"], "reading": x["reading"], "url": urls[x["video"]]}
                                   for x in answers]})
     html = open(TEMPLATE).read().replace("__ITEMS__", json.dumps(items).replace("</", "<\\/"))
