@@ -42,7 +42,11 @@ h1 { font: 700 clamp(22px, 4vw, 30px)/1.1 var(--display); margin: 0; letter-spac
 video { width: 100%; max-width: 100%; aspect-ratio: 6 / 5; background: var(--line); border-radius: 6px; display: block; }
 .thinks { font-size: 14px; margin: 0; color: var(--ink); }
 .thinks b { font: 600 11px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); display: block; }
-.choices { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; }
+.choices { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+.marks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.marks button { padding: 8px; font-size: 14px; }
+.marks button.on.best { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.marks button.on.worst { background: var(--pick); color: var(--accent-ink); border-color: var(--pick); }
 button { font: 600 15px var(--body); border-radius: 8px; padding: 12px 14px; cursor: pointer; border: 1px solid var(--line);
   background: var(--panel); color: var(--ink); }
 button.main { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -57,7 +61,7 @@ table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-nu
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .tablewrap { overflow-x: auto; }
 .done { text-align: center; padding: 30px 18px; }
-@media (max-width: 560px) { .choices { grid-template-columns: 1fr 1fr; } .choices .same { grid-column: 1 / -1; order: 3; } }
+@media (max-width: 560px) { .choices { grid-template-columns: 1fr 1fr; } .choices .progress { grid-column: 1 / -1; order: -1; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 
@@ -66,22 +70,17 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
     <h1>Which response fits better?</h1>
     <span class="progress" id="progress">0 rated</span>
   </header>
-  <p class="intro">Someone said this to Reachy Mini, a small robot that answers with body language. Watch both clips and pick the one that responds better to how the person feels. Keys: ← left, ↓ about the same, → right.</p>
+  <p class="intro">Someone said this to Reachy Mini, a small robot that answers with body language. Watch the clips, then mark the one that responds best to how the person feels and the one that responds worst. With two clips, just pick the better one.</p>
 
   <section class="card" id="item" aria-live="polite">
     <ul class="context" id="context"></ul>
     <p class="said" id="said">Loading the first comparison…</p>
     <span class="chip" id="voice"></span>
-    <div class="pair">
-      <div class="clip" id="clipL"><span class="tag">Left</span><video id="vidL" muted playsinline loop preload="auto"></video>
-        <p class="thinks"><b>Reachy reads them as</b><span id="thinkL"></span></p></div>
-      <div class="clip" id="clipR"><span class="tag">Right</span><video id="vidR" muted playsinline loop preload="auto"></video>
-        <p class="thinks"><b>Reachy reads them as</b><span id="thinkR"></span></p></div>
-    </div>
+    <div class="pair" id="pair"></div>
     <div class="choices">
-      <button class="main" id="pickL">◀ Left fits better</button>
-      <button class="same" id="pickS">About the same</button>
-      <button class="main" id="pickR">Right fits better ▶</button>
+      <button id="same">All about the same</button>
+      <span class="progress" id="hint">Pick the best and the worst</span>
+      <button class="main" id="submit" disabled>Next ▶</button>
     </div>
     <div class="row"><span>Clips loop; tap one to replay it from the start.</span><button id="skip">Skip</button></div>
     <div class="status" id="status"></div>
@@ -116,36 +115,64 @@ function shuffled(seed) {
   return a;
 }
 
+let pick = { best: null, worst: null };
+
 function render() {
   const done = Object.keys(mine).length;
   $('progress').textContent = `${done} of ${ITEMS.length} rated`;
   while (idx < order.length && mine[ITEMS[order[idx]].id]) idx++;
   if (idx >= order.length) { $('item').hidden = true; $('done').hidden = false; return; }
-  const it = ITEMS[order[idx]];
-  const flip = (order[idx] + (uid ? uid.length : 0)) % 2 === 1;      // which answer shows on the left
-  current = { it, left: flip ? 'b' : 'a', right: flip ? 'a' : 'b' };
+  const it = ITEMS[order[idx]], k = it.answers.length;
+  // display order: shuffled per rater and item, so position says nothing about the model
+  const disp = shuffled((uid || 'anon') + it.id).slice(0, ITEMS.length).filter((x) => x < k);
+  current = { it, disp: disp.length === k ? disp : it.answers.map((_, j) => j) };
+  pick = { best: null, worst: null };
   $('context').replaceChildren(...(it.context || []).slice(-2).map((t) => { const li = document.createElement('li'); li.textContent = t; return li; }));
   $('said').textContent = it.text;
   $('voice').textContent = `their voice sounded ${it.voice}`;
-  for (const [side, key] of [['L', current.left], ['R', current.right]]) {
-    const v = $('vid' + side); v.src = it[key].url; v.play().catch(() => {});
-    $('think' + side).textContent = it[key].reading || '…';
-    $('clip' + side).classList.remove('picked');
-  }
-  for (const b of ['pickL', 'pickS', 'pickR']) $(b).disabled = readOnly;
+  const pair = $('pair'); pair.replaceChildren();
+  current.disp.forEach((j, pos) => {
+    const ans = it.answers[j], box = document.createElement('div'); box.className = 'clip';
+    const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = String.fromCharCode(65 + pos);
+    const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto'; v.src = ans.url;
+    v.addEventListener('click', () => { v.currentTime = 0; v.play().catch(() => {}); });
+    const p = document.createElement('p'); p.className = 'thinks';
+    const b = document.createElement('b'); b.textContent = 'Reachy reads them as'; const sp = document.createElement('span'); sp.textContent = ans.reading || '…';
+    p.append(b, sp);
+    const marks = document.createElement('div'); marks.className = 'marks';
+    for (const kind of k > 2 ? ['best', 'worst'] : ['best']) {
+      const btn = document.createElement('button'); btn.className = kind; btn.textContent = kind === 'best' ? (k > 2 ? 'Best' : 'This one') : 'Worst';
+      btn.dataset.j = j; btn.dataset.kind = kind; btn.disabled = readOnly;
+      btn.addEventListener('click', () => mark(kind, j));
+      marks.appendChild(btn);
+    }
+    box.append(tag, v, p, marks); pair.appendChild(box);
+    v.play().catch(() => {});
+  });
+  pair.style.gridTemplateColumns = '1fr 1fr';
+  $('hint').textContent = k > 2 ? 'Pick the best and the worst' : 'Pick the better one';
+  $('submit').hidden = k === 2; $('submit').disabled = true; $('same').disabled = readOnly;
 }
 
-async function choose(which) {
+function mark(kind, j) {
+  const k = current.it.answers.length;
+  pick[kind] = pick[kind] === j ? null : j;
+  const other = kind === 'best' ? 'worst' : 'best';
+  if (pick[other] === j) pick[other] = null;
+  document.querySelectorAll('.marks button').forEach((b) => b.classList.toggle('on', pick[b.dataset.kind] === +b.dataset.j));
+  if (k === 2 && pick.best !== null) { pick.worst = current.disp.find((x) => x !== pick.best); save(); }
+  $('submit').disabled = !(pick.best !== null && pick.worst !== null);
+}
+
+async function save(same = false) {
   if (!current || readOnly) return;
-  const { it, left, right } = current;
-  const choice = which === 'S' ? 'same' : (which === 'L' ? left : right);
-  if (which !== 'S') $('clip' + which).classList.add('picked');
-  const vote = { choice, left, at: new Date().toISOString(), pool: it.pool };
+  const { it, disp } = current;
+  const vote = same ? { same: true } : { best: pick.best, worst: pick.worst };
+  Object.assign(vote, { shown: disp, at: new Date().toISOString(), pool: it.pool });
   mine = { ...mine, [it.id]: vote };
   idx++;
   setTimeout(render, 250);
   if (!db || !uid) { status('Not saved: sign in to claude.ai so your choices count.', true); return; }
-  // one write at a time to this rater's document
   writing = writing.then(async () => {
     try { await db.doc('ratings/' + uid).set({ votes: mine, updated: vote.at }); status(''); }
     catch (e) {
@@ -158,38 +185,36 @@ async function choose(which) {
 async function showResults() {
   try {
     const snap = await db.collection('ratings').get();
-    const tally = {}, train = { decisive: 0, same: 0 }; let raters = 0;
+    const score = {}, train = { items: 0, pairs: 0 }; let raters = 0;
     const byId = Object.fromEntries(ITEMS.map((it) => [it.id, it]));
     for (const d of snap.docs) {
       const votes = (d.data() || {}).votes || {}; if (Object.keys(votes).length) raters++;
       for (const [id, v] of Object.entries(votes)) {
         const it = byId[id]; if (!it) continue;
-        if (it.pool === 'train') { v.choice === 'same' ? train.same++ : train.decisive++; continue; }
-        const name = v.choice === 'same' ? 'about the same' : it[v.choice].model;
-        tally[name] = (tally[name] || 0) + 1;
+        const k = it.answers.length;
+        if (it.pool === 'train') { if (!v.same) { train.items++; train.pairs += k > 2 ? 2 * k - 3 : 1; } continue; }
+        for (const [j, a] of it.answers.entries()) {
+          const s = score[a.model] || (score[a.model] = { best: 0, worst: 0, shown: 0 });
+          s.shown++; if (!v.same && v.best === j) s.best++; if (!v.same && v.worst === j) s.worst++;
+        }
       }
     }
-    const total = Object.values(tally).reduce((a, b) => a + b, 0);
-    const rows = Object.entries(tally).sort((a, b) => b[1] - a[1]);
-    $('resultsTable').innerHTML = '<tr><th>Test clips: preferred</th><th>Votes</th><th>Share</th></tr>';
-    for (const [k, n] of rows) {
+    const rows = Object.entries(score).sort((a, b) => (b[1].best - b[1].worst) / b[1].shown - (a[1].best - a[1].worst) / a[1].shown);
+    $('resultsTable').innerHTML = '<tr><th>Test clips: model</th><th>Best</th><th>Worst</th><th>Shown</th><th>Score</th></tr>';
+    for (const [m, s] of rows) {
       const tr = document.createElement('tr');
-      for (const t of [k, String(n), total ? `${Math.round(100 * n / total)}%` : '—']) { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); }
+      for (const t of [m, s.best, s.worst, s.shown, ((s.best - s.worst) / s.shown).toFixed(2)]) { const td = document.createElement('td'); td.textContent = String(t); tr.appendChild(td); }
       $('resultsTable').appendChild(tr);
     }
-    $('resultsNote').textContent = `${raters} rater${raters === 1 ? '' : 's'} so far. Training clips: ${train.decisive} decisive choices usable for preference tuning, ${train.same} ties.`;
+    $('resultsNote').textContent = `${raters} rater${raters === 1 ? '' : 's'} so far. Score = (times best - times worst) / times shown, from -1 to 1. Training clips: ${train.items} rated, ${train.pairs} preference pairs for tuning.`;
     $('results').hidden = false;
   } catch { /* results are optional */ }
 }
 
-for (const [b, w] of [['pickL', 'L'], ['pickS', 'S'], ['pickR', 'R']]) $(b).addEventListener('click', () => choose(w));
+$('submit').addEventListener('click', () => save());
+$('same').addEventListener('click', () => save(true));
 $('skip').addEventListener('click', () => { idx++; if (idx >= order.length) idx = 0; render(); });
 for (const s of ['L', 'R']) $('clip' + s).addEventListener('click', (e) => { if (e.target.tagName === 'VIDEO') { e.target.currentTime = 0; e.target.play().catch(() => {}); } });
-document.addEventListener('keydown', (e) => {
-  if (e.target.closest && e.target.closest('input, textarea')) return;
-  if (e.key === 'ArrowLeft') choose('L'); else if (e.key === 'ArrowRight') choose('R'); else if (e.key === 'ArrowDown') { e.preventDefault(); choose('S'); }
-});
-
 order = shuffled('anon'); render();
 (async () => {
   const claude = window.claude;

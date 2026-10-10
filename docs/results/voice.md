@@ -222,6 +222,21 @@ data. A learned alternative for the head is in [listening.md](listening.md).
 python -m rmr.listen talk.wav --video listening.mp4 --json listening.json   # render it, with the speech as soundtrack
 ```
 
+## Human ratings
+
+`deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
+Reachy's answers as robot videos, with Reachy's reading under each. Raters mark the best and the worst
+(best-worst scaling; with two answers, the better one). Two pools:
+
+- **test clips** (MELD test, never trained on): one answer from each of four models (student v3, student v3 small,
+  the 80B teacher, the off-the-shelf 4B), a human score for each: (times best - times worst) / times shown.
+- **training clips**: four sampled answers of student v3. A best-worst judgement orders five of the six pairs, so each
+  becomes five DPO pairs (`scripts/dpo_from_ratings.py`), against one from an a/b pick.
+
+`scripts/rating_agreement.py` then asks whether the automatic checks agree with people: when exactly one of the two
+ends passes the physical check (or reads the feeling as MELD labels it), how often is it the one people preferred?
+If the checks agree, they can steer future experiments without asking anyone; if not, they need fixing first.
+
 ## Caveats
 
 These models read expressed emotion, not what someone feels, and they vary across speakers, accents and cultures.

@@ -18,15 +18,19 @@ def main():
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--workers", type=int, default=1, help="parallel requests (endpoint only)")
     ap.add_argument("--limit", type=int, default=None, help="only the first N clips")
-    ap.add_argument("--samples", type=int, default=1, help="answers per clip (endpoint only; use --temperature)")
+    ap.add_argument("--samples", type=int, default=1, help="answers per clip (with --temperature)")
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--seed", type=int, default=0, help="with --limit: a random subset instead of the first N")
+    ap.add_argument("--clips", help="only these clips (a JSON list of clip ids)")
     a = ap.parse_args()
     rows = [json.loads(line) for line in open(a.heard)]
     if a.seed and a.limit:
         import random
         rows = random.Random(a.seed).sample(rows, a.limit)
     rows = rows[:a.limit]
+    if a.clips:
+        keep = set(json.load(open(a.clips)))
+        rows = [r for r in rows if r["clip"] in keep]
     if a.model.startswith(("http://", "https://")):
         return endpoint(a, rows)
     import torch
@@ -40,13 +44,15 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     m = lm_class(path).from_pretrained(path, dtype=torch.bfloat16).to(dev).eval()
     t0, outs = time.time(), []
+    rows = [r for r in rows for _ in range(a.samples)]
     for i in range(0, len(rows), a.batch):
         chunk = rows[i:i + a.batch]
         texts = [tok.apply_chat_template(student_messages(r), tokenize=False, add_generation_prompt=True,
                                          enable_thinking=False) for r in chunk]
         enc = tok(texts, return_tensors="pt", padding=True).to(dev)
         with torch.no_grad():
-            g = m.generate(**enc, max_new_tokens=400, do_sample=False, pad_token_id=tok.pad_token_id or tok.eos_token_id)
+            sampling = {"do_sample": True, "temperature": a.temperature} if a.temperature else {"do_sample": False}
+            g = m.generate(**enc, max_new_tokens=400, **sampling, pad_token_id=tok.pad_token_id or tok.eos_token_id)
         for r, t in zip(chunk, tok.batch_decode(g[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)):
             outs.append(answer(r, t))
     write(a, outs, t0, "batched")

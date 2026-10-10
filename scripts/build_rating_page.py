@@ -3,7 +3,7 @@
   python scripts/build_rating_page.py --items runs/rating/v1/items.json --urls runs/rating/urls.json \
       --out runs/rating/reachy_ratings.html
 
-``--urls`` maps a video file name (``r000_a.mp4``) to its URL in the artifact's asset store. The page carries only
+``--urls`` maps a video file name to its URL in the artifact's asset store. The page carries only
 what raters see (the transcript, two earlier lines, the voice reading, Reachy's reading per clip) plus the model
 name per side for the owner's results panel; MELD's label and the recipes stay out.
 """
@@ -23,12 +23,13 @@ def main():
     urls = json.load(open(a.urls))
     items = []
     for it in json.load(open(a.items)):
-        if not all(it[s]["video"] in urls for s in ("a", "b")):
+        answers = it.get("answers") or [it["a"], it["b"]]          # k answers (or the first round's a / b)
+        if not all(x["video"] in urls for x in answers):
             continue
         items.append({"id": it["id"], "pool": it["pool"], "context": it["context"][-2:], "text": it["text"],
                       "voice": it["voice"],
-                      **{s: {"model": it[s]["model"], "reading": it[s]["reading"], "url": urls[it[s]["video"]]}
-                         for s in ("a", "b")}})
+                      "answers": [{"model": x["model"], "reading": x["reading"], "url": urls[x["video"]]}
+                                  for x in answers]})
     html = open(TEMPLATE).read().replace("__ITEMS__", json.dumps(items).replace("</", "<\\/"))
     with open(a.out, "w") as f:
         f.write(html)

@@ -68,3 +68,25 @@ With `--listener-model` the server serves the weights at `/api/listener`, and th
 while you talk. The antennas, the lean-in and the breathing still come from the rules, since humans don't have
 antennas. `visualizer/src/ListenModel.js` is the browser port; `tests/test_listen.py` checks that it matches Python to
 1e-6 with the same random draws.
+
+## Tuning the style by rating, without the licensed data
+
+The learned head above depends on non-commercial data. The alternative keeps the open, rule-based listener and lets a
+person's ratings choose its style (`rmr.listen.STYLE`, the same in `Listen.js`, parity-tested): nod size, the pause
+and amount of speech that earn a nod, double nods, how far it leans in, antenna perks, a gentle sway (three slow sines
+per axis) and occasional glances aside (from a seeded generator that runs identically in Python and JS).
+
+- **Speech**: four 16 s clips of people holding the floor in the AMI meeting corpus (CC BY 4.0), each speaker's own
+  headset channel placed on the meeting's timeline, so their real pauses are kept.
+- **Candidates**: 24 styles: the current one, a still baseline, seven hand-made variants, 14 spread evenly over the
+  settings (Latin hypercube), and the learned model as a yardstick only.
+- **Adaptive page** (`deploy/listen_duel_page.html`): two robots side by side over the same speech. The page fits a
+  Bradley-Terry model to the votes so far and picks each next duel by double Thompson sampling (the likely best
+  against its strongest challenger); every 20th duel repeats an earlier one with the sides swapped, to measure
+  consistency.
+- **Simulated rater** (`tests/duel_sim.mjs`, 24 styles, 40 votes, 300 runs): adaptive duels find the true best style
+  27% of the time vs 15% for random pairs, a true top-3 style 58% vs 38%, and cut the average gap to the best style
+  from 0.80 to 0.58 (log-strength). 40 votes cannot reliably single out the best of 24; they reliably narrow it down.
+- **Fit** (`scripts/listen_rating.py fit`): Bradley-Terry strengths with bootstrap intervals, the consistency of the
+  repeats, and a suggested next style: a quadratic fit of strength over the settings, searched only near the three
+  strongest styles, to test in a short second round.

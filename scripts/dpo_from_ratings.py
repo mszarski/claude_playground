@@ -8,9 +8,10 @@
   python scripts/dpo_from_ratings.py train --data runs/rating/dpo.jsonl --model mszarski/reachy-voice:student/v3 \
       --out /work/out
 
-Only the page's *train* pool counts (MELD train clips, two sampled answers of the student): the eval pool is MELD test
-data and stays held out. Each decisive choice becomes {prompt, chosen, rejected} in the student's own chat format;
-with several raters, a clip's majority wins and ties are dropped.
+Only the page's *train* pool counts (MELD train clips, sampled answers of the student): the eval pool is MELD test
+data and stays held out. A pick between two answers gives one {prompt, chosen, rejected} pair; best and worst among
+k answers give 2k - 3 (best over each other, each other over worst). With several raters, a pair's majority wins and
+ties are dropped.
 """
 import argparse
 import collections
@@ -27,27 +28,40 @@ def pairs(a):
         heard[r["clip"]] = r
     raw = json.load(open(a.ratings))
     docs = raw if isinstance(raw, list) else raw.get("documents", raw.get("docs", []))
-    votes = collections.defaultdict(collections.Counter)
+    # each judgement -> ordered pairs (winner index, loser index): a/b votes give one; best-worst over k answers gives
+    # best > every other and every other > worst (2k - 3 pairs). Several raters: a pair's majority wins, ties drop.
+    prefs = collections.defaultdict(collections.Counter)
     for d in docs:
         body = d.get("data", d)
         for item_id, v in (body.get("votes") or {}).items():
             it = items.get(item_id)
-            if it and it["pool"] == "train" and v.get("choice") in ("a", "b"):
-                votes[item_id][v["choice"]] += 1
+            if not it or it["pool"] != "train" or v.get("same"):
+                continue
+            if "best" in v:
+                k = len(it["answers"])
+                b, w = v["best"], v["worst"]
+                pairs_ = {(b, j) for j in range(k) if j != b} | {(j, w) for j in range(k) if j not in (b, w)}
+            elif v.get("choice") in ("a", "b"):
+                pairs_ = {(0, 1) if v["choice"] == "a" else (1, 0)}
+            else:
+                continue
+            for x, y in pairs_:
+                prefs[(item_id, min(x, y), max(x, y))][x] += 1
     out = []
-    for item_id, c in votes.items():
-        if c["a"] == c["b"]:
+    for (item_id, x, y), c in prefs.items():
+        if c[x] == c[y]:
             continue
         it = items[item_id]
-        win, lose = ("a", "b") if c["a"] > c["b"] else ("b", "a")
+        answers = it.get("answers") or [it["a"], it["b"]]
+        win, lose = (x, y) if c[x] > c[y] else (y, x)
         prompt = student_messages(heard[it["clip"]])
-        ans = lambda k: json.dumps({f: it[k][f] for f in ANSWER_ORDER})          # noqa: E731
+        ans = lambda j: json.dumps({f: answers[j][f] for f in ANSWER_ORDER})          # noqa: E731
         out.append({"prompt": prompt, "chosen": [{"role": "assistant", "content": ans(win)}],
                     "rejected": [{"role": "assistant", "content": ans(lose)}], "clip": it["clip"],
-                    "votes": dict(c)})
+                    "votes": {str(k): n for k, n in c.items()}})
     with open(a.out, "w") as f:
         f.writelines(json.dumps(x) + "\n" for x in out)
-    print(f"{len(out)} preference pairs from {len(votes)} rated training clips -> {a.out}")
+    print(f"{len(out)} preference pairs from {len({k[0] for k in prefs})} rated training clips -> {a.out}")
 
 
 def train(a):
