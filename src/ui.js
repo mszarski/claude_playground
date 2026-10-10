@@ -375,6 +375,17 @@ class UI {
       return;
     }
     if (tool === 'demolish') { if (g.demolishAt(t.x, t.y)) this.sfx.play('demolish'); return; }
+    if (tool === 'movedest') {
+      const d = this.moveDino, w2 = g.world;
+      const reg = w2.regionAt(t.x, t.y);
+      if (!d || d.dead) { this.setTool('inspect'); return; }
+      if (!reg || reg.public || reg.size > 1200) { this.toast('Pick an open tile inside a fenced paddock.', 'warn'); this.sfx.play('error'); return; }
+      d.relocateTo = { x: t.x, y: t.y }; d.relocate = true;
+      if (d.sedatedT <= 0) d.orderSedate = true;
+      g.log(`${d.name} the ${d.sp.name} will be sedated and airlifted to the new paddock.`, 'info', d, true);
+      this.sfx.play('click'); this.moveDino = null; this.setTool('inspect');
+      return;
+    }
     // Inspect: pick entity under cursor
     const pick = this.pickAt(t.wx, t.wy);
     this.select(pick);
@@ -669,7 +680,7 @@ class UI {
       html += `<div class="btns"><button data-a="follow" class="${this.follow ? 'on' : ''}">Follow</button>`;
       html += `<button data-a="sedate" ${d.sedatedT > 0 || d.carried || !g.hasBuilding('ranger') ? 'disabled' : ''} title="Rangers will tranquilize it">${d.orderSedate ? 'Sedating…' : 'Sedate'}</button>`;
       if (d.loose && d.sedatedT <= 0 && !d.carried) html += `<button data-a="strike" ${g.helis.length ? '' : 'disabled'} title="Helicopter darts it from the air ($8k)">ACU Strike $8k</button>`;
-      html += `<button data-a="relocate" ${d.sedatedT <= 0 || !g.hasBuilding('helipad') || d.carried ? 'disabled' : ''} title="ACU airlifts it to a safe paddock">Airlift</button>`;
+      html += `<button data-a="relocate" ${!g.hasBuilding('helipad') || d.carried || d.isPtera ? 'disabled' : ''} title="Pick a destination paddock; rangers sedate it and the ACU flies it there">Move…</button>`;
       html += `<button data-a="sell" class="danger" title="Ship to another facility">Sell ${fmtMoney(sp.cost * 0.4)}</button></div>`;
       portrait = () => {
         const c = $('#portrait'); if (!c) return;
@@ -745,7 +756,7 @@ class UI {
     if (a === 'sedate' && o) { o.orderSedate = true; g.log(`Rangers dispatched to sedate ${o.name}.`, 'info', o); }
     if (a === 'strike' && o) { const err = g.acuStrike(o); if (err) this.toast(err, 'warn'); }
     if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }
-    if (a === 'relocate' && o) { o.relocate = true; g.log(`ACU will airlift ${o.name} to a safe paddock.`, 'info', o); }
+    if (a === 'relocate' && o) { this.moveDino = o; this.setTool('movedest'); this.toast(`Click inside the paddock where ${o.name} should go (Esc to cancel).`, 'info'); }
     if (a === 'sell' && o) {
       if (o.carried) return;
       g.earn(o.sp.cost * 0.4, 'grants'); o.dead = true;

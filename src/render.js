@@ -385,7 +385,7 @@ class Renderer {
     const g = this.game, w = g.world;
     const tool = ui.tool;
     const showPower = this.overlay === 'power' || ['power', 'pylon', 'backup', 'fence', 'paddock'].includes(tool);
-    const showPaddock = this.overlay === 'paddock' || tool === 'hatch' || tool === 'feeder_h' || tool === 'feeder_c';
+    const showPaddock = this.overlay === 'paddock' || tool === 'hatch' || tool === 'feeder_h' || tool === 'feeder_c' || tool === 'movedest';
     if (showPower) {
       for (let y = Math.max(0, vy0); y <= Math.min(w.H - 1, vy1); y++) for (let x = Math.max(0, vx0); x <= Math.min(w.W - 1, vx1); x++) {
         const i = w.idx(x, y);

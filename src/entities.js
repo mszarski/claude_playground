@@ -1093,10 +1093,11 @@ class Helicopter {
   get ty() { return Math.floor(this.y); }
   dropAt(x, y) {
     const d = this.cargo; if (!d) return;
+    const moved = d.relocate && !d.loose;
     d.carried = null; d.x = x + 0.5; d.y = y + 0.5; d.sedatedT = 4; d.loose = d.isPtera ? d.loose : false; d.relocate = false; d.orderSedate = false;
     d.home = { x, y }; d.stress = Math.max(0, d.stress - 40);
     this.cargo = null;
-    this.game.log(`${d.name} the ${d.sp.name} is back in containment.`, 'good', d);
+    this.game.log(moved ? `${d.name} the ${d.sp.name} has been moved to the new paddock.` : `${d.name} the ${d.sp.name} is back in containment.`, 'good', d);
     this.game.burst(x + 0.5, y + 0.5, '#e8d8a0', 10);
   }
 }

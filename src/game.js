@@ -445,6 +445,11 @@ class Game {
       }
       return null;
     };
+    if (d.relocateTo) {
+      const r = w.regionAt(d.relocateTo.x, d.relocateTo.y);
+      if (r && !r.public && r.size < 1200) { const t = d.relocateTo; d.relocateTo = null; return t; }
+      d.relocateTo = null;
+    }
     const home = w.regionAt(d.home.x, d.home.y);
     if (ok(home)) return pickTile(home);
     const cands = w.regions.filter(ok).sort((a, b) => b.size - a.size);
