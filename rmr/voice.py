@@ -161,6 +161,10 @@ DIMS = ("arousal", "dominance", "valence")
 # licence-clean students were trained at. Conversational speech on a headset (AMI) reads close to it; TV dialogue
 # (MELD) reads about 0.2 higher on every attribute.
 REFERENCE = {"arousal": 0.404, "dominance": 0.446, "valence": 0.376}
+# ... and its mean category probabilities: the voice model hardly ever says "happy" on CREMA-D (5%), but on TV
+# dialogue it says it for 40% of clips (laugh tracks, loud delivery), on meeting talk for 16%.
+REFERENCE_PROBS = {"angry": 0.1516, "sad": 0.3086, "happy": 0.0451, "surprise": 0.0964, "fear": 0.069,
+                   "disgust": 0.027, "contempt": 0.0347, "neutral": 0.2676}
 
 
 class Calibration:
@@ -171,14 +175,23 @@ class Calibration:
     from one device (or conversation) and shifts each reading so that mean sits at ``REFERENCE``. ``prior_n`` pseudo
     readings at the reference keep the first few utterances from swinging it. ``fixed`` (a dict of means) calibrates a
     whole recorded set at once instead (evaluation on another corpus).
+
+    With ``probs=True`` the category probabilities get the same treatment (a prior-shift correction): each is scaled
+    by ``REFERENCE_PROBS[k] / device mean[k]`` and renormalised, and the top emotion and its confidence are recomputed.
+    A device that says "happy" for everyone stops sounding like a room full of happy people.
     """
 
-    def __init__(self, prior_n=20, ref=REFERENCE, fixed=None):
+    def __init__(self, prior_n=20, ref=REFERENCE, fixed=None, probs=False, ref_probs=REFERENCE_PROBS, fixed_probs=None):
         self.ref, self.fixed = dict(ref), fixed
         self.n, self.sum = prior_n, {k: ref[k] * prior_n for k in DIMS}
+        self.probs, self.ref_probs, self.fixed_probs = probs, dict(ref_probs), fixed_probs
+        self.psum = {k: v * prior_n for k, v in ref_probs.items()}
 
     def mean(self):
         return self.fixed or {k: self.sum[k] / self.n for k in DIMS}
+
+    def mean_probs(self):
+        return self.fixed_probs or {k: v / self.n for k, v in self.psum.items()}
 
     def __call__(self, heard, update=True):
         if not all(k in heard for k in DIMS):
@@ -187,10 +200,20 @@ class Calibration:
             self.n += 1
             for k in DIMS:
                 self.sum[k] += heard[k]
+            for k in self.psum:
+                self.psum[k] += heard.get("probs", {}).get(k, 0.0)
         m = self.mean()
         out = dict(heard, raw={k: heard[k] for k in DIMS})
         for k in DIMS:
             out[k] = float(min(1.0, max(0.0, heard[k] - m[k] + self.ref[k])))
+        if self.probs and heard.get("probs"):
+            mp = self.mean_probs()
+            q = {k: v * self.ref_probs.get(k, 0.0) / max(mp.get(k, 0.0), 1e-4) for k, v in heard["probs"].items()}
+            z = sum(q.values()) or 1.0
+            q = {k: v / z for k, v in q.items()}
+            top = max(q, key=q.get)
+            out.update(probs=q, emotion=top, confidence=q[top])
+            out["raw"].update(probs=heard["probs"], emotion=heard.get("emotion"), confidence=heard.get("confidence"))
         return out
 
 

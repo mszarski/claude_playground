@@ -90,3 +90,19 @@ def test_calibration_moves_a_loud_device_to_the_reference_level():
     assert cal({"text": "no attributes"}) == {"text": "no attributes"}
     fixed = Calibration(fixed={"arousal": 0.6, "dominance": 0.6, "valence": 0.6})
     assert abs(fixed({"arousal": 0.6, "dominance": 0.6, "valence": 0.7})["valence"] - (REFERENCE["valence"] + 0.1)) < 1e-9
+
+
+def test_prior_correction_stops_a_device_that_hears_happy_everywhere():
+    from rmr.voice import REFERENCE_PROBS, Calibration
+
+    cal = Calibration(prior_n=5, probs=True)
+    happyish = {k: 0.6 * v for k, v in REFERENCE_PROBS.items()}           # a realistic mix, plus "happy" for everyone
+    happyish["happy"] += 0.4
+    reading = {"arousal": 0.5, "dominance": 0.5, "valence": 0.5, "emotion": "happy", "confidence": 0.4, "probs": happyish}
+    outs = [cal(dict(reading)) for _ in range(100)]
+    assert outs[-1]["emotion"] != "happy" and outs[-1]["probs"]["happy"] < outs[0]["probs"]["happy"] < 0.4
+    assert abs(sum(outs[-1]["probs"].values()) - 1) < 1e-9 and outs[-1]["raw"]["emotion"] == "happy"
+    louder = {k: 0.1 * v for k, v in REFERENCE_PROBS.items()}             # clearly happier than this device's usual
+    louder["happy"] += 0.9
+    louder = cal(dict(reading, probs=louder))
+    assert louder["emotion"] == "happy"

@@ -103,7 +103,7 @@ class Engine:
             from .voice import Calibration
             if len(self.calibrations) > self.MAX_SESSIONS:
                 self.calibrations.clear()
-            heard = self.calibrations.setdefault(session or "", Calibration())(heard)
+            heard = self.calibrations.setdefault(session or "", Calibration(probs=True))(heard)
         self.remember(session, heard)
         t1 = time.time()
         yield {"stage": "heard", "heard": {k: v for k, v in heard.items() if k != "probs"},
@@ -233,8 +233,8 @@ def main():
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--calibrate", action="store_true", default=bool(os.environ.get("CALIBRATE_VOICE")),
-                    help="shift arousal / valence / dominance per session so their running mean sits at the level "
-                         "the licence-clean students were trained at (rmr.voice.Calibration)")
+                    help="correct the voice readings per session (attribute levels and category priors) toward what "
+                         "the licence-clean students were trained on (rmr.voice.Calibration)")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
     ap.add_argument("--listener-model", default=os.environ.get("LISTENER_MODEL"),
