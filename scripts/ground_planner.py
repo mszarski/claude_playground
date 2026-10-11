@@ -55,6 +55,56 @@ def transcribe(plan, step=1.0):
     return " | ".join(segs)
 
 
+# Smallest change worth writing per channel (deg, mm, energy): below it a channel stays where it is.
+DELTA = {"eR": 8, "eL": 8, "p": 3, "r": 3, "y": 4, "z": 2, "b": 5}
+E_DELTA = 0.8
+
+
+def compact(plan, step=1.0):
+    """Plan -> a short recipe in the teacher's style: a segment per ``step`` seconds, but only the channels that
+    moved by more than ``DELTA`` (ears together as ``e`` when they agree), and quiet stretches merged into one
+    ``hold``. Full transcriptions (``transcribe``) run to 1,000 characters for long clips, which a fine-tuned planner
+    then imitates past its answer length."""
+    keys = plan["keys"]
+    every = max(1, int(round(step / (keys[1]["t"] - keys[0]["t"])))) if len(keys) > 1 else 1
+    cur = {"eR": 15, "eL": 15, "p": 0, "r": 0, "y": 0, "z": 3, "b": 0}
+    curE, segs, quiet = 0.5, [], 0.0
+    for i in range(every, len(keys), every):
+        k, dt = keys[i], keys[i]["t"] - keys[i - every]["t"]
+        e = min(12.0, max(x["energy"] for x in keys[i - every + 1:i + 1]))
+        tgt = {a: float(np.clip(k[c], *LIMITS[a])) for a, c in KEYS}
+        moved = {a: v for a, v in tgt.items() if abs(v - cur[a]) > DELTA[a]}
+        if "eR" in moved or "eL" in moved:                # ears are written together
+            moved["eR"], moved["eL"] = tgt["eR"], tgt["eL"]
+        dE = abs(e - curE) > E_DELTA
+        if not moved:
+            if dE:
+                if quiet:
+                    segs.append(f"hold {quiet:.1f}")
+                    quiet = 0.0
+                segs.append(f"hold {dt:.1f} E={e:.1f}")
+                curE = e
+            else:
+                quiet += dt
+            continue
+        if quiet:
+            segs.append(f"hold {quiet:.1f}")
+            quiet = 0.0
+        parts = []
+        if "eR" in moved:
+            if abs(moved["eR"] - moved["eL"]) <= DELTA["eR"]:
+                parts.append(f"e={(moved['eR'] + moved['eL']) / 2:.0f}")
+            else:
+                parts += [f"eR={moved['eR']:.0f}", f"eL={moved['eL']:.0f}"]
+        parts += [f"{a}={moved[a]:.0f}" for a in ("p", "r", "y", "z", "b") if a in moved]
+        segs.append(f"go {dt:.1f} " + " ".join(parts) + (f" E={e:.1f}" if dE else ""))
+        cur.update(moved)
+        curE = e if dE else curE
+    if quiet:
+        segs.append(f"hold {quiet:.1f}")
+    return " | ".join(segs)
+
+
 def build(a):
     from rmr.motion import move_to_traj
     from rmr.plan import extract
@@ -62,7 +112,7 @@ def build(a):
     held = {word(h) for h in library.HELD_OUT_EMOTIONS}
     out = []
     for name, move in library.hub(library.EMOTIONS):
-        rec = transcribe(extract(move_to_traj(move)), a.step)
+        rec = (compact if a.compact else transcribe)(extract(move_to_traj(move)), a.step)
         assert check(rec) is None, (name, check(rec))
         out.append({"name": name, "caption": library.caption(name, move), "recipe": rec,
                     "held_out": name in library.HELD_OUT_EMOTIONS, "same_word_as_held_out": word(name) in held})
@@ -154,6 +204,7 @@ def main():
     b = sub.add_parser("library")
     b.add_argument("--out", required=True)
     b.add_argument("--step", type=float, default=1.0)
+    b.add_argument("--compact", action="store_true", help="short recipes: only channels that move (``compact``)")
     f = sub.add_parser("fidelity")
     f.add_argument("--library", required=True)
     f.add_argument("--ckpt", default="checkpoints/generator.pt")
