@@ -40,6 +40,15 @@ What Reachy took from them, per row:
 Reply with JSON: {{"best": "<letter>", "worst": "<letter>", "why": "<one sentence>"}}. Best and worst must differ."""
 
 
+DENSE = PROMPT.replace(
+    "The image shows {k} candidate responses, one per\nrow ({letters}); each row is {f} frames from its video, left to "
+    "right, with the time under each frame.",
+    "Each of the {k} candidate responses ({letters}) has its own image: its video\nas frames every "
+    "{fps:g}th of a second, left to right and top to bottom, with the time under each frame, and below them its "
+    "motion traces on fixed scales (head angles, ears, height over time), so you can compare size, speed and timing "
+    "between responses.")
+
+
 def strip_image(paths, frames, width):
     """One PNG: a labelled row of ``frames`` frames per video."""
     import imageio
@@ -68,6 +77,85 @@ def strip_image(paths, frames, width):
     return buf.getvalue()
 
 
+_GEN = {}
+
+
+def motion(recipe, video, ckpt):
+    """The exact motion in a rating video, regenerated as scripts/rating_set.py rendered it (seed from the recipe
+    hash): ``(T, 7)`` posture in plan units (earR earL pitch roll yaw z body; rmr.plan.posture)."""
+    from rmr.generator.sample import generate_batch, load
+    from rmr.motion import move_to_traj, traj_to_move
+    from rmr.plan import posture
+    from rmr.reach import Reach
+    from rmr.recipe import variants
+
+    if not _GEN:
+        _GEN["gen"], _GEN["reach"] = load(ckpt), Reach()
+    net, stats, dev = _GEN["gen"]
+    seed = int(video[:8], 16) % 100000
+    A = generate_batch(net, stats, variants(recipe, 1, seed=seed, fc=2.0, kdt=0.25), dev, seeds=[seed])[0]
+    return posture(move_to_traj(_GEN["reach"].project(traj_to_move(A, ""))[0]))
+
+
+def trace_image(P, width, seconds=15.0):
+    """Motion traces on fixed scales, so answers compare at a glance: head pitch / roll / turn, ears, height."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    panels = [("head (deg): pitch +down red, tilt green, turn blue", [(P[:, 2], "red"), (P[:, 3], "green"),
+                                                                      (P[:, 4], "blue")], (-30, 30)),
+              ("ears (deg): 0 up, 150 drooped; right red, left blue", [(P[:, 0], "red"), (P[:, 1], "blue")], (-20, 170)),
+              ("height (mm)", [(P[:, 5], "black")], (-25, 25))]
+    ph, lab = 70, 14
+    img = Image.new("RGB", (width, len(panels) * (ph + lab) + 14), "white")
+    d = ImageDraw.Draw(img)
+    T = len(P)
+    xs = np.arange(T) / 25 / seconds * (width - 1)
+    for k, (name, lines, (lo, hi)) in enumerate(panels):
+        y0 = k * (ph + lab) + lab
+        d.text((2, y0 - lab + 1), name, fill="gray")
+        d.rectangle([0, y0, width - 1, y0 + ph], outline="#cccccc")
+        if lo < 0 < hi:
+            yz = y0 + ph - (0 - lo) / (hi - lo) * ph
+            d.line([(0, yz), (width - 1, yz)], fill="#e6e6e6")
+        for v, col in lines:
+            ys = y0 + ph - (np.clip(v, lo, hi) - lo) / (hi - lo) * ph
+            d.line(list(zip(xs.tolist(), ys.tolist())), fill=col, width=2)
+    for s in range(0, int(seconds) + 1, 2):                 # time ticks under the last panel
+        x = s / seconds * (width - 1)
+        d.text((min(x, width - 18), len(panels) * (ph + lab)), f"{s}s", fill="gray")
+    return img
+
+
+def answer_image(path, recipe, ckpt, fps, max_frames, tile, traces):
+    """One answer: its frames at ``fps`` (at most ``max_frames``, then evenly spread) in a grid of 8 columns, with
+    the time under each frame, and (``traces``) its motion traces under the grid."""
+    import imageio
+    import numpy as np
+    from PIL import Image, ImageDraw
+
+    vid = np.stack(imageio.mimread(path, memtest=False))
+    w = vid.shape[2]
+    vid = vid[:, :, w // 4: 3 * w // 4]
+    n = min(max_frames, max(2, int(len(vid) / 25 * fps) + 1))
+    idx = [int(round(i * (len(vid) - 1) / (n - 1))) for i in range(n)]
+    cols, th = 8, int(tile * vid.shape[1] / vid.shape[2])
+    rows = (n + cols - 1) // cols
+    grid = Image.new("RGB", (cols * tile, rows * (th + 12)), "white")
+    d = ImageDraw.Draw(grid)
+    for k, i in enumerate(idx):
+        x, y = (k % cols) * tile, (k // cols) * (th + 12)
+        grid.paste(Image.fromarray(vid[i]).resize((tile, th)), (x, y))
+        d.text((x + 2, y + th), f"{i / 25:.2f}s", fill="gray")
+    if not traces:
+        return grid
+    tr = trace_image(motion(recipe, os.path.basename(path), ckpt), grid.width)
+    out = Image.new("RGB", (grid.width, grid.height + tr.height), "white")
+    out.paste(grid, (0, 0))
+    out.paste(tr, (0, grid.height))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--items", required=True)
@@ -79,6 +167,12 @@ def main():
     ap.add_argument("--only-rated", help="ratings export: judge only the items a person rated (to measure agreement)")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--save-images", help="folder to keep the strips in (to look at)")
+    ap.add_argument("--dense", action="store_true",
+                    help="one image per answer: frames at --fps (not --frames over the clip) plus motion traces")
+    ap.add_argument("--fps", type=float, default=4.0)
+    ap.add_argument("--max-frames", type=int, default=40)
+    ap.add_argument("--no-traces", action="store_true")
+    ap.add_argument("--ckpt", default="checkpoints/generator_v2.pt", help="the generator the videos were made with")
     a = ap.parse_args()
     from rmr.planner.llm import _post, parse_json
 
@@ -89,20 +183,40 @@ def main():
     part = a.out + ".part"
     done = dict(json.loads(x) for x in open(part)) if os.path.exists(part) else {}
 
-    def one(it):
+    def pngs(it, order):
+        """The images for one item, built up front (the generator is not thread-safe)."""
+        if not a.dense:
+            return [strip_image([os.path.join(a.videos, it["answers"][j]["video"]) for j in order], a.frames,
+                                a.width)]
+        out = []
+        for j in order:
+            x = it["answers"][j]
+            img = answer_image(os.path.join(a.videos, x["video"]), x["recipe"], a.ckpt, a.fps, a.max_frames, 110,
+                               not a.no_traces)
+            buf = io.BytesIO()
+            img.save(buf, "PNG")
+            out.append(buf.getvalue())
+        return out
+
+    def one(job):
+        it, order, images = job
         k = len(it["answers"])
-        order = random.Random(f"vlm{it['id']}").sample(range(k), k)
-        png = strip_image([os.path.join(a.videos, it["answers"][j]["video"]) for j in order], a.frames, a.width)
         if a.save_images:
             os.makedirs(a.save_images, exist_ok=True)
-            open(os.path.join(a.save_images, it["id"] + ".png"), "wb").write(png)
+            for n, png in enumerate(images):
+                open(os.path.join(a.save_images, f"{it['id']}_{n}.png"), "wb").write(png)
         ctx = "".join(f'Earlier: "{c}"\n' for c in (it.get("context") or [])[-2:])
         readings = "\n".join(f"{chr(65 + p)}. {it['answers'][j]['reading']}" for p, j in enumerate(order))
-        text = PROMPT.format(k=k, letters=", ".join(chr(65 + p) for p in range(k)), f=a.frames, context=ctx,
-                             text=it["text"], voice=it["voice"], readings=readings)
-        msg = [{"role": "user", "content": [
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(png).decode()}},
-            {"type": "text", "text": text}]}]
+        text = (DENSE if a.dense else PROMPT).format(k=k, letters=", ".join(chr(65 + p) for p in range(k)), f=a.frames,
+                                                     fps=a.fps, context=ctx, text=it["text"], voice=it["voice"],
+                                                     readings=readings)
+        content = []
+        for n, png in enumerate(images):
+            if a.dense:
+                content.append({"type": "text", "text": f"Response {chr(65 + n)}:"})
+            content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64,"
+                                                                      + base64.b64encode(png).decode()}})
+        msg = [{"role": "user", "content": content + [{"type": "text", "text": text}]}]
         for _ in range(3):
             try:
                 out = parse_json(_post({"model": a.model, "messages": msg, "temperature": 0.0,
@@ -118,7 +232,12 @@ def main():
 
     votes = dict(done)
     with ThreadPoolExecutor(a.workers) as ex, open(part, "a") as f:
-        for fut in as_completed([ex.submit(one, it) for it in items if it["id"] not in done]):
+        futs = []
+        for it in items:
+            if it["id"] not in done:
+                order = random.Random(f"vlm{it['id']}").sample(range(len(it["answers"])), len(it["answers"]))
+                futs.append(ex.submit(one, (it, order, pngs(it, order))))
+        for fut in as_completed(futs):
             i, v = fut.result()
             if v:
                 votes[i] = v
