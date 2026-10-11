@@ -129,11 +129,23 @@ def evaluate(a):
     recipes = {}
     for h, r in got:
         recipes.setdefault(h, []).append(r)
-    res = score(recipes, a.ckpt)
-    res.update(model=a.model, grounded=not a.plain, valid=sum(r is not None for _, r in got) / len(got))
-    print(json.dumps(res))
-    with open(a.out, "w") as f:
+    res = dict(model=a.model, grounded=not a.plain, valid=sum(r is not None for _, r in got) / len(got))
+    with open(a.out, "w") as f:                      # recipes first: scoring is the slow part (``score``)
         json.dump({**res, "recipes": recipes}, f, indent=1)
+    if not a.no_score:
+        rescore(argparse.Namespace(files=[a.out], ckpt=a.ckpt))
+
+
+def rescore(a):
+    """Score (or re-score) saved recipes: adds top1 / mean_rank to each file."""
+    import torch
+
+    torch.set_num_threads(max(1, os.cpu_count() // len(a.files)) if not torch.cuda.is_available() else 4)
+    for p in a.files:
+        d = json.load(open(p))
+        d.update(score(d["recipes"], a.ckpt))
+        json.dump(d, open(p, "w"), indent=1)
+        print(p, json.dumps({k: d[k] for k in ("model", "grounded", "valid", "top1", "mean_rank", "n")}), flush=True)
 
 
 def main():
@@ -153,8 +165,12 @@ def main():
     e.add_argument("--workers", type=int, default=6)
     e.add_argument("--ckpt", default="checkpoints/generator.pt")
     e.add_argument("--out", required=True)
+    e.add_argument("--no-score", action="store_true", help="only write the recipes (score them with ``score``)")
+    s = sub.add_parser("score")
+    s.add_argument("files", nargs="+")
+    s.add_argument("--ckpt", default="checkpoints/generator.pt")
     a = ap.parse_args()
-    {"library": build, "fidelity": fidelity, "eval": evaluate}[a.cmd](a)
+    {"library": build, "fidelity": fidelity, "eval": evaluate, "score": rescore}[a.cmd](a)
 
 
 if __name__ == "__main__":
