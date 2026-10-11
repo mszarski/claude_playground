@@ -127,7 +127,7 @@ def trace_image(P, width, seconds=15.0):
     return img
 
 
-def answer_image(path, recipe, ckpt, fps, max_frames, tile, traces):
+def answer_image(path, recipe, ckpt, fps, max_frames, tile, traces, head=False, cols=8):
     """One answer: its frames at ``fps`` (at most ``max_frames``, then evenly spread) in a grid of 8 columns, with
     the time under each frame, and (``traces``) its motion traces under the grid."""
     import imageio
@@ -135,11 +135,11 @@ def answer_image(path, recipe, ckpt, fps, max_frames, tile, traces):
     from PIL import Image, ImageDraw
 
     vid = np.stack(imageio.mimread(path, memtest=False))
-    w = vid.shape[2]
-    vid = vid[:, :, w // 4: 3 * w // 4]
+    h, w = vid.shape[1], vid.shape[2]
+    vid = vid[:, : int(h * 0.42), int(w * 0.3): int(w * 0.7)] if head else vid[:, :, w // 4: 3 * w // 4]
     n = min(max_frames, max(2, int(len(vid) / 25 * fps) + 1))
     idx = [int(round(i * (len(vid) - 1) / (n - 1))) for i in range(n)]
-    cols, th = 8, int(tile * vid.shape[1] / vid.shape[2])
+    th = int(tile * vid.shape[1] / vid.shape[2])
     rows = (n + cols - 1) // cols
     grid = Image.new("RGB", (cols * tile, rows * (th + 12)), "white")
     d = ImageDraw.Draw(grid)
@@ -172,6 +172,9 @@ def main():
     ap.add_argument("--fps", type=float, default=4.0)
     ap.add_argument("--max-frames", type=int, default=40)
     ap.add_argument("--no-traces", action="store_true")
+    ap.add_argument("--head", action="store_true", help="crop the frames to the head and antennas (denser frames)")
+    ap.add_argument("--tile", type=int, default=110, help="frame width in pixels")
+    ap.add_argument("--cols", type=int, default=8)
     ap.add_argument("--ckpt", default="checkpoints/generator_v2.pt", help="the generator the videos were made with")
     a = ap.parse_args()
     from rmr.planner.llm import _post, parse_json
@@ -191,8 +194,8 @@ def main():
         out = []
         for j in order:
             x = it["answers"][j]
-            img = answer_image(os.path.join(a.videos, x["video"]), x["recipe"], a.ckpt, a.fps, a.max_frames, 110,
-                               not a.no_traces)
+            img = answer_image(os.path.join(a.videos, x["video"]), x["recipe"], a.ckpt, a.fps, a.max_frames, a.tile,
+                               not a.no_traces, head=a.head, cols=a.cols)
             buf = io.BytesIO()
             img.save(buf, "PNG")
             out.append(buf.getvalue())
