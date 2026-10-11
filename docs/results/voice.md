@@ -333,6 +333,27 @@ The page was rebuilt on these licence-clean items before any votes came in. The 
 ends passes the physical check (or reads the feeling as labelled), how often is it the one people preferred?
 If the checks agree, they can steer future experiments without asking anyone; if not, they need fixing first.
 
+### First ratings (2026-10-11, one rater, 82 items)
+
+| model, 42 test items | best | worst | score (best - worst) / shown |
+|---|---|---|---|
+| v3 (MELD-trained) | 13 | 11 | +0.05 |
+| v5 | 7 | 7 | 0.00 |
+| v5 1.7B | 5 | 6 | -0.02 |
+| teacher (Qwen3-Next 80B) | 12 | 13 | -0.02 |
+
+13 of 82 items were "all about the same". With 42 items the noise is about +-0.15, so the four models are a tie. Split
+by item type (about 20 each), v3 leads on the real-voice tone items (+0.31) and v5 on the written lines (+0.10).
+
+- The automatic judge (GLM-5.3, `scripts/judge_ratings.py`) agrees at chance: same best 25% (chance 25%), pairs
+  ordered the same way 46% (chance 50%). It cannot stand in for people.
+- The physical check favours the human's pick 59% of the time (90% interval 39-76%), reading the feeling as labelled
+  44% (29-60%): neither predicts the preference yet (`scripts/rating_agreement.py`).
+- No single motion feature separates the picked answer from the rejected one: weak hints only (the picked one moves
+  its height less 62% of the time, is shorter, droops its ears less). The choice follows how well the response
+  fits the moment, which a descriptor or a judge that cannot see the video misses.
+- The 32 rated training items give 160 DPO pairs (`scripts/dpo_from_ratings.py pairs`, best-worst = 5 pairs each).
+
 ## Caveats
 
 These models read expressed emotion, not what someone feels, and they vary across speakers, accents and cultures.

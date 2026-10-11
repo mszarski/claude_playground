@@ -99,7 +99,7 @@ def main():
     p = sub.add_parser("pairs")
     p.add_argument("--items", required=True)
     p.add_argument("--ratings", required=True)
-    p.add_argument("--heard", default="runs/listen_train/heard.jsonl")
+    p.add_argument("--heard", default="runs/synth_v4/heard_v5.jsonl")
     p.add_argument("--out", required=True)
     t = sub.add_parser("train")
     t.add_argument("--data", required=True)
