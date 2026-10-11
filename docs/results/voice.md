@@ -352,6 +352,9 @@ by item type (about 20 each), v3 leads on the real-voice tone items (+0.31) and 
 - No single motion feature separates the picked answer from the rejected one: weak hints only (the picked one moves
   its height less 62% of the time, is shorter, droops its ears less). The choice follows how well the response
   fits the moment, which a descriptor or a judge that cannot see the video misses.
+- Judges that watch the videos do no better (`scripts/vlm_judge.py`: a frame strip per answer, 8 frames each): Kimi-K3
+  25% same best, pairs ordered alike 49%; Qwen3.5-397B 24%, 49%. The two agree with each other 48% on the best (chance
+  25%): the models share a consistent idea of a good response that is not this rater's.
 - The 32 rated training items give 160 DPO pairs (`scripts/dpo_from_ratings.py pairs`, best-worst = 5 pairs each).
 
 ## Caveats
