@@ -81,7 +81,7 @@ def _render_one(job):
 def render_all(a):
     from multiprocessing import Pool
 
-    clips = sorted(f for f in os.listdir(a.clips) if f.endswith(".wav"))
+    clips = sorted(f for f in os.listdir(a.clips) if f.endswith(".wav") and (not a.only or f[:-4] in a.only.split(",")))
     os.makedirs(os.path.join(a.out, "renders"), exist_ok=True)
     styles = dict(POOL)
     jobs = []
@@ -92,6 +92,8 @@ def render_all(a):
         if a.listener_model:
             jobs.append((os.path.join(a.clips, c), LEARNED, {"nod_deg": 0.0}, a.listener_model,
                          os.path.join(a.out, "renders", f"{c[:-4]}__{LEARNED}.mp4")))
+    i, n = map(int, a.shard.split("/"))
+    jobs = [j for k, j in enumerate(jobs) if k % n == i]
     with Pool(a.workers) as pool:
         for k, p in enumerate(pool.imap_unordered(_render_one, jobs)):
             print(f"{k + 1}/{len(jobs)} {os.path.basename(p)}", flush=True)
@@ -297,6 +299,8 @@ def main():
     r.add_argument("--out", default="runs/listen_rating")
     r.add_argument("--listener-model")
     r.add_argument("--workers", type=int, default=os.cpu_count())
+    r.add_argument("--only", help="comma list of clip names (c4,c5,...) to render; default all")
+    r.add_argument("--shard", default="0/1", help="i/n: render every n-th job from the i-th (parallel jobs)")
     p = sub.add_parser("pairs")
     p.add_argument("--out", default="runs/listen_rating")
     p.add_argument("--n", type=int, default=40)
