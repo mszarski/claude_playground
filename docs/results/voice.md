@@ -165,8 +165,8 @@ pip install -e ".[ik,generator,hf,serve,voice]"
 PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
   python -m rmr.server --model <served model name> --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the distilled student, one local call, no server and no network after the first download
-python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v5 --out runs/converse
-python -m rmr.server --voice-model mszarski/reachy-voice:student/v5 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v8 --out runs/converse
+python -m rmr.server --voice-model mszarski/reachy-voice:student/v8 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the quantised student behind llama.cpp (2.5 GB, CPU is fine) ...
 hf download mszarski/reachy-voice gguf/v5/reachy-voice-4b-Q4_K_M.gguf --local-dir .
 llama-server -m gguf/v5/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
@@ -266,6 +266,8 @@ recipe passes the physical check (as on MELD).
 | **v5 4B (lines + tone clips)** | **47%** | 63% | 37% / **42%** calibrated | 60% / **72%** calibrated |
 | v5 1.7B | 41% | 59% | 40% / 40% calibrated | 69% / 72% calibrated |
 | v6 4B (2.5x the tone clips) | 48% | 62% | 40% calibrated | 72% calibrated |
+| v7 4B (v5 data, teacher prompt fixed) | 41% | 63% | 40% calibrated | 74% calibrated |
+| **v8 4B (v5 data, Kimi-K3 teacher)** | 43% | **65%** | 39% calibrated | 72% calibrated |
 
 - **v5 uses tone.** On the tone test it beats the teacher and every earlier student. A logistic regression on the
   same readings (held-out actors) reaches 51% (54% with all class probabilities), so v5 is close to what the
@@ -283,9 +285,14 @@ recipe passes the physical check (as on MELD).
   MELD test's own means) v5 goes from 37% to 42% UA and from 60% to 72% appropriate. That is within two points of
   v3, which was trained on MELD itself.
 
-Data: `mszarski/reachy-voice` `synth/v4/` (lines, readings, tone bank), `student/v5`, `student/v5-1.7b`.
+Data: `mszarski/reachy-voice` `synth/v4/` (lines, readings, tone bank), `student/v5`, `student/v5-1.7b`, `student/v8` (default; `gguf/v8`).
 
 ### Which teacher? (bake-off, 2026-10-10)
+
+Result first: the same data labelled by Kimi-K3 (student v8) gives responses whose recipes pass the physical check
+90% of the time on the fresh lines, against 76% for v5 (Qwen3-Next teacher) and 79% for v7 (Qwen3-Next with the
+fixed prompt); reading stays within noise (tone test 43% vs 47%, MELD 39% vs 42%). v8 is the default student.
+
 
 The teacher answers every training example: it reads the person, writes the response and the recipe. Each of four
 open models (Hugging Face Inference Providers) acted as the full responder on the clean tests and on MELD. Reads =
