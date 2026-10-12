@@ -1,4 +1,4 @@
-import { headJoints } from './StewartIK.js';
+import { feasible, headJoints } from './StewartIK.js';
 
 /**
  * Plays Reachy Mini moves (SDK recorded-move format) on the 3D robot.
@@ -23,9 +23,9 @@ export class Player {
             head_joints: headJoints(f.head, f.body_yaw ?? 0),
             antennas_position: f.antennas,
         }));
-        // an unreachable frame (NaN motor angle) holds the previous valid one, like the daemon does
+        // an unreachable frame (NaN motor angle, or a motor past its range) holds the previous valid one
         for (let i = 1; i < this.frames.length; i++) {
-            if (this.frames[i].head_joints.some(Number.isNaN)) this.frames[i] = this.frames[i - 1];
+            if (!feasible(this.frames[i].head_joints)) this.frames[i] = this.frames[i - 1];
         }
         this.t0 = performance.now(); this.pausedAt = null;
         return this.duration();

@@ -1,4 +1,4 @@
-import { headJoints } from './StewartIK.js';
+import { feasible, headJoints } from './StewartIK.js';
 import { SpeakerFeatures } from './ListenModel.js';
 
 /**
@@ -53,7 +53,7 @@ export class Listener {
     /** head: optional LearnedHead (ListenModel.js); it then drives pitch, yaw and roll in place of the rule nods.
      *  style: overrides of STYLE; seed: for the sway phases and the glances. */
     constructor(side = 1.0, head = null, style = null, seed = 1) {
-        this.head = head; this.feats = head ? new SpeakerFeatures() : null;
+        this.head = head; this.feats = head ? new SpeakerFeatures() : null; this.lastPose = null;
         this.style = { ...STYLE, ...(style || {}) }; this.rng = rng(seed);
         this.phase = [0, 1, 2].map(() => [0, 1, 2].map(() => 2 * Math.PI * this.rng()));
         this.glance = null;
@@ -135,7 +135,9 @@ export class Listener {
         const z = p.z + NOD_Z * n + PERK_Z * perk + BREATH_MM * Math.sin(2 * Math.PI * t / BREATH_S);
         this.t += dt;
         const head = pose(z / 1000, rad(p.roll), rad(pitch), rad(yaw));
-        return { head_pose: head.flat(), head_joints: headJoints(head, 0), antennas_position: [-rad(ears), rad(ears)] };
+        const joints = headJoints(head, 0);
+        if (feasible(joints) || !this.lastPose) this.lastPose = { head_pose: head.flat(), head_joints: joints };
+        return { ...this.lastPose, antennas_position: [-rad(ears), rad(ears)] };    // an infeasible pose holds the last good one
     }
 }
 

@@ -5,6 +5,10 @@ each channel cannot guarantee a valid pose, and the robot freezes on an unreacha
 each unreachable head pose is line-searched (bisection) from the last reachable pose toward the target,
 with SE(3) interpolation and body yaw interpolated alongside. Antennas and timing are untouched.
 
+Reachable means the IK has a solution *and* every Stewart motor stays within its servo range (``MOTOR_LIMITS``,
+from the robot's URDF). The reference only checks for a solution; a pose with a solution can still need a motor
+beyond its range, which the real servos (and the viewer's URDF) clamp, so the head and its rods part ways.
+
 Needs the SDK's analytical IK: ``pip install reachy-mini-rust-kinematics`` (the ``ik`` extra).
 Reference: ``common/reach.py`` in pham-tuan-binh/reachy-motion-generator (Apache-2.0).
 """
@@ -15,6 +19,9 @@ import numpy as np
 
 # From pollen-robotics/reachy_mini (Apache-2.0).
 KINEMATICS = Path(__file__).parent / "assets" / "kinematics_data.json"
+# stewart_1..6 joint limits (rad), from the robot's URDF (visualizer/assets/reachy-mini.urdf, pollen-robotics).
+MOTOR_LIMITS = np.array([[-0.837758, 1.39626], [-1.39626, 1.22173], [-0.837758, 1.39626],
+                         [-1.39626, 0.837758], [-1.22173, 1.39626], [-1.39626, 0.837758]])
 
 
 def se3_interp(H0, H1, a):
@@ -57,7 +64,8 @@ class Reach:
                                                          max_body_yaw=np.deg2rad(160)))
 
     def reachable(self, H, body_yaw):
-        return bool(np.all(np.isfinite(self.ik(H, body_yaw))))
+        m = self.ik(H, body_yaw)[1:]
+        return bool(np.all(np.isfinite(m)) and np.all(m >= MOTOR_LIMITS[:, 0]) and np.all(m <= MOTOR_LIMITS[:, 1]))
 
     def project(self, move, iters=12):
         """Make every frame of ``move`` reachable, in place.
