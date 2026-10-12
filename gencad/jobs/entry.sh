@@ -96,6 +96,13 @@ case "$STAGE" in
     [[ "$DP_CKPT" != none && -f "$DP_CKPT" ]] && ARGS+=(--gencad_dp_ckpt "$DP_CKPT")
     python eval_mm.py "${ARGS[@]}" "$@" ;;
 
+  visual)     # rendered side-by-side check (needs OCC=1): GT vs GenCAD vs the prior under each condition
+    need cad_vec images
+    PRIOR=${PRIOR:-results/mm_v1/last.pt}
+    ARGS=(--prior "$PRIOR" --csr_ckpt "$CSR_CKPT" --emb_dir data/emb --data data --out "results/$RUN")
+    [[ "$DP_CKPT" != none && -f "$DP_CKPT" ]] && ARGS+=(--gencad_dp_ckpt "$DP_CKPT")
+    python scripts/visual_check.py "${ARGS[@]}" "$@" ;;
+
   shell)      # arbitrary command, e.g. launch.sh shell -- python infer_mm.py ...
     [[ "${1:-}" == "--" ]] && shift
     "$@" ;;

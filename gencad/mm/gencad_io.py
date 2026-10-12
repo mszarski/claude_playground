@@ -69,7 +69,10 @@ def decode_latents(csr, z):
 
 def vec_to_shape(cad_vec):
     """CAD vector -> OCC solid (needs pythonocc-core). Returns None if the sequence is not buildable."""
-    from cadlib.visualize import vec2CADsolid  # ImportError (no pythonocc-core) propagates to the caller
+    import OCC.Core.BRepBndLib as bnd  # ImportError (no pythonocc-core) propagates to the caller
+    if not hasattr(bnd, "brepbndlib_Add"):  # removed in pythonocc 7.8; upstream cadlib still imports it
+        bnd.brepbndlib_Add = bnd.brepbndlib.Add
+    from cadlib.visualize import vec2CADsolid
     try:
         return vec2CADsolid(cad_vec.astype(float))
     except Exception:
