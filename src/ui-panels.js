@@ -290,7 +290,7 @@ class UIPanels {
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
-      <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)} (copy)</button>
+      <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)}${this.game.mapSize !== 'medium' ? ' · ' + MAP_SIZES[this.game.mapSize].label.toLowerCase() : ''} (copy)</button>
       <button data-m="wheel" title="What scrolling does on the map">Scroll: ${{ auto: 'AUTO (mouse wheel zooms, trackpad pans)', zoom: 'ZOOM', pan: 'PAN (pinch or +/− to zoom)' }[this.wheelMode]}</button>
       <button data-m="audio">Sound settings</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;

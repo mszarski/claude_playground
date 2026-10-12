@@ -4,6 +4,12 @@
 const TILE = 16;
 const MAP_W = 72;
 const MAP_H = 54;
+// Island sizes in tiles. Scenarios and the tutorial are tuned for 'small'.
+const MAP_SIZES = {
+  small: { w: 72, h: 54, label: 'SMALL', desc: 'THE CLASSIC ISLAND' },
+  medium: { w: 96, h: 72, label: 'MEDIUM', desc: 'ROOM FOR A BIG PARK' },
+  large: { w: 128, h: 96, label: 'LARGE', desc: 'A SPRAWLING ISLAND' },
+};
 
 // Terrain ids
 const T_DEEP = 0, T_WATER = 1, T_SAND = 2, T_GRASS = 3, T_FOREST = 4, T_ROCK = 5, T_LAVA = 6, T_BASALT = 7, T_VOLCANO = 8;

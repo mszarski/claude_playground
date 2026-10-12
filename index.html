@@ -25,8 +25,10 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
-  font-family: 'VT323', 'Courier New', monospace; font-size: 18px; user-select: none; -webkit-user-select: none; touch-action: none; }
-#view { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; display: block; }
+  font-family: 'VT323', 'Courier New', monospace; font-size: 18px; user-select: none; -webkit-user-select: none; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; display: block; touch-action: none; }
+/* only the map takes over touch gestures; menus and panels scroll normally */
+#minimap, #zoomBtns, #topbar, #toolbar { touch-action: manipulation; }
 .px { font-family: 'Press Start 2P', monospace; }
 .panel { background: var(--panel); border: 3px solid var(--edge); box-shadow: inset 0 0 0 2px var(--hi), 0 4px 0 rgba(0,0,0,0.4); }
 button { font-family: 'VT323', monospace; font-size: 18px; color: var(--text); background: var(--panel2); border: 2px solid var(--edge);
@@ -173,9 +175,9 @@ table.fin td { padding: 1px 6px; border-bottom: 1px solid #2a3a26; }
 table.fin td:last-child { text-align: right; }
 
 /* title */
-#title { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; flex-direction: column;
+#title { position: absolute; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: safe center; flex-direction: column; overflow-y: auto;
   background: radial-gradient(ellipse at center, #1e3a1a 0%, #0a120a 75%); }
-#title canvas#tbg { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: 0.85; }
+#title canvas#tbg { position: fixed; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: 0.85; }
 #title .tbox { position: relative; text-align: center; padding: 22px 26px; max-width: 92vw; }
 #title h1 { font-family: 'Press Start 2P'; font-size: clamp(20px, 5vw, 42px); color: var(--gold); margin: 0; text-shadow: 4px 4px 0 #7a2010, 0 0 30px rgba(248,160,40,0.4); letter-spacing: 2px; }
 #title .tag2 { font-family: 'Press Start 2P'; font-size: clamp(8px, 1.5vw, 11px); color: var(--orange); margin: 10px 0 18px; }
@@ -229,6 +231,12 @@ table.fin td:last-child { text-align: right; }
   #tut { left: 56px; bottom: 4px; font-size: 15px; width: calc(100vw - 260px); max-height: 50vh; overflow-y: auto; }
   #toasts { top: auto; bottom: 60px; }
   #modal .box { max-height: 96vh; padding: 10px 12px; }
+  #title .tbox { padding: 10px 16px; }
+  #title h1 { font-size: 20px; }
+  #title .tag2 { margin: 6px 0 10px; }
+  #title .menu { gap: 5px; }
+  #title .menu button { padding: 6px 12px; font-size: 10px; }
+  #title .credits { margin-top: 8px; }
 }
 </style>
 </head>
@@ -301,6 +309,7 @@ table.fin td:last-child { text-align: right; }
       <button data-diff="normal">STANDARD<br><small style="font-size:8px;color:#9ab08a">THE INTENDED EXPERIENCE</small></button>
       <button data-diff="chaos">CHAOS THEORY<br><small style="font-size:8px;color:#9ab08a">DISASTERS EVERY DAY OR TWO</small></button>
       <div style="display:flex;gap:6px;align-items:center;justify-content:center;font-size:18px"><label for="seedIn">Island code</label><input id="seedIn" placeholder="random" maxlength="8" style="font-family:'Press Start 2P';font-size:11px;width:150px;padding:6px;background:#0a120a;color:var(--gold);border:2px solid var(--edge);text-transform:uppercase"></div>
+      <button id="mapSizeBtn">ISLAND SIZE: MEDIUM</button>
       <button id="dayLenBtn">DAY LENGTH: NORMAL</button>
       <button id="diffBack">BACK</button>
     </div>
