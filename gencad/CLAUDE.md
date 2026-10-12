@@ -40,6 +40,15 @@ Takeaways: the gain over GenCAD comes from the new denoiser/training (mm_ccip â‰
 helps on top of an image; more detailed prompts help more; expert text alone beats GenCAD's image prior on
 acc_cmd. w=3 â‰ˆ w=2 everywhere, w=1 a bit lower. Per-level evals: `eval_mm.py --text_level <level>`.
 
+### Visual check (`OCC=1 RUN=visual_v1 jobs/launch.sh visual`, grids in bucket `results/visual_v1/`)
+12 random test uids + 6 free-form prompts, guidance 2. Valid solids: gt 12, gencad 9, image 10, text:beginner 12,
+text:expert 11, image+text:expert 10; prompts 18/18. Simple parts (plates, cylinders, pegged plates, frames) come
+out right under every condition. Text recovers detailed parts (holed brackets) that image-only and GenCAD miss,
+but text gets proportions wrong (boxes come out as cubes or tall blocks); the image fixes proportions.
+image+text sometimes fragments a part that text alone gets right. Prompts: washer, hex nut, cylinder with a
+concentric hole are clean; "plate with four holes" and "stepped shaft" are partial; "L-bracket" comes out as
+disconnected plates.
+
 ## Next steps (ideas, none started)
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
