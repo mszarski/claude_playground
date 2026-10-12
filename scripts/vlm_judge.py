@@ -183,6 +183,7 @@ def main():
     ap.add_argument("--head", action="store_true", help="crop the frames to the head and antennas (denser frames)")
     ap.add_argument("--tile", type=int, default=110, help="frame width in pixels")
     ap.add_argument("--cols", type=int, default=8)
+    ap.add_argument("--seed", default="", help="another answer order (a repeat run to check a result holds)")
     ap.add_argument("--ckpt", default="checkpoints/generator_v2.pt", help="the generator the videos were made with")
     a = ap.parse_args()
     from rmr.planner.llm import _post, parse_json
@@ -246,7 +247,7 @@ def main():
         futs = []
         for it in items:
             if it["id"] not in done:
-                order = random.Random(f"vlm{it['id']}").sample(range(len(it["answers"])), len(it["answers"]))
+                order = random.Random(f"vlm{a.seed}{it['id']}").sample(range(len(it["answers"])), len(it["answers"]))
                 futs.append(ex.submit(one, (it, order, pngs(it, order))))
                 for fut in [x for x in futs if x.done()]:      # save verdicts while the rest are still being built
                     futs.remove(fut)
