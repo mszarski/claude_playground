@@ -89,12 +89,20 @@ def motion(recipe, video, ckpt):
     from rmr.reach import Reach
     from rmr.recipe import variants
 
+    import numpy as np
+
+    cache = os.path.join(os.path.dirname(os.path.abspath(ckpt)), "..", "runs", "motion_cache", video[:-4] + ".npy")
+    if os.path.exists(cache):                       # one generator pass per video, shared by every run
+        return np.load(cache)
     if not _GEN:
         _GEN["gen"], _GEN["reach"] = load(ckpt), Reach()
     net, stats, dev = _GEN["gen"]
     seed = int(video[:8], 16) % 100000
     A = generate_batch(net, stats, variants(recipe, 1, seed=seed, fc=2.0, kdt=0.25), dev, seeds=[seed])[0]
-    return posture(move_to_traj(_GEN["reach"].project(traj_to_move(A, ""))[0]))
+    P = posture(move_to_traj(_GEN["reach"].project(traj_to_move(A, ""))[0]))
+    os.makedirs(os.path.dirname(cache), exist_ok=True)
+    np.save(cache, P)
+    return P
 
 
 def trace_image(P, width, seconds=15.0):
@@ -240,6 +248,13 @@ def main():
             if it["id"] not in done:
                 order = random.Random(f"vlm{it['id']}").sample(range(len(it["answers"])), len(it["answers"]))
                 futs.append(ex.submit(one, (it, order, pngs(it, order))))
+                for fut in [x for x in futs if x.done()]:      # save verdicts while the rest are still being built
+                    futs.remove(fut)
+                    i, v = fut.result()
+                    if v:
+                        votes[i] = v
+                        f.write(json.dumps([i, v]) + "\n")
+                        f.flush()
         for fut in as_completed(futs):
             i, v = fut.result()
             if v:
