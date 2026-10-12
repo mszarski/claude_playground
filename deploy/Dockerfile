@@ -1,8 +1,8 @@
 # Live text-to-motion Space: python -m rmr.server. The voice student (VOICE_MODEL), Whisper and the speech-emotion
 # models run in the container, on the GPU when the Space has one; typed prompts use the planner on HF Inference
-# Providers. The default torch wheel carries CUDA and also runs on CPU hardware.
+# Providers. The CUDA 12.8 torch wheel also runs on CPU hardware.
 FROM python:3.11-slim
-RUN pip install --no-cache-dir torch
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu128
 RUN useradd -m -u 1000 user
 WORKDIR /app
 COPY --chown=user . .

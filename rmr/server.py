@@ -274,7 +274,7 @@ def main():
             if engine.voice_model and engine.student is None:
                 from .respond import Student
                 engine.student = Student(engine.voice_model)
-            print("voice models loaded", flush=True)
+            print(f"voice models loaded on {voice_device()}", flush=True)
         threading.Thread(target=_load, daemon=True).start()
     uvicorn.run(create_app(engine), host=a.host, port=a.port)
 
