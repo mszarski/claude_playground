@@ -52,7 +52,9 @@ case "$STAGE" in
     ls -la /work/data /work/ckpt ;;
 
   text)       # Text2CAD annotations -> text_index.json (needs access to the gated SadilKhan/Text2CAD)
-    python scripts/build_text_index.py --hf_repo SadilKhan/Text2CAD --split_json data/filtered_data.json \
+    # v1.1 only: the repo also has v1.0, whose prompts are noisier, and merging both would mix them per uid
+    python scripts/build_text_index.py --hf_repo SadilKhan/Text2CAD --hf_patterns "text2cad_v1.1/*.csv" \
+      --split_json data/filtered_data.json \
       --out /work/data/text_index.json "$@" ;;
 
   test)       # unit + smoke tests on synthetic data, real encoders included

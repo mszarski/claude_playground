@@ -128,7 +128,7 @@ def main():
         if a.text2cad and not os.path.exists(os.path.join(a.data, "text_index.json")):
             try:
                 sh(sys.executable, os.path.join(os.path.dirname(__file__), "build_text_index.py"),
-                   "--hf_repo", a.text2cad, "--split_json", os.path.join(a.data, "filtered_data.json"),
+                   "--hf_repo", a.text2cad, "--hf_patterns", "text2cad_v1.1/*.csv", "--split_json", os.path.join(a.data, "filtered_data.json"),
                    "--out", os.path.join(a.data, "text_index.json"))
             except subprocess.CalledProcessError:
                 # e.g. Text2CAD is gated and the token's account hasn't been granted access yet; keep the
