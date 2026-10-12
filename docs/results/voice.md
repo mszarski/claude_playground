@@ -355,6 +355,11 @@ by item type (about 20 each), v3 leads on the real-voice tone items (+0.31) and 
 - Judges that watch the videos do no better (`scripts/vlm_judge.py`: a frame strip per answer, 8 frames each): Kimi-K3
   25% same best, pairs ordered alike 49%; Qwen3.5-397B 24%, 49%. The two agree with each other 48% on the best (chance
   25%): the models share a consistent idea of a good response that is not this rater's.
+- Denser input does not fix it (`vlm_judge.py --dense`: frames every 0.25 s, or every 0.125 / 0.083 s cropped to the
+  head, plus motion traces regenerated from the exact motion): Kimi-K3 49-51% of pairs ordered alike, Qwen3.5-397B
+  47-59%. The one result above chance (Qwen, 8 frames/s, 59%) fell to 51% when repeated with the answers in another
+  order, and Qwen picks the same best as itself only 54% of the time across the two orders. No automated judge tried
+  so far can stand in for the rater; their ratings are the only reliable signal of fit to the feeling.
 - The 32 rated training items give 160 DPO pairs (`scripts/dpo_from_ratings.py pairs`, best-worst = 5 pairs each).
 
 ## Caveats
