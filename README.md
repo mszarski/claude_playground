@@ -75,7 +75,11 @@ sway and an occasional glance. Its style (nod size, timing, lean, sway) is the o
 **Hearing** (`rmr/voice.py`). Whisper turns speech into words. Two tone models (WavLM, trained on MSP-Podcast) read
 the tone: a feeling (neutral, happy, sad, angry, surprised, ...) and three attributes, arousal, valence and dominance.
 The same voice reads differently on different microphones, so each session keeps running means and shifts its
-readings toward the levels the responder was trained on (`Calibration`).
+readings toward the levels the responder was trained on (`Calibration`). The responder never hears audio: it gets the words
+and one line of text with the tone models' output ("Their voice sounds angry (confidence 61%). Arousal 0.68, valence
+0.31."). Each tone model is WavLM (a self-supervised speech encoder that captures pitch, energy, rate and voice quality,
+not words), attentive pooling over the utterance, and a small head: probabilities for 8 emotions, or scores for the
+three attributes. How much to trust that line is what the responder learns in training.
 
 **The responder** (`rmr/respond.py`). One model call turns what was heard into an answer: the feeling it reads, a
 one-sentence response ("Calm attention. You hold steady, ears relaxed, one slow nod"), the motion recipe, and a
