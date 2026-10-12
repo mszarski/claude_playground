@@ -110,7 +110,14 @@ class AudioLM:
 
 def bakeoff(a):
     rows = [json.loads(x) for x in open(a.heard)]
-    audio = crema_audio([r["tone"] for r in rows])
+    if a.voiced:                       # cloned voicings (scripts/clone_speech.py): <voiced>/<clip>.wav
+        from rmr.voice import load_audio
+
+        rows = [{**r, "label": r.get("label") or r["feeling"], "tone": r["clip"]} for r in rows
+                if r.get("label", r.get("feeling")) in FEELINGS5 and os.path.exists(os.path.join(a.voiced, r["clip"] + ".wav"))]
+        audio = {r["clip"]: load_audio(open(os.path.join(a.voiced, r["clip"] + ".wav"), "rb").read()) for r in rows}
+    else:
+        audio = crema_audio([r["tone"] for r in rows])
     print(f"{len(audio)} of {len(rows)} clips found", flush=True)
     results = {}
     for repo in a.models:
@@ -313,6 +320,7 @@ def main():
     b.add_argument("--heard", required=True, help="eval_clean tone.jsonl (CREMA-D file names in 'tone')")
     b.add_argument("--models", nargs="+", required=True)
     b.add_argument("--out", required=True)
+    b.add_argument("--voiced", default="", help="score cloned voicings (<dir>/<clip>.wav) instead of CREMA-D clips")
     bu = sub.add_parser("build")
     bu.add_argument("--sft", required=True, help="the text responder's SFT folder (train.jsonl, val.jsonl)")
     bu.add_argument("--heard", required=True)
