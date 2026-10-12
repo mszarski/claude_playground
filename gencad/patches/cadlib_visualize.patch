@@ -1,0 +1,13 @@
+diff --git a/cadlib/visualize.py b/cadlib/visualize.py
+index 366a8f0..0dc2895 100644
+--- a/cadlib/visualize.py
++++ b/cadlib/visualize.py
+@@ -35,8 +35,6 @@ def create_CAD(cad_seq: CADSequence):
+             body = BRepAlgoAPI_Cut(body, new_body).Shape()
+         elif extrude_op.operation == EXTRUDE_OPERATIONS.index("IntersectFeatureOperation"):
+             body = BRepAlgoAPI_Common(body, new_body).Shape()
+-        stl_num += 1 
+-        write_stl_file(body, f'temp/stls/body_{stl_num}_gt.stl')
+ 
+ 
+     return body

@@ -13,11 +13,15 @@ if [[ ! -d upstream/.git ]]; then
   git clone -q "$UPSTREAM_URL" upstream
 fi
 git -C upstream checkout -q "$UPSTREAM_REV"
-# apply our train_gencad.py CLI overrides (skip if already applied)
-if git -C upstream apply --check ../patches/train_gencad.patch 2>/dev/null; then
-  git -C upstream apply ../patches/train_gencad.patch
-  echo "[setup] applied patches/train_gencad.patch"
-fi
+# apply our patches (skip any already applied):
+#   train_gencad.patch      CLI overrides for epochs/bs/lr/steps/img_type
+#   cadlib_visualize.patch  drop a debug STL write to temp/stls/ that made every multi-extrude model fail to build
+for p in patches/*.patch; do
+  if git -C upstream apply --check "../$p" 2>/dev/null; then
+    git -C upstream apply "../$p"
+    echo "[setup] applied $p"
+  fi
+done
 
 # link every upstream top-level entry we don't define ourselves
 for src in upstream/*; do

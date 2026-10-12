@@ -49,6 +49,9 @@ def render_mesh(stl_path, png_path, size=3.0):
     m = trimesh.load(stl_path, force="mesh")
     v, f = m.vertices, m.faces
     v = (v - v.mean(0)) / max(np.ptp(v, 0).max(), 1e-9)
+    # matplotlib depth-sorts whole triangles (painter's algorithm): long CAD triangles overlap wrongly, so split
+    # them into small ones first
+    v, f = trimesh.remesh.subdivide_to_size(v, f, max_edge=0.04, max_iter=20)
     tri = v[f]
     n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
     n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
@@ -57,7 +60,7 @@ def render_mesh(stl_path, png_path, size=3.0):
     colors = np.clip(np.outer(shade, [0.36, 0.55, 0.85]), 0, 1)
     fig = plt.figure(figsize=(size, size))
     ax = fig.add_subplot(111, projection="3d")
-    ax.add_collection3d(Poly3DCollection(tri, facecolors=colors, edgecolor="none"))
+    ax.add_collection3d(Poly3DCollection(tri, facecolors=colors, edgecolors=colors, linewidths=0.3))
     ax.set_xlim(-0.55, 0.55), ax.set_ylim(-0.55, 0.55), ax.set_zlim(-0.55, 0.55)
     ax.set_box_aspect((1, 1, 1))
     ax.view_init(elev=25, azim=-60)
