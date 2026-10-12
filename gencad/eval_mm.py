@@ -61,6 +61,7 @@ def main():
     ap.add_argument("--gencad_dp_ckpt", default=None)
     ap.add_argument("--n", type=int, default=2000)
     ap.add_argument("--steps", type=int, default=100)
+    ap.add_argument("--eta", type=float, default=0.0, help="DDIM eta: 0 deterministic, 1 DDPM-like stochastic")
     ap.add_argument("--guidance", type=float, nargs="*", default=[1.0, 2.0, 3.0])
     ap.add_argument("--best_of", type=int, default=1,
                     help="sample N candidates per input and keep the best-scoring decoded program (mm.rerank)")
@@ -117,8 +118,8 @@ def main():
                 for w in a.guidance:
                     g = torch.Generator(device=device).manual_seed(0)
                     cond = {m: embeds[m][rows] for m in combo}
-                    kw = dict(guidance={m: w for m in combo}, steps=a.steps, generator=g)
-                    name = f"mm:{'+'.join(combo)}@w{w:g}"
+                    kw = dict(guidance={m: w for m in combo}, steps=a.steps, eta=a.eta, generator=g)
+                    name = f"mm:{'+'.join(combo)}@w{w:g}" + (f"@eta{a.eta:g}s{a.steps}" if a.eta else "")
                     if a.best_of > 1:
                         vecs, zs = [], []
                         for s in range(0, len(rows), 256):

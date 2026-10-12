@@ -68,6 +68,9 @@ def main():
     ap.add_argument("--uid", default="0068/00682829")
     ap.add_argument("--n_seeds", type=int, default=16)
     ap.add_argument("--best_of", type=int, default=0, help="also run each prior condition with best-of-N reranking")
+    ap.add_argument("--samplers", nargs="*", default=["0:100"],
+                    help="eta:steps pairs for the priors' DDIM sampler (eta 0 = deterministic, 1 = DDPM-like); "
+                         "anything but the first gets an '@eta<e>s<steps>' suffix")
     ap.add_argument("--out", default="results/rect/report.json")
     a = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -138,16 +141,20 @@ def main():
             if not all(m in prior.modalities for m in mods):
                 continue
 
-            def run(us, seed, prior=prior, mods=mods, n=1):
-                g = torch.Generator(device=device).manual_seed(seed)
-                emb = {m: cond(us, m, expert if m == "text" else 0) for m in mods}
-                kw = dict(guidance={m: a.guidance for m in mods}, steps=100, generator=g)
-                if n > 1:
-                    return best_of_n(prior, csr, emb, n=n, **kw)[0]
-                return decode_latents(csr, prior.sample(emb, **kw))
-            methods[f"{name}:{label}"] = run
-            if a.best_of > 1:
-                methods[f"{name}:{label}@bo{a.best_of}"] = lambda us, seed, run=run: run(us, seed, n=a.best_of)
+            for k, spec in enumerate(a.samplers):
+                eta, steps = float(spec.split(":")[0]), int(spec.split(":")[1])
+
+                def run(us, seed, prior=prior, mods=mods, n=1, eta=eta, steps=steps):
+                    g = torch.Generator(device=device).manual_seed(seed)
+                    emb = {m: cond(us, m, expert if m == "text" else 0) for m in mods}
+                    kw = dict(guidance={m: a.guidance for m in mods}, steps=steps, eta=eta, generator=g)
+                    if n > 1:
+                        return best_of_n(prior, csr, emb, n=n, **kw)[0]
+                    return decode_latents(csr, prior.sample(emb, **kw))
+                key = f"{name}:{label}" + ("" if k == 0 else f"@eta{eta:g}s{steps}")
+                methods[key] = run
+                if a.best_of > 1 and k == 0:
+                    methods[f"{key}@bo{a.best_of}"] = lambda us, seed, run=run: run(us, seed, n=a.best_of)
 
     report = {"n_uids": len(uids), "tol": a.tol, "methods": {}, "uid": a.uid, "uid_samples": {}}
     with torch.no_grad():
