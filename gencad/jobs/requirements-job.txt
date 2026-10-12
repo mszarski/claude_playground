@@ -1,4 +1,5 @@
-# Installed on top of the pytorch/pytorch CUDA image in every HF Job (torch/torchvision come with the image).
+# Installed on top of the pytorch/pytorch CUDA image in every HF Job (torch/torchvision come with the image;
+# transformers 5.x needs torch>=2.6, so keep the image in launch.sh at least that new).
 transformers>=4.51       # Qwen3-Embedding needs >=4.51, SigLIP2 >=4.49
 huggingface_hub>=0.34
 x_clip
@@ -14,6 +15,7 @@ trimesh
 sentencepiece
 protobuf
 pandas
+matplotlib
 pyarrow
 tqdm
 pytest

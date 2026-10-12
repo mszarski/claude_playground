@@ -17,7 +17,7 @@ STAGE=${1:?usage: jobs/launch.sh <fetch|test|csr|ccip|export|embed|dp|mm|eval|sh
 : "${HF_TOKEN:?export HF_TOKEN first}"
 NS=${NS:-$(hf auth whoami --format json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("name") or d["user"])')}
 BUCKET=${BUCKET:-$NS/gencad-work}
-IMAGE=${IMAGE:-pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime}
+IMAGE=${IMAGE:-pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime}
 
 # per-stage defaults: hardware and wall-clock limit
 case "$STAGE" in
