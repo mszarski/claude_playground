@@ -334,6 +334,8 @@ class UIPanels {
       <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
       Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
+      <h2>PLAY OFFLINE</h2>
+      <p>Open <b>mszarski.github.io/claude_playground</b> on your phone and choose <b>Add to Home Screen</b> (Share menu on iPhone, ⋮ menu on Android). After the first visit it runs without a connection.</p>
       <p style="color:#9ab08a">Lose if you stay deeply in debt or too many guests are eaten. Win by completing all goals.</p>
       <div class="btns" style="justify-content:flex-end"><button data-close>Got it</button></div>`;
     this.showModal(html);

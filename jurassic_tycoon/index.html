@@ -4,9 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Jurassic Tycoon</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<!-- installable web app (stripped from the single-file artifact build) -->
+<link rel="manifest" href="manifest.webmanifest" data-pwa>
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" data-pwa>
+<link rel="icon" type="image/png" href="icons/icon-192.png" data-pwa>
+<meta name="theme-color" content="#172414" data-pwa>
+<meta name="mobile-web-app-capable" content="yes" data-pwa>
+<meta name="apple-mobile-web-app-capable" content="yes" data-pwa>
+<meta name="apple-mobile-web-app-status-bar-style" content="black" data-pwa>
+<meta name="apple-mobile-web-app-title" content="Jurassic" data-pwa>
 <style>
+/* pixel fonts are bundled so the game works offline (SIL Open Font License, see fonts/) */
+@font-face { font-family: 'Press Start 2P'; src: url('fonts/PressStart2P.woff2') format('woff2'); font-display: swap; }
+@font-face { font-family: 'VT323'; src: url('fonts/VT323.woff2') format('woff2'); font-display: swap; }
 :root {
   color-scheme: dark;
   --bg: #0e140e;

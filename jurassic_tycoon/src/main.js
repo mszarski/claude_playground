@@ -232,6 +232,10 @@ function boot() {
   // browsers only allow audio after a user gesture
   const kick = () => { if (SFX.wantMusic && !SFX.muted) SFX.startMusic(); document.getElementById('sndBtn').textContent = SFX.muted ? '✕' : SFX.musicOn ? '♫' : '♪'; window.removeEventListener('pointerdown', kick); };
   window.addEventListener('pointerdown', kick);
+  // installed as a home-screen app: cache everything so it runs offline
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost') && document.querySelector('link[rel="manifest"]')) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is optional */ });
+  }
   // iOS ignores user-scalable=no: stop page pinch-zoom so pinches only zoom the map
   document.addEventListener('gesturestart', (e) => e.preventDefault());
   window.addEventListener('resize', () => {
