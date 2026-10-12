@@ -52,6 +52,17 @@ image+text sometimes fragments a part that text alone gets right. Prompts: washe
 concentric hole are clean; "plate with four holes" and "stepped shaft" are partial; "L-bracket" comes out as
 disconnected plates.
 
+### Skewed rectangles (`scripts/diagnose_rectangles.py`, report in bucket `results/rect/report.json`)
+300 test models whose GT is one axis-aligned rectangle extrude (SOL, 4 lines, Ext), one sample each:
+rectangle / skewed quad / other program = csr_recon 100/0/0, gencad 91.3/4.0/4.7, mm_v1 image 98.3/1.7/0,
+mm_v1 image+expert 97.3/2.7/0, mm_v1 expert 98.0/2.0/0, mm_ccip 97.7/2.0/0.3, mm_img 96.0/3.0/1.0 (%).
+Mechanism (from the visual-check trapezoid, uid 0068/00682829, 8 seeds): the image alone is ambiguous about the
+plate's width, so mm_v1:image samples land on two modes (x=211, the GT, or x=169). The CSR decoder picks every
+corner coordinate as an independent argmax token, so a latent between the modes gives corner 1 x=211 and corner
+2 x=169: a trapezoid (3/8 seeds). Nothing in decoding ties consecutive corners together. Adding expert text
+removes the ambiguity (8/8 exact). Fix ideas: snap near-axis-aligned edges after decoding, decode several samples
+and keep the one whose render best matches the input, or constrained decoding.
+
 ## Next steps (ideas, none started)
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
