@@ -60,3 +60,7 @@ bd ready --json
 bd update <id> --status in_progress --json
 bd show <id> --json
 ```
+
+## Other projects
+- `gencad/`: GenCAD replication + text/image conditioning for CAD generation. Self-contained; see
+  `gencad/CLAUDE.md` (run `gencad/setup.sh` first).

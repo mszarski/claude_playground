@@ -1,0 +1,20 @@
+# Installed on top of the pytorch/pytorch CUDA image in every HF Job (torch/torchvision come with the image).
+transformers>=4.51       # Qwen3-Embedding needs >=4.51, SigLIP2 >=4.49
+huggingface_hub>=0.34
+x_clip
+ema_pytorch
+einops
+h5py
+tensorboardX
+tensorboard
+scikit-learn
+opencv-python-headless
+plyfile
+trimesh
+sentencepiece
+protobuf
+pandas
+pyarrow
+tqdm
+pytest
+gdown

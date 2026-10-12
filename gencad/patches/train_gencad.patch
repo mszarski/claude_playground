@@ -1,0 +1,78 @@
+diff --git a/train_gencad.py b/train_gencad.py
+index 2d50513..e81599d 100644
+--- a/train_gencad.py
++++ b/train_gencad.py
+@@ -15,6 +15,11 @@ from utils import CADLoss, get_dataloader, get_ccip_dataloader, GradualWarmupSch
+ from utils.cad_dataset import DPDataset
+ 
+ 
++def _overrides(args, **mapping):
++    """{config_field: cli_name} -> kwargs for the CLI values that were actually given."""
++    return {field: getattr(args, cli) for field, cli in mapping.items() if getattr(args, cli, None) is not None}
++
++
+ def train_model(model="autoencoder", args=None):
+ 
+     if model=="csr":
+@@ -23,7 +28,8 @@ def train_model(model="autoencoder", args=None):
+ 
+         # load config
+ 
+-        config = ConfigAE(exp_name=args.exp_name, device=args.gpu, load_ckpt=args.ckpt_path)
++        config = ConfigAE(exp_name=args.exp_name, device=args.gpu, load_ckpt=args.ckpt_path,
++                          **_overrides(args, num_epochs="epochs", batch_size="bs", lr="lr"))
+ 
+         # data loader: each batch contains: command, args and id
+ 
+@@ -79,7 +85,8 @@ def train_model(model="autoencoder", args=None):
+ 
+         print(f"[INFO] vision model: {vision_network}\n")
+ 
+-        config = ConfigCCIP(exp_name=args.exp_name, device=args.gpu, load_ckpt=args.ckpt_path)
++        config = ConfigCCIP(exp_name=args.exp_name, device=args.gpu, load_ckpt=args.ckpt_path,
++                            **_overrides(args, num_epochs="epochs", batch_size="bs", lr="lr"))
+ 
+         # CCIP model 
+ 
+@@ -88,8 +95,9 @@ def train_model(model="autoencoder", args=None):
+                                 
+         # data loader: each batch contains: command, args, images and id
+ 
+-        train_loader = get_ccip_dataloader(phase="train", config=config, img_type='cad_image')
+-        val_loader = get_ccip_dataloader(phase="validation", config=config, img_type='cad_image')
++        img_type = getattr(args, "img_type", None) or 'cad_image'
++        train_loader = get_ccip_dataloader(phase="train", config=config, img_type=img_type)
++        val_loader = get_ccip_dataloader(phase="validation", config=config, img_type=img_type)
+ 
+         # optimizer
+ 
+@@ -126,6 +134,9 @@ def train_model(model="autoencoder", args=None):
+         dataset = DPDataset(cad_tensor, sketch_tensor)
+ 
+         config = ConfigDP(exp_name=args.exp_name, device=0)
++        for k, v in _overrides(args, train_num_steps="steps", batch_size="bs", lr="lr",
++                                  save_and_sample_every="save_every").items():
++            setattr(config, k, v)
+ 
+         model = ResNetDiffusion(d_in=config.d_in, n_blocks=config.n_blocks, d_main=config.d_main, 
+                                 d_hidden=config.d_hidden, dropout_first=config.dropout_first, 
+@@ -176,6 +187,7 @@ if __name__=="__main__":
+         parser.add_argument("-gpu", "--gpu", type=int, default=0, help="gpu device number, multi-gpu not supported")
+         parser.add_argument("-ckpt", "--ckpt_path", type=str, default=None, help="path to checkpoint file", required=False)
+         parser.add_argument("-cad_ckpt", "--cad_ckpt_path", type=str, default=None, help="path to checkpoint file", required=True)
++        parser.add_argument("-img_type", "--img_type", type=str, default="cad_image", choices=["cad_image", "cad_sketch"])
+ 
+     elif "dp" in sys.argv: 
+         parser.add_argument("-name", "--exp_name", type=str, required=True, help="experiment numbers, keep fixed for the same experiment")
+@@ -183,5 +195,11 @@ if __name__=="__main__":
+         parser.add_argument("-cad_emb", "--cad_embed_path", type=str, default=None, help="path to checkpoint file", required=True)
+         parser.add_argument("-img_emb", "--image_embed_path", type=str, default=None, help="path to checkpoint file", required=True)
+         
++    # optional hyperparameter overrides (upstream defaults in config/*.py are debug-sized, e.g. CSR batch_size=2)
++    parser.add_argument("-epochs", "--epochs", type=int, default=None)
++    parser.add_argument("-bs", "--bs", type=int, default=None)
++    parser.add_argument("-lr", "--lr", type=float, default=None)
++    parser.add_argument("-steps", "--steps", type=int, default=None, help="dp only: train_num_steps")
++    parser.add_argument("-save_every", "--save_every", type=int, default=None, help="dp only: save/sample interval")
+     args = parser.parse_args()
+     train_model(args.model, args)

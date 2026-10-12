@@ -1,0 +1,19 @@
+# fetched by setup.sh (upstream GenCAD is not committed here)
+/upstream/
+# symlinks into upstream/ created by setup.sh
+/assets
+/cadlib
+/config
+/data
+/Dockerfile
+/environment.yml
+/inference_gencad.py
+/model
+/readme.md
+/requirements.txt
+/results
+/stl2img.py
+/train_gencad.py
+/trainer
+/utils
+__pycache__/
