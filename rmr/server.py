@@ -26,6 +26,13 @@ from .planner.write import _batch
 from .reach import Reach
 from .recipe import variants
 
+def voice_device():
+    """Whisper and the speech-emotion models run on the GPU when there is one."""
+    import torch
+
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
 VIEWER = os.path.join(os.path.dirname(__file__), "..", "visualizer")
 MAX_PROMPT = 300
 
@@ -97,7 +104,7 @@ class Engine:
 
         t0 = time.time()
         if self.listener is None:
-            self.listener = Listener()
+            self.listener = Listener(device=voice_device())
         heard = self.listener.hear(audio)
         if self.calibrate:
             from .voice import Calibration
@@ -263,7 +270,10 @@ def main():
         from .voice import Listener
 
         def _load():
-            engine.listener = Listener()
+            engine.listener = Listener(device=voice_device())
+            if engine.voice_model and engine.student is None:
+                from .respond import Student
+                engine.student = Student(engine.voice_model)
             print("voice models loaded", flush=True)
         threading.Thread(target=_load, daemon=True).start()
     uvicorn.run(create_app(engine), host=a.host, port=a.port)

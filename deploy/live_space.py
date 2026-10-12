@@ -1,11 +1,13 @@
 """Deploy the live viewer (python -m rmr.server) to a private Docker Space.
 
   python deploy/live_space.py --repo mszarski/reachy-mini-motions-live \
-      --ckpt hf://mszarski/reachy-motion-generator/generator.pt
+      --ckpt hf://mszarski/reachy-motion-generator/generator.pt --hardware l4x1 --sleep 1800
 
 Uploads rmr/, pyproject.toml, visualizer/ and deploy/Dockerfile, sets GENERATOR_CKPT as a Space variable and the
-caller's HF_TOKEN as a Space secret (the server needs it to download the private generator checkpoint and to call
-the planner on Hugging Face Inference Providers, billed to that account).
+caller's HF_TOKEN as a Space secret (the server needs it to download the private generator checkpoint and voice
+student, and to call the planner on Hugging Face Inference Providers, billed to that account). Speech goes to the
+licence-clean voice student (``--voice-model``, in-process on the Space's GPU) unless ``--voice-model ""``, which falls
+back to ``--responder-model`` on Inference Providers. ``--sleep``: seconds without visitors before a paid Space sleeps.
 """
 import argparse
 import os
@@ -25,9 +27,10 @@ license: apache-2.0
 short_description: Type a prompt, watch Reachy Mini perform it in 3D
 ---
 
-Type what Reachy Mini should express, or hold the mic button and talk to it, and watch it respond in 3D. A zero-shot LLM planner writes a motion recipe, a
-21.8M flow-matching generator turns it into 25 Hz motion on CPU, and every frame is projected onto what the robot
-can reach. Source: rmr/server.py in github.com/mszarski/claude_playground.
+Type what Reachy Mini should express, or hold the mic button and talk to it, and watch it listen and respond in 3D.
+Speech: Whisper and speech-emotion models hear the words and the tone, and a fine-tuned 4B voice student answers with
+a response and a motion recipe. Typed prompts: a zero-shot LLM planner writes the recipe. A 21.8M flow-matching
+generator turns it into 25 Hz motion, and every frame is projected onto what the robot can reach. Source: rmr/server.py in github.com/mszarski/claude_playground.
 """
 
 
@@ -40,6 +43,9 @@ def main():
     ap.add_argument("--planner-model", default=None)
     ap.add_argument("--responder-model", default="Qwen/Qwen3-Next-80B-A3B-Instruct",
                     help="open-weight LLM that decides how Reachy responds to speech")
+    ap.add_argument("--voice-model", default="mszarski/reachy-voice:student/v8-dpo")
+    ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
+    ap.add_argument("--sleep", type=int, default=None, help="sleep after this many idle seconds (paid hardware)")
     ap.add_argument("--private", action=argparse.BooleanOptionalAction, default=True)
     a = ap.parse_args()
     api = HfApi()
@@ -50,6 +56,14 @@ def main():
         api.add_space_variable(a.repo, "PLANNER_MODEL", a.planner_model)
     api.add_space_variable(a.repo, "RESPONDER_MODEL", a.responder_model)
     api.add_space_variable(a.repo, "PRELOAD_VOICE", "1")
+    if a.voice_model:
+        api.add_space_variable(a.repo, "VOICE_MODEL", a.voice_model)
+    else:
+        api.delete_space_variable(a.repo, "VOICE_MODEL")
+    if a.hardware:
+        api.request_space_hardware(a.repo, a.hardware, sleep_time=a.sleep)
+    elif a.sleep:
+        api.set_space_sleep_time(a.repo, a.sleep)
     with tempfile.TemporaryDirectory() as d:
         shutil.copytree(os.path.join(ROOT, "rmr"), os.path.join(d, "rmr"), ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copytree(os.path.join(ROOT, "visualizer"), os.path.join(d, "visualizer"))
