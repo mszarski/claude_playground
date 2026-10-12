@@ -66,7 +66,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 @keyframes blink { 50% { background: #600; } }
 
 /* alert strip */
-#alerts { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; }
+#alerts { position: absolute; top: calc(var(--top, 44px) + 6px); left: 50%; transform: translateX(-50%); z-index: 9; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; }
 .alert { pointer-events: auto; font-family: 'Press Start 2P'; font-size: 10px; padding: 7px 12px; border: 3px solid #000; cursor: pointer; display: flex; gap: 10px; align-items: center; }
 .alert.red { background: #b01e10; color: #fff; animation: pulse 0.8s steps(2) infinite; }
 .alert.amber { background: #c88010; color: #1a0a00; }
@@ -75,7 +75,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 @keyframes pulse { 50% { background: #7a0e06; } }
 
 /* toast */
-#toasts { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); z-index: 8; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; }
+#toasts { position: absolute; top: calc(var(--top, 44px) + 52px); left: 50%; transform: translateX(-50%); z-index: 8; display: flex; flex-direction: column; gap: 4px; align-items: center; pointer-events: none; }
 .toast { font-size: 18px; padding: 4px 14px; background: rgba(10,16,10,0.92); border: 2px solid var(--edge); box-shadow: inset 0 0 0 2px var(--hi); transition: opacity 0.5s; max-width: 80vw; text-align: center; }
 .toast.bad { box-shadow: inset 0 0 0 2px var(--red); color: #ffd0c8; }
 .toast.good { box-shadow: inset 0 0 0 2px var(--green); }
@@ -83,10 +83,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 .toast.warn { box-shadow: inset 0 0 0 2px var(--orange); color: #ffe0b0; }
 
 /* toolbar */
-#toolbar { position: absolute; left: 6px; top: 54px; z-index: 10; display: flex; flex-direction: column; gap: 4px; padding: 5px; }
+#toolbar { position: absolute; left: 6px; top: calc(var(--top, 44px) + 10px); z-index: 10; display: flex; flex-direction: column; gap: 4px; padding: 5px; }
 .cat { width: 48px; height: 48px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 13px; }
 .cat canvas { width: 32px; height: 32px; image-rendering: pixelated; }
-#flyout { position: absolute; left: 70px; top: 54px; z-index: 10; padding: 6px; display: none; max-height: calc(100vh - 230px); overflow-y: auto; min-width: 230px; }
+#flyout { position: absolute; left: 70px; top: calc(var(--top, 44px) + 10px); z-index: 10; padding: 6px; display: none; max-height: calc(100vh - var(--top, 44px) - 186px); overflow-y: auto; min-width: 230px; }
 #flyout h3 { margin: 0 0 6px; font-family: 'Press Start 2P'; font-size: 10px; color: var(--gold); }
 .tool { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; margin-bottom: 3px; padding: 3px 6px; }
 .tool canvas { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
@@ -99,7 +99,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 #goal b { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); display: block; margin-bottom: 3px; }
 
 /* info panel */
-#info { position: absolute; right: 6px; top: 54px; width: 270px; z-index: 10; padding: 8px; display: none; max-height: calc(100vh - 250px); overflow-y: auto; }
+#info { position: absolute; right: 6px; top: calc(var(--top, 44px) + 10px); width: 270px; z-index: 10; padding: 8px; display: none; max-height: calc(100vh - 250px); overflow-y: auto; }
 #info h2 { margin: 0; font-family: 'Press Start 2P'; font-size: 11px; color: var(--gold); line-height: 1.4; }
 #info .sub { color: var(--dim); font-style: italic; font-size: 16px; }
 #info canvas.portrait { image-rendering: pixelated; display: block; margin: 6px auto; background: #2c4426; border: 2px solid var(--edge); }
@@ -124,6 +124,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 #minimap { display: block; width: 216px; height: 162px; image-rendering: pixelated; cursor: pointer; }
 #miniBtns { display: flex; gap: 3px; margin-top: 3px; }
 #miniBtns button { font-size: 14px; padding: 0 5px; flex: 1; }
+#zoomBtns { position: absolute; left: -46px; bottom: 0; display: flex; flex-direction: column; gap: 4px; }
+#zoomBtns button { width: 40px; height: 40px; font-size: 26px; padding: 0; }
 
 /* tutorial */
 #tut { position: absolute; left: 70px; bottom: 8px; z-index: 12; padding: 8px 12px; width: min(440px, calc(100vw - 300px)); font-size: 19px; }
@@ -132,11 +134,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 #tut .sub { color: var(--dim); font-size: 17px; margin-top: 4px; }
 #tutHl { position: fixed; z-index: 35; pointer-events: none; border: 3px solid var(--gold); box-shadow: 0 0 0 3px #000, 0 0 18px var(--gold); animation: tutpulse 0.9s ease-in-out infinite alternate; }
 @keyframes tutpulse { from { opacity: 1; } to { opacity: 0.35; } }
-@media (max-width: 760px) { #tut { left: 6px; width: calc(100vw - 150px); font-size: 16px; } }
+@media (max-width: 760px) { #tut { left: 6px; width: calc(100vw - 196px); font-size: 16px; } }
 @media (prefers-reduced-motion: reduce) { #tutHl { animation: none; } }
 /* breach cam */
-#pip:not([hidden]) ~ #info { top: 230px; }
-#pip { position: absolute; right: 6px; top: 54px; z-index: 7; padding: 4px; cursor: pointer; }
+#pip:not([hidden]) ~ #info { top: calc(var(--top, 44px) + 186px); }
+#pip { position: absolute; right: 6px; top: calc(var(--top, 44px) + 10px); z-index: 7; padding: 4px; cursor: pointer; }
 #pip canvas { display: block; width: 240px; height: 150px; image-rendering: pixelated; }
 .pipbar { display: flex; justify-content: space-between; align-items: center; font-family: 'Press Start 2P'; font-size: 8px; color: #ff6040; margin-bottom: 3px; }
 .pipbar button { font-size: 12px; padding: 0 4px; }
@@ -186,7 +188,7 @@ table.fin td:last-child { text-align: right; }
 
 @media (max-width: 760px) {
   #log { display: none; }
-  #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 150px); font-size: 15px; }
+  #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 196px); font-size: 15px; }
   #minimap { width: 128px; height: 96px; }
   #miniBtns { display: none; }
   #info { width: calc(100vw - 80px); top: auto; bottom: 120px; max-height: 45vh; }
@@ -198,14 +200,35 @@ table.fin td:last-child { text-align: right; }
   #topbar .spacer { display: none; }
   #topbar button { padding: 1px 5px; font-size: 15px; }
   #powerbar { width: 48px; }
-  #toolbar { top: 78px; padding: 3px; }
+  #toolbar { padding: 3px; }
   .cat { width: 42px; height: 42px; font-size: 12px; }
   .cat canvas { width: 24px; height: 24px; }
-  #flyout { top: 78px; left: 58px; min-width: 0; width: calc(100vw - 66px); max-height: 55vh; }
-  #alerts { top: 80px; width: calc(100vw - 70px); left: 62px; transform: none; }
+  #flyout { left: 58px; min-width: 0; width: calc(100vw - 66px); max-height: 55vh; }
+  #alerts { width: calc(100vw - 70px); left: 62px; transform: none; }
   .alert { font-size: 8px; }
-  #toasts { top: 140px; }
   .toast { font-size: 16px; }
+}
+@media (max-height: 520px) {
+  #logo, #log { display: none; }
+  #topbar { height: 38px; gap: 6px; }
+  .stat .k { font-size: 11px; }
+  .stat .v { font-size: 17px; }
+  #stars { font-size: 15px; }
+  #topbar button { padding: 1px 5px; font-size: 15px; }
+  #powerbar, .pbar { width: 46px; }
+  #toolbar { padding: 3px; gap: 2px; }
+  .cat { width: 40px; height: calc((100vh - var(--top, 38px) - 44px) / 6); max-height: 44px; min-height: 30px; font-size: 11px; }
+  .cat canvas { width: 20px; height: 20px; }
+  #flyout { left: 56px; max-height: calc(100vh - var(--top, 38px) - 20px); }
+  #minimap { width: 136px; height: 102px; }
+  #miniBtns { display: none; }
+  #goal { left: 56px; bottom: 4px; font-size: 15px; padding: 4px 8px; max-width: calc(100vw - 260px); }
+  #info { max-height: calc(100vh - var(--top, 38px) - 20px); right: 196px; }
+  #pip { top: auto; bottom: 6px; right: 196px; }
+  #pip canvas { width: 160px; height: 100px; }
+  #tut { left: 56px; bottom: 4px; font-size: 15px; width: calc(100vw - 260px); max-height: 50vh; overflow-y: auto; }
+  #toasts { top: auto; bottom: 60px; }
+  #modal .box { max-height: 96vh; padding: 10px 12px; }
 }
 </style>
 </head>
@@ -249,7 +272,7 @@ table.fin td:last-child { text-align: right; }
 <div id="info" class="panel"></div>
 <div id="log"></div>
 <div id="ticker"></div>
-<div id="mini" class="panel"><canvas id="minimap" width="216" height="162"></canvas>
+<div id="mini" class="panel"><div id="zoomBtns"><button id="zoomIn" title="Zoom in (+)">+</button><button id="zoomOut" title="Zoom out (−)">−</button></div><canvas id="minimap" width="216" height="162"></canvas>
   <div id="miniBtns"><button data-ov="power" title="Power overlay (O)">Power</button><button data-ov="paddock" title="Paddock overlay (K)">Paddocks</button><button id="findBtn" title="Jump to next loose dino (L)">Loose</button></div>
 </div>
 <div id="pip" class="panel" hidden><div class="pipbar"><span id="pipLabel">BREACH CAM</span><button id="pipClose" title="Hide">✕</button></div><canvas id="pipCanvas" width="240" height="150"></canvas></div>

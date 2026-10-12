@@ -291,6 +291,7 @@ class UIPanels {
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
       <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)} (copy)</button>
+      <button data-m="wheel" title="What scrolling does on the map">Scroll: ${{ auto: 'AUTO (mouse wheel zooms, trackpad pans)', zoom: 'ZOOM', pan: 'PAN (pinch or +/− to zoom)' }[this.wheelMode]}</button>
       <button data-m="audio">Sound settings</button>
       <button data-m="help">How to play</button><button data-m="new" class="danger">New island (lose progress)</button></div>`;
     this.showModal(html);
@@ -307,6 +308,11 @@ class UIPanels {
         else this.toast(`Island code: ${code}`, 'info');
       }
       else if (m === 'breed') { this.game.breedingOff = !this.game.breedingOff; this.showMenu(); }
+      else if (m === 'wheel') {
+        this.wheelMode = { auto: 'pan', pan: 'zoom', zoom: 'auto' }[this.wheelMode];
+        try { localStorage.setItem('jt_wheel', this.wheelMode); } catch (e) { /* storage unavailable */ }
+        this.showMenu();
+      }
       else if (m === 'advisor') { this.game.advisorOn = this.game.advisorOn === false; this.showMenu(); }
       else if (m === 'new') { this.closeModal(); showTitle(); }
     };
@@ -325,7 +331,8 @@ class UIPanels {
       <h2>WHEN THINGS GO WRONG</h2>
       <p>Stressed or hungry dinosaurs attack fences. Unpowered fences fall fast. When a dinosaur escapes: sound the <b>ALARM</b> (guests run to the Visitor Center, Hotel or Bunkers), let <b>Rangers</b> tranquilize it, and the <b>ACU Helipad</b> airlifts it home. <b>Engineers</b> from Maintenance Sheds repair fences. Build a <b>Backup Generator</b> for grid failures and a <b>Vet Clinic</b> for outbreaks.</p>
       <h2>CONTROLS</h2>
-      <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Wheel: zoom · WASD/Arrows: pan<br>
+      <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
+      Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
       <p style="color:#9ab08a">Lose if you stay deeply in debt or too many guests are eaten. Win by completing all goals.</p>
       <div class="btns" style="justify-content:flex-end"><button data-close>Got it</button></div>`;

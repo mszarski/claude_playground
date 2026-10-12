@@ -3,7 +3,7 @@
 
 const TUTORIAL_STEPS = [
   {
-    text: 'Welcome, park director! This short tutorial builds a tiny park and then lets something escape. Drag the map (or use WASD) to look around, and scroll to zoom.',
+    text: 'Welcome, park director! This short tutorial builds a tiny park and then lets something escape. Drag the map (or use WASD) to look around. Zoom with the mouse wheel, a pinch, or the +/− buttons by the minimap.',
     next: true,
   },
   {
