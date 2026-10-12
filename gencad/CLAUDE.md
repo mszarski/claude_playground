@@ -73,8 +73,20 @@ diagnostic, `results/rect/report_bo8.json`: skew rate unchanged or slightly up):
 different parts, not a corner that is off by a few of 256 units. Note the rectangle numbers move 2-3 points
 between runs on different hardware (different noise), so treat differences that size as noise. Default stays 1.
 
+### Stochastic sampling (`--eta`, `--samplers eta:steps`)
+Root cause of skew: the CSR decoder is non-autoregressive (its inputs are constant positional embeddings, never
+earlier tokens), so every coordinate is an independent argmax given z. Test of whether pred_x0 DDIM averaging
+(eta=0) produces the in-between latents: all 1685 test rectangle plates (`results/rect/report_eta.json`),
+skew rate eta0/s100 -> eta0.5/s100 -> eta1/s100 -> eta1/s1000: image 1.5 / 1.2 / 1.1 / 1.3 %, image+expert
+1.8 / 1.1 / 1.2 / 1.5 %, expert 3.3 / 2.9 / 2.7 / 1.8 %; gencad 1.8 % skewed + 3.1 % other program. Standard
+error at these rates is ~0.3 points. Full eval at eta1/s100 vs eta0 (`results/mm_v1/eval_eta1.json`): image
+R@1 0.430 vs 0.435, text 0.263 vs 0.254, image+text 0.501 vs 0.503; acc_cmd/acc_param 0.5-0.8 points lower.
+So averaging is a minor contributor: stochastic sampling trims skew by about a third at best and costs a
+little accuracy. Default stays eta=0. The remaining lever is the decoder (autoregressive decoding, below).
+
 ## Next steps (ideas, none started)
-- Post-decode snapping of near-axis-aligned sketch edges (the direct fix for skewed rectangles).
+- Autoregressive CSR decoder trained on the frozen latent space (fixes coordinate consistency at the source;
+  priors stay valid). Cheaper alternative: fine-tune the existing decoder on noise-perturbed latents.
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
 - Qualitative check: `infer_mm.py` on a few test uids / free-form prompts, export STEP with `OCC=1`.
