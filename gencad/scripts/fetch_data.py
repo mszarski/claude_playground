@@ -47,14 +47,18 @@ def extract_archives(root):
             os.remove(p)
 
 
+def gdown_folder(url, out):
+    # older gdown stops at 50 files per folder unless --remaining-ok; gdown 6 dropped both the cap and the flag
+    help_text = subprocess.run(["gdown", "--help"], capture_output=True, text=True).stdout
+    sh("gdown", "--folder", *(["--remaining-ok"] if "--remaining-ok" in help_text else []), url, "-O", out)
+
+
 def from_drive(data):
     sh(sys.executable, "-m", "pip", "install", "-q", "gdown")
     tmp = os.path.join(data, "_drive")
     os.makedirs(tmp, exist_ok=True)
-    sh("gdown", "--folder", "--remaining-ok", f"https://drive.google.com/drive/folders/{DATA_FOLDER}",
-       "-O", os.path.join(tmp, "dataset"))
-    sh("gdown", "--folder", "--remaining-ok", f"https://drive.google.com/drive/folders/{CKPT_FOLDER}",
-       "-O", os.path.join(data, "ckpt"))
+    gdown_folder(f"https://drive.google.com/drive/folders/{DATA_FOLDER}", os.path.join(tmp, "dataset"))
+    gdown_folder(f"https://drive.google.com/drive/folders/{CKPT_FOLDER}", os.path.join(data, "ckpt"))
     extract_archives(tmp)
     extract_archives(os.path.join(data, "ckpt"))
     # flatten: whatever top-level layout Drive had, move known dirs/files into data/
