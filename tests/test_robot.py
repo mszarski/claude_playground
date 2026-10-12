@@ -1,6 +1,6 @@
 import numpy as np
 
-from rmr import robot
+from rmr import listen, robot
 from rmr.motion import FPS
 from test_listen import _speech
 
@@ -26,6 +26,7 @@ def test_voice_loop_listens_then_answers(monkeypatch):
         yield {"stage": "done", "reading": "ok"}
 
     monkeypatch.setattr(robot, "respond_stream", fake_server)
+    monkeypatch.setattr(listen, "STYLE", listen.CLASSIC)          # the original rule timings: a nod at each pause
     x, sr = _speech()
     hop = sr // FPS
     frames = [x[i * hop:(i + 1) * hop] for i in range(len(x) // hop)] + [np.zeros(hop, np.float32)] * 50

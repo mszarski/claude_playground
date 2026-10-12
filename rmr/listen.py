@@ -51,15 +51,20 @@ BREATH_MM, BREATH_S = 1.2, 4.0    # slow breathing on z, so the robot never free
 
 # The listening *style*: what a person tunes by comparing listeners side by side (scripts/listen_rating.py).
 # The defaults are the original hand-set behaviour; ``sway`` and ``glances`` are off unless a style turns them on.
+# The original rule set, kept as a named style (the behaviour tests pin its nod timing).
+CLASSIC = {"nod_deg": NOD_DEG, "pause": PAUSE, "min_talk": MIN_TALK, "double_talk": DOUBLE_TALK, "lean": 1.0,
+           "perk": 1.0, "sway_deg": 0.0, "glances": 0.0}
+# The default is the style the owner's side-by-side ratings put first (scripts/listen_rating.py, style "x06",
+# 25 duels on 12 AMI speakers; docs/results/listening.md). The constants above are the original rule set.
 STYLE = {
-    "nod_deg": NOD_DEG,     # nod size (0 = never nod)
-    "pause": PAUSE,         # silence that earns a nod ...
-    "min_talk": MIN_TALK,   # ... after this much speech
-    "double_talk": DOUBLE_TALK,   # a double nod after this much speech (a large value = never)
-    "lean": 1.0,            # how far into the attentive pose it leans (1 = ATTENTIVE)
-    "perk": 1.0,            # antenna perks when the voice lifts (0 = off)
-    "sway_deg": 0.0,        # gentle continuous head motion while listening, deg (pitch, yaw, roll)
-    "glances": 0.0,         # quick looks aside per minute while listening
+    "nod_deg": 8.9,         # nod size (0 = never nod)
+    "pause": 0.46,          # silence that earns a nod ...
+    "min_talk": 1.7,        # ... after this much speech
+    "double_talk": 99.0,    # a double nod after this much speech (a large value = never)
+    "lean": 1.32,           # how far into the attentive pose it leans (1 = ATTENTIVE)
+    "perk": 0.39,           # antenna perks when the voice lifts (0 = off)
+    "sway_deg": 0.56,       # gentle continuous head motion while listening, deg (pitch, yaw, roll)
+    "glances": 1.94,        # quick looks aside per minute while listening
 }
 GLANCE_DEG, GLANCE_S = 8.0, 1.2   # a glance turns this far (x 0.6-1.0) and lasts this long
 SWAY_HZ = ((0.11, 0.23, 0.41), (0.07, 0.17, 0.31), (0.13, 0.19, 0.37))   # per axis: pitch, yaw, roll

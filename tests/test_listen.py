@@ -26,8 +26,9 @@ def _speech(phrases=((0.5, 2.0), (2.6, 4.4), (5.0, 5.6)), loud_at=3.4, seconds=8
 
 
 def test_nods_at_pauses_and_perks_on_emphasis():
+    from rmr.listen import CLASSIC
     x, sr = _speech()
-    A, events = listening_traj(x, sr)
+    A, events = listening_traj(x, sr, style=CLASSIC)
     kinds = [e for _, e in events]
     nods = [t for t, e in events if e.startswith("nod")]
     turns = [t for t, e in events if e == "turn"]
@@ -56,10 +57,11 @@ def test_js_port_matches_python():
     x, sr = _speech()
     from rmr.listen import loudness
     db = loudness(x, sr).tolist() + [-100.0] * 30
-    lis = Listener()
+    from rmr.listen import CLASSIC           # no sway / glances: pitch reads back exactly from the pose matrix
+    lis = Listener(style=CLASSIC)
     py = [lis.step(v) for v in db]
     js_src = (f"import {{ Listener }} from '{ROOT}/visualizer/src/Listen.js';"
-              f"const l = new Listener(); const db = {json.dumps(db)};"
+              f"const l = new Listener(1.0, null, {json.dumps(CLASSIC)}); const db = {json.dumps(db)};"
               f"const out = db.map((v) => {{ const s = l.step(v); return [s.head_pose[11], s.antennas_position[1],"
               f" Math.atan2(s.head_pose[2], s.head_pose[10])]; }});"
               f"console.log(JSON.stringify({{out, events: l.events}}));")

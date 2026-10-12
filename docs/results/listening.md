@@ -90,3 +90,25 @@ per axis) and occasional glances aside (from a seeded generator that runs identi
 - **Fit** (`scripts/listen_rating.py fit`): Bradley-Terry strengths with bootstrap intervals, the consistency of the
   repeats, and a suggested next style: a quadratic fit of strength over the settings, searched only near the three
   strongest styles, to test in a short second round.
+
+### Result (25 votes, 12 AMI speakers)
+
+Bradley-Terry strengths (log scale, 80% bootstrap interval), top of the 24:
+
+| style | strength | interval | what it is |
+|---|---|---|---|
+| **x06** | 3.46 | 1.38–4.36 | big nods (8.9°) after 1.7 s of speech and a 0.46 s pause, no double nods, leans in more, few antenna perks, little sway, some glances |
+| lively | 3.22 | 1.33–3.71 | the old rules with 9° nods, double nods, more sway and glances |
+| current | 1.94 | 0.46–3.60 | the old rules (now `rmr.listen.CLASSIC`) |
+| humanlike | 1.70 | 0.92–1.99 | small nods, lots of sway and glances |
+| learned | 0.65 | — | the non-commercial learned model: 15th of 24 |
+| still | 0.40 | — | no motion |
+
+The rater stopped when the duels began to repeat. With 25 votes, x06 and lively can't be told apart (their intervals
+overlap a lot), but both clearly beat the quiet styles, and the learned model loses. The common thread is **fewer,
+bigger nods**: the rater preferred clearer acknowledgement to frequent small motions.
+
+**x06 is now the default** (`rmr.listen.STYLE` and `Listen.js`). The original timings stay available as `CLASSIC`,
+and the tests that check exact nod timings use it. The default path is licence-clean: the learned head runs only with
+`--listener-model`. The fit's suggested next style (nod 9.9°, after 1.2 s of speech) lies between x06 and lively. It is
+a candidate for a short second round.
