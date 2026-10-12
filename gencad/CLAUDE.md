@@ -63,7 +63,18 @@ corner coordinate as an independent argmax token, so a latent between the modes 
 removes the ambiguity (8/8 exact). Fix ideas: snap near-axis-aligned edges after decoding, decode several samples
 and keep the one whose render best matches the input, or constrained decoding.
 
+### Best-of-N (`--best_of N`; `mm/rerank.py`)
+Samples N latents, decodes each, re-encodes the decoded program with the CSR encoder and keeps the one the
+prior's contrastive head (`MultiCondDiffusionPrior.score`) rates closest to the condition. On the 2000 test
+samples, mm_v1 at w=2 (text = expert), single sample -> best-of-8: image R@1 0.435 -> 0.433, acc_cmd 0.665 ->
+0.668; text R@1 0.254 -> 0.269, acc_cmd 0.650 -> 0.662; image+text R@1 0.503 -> 0.515, acc_cmd 0.695 -> 0.700.
+Small gains for 8x the sampling cost, none for image only. It does not fix skewed rectangles (300-plate
+diagnostic, `results/rect/report_bo8.json`: skew rate unchanged or slightly up): the contrastive head separates
+different parts, not a corner that is off by a few of 256 units. Note the rectangle numbers move 2-3 points
+between runs on different hardware (different noise), so treat differences that size as noise. Default stays 1.
+
 ## Next steps (ideas, none started)
+- Post-decode snapping of near-axis-aligned sketch edges (the direct fix for skewed rectangles).
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
 - Qualitative check: `infer_mm.py` on a few test uids / free-form prompts, export STEP with `OCC=1`.
