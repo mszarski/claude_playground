@@ -13,6 +13,9 @@ class UI {
     this.selected = null; this.follow = false;
     this.speed = 1; this.prevSpeed = 1;
     this.keys = {};
+    // 'auto' guesses mouse wheel (zoom) vs trackpad (pan); 'zoom' and 'pan' force one
+    this.wheelMode = 'auto';
+    try { this.wheelMode = localStorage.getItem('jt_wheel') || 'auto'; } catch (e) { /* storage unavailable */ }
     this.openCat = null;
     this.mouse = { x: 0, y: 0, down: false, button: 0 };
     this.infoT = 0; this.hudT = 0;
@@ -188,22 +191,48 @@ class UI {
       if (wasPan) return;
       this.click(t);
     });
+    // Wheel: a mouse wheel zooms; a trackpad's two-finger scroll pans and its pinch zooms.
+    // Browsers report a trackpad pinch as a wheel event with ctrlKey set.
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.zoomAt(e.deltaY < 0 ? 1 : -1, e.clientX, e.clientY);
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
+      const dx = e.deltaX * unit, dy = e.deltaY * unit;
+      if (e.ctrlKey) { this.stepZoom(-dy, 3, e.clientX, e.clientY); return; }
+      if (this.wheelMode === 'auto' && (dx !== 0 || !Number.isInteger(dy) || (dy !== 0 && Math.abs(dy) < 50))) this.sawTrackpad = true;
+      const pan = this.wheelMode === 'pan' || (this.wheelMode === 'auto' && this.sawTrackpad);
+      if (pan) {
+        const z = this.r.cam.zoom;
+        this.r.cam.x += (e.shiftKey && !dx ? dy : dx) / z;
+        this.r.cam.y += (e.shiftKey && !dx ? 0 : dy) / z;
+        this.follow = false; this.clampCam();
+        if (!this.panHinted) { this.panHinted = true; this.toast('Scroll pans · pinch or +/− zooms (change in Menu)', 'info'); }
+      } else this.stepZoom(-dy, 1, e.clientX, e.clientY);
     }, { passive: false });
+    // Safari sends trackpad pinches as gesture events instead
+    let gest = null;
+    cv.addEventListener('gesturestart', (e) => { e.preventDefault(); gest = { z: this.r.cam.zoom }; });
+    cv.addEventListener('gesturechange', (e) => {
+      e.preventDefault();
+      if (!gest) return;
+      const nz = clamp(Math.round(gest.z * e.scale), 1, 6);
+      if (nz !== this.r.cam.zoom) this.zoomAt(nz - this.r.cam.zoom, e.clientX || window.innerWidth / 2, e.clientY || window.innerHeight / 2);
+    });
+    cv.addEventListener('gestureend', (e) => { e.preventDefault(); gest = null; });
 
-    // touch: one finger = tool / pan, two = pinch zoom
+    // touch: one finger = tool (or pan in Inspect), two fingers = pan + pinch zoom
     let pinch = null;
+    const mid = (a, b) => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
     cv.addEventListener('touchstart', (e) => {
       e.preventDefault();
       this.sfx.ensure();
-      if (e.touches.length === 2) {
-        const [a, b] = e.touches;
-        pinch = { d: dist(a.clientX, a.clientY, b.clientX, b.clientY), z: this.r.cam.zoom };
-        this.drag = null; this.dragTiles = null; this.mouse.down = false;
+      this.touchUsed = true;
+      if (e.touches.length >= 2) {
+        const [a, b] = e.touches, m = mid(a, b);
+        pinch = { d: Math.max(1, dist(a.clientX, a.clientY, b.clientX, b.clientY)), z: this.r.cam.zoom, mx: m.x, my: m.y, cx: this.r.cam.x, cy: this.r.cam.y };
+        this.drag = null; this.dragTiles = null; this.mouse.down = false; this.panning = false; this.hideTip();
         return;
       }
+      if (pinch) return;
       const tt = e.touches[0];
       this.mouse.down = true; this.mouse.button = 0; this.mouse.sx = tt.clientX; this.mouse.sy = tt.clientY; this.mouse.moved = 0;
       this.mouse.camX = this.r.cam.x; this.mouse.camY = this.r.cam.y;
@@ -213,34 +242,50 @@ class UI {
     }, { passive: false });
     cv.addEventListener('touchmove', (e) => {
       e.preventDefault();
-      if (pinch && e.touches.length === 2) {
-        const [a, b] = e.touches;
+      if (pinch) {
+        if (e.touches.length < 2) return;
+        const [a, b] = e.touches, m = mid(a, b), cam = this.r.cam;
         const d = dist(a.clientX, a.clientY, b.clientX, b.clientY);
         const nz = clamp(Math.round(pinch.z * d / pinch.d), 1, 6);
-        if (nz !== this.r.cam.zoom) this.zoomAt(nz - this.r.cam.zoom, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+        // keep the world point that was under the fingers' midpoint under it
+        const wx = pinch.cx + pinch.mx / pinch.z, wy = pinch.cy + pinch.my / pinch.z;
+        cam.zoom = nz;
+        cam.x = wx - m.x / nz; cam.y = wy - m.y / nz;
+        this.follow = false; this.clampCam();
         return;
       }
       const tt = e.touches[0];
       const t = this.screenToTile(tt.clientX, tt.clientY);
       this.hover = t;
-      this.mouse.moved += 4;
-      if (this.drag) { this.updateDrag(t); return; }
-      if (this.mouse.moved > 8) {
+      this.mouse.moved = Math.max(this.mouse.moved, Math.abs(tt.clientX - this.mouse.sx) + Math.abs(tt.clientY - this.mouse.sy));
+      if (this.drag) {
+        this.updateDrag(t);
+        if (this.dragTiles) { const cost = this.dragCost(); this.showTip({ clientX: tt.clientX, clientY: tt.clientY - 60 }, `${this.dragTiles.length} tiles${cost ? ' · ' + fmtMoney(cost) : ''}`); }
+        return;
+      }
+      if (this.mouse.moved > 10) {
         const z = this.r.cam.zoom;
         this.r.cam.x = this.mouse.camX - (tt.clientX - this.mouse.sx) / z;
         this.r.cam.y = this.mouse.camY - (tt.clientY - this.mouse.sy) / z;
-        this.clampCam(); this.panning = true;
+        this.follow = false; this.clampCam(); this.panning = true;
       }
     }, { passive: false });
-    cv.addEventListener('touchend', (e) => {
+    const touchEnd = (e) => {
       e.preventDefault();
-      if (pinch) { if (e.touches.length < 2) pinch = null; return; }
+      if (pinch) {
+        // after a two-finger gesture, wait until every finger is up before a tap can count again
+        if (e.touches.length === 0) pinch = null;
+        return;
+      }
       if (!this.mouse.down) return;
       this.mouse.down = false;
-      if (this.drag) { this.applyDrag(); this.drag = null; this.dragTiles = null; return; }
-      if (!this.panning && this.hover) this.click(this.hover);
+      this.hideTip();
+      if (this.drag) { if (e.type === 'touchend') this.applyDrag(); this.drag = null; this.dragTiles = null; return; }
+      if (e.type === 'touchend' && !this.panning && this.hover) this.click(this.hover);
       this.panning = false;
-    }, { passive: false });
+    };
+    cv.addEventListener('touchend', touchEnd, { passive: false });
+    cv.addEventListener('touchcancel', touchEnd, { passive: false });
 
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
@@ -272,6 +317,14 @@ class UI {
       }
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
+  }
+
+  // Accumulate fine-grained wheel/pinch input into whole zoom steps so pixels stay crisp.
+  stepZoom(amount, scale, sx, sy) {
+    this.zAcc = (this.zAcc || 0) + amount * scale;
+    if (Math.abs(this.zAcc) < 60) return;
+    this.zoomAt(Math.sign(this.zAcc), sx, sy);
+    this.zAcc = 0;
   }
 
   zoomAt(dir, sx, sy) {
@@ -497,6 +550,13 @@ class UI {
       const x = (e.clientX - r.left) / r.width * this.game.world.W, y = (e.clientY - r.top) / r.height * this.game.world.H;
       this.centerOn(x, y); this.follow = false;
     };
+    $('#zoomIn').onclick = () => this.zoomAt(1, window.innerWidth / 2, window.innerHeight / 2);
+    $('#zoomOut').onclick = () => this.zoomAt(-1, window.innerWidth / 2, window.innerHeight / 2);
+    // panels sit below the top bar, which wraps to several rows on narrow screens
+    const tb = $('#topbar');
+    const syncTop = () => document.documentElement.style.setProperty('--top', tb.offsetHeight + 'px');
+    if (window.ResizeObserver) new ResizeObserver(syncTop).observe(tb);
+    syncTop();
     mm.addEventListener('mousedown', (e) => { mmNav(e); this.mmDrag = true; });
     window.addEventListener('mousemove', (e) => { if (this.mmDrag) mmNav(e); });
     window.addEventListener('mouseup', () => { this.mmDrag = false; });
