@@ -11,8 +11,11 @@ export PYTHONUNBUFFERED=1 HF_HUB_DISABLE_PROGRESS_BARS=1
 hf download mszarski/reachy-planner-sft --repo-type dataset --include "code/*" --local-dir /w
 hf download mszarski/reachy-voice "$GGUF" eval/lines.jsonl eval/tone.jsonl --local-dir /w
 cd /w/code && pip install -q --no-deps -e .
-/app/llama-server -m "/w/$GGUF" --host 127.0.0.1 --port 8080 -ngl 99 -c 4096 -np 4 --no-webui > /w/llama.log 2>&1 &
-until python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')" 2>/dev/null; do sleep 1; done
+LD_LIBRARY_PATH=/app:${LD_LIBRARY_PATH:-} /app/llama-server -m "/w/$GGUF" --host 127.0.0.1 --port 8080 -ngl 99 -c 4096 -np 4 --no-webui > /w/llama.log 2>&1 &
+pid=$!
+until python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')" 2>/dev/null; do
+  kill -0 $pid 2>/dev/null || { echo "llama-server exited"; cat /w/llama.log; exit 1; }; sleep 1
+done
 mkdir -p /w/out
 for s in lines tone; do
   python scripts/student_respond.py --model http://127.0.0.1:8080/v1 --heard /w/eval/$s.jsonl --out /w/out/eval_$s.jsonl --workers 4
