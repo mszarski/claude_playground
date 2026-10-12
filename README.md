@@ -113,7 +113,7 @@ Each model learns one thing, from data that suits it.
 |---|---|---|---|---|
 | generator v2 | how Reachy Mini moves | Pollen's 85 emotion clips + 19 dances (~9 min), 12 emotions held out | flow matching on the clips' own plans, simplified like recipes | 25-run sweep, $1.68 (A10G) |
 | planner (optional) | text → recipe | 17,364 prompt → recipe rows written by frontier LLMs (the reference's teacher data) | LoRA on Qwen3.5-4B, 2 epochs | $5.79 (A100) |
-| responder v8 | heard → feeling, response, recipe | 4,450 examples: LLM-written lines + real CREMA-D tone readings, answered by Kimi-K3 | LoRA SFT on Qwen3-4B-Instruct-2507 | under $1 (A10G) |
+| responder v8 | heard → feeling, response, recipe | 4,450 examples: LLM-written lines + real CREMA-D tone readings, answered by Kimi-K3 | LoRA SFT on Qwen3-4B-Instruct-2507 | ~$1 (one GPU, 1 h) |
 | responder v8-dpo (default) | your taste | 160 preference pairs from your ratings | DPO, LoRA r16, 3 epochs | under $1 |
 | listener style | your taste | 25 side-by-side votes over 24 styles | Bradley-Terry fit | free |
 
@@ -134,24 +134,79 @@ test. The fine-tuned 4B matches more real clips (28% top-1 vs 20%); a strong ope
 Grounding the planner in transcriptions of Pollen's real clips did not help (documented as a negative result).
 [Zero-shot](docs/results/planner_zeroshot.md), [fine-tune](docs/results/planner_finetune.md).
 
-**3. The responder: reading people, licence-clean.** The first versions learned from MELD (TV dialogue); the
-default one uses no MELD at all:
+**3. The responder: reading people, licence-clean.** The responder is *distilled*: a large teacher LLM shows a
+small model what to answer, thousands of times, until the small model can do it alone in one call. Five steps:
 
-- *Words*: about 4,200 lines written by an open LLM, six feelings, with random topics and speakers and styles that
-  fit each feeling.
-- *Tone*: each line is paired with the emotion model's reading of a real CREMA-D recording of the same feeling
-  (actors reading set sentences; only the readings are used). 800 extra examples use CREMA-D's flat sentences as
-  the words ("It's eleven o'clock."), so the feeling can only come from the tone: this is where the responder learns
-  to use the voice. 18 of the 91 actors are held out for testing.
-- *Answers*: a frontier open model (Kimi-K3, chosen in a bake-off of four) answers every example: feeling, response,
-  recipe and reading. Answers whose feeling disagrees with the known label get one hinted retry, and recipes must
-  pass a physical check (for sad or angry people the head moves slowly with little energy; for happy ones the ears
-  come up and the motion is lively; otherwise it stays moderate).
-- *Fine-tune*: LoRA on Qwen3-4B-Instruct-2507, so the 4B does in one call what took a hearing model plus a large
-  LLM.
+*What it sees and writes.* Each example is one chat turn. The input is what hearing produced, as text:
 
-On the held-out tone test (flat sentences, so words alone score chance) it reads the feeling 42% of the time
-(chance 20%), and 90% of its responses on fresh lines pass the physical check. [Results](docs/results/voice.md).
+```
+Earlier in the conversation:
+- "I finally finished the report."
+They said: "And now they want it redone by Monday."
+Their voice sounds angry (confidence 61%).
+Arousal 0.68, valence 0.31.
+```
+
+The target is one JSON object, in this order so the motion can start before the answer is finished:
+`{"feeling": "angry", "response": "Calm attention. You hold steady ... one slow nod", "recipe": "go .8 p=4 e=30 E=1 | hold 1.5 | ...", "reading": "They sound fed up ..."}`.
+A short system prompt explains the robot, the recipe language and the house rules (trust the words when the voice
+reading disagrees; gentle with sadness, calm with anger, reassuring with worry).
+
+*Step 1, the words* (`scripts/synth_lines.py`). The teacher LLM wrote about 4,200 things a person might say to a home
+robot, in six feelings (neutral, happy, sad, angry, anxious, surprised). Each batch draws a random topic (work, a pet,
+the commute, ...), a random speaker (a teenager, a nurse after a shift, ...) and a style that fits the feeling
+(openly, subtly, in a rush; sarcasm only for anger), and some lines come with the line before them, so the model
+learns to use context. Early neutral lines came out weary or sarcastic, so styles are now set per feeling.
+
+*Step 2, the tone* (`scripts/tone_bank.py`, `scripts/synth_heard.py`). Written lines have no voice, and synthetic
+voices turned out to sound sad whatever they were asked to do. So the tone comes from real people: the tone models
+were run on all 7,442 clips of CREMA-D (91 actors reading set sentences in six emotions, ODbL), and each line gets
+the reading of a real clip of the same feeling, never the audio itself. 20% of emotional lines get a reading from a
+neutral clip instead, because people often say emotional things flatly, and the model should then rely on the words.
+Then 800 *tone-only* examples use CREMA-D's own flat sentences ("It's eleven o'clock.") as the words, so the feeling
+can come only from the voice. This is where the responder learns what the tone models' readings mean on real
+voices (for example, that they rarely say "happy" for a happy speaker). 18 of the 91 actors are kept out of every
+training example, for testing.
+
+*Step 3, the teacher's answers* (`scripts/label_respond.py`). Kimi-K3, a large open model chosen in a bake-off of
+four, answers every example in two calls: first the feeling, response and reading, then the recipe for that response
+(as the planner would write it). Three filters keep only good answers:
+
+- The feeling must match the feeling the line was written with. When it doesn't, the teacher is asked once more, with
+  the true feeling as a hint, to find the cues that show it and answer accordingly; the hint never appears in the
+  training example.
+- The recipe must pass a physical check: for sad or angry people the head moves slowly with little energy, for happy
+  ones the ears come up and the motion is lively, otherwise it stays moderate.
+- A cap per feeling, preferring answers the teacher got right without a hint, keeps the hardest feelings from
+  crowding out the rest.
+
+That left 4,450 training examples and 100 for validation.
+
+*Step 4, supervised fine-tuning* (`rmr/planner/finetune.py train`, on a Hugging Face Jobs GPU). The base is
+Qwen3-4B-Instruct-2507 (Apache-2.0). Only small LoRA adapters are trained (rank 32 on every attention and MLP
+projection), and the loss counts only the answer, not the prompt. Two epochs, learning rate 1e-4 with a cosine
+schedule, 32 examples per step (8 × 4 accumulation), 8-bit AdamW; the checkpoint with the lowest validation loss is
+kept (0.59, at the end of epoch 2). About an hour on one GPU, around $1. The adapters are then merged into the model.
+
+*Step 5, preference tuning* (`scripts/dpo_from_ratings.py`). On the rating page you picked the best and the worst of
+four answers to the same line. Each such choice gives five ordered pairs (best over each of the others, each of the
+others over worst), 160 pairs in all, from training lines only. DPO then nudges the model to make the chosen answers
+more likely than the rejected ones, relative to where it started (beta 0.1, LoRA rank 16, 3 epochs, learning rate
+1e-5). That is v8-dpo, the default: its automatic scores are unchanged, while 158 of 255 recipes on the test lines
+changed, in the direction you preferred.
+
+*How the versions got here* (all scores on held-out actors and lines):
+
+| version | what changed | tone test (chance 20%) | responses that fit physically |
+|---|---|---|---|
+| v3 | trained on MELD (TV dialogue) | 32% | |
+| v4 | written lines only, no MELD | 28%: it ignored tone | |
+| v5 | + the 800 tone-only examples | 47% | 76% |
+| v8 | the same data answered by Kimi-K3 instead of Qwen3-Next | 43% | 90% |
+| v8-dpo | + your 160 preference pairs | 42% | 90% |
+
+A stronger teacher did not read people better (the tone models' readings are the limit there), but it wrote much
+better responses and recipes. [Full results](docs/results/voice.md).
 
 **4. Your preferences.** Automatic scores turned out not to predict what you prefer: an LLM judge and two video
 judges (vision models watching the rendered motion) all sat at chance against your ratings. So your ratings decide.
