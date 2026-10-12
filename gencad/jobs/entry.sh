@@ -35,9 +35,9 @@ done; }
 first() { for p in "$@"; do [[ -e "$p" ]] && { echo "$p"; return; }; done; echo "${1}"; }
 CSR_CKPT=${CSR_CKPT:-$(first data/ckpt/ae_ckpt_epoch1000.pth $(ls data/ckpt/*ae*.pth 2>/dev/null))}
 CCIP_CKPT=${CCIP_CKPT:-$(first data/ckpt/ccip_sketch_ckpt_epoch300.pth $(ls data/ckpt/*ccip*.pth 2>/dev/null))}
-DP_CKPT=${DP_CKPT:-$(first $(ls data/ckpt/*diffusion*.pt 2>/dev/null) none)}
-# the released CCIP/DP checkpoints are sketch-conditioned (Canny edges of renders)
-if [[ "$CCIP_CKPT" == *sketch* ]]; then IMG_TYPE=${IMG_TYPE:-cad_sketch}; else IMG_TYPE=${IMG_TYPE:-cad_image}; fi
+# the released CCIP/DP checkpoints come in sketch (Canny edges of renders) and image flavours; keep them paired
+if [[ "$CCIP_CKPT" == *sketch* ]]; then IMG_TYPE=${IMG_TYPE:-cad_sketch}; DP_KIND=sketch; else IMG_TYPE=${IMG_TYPE:-cad_image}; DP_KIND=image; fi
+DP_CKPT=${DP_CKPT:-$(first $(ls data/ckpt/${DP_KIND}_cond_diffusion*.pt data/ckpt/*diffusion*.pt 2>/dev/null) none)}
 echo "[ckpt] CSR=$CSR_CKPT CCIP=$CCIP_CKPT DP=$DP_CKPT IMG_TYPE=$IMG_TYPE"
 
 case "$STAGE" in
