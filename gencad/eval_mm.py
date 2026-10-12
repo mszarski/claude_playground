@@ -60,6 +60,8 @@ def main():
     ap.add_argument("--n", type=int, default=2000)
     ap.add_argument("--steps", type=int, default=100)
     ap.add_argument("--guidance", type=float, nargs="*", default=[1.0, 2.0, 3.0])
+    ap.add_argument("--text_level", default=None,
+                    help="evaluate text with this prompt level (e.g. abstract, expert); default: a random level per uid")
     ap.add_argument("--out", default="eval.json")
     a = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -74,8 +76,13 @@ def main():
         mods = sorted(set(prior.modalities) | ({"ccip_image"} if a.gencad_dp_ckpt else set()))
     paths = {m: os.path.join(a.emb_dir, f"cond_{m}.h5") for m in mods
              if os.path.exists(os.path.join(a.emb_dir, f"cond_{m}.h5"))}
+    variants = {m: 0 for m in paths if m != "text"}
+    if a.text_level and "text" in paths:
+        with h5py.File(paths["text"], "r") as f:
+            levels = json.loads(f.attrs["variants"])
+        variants["text"] = levels.index(a.text_level)
     ds = MultiModalLatentDataset(os.path.join(a.emb_dir, "cad_latents.h5"), paths, a.split, split_json,
-                                 variants={m: 0 for m in paths if m != "text"}, max_items=a.n)
+                                 variants=variants, max_items=a.n)
     items = [ds[i] for i in range(len(ds))]
     batch = torch.utils.data.default_collate([{k: v for k, v in b.items() if k != "uid"} for b in items])
     z, embeds, present = split_batch(batch, device)
