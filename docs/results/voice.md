@@ -168,12 +168,13 @@ the clean evaluation sets on a GPU job:
 | v8-dpo | lines UA | lines physical | tone UA | tone physical | same feeling as bf16 | model time to first motion |
 |---|---|---|---|---|---|---|
 | bf16, transformers | 64.8% | 90.3% | 42.3% | 77.5% | | 4.3-5.7 s |
-| Q8_0, llama.cpp | 64.2% | 89.7% | 42.7% | 78.3% | 531 / 555 | see below |
+| Q8_0, llama.cpp | 64.2% | 89.7% | 42.7% | 78.3% | 531 / 555 | 2.0-2.6 s |
 | Q4_K_M, llama.cpp | 65.2% | 88.0% | 41.7% | **70.0%** | 464 / 555 | 1.3-2.0 s |
 
 Q4_K_M reads people as well, but its responses fit physically less often on the tone test (31 clips lost vs 13
 gained against bf16, sign test p = 0.01): when only the voice gives the feeling away, the 4-bit model's motion
-drifts. Q8_0 is indistinguishable from bf16 (2 lost, 4 gained), so the Space serves Q8_0.
+drifts. Q8_0 is indistinguishable from bf16 (2 lost, 4 gained), so the Space serves Q8_0: the first motion now comes
+2.4-2.7 s after a short line ends (3.4-4.0 s after a 9 s one, most of the extra being Whisper), about twice as fast.
 
 ## Running it locally
 
