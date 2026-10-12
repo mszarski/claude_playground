@@ -63,7 +63,9 @@ class Events {
       this.quakeTick = (this.quakeTick || 0) - dt;
       if (this.quakeTick <= 0) {
         this.quakeTick = 0.45;
-        for (let k = 0; k < 14; k++) {
+        // scale the random fence hits with island area so big islands shake as hard
+        const hits = Math.round(14 * (w.W * w.H) / (72 * 54));
+        for (let k = 0; k < hits; k++) {
           const x = randi(1, w.W - 2), y = randi(1, w.H - 2);
           const j = w.idx(x, y);
           if (isSolidFence(w.fence[j])) g.damageFence(x, y, randf(15, 45), null);

@@ -24,6 +24,12 @@ class Renderer {
 
   setGame(game) {
     this.game = game;
+    const W = game.world.W * TILE, H = game.world.H * TILE;
+    if (this.cache[0][0].width !== W || this.cache[0][0].height !== H) {
+      this.cache = [makeCanvas(W, H), makeCanvas(W, H)];
+      this.miniC = null; this.clouds = null; this.flyers = null;
+    }
+    this.miniImg = false;
     game.world.dirtyTerrain = true;
   }
 

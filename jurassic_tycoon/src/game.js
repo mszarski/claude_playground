@@ -27,7 +27,10 @@ class Game {
   constructor(seed, opts = {}) {
     this.seed = seed;
     RNG = mulberry32(seed ^ 0x9e3779b9);
-    this.world = new World(seed);
+    // scenarios and the tutorial keep the island size they were balanced on
+    this.mapSize = MAP_SIZES[opts.size] ? opts.size : opts.scenario || opts.tutorial ? 'small' : 'medium';
+    const ms = MAP_SIZES[this.mapSize];
+    this.world = new World(seed, ms.w, ms.h);
     this.world.generate();
     this.events = new Events(this);
     this.research = new ResearchState(this);

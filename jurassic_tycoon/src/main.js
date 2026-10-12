@@ -39,7 +39,7 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, sph: g.secPerHour, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
+    v: 1, size: g.mapSize, sph: g.secPerHour, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
@@ -53,7 +53,8 @@ function saveGame(g) {
 
 function loadGame(json) {
   const s = JSON.parse(json);
-  const g = new Game(s.seed, { skipSetup: true, difficulty: s.diff });
+  // saves from before island sizes existed are all 'small'
+  const g = new Game(s.seed, { skipSetup: true, difficulty: s.diff, size: s.size || 'small' });
   const w = g.world;
   w.terrain.set(unb64(s.terrain, Uint8Array));
   w.fence.set(unb64(s.fence, Uint8Array));
@@ -231,6 +232,8 @@ function boot() {
   // browsers only allow audio after a user gesture
   const kick = () => { if (SFX.wantMusic && !SFX.muted) SFX.startMusic(); document.getElementById('sndBtn').textContent = SFX.muted ? '✕' : SFX.musicOn ? '♫' : '♪'; window.removeEventListener('pointerdown', kick); };
   window.addEventListener('pointerdown', kick);
+  // iOS ignores user-scalable=no: stop page pinch-zoom so pinches only zoom the map
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
   window.addEventListener('resize', () => {
     if (RENDER) { RENDER.resize(window.innerWidth, window.innerHeight); UIX.clampCam(); }
     if (titleAnim) startTitleAnim();
@@ -244,7 +247,7 @@ function boot() {
     SFX.play('click');
     document.querySelector('#title .menu').hidden = false;
     document.getElementById('diffMenu').hidden = true;
-    startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength(), seed: parseSeed(document.getElementById('seedIn').value) || undefined });
+    startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength(), size: window.currentMapSize(), seed: parseSeed(document.getElementById('seedIn').value) || undefined });
   };
   document.getElementById('btnScen').onclick = () => {
     SFX.ensure(); SFX.play('click');
@@ -267,9 +270,18 @@ function boot() {
   showLen();
   dlb.onclick = () => { dayLen = lens[(lens.indexOf(dayLen) + 1) % 3]; try { localStorage.setItem('jt_daylen', dayLen); } catch (e) { /* storage unavailable */ } showLen(); SFX.play('click'); };
   window.currentDayLength = () => dayLen;
+  const sizes = Object.keys(MAP_SIZES);
+  let mapSize = 'medium';
+  try { mapSize = localStorage.getItem('jt_mapsize') || 'medium'; } catch (e) { /* storage unavailable */ }
+  if (!MAP_SIZES[mapSize]) mapSize = 'medium';
+  const msb = document.getElementById('mapSizeBtn');
+  const showSize = () => { const m = MAP_SIZES[mapSize]; msb.innerHTML = `ISLAND SIZE: ${m.label}<br><small style="font-size:8px;color:#9ab08a">${m.desc} · ${m.w}×${m.h}</small>`; };
+  showSize();
+  msb.onclick = () => { mapSize = sizes[(sizes.indexOf(mapSize) + 1) % sizes.length]; try { localStorage.setItem('jt_mapsize', mapSize); } catch (e) { /* storage unavailable */ } showSize(); SFX.play('click'); };
+  window.currentMapSize = () => mapSize;
   document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
   document.getElementById('btnTut').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ tutorial: true, difficulty: 'easy' }); };
-  document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true }); };
+  document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true, size: window.currentMapSize() }); };
   document.getElementById('btnContinue').onclick = () => { SFX.ensure(); if (!loadGameFromStorage()) { startGame(); } };
   document.getElementById('btnHelp').onclick = () => {
     if (!UIX) { setActiveGame(new Game(1)); }

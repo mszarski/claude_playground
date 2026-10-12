@@ -2,9 +2,9 @@
 'use strict';
 
 class World {
-  constructor(seed) {
+  constructor(seed, w = MAP_W, h = MAP_H) {
     this.seed = seed;
-    this.W = MAP_W; this.H = MAP_H;
+    this.W = w; this.H = h;
     const N = this.W * this.H;
     this.terrain = new Uint8Array(N);
     this.variant = new Uint8Array(N);
