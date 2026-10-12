@@ -3,11 +3,12 @@
   python deploy/live_space.py --repo mszarski/reachy-mini-motions-live \
       --ckpt hf://mszarski/reachy-motion-generator/generator.pt --hardware l4x1 --sleep 1800
 
-Uploads rmr/, pyproject.toml, visualizer/ and deploy/Dockerfile, sets GENERATOR_CKPT as a Space variable and the
+Uploads rmr/, pyproject.toml, visualizer/, deploy/Dockerfile and deploy/start.sh, sets GENERATOR_CKPT as a Space variable and the
 caller's HF_TOKEN as a Space secret (the server needs it to download the private generator checkpoint and voice
 student, and to call the planner on Hugging Face Inference Providers, billed to that account). Speech goes to the
 licence-clean voice student (``--voice-model``, in-process on the Space's GPU) unless ``--voice-model ""``, which falls
-back to ``--responder-model`` on Inference Providers. ``--sleep``: seconds without visitors before a paid Space sleeps.
+back to ``--responder-model`` on Inference Providers. With ``--gguf`` (the default) the student runs as its 4-bit GGUF
+build behind llama.cpp's CUDA server in the container instead of transformers (``--gguf ""`` to turn off). ``--sleep``: seconds without visitors before a paid Space sleeps.
 """
 import argparse
 import os
@@ -44,6 +45,8 @@ def main():
     ap.add_argument("--responder-model", default="Qwen/Qwen3-Next-80B-A3B-Instruct",
                     help="open-weight LLM that decides how Reachy responds to speech")
     ap.add_argument("--voice-model", default="mszarski/reachy-voice:student/v8-dpo")
+    ap.add_argument("--gguf", default="mszarski/reachy-voice:gguf/v8-dpo/reachy-voice-4b-Q4_K_M.gguf",
+                    help="repo:path of the student's GGUF, served by llama.cpp in the Space")
     ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
     ap.add_argument("--sleep", type=int, default=None, help="sleep after this many idle seconds (paid hardware)")
     ap.add_argument("--private", action=argparse.BooleanOptionalAction, default=True)
@@ -60,6 +63,10 @@ def main():
         api.add_space_variable(a.repo, "VOICE_MODEL", a.voice_model)
     else:
         api.delete_space_variable(a.repo, "VOICE_MODEL")
+    if a.gguf:
+        api.add_space_variable(a.repo, "LLAMA_GGUF", a.gguf)
+    else:
+        api.delete_space_variable(a.repo, "LLAMA_GGUF")
     if a.hardware:
         api.request_space_hardware(a.repo, a.hardware, sleep_time=a.sleep)
     elif a.sleep:
@@ -69,7 +76,8 @@ def main():
         shutil.copytree(os.path.join(ROOT, "visualizer"), os.path.join(d, "visualizer"))
         for f in ["pyproject.toml", "NOTICE"]:
             shutil.copy(os.path.join(ROOT, f), d)
-        shutil.copy(os.path.join(ROOT, "deploy", "Dockerfile"), d)
+        for f in ["Dockerfile", "start.sh"]:
+            shutil.copy(os.path.join(ROOT, "deploy", f), d)
         with open(os.path.join(d, "README.md"), "w") as fh:
             fh.write(CARD)
         api.upload_folder(folder_path=d, repo_id=a.repo, repo_type="space", commit_message="Deploy live server")
