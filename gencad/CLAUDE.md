@@ -13,23 +13,27 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
 `patches/`, `setup.sh`. To change upstream code, edit it in `upstream/`, then regenerate the patch:
 `git -C upstream diff > patches/<name>.patch`, and make `setup.sh` apply it.
 
-## State at handoff (2026-10-12)
-- All code is written. `./setup.sh && python -m pytest tests/test_mm_smoke.py -q` passes (9 tests, CPU, ~1 min).
-  The full export → train → eval → infer chain ran on synthetic CAD files with random GenCAD weights: the code
-  runs, but no real numbers exist yet.
-- Nothing has touched real data or a GPU. The previous cloud session had no network access to huggingface.co or
-  drive.google.com and no HF token. That is the only reason it stopped.
+## State (2026-10-12, second session)
+- Local: `pip install torch torchvision -r jobs/requirements-job.txt && ./setup.sh`; tests pass (9, CPU). GPU
+  `test` stage passes on a T4 with the real SigLIP2/Qwen3 encoders.
+- Bucket `mszarski/gencad-work` holds: `data/{cad_vec,images,sketches}.tar` + split JSONs, all 7 released
+  checkpoints in `ckpt/`, `emb/{cad_latents,cond_ccip_image,cond_image}.h5` (168,674 uids).
+- Replication baseline (`results/released/eval.json`, 2000 test samples, sketch CCIP + sketch DP):
+  csr_recon acc_cmd 0.918 / acc_param 0.957; gencad_dp cos 0.535, R@1 0.220, R@10 0.421, acc_cmd 0.599,
+  acc_param 0.659.
+- **Text is blocked**: `SadilKhan/Text2CAD` is gated and the account has not been granted access. Once it is,
+  run `jobs/launch.sh text`, then embed only the text (`embed` would redo the 45-min image pass):
+  `jobs/launch.sh shell -- python scripts/embed_conditions.py text --text_index /work/data/text_index.json --out /work/emb/cond_text.h5`, then
+  `RUN=mm_v1 jobs/launch.sh mm --modalities image text` and `RUN=mm_v1 jobs/launch.sh eval`.
+- Image-only prior `RUN=mm_img jobs/launch.sh mm --modalities image` launched; evaluate with
+  `RUN=mm_img jobs/launch.sh eval` and compare to `results/released/eval.json`.
+- Pull results locally with `hf buckets cp hf://buckets/mszarski/gencad-work/results/<run>/eval.json ...`.
 
 ## Next steps
-1. Env: `pip install torch torchvision -r jobs/requirements-job.txt`, then `./setup.sh` and run the tests.
-   STEP/STL export needs `pythonocc-core` (conda-forge only); it's optional locally, jobs install it with `OCC=1`.
-2. `hf auth whoami` must work (needs `HF_TOKEN` with write + Jobs). Compute runs on HF Jobs via
-   `jobs/launch.sh <stage>`; use `DRY=1` first to print the command. Stages in order: `fetch`, `test`, `export`,
-   `RUN=released eval` (replication baseline), `embed`, `RUN=mm_v1 mm --modalities image text`, `RUN=mm_v1 eval`.
-   Monitor with `hf jobs logs <id> --follow`.
-3. `fetch` is the riskiest step: `gdown --folder` caps at 50 files per Drive folder, and the Text2CAD column
-   layout is auto-detected (`scripts/build_text_index.py` prints what it found and how many GenCAD uids join).
-   Check both outputs before moving on.
+1. Evaluate `mm_img`; ablation `RUN=mm_ccip ... mm --modalities ccip_image` (GenCAD's conditioning, new denoiser).
+2. Text, once access is granted (see above).
+3. Jobs: `jobs/launch.sh <stage>` (`DRY=1` prints the command); monitor with `hf jobs logs <id>` /
+   `hf jobs inspect <id> --format json`.
 
 ## Gotchas
 - Upstream `trainer/autoencoder_test.py::encode` writes CSR latents from a *shuffled* loader with no uids, so
@@ -40,4 +44,6 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
 - `utils/image_processor.process_image` naming is inverted: `img_type="image"` applies Canny, `"sketch"` doesn't.
 - Upstream `config/configAE.py` defaults are debug-sized (batch_size=2); pass `-bs/-epochs/-lr` overrides.
 - Upstream training code hard-codes CUDA.
+- Job image must have torch>=2.6 (transformers 5.x uses `torch.accelerator`).
+- Text2CAD is gated: the HF account behind `HF_TOKEN` must be granted access on the dataset page.
 - `jobs/launch.sh` uploads a dereferenced snapshot of this folder (symlinks followed, data/results excluded).
