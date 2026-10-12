@@ -20,15 +20,18 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from cadlib.macro import EXT_IDX, LINE_IDX, SOL_IDX  # noqa: E402
+from cadlib.macro import ALL_COMMANDS, EOS_IDX, EXT_IDX, LINE_IDX, SOL_IDX  # noqa: E402
 from mm.data import CadLatentStore, EmbeddingStore  # noqa: E402
 from mm.diffusion import MultiCondDiffusionPrior  # noqa: E402
 from mm.gencad_io import decode_latents, load_csr  # noqa: E402
 
 
 def rect_points(vec):
-    """Corner points (4, 2) if vec is exactly SOL + 4 lines + 1 extrude, else None."""
-    if vec is None or [int(c) for c in vec[:, 0]] != [SOL_IDX] + [LINE_IDX] * 4 + [EXT_IDX]:
+    """Corner points (4, 2) if vec is exactly SOL + 4 lines + 1 extrude (trailing EOS ignored), else None."""
+    if vec is None:
+        return None
+    vec = vec[[int(c) != EOS_IDX for c in vec[:, 0]]]  # stored GT keeps its EOS row, decoded sequences don't
+    if [int(c) for c in vec[:, 0]] != [SOL_IDX] + [LINE_IDX] * 4 + [EXT_IDX]:
         return None
     return vec[1:5, 1:3].astype(int)
 
@@ -82,11 +85,17 @@ def main():
     def has_all(u):
         return u in cad.index and all(u in s.index and s.valid[s.index[u]].any() for s in stores.values())
 
+    if a.uid in cad.index:
+        v = gt_vec(a.uid)
+        print(f"[rect] GT program of {a.uid}: " + " ".join(ALL_COMMANDS[int(c)] for c in v[:, 0]))
+        print(v.tolist())
+    pattern = Counter()
     uids, gts = [], []
     for u in split:
         if not has_all(u):
             continue
         g = gt_vec(u)
+        pattern[" ".join(ALL_COMMANDS[int(c)] for c in g[:, 0])] += 1
         p = rect_points(g)
         if p is not None and axis_error(p) == 0:
             uids.append(u)
@@ -97,6 +106,7 @@ def main():
         uids.append(a.uid)
         gts.append(rect_points(gt_vec(a.uid)))
     print(f"[rect] {len(uids)} {a.split} uids whose GT is one axis-aligned rectangle extrude")
+    print("[rect] most common GT programs:", pattern.most_common(5))
 
     def cond(u_list, m, variant=0):
         return torch.stack([stores[m].get(u, variant)[0] for u in u_list]).to(device)
