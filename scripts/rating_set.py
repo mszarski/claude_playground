@@ -36,6 +36,20 @@ def answer(model, d):
             "reading": b.get("reading", ""), "recipe": d["recipe"]}
 
 
+def differ(recipes, min_diff):
+    """True when every pair of recipes differs by at least ``min_diff`` (mean |z| over the plan descriptors of
+    rmr.planner.evaluate, z against typical recipe spreads), so a rater has something to choose between."""
+    if not min_diff:
+        return True
+    import numpy as np
+
+    from rmr.planner.evaluate import plan_descriptors
+
+    D = np.array([plan_descriptors(r) for r in recipes])
+    sd = np.array([2.0, 25, 25, 25, 5, 5, 5, 4, 4, 4, 10, 8, 0.8, 1.5])[:D.shape[1]]
+    return all(np.abs((D[i] - D[j]) / sd).mean() >= min_diff for i in range(len(D)) for j in range(i + 1, len(D)))
+
+
 def video_name(recipe):
     return hashlib.sha1(recipe.encode()).hexdigest()[:12] + ".mp4"
 
@@ -47,6 +61,9 @@ def main():
     ap.add_argument("--eval", nargs="+", help="k answer files on the test clips, one per model")
     ap.add_argument("--heard", default="runs/rating_clean/heard_eval.jsonl")
     ap.add_argument("--n-eval", type=int, default=40)
+    ap.add_argument("--repeats", type=int, default=0, help="show this many eval items twice (rater consistency)")
+    ap.add_argument("--min-diff", type=float, default=0.0,
+                    help="only eval items whose answers differ by at least this much (mean |z| of plan descriptors)")
     ap.add_argument("--train", nargs="+", help="student samples on train clips (several answers per clip id)")
     ap.add_argument("--train-heard", default="runs/synth_v4/heard_v5.jsonl")
     ap.add_argument("--n-train", type=int, default=40)
@@ -64,7 +81,7 @@ def main():
         files = [{d["clip"]: d for d in load(p)} for p in a.eval]
         names = [os.path.basename(p).split("+")[0] for p in a.eval]
         clips = [c for c in files[0] if all(c in f and f[c]["recipe"] for f in files)
-                 and len({f[c]["recipe"] for f in files}) == a.k]
+                 and len({f[c]["recipe"] for f in files}) == a.k and differ([f[c]["recipe"] for f in files], a.min_diff)]
         by = {}
         for c in clips:
             by.setdefault(heard[c]["label"], []).append(c)
@@ -83,11 +100,14 @@ def main():
         for c in rng.sample(cs, min(len(cs), a.n_train)):
             items.append({"pool": "train", "clip": c, "heard": heard[c],
                           "answers": [answer("student", d) for d in many[c][:a.k]]})
+    if a.repeats:                              # a few eval items again, to measure the rater's own consistency
+        ev = [it for it in items if it["pool"] == "eval"]
+        items += [dict(it, repeat_of=True) for it in rng.sample(ev, min(a.repeats, len(ev)))]
     rng.shuffle(items)
     rows = []
     for i, it in enumerate(items):
         h = it["heard"]
-        rows.append({"id": f"r{i:03d}", "pool": it["pool"], "clip": it["clip"],
+        rows.append({"id": f"r{i:03d}", "pool": it["pool"], "clip": it["clip"], "repeat": bool(it.get("repeat_of")),
                      "label": h.get("label") or h.get("meld_emotion"), "context": h.get("context") or [],
                      "text": h["text"], "voice": h["emotion"],
                      "answers": [{**x, "video": video_name(x["recipe"])} for x in it["answers"]]})
