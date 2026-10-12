@@ -362,6 +362,20 @@ by item type (about 20 each), v3 leads on the real-voice tone items (+0.31) and 
   so far can stand in for the rater; their ratings are the only reliable signal of fit to the feeling.
 - The 32 rated training items give 160 DPO pairs (`scripts/dpo_from_ratings.py pairs`, best-worst = 5 pairs each).
 
+### Second round (2026-10-12): preference tuning, rater consistency
+
+Student v5 was DPO-tuned on the 160 pairs from the first round (`scripts/dpo_from_ratings.py train`, LoRA r16, 3
+epochs, lr 1e-5; `student/v5-dpo`); the automatic metrics are unchanged (tone test 45% vs 47%, lines 63% vs 63%,
+MELD calibrated 43% / 72% vs 42% / 72%), and 167 of 255 recipes on the lines changed. The rating page then showed
+v5 against v5-dpo, two answers per item, on 39 held-out items not rated before whose two answers clearly differ
+(`rating_set.py --min-diff 0.4`), plus 10 of them again (`--repeats 10`).
+
+- The tuned student won 21 of 38 first showings (55%; one-sided p = 0.31). By feeling it led on surprised (5-2) and
+  sad (3-1) and trailed on happy and anxious (3-4 each). A lean, not evidence: confirming a 55% preference takes
+  about 150 comparisons. v5-dpo stays a candidate, not the default.
+- The rater gave the same verdict on 7 of 10 repeats (chance 5). Preferences between similar responses are real but
+  noisy, which caps any judge's possible agreement well below 100%; the automated judges sat at chance.
+
 ## Caveats
 
 These models read expressed emotion, not what someone feels, and they vary across speakers, accents and cultures.
