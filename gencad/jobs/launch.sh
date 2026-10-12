@@ -15,7 +15,7 @@
 set -euo pipefail
 STAGE=${1:?usage: jobs/launch.sh <fetch|test|csr|ccip|export|embed|dp|mm|eval|shell> [args...]}; shift
 : "${HF_TOKEN:?export HF_TOKEN first}"
-NS=${NS:-$(hf auth whoami --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')}
+NS=${NS:-$(hf auth whoami --format json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("name") or d["user"])')}
 BUCKET=${BUCKET:-$NS/gencad-work}
 IMAGE=${IMAGE:-pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime}
 
