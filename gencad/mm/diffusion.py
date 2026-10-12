@@ -160,6 +160,16 @@ class MultiCondDiffusionPrior(nn.Module):
                 traj.append(x0)
         return (x, traj) if return_trajectory else x
 
+    @torch.no_grad()
+    def score(self, embeds: dict, z):
+        """Cosine similarity (B,) between the given conditions and CAD latents z (B, z_dim), from the contrastive
+        heads trained alongside the denoiser. Used to rerank samples (mm.rerank.best_of_n)."""
+        assert self.contrastive_weight > 0, "this prior was trained without contrastive heads"
+        B = z.shape[0]
+        keep = {m: torch.full((B,), m in embeds, dtype=torch.bool, device=z.device) for m in self.modalities}
+        c = F.normalize(self.c_head(self.fuser(embeds, keep, batch=B)), dim=-1)
+        return (c * F.normalize(self.z_head(z), dim=-1)).sum(-1)
+
     # ---------------------------------------------------------------- io
     def save(self, path, **extra):
         torch.save({"config": self.config, "state_dict": self.state_dict(), **extra}, path)

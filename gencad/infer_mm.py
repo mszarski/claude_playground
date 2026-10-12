@@ -7,6 +7,8 @@
   python infer_mm.py ... --image sketch.png --w_image 2.0
   # both: the image fixes the overall shape, the text steers details (guidance applied in --order)
   python infer_mm.py ... --image photo.png --text "add a central through hole" --w_image 1.5 --w_text 3.0
+  # best-of-N: draw 8 candidates per output, keep the decoded program that best matches the condition
+  python infer_mm.py ... --image photo.png --best_of 8
 
 Outputs per sample: <out>/<i>_<j>.h5 (CAD vector), and .step/.stl/.png if pythonocc-core is installed.
 """
@@ -19,6 +21,7 @@ import torch
 
 from mm.diffusion import MultiCondDiffusionPrior
 from mm.gencad_io import decode_latents, export_shape, load_csr, vec_to_shape
+from mm.rerank import best_of_n
 
 
 def build_embeds(prior, ck, a, device):
@@ -77,6 +80,9 @@ def main():
     ap.add_argument("--steps", type=int, default=100)
     ap.add_argument("--eta", type=float, default=0.0)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--best_of", type=int, default=1,
+                    help="draw N candidates per output and keep the one whose decoded program the prior scores "
+                         "closest to the condition (needs a prior trained with --contrastive_weight > 0)")
     ap.add_argument("--out", default="out")
     ap.add_argument("--export", nargs="*", default=["step", "stl"], help="any of step stl png")
     a = ap.parse_args()
@@ -90,9 +96,13 @@ def main():
     embeds = {k: v.repeat_interleave(a.n, 0) for k, v in embeds.items()}
     g = torch.Generator(device=device).manual_seed(a.seed)
     weights = {"text": a.w_text, "image": a.w_image, "ccip_image": a.w_ccip_image}
-    z = prior.sample(embeds, guidance=weights, order=a.order, mode=a.mode, steps=a.steps, eta=a.eta, generator=g)
-    with torch.no_grad():
-        vecs = decode_latents(csr, z)
+    kw = dict(guidance=weights, order=a.order, mode=a.mode, steps=a.steps, eta=a.eta, generator=g)
+    if a.best_of > 1:
+        vecs = best_of_n(prior, csr, embeds, n=a.best_of, **kw)[0]
+    else:
+        z = prior.sample(embeds, **kw)
+        with torch.no_grad():
+            vecs = decode_latents(csr, z)
 
     os.makedirs(a.out, exist_ok=True)
     summary = []

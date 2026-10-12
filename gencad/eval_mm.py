@@ -22,6 +22,7 @@ from mm.data import MultiModalLatentDataset, split_batch
 from mm.diffusion import MultiCondDiffusionPrior
 from mm.gencad_io import decode_latents, load_csr
 from mm.metrics import latent_metrics, seq_metrics
+from mm.rerank import best_of_n
 
 
 def gt_vecs(data_root, uids):
@@ -39,10 +40,11 @@ def decode_batched(csr, z, bs=256):
     return out
 
 
-def row(name, z_pred, z_gt, csr, gts, rows=None):
+def row(name, z_pred, z_gt, csr, gts, rows=None, vecs=None):
     rows = torch.arange(len(z_gt)) if rows is None else rows
     m = latent_metrics(z_pred, z_gt[rows])
-    m.update(seq_metrics(decode_batched(csr, z_pred), [gts[i] for i in rows.tolist()]))
+    vecs = decode_batched(csr, z_pred) if vecs is None else vecs
+    m.update(seq_metrics(vecs, [gts[i] for i in rows.tolist()]))
     print(f"{name:28s} " + " ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in m.items()),
           flush=True)
     return m
@@ -60,6 +62,8 @@ def main():
     ap.add_argument("--n", type=int, default=2000)
     ap.add_argument("--steps", type=int, default=100)
     ap.add_argument("--guidance", type=float, nargs="*", default=[1.0, 2.0, 3.0])
+    ap.add_argument("--best_of", type=int, default=1,
+                    help="sample N candidates per input and keep the best-scoring decoded program (mm.rerank)")
     ap.add_argument("--text_level", default=None,
                     help="evaluate text with this prompt level (e.g. abstract, expert); default: a random level per uid")
     ap.add_argument("--out", default="eval.json")
@@ -112,10 +116,21 @@ def main():
                     continue
                 for w in a.guidance:
                     g = torch.Generator(device=device).manual_seed(0)
-                    zs = prior.sample({m: embeds[m][rows] for m in combo}, guidance={m: w for m in combo},
-                                      steps=a.steps, generator=g)
+                    cond = {m: embeds[m][rows] for m in combo}
+                    kw = dict(guidance={m: w for m in combo}, steps=a.steps, generator=g)
                     name = f"mm:{'+'.join(combo)}@w{w:g}"
-                    report[name] = row(name, zs, z, csr, gts, rows)
+                    if a.best_of > 1:
+                        vecs, zs = [], []
+                        for s in range(0, len(rows), 256):
+                            v, zz, _ = best_of_n(prior, csr, {m: e[s: s + 256] for m, e in cond.items()},
+                                                 n=a.best_of, **kw)
+                            vecs += v
+                            zs.append(zz)
+                        name += f"@bo{a.best_of}"
+                        report[name] = row(name, torch.cat(zs), z, csr, gts, rows, vecs=vecs)
+                    else:
+                        zs = prior.sample(cond, **kw)
+                        report[name] = row(name, zs, z, csr, gts, rows)
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:

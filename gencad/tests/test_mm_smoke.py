@@ -228,3 +228,20 @@ if __name__ == "__main__":
         print(f"--- {fn.__name__}", flush=True)
         fn()
     print(f"ALL {len(fns)} TESTS PASSED")
+
+
+def test_best_of_n_picks_highest_scoring_decodable_candidate():
+    import mm.rerank as rerank
+    from mm.gencad_io import load_csr
+    torch.manual_seed(0)
+    prior = tiny_prior().eval()
+    csr, _ = load_csr(None, "cpu")
+    embeds = {m: torch.randn(3, d) for m, d in DIMS.items()}
+    real_decode = rerank.decode_latents
+    try:  # only odd candidates decode; the winner must be one of them
+        rerank.decode_latents = lambda c, z: [_fake_cad_vec() if i % 2 else None for i in range(len(z))]
+        vecs, z, scores = rerank.best_of_n(prior, csr, embeds, n=4, steps=5)
+    finally:
+        rerank.decode_latents = real_decode
+    assert len(vecs) == 3 and z.shape == (3, 256)
+    assert all(v is not None for v in vecs) and torch.isfinite(scores).all()

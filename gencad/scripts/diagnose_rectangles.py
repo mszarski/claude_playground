@@ -24,6 +24,7 @@ from cadlib.macro import ALL_COMMANDS, EOS_IDX, EXT_IDX, LINE_IDX, SOL_IDX  # no
 from mm.data import CadLatentStore, EmbeddingStore  # noqa: E402
 from mm.diffusion import MultiCondDiffusionPrior  # noqa: E402
 from mm.gencad_io import decode_latents, load_csr  # noqa: E402
+from mm.rerank import best_of_n  # noqa: E402
 
 
 def rect_points(vec):
@@ -66,6 +67,7 @@ def main():
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--uid", default="0068/00682829")
     ap.add_argument("--n_seeds", type=int, default=16)
+    ap.add_argument("--best_of", type=int, default=0, help="also run each prior condition with best-of-N reranking")
     ap.add_argument("--out", default="results/rect/report.json")
     a = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -111,8 +113,9 @@ def main():
     def cond(u_list, m, variant=0):
         return torch.stack([stores[m].get(u, variant)[0] for u in u_list]).to(device)
 
-    # every "method" maps a uid list + seed to latents
-    methods = {"csr_recon": lambda us, seed: torch.stack([cad.z[cad.index[u]] for u in us]).to(device)}
+    # every "method" maps a uid list + seed to decoded CAD programs
+    methods = {"csr_recon": lambda us, seed: decode_latents(
+        csr, torch.stack([cad.z[cad.index[u]] for u in us]).to(device))}
     if a.gencad_dp_ckpt:
         from model import GaussianDiffusion1D, ResNetDiffusion
         net = ResNetDiffusion(d_in=256, n_blocks=10, d_main=2048, d_hidden=2048, dropout_first=0.1,
@@ -123,7 +126,7 @@ def main():
 
         def gencad(us, seed):
             torch.manual_seed(seed)
-            return dp.sample(cond=cond(us, "ccip_image"))
+            return decode_latents(csr, dp.sample(cond=cond(us, "ccip_image")))
         methods["gencad"] = gencad
     for spec in a.prior:
         name, path = spec.split("=", 1)
@@ -135,18 +138,23 @@ def main():
             if not all(m in prior.modalities for m in mods):
                 continue
 
-            def run(us, seed, prior=prior, mods=mods):
+            def run(us, seed, prior=prior, mods=mods, n=1):
                 g = torch.Generator(device=device).manual_seed(seed)
                 emb = {m: cond(us, m, expert if m == "text" else 0) for m in mods}
-                return prior.sample(emb, guidance={m: a.guidance for m in mods}, steps=100, generator=g)
+                kw = dict(guidance={m: a.guidance for m in mods}, steps=100, generator=g)
+                if n > 1:
+                    return best_of_n(prior, csr, emb, n=n, **kw)[0]
+                return decode_latents(csr, prior.sample(emb, **kw))
             methods[f"{name}:{label}"] = run
+            if a.best_of > 1:
+                methods[f"{name}:{label}@bo{a.best_of}"] = lambda us, seed, run=run: run(us, seed, n=a.best_of)
 
     report = {"n_uids": len(uids), "tol": a.tol, "methods": {}, "uid": a.uid, "uid_samples": {}}
     with torch.no_grad():
         for name, fn in methods.items():
             vecs = []
             for s in range(0, len(uids), 512):
-                vecs += decode_latents(csr, fn(uids[s: s + 512], 0))
+                vecs += fn(uids[s: s + 512], 0)
             cls = [classify(v, g, a.tol) for v, g in zip(vecs, gts)]
             counts = Counter(c for c, _ in cls)
             errs = [e for c, e in cls if c == "skewed_quad"]
@@ -160,7 +168,7 @@ def main():
             if a.uid in uids:
                 rows = []
                 for seed in range(a.n_seeds):
-                    v = decode_latents(csr, fn([a.uid], seed))[0]
+                    v = fn([a.uid], seed)[0]
                     c, e = classify(v, None, a.tol)
                     rows.append({"seed": seed, "class": c, "skew": e,
                                  "points": None if rect_points(v) is None else rect_points(v).tolist()})

@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mm.data import CadLatentStore, EmbeddingStore  # noqa: E402
 from mm.diffusion import MultiCondDiffusionPrior  # noqa: E402
 from mm.gencad_io import decode_latents, export_shape, load_csr, vec_to_shape  # noqa: E402
+from mm.rerank import best_of_n  # noqa: E402
 
 DEFAULT_CONDS = ["image", "text:beginner", "text:expert", "image+text:expert"]
 DEFAULT_PROMPTS = [
@@ -125,6 +126,9 @@ def main():
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--steps", type=int, default=100)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--best_of", type=int, default=1,
+                    help="also show each condition with best-of-N reranking (extra '<cond>@boN' columns); "
+                         "free-form prompts then use best-of-N too")
     ap.add_argument("--out", default="results/visual")
     a = ap.parse_args()
 
@@ -167,11 +171,13 @@ def main():
             out[m] = torch.stack([stores[m].get(u, variant)[0] for u in uids]).to(device)
         return out
 
-    def sample(embeds, n=None):
+    def sample(embeds, n=1):
         g = torch.Generator(device=device).manual_seed(a.seed)
-        z = prior.sample(embeds, guidance={m: a.guidance for m in embeds}, steps=a.steps, generator=g)
+        kw = dict(guidance={m: a.guidance for m in embeds}, steps=a.steps, generator=g)
+        if n > 1:
+            return best_of_n(prior, csr, embeds, n=n, **kw)[0]
         with torch.no_grad():
-            return decode_latents(csr, z)
+            return decode_latents(csr, prior.sample(embeds, **kw))
 
     status = {u: {} for u in uids}
     cols = ["input render", "gt"]
@@ -200,9 +206,11 @@ def main():
         if any(m not in prior.modalities or m not in stores for m in cond.split(":")[0].split("+")):
             print(f"[visual] skip {cond}: not in prior/embeddings")
             continue
-        for k, (u, v) in enumerate(zip(uids, sample(cond_embeds(cond)))):
-            status[u][cond] = vec_cell(v, os.path.join(cells, f"{k}_{cond.replace(':', '-').replace('+', '_')}"))
-        cols.append(cond)
+        for n in [1] + ([a.best_of] if a.best_of > 1 else []):
+            col = cond if n == 1 else f"{cond}@bo{n}"
+            for k, (u, v) in enumerate(zip(uids, sample(cond_embeds(cond), n))):
+                status[u][col] = vec_cell(v, os.path.join(cells, f"{k}_{col.replace(':', '-').replace('+', '_')}"))
+            cols.append(col)
 
     def cell_png(k, col):
         name = {"input render": "input"}.get(col, col.replace(":", "-").replace("+", "_"))
@@ -224,10 +232,7 @@ def main():
         enc = TextEncoder(info.get("backend", "hf-embed"), info.get("model", "Qwen/Qwen3-Embedding-0.6B"),
                           device=device)
         emb = enc(a.prompts).float().repeat_interleave(a.n_prompt_samples, 0)
-        g = torch.Generator(device=device).manual_seed(a.seed)
-        z = prior.sample({"text": emb}, guidance={"text": a.guidance}, steps=a.steps, generator=g)
-        with torch.no_grad():
-            vecs = decode_latents(csr, z)
+        vecs = sample({"text": emb}, a.best_of)
         for k, v in enumerate(vecs):
             i, j = divmod(k, a.n_prompt_samples)
             prompt_status.append({"prompt": i, "sample": j, "status": vec_cell(v, os.path.join(cells, f"p{i}_{j}"))})
