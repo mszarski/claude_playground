@@ -165,11 +165,11 @@ pip install -e ".[ik,generator,hf,serve,voice]"
 PLANNER_BASE_URL=http://localhost:11434/v1 PLANNER_API_KEY=local \
   python -m rmr.server --model <served model name> --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the distilled student, one local call, no server and no network after the first download
-python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v8 --out runs/converse
-python -m rmr.server --voice-model mszarski/reachy-voice:student/v8 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
+python -m rmr.converse clip.wav --voice-model mszarski/reachy-voice:student/v8-dpo --out runs/converse
+python -m rmr.server --voice-model mszarski/reachy-voice:student/v8-dpo --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # or the quantised student behind llama.cpp (2.5 GB, CPU is fine) ...
-hf download mszarski/reachy-voice gguf/v5/reachy-voice-4b-Q4_K_M.gguf --local-dir .
-llama-server -m gguf/v5/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
+hf download mszarski/reachy-voice gguf/v8-dpo/reachy-voice-4b-Q4_K_M.gguf --local-dir .
+llama-server -m gguf/v8-dpo/reachy-voice-4b-Q4_K_M.gguf --port 8080 -c 4096
 # (the 1.7B: gguf/v5-1.7b/... (file name says 4b), and add --chat-template-kwargs '{"enable_thinking":false}')
 python -m rmr.server --voice-model http://localhost:8080/v1 --ckpt hf://mszarski/reachy-motion-generator/generator_v2.pt
 # ... or Ollama (deploy/ollama/Modelfile)
@@ -375,6 +375,10 @@ v5 against v5-dpo, two answers per item, on 39 held-out items not rated before w
   about 150 comparisons. v5-dpo stays a candidate, not the default.
 - The rater gave the same verdict on 7 of 10 repeats (chance 5). Preferences between similar responses are real but
   noisy, which caps any judge's possible agreement well below 100%; the automated judges sat at chance.
+- The same 160 pairs then tuned v8 (`student/v8-dpo`, the default since): every automatic score holds (tone test
+  42% vs 43%, lines 65% / responses OK 90% vs 65% / 90%, MELD calibrated 39% / 72% vs 39% / 72%) and 158 of 255
+  recipes change, in the direction the rater preferred on v5. The pairs were sampled from v5, so this is
+  off-policy; a round of v8 against v8-dpo would confirm it.
 
 ## Caveats
 
