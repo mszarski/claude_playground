@@ -313,6 +313,34 @@ def answer(a):
         f.writelines(json.dumps(x) + "\n" for x in out)
 
 
+def text_baseline(a):
+    """The current pipeline on the same audio: Whisper + the tone models (rmr.voice) -> the text responder."""
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from rmr.respond import Student
+    from rmr.voice import Listener
+
+    rows = [json.loads(x) for x in open(a.heard)]
+    lis, st = Listener(device="cuda"), Student(a.model)
+    crema = {} if a.voiced else crema_audio([r["tone"] for r in rows])
+    out = []
+    for i, r in enumerate(rows):
+        path = os.path.join(a.voiced, r["clip"] + ".wav") if a.voiced else None
+        if path and not os.path.exists(path):
+            continue
+        h = lis.hear(path if path else (crema[r["tone"]], 16000))
+        h["context"] = r.get("context") or []
+        try:
+            d = st(h)
+        except Exception as e:
+            d = {"feeling": "", "reading": "", "response": "", "recipe": None, "error": str(e)}
+        out.append({"clip": r["clip"], "label": r["label"], "heard_text": h["text"], "emotion": h["emotion"],
+                    "recipe": d.get("recipe"), "both": {k: d.get(k, "") for k in ("feeling", "reading", "response")}})
+        if i % 25 == 0:
+            print(f"{i}/{len(rows)} {r['label']} -> {d.get('feeling')}", flush=True)
+    with open(a.out, "w") as f:
+        f.writelines(json.dumps(x) + "\n" for x in out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -346,8 +374,13 @@ def main():
     an.add_argument("--voiced", default="", help="folder of <clip>.wav (cloned voicings of written lines)")
     an.add_argument("--out", required=True)
     an.add_argument("--batch", type=int, default=8)
+    tb = sub.add_parser("text_baseline")
+    tb.add_argument("--model", default="mszarski/reachy-voice:student/v8-dpo")
+    tb.add_argument("--heard", required=True)
+    tb.add_argument("--voiced", default="")
+    tb.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"bakeoff": bakeoff, "build": build, "train": train, "answer": answer}[a.cmd](a)
+    {"bakeoff": bakeoff, "build": build, "train": train, "answer": answer, "text_baseline": text_baseline}[a.cmd](a)
 
 
 if __name__ == "__main__":
