@@ -28,6 +28,8 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
 |---|---|---|---|---|---|
 | csr_recon (upper bound) | 1.000 | 1.000 | 1.000 | 0.918 | 0.957 |
 | gencad_dp (released, sketch) | 0.535 | 0.220 | 0.421 | 0.599 | 0.659 |
+| upstream inference code, sketch input (`RUN=upstream jobs/launch.sh upstream`) | 0.534 | 0.227 | 0.424 | 0.597 | 0.660 |
+| upstream inference code, RGB render input (what `inference_gencad.py` does) | 0.511 | 0.188 | 0.384 | 0.589 | 0.647 |
 | mm_ccip: ccip_image (GenCAD features, new denoiser) | 0.641 | 0.461 | 0.637 | 0.666 | 0.748 |
 | mm_img: image (SigLIP2) | 0.635 | 0.448 | 0.603 | 0.671 | 0.743 |
 | mm_v1: image | 0.626 | 0.435 | 0.599 | 0.665 | 0.740 |
@@ -36,7 +38,8 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
 | mm_v1: image+text, random level | 0.647 | 0.468 | 0.645 | 0.681 | 0.751 |
 | mm_v1: image+text, expert | 0.666 | 0.503 | 0.693 | 0.695 | 0.759 |
 
-Takeaways: the gain over GenCAD comes from the new denoiser/training (mm_ccip ≈ mm_img), not SigLIP2. Text
+Takeaways: our harness reproduces the released GenCAD pipeline (upstream's own inference code on the same
+sketch inputs gives the same numbers within sampling noise; on RGB renders it is a bit worse). The gain over GenCAD comes from the new denoiser/training (mm_ccip ≈ mm_img), not SigLIP2. Text
 helps on top of an image; more detailed prompts help more; expert text alone beats GenCAD's image prior on
 acc_cmd. w=3 ≈ w=2 everywhere, w=1 a bit lower. Per-level evals: `eval_mm.py --text_level <level>`.
 
