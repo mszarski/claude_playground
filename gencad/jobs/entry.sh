@@ -96,6 +96,11 @@ case "$STAGE" in
     [[ "$DP_CKPT" != none && -f "$DP_CKPT" ]] && ARGS+=(--gencad_dp_ckpt "$DP_CKPT")
     python eval_mm.py "${ARGS[@]}" "$@" ;;
 
+  upstream)   # released GenCAD through upstream's own inference path, scored like eval_mm (cross-check of gencad_dp)
+    need cad_vec images sketches
+    python scripts/eval_upstream_inference.py --data data --emb_dir data/emb --ckpt_dir data/ckpt \
+      --out "results/$RUN/eval.json" "$@" ;;
+
   visual)     # rendered side-by-side check (needs OCC=1): GT vs GenCAD vs the prior under each condition
     need cad_vec images
     PRIOR=${PRIOR:-results/mm_v1/last.pt}
