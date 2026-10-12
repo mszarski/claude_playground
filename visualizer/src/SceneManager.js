@@ -17,14 +17,14 @@ export class SceneManager {
         // Scene setup
         this.scene = new THREE.Scene();
 
-        // Camera setup - positioned for good robot view
+        // Camera setup - straight in front of the robot (it faces +x), slightly above its eyes
         this.camera = new THREE.PerspectiveCamera(
             50,
             this.width() / this.height(),
             0.01,
             100
         );
-        this.camera.position.set(0.4, 0.1, -0.4);
+        this.camera.position.set(0.75, 0.24, 0);
         this.camera.lookAt(0, 0, 0);
 
         // Renderer setup
@@ -43,9 +43,8 @@ export class SceneManager {
 
         // Controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-        this.controls.autoRotate = true;
-        this.controls.autoRotateSpeed = 2;
-        this.controls.target.set(0, 0.15, 0);
+        this.controls.autoRotate = false;     // front on; drag to look around
+        this.controls.target.set(0, 0.17, 0);
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
         this.controls.minDistance = 0.2;
