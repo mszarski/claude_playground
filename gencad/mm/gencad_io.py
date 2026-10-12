@@ -72,7 +72,13 @@ def vec_to_shape(cad_vec):
     import OCC.Core.BRepBndLib as bnd  # ImportError (no pythonocc-core) propagates to the caller
     if not hasattr(bnd, "brepbndlib_Add"):  # removed in pythonocc 7.8; upstream cadlib still imports it
         bnd.brepbndlib_Add = bnd.brepbndlib.Add
-    from cadlib.visualize import vec2CADsolid
+    import matplotlib
+    use = matplotlib.use
+    matplotlib.use = lambda *a, **k: None  # upstream cadlib/sketch.py forces TkAgg, which fails headless
+    try:
+        from cadlib.visualize import vec2CADsolid
+    finally:
+        matplotlib.use = use
     try:
         return vec2CADsolid(cad_vec.astype(float))
     except Exception:
