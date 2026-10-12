@@ -248,7 +248,8 @@ def train(a):
     from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration, Trainer, TrainingArguments
 
     proc = AutoProcessor.from_pretrained(a.model)
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(a.model, dtype=torch.bfloat16)
+    gpu = torch.cuda.is_available()
+    model = Qwen2AudioForConditionalGeneration.from_pretrained(a.model, dtype=torch.bfloat16 if gpu else torch.float32)
     model.config.use_cache = False
     targets = r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)$"
     model = get_peft_model(model, LoraConfig(r=a.r, lora_alpha=a.r, lora_dropout=0.0, target_modules=targets,
@@ -259,7 +260,7 @@ def train(a):
         tr.rows, tr.wav = tr.rows[:a.max_rows], tr.wav[:a.max_rows]
     args = TrainingArguments(output_dir=a.out, per_device_train_batch_size=a.bs, per_device_eval_batch_size=a.bs,
                              gradient_accumulation_steps=a.grad_accum, num_train_epochs=a.epochs, max_steps=a.max_steps,
-                             learning_rate=a.lr, lr_scheduler_type="cosine", warmup_ratio=0.03, bf16=True,
+                             learning_rate=a.lr, lr_scheduler_type="cosine", warmup_steps=8, bf16=gpu, use_cpu=not gpu,
                              logging_steps=5, eval_strategy="steps", eval_steps=a.eval_steps, save_strategy="steps",
                              save_steps=a.eval_steps, save_total_limit=2, load_best_model_at_end=True,
                              metric_for_best_model="eval_loss", greater_is_better=False, remove_unused_columns=False,
@@ -290,15 +291,18 @@ def answer(a):
         crema = crema_audio([r["tone"] for r in rows])
         wavs = [crema[r["tone"]] for r in rows]
     proc = AutoProcessor.from_pretrained(a.model)
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(a.model, dtype=torch.bfloat16).to("cuda").eval()
+    gpu = torch.cuda.is_available()
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    dt = torch.bfloat16 if dev == "cuda" else torch.float32
+    model = Qwen2AudioForConditionalGeneration.from_pretrained(a.model, dtype=dt).to(dev).eval()
     out, t0 = [], time.time()
     for i in range(0, len(rows), a.batch):
         batch = rows[i:i + a.batch]
         texts = [proc.apply_chat_template(conversation(r), add_generation_prompt=True, tokenize=False) for r in batch]
         proc.tokenizer.padding_side = "left"
         enc = proc(text=texts, audio=[w[:16000 * 30] for w in wavs[i:i + a.batch]], sampling_rate=16000,
-                   return_tensors="pt", padding=True).to("cuda")
-        enc["input_features"] = enc["input_features"].to(torch.bfloat16)
+                   return_tensors="pt", padding=True).to(dev)
+        enc["input_features"] = enc["input_features"].to(dt)
         with torch.no_grad():
             gen = model.generate(**enc, max_new_tokens=400, do_sample=False)
         for r, g in zip(batch, proc.batch_decode(gen[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)):
