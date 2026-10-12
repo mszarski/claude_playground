@@ -125,3 +125,19 @@ def test_styled_listener_js_matches_python():
     js = np.array(json.loads(r.stdout))
     assert np.degrees(np.ptp(py[:, 5])) > 5                  # glances happened (yaw)
     assert np.allclose(js, py[:, [4, 5, 3, 2, 7]], atol=1e-9)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
+def test_mood_style_matches_js_and_biases_the_pose():
+    from rmr.listen import CLASSIC, mood_style
+    mood = {"valence": -0.6, "arousal": 0.4}
+    st = mood_style(mood, CLASSIC)
+    js_src = (f"import {{ moodStyle }} from '{ROOT}/visualizer/src/Listen.js';"
+              f"console.log(JSON.stringify(moodStyle({json.dumps(mood)}, {json.dumps(CLASSIC)})));")
+    js = json.loads(subprocess.run(["node", "--input-type=module", "-e", js_src], capture_output=True, text=True,
+                                   check=True).stdout)
+    assert js.keys() == st.keys() and all(abs(js[k] - st[k]) < 1e-12 for k in st)
+    assert mood_style({"valence": 0, "arousal": 0}, CLASSIC) == {**__import__("rmr.listen").listen.STYLE, **CLASSIC}
+    calm, sad = Listener(style=CLASSIC), Listener(style=st)
+    p0, p1 = calm.step(-100), sad.step(-100)
+    assert p1[7] > p0[7] and p1[4] > p0[4]                 # antennas lower and head down when subdued

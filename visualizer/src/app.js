@@ -1,7 +1,7 @@
 import { SceneManager } from './SceneManager.js';
 import { RobotManager } from './RobotManager.js';
 import { Player } from './Player.js';
-import { Listener, FPS, dbfs } from './Listen.js';
+import { Listener, FPS, dbfs, moodStyle } from './Listen.js';
 import { LearnedHead } from './ListenModel.js';
 
 // Gallery of motions built by `python -m rmr.viewer` (examples/examples.json):
@@ -11,8 +11,9 @@ import { LearnedHead } from './ListenModel.js';
 const $ = (id) => document.getElementById(id);
 let player, current = null, sample = 0;
 let listenerWeights = null;
+let MOOD = { valence: 0, arousal: 0 }, lastTurn = null;   // Reachy's mood (rmr.mood) and the last voice turn's id
 const SESSION = Math.random().toString(36).slice(2, 12);   // the server remembers this conversation's last lines     // learned listener (api/listener), if the server has one
-const newListener = () => new Listener(1.0, listenerWeights ? new LearnedHead(listenerWeights) : null);
+const newListener = () => new Listener(1.0, listenerWeights ? new LearnedHead(listenerWeights) : null, moodStyle(MOOD));
 
 function status(msg, kind = '') { const s = $('status'); s.textContent = msg; s.className = kind; }
 
@@ -40,7 +41,7 @@ function show(entry) {
 }
 
 function play() {
-    const d = player.load(current.moves[sample]);
+    const d = player.load(current.moves[sample], player.shown);   // glide in from the current pose
     $('dur').textContent = `${d.toFixed(1)} s`;
     $('playbtn').textContent = '❚❚';
 }
@@ -109,6 +110,8 @@ async function respondTo(wav, onMotion) {
             if (part.stage === 'heard') status(`Heard “${part.heard.text || '…'}”. Thinking…`);
             if (part.stage === 'motion') { onMotion?.(); show(entry); status('Reading you…'); duration = player.duration(); }
             if (part.stage === 'done') {
+                if (part.mood) MOOD = part.mood;
+                if (part.turn) { lastTurn = part.turn; $('rate').hidden = false; $('rate').dataset.sent = ''; }
                 $('reading').textContent = entry.reading || ''; $('reading-row').hidden = !entry.reading; status('');
                 const t = entry.timing_ms;
                 $('meta').textContent = `generated live · listening ${t.listen} ms · first motion ${t.first_motion} ms · total ${t.total} ms`;
@@ -116,6 +119,18 @@ async function respondTo(wav, onMotion) {
         }
     }
     return duration;
+}
+
+/** Thumbs up / down on the last voice turn (api/feedback, rmr.feedback); the recording only if the box is ticked. */
+async function rate(rating) {
+    if (!lastTurn || $('rate').dataset.sent) return;
+    $('rate').dataset.sent = '1';
+    try {
+        const r = await fetch('api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ turn: lastTurn, rating, save_audio: $('save-audio').checked }) });
+        status(r.ok ? 'Thanks, noted.' : 'Could not save the rating.', r.ok ? '' : 'err');
+    } catch { status('Could not save the rating.', 'err'); }
+    $('rate').hidden = true;
 }
 
 /** Microphone -> onSamples(Float32Array) per ~21 ms block. Returns {rate, close()}. */
@@ -209,10 +224,10 @@ function enableTalk() {
                 if (busy() || quiet < 10 || performance.now() < nextIdle) return;
                 nextIdle = performance.now() + 12000 + Math.random() * 13000;
                 try {
-                    const r = await fetch(`api/idle?silence=${Math.round(Math.min(quiet, 1e4))}&seed=${Math.floor(Math.random() * 1e6)}`);
+                    const r = await fetch(`api/idle?silence=${Math.round(Math.min(quiet, 1e4))}&seed=${Math.floor(Math.random() * 1e6)}&session=${SESSION}`);
                     if (!r.ok || busy() || lis.sinceVoice < 10) return;
                     const m = await r.json();
-                    player.live = null; player.load(m.moves[0]); player.loop = false; idling = true;
+                    player.live = null; player.load(m.moves[0], player.shown); player.loop = false; idling = true;
                     busyUntil = performance.now() + 1000 * (player.duration() + 0.3);
                     setTimeout(() => { idling = false; player.loop = true; }, 1000 * (player.duration() + 0.3));
                 } catch { /* idle is optional */ }
@@ -257,6 +272,8 @@ async function main() {
 
     $('playbtn').onclick = () => { player.toggle(); $('playbtn').textContent = player.playing() ? '❚❚' : '▶'; };
     $('restart').onclick = () => player.restart();
+    $('rate-up').onclick = () => rate(1);
+    $('rate-down').onclick = () => rate(-1);
     $('speed').onchange = (e) => player.setSpeed(+e.target.value);
     $('loop').onchange = (e) => { player.loop = e.target.checked; };
     $('scrub').oninput = (e) => player.seek(e.target.value / 1000);

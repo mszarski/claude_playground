@@ -65,7 +65,19 @@ STYLE = {
     "perk": 0.39,           # antenna perks when the voice lifts (0 = off)
     "sway_deg": 0.56,       # gentle continuous head motion while listening, deg (pitch, yaw, roll)
     "glances": 1.94,        # quick looks aside per minute while listening
+    "ears_off": 0.0,        # resting antenna droop added, deg (+ = lower); set by the mood (mood_style)
+    "pitch_off": 0.0,       # resting head pitch added, deg (+ = head down); set by the mood
 }
+
+
+def mood_style(mood, base=None):
+    """Bias a listening style with Reachy's mood (rmr.mood, valence and arousal in -1..1): cheerful = antennas up,
+    head up, livelier; subdued = antennas lower, head a little down, calmer. Neutral mood = ``base`` unchanged."""
+    b = {**STYLE, **(base or {})}
+    v, a = float(mood.get("valence", 0.0)), float(mood.get("arousal", 0.0))
+    return {**b, "nod_deg": b["nod_deg"] * (1 + 0.25 * a), "sway_deg": max(0.0, b["sway_deg"] * (1 + 0.6 * a)),
+            "lean": b["lean"] * (1 + 0.3 * a), "ears_off": b["ears_off"] - 12.0 * v,
+            "pitch_off": b["pitch_off"] - 3.0 * v}
 GLANCE_DEG, GLANCE_S = 8.0, 1.2   # a glance turns this far (x 0.6-1.0) and lasts this long
 SWAY_HZ = ((0.11, 0.23, 0.41), (0.07, 0.17, 0.31), (0.13, 0.19, 0.37))   # per axis: pitch, yaw, roll
 
@@ -179,6 +191,8 @@ class Listener:
         target = 1.0 if self.since_voice < ENGAGED else 0.0
         self.engaged += (target - self.engaged) * (1 - math.exp(-dt / POSE_TAU))
         pose = {k: IDLE[k] + st["lean"] * self.engaged * (ATTENTIVE[k] - IDLE[k]) for k in IDLE}
+        pose["ears"] += st.get("ears_off", 0.0)
+        pose["pitch"] += st.get("pitch_off", 0.0)
         pose["roll"] *= self.side
 
         nod = sum(a * _bump((t - s) / d) for s, a, d in self.nods)

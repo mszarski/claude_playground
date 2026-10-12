@@ -47,6 +47,8 @@ def main():
     ap.add_argument("--voice-model", default="mszarski/reachy-voice:student/v8-dpo")
     ap.add_argument("--gguf", default="mszarski/reachy-voice:gguf/v8-dpo/reachy-voice-4b-Q8_0.gguf",
                     help="repo:path of the student's GGUF, served by llama.cpp in the Space")
+    ap.add_argument("--feedback-repo", default="mszarski/reachy-feedback",
+                    help="private HF dataset the thumbs up / down (rmr.feedback) are pushed to")
     ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
     ap.add_argument("--sleep", type=int, default=None, help="sleep after this many idle seconds (paid hardware)")
     ap.add_argument("--private", action=argparse.BooleanOptionalAction, default=True)
@@ -63,6 +65,10 @@ def main():
         api.add_space_variable(a.repo, "VOICE_MODEL", a.voice_model)
     else:
         api.delete_space_variable(a.repo, "VOICE_MODEL")
+    api.add_space_variable(a.repo, "FEEDBACK_DIR", "/tmp/feedback")
+    if a.feedback_repo:
+        api.create_repo(a.feedback_repo, repo_type="dataset", private=True, exist_ok=True)
+        api.add_space_variable(a.repo, "FEEDBACK_REPO", a.feedback_repo)
     if a.gguf:
         api.add_space_variable(a.repo, "LLAMA_GGUF", a.gguf)
     else:

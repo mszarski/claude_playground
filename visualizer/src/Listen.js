@@ -20,7 +20,14 @@ const POSE_TAU = 0.6, BREATH_MM = 1.2, BREATH_S = 4.0;
 /** The listening style (rmr.listen.STYLE): what a person tunes by comparing listeners side by side. */
 // the owner's rated favourite (style "x06"; rmr.listen.STYLE, the same values)
 export const STYLE = { nod_deg: 8.9, pause: 0.46, min_talk: 1.7, double_talk: 99.0, lean: 1.32, perk: 0.39,
-    sway_deg: 0.56, glances: 1.94 };
+    sway_deg: 0.56, glances: 1.94, ears_off: 0.0, pitch_off: 0.0 };
+
+/** rmr.listen.mood_style: bias a style with Reachy's mood (valence, arousal in -1..1). */
+export function moodStyle(mood, base = null) {
+    const b = { ...STYLE, ...(base || {}) }, v = +(mood?.valence ?? 0), a = +(mood?.arousal ?? 0);
+    return { ...b, nod_deg: b.nod_deg * (1 + 0.25 * a), sway_deg: Math.max(0, b.sway_deg * (1 + 0.6 * a)),
+             lean: b.lean * (1 + 0.3 * a), ears_off: b.ears_off - 12.0 * v, pitch_off: b.pitch_off - 3.0 * v };
+}
 const GLANCE_DEG = 8.0, GLANCE_S = 1.2;
 const SWAY_HZ = [[0.11, 0.23, 0.41], [0.07, 0.17, 0.31], [0.13, 0.19, 0.37]];   // pitch, yaw, roll
 
@@ -103,6 +110,7 @@ export class Listener {
         this.engaged += (target - this.engaged) * (1 - Math.exp(-dt / POSE_TAU));
         const p = {};
         for (const k in IDLE) p[k] = IDLE[k] + st.lean * this.engaged * (ATTENTIVE[k] - IDLE[k]);
+        p.ears += st.ears_off || 0; p.pitch += st.pitch_off || 0;
         p.roll *= this.side;
 
         const nod = this.nods.reduce((s, [s0, a, d]) => s + a * bump((t - s0) / d), 0);

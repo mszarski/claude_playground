@@ -126,3 +126,30 @@ def test_calibration_per_session(client):
         eng.calibrate = False
     v = eng.student.valence
     assert v[0] > v[29] and v[29] < 0.5 and v[30] == v[0]       # drifts to the reference; a new session starts afresh
+
+
+def test_feedback_logs_rated_turns_and_mood_follows_the_conversation(client, tmp_path):
+    import json
+
+    from rmr.feedback import FeedbackLog
+
+    eng = client.app.state.engine
+    eng.listener, eng.voice_model, eng.student, eng.moods = _Heard(), "fake", _Student(), {}
+    assert client.post("/api/feedback", json={"turn": "x", "rating": 1}).status_code == 503   # logging off
+    eng.feedback = FeedbackLog(str(tmp_path))
+    parts = [json.loads(line) for line in client.post("/api/respond?stream=1&session=s1", content=b"\1" * 2000).text.splitlines()]
+    turn = parts[0]["turn"]
+    assert all(p["turn"] == turn for p in parts)
+    assert parts[-1]["mood"]["valence"] > 0                      # a happy turn lifts the mood
+    assert client.get("/api/mood?session=s1").json()["valence"] > 0
+    assert client.get("/api/mood?session=other").json()["valence"] == 0
+    assert client.post("/api/feedback", json={"turn": "nope", "rating": 1}).status_code == 404
+    assert client.post("/api/feedback", json={"turn": turn, "rating": 2}).status_code == 422
+    assert client.post("/api/feedback", json={"turn": turn, "rating": -1}).json()["ok"]
+    assert client.post("/api/feedback", json={"turn": turn, "rating": 1, "save_audio": True}).json()["ok"]
+    rows = [json.loads(x) for x in (tmp_path / "ratings.jsonl").read_text().splitlines()]
+    assert [r["rating"] for r in rows] == [-1, 1]
+    assert rows[0]["audio"] is None and rows[1]["audio"] == f"audio/{turn}.wav"
+    assert (tmp_path / rows[1]["audio"]).read_bytes() == b"\1" * 2000
+    assert rows[0]["recipe"] and rows[0]["heard"]["text"] == "I got the job!" and rows[0]["reading"] == "They're thrilled."
+    assert "_audio" not in rows[0]

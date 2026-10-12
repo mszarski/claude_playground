@@ -54,6 +54,10 @@ class Engine:
         self.history = {}                   # session -> [(time, what they said)], the conversation so far
         self.calibrate = calibrate          # per-session level correction of the voice attributes (rmr.voice)
         self.calibrations = {}              # session -> rmr.voice.Calibration
+        from .feedback import Turns
+        self.turns = Turns()                # recent voice turns by id, for ratings (rmr.feedback)
+        self.feedback = None                # rmr.feedback.FeedbackLog, set by main()
+        self.moods = {}                     # session -> rmr.mood.Mood
         if planner:
             from .planner.finetune import Planner
             self.finetuned = Planner(planner)
@@ -95,7 +99,30 @@ class Engine:
         out.pop("stage", None)
         return out
 
+    def mood(self, session):
+        from .mood import Mood
+        if len(self.moods) > self.MAX_SESSIONS:
+            self.moods.clear()
+        return self.moods.setdefault(session or "", Mood())
+
     def respond_stream(self, audio, n=1, seed=0, session=None):
+        """``_respond_stream`` with a turn id on every stage (for ratings, rmr.feedback) and Reachy's mood
+        (rmr.mood), updated from what it read, on the last."""
+        tid = self.turns.new(session, audio)
+        for part in self._respond_stream(audio, n, seed, session):
+            if part["stage"] == "heard":
+                self.turns.update(tid, heard=part["heard"])
+            elif part["stage"] == "motion":
+                self.turns.update(tid, recipe=part.get("recipe"), response=part.get("idea"),
+                                  feeling=part.get("feeling"), seed=seed,
+                                  responder=self.voice_model or self.responder or "default")
+            elif part["stage"] == "done":
+                h = (self.turns.get(tid) or {}).get("heard", {})
+                part["mood"] = self.mood(session).update(part.get("feeling"), h.get("valence"), h.get("arousal"))
+                self.turns.update(tid, reading=part.get("reading"), mood=part["mood"])
+            yield {**part, "turn": tid}
+
+    def _respond_stream(self, audio, n=1, seed=0, session=None):
         """Like ``respond``, in stages, so a client can act on each as soon as it exists:
         ``{"stage": "heard", "heard"}``, then ``{"stage": "motion", "moves", "recipe", "feeling", "idea", ...}`` as
         soon as the recipe is written (with a v3 student, before the reading), then ``{"stage": "done", "reading"}``."""
@@ -204,13 +231,38 @@ def create_app(engine):
         except Exception as e:
             raise HTTPException(502, f"{type(e).__name__}: {e}")
 
+    class Feedback(BaseModel):
+        turn: str = Field(min_length=1, max_length=40)
+        rating: int = Field(ge=-1, le=1)
+        save_audio: bool = False
+        note: str = Field("", max_length=500)
+
+    @app.post("/api/feedback")
+    def feedback(f: Feedback):
+        """A thumbs up (1) or down (-1) on a voice turn (rmr.feedback); the recording only with ``save_audio``."""
+        if engine.feedback is None:
+            raise HTTPException(503, "feedback logging is off on this server (--feedback-dir)")
+        turn = engine.turns.get(f.turn)
+        if turn is None:
+            raise HTTPException(404, "unknown or expired turn")
+        engine.feedback.add(turn, f.rating, f.save_audio, f.note)
+        return {"ok": True}
+
+    @app.get("/api/mood")
+    def mood(session: str = ""):
+        """Reachy's current mood in this conversation (rmr.mood), decayed to now."""
+        from .mood import label
+        st = engine.mood(session[:64] or None).state()
+        return {**st, "label": label(st)}
+
     @app.get("/api/idle")
-    async def idle(silence: float = 0.0, seed: int = 0):
+    async def idle(silence: float = 0.0, seed: int = 0, session: str = ""):
         """An idle move (rmr.idle) for after ``silence`` seconds of quiet: looking around, stretching, drowsing."""
         import random
 
         from .idle import pick
-        name, recipe = pick(silence, random.Random(seed))
+        mood = engine.mood(session[:64] or None).state() if session else None
+        name, recipe = pick(silence, random.Random(seed), mood)
         out = await run_in_threadpool(engine.generate, name, 1, seed, recipe)
         return {**out, "idea": name}
 
@@ -243,6 +295,10 @@ def main():
                     help="correct the voice readings per session (attribute levels and category priors) toward what "
                          "the licence-clean students were trained on (rmr.voice.Calibration); on by default with "
                          "--voice-model, off for the zero-shot responder (env CALIBRATE_VOICE=1/0)")
+    ap.add_argument("--feedback-dir", default=os.environ.get("FEEDBACK_DIR", "runs/feedback"),
+                    help="where thumbs up / down on voice turns are logged (rmr.feedback); '' to turn off")
+    ap.add_argument("--feedback-repo", default=os.environ.get("FEEDBACK_REPO"),
+                    help="private HF dataset the feedback folder is pushed to every 5 minutes")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 7860)))
     ap.add_argument("--listener-model", default=os.environ.get("LISTENER_MODEL"),
@@ -256,6 +312,9 @@ def main():
         env = os.environ.get("CALIBRATE_VOICE")
         a.calibrate = env not in ("0", "false", "") if env is not None else bool(a.voice_model)
     engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model, calibrate=a.calibrate)
+    if a.feedback_dir:
+        from .feedback import FeedbackLog
+        engine.feedback = FeedbackLog(a.feedback_dir, a.feedback_repo)
     if a.listener_model:
         path = a.listener_model
         if path.startswith("hf://"):
