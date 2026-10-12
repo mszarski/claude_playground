@@ -47,7 +47,8 @@ case "$STAGE" in
       [[ -d /tmp/d/$d ]] && { echo "[fetch] tar $d"; tar -cf /work/data/$d.tar -C /tmp/d $d; }
     done
     cp -f /tmp/d/*.json /work/data/ 2>/dev/null || true
-    cp -rf /tmp/d/ckpt/. /work/ckpt/ 2>/dev/null || true
+    # fetch_data.py symlinks checkpoints into model/ckpt, which is /work/ckpt here: replace the links with files
+    for f in /tmp/d/ckpt/*; do rm -f "/work/ckpt/$(basename "$f")"; cp -f "$f" /work/ckpt/; done
     ls -la /work/data /work/ckpt ;;
 
   text)       # Text2CAD annotations -> text_index.json (needs access to the gated SadilKhan/Text2CAD)
