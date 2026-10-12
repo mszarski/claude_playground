@@ -8,6 +8,9 @@ in memory. ``POST /api/feedback {"turn", "rating": 1 | -1}`` appends the turn an
 With ``repo`` (a private Hugging Face dataset, env ``FEEDBACK_REPO`` on the live Space, whose disk does not
 persist), a ``huggingface_hub.CommitScheduler`` pushes the folder every ``every`` minutes. These ratings feed the
 reward model and preference tuning (scripts/dpo_from_ratings.py, docs/ROADMAP.md).
+
+Puppeteered clips (visualizer/puppet.html, ``POST /api/clips``) are saved the same way, as
+``<dir>/clips/<id>.json`` (a move with its feeling word): new real motion for training the generator.
 """
 import json
 import os
@@ -47,6 +50,7 @@ class FeedbackLog:
     def __init__(self, folder, repo=None, every=5):
         self.folder, self.lock = folder, threading.Lock()
         os.makedirs(os.path.join(folder, "audio"), exist_ok=True)
+        os.makedirs(os.path.join(folder, "clips"), exist_ok=True)
         self.scheduler = None
         if repo:
             from huggingface_hub import CommitScheduler
@@ -66,3 +70,13 @@ class FeedbackLog:
             with open(os.path.join(self.folder, "ratings.jsonl"), "a") as f:
                 f.write(json.dumps(rec) + "\n")
         return rec
+
+    def add_clip(self, label, description, move, mirror=True):
+        cid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
+        rec = {"id": cid, "label": label, "description": description, "mirror": bool(mirror), "time": time.time(),
+               "move": move}
+        lock = self.scheduler.lock if self.scheduler else self.lock
+        with lock:
+            with open(os.path.join(self.folder, "clips", cid + ".json"), "w") as f:
+                json.dump(rec, f)
+        return cid

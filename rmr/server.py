@@ -248,6 +248,24 @@ def create_app(engine):
         engine.feedback.add(turn, f.rating, f.save_audio, f.note)
         return {"ok": True}
 
+    class Clip(BaseModel):
+        label: str = Field(min_length=2, max_length=40, pattern=r"^[a-z][a-z -]+$")
+        description: str = Field("", max_length=200)
+        mirror: bool = True
+        move: dict
+
+    @app.post("/api/clips")
+    def clips(c: Clip):
+        """A puppeteered motion (visualizer/puppet.html) with its feeling word, saved as training data."""
+        if engine.feedback is None:
+            raise HTTPException(503, "saving is off on this server (--feedback-dir)")
+        fr, t = c.move.get("set_target_data"), c.move.get("time")
+        ok = (isinstance(fr, list) and isinstance(t, list) and 25 <= len(fr) == len(t) <= 16 * 25
+              and all(len(f.get("head", [])) == 4 and len(f.get("antennas", [])) == 2 for f in fr))
+        if not ok:
+            raise HTTPException(422, "a move of 1 to 16 s at 25 Hz is expected")
+        return {"ok": True, "id": engine.feedback.add_clip(c.label, c.description, c.move, c.mirror)}
+
     @app.get("/api/mood")
     def mood(session: str = ""):
         """Reachy's current mood in this conversation (rmr.mood), decayed to now."""

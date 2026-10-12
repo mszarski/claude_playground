@@ -48,7 +48,7 @@ const bump = (u) => (u <= 0 || u >= 1) ? 0 : Math.sin(Math.PI * u ** 0.7) ** 2;
 const rad = (d) => d * Math.PI / 180;
 
 /** Head pose (4x4, nested) from z (m) and roll, pitch, yaw (rad): R = Rz(yaw) Ry(pitch) Rx(roll), as rmr.motion.rpy_to_mat. */
-function pose(z, roll, pitch, yaw = 0) {
+export function pose(z, roll, pitch, yaw = 0) {
     const cr = Math.cos(roll), sr = Math.sin(roll), cp = Math.cos(pitch), sp = Math.sin(pitch);
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     return [[cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr, 0],

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Puppeteer Reachy</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    #cam { position: fixed; right: 12px; top: 12px; width: 120px; border-radius: 10px; transform: scaleX(-1); z-index: 5;
+           background: #000; opacity: 0.85; }
+    #puppet .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+    #puppet input[type=text] { width: 100%; box-sizing: border-box; margin: 4px 0; padding: 6px 8px; }
+    #rec.on { background: #c0392b; color: #fff; }
+    #count { font-size: 40px; font-weight: 600; text-align: center; min-height: 48px; }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+  <video id="cam" playsinline muted autoplay hidden></video>
+  <aside id="panel">
+    <h1>Puppeteer Reachy</h1>
+    <p class="sub">Act out a feeling with your face and head; Reachy copies you. Record it, name it, and it becomes
+      training data for how Reachy moves. Your camera image stays on your phone: only the robot's motion is saved.</p>
+    <div id="puppet">
+      <div class="row">
+        <button id="start" class="primary" type="button">📷 Start camera</button>
+        <button id="calib" type="button" disabled title="Look straight at the phone with a relaxed face">Reset neutral</button>
+        <label class="loop"><input id="mirror" type="checkbox" checked> mirror</label>
+      </div>
+      <div class="row">
+        <button id="rec" type="button" disabled>⏺ Record</button>
+        <button id="play" type="button" disabled>▶ Play back</button>
+      </div>
+      <div id="count"></div>
+      <label for="label">What feeling is it? (one word)</label>
+      <input id="label" type="text" maxlength="40" placeholder="sheepish">
+      <label for="desc">Describe it (optional)</label>
+      <input id="desc" type="text" maxlength="200" placeholder="caught doing something silly, shy little smile">
+      <div class="row">
+        <button id="save" class="primary" type="button" disabled>Save to training data</button>
+        <button id="download" type="button" disabled>Download move</button>
+      </div>
+    </div>
+    <div id="status"></div>
+    <p class="sub">Tips: hold the phone at eye level, relax, tap "Reset neutral", then perform. Turn, nod, tilt and
+      raise or lower your head; raise or furrow your brows for the antennas. Up to 15 s per clip.
+      Face tracking: MediaPipe Face Landmarker (Apache-2.0).</p>
+  </aside>
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+      "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  } }
+  </script>
+  <script type="module" src="src/puppet_app.js"></script>
+</body>
+</html>

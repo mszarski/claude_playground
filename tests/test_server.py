@@ -153,3 +153,22 @@ def test_feedback_logs_rated_turns_and_mood_follows_the_conversation(client, tmp
     assert (tmp_path / rows[1]["audio"]).read_bytes() == b"\1" * 2000
     assert rows[0]["recipe"] and rows[0]["heard"]["text"] == "I got the job!" and rows[0]["reading"] == "They're thrilled."
     assert "_audio" not in rows[0]
+
+
+def test_puppeteered_clips_are_saved(client, tmp_path):
+    import json
+
+    import numpy as np
+
+    from rmr.feedback import FeedbackLog
+
+    eng = client.app.state.engine
+    eng.feedback = FeedbackLog(str(tmp_path))
+    fr = [{"head": np.eye(4).tolist(), "antennas": [-0.2, 0.2], "body_yaw": 0}] * 50
+    move = {"time": [i / 25 for i in range(50)], "set_target_data": fr}
+    r = client.post("/api/clips", json={"label": "sheepish", "description": "caught out", "move": move})
+    assert r.status_code == 200
+    saved = json.loads((tmp_path / "clips" / f"{r.json()['id']}.json").read_text())
+    assert saved["label"] == "sheepish" and len(saved["move"]["set_target_data"]) == 50
+    assert client.post("/api/clips", json={"label": "Bad!", "move": move}).status_code == 422
+    assert client.post("/api/clips", json={"label": "ok", "move": {**move, "time": move["time"][:10]}}).status_code == 422

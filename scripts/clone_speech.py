@@ -43,7 +43,7 @@ def crema_bytes(names):
 
 
 def pick(rows, per_feeling, seed, only=None):
-    rows = [r for r in rows if r.get("tone") and r.get("text") and not re.fullmatch(r"\d{4}_[A-Z]{3}_.*", r["clip"])]
+    rows = [r for r in rows if r.get("tone") and r.get("text") and not r["clip"].startswith("t_")]   # t_: real CREMA-D
     if only:
         rows = [r for r in rows if r["clip"] in only]
     if not per_feeling:
