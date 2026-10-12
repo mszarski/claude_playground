@@ -1,5 +1,5 @@
-# Live text-to-motion Space: python -m rmr.server. Speech goes to the voice student: the 4-bit GGUF build behind
-# llama.cpp's CUDA server (LLAMA_GGUF, ~3x faster than bf16 transformers on the same GPU), or a transformers model
+# Live text-to-motion Space: python -m rmr.server. Speech goes to the voice student: the 8-bit GGUF build behind
+# llama.cpp's CUDA server (LLAMA_GGUF, ~2.5x faster than bf16 transformers on the same GPU), or a transformers model
 # (VOICE_MODEL) when LLAMA_GGUF is unset. Whisper and the speech-emotion models run on the GPU too; typed prompts use
 # the planner on HF Inference Providers.
 FROM ghcr.io/ggml-org/llama.cpp:server-cuda

@@ -7,7 +7,7 @@ Uploads rmr/, pyproject.toml, visualizer/, deploy/Dockerfile and deploy/start.sh
 caller's HF_TOKEN as a Space secret (the server needs it to download the private generator checkpoint and voice
 student, and to call the planner on Hugging Face Inference Providers, billed to that account). Speech goes to the
 licence-clean voice student (``--voice-model``, in-process on the Space's GPU) unless ``--voice-model ""``, which falls
-back to ``--responder-model`` on Inference Providers. With ``--gguf`` (the default) the student runs as its 4-bit GGUF
+back to ``--responder-model`` on Inference Providers. With ``--gguf`` (the default) the student runs as its 8-bit GGUF
 build behind llama.cpp's CUDA server in the container instead of transformers (``--gguf ""`` to turn off). ``--sleep``: seconds without visitors before a paid Space sleeps.
 """
 import argparse
@@ -45,7 +45,7 @@ def main():
     ap.add_argument("--responder-model", default="Qwen/Qwen3-Next-80B-A3B-Instruct",
                     help="open-weight LLM that decides how Reachy responds to speech")
     ap.add_argument("--voice-model", default="mszarski/reachy-voice:student/v8-dpo")
-    ap.add_argument("--gguf", default="mszarski/reachy-voice:gguf/v8-dpo/reachy-voice-4b-Q4_K_M.gguf",
+    ap.add_argument("--gguf", default="mszarski/reachy-voice:gguf/v8-dpo/reachy-voice-4b-Q8_0.gguf",
                     help="repo:path of the student's GGUF, served by llama.cpp in the Space")
     ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
     ap.add_argument("--sleep", type=int, default=None, help="sleep after this many idle seconds (paid hardware)")

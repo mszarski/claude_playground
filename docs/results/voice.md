@@ -157,6 +157,24 @@ subset of the evaluation, Q4_K_M behind `llama-server` vs the full-precision stu
 The differences are within noise for 60 clips (3-4 clips each way). 15 s is on a small 4-vCPU cloud VM (8 tokens/s);
 a laptop with Metal or any GPU is several times faster, and a recent 8-core CPU about twice as fast.
 
+### Served on a GPU (the live Space)
+
+The live Space (`deploy/live_space.py`, an L4) first ran the student in bf16 with transformers: the first motion
+came 4.8-7.1 s after the person stopped, almost all of it the model writing its answer. The L4 reads all 8 GB of
+weights per token, so bf16 cannot go much past ~35 tokens/s. Serving a GGUF build with llama.cpp's CUDA server in
+the same container (`deploy/start.sh`) reads fewer bytes per token. `scripts/gguf_eval_job.sh` scores a build on
+the clean evaluation sets on a GPU job:
+
+| v8-dpo | lines UA | lines physical | tone UA | tone physical | same feeling as bf16 | model time to first motion |
+|---|---|---|---|---|---|---|
+| bf16, transformers | 64.8% | 90.3% | 42.3% | 77.5% | | 4.3-5.7 s |
+| Q8_0, llama.cpp | 64.2% | 89.7% | 42.7% | 78.3% | 531 / 555 | see below |
+| Q4_K_M, llama.cpp | 65.2% | 88.0% | 41.7% | **70.0%** | 464 / 555 | 1.3-2.0 s |
+
+Q4_K_M reads people as well, but its responses fit physically less often on the tone test (31 clips lost vs 13
+gained against bf16, sign test p = 0.01): when only the voice gives the feeling away, the 4-bit model's motion
+drifts. Q8_0 is indistinguishable from bf16 (2 lost, 4 gained), so the Space serves Q8_0.
+
 ## Running it locally
 
 ```bash
