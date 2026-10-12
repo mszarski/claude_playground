@@ -3,6 +3,7 @@
 #
 #   export HF_TOKEN=hf_...                 # needs Jobs + write access
 #   jobs/launch.sh fetch                   # once: Drive + Text2CAD -> your bucket (CPU)
+#   jobs/launch.sh text                    # Text2CAD index only (if fetch ran before access was granted)
 #   jobs/launch.sh test                    # smoke tests on a GPU
 #   jobs/launch.sh export                  # embeddings with the released GenCAD checkpoints
 #   jobs/launch.sh embed
@@ -13,7 +14,7 @@
 # Overrides: FLAVOR, TIMEOUT, BUCKET (default <you>/gencad-work), IMAGE, plus any env knob from entry.sh
 # (RUN, EPOCHS, BS, LR, STEPS, CSR_CKPT, CCIP_CKPT, DP_CKPT, IMG_TYPE, OCC, HUB_REPO). DRY=1 prints the command.
 set -euo pipefail
-STAGE=${1:?usage: jobs/launch.sh <fetch|test|csr|ccip|export|embed|dp|mm|eval|shell> [args...]}; shift
+STAGE=${1:?usage: jobs/launch.sh <fetch|text|test|csr|ccip|export|embed|dp|mm|eval|shell> [args...]}; shift
 : "${HF_TOKEN:?export HF_TOKEN first}"
 NS=${NS:-$(hf auth whoami --format json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("name") or d["user"])')}
 BUCKET=${BUCKET:-$NS/gencad-work}
@@ -22,6 +23,7 @@ IMAGE=${IMAGE:-pytorch/pytorch:2.8.0-cuda12.8-cudnn9-runtime}
 # per-stage defaults: hardware and wall-clock limit
 case "$STAGE" in
   fetch)        DF=cpu-upgrade; DT=6h ;;
+  text)         DF=cpu-upgrade; DT=1h ;;
   test)         DF=t4-small;    DT=1h ;;
   export|embed) DF=a10g-large;  DT=4h ;;
   csr)          DF=a100-large;  DT=48h ;;

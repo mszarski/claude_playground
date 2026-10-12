@@ -66,6 +66,12 @@ def from_drive(data):
         hits = sorted(glob.glob(os.path.join(tmp, "**", name), recursive=True), key=len)
         if hits and not os.path.exists(os.path.join(data, name)):
             shutil.move(hits[0], os.path.join(data, name))
+    # the split files ship in the upstream git repo (data/), not in the Drive folder
+    repo_data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data")
+    for name in ["filtered_data.json", "image_ids.json"]:
+        src = os.path.join(repo_data, name)
+        if not os.path.exists(os.path.join(data, name)) and os.path.exists(src):
+            shutil.copy(src, os.path.join(data, name))
     print("[drive] data dir now contains:", sorted(os.listdir(data)))
     print("[drive] checkpoints:", sorted(os.listdir(os.path.join(data, "ckpt"))))
 
@@ -120,9 +126,14 @@ def main():
     else:
         from_drive(a.data)
         if a.text2cad and not os.path.exists(os.path.join(a.data, "text_index.json")):
-            sh(sys.executable, os.path.join(os.path.dirname(__file__), "build_text_index.py"),
-               "--hf_repo", a.text2cad, "--split_json", os.path.join(a.data, "filtered_data.json"),
-               "--out", os.path.join(a.data, "text_index.json"))
+            try:
+                sh(sys.executable, os.path.join(os.path.dirname(__file__), "build_text_index.py"),
+                   "--hf_repo", a.text2cad, "--split_json", os.path.join(a.data, "filtered_data.json"),
+                   "--out", os.path.join(a.data, "text_index.json"))
+            except subprocess.CalledProcessError:
+                # e.g. Text2CAD is gated and the token's account hasn't been granted access yet; keep the
+                # Drive data and build the index later with `jobs/launch.sh text`
+                print(f"[text] WARNING: could not build text_index.json from {a.text2cad}; continuing without it")
         if a.mirror:
             mirror_to_hub(a.data, a.mirror)
     # upstream inference_gencad.py looks in model/ckpt

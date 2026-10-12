@@ -50,6 +50,10 @@ case "$STAGE" in
     cp -rf /tmp/d/ckpt/. /work/ckpt/ 2>/dev/null || true
     ls -la /work/data /work/ckpt ;;
 
+  text)       # Text2CAD annotations -> text_index.json (needs access to the gated SadilKhan/Text2CAD)
+    python scripts/build_text_index.py --hf_repo SadilKhan/Text2CAD --split_json data/filtered_data.json \
+      --out /work/data/text_index.json "$@" ;;
+
   test)       # unit + smoke tests on synthetic data, real encoders included
     MM_TEST_ENCODERS=1 python -m pytest tests/test_mm_smoke.py -q -s "$@" ;;
 
