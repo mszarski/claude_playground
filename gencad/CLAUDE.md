@@ -25,12 +25,14 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
   run `jobs/launch.sh text`, then embed only the text (`embed` would redo the 45-min image pass):
   `jobs/launch.sh shell -- python scripts/embed_conditions.py text --text_index /work/data/text_index.json --out /work/emb/cond_text.h5`, then
   `RUN=mm_v1 jobs/launch.sh mm --modalities image text` and `RUN=mm_v1 jobs/launch.sh eval`.
-- Image-only prior `RUN=mm_img jobs/launch.sh mm --modalities image` launched; evaluate with
-  `RUN=mm_img jobs/launch.sh eval` and compare to `results/released/eval.json`.
+- Image-only prior `mm_img` (SigLIP2 render embeddings, 200k steps, ~1.5 h on A100), same 2000 test samples
+  (`results/mm_img/eval.json`): guidance w=2 gives cos 0.635, R@1 0.448, R@10 0.603, acc_cmd 0.671,
+  acc_param 0.743 vs gencad_dp 0.535 / 0.220 / 0.421 / 0.599 / 0.659. w=3 is about the same; w=1 a bit lower.
+  Not yet apples-to-apples: GenCAD conditions on Canny sketches, mm_img on rendered images (see ablation).
 - Pull results locally with `hf buckets cp hf://buckets/mszarski/gencad-work/results/<run>/eval.json ...`.
 
 ## Next steps
-1. Evaluate `mm_img`; ablation `RUN=mm_ccip ... mm --modalities ccip_image` (GenCAD's conditioning, new denoiser).
+1. Ablation `RUN=mm_ccip ... mm --modalities ccip_image` (GenCAD's conditioning, new denoiser).
 2. Text, once access is granted (see above).
 3. Jobs: `jobs/launch.sh <stage>` (`DRY=1` prints the command); monitor with `hf jobs logs <id>` /
    `hf jobs inspect <id> --format json`.
