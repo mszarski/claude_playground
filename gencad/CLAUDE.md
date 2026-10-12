@@ -16,26 +16,36 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
 ## State (2026-10-12, second session)
 - Local: `pip install torch torchvision -r jobs/requirements-job.txt && ./setup.sh`; tests pass (9, CPU). GPU
   `test` stage passes on a T4 with the real SigLIP2/Qwen3 encoders.
-- Bucket `mszarski/gencad-work` holds: `data/{cad_vec,images,sketches}.tar` + split JSONs, all 7 released
-  checkpoints in `ckpt/`, `emb/{cad_latents,cond_ccip_image,cond_image}.h5` (168,674 uids).
-- Replication baseline (`results/released/eval.json`, 2000 test samples, sketch CCIP + sketch DP):
-  csr_recon acc_cmd 0.918 / acc_param 0.957; gencad_dp cos 0.535, R@1 0.220, R@10 0.421, acc_cmd 0.599,
-  acc_param 0.659.
-- **Text is blocked**: `SadilKhan/Text2CAD` is gated and the account has not been granted access. Once it is,
-  run `jobs/launch.sh text`, then embed only the text (`embed` would redo the 45-min image pass):
-  `jobs/launch.sh shell -- python scripts/embed_conditions.py text --text_index /work/data/text_index.json --out /work/emb/cond_text.h5`, then
-  `RUN=mm_v1 jobs/launch.sh mm --modalities image text` and `RUN=mm_v1 jobs/launch.sh eval`.
-- Image-only prior `mm_img` (SigLIP2 render embeddings, 200k steps, ~1.5 h on A100), same 2000 test samples
-  (`results/mm_img/eval.json`): guidance w=2 gives cos 0.635, R@1 0.448, R@10 0.603, acc_cmd 0.671,
-  acc_param 0.743 vs gencad_dp 0.535 / 0.220 / 0.421 / 0.599 / 0.659. w=3 is about the same; w=1 a bit lower.
-  Not yet apples-to-apples: GenCAD conditions on Canny sketches, mm_img on rendered images (see ablation).
-- Pull results locally with `hf buckets cp hf://buckets/mszarski/gencad-work/results/<run>/eval.json ...`.
+- Bucket `mszarski/gencad-work` holds: `data/{cad_vec,images,sketches}.tar`, split JSONs, `text_index.json`
+  (Text2CAD v1.1, 98.6% of train uids), all 7 released checkpoints in `ckpt/`,
+  `emb/{cad_latents,cond_ccip_image,cond_image,cond_text}.h5` (168,674 uids; text = 6 levels: abstract,
+  beginner, intermediate, expert, description, keywords), and `results/<run>/{last.pt,log.jsonl,eval*.json}`.
+- All priors: 200k steps, ~1.5 h on one A100. Pull results with
+  `hf buckets cp hf://buckets/mszarski/gencad-work/results/<run>/eval.json <local>`.
 
-## Next steps
-1. Ablation `RUN=mm_ccip ... mm --modalities ccip_image` (GenCAD's conditioning, new denoiser).
-2. Text, once access is granted (see above).
-3. Jobs: `jobs/launch.sh <stage>` (`DRY=1` prints the command); monitor with `hf jobs logs <id>` /
-   `hf jobs inspect <id> --format json`.
+### Results: 2000 test samples, guidance w=2 unless noted
+| row | cos | R@1 | R@10 | acc_cmd | acc_param |
+|---|---|---|---|---|---|
+| csr_recon (upper bound) | 1.000 | 1.000 | 1.000 | 0.918 | 0.957 |
+| gencad_dp (released, sketch) | 0.535 | 0.220 | 0.421 | 0.599 | 0.659 |
+| mm_ccip: ccip_image (GenCAD features, new denoiser) | 0.641 | 0.461 | 0.637 | 0.666 | 0.748 |
+| mm_img: image (SigLIP2) | 0.635 | 0.448 | 0.603 | 0.671 | 0.743 |
+| mm_v1: image | 0.626 | 0.435 | 0.599 | 0.665 | 0.740 |
+| mm_v1: text, random level | 0.490 | 0.162 | 0.311 | 0.557 | 0.634 |
+| mm_v1: text, abstract / beginner / intermediate / expert | 0.438 / 0.515 / 0.550 / 0.570 | 0.100 / 0.203 / 0.245 / 0.254 | 0.201 / 0.360 / 0.447 / 0.478 | 0.498 / 0.576 / 0.616 / 0.650 | 0.614 / 0.633 / 0.651 / 0.671 |
+| mm_v1: image+text, random level | 0.647 | 0.468 | 0.645 | 0.681 | 0.751 |
+| mm_v1: image+text, expert | 0.666 | 0.503 | 0.693 | 0.695 | 0.759 |
+
+Takeaways: the gain over GenCAD comes from the new denoiser/training (mm_ccip ≈ mm_img), not SigLIP2. Text
+helps on top of an image; more detailed prompts help more; expert text alone beats GenCAD's image prior on
+acc_cmd. w=3 ≈ w=2 everywhere, w=1 a bit lower. Per-level evals: `eval_mm.py --text_level <level>`.
+
+## Next steps (ideas, none started)
+- mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
+  metrics flatten after ~120k steps, so probably little to gain).
+- Qualitative check: `infer_mm.py` on a few test uids / free-form prompts, export STEP with `OCC=1`.
+- Jobs: `jobs/launch.sh <stage>` (`DRY=1` prints the command); monitor with `hf jobs logs <id>` /
+  `hf jobs inspect <id> --format json`.
 
 ## Gotchas
 - Upstream `trainer/autoencoder_test.py::encode` writes CSR latents from a *shuffled* loader with no uids, so
@@ -47,5 +57,6 @@ Tracked here (ours): `mm/`, `scripts/`, `jobs/`, `tests/`, `train_mm_prior.py`, 
 - Upstream `config/configAE.py` defaults are debug-sized (batch_size=2); pass `-bs/-epochs/-lr` overrides.
 - Upstream training code hard-codes CUDA.
 - Job image must have torch>=2.6 (transformers 5.x uses `torch.accelerator`).
-- Text2CAD is gated: the HF account behind `HF_TOKEN` must be granted access on the dataset page.
+- Text2CAD is gated (CC BY-NC-SA 4.0, auto-approved); the HF account behind `HF_TOKEN` has accepted it.
+  Use only `text2cad_v1.1/*.csv` (v1.0 is noisier). Never commit its data here.
 - `jobs/launch.sh` uploads a dereferenced snapshot of this folder (symlinks followed, data/results excluded).
