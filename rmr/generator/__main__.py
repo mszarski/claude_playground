@@ -1,7 +1,8 @@
 """python -m rmr.generator {train,evaluate,sample}
 
 Motion sources (combine freely): --emotions-dir DIR (a local copy of Pollen's emotions library),
---hub (download emotions + dances from the Hugging Face Hub), --dances (procedural dances, no network).
+--hub (download emotions + dances from the Hugging Face Hub), --dances (procedural dances, no network),
+--clips DIR (puppeteered clips saved by the viewer's puppet page, rmr.feedback: <id>.json with a "move").
 """
 import argparse
 import json
@@ -18,6 +19,12 @@ def _moves(a):
     if a.hub:
         moves += library.hub(library.EMOTIONS) + library.hub(library.DANCES)
         held += library.HELD_OUT_EMOTIONS
+    if getattr(a, "clips", None):
+        import glob
+
+        for path in sorted(glob.glob(os.path.join(a.clips, "*.json"))):
+            rec = json.load(open(path))
+            moves.append((f"puppet_{rec['label'].replace(' ', '_')}_{rec['id']}", rec["move"]))
     if a.dances:
         moves += library.dances()
         if not held:                 # dances only: hold out a few dances instead
@@ -33,6 +40,7 @@ def main():
     ap.add_argument("--emotions-dir")
     ap.add_argument("--hub", action="store_true")
     ap.add_argument("--dances", action="store_true")
+    ap.add_argument("--clips", help="folder of puppeteered clips (visualizer/puppet.html, POST /api/clips)")
     ap.add_argument("--ckpt", default="checkpoints/generator.pt")
     ap.add_argument("--steps", type=int, default=5000)
     ap.add_argument("--bs", type=int, default=16)
