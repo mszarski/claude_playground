@@ -51,3 +51,29 @@ our generator (5 plan variants per emotion, 100 flow steps).
   each) follow. The sneeze release sometimes goes up instead of down (19/24 correct).
 - The zero-shot frontier LLM beats it on the probes; the fine-tuned 4B is better on real clips (within noise). It
   runs locally in 0.4 s per answer, batched, on an A100 (plain transformers), and needs no API.
+
+## Grounding the planner in Pollen's real clips (2026-10-11): negative
+
+The gap between LLM recipes (20-28% top-1 on the held-out real clips) and the true plans (91.7%) looked like taste:
+how an LLM imagines an emotion versus how Pollen's animator made it. `scripts/ground_planner.py` transcribes every
+real clip's plan into a recipe (the held-out emotions and any clip of the same word left out); a transcription keeps
+enough to score 52% top-1 itself.
+
+| planner | held-out top-1 / mean rank | probes OOD / skill | valid |
+|---|---|---|---|
+| Kimi-K3 zero-shot (8 samples) | 24% / 4.40 | | 100% |
+| Kimi-K3 with the 68 real clips in the prompt | 24% / 4.69 | | 100% |
+| Kimi-K3 adapting the closest real clip | 23% / 4.72 | | 100% |
+| the closest real clip itself (picked by Kimi-K3) | 19% / 5.36 | | |
+| **fine-tuned 4B (current)** | **28% / ~4.0** | **0.88 / 0.81** | 100% |
+| B: + 972 prompts written for the real clips (x3), 3,000 recipes restyled by grounded Kimi-K3 | not run | 0.68 / 0.58 | 86% |
+| B2: the same with compact clip recipes (x1) | 10% / 5.72 | 0.71 / 0.78 | 98% |
+
+- Even Pollen's own nearest clip identifies the held-out clip worse than an LLM's recipe: each clip is idiosyncratic,
+  and about 20-30% is the ceiling for anything that has not seen it. This metric cannot show a house style.
+- A style distance (a classifier telling a set of recipes from the real clips on plan descriptors; AUC 0.5 =
+  indistinguishable) does separate them: 68% of the teacher data (`astra_lively`) is far from the real style (0.93),
+  restyling halves the gap, and fine-tune B's recipes became indistinguishable from real (0.52, the current planner
+  0.64). But full-length transcriptions taught it to write past its answer length, and B2 (compact transcriptions,
+  style 0.61) lost probe skills and held-out identification. Matching the real clips' statistics is not matching
+  each emotion; the current planner stays.
