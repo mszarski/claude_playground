@@ -87,6 +87,9 @@ def main():
         items = [(i, k, index[u][lv]) for i, u in enumerate(uids) if u in index
                  for k, lv in enumerate(levels) if lv in index[u]]
         K, variants = len(levels), levels
+        # batches are padded to their longest text: sorting by length keeps short prompts out of expert-length
+        # batches (several times faster); rows are written back by (uid, level) index, so order doesn't matter
+        items.sort(key=lambda t: len(t[2]))
 
     print(f"[embed] {len(items)} {a.modality} items, backend={backend} model={model_id} dim={enc.dim}")
     emb = np.zeros((len(uids), K, enc.dim), np.float16)
