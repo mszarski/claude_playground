@@ -1,7 +1,7 @@
 // Drive the real UI with mouse events.
 const { chromium } = require('./pw');
 const path = require('path');
-const SP = process.argv[2];
+const SP = process.argv[2] || require('os').tmpdir();
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
