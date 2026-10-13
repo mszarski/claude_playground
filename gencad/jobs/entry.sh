@@ -104,6 +104,11 @@ case "$STAGE" in
     need cad_vec images
     python train_token_cad.py --emb_dir data/emb --data data --name "$RUN" --steps ${STEPS:-40000} "$@" ;;
 
+  vlmcad)     # Qwen3-VL fine-tuned to write CAD programs from renders / prompts (train_vlm_cad.py)
+    need cad_vec
+    if [[ " $* " == *" --images images "* ]]; then need images; else need renders; fi
+    python train_vlm_cad.py --emb_dir data/emb --data data --name "$RUN" --steps ${STEPS:-15000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 

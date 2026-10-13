@@ -428,7 +428,7 @@ def test_vlm_cad_text_roundtrip_and_script_end_to_end():
             json.dump(obj, f)
     cmd = [sys.executable, os.path.join(ROOT, "train_vlm_cad.py"), "--emb_dir", root, "--data", data,
            "--out_dir", root, "--name", "vlm", "--model", model, "--bs", "4", "--accum", "2", "--steps", "4",
-           "--warmup", "1", "--eval_every", "4", "--eval_n", "4", "--save_every", "4", "--workers", "0",
+           "--warmup", "1", "--images", "images", "--eval_every", "4", "--eval_n", "4", "--save_every", "4", "--workers", "0",
            "--device", "cpu"]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=900)
     print(r.stdout[-3000:], r.stderr[-3000:])

@@ -34,8 +34,9 @@ def load_views(img_dir, u, views):
 
 
 class Samples(Dataset):
-    def __init__(self, uids, programs, img_dir, img_ids, text_index, levels, mode_p):
+    def __init__(self, uids, programs, img_dir, img_ids, text_index, levels, mode_p, fixed_cameras=False):
         self.uids, self.programs, self.img_dir, self.img_ids = uids, programs, img_dir, img_ids
+        self.fixed_cameras = fixed_cameras
         self.text_index, self.levels = text_index, levels
         self.modes, self.mode_p = list(mode_p), np.array(list(mode_p.values())) / sum(mode_p.values())
 
@@ -53,7 +54,10 @@ class Samples(Dataset):
         image = None
         if mode.startswith("view"):
             views = list(self.img_ids[u])
-            random.shuffle(views)
+            if mode.startswith("view4") and self.fixed_cameras:
+                views = views[:4]                      # grid cell k is always camera k
+            else:
+                random.shuffle(views)
             image = compose_views(load_views(self.img_dir, u, views[: 1 if mode.startswith("view1") else 4]))
         return image, prompt, self.programs[i]
 
@@ -104,6 +108,9 @@ def main():
     ap.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
     ap.add_argument("--levels", nargs="*", default=["abstract", "beginner", "intermediate", "expert", "description"])
     ap.add_argument("--mode_p", default="view1=0.3,view4=0.25,view1+text=0.15,view4+text=0.15,text=0.15")
+    ap.add_argument("--images", default="renders", choices=["renders", "images"],
+                    help="renders: our fixed-camera renders of the GT program (scripts/render_views.py); "
+                         "images: GenCAD's renders, which do not all show the GT program (scripts/check_views.py)")
     ap.add_argument("--no_dedup", action="store_true", help="keep exact duplicate training programs")
     ap.add_argument("--bs", type=int, default=8, help="micro batch")
     ap.add_argument("--accum", type=int, default=4)
@@ -128,8 +135,12 @@ def main():
 
     with open(os.path.join(a.data, "filtered_data.json")) as f:
         splits = json.load(f)
-    with open(os.path.join(a.data, "image_ids.json")) as f:
-        img_ids = json.load(f)
+    if a.images == "renders":
+        with open(os.path.join(a.data, "renders", "status.json")) as f:
+            img_ids = {u: [0, 1, 2, 3] for u, st in json.load(f).items() if st in ("ok", "skip")}
+    else:
+        with open(os.path.join(a.data, "image_ids.json")) as f:
+            img_ids = json.load(f)
     with open(os.path.join(a.data, "text_index.json")) as f:
         text_index = json.load(f)
     train = [u for u in splits["train"] if img_ids.get(u)][: a.max_items]
@@ -145,7 +156,7 @@ def main():
         print(f"[data] dedup: {len(train)} -> {len(keep)} training programs", flush=True)
         train, texts = [train[i] for i in keep], [texts[i] for i in keep]
     gt_va = [unpad(v) for v in vec[-len(val):]]
-    img_dir = os.path.join(a.data, "images")
+    img_dir = os.path.join(a.data, a.images)
     mode_p = {k: float(v) for k, v in (kv.split("=") for kv in a.mode_p.split(","))}
     assert set(mode_p) <= set(MODES), mode_p
     print(f"[data] train={len(train)} val={len(val)} modes={mode_p}", flush=True)
@@ -189,7 +200,7 @@ def main():
         with open(os.path.join(out, "model", "step.json"), "w") as f:
             json.dump({"step": step, "args": vars(a)}, f)
 
-    ds = Samples(train, texts, img_dir, img_ids, text_index, a.levels, mode_p)
+    ds = Samples(train, texts, img_dir, img_ids, text_index, a.levels, mode_p, fixed_cameras=a.images == "renders")
     loader = DataLoader(ds, batch_size=a.bs, shuffle=True, num_workers=a.workers, drop_last=True,
                         collate_fn=Collate(vlm.processor), pin_memory=True, persistent_workers=a.workers > 0,
                         worker_init_fn=lambda w: np.random.seed(torch.initial_seed() % 2**32))
