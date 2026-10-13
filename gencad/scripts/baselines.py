@@ -47,6 +47,7 @@ def main():
     ap.add_argument("--csr_ckpt", default=None)
     ap.add_argument("--prior", default=None, help="multimodal prior to sample (image, text, image+text at --guidance)")
     ap.add_argument("--gencad_dp_ckpt", default=None)
+    ap.add_argument("--ar_decoder", default=None, help="also report the autoregressive decoder's GT-latent ceiling")
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
     ap.add_argument("--skip_knn", action="store_true", help="only score the priors (duplicates are always computed)")
@@ -146,15 +147,21 @@ def main():
         knn(f"knn_{m}", q, keys, owner)
 
     # --- the generative models, split the same way
-    if a.csr_ckpt and (a.prior or a.gencad_dp_ckpt):
+    if a.csr_ckpt:
         from mm.gencad_io import decode_latents, load_csr
         csr, _ = load_csr(a.csr_ckpt, device)
 
-        def decode(z):
+        def decode(z, dec=csr):
             out = []
             for s in range(0, len(z), 256):
-                out += decode_latents(csr, z[s: s + 256])
+                out += decode_latents(dec, z[s: s + 256])
             return out
+
+        # ceiling: decode each test part's own GT latent (the best latent any prior could produce)
+        score("csr_recon", decode(z_gt), z_gt)
+        if a.ar_decoder:
+            from mm.ar_decoder import ARDecoder
+            score("ar_recon", decode(z_gt, ARDecoder.load(a.ar_decoder)[0].to(device).eval()), z_gt)
 
         if a.gencad_dp_ckpt:
             from model import GaussianDiffusion1D, ResNetDiffusion
