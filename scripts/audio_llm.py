@@ -211,6 +211,32 @@ class AudioRows:
         return {**self.rows[i], "wav": self.wav[i][:16000 * 30]}
 
 
+def collate_voxtral(proc):
+    """Prompt via mistral-common (rmr.audio_responder.voxtral_inputs) + the answer's tokens + EOS; loss on the answer."""
+    import torch
+
+    from rmr.audio_responder import voxtral_inputs
+
+    tok = proc.tokenizer
+    pad = tok.pad_token_id if tok.pad_token_id is not None else tok.eos_token_id
+
+    def collate(batch):
+        ids, labels, feats = [], [], []
+        for ex in batch:
+            enc = voxtral_inputs(proc, ex, ex["wav"])
+            p = enc["input_ids"][0].tolist()
+            ans = tok.encode(ex["answer"], add_special_tokens=False) + [tok.eos_token_id]
+            ids.append(p + ans)
+            labels.append([-100] * len(p) + ans)
+            feats.append(enc["input_features"])
+        n = max(map(len, ids))
+        return {"input_ids": torch.tensor([x + [pad] * (n - len(x)) for x in ids]),
+                "attention_mask": torch.tensor([[1] * len(x) + [0] * (n - len(x)) for x in ids]),
+                "labels": torch.tensor([x + [-100] * (n - len(x)) for x in labels]),
+                "input_features": torch.cat(feats)}
+    return collate
+
+
 def collate_fn(proc):
     import torch
 
@@ -236,11 +262,21 @@ def train(a):
     from peft import LoraConfig, get_peft_model
     from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration, Trainer, TrainingArguments
 
+    from rmr.audio_responder import family
+
     proc = AutoProcessor.from_pretrained(a.model)
     gpu = torch.cuda.is_available()
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(a.model, dtype=torch.bfloat16 if gpu else torch.float32)
+    fam = family(a.model)
+    if fam == "voxtral":
+        from transformers import VoxtralForConditionalGeneration as cls
+    else:
+        cls = Qwen2AudioForConditionalGeneration
+    model = cls.from_pretrained(a.model, dtype=torch.bfloat16 if gpu else torch.float32)
     model.config.use_cache = False
     targets = r".*language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)$"
+    if a.encoder_lora:           # also adapt the audio encoder (a model that does not hear tone yet must learn to)
+        targets = (r".*(language_model.*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)"
+                   r"|audio_tower.*\.(q_proj|k_proj|v_proj|out_proj|fc1|fc2))$")
     model = get_peft_model(model, LoraConfig(r=a.r, lora_alpha=a.r, lora_dropout=0.0, target_modules=targets,
                                              task_type="CAUSAL_LM"))
     model.print_trainable_parameters()
@@ -256,7 +292,8 @@ def train(a):
                              gradient_checkpointing=True, gradient_checkpointing_kwargs={"use_reentrant": False},
                              dataloader_num_workers=0, report_to=[])
     t0 = time.time()
-    trainer = Trainer(model=model, args=args, train_dataset=tr, eval_dataset=va, data_collator=collate_fn(proc))
+    trainer = Trainer(model=model, args=args, train_dataset=tr, eval_dataset=va,
+                      data_collator=(collate_voxtral if fam == "voxtral" else collate_fn)(proc))
     trainer.train()
     print(f"best checkpoint {trainer.state.best_model_checkpoint} (eval_loss {trainer.state.best_metric:.4f}) in "
           f"{(time.time() - t0) / 60:.1f} min", flush=True)
@@ -283,12 +320,34 @@ def answer(a):
     else:
         crema = crema_audio([r["tone"] for r in rows])
         wavs = [crema[r["tone"]] for r in rows]
+    from rmr.audio_responder import family, voxtral_inputs
+
     proc = AutoProcessor.from_pretrained(a.model)
-    gpu = torch.cuda.is_available()
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     dt = torch.bfloat16 if dev == "cuda" else torch.float32
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(a.model, dtype=dt).to(dev).eval()
+    fam = family(a.model)
+    if fam == "voxtral":
+        from transformers import VoxtralForConditionalGeneration as cls
+    else:
+        cls = Qwen2AudioForConditionalGeneration
+    model = cls.from_pretrained(a.model, dtype=dt).to(dev).eval()
     out, t0 = [], time.time()
+    if fam == "voxtral":                 # one at a time (mistral-common builds one prompt per call)
+        for r, w in zip(rows, wavs):
+            enc = voxtral_inputs(proc, r, w).to(dev)
+            enc["input_features"] = enc["input_features"].to(dt)
+            with torch.no_grad():
+                gen = model.generate(**enc, max_new_tokens=400, do_sample=False)
+            g = proc.tokenizer.decode(gen[0, enc["input_ids"].shape[1]:].tolist(), skip_special_tokens=True)
+            try:
+                d = parse_json(g)
+            except Exception:
+                d = {}
+            out.append({"clip": r["clip"], "label": r["label"], "raw": g, "recipe": d.get("recipe"),
+                        "both": {k: d.get(k, "") for k in ("feeling", "reading", "response")}})
+            if len(out) % 25 == 0:
+                print(f"{len(out)}/{len(rows)} answered ({(time.time() - t0) / len(out):.2f} s each)", flush=True)
+        rows = []
     for i in range(0, len(rows), a.batch):
         batch = rows[i:i + a.batch]
         texts = [proc.apply_chat_template(conversation(r), add_generation_prompt=True, tokenize=False) for r in batch]
@@ -402,6 +461,7 @@ def main():
     t.add_argument("--bs", type=int, default=4)
     t.add_argument("--grad-accum", type=int, default=8)
     t.add_argument("--eval-steps", type=int, default=25)
+    t.add_argument("--encoder-lora", action="store_true", help="LoRA on the audio encoder too")
     an = sub.add_parser("answer")
     an.add_argument("--model", required=True)
     an.add_argument("--heard", required=True, help="eval rows; audio from CREMA-D ('tone') unless --voiced")

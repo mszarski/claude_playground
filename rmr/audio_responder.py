@@ -38,6 +38,32 @@ def conversation(ex):
 
 
 
+def family(path):
+    """"qwen2_audio" or "voxtral" (the two audio LLM families this responder knows)."""
+    from transformers import AutoConfig
+
+    return AutoConfig.from_pretrained(path).model_type
+
+
+def voxtral_inputs(proc, ex, wav):
+    """Voxtral's chat template (mistral-common) takes no system message with audio: the instructions go in the user
+    turn, ahead of the transcript. -> input_ids, attention_mask, input_features."""
+    import os
+    import tempfile
+
+    import soundfile as sf
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        sf.write(f.name, wav[:16000 * 30], 16000)
+        path = f.name
+    try:
+        conv = [{"role": "user", "content": [{"type": "audio", "path": path},
+                                             {"type": "text", "text": AUDIO_SYSTEM + "\n\n" + user_text(ex)}]}]
+        return proc.apply_chat_template(conv, tokenize=True, return_dict=True, return_tensors="pt")
+    finally:
+        os.unlink(path)
+
+
 class AudioStudent:
     def __init__(self, path, max_tokens=400):
         self.max_tokens = max_tokens
@@ -51,11 +77,15 @@ class AudioStudent:
         from .planner.finetune import resolve
 
         path = resolve(path)
-        self.torch = torch
+        self.torch, self.family = torch, family(path)
         self.dev = "cuda" if torch.cuda.is_available() else "cpu"
         self.dt = torch.bfloat16 if self.dev == "cuda" else torch.float32
         self.proc = AutoProcessor.from_pretrained(path)
-        self.m = Qwen2AudioForConditionalGeneration.from_pretrained(path, dtype=self.dt).to(self.dev).eval()
+        if self.family == "voxtral":
+            from transformers import VoxtralForConditionalGeneration as cls
+        else:
+            cls = Qwen2AudioForConditionalGeneration
+        self.m = cls.from_pretrained(path, dtype=self.dt).to(self.dev).eval()
 
     def stream(self, heard, wav):
         """Yield the answer text as it grows."""
@@ -66,8 +96,11 @@ class AudioStudent:
 
         from transformers import TextIteratorStreamer
 
-        text = self.proc.apply_chat_template(conversation(heard), add_generation_prompt=True, tokenize=False)
-        enc = self.proc(text=[text], audio=[wav[:16000 * 30]], sampling_rate=16000, return_tensors="pt").to(self.dev)
+        if self.family == "voxtral":
+            enc = voxtral_inputs(self.proc, heard, wav).to(self.dev)
+        else:
+            text = self.proc.apply_chat_template(conversation(heard), add_generation_prompt=True, tokenize=False)
+            enc = self.proc(text=[text], audio=[wav[:16000 * 30]], sampling_rate=16000, return_tensors="pt").to(self.dev)
         enc["input_features"] = enc["input_features"].to(self.dt)
         streamer = TextIteratorStreamer(self.proc.tokenizer, skip_prompt=True, skip_special_tokens=True)
         kw = dict(**enc, max_new_tokens=self.max_tokens, do_sample=False, streamer=streamer)
@@ -87,8 +120,11 @@ class AudioStudent:
         buf = io.BytesIO()
         sf.write(buf, wav[:16000 * 30], 16000, format="WAV")
         audio = {"type": "input_audio", "input_audio": {"data": base64.b64encode(buf.getvalue()).decode(), "format": "wav"}}
-        msgs = [{"role": "system", "content": AUDIO_SYSTEM},
-                {"role": "user", "content": [audio, {"type": "text", "text": user_text(heard)}]}]
+        if "voxtral" in (self.model or ""):          # no system message next to audio (voxtral_inputs)
+            msgs = [{"role": "user", "content": [audio, {"type": "text", "text": AUDIO_SYSTEM + "\n\n" + user_text(heard)}]}]
+        else:
+            msgs = [{"role": "system", "content": AUDIO_SYSTEM},
+                    {"role": "user", "content": [audio, {"type": "text", "text": user_text(heard)}]}]
         body = {"model": self.model or "reachy-audio", "messages": msgs, "temperature": 0.0,
                 "max_tokens": self.max_tokens, "stream": True}
         req = urllib.request.Request(self.url.rstrip("/") + "/chat/completions", json.dumps(body).encode(),
