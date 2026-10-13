@@ -283,3 +283,24 @@ def test_train_ar_decoder_script_end_to_end():
     from mm.ar_decoder import ARDecoder
     model, ck = ARDecoder.load(os.path.join(root, "ar", "last.pt"))
     assert ck["step"] == 20 and os.path.exists(os.path.join(root, "programs.npz"))
+
+
+def test_pooled_view_store_averages_views():
+    from mm.data import PooledViewStore, cond_file, open_store
+    root = tempfile.mkdtemp()
+    make_stores(root)
+    path = cond_file(root, "image_mv")
+    assert path.endswith("cond_image.h5")
+    s = open_store("image_mv", path)
+    assert isinstance(s, PooledViewStore)
+    u = s.uids[1]                                     # uid 1 has all 3 views
+    i = s.index[u]
+    e1, ok = s.get(u, 0)
+    assert ok and torch.allclose(e1, s.emb[i, 0].float())
+    e3, _ = s.get(u, 2)
+    assert torch.allclose(e3, s.emb[i, :3].float().mean(0))
+    u0 = s.uids[0]                                    # uid 0: view 2 missing -> at most 2 views averaged
+    j = s.index[u0]
+    assert torch.allclose(s.get(u0, 4)[0], s.emb[j, :2].float().mean(0))
+    r, ok = s.get(u, None)                            # random subset: some mean of 1..3 views
+    assert ok and r.shape == (s.dim,)

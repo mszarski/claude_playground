@@ -41,6 +41,13 @@ def build_embeds(prior, ck, a, device):
                            device=device)
         embeds["image"] = enc(a.image)
         n_inputs = len(a.image)
+    if a.image and "image_mv" in prior.modalities:  # multi-view model: all --image paths are views of one part
+        from mm.cond_encoders import ImageEncoder
+        info = enc_info.get("image_mv", {})
+        enc = ImageEncoder(info.get("backend", "siglip"), info.get("model", "google/siglip2-base-patch16-224"),
+                           device=device)
+        embeds["image_mv"] = enc(a.image).float().mean(0, keepdim=True)
+        n_inputs = 1
     if a.image and "ccip_image" in prior.modalities:
         assert a.ccip_ckpt, "prior uses ccip_image; pass --ccip_ckpt"
         from mm.gencad_io import load_ccip
@@ -75,7 +82,7 @@ def main():
     ap.add_argument("--w_text", type=float, default=3.0)
     ap.add_argument("--w_image", type=float, default=2.0)
     ap.add_argument("--w_ccip_image", type=float, default=1.0)
-    ap.add_argument("--order", nargs="*", default=["image", "ccip_image", "text"])
+    ap.add_argument("--order", nargs="*", default=["image", "image_mv", "ccip_image", "text"])
     ap.add_argument("--mode", default="chain", choices=["chain", "independent"])
     ap.add_argument("--steps", type=int, default=100)
     ap.add_argument("--eta", type=float, default=0.0)
@@ -95,7 +102,7 @@ def main():
 
     embeds = {k: v.repeat_interleave(a.n, 0) for k, v in embeds.items()}
     g = torch.Generator(device=device).manual_seed(a.seed)
-    weights = {"text": a.w_text, "image": a.w_image, "ccip_image": a.w_ccip_image}
+    weights = {"text": a.w_text, "image": a.w_image, "image_mv": a.w_image, "ccip_image": a.w_ccip_image}
     kw = dict(guidance=weights, order=a.order, mode=a.mode, steps=a.steps, eta=a.eta, generator=g)
     if a.best_of > 1:
         vecs = best_of_n(prior, csr, embeds, n=a.best_of, **kw)[0]

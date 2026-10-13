@@ -64,6 +64,36 @@ class EmbeddingStore:
         return self.emb[i, k].float(), True
 
 
+class PooledViewStore(EmbeddingStore):
+    """Multi-view condition: the mean of several variants (render views) of one uid, read from the per-view store.
+    variant=None (training) -> mean of a random non-empty subset of the valid views, so one model serves any number
+    of input views; variant=k -> mean of the first k+1 valid views (eval: k = n_views - 1)."""
+
+    def get(self, uid, variant=None, rng=None):
+        i = self.index.get(uid)
+        if i is None or not self.valid[i].any():
+            return torch.zeros(self.dim), False
+        ok = torch.nonzero(self.valid[i]).flatten()
+        if variant is None:
+            ok = ok[torch.randperm(len(ok))[: int(torch.randint(1, len(ok) + 1, (1,)))]]
+        else:
+            ok = ok[: variant + 1]
+        return self.emb[i, ok].float().mean(0), True
+
+
+POOLED_SUFFIX = "_mv"
+
+
+def cond_file(emb_dir, name):
+    """Embedding file for a modality name: '<m>_mv' pools the views of cond_<m>.h5."""
+    base = name[: -len(POOLED_SUFFIX)] if name.endswith(POOLED_SUFFIX) else name
+    return os.path.join(emb_dir, f"cond_{base}.h5")
+
+
+def open_store(name, path):
+    return PooledViewStore(path) if name.endswith(POOLED_SUFFIX) else EmbeddingStore(path)
+
+
 class CadLatentStore:
     def __init__(self, path):
         with h5py.File(path, "r") as f:
@@ -78,7 +108,7 @@ class MultiModalLatentDataset(Dataset):
     def __init__(self, cad_path, cond_paths: dict, split=None, split_json=None, variants: dict | None = None,
                  require_any=True, max_items=None):
         self.cad = CadLatentStore(cad_path)
-        self.stores = {m: EmbeddingStore(p) for m, p in cond_paths.items()}
+        self.stores = {m: open_store(m, p) for m, p in cond_paths.items()}
         uids = self.cad.uids
         if split is not None:
             with open(split_json) as f:

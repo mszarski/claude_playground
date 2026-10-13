@@ -19,7 +19,7 @@ import time
 import torch
 from torch.utils.data import DataLoader
 
-from mm.data import MultiModalLatentDataset, split_batch
+from mm.data import cond_file, MultiModalLatentDataset, split_batch
 from mm.diffusion import MultiCondDiffusionPrior
 from mm.metrics import latent_metrics
 
@@ -68,7 +68,7 @@ def parse():
 
 
 def cond_paths(a):
-    return {m: os.path.join(a.emb_dir, f"cond_{m}.h5") for m in a.modalities}
+    return {m: cond_file(a.emb_dir, m) for m in a.modalities}
 
 
 def push_async(folder, repo, step):

@@ -18,7 +18,7 @@ import h5py
 import numpy as np
 import torch
 
-from mm.data import MultiModalLatentDataset, split_batch
+from mm.data import MultiModalLatentDataset, cond_file, split_batch
 from mm.diffusion import MultiCondDiffusionPrior
 from mm.gencad_io import decode_latents, load_csr
 from mm.metrics import latent_metrics, seq_metrics
@@ -66,6 +66,7 @@ def main():
     ap.add_argument("--guidance", type=float, nargs="*", default=[1.0, 2.0, 3.0])
     ap.add_argument("--best_of", type=int, default=1,
                     help="sample N candidates per input and keep the best-scoring decoded program (mm.rerank)")
+    ap.add_argument("--n_views", type=int, default=5, help="views averaged for pooled (*_mv) image modalities")
     ap.add_argument("--text_level", default=None,
                     help="evaluate text with this prompt level (e.g. abstract, expert); default: a random level per uid")
     ap.add_argument("--out", default="eval.json")
@@ -84,9 +85,8 @@ def main():
         prior, _ = MultiCondDiffusionPrior.load(a.prior)
         prior = prior.to(device).eval()
         mods = sorted(set(prior.modalities) | ({"ccip_image"} if a.gencad_dp_ckpt else set()))
-    paths = {m: os.path.join(a.emb_dir, f"cond_{m}.h5") for m in mods
-             if os.path.exists(os.path.join(a.emb_dir, f"cond_{m}.h5"))}
-    variants = {m: 0 for m in paths if m != "text"}
+    paths = {m: cond_file(a.emb_dir, m) for m in mods if os.path.exists(cond_file(a.emb_dir, m))}
+    variants = {m: (a.n_views - 1 if m.endswith("_mv") else 0) for m in paths if m != "text"}
     if a.text_level and "text" in paths:
         with h5py.File(paths["text"], "r") as f:
             levels = json.loads(f.attrs["variants"])
