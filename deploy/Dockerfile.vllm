@@ -1,0 +1,14 @@
+# Live Space with the audio-native responder served by vLLM in FP8 (fits an L4 next to Whisper, the tone models and
+# the generator). start.sh launches `vllm serve` when AUDIO_VLLM (repo:sub/dir of the merged model) is set and points
+# the server at it (AUDIO_MODEL=http://127.0.0.1:8000/v1#reachy-audio).
+FROM vllm/vllm-openai:v0.30.0
+RUN pip install --no-cache-dir soundfile scipy "reachy-mini-rust-kinematics>=1.0.3" "fastapi>=0.110" "uvicorn>=0.29" safetensors
+RUN useradd -m -u 1000 user || true
+WORKDIR /code
+COPY --chown=1000 . .
+RUN pip install --no-cache-dir --no-deps -e .
+USER 1000
+ENV HF_HOME=/tmp/hf PYTHONUNBUFFERED=1 HF_HUB_DISABLE_PROGRESS_BARS=1 OMP_NUM_THREADS=2 VLLM_CACHE_ROOT=/tmp/vllm
+EXPOSE 7860
+ENTRYPOINT []
+CMD ["sh", "start.sh"]

@@ -52,6 +52,8 @@ def main():
     ap.add_argument("--audio-model", default=None,
                     help="audio-native responder (rmr.audio_responder), e.g. mszarski/reachy-voice:audio/student/v1; "
                          "replaces the text responder (no llama.cpp), needs a GPU with ~20 GB")
+    ap.add_argument("--vllm", action="store_true",
+                    help="serve --audio-model with vLLM in FP8 (deploy/Dockerfile.vllm): fits an L4")
     ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
     ap.add_argument("--sleep", type=int, default=None, help="sleep after this many idle seconds (paid hardware)")
     ap.add_argument("--private", action=argparse.BooleanOptionalAction, default=True)
@@ -72,14 +74,14 @@ def main():
     if a.feedback_repo:
         api.create_repo(a.feedback_repo, repo_type="dataset", private=True, exist_ok=True)
         api.add_space_variable(a.repo, "FEEDBACK_REPO", a.feedback_repo)
-    if a.audio_model:
-        api.add_space_variable(a.repo, "AUDIO_MODEL", a.audio_model)
-        a.gguf = ""                                   # the audio responder replaces the text one
-    else:
+    for k in ("AUDIO_MODEL", "AUDIO_VLLM"):
         try:
-            api.delete_space_variable(a.repo, "AUDIO_MODEL")
+            api.delete_space_variable(a.repo, k)
         except Exception:
             pass
+    if a.audio_model:
+        api.add_space_variable(a.repo, "AUDIO_VLLM" if a.vllm else "AUDIO_MODEL", a.audio_model)
+        a.gguf = ""                                   # the audio responder replaces the text one
     if a.gguf:
         api.add_space_variable(a.repo, "LLAMA_GGUF", a.gguf)
     else:
@@ -93,8 +95,8 @@ def main():
         shutil.copytree(os.path.join(ROOT, "visualizer"), os.path.join(d, "visualizer"))
         for f in ["pyproject.toml", "NOTICE"]:
             shutil.copy(os.path.join(ROOT, f), d)
-        for f in ["Dockerfile", "start.sh"]:
-            shutil.copy(os.path.join(ROOT, "deploy", f), d)
+        shutil.copy(os.path.join(ROOT, "deploy", "Dockerfile.vllm" if a.vllm else "Dockerfile"), os.path.join(d, "Dockerfile"))
+        shutil.copy(os.path.join(ROOT, "deploy", "start.sh"), d)
         with open(os.path.join(d, "README.md"), "w") as fh:
             fh.write(CARD)
         api.upload_folder(folder_path=d, repo_id=a.repo, repo_type="space", commit_message="Deploy live server")
