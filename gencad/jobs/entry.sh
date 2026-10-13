@@ -86,6 +86,11 @@ case "$STAGE" in
     python train_gencad.py dp -name "$RUN" -gpu 0 -cad_emb data/dp/cad_zs.h5 -img_emb data/dp/img_zs.h5 \
       -steps ${STEPS:-1000000} -save_every ${SAVE_EVERY:-50000} "$@" ;;
 
+  ar)         # autoregressive CAD decoder on the frozen CSR latents (mm/ar_decoder.py)
+    need cad_vec
+    python train_ar_decoder.py --emb_dir data/emb --data data --csr_ckpt "$CSR_CKPT" --name "$RUN" \
+      --steps ${STEPS:-100000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 

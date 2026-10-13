@@ -60,6 +60,7 @@ def main():
     ap.add_argument("--data", default="data")
     ap.add_argument("--split", default="test")
     ap.add_argument("--csr_ckpt", required=True)
+    ap.add_argument("--ar_decoder", default=None, help="decode with this mm.ar_decoder checkpoint instead of the CSR decoder")
     ap.add_argument("--gencad_dp_ckpt", default=None)
     ap.add_argument("--prior", action="append", default=[], help="name=path, repeatable")
     ap.add_argument("--max_uids", type=int, default=1000)
@@ -75,6 +76,10 @@ def main():
     a = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     csr, _ = load_csr(a.csr_ckpt, device)
+    dec = csr  # what turns latents into programs; --ar_decoder swaps in the autoregressive decoder
+    if a.ar_decoder:
+        from mm.ar_decoder import ARDecoder
+        dec = ARDecoder.load(a.ar_decoder)[0].to(device).eval()
 
     cad = CadLatentStore(os.path.join(a.emb_dir, "cad_latents.h5"))
     stores = {m: EmbeddingStore(os.path.join(a.emb_dir, f"cond_{m}.h5")) for m in ["image", "text", "ccip_image"]}
@@ -118,7 +123,7 @@ def main():
 
     # every "method" maps a uid list + seed to decoded CAD programs
     methods = {"csr_recon": lambda us, seed: decode_latents(
-        csr, torch.stack([cad.z[cad.index[u]] for u in us]).to(device))}
+        dec, torch.stack([cad.z[cad.index[u]] for u in us]).to(device))}
     if a.gencad_dp_ckpt:
         from model import GaussianDiffusion1D, ResNetDiffusion
         net = ResNetDiffusion(d_in=256, n_blocks=10, d_main=2048, d_hidden=2048, dropout_first=0.1,
@@ -129,7 +134,7 @@ def main():
 
         def gencad(us, seed):
             torch.manual_seed(seed)
-            return decode_latents(csr, dp.sample(cond=cond(us, "ccip_image")))
+            return decode_latents(dec, dp.sample(cond=cond(us, "ccip_image")))
         methods["gencad"] = gencad
     for spec in a.prior:
         name, path = spec.split("=", 1)
@@ -150,7 +155,7 @@ def main():
                     kw = dict(guidance={m: a.guidance for m in mods}, steps=steps, eta=eta, generator=g)
                     if n > 1:
                         return best_of_n(prior, csr, emb, n=n, **kw)[0]
-                    return decode_latents(csr, prior.sample(emb, **kw))
+                    return decode_latents(dec, prior.sample(emb, **kw))
                 key = f"{name}:{label}" + ("" if k == 0 else f"@eta{eta:g}s{steps}")
                 methods[key] = run
                 if a.best_of > 1 and k == 0:

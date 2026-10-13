@@ -40,10 +40,10 @@ def decode_batched(csr, z, bs=256):
     return out
 
 
-def row(name, z_pred, z_gt, csr, gts, rows=None, vecs=None):
+def row(name, z_pred, z_gt, dec, gts, rows=None, vecs=None):
     rows = torch.arange(len(z_gt)) if rows is None else rows
     m = latent_metrics(z_pred, z_gt[rows])
-    vecs = decode_batched(csr, z_pred) if vecs is None else vecs
+    vecs = decode_batched(dec, z_pred) if vecs is None else vecs
     m.update(seq_metrics(vecs, [gts[i] for i in rows.tolist()]))
     print(f"{name:28s} " + " ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}" for k, v in m.items()),
           flush=True)
@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--data", default="data")
     ap.add_argument("--split", default="test")
     ap.add_argument("--csr_ckpt", required=True)
+    ap.add_argument("--ar_decoder", default=None, help="decode with this mm.ar_decoder checkpoint instead of the CSR decoder")
     ap.add_argument("--prior", default=None)
     ap.add_argument("--gencad_dp_ckpt", default=None)
     ap.add_argument("--n", type=int, default=2000)
@@ -72,6 +73,10 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     split_json = os.path.join(a.data, "filtered_data.json")
     csr, _ = load_csr(a.csr_ckpt, device)
+    dec = csr  # what turns latents into programs; --ar_decoder swaps in the autoregressive decoder
+    if a.ar_decoder:
+        from mm.ar_decoder import ARDecoder
+        dec = ARDecoder.load(a.ar_decoder)[0].to(device).eval()
     report = {}
 
     prior, mods = None, ["ccip_image"]
@@ -94,7 +99,7 @@ def main():
     gts = gt_vecs(a.data, [b["uid"] for b in items])
     print(f"[eval] {len(items)} {a.split} samples, modalities available: {list(embeds)}")
 
-    report["csr_recon"] = row("csr_recon", z, z, csr, gts)
+    report["csr_recon"] = row("csr_recon", z, z, dec, gts)
 
     if a.gencad_dp_ckpt and "ccip_image" in embeds:
         from model import GaussianDiffusion1D, ResNetDiffusion
@@ -106,7 +111,7 @@ def main():
         rows = torch.nonzero(present["ccip_image"].cpu()).flatten()
         torch.manual_seed(0)
         zs = torch.cat([dp.sample(cond=embeds["ccip_image"][rows[i: i + 512]]) for i in range(0, len(rows), 512)])
-        report["gencad_dp"] = row("gencad_dp", zs, z, csr, gts, rows)
+        report["gencad_dp"] = row("gencad_dp", zs, z, dec, gts, rows)
 
     if prior is not None:
         pm = [m for m in prior.modalities if m in embeds]
@@ -128,10 +133,10 @@ def main():
                             vecs += v
                             zs.append(zz)
                         name += f"@bo{a.best_of}"
-                        report[name] = row(name, torch.cat(zs), z, csr, gts, rows, vecs=vecs)
+                        report[name] = row(name, torch.cat(zs), z, dec, gts, rows, vecs=vecs)
                     else:
                         zs = prior.sample(cond, **kw)
-                        report[name] = row(name, zs, z, csr, gts, rows)
+                        report[name] = row(name, zs, z, dec, gts, rows)
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:

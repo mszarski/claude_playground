@@ -245,3 +245,41 @@ def test_best_of_n_picks_highest_scoring_decodable_candidate():
         rerank.decode_latents = real_decode
     assert len(vecs) == 3 and z.shape == (3, 256)
     assert all(v is not None for v in vecs) and torch.isfinite(scores).all()
+
+
+def test_ar_decoder_learns_a_program_and_decodes_through_gencad_io():
+    from mm.ar_decoder import ARDecoder, pad_program
+    from mm.gencad_io import decode_latents
+    torch.manual_seed(0)
+    g = _fake_cad_vec()
+    model = ARDecoder(d_model=64, n_layers=2, n_heads=4, d_ff=128, dropout=0.0)
+    z, v = torch.randn(4, 256), torch.tensor(np.stack([pad_program(g)] * 4))
+    opt = torch.optim.Adam(model.parameters(), 3e-3)
+    for _ in range(150):
+        loss, _ = model.loss(z, v)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    out = decode_latents(model.eval(), z)  # dispatches to ARDecoder.generate
+    assert all(o is not None and o.tolist() == g.tolist() for o in out)
+
+
+def test_train_ar_decoder_script_end_to_end():
+    root = tempfile.mkdtemp()
+    uids = make_stores(root, n=60)
+    data = os.path.join(root, "data")
+    for u in uids:
+        os.makedirs(os.path.dirname(os.path.join(data, "cad_vec", u + ".h5")), exist_ok=True)
+        with h5py.File(os.path.join(data, "cad_vec", u + ".h5"), "w") as f:
+            f["vec"] = _fake_cad_vec()
+    os.replace(os.path.join(root, "filtered_data.json"), os.path.join(data, "filtered_data.json"))
+    cmd = [sys.executable, os.path.join(ROOT, "train_ar_decoder.py"), "--emb_dir", root, "--data", data,
+           "--out_dir", root, "--name", "ar", "--d_model", "64", "--n_layers", "1", "--n_heads", "4",
+           "--d_ff", "128", "--bs", "16", "--steps", "20", "--warmup", "5", "--eval_every", "20", "--eval_n", "5",
+           "--save_every", "20", "--device", "cpu"]
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)
+    print(r.stdout[-2000:], r.stderr[-2000:])
+    assert r.returncode == 0 and '"ar_recon"' in r.stdout
+    from mm.ar_decoder import ARDecoder
+    model, ck = ARDecoder.load(os.path.join(root, "ar", "last.pt"))
+    assert ck["step"] == 20 and os.path.exists(os.path.join(root, "programs.npz"))

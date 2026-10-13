@@ -54,6 +54,8 @@ def decode_latents(csr, z):
 
     Mirrors inference_gencad.py: the decoder predicts the sequence after an implicit leading SOL.
     """
+    if hasattr(csr, "generate"):  # mm.ar_decoder.ARDecoder: autoregressive, row by row
+        return csr.generate(z)
     device = z.device
     out = csr(None, None, z=z.unsqueeze(1), return_tgt=False)
     vec = logits2vec(out, device=device if device.type == "cuda" else None)  # (B, S, 17)

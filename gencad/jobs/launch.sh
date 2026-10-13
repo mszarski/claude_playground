@@ -9,13 +9,14 @@
 #   jobs/launch.sh embed
 #   RUN=mm_v1 jobs/launch.sh mm --modalities image text
 #   RUN=mm_v1 jobs/launch.sh eval
+#   RUN=ar_v1 jobs/launch.sh ar               # autoregressive decoder; then eval/visual with --ar_decoder
 #   OCC=1 RUN=visual_v1 jobs/launch.sh visual    # rendered GT-vs-generation grids (PRIOR=results/mm_v1/last.pt)
 #   RUN=repl jobs/launch.sh csr            # full replication from scratch: csr -> ccip -> export -> dp -> eval
 #
 # Overrides: FLAVOR, TIMEOUT, BUCKET (default <you>/gencad-work), IMAGE, plus any env knob from entry.sh
 # (RUN, EPOCHS, BS, LR, STEPS, CSR_CKPT, CCIP_CKPT, DP_CKPT, IMG_TYPE, OCC, HUB_REPO). DRY=1 prints the command.
 set -euo pipefail
-STAGE=${1:?usage: jobs/launch.sh <fetch|text|test|csr|ccip|export|embed|dp|mm|eval|upstream|visual|shell> [args...]}; shift
+STAGE=${1:?usage: jobs/launch.sh <fetch|text|test|csr|ccip|export|embed|dp|mm|eval|ar|upstream|visual|shell> [args...]}; shift
 : "${HF_TOKEN:?export HF_TOKEN first}"
 NS=${NS:-$(hf auth whoami --format json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("name") or d["user"])')}
 BUCKET=${BUCKET:-$NS/gencad-work}
@@ -29,7 +30,7 @@ case "$STAGE" in
   export|embed) DF=a10g-large;  DT=4h ;;
   csr)          DF=a100-large;  DT=48h ;;
   ccip)         DF=a100-large;  DT=24h ;;
-  dp|mm)        DF=a100-large;  DT=24h ;;
+  dp|mm|ar)     DF=a100-large;  DT=24h ;;
   eval)         DF=a10g-large;  DT=4h ;;
   *)            DF=a10g-large;  DT=4h ;;
 esac

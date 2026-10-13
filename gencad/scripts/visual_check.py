@@ -114,6 +114,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--prior", required=True)
     ap.add_argument("--csr_ckpt", required=True)
+    ap.add_argument("--ar_decoder", default=None, help="decode with this mm.ar_decoder checkpoint instead of the CSR decoder")
     ap.add_argument("--gencad_dp_ckpt", default=None)
     ap.add_argument("--emb_dir", default="data/emb")
     ap.add_argument("--data", default="data")
@@ -138,6 +139,10 @@ def main():
     prior, ck = MultiCondDiffusionPrior.load(a.prior)
     prior = prior.to(device).eval()
     csr, _ = load_csr(a.csr_ckpt, device)
+    dec = csr  # what turns latents into programs; --ar_decoder swaps in the autoregressive decoder
+    if a.ar_decoder:
+        from mm.ar_decoder import ARDecoder
+        dec = ARDecoder.load(a.ar_decoder)[0].to(device).eval()
 
     # pick uids that have every condition we want to show
     cad = CadLatentStore(os.path.join(a.emb_dir, "cad_latents.h5"))
@@ -177,7 +182,7 @@ def main():
         if n > 1:
             return best_of_n(prior, csr, embeds, n=n, **kw)[0]
         with torch.no_grad():
-            return decode_latents(csr, prior.sample(embeds, **kw))
+            return decode_latents(dec, prior.sample(embeds, **kw))
 
     status = {u: {} for u in uids}
     cols = ["input render", "gt"]
@@ -197,7 +202,7 @@ def main():
         torch.manual_seed(a.seed)
         zs = dp.sample(cond=torch.stack([stores["ccip_image"].get(u, 0)[0] for u in uids]).to(device))
         with torch.no_grad():
-            vecs = decode_latents(csr, zs)
+            vecs = decode_latents(dec, zs)
         for k, (u, v) in enumerate(zip(uids, vecs)):
             status[u]["gencad"] = vec_cell(v, os.path.join(cells, f"{k}_gencad"))
         cols.append("gencad")
