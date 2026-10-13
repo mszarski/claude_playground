@@ -30,7 +30,8 @@ def unpad(v):
 
 
 class Samples(Dataset):
-    def __init__(self, uids, vec, img_dir, img_ids, text_index, levels, p_no_text, eval_level=None):
+    def __init__(self, uids, vec, img_dir, img_ids, text_index, levels, p_no_text, eval_level=None, true_view=False):
+        self.true_view = true_view
         self.uids, self.vec, self.img_dir, self.img_ids = uids, vec, img_dir, img_ids
         self.text_index, self.levels, self.p_no_text, self.eval_level = text_index, levels, p_no_text, eval_level
 
@@ -40,6 +41,8 @@ class Samples(Dataset):
     def __getitem__(self, i):
         u = self.uids[i]
         views = self.img_ids[u]
+        if self.true_view and 0 in views:   # file _0 is the only render that shows the GT program
+            views = [0]
         v = views[0] if self.eval_level else random.choice(views)
         pixels = TF(load_rgb(os.path.join(self.img_dir, f"{u}_{v}.png")))
         prompts = self.text_index.get(u, {})
@@ -65,6 +68,7 @@ def main():
     ap.add_argument("--text_model", default="Qwen/Qwen3-Embedding-0.6B")
     ap.add_argument("--text_layers", type=int, default=8)
     ap.add_argument("--levels", nargs="*", default=["abstract", "beginner", "intermediate", "expert", "description"])
+    ap.add_argument("--true_view", action="store_true", help="train and eval on render file _0 only")
     ap.add_argument("--p_no_text", type=float, default=0.5)
     ap.add_argument("--d_model", type=int, default=384)
     ap.add_argument("--n_layers", type=int, default=6)
@@ -102,7 +106,8 @@ def main():
     val = [u for u in splits["validation"] if img_ids.get(u) and text_index.get(u, {}).get("expert")][: a.eval_n]
     vec = torch.from_numpy(load_programs(a.emb_dir, a.data, train + val).astype(np.int64))
     img_dir = os.path.join(a.data, "images")
-    train_ds = Samples(train, vec[: len(train)], img_dir, img_ids, text_index, a.levels, a.p_no_text)
+    train_ds = Samples(train, vec[: len(train)], img_dir, img_ids, text_index, a.levels, a.p_no_text,
+                       true_view=a.true_view)
     gt_va = [unpad(v) for v in vec[len(train):].numpy()]
     print(f"[data] train={len(train)} val={len(val)}", flush=True)
 
@@ -130,7 +135,8 @@ def main():
         model.eval()
         swap_ema()
         rec = {"step": step}
-        ds = Samples(val, vec[len(train):], img_dir, img_ids, text_index, a.levels, 0.0, eval_level="expert")
+        ds = Samples(val, vec[len(train):], img_dir, img_ids, text_index, a.levels, 0.0, eval_level="expert",
+                     true_view=a.true_view)
         preds = {"image": [], "image+expert": []}
         for pixels, prompts, _ in DataLoader(ds, batch_size=128, num_workers=min(4, a.workers), collate_fn=collate):
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
