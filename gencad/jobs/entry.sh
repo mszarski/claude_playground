@@ -106,6 +106,11 @@ case "$STAGE" in
     python scripts/eval_upstream_inference.py --data data --emb_dir data/emb --ckpt_dir data/ckpt \
       --out "results/$RUN/eval.json" "$@" ;;
 
+  baselines)  # train/test duplication + nearest-neighbour baselines, and priors split into duplicated vs novel parts
+    need cad_vec
+    python scripts/baselines.py --emb_dir data/emb --data data --csr_ckpt "$CSR_CKPT" \
+      --out "results/$RUN/report.json" "$@" ;;
+
   visual)     # rendered side-by-side check (needs OCC=1): GT vs GenCAD vs the prior under each condition
     need cad_vec images
     PRIOR=${PRIOR:-results/mm_v1/last.pt}
