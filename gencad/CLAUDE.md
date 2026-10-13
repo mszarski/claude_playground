@@ -142,9 +142,17 @@ they add ~2 points of acc_param for image alone and nothing once text is present
 vs mm_v1 image+text 0.620 / 0.648). At 1 view mm_mv is slightly below mm_v1. Viewpoint ambiguity is therefore
 not what limits novel parts.
 
+### Decoder ceiling on the split (`RUN=baselines_ceiling jobs/launch.sh baselines --skip_knn --ar_decoder ...`)
+Decoding each test part's own GT latent (the best latent a prior could produce), prog_match / acc_cmd / acc_param:
+CSR all 0.775 / 0.918 / 0.957, dup 0.977 / 0.902 / 0.997, **novel 0.649 / 0.923 / 0.942**; AR decoder novel
+0.666 / 0.834 / 0.931. So the latent space represents novel parts well (65 % of them exactly), while the best
+prior gets 0.3 % of novel programs exactly (acc_param 0.648). The gap is entirely in mapping image/text to
+the right latent: the prior (and its conditioning) is where to invest, not the autoencoder or decoder.
+
 ## Next steps (ideas, none started)
-- Check the CSR autoencoder's own ceiling on the novel split (decode GT latents of novel test parts): if the
-  latent space itself reconstructs novel parts poorly, priors cannot do better there.
+- Close the prior gap on novel parts. Ideas: fine-tune the image encoder end to end with the prior (frozen
+  SigLIP2 features may not carry CAD-relevant geometry), a bigger / longer-trained prior, keep exact numbers from
+  text (Qwen embeddings blur dimensions), or predict programs directly from image features.
 - Hybrid retrieval + generation: return the nearest training program when the match is very close.
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
