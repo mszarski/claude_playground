@@ -366,6 +366,27 @@ On the cloned lines the audio responder is right where the text pipeline is wron
 66 vs 34, sad 82 vs 75, anxious 58 vs 56, happy 77 vs 80, angry 56 vs 62. The tone-test number may still be helped by
 contamination of the base model; the cloned-lines comparison is the clean one.
 
+### Serving it, and v2
+
+- **Serving** (`rmr/audio_responder.py`, `python -m rmr.server --audio-model ...`): Whisper and the tone models still
+  run for the transcript, the conversation memory and the mood; the audio responder answers. In bf16 on an A10G the
+  first motion comes 4.4-6 s after the person stops. vLLM in FP8 (`deploy/Dockerfile.vllm`, `--vllm`) fits it on an
+  L4 next to everything else with the same answers (same feeling on 99/100 tone-test clips and 93/100 cloned lines,
+  equal accuracy; `scripts/vllm_audio_job.sh`): first motion 4.4-4.8 s, about twice the text responder's 2.5 s,
+  because the model is twice the size.
+- **Conversation memory**: v1 leans on earlier lines more than the text responder; three unrelated clips sent as one
+  conversation produced a reading about things nobody said. With two unrelated earlier lines added to every cloned
+  test line, v1 drops from 67.9% to 64.1%.
+- **v2** (same data; 20% of the context-free training examples get one or two unrelated earlier lines with the
+  answer unchanged; answers written recipe first, so the motion starts about 35 tokens sooner):
+
+| | tone test | cloned lines | cloned lines + unrelated earlier lines |
+|---|---|---|---|
+| v1 | 90.7% / 97.5% physical | 67.9% / 88.0% | 64.1% / 90.3% |
+| **v2** | **91.0%** / 97.5% | **68.3%** / 88.0% | **67.9%** / 89.1% |
+
+v2 (`audio/student/v2`) is served on the live Space (L4, vLLM FP8).
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
