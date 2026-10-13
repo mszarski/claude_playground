@@ -105,6 +105,27 @@ AR decoder follows more literally; the mode-mixing trapezoid was a special case.
 Also from these metrics: whole programs right (prog_match) is 0.102 for GenCAD vs 0.178 image / 0.216
 image+text for mm_v1.
 
+### Duplicates and nearest-neighbour baselines (`scripts/baselines.py`, bucket `results/baselines/report.json`)
+Of the 2000 eval test programs, 29.4 % occur verbatim in the training set and 38.5 % within +-3 units ("dup",
+n=770; the rest "novel", n=1230). Nearest-neighbour baselines answer with the GT program of the closest training
+model (image: view 0 vs all training views; text: expert level; oracle: closest GT latent). prog_match /
+acc_cmd / acc_param:
+| method | all | dup (n=770) | novel (n=1230) |
+|---|---|---|---|
+| knn oracle (GT latent) | 0.318 / 0.815 / 0.794 | 0.826 / 0.902 / 0.992 | 0.000 / 0.782 / 0.704 |
+| knn image (SigLIP2) | 0.257 / 0.631 / 0.768 | 0.666 / 0.894 / 0.962 | 0.000 / 0.534 / 0.624 |
+| knn ccip_image | 0.256 / 0.660 / 0.770 | 0.665 / 0.895 / 0.963 | 0.000 / 0.572 / 0.637 |
+| knn text (expert) | 0.056 / 0.558 / 0.589 | 0.144 / 0.698 / 0.742 | 0.000 / 0.506 / 0.498 |
+| gencad | 0.102 / 0.600 / 0.658 | 0.265 / 0.765 / 0.822 | 0.000 / 0.538 / 0.556 |
+| mm_v1 image | 0.179 / 0.667 / 0.740 | 0.464 / 0.887 / 0.923 | 0.001 / 0.585 / 0.620 |
+| mm_v1 text | 0.137 / 0.652 / 0.670 | 0.355 / 0.773 / 0.828 | 0.000 / 0.607 / 0.587 |
+| mm_v1 image+text | 0.215 / 0.694 / 0.759 | 0.553 / 0.892 / 0.942 | 0.003 / 0.620 / 0.648 |
+Readings: (1) whole-program matches come almost only from duplicated test parts, for every method; (2) on
+duplicates, plain image retrieval beats every generator (0.666 vs 0.464-0.553 prog_match); (3) on novel parts,
+mm_v1 beats GenCAD clearly (image+text acc_cmd 0.620 vs 0.538, acc_param 0.648 vs 0.556) and beats retrieval on
+commands, roughly ties on parameters. Report the novel split as the headline from now on; consider a hybrid
+(retrieve when the nearest training match is very close, generate otherwise).
+
 ## Next steps (ideas, none started)
 - Skew is a prior-side error now: more views per condition, or text, are the levers (text halves it on hard cases).
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
