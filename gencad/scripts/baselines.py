@@ -55,6 +55,7 @@ def main():
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
     ap.add_argument("--override", action="append", default=[], help="modality=path to an alternative cond_*.h5")
     ap.add_argument("--skip_knn", action="store_true", help="only score the priors (duplicates are always computed)")
+    ap.add_argument("--save_preds", default=None, help="pickle every method's programs for scripts/geom_eval.py")
     ap.add_argument("--out", default="results/baselines/report.json")
     a = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -105,7 +106,11 @@ def main():
     report = {"n": len(test), "dup_exact": float(exact.mean()), "dup_near": float(near.mean())}
     print(f"[dups] test programs also in train: exact {exact.mean():.3f}, within +-{a.tol} {near.mean():.3f}")
 
+    saved = {}
+
     def score(name, vecs, z_pred=None):
+        if a.save_preds:
+            saved[name] = [None if v is None else np.asarray(v, np.int16) for v in vecs]
         groups = {"all": np.ones(len(test), bool), "dup": near, "novel": ~near}
         row = {}
         for gname, mask in groups.items():
@@ -254,6 +259,10 @@ def main():
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:
         json.dump(report, f, indent=2)
+    if a.save_preds:
+        import pickle
+        with open(a.save_preds, "wb") as f:
+            pickle.dump({"uids": list(test), "dup": near.tolist(), "preds": saved}, f)
     print(f"[done] {a.out}")
 
 

@@ -373,3 +373,64 @@ def test_token_cad_uses_image_and_optional_text_tokens():
     assert all(o is not None for o in model.generate(pixels=pixels))  # image-only path works
     assert all(o is not None for o in model.generate(pixels=pixels, prompts=["big", None]))  # mixed batch
     assert all(not k.startswith(TokenCAD.FROZEN) for k in model.trainable_state_dict())
+
+
+def _tiny_qwen3_vl(path):
+    """Random 2-layer Qwen3-VL with the real Qwen3-VL-2B processor saved to `path` (None if offline)."""
+    try:
+        from transformers import AutoProcessor, Qwen3VLConfig, Qwen3VLForConditionalGeneration
+        proc = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-2B-Instruct")
+        cfg = Qwen3VLConfig.from_pretrained("Qwen/Qwen3-VL-2B-Instruct")
+    except Exception as e:  # noqa: BLE001 - no network / no cache
+        print(f"[skip] Qwen3-VL processor unavailable: {e}")
+        return None
+    cfg.text_config.update(dict(hidden_size=64, intermediate_size=128, num_hidden_layers=2, num_attention_heads=4,
+                                num_key_value_heads=2, head_dim=16))
+    cfg.text_config.rope_parameters["mrope_section"] = [2, 3, 3]
+    cfg.vision_config.update(dict(depth=2, hidden_size=32, intermediate_size=64, num_heads=2, out_hidden_size=64,
+                                  deepstack_visual_indexes=[0]))
+    torch.manual_seed(0)
+    Qwen3VLForConditionalGeneration(cfg).save_pretrained(path)
+    proc.save_pretrained(path)
+    return path
+
+
+def test_vlm_cad_text_roundtrip_and_script_end_to_end():
+    from PIL import Image
+    from mm.vlm_cad import compose_views, program_to_text, text_to_program
+    vec = _fake_cad_vec()
+    assert (text_to_program(program_to_text(vec)) == vec).all()
+    assert text_to_program("S\nL 1") is None and text_to_program("X 1 2") is None and text_to_program("") is None
+    ims = [Image.new("RGB", (64, 64), c) for c in ["red", "green", "blue"]]
+    assert compose_views(ims[:1]).size == (448, 448) and compose_views(ims).getpixel((300, 300)) == (255, 255, 255)
+
+    root = tempfile.mkdtemp()
+    model = _tiny_qwen3_vl(os.path.join(root, "tiny_vlm"))
+    if model is None:
+        return
+    uids = make_stores(root, n=300)[:40] + make_stores(root, n=300)[240:250]
+    data = os.path.join(root, "data")
+    img_ids, text_index = {}, {}
+    for k, u in enumerate(uids):
+        os.makedirs(os.path.dirname(os.path.join(data, "cad_vec", u + ".h5")), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.join(data, "images", u)), exist_ok=True)
+        v = _fake_cad_vec()
+        v[1:5, 1] = k                       # distinct programs, so dedup keeps them all
+        with h5py.File(os.path.join(data, "cad_vec", u + ".h5"), "w") as f:
+            f["vec"] = v
+        for view in range(3):
+            Image.new("RGB", (64, 64), (k, view * 50, 0)).save(os.path.join(data, "images", f"{u}_{view}.png"))
+        img_ids[u] = [0, 1, 2]
+        text_index[u] = {"expert": f"a plate {k} units wide", "beginner": "a plate"}
+    splits = {"train": uids[:40], "validation": uids[40:], "test": []}
+    for name, obj in [("filtered_data.json", splits), ("image_ids.json", img_ids), ("text_index.json", text_index)]:
+        with open(os.path.join(data, name), "w") as f:
+            json.dump(obj, f)
+    cmd = [sys.executable, os.path.join(ROOT, "train_vlm_cad.py"), "--emb_dir", root, "--data", data,
+           "--out_dir", root, "--name", "vlm", "--model", model, "--bs", "4", "--accum", "2", "--steps", "4",
+           "--warmup", "1", "--eval_every", "4", "--eval_n", "4", "--save_every", "4", "--workers", "0",
+           "--device", "cpu"]
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=900)
+    print(r.stdout[-3000:], r.stderr[-3000:])
+    assert r.returncode == 0 and '"view1+expert"' in r.stdout
+    assert os.path.exists(os.path.join(root, "vlm", "model", "step.json"))

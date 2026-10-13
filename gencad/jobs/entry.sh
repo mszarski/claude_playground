@@ -125,6 +125,24 @@ case "$STAGE" in
     python scripts/baselines.py --emb_dir data/emb --data data --csr_ckpt "$CSR_CKPT" \
       --out "results/$RUN/report.json" "$@" ;;
 
+  geom)       # IoU / Chamfer / invalidity of saved predictions (scripts/geom_eval.py; installs OCC itself)
+    [[ "${OCC:-0}" == "1" ]] || conda install -y -q -c conda-forge pythonocc-core=7.9.0
+    need cad_vec
+    python scripts/geom_eval.py --data data --preds "${PREDS:-results/$RUN/preds.pkl}" --out "results/$RUN/geom.json" "$@" ;;
+
+  render)     # our own fixed-camera renders of every GT program -> /work/data/renders.tar (scripts/render_views.py)
+    [[ "${OCC:-0}" == "1" ]] || conda install -y -q -c conda-forge pythonocc-core=7.9.0
+    pip install -q pebble
+    need cad_vec
+    python scripts/render_views.py --data data --out data/renders "$@"
+    if [[ " $* " == *" --limit "* ]]; then mkdir -p "results/$RUN" && cp -r data/renders "results/$RUN/"   # preview
+    else tar -cf /work/data/renders.tar -C data renders && ls -la /work/data/renders.tar; fi ;;
+
+  checkviews) # do all 5 renders of a uid show its GT program? (scripts/check_views.py; installs OCC itself)
+    [[ "${OCC:-0}" == "1" ]] || conda install -y -q -c conda-forge pythonocc-core=7.9.0
+    need cad_vec images
+    python scripts/check_views.py --data data --out "results/$RUN/report.json" "$@" ;;
+
   visual)     # rendered side-by-side check (needs OCC=1): GT vs GenCAD vs the prior under each condition
     need cad_vec images
     PRIOR=${PRIOR:-results/mm_v1/last.pt}
