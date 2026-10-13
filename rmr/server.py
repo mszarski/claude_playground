@@ -157,8 +157,8 @@ class Engine:
                     out["timing_ms"]["first_motion"] = int(1000 * (time.time() - t0))
                     yield {"stage": "motion", **out, "idea": r["response"], "feeling": r["feeling"]}
                     moved = True
-                if not early:
-                    yield {"stage": "done", "reading": r["reading"], "feeling": r["feeling"],
+                if not early:      # the response may only now be complete (recipe-first answers)
+                    yield {"stage": "done", "reading": r["reading"], "feeling": r["feeling"], "idea": r["response"],
                            "timing_ms": {"total": int(1000 * (time.time() - t0))}}
         elif self.voice_model:            # the distilled student: response and recipe in one call
             from .respond import Student

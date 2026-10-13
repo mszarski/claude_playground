@@ -159,7 +159,12 @@ from rmr.audio_responder import AUDIO_SYSTEM, conversation, user_text  # noqa: E
 
 
 def build(a):
+    import random
+
     heard = {json.loads(x)["clip"]: json.loads(x) for x in open(a.heard)}
+    order = a.order.split(",")
+    rng = random.Random(0)
+    pool = [h["text"] for h in heard.values() if not h["clip"].startswith("t_")]
     bad = set()
     check = os.path.join(a.voiced, "check.jsonl")
     if os.path.exists(check):
@@ -176,8 +181,12 @@ def build(a):
             else:
                 skipped["unvoiced" if r["clip"] not in bad else "garbled"] += 1
                 continue
+            ans = json.loads(r["messages"][-1]["content"])
+            context = h.get("context") or []
+            if not context and split == "train" and rng.random() < a.distract:
+                context = rng.sample(pool, rng.choice([1, 2]))    # unrelated earlier lines: the answer must not change
             rows.append({"clip": r["clip"], "label": r["label"], "audio": audio, "text": h["text"],
-                         "context": h.get("context") or [], "answer": r["messages"][-1]["content"]})
+                         "context": context, "answer": json.dumps({k: ans[k] for k in order})})
         with open(os.path.join(a.out, f"{split}.jsonl"), "w") as f:
             f.writelines(json.dumps(x) + "\n" for x in rows)
         print(f"{split}: {len(rows)} examples ({Counter(x['audio'].startswith('crema:') for x in rows)[True]} real "
@@ -265,6 +274,10 @@ def answer(a):
     from rmr.voice import load_audio
 
     rows = [json.loads(x) for x in open(a.heard)]
+    if a.context_noise:          # two unrelated earlier lines (from other rows): a robust answer does not change
+        import random
+        rng = random.Random(1)
+        rows = [{**r, "context": rng.sample([x["text"] for x in rows if x["clip"] != r["clip"]], 2)} for r in rows]
     if a.voiced:
         wavs = [load_audio(open(os.path.join(a.voiced, r["clip"] + ".wav"), "rb").read()) for r in rows]
     else:
@@ -372,6 +385,10 @@ def main():
     bu.add_argument("--voiced", required=True)
     bu.add_argument("--out", required=True)
     bu.add_argument("--max-wer", type=float, default=0.35)
+    bu.add_argument("--order", default="feeling,response,recipe,reading",
+                    help="answer field order; recipe before response starts the motion sooner (v2)")
+    bu.add_argument("--distract", type=float, default=0.0,
+                    help="share of context-free training examples given unrelated earlier lines (same answer)")
     t = sub.add_parser("train")
     t.add_argument("--data", required=True)
     t.add_argument("--voiced", required=True)
@@ -391,6 +408,7 @@ def main():
     an.add_argument("--voiced", default="", help="folder of <clip>.wav (cloned voicings of written lines)")
     an.add_argument("--out", required=True)
     an.add_argument("--batch", type=int, default=8)
+    an.add_argument("--context-noise", action="store_true", help="give every row two unrelated earlier lines")
     be = sub.add_parser("bench")
     be.add_argument("--model", required=True, help="merged model or vLLM URL http://host:port/v1#name")
     be.add_argument("--heard", required=True)

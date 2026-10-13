@@ -111,6 +111,7 @@ async function respondTo(wav, onMotion) {
             if (part.stage === 'motion') { onMotion?.(); show(entry); status('Reading you…'); duration = player.duration(); }
             if (part.stage === 'done') {
                 if (part.mood) MOOD = part.mood;
+                if (part.idea) { $('idea').textContent = part.idea; $('idea-row').hidden = false; }
                 if (part.turn) { lastTurn = part.turn; $('rate').hidden = false; $('rate').dataset.sent = ''; }
                 $('reading').textContent = entry.reading || ''; $('reading-row').hidden = !entry.reading; status('');
                 const t = entry.timing_ms;
