@@ -18,11 +18,11 @@ vllm serve /w/audio/student/v1/merged --served-model-name reachy-audio --quantiz
 pid=$!
 until curl -sf http://127.0.0.1:8000/health >/dev/null; do kill -0 $pid || { tail -50 /w/out/vllm.log; exit 1; }; sleep 2; done
 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv | tee /w/out/gpu.txt
-python scripts/audio_llm.py bench --model "http://127.0.0.1:8000/v1#reachy-audio" --heard /w/eval/tone.jsonl \
+python3 scripts/audio_llm.py bench --model "http://127.0.0.1:8000/v1#reachy-audio" --heard /w/eval/tone.jsonl \
     --limit ${LIMIT:-100} --out /w/out/bench_tone.jsonl 2>&1 | tee /w/out/bench.log
-python scripts/audio_llm.py bench --model "http://127.0.0.1:8000/v1#reachy-audio" --heard /w/eval/lines.jsonl \
+python3 scripts/audio_llm.py bench --model "http://127.0.0.1:8000/v1#reachy-audio" --heard /w/eval/lines.jsonl \
     --voiced /w/audio/voiced/eval_lines --limit ${LIMIT:-100} --out /w/out/bench_lines.jsonl 2>&1 | tee -a /w/out/bench.log
-python - <<'PY'
+python3 - <<'PY'
 from huggingface_hub import HfApi
 import os
 HfApi().upload_folder(folder_path="/w/out", repo_id="mszarski/reachy-voice", path_in_repo=os.environ.get("OUT", "audio/vllm_bench"))
