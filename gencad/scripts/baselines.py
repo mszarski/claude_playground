@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cadlib.macro import CMD_ARGS_MASK, EOS_IDX  # noqa: E402
-from mm.data import MultiModalLatentDataset  # noqa: E402
+from mm.data import MultiModalLatentDataset, PooledViewStore, cond_file  # noqa: E402
 from mm.metrics import latent_metrics, seq_metrics  # noqa: E402
 
 
@@ -48,6 +48,8 @@ def main():
     ap.add_argument("--prior", default=None, help="multimodal prior to sample (image, text, image+text at --guidance)")
     ap.add_argument("--gencad_dp_ckpt", default=None)
     ap.add_argument("--guidance", type=float, default=2.0)
+    ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
+    ap.add_argument("--skip_knn", action="store_true", help="only score the priors (duplicates are always computed)")
     ap.add_argument("--out", default="results/baselines/report.json")
     a = ap.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -129,8 +131,10 @@ def main():
         owner = torch.arange(len(train))[:, None].expand_as(val)
         return emb[val].to(device), owner[val].to(device)
 
-    knn("knn_oracle_latent", z_gt, z_tr, torch.arange(len(train), device=device))
-    for m, variant in [("image", 0), ("ccip_image", 0), ("text", expert)]:
+    knn_runs = [] if a.skip_knn else [("image", 0), ("ccip_image", 0), ("text", expert)]
+    if not a.skip_knn:
+        knn("knn_oracle_latent", z_gt, z_tr, torch.arange(len(train), device=device))
+    for m, variant in knn_runs:
         if m not in ds.stores:
             continue
         store = ds.stores[m]
@@ -166,13 +170,22 @@ def main():
         if a.prior:
             from mm.diffusion import MultiCondDiffusionPrior
             prior = MultiCondDiffusionPrior.load(a.prior)[0].to(device).eval()
-            emb = {"image": torch.stack([ds.stores["image"].get(u, 0)[0] for u in test]).to(device),
-                   "text": torch.stack([ds.stores["text"].get(u, expert)[0] for u in test]).to(device)}
-            for combo in (["image"], ["text"], ["image", "text"]):
+            text = torch.stack([ds.stores["text"].get(u, expert)[0] for u in test]).to(device)
+            if "image_mv" in prior.modalities:   # multi-view prior: score it at each requested number of views
+                mv = PooledViewStore(cond_file(a.emb_dir, "image_mv"))
+                images = {f"image_mv@{k}v": torch.stack([mv.get(u, k - 1)[0] for u in test]).to(device)
+                          for k in a.n_views}
+            else:
+                images = {"image": torch.stack([ds.stores["image"].get(u, 0)[0] for u in test]).to(device)}
+            combos = [{"text": text}] + [{"image": e} for e in images.values()] + \
+                     [{"image": e, "text": text} for e in images.values()]
+            names = ["text"] + list(images) + [f"{n}+text" for n in images]
+            img_mod = "image_mv" if "image_mv" in prior.modalities else "image"
+            for name, combo in zip(names, combos):
+                emb = {(img_mod if m == "image" else m): e for m, e in combo.items()}
                 g = torch.Generator(device=device).manual_seed(0)
-                z = prior.sample({m: emb[m] for m in combo}, guidance={m: a.guidance for m in combo}, steps=100,
-                                 generator=g)
-                score(f"prior:{'+'.join(combo)}", decode(z), z)
+                z = prior.sample(emb, guidance={m: a.guidance for m in emb}, steps=100, generator=g)
+                score(f"prior:{name}", decode(z), z)
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:
