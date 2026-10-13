@@ -8,7 +8,7 @@
   python -m rmr.robot --play move.json                                     # just play a move
 
 Every 1/25 s the loop reads the microphone, steps ``rmr.listen.Listener`` and, unless it is answering, sends the
-listening pose with ``ReachyMini.set_target``. When a turn ends (0.9 s of silence after 0.6 s of speech) it posts the
+listening pose with ``ReachyMini.set_target``. When a turn ends (0.7 s of silence after 0.6 s of speech) it posts the
 turn to ``/api/respond?stream=1`` and plays the first move as soon as the server sends it, frame by frame at 25 Hz,
 then eases back into listening. Turns that end while it is answering are dropped, like the viewer's hands-free mode.
 
@@ -41,7 +41,7 @@ def wav_bytes(x, sr=SR):
 
 
 def respond_stream(server, wav, n=1, headers=None):
-    """POST a turn to the server; yield its stages (heard, motion, done)."""
+    """POST a turn to the server; yield its stages (heard, [react,] motion, done)."""
     req = urllib.request.Request(f"{server.rstrip('/')}/api/respond?stream=1&session={SESSION}&n={n}"
                                  f"&seed={int(time.time()) % 100000}",
                                  wav, {"content-type": "audio/wav", **(headers or {})})
@@ -147,6 +147,9 @@ def run(mini, server, frames, n=1, headers=None, log=print, head=None, idle=True
                 waited = f"+{time.monotonic() - t0:.1f}s"
                 if part["stage"] == "heard":
                     log(f"  {waited:>7} heard: {part['heard'].get('text')!r} (voice: {part['heard'].get('emotion')})")
+                elif part["stage"] == "react":          # the feeling, read: react at once (rmr.react)
+                    body.play(part["moves"][0])
+                    log(f"  {waited:>7} reacting: {part.get('feeling')}")
                 elif part["stage"] == "motion":
                     body.play(part["moves"][0])
                     events.append((round(lis.t, 2), "answer"))

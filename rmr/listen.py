@@ -35,7 +35,7 @@ REFRACTORY = 1.2       # minimum time between two nods
 PERK_GAP = 3.0         # ... and between two antenna perks, which lose their meaning when frequent
 ENGAGED = 4.0          # stay attentive this long after the last speech
 FAST, SLOW = 0.5, 0.05 # one-pole smoothing of the loudness envelopes
-END_OF_TURN = 0.9      # silence that ends the speaker's turn (hands-free mode sends the turn) ...
+END_OF_TURN = 0.7      # silence that ends the speaker's turn (hands-free mode sends the turn) ...
 MIN_TURN = 0.6         # ... once they have spoken at least this long in it
 RISE_DB = 8.0          # fast envelope this far above the slow one = the voice lifted
 

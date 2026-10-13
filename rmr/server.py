@@ -150,7 +150,15 @@ class Engine:
             if self.audio_student is None:
                 self.audio_student = AudioStudent(self.audio_model)
             wav, moved = load_audio(audio), False
-            for early, r in self.audio_student.answers(heard, wav):
+            for kind, r in self.audio_student.stages(heard, wav):
+                if kind == "feeling":         # react at once (rmr.react); the full response follows
+                    from .react import reaction
+                    name, recipe = reaction(r)
+                    out = self.generate(name, n=1, seed=seed, recipe=recipe)
+                    yield {"stage": "react", "moves": out["moves"], "feeling": r,
+                           "timing_ms": {"react": int(1000 * (time.time() - t0))}}
+                    continue
+                early = kind == "early"
                 if not moved:
                     out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
                     out["timing_ms"]["planner"] = int(1000 * (time.time() - t1)) - out["timing_ms"]["generator"]

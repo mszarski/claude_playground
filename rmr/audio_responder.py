@@ -102,20 +102,31 @@ class AudioStudent:
                 if delta:
                     yield delta
 
-    def answers(self, heard, wav):
-        """Yield ``(early, answer)`` like rmr.respond.Student.answers."""
+    def stages(self, heard, wav):
+        """Yield ``("feeling", word)`` as soon as the feeling is written, then ``("early", answer)`` once the recipe
+        is complete (if it comes before the end), then ``("final", answer)``."""
         from .planner.llm import parse_json
-        from .respond import _clean, _valid_recipe, partial_fields
+        from .respond import FEELINGS, _clean, _valid_recipe, partial_fields
 
-        text, sent = "", False
+        text, felt, sent = "", False, False
         for chunk in self.stream(heard, wav):
             text += chunk
             if not sent:
                 got = partial_fields(text)
+                if not felt and "feeling" in got:
+                    felt = True
+                    f = str(got["feeling"]).lower()
+                    yield "feeling", f if f in FEELINGS else "neutral"
                 if {"feeling", "recipe"} <= got.keys() and "reading" not in got and _valid_recipe(got["recipe"]):
                     sent = True
-                    yield True, _clean(got)
+                    yield "early", _clean(got)
         d = parse_json(text)
         if not _valid_recipe(d.get("recipe")):
             raise ValueError("the audio responder did not produce a valid recipe")
-        yield False, _clean(d)
+        yield "final", _clean(d)
+
+    def answers(self, heard, wav):
+        """Yield ``(early, answer)`` like rmr.respond.Student.answers."""
+        for kind, x in self.stages(heard, wav):
+            if kind != "feeling":
+                yield kind == "early", x

@@ -178,11 +178,12 @@ class _AudioStudent:
     def __init__(self):
         self.got = []
 
-    def answers(self, heard, wav):
+    def stages(self, heard, wav):
         self.got.append((heard["text"], len(wav)))
         r = {"feeling": "sad", "response": "gentle. You lower your ears.", "recipe": "go 1 e=90 p=8 E=1 | hold 1"}
-        yield True, {**r, "reading": ""}
-        yield False, {**r, "reading": "They sound low."}
+        yield "feeling", "sad"
+        yield "early", {**r, "reading": ""}
+        yield "final", {**r, "reading": "They sound low."}
 
 
 def test_audio_responder_hears_the_recording(client, monkeypatch):
@@ -200,6 +201,7 @@ def test_audio_responder_hears_the_recording(client, monkeypatch):
         parts = [json.loads(x) for x in client.post("/api/respond?stream=1", content=b"\0" * 4000).text.splitlines()]
     finally:
         eng.audio_model, eng.audio_student = None, None
-    assert [p["stage"] for p in parts] == ["heard", "motion", "done"]
-    assert parts[1]["feeling"] == "sad" and parts[1]["moves"] and parts[2]["reading"] == "They sound low."
+    assert [p["stage"] for p in parts] == ["heard", "react", "motion", "done"]
+    assert parts[1]["feeling"] == "sad" and parts[1]["moves"] and "react" in parts[1]["timing_ms"]   # react at once
+    assert parts[2]["feeling"] == "sad" and parts[2]["moves"] and parts[3]["reading"] == "They sound low."
     assert st.got == [("I got the job!", 2000)]                 # the transcript and the waveform both reach it

@@ -108,6 +108,12 @@ async function respondTo(wav, onMotion) {
             if (part.stage === 'error') throw new Error(part.detail);
             entry = { ...entry, ...part, timing_ms: { ...entry.timing_ms, ...part.timing_ms } };
             if (part.stage === 'heard') status(`Heard “${part.heard.text || '…'}”. Thinking…`);
+            if (part.stage === 'react') {          // the feeling is read: react now, glide into the answer later
+                onMotion?.(); player.live = null; player.loop = false;
+                player.load(part.moves[0], player.shown);
+                status(`Reads you as ${part.feeling}…`);
+            }
+            if (part.stage === 'motion') player.loop = $('loop').checked;
             if (part.stage === 'motion') { onMotion?.(); show(entry); status('Reading you…'); duration = player.duration(); }
             if (part.stage === 'done') {
                 if (part.mood) MOOD = part.mood;
@@ -187,7 +193,7 @@ function enableTalk() {
     b.addEventListener('keydown', (e) => { if (e.key === ' ' && !e.repeat) start(e); });
     b.addEventListener('keyup', (e) => { if (e.key === ' ') stop(e); });
 
-    // Hands-free: the mic stays open; the end of each turn (0.9 s of silence after 0.6 s of speech, Listen.js) sends
+    // Hands-free: the mic stays open; the end of each turn (0.7 s of silence after 0.6 s of speech, Listen.js) sends
     // that turn. While the robot answers (waiting, then playing its move) it doesn't take a new turn.
     const hf = $('handsfree');
     hf.onclick = async () => {

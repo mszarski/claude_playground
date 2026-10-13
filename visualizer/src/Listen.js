@@ -9,7 +9,7 @@ import { SpeakerFeatures } from './ListenModel.js';
  */
 export const FPS = 25;
 const FLOOR_RISE = 0.004, VOICE_DB = 9.0, MIN_DB = -55.0, HANGOVER = 0.2, PAUSE = 0.3, MIN_TALK = 1.0;
-const END_OF_TURN = 0.9, MIN_TURN = 0.6;
+const END_OF_TURN = 0.7, MIN_TURN = 0.6;
 const DOUBLE_TALK = 3.0, REFRACTORY = 1.2, PERK_GAP = 3.0, ENGAGED = 4.0, FAST = 0.5, SLOW = 0.05, RISE_DB = 8.0;
 const NOD_DEG = 7.0, NOD_S = 0.55, NOD_Z = -2.0;
 const PERK_EARS = 25.0, PERK_ATTACK = 0.12, PERK_DECAY = 0.8, PERK_PITCH = -3.0, PERK_Z = 3.0;
