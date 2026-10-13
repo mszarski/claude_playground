@@ -190,8 +190,27 @@ parts on every metric. Duplicated parts also improve (0.355 -> 0.588). Less deta
 abstract prompts carry no dimensions. Command structure is the weaker half (novel acc_cmd 0.631 vs ceiling
 0.923), so mistakes are now mostly wrong sketch structure, not wrong numbers.
 
+### Image (+ text) -> program from patch tokens (`mm/token_cad.py`, `train_token_cad.py`, `RUN=token_cad_v1 jobs/launch.sh tokencad`)
+Same AR decoder, cross-attending to the 196 SigLIP2 patch states of a render (frozen) plus, half the time, Qwen
+prompt tokens. 18.5M trainable; 40k steps bs 128, ~4.2 h A100. Test split (`baselines.py --token_cad`, bucket
+`results/baselines_token_cad/report.json`), prog_match / acc_cmd / acc_param:
+| model, input | dup (n=770) | novel (n=1230) |
+|---|---|---|
+| token_cad, image | 0.373 / 0.789 / 0.870 | 0.002 / 0.581 / 0.627 |
+| token_cad, image + expert | 0.603 / 0.812 / 0.927 | 0.018 / 0.647 / 0.712 |
+| token_cad, expert only (never trained without an image) | 0.171 / 0.706 / 0.808 | 0.005 / 0.597 / 0.662 |
+| text_cad, expert | 0.588 / 0.786 / 0.919 | 0.026 / 0.631 / 0.718 |
+| mm_v1 prior, image (pooled) | 0.464 / 0.887 / 0.923 | 0.001 / 0.585 / 0.620 |
+| mm_v1 prior, image + expert (pooled) | 0.553 / 0.892 / 0.942 | 0.003 / 0.620 / 0.648 |
+Patch tokens do not help images: image-only novel parts are where every image model has landed (0.58-0.60 /
+0.62-0.63), and on duplicates image-only is worse than the pooled prior (recognition of known parts suffers).
+With a prompt, image + expert ~= text_cad expert on novel parts (+1.6 acc_cmd, -0.6 acc_param, -0.8 prog_match):
+the numbers come from the text, the image adds a little structure. Conclusion: the renders do not carry enough
+information to pin down novel programs (isometric view, unknown scale, hidden features); detailed text does.
+
 ## Next steps (ideas, none started)
-- Same idea for images: cross-attend the program decoder to SigLIP2 patch tokens (and to text tokens together).
+- Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
+  mm_v1 for image-only; a small demo / API around that.
 - text_cad tuning: more Qwen layers (8 now), longer training (val still rising slowly at 40k), beam search.
 - The novel-part gap (prior 0.3-0.7 % exact vs decoder ceiling 65 %) survives encoder, view-count, decoder and
   sampler changes. Untested levers: prior capacity/objective (a bigger denoiser, pred_v, longer training) and
