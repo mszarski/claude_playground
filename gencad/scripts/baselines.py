@@ -49,6 +49,7 @@ def main():
     ap.add_argument("--gencad_dp_ckpt", default=None)
     ap.add_argument("--text_cad", default=None, help="mm.text_cad.TextCAD checkpoint: decode programs from prompts")
     ap.add_argument("--text_cad_levels", nargs="*", default=["expert", "intermediate", "beginner", "abstract"])
+    ap.add_argument("--token_cad", default=None, help="mm.token_cad.TokenCAD checkpoint: decode from image/text tokens")
     ap.add_argument("--ar_decoder", default=None, help="also report the autoregressive decoder's GT-latent ceiling")
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
@@ -216,6 +217,39 @@ def main():
                     vecs[i] = v
             print(f"[text_cad] {lv}: {len(have)}/{len(test)} test uids have this prompt level")
             score(f"text_cad:{lv}", vecs)
+
+    if a.token_cad:  # image (+ text) tokens -> program: render view 0, alone / with the expert prompt / prompt only
+        from mm.cond_encoders import load_rgb
+        from mm.token_cad import TokenCAD
+        from train_e2e import TF
+        tk = TokenCAD.load(a.token_cad)[0].to(device).eval()
+        with open(os.path.join(a.data, "text_index.json")) as f:
+            text_index = json.load(f)
+        with open(os.path.join(a.data, "image_ids.json")) as f:
+            img_ids = json.load(f)
+        modes = {"image": (True, False), "image+expert": (True, True), "expert": (False, True)}
+        out = {m: [] for m in modes}
+        for s in range(0, len(test), 128):
+            chunk = test[s: s + 128]
+            pixels = torch.stack([TF(load_rgb(os.path.join(a.data, "images", f"{u}_{img_ids[u][0]}.png")))
+                                  for u in chunk]).to(device)
+            prompts = [text_index.get(u, {}).get("expert") for u in chunk]
+            for m, (use_img, use_txt) in modes.items():
+                if not use_img and not any(prompts):
+                    out[m] += [None] * len(chunk)
+                    continue
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
+                    if use_img:
+                        out[m] += tk.generate(pixels=pixels, prompts=prompts if use_txt else None)
+                    else:   # prompt only: samples without a prompt count as invalid
+                        keep = [i for i, p in enumerate(prompts) if p]
+                        got = tk.generate(prompts=[prompts[i] for i in keep])
+                        row = [None] * len(chunk)
+                        for i, v in zip(keep, got):
+                            row[i] = v
+                        out[m] += row
+        for m in modes:
+            score(f"token_cad:{m}", out[m])
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:

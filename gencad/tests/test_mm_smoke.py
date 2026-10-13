@@ -342,3 +342,34 @@ def test_text_cad_reads_prompts_and_writes_programs():
     out = model.eval().generate(prompts)
     assert [o.tolist() for o in out] == [g1.tolist(), g2.tolist()]   # different prompts -> their own programs
     assert all(not k.startswith("text.") for k in model.trainable_state_dict())
+
+
+def test_token_cad_uses_image_and_optional_text_tokens():
+    from transformers import Qwen3Config, Qwen3Model, SiglipVisionConfig, SiglipVisionModel
+    from mm.ar_decoder import pad_program
+    from mm.token_cad import TokenCAD
+    torch.manual_seed(0)
+    vision = SiglipVisionModel(SiglipVisionConfig(hidden_size=32, intermediate_size=64, num_hidden_layers=1,
+                                                  num_attention_heads=2, image_size=32, patch_size=8))
+    text = Qwen3Model(Qwen3Config(vocab_size=260, hidden_size=32, intermediate_size=64, num_hidden_layers=2,
+                                  num_attention_heads=2, num_key_value_heads=1, head_dim=16))
+    model = TokenCAD(image_model=vision, text_model=text, tokenizer=_CharTokenizer(), text_layers=1,
+                     d_model=64, n_layers=2, n_heads=4, d_ff=128, dropout=0.0)
+    g1 = _fake_cad_vec()
+    g2 = g1.copy()
+    g2[1:5, 1:3] //= 2
+    pixels = torch.randn(1, 3, 32, 32).repeat(2, 1, 1, 1)          # the same image twice ...
+    prompts = ["big", "small"]                                        # ... told apart only by the prompt
+    vec = torch.tensor(np.stack([pad_program(g1), pad_program(g2)]))
+    opt = torch.optim.Adam([p for n, p in model.named_parameters() if not n.startswith(TokenCAD.FROZEN)], 3e-3)
+    model.train()
+    for _ in range(150):
+        loss, _ = model.loss(vec, pixels=pixels, prompts=prompts)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    out = model.eval().generate(pixels=pixels, prompts=prompts)
+    assert [o.tolist() for o in out] == [g1.tolist(), g2.tolist()]     # text tokens are actually read
+    assert all(o is not None for o in model.generate(pixels=pixels))  # image-only path works
+    assert all(o is not None for o in model.generate(pixels=pixels, prompts=["big", None]))  # mixed batch
+    assert all(not k.startswith(TokenCAD.FROZEN) for k in model.trainable_state_dict())

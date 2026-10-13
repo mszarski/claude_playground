@@ -100,6 +100,10 @@ case "$STAGE" in
     need cad_vec
     python train_text_cad.py --emb_dir data/emb --data data --name "$RUN" --steps ${STEPS:-40000} "$@" ;;
 
+  tokencad)   # image (+ text) -> CAD program decoded from patch/prompt tokens (train_token_cad.py)
+    need cad_vec images
+    python train_token_cad.py --emb_dir data/emb --data data --name "$RUN" --steps ${STEPS:-40000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 
@@ -117,6 +121,7 @@ case "$STAGE" in
 
   baselines)  # train/test duplication + nearest-neighbour baselines, and priors split into duplicated vs novel parts
     need cad_vec
+    [[ " $* " == *" --token_cad "* ]] && need images
     python scripts/baselines.py --emb_dir data/emb --data data --csr_ckpt "$CSR_CKPT" \
       --out "results/$RUN/report.json" "$@" ;;
 
