@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from cadlib.macro import ARC_IDX, CIRCLE_IDX, EXT_IDX, LINE_IDX, CMD_ARGS_MASK  # noqa: F401
+from cadlib.macro import ARC_IDX, CIRCLE_IDX, CMD_ARGS_MASK, EOS_IDX, EXT_IDX, LINE_IDX  # noqa: F401
 
 
 @torch.no_grad()
@@ -31,13 +31,24 @@ def seq_metrics(pred_vecs, gt_vecs, tolerance=3):
     ACC_param: fraction of *used* parameters of correctly predicted commands within +-tolerance quantization
                bins (DeepCAD uses tolerance 3 of 256 levels).
     invalid: fraction with no EOS / unparseable.
+    prog_match: fraction whose command sequence is identical and every used parameter is within the tolerance
+                (a whole-program score: unlike ACC_cmd, it does not depend on rows staying position-aligned).
+    cmd_edit: mean command-sequence edit distance divided by GT length (an inserted or dropped row costs 1, not
+              every row after it).
     """
-    n_cmd = n_cmd_ok = n_par = n_par_ok = invalid = 0
+    n_cmd = n_cmd_ok = n_par = n_par_ok = invalid = prog_ok = 0
+    edits = []
     for p, g in zip(pred_vecs, gt_vecs):
+        g_body = g[:-1] if len(g) and g[-1, 0] == EOS_IDX else g  # stored GT keeps its EOS row
         if p is None:
             invalid += 1
             n_cmd += len(g)
+            edits.append(1.0)
             continue
+        edits.append(_edit_distance(p[:, 0].tolist(), g_body[:, 0].tolist()) / max(1, len(g_body)))
+        if len(p) == len(g_body) and np.array_equal(p[:, 0], g_body[:, 0]):
+            m = CMD_ARGS_MASK[g_body[:, 0]].astype(bool)
+            prog_ok += bool((np.abs(p[:, 1:].astype(int) - g_body[:, 1:].astype(int))[m] < tolerance).all())
         L = len(g)
         pc = np.full(L, -1)
         m = min(L, len(p))
@@ -56,4 +67,15 @@ def seq_metrics(pred_vecs, gt_vecs, tolerance=3):
         "acc_cmd": n_cmd_ok / max(1, n_cmd),
         "acc_param": n_par_ok / max(1, n_par),
         "invalid": invalid / max(1, len(gt_vecs)),
+        "prog_match": prog_ok / max(1, len(gt_vecs)),
+        "cmd_edit": float(np.mean(edits)) if edits else 0.0,
     }
+
+
+def _edit_distance(a, b):
+    d = list(range(len(b) + 1))
+    for i, x in enumerate(a, 1):
+        prev, d[0] = d[0], i
+        for j, y in enumerate(b, 1):
+            prev, d[j] = d[j], min(d[j] + 1, d[j - 1] + 1, prev + (x != y))
+    return d[-1]
