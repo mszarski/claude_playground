@@ -325,6 +325,39 @@ def text_baseline(a):
         f.writelines(json.dumps(x) + "\n" for x in out)
 
 
+def bench(a):
+    """Latency and answers of an AudioStudent (in-process or a vLLM URL), one request at a time as when serving."""
+    from rmr.audio_responder import AudioStudent
+    from rmr.voice import load_audio
+
+    rows = [json.loads(x) for x in open(a.heard)][:a.limit or None]
+    if a.voiced:
+        wavs = [load_audio(open(os.path.join(a.voiced, r["clip"] + ".wav"), "rb").read()) for r in rows]
+    else:
+        crema = crema_audio([r["tone"] for r in rows])
+        wavs = [crema[r["tone"]] for r in rows]
+    st = AudioStudent(a.model)
+    out, first, total = [], [], []
+    for r, w in zip(rows, wavs):
+        t0, t_early, d = time.time(), None, {}
+        try:
+            for early, ans in st.answers(r, w):
+                if early and t_early is None:
+                    t_early = time.time() - t0
+                d = ans
+        except Exception as e:
+            print(r["clip"], type(e).__name__, e, flush=True)
+        total.append(time.time() - t0)
+        first.append(t_early or total[-1])
+        out.append({"clip": r["clip"], "label": r["label"], "recipe": d.get("recipe"),
+                    "both": {k: d.get(k, "") for k in ("feeling", "reading", "response")}})
+    import numpy as np
+    print(f"{len(out)} answers: recipe ready median {np.median(first[1:]):.2f} s (p90 {np.percentile(first[1:], 90):.2f}), "
+          f"full answer median {np.median(total[1:]):.2f} s  (first request excluded: warm-up)", flush=True)
+    with open(a.out, "w") as f:
+        f.writelines(json.dumps(x) + "\n" for x in out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -358,13 +391,20 @@ def main():
     an.add_argument("--voiced", default="", help="folder of <clip>.wav (cloned voicings of written lines)")
     an.add_argument("--out", required=True)
     an.add_argument("--batch", type=int, default=8)
+    be = sub.add_parser("bench")
+    be.add_argument("--model", required=True, help="merged model or vLLM URL http://host:port/v1#name")
+    be.add_argument("--heard", required=True)
+    be.add_argument("--voiced", default="")
+    be.add_argument("--limit", type=int, default=0)
+    be.add_argument("--out", required=True)
     tb = sub.add_parser("text_baseline")
     tb.add_argument("--model", default="mszarski/reachy-voice:student/v8-dpo")
     tb.add_argument("--heard", required=True)
     tb.add_argument("--voiced", default="")
     tb.add_argument("--out", required=True)
     a = ap.parse_args()
-    {"bakeoff": bakeoff, "build": build, "train": train, "answer": answer, "text_baseline": text_baseline}[a.cmd](a)
+    {"bakeoff": bakeoff, "build": build, "train": train, "answer": answer, "text_baseline": text_baseline,
+     "bench": bench}[a.cmd](a)
 
 
 if __name__ == "__main__":
