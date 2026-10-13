@@ -16,7 +16,7 @@
 # Overrides: FLAVOR, TIMEOUT, BUCKET (default <you>/gencad-work), IMAGE, plus any env knob from entry.sh
 # (RUN, EPOCHS, BS, LR, STEPS, CSR_CKPT, CCIP_CKPT, DP_CKPT, IMG_TYPE, OCC, HUB_REPO). DRY=1 prints the command.
 set -euo pipefail
-STAGE=${1:?usage: jobs/launch.sh <fetch|text|test|csr|ccip|export|embed|dp|mm|eval|ar|upstream|baselines|visual|shell> [args...]}; shift
+STAGE=${1:?usage: jobs/launch.sh <fetch|text|test|csr|ccip|export|embed|dp|mm|eval|ar|e2e|upstream|baselines|visual|shell> [args...]}; shift
 : "${HF_TOKEN:?export HF_TOKEN first}"
 NS=${NS:-$(hf auth whoami --format json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("name") or d["user"])')}
 BUCKET=${BUCKET:-$NS/gencad-work}
@@ -30,7 +30,7 @@ case "$STAGE" in
   export|embed) DF=a10g-large;  DT=4h ;;
   csr)          DF=a100-large;  DT=48h ;;
   ccip)         DF=a100-large;  DT=24h ;;
-  dp|mm|ar)     DF=a100-large;  DT=24h ;;
+  dp|mm|ar|e2e) DF=a100-large;  DT=24h ;;
   eval)         DF=a10g-large;  DT=4h ;;
   *)            DF=a10g-large;  DT=4h ;;
 esac
@@ -46,7 +46,7 @@ tar -chf - --exclude=./upstream --exclude=.git --exclude=__pycache__ --exclude=.
     --exclude=./data/sketches . | tar -xf - -C "$SNAP"   # -h follows the setup.sh symlinks
 
 ENVS=()
-for k in PRIOR RUN EPOCHS BS LR STEPS SAVE_EVERY CSR_CKPT CCIP_CKPT DP_CKPT IMG_TYPE OCC HUB_REPO; do
+for k in PRIOR INIT_PRIOR RUN EPOCHS BS LR STEPS SAVE_EVERY CSR_CKPT CCIP_CKPT DP_CKPT IMG_TYPE OCC HUB_REPO; do
   [[ -n "${!k:-}" ]] && ENVS+=(--env "$k=${!k}")
 done
 

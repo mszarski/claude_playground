@@ -91,6 +91,11 @@ case "$STAGE" in
     python train_ar_decoder.py --emb_dir data/emb --data data --csr_ckpt "$CSR_CKPT" --name "$RUN" \
       --steps ${STEPS:-100000} "$@" ;;
 
+  e2e)        # fine-tune the SigLIP2 image encoder end to end with a trained prior (train_e2e.py)
+    need images
+    python train_e2e.py --init_prior "${INIT_PRIOR:-results/mm_v1/last.pt}" --emb_dir data/emb --data data \
+      --name "$RUN" --steps ${STEPS:-20000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 

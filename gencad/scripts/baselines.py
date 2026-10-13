@@ -50,6 +50,7 @@ def main():
     ap.add_argument("--ar_decoder", default=None, help="also report the autoregressive decoder's GT-latent ceiling")
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
+    ap.add_argument("--override", action="append", default=[], help="modality=path to an alternative cond_*.h5")
     ap.add_argument("--skip_knn", action="store_true", help="only score the priors (duplicates are always computed)")
     ap.add_argument("--out", default="results/baselines/report.json")
     a = ap.parse_args()
@@ -60,6 +61,9 @@ def main():
 
     # --- test uids: exactly eval_mm.py's selection (first n of the split that have any condition)
     paths = {m: os.path.join(a.emb_dir, f"cond_{m}.h5") for m in ["ccip_image", "image", "text"]}
+    for spec in a.override:   # e.g. image=results/e2e_v1/emb/cond_image.h5 (fine-tuned encoder's embeddings)
+        m, p = spec.split("=", 1)
+        paths[m] = p
     paths = {m: p for m, p in paths.items() if os.path.exists(p)}
     ds = MultiModalLatentDataset(os.path.join(a.emb_dir, "cad_latents.h5"), paths, a.split, split_json,
                                  variants={m: 0 for m in paths if m != "text"}, max_items=a.n)
