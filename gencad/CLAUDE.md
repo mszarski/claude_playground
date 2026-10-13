@@ -149,10 +149,33 @@ CSR all 0.775 / 0.918 / 0.957, dup 0.977 / 0.902 / 0.997, **novel 0.649 / 0.923 
 prior gets 0.3 % of novel programs exactly (acc_param 0.648). The gap is entirely in mapping image/text to
 the right latent: the prior (and its conditioning) is where to invest, not the autoencoder or decoder.
 
+### GenCAD paper on frozen / staged training (arXiv 2409.16294, read 2026-10-13)
+Staging is motivated by scalability and reuse ("to make our approach scalable for large-scale datasets and
+models, we utilize the pre-trained CAD encoder ... instead of training from scratch"), not accuracy. CCIP trains a
+ResNet-18 from scratch against the frozen CSR encoder; encoder variants (ResNet-10/34, ViT) are compared on
+retrieval only; the diffusion prior is not ablated and no end-to-end or pretrained encoder is tried. Also: the
+training set "contains several scaled versions of the same CAD model" (fits our 38 % duplication) and the paper
+calls the CSR decoder autoregressive although it is fed constant embeddings.
+
+### End-to-end image encoder (`train_e2e.py`, `RUN=e2e_v1 jobs/launch.sh e2e`; ~2 h A100)
+Starts from mm_v1 and trains SigLIP2's vision tower (lr 1e-5) with the prior (lr 1e-4) on raw renders, 20k steps,
+bs 256; re-embeds val/test renders to `results/e2e_v1/emb/cond_image.h5`; scored with
+`baselines.py --override image=...` (bucket `results/baselines_e2e/report.json`). Val R@1 dipped to 0.388 at 2.5k
+then recovered: image 0.463 -> 0.467, image+text 0.550 -> 0.571. Test split, frozen mm_v1 -> e2e, prog_match /
+acc_cmd / acc_param:
+| condition | dup (n=770) | novel (n=1230) |
+|---|---|---|
+| image | 0.464 / 0.887 / 0.923 -> 0.419 / 0.883 / 0.909 | 0.001 / 0.585 / 0.620 -> 0.002 / 0.595 / 0.625 |
+| image+text | 0.553 / 0.892 / 0.942 -> 0.539 / 0.888 / 0.937 | 0.003 / 0.620 / 0.648 -> 0.007 / 0.629 / 0.648 |
+Novel parts move by about +1 point acc_cmd and +0-0.5 acc_param (within noise for n=1230); duplicated parts get
+slightly worse. So the frozen encoder is not the bottleneck either: frozen SigLIP2, GenCAD's CAD-trained CCIP and
+an end-to-end-tuned SigLIP2 all land within ~1 point on novel parts.
+
 ## Next steps (ideas, none started)
-- Close the prior gap on novel parts. Ideas: fine-tune the image encoder end to end with the prior (frozen
-  SigLIP2 features may not carry CAD-relevant geometry), a bigger / longer-trained prior, keep exact numbers from
-  text (Qwen embeddings blur dimensions), or predict programs directly from image features.
+- The novel-part gap (prior 0.3-0.7 % exact vs decoder ceiling 65 %) survives encoder, view-count, decoder and
+  sampler changes. Untested levers: prior capacity/objective (a bigger denoiser, pred_v, longer training) and
+  exact numbers from text. Or accept that image -> exact program is underdetermined on this data and target
+  "close enough" (cmd_edit / acc_param) rather than prog_match.
 - Hybrid retrieval + generation: return the nearest training program when the match is very close.
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
