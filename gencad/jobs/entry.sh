@@ -96,6 +96,10 @@ case "$STAGE" in
     python train_e2e.py --init_prior "${INIT_PRIOR:-results/mm_v1/last.pt}" --emb_dir data/emb --data data \
       --name "$RUN" --steps ${STEPS:-20000} "$@" ;;
 
+  textcad)    # text -> CAD program decoded from prompt tokens (train_text_cad.py; needs programs.npz in /work/emb)
+    need cad_vec
+    python train_text_cad.py --emb_dir data/emb --data data --name "$RUN" --steps ${STEPS:-40000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 

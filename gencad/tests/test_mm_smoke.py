@@ -304,3 +304,41 @@ def test_pooled_view_store_averages_views():
     assert torch.allclose(s.get(u0, 4)[0], s.emb[j, :2].float().mean(0))
     r, ok = s.get(u, None)                            # random subset: some mean of 1..3 views
     assert ok and r.shape == (s.dim,)
+
+
+class _CharTokenizer:
+    """Offline stand-in for a HF tokenizer: one id per character, right-padded."""
+
+    def __call__(self, texts, padding=True, truncation=True, max_length=512, return_tensors="pt"):
+        from transformers import BatchEncoding
+        ids = [[3 + (ord(c) % 250) for c in t[:max_length]] for t in texts]
+        n = max(len(i) for i in ids)
+        return BatchEncoding({"input_ids": torch.tensor([i + [0] * (n - len(i)) for i in ids]),
+                              "attention_mask": torch.tensor([[1] * len(i) + [0] * (n - len(i)) for i in ids])})
+
+
+def test_text_cad_reads_prompts_and_writes_programs():
+    from transformers import Qwen3Config, Qwen3Model
+    from mm.ar_decoder import pad_program
+    from mm.text_cad import TextCAD
+    torch.manual_seed(0)
+    cfg = Qwen3Config(vocab_size=260, hidden_size=32, intermediate_size=64, num_hidden_layers=3,
+                      num_attention_heads=2, num_key_value_heads=1, head_dim=16, max_position_embeddings=256)
+    model = TextCAD(text_model=Qwen3Model(cfg), tokenizer=_CharTokenizer(), text_layers=2,
+                    d_model=64, n_layers=2, n_heads=4, d_ff=128, dropout=0.0)
+    assert len(model.text.layers) == 2
+    g1 = _fake_cad_vec()
+    g2 = g1.copy()
+    g2[1:5, 1:3] //= 2
+    prompts = ["a big square plate", "a small square plate"]
+    vec = torch.tensor(np.stack([pad_program(g1), pad_program(g2)]))
+    opt = torch.optim.Adam([p for n, p in model.named_parameters() if not n.startswith("text.")], 3e-3)
+    model.train()
+    for _ in range(150):
+        loss, _ = model.loss(prompts, vec)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+    out = model.eval().generate(prompts)
+    assert [o.tolist() for o in out] == [g1.tolist(), g2.tolist()]   # different prompts -> their own programs
+    assert all(not k.startswith("text.") for k in model.trainable_state_dict())

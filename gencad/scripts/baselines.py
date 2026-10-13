@@ -47,6 +47,8 @@ def main():
     ap.add_argument("--csr_ckpt", default=None)
     ap.add_argument("--prior", default=None, help="multimodal prior to sample (image, text, image+text at --guidance)")
     ap.add_argument("--gencad_dp_ckpt", default=None)
+    ap.add_argument("--text_cad", default=None, help="mm.text_cad.TextCAD checkpoint: decode programs from prompts")
+    ap.add_argument("--text_cad_levels", nargs="*", default=["expert", "intermediate", "beginner", "abstract"])
     ap.add_argument("--ar_decoder", default=None, help="also report the autoregressive decoder's GT-latent ceiling")
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
@@ -197,6 +199,23 @@ def main():
                 g = torch.Generator(device=device).manual_seed(0)
                 z = prior.sample(emb, guidance={m: a.guidance for m in emb}, steps=100, generator=g)
                 score(f"prior:{name}", decode(z), z)
+
+    if a.text_cad:   # direct text -> program model, no latent: score each prompt level (missing prompt = invalid)
+        from mm.text_cad import TextCAD
+        tc = TextCAD.load(a.text_cad)[0].to(device).eval()
+        with open(os.path.join(a.data, "text_index.json")) as f:
+            text_index = json.load(f)
+        for lv in a.text_cad_levels:
+            have = [i for i, u in enumerate(test) if text_index.get(u, {}).get(lv)]
+            vecs = [None] * len(test)
+            for s in range(0, len(have), 128):
+                chunk = have[s: s + 128]
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=device == "cuda"):
+                    out = tc.generate([text_index[test[i]][lv] for i in chunk])
+                for i, v in zip(chunk, out):
+                    vecs[i] = v
+            print(f"[text_cad] {lv}: {len(have)}/{len(test)} test uids have this prompt level")
+            score(f"text_cad:{lv}", vecs)
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:

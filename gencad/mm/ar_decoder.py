@@ -56,42 +56,52 @@ class ARDecoder(nn.Module):
         bag = self.arg_emb((args + offsets).reshape(B * L, N_ARGS)).view(B, L, -1)
         return self.cmd_emb(cmd) + bag
 
-    def _forward(self, z, prev_rows):
-        """z (B, z_dim); prev_rows (B, L, 17) = rows already written (teacher-forced or generated).
+    def z_memory(self, z):
+        """CSR latent (B, z_dim) -> memory tokens (B, n_mem, d)."""
+        return self.z_proj(z).view(z.shape[0], self.n_mem, self.d_model)
+
+    def decode_step(self, mem, prev_rows, mem_pad=None):
+        """mem (B, M, d) memory tokens (mem_pad (B, M) True = padding); prev_rows (B, L, 17) rows already written.
         Returns logits for rows 0..L: cmd (B, L+1, N_CMD), args (B, L+1, N_ARGS, N_VAL)."""
-        B = z.shape[0]
+        B = mem.shape[0]
         bos = self.cmd_emb.weight[N_CMD].expand(B, 1, -1)
         x = torch.cat([bos, self._embed_rows(prev_rows)], 1) if prev_rows.shape[1] else bos
         x = x + self.pos_emb[: x.shape[1]]
-        mem = self.z_proj(z).view(B, self.n_mem, self.d_model)
         L = x.shape[1]
-        causal = torch.triu(torch.full((L, L), float("-inf"), device=z.device), 1)
-        h = self.norm(self.transformer(x, mem, tgt_mask=causal))
+        causal = torch.triu(torch.full((L, L), float("-inf"), device=mem.device), 1)
+        h = self.norm(self.transformer(x, mem, tgt_mask=causal, memory_key_padding_mask=mem_pad))
         return self.cmd_head(h), self.arg_head(h).view(B, L, N_ARGS, N_VAL)
 
-    def loss(self, z, vec):
-        """z (B, z_dim); vec (B, max_len, 17) GT programs padded with EOS rows. Loss covers every row up to and
-        including the first EOS; args only where the GT command uses them (as in DeepCAD)."""
-        cmd_logits, arg_logits = self._forward(z, vec[:, :-1])
+    def _forward(self, z, prev_rows):
+        return self.decode_step(self.z_memory(z), prev_rows)
+
+    def program_loss(self, mem, vec, mem_pad=None):
+        """Teacher-forced loss of GT programs vec (B, max_len, 17) (padded with EOS rows) given memory tokens.
+        Covers every row up to and including the first EOS; args only where the GT command uses them."""
+        cmd_logits, arg_logits = self.decode_step(mem, vec[:, :-1], mem_pad)
         cmd = vec[..., 0].long()
         is_eos = cmd == EOS_IDX
         first_eos = torch.where(is_eos.any(1), is_eos.float().argmax(1), torch.full_like(cmd[:, 0], vec.shape[1] - 1))
-        valid = torch.arange(vec.shape[1], device=z.device)[None] <= first_eos[:, None]   # (B, L)
+        valid = torch.arange(vec.shape[1], device=mem.device)[None] <= first_eos[:, None]   # (B, L)
         c_loss = F.cross_entropy(cmd_logits[valid], cmd[valid])
-        amask = self.arg_mask[cmd] & valid[..., None]                                      # (B, L, 16)
+        amask = self.arg_mask[cmd] & valid[..., None]                                        # (B, L, 16)
         target = (vec[..., 1:].long() + 1).clamp(0, N_VAL - 1)
         a_loss = F.cross_entropy(arg_logits[amask], target[amask]) if amask.any() else cmd_logits.sum() * 0
         return c_loss + a_loss, {"cmd_loss": c_loss.detach(), "arg_loss": a_loss.detach()}
 
+    def loss(self, z, vec):
+        """z (B, z_dim) CSR latents; vec (B, max_len, 17) GT programs padded with EOS rows."""
+        return self.program_loss(self.z_memory(z), vec)
+
     @torch.no_grad()
-    def generate(self, z):
+    def generate_from_memory(self, mem, mem_pad=None):
         """Greedy row-by-row decoding. Returns a list of (L_i, 17) int arrays, cut before the first EOS (None if
         no EOS within max_len), matching mm.gencad_io.decode_latents."""
-        B, device = z.shape[0], z.device
+        B, device = mem.shape[0], mem.device
         rows = torch.zeros(B, 0, 1 + N_ARGS, dtype=torch.long, device=device)
         done = torch.zeros(B, dtype=torch.bool, device=device)
         for _ in range(self.max_len):
-            cmd_logits, arg_logits = self._forward(z, rows)
+            cmd_logits, arg_logits = self.decode_step(mem, rows, mem_pad)
             cmd = cmd_logits[:, -1].argmax(-1)                                         # (B,)
             args = arg_logits[:, -1].argmax(-1) - 1                                    # (B, 16) in [-1, 255]
             args = torch.where(self.arg_mask[cmd], args, torch.full_like(args, -1))
@@ -105,6 +115,10 @@ class ARDecoder(nn.Module):
             cmds = r[:, 0].tolist()
             out.append(r[: cmds.index(EOS_IDX)].astype(np.int64) if EOS_IDX in cmds else None)
         return out
+
+    @torch.no_grad()
+    def generate(self, z):
+        return self.generate_from_memory(self.z_memory(z))
 
     # ------------------------------------------------------------------ io
     def save(self, path, **extra):
