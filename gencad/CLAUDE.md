@@ -126,8 +126,26 @@ mm_v1 beats GenCAD clearly (image+text acc_cmd 0.620 vs 0.538, acc_param 0.648 v
 commands, roughly ties on parameters. Report the novel split as the headline from now on; consider a hybrid
 (retrieve when the nearest training match is very close, generate otherwise).
 
+### Multi-view prior `mm_mv` (`--modalities image_mv text`; bucket `results/baselines_mm_mv/report.json`)
+image_mv = mean SigLIP2 embedding of a random 1-5 views in training (mm.data.PooledViewStore); scored at 1/3/5 views.
+prog_match / acc_cmd / acc_param, same 2000 test uids:
+| condition | all | dup (n=770) | novel (n=1230) |
+|---|---|---|---|
+| image, 1 view | 0.166 / 0.671 / 0.731 | 0.430 / 0.891 / 0.915 | 0.001 / 0.590 / 0.610 |
+| image, 3 views | 0.214 / 0.673 / 0.752 | 0.555 / 0.893 / 0.942 | 0.001 / 0.592 / 0.629 |
+| image, 5 views | 0.227 / 0.672 / 0.755 | 0.587 / 0.892 / 0.947 | 0.001 / 0.591 / 0.629 |
+| image 1 view + text | 0.205 / 0.691 / 0.751 | 0.529 / 0.894 / 0.937 | 0.002 / 0.616 / 0.636 |
+| image 5 views + text | 0.241 / 0.696 / 0.765 | 0.621 / 0.896 / 0.955 | 0.003 / 0.622 / 0.648 |
+| text only | 0.129 / 0.654 / 0.669 | 0.332 / 0.778 / 0.824 | 0.001 / 0.608 / 0.587 |
+More views help mostly on duplicated parts (image prog_match 0.430 -> 0.587; R@1 0.426 -> 0.494). On novel parts
+they add ~2 points of acc_param for image alone and nothing once text is present (5 views + text 0.622 / 0.648
+vs mm_v1 image+text 0.620 / 0.648). At 1 view mm_mv is slightly below mm_v1. Viewpoint ambiguity is therefore
+not what limits novel parts.
+
 ## Next steps (ideas, none started)
-- Skew is a prior-side error now: more views per condition, or text, are the levers (text halves it on hard cases).
+- Check the CSR autoencoder's own ceiling on the novel split (decode GT latents of novel test parts): if the
+  latent space itself reconstructs novel parts poorly, priors cannot do better there.
+- Hybrid retrieval + generation: return the nearest training program when the match is very close.
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
 - Qualitative check: `infer_mm.py` on a few test uids / free-form prompts, export STEP with `OCC=1`.
