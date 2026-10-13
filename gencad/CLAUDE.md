@@ -171,7 +171,28 @@ Novel parts move by about +1 point acc_cmd and +0-0.5 acc_param (within noise fo
 slightly worse. So the frozen encoder is not the bottleneck either: frozen SigLIP2, GenCAD's CAD-trained CCIP and
 an end-to-end-tuned SigLIP2 all land within ~1 point on novel parts.
 
+### Text -> program from prompt tokens (`mm/text_cad.py`, `train_text_cad.py`, `RUN=text_cad_v1 jobs/launch.sh textcad`)
+The AR program decoder cross-attends to per-token hidden states of a frozen Qwen3-Embedding-0.6B cut to 8 layers;
+no pooled embedding, no latent, no prior. 18.2M trainable params; 40k steps, bs 128, random prompt level per
+sample (abstract/beginner/intermediate/expert/description); ~3.6 h A100. Test split (`baselines.py --text_cad`,
+bucket `results/baselines_text_cad/report.json`), prog_match / acc_cmd / acc_param:
+| model, prompt | all | dup (n=770) | novel (n=1230) |
+|---|---|---|---|
+| text_cad, expert | 0.242 / 0.673 / 0.786 | 0.588 / 0.786 / 0.919 | **0.026 / 0.631 / 0.718** |
+| text_cad, intermediate | 0.176 / 0.607 / 0.730 | 0.451 / 0.739 / 0.888 | 0.005 / 0.558 / 0.644 |
+| text_cad, beginner | 0.128 / 0.563 / 0.685 | 0.329 / 0.705 / 0.838 | 0.002 / 0.510 / 0.596 |
+| text_cad, abstract | 0.054 / 0.487 / 0.637 | 0.142 / 0.659 / 0.767 | 0.000 / 0.423 / 0.548 |
+| mm_v1 text (pooled, prior), expert | 0.137 / 0.652 / 0.670 | 0.355 / 0.773 / 0.828 | 0.000 / 0.607 / 0.587 |
+| best image+text prior (mm_mv 5 views + expert) | 0.241 / 0.696 / 0.765 | 0.621 / 0.896 / 0.955 | 0.003 / 0.622 / 0.648 |
+First change that moves novel parts: from expert prompts, novel acc_param 0.587 -> 0.718 (+13 points), whole
+programs right 0 -> 2.6 % (32 of 1230), and expert text alone now beats the best image+text prior on novel
+parts on every metric. Duplicated parts also improve (0.355 -> 0.588). Less detailed prompts degrade as expected;
+abstract prompts carry no dimensions. Command structure is the weaker half (novel acc_cmd 0.631 vs ceiling
+0.923), so mistakes are now mostly wrong sketch structure, not wrong numbers.
+
 ## Next steps (ideas, none started)
+- Same idea for images: cross-attend the program decoder to SigLIP2 patch tokens (and to text tokens together).
+- text_cad tuning: more Qwen layers (8 now), longer training (val still rising slowly at 40k), beam search.
 - The novel-part gap (prior 0.3-0.7 % exact vs decoder ceiling 65 %) survives encoder, view-count, decoder and
   sampler changes. Untested levers: prior capacity/objective (a bigger denoiser, pred_v, longer training) and
   exact numbers from text. Or accept that image -> exact program is underdetermined on this data and target
