@@ -132,7 +132,7 @@ def main():
     ap.add_argument("--split", nargs="*", default=["train", "validation", "test"])
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=os.cpu_count())
-    ap.add_argument("--timeout", type=float, default=60.0)
+    ap.add_argument("--task_timeout", type=float, default=120.0, help="seconds per part")
     a = ap.parse_args()
     from pebble import ProcessPool
     with open(os.path.join(a.data, "filtered_data.json")) as f:
@@ -140,7 +140,7 @@ def main():
     uids = [u for s in a.split for u in splits[s][: a.limit]]
     status = {}
     with ProcessPool(max_workers=a.workers) as pool:
-        futs = {u: pool.schedule(render_uid, args=((u, a.data, a.out),), timeout=a.timeout) for u in uids}
+        futs = {u: pool.schedule(render_uid, args=((u, a.data, a.out),), timeout=a.task_timeout) for u in uids}
         for k, (u, fu) in enumerate(futs.items()):
             try:
                 status[u] = fu.result()[1]

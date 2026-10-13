@@ -157,7 +157,7 @@ def main():
     ap.add_argument("--methods", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=None, help="first N uids only (smoke test)")
     ap.add_argument("--workers", type=int, default=os.cpu_count())
-    ap.add_argument("--timeout", type=float, default=120.0, help="seconds per prediction; a hang counts as invalid")
+    ap.add_argument("--task_timeout", type=float, default=120.0, help="seconds per prediction; a hang counts as invalid")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     with open(a.preds, "rb") as f:
@@ -174,7 +174,7 @@ def main():
         rows = []
         # pebble kills a worker that hangs past the timeout or crashes (OCC segfault) and fails only that task
         with ProcessPool(max_workers=a.workers) as pool:
-            futs = [pool.schedule(_job, args=((g, p),), timeout=a.timeout) for g, p in zip(gts, preds)]
+            futs = [pool.schedule(_job, args=((g, p),), timeout=a.task_timeout) for g, p in zip(gts, preds)]
             for fu in futs:
                 try:
                     rows.append(fu.result())
