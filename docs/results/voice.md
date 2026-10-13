@@ -387,6 +387,19 @@ contamination of the base model; the cloned-lines comparison is the clean one.
 
 v2 (`audio/student/v2`) is served on the live Space (L4, vLLM FP8).
 
+### Reacting sooner (2026-10-13)
+
+- **Instant reaction** (`rmr/react.py`): the audio responder writes the feeling first, about half a second into its
+  answer; `AudioStudent.stages` announces it and the server sends a short generated reaction (`react` stage: ears
+  and head toward the feeling) that the viewer and the robot play at once, then glide into the full response. On
+  the live Space (L4, vLLM FP8, v2), with the server's clock: reaction at 0.6-0.9 s, full response motion at
+  3.3-4.1 s (first request after waking ~2 s / ~5.4 s).
+- **End of turn** (hands-free and the robot): 0.7 s of silence instead of 0.9 s.
+- So from the end of speech, Reachy moves after about 1.3-1.6 s instead of 4-5 s.
+- **Smaller model** (Voxtral-Mini-3B, Apache-2.0, ~2.5x fewer parameters): zero-shot it hardly hears tone (25% on the
+  tone test, chance 20%; 48% on cloned lines, where Qwen2-Audio gets 45%); a fine-tune with LoRA on the audio
+  encoder too is the test of whether it can learn to.
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
