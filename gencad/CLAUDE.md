@@ -84,9 +84,29 @@ R@1 0.430 vs 0.435, text 0.263 vs 0.254, image+text 0.501 vs 0.503; acc_cmd/acc_
 So averaging is a minor contributor: stochastic sampling trims skew by about a third at best and costs a
 little accuracy. Default stays eta=0. The remaining lever is the decoder (autoregressive decoding, below).
 
+### Autoregressive decoder (`mm/ar_decoder.py`, `train_ar_decoder.py`, `RUN=ar_v1 jobs/launch.sh ar`)
+17.8M-param transformer that writes the program row by row from the frozen CSR latent (100k steps, ~2 h A100;
+checkpoint `results/ar_v1/last.pt`; use with `--ar_decoder`). New whole-program metrics in `mm/metrics.py`:
+`prog_match` (same commands, used params within +-3) and `cmd_edit` (command edit distance per GT row), because
+acc_cmd compares rows by position and punishes a decoder that can insert/drop a row. 2000 test samples, w=2,
+text = expert, CSR decoder vs AR decoder:
+| row | prog_match CSR / AR | cmd_edit CSR / AR | acc_cmd CSR / AR | acc_param CSR / AR |
+|---|---|---|---|---|
+| GT latent (recon) | 0.775 / 0.794 | 0.005 / 0.014 | 0.918 / 0.853 | 0.957 / 0.952 |
+| gencad_dp | 0.102 / 0.102 | 0.185 / 0.181 | 0.599 / 0.598 | 0.659 / 0.660 |
+| mm_v1 image | 0.178 / 0.178 | 0.133 / 0.134 | 0.665 / 0.650 | 0.740 / 0.733 |
+| mm_v1 text | 0.136 / 0.136 | 0.154 / 0.153 | 0.650 / 0.635 | 0.671 / 0.670 |
+| mm_v1 image+text | 0.216 / 0.215 | 0.110 / 0.111 | 0.695 / 0.674 | 0.759 / 0.751 |
+Rectangle skew with the AR decoder (step 40k, all 1685 plates, `results/rect/report_ar40k.json`): gencad 3.9 %,
+image 2.7 %, image+expert 2.9 %, expert 6.4 % (vs 1.8 / 1.5 / 1.8 / 3.3 % with the CSR decoder). Conclusion: the
+AR decoder reconstructs GT latents slightly better as whole programs but is no better on prior samples and skews
+more. Most skew therefore comes from the prior placing latents that genuinely encode a skewed shape, which the
+AR decoder follows more literally; the mode-mixing trapezoid was a special case. Default stays the CSR decoder.
+Also from these metrics: whole programs right (prog_match) is 0.102 for GenCAD vs 0.178 image / 0.216
+image+text for mm_v1.
+
 ## Next steps (ideas, none started)
-- Autoregressive CSR decoder trained on the frozen latent space (fixes coordinate consistency at the source;
-  priors stay valid). Cheaper alternative: fine-tune the existing decoder on noise-perturbed latents.
+- Skew is a prior-side error now: more views per condition, or text, are the levers (text halves it on hard cases).
 - mm with `image text ccip_image`; `--cond_mode concat`; `--contrastive_weight 0`; longer training (val
   metrics flatten after ~120k steps, so probably little to gain).
 - Qualitative check: `infer_mm.py` on a few test uids / free-form prompts, export STEP with `OCC=1`.
