@@ -208,6 +208,30 @@ With a prompt, image + expert ~= text_cad expert on novel parts (+1.6 acc_cmd, -
 the numbers come from the text, the image adds a little structure. Conclusion: the renders do not carry enough
 information to pin down novel programs (isometric view, unknown scale, hidden features); detailed text does.
 
+### !! GenCAD's renders mostly do not show the GT program (`scripts/check_views.py`, 2026-10-13)
+Every uid has 5 renders `<uid>_{0..4}.png`. They are NOT 5 camera angles: the camera is the same isometric view and
+the part has different proportions in each. Silhouette test on 80 uids (GT solid projected along every isometric
+diagonal, both crops normalised to remove position/scale, `results/check_views/report.json`): IoU with file `_0`
+0.988 on average (best of the 5 for 78/80 uids, >0.95 for 97.5%); files `_1.._4` 0.74-0.87 (>0.95 for only 7-21%).
+`image_ids.json` lists the ids **shuffled** (e.g. `[4, 2, 3, 0, 1]`), and every script here (embeddings variant 0,
+eval_mm, baselines, token_cad, visual_check, upstream inference) took the first listed id: **the true render for
+only 19.4% of test parts**. Training sampled a random one of the 5 (20% correct), as upstream GenCAD does. So every
+image result above was scored, ~80% of the time, on an image of a differently proportioned part, and trained with
+the same label noise. This is the likely reason image models never got novel parts right ("renders do not carry
+enough information" was wrong). Fixes: `baselines.py --true_view` (query with file `_0` / its stored variant);
+`scripts/render_views.py` re-renders every GT program from 4 fixed cameras (iso top, iso bottom, front, top) into
+`/work/data/renders.tar`, used by default by `train_vlm_cad.py`.
+
+### Geometric metrics (`scripts/geom_eval.py`) and the VLM program writer (`mm/vlm_cad.py`, `train_vlm_cad.py`)
+prog_match counts a correct shape built by a different (or slightly off) program as wrong; the field reports IoU,
+median Chamfer distance and invalidity ratio (CAD-Recode / cadrille protocol: GT normalised to [-0.5, 0.5]^3, the
+prediction gets the same transform; CD on 8192 points x1e3). `baselines.py --save_preds` + `jobs/launch.sh geom`.
+Reference (cadrille, arXiv 2505.22914, DeepCAD test): single image IoU 81.7 / CD 0.21 (SFT, trained on CAD-Recode
+procedural data); 4-view grid trained on DeepCAD only 78.2 IoU, with CAD-Recode data 86.1, + RL 92.2. Their model is
+Qwen2-VL-2B fully fine-tuned to write CadQuery code. `mm/vlm_cad.py` does the same with Qwen3-VL-2B-Instruct writing
+our DeepCAD program as text (`S`, `L x y`, `A x y alpha f`, `R x y r`, `E <11 args>`), inputs 1 view or a 2x2 grid of
+4 views (448 px, 196 visual tokens) plus an optional prompt. `RUN=vlm_cad_v1 jobs/launch.sh vlmcad` (H200).
+
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
   mm_v1 for image-only; a small demo / API around that.
