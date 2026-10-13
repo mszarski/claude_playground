@@ -3,8 +3,9 @@
 The GenCAD renders of one uid are not views of its GT program (scripts/check_views.py): they show the part with
 different proportions. These renders come straight from the GT program, so every pixel agrees with the label.
 
-Cameras: orthographic, along the four tetrahedral diagonals (+1,+1,+1), (-1,-1,+1), (+1,-1,-1), (-1,+1,-1), so two
-views look from above and two from below (hidden features of one side show in the other). All views of a part share
+Cameras (orthographic): 0 isometric from above (+1,+1,+1), the single-view input; 1 isometric from below (-1,-1,-1),
+which shows what view 0 hides; 2 front (0,-1,0) and 3 top (0,0,+1), which show true proportions like an engineering
+drawing. All views of a part share
 one scale (the bounding sphere of the solid fills the frame), so relative sizes are comparable across views.
 Shading: grey Lambert per triangle on white, key light fixed to the camera; B-rep edges = boundaries between
 different faces (and the silhouette) in the z-buffered face-ID image, drawn dark.
@@ -21,7 +22,7 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DIRS = np.array([[1, 1, 1], [-1, -1, 1], [1, -1, -1], [-1, 1, -1]], float)
+DIRS = np.array([[1, 1, 1], [-1, -1, -1], [0, -1, 0], [0, 0, 1]], float)   # iso top, iso bottom, front, top
 
 
 def tessellate(shape):

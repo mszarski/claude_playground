@@ -55,6 +55,9 @@ def main():
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
     ap.add_argument("--override", action="append", default=[], help="modality=path to an alternative cond_*.h5")
     ap.add_argument("--skip_knn", action="store_true", help="only score the priors (duplicates are always computed)")
+    ap.add_argument("--true_view", action="store_true",
+                    help="query with render file _0 (the one that shows the GT program, scripts/check_views.py) "
+                         "instead of the first listed id in image_ids.json, which is a distorted variant ~80%% of the time")
     ap.add_argument("--save_preds", default=None, help="pickle every method's programs for scripts/geom_eval.py")
     ap.add_argument("--out", default="results/baselines/report.json")
     a = ap.parse_args()
@@ -73,6 +76,12 @@ def main():
                                  variants={m: 0 for m in paths if m != "text"}, max_items=a.n)
     test = ds.uids
     cad = ds.cad
+    with open(os.path.join(a.data, "image_ids.json")) as f:
+        img_ids = json.load(f)
+    # which stored view variant / file to query with, per uid (stores keep views in image_ids.json order)
+    qvar = {u: (img_ids[u].index(0) if a.true_view and 0 in img_ids.get(u, []) else 0) for u in test}
+    qfile = {u: (0 if a.true_view and 0 in img_ids[u] else img_ids[u][0]) for u in test}
+    report_view = "file_0" if a.true_view else "first_listed"
     with h5py.File(paths["text"], "r") as f:
         expert = json.loads(f.attrs["variants"]).index("expert")
 
@@ -103,7 +112,7 @@ def main():
         d = np.abs(P[:, :, 1:] - gb[None, :, 1:])
         exact[k] = (d[:, m] == 0).all(1).any() if m.any() else True
         near[k] = (d[:, m] < a.tol).all(1).any() if m.any() else True
-    report = {"n": len(test), "dup_exact": float(exact.mean()), "dup_near": float(near.mean())}
+    report = {"n": len(test), "dup_exact": float(exact.mean()), "dup_near": float(near.mean()), "view": report_view}
     print(f"[dups] test programs also in train: exact {exact.mean():.3f}, within +-{a.tol} {near.mean():.3f}")
 
     saved = {}
@@ -151,10 +160,11 @@ def main():
         if m not in ds.stores:
             continue
         store = ds.stores[m]
-        keep = [i for i, u in enumerate(test) if store.get(u, variant)[1]]
+        var = (lambda u: variant) if m == "text" else (lambda u: qvar[u])
+        keep = [i for i, u in enumerate(test) if store.get(u, var(u))[1]]
         if len(keep) < len(test):
             print(f"[knn] {m}: {len(test) - len(keep)} test uids lack this condition; scored as misses")
-        q = torch.stack([store.get(u, variant)[0] for u in test]).to(device)
+        q = torch.stack([store.get(u, var(u))[0] for u in test]).to(device)
         keys, owner = train_views(store, [variant] if m == "text" else None)
         knn(f"knn_{m}", q, keys, owner)
 
@@ -183,7 +193,7 @@ def main():
             dp.load_state_dict(torch.load(a.gencad_dp_ckpt, map_location="cpu", weights_only=False)["model"])
             dp = dp.to(device).eval()
             torch.manual_seed(0)
-            c = torch.stack([ds.stores["ccip_image"].get(u, 0)[0] for u in test]).to(device)
+            c = torch.stack([ds.stores["ccip_image"].get(u, qvar[u])[0] for u in test]).to(device)
             z = torch.cat([dp.sample(cond=c[s: s + 512]) for s in range(0, len(c), 512)])
             score("gencad", decode(z), z)
         if a.prior:
@@ -195,7 +205,7 @@ def main():
                 images = {f"image_mv@{k}v": torch.stack([mv.get(u, k - 1)[0] for u in test]).to(device)
                           for k in a.n_views}
             else:
-                images = {"image": torch.stack([ds.stores["image"].get(u, 0)[0] for u in test]).to(device)}
+                images = {"image": torch.stack([ds.stores["image"].get(u, qvar[u])[0] for u in test]).to(device)}
             combos = [{"text": text}] + [{"image": e} for e in images.values()] + \
                      [{"image": e, "text": text} for e in images.values()]
             names = ["text"] + list(images) + [f"{n}+text" for n in images]
@@ -230,13 +240,11 @@ def main():
         tk = TokenCAD.load(a.token_cad)[0].to(device).eval()
         with open(os.path.join(a.data, "text_index.json")) as f:
             text_index = json.load(f)
-        with open(os.path.join(a.data, "image_ids.json")) as f:
-            img_ids = json.load(f)
         modes = {"image": (True, False), "image+expert": (True, True), "expert": (False, True)}
         out = {m: [] for m in modes}
         for s in range(0, len(test), 128):
             chunk = test[s: s + 128]
-            pixels = torch.stack([TF(load_rgb(os.path.join(a.data, "images", f"{u}_{img_ids[u][0]}.png")))
+            pixels = torch.stack([TF(load_rgb(os.path.join(a.data, "images", f"{u}_{qfile[u]}.png")))
                                   for u in chunk]).to(device)
             prompts = [text_index.get(u, {}).get("expert") for u in chunk]
             for m, (use_img, use_txt) in modes.items():
