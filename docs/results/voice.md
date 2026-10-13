@@ -333,6 +333,39 @@ helps where it counts, in the responses and recipes. Kimi-K3 is the new teacher:
 and the lines, reads tone best of the three, and was the only model to pass every planner probe. GLM-5.3 stays the
 judge (`scripts/judge_ratings.py`), so no model grades its own answers.
 
+## Audio-native responder (2026-10-13)
+
+The text responder only ever sees the tone models' one-line reading of the voice, and on the tone test that caps it
+at 42%. An open audio LLM hears the voice itself.
+
+**Bake-off** (`scripts/audio_llm.py bakeoff`, zero-shot, "which one word: neutral, happy, sad, angry or anxious?"):
+Qwen2-Audio-7B-Instruct (Apache-2.0) reads 78% of the held-out tone test (neutral 92, happy 82, sad 95, angry 100,
+anxious 22%); Voxtral-Mini-3B did not run in the job (tokenizer setup) and Phi-4-multimodal needs remote code. On
+cloned speech it has never heard (below) the same model reads 45%, so part of the 78% may be CREMA-D having been in its
+training data, and part is that cloned voices carry less feeling than actors.
+
+**Training audio** (`scripts/clone_speech.py`): the written lines are voiced by zero-shot cloning (Chatterbox, MIT)
+of the very CREMA-D clip each line's tone reading came from (training actors only), so the line is said in that
+actor's voice and delivery. On the 3,860 voicings, the tone models agree with the intended feeling about as often as
+on the real reference clips for angry, sad, anxious and happy (75 / 66 / 13 / 18% vs 36 / 68 / 4 / 6%) and less for
+neutral and surprised (30 / 17% vs 64 / 82%); Whisper's word error rate is 14%, and 212 voicings above 35% are
+dropped. The 676 tone-only examples keep their real CREMA-D audio.
+
+**Training** (`scripts/audio_llm.py train`, one A100, 46 min, about $3): the v8 examples and teacher answers (4,238
+after dropping garbled voicings), input = audio + Whisper-style transcript + earlier lines, target = the same JSON
+answer; LoRA r32 on the language model (80M trainable of 8.5B), the audio encoder frozen; 2 epochs, val loss 1.08 ->
+0.62. Weights: `mszarski/reachy-voice` `audio/student/v1/merged`.
+
+| on the same audio | tone test (held-out actors, flat sentences) | cloned test lines (new audio) |
+|---|---|---|
+| text pipeline: Whisper + tone models + v8-dpo | 42.3% reads / 77.5% physical | 57.8% / 91.4% |
+| **audio responder v1** | **90.7%** / **97.5%** | **67.9%** / 88.0% |
+
+On the cloned lines the audio responder is right where the text pipeline is wrong on 48 clips, the reverse on 23
+(sign test p = 0.004); every one of its 555 recipes is valid. Per feeling on the lines: neutral 68 vs 40, surprised
+66 vs 34, sad 82 vs 75, anxious 58 vs 56, happy 77 vs 80, angry 56 vs 62. The tone-test number may still be helped by
+contamination of the base model; the cloned-lines comparison is the clean one.
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
