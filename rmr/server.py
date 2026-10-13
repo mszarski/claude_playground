@@ -42,7 +42,8 @@ class Engine:
     (merged model dir or Hub repo id, run in-process). ``responder``: the LLM that turns what it heard into a
     response prompt (``rmr.respond``); voice models load on the first ``/api/respond``."""
 
-    def __init__(self, ckpt, model=None, planner=None, responder=None, voice_model=None, calibrate=False):
+    def __init__(self, ckpt, model=None, planner=None, responder=None, voice_model=None, calibrate=False,
+                 audio_model=None):
         from .generator.sample import load
 
         self.net, self.stats, self.dev = load(ckpt)
@@ -50,6 +51,7 @@ class Engine:
         self.responder, self.listener = responder or model, None
         self.finetuned, self.voice_model = None, voice_model
         self.student = None
+        self.audio_model, self.audio_student = audio_model, None   # rmr.audio_responder: hears the voice itself
         self.listener_weights = None        # path of the learned listener's JSON weights, served to the viewer
         self.history = {}                   # session -> [(time, what they said)], the conversation so far
         self.calibrate = calibrate          # per-session level correction of the voice attributes (rmr.voice)
@@ -115,7 +117,7 @@ class Engine:
             elif part["stage"] == "motion":
                 self.turns.update(tid, recipe=part.get("recipe"), response=part.get("idea"),
                                   feeling=part.get("feeling"), seed=seed,
-                                  responder=self.voice_model or self.responder or "default")
+                                  responder=self.audio_model or self.voice_model or self.responder or "default")
             elif part["stage"] == "done":
                 h = (self.turns.get(tid) or {}).get("heard", {})
                 part["mood"] = self.mood(session).update(part.get("feeling"), h.get("valence"), h.get("arousal"))
@@ -142,7 +144,23 @@ class Engine:
         t1 = time.time()
         yield {"stage": "heard", "heard": {k: v for k, v in heard.items() if k != "probs"},
                "timing_ms": {"listen": int(1000 * (t1 - t0))}}
-        if self.voice_model:              # the distilled student: response and recipe in one call
+        if self.audio_model:              # the audio-native responder: hears the recording itself
+            from .audio_responder import AudioStudent
+            from .voice import load_audio
+            if self.audio_student is None:
+                self.audio_student = AudioStudent(self.audio_model)
+            wav, moved = load_audio(audio), False
+            for early, r in self.audio_student.answers(heard, wav):
+                if not moved:
+                    out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
+                    out["timing_ms"]["planner"] = int(1000 * (time.time() - t1)) - out["timing_ms"]["generator"]
+                    out["timing_ms"]["first_motion"] = int(1000 * (time.time() - t0))
+                    yield {"stage": "motion", **out, "idea": r["response"], "feeling": r["feeling"]}
+                    moved = True
+                if not early:
+                    yield {"stage": "done", "reading": r["reading"], "feeling": r["feeling"],
+                           "timing_ms": {"total": int(1000 * (time.time() - t0))}}
+        elif self.voice_model:            # the distilled student: response and recipe in one call
             from .respond import Student
             if self.student is None:
                 self.student = Student(self.voice_model)
@@ -307,6 +325,10 @@ def main():
                     help="LLM that decides how to respond to speech (default: --model)")
     ap.add_argument("--voice-model", default=os.environ.get("VOICE_MODEL"),
                     help="distilled responder (one local call: response + recipe), e.g. mszarski/reachy-voice:student/v8-dpo")
+    ap.add_argument("--audio-model", default=os.environ.get("AUDIO_MODEL"),
+                    help="audio-native responder (rmr.audio_responder; hears the voice itself), e.g. "
+                         "mszarski/reachy-voice:audio/student/v1, or a vLLM URL http://host:port/v1#model; "
+                         "takes precedence over --voice-model")
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--calibrate", action=argparse.BooleanOptionalAction, default=None,
@@ -328,8 +350,9 @@ def main():
 
     if a.calibrate is None:
         env = os.environ.get("CALIBRATE_VOICE")
-        a.calibrate = env not in ("0", "false", "") if env is not None else bool(a.voice_model)
-    engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model, calibrate=a.calibrate)
+        a.calibrate = env not in ("0", "false", "") if env is not None else bool(a.voice_model or a.audio_model)
+    engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model, calibrate=a.calibrate,
+                    audio_model=a.audio_model)
     if a.feedback_dir:
         from .feedback import FeedbackLog
         engine.feedback = FeedbackLog(a.feedback_dir, a.feedback_repo)
@@ -348,7 +371,10 @@ def main():
 
         def _load():
             engine.listener = Listener(device=voice_device())
-            if engine.voice_model and engine.student is None:
+            if engine.audio_model and engine.audio_student is None:
+                from .audio_responder import AudioStudent
+                engine.audio_student = AudioStudent(engine.audio_model)
+            elif engine.voice_model and engine.student is None:
                 from .respond import Student
                 engine.student = Student(engine.voice_model)
             print(f"voice models loaded on {voice_device()}", flush=True)

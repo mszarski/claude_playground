@@ -49,6 +49,9 @@ def main():
                     help="repo:path of the student's GGUF, served by llama.cpp in the Space")
     ap.add_argument("--feedback-repo", default="mszarski/reachy-feedback",
                     help="private HF dataset the thumbs up / down (rmr.feedback) are pushed to")
+    ap.add_argument("--audio-model", default=None,
+                    help="audio-native responder (rmr.audio_responder), e.g. mszarski/reachy-voice:audio/student/v1; "
+                         "replaces the text responder (no llama.cpp), needs a GPU with ~20 GB")
     ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
     ap.add_argument("--sleep", type=int, default=None, help="sleep after this many idle seconds (paid hardware)")
     ap.add_argument("--private", action=argparse.BooleanOptionalAction, default=True)
@@ -69,6 +72,14 @@ def main():
     if a.feedback_repo:
         api.create_repo(a.feedback_repo, repo_type="dataset", private=True, exist_ok=True)
         api.add_space_variable(a.repo, "FEEDBACK_REPO", a.feedback_repo)
+    if a.audio_model:
+        api.add_space_variable(a.repo, "AUDIO_MODEL", a.audio_model)
+        a.gguf = ""                                   # the audio responder replaces the text one
+    else:
+        try:
+            api.delete_space_variable(a.repo, "AUDIO_MODEL")
+        except Exception:
+            pass
     if a.gguf:
         api.add_space_variable(a.repo, "LLAMA_GGUF", a.gguf)
     else:

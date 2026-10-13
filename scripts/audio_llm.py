@@ -155,27 +155,7 @@ def bakeoff(a):
         json.dump(results, open(a.out, "w"), indent=1)
 
 
-AUDIO_SYSTEM = """You are Reachy Mini, a small expressive robot (head that tilts, nods and turns, two antenna ears,
-a rotating body). Someone just spoke to you: you hear their voice, with a transcript that can be wrong. From how they
-sound and what they say, judge how they feel and respond with kind body language: gentle with sadness, calm with
-anger, reassuring with fear, joyful with joy, attentive otherwise. Write the motion as a recipe:
-  go D k=v ... | hold D [E=v] | osc D ch amp per   channels e (ears: 0 up, 15 relaxed, 150 drooped), p (pitch, + = down),
-  r (roll), y (yaw), z (height mm), b (body), E (energy: 0 still, 1 calm, 3 lively, 6+ shaking)
-Reply with JSON only: {"feeling": "...", "response": "...", "recipe": "...", "reading": "..."}"""
-
-
-def user_text(ex):
-    parts = []
-    if ex.get("context"):
-        parts.append("Earlier in the conversation:\n" + "\n".join(f'- "{c}"' for c in ex["context"]))
-    parts.append(f'Transcript: "{ex.get("text") or "(no words)"}"\nHow do they feel, and how do you respond?')
-    return "\n".join(parts)
-
-
-def conversation(ex):
-    return [{"role": "system", "content": AUDIO_SYSTEM},
-            {"role": "user", "content": [{"type": "audio", "audio_url": "speech.wav"},
-                                         {"type": "text", "text": user_text(ex)}]}]
+from rmr.audio_responder import AUDIO_SYSTEM, conversation, user_text  # noqa: E402,F401  (shared with serving)
 
 
 def build(a):

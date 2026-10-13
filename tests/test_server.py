@@ -172,3 +172,34 @@ def test_puppeteered_clips_are_saved(client, tmp_path):
     assert saved["label"] == "sheepish" and len(saved["move"]["set_target_data"]) == 50
     assert client.post("/api/clips", json={"label": "Bad!", "move": move}).status_code == 422
     assert client.post("/api/clips", json={"label": "ok", "move": {**move, "time": move["time"][:10]}}).status_code == 422
+
+
+class _AudioStudent:
+    def __init__(self):
+        self.got = []
+
+    def answers(self, heard, wav):
+        self.got.append((heard["text"], len(wav)))
+        r = {"feeling": "sad", "response": "gentle. You lower your ears.", "recipe": "go 1 e=90 p=8 E=1 | hold 1"}
+        yield True, {**r, "reading": ""}
+        yield False, {**r, "reading": "They sound low."}
+
+
+def test_audio_responder_hears_the_recording(client, monkeypatch):
+    import json
+
+    import numpy as np
+
+    from rmr import voice
+
+    eng = client.app.state.engine
+    st = _AudioStudent()
+    eng.listener, eng.audio_model, eng.audio_student = _Heard(), "fake-audio", st
+    monkeypatch.setattr(voice, "load_audio", lambda b: np.zeros(len(b) // 2, np.float32))
+    try:
+        parts = [json.loads(x) for x in client.post("/api/respond?stream=1", content=b"\0" * 4000).text.splitlines()]
+    finally:
+        eng.audio_model, eng.audio_student = None, None
+    assert [p["stage"] for p in parts] == ["heard", "motion", "done"]
+    assert parts[1]["feeling"] == "sad" and parts[1]["moves"] and parts[2]["reading"] == "They sound low."
+    assert st.got == [("I got the job!", 2000)]                 # the transcript and the waveform both reach it
