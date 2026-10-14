@@ -450,3 +450,57 @@ def test_deepcad_to_cadquery_matches_cadlib_geometry():
     assert shape is not None and ref is not None
     assert iou(normalise(ref), normalise(shape)) > 0.99
     assert run_cadquery("r = 1/0") is None and run_cadquery("import cadquery as cq\nr=cq.Workplane('XY')") is None
+
+
+def test_vlm_cq_script_end_to_end():
+    """train_vlm_cq.py on 6 DeepCAD + 4 CAD-Recode samples with a tiny random Qwen3-VL; val IoU is computed."""
+    try:
+        import cadquery  # noqa: F401
+        import pandas as pd
+        from PIL import Image
+    except ImportError:
+        print("[skip] cadquery not installed")
+        return
+    from mm.cadquery_io import deepcad_to_cadquery
+    root = tempfile.mkdtemp()
+    model = _tiny_qwen3_vl(os.path.join(root, "tiny_vlm"))
+    if model is None:
+        return
+    data = os.path.join(root, "data")
+    uids = [f"0000/{i:08d}" for i in range(8)]
+    rows, status = [], {}
+    for k, u in enumerate(uids):
+        v = _fake_cad_vec()
+        v[2:4, 1] = 150 + k                          # distinct plates
+        os.makedirs(os.path.dirname(os.path.join(data, "cad_vec", u)), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.join(data, "renders", u)), exist_ok=True)
+        with h5py.File(os.path.join(data, "cad_vec", u + ".h5"), "w") as f:
+            f["vec"] = v
+        for cam in range(4):
+            Image.new("RGB", (64, 64), (k * 20, cam * 40, 0)).save(os.path.join(data, "renders", f"{u}_{cam}.png"))
+        status[u] = "ok"
+        rows.append((u, "train" if k < 6 else "validation", deepcad_to_cadquery(v), True, 1.0))
+    with open(os.path.join(data, "renders", "status.json"), "w") as f:
+        json.dump(status, f)
+    pd.DataFrame(rows, columns=["uid", "split", "code", "ok", "iou"]).to_parquet(os.path.join(data, "deepcad_cq.parquet"))
+    rc_rows, rc_status = [], {}
+    for k in range(4):
+        p = f"train/batch_00/{k}.py"
+        rc_rows.append(("train", p, f"import cadquery as cq\nr=cq.Workplane('XY').box({10 + k},20,30)"))
+        os.makedirs(os.path.join(data, "recode_renders", "train", "batch_00"), exist_ok=True)
+        for cam in range(4):
+            Image.new("RGB", (64, 64), (0, 0, k * 50)).save(os.path.join(data, "recode_renders", p[:-3] + f"_{cam}.png"))
+        rc_status[p] = "ok"
+    pd.DataFrame(rc_rows, columns=["split", "path", "code"]).to_parquet(os.path.join(data, "cad_recode.parquet"))
+    with open(os.path.join(data, "recode_renders", "status_0.json"), "w") as f:
+        json.dump(rc_status, f)
+    with open(os.path.join(data, "text_index.json"), "w") as f:
+        json.dump({u: {"expert": f"a plate {k}", "beginner": "a plate"} for k, u in enumerate(uids)}, f)
+    cmd = [sys.executable, os.path.join(ROOT, "train_vlm_cq.py"), "--data", data, "--out_dir", root, "--name", "cq",
+           "--model", model, "--deepcad_cq", os.path.join(data, "deepcad_cq.parquet"),
+           "--recode", os.path.join(data, "cad_recode.parquet"),
+           "--recode_renders", os.path.join(data, "recode_renders"), "--bs", "4", "--accum", "1", "--steps", "3",
+           "--warmup", "1", "--eval_every", "3", "--eval_n", "2", "--workers", "0", "--device", "cpu"]
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=900)
+    print(r.stdout[-3000:], r.stderr[-3000:])
+    assert r.returncode == 0 and '"iou_gt"' in r.stdout and "cad-recode 4" in r.stdout

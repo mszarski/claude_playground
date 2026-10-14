@@ -117,6 +117,12 @@ case "$STAGE" in
     if [[ " $* " == *" --images images "* ]]; then need images; else need renders; fi
     python train_vlm_cad.py --emb_dir data/emb --data data --name "$RUN" --steps ${STEPS:-15000} "$@" ;;
 
+  vlmcq)      # Qwen3-VL writing CadQuery, DeepCAD (converted) + CAD-Recode (train_vlm_cq.py); --predict for test preds
+    need_cq
+    need cad_vec renders recode_renders_0 recode_renders_1 recode_renders_2 recode_renders_3
+    cp /work/data/deepcad_cq.parquet /work/data/cad_recode.parquet data/
+    python train_vlm_cq.py --data data --name "$RUN" --steps ${STEPS:-30000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 
