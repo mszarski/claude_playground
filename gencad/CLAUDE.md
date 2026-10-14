@@ -232,6 +232,23 @@ Qwen2-VL-2B fully fine-tuned to write CadQuery code. `mm/vlm_cad.py` does the sa
 our DeepCAD program as text (`S`, `L x y`, `A x y alpha f`, `R x y r`, `E <11 args>`), inputs 1 view or a 2x2 grid of
 4 views (448 px, 196 visual tokens) plus an optional prompt. `RUN=vlm_cad_v1 jobs/launch.sh vlmcad` (H200).
 
+### Baseline in geometric terms (`results/baselines_true/{report,geom}.json`, test 2000, true view `_0`)
+Re-scoring the existing models with the correct render (`--true_view`) changes nothing (mm_v1 image novel acc_cmd /
+acc_param 0.584 / 0.623 vs 0.585 / 0.620): trained on 80% wrong views, they learned to ignore proportions. IoU %
+(invalid = 0) / median CD x1e3 / invalid %:
+| method | dup (n=770) | novel (n=1229) |
+|---|---|---|
+| csr_recon (GT latent decoded) | 99.0 / 0.14 / 0.0 | 84.0 / 0.20 / 2.0 |
+| knn image (retrieval) | 73.0 / 0.21 / 0.0 | 18.4 / 98.7 / 0.0 |
+| gencad (released) | 39.2 / 18.2 / 3.2 | 11.1 / 124 / 10.0 |
+| mm_v1 image | 59.6 / 0.49 / 0.8 | 15.0 / 110 / 10.6 |
+| mm_v1 image+expert | 70.9 / 0.27 / 0.6 | 16.5 / 91.8 / 9.4 |
+| text_cad expert | 69.4 / 0.27 / 0.4 | 23.8 / 77.3 / 4.5 |
+| token_cad image | 53.2 / 3.2 / 0.8 | 17.7 / 93.6 / 3.6 |
+| token_cad image+expert | 70.8 / 0.24 / 0.9 | 23.7 / 70.8 / 5.0 |
+On novel parts every model is at 11-24 % IoU with median CD ~70-130: wrong shapes, not near misses. cadrille reports
+78-82 % IoU / CD ~0.2 on the whole DeepCAD test set from images. That is the gap to close.
+
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
   mm_v1 for image-only; a small demo / API around that.
