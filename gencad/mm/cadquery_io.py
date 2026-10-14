@@ -169,9 +169,16 @@ def deepcad_to_cadquery(vec):
                                                                     (-e1 if int(ext.extent_type) == 1 else 0))]
     if not pts_all:
         return None
-    P = np.array(pts_all)
-    center = (P.max(0) + P.min(0)) / 2
-    scale = SPAN / max((P.max(0) - P.min(0)).max(), 1e-9)
+    # canonical frame = the built solid's bounding box (sketch points over-cover it: cut profiles stick out)
+    ref = deepcad_reference(vec)
+    if ref is not None and ref.Volume() > 0:
+        bb = ref.BoundingBox()
+        lo, hi = np.array([bb.xmin, bb.ymin, bb.zmin]), np.array([bb.xmax, bb.ymax, bb.zmax])
+    else:
+        P = np.array(pts_all)
+        lo, hi = P.min(0), P.max(0)
+    center = (hi + lo) / 2
+    scale = SPAN / max((hi - lo).max(), 1e-9)
 
     lines = ["import cadquery as cq"]
     planes = {}

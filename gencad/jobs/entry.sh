@@ -32,6 +32,14 @@ need() { for d in "$@"; do
   if [[ -f /work/data/$d.tar ]]; then echo "[data] unpack $d"; tar -xf /work/data/$d.tar -C data; else echo "[data] missing /work/data/$d.tar"; fi
 done; }
 
+# CadQuery (OCP) needs system GL libraries the pytorch image does not ship
+need_cq() {
+  python -c "import cadquery" 2>/dev/null && return
+  apt-get update -qq && apt-get install -y -qq libgl1 libglu1-mesa libxrender1 libxext6 >/dev/null
+  pip install -q cadquery pebble
+  python -c "import cadquery; print('[cadquery]', cadquery.__version__)"
+}
+
 first() { for p in "$@"; do [[ -e "$p" ]] && { echo "$p"; return; }; done; echo "${1}"; }
 CSR_CKPT=${CSR_CKPT:-$(first data/ckpt/ae_ckpt_epoch1000.pth $(ls data/ckpt/*ae*.pth 2>/dev/null))}
 CCIP_CKPT=${CCIP_CKPT:-$(first data/ckpt/ccip_sketch_ckpt_epoch300.pth $(ls data/ckpt/*ccip*.pth 2>/dev/null))}
@@ -149,15 +157,20 @@ case "$STAGE" in
     python scripts/fetch_cad_recode.py --out /work/data/cad_recode.parquet "$@" ;;
 
   renderrecode) # CAD-Recode programs -> renders with our cameras; one shard per job -> /work/data/<RUN>.tar
-    pip install -q cadquery pebble
+    need_cq
     cp /work/data/cad_recode.parquet data/
     python scripts/render_cad_recode.py --parquet data/cad_recode.parquet --out data/recode_renders "$@"
     tar -cf "/work/data/$RUN.tar" -C data recode_renders && ls -la "/work/data/$RUN.tar" ;;
 
   convertdc)  # DeepCAD programs -> CadQuery source + fidelity vs cadlib -> /work/data/deepcad_cq.parquet
-    pip install -q cadquery pebble
+    need_cq
     need cad_vec
     python scripts/convert_deepcad.py --data data --out /work/data/deepcad_cq.parquet "$@" ;;
+
+  cqiou)      # IoU of saved predictions (DeepCAD programs or CadQuery code) vs GT, in CadQuery (scripts/cq_iou.py)
+    need_cq
+    need cad_vec
+    python scripts/cq_iou.py --data data --preds "${PREDS:-results/$RUN/preds.pkl}" --out "results/$RUN/cq_iou.json" "$@" ;;
 
   checkviews) # do all 5 renders of a uid show its GT program? (scripts/check_views.py; installs OCC itself)
     [[ "${OCC:-0}" == "1" ]] || conda install -y -q -c conda-forge pythonocc-core=7.9.0
