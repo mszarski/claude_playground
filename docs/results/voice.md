@@ -396,9 +396,12 @@ v2 (`audio/student/v2`) is served on the live Space (L4, vLLM FP8).
   3.3-4.1 s (first request after waking ~2 s / ~5.4 s).
 - **End of turn** (hands-free and the robot): 0.7 s of silence instead of 0.9 s.
 - So from the end of speech, Reachy moves after about 1.3-1.6 s instead of 4-5 s.
-- **Smaller model** (Voxtral-Mini-3B, Apache-2.0, ~2.5x fewer parameters): zero-shot it hardly hears tone (25% on the
-  tone test, chance 20%; 48% on cloned lines, where Qwen2-Audio gets 45%); a fine-tune with LoRA on the audio
-  encoder too is the test of whether it can learn to.
+- **Smaller model, negative result** (Voxtral-Mini-3B, Apache-2.0, ~2.5x fewer parameters): zero-shot it hardly
+  hears tone (25% on the tone test, chance 20%; 48% on cloned lines, where Qwen2-Audio gets 45%). Fine-tuned on the
+  same data as v2, with LoRA on the audio encoder too (2 h 46 min on an L4, val loss 0.60 vs 0.64), it reaches 38%
+  on the tone test (v2: 91%, the text pipeline: 42%) and 61% on cloned lines (v2: 68%); every recipe is valid. It
+  reads the words, but its encoder does not seem to carry the emotional cues Qwen2-Audio's was pre-trained on, so
+  the speed is not worth it: the Space stays on Qwen2-Audio v2. Weights: `audio/student/voxtral-v1`.
 
 ## Human ratings
 
