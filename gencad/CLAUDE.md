@@ -258,6 +258,20 @@ geometry. cadrille's two levers against exactly this are a pretrained VLM (vlm_c
 generated programs (CAD-Recode v1.5, `filapro/cad-recode-v1.5`, CadQuery code, CC BY-NC 4.0; cadrille's weights are
 `maksimko123/cadrille`).
 
+### vlm_cad_v1: Qwen3-VL-2B writing programs from our renders (`results/vlm_cad_v1`, H200, 15k steps x 32)
+Full fine-tune, dedup'd train (152k -> 113k programs), our fixed-camera renders, mixed inputs (1 view / 2x2 grid of
+4 views / + random-level prompt / prompt only). ~2.1 s/step on an H200. Test at the **step-5k checkpoint**
+(`results/baselines_vlm5k`), novel parts (n=1230): prog_match / acc_cmd / acc_param, IoU / median CD / IR:
+| input | novel program | novel IoU / CD / IR | dup IoU |
+|---|---|---|---|
+| 1 view | 0.011 / 0.557 / 0.636 | 24.5 / 65.9 / 2.9 | 52.0 |
+| 4 views | 0.013 / 0.595 / 0.658 | 27.0 / 51.8 / 2.4 | 52.7 |
+| 1 view + expert | **0.104 / 0.758 / 0.777** | **36.2 / 33.5 / 0.9** | 68.1 |
+Previous best on novel parts: text_cad expert 0.026 / 0.631 / 0.718, IoU 23.8; token_cad true view + expert IoU 23.8.
+The pretrained VLM is the first model that generalises: 4x the novel exact-program rate with a prompt and +12 IoU.
+Image-only novel IoU 24-27 (vs 17.7-21.1 for token_cad). Lower dup scores than token_cad are expected (no
+duplicates in training). Final checkpoint: `results/baselines_vlm_final/{report,geom}.json`.
+
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
   mm_v1 for image-only; a small demo / API around that.
