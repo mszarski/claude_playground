@@ -284,6 +284,20 @@ outputs < 1 %. vs GenCAD (all 21.9, novel 11.1) and the best earlier model (toke
 43.7, novel 23.8). Still far from cadrille (~78-82 IoU on DeepCAD, whole test set) and from the decoder ceiling
 (novel 84.0). Text still carries most of the signal: expert prompt alone 40.3 novel IoU vs 4 views 33.5.
 
+### vlm_cq_v1: Qwen3-VL-2B writing CadQuery, DeepCAD (converted) + CAD-Recode (`train_vlm_cq.py`, H200, 30k x 32)
+Data: DeepCAD programs converted to CAD-Recode-style CadQuery (`scripts/convert_deepcad.py`, `/work/data/deepcad_cq
+.parquet`; builds 99 %, test fidelity vs cadlib mean IoU 0.977, 87 % > 0.99) - 98,729 unique train programs with
+fidelity >= 0.95; CAD-Recode v1.5 (`/work/data/cad_recode.parquet`, 982,847 programs; rendered with our cameras by
+`scripts/render_cad_recode.py`, 99.98 % build, `/work/data/recode_renders_{0..3}.tar`) - 981,667 train programs.
+Sampling 30 % DeepCAD / 70 % CAD-Recode; prompts only on DeepCAD samples. ~1.8 s/step. Validation = 256 DeepCAD val
+parts (dup and novel mixed), generated code executed, IoU vs GT (`scripts/cq_iou.py` protocol):
+| step | 1 view IoU gt/own, IR | 4 views | 1 view + expert |
+|---|---|---|---|
+| 5k | 65.8 / 66.0, 4.7 % | 72.4 / 72.0, 5.5 % | 72.8 / 73.8, 7.0 % |
+For scale, vlm_cad_v1 (DeepCAD tokens, no CAD-Recode) final checkpoint on the test set, all parts: 1 view 44.4,
+4 views 45.7, + expert 55.1 (different split, so read as indicative until the test eval). Image-only jumps by
+~20-27 points: the procedural CAD-Recode data is what teaches reading geometry from renders. Invalid code 5-7 %.
+
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
   mm_v1 for image-only; a small demo / API around that.
