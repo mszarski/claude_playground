@@ -249,6 +249,15 @@ acc_param 0.584 / 0.623 vs 0.585 / 0.620): trained on 80% wrong views, they lear
 On novel parts every model is at 11-24 % IoU with median CD ~70-130: wrong shapes, not near misses. cadrille reports
 78-82 % IoU / CD ~0.2 on the whole DeepCAD test set from images. That is the gap to close.
 
+### token_cad retrained on the true render (`--true_view`, `results/token_cad_true`, test `results/baselines_token_true`)
+Same model and recipe as token_cad_v1, but trained and evaluated on render file `_0` only. Test, image only:
+prog_match dup 0.356 -> **0.590**, novel 0.002 -> 0.006; IoU dup 53.2 -> **69.5**, novel 17.7 -> **21.1**
+(image + expert: IoU dup 75.4, novel 23.8). The data fix makes recognition of known parts much better and novel parts
+only slightly better: a small decoder trained from scratch on DeepCAD recalls training parts rather than reading new
+geometry. cadrille's two levers against exactly this are a pretrained VLM (vlm_cad_v1, running) and ~1M procedurally
+generated programs (CAD-Recode v1.5, `filapro/cad-recode-v1.5`, CadQuery code, CC BY-NC 4.0; cadrille's weights are
+`maksimko123/cadrille`).
+
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
   mm_v1 for image-only; a small demo / API around that.
