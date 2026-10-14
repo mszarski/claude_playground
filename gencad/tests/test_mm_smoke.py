@@ -434,3 +434,19 @@ def test_vlm_cad_text_roundtrip_and_script_end_to_end():
     print(r.stdout[-3000:], r.stderr[-3000:])
     assert r.returncode == 0 and '"view1+expert"' in r.stdout
     assert os.path.exists(os.path.join(root, "vlm", "model", "step.json"))
+
+
+def test_deepcad_to_cadquery_matches_cadlib_geometry():
+    try:
+        import cadquery  # noqa: F401
+    except ImportError:
+        print("[skip] cadquery not installed")
+        return
+    from mm.cadquery_io import deepcad_reference, deepcad_to_cadquery, iou, normalise, run_cadquery
+    vec = _fake_cad_vec()                     # 190 x 190 square plate, one extrude
+    code = deepcad_to_cadquery(vec)
+    assert code.startswith("import cadquery as cq") and "Workplane(" in code and ".extrude(" in code
+    shape, ref = run_cadquery(code), deepcad_reference(vec)
+    assert shape is not None and ref is not None
+    assert iou(normalise(ref), normalise(shape)) > 0.99
+    assert run_cadquery("r = 1/0") is None and run_cadquery("import cadquery as cq\nr=cq.Workplane('XY')") is None

@@ -51,6 +51,21 @@ def tessellate(shape):
     return np.concatenate(tris), np.concatenate(fid)
 
 
+def tessellate_cq(shape, rel_tol=1e-3):
+    """CadQuery Shape -> triangles (F, 3, 3) and the face index of each triangle (same output as tessellate)."""
+    bb = shape.BoundingBox()
+    tol = rel_tol * max(bb.xlen, bb.ylen, bb.zlen, 1e-9)
+    tris, fid = [], []
+    for k, face in enumerate(shape.Faces()):
+        verts, tri = face.tessellate(tol, 0.25)
+        if not tri:
+            continue
+        V = np.array([v.toTuple() for v in verts])
+        tris.append(V[np.array(tri)])
+        fid.append(np.full(len(tri), k))
+    return np.concatenate(tris), np.concatenate(fid)
+
+
 def rasterize(P, z, size):
     """Z-buffer: P (F, 3, 2) pixel coords, z (F, 3) depth (larger = closer). -> triangle index per pixel (-1 = none)."""
     zbuf = np.full((size, size), -np.inf)

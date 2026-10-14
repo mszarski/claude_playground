@@ -144,6 +144,21 @@ case "$STAGE" in
     if [[ " $* " == *" --limit "* ]]; then mkdir -p "results/$RUN" && cp -r data/renders "results/$RUN/"   # preview
     else tar -cf /work/data/renders.tar -C data renders && ls -la /work/data/renders.tar; fi ;;
 
+  fetchrecode) # CAD-Recode v1.5 (~1M CadQuery programs) -> /work/data/cad_recode.parquet
+    command -v git >/dev/null || { apt-get update -qq && apt-get install -y -qq git >/dev/null; }
+    python scripts/fetch_cad_recode.py --out /work/data/cad_recode.parquet "$@" ;;
+
+  renderrecode) # CAD-Recode programs -> renders with our cameras; one shard per job -> /work/data/<RUN>.tar
+    pip install -q cadquery pebble
+    cp /work/data/cad_recode.parquet data/
+    python scripts/render_cad_recode.py --parquet data/cad_recode.parquet --out data/recode_renders "$@"
+    tar -cf "/work/data/$RUN.tar" -C data recode_renders && ls -la "/work/data/$RUN.tar" ;;
+
+  convertdc)  # DeepCAD programs -> CadQuery source + fidelity vs cadlib -> /work/data/deepcad_cq.parquet
+    pip install -q cadquery pebble
+    need cad_vec
+    python scripts/convert_deepcad.py --data data --out /work/data/deepcad_cq.parquet "$@" ;;
+
   checkviews) # do all 5 renders of a uid show its GT program? (scripts/check_views.py; installs OCC itself)
     [[ "${OCC:-0}" == "1" ]] || conda install -y -q -c conda-forge pythonocc-core=7.9.0
     need cad_vec images
