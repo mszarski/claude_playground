@@ -52,6 +52,8 @@ def main():
     ap.add_argument("--audio-model", default=None,
                     help="audio-native responder (rmr.audio_responder), e.g. mszarski/reachy-voice:audio/student/v1; "
                          "replaces the text responder (no llama.cpp), needs a GPU with ~20 GB")
+    ap.add_argument("--audio-no-transcript", action="store_true",
+                    help="the audio model was trained without the transcript (v3): the server starts it at once")
     ap.add_argument("--vllm", action="store_true",
                     help="serve --audio-model with vLLM in FP8 (deploy/Dockerfile.vllm): fits an L4")
     ap.add_argument("--hardware", default=None, help="e.g. l4x1, t4-small, cpu-upgrade (default: leave as is)")
@@ -74,13 +76,15 @@ def main():
     if a.feedback_repo:
         api.create_repo(a.feedback_repo, repo_type="dataset", private=True, exist_ok=True)
         api.add_space_variable(a.repo, "FEEDBACK_REPO", a.feedback_repo)
-    for k in ("AUDIO_MODEL", "AUDIO_VLLM"):
+    for k in ("AUDIO_MODEL", "AUDIO_VLLM", "AUDIO_NO_TRANSCRIPT"):
         try:
             api.delete_space_variable(a.repo, k)
         except Exception:
             pass
     if a.audio_model:
         api.add_space_variable(a.repo, "AUDIO_VLLM" if a.vllm else "AUDIO_MODEL", a.audio_model)
+        if a.audio_no_transcript:
+            api.add_space_variable(a.repo, "AUDIO_NO_TRANSCRIPT", "1")
         a.gguf = ""                                   # the audio responder replaces the text one
     if a.gguf:
         api.add_space_variable(a.repo, "LLAMA_GGUF", a.gguf)

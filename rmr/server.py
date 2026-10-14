@@ -52,6 +52,7 @@ class Engine:
         self.finetuned, self.voice_model = None, voice_model
         self.student = None
         self.audio_model, self.audio_student = audio_model, None   # rmr.audio_responder: hears the voice itself
+        self.audio_transcript = True        # False: a transcript-free audio responder (starts before Whisper ends)
         self.listener_weights = None        # path of the learned listener's JSON weights, served to the viewer
         self.history = {}                   # session -> [(time, what they said)], the conversation so far
         self.calibrate = calibrate          # per-session level correction of the voice attributes (rmr.voice)
@@ -73,6 +74,11 @@ class Engine:
         return got[prompt]["idea"], got[prompt]["recipe"]
 
     HISTORY_TURNS, HISTORY_S, MAX_SESSIONS = 2, 300.0, 1000
+
+    def context(self, session):
+        """The person's last few lines in this session (oldest first), within ``HISTORY_S``."""
+        now = time.time()
+        return [x for t, x in self.history.get(session or "", []) if now - t < self.HISTORY_S][-self.HISTORY_TURNS:]
 
     def remember(self, session, heard):
         """Give ``heard`` the person's last few lines in this session as context (the student was trained with the
@@ -129,45 +135,18 @@ class Engine:
         ``{"stage": "heard", "heard"}``, then ``{"stage": "motion", "moves", "recipe", "feeling", "idea", ...}`` as
         soon as the recipe is written (with a v3 student, before the reading), then ``{"stage": "done", "reading"}``."""
         from .respond import respond
-        from .voice import Listener
 
         t0 = time.time()
-        if self.listener is None:
-            self.listener = Listener(device=voice_device())
-        heard = self.listener.hear(audio)
-        if self.calibrate:
-            from .voice import Calibration
-            if len(self.calibrations) > self.MAX_SESSIONS:
-                self.calibrations.clear()
-            heard = self.calibrations.setdefault(session or "", Calibration(probs=True))(heard)
-        self.remember(session, heard)
+        if self.audio_model and not self.audio_transcript:    # no need to wait for Whisper: hear in parallel
+            yield from self._respond_audio_parallel(audio, n, seed, session, t0)
+            return
+        heard = self.hear(audio, session)
         t1 = time.time()
         yield {"stage": "heard", "heard": {k: v for k, v in heard.items() if k != "probs"},
                "timing_ms": {"listen": int(1000 * (t1 - t0))}}
         if self.audio_model:              # the audio-native responder: hears the recording itself
-            from .audio_responder import AudioStudent
             from .voice import load_audio
-            if self.audio_student is None:
-                self.audio_student = AudioStudent(self.audio_model)
-            wav, moved = load_audio(audio), False
-            for kind, r in self.audio_student.stages(heard, wav):
-                if kind == "feeling":         # react at once (rmr.react); the full response follows
-                    from .react import reaction
-                    name, recipe = reaction(r)
-                    out = self.generate(name, n=1, seed=seed, recipe=recipe)
-                    yield {"stage": "react", "moves": out["moves"], "feeling": r,
-                           "timing_ms": {"react": int(1000 * (time.time() - t0))}}
-                    continue
-                early = kind == "early"
-                if not moved:
-                    out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
-                    out["timing_ms"]["planner"] = int(1000 * (time.time() - t1)) - out["timing_ms"]["generator"]
-                    out["timing_ms"]["first_motion"] = int(1000 * (time.time() - t0))
-                    yield {"stage": "motion", **out, "idea": r["response"], "feeling": r["feeling"]}
-                    moved = True
-                if not early:      # the response may only now be complete (recipe-first answers)
-                    yield {"stage": "done", "reading": r["reading"], "feeling": r["feeling"], "idea": r["response"],
-                           "timing_ms": {"total": int(1000 * (time.time() - t0))}}
+            yield from self._audio_answer(self.audio_stages(heard, load_audio(audio)), n, seed, t0, t1)
         elif self.voice_model:            # the distilled student: response and recipe in one call
             from .respond import Student
             if self.student is None:
@@ -190,6 +169,76 @@ class Engine:
             yield {"stage": "motion", **out, "feeling": r.get("feeling")}
             yield {"stage": "done", "reading": r["reading"], "feeling": r.get("feeling"),
                    "timing_ms": {"total": int(1000 * (time.time() - t0))}}
+
+    def hear(self, audio, session):
+        """Whisper + the tone models (rmr.voice), calibrated per session, with the conversation so far as context."""
+        from .voice import Listener
+
+        if self.listener is None:
+            self.listener = Listener(device=voice_device())
+        heard = self.listener.hear(audio)
+        if self.calibrate:
+            from .voice import Calibration
+            if len(self.calibrations) > self.MAX_SESSIONS:
+                self.calibrations.clear()
+            heard = self.calibrations.setdefault(session or "", Calibration(probs=True))(heard)
+        self.remember(session, heard)
+        return heard
+
+    def audio_stages(self, heard, wav):
+        from .audio_responder import AudioStudent
+        if self.audio_student is None:
+            self.audio_student = AudioStudent(self.audio_model)
+        return self.audio_student.stages(heard, wav)
+
+    def _audio_answer(self, stages, n, seed, t0, t1, before_done=None):
+        """The audio responder's stages -> react (rmr.react), motion and done parts."""
+        moved = False
+        for kind, r in stages:
+            if kind == "feeling":         # react at once; the full response follows
+                from .react import reaction
+                name, recipe = reaction(r)
+                out = self.generate(name, n=1, seed=seed, recipe=recipe)
+                yield {"stage": "react", "moves": out["moves"], "feeling": r,
+                       "timing_ms": {"react": int(1000 * (time.time() - t0))}}
+                continue
+            if not moved:
+                out = self.generate(r["response"], n=n, seed=seed, recipe=r["recipe"])
+                out["timing_ms"]["planner"] = int(1000 * (time.time() - t1)) - out["timing_ms"]["generator"]
+                out["timing_ms"]["first_motion"] = int(1000 * (time.time() - t0))
+                yield {"stage": "motion", **out, "idea": r["response"], "feeling": r["feeling"]}
+                moved = True
+            if kind == "final":        # the response may only now be complete (recipe-first answers)
+                if before_done:
+                    yield from before_done()
+                yield {"stage": "done", "reading": r["reading"], "feeling": r["feeling"], "idea": r["response"],
+                       "timing_ms": {"total": int(1000 * (time.time() - t0))}}
+
+    def _respond_audio_parallel(self, audio, n, seed, session, t0):
+        """A transcript-free audio responder starts at once; Whisper and the tone models run alongside (for the
+        transcript, the memory and the mood) and their "heard" part is sent when ready, before "done"."""
+        import threading
+
+        from .voice import load_audio
+
+        box, ctx = {}, self.context(session)
+        th = threading.Thread(target=lambda: box.update(heard=self.hear(audio, session)), daemon=True)
+        th.start()
+        sent = []
+
+        def heard_part(wait=False):
+            if sent or (th.is_alive() and not wait):
+                return
+            th.join()
+            sent.append(1)
+            if "heard" in box:
+                yield {"stage": "heard", "heard": {k: v for k, v in box["heard"].items() if k != "probs"},
+                       "timing_ms": {"listen": int(1000 * (time.time() - t0))}}
+
+        stages = self.audio_stages({"context": ctx, "no_transcript": True}, load_audio(audio))
+        for part in self._audio_answer(stages, n, seed, t0, t0, before_done=lambda: heard_part(wait=True)):
+            yield from heard_part()
+            yield part
 
     def generate(self, prompt, n=1, seed=0, recipe=None):
         from .generator.sample import generate_batch
@@ -337,6 +386,9 @@ def main():
                     help="audio-native responder (rmr.audio_responder; hears the voice itself), e.g. "
                          "mszarski/reachy-voice:audio/student/v1, or a vLLM URL http://host:port/v1#model; "
                          "takes precedence over --voice-model")
+    ap.add_argument("--audio-no-transcript", action="store_true", default=bool(os.environ.get("AUDIO_NO_TRANSCRIPT")),
+                    help="the audio responder was trained without the transcript (v3): start it at once, Whisper "
+                         "running alongside")
     ap.add_argument("--preload-voice", action="store_true", default=bool(os.environ.get("PRELOAD_VOICE")),
                     help="load the voice models at startup (in the background) instead of on the first /api/respond")
     ap.add_argument("--calibrate", action=argparse.BooleanOptionalAction, default=None,
@@ -361,6 +413,7 @@ def main():
         a.calibrate = env not in ("0", "false", "") if env is not None else bool(a.voice_model or a.audio_model)
     engine = Engine(a.ckpt, a.model, a.planner, a.responder, a.voice_model, calibrate=a.calibrate,
                     audio_model=a.audio_model)
+    engine.audio_transcript = not a.audio_no_transcript
     if a.feedback_dir:
         from .feedback import FeedbackLog
         engine.feedback = FeedbackLog(a.feedback_dir, a.feedback_repo)

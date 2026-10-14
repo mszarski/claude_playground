@@ -205,3 +205,44 @@ def test_audio_responder_hears_the_recording(client, monkeypatch):
     assert parts[1]["feeling"] == "sad" and parts[1]["moves"] and "react" in parts[1]["timing_ms"]   # react at once
     assert parts[2]["feeling"] == "sad" and parts[2]["moves"] and parts[3]["reading"] == "They sound low."
     assert st.got == [("I got the job!", 2000)]                 # the transcript and the waveform both reach it
+
+
+class _SlowHeard:
+    def hear(self, audio):
+        import time
+        time.sleep(0.5)
+        return {"text": "I got the job!", "emotion": "happy", "confidence": 0.8, "probs": {}, "valence": 0.8,
+                "arousal": 0.7}
+
+
+def test_transcript_free_audio_responder_starts_before_whisper_ends(client, monkeypatch):
+    import json
+
+    import numpy as np
+
+    from rmr import voice
+
+    eng = client.app.state.engine
+    st = _AudioStudent()
+    seen = []
+    orig = st.stages
+
+    def stages(heard, wav):
+        seen.append(dict(heard))
+        yield from orig({**heard, "text": heard.get("text", "")}, wav)
+    st.stages = stages
+    eng.listener, eng.audio_model, eng.audio_student, eng.audio_transcript = _SlowHeard(), "fake", st, False
+    eng.history, eng.moods = {}, {}
+    monkeypatch.setattr(voice, "load_audio", lambda b: np.zeros(len(b) // 2, np.float32))
+    try:
+        for i in range(2):
+            parts = [json.loads(x) for x in client.post("/api/respond?stream=1&session=p", content=b"\0" * 4000)
+                     .text.splitlines()]
+            stages_seen = [p["stage"] for p in parts]
+            assert stages_seen.index("react") < stages_seen.index("heard") < stages_seen.index("done")
+            assert parts[stages_seen.index("react")]["timing_ms"]["react"] < 450    # before Whisper (0.5 s) ended
+    finally:
+        eng.audio_model, eng.audio_student, eng.audio_transcript = None, None, True
+    assert seen[0] == {"context": [], "no_transcript": True}
+    assert seen[1]["context"] == ["I got the job!"]           # the first turn's transcript became memory
+    assert parts[-1]["stage"] == "done" and parts[-1]["mood"]["valence"] < 0.5  # mood still follows (sad answers)

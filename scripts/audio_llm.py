@@ -186,7 +186,8 @@ def build(a):
             if not context and split == "train" and rng.random() < a.distract:
                 context = rng.sample(pool, rng.choice([1, 2]))    # unrelated earlier lines: the answer must not change
             rows.append({"clip": r["clip"], "label": r["label"], "audio": audio, "text": h["text"],
-                         "context": context, "answer": json.dumps({k: ans[k] for k in order})})
+                         "context": context, "answer": json.dumps({k: ans[k] for k in order}),
+                         **({"no_transcript": True} if a.no_transcript else {})})
         with open(os.path.join(a.out, f"{split}.jsonl"), "w") as f:
             f.writelines(json.dumps(x) + "\n" for x in rows)
         print(f"{split}: {len(rows)} examples ({Counter(x['audio'].startswith('crema:') for x in rows)[True]} real "
@@ -311,6 +312,8 @@ def answer(a):
     from rmr.voice import load_audio
 
     rows = [json.loads(x) for x in open(a.heard)]
+    if a.no_transcript:
+        rows = [{**r, "no_transcript": True} for r in rows]
     if a.context_noise:          # two unrelated earlier lines (from other rows): a robust answer does not change
         import random
         rng = random.Random(1)
@@ -446,6 +449,7 @@ def main():
     bu.add_argument("--max-wer", type=float, default=0.35)
     bu.add_argument("--order", default="feeling,response,recipe,reading",
                     help="answer field order; recipe before response starts the motion sooner (v2)")
+    bu.add_argument("--no-transcript", action="store_true", help="the model hears the words itself (v3)")
     bu.add_argument("--distract", type=float, default=0.0,
                     help="share of context-free training examples given unrelated earlier lines (same answer)")
     t = sub.add_parser("train")
@@ -469,6 +473,7 @@ def main():
     an.add_argument("--out", required=True)
     an.add_argument("--batch", type=int, default=8)
     an.add_argument("--context-noise", action="store_true", help="give every row two unrelated earlier lines")
+    an.add_argument("--no-transcript", action="store_true", help="for a model trained without the transcript")
     be = sub.add_parser("bench")
     be.add_argument("--model", required=True, help="merged model or vLLM URL http://host:port/v1#name")
     be.add_argument("--heard", required=True)

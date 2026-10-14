@@ -27,7 +27,10 @@ def user_text(ex):
     parts = []
     if ex.get("context"):
         parts.append("Earlier in the conversation:\n" + "\n".join(f'- "{c}"' for c in ex["context"]))
-    parts.append(f'Transcript: "{ex.get("text") or "(no words)"}"\nHow do they feel, and how do you respond?')
+    if ex.get("no_transcript"):         # v3: the model hears the words itself (rmr.server starts it before Whisper ends)
+        parts.append("How do they feel, and how do you respond?")
+    else:
+        parts.append(f'Transcript: "{ex.get("text") or "(no words)"}"\nHow do they feel, and how do you respond?')
     return "\n".join(parts)
 
 
