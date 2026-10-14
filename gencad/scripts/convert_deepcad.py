@@ -32,6 +32,7 @@ def convert(args):
     ref = deepcad_reference(vec)
     try:
         v = iou(normalise(ref), normalise(shape)) if ref is not None and ref.Volume() > 0 else float("nan")
+        v = v if v <= 1.001 else float("nan")   # degenerate solids can report nonsense volumes
     except Exception:  # noqa: BLE001
         v = float("nan")
     return uid, code, True, float(v)

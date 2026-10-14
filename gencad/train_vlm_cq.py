@@ -168,7 +168,7 @@ def main():
     dc = pd.read_parquet(a.deepcad_cq)
     with open(os.path.join(render_dir, "status.json")) as f:
         rendered = {u for u, st in json.load(f).items() if st in ("ok", "skip")}
-    dc = dc[dc.ok & (dc.iou >= a.min_fidelity) & dc.uid.isin(rendered) & (dc.code.str.len() <= a.max_code_chars)]
+    dc = dc[dc.ok & (dc.iou >= a.min_fidelity) & (dc.iou <= 1.001) & dc.uid.isin(rendered) & (dc.code.str.len() <= a.max_code_chars)]
     tr_dc = dc[dc.split == "train"].drop_duplicates("code")
     val = dc[dc.split == "validation"]
     val = val[val.uid.map(lambda u: bool(text_index.get(u, {}).get("expert")))].head(a.eval_n)
