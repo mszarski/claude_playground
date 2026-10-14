@@ -294,6 +294,7 @@ parts (dup and novel mixed), generated code executed, IoU vs GT (`scripts/cq_iou
 | step | 1 view IoU gt/own, IR | 4 views | 1 view + expert |
 |---|---|---|---|
 | 5k | 65.8 / 66.0, 4.7 % | 72.4 / 72.0, 5.5 % | 72.8 / 73.8, 7.0 % |
+| 10k | 74.0 / 73.9, 3.1 % | 79.1 / 79.7, 4.3 % | 80.5 / 81.6, 3.9 % |
 For scale, vlm_cad_v1 (DeepCAD tokens, no CAD-Recode) final checkpoint on the test set, all parts: 1 view 44.4,
 4 views 45.7, + expert 55.1 (different split, so read as indicative until the test eval). Image-only jumps by
 ~20-27 points: the procedural CAD-Recode data is what teaches reading geometry from renders. Invalid code 5-7 %.
