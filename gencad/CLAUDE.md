@@ -270,7 +270,19 @@ Full fine-tune, dedup'd train (152k -> 113k programs), our fixed-camera renders,
 Previous best on novel parts: text_cad expert 0.026 / 0.631 / 0.718, IoU 23.8; token_cad true view + expert IoU 23.8.
 The pretrained VLM is the first model that generalises: 4x the novel exact-program rate with a prompt and +12 IoU.
 Image-only novel IoU 24-27 (vs 17.7-21.1 for token_cad). Lower dup scores than token_cad are expected (no
-duplicates in training). Final checkpoint: `results/baselines_vlm_final/{report,geom}.json`.
+duplicates in training).
+
+**Final checkpoint (step 15k, `results/baselines_vlm_final/{report,geom}.json`)**, test 2000:
+| input | novel program (prog / cmd / param) | novel IoU / CD / IR | dup IoU | all IoU |
+|---|---|---|---|---|
+| 1 view | 0.052 / 0.622 / 0.701 | 31.9 / 41.2 / 0.4 | 64.4 | 44.4 |
+| 4 views | 0.076 / 0.650 / 0.731 | 33.5 / 37.1 / 0.8 | 65.1 | 45.7 |
+| 1 view + expert | **0.180 / 0.805 / 0.817** | **42.8 / 16.8 / 0.6** | 74.6 | 55.1 |
+| expert only | 0.160 / 0.804 / 0.811 | 40.3 / 23.3 / 0.4 | 71.6 | 52.4 |
+5k -> 15k steps: novel IoU 24.5 -> 31.9 (1 view), 27.0 -> 33.5 (4 views), 36.2 -> 42.8 (+ expert); invalid
+outputs < 1 %. vs GenCAD (all 21.9, novel 11.1) and the best earlier model (token_cad true view + expert: all
+43.7, novel 23.8). Still far from cadrille (~78-82 IoU on DeepCAD, whole test set) and from the decoder ceiling
+(novel 84.0). Text still carries most of the signal: expert prompt alone 40.3 novel IoU vs 4 views 33.5.
 
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
