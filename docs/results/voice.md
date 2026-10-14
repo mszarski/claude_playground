@@ -403,6 +403,22 @@ v2 (`audio/student/v2`) is served on the live Space (L4, vLLM FP8).
   reads the words, but its encoder does not seem to carry the emotional cues Qwen2-Audio's was pre-trained on, so
   the speed is not worth it: the Space stays on Qwen2-Audio v2. Weights: `audio/student/voxtral-v1`.
 
+### v3: without the transcript (2026-10-14)
+
+v3 is v2 trained without the transcript in its input (`build --no-transcript`), so the server could start it the
+moment the recording arrives and run Whisper alongside (`--audio-no-transcript`, `Engine._respond_audio_parallel`),
+saving Whisper's 0.3-1.3 s. Same data, order and distractor context as v2; 46.5 min on an A100.
+
+| | tone test | cloned lines | cloned lines + unrelated earlier lines |
+|---|---|---|---|
+| v2 (transcript) | 91.0% / 97.5% physical | **68.3%** / 88.0% | **67.9%** / 89.1% |
+| v3 (no transcript) | 90.7% / 97.1% | 62.8% / 86.9% | 63.0% / 86.9% |
+
+Tone reading is unchanged, but without the transcript it reads the words worse: on the cloned lines v2 is right
+where v3 is wrong on 23 clips, the reverse on 10 (sign test p = 0.035). Since Reachy already reacts within about a
+second (instant reactions), the live Space stays on v2; v3 (`audio/student/v3`) and the parallel serving path stay
+available.
+
 ## Human ratings
 
 `deploy/rating_page.html` shows a clip someone said (transcript, two earlier lines, how their voice sounded) and k of
