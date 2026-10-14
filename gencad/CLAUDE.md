@@ -299,6 +299,22 @@ For scale, vlm_cad_v1 (DeepCAD tokens, no CAD-Recode) final checkpoint on the te
 4 views 45.7, + expert 55.1 (different split, so read as indicative until the test eval). Image-only jumps by
 ~20-27 points: the procedural CAD-Recode data is what teaches reading geometry from renders. Invalid code 5-7 %.
 
+## Handoff (2026-10-14 ~18:00 UTC): what is running and what is next
+- **Running:** `vlm_cq_v1` training, HF job `6acf66bac66288145223f01a` (H200, 30k steps, ~1.8 s/step, finishes
+  ~2026-10-15 03:00 UTC). Validation IoU in its log (`hf jobs logs 6acf66bac66288145223f01a | grep '"view1"'`);
+  checkpoint at `results/vlm_cq_v1/model` (overwritten every 5k steps).
+- **When it finishes:** test predictions, then IoU on the test split (dup / novel):
+  `RUN=vlm_cq_v1_test jobs/launch.sh vlmcq --predict results/vlm_cq_v1/model --uids_from
+  results/baselines_vlm_final/preds.pkl --out_preds results/vlm_cq_v1_test/preds.pkl`, then
+  `RUN=vlm_cq_v1_test jobs/launch.sh cqiou` (reads `results/vlm_cq_v1_test/preds.pkl`). Compare with vlm_cad_v1
+  (`results/baselines_vlm_final/geom.json`) and cadrille (~78-82 IoU, whole DeepCAD test set).
+- **Claude zero-shot baseline (needs `ANTHROPIC_API_KEY` in the environment):** run from this folder with test
+  renders and cad_vec available locally (download `/work/data/renders.tar`, `cad_vec.tar`, the split JSONs and
+  `text_index.json` from the bucket into `data/`, or run it in a job), then
+  `python scripts/claude_baseline.py submit --data data --uids_from results/baselines_vlm_final/preds.pkl --modes
+  view4 [view1 view1+expert]` -> `collect --wait` -> `scripts/cq_iou.py --preds results/claude_baseline/preds.pkl`.
+  Batch cost estimate ~$80 per input mode at effort high. Scope still to be confirmed by the user.
+
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
   mm_v1 for image-only; a small demo / API around that.
