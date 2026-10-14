@@ -127,6 +127,7 @@ case "$STAGE" in
   baselines)  # train/test duplication + nearest-neighbour baselines, and priors split into duplicated vs novel parts
     need cad_vec
     [[ " $* " == *" --token_cad "* ]] && need images
+    [[ " $* " == *" --vlm_cad "* ]] && need renders
     python scripts/baselines.py --emb_dir data/emb --data data --csr_ckpt "$CSR_CKPT" \
       --out "results/$RUN/report.json" "$@" ;;
 

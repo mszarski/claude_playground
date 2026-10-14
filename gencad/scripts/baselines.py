@@ -50,6 +50,10 @@ def main():
     ap.add_argument("--text_cad", default=None, help="mm.text_cad.TextCAD checkpoint: decode programs from prompts")
     ap.add_argument("--text_cad_levels", nargs="*", default=["expert", "intermediate", "beginner", "abstract"])
     ap.add_argument("--token_cad", default=None, help="mm.token_cad.TokenCAD checkpoint: decode from image/text tokens")
+    ap.add_argument("--vlm_cad", default=None, help="mm.vlm_cad model dir: decode from our renders (data/renders) "
+                    "with 1 view, 4 views, 1 view + expert prompt, expert prompt only")
+    ap.add_argument("--vlm_modes", nargs="*", default=["view1", "view4", "view1+expert", "expert"])
+    ap.add_argument("--vlm_bs", type=int, default=32)
     ap.add_argument("--ar_decoder", default=None, help="also report the autoregressive decoder's GT-latent ceiling")
     ap.add_argument("--guidance", type=float, default=2.0)
     ap.add_argument("--n_views", type=int, nargs="*", default=[1, 5], help="view counts for a multi-view prior")
@@ -263,6 +267,19 @@ def main():
                         out[m] += row
         for m in modes:
             score(f"token_cad:{m}", out[m])
+
+    if a.vlm_cad:
+        from mm.vlm_cad import VLMCad
+        from train_vlm_cad import evaluate_modes
+        vlm = VLMCad.from_pretrained(a.vlm_cad, dtype=torch.bfloat16)
+        vlm.model.to(device).eval()
+        with open(os.path.join(a.data, "text_index.json")) as f:
+            text_index = json.load(f)
+        r_ids = {u: [0, 1, 2, 3] for u in test}
+        preds = evaluate_modes(vlm, test, os.path.join(a.data, "renders"), r_ids, text_index, a.vlm_modes,
+                               bs=a.vlm_bs)
+        for m, p in preds.items():
+            score(f"vlm_cad:{m}", p)
 
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:

@@ -80,9 +80,12 @@ def evaluate_modes(vlm, uids, img_dir, img_ids, text_index, modes, bs=32, max_ne
             images, prompts = [], []
             for u in chunk:
                 p = text_index.get(u, {}).get("expert") if "expert" in mode else None
-                if mode.startswith("view"):
+                if mode.startswith("view") and os.path.exists(os.path.join(img_dir, f"{u}_{img_ids[u][0]}.png")):
                     n = int(mode[4])
                     images.append(compose_views(load_views(img_dir, u, img_ids[u][:n])))
+                elif mode.startswith("view"):   # no render (the program did not build): counts as invalid
+                    images.append(None)
+                    p = None
                 else:
                     images.append(None)
                 prompts.append(p)
