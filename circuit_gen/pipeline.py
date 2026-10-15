@@ -1,5 +1,5 @@
 """
-End-to-end pipeline: circuit code -> checks -> board -> routing -> DRC -> Gerbers.
+End-to-end pipeline: circuit code -> checks -> simulation -> board -> routing -> DRC -> Gerbers.
 
 Each stage writes its outputs into the run directory and records its result in
 report.json, so a failed run shows how far it got.
@@ -14,6 +14,7 @@ from .checks import check_circuit
 from .runner import run_circuit_code
 
 STAGES = ["circuit", "checks", "placement", "routing", "drc", "export"]
+SIM_STAGE = "simulation"   # only when the board has functional tests
 
 
 def _layout(circuit, out_dir, report, max_passes):
@@ -42,8 +43,12 @@ def _layout(circuit, out_dir, report, max_passes):
     report["stages"]["export"] = {"ok": not exported["errors"], **exported}
 
 
-def build(code, out_dir, max_passes=30, require_checks=True):
-    """Run the whole pipeline on SKiDL `code`. Returns the report dict."""
+def build(code, out_dir, max_passes=30, require_checks=True, tests=None):
+    """Run the whole pipeline on SKiDL `code`. Returns the report dict.
+
+    `tests` are SPICE test specs (see spice.py). When given, the board only
+    counts as a success if they pass too.
+    """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "circuit.py").write_text(code)
@@ -57,14 +62,23 @@ def build(code, out_dir, max_passes=30, require_checks=True):
         checks = check_circuit(run.circuit)
         report["stages"]["checks"] = {"ok": checks.ok, "errors": checks.errors,
                                       "warnings": checks.warnings}
+        if tests:
+            from .spice import simulate
+            sim = simulate(run.circuit, tests)
+            report["stages"][SIM_STAGE] = {
+                "ok": sim.ok, "unmodeled": sim.unmodeled,
+                "results": [{"name": r.name, "passed": r.passed, "value": r.value,
+                             "expect": r.expect, "error": r.error} for r in sim.results]}
         if checks.ok or not require_checks:
             try:
                 _layout(run.circuit, out_dir, report, max_passes)
             except Exception as e:  # report layout failures rather than crash an eval run
                 report["stages"]["layout_error"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
-    report["completed"] = [s for s in STAGES if report["stages"].get(s, {}).get("ok")]
-    report["success"] = report["completed"] == STAGES
+    required = STAGES + ([SIM_STAGE] if tests else [])
+    report["completed"] = [s for s in required if report["stages"].get(s, {}).get("ok")]
+    report["success"] = report["completed"] == required
+    report["functionally_tested"] = bool(tests)
     report["seconds"] = round(time.time() - start, 1)
     (out_dir / "report.json").write_text(json.dumps(report, indent=2))
     return report

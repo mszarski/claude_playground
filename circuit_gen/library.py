@@ -121,10 +121,12 @@ def _symbol_pins(lib, name):
         return _symbol_pins(lib, ext[1])
     pins = {}
     for unit in sexp.children(sym, "symbol"):
+        # Sub-symbols are named <name>_<unit>_<style>; unit 0 is shared by all units.
+        unit_no = int(unit[1].rsplit("_", 2)[-2])
         for pin in sexp.children(unit, "pin"):
             num = sexp.child(pin, "number")[1]
             pname = sexp.child(pin, "name")[1]
-            pins[num] = {"num": num, "name": pname, "type": pin[1]}
+            pins[num] = {"num": num, "name": pname, "type": pin[1], "unit": unit_no}
     return sorted(pins.values(), key=lambda p: (len(p["num"]), p["num"]))
 
 

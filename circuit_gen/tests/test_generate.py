@@ -85,7 +85,7 @@ class TestLoop:
         system, user, tools = backend.started
         assert "ldo_3v3.py" in system and "a board" in user
         assert {t["name"] for t in tools} == {"search_symbols", "get_symbol", "search_footprints",
-                                              "check_circuit"}
+                                              "check_circuit", "simulate"}
 
     @needs_skidl
     def test_repair_loop_keeps_last_passing_code(self, tmp_path):
@@ -109,6 +109,17 @@ class TestLoop:
         assert result.summary.startswith("Done")
         assert "AMS1117-3.3" in backend.tool_results[0][0].content
         assert (tmp_path / "transcript.jsonl").exists()
+
+    @needs_skidl
+    def test_simulate_tool(self, tmp_path):
+        tools = generate.Toolbox(tmp_path)
+        code = (EXAMPLES / "ldo_3v3.py").read_text()
+        content, is_error = tools.execute("simulate", {
+            "code": code, "sources": {"VIN": 5}, "loads": {"+3V3": 33}, "measure": "v(+3V3)"})
+        assert not is_error, content
+        assert content.startswith("v(+3V3) = 3.2")
+        content, is_error = tools.execute("simulate", {"code": code, "measure": "v(NOPE)"})
+        assert is_error and "NOPE" in content
 
 
 # ---- Hugging Face backend ----

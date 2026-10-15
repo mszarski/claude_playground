@@ -31,7 +31,7 @@ def cmd_build(args):
     return 0 if report["success"] else 1
 
 
-def _design(description, out_dir, args):
+def _design(description, out_dir, args, tests=None):
     from . import config
     from .backends import make_backend
     from .generate import generate_circuit
@@ -49,7 +49,7 @@ def _design(description, out_dir, args):
           f"turns={gen.turns} error={gen.error}")
     if gen.code is None:
         return {"success": False, "stages": {}, "generation": False}
-    report = build(gen.code, out_dir, max_passes=args.passes)
+    report = build(gen.code, out_dir, max_passes=args.passes, tests=tests)
     report["generation"] = gen.passed
     report["success"] = report["success"] and gen.passed
     _print_report(report)
@@ -73,16 +73,23 @@ def cmd_eval(args):
         print(f"== {case['id']}")
         case_dir = out / case["id"]
         if "code" in case:
-            report = build(case["code"], case_dir, max_passes=args.passes)
+            report = build(case["code"], case_dir, max_passes=args.passes, tests=case.get("tests"))
             _print_report(report)
         else:
-            report = _design(case["description"], case_dir, args)
+            report = _design(case["description"], case_dir, args, tests=case.get("tests"))
         results.append({"id": case["id"], "success": report["success"],
+                        "tested": bool(case.get("tests")),
                         "completed": report.get("completed", [])})
     passed = sum(r["success"] for r in results)
-    summary = {"passed": passed, "total": len(results), "results": results}
+    tested = [r for r in results if r["tested"]]
+    tested_passed = sum(r["success"] for r in tested)
+    summary = {"passed": passed, "total": len(results), "tested": len(tested),
+               "tested_passed": tested_passed, "results": results}
+    out.mkdir(parents=True, exist_ok=True)
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"\n{passed}/{len(results)} boards made it to DRC-clean Gerbers")
+    print(f"\n{passed}/{len(results)} boards made it to DRC-clean Gerbers (and passed their "
+          f"simulation tests, where they have any)")
+    print(f"{tested_passed}/{len(tested)} boards with simulation tests passed them all")
     return 0
 
 

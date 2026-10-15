@@ -1,8 +1,9 @@
 """
 Description -> SKiDL circuit code, using a language model with library and check tools.
 
-The model looks up real symbols and footprints, writes SKiDL code, and calls
-`check_circuit` to run it through SKiDL's ERC and our design checks. It repairs
+The model looks up real symbols and footprints, writes SKiDL code, calls
+`check_circuit` to run it through SKiDL's ERC and our design checks, and can
+`simulate` it in ngspice to verify voltages, currents and gains. It repairs
 the code until the checks pass. Every attempt is saved in the run directory;
 over time those logs become training data for a fine-tuned generator.
 """
@@ -38,14 +39,22 @@ How to work:
    LED_SMD:LED_0805_2012Metric) and 2.54 mm pin headers for connectors, \
    unless the description asks for something else.
 4. Call check_circuit with the complete code. Fix every error it reports and \
-   check again. You are done when check_circuit reports no errors; then reply \
-   with a short summary of the design and any assumptions you made.
+   check again.
+5. Verify the behaviour that matters with simulate (DC voltages and currents, \
+   AC gain): for example the LED current, a regulator's output under load, or \
+   an amplifier's gain. Fix the design if the numbers are wrong. Simple generic \
+   models are used, and parts without a model (MCUs, logic, timers) are left \
+   out of the simulation.
+6. You are done when check_circuit passes and simulation agrees with the \
+   description; then reply with a short summary of the design and any \
+   assumptions you made.
 
 SKiDL conventions for this environment:
 - `from skidl import *` and the library paths are already set up; do not \
   import skidl, call ERC(), or generate a netlist yourself.
 - Create parts with Part("<Library>", "<Symbol>", value="...", footprint="<Lib>:<Footprint>").
-- Name every net: vcc = Net("VCC"). Use GND for ground.
+- Name every net: vcc = Net("VCC"). Use GND for ground. When the description \
+  names nets, use exactly those names: the board is tested through them.
 - Connect with `+=` (net += part["PIN"]), pin names or numbers \
   (part[1, 2] += a, b), or chains for series parts (vcc & r & led["A K"] & gnd).
 - Power and I/O enter and leave the board through connectors (Connector \
@@ -112,6 +121,30 @@ TOOLS = [
             "required": ["code"],
         },
     },
+    {
+        "name": "simulate",
+        "description": "Run complete SKiDL code in ngspice and return one measurement. Voltage "
+                       "sources are applied from named nets to ground; loads are resistors from a "
+                       "net to ground, or to another net with {\"to\": NET, \"r\": OHMS}. measure "
+                       "is v(NET), i(NET) (current the source on NET delivers into the circuit) "
+                       "or gain(OUT_NET,IN_NET) (AC analysis, needs an \"ac\" source on IN_NET).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "code": {"type": "string", "description": "Complete SKiDL code"},
+                "analysis": {"type": "string", "enum": ["op", "ac"],
+                             "description": "op = DC operating point (default), ac = small-signal"},
+                "freq": {"type": "number", "description": "AC frequency in Hz (ac only)"},
+                "sources": {"type": "object",
+                            "description": "net name -> volts, or \"ac\" for the AC input, "
+                                           "e.g. {\"VCC\": 5, \"IN\": \"ac\"}"},
+                "loads": {"type": "object",
+                          "description": "net name -> ohms to ground, or {\"to\": NET, \"r\": OHMS}"},
+                "measure": {"type": "string", "description": "v(NET), i(NET) or gain(OUT,IN)"},
+            },
+            "required": ["code", "measure"],
+        },
+    },
 ]
 
 
@@ -144,6 +177,7 @@ class Toolbox:
     def __init__(self, workdir):
         self.workdir = Path(workdir)
         self.attempts = []
+        self.sim_runs = 0
 
     def check_circuit(self, code):
         n = len(self.attempts) + 1
@@ -158,6 +192,27 @@ class Toolbox:
         self.attempts.append(Attempt(code=code, passed=passed, feedback=feedback))
         return feedback
 
+    def simulate(self, args):
+        """Run one model-requested measurement. Returns (content, is_error)."""
+        from .spice import simulate
+        self.sim_runs += 1
+        run = run_circuit_code(args["code"], self.workdir / "sims" / f"{self.sim_runs:02d}")
+        if not run.ok:
+            return run.summary(), True
+        test = {"name": args["measure"], "analysis": args.get("analysis", "op"),
+                "freq": args.get("freq", 1000), "sources": args.get("sources") or {},
+                "loads": args.get("loads") or {}, "measure": args["measure"],
+                "expect": [-1e30, 1e30]}
+        report = simulate(run.circuit, [test])
+        result = report.results[0]
+        if result.error:
+            text = f"Simulation error: {result.error}"
+        else:
+            text = f"{args['measure']} = {result.value:.6g}"
+        if report.unmodeled:
+            text += "\nNot simulated (no model): " + ", ".join(report.unmodeled)
+        return text, bool(result.error)
+
     def execute(self, name, args):
         """Run one tool call. Returns (content, is_error)."""
         try:
@@ -171,6 +226,8 @@ class Toolbox:
                 return ("\n".join(hits) if hits else "No footprints found."), False
             if name == "check_circuit":
                 return self.check_circuit(args["code"]), False
+            if name == "simulate":
+                return self.simulate(args)
             return f"Unknown tool {name}", True
         except KeyError as e:
             return f"Not found: {e}", True

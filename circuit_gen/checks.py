@@ -54,6 +54,94 @@ def _is_ic(part):
     return part["ref"].startswith("U")
 
 
+# Pin types that set a net's DC level, and the ones that must not be left floating.
+DRIVING_TYPES = {"OUTPUT", "PWROUT", "BIDIR", "TRISTATE", "output", "power_out", "bidirectional",
+                 "tri_state"}
+INPUT_TYPES = {"INPUT", "input"}
+PUSH_PULL_OUTPUT_TYPES = {"OUTPUT", "PWROUT", "output", "power_out"}
+# Two-terminal parts that conduct at DC: resistors, inductors, ferrites, fuses, diodes,
+# jumpers. Crystals are included because oscillator pins are biased inside the IC.
+DC_CONDUCTING_PREFIXES = ("R", "L", "FB", "F", "D", "JP", "Y")
+# Input pins that are biased inside the part, so a capacitor alone is fine.
+INTERNALLY_BIASED = [(re.compile(r"(^|[^0-9])55[56]"), {"CV"})]
+
+
+def _internally_biased(part, pin):
+    name = part["symbol"].split(":", 1)[-1]
+    return any(pat.search(name) and pin["name"] in pins for pat, pins in INTERNALLY_BIASED)
+
+
+def _ref_prefix(ref):
+    return re.match(r"[A-Za-z]+", ref).group(0) if re.match(r"[A-Za-z]+", ref) else ""
+
+
+def _check_dc_paths(parts, members, report):
+    """Every net with an input pin needs a DC path to something that sets its voltage."""
+    defined = {n for n in members if is_ground(n)}
+    for part in parts:
+        for pin in part["pins"]:
+            if not pin["net"]:
+                continue
+            # Connectors bring signals and supplies from outside the board.
+            if part["ref"].startswith("J") or pin["type"] in DRIVING_TYPES:
+                defined.add(pin["net"])
+
+    edges = {}
+    for part in parts:
+        prefix = _ref_prefix(part["ref"])
+        nets = [p["net"] for p in part["pins"] if p["net"]]
+        if prefix in DC_CONDUCTING_PREFIXES and len(part["pins"]) == 2 and len(nets) == 2:
+            a, b = nets
+            edges.setdefault(a, set()).add(b)
+            edges.setdefault(b, set()).add(a)
+
+    frontier = list(defined)
+    while frontier:
+        net = frontier.pop()
+        for other in edges.get(net, ()):
+            if other not in defined:
+                defined.add(other)
+                frontier.append(other)
+
+    for net, pins in members.items():
+        if net in defined:
+            continue
+        inputs = []
+        for ref, num in pins:
+            part = next(p for p in parts if p["ref"] == ref)
+            pin = _pin(parts, ref, num)
+            if pin["type"] in INPUT_TYPES and not _internally_biased(part, pin):
+                inputs.append(f"{ref} pin {num}")
+        if inputs:
+            report.errors.append(
+                f"net '{net}' has no DC path to a supply, ground, output or connector, so "
+                f"the input(s) on it float ({', '.join(inputs)}). Add a bias or pull resistor "
+                f"(capacitors do not set a DC level).")
+
+
+def _check_outputs_on_rails(parts, members, report):
+    """A push-pull output wired straight to ground or to a supply rail fights that rail."""
+    rails = set()
+    for net, pins in members.items():
+        if is_ground(net):
+            rails.add(net)
+        elif any(_pin(parts, r, n)["type"] in {"PWROUT", "power_out"} for r, n in pins):
+            rails.add(net)
+    for part in parts:
+        for pin in part["pins"]:
+            if pin["type"] in {"OUTPUT", "output"} and pin["net"] in rails:
+                report.errors.append(
+                    f"{part['ref']} pin {pin['num']} ({pin['name']}) is an output tied directly "
+                    f"to rail '{pin['net']}'. Outputs must not drive a supply or ground; for an "
+                    f"unused op-amp section, connect it as a follower (output to - input) with "
+                    f"+ at a defined level.")
+
+
+def _pin(parts, ref, num):
+    part = next(p for p in parts if p["ref"] == ref)
+    return next(p for p in part["pins"] if p["num"] == num)
+
+
 def check_circuit(circuit):
     report = CheckReport()
     parts = circuit["parts"]
@@ -87,6 +175,9 @@ def check_circuit(circuit):
 
     if not any(is_ground(n) for n in members):
         report.warnings.append("no ground net found (expected a net named GND)")
+
+    _check_dc_paths(parts, members, report)
+    _check_outputs_on_rails(parts, members, report)
 
     # Every IC power-input net (other than ground) needs a capacitor to ground.
     decoupled = set()
