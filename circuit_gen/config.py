@@ -16,5 +16,8 @@ PYTHON = os.environ.get("CIRCUIT_GEN_PYTHON", "python3")
 BACKEND = os.environ.get("CIRCUIT_GEN_BACKEND", "hf")
 HF_MODEL = os.environ.get("CIRCUIT_GEN_HF_MODEL", "Qwen/Qwen3.8-27B")
 HF_PROVIDER = os.environ.get("CIRCUIT_GEN_HF_PROVIDER", "auto")
+# OpenAI-compatible endpoint URL to use instead of Inference Providers (e.g. a
+# dedicated Inference Endpoint serving a fine-tuned model).
+HF_BASE_URL = os.environ.get("CIRCUIT_GEN_HF_BASE_URL", "")
 HF_MAX_TOKENS = int(os.environ.get("CIRCUIT_GEN_HF_MAX_TOKENS", "65536"))
 CLAUDE_MODEL = os.environ.get("CIRCUIT_GEN_CLAUDE_MODEL", "claude-opus-5-5")

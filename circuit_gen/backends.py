@@ -97,7 +97,11 @@ class HuggingFaceBackend:
                  temperature=0.2, retries=7):
         if client is None:
             from huggingface_hub import InferenceClient
-            client = InferenceClient(provider=provider or config.HF_PROVIDER)
+            if config.HF_BASE_URL:
+                # A dedicated endpoint (e.g. an Inference Endpoint serving a fine-tuned model).
+                client = InferenceClient(base_url=config.HF_BASE_URL)
+            else:
+                client = InferenceClient(provider=provider or config.HF_PROVIDER)
         self.client = client
         self.model = model or config.HF_MODEL
         # Reasoning models can spend >16k tokens thinking on one turn.
