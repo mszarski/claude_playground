@@ -129,15 +129,29 @@ running out of its 64k-token reply budget while reasoning.
 
 ## Training data
 
-`python -m circuit_gen datagen` writes new board descriptions (60 are in
-`benchmarks/train_boards.json`, none from the benchmark);
-`eval benchmarks/train_boards.json --spec-first` designs them; `export`
-keeps only samples that pass every check and route cleanly, as chat-format
-JSONL (`sft_direct.jsonl`: description -> circuit code; `sft_agentic.jsonl`:
-the full tool-using session). `train/sft.py` is a LoRA SFT script for
-Qwen3-8B on Hugging Face Jobs. The first DeepSeek-V4.1-Flash data run
-stopped at the account's Inference Providers spending limit after 22
-verified sessions on 13 boards; a useful training set needs a few hundred.
+Two sources, both verified the same way (structure, ERC, and requirements
+simulated across component tolerances) and exported as chat-format JSONL:
+`sft_direct.jsonl` (description -> circuit code) and `sft_agentic.jsonl`
+(a tool-using design session). Benchmark boards are never used.
+
+- **Programmatic, no LLM** (`procgen.py`): 12 parametric families (LED
+  resistor, divider, RC filters, linear regulators, inverting and
+  non-inverting amps, Sallen-Key, 555 astable, zener regulator, MOSFET and
+  BJT switches, buffered reference). Values come from the design equations
+  rounded to E-series; sessions are built from real tool calls. 1,500
+  generated, 1,491 verified, in about 15 minutes on 4 CPU cores:
+
+  ```bash
+  python -m circuit_gen procgen -n 1500 -o runs/procgen
+  ```
+
+- **LLM-designed** (`datagen.py`): `datagen` writes new descriptions (60 in
+  `benchmarks/train_boards.json`), `eval --spec-first` designs them, and
+  `export` keeps the passing sessions. More varied than the templates, but
+  each session costs inference; the first run stopped at the account's
+  spending limit after 22 verified sessions.
+
+`train/sft.py` is a LoRA SFT script for Qwen3-8B on Hugging Face Jobs.
 
 ## Status and known limits
 
