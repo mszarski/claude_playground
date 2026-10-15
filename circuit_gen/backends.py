@@ -54,6 +54,40 @@ def _retry_delay(error, attempt, cap=60.0):
         return min(2.0 ** (attempt + 1), cap)
 
 
+def _is_connection_error(e):
+    names = {t.__name__ for t in type(e).__mro__}
+    return bool(names & {"ReadError", "RemoteProtocolError", "ConnectError", "ReadTimeout",
+                         "ConnectionError", "TimeoutException", "NetworkError"})
+
+
+def _assemble_stream(chunks):
+    """Merge streamed chat chunks into an object shaped like a non-streamed response."""
+    from types import SimpleNamespace as NS
+    content, finish, usage, calls = [], None, None, {}
+    for chunk in chunks:
+        if getattr(chunk, "usage", None):
+            usage = chunk.usage
+        if not chunk.choices:
+            continue
+        choice = chunk.choices[0]
+        finish = choice.finish_reason or finish
+        delta = choice.delta
+        if delta.content:
+            content.append(delta.content)
+        for tc in delta.tool_calls or []:
+            call = calls.setdefault(tc.index, {"id": None, "name": None, "args": []})
+            call["id"] = tc.id or call["id"]
+            if tc.function is not None:
+                call["name"] = tc.function.name or call["name"]
+                if tc.function.arguments:
+                    call["args"].append(tc.function.arguments)
+    tool_calls = [NS(id=c["id"] or f"call_{i}",
+                     function=NS(name=c["name"], arguments="".join(c["args"])))
+                  for i, c in sorted(calls.items())]
+    message = NS(content="".join(content), tool_calls=tool_calls or None)
+    return NS(choices=[NS(message=message, finish_reason=finish)], usage=usage)
+
+
 class HuggingFaceBackend:
     """Open models served by Hugging Face Inference Providers (OpenAI-style chat API)."""
 
@@ -81,15 +115,27 @@ class HuggingFaceBackend:
             for t in tools]
 
     def _complete(self):
+        """One streamed chat completion, assembled into a non-streamed response shape.
+
+        Streaming keeps the connection busy while the model reasons; long
+        non-streamed requests hit the router's gateway timeout (504).
+        """
         from huggingface_hub.errors import HfHubHTTPError
         for attempt in range(self.retries + 1):
             try:
-                return self.client.chat_completion(
+                stream = self.client.chat_completion(
                     model=self.model, messages=self.messages, tools=self.tools,
-                    max_tokens=self.max_tokens, temperature=self.temperature)
+                    max_tokens=self.max_tokens, temperature=self.temperature,
+                    stream=True, stream_options={"include_usage": True})
+                return _assemble_stream(stream)
             except HfHubHTTPError as e:
                 status = getattr(e.response, "status_code", None)
                 if attempt == self.retries or (status is not None and status < 500 and status != 429):
+                    raise
+                time.sleep(_retry_delay(e, attempt))
+            except Exception as e:
+                # Dropped connections (httpx ReadError, RemoteProtocolError, ...) mid-stream.
+                if attempt == self.retries or not _is_connection_error(e):
                     raise
                 time.sleep(_retry_delay(e, attempt))
 

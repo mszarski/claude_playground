@@ -53,3 +53,13 @@ def test_summary_rates_and_table():
     table = format_table(s)
     assert "| a | yes | 1/2 | simulation ×1 |" in table
     assert "Mean pass rate: 75%" in table
+
+
+def test_connection_errors_are_infra():
+    from circuit_gen.evaluate import _is_infra_error
+
+    class ReadError(Exception):
+        pass
+
+    assert _is_infra_error(ReadError("Connection reset by peer"))
+    assert not _is_infra_error(ValueError("bad circuit"))

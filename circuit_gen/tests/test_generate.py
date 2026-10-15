@@ -5,6 +5,8 @@ for the model APIs.
 
 import json
 from pathlib import Path
+
+import pytest
 from types import SimpleNamespace
 
 from circuit_gen import generate
@@ -142,6 +144,29 @@ def _hf_response(content="", tool_calls=(), finish_reason="stop"):
                            usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5))
 
 
+def _as_stream(response):
+    """Split a whole response into streamed chunks, as the router sends them."""
+    choice, msg = response.choices[0], response.choices[0].message
+    chunk = lambda delta, finish=None: SimpleNamespace(
+        choices=[SimpleNamespace(delta=delta, finish_reason=finish)], usage=None)
+    text = msg.content or ""
+    for part in (text[:len(text) // 2], text[len(text) // 2:]):
+        yield chunk(SimpleNamespace(content=part, tool_calls=None))
+    for i, tc in enumerate(msg.tool_calls or []):
+        args = tc.function.arguments
+        yield chunk(SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
+            index=i, id=tc.id, function=SimpleNamespace(name=tc.function.name, arguments=None))]))
+        for piece in (args[:3], args[3:]):
+            yield chunk(SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
+                index=i, id=None, function=SimpleNamespace(name=None, arguments=piece))]))
+    yield chunk(SimpleNamespace(content=None, tool_calls=None), choice.finish_reason)
+    yield SimpleNamespace(choices=[], usage=response.usage)
+
+
+class ReadError(Exception):
+    """Stands in for httpx.ReadError (a dropped connection)."""
+
+
 class FakeInferenceClient:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -149,7 +174,11 @@ class FakeInferenceClient:
 
     def chat_completion(self, **kwargs):
         self.requests.append({**kwargs, "messages": [dict(m) for m in kwargs["messages"]]})
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        assert kwargs.get("stream") is True
+        return _as_stream(response)
 
 
 class TestHuggingFaceBackend:
@@ -185,6 +214,22 @@ class TestHuggingFaceBackend:
         b.start("sys", "u", generate.TOOLS)
         assert b.step().stop == "max_tokens"
         assert [m["role"] for m in b.messages] == ["system", "user"]
+
+    def test_retries_dropped_connection(self, monkeypatch):
+        monkeypatch.setattr("circuit_gen.backends.time.sleep", lambda s: None)
+        client = FakeInferenceClient([ReadError("Connection reset by peer"),
+                                      _hf_response(content="done")])
+        b = HuggingFaceBackend(model="m", client=client)
+        b.start("sys", "u", generate.TOOLS)
+        turn = b.step()
+        assert turn.text == "done" and len(client.requests) == 2
+
+    def test_other_errors_are_not_retried(self):
+        client = FakeInferenceClient([ValueError("bad request shape")])
+        b = HuggingFaceBackend(model="m", client=client)
+        b.start("sys", "u", generate.TOOLS)
+        with pytest.raises(ValueError):
+            b.step()
 
     def test_default_backend_is_hf(self, monkeypatch):
         monkeypatch.setattr("huggingface_hub.InferenceClient", lambda **kw: object())
