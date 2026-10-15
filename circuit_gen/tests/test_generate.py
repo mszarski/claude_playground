@@ -97,7 +97,8 @@ class TestLoop:
         system, user, tools = backend.started
         assert "ldo_3v3.py" in system and "a board" in user
         assert {t["name"] for t in tools} == {"search_symbols", "get_symbol", "search_footprints",
-                                              "check_circuit", "simulate"}
+                                              "check_circuit", "simulate",
+                                              "report_spec_problem"}
 
     @needs_skidl
     def test_repair_loop_keeps_last_passing_code(self, tmp_path):

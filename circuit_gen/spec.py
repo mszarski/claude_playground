@@ -38,6 +38,13 @@ nets, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
 linear regulators, MOSFETs, BJTs, 555 timers and CMOS logic gates. \
 Behaviour that depends on an unmodelled part (e.g. an MCU) cannot be \
 checked; skip it.
+- Boards built around an IC without a model (MCUs, interface transceivers \
+such as RS-485, CAN or USB PHYs, sensors, memories): specify only the \
+circuitry around it (pull-ups, termination, dividers, LED currents, supply \
+filtering), never the IC's own function, or the designer will be pushed to \
+replace the IC with discrete parts.
+- All values are in SI base units: amperes, volts, ohms, hertz, seconds \
+(10 mA is 0.01, 4.7 kHz is 4700).
 
 Cover:
 - every number the description gives, at each end of any stated range of \

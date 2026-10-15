@@ -88,3 +88,14 @@ def test_tran_round_trip():
     reqs = parse_requirements("require('freq(OUT)', 0.7, 1.3, sources={'VCC': 5}, analysis='tran', duration=8)")
     again = parse_requirements(to_code(reqs))
     assert again == reqs and again[0]["duration"] == 8
+
+
+def test_designer_can_dispute_a_frozen_requirement(tmp_path):
+    from circuit_gen.backends import ToolCall
+    dispute = Turn(text="", stop="tool_use", tool_calls=[ToolCall(
+        id="d1", name="report_spec_problem",
+        input={"requirement": "LED current", "reason": "value is in mA, not A"}, raw="{}")])
+    backend = ScriptedBackend([say(SPEC_REPLY), dispute])
+    result = generate.generate_circuit("an LED board", tmp_path, backend=backend, spec_first=True)
+    assert not result.passed
+    assert result.error == "spec disputed: LED current: value is in mA, not A"

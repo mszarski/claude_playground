@@ -146,6 +146,21 @@ TOOLS = [
         },
     },
     {
+        "name": "report_spec_problem",
+        "description": "Report that a fixed requirement is wrong (e.g. wrong units, physically "
+                       "impossible, or it tests an IC that has no simulation model) and stop. "
+                       "Use this instead of distorting the circuit to satisfy a requirement you "
+                       "believe is incorrect. The session ends as a failure with your reason.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "requirement": {"type": "string", "description": "the requirement's name"},
+                "reason": {"type": "string", "description": "why it is wrong"},
+            },
+            "required": ["requirement", "reason"],
+        },
+    },
+    {
         "name": "simulate",
         "description": "Run complete SKiDL code in ngspice and return one measurement. Voltage "
                        "sources are applied from named nets to ground; loads are resistors from a "
@@ -279,7 +294,10 @@ SPEC_NOTE = """
 These requirements were written before the design and are fixed. They are \
 appended to your code automatically every time it is checked or simulated, so \
 do not copy them; check_circuit fails until all of them pass. You may add \
-more require(...) lines of your own.
+more require(...) lines of your own. If a requirement is itself wrong (wrong \
+units, physically impossible, or it tests an IC that has no model), call \
+report_spec_problem; never bend the circuit away from the description to \
+satisfy a requirement you believe is wrong.
 
 {spec}"""
 
@@ -342,6 +360,12 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
             break
 
         results = []
+        disputed = next((c for c in turn.tool_calls if c.name == "report_spec_problem"
+                         and _validate_input(c.name, c.input)), None)
+        if disputed:
+            result.error = (f"spec disputed: {disputed.input['requirement']}: "
+                            f"{disputed.input['reason']}")
+            break
         for call in turn.tool_calls:
             if not _validate_input(call.name, call.input):
                 content, is_error = json.dumps({"INVALID_JSON": call.raw[:2000]}), True
