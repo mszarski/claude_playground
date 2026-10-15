@@ -71,6 +71,10 @@ def parse_requirements(text):
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                 and call.func.id == "require"):
             raise SpecError(f"only require(...) calls are allowed, got: {ast.unparse(node)[:80]}")
+        # Accept an unquoted measure, e.g. require(v(OUT), ...), as models often write it.
+        if call.args and isinstance(call.args[0], ast.Call) and \
+                isinstance(call.args[0].func, ast.Name) and call.args[0].func.id in ("v", "i", "gain"):
+            call.args[0] = ast.Constant(ast.unparse(call.args[0]).replace(" ", "").replace("'", ""))
         try:
             args = [ast.literal_eval(a) for a in call.args]
             kwargs = {k.arg: ast.literal_eval(k.value) for k in call.keywords}

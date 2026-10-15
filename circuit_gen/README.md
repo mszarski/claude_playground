@@ -44,10 +44,14 @@ python -m circuit_gen design "..." --backend claude -o runs/claude
 # Lay out and route a hand-written SKiDL file (no model involved)
 python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
 
+# Spec-first: requirements are written from the description alone, then frozen
+python -m circuit_gen design "..." --spec-first -o runs/x
+
 # Benchmark: how many descriptions make it all the way to DRC-clean Gerbers
-# and pass their SPICE tests
+# and pass their SPICE tests (--resume reuses finished samples)
 python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval --samples 5 --jobs 6
 python -m circuit_gen eval --examples -o runs/examples   # layout half only, no API calls
+python -m circuit_gen compare runs/eval_a runs/eval_b    # side-by-side pass rates
 ```
 
 Defaults can also be set with `CIRCUIT_GEN_BACKEND`, `CIRCUIT_GEN_HF_MODEL`,
@@ -90,6 +94,35 @@ Parts are mapped to generic SPICE models by library and symbol: R/C/L,
 diodes and LEDs (Vf by colour), op-amps (1 MHz, rail-limited), fixed linear
 regulators (load current drawn from the input), MOSFETs and BJTs. MCUs, logic
 and timers have no model yet, so their behaviour is not simulated.
+
+## Benchmark results (October 2026)
+
+19 boards in `benchmarks/boards.json`: 12 simple ones and 7 harder analog ones
+(Sallen-Key filter, inverting and difference amplifiers, common-emitter stage,
+discrete current source, zener regulator, reverse-polarity protection). Each
+harder board has a reference design in `benchmarks/reference/` that passes its
+hidden tests, so the specs are achievable. All runs use the `hf` backend.
+
+Open models, 2 samples per board (designer writes its own requirements):
+
+| model | passed |
+|---|---|
+| deepseek-ai/DeepSeek-V4.1-Flash | 38/38 |
+| zai-org/GLM-5.3 | 38/38 (but ~30x slower per board) |
+| Qwen/Qwen3.8-27B | 30/38 |
+| openai/gpt-oss-120b | 25/38 (3 false accepts) |
+
+Qwen3.8-27B on the 7 harder boards, 5 samples each:
+
+| mode | passed | false accepts |
+|---|---|---|
+| designer writes its own requirements | 23/35 | 8 |
+| `--spec-first` (frozen requirements) | 31/35 | 0 |
+
+A false accept is a design the model declared finished that fails the hidden
+tests. Without a separate spec, the designer loosened or omitted the
+requirements it was failing. The remaining spec-first failures are the model
+running out of its 64k-token reply budget while reasoning.
 
 ## Status and known limits
 

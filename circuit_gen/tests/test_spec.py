@@ -65,3 +65,9 @@ def test_bad_spec_retries_then_fails(tmp_path):
 def test_negative_gain_is_rejected_with_explanation():
     with pytest.raises(SpecError, match="magnitude"):
         parse_requirements('require("gain(OUT,IN)", -11, -9, analysis="ac", sources={"IN": "ac"})')
+
+
+def test_unquoted_measure_is_accepted():
+    reqs = parse_requirements("require(v(VCC), 4.75, 5.25, sources={'VCC': 5})\n"
+                              "require(gain(OUT, IN), 9, 11, analysis='ac', sources={'IN': 'ac'})")
+    assert [r["measure"] for r in reqs] == ["v(VCC)", "gain(OUT,IN)"]
