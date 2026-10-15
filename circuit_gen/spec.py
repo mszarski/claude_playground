@@ -23,8 +23,8 @@ means exactly that.
 
     require(measure, low, high, sources={...}, loads={...}, analysis="op", freq=1000, name="...")
 
-- measure: v(NET), i(NET) (current the voltage source on NET delivers into \
-the circuit; negative if the circuit sinks it), gain(OUT,IN) with \
+- measure: v(NET), i(NET) (magnitude of the current through the voltage \
+source on NET, always >= 0), gain(OUT,IN) with \
 analysis="ac" and an "ac" source on IN, or freq(NET), an oscillation \
 frequency in Hz, with analysis="tran" and duration= long enough for at least \
 four cycles. In AC analysis every measure is a \
@@ -45,6 +45,16 @@ filtering), never the IC's own function, or the designer will be pushed to \
 replace the IC with discrete parts.
 - All values are in SI base units: amperes, volts, ohms, hertz, seconds \
 (10 mA is 0.01, 4.7 kHz is 4700).
+
+Make the set consistent:
+- Every requirement must be satisfiable together with all the others by one \
+circuit; two requirements with identical sources and loads cannot expect \
+different values.
+- A source fixes its net's voltage, so do not also require v() of that net, \
+and remember that a source overrides whatever the circuit would do there.
+- A DC (op) analysis shows one static state. For oscillators and blinkers, \
+require freq(NET) with analysis="tran", not high and low v() levels.
+- Loads are resistances in ohms: a 10 mA load at 5 V is 500.
 
 Cover:
 - every number the description gives, at each end of any stated range of \
@@ -108,6 +118,14 @@ def parse_requirements(text):
             raise SpecError(f"require(...) missing {', '.join(missing)}: {ast.unparse(call)[:80]}")
         if float(req["low"]) > float(req["high"]):
             raise SpecError(f"low above high in: {ast.unparse(call)[:80]}")
+        for net, load in (req.get("loads") or {}).items():
+            ohms = load.get("r") if isinstance(load, dict) else load
+            if not isinstance(ohms, (int, float)) or ohms < 1:
+                raise SpecError(f"loads are resistances in ohms, got {load!r} on {net}; for a "
+                                f"10 mA load at 5 V use 500: {ast.unparse(call)[:80]}")
+        if str(req["measure"]).startswith("i(") and float(req["high"]) < 0:
+            raise SpecError("i() is a magnitude and never negative: "
+                            f"{ast.unparse(call)[:80]}")
         if str(req["measure"]).startswith("gain(") and float(req["high"]) < 0:
             raise SpecError("gain() is a magnitude and never negative; for an inverting "
                             f"gain of -10 require 9 to 11: {ast.unparse(call)[:80]}")
@@ -154,5 +172,42 @@ def write_spec(description, backend, workdir, attempts=3):
             continue
         code = to_code(reqs)
         (workdir / "spec.py").write_text(code)
+        return reqs, code
+    raise last_error
+
+
+REVISE_NOTE = """The designer could not meet your requirements and objected:
+
+Requirement: {requirement}
+Objection: {reason}
+
+Current requirements:
+{spec}
+
+If the objection is right, reply with the complete corrected list of \
+require(...) lines. If it is wrong, reply with the same list unchanged. Do \
+not weaken a requirement the description actually demands."""
+
+
+def revise_spec(description, backend, workdir, spec_code, requirement, reason, attempts=3):
+    """Let the spec writer answer a designer's objection. Returns (requirements, code)."""
+    backend.start(SPEC_PROMPT, f"Board description:\n\n{description}\n\n" + REVISE_NOTE.format(
+        requirement=requirement, reason=reason, spec=spec_code.strip()), [])
+    last_error = None
+    for _ in range(attempts):
+        turn = backend.step()
+        with open(workdir / "spec_transcript.jsonl", "a") as f:
+            f.write(json.dumps({"stop": turn.stop, "revision": True, **turn.record}, default=str) + "\n")
+        if turn.stop in ("refusal", "max_tokens"):
+            last_error = SpecError(f"spec revision ended with {turn.stop}")
+            continue
+        try:
+            reqs = parse_requirements(turn.text)
+        except SpecError as e:
+            last_error = e
+            backend.add_user_message(f"{e}. Reply with only require(...) lines.")
+            continue
+        code = to_code(reqs)
+        (workdir / "spec_revised.py").write_text(code)
         return reqs, code
     raise last_error

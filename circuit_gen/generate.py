@@ -21,6 +21,7 @@ EXAMPLES_DIR = Path(__file__).parent / "examples"
 FEW_SHOT_EXAMPLES = ["ldo_3v3.py", "blinker_555.py"]
 MAX_TURNS = 40
 MAX_TOKEN_RETRIES = 2
+MAX_SPEC_REVISIONS = 1
 
 SYSTEM_PROMPT = """\
 You are an electronics design engineer. You turn a plain-language description \
@@ -60,8 +61,8 @@ How to work:
 
 Requirements:
     require(measure, low, high, sources={...}, loads={...}, analysis="op", freq=1000, name="...")
-- measure: v(NET), i(NET) (current the source on NET delivers into the \
-  circuit; negative if the circuit sinks it), or gain(OUT,IN) with \
+- measure: v(NET), i(NET) (magnitude of the current through the voltage \
+  source on NET, always >= 0), or gain(OUT,IN) with \
   analysis="ac" and an "ac" source on IN. In AC analysis every measure is \
   a magnitude: gain() is never negative. freq(NET) measures an oscillation \
   frequency with analysis="tran" and duration= at least four cycles long.
@@ -165,7 +166,7 @@ TOOLS = [
         "description": "Run complete SKiDL code in ngspice and return one measurement. Voltage "
                        "sources are applied from named nets to ground; loads are resistors from a "
                        "net to ground, or to another net with {\"to\": NET, \"r\": OHMS}. measure "
-                       "is v(NET), i(NET) (current the source on NET delivers into the circuit) "
+                       "is v(NET), i(NET) (magnitude of the current through the source on NET) "
                        "or gain(OUT_NET,IN_NET) (AC analysis, needs an \"ac\" source on IN_NET).",
         "input_schema": {
             "type": "object",
@@ -203,6 +204,7 @@ class GenerationResult:
     summary: str = ""
     turns: int = 0
     error: str | None = None
+    spec_revisions: int = 0
 
 
 def _format_symbols(entries):
@@ -229,7 +231,8 @@ class Toolbox:
             feedback += "\n" + report.summary()
             passed = report.ok and not run.erc_errors
         feedback = ("PASSED. " if passed else "FAILED. ") + feedback
-        self.attempts.append(Attempt(code=code, passed=passed, feedback=feedback))
+        # Keep the exact code that was checked, frozen requirements included.
+        self.attempts.append(Attempt(code=code + self.suffix, passed=passed, feedback=feedback))
         return feedback
 
     def simulate(self, args):
@@ -310,16 +313,19 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
     the description alone (spec.py); they are frozen and appended to every
     circuit the designer submits.
     """
-    from .spec import SpecError, write_spec
+    from .spec import SpecError, revise_spec, write_spec
 
     backend = backend or make_backend()
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     user = f"Design this board:\n\n{description}"
     suffix = ""
+    # The spec writer gets its own conversation so it can revise the spec mid-design.
+    spec_backend = backend.clone() if hasattr(backend, "clone") else backend
+    revisions = 0
     if spec_first:
         try:
-            _, suffix = write_spec(description, backend, workdir)
+            _, suffix = write_spec(description, spec_backend, workdir)
         except SpecError as e:
             return GenerationResult(description=description, code=None, passed=False,
                                     error=f"spec phase failed: {e}")
@@ -362,11 +368,28 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
         results = []
         disputed = next((c for c in turn.tool_calls if c.name == "report_spec_problem"
                          and _validate_input(c.name, c.input)), None)
+        revised_note = None
         if disputed:
-            result.error = (f"spec disputed: {disputed.input['requirement']}: "
-                            f"{disputed.input['reason']}")
-            break
+            if not spec_first or revisions >= MAX_SPEC_REVISIONS:
+                result.error = (f"spec disputed: {disputed.input['requirement']}: "
+                                f"{disputed.input['reason']}")
+                break
+            # One round: the spec writer answers the objection, and design continues.
+            revisions += 1
+            try:
+                _, suffix = revise_spec(description, spec_backend, workdir, suffix,
+                                        disputed.input["requirement"], disputed.input["reason"])
+            except SpecError as e:
+                result.error = f"spec revision failed: {e}"
+                break
+            tools.suffix = suffix
+            revised_note = ("The spec writer reviewed your objection. These requirements now "
+                            "replace the previous ones (unchanged if it disagreed); they are "
+                            "fixed and appended automatically:\n\n" + suffix.strip())
         for call in turn.tool_calls:
+            if call is disputed:
+                results.append(ToolResult(id=call.id, content=revised_note))
+                continue
             if not _validate_input(call.name, call.input):
                 content, is_error = json.dumps({"INVALID_JSON": call.raw[:2000]}), True
             else:
@@ -377,13 +400,14 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
         result.error = f"stopped after {max_turns} turns"
 
     result.attempts = tools.attempts
+    result.spec_revisions = revisions
     if hasattr(backend, "export"):
         # The full design conversation, tool results included: training data.
         (workdir / "conversation.json").write_text(json.dumps(
             {"backend": backend.name, "model": backend.model, **backend.export()}, default=str))
     passing = [a for a in tools.attempts if a.passed]
     if passing:
-        result.code, result.passed = passing[-1].code + suffix, True
+        result.code, result.passed = passing[-1].code, True
     elif tools.attempts:
-        result.code = tools.attempts[-1].code + suffix
+        result.code = tools.attempts[-1].code
     return result

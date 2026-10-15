@@ -177,6 +177,11 @@ class HuggingFaceBackend:
                                "completion_tokens": usage.completion_tokens}
         return Turn(text=msg.content or "", tool_calls=calls, stop=stop, record=record)
 
+    def clone(self):
+        """A fresh conversation with the same model and client."""
+        return HuggingFaceBackend(model=self.model, client=self.client, max_tokens=self.max_tokens,
+                                  temperature=self.temperature, retries=self.retries)
+
     def add_tool_results(self, results):
         for r in results:
             content = f"ERROR: {r.content}" if r.is_error else r.content
@@ -248,6 +253,11 @@ class ClaudeBackend:
                           raw=json.dumps(b.input, default=str))
                  for b in response.content if b.type == "tool_use"]
         return Turn(text=text, tool_calls=calls, stop="tool_use" if calls else "end", record=record)
+
+    def clone(self):
+        """A fresh conversation with the same model and client."""
+        return ClaudeBackend(model=self.model, client=self.client, effort=self.effort,
+                             max_tokens=self.max_tokens, json_retries=self.json_retries)
 
     def add_tool_results(self, results):
         self.messages.append({"role": "user", "content": [

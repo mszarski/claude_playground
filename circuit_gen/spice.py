@@ -19,7 +19,7 @@ A test spec looks like:
      "measure": "i(VCC)",                   # v(NET), i(NET) or gain(OUT,IN)
      "expect": [0.008, 0.012]}              # inclusive range
 
-i(NET) is the current the source on NET delivers into the circuit.
+i(NET) is the magnitude of the current through the voltage source on NET.
 Net names are the ones the description asked the circuit to use.
 """
 
@@ -377,7 +377,8 @@ def _testbench(nl, test):
         n = node(a)
         if a not in test.get("sources", {}):
             raise ValueError(f"i({a}) needs a source on {a}")
-        expr = f"mag(i(v_{n}))" if ac else f"-i(v_{n})"
+        # A magnitude in both analyses: sign conventions were the most common spec error.
+        expr = f"mag(i(v_{n}))" if ac else f"abs(i(v_{n}))"
     else:
         if b is None:
             raise ValueError("gain() needs two nets: gain(OUT,IN)")

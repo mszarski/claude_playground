@@ -85,6 +85,7 @@ def design_and_build(description, out_dir, opts, tests=None):
         "description": description, "backend": backend.name, "model": backend.model,
         "passed_checks": gen.passed, "turns": gen.turns,
         "attempts": len(gen.attempts), "error": gen.error, "summary": gen.summary,
+        "spec_revisions": gen.spec_revisions,
     }, indent=2))
     print(f"generation: passed_checks={gen.passed} attempts={len(gen.attempts)} "
           f"turns={gen.turns} error={gen.error}")

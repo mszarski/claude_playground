@@ -90,12 +90,38 @@ def test_tran_round_trip():
     assert again == reqs and again[0]["duration"] == 8
 
 
-def test_designer_can_dispute_a_frozen_requirement(tmp_path):
+def _dispute(name="LED current", reason="value is in mA, not A"):
     from circuit_gen.backends import ToolCall
-    dispute = Turn(text="", stop="tool_use", tool_calls=[ToolCall(
-        id="d1", name="report_spec_problem",
-        input={"requirement": "LED current", "reason": "value is in mA, not A"}, raw="{}")])
-    backend = ScriptedBackend([say(SPEC_REPLY), dispute])
+    return Turn(text="", stop="tool_use", tool_calls=[ToolCall(
+        id="d1", name="report_spec_problem", input={"requirement": name, "reason": reason},
+        raw="{}")])
+
+
+REVISED = 'require("i(VCC)", 0.009, 0.011, sources={"VCC": 5}, name="LED current")'
+
+
+def test_dispute_gets_one_revision_then_ends(tmp_path):
+    # spec, dispute, revised spec (the scripted backend plays both roles), dispute again
+    backend = ScriptedBackend([say(SPEC_REPLY), _dispute(), say(REVISED), _dispute("again", "still wrong")])
     result = generate.generate_circuit("an LED board", tmp_path, backend=backend, spec_first=True)
-    assert not result.passed
-    assert result.error == "spec disputed: LED current: value is in mA, not A"
+    assert result.spec_revisions == 1
+    assert result.error == "spec disputed: again: still wrong"
+    assert (tmp_path / "spec_revised.py").read_text().count("require(") == 1
+    note = backend.tool_results[0][0].content
+    assert "now replace the previous ones" in note and "0.009" in note
+
+
+def test_dispute_without_spec_first_ends(tmp_path):
+    backend = ScriptedBackend([_dispute()])
+    result = generate.generate_circuit("x", tmp_path, backend=backend)
+    assert result.error.startswith("spec disputed")
+
+
+@pytest.mark.parametrize("text,message", [
+    ('require("v(OUT)", 4, 5, loads={"OUT": 0.01})', "resistances in ohms"),
+    ('require("v(OUT)", 4, 5, loads={"OUT": {"to": "VCC", "r": 0.5}})', "resistances in ohms"),
+    ('require("i(VCC)", -0.02, -0.01, sources={"VCC": 5})', "magnitude"),
+])
+def test_spec_sanity_rejections(text, message):
+    with pytest.raises(SpecError, match=message):
+        parse_requirements(text)
