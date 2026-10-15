@@ -132,3 +132,26 @@ class TestRunner:
         result = run_circuit_code((EXAMPLES / "ldo_3v3.py").read_text(), tmp_path)
         nets = {pin["net"] for part in result.circuit["parts"] for pin in part["pins"]}
         assert {"VIN", "+3V3", "GND"} <= nets
+
+
+@needs_skidl
+class TestRequire:
+    CODE = '''
+vcc, gnd = Net("VCC"), Net("GND")
+j = Part("Connector", "Conn_01x02_Pin", footprint="Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical")
+r = Part("Device", "R", value="1k", footprint="Resistor_SMD:R_0805_2012Metric", tolerance=0.01)
+j[1, 2] += vcc, gnd
+r[1, 2] += vcc, gnd
+'''
+
+    def test_requirements_and_tolerance_are_dumped(self, tmp_path):
+        code = self.CODE + 'require("i(VCC)", 0.004, 0.006, sources={"VCC": 5}, name="load")\n'
+        result = run_circuit_code(code, tmp_path)
+        assert result.ok, result.error
+        assert result.circuit["requirements"][0]["name"] == "load"
+        assert result.circuit["requirements"][0]["max"] == 0.006
+        assert next(p for p in result.circuit["parts"] if p["ref"] == "R1")["tolerance"] == 0.01
+
+    def test_bad_requirement_is_a_code_error(self, tmp_path):
+        result = run_circuit_code(self.CODE + 'require("i(VCC)", 1, 0)\n', tmp_path)
+        assert not result.ok and "above high" in result.error

@@ -139,8 +139,10 @@ class TestSimulation:
         ]}
         ok = {"sources": {"VIN": 12}, "loads": {"+5V": 50}, "measure": "v(+5V)", "expect": [4.9, 5.1]}
         dropout = {"sources": {"VIN": 6}, "loads": {"+5V": 50}, "measure": "v(+5V)", "expect": [3.5, 4.5]}
-        between = {"sources": {"VIN": 12}, "loads": {"+5V": {"to": "VIN", "r": 1000}},
-                   "measure": "i(VIN)", "expect": [0.006, 0.0075]}
+        # A load between two named nets (here input to ground): 12 V / 1k plus the
+        # regulator's quiescent current.
+        between = {"sources": {"VIN": 12}, "loads": {"VIN": {"to": "GND", "r": 1000}},
+                   "measure": "i(VIN)", "expect": [0.0118, 0.0125]}
         report = spice.simulate(circuit, [ok, dropout, between])
         assert report.ok, report.summary()
 
@@ -154,3 +156,61 @@ class TestSimulation:
         assert not report.ok
         assert "VDD" in report.results[0].error
         assert report.unmodeled == ["U1 (MCU_Microchip_ATtiny:ATtiny85-20PU)"]
+
+
+@needs_ngspice
+@needs_libs
+class TestToleranceCorners:
+    def _divider(self, tol=None):
+        r1 = R("R1", "VCC", "OUT", "10k")
+        r2 = R("R2", "OUT", "GND", "10k")
+        if tol is not None:
+            r1["tolerance"] = r2["tolerance"] = tol
+        return {"parts": [header("J1", "VCC", "GND"), r1, r2]}
+
+    def test_spread_covers_tolerance(self):
+        test = {"sources": {"VCC": 10}, "measure": "v(OUT)", "expect": [4.5, 5.5]}
+        result = spice.simulate(self._divider(), [test], corners=True).results[0]
+        assert result.passed
+        assert result.value == pytest.approx(5.0)
+        # 5% resistors in opposite corners: 10*10.5/(9.5+10.5) = 5.25
+        assert result.spread[0] == pytest.approx(4.75, abs=0.01)
+        assert result.spread[1] == pytest.approx(5.25, abs=0.01)
+
+    def test_corner_failure_and_part_tolerance(self):
+        tight = {"sources": {"VCC": 10}, "measure": "v(OUT)", "expect": [4.9, 5.1]}
+        assert not spice.simulate(self._divider(), [tight], corners=True).ok
+        assert spice.simulate(self._divider(), [tight]).ok          # nominal only
+        assert spice.simulate(self._divider(tol=0.01), [tight], corners=True).ok
+
+    def test_regulator_input_current_includes_load(self):
+        circuit = {"parts": [
+            part("U1", "Regulator_Linear:L7805", "L7805", [
+                ("1", "IN", "PWRIN", "VIN"), ("2", "GND", "PWRIN", "GND"), ("3", "OUT", "PWROUT", "+5V")]),
+        ]}
+        test = {"sources": {"VIN": 12}, "loads": {"+5V": 50}, "measure": "i(VIN)", "expect": [0.099, 0.102]}
+        assert spice.simulate(circuit, [test]).ok
+
+
+@needs_ngspice
+@needs_libs
+class TestRequirementsInChecks:
+    def _circuit(self, low, high):
+        c = {"parts": [header("J1", "VCC", "GND"), R("R1", "VCC", "OUT", "10k"), R("R2", "OUT", "GND", "10k")]}
+        c["requirements"] = [{"measure": "v(OUT)", "min": low, "max": high, "sources": {"VCC": 10},
+                              "loads": {}, "analysis": "op", "freq": 1000, "name": "half"}]
+        return c
+
+    def test_met(self, fake_footprints):
+        report = checks.check_circuit(self._circuit(4.5, 5.5))
+        assert report.ok and "REQUIREMENT OK: half" in report.summary()
+
+    def test_not_met_across_tolerances(self, fake_footprints):
+        report = checks.check_circuit(self._circuit(4.9, 5.1))
+        assert any("requirement not met: half" in e for e in report.errors)
+
+    def test_missing_requirements_warn(self, fake_footprints):
+        c = self._circuit(0, 1)
+        c["requirements"] = []
+        report = checks.check_circuit(c)
+        assert report.ok and any("no require(...)" in w for w in report.warnings)

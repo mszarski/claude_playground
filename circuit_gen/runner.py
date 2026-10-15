@@ -24,6 +24,20 @@ from skidl import *
 set_default_tool(KICAD7)
 lib_search_paths[KICAD7].append({symbol_dir!r})
 footprint_search_paths[KICAD7].append({footprint_dir!r})
+
+_REQUIREMENTS = []
+def require(measure, low, high, sources=None, loads=None, analysis="op", freq=1000, name=None):
+    """Declare a behaviour the circuit must have; checked in ngspice across tolerances."""
+    if not isinstance(measure, str):
+        raise TypeError("require(): measure must be a string such as 'v(OUT)'")
+    low, high = float(low), float(high)
+    if low > high:
+        raise ValueError(f"require({{measure!r}}): low {{low}} is above high {{high}}")
+    if analysis not in ("op", "ac"):
+        raise ValueError("require(): analysis must be 'op' or 'ac'")
+    _REQUIREMENTS.append({{"measure": measure, "min": low, "max": high,
+                          "sources": dict(sources or {{}}), "loads": dict(loads or {{}}),
+                          "analysis": analysis, "freq": float(freq), "name": name}})
 # ---- circuit code starts here ----
 '''
 
@@ -45,10 +59,11 @@ def _dump_circuit(path):
             "symbol": f"{getattr(p.lib, 'filename', p.lib)}:{p.name}",
             "value": str(p.value),
             "footprint": p.footprint or "",
+            "tolerance": getattr(p, "tolerance", None),
             "pins": pins,
         })
     with open(path, "w") as f:
-        json.dump({"parts": parts}, f, indent=1)
+        json.dump({"parts": parts, "requirements": _REQUIREMENTS}, f, indent=1)
 
 print("@@ERC_START@@", flush=True)
 ERC()

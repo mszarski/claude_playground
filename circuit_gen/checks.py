@@ -20,16 +20,18 @@ POWER_IN_TYPES = {"PWRIN", "power_in"}
 class CheckReport:
     errors: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
+    notes: list = field(default_factory=list)      # e.g. requirements that passed
 
     @property
     def ok(self):
         return not self.errors
 
     def summary(self):
-        if not self.errors and not self.warnings:
-            return "Design checks passed."
         lines = [f"DESIGN ERROR: {e}" for e in self.errors]
         lines += [f"DESIGN WARNING: {w}" for w in self.warnings]
+        lines += [f"REQUIREMENT OK: {n}" for n in self.notes]
+        if not self.errors and not self.warnings:
+            lines.insert(0, "Design checks passed.")
         return "\n".join(lines)
 
 
@@ -142,7 +144,28 @@ def _pin(parts, ref, num):
     return next(p for p in part["pins"] if p["num"] == num)
 
 
-def check_circuit(circuit):
+def _check_requirements(circuit, report):
+    """Simulate each require(...) at nominal values and across component tolerances."""
+    from .spice import requirement_tests, simulate
+    tests = requirement_tests(circuit)
+    if not tests:
+        report.warnings.append(
+            "no require(...) declarations: state the behaviour the description asks for "
+            "(currents, voltages, gains) so it is checked in simulation")
+        return
+    sim = simulate(circuit, tests, corners=True)
+    for result in sim.results:
+        if result.passed:
+            report.notes.append(result.describe())
+        else:
+            report.errors.append(f"requirement not met: {result.describe()}")
+    if sim.unmodeled and not sim.ok:
+        report.warnings.append("parts without a simulation model (left out): "
+                               + ", ".join(sim.unmodeled))
+
+
+def check_circuit(circuit, requirements=True):
+    """Structural checks, plus the circuit's own requirements in simulation."""
     report = CheckReport()
     parts = circuit["parts"]
     if not parts:
@@ -195,4 +218,6 @@ def check_circuit(circuit):
                 report.errors.append(
                     f"{part['ref']} power pin {pin['num']} ({pin['name']}) on net '{net}' "
                     f"has no decoupling capacitor to ground")
+    if requirements and not report.errors:
+        _check_requirements(circuit, report)
     return report

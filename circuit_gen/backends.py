@@ -59,14 +59,15 @@ class HuggingFaceBackend:
 
     name = "hf"
 
-    def __init__(self, model=None, client=None, provider=None, max_tokens=16384,
+    def __init__(self, model=None, client=None, provider=None, max_tokens=None,
                  temperature=0.2, retries=7):
         if client is None:
             from huggingface_hub import InferenceClient
             client = InferenceClient(provider=provider or config.HF_PROVIDER)
         self.client = client
         self.model = model or config.HF_MODEL
-        self.max_tokens = max_tokens
+        # Reasoning models can spend >16k tokens thinking on one turn.
+        self.max_tokens = max_tokens or config.HF_MAX_TOKENS
         self.temperature = temperature
         self.retries = retries
         self.messages = []

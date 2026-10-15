@@ -39,16 +39,36 @@ How to work:
    (Resistor_SMD:R_0805_2012Metric, Capacitor_SMD:C_0805_2012Metric, \
    LED_SMD:LED_0805_2012Metric) and 2.54 mm pin headers for connectors, \
    unless the description asks for something else.
-4. Call check_circuit with the complete code. Fix every error it reports and \
-   check again.
-5. Verify the behaviour that matters with simulate (DC voltages and currents, \
-   AC gain): for example the LED current, a regulator's output under load, or \
-   an amplifier's gain. Fix the design if the numbers are wrong. Simple generic \
-   models are used, and parts without a model (MCUs, logic, timers) are left \
-   out of the simulation.
-6. You are done when check_circuit passes and simulation agrees with the \
-   description; then reply with a short summary of the design and any \
+4. State what the board must do as require(...) lines in the code: every \
+   number the description gives (currents, voltages, gains, cutoffs) and the \
+   behaviour that matters (a regulator's output under load, a switch's on and \
+   off states). check_circuit simulates each requirement in ngspice at nominal \
+   values and across component tolerances (resistors 5%, capacitors 10% \
+   unless you set tolerance= on the part), and fails if any value falls \
+   outside its range.
+5. Call check_circuit with the complete code. Fix every error it reports and \
+   check again. A failed requirement means the circuit is wrong: change the \
+   circuit (or tighten part tolerances), never widen a requirement beyond what \
+   the description asks for. Use simulate to investigate failures.
+   Make each range as tight as the description implies, not tighter: \
+   "about 100" allows roughly ±25%, while "3.3 V ±5%" means exactly that. \
+   Check outputs under a realistic load (e.g. 10k on an audio or signal \
+   output, the rated current on a supply rail), not only unloaded.
+6. You are done only when check_circuit passes, with requirements that cover \
+   the description; then reply with a short summary of the design and any \
    assumptions you made.
+
+Requirements:
+    require(measure, low, high, sources={...}, loads={...}, analysis="op", freq=1000, name="...")
+- measure: v(NET), i(NET) (current the source on NET delivers into the \
+  circuit; negative if the circuit sinks it), or gain(OUT,IN) with \
+  analysis="ac" and an "ac" source on IN.
+- sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}.
+- loads: resistors from a net to ground, e.g. {"OUT": 10000}, or to another \
+  net, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
+- Generic models are used: R/C/L, diodes and LEDs, op-amps, fixed linear \
+  regulators, MOSFETs and BJTs. Parts without a model (MCUs, logic, timers) \
+  are left out, so only require what the modelled parts determine.
 
 SKiDL conventions for this environment:
 - `from skidl import *` and the library paths are already set up; do not \

@@ -67,15 +67,29 @@ a future fine-tuning dataset.
    decoupled; every net with an input pin has a DC path to a supply, ground,
    output or connector (a capacitor alone leaves it floating); no push-pull
    output is wired straight to a supply or ground.
-2. **Simulation** (`spice.py`): benchmark boards carry test specs in
-   `benchmarks/boards.json`, run in ngspice against the nets named in the
-   description. For example, "the LED draws 8–12 mA at 5 V", "the gain at 1 kHz
-   is 70–140", "the output stays at 4.75–5.25 V with a 50 Ω load". The model can
-   also call `simulate` on its own design. Parts are mapped to generic models
-   by library and symbol: R/C/L, diodes and LEDs (Vf by colour), op-amps
-   (1 MHz, rail-limited), fixed linear regulators, MOSFETs and BJTs. MCUs,
-   logic and timers have no model yet, so boards built around them have no
-   functional tests.
+2. **Requirements in the design file**: the model states what the board must
+   do next to the circuit, in the spirit of atopile's `assert`:
+
+   ```python
+   require("gain(AUDIO_OUT,MIC)", 75, 125, sources={"VCC": 5, "MIC": "ac"},
+           loads={"AUDIO_OUT": 10000}, analysis="ac", freq=1000, name="gain ~100")
+   r_f = Part("Device", "R", value="100k", footprint="...", tolerance=0.01)
+   ```
+
+   `check_circuit` simulates every requirement in ngspice at nominal values
+   and at 24 tolerance corners (each R/C/L at one end of its band; defaults
+   R 5%, C 10%, L 20%, or the part's `tolerance=`), and fails unless every
+   corner is in range. So "passes" means "passes across component tolerances",
+   not "passed once".
+3. **Hidden benchmark tests** (`spice.py`): benchmark boards carry their own
+   test specs in `benchmarks/boards.json`, run at nominal values against the
+   nets named in the description. The model never sees these, so they check
+   whether its own requirements were the right ones.
+
+Parts are mapped to generic SPICE models by library and symbol: R/C/L,
+diodes and LEDs (Vf by colour), op-amps (1 MHz, rail-limited), fixed linear
+regulators (load current drawn from the input), MOSFETs and BJTs. MCUs, logic
+and timers have no model yet, so their behaviour is not simulated.
 
 ## Status and known limits
 
@@ -87,8 +101,9 @@ a future fine-tuning dataset.
   caps are not forced next to their IC pins, and there is no ground pour. All
   nets are routed as 0.25 mm tracks, so it is not suitable for high-current or
   high-speed boards.
-- Design checks are structural. They do not verify that the circuit does what
-  the description asked; SPICE simulation (ngspice is installed) is the next step.
+- Simulation uses generic models, so it checks the circuit topology and
+  values, not a specific part's datasheet limits (e.g. a MOSFET's real
+  threshold voltage).
 - Generated code runs in a subprocess on this machine. That is isolation of
   SKiDL state, not a security sandbox.
 

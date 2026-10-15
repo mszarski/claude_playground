@@ -64,7 +64,10 @@ Iq vp vn 0.5m
 .subckt CG_REG vi vo gnd vout=3.3 drop=1.0
 * Fixed-output linear regulator: regulates to vout until the input drops.
 Bo voi gnd V = max(min(vout, V(vi,gnd)-drop), 0)
-Ro voi vo 0.05
+Vsense voi vos 0
+Ro vos vo 0.05
+* The load current is drawn from the input, plus a small quiescent current.
+Fin vi gnd Vsense 1
 Gq vi gnd vi gnd 1e-5
 .ends
 .model CG_DIODE D(IS=2.5n N=1.75 RS=0.5 BV=100)
@@ -75,6 +78,11 @@ Gq vi gnd vi gnd 1e-5
 .model CG_NPN NPN(IS=1e-14 BF=200 VAF=100)
 .model CG_PNP PNP(IS=1e-14 BF=150 VAF=100)
 """
+
+# Tolerance used for a passive when the circuit does not give one (part.tolerance).
+DEFAULT_TOLERANCE = {"R": 0.05, "C": 0.10, "L": 0.20}
+# Tolerance corners: each sample puts every R/C/L at one end of its tolerance band.
+CORNER_SAMPLES = 24
 
 # LED forward voltage at 10 mA by colour.
 _LED_VF = [("red", 1.9), ("orange", 2.0), ("yellow", 2.0), ("amber", 2.0), ("green", 2.2),
@@ -94,6 +102,7 @@ class Netlist:
     models: list = field(default_factory=list)
     node: dict = field(default_factory=dict)       # net name -> SPICE node
     unmodeled: list = field(default_factory=list)
+    tolerances: dict = field(default_factory=dict)  # SPICE element -> (nominal, relative tolerance)
 
     def node_for(self, net):
         if net is None:
@@ -133,7 +142,11 @@ def _add_part(nl, part):
 
     if lib == "Device" and name.startswith(("R", "C", "L")) and len(pins) == 2 \
             and name[0] == ref[0]:
-        nl.lines.append(f"{name[0]}{ref} {nodes[0]} {nodes[1]} {parse_value(value):.6g}")
+        nominal = parse_value(value)
+        nl.lines.append(f"{name[0]}{ref} {nodes[0]} {nodes[1]} {nominal:.6g}")
+        tol = part.get("tolerance")
+        nl.tolerances[f"{name[0]}{ref}".lower()] = (
+            nominal, DEFAULT_TOLERANCE[name[0]] if tol is None else float(tol))
         return
     if lib == "Device" and name.startswith("LED") and {"A", "K"} <= by_name.keys():
         model = f"CG_LED_{ref}"
@@ -207,12 +220,16 @@ class TestResult:
     value: float | None = None
     expect: list | None = None
     error: str | None = None
+    spread: list | None = None      # [min, max] over tolerance corners, when run
 
     def describe(self):
         if self.error:
             return f"{self.name}: ERROR {self.error}"
         lo, hi = self.expect
-        return f"{self.name}: {'pass' if self.passed else 'FAIL'} measured {self.value:.4g}, expected {lo:g}..{hi:g}"
+        text = f"{self.name}: {'pass' if self.passed else 'FAIL'} measured {self.value:.4g}"
+        if self.spread:
+            text += f" ({self.spread[0]:.4g}..{self.spread[1]:.4g} across tolerances)"
+        return text + f", required {lo:g}..{hi:g}"
 
 
 def _testbench(nl, test):
@@ -259,17 +276,40 @@ def _testbench(nl, test):
     return lines, analysis, expr
 
 
-def run_test(nl, test, timeout=60):
+def corner_variants(nl, samples=CORNER_SAMPLES, seed=0):
+    """Component values for tolerance-corner runs: all-high, all-low, then random corners."""
+    import random
+    elems = sorted(e for e, (_, tol) in nl.tolerances.items() if tol > 0)
+    if not elems:
+        return []
+    rng = random.Random(seed)
+    signs = [{e: 1 for e in elems}, {e: -1 for e in elems}]
+    signs += [{e: rng.choice((-1, 1)) for e in elems} for _ in range(max(0, samples - 2))]
+    return [{e: nl.tolerances[e][0] * (1 + sign[e] * nl.tolerances[e][1]) for e in elems}
+            for sign in signs]
+
+
+def run_test(nl, test, timeout=60, corners=False):
+    """Run one test at nominal values, and at tolerance corners if `corners` is set.
+
+    The reported value is the nominal one; with corners, the test passes only if
+    every corner is inside the expected range, and `spread` gives the min/max.
+    """
     name = test.get("name", test["measure"])
     try:
         tb, analysis, expr = _testbench(nl, test)
     except (KeyError, ValueError) as e:
         return TestResult(name=name, passed=False, expect=test["expect"], error=str(e).strip("'\""))
 
+    variants = [{}] + (corner_variants(nl) if corners else [])
+    control = [".control"]
+    for k, values in enumerate(variants):
+        control += [f"alter {elem} = {value:.6g}" for elem, value in values.items()]
+        control += [analysis, f"let cg_r{k} = {expr}", f"print cg_r{k}"]
+    control += [".endc"]
     deck = "\n".join([f"* {name}", MODELS, *nl.models, *nl.lines, *tb,
                       ".option rshunt=1e10",           # tie nodes left floating by unmodeled parts
-                      ".control", analysis, f"let cg_result = {expr}", "print cg_result",
-                      ".endc", ".end", ""])
+                      *control, ".end", ""])
     with tempfile.TemporaryDirectory() as tmp:
         cir = Path(tmp) / "test.cir"
         cir.write_text(deck)
@@ -279,13 +319,15 @@ def run_test(nl, test, timeout=60):
         except subprocess.TimeoutExpired:
             return TestResult(name=name, passed=False, expect=test["expect"], error="ngspice timed out")
     out = proc.stdout + proc.stderr
-    m = re.search(r"cg_result\s*=\s*([-+0-9.eE]+)", out)
-    if not m:
+    found = {int(k): float(v) for k, v in re.findall(r"cg_r(\d+)\s*=\s*([-+0-9.eE]+)", out)}
+    if 0 not in found or len(found) < len(variants):
         err = next((l.strip() for l in out.splitlines() if "rror" in l), "no result from ngspice")
         return TestResult(name=name, passed=False, expect=test["expect"], error=err)
-    value = float(m.group(1))
     lo, hi = test["expect"]
-    return TestResult(name=name, passed=lo <= value <= hi, value=value, expect=[lo, hi])
+    values = [found[k] for k in range(len(variants))]
+    spread = [min(values), max(values)] if corners else None
+    passed = all(lo <= v <= hi for v in values)
+    return TestResult(name=name, passed=passed, value=found[0], expect=[lo, hi], spread=spread)
 
 
 @dataclass
@@ -304,6 +346,16 @@ class SimReport:
         return "\n".join(lines)
 
 
-def simulate(circuit, tests):
+def simulate(circuit, tests, corners=False):
     nl = to_netlist(circuit)
-    return SimReport(results=[run_test(nl, t) for t in tests], unmodeled=nl.unmodeled)
+    return SimReport(results=[run_test(nl, t, corners=corners) for t in tests],
+                     unmodeled=nl.unmodeled)
+
+
+def requirement_tests(circuit):
+    """The circuit's own require(...) declarations as test specs."""
+    return [{"name": r.get("name") or r["measure"], "analysis": r.get("analysis", "op"),
+             "freq": r.get("freq", 1000), "sources": r.get("sources") or {},
+             "loads": r.get("loads") or {}, "measure": r["measure"],
+             "expect": [r["min"], r["max"]]}
+            for r in circuit.get("requirements", [])]

@@ -21,3 +21,8 @@ reg["GND"] += gnd
 c_in[1, 2] += vin, gnd
 c_out[1, 2] += v33, gnd
 v33 & r_led & led["A K"] & gnd
+
+# Requirements, checked in simulation across component tolerances.
+require("v(+3V3)", 3.2, 3.4, sources={"VIN": 5}, loads={"+3V3": 33},
+        name="3.3 V at 100 mA")
+require("i(VIN)", 0.0005, 0.003, sources={"VIN": 5}, name="no-load input current (LED)")

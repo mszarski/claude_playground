@@ -31,3 +31,7 @@ vcc & C("100n") & gnd
 out & R("470") & led_a
 led_a += led["A"]
 led["K"] += gnd
+
+
+# The 555 has no simulation model, so the blink rate cannot be simulated and
+# there is no require(...) here; the timing calculation above is the check.
