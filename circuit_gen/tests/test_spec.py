@@ -71,3 +71,20 @@ def test_unquoted_measure_is_accepted():
     reqs = parse_requirements("require(v(VCC), 4.75, 5.25, sources={'VCC': 5})\n"
                               "require(gain(OUT, IN), 9, 11, analysis='ac', sources={'IN': 'ac'})")
     assert [r["measure"] for r in reqs] == ["v(VCC)", "gain(OUT,IN)"]
+
+
+@pytest.mark.parametrize("text,measure", [
+    ("require(v(+5V), 4.75, 5.25, sources={'VIN': 12})", "v(+5V)"),
+    ("require(freq('OUT'), 0.7, 1.3, analysis='tran', duration=6)", "freq(OUT)"),
+    ("require(freq(OUT), 0.7, 1.3, analysis='tran')", "freq(OUT)"),
+    ("require( gain( OUT , IN ), 9, 11, analysis='ac')", "gain(OUT,IN)"),
+    ('require("v(OUT)", 1, 2)', "v(OUT)"),
+])
+def test_bare_measures(text, measure):
+    assert parse_requirements(text)[0]["measure"] == measure
+
+
+def test_tran_round_trip():
+    reqs = parse_requirements("require('freq(OUT)', 0.7, 1.3, sources={'VCC': 5}, analysis='tran', duration=8)")
+    again = parse_requirements(to_code(reqs))
+    assert again == reqs and again[0]["duration"] == 8

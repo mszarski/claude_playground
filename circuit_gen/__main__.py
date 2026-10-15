@@ -62,6 +62,23 @@ def cmd_eval(args):
     return 0
 
 
+def cmd_datagen(args):
+    from .backends import make_backend
+    from .datagen import generate_descriptions
+    backend = make_backend(args.backend, model=args.model)
+    boards = generate_descriptions(n_per_topic=args.per_topic, backend=backend)
+    Path(args.out).write_text(json.dumps(boards, indent=1))
+    print(f"wrote {len(boards)} board descriptions to {args.out}")
+    return 0
+
+
+def cmd_export(args):
+    from .datagen import export_dataset
+    stats = export_dataset(args.runs, args.out, include_benchmark=args.include_benchmark)
+    print(json.dumps(stats, indent=2))
+    return 0
+
+
 def cmd_compare(args):
     from .evaluate import compare
     print(compare(args.runs))
@@ -87,6 +104,18 @@ def main(argv=None):
     e.add_argument("--only", default=None, help="comma-separated board ids to run")
     e.add_argument("--resume", action="store_true", help="reuse samples already finished in --out")
 
+    g = sub.add_parser("datagen", help="write new (non-benchmark) board descriptions for training")
+    g.add_argument("-o", "--out", required=True, help="output JSON file of boards")
+    g.add_argument("--per-topic", type=int, default=4)
+    g.add_argument("--backend", default=None, choices=["hf", "claude"])
+    g.add_argument("--model", default=None)
+
+    x = sub.add_parser("export", help="SFT dataset (JSONL) from successful eval runs")
+    x.add_argument("runs", nargs="+", help="eval output directories")
+    x.add_argument("-o", "--out", required=True, help="output directory")
+    x.add_argument("--include-benchmark", action="store_true",
+                   help="also export benchmark boards (they are held out by default)")
+
     c = sub.add_parser("compare", help="side-by-side pass rates of several eval runs")
     c.add_argument("runs", nargs="+", help="eval output directories")
 
@@ -106,7 +135,7 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     return {"build": cmd_build, "design": cmd_design, "eval": cmd_eval,
-            "compare": cmd_compare}[args.cmd](args)
+            "compare": cmd_compare, "datagen": cmd_datagen, "export": cmd_export}[args.cmd](args)
 
 
 if __name__ == "__main__":

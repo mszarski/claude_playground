@@ -178,6 +178,10 @@ class HuggingFaceBackend:
             content = f"ERROR: {r.content}" if r.is_error else r.content
             self.messages.append({"role": "tool", "tool_call_id": r.id, "content": content})
 
+    def export(self):
+        """The conversation in OpenAI chat format, with the tool definitions."""
+        return {"messages": [dict(m) for m in self.messages], "tools": self.tools}
+
     def add_user_message(self, text):
         self.messages.append({"role": "user", "content": text})
 
@@ -245,6 +249,16 @@ class ClaudeBackend:
         self.messages.append({"role": "user", "content": [
             {"type": "tool_result", "tool_use_id": r.id, "content": r.content, "is_error": r.is_error}
             for r in results]})
+
+    def export(self):
+        """The conversation in Anthropic Messages format, with the tool definitions."""
+        def plain(content):
+            if isinstance(content, str):
+                return content
+            return [c.model_dump() if hasattr(c, "model_dump") else c for c in content]
+        return {"system": self.system, "tools": self.tools,
+                "messages": [{"role": m["role"], "content": plain(m["content"])}
+                             for m in self.messages]}
 
     def add_user_message(self, text):
         self.messages.append({"role": "user", "content": text})

@@ -1,0 +1,302 @@
+[
+ {
+  "id": "rc_highpass",
+  "description": "Passive first-order RC high-pass filter with a 1 kHz cutoff (-3 dB), input and output on 2-pin headers. Name the nets IN, OUT and GND.",
+  "topic": "passive RC/LC filters (high-pass, band-pass, notch)"
+ },
+ {
+  "id": "lc_bandpass",
+  "description": "Passive LC band-pass filter centered at 1 MHz with a bandwidth of about 100 kHz, built from a series LC and a shunt LC, 50 ohm input and output on SMA or 2-pin headers. Name the nets IN, OUT and GND.",
+  "topic": "passive RC/LC filters (high-pass, band-pass, notch)"
+ },
+ {
+  "id": "twin_t_notch",
+  "description": "Passive twin-T notch filter that rejects 50 Hz by at least 30 dB while passing 1 kHz, with 10k source and load impedances, input and output on 2-pin headers. Name the nets IN, OUT and GND.",
+  "topic": "passive RC/LC filters (high-pass, band-pass, notch)"
+ },
+ {
+  "id": "rc_highpass_2nd",
+  "description": "Second-order passive RC high-pass filter with a 500 Hz cutoff, two cascaded RC sections with a buffer-free design, input and output on 2-pin headers. Name the nets IN, OUT and GND.",
+  "topic": "passive RC/LC filters (high-pass, band-pass, notch)"
+ },
+ {
+  "id": "lc_lowpass_am",
+  "description": "Passive LC low-pass filter for AM broadcast with a 1.6 MHz cutoff, using a 1 uH inductor and a 10 nF capacitor, 50 ohm input and output on 2-pin headers. Name the nets IN, OUT and GND.",
+  "topic": "passive RC/LC filters (high-pass, band-pass, notch)"
+ },
+ {
+  "id": "noninv_amp_gain20",
+  "description": "Single-supply non-inverting op-amp amplifier running from 5 V that gives a gain of 20 at 1 kHz, AC-coupled input and output, biased at mid-supply, and able to drive a 10k load. Power and signal connect through 2-pin headers. Name the nets VCC, GND, IN and OUT.",
+  "topic": "op-amp amplifiers and buffers (summing, non-inverting, transimpedance, single and dual supply)"
+ },
+ {
+  "id": "summing_amp_dual",
+  "description": "Two-input inverting summing amplifier on +/-12 V supplies that outputs OUT = -(IN_A + IN_B), using 10k input resistors and a 10k feedback resistor so each input contributes unity gain, with a 100 ohm output resistor to drive a 1k load. Inputs, output and power on pin headers. Name the nets IN_A, IN_B, OUT, VPOS (+12 V), VNEG (-12 V) and GND.",
+  "topic": "op-amp amplifiers and buffers (summing, non-inverting, transimpedance, single and dual supply)"
+ },
+ {
+  "id": "transimpedance_photodiode",
+  "description": "Transimpedance amplifier for a photodiode on a single 5 V supply, with a 1 MOhm feedback resistor giving about 1 V per microamp of photocurrent and a 10 pF feedback capacitor for stability, biased at mid-supply with the photodiode anode at VCC. Photodiode, power and output on pin headers. Name the nets VCC, GND, PHOTO and OUT.",
+  "topic": "op-amp amplifiers and buffers (summing, non-inverting, transimpedance, single and dual supply)"
+ },
+ {
+  "id": "dual_supply_buffer",
+  "description": "Unity-gain op-amp buffer on +/-12 V supplies that accepts a +/-10 V input and drives a 600 ohm load, with a 100 ohm series output resistor for short-circuit protection. Input, output and power on pin headers. Name the nets IN, OUT, VPOS (+12 V), VNEG (-12 V) and GND.",
+  "topic": "op-amp amplifiers and buffers (summing, non-inverting, transimpedance, single and dual supply)"
+ },
+ {
+  "id": "single_supply_diff_buffer",
+  "description": "Single-supply 5 V difference buffer that outputs OUT = IN_P - IN_N with unity gain, using four matched 10k resistors around an op-amp biased at mid-supply, AC-coupled inputs, and able to drive a 10k load. Inputs, output and power on pin headers. Name the nets VCC, GND, IN_P, IN_N and OUT.",
+  "topic": "op-amp amplifiers and buffers (summing, non-inverting, transimpedance, single and dual supply)"
+ },
+ {
+  "id": "sallen_key_highpass",
+  "description": "Second-order Sallen-Key high-pass filter with a 300 Hz cutoff and unity gain, using an op-amp on +/-12 V supplies. Input, output and power on pin headers. Name the nets IN, OUT, VPOS (+12 V), VNEG (-12 V) and GND.",
+  "topic": "op-amp active filters and integrators"
+ },
+ {
+  "id": "integrator_1khz",
+  "description": "Op-amp integrator on +/-12 V supplies with a 1 kohm input resistor and 100 nF feedback capacitor, giving unity gain at about 1.6 kHz, plus a 1 Mohm feedback resistor to limit DC drift. Input, output and power on pin headers. Name the nets IN, OUT, VPOS (+12 V), VNEG (-12 V) and GND.",
+  "topic": "op-amp active filters and integrators"
+ },
+ {
+  "id": "bandpass_filter",
+  "description": "Single-supply 5 V multiple-feedback band-pass filter centered at 2 kHz with a Q of about 5 and a gain of 2, biased at mid-supply and able to drive a 10k load. Input, output and power on pin headers. Name the nets VCC, GND, IN and OUT.",
+  "topic": "op-amp active filters and integrators"
+ },
+ {
+  "id": "notch_filter_50hz",
+  "description": "Twin-T notch filter that attenuates 50 Hz mains hum by at least 30 dB while passing 1 kHz, built around an op-amp on +/-12 V supplies with a unity-gain buffer for the notch network. Input, output and power on pin headers. Name the nets IN, OUT, VPOS (+12 V), VNEG (-12 V) and GND.",
+  "topic": "op-amp active filters and integrators"
+ },
+ {
+  "id": "state_variable_filter",
+  "description": "State-variable filter using three op-amps on +/-12 V supplies, with a 1 kHz center frequency and Q of 10, providing simultaneous low-pass, band-pass and high-pass outputs. Input, the three outputs and power on pin headers. Name the nets IN, LP, BP, HP, VPOS (+12 V), VNEG (-12 V) and GND.",
+  "topic": "op-amp active filters and integrators"
+ },
+ {
+  "id": "comparator_hysteresis_led",
+  "description": "Single-supply 5 V comparator using an op-amp as a threshold detector with hysteresis: switches a red LED (10 mA) on when the input rises above 2.5 V and off when it falls below 2.3 V, giving about 200 mV of hysteresis. Input on a 2-pin header, power on a 2-pin header. Name the nets VCC, GND, IN and LED_A.",
+  "topic": "comparators and threshold detectors made from op-amps, with hysteresis"
+ },
+ {
+  "id": "window_comparator",
+  "description": "5 V window comparator built from two op-amps that pulls its open-collector-style output low only while the input sits between 1.5 V and 3.5 V, with 100 mV of hysteresis at each edge and a 10k pull-up on the output. Input, output and power on pin headers. Name the nets VCC, GND, IN and OUT.",
+  "topic": "comparators and threshold detectors made from op-amps, with hysteresis"
+ },
+ {
+  "id": "photodiode_threshold",
+  "description": "5 V photodiode threshold detector: a reverse-biased photodiode into a 1M transimpedance stage, followed by an op-amp comparator with 50 mV of hysteresis that goes high when the photocurrent exceeds about 1 uA. Photodiode on a 2-pin header, output and power on pin headers. Name the nets VCC, GND, PD and OUT.",
+  "topic": "comparators and threshold detectors made from op-amps, with hysteresis"
+ },
+ {
+  "id": "battery_low_cutoff",
+  "description": "12 V battery low-voltage cutoff detector: an op-amp comparator with hysteresis that asserts its output when the monitored rail drops below 10.5 V and releases above 11.2 V, driving a small NPN to sink a 20 mA indicator LED. Battery sense and output on pin headers, powered from the same 12 V rail. Name the nets V12, GND, SENSE and OUT.",
+  "topic": "comparators and threshold detectors made from op-amps, with hysteresis"
+ },
+ {
+  "id": "zero_cross_detector",
+  "description": "Mains-referenced zero-cross detector: a 6 V AC input through a 100k resistor into an op-amp comparator with 100 mV of hysteresis, producing a 5 V logic square wave at the AC line frequency, with the op-amp powered from a separate 5 V supply and the AC side isolated by the input resistor. AC input on a 2-pin terminal block, 5 V logic output and power on pin headers. Name the nets AC_IN, VCC, GND and ZC_OUT.",
+  "topic": "comparators and threshold detectors made from op-amps, with hysteresis"
+ },
+ {
+  "id": "emitter_follower_buffer",
+  "description": "Single-supply 5 V NPN emitter follower that buffers a high-impedance signal into a 1k load, with a voltage-divider bias at mid-supply and a 1 mA emitter current so the output can swing about +/-1 V around 2.5 V. Input, output and power on pin headers. Name the nets VCC, GND, IN and OUT.",
+  "topic": "BJT circuits (emitter follower, current mirror, LED switch, Darlington switch)"
+ },
+ {
+  "id": "bjt_current_mirror",
+  "description": "Two matched NPN transistors in a current mirror that sinks 1 mA into a load from a 5 V supply, set by a 4.3k reference resistor from VCC to the diode-connected transistor. Reference and mirror outputs on 2-pin headers. Name the nets VCC, GND, IREF and IOUT.",
+  "topic": "BJT circuits (emitter follower, current mirror, LED switch, Darlington switch)"
+ },
+ {
+  "id": "npn_led_switch",
+  "description": "Low-side NPN switch that turns a 20 mA red LED on and off from a 3.3 V logic signal, with a 1k base resistor and the LED fed from 5 V through a 150 ohm resistor. Logic input on a 2-pin header, LED on board. Name the nets VCC, GND, CTRL and LED_A.",
+  "topic": "BJT circuits (emitter follower, current mirror, LED switch, Darlington switch)"
+ },
+ {
+  "id": "darlington_relay_driver",
+  "description": "Darlington NPN pair that drives a 12 V, 100 mA relay coil from a 3.3 V logic input, with a 10k base pull-down and a flyback diode across the coil. Logic input on a 2-pin header and coil on a 2-pin screw terminal. Name the nets V12, GND, CTRL and COIL_NEG.",
+  "topic": "BJT circuits (emitter follower, current mirror, LED switch, Darlington switch)"
+ },
+ {
+  "id": "bjt_constant_current_led",
+  "description": "Two-transistor constant-current sink that holds a white LED at 20 mA from a 9 V to 15 V supply, using a 33 ohm emitter sense resistor and a small-signal NPN pair. Supply on a 2-pin header, LED on board. Name the nets VIN and GND.",
+  "topic": "BJT circuits (emitter follower, current mirror, LED switch, Darlington switch)"
+ },
+ {
+  "id": "high_side_pnp_switch",
+  "description": "High-side switch that lets a 3.3 V logic signal turn a 12 V, 500 mA load on and off using a PNP pass transistor driven by a small NPN level shifter, with base resistors and a base-emitter pull-up so the PNP stays off when the input floats. 12 V in, load out and logic input on screw terminals or headers. Name the nets V12, GND, LOAD_POS and CTRL.",
+  "topic": "MOSFET switches and load drivers (low-side, high-side with PNP or P-MOSFET)"
+ },
+ {
+  "id": "pmos_high_side_driver",
+  "description": "High-side P-channel MOSFET load driver switching 24 V at up to 2 A from a 5 V logic input, using an NPN/NPN or NPN plus resistor network to pull the gate low, with a gate-source resistor and a zener clamp to keep VGS within +/-20 V. 24 V in, load out and control input on screw terminals. Name the nets V24, GND, LOAD_POS and CTRL.",
+  "topic": "MOSFET switches and load drivers (low-side, high-side with PNP or P-MOSFET)"
+ },
+ {
+  "id": "low_side_logic_level_mosfet",
+  "description": "Low-side N-channel MOSFET switch that drives a 5 V, 3 A load from a 1.8 V logic signal, using a logic-level MOSFET with a 100 ohm gate resistor, a 100k gate pull-down, and a flyback diode across the load terminals for inductive loads. Load connects between V5 and LOAD_NEG, with 5 V in, load and logic input on screw terminals. Name the nets V5, GND, LOAD_NEG and CTRL.",
+  "topic": "MOSFET switches and load drivers (low-side, high-side with PNP or P-MOSFET)"
+ },
+ {
+  "id": "dual_mosfet_half_bridge",
+  "description": "Half-bridge motor driver using one N-channel and one P-channel MOSFET to drive a small 12 V, 1 A brushed motor in either direction from two logic inputs, with gate resistors, pull-downs/pull-ups to keep both off at power-up, and flyback diodes across each MOSFET. 12 V in, motor on a 2-pin terminal, and two logic inputs on a header. Name the nets V12, GND, MOTOR_A, MOTOR_B, IN_HI and IN_LO.",
+  "topic": "MOSFET switches and load drivers (low-side, high-side with PNP or P-MOSFET)"
+ },
+ {
+  "id": "mosfet_pwm_led_driver",
+  "description": "Low-side N-channel MOSFET driver for a 12 V, 1 A LED string, intended to be PWM dimmed at up to 20 kHz from a 3.3 V logic signal, with a 47 ohm gate resistor, a 10k gate pull-down, and a gate-source resistor to keep the MOSFET off when the input is disconnected. 12 V in, LED string on a 2-pin terminal, and PWM input on a header. Name the nets V12, GND, LED_NEG and PWM.",
+  "topic": "MOSFET switches and load drivers (low-side, high-side with PNP or P-MOSFET)"
+ },
+ {
+  "id": "adc_divider_3v3",
+  "description": "A 0-10 V sensor signal is scaled down to 0-3.3 V for a 3.3 V ADC using a resistor divider with a 10k/4.7k ratio, plus a 100 nF capacitor to ground at the output to filter noise. Input and output on 2-pin headers, powered only from the ADC's 3.3 V rail for the filter reference. Name the nets VIN, VOUT, VCC and GND.",
+  "topic": "linear power (fixed regulators, zener references, voltage dividers for ADC inputs)"
+ },
+ {
+  "id": "lm317_adjustable",
+  "description": "Adjustable linear regulator board based on an LM317 that outputs 1.25 V to 10 V from a 12 V input at up to 500 mA, set by a 240 ohm resistor and a 5k trimmer, with a 10 uF output capacitor for stability. Input and output on screw terminals. Name the nets VIN, VOUT and GND.",
+  "topic": "linear power (fixed regulators, zener references, voltage dividers for ADC inputs)"
+ },
+ {
+  "id": "zener_3v3_ref",
+  "description": "A 3.3 V shunt reference for a 5 V ADC built from a 3.3 V zener diode and a 470 ohm series resistor, biased at about 3 mA, with a 10 uF bypass capacitor across the zener to keep noise low. Input and reference output on 2-pin headers. Name the nets VCC, VREF and GND.",
+  "topic": "linear power (fixed regulators, zener references, voltage dividers for ADC inputs)"
+ },
+ {
+  "id": "dual_rail_5v",
+  "description": "Board that makes +/-5 V rails from a single 9 V input using a 7805 for +5 V and a 7905 for -5 V, each rated for 100 mA, with 0.33 uF input and 0.1 uF output capacitors on both regulators. Input on a 2-pin header and both rails plus ground on a 4-pin header. Name the nets VIN, +5V, -5V and GND.",
+  "topic": "linear power (fixed regulators, zener references, voltage dividers for ADC inputs)"
+ },
+ {
+  "id": "battery_monitor",
+  "description": "12 V lead-acid battery monitor that divides the battery voltage down by 4 with a 30k/10k divider so a 5 V ADC sees 0-3 V, with a 100 nF filter capacitor and a 5.1 V zener clamp to protect the ADC input from overvoltage. Battery input on a screw terminal, ADC output on a 2-pin header. Name the nets VBAT, VOUT and GND.",
+  "topic": "linear power (fixed regulators, zener references, voltage dividers for ADC inputs)"
+ },
+ {
+  "id": "555_astable_1khz",
+  "description": "A 555 timer astable oscillator running from a 5 V supply that produces a 1 kHz square wave with roughly 50% duty cycle, using a 10 nF timing capacitor and resistors chosen for the frequency. The 555 output drives a 3-pin header (signal, VCC, GND) and a small LED indicator through a 1k resistor. Name the nets VCC, GND and OUT.",
+  "topic": "555 timer oscillators and PWM generators"
+ },
+ {
+  "id": "555_pwm_led_dimmer",
+  "description": "A 555 timer PWM generator on a 12 V supply that drives a white LED string at about 1 kHz, with a potentiometer setting the duty cycle from 5% to 95%. The LED cathode connects to a logic-level N-channel MOSFET gate driven by the 555 output, with a 10k gate pull-down and a 100 ohm gate resistor. Power comes in on a 2-pin screw terminal and the LED string connects to a 2-pin terminal. Name the nets V12, GND, PWM and LED_NEG.",
+  "topic": "555 timer oscillators and PWM generators"
+ },
+ {
+  "id": "555_monostable_pulse",
+  "description": "A 555 monostable one-shot on a 5 V supply that outputs a single 100 ms pulse when a push button is pressed, with the pulse length set by a 100k resistor and 1 uF capacitor. The trigger input is debounced with a 100 nF cap and the output drives a 3-pin header. Name the nets VCC, GND, TRIG and OUT.",
+  "topic": "555 timer oscillators and PWM generators"
+ },
+ {
+  "id": "555_pwm_motor_driver",
+  "description": "A 555 PWM generator on a 12 V supply that drives a small brushed DC motor at about 20 kHz to avoid audible whine, with a duty cycle adjustable from 10% to 90% by a potentiometer. The 555 output feeds a logic-level N-channel MOSFET rated for at least 2 A, with a flyback diode across the motor terminals and a 10k gate pull-down. Motor and supply connect via screw terminals. Name the nets V12, GND, PWM and MOTOR_NEG.",
+  "topic": "555 timer oscillators and PWM generators"
+ },
+ {
+  "id": "555_dual_tone_siren",
+  "description": "A 555-based siren board on a 9 V supply that alternates between two audio tones (about 600 Hz and 900 Hz) at roughly 2 Hz, using a second 555 as a slow astable to switch the timing resistor of the first. The output drives a small 8 ohm speaker through a 100 uF coupling capacitor and a series 100 ohm resistor. Power and speaker connect via 2-pin headers. Name the nets VCC, GND, TONE and SPK.",
+  "topic": "555 timer oscillators and PWM generators"
+ },
+ {
+  "id": "schmitt_rc_osc",
+  "description": "A 74HC14 Schmitt-trigger inverter relaxation oscillator running from a 5 V supply, with an RC network giving about 1 kHz square wave output. Power and output on pin headers. Name the nets VCC, GND and OUT.",
+  "topic": "CMOS logic circuits (Schmitt-trigger RC oscillators, gate logic, inverters)"
+ },
+ {
+  "id": "cmos_inverter_buffer",
+  "description": "A 74HC04 hex inverter board that buffers a 5 V logic signal, with two gates in parallel to drive a 10 mA load and the remaining gates unused. Input and output on pin headers. Name the nets VCC, GND, IN and OUT.",
+  "topic": "CMOS logic circuits (Schmitt-trigger RC oscillators, gate logic, inverters)"
+ },
+ {
+  "id": "schmitt_rc_pwm",
+  "description": "A 74HC14 Schmitt-trigger RC oscillator with a potentiometer to vary the output frequency from about 100 Hz to 10 kHz at 5 V, with the square wave on a pin header. Name the nets VCC, GND and OUT.",
+  "topic": "CMOS logic circuits (Schmitt-trigger RC oscillators, gate logic, inverters)"
+ },
+ {
+  "id": "cmos_and_gate",
+  "description": "A 74HC08 quad 2-input AND gate board powered from 5 V, with two inputs and one output on pin headers, and unused inputs tied to GND. Name the nets VCC, GND, A, B and OUT.",
+  "topic": "CMOS logic circuits (Schmitt-trigger RC oscillators, gate logic, inverters)"
+ },
+ {
+  "id": "schmitt_rc_debounce_osc",
+  "description": "A 74HC14 Schmitt-trigger inverter with an RC feedback network that produces a clean 5 V square wave at about 10 kHz, powered from a 5 V supply, with output on a pin header. Name the nets VCC, GND and OUT.",
+  "topic": "CMOS logic circuits (Schmitt-trigger RC oscillators, gate logic, inverters)"
+ },
+ {
+  "id": "led_5v_20ma",
+  "description": "A small board that drives a white LED at 20 mA from a 5 V supply using a series resistor, with the LED and resistor on a 2-pin header. Name the nets VCC and GND.",
+  "topic": "LED indicator boards and current-limited LED arrays"
+ },
+ {
+  "id": "led_12v_3led_string",
+  "description": "A board that lights three red LEDs in series from a 12 V supply at about 15 mA, with a single current-limiting resistor and a 2-pin input header. Name the nets VIN and GND.",
+  "topic": "LED indicator boards and current-limited LED arrays"
+ },
+ {
+  "id": "led_dual_indicator",
+  "description": "A board with two independent LEDs (red and green) each with its own current-limiting resistor for about 10 mA from a 5 V supply, controlled by two separate input pins on a 4-pin header. Name the nets VCC, GND, LED_R and LED_G.",
+  "topic": "LED indicator boards and current-limited LED arrays"
+ },
+ {
+  "id": "led_pwm_dimmer",
+  "description": "A board that drives a white LED at up to 20 mA from a 5 V supply using a PWM input signal, with a MOSFET low-side switch and a series resistor. The PWM input is on a 3-pin header (VCC, GND, PWM). Name the nets VCC, GND and PWM.",
+  "topic": "LED indicator boards and current-limited LED arrays"
+ },
+ {
+  "id": "led_constant_current_20ma",
+  "description": "A board that keeps a white LED at 20 mA from a 9 V to 15 V supply using a discrete constant-current circuit (two transistors and a sense resistor), with the LED on-board and supply on a 2-pin header. Name the nets VIN and GND.",
+  "topic": "LED indicator boards and current-limited LED arrays"
+ },
+ {
+  "id": "analog_sensor_pullup",
+  "description": "Breakout for a 4-20 mA current-loop sensor, powered from 24 V, with a 100 ohm sense resistor to ground so the loop current becomes 0.4-2.0 V, plus a 100 nF decoupling cap across the sense resistor and a 3-pin screw terminal for the loop. Name the nets VLOOP, LOOP_IN, SENSE and GND.",
+  "topic": "sensor and interface breakouts with pull-ups, level setting and decoupling"
+ },
+ {
+  "id": "spi_level_shifter",
+  "description": "Bidirectional 3.3 V to 5 V level shifter for SPI using a 74LVC1T45-style transceiver, with 100 nF decoupling on both rails and 2x3 pin headers for the low side and high side. Name the nets VCC_3V3, VCC_5V, GND, SCLK_L, SCLK_H, MOSI_L, MOSI_H, MISO_L and MISO_H.",
+  "topic": "sensor and interface breakouts with pull-ups, level setting and decoupling"
+ },
+ {
+  "id": "hall_sensor_breakout",
+  "description": "Open-collector Hall-effect sensor breakout powered from 5 V, with a 10k pull-up on the output, a 100 nF supply decoupling cap, and a 3-pin header for VCC, GND and OUT. Name the nets VCC, GND and OUT.",
+  "topic": "sensor and interface breakouts with pull-ups, level setting and decoupling"
+ },
+ {
+  "id": "rtd_interface",
+  "description": "2-wire PT100 interface board that excites the RTD with 1 mA from a 5 V rail through a 4.99k resistor, giving about 100 mV at 0 C, with a 100 nF filter cap and a 3-pin header for the RTD and a 2-pin header for the sense output. Name the nets VCC, GND, RTD_A, RTD_B and V_SENSE.",
+  "topic": "sensor and interface breakouts with pull-ups, level setting and decoupling"
+ },
+ {
+  "id": "optocoupler_input",
+  "description": "Isolated 24 V digital input using an optocoupler with a 2.2k series resistor for about 10 mA of LED current, a reverse-protection diode, a 100 nF decoupling cap on the logic side, and a 4-pin header for the field side and logic side. Name the nets V_FIELD, FIELD_IN, VCC, GND and OUT.",
+  "topic": "sensor and interface breakouts with pull-ups, level setting and decoupling"
+ },
+ {
+  "id": "zener_clamp_5v",
+  "description": "A 5 V signal clamp board that limits an input to about 0 to 5.6 V using a 5.1 V zener to GND and a series 1k resistor, protecting a downstream 5 V ADC input from overvoltage. Input and output on 2-pin headers, powered from the 5 V rail. Name the nets VCC, GND, IN and OUT.",
+  "topic": "protection circuits (reverse polarity, clamping with zeners or diodes)"
+ },
+ {
+  "id": "tvs_input_protection",
+  "description": "A 24 V, 500 mA input protection board using a unidirectional TVS diode (standoff 26 V, clamp ~40 V) across the input and a 1 A fuse in series, with a 2-pin screw terminal for the supply and a 2-pin header for the protected output. Name the nets VIN, VOUT and GND.",
+  "topic": "protection circuits (reverse polarity, clamping with zeners or diodes)"
+ },
+ {
+  "id": "reverse_polarity_diode",
+  "description": "A simple reverse-polarity protection board for a 9 V, 500 mA input using a series Schottky diode (about 0.4 V drop) and a reverse-biased diode across the output to clamp negative transients. Input and output on 2-pin headers. Name the nets VIN, VOUT and GND.",
+  "topic": "protection circuits (reverse polarity, clamping with zeners or diodes)"
+ },
+ {
+  "id": "bidirectional_signal_clamp",
+  "description": "A bidirectional clamp for a +/-10 V signal, using two 5.1 V zeners in series (back-to-back) to GND and a 100 ohm series resistor, so the output stays within about +/-6 V for a downstream 5 V circuit. Input and output on 2-pin headers, with a GND pin. Name the nets IN, OUT and GND.",
+  "topic": "protection circuits (reverse polarity, clamping with zeners or diodes)"
+ },
+ {
+  "id": "overvoltage_crowbar",
+  "description": "A 5 V overvoltage crowbar that fires a 4.7 V zener into the base of an NPN transistor, which then triggers a thyristor (or SCR) across the 5 V rail to short it and blow a 1 A fuse when the input exceeds about 5.6 V. Input and output on 2-pin headers. Name the nets VIN, VOUT and GND.",
+  "topic": "protection circuits (reverse polarity, clamping with zeners or diodes)"
+ }
+]

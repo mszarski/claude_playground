@@ -349,6 +349,10 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
         result.error = f"stopped after {max_turns} turns"
 
     result.attempts = tools.attempts
+    if hasattr(backend, "export"):
+        # The full design conversation, tool results included: training data.
+        (workdir / "conversation.json").write_text(json.dumps(
+            {"backend": backend.name, "model": backend.model, **backend.export()}, default=str))
     passing = [a for a in tools.attempts if a.passed]
     if passing:
         result.code, result.passed = passing[-1].code + suffix, True

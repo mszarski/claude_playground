@@ -9,6 +9,7 @@ so the designer cannot loosen a requirement its circuit fails.
 
 import ast
 import json
+import re
 
 SPEC_PROMPT = """\
 You write acceptance tests for a circuit board before anyone designs it. \
@@ -57,6 +58,17 @@ class SpecError(ValueError):
     pass
 
 
+_UNQUOTED = re.compile(r"require\(\s*(v|i|gain|freq)\(\s*([^)]*?)\s*\)")
+
+
+def _quote_measures(code):
+    """Quote measures models write bare, e.g. require(v(+5V), ...) or require(freq('OUT'), ...)."""
+    def fix(m):
+        inner = re.sub(r"[\s'\"]", "", m.group(2))
+        return f'require("{m.group(1)}({inner})"'
+    return _UNQUOTED.sub(fix, code)
+
+
 def parse_requirements(text):
     """Parse require(...) calls from model output. Raises SpecError on anything else."""
     if "```" in text:
@@ -65,6 +77,7 @@ def parse_requirements(text):
         code = code.split("\n", 1)[1] if code.startswith(("python", "py")) else code
     else:
         code = text
+    code = _quote_measures(code)
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
@@ -75,10 +88,6 @@ def parse_requirements(text):
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                 and call.func.id == "require"):
             raise SpecError(f"only require(...) calls are allowed, got: {ast.unparse(node)[:80]}")
-        # Accept an unquoted measure, e.g. require(v(OUT), ...), as models often write it.
-        if call.args and isinstance(call.args[0], ast.Call) and \
-                isinstance(call.args[0].func, ast.Name) and call.args[0].func.id in ("v", "i", "gain"):
-            call.args[0] = ast.Constant(ast.unparse(call.args[0]).replace(" ", "").replace("'", ""))
         try:
             args = [ast.literal_eval(a) for a in call.args]
             kwargs = {k.arg: ast.literal_eval(k.value) for k in call.keywords}
