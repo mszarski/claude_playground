@@ -53,10 +53,13 @@ def _existing():
     return json.loads(BENCHMARK.read_text())
 
 
-def generate_descriptions(n_per_topic=4, backend=None, topics=TOPICS):
-    """New board descriptions, n_per_topic for each topic. Benchmark boards are excluded."""
+def generate_descriptions(n_per_topic=4, backend=None, topics=TOPICS, also_exclude=()):
+    """New board descriptions, n_per_topic for each topic.
+
+    Benchmark boards and `also_exclude` (e.g. earlier training boards) are excluded.
+    """
     backend = backend or make_backend()
-    existing = _existing()
+    existing = _existing() + list(also_exclude)
     taken = {c["id"] for c in existing}
     listing = "\n".join(f"- {c['id']}: {c['description']}" for c in existing)
     boards = []

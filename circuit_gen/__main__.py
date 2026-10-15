@@ -66,9 +66,12 @@ def cmd_datagen(args):
     from .backends import make_backend
     from .datagen import generate_descriptions
     backend = make_backend(args.backend, model=args.model)
-    boards = generate_descriptions(n_per_topic=args.per_topic, backend=backend)
-    Path(args.out).write_text(json.dumps(boards, indent=1))
-    print(f"wrote {len(boards)} board descriptions to {args.out}")
+    out = Path(args.out)
+    previous = json.loads(out.read_text()) if args.append and out.exists() else []
+    boards = generate_descriptions(n_per_topic=args.per_topic, backend=backend,
+                                   also_exclude=previous)
+    out.write_text(json.dumps(previous + boards, indent=1))
+    print(f"wrote {len(boards)} new board descriptions to {args.out} ({len(previous) + len(boards)} total)")
     return 0
 
 
@@ -114,6 +117,7 @@ def main(argv=None):
     g = sub.add_parser("datagen", help="write new (non-benchmark) board descriptions for training")
     g.add_argument("-o", "--out", required=True, help="output JSON file of boards")
     g.add_argument("--per-topic", type=int, default=4)
+    g.add_argument("--append", action="store_true", help="add to the boards already in --out")
     g.add_argument("--backend", default=None, choices=["hf", "claude"])
     g.add_argument("--model", default=None)
 
