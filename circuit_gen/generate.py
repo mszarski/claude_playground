@@ -267,6 +267,9 @@ def _validate_input(tool_name, data):
     return all(isinstance(data.get(k), str) and data.get(k) for k in schema["required"])
 
 
+CUT_OFF_NOTE = ("Your last reply ran out of space before it finished. Think briefly, then make "
+                "the next tool call.")
+
 NUDGE = ("check_circuit has not passed yet. Fix the problems it reported (or call it if you "
          "have not yet) and call check_circuit again with the complete code.")
 
@@ -324,6 +327,7 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
             # Usually runaway reasoning; a fresh sample of the same turn tends to finish.
             if max_token_retries < MAX_TOKEN_RETRIES:
                 max_token_retries += 1
+                backend.add_user_message(CUT_OFF_NOTE)
                 continue
             result.error = "response hit max_tokens"
             break

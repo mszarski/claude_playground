@@ -338,6 +338,8 @@ def _testbench(nl, test):
 
     lines = []
     for net, spec in test.get("sources", {}).items():
+        if is_ground(net):
+            continue                      # ground is node 0 already
         n = node(net)
         if spec == "ac":
             lines.append(f"V_{n} {n} 0 DC 0 AC 1")
@@ -366,7 +368,9 @@ def _testbench(nl, test):
                     f"meas tran cg_t1 when v({n})=$&cg_lvl rise=2",
                     f"meas tran cg_t2 when v({n})=$&cg_lvl rise=3"]
         return lines, analysis, "1/(cg_t2-cg_t1)"
-    if kind == "v":
+    if kind == "v" and is_ground(a):
+        expr = "0"                        # ground is the 0 V reference
+    elif kind == "v":
         # In AC analysis voltages are complex; compare magnitudes.
         expr = f"mag(v({node(a)}))" if ac else f"v({node(a)})"
     elif kind == "i":

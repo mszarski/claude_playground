@@ -260,3 +260,13 @@ class TestTimerAndLogic:
                 "expect": [expect - 0.1, expect + 0.1]}
         report = spice.simulate(circuit, [test])
         assert report.ok, report.summary()
+
+
+@needs_ngspice
+@needs_libs
+def test_ground_sources_and_measures_are_harmless():
+    circuit = {"parts": [header("J1", "VCC", "GND"), R("R1", "VCC", "GND", "1k")]}
+    tests = [{"sources": {"VCC": 5, "GND": 0}, "measure": "i(VCC)", "expect": [0.0049, 0.0051]},
+             {"sources": {"VCC": 5}, "measure": "v(GND)", "expect": [-0.01, 0.01]}]
+    report = spice.simulate(circuit, tests)
+    assert report.ok, report.summary()
