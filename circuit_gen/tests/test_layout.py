@@ -120,3 +120,22 @@ def test_examples_build_end_to_end(example, tmp_path):
     assert report["stages"]["routing"]["unrouted"] == 0
     assert report["stages"]["drc"]["errors"] == 0
     assert (tmp_path / "gerbers" / "board-F_Cu.gtl").exists()
+
+
+@needs_pcbnew
+def test_routing_retries_until_complete(tmp_path, monkeypatch):
+    import pcbnew
+    from circuit_gen.layout import route
+
+    outcomes = [(True, 1, ""), (True, 0, ""), (True, 0, "")]
+    calls, applied = [], []
+
+    def fake_freerouting(dsn, ses, max_passes):
+        calls.append(ses)
+        return outcomes[len(calls) - 1]
+
+    monkeypatch.setattr(route, "run_freerouting", fake_freerouting)
+    monkeypatch.setattr(route, "apply_session", lambda board, ses: applied.append(ses) or (5, 0))
+    result = route.route_board(pcbnew.BOARD(), tmp_path)
+    assert len(calls) == 2                      # stopped once fully routed
+    assert result.unrouted == 0 and applied == [calls[1]]

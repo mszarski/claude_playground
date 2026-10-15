@@ -21,7 +21,7 @@ from .pipeline import SIM_STAGE, STAGES, build
 
 def _is_infra_error(e):
     """API or network failures: the sample says nothing about the model's design ability."""
-    names = {type(x).__name__ for x in type(e).__mro__}
+    names = {t.__name__ for t in type(e).__mro__}
     return bool(names & {"HfHubHTTPError", "APIConnectionError", "APIStatusError",
                          "ConnectionError", "Timeout", "TimeoutError", "ReadError",
                          "RemoteProtocolError", "ConnectError", "TimeoutException",

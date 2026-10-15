@@ -108,17 +108,34 @@ def apply_session(board, ses_path):
     return n_tracks, n_vias
 
 
-def route_board(board, workdir, max_passes=30):
-    """Export, route and re-import. Modifies `board` in place."""
+def route_board(board, workdir, max_passes=30, attempts=3):
+    """Export, route and re-import. Modifies `board` in place.
+
+    FreeRouting is multi-threaded and not deterministic: it occasionally leaves
+    a connection unrouted that a second run completes. It is rerun up to
+    `attempts` times while anything is unrouted, and the best session is kept.
+    """
     workdir = Path(workdir)
-    dsn, ses = workdir / "board.dsn", workdir / "board.ses"
+    dsn = workdir / "board.dsn"
     if not pcbnew.ExportSpecctraDSN(board, str(dsn)):
         return RouteResult(ok=False, error="DSN export failed")
-    ok, unrouted, log = run_freerouting(dsn, ses, max_passes=max_passes)
-    if not ok:
-        return RouteResult(ok=False, unrouted=unrouted, error=log)
-    tracks, vias = apply_session(board, ses)
-    return RouteResult(ok=True, unrouted=unrouted, tracks=tracks, vias=vias)
+    best = None              # (unrouted, ses path)
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        ses = workdir / ("board.ses" if attempt == 1 else f"board.{attempt}.ses")
+        ok, unrouted, log = run_freerouting(dsn, ses, max_passes=max_passes)
+        if not ok:
+            last_error = log
+            continue
+        score = unrouted if unrouted is not None else float("inf")
+        if best is None or score < best[0]:
+            best = (score, ses, unrouted)
+        if unrouted == 0:
+            break
+    if best is None:
+        return RouteResult(ok=False, error=last_error)
+    tracks, vias = apply_session(board, best[1])
+    return RouteResult(ok=True, unrouted=best[2], tracks=tracks, vias=vias)
 
 
 @dataclass
