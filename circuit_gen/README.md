@@ -119,10 +119,25 @@ Qwen3.8-27B on the 7 harder boards, 5 samples each:
 | designer writes its own requirements | 23/35 | 8 |
 | `--spec-first` (frozen requirements) | 31/35 | 0 |
 
+Qwen3.8-27B with `--spec-first` on all 19 boards, 3 samples each: 88% of
+samples pass, 0 false accepts (11 samples excluded for API errors).
+
 A false accept is a design the model declared finished that fails the hidden
 tests. Without a separate spec, the designer loosened or omitted the
 requirements it was failing. The remaining spec-first failures are the model
 running out of its 64k-token reply budget while reasoning.
+
+## Training data
+
+`python -m circuit_gen datagen` writes new board descriptions (60 are in
+`benchmarks/train_boards.json`, none from the benchmark);
+`eval benchmarks/train_boards.json --spec-first` designs them; `export`
+keeps only samples that pass every check and route cleanly, as chat-format
+JSONL (`sft_direct.jsonl`: description -> circuit code; `sft_agentic.jsonl`:
+the full tool-using session). `train/sft.py` is a LoRA SFT script for
+Qwen3-8B on Hugging Face Jobs. The first DeepSeek-V4.1-Flash data run
+stopped at the account's Inference Providers spending limit after 22
+verified sessions on 13 boards; a useful training set needs a few hundred.
 
 ## Status and known limits
 
