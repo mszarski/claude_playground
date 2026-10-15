@@ -1,0 +1,146 @@
+"""
+Multi-sample benchmark runs.
+
+Each board is designed `samples` times. Model outputs vary between samples,
+so a single run says little; the per-board pass rate and the stage where
+failing samples stopped are what to compare between models and prompts.
+
+Samples run in separate processes (KiCad's pcbnew is not thread-safe), each
+writing to <out>/<board>/sNN/ with its own log.txt.
+"""
+
+import contextlib
+import json
+import multiprocessing
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+
+from .pipeline import SIM_STAGE, STAGES, build
+
+
+def first_failure(report):
+    """The stage where a run stopped, or None if it succeeded."""
+    if report.get("success"):
+        return None
+    if report.get("generation") is False:
+        return "generation"
+    required = STAGES + ([SIM_STAGE] if report.get("functionally_tested") else [])
+    for stage in required:
+        if not report.get("stages", {}).get(stage, {}).get("ok"):
+            return stage
+    return "unknown"
+
+
+def _run_one(case, sample, out_dir, opts):
+    """Design (or build) one sample. Runs in a worker process."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    start = time.time()
+    with open(out_dir / "log.txt", "w") as log, contextlib.redirect_stdout(log):
+        try:
+            if "code" in case:
+                report = build(case["code"], out_dir, max_passes=opts["passes"], tests=case.get("tests"))
+            else:
+                report = design_and_build(case["description"], out_dir, opts, tests=case.get("tests"))
+        except Exception as e:  # one broken sample must not stop the benchmark
+            print(f"crashed: {type(e).__name__}: {e}")
+            report = {"success": False, "generation": False, "stages": {},
+                      "error": f"{type(e).__name__}: {e}"}
+    return {"id": case["id"], "sample": sample, "success": bool(report.get("success")),
+            "failed_at": first_failure(report), "tested": bool(case.get("tests")),
+            "seconds": round(time.time() - start, 1), "dir": str(out_dir)}
+
+
+def design_and_build(description, out_dir, opts, tests=None):
+    """Generate a circuit with the model, then run the build pipeline on it."""
+    from . import config
+    from .backends import make_backend
+    from .generate import generate_circuit
+
+    out_dir = Path(out_dir)
+    name = opts.get("backend") or config.BACKEND
+    extra = {"effort": opts["effort"]} if name == "claude" and opts.get("effort") else {}
+    backend = make_backend(name, model=opts.get("model"), **extra)
+    gen = generate_circuit(description, out_dir, backend=backend, max_turns=opts["max_turns"])
+    (out_dir / "generation.json").write_text(json.dumps({
+        "description": description, "backend": backend.name, "model": backend.model,
+        "passed_checks": gen.passed, "turns": gen.turns,
+        "attempts": len(gen.attempts), "error": gen.error, "summary": gen.summary,
+    }, indent=2))
+    print(f"generation: passed_checks={gen.passed} attempts={len(gen.attempts)} "
+          f"turns={gen.turns} error={gen.error}")
+    if gen.code is None:
+        return {"success": False, "stages": {}, "generation": False}
+    report = build(gen.code, out_dir, max_passes=opts["passes"], tests=tests)
+    report["generation"] = gen.passed
+    report["success"] = report["success"] and gen.passed
+    return report
+
+
+def summarize(cases, results, samples):
+    boards = []
+    for case in cases:
+        runs = sorted((r for r in results if r["id"] == case["id"]), key=lambda r: r["sample"])
+        passed = sum(r["success"] for r in runs)
+        failures = {}
+        for r in runs:
+            if r["failed_at"]:
+                failures[r["failed_at"]] = failures.get(r["failed_at"], 0) + 1
+        boards.append({"id": case["id"], "tested": bool(case.get("tests")), "passed": passed,
+                       "samples": len(runs), "pass_rate": passed / len(runs) if runs else 0.0,
+                       "failures": failures})
+    tested = [b for b in boards if b["tested"]]
+
+    def mean(xs):
+        return sum(xs) / len(xs) if xs else 0.0
+
+    return {
+        "samples_per_board": samples,
+        "pass_rate": mean([b["pass_rate"] for b in boards]),
+        "pass_rate_tested": mean([b["pass_rate"] for b in tested]),
+        "solved_at_least_once": sum(b["passed"] > 0 for b in boards),
+        "solved_every_time": sum(b["passed"] == b["samples"] for b in boards),
+        "boards": boards,
+    }
+
+
+def format_table(summary):
+    lines = ["| board | sim tests | passed | where failures stopped |", "|---|---|---|---|"]
+    for b in summary["boards"]:
+        fails = ", ".join(f"{k} ×{v}" for k, v in sorted(b["failures"].items())) or "—"
+        lines.append(f"| {b['id']} | {'yes' if b['tested'] else 'no'} | "
+                     f"{b['passed']}/{b['samples']} | {fails} |")
+    n = len(summary["boards"])
+    lines += ["",
+              f"Mean pass rate: {summary['pass_rate']:.0%} over all boards, "
+              f"{summary['pass_rate_tested']:.0%} over boards with simulation tests.",
+              f"Solved at least once: {summary['solved_at_least_once']}/{n}; "
+              f"every time: {summary['solved_every_time']}/{n}."]
+    return "\n".join(lines)
+
+
+def run_eval(cases, out, samples=1, jobs=4, **opts):
+    """Run every case `samples` times with `jobs` worker processes. Returns the summary."""
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    opts = {"passes": 30, "max_turns": 40, **opts}
+    work = [(case, s) for case in cases for s in range(1, samples + 1)]
+    results = []
+    ctx = multiprocessing.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=jobs, mp_context=ctx) as pool:
+        futures = {pool.submit(_run_one, case, s, out / case["id"] / f"s{s:02d}", opts): (case, s)
+                   for case, s in work}
+        for i, fut in enumerate(as_completed(futures), 1):
+            r = fut.result()
+            results.append(r)
+            status = "pass" if r["success"] else f"FAIL at {r['failed_at']}"
+            print(f"[{i}/{len(work)}] {r['id']} s{r['sample']:02d}: {status} ({r['seconds']}s)",
+                  flush=True)
+
+    summary = summarize(cases, results, samples)
+    summary["runs"] = sorted(results, key=lambda r: (r["id"], r["sample"]))
+    summary["options"] = {k: v for k, v in opts.items()}
+    (out / "summary.json").write_text(json.dumps(summary, indent=2))
+    (out / "summary.md").write_text(format_table(summary) + "\n")
+    return summary

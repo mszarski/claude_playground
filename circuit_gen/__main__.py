@@ -4,7 +4,7 @@ Command line interface.
     python -m circuit_gen design "5V to 3.3V regulator board" -o runs/ldo
     python -m circuit_gen design "..." --backend hf --model Qwen/Qwen3.8-27B -o runs/x
     python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
-    python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval
+    python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval --samples 5
     python -m circuit_gen eval --examples -o runs/examples
 """
 
@@ -31,65 +31,32 @@ def cmd_build(args):
     return 0 if report["success"] else 1
 
 
-def _design(description, out_dir, args, tests=None):
-    from . import config
-    from .backends import make_backend
-    from .generate import generate_circuit
-    out_dir = Path(out_dir)
-    name = args.backend or config.BACKEND
-    extra = {"effort": args.effort} if name == "claude" else {}
-    backend = make_backend(name, model=args.model, **extra)
-    gen = generate_circuit(description, out_dir, backend=backend, max_turns=args.max_turns)
-    (out_dir / "generation.json").write_text(json.dumps({
-        "description": description, "backend": backend.name, "model": backend.model,
-        "passed_checks": gen.passed, "turns": gen.turns,
-        "attempts": len(gen.attempts), "error": gen.error, "summary": gen.summary,
-    }, indent=2))
-    print(f"generation: passed_checks={gen.passed} attempts={len(gen.attempts)} "
-          f"turns={gen.turns} error={gen.error}")
-    if gen.code is None:
-        return {"success": False, "stages": {}, "generation": False}
-    report = build(gen.code, out_dir, max_passes=args.passes, tests=tests)
-    report["generation"] = gen.passed
-    report["success"] = report["success"] and gen.passed
-    _print_report(report)
-    return report
+def _opts(args):
+    return {"backend": args.backend, "model": args.model, "effort": args.effort,
+            "max_turns": args.max_turns, "passes": args.passes}
 
 
 def cmd_design(args):
-    report = _design(args.description, args.out, args)
+    from .evaluate import design_and_build
+    report = design_and_build(args.description, args.out, _opts(args))
+    if report.get("stages"):
+        _print_report(report)
     return 0 if report["success"] else 1
 
 
 def cmd_eval(args):
-    out = Path(args.out)
+    from .evaluate import format_table, run_eval
     if args.examples:
         examples = sorted((Path(__file__).parent / "examples").glob("*.py"))
         cases = [{"id": p.stem, "code": p.read_text()} for p in examples]
     else:
         cases = json.loads(Path(args.benchmark).read_text())
-    results = []
-    for case in cases:
-        print(f"== {case['id']}")
-        case_dir = out / case["id"]
-        if "code" in case:
-            report = build(case["code"], case_dir, max_passes=args.passes, tests=case.get("tests"))
-            _print_report(report)
-        else:
-            report = _design(case["description"], case_dir, args, tests=case.get("tests"))
-        results.append({"id": case["id"], "success": report["success"],
-                        "tested": bool(case.get("tests")),
-                        "completed": report.get("completed", [])})
-    passed = sum(r["success"] for r in results)
-    tested = [r for r in results if r["tested"]]
-    tested_passed = sum(r["success"] for r in tested)
-    summary = {"passed": passed, "total": len(results), "tested": len(tested),
-               "tested_passed": tested_passed, "results": results}
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "summary.json").write_text(json.dumps(summary, indent=2))
-    print(f"\n{passed}/{len(results)} boards made it to DRC-clean Gerbers (and passed their "
-          f"simulation tests, where they have any)")
-    print(f"{tested_passed}/{len(tested)} boards with simulation tests passed them all")
+    if args.only:
+        wanted = set(args.only.split(","))
+        cases = [c for c in cases if c["id"] in wanted]
+    summary = run_eval(cases, args.out, samples=args.samples, jobs=args.jobs, **_opts(args))
+    print()
+    print(format_table(summary))
     return 0
 
 
@@ -107,6 +74,9 @@ def main(argv=None):
     e = sub.add_parser("eval", help="run a benchmark of descriptions (or the examples)")
     e.add_argument("benchmark", nargs="?", default=str(Path(__file__).parent / "benchmarks" / "boards.json"))
     e.add_argument("--examples", action="store_true", help="build the hand-written examples instead")
+    e.add_argument("--samples", type=int, default=1, help="designs per board (model outputs vary)")
+    e.add_argument("--jobs", type=int, default=4, help="samples run in parallel")
+    e.add_argument("--only", default=None, help="comma-separated board ids to run")
 
     for s in (b, d, e):
         s.add_argument("-o", "--out", required=True, help="output directory")

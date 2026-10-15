@@ -46,7 +46,7 @@ python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
 
 # Benchmark: how many descriptions make it all the way to DRC-clean Gerbers
 # and pass their SPICE tests
-python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval
+python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval --samples 5 --jobs 6
 python -m circuit_gen eval --examples -o runs/examples   # layout half only, no API calls
 ```
 
