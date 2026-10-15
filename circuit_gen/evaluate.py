@@ -160,3 +160,32 @@ def run_eval(cases, out, samples=1, jobs=4, **opts):
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     (out / "summary.md").write_text(format_table(summary) + "\n")
     return summary
+
+
+def compare(run_dirs):
+    """Markdown table of per-board pass rates across several eval runs (e.g. models)."""
+    summaries = []
+    for d in run_dirs:
+        s = json.loads((Path(d) / "summary.json").read_text())
+        label = (s.get("options") or {}).get("model") or Path(d).name
+        summaries.append((label, s))
+    boards = []
+    for _, s in summaries:
+        for b in s["boards"]:
+            if b["id"] not in boards:
+                boards.append(b["id"])
+    head = "| board | " + " | ".join(label for label, _ in summaries) + " |"
+    lines = [head, "|---" * (len(summaries) + 1) + "|"]
+    for bid in boards:
+        cells = []
+        for _, s in summaries:
+            b = next((b for b in s["boards"] if b["id"] == bid), None)
+            cells.append(f"{b['passed']}/{b['samples']}" if b else "—")
+        lines.append(f"| {bid} | " + " | ".join(cells) + " |")
+    totals = []
+    for _, s in summaries:
+        passed = sum(b["passed"] for b in s["boards"])
+        total = sum(b["samples"] for b in s["boards"])
+        totals.append(f"**{passed}/{total}**" if total else "—")
+    lines.append("| **all** | " + " | ".join(totals) + " |")
+    return "\n".join(lines)

@@ -63,3 +63,17 @@ def test_connection_errors_are_infra():
 
     assert _is_infra_error(ReadError("Connection reset by peer"))
     assert not _is_infra_error(ValueError("bad circuit"))
+
+
+def test_compare(tmp_path):
+    import json
+    from circuit_gen.evaluate import compare
+    for name, model, passed in (("a", "org/m1", 2), ("b", "org/m2", 1)):
+        d = tmp_path / name
+        d.mkdir()
+        d.joinpath("summary.json").write_text(json.dumps({
+            "options": {"model": model},
+            "boards": [{"id": "led", "passed": passed, "samples": 2}]}))
+    table = compare([tmp_path / "a", tmp_path / "b"])
+    assert "| board | org/m1 | org/m2 |" in table
+    assert "| led | 2/2 | 1/2 |" in table and "**2/2**" in table

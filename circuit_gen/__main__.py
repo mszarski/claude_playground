@@ -6,6 +6,7 @@ Command line interface.
     python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
     python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval --samples 5
     python -m circuit_gen eval --examples -o runs/examples
+    python -m circuit_gen compare runs/qwen runs/glm
 """
 
 import argparse
@@ -60,6 +61,12 @@ def cmd_eval(args):
     return 0
 
 
+def cmd_compare(args):
+    from .evaluate import compare
+    print(compare(args.runs))
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="circuit_gen", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -78,6 +85,9 @@ def main(argv=None):
     e.add_argument("--jobs", type=int, default=4, help="samples run in parallel")
     e.add_argument("--only", default=None, help="comma-separated board ids to run")
 
+    c = sub.add_parser("compare", help="side-by-side pass rates of several eval runs")
+    c.add_argument("runs", nargs="+", help="eval output directories")
+
     for s in (b, d, e):
         s.add_argument("-o", "--out", required=True, help="output directory")
         s.add_argument("--passes", type=int, default=30, help="max FreeRouting passes")
@@ -91,7 +101,8 @@ def main(argv=None):
                        help="Claude backend only")
 
     args = p.parse_args(argv)
-    return {"build": cmd_build, "design": cmd_design, "eval": cmd_eval}[args.cmd](args)
+    return {"build": cmd_build, "design": cmd_design, "eval": cmd_eval,
+            "compare": cmd_compare}[args.cmd](args)
 
 
 if __name__ == "__main__":
