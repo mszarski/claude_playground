@@ -123,6 +123,12 @@ case "$STAGE" in
     cp /work/data/deepcad_cq.parquet /work/data/cad_recode.parquet data/
     python train_vlm_cq.py --data data --name "$RUN" --steps ${STEPS:-30000} "$@" ;;
 
+  vlmrl)      # RL on IoU for the CadQuery writer (train_vlm_rl.py), DeepCAD parts only; INIT = SFT model dir
+    need_cq
+    need cad_vec renders
+    cp /work/data/deepcad_cq.parquet data/
+    python train_vlm_rl.py --data data --name "$RUN" --init "${INIT:-results/vlm_cq_v1/model}" --steps ${STEPS:-1000} "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 

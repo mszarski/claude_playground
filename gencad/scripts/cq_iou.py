@@ -63,6 +63,8 @@ def main():
     ap.add_argument("--workers", type=int, default=os.cpu_count())
     ap.add_argument("--task_timeout", type=float, default=120.0)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--rows", default=None, help="also pickle the per-part results {method: [row]} here "
+                                                 "(scripts/fallback.py combines them)")
     a = ap.parse_args()
     from pebble import ProcessPool
     with open(a.preds, "rb") as f:
@@ -74,6 +76,7 @@ def main():
         with h5py.File(os.path.join(a.data, "cad_vec", u + ".h5"), "r") as f:
             gts.append(f["vec"][:].astype(np.int64))
     report = {"n": len(uids), "kind": kind, "protocol": __doc__.split("\n\n")[1]}
+    all_rows = {"uids": uids, "dup": dup.tolist(), "rows": {}}
     for m in a.methods or list(P["preds"]):
         rows = []
         with ProcessPool(max_workers=a.workers) as pool:
@@ -83,16 +86,22 @@ def main():
                 try:
                     rows.append(fu.result())
                 except Exception:  # noqa: BLE001 - timeout / crashed worker -> invalid prediction
-                    rows.append({"valid": False, "gt": 0.0, "own": 0.0})
+                    rows.append({"valid": False, "gt": 0.0, "own": 0.0, "failed": True})
         res = {}
         for g, mask in {"all": np.ones(len(uids), bool), "dup": dup, "novel": ~dup}.items():
             r = [x for x, k in zip(rows, mask) if k and x is not None]
             res[g] = {"n": len(r), "IR": 100 * float(np.mean([not x["valid"] for x in r])),
                       "IoU_gt": 100 * float(np.mean([x["gt"] for x in r])),
                       "IoU_own": 100 * float(np.mean([x["own"] for x in r]))}
+        res["n_timeout_or_crash"] = sum(bool(x and x.get("failed")) for x in rows)   # high = machine overloaded
         report[m] = res
+        all_rows["rows"][m] = rows
+        if a.rows:
+            with open(a.rows, "wb") as f:
+                pickle.dump(all_rows, f)
         print(f"{m:26s} " + "  ".join(f"{g}: IoU gt/own={v['IoU_gt']:.1f}/{v['IoU_own']:.1f} IR={v['IR']:.1f} "
-                                      f"(n={v['n']})" for g, v in res.items()), flush=True)
+                                      f"(n={v['n']})" for g, v in res.items() if g != "n_timeout_or_crash")
+              + f"  timeout/crash={res['n_timeout_or_crash']}", flush=True)
         with open(a.out, "w") as f:
             json.dump(report, f, indent=2)
     print(f"[done] {a.out}")
