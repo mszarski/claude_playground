@@ -38,7 +38,9 @@ BASE_MODEL = os.environ.get("BASE_MODEL", "Qwen/Qwen3-8B")
 MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "16384"))
 EPOCHS = float(os.environ.get("EPOCHS", "2"))
 
-dataset = load_dataset(DATASET, data_files="sft_agentic.jsonl", split="train")
+# Comma-separated files in the dataset repo, e.g. procgen and LLM-designed sessions.
+DATA_FILES = os.environ.get("DATA_FILES", "procgen/sft_agentic.jsonl,llm/sft_agentic.jsonl")
+dataset = load_dataset(DATASET, data_files=DATA_FILES.split(","), split="train")
 dataset = dataset.select_columns(["messages", "tools"])
 split = dataset.train_test_split(test_size=0.1, seed=0)
 print(f"train {len(split['train'])}, eval {len(split['test'])}")
