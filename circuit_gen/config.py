@@ -11,4 +11,9 @@ FREEROUTING_JAR = Path(os.environ.get("CIRCUIT_GEN_FREEROUTING_JAR", "/opt/freer
 KICAD_CLI = os.environ.get("CIRCUIT_GEN_KICAD_CLI", "kicad-cli")
 PYTHON = os.environ.get("CIRCUIT_GEN_PYTHON", "python3")
 
-MODEL = os.environ.get("CIRCUIT_GEN_MODEL", "claude-opus-5-5")
+# Which model writes the circuit: "hf" (open models via Hugging Face Inference
+# Providers, needs HF_TOKEN) or "claude" (Anthropic API).
+BACKEND = os.environ.get("CIRCUIT_GEN_BACKEND", "hf")
+HF_MODEL = os.environ.get("CIRCUIT_GEN_HF_MODEL", "Qwen/Qwen3.8-27B")
+HF_PROVIDER = os.environ.get("CIRCUIT_GEN_HF_PROVIDER", "auto")
+CLAUDE_MODEL = os.environ.get("CIRCUIT_GEN_CLAUDE_MODEL", "claude-opus-5-5")

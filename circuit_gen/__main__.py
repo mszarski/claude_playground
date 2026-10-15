@@ -2,6 +2,7 @@
 Command line interface.
 
     python -m circuit_gen design "5V to 3.3V regulator board" -o runs/ldo
+    python -m circuit_gen design "..." --backend hf --model Qwen/Qwen3.8-27B -o runs/x
     python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
     python -m circuit_gen eval circuit_gen/benchmarks/boards.json -o runs/eval
     python -m circuit_gen eval --examples -o runs/examples
@@ -31,11 +32,17 @@ def cmd_build(args):
 
 
 def _design(description, out_dir, args):
+    from . import config
+    from .backends import make_backend
     from .generate import generate_circuit
     out_dir = Path(out_dir)
-    gen = generate_circuit(description, out_dir, max_turns=args.max_turns, effort=args.effort)
+    name = args.backend or config.BACKEND
+    extra = {"effort": args.effort} if name == "claude" else {}
+    backend = make_backend(name, model=args.model, **extra)
+    gen = generate_circuit(description, out_dir, backend=backend, max_turns=args.max_turns)
     (out_dir / "generation.json").write_text(json.dumps({
-        "description": description, "passed_checks": gen.passed, "turns": gen.turns,
+        "description": description, "backend": backend.name, "model": backend.model,
+        "passed_checks": gen.passed, "turns": gen.turns,
         "attempts": len(gen.attempts), "error": gen.error, "summary": gen.summary,
     }, indent=2))
     print(f"generation: passed_checks={gen.passed} attempts={len(gen.attempts)} "
@@ -98,8 +105,13 @@ def main(argv=None):
         s.add_argument("-o", "--out", required=True, help="output directory")
         s.add_argument("--passes", type=int, default=30, help="max FreeRouting passes")
     for s in (d, e):
+        s.add_argument("--backend", default=None, choices=["hf", "claude"],
+                       help="hf: open model via Hugging Face Inference Providers (default); claude: Anthropic API")
+        s.add_argument("--model", default=None,
+                       help="model id, e.g. Qwen/Qwen3.8-27B (hf) or claude-opus-5-5 (claude)")
         s.add_argument("--max-turns", type=int, default=40)
-        s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+        s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"],
+                       help="Claude backend only")
 
     args = p.parse_args(argv)
     return {"build": cmd_build, "design": cmd_design, "eval": cmd_eval}[args.cmd](args)

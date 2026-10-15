@@ -1,5 +1,5 @@
 """
-Description -> SKiDL circuit code, using Claude with library and check tools.
+Description -> SKiDL circuit code, using a language model with library and check tools.
 
 The model looks up real symbols and footprints, writes SKiDL code, and calls
 `check_circuit` to run it through SKiDL's ERC and our design checks. It repairs
@@ -11,15 +11,13 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import anthropic
-
-from . import config, library
+from . import library
+from .backends import ToolResult, make_backend
 from .checks import check_circuit
 from .runner import run_circuit_code
 
 EXAMPLES_DIR = Path(__file__).parent / "examples"
 FEW_SHOT_EXAMPLES = ["ldo_3v3.py", "blinker_555.py"]
-MAX_TOKENS = 64000
 MAX_TURNS = 40
 
 SYSTEM_PROMPT = """\
@@ -115,8 +113,6 @@ TOOLS = [
         },
     },
 ]
-for _tool in TOOLS:
-    _tool["eager_input_streaming"] = True
 
 
 @dataclass
@@ -181,78 +177,59 @@ class Toolbox:
 
 
 def _validate_input(tool_name, data):
-    """Check a streamed tool input against its schema's required string fields."""
+    """Check a tool call's parsed input against its schema's required string fields."""
     schema = next((t["input_schema"] for t in TOOLS if t["name"] == tool_name), None)
     if schema is None or not isinstance(data, dict):
         return False
     return all(isinstance(data.get(k), str) and data.get(k) for k in schema["required"])
 
 
-def _request(client, model, messages, effort, json_retries=2):
-    """One streamed model turn. Re-issues the request if a tool input can't be parsed."""
-    for attempt in range(json_retries + 1):
-        try:
-            with client.beta.messages.stream(
-                model=model,
-                max_tokens=MAX_TOKENS,
-                system=_system_prompt(),
-                tools=TOOLS,
-                messages=messages,
-                thinking={"type": "adaptive"},
-                output_config={"effort": effort},
-                cache_control={"type": "ephemeral"},
-                betas=["server-side-fallback-2026-07-01"],
-                fallbacks="default",
-            ) as stream:
-                return stream.get_final_message()
-        except ValueError:
-            # Raised by the SDK for streamed tool input that is not valid JSON.
-            if attempt == json_retries:
-                raise
+NUDGE = ("check_circuit has not passed yet. Fix the problems it reported (or call it if you "
+         "have not yet) and call check_circuit again with the complete code.")
 
 
-def generate_circuit(description, workdir, client=None, model=None, max_turns=MAX_TURNS,
-                     effort="high"):
+def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, max_nudges=2):
     """Ask the model for a circuit matching `description`. Returns a GenerationResult."""
-    client = client or anthropic.Anthropic()
-    model = model or config.MODEL
+    backend = backend or make_backend()
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     tools = Toolbox(workdir)
-    messages = [{"role": "user", "content": f"Design this board:\n\n{description}"}]
+    backend.start(_system_prompt(), f"Design this board:\n\n{description}", TOOLS)
     result = GenerationResult(description=description, code=None, passed=False)
     transcript = workdir / "transcript.jsonl"
+    nudges = 0
 
-    for turn in range(1, max_turns + 1):
-        result.turns = turn
-        response = _request(client, model, messages, effort)
-
+    for turn_no in range(1, max_turns + 1):
+        result.turns = turn_no
+        turn = backend.step()
         with transcript.open("a") as f:
-            f.write(json.dumps({"turn": turn, "stop_reason": response.stop_reason,
-                                "content": [b.model_dump() for b in response.content]}) + "\n")
+            f.write(json.dumps({"turn": turn_no, "backend": backend.name, "stop": turn.stop,
+                                **turn.record}, default=str) + "\n")
 
-        if response.stop_reason == "refusal":
+        if turn.stop == "refusal":
             result.error = "model declined the request"
             break
-        if response.stop_reason == "max_tokens":
+        if turn.stop == "max_tokens":
             result.error = "response hit max_tokens"
             break
 
-        messages.append({"role": "assistant", "content": response.content})
-        tool_uses = [b for b in response.content if b.type == "tool_use"]
-        if not tool_uses:
-            result.summary = "\n".join(b.text for b in response.content if b.type == "text")
+        if not turn.tool_calls:
+            # Open models sometimes stop early or paste code as text; push them back once or twice.
+            if not any(a.passed for a in tools.attempts) and nudges < max_nudges:
+                nudges += 1
+                backend.add_user_message(NUDGE)
+                continue
+            result.summary = turn.text
             break
 
         results = []
-        for block in tool_uses:
-            if not _validate_input(block.name, block.input):
-                content, is_error = json.dumps({"INVALID_JSON": str(block.input)}), True
+        for call in turn.tool_calls:
+            if not _validate_input(call.name, call.input):
+                content, is_error = json.dumps({"INVALID_JSON": call.raw[:2000]}), True
             else:
-                content, is_error = tools.execute(block.name, block.input)
-            results.append({"type": "tool_result", "tool_use_id": block.id,
-                            "content": content, "is_error": is_error})
-        messages.append({"role": "user", "content": results})
+                content, is_error = tools.execute(call.name, call.input)
+            results.append(ToolResult(id=call.id, content=content, is_error=is_error))
+        backend.add_tool_results(results)
     else:
         result.error = f"stopped after {max_turns} turns"
 

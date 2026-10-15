@@ -53,13 +53,13 @@ pytest trajectory_classifier/tests/test_classifier.py::TestClassifier::test_clas
 
 ## circuit_gen (second project)
 
-`circuit_gen/` turns a text description into a routed PCB: Claude writes SKiDL circuit code (with KiCad library search and check tools), then KiCad + FreeRouting place, route, DRC-check and export Gerbers. See `circuit_gen/README.md`.
+`circuit_gen/` turns a text description into a routed PCB: an LLM (default: open model `Qwen/Qwen3.8-27B` via Hugging Face Inference Providers; or Claude with `--backend claude`) writes SKiDL circuit code (with KiCad library search and check tools), then KiCad + FreeRouting place, route, DRC-check and export Gerbers. See `circuit_gen/README.md`.
 
 ```bash
 circuit_gen/setup.sh                       # KiCad 7, FreeRouting, SKiDL
 pytest circuit_gen/tests/
 python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
-python -m circuit_gen design "<description>" -o runs/x   # needs ANTHROPIC_API_KEY
+python -m circuit_gen design "<description>" -o runs/x   # needs HF_TOKEN
 ```
 
 ## Issue Tracking

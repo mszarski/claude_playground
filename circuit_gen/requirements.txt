@@ -1,4 +1,5 @@
-anthropic>=1.14.0
+anthropic>=1.14.0          # optional: --backend claude
+huggingface_hub>=1.0      # default backend: open models via Inference Providers
 
 # SKiDL's own dependencies. SKiDL itself is installed by setup.sh with --no-deps,
 # because its optional layout helpers (kinet2pcb, hierplace) don't build on Python 3.13.
