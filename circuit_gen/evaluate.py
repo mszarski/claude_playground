@@ -58,9 +58,15 @@ def _run_one(case, sample, out_dir, opts):
             print(f"crashed: {type(e).__name__}: {e}")
             report = {"success": False, "generation": False, "stages": {},
                       "error": f"{type(e).__name__}: {e}", "infra": _is_infra_error(e)}
-    return {"id": case["id"], "sample": sample, "success": bool(report.get("success")),
+    # The model said its design was done (its checks passed) but the hidden tests failed.
+    sim = report.get("stages", {}).get(SIM_STAGE)
+    false_accept = bool(report.get("generation")) and sim is not None and not sim.get("ok")
+    result = {"id": case["id"], "sample": sample, "success": bool(report.get("success")),
+            "false_accept": false_accept,
             "failed_at": first_failure(report), "tested": bool(case.get("tests")),
             "seconds": round(time.time() - start, 1), "dir": str(out_dir)}
+    (out_dir / "result.json").write_text(json.dumps(result))
+    return result
 
 
 def design_and_build(description, out_dir, opts, tests=None):
@@ -73,7 +79,8 @@ def design_and_build(description, out_dir, opts, tests=None):
     name = opts.get("backend") or config.BACKEND
     extra = {"effort": opts["effort"]} if name == "claude" and opts.get("effort") else {}
     backend = make_backend(name, model=opts.get("model"), **extra)
-    gen = generate_circuit(description, out_dir, backend=backend, max_turns=opts["max_turns"])
+    gen = generate_circuit(description, out_dir, backend=backend, max_turns=opts["max_turns"],
+                           spec_first=opts.get("spec_first", False))
     (out_dir / "generation.json").write_text(json.dumps({
         "description": description, "backend": backend.name, "model": backend.model,
         "passed_checks": gen.passed, "turns": gen.turns,
@@ -100,7 +107,9 @@ def summarize(cases, results, samples):
         for r in runs:
             if r["failed_at"]:
                 failures[r["failed_at"]] = failures.get(r["failed_at"], 0) + 1
+        false_accepts = sum(r.get("false_accept", False) for r in runs)
         boards.append({"id": case["id"], "tested": bool(case.get("tests")), "passed": passed,
+                       "false_accepts": false_accepts,
                        "samples": len(runs), "pass_rate": passed / len(runs) if runs else 0.0,
                        "failures": failures, "infra_errors": infra})
     tested = [b for b in boards if b["tested"]]
@@ -115,6 +124,7 @@ def summarize(cases, results, samples):
         "solved_at_least_once": sum(b["passed"] > 0 for b in boards),
         "solved_every_time": sum(b["passed"] == b["samples"] for b in boards),
         "infra_errors": sum(b["infra_errors"] for b in boards),
+        "false_accepts": sum(b.get("false_accepts", 0) for b in boards),
         "boards": boards,
     }
 
@@ -131,18 +141,32 @@ def format_table(summary):
               f"{summary['pass_rate_tested']:.0%} over boards with simulation tests.",
               f"Solved at least once: {summary['solved_at_least_once']}/{n}; "
               f"every time: {summary['solved_every_time']}/{n}."]
+    lines.append(f"False accepts (model declared done, hidden tests failed): "
+                 f"{summary.get('false_accepts', 0)}.")
     if summary.get("infra_errors"):
         lines.append(f"{summary['infra_errors']} sample(s) excluded: API or network errors.")
     return "\n".join(lines)
 
 
-def run_eval(cases, out, samples=1, jobs=4, **opts):
-    """Run every case `samples` times with `jobs` worker processes. Returns the summary."""
+def run_eval(cases, out, samples=1, jobs=4, resume=False, **opts):
+    """Run every case `samples` times with `jobs` worker processes. Returns the summary.
+
+    With `resume`, samples that already finished (have a result.json) are reused.
+    """
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     opts = {"passes": 30, "max_turns": 40, **opts}
     work = [(case, s) for case in cases for s in range(1, samples + 1)]
     results = []
+    if resume:
+        done = []
+        for case, s in work:
+            f = out / case["id"] / f"s{s:02d}" / "result.json"
+            if f.exists():
+                results.append(json.loads(f.read_text()))
+                done.append((case["id"], s))
+        work = [(c, s) for c, s in work if (c["id"], s) not in done]
+        print(f"resuming: {len(done)} samples already done, {len(work)} to run", flush=True)
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=jobs, mp_context=ctx) as pool:
         futures = {pool.submit(_run_one, case, s, out / case["id"] / f"s{s:02d}", opts): (case, s)

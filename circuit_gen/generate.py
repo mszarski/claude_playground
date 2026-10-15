@@ -195,14 +195,15 @@ def _format_symbols(entries):
 class Toolbox:
     """Executes the model's tool calls and records circuit attempts."""
 
-    def __init__(self, workdir):
+    def __init__(self, workdir, suffix=""):
         self.workdir = Path(workdir)
+        self.suffix = suffix        # frozen requirements appended to every circuit
         self.attempts = []
         self.sim_runs = 0
 
     def check_circuit(self, code):
         n = len(self.attempts) + 1
-        run = run_circuit_code(code, self.workdir / "attempts" / f"{n:02d}")
+        run = run_circuit_code(code + self.suffix, self.workdir / "attempts" / f"{n:02d}")
         feedback = run.summary()
         passed = False
         if run.ok:
@@ -217,7 +218,8 @@ class Toolbox:
         """Run one model-requested measurement. Returns (content, is_error)."""
         from .spice import simulate
         self.sim_runs += 1
-        run = run_circuit_code(args["code"], self.workdir / "sims" / f"{self.sim_runs:02d}")
+        run = run_circuit_code(args["code"] + self.suffix,
+                               self.workdir / "sims" / f"{self.sim_runs:02d}")
         if not run.ok:
             return run.summary(), True
         test = {"name": args["measure"], "analysis": args.get("analysis", "op"),
@@ -266,13 +268,40 @@ NUDGE = ("check_circuit has not passed yet. Fix the problems it reported (or cal
          "have not yet) and call check_circuit again with the complete code.")
 
 
-def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, max_nudges=2):
-    """Ask the model for a circuit matching `description`. Returns a GenerationResult."""
+SPEC_NOTE = """
+
+These requirements were written before the design and are fixed. They are \
+appended to your code automatically every time it is checked or simulated, so \
+do not copy them; check_circuit fails until all of them pass. You may add \
+more require(...) lines of your own.
+
+{spec}"""
+
+
+def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, max_nudges=2,
+                     spec_first=False):
+    """Ask the model for a circuit matching `description`. Returns a GenerationResult.
+
+    With `spec_first`, a separate model call first writes the requirements from
+    the description alone (spec.py); they are frozen and appended to every
+    circuit the designer submits.
+    """
+    from .spec import SpecError, write_spec
+
     backend = backend or make_backend()
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
-    tools = Toolbox(workdir)
-    backend.start(_system_prompt(), f"Design this board:\n\n{description}", TOOLS)
+    user = f"Design this board:\n\n{description}"
+    suffix = ""
+    if spec_first:
+        try:
+            _, suffix = write_spec(description, backend, workdir)
+        except SpecError as e:
+            return GenerationResult(description=description, code=None, passed=False,
+                                    error=f"spec phase failed: {e}")
+        user += SPEC_NOTE.format(spec=suffix.strip())
+    tools = Toolbox(workdir, suffix=suffix)
+    backend.start(_system_prompt(), user, TOOLS)
     result = GenerationResult(description=description, code=None, passed=False)
     transcript = workdir / "transcript.jsonl"
     nudges = 0
@@ -319,7 +348,7 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
     result.attempts = tools.attempts
     passing = [a for a in tools.attempts if a.passed]
     if passing:
-        result.code, result.passed = passing[-1].code, True
+        result.code, result.passed = passing[-1].code + suffix, True
     elif tools.attempts:
-        result.code = tools.attempts[-1].code
+        result.code = tools.attempts[-1].code + suffix
     return result

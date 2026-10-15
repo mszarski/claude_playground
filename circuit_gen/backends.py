@@ -123,10 +123,11 @@ class HuggingFaceBackend:
         from huggingface_hub.errors import HfHubHTTPError
         for attempt in range(self.retries + 1):
             try:
+                extra = {"tools": self.tools} if self.tools else {}
                 stream = self.client.chat_completion(
-                    model=self.model, messages=self.messages, tools=self.tools,
+                    model=self.model, messages=self.messages,
                     max_tokens=self.max_tokens, temperature=self.temperature,
-                    stream=True, stream_options={"include_usage": True})
+                    stream=True, stream_options={"include_usage": True}, **extra)
                 return _assemble_stream(stream)
             except HfHubHTTPError as e:
                 status = getattr(e.response, "status_code", None)
@@ -207,11 +208,12 @@ class ClaudeBackend:
     def _request(self):
         for attempt in range(self.json_retries + 1):
             try:
+                extra = {"tools": self.tools} if self.tools else {}
                 with self.client.beta.messages.stream(
                     model=self.model,
                     max_tokens=self.max_tokens,
                     system=self.system,
-                    tools=self.tools,
+                    **extra,
                     messages=self.messages,
                     thinking={"type": "adaptive"},
                     output_config={"effort": self.effort},

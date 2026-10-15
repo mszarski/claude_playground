@@ -34,7 +34,7 @@ def cmd_build(args):
 
 def _opts(args):
     return {"backend": args.backend, "model": args.model, "effort": args.effort,
-            "max_turns": args.max_turns, "passes": args.passes}
+            "max_turns": args.max_turns, "passes": args.passes, "spec_first": args.spec_first}
 
 
 def cmd_design(args):
@@ -55,7 +55,8 @@ def cmd_eval(args):
     if args.only:
         wanted = set(args.only.split(","))
         cases = [c for c in cases if c["id"] in wanted]
-    summary = run_eval(cases, args.out, samples=args.samples, jobs=args.jobs, **_opts(args))
+    summary = run_eval(cases, args.out, samples=args.samples, jobs=args.jobs,
+                       resume=args.resume, **_opts(args))
     print()
     print(format_table(summary))
     return 0
@@ -84,6 +85,7 @@ def main(argv=None):
     e.add_argument("--samples", type=int, default=1, help="designs per board (model outputs vary)")
     e.add_argument("--jobs", type=int, default=4, help="samples run in parallel")
     e.add_argument("--only", default=None, help="comma-separated board ids to run")
+    e.add_argument("--resume", action="store_true", help="reuse samples already finished in --out")
 
     c = sub.add_parser("compare", help="side-by-side pass rates of several eval runs")
     c.add_argument("runs", nargs="+", help="eval output directories")
@@ -97,6 +99,8 @@ def main(argv=None):
         s.add_argument("--model", default=None,
                        help="model id, e.g. Qwen/Qwen3.8-27B (hf) or claude-opus-5-5 (claude)")
         s.add_argument("--max-turns", type=int, default=40)
+        s.add_argument("--spec-first", action="store_true",
+                       help="write frozen requirements from the description before designing")
         s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"],
                        help="Claude backend only")
 
