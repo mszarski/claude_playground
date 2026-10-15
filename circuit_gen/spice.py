@@ -72,7 +72,6 @@ Gq vi gnd vi gnd 1e-5
 .ends
 .model CG_DIODE D(IS=2.5n N=1.75 RS=0.5 BV=100)
 .model CG_SCHOTTKY D(IS=1u N=1.05 RS=0.05 BV=40)
-.model CG_ZENER D(IS=1n N=1.5 RS=1)
 .model CG_NMOS NMOS(LEVEL=1 VTO=1.5 KP=20 LAMBDA=0.01)
 .model CG_PMOS PMOS(LEVEL=1 VTO=-1.5 KP=10 LAMBDA=0.01)
 .model CG_NPN NPN(IS=1e-14 BF=200 VAF=100)
@@ -87,6 +86,18 @@ CORNER_SAMPLES = 24
 # LED forward voltage at 10 mA by colour.
 _LED_VF = [("red", 1.9), ("orange", 2.0), ("yellow", 2.0), ("amber", 2.0), ("green", 2.2),
            ("blue", 3.0), ("white", 3.0), ("uv", 3.3), ("ir", 1.3)]
+
+
+def _zener_voltage(*texts):
+    """Breakdown voltage from a value or part name such as '5.1V', '5V1', 'BZV55C5V1'."""
+    for text in texts:
+        m = re.search(r"(\d+)V(\d+)", text or "")
+        if m:
+            return float(f"{m.group(1)}.{m.group(2)}")
+        m = re.search(r"(\d+(?:\.\d+)?)\s*V\b", text or "")
+        if m:
+            return float(m.group(1))
+    return None
 
 
 def _led_model(name, value):
@@ -155,7 +166,14 @@ def _add_part(nl, part):
         return
     if {"A", "K"} <= by_name.keys() and len(pins) == 2 and (lib in ("Diode", "Device")):
         low = desc.lower()
-        model = "CG_SCHOTTKY" if "schottky" in low else "CG_ZENER" if "zener" in low else "CG_DIODE"
+        model = "CG_SCHOTTKY" if "schottky" in low else "CG_DIODE"
+        if "zener" in low:
+            bv = _zener_voltage(value, name, (info or {}).get("description", ""))
+            if bv is None:
+                nl.unmodeled.append(f"{ref} (zener voltage unknown: put it in the value, e.g. '5.1V')")
+                return
+            model = f"CG_Z_{ref}"
+            nl.models.append(f".model {model} D(IS=1n N=1.5 RS=1 BV={bv:g} IBV=1m)")
         nl.lines.append(f"D{ref} {nl.node_for(by_name['A']['net'])} {nl.node_for(by_name['K']['net'])} {model}")
         return
     if lib == "Amplifier_Operational" and info:
@@ -194,6 +212,9 @@ def _add_part(nl, part):
         model = "CG_PMOS" if "p-channel" in desc.lower() or "pmos" in desc.lower() else "CG_NMOS"
         d, g, s = (nl.node_for(by_name[k]["net"]) or f"nc_{ref}_{k}" for k in "DGS")
         nl.lines.append(f"M{ref} {d} {g} {s} {s} {model}")
+        # Body diode: source to drain for N-channel, drain to source for P-channel.
+        anode, cathode = (d, s) if model == "CG_PMOS" else (s, d)
+        nl.lines.append(f"DB{ref} {anode} {cathode} CG_DIODE")
         return
     if lib.startswith("Transistor_BJT") and {"B", "C", "E"} <= by_name.keys():
         model = "CG_PNP" if "pnp" in desc.lower() else "CG_NPN"
