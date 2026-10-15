@@ -92,8 +92,9 @@ a future fine-tuning dataset.
 
 Parts are mapped to generic SPICE models by library and symbol: R/C/L,
 diodes and LEDs (Vf by colour), op-amps (1 MHz, rail-limited), fixed linear
-regulators (load current drawn from the input), MOSFETs and BJTs. MCUs, logic
-and timers have no model yet, so their behaviour is not simulated.
+regulators (load current drawn from the input), MOSFETs and BJTs (with body
+diodes), zeners, 555 timers and CMOS logic gates. MCUs and other complex ICs
+have no model, so their behaviour is not simulated.
 
 ## Benchmark results (October 2026)
 
@@ -121,6 +122,20 @@ Qwen3.8-27B on the 7 harder boards, 5 samples each:
 
 Qwen3.8-27B with `--spec-first` on all 19 boards, 3 samples each: 88% of
 samples pass, 0 false accepts (11 samples excluded for API errors).
+
+DeepSeek-V4.1-Flash with `--spec-first`, 19 boards x 3 samples:
+
+| spec-first version | passed | false accepts |
+|---|---|---|
+| frozen spec, designer can only fail | 72% | 2 (spec errors the designer gamed) |
+| + designer can dispute a requirement | 40% | 0 (most sessions end in accurate disputes) |
+| + spec fixes, one revision round | 79% | 1 (spec invented a net; now rejected) |
+
+The spec writer's common mistakes were current sign conventions, loads
+written as currents, DC checks of oscillators, unmodelled ICs, invented nets
+and contradictory requirements. `i()` is now a magnitude, specs are
+sanity-checked (load units, named nets), and a disputed requirement goes
+back to the spec writer once.
 
 A false accept is a design the model declared finished that fails the hidden
 tests. Without a separate spec, the designer loosened or omitted the
