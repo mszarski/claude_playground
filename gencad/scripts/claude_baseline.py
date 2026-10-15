@@ -87,7 +87,7 @@ def submit(a):
             prompt = text_index.get(u, {}).get("expert") if "expert" in mode else None
             if "expert" in mode and not prompt:
                 continue
-            reqs.append(Request(custom_id=f"{i}|{mode}",
+            reqs.append(Request(custom_id=f"{i}_{mode.replace('+', '-')}",   # API allows [a-zA-Z0-9_-] only
                                 params=MessageCreateParamsNonStreaming(**request(a.data, u, mode, prompt, a.effort))))
     client = anthropic.Anthropic()
     batch = client.messages.batches.create(requests=reqs)
@@ -117,7 +117,8 @@ def collect(a):
     usage = {"input_tokens": 0, "output_tokens": 0}
     status = {}
     for r in client.messages.batches.results(meta["batch_id"]):
-        i, mode = r.custom_id.split("|")
+        i, mode = r.custom_id.split("_", 1)
+        mode = {m.replace("+", "-"): m for m in meta["modes"]}[mode]
         status[r.result.type] = status.get(r.result.type, 0) + 1
         if r.result.type != "succeeded":
             continue
