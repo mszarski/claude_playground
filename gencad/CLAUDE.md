@@ -318,14 +318,34 @@ scores the whole DeepCAD test set and we score our 2000-uid subset; still below 
 loss is mostly invalid code (4-9 % at IoU 0): with 4 views, valid outputs average ~90 IoU. Next levers: retry /
 best-of-N on code that fails to build, RL on IoU (cadrille's +6), longer training (val still rising at 30k).
 
-## Handoff (2026-10-15 ~06:00 UTC)
+### Claude zero-shot baseline, 4 views (`scripts/claude_baseline.py`, bucket `results/claude_baseline/`)
+claude-opus-5-5, effort high, Message Batches API, same 2x2 grid of our 4 fixed-camera renders as vlm_cq view4, plus
+the camera layout and a CadQuery style example in the prompt (no fine-tuning, no DeepCAD data). 2000/2000 requests
+succeeded in ~70 min; 1.50M input / 1.50M output tokens, **~$18** (not ~$80 as estimated). Scored locally with
+`scripts/cq_iou.py` (same n = 1997 / dup 770 / novel 1227). IoU % gt / own, IR %:
+| method (4 views) | all | dup | novel |
+|---|---|---|---|
+| Claude zero-shot | 83.2 / **83.4**, 3.2 | 87.8 / **87.8**, 2.2 | 80.4 / **80.6**, 3.7 |
+| vlm_cq_v1 (fine-tuned Qwen3-VL-2B) | 86.6 / **86.5**, 4.0 | 92.4 / **92.8**, 3.0 | 82.9 / **82.6**, 4.6 |
+| cadrille (DeepCAD test, whole set) | SFT DeepCAD + CAD-Recode 86.1; + RL 92.2 | | |
+Readings: (1) zero-shot Claude is only 3.1 points (own, all) behind our fine-tuned model and 2.0 behind on novel
+parts; the gap is mostly on duplicated parts (-5.0), which vlm_cq has effectively seen in training. (2) gt ~= own:
+from the camera description Claude puts parts in the right frame and proportions, so the frame caveat did not matter.
+(3) Claude has the lowest invalid rate of any CadQuery writer here (3.2 % vs 4.0 %); over valid outputs only it
+averages ~86 own IoU vs ~90 for vlm_cq, so vlm_cq's lead is in shape accuracy, not validity. (4) Code is short
+(median 239 chars, 1893 distinct programs; 44 % use circles, 11 % arcs, 40 % cut). Side fix: batch `custom_id`
+may only contain `[A-Za-z0-9_-]`, so ids are now `<i>_<mode with + -> ->`.
+
+## Handoff (2026-10-15 ~08:20 UTC)
 - vlm_cq_v1 finished (30k steps, checkpoint `results/vlm_cq_v1/model`) and is scored on the test split (above).
-- **Claude zero-shot baseline: not run yet** (no `ANTHROPIC_API_KEY` in the session that tried). Run from this folder
-  with test renders available locally: `hf buckets cp` `data/renders.tar` and `data/text_index.json` into `data/`,
-  `results/baselines_vlm_final/preds.pkl` into the same path, extract only the 8000 test renders, then
-  `python scripts/claude_baseline.py submit --data data --uids_from results/baselines_vlm_final/preds.pkl --modes
-  view4 [view1 view1+expert]` -> `collect --wait` -> `PREDS=results/claude_baseline/preds.pkl` scoring with
-  `scripts/cq_iou.py` (compare its `own` IoU: a zero-shot model cannot know DeepCAD's frame). ~$80 per mode.
+- Claude zero-shot baseline done for `view4` (above). Not run: `view1`, `view1+expert` (~$18 each at this rate).
+  To rerun: `hf buckets cp` `data/renders.tar`, `data/text_index.json`, `data/cad_vec.tar` and
+  `results/baselines_vlm_final/preds.pkl`, extract only the test uids' files, then `python scripts/claude_baseline.py
+  submit --data data --uids_from results/baselines_vlm_final/preds.pkl --modes <modes>` -> `collect --wait` ->
+  `python scripts/cq_iou.py --preds results/claude_baseline/preds.pkl --data data --out ...` (~20 min on 4 CPUs;
+  local deps: torch from plain PyPI, anthropic, cadquery, h5py, pebble, trimesh).
+- Ideas from it: Claude as a fallback when vlm_cq's code fails to build (its IR is lower), or as a best-of-2
+  candidate picked by render agreement.
 
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
