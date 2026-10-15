@@ -127,7 +127,7 @@ case "$STAGE" in
     need_cq
     need cad_vec renders
     cp /work/data/deepcad_cq.parquet data/
-    python train_vlm_rl.py --data data --name "$RUN" --init "${INIT:-results/vlm_cq_v1/model}" --steps ${STEPS:-400} "$@" ;;
+    python train_vlm_rl.py --data data --name "$RUN" --init "${INIT:-results/vlm_cq_v1/model}" --steps ${STEPS:-300} "$@" ;;
 
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;

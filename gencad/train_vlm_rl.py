@@ -21,7 +21,9 @@ import time
 
 import numpy as np
 import pandas as pd
-import torch
+
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")   # sampling/backward shapes vary a lot
+import torch  # noqa: E402
 
 from mm.vlm_cad import VLMCad, compose_views, encode_batch
 from train_vlm_cad import load_views
@@ -55,11 +57,11 @@ def main():
     ap.add_argument("--max_new_tokens", type=int, default=1024)
     ap.add_argument("--invalid_reward", type=float, default=-1.0)
     ap.add_argument("--len_norm", type=float, default=256.0, help="constant token normaliser (Dr. GRPO)")
-    ap.add_argument("--micro", type=int, default=16, help="sequences per backward pass")
-    ap.add_argument("--gen_bs", type=int, default=128, help="sequences per generate call")
+    ap.add_argument("--micro", type=int, default=8, help="sequences per backward pass")
+    ap.add_argument("--gen_bs", type=int, default=64, help="sequences per generate call")
     ap.add_argument("--lr", type=float, default=1e-6)
     ap.add_argument("--warmup", type=int, default=20)
-    ap.add_argument("--steps", type=int, default=400)
+    ap.add_argument("--steps", type=int, default=300)
     ap.add_argument("--eval_every", type=int, default=100)
     ap.add_argument("--eval_n", type=int, default=256)
     ap.add_argument("--eval_first", type=int, default=1, help="evaluate the initial model at step 0")
@@ -159,6 +161,8 @@ def main():
                                        top_p=1.0, top_k=0, pad_token_id=tok.pad_token_id)
             gen += [row for row in o[:, enc["input_ids"].shape[1]:].cpu()]
         t_gen = time.time() - t0
+        if amp:
+            torch.cuda.empty_cache()
         seqs = []                                         # generated ids up to and including the first eos
         for g in gen:
             ids = g.tolist()
@@ -210,6 +214,8 @@ def main():
             opt.step()
             sched.step()
         opt.zero_grad(set_to_none=True)
+        if amp:
+            torch.cuda.empty_cache()
 
         valid = [x for x in r if x is not None]
         rec = {"step": step, "reward": round(float(np.mean(valid)), 4),

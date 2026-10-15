@@ -359,20 +359,22 @@ part, or Claude's when vlm_cq's code fails to build. Own IoU all / novel, IR:
 The fallback is a free +0.7-0.9 (removes almost all invalid outputs). The oracle (+3.5-5.8) says the two models err on
 different parts, so a selector that picks between candidates (e.g. render agreement with the input) could gain more.
 
-### RL on IoU (`train_vlm_rl.py`, `RUN=vlm_rl_v1 jobs/launch.sh vlmrl`, H200; RUNNING, results pending)
+### RL on IoU (`train_vlm_rl.py`, `RUN=vlm_rl_v2 jobs/launch.sh vlmrl`, H200; RUNNING, results pending)
 Starts from `results/vlm_cq_v1/model`. On-policy group policy gradient (Dr. GRPO: advantage = reward - group mean,
 no std normalisation, constant token normaliser, no KL, one update per batch so no ratio/clipping). Each step: 16
 DeepCAD train parts (104,625 distinct programs), mode view1 / view4 / view1+expert = 0.4 / 0.4 / 0.2, 8 samples each
-at temperature 1.0, reward = `cq_iou.score` IoU (GT normalisation) or -1 if the code fails. lr 1e-6 AdamW, 400 steps,
+at temperature 1.0, reward = `cq_iou.score` IoU (GT normalisation) or -1 if the code fails. lr 1e-6 AdamW, 300 steps,
 save + validate (same 256 val parts and greedy decoding as train_vlm_cq.py) every 100 steps. ~60-115 s/step, mostly
 sampling (HF generate). Step-0 validation (SFT model, this harness): view1 85.8, view4 90.5, view1+expert 90.2 IoU gt.
-Test after: `train_vlm_cq.py --predict results/vlm_rl_v1/model --uids_from results/baselines_vlm_final/preds.pkl
---out_preds results/vlm_rl_v1_test/preds.pkl`, then `cq_iou.py` locally (see the timeout note above).
+Test after: `train_vlm_cq.py --predict results/vlm_rl_v2/model --uids_from results/baselines_vlm_final/preds.pkl
+--out_preds results/vlm_rl_v2_test/preds.pkl`, then `cq_iou.py` locally (see the timeout note above).
 
 ## Handoff (2026-10-15 ~11:00 UTC)
 - Claude zero-shot done for view4 and view1+expert; fallback scored (above). vlm_cq_v1 test numbers corrected.
-- RL job `vlm_rl_v1` running (HF job 6ad0afe9c662881452250458); `results/vlm_rl_v1/log.jsonl` (its first lines, steps
-  0-3, are from an earlier attempt of the same run that was restarted to fit the 12 h timeout).
+- RL job `vlm_rl_v2` running (HF job 6ad0b890c662881452250c2e, 300 steps, 13 h limit). `vlm_rl_v1` attempts died:
+  empty `data/` in the upload, then CUDA OOM at step 15 while sampling 128 sequences in one generate call (now 64
+  per call, expandable_segments, empty_cache between phases, backward micro-batch 8). In the 14 steps it ran, the
+  mean sampled reward was 0.69 (IoU of valid samples 0.76, invalid 3.7 %), ~120 s/step.
 - Launch gotcha: `jobs/launch.sh` uploads everything under `data/` except the big extracted folders, so local
   `data/renders.tar`, `cad_vec.tar`, `text_index.json` would be uploaded too: move `data/` aside and leave a
   placeholder file (an empty `data/` is dropped, which breaks `entry.sh`).
