@@ -129,6 +129,11 @@ case "$STAGE" in
     cp /work/data/deepcad_cq.parquet data/
     python train_vlm_rl.py --data data --name "$RUN" --init "${INIT:-results/vlm_cq_v1/model}" --steps ${STEPS:-300} "$@" ;;
 
+  vlmpred)    # test-set CadQuery predictions of a vlm_cq-style model dir (INIT) -> results/$RUN/preds.pkl
+    need renders
+    python train_vlm_cq.py --data data --predict "${INIT:?set INIT=<model dir>}" \
+        --uids_from results/baselines_vlm_final/preds.pkl --out_preds "results/$RUN/preds.pkl" "$@" ;;
+
   mm)         # the new multimodal prior
     python train_mm_prior.py --emb_dir data/emb --name "$RUN" ${HUB_REPO:+--hub_repo $HUB_REPO} "$@" ;;
 
