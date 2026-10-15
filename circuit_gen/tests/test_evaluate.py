@@ -27,6 +27,16 @@ class TestFirstFailure:
         assert first_failure(report(False, completed=layout, tested=True)) == "simulation"
 
 
+def test_infra_errors_are_excluded():
+    cases = [{"id": "a"}]
+    results = [{"id": "a", "sample": 1, "success": True, "failed_at": None},
+               {"id": "a", "sample": 2, "success": False, "failed_at": "infra"}]
+    s = summarize(cases, results, samples=2)
+    assert s["pass_rate"] == 1.0 and s["infra_errors"] == 1
+    assert s["boards"][0]["samples"] == 1
+    assert "1 sample(s) excluded" in format_table(s)
+
+
 def test_summary_rates_and_table():
     cases = [{"id": "a", "tests": [{}]}, {"id": "b"}]
     results = [

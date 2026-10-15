@@ -45,13 +45,22 @@ class ToolResult:
     is_error: bool = False
 
 
+def _retry_delay(error, attempt, cap=60.0):
+    """Seconds to wait before retrying: the server's Retry-After if given, else backoff."""
+    headers = getattr(getattr(error, "response", None), "headers", None) or {}
+    try:
+        return min(float(headers.get("retry-after")), cap)
+    except (TypeError, ValueError):
+        return min(2.0 ** (attempt + 1), cap)
+
+
 class HuggingFaceBackend:
     """Open models served by Hugging Face Inference Providers (OpenAI-style chat API)."""
 
     name = "hf"
 
     def __init__(self, model=None, client=None, provider=None, max_tokens=16384,
-                 temperature=0.2, retries=4):
+                 temperature=0.2, retries=7):
         if client is None:
             from huggingface_hub import InferenceClient
             client = InferenceClient(provider=provider or config.HF_PROVIDER)
@@ -81,7 +90,7 @@ class HuggingFaceBackend:
                 status = getattr(e.response, "status_code", None)
                 if attempt == self.retries or (status is not None and status < 500 and status != 429):
                     raise
-                time.sleep(2 ** (attempt + 1))
+                time.sleep(_retry_delay(e, attempt))
 
     def step(self):
         response = self._complete()

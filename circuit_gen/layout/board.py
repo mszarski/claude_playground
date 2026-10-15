@@ -19,6 +19,7 @@ class BoardRules:
     clearance: float = 0.2       # mm
     via_diameter: float = 0.6    # mm
     via_drill: float = 0.3       # mm
+    hole_clearance: float = 0.15 # mm; some KiCad library footprints (USB-C) need < 0.25
     part_spacing: float = 1.0    # mm between part bounding boxes
     edge_margin: float = 2.0     # mm from parts to board edge
 
@@ -46,6 +47,7 @@ def _apply_rules(board, rules):
     nc.SetViaDrill(_mm(rules.via_drill))
     ds.m_TrackMinWidth = _mm(min(rules.track_width, 0.2))
     ds.m_MinClearance = _mm(min(rules.clearance, 0.2))
+    ds.m_HoleClearance = _mm(rules.hole_clearance)
 
 
 def _draw_outline(board, x0, y0, x1, y1):

@@ -19,10 +19,19 @@ from pathlib import Path
 from .pipeline import SIM_STAGE, STAGES, build
 
 
+def _is_infra_error(e):
+    """API or network failures: the sample says nothing about the model's design ability."""
+    names = {type(x).__name__ for x in type(e).__mro__}
+    return bool(names & {"HfHubHTTPError", "APIConnectionError", "APIStatusError",
+                         "ConnectionError", "Timeout", "TimeoutError"})
+
+
 def first_failure(report):
     """The stage where a run stopped, or None if it succeeded."""
     if report.get("success"):
         return None
+    if report.get("infra"):
+        return "infra"
     if report.get("generation") is False:
         return "generation"
     required = STAGES + ([SIM_STAGE] if report.get("functionally_tested") else [])
@@ -46,7 +55,7 @@ def _run_one(case, sample, out_dir, opts):
         except Exception as e:  # one broken sample must not stop the benchmark
             print(f"crashed: {type(e).__name__}: {e}")
             report = {"success": False, "generation": False, "stages": {},
-                      "error": f"{type(e).__name__}: {e}"}
+                      "error": f"{type(e).__name__}: {e}", "infra": _is_infra_error(e)}
     return {"id": case["id"], "sample": sample, "success": bool(report.get("success")),
             "failed_at": first_failure(report), "tested": bool(case.get("tests")),
             "seconds": round(time.time() - start, 1), "dir": str(out_dir)}
@@ -81,7 +90,9 @@ def design_and_build(description, out_dir, opts, tests=None):
 def summarize(cases, results, samples):
     boards = []
     for case in cases:
-        runs = sorted((r for r in results if r["id"] == case["id"]), key=lambda r: r["sample"])
+        all_runs = sorted((r for r in results if r["id"] == case["id"]), key=lambda r: r["sample"])
+        infra = sum(r["failed_at"] == "infra" for r in all_runs)
+        runs = [r for r in all_runs if r["failed_at"] != "infra"]
         passed = sum(r["success"] for r in runs)
         failures = {}
         for r in runs:
@@ -89,7 +100,7 @@ def summarize(cases, results, samples):
                 failures[r["failed_at"]] = failures.get(r["failed_at"], 0) + 1
         boards.append({"id": case["id"], "tested": bool(case.get("tests")), "passed": passed,
                        "samples": len(runs), "pass_rate": passed / len(runs) if runs else 0.0,
-                       "failures": failures})
+                       "failures": failures, "infra_errors": infra})
     tested = [b for b in boards if b["tested"]]
 
     def mean(xs):
@@ -101,6 +112,7 @@ def summarize(cases, results, samples):
         "pass_rate_tested": mean([b["pass_rate"] for b in tested]),
         "solved_at_least_once": sum(b["passed"] > 0 for b in boards),
         "solved_every_time": sum(b["passed"] == b["samples"] for b in boards),
+        "infra_errors": sum(b["infra_errors"] for b in boards),
         "boards": boards,
     }
 
@@ -117,6 +129,8 @@ def format_table(summary):
               f"{summary['pass_rate_tested']:.0%} over boards with simulation tests.",
               f"Solved at least once: {summary['solved_at_least_once']}/{n}; "
               f"every time: {summary['solved_every_time']}/{n}."]
+    if summary.get("infra_errors"):
+        lines.append(f"{summary['infra_errors']} sample(s) excluded: API or network errors.")
     return "\n".join(lines)
 
 
