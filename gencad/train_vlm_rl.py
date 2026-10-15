@@ -56,10 +56,11 @@ def main():
     ap.add_argument("--invalid_reward", type=float, default=-1.0)
     ap.add_argument("--len_norm", type=float, default=256.0, help="constant token normaliser (Dr. GRPO)")
     ap.add_argument("--micro", type=int, default=16, help="sequences per backward pass")
+    ap.add_argument("--gen_bs", type=int, default=128, help="sequences per generate call")
     ap.add_argument("--lr", type=float, default=1e-6)
     ap.add_argument("--warmup", type=int, default=20)
-    ap.add_argument("--steps", type=int, default=1000)
-    ap.add_argument("--eval_every", type=int, default=250)
+    ap.add_argument("--steps", type=int, default=400)
+    ap.add_argument("--eval_every", type=int, default=100)
     ap.add_argument("--eval_n", type=int, default=256)
     ap.add_argument("--eval_first", type=int, default=1, help="evaluate the initial model at step 0")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
@@ -151,8 +152,8 @@ def main():
         # --- sample (no grad, cache on)
         vlm.model.eval()
         gen = []
-        for s in range(0, len(images), 64):
-            enc = encode_batch(vlm.processor, images[s: s + 64], prompts[s: s + 64]).to(a.device)
+        for s in range(0, len(images), a.gen_bs):
+            enc = encode_batch(vlm.processor, images[s: s + a.gen_bs], prompts[s: s + a.gen_bs]).to(a.device)
             with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
                 o = vlm.model.generate(**enc, max_new_tokens=a.max_new_tokens, do_sample=True, temperature=a.temp,
                                        top_p=1.0, top_k=0, pad_token_id=tok.pad_token_id)

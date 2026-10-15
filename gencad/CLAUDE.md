@@ -301,7 +301,7 @@ For scale, vlm_cad_v1 (DeepCAD tokens, no CAD-Recode) final checkpoint on the te
 ~20-27 points: the procedural CAD-Recode data is what teaches reading geometry from renders. Invalid code 5-7 %.
 Final validation (step 30k): 1 view 86.0, 4 views 91.1, 1 view + expert 90.0 IoU, invalid 0.8-2.0 %.
 
-**Test split, final checkpoint** (`results/vlm_cq_v1_test/{preds.pkl,cq_iou.json}`; 2000 test uids, 3 whose GT does
+**Test split, final checkpoint** (superseded: see the re-scored table below) (`results/vlm_cq_v1_test/{preds.pkl,cq_iou.json}`; 2000 test uids, 3 whose GT does
 not build dropped, so n = 1997 / dup 770 / novel 1227). IoU % with GT normalisation (gt) / each solid fitted to its own
 box (own), invalid code IR %; invalid = IoU 0:
 | input | all IoU gt / own, IR | dup IoU gt, IR | novel IoU gt / own, IR | vlm_cad_v1 novel / all IoU |
@@ -318,34 +318,65 @@ scores the whole DeepCAD test set and we score our 2000-uid subset; still below 
 loss is mostly invalid code (4-9 % at IoU 0): with 4 views, valid outputs average ~90 IoU. Next levers: retry /
 best-of-N on code that fails to build, RL on IoU (cadrille's +6), longer training (val still rising at 30k).
 
-### Claude zero-shot baseline, 4 views (`scripts/claude_baseline.py`, bucket `results/claude_baseline/`)
-claude-opus-5-5, effort high, Message Batches API, same 2x2 grid of our 4 fixed-camera renders as vlm_cq view4, plus
-the camera layout and a CadQuery style example in the prompt (no fine-tuning, no DeepCAD data). 2000/2000 requests
-succeeded in ~70 min; 1.50M input / 1.50M output tokens, **~$18** (not ~$80 as estimated). Scored locally with
-`scripts/cq_iou.py` (same n = 1997 / dup 770 / novel 1227). IoU % gt / own, IR %:
-| method (4 views) | all | dup | novel |
+### !! vlm_cq_v1 test numbers above are 2-5 points too low (scoring job lost parts)
+Re-scoring the same `results/vlm_cq_v1_test/preds.pkl` locally (4 CPUs, `cq_iou_local{,2}.json`) gives, IoU % gt / own,
+IR % (all | dup | novel):
+| input | all | dup | novel |
 |---|---|---|---|
-| Claude zero-shot | 83.2 / **83.4**, 3.2 | 87.8 / **87.8**, 2.2 | 80.4 / **80.6**, 3.7 |
-| vlm_cq_v1 (fine-tuned Qwen3-VL-2B) | 86.6 / **86.5**, 4.0 | 92.4 / **92.8**, 3.0 | 82.9 / **82.6**, 4.6 |
-| cadrille (DeepCAD test, whole set) | SFT DeepCAD + CAD-Recode 86.1; + RL 92.2 | | |
-Readings: (1) zero-shot Claude is only 3.1 points (own, all) behind our fine-tuned model and 2.0 behind on novel
-parts; the gap is mostly on duplicated parts (-5.0), which vlm_cq has effectively seen in training. (2) gt ~= own:
-from the camera description Claude puts parts in the right frame and proportions, so the frame caveat did not matter.
-(3) Claude has the lowest invalid rate of any CadQuery writer here (3.2 % vs 4.0 %); over valid outputs only it
-averages ~86 own IoU vs ~90 for vlm_cq, so vlm_cq's lead is in shape accuracy, not validity. (4) Code is short
-(median 239 chars, 1893 distinct programs; 44 % use circles, 11 % arcs, 40 % cut). Side fix: batch `custom_id`
-may only contain `[A-Za-z0-9_-]`, so ids are now `<i>_<mode with + -> ->`.
+| 1 view | 83.0 / 82.9, 2.3 | 90.2 / 90.4, 1.0 | 78.6 / 78.2, 3.1 |
+| 4 views | **89.1 / 89.1, 1.3** | 94.9 / 95.2, 0.5 | **85.5 / 85.2, 1.7** |
+| 1 view + expert | 87.9 / 88.4, 1.6 | 94.6 / 94.9, 0.4 | 83.7 / 84.2, 2.3 |
+| expert only | 78.1 / 80.1, 2.8 | 88.3 / 89.9, 0.3 | 71.7 / 73.9, 4.4 |
+The cloud `cqiou` job had marked an extra 2-6 % of parts invalid; the local invalid rates match training-time
+validation (view4 1.2 %), and Claude's predictions score identically in two local runs, so the job most likely
+lost parts to worker timeouts/crashes under load. `cq_iou.py` now prints `timeout/crash=<n>` per method; if it is
+not ~0, rerun with fewer `--workers`. Use the local numbers from now on.
 
-## Handoff (2026-10-15 ~08:20 UTC)
-- vlm_cq_v1 finished (30k steps, checkpoint `results/vlm_cq_v1/model`) and is scored on the test split (above).
-- Claude zero-shot baseline done for `view4` (above). Not run: `view1`, `view1+expert` (~$18 each at this rate).
-  To rerun: `hf buckets cp` `data/renders.tar`, `data/text_index.json`, `data/cad_vec.tar` and
-  `results/baselines_vlm_final/preds.pkl`, extract only the test uids' files, then `python scripts/claude_baseline.py
-  submit --data data --uids_from results/baselines_vlm_final/preds.pkl --modes <modes>` -> `collect --wait` ->
-  `python scripts/cq_iou.py --preds results/claude_baseline/preds.pkl --data data --out ...` (~20 min on 4 CPUs;
-  local deps: torch from plain PyPI, anthropic, cadquery, h5py, pebble, trimesh).
-- Ideas from it: Claude as a fallback when vlm_cq's code fails to build (its IR is lower), or as a best-of-2
-  candidate picked by render agreement.
+### Claude zero-shot baseline (`scripts/claude_baseline.py`, bucket `results/claude_baseline{,_v1e}/`)
+claude-opus-5-5, effort high, Message Batches API, same inputs as vlm_cq (2x2 grid of our 4 fixed-camera renders, or
+1 view + the expert prompt), plus the camera layout and a CadQuery style example in the prompt; no fine-tuning, no
+DeepCAD data. view4: 2000/2000 succeeded in ~70 min, ~$18; view1+expert: ~3.5 h, ~$27. Scored locally with
+`scripts/cq_iou.py` (n = 1997 / dup 770 / novel 1227), no timeouts. IoU % gt / own, IR %:
+| method | all | dup | novel |
+|---|---|---|---|
+| Claude, 4 views | 83.2 / **83.4**, 3.2 | 87.8 / 87.8, 2.2 | 80.4 / **80.6**, 3.7 |
+| vlm_cq_v1, 4 views | 89.1 / **89.1**, 1.3 | 94.9 / 95.2, 0.5 | 85.5 / **85.2**, 1.7 |
+| Claude, 1 view + expert | 80.2 / **80.5**, 1.4 | 80.9 / 81.0, 0.9 | 79.8 / **80.2**, 1.6 |
+| vlm_cq_v1, 1 view + expert | 87.9 / **88.4**, 1.6 | 94.6 / 94.9, 0.4 | 83.7 / **84.2**, 2.3 |
+| cadrille (DeepCAD test, whole set), 4 views | SFT DeepCAD + CAD-Recode 86.1; + RL 92.2 | | |
+Readings: (1) vlm_cq leads by 5.7 (4 views) and 7.9 (1 view + expert) points own IoU overall, 4.6 / 4.0 on novel
+parts; the dup gap is larger (7-14) since vlm_cq has seen those shapes. (2) gt ~= own for Claude: from the camera
+description it puts parts in the right frame. (3) Text barely helps Claude (novel 80.6 with 4 views vs 80.2 with
+1 view + expert), while it lifts vlm_cq's 1 view from 78.2 to 84.2. (4) Claude's code is short (view4 median 239
+chars; 44 % circles, 11 % arcs, 40 % cuts) and fails to build 1.4-3.7 % of the time.
+
+**Fallback** (`scripts/fallback.py`, per-part rows from `cq_iou.py --rows`; bucket `results/fallback/`): vlm_cq's
+part, or Claude's when vlm_cq's code fails to build. Own IoU all / novel, IR:
+| input | vlm_cq alone | + Claude fallback | oracle best of the two per part |
+|---|---|---|---|
+| 4 views | 89.1 / 85.2, 1.3 % | **89.8 / 86.2, 0.1 %** (Claude used on 25 parts) | 92.6 / 90.1 |
+| 1 view + expert | 88.4 / 84.2, 1.6 % | **89.3 / 85.7, 0.1 %** (31 parts) | 94.2 / 92.5 |
+The fallback is a free +0.7-0.9 (removes almost all invalid outputs). The oracle (+3.5-5.8) says the two models err on
+different parts, so a selector that picks between candidates (e.g. render agreement with the input) could gain more.
+
+### RL on IoU (`train_vlm_rl.py`, `RUN=vlm_rl_v1 jobs/launch.sh vlmrl`, H200; RUNNING, results pending)
+Starts from `results/vlm_cq_v1/model`. On-policy group policy gradient (Dr. GRPO: advantage = reward - group mean,
+no std normalisation, constant token normaliser, no KL, one update per batch so no ratio/clipping). Each step: 16
+DeepCAD train parts (104,625 distinct programs), mode view1 / view4 / view1+expert = 0.4 / 0.4 / 0.2, 8 samples each
+at temperature 1.0, reward = `cq_iou.score` IoU (GT normalisation) or -1 if the code fails. lr 1e-6 AdamW, 400 steps,
+save + validate (same 256 val parts and greedy decoding as train_vlm_cq.py) every 100 steps. ~60-115 s/step, mostly
+sampling (HF generate). Step-0 validation (SFT model, this harness): view1 85.8, view4 90.5, view1+expert 90.2 IoU gt.
+Test after: `train_vlm_cq.py --predict results/vlm_rl_v1/model --uids_from results/baselines_vlm_final/preds.pkl
+--out_preds results/vlm_rl_v1_test/preds.pkl`, then `cq_iou.py` locally (see the timeout note above).
+
+## Handoff (2026-10-15 ~11:00 UTC)
+- Claude zero-shot done for view4 and view1+expert; fallback scored (above). vlm_cq_v1 test numbers corrected.
+- RL job `vlm_rl_v1` running (HF job 6ad0afe9c662881452250458); `results/vlm_rl_v1/log.jsonl` (its first lines, steps
+  0-3, are from an earlier attempt of the same run that was restarted to fit the 12 h timeout).
+- Launch gotcha: `jobs/launch.sh` uploads everything under `data/` except the big extracted folders, so local
+  `data/renders.tar`, `cad_vec.tar`, `text_index.json` would be uploaded too: move `data/` aside and leave a
+  placeholder file (an empty `data/` is dropped, which breaks `entry.sh`).
+- Bucket housekeeping: `results/vlm_cq_v1/model/` holds six stale `.tmp*` files of 4.9 GB each (interrupted saves).
 
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
