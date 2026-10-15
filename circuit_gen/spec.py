@@ -86,6 +86,47 @@ def _quote_measures(code):
     return _UNQUOTED.sub(fix, code)
 
 
+def _nets_in(req):
+    nets = set(req.get("sources") or {})
+    for net, load in (req.get("loads") or {}).items():
+        nets.add(net)
+        if isinstance(load, dict) and load.get("to"):
+            nets.add(load["to"])
+    m = re.match(r"\s*\w+\((.*)\)\s*$", str(req["measure"]))
+    if m:
+        nets.update(n.strip() for n in m.group(1).split(",") if n.strip())
+    return nets
+
+
+def named_nets(description):
+    """Nets listed in the description's "Name the ... nets A, B and C." sentences, or None."""
+    sentences = re.findall(r"[Nn]ame the[^.]*?(?:\.(?=\s|$)|$)", description)
+    if not sentences:
+        return None
+    nets = set()
+    for sentence in sentences:
+        for token in re.findall(r"(?<![A-Za-z0-9_+])[A-Z0-9_+][A-Za-z0-9_+/-]*", sentence):
+            if re.search(r"[A-Z+]", token):
+                nets.add(token.rstrip(",.;"))
+    return nets
+
+
+def check_nets(reqs, description):
+    """Requirements may only use nets the description names (plus ground)."""
+    named = named_nets(description)
+    for r in reqs:
+        for net in _nets_in(r):
+            if net.upper() in ("GND", "0"):
+                continue
+            if named is not None:
+                ok = net in named
+            else:
+                ok = re.search(rf"(?<![A-Za-z0-9_+]){re.escape(net)}(?![A-Za-z0-9_])", description)
+            if not ok:
+                raise SpecError(f"net {net!r} is not named in the description; requirements may "
+                                f"only use the nets the description names: {r.get('name') or r['measure']}")
+
+
 def parse_requirements(text):
     """Parse require(...) calls from model output. Raises SpecError on anything else."""
     if "```" in text:
@@ -166,6 +207,7 @@ def write_spec(description, backend, workdir, attempts=3):
             continue
         try:
             reqs = parse_requirements(turn.text)
+            check_nets(reqs, description)
         except SpecError as e:
             last_error = e
             backend.add_user_message(f"{e}. Reply with only require(...) lines.")
@@ -203,6 +245,7 @@ def revise_spec(description, backend, workdir, spec_code, requirement, reason, a
             continue
         try:
             reqs = parse_requirements(turn.text)
+            check_nets(reqs, description)
         except SpecError as e:
             last_error = e
             backend.add_user_message(f"{e}. Reply with only require(...) lines.")

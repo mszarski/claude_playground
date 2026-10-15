@@ -10,6 +10,8 @@ from circuit_gen.spec import SpecError, parse_requirements, to_code
 
 from test_generate import ScriptedBackend, calls, say
 
+DESC = "An LED board with a filter. Name the nets VCC, IN, OUT and GND."
+
 SPEC_REPLY = '''Here are the tests:
 ```python
 require("i(VCC)", 0.008, 0.012, sources={"VCC": 5}, name="LED current")
@@ -46,7 +48,7 @@ def test_spec_first_freezes_requirements(tmp_path):
     starts = []
     original_start = backend.start
     backend.start = lambda *a: (starts.append(a), original_start(*a))
-    result = generate.generate_circuit("an LED board", tmp_path, backend=backend, spec_first=True)
+    result = generate.generate_circuit(DESC, tmp_path, backend=backend, spec_first=True)
 
     assert len(starts) == 2                                  # spec call, then design call
     assert starts[0][2] == []                                # spec phase has no tools
@@ -103,7 +105,7 @@ REVISED = 'require("i(VCC)", 0.009, 0.011, sources={"VCC": 5}, name="LED current
 def test_dispute_gets_one_revision_then_ends(tmp_path):
     # spec, dispute, revised spec (the scripted backend plays both roles), dispute again
     backend = ScriptedBackend([say(SPEC_REPLY), _dispute(), say(REVISED), _dispute("again", "still wrong")])
-    result = generate.generate_circuit("an LED board", tmp_path, backend=backend, spec_first=True)
+    result = generate.generate_circuit(DESC, tmp_path, backend=backend, spec_first=True)
     assert result.spec_revisions == 1
     assert result.error == "spec disputed: again: still wrong"
     assert (tmp_path / "spec_revised.py").read_text().count("require(") == 1
@@ -125,3 +127,22 @@ def test_dispute_without_spec_first_ends(tmp_path):
 def test_spec_sanity_rejections(text, message):
     with pytest.raises(SpecError, match=message):
         parse_requirements(text)
+
+
+def test_requirements_must_use_described_nets():
+    from circuit_gen.spec import check_nets
+    desc = "White LED driver from 9 V with a +5V rail. Name the nets VIN, +5V and GND."
+    ok = parse_requirements("require('i(VIN)', 0.01, 0.03, sources={'VIN': 9, 'GND': 0})\n"
+                            "require('v(+5V)', 4.8, 5.2, sources={'VIN': 9})")
+    check_nets(ok, desc)
+    bad = parse_requirements("require('i(VIN)', 0.019, 0.021, sources={'VIN': 9}, loads={'LED': 3.2})")
+    with pytest.raises(SpecError, match="'LED' is not named"):
+        check_nets(bad, desc)
+
+
+def test_named_nets():
+    from circuit_gen.spec import named_nets
+    assert named_nets("Board. Name the nets IN_P, IN_N, OUT, VPOS (+12 V), VNEG (-12 V) and GND.") \
+        >= {"IN_P", "IN_N", "OUT", "VPOS", "VNEG", "GND"}
+    assert named_nets("Name the supply nets VCC and GND, and the 555 output net OUT.") >= {"VCC", "GND", "OUT"}
+    assert named_nets("no clause here") is None
