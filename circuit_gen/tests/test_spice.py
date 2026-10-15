@@ -225,3 +225,38 @@ def test_ac_voltage_is_a_magnitude():
     test = {"analysis": "ac", "freq": 1000, "sources": {"IN": "ac"}, "measure": "v(OUT)",
             "expect": [0.69, 0.72]}
     assert spice.simulate(circuit, [test]).ok
+
+
+@needs_ngspice
+@needs_libs
+class TestTimerAndLogic:
+    def test_555_astable_frequency(self):
+        circuit = {"parts": [
+            header("J1", "VCC", "GND"),
+            part("U1", "Timer:NE555D", "NE555D", [
+                ("1", "GND", "PWRIN", "GND"), ("2", "TR", "INPUT", "THR"), ("3", "Q", "OUTPUT", "OUT"),
+                ("4", "R", "INPUT", "VCC"), ("5", "CV", "INPUT", "CV"), ("6", "THR", "INPUT", "THR"),
+                ("7", "DIS", "INPUT", "DIS"), ("8", "VCC", "PWRIN", "VCC")]),
+            R("R1", "VCC", "DIS", "10k"), R("R2", "DIS", "THR", "33k"),
+            C("C1", "THR", "GND", "10u"), C("C2", "CV", "GND", "10n"),
+        ]}
+        test = {"analysis": "tran", "duration": 5, "sources": {"VCC": 5}, "measure": "freq(OUT)",
+                "expect": [1.80, 2.0]}          # 1.44 / ((10k + 66k) * 10u) = 1.895 Hz
+        report = spice.simulate(circuit, [test])
+        assert report.ok, report.summary()
+
+    def test_freq_needs_tran(self):
+        circuit = {"parts": [header("J1", "VCC", "GND"), R("R1", "VCC", "GND")]}
+        result = spice.simulate(circuit, [{"sources": {"VCC": 5}, "measure": "freq(VCC)",
+                                           "expect": [0, 1]}]).results[0]
+        assert "tran" in result.error
+
+    @pytest.mark.parametrize("a,b,expect", [(0, 0, 5), (0, 5, 5), (5, 0, 5), (5, 5, 0)])
+    def test_nand_truth_table(self, a, b, expect):
+        circuit = {"parts": [part("U1", "74xx:74HC00", "74HC00", [
+            ("1", "~", "INPUT", "A"), ("2", "~", "INPUT", "B"), ("3", "~", "OUTPUT", "Y"),
+            ("7", "GND", "PWRIN", "GND"), ("14", "VCC", "PWRIN", "VCC")])]}
+        test = {"sources": {"VCC": 5, "A": a, "B": b}, "measure": "v(Y)",
+                "expect": [expect - 0.1, expect + 0.1]}
+        report = spice.simulate(circuit, [test])
+        assert report.ok, report.summary()

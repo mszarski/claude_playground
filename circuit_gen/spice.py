@@ -4,7 +4,8 @@ Functional checks: simulate a circuit in ngspice against a board's test spec.
 The circuit (from the runner) is converted to a SPICE netlist using generic
 models chosen from each part's KiCad library and symbol: resistors,
 capacitors, inductors, diodes and LEDs, op-amps, fixed-output linear
-regulators, MOSFETs and BJTs. Parts without a model (MCUs, logic, timers, ...)
+regulators, MOSFETs, BJTs, 555 timers and CMOS logic gates. Parts without a
+model (MCUs, ...)
 are left out of the netlist and listed as unmodeled, so tests that depend on
 them can fail; the report says which parts were missing.
 
@@ -69,6 +70,24 @@ Ro vos vo 0.05
 * The load current is drawn from the input, plus a small quiescent current.
 Fin vi gnd Vsense 1
 Gq vi gnd vi gnd 1e-5
+.ends
+.subckt CG_555 gnd tr q r cv thr dis vcc
+* Behavioural 555: internal 5k/5k/5k divider, a regenerative latch whose state
+* is held on Cst (set by TR < Vcc/3, cleared by THR > CV or R < 0.7 V), a
+* discharge switch that is on while the latch is clear, and an output ~1.5 V
+* below Vcc when set.
+R1 vcc cv 5k
+R2 cv lo 5k
+R3 lo gnd 5k
+Bst gnd st I = (V(tr,gnd) < V(lo,gnd) ? 1e-3 : 0) - ((V(thr,gnd) > V(cv,gnd) || V(r,gnd) < 0.7) ? 1e-3 : 0) - (V(st,gnd) > 1 ? 1e-1*(V(st,gnd)-1) : 0) + (V(st,gnd) < 0 ? -1e-1*V(st,gnd) : 0) + 1e-4*(V(st,gnd) - 0.5)
+Cst st gnd 1n
+Rst st gnd 1e13
+Bnst nst gnd V = 1 - V(st,gnd)
+Sdis dis gnd nst gnd CG_555_SW
+.model CG_555_SW SW(VT=0.5 VH=0.05 RON=10 ROFF=1e9)
+Bq qi gnd V = V(st,gnd) > 0.5 ? V(vcc,gnd) - 1.5 : 0.05
+Rq qi q 10
+Iq vcc gnd 3m
 .ends
 .model CG_DIODE D(IS=2.5n N=1.75 RS=0.5 BV=100)
 .model CG_SCHOTTKY D(IS=1u N=1.05 RS=0.05 BV=40)
@@ -221,7 +240,62 @@ def _add_part(nl, part):
         c, b, e = (nl.node_for(by_name[k]["net"]) or f"nc_{ref}_{k}" for k in "CBE")
         nl.lines.append(f"Q{ref} {c} {b} {e} {model}")
         return
+    if lib == "Timer" and re.search(r"(^|[^0-9])555", name) and \
+            {"GND", "TR", "Q", "R", "CV", "THR", "DIS", "VCC"} <= by_name.keys():
+        n = {k: nl.node_for(by_name[k]["net"]) or f"nc_{ref}_{k}"
+             for k in ("GND", "TR", "Q", "R", "CV", "THR", "DIS", "VCC")}
+        nl.lines.append(f"X{ref} {n['GND']} {n['TR']} {n['Q']} {n['R']} {n['CV']} {n['THR']} "
+                        f"{n['DIS']} {n['VCC']} CG_555")
+        return
+    if lib in ("74xx", "4xxx") and info and _add_logic(nl, part, info):
+        return
     nl.unmodeled.append(f"{ref} ({part['symbol']})")
+
+
+_GATES = [  # (description keyword, combine inputs, invert)
+    ("nand", "&&", True), ("nor", "||", True), ("xor", "!=", False),
+    ("and", "&&", False), ("or", "||", False), ("inverter", None, True),
+    ("buffer", None, False),
+]
+
+
+def _add_logic(nl, part, info):
+    """CMOS logic gates as behavioural sources: threshold at Vcc/2, 50 R output."""
+    desc = info.get("description", "").lower()
+    gate = next((g for g in _GATES if re.search(rf"\b{g[0]}", desc)), None)
+    if gate is None:
+        return False
+    _, combine, invert = gate
+    lib_pins = {p["num"]: p for p in info["pins"]}
+    pins = {p["num"]: p for p in part["pins"]}
+    power = {lib_pins[n]["name"]: pins[n]["net"] for n in pins
+             if n in lib_pins and lib_pins[n]["type"] == "power_in"}
+    vcc = nl.node_for(power.get("VCC") or power.get("VDD"))
+    gnd = nl.node_for(power.get("GND") or power.get("VSS"))
+    if vcc is None or gnd is None:
+        return False
+    units = {}
+    for n, p in pins.items():
+        lp = lib_pins.get(n)
+        if lp and lp["type"] in ("input", "output"):
+            units.setdefault(lp["unit"], {"in": [], "out": None})
+            if lp["type"] == "input":
+                units[lp["unit"]]["in"].append(nl.node_for(p["net"]))
+            else:
+                units[lp["unit"]]["out"] = nl.node_for(p["net"])
+    ref = part["ref"]
+    for u, unit in sorted(units.items()):
+        if unit["out"] is None or any(i is None for i in unit["in"]) or not unit["in"]:
+            continue                       # unused gate
+        highs = [f"(V({i},{gnd}) > V({vcc},{gnd})/2)" for i in unit["in"]]
+        logic = highs[0] if combine is None else f" {combine} ".join(highs)
+        if combine == "!=":
+            logic = f"({highs[0]} != {highs[1]})" if len(highs) == 2 else highs[0]
+        cond = f"!({logic})" if invert else f"({logic})"
+        nl.lines.append(f"B{ref}_{u} {ref}_o{u} {gnd} V = {cond} ? V({vcc},{gnd}) : 0")
+        nl.lines.append(f"R{ref}_o{u} {ref}_o{u} {unit['out']} 50")
+    nl.lines.append(f"R{ref}_q {vcc} {gnd} 1e6")       # quiescent supply current
+    return True
 
 
 def to_netlist(circuit):
@@ -275,11 +349,23 @@ def _testbench(nl, test):
         else:
             lines.append(f"R_load{i} {node(net)} 0 {float(spec)}")
 
-    m = re.fullmatch(r"\s*(v|i|gain)\(\s*([^,)]+?)\s*(?:,\s*([^)]+?)\s*)?\)\s*", test["measure"])
+    m = re.fullmatch(r"\s*(v|i|gain|freq)\(\s*([^,)]+?)\s*(?:,\s*([^)]+?)\s*)?\)\s*", test["measure"])
     if not m:
         raise ValueError(f"bad measure expression {test['measure']!r}")
     kind, a, b = m.group(1), m.group(2), m.group(3)
     ac = test.get("analysis", "op") == "ac"
+    if kind == "freq" or test.get("analysis") == "tran":
+        if kind != "freq" or test.get("analysis") != "tran":
+            raise ValueError("freq(NET) is measured with analysis='tran' (and only it)")
+        duration = float(test.get("duration", 5.0))
+        n = node(a)
+        # Oscillation frequency from the 2nd to 3rd rising crossing of the mid level,
+        # skipping the start-up cycle.
+        analysis = [f"tran {duration / 5000:.6g} {duration:.6g} uic",
+                    f"let cg_lvl = (vecmax(v({n})) + vecmin(v({n})))/2",
+                    f"meas tran cg_t1 when v({n})=$&cg_lvl rise=2",
+                    f"meas tran cg_t2 when v({n})=$&cg_lvl rise=3"]
+        return lines, analysis, "1/(cg_t2-cg_t1)"
     if kind == "v":
         # In AC analysis voltages are complex; compare magnitudes.
         expr = f"mag(v({node(a)}))" if ac else f"v({node(a)})"
@@ -330,7 +416,8 @@ def run_test(nl, test, timeout=60, corners=False):
     control = [".control"]
     for k, values in enumerate(variants):
         control += [f"alter {elem} = {value:.6g}" for elem, value in values.items()]
-        control += [analysis, f"let cg_r{k} = {expr}", f"print cg_r{k}"]
+        control += (analysis if isinstance(analysis, list) else [analysis])
+        control += [f"let cg_r{k} = {expr}", f"print cg_r{k}"]
     control += [".endc"]
     deck = "\n".join([f"* {name}", MODELS, *nl.models, *nl.lines, *tb,
                       ".option rshunt=1e10",           # tie nodes left floating by unmodeled parts
@@ -380,7 +467,8 @@ def simulate(circuit, tests, corners=False):
 def requirement_tests(circuit):
     """The circuit's own require(...) declarations as test specs."""
     return [{"name": r.get("name") or r["measure"], "analysis": r.get("analysis", "op"),
-             "freq": r.get("freq", 1000), "sources": r.get("sources") or {},
+             "freq": r.get("freq", 1000), "duration": r.get("duration", 5.0),
+             "sources": r.get("sources") or {},
              "loads": r.get("loads") or {}, "measure": r["measure"],
              "expect": [r["min"], r["max"]]}
             for r in circuit.get("requirements", [])]

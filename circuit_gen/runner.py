@@ -26,18 +26,20 @@ lib_search_paths[KICAD7].append({symbol_dir!r})
 footprint_search_paths[KICAD7].append({footprint_dir!r})
 
 _REQUIREMENTS = []
-def require(measure, low, high, sources=None, loads=None, analysis="op", freq=1000, name=None):
+def require(measure, low, high, sources=None, loads=None, analysis="op", freq=1000, name=None,
+            duration=5.0):
     """Declare a behaviour the circuit must have; checked in ngspice across tolerances."""
     if not isinstance(measure, str):
         raise TypeError("require(): measure must be a string such as 'v(OUT)'")
     low, high = float(low), float(high)
     if low > high:
         raise ValueError(f"require({{measure!r}}): low {{low}} is above high {{high}}")
-    if analysis not in ("op", "ac"):
-        raise ValueError("require(): analysis must be 'op' or 'ac'")
+    if analysis not in ("op", "ac", "tran"):
+        raise ValueError("require(): analysis must be 'op', 'ac' or 'tran'")
     _REQUIREMENTS.append({{"measure": measure, "min": low, "max": high,
                           "sources": dict(sources or {{}}), "loads": dict(loads or {{}}),
-                          "analysis": analysis, "freq": float(freq), "name": name}})
+                          "analysis": analysis, "freq": float(freq), "name": name,
+                          "duration": float(duration)}})
 # ---- circuit code starts here ----
 '''
 

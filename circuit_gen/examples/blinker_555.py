@@ -33,5 +33,7 @@ led_a += led["A"]
 led["K"] += gnd
 
 
-# The 555 has no simulation model, so the blink rate cannot be simulated and
-# there is no require(...) here; the timing calculation above is the check.
+
+# Requirements, checked in simulation across component tolerances.
+require("freq(OUT)", 0.75, 1.3, sources={"VCC": 9}, analysis="tran", duration=8,
+        name="blinks at about 1 Hz")

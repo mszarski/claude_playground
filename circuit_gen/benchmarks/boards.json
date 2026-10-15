@@ -49,8 +49,22 @@
  },
  {
   "id": "alternating_blinker",
-  "description": "Two LEDs that blink alternately at about 1 Hz, driven by a 555 timer, powered from 5 V through a 2-pin header. Name the supply nets VCC and GND.",
-  "tests": []
+  "description": "Two LEDs that blink alternately at about 1 Hz, driven by a 555 timer, powered from 5 V through a 2-pin header. Name the supply nets VCC and GND, and the 555 output net OUT.",
+  "tests": [
+   {
+    "name": "blinks at ~1 Hz",
+    "analysis": "tran",
+    "duration": 8,
+    "sources": {
+     "VCC": 5
+    },
+    "measure": "freq(OUT)",
+    "expect": [
+     0.7,
+     1.4
+    ]
+   }
+  ]
  },
  {
   "id": "usb_c_power",
@@ -137,8 +151,20 @@
  },
  {
   "id": "button_debounce",
-  "description": "Push button with RC debouncing feeding a 74HC14 Schmitt-trigger inverter, 5 V supply, output on a 3-pin header. Name the nets VCC, GND and OUT.",
-  "tests": []
+  "description": "Push button with RC debouncing feeding a 74HC14 Schmitt-trigger inverter, 5 V supply, output on a 3-pin header. OUT is low while the button is released and high while it is pressed. Name the nets VCC, GND and OUT.",
+  "tests": [
+   {
+    "name": "OUT low with the button released",
+    "sources": {
+     "VCC": 5
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     0,
+     0.5
+    ]
+   }
+  ]
  },
  {
   "id": "mosfet_switch",

@@ -23,8 +23,10 @@ means exactly that.
     require(measure, low, high, sources={...}, loads={...}, analysis="op", freq=1000, name="...")
 
 - measure: v(NET), i(NET) (current the voltage source on NET delivers into \
-the circuit; negative if the circuit sinks it), or gain(OUT,IN) with \
-analysis="ac" and an "ac" source on IN. In AC analysis every measure is a \
+the circuit; negative if the circuit sinks it), gain(OUT,IN) with \
+analysis="ac" and an "ac" source on IN, or freq(NET), an oscillation \
+frequency in Hz, with analysis="tran" and duration= long enough for at least \
+four cycles. In AC analysis every measure is a \
 magnitude: gain() is never negative, so an inverting gain of -10 is 9 to 11.
 - sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}. \
 A net without a source is left floating (useful for "input left open" cases).
@@ -32,8 +34,9 @@ A net without a source is left floating (useful for "input left open" cases).
 nets, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
 - Use only the net names the description gives; internal nets do not exist yet.
 - Simulation uses generic models of passives, diodes, LEDs, op-amps, fixed \
-linear regulators, MOSFETs and BJTs. Behaviour that depends only on an \
-unmodelled part (an MCU, logic gate or timer) cannot be checked; skip it.
+linear regulators, MOSFETs, BJTs, 555 timers and CMOS logic gates. \
+Behaviour that depends on an unmodelled part (e.g. an MCU) cannot be \
+checked; skip it.
 
 Cover:
 - every number the description gives, at each end of any stated range of \
@@ -46,7 +49,8 @@ conditions (e.g. both supply voltages of "9 V to 15 V");
 Reply with only the require(...) lines, one per call, in a ```python block."""
 
 FIELDS = ("measure", "low", "high")
-OPTIONAL = {"sources": {}, "loads": {}, "analysis": "op", "freq": 1000, "name": None}
+OPTIONAL = {"sources": {}, "loads": {}, "analysis": "op", "freq": 1000, "name": None,
+            "duration": 5.0}
 
 
 class SpecError(ValueError):
@@ -105,8 +109,10 @@ def to_code(reqs):
         for key in ("sources", "loads"):
             if r.get(key):
                 parts.append(f"{key}={r[key]!r}")
-        if r.get("analysis", "op") != "op":
-            parts += [f"analysis={r['analysis']!r}", f"freq={float(r.get('freq', 1000))!r}"]
+        if r.get("analysis", "op") == "ac":
+            parts += [f"analysis='ac'", f"freq={float(r.get('freq', 1000))!r}"]
+        elif r.get("analysis") == "tran":
+            parts += [f"analysis='tran'", f"duration={float(r.get('duration', 5.0))!r}"]
         if r.get("name"):
             parts.append(f"name={r['name']!r}")
         lines.append(f"require({', '.join(parts)})")

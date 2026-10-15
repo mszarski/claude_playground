@@ -63,13 +63,15 @@ Requirements:
 - measure: v(NET), i(NET) (current the source on NET delivers into the \
   circuit; negative if the circuit sinks it), or gain(OUT,IN) with \
   analysis="ac" and an "ac" source on IN. In AC analysis every measure is \
-  a magnitude: gain() is never negative.
+  a magnitude: gain() is never negative. freq(NET) measures an oscillation \
+  frequency with analysis="tran" and duration= at least four cycles long.
 - sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}.
 - loads: resistors from a net to ground, e.g. {"OUT": 10000}, or to another \
   net, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
 - Generic models are used: R/C/L, diodes and LEDs, op-amps, fixed linear \
-  regulators, MOSFETs and BJTs. Parts without a model (MCUs, logic, timers) \
-  are left out, so only require what the modelled parts determine.
+  regulators, MOSFETs, BJTs, 555 timers and CMOS logic gates. Parts without \
+  a model (e.g. MCUs) are left out, so only require what the modelled parts \
+  determine.
 
 SKiDL conventions for this environment:
 - `from skidl import *` and the library paths are already set up; do not \
