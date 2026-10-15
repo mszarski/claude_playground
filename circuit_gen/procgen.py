@@ -33,7 +33,7 @@ OPAMPS = [("LM358", SOIC8), ("TL072", SOIC8), ("MCP6002-xSN", SOIC8)]
 
 REGULATORS = [  # symbol, footprint, output volts, dropout volts, pin names (in, gnd, out)
     ("Regulator_Linear", "AMS1117-3.3", "Package_TO_SOT_SMD:SOT-223-3_TabPin2", 3.3, 1.3, ("VI", "GND", "VO")),
-    ("Regulator_Linear", "LM7805_TO220", "Package_TO_SOT_THT:TO-220-3_Vertical", 5.0, 2.0, ("IN", "GND", "OUT")),
+    ("Regulator_Linear", "LM7805_TO220", "Package_TO_SOT_THT:TO-220-3_Vertical", 5.0, 2.0, ("VI", "GND", "VO")),
     ("Regulator_Linear", "L7809", "Package_TO_SOT_THT:TO-220-3_Vertical", 9.0, 2.0, ("IN", "GND", "OUT")),
     ("Regulator_Linear", "L7812", "Package_TO_SOT_THT:TO-220-3_Vertical", 12.0, 2.0, ("IN", "GND", "OUT")),
 ]
@@ -64,6 +64,17 @@ def human(value, unit):
     return f"{value:.3g} {unit}"
 
 
+OPENERS = ["", "Design ", "I need ", "Please make ", "Build "]
+
+
+def phrase(rng, text):
+    """Light variation in how a brief starts, so descriptions are not all one template."""
+    opener = rng.choice(OPENERS)
+    if not opener:
+        return text
+    return opener + text[0].lower() + text[1:]
+
+
 def header(n):
     return (f'Part("Connector", "Conn_01x{n:02d}_Pin", '
             f'footprint="Connector_PinHeader_2.54mm:PinHeader_1x{n:02d}_P2.54mm_Vertical")')
@@ -86,12 +97,12 @@ def req(measure, low, high, name, **kw):
 # ----------------------------------------------------------------------------
 
 def led_resistor(rng):
-    vcc = rng.choice([3.3, 5, 9, 12, 24])
+    vcc = rng.choice([3.3, 5, 6, 9, 12, 15, 24])
     colour = rng.choice([c for c, vf in LED_VF.items() if vf < vcc - 0.8])
-    i = rng.choice([0.002, 0.005, 0.01, 0.015, 0.02])
+    i = rng.choice([0.001, 0.002, 0.003, 0.005, 0.008, 0.01, 0.012, 0.015, 0.02, 0.025])
     vf = LED_VF[colour]
     r = nearest((vcc - vf) / i)
-    desc = (f"A small board that lights a {colour} LED at about {human(i, 'A')} from a "
+    desc = phrase(rng, f"A small board that lights a {colour} LED at about {human(i, 'A')} from a "
             f"{vcc:g} V supply on a 2-pin header, with a current-limiting resistor. "
             f"Name the supply nets VCC and GND.")
     code = f'''"""{colour.capitalize()} LED at ~{human(i, 'A')} from {vcc:g} V.
@@ -118,7 +129,7 @@ def voltage_divider(rng):
     r2 = nearest(total * ratio)
     r1 = nearest(total - r2)
     actual = vin * r2 / (r1 + r2)
-    desc = (f"Resistive divider that scales a {vin:g} V input down to about {vout:g} V for an "
+    desc = phrase(rng, f"Resistive divider that scales a {vin:g} V input down to about {vout:g} V for an "
             f"ADC input, total resistance around {fmt(total)}ohm, input and output on pin "
             f"headers. Name the nets VIN, OUT and GND.")
     code = f'''"""Divider: Vout = Vin * R2 / (R1 + R2) = {vin:g} * {fmt(r2)} / ({fmt(r1)} + {fmt(r2)}) = {actual:.3g} V."""
@@ -137,11 +148,11 @@ vin & R("{fmt(r1)}", tolerance=0.01) & out & R("{fmt(r2)}", tolerance=0.01) & gn
 
 def rc_filter(rng):
     kind = rng.choice(["low", "high"])
-    fc = nearest(rng.uniform(20, 20000), E12)
+    fc = nearest(10 ** rng.uniform(1, 5), E24)
     c = nearest(1 / (2 * math.pi * fc * rng.uniform(3e3, 30e3)), E6)
     r = nearest(1 / (2 * math.pi * fc * c))
     actual = 1 / (2 * math.pi * r * c)
-    desc = (f"Passive first-order RC {kind}-pass filter with a {human(fc, 'Hz')} cutoff, input "
+    desc = phrase(rng, f"Passive first-order RC {kind}-pass filter with a {human(fc, 'Hz')} cutoff, input "
             f"and output on 2-pin headers. Name the nets IN, OUT and GND.")
     if kind == "low":
         wiring = 'inp & R("{r}") & out & C("{c}") & gnd'
@@ -167,10 +178,10 @@ j_out[1, 2] += out, gnd
 
 def linear_regulator(rng):
     lib, name, fp, vout, drop, (pin_in, pin_gnd, pin_out) = rng.choice(REGULATORS)
-    vin = rng.choice([v for v in (5, 7.5, 9, 12, 15, 24) if v >= vout + drop + 0.5])
-    iload = rng.choice([0.05, 0.1, 0.2, 0.5])
+    vin = rng.choice([v for v in (5, 6, 7.5, 9, 10, 12, 13.8, 15, 18, 20, 24) if v >= vout + drop + 0.5])
+    iload = rng.choice([0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5])
     rload = vout / iload
-    desc = (f"{vin:g} V to {vout:g} V linear regulator board for up to {human(iload, 'A')}, "
+    desc = phrase(rng, f"{vin:g} V to {vout:g} V linear regulator board for up to {human(iload, 'A')}, "
             f"with input and output 2-pin headers and the regulator's input and output "
             f"capacitors. Name the nets VIN, VOUT and GND.")
     code = f'''"""{vin:g} V -> {vout:g} V with a fixed {name}: needs Vin >= Vout + ~{drop:g} V dropout.
@@ -201,16 +212,16 @@ def _opamp(rng):
 
 def noninverting_amp(rng):
     sym, fp = _opamp(rng)
-    gain = rng.choice([2, 3, 5, 10, 11, 20, 21, 33, 50])
+    gain = rng.choice([2, 3, 4, 5, 6, 8, 10, 11, 15, 20, 21, 25, 30, 33, 40, 50])
     rg = rng.choice([1e3, 2.2e3, 4.7e3, 10e3])
     rf = nearest(rg * (gain - 1))
     actual = 1 + rf / rg
-    vcc = 5 if sym != "TL072" else 12
-    if sym == "TL072":
-        vcc = 12
-    desc = (f"Single-supply {vcc:g} V non-inverting op-amp amplifier with a gain of {gain} at "
-            f"1 kHz, AC-coupled input and output, biased at mid-supply, able to drive a 10k "
-            f"load. Name the nets VCC, GND, IN and OUT.")
+    vcc = rng.choice([9, 12, 15]) if sym == "TL072" else rng.choice([5, 9, 12])
+    load = rng.choice([2200, 4700, 10000, 47000])
+    ftest = rng.choice([200, 500, 1000, 2000])
+    desc = phrase(rng, f"Single-supply {vcc:g} V non-inverting op-amp amplifier with a gain of {gain} "
+            f"at {human(ftest, 'Hz')}, AC-coupled input and output, biased at mid-supply, able to "
+            f"drive a {fmt(load)}ohm load. Name the nets VCC, GND, IN and OUT.")
     code = f'''"""Non-inverting amplifier on {vcc:g} V: gain = 1 + Rf/Rg = 1 + {fmt(rf)}/{fmt(rg)} = {actual:.3g}.
 Mid-supply reference from a 10k/10k divider; Rg returns to the reference through
 a capacitor so the DC gain is 1 and the output sits at mid-supply."""
@@ -238,21 +249,23 @@ u[1] += oa
 oa & C("10u") & out
 u[5] += vref        # unused section as a follower at the reference
 u[6] += u[7]
-{req("gain(OUT,IN)", gain * 0.85, gain * 1.15, f"gain ~{gain} at 1 kHz into 10k", sources={"VCC": vcc, "IN": "ac"}, loads={"OUT": 10000}, analysis="ac", freq=1000.0)}
+{req("gain(OUT,IN)", gain * 0.85, gain * 1.15, f"gain ~{gain} into {fmt(load)}", sources={"VCC": vcc, "IN": "ac"}, loads={"OUT": load}, analysis="ac", freq=float(ftest))}
 '''
     return desc, code
 
 
 def inverting_amp(rng):
     sym, fp = _opamp(rng)
-    gain = rng.choice([2, 4.7, 5, 10, 22, 47])
+    gain = rng.choice([1, 2, 3, 4.7, 5, 6.8, 10, 15, 22, 33, 47])
     rin = rng.choice([4.7e3, 10e3, 22e3])
     rf = nearest(rin * gain)
     actual = rf / rin
-    vcc = 12 if sym == "TL072" else 5
-    desc = (f"Single-supply {vcc:g} V inverting amplifier with a gain of -{gain:g} at 1 kHz, "
-            f"AC-coupled input and output, biased at mid-supply, able to drive a 10k load. "
-            f"Name the nets VCC, GND, IN and OUT.")
+    vcc = rng.choice([9, 12, 15]) if sym == "TL072" else rng.choice([5, 9, 12])
+    load = rng.choice([2200, 4700, 10000, 47000])
+    ftest = rng.choice([200, 500, 1000, 2000])
+    desc = phrase(rng, f"Single-supply {vcc:g} V inverting amplifier with a gain of -{gain:g} at "
+            f"{human(ftest, 'Hz')}, AC-coupled input and output, biased at mid-supply, able to "
+            f"drive a {fmt(load)}ohm load. Name the nets VCC, GND, IN and OUT.")
     code = f'''"""Inverting amplifier on {vcc:g} V: |gain| = Rf/Rin = {fmt(rf)}/{fmt(rin)} = {actual:.3g}."""
 vcc, gnd, inp, out = Net("VCC"), Net("GND"), Net("IN"), Net("OUT")
 vref, cin, inv, oa = Net("VREF"), Net("CIN"), Net("INV"), Net("OA")
@@ -278,20 +291,20 @@ u[1] += oa
 oa & C("10u") & out
 u[5] += vref
 u[6] += u[7]
-{req("gain(OUT,IN)", gain * 0.85, gain * 1.15, f"|gain| ~{gain:g} at 1 kHz into 10k", sources={"VCC": vcc, "IN": "ac"}, loads={"OUT": 10000}, analysis="ac", freq=1000.0)}
+{req("gain(OUT,IN)", gain * 0.85, gain * 1.15, f"|gain| ~{gain:g} into {fmt(load)}", sources={"VCC": vcc, "IN": "ac"}, loads={"OUT": load}, analysis="ac", freq=float(ftest))}
 '''
     return desc, code
 
 
 def sallen_key_lowpass(rng):
     sym, fp = rng.choice([("TL072", SOIC8), ("LM358", SOIC8)])
-    fc = nearest(rng.uniform(100, 10000), E12)
+    fc = nearest(10 ** rng.uniform(1.7, 4.3), E24)
     c2 = nearest(1 / (2 * math.pi * fc * 10e3 * math.sqrt(2)), E12)
     c1 = nearest(2 * c2, E12)
     r = nearest(1 / (2 * math.pi * fc * math.sqrt(c1 * c2)))
     actual = 1 / (2 * math.pi * r * math.sqrt(c1 * c2))
     q = math.sqrt(c1 * c2) / (2 * c2)
-    desc = (f"Second-order Butterworth low-pass filter (Sallen-Key, unity gain) with a "
+    desc = phrase(rng, f"Second-order Butterworth low-pass filter (Sallen-Key, unity gain) with a "
             f"{human(fc, 'Hz')} cutoff, using an op-amp on +/-12 V supplies. Input, output and "
             f"power on pin headers. Name the nets IN, OUT, VPOS (+12 V), VNEG (-12 V) and GND.")
     code = f'''"""Unity-gain Sallen-Key low-pass: fc = 1/(2 pi R sqrt(C1 C2)) = {actual:.4g} Hz,
@@ -327,8 +340,8 @@ u[6] += u[7]
 
 
 def astable_555(rng):
-    f = nearest(rng.uniform(0.5, 2000), E12)
-    vcc = rng.choice([5, 9, 12])
+    f = nearest(10 ** rng.uniform(-0.3, 3.5), E24)
+    vcc = rng.choice([5, 6, 9, 12, 15])
     c = nearest(rng.uniform(1, 30) / (f * 1e5), E6)        # aims Ra + 2 Rb in ~10k-300k
     total = 1.44 / (f * c)
     ra = nearest(total * 0.1)
@@ -337,7 +350,7 @@ def astable_555(rng):
     duration = max(6 / actual, 6 * 10e-6)
     colour = rng.choice(["red", "green", "yellow"])
     r_led = nearest((vcc - 1.5 - LED_VF[colour]) / 0.01)
-    desc = (f"555 timer astable oscillator running at about {human(f, 'Hz')} from a {vcc:g} V "
+    desc = phrase(rng, f"555 timer astable oscillator running at about {human(f, 'Hz')} from a {vcc:g} V "
             f"supply, with a {colour} LED showing the output. Power on a 2-pin header. Name the "
             f"supply nets VCC and GND, and the 555 output net OUT.")
     code = f'''"""555 astable: f = 1.44 / ((Ra + 2 Rb) C) = 1.44 / (({fmt(ra)} + 2 * {fmt(rb)}) * {fmt(c)}F) = {actual:.4g} Hz.
@@ -375,10 +388,10 @@ ZENERS = [3.3, 3.9, 4.7, 5.1, 5.6, 6.2, 6.8, 8.2, 9.1]
 
 def zener_regulator(rng):
     vz = rng.choice(ZENERS)
-    vin = rng.choice([v for v in (9, 12, 15, 24) if v > vz + 3])
-    iload = rng.choice([0.002, 0.005, 0.01])
+    vin = rng.choice([v for v in (9, 10, 12, 13.8, 15, 18, 24) if v > vz + 3])
+    iload = rng.choice([0.001, 0.002, 0.003, 0.005, 0.008, 0.01, 0.015])
     rs = nearest((vin - vz) / (iload + 0.005), E12)
-    desc = (f"Zener shunt regulator that makes {vz:g} V from a {vin:g} V input and can supply "
+    desc = phrase(rng, f"Zener shunt regulator that makes {vz:g} V from a {vin:g} V input and can supply "
             f"up to {human(iload, 'A')}. Input and output on 2-pin headers. Name the nets VIN, OUT "
             f"and GND.")
     code = f'''"""Zener shunt regulator: Rs = (Vin - Vz) / (Iload + ~5 mA zener) = ({vin:g} - {vz:g}) / {iload + 0.005:g} -> {fmt(rs)}."""
@@ -401,13 +414,13 @@ out & C("10u") & gnd
 
 
 def mosfet_switch(rng):
-    vload = rng.choice([5, 12, 24])
+    vload = rng.choice([5, 9, 12, 15, 24])
     vlogic = rng.choice([3.3, 5])
-    iload = rng.choice([0.1, 0.5, 1.0])
+    iload = rng.choice([0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 1.5, 2.0])
     rload = vload / iload
     sym = "AO3400A" if iload <= 0.5 else "IRLZ44N"
     fp = "Package_TO_SOT_SMD:SOT-23" if sym == "AO3400A" else "Package_TO_SOT_THT:TO-220-3_Vertical"
-    desc = (f"Low-side N-channel MOSFET switch that lets a {vlogic:g} V logic signal switch a "
+    desc = phrase(rng, f"Low-side N-channel MOSFET switch that lets a {vlogic:g} V logic signal switch a "
             f"{vload:g} V, {human(iload, 'A')} load, with a gate resistor, a gate pull-down so the "
             f"load stays off when the input floats, and a flyback diode. The load connects between "
             f"V{vload:g} and LOAD_NEG. Name the nets V{vload:g}, GND, LOAD_NEG and CTRL.")
@@ -441,15 +454,15 @@ vsup & C("10u") & gnd
 
 
 def bjt_led_switch(rng):
-    vcc = rng.choice([5, 9, 12])
-    vlogic = rng.choice([3.3, 5])
+    vcc = rng.choice([5, 6, 9, 12, 15])
+    vlogic = rng.choice([1.8, 3.3, 5])
     colour = rng.choice(list(LED_VF))
-    i = rng.choice([0.01, 0.02])
+    i = rng.choice([0.005, 0.01, 0.015, 0.02, 0.03])
     vf = LED_VF[colour]
     r_led = nearest((vcc - vf - 0.1) / i)
     ib = i / 10                     # hard saturation: beta_forced = 10
     rb = nearest((vlogic - 0.7) / ib)
-    desc = (f"NPN transistor switch that lets a {vlogic:g} V logic input turn on a {colour} LED "
+    desc = phrase(rng, f"NPN transistor switch that lets a {vlogic:g} V logic input turn on a {colour} LED "
             f"at about {human(i, 'A')} from a {vcc:g} V supply, with a base resistor and a "
             f"pull-down so the LED is off when the input floats. Name the nets VCC, GND and CTRL.")
     code = f'''"""NPN low-side LED switch: R_led = (Vcc - Vf - Vce_sat) / I = ({vcc:g} - {vf} - 0.1) / {i:g} -> {fmt(r_led)};
@@ -479,17 +492,15 @@ vcc & C("100n") & gnd
 
 
 def buffered_reference(rng):
-    vcc = rng.choice([5, 9, 12])
     sym, fp = rng.choice([("LM358", SOIC8), ("TL072", SOIC8)])
-    if sym == "TL072":
-        vcc = 12
+    vcc = rng.choice([9, 12, 15]) if sym == "TL072" else rng.choice([5, 9, 12])
     vref = round(vcc * rng.uniform(0.3, 0.6), 2)
     r2 = nearest(10e3 * vref / vcc * 2)
     r1 = nearest(r2 * (vcc - vref) / vref)
     actual = vcc * r2 / (r1 + r2)
     vref = round(actual, 2)            # describe what the standard values actually give
-    rl = rng.choice([1000, 2200, 4700])
-    desc = (f"A {vref:g} V reference made from a resistor divider on a {vcc:g} V supply, buffered "
+    rl = rng.choice([470, 1000, 2200, 4700, 10000])
+    desc = phrase(rng, f"A {vref:g} V reference made from a resistor divider on a {vcc:g} V supply, buffered "
             f"by an op-amp voltage follower so it can drive a {fmt(rl)}ohm load. Power and the "
             f"reference output on pin headers. Name the nets VCC, GND and VREF_OUT.")
     code = f'''"""Divider {fmt(r1)}/{fmt(r2)} gives {actual:.3g} V; an op-amp follower drives the load."""
@@ -532,18 +543,27 @@ FAMILIES = {
 }
 
 
-def generate(n, seed=0, families=None):
-    """n boards, cycling through families. Returns dicts with id, family, description, code."""
+def generate(n, seed=0, families=None, max_misses=50):
+    """n boards, round-robin over families. Returns dicts with id, family, description, code.
+
+    A family that keeps producing descriptions already seen is retired, so a
+    small parameter space cannot stall the run.
+    """
     rng = random.Random(seed)
-    names = list(families or FAMILIES)
+    active = list(families or FAMILIES)
+    misses = {f: 0 for f in active}
     boards, seen = [], set()
-    attempts = 0
-    while len(boards) < n and attempts < n * 20:
-        attempts += 1
-        family = names[len(boards) % len(names)]
+    turn = 0
+    while len(boards) < n and active:
+        family = active[turn % len(active)]
+        turn += 1
         desc, code = FAMILIES[family](rng)
         if desc in seen:
+            misses[family] += 1
+            if misses[family] >= max_misses:
+                active.remove(family)
             continue
+        misses[family] = 0
         seen.add(desc)
         boards.append({"id": f"{family}_{len(boards):04d}", "family": family,
                        "description": desc, "code": code})
