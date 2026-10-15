@@ -115,7 +115,8 @@ def test_examples_build_end_to_end(example, tmp_path):
     from circuit_gen.pipeline import build
 
     report = build((EXAMPLES / example).read_text(), tmp_path)
-    assert report["success"], report["stages"]
+    failed = {k: v for k, v in report["stages"].items() if not v.get("ok")}
+    assert report["success"], failed
     assert report["stages"]["routing"]["unrouted"] == 0
     assert report["stages"]["drc"]["errors"] == 0
     assert (tmp_path / "gerbers" / "board-F_Cu.gtl").exists()

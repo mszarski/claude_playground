@@ -73,6 +73,16 @@ class TestLoop:
         assert result.error == "model declined the request"
         assert result.attempts == []
 
+    def test_retries_turn_after_max_tokens(self, tmp_path):
+        cut = Turn(text="", stop="max_tokens")
+        backend = ScriptedBackend([cut, cut, say("done"), say("done"), say("done")])
+        result = generate.generate_circuit("anything", tmp_path, backend=backend)
+        assert result.error is None and result.summary == "done"
+
+        backend = ScriptedBackend([cut, cut, cut])
+        result = generate.generate_circuit("anything", tmp_path, backend=backend)
+        assert result.error == "response hit max_tokens"
+
     def test_nudges_when_model_stops_without_passing(self, tmp_path):
         backend = ScriptedBackend([say("here is a design"), say("ok"), say("bye")])
         result = generate.generate_circuit("anything", tmp_path, backend=backend, max_nudges=2)
@@ -169,11 +179,12 @@ class TestHuggingFaceBackend:
         assert req["messages"][2]["tool_calls"][0]["function"]["arguments"] == '{"query": "555"}'
         assert req["messages"][4] == {"role": "tool", "tool_call_id": "c2", "content": "ERROR: bad json"}
 
-    def test_length_finish_is_max_tokens(self):
+    def test_length_finish_is_max_tokens_and_not_kept(self):
         client = FakeInferenceClient([_hf_response(content="...", finish_reason="length")])
         b = HuggingFaceBackend(model="m", client=client)
         b.start("sys", "u", generate.TOOLS)
         assert b.step().stop == "max_tokens"
+        assert [m["role"] for m in b.messages] == ["system", "user"]
 
     def test_default_backend_is_hf(self, monkeypatch):
         monkeypatch.setattr("huggingface_hub.InferenceClient", lambda **kw: object())

@@ -20,6 +20,7 @@ from .runner import run_circuit_code
 EXAMPLES_DIR = Path(__file__).parent / "examples"
 FEW_SHOT_EXAMPLES = ["ldo_3v3.py", "blinker_555.py"]
 MAX_TURNS = 40
+MAX_TOKEN_RETRIES = 2
 
 SYSTEM_PROMPT = """\
 You are an electronics design engineer. You turn a plain-language description \
@@ -255,6 +256,7 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
     result = GenerationResult(description=description, code=None, passed=False)
     transcript = workdir / "transcript.jsonl"
     nudges = 0
+    max_token_retries = 0
 
     for turn_no in range(1, max_turns + 1):
         result.turns = turn_no
@@ -267,6 +269,10 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
             result.error = "model declined the request"
             break
         if turn.stop == "max_tokens":
+            # Usually runaway reasoning; a fresh sample of the same turn tends to finish.
+            if max_token_retries < MAX_TOKEN_RETRIES:
+                max_token_retries += 1
+                continue
             result.error = "response hit max_tokens"
             break
 

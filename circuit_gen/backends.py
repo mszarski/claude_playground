@@ -104,9 +104,11 @@ class HuggingFaceBackend:
             assistant["tool_calls"] = [{"id": c.id, "type": "function",
                                         "function": {"name": c.name, "arguments": c.raw}}
                                        for c in calls]
-        self.messages.append(assistant)
-
         stop = {"length": "max_tokens"}.get(choice.finish_reason, "tool_use" if calls else "end")
+        if stop != "max_tokens":
+            # A cut-off reply is not kept, so the turn can be retried from the same history.
+            self.messages.append(assistant)
+
         record = {"finish_reason": choice.finish_reason, "message": assistant}
         usage = getattr(response, "usage", None)
         if usage is not None:
