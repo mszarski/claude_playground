@@ -28,7 +28,7 @@ Runs on Hugging Face Jobs, e.g.:
 import os
 
 import trackio
-from datasets import load_dataset
+from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
 
@@ -40,8 +40,10 @@ EPOCHS = float(os.environ.get("EPOCHS", "2"))
 
 # Comma-separated files in the dataset repo, e.g. procgen and LLM-designed sessions.
 DATA_FILES = os.environ.get("DATA_FILES", "procgen/sft_agentic.jsonl,llm/sft_agentic.jsonl")
-dataset = load_dataset(DATASET, data_files=DATA_FILES.split(","), split="train")
-dataset = dataset.select_columns(["messages", "tools"])
+# Load each file on its own: the sources carry different metadata columns.
+parts = [load_dataset(DATASET, data_files=f, split="train").select_columns(["messages", "tools"])
+         for f in DATA_FILES.split(",")]
+dataset = concatenate_datasets(parts).shuffle(seed=0)
 split = dataset.train_test_split(test_size=0.1, seed=0)
 print(f"train {len(split['train'])}, eval {len(split['test'])}")
 
