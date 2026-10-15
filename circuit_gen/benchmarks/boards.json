@@ -1,0 +1,12 @@
+[
+  {"id": "led_resistor", "description": "A small board that lights a red LED from a 5 V supply on a 2-pin header, with a current-limiting resistor for about 10 mA."},
+  {"id": "ldo_3v3", "description": "5 V to 3.3 V regulator board for up to 500 mA, using a linear regulator, with input and output 2-pin headers and a green power LED."},
+  {"id": "blinker_555", "description": "An LED that blinks at about 2 Hz using a 555 timer, powered from 9 V through a 2-pin header."},
+  {"id": "usb_c_power", "description": "A USB-C receptacle that provides 5 V to a 2-pin output header. Include the 5.1k CC pull-down resistors so chargers supply 5 V, and a power LED."},
+  {"id": "mic_preamp", "description": "Single-supply 5 V microphone preamp for an electret mic: mic bias resistor, op-amp non-inverting stage with a gain of about 100, mid-supply reference, AC-coupled input and output. Mic input, power and audio output on pin headers."},
+  {"id": "i2c_sensor_breakout", "description": "Breakout board for a BME280 temperature/humidity/pressure sensor on I2C, powered from 3.3 V, with 4.7k I2C pull-ups and a 4-pin header (VCC, GND, SCL, SDA)."},
+  {"id": "button_debounce", "description": "Push button with RC debouncing feeding a 74HC14 Schmitt-trigger inverter, 5 V supply, output on a 3-pin header (VCC, GND, OUT)."},
+  {"id": "mosfet_switch", "description": "Low-side N-channel MOSFET switch that lets a 3.3 V logic signal switch a 12 V, 1 A load, with gate resistor, gate pull-down, and a flyback diode for inductive loads. Screw terminals or headers for 12 V in, load, and the logic input."},
+  {"id": "attiny_blinky", "description": "ATtiny85 microcontroller board with a 6-pin ISP programming header, an LED on PB0, decoupling, and a 2-pin 5 V power header."},
+  {"id": "rs485_transceiver", "description": "RS-485 transceiver breakout using a MAX485-compatible chip at 5 V, with a 120 ohm termination resistor, and headers for the UART side (RO, DI, DE/RE, VCC, GND) and the bus side (A, B, GND)."}
+]

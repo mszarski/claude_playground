@@ -51,6 +51,17 @@ pytest trajectory_classifier/tests/test_classifier.py::TestClassifier::test_clas
 - **TURN**: Sustained `|heading_change| > turn_threshold` (default 15°)
 - **WIGGLE**: Multiple sign changes in heading within window (oscillating/unstable)
 
+## circuit_gen (second project)
+
+`circuit_gen/` turns a text description into a routed PCB: Claude writes SKiDL circuit code (with KiCad library search and check tools), then KiCad + FreeRouting place, route, DRC-check and export Gerbers. See `circuit_gen/README.md`.
+
+```bash
+circuit_gen/setup.sh                       # KiCad 7, FreeRouting, SKiDL
+pytest circuit_gen/tests/
+python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
+python -m circuit_gen design "<description>" -o runs/x   # needs ANTHROPIC_API_KEY
+```
+
 ## Issue Tracking
 
 Use the `bd` command for issue tracking instead of markdown TODOs:

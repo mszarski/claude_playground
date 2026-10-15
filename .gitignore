@@ -1,1 +1,5 @@
 *.png
+runs/
+__pycache__/
+*.erc
+*.log

@@ -16,6 +16,10 @@ pip install -r "$CLAUDE_PROJECT_DIR/trajectory_classifier/requirements.txt"
 # Install pytest for testing
 pip install pytest
 
+# Toolchain for circuit_gen (KiCad, FreeRouting, SKiDL)
+echo "Setting up circuit_gen toolchain..."
+"$CLAUDE_PROJECT_DIR/circuit_gen/setup.sh" || echo "Warning: circuit_gen setup failed"
+
 # Install bd (beads issue tracker)
 echo "Setting up bd (beads issue tracker)..."
 if ! command -v bd &> /dev/null; then
