@@ -60,3 +60,8 @@ def test_bad_spec_retries_then_fails(tmp_path):
     result = generate.generate_circuit("x", tmp_path, backend=backend, spec_first=True)
     assert result.error.startswith("spec phase failed")
     assert len(backend.user_messages) == 3
+
+
+def test_negative_gain_is_rejected_with_explanation():
+    with pytest.raises(SpecError, match="magnitude"):
+        parse_requirements('require("gain(OUT,IN)", -11, -9, analysis="ac", sources={"IN": "ac"})')

@@ -24,7 +24,8 @@ means exactly that.
 
 - measure: v(NET), i(NET) (current the voltage source on NET delivers into \
 the circuit; negative if the circuit sinks it), or gain(OUT,IN) with \
-analysis="ac" and an "ac" source on IN.
+analysis="ac" and an "ac" source on IN. In AC analysis every measure is a \
+magnitude: gain() is never negative, so an inverting gain of -10 is 9 to 11.
 - sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}. \
 A net without a source is left floating (useful for "input left open" cases).
 - loads: resistors from a net to ground, e.g. {"OUT": 10000}, or between \
@@ -83,6 +84,9 @@ def parse_requirements(text):
             raise SpecError(f"require(...) missing {', '.join(missing)}: {ast.unparse(call)[:80]}")
         if float(req["low"]) > float(req["high"]):
             raise SpecError(f"low above high in: {ast.unparse(call)[:80]}")
+        if str(req["measure"]).startswith("gain(") and float(req["high"]) < 0:
+            raise SpecError("gain() is a magnitude and never negative; for an inverting "
+                            f"gain of -10 require 9 to 11: {ast.unparse(call)[:80]}")
         reqs.append(req)
     if not reqs:
         raise SpecError("no require(...) lines found")

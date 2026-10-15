@@ -279,14 +279,18 @@ def _testbench(nl, test):
     if not m:
         raise ValueError(f"bad measure expression {test['measure']!r}")
     kind, a, b = m.group(1), m.group(2), m.group(3)
+    ac = test.get("analysis", "op") == "ac"
     if kind == "v":
-        expr = f"v({node(a)})"
+        # In AC analysis voltages are complex; compare magnitudes.
+        expr = f"mag(v({node(a)}))" if ac else f"v({node(a)})"
     elif kind == "i":
         n = node(a)
         if a not in test.get("sources", {}):
             raise ValueError(f"i({a}) needs a source on {a}")
-        expr = f"-i(v_{n})"
+        expr = f"mag(i(v_{n}))" if ac else f"-i(v_{n})"
     else:
+        if b is None:
+            raise ValueError("gain() needs two nets: gain(OUT,IN)")
         expr = f"mag(v({node(a)}))/mag(v({node(b)}))"
 
     if test.get("analysis", "op") == "ac":

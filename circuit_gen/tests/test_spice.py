@@ -214,3 +214,14 @@ class TestRequirementsInChecks:
         c["requirements"] = []
         report = checks.check_circuit(c)
         assert report.ok and any("no require(...)" in w for w in report.warnings)
+
+
+@needs_ngspice
+@needs_libs
+def test_ac_voltage_is_a_magnitude():
+    circuit = {"parts": [header("J1", "IN", "GND"), R("R1", "IN", "OUT", "1k"),
+                         C("C1", "OUT", "GND", "159n")]}
+    # RC low-pass at its 1 kHz corner: |v(OUT)| = 0.707 with a 1 V AC input.
+    test = {"analysis": "ac", "freq": 1000, "sources": {"IN": "ac"}, "measure": "v(OUT)",
+            "expect": [0.69, 0.72]}
+    assert spice.simulate(circuit, [test]).ok

@@ -62,7 +62,8 @@ Requirements:
     require(measure, low, high, sources={...}, loads={...}, analysis="op", freq=1000, name="...")
 - measure: v(NET), i(NET) (current the source on NET delivers into the \
   circuit; negative if the circuit sinks it), or gain(OUT,IN) with \
-  analysis="ac" and an "ac" source on IN.
+  analysis="ac" and an "ac" source on IN. In AC analysis every measure is \
+  a magnitude: gain() is never negative.
 - sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}.
 - loads: resistors from a net to ground, e.g. {"OUT": 10000}, or to another \
   net, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
