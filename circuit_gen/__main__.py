@@ -79,6 +79,13 @@ def cmd_export(args):
     return 0
 
 
+def cmd_procgen(args):
+    from .procgen import build_dataset
+    stats = build_dataset(args.n, args.out, seed=args.seed, jobs=args.jobs)
+    print(json.dumps(stats, indent=2))
+    return 0
+
+
 def cmd_compare(args):
     from .evaluate import compare
     print(compare(args.runs))
@@ -116,6 +123,12 @@ def main(argv=None):
     x.add_argument("--include-benchmark", action="store_true",
                    help="also export benchmark boards (they are held out by default)")
 
+    pg = sub.add_parser("procgen", help="programmatic training set: parametric boards, verified, no LLM")
+    pg.add_argument("-n", type=int, default=600, help="boards to generate")
+    pg.add_argument("-o", "--out", required=True)
+    pg.add_argument("--seed", type=int, default=0)
+    pg.add_argument("--jobs", type=int, default=4)
+
     c = sub.add_parser("compare", help="side-by-side pass rates of several eval runs")
     c.add_argument("runs", nargs="+", help="eval output directories")
 
@@ -135,7 +148,8 @@ def main(argv=None):
 
     args = p.parse_args(argv)
     return {"build": cmd_build, "design": cmd_design, "eval": cmd_eval,
-            "compare": cmd_compare, "datagen": cmd_datagen, "export": cmd_export}[args.cmd](args)
+            "compare": cmd_compare, "datagen": cmd_datagen, "export": cmd_export,
+            "procgen": cmd_procgen}[args.cmd](args)
 
 
 if __name__ == "__main__":
