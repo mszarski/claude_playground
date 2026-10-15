@@ -299,22 +299,33 @@ parts (dup and novel mixed), generated code executed, IoU vs GT (`scripts/cq_iou
 For scale, vlm_cad_v1 (DeepCAD tokens, no CAD-Recode) final checkpoint on the test set, all parts: 1 view 44.4,
 4 views 45.7, + expert 55.1 (different split, so read as indicative until the test eval). Image-only jumps by
 ~20-27 points: the procedural CAD-Recode data is what teaches reading geometry from renders. Invalid code 5-7 %.
+Final validation (step 30k): 1 view 86.0, 4 views 91.1, 1 view + expert 90.0 IoU, invalid 0.8-2.0 %.
 
-## Handoff (2026-10-14 ~18:00 UTC): what is running and what is next
-- **Running:** `vlm_cq_v1` training, HF job `6acf66bac66288145223f01a` (H200, 30k steps, ~1.8 s/step, finishes
-  ~2026-10-15 03:00 UTC). Validation IoU in its log (`hf jobs logs 6acf66bac66288145223f01a | grep '"view1"'`);
-  checkpoint at `results/vlm_cq_v1/model` (overwritten every 5k steps).
-- **When it finishes:** test predictions, then IoU on the test split (dup / novel):
-  `RUN=vlm_cq_v1_test jobs/launch.sh vlmcq --predict results/vlm_cq_v1/model --uids_from
-  results/baselines_vlm_final/preds.pkl --out_preds results/vlm_cq_v1_test/preds.pkl`, then
-  `RUN=vlm_cq_v1_test jobs/launch.sh cqiou` (reads `results/vlm_cq_v1_test/preds.pkl`). Compare with vlm_cad_v1
-  (`results/baselines_vlm_final/geom.json`) and cadrille (~78-82 IoU, whole DeepCAD test set).
-- **Claude zero-shot baseline (needs `ANTHROPIC_API_KEY` in the environment):** run from this folder with test
-  renders and cad_vec available locally (download `/work/data/renders.tar`, `cad_vec.tar`, the split JSONs and
-  `text_index.json` from the bucket into `data/`, or run it in a job), then
+**Test split, final checkpoint** (`results/vlm_cq_v1_test/{preds.pkl,cq_iou.json}`; 2000 test uids, 3 whose GT does
+not build dropped, so n = 1997 / dup 770 / novel 1227). IoU % with GT normalisation (gt) / each solid fitted to its own
+box (own), invalid code IR %; invalid = IoU 0:
+| input | all IoU gt / own, IR | dup IoU gt, IR | novel IoU gt / own, IR | vlm_cad_v1 novel / all IoU |
+|---|---|---|---|---|
+| 1 view | 78.2 / 78.0, 8.0 | 85.1, 6.8 | 73.9 / 73.5, 8.8 | 31.9 / 44.4 |
+| 4 views | **86.6** / 86.5, 4.0 | 92.4, 3.0 | **82.9** / 82.6, 4.6 | 33.5 / 45.7 |
+| 1 view + expert | 85.2 / 85.6, 4.5 | 92.0, 3.1 | 81.0 / 81.5, 5.4 | 42.8 / 55.1 |
+| expert only | 76.0 / 77.9, 5.4 | 86.2, 2.7 | 69.6 / 71.7, 7.0 | 40.3 / 52.4 |
+Novel-part IoU goes from 33.5 (vlm_cad_v1, 4 views) to 82.9: +49 points from CAD-Recode data plus CadQuery output.
+The test numbers match validation (4 views 91.1 val vs 86.6 test all; val mixes dup and novel). 4 views now beat
+1 view + expert prompt: geometry comes from the images, not the text, a reversal of every earlier model. Level with
+cadrille's DeepCAD-only + CAD-Recode SFT on 4 views (86.1) and above its single-image SFT (81.7), though cadrille
+scores the whole DeepCAD test set and we score our 2000-uid subset; still below cadrille + RL (92.2). Remaining
+loss is mostly invalid code (4-9 % at IoU 0): with 4 views, valid outputs average ~90 IoU. Next levers: retry /
+best-of-N on code that fails to build, RL on IoU (cadrille's +6), longer training (val still rising at 30k).
+
+## Handoff (2026-10-15 ~06:00 UTC)
+- vlm_cq_v1 finished (30k steps, checkpoint `results/vlm_cq_v1/model`) and is scored on the test split (above).
+- **Claude zero-shot baseline: not run yet** (no `ANTHROPIC_API_KEY` in the session that tried). Run from this folder
+  with test renders available locally: `hf buckets cp` `data/renders.tar` and `data/text_index.json` into `data/`,
+  `results/baselines_vlm_final/preds.pkl` into the same path, extract only the 8000 test renders, then
   `python scripts/claude_baseline.py submit --data data --uids_from results/baselines_vlm_final/preds.pkl --modes
-  view4 [view1 view1+expert]` -> `collect --wait` -> `scripts/cq_iou.py --preds results/claude_baseline/preds.pkl`.
-  Batch cost estimate ~$80 per input mode at effort high. Scope still to be confirmed by the user.
+  view4 [view1 view1+expert]` -> `collect --wait` -> `PREDS=results/claude_baseline/preds.pkl` scoring with
+  `scripts/cq_iou.py` (compare its `own` IoU: a zero-shot model cannot know DeepCAD's frame). ~$80 per mode.
 
 ## Next steps (ideas, none started)
 - Product path: text_cad (or token_cad image+text) for prompts with dimensions, retrieval for near-duplicates,
