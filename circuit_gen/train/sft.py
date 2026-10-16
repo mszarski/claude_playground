@@ -20,7 +20,7 @@ circuit passed every check, its frozen requirements across tolerances, and
 routed to DRC-clean Gerbers are included; benchmark boards are held out.
 
 Runs on Hugging Face Jobs, e.g.:
-    hf jobs uv run --flavor a100-large --timeout 2h --secrets HF_TOKEN \\
+    hf jobs uv run --flavor h200 --timeout 3h --secrets HF_TOKEN \\
         -e DATASET=user/circuit-gen-sft -e OUTPUT_REPO=user/qwen3-8b-circuit-gen \\
         https://huggingface.co/datasets/user/circuit-gen-sft/resolve/main/sft.py
 """
@@ -30,22 +30,41 @@ import os
 import trackio
 from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig
+from transformers import AutoTokenizer
 from trl import SFTConfig, SFTTrainer
 
 DATASET = os.environ["DATASET"]
 OUTPUT_REPO = os.environ["OUTPUT_REPO"]
 BASE_MODEL = os.environ.get("BASE_MODEL", "Qwen/Qwen3-8B")
-MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "16384"))
-EPOCHS = float(os.environ.get("EPOCHS", "2"))
+MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "32768"))
+EPOCHS = float(os.environ.get("EPOCHS", "1"))
+# Repeat the (few, varied) LLM sessions so the (many, templated) procgen ones don't dominate.
+LLM_REPEAT = int(os.environ.get("LLM_REPEAT", "2"))
 
 # Comma-separated files in the dataset repo, e.g. procgen and LLM-designed sessions.
 DATA_FILES = os.environ.get("DATA_FILES", "procgen/sft_agentic.jsonl,llm/sft_agentic.jsonl")
+tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
+
+
+def fits(row):
+    """Drop sessions longer than MAX_LENGTH: truncation would cut off the passing check."""
+    text = tokenizer.apply_chat_template(row["messages"], tools=row["tools"], tokenize=False)
+    return len(tokenizer(text)["input_ids"]) <= MAX_LENGTH
+
+
 # Load each file on its own: the sources carry different metadata columns.
-parts = [load_dataset(DATASET, data_files=f, split="train").select_columns(["messages", "tools"])
-         for f in DATA_FILES.split(",")]
-dataset = concatenate_datasets(parts).shuffle(seed=0)
-split = dataset.train_test_split(test_size=0.1, seed=0)
-print(f"train {len(split['train'])}, eval {len(split['test'])}")
+# Split before repeating, so no copy of an eval session is trained on.
+train_parts, eval_parts = [], []
+for f in DATA_FILES.split(","):
+    part = load_dataset(DATASET, data_files=f, split="train").select_columns(["messages", "tools"])
+    kept = part.filter(fits)
+    print(f"{f}: {len(kept)}/{len(part)} sessions fit in {MAX_LENGTH} tokens")
+    split = kept.train_test_split(test_size=0.1, seed=0)
+    train_parts += [split["train"]] * (LLM_REPEAT if f.startswith("llm/") else 1)
+    eval_parts.append(split["test"])
+train_dataset = concatenate_datasets(train_parts).shuffle(seed=0)
+eval_dataset = concatenate_datasets(eval_parts)
+print(f"train {len(train_dataset)}, eval {len(eval_dataset)}")
 
 config = SFTConfig(
     output_dir="circuit-gen-sft",
@@ -82,8 +101,8 @@ peft_config = LoraConfig(
 
 trainer = SFTTrainer(
     model=BASE_MODEL,
-    train_dataset=split["train"],
-    eval_dataset=split["test"],
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
     args=config,
     peft_config=peft_config,
 )
