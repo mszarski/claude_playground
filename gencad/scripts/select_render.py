@@ -71,7 +71,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data")
     ap.add_argument("--cand", nargs="+", required=True,
-                    help="preds.pkl:method (fnmatch pattern allowed in the method, e.g. 'vlm_cq:view4@s*')")
+                    help="preds.pkl:method[=alias] (fnmatch pattern allowed in the method, e.g. 'vlm_cq:view4@s*')")
     ap.add_argument("--views", type=int, choices=[1, 4], required=True, help="input views the selector may use")
     ap.add_argument("--size", type=int, default=128, help="render side for the comparison")
     ap.add_argument("--n", type=int, default=None, help="first n uids only")
@@ -84,6 +84,7 @@ def main():
 
     names, codes, uids, dup = [], [], None, None
     for spec in a.cand:
+        spec, alias = spec.split("=", 1) if "=" in spec else (spec, None)
         path, pat = spec.split(":", 1)
         with open(path, "rb") as f:
             P = pickle.load(f)
@@ -93,7 +94,8 @@ def main():
         hit = sorted(m for m in P["preds"] if fnmatch.fnmatch(m, pat))
         assert hit, f"no method matches {pat} in {path} ({sorted(P['preds'])})"
         for m in hit:
-            names.append(m if m not in names else f"{m}#{len(names)}")
+            name = m.replace(pat.split("@")[0], alias, 1) if alias else m
+            names.append(name if name not in names else f"{name}#{len(names)}")
             codes.append(P["preds"][m])
     n = a.n or len(uids)
     uids, dup = uids[:n], dup[:n]
