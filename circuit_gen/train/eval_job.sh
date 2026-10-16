@@ -18,7 +18,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends kicad kicad-symbols kicad-footprints ngspice \
-    default-jre-headless python3-venv curl ca-certificates > /dev/null
+    default-jre-headless python3-venv python3-dev gcc g++ curl ca-certificates > /dev/null
 # A venv that still sees the system packages (KiCad's pcbnew module).
 python3 -m venv --system-site-packages /venv
 export PATH=/venv/bin:$PATH
@@ -38,7 +38,7 @@ vllm serve "$BASE_MODEL" --port 8000 --max-model-len 40960 \
     --enable-lora --max-lora-rank 32 --lora-modules circuit=/work/adapter \
     --enable-auto-tool-choice --tool-call-parser hermes > vllm.log 2>&1 &
 until curl -sf localhost:8000/v1/models > /dev/null; do
-    kill -0 $! 2> /dev/null || { tail -50 vllm.log; exit 1; }
+    kill -0 $! 2> /dev/null || { grep -iE "error|exception|failed" vllm.log | head -40; exit 1; }
     sleep 10
 done
 echo "vLLM up: $(curl -s localhost:8000/v1/models)"
