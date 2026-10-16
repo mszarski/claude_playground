@@ -359,7 +359,7 @@ part, or Claude's when vlm_cq's code fails to build. Own IoU all / novel, IR:
 The fallback is a free +0.7-0.9 (removes almost all invalid outputs). The oracle (+3.5-5.8) says the two models err on
 different parts, so a selector that picks between candidates (e.g. render agreement with the input) could gain more.
 
-### RL on IoU (`train_vlm_rl.py`, `RUN=vlm_rl_v2 jobs/launch.sh vlmrl`, H200; RUNNING, results pending)
+### RL on IoU (`train_vlm_rl.py`, `RUN=vlm_rl_v2 jobs/launch.sh vlmrl`, H200; done, small gain)
 Starts from `results/vlm_cq_v1/model`. On-policy group policy gradient (Dr. GRPO: advantage = reward - group mean,
 no std normalisation, constant token normaliser, no KL, one update per batch so no ratio/clipping). Each step: 16
 DeepCAD train parts (104,625 distinct programs), mode view1 / view4 / view1+expert = 0.4 / 0.4 / 0.2, 8 samples each
@@ -368,16 +368,40 @@ save + validate (same 256 val parts and greedy decoding as train_vlm_cq.py) ever
 sampling (HF generate). Step-0 validation (SFT model, this harness): view1 85.8, view4 90.5, view1+expert 90.2 IoU gt.
 Test after: `train_vlm_cq.py --predict results/vlm_rl_v2/model --uids_from results/baselines_vlm_final/preds.pkl
 --out_preds results/vlm_rl_v2_test/preds.pkl`, then `cq_iou.py` locally (see the timeout note above).
+Result (300 steps; validation every 100 steps flat: view4 90.3 / 90.7 / 90.8 vs 91.1 SFT). Test, scored locally
+(`results/vlm_rl_v2_test/{cq_iou_local.json,rows.pkl}`, no timeouts), IoU gt / own, IR (all | novel), SFT -> RL:
+view1 83.0 -> **84.5** / 84.5, IR 1.7 | novel 78.6 -> 79.7; view4 89.1 -> 89.2, IR 1.5 | novel 85.5 -> 85.2;
+view1 + expert 87.9 -> 88.0 | novel 83.7 -> 83.9; expert 78.1 -> 78.8 | novel 71.7 -> 72.6. So +1.5 for 1 view and
+nothing elsewhere: not worth more H200 time in this form.
 
-## Handoff (2026-10-15 ~11:00 UTC)
-- Claude zero-shot done for view4 and view1+expert; fallback scored (above). vlm_cq_v1 test numbers corrected.
-- RL job `vlm_rl_v2` running (HF job 6ad0b890c662881452250c2e, 300 steps, 13 h limit). `vlm_rl_v1` attempts died:
-  empty `data/` in the upload, then CUDA OOM at step 15 while sampling 128 sequences in one generate call (now 64
-  per call, expandable_segments, empty_cache between phases, backward micro-batch 8). In the 14 steps it ran, the
-  mean sampled reward was 0.69 (IoU of valid samples 0.76, invalid 3.7 %), ~120 s/step.
+### Render-agreement selection (`scripts/select_render.py`; IN PROGRESS)
+Pick one program per part among candidates (greedy SFT, greedy RL, Claude, sampled programs) by how well the
+candidate's render matches the **input** views (4 views for view4, view 0 only for view1 modes): mean silhouette IoU
+(`sil`) or mean grey-level difference (`pix`) at 128 px, same cameras/framing as `scripts/render_views.py` (a correct
+part scores sil ~0.99). Also reports each candidate alone and the oracle (best own IoU). ~0.1 s per candidate on one
+CPU, so local runs are fine. Sampled candidates: `train_vlm_cq.py --predict ... --n_samples 8 --temp 0.8`
+(`vlmpred` stage passes extra args), keys `vlm_cq:<mode>@s<k>`.
+
+## Handoff (2026-10-16 ~04:15 UTC)
+- RL scored (above): small gain, stop there.
+- **Running:** HF job `6ad197555ccb47ba0f7ae8cf` (`RUN=vlm_cq_samples`, H200): 8 samples per test part at temp 0.8
+  from `results/vlm_cq_v1/model`, modes view4 and view1+expert -> `results/vlm_cq_samples/preds.pkl`
+  (view4 took ~45 min; expected done ~05:00 UTC).
+- **Next:** pull preds into `results/` (also `results/{vlm_cq_v1_test,vlm_rl_v2_test,claude_baseline,
+  claude_baseline_v1e}/preds.pkl`), test renders + cad_vec into `data/`, then run the selector locally:
+  `python scripts/select_render.py --data data --views 4 --out results/select/view4 --cand
+  results/vlm_cq_v1_test/preds.pkl:vlm_cq:view4=sft results/vlm_rl_v2_test/preds.pkl:vlm_cq:view4=rl
+  results/claude_baseline/preds.pkl:claude:view4=claude 'results/vlm_cq_samples/preds.pkl:vlm_cq:view4@s*=smp'`
+  and the same with `--views 1`, `view1+expert` everywhere and `claude_baseline_v1e`. Compare against the
+  fallback (89.8 / 86.2 own, all / novel, view4) and the oracle (92.6 / 90.1). Record in CLAUDE.md, upload
+  `results/select/` to the bucket.
+- Data for local runs: `data/renders.tar` and `data/cad_vec.tar` from the bucket, extract only the test uids
+  (2000 from `results/baselines_vlm_final/preds.pkl`, 4 renders each); `pip install cadquery pebble h5py`.
 - Launch gotcha: `jobs/launch.sh` uploads everything under `data/` except the big extracted folders, so local
   `data/renders.tar`, `cad_vec.tar`, `text_index.json` would be uploaded too: move `data/` aside and leave a
   placeholder file (an empty `data/` is dropped, which breaks `entry.sh`).
+- Claude API key: stored as `GENCAD_API_KEY` (`ANTHROPIC_*` names are reserved); `scripts/claude_baseline.py`
+  reads `ANTHROPIC_API_KEY`, so run it as `ANTHROPIC_API_KEY=$GENCAD_API_KEY python scripts/claude_baseline.py ...`.
 - Bucket housekeeping: `results/vlm_cq_v1/model/` holds six stale `.tmp*` files of 4.9 GB each (interrupted saves).
 
 ## Next steps (ideas, none started)
