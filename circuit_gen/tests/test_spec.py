@@ -146,3 +146,9 @@ def test_named_nets():
         >= {"IN_P", "IN_N", "OUT", "VPOS", "VNEG", "GND"}
     assert named_nets("Name the supply nets VCC and GND, and the 555 output net OUT.") >= {"VCC", "GND", "OUT"}
     assert named_nets("no clause here") is None
+
+
+def test_named_nets_with_signs():
+    from circuit_gen.spec import named_nets
+    nets = named_nets("Dual rail. Name the nets VIN, +5V, -5V and GND.")
+    assert {"+5V", "-5V", "VIN", "GND"} <= nets

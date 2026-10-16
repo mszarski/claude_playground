@@ -105,7 +105,7 @@ def named_nets(description):
         return None
     nets = set()
     for sentence in sentences:
-        for token in re.findall(r"(?<![A-Za-z0-9_+])[A-Z0-9_+][A-Za-z0-9_+/-]*", sentence):
+        for token in re.findall(r"(?<![A-Za-z0-9_+-])[-+]?[A-Z0-9_][A-Za-z0-9_+/-]*", sentence):
             if re.search(r"[A-Z+]", token):
                 nets.add(token.rstrip(",.;"))
     return nets
@@ -121,7 +121,7 @@ def check_nets(reqs, description):
             if named is not None:
                 ok = net in named
             else:
-                ok = re.search(rf"(?<![A-Za-z0-9_+]){re.escape(net)}(?![A-Za-z0-9_])", description)
+                ok = re.search(rf"(?<![A-Za-z0-9_+-]){re.escape(net)}(?![A-Za-z0-9_])", description)
             if not ok:
                 raise SpecError(f"net {net!r} is not named in the description; requirements may "
                                 f"only use the nets the description names: {r.get('name') or r['measure']}")
