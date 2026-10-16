@@ -35,7 +35,8 @@ def cmd_build(args):
 def _opts(args):
     return {"backend": args.backend, "model": args.model, "effort": args.effort,
             "max_turns": args.max_turns, "passes": args.passes, "spec_first": args.spec_first,
-            "spec_model": args.spec_model, "thinking": False if args.no_thinking else None}
+            "spec_model": args.spec_model, "spec_provider": args.spec_provider,
+            "thinking": False if args.no_thinking else None}
 
 
 def cmd_design(args):
@@ -85,7 +86,8 @@ def cmd_export(args):
 
 def cmd_procgen(args):
     from .procgen import build_dataset
-    stats = build_dataset(args.n, args.out, seed=args.seed, jobs=args.jobs)
+    stats = build_dataset(args.n, args.out, seed=args.seed, jobs=args.jobs,
+                          repair_fraction=args.repair_fraction)
     print(json.dumps(stats, indent=2))
     return 0
 
@@ -133,6 +135,8 @@ def main(argv=None):
     pg.add_argument("-o", "--out", required=True)
     pg.add_argument("--seed", type=int, default=0)
     pg.add_argument("--jobs", type=int, default=4)
+    pg.add_argument("--repair-fraction", type=float, default=0.0,
+                    help="share of sessions that start from a planted bug and show the fix")
 
     c = sub.add_parser("compare", help="side-by-side pass rates of several eval runs")
     c.add_argument("runs", nargs="+", help="eval output directories")
@@ -150,6 +154,9 @@ def main(argv=None):
                        help="write frozen requirements from the description before designing")
         s.add_argument("--spec-model", default=None,
                        help="model that writes the spec (default: the designer's model)")
+        s.add_argument("--spec-provider", default=None,
+                       help="hf backend: run the spec model on this Inference Provider (e.g. "
+                            "deepinfra), even when CIRCUIT_GEN_HF_BASE_URL points elsewhere")
         s.add_argument("--no-thinking", action="store_true",
                        help="hf backend: turn off the designer's thinking mode (Qwen3-style models)")
         s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"],

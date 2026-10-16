@@ -257,6 +257,14 @@ class TestHuggingFaceBackend:
         d.step()
         assert "extra_body" not in client.requests[2]
 
+    def test_empty_base_url_forces_inference_providers(self, monkeypatch):
+        made = []
+        monkeypatch.setattr("huggingface_hub.InferenceClient", lambda **kw: made.append(kw) or object())
+        monkeypatch.setattr("circuit_gen.config.HF_BASE_URL", "http://localhost:8000/v1")
+        HuggingFaceBackend(model="m")
+        HuggingFaceBackend(model="m", base_url="", provider="deepinfra")
+        assert made == [{"base_url": "http://localhost:8000/v1"}, {"provider": "deepinfra"}]
+
     def test_default_backend_is_hf(self, monkeypatch):
         monkeypatch.setattr("huggingface_hub.InferenceClient", lambda **kw: object())
         assert make_backend().name == "hf"

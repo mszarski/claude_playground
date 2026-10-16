@@ -34,3 +34,20 @@ def test_every_family_verifies(family, tmp_path):
     assert roles[:2] == ["system", "user"] and roles[-1] == "assistant"
     assert any(m.get("tool_calls", [{}])[0].get("function", {}).get("name") == "check_circuit"
                for m in session["messages"] if m["role"] == "assistant" and m.get("tool_calls"))
+
+
+@needs_skidl
+def test_repair_session_shows_real_failure_then_fix(tmp_path):
+    import random
+    board = procgen.generate(1, seed=7, families=["voltage_divider"])[0]
+    passed, feedback, circuit = procgen.verify(board, tmp_path / "ok")
+    assert passed
+    repair = procgen.plant_bug(board, str(tmp_path / "bug"), random.Random(0))
+    assert repair and repair["code"] != board["code"]
+    assert "requirement not met" in repair["feedback"]
+    session = procgen.tool_session(board, circuit, feedback, repair)
+    checks = [m for m in session["messages"] if m.get("tool_calls")
+              and m["tool_calls"][0]["function"]["name"] == "check_circuit"]
+    assert len(checks) == 2 and checks[1]["content"] == repair["diagnosis"]
+    results = [m["content"] for m in session["messages"] if m["role"] == "tool"]
+    assert results[-2].startswith("FAILED") and results[-1].startswith("PASSED")

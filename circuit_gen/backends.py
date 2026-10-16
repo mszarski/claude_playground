@@ -94,12 +94,14 @@ class HuggingFaceBackend:
     name = "hf"
 
     def __init__(self, model=None, client=None, provider=None, max_tokens=None,
-                 temperature=0.2, retries=7, thinking=None):
+                 temperature=0.2, retries=7, thinking=None, base_url=None):
         if client is None:
             from huggingface_hub import InferenceClient
-            if config.HF_BASE_URL:
+            # base_url "" forces Inference Providers even when CIRCUIT_GEN_HF_BASE_URL is set.
+            base_url = config.HF_BASE_URL if base_url is None else base_url
+            if base_url:
                 # A dedicated endpoint (e.g. an Inference Endpoint serving a fine-tuned model).
-                client = InferenceClient(base_url=config.HF_BASE_URL)
+                client = InferenceClient(base_url=base_url)
             else:
                 client = InferenceClient(provider=provider or config.HF_PROVIDER)
         self.client = client

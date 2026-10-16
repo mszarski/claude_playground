@@ -15,6 +15,7 @@ variety on top.
 
 import math
 import random
+import re
 
 E6 = [1.0, 1.5, 2.2, 3.3, 4.7, 6.8]
 E12 = [1.0, 1.2, 1.5, 1.8, 2.2, 2.7, 3.3, 3.9, 4.7, 5.6, 6.8, 8.2]
@@ -587,6 +588,38 @@ def verify(board, workdir):
     return passed, ("PASSED. " if passed else "FAILED. ") + feedback, run.circuit
 
 
+_VALUE = re.compile(r'\b([RC])\("([^"]+)"(?=[,)])')
+_FAILED_REQ = re.compile(r"requirement not met: (.+?): FAIL measured (\S+) .*?required (\S+)")
+
+
+def plant_bug(board, workdir, rng):
+    """A copy of the board with one R or C value off by a factor of ten that fails a requirement.
+
+    Returns {"code", "feedback", "diagnosis"} with the real check_circuit
+    output for the broken code, or None if no single change breaks a requirement.
+    """
+    from .spice import parse_value
+    code = board["code"]
+    matches = list(_VALUE.finditer(code))
+    rng.shuffle(matches)
+    for m in matches:
+        kind, good = m.group(1), m.group(2)
+        for factor in rng.sample([10, 0.1], 2):
+            bad = fmt(parse_value(good) * factor)
+            broken = code[:m.start()] + f'{kind}("{bad}"' + code[m.end():]
+            passed, feedback, _ = verify({**board, "code": broken}, workdir)
+            failure = _FAILED_REQ.search(feedback)
+            if passed or not failure:
+                continue
+            part = "resistor" if kind == "R" else "capacitor"
+            name, measured, required = failure.groups()
+            diagnosis = (f'The requirement "{name}" fails: measured {measured}, required '
+                         f'{required}. The {bad} {part} is a factor of ten off; from the design '
+                         f'calculation it should be {good}. Fixing it and checking again.')
+            return {"code": broken, "feedback": feedback, "diagnosis": diagnosis}
+    return None
+
+
 def _parts_used(circuit):
     seen, out = set(), []
     for p in circuit["parts"]:
@@ -597,12 +630,14 @@ def _parts_used(circuit):
     return out
 
 
-def tool_session(board, circuit, feedback):
+def tool_session(board, circuit, feedback, repair=None):
     """A tool-using design session for this board, built from real tool calls.
 
     Mirrors what a good designer does: look up each part, read its pins, then
-    check the circuit once and summarise. Tool results are produced by the
-    same functions the live tools call.
+    check the circuit and summarise. Tool results are produced by the same
+    functions the live tools call. With `repair` (from plant_bug), the first
+    check fails on a planted bug and the next turn diagnoses it and resubmits
+    the fixed code in the same message.
     """
     from .generate import TOOLS, Toolbox, _system_prompt
     from pathlib import Path
@@ -614,14 +649,16 @@ def tool_session(board, circuit, feedback):
                 {"role": "user", "content": f"Design this board:\n\n{board['description']}"}]
     n = 0
 
-    def call(name, args):
+    def call(name, args, text="", result=None):
         nonlocal n
         n += 1
         cid = f"call_{n}"
-        messages.append({"role": "assistant", "content": "", "tool_calls": [
+        messages.append({"role": "assistant", "content": text, "tool_calls": [
             {"id": cid, "type": "function",
              "function": {"name": name, "arguments": _json.dumps(args)}}]})
-        if name == "check_circuit":
+        if result is not None:
+            content = result
+        elif name == "check_circuit":
             content = feedback
         else:
             content, is_error = tools.execute(name, args)
@@ -634,7 +671,11 @@ def tool_session(board, circuit, feedback):
             continue
         call("search_symbols", {"query": name})
         call("get_symbol", {"lib": lib, "name": name})
-    call("check_circuit", {"code": board["code"]})
+    if repair:
+        call("check_circuit", {"code": repair["code"]}, result=repair["feedback"])
+        call("check_circuit", {"code": board["code"]}, text=repair["diagnosis"])
+    else:
+        call("check_circuit", {"code": board["code"]})
     summary = board["code"].split('"""')[1].strip() if board["code"].startswith('"""') else ""
     messages.append({"role": "assistant",
                      "content": f"The design passes check_circuit, including its requirements "
@@ -646,13 +687,21 @@ def tool_session(board, circuit, feedback):
 
 
 def _verify_one(args):
-    board, workdir = args
+    board, workdir, repair_fraction, seed = args
     passed, feedback, circuit = verify(board, workdir)
-    return board, passed, feedback, circuit
+    repair = None
+    rng = random.Random(f"{seed}-{board['id']}")
+    if passed and rng.random() < repair_fraction:
+        repair = plant_bug(board, workdir + "_bug", rng)
+    return board, passed, feedback, circuit, repair
 
 
-def build_dataset(n, out_dir, seed=0, jobs=4):
-    """Generate n boards, verify them in parallel, export the ones that pass. Returns stats."""
+def build_dataset(n, out_dir, seed=0, jobs=4, repair_fraction=0.0):
+    """Generate n boards, verify them in parallel, export the ones that pass. Returns stats.
+
+    A `repair_fraction` of the agentic sessions start from a planted bug
+    (plant_bug) and show the diagnosis and fix.
+    """
     import json as _json
     import multiprocessing
     from collections import Counter
@@ -667,10 +716,10 @@ def build_dataset(n, out_dir, seed=0, jobs=4):
     kept, failed = [], Counter()
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=jobs, mp_context=ctx) as pool:
-        for i, (board, passed, feedback, circuit) in enumerate(pool.map(
-                _verify_one, [(b, str(work / b["id"])) for b in boards]), 1):
+        for i, (board, passed, feedback, circuit, repair) in enumerate(pool.map(
+                _verify_one, [(b, str(work / b["id"]), repair_fraction, seed) for b in boards]), 1):
             if passed:
-                kept.append((board, feedback, circuit))
+                kept.append((board, feedback, circuit, repair))
             else:
                 failed[board["family"]] += 1
                 (work / board["id"] / "FAILED.txt").write_text(feedback)
@@ -680,17 +729,20 @@ def build_dataset(n, out_dir, seed=0, jobs=4):
     with open(out_dir / "boards.jsonl", "w") as f_boards, \
             open(out_dir / "sft_direct.jsonl", "w") as f_direct, \
             open(out_dir / "sft_agentic.jsonl", "w") as f_agentic:
-        for board, feedback, circuit in kept:
-            meta = {"board": board["id"], "family": board["family"], "source": "procgen"}
+        for board, feedback, circuit, repair in kept:
+            meta = {"board": board["id"], "family": board["family"], "source": "procgen",
+                    "repair": repair is not None}
             f_boards.write(_json.dumps(board) + "\n")
             f_direct.write(_json.dumps({"messages": [
                 {"role": "system", "content": DIRECT_SYSTEM},
                 {"role": "user", "content": board["description"]},
                 {"role": "assistant", "content": f"```python\n{board['code'].strip()}\n```"},
             ], **meta}) + "\n")
-            f_agentic.write(_json.dumps({**tool_session(board, circuit, feedback), **meta}) + "\n")
+            f_agentic.write(_json.dumps({**tool_session(board, circuit, feedback, repair),
+                                         **meta}) + "\n")
     stats = {"generated": len(boards), "kept": len(kept),
-             "kept_by_family": dict(Counter(b["family"] for b, _, _ in kept)),
+             "repair_sessions": sum(r is not None for *_, r in kept),
+             "kept_by_family": dict(Counter(b["family"] for b, *_ in kept)),
              "failed_by_family": dict(failed)}
     (out_dir / "stats.json").write_text(_json.dumps(stats, indent=2))
     return stats

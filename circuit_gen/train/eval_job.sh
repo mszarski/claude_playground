@@ -14,6 +14,10 @@ set -euo pipefail
 BASE_MODEL="${BASE_MODEL:-Qwen/Qwen3-8B}"
 SAMPLES="${SAMPLES:-2}"
 JOBS="${JOBS:-12}"  # parallel samples per model; vLLM batches them on one GPU
+# Specs come from the model that wrote the training specs, via Inference Providers,
+# so every arm is judged against specs of the quality the adapter trained on.
+SPEC_MODEL="${SPEC_MODEL:-deepseek-ai/DeepSeek-V4.1-Flash}"
+SPEC_PROVIDER="${SPEC_PROVIDER:-deepinfra}"
 RUN="${RUN:-$(date +%Y%m%d-%H%M)}"
 export DEBIAN_FRONTEND=noninteractive
 
@@ -53,15 +57,15 @@ upload() {
 # The job's --timeout kills everything at once, so stop the evals in time to
 # upload, and upload finished samples (result.json) as they accumulate.
 EVAL_MINUTES="${EVAL_MINUTES:-140}"
-# Every arm gets its spec from the base model (thinking on), so the arms differ only
-# in the designer. The adapter was trained on sessions without thinking, so it runs
-# with thinking off, and so does a base-model control arm.
+# Every arm gets its spec from SPEC_MODEL, so the arms differ only in the designer.
+# The adapter was trained on sessions without thinking, so it runs with thinking
+# off, and so does a base-model control arm.
 eval_one() {  # name model [extra eval args]
     local name=$1 model=$2
     shift 2
     timeout "${EVAL_MINUTES}m" python3 -m circuit_gen eval circuit_gen/benchmarks/boards.json \
         -o "runs/$name" --samples "$SAMPLES" --jobs "$JOBS" --max-turns 25 --spec-first \
-        --model "$model" --spec-model "$BASE_MODEL" "$@" \
+        --model "$model" --spec-model "$SPEC_MODEL" --spec-provider "$SPEC_PROVIDER" "$@" \
         > "runs/$name.log" 2>&1 || echo "$name eval stopped (exit $?)"
 }
 mkdir -p runs

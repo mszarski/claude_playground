@@ -78,7 +78,11 @@ def design_and_build(description, out_dir, opts, tests=None):
     out_dir = Path(out_dir)
     name = opts.get("backend") or config.BACKEND
     extra = {"effort": opts["effort"]} if name == "claude" and opts.get("effort") else {}
-    spec_backend = (make_backend(name, model=opts["spec_model"], **extra)
+    spec_extra = dict(extra)
+    if opts.get("spec_provider"):
+        # Spec writer on Inference Providers, e.g. while the designer runs on a local server.
+        spec_extra.update(provider=opts["spec_provider"], base_url="", max_tokens=16384)
+    spec_backend = (make_backend(name, model=opts["spec_model"], **spec_extra)
                     if opts.get("spec_model") else None)
     if name == "hf" and opts.get("thinking") is not None:
         extra["thinking"] = opts["thinking"]
