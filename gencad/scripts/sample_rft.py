@@ -42,6 +42,7 @@ def main():
     ap.add_argument("--modes", default="view1=0.4,view4=0.4,view1+expert=0.2")
     ap.add_argument("--max_new_tokens", type=int, default=1024)
     ap.add_argument("--chunk", type=int, default=2000)
+    ap.add_argument("--max_len", type=int, default=4096, help="vLLM context: prompt + image + program")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 3))
     ap.add_argument("--score_timeout", type=float, default=60.0)
     ap.add_argument("--gpu_mem", type=float, default=0.85)
@@ -73,10 +74,15 @@ def main():
     uids = uids[: a.n_parts]
     modes = {k: float(v) for k, v in (kv.split("=") for kv in a.modes.split(","))}
     names, p = list(modes), np.array(list(modes.values())) / sum(modes.values())
-    plan = []                                         # (uid, mode, views, prompt)
+    from transformers import AutoProcessor
+    processor = AutoProcessor.from_pretrained(a.model)
+    max_prompt = a.max_len - a.max_new_tokens - 400   # room for the template and 196 image tokens
+    plan, n_long = [], 0                              # (uid, mode, views, prompt)
     for u in uids:
         mode = names[int(np.searchsorted(np.cumsum(p), rng.random()))]
         prompt = text_index.get(u, {}).get("expert") if "expert" in mode else None
+        if prompt and len(processor.tokenizer(prompt)["input_ids"]) > max_prompt:
+            prompt, n_long = None, n_long + 1         # rare very long prompt: image only
         if "expert" in mode and not prompt:
             mode = "view1"
         views = [0, 1, 2, 3] if mode == "view4" else ([0] if a.split == "validation" else [rng.randrange(4)])
@@ -85,15 +91,14 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "args.json"), "w") as f:
         json.dump(vars(a), f, indent=2)
-    print(f"[rft] {len(plan)} {a.split} parts, modes {modes}, {a.n_samples} samples at T={a.temp} + greedy", flush=True)
+    print(f"[rft] {len(plan)} {a.split} parts, modes {modes}, {a.n_samples} samples at T={a.temp} + greedy; "
+          f"{n_long} over-long prompts dropped", flush=True)
 
     os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")   # FlashInfer JIT-compiles its sampler: needs nvcc
-    from transformers import AutoProcessor
     from vllm import LLM, SamplingParams
     from mm.vlm_cad import _messages, compose_views
     from train_vlm_cad import load_views
-    processor = AutoProcessor.from_pretrained(a.model)
-    llm = LLM(model=a.model, dtype="bfloat16", max_model_len=2048, limit_mm_per_prompt={"image": 1},
+    llm = LLM(model=a.model, dtype="bfloat16", max_model_len=a.max_len, limit_mm_per_prompt={"image": 1},
               gpu_memory_utilization=a.gpu_mem, enable_prefix_caching=True, generation_config="vllm", seed=a.seed)
     stop = [processor.tokenizer.convert_tokens_to_ids("<|im_end|>"), processor.tokenizer.eos_token_id]
     sp_greedy = SamplingParams(temperature=0.0, max_tokens=a.max_new_tokens, stop_token_ids=stop)
