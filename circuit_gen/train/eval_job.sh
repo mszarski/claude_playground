@@ -34,11 +34,12 @@ hf download "$ADAPTER" --local-dir adapter --exclude "last-checkpoint/*" > /dev/
 pip install -q -r circuit_gen/requirements.txt
 pip install -q --no-deps skidl==2.3.0 InSpice==1.7.0.7
 
-vllm serve "$BASE_MODEL" --port 8000 --max-model-len 40960 \
+# No CUDA toolkit (nvcc) in this image, so skip FlashInfer's JIT-compiled sampler.
+VLLM_USE_FLASHINFER_SAMPLER=0 vllm serve "$BASE_MODEL" --port 8000 --max-model-len 40960 \
     --enable-lora --max-lora-rank 32 --lora-modules circuit=/work/adapter \
     --enable-auto-tool-choice --tool-call-parser hermes > vllm.log 2>&1 &
 until curl -sf localhost:8000/v1/models > /dev/null; do
-    kill -0 $! 2> /dev/null || { grep -iE "error|exception|failed" vllm.log | head -40; exit 1; }
+    kill -0 $! 2> /dev/null || { grep -iE "error|exception|failed" vllm.log | tail -40; exit 1; }
     sleep 10
 done
 echo "vLLM up: $(curl -s localhost:8000/v1/models)"
