@@ -13,6 +13,7 @@ set -euo pipefail
 
 BASE_MODEL="${BASE_MODEL:-Qwen/Qwen3-8B}"
 SAMPLES="${SAMPLES:-2}"
+JOBS="${JOBS:-12}"  # parallel samples per model; vLLM batches them on one GPU
 RUN="${RUN:-$(date +%Y%m%d-%H%M)}"
 export DEBIAN_FRONTEND=noninteractive
 
@@ -54,7 +55,7 @@ upload() {
 EVAL_MINUTES="${EVAL_MINUTES:-140}"
 eval_one() {  # name model
     timeout "${EVAL_MINUTES}m" python3 -m circuit_gen eval circuit_gen/benchmarks/boards.json \
-        -o "runs/$1" --samples "$SAMPLES" --jobs 6 --max-turns 25 --spec-first --model "$2" \
+        -o "runs/$1" --samples "$SAMPLES" --jobs "$JOBS" --max-turns 25 --spec-first --model "$2" \
         > "runs/$1.log" 2>&1 || echo "$1 eval stopped (exit $?)"
 }
 mkdir -p runs
