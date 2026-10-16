@@ -87,6 +87,7 @@ def main():
         json.dump(vars(a), f, indent=2)
     print(f"[rft] {len(plan)} {a.split} parts, modes {modes}, {a.n_samples} samples at T={a.temp} + greedy", flush=True)
 
+    os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")   # FlashInfer JIT-compiles its sampler: needs nvcc
     from transformers import AutoProcessor
     from vllm import LLM, SamplingParams
     from mm.vlm_cad import _messages, compose_views
