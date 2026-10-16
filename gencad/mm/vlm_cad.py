@@ -145,7 +145,7 @@ class VLMCad:
     def generate(self, images, prompts, max_new_tokens=1024, **kw):
         """-> list of (L, 17) programs or None (malformed text)."""
         enc = self.batch(images, prompts).to(self.device)
-        out = self.model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False,
-                                  pad_token_id=self.tok.pad_token_id, **kw)
+        kw.setdefault("do_sample", False)
+        out = self.model.generate(**enc, max_new_tokens=max_new_tokens, pad_token_id=self.tok.pad_token_id, **kw)
         texts = self.tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
         return [text_to_program(t) for t in texts], texts

@@ -56,8 +56,29 @@ class Samples(Dataset):
         return image, prompt, code
 
 
-def predict(vlm, uids, render_dir, text_index, modes, bs=32, max_new_tokens=1024):
-    """Greedy-decode CadQuery text for each uid under each mode -> {mode: [code or None]}."""
+def predict(vlm, uids, render_dir, text_index, modes, bs=32, max_new_tokens=1024, n_samples=0, temp=1.0):
+    """Greedy-decode CadQuery text for each uid under each mode -> {mode: [code or None]}. With n_samples > 0, instead
+    sample n_samples programs per uid at temperature temp -> {f"{mode}@s{k}": [code or None]} (candidates for
+    scripts/select_render.py)."""
+    if n_samples:
+        out = {}
+        for mode in modes:
+            per = max(1, bs // n_samples)                  # uids per generate call; each repeated n_samples times
+            res = [[None] * len(uids) for _ in range(n_samples)]
+            for s in range(0, len(uids), per):
+                part = _decode(vlm, uids[s: s + per], render_dir, text_index, [mode], per, max_new_tokens,
+                               rep=(n_samples, temp))[mode]
+                for j, codes in enumerate(part):
+                    for k in range(n_samples):
+                        res[k][s + j] = codes[k]
+                if s % (per * 25) == 0:
+                    print(f"[sample] {mode} {s}/{len(uids)}", flush=True)
+            out.update({f"{mode}@s{k}": res[k] for k in range(n_samples)})
+        return out
+    return _decode(vlm, uids, render_dir, text_index, modes, bs, max_new_tokens)
+
+
+def _decode(vlm, uids, render_dir, text_index, modes, bs, max_new_tokens, rep=None):
     out = {}
     for mode in modes:
         rows = []
@@ -74,13 +95,16 @@ def predict(vlm, uids, render_dir, text_index, modes, bs=32, max_new_tokens=1024
                     p = p if not mode.startswith("view") else None
                 prompts.append(p)
             keep = [i for i, (im, p) in enumerate(zip(images, prompts)) if im is not None or p]
-            row = [None] * len(chunk)
+            n, kw = (rep[0], dict(do_sample=True, temperature=rep[1], top_p=1.0, top_k=0)) if rep else (1, {})
+            row = [[None] * n if rep else None for _ in chunk]
             if keep:
                 with torch.autocast("cuda", dtype=torch.bfloat16, enabled=vlm.device.type == "cuda"):
-                    _, texts = vlm.generate([images[i] for i in keep], [prompts[i] for i in keep],
-                                            max_new_tokens=max_new_tokens)
-                for i, t in zip(keep, texts):
-                    row[i] = t.strip() or None
+                    _, texts = vlm.generate([images[i] for i in keep for _ in range(n)],
+                                            [prompts[i] for i in keep for _ in range(n)],
+                                            max_new_tokens=max_new_tokens, **kw)
+                for j, i in enumerate(keep):
+                    got = [t.strip() or None for t in texts[j * n: (j + 1) * n]]
+                    row[i] = got if rep else got[0]
             rows += row
         out[mode] = rows
     return out
@@ -137,6 +161,9 @@ def main():
     ap.add_argument("--uids_from", default=None)
     ap.add_argument("--out_preds", default=None)
     ap.add_argument("--predict_modes", nargs="*", default=["view1", "view4", "view1+expert", "expert"])
+    ap.add_argument("--n_samples", type=int, default=0, help="with --predict: sample this many programs per part")
+    ap.add_argument("--temp", type=float, default=0.8, help="sampling temperature for --n_samples")
+    ap.add_argument("--predict_prefix", default="vlm_cq", help="method name prefix in the predictions file")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     a = ap.parse_args()
     torch.manual_seed(0)
@@ -151,11 +178,12 @@ def main():
             P = pickle.load(f)
         vlm = VLMCad.from_pretrained(a.predict, dtype=torch.bfloat16)
         vlm.model.to(a.device).eval()
-        preds = predict(vlm, P["uids"], render_dir, text_index, a.predict_modes, bs=64)
+        preds = predict(vlm, P["uids"], render_dir, text_index, a.predict_modes, bs=64, n_samples=a.n_samples,
+                        temp=a.temp)
         os.makedirs(os.path.dirname(a.out_preds) or ".", exist_ok=True)
         with open(a.out_preds, "wb") as f:
             pickle.dump({"uids": P["uids"], "dup": P["dup"], "kind": "cadquery",
-                         "preds": {f"vlm_cq:{m}": v for m, v in preds.items()}}, f)
+                         "preds": {f"{a.predict_prefix}:{m}": v for m, v in preds.items()}}, f)
         print(f"[done] {a.out_preds}")
         return
 
