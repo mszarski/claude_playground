@@ -45,17 +45,28 @@ done
 echo "vLLM up: $(curl -s localhost:8000/v1/models)"
 
 export CIRCUIT_GEN_HF_BASE_URL=http://localhost:8000/v1 CIRCUIT_GEN_HF_MAX_TOKENS=8192
+upload() {
+    hf upload "$DATASET" runs "eval/$RUN" --repo-type dataset --commit-message "eval $RUN" \
+        --exclude "*.kicad_pcb" --exclude "*.dsn" --exclude "*.ses" --exclude "gerbers/*" > /dev/null || true
+}
+# The job's --timeout kills everything at once, so stop the evals in time to
+# upload, and upload finished samples (result.json) as they accumulate.
+EVAL_MINUTES="${EVAL_MINUTES:-140}"
 eval_one() {  # name model
-    python3 -m circuit_gen eval circuit_gen/benchmarks/boards.json -o "runs/$1" \
-        --samples "$SAMPLES" --jobs 6 --max-turns 25 --spec-first --model "$2" > "runs/$1.log" 2>&1
+    timeout "${EVAL_MINUTES}m" python3 -m circuit_gen eval circuit_gen/benchmarks/boards.json \
+        -o "runs/$1" --samples "$SAMPLES" --jobs 6 --max-turns 25 --spec-first --model "$2" \
+        > "runs/$1.log" 2>&1 || echo "$1 eval stopped (exit $?)"
 }
 mkdir -p runs
+(while sleep 600; do upload; done) &
+uploader=$!
 eval_one base "$BASE_MODEL" &
+base=$!
 eval_one tuned circuit &
-wait
-python3 -m circuit_gen compare runs/base runs/tuned | tee runs/compare.md
+tuned=$!
+wait $base $tuned
+kill $uploader
+python3 -m circuit_gen compare runs/base runs/tuned | tee runs/compare.md || true
 tail -5 runs/base.log runs/tuned.log
-
-hf upload "$DATASET" runs "eval/$RUN" --repo-type dataset \
-    --exclude "*.kicad_pcb" --exclude "*.dsn" --exclude "*.ses" --exclude "gerbers/*" > /dev/null
+upload
 echo "results: https://huggingface.co/datasets/$DATASET/tree/main/eval/$RUN"
