@@ -40,6 +40,14 @@ need_cq() {
   python -c "import cadquery; print('[cadquery]', cadquery.__version__)"
 }
 
+# vLLM: triton JIT-compiles kernels at engine start, so the image needs a C compiler
+need_vllm() {
+  python -c "import vllm" 2>/dev/null && return
+  apt-get update -qq && apt-get install -y -qq gcc g++ >/dev/null
+  pip install -q vllm
+  python -c "import vllm, torch, transformers; print('[vllm]', vllm.__version__, torch.__version__, transformers.__version__)"
+}
+
 first() { for p in "$@"; do [[ -e "$p" ]] && { echo "$p"; return; }; done; echo "${1}"; }
 CSR_CKPT=${CSR_CKPT:-$(first data/ckpt/ae_ckpt_epoch1000.pth $(ls data/ckpt/*ae*.pth 2>/dev/null))}
 CCIP_CKPT=${CCIP_CKPT:-$(first data/ckpt/ccip_sketch_ckpt_epoch300.pth $(ls data/ckpt/*ccip*.pth 2>/dev/null))}
@@ -133,10 +141,21 @@ case "$STAGE" in
     need_cq
     need cad_vec renders
     cp /work/data/deepcad_cq.parquet data/
-    apt-get update -qq && apt-get install -y -qq gcc g++ >/dev/null   # triton JIT-compiles kernels at engine start
-    pip install -q vllm
-    python -c "import vllm, torch, transformers; print('[vllm]', vllm.__version__, torch.__version__, transformers.__version__)"
+    need_vllm
     python scripts/sample_rft.py --data data --model "${INIT:-results/vlm_cq_v1/model}" --out "results/$RUN" "$@" ;;
+
+  vlmdpo)     # DPO on rejection-sampling pairs (train_vlm_dpo.py); INIT = policy/reference init, CHUNKS = sample_rft output
+    need_cq
+    need cad_vec renders
+    cp /work/data/deepcad_cq.parquet data/
+    python train_vlm_dpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" \
+        --chunks "${CHUNKS:-results/rft_v1}" ${STEPS:+--steps $STEPS} "$@" ;;
+
+  vllmpred)   # greedy test predictions with vLLM (scripts/predict_vllm.py) -> results/$RUN/preds.pkl; INIT = model dir
+    need renders
+    need_vllm
+    python scripts/predict_vllm.py --data data --model "${INIT:?set INIT=<model dir>}" \
+        --uids_from results/baselines_vlm_final/preds.pkl --out "results/$RUN/preds.pkl" "$@" ;;
 
   vlmpred)    # test-set CadQuery predictions of a vlm_cq-style model dir (INIT) -> results/$RUN/preds.pkl
     need renders
