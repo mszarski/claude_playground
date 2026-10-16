@@ -6,7 +6,6 @@
 #     "transformers>=4.51.0",
 #     "accelerate>=0.34.0",
 #     "datasets>=3.0.0",
-#     "trackio",
 # ]
 # ///
 """
@@ -27,7 +26,6 @@ Runs on Hugging Face Jobs, e.g.:
 
 import os
 
-import trackio
 from datasets import concatenate_datasets, load_dataset
 from peft import LoraConfig
 from transformers import AutoTokenizer
@@ -67,7 +65,8 @@ eval_dataset = concatenate_datasets(eval_parts)
 print(f"train {len(train_dataset)}, eval {len(eval_dataset)}")
 
 config = SFTConfig(
-    output_dir="circuit-gen-sft",
+    # /data is the job's bucket mount on HF Jobs: checkpoints survive a failed push.
+    output_dir="/data/circuit-gen-sft" if os.path.isdir("/data") else "circuit-gen-sft",
     push_to_hub=True,
     hub_model_id=OUTPUT_REPO,
     hub_private_repo=True,
@@ -78,15 +77,14 @@ config = SFTConfig(
     gradient_checkpointing=True,
     learning_rate=1e-4,
     lr_scheduler_type="cosine",
-    warmup_ratio=0.05,
+    warmup_steps=0.05,  # a float below 1 is a ratio of total steps
     max_length=MAX_LENGTH,
     bf16=True,
     logging_steps=5,
     eval_strategy="epoch",
     save_strategy="epoch",
     save_total_limit=2,
-    report_to="trackio",
-    project="circuit-gen",
+    report_to="none",
     run_name=f"sft-{BASE_MODEL.split('/')[-1]}",
 )
 
@@ -108,5 +106,4 @@ trainer = SFTTrainer(
 )
 trainer.train()
 trainer.push_to_hub()
-trackio.finish()
 print(f"done: https://huggingface.co/{OUTPUT_REPO}")
