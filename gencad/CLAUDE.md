@@ -435,6 +435,23 @@ Goal: teach the model to produce its best-of-N answer greedily, so it stays one 
    (94.3 vs 89.1) is sampling luck that one greedy answer cannot capture. Cost: sampling ~1.6 h H200, fine-tune
    ~2.6 h H200, test predictions ~3 h A100 (HF generate; switch `vlmpred` to vLLM next time).
 
+### DPO on rejection-sampling pairs (`train_vlm_dpo.py`, `RUN=... INIT=... CHUNKS=results/rft_v1 jobs/launch.sh vlmdpo`)
+Pairs from the RFT samples (no new sampling): chosen = best program by GT IoU (>= 0.9), rejected = up to 2 programs
+>= 0.15 IoU worse or failing to build, greedy first: 13,147 pairs from 7,569 parts (rejected is greedy in 2,045;
+chosen IoU 0.964, rejected 0.389, 11 % invalid). Sigmoid DPO (beta 0.1) vs a frozen reference (= init) + nll_weight x
+token NLL of the chosen program; 32 pairs/step, ~5 s/step on an H200. CPU check: with reference = policy the loss is
+exactly log 2.
+**v1** (init RFT round 1, lr 1e-6, nll 0.2, 500 steps): pair accuracy 0.68 -> 0.85, margin up to ~15 nats, but
+validation got worse and the invalid rate rose (gt IoU view1 / view4 / view1+expert, invalid on view1+expert):
+RFT 87.0 / 90.8 / 90.6, 0.8 % -> step 250 86.0 / 89.8 / 87.2, 5.5 % -> step 500 86.0 / 88.8 / 84.5, 7.8 %. Classic DPO
+likelihood displacement: it lowers the rejected programs faster than it raises the chosen ones, mass moves to unseen
+(broken) code; chosen NLL rose 0.047 -> 0.061. Not test-scored. **v2**: nll 1.0, lr 3e-7, 300 steps (running).
+
+### vLLM test predictions (`scripts/predict_vllm.py`, `INIT=<model dir> RUN=<name> jobs/launch.sh vllmpred`)
+Same inputs/prompts/output format as `train_vlm_cq.py --predict`. 4 modes x 2000 test parts in ~5 min on an A100
+(HF generate: ~3 h). Validated on the RFT model: local cq_iou own IoU all view1 / view4 / view1+expert / expert
+85.0 / 89.6 / 88.1 / 80.5 vs HF-generate predictions 85.1 / 89.6 / 88.2 / 80.4. Use it for all test predictions.
+
 ## Handoff (2026-10-16 ~07:20 UTC)
 - RL scored: +1.5 for 1 view, flat elsewhere; stopped. Render selection done (above): local best-of-9 view4 91.7.
 - **Next (agreed direction: improve the model itself, no cloud at inference): rejection-sampling fine-tuning.**
