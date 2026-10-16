@@ -133,6 +133,7 @@ case "$STAGE" in
     need_cq
     need cad_vec renders
     cp /work/data/deepcad_cq.parquet data/
+    apt-get update -qq && apt-get install -y -qq gcc g++ >/dev/null   # triton JIT-compiles kernels at engine start
     pip install -q vllm
     python -c "import vllm, torch, transformers; print('[vllm]', vllm.__version__, torch.__version__, transformers.__version__)"
     python scripts/sample_rft.py --data data --model "${INIT:-results/vlm_cq_v1/model}" --out "results/$RUN" "$@" ;;

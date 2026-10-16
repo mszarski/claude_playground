@@ -32,7 +32,8 @@ IMAGE_MODES = ("view1", "view4")
 
 
 class Samples(Dataset):
-    """items: (image stem, code, uid with prompts or None)."""
+    """items: (image stem, code, uid with prompts or None[, fixed input]). A fixed input (views, prompt) comes from
+    rejection sampling (--rft): the target program was the model's best answer to exactly that input."""
 
     def __init__(self, items, text_index, levels, mode_p):
         self.items, self.text_index, self.levels = items, text_index, levels
@@ -42,7 +43,10 @@ class Samples(Dataset):
         return len(self.items)
 
     def __getitem__(self, i):
-        stem, code, uid = self.items[i]
+        stem, code, uid = self.items[i][:3]
+        if len(self.items[i]) > 3:
+            views, prompt = self.items[i][3]
+            return compose_views([load_views("", stem, [v])[0] for v in views]), prompt, code
         prompts = self.text_index.get(uid, {}) if uid else {}
         have = [lv for lv in self.levels if prompts.get(lv)]
         mode = self.modes[np.random.choice(len(self.modes), p=self.mode_p)]
@@ -144,6 +148,8 @@ def main():
     ap.add_argument("--recode_renders", default="data/recode_renders")
     ap.add_argument("--min_fidelity", type=float, default=0.95, help="drop DeepCAD conversions below this IoU")
     ap.add_argument("--deepcad_p", type=float, default=0.3, help="share of samples drawn from DeepCAD")
+    ap.add_argument("--rft", default=None, help="rejection-sampling targets (scripts/build_rft.py parquet)")
+    ap.add_argument("--rft_p", type=float, default=0.5, help="share of samples drawn from --rft (rest as before)")
     ap.add_argument("--levels", nargs="*", default=["abstract", "beginner", "intermediate", "expert", "description"])
     ap.add_argument("--mode_p", default="view1=0.3,view4=0.25,view1+text=0.15,view4+text=0.15,text=0.15")
     ap.add_argument("--max_code_chars", type=int, default=2500)
@@ -211,9 +217,18 @@ def main():
     rc = rc[(rc.split == "train") & rc.path.map(lambda p: status.get(p) in ("ok", "skip"))
             & (rc.code.str.len() <= a.max_code_chars)]
     items_rc = [(os.path.join(a.recode_renders, p[:-3]), c, None) for p, c in zip(rc.path, rc.code)][: a.max_items]
-    items = items_dc + items_rc
-    w = np.concatenate([np.full(len(items_dc), a.deepcad_p / max(len(items_dc), 1)),
-                        np.full(len(items_rc), (1 - a.deepcad_p) / max(len(items_rc), 1))])
+    items_rft = []
+    if a.rft:
+        rf = pd.read_parquet(a.rft)
+        items_rft = [(os.path.join(render_dir, u), c, u, (list(map(int, json.loads(v))), p if p else None))
+                     for u, c, v, p in zip(rf.uid, rf.code, rf.views, rf.prompt)]
+    rest = 1 - (a.rft_p if items_rft else 0.0)
+    items = items_dc + items_rc + items_rft
+    w = np.concatenate([np.full(len(items_dc), rest * a.deepcad_p / max(len(items_dc), 1)),
+                        np.full(len(items_rc), rest * (1 - a.deepcad_p) / max(len(items_rc), 1)),
+                        np.full(len(items_rft), (1 - rest) / max(len(items_rft), 1))])
+    if items_rft:
+        print(f"[data] rft targets {len(items_rft)} from {a.rft}, share {1 - rest}", flush=True)
     print(f"[data] deepcad train {len(items_dc)} (of {len(dc[dc.split == 'train'])} faithful), cad-recode "
           f"{len(items_rc)}, val {len(val)}; deepcad share {a.deepcad_p}", flush=True)
     mode_p = {k: float(v) for k, v in (kv.split("=") for kv in a.mode_p.split(","))}
