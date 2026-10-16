@@ -129,6 +129,14 @@ case "$STAGE" in
     cp /work/data/deepcad_cq.parquet data/
     python train_vlm_rl.py --data data --name "$RUN" --init "${INIT:-results/vlm_cq_v1/model}" --steps ${STEPS:-300} "$@" ;;
 
+  rftsample)  # greedy + sampled programs per DeepCAD part with vLLM, scored vs GT (scripts/sample_rft.py); INIT = model dir
+    need_cq
+    need cad_vec renders
+    cp /work/data/deepcad_cq.parquet data/
+    pip install -q vllm
+    python -c "import vllm, torch, transformers; print('[vllm]', vllm.__version__, torch.__version__, transformers.__version__)"
+    python scripts/sample_rft.py --data data --model "${INIT:-results/vlm_cq_v1/model}" --out "results/$RUN" "$@" ;;
+
   vlmpred)    # test-set CadQuery predictions of a vlm_cq-style model dir (INIT) -> results/$RUN/preds.pkl
     need renders
     python train_vlm_cq.py --data data --predict "${INIT:?set INIT=<model dir>}" \
