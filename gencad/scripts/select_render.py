@@ -152,10 +152,12 @@ def main():
         report["select"][f"{gname}:oracle"] = table(f"oracle {gname} (best own IoU)",
                                                     {i: pick(i, cand, "own") for i in keep})
     # how often each candidate is picked by the main selector
-    counts = np.bincount([int(np.argmax([rows[i][c]["sil"] for c in groups["all"]])) for i in keep],
-                         minlength=len(names))
-    report["picked_by_sil"] = dict(zip(names, counts.tolist()))
-    print(f"[select] picked by sil: {report['picked_by_sil']}; timeout/crash {failed}", flush=True)
+    for key in ("sil", "pix"):
+        counts = np.bincount([int(np.argmax([rows[i][c][key] for c in groups["all"]])) for i in keep],
+                             minlength=len(names))
+        report[f"picked_by_{key}"] = dict(zip(names, counts.tolist()))
+        print(f"[select] picked by {key}: {report[f'picked_by_{key}']}", flush=True)
+    print(f"[select] timeout/crash {failed}", flush=True)
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "rows.pkl"), "wb") as f:
         pickle.dump({"uids": uids, "dup": dup.tolist(), "names": names, "rows": rows}, f)
