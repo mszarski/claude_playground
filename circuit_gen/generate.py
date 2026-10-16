@@ -306,12 +306,13 @@ satisfy a requirement you believe is wrong.
 
 
 def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, max_nudges=2,
-                     spec_first=False):
+                     spec_first=False, spec_backend=None):
     """Ask the model for a circuit matching `description`. Returns a GenerationResult.
 
     With `spec_first`, a separate model call first writes the requirements from
     the description alone (spec.py); they are frozen and appended to every
-    circuit the designer submits.
+    circuit the designer submits. `spec_backend` writes the spec (default: the
+    designer's model in a separate conversation).
     """
     from .spec import SpecError, revise_spec, write_spec
 
@@ -321,7 +322,8 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
     user = f"Design this board:\n\n{description}"
     suffix = ""
     # The spec writer gets its own conversation so it can revise the spec mid-design.
-    spec_backend = backend.clone() if hasattr(backend, "clone") else backend
+    if spec_backend is None:
+        spec_backend = backend.clone() if hasattr(backend, "clone") else backend
     revisions = 0
     if spec_first:
         try:

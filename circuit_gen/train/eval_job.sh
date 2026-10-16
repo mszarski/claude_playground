@@ -53,21 +53,29 @@ upload() {
 # The job's --timeout kills everything at once, so stop the evals in time to
 # upload, and upload finished samples (result.json) as they accumulate.
 EVAL_MINUTES="${EVAL_MINUTES:-140}"
-eval_one() {  # name model
+# Every arm gets its spec from the base model (thinking on), so the arms differ only
+# in the designer. The adapter was trained on sessions without thinking, so it runs
+# with thinking off, and so does a base-model control arm.
+eval_one() {  # name model [extra eval args]
+    local name=$1 model=$2
+    shift 2
     timeout "${EVAL_MINUTES}m" python3 -m circuit_gen eval circuit_gen/benchmarks/boards.json \
-        -o "runs/$1" --samples "$SAMPLES" --jobs "$JOBS" --max-turns 25 --spec-first --model "$2" \
-        > "runs/$1.log" 2>&1 || echo "$1 eval stopped (exit $?)"
+        -o "runs/$name" --samples "$SAMPLES" --jobs "$JOBS" --max-turns 25 --spec-first \
+        --model "$model" --spec-model "$BASE_MODEL" "$@" \
+        > "runs/$name.log" 2>&1 || echo "$name eval stopped (exit $?)"
 }
 mkdir -p runs
 (while sleep 600; do upload; done) &
 uploader=$!
 eval_one base "$BASE_MODEL" &
 base=$!
-eval_one tuned circuit &
+eval_one base_nothink "$BASE_MODEL" --no-thinking &
+base_nothink=$!
+eval_one tuned circuit --no-thinking &
 tuned=$!
-wait $base $tuned
+wait $base $base_nothink $tuned
 kill $uploader
-python3 -m circuit_gen compare runs/base runs/tuned | tee runs/compare.md || true
-tail -5 runs/base.log runs/tuned.log
+python3 -m circuit_gen compare runs/base runs/base_nothink runs/tuned | tee runs/compare.md || true
+tail -5 runs/base.log runs/base_nothink.log runs/tuned.log
 upload
 echo "results: https://huggingface.co/datasets/$DATASET/tree/main/eval/$RUN"

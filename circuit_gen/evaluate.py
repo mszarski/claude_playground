@@ -78,11 +78,16 @@ def design_and_build(description, out_dir, opts, tests=None):
     out_dir = Path(out_dir)
     name = opts.get("backend") or config.BACKEND
     extra = {"effort": opts["effort"]} if name == "claude" and opts.get("effort") else {}
+    spec_backend = (make_backend(name, model=opts["spec_model"], **extra)
+                    if opts.get("spec_model") else None)
+    if name == "hf" and opts.get("thinking") is not None:
+        extra["thinking"] = opts["thinking"]
     backend = make_backend(name, model=opts.get("model"), **extra)
     gen = generate_circuit(description, out_dir, backend=backend, max_turns=opts["max_turns"],
-                           spec_first=opts.get("spec_first", False))
+                           spec_first=opts.get("spec_first", False), spec_backend=spec_backend)
     (out_dir / "generation.json").write_text(json.dumps({
         "description": description, "backend": backend.name, "model": backend.model,
+        "spec_model": spec_backend.model if spec_backend else None,
         "passed_checks": gen.passed, "turns": gen.turns,
         "attempts": len(gen.attempts), "error": gen.error, "summary": gen.summary,
         "spec_revisions": gen.spec_revisions,
@@ -194,6 +199,9 @@ def compare(run_dirs):
         s = json.loads((Path(d) / "summary.json").read_text())
         label = (s.get("options") or {}).get("model") or Path(d).name
         summaries.append((label, s))
+    labels = [label for label, _ in summaries]
+    if len(set(labels)) < len(labels):  # e.g. one model run with different options
+        summaries = [(Path(d).name, s) for d, (_, s) in zip(run_dirs, summaries)]
     boards = []
     for _, s in summaries:
         for b in s["boards"]:

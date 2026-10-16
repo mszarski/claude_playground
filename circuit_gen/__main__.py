@@ -34,7 +34,8 @@ def cmd_build(args):
 
 def _opts(args):
     return {"backend": args.backend, "model": args.model, "effort": args.effort,
-            "max_turns": args.max_turns, "passes": args.passes, "spec_first": args.spec_first}
+            "max_turns": args.max_turns, "passes": args.passes, "spec_first": args.spec_first,
+            "spec_model": args.spec_model, "thinking": False if args.no_thinking else None}
 
 
 def cmd_design(args):
@@ -147,6 +148,10 @@ def main(argv=None):
         s.add_argument("--max-turns", type=int, default=40)
         s.add_argument("--spec-first", action="store_true",
                        help="write frozen requirements from the description before designing")
+        s.add_argument("--spec-model", default=None,
+                       help="model that writes the spec (default: the designer's model)")
+        s.add_argument("--no-thinking", action="store_true",
+                       help="hf backend: turn off the designer's thinking mode (Qwen3-style models)")
         s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"],
                        help="Claude backend only")
 

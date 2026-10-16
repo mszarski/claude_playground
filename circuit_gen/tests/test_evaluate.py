@@ -77,3 +77,15 @@ def test_compare(tmp_path):
     table = compare([tmp_path / "a", tmp_path / "b"])
     assert "| board | org/m1 | org/m2 |" in table
     assert "| led | 2/2 | 1/2 |" in table and "**2/2**" in table
+
+
+def test_compare_same_model_uses_run_names(tmp_path):
+    import json
+    from circuit_gen.evaluate import compare
+    for name in ("base", "base_nothink"):
+        d = tmp_path / name
+        d.mkdir()
+        d.joinpath("summary.json").write_text(json.dumps({
+            "options": {"model": "org/m1"},
+            "boards": [{"id": "led", "passed": 1, "samples": 1}]}))
+    assert "| board | base | base_nothink |" in compare([tmp_path / "base", tmp_path / "base_nothink"])

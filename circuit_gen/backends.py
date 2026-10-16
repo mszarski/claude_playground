@@ -94,7 +94,7 @@ class HuggingFaceBackend:
     name = "hf"
 
     def __init__(self, model=None, client=None, provider=None, max_tokens=None,
-                 temperature=0.2, retries=7):
+                 temperature=0.2, retries=7, thinking=None):
         if client is None:
             from huggingface_hub import InferenceClient
             if config.HF_BASE_URL:
@@ -108,6 +108,9 @@ class HuggingFaceBackend:
         self.max_tokens = max_tokens or config.HF_MAX_TOKENS
         self.temperature = temperature
         self.retries = retries
+        # None leaves the server's default; False turns off a hybrid model's thinking mode
+        # (Qwen3 chat_template_kwargs), e.g. for a model fine-tuned on sessions without it.
+        self.thinking = thinking
         self.messages = []
         self.tools = []
 
@@ -128,6 +131,8 @@ class HuggingFaceBackend:
         for attempt in range(self.retries + 1):
             try:
                 extra = {"tools": self.tools} if self.tools else {}
+                if self.thinking is not None:
+                    extra["extra_body"] = {"chat_template_kwargs": {"enable_thinking": self.thinking}}
                 stream = self.client.chat_completion(
                     model=self.model, messages=self.messages,
                     max_tokens=self.max_tokens, temperature=self.temperature,
@@ -180,7 +185,8 @@ class HuggingFaceBackend:
     def clone(self):
         """A fresh conversation with the same model and client."""
         return HuggingFaceBackend(model=self.model, client=self.client, max_tokens=self.max_tokens,
-                                  temperature=self.temperature, retries=self.retries)
+                                  temperature=self.temperature, retries=self.retries,
+                                  thinking=self.thinking)
 
     def add_tool_results(self, results):
         for r in results:

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from types import SimpleNamespace
 
-from circuit_gen import generate
+from circuit_gen import generate, spec
 from circuit_gen.backends import (ClaudeBackend, HuggingFaceBackend, ToolCall, ToolResult, Turn,
                                   make_backend)
 
@@ -90,6 +90,15 @@ class TestLoop:
         result = generate.generate_circuit("anything", tmp_path, backend=backend, max_nudges=2)
         assert len(backend.user_messages) == 2
         assert result.summary == "bye" and not result.passed
+
+    def test_separate_spec_backend_writes_the_spec(self, tmp_path):
+        spec_writer = ScriptedBackend([say('```python\nrequire("v(OUT)", 1, 2)\n```')])
+        designer = ScriptedBackend([say("done"), say("done"), say("done")])
+        generate.generate_circuit("Name the nets OUT and GND.", tmp_path, backend=designer,
+                                  spec_first=True, spec_backend=spec_writer)
+        assert spec_writer.started[0] == spec.SPEC_PROMPT
+        assert "v(OUT)" in (tmp_path / "spec.py").read_text()
+        assert designer.started[1].startswith("Design this board")
 
     def test_system_prompt_has_examples(self, tmp_path):
         backend = ScriptedBackend([say("done"), say("done"), say("done")])
@@ -231,6 +240,22 @@ class TestHuggingFaceBackend:
         b.start("sys", "u", generate.TOOLS)
         with pytest.raises(ValueError):
             b.step()
+
+    def test_thinking_off_is_sent_and_kept_by_clone(self):
+        client = FakeInferenceClient([_hf_response(content="a"), _hf_response(content="b"),
+                                      _hf_response(content="c")])
+        b = HuggingFaceBackend(model="m", client=client, thinking=False)
+        b.start("sys", "u", generate.TOOLS)
+        b.step()
+        assert client.requests[0]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+        c = b.clone()
+        c.start("sys", "u", [])
+        c.step()
+        assert client.requests[1]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is False
+        d = HuggingFaceBackend(model="m", client=client)
+        d.start("sys", "u", [])
+        d.step()
+        assert "extra_body" not in client.requests[2]
 
     def test_default_backend_is_hf(self, monkeypatch):
         monkeypatch.setattr("huggingface_hub.InferenceClient", lambda **kw: object())
