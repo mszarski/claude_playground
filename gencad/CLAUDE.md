@@ -445,7 +445,14 @@ exactly log 2.
 validation got worse and the invalid rate rose (gt IoU view1 / view4 / view1+expert, invalid on view1+expert):
 RFT 87.0 / 90.8 / 90.6, 0.8 % -> step 250 86.0 / 89.8 / 87.2, 5.5 % -> step 500 86.0 / 88.8 / 84.5, 7.8 %. Classic DPO
 likelihood displacement: it lowers the rejected programs faster than it raises the chosen ones, mass moves to unseen
-(broken) code; chosen NLL rose 0.047 -> 0.061. Not test-scored. **v2**: nll 1.0, lr 3e-7, 300 steps (running).
+(broken) code; chosen NLL rose 0.047 -> 0.061. Not test-scored.
+**v2** (init RFT, nll 1.0, lr 3e-7, 300 steps, `results/vlm_dpo_v2{,_test}`): pair accuracy ~0.8, margin ~1 nat (the NLL
+anchor keeps it close to the reference); validation step 100 / 200 / 300 view1 87.2 / 86.6 / 88.0, view4 90.4 / 91.2 /
+91.0, view1+expert 90.4 / 90.8 / 90.5, invalid normal. Test (vLLM predictions, local scoring), own IoU all / novel:
+view1 85.3 / 79.7, view4 89.5 / 85.6, view1+expert 88.1 / 83.9, expert 80.5 / 74.6. Paired vs RFT round 1: +0.30 +- 0.17,
+-0.09 +- 0.18, +0.02 +- 0.19, +0.03 +- 0.19 (all), i.e. no change; vs SFT +2.4 (view1), +0.5 (view4), flat with text.
+Conclusion: post-training on the model's own samples (RL, RFT, DPO) has plateaued at ~89.5 own IoU single-answer for
+4 views; the 5-point best-of-N headroom does not transfer into the greedy answer with these methods at this scale.
 
 ### vLLM test predictions (`scripts/predict_vllm.py`, `INIT=<model dir> RUN=<name> jobs/launch.sh vllmpred`)
 Same inputs/prompts/output format as `train_vlm_cq.py --predict`. 4 modes x 2000 test parts in ~5 min on an A100
