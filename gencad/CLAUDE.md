@@ -402,7 +402,7 @@ headroom for rejection-sampling fine-tuning (sample on train parts, keep the bes
 Caveat: the selector compares against renders from our own renderer, so on real photos `pix` would need a learned or
 edge-based comparison. Not run: extra Claude samples as candidates (kept the model local by choice).
 
-### Rejection-sampling fine-tuning (RFT; `scripts/sample_rft.py`, `scripts/build_rft.py`, `train_vlm_cq.py --rft`; IN PROGRESS)
+### Rejection-sampling fine-tuning (RFT; `scripts/sample_rft.py`, `scripts/build_rft.py`, `train_vlm_cq.py --rft`; round 1 done)
 Goal: teach the model to produce its best-of-N answer greedily, so it stays one local model with no selector or Claude.
 1. **Sampling** (`RUN=rft_v1 INIT=results/vlm_cq_v1/model jobs/launch.sh rftsample --n_parts 30000`, H200, 1.6 h):
    vLLM 0.31 (needs gcc in the image; FlashInfer's sampler is disabled because its JIT needs nvcc; 4096-token
@@ -417,7 +417,23 @@ Goal: teach the model to produce its best-of-N answer greedily, so it stays one 
    2,468 by > 0.10, 160 fix invalid greedy code; view4 9,667 / view1 6,535 / view1+expert 4,478.
 3. **Fine-tune** (`RUN=vlm_rft_v1 STEPS=3000 jobs/launch.sh vlmcq --model results/vlm_cq_v1/model --rft
    results/rft_v1/rft.parquet --rft_p 0.5 --lr 2e-5 --warmup 100 --eval_every 1000`): half of each batch RFT targets
-   with their exact input, half the original DeepCAD/CAD-Recode mix. Running.
+   with their exact input, half the original DeepCAD/CAD-Recode mix. ~2.1 s/step on an H200. Validation (gt IoU,
+   steps 1000 / 2000 / 3000; SFT 86.0 / 91.1 / 90.0): view1 85.4 / 86.0 / 87.0, view4 89.3 / 90.6 / 90.8,
+   view1+expert 90.6 / 89.1 / 90.6.
+4. **Test** (`results/vlm_rft_v1_test/{preds.pkl,cq_iou_local.json,rows.pkl}`, scored locally, no timeouts). Own IoU,
+   all / novel, and the paired difference to SFT on the same parts (+- standard error):
+| input | SFT | RFT round 1 | paired diff all | paired diff novel |
+|---|---|---|---|---|
+| 1 view | 82.9 / 78.2 | **85.1 / 79.3** | **+2.18 +- 0.40** | +1.16 +- 0.53 |
+| 4 views | 89.1 / 85.2 | 89.6 / 85.8 | +0.55 +- 0.31 | +0.58 +- 0.46 |
+| 1 view + expert | 88.4 / 84.2 | 88.2 / 83.8 | -0.17 +- 0.28 | -0.39 +- 0.43 |
+| expert only | 80.1 / 73.9 | 80.4 / 74.5 | +0.33 +- 0.36 | +0.64 +- 0.54 |
+   Readings: a real gain only for 1 view (+2.2, like RL's +1.5 there); 4 views +0.5 is marginal; text modes flat.
+   Many parts move both ways (view4: 185 better / 134 worse by > 0.05), so the update reshuffles as much as it
+   improves. Likely reasons: 7.9k of the 20.7k targets are the greedy program itself (self-distillation, no new
+   information) and the 5.9k real improvements are a small share of the batches; much of the test oracle gap
+   (94.3 vs 89.1) is sampling luck that one greedy answer cannot capture. Cost: sampling ~1.6 h H200, fine-tune
+   ~2.6 h H200, test predictions ~3 h A100 (HF generate; switch `vlmpred` to vLLM next time).
 
 ## Handoff (2026-10-16 ~07:20 UTC)
 - RL scored: +1.5 for 1 view, flat elsewhere; stopped. Render selection done (above): local best-of-9 view4 91.7.
