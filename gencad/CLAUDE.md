@@ -402,6 +402,23 @@ headroom for rejection-sampling fine-tuning (sample on train parts, keep the bes
 Caveat: the selector compares against renders from our own renderer, so on real photos `pix` would need a learned or
 edge-based comparison. Not run: extra Claude samples as candidates (kept the model local by choice).
 
+### Rejection-sampling fine-tuning (RFT; `scripts/sample_rft.py`, `scripts/build_rft.py`, `train_vlm_cq.py --rft`; IN PROGRESS)
+Goal: teach the model to produce its best-of-N answer greedily, so it stays one local model with no selector or Claude.
+1. **Sampling** (`RUN=rft_v1 INIT=results/vlm_cq_v1/model jobs/launch.sh rftsample --n_parts 30000`, H200, 1.6 h):
+   vLLM 0.31 (needs gcc in the image; FlashInfer's sampler is disabled because its JIT needs nvcc; 4096-token
+   context, 10 over-long expert prompts dropped). 30k random distinct DeepCAD *train* programs, one input each
+   (view1 with a random camera 0.4 / view4 0.4 / view1+expert 0.2), greedy + 8 samples at T 0.8, each scored vs GT in a
+   CPU pool overlapping the next chunk's generation. Check on the 256 val parts (`results/rft_check`): vLLM greedy
+   view4 90.7 IoU (HF generate 90.5-91.1), best-of-9 94.9. Train parts: greedy 0.76, best-of-9 0.87 mean IoU (lower
+   than test because a third use a single random camera; front/top alone are ambiguous); a sample beats greedy by
+   > 0.02 on ~42 % of parts. Timeouts 2-14 per 18k programs.
+2. **Targets** (`results/rft_v1/rft.parquet`, stats in `rft_stats.json`): best program per part by GT IoU, kept if >= 0.9
+   (ties -> greedy, then shortest): 20,680 targets, mean IoU 0.978; 12,787 are samples, 5,857 improve greedy by > 0.02,
+   2,468 by > 0.10, 160 fix invalid greedy code; view4 9,667 / view1 6,535 / view1+expert 4,478.
+3. **Fine-tune** (`RUN=vlm_rft_v1 STEPS=3000 jobs/launch.sh vlmcq --model results/vlm_cq_v1/model --rft
+   results/rft_v1/rft.parquet --rft_p 0.5 --lr 2e-5 --warmup 100 --eval_every 1000`): half of each batch RFT targets
+   with their exact input, half the original DeepCAD/CAD-Recode mix. Running.
+
 ## Handoff (2026-10-16 ~07:20 UTC)
 - RL scored: +1.5 for 1 view, flat elsewhere; stopped. Render selection done (above): local best-of-9 view4 91.7.
 - **Next (agreed direction: improve the model itself, no cloud at inference): rejection-sampling fine-tuning.**
