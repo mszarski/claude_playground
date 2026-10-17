@@ -58,8 +58,10 @@ upload() {
 # upload, and upload finished samples (result.json) as they accumulate.
 EVAL_MINUTES="${EVAL_MINUTES:-140}"
 # Every arm gets its spec from SPEC_MODEL, so the arms differ only in the designer.
-# The adapter was trained on sessions without thinking, so it runs with thinking
-# off, and so does a base-model control arm.
+# Arms (ARMS, space-separated): base, base_nothink, tuned (adapter, thinking on),
+# tuned_nothink. Training sessions render with no think block, which matches the
+# thinking-on prompt; thinking off adds an empty <think></think> the adapter never saw.
+ARMS="${ARMS:-base tuned}"
 eval_one() {  # name model [extra eval args]
     local name=$1 model=$2
     shift 2
@@ -71,15 +73,20 @@ eval_one() {  # name model [extra eval args]
 mkdir -p runs
 (while sleep 600; do upload; done) &
 uploader=$!
-eval_one base "$BASE_MODEL" &
-base=$!
-eval_one base_nothink "$BASE_MODEL" --no-thinking &
-base_nothink=$!
-eval_one tuned circuit --no-thinking &
-tuned=$!
-wait $base $base_nothink $tuned
+pids=()
+for arm in $ARMS; do
+    case $arm in
+        base) eval_one base "$BASE_MODEL" & ;;
+        base_nothink) eval_one base_nothink "$BASE_MODEL" --no-thinking & ;;
+        tuned) eval_one tuned circuit & ;;
+        tuned_nothink) eval_one tuned_nothink circuit --no-thinking & ;;
+        *) echo "unknown arm $arm"; exit 1 ;;
+    esac
+    pids+=($!)
+done
+wait "${pids[@]}"
 kill $uploader
-python3 -m circuit_gen compare runs/base runs/base_nothink runs/tuned | tee runs/compare.md || true
-tail -5 runs/base.log runs/base_nothink.log runs/tuned.log
+python3 -m circuit_gen compare $(printf "runs/%s " $ARMS) | tee runs/compare.md || true
+for arm in $ARMS; do tail -5 "runs/$arm.log"; done
 upload
 echo "results: https://huggingface.co/datasets/$DATASET/tree/main/eval/$RUN"
