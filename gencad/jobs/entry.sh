@@ -151,6 +151,13 @@ case "$STAGE" in
     python train_vlm_dpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" \
         --chunks "${CHUNKS:-results/rft_v1}" ${STEPS:+--steps $STEPS} "$@" ;;
 
+  vlmgrpo)    # online RL: vLLM sampling + in-process weight sync (train_vlm_grpo.py); INIT = start model
+    need_cq
+    need cad_vec renders
+    cp /work/data/deepcad_cq.parquet data/
+    need_vllm
+    python train_vlm_grpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" ${STEPS:+--steps $STEPS} "$@" ;;
+
   vllmpred)   # greedy test predictions with vLLM (scripts/predict_vllm.py) -> results/$RUN/preds.pkl; INIT = model dir
     need renders
     need_vllm
