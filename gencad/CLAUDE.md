@@ -459,6 +459,28 @@ Same inputs/prompts/output format as `train_vlm_cq.py --predict`. 4 modes x 2000
 (HF generate: ~3 h). Validated on the RFT model: local cq_iou own IoU all view1 / view4 / view1+expert / expert
 85.0 / 89.6 / 88.1 / 80.5 vs HF-generate predictions 85.1 / 89.6 / 88.2 / 80.4. Use it for all test predictions.
 
+### Online RL (GRPO; `train_vlm_grpo.py`, `RUN=vlm_grpo_v1 STEPS=1000 jobs/launch.sh vlmgrpo`, H200; best single model)
+vLLM (in-process, `VLLM_ENABLE_V1_MULTIPROCESSING=0`, 30 % of the GPU) samples from the current policy; the HF model
+(fp32 AdamW) takes one step per batch on exactly the sampled tokens (on-policy, no ratio/clipping, no KL); new weights
+are loaded into vLLM after every step (`model_runner.get_model().load_weights`, then `reset_prefix_cache`). Sync check:
+log-prob of a fixed program by vLLM vs HF -0.751 / -0.780 before, -0.757 / -0.755 after step 1. Each step 32 DeepCAD
+train parts (view1 random camera 0.4 / view4 0.4 / view1+expert 0.2) x 8 samples at T 1.0, reward GT IoU (invalid
+-0.5), GRPO advantage (r - mean) / (std + 1e-4) per group, loss -mean(A x mean token log-prob), lr 2e-6 constant, init
+RFT round 1. ~25 s/step (sampling 3 s, scoring 4-20 s, update 14 s); validation through vLLM in ~35 s. 1000 steps
+(~7 h, ~$35): train reward 0.728 -> 0.76-0.88, invalid samples 3.1 % -> 2.0 %; validation noisy-flat to slightly up
+(view1 87.2 -> 87.4-87.7, view4 91.3 -> 91.0-92.3). **Test** (`results/vlm_grpo_v1_test`, vLLM greedy, local scoring),
+own IoU all / novel, invalid %, and paired difference to SFT and to RFT round 1 (all parts, +- s.e.):
+| input | GRPO | IR | vs SFT | vs RFT |
+|---|---|---|---|---|
+| 1 view | 85.3 / 80.4 | 1.3 | +2.39 +- 0.41 | +0.30 +- 0.33 |
+| 4 views | **90.5 / 87.2** | 1.1 | **+1.45 +- 0.35** (novel +1.97) | +0.89 +- 0.32 |
+| 1 view + expert | 89.3 / 85.7 | 1.1 | +0.97 +- 0.30 | +1.21 +- 0.26 |
+| expert only | 81.3 / 75.7 | 1.8 | +1.26 +- 0.34 | +0.85 +- 0.31 |
+First post-training that helps every mode on test, mostly on novel parts (+1.5-2.2 vs SFT) and through fewer invalid
+programs (IR 1.1-1.8 % vs 1.3-2.8 %). Validation (256 parts) hid it: test differences of ~1 point are below its noise.
+The RFT start matters less than the RL itself: earlier tiny on-policy RL (300 steps x 16 parts, lr 1e-6, HF
+generate) moved nothing; this run saw 32k part-samples with std-normalised advantages.
+
 ## Handoff (2026-10-16 ~07:20 UTC)
 - RL scored: +1.5 for 1 view, flat elsewhere; stopped. Render selection done (above): local best-of-9 view4 91.7.
 - **Next (agreed direction: improve the model itself, no cloud at inference): rejection-sampling fine-tuning.**
