@@ -69,6 +69,17 @@ class TestLoop:
         assert first.is_error and "INVALID_JSON" in first.content
         assert result.code is None and not result.passed
 
+    def test_repeated_identical_call_is_flagged(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(generate.library, "search_footprints", lambda q: ["Lib:FP_1"])
+        same = ("search_footprints", {"query": "SOT-23-5"})
+        backend = ScriptedBackend([calls(same), calls(same), calls(same),
+                                   say("done"), say("done"), say("done")])
+        generate.generate_circuit("anything", tmp_path, backend=backend)
+        contents = [r[0].content for r in backend.tool_results]
+        assert contents[0] == "Lib:FP_1"
+        assert "made this exact call 2 times" in contents[1] and contents[1].endswith("Lib:FP_1")
+        assert "3 times" in contents[2]
+
     def test_refusal_stops_without_running_tools(self, tmp_path):
         backend = ScriptedBackend([Turn(text="", stop="refusal")])
         result = generate.generate_circuit("anything", tmp_path, backend=backend)

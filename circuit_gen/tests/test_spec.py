@@ -2,6 +2,8 @@
 Tests for spec-first generation: parsing frozen requirements and appending them.
 """
 
+import re
+
 import pytest
 
 from circuit_gen import generate
@@ -152,3 +154,14 @@ def test_named_nets_with_signs():
     from circuit_gen.spec import named_nets
     nets = named_nets("Dual rail. Name the nets VIN, +5V, -5V and GND.")
     assert {"+5V", "-5V", "VIN", "GND"} <= nets
+
+
+@pytest.mark.parametrize("line,message", [
+    ("require(freq, 0.7, 1.4)", "quoted string"),
+    ("require('freq', 0.7, 1.4)", "v(NET), i(NET)"),
+    ("require('resistance(R1)', 1, 2)", "v(NET), i(NET)"),
+    ("require('v(OUT)', 2.5, 2.5)", "single value"),
+])
+def test_rejects_unmeasurable_or_unsatisfiable(line, message):
+    with pytest.raises(SpecError, match=re.escape(message)):
+        parse_requirements(line)

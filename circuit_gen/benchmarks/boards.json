@@ -13,6 +13,28 @@
      0.008,
      0.012
     ]
+   },
+   {
+    "name": "LED current at 4.75 V",
+    "sources": {
+     "VCC": 4.75
+    },
+    "measure": "i(VCC)",
+    "expect": [
+     0.0075,
+     0.0125
+    ]
+   },
+   {
+    "name": "LED current at 5.25 V",
+    "sources": {
+     "VCC": 5.25
+    },
+    "measure": "i(VCC)",
+    "expect": [
+     0.0075,
+     0.0125
+    ]
    }
   ]
  },
@@ -44,6 +66,17 @@
      4.75,
      5.25
     ]
+   },
+   {
+    "name": "power LED current limited",
+    "sources": {
+     "VIN": 12
+    },
+    "measure": "i(VIN)",
+    "expect": [
+     0.0005,
+     0.02
+    ]
    }
   ]
  },
@@ -62,6 +95,17 @@
     "expect": [
      0.7,
      1.4
+    ]
+   },
+   {
+    "name": "supply current limited",
+    "sources": {
+     "VCC": 5
+    },
+    "measure": "i(VCC)",
+    "expect": [
+     0.001,
+     0.06
     ]
    }
   ]
@@ -93,6 +137,17 @@
      0.000179,
      0.000217
     ]
+   },
+   {
+    "name": "power LED current limited",
+    "sources": {
+     "VBUS": 5
+    },
+    "measure": "i(VBUS)",
+    "expect": [
+     0.0005,
+     0.02
+    ]
    }
   ]
  },
@@ -115,6 +170,35 @@
     "expect": [
      70,
      140
+    ]
+   },
+   {
+    "name": "gain ~100 at 300 Hz",
+    "analysis": "ac",
+    "freq": 300,
+    "sources": {
+     "VCC": 5,
+     "MIC": "ac"
+    },
+    "loads": {
+     "AUDIO_OUT": 10000
+    },
+    "measure": "gain(AUDIO_OUT,MIC)",
+    "expect": [
+     70,
+     140
+    ]
+   },
+   {
+    "name": "mic bias current",
+    "sources": {
+     "VCC": 5,
+     "MIC": 0
+    },
+    "measure": "i(MIC)",
+    "expect": [
+     0.0005,
+     0.005
     ]
    }
   ]
@@ -146,6 +230,17 @@
      0.00055,
      0.00085
     ]
+   },
+   {
+    "name": "SDA idles high",
+    "sources": {
+     "VCC": 3.3
+    },
+    "measure": "v(SDA)",
+    "expect": [
+     3.2,
+     3.35
+    ]
    }
   ]
  },
@@ -162,6 +257,17 @@
     "expect": [
      0,
      0.5
+    ]
+   },
+   {
+    "name": "supply current small with the button released",
+    "sources": {
+     "VCC": 5
+    },
+    "measure": "i(VCC)",
+    "expect": [
+     0,
+     0.002
     ]
    }
   ]
@@ -228,7 +334,30 @@
  {
   "id": "attiny_blinky",
   "description": "ATtiny85 microcontroller board with a 6-pin ISP programming header, an LED on PB0, decoupling, and a 2-pin 5 V power header. Name the supply nets VCC and GND.",
-  "tests": []
+  "tests": [
+   {
+    "name": "no supply short at 5 V",
+    "sources": {
+     "VCC": 5
+    },
+    "measure": "i(VCC)",
+    "expect": [
+     0,
+     0.002
+    ]
+   },
+   {
+    "name": "no supply short at 5.5 V",
+    "sources": {
+     "VCC": 5.5
+    },
+    "measure": "i(VCC)",
+    "expect": [
+     0,
+     0.002
+    ]
+   }
+  ]
  },
  {
   "id": "rs485_transceiver",
@@ -241,6 +370,18 @@
      "B": 0
     },
     "measure": "i(A)",
+    "expect": [
+     0.0077,
+     0.0091
+    ]
+   },
+   {
+    "name": "120 ohm termination, B side",
+    "sources": {
+     "A": 0,
+     "B": 1
+    },
+    "measure": "i(B)",
     "expect": [
      0.0077,
      0.0091
@@ -277,6 +418,19 @@
      0,
      0.15
     ]
+   },
+   {
+    "name": "passes 100 Hz",
+    "analysis": "ac",
+    "freq": 100,
+    "sources": {
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     0.95,
+     1.0
+    ]
    }
   ]
  },
@@ -291,6 +445,31 @@
     },
     "loads": {
      "VREF_OUT": 1000
+    },
+    "measure": "v(VREF_OUT)",
+    "expect": [
+     2.4,
+     2.6
+    ]
+   },
+   {
+    "name": "2.5 V unloaded",
+    "sources": {
+     "VCC": 5
+    },
+    "measure": "v(VREF_OUT)",
+    "expect": [
+     2.4,
+     2.6
+    ]
+   },
+   {
+    "name": "2.5 V into 10k",
+    "sources": {
+     "VCC": 5
+    },
+    "loads": {
+     "VREF_OUT": 10000
     },
     "measure": "v(VREF_OUT)",
     "expect": [
@@ -371,6 +550,23 @@
      8.5,
      11.5
     ]
+   },
+   {
+    "name": "|gain| ~10 at 100 Hz into 10k",
+    "analysis": "ac",
+    "freq": 100,
+    "sources": {
+     "VCC": 5,
+     "IN": "ac"
+    },
+    "loads": {
+     "OUT": 10000
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     8.5,
+     11.5
+    ]
    }
   ]
  },
@@ -382,6 +578,23 @@
     "name": "gain ~20 at 1 kHz into 10k",
     "analysis": "ac",
     "freq": 1000,
+    "sources": {
+     "VCC": 9,
+     "IN": "ac"
+    },
+    "loads": {
+     "OUT": 10000
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     14,
+     28
+    ]
+   },
+   {
+    "name": "gain ~20 at 100 Hz into 10k",
+    "analysis": "ac",
+    "freq": 100,
     "sources": {
      "VCC": 9,
      "IN": "ac"

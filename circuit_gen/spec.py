@@ -78,6 +78,9 @@ class SpecError(ValueError):
 _UNQUOTED = re.compile(r"require\(\s*(v|i|gain|freq)\(\s*([^)]*?)\s*\)")
 
 
+_MEASURE = re.compile(r"(v|i|freq)\([^,()]+\)|gain\([^,()]+,[^,()]+\)")
+
+
 def _quote_measures(code):
     """Quote measures models write bare, e.g. require(v(+5V), ...) or require(freq('OUT'), ...)."""
     def fix(m):
@@ -146,6 +149,9 @@ def parse_requirements(text):
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                 and call.func.id == "require"):
             raise SpecError(f"only require(...) calls are allowed, got: {ast.unparse(node)[:80]}")
+        if call.args and not isinstance(call.args[0], ast.Constant):
+            raise SpecError("the measure must be a quoted string naming its nets, such as "
+                            f"'v(OUT)' or 'freq(OUT)': {ast.unparse(call)[:80]}")
         try:
             args = [ast.literal_eval(a) for a in call.args]
             kwargs = {k.arg: ast.literal_eval(k.value) for k in call.keywords}
@@ -157,8 +163,15 @@ def parse_requirements(text):
         missing = [f for f in FIELDS if f not in req]
         if missing:
             raise SpecError(f"require(...) missing {', '.join(missing)}: {ast.unparse(call)[:80]}")
+        if not _MEASURE.fullmatch(str(req["measure"]).replace(" ", "")):
+            raise SpecError("the measure must be v(NET), i(NET), freq(NET) or gain(OUT,IN): "
+                            f"{ast.unparse(call)[:80]}")
         if float(req["low"]) > float(req["high"]):
             raise SpecError(f"low above high in: {ast.unparse(call)[:80]}")
+        if float(req["low"]) == float(req["high"]):
+            raise SpecError("a range of a single value cannot be met across component "
+                            "tolerances; give the band the description allows (3.3 V +/-5% is "
+                            f"3.135 to 3.465, 'off' is 0 to 0.1): {ast.unparse(call)[:80]}")
         for net, load in (req.get("loads") or {}).items():
             ohms = load.get("r") if isinstance(load, dict) else load
             if not isinstance(ohms, (int, float)) or ohms < 1:

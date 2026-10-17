@@ -9,6 +9,7 @@ over time those logs become training data for a fine-tuned generator.
 """
 
 import json
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -288,6 +289,10 @@ def _validate_input(tool_name, data):
 CUT_OFF_NOTE = ("Your last reply ran out of space before it finished. Think briefly, then make "
                 "the next tool call.")
 
+REPEAT_NOTE = ("NOTE: you have now made this exact call {n} times, with the same arguments, "
+               "and the result below is unchanged. Repeating it will not help: change the "
+               "circuit, look up something different, or submit corrected code.\n\n")
+
 NUDGE = ("check_circuit has not passed yet. Fix the problems it reported (or call it if you "
          "have not yet) and call check_circuit again with the complete code.")
 
@@ -333,6 +338,7 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
                                     error=f"spec phase failed: {e}")
         user += SPEC_NOTE.format(spec=suffix.strip())
     tools = Toolbox(workdir, suffix=suffix)
+    repeats = Counter()  # identical tool calls, to break loops
     backend.start(_system_prompt(), user, TOOLS)
     result = GenerationResult(description=description, code=None, passed=False)
     transcript = workdir / "transcript.jsonl"
@@ -396,6 +402,10 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
                 content, is_error = json.dumps({"INVALID_JSON": call.raw[:2000]}), True
             else:
                 content, is_error = tools.execute(call.name, call.input)
+                key = (call.name, json.dumps(call.input, sort_keys=True))
+                repeats[key] += 1
+                if repeats[key] > 1:
+                    content = REPEAT_NOTE.format(n=repeats[key]) + content
             results.append(ToolResult(id=call.id, content=content, is_error=is_error))
         backend.add_tool_results(results)
     else:

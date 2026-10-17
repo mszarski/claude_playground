@@ -150,8 +150,9 @@ def main(argv=None):
         s.add_argument("--model", default=None,
                        help="model id, e.g. Qwen/Qwen3.8-27B (hf) or claude-opus-5-5 (claude)")
         s.add_argument("--max-turns", type=int, default=40)
-        s.add_argument("--spec-first", action="store_true",
-                       help="write frozen requirements from the description before designing")
+        s.add_argument("--spec-first", action=argparse.BooleanOptionalAction, default=True,
+                       help="write frozen requirements from the description before designing "
+                            "(default; --no-spec-first lets the designer write its own)")
         s.add_argument("--spec-model", default=None,
                        help="model that writes the spec (default: the designer's model)")
         s.add_argument("--spec-provider", default=None,
