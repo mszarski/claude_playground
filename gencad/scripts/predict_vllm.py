@@ -27,7 +27,8 @@ def main():
     os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")   # FlashInfer JIT-compiles its sampler: needs nvcc
     from transformers import AutoProcessor
     from vllm import LLM, SamplingParams
-    from mm.vlm_cad import _messages, compose_views
+    from mm.vlm_cad import _messages, compose_views, configure
+    print(f"[vlm] view grid {configure(a.model)} px", flush=True)   # the layout this model was trained on
     from train_vlm_cad import load_views
 
     with open(a.uids_from, "rb") as f:

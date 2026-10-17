@@ -28,6 +28,29 @@ CMD = {v: k for k, v in LETTER.items()}
 USED = {c: np.nonzero(CMD_ARGS_MASK[c])[0] for c in LETTER}          # which of the 16 args each command uses
 SIDE = 448                                                           # model input image side (14 x 32 px patches)
 INSTRUCTION = "Write the CAD program for this part."
+CFG_FILE = "gencad_vlm.json"          # per-model input settings, saved next to the weights
+GRID_SIDE = SIDE                      # side of the 2-4 view grid; 2 * SIDE keeps every view at full resolution
+
+
+def configure(path=None, grid_side=None):
+    """Set the multi-view grid side: explicitly, or from <path>/gencad_vlm.json (absent = SIDE, the original
+    layout). Every loader (HF or vLLM) calls this so a model is always fed the layout it was trained on."""
+    global GRID_SIDE
+    if grid_side is None and path is not None:
+        import json
+        import os
+        f = os.path.join(path, CFG_FILE)
+        grid_side = json.load(open(f)).get("grid_side", SIDE) if os.path.exists(f) else SIDE
+    if grid_side is not None:
+        GRID_SIDE = int(grid_side)
+    return GRID_SIDE
+
+
+def save_config(path):
+    import json
+    import os
+    with open(os.path.join(path, CFG_FILE), "w") as f:
+        json.dump({"grid_side": GRID_SIDE}, f)
 
 
 def program_to_text(vec) -> str:
@@ -66,14 +89,15 @@ def text_to_program(text: str):
     return np.stack(rows)
 
 
-def compose_views(images, side=SIDE):
-    """List of PIL renders -> one RGB image: a single view resized to side x side, or 2-4 views in a 2x2 grid
-    (unused cells white)."""
+def compose_views(images, side=SIDE, grid_side=None):
+    """List of PIL renders -> one RGB image: a single view resized to side x side, or 2-4 views in a 2x2 grid of
+    grid_side (default: the configured GRID_SIDE) with unused cells white."""
     images = [im.convert("RGB") for im in images]
     if len(images) == 1:
         return images[0].resize((side, side), Image.BICUBIC)
-    cell = side // 2
-    grid = Image.new("RGB", (side, side), (255, 255, 255))
+    gs = grid_side or GRID_SIDE
+    cell = gs // 2
+    grid = Image.new("RGB", (gs, gs), (255, 255, 255))
     for k, im in enumerate(images[:4]):
         grid.paste(im.resize((cell, cell), Image.BICUBIC), ((k % 2) * cell, (k // 2) * cell))
     return grid
@@ -109,6 +133,11 @@ def encode_batch(processor, images, prompts, targets=None):
     return enc
 
 
+def set_pixel_range(processor):
+    """Images are fed at their own size: 448 px single views (196 visual tokens) and GRID_SIDE grids."""
+    processor.image_processor.size = {"shortest_edge": SIDE * SIDE, "longest_edge": max(SIDE, GRID_SIDE) ** 2}
+
+
 class VLMCad:
     """Thin wrapper: chat formatting, loss masking and generation around a Qwen-VL model + processor."""
 
@@ -120,15 +149,20 @@ class VLMCad:
     def from_pretrained(cls, path, dtype=torch.float32, **kw):
         from transformers import AutoModelForImageTextToText, AutoProcessor
         processor = AutoProcessor.from_pretrained(path)
-        ip = processor.image_processor          # keep the 448 px input as is: 196 visual tokens
-        ip.size = {"shortest_edge": SIDE * SIDE, "longest_edge": SIDE * SIDE}
+        configure(path)
+        set_pixel_range(processor)
         processor.tokenizer.padding_side = "left"
         model = AutoModelForImageTextToText.from_pretrained(path, dtype=dtype, **kw)
         return cls(model, processor)
 
+    def set_grid_side(self, grid_side):
+        configure(grid_side=grid_side)
+        set_pixel_range(self.processor)
+
     def save(self, path):
         self.model.save_pretrained(path, safe_serialization=True)
         self.processor.save_pretrained(path)
+        save_config(path)
 
     @property
     def device(self):

@@ -25,7 +25,7 @@ import pandas as pd
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")   # sampling/backward shapes vary a lot
 import torch  # noqa: E402
 
-from mm.vlm_cad import VLMCad, compose_views, encode_batch
+from mm.vlm_cad import VLMCad, compose_views, encode_batch, save_config
 from train_vlm_cad import load_views
 from train_vlm_cq import gt_vec, iou_scores, predict
 
@@ -130,6 +130,7 @@ def main():
         sd = {k: v.to(torch.bfloat16) for k, v in vlm.model.state_dict().items()}
         vlm.model.save_pretrained(os.path.join(out, "model"), state_dict=sd, safe_serialization=True)
         vlm.processor.save_pretrained(os.path.join(out, "model"))
+        save_config(os.path.join(out, "model"))
         with open(os.path.join(out, "model", "step.json"), "w") as f:
             json.dump({"step": step, "args": vars(a)}, f)
 

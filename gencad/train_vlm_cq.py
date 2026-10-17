@@ -25,7 +25,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
-from mm.vlm_cad import VLMCad, compose_views
+from mm.vlm_cad import VLMCad, compose_views, save_config
 from train_vlm_cad import Collate, load_views
 
 IMAGE_MODES = ("view1", "view4")
@@ -153,6 +153,8 @@ def main():
     ap.add_argument("--levels", nargs="*", default=["abstract", "beginner", "intermediate", "expert", "description"])
     ap.add_argument("--mode_p", default="view1=0.3,view4=0.25,view1+text=0.15,view4+text=0.15,text=0.15")
     ap.add_argument("--max_code_chars", type=int, default=2500)
+    ap.add_argument("--grid_side", type=int, default=None, help="multi-view grid side (896 = full-res views); "
+                    "default: the init model's setting")
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--accum", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
@@ -236,6 +238,9 @@ def main():
     val_gt = [gt_vec(a.data, u) for u in val_uids]
 
     vlm = VLMCad.from_pretrained(a.model, dtype=torch.float32)
+    if a.grid_side:
+        vlm.set_grid_side(a.grid_side)
+    print(f"[data] view grid {__import__('mm.vlm_cad', fromlist=['GRID_SIDE']).GRID_SIDE} px", flush=True)
     vlm.model.to(a.device)
     vlm.model.config.use_cache = False
     vlm.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
@@ -274,6 +279,7 @@ def main():
         sd = {k: v.to(torch.bfloat16) for k, v in vlm.model.state_dict().items()}
         vlm.model.save_pretrained(os.path.join(out, "model"), state_dict=sd, safe_serialization=True)
         vlm.processor.save_pretrained(os.path.join(out, "model"))
+        save_config(os.path.join(out, "model"))
         with open(os.path.join(out, "model", "step.json"), "w") as f:
             json.dump({"step": step, "args": vars(a)}, f)
 
