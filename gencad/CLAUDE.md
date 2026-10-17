@@ -495,19 +495,21 @@ Readings: full resolution gives view4 about the same gain as online RL (+0.7-0.9
 detail vs. policy). Retraining on the plain SFT mix lost part of RFT's view1 gain. The two are likely additive: GRPO
 starting from this model is the obvious next run.
 
-## Handoff (2026-10-16 ~07:20 UTC)
-- RL scored: +1.5 for 1 view, flat elsewhere; stopped. Render selection done (above): local best-of-9 view4 91.7.
-- **Next (agreed direction: improve the model itself, no cloud at inference): rejection-sampling fine-tuning.**
-  Sample ~8 programs per DeepCAD *train* part (weighted to parts where greedy IoU < 0.9 or invalid), keep the best by
-  GT IoU when it beats greedy by a margin, fine-tune `vlm_cq_v1` on those mixed with the original SFT data, score on
-  test locally. Generation is the cost (HF generate: ~45 min per 2000 parts x 8 samples on an H200), so switch the
-  sampler to vLLM first. Never use test-derived outputs for training.
+## Handoff (2026-10-17)
+- **Best single model: `results/vlm_grpo_v1/model`** (online RL from RFT round 1): test own IoU view4 90.5 (novel 87.2),
+  view1 85.3, view1+expert 89.3, expert 81.3, invalid 1.1-1.8 %. Full-res `results/vlm_cq_fullres/model` ties on view4
+  (90.4) and is lower elsewhere. Claude zero-shot view4 83.4; GenCAD ~22; local best-of-9 (SFT samples, pix) 91.7.
+- **Next (not started, ~$35-40):** GRPO from `results/vlm_cq_fullres/model` (`INIT=results/vlm_cq_fullres/model
+  RUN=vlm_grpo_fullres STEPS=1000 jobs/launch.sh vlmgrpo`); the two gains look additive. Then a full-res best-of-N.
+- Tooling: test predictions with `jobs/launch.sh vllmpred` (~5 min) then `scripts/cq_iou.py --rows` locally (~40 min,
+  4 CPUs); paired comparisons from the rows files. Sampling + GT scoring at scale: `rftsample` (vLLM).
 - Data for local runs: `data/renders.tar` and `data/cad_vec.tar` from the bucket, extract only the test uids
-  (2000 from `results/baselines_vlm_final/preds.pkl`, 4 renders each); `pip install cadquery pebble h5py trimesh`
-  and `./setup.sh` (cadlib).
+  (2000 from `results/baselines_vlm_final/preds.pkl`, 4 renders each); `pip install cadquery pebble h5py trimesh
+  pyarrow` plus `jobs/requirements-job.txt` and `./setup.sh` (cadlib).
 - Launch gotcha: `jobs/launch.sh` uploads everything under `data/` except the big extracted folders, so local
   `data/renders.tar`, `cad_vec.tar`, `text_index.json` would be uploaded too: move `data/` aside and leave a
   placeholder file (an empty `data/` is dropped, which breaks `entry.sh`).
+- vLLM in jobs: `need_vllm` installs gcc (triton JIT) and vllm; FlashInfer's sampler is disabled (its JIT needs nvcc).
 - Claude API key: stored as `GENCAD_API_KEY` (`ANTHROPIC_*` names are reserved); `scripts/claude_baseline.py`
   reads `ANTHROPIC_API_KEY`, so run it as `ANTHROPIC_API_KEY=$GENCAD_API_KEY python scripts/claude_baseline.py ...`.
 - Bucket housekeeping: `results/vlm_cq_v1/model/` holds six stale `.tmp*` files of 4.9 GB each (interrupted saves).
