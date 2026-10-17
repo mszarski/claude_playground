@@ -44,8 +44,14 @@ python -m circuit_gen design "..." --backend claude -o runs/claude
 # Lay out and route a hand-written SKiDL file (no model involved)
 python -m circuit_gen build circuit_gen/examples/blinker_555.py -o runs/blinker
 
-# Spec-first: requirements are written from the description alone, then frozen
-python -m circuit_gen design "..." --spec-first -o runs/x
+# Requirements are written from the description alone, then frozen (the default);
+# --no-spec-first lets the designer write its own
+python -m circuit_gen design "..." --no-spec-first -o runs/x
+
+# The spec writer can be another model, e.g. on Inference Providers while the
+# designer runs on a local server (CIRCUIT_GEN_HF_BASE_URL)
+python -m circuit_gen design "..." --spec-model deepseek-ai/DeepSeek-V4.1-Flash \
+    --spec-provider deepinfra -o runs/x
 
 # Benchmark: how many descriptions make it all the way to DRC-clean Gerbers
 # and pass their SPICE tests (--resume reuses finished samples)
@@ -100,9 +106,18 @@ have no model, so their behaviour is not simulated.
 
 19 boards in `benchmarks/boards.json`: 12 simple ones and 7 harder analog ones
 (Sallen-Key filter, inverting and difference amplifiers, common-emitter stage,
-discrete current source, zener regulator, reverse-polarity protection). Each
-harder board has a reference design in `benchmarks/reference/` that passes its
-hidden tests, so the specs are achievable. All runs use the `hf` backend.
+discrete current source, zener regulator, reverse-polarity protection). All
+runs use the `hf` backend.
+
+Every board has a reference design in `benchmarks/reference/` and two or three
+hidden tests that the reference passes, so every spec is achievable. The tests
+are also checked from the other side: nine plausible wrong designs (a
+reference with one mistake, such as an LED without its resistor, a missing
+mic bias resistor or an undersized coupling capacitor) must each fail them
+(`tests/test_benchmark.py`).
+
+Results before October 17 used a weaker version: 9 boards had references and
+most boards had a single hidden test, so they may overstate pass rates.
 
 Open models, 2 samples per board (designer writes its own requirements):
 
@@ -153,20 +168,49 @@ simulated across component tolerances) and exported as chat-format JSONL:
   resistor, divider, RC filters, linear regulators, inverting and
   non-inverting amps, Sallen-Key, 555 astable, zener regulator, MOSFET and
   BJT switches, buffered reference). Values come from the design equations
-  rounded to E-series; sessions are built from real tool calls. 1,500
-  generated, 1,491 verified, in about 15 minutes on 4 CPU cores:
+  rounded to E-series; sessions are built from real tool calls. With
+  `--repair-fraction`, some sessions start from a planted bug (one R or C off
+  by ten) whose real check output is followed by a diagnosis and the fixed
+  code. 1,500 generated, 1,491 verified (618 repair sessions), about 1.5
+  hours on 4 CPU cores:
 
   ```bash
-  python -m circuit_gen procgen -n 1500 -o runs/procgen
+  python -m circuit_gen procgen -n 1500 -o runs/procgen --repair-fraction 0.5
   ```
 
-- **LLM-designed** (`datagen.py`): `datagen` writes new descriptions (60 in
-  `benchmarks/train_boards.json`), `eval --spec-first` designs them, and
-  `export` keeps the passing sessions. More varied than the templates, but
-  each session costs inference; the first run stopped at the account's
-  spending limit after 22 verified sessions.
+- **LLM-designed** (`datagen.py`): `datagen` writes new descriptions (167 in
+  `benchmarks/train_boards.json`), `eval` designs them, and `export` keeps
+  the passing sessions. DeepSeek-V4.1-Flash, 2 samples each: 144 verified
+  sessions covering 96 boards.
 
-`train/sft.py` is a LoRA SFT script for Qwen3-8B on Hugging Face Jobs.
+`train/sft.py` is a LoRA SFT script for Hugging Face Jobs, and
+`train/eval_job.sh` benchmarks an adapter against its base model in one job
+(vLLM serves both on the job's GPU next to the normal eval).
+
+### Fine-tuning Qwen3-8B: no gain
+
+LoRA (r=32) on Qwen3-8B with the sets above, one epoch on an H200, did not
+beat the base model. With DeepSeek writing the specs for every designer
+(1 sample per board):
+
+| designer | passed |
+|---|---|
+| Qwen3-8B, thinking on | 3/15 |
+| Qwen3-8B, thinking off | 0/19 |
+| fine-tuned, thinking off | 0/19 |
+| fine-tuned, thinking on | 1/19 |
+
+The fine-tuned model learned the session format but not debugging: it
+narrated fixes and stopped without calling the tool, or repeated the same
+call. The likely cause is the mix: about 1,340 short templated sessions
+against about 120 varied ones. Things to know before trying again:
+
+- Qwen3's thinking-off prompt adds an empty `<think></think>` that training
+  sessions (no reasoning) never contain; the thinking-on prompt matches them.
+- Specs should come from a strong model (`--spec-model`): the 8B wrote
+  unsatisfiable ones (zero-width ranges, unquoted measures), now rejected.
+- Much more varied LLM-designed data is the first thing to add; Qwen3.8-27B
+  without fine-tuning is the better open designer for now.
 
 ## Status and known limits
 
@@ -174,6 +218,9 @@ simulated across component tolerances) and exported as chat-format JSONL:
   0 DRC errors (only silkscreen/library warnings).
 - The `design` loop runs live with `Qwen/Qwen3.8-27B` via Hugging Face. The
   Claude backend is tested only with a scripted client.
+- A model that repeats an identical tool call is told so in the result from
+  the second time on; small models otherwise loop on one lookup until they
+  run out of turns.
 - Placement is a simple greedy heuristic: parts are not rotated, decoupling
   caps are not forced next to their IC pins, and there is no ground pour. All
   nets are routed as 0.25 mm tracks, so it is not suitable for high-current or
