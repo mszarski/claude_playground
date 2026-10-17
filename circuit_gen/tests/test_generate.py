@@ -60,6 +60,20 @@ class TestLoop:
         assert tools.execute("search_footprints", {"query": "x"}) == ("Lib:FP_1", False)
         assert tools.execute("nope", {})[1]
 
+    def test_malformed_simulate_arguments_are_tool_errors(self, tmp_path, monkeypatch):
+        tools = generate.Toolbox(tmp_path)
+        seen = []
+        monkeypatch.setattr(tools, "simulate", lambda args: seen.append(args) or ("ok", False))
+        assert tools.execute("simulate", {"code": "x", "measure": "v(OUT)",
+                                          "loads": '{"OUT": 10000}'}) == ("ok", False)
+        assert seen[0]["loads"] == {"OUT": 10000}
+        content, is_error = tools.execute("simulate", {"code": "x", "measure": "v(OUT)",
+                                                       "loads": '{"VOUT": 1'})
+        assert is_error and "loads must be an object" in content
+        monkeypatch.setattr(tools, "simulate", lambda args: "x".items())
+        content, is_error = tools.execute("simulate", {"code": "x", "measure": "v(OUT)"})
+        assert is_error and "AttributeError" in content
+
     def test_invalid_tool_input_is_returned_as_error(self, tmp_path):
         bad = Turn(text="", stop="tool_use",
                    tool_calls=[ToolCall(id="t1", name="check_circuit", input=None, raw='{"code": ')])

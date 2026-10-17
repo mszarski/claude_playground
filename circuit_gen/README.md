@@ -119,6 +119,15 @@ mic bias resistor or an undersized coupling capacitor) must each fail them
 Results before October 17 used a weaker version: 9 boards had references and
 most boards had a single hidden test, so they may overstate pass rates.
 
+Qwen3.8-27B on the current benchmark, spec-first (the default; the same model
+writes the spec), 2 samples per board: **32/38 (84%)**, 18/19 boards solved at
+least once, 14/19 every time, **0 false accepts**. The six failures: three ran
+out of the 64k-token reply budget while designing (both Sallen-Key samples
+and one blinker), two spec writers reasoned past the budget and wrote
+nothing, and one spec used a net the description doesn't name (rejected).
+
+Older results:
+
 Open models, 2 samples per board (designer writes its own requirements):
 
 | model | passed |

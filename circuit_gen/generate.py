@@ -272,10 +272,24 @@ class Toolbox:
             if name == "check_circuit":
                 return self.check_circuit(args["code"]), False
             if name == "simulate":
+                args = dict(args)
+                for key in ("sources", "loads"):
+                    value = args.get(key)
+                    if isinstance(value, str):  # some models send objects as JSON strings
+                        try:
+                            value = args[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            pass
+                    if value is not None and not isinstance(value, dict):
+                        return (f'{key} must be an object such as {{"OUT": 10000}}, '
+                                f"got {str(value)[:100]!r}"), True
                 return self.simulate(args)
             return f"Unknown tool {name}", True
         except KeyError as e:
             return f"Not found: {e}", True
+        except (TypeError, AttributeError, ValueError) as e:
+            # Malformed arguments are the model's to fix, not a reason to end the run.
+            return f"Invalid arguments for {name}: {type(e).__name__}: {e}", True
 
 
 def _validate_input(tool_name, data):
