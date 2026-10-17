@@ -481,6 +481,20 @@ programs (IR 1.1-1.8 % vs 1.3-2.8 %). Validation (256 parts) hid it: test differ
 The RFT start matters less than the RL itself: earlier tiny on-policy RL (300 steps x 16 parts, lr 1e-6, HF
 generate) moved nothing; this run saw 32k part-samples with std-normalised advantages.
 
+### Full-resolution 4-view input (`--grid_side 896`; `results/vlm_cq_fullres{,_test}`)
+Until now view4 squeezed four 448 px renders into one 448 px grid (224 px per view, 196 visual tokens). The grid side is
+now a per-model setting (`gencad_vlm.json` next to the weights; `mm.vlm_cad.configure`, read by every HF and vLLM loader;
+the processor's max pixels follow it): 896 keeps each view at 448 px (784 tokens), single views unchanged (196).
+Continued from RFT round 1 with the original DeepCAD/CAD-Recode mix, 10k steps, lr 3e-5 cosine, ~3.3 s/step on an H200
+(~10 h incl. validation, ~$50). Validation gt IoU view1 / view4 / view1+expert at steps 2.5k / 5k / 7.5k / 10k:
+83.6 / 89.8 / 88.4, 84.2 / 90.7 / 89.8, 84.6 / 92.2 / 90.1, 85.9 / 91.6 / 90.0 (start 87.0 / 90.8 / 90.6).
+**Test** own IoU all / novel, IR: view1 84.8 / 80.1, 1.5; **view4 90.4 / 86.7, 1.8**; view1+expert 88.8 / 84.5, 1.7;
+expert 80.6 / 74.8, 2.2. Paired vs RFT round 1: view4 +0.74 +- 0.34 (novel +0.95), view1+expert +0.71 +- 0.33, view1
+-0.19, expert +0.10; vs SFT view4 +1.30. vs GRPO: view4 -0.15 +- 0.36 (tie), others -0.5 to -0.75.
+Readings: full resolution gives view4 about the same gain as online RL (+0.7-0.9 over RFT), by a different route (input
+detail vs. policy). Retraining on the plain SFT mix lost part of RFT's view1 gain. The two are likely additive: GRPO
+starting from this model is the obvious next run.
+
 ## Handoff (2026-10-16 ~07:20 UTC)
 - RL scored: +1.5 for 1 view, flat elsewhere; stopped. Render selection done (above): local best-of-9 view4 91.7.
 - **Next (agreed direction: improve the model itself, no cloud at inference): rejection-sampling fine-tuning.**
