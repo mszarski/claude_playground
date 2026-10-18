@@ -495,6 +495,21 @@ Readings: full resolution gives view4 about the same gain as online RL (+0.7-0.9
 detail vs. policy). Retraining on the plain SFT mix lost part of RFT's view1 gain. The two are likely additive: GRPO
 starting from this model is the obvious next run.
 
+### Online RL on the full-res model (`RUN=vlm_grpo_fullres INIT=results/vlm_cq_fullres/model jobs/launch.sh vlmgrpo`; BEST)
+Same GRPO recipe as vlm_grpo_v1 (1000 steps x 32 parts x 8 samples, lr 2e-6), started from `vlm_cq_fullres` (896 px
+grid). ~32 s/step (longer image prompts), ~9.5 h on an H200 (~$48). Sync check -1.671 / -1.687 before, -1.662 / -1.636
+after step 1. Validation (vLLM greedy) start -> end: view1 87.0 -> 88.6, view4 92.1 -> 92.3 (peak 92.9), view1+expert
+90.1 -> 89.7. **Test** (`results/vlm_grpo_fullres_test`), IoU gt / own, all / novel, IR:
+| input | all gt / own | novel gt / own | IR | vs SFT (own, all / novel) | vs GRPO (own) | vs full-res (own) |
+|---|---|---|---|---|---|---|
+| 1 view | 86.6 / 86.5 | 81.9 / 81.9 | 1.4 | +3.64 / +3.70 | +1.25 +- 0.31 | +1.74 +- 0.37 |
+| **4 views** | **91.6 / 91.4** | **88.5 / 88.4** | 1.5 | **+2.37 / +3.16** | +0.91 +- 0.31 | +1.06 +- 0.31 |
+| 1 view + expert | 89.1 / 89.0 | 85.5 / 85.3 | 1.5 | +0.67 / +1.03 | -0.29 +- 0.31 | +0.21 +- 0.30 |
+| expert only | 79.8 / 81.5 | 73.6 / 76.0 | 2.2 | +1.48 / +2.13 | +0.22 +- 0.34 | +0.97 +- 0.33 |
+(Paired s.e. vs SFT 0.33-0.42.) The two gains add up: full resolution + online RL beats either alone on image inputs
+(+0.9-1.7). A single greedy answer now matches the earlier local best-of-9 selection (91.7) and is close to cadrille +
+RL (92.2, whole DeepCAD test set). Text inputs gain least; the RL mix had only 20 % text prompts.
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
@@ -504,12 +519,12 @@ method gets. **Quirk:** the "own" normalisation can collapse to ~0 for a correct
 bounding box inflated by stray geometry: 8-13 of ~1970 valid parts for our models, 1 for Claude, worth 0.2-0.4 points
 of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the gallery labels tiles with gt IoU.
 
-## Handoff (2026-10-17)
-- **Best single model: `results/vlm_grpo_v1/model`** (online RL from RFT round 1): test own IoU view4 90.5 (novel 87.2),
-  view1 85.3, view1+expert 89.3, expert 81.3, invalid 1.1-1.8 %. Full-res `results/vlm_cq_fullres/model` ties on view4
-  (90.4) and is lower elsewhere. Claude zero-shot view4 83.4; GenCAD ~22; local best-of-9 (SFT samples, pix) 91.7.
-- **Next (not started, ~$35-40):** GRPO from `results/vlm_cq_fullres/model` (`INIT=results/vlm_cq_fullres/model
-  RUN=vlm_grpo_fullres STEPS=1000 jobs/launch.sh vlmgrpo`); the two gains look additive. Then a full-res best-of-N.
+## Handoff (2026-10-19)
+- **Best single model: `results/vlm_grpo_fullres/model`** (RFT -> full-res 896 px grid -> online RL): test own IoU
+  view4 91.4 (novel 88.4), view1 86.5, view1+expert 89.0, expert 81.5, invalid 1.4-2.2 %. Previous: vlm_grpo_v1 view4
+  90.5, original SFT 89.1, Claude zero-shot 83.4, GenCAD ~22.
+- **Next ideas (not started):** best-of-N with render selection on top of this model (best-of-9 gave +2.6 on SFT);
+  more RL steps or a higher text share for the text modes; a bigger base model (Qwen3-VL-4B) with this recipe.
 - Tooling: test predictions with `jobs/launch.sh vllmpred` (~5 min) then `scripts/cq_iou.py --rows` locally (~40 min,
   4 CPUs); paired comparisons from the rows files. Sampling + GT scoring at scale: `rftsample` (vLLM).
 - Data for local runs: `data/renders.tar` and `data/cad_vec.tar` from the bucket, extract only the test uids
