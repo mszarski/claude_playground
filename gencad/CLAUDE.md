@@ -495,6 +495,15 @@ Readings: full resolution gives view4 about the same gain as online RL (+0.7-0.9
 detail vs. policy). Retraining on the plain SFT mix lost part of RFT's view1 gain. The two are likely additive: GRPO
 starting from this model is the obvious next run.
 
+### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
+14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
+same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
+parts still fail for our models (one random part: Claude 96 vs SFT 16 / GRPO 65). GRPO's wins are mostly code that
+failed to build or broken partial solids becoming correct; its losses are occasional invalid code on parts every other
+method gets. **Quirk:** the "own" normalisation can collapse to ~0 for a correct solid (gt IoU 0.81-0.99), most likely a
+bounding box inflated by stray geometry: 8-13 of ~1970 valid parts for our models, 1 for Claude, worth 0.2-0.4 points
+of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the gallery labels tiles with gt IoU.
+
 ## Handoff (2026-10-17)
 - **Best single model: `results/vlm_grpo_v1/model`** (online RL from RFT round 1): test own IoU view4 90.5 (novel 87.2),
   view1 85.3, view1+expert 89.3, expert 81.3, invalid 1.1-1.8 %. Full-res `results/vlm_cq_fullres/model` ties on view4
