@@ -38,6 +38,7 @@ const tick = (ok, text) => `${ok ? '✓' : '○'} ${text}`;
 
 const CHAPTERS = {
   c1: {
+    endDay: 15,
     chapter: 1, name: 'Opening Season', size: 'small', difficulty: 'normal', hints: true,
     blurb: 'Hammond has the island, the money and a dream. Build the park from nothing and prove people will come.',
     objective: 'Reach 2 stars, have 120 guests in the park at once and $600,000 in the bank, by Day 15',
@@ -53,6 +54,7 @@ const CHAPTERS = {
     medalText: 'Gold: by Day 7 · Silver: by Day 10',
   },
   c2: {
+    endDay: 12,
     chapter: 2, name: 'Clever Girls', size: 'medium', difficulty: 'normal',
     blurb: 'The board wants the raptors on show. Muldoon wants them shot. Exhibit a pack and put on raptor shows without losing control.',
     objective: 'Exhibit 3 raptors and hold 10 raptor shows by Day 12, with no more than 4 escapes',
@@ -78,9 +80,10 @@ const CHAPTERS = {
     medalText: 'Gold: no escapes · Silver: 2 or fewer',
   },
   c3: {
+    endDay: 26,
     chapter: 3, name: 'Monsoon', size: 'medium', difficulty: 'normal',
-    blurb: 'Storm season. A storm rolls in every other day. Keep the money coming and the guests happy anyway.',
-    objective: 'Have $600,000 in the bank and reputation 50+ by Day 26',
+    blurb: 'Storm season. A storm rolls in every other day and empties the park. Grow anyway: every dollar guests spend counts, whatever you spend on building.',
+    objective: 'Earn $250,000 from guests (tickets, shops and rides) and keep reputation 50+, by Day 26',
     setup(g) {
       g.money = 300000;
       const P = buildStarterPark(g, { staff: true });
@@ -91,20 +94,22 @@ const CHAPTERS = {
       g.time = 14 * 24 + 7.5; g.lastDay = g.day; g.events.nextDay = g.day + 2;
       applyPerks(g, 'c3');
       g.scenarioState = { lastStorm: g.day };
+      g.stats.guestIncome = 0;
     },
     tick(g) { if (g.day >= g.scenarioState.lastStorm + 2 && g.hour >= 10) { g.scenarioState.lastStorm = g.day; g.events.trigger('storm'); } },
     check(g) {
-      if (g.money >= 600000 && g.reputation >= 50) return 'win';
+      if ((g.stats.guestIncome || 0) >= 250000 && g.reputation >= 50) return 'win';
       if (g.day > 26) return 'lose';
       return null;
     },
-    progress(g) { return [tick(g.money >= 600000, `${fmtMoney(g.money)} / $600k`), tick(g.reputation >= 50, `Rep ${Math.round(g.reputation)}/50`), `Day ${g.day}/26`].join(' · '); },
-    medal(g) { return g.day <= 21 ? 'gold' : g.day <= 23 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 21 · Silver: by Day 23',
+    progress(g) { return [tick((g.stats.guestIncome || 0) >= 250000, `Earned ${fmtMoney(g.stats.guestIncome || 0)} / $250k`), tick(g.reputation >= 50, `Rep ${Math.round(g.reputation)}/50`), `Day ${g.day}/26`].join(' · '); },
+    medal(g) { return g.day <= 23 ? 'gold' : g.day <= 25 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 23 · Silver: by Day 25',
   },
   c4: {
+    endDay: 18,
     chapter: 4, name: 'Site B', size: 'medium', difficulty: 'normal',
-    blurb: 'InGen\'s abandoned breeding island. The animals have been roaming free for years. Round them up and open a real park.',
+    blurb: 'InGen\'s abandoned breeding island. The animals have been roaming free for years. Round them up, then open the gates (Main Gate) to a real park.',
     objective: 'Contain every dinosaur and reach 3 stars by Day 18',
     setup(g) {
       const w = g.world, s = g.start;
@@ -114,6 +119,8 @@ const CHAPTERS = {
       g.money = 650000;
       roamSpawn(g, 'galli', 4); roamSpawn(g, 'para', 3); roamSpawn(g, 'stego', 2); roamSpawn(g, 'trike', 2); roamSpawn(g, 'anky', 1, 22); roamSpawn(g, 'dilo', 2, 22); roamSpawn(g, 'raptor', 2, 26);
       w.computeRegions(); g.updateLoose();
+      g.parkClosed = true;
+      g.log('The park stays closed while the island is overrun. Open it from the Main Gate when it is safe.', 'warn', null, true);
       applyPerks(g, 'c4');
     },
     check(g) {
@@ -123,27 +130,27 @@ const CHAPTERS = {
       if (g.day > 18) return 'lose';
       return null;
     },
-    progress(g) { const free = g.dinos.filter((d) => d.loose || d.carried).length; return [tick(!free, `Contained ${g.dinos.length - free}/${g.dinos.length}`), tick(g.stars >= 3, `★ ${g.stars}/3`), `Day ${g.day}/18`].join(' · '); },
-    medal(g) { return g.day <= 11 ? 'gold' : g.day <= 14 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 11 · Silver: by Day 14',
+    progress(g) { const free = g.dinos.filter((d) => d.loose || d.carried).length; return [tick(!free, `Contained ${g.dinos.length - free}/${g.dinos.length}`), tick(g.stars >= 3, `★ ${g.stars}/3`), `Day ${g.day}/18`].concat(g.parkClosed ? ['Park closed: open it at the Main Gate'] : []).join(' · '); },
+    medal(g) { return g.day <= 9 ? 'gold' : g.day <= 12 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 9 · Silver: by Day 12',
   },
   c5: {
     chapter: 5, name: 'Jurassic World', size: 'large', difficulty: 'normal',
     blurb: 'The big one. A whole island, every attraction and the whole world watching. Build the greatest park on Earth.',
-    objective: 'Reach 5 stars with a T. rex on show, a Mosasaur Lagoon and 250 guests at once',
+    objective: 'Reach 5 stars with a T. rex on show, a Mosasaur Lagoon and 400 guests at once',
     setup(g) { g.money = 800000; applyPerks(g, 'c5'); g.scenarioState = { peak: 0 }; },
     tick(g) { g.scenarioState.peak = Math.max(g.scenarioState.peak || 0, g.guests.length); },
     check(g) {
       const rex = g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried);
-      if (g.stars >= 5 && rex && g.hasBuilding('lagoon') && (g.scenarioState.peak || 0) >= 250) return 'win';
+      if (g.stars >= 5 && rex && g.hasBuilding('lagoon') && (g.scenarioState.peak || 0) >= 400) return 'win';
       return null;
     },
     progress(g) {
       const rex = g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried);
-      return [tick(g.stars >= 5, `★ ${g.stars}/5`), tick(rex, 'T. rex'), tick(g.hasBuilding('lagoon'), 'Lagoon'), tick((g.scenarioState.peak || 0) >= 250, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/250`), `Day ${g.day}`].join(' · ');
+      return [tick(g.stars >= 5, `★ ${g.stars}/5`), tick(rex, 'T. rex'), tick(g.hasBuilding('lagoon'), 'Lagoon'), tick((g.scenarioState.peak || 0) >= 400, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/400`), `Day ${g.day}`].join(' · ');
     },
-    medal(g) { return g.day <= 35 ? 'gold' : g.day <= 50 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 35 · Silver: by Day 50',
+    medal(g) { return g.day <= 40 ? 'gold' : g.day <= 55 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 40 · Silver: by Day 55',
   },
 };
 for (const [k, c] of Object.entries(CHAPTERS)) SCENARIOS[k] = Object.assign({ campaign: true, decisions: true }, c);

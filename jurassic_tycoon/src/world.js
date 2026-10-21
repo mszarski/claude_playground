@@ -473,4 +473,12 @@ class World {
     out.reverse();
     return out;
   }
+  // Path to the reachable tile closest to (tx, ty): for getting as near as possible to something behind a fence
+  bfsNearest(sx, sy, passFn, tx, ty, maxNodes = 4000) {
+    let best = null, bd = dist2(sx + 0.5, sy + 0.5, tx, ty);
+    this.bfs(sx, sy, passFn, (x, y) => { if (passFn.call(this, x, y)) { const d = dist2(x + 0.5, y + 0.5, tx, ty); if (d < bd) { bd = d; best = [x, y]; } } return false; }, maxNodes);
+    if (!best) return null;
+    const [bx, by] = best;
+    return this.bfs(sx, sy, passFn, (x, y) => x === bx && y === by, maxNodes);
+  }
 }

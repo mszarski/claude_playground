@@ -12,7 +12,10 @@ grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 - **Dinosaur needs** — space, tree cover, water, herd size, food, and fear of predators all feed a comfort score. Stressed dinos test the fences; raptors look for the weakest spot.
 - **Guests** walk paths, eat, shop, ride the electric **jeep tour**, watch **Mosasaur** feeding shows, and flee to shelters when the alarm sounds.
 - **Disasters** — tropical storms with lightning, grid sabotage, earthquakes, volcanic eruptions, outbreaks, rampages, raptor probes, safety inspections. Trigger them yourself from the ☄ menu.
-- **Response tools** — evacuation alarm, siren towers, rangers with tranquilizer rifles, engineers, ACU helicopter airlifts and strikes, emergency fence repair, backup generators, vet clinics.
+- **Response tools** — evacuation alarm, siren towers, rangers with tranquilizer rifles, engineers, ACU helicopter airlifts and strikes, emergency fence repair, backup generators, vet clinics, and closing the park from the Main Gate.
+- **Campaign** — five chapters (Opening Season, Clever Girls, Monsoon, Site B, Jurassic World), each unlocking a perk for the ones after it.
+- **InGen calls** — investors, lawyers, the board and Dr. Wu phone in with deals that pay now and bite later.
+- **RTS controls** — select rangers, engineers and helicopters and give them orders, or hit RESPOND on a breach; everyone also works on their own.
 - **Scenarios** — Nedry's Night, Isla Sorna Cleanup, The Lost World, Opening Day, Raptor Siege and Storm Season: prebuilt crises with objectives and deadlines.
 - **Research Lab** — upgrades (reinforced fences, high-voltage grid, faster darts, ranger training, turbines, medicine, feeders, motion sensors, ACU gunship, marketing) and genome research that unlocks species without stars.
 - **Seasons** — Spring, Summer (tourist peak), Monsoon (storms) and Cool Season; adjustable day length; a Calm mode with no disasters.

@@ -39,12 +39,12 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, size: g.mapSize, sph: g.secPerHour, lastInc: g.lastIncidentDay,
+    v: 1, size: g.mapSize, sph: g.secPerHour, lastInc: g.lastIncidentDay, closed: g.parkClosed ? 1 : 0,
     mods: g.mods || [], contracts: g.contracts || [], freeEgg: g.freeEgg || null, seenDec: g.seenDecisions || {}, nextDec: g.nextDecisionDay || 0, decOn: g.decisionsOn !== false, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
-    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills, gr: d.growth, ag: d.ageDays, ls: d.lifespan, un: d.unstable ? 1 : 0 })),
+    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills, gr: d.growth, ag: d.ageDays, ls: d.lifespan, un: d.unstable ? 1 : 0, lo: d.loose ? 1 : 0 })),
   });
 }
 
@@ -74,7 +74,7 @@ function loadGame(json) {
   }
   for (const dd of s.dinos) {
     const d = SPECIES[dd.s].flying ? new Ptera(g, Math.floor(dd.x), Math.floor(dd.y)) : new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));
-    d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0; if (dd.un) { d.unstable = true; } if (dd.gr !== undefined) d.growth = dd.gr; if (dd.ag !== undefined) { d.ageDays = dd.ag; d.lifespan = dd.ls; }
+    d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0; if (dd.un) { d.unstable = true; } if (dd.lo) d.loose = d.wasLooseFlag = true; if (dd.gr !== undefined) d.growth = dd.gr; if (dd.ag !== undefined) { d.ageDays = dd.ag; d.lifespan = dd.ls; } // dd.lo: already loose when saved, not a new escape
     g.breedingOff = s.breedOff;
     if (d.isPtera) g.pteros.push(d); else g.dinos.push(d);
   }
@@ -84,6 +84,7 @@ function loadGame(json) {
   g.lastDay = g.day;
   if (s.sph) g.secPerHour = s.sph;
   if (s.lastInc) g.lastIncidentDay = s.lastInc;
+  g.parkClosed = !!s.closed;
   g.mods = s.mods || []; g.contracts = s.contracts || []; g.freeEgg = s.freeEgg || null;
   g.seenDecisions = s.seenDec || {}; g.nextDecisionDay = s.nextDec || 0; g.decisionsOn = s.decOn !== false;
   if (s.research) { g.research.done = new Set(s.research.done); g.research.active = s.research.active; g.research.apply(); }

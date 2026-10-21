@@ -5,7 +5,21 @@ const DAY_H = 24;
 
 // Timed modifiers a choice can put on the park. Several can stack; numbers multiply.
 const MODS = {
-  ad_blitz: { label: 'TV ad campaign', icon: '📺', guestMul: 1.4 },
+  ad_blitz: {
+    from: 'Ad Agency', icon: '📺',
+    // priced from what guests actually spend, so the ads roughly pay for themselves in a busy park
+    prep: (g) => {
+      if (g.guests.length <= 15) return null;
+      const recent = g.history.slice(-3).map((h) => (h.ledger.tickets || 0) + (h.ledger.shops || 0));
+      const daily = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 20000;
+      return { cost: Math.max(15000, Math.round(daily * 1.2 / 5000) * 5000) };
+    },
+    text: (g, p) => `"Picture it: a T. rex, a sunset, your logo." <b>${fmtMoney(p.cost)}</b> buys 4 days of TV spots and <b>40% more visitors</b>.`,
+    choices: [
+      { label: 'Run the ads', hint: (p) => `−${fmtMoney(p.cost)} · +40% visitors for 4 days`, apply: (g, p) => { g.spend(p.cost, 'ops'); g.addMod('ad_blitz', 4); } },
+      { label: 'No thanks', hint: 'Nothing happens', apply: () => {} },
+    ],
+  },
   half_price: { label: 'Half-price tickets', icon: '🎟', guestMul: 1.6, ticketMul: 0.5 },
   night_safari: { label: 'Night safari', icon: '☾', nightGuests: 1, carnStress: 15 },
   cheap_fences: { label: 'Maintenance budget cut', icon: '✂', fenceDmgMul: 1.5 },
@@ -21,12 +35,14 @@ const MODS = {
 // unless the contract sets passOnDeadline (the "nothing went wrong" kind).
 const CONTRACTS = {
   trex_deal: {
+    term: 7, // days until the payback comes due
     label: () => 'Investors: exhibit a T. rex',
     check: (g) => g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried) ? 'win' : null,
     win: (g) => { g.earn(60000, 'grants'); g.reputation = Math.min(100, g.reputation + 6); g.log('The investors are thrilled with your T. rex. Bonus: +$60k', 'good', null, true); },
     fail: (g) => { g.spend(250000, 'fines'); g.log('No T. rex by the deadline. The investors claw back $250k.', 'bad', null, true); },
   },
   species_deal: {
+    term: 6, // days until the payback comes due
     label: (c) => `Board: exhibit ${c.data.n} species`,
     check: (g, c) => g.speciesCount() >= c.data.n ? 'win' : null,
     win: (g) => { g.earn(60000, 'grants'); g.reputation = Math.min(100, g.reputation + 5); g.log('The board is delighted with the new exhibits: +$60k', 'good', null, true); },
@@ -193,6 +209,7 @@ const DECISIONS = {
     ],
   },
   hammond: {
+    term: 10, // days until the payback comes due
     from: 'John Hammond', icon: '🎩',
     prep: (g) => g.stars === 3 ? {} : null,
     text: (g) => `"Spare no expense!" Hammond wires <b>$200,000</b> of his own money. He expects <b>4 stars</b> by Day ${g.day + 10}, and he'll be very disappointed otherwise (<b>−15 reputation</b>).`,
@@ -221,11 +238,17 @@ const DECISIONS = {
   },
   goat_strike: {
     from: 'Feed Supplier', icon: '🐐',
-    prep: (g) => g.dinos.some((d) => d.sp.diet === 'carn') ? {} : null,
-    text: () => `The goat farmers are on strike. Pay <b>$30,000</b> for an emergency supplier, or feed costs <b>double</b> for 4 days.`,
+    // priced from what the park actually spends on feed, so both choices are honest
+    prep: (g) => {
+      if (!g.dinos.some((d) => d.sp.diet === 'carn')) return null;
+      const recent = g.history.slice(-3).map((h) => h.ledger.food || 0);
+      const daily = Math.max(1500, recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 2000);
+      return { now: Math.max(5000, Math.round(daily * 3 / 1000) * 1000), extra: Math.round(daily * 4 / 1000) * 1000 };
+    },
+    text: (g, p) => `The goat farmers are on strike. Pay <b>${fmtMoney(p.now)}</b> for an emergency supplier, or feed costs <b>double</b> for 4 days (about <b>${fmtMoney(p.extra)}</b> extra at your current feed bill).`,
     choices: [
-      { label: 'Emergency supplier', hint: '−$30k now', apply: (g) => g.spend(30000, 'food') },
-      { label: 'Pay double', hint: 'Feed costs ×2 for 4 days', apply: (g) => g.addMod('goat_shortage', 4) },
+      { label: 'Emergency supplier', hint: (p) => `−${fmtMoney(p.now)} now`, apply: (g, p) => g.spend(p.now, 'food') },
+      { label: 'Pay double', hint: (p) => `Feed costs ×2 for 4 days (≈ ${fmtMoney(p.extra)})`, apply: (g) => g.addMod('goat_shortage', 4) },
     ],
   },
   lysine: {
@@ -297,6 +320,8 @@ const DecisionMixin = {
     for (const [id, def] of Object.entries(DECISIONS)) {
       if (this.seenDecisions[id] !== undefined && this.day - this.seenDecisions[id] < 12) continue;
       if ((this.contracts || []).some((c) => c.id === id)) continue;
+      // a deal whose payback would come due after a timed chapter ends is a free lunch: don't offer it
+      if (def.term && this.scenario && SCENARIOS[this.scenario].endDay && this.day + def.term > SCENARIOS[this.scenario].endDay) continue;
       const p = def.prep(this);
       if (p) cands.push({ id, params: p });
     }

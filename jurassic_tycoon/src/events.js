@@ -270,7 +270,12 @@ class Events {
     const j = w.idx(nx, ny);
     w.terrain[j] = T_LAVA; w.lavaT[j] = randf(35, 60);
     w.path[j] = 0;
-    if (w.fence[j]) { w.fence[j] = F_NONE; w.fenceHp[j] = 0; }
+    if (w.fence[j]) {
+      // engineers rebuild the fence once the lava has cooled, so the paddock doesn't silently open up
+      const f = w.fence[j] === F_BROKEN ? (w.fenceOrig[j] || F_ELECTRIC) : w.fence[j];
+      if (f !== F_GATE) g.queueFence(nx, ny, f, 48);
+      w.fence[j] = F_NONE; w.fenceHp[j] = 0;
+    }
     const b = w.buildings.get(w.bld[j]);
     if (b) g.damageBuilding(b, 9999, null);
     v.front.push([nx, ny]);

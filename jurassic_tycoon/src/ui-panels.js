@@ -96,8 +96,9 @@ class UIPanels {
       const diets = new Set(ds.map((d) => d.sp.diet));
       html += `<div class="btns">`;
       if (cover < 0.28 && needTrees) html += `<button data-a="cover" title="Plant trees until about 30% of the paddock is covered">Tree cover ${fmtMoney(needTrees * TOOL_INFO.trees.cost)}</button>`;
-      if (!reg.feeders.herb.length && (diets.has('herb') || !ds.length)) html += `<button data-a="feedH">+ Herb feeder</button>`;
-      if (!reg.feeders.carn.length && diets.has('carn')) html += `<button data-a="feedC">+ Carn feeder</button>`;
+      // an empty paddock offers both: its feeder also tells the ACU which captured animals belong here
+      if (!reg.feeders.herb.length && (diets.has('herb') || !ds.length)) html += `<button data-a="feedH" title="Herbivores captured by the ACU will be brought here">+ Herb feeder</button>`;
+      if (!reg.feeders.carn.length && (diets.has('carn') || !ds.length)) html += `<button data-a="feedC" title="Carnivores captured by the ACU will be brought here">+ Carn feeder</button>`;
       if (dmg) html += `<button data-a="fixfence" class="danger">Repair ${dmg} fence${dmg > 1 ? 's' : ''}</button>`;
       html += `<button data-a="copy" title="Copy this paddock's fences, trees and feeders, then stamp copies elsewhere">Copy layout</button></div>`;
     } else if (o.type) {
@@ -107,6 +108,7 @@ class UIPanels {
       if (def.power) html += `<div class="row"><span>Power</span><span style="color:${o.powered ? '#f8d040' : '#e04838'}">${o.powered ? 'ON' : 'NO POWER'}</span></div>`;
       if (o.type === 'pylon') html += `<div class="row"><span>Grid</span><span style="color:${w.covered[w.idx(o.x, o.y)] ? '#f8d040' : '#e04838'}">${w.covered[w.idx(o.x, o.y)] ? 'CONNECTED' : 'NOT CONNECTED'}</span></div>${w.covered[w.idx(o.x, o.y)] ? '' : '<div class="sub" style="color:#ff9080">Outside the power area. Move it closer to a power plant or a connected pylon.</div>'}`;
       if (o.type === 'power') html += `<div class="row"><span>Output</span><span>${o.offline > 0 || w.power.outage > 0 ? 'OFFLINE' : def.supply + ' MW'}</span></div>`;
+      if (o.type === 'gate') html += `<div class="row"><span>Park</span><span style="color:${g.parkClosed ? '#e04838' : '#5ac85a'}">${g.parkClosed ? 'CLOSED' : 'OPEN'}</span></div><div class="btns"><button data-a="toggleopen">${g.parkClosed ? 'Open the park' : 'Close the park'}</button></div>`;
       if (def.cat === 'guest' && !w.accessTiles(o).length) html += `<div class="sub" style="color:#ff9080">Not connected to a path!</div>`;
       if (o.type === 'tour') {
         html += `<div class="row"><span>Queue</span><span>${(o.queue || []).length}</span></div><div class="row"><span>Jeeps</span><span>${g.jeeps.filter((j) => j.station === o).length}</span></div>`;
@@ -156,6 +158,7 @@ class UIPanels {
       const t = reg.tiles.find((i) => g.world.dinoPass(i % g.world.W, (i / g.world.W) | 0));
       if (t !== undefined) { const r2 = g.world.regionAt(t % g.world.W, (t / g.world.W) | 0); if (r2) this.selected = { kind: 'paddock', x: t % g.world.W, y: (t / g.world.W) | 0, reg: r2 }; }
     }
+    if (a === 'toggleopen') { g.parkClosed = !g.parkClosed; g.log(g.parkClosed ? 'The park is closed: no new visitors until you reopen the gate.' : 'The park is open!', g.parkClosed ? 'warn' : 'good', null, true); }
     if (a === 'sedate' && o) { o.orderSedate = true; g.log(`Rangers dispatched to sedate ${o.name}.`, 'info', o); }
     if (a === 'strike' && o) { const err = g.acuStrike(o); if (err) this.toast(err, 'warn'); }
     if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }

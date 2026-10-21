@@ -59,7 +59,9 @@ class Staff {
         const dd = dist(this.x, this.y, d.x, d.y);
         if (dd > 4.2 && (!this.path || this.thinkCount++ % 3 === 0)) {
           const tx = d.x, ty = d.y;
-          const p = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => dist2(x + 0.5, y + 0.5, tx, ty) < 3.5 * 3.5 && w.humanPass(x, y), 4000);
+          let p = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => dist2(x + 0.5, y + 0.5, tx, ty) < 3.5 * 3.5 && w.humanPass(x, y), 4000);
+          // a contained target deep inside its paddock: wait at the nearest point of the fence for a clear shot
+          if (!p && !d.loose) p = w.bfsNearest(this.tx, this.ty, w.humanPass, tx, ty, 4000);
           this.path = p; this.pi = 0;
           this.state = p ? 'move' : 'idle';
         }

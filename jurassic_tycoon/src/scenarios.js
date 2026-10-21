@@ -100,7 +100,7 @@ function roamSpawn(g, sp, n, minDist = 14) {
   const w = g.world, s = g.start, main = mainRegion(g);
   for (let k = 0; k < n; k++) for (let t = 0; t < 400; t++) {
     const x = randi(4, w.W - 5), y = randi(4, w.H - 5);
-    if (w.dinoPass(x, y) && dist(x, y, s.x, s.y) > minDist && w.region[w.idx(x, y)] === main) { const d = new Dino(g, sp, x, y); d.growth = 1; d.stress = 20; g.dinos.push(d); break; }
+    if (w.dinoPass(x, y) && dist(x, y, s.x, s.y) > minDist && w.region[w.idx(x, y)] === main) { const d = new Dino(g, sp, x, y); d.growth = 1; d.stress = 20; d.loose = d.wasLooseFlag = true; g.dinos.push(d); break; }
   }
 }
 
