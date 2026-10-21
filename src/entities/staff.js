@@ -35,13 +35,21 @@ class Staff {
   updateRanger(dt) {
     const g = this.game, w = g.world;
     if (this.thinkT <= 0) {
-      this.thinkT = 1.0;
-      // pick most dangerous loose dino (or ordered sedation)
+      this.thinkT = this.order ? 0.6 : 1.0;
+      const o = this.order;
+      // a hunt order ends once the target is down or back in its paddock
+      if (o && o.type === 'hunt' && (!o.d || o.d.dead || o.d.carried || o.d.sedatedT > 0 || (!o.d.loose && !o.d.orderSedate))) {
+        this.order = null;
+        g.addFloat(this.x, this.y - 1, 'Target secured', '#a8f080');
+      }
+      // pick most dangerous loose dino (or ordered sedation); a posted ranger only guards its post
       let best = null, bs = -1e9;
-      for (const d of g.creatures()) {
+      if (this.order && this.order.type === 'hunt') best = this.order.d;
+      else for (const d of g.creatures()) {
         if (d.carried || d.sedatedT > 0) continue;
         if (!d.loose && !d.orderSedate) continue;
         if (d.camouflaged && dist2(this.x, this.y, d.x, d.y) > 9) continue;
+        if (this.order && dist2(this.order.x + 0.5, this.order.y + 0.5, d.x, d.y) > 49) continue;
         const s = d.sp.danger * 10 - dist(this.x, this.y, d.x, d.y);
         if (s > bs) { bs = s; best = d; }
       }
@@ -55,6 +63,12 @@ class Staff {
           this.path = p; this.pi = 0;
           this.state = p ? 'move' : 'idle';
         }
+      } else if (this.order && this.order.type === 'move') {
+        // head to the ordered post and hold there
+        const ox = this.order.x, oy = this.order.y;
+        if (dist2(this.x, this.y, ox + 0.5, oy + 0.5) > 2.2) {
+          if (!this.path) { this.path = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => dist2(x, y, ox, oy) <= 1, 5000); this.pi = 0; if (!this.path) this.order = null; }
+        } else { this.path = null; this.reached = true; }
       } else if (!this.path) {
         // patrol near home
         if (chance(0.3)) {
@@ -84,7 +98,8 @@ class Staff {
       }
       if (dd <= 3.8) { this.path = null; return; }
     }
-    if (this.path) { if (stepAlong(this, dt, (g.research.has('rangers') ? 2.5 : 1.9) * g.mod('rangerSpeed'), w.humanPass, w)) this.path = null; }
+    // ordered units move at the double
+    if (this.path) { if (stepAlong(this, dt, (g.research.has('rangers') ? 2.5 : 1.9) * g.mod('rangerSpeed') * (this.order ? 1.3 : 1), w.humanPass, w)) this.path = null; }
   }
 
   updateWorker(dt) {
@@ -139,7 +154,7 @@ class Staff {
       return;
     }
     if (this.state === 'move') {
-      if (stepAlong(this, dt, 1.7, w.humanPass, w)) {
+      if (stepAlong(this, dt, this.order ? 2.2 : 1.7, w.humanPass, w)) {
         this.path = null;
         this.state = this.job != null ? 'repair' : 'idle';
         this.workT = 0;
@@ -148,6 +163,29 @@ class Staff {
     }
     if (this.thinkT > 0) return;
     this.thinkT = 1.5 + rand();
+    const o = this.order;
+    if (o && (o.type === 'repair' || o.type === 'repairB')) {
+      // ordered repair: go straight to that fence or building
+      const isB = o.type === 'repairB';
+      const done = isB ? (!w.buildings.has(o.b.id) || o.b.hp >= o.b.maxHp) : !g.needsRepair(o.x, o.y);
+      if (done || this.ordered) { this.order = done ? null : this.order; this.ordered = false; if (done) { g.addFloat(this.x, this.y - 1, 'Fixed!', '#a8f080'); return; } }
+      const goal = isB ? (x, y) => w.buildingAt(x, y) === o.b || DIRS4.some(([dx, dy]) => w.buildingAt(x + dx, y + dy) === o.b) : (x, y) => Math.abs(x - o.x) + Math.abs(y - o.y) <= 1;
+      const p = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => w.humanPass(x, y) && goal(x, y), 8000) || (goal(this.tx, this.ty) ? [] : null);
+      if (!p) { this.order = null; g.addFloat(this.x, this.y - 1, "Can't reach it", '#ff9080'); return; }
+      if (isB) { this.jobType = 'building'; this.jobB = o.b; this.job = 'b' + o.b.id; }
+      else { this.jobType = 'fence'; this.job = w.idx(o.x, o.y); }
+      this.ordered = true;
+      this.path = p; this.pi = 0; this.state = p.length ? 'move' : 'repair'; this.workT = 0;
+      return;
+    }
+    if (o && o.type === 'move' && !this.reached) {
+      const ox = o.x, oy = o.y;
+      const p = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => dist2(x, y, ox, oy) <= 1, 5000);
+      if (!p) { this.order = null; return; }
+      this.reached = true; this.job = null;
+      this.path = p; this.pi = 0; this.state = p.length ? 'move' : 'idle';
+      return;
+    }
     // Find nearest repair job reachable
     const claimed = new Set(g.staff.filter((s) => s !== this && s.role === 'worker' && s.job != null && s.state !== 'idle').map((s) => s.job));
     const needs = (x, y) => {
@@ -155,6 +193,7 @@ class Staff {
       const j = w.idx(x, y);
       if (claimed.has(j)) return false;
       if (g.threatNear(x + 0.5, y + 0.5, 8)) return false;
+      if (o && dist2(x, y, o.x, o.y) > 100) return false;
       const f = w.fence[j];
       if (f === F_BROKEN) return true;
       if ((isSolidFence(f)) && w.fenceHp[j] < FENCE_DEF[f].hp * 0.98) return true;
@@ -173,8 +212,8 @@ class Staff {
       if (!p.length) this.state = 'repair';
     } else {
       this.job = null;
-      // idle wander near home
-      if (dist(this.x, this.y, this.home.x, this.home.y) > 4) {
+      // idle wander near home (or stay at an ordered post)
+      if (!o && dist(this.x, this.y, this.home.x, this.home.y) > 4) {
         const hp = w.bfs(this.tx, this.ty, w.humanPass, (x, y) => dist2(x, y, this.home.x, this.home.y) < 9, 3000);
         if (hp) { this.path = hp; this.pi = 0; this.state = 'move'; }
       }

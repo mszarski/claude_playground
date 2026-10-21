@@ -384,6 +384,7 @@ class Renderer {
 
     // tool previews
     this.drawToolPreview(ctx, ui);
+    this.drawSquad(ctx, ui, dt);
 
     // floating texts / thoughts
     ctx.font = '8px "Press Start 2P", monospace';
@@ -405,6 +406,60 @@ class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.drawLighting(ctx, cw, ch, camX, camY, z);
     this.drawWeather(ctx, cw, ch, dt);
+    if (ui.box) {
+      const b = ui.box;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = 'rgba(248,208,64,0.12)'; ctx.strokeStyle = '#f8d040'; ctx.lineWidth = 1;
+      const x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1), bw = Math.abs(b.x1 - b.x0), bh = Math.abs(b.y1 - b.y0);
+      ctx.fillRect(x, y, bw, bh); ctx.strokeRect(x + 0.5, y + 0.5, bw, bh);
+    }
+  }
+
+  // RTS selection rings and the orders of the selected units
+  drawSquad(ctx, ui, dt) {
+    const sq = ui.squad || [];
+    const pulse = Math.floor(this.time * 3) % 2;
+    const ring = (x, y, col, r = 6) => {
+      ctx.strokeStyle = col; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(Math.round(x * TILE) + 0.5, Math.round(y * TILE) + 1.5, r, r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+    };
+    for (const u of sq) {
+      if (u.dead) continue;
+      ring(u.x, u.y + (u.kind === 'heli' ? 0.2 : 0), '#f8d040', u.kind === 'heli' ? 10 : 6);
+      const o = u.order;
+      if (!o) continue;
+      let tx, ty, col;
+      if (o.type === 'hunt' && o.d && !o.d.dead) { tx = o.d.x; ty = o.d.y; col = 'rgba(255,90,60,0.7)'; }
+      else if (o.x !== undefined) { tx = o.x + 0.5; ty = o.y + 0.5; col = o.type === 'move' ? 'rgba(248,208,64,0.6)' : 'rgba(120,220,255,0.7)'; }
+      else continue;
+      ctx.strokeStyle = col; ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(u.x * TILE, u.y * TILE); ctx.lineTo(tx * TILE, ty * TILE); ctx.stroke();
+      ctx.setLineDash([]);
+      if (o.type === 'hunt') {
+        // crosshair on the target
+        ctx.strokeStyle = pulse ? '#ff5a3c' : '#ffd0c0';
+        const cx = Math.round(tx * TILE) + 0.5, cy = Math.round(ty * TILE - 6) + 0.5;
+        ctx.strokeRect(cx - 5, cy - 5, 10, 10);
+        ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy - 3); ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 8);
+        ctx.moveTo(cx - 8, cy); ctx.lineTo(cx - 3, cy); ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + 8, cy); ctx.stroke();
+      } else if (o.type === 'move') {
+        // little flag where they hold
+        const fx = Math.round(tx * TILE), fy = Math.round(ty * TILE);
+        ctx.fillStyle = '#3a2a1a'; ctx.fillRect(fx, fy - 9, 1, 10);
+        ctx.fillStyle = '#f8d040'; ctx.fillRect(fx + 1, fy - 9, 5, 3);
+      } else {
+        ctx.strokeStyle = '#78dcff'; ctx.strokeRect(Math.round((tx - 0.5) * TILE) + 0.5, Math.round((ty - 0.5) * TILE) + 0.5, TILE - 1, TILE - 1);
+      }
+    }
+    const p = ui.orderPing;
+    if (p && p.t > 0) {
+      p.t -= dt;
+      const r = 3 + (0.8 - p.t) * 14;
+      ctx.globalAlpha = clamp(p.t / 0.8, 0, 1);
+      ctx.strokeStyle = p.hunt ? '#ff5a3c' : '#f8d040';
+      ctx.beginPath(); ctx.ellipse(p.x * TILE, p.y * TILE, r, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   }
 
   bubble(ctx, text, x, y, col) {

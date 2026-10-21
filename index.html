@@ -116,6 +116,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .deal.contract { box-shadow: inset 3px 0 0 var(--gold); }
 .deal.mod { box-shadow: inset 3px 0 0 #70b8f0; color: #cfe4f0; }
 .deal i { font-style: normal; color: var(--gold); }
+/* RTS squad bar */
+#squad { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; z-index: 11; padding: 5px 10px; font-size: 17px; max-width: min(520px, calc(100vw - 420px)); text-align: center; }
+#squad .sqhead { font-family: 'Press Start 2P'; font-size: 9px; color: var(--gold); line-height: 1.6; }
+#squad .sqhead span { color: var(--dim); font-family: 'VT323'; font-size: 16px; }
+#squad .sqhint { color: var(--dim); font-size: 15px; }
+#squad .btns { justify-content: center; margin-top: 3px; }
 /* InGen call */
 .call { max-width: 560px; }
 .callhead { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
@@ -221,6 +227,7 @@ table.fin td:last-child { text-align: right; }
   #log { display: none; }
   #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 196px); font-size: 15px; }
   #deals { left: 6px; max-width: calc(100vw - 196px); }
+  #squad { left: 6px; right: auto; transform: none; bottom: calc(var(--goalH, 60px) + 12px); max-width: calc(100vw - 196px); }
   .deal { font-size: 14px; }
   #minimap { width: 128px; height: 96px; }
   #miniBtns { display: none; }
@@ -308,6 +315,7 @@ table.fin td:last-child { text-align: right; }
 <div id="toolbar" class="panel"></div>
 <div id="flyout" class="panel"></div>
 <div id="deals" hidden></div>
+<div id="squad" class="panel" hidden></div>
 <div id="goal" class="panel"></div>
 <div id="info" class="panel"></div>
 <div id="log"></div>
@@ -365,6 +373,7 @@ table.fin td:last-child { text-align: right; }
 <script src="src/game.js"></script>
 <script src="src/scenarios.js"></script>
 <script src="src/decisions.js"></script>
+<script src="src/command.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>

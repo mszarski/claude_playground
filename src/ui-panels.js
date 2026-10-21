@@ -58,8 +58,14 @@ class UIPanels {
       html += `<div class="row"><span>Species seen</span><span>${o.seenSpecies.size}</span></div><div class="row"><span>Spent</span><span>${fmtMoney(o.spent + g.ticket)}</span></div>`;
     } else if (o.kind === 'ranger' || o.kind === 'worker') {
       html += `<h2>${o.kind === 'ranger' ? 'Park Ranger' : 'Engineer'}</h2>`;
-      html += `<div class="sub">${o.kind === 'ranger' ? (o.target ? `Pursuing ${o.target.name} the ${o.target.sp.name}` : 'On patrol') : (o.state === 'repair' ? 'Repairing' : o.state === 'move' ? 'En route to a job' : 'Idle')}</div>`;
-      html += `<div class="sub">${o.kind === 'ranger' ? 'Tranquilizes loose dinosaurs within 4 tiles.' : 'Repairs fences & buildings, rebuilds breached fences.'}</div>`;
+      html += `<div class="sub">${o.kind === 'ranger' ? (o.target ? `Pursuing ${o.target.name} the ${o.target.sp.name}` : 'On patrol') : (o.state === 'flee' ? 'Running from a predator!' : o.state === 'repair' ? 'Repairing' : o.state === 'move' ? 'En route to a job' : 'Idle')}</div>`;
+      html += `<div class="row"><span>Orders</span><span>${orderText(o).replace('Ordered: ', '')}</span></div>`;
+      html += `<div class="sub">${o.kind === 'ranger' ? 'Tranquilizes loose dinosaurs within 4 tiles.' : 'Repairs fences & buildings, rebuilds breached fences.'} ${this.touchUsed ? 'Use Send… to give orders.' : 'Right-click to give orders · shift-drag to select several.'}</div>`;
+      if (o.order) html += `<div class="btns"><button data-a="auto">Back to auto</button></div>`;
+    } else if (o.kind === 'heli') {
+      const st = { parked: 'On the pad', strike: `Darting ${o.target ? o.target.name : 'a target'} from the air`, fetch: `Fetching ${o.target ? o.target.name : 'a sedated dinosaur'}`, deliver: `Flying ${o.cargo ? o.cargo.name : 'cargo'} to a paddock`, return: 'Returning to base' }[o.state] || o.state;
+      html += `<h2>ACU Helicopter</h2><div class="sub">${st}</div>`;
+      html += `<div class="sub">Airlifts sedated dinosaurs home on its own. ${this.touchUsed ? 'Select it and use Send…' : 'Right-click'} a loose dinosaur for an air strike (${fmtMoney(g.research.has('acu') ? 3000 : 8000)}).</div>`;
     } else if (o.kind === 'fence') {
       const i = w.idx(o.x, o.y), f = w.fence[i];
       if (!f) { this.selected = null; el.style.display = 'none'; return; }
@@ -113,6 +119,7 @@ class UIPanels {
     this.sfx.play('click');
     if (a === 'close') { this.select(null); return; }
     if (a === 'follow') { this.follow = !this.follow; }
+    if (a === 'auto' && o) { g.releaseUnits([o]); }
     if (a === 'sedate' && o) { o.orderSedate = true; g.log(`Rangers dispatched to sedate ${o.name}.`, 'info', o); }
     if (a === 'strike' && o) { const err = g.acuStrike(o); if (err) this.toast(err, 'warn'); }
     if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }
@@ -336,6 +343,8 @@ class UIPanels {
       <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
       Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
+      <h2>COMMANDING STAFF (OPTIONAL)</h2>
+      <p>Rangers, engineers and helicopters work on their own, but you can take charge. Click one to select it, shift-click or shift-drag to select several, double-click to select every one of that kind, or press <b>M</b> for all rangers. Then <b>right-click</b> (on touch: <b>Send…</b>, then tap) a dinosaur to hunt it, a broken fence to repair it, or open ground to hold a position. Units on orders move faster. <b>Back to auto</b> releases them. When something escapes, <b>RESPOND</b> (or <b>B</b>) sounds the alarm and sends every ranger and helicopter at once.</p>
       <h2>PLAY OFFLINE</h2>
       <p>Open <b>mszarski.github.io/claude_playground</b> on your phone and choose <b>Add to Home Screen</b> (Share menu on iPhone, ⋮ menu on Android). After the first visit it runs without a connection.</p>
       <p style="color:#9ab08a">Lose if you stay deeply in debt or too many guests are eaten. Win by completing all goals.</p>

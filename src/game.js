@@ -457,8 +457,8 @@ class Game {
   }
 
   // Player-ordered helicopter tranquilizer run
-  acuStrike(d) {
-    const h = this.helis.find((x) => x.state === 'parked' && !x.cargo) || this.helis.find((x) => x.state === 'return' && !x.cargo);
+  acuStrike(d, heli = null) {
+    const h = heli || this.helis.find((x) => x.state === 'parked' && !x.cargo) || this.helis.find((x) => x.state === 'return' && !x.cargo);
     if (!h) return 'All helicopters are busy.';
     const cost = this.research.has('acu') ? 3000 : 8000;
     if (!this.canAfford(cost)) return `Not enough money (${fmtMoney(cost)}).`;
