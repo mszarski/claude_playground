@@ -90,6 +90,16 @@ class UIPanels {
       const sp = ds.reduce((a, d) => a + d.sp.space, 0);
       html += `<div class="row"><span>Space used</span><span>${sp}/${reg.size}</span></div>`;
       html += `<div class="sub">${ds.length ? ds.map((d) => d.name + ' (' + d.sp.name + ')').join(', ') : 'Empty. Use Hatch to add dinosaurs.'}</div>`;
+      // one-click upkeep
+      const cover = reg.forest / reg.size, needTrees = Math.max(0, Math.ceil(reg.size * 0.3) - reg.forest);
+      const fences = g.paddockFences(reg), dmg = fences.filter((j) => g.needsRepair(j % w.W, (j / w.W) | 0)).length;
+      const diets = new Set(ds.map((d) => d.sp.diet));
+      html += `<div class="btns">`;
+      if (cover < 0.28 && needTrees) html += `<button data-a="cover" title="Plant trees until about 30% of the paddock is covered">Tree cover ${fmtMoney(needTrees * TOOL_INFO.trees.cost)}</button>`;
+      if (!reg.feeders.herb.length && (diets.has('herb') || !ds.length)) html += `<button data-a="feedH">+ Herb feeder</button>`;
+      if (!reg.feeders.carn.length && diets.has('carn')) html += `<button data-a="feedC">+ Carn feeder</button>`;
+      if (dmg) html += `<button data-a="fixfence" class="danger">Repair ${dmg} fence${dmg > 1 ? 's' : ''}</button>`;
+      html += `<button data-a="copy" title="Copy this paddock's fences, trees and feeders, then stamp copies elsewhere">Copy layout</button></div>`;
     } else if (o.type) {
       const def = BUILDINGS[o.type];
       html += `<h2>${def.name}</h2><div class="sub">${def.desc}</div>`;
@@ -120,6 +130,16 @@ class UIPanels {
     if (a === 'close') { this.select(null); return; }
     if (a === 'follow') { this.follow = !this.follow; }
     if (a === 'auto' && o) { g.releaseUnits([o]); }
+    const reg = o && o.kind === 'paddock' ? g.world.regionAt(o.x, o.y) : null;
+    if (reg && !reg.public) {
+      if (a === 'cover') { const n = g.plantCover(reg); this.toast(n ? `Planted ${n} trees.` : 'No room for trees.', n ? 'good' : 'warn'); if (n) this.sfx.play('build'); }
+      if (a === 'feedH' || a === 'feedC') { const f = g.addFeeder(reg, a === 'feedC' ? 'carn' : 'herb'); if (f) this.sfx.play('build'); else this.toast('No free tile for a feeder (or not enough money).', 'warn'); }
+      if (a === 'fixfence') { const r = g.repairFences(reg); this.toast(r.n ? `Repaired ${r.n} fence tiles (${fmtMoney(r.cost)}).${r.blocked ? ' A dinosaur is blocking a gap.' : ''}` : r.blocked ? 'A dinosaur is standing in the gap! Sedate it first.' : 'Not enough money.', r.n ? 'good' : 'warn'); if (r.n) this.sfx.play('build'); }
+      if (a === 'copy') { const bp = g.copyPaddock(reg); if (bp) { this.blueprint = bp; this.setTool('stamp'); this.toast(`Layout copied (${bp.w}×${bp.h}). Click to stamp a copy, Esc to stop.`, 'info'); } }
+      // keep the paddock selected on a tile that is still inside it
+      const t = reg.tiles.find((i) => g.world.dinoPass(i % g.world.W, (i / g.world.W) | 0));
+      if (t !== undefined) { const r2 = g.world.regionAt(t % g.world.W, (t / g.world.W) | 0); if (r2) this.selected = { kind: 'paddock', x: t % g.world.W, y: (t / g.world.W) | 0, reg: r2 }; }
+    }
     if (a === 'sedate' && o) { o.orderSedate = true; g.log(`Rangers dispatched to sedate ${o.name}.`, 'info', o); }
     if (a === 'strike' && o) { const err = g.acuStrike(o); if (err) this.toast(err, 'warn'); }
     if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }
@@ -343,6 +363,8 @@ class UIPanels {
       <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
       Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
+      <h2>SHORTCUTS</h2>
+      <p>Click a paddock for one-click <b>Tree cover</b>, <b>feeders</b> and <b>fence repairs</b>. <b>Copy layout</b> turns a paddock into a blueprint you can stamp anywhere. Hatching into a paddock with no food adds a feeder automatically, and <b>Repair all</b> on the breached-fence alert fixes every fence at once.</p>
       <h2>COMMANDING STAFF (OPTIONAL)</h2>
       <p>Rangers, engineers and helicopters work on their own, but you can take charge. Click one to select it, shift-click or shift-drag to select several, double-click to select every one of that kind, or press <b>M</b> for all rangers. Then <b>right-click</b> (on touch: <b>Send…</b>, then tap) a dinosaur to hunt it, a broken fence to repair it, or open ground to hold a position. Units on orders move faster. <b>Back to auto</b> releases them. When something escapes, <b>RESPOND</b> (or <b>B</b>) sounds the alarm and sends every ranger and helicopter at once.</p>
       <h2>PLAY OFFLINE</h2>

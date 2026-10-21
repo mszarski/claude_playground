@@ -473,7 +473,7 @@ class Renderer {
   drawOverlays(ctx, ui, vx0, vy0, vx1, vy1) {
     const g = this.game, w = g.world;
     const tool = ui.tool;
-    const showPower = this.overlay === 'power' || ['power', 'pylon', 'backup', 'fence', 'paddock'].includes(tool);
+    const showPower = this.overlay === 'power' || ['power', 'pylon', 'backup', 'fence', 'paddock', 'stamp'].includes(tool);
     const showPaddock = this.overlay === 'paddock' || tool === 'hatch' || tool === 'feeder_h' || tool === 'feeder_c' || tool === 'movedest';
     if (showPower) {
       for (let y = Math.max(0, vy0); y <= Math.min(w.H - 1, vy1); y++) for (let x = Math.max(0, vx0); x <= Math.min(w.W - 1, vx1); x++) {
@@ -902,6 +902,19 @@ class Renderer {
     ctx.strokeStyle = tool === 'demolish' ? '#ff6050' : '#ffffff';
     ctx.lineWidth = 1;
     ctx.strokeRect(h.x * TILE + 0.5, h.y * TILE + 0.5, TILE - 1, TILE - 1);
+    if (tool === 'stamp' && ui.blueprint) {
+      const bp = ui.blueprint, ox = h.x - Math.floor(bp.w / 2), oy = h.y - Math.floor(bp.h / 2);
+      const plan = g.stampPlan(bp, ox, oy);
+      const ok = new Set(plan.fences.map(([x, y]) => x + ',' + y));
+      for (const [dx, dy] of bp.trees) { ctx.fillStyle = 'rgba(60,160,60,0.35)'; ctx.fillRect((ox + dx) * TILE, (oy + dy) * TILE, TILE, TILE); }
+      for (const [dx, dy] of bp.fences) {
+        const x = ox + dx, y = oy + dy, i = w.inb(x, y) ? w.idx(x, y) : -1;
+        const fine = ok.has(x + ',' + y) || (i >= 0 && w.fence[i]);
+        ctx.fillStyle = fine ? 'rgba(248,224,64,0.55)' : 'rgba(255,60,60,0.55)';
+        ctx.fillRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8);
+      }
+      for (const [dx, dy] of bp.feeders) { ctx.strokeStyle = '#ffffff'; ctx.strokeRect((ox + dx) * TILE + 2.5, (oy + dy) * TILE + 2.5, TILE - 5, TILE - 5); }
+    }
     if (tool === 'hatch' && ui.species) {
       const S = DINO_SPRITES[ui.species];
       ctx.globalAlpha = 0.6;

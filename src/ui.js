@@ -182,6 +182,9 @@ class UI {
         }
         if (!why && !this.game.canAfford(def.cost)) why = 'not enough money';
         this.showTip(e, `${def.name} · ${fmtMoney(def.cost)}${why ? `<br><span style="color:#ff9080">Blocked by ${why}</span>` : ''}`);
+      } else if (e.target === cv && this.tool === 'stamp' && this.blueprint) {
+        const bp = this.blueprint, plan = this.game.stampPlan(bp, t.x - Math.floor(bp.w / 2), t.y - Math.floor(bp.h / 2));
+        this.showTip(e, `Paddock blueprint · ${fmtMoney(plan.cost)}${plan.blocked ? `<br><span style="color:#ff9080">${plan.blocked} fence tiles blocked</span>` : ''}`);
       } else if (e.target === cv && this.tool === 'hatch' && this.species) {
         const err = this.game.canHatchAt(this.species, t.x, t.y);
         this.showTip(e, err ? `<span style="color:#ff9080">${err}</span>` : `Hatch ${SPECIES[this.species].name} · ${this.game.hatchCost(this.species) ? fmtMoney(this.game.hatchCost(this.species)) : 'FREE'}`);
@@ -490,6 +493,13 @@ class UI {
       if (d.sedatedT <= 0) d.orderSedate = true;
       g.log(`${d.name} the ${d.sp.name} will be sedated and airlifted to the new paddock.`, 'info', d, true);
       this.sfx.play('click'); this.moveDino = null; this.setTool('inspect');
+      return;
+    }
+    if (tool === 'stamp' && this.blueprint) {
+      const bp = this.blueprint;
+      const r = g.stamp(bp, t.x - Math.floor(bp.w / 2), t.y - Math.floor(bp.h / 2));
+      if (r.n) { this.sfx.play('build'); this.toast(`Paddock stamped (${fmtMoney(r.plan.cost)}).${r.plan.blocked ? ` ${r.plan.blocked} fence tiles were blocked.` : ''}`, r.plan.blocked ? 'warn' : 'good'); }
+      else { this.sfx.play('error'); this.toast(r.money ? `Not enough money (${fmtMoney(r.plan.cost)}).` : "Can't stamp there.", 'warn'); }
       return;
     }
     if (tool === 'order') {
@@ -863,6 +873,8 @@ class UI {
     const v = g.events.volcano;
     if (v) out.push(`<div class="alert ${v.phase === 'erupt' ? 'red' : 'amber'}" data-act="volcano">🌋 ${v.phase === 'warn' ? 'ERUPTION IN ' + Math.ceil(v.t) + 's' : 'ERUPTION!'}</div>`);
     if (g.events.quake > 0) out.push(`<div class="alert red">〰 EARTHQUAKE</div>`);
+    const broken = g.countBrokenFences();
+    if (broken >= 3 || (broken && !g.hasBuilding('maint'))) out.push(`<div class="alert amber" data-act="none">🔧 ${broken} BREACHED FENCE${broken > 1 ? 'S' : ''} <button data-act="fixall" title="Instantly repair every damaged fence">Repair all ${fmtMoney(g.repairAllCost().cost)}</button></div>`);
     if (g.alarm) out.push(`<div class="alert amber" data-act="alarm">🔊 EVACUATION IN PROGRESS · click to sound all-clear</div>`);
     const html = out.join('');
     if (html !== this.lastAlerts) {
@@ -875,6 +887,7 @@ class UI {
           const a = el.dataset.act;
           if (a === 'loose') this.jumpToLoose();
           else if (a === 'respond') this.respond();
+          else if (a === 'fixall') { const r = g.repairFences(); this.toast(r.n ? `Repaired ${r.n} fence tiles (${fmtMoney(r.cost)}).${r.blocked ? ` ${r.blocked} gaps have a dinosaur in them.` : ''}` : r.blocked ? 'Dinosaurs are standing in the gaps. Sedate them first.' : 'Not enough money.', r.n ? 'good' : 'warn'); if (r.n) this.sfx.play('build'); }
           else if (a === 'reboot') {
             if (g.world.power.outage > 8 && g.canAfford(15000)) { g.spend(15000, 'ops'); g.world.power.outage = 8; g.log('Engineers are rebooting the grid manually...', 'info', null, true); }
           } else if (a === 'volcano') this.centerOn(w.volcano.x, w.volcano.y);

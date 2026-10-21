@@ -406,12 +406,18 @@ class Game {
   hatch(species, x, y) {
     const err = this.canHatchAt(species, x, y);
     if (err) { this.log(err, 'warn'); return false; }
-    const cost = this.hatchCost(species);
+    const sp = SPECIES[species], cost = this.hatchCost(species);
     this.spend(cost, 'dinos');
     const egg = { species, x, y, t: 8, max: 8 };
     if (this.freeEgg === species) { egg.unstable = true; this.freeEgg = null; }
     this.eggs.push(egg);
     this.recordUndo({ kind: 'egg', egg, cost });
+    // no food in this paddock yet? put a feeder in for the new arrival
+    const reg = sp.flying ? null : this.world.regionAt(x, y);
+    if (reg && !reg.feeders[sp.diet].length && (sp.diet === 'carn' || reg.forest < 4) && this.autoFeeders !== false) {
+      const f = this.addFeeder(reg, sp.diet, true);
+      if (f) this.log(`A ${BUILDINGS[f.type].name} was added to the paddock (${fmtMoney(BUILDINGS[f.type].cost)}).`, 'info', f);
+    }
     this.sound('build');
     return true;
   }
