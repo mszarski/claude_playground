@@ -121,7 +121,10 @@ class UI {
   closeFlyout() {
     this.openCat = null;
     $('#flyout').style.display = 'none';
-    for (const c of document.querySelectorAll('.cat')) c.classList.toggle('on', c.dataset.cat === 'inspect' && this.tool === 'inspect');
+    // keep the category of the active tool lit so it's clear what a click will do
+    const grp = TOOL_GROUPS.find((gr) => gr.tools.includes(this.tool));
+    const cat = this.tool === 'inspect' || !grp ? 'inspect' : grp.id;
+    for (const c of document.querySelectorAll('.cat')) c.classList.toggle('on', c.dataset.cat === cat);
     this.hideTip();
   }
 
@@ -155,6 +158,8 @@ class UI {
       this.mouse.down = true; this.mouse.button = e.button;
       this.mouse.sx = e.clientX; this.mouse.sy = e.clientY; this.mouse.moved = 0;
       this.mouse.camX = this.r.cam.x; this.mouse.camY = this.r.cam.y;
+      // the open menu would hide part of the map: tuck it away once the player starts building
+      if (this.openCat && e.button === 0) this.closeFlyout();
       if (e.button !== 0) { this.panning = true; return; }
       if (e.shiftKey && (this.tool === 'inspect' || this.tool === 'order')) { this.box = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; return; }
       const t = this.screenToTile(e.clientX, e.clientY);
@@ -433,14 +438,17 @@ class UI {
   applyDrag() {
     const g = this.game, tool = this.tool;
     if (!this.dragTiles) return;
-    let n = 0;
+    let n = 0, queued = 0;
     g.startBatch();
     for (const [x, y] of this.dragTiles) {
       let ok = false;
       if (tool === 'path' || tool === 'route') ok = g.placePath(x, y);
       else if (tool === 'track') ok = g.placeTrack(x, y);
-      else if (tool === 'fence' || tool === 'paddock') ok = g.placeFence(x, y, F_ELECTRIC);
-      else if (tool === 'wall') ok = g.placeFence(x, y, F_WALL);
+      else if (tool === 'fence' || tool === 'paddock' || tool === 'wall') {
+        const type = tool === 'wall' ? F_WALL : F_ELECTRIC;
+        ok = g.placeFence(x, y, type);
+        if (!ok && g.fenceBlockedByDino(x, y) && g.world.fence[g.world.idx(x, y)] !== type) { g.queueFence(x, y, type); queued++; }
+      }
       else if (tool === 'demolish') {
         // demolish only fences/paths in drag, buildings only on single tile
         const w = g.world, i = w.idx(x, y);
@@ -460,6 +468,16 @@ class UI {
       let off = 0, total = 0;
       for (const [x, y] of this.dragTiles) { const i = w.idx(x, y); if (w.fence[i] === F_ELECTRIC) { total++; if (!w.fencePowered[i]) off++; } }
       if (off) this.toast(`${off} of ${total} fence tiles have no power (blinking red). Build a Power Plant or Pylon nearby.`, 'warn');
+    }
+    if (queued) this.toast(`A dinosaur is standing in the way of ${queued} fence tile${queued > 1 ? 's' : ''}. ${queued > 1 ? 'They\'ll' : 'It\'ll'} be built as soon as it moves.`, 'info');
+    else if (n && tool === 'paddock' && this.dragTiles.length > 4) {
+      // a paddock that doesn't close is just an expensive fence: say so
+      const w = g.world;
+      w.computeRegions();
+      const xs = this.dragTiles.map((p) => p[0]), ys = this.dragTiles.map((p) => p[1]);
+      const cx = Math.round((Math.min(...xs) + Math.max(...xs)) / 2), cy = Math.round((Math.min(...ys) + Math.max(...ys)) / 2);
+      const reg = w.regionAt(cx, cy);
+      if (reg && reg.public && Math.max(...xs) - Math.min(...xs) > 1 && Math.max(...ys) - Math.min(...ys) > 1) this.toast('This paddock isn\'t closed: something blocked part of the fence. Look for the gap and fill it with the Fence tool.', 'warn');
     }
   }
 

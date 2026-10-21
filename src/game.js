@@ -123,7 +123,10 @@ class Game {
 
   // ------------- money -------------
   spend(v, cat = 'construction') { this.money -= v; this.ledger[cat] = (this.ledger[cat] || 0) + v; }
-  earn(v, cat = 'shops') { this.money += v; this.ledger[cat] = (this.ledger[cat] || 0) + v; }
+  earn(v, cat = 'shops') {
+    this.money += v; this.ledger[cat] = (this.ledger[cat] || 0) + v;
+    if (cat === 'tickets' || cat === 'shops') this.stats.guestIncome = (this.stats.guestIncome || 0) + v;
+  }
   canAfford(v) { return this.money - v >= -20000; }
 
   // ------------- logging & fx -------------
@@ -296,6 +299,25 @@ class Game {
     w.invalidate(x, y);
     return true;
   }
+  // Fence tiles a dinosaur was standing on: built as soon as it steps off
+  queueFence(x, y, type) {
+    this.pendingFences = this.pendingFences || [];
+    if (!this.pendingFences.some((p) => p.x === x && p.y === y)) this.pendingFences.push({ x, y, type, t: 24 * this.secPerHour });
+  }
+  buildPendingFences(dt) {
+    const w = this.world;
+    this.pendingFences = this.pendingFences.filter((p) => {
+      p.t -= dt;
+      const i = w.idx(p.x, p.y);
+      if (w.fence[i] === p.type || w.bld[i] || w.path[i]) return false;
+      if (this.dinos.some((d) => d.tx === p.x && d.ty === p.y && !d.carried)) return p.t > 0;
+      this.placeFence(p.x, p.y, p.type);
+      return false;
+    });
+    if (!this.pendingFences.length) { w.computeRegions(); this.updateLoose(); w.powerDirty = true; }
+  }
+  fenceBlockedByDino(x, y) { return this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried); }
+
   placeFence(x, y, type) {
     const w = this.world;
     if (!w.inb(x, y)) return false;
@@ -615,8 +637,11 @@ class Game {
       const a = pick(av);
       return { x: a.x + 2, y: a.y + 2 };
     }
+    const mine = d.sp.diet === 'carn' ? 'carn' : 'herb', other = mine === 'carn' ? 'herb' : 'carn';
     const ok = (reg) => {
       if (!reg || reg.public || reg.size < 12 || reg.size > 1200) return false;
+      // the player marked this paddock for the other diet by giving it only that kind of feeder
+      if (reg.feeders && reg.feeders[other].length && !reg.feeders[mine].length) return false;
       for (const o of this.dinos) {
         if (o === d || o.carried || o.dead) continue;
         if (w.region[w.idx(o.tx, o.ty)] !== reg.id) continue;
@@ -640,7 +665,8 @@ class Game {
     }
     const home = w.regionAt(d.home.x, d.home.y);
     if (ok(home)) return pickTile(home);
-    const cands = w.regions.filter(ok).sort((a, b) => b.size - a.size);
+    const fed = (reg) => (reg.feeders && reg.feeders[mine].length ? 1 : 0);
+    const cands = w.regions.filter(ok).sort((a, b) => fed(b) - fed(a) || b.size - a.size);
     return cands.length ? pickTile(cands[0]) : null;
   }
 
@@ -660,6 +686,7 @@ class Game {
     this.powerT -= dt;
     if (w.powerDirty || this.powerT <= 0) { w.computePower(this); this.powerT = 1; }
     if (w.regionsDirty) { w.computeRegions(); this.updateLoose(); }
+    if (this.pendingFences && this.pendingFences.length) this.buildPendingFences(dt);
 
     // eggs
     for (const e of this.eggs) {

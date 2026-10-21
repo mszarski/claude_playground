@@ -38,6 +38,7 @@ const tick = (ok, text) => `${ok ? '✓' : '○'} ${text}`;
 
 const CHAPTERS = {
   c1: {
+    endDay: 15,
     chapter: 1, name: 'Opening Season', size: 'small', difficulty: 'normal', hints: true,
     blurb: 'Hammond has the island, the money and a dream. Build the park from nothing and prove people will come.',
     objective: 'Reach 2 stars, have 120 guests in the park at once and $600,000 in the bank, by Day 15',
@@ -53,6 +54,7 @@ const CHAPTERS = {
     medalText: 'Gold: by Day 7 · Silver: by Day 10',
   },
   c2: {
+    endDay: 12,
     chapter: 2, name: 'Clever Girls', size: 'medium', difficulty: 'normal',
     blurb: 'The board wants the raptors on show. Muldoon wants them shot. Exhibit a pack and put on raptor shows without losing control.',
     objective: 'Exhibit 3 raptors and hold 10 raptor shows by Day 12, with no more than 4 escapes',
@@ -78,9 +80,10 @@ const CHAPTERS = {
     medalText: 'Gold: no escapes · Silver: 2 or fewer',
   },
   c3: {
+    endDay: 26,
     chapter: 3, name: 'Monsoon', size: 'medium', difficulty: 'normal',
-    blurb: 'Storm season. A storm rolls in every other day. Keep the money coming and the guests happy anyway.',
-    objective: 'Have $600,000 in the bank and reputation 50+ by Day 26',
+    blurb: 'Storm season. A storm rolls in every other day and empties the park. Grow anyway: every dollar guests spend counts, whatever you spend on building.',
+    objective: 'Earn $250,000 from guests (tickets, shops and rides) and keep reputation 50+, by Day 26',
     setup(g) {
       g.money = 300000;
       const P = buildStarterPark(g, { staff: true });
@@ -91,18 +94,20 @@ const CHAPTERS = {
       g.time = 14 * 24 + 7.5; g.lastDay = g.day; g.events.nextDay = g.day + 2;
       applyPerks(g, 'c3');
       g.scenarioState = { lastStorm: g.day };
+      g.stats.guestIncome = 0;
     },
     tick(g) { if (g.day >= g.scenarioState.lastStorm + 2 && g.hour >= 10) { g.scenarioState.lastStorm = g.day; g.events.trigger('storm'); } },
     check(g) {
-      if (g.money >= 600000 && g.reputation >= 50) return 'win';
+      if ((g.stats.guestIncome || 0) >= 250000 && g.reputation >= 50) return 'win';
       if (g.day > 26) return 'lose';
       return null;
     },
-    progress(g) { return [tick(g.money >= 600000, `${fmtMoney(g.money)} / $600k`), tick(g.reputation >= 50, `Rep ${Math.round(g.reputation)}/50`), `Day ${g.day}/26`].join(' · '); },
-    medal(g) { return g.day <= 21 ? 'gold' : g.day <= 23 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 21 · Silver: by Day 23',
+    progress(g) { return [tick((g.stats.guestIncome || 0) >= 250000, `Earned ${fmtMoney(g.stats.guestIncome || 0)} / $250k`), tick(g.reputation >= 50, `Rep ${Math.round(g.reputation)}/50`), `Day ${g.day}/26`].join(' · '); },
+    medal(g) { return g.day <= 23 ? 'gold' : g.day <= 25 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 23 · Silver: by Day 25',
   },
   c4: {
+    endDay: 18,
     chapter: 4, name: 'Site B', size: 'medium', difficulty: 'normal',
     blurb: 'InGen\'s abandoned breeding island. The animals have been roaming free for years. Round them up and open a real park.',
     objective: 'Contain every dinosaur and reach 3 stars by Day 18',

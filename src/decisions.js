@@ -21,12 +21,14 @@ const MODS = {
 // unless the contract sets passOnDeadline (the "nothing went wrong" kind).
 const CONTRACTS = {
   trex_deal: {
+    term: 7, // days until the payback comes due
     label: () => 'Investors: exhibit a T. rex',
     check: (g) => g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried) ? 'win' : null,
     win: (g) => { g.earn(60000, 'grants'); g.reputation = Math.min(100, g.reputation + 6); g.log('The investors are thrilled with your T. rex. Bonus: +$60k', 'good', null, true); },
     fail: (g) => { g.spend(250000, 'fines'); g.log('No T. rex by the deadline. The investors claw back $250k.', 'bad', null, true); },
   },
   species_deal: {
+    term: 6, // days until the payback comes due
     label: (c) => `Board: exhibit ${c.data.n} species`,
     check: (g, c) => g.speciesCount() >= c.data.n ? 'win' : null,
     win: (g) => { g.earn(60000, 'grants'); g.reputation = Math.min(100, g.reputation + 5); g.log('The board is delighted with the new exhibits: +$60k', 'good', null, true); },
@@ -193,6 +195,7 @@ const DECISIONS = {
     ],
   },
   hammond: {
+    term: 10, // days until the payback comes due
     from: 'John Hammond', icon: '🎩',
     prep: (g) => g.stars === 3 ? {} : null,
     text: (g) => `"Spare no expense!" Hammond wires <b>$200,000</b> of his own money. He expects <b>4 stars</b> by Day ${g.day + 10}, and he'll be very disappointed otherwise (<b>−15 reputation</b>).`,
@@ -297,6 +300,8 @@ const DecisionMixin = {
     for (const [id, def] of Object.entries(DECISIONS)) {
       if (this.seenDecisions[id] !== undefined && this.day - this.seenDecisions[id] < 12) continue;
       if ((this.contracts || []).some((c) => c.id === id)) continue;
+      // a deal whose payback would come due after a timed chapter ends is a free lunch: don't offer it
+      if (def.term && this.scenario && SCENARIOS[this.scenario].endDay && this.day + def.term > SCENARIOS[this.scenario].endDay) continue;
       const p = def.prep(this);
       if (p) cands.push({ id, params: p });
     }
