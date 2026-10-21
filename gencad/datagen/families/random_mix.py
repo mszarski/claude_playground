@@ -77,16 +77,19 @@ def try_seg(w, seg):
 
 
 # ----------------------------------------------------------------------------------------------- geometry queries
-class Classifier:
-    def __init__(self, shape):
-        from OCP.BRepClass3d import BRepClass3d_SolidClassifier
-        self.c = BRepClass3d_SolidClassifier(shape.wrapped)
+class Rays:
+    """Ray casting against the solid: depths at which a line from p along -n crosses the boundary."""
 
-    def inside(self, p):
-        from OCP.gp import gp_Pnt
-        from OCP.TopAbs import TopAbs_OUT
-        self.c.Perform(gp_Pnt(*p), 1e-6)
-        return self.c.State() != TopAbs_OUT
+    def __init__(self, shape):
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+        from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
+        self.I = IntCurvesFace_ShapeIntersector()
+        self.I.Load(shape.wrapped, 1e-6)
+        self.P, self.D, self.L = gp_Pnt, gp_Dir, gp_Lin
+
+    def hits(self, p, n, tmax, tmin=0.3):
+        self.I.Perform(self.L(self.P(p[0], p[1], p[2]), self.D(-n[0], -n[1], -n[2])), -1.0, tmax)
+        return sorted(t for t in (self.I.WParameter(i) for i in range(1, self.I.NbPnt() + 1)) if t > tmin)
 
 
 class _BB:
@@ -212,44 +215,29 @@ def extent_below(shape, fi):
     return (fi.level - lo) if fi.sg > 0 else (hi - fi.level)
 
 
-def clean_cut(cl, pts_world, fi, depth, blind, floor=1.5, step=None):
+def clean_cut(rays, pts_world, fi, depth, blind, floor=1.5, tol=0.8):
     """A cut of the given outline (world points on the face, already grown by a margin) going `depth` behind the
-    face: at every sampled depth all outline points share one inside/outside state (the cut never grazes a wall)
-    and, if blind, the solid continues `floor` below its bottom (the pocket has a floor)."""
+    face. Blind: the material is continuous under every point down to `floor` below the bottom (a floor, no
+    break-through). Through: every point crosses the same walls at the same depths (the cut never grazes a wall)."""
     n = fi.n
-    nd = max(3, min(16, int(depth / (step or 3.0))))
-    ts = [0.4 + (depth - 0.8) * k / (nd - 1) for k in range(nd)] if depth > 1 else [depth / 2]
-    for t in ts:
-        st = None
-        for p in pts_world:
-            q = (p[0] - n[0] * t, p[1] - n[1] * t, p[2] - n[2] * t)
-            s = cl.inside(q)
-            if st is None:
-                st = s
-            elif s != st:
-                return False
     if blind:
-        t = depth + floor
-        for p in pts_world:
-            if not cl.inside((p[0] - n[0] * t, p[1] - n[1] * t, p[2] - n[2] * t)):
-                return False
+        return all(not rays.hits(p, n, depth + floor) for p in pts_world)
+    ref = None
+    for p in pts_world:
+        h = rays.hits(p, n, depth + 1)
+        if not h:
+            return False
+        if ref is None:
+            ref = h
+        elif len(h) != len(ref) or any(abs(x - y) > tol for x, y in zip(h, ref)):
+            return False
     return True
 
 
-def material_depth(cl, fi, p, maxd):
+def material_depth(rays, fi, p, maxd):
     """Depth of material directly behind point p on face fi."""
-    n = fi.n
-    t = 0.3
-    while t < maxd:
-        if not cl.inside((p[0] - n[0] * t, p[1] - n[1] * t, p[2] - n[2] * t)):
-            if t < 1:
-                return t
-            t -= 1.4
-            while cl.inside((p[0] - n[0] * t, p[1] - n[1] * t, p[2] - n[2] * t)):
-                t += 0.35
-            return t
-        t += 1.5
-    return maxd
+    h = rays.hits(p, fi.n, maxd)
+    return h[0] if h else maxd
 
 
 def ring(c, r, k=12, plane=None):
@@ -578,7 +566,7 @@ def build_bodies(rng, hard):
     part = Part(emit)
     if not part.build():
         return None
-    nb = rng.choice([1, 1, 2, 2, 3, 4]) if not hard else rng.choice([2, 2, 3, 3, 4, 4])
+    nb = rng.choice([1, 1, 2, 2, 3, 4]) if not hard else rng.choice([2, 2, 3, 3, 3, 4])
     rectish = kind in ("box", "rect", "rrect")
     used = 1
     if kind == "revolve":
@@ -647,7 +635,7 @@ def op_holes(rng, st, T):
         return None
     wpl = ev(w, sel + ".workplane()")
     plane = wpl.plane
-    cl = Classifier(s)
+    cl = Rays(s)
     below = extent_below(s, fi)
     mw = fi.min_width()
     d = round(min(T * rng.uniform(0.035, 0.1), mw * rng.uniform(0.25, 0.55)) * 2) / 2
@@ -734,7 +722,7 @@ def op_holes(rng, st, T):
         pts = [world(plane, q) for q in loc]
         head = ".pushPoints(" + pts_code_list(loc) + ")"
     rings = [[world(plane, (local(plane, p)[0] + u[0], local(plane, p)[1] + u[1]))
-              for u in ring((0, 0), outer / 2 + 1.2, 8)] + [p] for p in pts]
+              for u in ring((0, 0), outer / 2 + 1.2, 6)] + [p] for p in pts]
     if through and not all(clean_cut(cl, rp, fi, below, False) for rp in rings):
         through = False
     if through:
@@ -775,7 +763,7 @@ def op_pocket(rng, st, T):
     if sel is None:
         return None
     plane = ev(w, sel + ".workplane()").plane
-    cl = Classifier(s)
+    cl = Rays(s)
     below = extent_below(s, fi)
     mw = fi.min_width()
     k = rng.choice(["rect", "rrect", "circle", "slot", "slot"])
@@ -976,7 +964,7 @@ def generate_mix(rng, hard=False):
         bb0 = fbb(part.s)
         T = max(bb0.xlen, bb0.ylen)
         st = {"w": part.w, "s": part.s, "simple": single and kind in ("box", "rect", "ngon", "outline")}
-        nops = rng.choice([0, 1, 2, 2, 3, 3, 4, 4]) if not hard else rng.choices([3, 4, 5, 6, 7], [3, 3, 2, 1.5, 1])[0]
+        nops = rng.choice([0, 1, 2, 2, 3, 3, 4, 4]) if not hard else rng.choices([3, 4, 5, 6, 7], [4, 3, 2, 1, 1])[0]
         segs = []
         if single and kind in ("box", "rect", "rrect", "circle", "ngon", "outline") and rng.random() < 0.3:
             out = op_shell(rng, st, T)

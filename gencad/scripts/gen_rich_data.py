@@ -28,6 +28,25 @@ def seed_of(*parts):
     return int.from_bytes(hashlib.sha256("|".join(map(str, parts)).encode()).digest()[:8], "little")
 
 
+def usable_cpus():
+    """CPUs we may actually use: the cgroup CPU quota if set (containers report the host's CPUs in os.cpu_count(),
+    and oversubscribing them makes every part time out), else the affinity mask."""
+    try:
+        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()
+        if quota != "max":
+            return max(1, int(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    try:
+        q = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+        p = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+        if q > 0:
+            return max(1, q // p)
+    except (OSError, ValueError):
+        pass
+    return len(os.sched_getaffinity(0))
+
+
 def make(args):
     """Worker: generate one part for (split, family, shard, k); check; render. -> record or None."""
     split, fam, shard, k, out = args
@@ -55,10 +74,12 @@ def main():
     ap.add_argument("--per_shard", type=int, default=1000, help="attempted parts per shard (failures are dropped)")
     ap.add_argument("--families", default=DEFAULT)
     ap.add_argument("--exclude", default="")
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
-    ap.add_argument("--timeout", type=float, default=30.0)
+    ap.add_argument("--workers", type=int, default=None, help="default: CPUs this process may use (cgroup quota)")
+    ap.add_argument("--timeout", type=float, default=60.0)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
+    a.workers = a.workers or usable_cpus()
+    print(f"[gen] {a.workers} workers (os.cpu_count() says {os.cpu_count()})", flush=True)
     import pandas as pd
     from pebble import ProcessPool
     fams = {k: float(v) for k, v in (kv.split("=") for kv in a.families.split(","))}
