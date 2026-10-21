@@ -50,10 +50,10 @@ def _bore(s, bore, rng):
 
 def _spur(rng, sprocket=False):
     OD = rng.uniform(100, 200)
-    n = rng.randint(9, 40) if sprocket else rng.randint(8, 40)
+    n = rng.randint(9, 40) if sprocket else rng.randint(10, 40)
     if sprocket:
-        p = 2 * (OD / 2) * math.sin(math.pi / n) / 1.25        # chain pitch (tips ~0.3p above the pitch circle)
-        Rp = p / (2 * math.sin(math.pi / n))
+        Rp = OD / 2 / (1 + 0.6 * math.sin(math.pi / n))      # tips ~0.3 pitch above the pitch circle
+        p = 2 * Rp * math.sin(math.pi / n)                     # chain pitch
         dr = 0.62 * p
         Rr = Rp - dr / 2
         Rt = OD / 2
@@ -74,16 +74,16 @@ def _spur(rng, sprocket=False):
         m = OD / (n + 2)
         sk, Rr, Rt = _tooth_sketch(n, m, rng, fillet=n <= 16 and rng.random() < 0.6)
         b = rd(OD * rng.uniform(0.08, 0.3))
-    web_in = Rr - 2.2 * m if not sprocket else Rr - 0.6 * dr      # inside of the toothed rim
+    web_in = max(Rr - 2.2 * m, 0.6 * Rr) if not sprocket else Rr - 0.6 * dr      # inside of the toothed rim
     hub_r = OD / 2 * rng.uniform(0.18, 0.32)
-    hub_r = min(hub_r, web_in * 0.6)
+    hub_r = min(hub_r, web_in * 0.75)
     bore = hub_r * rng.uniform(0.75, 1.1)
     hub = rng.random() < (0.85 if sprocket else 0.7)
     hub_len = rd(b * rng.uniform(1.6, 3.0)) if hub else b
     if sprocket:
         hub_len = rd(max(hub_len, OD * 0.12))
     if not hub:
-        bore = min(bore, web_in * 0.7)
+        bore = Rr * rng.uniform(0.35, 0.7)
     sym = rng.random() < 0.5 and not sprocket
     # z layout: gear from zg to zg + b; hub from zh to zh + hub_len
     if not hub:

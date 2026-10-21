@@ -20,7 +20,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 DEFAULT = ("flange=1,l_bracket=1,u_bracket=1,gusset_mount=1,mount_plate=1,pocket_plate=1,bar_link=1,stepped_shaft=1,"
-           "pulley=1,bushing=1,enclosure=1,bearing_block=1,motor_mount=1,hex_hardware=1,knob_handle=1,gear_like=1,"
+           "pulley=1,bushing=1,enclosure=1,bearing_block=1,motor_mount=1,hex_hardware=1,knob_handle=1,gear_like=0.5,"
            "extrusion_profile=1,bent_sheet=1,rib_panel=1,random_mix=3,random_mix_hard=2")
 
 

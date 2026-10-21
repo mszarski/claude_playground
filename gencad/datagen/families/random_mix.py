@@ -51,13 +51,13 @@ def solid_of(w):
     return objs[0]
 
 
-def good(w):
-    """The workplane holds exactly one valid solid."""
+def good(w, full=True):
+    """The workplane holds exactly one (valid, if full) solid."""
     try:
         s = solid_of(w)
         if s is None:
             return None
-        if len(s.Solids()) != 1 or not s.isValid() or s.Volume() <= 0:
+        if len(s.Solids()) != 1 or (full and not s.isValid()) or s.Volume() <= 0:
             return None
         return s
     except Exception:  # noqa: BLE001
@@ -65,11 +65,12 @@ def good(w):
 
 
 def try_seg(w, seg):
+    """Apply a chain segment; validity (BRepCheck) of the final part is checked once at the end."""
     try:
         w2 = ev(w, seg)
     except Exception:  # noqa: BLE001
         return None, None
-    s = good(w2)
+    s = good(w2, full=False)
     if s is None:
         return None, None
     return w2, s
@@ -241,8 +242,13 @@ def material_depth(cl, fi, p, maxd):
     t = 0.3
     while t < maxd:
         if not cl.inside((p[0] - n[0] * t, p[1] - n[1] * t, p[2] - n[2] * t)):
+            if t < 1:
+                return t
+            t -= 1.4
+            while cl.inside((p[0] - n[0] * t, p[1] - n[1] * t, p[2] - n[2] * t)):
+                t += 0.35
             return t
-        t += 0.7
+        t += 1.5
     return maxd
 
 
@@ -596,8 +602,8 @@ def build_bodies(rng, hard):
     # recentre on the bounding-box centre and rebuild
     bb = fbb(part.s)
     dx, dy, dz = -round((bb.xmin + bb.xmax) / 2), -round((bb.ymin + bb.ymax) / 2), -round((bb.zmin + bb.zmax) / 2)
-    if not part.build(dx, dy, dz):
-        return None
+    s = part.s.translate(cq.Vector(dx, dy, dz))       # same as rebuilding the shifted code
+    part.w, part.s = cq.Workplane("XY").add(s), s
     bb = fbb(part.s)
     side = max(bb.xlen, bb.ylen, bb.zlen)
     if not 100 <= side <= 205:
@@ -654,11 +660,13 @@ def op_holes(rng, st, T):
     through = rng.random() < 0.65
     # placement pattern
     pat = rng.choice(["single", "rarray", "rarray", "polar", "push"])
-    c = fi.sample(rng, 0, centre_first=True) if pat != "push" else None
+    bb = fi.bb
+    c = ((bb.xmin + bb.xmax) / 2, (bb.ymin + bb.ymax) / 2, (bb.zmin + bb.zmax) / 2)   # pattern centre
     pts = []
     head = ""
+    need = outer / 2 + mrg
     if pat == "single":
-        p = fi.sample(rng, outer / 2 + mrg, centre_first=rng.random() < 0.6)
+        p = fi.sample(rng, need, centre_first=rng.random() < 0.6)
         if p is None:
             return None
         q = local(plane, p)
@@ -667,50 +675,45 @@ def op_holes(rng, st, T):
         if head:
             pts = [world(plane, (r1(q[0]), r1(q[1])))]
     elif pat == "rarray":
-        if c is None:
-            return None
-        bb = fi.bb
-        ext = sorted([(bb.xlen, 0), (bb.ylen, 1), (bb.zlen, 2)])[1:]
-        # local extents along the workplane x/y
         lx = abs(plane.xDir.x) * bb.xlen + abs(plane.xDir.y) * bb.ylen + abs(plane.xDir.z) * bb.zlen
         ly = abs(plane.yDir.x) * bb.xlen + abs(plane.yDir.y) * bb.ylen + abs(plane.yDir.z) * bb.zlen
-        nx, ny = rng.choice([(2, 2), (2, 2), (2, 1), (1, 2), (3, 2), (2, 3), (3, 1), (4, 1), (1, 3)])
-        for _ in range(4):
-            sx = r1(lx * rng.uniform(0.4, 0.8) / max(nx - 1, 1)) if nx > 1 else 1
-            sy = r1(ly * rng.uniform(0.4, 0.8) / max(ny - 1, 1)) if ny > 1 else 1
-            q0 = local(plane, c)
-            q0 = (r1(q0[0]), r1(q0[1]))
+        q0 = local(plane, c)
+        q0 = (r1(q0[0]), r1(q0[1]))
+        for _ in range(8):
+            nx, ny = rng.choice([(2, 2), (2, 2), (2, 1), (1, 2), (3, 2), (2, 3), (3, 1), (4, 1), (1, 3)])
+            sx = r1((lx - 2 * need) * rng.uniform(0.5, 1.0) / max(nx - 1, 1)) if nx > 1 else 1
+            sy = r1((ly - 2 * need) * rng.uniform(0.5, 1.0) / max(ny - 1, 1)) if ny > 1 else 1
+            if (nx > 1 and sx < outer + mrg) or (ny > 1 and sy < outer + mrg):
+                continue
             loc = [(q0[0] + (i - (nx - 1) / 2) * sx, q0[1] + (j - (ny - 1) / 2) * sy) for i in range(nx)
                    for j in range(ny)]
             pts = [world(plane, q) for q in loc]
-            if all(fi.clearance(p) >= outer / 2 + mrg for p in pts):
+            if all(fi.clearance(p) >= need for p in pts):
                 break
             pts = []
         if not pts:
             return None
-        del ext
         head = (f".center({f(q0[0])},{f(q0[1])})" if (f(q0[0]), f(q0[1])) != ("0", "0") else "") + \
             f".rarray({f(sx)},{f(sy)},{nx},{ny})"
     elif pat == "polar":
-        if c is None:
-            return None
         q0 = local(plane, c)
         q0 = (r1(q0[0]), r1(q0[1]))
         n = rng.choice([3, 4, 4, 5, 6, 6, 8])
         a0 = rng.choice([0, 0, 45, 90, 30])
-        pts = []
-        for _ in range(4):
-            R = r1(mw * rng.uniform(0.4, 1.0))
-            if R < outer:
+        rmax = max(bb.xlen, bb.ylen, bb.zlen) / 2 - need
+        cands = []
+        for k in range(10):
+            R = r1(outer + (rmax - outer) * (k + 0.5) / 10)
+            if R < outer or 2 * R * math.sin(math.pi / n) <= outer + mrg:
                 continue
             loc = [(q0[0] + R * math.cos(math.radians(a0 + 360 * i / n)),
                     q0[1] + R * math.sin(math.radians(a0 + 360 * i / n))) for i in range(n)]
-            pts = [world(plane, q) for q in loc]
-            if all(fi.clearance(p) >= outer / 2 + mrg for p in pts) and 2 * R * math.sin(math.pi / n) > outer + mrg:
-                break
-            pts = []
-        if not pts:
+            pw = [world(plane, q) for q in loc]
+            if all(fi.clearance(p) >= need for p in pw):
+                cands.append((R, pw))
+        if not cands:
             return None
+        R, pts = rng.choice(cands)
         head = (f".center({f(q0[0])},{f(q0[1])})" if (f(q0[0]), f(q0[1])) != ("0", "0") else "") + \
             f".polarArray({f(R)},{a0},360,{n})"
     else:
@@ -730,7 +733,10 @@ def op_holes(rng, st, T):
             return None
         pts = [world(plane, q) for q in loc]
         head = ".pushPoints(" + pts_code_list(loc) + ")"
-    # depth
+    rings = [[world(plane, (local(plane, p)[0] + u[0], local(plane, p)[1] + u[1]))
+              for u in ring((0, 0), outer / 2 + 1.2, 8)] + [p] for p in pts]
+    if through and not all(clean_cut(cl, rp, fi, below, False) for rp in rings):
+        through = False
     if through:
         depth = below
         dtxt = ""
@@ -740,6 +746,8 @@ def op_holes(rng, st, T):
             return None
         depth = r1(thick * rng.uniform(0.4, 0.75))
         dtxt = f",{f(depth)}"
+        if not all(clean_cut(cl, rp, fi, depth, True) for rp in rings):
+            return None
     if htype == "hole":
         call = f".hole({f(d)}{dtxt})"
     elif htype == "cbore":
@@ -750,11 +758,6 @@ def op_holes(rng, st, T):
             call = f".cboreHole({f(d)},{f(d * rng.uniform(1.5, 1.9))},{f(cd)}{dtxt})"
     else:
         call = f".cskHole({f(d)},{f(d * rng.uniform(1.6, 2.0))},{rng.choice([82, 90, 90, 100])}{dtxt})"
-    # every hole cuts cleanly
-    for p in pts:
-        if not clean_cut(cl, [world(plane, (local(plane, p)[0] + u[0], local(plane, p)[1] + u[1]))
-                              for u in ring((0, 0), outer / 2 + 1.2, 8)] + [p], fi, depth, not through):
-            return None
     return sel + ".workplane()" + head + call
 
 
@@ -1007,6 +1010,13 @@ def generate_mix(rng, hard=False):
         bb = fbb(st["s"])
         cen = ((bb.xmin + bb.xmax) / 2, (bb.ymin + bb.ymax) / 2, (bb.zmin + bb.zmax) / 2)
         if max(abs(c) for c in cen) > 10:
+            continue
+        while segs and not st["s"].isValid():        # rare: drop finishing ops from the end until valid
+            segs.pop()
+            st["s"] = good(ev_expr(body_code + "".join(segs)), full=False)
+            if st["s"] is None:
+                break
+        if st["s"] is None or (hard and len(segs) < 3):
             continue
         return "import cadquery as cq\nr=" + body_code + "".join(segs) + orient(rng)
     return "import cadquery as cq\nr=cq.Workplane('XY').box(120,80,20)" + orient(rng)

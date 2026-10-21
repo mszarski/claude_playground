@@ -42,7 +42,8 @@ def generate(rng):
         if m == 0 and rng.random() < 0.6:                    # flush wall: round the outer vertical corners
             pc = [(sx * A / 2, sy * B / 2) for sx in (-1, 1) for sy in (-1, 1)]
             zc = z0 + (T + h) / 2
-            s += f".edges(near({','.join(f'({f(x)},{f(y)},{f(zc)})' for x, y in pc)})).fillet({f(w * rng.uniform(0.5, 0.9))})"
+            rc = round(w * rng.uniform(0.5, 0.9), 1)
+            s += f".edges(near({','.join(f'({f(x)},{f(y)},{f(zc)})' for x, y in pc)})).fillet({f(rc)})"
         ix, iy = A - 2 * w, B - 2 * w                        # inner pocket
         lx, ly = A - w + 2 * hr * tan_t, B - w + 2 * hr * tan_t   # ribs run into the wall (drafted ends too)
     else:
@@ -95,15 +96,19 @@ def generate(rng):
             hb = hr * rng.uniform(1.0, 1.3)
     # fillets at the rib / wall roots (floor faces = second horizontal level from the bottom); bosses come after
     top_z = max(h if wall else 0, hr, hb if bosses else 0)
-    if (nx or ny or wall) and rng.random() < 0.55:
+    edge_ribs = not wall and lx >= Lx - 0.01                 # ribs running out to the plate edge
+    if (nx or ny or wall) and m == 0 and not edge_ribs and rng.random() < 0.6:
         rf = rt * rng.uniform(0.3, 0.7)
         if m > 0 or not wall:
             rf = min(rf, 0.6 * T)                             # plate's outer top edge is in that set too
         s += f".faces('>Z[1]').fillet({f(rf)})"
     if bosses:
         s += f".pushPoints({_pts(bosses)}).circle({f(db / 2)}).extrude({f(hb)})"
-    if rng.random() < 0.4:
-        s += f".faces('<Z').chamfer({f(T * rng.uniform(0.15, 0.35))})"
+    ch = T * rng.uniform(0.15, 0.35)
+    if rc:
+        ch = min(ch, 0.6 * rc)
+    if rng.random() < 0.4 and ch >= 0.5:
+        s += f".faces('<Z').chamfer({f(ch)})"
     # holes through the bosses
     if bosses:
         dh = db * rng.uniform(0.35, 0.55)
