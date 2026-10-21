@@ -137,20 +137,20 @@ const CHAPTERS = {
   c5: {
     chapter: 5, name: 'Jurassic World', size: 'large', difficulty: 'normal',
     blurb: 'The big one. A whole island, every attraction and the whole world watching. Build the greatest park on Earth.',
-    objective: 'Reach 5 stars with a T. rex on show, a Mosasaur Lagoon and 250 guests at once',
+    objective: 'Reach 5 stars with a T. rex on show, a Mosasaur Lagoon and 400 guests at once',
     setup(g) { g.money = 800000; applyPerks(g, 'c5'); g.scenarioState = { peak: 0 }; },
     tick(g) { g.scenarioState.peak = Math.max(g.scenarioState.peak || 0, g.guests.length); },
     check(g) {
       const rex = g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried);
-      if (g.stars >= 5 && rex && g.hasBuilding('lagoon') && (g.scenarioState.peak || 0) >= 250) return 'win';
+      if (g.stars >= 5 && rex && g.hasBuilding('lagoon') && (g.scenarioState.peak || 0) >= 400) return 'win';
       return null;
     },
     progress(g) {
       const rex = g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried);
-      return [tick(g.stars >= 5, `★ ${g.stars}/5`), tick(rex, 'T. rex'), tick(g.hasBuilding('lagoon'), 'Lagoon'), tick((g.scenarioState.peak || 0) >= 250, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/250`), `Day ${g.day}`].join(' · ');
+      return [tick(g.stars >= 5, `★ ${g.stars}/5`), tick(rex, 'T. rex'), tick(g.hasBuilding('lagoon'), 'Lagoon'), tick((g.scenarioState.peak || 0) >= 400, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/400`), `Day ${g.day}`].join(' · ');
     },
-    medal(g) { return g.day <= 35 ? 'gold' : g.day <= 50 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 35 · Silver: by Day 50',
+    medal(g) { return g.day <= 40 ? 'gold' : g.day <= 55 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 40 · Silver: by Day 55',
   },
 };
 for (const [k, c] of Object.entries(CHAPTERS)) SCENARIOS[k] = Object.assign({ campaign: true, decisions: true }, c);
