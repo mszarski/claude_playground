@@ -104,9 +104,23 @@ def compose_views(images, side=SIDE, grid_side=None):
 
 
 def _messages(image, prompt):
-    content = [{"type": "image"}] if image is not None else []
+    """image: None, one PIL image, or a list of them (input first; a revision turn adds the attempt's render)."""
+    images = [] if image is None else (image if isinstance(image, list) else [image])
+    content = [{"type": "image"} for _ in images]
     content.append({"type": "text", "text": prompt if prompt else INSTRUCTION})
     return [{"role": "user", "content": content}]
+
+
+def revision_text(prompt, attempt, error=None):
+    """Prompt of a revision turn (build-inspect-fix): the task, the previous program, and what happened when it was
+    built: the build error, or (error None) its render, given as the second image with the same cameras as the input."""
+    head = (prompt + "\n\n") if prompt else INSTRUCTION + "\n\n"
+    if error:
+        result = f"It failed to build: {error}"
+    else:
+        result = "The second image shows what it builds, rendered with the same cameras as the first image."
+    return (f"{head}A previous attempt:\n{attempt}\n\n{result}\n"
+            "Write the corrected program (or repeat it if it is already right).")
 
 
 def encode_batch(processor, images, prompts, targets=None):
@@ -121,7 +135,7 @@ def encode_batch(processor, images, prompts, targets=None):
             s += targets[k] + tok.eos_token             # "<|im_end|>" closes the answer
         texts.append(s)
         if im is not None:
-            ims.append(im)
+            ims.extend(im if isinstance(im, list) else [im])
     enc = processor(text=texts, images=ims or None, return_tensors="pt", padding=True)
     if targets is not None:
         labels = enc["input_ids"].clone()

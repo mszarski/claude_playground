@@ -159,12 +159,26 @@ case "$STAGE" in
     need_vllm
     python train_vlm_grpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" ${STEPS:+--steps $STEPS} "$@" ;;
 
+  revise)     # build-inspect-fix inference (scripts/revise_vllm.py) -> results/$RUN/revise.pkl; INIT = model dir
+    need renders
+    if [[ "${RICH_TEST:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/test*.tar; do tar -xf "$t" -C data/rich; done; fi
+    need_cq
+    need_vllm
+    python scripts/revise_vllm.py --data data --model "${INIT:?set INIT=<model dir>}" \
+        --uids_from results/baselines_vlm_final/preds.pkl --out "results/$RUN/revise.pkl" "$@" ;;
+
   vllmpred)   # greedy test predictions with vLLM (scripts/predict_vllm.py) -> results/$RUN/preds.pkl; INIT = model dir
     need renders            # RICH_TEST=1: also unpack the rich test shards (pass --rich data/rich/test --out ...)
     if [[ "${RICH_TEST:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/test*.tar; do tar -xf "$t" -C data/rich; done; fi
     need_vllm
     python scripts/predict_vllm.py --data data --model "${INIT:?set INIT=<model dir>}" \
         --uids_from results/baselines_vlm_final/preds.pkl --out "results/$RUN/preds.pkl" "$@" ;;
+
+  revdata)    # revision-turn training data from sample_rft chunks (scripts/build_revision.py) -> /work/data/revision.tar
+    need_cq
+    cp /work/data/deepcad_cq.parquet data/
+    python scripts/build_revision.py --chunks "${CHUNKS:-results/rft_v1}" --out data/revision "$@"
+    tar -cf /work/data/revision.tar -C data revision && ls -la /work/data/revision.tar ;;
 
   richgen)    # rich-feature parts (datagen/families) -> /work/data/rich/<split>_<shard>.tar (scripts/gen_rich_data.py)
     need_cq

@@ -25,7 +25,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
-from mm.vlm_cad import VLMCad, compose_views, save_config
+from mm.vlm_cad import VLMCad, compose_views, revision_text, save_config
 from train_vlm_cad import Collate, load_views
 
 IMAGE_MODES = ("view1", "view4")
@@ -44,6 +44,12 @@ class Samples(Dataset):
 
     def __getitem__(self, i):
         stem, code, uid = self.items[i][:3]
+        if len(self.items[i]) > 4:                    # revision turn: input + attempt render (or its build error)
+            (views, prompt), rev = self.items[i][3], self.items[i][4]
+            image = compose_views([load_views("", stem, [v])[0] for v in views])
+            if rev["attempt_stem"]:
+                image = [image, compose_views([load_views("", rev["attempt_stem"], [v])[0] for v in views])]
+            return image, revision_text(prompt, rev["attempt"], rev["error"]), code
         if len(self.items[i]) > 3:
             views, prompt = self.items[i][3]
             return compose_views([load_views("", stem, [v])[0] for v in views]), prompt, code
@@ -148,6 +154,8 @@ def main():
     ap.add_argument("--recode_renders", default="data/recode_renders")
     ap.add_argument("--min_fidelity", type=float, default=0.95, help="drop DeepCAD conversions below this IoU")
     ap.add_argument("--deepcad_p", type=float, default=0.3, help="share of samples drawn from DeepCAD")
+    ap.add_argument("--revision", default=None, help="revision-turn data dir (scripts/build_revision.py)")
+    ap.add_argument("--revision_p", type=float, default=0.15, help="share of samples drawn from --revision")
     ap.add_argument("--rich", default=None, help="rich-feature shards dir (scripts/gen_rich_data.py: <dir>/<shard>/)")
     ap.add_argument("--rich_p", type=float, default=0.4, help="share of samples drawn from --rich")
     ap.add_argument("--rich_max_chars", type=int, default=3000)
@@ -237,14 +245,30 @@ def main():
                 items_rich += [(os.path.join(a.rich, sh, "renders", u), c, None) for u, c in zip(df.uid, df.code)]
         items_rich = items_rich[: a.max_items] if a.max_items else items_rich
         print(f"[data] rich parts {len(items_rich)} from {a.rich}, share {a.rich_p}", flush=True)
+    items_rev, w_rev = [], []
+    if a.revision:
+        rv = pd.read_parquet(os.path.join(a.revision, "revision.parquet"))
+        rv = rv[rv.target.str.len() <= a.max_code_chars]
+        n_kind = rv.kind.map(lambda k: "keep" if k == "keep" else "fix").value_counts().to_dict()
+        for row in rv.itertuples():
+            rev = {"attempt": row.attempt, "error": row.error if isinstance(row.error, str) else None,
+                   "attempt_stem": os.path.join(a.revision, row.attempt_stem) if isinstance(row.attempt_stem, str)
+                   else None}
+            items_rev.append((os.path.join(render_dir, row.uid), row.target, row.uid,
+                              (list(map(int, json.loads(row.views))), row.prompt or None), rev))
+            w_rev.append(1.0 / n_kind["keep" if row.kind == "keep" else "fix"])   # keep : fix = 1 : 1
+        w_rev = np.array(w_rev) / sum(w_rev)
+        print(f"[data] revision examples {len(items_rev)} ({n_kind}), share {a.revision_p}", flush=True)
     p_rft = a.rft_p if items_rft else 0.0
     p_rich = a.rich_p if items_rich else 0.0
-    rest = 1 - p_rft - p_rich
-    items = items_dc + items_rc + items_rft + items_rich
+    p_rev = a.revision_p if items_rev else 0.0
+    rest = 1 - p_rft - p_rich - p_rev
+    items = items_dc + items_rc + items_rft + items_rich + items_rev
     w = np.concatenate([np.full(len(items_dc), rest * a.deepcad_p / max(len(items_dc), 1)),
                         np.full(len(items_rc), rest * (1 - a.deepcad_p) / max(len(items_rc), 1)),
                         np.full(len(items_rft), p_rft / max(len(items_rft), 1)),
-                        np.full(len(items_rich), p_rich / max(len(items_rich), 1))])
+                        np.full(len(items_rich), p_rich / max(len(items_rich), 1)),
+                        p_rev * np.asarray(w_rev, float)])
     if items_rft:
         print(f"[data] rft targets {len(items_rft)} from {a.rft}, share {p_rft}", flush=True)
     print(f"[data] deepcad train {len(items_dc)} (of {len(dc[dc.split == 'train'])} faithful), cad-recode "
