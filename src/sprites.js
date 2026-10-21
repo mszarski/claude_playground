@@ -996,6 +996,52 @@ function buildBuildingSprites() {
     p.r(12, H - 8, 8, 2, '#5a5a5a');
   });
 
+  make('gyro', 14, (p, W, H, ctx) => {
+    // launch platform with a glass ball on the rails
+    p.r(0, H - 12, W, 10, '#8a8a84'); p.r(1, H - 11, W - 2, 2, '#b0b0a8');
+    p.r(2, H - 3, W - 4, 1, '#5a5a56');
+    p.r(4, 10, 2, H - 20, '#5a5a5a'); p.r(W - 6, 10, 2, H - 20, '#5a5a5a');
+    roofGable(p, 0, 4, W, 10, '#2a6aa8', '#4a8ac8', '#163a6a');
+    p.r(6, 0, W - 12, 6, '#1a1a1a'); p.r(7, 1, W - 14, 4, '#70b8f0');
+    drawText3(ctx, 'GYRO', 14, 1, '#0a1a2a');
+    const cx = W / 2, cy = H - 18;
+    for (let y = -7; y <= 7; y++) for (let x = -7; x <= 7; x++) {
+      const d = x * x + y * y;
+      if (d > 49) continue;
+      p.px(cx + x, cy + y, d > 36 ? '#2a4a6a' : (x < -2 && y < -2) ? '#e8f8ff' : 'rgba(150,210,240,0.85)');
+    }
+    p.r(cx - 3, cy + 1, 2, 3, '#f0c8a0'); p.r(cx + 1, cy + 1, 2, 3, '#b07850');
+  });
+
+  make('arena', 18, (p, W, H, ctx) => {
+    // sand ring with stands on three sides
+    p.r(0, 12, W, H - 12, '#5a3a1c');
+    for (let y = 14; y < 26; y += 3) p.r(2, y, W - 4, 2, y % 2 ? '#8a6a3a' : '#7a5a2e');
+    p.r(6, 24, W - 12, H - 28, '#d8c088'); p.r(8, 26, W - 16, H - 32, '#e8d09a');
+    for (let x = 10; x < W - 10; x += 5) p.px(x, H - 9, '#c8b078');
+    // crowd dots in the stands
+    const cols = ['#e04838', '#f8d040', '#70b8f0', '#f0f0f0', '#7ad04a'];
+    for (let x = 4; x < W - 4; x += 3) for (let y = 15; y < 24; y += 3) p.px(x + (y % 2), y, cols[(x * 7 + y) % 5]);
+    // banner
+    p.r(10, 0, W - 20, 10, '#2a1a0c'); p.r(11, 1, W - 22, 8, '#c8381e');
+    drawText3(ctx, 'RAPTORS', 17, 3, '#f8e060');
+    p.r(9, 0, 2, 14, '#3a2814'); p.r(W - 11, 0, 2, 14, '#3a2814');
+    // trainer podium
+    p.r(W / 2 - 3, H - 14, 6, 4, '#6a6a64');
+  });
+
+  make('feedshow', 12, (p, W, H, ctx) => {
+    // tiered wooden grandstand facing the paddock
+    for (let k = 0; k < 4; k++) { p.r(1 + k * 2, 10 + k * 6, W - 2 - k * 4, 6, k % 2 ? '#7a5a2e' : '#8a6a3a'); p.r(1 + k * 2, 15 + k * 6, W - 2 - k * 4, 1, '#3a2814'); }
+    const cols = ['#e04838', '#f8d040', '#70b8f0', '#f0f0f0'];
+    for (let x = 4; x < W - 4; x += 3) for (let k = 0; k < 3; k++) p.px(x + k, 12 + k * 6, cols[(x + k) % 4]);
+    p.r(0, 6, 2, H - 8, '#3a2814'); p.r(W - 2, 6, 2, H - 8, '#3a2814');
+    p.r(4, 0, W - 8, 7, '#2a1a0c'); p.r(5, 1, W - 10, 5, '#e8a028');
+    drawText3(ctx, 'FEED', 14, 1, '#2a1408');
+    // goat crane
+    p.r(W - 6, 2, 1, 10, '#5a5a5a'); p.r(W - 10, 2, 5, 1, '#5a5a5a'); p.r(W - 10, 3, 1, 3, '#a0a0a0');
+  });
+
   make('aviary', 12, (p, W, H, ctx) => {
     // concrete base ring
     p.r(2, H - 14, W - 4, 12, '#6a6a64'); p.r(3, H - 13, W - 6, 2, '#9a9a92');

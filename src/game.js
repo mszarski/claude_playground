@@ -38,7 +38,7 @@ class Game {
     this.money = 450000;
     this.time = 7.5; // hours since start (day 1 07:30)
     this.secPerHour = 2.5;
-    this.dinos = []; this.guests = []; this.staff = []; this.helis = []; this.eggs = []; this.jeeps = []; this.pteros = [];
+    this.dinos = []; this.guests = []; this.staff = []; this.helis = []; this.eggs = []; this.jeeps = []; this.pteros = []; this.gyros = [];
     this.particles = []; this.floats = []; this.darts = [];
     this.logs = [];
     this.reputation = 50; this.stars = 0; this.attraction = 0; this.safety = 100;
@@ -232,7 +232,7 @@ class Game {
           const def = BUILDINGS[e.type];
           if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
           if (e.type === 'helipad') this.helis.push(new Helicopter(this, b));
-          if (e.type === 'tour') { b.queue = []; b.jeepT = 0; }
+          if (e.type === 'tour' || e.type === 'gyro') { b.queue = []; b.jeepT = 0; }
           ok = true;
         }
       }
@@ -337,6 +337,7 @@ class Game {
     this.burst(b.x + b.w / 2, b.y + b.h / 2, '#8a8a84', 14);
     for (const h of this.helis) if (h.pad === b) h.dead = true;
     for (const j of this.jeeps) if (j.station === b) j.remove();
+    for (const gy of this.gyros || []) if (gy.station === b) gy.remove();
   }
   placeBuilding(type, x, y) {
     const w = this.world, def = BUILDINGS[type];
@@ -351,7 +352,7 @@ class Game {
     this.recordUndo({ kind: 'bld', id: b.id, cost: def.cost });
     if (def.staff) for (let k = 0; k < def.staffN; k++) this.staff.push(new Staff(this, def.staff, b));
     if (type === 'helipad') this.helis.push(new Helicopter(this, b));
-    if (type === 'tour') { b.queue = []; b.jeepT = 0; }
+    if (type === 'tour' || type === 'gyro') { b.queue = []; b.jeepT = 0; }
     this.burst(x + def.w / 2, y + def.h / 2, '#e8d8b0', 12);
     return b;
   }
@@ -676,6 +677,7 @@ class Game {
     for (const h of this.helis) h.update(dt);
     this.helis = this.helis.filter((h) => !h.dead);
     this.updateTours(dt);
+    this.updateAttractions(dt);
     this.research.update(dt);
     this.updateLagoons(dt);
 

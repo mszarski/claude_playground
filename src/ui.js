@@ -466,6 +466,7 @@ class UI {
         this.sfx.play('build');
         if (def.cat === 'guest' && !w.accessTiles(b).length) this.toast(`Connect the ${def.name} to a path!`, 'warn');
         if (tool === 'tour' && !w.trackAccess(b).length) this.toast('Now lay Tour Track from the station past your paddocks, ideally in a loop.', 'info');
+        if (tool === 'gyro' && !g.gyroAccess(b).length) this.toast('A Gyrosphere Station must touch a paddock: build it right against the fence.', 'warn');
         if (def.feeds) { const reg = w.regionAt(bx + 1, by) || w.regionAt(bx - 1, by) || w.regionAt(bx, by + 1) || w.regionAt(bx, by - 1); if (reg && reg.public) this.toast('Feeders should go inside a fenced paddock.', 'warn'); }
       } else {
         this.sfx.play('error');

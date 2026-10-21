@@ -111,6 +111,20 @@ class UIPanels {
         html += `<div class="row"><span>Queue</span><span>${(o.queue || []).length}</span></div><div class="row"><span>Jeeps</span><span>${g.jeeps.filter((j) => j.station === o).length}</span></div>`;
         if (!w.trackAccess(o).length) html += `<div class="sub" style="color:#ff9080">Needs Tour Track next to it!</div>`;
       }
+      if (o.type === 'gyro') {
+        html += `<div class="row"><span>Queue</span><span>${(o.queue || []).length}</span></div><div class="row"><span>Spheres</span><span>${(g.gyros || []).filter((x) => x.station === o).length}</span></div>`;
+        if (o.noPaddock) html += `<div class="sub" style="color:#ff9080">Must touch a paddock (build it right against a paddock's fence).</div>`;
+      }
+      if (o.type === 'arena') {
+        html += `<div class="row"><span>Next show</span><span>${o.noRaptors ? '—' : Math.max(0, Math.ceil(o.showT || 0)) + 's'}</span></div>`;
+        if (o.noRaptors) html += `<div class="sub" style="color:#ff9080">Needs a paddock with 2+ raptors within 12 tiles.</div>`;
+        if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
+      }
+      if (o.type === 'feedshow') {
+        html += `<div class="row"><span>Shows</span><span>12:00 · 18:00</span></div>`;
+        if (o.noCarnivore) html += `<div class="sub" style="color:#ff9080">No carnivore within 12 tiles to feed.</div>`;
+        if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
+      }
       if (def.income) html += `<div class="row"><span>Visitors</span><span>${o.visitors}</span></div><div class="row"><span>Revenue</span><span>${fmtMoney(o.revenue || 0)}</span></div>`;
       if (def.shelter) html += `<div class="row"><span>Sheltering</span><span>${o.inside}/${def.shelter}</span></div>`;
       if (def.upkeep) html += `<div class="row"><span>Upkeep</span><span>${fmtMoney(def.upkeep)}/day</span></div>`;
@@ -363,6 +377,8 @@ class UIPanels {
       <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
       Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
+      <h2>ATTRACTIONS</h2>
+      <p><b>Gyrosphere Station</b> (1★): build it against a paddock fence; glass balls roll guests among the dinosaurs. Put it on a carnivore paddock for thrills, and the occasional cracked sphere. <b>Feeding Grandstand</b>: at noon and 6pm a nearby carnivore is fed in front of the crowd. <b>Raptor Arena</b> (2★): next to a paddock with 2+ raptors, shows pay well but stress the pack, and sometimes go badly wrong.</p>
       <h2>SHORTCUTS</h2>
       <p>Click a paddock for one-click <b>Tree cover</b>, <b>feeders</b> and <b>fence repairs</b>. <b>Copy layout</b> turns a paddock into a blueprint you can stamp anywhere. Hatching into a paddock with no food adds a feeder automatically, and <b>Repair all</b> on the breached-fence alert fixes every fence at once.</p>
       <h2>COMMANDING STAFF (OPTIONAL)</h2>

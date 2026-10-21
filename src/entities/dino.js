@@ -356,6 +356,16 @@ class Dino {
         if (d < bd) { bd = d; best = j; }
       }
     }
+    // Gyrospheres rolling through a carnivore's paddock look a lot like snacks in a jar
+    if (this.sp.diet === 'carn' && this.sp.danger >= 4 && (this.loose || this.hunger > 45 || this.stress > 55)) {
+      const myR = g.world.region[g.world.idx(this.tx, this.ty)];
+      for (const gy of g.gyros || []) {
+        if (gy.wrecked || !gy.riders.length || gy.state === 'parked') continue;
+        if (!this.loose && g.world.region[g.world.idx(gy.tx, gy.ty)] !== myR) continue;
+        const d = dist2(this.x, this.y, gy.x, gy.y);
+        if (d < bd) { bd = d; best = gy; }
+      }
+    }
     // Contained carnivores (or loose ones) can also eat herbivores in their region
     const myReg = g.world.region[g.world.idx(this.tx, this.ty)];
     for (const d of g.dinos) {
@@ -379,8 +389,9 @@ class Dino {
       if (this.attackCD > 0) return;
       this.attackCD = 1.2;
       this.lunge = 0.3;
-      if (t.kind === 'jeep') {
-        g.jeepAttacked(t, this); this.kills++; this.hunger = Math.max(0, this.hunger - 60);
+      if (t.kind === 'jeep' || t.kind === 'gyro') {
+        if (t.kind === 'jeep') g.jeepAttacked(t, this); else g.gyroAttacked(t, this);
+        this.kills++; this.hunger = Math.max(0, this.hunger - 60);
         this.state = 'eat'; this.stateT = 6; this.target = null; return;
       }
       if (t.kind === 'dino') {

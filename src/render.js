@@ -319,6 +319,7 @@ class Renderer {
     for (const gu of g.guests) if (!gu.hidden && vis(gu.tx, gu.ty)) items.push({ y: gu.y, t: 2, o: gu });
     for (const s of g.staff) if (vis(s.tx, s.ty)) items.push({ y: s.y, t: 2, o: s });
     for (const j of g.jeeps) if (vis(j.tx, j.ty)) items.push({ y: j.y + 0.2, t: 5, o: j });
+    for (const gy of g.gyros || []) if (vis(gy.tx, gy.ty)) items.push({ y: gy.y + 0.1, t: 6, o: gy });
     for (const e of g.eggs) items.push({ y: e.y + 0.6, t: 3, o: e });
     if (w.volcano && vis(w.volcano.x, w.volcano.y)) items.push({ y: w.volcano.y + 3, t: 4, o: w.volcano });
     items.sort((a, b) => a.y - b.y);
@@ -335,6 +336,7 @@ class Renderer {
       else if (it.t === 2) this.drawPerson(ctx, it.o, ui);
       else if (it.t === 4) this.drawVolcano(ctx, it.o);
       else if (it.t === 5) this.drawJeep(ctx, it.o);
+      else if (it.t === 6) this.drawGyro(ctx, it.o);
       else this.drawEgg(ctx, it.o);
     }
 
@@ -527,6 +529,23 @@ class Renderer {
       ctx.fillRect(x + 6, y - 2, 2, 3); ctx.fillRect(x + spr.canvas.width - 8, y - 2, 2, 3);
     }
     if (b.type === 'lagoon' && !b.escaped) this.drawMosasaur(ctx, b, x, y + spr.extra);
+    if (b.type === 'arena' && b.showing > 0) {
+      // raptors leaping through hoops in the ring, a spotlight on the trainer
+      const R = DINO_SPRITES.raptor, rh = y + spr.canvas.height - 10;
+      ctx.fillStyle = 'rgba(255,248,200,0.25)'; ctx.fillRect(x + 6, y + 22, spr.canvas.width - 12, spr.canvas.height - 26);
+      for (let k = 0; k < 2; k++) {
+        const ph = (this.time * 1.6 + k * 0.5) % 1, jump = Math.round(Math.sin(ph * Math.PI) * 9);
+        const rx = Math.round(x + 10 + ph * (spr.canvas.width - 20 - R.w / 2));
+        const img = R.right[Math.floor(this.time * 8) % 2];
+        ctx.drawImage(img, rx, rh - jump - Math.round(R.h * 0.7), Math.round(R.w * 0.7), Math.round(R.h * 0.7));
+      }
+      ctx.strokeStyle = '#e8a028'; ctx.beginPath(); ctx.arc(x + spr.canvas.width / 2, rh - 12, 5, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (b.type === 'feedshow' && b.lastShow && this.game.hour % 6 < 0.6 && (this.game.hour >= 12 && this.game.hour < 12.6 || this.game.hour >= 18 && this.game.hour < 18.6)) {
+      // the goat on the crane
+      const gx = x + spr.canvas.width - 10, gy = y + 6 + Math.round((this.game.hour % 1) * 12);
+      ctx.fillStyle = '#f0f0e8'; ctx.fillRect(gx - 1, gy, 4, 3); ctx.fillStyle = '#1a1a1a'; ctx.fillRect(gx + 2, gy, 1, 1);
+    }
     if (b.type === 'hatchery' && g.eggs.length) {
       ctx.fillStyle = Math.sin(this.time * 6) > 0 ? '#f8f080' : '#e0c040';
       ctx.fillRect(x + 22, y + 1, 4, 1);
@@ -772,6 +791,23 @@ class Renderer {
     if (j.state !== 'parked' && (!j.station.powered || g.world.power.outage > 0) && Math.floor(this.time * 2) % 2) {
       drawText3(ctx, '!', x + 6, y - 7, '#ff4030');
     }
+  }
+
+  drawGyro(ctx, gy) {
+    const x = Math.round(gy.x * TILE), y = Math.round(gy.y * TILE - 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x - 5, y + 5, 10, 2);
+    if (gy.wrecked) {
+      ctx.fillStyle = '#9ab8c8';
+      for (let k = 0; k < 6; k++) ctx.fillRect(x - 5 + k * 2, y + 2 + (k % 3), 2, 1);
+      return;
+    }
+    // rolling glass ball: rim, glass, a highlight and the riders inside
+    const roll = gy.moving ? Math.floor(gy.anim * 10) % 4 : 0;
+    ctx.fillStyle = '#2a4a6a'; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(160,215,240,0.85)'; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5a5a'; ctx.fillRect(x - 5 + roll * 2, y - 1, 1, 2);
+    for (let k = 0; k < gy.riders.length; k++) { ctx.fillStyle = ['#f0c8a0', '#b07850'][k % 2]; ctx.fillRect(x - 2 + k * 3, y - 1, 2, 3); }
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 3, y - 3, 2, 1);
   }
 
   drawVolcano(ctx, v) {

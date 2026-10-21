@@ -29,6 +29,7 @@ const TESTS = [
   { name: 'tutorial completes', file: 'tutorial.js', check: (r) => r[r.length - 1] === 'final->done' },
   { name: 'InGen calls: every choice', file: 'decisions.js', check: (r) => Array.isArray(r) && r.some((x) => x.startsWith('scheduled: ')) },
   { name: 'paddock blueprints and quick actions', file: 'busywork.js', check: (r) => r && r.ok },
+  { name: 'attractions: gyrospheres, arena, feeding', file: 'attractions.js', check: (r) => r && r.ok },
   { name: 'fuzz + save/load round trip', file: 'fuzz.js', pre: 'window.FUZZ_RUNS = 1;', check: (r) => Array.isArray(r) && r.length >= 1 },
   {
     name: 'modals and panels render',

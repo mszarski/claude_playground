@@ -70,7 +70,7 @@ function loadGame(json) {
     const def = BUILDINGS[bd.type];
     if (def.staff) for (let k = 0; k < def.staffN; k++) g.staff.push(new Staff(g, def.staff, b));
     if (bd.type === 'helipad') g.helis.push(new Helicopter(g, b));
-    if (bd.type === 'tour') { b.queue = []; b.jeepT = 0; }
+    if (bd.type === 'tour' || bd.type === 'gyro') { b.queue = []; b.jeepT = 0; }
   }
   for (const dd of s.dinos) {
     const d = SPECIES[dd.s].flying ? new Ptera(g, Math.floor(dd.x), Math.floor(dd.y)) : new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));
