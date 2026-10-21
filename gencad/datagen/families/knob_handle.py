@@ -119,7 +119,7 @@ def _star_knob(rng):
     H = t + hbz
     z0 = rd(-H / 2 + hbz)              # bottom of the star body
     if rng.random() < 0.6:    # lobes on a hub
-        smax = math.sin(math.pi / n) / 1.15
+        smax = math.sin(math.pi / n) / 1.3
         q = rng.uniform(0.25, min(0.6, smax))
         rl = R / (1 + q)
         lr = q * rl
@@ -132,7 +132,8 @@ def _star_knob(rng):
             Rh = rl - lr + 0.3 * lr
         arc = hub_arc(Rh)
         sk = f"cq.Sketch().circle({f(Rh)}).parray({f(rl)},0,360,{n}).circle({f(lr)})"
-        fr = min(min(lr, Rh) * rng.uniform(0.15, 0.35), max(arc, 0.0) * 0.35 + 0.05 * lr)
+        gap = 2 * rl * math.sin(math.pi / n) - 2 * lr          # clearance between neighbouring lobes
+        fr = min(min(lr, Rh) * rng.uniform(0.15, 0.35), max(arc, 0.0) * 0.35 + 0.05 * lr, 0.4 * gap)
         inner = rl - lr
     else:                     # scalloped disc
         rs = R * math.sin(math.pi / n) * rng.uniform(0.55, 0.85)

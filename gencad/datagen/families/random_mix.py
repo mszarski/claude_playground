@@ -161,20 +161,22 @@ class FaceInfo:
         return 2 * a / max(per, 1e-9)
 
 
+_FCACHE = {}
+
+
 def planar_faces(shape, axes=(2,), signs=(1, -1), min_area=100.0):
-    out = []
-    for fc in shape.Faces():
-        if fc.geomType() != "PLANE":
-            continue
-        n = face_normal(fc)
-        a = axis_of(n)
-        if a is None or a[0] not in axes or a[1] not in signs:
-            continue
-        fi = FaceInfo(fc)
-        if fi.area < min_area:
-            continue
-        out.append(fi)
-    return out
+    """Axis-aligned planar faces of shape (FaceInfo, cached per shape object)."""
+    key = id(shape)
+    if key not in _FCACHE or _FCACHE[key][0] is not shape:
+        if len(_FCACHE) > 8:
+            _FCACHE.clear()
+        allf = []
+        for fc in shape.Faces():
+            if fc.geomType() != "PLANE" or axis_of(face_normal(fc)) is None:
+                continue
+            allf.append(FaceInfo(fc))
+        _FCACHE[key] = (shape, allf)
+    return [fi for fi in _FCACHE[key][1] if fi.ax in axes and fi.sg in signs and fi.area >= min_area]
 
 
 def face_selector(w, shape, fi, rng):
@@ -214,7 +216,7 @@ def clean_cut(cl, pts_world, fi, depth, blind, floor=1.5, step=None):
     face: at every sampled depth all outline points share one inside/outside state (the cut never grazes a wall)
     and, if blind, the solid continues `floor` below its bottom (the pocket has a floor)."""
     n = fi.n
-    nd = max(4, min(40, int(depth / (step or 2.0))))
+    nd = max(3, min(16, int(depth / (step or 3.0))))
     ts = [0.4 + (depth - 0.8) * k / (nd - 1) for k in range(nd)] if depth > 1 else [depth / 2]
     for t in ts:
         st = None
@@ -404,8 +406,8 @@ def add_ears(rng, part, kind, dims):
     span = w if ax == 0 else d
     side = d if ax == 0 else w
     te = r1(h * rng.uniform(0.35, 1.0)) if h > 8 else r1(h)
-    te = max(te, 4.0)
-    wt = r1(min(side * rng.uniform(0.3, 0.6), 0.25 * span + 20))
+    te = max(te, 5.0, r1(0.04 * span))
+    wt = r1(max(min(side * rng.uniform(0.3, 0.6), 0.25 * span + 20), 0.15 * span))
     le = r1(span * rng.uniform(0.12, 0.25))
     both = rng.random() < 0.6
     rounded = rng.random() < 0.6
@@ -488,54 +490,62 @@ def add_bodycut(rng, part, dims):
 
 
 def add_boss(rng, part, T, hard):
-    """A body standing on an upward planar face (boss, pad, tube, rib, polygon)."""
+    """A body standing on an upward planar face (boss, pad, tube, rib, polygon, slot)."""
     faces = [fi for fi in planar_faces(part.s, axes=(2,), signs=(1,), min_area=400.0)]
+    faces = [fi for fi in faces if fi.min_width() > 0.08 * T]
     if not faces:
         return False
     faces.sort(key=lambda fi: -fi.area)
     fi = faces[0] if rng.random() < 0.7 else rng.choice(faces)
     k = rng.choice(["cyl", "cyl", "tube", "box", "rrect", "ngon", "rib", "slot"])
+    bb = fi.bb
+    ext = max(bb.xlen, bb.ylen)
     mw = fi.min_width()
-    for shrink in (1.0, 0.7, 0.5):
-        size = mw * rng.uniform(0.4, 1.1) * shrink
-        if size < 8:
+    for shrink in (1.0, 0.75, 0.55):
+        size = max(mw * rng.uniform(0.5, 1.2), 0.15 * T) * shrink
+        if size < 0.1 * T or size < 8:
             return False
         if k in ("cyl", "tube", "ngon"):
             rad = r1(size / 2)
-            circ = rad
-        elif k in ("box", "rrect"):
-            a, b = r1(size * rng.uniform(0.6, 1.0)), r1(size * rng.uniform(0.4, 0.9))
-            circ = math.hypot(a, b) / 2
-        elif k == "rib":
-            a, b = r1(size * rng.uniform(1.2, 2.5)), r1(max(3.0, size * rng.uniform(0.08, 0.15)))
+            foot = [(0, 0)] + ring((0, 0), rad + 1.5, 10)
+        else:
+            if k in ("box", "rrect"):
+                a, b = r1(size * rng.uniform(0.6, 1.0)), r1(size * rng.uniform(0.45, 0.9))
+            elif k == "rib":
+                a = r1(ext * rng.uniform(0.3, 0.75))
+                b = r1(max(4.0, 0.035 * T * rng.uniform(1, 1.6)))
+            else:
+                a, b = r1(size * rng.uniform(1.3, 2.2)), r1(size * rng.uniform(0.4, 0.65))
             if rng.random() < 0.5:
                 a, b = b, a
-            circ = math.hypot(a, b) / 2
-        else:
-            a, b = r1(size * rng.uniform(1.2, 2.0)), r1(size * rng.uniform(0.35, 0.6))
-            circ = a / 2
-        p = fi.sample(rng, circ + 1.5, centre_first=rng.random() < 0.5)
+            foot = [((a / 2 + 1.5) * i / 2, (b / 2 + 1.5) * j / 2) for i in range(-2, 3) for j in range(-2, 3)]
+        p = None
+        for t in range(12):
+            q = fi.centre() if t == 0 and rng.random() < 0.5 else fi.sample(rng, 1.0, centre_first=False, tries=4)
+            if q is None:
+                continue
+            if all(fi.clearance((q[0] + u, q[1] + v, q[2])) >= 1.0 for u, v in foot):
+                p = q
+                break
         if p is None:
             continue
         x, y, z = r1(p[0]), r1(p[1]), fi.level
-        hb = r1(T * rng.uniform(0.08, 0.35 if not hard else 0.45))
+        hb = r1(min(0.45 * T, size * rng.uniform(0.3, 1.2)))
         if k == "rib":
-            hb = r1(T * rng.uniform(0.06, 0.2))
+            hb = r1(T * rng.uniform(0.06, 0.18))
         if k == "cyl":
             body = f".circle({f(rad)}).extrude({f(hb)})"
         elif k == "tube":
             body = f".circle({f(rad)}).circle({f(rad * rng.uniform(0.4, 0.7))}).extrude({f(hb)})"
         elif k == "ngon":
             body = f".polygon({rng.choice([5, 6, 6, 8])},{f(2 * rad)}).extrude({f(hb)})"
-        elif k == "box":
+        elif k in ("box", "rib"):
             body = f".rect({f(a)},{f(b)}).extrude({f(hb)})"
         elif k == "rrect":
-            body = f".sketch().rect({f(a)},{f(b)}).vertices().fillet({f(min(a, b) * rng.uniform(0.1, 0.35))}).finalize().extrude({f(hb)})"
-        elif k == "rib":
-            body = f".rect({f(a)},{f(b)}).extrude({f(hb)})"
+            body = (f".sketch().rect({f(a)},{f(b)}).vertices().fillet({f(min(a, b) * rng.uniform(0.1, 0.35))})"
+                    f".finalize().extrude({f(hb)})")
         else:
-            ang = rng.choice([0, 0, 90, 45, 30])
-            body = f".slot2D({f(a)},{f(b)}{',' + str(ang) if ang else ''}).extrude({f(hb)})"
+            body = f".slot2D({f(max(a, b))},{f(min(a, b))}{',90' if b > a else ''}).extrude({f(hb)})"
         em = (lambda x=x, y=y, z=z, body=body: lambda dx, dy, dz: f"{wp(x + dx, y + dy, z + dz)}{body}")()
         if part.try_add("union", em):
             return True
@@ -584,11 +594,11 @@ def build_bodies(rng, hard):
             tries += 1
             used += add_boss(rng, part, T, hard)
     # recentre on the bounding-box centre and rebuild
-    bb = part.s.BoundingBox()
+    bb = fbb(part.s)
     dx, dy, dz = -round((bb.xmin + bb.xmax) / 2), -round((bb.ymin + bb.ymax) / 2), -round((bb.zmin + bb.zmax) / 2)
     if not part.build(dx, dy, dz):
         return None
-    bb = part.s.BoundingBox()
+    bb = fbb(part.s)
     side = max(bb.xlen, bb.ylen, bb.zlen)
     if not 100 <= side <= 205:
         return None
@@ -613,7 +623,7 @@ def pick_face(rng, s, side_p=0.2, min_area=300.0):
         faces = planar_faces(s, axes=(0, 1, 2), min_area=min_area)
     if not faces:
         return None
-    wts = [fi.area ** 0.5 for fi in faces]
+    wts = [fi.area for fi in faces]
     return rng.choices(faces, weights=wts)[0]
 
 
@@ -634,8 +644,8 @@ def op_holes(rng, st, T):
     cl = Classifier(s)
     below = extent_below(s, fi)
     mw = fi.min_width()
-    d = round(min(T * rng.uniform(0.03, 0.09), mw * rng.uniform(0.2, 0.5)) * 2) / 2
-    if d < 3:
+    d = round(min(T * rng.uniform(0.035, 0.1), mw * rng.uniform(0.25, 0.55)) * 2) / 2
+    if d < max(4.0, 0.03 * T):
         return None
     htype = rng.choice(["hole", "hole", "cbore", "csk"])
     outer = d * (1.8 if htype != "hole" else 1.0)
@@ -743,7 +753,7 @@ def op_holes(rng, st, T):
     # every hole cuts cleanly
     for p in pts:
         if not clean_cut(cl, [world(plane, (local(plane, p)[0] + u[0], local(plane, p)[1] + u[1]))
-                              for u in ring((0, 0), outer / 2 + 1.2, 10)] + [p], fi, depth, not through):
+                              for u in ring((0, 0), outer / 2 + 1.2, 8)] + [p], fi, depth, not through):
             return None
     return sel + ".workplane()" + head + call
 
@@ -829,29 +839,26 @@ def op_pocket(rng, st, T):
     return None
 
 
-def edge_face_map(s):
-    """For every edge of s, its distinct adjacent faces (one OCC map for the whole shape)."""
-    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
-    from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
-    m = TopTools_IndexedDataMapOfShapeListOfShape()
-    TopExp.MapShapesAndAncestors_s(s.wrapped, TopAbs_EDGE, TopAbs_FACE, m)
-    out = []
-    for i in range(1, m.Extent() + 1):
-        e = cq.Edge(m.FindKey(i))
+class EdgeFaces:
+    """Distinct adjacent faces of edges of s (one OCC ancestor map for the whole shape, queried lazily)."""
+
+    def __init__(self, s):
+        from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+        from OCP.TopExp import TopExp
+        from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+        self.m = TopTools_IndexedDataMapOfShapeListOfShape()
+        TopExp.MapShapesAndAncestors_s(s.wrapped, TopAbs_EDGE, TopAbs_FACE, self.m)
+
+    def __call__(self, e):
+        try:
+            lst = self.m.FindFromKey(e.wrapped)
+        except Exception:  # noqa: BLE001
+            return []
         fl = []
-        for fc in m.FindFromIndex(i):
+        for fc in lst:
             if not any(fc.IsSame(o) for o in fl):
                 fl.append(fc)
-        out.append((e, [cq.Face(fc) for fc in fl]))
-    return out
-
-
-def adjacent_faces(emap, e):
-    for e2, fl in emap:
-        if e2.isSame(e):
-            return fl
-    return []
+        return [cq.Face(fc) for fc in fl]
 
 
 def edge_point(e):
@@ -878,13 +885,8 @@ def face_size(fc):
 def op_edges(rng, st, T):
     """Fillet or chamfer a group of real edges."""
     w, s = st["w"], st["s"]
-    emap = edge_face_map(s)
-    adj = {}
-    edges = []
-    for e, fa in emap:
-        if len(fa) == 2 and e.geomType() in ("LINE", "CIRCLE") and e.Length() > 4:
-            adj[id(e)] = fa
-            edges.append(e)
+    adj = EdgeFaces(s)
+    edges = [e for e in s.Edges() if e.geomType() in ("LINE", "CIRCLE") and e.Length() > 4]
     if not edges:
         return None
     mode = rng.random()
@@ -901,7 +903,12 @@ def op_edges(rng, st, T):
             if fs is not None and fs.startswith(".faces('") and len(fi.face.Edges()) <= 16:
                 sel, group = fs, fi.face.Edges()
     if sel is None:
-        seed = rng.choice(edges)
+        for _ in range(6):
+            seed = rng.choice(edges)
+            if len(adj(seed)) == 2:
+                break
+        else:
+            return None
         if seed.geomType() == "CIRCLE":
             same = [e for e in edges if e.geomType() == "CIRCLE" and abs(e.radius() - seed.radius()) < 0.05
                     and abs(edge_point(e)[2] - edge_point(seed)[2]) < 0.05]
@@ -921,7 +928,7 @@ def op_edges(rng, st, T):
         sel = ".edges(near(" + ",".join(f"({f(p[0])},{f(p[1])},{f(p[2])})" for p in pts) + "))"
     lim = 1e9
     for e in group:
-        fa = adj.get(id(e)) or adjacent_faces(emap, e)
+        fa = adj(e)
         if len(fa) != 2:
             return None
         for fc in fa:
@@ -966,7 +973,7 @@ def generate_mix(rng, hard=False):
         bb0 = fbb(part.s)
         T = max(bb0.xlen, bb0.ylen)
         st = {"w": part.w, "s": part.s, "simple": single and kind in ("box", "rect", "ngon", "outline")}
-        nops = rng.choice([0, 1, 2, 2, 3, 3, 4, 4]) if not hard else rng.randint(3, 7)
+        nops = rng.choice([0, 1, 2, 2, 3, 3, 4, 4]) if not hard else rng.choices([3, 4, 5, 6, 7], [3, 3, 2, 1.5, 1])[0]
         segs = []
         if single and kind in ("box", "rect", "rrect", "circle", "ngon", "outline") and rng.random() < 0.3:
             out = op_shell(rng, st, T)
@@ -997,7 +1004,7 @@ def generate_mix(rng, hard=False):
             st["w"], st["s"] = w2, s2
         if hard and len(segs) < 3:
             continue
-        bb = st["s"].BoundingBox()
+        bb = fbb(st["s"])
         cen = ((bb.xmin + bb.xmax) / 2, (bb.ymin + bb.ymax) / 2, (bb.zmin + bb.zmax) / 2)
         if max(abs(c) for c in cen) > 10:
             continue

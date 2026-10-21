@@ -14,7 +14,7 @@ def _rrect(a, b, r):
 def _boss_inset(rng, rb, rc, t):
     """Distance from a corner boss centre to the inner wall faces: merged into the wall (overlapping it by <= 0.4 t,
     never poking through the outside, also around the rounded corner) or free-standing."""
-    if rng.random() < 0.5:
+    if rng.random() < 0.5 or rb > rc - 0.4 * t:
         return rb + rng.uniform(1.0, 3.0)
     c = max(rb * rng.uniform(0.55, 0.8), rb - 0.4 * t)
     ri = rc - t
@@ -34,7 +34,7 @@ def _side_cuts(rng, L, W, H, t, z_lo, z_hi, keep_x):
             continue
         zc = (z_lo + z_hi) / 2
         k = rng.random()
-        wp = f".faces('{wall}').workplane()"
+        wp = f".faces('{wall}').workplane(origin=(0,0,0))"
         if k < 0.4:                                    # one or two rectangular connector openings
             n = rng.choice([1, 1, 2, 3])
             w = rng.uniform(0.15, 0.5) * 2 * span / n
@@ -108,6 +108,17 @@ def _box(rng):
     if lip_kind == "rebate":                   # step cut into the inner half of the rim (lid seat)
         s += (f".faces('>Z').workplane(centerOption='CenterOfBoundBox')" + _rrect(L - t, W - t, rc - t / 2)
               + f".cutBlind({f(-lh)})")
+    # PCB standoffs on the floor (hollow), clear of the corner bosses
+    sx, sy = bx - rb - 6, by - rb - 6
+    if rng.random() < 0.35 and sx > 15 and sy > 12:
+        px, py = rng.uniform(0.5, 1.0) * 2 * sx, rng.uniform(0.5, 1.0) * 2 * sy
+        ro = rng.uniform(1.2, 2.0) * t
+        hs = min(rng.uniform(0.15, 0.4) * H, boss_top - z0 - t - 2)
+        if hs > 3:
+            zb = z0 + t / 2
+            pre += (f"p=cq.Workplane('XY').workplane(offset={f(zb)}).rarray({f(px)},{f(py)},2,2)"
+                    f".circle({f(ro)}).circle({f(ro * 0.5)}).extrude({f(hs + t / 2)})\n")
+            s += ".union(p)"
     # connector cut-outs in the walls, clear of the corners / bosses and the floor / rim
     keep = (L / 2 - max(rc, t + c + rb) - 2, W / 2 - max(rc, t + c + rb) - 2)
     z_lo = z0 + t + max(bottom_r, 2) + 1
@@ -209,7 +220,7 @@ def _lid(rng):
     if rng.random() < 0.3 and H - t > 8:
         wn = rng.uniform(0.1, 0.25) * W
         hn = rng.uniform(0.3, 0.6) * (H - t)
-        s += f".faces('<X').workplane().center(0,{f(z0)}).rect({f(wn)},{f(2 * hn)}).cutBlind({f(-2 * t)})"
+        s += f".faces('<X').workplane(origin=(0,0,0)).center(0,{f(z0)}).rect({f(wn)},{f(2 * hn)}).cutBlind({f(-2 * t)})"
     return pre + "r=" + s
 
 

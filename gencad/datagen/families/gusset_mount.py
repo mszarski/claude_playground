@@ -247,7 +247,7 @@ def generate(rng):
         if uend - rb < max(6.0, 0.6 * hr) or tr < 3:
             continue
         sgn = 1 if a[0] == "+" else -1
-        prof = [(u0, zt - 0.5), (uend, zt - 0.5), (uend, zt + flat), (u0, zt + hr)]
+        prof = [(u0, z0), (uend, z0), (uend, zt + flat), (u0, zt + hr)]
         off = ox if a[1] == "x" else oy
         groups[a[1]].append([(sgn * u + off, v) for u, v in prof])
     for ax, polys in groups.items():

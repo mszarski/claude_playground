@@ -93,14 +93,15 @@ def generate(rng):
         hb = h if rng.random() < 0.7 or not wall else h * rng.uniform(1.0, 1.15)
         if not wall:
             hb = hr * rng.uniform(1.0, 1.3)
-        s += f".pushPoints({_pts(bosses)}).circle({f(db / 2)}).extrude({f(hb)})"
-    # fillets at the rib / wall / boss roots (floor faces = second horizontal level from the bottom)
+    # fillets at the rib / wall roots (floor faces = second horizontal level from the bottom); bosses come after
     top_z = max(h if wall else 0, hr, hb if bosses else 0)
     if (nx or ny or wall) and rng.random() < 0.55:
         rf = rt * rng.uniform(0.3, 0.7)
         if m > 0 or not wall:
             rf = min(rf, 0.6 * T)                             # plate's outer top edge is in that set too
         s += f".faces('>Z[1]').fillet({f(rf)})"
+    if bosses:
+        s += f".pushPoints({_pts(bosses)}).circle({f(db / 2)}).extrude({f(hb)})"
     if rng.random() < 0.4:
         s += f".faces('<Z').chamfer({f(T * rng.uniform(0.15, 0.35))})"
     # holes through the bosses
@@ -134,8 +135,8 @@ def generate(rng):
             mp = [(x, y) for y in (-(Ly - m) / 2, (Ly - m) / 2) for x in (-px, 0, px)]
             if q < 0.75:
                 s += f".faces('<Z').workplane(origin=(0,0,0)).pushPoints({_pts(mp)}).hole({f(dm)})"
-            else:
-                s += (f".faces('<Z').workplane(origin=(0,0,0)).pushPoints({_pts(mp)})"
+            else:                                             # countersunk from the flange top
+                s += (f".faces('>Z[1]').workplane(origin=(0,0,0)).pushPoints({_pts(mp)})"
                       f".cskHole({f(dm)},{f(min(dm * 1.8, m * 0.8))},90)")
     elif not wall and rng.random() < 0.5:                     # plain ribbed plate: corner holes
         gx = Lx / 2 - (xs[-1] + rt / 2 if nx else -1e9)       # edge -> outermost rib face
