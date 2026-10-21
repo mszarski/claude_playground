@@ -33,6 +33,25 @@ const TESTS = [
   { name: 'campaign chapters, unlocks and perks', file: 'campaign.js', check: (r) => Array.isArray(r) && r[r.length - 1] === 'locked after all wins: 0' },
   { name: 'fuzz + save/load round trip', file: 'fuzz.js', pre: 'window.FUZZ_RUNS = 1;', check: (r) => Array.isArray(r) && r.length >= 1 },
   {
+    name: 'save/load keeps dinosaurs and park state',
+    run: `(() => {
+      startGame({ seed: ${SEED}, scenario: 'c4', difficulty: 'normal' });
+      for (let i = 0; i < 30 * 10; i++) GAME.update(1 / 30);
+      const before = GAME.dinos.map((d) => [d.name, d.growth.toFixed(3), d.ageDays.toFixed(3), d.loose]).join('|');
+      const rep = GAME.reputation, esc = GAME.stats.escapes, closed = GAME.parkClosed;
+      const json = serialize(GAME);
+      const g = loadGame(json);
+      const after = g.dinos.map((d) => [d.name, d.growth.toFixed(3), d.ageDays.toFixed(3), d.loose]).join('|');
+      const out = [];
+      if (before !== after) out.push('dinos differ: ' + before.slice(0, 120) + ' vs ' + after.slice(0, 120));
+      if (Math.abs(g.reputation - rep) > 0.01) out.push('reputation ' + rep + ' -> ' + g.reputation);
+      if (g.stats.escapes !== esc) out.push('escapes ' + esc + ' -> ' + g.stats.escapes);
+      if (g.parkClosed !== closed) out.push('parkClosed ' + closed + ' -> ' + g.parkClosed);
+      return out.length ? out : 'ok';
+    })()`,
+    check: (r) => r === 'ok',
+  },
+  {
     name: 'modals and panels render',
     run: `(() => {
       startGame({ seed: ${SEED}, difficulty: 'normal' });

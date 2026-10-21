@@ -109,7 +109,7 @@ const CHAPTERS = {
   c4: {
     endDay: 18,
     chapter: 4, name: 'Site B', size: 'medium', difficulty: 'normal',
-    blurb: 'InGen\'s abandoned breeding island. The animals have been roaming free for years. Round them up and open a real park.',
+    blurb: 'InGen\'s abandoned breeding island. The animals have been roaming free for years. Round them up, then open the gates (Main Gate) to a real park.',
     objective: 'Contain every dinosaur and reach 3 stars by Day 18',
     setup(g) {
       const w = g.world, s = g.start;
@@ -119,6 +119,8 @@ const CHAPTERS = {
       g.money = 650000;
       roamSpawn(g, 'galli', 4); roamSpawn(g, 'para', 3); roamSpawn(g, 'stego', 2); roamSpawn(g, 'trike', 2); roamSpawn(g, 'anky', 1, 22); roamSpawn(g, 'dilo', 2, 22); roamSpawn(g, 'raptor', 2, 26);
       w.computeRegions(); g.updateLoose();
+      g.parkClosed = true;
+      g.log('The park stays closed while the island is overrun. Open it from the Main Gate when it is safe.', 'warn', null, true);
       applyPerks(g, 'c4');
     },
     check(g) {
@@ -128,9 +130,9 @@ const CHAPTERS = {
       if (g.day > 18) return 'lose';
       return null;
     },
-    progress(g) { const free = g.dinos.filter((d) => d.loose || d.carried).length; return [tick(!free, `Contained ${g.dinos.length - free}/${g.dinos.length}`), tick(g.stars >= 3, `★ ${g.stars}/3`), `Day ${g.day}/18`].join(' · '); },
-    medal(g) { return g.day <= 11 ? 'gold' : g.day <= 14 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 11 · Silver: by Day 14',
+    progress(g) { const free = g.dinos.filter((d) => d.loose || d.carried).length; return [tick(!free, `Contained ${g.dinos.length - free}/${g.dinos.length}`), tick(g.stars >= 3, `★ ${g.stars}/3`), `Day ${g.day}/18`].concat(g.parkClosed ? ['Park closed: open it at the Main Gate'] : []).join(' · '); },
+    medal(g) { return g.day <= 9 ? 'gold' : g.day <= 12 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 9 · Silver: by Day 12',
   },
   c5: {
     chapter: 5, name: 'Jurassic World', size: 'large', difficulty: 'normal',

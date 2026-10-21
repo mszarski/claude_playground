@@ -183,6 +183,7 @@ class Helicopter {
     const d = this.cargo; if (!d) return;
     const moved = d.relocate && !d.loose;
     d.carried = null; d.x = x + 0.5; d.y = y + 0.5; d.sedatedT = 4; d.loose = d.isPtera ? d.loose : false; d.relocate = false; d.orderSedate = false;
+    if (!d.loose) d.wasLooseFlag = false; // the drop is announced below, don't announce it again
     d.home = { x, y }; d.stress = Math.max(0, d.stress - 40);
     this.cargo = null;
     this.game.log(moved ? `${d.name} the ${d.sp.name} has been moved to the new paddock.` : `${d.name} the ${d.sp.name} is back in containment.`, 'good', d);
