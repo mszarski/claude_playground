@@ -106,6 +106,28 @@ function loadGameFromStorage() {
   } catch (e) { console.error(e); return false; }
 }
 
+// ---------------- campaign menu ----------------
+function showCampaignMenu() {
+  const m = document.getElementById('scenMenu');
+  const done = loadCampaign();
+  m.innerHTML = CAMPAIGN_ORDER.map((k) => {
+    const c = SCENARIOS[k], open = campaignUnlocked(k), won = done[k];
+    const perk = CAMPAIGN_PERKS[k] ? `<br><small style="font-size:8px;color:#f8d040">REWARD: ${CAMPAIGN_PERKS[k].desc.toUpperCase()}</small>` : '';
+    return `<button data-camp="${k}" ${open ? '' : 'disabled'} title="${c.blurb}">${won ? MEDAL_ICON[won.medal] + ' ' : open ? '' : '🔒 '}CHAPTER ${c.chapter}: ${c.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${c.objective.toUpperCase()}</small>${perk}</button>`;
+  }).join('') + '<button id="scenBack">BACK</button>';
+  document.querySelector('#title .menu').hidden = true; m.hidden = false;
+  for (const b of m.querySelectorAll('[data-camp]')) b.onclick = () => {
+    document.querySelector('#title .menu').hidden = false; m.hidden = true;
+    startChapter(b.dataset.camp);
+  };
+  document.getElementById('scenBack').onclick = () => { document.querySelector('#title .menu').hidden = false; m.hidden = true; };
+}
+function startChapter(id) {
+  const c = SCENARIOS[id];
+  startGame({ scenario: id, difficulty: c.difficulty || 'normal' });
+  UIX.showChapterIntro(id);
+}
+
 // ---------------- title ----------------
 function showTitle() {
   const t = document.getElementById('title');
@@ -257,11 +279,12 @@ function boot() {
     document.getElementById('diffMenu').hidden = true;
     startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength(), size: window.currentMapSize(), seed: parseSeed(document.getElementById('seedIn').value) || undefined });
   };
+  document.getElementById('btnCamp').onclick = () => { SFX.ensure(); SFX.play('click'); showCampaignMenu(); };
   document.getElementById('btnScen').onclick = () => {
     SFX.ensure(); SFX.play('click');
     const m = document.getElementById('scenMenu');
     const won = loadMedals();
-    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${won[k] ? MEDAL_ICON[won[k].medal] + ' ' : ''}${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
+    m.innerHTML = Object.entries(SCENARIOS).filter(([, sc]) => !sc.campaign).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${won[k] ? MEDAL_ICON[won[k].medal] + ' ' : ''}${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
     document.querySelector('#title .menu').hidden = true; m.hidden = false;
     for (const b of m.querySelectorAll('[data-scen]')) b.onclick = () => {
       document.querySelector('#title .menu').hidden = false; m.hidden = true;

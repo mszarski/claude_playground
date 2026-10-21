@@ -429,6 +429,16 @@ class UIPanels {
     $('[data-m="new"]').onclick = () => { this.closeModal(); showTitle(); };
   }
 
+  showChapterIntro(id) {
+    const c = SCENARIOS[id], perks = campaignPerks(id);
+    const html = `<div id="gameover"><div style="font-family:'Press Start 2P';font-size:9px;color:var(--orange)">CHAPTER ${c.chapter} OF ${CAMPAIGN_ORDER.length}</div><h1>${c.name.toUpperCase()}</h1>
+      <p style="font-size:21px">${c.blurb}</p><p style="color:var(--gold);font-size:20px">${c.objective}.</p>
+      ${perks.length ? `<p style="color:#9ab08a">Your perks: ${perks.map((p) => `<b style="color:#a8f080">${p.name}</b> (${p.desc})`).join(', ')}</p>` : ''}
+      <div class="btns" style="justify-content:center"><button data-close>Let's go</button></div></div>`;
+    this.showModal(html);
+    $('[data-close]').onclick = () => this.closeModal();
+  }
+
   showScenarioEnd(r) {
     const g = this.game, sc = SCENARIOS[g.scenario];
     this.setSpeed(0);
@@ -436,6 +446,24 @@ class UIPanels {
     if (win) this.sfx.play('fanfare');
     const medal = win && sc.medal ? sc.medal(g) : null;
     const best = medal ? saveMedal(g.scenario, medal, g.day) : false;
+    if (sc.campaign) {
+      if (win) saveCampaign(g.scenario, medal || 'bronze', g.day);
+      const next = CAMPAIGN_ORDER[CAMPAIGN_ORDER.indexOf(g.scenario) + 1];
+      const perk = win && CAMPAIGN_PERKS[g.scenario];
+      const html = `<div id="gameover"><div style="font-family:'Press Start 2P';font-size:9px;color:var(--orange)">CHAPTER ${sc.chapter} OF ${CAMPAIGN_ORDER.length}</div><h1>${win ? (next ? 'CHAPTER COMPLETE' : 'CAMPAIGN COMPLETE') : 'CHAPTER FAILED'}</h1>
+        <p style="font-size:22px">${sc.name}: ${win ? (next ? 'on to the next island.' : 'the greatest park on Earth. Welcome to Jurassic World.') : 'the island won this time.'}</p>
+        ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
+        ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
+        ${perk ? `<p>New perk for the chapters ahead: <b style="color:#a8f080">${perk.name}</b> (${perk.desc})</p>` : ''}
+        <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
+        <div class="btns" style="justify-content:center">${win && next ? '<button data-m="next">Next chapter</button>' : ''}<button data-m="again">${win ? 'Replay' : 'Try again'}</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
+      this.showModal(html, true);
+      const nb = $('[data-m="next"]'); if (nb) nb.onclick = () => { this.closeModal(); startChapter(next); };
+      $('[data-m="again"]').onclick = () => { this.closeModal(); startChapter(g.scenario); };
+      $('[data-m="title"]').onclick = () => { this.closeModal(); showTitle(); };
+      $('[data-close]').onclick = () => { this.closeModal(); this.setSpeed(1); };
+      return;
+    }
     const html = `<div id="gameover"><h1>${win ? 'SCENARIO COMPLETE' : 'SCENARIO FAILED'}</h1><p style="font-size:22px">${sc.name}: ${win ? 'you did it.' : 'the island won this time.'}</p>
       ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
       ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}

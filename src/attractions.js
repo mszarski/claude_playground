@@ -145,6 +145,7 @@ const AttractionMixin = {
       for (const gu of crowd) { gu.happy = Math.min(100, gu.happy + 15); if (chance(0.25)) { gu.thought = pick(['CLEVER!', 'WOW!', 'EEK!']); gu.thoughtT = 2; } }
       if (pay) this.addFloat(cx, b.y - 0.5, '+' + fmtMoney(pay), '#f8d040');
       b.showing = 4;
+      this.stats.shows = (this.stats.shows || 0) + 1;
       this.soundAt('screech', cx, cy, 1);
       const avgStress = raptors.reduce((a, d) => a + d.stress, 0) / raptors.length;
       for (const d of raptors) d.stress = Math.min(100, d.stress + 10);

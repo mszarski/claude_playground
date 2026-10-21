@@ -815,7 +815,7 @@ class UI {
     const el = $('#goal');
     if (g.scenario) {
       const sc = SCENARIOS[g.scenario];
-      el.innerHTML = `<b>SCENARIO · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>`;
+      el.innerHTML = `<b>${sc.campaign ? 'CHAPTER ' + sc.chapter : 'SCENARIO'} · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>`;
       return;
     }
     if (g.goalIdx >= GOALS.length) { el.innerHTML = `<b>ALL GOALS COMPLETE</b>Spared no expense. Keep building!`; return; }

@@ -11,6 +11,26 @@ function buildStarterPark(g, opts = {}) {
       if (w.terrain[i] !== T_GRASS && w.terrain[i] !== T_FOREST) w.terrain[i] = T_GRASS;
     }
   };
+  // the starter park needs this ground: move the volcano out of the way if it sits here
+  const v = w.volcano;
+  if (v && v.x >= s.x - 28 && v.x <= s.x + 28 && v.y >= s.y - 34) {
+    let best = null, bd = -1;
+    for (let y = 4; y < w.H - 4; y++) for (let x = 4; x < w.W - 4; x++) {
+      if (x >= s.x - 28 && x <= s.x + 28 && y >= s.y - 34) continue;
+      if (!w.isLand(w.terrain[w.idx(x, y)]) && w.terrain[w.idx(x, y)] !== T_ROCK) continue;
+      const d = dist(x, y, s.x, s.y) + (w.terrain[w.idx(x, y)] === T_ROCK ? 6 : 0);
+      if (d > bd) { bd = d; best = { x, y }; }
+    }
+    if (best) {
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        const x = best.x + dx, y = best.y + dy;
+        if (!w.inb(x, y)) continue;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d <= 1.5) w.terrain[w.idx(x, y)] = T_VOLCANO; else if (d <= 3.2) w.terrain[w.idx(x, y)] = T_ROCK;
+      }
+      w.volcano = best;
+    }
+  }
   flat(s.x - 24, s.y - 30, s.x + 24, s.y - 1);
   const money = g.money; g.money = 1e9;
   const put = (t, x, y) => { const b = g.placeBuilding(t, x, y); return b; };
