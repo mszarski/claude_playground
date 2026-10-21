@@ -300,7 +300,7 @@ class Game {
     return true;
   }
   // Fence tiles a dinosaur was standing on: built as soon as it steps off
-  queueFence(x, y, type, hours = 24) {
+  queueFence(x, y, type, hours = 72) {
     this.pendingFences = this.pendingFences || [];
     if (!this.pendingFences.some((p) => p.x === x && p.y === y)) this.pendingFences.push({ x, y, type, t: hours * this.secPerHour });
   }
@@ -325,9 +325,24 @@ class Game {
       const reg = w.regionAt(d.tx, d.ty);
       if (!reg || reg.public || reg.feeders[d.sp.diet].length) continue;
       if (d.sp.diet === 'herb' && reg.forest >= 4) continue; // can graze
+      if (reg.feeders[d.sp.diet === 'carn' ? 'herb' : 'carn'].length) continue; // a stray in the other diet's paddock: it gets moved, not fed
       out.push({ d, reg });
     }
     return out;
+  }
+  // Animals fenced in with the other diet by accident (the paddock's feeders say what it is for): move them out
+  moveStrays() {
+    if (!this.hasBuilding('ranger')) return;
+    const w = this.world;
+    for (const d of this.dinos) {
+      if (d.loose || d.carried || d.relocate || d.isPtera) continue;
+      const reg = w.regionAt(d.tx, d.ty);
+      const mine = d.sp.diet === 'carn' ? 'carn' : 'herb', other = mine === 'carn' ? 'herb' : 'carn';
+      if (!reg || reg.public || !reg.feeders[other].length || reg.feeders[mine].length) continue;
+      if (!this.findPaddockFor(d)) continue; // nowhere better to go yet
+      d.relocate = true; d.orderSedate = true;
+      this.log(`${d.name} the ${d.sp.name} is in the ${other === 'carn' ? 'carnivore' : 'herbivore'} paddock. Rangers will move it to a better one.`, 'info', d);
+    }
   }
   replaceLostFeeders(force = false) {
     if (this.autoFeeders === false && !force) return 0;
@@ -696,6 +711,21 @@ class Game {
     return cands.length ? pickTile(cands[0]) : null;
   }
 
+  // A paddock marked for this diet (by its feeder) is blocked by animals of the other diet, fenced in by accident:
+  // have the rangers move them out. Returns a message, or null if there is no such paddock.
+  makeRoomFor(d) {
+    const w = this.world, mine = d.sp.diet === 'carn' ? 'carn' : 'herb', other = mine === 'carn' ? 'herb' : 'carn';
+    for (const reg of w.regions) {
+      if (reg.public || reg.size > 1200 || !reg.feeders[mine].length || reg.feeders[other].length) continue;
+      const strays = this.dinos.filter((o) => !o.carried && !o.dead && o.sp.diet === other && w.region[w.idx(o.tx, o.ty)] === reg.id);
+      if (!strays.length) continue;
+      for (const o of strays) { o.relocate = true; o.orderSedate = true; }
+      const o = strays[0];
+      return `${d.name} the ${d.sp.name} has to wait: ${o.name} the ${o.sp.name}${strays.length > 1 ? ` and ${strays.length - 1} more are` : ' is'} in the ${mine === 'carn' ? 'carnivore' : 'herbivore'} paddock. Rangers will move ${strays.length > 1 ? 'them' : 'it'} out.`;
+    }
+    return null;
+  }
+
   // ------------- simulation -------------
   update(dt) {
     if (this.gameOver) return;
@@ -714,7 +744,7 @@ class Game {
     if (w.regionsDirty) { w.computeRegions(); this.updateLoose(); }
     if (this.pendingFences && this.pendingFences.length) this.buildPendingFences(dt);
     this.feedCheckT = (this.feedCheckT || 0) - dt;
-    if (this.feedCheckT <= 0) { this.feedCheckT = 3; this.replaceLostFeeders(); }
+    if (this.feedCheckT <= 0) { this.feedCheckT = 3; this.moveStrays(); this.replaceLostFeeders(); }
 
     // eggs
     for (const e of this.eggs) {
@@ -874,6 +904,7 @@ class Game {
     if (unpowered && cre.length) issues.push([90, 'Some electric fences have no power. Add a Pylon or Power Plant nearby.', unpowered]);
     const dark = [...w.buildings.values()].filter((b) => BUILDINGS[b.type].power && !b.powered && w.covered[w.idx(b.x, b.y)]);
     if (w.power.outage <= 0 && w.power.demand > w.power.supply && dark.length) issues.push([88, `Not enough power: ${Math.round(w.power.demand)} MW needed, ${Math.round(w.power.supply)} MW made. ${dark.length} building${dark.length > 1 ? 's are' : ' is'} dark (fences get power first). Build another Power Plant.`, dark[0]]);
+    if (this.alarm && !cre.some((d) => d.loose && !d.carried && d.sedatedT <= 0 && d.sp.danger >= 4)) issues.push([86, 'Nothing dangerous is loose any more. Sound the all-clear (alarm button) so visitors can come back.', null]);
     if (carn && !this.hasBuilding('ranger')) issues.push([85, 'You have dangerous carnivores but no Ranger Station. Nobody can tranquilize an escapee.', null]);
     if (carn && !this.shelters().length) issues.push([70, 'There is nowhere for guests to shelter. A Visitor Center, Hotel or Bunker saves lives during a breach.', null]);
     if (cre.length && !this.hasBuilding('maint')) issues.push([65, 'Without a Maintenance Shed, damaged fences are never repaired.', null]);

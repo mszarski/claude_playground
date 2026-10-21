@@ -41,17 +41,17 @@ const CHAPTERS = {
     endDay: 15,
     chapter: 1, name: 'Opening Season', size: 'small', difficulty: 'normal', hints: true,
     blurb: 'Hammond has the island, the money and a dream. Build the park from nothing and prove people will come.',
-    objective: 'Reach 2 stars, have 120 guests in the park at once and $600,000 in the bank, by Day 15',
-    setup(g) { g.money = 500000; applyPerks(g, 'c1'); g.scenarioState = { peak: 0 }; },
+    objective: 'Reach 2 stars, have 120 guests in the park at once and earn $150,000 from guests, by Day 15',
+    setup(g) { g.money = 500000; applyPerks(g, 'c1'); g.scenarioState = { peak: 0 }; g.stats.guestIncome = 0; },
     tick(g) { g.scenarioState.peak = Math.max(g.scenarioState.peak || 0, g.guests.length); },
     check(g) {
-      if (g.stars >= 2 && (g.scenarioState.peak || 0) >= 120 && g.money >= 600000) return 'win';
+      if (g.stars >= 2 && (g.scenarioState.peak || 0) >= 120 && (g.stats.guestIncome || 0) >= 150000) return 'win';
       if (g.day > 15) return 'lose';
       return null;
     },
-    progress(g) { return [tick(g.stars >= 2, `★ ${g.stars}/2`), tick((g.scenarioState.peak || 0) >= 120, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/120`), tick(g.money >= 600000, `${fmtMoney(g.money)} / $600k`), `Day ${g.day}/15`].join(' · '); },
-    medal(g) { return g.day <= 7 ? 'gold' : g.day <= 10 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 7 · Silver: by Day 10',
+    progress(g) { return [tick(g.stars >= 2, `★ ${g.stars}/2`), tick((g.scenarioState.peak || 0) >= 120, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/120`), tick((g.stats.guestIncome || 0) >= 150000, `Earned ${fmtMoney(g.stats.guestIncome || 0)} / $150k`), `Day ${g.day}/15`].join(' · '); },
+    medal(g) { return g.day <= 8 ? 'gold' : g.day <= 11 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 8 · Silver: by Day 11',
   },
   c2: {
     endDay: 12,
