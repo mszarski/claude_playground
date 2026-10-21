@@ -172,44 +172,6 @@ def generate(rng):
         if ri > 1.5:
             s += f".edges(near(" + ",".join(P3(x, y, zt - tb / 2) for x, y in inner_c) + f")).fillet({f(ri)})"
 
-    # ---------------- hub pad and boss
-    if hub:                                            # round pad under the boss, same thickness as the plate
-        s += (f".faces('<Z').workplane(centerOption='ProjectedOrigin',origin=({f(ox)},{f(oy)},0),invert=True)"
-              f".circle({f(rh)}).extrude({f(tb)})")
-    s += (f".faces('>Z').workplane(centerOption='ProjectedOrigin',origin=({f(ox)},{f(oy)},0))"
-          f".circle({f(rb)}).extrude({f(hbs)})")
-    rib_dirs = [a for a in arms if rng.random() < 0.85]
-    if not rib_dirs and rng.random() < 0.7:
-        rib_dirs = list(arms)
-    if rng.random() < 0.6:
-        rr = round(rng.uniform(0.2, 0.5) * min(tb, rb * 0.5), 1)
-        if rr >= 1:
-            s += f".edges(near({on_circle(rb, zt, ox, oy)})).fillet({f(rr)})"
-
-    # ---------------- ribs
-    hr = rng.uniform(0.6, 0.95) * hbs
-    flat = rng.uniform(0.0, 0.25) * hbs if rng.random() < 0.5 else 0.0
-    pre = ""
-    j = 0
-    for a in rib_dirs:
-        L = arms[a]
-        uend = min(rib_end.get(a, L - 2), L - 1.5)
-        u0 = rb * 0.5
-        if uend - rb < max(6.0, 0.6 * hr) or tr < 3:
-            continue
-        sgn = 1 if a[0] == "+" else -1
-        prof = [(u0, zt - 0.5), (uend, zt - 0.5), (uend, zt + flat), (u0, zt + hr)]
-        if a[1] == "x":                                 # XZ plane: local (u, v) = (X, Z), extrude along -Y
-            pts = [(sgn * u + ox, v) for u, v in prof]
-            wp = f"cq.Workplane('XZ',origin=(0,{f(oy)},0))"
-        else:                                           # YZ plane: local (u, v) = (Y, Z), extrude along +X
-            pts = [(sgn * u + oy, v) for u, v in prof]
-            wp = f"cq.Workplane('YZ',origin=({f(ox)},0,0))"
-        pre += (f"rib{j}={wp}.polyline([" + ",".join(f"({f(u)},{f(v)})" for u, v in pts)
-                + f"]).close().extrude({f(tr / 2)},both=True)\n")
-        s += f".union(rib{j})"
-        j += 1
-
     # ---------------- bolt holes / slots in the arms (from the base top: local = global x, y)
     if holes:
         wp = f".faces('<Z').workplane(centerOption='ProjectedOrigin',origin=(0,0,0),invert=True,offset={f(tb)})"
@@ -229,6 +191,20 @@ def generate(rng):
             if yh:
                 s += wp + ".pushPoints([" + ",".join(P(x, y) for x, y in yh) + "])" + \
                      f".slot2D({f(slot_len)},{f(d)},90).cutThruAll()"
+
+    # ---------------- hub pad and boss
+    if hub:                                            # round pad under the boss, same thickness as the plate
+        s += (f".faces('<Z').workplane(centerOption='ProjectedOrigin',origin=({f(ox)},{f(oy)},0),invert=True)"
+              f".circle({f(rh)}).extrude({f(tb)})")
+    s += (f".faces('>Z').workplane(centerOption='ProjectedOrigin',origin=({f(ox)},{f(oy)},0))"
+          f".circle({f(rb)}).extrude({f(hbs)})")
+    rib_dirs = [a for a in arms if rng.random() < 0.85]
+    if not rib_dirs and rng.random() < 0.7:
+        rib_dirs = list(arms)
+    if rng.random() < 0.6:
+        rr = round(rng.uniform(0.2, 0.5) * min(tb, rb * 0.5), 1)
+        if rr >= 1:
+            s += f".edges(near({on_circle(rb, zt, ox, oy)})).fillet({f(rr)})"
 
     # ---------------- bore and boss-top features
     bore = rng.uniform(0.35, 0.65) * 2 * rb
@@ -258,4 +234,28 @@ def generate(rng):
         rt = round(rng.uniform(0.2, 0.5) * min(wall, 6.0), 1)
         if rt >= 0.8:
             s += f".edges(near({on_circle(rb, ztop, ox, oy)})).chamfer({f(rt)})"
+    # ---------------- ribs: one sketch per plane through the boss axis, unioned last
+    hr = rng.uniform(0.6, 0.95) * hbs
+    flat = rng.uniform(0.0, 0.25) * hbs if rng.random() < 0.5 else 0.0
+    rib_len = rng.uniform(1.2, 3.0) * hr
+    pre = ""
+    groups = {"x": [], "y": []}
+    for a in rib_dirs:
+        L = arms[a]
+        uend = min(rib_end.get(a, L - 2), L - 1.5, rb + rib_len)
+        u0 = rb * 0.8
+        if uend - rb < max(6.0, 0.6 * hr) or tr < 3:
+            continue
+        sgn = 1 if a[0] == "+" else -1
+        prof = [(u0, zt - 0.5), (uend, zt - 0.5), (uend, zt + flat), (u0, zt + hr)]
+        off = ox if a[1] == "x" else oy
+        groups[a[1]].append([(sgn * u + off, v) for u, v in prof])
+    for ax, polys in groups.items():
+        if not polys:
+            continue
+        # XZ plane: local (u, v) = (X, Z), normal -Y;  YZ plane: local (u, v) = (Y, Z), normal +X
+        wp = f"cq.Workplane('XZ',origin=(0,{f(oy)},0))" if ax == "x" else f"cq.Workplane('YZ',origin=({f(ox)},0,0))"
+        body = "".join(".polyline([" + ",".join(f"({f(u)},{f(v)})" for u, v in pts) + "]).close()" for pts in polys)
+        pre += f"rib{ax}={wp}{body}.extrude({f(tr / 2)},both=True)\n"
+        s += f".union(rib{ax})"
     return "import cadquery as cq\n" + pre + "r=" + s + orient(rng)

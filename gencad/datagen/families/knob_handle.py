@@ -124,8 +124,15 @@ def _star_knob(rng):
         rl = R / (1 + q)
         lr = q * rl
         Rh = rng.uniform(rl - lr + 0.3 * lr, min(rl * 0.92, rl - lr + 1.2 * lr))
+
+        def hub_arc(Rh):   # length of hub circle left between two lobes
+            phi = math.acos(max(-1.0, min(1.0, (Rh * Rh + rl * rl - lr * lr) / (2 * Rh * rl))))
+            return Rh * (2 * math.pi / n - 2 * phi)
+        if hub_arc(Rh) < 0.5 * lr:
+            Rh = rl - lr + 0.3 * lr
+        arc = hub_arc(Rh)
         sk = f"cq.Sketch().circle({f(Rh)}).parray({f(rl)},0,360,{n}).circle({f(lr)})"
-        fr = min(lr, Rh) * rng.uniform(0.15, 0.35)
+        fr = min(min(lr, Rh) * rng.uniform(0.15, 0.35), max(arc, 0.0) * 0.35 + 0.05 * lr)
         inner = rl - lr
     else:                     # scalloped disc
         rs = R * math.sin(math.pi / n) * rng.uniform(0.55, 0.85)

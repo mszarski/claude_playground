@@ -182,7 +182,8 @@ def face_selector(w, shape, fi, rng):
     name = "XYZ"[fi.ax]
     sel = (">" if fi.sg > 0 else "<") + name
     try:
-        got = ev(w, f".faces('{sel}')").vals()
+        vec = cq.Vector(*[float(fi.sg) if i == fi.ax else 0.0 for i in range(3)])
+        got = w.faces(cq.selectors.DirectionMinMaxSelector(vec, True)).vals()
         if len(got) == 1 and got[0].isSame(fi.face):
             return f".faces('{sel}')"
     except Exception:  # noqa: BLE001
@@ -817,7 +818,7 @@ def op_pocket(rng, st, T):
             prof = f"{cen}.rect({f(a)},{f(b)})" if not ang else \
                 f".sketch().push([{pt_code(q)}]).rect({f(a)},{f(b)},{ang}).finalize()"
         elif k == "rrect":
-            prof = (f".sketch().push([{pt_code(q)}]).rect({f(a)},{f(b)}{angs}).vertices()"
+            prof = (f".sketch().push([{pt_code(q)}]).rect({f(a)},{f(b)}{angs}).reset().vertices()"
                     f".fillet({f(min(a, b) * rng.uniform(0.15, 0.45))}).finalize()")
         elif k == "circle":
             prof = f"{cen}.circle({f(rad)})"
@@ -828,11 +829,29 @@ def op_pocket(rng, st, T):
     return None
 
 
-def adjacent_faces(s, e):
-    try:
-        return list(s.ancestors(e, "Face"))
-    except Exception:  # noqa: BLE001
-        return []
+def edge_face_map(s):
+    """For every edge of s, its distinct adjacent faces (one OCC map for the whole shape)."""
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+    m = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors_s(s.wrapped, TopAbs_EDGE, TopAbs_FACE, m)
+    out = []
+    for i in range(1, m.Extent() + 1):
+        e = cq.Edge(m.FindKey(i))
+        fl = []
+        for fc in m.FindFromIndex(i):
+            if not any(fc.IsSame(o) for o in fl):
+                fl.append(fc)
+        out.append((e, [cq.Face(fc) for fc in fl]))
+    return out
+
+
+def adjacent_faces(emap, e):
+    for e2, fl in emap:
+        if e2.isSame(e):
+            return fl
+    return []
 
 
 def edge_point(e):
@@ -859,7 +878,13 @@ def face_size(fc):
 def op_edges(rng, st, T):
     """Fillet or chamfer a group of real edges."""
     w, s = st["w"], st["s"]
-    edges = [e for e in s.Edges() if e.geomType() in ("LINE", "CIRCLE") and e.Length() > 4]
+    emap = edge_face_map(s)
+    adj = {}
+    edges = []
+    for e, fa in emap:
+        if len(fa) == 2 and e.geomType() in ("LINE", "CIRCLE") and e.Length() > 4:
+            adj[id(e)] = fa
+            edges.append(e)
     if not edges:
         return None
     mode = rng.random()
@@ -896,7 +921,10 @@ def op_edges(rng, st, T):
         sel = ".edges(near(" + ",".join(f"({f(p[0])},{f(p[1])},{f(p[2])})" for p in pts) + "))"
     lim = 1e9
     for e in group:
-        for fc in adjacent_faces(s, e):
+        fa = adj.get(id(e)) or adjacent_faces(emap, e)
+        if len(fa) != 2:
+            return None
+        for fc in fa:
             lim = min(lim, face_size(fc))
         if e.geomType() == "LINE":
             lim = min(lim, e.Length())
