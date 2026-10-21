@@ -158,6 +158,7 @@ case "$STAGE" in
     need cad_vec renders
     cp /work/data/deepcad_cq.parquet data/
     need_vllm
+    if [[ "${RICH:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/train_*.tar; do tar -xf "$t" -C data/rich; done; fi
     python train_vlm_grpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" ${STEPS:+--steps $STEPS} "$@" ;;
 
   revise)     # build-inspect-fix inference (scripts/revise_vllm.py) -> results/$RUN/revise.pkl; INIT = model dir

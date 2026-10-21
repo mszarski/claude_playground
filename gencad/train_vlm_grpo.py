@@ -58,6 +58,10 @@ def main():
     ap.add_argument("--out_dir", default="results")
     ap.add_argument("--deepcad_cq", default="data/deepcad_cq.parquet")
     ap.add_argument("--modes", default="view1=0.4,view4=0.4,view1+expert=0.2")
+    ap.add_argument("--rich", default=None, help="rich-part shards (scripts/gen_rich_data.py) to mix into the prompts")
+    ap.add_argument("--rich_p", type=float, default=0.5, help="share of prompts drawn from --rich")
+    ap.add_argument("--rich_max", type=int, default=300000, help="rich parts to sample prompts from")
+    ap.add_argument("--rich_val", type=int, default=128, help="rich parts held out for validation")
     ap.add_argument("--prompts", type=int, default=32)
     ap.add_argument("--group", type=int, default=8)
     ap.add_argument("--temp", type=float, default=1.0)
@@ -79,6 +83,7 @@ def main():
     import pandas as pd
     from pebble import ProcessPool
     from scripts.cq_iou import score
+    from scripts.rich_iou import score as rich_score
     pool = ProcessPool(max_workers=a.workers)            # before CUDA: workers fork clean
     rng = random.Random(a.seed)
     torch.manual_seed(a.seed)
@@ -112,6 +117,21 @@ def main():
         if text_index.get(u, {}).get("expert"):
             expert[u] = text_index[u]["expert"]
     del text_index
+    rich, rich_train, rich_valk = {}, [], []          # "rich:<uid>" -> (render stem, GT CadQuery code)
+    if a.rich:
+        for sh in sorted(os.listdir(a.rich)):
+            pq = os.path.join(a.rich, sh, "parts.parquet")
+            if os.path.exists(pq):
+                d = pd.read_parquet(pq)
+                d = d[d.code.str.len() <= 2400]
+                for u, c in zip(d.uid, d.code):
+                    rich[f"rich:{sh}:{u}"] = (os.path.join(a.rich, sh, "renders", u), c)
+        keys = sorted(rich)
+        rng_r = random.Random(a.seed + 1)
+        rng_r.shuffle(keys)
+        rich_valk, rich_train = keys[: a.rich_val], keys[a.rich_val: a.rich_val + a.rich_max]
+        rich = {k: rich[k] for k in rich_valk + rich_train}
+        print(f"[data] rich: {len(rich_train)} prompt parts, {len(rich_valk)} val, share {a.rich_p}", flush=True)
     gts = {}
 
     def gt(u):
@@ -140,6 +160,10 @@ def main():
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, (s + 1) / a.warmup))
 
     def inputs(u, mode, val_mode=False):
+        if u.startswith("rich:"):                     # rich parts: images only
+            mode = "view4" if mode == "view4" else "view1"
+            views = [0, 1, 2, 3] if mode == "view4" else ([0] if val_mode else [rng.randrange(4)])
+            return compose_views(load_views("", rich[u][0], views)), None
         prompt = expert.get(u) if "expert" in mode else None
         if prompt and len(tok(prompt)["input_ids"]) > max_prompt:
             prompt = None
@@ -154,7 +178,8 @@ def main():
         return {"prompt": text + suffix, "multi_modal_data": {"image": image}}
 
     def scores(codes, uids):
-        futs = [pool.schedule(score, args=((gt(u), c, "cadquery"),), timeout=a.score_timeout)
+        futs = [pool.schedule(rich_score, args=((rich[u][1], c),), timeout=a.score_timeout) if u.startswith("rich:")
+                else pool.schedule(score, args=((gt(u), c, "cadquery"),), timeout=a.score_timeout)
                 for c, u in zip(codes, uids)]
         res = []
         for fu in futs:
@@ -195,6 +220,12 @@ def main():
             rs = [r for r in scores(codes, val) if r is not None]
             rec[mode] = {"iou_gt": round(100 * float(np.mean([r["gt"] for r in rs])), 2),
                          "invalid": round(float(np.mean([not r["valid"] for r in rs])), 4)}
+        if rich_valk:                                 # rich held-out parts, 4 views, own IoU
+            reqs = [request(*inputs(u, "view4", True)) for u in rich_valk]
+            codes = [o.outputs[0].text.strip() or None for o in llm.generate(reqs, greedy, use_tqdm=False)]
+            rs = [r for r in scores(codes, rich_valk) if r is not None]
+            rec["rich_view4"] = {"iou_own": round(100 * float(np.mean([r["own"] for r in rs])), 2),
+                                 "invalid": round(float(np.mean([not r["valid"] for r in rs])), 4)}
         rec["eval_sec"] = round(time.time() - t0)
         emit(rec)
 
@@ -216,7 +247,8 @@ def main():
     sp = SamplingParams(n=a.group, temperature=a.temp, top_p=1.0, max_tokens=a.max_new_tokens, stop_token_ids=stop)
     for step in range(1, a.steps + 1):
         t0 = time.time()
-        uids = rng.sample(train, a.prompts)
+        n_rich = sum(rng.random() < a.rich_p for _ in range(a.prompts)) if rich_train else 0
+        uids = rng.sample(train, a.prompts - n_rich) + rng.sample(rich_train, n_rich)
         items = [inputs(u, names[int(np.searchsorted(mp, rng.random()))]) for u in uids]
         outs = llm.generate([request(im, p) for im, p in items], sp, use_tqdm=False)
         seqs = [list(c.token_ids) for o in outs for c in o.outputs]
@@ -224,7 +256,9 @@ def main():
         t_gen = time.time() - t0
         rs = scores(codes, [u for u in uids for _ in range(a.group)])
         t_score = time.time() - t0 - t_gen
-        R = np.array([np.nan if r is None else (r["gt"] if r["valid"] else a.invalid_reward) for r in rs])
+        rew_uids = [u for u in uids for _ in range(a.group)]
+        R = np.array([np.nan if r is None else ((r["own"] if u.startswith("rich:") else r["gt"]) if r["valid"]
+                      else a.invalid_reward) for r, u in zip(rs, rew_uids)])   # rich: size unobservable -> own IoU
         R = R.reshape(a.prompts, a.group)
         std = np.nanstd(R, axis=1, keepdims=True)
         adv = (R - np.nanmean(R, axis=1, keepdims=True)) / (std + 1e-4)
