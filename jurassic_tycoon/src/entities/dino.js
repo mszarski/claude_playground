@@ -60,8 +60,8 @@ class Dino {
     // Sedation
     if (this.sedatedT > 0) {
       this.sedatedT -= dt;
-      // No helicopter? A ground crew trucks sedated escapees home (slow and pricey)
-      if ((this.loose || this.relocate) && !g.hasBuilding('helipad')) {
+      // No helicopter (or every one is already carrying an animal)? A ground crew trucks it (slow and pricey)
+      if ((this.loose || this.relocate) && (!g.hasBuilding('helipad') || (g.helis.length && g.helis.every((h) => h.cargo)))) {
         this.truckT = (this.truckT || 0) + dt;
         if (this.truckT > 18) {
           const dest = g.findPaddockFor(this);
@@ -202,6 +202,16 @@ class Dino {
     if (this.loose && this.sp.strength >= 5 && this.stress > 60 && chance(0.4)) {
       const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => !!w.buildingAt(x, y), 900);
       if (p && p.length) { p.pop(); this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = true; return; }
+    }
+    // Clever girls: hungry loose raptors work at shelters they can smell people in
+    if (this.loose && this.sp.clever && this.hunger > 45 && chance(0.35)) {
+      const full = (b) => b && BUILDINGS[b.type].shelter && b.inside > 0;
+      const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => full(w.buildingAt(x, y)), 1400);
+      if (p && p.length) {
+        p.pop(); this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = true;
+        if (!this.shelterLogged) { this.shelterLogged = true; g.log(`${this.name} the ${this.sp.name} is testing the doors of a shelter full of guests!`, 'bad', this, true); }
+        return;
+      }
     }
     // Herbivores mostly sleep through the night
     if (g.isNight && this.sp.diet === 'herb' && !this.loose && this.hunger < 70 && chance(0.8)) { this.state = 'idle'; this.stateT = randf(6, 12); this.sleeping = true; return; }

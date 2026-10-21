@@ -138,6 +138,18 @@ const SCENARIOS = {
         g.world.power.outage = 150;
         g.gateLocked = true;
         g.log('Dennis Nedry has stolen the embryos (-$50k), shut down the grid and sealed the main gate. Guests cannot leave: build Bunkers! "Ah ah ah!"', 'bad', null, true);
+        // the film's moment: the T. rex fence fails right where the tour stops, and the raptors smell the chance
+        const w = g.world;
+        for (const d of g.dinos) {
+          if (d.species === 'raptor') d.stress = Math.min(100, d.stress + 45);
+          if (d.species !== 'trex' || d.loose) continue;
+          const reg = w.regionAt(d.tx, d.ty);
+          const fences = reg ? g.paddockFences(reg).filter((j) => w.fence[j] === F_ELECTRIC) : [];
+          const sx = g.start.x, sy = g.start.y;
+          fences.sort((a, b) => dist2(a % w.W, (a / w.W) | 0, sx, sy) - dist2(b % w.W, (b / w.W) | 0, sx, sy));
+          for (const j of fences.slice(0, 2)) g.damageFence(j % w.W, (j / w.W) | 0, 9999, null);
+          g.log(`The fence of ${d.name} the Tyrannosaurus is down!`, 'bad', d, true);
+        }
       }
     },
     medal(g) { const d = g.stats.deaths; return d === 0 ? 'gold' : d <= 1 ? 'silver' : 'bronze'; },
@@ -164,8 +176,8 @@ const SCENARIOS = {
       w.computeRegions(); g.updateLoose();
       g.events.auto = false;
     },
-    medal(g) { return g.day <= 5 ? 'gold' : g.day <= 7 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 5 · Silver: by Day 7',
+    medal(g) { return g.day <= 4 ? 'gold' : g.day <= 6 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 4 · Silver: by Day 6',
     check(g) {
       if (!g.dinos.length) return 'lose';
       if (g.dinos.every((d) => !d.loose && !d.carried && d.sedatedT <= 0)) return 'win';
@@ -203,7 +215,7 @@ const SCENARIOS = {
   opening: {
     name: 'Opening Day',
     blurb: 'The new park opens to record crowds and your star attraction is an Indominus. On day two she figures out the walls.',
-    objective: 'Welcome 1,800 guests by Day 5 with fewer than 6 casualties',
+    objective: 'Welcome 1,500 guests by Day 5 with fewer than 6 casualties',
     setup(g) {
       g.money = 300000;
       const P = buildStarterPark(g, { staff: true, rexWall: true });
@@ -222,9 +234,11 @@ const SCENARIOS = {
         if (d) {
           d.rageT = 60; d.stress = 100; d.deterT = 0;
           // she clawed through a weak spot in the wall nearest her
-          const w = g.world;
-          const p = w.bfs(d.tx, d.ty, w.dinoPass, (x, y) => isSolidFence(w.fence[w.idx(x, y)]), 4000);
-          if (p && p.length) { const [fx, fy] = p[p.length - 1]; g.damageFence(fx, fy, 99999, d); }
+          // the wall facing the guests, not the one shared with the next paddock
+          const w = g.world, reg = w.regionAt(d.tx, d.ty);
+          const walls = reg ? g.paddockFences(reg).filter((j) => isSolidFence(w.fence[j])) : [];
+          walls.sort((a, b) => dist2(a % w.W, (a / w.W) | 0, g.start.x, g.start.y) - dist2(b % w.W, (b / w.W) | 0, g.start.x, g.start.y));
+          for (const j of walls.slice(0, 2)) g.damageFence(j % w.W, (j / w.W) | 0, 99999, d);
           g.log(`${d.name} the Indominus vanished from the paddock cameras... then tore through the wall!`, 'bad', d, true);
         }
       }
@@ -233,11 +247,11 @@ const SCENARIOS = {
     medalText: 'Gold: no casualties by Day 4 · Silver: 2 or fewer casualties',
     check(g) {
       if (g.stats.deaths >= 6) return 'lose';
-      if (g.stats.guestsTotal >= 1800) return 'win';
+      if (g.stats.guestsTotal >= 1500) return 'win';
       if (g.day > 5) return 'lose';
       return null;
     },
-    progress(g) { return `Guests ${g.stats.guestsTotal}/1800 · Casualties ${g.stats.deaths}/5 · Day ${g.day}/5`; },
+    progress(g) { return `Guests ${g.stats.guestsTotal}/1500 · Casualties ${g.stats.deaths}/5 · Day ${g.day}/5`; },
   },
   siege: {
     name: 'Raptor Siege',
@@ -271,8 +285,8 @@ const SCENARIOS = {
   },
   storms: {
     name: 'Storm Season',
-    blurb: 'Monsoon season. A storm hits every single day, knocking out power and fences. Keep the park profitable anyway.',
-    objective: 'Reach $650,000 in the bank by Day 12',
+    blurb: 'Monsoon season. A storm hits every single day, knocking out power and fences. Keep the visitors coming anyway: every dollar guests spend counts, whatever you spend on building.',
+    objective: 'Earn $300,000 from guests (tickets, shops and rides) by Day 12',
     setup(g) {
       g.money = 250000;
       const P = buildStarterPark(g, { staff: true });
@@ -281,17 +295,18 @@ const SCENARIOS = {
       spawnIn(g, 'dilo', P[2], 2);
       g.events.auto = false;
       g.scenarioState = { lastStorm: 0 };
+      g.stats.guestIncome = 0;
     },
     tick(g) {
       if (g.day > g.scenarioState.lastStorm && g.hour >= 11) { g.scenarioState.lastStorm = g.day; g.events.trigger('storm'); }
     },
-    medal(g) { return g.day <= 8 ? 'gold' : g.day <= 10 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 8 · Silver: by Day 10',
+    medal(g) { return g.day <= 10 ? 'gold' : g.day <= 11 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 10 · Silver: by Day 11',
     check(g) {
-      if (g.money >= 650000) return 'win';
+      if ((g.stats.guestIncome || 0) >= 300000) return 'win';
       if (g.day > 12) return 'lose';
       return null;
     },
-    progress(g) { return `${fmtMoney(g.money)} / $650k · Day ${g.day}/12`; },
+    progress(g) { return `Earned ${fmtMoney(g.stats.guestIncome || 0)} / $300k · Day ${g.day}/12`; },
   },
 };
