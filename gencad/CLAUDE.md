@@ -510,6 +510,39 @@ after step 1. Validation (vLLM greedy) start -> end: view1 87.0 -> 88.6, view4 9
 (+0.9-1.7). A single greedy answer now matches the earlier local best-of-9 selection (91.7) and is close to cadrille +
 RL (92.2, whole DeepCAD test set). Text inputs gain least; the RL mix had only 20 % text prompts.
 
+### Tier 1: rich-feature parts (`datagen/`, `scripts/gen_rich_data.py`; IN PROGRESS)
+Motivation (Spectral Labs "Quartz" post): learning CAD needs data with real engineering features and an executing
+environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers, revolves, holes, shells or patterns.
+- `datagen/README.md` is the spec. 21 generator families (`datagen/families/`): flange, l_bracket, u_bracket,
+  gusset_mount, mount_plate, pocket_plate, bar_link, stepped_shaft, pulley, bushing, enclosure, bearing_block,
+  motor_mount, hex_hardware, knob_handle, gear_like, extrusion_profile, bent_sheet, rib_panel, random_mix,
+  random_mix_hard. Written by parallel Claude sub-agents to the spec, each self-audited (check pass rate >= 0.9, most
+  1.0; < 1 s/part; preview sheets reviewed by eye), then reviewed again by the main session.
+- Conventions: literal CadQuery; build in XY then one final `.rotate`; edges picked with `near((x,y,z),...)`
+  (`mm/cad_helpers.py`, added to every runtime: CadQuery's NearestToPointSelector compares edge *centres*, so circular
+  edges could never be picked); canonical-ish frame (centred, longest side 100-200).
+- `datagen/check.py`: literal code, builds, exactly one solid, BRepCheck valid, size/centre limits, not a sliver,
+  deterministic rebuild. `datagen/preview.py`: contact sheets for review.
+- Generation: `RUN=richgen_<i> SPLIT=train jobs/launch.sh richgen --shard <i> --per_shard 40000 ...` on cpu-upgrade
+  (8 vCPU, $0.03/h). 28 train shards (20 x 18 named families, 8 x random_mix) ~1.1M parts; test: `test_0` (1489 parts,
+  18 named families) and `test_1` (random_mix). ~22 KB per part (4 renders).
+- **Job CPU gotcha:** inside HF Jobs `os.cpu_count()` returns the host's CPUs (64 on an 8-vCPU job). Pools sized from it
+  oversubscribe and CAD builds time out (first test shard kept 458/1500; fixed: 1489/1500 in half the time). Every
+  script now uses `mm/sysutil.usable_cpus()` (cgroup quota). This also explains the cloud cqiou job that lost parts.
+- Baseline, current best model (`vlm_grpo_fullres`) on `test_0` (`scripts/predict_vllm.py --rich`,
+  `scripts/rich_iou.py`): own IoU 1 view 50.6 / 4 views 55.5, invalid 9-11 %; worst on unseen features (enclosure 21,
+  gear 22, bent sheet 26, knob 35 own IoU at 4 views; 26-55 % invalid). The "gt" IoU (23.5) is not meaningful for rich
+  parts: renders are framed to the part, so absolute size (100-200) is unobservable; use "own".
+
+### Tier 2: build-inspect-fix revision turn (IN PROGRESS)
+- Prompt: `mm.vlm_cad.revision_text` (task + previous program + build error, or its render as a 2nd image with the
+  input cameras). Multi-image support in `_messages` / `encode_batch`.
+- Data: `scripts/build_revision.py` (job `revdata`, `/work/data/revision.tar`) from the RFT samples: 46,057 examples
+  (greedy attempt + one flawed sample per part; 36k fix-to-GT, 9.7k keep, 1.6k with real build errors).
+  Trained as a share of the SFT mix (`train_vlm_cq.py --revision`, keep:fix sampled 1:1).
+- Inference/eval: `scripts/revise_vllm.py` (job `revise`): turn 1, build + render or error, turn 2; a revision that
+  fails to build is dropped.
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
