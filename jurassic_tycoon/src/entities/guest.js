@@ -16,7 +16,7 @@ class Guest {
     this.state = 'walk';
     this.hunger = randf(0, 40); this.toilet = randf(0, 30); this.shopUrge = randf(0, 60);
     this.happy = 60; this.fear = 0;
-    this.stay = randf(8, 18); // hours in park
+    this.stay = randf(10, 20); // hours in park
     this.goal = null; this.insideT = 0; this.hidden = false; this.dead = false;
     this.anim = rand(); this.facing = 1;
     this.seenSpecies = new Set();
@@ -77,7 +77,8 @@ class Guest {
     if (this.thoughtT > 0) this.thoughtT -= dt; else this.thought = null;
 
     // Movement between tiles
-    const speed = (this.state === 'flee' ? 2.0 : 0.95) * this.speedMul;
+    // a park is a long walk: guests stroll briskly so far-off attractions are reachable in a visit
+    const speed = (this.state === 'flee' ? 2.1 : 1.3) * this.speedMul;
     const tx = this.nx + 0.5 + this.ox, ty = this.ny + 0.5 + this.oy;
     const dx = tx - this.x, dy = ty - this.y;
     const d = Math.sqrt(dx * dx + dy * dy);

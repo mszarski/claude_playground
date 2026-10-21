@@ -105,6 +105,7 @@ class UIPanels {
       html += `<h2>${def.name}</h2><div class="sub">${def.desc}</div>`;
       html += `<div class="row"><span>Condition</span><span>${Math.round(o.hp)}/${o.maxHp}</span></div>${this.bar(o.hp, o.maxHp, '#5ac85a')}`;
       if (def.power) html += `<div class="row"><span>Power</span><span style="color:${o.powered ? '#f8d040' : '#e04838'}">${o.powered ? 'ON' : 'NO POWER'}</span></div>`;
+      if (o.type === 'pylon') html += `<div class="row"><span>Grid</span><span style="color:${w.covered[w.idx(o.x, o.y)] ? '#f8d040' : '#e04838'}">${w.covered[w.idx(o.x, o.y)] ? 'CONNECTED' : 'NOT CONNECTED'}</span></div>${w.covered[w.idx(o.x, o.y)] ? '' : '<div class="sub" style="color:#ff9080">Outside the power area. Move it closer to a power plant or a connected pylon.</div>'}`;
       if (o.type === 'power') html += `<div class="row"><span>Output</span><span>${o.offline > 0 || w.power.outage > 0 ? 'OFFLINE' : def.supply + ' MW'}</span></div>`;
       if (def.cat === 'guest' && !w.accessTiles(o).length) html += `<div class="sub" style="color:#ff9080">Not connected to a path!</div>`;
       if (o.type === 'tour') {
@@ -116,13 +117,14 @@ class UIPanels {
         if (o.noPaddock) html += `<div class="sub" style="color:#ff9080">Must touch a paddock (build it right against a paddock's fence).</div>`;
       }
       if (o.type === 'arena') {
-        html += `<div class="row"><span>Next show</span><span>${o.noRaptors ? '—' : Math.max(0, Math.ceil(o.showT || 0)) + 's'}</span></div>`;
-        if (o.noRaptors) html += `<div class="sub" style="color:#ff9080">Needs a paddock with 2+ raptors within 12 tiles.</div>`;
+        const night = g.hour < 8 || g.hour >= 20;
+        html += `<div class="row"><span>Next show</span><span>${o.noRaptors ? '—' : night ? 'after 08:00' : 'in ' + Math.max(1, Math.ceil((o.showT || 0) / g.secPerHour)) + 'h'}</span></div>`;
+        if (o.noRaptors) html += `<div class="sub" style="color:#ff9080">Needs a paddock with 2+ raptors within 6 tiles.</div>`;
         if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
       }
       if (o.type === 'feedshow') {
         html += `<div class="row"><span>Shows</span><span>12:00 · 18:00</span></div>`;
-        if (o.noCarnivore) html += `<div class="sub" style="color:#ff9080">No carnivore within 12 tiles to feed.</div>`;
+        if (o.noCarnivore) html += `<div class="sub" style="color:#ff9080">No carnivore paddock within 6 tiles.</div>`;
         if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
       }
       if (def.income) html += `<div class="row"><span>Visitors</span><span>${o.visitors}</span></div><div class="row"><span>Revenue</span><span>${fmtMoney(o.revenue || 0)}</span></div>`;

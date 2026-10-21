@@ -191,7 +191,8 @@ class UI {
           if (!why && this.game.dinos.some((d) => d.tx === bx + dx && d.ty === by + dy)) why = 'a dinosaur';
         }
         if (!why && !this.game.canAfford(def.cost)) why = 'not enough money';
-        this.showTip(e, `${def.name} · ${fmtMoney(def.cost)}${why ? `<br><span style="color:#ff9080">Blocked by ${why}</span>` : ''}`);
+        const offGrid = !why && this.tool === 'pylon' && !w.covered[w.idx(bx, by)];
+        this.showTip(e, `${def.name} · ${fmtMoney(def.cost)}${why ? `<br><span style="color:#ff9080">Blocked by ${why}</span>` : ''}${offGrid ? '<br><span style="color:#ff9080">Outside the blue power area: it won\'t connect</span>' : ''}`);
       } else if (e.target === cv && this.tool === 'stamp' && this.blueprint) {
         const bp = this.blueprint, plan = this.game.stampPlan(bp, t.x - Math.floor(bp.w / 2), t.y - Math.floor(bp.h / 2));
         this.showTip(e, `Paddock blueprint · ${fmtMoney(plan.cost)}${plan.blocked ? `<br><span style="color:#ff9080">${plan.blocked} fence tiles blocked</span>` : ''}`);
@@ -476,6 +477,7 @@ class UI {
         this.sfx.play('build');
         if (def.cat === 'guest' && !w.accessTiles(b).length) this.toast(`Connect the ${def.name} to a path!`, 'warn');
         if (tool === 'tour' && !w.trackAccess(b).length) this.toast('Now lay Tour Track from the station past your paddocks, ideally in a loop.', 'info');
+        if (tool === 'pylon') { w.computePower(g); if (!w.covered[w.idx(b.x, b.y)]) this.toast('This pylon is outside the power area, so it is not connected. Place pylons inside the blue area to extend it.', 'warn'); }
         if (tool === 'gyro' && !g.gyroAccess(b).length) this.toast('A Gyrosphere Station must touch a paddock: build it right against the fence.', 'warn');
         if (def.feeds) { const reg = w.regionAt(bx + 1, by) || w.regionAt(bx - 1, by) || w.regionAt(bx, by + 1) || w.regionAt(bx, by - 1); if (reg && reg.public) this.toast('Feeders should go inside a fenced paddock.', 'warn'); }
       } else {
@@ -572,7 +574,7 @@ class UI {
   }
   respond() {
     const err = this.game.respondToBreach();
-    if (err) this.toast(err, 'info'); else { this.sfx.play('alarm'); $('#alarmBtn').classList.toggle('on', this.game.alarm); }
+    if (err) this.toast(err, 'info'); else { if (this.game.alarm) this.sfx.play('alarm'); $('#alarmBtn').classList.toggle('on', this.game.alarm); }
   }
   renderSquad(force) {
     const el = $('#squad');
@@ -817,22 +819,28 @@ class UI {
     const el = $('#goal');
     if (g.scenario) {
       const sc = SCENARIOS[g.scenario];
-      el.innerHTML = `<b>${sc.campaign ? 'CHAPTER ' + sc.chapter : 'SCENARIO'} · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>`;
+      // chapter 1 keeps the beginner's step-by-step hints from the classic goal list
+      const hint = sc.hints ? GOALS.slice(0, 12).find((x) => !x.check(g)) : null;
+      this.hintId = hint ? hint.id : null;
+      el.innerHTML = `<b>${sc.campaign ? 'CHAPTER ' + sc.chapter : 'SCENARIO'} · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>${hint ? `<br><span style="color:var(--dim)">Next step: ${hint.text}</span>${hint.tool ? ' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>' : ''}` : ''}`;
+      if (hint && hint.tool) $('#goalBtn').onclick = () => this.showMeTool(hint.tool);
       return;
     }
     if (g.goalIdx >= GOALS.length) { el.innerHTML = `<b>ALL GOALS COMPLETE</b>Spared no expense. Keep building!`; return; }
     const goal = GOALS[g.goalIdx];
     el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}${goal.tool ? ' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>' : ''}`;
     const gb = $('#goalBtn');
-    if (gb) gb.onclick = () => {
-      this.sfx.play('click');
-      if (goal.tool === 'hatch') { this.showSpeciesPicker(); return; }
-      const grp = TOOL_GROUPS.find((gr) => gr.tools.includes(goal.tool));
-      this.setTool(goal.tool);
-      if (grp && window.innerWidth >= 760) this.openFlyout(grp);
-      const tips = { paddock: 'Drag a rectangle inside the blue power coverage, then put a Feeder inside.', power: 'Place it near where your paddocks will go. Fences only work in its blue radius.', visitor: 'Build it next to a path, and connect paths from the gate past your paddocks.' };
-      this.toast(tips[goal.tool] || `Selected: ${(BUILDINGS[goal.tool] || TOOL_INFO[goal.tool]).name}. Click on the map to place it.`, 'info');
-    };
+    if (gb) gb.onclick = () => this.showMeTool(goal.tool);
+  }
+
+  showMeTool(tool) {
+    this.sfx.play('click');
+    if (tool === 'hatch') { this.showSpeciesPicker(); return; }
+    const grp = TOOL_GROUPS.find((gr) => gr.tools.includes(tool));
+    this.setTool(tool);
+    if (grp && window.innerWidth >= 760) this.openFlyout(grp);
+    const tips = { paddock: 'Drag a rectangle inside the blue power coverage, then put a Feeder inside.', power: 'Place it near where your paddocks will go. Fences only work in its blue radius.', visitor: 'Build it next to a path, and connect paths from the gate past your paddocks.' };
+    this.toast(tips[tool] || `Selected: ${(BUILDINGS[tool] || TOOL_INFO[tool]).name}. Click on the map to place it.`, 'info');
   }
 
   // ---------------- HUD ----------------
@@ -859,7 +867,11 @@ class UI {
     $('#sPowK').style.color = p.outage > 0 ? '#e04838' : '';
     $('#alarmBtn').classList.toggle('on', g.alarm);
     this.renderAlerts();
-    if (g.scenario) { const p = $('#scProg'); if (p) p.textContent = SCENARIOS[g.scenario].progress(g); }
+    if (g.scenario) {
+      const sc = SCENARIOS[g.scenario], p = $('#scProg');
+      if (p) p.textContent = sc.progress(g);
+      if (sc.hints) { const h = GOALS.slice(0, 12).find((x) => !x.check(g)); if ((h ? h.id : null) !== this.hintId) this.renderGoal(); }
+    }
     this.infoT -= 0.2;
     if (this.infoT <= 0) { this.infoT = 0.4; this.renderInfo(false); }
     this.renderDeals(false);
@@ -913,6 +925,12 @@ class UI {
   // ---------------- per-frame ----------------
   frame(dt) {
     if (this.slowmo > 0) this.slowmo -= dt;
+    // building while paused: keep power and paddocks up to date so hatching, feeders and fence lights work
+    const w = this.game.world;
+    if (this.speed === 0 || $('#modal').style.display === 'flex') {
+      if (w.regionsDirty) { w.computeRegions(); this.game.updateLoose(); }
+      if (w.powerDirty) w.computePower(this.game);
+    }
     const k = this.keys;
     const sp = 420 * dt / this.r.cam.zoom;
     let mx = 0, my = 0;

@@ -525,7 +525,11 @@ class Renderer {
     // the "days without incident" board beside the main gate
     if (b.type === 'gate' && b === g.buildingsOfType('gate')[0]) {
       const days = Math.max(0, g.day - (g.lastIncidentDay || 1));
-      const sx = x - 25, sy = y + spr.canvas.height - 30;
+      // stand it beside the gate on whichever side has no path or building
+      const w = g.world, clear = (tx) => [0, 1].every((dy) => w.inb(tx, b.y + dy) && !w.path[w.idx(tx, b.y + dy)] && !w.bld[w.idx(tx, b.y + dy)] && !w.track[w.idx(tx, b.y + dy)]);
+      const side = clear(b.x - 1) && clear(b.x - 2) ? -1 : clear(b.x + b.w) && clear(b.x + b.w + 1) ? 1 : 0;
+      const sx = side === 1 ? x + spr.canvas.width + 4 : x - 25, sy = y + spr.canvas.height - 30;
+      if (side !== 0) {
       const fresh = g.incidentFlash > 0 && Math.floor(this.time * 6) % 2;
       ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(sx + 2, sy + 29, 19, 2);
       ctx.fillStyle = '#3a2814'; ctx.fillRect(sx + 9, sy + 19, 2, 11);
@@ -535,6 +539,7 @@ class Renderer {
       drawText3(ctx, 'SAFE', sx + 3, sy + 7, '#2a1408');
       const n = String(Math.min(999, days));
       drawText3(ctx, n, sx + 11 - n.length * 2, sy + 12, days ? '#2a6a2a' : '#c8381e');
+      }
     }
     // torches flicker on gate
     if (b.type === 'gate') {
@@ -920,7 +925,8 @@ class Renderer {
       ctx.globalAlpha = 0.65;
       ctx.drawImage(spr.canvas, bx * TILE, (by + def.h) * TILE - spr.canvas.height);
       ctx.globalAlpha = 1;
-      ctx.fillStyle = ok ? 'rgba(80,255,80,0.25)' : 'rgba(255,60,60,0.25)';
+      const offGrid = tool === 'pylon' && !w.covered[w.idx(bx, by)];
+      ctx.fillStyle = ok && !offGrid ? 'rgba(80,255,80,0.25)' : offGrid && ok ? 'rgba(255,170,40,0.35)' : 'rgba(255,60,60,0.25)';
       ctx.fillRect(bx * TILE, by * TILE, def.w * TILE, def.h * TILE);
       if (!ok) {
         // mark exactly which tiles are in the way
