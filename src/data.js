@@ -155,9 +155,9 @@ const BUILDINGS = {
   gyro: { name: 'Gyrosphere Station', w: 3, h: 2, cost: 70000, upkeep: 400, power: 4, cat: 'guest', hp: 260, income: 35, appeal: 6, need: 'gyro', unlockStars: 1,
     desc: 'Glass balls roll guests right through the paddock it touches. Build it against a paddock fence, next to a path. Carnivore paddocks thrill riders... until something cracks the glass.' },
   arena: { name: 'Raptor Arena', w: 4, h: 3, cost: 95000, upkeep: 600, power: 3, cat: 'guest', hp: 420, appeal: 10, unlockStars: 2,
-    desc: 'Trained raptors perform every few minutes for everyone within 10 tiles. Needs a paddock with 2+ raptors within 12 tiles. Lucrative, but every show riles them up.' },
+    desc: 'Trained raptors perform every few hours of daylight for everyone within 10 tiles. Build it within 6 tiles of a paddock holding 2+ raptors. Lucrative, but every show riles them up.' },
   feedshow: { name: 'Feeding Grandstand', w: 3, h: 2, cost: 45000, upkeep: 200, power: 1, cat: 'guest', hp: 300, appeal: 4,
-    desc: 'At noon and 6pm the biggest carnivore in a nearby paddock (within 12 tiles) is fed in front of the crowd. Free meal, huge cheers.' },
+    desc: 'At noon and 6pm the biggest carnivore in a paddock within 6 tiles is fed in front of the crowd. Free meal, huge cheers.' },
   siren: { name: 'Siren Tower', w: 1, h: 1, cost: 6000, upkeep: 20, power: 1, cat: 'infra', hp: 120, range: 14,
     desc: 'Guests in range evacuate instantly when an alarm sounds.' },
 };

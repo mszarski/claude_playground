@@ -53,6 +53,23 @@ function buildStarterPark(g, opts = {}) {
     fenceRect(x0, y0, x1, y1, k === 1 && opts.rexWall ? F_WALL : F_ELECTRIC);
     forest(x0 + 1, y0 + 1, x0 + 4, y0 + 4);
   });
+  // chain pylons (outside the paddocks) until every electric fence has power
+  const inBox = (x, y) => P.some(([x0, y0, x1, y1]) => x >= x0 && x <= x1 && y >= y0 && y <= y1);
+  for (let k = 0; k < 12; k++) {
+    w.computePower(g);
+    const dead = [];
+    for (let i = 0; i < w.fence.length; i++) if (w.fence[i] === F_ELECTRIC && !w.covered[i]) dead.push([i % w.W, (i / w.W) | 0]);
+    if (!dead.length) break;
+    let best = null, bs = 0;
+    for (let y = s.y - 34; y <= s.y; y++) for (let x = s.x - 30; x <= s.x + 30; x++) {
+      if (!w.inb(x, y) || !w.covered[w.idx(x, y)] || inBox(x, y) || !w.canPlaceBuilding('pylon', x, y)) continue;
+      let n = 0;
+      for (const [fx, fy] of dead) if (dist2(x, y, fx, fy) <= 64) n++;
+      if (n > bs) { bs = n; best = { x, y }; }
+    }
+    if (!best) break;
+    put('pylon', best.x, best.y);
+  }
   put('feeder_h', s.x - 15, s.y - 13); put('feeder_c', s.x, s.y - 13); put('feeder_c', s.x + 15, s.y - 13);
   put('viewing', s.x - 12, s.y - 11);
   if (opts.staff) { put('ranger', s.x + 15, s.y - 7); put('maint', s.x - 20, s.y - 7); }

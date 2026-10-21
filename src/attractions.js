@@ -109,6 +109,23 @@ const AttractionMixin = {
     this.log(`${dino.name} the ${dino.sp.name} cracked open a gyrosphere!${n ? ' ' + n + ' rider' + (n > 1 ? 's' : '') + ' lost.' : ''}`, 'bad', { x: gy.x, y: gy.y }, true);
   },
 
+  // Dinosaurs living in a paddock whose fence comes within `reach` tiles of building b
+  nearbyPaddockDinos(b, filter, reach = 6) {
+    const w = this.world, out = [];
+    const bx0 = b.x - reach, by0 = b.y - reach, bx1 = b.x + b.w - 1 + reach, by1 = b.y + b.h - 1 + reach;
+    const near = new Map();
+    for (const d of this.dinos) {
+      if (d.loose || d.carried || d.sedatedT > 0 || !filter(d)) continue;
+      const rid = w.region[w.idx(d.tx, d.ty)];
+      if (!near.has(rid)) {
+        const reg = w.regions[rid];
+        near.set(rid, !!reg && !reg.public && reg.maxX + 1 >= bx0 && reg.minX - 1 <= bx1 && reg.maxY + 1 >= by0 && reg.minY - 1 <= by1);
+      }
+      if (near.get(rid)) out.push(d);
+    }
+    return out;
+  },
+
   updateAttractions(dt) {
     const w = this.world;
     this.gyros = this.gyros || [];
@@ -128,14 +145,14 @@ const AttractionMixin = {
     this.gyros = this.gyros.filter((gy) => !gy.dead);
 
     const day = this.hour >= 8 && this.hour < 20;
-    // raptor arena: a show every 40-60s when the raptors are next door
+    // raptor arena: a show every 2.5-4 game hours of daylight when the raptors are next door
     for (const b of this.buildingsOfType('arena')) {
       if (b.showing > 0) b.showing -= dt;
-      b.showT = (b.showT === undefined ? randf(10, 20) : b.showT) - dt;
+      b.showT = (b.showT === undefined ? randf(1, 2) * this.secPerHour : b.showT) - dt;
       if (b.showT > 0) continue;
-      b.showT = randf(40, 60);
+      b.showT = randf(2.5, 4) * this.secPerHour;
       const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-      const raptors = this.dinos.filter((d) => d.species === 'raptor' && !d.loose && !d.carried && d.sedatedT <= 0 && dist2(cx, cy, d.x, d.y) < 144);
+      const raptors = this.nearbyPaddockDinos(b, (d) => d.species === 'raptor');
       b.noRaptors = raptors.length < 2;
       if (!b.powered || !day || b.noRaptors) continue;
       const crowd = this.guests.filter((gu) => !gu.hidden && dist2(gu.x, gu.y, cx, cy) < 100);
@@ -189,7 +206,7 @@ const AttractionMixin = {
 
   feedingShow(b) {
     const w = this.world, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    const cands = this.dinos.filter((d) => d.sp.diet === 'carn' && !d.loose && !d.carried && d.sedatedT <= 0 && dist2(cx, cy, d.x, d.y) < 144);
+    const cands = this.nearbyPaddockDinos(b, (d) => d.sp.diet === 'carn');
     b.noCarnivore = !cands.length;
     if (!cands.length) return;
     const d = cands.sort((a, c) => c.sp.appeal - a.sp.appeal)[0];

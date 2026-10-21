@@ -72,6 +72,7 @@ class Game {
     if (opts.scenario && SCENARIOS[opts.scenario]) {
       this.scenario = opts.scenario;
       SCENARIOS[opts.scenario].setup(this);
+      this.lastIncidentDay = this.day;
       this.goalIdx = GOALS.length; // scenarios replace the goal chain
     }
   }
@@ -109,8 +110,15 @@ class Game {
       const i = w.idx(gx + dx, gy + dy); if (!w.isLand(w.terrain[i])) w.terrain[i] = T_GRASS;
     }
     const gate = w.addBuilding('gate', gx, gy); gate.built = 1;
-    for (let y = s.y - 1; y >= s.y - 5; y--) this.placePath(s.x, y, true);
-    for (let x = s.x - 3; x <= s.x + 3; x++) this.placePath(x, s.y - 5, true);
+    // the starting path must not run into rock: clear the ground under it
+    const startPath = [];
+    for (let y = s.y - 1; y >= s.y - 5; y--) startPath.push([s.x, y]);
+    for (let x = s.x - 3; x <= s.x + 3; x++) startPath.push([x, s.y - 5]);
+    for (const [x, y] of startPath) {
+      const i = w.idx(x, y);
+      if (w.terrain[i] === T_ROCK || w.terrain[i] === T_FOREST || w.terrain[i] === T_SAND) w.terrain[i] = T_GRASS;
+    }
+    for (const [x, y] of startPath) this.placePath(x, y, true);
   }
 
   // ------------- money -------------
@@ -820,7 +828,7 @@ class Game {
       if (d.hunger > 75) issues.push([80, `${d.name} the ${d.sp.name} is starving. Put a ${d.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder in its paddock.`, d]);
       else if (p.fear < 0) issues.push([75, `${d.name} the ${d.sp.name} is terrified: it shares a paddock with a carnivore. Use Move… to separate them.`, d]);
       else if (p.social < 0) issues.push([75, `${d.name} the ${d.sp.name} is fighting a rival. Move one of them to its own paddock.`, d]);
-      else if (d.sp.social > 1 && p.social < 10) issues.push([40, `${d.name} the ${d.sp.name} is lonely. ${d.sp.name}s like groups of ${d.sp.social}.`, d]);
+      else if (d.sp.social > 1 && p.social < 10) issues.push([40, `${d.name} the ${d.sp.name} is lonely. ${d.sp.name} like groups of ${d.sp.social}.`, d]);
       else if (p.space < 18) issues.push([50, `${d.name}'s paddock is crowded. Enlarge it or move some dinosaurs out.`, d]);
       else if (p.forest < 8 && d.sp.forest > 0.2) issues.push([30, `${d.name} the ${d.sp.name} wants more tree cover. Plant trees in its paddock.`, d]);
       else if (d.sick > 0 && !this.hasBuilding('vet')) issues.push([60, `${d.name} is sick. A Vet Clinic would cure it quickly.`, d]);

@@ -38,24 +38,24 @@ const tick = (ok, text) => `${ok ? '✓' : '○'} ${text}`;
 
 const CHAPTERS = {
   c1: {
-    chapter: 1, name: 'Opening Season', size: 'small', difficulty: 'normal',
+    chapter: 1, name: 'Opening Season', size: 'small', difficulty: 'normal', hints: true,
     blurb: 'Hammond has the island, the money and a dream. Build the park from nothing and prove people will come.',
-    objective: 'Reach 2 stars and have 80 guests in the park at once, by Day 15',
+    objective: 'Reach 2 stars, have 120 guests in the park at once and $600,000 in the bank, by Day 15',
     setup(g) { g.money = 500000; applyPerks(g, 'c1'); g.scenarioState = { peak: 0 }; },
     tick(g) { g.scenarioState.peak = Math.max(g.scenarioState.peak || 0, g.guests.length); },
     check(g) {
-      if (g.stars >= 2 && (g.scenarioState.peak || 0) >= 80) return 'win';
+      if (g.stars >= 2 && (g.scenarioState.peak || 0) >= 120 && g.money >= 600000) return 'win';
       if (g.day > 15) return 'lose';
       return null;
     },
-    progress(g) { return [tick(g.stars >= 2, `★ ${g.stars}/2`), tick((g.scenarioState.peak || 0) >= 80, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/80`), `Day ${g.day}/15`].join(' · '); },
-    medal(g) { return g.day <= 8 ? 'gold' : g.day <= 11 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 8 · Silver: by Day 11',
+    progress(g) { return [tick(g.stars >= 2, `★ ${g.stars}/2`), tick((g.scenarioState.peak || 0) >= 120, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/120`), tick(g.money >= 600000, `${fmtMoney(g.money)} / $600k`), `Day ${g.day}/15`].join(' · '); },
+    medal(g) { return g.day <= 7 ? 'gold' : g.day <= 10 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 7 · Silver: by Day 10',
   },
   c2: {
     chapter: 2, name: 'Clever Girls', size: 'medium', difficulty: 'normal',
     blurb: 'The board wants the raptors on show. Muldoon wants them shot. Exhibit a pack and put on raptor shows without losing control.',
-    objective: 'Exhibit 3 raptors and hold 4 raptor shows by Day 14, with no more than 4 escapes',
+    objective: 'Exhibit 3 raptors and hold 10 raptor shows by Day 12, with no more than 4 escapes',
     setup(g) {
       g.money = 380000;
       const P = buildStarterPark(g, { staff: true });
@@ -66,13 +66,13 @@ const CHAPTERS = {
     },
     check(g) {
       const raptors = g.dinos.filter((d) => d.species === 'raptor' && !d.loose && !d.carried).length;
-      if (raptors >= 3 && (g.stats.shows || 0) >= 4) return 'win';
-      if (g.stats.escapes > 4 || g.day > 14) return 'lose';
+      if (raptors >= 3 && (g.stats.shows || 0) >= 10) return 'win';
+      if (g.stats.escapes > 4 || g.day > 12) return 'lose';
       return null;
     },
     progress(g) {
       const raptors = g.dinos.filter((d) => d.species === 'raptor' && !d.loose && !d.carried).length;
-      return [tick(raptors >= 3, `Raptors ${raptors}/3`), tick((g.stats.shows || 0) >= 4, `Shows ${g.stats.shows || 0}/4`), `Escapes ${g.stats.escapes}/4`, `Day ${g.day}/14`].join(' · ');
+      return [tick(raptors >= 3, `Raptors ${raptors}/3`), tick((g.stats.shows || 0) >= 10, `Shows ${g.stats.shows || 0}/10`), `Escapes ${g.stats.escapes}/4`, `Day ${g.day}/12`].join(' · ');
     },
     medal(g) { return g.stats.escapes === 0 ? 'gold' : g.stats.escapes <= 2 ? 'silver' : 'bronze'; },
     medalText: 'Gold: no escapes · Silver: 2 or fewer',
@@ -80,7 +80,7 @@ const CHAPTERS = {
   c3: {
     chapter: 3, name: 'Monsoon', size: 'medium', difficulty: 'normal',
     blurb: 'Storm season. A storm rolls in every other day. Keep the money coming and the guests happy anyway.',
-    objective: 'Have $650,000 in the bank and reputation 50+ by Day 26',
+    objective: 'Have $600,000 in the bank and reputation 50+ by Day 26',
     setup(g) {
       g.money = 300000;
       const P = buildStarterPark(g, { staff: true });
@@ -94,11 +94,11 @@ const CHAPTERS = {
     },
     tick(g) { if (g.day >= g.scenarioState.lastStorm + 2 && g.hour >= 10) { g.scenarioState.lastStorm = g.day; g.events.trigger('storm'); } },
     check(g) {
-      if (g.money >= 650000 && g.reputation >= 50) return 'win';
+      if (g.money >= 600000 && g.reputation >= 50) return 'win';
       if (g.day > 26) return 'lose';
       return null;
     },
-    progress(g) { return [tick(g.money >= 650000, `${fmtMoney(g.money)} / $650k`), tick(g.reputation >= 50, `Rep ${Math.round(g.reputation)}/50`), `Day ${g.day}/26`].join(' · '); },
+    progress(g) { return [tick(g.money >= 600000, `${fmtMoney(g.money)} / $600k`), tick(g.reputation >= 50, `Rep ${Math.round(g.reputation)}/50`), `Day ${g.day}/26`].join(' · '); },
     medal(g) { return g.day <= 21 ? 'gold' : g.day <= 23 ? 'silver' : 'bronze'; },
     medalText: 'Gold: by Day 21 · Silver: by Day 23',
   },
