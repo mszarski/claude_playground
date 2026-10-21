@@ -27,6 +27,7 @@ const TESTS = [
     check: (r) => Array.isArray(r) && r.length >= 12,
   },
   { name: 'tutorial completes', file: 'tutorial.js', check: (r) => r[r.length - 1] === 'final->done' },
+  { name: 'InGen calls: every choice', file: 'decisions.js', check: (r) => Array.isArray(r) && r.some((x) => x.startsWith('scheduled: ')) },
   { name: 'fuzz + save/load round trip', file: 'fuzz.js', pre: 'window.FUZZ_RUNS = 1;', check: (r) => Array.isArray(r) && r.length >= 1 },
   {
     name: 'modals and panels render',

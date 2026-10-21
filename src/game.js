@@ -378,7 +378,8 @@ class Game {
     return true;
   }
 
-  isUnlocked(species) { return this.stars >= SPECIES[species].unlock || this.sandbox || this.research.has('gen_' + species); }
+  isUnlocked(species) { return this.stars >= SPECIES[species].unlock || this.sandbox || this.research.has('gen_' + species) || this.freeEgg === species; }
+  hatchCost(species) { return this.freeEgg === species ? 0 : SPECIES[species].cost; }
 
   canHatchAt(species, x, y) {
     const w = this.world;
@@ -392,24 +393,25 @@ class Game {
       if (b.hp < b.maxHp * 0.6) return 'The Aviary needs repairs first.';
       const n = this.pteros.filter((p) => !p.dead && p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h).length + this.eggs.filter((e) => e.species === 'ptera').length;
       if (n >= 6) return 'This Aviary is full (6 Pteranodons).';
-      if (!this.canAfford(sp.cost)) return 'Not enough money.';
+      if (!this.canAfford(this.hatchCost(species))) return 'Not enough money.';
       return null;
     }
     if (!w.dinoPass(x, y)) return 'Pick an open tile inside a paddock.';
     const reg = w.regionAt(x, y);
     if (!reg || reg.public) return 'Dinosaurs must hatch inside a fenced paddock with no paths.';
     if (reg.size > 1200) return 'That area is not enclosed.';
-    if (!this.canAfford(sp.cost)) return 'Not enough money.';
+    if (!this.canAfford(this.hatchCost(species))) return 'Not enough money.';
     return null;
   }
   hatch(species, x, y) {
     const err = this.canHatchAt(species, x, y);
     if (err) { this.log(err, 'warn'); return false; }
-    const sp = SPECIES[species];
-    this.spend(sp.cost, 'dinos');
+    const cost = this.hatchCost(species);
+    this.spend(cost, 'dinos');
     const egg = { species, x, y, t: 8, max: 8 };
+    if (this.freeEgg === species) { egg.unstable = true; this.freeEgg = null; }
     this.eggs.push(egg);
-    this.recordUndo({ kind: 'egg', egg, cost: sp.cost });
+    this.recordUndo({ kind: 'egg', egg, cost });
     this.sound('build');
     return true;
   }
@@ -419,7 +421,7 @@ class Game {
     const w = this.world, i = w.idx(x, y);
     const f = w.fence[i];
     if (!isSolidFence(f)) return;
-    w.fenceHp[i] -= dmg;
+    w.fenceHp[i] -= dmg * this.mod('fenceDmgMul');
     w.markDirty(x, y);
     if (w.fenceHp[i] <= 0) {
       w.fence[i] = F_BROKEN; w.fenceHp[i] = 0;
@@ -639,6 +641,7 @@ class Game {
       if (e.t <= 0) {
         const reg = w.regionAt(e.x, e.y);
         const d = SPECIES[e.species].flying ? new Ptera(this, e.x, e.y) : new Dino(this, e.species, e.x, e.y);
+        if (e.unstable) { d.unstable = true; d.hp = d.sp.hp * 1.3; }
         if (d.isPtera) this.pteros.push(d); else this.dinos.push(d);
         this.stats.hatched++;
         this.burst(e.x + 0.5, e.y + 0.5, '#f0e8c8', 14);
@@ -717,6 +720,7 @@ class Game {
         const r = sc.check(this);
         if (r && !this.scenarioDone) { this.scenarioDone = r; this.emit('scenario', r); }
       }
+      this.updateDecisions();
       this.adviseT = (this.adviseT === undefined ? 20 : this.adviseT) - 1;
       if (this.adviseT <= 0) { this.adviseT = 45; if (this.advisorOn !== false) this.advise(); }
       this.looseCount = this.creatures().filter((d) => d.loose && !d.carried).length;
@@ -891,7 +895,7 @@ class Game {
     const h = this.hour;
     const gates = this.buildingsOfType('gate');
     if (!gates.length || this.alarm || this.gateLocked || (this.events.storm && this.events.storm.phase === 'active')) return;
-    if (h < 7 || h > 20) return;
+    if ((h < 7 || h > 20) && !this.mod('nightGuests', 0)) return;
     const desired = this.desiredGuests();
     if (this.guests.length >= desired) return;
     const perHour = Math.max(2, desired / 5);
@@ -904,7 +908,7 @@ class Game {
       const gu = new Guest(this, pick(acc));
       this.guests.push(gu);
       this.stats.guestsTotal++;
-      this.earn(this.ticket, 'tickets');
+      this.earn(this.ticket * this.mod('ticketMul'), 'tickets');
       this.floatT = (this.floatT || 0) - 1;
       if (this.floatT <= 0) { this.floatT = 4; this.addFloat(gate.x + 1.5, gate.y - 0.5, '+$' + this.ticket, '#f8d040'); }
     }
@@ -917,9 +921,9 @@ class Game {
     if (!hasThings) return 0;
     const priceF = clamp(1.7 - this.ticket / 150, 0.1, 1.5);
     const repF = 0.4 + this.reputation / 80;
-    const night = this.isNight ? 0.5 : 1;
+    const night = this.isNight && !this.mod('nightGuests', 0) ? 0.5 : 1;
     const mkt = this.research.has('marketing') ? 1.15 : 1;
-    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night * mkt * this.season.guests));
+    return Math.min(450, Math.floor((10 + attractions * 2.8) * priceF * repF * night * mkt * this.season.guests * this.mod('guestMul')));
   }
 
   updateRating() {
@@ -958,6 +962,7 @@ class Game {
     // upkeep
     let up = 0;
     for (const b of this.world.buildings.values()) up += BUILDINGS[b.type].upkeep;
+    up += this.mod('upkeepAdd', 0);
     this.spend(up, 'upkeep');
     // reputation drift
     const avgHappy = this.happySamples && this.happySamples.length ? this.happySamples.reduce((a, b) => a + b, 0) / this.happySamples.length : 55;
@@ -975,6 +980,7 @@ class Game {
     if ((day - 1) % 7 === 0 && day > 1) { const s = this.season; this.log(`${s.name} has arrived. ${s.desc}`, 'info', null, true); }
     this.events.onNewDay(day);
     this.breed();
+    this.maybeOfferDecision();
     this.emit('day', day);
     // game over checks
     if (this.money < -100000) {

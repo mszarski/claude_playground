@@ -110,6 +110,25 @@ button:disabled { opacity: 0.45; cursor: default; }
 #goal { position: absolute; left: 70px; bottom: 8px; z-index: 6; padding: 6px 10px; max-width: min(420px, 45vw); font-size: 18px; }
 #goal b { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); display: block; margin-bottom: 3px; }
 
+/* InGen deals and timed modifiers, stacked above the goal */
+#deals { position: absolute; left: 70px; bottom: calc(var(--goalH, 60px) + 14px); z-index: 6; display: flex; flex-direction: column; gap: 2px; max-width: min(360px, 45vw); pointer-events: none; }
+.deal { display: flex; justify-content: space-between; gap: 10px; background: rgba(10,16,10,0.88); border: 2px solid var(--edge); padding: 0 6px; font-size: 16px; }
+.deal.contract { box-shadow: inset 3px 0 0 var(--gold); }
+.deal.mod { box-shadow: inset 3px 0 0 #70b8f0; color: #cfe4f0; }
+.deal i { font-style: normal; color: var(--gold); }
+/* InGen call */
+.call { max-width: 560px; }
+.callhead { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.callicon { font-size: 40px; line-height: 1; }
+.callfrom { font-family: 'Press Start 2P'; font-size: 8px; color: var(--orange); animation: blink 0.8s steps(2) 3; }
+.call h1 { margin: 2px 0 0 !important; }
+.calltext { font-size: 21px !important; line-height: 1.25; }
+.calltext b { color: var(--gold); font-weight: normal; }
+.choices { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.choice { text-align: left; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; }
+.choice b { font-family: 'Press Start 2P'; font-size: 10px; color: var(--text); font-weight: normal; }
+.choice span { color: var(--dim); font-size: 17px; }
+.choice:hover b { color: var(--gold); }
 /* info panel */
 #info { position: absolute; right: 6px; top: calc(var(--top, 44px) + 10px); width: 270px; z-index: 10; padding: 8px; display: none; max-height: calc(100vh - 250px); overflow-y: auto; }
 #info h2 { margin: 0; font-family: 'Press Start 2P'; font-size: 11px; color: var(--gold); line-height: 1.4; }
@@ -201,6 +220,8 @@ table.fin td:last-child { text-align: right; }
 @media (max-width: 760px) {
   #log { display: none; }
   #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 196px); font-size: 15px; }
+  #deals { left: 6px; max-width: calc(100vw - 196px); }
+  .deal { font-size: 14px; }
   #minimap { width: 128px; height: 96px; }
   #miniBtns { display: none; }
   #info { width: calc(100vw - 80px); top: auto; bottom: 120px; max-height: 45vh; }
@@ -286,6 +307,7 @@ table.fin td:last-child { text-align: right; }
 <div id="toasts"></div>
 <div id="toolbar" class="panel"></div>
 <div id="flyout" class="panel"></div>
+<div id="deals" hidden></div>
 <div id="goal" class="panel"></div>
 <div id="info" class="panel"></div>
 <div id="log"></div>
@@ -342,6 +364,7 @@ table.fin td:last-child { text-align: right; }
 <script src="src/research.js"></script>
 <script src="src/game.js"></script>
 <script src="src/scenarios.js"></script>
+<script src="src/decisions.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>

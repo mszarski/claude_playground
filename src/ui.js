@@ -28,6 +28,7 @@ class UI {
   attachGame(game) {
     this.game = game;
     this.selected = null;
+    this.decisionShown = null;
     $('#log').innerHTML = '';
     game.on('log', (e) => this.onLog(e));
     game.on('gameover', (reason) => this.showGameOver(reason));
@@ -171,7 +172,7 @@ class UI {
         this.showTip(e, `${def.name} · ${fmtMoney(def.cost)}${why ? `<br><span style="color:#ff9080">Blocked by ${why}</span>` : ''}`);
       } else if (e.target === cv && this.tool === 'hatch' && this.species) {
         const err = this.game.canHatchAt(this.species, t.x, t.y);
-        this.showTip(e, err ? `<span style="color:#ff9080">${err}</span>` : `Hatch ${SPECIES[this.species].name} · ${fmtMoney(SPECIES[this.species].cost)}`);
+        this.showTip(e, err ? `<span style="color:#ff9080">${err}</span>` : `Hatch ${SPECIES[this.species].name} · ${this.game.hatchCost(this.species) ? fmtMoney(this.game.hatchCost(this.species)) : 'FREE'}`);
       } else if (e.target === cv) {
         // hover a dinosaur for a quick read on how it's doing
         const d = (this.tool === 'inspect' || !BUILDINGS[this.tool]) && this.pickAt(t.wx, t.wy);
@@ -555,7 +556,9 @@ class UI {
     // panels sit below the top bar, which wraps to several rows on narrow screens
     const tb = $('#topbar');
     const syncTop = () => document.documentElement.style.setProperty('--top', tb.offsetHeight + 'px');
-    if (window.ResizeObserver) new ResizeObserver(syncTop).observe(tb);
+    const goalEl = $('#goal');
+    const syncGoal = () => document.documentElement.style.setProperty('--goalH', (goalEl.offsetHeight || 0) + 'px');
+    if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); }
     syncTop();
     mm.addEventListener('mousedown', (e) => { mmNav(e); this.mmDrag = true; });
     window.addEventListener('mousemove', (e) => { if (this.mmDrag) mmNav(e); });
@@ -734,6 +737,9 @@ class UI {
     if (g.scenario) { const p = $('#scProg'); if (p) p.textContent = SCENARIOS[g.scenario].progress(g); }
     this.infoT -= 0.2;
     if (this.infoT <= 0) { this.infoT = 0.4; this.renderInfo(false); }
+    this.renderDeals(false);
+    // an InGen call waits until no other dialog is open
+    if (g.pendingDecision && !this.decisionShown && $('#modal').style.display !== 'flex') this.showDecision(g.pendingDecision);
   }
 
   renderAlerts() {

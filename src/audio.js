@@ -139,6 +139,7 @@ class Sfx {
       case 'cricket': for (let i = 0; i < 3; i++) this.tone('square', 4200, 4300, 0.03, 0.008 * v, i * 0.06); break;
       case 'caw': this.tone('sawtooth', 700, 420, 0.25, 0.03 * v); break;
       case 'heli': this.noiseBurst(0.8, 0.15 * v, 200, 6); break;
+      case 'ring': for (let i = 0; i < 2; i++) { for (let k = 0; k < 8; k++) this.tone('square', k % 2 ? 1180 : 960, k % 2 ? 1180 : 960, 0.04, 0.05 * v, i * 0.55 + k * 0.045); } break;
     }
   }
 }

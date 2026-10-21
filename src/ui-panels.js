@@ -22,7 +22,7 @@ class UIPanels {
       const status = d.carried ? '<span class="tag" style="background:#2a5a9a">AIRLIFT</span>' :
         d.sedatedT > 0 ? '<span class="tag" style="background:#4a4a8a">SEDATED</span>' :
           d.loose ? '<span class="tag" style="background:#b01e10">LOOSE!</span>' : '<span class="tag" style="background:#2a6a2a">CONTAINED</span>';
-      const sick = d.sick > 0 ? '<span class="tag" style="background:#5a8a2a">SICK</span>' : '';
+      const sick = (d.sick > 0 ? '<span class="tag" style="background:#5a8a2a">SICK</span>' : '') + (d.unstable ? '<span class="tag" style="background:#6a2a7a" title="Dr. Wu\'s frog-DNA embryo: stronger and more easily stressed">UNSTABLE</span>' : '');
       const diet = `<span class="tag" style="background:${sp.diet === 'carn' ? '#8a3a1a' : '#3a6a2a'}">${sp.diet === 'carn' ? 'CARNIVORE' : 'HERBIVORE'}</span>`;
       html += `<h2>${d.name}</h2><div class="sub">${sp.name} · <i>${sp.sci}</i></div><canvas class="portrait" id="portrait"></canvas>${status}${sick}${diet}`;
       html += `<div class="row"><span>Health</span><span>${Math.round(d.hp)}/${sp.hp}</span></div>${this.bar(d.hp, sp.hp, '#5ac85a')}`;
@@ -144,7 +144,7 @@ class UIPanels {
       const sp = SPECIES[k];
       const locked = !g.isUnlocked(k);
       html += `<div class="card ${locked ? 'locked' : ''}" data-sp="${k}"><canvas data-spr="${k}"></canvas><div class="nm">${sp.name.toUpperCase()}</div>
-        <div>${sp.diet === 'carn' ? '<span style="color:#f08a5a">Carnivore</span>' : '<span style="color:#8ad06a">Herbivore</span>'} · ${fmtMoney(sp.cost)}</div>
+        <div>${sp.diet === 'carn' ? '<span style="color:#f08a5a">Carnivore</span>' : '<span style="color:#8ad06a">Herbivore</span>'} · ${g.freeEgg === k ? '<span style="color:#f8d040">FREE (Dr. Wu)</span>' : fmtMoney(sp.cost)}</div>
         <div style="color:#9ab08a">Appeal ${sp.appeal} · Danger ${sp.danger} · Str ${sp.strength}</div>
         <div style="color:#9ab08a">${sp.flying ? 'Needs an Aviary' : `Needs ${sp.space} tiles${sp.social > 1 ? ' · groups of ' + sp.social : ''}`}</div>
         ${locked ? `<div style="color:#f8d040">Unlocks at ${'★'.repeat(sp.unlock)}</div>` : ''}</div>`;
@@ -289,6 +289,7 @@ class UIPanels {
     let html = `<h1>MENU</h1><div class="btns" style="flex-direction:column;align-items:stretch;gap:6px">
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
+      <button data-m="calls" title="Calls from InGen with choices and consequences">InGen calls: ${this.game.decisionsOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
       <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)}${this.game.mapSize !== 'medium' ? ' · ' + MAP_SIZES[this.game.mapSize].label.toLowerCase() : ''} (copy)</button>
       <button data-m="wheel" title="What scrolling does on the map">Scroll: ${{ auto: 'AUTO (mouse wheel zooms, trackpad pans)', zoom: 'ZOOM', pan: 'PAN (pinch or +/− to zoom)' }[this.wheelMode]}</button>
@@ -307,6 +308,7 @@ class UIPanels {
         if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => this.toast(`Copied island code ${code}`, 'good'), () => this.toast(`Island code: ${code}`, 'info'));
         else this.toast(`Island code: ${code}`, 'info');
       }
+      else if (m === 'calls') { this.game.decisionsOn = this.game.decisionsOn === false; this.showMenu(); }
       else if (m === 'breed') { this.game.breedingOff = !this.game.breedingOff; this.showMenu(); }
       else if (m === 'wheel') {
         this.wheelMode = { auto: 'pan', pan: 'zoom', zoom: 'auto' }[this.wheelMode];
@@ -340,6 +342,34 @@ class UIPanels {
       <div class="btns" style="justify-content:flex-end"><button data-close>Got it</button></div>`;
     this.showModal(html);
     $('[data-close]').onclick = () => this.closeModal();
+  }
+
+  // An InGen call: the game is paused (modal open) until the director picks an option
+  showDecision(offer) {
+    const g = this.game, def = DECISIONS[offer.id];
+    this.decisionShown = offer;
+    const html = `<div class="call"><div class="callhead"><span class="callicon">${def.icon}</span><div><div class="callfrom">☎ INCOMING CALL</div><h1>${def.from.toUpperCase()}</h1></div></div>
+      <p class="calltext">${def.text(g, offer.params)}</p>
+      <div class="choices">${def.choices.map((c, i) => `<button class="choice" data-ch="${i}"><b>${typeof c.label === 'function' ? c.label(offer.params) : c.label}</b><span>${choiceHint(c, offer.params)}</span></button>`).join('')}</div></div>`;
+    this.showModal(html, true);
+    this.sfx.play('ring');
+    for (const b of document.querySelectorAll('[data-ch]')) b.onclick = () => {
+      g.resolveDecision(+b.dataset.ch);
+      this.decisionShown = null;
+      this.closeModal();
+      this.sfx.play('click');
+      this.renderDeals(true);
+    };
+  }
+
+  renderDeals(force) {
+    const list = contractStatus(this.game);
+    const html = list.map((c) => `<div class="deal ${c.kind}"><span>${c.kind === 'contract' ? '📋 ' : ''}${c.text}</span><i>${c.left}</i></div>`).join('');
+    if (!force && html === this.lastDeals) return;
+    this.lastDeals = html;
+    const el = $('#deals');
+    el.innerHTML = html;
+    el.hidden = !list.length;
   }
 
   showGameOver(reason) {

@@ -84,7 +84,7 @@ class Staff {
       }
       if (dd <= 3.8) { this.path = null; return; }
     }
-    if (this.path) { if (stepAlong(this, dt, g.research.has('rangers') ? 2.5 : 1.9, w.humanPass, w)) this.path = null; }
+    if (this.path) { if (stepAlong(this, dt, (g.research.has('rangers') ? 2.5 : 1.9) * g.mod('rangerSpeed'), w.humanPass, w)) this.path = null; }
   }
 
   updateWorker(dt) {
