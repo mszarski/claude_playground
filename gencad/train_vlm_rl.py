@@ -20,6 +20,7 @@ import random
 import time
 
 import numpy as np
+from mm.sysutil import usable_cpus  # noqa: E402
 import pandas as pd
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")   # sampling/backward shapes vary a lot
@@ -65,7 +66,7 @@ def main():
     ap.add_argument("--eval_every", type=int, default=100)
     ap.add_argument("--eval_n", type=int, default=256)
     ap.add_argument("--eval_first", type=int, default=1, help="evaluate the initial model at step 0")
-    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
+    ap.add_argument("--workers", type=int, default=max(1, usable_cpus() - 2))
     ap.add_argument("--score_timeout", type=float, default=30.0)
     ap.add_argument("--optim", default="adamw", choices=["adamw", "sgd"], help="sgd: CPU smoke tests only")
     ap.add_argument("--dtype", default="float32", choices=["float32", "bfloat16"])

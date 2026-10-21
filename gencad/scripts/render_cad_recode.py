@@ -15,6 +15,7 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 from scripts.render_views import DIRS, render, tessellate_cq  # noqa: E402
 
 
@@ -42,7 +43,7 @@ def main():
     ap.add_argument("--shard", type=int, default=0)
     ap.add_argument("--n_shards", type=int, default=1)
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--task_timeout", type=float, default=60.0)
     a = ap.parse_args()
     from pebble import ProcessPool

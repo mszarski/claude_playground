@@ -16,6 +16,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 
 
 def attempt_feedback(args):
@@ -45,7 +46,7 @@ def main():
     ap.add_argument("--rounds", type=int, default=1)
     ap.add_argument("--max_new_tokens", type=int, default=1024)
     ap.add_argument("--max_len", type=int, default=8192)
-    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
+    ap.add_argument("--workers", type=int, default=max(1, usable_cpus() - 2))
     ap.add_argument("--scratch", default="/tmp/revise_renders")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

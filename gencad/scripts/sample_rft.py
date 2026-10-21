@@ -23,6 +23,7 @@ import h5py
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 
 
 def gt_vec(data, u):
@@ -43,7 +44,7 @@ def main():
     ap.add_argument("--max_new_tokens", type=int, default=1024)
     ap.add_argument("--chunk", type=int, default=2000)
     ap.add_argument("--max_len", type=int, default=4096, help="vLLM context: prompt + image + program")
-    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 3))
+    ap.add_argument("--workers", type=int, default=max(1, usable_cpus() - 3))
     ap.add_argument("--score_timeout", type=float, default=60.0)
     ap.add_argument("--gpu_mem", type=float, default=0.85)
     ap.add_argument("--seed", type=int, default=0)

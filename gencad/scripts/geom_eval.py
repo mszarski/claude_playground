@@ -21,6 +21,7 @@ import numpy as np
 from pebble import ProcessPool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 
 N_POINTS = 8192
 
@@ -156,7 +157,7 @@ def main():
     ap.add_argument("--data", default="data")
     ap.add_argument("--methods", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=None, help="first N uids only (smoke test)")
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--task_timeout", type=float, default=120.0, help="seconds per prediction; a hang counts as invalid")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

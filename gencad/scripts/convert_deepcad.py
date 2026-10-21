@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 
 
 def convert(args):
@@ -43,7 +44,7 @@ def main():
     ap.add_argument("--data", default="data")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--task_timeout", type=float, default=60.0)
     a = ap.parse_args()
     from pebble import ProcessPool

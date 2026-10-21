@@ -20,6 +20,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 
 
 def error_of(code):
@@ -67,7 +68,7 @@ def main():
     ap.add_argument("--bad", type=float, default=0.9)
     ap.add_argument("--keep", type=float, default=0.98)
     ap.add_argument("--keep_best", type=float, default=0.95)
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()
     import pandas as pd

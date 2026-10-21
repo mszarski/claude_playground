@@ -19,6 +19,7 @@ import sys
 import time
 
 import numpy as np
+from mm.sysutil import usable_cpus  # noqa: E402
 
 os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")      # FlashInfer JIT-compiles its sampler: needs nvcc
 os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")   # engine in this process, so weights can be loaded
@@ -71,7 +72,7 @@ def main():
     ap.add_argument("--save_every", type=int, default=200)
     ap.add_argument("--eval_n", type=int, default=256)
     ap.add_argument("--gpu_mem", type=float, default=0.3, help="vLLM share of GPU memory; the rest trains")
-    ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 3))
+    ap.add_argument("--workers", type=int, default=max(1, usable_cpus() - 3))
     ap.add_argument("--score_timeout", type=float, default=60.0)
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args()

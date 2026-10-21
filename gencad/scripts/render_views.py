@@ -22,6 +22,7 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 DIRS = np.array([[1, 1, 1], [-1, -1, -1], [0, -1, 0], [0, 0, 1]], float)   # iso top, iso bottom, front, top
 
 
@@ -146,7 +147,7 @@ def main():
     ap.add_argument("--out", default="data/renders")
     ap.add_argument("--split", nargs="*", default=["train", "validation", "test"])
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--task_timeout", type=float, default=120.0, help="seconds per part")
     a = ap.parse_args()
     from pebble import ProcessPool

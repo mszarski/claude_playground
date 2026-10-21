@@ -27,6 +27,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from mm.sysutil import usable_cpus  # noqa: E402
 
 
 def load_input(stem, views, size):
@@ -75,7 +76,7 @@ def main():
     ap.add_argument("--views", type=int, choices=[1, 4], required=True, help="input views the selector may use")
     ap.add_argument("--size", type=int, default=128, help="render side for the comparison")
     ap.add_argument("--n", type=int, default=None, help="first n uids only")
-    ap.add_argument("--workers", type=int, default=os.cpu_count())
+    ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--task_timeout", type=float, default=180.0)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
