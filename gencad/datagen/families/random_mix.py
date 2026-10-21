@@ -965,8 +965,10 @@ def generate_mix(rng, hard=False):
         T = max(bb0.xlen, bb0.ylen)
         st = {"w": part.w, "s": part.s, "simple": single and kind in ("box", "rect", "ngon", "outline")}
         nops = rng.choice([0, 1, 2, 2, 3, 3, 4, 4]) if not hard else rng.choices([3, 4, 5, 6, 7], [4, 3, 2, 1, 1])[0]
+        if single and nops == 0:
+            nops = 1                       # a lone primitive with nothing on it adds nothing to the data
         segs = []
-        if single and kind in ("box", "rect", "rrect", "circle", "ngon", "outline") and rng.random() < 0.3:
+        if kind in ("box", "rect", "rrect", "circle", "ngon", "outline") and rng.random() < (0.3 if single else 0.2):
             out = op_shell(rng, st, T)
             if out is not None:
                 segs.append(out[0])
