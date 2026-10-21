@@ -232,7 +232,8 @@ table.fin td:last-child { text-align: right; }
   #log { display: none; }
   #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 196px); font-size: 15px; }
   #deals { left: 6px; max-width: calc(100vw - 196px); }
-  #squad { left: 6px; right: auto; transform: none; bottom: calc(var(--goalH, 60px) + 12px); max-width: calc(100vw - 196px); }
+  #squad { left: 6px; right: auto; transform: none; bottom: calc(var(--goalH, 60px) + var(--dealsH, 0px) + 14px); max-width: calc(100vw - 196px); padding: 4px 8px; }
+  #squad .sqhint { display: none; }
   .deal { font-size: 14px; }
   #minimap { width: 128px; height: 96px; }
   #miniBtns { display: none; }
@@ -273,6 +274,10 @@ table.fin td:last-child { text-align: right; }
   #pip canvas { width: 160px; height: 100px; }
   #tut { left: 56px; bottom: 4px; font-size: 15px; width: calc(100vw - 260px); max-height: 50vh; overflow-y: auto; }
   #toasts { top: auto; bottom: 60px; }
+  #deals { left: 56px; max-width: 270px; }
+  .deal { font-size: 14px; }
+  #squad { left: auto; right: 196px; transform: none; bottom: 6px; max-width: 300px; padding: 3px 8px; }
+  #squad .sqhint { display: none; }
   #modal .box { max-height: 96vh; padding: 10px 12px; }
   #title .tbox { padding: 10px 16px; }
   #title h1 { font-size: 20px; }

@@ -377,6 +377,8 @@ class UIPanels {
       <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
       Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
+      <h2>CAMPAIGN AND INGEN CALLS</h2>
+      <p>The <b>Campaign</b> is five chapters, from opening day to Jurassic World; each one you finish gives a perk to the chapters after it. Every few mornings <b>InGen calls</b> with a choice: investors, lawyers, Dr. Wu, the rangers' union and more. Deals show above your goal with their deadlines. Turn calls off in the menu if you just want to build.</p>
       <h2>ATTRACTIONS</h2>
       <p><b>Gyrosphere Station</b> (1★): build it against a paddock fence; glass balls roll guests among the dinosaurs. Put it on a carnivore paddock for thrills, and the occasional cracked sphere. <b>Feeding Grandstand</b>: at noon and 6pm a nearby carnivore is fed in front of the crowd. <b>Raptor Arena</b> (2★): next to a paddock with 2+ raptors, shows pay well but stress the pack, and sometimes go badly wrong.</p>
       <h2>SHORTCUTS</h2>
@@ -417,6 +419,7 @@ class UIPanels {
     const el = $('#deals');
     el.innerHTML = html;
     el.hidden = !list.length;
+    document.documentElement.style.setProperty('--dealsH', (el.hidden ? 0 : el.offsetHeight + 4) + 'px');
   }
 
   showGameOver(reason) {

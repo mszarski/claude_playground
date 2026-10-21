@@ -681,7 +681,9 @@ class UI {
     const syncTop = () => document.documentElement.style.setProperty('--top', tb.offsetHeight + 'px');
     const goalEl = $('#goal');
     const syncGoal = () => document.documentElement.style.setProperty('--goalH', (goalEl.offsetHeight || 0) + 'px');
-    if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); }
+    const dealsEl = $('#deals');
+    const syncDeals = () => document.documentElement.style.setProperty('--dealsH', (dealsEl.hidden ? 0 : dealsEl.offsetHeight + 4) + 'px');
+    if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); new ResizeObserver(syncDeals).observe(dealsEl); }
     syncTop();
     mm.addEventListener('mousedown', (e) => { mmNav(e); this.mmDrag = true; });
     window.addEventListener('mousemove', (e) => { if (this.mmDrag) mmNav(e); });
