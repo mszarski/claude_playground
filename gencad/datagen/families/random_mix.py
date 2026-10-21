@@ -602,8 +602,8 @@ def build_bodies(rng, hard):
     # recentre on the bounding-box centre and rebuild
     bb = fbb(part.s)
     dx, dy, dz = -round((bb.xmin + bb.xmax) / 2), -round((bb.ymin + bb.ymax) / 2), -round((bb.zmin + bb.zmax) / 2)
-    s = part.s.translate(cq.Vector(dx, dy, dz))       # same as rebuilding the shifted code
-    part.w, part.s = cq.Workplane("XY").add(s), s
+    if not part.build(dx, dy, dz):
+        return None
     bb = fbb(part.s)
     side = max(bb.xlen, bb.ylen, bb.zlen)
     if not 100 <= side <= 205:
@@ -942,8 +942,8 @@ def op_edges(rng, st, T):
         return None
     nf = len(s.Faces())
     fillet = rng.random() < 0.55
-    for frac in (rng.uniform(0.2, 0.45), 0.15):
-        r = r1(max(1.0, lim * frac))
+    for frac in (rng.uniform(0.25, 0.48), 0.2):
+        r = r1(max(1.5, 0.012 * T, lim * frac))
         if r >= lim * 0.5:
             continue
         seg = sel + (f".fillet({f(r)})" if fillet else f".chamfer({f(r)})")
