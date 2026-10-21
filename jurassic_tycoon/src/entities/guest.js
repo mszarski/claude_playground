@@ -131,7 +131,7 @@ class Guest {
     else if (this.toilet > 60) type = 'restroom';
     else if ((g.hour >= 19 || g.hour < 6) && this.stay > 4) type = 'hotel';
     else if (this.shopUrge > 70) type = 'shop';
-    else if (chance(0.45)) type = pick(['tour', 'tour', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
+    else if (chance(0.45)) type = pick(['tour', 'tour', 'gyro', 'gyro', 'arena', 'feedshow', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
     if (!type) return null;
     const cands = g.buildingsOfType(type).filter((b) => b.powered || !BUILDINGS[b.type].power);
     if (!cands.length) { if (type === 'restroom' || type === 'restaurant') this.happy -= 2; return null; }
@@ -211,8 +211,8 @@ class Guest {
     if (!b || b === 'gate' || !w.buildings.has(b.id)) return;
     const def = BUILDINGS[b.type];
     if (def.power && !b.powered) { this.happy -= 3; return; }
-    if (b.type === 'viewing') { this.happy = Math.min(100, this.happy + 4); this.lookAtDinos(); return; }
-    if (b.type === 'tour') {
+    if (b.type === 'viewing' || b.type === 'arena' || b.type === 'feedshow') { this.happy = Math.min(100, this.happy + 4); this.lookAtDinos(); return; }
+    if (b.type === 'tour' || b.type === 'gyro') {
       if (!b.queue) b.queue = [];
       if (b.queue.length >= 16) { this.happy -= 3; return; }
       b.queue.push(this); this.state = 'queue'; this.hidden = true; this.inBuilding = null; this.insideT = 40;

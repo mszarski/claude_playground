@@ -24,3 +24,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Run test suite
         run: node tools/ci.js
+      - name: RTS controls with the real mouse
+        run: node tools/rts.js

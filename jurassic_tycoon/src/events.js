@@ -234,7 +234,7 @@ class Events {
     this.bolts.push({ x: tx + 0.5, y: ty + 0.5, life: 0.35, seed: randi(0, 9999) });
     g.soundAt('thunder', tx, ty, 1);
     const j = w.idx(tx, ty);
-    if (isSolidFence(w.fence[j])) g.damageFence(tx, ty, randf(50, 110), null);
+    if (isSolidFence(w.fence[j]) && !g.mod('stormproof', 0)) g.damageFence(tx, ty, randf(50, 110), null);
     const b = w.buildings.get(w.bld[j]);
     if (b) {
       g.damageBuilding(b, randf(40, 120), null);

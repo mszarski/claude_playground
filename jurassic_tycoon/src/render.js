@@ -319,6 +319,7 @@ class Renderer {
     for (const gu of g.guests) if (!gu.hidden && vis(gu.tx, gu.ty)) items.push({ y: gu.y, t: 2, o: gu });
     for (const s of g.staff) if (vis(s.tx, s.ty)) items.push({ y: s.y, t: 2, o: s });
     for (const j of g.jeeps) if (vis(j.tx, j.ty)) items.push({ y: j.y + 0.2, t: 5, o: j });
+    for (const gy of g.gyros || []) if (vis(gy.tx, gy.ty)) items.push({ y: gy.y + 0.1, t: 6, o: gy });
     for (const e of g.eggs) items.push({ y: e.y + 0.6, t: 3, o: e });
     if (w.volcano && vis(w.volcano.x, w.volcano.y)) items.push({ y: w.volcano.y + 3, t: 4, o: w.volcano });
     items.sort((a, b) => a.y - b.y);
@@ -335,6 +336,7 @@ class Renderer {
       else if (it.t === 2) this.drawPerson(ctx, it.o, ui);
       else if (it.t === 4) this.drawVolcano(ctx, it.o);
       else if (it.t === 5) this.drawJeep(ctx, it.o);
+      else if (it.t === 6) this.drawGyro(ctx, it.o);
       else this.drawEgg(ctx, it.o);
     }
 
@@ -384,6 +386,7 @@ class Renderer {
 
     // tool previews
     this.drawToolPreview(ctx, ui);
+    this.drawSquad(ctx, ui, dt);
 
     // floating texts / thoughts
     ctx.font = '8px "Press Start 2P", monospace';
@@ -405,6 +408,60 @@ class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.drawLighting(ctx, cw, ch, camX, camY, z);
     this.drawWeather(ctx, cw, ch, dt);
+    if (ui.box) {
+      const b = ui.box;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = 'rgba(248,208,64,0.12)'; ctx.strokeStyle = '#f8d040'; ctx.lineWidth = 1;
+      const x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1), bw = Math.abs(b.x1 - b.x0), bh = Math.abs(b.y1 - b.y0);
+      ctx.fillRect(x, y, bw, bh); ctx.strokeRect(x + 0.5, y + 0.5, bw, bh);
+    }
+  }
+
+  // RTS selection rings and the orders of the selected units
+  drawSquad(ctx, ui, dt) {
+    const sq = ui.squad || [];
+    const pulse = Math.floor(this.time * 3) % 2;
+    const ring = (x, y, col, r = 6) => {
+      ctx.strokeStyle = col; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(Math.round(x * TILE) + 0.5, Math.round(y * TILE) + 1.5, r, r * 0.45, 0, 0, Math.PI * 2); ctx.stroke();
+    };
+    for (const u of sq) {
+      if (u.dead) continue;
+      ring(u.x, u.y + (u.kind === 'heli' ? 0.2 : 0), '#f8d040', u.kind === 'heli' ? 10 : 6);
+      const o = u.order;
+      if (!o) continue;
+      let tx, ty, col;
+      if (o.type === 'hunt' && o.d && !o.d.dead) { tx = o.d.x; ty = o.d.y; col = 'rgba(255,90,60,0.7)'; }
+      else if (o.x !== undefined) { tx = o.x + 0.5; ty = o.y + 0.5; col = o.type === 'move' ? 'rgba(248,208,64,0.6)' : 'rgba(120,220,255,0.7)'; }
+      else continue;
+      ctx.strokeStyle = col; ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.moveTo(u.x * TILE, u.y * TILE); ctx.lineTo(tx * TILE, ty * TILE); ctx.stroke();
+      ctx.setLineDash([]);
+      if (o.type === 'hunt') {
+        // crosshair on the target
+        ctx.strokeStyle = pulse ? '#ff5a3c' : '#ffd0c0';
+        const cx = Math.round(tx * TILE) + 0.5, cy = Math.round(ty * TILE - 6) + 0.5;
+        ctx.strokeRect(cx - 5, cy - 5, 10, 10);
+        ctx.beginPath(); ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy - 3); ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 8);
+        ctx.moveTo(cx - 8, cy); ctx.lineTo(cx - 3, cy); ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + 8, cy); ctx.stroke();
+      } else if (o.type === 'move') {
+        // little flag where they hold
+        const fx = Math.round(tx * TILE), fy = Math.round(ty * TILE);
+        ctx.fillStyle = '#3a2a1a'; ctx.fillRect(fx, fy - 9, 1, 10);
+        ctx.fillStyle = '#f8d040'; ctx.fillRect(fx + 1, fy - 9, 5, 3);
+      } else {
+        ctx.strokeStyle = '#78dcff'; ctx.strokeRect(Math.round((tx - 0.5) * TILE) + 0.5, Math.round((ty - 0.5) * TILE) + 0.5, TILE - 1, TILE - 1);
+      }
+    }
+    const p = ui.orderPing;
+    if (p && p.t > 0) {
+      p.t -= dt;
+      const r = 3 + (0.8 - p.t) * 14;
+      ctx.globalAlpha = clamp(p.t / 0.8, 0, 1);
+      ctx.strokeStyle = p.hunt ? '#ff5a3c' : '#f8d040';
+      ctx.beginPath(); ctx.ellipse(p.x * TILE, p.y * TILE, r, r * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   }
 
   bubble(ctx, text, x, y, col) {
@@ -418,7 +475,7 @@ class Renderer {
   drawOverlays(ctx, ui, vx0, vy0, vx1, vy1) {
     const g = this.game, w = g.world;
     const tool = ui.tool;
-    const showPower = this.overlay === 'power' || ['power', 'pylon', 'backup', 'fence', 'paddock'].includes(tool);
+    const showPower = this.overlay === 'power' || ['power', 'pylon', 'backup', 'fence', 'paddock', 'stamp'].includes(tool);
     const showPaddock = this.overlay === 'paddock' || tool === 'hatch' || tool === 'feeder_h' || tool === 'feeder_c' || tool === 'movedest';
     if (showPower) {
       for (let y = Math.max(0, vy0); y <= Math.min(w.H - 1, vy1); y++) for (let x = Math.max(0, vx0); x <= Math.min(w.W - 1, vx1); x++) {
@@ -465,6 +522,20 @@ class Renderer {
     const lit = spr.night && g.darkness > 0.3 && (b.powered || !def.power);
     ctx.drawImage(lit ? spr.night : spr.canvas, x, y);
     this.animateBuilding(ctx, b, x, y, spr);
+    // the "days without incident" board beside the main gate
+    if (b.type === 'gate' && b === g.buildingsOfType('gate')[0]) {
+      const days = Math.max(0, g.day - (g.lastIncidentDay || 1));
+      const sx = x - 25, sy = y + spr.canvas.height - 30;
+      const fresh = g.incidentFlash > 0 && Math.floor(this.time * 6) % 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(sx + 2, sy + 29, 19, 2);
+      ctx.fillStyle = '#3a2814'; ctx.fillRect(sx + 9, sy + 19, 2, 11);
+      ctx.fillStyle = '#2a1a0c'; ctx.fillRect(sx, sy, 21, 20);
+      ctx.fillStyle = fresh ? '#f8d040' : '#e8dcc0'; ctx.fillRect(sx + 1, sy + 1, 19, 18);
+      drawText3(ctx, 'DAYS', sx + 3, sy + 2, '#2a1408');
+      drawText3(ctx, 'SAFE', sx + 3, sy + 7, '#2a1408');
+      const n = String(Math.min(999, days));
+      drawText3(ctx, n, sx + 11 - n.length * 2, sy + 12, days ? '#2a6a2a' : '#c8381e');
+    }
     // torches flicker on gate
     if (b.type === 'gate') {
       const fl = Math.sin(this.time * 20) > 0;
@@ -472,6 +543,23 @@ class Renderer {
       ctx.fillRect(x + 6, y - 2, 2, 3); ctx.fillRect(x + spr.canvas.width - 8, y - 2, 2, 3);
     }
     if (b.type === 'lagoon' && !b.escaped) this.drawMosasaur(ctx, b, x, y + spr.extra);
+    if (b.type === 'arena' && b.showing > 0) {
+      // raptors leaping through hoops in the ring, a spotlight on the trainer
+      const R = DINO_SPRITES.raptor, rh = y + spr.canvas.height - 10;
+      ctx.fillStyle = 'rgba(255,248,200,0.25)'; ctx.fillRect(x + 6, y + 22, spr.canvas.width - 12, spr.canvas.height - 26);
+      for (let k = 0; k < 2; k++) {
+        const ph = (this.time * 1.6 + k * 0.5) % 1, jump = Math.round(Math.sin(ph * Math.PI) * 9);
+        const rx = Math.round(x + 10 + ph * (spr.canvas.width - 20 - R.w / 2));
+        const img = R.right[Math.floor(this.time * 8) % 2];
+        ctx.drawImage(img, rx, rh - jump - Math.round(R.h * 0.7), Math.round(R.w * 0.7), Math.round(R.h * 0.7));
+      }
+      ctx.strokeStyle = '#e8a028'; ctx.beginPath(); ctx.arc(x + spr.canvas.width / 2, rh - 12, 5, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (b.type === 'feedshow' && b.lastShow && this.game.hour % 6 < 0.6 && (this.game.hour >= 12 && this.game.hour < 12.6 || this.game.hour >= 18 && this.game.hour < 18.6)) {
+      // the goat on the crane
+      const gx = x + spr.canvas.width - 10, gy = y + 6 + Math.round((this.game.hour % 1) * 12);
+      ctx.fillStyle = '#f0f0e8'; ctx.fillRect(gx - 1, gy, 4, 3); ctx.fillStyle = '#1a1a1a'; ctx.fillRect(gx + 2, gy, 1, 1);
+    }
     if (b.type === 'hatchery' && g.eggs.length) {
       ctx.fillStyle = Math.sin(this.time * 6) > 0 ? '#f8f080' : '#e0c040';
       ctx.fillRect(x + 22, y + 1, 4, 1);
@@ -719,6 +807,23 @@ class Renderer {
     }
   }
 
+  drawGyro(ctx, gy) {
+    const x = Math.round(gy.x * TILE), y = Math.round(gy.y * TILE - 5);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x - 5, y + 5, 10, 2);
+    if (gy.wrecked) {
+      ctx.fillStyle = '#9ab8c8';
+      for (let k = 0; k < 6; k++) ctx.fillRect(x - 5 + k * 2, y + 2 + (k % 3), 2, 1);
+      return;
+    }
+    // rolling glass ball: rim, glass, a highlight and the riders inside
+    const roll = gy.moving ? Math.floor(gy.anim * 10) % 4 : 0;
+    ctx.fillStyle = '#2a4a6a'; ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(160,215,240,0.85)'; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a5a5a'; ctx.fillRect(x - 5 + roll * 2, y - 1, 1, 2);
+    for (let k = 0; k < gy.riders.length; k++) { ctx.fillStyle = ['#f0c8a0', '#b07850'][k % 2]; ctx.fillRect(x - 2 + k * 3, y - 1, 2, 3); }
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 3, y - 3, 2, 1);
+  }
+
   drawVolcano(ctx, v) {
     const g = this.game;
     const x = Math.round((v.x + 0.5) * TILE - VOLCANO_SPR.width / 2), y = Math.round((v.y + 3) * TILE - VOLCANO_SPR.height);
@@ -847,6 +952,19 @@ class Renderer {
     ctx.strokeStyle = tool === 'demolish' ? '#ff6050' : '#ffffff';
     ctx.lineWidth = 1;
     ctx.strokeRect(h.x * TILE + 0.5, h.y * TILE + 0.5, TILE - 1, TILE - 1);
+    if (tool === 'stamp' && ui.blueprint) {
+      const bp = ui.blueprint, ox = h.x - Math.floor(bp.w / 2), oy = h.y - Math.floor(bp.h / 2);
+      const plan = g.stampPlan(bp, ox, oy);
+      const ok = new Set(plan.fences.map(([x, y]) => x + ',' + y));
+      for (const [dx, dy] of bp.trees) { ctx.fillStyle = 'rgba(60,160,60,0.35)'; ctx.fillRect((ox + dx) * TILE, (oy + dy) * TILE, TILE, TILE); }
+      for (const [dx, dy] of bp.fences) {
+        const x = ox + dx, y = oy + dy, i = w.inb(x, y) ? w.idx(x, y) : -1;
+        const fine = ok.has(x + ',' + y) || (i >= 0 && w.fence[i]);
+        ctx.fillStyle = fine ? 'rgba(248,224,64,0.55)' : 'rgba(255,60,60,0.55)';
+        ctx.fillRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8);
+      }
+      for (const [dx, dy] of bp.feeders) { ctx.strokeStyle = '#ffffff'; ctx.strokeRect((ox + dx) * TILE + 2.5, (oy + dy) * TILE + 2.5, TILE - 5, TILE - 5); }
+    }
     if (tool === 'hatch' && ui.species) {
       const S = DINO_SPRITES[ui.species];
       ctx.globalAlpha = 0.6;
@@ -860,7 +978,9 @@ class Renderer {
     const dark = g.darkness;
     const storm = g.events.storm && g.events.storm.phase === 'active' ? 0.35 : g.events.storm ? 0.15 : 0;
     const v = g.events.volcano && g.events.volcano.phase === 'erupt' ? 0.2 : 0;
-    const amount = Math.max(dark * 0.62, storm, v);
+    // a grid failure at night is properly dark: only flashlights, fires and the moon
+    const blackout = w.power.outage > 0 && !(g.hasBuilding('backup') && w.power.backupFuel > 0 && w.power.backupDelay <= 0);
+    const amount = Math.max(dark * (blackout ? 0.86 : 0.62), storm, v);
     if (amount > 0.01) {
       const lc = this.lightX;
       lc.globalCompositeOperation = 'source-over';
@@ -885,8 +1005,39 @@ class Renderer {
         for (let i = 0; i < w.W * w.H; i++) if (w.terrain[i] === T_LAVA) light((i % w.W + 0.5) * TILE, ((i / w.W | 0) + 0.5) * TILE, 22, 0.8);
         if (w.volcano) light((w.volcano.x + 0.5) * TILE, (w.volcano.y + 0.5) * TILE, 40, 0.8);
         for (const h of g.helis) if (h.state !== 'parked') light(h.x * TILE + h.facing * 30, h.y * TILE, 30, 0.9);
+        // flashlight cones: staff always carry them after dark, fleeing guests use their phones in a blackout
+        const cone = (wx, wy, dir, len, a) => {
+          const sx = (wx - camX) * z, sy = (wy - camY) * z, L = len * z;
+          if (sx < -L || sy < -L || sx > cw + L || sy > ch + L) return;
+          const gr = lc.createRadialGradient(sx, sy, 0, sx, sy, L);
+          gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+          lc.fillStyle = gr;
+          lc.beginPath(); lc.moveTo(sx, sy); lc.arc(sx, sy, L, dir - 0.42, dir + 0.42); lc.closePath(); lc.fill();
+          light(wx, wy, 6, a * 0.8);
+        };
+        if (dark > 0.3) {
+          for (const s of g.staff) {
+            if (s.dead || s.hidden) continue;
+            const t = s.target && !s.target.dead ? s.target : null;
+            const dir = t ? Math.atan2(t.y - s.y, t.x - s.x) : (s.facing > 0 ? 0 : Math.PI) + Math.sin(this.time * 1.3 + s.id) * 0.4;
+            cone(s.x * TILE, s.y * TILE - 6, dir, 46, 0.85);
+          }
+          for (const j of g.jeeps) if (!j.wrecked && j.state !== 'parked') cone(j.x * TILE + j.facing * 6, j.y * TILE - 4, j.facing > 0 ? 0 : Math.PI, 40, 0.8);
+          if (blackout) for (const gu of g.guests) if (!gu.hidden && gu.state === 'flee' && gu.id % 3 === 0) light(gu.x * TILE, gu.y * TILE - 6, 10, 0.6);
+        }
       }
       ctx.drawImage(this.lightC, 0, 0);
+      if (dark > 0.45) {
+        const blink = Math.floor(this.time * 0.7) % 7 === 0;
+        for (const d of g.dinos) {
+          if (!d.loose || d.carried || d.sedatedT > 0 || d.sp.danger < 4 || d.camouflaged || blink) continue;
+          const S = DINO_SPRITES[d.species];
+          const hx = d.x * TILE + d.facing * (S.w / 2 - 5), hy = d.y * TILE - S.h + 7;
+          const sx = Math.round((hx - camX) * z), sy = Math.round((hy - camY) * z);
+          if (sx < 0 || sy < 0 || sx > cw || sy > ch) continue;
+          ctx.fillStyle = '#f8e040'; ctx.fillRect(sx, sy, Math.max(2, z), Math.max(2, z)); ctx.fillRect(sx + d.facing * 3 * z, sy, Math.max(2, z), Math.max(2, z));
+        }
+      }
       // warm tint for lamps
       if (dark > 0.3) {
         ctx.globalCompositeOperation = 'lighter';

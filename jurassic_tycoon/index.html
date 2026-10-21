@@ -110,6 +110,31 @@ button:disabled { opacity: 0.45; cursor: default; }
 #goal { position: absolute; left: 70px; bottom: 8px; z-index: 6; padding: 6px 10px; max-width: min(420px, 45vw); font-size: 18px; }
 #goal b { font-family: 'Press Start 2P'; font-size: 8px; color: var(--gold); display: block; margin-bottom: 3px; }
 
+/* InGen deals and timed modifiers, stacked above the goal */
+#deals { position: absolute; left: 70px; bottom: calc(var(--goalH, 60px) + 14px); z-index: 6; display: flex; flex-direction: column; gap: 2px; max-width: min(360px, 45vw); pointer-events: none; }
+.deal { display: flex; justify-content: space-between; gap: 10px; background: rgba(10,16,10,0.88); border: 2px solid var(--edge); padding: 0 6px; font-size: 16px; }
+.deal.contract { box-shadow: inset 3px 0 0 var(--gold); }
+.deal.mod { box-shadow: inset 3px 0 0 #70b8f0; color: #cfe4f0; }
+.deal i { font-style: normal; color: var(--gold); }
+/* RTS squad bar */
+#squad { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; z-index: 11; padding: 5px 10px; font-size: 17px; max-width: min(520px, calc(100vw - 420px)); text-align: center; }
+#squad .sqhead { font-family: 'Press Start 2P'; font-size: 9px; color: var(--gold); line-height: 1.6; }
+#squad .sqhead span { color: var(--dim); font-family: 'VT323'; font-size: 16px; }
+#squad .sqhint { color: var(--dim); font-size: 15px; }
+#squad .btns { justify-content: center; margin-top: 3px; }
+/* InGen call */
+.call { max-width: 560px; }
+.callhead { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+.callicon { font-size: 40px; line-height: 1; }
+.callfrom { font-family: 'Press Start 2P'; font-size: 8px; color: var(--orange); animation: blink 0.8s steps(2) 3; }
+.call h1 { margin: 2px 0 0 !important; }
+.calltext { font-size: 21px !important; line-height: 1.25; }
+.calltext b { color: var(--gold); font-weight: normal; }
+.choices { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.choice { text-align: left; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; }
+.choice b { font-family: 'Press Start 2P'; font-size: 10px; color: var(--text); font-weight: normal; }
+.choice span { color: var(--dim); font-size: 17px; }
+.choice:hover b { color: var(--gold); }
 /* info panel */
 #info { position: absolute; right: 6px; top: calc(var(--top, 44px) + 10px); width: 270px; z-index: 10; padding: 8px; display: none; max-height: calc(100vh - 250px); overflow-y: auto; }
 #info h2 { margin: 0; font-family: 'Press Start 2P'; font-size: 11px; color: var(--gold); line-height: 1.4; }
@@ -155,6 +180,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 .pipbar { display: flex; justify-content: space-between; align-items: center; font-family: 'Press Start 2P'; font-size: 8px; color: #ff6040; margin-bottom: 3px; }
 .pipbar button { font-size: 12px; padding: 0 4px; }
 @media (max-width: 760px) { #pip { top: auto; bottom: 110px; } #pip canvas { width: 160px; height: 100px; } }
+/* red flash on a dangerous breach */
+#flash { position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255,0,0,0) 40%, rgba(200,10,0,0.55) 100%); }
+#flash.go { animation: breachflash 1.4s ease-out; }
+@keyframes breachflash { 0% { opacity: 1; } 30% { opacity: 0.4; } 45% { opacity: 0.9; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #flash.go { animation-duration: 0.6s; } }
 /* tooltip */
 #tip { position: fixed; z-index: 30; pointer-events: none; background: rgba(8,12,8,0.94); border: 2px solid var(--hi); padding: 3px 8px; font-size: 17px; display: none; max-width: 280px; }
 
@@ -201,6 +231,10 @@ table.fin td:last-child { text-align: right; }
 @media (max-width: 760px) {
   #log { display: none; }
   #goal { left: 6px; bottom: 6px; max-width: calc(100vw - 196px); font-size: 15px; }
+  #deals { left: 6px; max-width: calc(100vw - 196px); }
+  #squad { left: 6px; right: auto; transform: none; bottom: calc(var(--goalH, 60px) + var(--dealsH, 0px) + 14px); max-width: calc(100vw - 196px); padding: 4px 8px; }
+  #squad .sqhint { display: none; }
+  .deal { font-size: 14px; }
   #minimap { width: 128px; height: 96px; }
   #miniBtns { display: none; }
   #info { width: calc(100vw - 80px); top: auto; bottom: 120px; max-height: 45vh; }
@@ -240,6 +274,10 @@ table.fin td:last-child { text-align: right; }
   #pip canvas { width: 160px; height: 100px; }
   #tut { left: 56px; bottom: 4px; font-size: 15px; width: calc(100vw - 260px); max-height: 50vh; overflow-y: auto; }
   #toasts { top: auto; bottom: 60px; }
+  #deals { left: 56px; max-width: 270px; }
+  .deal { font-size: 14px; }
+  #squad { left: auto; right: 196px; transform: none; bottom: 6px; max-width: 300px; padding: 3px 8px; }
+  #squad .sqhint { display: none; }
   #modal .box { max-height: 96vh; padding: 10px 12px; }
   #title .tbox { padding: 10px 16px; }
   #title h1 { font-size: 20px; }
@@ -286,6 +324,8 @@ table.fin td:last-child { text-align: right; }
 <div id="toasts"></div>
 <div id="toolbar" class="panel"></div>
 <div id="flyout" class="panel"></div>
+<div id="deals" hidden></div>
+<div id="squad" class="panel" hidden></div>
 <div id="goal" class="panel"></div>
 <div id="info" class="panel"></div>
 <div id="log"></div>
@@ -297,6 +337,7 @@ table.fin td:last-child { text-align: right; }
 <div id="tut" class="panel" hidden></div>
 <div id="tutHl" hidden></div>
 <div id="tip"></div>
+<div id="flash"></div>
 <div id="modal"><div class="box panel" id="modalBox"></div></div>
 
 <div id="title">
@@ -306,6 +347,7 @@ table.fin td:last-child { text-align: right; }
     <div class="tag2">BUILD THE PARK. CONTAIN THE CHAOS.</div>
     <div class="menu">
       <button id="btnTut">TUTORIAL</button>
+      <button id="btnCamp">CAMPAIGN</button>
       <button id="btnNew">NEW ISLAND</button>
       <button id="btnContinue" style="display:none">CONTINUE</button>
       <button id="btnScen">SCENARIOS</button>
@@ -342,6 +384,11 @@ table.fin td:last-child { text-align: right; }
 <script src="src/research.js"></script>
 <script src="src/game.js"></script>
 <script src="src/scenarios.js"></script>
+<script src="src/decisions.js"></script>
+<script src="src/command.js"></script>
+<script src="src/blueprints.js"></script>
+<script src="src/attractions.js"></script>
+<script src="src/campaign.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/render.js"></script>
 <script src="src/ui.js"></script>

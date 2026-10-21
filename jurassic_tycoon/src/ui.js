@@ -4,6 +4,7 @@
 const $ = (s) => document.querySelector(s);
 const LINE_TOOLS = ['path', 'route', 'track', 'fence', 'wall'];
 const RECT_TOOLS = ['demolish', 'trees', 'clear'];
+const isUnit = (o) => o && (o.kind === 'ranger' || o.kind === 'worker' || o.kind === 'heli');
 
 class UI {
   constructor(game, renderer, sfx) {
@@ -11,6 +12,7 @@ class UI {
     this.tool = 'inspect'; this.species = null;
     this.hover = null; this.drag = null; this.dragTiles = null;
     this.selected = null; this.follow = false;
+    this.squad = []; // RTS selection: rangers, engineers and helicopters you can give orders to
     this.speed = 1; this.prevSpeed = 1;
     this.keys = {};
     // 'auto' guesses mouse wheel (zoom) vs trackpad (pan); 'zoom' and 'pan' force one
@@ -27,13 +29,24 @@ class UI {
 
   attachGame(game) {
     this.game = game;
-    this.selected = null;
+    this.selected = null; this.squad = [];
+    this.decisionShown = null;
     $('#log').innerHTML = '';
     game.on('log', (e) => this.onLog(e));
     game.on('gameover', (reason) => this.showGameOver(reason));
     game.on('victory', () => this.showVictory());
     game.on('scenario', (r) => this.showScenarioEnd(r));
-    game.on('breach', () => { if (this.speed > 1) this.setSpeed(1); });
+    game.on('breach', (newly) => {
+      if (this.speed > 1) this.setSpeed(1);
+      // a dangerous escape gets a moment: slow motion, a roar, a red flash
+      const worst = newly.reduce((a, d) => (d.sp.danger > a.sp.danger ? d : a), newly[0]);
+      if (worst.sp.danger >= 4) {
+        this.slowmo = 1.3;
+        this.sfx.play(worst.sp.size >= 3 ? 'roar' : 'screech', 1.2);
+        setTimeout(() => this.sfx.play('scream', 0.8), 450);
+        const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+      }
+    });
     game.on('day', () => {
       const h = game.history[game.history.length - 1];
       if (!h) return;
@@ -116,6 +129,7 @@ class UI {
     this.tool = t;
     this.drag = null; this.dragTiles = null;
     this.r.canvas.style.cursor = t === 'inspect' ? 'default' : 'crosshair';
+    if (this.lastSquad !== undefined && t !== 'order' && this.squad && this.squad.length) this.lastSquad = '';
     if (t === 'inspect') for (const c of document.querySelectorAll('.cat')) c.classList.toggle('on', c.dataset.cat === 'inspect');
   }
 
@@ -129,12 +143,20 @@ class UI {
   bindInput() {
     const cv = this.r.canvas;
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
+    // double-click a ranger/engineer/helicopter: select every one of that kind on screen
+    cv.addEventListener('dblclick', (e) => {
+      if (this.tool !== 'inspect') return;
+      const t = this.screenToTile(e.clientX, e.clientY);
+      const u = this.pickAt(t.wx, t.wy);
+      if (u && isUnit(u)) this.selectSquad(this.unitsOnScreen().filter((x) => x.kind === u.kind));
+    });
     cv.addEventListener('mousedown', (e) => {
       this.sfx.ensure();
       this.mouse.down = true; this.mouse.button = e.button;
       this.mouse.sx = e.clientX; this.mouse.sy = e.clientY; this.mouse.moved = 0;
       this.mouse.camX = this.r.cam.x; this.mouse.camY = this.r.cam.y;
       if (e.button !== 0) { this.panning = true; return; }
+      if (e.shiftKey && (this.tool === 'inspect' || this.tool === 'order')) { this.box = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY }; return; }
       const t = this.screenToTile(e.clientX, e.clientY);
       if (LINE_TOOLS.includes(this.tool) || RECT_TOOLS.includes(this.tool) || this.tool === 'paddock') {
         this.drag = { x: t.x, y: t.y }; this.updateDrag(t);
@@ -145,6 +167,7 @@ class UI {
       if (e.target !== cv && !this.mouse.down) { this.hover = null; return; }
       const t = this.screenToTile(e.clientX, e.clientY);
       this.hover = t;
+      if (this.mouse.down && this.box) { this.box.x1 = e.clientX; this.box.y1 = e.clientY; return; }
       if (this.mouse.down) {
         this.mouse.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
         if (this.panning || (this.tool === 'inspect' && this.mouse.moved > 6) || (this.tool === 'hatch' && this.mouse.moved > 6)) {
@@ -169,9 +192,12 @@ class UI {
         }
         if (!why && !this.game.canAfford(def.cost)) why = 'not enough money';
         this.showTip(e, `${def.name} · ${fmtMoney(def.cost)}${why ? `<br><span style="color:#ff9080">Blocked by ${why}</span>` : ''}`);
+      } else if (e.target === cv && this.tool === 'stamp' && this.blueprint) {
+        const bp = this.blueprint, plan = this.game.stampPlan(bp, t.x - Math.floor(bp.w / 2), t.y - Math.floor(bp.h / 2));
+        this.showTip(e, `Paddock blueprint · ${fmtMoney(plan.cost)}${plan.blocked ? `<br><span style="color:#ff9080">${plan.blocked} fence tiles blocked</span>` : ''}`);
       } else if (e.target === cv && this.tool === 'hatch' && this.species) {
         const err = this.game.canHatchAt(this.species, t.x, t.y);
-        this.showTip(e, err ? `<span style="color:#ff9080">${err}</span>` : `Hatch ${SPECIES[this.species].name} · ${fmtMoney(SPECIES[this.species].cost)}`);
+        this.showTip(e, err ? `<span style="color:#ff9080">${err}</span>` : `Hatch ${SPECIES[this.species].name} · ${this.game.hatchCost(this.species) ? fmtMoney(this.game.hatchCost(this.species)) : 'FREE'}`);
       } else if (e.target === cv) {
         // hover a dinosaur for a quick read on how it's doing
         const d = (this.tool === 'inspect' || !BUILDINGS[this.tool]) && this.pickAt(t.wx, t.wy);
@@ -183,10 +209,12 @@ class UI {
       if (!this.mouse.down) return;
       this.mouse.down = false;
       const wasPan = this.panning; this.panning = false;
+      if (this.box) { this.finishBox(e.shiftKey); return; }
       if (e.target !== cv && !this.drag) return;
-      if (wasPan && this.mouse.button !== 0) return;
-      if (this.mouse.button !== 0) return;
       const t = this.screenToTile(e.clientX, e.clientY);
+      // right-click (not a right-drag pan) gives the selected units an order
+      if (this.mouse.button === 2) { if (this.mouse.moved < 6 && this.squad.length) this.issueOrder(t); return; }
+      if (this.mouse.button !== 0) return;
       if (this.drag) { this.applyDrag(); this.drag = null; this.dragTiles = null; this.hideTip(); return; }
       if (wasPan) return;
       this.click(t);
@@ -296,7 +324,9 @@ class UI {
       else if (k === '2') this.setSpeed(2);
       else if (k === '3') this.setSpeed(4);
       else if (k === '4') this.setSpeed(8);
-      else if (k === 'escape') { if ($('#modal').style.display === 'flex') this.closeModal(); else if (this.tool !== 'inspect') { this.setTool('inspect'); this.closeFlyout(); } else if (this.selected) this.select(null); else this.showMenu(); }
+      else if (k === 'escape') { if ($('#modal').style.display === 'flex') this.closeModal(); else if (this.tool !== 'inspect') { this.setTool('inspect'); this.closeFlyout(); } else if (this.squad.length) this.selectSquad([]); else if (this.selected) this.select(null); else this.showMenu(); }
+      else if (k === 'm') this.selectSquad(this.game.staff.filter((s) => s.role === 'ranger' && !s.dead));
+      else if (k === 'b' && this.game.looseCount) this.respond();
       else if (k === 'e') this.toggleAlarm();
       else if (k === 'o') this.toggleOverlay('power');
       else if (k === 'k') this.toggleOverlay('paddock');
@@ -317,6 +347,8 @@ class UI {
       }
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
+    const trackShift = (e) => { this.shiftDown = e.shiftKey; };
+    window.addEventListener('mousedown', trackShift, true); window.addEventListener('mouseup', trackShift, true);
   }
 
   // Accumulate fine-grained wheel/pinch input into whole zoom steps so pixels stay crisp.
@@ -444,6 +476,7 @@ class UI {
         this.sfx.play('build');
         if (def.cat === 'guest' && !w.accessTiles(b).length) this.toast(`Connect the ${def.name} to a path!`, 'warn');
         if (tool === 'tour' && !w.trackAccess(b).length) this.toast('Now lay Tour Track from the station past your paddocks, ideally in a loop.', 'info');
+        if (tool === 'gyro' && !g.gyroAccess(b).length) this.toast('A Gyrosphere Station must touch a paddock: build it right against the fence.', 'warn');
         if (def.feeds) { const reg = w.regionAt(bx + 1, by) || w.regionAt(bx - 1, by) || w.regionAt(bx, by + 1) || w.regionAt(bx, by - 1); if (reg && reg.public) this.toast('Feeders should go inside a fenced paddock.', 'warn'); }
       } else {
         this.sfx.play('error');
@@ -473,16 +506,107 @@ class UI {
       this.sfx.play('click'); this.moveDino = null; this.setTool('inspect');
       return;
     }
+    if (tool === 'stamp' && this.blueprint) {
+      const bp = this.blueprint;
+      const r = g.stamp(bp, t.x - Math.floor(bp.w / 2), t.y - Math.floor(bp.h / 2));
+      if (r.n) { this.sfx.play('build'); this.toast(`Paddock stamped (${fmtMoney(r.plan.cost)}).${r.plan.blocked ? ` ${r.plan.blocked} fence tiles were blocked.` : ''}`, r.plan.blocked ? 'warn' : 'good'); }
+      else { this.sfx.play('error'); this.toast(r.money ? `Not enough money (${fmtMoney(r.plan.cost)}).` : "Can't stamp there.", 'warn'); }
+      return;
+    }
+    if (tool === 'order') {
+      this.issueOrder(t);
+      this.setTool('inspect');
+      return;
+    }
     // Inspect: pick entity under cursor
     const pick = this.pickAt(t.wx, t.wy);
+    if (this.shiftDown && pick && isUnit(pick)) {
+      // shift-click adds or removes a unit from the squad
+      const i = this.squad.indexOf(pick);
+      if (i >= 0) this.squad.splice(i, 1); else this.squad.push(pick);
+      this.renderSquad(true);
+      this.sfx.play('click');
+      return;
+    }
+    this.squad = pick && isUnit(pick) ? [pick] : [];
+    this.renderSquad(true);
     this.select(pick);
     this.sfx.play('click');
+  }
+
+  // ---------------- RTS squad ----------------
+  unitsOnScreen() {
+    const z = this.r.cam.zoom, cam = this.r.cam;
+    const x0 = cam.x / TILE, y0 = cam.y / TILE, x1 = x0 + this.r.canvas.width / z / TILE, y1 = y0 + this.r.canvas.height / z / TILE;
+    return this.allUnits().filter((u) => u.x >= x0 && u.x <= x1 && u.y >= y0 && u.y <= y1);
+  }
+  allUnits() { return this.game.staff.filter((s) => !s.dead && !s.hidden).concat(this.game.helis.filter((h) => !h.dead)); }
+  selectSquad(units) {
+    this.squad = units.slice();
+    if (units.length === 1) this.select(units[0]); else if (units.length) this.select(null);
+    this.renderSquad(true);
+    if (units.length) this.sfx.play('click');
+  }
+  finishBox(add) {
+    const b = this.box; this.box = null;
+    const a = this.screenToTile(Math.min(b.x0, b.x1), Math.min(b.y0, b.y1)), c = this.screenToTile(Math.max(b.x0, b.x1), Math.max(b.y0, b.y1));
+    const inBox = this.allUnits().filter((u) => u.x >= a.wx && u.x <= c.wx && u.y >= a.wy - 0.6 && u.y <= c.wy + 0.4);
+    this.selectSquad(add ? [...new Set(this.squad.concat(inBox))] : inBox);
+  }
+  issueOrder(t) {
+    const g = this.game, w = g.world;
+    this.squad = this.squad.filter((u) => !u.dead);
+    if (!this.squad.length) return;
+    const p = this.pickAt(t.wx, t.wy);
+    let target;
+    if (p && (p.kind === 'dino' || p.kind === 'ptera')) target = { dino: p };
+    else if (p && p.kind === 'fence') target = { fence: { x: p.x, y: p.y }, x: p.x, y: p.y };
+    else if (p && p.type && BUILDINGS[p.type]) target = { building: p, x: t.x, y: t.y };
+    else target = { x: t.x, y: t.y };
+    if (!target.dino && !w.humanPass(t.x, t.y) && !target.fence && !target.building) { this.toast("Units can't go there.", 'warn'); this.sfx.play('error'); return; }
+    const n = g.commandUnits(this.squad, target);
+    this.orderPing = { x: target.dino ? target.dino.x : t.x + 0.5, y: target.dino ? target.dino.y : t.y + 0.5, t: 0.8, hunt: !!target.dino };
+    if (!n) { this.toast(target.dino ? 'No selected unit can take that order.' : 'Nothing to do there.', 'warn'); this.sfx.play('error'); return; }
+    this.sfx.play('click');
+    this.renderSquad(true);
+  }
+  respond() {
+    const err = this.game.respondToBreach();
+    if (err) this.toast(err, 'info'); else { this.sfx.play('alarm'); $('#alarmBtn').classList.toggle('on', this.game.alarm); }
+  }
+  renderSquad(force) {
+    const el = $('#squad');
+    this.squad = this.squad.filter((u) => !u.dead);
+    const sq = this.squad;
+    if (!sq.length) { if (!el.hidden) { el.hidden = true; this.lastSquad = ''; } if (this.tool === 'order') this.setTool('inspect'); return; }
+    const count = (k) => sq.filter((u) => u.kind === k).length;
+    const parts = [['ranger', 'ranger', '🎯'], ['worker', 'engineer', '🔧'], ['heli', 'helicopter', '🚁']].filter(([k]) => count(k)).map(([k, nm, ic]) => `${ic} ${count(k)} ${nm}${count(k) > 1 ? 's' : ''}`);
+    const ordered = sq.filter((u) => u.order).length;
+    const touch = this.touchUsed;
+    const html = `<div class="sqhead">${parts.join(' · ')}${ordered ? ` <span>(${ordered} on orders)</span>` : ''}</div>
+      <div class="sqhint">${touch ? 'Tap Send, then tap a dinosaur to hunt it, a fence to repair or ground to hold.' : 'Right-click a dinosaur to hunt it, a fence to repair, or ground to hold there.'}</div>
+      <div class="btns"><button data-sq="send" class="${this.tool === 'order' ? 'on' : ''}">Send…</button><button data-sq="auto" ${ordered ? '' : 'disabled'} title="Let them work on their own again">Back to auto</button><button data-sq="clear">✕</button></div>`;
+    if (!force && html === this.lastSquad) return;
+    this.lastSquad = html;
+    el.innerHTML = html; el.hidden = false;
+    for (const b of el.querySelectorAll('[data-sq]')) b.onclick = () => {
+      const a = b.dataset.sq;
+      this.sfx.play('click');
+      if (a === 'send') { this.setTool(this.tool === 'order' ? 'inspect' : 'order'); if (this.tool === 'order') this.toast('Tap where to send them.', 'info'); }
+      else if (a === 'auto') { this.game.releaseUnits(this.squad); this.toast('Back to working on their own.', 'info'); }
+      else if (a === 'clear') this.selectSquad([]);
+      this.renderSquad(true);
+    };
   }
 
   pickAt(wx, wy) {
     const g = this.game, w = g.world;
     const px = wx * TILE, py = wy * TILE;
     let best = null, by = -1e9;
+    for (const h of g.helis) {
+      const hy = (h.y - h.alt) * TILE;
+      if (Math.abs(px - h.x * TILE) < 12 && py > hy - 12 && py < hy + 6) return h;
+    }
     for (const d of g.dinos) {
       if (d.carried) continue;
       const S = DINO_SPRITES[d.species];
@@ -555,7 +679,11 @@ class UI {
     // panels sit below the top bar, which wraps to several rows on narrow screens
     const tb = $('#topbar');
     const syncTop = () => document.documentElement.style.setProperty('--top', tb.offsetHeight + 'px');
-    if (window.ResizeObserver) new ResizeObserver(syncTop).observe(tb);
+    const goalEl = $('#goal');
+    const syncGoal = () => document.documentElement.style.setProperty('--goalH', (goalEl.offsetHeight || 0) + 'px');
+    const dealsEl = $('#deals');
+    const syncDeals = () => document.documentElement.style.setProperty('--dealsH', (dealsEl.hidden ? 0 : dealsEl.offsetHeight + 4) + 'px');
+    if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); new ResizeObserver(syncDeals).observe(dealsEl); }
     syncTop();
     mm.addEventListener('mousedown', (e) => { mmNav(e); this.mmDrag = true; });
     window.addEventListener('mousemove', (e) => { if (this.mmDrag) mmNav(e); });
@@ -689,7 +817,7 @@ class UI {
     const el = $('#goal');
     if (g.scenario) {
       const sc = SCENARIOS[g.scenario];
-      el.innerHTML = `<b>SCENARIO · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>`;
+      el.innerHTML = `<b>${sc.campaign ? 'CHAPTER ' + sc.chapter : 'SCENARIO'} · ${sc.name.toUpperCase()}</b>${sc.objective}<br><span style="color:var(--gold)" id="scProg">${sc.progress(g)}</span>`;
       return;
     }
     if (g.goalIdx >= GOALS.length) { el.innerHTML = `<b>ALL GOALS COMPLETE</b>Spared no expense. Keep building!`; return; }
@@ -734,6 +862,10 @@ class UI {
     if (g.scenario) { const p = $('#scProg'); if (p) p.textContent = SCENARIOS[g.scenario].progress(g); }
     this.infoT -= 0.2;
     if (this.infoT <= 0) { this.infoT = 0.4; this.renderInfo(false); }
+    this.renderDeals(false);
+    this.renderSquad(false);
+    // an InGen call waits until no other dialog is open
+    if (g.pendingDecision && !this.decisionShown && $('#modal').style.display !== 'flex') this.showDecision(g.pendingDecision);
   }
 
   renderAlerts() {
@@ -742,7 +874,8 @@ class UI {
     const loose = g.creatures().filter((d) => d.loose && !d.carried);
     if (loose.length) {
       const sed = loose.filter((d) => d.sedatedT > 0).length;
-      out.push(`<div class="alert red" data-act="loose">⚠ ${loose.length} DINOSAUR${loose.length > 1 ? 'S' : ''} LOOSE${sed ? ` (${sed} SEDATED)` : ''}${!g.hasBuilding('ranger') ? ' · NO RANGERS!' : ''}</div>`);
+      const canRespond = g.hasBuilding('ranger') || g.helis.length;
+      out.push(`<div class="alert red" data-act="loose">⚠ ${loose.length} DINOSAUR${loose.length > 1 ? 'S' : ''} LOOSE${sed ? ` (${sed} SEDATED)` : ''}${!g.hasBuilding('ranger') ? ' · NO RANGERS!' : ''}${canRespond && loose.length > sed ? ' <button data-act="respond" title="Alarm on, every ranger and helicopter on the escapees (B)">RESPOND</button>' : ''}</div>`);
     }
     if (w.power.outage > 0) {
       const backup = g.hasBuilding('backup') && w.power.backupFuel > 0 && w.power.backupDelay <= 0;
@@ -753,6 +886,8 @@ class UI {
     const v = g.events.volcano;
     if (v) out.push(`<div class="alert ${v.phase === 'erupt' ? 'red' : 'amber'}" data-act="volcano">🌋 ${v.phase === 'warn' ? 'ERUPTION IN ' + Math.ceil(v.t) + 's' : 'ERUPTION!'}</div>`);
     if (g.events.quake > 0) out.push(`<div class="alert red">〰 EARTHQUAKE</div>`);
+    const broken = g.countBrokenFences();
+    if (broken >= 3 || (broken && !g.hasBuilding('maint'))) out.push(`<div class="alert amber" data-act="none">🔧 ${broken} BREACHED FENCE${broken > 1 ? 'S' : ''} <button data-act="fixall" title="Instantly repair every damaged fence">Repair all ${fmtMoney(g.repairAllCost().cost)}</button></div>`);
     if (g.alarm) out.push(`<div class="alert amber" data-act="alarm">🔊 EVACUATION IN PROGRESS · click to sound all-clear</div>`);
     const html = out.join('');
     if (html !== this.lastAlerts) {
@@ -764,6 +899,8 @@ class UI {
           e.stopPropagation();
           const a = el.dataset.act;
           if (a === 'loose') this.jumpToLoose();
+          else if (a === 'respond') this.respond();
+          else if (a === 'fixall') { const r = g.repairFences(); this.toast(r.n ? `Repaired ${r.n} fence tiles (${fmtMoney(r.cost)}).${r.blocked ? ` ${r.blocked} gaps have a dinosaur in them.` : ''}` : r.blocked ? 'Dinosaurs are standing in the gaps. Sedate them first.' : 'Not enough money.', r.n ? 'good' : 'warn'); if (r.n) this.sfx.play('build'); }
           else if (a === 'reboot') {
             if (g.world.power.outage > 8 && g.canAfford(15000)) { g.spend(15000, 'ops'); g.world.power.outage = 8; g.log('Engineers are rebooting the grid manually...', 'info', null, true); }
           } else if (a === 'volcano') this.centerOn(w.volcano.x, w.volcano.y);
@@ -775,6 +912,7 @@ class UI {
 
   // ---------------- per-frame ----------------
   frame(dt) {
+    if (this.slowmo > 0) this.slowmo -= dt;
     const k = this.keys;
     const sp = 420 * dt / this.r.cam.zoom;
     let mx = 0, my = 0;

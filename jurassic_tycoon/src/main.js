@@ -39,11 +39,12 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, size: g.mapSize, sph: g.secPerHour, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
+    v: 1, size: g.mapSize, sph: g.secPerHour, lastInc: g.lastIncidentDay,
+    mods: g.mods || [], contracts: g.contracts || [], freeEgg: g.freeEgg || null, seenDec: g.seenDecisions || {}, nextDec: g.nextDecisionDay || 0, decOn: g.decisionsOn !== false, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
     buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
-    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills, gr: d.growth, ag: d.ageDays, ls: d.lifespan })),
+    dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills, gr: d.growth, ag: d.ageDays, ls: d.lifespan, un: d.unstable ? 1 : 0 })),
   });
 }
 
@@ -69,11 +70,11 @@ function loadGame(json) {
     const def = BUILDINGS[bd.type];
     if (def.staff) for (let k = 0; k < def.staffN; k++) g.staff.push(new Staff(g, def.staff, b));
     if (bd.type === 'helipad') g.helis.push(new Helicopter(g, b));
-    if (bd.type === 'tour') { b.queue = []; b.jeepT = 0; }
+    if (bd.type === 'tour' || bd.type === 'gyro') { b.queue = []; b.jeepT = 0; }
   }
   for (const dd of s.dinos) {
     const d = SPECIES[dd.s].flying ? new Ptera(g, Math.floor(dd.x), Math.floor(dd.y)) : new Dino(g, dd.s, Math.floor(dd.x), Math.floor(dd.y));
-    d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0; if (dd.gr !== undefined) d.growth = dd.gr; if (dd.ag !== undefined) { d.ageDays = dd.ag; d.lifespan = dd.ls; }
+    d.x = dd.x; d.y = dd.y; d.home = { x: dd.hx, y: dd.hy }; d.hp = dd.hp; d.hunger = dd.hu; d.stress = dd.st; d.name = dd.n; d.sick = dd.sick; d.kills = dd.k || 0; if (dd.un) { d.unstable = true; } if (dd.gr !== undefined) d.growth = dd.gr; if (dd.ag !== undefined) { d.ageDays = dd.ag; d.lifespan = dd.ls; }
     g.breedingOff = s.breedOff;
     if (d.isPtera) g.pteros.push(d); else g.dinos.push(d);
   }
@@ -82,6 +83,9 @@ function loadGame(json) {
   g.events.auto = s.auto; g.events.nextDay = s.nextDay; g.start = s.start;
   g.lastDay = g.day;
   if (s.sph) g.secPerHour = s.sph;
+  if (s.lastInc) g.lastIncidentDay = s.lastInc;
+  g.mods = s.mods || []; g.contracts = s.contracts || []; g.freeEgg = s.freeEgg || null;
+  g.seenDecisions = s.seenDec || {}; g.nextDecisionDay = s.nextDec || 0; g.decisionsOn = s.decOn !== false;
   if (s.research) { g.research.done = new Set(s.research.done); g.research.active = s.research.active; g.research.apply(); }
   if (s.scen) { g.scenario = s.scen; g.scenarioState = s.scenState || {}; }
   w.invalidate(); w.computeRegions(); w.computePower(g); g.updateLoose();
@@ -100,6 +104,28 @@ function loadGameFromStorage() {
     UIX.toast('Park loaded. Welcome back!', 'good');
     return true;
   } catch (e) { console.error(e); return false; }
+}
+
+// ---------------- campaign menu ----------------
+function showCampaignMenu() {
+  const m = document.getElementById('scenMenu');
+  const done = loadCampaign();
+  m.innerHTML = CAMPAIGN_ORDER.map((k) => {
+    const c = SCENARIOS[k], open = campaignUnlocked(k), won = done[k];
+    const perk = CAMPAIGN_PERKS[k] ? `<br><small style="font-size:8px;color:#f8d040">REWARD: ${CAMPAIGN_PERKS[k].desc.toUpperCase()}</small>` : '';
+    return `<button data-camp="${k}" ${open ? '' : 'disabled'} title="${c.blurb}">${won ? MEDAL_ICON[won.medal] + ' ' : open ? '' : '🔒 '}CHAPTER ${c.chapter}: ${c.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${c.objective.toUpperCase()}</small>${perk}</button>`;
+  }).join('') + '<button id="scenBack">BACK</button>';
+  document.querySelector('#title .menu').hidden = true; m.hidden = false;
+  for (const b of m.querySelectorAll('[data-camp]')) b.onclick = () => {
+    document.querySelector('#title .menu').hidden = false; m.hidden = true;
+    startChapter(b.dataset.camp);
+  };
+  document.getElementById('scenBack').onclick = () => { document.querySelector('#title .menu').hidden = false; m.hidden = true; };
+}
+function startChapter(id) {
+  const c = SCENARIOS[id];
+  startGame({ scenario: id, difficulty: c.difficulty || 'normal' });
+  UIX.showChapterIntro(id);
 }
 
 // ---------------- title ----------------
@@ -183,7 +209,7 @@ function loop(now) {
     const speed = UIX.speed;
     const modalOpen = document.getElementById('modal').style.display === 'flex';
     if (speed > 0 && !modalOpen) {
-      let remaining = dtReal * speed;
+      let remaining = dtReal * speed * (UIX.slowmo > 0 ? 0.25 : 1);
       while (remaining > 1e-6) {
         const step = Math.min(1 / 30, remaining);
         GAME.update(step);
@@ -253,11 +279,12 @@ function boot() {
     document.getElementById('diffMenu').hidden = true;
     startGame({ difficulty: b.dataset.diff, dayLength: window.currentDayLength(), size: window.currentMapSize(), seed: parseSeed(document.getElementById('seedIn').value) || undefined });
   };
+  document.getElementById('btnCamp').onclick = () => { SFX.ensure(); SFX.play('click'); showCampaignMenu(); };
   document.getElementById('btnScen').onclick = () => {
     SFX.ensure(); SFX.play('click');
     const m = document.getElementById('scenMenu');
     const won = loadMedals();
-    m.innerHTML = Object.entries(SCENARIOS).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${won[k] ? MEDAL_ICON[won[k].medal] + ' ' : ''}${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
+    m.innerHTML = Object.entries(SCENARIOS).filter(([, sc]) => !sc.campaign).map(([k, sc]) => `<button data-scen="${k}" title="${sc.blurb}">${won[k] ? MEDAL_ICON[won[k].medal] + ' ' : ''}${sc.name.toUpperCase()}<br><small style="font-size:8px;color:#9ab08a">${sc.objective.toUpperCase()}</small></button>`).join('') + '<button id="scenBack">BACK</button>';
     document.querySelector('#title .menu').hidden = true; m.hidden = false;
     for (const b of m.querySelectorAll('[data-scen]')) b.onclick = () => {
       document.querySelector('#title .menu').hidden = false; m.hidden = true;

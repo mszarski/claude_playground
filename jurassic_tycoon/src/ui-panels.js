@@ -22,7 +22,7 @@ class UIPanels {
       const status = d.carried ? '<span class="tag" style="background:#2a5a9a">AIRLIFT</span>' :
         d.sedatedT > 0 ? '<span class="tag" style="background:#4a4a8a">SEDATED</span>' :
           d.loose ? '<span class="tag" style="background:#b01e10">LOOSE!</span>' : '<span class="tag" style="background:#2a6a2a">CONTAINED</span>';
-      const sick = d.sick > 0 ? '<span class="tag" style="background:#5a8a2a">SICK</span>' : '';
+      const sick = (d.sick > 0 ? '<span class="tag" style="background:#5a8a2a">SICK</span>' : '') + (d.unstable ? '<span class="tag" style="background:#6a2a7a" title="Dr. Wu\'s frog-DNA embryo: stronger and more easily stressed">UNSTABLE</span>' : '');
       const diet = `<span class="tag" style="background:${sp.diet === 'carn' ? '#8a3a1a' : '#3a6a2a'}">${sp.diet === 'carn' ? 'CARNIVORE' : 'HERBIVORE'}</span>`;
       html += `<h2>${d.name}</h2><div class="sub">${sp.name} · <i>${sp.sci}</i></div><canvas class="portrait" id="portrait"></canvas>${status}${sick}${diet}`;
       html += `<div class="row"><span>Health</span><span>${Math.round(d.hp)}/${sp.hp}</span></div>${this.bar(d.hp, sp.hp, '#5ac85a')}`;
@@ -58,8 +58,14 @@ class UIPanels {
       html += `<div class="row"><span>Species seen</span><span>${o.seenSpecies.size}</span></div><div class="row"><span>Spent</span><span>${fmtMoney(o.spent + g.ticket)}</span></div>`;
     } else if (o.kind === 'ranger' || o.kind === 'worker') {
       html += `<h2>${o.kind === 'ranger' ? 'Park Ranger' : 'Engineer'}</h2>`;
-      html += `<div class="sub">${o.kind === 'ranger' ? (o.target ? `Pursuing ${o.target.name} the ${o.target.sp.name}` : 'On patrol') : (o.state === 'repair' ? 'Repairing' : o.state === 'move' ? 'En route to a job' : 'Idle')}</div>`;
-      html += `<div class="sub">${o.kind === 'ranger' ? 'Tranquilizes loose dinosaurs within 4 tiles.' : 'Repairs fences & buildings, rebuilds breached fences.'}</div>`;
+      html += `<div class="sub">${o.kind === 'ranger' ? (o.target ? `Pursuing ${o.target.name} the ${o.target.sp.name}` : 'On patrol') : (o.state === 'flee' ? 'Running from a predator!' : o.state === 'repair' ? 'Repairing' : o.state === 'move' ? 'En route to a job' : 'Idle')}</div>`;
+      html += `<div class="row"><span>Orders</span><span>${orderText(o).replace('Ordered: ', '')}</span></div>`;
+      html += `<div class="sub">${o.kind === 'ranger' ? 'Tranquilizes loose dinosaurs within 4 tiles.' : 'Repairs fences & buildings, rebuilds breached fences.'} ${this.touchUsed ? 'Use Send… to give orders.' : 'Right-click to give orders · shift-drag to select several.'}</div>`;
+      if (o.order) html += `<div class="btns"><button data-a="auto">Back to auto</button></div>`;
+    } else if (o.kind === 'heli') {
+      const st = { parked: 'On the pad', strike: `Darting ${o.target ? o.target.name : 'a target'} from the air`, fetch: `Fetching ${o.target ? o.target.name : 'a sedated dinosaur'}`, deliver: `Flying ${o.cargo ? o.cargo.name : 'cargo'} to a paddock`, return: 'Returning to base' }[o.state] || o.state;
+      html += `<h2>ACU Helicopter</h2><div class="sub">${st}</div>`;
+      html += `<div class="sub">Airlifts sedated dinosaurs home on its own. ${this.touchUsed ? 'Select it and use Send…' : 'Right-click'} a loose dinosaur for an air strike (${fmtMoney(g.research.has('acu') ? 3000 : 8000)}).</div>`;
     } else if (o.kind === 'fence') {
       const i = w.idx(o.x, o.y), f = w.fence[i];
       if (!f) { this.selected = null; el.style.display = 'none'; return; }
@@ -84,6 +90,16 @@ class UIPanels {
       const sp = ds.reduce((a, d) => a + d.sp.space, 0);
       html += `<div class="row"><span>Space used</span><span>${sp}/${reg.size}</span></div>`;
       html += `<div class="sub">${ds.length ? ds.map((d) => d.name + ' (' + d.sp.name + ')').join(', ') : 'Empty. Use Hatch to add dinosaurs.'}</div>`;
+      // one-click upkeep
+      const cover = reg.forest / reg.size, needTrees = Math.max(0, Math.ceil(reg.size * 0.3) - reg.forest);
+      const fences = g.paddockFences(reg), dmg = fences.filter((j) => g.needsRepair(j % w.W, (j / w.W) | 0)).length;
+      const diets = new Set(ds.map((d) => d.sp.diet));
+      html += `<div class="btns">`;
+      if (cover < 0.28 && needTrees) html += `<button data-a="cover" title="Plant trees until about 30% of the paddock is covered">Tree cover ${fmtMoney(needTrees * TOOL_INFO.trees.cost)}</button>`;
+      if (!reg.feeders.herb.length && (diets.has('herb') || !ds.length)) html += `<button data-a="feedH">+ Herb feeder</button>`;
+      if (!reg.feeders.carn.length && diets.has('carn')) html += `<button data-a="feedC">+ Carn feeder</button>`;
+      if (dmg) html += `<button data-a="fixfence" class="danger">Repair ${dmg} fence${dmg > 1 ? 's' : ''}</button>`;
+      html += `<button data-a="copy" title="Copy this paddock's fences, trees and feeders, then stamp copies elsewhere">Copy layout</button></div>`;
     } else if (o.type) {
       const def = BUILDINGS[o.type];
       html += `<h2>${def.name}</h2><div class="sub">${def.desc}</div>`;
@@ -94,6 +110,20 @@ class UIPanels {
       if (o.type === 'tour') {
         html += `<div class="row"><span>Queue</span><span>${(o.queue || []).length}</span></div><div class="row"><span>Jeeps</span><span>${g.jeeps.filter((j) => j.station === o).length}</span></div>`;
         if (!w.trackAccess(o).length) html += `<div class="sub" style="color:#ff9080">Needs Tour Track next to it!</div>`;
+      }
+      if (o.type === 'gyro') {
+        html += `<div class="row"><span>Queue</span><span>${(o.queue || []).length}</span></div><div class="row"><span>Spheres</span><span>${(g.gyros || []).filter((x) => x.station === o).length}</span></div>`;
+        if (o.noPaddock) html += `<div class="sub" style="color:#ff9080">Must touch a paddock (build it right against a paddock's fence).</div>`;
+      }
+      if (o.type === 'arena') {
+        html += `<div class="row"><span>Next show</span><span>${o.noRaptors ? '—' : Math.max(0, Math.ceil(o.showT || 0)) + 's'}</span></div>`;
+        if (o.noRaptors) html += `<div class="sub" style="color:#ff9080">Needs a paddock with 2+ raptors within 12 tiles.</div>`;
+        if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
+      }
+      if (o.type === 'feedshow') {
+        html += `<div class="row"><span>Shows</span><span>12:00 · 18:00</span></div>`;
+        if (o.noCarnivore) html += `<div class="sub" style="color:#ff9080">No carnivore within 12 tiles to feed.</div>`;
+        if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
       }
       if (def.income) html += `<div class="row"><span>Visitors</span><span>${o.visitors}</span></div><div class="row"><span>Revenue</span><span>${fmtMoney(o.revenue || 0)}</span></div>`;
       if (def.shelter) html += `<div class="row"><span>Sheltering</span><span>${o.inside}/${def.shelter}</span></div>`;
@@ -113,6 +143,17 @@ class UIPanels {
     this.sfx.play('click');
     if (a === 'close') { this.select(null); return; }
     if (a === 'follow') { this.follow = !this.follow; }
+    if (a === 'auto' && o) { g.releaseUnits([o]); }
+    const reg = o && o.kind === 'paddock' ? g.world.regionAt(o.x, o.y) : null;
+    if (reg && !reg.public) {
+      if (a === 'cover') { const n = g.plantCover(reg); this.toast(n ? `Planted ${n} trees.` : 'No room for trees.', n ? 'good' : 'warn'); if (n) this.sfx.play('build'); }
+      if (a === 'feedH' || a === 'feedC') { const f = g.addFeeder(reg, a === 'feedC' ? 'carn' : 'herb'); if (f) this.sfx.play('build'); else this.toast('No free tile for a feeder (or not enough money).', 'warn'); }
+      if (a === 'fixfence') { const r = g.repairFences(reg); this.toast(r.n ? `Repaired ${r.n} fence tiles (${fmtMoney(r.cost)}).${r.blocked ? ' A dinosaur is blocking a gap.' : ''}` : r.blocked ? 'A dinosaur is standing in the gap! Sedate it first.' : 'Not enough money.', r.n ? 'good' : 'warn'); if (r.n) this.sfx.play('build'); }
+      if (a === 'copy') { const bp = g.copyPaddock(reg); if (bp) { this.blueprint = bp; this.setTool('stamp'); this.toast(`Layout copied (${bp.w}×${bp.h}). Click to stamp a copy, Esc to stop.`, 'info'); } }
+      // keep the paddock selected on a tile that is still inside it
+      const t = reg.tiles.find((i) => g.world.dinoPass(i % g.world.W, (i / g.world.W) | 0));
+      if (t !== undefined) { const r2 = g.world.regionAt(t % g.world.W, (t / g.world.W) | 0); if (r2) this.selected = { kind: 'paddock', x: t % g.world.W, y: (t / g.world.W) | 0, reg: r2 }; }
+    }
     if (a === 'sedate' && o) { o.orderSedate = true; g.log(`Rangers dispatched to sedate ${o.name}.`, 'info', o); }
     if (a === 'strike' && o) { const err = g.acuStrike(o); if (err) this.toast(err, 'warn'); }
     if (a === 'erepair' && o) { const err = g.emergencyRepair(o.x, o.y); if (err) this.toast(err, 'warn'); else this.sfx.play('build'); }
@@ -144,7 +185,7 @@ class UIPanels {
       const sp = SPECIES[k];
       const locked = !g.isUnlocked(k);
       html += `<div class="card ${locked ? 'locked' : ''}" data-sp="${k}"><canvas data-spr="${k}"></canvas><div class="nm">${sp.name.toUpperCase()}</div>
-        <div>${sp.diet === 'carn' ? '<span style="color:#f08a5a">Carnivore</span>' : '<span style="color:#8ad06a">Herbivore</span>'} · ${fmtMoney(sp.cost)}</div>
+        <div>${sp.diet === 'carn' ? '<span style="color:#f08a5a">Carnivore</span>' : '<span style="color:#8ad06a">Herbivore</span>'} · ${g.freeEgg === k ? '<span style="color:#f8d040">FREE (Dr. Wu)</span>' : fmtMoney(sp.cost)}</div>
         <div style="color:#9ab08a">Appeal ${sp.appeal} · Danger ${sp.danger} · Str ${sp.strength}</div>
         <div style="color:#9ab08a">${sp.flying ? 'Needs an Aviary' : `Needs ${sp.space} tiles${sp.social > 1 ? ' · groups of ' + sp.social : ''}`}</div>
         ${locked ? `<div style="color:#f8d040">Unlocks at ${'★'.repeat(sp.unlock)}</div>` : ''}</div>`;
@@ -289,6 +330,7 @@ class UIPanels {
     let html = `<h1>MENU</h1><div class="btns" style="flex-direction:column;align-items:stretch;gap:6px">
       <button data-m="resume">Resume</button><button data-m="save">Save park</button><button data-m="load" ${has ? '' : 'disabled'}>Load saved park</button>
       <button data-m="advisor">Advisor tips: ${this.game.advisorOn === false ? 'OFF' : 'ON'}</button>
+      <button data-m="calls" title="Calls from InGen with choices and consequences">InGen calls: ${this.game.decisionsOn === false ? 'OFF' : 'ON'}</button>
       <button data-m="breed">Breeding: ${this.game.breedingOff ? 'PREVENTED (lysine contingency)' : 'ALLOWED'}</button>
       <button data-m="seed" title="Share this code so a friend can play the same island">Island code: ${seedCode(this.game.seed)}${this.game.mapSize !== 'medium' ? ' · ' + MAP_SIZES[this.game.mapSize].label.toLowerCase() : ''} (copy)</button>
       <button data-m="wheel" title="What scrolling does on the map">Scroll: ${{ auto: 'AUTO (mouse wheel zooms, trackpad pans)', zoom: 'ZOOM', pan: 'PAN (pinch or +/− to zoom)' }[this.wheelMode]}</button>
@@ -307,6 +349,7 @@ class UIPanels {
         if (navigator.clipboard) navigator.clipboard.writeText(code).then(() => this.toast(`Copied island code ${code}`, 'good'), () => this.toast(`Island code: ${code}`, 'info'));
         else this.toast(`Island code: ${code}`, 'info');
       }
+      else if (m === 'calls') { this.game.decisionsOn = this.game.decisionsOn === false; this.showMenu(); }
       else if (m === 'breed') { this.game.breedingOff = !this.game.breedingOff; this.showMenu(); }
       else if (m === 'wheel') {
         this.wheelMode = { auto: 'pan', pan: 'zoom', zoom: 'auto' }[this.wheelMode];
@@ -334,12 +377,49 @@ class UIPanels {
       <p>Left click: use tool / select · Drag: build lines & areas · Right-drag or drag in Inspect: pan · Mouse wheel or +/−: zoom · WASD/Arrows: pan<br>
       Trackpad: two-finger scroll pans, pinch zooms · Touch: one finger builds (or pans in Inspect), two fingers pan and pinch<br>
       Space: pause · 1/2/3: speed · E: alarm · O: power overlay · K: paddock overlay · L: find loose dinos · Esc: cancel</p>
+      <h2>CAMPAIGN AND INGEN CALLS</h2>
+      <p>The <b>Campaign</b> is five chapters, from opening day to Jurassic World; each one you finish gives a perk to the chapters after it. Every few mornings <b>InGen calls</b> with a choice: investors, lawyers, Dr. Wu, the rangers' union and more. Deals show above your goal with their deadlines. Turn calls off in the menu if you just want to build.</p>
+      <h2>ATTRACTIONS</h2>
+      <p><b>Gyrosphere Station</b> (1★): build it against a paddock fence; glass balls roll guests among the dinosaurs. Put it on a carnivore paddock for thrills, and the occasional cracked sphere. <b>Feeding Grandstand</b>: at noon and 6pm a nearby carnivore is fed in front of the crowd. <b>Raptor Arena</b> (2★): next to a paddock with 2+ raptors, shows pay well but stress the pack, and sometimes go badly wrong.</p>
+      <h2>SHORTCUTS</h2>
+      <p>Click a paddock for one-click <b>Tree cover</b>, <b>feeders</b> and <b>fence repairs</b>. <b>Copy layout</b> turns a paddock into a blueprint you can stamp anywhere. Hatching into a paddock with no food adds a feeder automatically, and <b>Repair all</b> on the breached-fence alert fixes every fence at once.</p>
+      <h2>COMMANDING STAFF (OPTIONAL)</h2>
+      <p>Rangers, engineers and helicopters work on their own, but you can take charge. Click one to select it, shift-click or shift-drag to select several, double-click to select every one of that kind, or press <b>M</b> for all rangers. Then <b>right-click</b> (on touch: <b>Send…</b>, then tap) a dinosaur to hunt it, a broken fence to repair it, or open ground to hold a position. Units on orders move faster. <b>Back to auto</b> releases them. When something escapes, <b>RESPOND</b> (or <b>B</b>) sounds the alarm and sends every ranger and helicopter at once.</p>
       <h2>PLAY OFFLINE</h2>
       <p>Open <b>mszarski.github.io/claude_playground</b> on your phone and choose <b>Add to Home Screen</b> (Share menu on iPhone, ⋮ menu on Android). After the first visit it runs without a connection.</p>
       <p style="color:#9ab08a">Lose if you stay deeply in debt or too many guests are eaten. Win by completing all goals.</p>
       <div class="btns" style="justify-content:flex-end"><button data-close>Got it</button></div>`;
     this.showModal(html);
     $('[data-close]').onclick = () => this.closeModal();
+  }
+
+  // An InGen call: the game is paused (modal open) until the director picks an option
+  showDecision(offer) {
+    const g = this.game, def = DECISIONS[offer.id];
+    this.decisionShown = offer;
+    const html = `<div class="call"><div class="callhead"><span class="callicon">${def.icon}</span><div><div class="callfrom">☎ INCOMING CALL</div><h1>${def.from.toUpperCase()}</h1></div></div>
+      <p class="calltext">${def.text(g, offer.params)}</p>
+      <div class="choices">${def.choices.map((c, i) => `<button class="choice" data-ch="${i}"><b>${typeof c.label === 'function' ? c.label(offer.params) : c.label}</b><span>${choiceHint(c, offer.params)}</span></button>`).join('')}</div></div>`;
+    this.showModal(html, true);
+    this.sfx.play('ring');
+    for (const b of document.querySelectorAll('[data-ch]')) b.onclick = () => {
+      g.resolveDecision(+b.dataset.ch);
+      this.decisionShown = null;
+      this.closeModal();
+      this.sfx.play('click');
+      this.renderDeals(true);
+    };
+  }
+
+  renderDeals(force) {
+    const list = contractStatus(this.game);
+    const html = list.map((c) => `<div class="deal ${c.kind}"><span>${c.kind === 'contract' ? '📋 ' : ''}${c.text}</span><i>${c.left}</i></div>`).join('');
+    if (!force && html === this.lastDeals) return;
+    this.lastDeals = html;
+    const el = $('#deals');
+    el.innerHTML = html;
+    el.hidden = !list.length;
+    document.documentElement.style.setProperty('--dealsH', (el.hidden ? 0 : el.offsetHeight + 4) + 'px');
   }
 
   showGameOver(reason) {
@@ -352,6 +432,16 @@ class UIPanels {
     $('[data-m="new"]').onclick = () => { this.closeModal(); showTitle(); };
   }
 
+  showChapterIntro(id) {
+    const c = SCENARIOS[id], perks = campaignPerks(id);
+    const html = `<div id="gameover"><div style="font-family:'Press Start 2P';font-size:9px;color:var(--orange)">CHAPTER ${c.chapter} OF ${CAMPAIGN_ORDER.length}</div><h1>${c.name.toUpperCase()}</h1>
+      <p style="font-size:21px">${c.blurb}</p><p style="color:var(--gold);font-size:20px">${c.objective}.</p>
+      ${perks.length ? `<p style="color:#9ab08a">Your perks: ${perks.map((p) => `<b style="color:#a8f080">${p.name}</b> (${p.desc})`).join(', ')}</p>` : ''}
+      <div class="btns" style="justify-content:center"><button data-close>Let's go</button></div></div>`;
+    this.showModal(html);
+    $('[data-close]').onclick = () => this.closeModal();
+  }
+
   showScenarioEnd(r) {
     const g = this.game, sc = SCENARIOS[g.scenario];
     this.setSpeed(0);
@@ -359,6 +449,24 @@ class UIPanels {
     if (win) this.sfx.play('fanfare');
     const medal = win && sc.medal ? sc.medal(g) : null;
     const best = medal ? saveMedal(g.scenario, medal, g.day) : false;
+    if (sc.campaign) {
+      if (win) saveCampaign(g.scenario, medal || 'bronze', g.day);
+      const next = CAMPAIGN_ORDER[CAMPAIGN_ORDER.indexOf(g.scenario) + 1];
+      const perk = win && CAMPAIGN_PERKS[g.scenario];
+      const html = `<div id="gameover"><div style="font-family:'Press Start 2P';font-size:9px;color:var(--orange)">CHAPTER ${sc.chapter} OF ${CAMPAIGN_ORDER.length}</div><h1>${win ? (next ? 'CHAPTER COMPLETE' : 'CAMPAIGN COMPLETE') : 'CHAPTER FAILED'}</h1>
+        <p style="font-size:22px">${sc.name}: ${win ? (next ? 'on to the next island.' : 'the greatest park on Earth. Welcome to Jurassic World.') : 'the island won this time.'}</p>
+        ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
+        ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
+        ${perk ? `<p>New perk for the chapters ahead: <b style="color:#a8f080">${perk.name}</b> (${perk.desc})</p>` : ''}
+        <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
+        <div class="btns" style="justify-content:center">${win && next ? '<button data-m="next">Next chapter</button>' : ''}<button data-m="again">${win ? 'Replay' : 'Try again'}</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
+      this.showModal(html, true);
+      const nb = $('[data-m="next"]'); if (nb) nb.onclick = () => { this.closeModal(); startChapter(next); };
+      $('[data-m="again"]').onclick = () => { this.closeModal(); startChapter(g.scenario); };
+      $('[data-m="title"]').onclick = () => { this.closeModal(); showTitle(); };
+      $('[data-close]').onclick = () => { this.closeModal(); this.setSpeed(1); };
+      return;
+    }
     const html = `<div id="gameover"><h1>${win ? 'SCENARIO COMPLETE' : 'SCENARIO FAILED'}</h1><p style="font-size:22px">${sc.name}: ${win ? 'you did it.' : 'the island won this time.'}</p>
       ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
       ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
