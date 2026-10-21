@@ -18,7 +18,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--data", default="data")
-    ap.add_argument("--uids_from", required=True)
+    ap.add_argument("--uids_from", default=None, help="DeepCAD test: a baselines.py preds file (uids, dup)")
+    ap.add_argument("--rich", default=None, help="rich-part test instead: dir of gen_rich_data.py shards")
     ap.add_argument("--modes", nargs="*", default=["view1", "view4", "view1+expert", "expert"])
     ap.add_argument("--max_new_tokens", type=int, default=1024)
     ap.add_argument("--max_len", type=int, default=4096)
@@ -31,11 +32,21 @@ def main():
     print(f"[vlm] view grid {configure(a.model)} px", flush=True)   # the layout this model was trained on
     from train_vlm_cad import load_views
 
-    with open(a.uids_from, "rb") as f:
-        P = pickle.load(f)
-    with open(os.path.join(a.data, "text_index.json")) as f:
-        text_index = json.load(f)
     render_dir = os.path.join(a.data, "renders")
+    text_index = {}
+    if a.rich:                                        # rich test parts: images only, GT is CadQuery code
+        import pandas as pd
+        dfs = [pd.read_parquet(os.path.join(a.rich, sh, "parts.parquet")).assign(shard=sh)
+               for sh in sorted(os.listdir(a.rich)) if os.path.exists(os.path.join(a.rich, sh, "parts.parquet"))]
+        df = pd.concat(dfs, ignore_index=True)
+        P = {"uids": list(df.uid), "dup": [False] * len(df), "family": list(df.family), "gt_code": list(df.code),
+             "stems": [os.path.join(a.rich, sh, "renders", u) for sh, u in zip(df.shard, df.uid)]}
+        a.modes = [m for m in a.modes if m.startswith("view") and "expert" not in m]
+    else:
+        with open(a.uids_from, "rb") as f:
+            P = pickle.load(f)
+        with open(os.path.join(a.data, "text_index.json")) as f:
+            text_index = json.load(f)
     processor = AutoProcessor.from_pretrained(a.model)
     llm = LLM(model=a.model, dtype="bfloat16", max_model_len=a.max_len, limit_mm_per_prompt={"image": 1},
               gpu_memory_utilization=0.85, enable_prefix_caching=True, generation_config="vllm", seed=0)
@@ -50,7 +61,7 @@ def main():
             prompt = text_index.get(u, {}).get("expert") if "expert" in mode else None
             if prompt and len(processor.tokenizer(prompt)["input_ids"]) > max_prompt:
                 prompt = None
-            stem = os.path.join(render_dir, u)
+            stem = P["stems"][i] if "stems" in P else os.path.join(render_dir, u)
             image = None
             if mode.startswith("view"):
                 if not os.path.exists(f"{stem}_0.png"):
@@ -68,7 +79,7 @@ def main():
         print(f"[predict] {mode}: {len(reqs)} requests in {time.time() - t0:.0f}s", flush=True)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "wb") as f:
-        pickle.dump({"uids": P["uids"], "dup": P["dup"], "kind": "cadquery", "preds": preds}, f)
+        pickle.dump({**{k: v for k, v in P.items() if k != "preds"}, "kind": "cadquery", "preds": preds}, f)
     print(f"[done] {a.out}", flush=True)
 
 

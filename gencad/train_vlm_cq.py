@@ -148,6 +148,9 @@ def main():
     ap.add_argument("--recode_renders", default="data/recode_renders")
     ap.add_argument("--min_fidelity", type=float, default=0.95, help="drop DeepCAD conversions below this IoU")
     ap.add_argument("--deepcad_p", type=float, default=0.3, help="share of samples drawn from DeepCAD")
+    ap.add_argument("--rich", default=None, help="rich-feature shards dir (scripts/gen_rich_data.py: <dir>/<shard>/)")
+    ap.add_argument("--rich_p", type=float, default=0.4, help="share of samples drawn from --rich")
+    ap.add_argument("--rich_max_chars", type=int, default=3000)
     ap.add_argument("--rft", default=None, help="rejection-sampling targets (scripts/build_rft.py parquet)")
     ap.add_argument("--rft_p", type=float, default=0.5, help="share of samples drawn from --rft (rest as before)")
     ap.add_argument("--levels", nargs="*", default=["abstract", "beginner", "intermediate", "expert", "description"])
@@ -224,13 +227,26 @@ def main():
         rf = pd.read_parquet(a.rft)
         items_rft = [(os.path.join(render_dir, u), c, u, (list(map(int, json.loads(v))), p if p else None))
                      for u, c, v, p in zip(rf.uid, rf.code, rf.views, rf.prompt)]
-    rest = 1 - (a.rft_p if items_rft else 0.0)
-    items = items_dc + items_rc + items_rft
+    items_rich = []
+    if a.rich:
+        for sh in sorted(os.listdir(a.rich)):
+            pq = os.path.join(a.rich, sh, "parts.parquet")
+            if os.path.exists(pq):
+                df = pd.read_parquet(pq)
+                df = df[df.code.str.len() <= a.rich_max_chars]
+                items_rich += [(os.path.join(a.rich, sh, "renders", u), c, None) for u, c in zip(df.uid, df.code)]
+        items_rich = items_rich[: a.max_items] if a.max_items else items_rich
+        print(f"[data] rich parts {len(items_rich)} from {a.rich}, share {a.rich_p}", flush=True)
+    p_rft = a.rft_p if items_rft else 0.0
+    p_rich = a.rich_p if items_rich else 0.0
+    rest = 1 - p_rft - p_rich
+    items = items_dc + items_rc + items_rft + items_rich
     w = np.concatenate([np.full(len(items_dc), rest * a.deepcad_p / max(len(items_dc), 1)),
                         np.full(len(items_rc), rest * (1 - a.deepcad_p) / max(len(items_rc), 1)),
-                        np.full(len(items_rft), (1 - rest) / max(len(items_rft), 1))])
+                        np.full(len(items_rft), p_rft / max(len(items_rft), 1)),
+                        np.full(len(items_rich), p_rich / max(len(items_rich), 1))])
     if items_rft:
-        print(f"[data] rft targets {len(items_rft)} from {a.rft}, share {1 - rest}", flush=True)
+        print(f"[data] rft targets {len(items_rft)} from {a.rft}, share {p_rft}", flush=True)
     print(f"[data] deepcad train {len(items_dc)} (of {len(dc[dc.split == 'train'])} faithful), cad-recode "
           f"{len(items_rc)}, val {len(val)}; deepcad share {a.deepcad_p}", flush=True)
     mode_p = {k: float(v) for k, v in (kv.split("=") for kv in a.mode_p.split(","))}

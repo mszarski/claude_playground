@@ -282,8 +282,8 @@ def _loop_edges(curves, to2d, first=True):
 
 def run_cadquery(code):
     """Execute CadQuery source that assigns `r`; -> cadquery Shape (non-empty solid) or None."""
-    import cadquery as cq
-    ns = {"cq": cq}
+    from mm.cad_helpers import namespace
+    ns = namespace()                                    # cq + near() edge selector
     try:
         exec(code, ns)
         r = ns.get("r")

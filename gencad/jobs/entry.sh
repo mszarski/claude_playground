@@ -129,6 +129,7 @@ case "$STAGE" in
     need_cq
     need cad_vec renders recode_renders_0 recode_renders_1 recode_renders_2 recode_renders_3
     cp /work/data/deepcad_cq.parquet /work/data/cad_recode.parquet data/
+    if [[ "${RICH:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/train_*.tar; do tar -xf "$t" -C data/rich; done; fi
     python train_vlm_cq.py --data data --name "$RUN" --steps ${STEPS:-30000} "$@" ;;
 
   vlmrl)      # RL on IoU for the CadQuery writer (train_vlm_rl.py), DeepCAD parts only; INIT = SFT model dir
@@ -159,10 +160,18 @@ case "$STAGE" in
     python train_vlm_grpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" ${STEPS:+--steps $STEPS} "$@" ;;
 
   vllmpred)   # greedy test predictions with vLLM (scripts/predict_vllm.py) -> results/$RUN/preds.pkl; INIT = model dir
-    need renders
+    need renders            # RICH_TEST=1: also unpack the rich test shards (pass --rich data/rich/test --out ...)
+    if [[ "${RICH_TEST:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/test*.tar; do tar -xf "$t" -C data/rich; done; fi
     need_vllm
     python scripts/predict_vllm.py --data data --model "${INIT:?set INIT=<model dir>}" \
         --uids_from results/baselines_vlm_final/preds.pkl --out "results/$RUN/preds.pkl" "$@" ;;
+
+  richgen)    # rich-feature parts (datagen/families) -> /work/data/rich/<split>_<shard>.tar (scripts/gen_rich_data.py)
+    need_cq
+    SPLIT=${SPLIT:-train}
+    python scripts/gen_rich_data.py --split "$SPLIT" --out "data/rich/$SPLIT" "$@"
+    SH=$(ls data/rich/$SPLIT)
+    mkdir -p /work/data/rich && tar -cf "/work/data/rich/${SPLIT}_${SH}.tar" -C data/rich "$SPLIT/$SH" && ls -la "/work/data/rich/${SPLIT}_${SH}.tar" ;;
 
   vlmpred)    # test-set CadQuery predictions of a vlm_cq-style model dir (INIT) -> results/$RUN/preds.pkl
     need renders
