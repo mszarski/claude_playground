@@ -58,7 +58,7 @@ tar -chf - --exclude=./upstream --exclude=.git --exclude=__pycache__ --exclude=.
     --exclude=./data/sketches . | tar -xf - -C "$SNAP"   # -h follows the setup.sh symlinks
 
 ENVS=()
-for k in INIT CHUNKS SPLIT RICH RICH_TEST PRIOR INIT_PRIOR PREDS RUN EPOCHS BS LR STEPS SAVE_EVERY CSR_CKPT CCIP_CKPT DP_CKPT IMG_TYPE OCC HUB_REPO; do
+for k in INIT CHUNKS SPLIT RICH RICH_TEST REV PRIOR INIT_PRIOR PREDS RUN EPOCHS BS LR STEPS SAVE_EVERY CSR_CKPT CCIP_CKPT DP_CKPT IMG_TYPE OCC HUB_REPO; do
   [[ -n "${!k:-}" ]] && ENVS+=(--env "$k=${!k}")
 done
 

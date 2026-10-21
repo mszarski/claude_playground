@@ -130,6 +130,7 @@ case "$STAGE" in
     need cad_vec renders recode_renders_0 recode_renders_1 recode_renders_2 recode_renders_3
     cp /work/data/deepcad_cq.parquet /work/data/cad_recode.parquet data/
     if [[ "${RICH:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/train_*.tar; do tar -xf "$t" -C data/rich; done; fi
+    if [[ "${REV:-0}" == "1" ]]; then tar -xf /work/data/revision.tar -C data; fi
     python train_vlm_cq.py --data data --name "$RUN" --steps ${STEPS:-30000} "$@" ;;
 
   vlmrl)      # RL on IoU for the CadQuery writer (train_vlm_rl.py), DeepCAD parts only; INIT = SFT model dir
