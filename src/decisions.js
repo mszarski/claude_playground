@@ -5,7 +5,21 @@ const DAY_H = 24;
 
 // Timed modifiers a choice can put on the park. Several can stack; numbers multiply.
 const MODS = {
-  ad_blitz: { label: 'TV ad campaign', icon: '📺', guestMul: 1.4 },
+  ad_blitz: {
+    from: 'Ad Agency', icon: '📺',
+    // priced from what guests actually spend, so the ads roughly pay for themselves in a busy park
+    prep: (g) => {
+      if (g.guests.length <= 15) return null;
+      const recent = g.history.slice(-3).map((h) => (h.ledger.tickets || 0) + (h.ledger.shops || 0));
+      const daily = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 20000;
+      return { cost: Math.max(15000, Math.round(daily * 1.2 / 5000) * 5000) };
+    },
+    text: (g, p) => `"Picture it: a T. rex, a sunset, your logo." <b>${fmtMoney(p.cost)}</b> buys 4 days of TV spots and <b>40% more visitors</b>.`,
+    choices: [
+      { label: 'Run the ads', hint: (p) => `−${fmtMoney(p.cost)} · +40% visitors for 4 days`, apply: (g, p) => { g.spend(p.cost, 'ops'); g.addMod('ad_blitz', 4); } },
+      { label: 'No thanks', hint: 'Nothing happens', apply: () => {} },
+    ],
+  },
   half_price: { label: 'Half-price tickets', icon: '🎟', guestMul: 1.6, ticketMul: 0.5 },
   night_safari: { label: 'Night safari', icon: '☾', nightGuests: 1, carnStress: 15 },
   cheap_fences: { label: 'Maintenance budget cut', icon: '✂', fenceDmgMul: 1.5 },
@@ -224,11 +238,17 @@ const DECISIONS = {
   },
   goat_strike: {
     from: 'Feed Supplier', icon: '🐐',
-    prep: (g) => g.dinos.some((d) => d.sp.diet === 'carn') ? {} : null,
-    text: () => `The goat farmers are on strike. Pay <b>$30,000</b> for an emergency supplier, or feed costs <b>double</b> for 4 days.`,
+    // priced from what the park actually spends on feed, so both choices are honest
+    prep: (g) => {
+      if (!g.dinos.some((d) => d.sp.diet === 'carn')) return null;
+      const recent = g.history.slice(-3).map((h) => h.ledger.food || 0);
+      const daily = Math.max(1500, recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 2000);
+      return { now: Math.max(5000, Math.round(daily * 3 / 1000) * 1000), extra: Math.round(daily * 4 / 1000) * 1000 };
+    },
+    text: (g, p) => `The goat farmers are on strike. Pay <b>${fmtMoney(p.now)}</b> for an emergency supplier, or feed costs <b>double</b> for 4 days (about <b>${fmtMoney(p.extra)}</b> extra at your current feed bill).`,
     choices: [
-      { label: 'Emergency supplier', hint: '−$30k now', apply: (g) => g.spend(30000, 'food') },
-      { label: 'Pay double', hint: 'Feed costs ×2 for 4 days', apply: (g) => g.addMod('goat_shortage', 4) },
+      { label: 'Emergency supplier', hint: (p) => `−${fmtMoney(p.now)} now`, apply: (g, p) => g.spend(p.now, 'food') },
+      { label: 'Pay double', hint: (p) => `Feed costs ×2 for 4 days (≈ ${fmtMoney(p.extra)})`, apply: (g) => g.addMod('goat_shortage', 4) },
     ],
   },
   lysine: {

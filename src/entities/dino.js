@@ -430,6 +430,7 @@ class Dino {
 
   sedate() {
     this.sedatedT = 70; this.state = 'sedated'; this.path = null; this.target = null;
+    this.orderSedate = false; // order carried out (a relocation still follows via the relocate flag)
     this.game.log(`${this.name} the ${this.sp.name} has been sedated.`, 'good', this);
   }
 }

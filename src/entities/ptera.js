@@ -22,7 +22,7 @@ class Ptera {
     return null;
   }
   sedate() {
-    this.sedatedT = 70; this.prey = null; this.tgt = null;
+    this.sedatedT = 70; this.prey = null; this.tgt = null; this.orderSedate = false;
     this.game.log(`${this.name} the Pteranodon has been sedated and dropped out of the sky.`, 'good', this);
   }
   update(dt) {

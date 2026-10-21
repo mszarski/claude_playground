@@ -469,7 +469,7 @@ class UI {
       for (const [x, y] of this.dragTiles) { const i = w.idx(x, y); if (w.fence[i] === F_ELECTRIC) { total++; if (!w.fencePowered[i]) off++; } }
       if (off) this.toast(`${off} of ${total} fence tiles have no power (blinking red). Build a Power Plant or Pylon nearby.`, 'warn');
     }
-    if (queued) this.toast(`A dinosaur is standing in the way of ${queued} fence tile${queued > 1 ? 's' : ''}. ${queued > 1 ? 'They\'ll' : 'It\'ll'} be built as soon as it moves.`, 'info');
+    if (queued) this.toast(`A dinosaur or lava is in the way of ${queued} fence tile${queued > 1 ? 's' : ''}. ${queued > 1 ? 'They\'ll' : 'It\'ll'} be built as soon as the way is clear.`, 'info');
     else if (n && tool === 'paddock' && this.dragTiles.length > 4) {
       // a paddock that doesn't close is just an expensive fence: say so
       const w = g.world;
@@ -881,8 +881,8 @@ class UI {
     bar.style.width = (pct * 100) + '%';
     bar.style.background = p.outage > 0 ? '#e04838' : pct < 1 ? '#f0a030' : '#f8d040';
     $('#sPow').textContent = `${Math.round(p.demand)}/${Math.round(p.supply)} MW`;
-    $('#sPowK').textContent = p.outage > 0 ? 'GRID DOWN' : 'Power';
-    $('#sPowK').style.color = p.outage > 0 ? '#e04838' : '';
+    $('#sPowK').textContent = p.outage > 0 ? 'GRID DOWN' : pct < 1 ? 'OVERLOADED' : 'Power';
+    $('#sPowK').style.color = p.outage > 0 ? '#e04838' : pct < 1 ? '#f0a030' : '';
     $('#alarmBtn').classList.toggle('on', g.alarm);
     this.renderAlerts();
     if (g.scenario) {
@@ -918,6 +918,8 @@ class UI {
     if (g.events.quake > 0) out.push(`<div class="alert red">〰 EARTHQUAKE</div>`);
     const broken = g.countBrokenFences();
     if (broken >= 3 || (broken && !g.hasBuilding('maint'))) out.push(`<div class="alert amber" data-act="none">🔧 ${broken} BREACHED FENCE${broken > 1 ? 'S' : ''} <button data-act="fixall" title="Instantly repair every damaged fence">Repair all ${fmtMoney(g.repairAllCost().cost)}</button></div>`);
+    const starving = g.hungryWithoutFood().filter((x) => x.d.hunger > 75);
+    if (starving.length) out.push(`<div class="alert red" data-act="starve">🍖 ${starving.length} DINOSAUR${starving.length > 1 ? 'S' : ''} STARVING (NO FEEDER) <button data-act="feedall">Add feeders</button></div>`);
     if (g.alarm) out.push(`<div class="alert amber" data-act="alarm">🔊 EVACUATION IN PROGRESS · click to sound all-clear</div>`);
     const html = out.join('');
     if (html !== this.lastAlerts) {
@@ -935,6 +937,8 @@ class UI {
             if (g.world.power.outage > 8 && g.canAfford(15000)) { g.spend(15000, 'ops'); g.world.power.outage = 8; g.log('Engineers are rebooting the grid manually...', 'info', null, true); }
           } else if (a === 'volcano') this.centerOn(w.volcano.x, w.volcano.y);
           else if (a === 'alarm') this.toggleAlarm();
+          else if (a === 'feedall') { const n = g.replaceLostFeeders(true); this.toast(n ? `Added ${n} feeder${n > 1 ? 's' : ''}.` : 'No room for a feeder (or not enough money).', n ? 'good' : 'warn'); if (n) this.sfx.play('build'); }
+          else if (a === 'starve') { const x = g.hungryWithoutFood()[0]; if (x) this.centerOn(x.d.tx, x.d.ty); }
         };
       }
     }

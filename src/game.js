@@ -300,9 +300,9 @@ class Game {
     return true;
   }
   // Fence tiles a dinosaur was standing on: built as soon as it steps off
-  queueFence(x, y, type) {
+  queueFence(x, y, type, hours = 24) {
     this.pendingFences = this.pendingFences || [];
-    if (!this.pendingFences.some((p) => p.x === x && p.y === y)) this.pendingFences.push({ x, y, type, t: 24 * this.secPerHour });
+    if (!this.pendingFences.some((p) => p.x === x && p.y === y)) this.pendingFences.push({ x, y, type, t: hours * this.secPerHour });
   }
   buildPendingFences(dt) {
     const w = this.world;
@@ -310,13 +310,39 @@ class Game {
       p.t -= dt;
       const i = w.idx(p.x, p.y);
       if (w.fence[i] === p.type || w.bld[i] || w.path[i]) return false;
-      if (this.dinos.some((d) => d.tx === p.x && d.ty === p.y && !d.carried)) return p.t > 0;
+      if (w.terrain[i] === T_LAVA || this.dinos.some((d) => d.tx === p.x && d.ty === p.y && !d.carried)) return p.t > 0;
       this.placeFence(p.x, p.y, p.type);
       return false;
     });
     if (!this.pendingFences.length) { w.computeRegions(); this.updateLoose(); w.powerDirty = true; }
   }
-  fenceBlockedByDino(x, y) { return this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried); }
+  // something that will clear by itself: a dinosaur standing there, or lava that will cool
+  // Hungry animals in a paddock whose feeder was destroyed (lava, quakes, a rampage)
+  hungryWithoutFood() {
+    const w = this.world, out = [];
+    for (const d of this.dinos) {
+      if (d.loose || d.carried || d.hunger < 60) continue;
+      const reg = w.regionAt(d.tx, d.ty);
+      if (!reg || reg.public || reg.feeders[d.sp.diet].length) continue;
+      if (d.sp.diet === 'herb' && reg.forest >= 4) continue; // can graze
+      out.push({ d, reg });
+    }
+    return out;
+  }
+  replaceLostFeeders(force = false) {
+    if (this.autoFeeders === false && !force) return 0;
+    let n = 0;
+    const done = new Set();
+    for (const { d, reg } of this.hungryWithoutFood()) {
+      const key = reg.id + d.sp.diet;
+      if (done.has(key)) continue;
+      done.add(key);
+      const f = this.addFeeder(reg, d.sp.diet);
+      if (f) { n++; this.log(`Ground crew installed a ${BUILDINGS[f.type].name} for hungry ${d.name} the ${d.sp.name} (${fmtMoney(BUILDINGS[f.type].cost)}).`, 'info', f); }
+    }
+    return n;
+  }
+  fenceBlockedByDino(x, y) { return this.world.terrain[this.world.idx(x, y)] === T_LAVA || this.dinos.some((d) => d.tx === x && d.ty === y && !d.carried); }
 
   placeFence(x, y, type) {
     const w = this.world;
@@ -687,6 +713,8 @@ class Game {
     if (w.powerDirty || this.powerT <= 0) { w.computePower(this); this.powerT = 1; }
     if (w.regionsDirty) { w.computeRegions(); this.updateLoose(); }
     if (this.pendingFences && this.pendingFences.length) this.buildPendingFences(dt);
+    this.feedCheckT = (this.feedCheckT || 0) - dt;
+    if (this.feedCheckT <= 0) { this.feedCheckT = 3; this.replaceLostFeeders(); }
 
     // eggs
     for (const e of this.eggs) {
@@ -844,6 +872,8 @@ class Game {
       unpowered = { x: i % w.W, y: (i / w.W) | 0 }; break;
     }
     if (unpowered && cre.length) issues.push([90, 'Some electric fences have no power. Add a Pylon or Power Plant nearby.', unpowered]);
+    const dark = [...w.buildings.values()].filter((b) => BUILDINGS[b.type].power && !b.powered && w.covered[w.idx(b.x, b.y)]);
+    if (w.power.outage <= 0 && w.power.demand > w.power.supply && dark.length) issues.push([88, `Not enough power: ${Math.round(w.power.demand)} MW needed, ${Math.round(w.power.supply)} MW made. ${dark.length} building${dark.length > 1 ? 's are' : ' is'} dark (fences get power first). Build another Power Plant.`, dark[0]]);
     if (carn && !this.hasBuilding('ranger')) issues.push([85, 'You have dangerous carnivores but no Ranger Station. Nobody can tranquilize an escapee.', null]);
     if (carn && !this.shelters().length) issues.push([70, 'There is nowhere for guests to shelter. A Visitor Center, Hotel or Bunker saves lives during a breach.', null]);
     if (cre.length && !this.hasBuilding('maint')) issues.push([65, 'Without a Maintenance Shed, damaged fences are never repaired.', null]);
