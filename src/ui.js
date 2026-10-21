@@ -36,7 +36,17 @@ class UI {
     game.on('gameover', (reason) => this.showGameOver(reason));
     game.on('victory', () => this.showVictory());
     game.on('scenario', (r) => this.showScenarioEnd(r));
-    game.on('breach', () => { if (this.speed > 1) this.setSpeed(1); });
+    game.on('breach', (newly) => {
+      if (this.speed > 1) this.setSpeed(1);
+      // a dangerous escape gets a moment: slow motion, a roar, a red flash
+      const worst = newly.reduce((a, d) => (d.sp.danger > a.sp.danger ? d : a), newly[0]);
+      if (worst.sp.danger >= 4) {
+        this.slowmo = 1.3;
+        this.sfx.play(worst.sp.size >= 3 ? 'roar' : 'screech', 1.2);
+        setTimeout(() => this.sfx.play('scream', 0.8), 450);
+        const f = $('#flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go');
+      }
+    });
     game.on('day', () => {
       const h = game.history[game.history.length - 1];
       if (!h) return;
@@ -900,6 +910,7 @@ class UI {
 
   // ---------------- per-frame ----------------
   frame(dt) {
+    if (this.slowmo > 0) this.slowmo -= dt;
     const k = this.keys;
     const sp = 420 * dt / this.r.cam.zoom;
     let mx = 0, my = 0;

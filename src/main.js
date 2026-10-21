@@ -39,7 +39,7 @@ function unb64(str, Type) { const s = atob(str); const u8 = new Uint8Array(s.len
 function serialize(g) {
   const w = g.world;
   return JSON.stringify({
-    v: 1, size: g.mapSize, sph: g.secPerHour,
+    v: 1, size: g.mapSize, sph: g.secPerHour, lastInc: g.lastIncidentDay,
     mods: g.mods || [], contracts: g.contracts || [], freeEgg: g.freeEgg || null, seenDec: g.seenDecisions || {}, nextDec: g.nextDecisionDay || 0, decOn: g.decisionsOn !== false, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
@@ -83,6 +83,7 @@ function loadGame(json) {
   g.events.auto = s.auto; g.events.nextDay = s.nextDay; g.start = s.start;
   g.lastDay = g.day;
   if (s.sph) g.secPerHour = s.sph;
+  if (s.lastInc) g.lastIncidentDay = s.lastInc;
   g.mods = s.mods || []; g.contracts = s.contracts || []; g.freeEgg = s.freeEgg || null;
   g.seenDecisions = s.seenDec || {}; g.nextDecisionDay = s.nextDec || 0; g.decisionsOn = s.decOn !== false;
   if (s.research) { g.research.done = new Set(s.research.done); g.research.active = s.research.active; g.research.apply(); }
@@ -186,7 +187,7 @@ function loop(now) {
     const speed = UIX.speed;
     const modalOpen = document.getElementById('modal').style.display === 'flex';
     if (speed > 0 && !modalOpen) {
-      let remaining = dtReal * speed;
+      let remaining = dtReal * speed * (UIX.slowmo > 0 ? 0.25 : 1);
       while (remaining > 1e-6) {
         const step = Math.min(1 / 30, remaining);
         GAME.update(step);

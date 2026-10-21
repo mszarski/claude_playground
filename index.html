@@ -180,6 +180,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 .pipbar { display: flex; justify-content: space-between; align-items: center; font-family: 'Press Start 2P'; font-size: 8px; color: #ff6040; margin-bottom: 3px; }
 .pipbar button { font-size: 12px; padding: 0 4px; }
 @media (max-width: 760px) { #pip { top: auto; bottom: 110px; } #pip canvas { width: 160px; height: 100px; } }
+/* red flash on a dangerous breach */
+#flash { position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255,0,0,0) 40%, rgba(200,10,0,0.55) 100%); }
+#flash.go { animation: breachflash 1.4s ease-out; }
+@keyframes breachflash { 0% { opacity: 1; } 30% { opacity: 0.4; } 45% { opacity: 0.9; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { #flash.go { animation-duration: 0.6s; } }
 /* tooltip */
 #tip { position: fixed; z-index: 30; pointer-events: none; background: rgba(8,12,8,0.94); border: 2px solid var(--hi); padding: 3px 8px; font-size: 17px; display: none; max-width: 280px; }
 
@@ -327,6 +332,7 @@ table.fin td:last-child { text-align: right; }
 <div id="tut" class="panel" hidden></div>
 <div id="tutHl" hidden></div>
 <div id="tip"></div>
+<div id="flash"></div>
 <div id="modal"><div class="box panel" id="modalBox"></div></div>
 
 <div id="title">

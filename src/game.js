@@ -50,7 +50,7 @@ class Game {
     this.stats = { guestsTotal: 0, deaths: 0, staffDeaths: 0, escapes: 0, dinoDeaths: 0, fledToday: 0, hatched: 0 };
     this.ledger = this.newLedger();
     this.history = [];
-    this.lastDay = 1;
+    this.lastDay = 1; this.lastIncidentDay = 1;
     this.spawnAcc = 0;
     this.comfortT = 0; this.powerT = 0; this.secondT = 0;
     this.typeCache = null;
@@ -513,6 +513,7 @@ class Game {
     this.soundAt('scream', h.x, h.y, 1);
     if (h.kind === 'guest') {
       this.stats.deaths++; this.deathLog.push(this.day);
+      this.incident();
       this.reputation = Math.max(0, this.reputation - 5);
       this.spend(30000, 'fines');
       this.removeGuest(h, false);
@@ -527,6 +528,14 @@ class Game {
       setTimeoutSim(this, 30, () => { if (this.world.buildings.has(home.id)) { this.staff.push(new Staff(this, h.role, home)); this.spend(5000, 'ops'); } });
     }
   }
+  // reset the board by the gate
+  incident() {
+    const streak = this.day - (this.lastIncidentDay || 1);
+    this.lastIncidentDay = this.day;
+    this.incidentFlash = 4;
+    if (streak >= 3) this.log(`The "days without incident" sign is back to zero after ${streak} days.`, 'warn');
+  }
+
   killDino(d, cause, natural = false) {
     if (d.dead) return;
     d.dead = true;
@@ -633,6 +642,7 @@ class Game {
     const prevHour = this.hour;
     this.time += dt / this.secPerHour;
     if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 6);
+    if (this.incidentFlash > 0) this.incidentFlash -= dt;
     this.events.update(dt);
     runSimTimers(this, dt);
 
@@ -849,6 +859,7 @@ class Game {
       const d = newly[0];
       const what = newly.length > 1 ? `${newly.length} dinosaurs including ${d.name} the ${d.sp.name}` : `${d.name} the ${d.sp.name}`;
       this.log(`CONTAINMENT BREACH! ${what} ${newly.length > 1 ? 'are' : 'is'} loose!`, 'bad', d, true);
+      this.incident();
       this.sound('alarm');
       this.emit('breach', newly);
     }

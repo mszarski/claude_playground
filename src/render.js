@@ -522,6 +522,20 @@ class Renderer {
     const lit = spr.night && g.darkness > 0.3 && (b.powered || !def.power);
     ctx.drawImage(lit ? spr.night : spr.canvas, x, y);
     this.animateBuilding(ctx, b, x, y, spr);
+    // the "days without incident" board beside the main gate
+    if (b.type === 'gate' && b === g.buildingsOfType('gate')[0]) {
+      const days = Math.max(0, g.day - (g.lastIncidentDay || 1));
+      const sx = x - 25, sy = y + spr.canvas.height - 30;
+      const fresh = g.incidentFlash > 0 && Math.floor(this.time * 6) % 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(sx + 2, sy + 29, 19, 2);
+      ctx.fillStyle = '#3a2814'; ctx.fillRect(sx + 9, sy + 19, 2, 11);
+      ctx.fillStyle = '#2a1a0c'; ctx.fillRect(sx, sy, 21, 20);
+      ctx.fillStyle = fresh ? '#f8d040' : '#e8dcc0'; ctx.fillRect(sx + 1, sy + 1, 19, 18);
+      drawText3(ctx, 'DAYS', sx + 3, sy + 2, '#2a1408');
+      drawText3(ctx, 'SAFE', sx + 3, sy + 7, '#2a1408');
+      const n = String(Math.min(999, days));
+      drawText3(ctx, n, sx + 11 - n.length * 2, sy + 12, days ? '#2a6a2a' : '#c8381e');
+    }
     // torches flicker on gate
     if (b.type === 'gate') {
       const fl = Math.sin(this.time * 20) > 0;
@@ -964,7 +978,9 @@ class Renderer {
     const dark = g.darkness;
     const storm = g.events.storm && g.events.storm.phase === 'active' ? 0.35 : g.events.storm ? 0.15 : 0;
     const v = g.events.volcano && g.events.volcano.phase === 'erupt' ? 0.2 : 0;
-    const amount = Math.max(dark * 0.62, storm, v);
+    // a grid failure at night is properly dark: only flashlights, fires and the moon
+    const blackout = w.power.outage > 0 && !(g.hasBuilding('backup') && w.power.backupFuel > 0 && w.power.backupDelay <= 0);
+    const amount = Math.max(dark * (blackout ? 0.86 : 0.62), storm, v);
     if (amount > 0.01) {
       const lc = this.lightX;
       lc.globalCompositeOperation = 'source-over';
@@ -989,8 +1005,39 @@ class Renderer {
         for (let i = 0; i < w.W * w.H; i++) if (w.terrain[i] === T_LAVA) light((i % w.W + 0.5) * TILE, ((i / w.W | 0) + 0.5) * TILE, 22, 0.8);
         if (w.volcano) light((w.volcano.x + 0.5) * TILE, (w.volcano.y + 0.5) * TILE, 40, 0.8);
         for (const h of g.helis) if (h.state !== 'parked') light(h.x * TILE + h.facing * 30, h.y * TILE, 30, 0.9);
+        // flashlight cones: staff always carry them after dark, fleeing guests use their phones in a blackout
+        const cone = (wx, wy, dir, len, a) => {
+          const sx = (wx - camX) * z, sy = (wy - camY) * z, L = len * z;
+          if (sx < -L || sy < -L || sx > cw + L || sy > ch + L) return;
+          const gr = lc.createRadialGradient(sx, sy, 0, sx, sy, L);
+          gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+          lc.fillStyle = gr;
+          lc.beginPath(); lc.moveTo(sx, sy); lc.arc(sx, sy, L, dir - 0.42, dir + 0.42); lc.closePath(); lc.fill();
+          light(wx, wy, 6, a * 0.8);
+        };
+        if (dark > 0.3) {
+          for (const s of g.staff) {
+            if (s.dead || s.hidden) continue;
+            const t = s.target && !s.target.dead ? s.target : null;
+            const dir = t ? Math.atan2(t.y - s.y, t.x - s.x) : (s.facing > 0 ? 0 : Math.PI) + Math.sin(this.time * 1.3 + s.id) * 0.4;
+            cone(s.x * TILE, s.y * TILE - 6, dir, 46, 0.85);
+          }
+          for (const j of g.jeeps) if (!j.wrecked && j.state !== 'parked') cone(j.x * TILE + j.facing * 6, j.y * TILE - 4, j.facing > 0 ? 0 : Math.PI, 40, 0.8);
+          if (blackout) for (const gu of g.guests) if (!gu.hidden && gu.state === 'flee' && gu.id % 3 === 0) light(gu.x * TILE, gu.y * TILE - 6, 10, 0.6);
+        }
       }
       ctx.drawImage(this.lightC, 0, 0);
+      if (dark > 0.45) {
+        const blink = Math.floor(this.time * 0.7) % 7 === 0;
+        for (const d of g.dinos) {
+          if (!d.loose || d.carried || d.sedatedT > 0 || d.sp.danger < 4 || d.camouflaged || blink) continue;
+          const S = DINO_SPRITES[d.species];
+          const hx = d.x * TILE + d.facing * (S.w / 2 - 5), hy = d.y * TILE - S.h + 7;
+          const sx = Math.round((hx - camX) * z), sy = Math.round((hy - camY) * z);
+          if (sx < 0 || sy < 0 || sx > cw || sy > ch) continue;
+          ctx.fillStyle = '#f8e040'; ctx.fillRect(sx, sy, Math.max(2, z), Math.max(2, z)); ctx.fillRect(sx + d.facing * 3 * z, sy, Math.max(2, z), Math.max(2, z));
+        }
+      }
       // warm tint for lamps
       if (dark > 0.3) {
         ctx.globalCompositeOperation = 'lighter';
