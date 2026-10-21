@@ -50,31 +50,41 @@ def generate(rng):
         R = 0.0
     tb = rng.uniform(0.06, 0.13)
     Zb = G + 2 * te + 2 * ext
-    Hy = tb + hc + (R if top == "arc" else wb * 0.35)
+    tf = rng.uniform(0.3, 0.5)                    # flat ears: material above the pin, as a share of hc
+    Hy = tb + hc + (R if top == "arc" else hc * tf)
     S = rng.uniform(100, 200)
     k = S / max(Lb, Zb, Hy)
     Lb, wb, G, te, ext, hc, R, tb, Zb, Hy = (v * k for v in (Lb, wb, G, te, ext, hc, R, tb, Zb, Hy))
-    te = max(te, 3.0)
-    tb = max(tb, 3.0)
-    Zb = G + 2 * te + 2 * ext
-    ytop_flat = hc * rng.uniform(0.3, 0.5) if top == "flat" else 0.0
+    r1 = lambda v: round(v, 1)                    # noqa: E731
+    r2 = lambda v: round(v / 0.2) * 0.2           # noqa: E731  (halves stay on the 0.1 grid)
+    te, tb = r1(max(te, 3.0)), r2(max(tb, 3.0))
+    Lb, wb = r2(Lb), r2(wb) if kind != "channel" else r2(Lb)
+    if kind == "channel":
+        Lb = wb
+    R = r1(min(R, wb / 2)) if top == "arc" else 0.0
+    hc, ext = r1(hc), r1(ext)
+    ytop_flat = r1(max(hc * tf, 0.3 * wb)) if top == "flat" else 0.0
     Hy = tb + hc + (R if top == "arc" else ytop_flat)
-    y0 = -Hy / 2
-    yb = y0 + tb                                  # base top
-    yc = yb + hc                                  # pin centre
-    zi, zo = G / 2, G / 2 + te                    # ear inner / outer faces
-    rf = round(rng.uniform(0.4, 0.9) * min(te, tb), 1) if rng.random() < 0.75 else 0.0
+    y0 = r1(-Hy / 2)
+    yb = r1(y0 + tb)                              # base top
+    yc = r1(yb + hc)                              # pin centre
+    zi = r1(G / 2)
+    zo = r1(zi + te)                              # ear inner / outer faces
+    Zb = 2 * r1(zo + ext)
+    rf = round(rng.uniform(0.3, 0.7) * min(te, tb), 1) if rng.random() < 0.75 else 0.0
 
     # ---------------- ear profile
     if top == "arc":
         tl = _tangent(-wb / 2, yb, 0.0, yc, R, True)
         tr = (-tl[0], tl[1])
-        ear = (f".moveTo({f(-wb / 2)},{f(yb)}).lineTo({f(tl[0])},{f(tl[1])})"
-               f".threePointArc((0,{f(yc + R)}),({f(tr[0])},{f(tr[1])})).lineTo({f(wb / 2)},{f(yb)}).close()")
+        yd = yb - tb / 2                          # ear foot buried in the base so the union fuses
+        ear = (f".moveTo({f(-wb / 2)},{f(yd)}).lineTo({f(-wb / 2)},{f(yb)}).lineTo({f(tl[0])},{f(tl[1])})"
+               f".threePointArc((0,{f(yc + R)}),({f(tr[0])},{f(tr[1])})).lineTo({f(wb / 2)},{f(yb)})"
+               f".lineTo({f(wb / 2)},{f(yd)}).close()")
         ear_r = R
     else:
         yt = yc + ytop_flat
-        ear = f".center(0,{f((yb + yt) / 2)}).rect({f(wb)},{f(yt - yb)})"
+        ear = f".center(0,{f((yb - tb / 2 + yt) / 2)}).rect({f(wb)},{f(yt - yb + tb / 2)})"
         ear_r = min(wb / 2, ytop_flat)
     boss = rng.random() < 0.25 and top == "arc"
     pre = f"e=cq.Workplane('XY',origin=(0,0,{f(zi)})){ear}.extrude({f(te)})"
@@ -85,13 +95,13 @@ def generate(rng):
             pts = f"near(({f(-wb / 2)},{f(yt)},{f(zi + te / 2)}),({f(wb / 2)},{f(yt)},{f(zi + te / 2)}))"
             pre += f".edges({pts}).{rng.choice(['fillet', 'fillet', 'chamfer'])}({f(cc)})"
     dp = max(4.0, rng.uniform(0.35, 0.65) * 2 * ear_r)
-    dp = min(dp, 2 * ear_r - 2 * max(3.0, 0.3 * ear_r))
+    dp = min(dp, 2 * ear_r - 2 * max(3.0, 0.3 * ear_r), 2 * (yc - yb - rf - max(3.0, 0.15 * hc)))
     if dp < 4:
         dp = 0.0
     hb = 0.0
     if boss and dp:
         rbo = min(ear_r * rng.uniform(0.6, 0.9), dp / 2 + max(3.0, 0.45 * dp))
-        hb = rng.uniform(0.3, 0.8) * te
+        hb = min(rng.uniform(0.3, 0.8) * te, max(Zb / 2, S / 2) - zo)
         if yc - rbo < yb + rf + 2 or rbo < dp / 2 + 2.5:
             boss = False
         else:
@@ -99,6 +109,8 @@ def generate(rng):
                     f".center(0,{f(yc)}).circle({f(rbo)}).extrude({f(hb)})")
     else:
         boss = False
+    if not boss:
+        hb = 0.0
     pre += "\n"
 
     s = f"cq.Workplane('XY').center(0,{f(y0 + tb / 2)}).rect({f(Lb)},{f(tb)}).extrude({f(Zb / 2)},both=True)"
@@ -107,7 +119,7 @@ def generate(rng):
     # ---------------- root fillets
     if rf > 0:
         pts = [(0, yb, zi), (0, yb, -zi)]
-        if ext > rf + 1:
+        if ext > 1.5 * rf + 2:
             pts += [(0, yb, zo), (0, yb, -zo)]
         if Lb / 2 - wb / 2 > rf + 1:
             zm = (zi + zo) / 2

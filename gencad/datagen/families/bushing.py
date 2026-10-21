@@ -226,12 +226,14 @@ def generate(rng):
             s += f".edges(near({on_circle(rtop, z1)})).chamfer({f(c)})"
 
     rbig = max(r for r, z in outer)
+    bolts = False
     # flange bolt holes (flanged kind with a big enough flange)
     if kind == "flanged" and rf - ro > 10 and rng.random() < 0.6:
         n = rng.choice([3, 4, 4, 6, 6, 8])
         bc = _q((rf + ro) / 2)
         hd = _q(min((rf - ro) * rng.uniform(0.35, 0.5), 2 * math.pi * bc / n * 0.4))
         wp = ".faces('<Z').workplane(centerOption='ProjectedOrigin')"
+        bolts = True
         u = rng.random()
         if u < 0.5:
             s += wp + f".polarArray({f(bc)},0,360,{n}).hole({f(hd)})"
@@ -259,7 +261,8 @@ def generate(rng):
                 s += f".cut({box}.translate(({f(-xc)},0,{f(zc)})))"
     # radial cross hole(s)
     if rng.random() < 0.45:
-        segs = [(a, b) for a, b in zip(outer, outer[1:]) if a[0] == b[0] and b[1] - a[1] > 8]
+        segs = [(a, b) for a, b in zip(outer, outer[1:]) if a[0] == b[0] and b[1] - a[1] > 8
+                and not (bolts and a[0] >= rf - 0.05)]
         if segs:
             a, b = rng.choice(segs)
             hd = _q(max(2.0, min((b[1] - a[1]) * 0.4, a[0] * rng.uniform(0.2, 0.4))))

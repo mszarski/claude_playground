@@ -228,5 +228,5 @@ def generate(rng):
         n = rng.choice([6, 8, 10, 12, 16])
         fr_ = _q(min(R * rng.uniform(0.05, 0.09), math.pi * R / n * 0.6))
         s += (f".faces('<Z').workplane(centerOption='ProjectedOrigin').polarArray({f(R + fr_ * 0.3)},0,360,{n})"
-              f".circle({f(fr_)}).cutBlind({f(-(zt1 - zb0) * rng.uniform(0.5, 0.9))})")
+              f".circle({f(fr_)}).cutBlind({f(-h1 * rng.uniform(0.75, 1.0))})")
     return "import cadquery as cq\nr=" + s + orient(rng)

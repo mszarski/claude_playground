@@ -112,12 +112,12 @@ def _wall_code(rng, walls, L, shift, d_max_global):
         lo, hi = sa + m, sb - m
         if hi < lo:
             continue
-        # face pick point: on the outer face between the end and the first hole, mid width. The face workplane's
-        # origin is the projected base-plane origin at z=-L/2, so local y = global z + L/2
+        # face pick point: on the outer face between the end and the first hole, mid width. workplane(origin=(0,0,0))
+        # puts the local origin at the projection of the global origin: local y = global z
         e = max(1.5 * d, rng.uniform(0.08, 0.2) * L)
         mid = (A[0] + B[0]) / 2, (A[1] + B[1]) / 2
         zp = -L / 2 + 0.4 * e - d * 0.1
-        face = f".faces(near({_pt3(mid, zp)})).workplane()"
+        face = f".faces(near({_pt3(mid, zp)})).workplane(origin=(0,0,0))"
         two_rows = (hi - lo) > 2.6 * d and rng.random() < 0.35
         if two_rows:
             g = rng.uniform(0.5, 1.0) * (hi - lo)
@@ -132,7 +132,7 @@ def _wall_code(rng, walls, L, shift, d_max_global):
             if ns > 1 and (span - sl) / (ns - 1) < sl + d:
                 ns = 1
             zs = [0.0] if ns == 1 else [-(span - sl) / 2 + i * (span - sl) / (ns - 1) for i in range(ns)]
-            pts = [(x, z + L / 2) for x in xs for z in zs]
+            pts = [(x, z) for x in xs for z in zs]
             out += face + f".pushPoints({_pts(pts)}).slot2D({f(sl + d)},{f(d)},90).cutThruAll()"
             continue
         nh = rng.choice([1, 2, 2, 3, 3, 4, 5, 6])
@@ -145,9 +145,9 @@ def _wall_code(rng, walls, L, shift, d_max_global):
         else:
             zs = [-span / 2 + i * pitch for i in range(nh)]
         if len(xs) == 1 and nh > 1 and rng.random() < 0.5:
-            pat = f".center({f(xs[0])},{f(L / 2)}).rarray(1,{f(pitch)},1,{nh})"
+            pat = f".center({f(xs[0])},0).rarray(1,{f(pitch)},1,{nh})"
         else:
-            pat = f".pushPoints({_pts([(x, z + L / 2) for x in xs for z in zs])})"
+            pat = f".pushPoints({_pts([(x, z) for x in xs for z in zs])})"
         k2 = rng.random()
         if k2 < 0.6 or t < 4:
             depth = "" if rng.random() < 0.7 else f",{f(t * 1.5)}"
@@ -159,7 +159,7 @@ def _wall_code(rng, walls, L, shift, d_max_global):
             else:
                 out += face + pat + f".cboreHole({f(d)},{f(cb)},{f(t * rng.uniform(0.3, 0.5))})"
         else:
-            cs = min(d * 1.8, width - 2, d + 2 * t * 0.8)
+            cs = min(d * 1.8, width - 2, d + 1.2 * t)
             if cs <= d + 1:
                 out += face + pat + f".hole({f(d)})"
             else:
@@ -172,10 +172,11 @@ def _tslot(rng, L):
     nx = rng.choice([1, 1, 1, 2])                    # 1x1 or 1x2 module
     W, H = a * nx, a
     wo = a * rng.uniform(0.2, 0.26)                   # slot opening
-    lt = a * rng.uniform(0.09, 0.12)                  # lip thickness
-    wi = a * rng.uniform(0.42, 0.52)                  # undercut width
-    d1 = a * rng.uniform(0.1, 0.14)
+    lt = a * rng.uniform(0.07, 0.09)                  # lip thickness
+    wi = a * rng.uniform(0.38, 0.44)                  # undercut width
+    d1 = a * rng.uniform(0.06, 0.08)
     d2 = a * rng.uniform(0.04, 0.07)                  # tapered slot bottom
+    # undercut corners stay clear of the corner diagonals: wi/2 + lt + d1 <= 0.39 a
     prof = [(-wo / 2, 0), (-wo / 2, lt), (-wi / 2, lt), (-wi / 2, lt + d1), (-wo / 2, lt + d1 + d2),
             (wo / 2, lt + d1 + d2), (wi / 2, lt + d1), (wi / 2, lt), (wo / 2, lt), (wo / 2, 0)]
     corners = [(-W / 2, -H / 2), (W / 2, -H / 2), (W / 2, H / 2), (-W / 2, H / 2)]
@@ -206,22 +207,22 @@ def _tslot(rng, L):
         s += f".edges(near({','.join(_pt3(c) for c in corners)})).fillet({f(rc)})"
     if rng.random() < 0.7:                            # access / connector holes across the profile
         d = min(wo * rng.uniform(0.6, 0.95), bore * 1.1) if rng.random() < 0.5 else bore * rng.uniform(0.9, 1.3)
-        e = rng.uniform(0.05, 0.2) * L + d       # local y on a side face = global z + L/2
+        e = rng.uniform(0.05, 0.2) * L + d
         side = rng.choice(["x", "y"])
         if side == "y" or nx == 1:
             n = (0, -1) if rng.random() < 0.5 else (0, 1)
             P = (centres[0][0] + (wo / 2 + a / 2) / 2, n[1] * H / 2)
             xs = [c[0] * -n[1] for c in centres]                 # local x = global x * (-n_y)
-            z_s = [e, L - e] if rng.random() < 0.6 else [e]
+            z_s = [-L / 2 + e, L / 2 - e] if rng.random() < 0.6 else [-L / 2 + e]
             pts = [(x, z) for x in xs for z in z_s]
         else:
             n = (1, 0) if rng.random() < 0.5 else (-1, 0)
             P = (n[0] * W / 2, (wo / 2 + a / 2) / 2)
-            z_s = [e, L - e] if rng.random() < 0.6 else [e]
+            z_s = [-L / 2 + e, L / 2 - e] if rng.random() < 0.6 else [-L / 2 + e]
             pts = [(0, z) for z in z_s]
-        s += f".faces(near({_pt3(P, 0)})).workplane().pushPoints({_pts(pts)}).hole({f(d)})"
+        s += f".faces(near({_pt3(P, 0)})).workplane(origin=(0,0,0)).pushPoints({_pts(pts)}).hole({f(d)})"
     if rng.random() < 0.3 and nx == 1:
-        s += f".faces('>Z').workplane().hole({f(bore * rng.uniform(1.0, 1.15))},{f(rng.uniform(0.1, 0.25) * L)})"
+        s += f".faces('>Z').workplane(origin=(0,0,0)).hole({f(bore * rng.uniform(1.0, 1.15))},{f(rng.uniform(0.1, 0.25) * L)})"
     return s
 
 
@@ -276,14 +277,17 @@ def generate(rng):
         s += f".edges(near({','.join(_pt3(tr(p)) for p, _ in prof['concave'])})).fillet({f(rin)})"
         if prof["heel"] and rng.random() < 0.7:
             s += f".edges(near({','.join(_pt3(tr(p)) for p, _ in prof['heel'])})).fillet({f(prof['heel'][0][1])})"
+    rtip = 0
     if rng.random() < 0.4:
-        s += f".edges(near({','.join(_pt3(tr(p)) for p in prof['tips'])})).fillet({f(tmin * rng.uniform(0.15, 0.35))})"
+        rtip = round(tmin * rng.uniform(0.15, 0.35), 1)
+        s += f".edges(near({','.join(_pt3(tr(p)) for p in prof['tips'])})).fillet({f(rtip)})"
     walls = []
     for A, B, n, t in prof["walls"]:
         A2, B2 = tr((A[0], A[1])), tr((B[0], B[1]))
         walls.append((A2, B2, (mx * n[0], n[1]), t))
     if rng.random() < 0.85:
         s += _wall_code(rng, walls, L, (0, 0), 0.5 * S)
-    if rng.random() < 0.4:
-        s += f".faces('>Z or <Z').chamfer({f(tmin * rng.uniform(0.15, 0.3))})"
+    ch = tmin * rng.uniform(0.15, 0.3) if not rtip else rtip * rng.uniform(0.3, 0.5)
+    if rng.random() < 0.4 and ch >= 0.5:
+        s += f".faces('>Z or <Z').chamfer({f(ch)})"
     return "import cadquery as cq\nr=" + s + orient(rng)

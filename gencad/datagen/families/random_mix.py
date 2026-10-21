@@ -88,6 +88,22 @@ class Classifier:
         return self.c.State() != TopAbs_OUT
 
 
+class _BB:
+    def __init__(self, xmin, ymin, zmin, xmax, ymax, zmax):
+        self.xmin, self.ymin, self.zmin, self.xmax, self.ymax, self.zmax = xmin, ymin, zmin, xmax, ymax, zmax
+        self.xlen, self.ylen, self.zlen = xmax - xmin, ymax - ymin, zmax - zmin
+
+
+def fbb(shape):
+    """Fast (non-optimal, tolerance-free) bounding box; Shape.BoundingBox() uses the slow optimal algorithm."""
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    b = Bnd_Box()
+    b.SetGap(0.0)
+    BRepBndLib.Add_s(shape.wrapped, b, True)
+    return _BB(*b.Get())
+
+
 def vtx(p):
     return cq.Vertex.makeVertex(*map(float, p))
 
@@ -111,7 +127,8 @@ class FaceInfo:
         self.n = face_normal(face)
         self.ax, self.sg = axis_of(self.n)
         self.bnd = cq.Compound.makeCompound(face.Wires())
-        self.bb = face.BoundingBox()
+        self.bb = fbb(face)
+        self.area = face.Area()
         self.level = [self.bb.xmin, self.bb.ymin, self.bb.zmin][self.ax]
 
     def clearance(self, p):
@@ -139,7 +156,7 @@ class FaceInfo:
         return None
 
     def min_width(self):
-        a = self.face.Area()
+        a = self.area
         per = sum(e.Length() for e in self.face.Edges())
         return 2 * a / max(per, 1e-9)
 
@@ -153,9 +170,10 @@ def planar_faces(shape, axes=(2,), signs=(1, -1), min_area=100.0):
         a = axis_of(n)
         if a is None or a[0] not in axes or a[1] not in signs:
             continue
-        if fc.Area() < min_area:
+        fi = FaceInfo(fc)
+        if fi.area < min_area:
             continue
-        out.append(FaceInfo(fc))
+        out.append(fi)
     return out
 
 
@@ -184,7 +202,7 @@ def face_selector(w, shape, fi, rng):
 
 def extent_below(shape, fi):
     """How far the solid extends behind face fi (along -normal)."""
-    bb = shape.BoundingBox()
+    bb = fbb(shape)
     lo = [bb.xmin, bb.ymin, bb.zmin][fi.ax]
     hi = [bb.xmax, bb.ymax, bb.zmax][fi.ax]
     return (fi.level - lo) if fi.sg > 0 else (hi - fi.level)
@@ -473,7 +491,7 @@ def add_boss(rng, part, T, hard):
     faces = [fi for fi in planar_faces(part.s, axes=(2,), signs=(1,), min_area=400.0)]
     if not faces:
         return False
-    faces.sort(key=lambda fi: -fi.face.Area())
+    faces.sort(key=lambda fi: -fi.area)
     fi = faces[0] if rng.random() < 0.7 else rng.choice(faces)
     k = rng.choice(["cyl", "cyl", "tube", "box", "rrect", "ngon", "rib", "slot"])
     mw = fi.min_width()
@@ -594,7 +612,7 @@ def pick_face(rng, s, side_p=0.2, min_area=300.0):
         faces = planar_faces(s, axes=(0, 1, 2), min_area=min_area)
     if not faces:
         return None
-    wts = [fi.face.Area() ** 0.5 for fi in faces]
+    wts = [fi.area ** 0.5 for fi in faces]
     return rng.choices(faces, weights=wts)[0]
 
 
@@ -899,7 +917,7 @@ def op_edges(rng, st, T):
 
 def op_shell(rng, st, T):
     w, s = st["w"], st["s"]
-    bb = s.BoundingBox()
+    bb = fbb(s)
     t = r1(max(2.0, min(bb.xlen, bb.ylen, bb.zlen) * rng.uniform(0.06, 0.12)))
     if bb.zlen < 3 * t + 6:
         return None
@@ -917,7 +935,8 @@ def generate_mix(rng, hard=False):
         if res is None:
             continue
         part, body_code, kind, single = res
-        T = max(part.s.BoundingBox().xlen, part.s.BoundingBox().ylen)
+        bb0 = fbb(part.s)
+        T = max(bb0.xlen, bb0.ylen)
         st = {"w": part.w, "s": part.s, "simple": single and kind in ("box", "rect", "ngon", "outline")}
         nops = rng.choice([0, 1, 2, 2, 3, 3, 4, 4]) if not hard else rng.randint(3, 7)
         segs = []
