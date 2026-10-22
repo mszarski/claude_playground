@@ -142,10 +142,33 @@ These match the ATC datasets so the two can be mixed:
 - `PAN-PAN` → `PAN PAN`, `SÉCURITÉ`/`SECURITAY` → `SECURITE`,
   `NINER` → `NINE`.
 
+## Results (first run)
+
+LoRA r=32 on the LM and audio encoder, 10,958 clips
+(`vhf8k:train` + `vhf8k:discovery` + `martts:train+clean` + `atc:train@4000` +
+`atcosim:train@2000`), 2 epochs, 1× A100, 1.8 h (~$4.50 on HF Jobs).
+The adapter is at `mszarski/voxtral-3B-marine-vhf` (private).
+
+| Held-out set | Base Voxtral WER | Fine-tuned WER | Vessel names correct |
+|---|---|---|---|
+| VHF-8K test (400) | 28.1% | **12.6%** | 23.3% → 34.6% |
+| MARTTS test (48 dialogues) | 15.3% | **7.5%** | – |
+| ATC test, real radio (300) | 69.1% | **9.8%** | – |
+
+WER here is scored after normalizing both sides to the same format, so it is
+not directly comparable with the 105.6% baseline on the ATC model's card. For
+reference, the ATC model reports 8.0% on the full ATC test set.
+
+Unseen vessel names are the main weakness. The VHF-8K test set uses vessel
+names that never appear in training (by design), and the model writes them
+phonetically ("CHARIKLIA JUNIOR" → "TREKLIER JUNIOR", "LYNX SATU" → "LYNK SATU").
+This is expected from audio alone. The next step is contextual biasing:
+put the vessel names currently in the area (from AIS) into the prompt.
+VHF-8K provides candidate lists (`ship_names`) for exactly this.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and
-synthesis pipeline are tested on CPU. The training collator has been checked
-against the real Voxtral processor on mixed batches, including multi-window
-MARTTS clips. Training runs on HF Jobs; see the model repo for results.
+synthesis pipeline are tested on CPU. The full train → eval → push path has
+been run on a tiny random model on CPU, and for real on HF Jobs (above).
 The Kokoro TTS backend has not been run (it needs `espeak-ng`).
