@@ -147,8 +147,15 @@ class Guest {
     if (!type) return null;
     const cands = g.buildingsOfType(type).filter((b) => b.powered || !BUILDINGS[b.type].power);
     if (!cands.length) { if (type === 'restroom' || type === 'restaurant') this.happy -= 2; return null; }
-    const b = pick(cands);
-    return b;
+    // a pressing need goes to the nearest one you can actually walk to; anything else can be anywhere
+    if (type === 'restroom' || type === 'restaurant') {
+      const here = g.world.idx(this.cx, this.cy);
+      let best = null, bd = Infinity;
+      for (const b of cands) { const d = g.buildingField(b)[here]; if (d >= 0 && d < bd) { bd = d; best = b; } }
+      if (!best) { this.happy -= 2; return null; }
+      return best;
+    }
+    return pick(cands);
   }
 
   chooseNext(here) {
@@ -163,7 +170,7 @@ class Guest {
     } else if (this.state === 'leave') {
       field = g.gateLocked ? null : g.gateField();
     } else {
-      if (!this.goal || (this.goal !== 'gate' && !w.buildings.has(this.goal.id))) { this.goal = chance(0.25) ? this.pickGoal() : null; }
+      if (!this.goal || (this.goal !== 'gate' && !w.buildings.has(this.goal.id))) { const urgent = this.hunger > 60 || this.toilet > 60; this.goal = urgent || chance(0.25) ? this.pickGoal() : null; }
       if (this.goal && this.goal !== 'gate') field = g.buildingField(this.goal);
     }
     if (field) {

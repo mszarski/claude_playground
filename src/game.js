@@ -21,7 +21,7 @@ const GOALS = [
   { id: 'star5', text: 'Reach a 5-star rating: the greatest park on Earth', reward: 250000, check: (g) => g.stars >= 5 },
 ];
 
-const STAR_THRESH = [0, 55, 110, 165, 245, 350];
+const STAR_THRESH = [0, 55, 110, 165, 235, 330];
 
 class Game {
   constructor(seed, opts = {}) {
@@ -981,6 +981,12 @@ class Game {
     }
     const gb = this.buildingsOfType('gate')[0];
     if (this.guests.length > 30 && !this.hasBuilding('restroom')) issues.push([35, 'Guests are desperate for a Restroom.', null]);
+    else if (this.guests.length > 80 * this.buildingsOfType('restroom').length) issues.push([42, `${this.guests.length} guests and only ${this.buildingsOfType('restroom').length} restroom${this.buildingsOfType('restroom').length > 1 ? 's' : ''}: people are leaving unhappy. Aim for one per 60–80 guests, spread along the paths.`, null]);
+    if (this.isNight && this.guests.length > 30) {
+      const vis = this.guests.filter((gu) => !gu.hidden);
+      const dark = vis.filter((gu) => !this.litNear(gu.x, gu.y)).length;
+      if (vis.length && dark / vis.length > 0.3) issues.push([38, 'Guests are wandering dark paths tonight and hating it. Line the busy paths with Lamp Posts (Guests menu).', null]);
+    }
     if (this.guests.length > 30 && !this.hasBuilding('restaurant')) issues.push([35, 'Hungry guests have nowhere to eat. Build a Restaurant.', null]);
     if (this.guests.length > 60 && !this.hasBuilding('tour') && this.stars >= 1) issues.push([20, 'A Tour Station with a loop of Tour Track past the paddocks is the best crowd-pleaser.', null]);
     const crowded = this.guests.filter((gu) => gu.crowded);
@@ -1109,7 +1115,7 @@ class Game {
       att += d.sp.appeal * (d.sick > 0 ? 0.5 : 1) * (0.6 + d.comfort / 250);
       species.add(d.species);
     }
-    att += species.size * 5;
+    att += species.size * 8; // variety is what people cross the ocean for
     for (const b of this.world.buildings.values()) att += (BUILDINGS[b.type].appeal || 0) * (b.powered ? 1 : 0.5) * (b.escaped ? 0 : 1);
     this.attraction = att;
     const score = att + this.reputation * 0.9;
