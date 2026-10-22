@@ -197,6 +197,41 @@ In real use, the list would come from AIS: vessels within radio range of the
 receiver, typically more than the 5 used here. Testing with longer lists is a
 sensible next step.
 
+## Results: realistic candidate lists (third run)
+
+v2's lists had at most ~10 names and the speaker was missing only 15% of the
+time. With longer lists that lack the speaker, v2 often wrote some list name
+anyway, usually an unrelated one ("CHARIKLIA JUNIOR" → "TURTLE BUDDY II").
+v3 trains on lists of 5-100 names with the speaker missing 30% of the time
+(`#mixlong`). Adapter: `mszarski/voxtral-3B-marine-vhf-v3` (private).
+
+"Wrong name" = an unspoken list name appears in the transcript.
+"Verified" = `evaluate.transcribe_verified`: a second pass without the list,
+keeping a list name only if something similar was heard (2x inference).
+
+| VHF-8K test (400 clips) | v2 names / wrong | v3 names / wrong | v3 verified names / wrong |
+|---|---|---|---|
+| No list | 34% / – | 33% / – | – |
+| Speaker on 10-name list | 97% / 0.8% | 94% / 0.5% | 92% / 0.0% |
+| Speaker on 25-name list | 97% / 1.5% | 93% / 0.2% | 91% / 0.0% |
+| Speaker on 100-name list | 91% / 4.0% | 90% / 1.5% | 88% / 1.2% |
+| Speaker **not** on 25-name list | – / 16.0% | – / **3.8%** | – / **2.0%** |
+| Speaker **not** on 100-name list | – / 21.5% | – / **4.8%** | – / **3.5%** |
+
+| WER | v2 | v3 |
+|---|---|---|
+| VHF-8K, no list | 13.2% | 12.9% |
+| VHF-8K, speaker on 100-name list | 3.4% | 3.2% |
+| VHF-8K, speaker not on 100-name list | 15.4% | 13.2% |
+| MARTTS test | 8.7% | 7.6% |
+| ATC test, real radio | 9.9% | 9.7% |
+
+v3 trades about 3 points of name accuracy on short lists for 4-5x fewer wrong
+names when the speaker is not listed, and is as good or better everywhere
+else. It is the recommended adapter. Verification removes about a third to a
+half of the remaining wrong names at 2x inference cost; worth it where a
+wrong vessel name matters more than latency.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and
