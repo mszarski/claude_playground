@@ -941,6 +941,12 @@ class Game {
     if (this.hasBuilding('power') && !this.hasBuilding('backup') && cre.some((d) => d.sp.strength >= 6)) issues.push([45, 'A Backup Generator keeps fences live during a grid failure.', null]);
     const bySp = {};
     for (const d of contained) (bySp[d.species] = bySp[d.species] || []).push(d);
+    // clever escape artists beat electric fences eventually: point at the real fix
+    for (const d of contained) {
+      if (!d.sp.clever || ((this.stats.escBySp || {})[d.species] || 0) < 2) continue;
+      const reg = w.regionAt(d.tx, d.ty);
+      if (reg && this.paddockFences(reg).some((j) => w.fence[j] === F_ELECTRIC)) { issues.push([78, `The ${d.sp.name.endsWith("s") ? d.sp.name : d.sp.name + "s"} keep beating electric fences (${this.stats.escBySp[d.species]} escapes). Concrete walls (Build menu) hold them: drag a Wall over their paddock fence.`, d]); break; }
+    }
     for (const [sp, ds] of Object.entries(bySp)) {
       if (ds.every((d) => d.elderly) && !this.eggs.some((e) => e.species === sp)) {
         const left = Math.max(1, Math.round(Math.min(...ds.map((d) => d.lifespan - d.ageDays))));
@@ -990,6 +996,7 @@ class Game {
     }
     if (newly.length) {
       this.stats.escapes += newly.length;
+      for (const d of newly) { this.stats.escBySp = this.stats.escBySp || {}; this.stats.escBySp[d.species] = (this.stats.escBySp[d.species] || 0) + 1; }
       this.reputation = Math.max(0, this.reputation - newly.length * 1.5);
       const d = newly[0];
       const what = newly.length > 1 ? `${newly.length} dinosaurs including ${d.name} the ${d.sp.name}` : `${d.name} the ${d.sp.name}`;
