@@ -264,6 +264,15 @@ function boot() {
   // installed as a home-screen app: cache everything so it runs offline
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost') && document.querySelector('link[rel="manifest"]')) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is optional */ });
+    // an update was installed while the app was open: reload straight away on the title screen,
+    // otherwise offer it, so a park in progress is never yanked away
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      const title = document.getElementById('title');
+      if (!GAME || (title && !title.hidden && getComputedStyle(title).display !== 'none')) { location.reload(); return; }
+      if (UIX) UIX.toast('A new version of the game is ready. Save, then reload the page to play it.', 'info');
+    });
   }
   // iOS ignores user-scalable=no: stop page pinch-zoom so pinches only zoom the map
   document.addEventListener('gesturestart', (e) => e.preventDefault());
