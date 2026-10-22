@@ -905,7 +905,12 @@ class Game {
     for (let i = 0; i < w.fence.length; i++) if (w.fence[i] === F_ELECTRIC && !w.fencePowered[i]) {
       unpowered = { x: i % w.W, y: (i / w.W) | 0 }; break;
     }
-    if (unpowered && cre.length) issues.push([90, 'Some electric fences have no power. Add a Pylon or Power Plant nearby.', unpowered]);
+    const offline = this.buildingsOfType('power').filter((b) => b.offline > 0);
+    if (unpowered && cre.length) {
+      if (w.power.outage > 0) issues.push([90, `The grid is down: fences come back on when it restarts${this.hasBuilding('backup') ? '' : '. A Backup Generator keeps them live meanwhile'}.`, unpowered]);
+      else if (offline.length) issues.push([90, `A Power Plant is knocked offline, so some fences have no power until it restarts${this.hasBuilding('backup') ? '' : '. A Backup Generator or a second plant covers this'}.`, offline[0]]);
+      else issues.push([90, 'Some electric fences have no power. Add a Pylon or Power Plant nearby.', unpowered]);
+    }
     const dark = [...w.buildings.values()].filter((b) => BUILDINGS[b.type].power && !b.powered && w.covered[w.idx(b.x, b.y)]);
     if (w.power.outage <= 0 && w.power.demand > w.power.supply && dark.length) issues.push([88, `Not enough power: ${Math.round(w.power.demand)} MW needed, ${Math.round(w.power.supply)} MW made. ${dark.length} building${dark.length > 1 ? 's are' : ' is'} dark (fences get power first). Build another Power Plant.`, dark[0]]);
     if (this.alarm && !cre.some((d) => d.loose && !d.carried && d.sedatedT <= 0 && d.sp.danger >= 4)) issues.push([86, 'Nothing dangerous is loose any more. Sound the all-clear (alarm button) so visitors can come back.', null]);
