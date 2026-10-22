@@ -30,6 +30,7 @@ function setActiveGame(g) {
   else RENDER.setGame(g);
   if (!UIX) UIX = new UI(g, RENDER, SFX); else UIX.attachGame(g);
   UIX.setTool('inspect'); UIX.closeFlyout(); UIX.setSpeed(1);
+  if ($('#modal').style.display === 'flex') UIX.closeModal(); // nothing from the last game carries over
   window.GAME = g;
 }
 
