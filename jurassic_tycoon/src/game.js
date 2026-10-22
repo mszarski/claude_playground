@@ -655,7 +655,7 @@ class Game {
       const reg = w.regions[rid];
       const all = this.dinos.filter((d) => !d.carried && w.region[w.idx(d.tx, d.ty)] === rid);
       // the old are making way: a herd can replace itself in a paddock it already fills
-      const used = all.reduce((a, d) => a + (d.elderly ? 0 : d.sp.space), 0);
+      const used = all.reduce((a, d) => a + (d.elderly ? d.sp.space / 2 : d.sp.space), 0);
       const bySp = {};
       for (const d of list) (bySp[d.species] = bySp[d.species] || []).push(d);
       for (const [sp, ds] of Object.entries(bySp)) {
