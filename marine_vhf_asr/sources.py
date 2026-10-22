@@ -5,13 +5,21 @@ Every loader returns a datasets.Dataset with the same columns:
     audio  - Audio(decode=False): {"bytes": ..., "path": ...}; decode with load_audio()
     text   - transcript in our canonical form (see normalize.py)
     slots  - JSON string of critical values to check verbatim ("{}" if none)
+    context - optional prompt text, e.g. candidate vessel names ("" if none)
+    decoys  - JSON list of candidate names in the context that are NOT spoken
     source - source name
 
-Sources (spec "name:split[@max_examples]", e.g. "vhf8k:train@2000"):
+Sources (spec "name:split[#context][@max_examples]", e.g. "vhf8k:train#mix@2000"):
     vhf8k    PassbyGrocer/VHF-8K: synthetic VTS traffic, one transmission per clip.
              Splits: train, discovery, confirmation, test. Vessel names become slots.
              Transcripts with ambiguous numbers (3+ digit runs, coordinates) are
              dropped because we cannot know how the TTS voice read them.
+             Context modes (candidate vessel names in the prompt):
+               #none       no context (default)
+               #supported  spoken name(s) + VHF-8K's phonetic decoys, shuffled
+               #decoys     decoys only: tests that unspoken candidates are not copied
+               #mix        training mix: 35% none, 50% supported, 15% decoys, with
+                           0-5 extra names from the dialogue's vessel inventory
     martts   bonalor/synthetic_maritime_radio_communication (CC-BY 4.0): synthetic
              distress / SAR dialogues, multi-speaker, one 30-125 s clip per dialogue.
              Splits: train (scenarios 1-8), test (scenarios 9-10); variant "clean"
@@ -21,8 +29,10 @@ Sources (spec "name:split[@max_examples]", e.g. "vhf8k:train@2000"):
     <path>   a local JSONL manifest written by synthesize.py
 """
 
+import hashlib
 import io
 import json
+import random
 import re
 from pathlib import Path
 
@@ -49,25 +59,71 @@ def load_audio(audio: dict, sr: int = SR) -> np.ndarray:
     return x
 
 
+COLUMNS = ["audio", "text", "slots", "context", "decoys"]
+
+
 def _finish(ds, name):
     from datasets import Audio
-    return ds.cast_column("audio", Audio(decode=False)).map(lambda _: {"source": name})
+    if "context" not in ds.column_names:
+        ds = ds.map(lambda _: {"context": "", "decoys": "[]"})
+    ds = ds.select_columns(COLUMNS).cast_column("audio", Audio(decode=False))
+    return ds.map(lambda _: {"source": name})
+
+
+def _vhf8k_name(name: str) -> str:
+    """VHF-8K vessel name in transcript form. Letters stay letters ("M", not "MIKE"):
+    that is how the TTS voice read them."""
+    return normalize_transcript(name, numbers="cardinal", expand_letters=False)
+
+
+_JUNK_NAME = re.compile(r"[^A-Za-z0-9 .'&/-]")
+
+
+def _vhf8k_context(r, mode: str):
+    """Pick (context, decoys) for one VHF-8K row; deterministic per utterance."""
+    rng = random.Random(int(hashlib.md5(r["utterance_id"].encode()).hexdigest()[:8], 16))
+    if mode == "mix":
+        mode = rng.choices(["none", "supported", "decoys"], weights=[35, 50, 15])[0]
+    if mode == "none":
+        return "", []
+
+    spoken = [_vhf8k_name(e) for e in r["reference_entities"] or []]
+    decoys = [_vhf8k_name(e) for e in r["konger_entities"] or []]
+    if r.get("_extra"):
+        pool = [_vhf8k_name(e) for e in r["ship_names"] or [] if e and not _JUNK_NAME.search(e)]
+        pool = [n for n in pool if n and n not in spoken and n not in decoys]
+        decoys += rng.sample(pool, min(len(pool), rng.randint(0, 5)))
+    names = (spoken if mode == "supported" else []) + decoys
+    rng.shuffle(names)
+    return prompt_text(names), decoys
+
+
+def prompt_text(names) -> str:
+    """Candidate-vessel context, in the wording the model is trained on."""
+    if not names:
+        return ""
+    return f"Candidate vessel names: {'; '.join(names)}. Use a candidate only if it is spoken."
 
 
 def _vhf8k(split):
     from datasets import Audio, load_dataset
+
+    split, _, mode = split.partition("#")
+    mode = mode or "none"
+    if mode not in ("none", "supported", "decoys", "mix"):
+        raise ValueError(f"vhf8k context mode must be none/supported/decoys/mix, got {mode!r}")
 
     ds = load_dataset("PassbyGrocer/VHF-8K", split=split)
     ds = ds.cast_column("audio", Audio(decode=False))
     ds = ds.filter(lambda r: not _AMBIGUOUS_NUMBER.search(r["reference_text"]))
 
     def convert(r):
-        norm = lambda s: normalize_transcript(s, numbers="cardinal")  # noqa: E731
-        slots = {f"vessel_{i}": norm(e) for i, e in enumerate(r["reference_entities"] or [])}
-        return {"text": norm(r["reference_text"]), "slots": json.dumps(slots)}
+        slots = {f"vessel_{i}": _vhf8k_name(e) for i, e in enumerate(r["reference_entities"] or [])}
+        context, decoys = _vhf8k_context(dict(r, _extra=mode == "mix"), mode)
+        text = normalize_transcript(r["reference_text"], numbers="cardinal", expand_letters=False)
+        return {"text": text, "slots": json.dumps(slots), "context": context, "decoys": json.dumps(decoys)}
 
-    ds = ds.map(convert).select_columns(["audio", "text", "slots"])
-    return _finish(ds, "vhf8k")
+    return _finish(ds.map(convert), "vhf8k")
 
 
 def _martts(split):
@@ -95,7 +151,8 @@ def _martts(split):
         for v in variants:
             wav = root / f"dataset_{v}" / f"{topic}_{number}_{variant}.wav"
             if wav.exists():
-                rows.append({"audio": {"bytes": None, "path": str(wav)}, "text": text, "slots": "{}"})
+                rows.append({"audio": {"bytes": None, "path": str(wav)}, "text": text, "slots": "{}",
+                             "context": "", "decoys": "[]"})
     if not rows:
         raise FileNotFoundError(f"No MARTTS audio found under {root}")
     return _finish(Dataset.from_list(rows), "martts")
@@ -107,7 +164,7 @@ def _hf_text_audio(repo, name):
 
         ds = load_dataset(repo, split=split).cast_column("audio", Audio(decode=False))
         ds = ds.map(lambda r: {"text": normalize_transcript(r["text"]), "slots": "{}"})
-        return _finish(ds.select_columns(["audio", "text", "slots"]), name)
+        return _finish(ds, name)
     return load
 
 
@@ -124,7 +181,7 @@ def _manifest(path):
         "slots_json": json.dumps({k: v for k, v in (r.get("slots") or {}).items() if v is not None}),
     }, remove_columns=[c for c in ds.column_names if c != "text"])
     ds = ds.rename_columns({"audio_ref": "audio", "slots_json": "slots"})
-    return _finish(ds.select_columns(["audio", "text", "slots"]), path.stem)
+    return _finish(ds, path.stem)
 
 
 LOADERS = {
@@ -136,7 +193,7 @@ LOADERS = {
 
 
 def load_source(spec: str, seed: int = 0):
-    """Load one source from a spec like 'vhf8k:train@2000' or 'data/synth/manifest.jsonl'."""
+    """Load one source from a spec like 'vhf8k:train#mix@2000' or 'data/synth/manifest.jsonl'."""
     limit = None
     if "@" in spec:
         spec, n = spec.rsplit("@", 1)

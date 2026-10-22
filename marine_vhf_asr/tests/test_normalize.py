@@ -100,3 +100,15 @@ class TestNormalizeOptions:
     def test_acronyms_leave_words_alone(self):
         assert normalize_transcript("I have a man overboard", acronyms=True) == \
             "I HAVE A MAN OVERBOARD"
+
+
+class TestDecoyCopyRate:
+    def test_counts_unspoken_candidates(self):
+        from marine_vhf_asr.metrics import decoy_copy_rate
+        examples = [
+            (["PAN AMBER"], "VTS SHAN BANG OVER", "VTS PAN AMBER OVER"),     # copied a decoy
+            (["PAN AMBER"], "VTS SHAN BANG OVER", "VTS SHAN BANG OVER"),     # clean
+            (["PAN AMBER"], "PAN AMBER THIS IS VTS", "PAN AMBER THIS IS VTS"),  # actually spoken
+            ([], "X", "Y"),                                                  # no decoys: ignored
+        ]
+        assert decoy_copy_rate(examples) == pytest.approx(1 / 3)

@@ -71,3 +71,25 @@ def slot_accuracy(
     total = sum(totals.values())
     result["all"] = sum(hits.values()) / total if total else 0.0
     return result
+
+
+def decoy_copy_rate(examples: Iterable[Tuple[List[str], str, str]]) -> float:
+    """
+    Fraction of clips where an unspoken candidate name from the prompt shows up
+    in the hypothesis (and not in the reference).
+
+    Args:
+        examples: (decoy names, reference, hypothesis) triples; clips without
+            decoys are ignored
+    """
+    copied = total = 0
+    for decoys, ref, hyp in examples:
+        if not decoys:
+            continue
+        total += 1
+        ref_p = f" {normalize_transcript(ref)} "
+        hyp_p = f" {normalize_transcript(hyp)} "
+        if any(f" {normalize_transcript(d)} " in hyp_p and f" {normalize_transcript(d)} " not in ref_p
+               for d in decoys):
+            copied += 1
+    return copied / total if total else 0.0

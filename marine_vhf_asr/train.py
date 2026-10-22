@@ -8,9 +8,9 @@ ATC corpora for real VHF channel noise and accented radio English.
 
 Usage:
     python -m marine_vhf_asr.train \\
-        --train vhf8k:train vhf8k:discovery martts:train+clean atc:train@4000 atcosim:train@2000 \\
-        --eval vhf8k:confirmation@300 \\
-        --wer-eval vhf8k:test@400 martts:test atc:test@300 \\
+        --train vhf8k:train#mix vhf8k:discovery#mix martts:train+clean atc:train@4000 atcosim:train@2000 \\
+        --eval vhf8k:confirmation#mix@300 \\
+        --wer-eval vhf8k:test#none@400 vhf8k:test#supported@400 vhf8k:test#decoys@400 martts:test atc:test@300 \\
         --hub-model-id mszarski/voxtral-3B-marine-vhf
 """
 
@@ -21,14 +21,15 @@ from pathlib import Path
 import torch
 
 from .evaluate import BASE_MODEL, evaluate_dataset
-from .sources import SR, load_audio, load_source, load_sources
+from .prompting import build_inputs
+from .sources import load_audio, load_source, load_sources
 
 LM_ONLY = r"^(?!.*audio_tower).*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)$"
 LM_AND_AUDIO = r".*\.(q_proj|k_proj|v_proj|o_proj|out_proj|gate_proj|up_proj|down_proj|fc1|fc2)$"
 
 
 class VoxtralCollator:
-    """Builds [audio + transcribe prompt] + [transcript + EOS]; loss only on the transcript."""
+    """Builds [audio + optional context + transcribe prompt] + [transcript + EOS]; loss only on the transcript."""
 
     def __init__(self, processor, model_id: str, max_text_tokens: int = 512):
         self.processor = processor
@@ -38,14 +39,7 @@ class VoxtralCollator:
 
     def __call__(self, features):
         audios = [load_audio(f["audio"]) for f in features]
-        prompt = self.processor.apply_transcription_request(
-            language="en",
-            audio=audios,
-            model_id=self.model_id,
-            sampling_rate=SR,
-            format=["WAV"] * len(audios),
-            return_tensors="pt",
-        )
+        prompt = build_inputs(self.processor, self.model_id, audios, [f.get("context", "") for f in features])
         extra = {k: v for k, v in prompt.items() if k not in ("input_ids", "attention_mask")}
 
         eos = self.tok.eos_token_id
@@ -76,10 +70,9 @@ class VoxtralCollator:
 
 
 def model_card(args, metrics, n_train) -> str:
+    pct = lambda m, k: f"{m[k]:.1%}" if k in m else "–"  # noqa: E731
     rows = "\n".join(
-        f"| `{spec}` | {m['n']} | {m['wer']:.1%} | "
-        f"{m['slot_accuracy']:.1%} |" if "slot_accuracy" in m else
-        f"| `{spec}` | {m['n']} | {m['wer']:.1%} | – |"
+        f"| `{spec}` | {m['n']} | {pct(m, 'wer')} | {pct(m, 'slot_accuracy')} | {pct(m, 'decoy_copy_rate')} |"
         for spec, m in metrics.items()
     )
     sources = "\n".join(f"- `{s}`" for s in args.train)
@@ -105,25 +98,28 @@ before relying on it, and never use it as the only record of distress traffic.
 {sources}
 
 ## Results (held out)
-| Data | n | WER | Slot accuracy (vessel names etc.) |
-|---|---|---|---|
+| Data | n | WER | Vessel names correct | Unspoken candidate copied |
+|---|---|---|---|---|
 {rows}
 
-Output format: uppercase, no punctuation, digits spelled out
-(`CHANNEL ONE SIX`), phonetic alphabet for spelled letters.
+`#supported`: the prompt lists the spoken vessel name(s) plus phonetically similar
+decoys. `#decoys`: decoys only (the spoken name is absent). `#none`: no list.
+
+Output format: uppercase, no punctuation, numbers spelled out as spoken
+(`CHANNEL ONE SIX`).
+
+Optionally pass the vessels known to be nearby (e.g. from AIS) as context;
+compare the `#none` and `#supported` rows for the effect.
 
 ## Usage
+With the `marine_vhf_asr` package (handles the context prompt and output-length cap):
 ```python
-from transformers import AutoProcessor, VoxtralForConditionalGeneration
-from peft import PeftModel
-base = "{args.model}"
-processor = AutoProcessor.from_pretrained(base)
-model = VoxtralForConditionalGeneration.from_pretrained(base, torch_dtype="bfloat16", device_map="auto")
-model = PeftModel.from_pretrained(model, "{args.hub_model_id}")
-inputs = processor.apply_transcription_request(language="en", audio="call.wav", model_id=base)
-inputs = inputs.to(model.device, dtype=model.dtype)
-out = model.generate(**inputs, max_new_tokens=256)
-print(processor.batch_decode(out[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0])
+from marine_vhf_asr.evaluate import load_model, transcribe
+from marine_vhf_asr.sources import load_audio, prompt_text
+model, processor = load_model(adapter="{args.hub_model_id}")
+audio = load_audio({{"path": "call.wav", "bytes": None}})
+context = prompt_text(["EVER GIVEN", "MAERSK ESSEN", "STENA BRITANNICA"])  # or "" for none
+print(transcribe(model, processor, "{args.model}", [audio], [context])[0])
 ```
 
 Hyperparameters: LoRA r={args.lora_r}, alpha={args.lora_alpha}, audio encoder

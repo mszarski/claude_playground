@@ -39,7 +39,7 @@ def test_local_manifest(tmp_path):
         # Different slot keys per row must not turn into a sparse struct
         f.write(json.dumps({"audio": "a.wav", "text": "RED KITE", "slots": {"vessel": "RED KITE"}}) + "\n")
     ds = load_source(str(tmp_path / "m.jsonl"))
-    assert ds.column_names == ["audio", "text", "slots", "source"]
+    assert ds.column_names == ["audio", "text", "slots", "context", "decoys", "source"]
     assert json.loads(ds[0]["slots"]) == {"channel": "ONE SIX"}
     assert json.loads(ds[1]["slots"]) == {"vessel": "RED KITE"}
     assert len(load_audio(ds[0]["audio"])) == 1600

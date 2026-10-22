@@ -1,12 +1,13 @@
 """
 Evaluate a Voxtral checkpoint (base, merged, or LoRA adapter).
 
-Reports corpus WER per source and slot accuracy (vessel names, channels,
-positions, MMSI, ...) where the data carries slots.
+Reports corpus WER per source, slot accuracy (vessel names, channels,
+positions, MMSI, ...) where the data carries slots, and - when the prompt
+carries candidate vessel names - how often an unspoken candidate is copied.
 
 Usage:
-    python -m marine_vhf_asr.evaluate --data vhf8k:test@300 martts:test atc:test@200 \\
-        --adapter mszarski/voxtral-3B-marine-vhf
+    python -m marine_vhf_asr.evaluate --data vhf8k:test#supported@400 vhf8k:test#decoys@400 \\
+        martts:test atc:test@300 --adapter mszarski/voxtral-3B-marine-vhf
 """
 
 import argparse
@@ -14,23 +15,29 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from .metrics import corpus_wer, slot_accuracy
+from .metrics import corpus_wer, decoy_copy_rate, slot_accuracy
+from .prompting import build_inputs, max_new_tokens_for, trim_runaway
 from .sources import SR, load_audio, load_source
 
 BASE_MODEL = "mistralai/Voxtral-Mini-3B-2507"
 
 
-def transcribe(model, processor, model_id, audios, max_new_tokens=512):
+def transcribe(model, processor, model_id, audios, contexts=None):
+    """
+    Transcribe a batch of 16 kHz clips, optionally with per-clip context
+    (e.g. sources.prompt_text(nearby_vessel_names)).
+
+    Output length is capped from each clip's duration so a runaway generation
+    cannot flood the transcript.
+    """
     import torch
 
-    inputs = processor.apply_transcription_request(
-        language="en", audio=audios, model_id=model_id, sampling_rate=SR,
-        format=["WAV"] * len(audios), return_tensors="pt",
-    ).to(model.device, dtype=torch.bfloat16)
+    inputs = build_inputs(processor, model_id, audios, contexts).to(model.device, dtype=torch.bfloat16)
     with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+        out = model.generate(**inputs, max_new_tokens=max_new_tokens_for(audios), do_sample=False)
     new_tokens = out[:, inputs["input_ids"].shape[1]:]
-    return processor.batch_decode(new_tokens, skip_special_tokens=True)
+    texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
+    return [trim_runaway(t, len(a) / SR) for t, a in zip(texts, audios)]
 
 
 def evaluate_dataset(model, processor, model_id, ds, batch_size=8):
@@ -44,9 +51,11 @@ def evaluate_dataset(model, processor, model_id, ds, batch_size=8):
     for i in range(0, len(ds), batch_size):
         batch = ds[i:i + batch_size]
         audios = [load_audio(a) for a in batch["audio"]]
-        hyps = transcribe(model, processor, model_id, audios)
-        for text, slots, source, hyp in zip(batch["text"], batch["slots"], batch["source"], hyps):
-            preds.append({"source": source, "text": text, "hyp": hyp, "slots": json.loads(slots)})
+        hyps = transcribe(model, processor, model_id, audios, batch["context"])
+        for text, slots, context, decoys, source, hyp in zip(
+                batch["text"], batch["slots"], batch["context"], batch["decoys"], batch["source"], hyps):
+            preds.append({"source": source, "text": text, "hyp": hyp, "slots": json.loads(slots),
+                          "context": context, "decoys": json.loads(decoys)})
         print(f"  {min(i + batch_size, len(ds))}/{len(ds)}", end="\r", flush=True)
     print()
 
@@ -59,6 +68,8 @@ def evaluate_dataset(model, processor, model_id, ds, batch_size=8):
         slotted = [(p["slots"], p["hyp"]) for p in ps if p["slots"]]
         if slotted:
             m["slot_accuracy"] = slot_accuracy(slotted)["all"]
+        if any(p["decoys"] for p in ps):
+            m["decoy_copy_rate"] = decoy_copy_rate((p["decoys"], p["text"], p["hyp"]) for p in ps)
         metrics[source] = m
     return metrics, preds
 
