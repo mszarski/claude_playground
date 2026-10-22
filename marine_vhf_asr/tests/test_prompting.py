@@ -6,7 +6,8 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("datasets")
 
-from marine_vhf_asr.prompting import build_inputs, collapse_loops, max_new_tokens_for, trim_runaway  # noqa: E402
+from marine_vhf_asr.prompting import (build_inputs, candidate_names, collapse_loops,  # noqa: E402
+                                      max_new_tokens_for, trim_runaway, verify_names)
 from marine_vhf_asr.sources import _vhf8k_context, prompt_text  # noqa: E402
 
 END_INST, PAD, AUDIO = 4, 11, 24
@@ -133,3 +134,38 @@ def test_vhf8k_context_padded_to_size():
     ctx, decoys = _vhf8k_context(row, "decoys", size=8, pool=pool)
     assert "SHAN BANG" not in ctx and len(decoys) == 8
     assert _vhf8k_context(row, "decoys", size=8, pool=pool) == (ctx, decoys)
+
+
+def test_candidate_names_roundtrip():
+    assert candidate_names(prompt_text(["SHAN BANG", "PAN AMBER"])) == ["SHAN BANG", "PAN AMBER"]
+    assert candidate_names("") == []
+
+
+def test_verify_names_keeps_supported_and_replaces_unrelated():
+    cands = ["CHARIKLIA JUNIOR", "TURTLE BUDDY II", "SEA RUBY"]
+    # Spoken vessel on the list: the no-list pass heard something similar -> keep
+    assert verify_names("VTS TO CHARIKLIA JUNIOR REDUCE SPEED", "VTS TO TREKLIER JUNIOR REDUCE SPEED", cands) == \
+        "VTS TO CHARIKLIA JUNIOR REDUCE SPEED"
+    # Unrelated list name substituted: fall back to what was heard without the list
+    assert verify_names("VTS TO TURTLE BUDDY II REDUCE SPEED", "VTS TO TREKLIER JUNIOR REDUCE SPEED", cands) == \
+        "VTS TO TREKLIER JUNIOR REDUCE SPEED"
+    # Spelled-out letters are compared without spaces
+    assert verify_names("H T M S TAKSIN GO AHEAD", "HTMS TAXIDIAN GO AHEAD", ["H T M S TAKSIN"]) == \
+        "H T M S TAKSIN GO AHEAD"
+    # No list names used: unchanged apart from normalization
+    assert verify_names("vts, over", "VTS OVER", cands) == "VTS OVER"
+
+
+def test_mixlong_sizes_and_proportions():
+    pool = [f"VESSEL {chr(65 + i % 26)}{chr(65 + i // 26 % 26)}" for i in range(400)]
+    modes, sizes = {"none": 0, "supported": 0, "decoys": 0}, []
+    for i in range(600):
+        row = dict(ROW, utterance_id=f"m{i}", reference_text="VTS SHAN BANG OVER")
+        ctx, decoys = _vhf8k_context(row, "mixlong", pool=pool)
+        names = candidate_names(ctx)
+        mode = "none" if not ctx else ("supported" if "SHAN BANG" in names else "decoys")
+        modes[mode] += 1
+        if names:
+            sizes.append(len(names))
+    assert 5 <= min(sizes) and max(sizes) <= 100 and max(sizes) > 50
+    assert 0.2 < modes["decoys"] / 600 < 0.4 and 0.3 < modes["supported"] / 600 < 0.5

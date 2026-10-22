@@ -20,6 +20,8 @@ Sources (spec "name:split[#context][@max_examples]", e.g. "vhf8k:train#mix@2000"
                #decoys     decoys only: tests that unspoken candidates are not copied
                #mix        training mix: 35% none, 50% supported, 15% decoys, with
                            0-5 extra names from the dialogue's vessel inventory
+               #mixlong    like #mix but closer to real AIS lists: 30% none, 40% supported,
+                           30% spoken name absent; list length 5-100 (log-uniform)
              #supported:N / #decoys:N pad the list to N names with random other
              vessel names from the split, like a real AIS list of ships in range.
     martts   bonalor/synthetic_maritime_radio_communication (CC-BY 4.0): synthetic
@@ -34,6 +36,7 @@ Sources (spec "name:split[#context][@max_examples]", e.g. "vhf8k:train#mix@2000"
 import hashlib
 import io
 import json
+import math
 import random
 import re
 from pathlib import Path
@@ -91,6 +94,9 @@ def _vhf8k_context(r, mode: str, size: int = 0, pool=()):
     rng = random.Random(int(hashlib.md5(f"{r['utterance_id']}/{size}".encode()).hexdigest()[:8], 16))
     if mode == "mix":
         mode = rng.choices(["none", "supported", "decoys"], weights=[35, 50, 15])[0]
+    elif mode == "mixlong":
+        mode = rng.choices(["none", "supported", "decoys"], weights=[30, 40, 30])[0]
+        size = round(math.exp(rng.uniform(math.log(5), math.log(100))))
     if mode == "none":
         return "", []
 
@@ -128,15 +134,15 @@ def _vhf8k(split):
     split, _, mode = split.partition("#")
     mode, _, size = (mode or "none").partition(":")
     size = int(size or 0)
-    if mode not in ("none", "supported", "decoys", "mix") or (size and mode not in ("supported", "decoys")):
-        raise ValueError(f"vhf8k context must be none/supported[:N]/decoys[:N]/mix, got {mode!r}")
+    if mode not in ("none", "supported", "decoys", "mix", "mixlong") or (size and mode not in ("supported", "decoys")):
+        raise ValueError(f"vhf8k context must be none/supported[:N]/decoys[:N]/mix/mixlong, got {mode!r}")
 
     ds = load_dataset("PassbyGrocer/VHF-8K", split=split)
     ds = ds.cast_column("audio", Audio(decode=False))
     ds = ds.filter(lambda r: not _AMBIGUOUS_NUMBER.search(r["reference_text"]))
 
     pool = []
-    if size:
+    if size or mode == "mixlong":
         names = set()
         for cols in zip(ds["ship_names"], ds["konger_entities"], ds["reference_entities"]):
             names.update(_vhf8k_name(e) for col in cols for e in col or [] if e and not _JUNK_NAME.search(e))

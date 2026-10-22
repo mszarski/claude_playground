@@ -94,3 +94,78 @@ def collapse_loops(text: str, max_repeats: int = 8, keep: int = 3, max_ngram: in
             out.append(words[i])
             i += 1
     return " ".join(out)
+
+
+def candidate_names(context: str) -> List[str]:
+    """Names listed in a context built by sources.prompt_text."""
+    if not context or ": " not in context:
+        return []
+    return context.split(": ", 1)[1].split(". Use a candidate")[0].split("; ")
+
+
+def _best_span(name: str, words: List[str]):
+    """(similarity, span) of the span of `words` that best matches `name`, by characters."""
+    from difflib import SequenceMatcher
+
+    target = name.replace(" ", "")
+    k = len(name.split())
+    best = (0.0, "")
+    # Spans can be shorter than the name: "H T M S TAKSIN" is often heard as "HTMS TAXIDIAN"
+    for w in range(1, k + 2):
+        for i in range(max(1, len(words) - w + 1)):
+            span = words[i:i + w]
+            score = SequenceMatcher(None, target, "".join(span)).ratio()
+            if score > best[0]:
+                best = (score, " ".join(span))
+    return best
+
+
+def _aligned_span(words: List[str], start: int, end: int, other: List[str]) -> str:
+    """Words of `other` aligned with words[start:end] (word-level diff alignment)."""
+    from difflib import SequenceMatcher
+
+    def map_index(i, is_end):
+        for tag, i1, i2, j1, j2 in SequenceMatcher(None, words, other, autojunk=False).get_opcodes():
+            if i1 <= i < i2 or (is_end and i == i2 and i2 > i1):
+                if tag == "equal":
+                    return j1 + (i - i1)
+                return j2 if is_end else j1
+        return len(other)
+
+    return " ".join(other[map_index(start, False):map_index(end, True)])
+
+
+def verify_names(context_hyp: str, plain_hyp: str, candidates: List[str], threshold: float = 0.5) -> str:
+    """
+    Second-opinion check on candidate names copied from the prompt.
+
+    `context_hyp` was transcribed with the candidate list, `plain_hyp` without it.
+    A candidate used in `context_hyp` is kept only if something similar was heard
+    without the list (character similarity >= `threshold` against the best
+    matching span of `plain_hyp`). Otherwise it is replaced by what the no-list
+    pass heard at the same position. This stops the model from substituting an
+    unrelated name from a long list when the speaking vessel is not on it.
+    Returns normalized text.
+    """
+    from .normalize import normalize_transcript
+
+    # Keep spelled letters as letters so "H T M S" can match "HTMS"
+    norm = lambda t: normalize_transcript(t, expand_letters=False).split()  # noqa: E731
+    words, plain = norm(context_hyp), norm(plain_hyp)
+    for cand in sorted(candidates, key=len, reverse=True):
+        name = norm(cand)
+        if not name:
+            continue
+        i = 0
+        while i <= len(words) - len(name):
+            if words[i:i + len(name)] != name:
+                i += 1
+                continue
+            score, _ = _best_span(" ".join(name), plain)
+            if score >= threshold:
+                i += len(name)
+                continue
+            heard = _aligned_span(words, i, i + len(name), plain).split()
+            words = words[:i] + heard + words[i + len(name):]
+            i += max(1, len(heard))
+    return " ".join(words)

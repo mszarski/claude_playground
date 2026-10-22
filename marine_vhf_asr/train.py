@@ -75,6 +75,13 @@ def model_card(args, metrics, n_train) -> str:
         f"| `{spec}` | {m['n']} | {pct(m, 'wer')} | {pct(m, 'slot_accuracy')} | {pct(m, 'decoy_copy_rate')} |"
         for spec, m in metrics.items()
     )
+    verified = {spec: m for spec, m in metrics.items() if "verified_wer" in m}
+    if verified:
+        rows += "\n\nWith two-pass name verification (`evaluate.transcribe_verified`):\n\n"
+        rows += "| Data | n | WER | Vessel names correct | Unspoken candidate copied |\n|---|---|---|---|---|\n"
+        rows += "\n".join(
+            f"| `{spec}` | {m['n']} | {pct(m, 'verified_wer')} | {pct(m, 'verified_slot_accuracy')} | "
+            f"{pct(m, 'verified_decoy_copy_rate')} |" for spec, m in verified.items())
     sources = "\n".join(f"- `{s}`" for s in args.train)
     return f"""---
 base_model: {args.model}
@@ -120,6 +127,10 @@ model, processor = load_model(adapter="{args.hub_model_id}")
 audio = load_audio({{"path": "call.wav", "bytes": None}})
 context = prompt_text(["EVER GIVEN", "MAERSK ESSEN", "STENA BRITANNICA"])  # or "" for none
 print(transcribe(model, processor, "{args.model}", [audio], [context])[0])
+
+# Safer with long lists: second pass without the list rejects names it did not hear
+from marine_vhf_asr.evaluate import transcribe_verified
+verified, with_list, without_list = transcribe_verified(model, processor, "{args.model}", [audio], [context])
 ```
 
 Hyperparameters: LoRA r={args.lora_r}, alpha={args.lora_alpha}, audio encoder
@@ -134,6 +145,8 @@ def main(argv=None):
     parser.add_argument("--eval", nargs="*", default=[], help="Source specs for eval loss during training")
     parser.add_argument("--wer-eval", nargs="*", default=[], help="Source specs for WER after training")
     parser.add_argument("--baseline", action="store_true", help="Also score the untrained model on --wer-eval")
+    parser.add_argument("--verify-names", action="store_true",
+                        help="Also report two-pass verified metrics on --wer-eval sets with candidate lists")
     parser.add_argument("--model", default=BASE_MODEL)
     parser.add_argument("--output", type=Path, default=Path("runs/voxtral-marine"))
     parser.add_argument("--hub-model-id", help="Push adapter, results and model card here")
@@ -224,9 +237,9 @@ def main(argv=None):
     all_preds = []
     for spec in args.wer_eval:
         print(f"Fine-tuned WER on {spec}")
-        m, preds = evaluate_dataset(model, processor, args.model, load_source(spec))
+        m, preds = evaluate_dataset(model, processor, args.model, load_source(spec), verify=args.verify_names)
         metrics.update({spec: v for v in m.values()})
-        all_preds += preds
+        all_preds += [dict(p, spec=spec) for p in preds]
     print(json.dumps(metrics, indent=2))
 
     (adapter_dir / "eval_results.json").write_text(json.dumps(metrics, indent=2))
