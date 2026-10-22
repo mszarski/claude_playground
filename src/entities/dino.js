@@ -159,8 +159,9 @@ class Dino {
     const g = this.game, w = g.world;
     const reg = w.regionAt(this.tx, this.ty);
     // Loose carnivores look for prey
-    if (this.sp.diet === 'carn' && (this.loose ? this.hunger > 15 : this.hunger > 60)) {
-      const prey = this.findPrey(this.loose ? 10 : 30);
+    // raptors on the loose hunt whether or not they are hungry
+    if (this.sp.diet === 'carn' && (this.loose ? (this.sp.clever || this.hunger > 15) : this.hunger > 60)) {
+      const prey = this.findPrey(this.loose ? (this.sp.clever ? 14 : 10) : 30);
       if (prey) { this.state = 'hunt'; this.target = prey; this.thinkT = 0; return; }
     }
     // Territorial giants fight rivals that share their paddock
@@ -426,7 +427,7 @@ class Dino {
       } else {
         g.humanKilled(t, this);
         this.hunger = Math.max(0, this.hunger - 50); this.kills++;
-        this.state = 'eat'; this.stateT = 5; this.target = null;
+        this.state = 'eat'; this.stateT = this.sp.clever ? 1.5 : 5; this.target = null;
       }
       return;
     }
