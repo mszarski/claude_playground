@@ -126,6 +126,7 @@ class UIPanels {
         if (o.noRaptors) html += `<div class="sub" style="color:#ff9080">Needs a paddock with 2+ raptors within 6 tiles.</div>`;
         if (o.revenue) html += `<div class="row"><span>Show takings</span><span>${fmtMoney(o.revenue)}</span></div>`;
       }
+      if (o.type === 'lagoon') html += `<div class="row"><span>Next leap</span><span>${o.powered ? 'in ' + Math.max(1, Math.ceil((o.showT || 0) / g.secPerHour)) + 'h' : '—'}</span></div><div class="sub">Guests within 9 tiles watch the Mosasaur leap and pay for the show. Run a path past it.</div>`;
       if (o.type === 'feedshow') {
         html += `<div class="row"><span>Shows</span><span>12:00 · 18:00</span></div>`;
         if (o.noCarnivore) html += `<div class="sub" style="color:#ff9080">No carnivore paddock within 6 tiles.</div>`;

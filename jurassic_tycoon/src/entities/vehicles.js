@@ -156,7 +156,7 @@ class Helicopter {
           g.spend(2500, 'ops');
           const dest = g.findPaddockFor(t);
           if (dest) { this.dest = dest; this.state = 'deliver'; }
-          else { this.state = 'return'; g.log(g.makeRoomFor(t) || `No safe paddock for ${t.name} the ${t.sp.name}! Holding at the helipad: build a paddock with a ${t.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder.`, 'warn', this, true); }
+          else { this.state = 'return'; g.log(g.makeRoomFor(t) || `No safe paddock for ${t.name} the ${t.sp.name}! Holding at the helipad until there is one: repair the fence of its old paddock, or build a new one with a ${t.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder.`, 'warn', this, true); }
         }
         break;
       }
