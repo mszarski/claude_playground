@@ -51,6 +51,13 @@ pytest trajectory_classifier/tests/test_classifier.py::TestClassifier::test_clas
 - **TURN**: Sustained `|heading_change| > turn_threshold` (default 15°)
 - **WIGGLE**: Multiple sign changes in heading within window (oscillating/unstable)
 
+## marine_vhf_asr
+
+A separate package for marine VHF radio transcription: SMCP dialogue
+generator, VHF channel simulator, and Voxtral LoRA fine-tune/eval scripts.
+See `marine_vhf_asr/README.md`. Tests: `pytest marine_vhf_asr/tests/`.
+The GPU dependencies are in `marine_vhf_asr/requirements-train.txt`.
+
 ## Issue Tracking
 
 Use the `bd` command for issue tracking instead of markdown TODOs:

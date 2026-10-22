@@ -1,0 +1,7 @@
+# Data generation, augmentation and metrics
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Optional: TTS backend for synthesize.py (also needs espeak-ng)
+# kokoro>=0.9
+# soundfile>=0.12

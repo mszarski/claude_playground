@@ -1,0 +1,9 @@
+# Training / evaluation (GPU)
+-r requirements.txt
+torch>=2.3
+transformers>=4.54.0   # Voxtral support
+peft>=0.12
+accelerate>=0.33
+datasets>=3.0
+mistral-common[audio]>=1.8.1
+librosa>=0.10
