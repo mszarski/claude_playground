@@ -195,7 +195,10 @@ class Game {
     const w = this.world;
     return w.flowField('gate', () => { const out = []; for (const b of this.buildingsOfType('gate')) out.push(...w.accessTiles(b)); return out; });
   }
-  shelters() { return this.buildingsOfType('visitor').concat(this.buildingsOfType('hotel'), this.buildingsOfType('shelter')); }
+  shelters() {
+    // a shelter whose doors were broken in is no refuge until it is repaired
+    return this.buildingsOfType('visitor').concat(this.buildingsOfType('hotel'), this.buildingsOfType('shelter')).filter((b) => !b.doorsBroken);
+  }
   shelterField() {
     const w = this.world;
     return w.flowField('shelter', () => { const out = []; for (const b of this.shelters()) out.push(...w.accessTiles(b)); return out; });
@@ -516,6 +519,18 @@ class Game {
   damageBuilding(b, dmg, dino) {
     if (!this.world.buildings.has(b.id)) return;
     b.hp -= dmg;
+    // a shelter's doors give way long before its walls do
+    if (dino && BUILDINGS[b.type].shelter && b.inside > 0 && b.hp < b.maxHp * 0.5 && !b.doorsBroken) {
+      b.doorsBroken = true; this.world.flowCache.clear();
+      this.log(`${dino.name} the ${dino.sp.name} broke into the ${BUILDINGS[b.type].name}! The guests inside are running for it.`, 'bad', dino, true);
+      const acc = this.world.accessTiles(b);
+      for (const gu of this.guests) if (gu.inBuilding === b) {
+        gu.inBuilding = null; gu.hidden = false; gu.state = 'flee'; gu.fleeGate = true;
+        if (acc.length) { const t = pick(acc); gu.cx = gu.nx = t % this.world.W; gu.cy = gu.ny = (t / this.world.W) | 0; gu.x = gu.cx + 0.5; gu.y = gu.cy + 0.5; }
+      }
+      b.inside = 0;
+      this.soundAt('crash', b.x, b.y, 1);
+    }
     if (b.hp <= 0) {
       this.log(`The ${BUILDINGS[b.type].name} was destroyed${dino ? ' by ' + dino.name + ' the ' + dino.sp.name : ''}!`, 'bad', { x: b.x + b.w / 2, y: b.y + b.h / 2 }, true);
       // guests inside are hurt? they flee
@@ -745,7 +760,11 @@ class Game {
     if (w.regionsDirty) { w.computeRegions(); this.updateLoose(); }
     if (this.pendingFences && this.pendingFences.length) this.buildPendingFences(dt);
     this.feedCheckT = (this.feedCheckT || 0) - dt;
-    if (this.feedCheckT <= 0) { this.feedCheckT = 3; this.moveStrays(); this.replaceLostFeeders(); }
+    if (this.feedCheckT <= 0) {
+      this.feedCheckT = 3; this.moveStrays(); this.replaceLostFeeders();
+      // engineers patched up a broken-into shelter: open its doors again
+      for (const b of w.buildings.values()) if (b.doorsBroken && b.hp >= b.maxHp * 0.8) { b.doorsBroken = false; w.flowCache.clear(); }
+    }
 
     // eggs
     for (const e of this.eggs) {

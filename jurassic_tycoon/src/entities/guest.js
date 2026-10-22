@@ -34,6 +34,11 @@ class Guest {
     this.anim += dt;
     const hrs = dt / g.secPerHour;
     if (this.state === 'ride') { if (this.inJeep) { this.x = this.inJeep.x; this.y = this.inJeep.y; } return; }
+    if ((this.state === 'queue' || this.state === 'inside') && (this.scareT = (this.scareT || 0) - dt) <= 0) {
+      // a shop counter or a ride queue is no hiding place: a predator close by flushes everyone out
+      this.scareT = 1;
+      if (g.threatNear(this.cx, this.cy, 5)) { this.leaveCover(); this.state = 'flee'; this.goal = null; this.fear = 100; this.thought = 'RUN!'; this.thoughtT = 2; return; }
+    }
     if (this.state === 'queue') {
       this.insideT -= dt;
       if (this.insideT <= 0) { this.happy -= 8; this.hidden = false; this.state = 'walk'; }
@@ -46,6 +51,7 @@ class Guest {
       } else if (this.insideT <= 0) this.exitBuilding();
       return;
     }
+    if (this.state === 'frozen') { this.frozenT -= dt; if (this.frozenT <= 0) this.state = 'flee'; return; }
     this.stay -= hrs;
     this.hunger += hrs * 5; this.toilet += hrs * 6; this.shopUrge += hrs * 3;
 
@@ -54,9 +60,11 @@ class Guest {
     if (this.viewT <= 0) {
       this.viewT = 0.8;
       const threat = g.threatNear(this.x, this.y, 7);
-      if ((threat || g.alarm || (g.sirenAlarm && g.inSirenRange(this.x, this.y))) && this.state !== 'flee') {
-        this.state = 'flee'; this.goal = null; this.fear = 100;
-        if (threat && chance(0.3)) { this.thought = 'AAAH!'; this.thoughtT = 2; g.soundAt('scream', this.x, this.y, 0.6); }
+      if ((threat || g.alarm || (g.sirenAlarm && g.inSirenRange(this.x, this.y))) && this.state !== 'flee' && this.state !== 'frozen') {
+        this.goal = null; this.fear = 100;
+        // a predator in plain sight: some people freeze before they run (an alarm gives warning, so nobody does)
+        if (threat && chance(0.3)) { this.state = 'frozen'; this.frozenT = randf(1, 2.5); this.thought = 'AAAH!'; this.thoughtT = 2; g.soundAt('scream', this.x, this.y, 0.6); }
+        else this.state = 'flee';
       }
       if (this.state !== 'flee') this.lookAtDinos();
       if (this.hunger > 85 || this.toilet > 85) this.happy -= 1.5;
@@ -233,6 +241,12 @@ class Guest {
     if (b.type === 'shop') this.shopUrge = 0;
     if (b.type === 'hotel') { this.stay += 10; this.hunger = 10; this.toilet = 10; }
     this.happy = Math.min(100, this.happy + (def.appeal || 3));
+  }
+
+  leaveCover() {
+    if (this.inBuilding) this.inBuilding.inside = Math.max(0, this.inBuilding.inside - 1);
+    if (this.state === 'queue') for (const b of this.game.world.buildings.values()) if (b.queue) { const k = b.queue.indexOf(this); if (k >= 0) b.queue.splice(k, 1); }
+    this.inBuilding = null; this.hidden = false;
   }
 
   exitBuilding() {
