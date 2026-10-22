@@ -61,10 +61,13 @@ class Guest {
       if (this.state !== 'flee') this.lookAtDinos();
       if (this.hunger > 85 || this.toilet > 85) this.happy -= 1.5;
       if (g.crowd) {
-        let c = 0;
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = this.cx + dx, y = this.cy + dy; if (g.world.inb(x, y)) c += g.crowd[g.world.idx(x, y)]; }
-        if (c > 18) {
-          this.happy -= (c - 18) * 0.04;
+        // people per walkable tile nearby: a wider path or plaza really does relieve the crush
+        let c = 0, room = 0;
+        const w = g.world;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = this.cx + dx, y = this.cy + dy; if (!w.inb(x, y)) continue; const i = w.idx(x, y); c += g.crowd[i]; if (w.path[i]) room++; }
+        const limit = 6 * Math.max(3, room);
+        if (c > limit) {
+          this.happy -= (c - limit) * 0.04;
           this.crowded = true;
           if (chance(0.03)) { this.thought = 'CROWDED'; this.thoughtT = 1.5; }
         } else this.crowded = false;

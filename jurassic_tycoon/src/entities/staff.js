@@ -83,7 +83,9 @@ class Staff {
     if (this.target) {
       const d = this.target;
       const dd = dist(this.x, this.y, d.x, d.y);
-      if (dd <= (g.research.has('rangers') ? 5.5 : 4.5) && this.cd <= 0 && !d.carried && d.sedatedT <= 0) {
+      // over a fence, from a raised position: a contained target can be darted from a little further away
+      const reach = (g.research.has('rangers') ? 5.5 : 4.5) + (d.loose ? 0 : 1.5);
+      if (dd <= reach && this.cd <= 0 && !d.carried && d.sedatedT <= 0) {
         this.cd = 1.6;
         this.facing = d.x > this.x ? 1 : -1;
         g.darts.push({ x: this.x, y: this.y - 0.3, t: d, life: 1.5 });
