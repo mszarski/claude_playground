@@ -48,7 +48,7 @@ def main():
     stems = P.get("stems") or [os.path.join(a.data, "renders", u) for u in P["uids"]]
     key = "own" if "family" in P else "gt"
     base = sorted({m.split("@")[0] for m in P["preds"]})
-    report = {}
+    report, picks = {}, {"uids": P["uids"], "key": key, "picked": {}}
     with ProcessPool(max_workers=a.workers) as pool:
         for b in base:
             views = [0, 1, 2, 3] if "view4" in b else [0]
@@ -76,12 +76,14 @@ def main():
                         if agr[r][i] is not None and (agr[best][i] is None or agr[r][i] > agr[best][i]):
                             best = r
                     pick.append(score(best, i))
+                picks["picked"][m + "+guard"] = dict(zip(ok, pick))
                 res[m] = 100 * float(np.mean([score(m, i) for i in ok]))
                 res[m + "+guard"] = 100 * float(np.mean(pick))
             report[b] = res
             print(f"[guard] {b} ({key} IoU, n={len(ok)}): " + "  ".join(f"{k} {v:.1f}" for k, v in res.items()),
                   flush=True)
     json.dump(report, open(a.out, "w"), indent=1)
+    pickle.dump(picks, open(os.path.splitext(a.out)[0] + "_picks.pkl", "wb"))   # per-part guarded IoU {idx: iou}
     print(f"[done] {a.out}")
 
 

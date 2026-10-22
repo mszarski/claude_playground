@@ -563,6 +563,22 @@ environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers
   is free at inference (one render per candidate) and makes the revision turn safe everywhere. Rich revision data
   (GT always available) is the obvious fix for the turn itself.
 
+### RL top-up on both tasks (`vlm_grpo_rich`; job 6ad9a27d0a35baab53a26a05)
+`RUN=vlm_grpo_rich INIT=results/vlm_rich_v1/model RICH=1 STEPS=600 jobs/launch.sh vlmgrpo --rich data/rich/train
+--rich_p 0.5` (H200, ~60 s/step: rich scoring dominates; ~10 h, ~$50). Half the prompts are rich parts (images only,
+reward own IoU), half DeepCAD (gt IoU); invalid -0.5. Validation: DeepCAD view1 81.5 -> 85.6 at step 50, then flat
+85.4-87.3; view4 90.7 -> 91.5-92.8; view1+expert 90.4 -> 90.8-91.7; rich view4 77.6 -> 76.5-80.0 (flat).
+**Step-400 checkpoint, test** (`results/revise_grpo_rich_s400{,_dc}`, revise jobs, 1 round, guard):
+| input | turn 1 | + revision | + guarded revision | previous best (vlm_grpo_fullres, single) |
+|---|---|---|---|---|
+| DeepCAD view1 (gt) | 84.6 | 85.9 | 86.1 | 86.6 |
+| DeepCAD view4 (gt) | 90.9 | 90.9 | 91.7 | 91.6 |
+| DeepCAD view1+expert (gt) | 89.2 | 89.7 | 90.1 | 89.1 |
+| rich view1 (own, 1989) | 73.4 | 60.1 | 74.3 | ~50.6 (test_0) |
+| rich view4 (own, 1989) | 80.4 | 65.2 | 81.4 | ~55.5 (test_0) |
+Paired single-pass vs previous best: DeepCAD view1 -1.99 +- 0.38, view4 -0.73 +- 0.32, view1+expert +0.02 +- 0.29;
+rich test_0 view1 +22.7 +- 0.75, view4 +25.1 +- 0.85. RL added +3.3 rich view4 over vlm_rich_v1 (77.1 -> 80.4).
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
