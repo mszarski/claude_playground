@@ -396,6 +396,12 @@ v2 (`audio/student/v2`) is served on the live Space (L4, vLLM FP8).
   3.3-4.1 s (first request after waking ~2 s / ~5.4 s).
 - **End of turn** (hands-free and the robot): 0.7 s of silence instead of 0.9 s.
 - So from the end of speech, Reachy moves after about 1.3-1.6 s instead of 4-5 s.
+- **Faster transcription** (`scripts/asr_bench.py`, on an L4, 300 held-out CREMA-D clips + 255 cloned lines with known
+  words): Whisper-small (until now) 8.4% / 14.8% WER, 0.23 s per clip (0.46 s over 5 s); Whisper-large-v3-turbo
+  (MIT, fp16) 7.3% / 14.1%, 0.14 s (0.23 s); Voxtral-Mini-4B-Realtime (Apache-2.0, a streaming transcriber, run
+  offline here) 8.9% / 15.4%, 2.85 s. Streaming would finish ~0.5 s after the person stops (its default delay), which
+  is slower than Whisper-turbo transcribing the whole turn, and it is no more accurate on this speech; Whisper-turbo
+  is now the default on a GPU (`rmr.voice.ASR_GPU`).
 - **Smaller model, negative result** (Voxtral-Mini-3B, Apache-2.0, ~2.5x fewer parameters): zero-shot it hardly
   hears tone (25% on the tone test, chance 20%; 48% on cloned lines, where Qwen2-Audio gets 45%). Fine-tuned on the
   same data as v2, with LoRA on the audio encoder too (2 h 46 min on an L4, val loss 0.60 vs 0.64), it reaches 38%

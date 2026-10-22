@@ -3,7 +3,7 @@
   from rmr.voice import Listener
   heard = Listener().hear("clip.wav")     # {"text", "emotion", "probs", "arousal", "valence", "dominance", ...}
 
-- Speech to text: Whisper (``openai/whisper-small``, Apache-2.0).
+- Speech to text: Whisper (``openai/whisper-large-v3-turbo`` on a GPU, ``openai/whisper-small`` on a CPU; MIT).
 - Emotion: ``3loi/SER-Odyssey-Baseline-WavLM-Categorical`` (MIT) and ``...-Multi-Attributes`` (MIT), the Odyssey 2024
   challenge baselines, trained on MSP-Podcast (natural podcast speech) by the lab that built it. Other candidates are
   wired in for ``scripts/eval_voice_emotion.py``.
@@ -217,13 +217,23 @@ class Calibration:
         return out
 
 
+ASR_GPU, ASR_CPU = "openai/whisper-large-v3-turbo", "openai/whisper-small"     # both MIT
+
+
 class Listener:
     """Transcript + categorical emotion + arousal / valence / dominance for one utterance."""
 
-    def __init__(self, asr="openai/whisper-small", emotion="msp", dims=True, device="cpu"):
+    def __init__(self, asr=None, emotion="msp", dims=True, device="cpu"):
+        """``asr``: the speech-to-text model; by default Whisper-large-v3-turbo in fp16 on a GPU (more accurate than
+        Whisper-small and about twice as fast there: 7.3 vs 8.4% WER, 0.14 vs 0.23 s per clip on an L4,
+        scripts/asr_bench.py) and Whisper-small on a CPU."""
+        import torch
         from transformers import pipeline
 
-        self.asr = pipeline("automatic-speech-recognition", model=asr, device=device)
+        gpu = str(device).startswith("cuda")
+        asr = asr or (ASR_GPU if gpu else ASR_CPU)
+        self.asr = pipeline("automatic-speech-recognition", model=asr, device=device,
+                            dtype=torch.float16 if gpu else torch.float32)
         self.emo = EmotionModel(emotion, device=device)
         self.dims = EmotionModel("msp-dims", device=device) if dims else None
 
