@@ -551,6 +551,11 @@ environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers
   Trained as a share of the SFT mix (`train_vlm_cq.py --revision`, keep:fix sampled 1:1).
 - Inference/eval: `scripts/revise_vllm.py` (job `revise`): turn 1, build + render or error, turn 2; a revision that
   fails to build is dropped.
+- **Result, DeepCAD test with `vlm_rich_v1`** (`results/revise_rich_v1_dc`, job revise ~20 min on A100), gt IoU /
+  invalid: view1 81.0 / 2.0 % -> r1 85.2 / 0.4 % -> r2 85.3; view4 88.3 / 1.5 % -> r1 90.9 / 0.3 % -> r2 91.0 (novel
+  84.6 -> 87.6). Round 1 changes 23-31 % of programs; round 2 adds ~0.1. Half the gain is repaired build failures, the
+  rest is geometry fixed from the render comparison. (The untrained `vlm_grpo_fullres` got nothing from a revision
+  turn, so the gain comes from the revision training data.)
 
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
