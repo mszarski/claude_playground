@@ -44,6 +44,7 @@ def main():
     ap.add_argument("--rich", default=None)
     ap.add_argument("--modes", nargs="*", default=["view1", "view4", "view1+expert"])
     ap.add_argument("--rounds", type=int, default=1)
+    ap.add_argument("--revise_model", default=None, help="model for the revision turns (default: --model)")
     ap.add_argument("--max_new_tokens", type=int, default=1024)
     ap.add_argument("--max_len", type=int, default=8192)
     ap.add_argument("--workers", type=int, default=max(1, usable_cpus() - 2))
@@ -74,8 +75,12 @@ def main():
         text_index = json.load(open(os.path.join(a.data, "text_index.json")))
     stems = P.get("stems") or [os.path.join(a.data, "renders", u) for u in P["uids"]]
     processor = AutoProcessor.from_pretrained(a.model)
+    mem = 0.42 if a.revise_model else 0.85
     llm = LLM(model=a.model, dtype="bfloat16", max_model_len=a.max_len, limit_mm_per_prompt={"image": 2},
-              gpu_memory_utilization=0.85, enable_prefix_caching=True, generation_config="vllm", seed=0)
+              gpu_memory_utilization=mem, enable_prefix_caching=True, generation_config="vllm", seed=0)
+    llm_rev = llm if not a.revise_model else LLM(
+        model=a.revise_model, dtype="bfloat16", max_model_len=a.max_len, limit_mm_per_prompt={"image": 2},
+        gpu_memory_utilization=mem, enable_prefix_caching=True, generation_config="vllm", seed=0)
     stop = [processor.tokenizer.convert_tokens_to_ids("<|im_end|>"), processor.tokenizer.eos_token_id]
     sp = SamplingParams(temperature=0.0, max_tokens=a.max_new_tokens, stop_token_ids=stop)
 
@@ -120,7 +125,7 @@ def main():
             for im, p, c, (err, st) in zip(inputs, prompts, cur, fb):
                 imgs = [im] + ([compose_views(load_views("", st, views))] if st else [])
                 reqs.append(request(imgs, revision_text(p, c or "", err)))
-            new = [o.outputs[0].text.strip() or None for o in llm.generate(reqs, sp, use_tqdm=False)]
+            new = [o.outputs[0].text.strip() or None for o in llm_rev.generate(reqs, sp, use_tqdm=False)]
             chk = [pool.schedule(attempt_feedback, args=((c, os.path.join(a.scratch, mode, f"c{k}", str(i))),),
                                  timeout=120) for i, c in zip(idx, new)]
             nxt, changed = [], 0
