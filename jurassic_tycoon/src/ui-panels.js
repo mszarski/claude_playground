@@ -183,7 +183,7 @@ class UIPanels {
 
   showSpeciesPicker() {
     const g = this.game;
-    let html = `<h1>HATCHERY</h1><p>Choose a species, then click inside a fenced paddock (no paths inside!). Carnivores will eat herbivores that share their paddock. Pteranodons hatch inside an Aviary.</p>`;
+    let html = `<h1>HATCHERY</h1><p>Choose a species, then ${IS_TOUCH ? 'tap' : 'click'} inside a fenced paddock (no paths inside!). Carnivores will eat herbivores that share their paddock. Pteranodons hatch inside an Aviary.</p>`;
     if (!g.hasBuilding('hatchery')) html += `<p style="color:#ff9080">You need to build a Hatchery first (Dinos menu).</p>`;
     html += `<div class="cards">`;
     for (const k of SPECIES_ORDER) {

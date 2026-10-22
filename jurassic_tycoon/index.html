@@ -105,6 +105,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .tool .nm { flex: 1; }
 .tool .c { color: var(--gold); font-size: 16px; }
 .tool .k { color: var(--dim); font-size: 14px; }
+@media (pointer: coarse) { .tool .key { display: none; } } /* keyboard shortcuts mean nothing on a phone */
 
 /* goal */
 #goal { position: absolute; left: 70px; bottom: 8px; z-index: 6; padding: 6px 10px; max-width: min(420px, 45vw); font-size: 18px; }
@@ -172,6 +173,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 #tutHl { position: fixed; z-index: 35; pointer-events: none; border: 3px solid var(--gold); box-shadow: 0 0 0 3px #000, 0 0 18px var(--gold); animation: tutpulse 0.9s ease-in-out infinite alternate; }
 @keyframes tutpulse { from { opacity: 1; } to { opacity: 0.35; } }
 @media (max-width: 760px) { #tut { left: 6px; width: calc(100vw - 196px); font-size: 16px; } }
+@media (max-width: 500px) { #zoomBtns { left: auto; right: 0; bottom: calc(100% + 6px); flex-direction: row; } #tut { left: 4px; width: calc(100vw - 168px); font-size: 14px; padding: 6px 8px; max-height: 46vh; overflow-y: auto; } #tut .sub { font-size: 13px; } }
 @media (prefers-reduced-motion: reduce) { #tutHl { animation: none; } }
 /* breach cam */
 #pip:not([hidden]) ~ #info { top: calc(var(--top, 44px) + 186px); }

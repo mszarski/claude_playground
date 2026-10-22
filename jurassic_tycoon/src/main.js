@@ -16,6 +16,7 @@ function startGame(opts = {}) {
   }
   if (opts.tutorial) {
     g.tutorial = true; g.events.auto = false; g.advisorOn = false;
+    g.secPerHour = 7.5; // slow days: time to read and build without the park running away
     document.getElementById('goal').hidden = true;
     UIX.tutorial = new Tutorial(UIX);
   } else if (UIX.tutorial) { UIX.tutorial.finish(); }
@@ -312,7 +313,7 @@ function boot() {
   msb.onclick = () => { mapSize = sizes[(sizes.indexOf(mapSize) + 1) % sizes.length]; try { localStorage.setItem('jt_mapsize', mapSize); } catch (e) { /* storage unavailable */ } showSize(); SFX.play('click'); };
   window.currentMapSize = () => mapSize;
   document.getElementById('diffBack').onclick = () => { document.querySelector('#title .menu').hidden = false; document.getElementById('diffMenu').hidden = true; };
-  document.getElementById('btnTut').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ tutorial: true, difficulty: 'easy' }); };
+  document.getElementById('btnTut').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ tutorial: true, difficulty: 'easy', seed: 51 }); }; // an island with open grass in front of the gate
   document.getElementById('btnSandbox').onclick = () => { SFX.ensure(); SFX.play('click'); startGame({ sandbox: true, size: window.currentMapSize() }); };
   document.getElementById('btnContinue').onclick = () => { SFX.ensure(); if (!loadGameFromStorage()) { startGame(); } };
   document.getElementById('btnHelp').onclick = () => {
