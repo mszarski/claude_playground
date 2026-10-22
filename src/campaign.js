@@ -57,7 +57,7 @@ const CHAPTERS = {
     endDay: 12,
     chapter: 2, name: 'Clever Girls', size: 'medium', difficulty: 'normal',
     blurb: 'The board wants the raptors on show. Muldoon wants them shot. Exhibit a pack and put on raptor shows without losing control.',
-    objective: 'Exhibit 3 raptors and hold 10 raptor shows by Day 12, with no more than 4 escapes',
+    objective: 'Exhibit 3 raptors and hold 24 raptor shows by Day 12, with no more than 4 escapes',
     setup(g) {
       g.money = 380000;
       const P = buildStarterPark(g, { staff: true });
@@ -68,13 +68,13 @@ const CHAPTERS = {
     },
     check(g) {
       const raptors = g.dinos.filter((d) => d.species === 'raptor' && !d.loose && !d.carried).length;
-      if (raptors >= 3 && (g.stats.shows || 0) >= 10) return 'win';
+      if (raptors >= 3 && (g.stats.shows || 0) >= 24) return 'win';
       if (g.stats.escapes > 4 || g.day > 12) return 'lose';
       return null;
     },
     progress(g) {
       const raptors = g.dinos.filter((d) => d.species === 'raptor' && !d.loose && !d.carried).length;
-      return [tick(raptors >= 3, `Raptors ${raptors}/3`), tick((g.stats.shows || 0) >= 10, `Shows ${g.stats.shows || 0}/10`), `Escapes ${g.stats.escapes}/4`, `Day ${g.day}/12`].join(' · ');
+      return [tick(raptors >= 3, `Raptors ${raptors}/3`), tick((g.stats.shows || 0) >= 24, `Shows ${g.stats.shows || 0}/24`), `Escapes ${g.stats.escapes}/4`, `Day ${g.day}/12`].join(' · ');
     },
     medal(g) { return g.stats.escapes === 0 ? 'gold' : g.stats.escapes <= 2 ? 'silver' : 'bronze'; },
     medalText: 'Gold: no escapes · Silver: 2 or fewer',
