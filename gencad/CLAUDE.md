@@ -556,6 +556,12 @@ environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers
   84.6 -> 87.6). Round 1 changes 23-31 % of programs; round 2 adds ~0.1. Half the gain is repaired build failures, the
   rest is geometry fixed from the render comparison. (The untrained `vlm_grpo_fullres` got nothing from a revision
   turn, so the gain comes from the revision training data.)
+- **Rich test with `vlm_rich_v1`** (`results/revise_rich_v1`): the revision turn *hurts*: own IoU 77.1 -> r1 62.1 ->
+  r2 63.0 (it rewrites 87 % of programs; the revision data was DeepCAD only). **Render-agreement guard**
+  (`scripts/revise_guard.py`: keep a revision only if its render matches the input views better, pix score at 128 px,
+  no GT): rich 77.1 -> 80.3 (r1) / 80.4 (r2); DeepCAD view1 81.0 -> 85.3 / 85.6, view4 88.3 -> 91.1 / 91.3. The guard
+  is free at inference (one render per candidate) and makes the revision turn safe everywhere. Rich revision data
+  (GT always available) is the obvious fix for the turn itself.
 
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
