@@ -990,7 +990,7 @@ class Game {
     if (this.guests.length > 30 && !this.hasBuilding('restaurant')) issues.push([35, 'Hungry guests have nowhere to eat. Build a Restaurant.', null]);
     if (this.guests.length > 60 && !this.hasBuilding('tour') && this.stars >= 1) issues.push([20, 'A Tour Station with a loop of Tour Track past the paddocks is the best crowd-pleaser.', null]);
     const crowded = this.guests.filter((gu) => gu.crowded);
-    if (crowded.length > 25) issues.push([45, 'Paths are overcrowded and guests are unhappy. Widen busy paths or add a second route.', crowded[0]]);
+    if (crowded.length > 25) issues.push([45, 'Paths are overcrowded and guests are unhappy. Use the Wide Path tool [I] on busy stretches, or add a second route.', crowded[0]]);
     if (this.money < 30000) issues.push([55, 'Funds are low. Raise ticket prices a little or add shops along busy paths.', gb]);
     this.adviceSaid = this.adviceSaid || {};
     issues.sort((a, b) => b[0] - a[0]);

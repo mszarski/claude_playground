@@ -2,7 +2,7 @@
 'use strict';
 
 const $ = (s) => document.querySelector(s);
-const LINE_TOOLS = ['path', 'route', 'track', 'fence', 'wall'];
+const LINE_TOOLS = ['path', 'widepath', 'route', 'track', 'fence', 'wall'];
 const RECT_TOOLS = ['demolish', 'trees', 'clear'];
 const isUnit = (o) => o && (o.kind === 'ranger' || o.kind === 'worker' || o.kind === 'heli');
 
@@ -414,6 +414,14 @@ class UI {
         for (let y = d.y; y !== t.y + sy; y += sy) tiles.push([d.x, y]);
         for (let x = d.x + sx; x !== t.x + sx; x += sx) if (t.x !== d.x) tiles.push([x, t.y]);
       }
+      if (this.tool === 'widepath') {
+        const seen = new Set(), wide = [];
+        for (const [x, y] of tiles) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const k = (x + dx) + ',' + (y + dy);
+          if (!seen.has(k)) { seen.add(k); wide.push([x + dx, y + dy]); }
+        }
+        tiles.length = 0; tiles.push(...wide);
+      }
     } else if (this.tool === 'paddock') {
       const x0 = Math.min(d.x, t.x), x1 = Math.max(d.x, t.x), y0 = Math.min(d.y, t.y), y1 = Math.max(d.y, t.y);
       for (let x = x0; x <= x1; x++) { tiles.push([x, y0]); if (y1 !== y0) tiles.push([x, y1]); }
@@ -430,7 +438,7 @@ class UI {
     let c = 0;
     for (const [x, y] of this.dragTiles) {
       const i = w.idx(x, y);
-      if ((tool === 'path' || tool === 'route') && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0);
+      if ((tool === 'path' || tool === 'widepath' || tool === 'route') && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.path.cost + (w.terrain[i] === T_FOREST ? 40 : 0);
       else if (tool === 'track' && !w.path[i] && !w.track[i] && w.canBuildAt(x, y)) c += TOOL_INFO.track.cost;
       else if ((tool === 'fence' || tool === 'paddock') && w.fence[i] !== F_ELECTRIC && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_ELECTRIC].cost;
       else if (tool === 'wall' && w.fence[i] !== F_WALL && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_WALL].cost;
@@ -447,7 +455,7 @@ class UI {
     g.startBatch();
     for (const [x, y] of this.dragTiles) {
       let ok = false;
-      if (tool === 'path' || tool === 'route') ok = g.placePath(x, y);
+      if (tool === 'path' || tool === 'widepath' || tool === 'route') ok = g.placePath(x, y);
       else if (tool === 'track') { const f0 = g.world.fence[g.world.idx(x, y)]; ok = g.placeTrack(x, y); if (ok && f0 && f0 !== F_GATE) gates++; }
       else if (tool === 'fence' || tool === 'paddock' || tool === 'wall') {
         const type = tool === 'wall' ? F_WALL : F_ELECTRIC;

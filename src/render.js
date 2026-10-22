@@ -957,7 +957,7 @@ class Renderer {
     }
     if (ui.dragTiles && ui.dragTiles.length) {
       for (const [x, y] of ui.dragTiles) {
-        ctx.fillStyle = tool === 'demolish' ? 'rgba(255,60,60,0.4)' : tool === 'path' || tool === 'route' ? 'rgba(232,200,140,0.6)' : tool === 'track' ? 'rgba(90,90,88,0.7)' : tool === 'trees' ? 'rgba(60,160,60,0.5)' : tool === 'clear' ? 'rgba(200,160,80,0.4)' : 'rgba(248,224,64,0.5)';
+        ctx.fillStyle = tool === 'demolish' ? 'rgba(255,60,60,0.4)' : tool === 'path' || tool === 'widepath' || tool === 'route' ? 'rgba(232,200,140,0.6)' : tool === 'track' ? 'rgba(90,90,88,0.7)' : tool === 'trees' ? 'rgba(60,160,60,0.5)' : tool === 'clear' ? 'rgba(200,160,80,0.4)' : 'rgba(248,224,64,0.5)';
         ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
       }
     }

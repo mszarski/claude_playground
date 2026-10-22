@@ -172,7 +172,7 @@ const SEASONS = [
 
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
-  { id: 'build', label: 'Build', tools: ['path', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
+  { id: 'build', label: 'Build', tools: ['path', 'widepath', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
   { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'gyro', 'feedshow', 'arena', 'hotel', 'shelter', 'lamp', 'lagoon'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
@@ -182,6 +182,7 @@ const TOOL_GROUPS = [
 const TOOL_INFO = {
   inspect: { name: 'Inspect', desc: 'Click anything to see details.', key: 'Q' },
   path: { name: 'Footpath', cost: 60, desc: 'Drag to lay paths. Guests only walk on paths.', key: 'P' },
+  widepath: { name: 'Wide Path', cost: 60, desc: 'Drag to lay a 3-tile-wide avenue: room for big crowds near popular spots.', key: 'I' },
   route: { name: 'Smart Path', cost: 60, desc: 'Drag from one point to another: builds the cheapest footpath route, reusing existing paths.', key: 'N' },
   track: { name: 'Tour Track', cost: 150, desc: 'Drag to lay the jeep tour track. Crossing a fence builds a Track Gate ($1,500) so jeeps can drive through paddocks.', key: 'J' },
   fence: { name: 'Electric Fence', cost: 250, desc: 'Drag a line of electric fence. Needs power!', key: 'F' },
