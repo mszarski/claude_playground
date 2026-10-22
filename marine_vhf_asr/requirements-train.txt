@@ -6,4 +6,6 @@ peft>=0.12
 accelerate>=0.33
 datasets>=3.0
 mistral-common[audio]>=1.8.1
-librosa>=0.10
+soundfile>=0.12
+huggingface_hub>=0.34
+trackio  # optional

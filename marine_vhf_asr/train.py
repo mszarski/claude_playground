@@ -2,72 +2,42 @@
 LoRA fine-tune Voxtral Mini 3B for marine VHF transcription.
 
 Same recipe as pphilip/voxtral-3B-atc-transcribe (Voxtral-Mini-3B-2507 on a
-mix of noisy-radio and clean data), adapted to marine traffic:
-- Marine manifests (synthetic from marine_vhf_asr.synthesize and/or real
-  recordings in the same JSONL format)
-- Optionally mix in jacktol/ATC-ASR-Dataset for real VHF channel noise and
-  accented radio English; its transcripts already use our conventions
-
-Fits on a single 24 GB GPU in bf16 with batch size 2-4 and gradient
-accumulation.
+mix of noisy-radio and clean data), adapted to marine traffic. Data comes from
+sources.py: marine corpora (VHF-8K, MARTTS, our own synthetic manifests) plus
+ATC corpora for real VHF channel noise and accented radio English.
 
 Usage:
     python -m marine_vhf_asr.train \\
-        --train data/synth/manifest.jsonl data/real/train.jsonl \\
-        --eval data/real/dev.jsonl \\
-        --atc-fraction 0.3 --output runs/voxtral-marine
+        --train vhf8k:train vhf8k:discovery martts:train+clean atc:train@4000 atcosim:train@2000 \\
+        --eval vhf8k:confirmation@300 \\
+        --wer-eval vhf8k:test@400 martts:test atc:test@300 \\
+        --hub-model-id mszarski/voxtral-3B-marine-vhf
 """
 
 import argparse
+import json
 from pathlib import Path
-from typing import List
 
 import torch
 
-from .normalize import normalize_transcript
-
-BASE_MODEL = "mistralai/Voxtral-Mini-3B-2507"
-SR = 16000
+from .evaluate import BASE_MODEL, evaluate_dataset
+from .sources import SR, load_audio, load_source, load_sources
 
 LM_ONLY = r"^(?!.*audio_tower).*\.(q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj)$"
 LM_AND_AUDIO = r".*\.(q_proj|k_proj|v_proj|o_proj|out_proj|gate_proj|up_proj|down_proj|fc1|fc2)$"
 
 
-def load_manifests(paths: List[Path]):
-    """Load one or more JSONL manifests; audio paths are relative to each manifest."""
-    from datasets import Audio, concatenate_datasets, load_dataset
-
-    parts = []
-    for p in paths:
-        ds = load_dataset("json", data_files=str(p), split="train")
-        root = str(p.parent)
-        ds = ds.map(lambda r: {"audio": f"{root}/{r['audio']}"})
-        parts.append(ds.select_columns(["audio", "text"]))
-    ds = concatenate_datasets(parts)
-    return ds.cast_column("audio", Audio(sampling_rate=SR))
-
-
-def load_atc(n: int, split: str = "train"):
-    """n examples from the public ATC radio dataset, re-normalized to our conventions."""
-    from datasets import Audio, load_dataset
-
-    ds = load_dataset("jacktol/ATC-ASR-Dataset", split=split).shuffle(seed=0)
-    ds = ds.select(range(min(n, len(ds)))).select_columns(["audio", "text"])
-    ds = ds.map(lambda r: {"text": normalize_transcript(r["text"])})
-    return ds.cast_column("audio", Audio(sampling_rate=SR))
-
-
 class VoxtralCollator:
     """Builds [audio + transcribe prompt] + [transcript + EOS]; loss only on the transcript."""
 
-    def __init__(self, processor, model_id: str, max_text_tokens: int = 256):
+    def __init__(self, processor, model_id: str, max_text_tokens: int = 512):
         self.processor = processor
         self.model_id = model_id
         self.tok = processor.tokenizer
         self.max_text_tokens = max_text_tokens
 
     def __call__(self, features):
-        audios = [f["audio"]["array"] for f in features]
+        audios = [load_audio(f["audio"]) for f in features]
         prompt = self.processor.apply_transcription_request(
             language="en",
             audio=audios,
@@ -85,6 +55,7 @@ class VoxtralCollator:
             truncation=True, max_length=self.max_text_tokens,
         )["input_ids"]
 
+        # Prompts come back left-padded, so appending the transcript is safe
         ids, attn, labels = [], [], []
         for p_ids, p_att, t_ids in zip(prompt["input_ids"].tolist(),
                                        prompt["attention_mask"].tolist(), text_ids):
@@ -104,41 +75,107 @@ class VoxtralCollator:
         return batch
 
 
+def model_card(args, metrics, n_train) -> str:
+    rows = "\n".join(
+        f"| `{spec}` | {m['n']} | {m['wer']:.1%} | "
+        f"{m['slot_accuracy']:.1%} |" if "slot_accuracy" in m else
+        f"| `{spec}` | {m['n']} | {m['wer']:.1%} | – |"
+        for spec, m in metrics.items()
+    )
+    sources = "\n".join(f"- `{s}`" for s in args.train)
+    return f"""---
+base_model: {args.model}
+library_name: peft
+license: apache-2.0
+language: [en]
+pipeline_tag: automatic-speech-recognition
+tags: [maritime, vhf, smcp, voxtral, lora]
+---
+
+# Voxtral Mini 3B: marine VHF transcription (LoRA)
+
+LoRA adapter on `{args.model}` for marine VHF radio (VTS, port control,
+pilots, coastguard, distress traffic). It is modeled on
+[pphilip/voxtral-3B-atc-transcribe](https://huggingface.co/pphilip/voxtral-3B-atc-transcribe).
+
+**Trained mostly on synthetic marine speech.** Validate on real radio traffic
+before relying on it, and never use it as the only record of distress traffic.
+
+## Training data ({n_train} clips)
+{sources}
+
+## Results (held out)
+| Data | n | WER | Vessel-name slot accuracy |
+|---|---|---|---|
+{rows}
+
+Output format: uppercase, no punctuation, digits spelled out
+(`CHANNEL ONE SIX`), phonetic alphabet for spelled letters.
+
+## Usage
+```python
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+from peft import PeftModel
+base = "{args.model}"
+processor = AutoProcessor.from_pretrained(base)
+model = VoxtralForConditionalGeneration.from_pretrained(base, torch_dtype="bfloat16", device_map="auto")
+model = PeftModel.from_pretrained(model, "{args.hub_model_id}")
+inputs = processor.apply_transcription_request(language="en", audio="call.wav", model_id=base)
+inputs = inputs.to(model.device, dtype=model.dtype)
+out = model.generate(**inputs, max_new_tokens=256)
+print(processor.batch_decode(out[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0])
+```
+
+Hyperparameters: LoRA r={args.lora_r}, alpha={args.lora_alpha}, audio encoder
+adapted={args.lora_audio}, lr={args.lr}, epochs={args.epochs},
+effective batch={args.batch_size * args.grad_accum}.
+"""
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--train", nargs="+", type=Path, required=True, help="Training JSONL manifests")
-    parser.add_argument("--eval", nargs="*", type=Path, default=[], help="Eval JSONL manifests")
-    parser.add_argument("--atc-fraction", type=float, default=0.0,
-                        help="Add jacktol/ATC-ASR-Dataset examples equal to this fraction of the marine set")
+    parser.add_argument("--train", nargs="+", required=True, help="Training source specs (see sources.py)")
+    parser.add_argument("--eval", nargs="*", default=[], help="Source specs for eval loss during training")
+    parser.add_argument("--wer-eval", nargs="*", default=[], help="Source specs for WER after training")
+    parser.add_argument("--baseline", action="store_true", help="Also score the untrained model on --wer-eval")
     parser.add_argument("--model", default=BASE_MODEL)
     parser.add_argument("--output", type=Path, default=Path("runs/voxtral-marine"))
-    parser.add_argument("--lora-r", type=int, default=16)
-    parser.add_argument("--lora-alpha", type=int, default=32)
+    parser.add_argument("--hub-model-id", help="Push adapter, results and model card here")
+    parser.add_argument("--lora-r", type=int, default=32)
+    parser.add_argument("--lora-alpha", type=int, default=64)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument("--lora-audio", action="store_true",
                         help="Also adapt the audio encoder (helps with radio channel noise; more memory)")
-    parser.add_argument("--epochs", type=float, default=3)
+    parser.add_argument("--epochs", type=float, default=2)
+    parser.add_argument("--max-steps", type=int, default=-1, help="Override epochs (for smoke tests)")
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--grad-accum", type=int, default=8)
+    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--save-steps", type=int, default=500)
-    parser.add_argument("--merge", action="store_true", help="Also save merged full weights for plain inference")
+    parser.add_argument("--trackio-project", help="Log to Trackio under this project")
+    parser.add_argument("--trackio-space", help="Trackio Space to sync to, e.g. <user>/trackio")
     args = parser.parse_args(argv)
 
-    from datasets import concatenate_datasets
     from peft import LoraConfig, get_peft_model
     from transformers import (AutoProcessor, Trainer, TrainingArguments,
                               VoxtralForConditionalGeneration)
 
-    train_ds = load_manifests(args.train)
-    if args.atc_fraction > 0:
-        train_ds = concatenate_datasets([train_ds, load_atc(int(len(train_ds) * args.atc_fraction))])
-    train_ds = train_ds.shuffle(seed=0)
-    eval_ds = load_manifests(args.eval) if args.eval else None
+    train_ds = load_sources(args.train).shuffle(seed=0)
+    eval_ds = load_sources(args.eval) if args.eval else None
+    print(f"Train: {len(train_ds)} clips; eval: {len(eval_ds) if eval_ds else 0}")
 
     processor = AutoProcessor.from_pretrained(args.model)
     model = VoxtralForConditionalGeneration.from_pretrained(
         args.model, torch_dtype=torch.bfloat16, device_map="auto")
+
+    metrics = {}
+    if args.baseline:
+        for spec in args.wer_eval:
+            print(f"Baseline WER on {spec}")
+            m, _ = evaluate_dataset(model.eval(), processor, args.model, load_source(spec))
+            metrics.update({f"baseline {spec}": v for v in m.values()})
+        print(json.dumps(metrics, indent=2))
+
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.enable_input_require_grads()
     model = get_peft_model(model, LoraConfig(
@@ -147,6 +184,13 @@ def main(argv=None):
     ))
     model.print_trainable_parameters()
 
+    tracking = dict(report_to=[])
+    if args.trackio_project:
+        tracking = dict(report_to=["trackio"], project=args.trackio_project,
+                        trackio_space_id=args.trackio_space, run_name=args.output.name)
+
+    push = dict(push_to_hub=True, hub_model_id=args.hub_model_id, hub_private_repo=True,
+                hub_strategy="every_save") if args.hub_model_id else {}
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
@@ -158,15 +202,17 @@ def main(argv=None):
             lr_scheduler_type="cosine",
             warmup_ratio=0.03,
             num_train_epochs=args.epochs,
+            max_steps=args.max_steps,
             bf16=True,
-            logging_steps=20,
+            logging_steps=10,
             save_steps=args.save_steps,
             eval_steps=args.save_steps if eval_ds is not None else None,
             eval_strategy="steps" if eval_ds is not None else "no",
-            save_total_limit=3,
+            save_total_limit=2,
             remove_unused_columns=False,
-            dataloader_num_workers=2,
-            report_to=[],
+            dataloader_num_workers=4,
+            **tracking,
+            **push,
         ),
         train_dataset=train_ds,
         eval_dataset=eval_ds,
@@ -177,11 +223,29 @@ def main(argv=None):
     adapter_dir = args.output / "adapter"
     model.save_pretrained(adapter_dir)
     processor.save_pretrained(adapter_dir)
-    if args.merge:
-        merged_dir = args.output / "merged"
-        model.merge_and_unload().save_pretrained(merged_dir)
-        processor.save_pretrained(merged_dir)
-    print(f"Saved adapter to {adapter_dir}")
+
+    model.eval()
+    all_preds = []
+    for spec in args.wer_eval:
+        print(f"Fine-tuned WER on {spec}")
+        m, preds = evaluate_dataset(model, processor, args.model, load_source(spec))
+        metrics.update({spec: v for v in m.values()})
+        all_preds += preds
+    print(json.dumps(metrics, indent=2))
+
+    (adapter_dir / "eval_results.json").write_text(json.dumps(metrics, indent=2))
+    with open(adapter_dir / "eval_predictions.jsonl", "w") as f:
+        for p in all_preds:
+            f.write(json.dumps(p) + "\n")
+    finetuned = {k: v for k, v in metrics.items() if not k.startswith("baseline")}
+    (adapter_dir / "README.md").write_text(
+        model_card(args, metrics if args.baseline else finetuned, len(train_ds)))
+
+    if args.hub_model_id:
+        from huggingface_hub import upload_folder
+        upload_folder(repo_id=args.hub_model_id, folder_path=str(adapter_dir),
+                      commit_message="Final adapter, eval results and model card")
+        print(f"Pushed to https://huggingface.co/{args.hub_model_id}")
 
 
 if __name__ == "__main__":

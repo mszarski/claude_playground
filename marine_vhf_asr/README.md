@@ -35,12 +35,11 @@ What carries over:
 - The same base model and LoRA fine-tune fit on one 24 GB GPU.
 
 What doesn't carry over:
-- **There is no public marine equivalent of the ATC corpora.** The real
+- **There is no public corpus of real, transcribed marine radio.** The real
   recordings people have used (Fraunhofer marFM, about 56 h; the Hamburg
-  port study; the Irish Coast Guard work) are proprietary. The closest open
-  resource is DLR's synthetic **MARTTS** corpus (240 dialogues, Zenodo,
-  March 2026). So this package generates synthetic data and borrows real VHF
-  acoustics from the ATC dataset.
+  port study; the Irish Coast Guard work) are proprietary. The open marine
+  data is synthetic (see *Datasets* below), so we combine it with real VHF
+  acoustics from the ATC corpora.
 - **Vocabulary is local.** Vessel names, port and berth names, and VTS
   sector names vary by region. The model can only learn names it has heard,
   so `gazetteer.py` has to be filled in for the ports you care about.
@@ -49,76 +48,104 @@ What doesn't carry over:
   UK Wireless Telegraphy Act), and in the EU voices and names are subject to
   GDPR. Check this before you collect real recordings.
 
+## Datasets
+
+| Source spec | Dataset | What it is | License |
+|---|---|---|---|
+| `vhf8k` | [PassbyGrocer/VHF-8K](https://huggingface.co/datasets/PassbyGrocer/VHF-8K) | 8k synthetic VTS transmissions (13.5 h, one TTS voice, 4 VHF profiles), vessel-name annotations | other (check upstream terms) |
+| `martts` | [bonalor/synthetic_maritime_radio_communication](https://huggingface.co/datasets/bonalor/synthetic_maritime_radio_communication) (MARTTS) | 240 synthetic distress / SAR dialogues, VCTK-cloned accents, real marine noise; one 30–125 s clip per dialogue | CC-BY 4.0 |
+| `atc` | [jacktol/ATC-ASR-Dataset](https://huggingface.co/datasets/jacktol/ATC-ASR-Dataset) | 8k **real** accented ATC VHF clips | not stated |
+| `atcosim` | [jlvdoorn/atcosim](https://huggingface.co/datasets/jlvdoorn/atcosim) | 10k clean simulated ATC clips | ATCOSIM terms |
+| `path.jsonl` | `synthesize.py` output or your own recordings | SMCP dialogues for your ports | yours |
+
+Specs take a split and an optional cap, e.g. `vhf8k:train@2000`,
+`martts:train+clean`. The loaders convert each source to our transcript
+conventions:
+- VHF-8K writes numbers as digits ("8 knots", "MERLION 31"). They are read as
+  cardinals, as a TTS voice speaks them. Transcripts with ambiguous numbers
+  (3+ digit runs, coordinates, times; about 6%) are dropped.
+- MARTTS ships the spoken-form text ("M M S I - number two six ..."). Spaced
+  letters are joined into acronyms (`MMSI`).
+- MARTTS scenarios 9–10 of each topic are held out as `martts:test`. Its a/b/c
+  variants share a script, so splitting by scenario avoids leaking text.
+
 ## Plan
 
-1. **Text.** `smcp.py` generates SMCP-style dialogues for 19 real ports,
-   covering VTS entry reports, pilot requests, berthing, MAYDAY, PAN PAN,
-   SECURITE, ship-to-ship passing and radio checks. Each one carries labelled
-   *slots*: vessel, channel, position, MMSI, call sign, ETA, berth.
-2. **Audio.** `synthesize.py` runs TTS with multiple voices, then
-   `vhf_channel.py` simulates the radio: mic background, band-pass,
-   limiter, receiver hiss at 3–30 dB SNR, squelch bursts, fades, and an
-   optional 8 kHz recorder path.
-3. **Real VHF acoustics.** `train.py --atc-fraction 0.3` mixes in
-   `jacktol/ATC-ASR-Dataset`. Its transcripts already use our conventions
-   (uppercase, digits spelled out, phonetic letters).
-4. **Real marine data (needed for a usable model).** Record a few hours from
-   a scanner or AIS-linked receiver near your target port, with permission,
-   and transcribe it. Bootstrapping with the stage-3 model and correcting its
-   output by hand is much faster than transcribing from scratch. Keep a
-   held-out real test set; synthetic WER will be optimistic.
-5. **Train.** LoRA on Voxtral Mini 3B. Add `--lora-audio` to also adapt the
-   audio encoder to the channel.
-6. **Evaluate.** `evaluate.py` reports WER, WER per scenario, and **slot
-   accuracy**. On the radio, one wrong digit in a channel or position is a
-   safety problem, even though it barely moves WER.
+1. **Bootstrap (done here).** Fine-tune on VHF-8K + MARTTS + ATC.
+2. **Local vocabulary.** Fill in `gazetteer.py` for your ports and generate
+   SMCP dialogues with `synthesize.py`. TTS with many voices, then
+   `vhf_channel.py` simulates the radio: mic background, band-pass, limiter,
+   receiver hiss at 3–30 dB SNR, squelch bursts, fades.
+3. **Real marine data (needed for a usable model).** Record a few hours from
+   a receiver near your target port, with permission. Have the step-1 model
+   pre-transcribe it, then correct the output by hand. Keep a held-out real
+   test set; synthetic WER will be optimistic.
+4. **Evaluate on slot accuracy, not just WER.** One wrong digit in a channel
+   or position is a safety problem, even though it barely moves WER.
 
 ## Usage
 
 ```bash
 pip install -r marine_vhf_asr/requirements.txt          # generation + metrics
-pip install kokoro soundfile                            # TTS (needs espeak-ng)
 pip install -r marine_vhf_asr/requirements-train.txt    # GPU training / eval
+pip install kokoro soundfile                            # optional TTS (needs espeak-ng)
 
 # Look at the generated phraseology
 python -m marine_vhf_asr.synthesize --out data/text --dialogues 50 --text-only
 
-# Synthetic train / test sets (different seeds)
-python -m marine_vhf_asr.synthesize --out data/synth_train --dialogues 4000 --tts kokoro --seed 0
-python -m marine_vhf_asr.synthesize --out data/synth_test  --dialogues 300  --tts kokoro --seed 1
+# Train on a local GPU (24 GB: use --batch-size 2 --grad-accum 8)
+python -m marine_vhf_asr.train \
+    --train vhf8k:train vhf8k:discovery martts:train+clean atc:train@4000 atcosim:train@2000 \
+    --eval vhf8k:confirmation@300 \
+    --wer-eval vhf8k:test@400 martts:test atc:test@300 --baseline \
+    --lora-audio --output runs/voxtral-marine
 
-# Baseline: untrained Voxtral
-python -m marine_vhf_asr.evaluate --manifest data/synth_test/manifest.jsonl --limit 200
-
-# Fine-tune (single 24 GB GPU)
-python -m marine_vhf_asr.train --train data/synth_train/manifest.jsonl \
-    --eval data/synth_test/manifest.jsonl --atc-fraction 0.3 --lora-audio \
-    --output runs/voxtral-marine
-
-python -m marine_vhf_asr.evaluate --manifest data/synth_test/manifest.jsonl \
+python -m marine_vhf_asr.evaluate --data vhf8k:test@400 martts:test \
     --adapter runs/voxtral-marine/adapter
 
 pytest marine_vhf_asr/tests/
 ```
 
+### On Hugging Face Jobs (no local GPU)
+
+The job container has no checkout of this repository, so upload the package to
+a private Hub repo, then point the job entry script at it:
+
+```bash
+hf upload <user>/marine-vhf-asr-code marine_vhf_asr marine_vhf_asr --private \
+    --exclude "tests/*" --exclude "__pycache__/*"
+hf jobs uv run --flavor a100-large --timeout 5h --secrets HF_TOKEN \
+    --env CODE_REPO=<user>/marine-vhf-asr-code --detach \
+    marine_vhf_asr/jobs/hf_train_job.py \
+    --train vhf8k:train vhf8k:discovery martts:train+clean atc:train@4000 atcosim:train@2000 \
+    --eval vhf8k:confirmation@300 --wer-eval vhf8k:test@400 martts:test atc:test@300 --baseline \
+    --lora-audio --hub-model-id <user>/voxtral-3B-marine-vhf \
+    --trackio-project marine-vhf-asr --trackio-space <user>/trackio
+```
+
+The job pushes checkpoints, the final adapter, `eval_results.json`, per-example
+predictions and a model card to `--hub-model-id` (private).
+
 Real recordings use the same JSONL format: `{"audio": "relative/path.wav",
-"text": "..."}`. `scenario` and `slots` are optional.
+"text": "..."}`. `slots` is optional.
 
 ## Transcript conventions
 
 These match the ATC datasets so the two can be mixed:
 - Uppercase, with no punctuation.
-- Digits are spelled one at a time (`16` → `ONE SIX`). Number words as
-  spoken are kept (`SIXTEEN`).
+- Numbers are written as spoken. On the radio that usually means one digit
+  at a time (`16` → `ONE SIX`, the default). Use `numbers="cardinal"` for
+  sources where numbers were read as words (`16` → `SIXTEEN`). Digits after a
+  decimal point are always spelled one by one.
 - Isolated letters become phonetic words (`P` → `PAPA`), except `A` and `I`.
+  With `acronyms=True`, spaced letters are joined instead (`M M S I` → `MMSI`).
 - `PAN-PAN` → `PAN PAN`, `SÉCURITÉ`/`SECURITAY` → `SECURITE`,
   `NINER` → `NINE`.
 
 ## Status
 
-The text generator, channel simulator, normalizer, metrics and synthesis
-pipeline are tested on CPU. The training collator and LoRA target patterns
-have been checked against the real Voxtral processor and model layout.
-These steps have not been run yet:
-- a full training run (needs a GPU)
-- the Kokoro backend (needs `espeak-ng`)
+The text generator, channel simulator, normalizer, metrics, data loaders and
+synthesis pipeline are tested on CPU. The training collator has been checked
+against the real Voxtral processor on mixed batches, including multi-window
+MARTTS clips. Training runs on HF Jobs; see the model repo for results.
+The Kokoro TTS backend has not been run (it needs `espeak-ng`).

@@ -53,18 +53,74 @@ def _strip_diacritics(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
-def normalize_transcript(text: str, expand_letters: bool = True) -> str:
+_ONES = ["ZERO", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE",
+         "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN",
+         "SEVENTEEN", "EIGHTEEN", "NINETEEN"]
+_TENS = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"]
+
+
+def cardinal(number: str) -> str:
+    """
+    Read a digit string as an English cardinal: '31' -> 'THIRTY ONE'.
+
+    Numbers with a leading zero or above 999999 are spelled digit by digit,
+    which is how they are read on the radio anyway.
+    """
+    n = int(number)
+    if (len(number) > 1 and number[0] == "0") or n > 999999:
+        return spell_digits(number)
+
+    def below_1000(n):
+        words = []
+        if n >= 100:
+            words += [_ONES[n // 100], "HUNDRED"]
+            n %= 100
+        if n >= 20:
+            words.append(_TENS[n // 10])
+            n %= 10
+            if n:
+                words.append(_ONES[n])
+        elif n or not words:
+            words.append(_ONES[n])
+        return words
+
+    if n >= 1000:
+        thousands, rest = divmod(n, 1000)
+        words = below_1000(thousands) + ["THOUSAND"] + (below_1000(rest) if rest else [])
+    else:
+        words = below_1000(n)
+    return " ".join(words)
+
+
+def normalize_transcript(
+    text: str,
+    expand_letters: bool = True,
+    numbers: str = "digits",
+    acronyms: bool = False,
+) -> str:
     """
     Normalize a transcript to the canonical training/eval form.
 
     Args:
         text: Raw transcript
         expand_letters: Expand isolated letters (other than A/I) to phonetic words
+        numbers: "digits" spells numbers digit by digit ("16" -> "ONE SIX", the
+            radio convention); "cardinal" reads them as words ("16" -> "SIXTEEN"),
+            for sources such as TTS corpora where that is what was spoken.
+            Digits after a decimal point are always spelled one by one.
+        acronyms: Join runs of spaced single letters into one word
+            ("M M S I" -> "MMSI") instead of expanding them phonetically
 
     Returns:
-        Uppercase, punctuation-free, digit-spelled transcript
+        Uppercase, punctuation-free transcript with numbers spelled out
     """
+    if numbers not in ("digits", "cardinal"):
+        raise ValueError(f"numbers must be 'digits' or 'cardinal', got {numbers!r}")
     t = _strip_diacritics(text).upper()
+
+    if acronyms:
+        t = re.sub(r"(?<![A-Z'])[A-Z](?![A-Z'])(?:[\s-]+[A-Z](?![A-Z']))+",
+                   lambda m: re.sub(r"[\s-]", "", m.group()), t)
 
     # Hyphenated canonical forms must be handled before hyphens are stripped
     for variant in ("PAN-PAN", "MAYDAY-RELAY", "X-RAY"):
@@ -77,8 +133,11 @@ def normalize_transcript(text: str, expand_letters: bool = True) -> str:
     t = re.sub(r"(?<=\d)\s*['′]", " MINUTES ", t)
     t = re.sub(r"(?<=\d)\.(?=\d)", " POINT ", t)
 
-    # Split digits off from letters ("CH16" -> "CH 16") then spell each digit
+    # Split digits off from letters ("CH16" -> "CH 16") then spell the numbers
     t = re.sub(r"(?<=[A-Z])(?=\d)|(?<=\d)(?=[A-Z])", " ", t)
+    t = re.sub(r"(?<=POINT )\d+", lambda m: f" {spell_digits(m.group())} ", t)
+    if numbers == "cardinal":
+        t = re.sub(r"\d+", lambda m: f" {cardinal(m.group())} ", t)
     t = re.sub(r"\d", lambda m: f" {DIGITS[m.group()]} ", t)
 
     # Remove punctuation (keep apostrophes inside words, e.g. "WE'RE")

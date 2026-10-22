@@ -72,3 +72,31 @@ class TestMetrics:
     def test_slot_requires_whole_words(self):
         # "ON" is a prefix of "ONE" but not a word in the hypothesis
         assert slot_accuracy([({"x": "on"}, "one six")])["x"] == 0.0
+
+
+class TestNormalizeOptions:
+    def test_cardinal_numbers(self):
+        assert normalize_transcript("MERLION 31, 8 knots, channel 16", numbers="cardinal") == \
+            "MERLION THIRTY ONE EIGHT KNOTS CHANNEL SIXTEEN"
+
+    def test_cardinal_keeps_leading_zero_digitwise(self):
+        assert normalize_transcript("heading 045", numbers="cardinal") == "HEADING ZERO FOUR FIVE"
+
+    def test_cardinal_large(self):
+        assert normalize_transcript("105 and 2500", numbers="cardinal") == \
+            "ONE HUNDRED FIVE AND TWO THOUSAND FIVE HUNDRED"
+
+    def test_decimals_always_digitwise(self):
+        assert normalize_transcript("12.75", numbers="cardinal") == "TWELVE POINT SEVEN FIVE"
+
+    def test_bad_numbers_option(self):
+        with pytest.raises(ValueError):
+            normalize_transcript("1", numbers="roman")
+
+    def test_acronyms(self):
+        assert normalize_transcript("M V - AZAMARA, M M S I number, E T A", acronyms=True) == \
+            "MV AZAMARA MMSI NUMBER ETA"
+
+    def test_acronyms_leave_words_alone(self):
+        assert normalize_transcript("I have a man overboard", acronyms=True) == \
+            "I HAVE A MAN OVERBOARD"
