@@ -4,6 +4,7 @@
 const TUTORIAL_STEPS = [
   {
     text: 'Welcome, park director! This short tutorial builds a tiny park and then lets something escape. Drag the map (or use WASD) to look around. Zoom with the mouse wheel, a pinch, or the +/− buttons by the minimap.',
+    touch: 'Welcome, park director! This short tutorial builds a tiny park and then lets something escape. Drag the map with a finger to look around. Pinch, or use the +/− buttons by the minimap, to zoom.',
     next: true,
   },
   {
@@ -29,14 +30,14 @@ const TUTORIAL_STEPS = [
     hint: 'If it shows a yellow "!" it has no power: move it closer or add a Power Pylon.',
   },
   {
-    text: 'Hatch two <b>Gallimimus</b>: press <b>H</b> (or Dinos → Hatch Dinosaur), pick Gallimimus, then click inside the paddock twice. They like company.',
+    text: 'Hatch two <b>Gallimimus</b>: press <b>H</b> (or Dinos → Hatch Dinosaur), pick Gallimimus, then click inside the paddock twice. (Gallimimus are happiest in threes, so add a third later.)',
     target: '.cat[data-cat="dino"]', tool: 'hatch',
     check: (g) => g.dinos.filter((d) => d.species === 'galli').length + g.eggs.filter((e) => e.species === 'galli').length >= 2,
   },
   {
     text: 'Guests arrive at the gate and only walk on paths. Build a <b>Visitor Center</b> (Guests menu) and connect it to the gate with <b>Smart Path</b>: drag from the gate path to the building.',
     target: '.cat[data-cat="guest"]', tool: 'visitor',
-    check: (g) => g.guests.length >= 5,
+    check: (g) => g.buildingsOfType('visitor').some((b) => g.world.accessTiles(b).length) && g.guests.length >= 3,
     hint: 'Guests only come once there is something connected to the gate by paths. Run a path past the paddock so they can see the dinosaurs.',
   },
   {
@@ -114,11 +115,11 @@ class Tutorial {
     const s = this.step;
     const n = TUTORIAL_STEPS.length;
     this.panel.hidden = false;
-    this.panel.innerHTML = `<b>TUTORIAL ${this.i + 1}/${n}</b><div>${s.text}</div><div id="tutHint" class="sub"></div>
-      <div class="btns">${s.next ? `<button id="tutNext">${s.last ? 'Start playing' : 'Next'}</button>` : ''}${s.tool ? '<button id="tutTool">Select it for me</button>' : ''}<button id="tutSkip">Skip tutorial</button></div>`;
+    this.panel.innerHTML = `<b>TUTORIAL ${this.i + 1}/${n}</b><div>${tutText(s)}</div><div id="tutHint" class="sub"></div>
+      <div class="btns">${s.next ? `<button id="tutNext">${s.last ? 'Start playing' : 'Next'}</button>` : ''}${s.tool ? '<button id="tutTool">Select it for me</button>' : ''}${s.last ? '' : '<button id="tutSkip">Skip tutorial</button>'}</div>`;
     const nb = document.getElementById('tutNext'); if (nb) nb.onclick = () => (s.last ? this.finish() : this.go(this.i + 1));
     const tb = document.getElementById('tutTool'); if (tb) tb.onclick = () => this.selectTool(s.tool);
-    document.getElementById('tutSkip').onclick = () => this.finish();
+    const sk = document.getElementById('tutSkip'); if (sk) sk.onclick = () => this.finish();
   }
   selectTool(t) {
     const ui = this.ui;
@@ -132,7 +133,7 @@ class Tutorial {
     const s = this.step; if (!s) return;
     this.t += dt;
     if (s.check && s.check(this.ui.game)) { this.go(this.i + 1); return; }
-    if (s.hint && !this.hintShown && this.t > 25) { this.hintShown = true; const h = document.getElementById('tutHint'); if (h) h.innerHTML = '💡 ' + s.hint; }
+    if (s.hint && !this.hintShown && this.t > 25) { this.hintShown = true; const h = document.getElementById('tutHint'); if (h) h.innerHTML = '💡 ' + tutText({ text: s.hint }); }
     // highlight target element
     const el = s.target && document.querySelector(s.target);
     if (el && el.offsetParent !== null && !el.hidden) {
@@ -150,4 +151,11 @@ class Tutorial {
     document.getElementById('goal').hidden = false;
     this.ui.tutorial = null;
   }
+}
+
+// Phones and tablets: tap instead of click, and no keyboard shortcuts
+function tutText(s) {
+  const touch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  if (!touch) return s.text;
+  return (s.touch || s.text).replace(' Dead fences blink red.', ' Dead fences blink red. Pinch to zoom out if it doesn\'t fit.').replace(/\bclick/g, 'tap').replace(/\bClick/g, 'Tap').replace(/ \(or [A-Z]\)/g, '').replace(/press U to undo/, 'tap ↶ (top bar) to undo').replace(/press <b>H<\/b> \(or Dinos → Hatch Dinosaur\)/, 'open Dinos → Hatch Dinosaur');
 }

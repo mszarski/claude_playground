@@ -101,7 +101,7 @@ class UI {
       b.appendChild(c);
       const info = BUILDINGS[t] || TOOL_INFO[t];
       const cost = BUILDINGS[t] ? BUILDINGS[t].cost : (TOOL_INFO[t].cost || 0);
-      const nm = document.createElement('span'); nm.className = 'nm'; nm.innerHTML = `${info.name}${TOOL_INFO[t] && TOOL_INFO[t].key ? ` <span class="k">[${TOOL_INFO[t].key}]</span>` : ''}`;
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.innerHTML = `${info.name}${TOOL_INFO[t] && TOOL_INFO[t].key ? ` <span class="k key">[${TOOL_INFO[t].key}]</span>` : ''}`;
       b.appendChild(nm);
       if (BUILDINGS[t] && BUILDINGS[t].unlockStars && this.game.stars < BUILDINGS[t].unlockStars && !this.game.sandbox) { b.style.opacity = 0.5; nm.innerHTML += ` <span class="k">${'★'.repeat(BUILDINGS[t].unlockStars)}</span>`; }
       if (cost) { const cs = document.createElement('span'); cs.className = 'c'; cs.textContent = fmtMoney(cost) + (LINE_TOOLS.includes(t) || RECT_TOOLS.includes(t) || t === 'paddock' ? '/t' : ''); b.appendChild(cs); }
@@ -109,7 +109,8 @@ class UI {
       b.onmouseleave = () => this.hideTip();
       b.onclick = () => {
         this.sfx.play('click');
-        if (t === 'hatch') { this.showSpeciesPicker(); return; }
+        // the picker covers the map; the menu must not be left open under it to catch the next tap
+        if (t === 'hatch') { this.closeFlyout(); this.showSpeciesPicker(); return; }
         this.setTool(t);
         if (window.innerWidth < 760) this.closeFlyout(); else this.openFlyout(grp);
       };
@@ -186,7 +187,7 @@ class UI {
       }
       if (this.drag && this.dragTiles) {
         const cost = this.dragCost();
-        this.showTip(e, this.tool === 'route' && this.routeFail ? '<span style="color:#ff9080">No route between these points</span>' : `${this.dragTiles.length} tiles${cost ? ' · ' + fmtMoney(cost) : ''}`);
+        this.showTip(e, this.tool === 'route' && this.routeFail ? '<span style="color:#ff9080">No route between these points</span>' : `${this.dragLabel()}${cost ? ' · ' + fmtMoney(cost) : ''}`);
       } else if (e.target === cv && BUILDINGS[this.tool]) {
         const def = BUILDINGS[this.tool], w = this.game.world;
         const bx = t.x - Math.floor((def.w - 1) / 2), by = t.y - Math.floor((def.h - 1) / 2);
@@ -294,7 +295,7 @@ class UI {
       this.mouse.moved = Math.max(this.mouse.moved, Math.abs(tt.clientX - this.mouse.sx) + Math.abs(tt.clientY - this.mouse.sy));
       if (this.drag) {
         this.updateDrag(t);
-        if (this.dragTiles) { const cost = this.dragCost(); this.showTip({ clientX: tt.clientX, clientY: tt.clientY - 60 }, `${this.dragTiles.length} tiles${cost ? ' · ' + fmtMoney(cost) : ''}`); }
+        if (this.dragTiles) { const cost = this.dragCost(); this.showTip({ clientX: tt.clientX, clientY: tt.clientY - 60 }, `${this.dragLabel()}${cost ? ' · ' + fmtMoney(cost) : ''}`); }
         return;
       }
       if (this.mouse.moved > 10) {
@@ -314,9 +315,11 @@ class UI {
       if (!this.mouse.down) return;
       this.mouse.down = false;
       this.hideTip();
-      if (this.drag) { if (e.type === 'touchend') this.applyDrag(); this.drag = null; this.dragTiles = null; return; }
-      if (e.type === 'touchend' && !this.panning && this.hover) this.click(this.hover);
+      if (this.drag) { if (e.type === 'touchend') this.applyDrag(); this.drag = null; this.dragTiles = null; this.hover = null; return; }
+      if (e.type === 'touchend' && !this.panning && this.hover) this.click(this.snapForTouch(this.hover));
       this.panning = false;
+      // no finger, no hover: don't leave a build preview (or a red X) stuck where the last tap was
+      this.hover = null;
     };
     cv.addEventListener('touchend', touchEnd, { passive: false });
     cv.addEventListener('touchcancel', touchEnd, { passive: false });
@@ -379,8 +382,10 @@ class UI {
     const cam = this.r.cam, w = this.game.world;
     const vw = this.r.canvas.width / cam.zoom, vh = this.r.canvas.height / cam.zoom;
     const W = w.W * TILE, H = w.H * TILE;
-    cam.x = vw >= W ? (W - vw) / 2 : clamp(cam.x, -40, W - vw + 40);
-    cam.y = vh >= H ? (H - vh) / 2 : clamp(cam.y, -60, H - vh + 40);
+    // let the shore scroll clear of the toolbar (left) and the panels along the bottom (tutorial, minimap, goals)
+    const left = Math.max(40, 80 / cam.zoom), bottom = Math.max(40, vh * 0.45);
+    cam.x = vw >= W ? (W - vw) / 2 : clamp(cam.x, -left, W - vw + 40);
+    cam.y = vh >= H ? (H - vh) / 2 : clamp(cam.y, -60, H - vh + bottom);
   }
 
   centerOn(x, y) {
@@ -479,6 +484,32 @@ class UI {
       const reg = w.regionAt(cx, cy);
       if (reg && reg.public && Math.max(...xs) - Math.min(...xs) > 1 && Math.max(...ys) - Math.min(...ys) > 1) this.toast('This paddock isn\'t closed: something blocked part of the fence. Look for the gap and fill it with the Fence tool.', 'warn');
     }
+  }
+
+  // Paddocks and areas read better as width × height than as a tile count
+  dragLabel() {
+    const d = this.drag, t = this.dragTiles;
+    if (d && (this.tool === 'paddock' || RECT_TOOLS.includes(this.tool)) && t.length) {
+      const xs = t.map((p) => p[0]), ys = t.map((p) => p[1]);
+      const w = Math.max(...xs) - Math.min(...xs) + 1, h = Math.max(...ys) - Math.min(...ys) + 1;
+      return this.tool === 'paddock' ? `${w}×${h} paddock (${Math.max(0, (w - 2) * (h - 2))} tiles inside)` : `${w}×${h}`;
+    }
+    return `${t.length} tiles`;
+  }
+
+  // A fingertip is less precise than a mouse and there is no hover preview: nudge a building to the
+  // nearest spot within 2 tiles where it fits
+  snapForTouch(t) {
+    const def = BUILDINGS[this.tool], w = this.game.world;
+    if (!def) return t;
+    const ox = Math.floor((def.w - 1) / 2), oy = Math.floor((def.h - 1) / 2);
+    if (w.canPlaceBuilding(this.tool, t.x - ox, t.y - oy)) return t;
+    let best = null, bd = 99;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const d = dx * dx + dy * dy;
+      if (d < bd && w.canPlaceBuilding(this.tool, t.x + dx - ox, t.y + dy - oy)) { bd = d; best = { x: t.x + dx, y: t.y + dy }; }
+    }
+    return best || t;
   }
 
   click(t) {
@@ -770,6 +801,7 @@ class UI {
   hideTip() { $('#tip').style.display = 'none'; }
 
   toast(msg, type = 'info') {
+    msg = forTouch(msg);
     const el = document.createElement('div');
     el.className = 'toast ' + type; el.textContent = msg;
     const box = $('#toasts');
@@ -881,8 +913,9 @@ class UI {
     bar.style.width = (pct * 100) + '%';
     bar.style.background = p.outage > 0 ? '#e04838' : pct < 1 ? '#f0a030' : '#f8d040';
     $('#sPow').textContent = `${Math.round(p.demand)}/${Math.round(p.supply)} MW`;
-    $('#sPowK').textContent = p.outage > 0 ? 'GRID DOWN' : pct < 1 ? 'OVERLOADED' : 'Power';
-    $('#sPowK').style.color = p.outage > 0 ? '#e04838' : pct < 1 ? '#f0a030' : '';
+    const over = p.demand > p.supply && p.demand > 0;
+    $('#sPowK').textContent = p.outage > 0 ? 'GRID DOWN' : over ? 'OVERLOADED' : 'Power';
+    $('#sPowK').style.color = p.outage > 0 ? '#e04838' : over ? '#f0a030' : '';
     $('#alarmBtn').classList.toggle('on', g.alarm);
     this.renderAlerts();
     if (g.scenario) {
@@ -920,7 +953,7 @@ class UI {
     if (broken >= 3 || (broken && !g.hasBuilding('maint'))) out.push(`<div class="alert amber" data-act="none">🔧 ${broken} BREACHED FENCE${broken > 1 ? 'S' : ''} <button data-act="fixall" title="Instantly repair every damaged fence">Repair all ${fmtMoney(g.repairAllCost().cost)}</button></div>`);
     const starving = g.hungryWithoutFood().filter((x) => x.d.hunger > 75);
     if (starving.length) out.push(`<div class="alert red" data-act="starve">🍖 ${starving.length} DINOSAUR${starving.length > 1 ? 'S' : ''} STARVING (NO FEEDER) <button data-act="feedall">Add feeders</button></div>`);
-    if (g.alarm) out.push(`<div class="alert amber" data-act="alarm">🔊 EVACUATION IN PROGRESS · click to sound all-clear</div>`);
+    if (g.alarm) out.push(`<div class="alert amber" data-act="alarm">🔊 EVACUATION IN PROGRESS · ${IS_TOUCH ? 'tap' : 'click'} to sound all-clear</div>`);
     const html = out.join('');
     if (html !== this.lastAlerts) {
       this.lastAlerts = html;
@@ -970,4 +1003,11 @@ class UI {
     }
     this.updateHUD(dt);
   }
+}
+
+// Phones and tablets: tap, not click, and no keyboard hints
+const IS_TOUCH = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+function forTouch(msg) {
+  if (!IS_TOUCH || typeof msg !== 'string') return msg;
+  return msg.replace(/\bClick\b/g, 'Tap').replace(/\bclick\b/g, 'tap').replace(/,? ?\(?Esc to (stop|cancel)\)?/g, '');
 }
