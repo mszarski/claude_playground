@@ -42,7 +42,7 @@ class Gyro {
         this.riders = q.splice(0, 2);
         const price = BUILDINGS.gyro.income * g.priceMul;
         for (const r of this.riders) { r.state = 'ride'; r.inJeep = this; g.earn(price, 'shops'); r.spent += price; this.station.visitors++; this.station.revenue = (this.station.revenue || 0) + price; }
-        this.state = 'roll'; this.trip = randf(22, 34); this.waitT = 0;
+        this.state = 'roll'; this.trip = randf(14, 22); this.waitT = 0;
       }
       return;
     }
@@ -139,7 +139,7 @@ const AttractionMixin = {
       const mine = this.gyros.filter((gy) => gy.station === st && !gy.dead);
       const acc = this.gyroAccess(st);
       st.noPaddock = !acc.length;
-      if (mine.length < 2 && acc.length) this.gyros.push(new Gyro(this, st, pick(acc)));
+      if (mine.length < 3 && acc.length) this.gyros.push(new Gyro(this, st, pick(acc)));
     }
     for (const gy of this.gyros) gy.update(dt);
     this.gyros = this.gyros.filter((gy) => !gy.dead);
