@@ -533,6 +533,15 @@ environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers
   `scripts/rich_iou.py`): own IoU 1 view 50.6 / 4 views 55.5, invalid 9-11 %; worst on unseen features (enclosure 21,
   gear 22, bent sheet 26, knob 35 own IoU at 4 views; 26-55 % invalid). The "gt" IoU (23.5) is not meaningful for rich
   parts: renders are framed to the part, so absolute size (100-200) is unobservable; use "own".
+- **Combined SFT `vlm_rich_v1`** (job 6ad8f3775275124786e2885b, H200, ~12 h, ~$60): from `vlm_grpo_fullres`,
+  `train_vlm_cq.py --rich data/rich/train --rich_p 0.4 --revision data/revision --revision_p 0.15`, lr 2e-5, 10k
+  steps. Rich test (`results/vlm_rich_v1_rich`), own IoU: full test (1989) view1 70.4 / view4 77.2, invalid 4.7-5.1 %;
+  paired on `test_0` (1489) vs `vlm_grpo_fullres`: view1 50.6 -> 72.4 (+21.8 +- 0.8), view4 55.5 -> 79.5 (+24.0 +-
+  0.9). Most of the gain came after step 2500 (60.4 then). Weakest families at view4: bent_sheet 48, l_bracket 62,
+  enclosure 62, extrusion 64, random_mix_hard 64 (IR 21 %). **DeepCAD test regressed** (`results/vlm_rich_v1_test`,
+  gt IoU): view1 86.6 -> 81.2, view4 91.6 -> 87.9, view1+expert 89.1 -> 88.6, expert 79.8 -> 79.7. Imitation training
+  after RL gives back most of the RL gain on image modes; the GRPO top-up on both tasks (`vlm_grpo_rich`) is meant to
+  recover it.
 
 ### Tier 2: build-inspect-fix revision turn (IN PROGRESS)
 - Prompt: `mm.vlm_cad.revision_text` (task + previous program + build error, or its render as a 2nd image with the
