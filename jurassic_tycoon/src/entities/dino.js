@@ -52,6 +52,7 @@ class Dino {
     this.age += dt;
     this.ageDays += dt / (g.secPerHour * 24);
     if (this.ageDays > this.lifespan && !this.loose && this.sedatedT <= 0) { g.killDino(this, 'old age', true); return; }
+    if (this.elderly && !this.oldLogged) { this.oldLogged = true; if (this.growth >= 1) g.log(`${this.name} the ${this.sp.name} is getting old: about ${Math.max(1, Math.round(this.lifespan - this.ageDays))} days left.`, 'warn', this); }
     if (this.growth < 1) {
       this.growth = Math.min(1, this.growth + dt / 150);
       if (this.growth >= 1) g.log(`${this.name} the ${this.sp.name} is fully grown.`, 'info', this);

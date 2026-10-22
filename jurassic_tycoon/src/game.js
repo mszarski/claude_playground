@@ -654,16 +654,17 @@ class Game {
     for (const [rid, list] of byReg) {
       const reg = w.regions[rid];
       const all = this.dinos.filter((d) => !d.carried && w.region[w.idx(d.tx, d.ty)] === rid);
-      const used = all.reduce((a, d) => a + d.sp.space, 0);
+      // the old are making way: a herd can replace itself in a paddock it already fills
+      const used = all.reduce((a, d) => a + (d.elderly ? 0 : d.sp.space), 0);
       const bySp = {};
       for (const d of list) (bySp[d.species] = bySp[d.species] || []).push(d);
       for (const [sp, ds] of Object.entries(bySp)) {
         if (ds.length < 2) continue;
         const S = SPECIES[sp];
         if (used + S.space > reg.size) continue;
-        const comfy = ds.filter((d) => d.comfort >= 68 && d.hunger < 60).length;
+        const comfy = ds.filter((d) => d.comfort >= 62 && d.hunger < 65).length;
         if (comfy < 2) continue;
-        if (!chance(S.diet === 'carn' ? 0.12 : 0.22)) continue;
+        if (!chance(S.diet === 'carn' ? 0.2 : 0.35)) continue;
         const parent = ds[0];
         const baby = new Dino(this, sp, parent.tx, parent.ty);
         baby.growth = 0.5;
@@ -938,6 +939,14 @@ class Game {
     if (carn && !this.shelters().length) issues.push([70, 'There is nowhere for guests to shelter. A Visitor Center, Hotel or Bunker saves lives during a breach.', null]);
     if (cre.length && !this.hasBuilding('maint')) issues.push([65, 'Without a Maintenance Shed, damaged fences are never repaired.', null]);
     if (this.hasBuilding('power') && !this.hasBuilding('backup') && cre.some((d) => d.sp.strength >= 6)) issues.push([45, 'A Backup Generator keeps fences live during a grid failure.', null]);
+    const bySp = {};
+    for (const d of contained) (bySp[d.species] = bySp[d.species] || []).push(d);
+    for (const [sp, ds] of Object.entries(bySp)) {
+      if (ds.every((d) => d.elderly) && !this.eggs.some((e) => e.species === sp)) {
+        const left = Math.max(1, Math.round(Math.min(...ds.map((d) => d.lifespan - d.ageDays))));
+        issues.push([72, `Your ${SPECIES[sp].name} ${ds.length > 1 ? 'are all' : 'is'} elderly: the first will die of old age in about ${left} day${left > 1 ? 's' : ''}. Hatch young ones to keep the exhibit going.`, ds[0]]);
+      }
+    }
     for (const d of contained) {
       const reg = w.regionAt(d.tx, d.ty);
       if (!reg) continue;
