@@ -2,6 +2,35 @@
 'use strict';
 
 const BlueprintMixin = {
+  // Rock or water that closes a paddock where there is no fence: a copy built elsewhere needs fence there
+  naturalWalls(reg) {
+    const w = this.world, out = new Set(), inReg = new Set(reg.tiles);
+    for (const t of reg.tiles) {
+      const x = t % w.W, y = (t / w.W) | 0;
+      for (const [dx, dy] of DIRS8) {
+        const nx = x + dx, ny = y + dy;
+        if (!w.inb(nx, ny)) continue;
+        const j = w.idx(nx, ny);
+        if (inReg.has(j) || w.fence[j] || w.bld[j]) continue;
+        if (!w.dinoPass(nx, ny)) out.add(j);
+      }
+    }
+    if (!out.size) return [];
+    // keep only the outer walls: a pond inside the paddock is scenery, not a wall
+    const x0 = reg.minX - 2, y0 = reg.minY - 2, x1 = reg.maxX + 2, y1 = reg.maxY + 2;
+    const seen = new Set(), q = [];
+    for (let x = x0; x <= x1; x++) for (const y of [y0, y1]) if (w.inb(x, y)) q.push(w.idx(x, y));
+    for (let y = y0; y <= y1; y++) for (const x of [x0, x1]) if (w.inb(x, y)) q.push(w.idx(x, y));
+    while (q.length) {
+      const j = q.pop();
+      if (seen.has(j) || inReg.has(j) || w.fence[j]) continue;
+      seen.add(j);
+      const x = j % w.W, y = (j / w.W) | 0;
+      for (const [dx, dy] of DIRS4) { const nx = x + dx, ny = y + dy; if (nx >= x0 && nx <= x1 && ny >= y0 && ny <= y1 && w.inb(nx, ny)) q.push(w.idx(nx, ny)); }
+    }
+    return [...out].filter((j) => seen.has(j));
+  },
+
   // Fence tiles that enclose a region (8-neighbourhood so corner posts count)
   paddockFences(reg) {
     const w = this.world, out = new Set();
@@ -21,13 +50,15 @@ const BlueprintMixin = {
     const w = this.world;
     const fences = this.paddockFences(reg);
     if (!fences.length) return null;
+    const walls = this.naturalWalls(reg);
     let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
-    for (const j of fences) { const x = j % w.W, y = (j / w.W) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    for (const j of fences.concat(walls)) { const x = j % w.W, y = (j / w.W) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
     const bp = { w: x1 - x0 + 1, h: y1 - y0 + 1, fences: [], feeders: [], trees: [] };
     for (const j of fences) {
       const f = w.fence[j];
       bp.fences.push([j % w.W - x0, ((j / w.W) | 0) - y0, f === F_BROKEN ? (w.fenceOrig[j] || F_ELECTRIC) : f === F_GATE ? F_ELECTRIC : f]);
     }
+    for (const j of walls) bp.fences.push([j % w.W - x0, ((j / w.W) | 0) - y0, F_ELECTRIC]);
     for (const t of reg.tiles) if (w.terrain[t] === T_FOREST) bp.trees.push([t % w.W - x0, ((t / w.W) | 0) - y0]);
     for (const b of reg.feeders.herb.concat(reg.feeders.carn)) bp.feeders.push([b.x - x0, b.y - y0, b.type]);
     return bp;

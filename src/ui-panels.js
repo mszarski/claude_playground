@@ -89,7 +89,9 @@ class UIPanels {
       html += `<div class="row"><span>Feeders</span><span>${reg.feeders.herb.length}H / ${reg.feeders.carn.length}C</span></div>`;
       const sp = ds.reduce((a, d) => a + d.sp.space, 0);
       html += `<div class="row"><span>Space used</span><span>${sp}/${reg.size}</span></div>`;
-      html += `<div class="sub">${ds.length ? ds.map((d) => d.name + ' (' + d.sp.name + ')').join(', ') : 'Empty. Use Hatch to add dinosaurs.'}</div>`;
+      const eggs = g.eggs.filter((e) => w.regionAt(e.x, e.y) === reg);
+      const eggText = eggs.length ? `${eggs.length} egg${eggs.length > 1 ? 's' : ''} hatching (${[...new Set(eggs.map((e) => SPECIES[e.species].name))].join(', ')})` : '';
+      html += `<div class="sub">${ds.length ? ds.map((d) => d.name + ' (' + d.sp.name + ')').join(', ') + (eggText ? ' · ' + eggText : '') : eggText || 'Empty. Use Hatch to add dinosaurs.'}</div>`;
       // one-click upkeep
       const cover = reg.forest / reg.size, needTrees = Math.max(0, Math.ceil(reg.size * 0.3) - reg.forest);
       const fences = g.paddockFences(reg), dmg = fences.filter((j) => g.needsRepair(j % w.W, (j / w.W) | 0)).length;
@@ -324,7 +326,14 @@ class UIPanels {
     for (const [k, d] of Object.entries(DISASTERS)) html += `<div class="card" data-dis="${k}"><div style="font-size:30px">${d.icon}</div><div class="nm">${d.name.toUpperCase()}</div><div style="color:#9ab08a">${d.desc}</div></div>`;
     html += `</div><div class="btns" style="justify-content:space-between;margin-top:10px"><button id="autoDis" class="${g.events.auto ? 'on' : ''}">Random disasters: ${g.events.auto ? 'ON' : 'OFF'}</button><button data-close>Close</button></div>`;
     this.showModal(html);
-    for (const c of document.querySelectorAll('[data-dis]')) c.onclick = () => { g.events.trigger(c.dataset.dis); this.closeModal(); };
+    const why = { rampage: 'nothing in the park is big enough to go on a rampage', raptors: 'there are no Velociraptors in a paddock', disease: 'there are no dinosaurs to fall ill', storm: 'a storm is already on the way', volcano: 'the volcano is already erupting' };
+    for (const c of document.querySelectorAll('[data-dis]')) c.onclick = () => {
+      const n = g.logs.length;
+      g.events.trigger(c.dataset.dis);
+      this.closeModal();
+      // a disaster with nothing to act on does nothing: say so rather than leave the player wondering
+      if (g.logs.length === n) this.toast(`Nothing happened: ${why[c.dataset.dis] || 'the conditions are not right'}.`, 'info');
+    };
     $('#autoDis').onclick = () => { g.events.auto = !g.events.auto; this.showDisasters(); };
     $('[data-close]').onclick = () => this.closeModal();
   }

@@ -443,12 +443,12 @@ class UI {
   applyDrag() {
     const g = this.game, tool = this.tool;
     if (!this.dragTiles) return;
-    let n = 0, queued = 0;
+    let n = 0, queued = 0, gates = 0;
     g.startBatch();
     for (const [x, y] of this.dragTiles) {
       let ok = false;
       if (tool === 'path' || tool === 'route') ok = g.placePath(x, y);
-      else if (tool === 'track') ok = g.placeTrack(x, y);
+      else if (tool === 'track') { const f0 = g.world.fence[g.world.idx(x, y)]; ok = g.placeTrack(x, y); if (ok && f0 && f0 !== F_GATE) gates++; }
       else if (tool === 'fence' || tool === 'paddock' || tool === 'wall') {
         const type = tool === 'wall' ? F_WALL : F_ELECTRIC;
         ok = g.placeFence(x, y, type);
@@ -474,6 +474,7 @@ class UI {
       for (const [x, y] of this.dragTiles) { const i = w.idx(x, y); if (w.fence[i] === F_ELECTRIC) { total++; if (!w.fencePowered[i]) off++; } }
       if (off) this.toast(`${off} of ${total} fence tiles have no power (blinking red). Build a Power Plant or Pylon nearby.`, 'warn');
     }
+    if (gates > 2) this.toast(`The track runs along a fence: ${gates} fence tiles became Track Gates (${fmtMoney(gates * FENCE_DEF[F_GATE].cost)}). Gates don't zap, so that side of the paddock is weaker. Cross fences at a right angle instead (Undo to take it back).`, 'warn');
     if (queued) this.toast(`A dinosaur or lava is in the way of ${queued} fence tile${queued > 1 ? 's' : ''}. ${queued > 1 ? 'They\'ll' : 'It\'ll'} be built as soon as the way is clear.`, 'info');
     else if (n && tool === 'paddock' && this.dragTiles.length > 4) {
       // a paddock that doesn't close is just an expensive fence: say so
@@ -560,7 +561,7 @@ class UI {
     if (tool === 'stamp' && this.blueprint) {
       const bp = this.blueprint;
       const r = g.stamp(bp, t.x - Math.floor(bp.w / 2), t.y - Math.floor(bp.h / 2));
-      if (r.n) { this.sfx.play('build'); this.toast(`Paddock stamped (${fmtMoney(r.plan.cost)}).${r.plan.blocked ? ` ${r.plan.blocked} fence tiles were blocked.` : ''}`, r.plan.blocked ? 'warn' : 'good'); }
+      if (r.n) { this.sfx.play('build'); this.toast(`Paddock stamped (${fmtMoney(r.plan.cost)}).${r.plan.blocked ? ` ${r.plan.blocked} fence tiles were blocked, so it may not be closed: look for gaps.` : ''}`, r.plan.blocked ? 'warn' : 'good'); }
       else { this.sfx.play('error'); this.toast(r.money ? `Not enough money (${fmtMoney(r.plan.cost)}).` : "Can't stamp there.", 'warn'); }
       return;
     }
