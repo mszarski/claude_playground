@@ -134,8 +134,10 @@ class UIPanels {
       }
       if (def.income) html += `<div class="row"><span>Visitors</span><span>${o.visitors}</span></div><div class="row"><span>Revenue</span><span>${fmtMoney(o.revenue || 0)}</span></div>`;
       if (def.shelter) html += `<div class="row"><span>Sheltering</span><span>${o.inside}/${def.shelter}</span></div>`;
+      if (o.doorsBroken) html += `<div class="sub" style="color:#ff9080">DOORS BROKEN: guests won't shelter here until engineers repair it (80% condition).</div>`;
       if (def.upkeep) html += `<div class="row"><span>Upkeep</span><span>${fmtMoney(def.upkeep)}/day</span></div>`;
-      html += `<div class="btns"><button data-a="demolish" class="danger">Demolish (+${fmtMoney(def.cost * 0.25)})</button></div>`;
+      const fixCost = Math.round((1 - o.hp / o.maxHp) * def.cost * 0.3 / 100) * 100;
+      html += `<div class="btns">${o.hp < o.maxHp ? `<button data-a="fixb" title="Instant repair by contractors">Repair ${fmtMoney(Math.max(100, fixCost))}</button>` : ''}<button data-a="demolish" class="danger">Demolish (+${fmtMoney(def.cost * 0.25)})</button></div>`;
     }
     if (force || html !== this.lastInfo) {
       this.lastInfo = html;
@@ -170,6 +172,13 @@ class UIPanels {
       const err = g.sellDino(o);
       if (err) { this.toast(err, 'warn'); return; }
       this.select(null); return;
+    }
+    if (a === 'fixb' && o && o.type) {
+      const c = Math.max(100, Math.round((1 - o.hp / o.maxHp) * BUILDINGS[o.type].cost * 0.3 / 100) * 100);
+      if (!g.canAfford(c)) { this.toast('Not enough money.', 'warn'); return; }
+      g.spend(c, 'repairs'); o.hp = o.maxHp; o.doorsBroken = false; g.world.flowCache.clear();
+      g.sparks(o.x + o.w / 2, o.y + o.h / 2, '#f8e080', 8); this.sfx.play('build');
+      this.toast(`${BUILDINGS[o.type].name} repaired (${fmtMoney(c)}).`, 'good');
     }
     if (a === 'demolish' && o) { g.startBatch(); const ok = g.demolishAt(o.x, o.y); g.endBatch('demolition'); if (ok) this.sfx.play('demolish'); this.select(null); return; }
     this.renderInfo(true);

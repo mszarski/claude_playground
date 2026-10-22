@@ -598,6 +598,12 @@ class Renderer {
     if (b.inside > 0 && (def.shelter) && (g.alarm || g.looseCount)) {
       drawText3(ctx, String(b.inside), x + 2, y + 2, '#fff');
     }
+    if (b.doorsBroken && Math.floor(this.time * 2) % 2 === 0) {
+      // broken in: a flashing red X over the doors
+      const cx = x + b.w * TILE / 2, cy = y + b.h * TILE - 6;
+      ctx.strokeStyle = '#e04838'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx - 4, cy - 4); ctx.lineTo(cx + 4, cy + 4); ctx.moveTo(cx + 4, cy - 4); ctx.lineTo(cx - 4, cy + 4); ctx.stroke();
+    }
   }
 
   animateBuilding(ctx, b, x, y, spr) {
