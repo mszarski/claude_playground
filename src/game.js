@@ -868,7 +868,11 @@ class Game {
         this.soundAt('bellow', b.x + 3, b.y + 3, 1);
         setTimeoutSim(this, 1.1, () => { this.burst(b.x + 3, b.y + 3.2, '#a8d8f0', 30); this.soundAt('crash', b.x + 3, b.y + 3, 0.6); this.shake = Math.max(this.shake, 1); });
         // nearby guests love it
-        for (const gu of this.guests) if (!gu.hidden && dist2(gu.x, gu.y, b.x + 3, b.y + 2.5) < 81) { gu.happy = Math.min(100, gu.happy + 15); if (chance(0.2)) { gu.thought = 'WOW!'; gu.thoughtT = 2; } this.earn(5, 'shops'); }
+        // the splash zone: everyone watching pays for the privilege, like a feeding show
+        let crowd = 0;
+        for (const gu of this.guests) if (!gu.hidden && dist2(gu.x, gu.y, b.x + 3, b.y + 2.5) < 81) { gu.happy = Math.min(100, gu.happy + 15); if (chance(0.2)) { gu.thought = 'WOW!'; gu.thoughtT = 2; } crowd++; }
+        const pay = Math.min(crowd, 60) * 22 * this.priceMul;
+        if (pay) { this.earn(pay, 'shops'); b.revenue = (b.revenue || 0) + pay; b.visitors = (b.visitors || 0) + crowd; }
       }
       if (b.hp < b.maxHp * 0.25 && !b.escaped) {
         b.escaped = true;
