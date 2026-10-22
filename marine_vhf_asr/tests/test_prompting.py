@@ -118,3 +118,18 @@ def test_collapse_loops():
                   "PAN PAN PAN PAN PAN PAN ALL STATIONS ALL STATIONS ALL STATIONS",
                   "SECURITE SECURITE SECURITE", ""]:
         assert collapse_loops(legit) == legit
+
+
+def test_vhf8k_context_padded_to_size():
+    row = dict(ROW, reference_text="VTS, SHAN BANG, roger. Keeping clear of ORFEOS.")
+    pool = sorted({"ORFEOS", "MONT FORT", "SHAN BANG", "GOLDEN TIDE", "SEA LION", "ALPHA STAR",
+                   "BLUE WHALE", "RED ROCK", "NORTH WIND", "EAST CAPE", "WEST POINT", "SOUTH BAY"})
+    ctx, decoys = _vhf8k_context(row, "supported", size=8, pool=pool)
+    names = ctx.split(": ", 1)[1].split(". Use")[0].split("; ")
+    assert len(names) == 8 and len(set(names)) == 8 and "SHAN BANG" in names
+    assert "ORFEOS" not in names  # spoken in the clip, so never a filler decoy
+    assert "SHAN BANG" not in decoys and len(decoys) == 7
+
+    ctx, decoys = _vhf8k_context(row, "decoys", size=8, pool=pool)
+    assert "SHAN BANG" not in ctx and len(decoys) == 8
+    assert _vhf8k_context(row, "decoys", size=8, pool=pool) == (ctx, decoys)

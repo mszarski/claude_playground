@@ -20,6 +20,8 @@ Sources (spec "name:split[#context][@max_examples]", e.g. "vhf8k:train#mix@2000"
                #decoys     decoys only: tests that unspoken candidates are not copied
                #mix        training mix: 35% none, 50% supported, 15% decoys, with
                            0-5 extra names from the dialogue's vessel inventory
+             #supported:N / #decoys:N pad the list to N names with random other
+             vessel names from the split, like a real AIS list of ships in range.
     martts   bonalor/synthetic_maritime_radio_communication (CC-BY 4.0): synthetic
              distress / SAR dialogues, multi-speaker, one 30-125 s clip per dialogue.
              Splits: train (scenarios 1-8), test (scenarios 9-10); variant "clean"
@@ -79,9 +81,14 @@ def _vhf8k_name(name: str) -> str:
 _JUNK_NAME = re.compile(r"[^A-Za-z0-9 .'&/-]")
 
 
-def _vhf8k_context(r, mode: str):
-    """Pick (context, decoys) for one VHF-8K row; deterministic per utterance."""
-    rng = random.Random(int(hashlib.md5(r["utterance_id"].encode()).hexdigest()[:8], 16))
+def _vhf8k_context(r, mode: str, size: int = 0, pool=()):
+    """
+    Pick (context, decoys) for one VHF-8K row; deterministic per utterance.
+
+    With `size`, the list is padded to `size` names with random names from
+    `pool` (never a name that is spoken in the clip).
+    """
+    rng = random.Random(int(hashlib.md5(f"{r['utterance_id']}/{size}".encode()).hexdigest()[:8], 16))
     if mode == "mix":
         mode = rng.choices(["none", "supported", "decoys"], weights=[35, 50, 15])[0]
     if mode == "none":
@@ -93,6 +100,16 @@ def _vhf8k_context(r, mode: str):
         pool = [_vhf8k_name(e) for e in r["ship_names"] or [] if e and not _JUNK_NAME.search(e)]
         pool = [n for n in pool if n and n not in spoken and n not in decoys]
         decoys += rng.sample(pool, min(len(pool), rng.randint(0, 5)))
+    if size:
+        text = f" {_vhf8k_name(r['reference_text'])} "
+        taken = set(spoken) | set(decoys)
+        need = size - len(decoys) - (len(spoken) if mode == "supported" else 0)
+        while need > 0:
+            name = pool[rng.randrange(len(pool))]
+            if name not in taken and f" {name} " not in text:
+                decoys.append(name)
+                taken.add(name)
+                need -= 1
     names = (spoken if mode == "supported" else []) + decoys
     rng.shuffle(names)
     return prompt_text(names), decoys
@@ -109,17 +126,25 @@ def _vhf8k(split):
     from datasets import Audio, load_dataset
 
     split, _, mode = split.partition("#")
-    mode = mode or "none"
-    if mode not in ("none", "supported", "decoys", "mix"):
-        raise ValueError(f"vhf8k context mode must be none/supported/decoys/mix, got {mode!r}")
+    mode, _, size = (mode or "none").partition(":")
+    size = int(size or 0)
+    if mode not in ("none", "supported", "decoys", "mix") or (size and mode not in ("supported", "decoys")):
+        raise ValueError(f"vhf8k context must be none/supported[:N]/decoys[:N]/mix, got {mode!r}")
 
     ds = load_dataset("PassbyGrocer/VHF-8K", split=split)
     ds = ds.cast_column("audio", Audio(decode=False))
     ds = ds.filter(lambda r: not _AMBIGUOUS_NUMBER.search(r["reference_text"]))
 
+    pool = []
+    if size:
+        names = set()
+        for cols in zip(ds["ship_names"], ds["konger_entities"], ds["reference_entities"]):
+            names.update(_vhf8k_name(e) for col in cols for e in col or [] if e and not _JUNK_NAME.search(e))
+        pool = sorted(n for n in names if n)
+
     def convert(r):
         slots = {f"vessel_{i}": _vhf8k_name(e) for i, e in enumerate(r["reference_entities"] or [])}
-        context, decoys = _vhf8k_context(dict(r, _extra=mode == "mix"), mode)
+        context, decoys = _vhf8k_context(dict(r, _extra=mode == "mix"), mode, size, pool)
         text = normalize_transcript(r["reference_text"], numbers="cardinal", expand_letters=False)
         return {"text": text, "slots": json.dumps(slots), "context": context, "decoys": json.dumps(decoys)}
 
