@@ -6,7 +6,7 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("datasets")
 
-from marine_vhf_asr.prompting import build_inputs, max_new_tokens_for, trim_runaway  # noqa: E402
+from marine_vhf_asr.prompting import build_inputs, collapse_loops, max_new_tokens_for, trim_runaway  # noqa: E402
 from marine_vhf_asr.sources import _vhf8k_context, prompt_text  # noqa: E402
 
 END_INST, PAD, AUDIO = 4, 11, 24
@@ -109,3 +109,12 @@ def test_spoken_name_position_is_shuffled():
 def test_prompt_text():
     assert prompt_text([]) == ""
     assert prompt_text(["A", "B"]) == "Candidate vessel names: A; B. Use a candidate only if it is spoken."
+
+
+def test_collapse_loops():
+    assert collapse_loops("VTS " * 50 + "OVER") == "VTS VTS VTS OVER"
+    assert collapse_loops("ROGER " + "STAND BY " * 20) == "ROGER STAND BY STAND BY STAND BY"
+    for legit in ["MAYDAY MAYDAY MAYDAY THIS IS RED KITE RED KITE RED KITE",
+                  "PAN PAN PAN PAN PAN PAN ALL STATIONS ALL STATIONS ALL STATIONS",
+                  "SECURITE SECURITE SECURITE", ""]:
+        assert collapse_loops(legit) == legit

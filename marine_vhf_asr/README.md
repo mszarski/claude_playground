@@ -159,12 +159,43 @@ WER here is scored after normalizing both sides to the same format, so it is
 not directly comparable with the 105.6% baseline on the ATC model's card. For
 reference, the ATC model reports 8.0% on the full ATC test set.
 
-Unseen vessel names are the main weakness. The VHF-8K test set uses vessel
-names that never appear in training (by design), and the model writes them
-phonetically ("CHARIKLIA JUNIOR" → "TREKLIER JUNIOR", "LYNX SATU" → "LYNK SATU").
-This is expected from audio alone. The next step is contextual biasing:
-put the vessel names currently in the area (from AIS) into the prompt.
-VHF-8K provides candidate lists (`ship_names`) for exactly this.
+Unseen vessel names are the main weakness without context. The VHF-8K test set
+uses vessel names that never appear in training (by design), and the model
+writes them phonetically ("CHARIKLIA JUNIOR" → "TREKLIER JUNIOR").
+
+## Results: vessel-name context (second run)
+
+Same data and settings, but VHF-8K clips are trained with a candidate list in
+the prompt (`#mix`). Adapter: `mszarski/voxtral-3B-marine-vhf-context` (private).
+Both models are scored with the current evaluation (output-length cap and
+repetition-loop guard, VHF-8K letters kept as letters), on the same clips.
+
+| VHF-8K test (400 clips) | v1 WER | v1 names | v2 WER | v2 names | v2 decoy copied |
+|---|---|---|---|---|---|
+| No list | 12.6% | 34.8% | 13.2% | 33.6% | – |
+| Spoken name + 4 decoys | 10.9% | 65.7% | **1.9%** | **97.3%** | 0.5% |
+| Decoys only (name absent) | 19.0% | 34.1% | 13.6% | 32.8% | 3.8% |
+
+| Other held-out sets | v1 WER | v2 WER |
+|---|---|---|
+| MARTTS test (48 dialogues) | 7.8% | 8.7% |
+| ATC test, real radio (300) | 9.6% | 9.9% |
+
+- With the right vessel in the list, v2 gets 97% of names right and the overall
+  WER drops to 1.9%. It almost never copies a decoy (0.5% of clips).
+- When the list does not contain the spoken name, v2 copes much better than v1
+  (13.6% vs 19.0% WER). It still writes a decoy name in 3.8% of clips; a
+  downstream check against AIS position would catch most of these.
+- Without a list, v2 is on par with v1 (13.2% vs 12.6%: 54 clips worse, 44 better).
+  MARTTS and ATC moved by under a point, which is within noise at these sample sizes.
+- The first v2 evaluation hit one clip stuck repeating "VTS VTS VTS ...", which
+  added 94 errors. That is why `evaluate.transcribe` now cuts repetition loops
+  (a 1-4 word phrase repeated 8+ times) and caps output length by clip duration.
+  Neither guard alters any reference transcript in the train or test sets.
+
+In real use, the list would come from AIS: vessels within radio range of the
+receiver, typically more than the 5 used here. Testing with longer lists is a
+sensible next step.
 
 ## Status
 

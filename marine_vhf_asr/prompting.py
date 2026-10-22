@@ -68,3 +68,29 @@ def trim_runaway(text: str, duration_s: float) -> str:
         return text
     cut = text.rfind(" ", 0, limit)
     return text[:cut if cut > 0 else limit]
+
+
+def collapse_loops(text: str, max_repeats: int = 8, keep: int = 3, max_ngram: int = 4) -> str:
+    """
+    Cut a generation that got stuck repeating a short phrase ("VTS VTS VTS ...").
+
+    A 1-4 word phrase repeated `max_repeats` or more times in a row is reduced to
+    `keep` copies. Real radio repeats are short (MAYDAY x3, PAN PAN x3, call signs
+    twice), so the thresholds leave them alone.
+    """
+    words = text.split()
+    out, i = [], 0
+    while i < len(words):
+        for n in range(1, max_ngram + 1):
+            gram = words[i:i + n]
+            reps = 1
+            while words[i + reps * n:i + (reps + 1) * n] == gram:
+                reps += 1
+            if len(gram) == n and reps >= max_repeats:
+                out += gram * keep
+                i += reps * n
+                break
+        else:
+            out.append(words[i])
+            i += 1
+    return " ".join(out)

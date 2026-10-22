@@ -16,7 +16,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from .metrics import corpus_wer, decoy_copy_rate, slot_accuracy
-from .prompting import build_inputs, max_new_tokens_for, trim_runaway
+from .prompting import build_inputs, collapse_loops, max_new_tokens_for, trim_runaway
 from .sources import SR, load_audio, load_source
 
 BASE_MODEL = "mistralai/Voxtral-Mini-3B-2507"
@@ -27,8 +27,8 @@ def transcribe(model, processor, model_id, audios, contexts=None):
     Transcribe a batch of 16 kHz clips, optionally with per-clip context
     (e.g. sources.prompt_text(nearby_vessel_names)).
 
-    Output length is capped from each clip's duration so a runaway generation
-    cannot flood the transcript.
+    Output length is capped from each clip's duration, and phrases stuck in a
+    repetition loop are cut, so a runaway generation cannot flood the transcript.
     """
     import torch
 
@@ -37,7 +37,7 @@ def transcribe(model, processor, model_id, audios, contexts=None):
         out = model.generate(**inputs, max_new_tokens=max_new_tokens_for(audios), do_sample=False)
     new_tokens = out[:, inputs["input_ids"].shape[1]:]
     texts = processor.batch_decode(new_tokens, skip_special_tokens=True)
-    return [trim_runaway(t, len(a) / SR) for t, a in zip(texts, audios)]
+    return [collapse_loops(trim_runaway(t, len(a) / SR)) for t, a in zip(texts, audios)]
 
 
 def evaluate_dataset(model, processor, model_id, ds, batch_size=8):
