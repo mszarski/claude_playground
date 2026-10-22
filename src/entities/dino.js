@@ -213,6 +213,17 @@ class Dino {
         return;
       }
     }
+    // Predators on the loose follow the noise: head for the nearest crowd within earshot
+    if (this.loose && this.sp.diet === 'carn' && this.sp.danger >= 4 && this.hunger > 25 && chance(0.6)) {
+      let best = null, bd = 28 * 28;
+      for (const gu of g.guests) { if (gu.hidden) continue; const d = dist2(this.x, this.y, gu.x, gu.y); if (d < bd) { bd = d; best = gu; } }
+      if (best) {
+        const gx = best.cx, gy = best.cy;
+        // stop a few tiles short: from there findPrey takes over and the guests get a chance to run
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => dist2(x, y, gx, gy) < 25, 2500);
+        if (p && p.length) { this.path = p.slice(0, 14); this.pi = 0; this.state = 'walk'; return; }
+      }
+    }
     // Herbivores mostly sleep through the night
     if (g.isNight && this.sp.diet === 'herb' && !this.loose && this.hunger < 70 && chance(0.8)) { this.state = 'idle'; this.stateT = randf(6, 12); this.sleeping = true; return; }
     this.sleeping = false;

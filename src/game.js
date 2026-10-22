@@ -167,7 +167,8 @@ class Game {
       if (!d.loose || d.carried || d.sedatedT > 0) continue;
       if (d.sp.danger < 2) continue;
       const sens = this.research.has('sensors');
-      const rr = d.camouflaged && !sens ? Math.min(r, 2.5) : r * (sens ? 1.4 : 1);
+      // raptors stalk: you don't see them until they are close (motion sensors spoil the ambush)
+      const rr = d.camouflaged && !sens ? Math.min(r, 2.5) : sens ? r * 1.4 : d.sp.clever ? r * 0.6 : r;
       if (dist2(x, y, d.x, d.y) < rr * rr) return d;
     }
     return null;
