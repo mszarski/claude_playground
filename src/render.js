@@ -569,7 +569,7 @@ class Renderer {
       ctx.fillStyle = Math.sin(this.time * 6) > 0 ? '#f8f080' : '#e0c040';
       ctx.fillRect(x + 22, y + 1, 4, 1);
     }
-    if (b.type === 'siren' && (g.alarm || g.sirenAlarm) && b.powered) {
+    if (b.type === 'siren' && (g.alarm || b.active) && b.powered) {
       ctx.fillStyle = Math.sin(this.time * 12) > 0 ? '#ff4030' : '#601010';
       ctx.fillRect(x + 4, y + 1, 8, 5);
     }
