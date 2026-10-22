@@ -117,10 +117,13 @@ def _manifest(path):
     path = Path(path)
     ds = load_dataset("json", data_files=str(path), split="train")
     root = path.parent.resolve()
+    # Rebuild audio/slots as new columns: JSON slots have per-row keys, which
+    # datasets would otherwise keep as a sparse struct column
     ds = ds.map(lambda r: {
-        "audio": {"bytes": None, "path": str(root / r["audio"])},
-        "slots": json.dumps(r.get("slots") or {}),
-    })
+        "audio_ref": {"bytes": None, "path": str(root / r["audio"])},
+        "slots_json": json.dumps({k: v for k, v in (r.get("slots") or {}).items() if v is not None}),
+    }, remove_columns=[c for c in ds.column_names if c != "text"])
+    ds = ds.rename_columns({"audio_ref": "audio", "slots_json": "slots"})
     return _finish(ds.select_columns(["audio", "text", "slots"]), path.stem)
 
 

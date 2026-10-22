@@ -36,7 +36,10 @@ def test_local_manifest(tmp_path):
     wavfile.write(tmp_path / "a.wav", 16000, np.zeros(1600, dtype=np.float32))
     with open(tmp_path / "m.jsonl", "w") as f:
         f.write(json.dumps({"audio": "a.wav", "text": "CHANNEL ONE SIX", "slots": {"channel": "ONE SIX"}}) + "\n")
+        # Different slot keys per row must not turn into a sparse struct
+        f.write(json.dumps({"audio": "a.wav", "text": "RED KITE", "slots": {"vessel": "RED KITE"}}) + "\n")
     ds = load_source(str(tmp_path / "m.jsonl"))
     assert ds.column_names == ["audio", "text", "slots", "source"]
     assert json.loads(ds[0]["slots"]) == {"channel": "ONE SIX"}
+    assert json.loads(ds[1]["slots"]) == {"vessel": "RED KITE"}
     assert len(load_audio(ds[0]["audio"])) == 1600

@@ -105,7 +105,7 @@ before relying on it, and never use it as the only record of distress traffic.
 {sources}
 
 ## Results (held out)
-| Data | n | WER | Vessel-name slot accuracy |
+| Data | n | WER | Slot accuracy (vessel names etc.) |
 |---|---|---|---|
 {rows}
 
@@ -200,10 +200,10 @@ def main(argv=None):
             gradient_accumulation_steps=args.grad_accum,
             learning_rate=args.lr,
             lr_scheduler_type="cosine",
-            warmup_ratio=0.03,
+            warmup_steps=0.03,  # <1 means a fraction of total steps
             num_train_epochs=args.epochs,
             max_steps=args.max_steps,
-            bf16=True,
+            bf16=torch.cuda.is_available(),
             logging_steps=10,
             save_steps=args.save_steps,
             eval_steps=args.save_steps if eval_ds is not None else None,
