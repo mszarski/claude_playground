@@ -184,8 +184,20 @@ class Game {
     return null;
   }
   inSirenRange(x, y) {
-    for (const s of this.buildingsOfType('siren')) if (s.powered && dist2(x, y, s.x + 0.5, s.y + 0.5) < BUILDINGS.siren.range ** 2) return true;
+    for (const s of this.buildingsOfType('siren')) if (s.active && dist2(x, y, s.x + 0.5, s.y + 0.5) < BUILDINGS.siren.range ** 2) return true;
     return false;
+  }
+  // Siren towers sound on their own when something dangerous is loose nearby: a local evacuation, no button needed
+  updateSirens() {
+    let any = false;
+    const r = BUILDINGS.siren.range + 4;
+    for (const s of this.buildingsOfType('siren')) {
+      const was = s.active;
+      s.active = s.powered && this.creatures().some((d) => d.loose && !d.carried && d.sedatedT <= 0 && d.sp.danger >= 3 && dist2(d.x, d.y, s.x + 0.5, s.y + 0.5) < r * r);
+      if (s.active && !was) { this.log('Siren tower: something dangerous is close! Guests nearby are evacuating.', 'warn', s); this.soundAt('alarm', s.x, s.y, 0.7); }
+      any = any || s.active;
+    }
+    this.sirenAlarm = any;
   }
   countBrokenFences() { let n = 0; const f = this.world.fence; for (let i = 0; i < f.length; i++) if (f[i] === F_BROKEN) n++; return n; }
   recentDeaths(days = 7) { return this.deathLog.filter((d) => d > this.day - days).length; }
@@ -761,6 +773,8 @@ class Game {
     if (w.regionsDirty) { w.computeRegions(); this.updateLoose(); }
     if (this.pendingFences && this.pendingFences.length) this.buildPendingFences(dt);
     this.feedCheckT = (this.feedCheckT || 0) - dt;
+    this.sirenT = (this.sirenT || 0) - dt;
+    if (this.sirenT <= 0) { this.sirenT = 0.5; this.updateSirens(); }
     if (this.feedCheckT <= 0) {
       this.feedCheckT = 3; this.moveStrays(); this.replaceLostFeeders();
       // engineers patched up a broken-into shelter: open its doors again

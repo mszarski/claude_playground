@@ -118,7 +118,7 @@ const BUILDINGS = {
     desc: 'Guests get grumpy without these. Not a great hiding place.' },
   viewing: { name: 'Viewing Platform', w: 2, h: 2, cost: 9000, upkeep: 40, power: 0, cat: 'guest', hp: 220, appeal: 3, view: 11,
     desc: 'Place by a paddock. Guests here see dinos up to 11 tiles away.' },
-  hotel: { name: 'Lodge Hotel', w: 3, h: 3, cost: 90000, upkeep: 600, power: 8, cat: 'guest', hp: 400, income: 200, shelter: 50, need: 'rest', appeal: 4,
+  hotel: { name: 'Lodge Hotel', w: 3, h: 3, cost: 90000, upkeep: 600, power: 8, cat: 'guest', hp: 400, income: 150, shelter: 50, need: 'rest', appeal: 4,
     desc: 'Overnight stays. Big income and a shelter for 50.' },
   shelter: { name: 'Bunker', w: 2, h: 2, cost: 12000, upkeep: 60, power: 1, cat: 'guest', hp: 900, shelter: 45,
     desc: 'Reinforced emergency bunker for 45 guests.' },
@@ -159,7 +159,7 @@ const BUILDINGS = {
   feedshow: { name: 'Feeding Grandstand', w: 3, h: 2, cost: 45000, upkeep: 200, power: 1, cat: 'guest', hp: 300, appeal: 4,
     desc: 'At noon and 6pm the biggest carnivore in a paddock within 6 tiles is fed in front of the crowd. Free meal, huge cheers.' },
   siren: { name: 'Siren Tower', w: 1, h: 1, cost: 6000, upkeep: 20, power: 1, cat: 'infra', hp: 120, range: 14,
-    desc: 'Guests in range evacuate instantly when an alarm sounds.' },
+    desc: 'Sounds by itself when something dangerous is loose nearby: guests in range head for shelter, no alarm needed.' },
 };
 
 // A year is 28 days: four 7-day seasons
