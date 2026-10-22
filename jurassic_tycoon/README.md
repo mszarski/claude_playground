@@ -43,7 +43,7 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 | G | Dinosaur roster |
 | U or Ctrl+Z | Undo last construction, demolition or egg |
 | Y | Research |
-| Q P N J F R V X T C H | Tools: inspect, path, smart path, tour track, fence, paddock, wall, demolish, trees, clear, hatch |
+| Q P I N J F R V X T C H | Tools: inspect, path, wide path, smart path, tour track, fence, paddock, wall, demolish, trees, clear, hatch |
 
 ## Development
 
