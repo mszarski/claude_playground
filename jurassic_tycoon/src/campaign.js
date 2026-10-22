@@ -149,8 +149,8 @@ const CHAPTERS = {
       const rex = g.dinos.some((d) => d.species === 'trex' && !d.loose && !d.carried);
       return [tick(g.stars >= 5, `★ ${g.stars}/5`), tick(rex, 'T. rex'), tick(g.hasBuilding('lagoon'), 'Lagoon'), tick((g.scenarioState.peak || 0) >= 400, `Guests ${Math.max(g.guests.length, g.scenarioState.peak || 0)}/400`), `Day ${g.day}`].join(' · ');
     },
-    medal(g) { return g.day <= 40 ? 'gold' : g.day <= 55 ? 'silver' : 'bronze'; },
-    medalText: 'Gold: by Day 40 · Silver: by Day 55',
+    medal(g) { return g.day <= 45 ? 'gold' : g.day <= 60 ? 'silver' : 'bronze'; },
+    medalText: 'Gold: by Day 45 · Silver: by Day 60',
   },
 };
 for (const [k, c] of Object.entries(CHAPTERS)) SCENARIOS[k] = Object.assign({ campaign: true, decisions: true }, c);
