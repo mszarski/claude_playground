@@ -578,6 +578,8 @@ reward own IoU), half DeepCAD (gt IoU); invalid -0.5. Validation: DeepCAD view1 
 | rich view4 (own, 1989) | 80.4 | 65.2 | 81.4 | ~55.5 (test_0) |
 Paired single-pass vs previous best: DeepCAD view1 -1.99 +- 0.38, view4 -0.73 +- 0.32, view1+expert +0.02 +- 0.29;
 rich test_0 view1 +22.7 +- 0.75, view4 +25.1 +- 0.85. RL added +3.3 rich view4 over vlm_rich_v1 (77.1 -> 80.4).
+Paired guarded revision vs previous best (single): view1 -0.47 +- 0.34, view4 +0.14 +- 0.30, view1+expert
++0.96 +- 0.28 (`guard_picks.pkl`). So: tied on DeepCAD images, better with text, +25 on rich parts.
 
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
