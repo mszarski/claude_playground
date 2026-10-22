@@ -510,7 +510,7 @@ after step 1. Validation (vLLM greedy) start -> end: view1 87.0 -> 88.6, view4 9
 (+0.9-1.7). A single greedy answer now matches the earlier local best-of-9 selection (91.7) and is close to cadrille +
 RL (92.2, whole DeepCAD test set). Text inputs gain least; the RL mix had only 20 % text prompts.
 
-### Tier 1: rich-feature parts (`datagen/`, `scripts/gen_rich_data.py`; IN PROGRESS)
+### Tier 1: rich-feature parts (`datagen/`, `scripts/gen_rich_data.py`; done)
 Motivation (Spectral Labs "Quartz" post): learning CAD needs data with real engineering features and an executing
 environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers, revolves, holes, shells or patterns.
 - `datagen/README.md` is the spec. 21 generator families (`datagen/families/`): flange, l_bracket, u_bracket,
@@ -543,7 +543,7 @@ environment. Our training data (DeepCAD + CAD-Recode) has zero fillets, chamfers
   after RL gives back most of the RL gain on image modes; the GRPO top-up on both tasks (`vlm_grpo_rich`) is meant to
   recover it.
 
-### Tier 2: build-inspect-fix revision turn (IN PROGRESS)
+### Tier 2: build-inspect-fix revision turn (done)
 - Prompt: `mm.vlm_cad.revision_text` (task + previous program + build error, or its render as a 2nd image with the
   input cameras). Multi-image support in `_messages` / `encode_batch`.
 - Data: `scripts/build_revision.py` (job `revdata`, `/work/data/revision.tar`) from the RFT samples: 46,057 examples
@@ -580,6 +580,13 @@ Paired single-pass vs previous best: DeepCAD view1 -1.99 +- 0.38, view4 -0.73 +-
 rich test_0 view1 +22.7 +- 0.75, view4 +25.1 +- 0.85. RL added +3.3 rich view4 over vlm_rich_v1 (77.1 -> 80.4).
 Paired guarded revision vs previous best (single): view1 -0.47 +- 0.34, view4 +0.14 +- 0.30, view1+expert
 +0.96 +- 0.28 (`guard_picks.pkl`). So: tied on DeepCAD images, better with text, +25 on rich parts.
+**Step 600 (final, `results/vlm_grpo_rich/model`; `results/revise_grpo_rich{,_dc}`)**: DeepCAD gt IoU turn 1 /
+revision / guarded: view1 85.9 / 87.0 / **87.1**, view4 90.9 / 91.3 / **91.8**, view1+expert 89.0 / 89.4 / **89.9**;
+rich own view1 72.7 / 60.1 / 73.5, view4 80.2 / 65.2 / **81.4**. Paired vs `vlm_grpo_fullres` (single): one answer
+view1 -0.68 +- 0.32, view4 -0.73 +- 0.32, view1+expert -0.13 +- 0.30; **guarded revision view1 +0.55 +- 0.29, view4
++0.23 +- 0.29, view1+expert +0.71 +- 0.28**. Step 600 > step 400 on DeepCAD view1 (+1.0 guarded); chosen as final.
+Gallery: `scripts/gallery_rich.py` -> bucket `results/gallery/gallery_rich_view4.png`. A transient pip download
+error killed one revise job at install; relaunching unchanged worked.
 
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
@@ -590,7 +597,18 @@ method gets. **Quirk:** the "own" normalisation can collapse to ~0 for a correct
 bounding box inflated by stray geometry: 8-13 of ~1970 valid parts for our models, 1 for Claude, worth 0.2-0.4 points
 of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the gallery labels tiles with gt IoU.
 
-## Handoff (2026-10-19)
+## Handoff (2026-10-22)
+- **Best model: `results/vlm_grpo_rich/model`** (vlm_grpo_fullres -> imitation on DeepCAD + CAD-Recode + rich parts +
+  revision -> online RL on DeepCAD + rich). Use it with one revision round and the render guard
+  (`scripts/revise_vllm.py --rounds 1`, then `scripts/revise_guard.py`): DeepCAD test gt IoU view4 91.8, view1 87.1,
+  view1+expert 89.9 (all slightly above vlm_grpo_fullres); rich test own IoU view4 81.4 (was ~55).
+- Spend for the Tier 1/2 phase: ~$130 of the $200 budget.
+- **Next ideas:** rich-part revision data (GT always known; fixes the unguarded rich revision, 80 -> 65); families for
+  the weak spots (bent sheet, L-brackets, enclosures, extrusions, random_mix_hard 21 % invalid at SFT); best-of-N +
+  render picking on top; Qwen3-VL-4B.
+- Local rich test data: `data/rich/test/{0,1}` from bucket `data/rich/test_{0,1}.tar`.
+
+## Handoff (2026-10-19, superseded)
 - **Best single model: `results/vlm_grpo_fullres/model`** (RFT -> full-res 896 px grid -> online RL): test own IoU
   view4 91.4 (novel 88.4), view1 86.5, view1+expert 89.0, expert 81.5, invalid 1.4-2.2 %. Previous: vlm_grpo_v1 view4
   90.5, original SFT 89.1, Claude zero-shot 83.4, GenCAD ~22.

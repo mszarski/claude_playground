@@ -1,4 +1,4 @@
-# Image/text → CAD: project report (as of 2026-10-21)
+# Image/text → CAD: project report (as of 2026-10-22)
 
 ## Where we are, in one paragraph
 
@@ -10,6 +10,12 @@ everything. After post-training (rejection sampling, full-resolution inputs, onl
 our current best model, `vlm_grpo_fullres`, reaches **91.4 IoU from four views (88.4 on novel parts)** with a single
 answer. That is 4× GenCAD, 8 points above Claude Opus 5.5 zero-shot, and close to the best published result we
 know of (cadrille with RL, 92.2). It is a 2B model that runs locally; nothing at inference depends on a cloud API.
+
+**Update (Oct 22): realistic parts.** DeepCAD has no fillets, chamfers, holes, revolves, shells or patterns, and the
+best model scored only ~55 on such parts. We built 21 procedural part families (~1.1M checked parts), trained on them
+plus a "look at what you built and fix it" revision turn, then ran online RL on both kinds of parts. The new model,
+`vlm_grpo_rich`, scores **80–81 on realistic parts (+25)** and, with one revision turn guarded by render agreement,
+**slightly beats the previous best on every DeepCAD image mode** (4 views 91.8 vs 91.6). See section 11.
 
 ## The task and how we measure it
 
@@ -95,6 +101,34 @@ Galleries of real test parts (`scripts/gallery.py`, bucket `results/gallery/`): 
 every method; the RL models mostly win by turning broken or non-building outputs into correct solids; the main
 remaining failure is occasional code that does not build on simple parts (~1.5 % of parts).
 
+### 11. Realistic parts and a revision turn (Oct 21-22)
+- **Data (Tier 1).** 21 procedural CadQuery families (flanges, brackets, enclosures, gears, pulleys, shafts, knobs,
+  bent sheet, rib panels, random feature mixes...) written and audited by Claude sub-agents to one spec, every part
+  machine-checked (builds, one valid solid, sane size, deterministic). ~1.1M training parts on cheap CPU jobs; a
+  held-out test set of 1,989 parts (`datagen/`, `scripts/gen_rich_data.py`, `scripts/rich_iou.py`).
+- **Revision turn (Tier 2).** The model gets its own previous program plus either the build error or a render of what
+  it built, and writes a corrected program. Training data: 46k examples from the model's own DeepCAD attempts.
+- **Training.** Imitation training from the best model on a mix of DeepCAD, CAD-Recode, rich parts (40 %) and revision
+  examples (15 %), 10k steps (`vlm_rich_v1`), then 600 steps of online RL with half rich, half DeepCAD prompts
+  (`vlm_grpo_rich`). Imitation alone gained +24 on rich parts but cost 4-5 points on DeepCAD images (it undid the
+  earlier RL); the RL step recovered DeepCAD and added +3 on rich parts.
+- **Render-agreement guard.** On rich parts the revision turn rewrote most programs and *hurt* (77 → 62), because the
+  revision data was DeepCAD-only. Keeping a revision only when its render matches the input views better than the
+  first attempt's (no ground truth needed) makes it a gain everywhere.
+
+Final model `vlm_grpo_rich` (test sets; DeepCAD gt IoU, paired against `vlm_grpo_fullres` on the same 1,997 parts;
+rich parts own IoU, previous best measured on the 1,489 named-family parts):
+| input | previous best | new, one answer | new + guarded revision | paired diff (guarded) |
+|---|---|---|---|---|
+| DeepCAD 1 view | 86.6 | 85.9 | **87.1** | +0.55 ± 0.29 |
+| DeepCAD 4 views | 91.6 | 90.9 | **91.8** | +0.23 ± 0.29 |
+| DeepCAD 1 view + expert text | 89.1 | 89.0 | **89.9** | +0.71 ± 0.28 |
+| rich parts, 1 view | ~50.6 | 72.7 | **73.5** | ≈ +23 |
+| rich parts, 4 views | ~55.5 | 80.2 | **81.4** | ≈ +25 |
+Programs that fail to build: 0.6-1.1 % on DeepCAD with revision (was ~1.4 %); rich 2 % (was 9-11 %). Gallery:
+bucket `results/gallery/gallery_rich_view4.png`. Weakest rich families: bent sheet, L-brackets, enclosures,
+extrusions, the hardest random mixes.
+
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
 | model | 1 view | 4 views | 1 view + expert text | expert text only |
@@ -106,9 +140,11 @@ remaining failure is occasional code that does not build on simple parts (~1.5 %
 | vlm_cq_v1 (VLM, CadQuery + CAD-Recode) | 82.9 / 78.2 | 89.1 / 85.2 | 88.4 / 84.2 | 80.1 / 73.9 |
 | + online RL (`vlm_grpo_v1`) | 85.3 / 80.4 | 90.5 / 87.2 | 89.3 / 85.7 | 81.3 / 75.7 |
 | **+ full-res + online RL (`vlm_grpo_fullres`, best)** | **86.5 / 81.9** | **91.4 / 88.4** | 89.0 / 85.3 | **81.5 / 76.0** |
+| **rich + RL + guarded revision (`vlm_grpo_rich`, gt IoU)** | **87.1** / 82.5¹ | **91.8** / 88.1¹ | **89.9** / 85.6¹ | – |
 | local best-of-9 picking (on vlm_cq_v1) | – | 91.7 / 89.3 | 91.2 / 88.3 | – |
 | cadrille, published (whole DeepCAD test) | 81.7 (SFT) | 86.1 (SFT), 92.2 (+RL) | – | – |
 
+¹ Novel-part figures for the unguarded revision (the guard picks per part, novel split not tabulated).
 \* Scored with the earlier geometry script (gt normalisation), so indicative; the gap is far larger than any protocol
 difference. cadrille scores the whole DeepCAD test set, we score a 2000-part subset.
 
@@ -119,7 +155,10 @@ difference. cadrille scores the whole DeepCAD test set, we score a 2000-part sub
 - `train_vlm_rl.py`, `train_vlm_dpo.py`, `train_vlm_cq.py --rft`, `scripts/build_rft.py`: the other post-training
   methods.
 - `scripts/select_render.py`: render-agreement picking. `scripts/fallback.py`: fallback combination.
-- `scripts/claude_baseline.py`: the Claude zero-shot baseline. `scripts/gallery.py`: visual galleries.
+- `scripts/claude_baseline.py`: the Claude zero-shot baseline. `scripts/gallery.py`, `scripts/gallery_rich.py`:
+  visual galleries.
+- `datagen/` + `scripts/gen_rich_data.py`: rich-part generation and checks; `scripts/rich_iou.py`: scoring.
+- `scripts/revise_vllm.py`: the revision turn at inference; `scripts/revise_guard.py`: the render-agreement guard.
 - A per-model input setting (`gencad_vlm.json`), so every loader feeds a model the image layout it was trained on.
 
 ## Caveats
@@ -130,16 +169,18 @@ difference. cadrille scores the whole DeepCAD test set, we score a 2000-part sub
 - Remaining failures: complex stepped parts, and occasional code that fails to build (~1.5 %).
 
 ## Cost (Hugging Face compute; Claude API separately)
-Since the Claude baseline (Oct 15): roughly $300 of H200/A100 time across RL, sampling, RFT, DPO, full-res training,
-online RL runs and predictions; Claude API about $45 for the two zero-shot baselines. Earlier phases were not
-costed here.
+Since the Claude baseline (Oct 15): roughly $300 of H200/A100 time up to the full-res RL model; the realistic-parts
+phase (Oct 20-22) about $130 more (data generation ~$5, imitation training ~$62, RL ~$52, predictions ~$10) of a
+$200 budget. Claude API about $45 for the two zero-shot baselines. Earlier phases were not costed here.
 
 ## Possible next steps
-1. **Best-of-N with render picking on top of the best model.** No training needed; it gave +2.6 on the original
-   model and would also catch most code that fails to build.
-2. **More online RL with more text prompts** (only 20 % of RL steps used text, and text modes gained least), ~$40.
-3. **A larger base model (Qwen3-VL-4B) with the full recipe**, ~$200+.
+1. **Revision data from rich parts.** Ground truth is always available for generated parts, so the revision turn can
+   be trained on them directly; it should turn the unguarded rich revision from a loss into a gain (~$20).
+2. **More families aimed at the weak spots** (sheet metal, brackets with features on several faces, shells with
+   cut-outs), and harder random mixes.
+3. **Best-of-N with render picking** on top of the guarded revision (no training).
+4. **A larger base model (Qwen3-VL-4B) with the full recipe**, ~$200+.
 
 Where things are: code and notes on branch `claude/gencad-multimodal` (`gencad/`); models, predictions and per-part
-scores in the bucket `mszarski/gencad-work` (best model: `results/vlm_grpo_fullres/model`). Detailed lab notes,
+scores in the bucket `mszarski/gencad-work` (best model: `results/vlm_grpo_rich/model`; DeepCAD-only best: `results/vlm_grpo_fullres/model`). Detailed lab notes,
 commands and gotchas: `gencad/CLAUDE.md`.
