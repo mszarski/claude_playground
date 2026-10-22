@@ -154,7 +154,8 @@ def main():
     ap.add_argument("--recode_renders", default="data/recode_renders")
     ap.add_argument("--min_fidelity", type=float, default=0.95, help="drop DeepCAD conversions below this IoU")
     ap.add_argument("--deepcad_p", type=float, default=0.3, help="share of samples drawn from DeepCAD")
-    ap.add_argument("--revision", default=None, help="revision-turn data dir (scripts/build_revision.py)")
+    ap.add_argument("--revision", nargs="*", default=None,
+                    help="revision-turn data dirs (scripts/build_revision.py, scripts/sample_rich_rev.py)")
     ap.add_argument("--revision_p", type=float, default=0.15, help="share of samples drawn from --revision")
     ap.add_argument("--rich", default=None, help="rich-feature shards dir (scripts/gen_rich_data.py: <dir>/<shard>/)")
     ap.add_argument("--rich_p", type=float, default=0.4, help="share of samples drawn from --rich")
@@ -247,18 +248,25 @@ def main():
         print(f"[data] rich parts {len(items_rich)} from {a.rich}, share {a.rich_p}", flush=True)
     items_rev, w_rev = [], []
     if a.revision:
-        rv = pd.read_parquet(os.path.join(a.revision, "revision.parquet"))
+        rv = pd.concat([pd.read_parquet(os.path.join(d, "revision.parquet")).assign(root=d) for d in a.revision],
+                       ignore_index=True)
         rv = rv[rv.target.str.len() <= a.max_code_chars]
-        n_kind = rv.kind.map(lambda k: "keep" if k == "keep" else "fix").value_counts().to_dict()
+        if "input_stem" not in rv:
+            rv["input_stem"] = None
+        rv["k2"] = rv.kind.map(lambda k: "keep" if k == "keep" else "fix")
+        n_kind = rv.k2.value_counts().to_dict()
+        n_root_kind = rv.groupby(["root", "k2"]).size().to_dict()
         for row in rv.itertuples():
             rev = {"attempt": row.attempt, "error": row.error if isinstance(row.error, str) else None,
-                   "attempt_stem": os.path.join(a.revision, row.attempt_stem) if isinstance(row.attempt_stem, str)
+                   "attempt_stem": os.path.join(row.root, row.attempt_stem) if isinstance(row.attempt_stem, str)
                    else None}
-            items_rev.append((os.path.join(render_dir, row.uid), row.target, row.uid,
-                              (list(map(int, json.loads(row.views))), row.prompt or None), rev))
-            w_rev.append(1.0 / n_kind["keep" if row.kind == "keep" else "fix"])   # keep : fix = 1 : 1
+            stem = row.input_stem if isinstance(row.input_stem, str) else os.path.join(render_dir, row.uid)
+            items_rev.append((stem, row.target, row.uid, (list(map(int, json.loads(row.views))), row.prompt or None),
+                              rev))
+            w_rev.append(1.0 / n_root_kind[(row.root, row.k2)])   # each dir equal; keep : fix = 1 : 1 within a dir
         w_rev = np.array(w_rev) / sum(w_rev)
-        print(f"[data] revision examples {len(items_rev)} ({n_kind}), share {a.revision_p}", flush=True)
+        print(f"[data] revision examples {len(items_rev)} ({n_kind}) from {a.revision}, share {a.revision_p}",
+              flush=True)
     p_rft = a.rft_p if items_rft else 0.0
     p_rich = a.rich_p if items_rich else 0.0
     p_rev = a.revision_p if items_rev else 0.0

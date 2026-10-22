@@ -131,6 +131,7 @@ case "$STAGE" in
     cp /work/data/deepcad_cq.parquet /work/data/cad_recode.parquet data/
     if [[ "${RICH:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/train_*.tar; do tar -xf "$t" -C data/rich; done; fi
     if [[ "${REV:-0}" == "1" ]]; then tar -xf /work/data/revision.tar -C data; fi
+    if [[ "${REV_RICH:-0}" == "1" ]]; then tar -xf /work/data/rich_revision.tar -C data; fi
     python train_vlm_cq.py --data data --name "$RUN" --steps ${STEPS:-30000} "$@" ;;
 
   vlmrl)      # RL on IoU for the CadQuery writer (train_vlm_rl.py), DeepCAD parts only; INIT = SFT model dir
@@ -181,6 +182,13 @@ case "$STAGE" in
     cp /work/data/deepcad_cq.parquet data/
     python scripts/build_revision.py --chunks "${CHUNKS:-results/rft_v1}" --out data/revision "$@"
     tar -cf /work/data/revision.tar -C data revision && ls -la /work/data/revision.tar ;;
+
+  richrev)    # revision-turn data from rich parts: model attempts vs generator programs (scripts/sample_rich_rev.py)
+    need_cq     # INIT = model dir; RICH_SHARDS = train shards to sample from -> /work/data/rich_revision.tar
+    need_vllm
+    mkdir -p data/rich; for sh in ${RICH_SHARDS:-0 1 2 3 20 21}; do tar -xf "/work/data/rich/train_$sh.tar" -C data/rich; done
+    python scripts/sample_rich_rev.py --model "${INIT:?set INIT=<model dir>}" --rich data/rich/train --out data/rich_revision "$@"
+    tar -cf /work/data/rich_revision.tar -C data rich_revision && ls -la /work/data/rich_revision.tar ;;
 
   richgen)    # rich-feature parts (datagen/families) -> /work/data/rich/<split>_<shard>.tar (scripts/gen_rich_data.py)
     need_cq
