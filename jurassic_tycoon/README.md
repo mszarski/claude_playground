@@ -35,10 +35,11 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 | Right-drag, or drag with Inspect | Pan |
 | Mouse wheel / pinch | Zoom |
 | WASD / arrows | Pan |
-| Space, 1, 2, 3 | Pause / speed |
+| Space, 1–4 | Pause / speed |
 | E | Evacuation alarm |
 | O / K | Power / paddock overlays |
 | L | Jump to loose dinosaur |
+| B / M | Respond to a breach / select all rangers |
 | G | Dinosaur roster |
 | U or Ctrl+Z | Undo last construction, demolition or egg |
 | Y | Research |
