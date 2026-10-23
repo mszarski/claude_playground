@@ -82,6 +82,13 @@ function buildStarterPark(g, opts = {}) {
 
 function spawnIn(g, sp, box, n = 1) {
   const w = g.world;
+  // the starter paddock's trough must suit who lives there, or the rangers truck them straight out
+  const diet = SPECIES[sp].diet, inBox = (b) => b.x >= box[0] && b.x <= box[2] && b.y >= box[1] && b.y <= box[3];
+  const troughs = [...w.buildings.values()].filter((b) => BUILDINGS[b.type].feeds && inBox(b));
+  if (troughs.length && !troughs.some((b) => BUILDINGS[b.type].feeds === diet)) {
+    for (const b of troughs) b.type = diet === 'herb' ? 'feeder_h' : 'feeder_c';
+    w.invalidate(); w.computeRegions();
+  }
   for (let k = 0; k < n; k++) {
     for (let t = 0; t < 40; t++) {
       const x = randi(box[0] + 2, box[2] - 2), y = randi(box[1] + 2, box[3] - 2);
@@ -215,7 +222,7 @@ const SCENARIOS = {
   opening: {
     name: 'Opening Day',
     blurb: 'The new park opens to record crowds and your star attraction is an Indominus. On day two she figures out the walls.',
-    objective: 'Welcome 1,500 guests by Day 5 with fewer than 6 casualties',
+    objective: 'Welcome 1,400 guests by Day 5 with fewer than 6 casualties',
     setup(g) {
       g.money = 300000;
       const P = buildStarterPark(g, { staff: true, rexWall: true });
@@ -239,6 +246,13 @@ const SCENARIOS = {
           const walls = reg ? g.paddockFences(reg).filter((j) => isSolidFence(w.fence[j])) : [];
           walls.sort((a, b) => dist2(a % w.W, (a / w.W) | 0, g.start.x, g.start.y) - dist2(b % w.W, (b / w.W) | 0, g.start.x, g.start.y));
           for (const j of walls.slice(0, 2)) g.damageFence(j % w.W, (j / w.W) | 0, 99999, d);
+          // ...and she is already through it: step her out of the hole on the guests' side
+          if (walls.length) {
+            const hx = walls[0] % w.W, hy = (walls[0] / w.W) | 0;
+            const out = DIRS4.map(([dx, dy]) => [hx + dx, hy + dy]).filter(([x, y]) => w.dinoPass(x, y) && w.regionAt(x, y) !== reg)
+              .sort((a, b) => dist2(a[0], a[1], g.start.x, g.start.y) - dist2(b[0], b[1], g.start.x, g.start.y))[0];
+            if (out) { d.x = out[0] + 0.5; d.y = out[1] + 0.5; d.path = null; d.state = 'idle'; d.stateT = 0.5; }
+          }
           g.log(`${d.name} the Indominus vanished from the paddock cameras... then tore through the wall!`, 'bad', d, true);
         }
       }
@@ -247,11 +261,11 @@ const SCENARIOS = {
     medalText: 'Gold: no casualties by Day 4 · Silver: 2 or fewer casualties',
     check(g) {
       if (g.stats.deaths >= 6) return 'lose';
-      if (g.stats.guestsTotal >= 1500) return 'win';
+      if (g.stats.guestsTotal >= 1400) return 'win';
       if (g.day > 5) return 'lose';
       return null;
     },
-    progress(g) { return `Guests ${g.stats.guestsTotal}/1500 · Casualties ${g.stats.deaths}/5 · Day ${g.day}/5`; },
+    progress(g) { return `Guests ${g.stats.guestsTotal}/1400 · Casualties ${g.stats.deaths}/5 · Day ${g.day}/5`; },
   },
   siege: {
     name: 'Raptor Siege',

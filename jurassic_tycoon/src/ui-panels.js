@@ -22,7 +22,7 @@ class UIPanels {
       const status = d.carried ? '<span class="tag" style="background:#2a5a9a">AIRLIFT</span>' :
         d.sedatedT > 0 ? '<span class="tag" style="background:#4a4a8a">SEDATED</span>' :
           d.loose ? '<span class="tag" style="background:#b01e10">LOOSE!</span>' : '<span class="tag" style="background:#2a6a2a">CONTAINED</span>';
-      const sick = (d.sick > 0 ? '<span class="tag" style="background:#5a8a2a">SICK</span>' : '') + (d.unstable ? '<span class="tag" style="background:#6a2a7a" title="Dr. Wu\'s frog-DNA embryo: stronger and more easily stressed">UNSTABLE</span>' : '');
+      const sick = (d.sick > 0 ? '<span class="tag" style="background:#5a8a2a">SICK</span>' : '') + (d.unstable ? '<span class="tag" style="background:#6a2a7a" title="Dr. Wu\'s frog-DNA embryo: stronger and more easily stressed">UNSTABLE</span>' : '') + (d.rageT > 0 ? '<span class="tag" style="background:#c82020" title="Enraged: comfort means nothing until she calms down">ENRAGED</span>' : '');
       const diet = `<span class="tag" style="background:${sp.diet === 'carn' ? '#8a3a1a' : '#3a6a2a'}">${sp.diet === 'carn' ? 'CARNIVORE' : 'HERBIVORE'}</span>`;
       html += `<h2>${d.name}</h2><div class="sub">${sp.name} · <i>${sp.sci}</i></div><canvas class="portrait" id="portrait"></canvas>${status}${sick}${diet}`;
       html += `<div class="row"><span>Health</span><span>${Math.round(d.hp)}/${sp.hp}</span></div>${this.bar(d.hp, sp.hp, '#5ac85a')}`;

@@ -210,7 +210,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .rrow .mini i { position: absolute; left: 0; top: 0; bottom: 0; }
 .rhead { font-size: 14px; color: var(--dim); display: grid; grid-template-columns: 56px 1fr 70px 70px 70px 90px; gap: 8px; padding: 0 8px; }
 @media (max-width: 760px) { .rrow, .rhead { grid-template-columns: 40px 1fr 50px 50px 70px; } .rrow .hide, .rhead .hide { display: none; } }
-#ticker { position: absolute; left: 70px; right: 240px; bottom: 60px; z-index: 5; overflow: hidden; height: 24px; pointer-events: none; display: none; }
+#ticker { position: absolute; left: 70px; right: 240px; bottom: calc(var(--goalH, 60px) + 14px); z-index: 7; overflow: hidden; height: 24px; pointer-events: none; display: none; }
 #ticker span { position: absolute; white-space: nowrap; font-size: 18px; color: #f8e8b0; background: rgba(60,20,10,0.85); border: 2px solid #000; padding: 0 10px; }
 table.fin { width: 100%; border-collapse: collapse; font-size: 18px; }
 table.fin td { padding: 1px 6px; border-bottom: 1px solid #2a3a26; }

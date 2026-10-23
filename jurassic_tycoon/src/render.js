@@ -391,8 +391,13 @@ class Renderer {
     // floating texts / thoughts
     ctx.font = '8px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    for (const gu of g.guests) {
-      if (gu.thought && !gu.hidden && vis(gu.tx, gu.ty)) {
+    // one bubble per small patch of ground, so a crowd doesn't stack them into a wall of text
+    const taken = new Set();
+    for (const pass of [0, 1]) for (const gu of g.guests) {
+      if (gu.thought && !gu.hidden && (gu.thought === 'AAAH!') === !pass && vis(gu.tx, gu.ty)) {
+        const cell = (gu.tx >> 2) + ',' + (gu.ty >> 1);
+        if (taken.has(cell)) continue;
+        taken.add(cell);
         const tx = Math.round(gu.x * TILE), ty = Math.round(gu.y * TILE - 16);
         this.bubble(ctx, gu.thought, tx, ty, gu.thought === 'AAAH!' ? '#c82020' : '#1a1a1a');
       }

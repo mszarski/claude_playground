@@ -202,7 +202,8 @@ class Dino {
     }
     // Loose: rampage on buildings if stressed and big
     if (this.loose && this.sp.strength >= 5 && this.stress > 60 && chance(0.4)) {
-      const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => !!w.buildingAt(x, y), 900);
+      // the park, not its own feeding trough
+      const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => { const b = w.buildingAt(x, y); return !!b && !BUILDINGS[b.type].feeds; }, 900);
       if (p && p.length) { p.pop(); this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = true; return; }
     }
     // Clever girls: hungry loose raptors work at shelters they can smell people in
