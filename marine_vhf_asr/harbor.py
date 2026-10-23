@@ -143,6 +143,8 @@ def main(argv=None):
     parser.add_argument("--shares", default="0.6,0.25,0.15", help="commercial,small_craft,unknown speaker shares")
     parser.add_argument("--unknown-names", type=Path, help="Text file, one spoken name per line")
     parser.add_argument("--exclude-names", type=Path, help="Text file of spoken names never to use")
+    parser.add_argument("--min-listed", type=int, default=20,
+                        help="Skip moments with fewer moving class A vessels than this")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -153,7 +155,8 @@ def main(argv=None):
     n = 0
     with open(args.out, "w") as f:
         for rec in build_dialogues(regional, args.dialogues, args.seed, tuple(map(float, args.shares.split(","))),
-                                   read(args.unknown_names), frozenset(read(args.exclude_names))):
+                                   read(args.unknown_names), frozenset(read(args.exclude_names)),
+                                   args.min_listed):
             f.write(json.dumps(rec) + "\n")
             n += 1
     print(f"Wrote {n} transmissions from {args.dialogues} dialogues ({', '.join(sorted(regional))}) to {args.out}")
