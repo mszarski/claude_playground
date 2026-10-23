@@ -157,6 +157,9 @@ def main():
     ap.add_argument("--revision", nargs="*", default=None,
                     help="revision-turn data dirs (scripts/build_revision.py, scripts/sample_rich_rev.py)")
     ap.add_argument("--revision_p", type=float, default=0.15, help="share of samples drawn from --revision")
+    ap.add_argument("--rev_keep_rich", type=float, default=None,
+                    help="rich revision rows (with input_stem) whose attempt scores >= this keep the attempt as target "
+                         "(own IoU >= 0.98 is rare on rich parts, so 'leave it' examples are scarce otherwise)")
     ap.add_argument("--rich", default=None, help="rich-feature shards dir (scripts/gen_rich_data.py: <dir>/<shard>/)")
     ap.add_argument("--rich_p", type=float, default=0.4, help="share of samples drawn from --rich")
     ap.add_argument("--rich_max_chars", type=int, default=3000)
@@ -253,6 +256,11 @@ def main():
         rv = rv[rv.target.str.len() <= a.max_code_chars]
         if "input_stem" not in rv:
             rv["input_stem"] = None
+        if a.rev_keep_rich is not None:
+            hit = rv.input_stem.notna() & (rv.attempt_iou >= a.rev_keep_rich) & (rv.kind != "keep")
+            rv.loc[hit, "target"], rv.loc[hit, "kind"] = rv.loc[hit, "attempt"], "keep"
+            print(f"[data] rich revision rows relabelled keep (attempt >= {a.rev_keep_rich}): {int(hit.sum())}",
+                  flush=True)
         rv["k2"] = rv.kind.map(lambda k: "keep" if k == "keep" else "fix")
         n_kind = rv.k2.value_counts().to_dict()
         n_root_kind = rv.groupby(["root", "k2"]).size().to_dict()
