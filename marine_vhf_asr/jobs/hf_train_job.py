@@ -44,6 +44,6 @@ argv = sys.argv[1:]
 if os.environ.get("DATA_REPO"):
     # Source specs may refer to a Hub dataset folder as {DATA}, e.g. {DATA}/train/manifest.jsonl#mix
     data = snapshot_download(os.environ["DATA_REPO"], repo_type="dataset",
-                             allow_patterns=os.environ.get("DATA_PATTERNS", "*").split(","))
+                             allow_patterns=os.environ.get("DATA_PATTERNS", "*").split(","), max_workers=32)
     argv = [a.replace("{DATA}", data) for a in argv]
 main(argv)

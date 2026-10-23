@@ -50,6 +50,7 @@ from .normalize import normalize_transcript
 SR = 16000
 
 MAX_TRAIN_LIST = 120  # cap on candidate-list length in the #mix training mode
+DROP_SPEAKER = 0.5    # share of #mix lists with the spoken names removed (v4 used 0.3 and over-copied)
 
 _AMBIGUOUS_NUMBER = re.compile(r"\d{3,}|\d\s*[-.:°']\s*\d|\d[NSEW]\b")
 
@@ -220,11 +221,11 @@ def _manifest(path, context_key=""):
         padded = f" {r['text']} "
         if context_key == "mix":
             # Training mix over harbor.py lists: 30% no list, else moving_a or all;
-            # the spoken names are removed from 30% of lists ("speaker not listed")
+            # the spoken names are removed from DROP_SPEAKER of lists ("speaker not listed")
             rng = random.Random(int(hashlib.md5(r["audio"].encode()).hexdigest()[:8], 16))
             contexts = r.get("contexts") or {}
             names = [] if rng.random() < 0.3 or not contexts else list(contexts[rng.choice(sorted(contexts))] or [])
-            if names and rng.random() < 0.3:
+            if names and rng.random() < DROP_SPEAKER:
                 names = [n for n in names if f" {n} " not in padded]
             if len(names) > MAX_TRAIN_LIST:
                 # Long lists (~350 names in a busy harbor) make sequences very slow

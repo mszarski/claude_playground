@@ -27,7 +27,7 @@ verify = os.environ.get("VERIFY") == "1"
 if os.environ.get("DATA_REPO"):
     # Specs may refer to a Hub dataset folder as {DATA}, e.g. {DATA}/test/manifest.jsonl#all
     data = snapshot_download(os.environ["DATA_REPO"], repo_type="dataset",
-                             allow_patterns=os.environ.get("DATA_PATTERNS", "*").split(","))
+                             allow_patterns=os.environ.get("DATA_PATTERNS", "*").split(","), max_workers=32)
     specs = [s.replace("{DATA}", data) for s in specs]
 model, processor = evaluate.load_model(adapter=adapter)
 results, preds = {}, []

@@ -62,6 +62,8 @@ def main(argv=None):
     parser.add_argument("--from-text", type=Path,
                         help="Synthesize a text-only manifest (e.g. from harbor.py) instead of generating dialogues")
     parser.add_argument("--tts", choices=sorted(BACKENDS), default="kokoro")
+    parser.add_argument("--voice-set", choices=["all", "train", "test"], default="all",
+                        help="Kokoro voice subset; 'test' voices are never used for training data")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--clean-copies", action="store_true",
                         help="Also write an undegraded copy of each clip (for curriculum / debugging)")
@@ -70,7 +72,7 @@ def main(argv=None):
 
     rng = np.random.default_rng(args.seed)
     cfg = ChannelConfig()
-    tts = None if args.text_only else BACKENDS[args.tts]()
+    tts = None if args.text_only else BACKENDS[args.tts](voice_set=args.voice_set)
     records = _text_records(args.from_text) if args.from_text else _generated_records(args)
 
     wav_dir = args.out / "wav"

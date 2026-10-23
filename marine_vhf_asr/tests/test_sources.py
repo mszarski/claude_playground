@@ -70,7 +70,7 @@ def test_manifest_mix_varies_lists_and_drops_speaker(tmp_path):
     ctx = ds["context"]
     none = sum(not c for c in ctx) / len(ctx)
     absent = sum(bool(c) and "EVER GIVEN" not in c for c in ctx) / len(ctx)
-    assert 0.2 < none < 0.4 and 0.1 < absent < 0.35
+    assert 0.2 < none < 0.4 and 0.2 < absent < 0.5
     assert any("SEA LION" in c for c in ctx) and any(c and "SEA LION" not in c for c in ctx)
 
 
