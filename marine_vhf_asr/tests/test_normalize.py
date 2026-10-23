@@ -112,3 +112,14 @@ class TestDecoyCopyRate:
             ([], "X", "Y"),                                                  # no decoys: ignored
         ]
         assert decoy_copy_rate(examples) == pytest.approx(1 / 3)
+
+
+
+class TestNameCer:
+    def test_exact_spacing_insensitive_and_near_miss(self):
+        from marine_vhf_asr.metrics import name_cer
+        assert name_cer([({"v": "H T M S TAKSIN"}, "VTS HTMS TAKSIN GO AHEAD")]) == 0.0
+        near = name_cer([({"v": "CHARIKLIA JUNIOR"}, "VTS TO TREKLIER JUNIOR REDUCE SPEED")])
+        assert 0.2 < near < 0.5
+        assert name_cer([({"v": "SEA LION"}, "ROGER OVER")]) > 0.7
+        assert name_cer([]) == 0.0

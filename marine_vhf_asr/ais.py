@@ -89,11 +89,18 @@ class Vessel:
 
 
 def snapshot(df, t, lat0: float, lon0: float, radius_nm: float = 20.0, window_min: int = 10) -> List[Vessel]:
-    """Vessels heard within `radius_nm` of (lat0, lon0) in the `window_min` minutes before `t`."""
+    """
+    Vessels heard within `radius_nm` of (lat0, lon0) in the `window_min` minutes
+    before `t`. `df` must be sorted by its "t" column, as load() returns it.
+    """
     import pandas as pd
 
     t = pd.Timestamp(t)
-    w = df[(df["t"] > t - pd.Timedelta(minutes=window_min)) & (df["t"] <= t)]
+    # df is sorted by time (see load()), so slice the window by binary search
+    times = df["t"].values
+    lo = np.searchsorted(times, np.datetime64(t - pd.Timedelta(minutes=window_min)), side="right")
+    hi = np.searchsorted(times, np.datetime64(t), side="right")
+    w = df.iloc[lo:hi]
     w = w[haversine_nm(w.LAT.values, w.LON.values, lat0, lon0) <= radius_nm]
     out = []
     for mmsi, g in w.groupby("MMSI"):
@@ -112,7 +119,7 @@ def load(paths) -> "pd.DataFrame":
 
     df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
     df["t"] = pd.to_datetime(df.BaseDateTime)
-    return df.sort_values("t")
+    return df.sort_values("t", kind="stable").reset_index(drop=True)
 
 
 def candidate_lists(vessels: List[Vessel]) -> Dict[str, List[str]]:

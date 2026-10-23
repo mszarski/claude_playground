@@ -15,7 +15,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from .metrics import corpus_wer, decoy_copy_rate, slot_accuracy
+from .metrics import corpus_wer, decoy_copy_rate, name_cer, slot_accuracy
 from .prompting import (build_inputs, candidate_names, collapse_loops, max_new_tokens_for,
                         trim_runaway, verify_names)
 from .sources import SR, load_audio, load_source
@@ -65,6 +65,7 @@ def _score(ps, hyp_key):
     slotted = [(p["slots"], p[hyp_key]) for p in ps if p["slots"]]
     if slotted:
         m["slot_accuracy"] = slot_accuracy(slotted)["all"]
+        m["name_cer"] = name_cer(slotted)
     if any(p["decoys"] for p in ps):
         m["decoy_copy_rate"] = decoy_copy_rate((p["decoys"], p["text"], p[hyp_key]) for p in ps)
     return m

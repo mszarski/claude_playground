@@ -31,7 +31,8 @@ Sources (spec "name:split[#context][@max_examples]", e.g. "vhf8k:train#mix@2000"
     atc      jacktol/ATC-ASR-Dataset: real accented ATC over VHF. train/validation/test
     atcosim  jlvdoorn/atcosim: clean simulated ATC. train/validation
     <path>   a local JSONL manifest written by synthesize.py; "<path>#<key>" uses each
-             record's contexts[<key>] as the candidate list (see harbor.py)
+             record's contexts[<key>] as the candidate list (see harbor.py);
+             "<path>#mix" is a training mix over those lists
 """
 
 import hashlib
@@ -214,8 +215,18 @@ def _manifest(path, context_key=""):
     root = path.parent.resolve()
 
     def convert(r):
-        names = ((r.get("contexts") or {}).get(context_key) or []) if context_key else []
         padded = f" {r['text']} "
+        if context_key == "mix":
+            # Training mix over harbor.py lists: 30% no list, else moving_a or all;
+            # the spoken names are removed from 30% of lists ("speaker not listed")
+            rng = random.Random(int(hashlib.md5(r["audio"].encode()).hexdigest()[:8], 16))
+            contexts = r.get("contexts") or {}
+            names = [] if rng.random() < 0.3 or not contexts else list(contexts[rng.choice(sorted(contexts))] or [])
+            if names and rng.random() < 0.3:
+                names = [n for n in names if f" {n} " not in padded]
+            rng.shuffle(names)
+        else:
+            names = ((r.get("contexts") or {}).get(context_key) or []) if context_key else []
         return {
             "audio_ref": {"bytes": None, "path": str(root / r["audio"])},
             # JSON slots have per-row keys, which datasets would otherwise keep

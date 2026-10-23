@@ -93,3 +93,31 @@ def decoy_copy_rate(examples: Iterable[Tuple[List[str], str, str]]) -> float:
                for d in decoys):
             copied += 1
     return copied / total if total else 0.0
+
+
+def name_cer(examples: Iterable[Tuple[Dict[str, str], str]]) -> float:
+    """
+    Mean character error rate of slot values (e.g. vessel names) against the
+    closest span of the hypothesis, ignoring spaces ("H T M S" == "HTMS").
+
+    Unlike slot_accuracy this rewards near misses, which matters for names the
+    model has never heard: "TREKLIER JUNIOR" for "CHARIKLIA JUNIOR" scores ~0.4.
+
+    Args:
+        examples: (slots, hypothesis) pairs
+    """
+    total, n = 0.0, 0
+    for slots, hyp in examples:
+        words = normalize_transcript(hyp, expand_letters=False).split()
+        for value in slots.values():
+            target = normalize_transcript(value, expand_letters=False).replace(" ", "")
+            if not target:
+                continue
+            k = len(value.split())
+            best = len(target)
+            for w in range(1, k + 3):
+                for i in range(max(1, len(words) - w + 1)):
+                    best = min(best, edit_distance(list(target), list("".join(words[i:i + w]))))
+            total += min(1.0, best / len(target))
+            n += 1
+    return total / n if n else 0.0

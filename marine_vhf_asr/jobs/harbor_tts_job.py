@@ -21,10 +21,12 @@ from huggingface_hub import hf_hub_download, snapshot_download, upload_folder
 sys.path.insert(0, snapshot_download(os.environ["CODE_REPO"]))
 from marine_vhf_asr import synthesize  # noqa: E402
 
-repo, split = os.environ["DATA_REPO"], os.environ["SPLIT"]
-text = hf_hub_download(repo, f"{split}/text.jsonl", repo_type="dataset")
-out = f"/tmp/{split}"
-synthesize.main(["--out", out, "--from-text", text, "--tts", "kokoro", "--seed", os.environ.get("SEED", "0")])
-upload_folder(repo_id=repo, repo_type="dataset", folder_path=out, path_in_repo=split,
-              commit_message=f"Synthesized {split} audio")
-print("UPLOADED", flush=True)
+repo = os.environ["DATA_REPO"]
+for i, split in enumerate(os.environ["SPLIT"].split(",")):  # comma-separated splits, one seed each
+    text = hf_hub_download(repo, f"{split}/text.jsonl", repo_type="dataset")
+    out = f"/tmp/{split}"
+    seed = str(int(os.environ.get("SEED", "0")) + i)
+    synthesize.main(["--out", out, "--from-text", text, "--tts", "kokoro", "--seed", seed])
+    upload_folder(repo_id=repo, repo_type="dataset", folder_path=out, path_in_repo=split,
+                  commit_message=f"Synthesized {split} audio")
+    print("UPLOADED", split, flush=True)

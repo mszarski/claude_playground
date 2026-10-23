@@ -57,3 +57,18 @@ def test_manifest_context_key(tmp_path):
     ds = load_source(str(tmp_path / "m.jsonl") + "#all")
     assert "SEA LION" in ds[0]["context"] and "EVER GIVEN" in ds[0]["context"]
     assert json.loads(ds[0]["decoys"]) == ["MSC ISABELLA", "SEA LION"]
+
+
+def test_manifest_mix_varies_lists_and_drops_speaker(tmp_path):
+    wavfile.write(tmp_path / "a.wav", 16000, np.zeros(1600, dtype=np.float32))
+    with open(tmp_path / "m.jsonl", "w") as f:
+        for i in range(200):
+            f.write(json.dumps({"audio": f"a.wav?{i}", "text": "THIS IS EVER GIVEN OVER",
+                                "contexts": {"moving_a": ["EVER GIVEN", "MSC ISABELLA"],
+                                             "all": ["EVER GIVEN", "MSC ISABELLA", "SEA LION"]}}) + "\n")
+    ds = load_source(str(tmp_path / "m.jsonl") + "#mix")
+    ctx = ds["context"]
+    none = sum(not c for c in ctx) / len(ctx)
+    absent = sum(bool(c) and "EVER GIVEN" not in c for c in ctx) / len(ctx)
+    assert 0.2 < none < 0.4 and 0.1 < absent < 0.35
+    assert any("SEA LION" in c for c in ctx) and any(c and "SEA LION" not in c for c in ctx)
