@@ -232,6 +232,41 @@ else. It is the recommended adapter. Verification removes about a third to a
 half of the remaining wrong names at 2x inference cost; worth it where a
 wrong vessel name matters more than latency.
 
+## Results: New York Harbor with real AIS (v3, synthetic audio)
+
+Test set: 300 dialogues / 1,143 transmissions built by `harbor.py` from real
+NOAA AIS for NY Harbor on three held-out days (2024-07-16, 2024-10-08,
+2024-12-03), receiver at VTS New York (Staten Island), Kokoro TTS + VHF channel
+simulation. Real vessel names; about a quarter of speakers are small craft.
+
+What a receiver hears (10-minute window, 20 nm): median 353 vessels; class A
+transponders that moved: median 85. Those are the two candidate lists tested.
+
+| Condition | WER | Vessel names correct (listed) | (not listed) | Wrong list name |
+|---|---|---|---|---|
+| No list | 17.1% | – | 40% | – |
+| Moving class A list (~100 names) | **7.5%** | **86%** | 40% | 0.9% |
+| Everything in range (~380 names) | **7.6%** | **80%** | – | 1.0% |
+| Moving class A + verification | 8.1% | 84% | 40% | 0.7% |
+| Everything + verification | 8.1% | 78% | – | 0.7% |
+
+- Real AIS lists work, and a ~380-name list (4x longer than any in training)
+  is almost as good as the filtered ~100-name list.
+- Wrong names stay under 1% even with 380 names, so verification is not
+  worth its cost here (it loses ~2 points of names and 0.5 points of WER).
+- No-list WER is higher than on VHF-8K (17% vs 13%): US vessel names are new
+  to the model, and about 2.5 points come from letter-spacing conventions
+  ("M S C" vs "MSC").
+- Failure modes seen: spoken letters written as NATO words ("L Y N N" →
+  "LIMA YANKEE NINE", learned from ATC data where letters are spoken that
+  way); concatenated AIS names ("OCEANQUEENROCKSTAR"); occasional ATC phrasing
+  on short calls. The test set also used a since-fixed rule that spelled
+  "LYNN" as letters.
+- 85% of the vessel names mentioned on the test days also appear in AIS on
+  other days (71% for small craft): a harbor's fleet is fairly stable, so
+  training on the port's own AIS-driven dialogues should help, including for
+  vessels that are not on the candidate list.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and

@@ -14,7 +14,9 @@ from marine_vhf_asr import ais  # noqa: E402
     ("MSC ISABELLA", "M S C ISABELLA"),
     ("JOHN J HARVEY", "JOHN J HARVEY"),
     ("ARMY CORPS NYSB-4", "ARMY CORPS N Y S B FOUR"),
-    ("SEA & SKY", "SEA AND S K Y"),
+    ("SEA & SKY", "SEA AND SKY"),
+    ("HEIDI LYNN", "HEIDI LYNN"),
+    ("FDNY BRAVEST", "F D N Y BRAVEST"),
 ])
 def test_spoken_name(raw, spoken):
     assert ais.spoken_name(raw) == spoken

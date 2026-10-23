@@ -20,7 +20,9 @@ import numpy as np
 from .normalize import cardinal, normalize_transcript, spell_digits
 
 EARTH_RADIUS_NM = 3440.065
-VOWELS = set("AEIOU")  # "NYPD" is read as letters
+VOWELS = set("AEIOUY")
+# Vowel-less tokens are read as letters; these contain a Y but are acronyms too
+LETTER_ACRONYMS = {"NYPD", "FDNY", "NYFD", "NYSB", "NYS", "NYC", "NY", "NYWW", "NYCDEP", "NYCEDC"}
 
 # MarineCadastre VesselType codes, grouped by how a vessel uses the radio
 TYPE_GROUPS = {
@@ -58,7 +60,7 @@ def spoken_name(ais_name: str) -> Optional[str]:
             continue
         if tok.isdigit():
             words.append(cardinal(tok) if len(tok) <= 2 else spell_digits(tok))
-        elif len(tok) == 1 or (len(tok) <= 4 and not set(tok) & VOWELS):
+        elif len(tok) == 1 or tok in LETTER_ACRONYMS or (len(tok) <= 4 and not set(tok) & VOWELS):
             words.extend(tok)
         else:
             words.append(tok)
