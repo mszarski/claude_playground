@@ -267,6 +267,56 @@ transponders that moved: median 85. Those are the two candidate lists tested.
   training on the port's own AIS-driven dialogues should help, including for
   vessels that are not on the candidate list.
 
+## Results: general model across regions (v4, partial)
+
+Goal: one model for any port and any vessel, including vessels on no list.
+Real AIS from 9 regions (NOAA: New York, Houston, LA/Long Beach, San Francisco,
+Puget Sound, New Orleans, Port Arthur; Danish Maritime Authority: Great Belt,
+Oresund). v4 trains on the general mix plus `harbor.py` dialogues from 7
+regions (11k transmissions). **New York and Oresund are held out**, and every
+vessel name seen in their AIS is excluded from training (6% overlap removed).
+About 17% of test speakers are "unknown" vessels: on no candidate list and
+never seen in training (NY test uses Oresund names, and vice versa).
+
+The v4 run timed out (long candidate lists slowed training ~2x) and its
+step-2000 checkpoint upload failed, so these numbers are from **step 1500 of
+2756** (1.1 epochs). Fixes are in `train.py` (list cap, adapter pushed before
+eval, resumable checkpoints).
+
+| Held-out test, no list | v3 WER | v4@1500 WER | v3 names / CER | v4@1500 names / CER |
+|---|---|---|---|---|
+| New York, all speakers | 16.1% | **4.7%** | 45% / 0.16 | **69% / 0.05** |
+| New York, unknown vessels | 19.7% | 6.7% | 23% / 0.26 | **56% / 0.09** |
+| Oresund, all speakers | 22.4% | **5.6%** | 26% / 0.26 | **61% / 0.07** |
+| Oresund, unknown vessels | 17.7% | 3.4% | 43% / 0.20 | **73% / 0.06** |
+
+| With candidate list | v3 WER / names | v4@1500 WER / names |
+|---|---|---|
+| New York, moving class A (~100) | 7.7% / 76% | 1.8% / 88% |
+| New York, all in range (~380) | 8.5% / 76% | 1.8% / 89% |
+| Oresund, moving class A (~25) | 10.6% / 76% | 2.2% / 89% |
+| Oresund, all in range (~260) | 10.4% / 73% | 1.4% / 94% |
+
+Regressions vs v3 on the general sets:
+
+| | v3 | v4@1500 |
+|---|---|---|
+| VHF-8K, speaker not on 25-name list: wrong name used | 3.8% | **13.5%** |
+| VHF-8K, speaker on 25-name list: names | 93% | 96% |
+| VHF-8K no list WER | 12.9% | 13.2% |
+| MARTTS WER | 7.6% | 9.8% |
+| ATC (real radio) WER | 9.7% | 10.8% |
+
+Caveats:
+- Train and test dialogues come from the same generator, Kokoro voices and
+  channel simulator. Much of the drop in overall WER is the model learning
+  those templates and voices, and will not carry over to real radio. The name
+  metrics are more meaningful (the names are genuinely unseen), but even they
+  benefit from the TTS pronouncing spellings consistently.
+- The VHF-8K wrong-name regression matters for safety; v4 saw fewer
+  "speaker not on the list" examples relative to list examples than v3.
+- Step 1500 is mid-schedule; MARTTS/ATC may recover with full training.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and
