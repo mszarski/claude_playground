@@ -49,6 +49,8 @@ from .normalize import normalize_transcript
 
 SR = 16000
 
+MAX_TRAIN_LIST = 120  # cap on candidate-list length in the #mix training mode
+
 _AMBIGUOUS_NUMBER = re.compile(r"\d{3,}|\d\s*[-.:°']\s*\d|\d[NSEW]\b")
 
 
@@ -224,6 +226,12 @@ def _manifest(path, context_key=""):
             names = [] if rng.random() < 0.3 or not contexts else list(contexts[rng.choice(sorted(contexts))] or [])
             if names and rng.random() < 0.3:
                 names = [n for n in names if f" {n} " not in padded]
+            if len(names) > MAX_TRAIN_LIST:
+                # Long lists (~350 names in a busy harbor) make sequences very slow
+                # to train on; keep the spoken names and sample the rest
+                spoken = [n for n in names if f" {n} " in padded]
+                others = [n for n in names if f" {n} " not in padded]
+                names = spoken + rng.sample(others, MAX_TRAIN_LIST - len(spoken))
             rng.shuffle(names)
         else:
             names = ((r.get("contexts") or {}).get(context_key) or []) if context_key else []

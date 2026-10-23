@@ -72,3 +72,19 @@ def test_manifest_mix_varies_lists_and_drops_speaker(tmp_path):
     absent = sum(bool(c) and "EVER GIVEN" not in c for c in ctx) / len(ctx)
     assert 0.2 < none < 0.4 and 0.1 < absent < 0.35
     assert any("SEA LION" in c for c in ctx) and any(c and "SEA LION" not in c for c in ctx)
+
+
+def test_manifest_mix_caps_long_lists(tmp_path):
+    from marine_vhf_asr.sources import MAX_TRAIN_LIST
+    wavfile.write(tmp_path / "a.wav", 16000, np.zeros(1600, dtype=np.float32))
+    many = [f"VESSEL {i}" for i in range(400)] + ["EVER GIVEN"]
+    with open(tmp_path / "m.jsonl", "w") as f:
+        for i in range(60):
+            f.write(json.dumps({"audio": f"a.wav?{i}", "text": "THIS IS EVER GIVEN OVER",
+                                "contexts": {"all": many}}) + "\n")
+    ds = load_source(str(tmp_path / "m.jsonl") + "#mix")
+    from marine_vhf_asr.prompting import candidate_names
+    lists = [candidate_names(c) for c in ds["context"] if c]
+    assert lists and all(len(names) <= MAX_TRAIN_LIST for names in lists)
+    with_speaker = [names for names in lists if "EVER GIVEN" in names]
+    assert with_speaker  # the spoken name survives the cap when it is meant to be listed
