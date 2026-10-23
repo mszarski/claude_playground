@@ -161,6 +161,8 @@ def main(argv=None):
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--grad-accum", type=int, default=4)
     parser.add_argument("--save-steps", type=int, default=500)
+    parser.add_argument("--resume", action="store_true",
+                        help="Resume from --hub-model-id's last-checkpoint/ (after a timeout)")
     parser.add_argument("--trackio-project", help="Log to Trackio under this project")
     parser.add_argument("--trackio-space", help="Trackio Space to sync to, e.g. <user>/trackio")
     args = parser.parse_args(argv)
@@ -199,7 +201,9 @@ def main(argv=None):
                         trackio_space_id=args.trackio_space, run_name=args.output.name)
 
     push = dict(push_to_hub=True, hub_model_id=args.hub_model_id, hub_private_repo=True,
-                hub_strategy="every_save") if args.hub_model_id else {}
+                # "checkpoint" also uploads optimizer state to last-checkpoint/, so a
+                # run that times out can be resumed with --resume
+                hub_strategy="checkpoint") if args.hub_model_id else {}
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
@@ -227,11 +231,24 @@ def main(argv=None):
         eval_dataset=eval_ds,
         data_collator=VoxtralCollator(processor, args.model),
     )
-    trainer.train()
+    resume = None
+    if args.resume and args.hub_model_id:
+        from huggingface_hub import snapshot_download
+        local = snapshot_download(args.hub_model_id, allow_patterns=["last-checkpoint/*"])
+        resume = str(Path(local) / "last-checkpoint")
+        print(f"Resuming from {args.hub_model_id}/last-checkpoint")
+    trainer.train(resume_from_checkpoint=resume)
 
     adapter_dir = args.output / "adapter"
     model.save_pretrained(adapter_dir)
     processor.save_pretrained(adapter_dir)
+    if args.hub_model_id:
+        # Push the trained adapter before the (long) evaluation, so a timeout
+        # or eval failure cannot lose it
+        from huggingface_hub import upload_folder
+        upload_folder(repo_id=args.hub_model_id, folder_path=str(adapter_dir),
+                      commit_message="Final adapter (before evaluation)")
+        print(f"Pushed adapter to https://huggingface.co/{args.hub_model_id}", flush=True)
 
     model.eval()
     all_preds = []
