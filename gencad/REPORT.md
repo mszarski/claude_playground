@@ -129,6 +129,13 @@ Programs that fail to build: 0.6-1.1 % on DeepCAD with revision (was ~1.4 %); ri
 bucket `results/gallery/gallery_rich_view4.png`. Weakest rich families: bent sheet, L-brackets, enclosures,
 extrusions, the hardest random mixes.
 
+Follow-up (Oct 23): revision examples from rich parts (25.6k, the model's own attempts with the generator program
+as target) trained into a separate revision model (`vlm_rev_v2`; imitation training again eroded first-attempt
+quality, so the first attempt still comes from `vlm_grpo_rich`). The unguarded revision no longer hurts rich parts
+(80.2 → 80.2 instead of → 65.2), and with the guard rich parts gain +0.75 ± 0.32 (4 views, 82.1) and +1.0 ± 0.33
+(1 view, 74.5) while DeepCAD is unchanged within ±0.4. Small, and it costs a second model; the revision turn cannot
+fix parts the model does not know how to build (bent sheet, enclosures, L-brackets got slightly worse).
+
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
 | model | 1 view | 4 views | 1 view + expert text | expert text only |
@@ -171,11 +178,11 @@ difference. cadrille scores the whole DeepCAD test set, we score a 2000-part sub
 ## Cost (Hugging Face compute; Claude API separately)
 Since the Claude baseline (Oct 15): roughly $300 of H200/A100 time up to the full-res RL model; the realistic-parts
 phase (Oct 20-22) about $130 more (data generation ~$5, imitation training ~$62, RL ~$52, predictions ~$10) of a
-$200 budget. Claude API about $45 for the two zero-shot baselines. Earlier phases were not costed here.
+$200 budget; ~$40 more for the rich revision data and `vlm_rev_v2` (~$170 in total). Claude API about $45 for the two zero-shot baselines. Earlier phases were not costed here.
 
 ## Possible next steps
-1. **Revision data from rich parts.** Ground truth is always available for generated parts, so the revision turn can
-   be trained on them directly; it should turn the unguarded rich revision from a loss into a gain (~$20).
+1. **Better first attempts on the weak families** (done: rich revision data only made the revision safe, +0.75):
+   RL focused on bent sheet, brackets and enclosures, or more varied data for them.
 2. **More families aimed at the weak spots** (sheet metal, brackets with features on several faces, shells with
    cut-outs), and harder random mixes.
 3. **Best-of-N with render picking** on top of the guarded revision (no training).

@@ -588,6 +588,24 @@ view1 -0.68 +- 0.32, view4 -0.73 +- 0.32, view1+expert -0.13 +- 0.30; **guarded 
 Gallery: `scripts/gallery_rich.py` -> bucket `results/gallery/gallery_rich_view4.png`. A transient pip download
 error killed one revise job at install; relaunching unchanged worked.
 
+### Rich-part revision data (`vlm_rev_v2`; Oct 23)
+- Data: `scripts/sample_rich_rev.py` (job `richrev`, H200, ~3.5 h, ~$20; scoring/rendering 45k attempts dominates):
+  `vlm_grpo_rich` attempts on 15k rich train parts (shards 0-3, 20-21; greedy + 2 samples at T 0.8), scored own IoU
+  vs the generator program -> 25,647 rows -> `/work/data/rich_revision.tar`. Greedy own IoU 73.6 on train parts;
+  only 2.9 % of attempts reach own 0.98, so `train_vlm_cq.py --rev_keep_rich 0.95` relabels attempts >= 0.95 as keep.
+- Training: from `vlm_grpo_rich`, `--revision data/revision data/rich_revision --revision_p 0.5 --rich_p 0.2 --lr 5e-6
+  --steps 2000` (each revision dir weighted equally, keep:fix 1:1 within a dir), ~6 s/step, ~3.5 h, ~$18. As before,
+  imitation erodes the RL gains on turn 1 (DeepCAD val view1 81.9 vs 88.9), so it is used **only for the revision turn**
+  (`revise_vllm.py --revise_model`; turn 1 stays `vlm_grpo_rich`, two vLLM engines at 0.42 GPU memory each).
+- Test (`results/revise_v2_{rich,dc}`): the unguarded rich revision is no longer harmful (view4 80.2 -> 80.2, was ->
+  65.2; view1 72.4 -> 72.2) but adds nothing on its own; it still loses on the weakest families (bent sheet 52.6 ->
+  51.0, enclosure 63.6 -> 60.6, L-bracket 66.3 -> 62.4) and gains on bushing, stepped shaft, rib panel. With the
+  guard, paired vs the single-model guarded pipeline: rich view1 +1.01 +- 0.33 (74.5), view4 +0.75 +- 0.32 (82.1);
+  DeepCAD view1 -0.39 +- 0.19 (86.8), view4 -0.11 +- 0.16 (91.7), view1+expert +0.21 +- 0.17 (90.1).
+- Verdict: a small rich gain at the cost of a second model. The single-model guarded pipeline stays the default;
+  the revision turn cannot fix what the model cannot see how to build (weak families need better first attempts:
+  more/better data for those families, or RL focused on them).
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
@@ -602,7 +620,7 @@ of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the galler
   revision -> online RL on DeepCAD + rich). Use it with one revision round and the render guard
   (`scripts/revise_vllm.py --rounds 1`, then `scripts/revise_guard.py`): DeepCAD test gt IoU view4 91.8, view1 87.1,
   view1+expert 89.9 (all slightly above vlm_grpo_fullres); rich test own IoU view4 81.4 (was ~55).
-- Spend for the Tier 1/2 phase: ~$130 of the $200 budget.
+- Spend for the Tier 1/2 phase: ~$130, plus ~$40 for rich revision data + `vlm_rev_v2` (total ~$170 of $200).
 - **Next ideas:** rich-part revision data (GT always known; fixes the unguarded rich revision, 80 -> 65); families for
   the weak spots (bent sheet, L-brackets, enclosures, extrusions, random_mix_hard 21 % invalid at SFT); best-of-N +
   render picking on top; Qwen3-VL-4B.
