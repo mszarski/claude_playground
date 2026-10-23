@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11,<3.12"
-# dependencies = ["chatterbox-tts", "datasets>=3,<4", "pyarrow>=15,<18", "soundfile", "scipy", "huggingface_hub"]
+# dependencies = ["chatterbox-tts", "datasets>=3,<4", "pyarrow>=15,<18", "setuptools<81", "soundfile", "scipy", "huggingface_hub"]
 # ///
 """
 Synthesize a text-only manifest (harbor.py output) with Kokoro + the VHF channel

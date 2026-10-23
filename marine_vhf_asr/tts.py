@@ -72,6 +72,11 @@ class ChatterboxBackend:
         from chatterbox.tts import ChatterboxTTS
         from datasets import Audio, load_dataset
 
+        import perth
+        if perth.PerthImplicitWatermarker is None:
+            # The neural watermarker's native backend failed to import; the
+            # watermark is irrelevant here, so use the library's no-op one
+            perth.PerthImplicitWatermarker = perth.DummyWatermarker
         self.model = ChatterboxTTS.from_pretrained(device="cuda")
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(decode=False))
