@@ -887,6 +887,16 @@ class UI {
     }
     if (g.goalIdx >= GOALS.length) { el.innerHTML = `<b>ALL GOALS COMPLETE</b>Spared no expense. Keep building!`; return; }
     const goal = GOALS[g.goalIdx];
+    // eggs already in: say so, or the Show me button invites buying a second clutch
+    if (goal.id === 'hatch1' && g.eggs.length) {
+      const e = g.eggs.reduce((a, b) => (b.t < a.t ? b : a));
+      const hrs = Math.max(1, Math.ceil(e.t / g.secPerHour));
+      this.eggGoalKey = hrs;
+      el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}<br><span style="color:var(--dim)">${g.eggs.length > 1 ? g.eggs.length + ' eggs' : 'Egg'} incubating: hatches in ~${hrs}h of game time.</span> <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>`;
+      $('#goalBtn').onclick = () => { this.sfx.play('click'); this.centerOn(e.x, e.y); };
+      return;
+    }
+    this.eggGoalKey = null;
     el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}${goal.tool ? ' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>' : ''}`;
     const gb = $('#goalBtn');
     if (gb) gb.onclick = () => this.showMeTool(goal.tool);
@@ -931,6 +941,10 @@ class UI {
       const sc = SCENARIOS[g.scenario], p = $('#scProg');
       if (p) p.textContent = sc.progress(g);
       if (sc.hints) { const h = GOALS.slice(0, 12).find((x) => !x.check(g)); if ((h ? h.id : null) !== this.hintId) this.renderGoal(); }
+    } else if (this.speed === 0) g.checkGoals(); // building while paused still ticks goals off
+    if (!g.scenario && GOALS[g.goalIdx] && GOALS[g.goalIdx].id === 'hatch1') {
+      const k = g.eggs.length ? Math.max(1, Math.ceil(Math.min(...g.eggs.map((e) => e.t)) / g.secPerHour)) : null;
+      if (k !== this.eggGoalKey) this.renderGoal();
     }
     this.infoT -= 0.2;
     if (this.infoT <= 0) { this.infoT = 0.4; this.renderInfo(false); }
