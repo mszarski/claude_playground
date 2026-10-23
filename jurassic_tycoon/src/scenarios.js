@@ -269,7 +269,7 @@ const SCENARIOS = {
   },
   siege: {
     name: 'Raptor Siege',
-    blurb: 'A raptor pack is loose and the gate is sealed. The rescue helicopter lands on Day 3 at noon. Keep the guests alive until then.',
+    blurb: 'A raptor pack is loose and the gate is sealed. The rescue helicopter lands on Day 3 at noon. Keep the guests alive until then: get Bunkers up and the alarm on before you unpause.',
     objective: 'Lose fewer than 8 guests before Day 3, 12:00',
     setup(g) {
       g.money = 200000;
