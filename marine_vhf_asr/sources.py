@@ -30,7 +30,8 @@ Sources (spec "name:split[#context][@max_examples]", e.g. "vhf8k:train#mix@2000"
              adds the undegraded audio (train only).
     atc      jacktol/ATC-ASR-Dataset: real accented ATC over VHF. train/validation/test
     atcosim  jlvdoorn/atcosim: clean simulated ATC. train/validation
-    <path>   a local JSONL manifest written by synthesize.py
+    <path>   a local JSONL manifest written by synthesize.py; "<path>#<key>" uses each
+             record's contexts[<key>] as the candidate list (see harbor.py)
 """
 
 import hashlib
@@ -199,18 +200,32 @@ def _hf_text_audio(repo, name):
     return load
 
 
-def _manifest(path):
+def _manifest(path, context_key=""):
+    """
+    A local JSONL manifest. With `context_key`, each record's
+    `contexts[context_key]` list of names becomes the candidate-vessel prompt
+    (harbor.py writes `moving_a` and `all`); listed names that are not in the
+    transcript are its decoys.
+    """
     from datasets import load_dataset
 
     path = Path(path)
     ds = load_dataset("json", data_files=str(path), split="train")
     root = path.parent.resolve()
-    # Rebuild audio/slots as new columns: JSON slots have per-row keys, which
-    # datasets would otherwise keep as a sparse struct column
-    ds = ds.map(lambda r: {
-        "audio_ref": {"bytes": None, "path": str(root / r["audio"])},
-        "slots_json": json.dumps({k: v for k, v in (r.get("slots") or {}).items() if v is not None}),
-    }, remove_columns=[c for c in ds.column_names if c != "text"])
+
+    def convert(r):
+        names = ((r.get("contexts") or {}).get(context_key) or []) if context_key else []
+        padded = f" {r['text']} "
+        return {
+            "audio_ref": {"bytes": None, "path": str(root / r["audio"])},
+            # JSON slots have per-row keys, which datasets would otherwise keep
+            # as a sparse struct column
+            "slots_json": json.dumps({k: v for k, v in (r.get("slots") or {}).items() if v is not None}),
+            "context": prompt_text(names),
+            "decoys": json.dumps([n for n in names if f" {n} " not in padded]),
+        }
+
+    ds = ds.map(convert, remove_columns=[c for c in ds.column_names if c != "text"])
     ds = ds.rename_columns({"audio_ref": "audio", "slots_json": "slots"})
     return _finish(ds, path.stem)
 
@@ -229,8 +244,9 @@ def load_source(spec: str, seed: int = 0):
     if "@" in spec:
         spec, n = spec.rsplit("@", 1)
         limit = int(n)
-    if spec.endswith(".jsonl"):
-        ds = _manifest(spec)
+    if spec.split("#")[0].endswith(".jsonl"):
+        path, _, key = spec.partition("#")
+        ds = _manifest(path, "" if key == "none" else key)
     else:
         name, _, split = spec.partition(":")
         if name not in LOADERS:

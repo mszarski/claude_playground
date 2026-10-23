@@ -43,3 +43,17 @@ def test_local_manifest(tmp_path):
     assert json.loads(ds[0]["slots"]) == {"channel": "ONE SIX"}
     assert json.loads(ds[1]["slots"]) == {"vessel": "RED KITE"}
     assert len(load_audio(ds[0]["audio"])) == 1600
+
+
+def test_manifest_context_key(tmp_path):
+    wavfile.write(tmp_path / "a.wav", 16000, np.zeros(1600, dtype=np.float32))
+    rec = {"audio": "a.wav", "text": "NEW YORK TRAFFIC THIS IS EVER GIVEN OVER",
+           "slots": {"vessel_0": "EVER GIVEN"},
+           "contexts": {"moving_a": ["EVER GIVEN", "MSC ISABELLA"], "all": ["EVER GIVEN", "MSC ISABELLA", "SEA LION"]}}
+    with open(tmp_path / "m.jsonl", "w") as f:
+        f.write(json.dumps(rec) + "\n")
+    plain = load_source(str(tmp_path / "m.jsonl"))
+    assert plain[0]["context"] == "" and json.loads(plain[0]["decoys"]) == []
+    ds = load_source(str(tmp_path / "m.jsonl") + "#all")
+    assert "SEA LION" in ds[0]["context"] and "EVER GIVEN" in ds[0]["context"]
+    assert json.loads(ds[0]["decoys"]) == ["MSC ISABELLA", "SEA LION"]

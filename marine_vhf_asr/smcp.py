@@ -99,6 +99,8 @@ class DialogueGenerator:
         return self.rng.random() < p
 
     def _vessel(self) -> str:
+        if getattr(self, "_names", None):
+            return self._names.pop(0)
         return (self._choice(VESSEL_PREFIXES) + self._choice(VESSEL_WORDS)).strip()
 
     def _callsign(self) -> str:
@@ -193,15 +195,16 @@ class DialogueGenerator:
         vessel = self._vessel()
         berth = self._choice(port.berths) if port.berths else "the inner harbour"
         ch = self._channel(self._choice(port.vts_channels))
-        tugs = number_words(int(self.rng.integers(1, 4)))
+        n_tugs = int(self.rng.integers(1, 4))
+        tugs = f"{number_words(n_tugs)} tug{'s' if n_tugs > 1 else ''}"
         side = self._choice(["port", "starboard"])
         return [
             Turn("shore", f"{vessel}, {port.vts}. INSTRUCTION: proceed to {berth}, "
-                          f"{side} side alongside. {tugs.capitalize()} tugs will meet you "
+                          f"{side} side alongside. {tugs.capitalize()} will meet you "
                           f"at the breakwater, over.",
                  {"berth": berth, "side": side}),
             Turn("vessel", f"{port.vts}, {vessel}. Proceed to {berth}, {side} side alongside, "
-                           f"{tugs} tugs at the breakwater, over.", {"berth": berth}),
+                           f"{tugs} at the breakwater, over.", {"berth": berth}),
             Turn("shore", f"{vessel}, correct. Switch to {ch} for berthing, over.",
                  {"channel": ch.split(" ", 1)[1]}),
             Turn("vessel", f"Switching to {ch}, {vessel}.", {"vessel": vessel}),
@@ -297,8 +300,19 @@ class DialogueGenerator:
 
     # --------------------------------------------------------------------- API
 
-    def generate(self, scenario: Optional[str] = None, port: Optional[Port] = None) -> Dialogue:
-        """Generate one dialogue, choosing scenario and port at random if not given."""
+    def generate(self, scenario: Optional[str] = None, port: Optional[Port] = None,
+                 vessels: Optional[List[str]] = None) -> Dialogue:
+        """
+        Generate one dialogue, choosing scenario and port at random if not given.
+
+        Args:
+            vessels: Vessel names to use, in order of appearance (e.g. real names
+                from an AIS snapshot); random names fill in if there are too few
+        """
         scenario = scenario or self._choice(list(self.scenarios))
         port = port or self._choice(self.ports)
-        return Dialogue(scenario, port.name, self.scenarios[scenario](port))
+        self._names = list(vessels or [])
+        try:
+            return Dialogue(scenario, port.name, self.scenarios[scenario](port))
+        finally:
+            self._names = []
