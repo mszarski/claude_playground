@@ -118,7 +118,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 .deal.mod { box-shadow: inset 3px 0 0 #70b8f0; color: #cfe4f0; }
 .deal i { font-style: normal; color: var(--gold); }
 /* RTS squad bar */
-#squad { position: absolute; left: 50%; transform: translateX(-50%); bottom: 8px; z-index: 11; padding: 5px 10px; font-size: 17px; max-width: min(520px, calc(100vw - 420px)); text-align: center; }
+#squad { position: absolute; left: calc(var(--goalR, 490px) + 12px); bottom: 8px; z-index: 11; padding: 5px 10px; font-size: 17px; max-width: min(520px, calc(100vw - var(--goalR, 490px) - 300px)); text-align: center; }
 #squad .sqhead { font-family: 'Press Start 2P'; font-size: 9px; color: var(--gold); line-height: 1.6; }
 #squad .sqhead span { color: var(--dim); font-family: 'VT323'; font-size: 16px; }
 #squad .sqhint { color: var(--dim); font-size: 15px; }

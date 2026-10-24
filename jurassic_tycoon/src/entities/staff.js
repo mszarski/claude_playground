@@ -53,7 +53,7 @@ class Staff {
         const s = d.sp.danger * 10 - dist(this.x, this.y, d.x, d.y);
         if (s > bs) { bs = s; best = d; }
       }
-      if (best !== this.target) { this.target = best; this.path = null; }
+      if (best !== this.target) { this.target = best; this.path = null; if (!best) this.state = 'idle'; }
       if (this.target) {
         const d = this.target;
         const dd = dist(this.x, this.y, d.x, d.y);
