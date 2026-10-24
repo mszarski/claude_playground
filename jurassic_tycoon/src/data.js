@@ -172,7 +172,7 @@ const SEASONS = [
 
 const TOOL_GROUPS = [
   { id: 'inspect', label: 'Inspect', tools: ['inspect'] },
-  { id: 'build', label: 'Build', tools: ['path', 'widepath', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'clear'] },
+  { id: 'build', label: 'Build', tools: ['path', 'widepath', 'route', 'track', 'fence', 'paddock', 'wall', 'demolish', 'trees', 'pond', 'clear'] },
   { id: 'guest', label: 'Guests', tools: ['gate', 'visitor', 'restaurant', 'shop', 'restroom', 'viewing', 'tour', 'gyro', 'feedshow', 'arena', 'hotel', 'shelter', 'lamp', 'lagoon'] },
   { id: 'infra', label: 'Power', tools: ['power', 'pylon', 'backup', 'siren'] },
   { id: 'staff', label: 'Staff', tools: ['ranger', 'maint', 'helipad', 'vet'] },
@@ -190,6 +190,7 @@ const TOOL_INFO = {
   wall: { name: 'Concrete Wall', cost: 900, desc: 'Drag. Very strong, needs no power.', key: 'V' },
   demolish: { name: 'Demolish', cost: 0, desc: 'Drag to remove paths, fences and buildings.', key: 'X' },
   trees: { name: 'Plant Trees', cost: 80, desc: 'Drag to plant jungle. Dinos love cover.', key: 'T' },
+  pond: { name: 'Dig Pond', cost: 150, desc: 'Drag to dig water. A pond in a paddock makes most dinos happier; the Spinosaurus needs one.' },
   clear: { name: 'Clear Land', cost: 40, desc: 'Drag to clear jungle.', key: 'C' },
   hatch: { name: 'Hatch Dinosaur', desc: 'Pick a species, then click inside a paddock.', key: 'H' },
 };

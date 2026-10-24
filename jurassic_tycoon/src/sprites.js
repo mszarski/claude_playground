@@ -1320,6 +1320,14 @@ function buildIcons() {
     'dddddddddddd',
     'dDddddddddDd',
   ], { G: '#4f8a32', d: '#c8a878', D: '#a88858' });
+  ICONS.pond = mk([
+    'GGGGGGGGGGGG',
+    'GGGwwwwwwGGG',
+    'GGwwbwwwwwGG',
+    'GwwwwwwbwwwG',
+    'GGwwwwwwwwGG',
+    'GGGwwwwwwGGG',
+  ], { G: '#4f8a32', w: '#3a7ad0', b: '#a8d0f8' });
   ICONS.route = mk([
     'GGGGGGGGGGGG',
     'GddddGGGGGGG',

@@ -455,6 +455,19 @@ class Game {
     w.terrain[i] = T_FOREST; w.invalidate(x, y);
     return true;
   }
+  // dig a pond: water in a paddock comforts most species and the Spinosaurus needs it
+  digPond(x, y) {
+    const w = this.world;
+    if (!w.inb(x, y)) return false;
+    const i = w.idx(x, y), t = w.terrain[i];
+    if (!(t === T_GRASS || t === T_FOREST || t === T_SAND) || w.path[i] || w.track[i] || w.bld[i] || w.fence[i]) return false;
+    if (this.creatures().some((d) => !d.isPtera && d.tx === x && d.ty === y) || this.guests.some((gu) => gu.tx === x && gu.ty === y)) return false;
+    if (!this.canAfford(TOOL_INFO.pond.cost)) return false;
+    this.spend(TOOL_INFO.pond.cost);
+    this.recordUndo({ kind: 'terrain', x, y, prev: t, now: T_WATER, cost: TOOL_INFO.pond.cost });
+    w.terrain[i] = T_WATER; w.invalidate(x, y);
+    return true;
+  }
   clearLand(x, y) {
     const w = this.world;
     if (!w.inb(x, y)) return false;
