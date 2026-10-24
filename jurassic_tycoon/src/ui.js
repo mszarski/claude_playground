@@ -744,12 +744,16 @@ class UI {
     const syncTop = () => document.documentElement.style.setProperty('--top', tb.offsetHeight + 'px');
     const goalEl = $('#goal');
     const syncGoal = () => {
-      document.documentElement.style.setProperty('--goalH', (goalEl.offsetHeight || 0) + 'px');
-      document.documentElement.style.setProperty('--goalR', (goalEl.offsetLeft + goalEl.offsetWidth || 0) + 'px');
+      // the squad bar and ticker make room for whichever bottom-left panel is showing: the goal, or the tutorial
+      const tutEl = $('#tut');
+      const panel = goalEl.offsetWidth ? goalEl : tutEl && tutEl.offsetWidth ? tutEl : null;
+      document.documentElement.style.setProperty('--goalH', (panel ? panel.offsetHeight : 0) + 'px');
+      document.documentElement.style.setProperty('--goalR', (panel ? panel.offsetLeft + panel.offsetWidth : 70) + 'px');
     };
+    this.syncGoal = syncGoal;
     const dealsEl = $('#deals');
     const syncDeals = () => document.documentElement.style.setProperty('--dealsH', (dealsEl.hidden ? 0 : dealsEl.offsetHeight + 4) + 'px');
-    if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); new ResizeObserver(syncDeals).observe(dealsEl); }
+    if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); if ($('#tut')) new ResizeObserver(syncGoal).observe($('#tut')); new ResizeObserver(syncDeals).observe(dealsEl); }
     syncTop();
     mm.addEventListener('mousedown', (e) => { mmNav(e); this.mmDrag = true; });
     window.addEventListener('mousemove', (e) => { if (this.mmDrag) mmNav(e); });
