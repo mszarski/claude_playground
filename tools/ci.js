@@ -39,6 +39,11 @@ const TESTS = [
       for (let i = 0; i < 30 * 10; i++) GAME.update(1 / 30);
       const before = GAME.dinos.map((d) => [d.name, d.growth.toFixed(3), d.ageDays.toFixed(3), d.loose]).join('|');
       const rep = GAME.reputation, esc = GAME.stats.escapes, closed = GAME.parkClosed;
+      // things in flight: an egg, a blackout, the alarm, a queued fence
+      const d0 = GAME.dinos[0];
+      GAME.eggs.push({ species: 'galli', x: d0.tx, y: d0.ty, t: 5, max: 8 });
+      GAME.events.trigger('outage'); GAME.alarm = true; GAME.queueFence(3, 3, F_WALL, 30);
+      const outage = GAME.world.power.outage;
       const json = serialize(GAME);
       const g = loadGame(json);
       const after = g.dinos.map((d) => [d.name, d.growth.toFixed(3), d.ageDays.toFixed(3), d.loose]).join('|');
@@ -47,6 +52,10 @@ const TESTS = [
       if (Math.abs(g.reputation - rep) > 0.01) out.push('reputation ' + rep + ' -> ' + g.reputation);
       if (g.stats.escapes !== esc) out.push('escapes ' + esc + ' -> ' + g.stats.escapes);
       if (g.parkClosed !== closed) out.push('parkClosed ' + closed + ' -> ' + g.parkClosed);
+      if (g.eggs.length !== 1 || g.eggs[0].t !== 5) out.push('egg lost');
+      if (Math.abs(g.world.power.outage - outage) > 0.01) out.push('outage ' + outage + ' -> ' + g.world.power.outage);
+      if (!g.alarm) out.push('alarm lost');
+      if (!g.pendingFences.length) out.push('queued fence lost');
       return out.length ? out : 'ok';
     })()`,
     check: (r) => r === 'ok',

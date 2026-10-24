@@ -44,8 +44,12 @@ function serialize(g) {
     v: 1, size: g.mapSize, sph: g.secPerHour, lastInc: g.lastIncidentDay, closed: g.parkClosed ? 1 : 0,
     mods: g.mods || [], contracts: g.contracts || [], freeEgg: g.freeEgg || null, seenDec: g.seenDecisions || {}, nextDec: g.nextDecisionDay || 0, decOn: g.decisionsOn !== false, research: { done: [...g.research.done], active: g.research.active }, breedOff: !!g.breedingOff, seed: g.seed, diff: g.difficulty, scen: g.scenario || null, scenState: g.scenarioState || null, money: g.money, time: g.time, rep: g.reputation, ticket: g.ticket, goalIdx: g.goalIdx, sandbox: !!g.sandbox,
     stats: g.stats, history: g.history, deathLog: g.deathLog, auto: g.events.auto, nextDay: g.events.nextDay, start: g.start,
+    // anything in flight when the player saved: eggs, crises, queued fences
+    eggs: g.eggs.map((e) => ({ s: e.species, x: e.x, y: e.y, t: e.t, max: e.max, un: e.unstable ? 1 : 0 })), pend: g.pendingFences || [],
+    ev: { storm: g.events.storm, quake: g.events.quake, volcano: g.events.volcano, outage: w.power.outage, bDelay: w.power.backupDelay, bFuel: w.power.backupFuel },
+    alarm: g.alarm ? 1 : 0, gateLocked: g.gateLocked ? 1 : 0, lavaT: b64(new Uint8Array(w.lavaT.buffer)),
     terrain: b64(w.terrain), fence: b64(w.fence), fenceOrig: b64(w.fenceOrig), path: b64(w.path), track: b64(w.track), fenceHp: b64(new Uint8Array(w.fenceHp.buffer)),
-    buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0 })),
+    buildings: Array.from(w.buildings.values()).map((b) => ({ type: b.type, x: b.x, y: b.y, hp: b.hp, visitors: b.visitors, revenue: b.revenue || 0, esc: b.escaped ? 1 : 0, door: b.doorsBroken ? 1 : 0, off: b.offline > 0 ? b.offline : 0 })),
     dinos: g.creatures().filter((d) => !d.dead).map((d) => ({ s: d.species, x: d.x, y: d.y, hx: d.home.x, hy: d.home.y, hp: d.hp, hu: d.hunger, st: d.stress, n: d.name, sick: d.sick, k: d.kills, gr: d.growth, ag: d.ageDays, ls: d.lifespan, un: d.unstable ? 1 : 0, lo: d.loose ? 1 : 0 })),
   });
 }
@@ -69,6 +73,7 @@ function loadGame(json) {
   for (const bd of s.buildings) {
     const b = w.addBuilding(bd.type, bd.x, bd.y);
     b.hp = bd.hp; b.visitors = bd.visitors; b.revenue = bd.revenue;
+    if (bd.esc) b.escaped = true; if (bd.door) b.doorsBroken = true; if (bd.off) b.offline = bd.off;
     const def = BUILDINGS[bd.type];
     if (def.staff) for (let k = 0; k < def.staffN; k++) g.staff.push(new Staff(g, def.staff, b));
     if (bd.type === 'helipad') g.helis.push(new Helicopter(g, b));
@@ -91,6 +96,14 @@ function loadGame(json) {
   g.seenDecisions = s.seenDec || {}; g.nextDecisionDay = s.nextDec || 0; g.decisionsOn = s.decOn !== false;
   if (s.research) { g.research.done = new Set(s.research.done); g.research.active = s.research.active; g.research.apply(); }
   if (s.scen) { g.scenario = s.scen; g.scenarioState = s.scenState || {}; }
+  if (s.lavaT) w.lavaT.set(unb64(s.lavaT, Float32Array));
+  g.eggs = (s.eggs || []).map((e) => ({ species: e.s, x: e.x, y: e.y, t: e.t, max: e.max, unstable: !!e.un }));
+  g.pendingFences = s.pend || [];
+  if (s.ev) {
+    g.events.storm = s.ev.storm || null; g.events.quake = s.ev.quake || 0; g.events.volcano = s.ev.volcano || null;
+    w.power.outage = s.ev.outage || 0; if (s.ev.bDelay !== undefined) w.power.backupDelay = s.ev.bDelay; if (s.ev.bFuel !== undefined) w.power.backupFuel = s.ev.bFuel;
+  }
+  g.alarm = !!s.alarm; g.gateLocked = !!s.gateLocked;
   w.invalidate(); w.computeRegions(); w.computePower(g); g.updateLoose();
   for (const d of g.dinos) d.wasLooseFlag = d.loose;
   return g;
