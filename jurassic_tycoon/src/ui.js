@@ -988,6 +988,10 @@ class UI {
       const backup = g.hasBuilding('backup') && w.power.backupFuel > 0 && w.power.backupDelay <= 0;
       out.push(`<div class="alert red" data-act="none">⚡ GRID DOWN ${Math.ceil(w.power.outage)}s${backup ? ' · BACKUP ON' : ''} <button data-act="reboot">Manual restart $15k</button></div>`);
     }
+    if (w.power.outage <= 0 && w.power.demand > w.power.supply && !g.buildingsOfType('power').some((b) => b.offline > 0)) {
+      const dark = [...w.buildings.values()].filter((b) => BUILDINGS[b.type].power && !b.powered && (w.covered[w.idx(b.x, b.y)] || w.covered[w.idx(b.x + b.w - 1, b.y + b.h - 1)])).length;
+      if (dark) out.push(`<div class="alert amber" data-act="none">⚡ POWER SHORTAGE · ${dark} BUILDING${dark > 1 ? 'S' : ''} DARK · needs ${Math.round(w.power.demand)} MW, has ${Math.round(w.power.supply)} <button data-act="buildpower">Build Power Plant</button></div>`);
+    }
     const s = g.events.storm;
     if (s) out.push(`<div class="alert ${s.phase === 'active' ? 'blue' : 'amber'}">⛈ ${s.phase === 'warn' ? 'STORM INCOMING ' + Math.ceil(s.t) + 's' : 'TROPICAL STORM ' + Math.ceil(s.t) + 's'}</div>`);
     const v = g.events.volcano;
@@ -1014,6 +1018,7 @@ class UI {
             if (g.world.power.outage > 8 && g.canAfford(15000)) { g.spend(15000, 'ops'); g.world.power.outage = 8; g.log('Engineers are rebooting the grid manually...', 'info', null, true); }
           } else if (a === 'volcano') this.centerOn(w.volcano.x, w.volcano.y);
           else if (a === 'alarm') this.toggleAlarm();
+          else if (a === 'buildpower') this.showMeTool('power');
           else if (a === 'feedall') { const n = g.replaceLostFeeders(true); this.toast(n ? `Added ${n} feeder${n > 1 ? 's' : ''}.` : 'No room for a feeder (or not enough money).', n ? 'good' : 'warn'); if (n) this.sfx.play('build'); }
           else if (a === 'starve') { const x = g.hungryWithoutFood()[0]; if (x) this.centerOn(x.d.tx, x.d.ty); }
         };

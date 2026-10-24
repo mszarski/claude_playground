@@ -368,7 +368,10 @@ class World {
       for (let k = 0; k < n; k++) this.fencePowered[fenceTiles[k]] = 1;
       left = 0;
     }
-    consumers.sort((a, b) => (BUILDINGS[a.type].cat === 'staff' ? -1 : 0) - (BUILDINGS[b.type].cat === 'staff' ? -1 : 0));
+    // when power runs short: staff and safety first, then what guests can't do without, rides and shows last
+    const ESSENTIAL = { shelter: 1, siren: 1, hatchery: 2, restroom: 2, restaurant: 2, visitor: 2, lamp: 3 };
+    const rank = (b) => (BUILDINGS[b.type].cat === 'staff' ? 0 : ESSENTIAL[b.type] || 4);
+    consumers.sort((a, b) => rank(a) - rank(b));
     for (const b of consumers) {
       const need = BUILDINGS[b.type].power;
       if (left >= need) { b.powered = true; left -= need; }
