@@ -371,6 +371,51 @@ What this shows:
 - Every number here is still synthetic speech. Real recordings are the only
   way to know real-world accuracy; the Chatterbox rows are the better guide.
 
+## Results: multi-engine training (v6) on an unseen TTS engine
+
+v6 = v5 with the AIS training dialogues voiced by three engines, a third each:
+Kokoro (training voices), Piper (11 voice models, including the L2-ARCTIC
+non-native English speakers) and Chatterbox. Same 22k clips, same settings.
+Adapter: `mszarski/voxtral-3B-marine-vhf-v6` (private).
+
+Test engine: **Parler-TTS**, which no training data uses (MARTTS, in the training
+mix, was itself made with Chatterbox, so the earlier Chatterbox test was not
+fully clean). Half the New York / Oresund test dialogues (Parler is slow).
+
+**Parler garbles a lot of its output.** An independent check with Whisper
+large-v3 on the same 200 transmissions: 19% WER on Chatterbox, 27% on Kokoro,
+49% on Parler. So Parler clips are scored only if Whisper recovers at least 80%
+of their non-name words (`jobs/whisper_judge_job.py`): 57% of New York clips
+and 43% of Oresund clips pass. Names are excluded from that judgement, but
+Parler also mispronounces names, so name accuracy on Parler is pessimistic for
+every model.
+
+| Intelligible Parler clips: WER / names right | v5 | v6 |
+|---|---|---|
+| New York, no list | 24.0% / 16% | **20.6%** / 16% |
+| New York, moving class A list | 18.0% / 49% | **13.5% / 56%** |
+| Oresund, no list | 27.3% / 8% | **24.1%** / 9% |
+| Oresund, moving class A list | 19.6% / 46% | **16.2% / 51%** |
+| Unknown vessels (no list), names right NY / Oresund | 12% / 20% | 11% / 25% |
+
+Regression checks:
+
+| | v5 | v6 |
+|---|---|---|
+| VHF-8K no list WER | 12.7% | 12.5% |
+| VHF-8K, speaker on 25-name list: names right | 95% | 96% |
+| VHF-8K, speaker not on list: wrong name used | 4.0% | 3.8% |
+| MARTTS WER | 7.5% | 8.6% |
+| ATC (real radio) WER | 9.4% | 9.6% |
+
+- Training on several engines gives a consistent 13-25% relative WER
+  reduction on an engine neither model has heard, in both regions, with and
+  without a list, and 5-9 more points of names when a list is given.
+- It does not help unknown vessels: their names stay at roughly 10-25% exactly
+  right (CER ~0.4 on Parler audio), and no list can help them by definition.
+- No meaningful regressions; MARTTS (48 dialogues) is 1 point worse.
+- v6 is the recommended adapter.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and
