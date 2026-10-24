@@ -474,7 +474,12 @@ class Game {
     const w = this.world;
     const sp = SPECIES[species];
     if (!this.hasBuilding('hatchery')) return 'Build a Hatchery first.';
-    if (!this.buildingsOfType('hatchery').some((b) => b.powered)) return 'The Hatchery has no power.';
+    if (!this.buildingsOfType('hatchery').some((b) => b.powered)) {
+      const p = this.world.power;
+      if (p.outage > 0) return 'The Hatchery has no power: the grid is down.';
+      if (p.demand > p.supply) return `The Hatchery has no power: the grid is overloaded (${Math.round(p.demand)}/${Math.round(p.supply)} MW). Build another Power Plant.`;
+      return 'The Hatchery has no power: put it inside the blue power coverage.';
+    }
     if (!this.isUnlocked(species)) return `Requires a ${sp.unlock}-star rating (or genome research).`;
     if (sp.flying) {
       const b = w.buildingAt(x, y);
@@ -606,7 +611,7 @@ class Game {
 
   onFenceRebuilt(x, y) { this.burst(x + 0.5, y + 0.5, '#f8e080', 6); }
 
-  humanKilled(h, dino) {
+  humanKilled(h, dino, cause) {
     if (h.dead) return;
     h.dead = true;
     this.burst(h.x, h.y, '#c82020', 14);
@@ -617,12 +622,12 @@ class Game {
       this.reputation = Math.max(0, this.reputation - 5);
       this.spend(30000, 'fines');
       this.removeGuest(h, false);
-      this.log(dino ? `A guest was ${dino.isPtera ? 'carried off' : 'eaten'} by ${dino.name} the ${dino.sp.name}! Lawsuit: -$30k` : 'A guest was killed! Lawsuit: -$30k', 'bad', { x: h.x, y: h.y }, true);
+      this.log(dino ? `A guest was ${dino.isPtera ? 'carried off' : 'eaten'} by ${dino.name} the ${dino.sp.name}! Lawsuit: -$30k` : `A guest was ${cause || 'killed'}! Lawsuit: -$30k`, 'bad', { x: h.x, y: h.y }, true);
     } else {
       this.stats.staffDeaths++;
       this.reputation = Math.max(0, this.reputation - 2);
       const role = h.role === 'ranger' ? 'ranger' : 'engineer';
-      this.log(dino ? `${role === 'ranger' ? 'A ranger' : 'An engineer'} was killed by ${dino.name} the ${dino.sp.name}!` : `${role === 'ranger' ? 'A ranger' : 'An engineer'} was killed!`, 'bad', { x: h.x, y: h.y }, true);
+      this.log(dino ? `${role === 'ranger' ? 'A ranger' : 'An engineer'} was killed by ${dino.name} the ${dino.sp.name}!` : `${role === 'ranger' ? 'A ranger' : 'An engineer'} was ${cause || 'killed'}!`, 'bad', { x: h.x, y: h.y }, true);
       // rehire after a delay
       const home = h.home;
       setTimeoutSim(this, 30, () => { if (this.world.buildings.has(home.id)) { this.staff.push(new Staff(this, h.role, home)); this.spend(5000, 'ops'); } });
@@ -921,7 +926,7 @@ class Game {
     if (j.wrecked) return;
     j.wrecked = 8;
     const n = j.riders.length;
-    for (const r of j.riders) { r.hidden = false; r.x = j.x; r.y = j.y; this.humanKilled(r, null); }
+    for (const r of j.riders) { r.hidden = false; r.x = j.x; r.y = j.y; this.humanKilled(r, null, 'killed when a tour jeep was flipped'); }
     j.riders = [];
     this.burst(j.x, j.y, '#3a8a3a', 14); this.burst(j.x, j.y, '#c82020', n * 4);
     this.shake = Math.max(this.shake, 4);
