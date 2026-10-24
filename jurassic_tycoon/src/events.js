@@ -37,7 +37,17 @@ class Events {
         g.sound('thunder');
       } else if (s.phase === 'active') {
         s.strikeT -= dt;
-        if (s.strikeT <= 0) { s.strikeT = randf(1.8, 4.5); this.strike(); }
+        if (s.strikeT <= 0) {
+          s.strikeT = randf(1.8, 4.5);
+          // the aviary dome is the tallest thing on the island
+          const av = g.buildingsOfType('aviary');
+          if (av.length && chance(0.15)) { const a = pick(av); this.strike(randi(a.x, a.x + a.w - 1), randi(a.y, a.y + a.h - 1)); } else this.strike();
+        }
+        // high winds tear at the aviary mesh
+        for (const a of g.buildingsOfType('aviary')) {
+          g.damageBuilding(a, dt * randf(3, 7) * (g.mod('stormproof', 0) ? 0.5 : 1), null);
+          if (!s.meshLogged) { s.meshLogged = true; g.log('High winds are tearing at the Aviary mesh! If it gives way, the Pteranodons get out.', 'warn', a, true); }
+        }
         s.flickerT -= dt;
         if (s.flickerT <= 0) {
           s.flickerT = randf(6, 12);
@@ -215,10 +225,10 @@ class Events {
     }
   }
 
-  strike() {
+  strike(ax, ay) {
     const g = this.game, w = g.world;
-    let tx, ty;
-    const r = rand();
+    let tx = ax, ty = ay;
+    const r = ax === undefined ? rand() : 1;
     const blds = Array.from(w.buildings.values());
     if (r < 0.35 && blds.length) { const b = pick(blds); tx = b.x + randi(0, b.w - 1); ty = b.y + randi(0, b.h - 1); }
     else if (r < 0.75) {
