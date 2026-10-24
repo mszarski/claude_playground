@@ -198,6 +198,16 @@ class Dino {
         if (p) { this.path = p; this.pi = 0; this.state = 'graze'; if (!p.length) this.arrive(); return; }
       }
     }
+    // The Indominus schemes: every few days she picks a spot along her wall and works at it, calm or not
+    if (this.sp.camo && !this.loose && this.growth >= 1) {
+      this.schemeT = (this.schemeT === undefined ? randf(2, 4) * 24 : this.schemeT) - (this.decideClock ? (g.time - this.decideClock) : 0);
+      this.decideClock = g.time;
+      if (this.schemeT <= 0 && this.deterT <= 0 && this.planFenceAttack(true, true)) {
+        this.schemeT = randf(2, 4) * 24; this.scheming = true;
+        g.log(`${this.name} the ${this.sp.name} is clawing at her wall... Engineers need to get there before she's through.`, 'bad', this, true);
+        return;
+      }
+    }
     // The hum stops: a predator notices the moment its fence goes quiet
     if (!this.loose && this.deterT <= 0 && this.sp.diet === 'carn' && (w.power.outage > 0 || w.power.ratio < 1) && chance(0.35)) {
       if (this.planFenceAttack(true)) {
@@ -275,13 +285,13 @@ class Dino {
       this.state = 'eat'; this.stateT = 4;
       return;
     } else if (this.state === 'tofence') {
-      this.state = 'attack'; this.attackCD = 0.4; this.attackT = randf(8, 16);
+      this.state = 'attack'; this.attackCD = 0.4; this.attackT = this.scheming ? randf(28, 40) : randf(8, 16); this.schemeBout = this.scheming; this.scheming = false;
       return;
     }
     this.state = 'idle'; this.stateT = randf(1, 4);
   }
 
-  planFenceAttack(clever) {
+  planFenceAttack(clever, force) {
     const w = this.game.world;
     const isFence = (x, y) => {
       if (!w.inb(x, y)) return false;
@@ -293,7 +303,7 @@ class Dino {
       // Raptors look for the weakest point: unpowered or damaged fence along their paddock
       const reg = w.regionAt(this.tx, this.ty);
       if (reg) {
-        let best = null, bestScore = -1;
+        let best = null, bestScore = -Infinity;
         for (let k = 0; k < 60; k++) {
           const t = reg.tiles[Math.floor(rand() * reg.tiles.length)];
           const x = t % w.W, y = (t / w.W) | 0;
@@ -304,7 +314,7 @@ class Dino {
             if (score > bestScore) { bestScore = score; best = [x + dx, y + dy]; }
           }
         }
-        if (best && bestScore > 20) goalFence = best;
+        if (best && (bestScore > 20 || force)) goalFence = best;
         else if (!(this.stress > 62)) return false;
       }
     }
@@ -321,7 +331,7 @@ class Dino {
   updateFenceAttack(dt) {
     const g = this.game, w = g.world;
     this.attackT -= dt;
-    if (this.attackT <= 0 || this.sedatedT > 0) { this.state = 'idle'; this.stateT = 2; this.attackBuilding = false; return; }
+    if (this.attackT <= 0 || this.sedatedT > 0) { this.state = 'idle'; this.stateT = 2; this.attackBuilding = false; this.schemeBout = false; return; }
     if (this.attackCD > 0) return;
     this.attackCD = 1.1 + rand() * 0.5;
     // find adjacent target
@@ -342,7 +352,7 @@ class Dino {
       let dmg;
       if (type === F_ELECTRIC && w.fencePowered[tgt.j]) {
         // ZAP
-        const brute = str >= (g.research.has('fence3') ? 11 : 8) && this.stress > 85;
+        const brute = str >= (g.research.has('fence3') ? 11 : 8) && (this.stress > 85 || this.schemeBout);
         dmg = brute ? str * 0.8 : str * 0.25;
         this.flash = 0.25;
         this.hp -= 3;
