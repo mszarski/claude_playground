@@ -712,6 +712,7 @@ class UI {
     for (const b of document.querySelectorAll('#speedBtns button')) b.onclick = () => { this.setSpeed(+b.dataset.speed); this.sfx.play('click'); };
     $('#alarmBtn').onclick = () => this.toggleAlarm();
     $('#finBtn').onclick = () => this.showFinances();
+    const rat = $('#stars').parentElement; rat.style.cursor = 'pointer'; rat.title = 'What makes the rating, and how to raise it'; rat.onclick = () => this.showRating();
     $('#undoBtn').onclick = () => this.doUndo();
     $('#resBtn').onclick = () => this.showResearch();
     $('#rosterBtn').onclick = () => this.showRoster();
@@ -897,9 +898,10 @@ class UI {
       return;
     }
     this.eggGoalKey = null;
-    el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}${goal.tool ? ' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">Show me</button>' : ''}`;
+    el.innerHTML = `<b>GOAL ${g.goalIdx + 1}/${GOALS.length}</b>${goal.text}${goal.reward ? ` <span style="color:var(--gold)">+${fmtMoney(goal.reward)}</span>` : ''}${' <button id="goalBtn" style="font-size:15px;padding:0 6px;margin-left:4px">' + (goal.tool ? 'Show me' : 'How?') + '</button>'}`;
     const gb = $('#goalBtn');
-    if (gb) gb.onclick = () => this.showMeTool(goal.tool);
+    // goals with no single tool (stars, crowds, cash) open the breakdown of what drives them
+    gb.onclick = () => { if (goal.tool) this.showMeTool(goal.tool); else if (goal.id === 'million') this.showFinances(); else this.showRating(); };
   }
 
   showMeTool(tool) {

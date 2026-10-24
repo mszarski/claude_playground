@@ -257,6 +257,53 @@ class UIPanels {
     $('[data-close]').onclick = () => this.closeModal();
   }
 
+  // where the star rating comes from, and what would raise it next
+  showRating() {
+    const g = this.game, w = g.world;
+    let dinoPts = 0; const species = new Set();
+    for (const d of g.creatures()) {
+      if (d.loose || d.carried) continue;
+      dinoPts += d.sp.appeal * (d.sick > 0 ? 0.5 : 1) * (0.6 + d.comfort / 250);
+      species.add(d.species);
+    }
+    let bldPts = 0; const dark = [];
+    for (const b of w.buildings.values()) {
+      const a = BUILDINGS[b.type].appeal || 0; if (!a) continue;
+      bldPts += a * (b.powered ? 1 : 0.5) * (b.escaped ? 0 : 1);
+      if (!b.powered) dark.push(b);
+    }
+    const varPts = species.size * 8, repPts = g.reputation * 0.9;
+    const score = dinoPts + varPts + bldPts + repPts;
+    const next = STAR_THRESH[g.stars + 1];
+    const row = (k, v, note) => `<div class="row"><span>${k}${note ? ` <span style="color:#9ab08a">${note}</span>` : ''}</span><span>${Math.round(v)}</span></div>`;
+    let html = `<h1>PARK RATING <span style="color:var(--gold)">${'★'.repeat(g.stars)}</span><span style="color:#4a5a44">${'★'.repeat(5 - g.stars)}</span></h1>`;
+    html += `<p>Score <b style="color:var(--gold)">${Math.round(score)}</b>${next ? ` · the next star needs <b>${next}</b> (${Math.ceil(next - score)} to go)` : ' · top rating!'}</p>`;
+    html += row('Dinosaurs on show', dinoPts, 'appeal × comfort') + row('Variety', varPts, `${species.size} species × 8`) + row('Attractions', bldPts, 'buildings with appeal') + row('Reputation', repPts, `${Math.round(g.reputation)} × 0.9`);
+    const happy = g.happySamples && g.happySamples.length ? g.happySamples.reduce((a, b) => a + b, 0) / g.happySamples.length : null;
+    html += `<p style="color:#9ab08a">Reputation drifts each night toward a mix of how happy departing guests were${happy !== null ? ` (${Math.round(happy)})` : ''} and park safety (${Math.round(g.safety === undefined ? 100 : g.safety)}): deaths, loose dinosaurs and broken fences pull safety down.</p>`;
+    // concrete next steps
+    const tips = [];
+    const fresh = SPECIES_ORDER.filter((k) => g.isUnlocked(k) && !species.has(k) && !SPECIES[k].flying);
+    if (fresh.length) tips.push(`New species add their appeal plus 8 for variety. Unlocked and not yet on show: ${fresh.slice(0, 4).map((k) => `${SPECIES[k].name} (${SPECIES[k].appeal + 8})`).join(', ')}.`);
+    const locked = SPECIES_ORDER.find((k) => !g.isUnlocked(k));
+    if (locked) tips.push(`${SPECIES[locked].name} unlocks at ${SPECIES[locked].unlock} stars (or with genome research).`);
+    const sad = g.dinos.filter((d) => !d.loose && !d.carried && d.comfort < 55);
+    if (sad.length) tips.push(`${sad.length} dinosaur${sad.length > 1 ? 's are' : ' is'} uncomfortable, which cuts their appeal by up to a third: open ${sad.length > 1 ? 'their panels' : 'its panel'} to see what ${sad.length > 1 ? 'they need' : 'it needs'}.`);
+    const sick = g.dinos.filter((d) => d.sick > 0).length;
+    if (sick) tips.push(`${sick} sick dinosaur${sick > 1 ? 's count' : ' counts'} for half. A Vet Clinic cures them faster.`);
+    if (g.looseCount) tips.push(`Loose dinosaurs count for nothing until they are back in a paddock.`);
+    if (dark.length) tips.push(`${dark.length} attraction${dark.length > 1 ? 's have' : ' has'} no power and count${dark.length > 1 ? '' : 's'} for half.`);
+    if (!g.hasBuilding('viewing')) tips.push('Viewing Platforms next to paddocks are cheap appeal.');
+    if (!g.hasBuilding('tour') && g.stars >= 1) tips.push('A Tour Station with track through the paddocks adds a lot of appeal.');
+    if (tips.length) html += `<h2>WAYS TO RAISE IT</h2><ul>${tips.map((t) => `<li>${t}</li>`).join('')}</ul>`;
+    const issues = g.collectIssues().slice(0, 4);
+    if (issues.length) html += `<h2>ADVISOR</h2><ul>${issues.map(([, m]) => `<li>${m}</li>`).join('')}</ul>`;
+    html += `<h2>GUESTS</h2><p>The park draws about <b>${g.desiredGuests()}</b> guests right now (${g.guests.length} inside, at most 450). More appeal, a better reputation and a lower ticket price ($${g.ticket}) all bring more.</p>`;
+    html += `<div class="btns" style="justify-content:flex-end;margin-top:8px"><button data-close>Close</button></div>`;
+    this.showModal(html);
+    $('[data-close]').onclick = () => this.closeModal();
+  }
+
   showResearch() {
     const g = this.game, rs = g.research;
     const labs = g.buildingsOfType('lab').length;
@@ -388,6 +435,7 @@ class UIPanels {
   showHelp() {
     const html = `<h1>HOW TO PLAY</h1>
       <p>You run a dinosaur theme park on a remote island. Build attractions, hatch dinosaurs, keep guests happy and — above all — <b style="color:#f8d040">keep the dinosaurs contained</b>.</p>
+      <p>${IS_TOUCH ? 'Tap' : 'Click'} the <b>Rating</b> in the top bar to see what your star rating is made of and what would raise it.</p>
       <h2>BUILDING A PADDOCK</h2>
       <p>1. Build a <b>Power Plant</b> (Power menu). Electric fences only work inside its blue coverage area; extend it with Pylons.<br>
       2. Use the <b>Paddock</b> tool to drag a fenced rectangle. Trees and water inside make dinos happier.<br>
