@@ -606,6 +606,26 @@ error killed one revise job at install; relaunching unchanged worked.
   the revision turn cannot fix what the model cannot see how to build (weak families need better first attempts:
   more/better data for those families, or RL focused on them).
 
+### Real parts: Fusion 360 Gallery check (Oct 24)
+- Test set: `scripts/prep_real.py` on the Fusion 360 Gallery segmentation release (`s2.0.1_extended_step.zip`, 42,912
+  STEP files of user designs, per-face labels). 150 parts each of revolve / chamfer / fillet / plain (priority in that
+  order), one valid solid, <= 120 faces (median 8-17), rendered with our cameras; layout of a rich shard, GT program
+  `r = cq.importers.importStep("data/rich/real/0/step/<name>.stp")`. Bucket `data/rich/test_real.tar` (unpacked by
+  `RICH_TEST=1` into `data/rich/real`). Scored with own IoU (rich_iou.py; "gt" is meaningless here).
+- Result (`results/real_old`, `results/real_new`), own IoU, paired on 600 parts:
+  | | old `vlm_grpo_fullres` | new `vlm_grpo_rich` one answer | new + guarded revision |
+  |---|---|---|---|
+  | view4 | 59.9 (IR 6.3 %) | 57.5 (IR 10.5 %), -2.33 +- 1.25 | **63.6**, +3.76 +- 1.05 |
+  | view1 | 57.0 (IR 6.8 %) | 54.4 (IR 7.5 %), -2.59 +- 1.01 | **59.1**, +2.14 +- 0.86 |
+  Per group at view4 (old -> new single): plain 73.4 -> 71.5, chamfer 60.2 -> 56.9, fillet 58.4 -> 50.5 (IR 19 %),
+  revolve 47.3 -> 51.2. **The +25 on the rich test does not transfer**: it measured the generators' distribution. On
+  real parts the new model writes generator-style fillet/chamfer code that fails on real geometry (invalid solid,
+  BRep command not done, no suitable edges) and sometimes mixes CAD-Recode sketch syntax into broken code. The
+  revision + guard repairs most of it (IR 10.5 -> 3.7 %).
+- Fix direction: rich data that is less templated (varied construction order, sketch-based profiles, fillets
+  chosen by geometry rather than fixed recipes), or RL on real-part images (reward = own IoU vs STEP) once a
+  train split of real STEP files is held out.
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped

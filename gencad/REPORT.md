@@ -15,7 +15,9 @@ know of (cadrille with RL, 92.2). It is a 2B model that runs locally; nothing at
 best model scored only ~55 on such parts. We built 21 procedural part families (~1.1M checked parts), trained on them
 plus a "look at what you built and fix it" revision turn, then ran online RL on both kinds of parts. The new model,
 `vlm_grpo_rich`, scores **80–81 on realistic parts (+25)** and, with one revision turn guarded by render agreement,
-**slightly beats the previous best on every DeepCAD image mode** (4 views 91.8 vs 91.6). See section 11.
+**slightly beats the previous best on every DeepCAD image mode** (4 views 91.8 vs 91.6). See section 11. On *real*
+designs (Fusion 360 Gallery) the gain is much smaller: +2–4 points with the guarded revision, and the first answer
+alone is slightly worse than before — the generated test set overstated the gain.
 
 ## The task and how we measure it
 
@@ -135,6 +137,18 @@ quality, so the first attempt still comes from `vlm_grpo_rich`). The unguarded r
 (80.2 → 80.2 instead of → 65.2), and with the guard rich parts gain +0.75 ± 0.32 (4 views, 82.1) and +1.0 ± 0.33
 (1 view, 74.5) while DeepCAD is unchanged within ±0.4. Small, and it costs a second model; the revision turn cannot
 fix parts the model does not know how to build (bent sheet, enclosures, L-brackets got slightly worse).
+
+**Real-part check (Oct 24).** 600 real user designs from the Fusion 360 Gallery (150 each with revolves, chamfers,
+fillets, plain), rendered with our cameras, own IoU, paired:
+| | previous best | new, one answer | new + guarded revision |
+|---|---|---|---|
+| 4 views | 59.9 | 57.5 (−2.3 ± 1.3) | **63.6 (+3.8 ± 1.1)** |
+| 1 view | 57.0 | 54.4 (−2.6 ± 1.0) | **59.1 (+2.1 ± 0.9)** |
+The large gain on our generated test set **does not carry over to real designs**: there the new model's first
+answer is slightly worse (filleted parts: 19 % of programs fail to build, mostly generator-style fillets that
+fail on real geometry). The guarded revision repairs most of that, so the full pipeline is +2–4 points better than
+before on real parts — real, but far from +25. The generated test set overstates progress; real parts are now the
+yardstick.
 
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
