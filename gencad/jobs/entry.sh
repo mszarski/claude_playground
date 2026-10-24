@@ -252,6 +252,18 @@ case "$STAGE" in
     need cad_vec
     python scripts/convert_deepcad.py --data data --out /work/data/deepcad_cq.parquet "$@" ;;
 
+  orient)     # orientation search on saved predictions (scripts/orient_fix.py) + scoring -> results/$RUN/orient*.{pkl,json}
+    need_cq     # RICH_TEST=1: rich/real test parts (scored by rich_iou.py); else DeepCAD test (cq_iou.py)
+    if [[ "${RICH_TEST:-0}" == "1" ]]; then
+      mkdir -p data/rich; for t in /work/data/rich/test*.tar; do tar -xf "$t" -C data/rich; done
+      python scripts/orient_fix.py --data data --out "results/$RUN/orient.pkl" "$@"
+      python scripts/rich_iou.py --preds "results/$RUN/orient.pkl" --out "results/$RUN/orient_iou.json" --rows "results/$RUN/orient_rows.pkl"
+    else
+      need cad_vec renders
+      python scripts/orient_fix.py --data data --out "results/$RUN/orient.pkl" "$@"
+      python scripts/cq_iou.py --data data --preds "results/$RUN/orient.pkl" --out "results/$RUN/orient_iou.json" --rows "results/$RUN/orient_rows.pkl"
+    fi ;;
+
   cqiou)      # IoU of saved predictions (DeepCAD programs or CadQuery code) vs GT, in CadQuery (scripts/cq_iou.py)
     need_cq
     need cad_vec

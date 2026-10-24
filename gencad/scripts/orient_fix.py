@@ -7,7 +7,7 @@ Motivation: on the weakest rich families most of the error is a correctly built 
 generators build in a canonical frame and finish with one `.rotate`; the model often picks the wrong one).
 
   python scripts/orient_fix.py --preds results/<run>/revise.pkl --methods vlm_cq:view4 --out results/<run>/orient.pkl
-Writes a preds file with `<method>+orient` keys added (scored by rich_iou.py / cq_iou.py).
+Writes a preds file holding only the `<method>+orient` predictions (scored by rich_iou.py / cq_iou.py).
 """
 import argparse
 import os
@@ -81,7 +81,7 @@ def main():
     from pebble import ProcessPool
     P = pickle.load(open(a.preds, "rb"))
     stems = P.get("stems") or [os.path.join(a.data, "renders", u) for u in P["uids"]]
-    stats = {}
+    stats, out = {}, {}
     with ProcessPool(max_workers=a.workers) as pool:
         for m in a.methods:
             views = [0, 1, 2, 3] if "view4" in m else [0]
@@ -95,11 +95,11 @@ def main():
                     code, best = c, None
                 new.append(code)
                 turned += bool(best)
-            P["preds"][m + "+orient"] = new
+            out[m + "+orient"] = new
             stats[m] = turned
             print(f"[orient] {m}: rotated {turned}/{len(new)}", flush=True)
-    P["orient_stats"] = stats
-    pickle.dump(P, open(a.out, "wb"))
+    os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
+    pickle.dump({**P, "preds": out, "orient_stats": stats}, open(a.out, "wb"))
     print(f"[done] {a.out}")
 
 
