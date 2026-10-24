@@ -861,7 +861,15 @@ class UI {
   onLog(e) {
     if (e.big) this.toast(e.msg, e.type);
     const hl = (e.type === 'bad' || e.type === 'good' || e.type === 'goal') ? this.headline(e) : null;
-    if (hl && (!this.tickerT || performance.now() - this.tickerT > 15000)) { this.tickerT = performance.now(); this.showTicker(hl); }
+    if (hl) {
+      // bad news bumps whatever is scrolling; good news waits its turn and stays quiet in a crisis
+      const g = this.game, now = performance.now(), bad = e.type === 'bad';
+      const crisis = g.looseCount > 0 || g.alarm || g.world.power.outage > 0;
+      if (bad ? !this.tickerBadT || now - this.tickerBadT > 15000 : (!this.tickerT || now - this.tickerT > 15000) && !crisis) {
+        this.tickerT = now; if (bad) this.tickerBadT = now;
+        this.showTicker(hl);
+      }
+    }
     const box = $('#log');
     const el = document.createElement('div');
     el.className = e.type;
