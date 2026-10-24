@@ -317,6 +317,60 @@ Caveats:
   "speaker not on the list" examples relative to list examples than v3.
 - Step 1500 is mid-schedule; MARTTS/ATC may recover with full training.
 
+## Results: v5 and an honest test (different TTS engine)
+
+v5 fixes v4's problems: candidate lists capped at 120 names in training,
+the speaker removed from 50% of AIS lists (v4: 30%), the adapter pushed before
+evaluation, resumable checkpoints. AIS training audio uses Kokoro *training*
+voices only. Two versions of the held-out New York / Oresund test audio:
+- `_kv`: Kokoro, five voices never used in training
+- `_cb`: **Chatterbox**, a different TTS engine cloning LibriSpeech speakers,
+  never used in training
+
+Adapter: `mszarski/voxtral-3B-marine-vhf-v5` (private). 2 epochs, 22k clips,
+4.9 h on one A100; final eval loss 0.160 (v3: 0.169).
+
+| Held-out test: WER / names right | v3 | v5 |
+|---|---|---|
+| New York, Kokoro held-out voices, no list | 16.6% / 43% | 5.2% / 68% |
+| Oresund, Kokoro held-out voices, no list | 22.3% / 27% | 6.1% / 60% |
+| **New York, Chatterbox, no list** | 16.3% / 33% | **11.9% / 39%** |
+| **Oresund, Chatterbox, no list** | 21.3% / 22% | **14.0% / 29%** |
+| New York, Chatterbox, moving class A list | 8.8% / 74% | 6.3% / 71% |
+| Oresund, Chatterbox, moving class A list | 11.5% / 72% | 6.3% / 74% |
+
+Unknown vessels (on no list, never seen), Chatterbox audio:
+
+| names right / name CER | v3 | v5 |
+|---|---|---|
+| New York, no list | 19% / 0.29 | 20% / 0.25 |
+| Oresund, no list | 30% / 0.20 | 39% / 0.17 |
+
+Regression checks (v4 regressed on the first row):
+
+| | v3 | v4@1500 | v5 |
+|---|---|---|---|
+| VHF-8K, speaker not on 25-name list: wrong name used | 3.8% | 13.5% | **4.0%** |
+| VHF-8K, speaker on 25-name list: names right | 93% | 96% | 95% |
+| VHF-8K no list WER | 12.9% | 13.2% | 12.7% |
+| MARTTS WER | 7.6% | 9.8% | 7.5% |
+| ATC (real radio) WER | 9.7% | 10.8% | 9.4% |
+
+What this shows:
+- **Most of the dramatic v4/v5 gain was Kokoro-specific.** Holding out Kokoro
+  voices is not enough; the model learns how Kokoro pronounces spellings. On
+  Chatterbox the gain shrinks to ~30% relative WER and +6-9 points of names
+  without a list, and names with a list are flat.
+- v5 is still the best model overall: better than v3 on every held-out
+  Chatterbox WER, no regressions on VHF-8K, MARTTS or the real ATC radio, and
+  v4's wrong-name regression is gone.
+- **Unknown vessels remain the open problem**: 20-39% of names exactly right
+  on Chatterbox audio (CER 0.17-0.25). Audio alone gives roughly a phonetic
+  spelling; getting names right needs a list, and a vessel that is not on any
+  list cannot be looked up.
+- Every number here is still synthetic speech. Real recordings are the only
+  way to know real-world accuracy; the Chatterbox rows are the better guide.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and
