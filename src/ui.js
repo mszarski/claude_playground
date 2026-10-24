@@ -741,7 +741,10 @@ class UI {
     const tb = $('#topbar');
     const syncTop = () => document.documentElement.style.setProperty('--top', tb.offsetHeight + 'px');
     const goalEl = $('#goal');
-    const syncGoal = () => document.documentElement.style.setProperty('--goalH', (goalEl.offsetHeight || 0) + 'px');
+    const syncGoal = () => {
+      document.documentElement.style.setProperty('--goalH', (goalEl.offsetHeight || 0) + 'px');
+      document.documentElement.style.setProperty('--goalR', (goalEl.offsetLeft + goalEl.offsetWidth || 0) + 'px');
+    };
     const dealsEl = $('#deals');
     const syncDeals = () => document.documentElement.style.setProperty('--dealsH', (dealsEl.hidden ? 0 : dealsEl.offsetHeight + 4) + 'px');
     if (window.ResizeObserver) { new ResizeObserver(syncTop).observe(tb); new ResizeObserver(syncGoal).observe(goalEl); new ResizeObserver(syncDeals).observe(dealsEl); }

@@ -70,10 +70,13 @@ class Dino {
             g.spend(12000, 'ops');
             g.burst(this.x, this.y, '#e8d8a0', 8);
             this.x = dest.x + 0.5; this.y = dest.y + 0.5; this.home = { x: dest.x, y: dest.y };
-            this.loose = false; this.relocate = false; this.orderSedate = false; this.sedatedT = 3; this.truckT = 0;
+            this.loose = false; this.relocate = false; this.orderSedate = false; this.sedatedT = 3; this.truckT = 0; this.noDestLogged = false;
             g.world.regionsDirty = true;
             g.log(`Ground crew trucked ${this.name} the ${this.sp.name} back to a paddock (-$12k). A helipad is faster.`, 'good', this);
-          } else this.truckT = 10;
+          } else {
+            this.truckT = 10;
+            if (!this.noDestLogged) { this.noDestLogged = true; g.log(g.makeRoomFor(this) || `No safe paddock for ${this.name} the ${this.sp.name}! The ground crew can't move it until there is one: repair the fence of its old paddock, or build a new one with a ${this.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder.`, 'warn', this, true); }
+          }
         }
       } else this.truckT = 0;
       if (this.sedatedT <= 0) {

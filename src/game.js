@@ -714,7 +714,8 @@ class Game {
     }
     const mine = d.sp.diet === 'carn' ? 'carn' : 'herb', other = mine === 'carn' ? 'herb' : 'carn';
     const ok = (reg) => {
-      if (!reg || reg.public || reg.size < 12 || reg.size > 1200) return false;
+      // a fenced-off pocket is not a paddock: it has to have room for the animal
+      if (!reg || reg.public || reg.size < Math.max(12, d.sp.space * 0.6) || reg.size > 1200) return false;
       // the player marked this paddock for the other diet by giving it only that kind of feeder
       if (reg.feeders && reg.feeders[other].length && !reg.feeders[mine].length) return false;
       for (const o of this.dinos) {
