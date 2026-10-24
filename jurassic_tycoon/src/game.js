@@ -354,10 +354,14 @@ class Game {
       if (d.loose || d.carried || d.relocate || d.isPtera) continue;
       const reg = w.regionAt(d.tx, d.ty);
       const mine = d.sp.diet === 'carn' ? 'carn' : 'herb', other = mine === 'carn' ? 'herb' : 'carn';
-      if (!reg || reg.public || !reg.feeders[other].length || reg.feeders[mine].length) continue;
+      if (!reg || reg.public) continue;
+      // fenced into a scrap of land between paddocks (say, after a breach was patched up around it)
+      const stranded = reg.size < Math.max(6, d.sp.space * 0.4);
+      const wrongDiet = reg.feeders[other].length && !reg.feeders[mine].length;
+      if (!stranded && !wrongDiet) continue;
       if (!this.findPaddockFor(d)) continue; // nowhere better to go yet
       d.relocate = true; d.orderSedate = true;
-      this.log(`${d.name} the ${d.sp.name} is in the ${other === 'carn' ? 'carnivore' : 'herbivore'} paddock. Rangers will move it to a better one.`, 'info', d);
+      this.log(stranded ? `${d.name} the ${d.sp.name} is fenced into a tiny pocket. Rangers will move it back to a paddock.` : `${d.name} the ${d.sp.name} is in the ${other === 'carn' ? 'carnivore' : 'herbivore'} paddock. Rangers will move it to a better one.`, 'info', d);
     }
   }
   replaceLostFeeders(force = false) {
