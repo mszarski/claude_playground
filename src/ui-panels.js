@@ -438,7 +438,7 @@ class UIPanels {
       <p>${IS_TOUCH ? 'Tap' : 'Click'} the <b>Rating</b> in the top bar to see what your star rating is made of and what would raise it.</p>
       <h2>BUILDING A PADDOCK</h2>
       <p>1. Build a <b>Power Plant</b> (Power menu). Electric fences only work inside its blue coverage area; extend it with Pylons.<br>
-      2. Use the <b>Paddock</b> tool to drag a fenced rectangle. Trees and water inside make dinos happier.<br>
+      2. Use the <b>Paddock</b> tool to drag a fenced rectangle. Trees and water inside make dinos happier (Plant Trees and Dig Pond in the Build menu).<br>
       3. Put a <b>Feeder</b> inside (herbivore or carnivore).<br>
       4. Build a <b>Hatchery</b>, then <b>Hatch</b> a species inside the paddock.</p>
       <h2>GUESTS</h2>

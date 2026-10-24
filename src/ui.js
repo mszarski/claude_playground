@@ -3,7 +3,7 @@
 
 const $ = (s) => document.querySelector(s);
 const LINE_TOOLS = ['path', 'widepath', 'route', 'track', 'fence', 'wall'];
-const RECT_TOOLS = ['demolish', 'trees', 'clear'];
+const RECT_TOOLS = ['demolish', 'trees', 'pond', 'clear'];
 const isUnit = (o) => o && (o.kind === 'ranger' || o.kind === 'worker' || o.kind === 'heli');
 
 class UI {
@@ -443,6 +443,7 @@ class UI {
       else if ((tool === 'fence' || tool === 'paddock') && w.fence[i] !== F_ELECTRIC && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_ELECTRIC].cost;
       else if (tool === 'wall' && w.fence[i] !== F_WALL && w.canBuildAt(x, y) && !w.path[i]) c += FENCE_DEF[F_WALL].cost;
       else if (tool === 'trees' && w.terrain[i] === T_GRASS && !w.path[i] && !w.bld[i] && !w.fence[i]) c += TOOL_INFO.trees.cost;
+      else if (tool === 'pond' && (w.terrain[i] === T_GRASS || w.terrain[i] === T_FOREST || w.terrain[i] === T_SAND) && !w.path[i] && !w.track[i] && !w.bld[i] && !w.fence[i]) c += TOOL_INFO.pond.cost;
       else if (tool === 'clear' && w.terrain[i] === T_FOREST) c += TOOL_INFO.clear.cost;
     }
     return c;
@@ -469,6 +470,7 @@ class UI {
         ok = g.demolishAt(x, y);
       }
       else if (tool === 'trees') ok = g.plantTree(x, y);
+      else if (tool === 'pond') ok = g.digPond(x, y);
       else if (tool === 'clear') ok = g.clearLand(x, y);
       if (ok) n++;
     }
@@ -758,7 +760,7 @@ class UI {
 
   dinoTip(d) {
     const status = d.carried ? 'Being airlifted' : d.sedatedT > 0 ? 'Sedated' : d.loose ? '<span style="color:#ff6040">LOOSE!</span>' : d.sick > 0 ? '<span style="color:#9ae060">Sick</span>' : d.sleeping ? 'Sleeping' : 'Contained';
-    const lbl = { space: 'too crowded', forest: 'wants tree cover', water: 'no water nearby', social: d.sp.territorial ? 'rival nearby' : 'lonely', food: 'no food source', fear: 'scared of predators', loose: 'out of its paddock' };
+    const lbl = { space: 'too crowded', forest: 'wants tree cover', water: 'no water nearby (Dig Pond)', social: d.sp.territorial ? 'rival nearby' : 'lonely', food: 'no food source', fear: 'scared of predators', loose: 'out of its paddock' };
     let worst = null, wv = 1e9;
     const max = { space: 30, forest: 18, water: 12, social: 15, food: 15, fear: 0, loose: 0 };
     for (const k in d.comfortParts || {}) { if (!(k in lbl)) continue; const gap = d.comfortParts[k] - (max[k] || 0); if (gap < wv && gap < -3) { wv = gap; worst = k; } }
