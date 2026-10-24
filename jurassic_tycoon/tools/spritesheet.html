@@ -1,0 +1,18 @@
+<!doctype html><html><body style="background:#333;margin:0">
+<canvas id="c" width="1400" height="1000"></canvas>
+<script src="../src/util.js"></script><script src="../src/data.js"></script><script src="../src/sprites.js"></script>
+<script>
+buildAllSprites();
+const ctx = document.getElementById('c').getContext('2d'); ctx.imageSmoothingEnabled=false;
+let x=10,y=10,rowH=0;
+function put(img,s=4){ if(x+img.width*s>1390){x=10;y+=rowH+10;rowH=0;} ctx.drawImage(img,x,y,img.width*s,img.height*s); x+=img.width*s+10; rowH=Math.max(rowH,img.height*s);}
+for(const k of SPECIES_ORDER){ put(DINO_SPRITES[k].right[0]); put(DINO_SPRITES[k].right[1]); }
+x=10;y+=rowH+20;rowH=0;
+for(const k of Object.keys(BSPR)) put(BSPR[k].canvas,3);
+x=10;y+=rowH+20;rowH=0;
+for(const t of TILES.trees) put(t,3);
+put(TILES.grass[0],3);put(TILES.water[0][0],3);put(TILES.rock[0],3);put(TILES.sand[0],3);
+for(const g of PEOPLE.guests.slice(0,6)) put(g[0],4); put(PEOPLE.ranger[0],4); put(PEOPLE.worker[0],4);
+put(HELI_SPR,3); put(EGG_SPR,4); put(RUBBLE_SPR,3);
+for (const k of ['inspect','path','fence','paddock','wall','demolish','clear','hatch']) put(ICONS[k],3);
+</script></body></html>
