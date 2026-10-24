@@ -936,6 +936,20 @@ class Game {
 
   // Advisor: find the most pressing issue the player can act on
   advise() {
+    const issues = this.collectIssues();
+    this.adviceSaid = this.adviceSaid || {};
+    for (const [, msg, ref] of issues) {
+      const last = this.adviceSaid[msg];
+      if (last !== undefined && this.time - last < 48) continue;
+      this.adviceSaid[msg] = this.time;
+      this.log('Advisor: ' + msg, 'warn', ref, true);
+      return msg;
+    }
+    return null;
+  }
+
+  // everything the advisor would say right now, most urgent first
+  collectIssues() {
     const w = this.world;
     const issues = [];
     const cre = this.creatures();
@@ -997,16 +1011,8 @@ class Game {
     const crowded = this.guests.filter((gu) => gu.crowded);
     if (crowded.length > 25) issues.push([45, 'Paths are overcrowded and guests are unhappy. Use the Wide Path tool [I] on busy stretches, or add a second route.', crowded[0]]);
     if (this.money < 30000) issues.push([55, 'Funds are low. Raise ticket prices a little or add shops along busy paths.', gb]);
-    this.adviceSaid = this.adviceSaid || {};
     issues.sort((a, b) => b[0] - a[0]);
-    for (const [, msg, ref] of issues) {
-      const last = this.adviceSaid[msg];
-      if (last !== undefined && this.time - last < 48) continue;
-      this.adviceSaid[msg] = this.time;
-      this.log('Advisor: ' + msg, 'warn', ref, true);
-      return msg;
-    }
-    return null;
+    return issues;
   }
 
   updateLoose() {

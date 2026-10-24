@@ -55,7 +55,7 @@ const TESTS = [
     name: 'modals and panels render',
     run: `(() => {
       startGame({ seed: ${SEED}, difficulty: 'normal' });
-      for (const f of ['showFinances', 'showDisasters', 'showMenu', 'showHelp', 'showSpeciesPicker', 'showRoster', 'showResearch', 'showAudio']) { UIX[f](); UIX.closeModal(); }
+      for (const f of ['showFinances', 'showDisasters', 'showMenu', 'showHelp', 'showSpeciesPicker', 'showRoster', 'showRating', 'showResearch', 'showAudio']) { UIX[f](); UIX.closeModal(); }
       return 'ok';
     })()`,
     check: (r) => r === 'ok',
