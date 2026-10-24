@@ -16,8 +16,9 @@ best model scored only ~55 on such parts. We built 21 procedural part families (
 plus a "look at what you built and fix it" revision turn, then ran online RL on both kinds of parts. The new model,
 `vlm_grpo_rich`, scores **80–81 on realistic parts (+25)** and, with one revision turn guarded by render agreement,
 **slightly beats the previous best on every DeepCAD image mode** (4 views 91.8 vs 91.6). See section 11. On *real*
-designs (Fusion 360 Gallery) the gain is much smaller: +2–4 points with the guarded revision, and the first answer
-alone is slightly worse than before — the generated test set overstated the gain.
+designs (Fusion 360 Gallery) the gain is much smaller: the first answer alone is slightly worse than before, and
+the full pipeline (orientation search + guarded revision) is +5 points (65.0 vs 59.9) — the generated test set
+overstated the gain.
 
 ## The task and how we measure it
 
@@ -150,6 +151,14 @@ fail on real geometry). The guarded revision repairs most of that, so the full p
 before on real parts — real, but far from +25. The generated test set overstates progress; real parts are now the
 yardstick.
 
+**Orientation search (Oct 24, no training).** Many wrong answers on brackets, bent sheet and extrusions were the right
+part turned the wrong way. Trying the 24 right-angle orientations of each answer and keeping the one whose renders
+best match the input pictures (input images only, no ground truth) lifts the generated test set 80.2 → 83.9
+(L-brackets 66 → 80, bent sheet 53 → 66, extrusions 66 → 79), leaves DeepCAD unchanged, and on real parts brings the
+full pipeline (orientation search + guarded revision) to **65.0 vs 59.9 for the previous best (+5.2 ± 1.1, 4 views)**
+and 60.1 vs 57.0 (+3.1 ± 0.9, 1 view). The previous best model gains nothing from it: the habit came from our
+generated data, and this undoes it.
+
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
 | model | 1 view | 4 views | 1 view + expert text | expert text only |
@@ -179,7 +188,8 @@ difference. cadrille scores the whole DeepCAD test set, we score a 2000-part sub
 - `scripts/claude_baseline.py`: the Claude zero-shot baseline. `scripts/gallery.py`, `scripts/gallery_rich.py`:
   visual galleries.
 - `datagen/` + `scripts/gen_rich_data.py`: rich-part generation and checks; `scripts/rich_iou.py`: scoring.
-- `scripts/revise_vllm.py`: the revision turn at inference; `scripts/revise_guard.py`: the render-agreement guard.
+- `scripts/revise_vllm.py`: the revision turn at inference; `scripts/revise_guard.py`: the render-agreement guard;
+  `scripts/orient_fix.py`: orientation search; `scripts/prep_real.py`: the Fusion 360 Gallery real-part test set.
 - A per-model input setting (`gencad_vlm.json`), so every loader feeds a model the image layout it was trained on.
 
 ## Caveats

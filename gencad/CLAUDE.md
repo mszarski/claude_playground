@@ -626,6 +626,24 @@ error killed one revise job at install; relaunching unchanged worked.
   chosen by geometry rather than fixed recipes), or RL on real-part images (reward = own IoU vs STEP) once a
   train split of real STEP files is held out.
 
+### Orientation search at inference (`scripts/orient_fix.py`; Oct 24)
+- Failure analysis on the weak rich families: the part is often built right but turned wrong (wrong final
+  `.rotate`, L legs swapped). `orient_fix.py` tries the 24 axis-aligned rotations of each predicted solid (tessellate
+  once, rotate the triangles, render the input cameras at 128 px), keeps the best render agreement with the input
+  views (pix score) if it beats the program as written by > 0.5 grey levels, and appends `r = r.rotate(...)` lines
+  (still a plain program). No GT, no training. Slow in pure Python (96 renders per part at view4): run as job
+  `orient` on cpu-upgrade ($0.03/h, ~2-3 h per 2000 parts x method), which also scores the result.
+  (`scripts/rot_iou.py`, a GT-side diagnostic, undercounts: trust orient_fix + rich_iou.)
+- Results, own IoU (rich, real) / gt IoU (DeepCAD), turn 1 -> + orient:
+  rich test (`results/orient_rich_v{4,1}`): view4 80.2 -> **83.9** (264 of 1989 rotated), view1 72.7 -> **75.7**;
+  per family view4: bent sheet 52.6 -> 66.0, L-bracket 66.3 -> 80.1, extrusion 66.3 -> 79.1, enclosure 63.6 -> 69.2.
+  Real (`results/orient_real_*`): new view4 57.5 -> 59.9, r1 59.8 -> 61.1; new view1 54.4 -> 56.0; old model
+  unchanged (59.9 -> 59.9, 57.0 -> 56.7): the wrong-orientation habit comes from the rich training data.
+  DeepCAD (`results/orient_dc_v{4,1}`): view4 90.9 -> 91.0 (29 rotated), view1 85.9 -> 85.8 (108): harmless.
+- **Full pipeline on real parts** (orient both turns, then the guard; `results/orient_real_new{4,1}/guard.json`):
+  view4 **65.0** vs old 59.9 (+5.16 +- 1.05 paired), view1 **60.1** vs 57.0 (+3.13 +- 0.90).
+- Recommended inference: `vlm_grpo_rich` turn 1 -> orient -> revision turn -> orient -> guard (render agreement).
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
@@ -640,6 +658,8 @@ of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the galler
   revision -> online RL on DeepCAD + rich). Use it with one revision round and the render guard
   (`scripts/revise_vllm.py --rounds 1`, then `scripts/revise_guard.py`): DeepCAD test gt IoU view4 91.8, view1 87.1,
   view1+expert 89.9 (all slightly above vlm_grpo_fullres); rich test own IoU view4 81.4 (was ~55).
+  Add the orientation search (`scripts/orient_fix.py`, before the guard): real parts (Fusion 360 Gallery) view4
+  65.0 vs 59.9 for vlm_grpo_fullres; rich turn 1 80.2 -> 83.9; DeepCAD unchanged.
 - Spend for the Tier 1/2 phase: ~$130, plus ~$40 for rich revision data + `vlm_rev_v2` (total ~$170 of $200).
 - **Next ideas:** rich-part revision data (GT always known; fixes the unguarded rich revision, 80 -> 65); families for
   the weak spots (bent sheet, L-brackets, enclosures, extrusions, random_mix_hard 21 % invalid at SFT); best-of-N +
