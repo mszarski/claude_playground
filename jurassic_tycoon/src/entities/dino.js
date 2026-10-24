@@ -195,6 +195,13 @@ class Dino {
         if (p) { this.path = p; this.pi = 0; this.state = 'graze'; if (!p.length) this.arrive(); return; }
       }
     }
+    // The hum stops: a predator notices the moment its fence goes quiet
+    if (!this.loose && this.deterT <= 0 && this.sp.diet === 'carn' && (w.power.outage > 0 || w.power.ratio < 1) && chance(0.35)) {
+      if (this.planFenceAttack(true)) {
+        if (!g.quietFenceLogged) { g.quietFenceLogged = true; g.log(`${this.name} the ${this.sp.name} has noticed the fences are dead...`, 'bad', this, true); }
+        return;
+      }
+    }
     // Fence testing
     const clever = this.sp.clever && chance(0.25);
     if (!this.loose && this.deterT <= 0 && (this.stress > 62 || clever)) {

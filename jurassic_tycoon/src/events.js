@@ -86,7 +86,7 @@ class Events {
         pw.backupFuel -= dt;
         if (pw.backupFuel <= 0) { w.powerDirty = true; g.log('Backup generators out of fuel!', 'bad'); }
       }
-      if (pw.outage <= 0) { pw.outage = 0; w.powerDirty = true; g.log('Main grid restored. Fences are live.', 'good', null, true); g.sound('powerup'); }
+      if (pw.outage <= 0) { pw.outage = 0; w.powerDirty = true; g.quietFenceLogged = false; g.log('Main grid restored. Fences are live.', 'good', null, true); g.sound('powerup'); }
     }
 
     // ----- Volcano -----
@@ -282,7 +282,7 @@ class Events {
     if (v.front.length > 80) v.front.shift();
     // creatures caught in lava
     for (const d of g.dinos) if (!d.carried && d.tx === nx && d.ty === ny) g.killDino(d, 'lava');
-    for (const h of g.humans()) if (!h.hidden && h.tx === nx && h.ty === ny) g.humanKilled(h, null);
+    for (const h of g.humans()) if (!h.hidden && h.tx === nx && h.ty === ny) g.humanKilled(h, null, 'caught by the lava');
     w.invalidate(nx, ny);
   }
 }

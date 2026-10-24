@@ -101,7 +101,7 @@ const AttractionMixin = {
     if (gy.wrecked) return;
     gy.wrecked = 6;
     const n = gy.riders.length;
-    for (const r of gy.riders) { r.hidden = false; r.x = gy.x; r.y = gy.y; this.humanKilled(r, null); }
+    for (const r of gy.riders) { r.hidden = false; r.x = gy.x; r.y = gy.y; this.humanKilled(r, null, 'killed when a gyrosphere was crushed'); }
     gy.riders = [];
     this.burst(gy.x, gy.y, '#c8e8f8', 18); this.burst(gy.x, gy.y, '#c82020', n * 4);
     this.shake = Math.max(this.shake, 3);
