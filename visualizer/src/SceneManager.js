@@ -33,9 +33,16 @@ export class SceneManager {
             alpha: true
         });
         this.renderer.setSize(this.width(), this.height());
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        // phones: a lighter renderer (Safari drops WebGL contexts that use too much memory)
+        const touch = matchMedia('(pointer: coarse)').matches;
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, touch ? 1.5 : 2));
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = touch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+        this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+            e.preventDefault();
+            const s = document.getElementById('status');
+            if (s) { s.textContent = 'The 3D view was paused by the browser; reload the page to bring it back.'; s.className = 'err'; }
+        });
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.0;
@@ -59,6 +66,8 @@ export class SceneManager {
 
         // Handle window resize
         window.addEventListener('resize', () => this.onWindowResize());
+        // phones: the container also changes size when Safari's toolbar slides or the device rotates
+        if (window.ResizeObserver) new ResizeObserver(() => this.onWindowResize()).observe(this.container);
     }
 
     setupLighting() {

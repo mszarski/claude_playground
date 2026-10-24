@@ -142,8 +142,14 @@ async function rate(rating) {
 
 /** Microphone -> onSamples(Float32Array) per ~21 ms block. Returns {rate, close()}. */
 async function openMic(onSamples) {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
-    const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(1024, 1, 1);
+    // The AudioContext is created before the first await, while the tap that called us still counts as a user gesture:
+    // iOS Safari starts a context made later (after the permission prompt) suspended, and it would record silence.
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } }); }
+    catch (err) { ctx.close(); throw err; }
+    if (ctx.state !== 'running') await ctx.resume();
+    const src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(1024, 1, 1);
     node.onaudioprocess = (ev) => onSamples(new Float32Array(ev.inputBuffer.getChannelData(0)));
     src.connect(node); node.connect(ctx.destination);
     return { rate: ctx.sampleRate, close: async () => { stream.getTracks().forEach((t) => t.stop()); await ctx.close(); } };
@@ -165,8 +171,11 @@ function enableTalk() {
     // Hold to talk: while you speak, the robot listens (nods, perks; rmr/listen.py's controller in Listen.js).
     // After you let go it keeps listening to the silence (the closing nod) until the response move arrives.
     const stopIdle = () => { clearInterval(idle); idle = null; };
+    let holding = false, opening = false;      // the finger can lift before the microphone has finished opening
     const start = async (e) => {
-        e.preventDefault(); if (rec || free) return;
+        e.preventDefault(); if (rec || free || opening) return;
+        holding = true; opening = true;
+        try { e.target.setPointerCapture?.(e.pointerId); } catch { /* not an active pointer: fine */ }
         try {
             const lis = newListener(), chunks = [];
             let feed = null;
@@ -175,10 +184,12 @@ function enableTalk() {
             stopIdle();
             rec = { mic, chunks, lis, t0: performance.now() };
             $('talk').classList.add('on'); status('Listening… release to send.');
+            if (!holding) stop(e);                // released while the mic was opening
         } catch (err) { status(`Microphone unavailable: ${err.message}`, 'err'); }
+        finally { opening = false; }
     };
     const stop = async (e) => {
-        e.preventDefault(); if (!rec) return;
+        e.preventDefault(); holding = false; if (!rec) return;
         const { mic, chunks, lis, t0 } = rec; rec = null; $('talk').classList.remove('on');
         const rate = mic.rate; await mic.close();
         if (performance.now() - t0 < 500) { player.live = null; return status('Hold the button while you speak.', 'err'); }
@@ -189,7 +200,8 @@ function enableTalk() {
         finally { stopIdle(); }
     };
         const b = $('talk');
-    b.addEventListener('pointerdown', start); b.addEventListener('pointerup', stop); b.addEventListener('pointerleave', stop);
+    b.addEventListener('pointerdown', start); b.addEventListener('pointerup', stop); b.addEventListener('pointercancel', stop);
+    b.addEventListener('contextmenu', (e) => e.preventDefault());        // no long-press menu on touch screens
     b.addEventListener('keydown', (e) => { if (e.key === ' ' && !e.repeat) start(e); });
     b.addEventListener('keyup', (e) => { if (e.key === ' ') stop(e); });
 
