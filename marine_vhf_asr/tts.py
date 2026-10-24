@@ -101,6 +101,89 @@ class ChatterboxBackend:
         return wav.squeeze(0).cpu().numpy(), self.model.sr
 
 
+class PiperBackend:
+    """
+    Piper (MIT; voices under their own licenses, see rhasspy/piper-voices):
+    fast ONNX TTS, many English voices, including multi-speaker models
+    (VCTK, LibriTTS, L2-ARCTIC non-native English speakers).
+
+    pip install piper-tts huggingface_hub
+    """
+
+    MODELS = {  # model -> speaker ids to use (None: single-speaker)
+        "en_US/l2arctic/medium/en_US-l2arctic-medium": range(24),
+        "en_GB/vctk/medium/en_GB-vctk-medium": range(0, 109, 6),
+        "en_US/libritts/high/en_US-libritts-high": range(0, 900, 60),
+        "en_US/arctic/medium/en_US-arctic-medium": range(18),
+        "en_GB/alan/medium/en_GB-alan-medium": None,
+        "en_GB/northern_english_male/medium/en_GB-northern_english_male-medium": None,
+        "en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium": None,
+        "en_US/joe/medium/en_US-joe-medium": None,
+        "en_US/kristin/medium/en_US-kristin-medium": None,
+        "en_US/kusal/medium/en_US-kusal-medium": None,
+        "en_US/hfc_female/medium/en_US-hfc_female-medium": None,
+    }
+
+    def __init__(self, voice_set: str = "all"):
+        from huggingface_hub import hf_hub_download
+        from piper import PiperVoice
+
+        self._models, self.voices = {}, []
+        for model, speakers in self.MODELS.items():
+            path = hf_hub_download("rhasspy/piper-voices", f"en/{model}.onnx")
+            hf_hub_download("rhasspy/piper-voices", f"en/{model}.onnx.json")
+            self._models[model] = PiperVoice.load(path)
+            self.voices += [f"{model}#{s}" for s in speakers] if speakers is not None else [model]
+
+    def synthesize(self, text: str, voice: str) -> Tuple[np.ndarray, int]:
+        from piper import SynthesisConfig
+
+        model, _, speaker = voice.partition("#")
+        v = self._models[model]
+        cfg = SynthesisConfig(speaker_id=int(speaker) if speaker else None,
+                              length_scale=random.uniform(0.85, 1.15))
+        audio = np.concatenate([c.audio_float_array for c in v.synthesize(text, syn_config=cfg)])
+        return audio, v.config.sample_rate
+
+
+class ParlerBackend:
+    """
+    Parler-TTS Mini v1.1 (Apache 2.0): voices from text descriptions plus 34
+    named speakers. Used for held-out test audio: no training data uses it.
+
+    pip install git+https://github.com/huggingface/parler-tts.git
+    """
+
+    SPEAKERS = ["Jon", "Lea", "Gary", "Jenna", "Mike", "Laura", "Lauren", "Eileen", "Alisa", "Karen",
+                "Barbara", "Carol", "Emily", "Rose", "Will", "Patrick", "Eric", "Rick", "Anna", "Tina",
+                "Jordan", "Brenda", "David", "Jerry"]
+
+    def __init__(self, voice_set: str = "all"):
+        import torch
+        from parler_tts import ParlerTTSForConditionalGeneration
+        from transformers import AutoTokenizer
+
+        repo = "parler-tts/parler-tts-mini-v1.1"
+        self.device = "cuda"
+        self.model = ParlerTTSForConditionalGeneration.from_pretrained(repo, torch_dtype=torch.float16).to(self.device)
+        self.tok = AutoTokenizer.from_pretrained(repo)
+        self.desc_tok = AutoTokenizer.from_pretrained(self.model.config.text_encoder._name_or_path)
+        self.voices = self.SPEAKERS
+
+    def synthesize(self, text: str, voice: str) -> Tuple[np.ndarray, int]:
+        import torch
+
+        pace = random.choice(["slightly fast", "moderate", "slightly slow", "fast"])
+        desc = (f"{voice} speaks at a {pace} pace with a {random.choice(['low', 'moderate', 'high'])} "
+                f"pitch, in a very clear recording with almost no background noise.")
+        d = self.desc_tok(desc, return_tensors="pt").to(self.device)
+        p = self.tok(text, return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            out = self.model.generate(input_ids=d.input_ids, attention_mask=d.attention_mask,
+                                      prompt_input_ids=p.input_ids, prompt_attention_mask=p.attention_mask)
+        return out.to(torch.float32).cpu().numpy().squeeze(), self.model.config.sampling_rate
+
+
 class SineBackend:
     """
     Dependency-free placeholder that emits tones instead of speech.
@@ -121,4 +204,5 @@ class SineBackend:
         return 0.5 * np.sin(2 * np.pi * f0 * t * (1 + 0.1 * np.sin(2 * np.pi * 3 * t))), sr
 
 
-BACKENDS = {"kokoro": KokoroBackend, "chatterbox": ChatterboxBackend, "sine": SineBackend}
+BACKENDS = {"kokoro": KokoroBackend, "chatterbox": ChatterboxBackend, "piper": PiperBackend,
+            "parler": ParlerBackend, "sine": SineBackend}

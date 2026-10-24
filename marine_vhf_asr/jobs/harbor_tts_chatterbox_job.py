@@ -30,7 +30,8 @@ for i, split in enumerate(os.environ["SPLIT"].split(",")):  # comma-separated sp
     text = hf_hub_download(repo, f"{split}/text.jsonl", repo_type="dataset")
     out = f"/tmp/{split}{suffix}"
     seed = str(int(os.environ.get("SEED", "0")) + i)
-    synthesize.main(["--out", out, "--from-text", text, "--tts", tts, "--voice-set", voice_set, "--seed", seed])
+    extra = ["--select", os.environ["SELECT"]] if os.environ.get("SELECT") else []
+    synthesize.main(["--out", out, "--from-text", text, "--tts", tts, "--voice-set", voice_set, "--seed", seed] + extra)
     upload_folder(repo_id=repo, repo_type="dataset", folder_path=out, path_in_repo=f"{split}{suffix}",
                   commit_message=f"Synthesized {split}{suffix} audio ({tts}, voices: {voice_set})")
     print("UPLOADED", split + suffix, flush=True)

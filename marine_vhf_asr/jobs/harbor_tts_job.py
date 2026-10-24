@@ -14,8 +14,9 @@ simulator on HF Jobs, and upload wavs + manifest to a Hub dataset folder.
         --env SPLIT=test --env SEED=1 --env VOICE_SET=test --env OUT_SUFFIX=_kv \\
         marine_vhf_asr/jobs/harbor_tts_job.py
 
-TTS=kokoro|chatterbox (Chatterbox needs jobs/harbor_tts_chatterbox_job.py, which
-pins its dependencies); VOICE_SET=all|train|test (Kokoro voice subsets).
+TTS=kokoro|chatterbox|parler (Chatterbox and Parler need their own job files,
+which pin their dependencies); VOICE_SET=all|train|test (Kokoro voice subsets);
+SELECT=M:R synthesizes only dialogues with dialogue_id % M == R.
 """
 import os
 import sys
@@ -33,7 +34,8 @@ for i, split in enumerate(os.environ["SPLIT"].split(",")):  # comma-separated sp
     text = hf_hub_download(repo, f"{split}/text.jsonl", repo_type="dataset")
     out = f"/tmp/{split}{suffix}"
     seed = str(int(os.environ.get("SEED", "0")) + i)
-    synthesize.main(["--out", out, "--from-text", text, "--tts", tts, "--voice-set", voice_set, "--seed", seed])
+    extra = ["--select", os.environ["SELECT"]] if os.environ.get("SELECT") else []
+    synthesize.main(["--out", out, "--from-text", text, "--tts", tts, "--voice-set", voice_set, "--seed", seed] + extra)
     upload_folder(repo_id=repo, repo_type="dataset", folder_path=out, path_in_repo=f"{split}{suffix}",
                   commit_message=f"Synthesized {split}{suffix} audio ({tts}, voices: {voice_set})")
     print("UPLOADED", split + suffix, flush=True)

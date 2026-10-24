@@ -64,6 +64,8 @@ def main(argv=None):
     parser.add_argument("--tts", choices=sorted(BACKENDS), default="kokoro")
     parser.add_argument("--voice-set", choices=["all", "train", "test"], default="all",
                         help="Kokoro voice subset; 'test' voices are never used for training data")
+    parser.add_argument("--select", help="Only dialogues with dialogue_id %% M == R, as 'M:R' "
+                                          "(split a set across TTS engines or parallel jobs)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--clean-copies", action="store_true",
                         help="Also write an undegraded copy of each clip (for curriculum / debugging)")
@@ -74,6 +76,9 @@ def main(argv=None):
     cfg = ChannelConfig()
     tts = None if args.text_only else BACKENDS[args.tts](voice_set=args.voice_set)
     records = _text_records(args.from_text) if args.from_text else _generated_records(args)
+    if args.select:
+        mod, rem = map(int, args.select.split(":"))
+        records = (r for r in records if r["dialogue_id"] % mod == rem)
 
     wav_dir = args.out / "wav"
     wav_dir.mkdir(parents=True, exist_ok=True)
@@ -97,7 +102,7 @@ def main(argv=None):
                 if args.clean_copies:
                     clean = (0.9 * audio / (np.max(np.abs(audio)) + 1e-12)).astype(np.float32)
                     wavfile.write(wav_dir / f"clean_{name}", TARGET_SR, clean)
-                record.update(audio=f"wav/{name}", voice=voice, channel=params)
+                record.update(audio=f"wav/{name}", voice=voice, tts=args.tts, channel=params)
             manifest.write(json.dumps(record) + "\n")
             n += 1
             if n % 100 == 0:
