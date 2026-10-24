@@ -953,7 +953,9 @@ class UI {
     this.renderDeals(false);
     this.renderSquad(false);
     // an InGen call waits until no other dialog is open
-    if (g.pendingDecision && !this.decisionShown && $('#modal').style.display !== 'flex') this.showDecision(g.pendingDecision);
+    // the board can wait while the park is in crisis
+    const crisis = g.looseCount > 0 || g.alarm || g.world.power.outage > 0 || (g.events.storm && g.events.storm.phase === 'active');
+    if (g.pendingDecision && !this.decisionShown && !crisis && $('#modal').style.display !== 'flex') this.showDecision(g.pendingDecision);
   }
 
   renderAlerts() {
