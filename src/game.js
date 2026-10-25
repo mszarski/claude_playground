@@ -639,7 +639,7 @@ class Game {
       this.reputation = Math.max(0, this.reputation - 5);
       this.spend(30000, 'fines');
       this.removeGuest(h, false);
-      this.log(dino ? `A guest was ${dino.isPtera ? 'carried off' : 'eaten'} by ${dino.name} the ${dino.sp.name}! Lawsuit: -$30k` : `A guest was ${cause || 'killed'}! Lawsuit: -$30k`, 'bad', { x: h.x, y: h.y }, true);
+      this.log(dino ? `${h.label} was ${dino.isPtera ? 'carried off' : 'eaten'} by ${dino.name} the ${dino.sp.name}! Lawsuit: -$30k` : `${h.label} was ${cause || 'killed'}! Lawsuit: -$30k`, 'bad', { x: h.x, y: h.y }, true);
     } else {
       this.stats.staffDeaths++;
       this.reputation = Math.max(0, this.reputation - 2);

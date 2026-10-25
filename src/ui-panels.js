@@ -51,10 +51,11 @@ class UIPanels {
         x.drawImage(d.sedatedT > 0 ? S.sleepR : S.right[0], 8, 4, S.w * sc, S.h * sc);
       };
     } else if (o.kind === 'guest') {
-      html += `<h2>Guest</h2><div class="sub">${o.state === 'flee' ? 'Running for their life!' : o.state === 'shelter' ? 'Hiding in a shelter' : o.state === 'leave' ? 'Heading home' : 'Enjoying the park'}</div>`;
+      html += `<h2>${o.label}</h2><div class="sub">${o.state === 'flee' ? 'Running for their life!' : o.state === 'shelter' ? 'Hiding in a shelter' : o.state === 'leave' ? 'Heading home' : 'Enjoying the park'}</div>`;
       html += `<div class="row"><span>Happiness</span><span>${Math.round(o.happy)}%</span></div>${this.bar(o.happy, 100, '#5ac85a')}`;
       html += `<div class="row"><span>Hunger</span><span>${Math.round(o.hunger)}%</span></div>${this.bar(o.hunger, 100, '#f0a030')}`;
       html += `<div class="row"><span>Bladder</span><span>${Math.round(o.toilet)}%</span></div>${this.bar(o.toilet, 100, '#70b8f0')}`;
+      if (o.thought) html += `<div class="row"><span>Thinking</span><span>"${o.thought}"</span></div>`;
       html += `<div class="row"><span>Species seen</span><span>${o.seenSpecies.size}</span></div><div class="row"><span>Spent</span><span>${fmtMoney(o.spent + g.ticket)}</span></div>`;
     } else if (o.kind === 'ranger' || o.kind === 'worker') {
       html += `<h2>${o.kind === 'ranger' ? 'Park Ranger' : 'Engineer'}</h2>`;
