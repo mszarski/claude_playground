@@ -263,7 +263,8 @@ class Dino {
         if (p && p.length) { this.path = p; this.pi = 0; this.state = 'walk'; return; }
       }
     }
-    this.state = 'idle'; this.stateT = randf(1.5, 4.5);
+    // a loose raptor doesn't stand around waiting to be darted
+    this.state = 'idle'; this.stateT = this.loose && this.sp.clever ? randf(0.3, 0.9) : randf(1.5, 4.5);
   }
 
   arrive() {
@@ -385,10 +386,15 @@ class Dino {
     const g = this.game;
     let best = null, bd = range * range;
     if (this.loose) {
+      // the nearest person it can actually get to: a guest on the far side of an intact fence is no prey
+      const w = g.world, at = new Map();
       for (const h of g.humans()) {
-        if (h.hidden || h.dead) continue;
-        const d = dist2(this.x, this.y, h.x, h.y);
-        if (d < bd) { bd = d; best = h; }
+        if (h.hidden || h.dead || dist2(this.x, this.y, h.x, h.y) >= bd) continue;
+        at.set(w.idx(Math.floor(h.x), Math.floor(h.y)), h);
+      }
+      if (at.size) {
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => at.has(w.idx(x, y)), 2500);
+        if (p && p.length) { const [x, y] = p[p.length - 1]; best = at.get(w.idx(x, y)); bd = dist2(this.x, this.y, best.x, best.y); }
       }
     }
     const angry = !this.loose && this.sp.size >= 3 && this.stress > 75;
