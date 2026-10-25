@@ -528,6 +528,8 @@ class UIPanels {
     if (win) this.sfx.play('fanfare');
     const medal = win && sc.medal ? sc.medal(g) : null;
     const best = medal ? saveMedal(g.scenario, medal, g.day) : false;
+    // on a loss, say what the goal was and how far off it the park ended up
+    const failWhy = `<p>Goal: ${sc.objective}</p><p style="color:#ff9080">Where you stood: ${sc.progress(g).replace(/<[^>]+>/g, '')}</p>`;
     if (sc.campaign) {
       if (win) saveCampaign(g.scenario, medal || 'bronze', g.day);
       const next = CAMPAIGN_ORDER[CAMPAIGN_ORDER.indexOf(g.scenario) + 1];
@@ -535,7 +537,7 @@ class UIPanels {
       const html = `<div id="gameover"><div style="font-family:'Press Start 2P';font-size:9px;color:var(--orange)">CHAPTER ${sc.chapter} OF ${CAMPAIGN_ORDER.length}</div><h1>${win ? (next ? 'CHAPTER COMPLETE' : 'CAMPAIGN COMPLETE') : 'CHAPTER FAILED'}</h1>
         <p style="font-size:22px">${sc.name}: ${win ? (next ? 'on to the next island.' : 'the greatest park on Earth. Welcome to Jurassic World.') : 'the island won this time.'}</p>
         ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
-        ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
+        ${win ? (sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : '') : failWhy}
         ${perk ? `<p>New perk for the chapters ahead: <b style="color:#a8f080">${perk.name}</b> (${perk.desc})</p>` : ''}
         <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
         <div class="btns" style="justify-content:center">${win && next ? '<button data-m="next">Next chapter</button>' : ''}<button data-m="again">${win ? 'Replay' : 'Try again'}</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
@@ -548,7 +550,7 @@ class UIPanels {
     }
     const html = `<div id="gameover"><h1>${win ? 'SCENARIO COMPLETE' : 'SCENARIO FAILED'}</h1><p style="font-size:22px">${sc.name}: ${win ? 'you did it.' : 'the island won this time.'}</p>
       ${medal ? `<p style="font-size:44px;margin:4px 0">${MEDAL_ICON[medal]}</p><p style="font-family:'Press Start 2P';font-size:10px;color:var(--gold)">${medal.toUpperCase()} MEDAL${best ? ' · NEW BEST' : ''}</p>` : ''}
-      ${sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : ''}
+      ${win ? (sc.medalText ? `<p style="color:#9ab08a">${sc.medalText}</p>` : '') : failWhy}
       <p style="color:#9ab08a">Day ${g.day} · ${g.stats.deaths} guests lost · ${g.stats.escapes} escapes · ${fmtMoney(g.money)}</p>
       <div class="btns" style="justify-content:center"><button data-m="again">Try again</button><button data-m="title">Main menu</button><button data-close>Keep playing</button></div></div>`;
     this.showModal(html, true);
