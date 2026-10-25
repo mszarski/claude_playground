@@ -160,6 +160,7 @@ case "$STAGE" in
     cp /work/data/deepcad_cq.parquet data/
     need_vllm
     if [[ "${RICH:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/train_*.tar; do tar -xf "$t" -C data/rich; done; fi
+    if [[ "${REAL:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/real_train_*.tar; do tar -xf "$t" -C data/rich; done; fi
     python train_vlm_grpo.py --data data --name "$RUN" --init "${INIT:-results/vlm_rft_v1/model}" ${STEPS:+--steps $STEPS} "$@" ;;
 
   revise)     # build-inspect-fix inference (scripts/revise_vllm.py) -> results/$RUN/revise.pkl; INIT = model dir
@@ -251,6 +252,14 @@ case "$STAGE" in
     need_cq
     need cad_vec
     python scripts/convert_deepcad.py --data data --out /work/data/deepcad_cq.parquet "$@" ;;
+
+  realgen)    # real-part training shard from the Fusion 360 Gallery STEP release (scripts/prep_real.py)
+    need_cq     # SHARD/N_SHARDS -> /work/data/rich/real_train_<shard>.tar; test designs excluded
+    python -c "import urllib.request as u; u.urlretrieve('https://fusion-360-gallery-dataset.s3.us-west-2.amazonaws.com/segmentation/s2.0.1/s2.0.1_extended_step.zip', '/tmp/f360.zip')"
+    python scripts/prep_real.py --zip /tmp/f360.zip --out data/rich/real_train --shard "${SHARD:-0}" --n_shards "${N_SHARDS:-4}" \
+        --exclude_designs datagen/real_test_designs.txt "$@"
+    mkdir -p /work/data/rich && tar -cf "/work/data/rich/real_train_${SHARD:-0}.tar" -C data/rich "real_train/${SHARD:-0}" \
+        && ls -la "/work/data/rich/real_train_${SHARD:-0}.tar" ;;
 
   orient)     # orientation search on saved predictions (scripts/orient_fix.py) + scoring -> results/$RUN/orient*.{pkl,json}
     need_cq     # RICH_TEST=1: rich/real test parts (scored by rich_iou.py); else DeepCAD test (cq_iou.py)

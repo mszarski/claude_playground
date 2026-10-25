@@ -58,7 +58,9 @@ def main():
     ap.add_argument("--out_dir", default="results")
     ap.add_argument("--deepcad_cq", default="data/deepcad_cq.parquet")
     ap.add_argument("--modes", default="view1=0.4,view4=0.4,view1+expert=0.2")
-    ap.add_argument("--rich", default=None, help="rich-part shards (scripts/gen_rich_data.py) to mix into the prompts")
+    ap.add_argument("--rich", nargs="*", default=None,
+                    help="part-shard dirs (scripts/gen_rich_data.py, scripts/prep_real.py) to mix into the prompts")
+    ap.add_argument("--rich_w", type=float, nargs="*", default=None, help="relative weight of each --rich dir")
     ap.add_argument("--rich_p", type=float, default=0.5, help="share of prompts drawn from --rich")
     ap.add_argument("--rich_max", type=int, default=300000, help="rich parts to sample prompts from")
     ap.add_argument("--rich_val", type=int, default=128, help="rich parts held out for validation")
@@ -117,21 +119,30 @@ def main():
         if text_index.get(u, {}).get("expert"):
             expert[u] = text_index[u]["expert"]
     del text_index
-    rich, rich_train, rich_valk = {}, [], []          # "rich:<uid>" -> (render stem, GT CadQuery code)
-    if a.rich:
-        for sh in sorted(os.listdir(a.rich)):
-            pq = os.path.join(a.rich, sh, "parts.parquet")
+    rich, rich_train, rich_valk = {}, [], []          # "rich:<j>:<shard>:<uid>" -> (render stem, GT CadQuery code)
+    rich_by_dir, val_by_dir = [], []
+    for j, rdir in enumerate(a.rich or []):
+        part = {}
+        for sh in sorted(os.listdir(rdir)):
+            pq = os.path.join(rdir, sh, "parts.parquet")
             if os.path.exists(pq):
                 d = pd.read_parquet(pq)
                 d = d[d.code.str.len() <= 2400]
                 for u, c in zip(d.uid, d.code):
-                    rich[f"rich:{sh}:{u}"] = (os.path.join(a.rich, sh, "renders", u), c)
-        keys = sorted(rich)
-        rng_r = random.Random(a.seed + 1)
-        rng_r.shuffle(keys)
-        rich_valk, rich_train = keys[: a.rich_val], keys[a.rich_val: a.rich_val + a.rich_max]
-        rich = {k: rich[k] for k in rich_valk + rich_train}
-        print(f"[data] rich: {len(rich_train)} prompt parts, {len(rich_valk)} val, share {a.rich_p}", flush=True)
+                    part[f"rich:{j}:{sh}:{u}"] = (os.path.join(rdir, sh, "renders", u), c)
+        keys = sorted(part)
+        random.Random(a.seed + 1 + j).shuffle(keys)
+        vk, tk = keys[: a.rich_val], keys[a.rich_val: a.rich_val + a.rich_max]
+        rich.update({k: part[k] for k in vk + tk})
+        rich_by_dir.append(tk)
+        val_by_dir.append((os.path.basename(rdir.rstrip("/")), vk))
+        rich_train += tk
+        rich_valk += vk
+        print(f"[data] rich {rdir}: {len(tk)} prompt parts, {len(vk)} val", flush=True)
+    rich_w = np.array(a.rich_w if a.rich_w else [1.0] * len(rich_by_dir), float)
+    rich_w = rich_w / rich_w.sum() if len(rich_w) else rich_w
+    if rich_by_dir:
+        print(f"[data] rich share {a.rich_p}, dir weights {rich_w.round(3).tolist()}", flush=True)
     gts = {}
 
     def gt(u):
@@ -220,12 +231,13 @@ def main():
             rs = [r for r in scores(codes, val) if r is not None]
             rec[mode] = {"iou_gt": round(100 * float(np.mean([r["gt"] for r in rs])), 2),
                          "invalid": round(float(np.mean([not r["valid"] for r in rs])), 4)}
-        if rich_valk:                                 # rich held-out parts, 4 views, own IoU
-            reqs = [request(*inputs(u, "view4", True)) for u in rich_valk]
+        for name, vk in val_by_dir:                   # held-out parts of each --rich dir, 4 views, own IoU
+            reqs = [request(*inputs(u, "view4", True)) for u in vk]
             codes = [o.outputs[0].text.strip() or None for o in llm.generate(reqs, greedy, use_tqdm=False)]
-            rs = [r for r in scores(codes, rich_valk) if r is not None]
-            rec["rich_view4"] = {"iou_own": round(100 * float(np.mean([r["own"] for r in rs])), 2),
-                                 "invalid": round(float(np.mean([not r["valid"] for r in rs])), 4)}
+            rs = [r for r in scores(codes, vk) if r is not None]
+            key = "rich_view4" if name == "train" else f"{name}_view4"
+            rec[key] = {"iou_own": round(100 * float(np.mean([r["own"] for r in rs])), 2),
+                        "invalid": round(float(np.mean([not r["valid"] for r in rs])), 4)}
         rec["eval_sec"] = round(time.time() - t0)
         emit(rec)
 
@@ -248,7 +260,8 @@ def main():
     for step in range(1, a.steps + 1):
         t0 = time.time()
         n_rich = sum(rng.random() < a.rich_p for _ in range(a.prompts)) if rich_train else 0
-        uids = rng.sample(train, a.prompts - n_rich) + rng.sample(rich_train, n_rich)
+        dirs = rng.choices(range(len(rich_by_dir)), weights=rich_w, k=n_rich) if n_rich else []
+        uids = rng.sample(train, a.prompts - n_rich) + [rng.choice(rich_by_dir[j]) for j in dirs]
         items = [inputs(u, names[int(np.searchsorted(mp, rng.random()))]) for u in uids]
         outs = llm.generate([request(im, p) for im, p in items], sp, use_tqdm=False)
         seqs = [list(c.token_ids) for o in outs for c in o.outputs]

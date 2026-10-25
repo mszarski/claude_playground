@@ -6,7 +6,11 @@ with the input cameras. Output has the layout of scripts/gen_rich_data.py, so pr
 and rich_iou.py work unchanged; the "GT program" imports the STEP file:
 
   python scripts/prep_real.py --zip <dir>/s2.0.1_extended_step.zip --out data/rich/real --per_cat 150
-Writes <out>/0/parts.parquet, <out>/0/renders/<cat>/<name>_{0..3}.png, <out>/0/step/<name>.stp.
+Writes <out>/<shard>/parts.parquet, <out>/<shard>/renders/<cat>/<name>_{0..3}.png, <out>/<shard>/step/<name>.stp.
+
+Training split (no design shared with the test set; a design id is the name up to the first "_"):
+  python scripts/prep_real.py --zip ... --out data/rich/real_train --per_cat 1000 --shard 0 --n_shards 4 \
+      --exclude_designs datagen/real_test_designs.txt
 """
 import argparse
 import os
@@ -64,19 +68,27 @@ def main():
     ap.add_argument("--max_faces", type=int, default=120)
     ap.add_argument("--workers", type=int, default=usable_cpus())
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--shard", type=int, default=0)
+    ap.add_argument("--n_shards", type=int, default=1, help="designs are split across shards by a hash of their id")
+    ap.add_argument("--exclude_designs", default=None, help="file of design ids to leave out (one per line)")
     a = ap.parse_args()
     import pandas as pd
     from pebble import ProcessPool
-    rng = random.Random(a.seed)
+    rng = random.Random(a.seed + a.shard)
     z = zipfile.ZipFile(a.zip)
     names = sorted(n for n in z.namelist() if n.endswith(".seg"))
+    import zlib
+    excl = set(open(a.exclude_designs).read().split()) if a.exclude_designs else set()
     by_cat = {c: [] for c in CATS}
     for n in names:
+        design = os.path.basename(n).split("_")[0]
+        if design in excl or zlib.crc32(design.encode()) % a.n_shards != a.shard:
+            continue
         labels = [int(x) for x in z.read(n).decode().split()]
         if 0 < len(labels) <= a.max_faces:
             by_cat[category(labels)].append(os.path.basename(n)[:-4])
     print("[real] candidates " + ", ".join(f"{c} {len(v)}" for c, v in by_cat.items()), flush=True)
-    root = os.path.join(a.out, "0")
+    root = os.path.join(a.out, str(a.shard))
     os.makedirs(os.path.join(root, "step"), exist_ok=True)
     stp = {os.path.basename(n)[:-4]: n for n in z.namelist() if n.endswith(".stp")}
     rows = []
