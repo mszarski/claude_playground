@@ -224,7 +224,7 @@ const AttractionMixin = {
       this.soundAt('chomp', d.x, d.y, 1);
       this.soundAt(d.sp.size >= 3 ? 'roar' : 'screech', d.x, d.y, 1);
       const crowd = this.guests.filter((gu) => !gu.hidden && dist2(gu.x, gu.y, cx, cy) < 144);
-      const pay = Math.min(crowd.length, 60) * 10 * this.priceMul;
+      const pay = Math.min(crowd.length, 80) * 20 * this.priceMul;
       this.earn(pay, 'shops'); b.revenue = (b.revenue || 0) + pay; b.visitors += crowd.length;
       for (const gu of crowd) { gu.happy = Math.min(100, gu.happy + 20); if (chance(0.3)) { gu.thought = pick(['WHOA!', 'GROSS!', 'AGAIN!']); gu.thoughtT = 2; } }
       if (pay) this.addFloat(cx, b.y - 0.5, '+' + fmtMoney(pay), '#f8d040');
