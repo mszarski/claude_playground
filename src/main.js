@@ -12,7 +12,8 @@ function startGame(opts = {}) {
   if (window.innerWidth < 700) RENDER.cam.zoom = 2;
   if (!opts.loaded) {
     UIX.centerOn(g.start.x, g.start.y - 6);
-    if (!opts.scenario && !opts.tutorial) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
+    if (opts.sandbox) g.log('Sandbox: every species and building is unlocked and the park can\'t go bankrupt. Random disasters are on: switch them off, or set one off yourself, from the ☄ Disasters button.', 'goal', null, true);
+    else if (!opts.scenario && !opts.tutorial) g.log('Welcome to Isla Nublar! Follow the goals in the bottom-left to build your park.', 'goal', null, true);
   }
   if (opts.tutorial) {
     g.tutorial = true; g.events.auto = false; g.advisorOn = false;
