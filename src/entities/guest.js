@@ -96,6 +96,7 @@ class Guest {
       if (this.stay <= 0 && this.state === 'walk') this.state = 'leave';
     }
     if (this.thoughtT > 0) this.thoughtT -= dt; else this.thought = null;
+    if (this.state === 'watch') { this.watchT -= dt; if (this.watchT <= 0) this.state = 'walk'; return; }
 
     // Movement between tiles
     // a park is a long walk: guests stroll briskly so far-off attractions are reachable in a visit
@@ -155,9 +156,12 @@ class Guest {
     else if (this.toilet > 60) type = 'restroom';
     else if ((g.hour >= 19 || g.hour < 6) && this.stay > 4) type = 'hotel';
     else if (this.shopUrge > 70) type = 'shop';
+    // feeding time draws a crowd: in the hour before the noon and evening shows, people head for the stands
+    else if (((g.hour >= 11 && g.hour < 12) || (g.hour >= 17 && g.hour < 18)) && g.hasBuilding('feedshow') && chance(0.5)) type = 'feedshow';
     else if (chance(0.45)) type = pick(['tour', 'tour', 'gyro', 'gyro', 'lagoon', 'lagoon', 'arena', 'feedshow', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
     if (!type) return null;
-    const cands = g.buildingsOfType(type).filter((b) => b.powered || !BUILDINGS[b.type].power);
+    // a hotel only has so many rooms
+    const cands = g.buildingsOfType(type).filter((b) => (b.powered || !BUILDINGS[b.type].power) && !(BUILDINGS[b.type].rooms && b.inside >= BUILDINGS[b.type].rooms));
     if (!cands.length) { if (type === 'restroom' || type === 'restaurant') this.happy -= 2; return null; }
     // a pressing need goes to the nearest one you can actually walk to; anything else can be anywhere
     if (type === 'restroom' || type === 'restaurant') {
@@ -244,13 +248,23 @@ class Guest {
     if (!b || b === 'gate' || !w.buildings.has(b.id)) return;
     const def = BUILDINGS[b.type];
     if (def.power && !b.powered) { this.happy -= 3; return; }
-    if (b.type === 'viewing' || b.type === 'arena' || b.type === 'feedshow') { this.happy = Math.min(100, this.happy + 4); this.lookAtDinos(); return; }
+    if (b.type === 'viewing' || b.type === 'arena' || b.type === 'feedshow') {
+      this.happy = Math.min(100, this.happy + 4); this.lookAtDinos();
+      // waiting for feeding time: stay put by the stands
+      if (b.type === 'feedshow' && ((g.hour >= 11 && g.hour < 12.2) || (g.hour >= 17 && g.hour < 18.2))) {
+        const showAt = g.hour < 13 ? 12.2 : 18.2;
+        this.state = 'watch'; this.watchT = Math.max(1, (showAt - g.hour) * g.secPerHour);
+      }
+      return;
+    }
     if (b.type === 'tour' || b.type === 'gyro') {
       if (!b.queue) b.queue = [];
       if (b.queue.length >= 16) { this.happy -= 3; return; }
       b.queue.push(this); this.state = 'queue'; this.hidden = true; this.inBuilding = null; this.insideT = 40;
       return;
     }
+    // a full hotel turns people away at the desk
+    if (def.rooms && b.inside >= def.rooms) { this.happy -= 2; this.thought = 'NO ROOMS'; this.thoughtT = 1.5; return; }
     // Enter
     this.inBuilding = b; b.inside++;
     this.hidden = true; this.state = 'inside';

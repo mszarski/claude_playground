@@ -111,6 +111,7 @@ class UIPanels {
       const def = BUILDINGS[o.type];
       html += `<h2>${def.name}</h2><div class="sub">${def.desc}</div>`;
       html += `<div class="row"><span>Condition</span><span>${Math.round(o.hp)}/${o.maxHp}</span></div>${this.bar(o.hp, o.maxHp, '#5ac85a')}`;
+      if (def.rooms) html += `<div class="row"><span>Rooms taken</span><span>${Math.min(o.inside, def.rooms)}/${def.rooms}</span></div>`;
       if (def.power) html += `<div class="row"><span>Power</span><span style="color:${o.powered ? '#f8d040' : '#e04838'}">${o.powered ? 'ON' : 'NO POWER'}</span></div>`;
       if (o.type === 'pylon') html += `<div class="row"><span>Grid</span><span style="color:${w.covered[w.idx(o.x, o.y)] ? '#f8d040' : '#e04838'}">${w.covered[w.idx(o.x, o.y)] ? 'CONNECTED' : 'NOT CONNECTED'}</span></div>${w.covered[w.idx(o.x, o.y)] ? '' : '<div class="sub" style="color:#ff9080">Outside the power area. Move it closer to a power plant or a connected pylon.</div>'}`;
       if (o.type === 'power') html += `<div class="row"><span>Output</span><span>${o.offline > 0 || w.power.outage > 0 ? 'OFFLINE' : def.supply + ' MW'}</span></div>`;
