@@ -851,6 +851,10 @@ class Game {
       const sp = 14 * dt;
       if (dd <= sp) {
         dt_.life = 0;
+        // a running target is hard to hit, and a clever one jinks: raptors make rangers work for it
+        const moving = t.state === 'hunt' || t.state === 'walk' || t.state === 'tofence';
+        const miss = moving ? (t.sp && t.sp.clever ? 0.45 : 0.2) * (this.research.has('darts') ? 0.6 : 1) : 0;
+        if (miss && chance(miss)) { this.addFloat(t.x, t.y - 1, 'miss', '#c8c8c8'); continue; }
         if (!t.dead && !t.carried && t.sedatedT <= 0) {
           t.sedation += 1; t.flash = 0.15;
           if (t.sedation >= Math.max(1, t.sp.tranq - (this.research.has('darts') ? 1 : 0))) t.sedate();
