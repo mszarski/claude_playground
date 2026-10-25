@@ -53,13 +53,25 @@ const BlueprintMixin = {
     const walls = this.naturalWalls(reg);
     let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
     for (const j of fences.concat(walls)) { const x = j % w.W, y = (j / w.W) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    const bp = { w: x1 - x0 + 1, h: y1 - y0 + 1, fences: [], feeders: [], trees: [] };
+    const bp = { w: x1 - x0 + 1, h: y1 - y0 + 1, fences: [], feeders: [], trees: [], water: [] };
     for (const j of fences) {
       const f = w.fence[j];
       bp.fences.push([j % w.W - x0, ((j / w.W) | 0) - y0, f === F_BROKEN ? (w.fenceOrig[j] || F_ELECTRIC) : f === F_GATE ? F_ELECTRIC : f]);
     }
     for (const j of walls) bp.fences.push([j % w.W - x0, ((j / w.W) | 0) - y0, F_ELECTRIC]);
     for (const t of reg.tiles) if (w.terrain[t] === T_FOREST) bp.trees.push([t % w.W - x0, ((t / w.W) | 0) - y0]);
+    // ponds inside the paddock: flood the water that touches the paddock, without crossing its outer walls
+    const isWater = (j) => w.terrain[j] === T_WATER || w.terrain[j] === T_DEEP;
+    const wallSet = new Set(walls), seen = new Set(), stack = [];
+    for (const t of reg.tiles) {
+      const x = t % w.W, y = (t / w.W) | 0;
+      for (const [dx, dy] of DIRS8) { const j = w.idx(x + dx, y + dy); if (w.inb(x + dx, y + dy) && isWater(j) && !wallSet.has(j) && !seen.has(j)) { seen.add(j); stack.push(j); } }
+    }
+    while (stack.length) {
+      const j = stack.pop(), x = j % w.W, y = (j / w.W) | 0;
+      bp.water.push([x - x0, y - y0]);
+      for (const [dx, dy] of DIRS4) { const nx = x + dx, ny = y + dy; if (nx < x0 || nx > x1 || ny < y0 || ny > y1) continue; const k = w.idx(nx, ny); if (isWater(k) && !wallSet.has(k) && !seen.has(k)) { seen.add(k); stack.push(k); } }
+    }
     for (const b of reg.feeders.herb.concat(reg.feeders.carn)) bp.feeders.push([b.x - x0, b.y - y0, b.type]);
     return bp;
   },
@@ -67,7 +79,7 @@ const BlueprintMixin = {
   // What a stamp would build at (x, y), and what it costs
   stampPlan(bp, x, y) {
     const w = this.world;
-    const plan = { fences: [], feeders: [], trees: [], cost: 0, blocked: 0 };
+    const plan = { fences: [], feeders: [], trees: [], water: [], cost: 0, blocked: 0 };
     for (const [dx, dy, f] of bp.fences) {
       const tx = x + dx, ty = y + dy;
       if (!w.inb(tx, ty)) { plan.blocked++; continue; }
@@ -78,6 +90,12 @@ const BlueprintMixin = {
     }
     for (const [dx, dy, type] of bp.feeders) {
       if (w.canPlaceBuilding(type, x + dx, y + dy)) { plan.feeders.push([x + dx, y + dy, type]); plan.cost += BUILDINGS[type].cost; }
+    }
+    for (const [dx, dy] of bp.water || []) {
+      const tx = x + dx, ty = y + dy;
+      if (!w.inb(tx, ty)) continue;
+      const i = w.idx(tx, ty), t = w.terrain[i];
+      if ((t === T_GRASS || t === T_FOREST || t === T_SAND) && !w.path[i] && !w.track[i] && !w.bld[i] && !w.fence[i]) { plan.water.push([tx, ty]); plan.cost += TOOL_INFO.pond.cost; }
     }
     for (const [dx, dy] of bp.trees) {
       const tx = x + dx, ty = y + dy;
@@ -95,6 +113,7 @@ const BlueprintMixin = {
     let n = 0;
     this.startBatch();
     for (const [tx, ty, f] of plan.fences) if (this.placeFence(tx, ty, f)) n++;
+    for (const [tx, ty] of plan.water) this.digPond(tx, ty);
     for (const [tx, ty] of plan.trees) this.plantTree(tx, ty);
     for (const [tx, ty, type] of plan.feeders) if (this.placeBuilding(type, tx, ty)) n++;
     this.endBatch('paddock blueprint');

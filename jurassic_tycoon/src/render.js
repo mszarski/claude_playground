@@ -974,6 +974,7 @@ class Renderer {
       const plan = g.stampPlan(bp, ox, oy);
       const ok = new Set(plan.fences.map(([x, y]) => x + ',' + y));
       for (const [dx, dy] of bp.trees) { ctx.fillStyle = 'rgba(60,160,60,0.35)'; ctx.fillRect((ox + dx) * TILE, (oy + dy) * TILE, TILE, TILE); }
+      for (const [dx, dy] of bp.water || []) { ctx.fillStyle = 'rgba(60,130,220,0.45)'; ctx.fillRect((ox + dx) * TILE, (oy + dy) * TILE, TILE, TILE); }
       for (const [dx, dy] of bp.fences) {
         const x = ox + dx, y = oy + dy, i = w.inb(x, y) ? w.idx(x, y) : -1;
         const fine = ok.has(x + ',' + y) || (i >= 0 && w.fence[i]);
