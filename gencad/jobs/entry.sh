@@ -132,6 +132,7 @@ case "$STAGE" in
     if [[ "${RICH:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/train_*.tar; do tar -xf "$t" -C data/rich; done; fi
     if [[ "${REV:-0}" == "1" ]]; then tar -xf /work/data/revision.tar -C data; fi
     if [[ "${REV_RICH:-0}" == "1" ]]; then tar -xf /work/data/rich_revision.tar -C data; fi
+    pip install -q -U "brotli>=1.2"   # the image's brotli breaks Hub downloads of base models (httpx2 decoder kwargs)
     python train_vlm_cq.py --data data --name "$RUN" --steps ${STEPS:-30000} "$@" ;;
 
   vlmrl)      # RL on IoU for the CadQuery writer (train_vlm_rl.py), DeepCAD parts only; INIT = SFT model dir
