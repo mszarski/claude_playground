@@ -1,4 +1,4 @@
-# Image/text → CAD: project report (as of 2026-10-22)
+# Image/text → CAD: project report (as of 2026-10-25)
 
 ## Where we are, in one paragraph
 
@@ -16,9 +16,8 @@ best model scored only ~55 on such parts. We built 21 procedural part families (
 plus a "look at what you built and fix it" revision turn, then ran online RL on both kinds of parts. The new model,
 `vlm_grpo_rich`, scores **80–81 on realistic parts (+25)** and, with one revision turn guarded by render agreement,
 **slightly beats the previous best on every DeepCAD image mode** (4 views 91.8 vs 91.6). See section 11. On *real*
-designs (Fusion 360 Gallery) the gain is much smaller: the first answer alone is slightly worse than before, and
-the full pipeline (orientation search + guarded revision) is +5 points (65.0 vs 59.9) — the generated test set
-overstated the gain.
+designs (Fusion 360 Gallery) the gain was much smaller at first (+5 with the full pipeline); RL on 14k real training
+parts then brought it to **+7.4 (67.3 vs 59.9)**, with DeepCAD slightly up as well. Best model: `vlm_grpo_real`.
 
 ## The task and how we measure it
 
@@ -159,6 +158,23 @@ full pipeline (orientation search + guarded revision) to **65.0 vs 59.9 for the 
 and 60.1 vs 57.0 (+3.1 ± 0.9, 1 view). The previous best model gains nothing from it: the habit came from our
 generated data, and this undoes it.
 
+**Training on real parts (Oct 25, extra $100).** 14,165 real Fusion 360 parts (no design shared with the test set)
+rendered with our cameras, then 600 steps of online RL with 45 % real-part prompts (reward: shape match against the
+real STEP), 15 % generated, 40 % DeepCAD. Final model `vlm_grpo_real`, paired against the model we started the
+phase with (`vlm_grpo_fullres`):
+| test | before | new, one answer | new, full pipeline | difference (pipeline) |
+|---|---|---|---|---|
+| **real parts, 4 views** | 59.9 | 64.5 | **67.3** | **+7.4 ± 1.0** |
+| real parts, 1 view | 57.0 | 59.5 | **62.4** | +5.4 ± 0.9 |
+| DeepCAD, 4 views | 91.6 | 91.2 | **92.0** | +0.4 ± 0.3 |
+| DeepCAD, 1 view | 86.6 | 86.5 | **87.0** | +0.4 ± 0.3 |
+| DeepCAD, 1 view + expert text | 89.1 | 89.2 | **89.9** | +0.8 ± 0.3 |
+| generated parts, 4 views | ~55.5 | 78.8 | **82.2** | ≈ +26 |
+(Full pipeline: first answer → orientation search → one revision → orientation search → keep the revision only if
+its render matches the input better.) Real filleted parts went from 50.5 to 64.2 for the first answer alone. The
+model now ties the old best on DeepCAD with a single answer and beats it on real designs; with the full pipeline it
+is better on every test set we have.
+
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
 | model | 1 view | 4 views | 1 view + expert text | expert text only |
@@ -202,7 +218,8 @@ difference. cadrille scores the whole DeepCAD test set, we score a 2000-part sub
 ## Cost (Hugging Face compute; Claude API separately)
 Since the Claude baseline (Oct 15): roughly $300 of H200/A100 time up to the full-res RL model; the realistic-parts
 phase (Oct 20-22) about $130 more (data generation ~$5, imitation training ~$62, RL ~$52, predictions ~$10) of a
-$200 budget; ~$40 more for the rich revision data and `vlm_rev_v2` (~$170 in total). Claude API about $45 for the two zero-shot baselines. Earlier phases were not costed here.
+$200 budget; ~$40 more for the rich revision data and `vlm_rev_v2` (~$176 in total); then ~$52 of an extra $100
+for real-part training and its evaluation. Claude API about $45 for the two zero-shot baselines. Earlier phases were not costed here.
 
 ## Possible next steps
 1. **Better first attempts on the weak families** (done: rich revision data only made the revision safe, +0.75):
@@ -213,5 +230,5 @@ $200 budget; ~$40 more for the rich revision data and `vlm_rev_v2` (~$170 in tot
 4. **A larger base model (Qwen3-VL-4B) with the full recipe**, ~$200+.
 
 Where things are: code and notes on branch `claude/gencad-multimodal` (`gencad/`); models, predictions and per-part
-scores in the bucket `mszarski/gencad-work` (best model: `results/vlm_grpo_rich/model`; DeepCAD-only best: `results/vlm_grpo_fullres/model`). Detailed lab notes,
+scores in the bucket `mszarski/gencad-work` (best model: `results/vlm_grpo_real/model`; earlier: `results/vlm_grpo_rich/model`, `results/vlm_grpo_fullres/model`). Detailed lab notes,
 commands and gotchas: `gencad/CLAUDE.md`.

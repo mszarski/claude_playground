@@ -657,6 +657,24 @@ error killed one revise job at install; relaunching unchanged worked.
   view4 one answer 57.5 -> **62.4 (+4.89 +- 1.04)** (IR 10.5 -> 6.7 %; fillet 50.5 -> 58.7, revolve 51.2 -> 55.0),
   guarded revision 63.6 -> **65.8 (+2.23 +- 0.79)**; view1 54.4 -> 57.6 (+3.17 +- 0.80), guarded 59.1 -> 61.1.
   The first answer now beats the old `vlm_grpo_fullres` on real parts (62.4 vs 59.9).
+- Later validation: real_train_view4 64.7 (s400) -> 66.5 (s600); DeepCAD view4 93.3, view1 87.7 at s600; generated
+  dipped to 71.8 (s450) and recovered to 76.4. Step 400 on the full tests: real view4 62.4 / guarded 67.0, generated
+  view4 77.7 (-2.5 vs vlm_grpo_rich).
+- **Final, step 600 = `results/vlm_grpo_real/model`** (`results/final_{real,rich,dc}`; orientation search on both turns
+  `results/or_final_*`, merged + guard in `results/final_*_o/guard.json`). Full pipeline = turn 1 -> orient ->
+  revision -> orient -> guard. Paired vs the pre-phase best `vlm_grpo_fullres` (one answer):
+  | test | metric | old | step 600 one answer | step 600 full pipeline | paired diff (pipeline) |
+  |---|---|---|---|---|---|
+  | real view4 (600) | own | 59.9 | 64.5 | **67.3** | +7.41 +- 1.02 |
+  | real view1 | own | 57.0 | 59.5 | **62.4** | +5.42 +- 0.87 |
+  | DeepCAD view4 (1997) | gt | 91.6 | 91.2 (-0.38 +- 0.30) | **92.0** | +0.42 +- 0.28 |
+  | DeepCAD view1 | gt | 86.6 | 86.5 (-0.06 +- 0.30) | **87.0** | +0.43 +- 0.31 |
+  | DeepCAD view1+expert | gt | 89.1 | 89.2 (+0.02 +- 0.31) | **89.9** | +0.78 +- 0.30 |
+  | generated view4 (test_0, 1489) | own | 55.5 | – | **81.4** | +25.9 +- 0.8 |
+  | generated view1 (test_0) | own | 50.6 | – | **73.8** | +23.2 +- 0.7 |
+  Full generated test (1989): one answer view4 78.8 (vlm_grpo_rich 80.2), pipeline 82.2. Real per group (one answer
+  view4): fillet 64.2 (vlm_grpo_rich 50.5), chamfer 64.9, revolve 55.7, plain 73.0. The one-answer model alone now ties
+  the old best on DeepCAD and beats it on real parts (+4.6). Cost: RL ~9 h H200 (~$44) + data/evals ~$8.
 
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
@@ -667,18 +685,22 @@ method gets. **Quirk:** the "own" normalisation can collapse to ~0 for a correct
 bounding box inflated by stray geometry: 8-13 of ~1970 valid parts for our models, 1 for Claude, worth 0.2-0.4 points
 of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the gallery labels tiles with gt IoU.
 
-## Handoff (2026-10-22)
-- **Best model: `results/vlm_grpo_rich/model`** (vlm_grpo_fullres -> imitation on DeepCAD + CAD-Recode + rich parts +
-  revision -> online RL on DeepCAD + rich). Use it with one revision round and the render guard
-  (`scripts/revise_vllm.py --rounds 1`, then `scripts/revise_guard.py`): DeepCAD test gt IoU view4 91.8, view1 87.1,
-  view1+expert 89.9 (all slightly above vlm_grpo_fullres); rich test own IoU view4 81.4 (was ~55).
-  Add the orientation search (`scripts/orient_fix.py`, before the guard): real parts (Fusion 360 Gallery) view4
-  65.0 vs 59.9 for vlm_grpo_fullres; rich turn 1 80.2 -> 83.9; DeepCAD unchanged.
-- Spend for the Tier 1/2 phase: ~$130, plus ~$40 for rich revision data + `vlm_rev_v2` (total ~$170 of $200).
-- **Next ideas:** rich-part revision data (GT always known; fixes the unguarded rich revision, 80 -> 65); families for
-  the weak spots (bent sheet, L-brackets, enclosures, extrusions, random_mix_hard 21 % invalid at SFT); best-of-N +
-  render picking on top; Qwen3-VL-4B.
-- Local rich test data: `data/rich/test/{0,1}` from bucket `data/rich/test_{0,1}.tar`.
+## Handoff (2026-10-25)
+- **Best model: `results/vlm_grpo_real/model`** (vlm_grpo_fullres -> imitation on DeepCAD + CAD-Recode + generated rich
+  parts + revision -> online RL on DeepCAD + generated -> online RL with real Fusion 360 parts). Inference pipeline:
+  turn 1 -> `scripts/orient_fix.py` -> revision turn (`scripts/revise_vllm.py --rounds 1`) -> orient -> guard
+  (`scripts/revise_guard.py`). Real parts (Fusion 360 Gallery, 600) own IoU view4 67.3 vs 59.9 for vlm_grpo_fullres
+  (+7.4 +- 1.0); DeepCAD gt view4 92.0 / view1 87.0 / view1+expert 89.9 (all +0.4-0.8 over vlm_grpo_fullres); generated
+  parts 82.2. One answer alone: DeepCAD tied with the old best, real +4.6.
+- Spend: Tier 1/2 phase ~$176 of $200; real-part extension ~$52 of an extra $100.
+- **Next ideas:** more real-part RL (14k train parts used for 600 steps; real val still rising slowly) with a larger
+  generated share to stop the generated-part dip; a faster renderer so the orientation search is cheap at inference;
+  Qwen3-VL-4B/8B with this recipe; DeepSeek V4.1 Flash (multimodal, MIT, API) zero-shot on the real test as a
+  reference/teacher.
+- Real test data: bucket `data/rich/test_real.tar` (-> `data/rich/real`), train `data/rich/real_train_{0..3}.tar`.
+
+## Handoff (2026-10-22, superseded)
+- Best model then: `results/vlm_grpo_rich/model`; see the sections above.
 
 ## Handoff (2026-10-19, superseded)
 - **Best single model: `results/vlm_grpo_fullres/model`** (RFT -> full-res 896 px grid -> online RL): test own IoU
