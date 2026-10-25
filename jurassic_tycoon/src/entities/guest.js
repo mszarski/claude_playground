@@ -89,7 +89,9 @@ class Guest {
 
     // Movement between tiles
     // a park is a long walk: guests stroll briskly so far-off attractions are reachable in a visit
-    const speed = (this.state === 'flee' ? 2.1 : 1.3) * this.speedMul;
+    let speed = (this.state === 'flee' ? 2.1 : 1.3) * this.speedMul;
+    // a panicking crowd jams: narrow, packed paths turn an evacuation into a crush
+    if (this.state === 'flee' && g.crowd) { const n = g.crowd[g.world.idx(this.cx, this.cy)] || 0; if (n > 3) speed *= clamp(1 - (n - 3) * 0.08, 0.35, 1); }
     const tx = this.nx + 0.5 + this.ox, ty = this.ny + 0.5 + this.oy;
     const dx = tx - this.x, dy = ty - this.y;
     const d = Math.sqrt(dx * dx + dy * dy);
@@ -162,6 +164,8 @@ class Guest {
     const g = this.game, w = g.world;
     let field = null;
     if (this.state === 'flee') {
+      // people trip when they run for their lives
+      if (chance(0.03)) { this.state = 'frozen'; this.frozenT = randf(0.7, 1.4); this.thought = 'OOF!'; this.thoughtT = 1; return; }
       field = g.shelterField();
       if (field[here] === -1 || !g.anyShelterSpace()) {
         if (g.gateLocked) field = null; // nowhere to run: panic in place
