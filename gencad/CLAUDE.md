@@ -644,6 +644,20 @@ error killed one revise job at install; relaunching unchanged worked.
   view4 **65.0** vs old 59.9 (+5.16 +- 1.05 paired), view1 **60.1** vs 57.0 (+3.13 +- 0.90).
 - Recommended inference: `vlm_grpo_rich` turn 1 -> orient -> revision turn -> orient -> guard (render agreement).
 
+### Online RL on real parts (`vlm_grpo_real`; Oct 25, extra $100 budget)
+- Train split: `scripts/prep_real.py --shard k --n_shards 4 --per_cat 1000 --exclude_designs datagen/real_test_designs.txt`
+  (job `realgen`, cpu-upgrade, ~1 h, cents): 14,165 Fusion 360 parts (revolve ~4k, fillet 4k, plain 4k, chamfer ~2.2k
+  = all available), no design shared with the 600-part test set (design id = name up to the first "_"), in
+  `/work/data/rich/real_train_{0..3}.tar` (`REAL=1` unpacks them).
+- `train_vlm_grpo.py --rich data/rich/train data/rich/real_train --rich_w 0.25 0.75 --rich_p 0.6` (several weighted part
+  sources, each with its own 128-part validation: `rich_view4`, `real_train_view4`), from `vlm_grpo_rich`, 600 steps,
+  ~50 s/step on an H200. Prompts: 45 % real, 15 % generated, 40 % DeepCAD.
+- Validation real_train_view4 (128 parts) 61.1 -> 60.1 / 61.2 / 61.1 -> 62.8 at step 200 (noisy); DeepCAD and
+  generated flat. **Real test at step 200** (`results/real_grpo_real_s200`), own IoU, paired vs `vlm_grpo_rich`:
+  view4 one answer 57.5 -> **62.4 (+4.89 +- 1.04)** (IR 10.5 -> 6.7 %; fillet 50.5 -> 58.7, revolve 51.2 -> 55.0),
+  guarded revision 63.6 -> **65.8 (+2.23 +- 0.79)**; view1 54.4 -> 57.6 (+3.17 +- 0.80), guarded 59.1 -> 61.1.
+  The first answer now beats the old `vlm_grpo_fullres` on real parts (62.4 vs 59.9).
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
