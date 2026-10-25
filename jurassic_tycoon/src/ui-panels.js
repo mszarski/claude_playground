@@ -103,6 +103,9 @@ class UIPanels {
       if (!reg.feeders.herb.length && (diets.has('herb') || !ds.length)) html += `<button data-a="feedH" title="Herbivores captured by the ACU will be brought here">+ Herb feeder</button>`;
       if (!reg.feeders.carn.length && (diets.has('carn') || !ds.length)) html += `<button data-a="feedC" title="Carnivores captured by the ACU will be brought here">+ Carn feeder</button>`;
       if (dmg) html += `<button data-a="fixfence" class="danger">Repair ${dmg} fence${dmg > 1 ? 's' : ''}</button>`;
+      // top up the exhibit: one more of whatever lives here most, if there is room for it
+      const top = this.restockSpecies(reg, ds, eggs);
+      if (top) html += `<button data-a="restock" title="Lay one more ${SPECIES[top].name} egg in this paddock">Hatch another ${SPECIES[top].name} ${fmtMoney(g.hatchCost(top))}</button>`;
       html += `<button data-a="copy" title="Copy this paddock's fences, trees and feeders, then stamp copies elsewhere">Copy layout</button></div>`;
     } else if (o.type) {
       const def = BUILDINGS[o.type];
@@ -159,6 +162,13 @@ class UIPanels {
       if (a === 'cover') { const n = g.plantCover(reg); this.toast(n ? `Planted ${n} trees.` : 'No room for trees.', n ? 'good' : 'warn'); if (n) this.sfx.play('build'); }
       if (a === 'feedH' || a === 'feedC') { const f = g.addFeeder(reg, a === 'feedC' ? 'carn' : 'herb'); if (f) this.sfx.play('build'); else this.toast('No free tile for a feeder (or not enough money).', 'warn'); }
       if (a === 'fixfence') { const r = g.repairFences(reg); this.toast(r.n ? `Repaired ${r.n} fence tiles (${fmtMoney(r.cost)}).${r.blocked ? ' A dinosaur is blocking a gap.' : ''}` : r.blocked ? 'A dinosaur is standing in the gap! Sedate it first.' : 'Not enough money.', r.n ? 'good' : 'warn'); if (r.n) this.sfx.play('build'); }
+      if (a === 'restock') {
+        const ds = g.dinos.filter((d) => !d.carried && g.world.region[g.world.idx(d.tx, d.ty)] === reg.id);
+        const sp = this.restockSpecies(reg, ds, g.eggs.filter((e) => g.world.regionAt(e.x, e.y) === reg));
+        let err = 'No room for another.';
+        if (sp) for (const t of reg.tiles) { const x = t % g.world.W, y = (t / g.world.W) | 0; err = g.canHatchAt(sp, x, y); if (!err) { g.hatch(sp, x, y); this.sfx.play('build'); break; } if (/money|power|Hatchery|star/i.test(err)) break; }
+        if (err) this.toast(err, 'warn');
+      }
       if (a === 'copy') { const bp = g.copyPaddock(reg); if (bp) { this.blueprint = bp; this.setTool('stamp'); this.toast(`Layout copied (${bp.w}×${bp.h}). Click to stamp a copy, Esc to stop.`, 'info'); } }
       // keep the paddock selected on a tile that is still inside it
       const t = reg.tiles.find((i) => g.world.dinoPass(i % g.world.W, (i / g.world.W) | 0));
@@ -256,6 +266,19 @@ class UIPanels {
       if (d) { this.closeModal(); this.centerOn(d.x, d.y); this.select(d); }
     };
     $('[data-close]').onclick = () => this.closeModal();
+  }
+
+  // the species to offer one more of in a paddock: the most common one there, if it still fits
+  restockSpecies(reg, ds, eggs) {
+    const g = this.game;
+    if (!ds.length) return null;
+    const count = {};
+    for (const d of ds) count[d.species] = (count[d.species] || 0) + 1;
+    const top = Object.keys(count).sort((a, b) => count[b] - count[a])[0];
+    const sp = SPECIES[top];
+    if (sp.flying || (sp.territorial && count[top] >= 1) || !g.isUnlocked(top)) return null;
+    const used = ds.reduce((a, d) => a + d.sp.space, 0) + eggs.reduce((a, e) => a + SPECIES[e.species].space, 0);
+    return used + sp.space <= reg.size ? top : null;
   }
 
   // where the star rating comes from, and what would raise it next
