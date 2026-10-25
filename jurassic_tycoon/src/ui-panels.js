@@ -348,6 +348,10 @@ class UIPanels {
     let html = `<h1>FINANCES</h1><table class="fin"><tr><td></td><td>Today</td><td>Yesterday</td></tr>`;
     html += row('tickets', 'Tickets', 1) + row('shops', 'Shops & food', 1) + row('grants', 'Grants & sales', 1);
     html += row('upkeep', 'Upkeep & wages', -1) + row('food', 'Dino food', -1) + row('repairs', 'Repairs', -1) + row('construction', 'Construction', -1) + row('dinos', 'Hatching', -1) + row('ops', 'Operations', -1) + row('fines', 'Lawsuits & fines', -1);
+    const IN = ['tickets', 'shops', 'grants'], OUT = ['upkeep', 'food', 'repairs', 'construction', 'dinos', 'ops', 'fines'];
+    const net = (l) => IN.reduce((a, k) => a + (l[k] || 0), 0) - OUT.reduce((a, k) => a + (l[k] || 0), 0);
+    const nt = net(L), ny = last ? net(last) : null;
+    html += `<tr style="border-top:2px solid #4a6a3a"><td><b>Net</b></td><td style="color:${nt >= 0 ? '#8ad06a' : '#ff9080'}"><b>${fmtMoneyFull(nt)}</b></td><td style="color:${ny === null ? '#9ab08a' : ny >= 0 ? '#8ad06a' : '#ff9080'}"><b>${ny === null ? '—' : fmtMoneyFull(ny)}</b></td></tr>`;
     html += `</table>`;
     html += `<h2>TICKET PRICE</h2><div class="btns" style="align-items:center"><button data-t="-10">−10</button><button data-t="-1">−1</button><span style="font-size:26px;color:#f8d040;min-width:70px;text-align:center" id="tp">$${g.ticket}</span><button data-t="1">+1</button><button data-t="10">+10</button><span style="color:#9ab08a">Higher prices = fewer visitors.</span></div>`;
     html += `<h2>HISTORY</h2><canvas id="finChart" width="680" height="150" style="width:100%;height:150px;background:#0a120a;border:2px solid #000"></canvas>`;
