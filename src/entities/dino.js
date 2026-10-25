@@ -17,7 +17,7 @@ class Dino {
     this.path = null; this.pi = 0;
     this.facing = chance(0.5) ? 1 : -1;
     this.anim = rand() * 10; this.moving = false;
-    this.name = pick(DINO_NAMES);
+    this.name = nameFor(species);
     this.sick = 0; this.attackCD = 0; this.flash = 0; this.deterT = 0;
     this.loose = false; this.carried = null; this.target = null;
     this.thinkT = 0; this.age = 0; this.kills = 0;

@@ -9,7 +9,7 @@ class Ptera {
     this.x = x + 0.5; this.y = y + 0.5; this.alt = 1.5; this.home = { x, y };
     this.hp = this.sp.hp; this.hunger = 20; this.stress = 10; this.comfort = 80; this.comfortParts = {};
     this.sedation = 0; this.sedatedT = 0; this.loose = false; this.carried = null; this.dead = false;
-    this.name = pick(DINO_NAMES); this.facing = 1; this.anim = rand() * 6; this.flash = 0; this.kills = 0;
+    this.name = nameFor('ptera'); this.facing = 1; this.anim = rand() * 6; this.flash = 0; this.kills = 0;
     this.tgt = null; this.prey = null; this.cd = 0; this.sick = 0;
   }
   get tx() { return Math.floor(this.x); }
