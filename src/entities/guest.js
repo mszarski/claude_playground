@@ -155,7 +155,7 @@ class Guest {
     else if (this.toilet > 60) type = 'restroom';
     else if ((g.hour >= 19 || g.hour < 6) && this.stay > 4) type = 'hotel';
     else if (this.shopUrge > 70) type = 'shop';
-    else if (chance(0.45)) type = pick(['tour', 'tour', 'gyro', 'gyro', 'arena', 'feedshow', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
+    else if (chance(0.45)) type = pick(['tour', 'tour', 'gyro', 'gyro', 'lagoon', 'lagoon', 'arena', 'feedshow', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
     if (!type) return null;
     const cands = g.buildingsOfType(type).filter((b) => b.powered || !BUILDINGS[b.type].power);
     if (!cands.length) { if (type === 'restroom' || type === 'restaurant') this.happy -= 2; return null; }

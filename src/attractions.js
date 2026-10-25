@@ -42,7 +42,7 @@ class Gyro {
         this.riders = q.splice(0, 2);
         const price = BUILDINGS.gyro.income * g.priceMul;
         for (const r of this.riders) { r.state = 'ride'; r.inJeep = this; g.earn(price, 'shops'); r.spent += price; this.station.visitors++; this.station.revenue = (this.station.revenue || 0) + price; }
-        this.state = 'roll'; this.trip = randf(14, 22); this.waitT = 0;
+        this.state = 'roll'; this.trip = randf(8, 12); this.waitT = 0;
       }
       return;
     }
