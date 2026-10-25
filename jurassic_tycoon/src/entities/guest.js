@@ -1,6 +1,8 @@
 'use strict';
 
 // ---------------- Guests ----------------
+const GUEST_FIRST = ['Dave', 'Karen', 'Lex', 'Tim', 'Gennaro', 'Priya', 'Marco', 'Aiko', 'Olu', 'Sven', 'Rosa', 'Ben', 'Mei', 'Hank', 'Fatima', 'Liam', 'Ines', 'Carl', 'Zoe', 'Raj', 'Greta', 'Diego', 'Nora', 'Kwame'];
+const GUEST_TOWNS = ['Ohio', 'Leeds', 'Osaka', 'Lagos', 'Lyon', 'Perth', 'Toronto', 'Seville', 'Pune', 'Bergen', 'Cork', 'Austin', 'Busan', 'Accra', 'Malmo', 'Porto', 'Denver', 'Bristol'];
 class Guest {
   constructor(game, tile) {
     this.id = _eid++;
@@ -26,6 +28,14 @@ class Guest {
     this.thought = null;
   }
 
+  // a name only when someone looks (cosmetic, so it stays off the simulation's seeded dice)
+  get label() {
+    if (!this._label) {
+      const pickR = (a) => a[Math.floor(Math.random() * a.length)];
+      this._label = `${pickR(GUEST_FIRST)} from ${pickR(GUEST_TOWNS)}`;
+    }
+    return this._label;
+  }
   get tx() { return Math.floor(this.x); }
   get ty() { return Math.floor(this.y); }
 
