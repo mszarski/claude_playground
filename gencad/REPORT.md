@@ -175,6 +175,11 @@ its render matches the input better.) Real filleted parts went from 50.5 to 64.2
 model now ties the old best on DeepCAD with a single answer and beats it on real designs; with the full pipeline it
 is better on every test set we have.
 
+A second round of the same RL (`vlm_grpo_real2`, with more generated parts in the mix) adds a little: real parts
+68.0 with the full pipeline (+0.8 ± 0.7 over `vlm_grpo_real`, +8.2 ± 1.0 over the starting model), generated parts
+83.1 (+0.9 ± 0.3), DeepCAD unchanged. Returns from repeating this RL are now small; a bigger base model
+(Qwen3-VL-4B, in progress) is the next lever.
+
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
 | model | 1 view | 4 views | 1 view + expert text | expert text only |
@@ -230,5 +235,5 @@ for real-part training and its evaluation. Claude API about $45 for the two zero
 4. **A larger base model (Qwen3-VL-4B) with the full recipe**, ~$200+.
 
 Where things are: code and notes on branch `claude/gencad-multimodal` (`gencad/`); models, predictions and per-part
-scores in the bucket `mszarski/gencad-work` (best model: `results/vlm_grpo_real/model`; earlier: `results/vlm_grpo_rich/model`, `results/vlm_grpo_fullres/model`). Detailed lab notes,
+scores in the bucket `mszarski/gencad-work` (best model: `results/vlm_grpo_real2/model`; earlier: `results/vlm_grpo_rich/model`, `results/vlm_grpo_fullres/model`). Detailed lab notes,
 commands and gotchas: `gencad/CLAUDE.md`.
