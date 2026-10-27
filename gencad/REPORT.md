@@ -177,8 +177,11 @@ is better on every test set we have.
 
 A second round of the same RL (`vlm_grpo_real2`, with more generated parts in the mix) adds a little: real parts
 68.0 with the full pipeline (+0.8 ± 0.7 over `vlm_grpo_real`, +8.2 ± 1.0 over the starting model), generated parts
-83.1 (+0.9 ± 0.3), DeepCAD unchanged. Returns from repeating this RL are now small; a bigger base model
-(Qwen3-VL-4B, in progress) is the next lever.
+83.1 (+0.9 ± 0.3), DeepCAD unchanged. Returns from repeating this RL are now small.
+
+**Qwen3-VL-4B pilot (stopped).** A shortened recipe on the 4B model (12k-step fine-tune, then RL) learned only ~3
+points faster per step than the 2B had; at that pace it would have ended below our 2B on DeepCAD, so it was
+stopped halfway (~$60). A fair test of a bigger model needs the 2B's full training length (~$300+).
 
 ## Current standings (test set, own IoU %, all parts / novel parts)
 

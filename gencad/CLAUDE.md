@@ -684,6 +684,18 @@ error killed one revise job at install; relaunching unchanged worked.
   view1 74.9. One answer: real view4 65.1, DeepCAD view4 91.4 / view1 86.5. Diminishing returns: a second round
   of the same RL adds < 1 point.
 
+### Qwen3-VL-4B pilot (`vlm4b_sft`; stopped Oct 27)
+- `train_vlm_cq.py --model Qwen/Qwen3-VL-4B-Instruct --grid_side 896 --rich_p 0.3 --revision data/revision
+  data/rich_revision --revision_p 0.1 --lr 1e-4 --steps 12000 --bs 4 --accum 8` (job 6ae067ce3fb22a235dd27986).
+  Gotchas: the job image's old `brotli` breaks Hub downloads of new base models (`process() takes no keyword
+  arguments` in httpx2) -> `pip install -U "brotli>=1.2"` in the vlmcq stage; bs 8 OOMed at step 250 on a long
+  multi-image batch -> bs 4 x accum 8 + `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`. ~6.9 s/step on an H200.
+- DeepCAD validation (gt IoU) view4 / view1 / view1+expert: step 3000 65.0 / 55.1 / 66.2; step 6000 76.9 / 66.4 /
+  76.1. The 2B's first SFT (`vlm_cq_v1`, 448 px views, 30k-step schedule) was at 72.4 (5k) and 79.1 (10k), i.e.
+  ~73.7 at 6k: 4B only ~3 points ahead per step, with a more diluted mix. Projected ~90-91 after a 12k SFT + short
+  RL, below `vlm_grpo_real2` (~92), so **stopped at step ~6000 (~$58 spent; no checkpoint kept)**. A fair 4B test
+  needs the 2B's full step count (~30k SFT + RL, ~$300+).
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped
@@ -702,8 +714,7 @@ of own IoU (rankings unchanged). Prefer gt IoU when the two disagree; the galler
   (vlm_grpo_real: +7.4 +- 1.0; vlm_grpo_real2: 68.0, +8.2); DeepCAD gt view4 ~92.0 / view1 ~87.0 / view1+expert ~90.0
   (+0.3-0.8 over vlm_grpo_fullres); generated parts 82.2 / 83.1. One answer alone: DeepCAD tied with the old best, real +4.6.
 - Spend: Tier 1/2 phase ~$176 of $200; real-part extension ~$52 of an extra $100; then ~$30 for vlm_grpo_real2 and
-  ~$170 approved for Qwen3-VL-4B (`vlm4b_sft` running: 12k steps, bs 4 x accum 8, expandable segments after an OOM
-  at bs 8).
+  ~$61 on a Qwen3-VL-4B pilot, stopped at step 6000 (not clearly ahead of the 2B; see that section).
 - **Next ideas:** more real-part RL (14k train parts used for 600 steps; real val still rising slowly) with a larger
   generated share to stop the generated-part dip; a faster renderer so the orientation search is cheap at inference;
   Qwen3-VL-4B/8B with this recipe; DeepSeek V4.1 Flash (multimodal, MIT, API) zero-shot on the real test as a
