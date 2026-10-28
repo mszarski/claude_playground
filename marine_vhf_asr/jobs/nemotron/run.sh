@@ -11,6 +11,12 @@ UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --extra asr --extra vllm --locked --no
 uv pip install --python .venv/bin/python --no-deps -e .
 uv pip install --python .venv/bin/python --no-deps av==19.0.2 opencv-python-headless==5.0.0.93
 source .venv/bin/activate
+# FlashInfer JIT-compiles kernels with nvcc; use the pip CUDA toolkit the lockfile installs
+NVCC=$(find "$PWD/.venv" -path "*/bin/nvcc" -type f | head -1)
+export CUDA_HOME=$(dirname "$(dirname "$NVCC")")
+export PATH="$CUDA_HOME/bin:$PATH"
+echo "CUDA_HOME=$CUDA_HOME"; ls "$CUDA_HOME" || true; ls "$CUDA_HOME/include" | head -5 || true
+nvcc --version | tail -2 || true
 hf download nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B --local-dir /tmp/nemotron
 export VLLM_PLUGINS=nemo_speechlm VLLM_MAX_AUDIO_DECODE_DURATION_S=3600 VLLM_MAX_AUDIO_CLIP_FILESIZE_MB=180
 vllm serve /tmp/nemotron --served-model-name nemotron \
