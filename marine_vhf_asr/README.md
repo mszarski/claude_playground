@@ -416,6 +416,47 @@ Regression checks:
 - No meaningful regressions; MARTTS (48 dialogues) is 1 point worse.
 - v6 is the recommended adapter.
 
+## Comparison: NVIDIA Nemotron-3.5-Transcribe-30B-A4B (zero-shot)
+
+`jobs/nemotron/run.sh` serves the model with vLLM 0.32 + the NeMo Speech plugin
+on one A100 and scores it with the same normalization, runaway guards and
+metrics (`jobs/nemotron/client.py`). Prompt: transcribe word for word, numbers
+as words, plus "Context terms: ..." with the candidate list when there is one.
+The model card's fast config (replayssm FlashInfer Mamba kernels, MTP
+speculative decoding) needs Hopper (sm_90); on A100 the plain config is used,
+which changes speed, not output (greedy decoding).
+
+| WER / names right | base Voxtral | v5 | v6 | Nemotron |
+|---|---|---|---|---|
+| VHF-8K, no list | 28.1% | 12.7% | 12.5% | 59.8% / 14% |
+| VHF-8K, speaker on 25-name list | | 95% names | 96% names | 14.4% / 78% |
+| VHF-8K, speaker not on list: wrong name used | | 4.0% | 3.8% | 6.8% |
+| MARTTS | 15.3% | 7.5% | 8.6% | 13.6% |
+| ATC (real radio) | 69.1% | 9.4% | 9.6% | 52.4% |
+| New York, Chatterbox, no list | | 11.9% / 39% | (trained on CB) | 30.1% / 33% |
+| New York, Chatterbox, moving list | | 6.3% / 71% | (trained on CB) | 14.8% / 51% |
+| Oresund, Chatterbox, no list | | 14.0% / 29% | (trained on CB) | 38.5% / 18% |
+| Oresund, Chatterbox, moving list | | 6.3% / 74% | (trained on CB) | 17.1% / 62% |
+| New York, intelligible Parler, no list | | 24.0% / 16% | 20.6% / 16% | 45.3% / 15% |
+| New York, intelligible Parler, moving list | | 18.0% / 49% | 13.5% / 56% | 28.5% / 30% |
+| Oresund, intelligible Parler, no list | | 27.3% / 8% | 24.1% / 9% | 54.5% / 6% |
+| Oresund, intelligible Parler, moving list | | 19.6% / 46% | 16.2% / 51% | 32.7% / 36% |
+
+- **Nemotron often returns nothing on VHF audio without context**: 43% of
+  VHF-8K clips, 15-20% of Chatterbox clips, 23-31% of Parler clips. With a
+  context list it almost always answers (1-8% empty). On the clips it does
+  transcribe, no-list WER is 26% (VHF-8K), 15% / 23% (NY / Oresund Chatterbox).
+- Context terms help it a lot (NY Chatterbox 30% -> 15%), but the fine-tuned
+  3B model with the same list is still 2x better on WER and 10-25 points
+  better on names, on audio neither was trained on (Parler).
+- It writes US spellings (DRAFT, METERS) and reads "G II" as "GOLF TWO";
+  normal for a general model, and part of why fine-tuning wins on SMCP.
+- Real Kaggle clips (12, first 120 s): plausible transcripts of the casual
+  traffic on 7 of 12, empty on 5. Not scored (no references).
+- Verdict: not a replacement. It is 10x the parameters and still behind v6 on
+  every test; a possible second opinion for pseudo-labelling real audio, where
+  it does not share Whisper's errors.
+
 ## Status
 
 The text generator, channel simulator, normalizer, metrics, data loaders and
