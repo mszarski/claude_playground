@@ -11,10 +11,13 @@ UV_PROJECT_ENVIRONMENT=$PWD/.venv uv sync --extra asr --extra vllm --locked --no
 uv pip install --python .venv/bin/python --no-deps -e .
 uv pip install --python .venv/bin/python --no-deps av==19.0.2 opencv-python-headless==5.0.0.93
 source .venv/bin/activate
-# FlashInfer JIT-compiles kernels with nvcc; use the pip CUDA toolkit, with nvcc pinned to
-# the CUDA version of the installed headers/runtime (the lockfile pulls a newer nvcc)
+# FlashInfer JIT-compiles kernels with nvcc; use the pip CUDA toolkit, with the whole compiler
+# (nvcc, crt, nvvm/cicc) pinned to the CUDA version of the installed runtime. A newer nvvm
+# emits PTX the pinned ptxas rejects ("Unsupported .version 9.2")
 CU=$(python -c "import importlib.metadata as m; print(m.version('nvidia-cuda-runtime').rsplit('.', 1)[0])")
-uv pip install --python .venv/bin/python --no-deps "nvidia-cuda-nvcc==$CU.*" "nvidia-cuda-crt==$CU.*" || true
+uv pip install --python .venv/bin/python --no-deps "nvidia-cuda-nvcc==$CU.*" "nvidia-cuda-crt==$CU.*" \
+  "nvidia-nvvm==$CU.*" || true
+uv pip list --python .venv/bin/python 2>/dev/null | grep -iE "^nvidia-(cuda|nvvm)" || true
 NVCC=$(find "$PWD/.venv" -path "*/bin/nvcc" -type f | head -1)
 export CUDA_HOME=$(dirname "$(dirname "$NVCC")")
 export PATH="$CUDA_HOME/bin:$PATH"
@@ -50,7 +53,7 @@ start --gpu-memory-utilization 0.92 --max-model-len 32768 --max-num-batched-toke
   --enable-chunked-prefill --no-enable-prefix-caching --use-replayssm --mamba-backend flashinfer \
   --mamba-cache-mode none --mm-processor-cache-gb 0 --no-async-scheduling --limit-mm-per-prompt "$AUDIO_LIMIT" \
   --speculative-config '{"method":"mtp","num_speculative_tokens":8}' --reasoning-parser nemotron_v3 \
-  || start --gpu-memory-utilization 0.90 --max-model-len 16384 --max-num-seqs 32 --limit-mm-per-prompt "$AUDIO_LIMIT" \
+  || VLLM_USE_FLASHINFER_SAMPLER=0 start --gpu-memory-utilization 0.90 --max-model-len 16384 --max-num-seqs 32 --limit-mm-per-prompt "$AUDIO_LIMIT" \
   || { echo "vLLM failed to start"; exit 1; }
 deactivate
 echo "SERVER READY"
