@@ -22,25 +22,36 @@ echo "CUDA_HOME=$CUDA_HOME"; ls "$CUDA_HOME" || true; ls "$CUDA_HOME/include" | 
 nvcc --version | tail -2 || true
 hf download nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B --local-dir /tmp/nemotron
 export VLLM_PLUGINS=nemo_speechlm VLLM_MAX_AUDIO_DECODE_DURATION_S=3600 VLLM_MAX_AUDIO_CLIP_FILESIZE_MB=180
-COMMON=(--served-model-name nemotron --trust-remote-code --dtype bfloat16 --gpu-memory-utilization 0.92
-  --max-model-len 32768 --max-num-batched-tokens 4096 --max-num-seqs 64
-  --enable-chunked-prefill --no-enable-prefix-caching --mamba-cache-mode none
-  --mm-processor-cache-gb 0 --no-async-scheduling
-  --limit-mm-per-prompt '{"audio":{"count":1,"length":120000000}}' --reasoning-parser nemotron_v3)
-start() {  # start vLLM with extra args; succeed once /health answers
-  vllm serve /tmp/nemotron "${COMMON[@]}" "$@" > /tmp/vllm.log 2>&1 &
+ATTEMPT=0
+start() {  # start vLLM with the given args; succeed once /health answers
+  ATTEMPT=$((ATTEMPT + 1)); LOG=/tmp/vllm_$ATTEMPT.log
+  vllm serve /tmp/nemotron --served-model-name nemotron --trust-remote-code --dtype bfloat16 "$@" > $LOG 2>&1 &
   PID=$!
   for i in $(seq 1 90); do
-    curl -sf http://127.0.0.1:8000/health >/dev/null && return 0
+    curl -sf http://127.0.0.1:8000/health >/dev/null && { cp $LOG /tmp/vllm.log; return 0; }
     kill -0 $PID 2>/dev/null || break
     sleep 10
   done
-  echo "vLLM config failed: $*"; grep -E "Error|error" /tmp/vllm.log | tail -5
+  echo "vLLM attempt $ATTEMPT failed: $*"
+  grep -vE "^\s+(File |\^|return|await|raise|self\.|args\.|uvloop)" $LOG | grep -iE "error|exception|unsupported|not support|failed|cannot|could not" | sort -u | head -20
+  python - "$LOG" <<'PY'
+import os, sys
+from huggingface_hub import upload_file
+log = sys.argv[1]
+upload_file(path_or_fileobj=log, path_in_repo=f"diagnostics/nemotron_{os.path.basename(log)}",
+            repo_id=os.environ["OUT_REPO"], repo_type="dataset", commit_message="Nemotron vLLM startup log")
+print("uploaded", log)
+PY
   kill $PID 2>/dev/null || true; sleep 5; return 1
 }
-# Model card configuration first; fall back to vLLM's default kernels (no JIT) if it fails
-start --use-replayssm --mamba-backend flashinfer --speculative-config '{"method":"mtp","num_speculative_tokens":8}' \
-  || start || { echo "vLLM failed to start"; tail -60 /tmp/vllm.log; exit 1; }
+AUDIO_LIMIT='{"audio":{"count":1,"length":120000000}}'
+# 1) Model card configuration; 2) minimal flags if that fails
+start --gpu-memory-utilization 0.92 --max-model-len 32768 --max-num-batched-tokens 4096 --max-num-seqs 64 \
+  --enable-chunked-prefill --no-enable-prefix-caching --use-replayssm --mamba-backend flashinfer \
+  --mamba-cache-mode none --mm-processor-cache-gb 0 --no-async-scheduling --limit-mm-per-prompt "$AUDIO_LIMIT" \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":8}' --reasoning-parser nemotron_v3 \
+  || start --gpu-memory-utilization 0.90 --max-model-len 16384 --max-num-seqs 32 --limit-mm-per-prompt "$AUDIO_LIMIT" \
+  || { echo "vLLM failed to start"; exit 1; }
 deactivate
 echo "SERVER READY"
 curl -sSL -H "Authorization: Bearer $HF_TOKEN" "https://huggingface.co/$CODE_REPO/resolve/main/marine_vhf_asr/jobs/nemotron/client.py" -o /tmp/client.py
