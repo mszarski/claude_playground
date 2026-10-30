@@ -70,6 +70,28 @@ Each run directory holds `circuit.py`, `circuit.json`, `circuit.net`,
 and every attempted circuit under `attempts/`, which is the raw material for
 a future fine-tuning dataset.
 
+## Schematics (optional)
+
+The build goes from netlist straight to PCB. `schematic` adds a KiCad
+schematic for review, using [circuit-synth](https://github.com/circuit-synth/circuit-synth)
+(MIT) in its own environment so its dependencies stay out of this package:
+
+```bash
+uv venv ~/.cache/circuit_gen/cs-env
+VIRTUAL_ENV=~/.cache/circuit_gen/cs-env uv pip install circuit-synth==0.12.1
+export CIRCUIT_GEN_CS_PYTHON=~/.cache/circuit_gen/cs-env/bin/python
+python -m circuit_gen schematic runs/x runs/eval/led_resistor/s01
+```
+
+circuit-synth supplies the symbols and the KiCad 9 file; `schematic.py` then
+re-places the parts on a grid and draws one net label per pin, because
+circuit-synth 0.12.1 shorts multi-unit parts (it places every unit's labels
+relative to the first unit and records every unit as unit 1) and overlaps
+their units. Each export is checked against the circuit twice, by reading the
+labels back and by KiCad's own netlist export, and mismatches are reported.
+All 19 benchmark references and the 32 passing Qwen3.8-27B benchmark designs
+export with matching connections. Open the result with KiCad 9.
+
 ## How designs are checked
 
 1. **Structural rules** (`checks.py`), on every attempt: footprints exist and

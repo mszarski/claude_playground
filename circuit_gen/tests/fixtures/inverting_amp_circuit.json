@@ -1,0 +1,292 @@
+{
+ "parts": [
+  {
+   "ref": "J1",
+   "symbol": "Connector:Conn_01x02_Pin",
+   "value": "Conn_01x02_Pin",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "Pin_1",
+     "type": "PASSIVE",
+     "net": "VCC"
+    },
+    {
+     "num": "2",
+     "name": "Pin_2",
+     "type": "PASSIVE",
+     "net": "GND"
+    }
+   ]
+  },
+  {
+   "ref": "J2",
+   "symbol": "Connector:Conn_01x02_Pin",
+   "value": "Conn_01x02_Pin",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "Pin_1",
+     "type": "PASSIVE",
+     "net": "IN"
+    },
+    {
+     "num": "2",
+     "name": "Pin_2",
+     "type": "PASSIVE",
+     "net": "GND"
+    }
+   ]
+  },
+  {
+   "ref": "J3",
+   "symbol": "Connector:Conn_01x02_Pin",
+   "value": "Conn_01x02_Pin",
+   "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "Pin_1",
+     "type": "PASSIVE",
+     "net": "OUT"
+    },
+    {
+     "num": "2",
+     "name": "Pin_2",
+     "type": "PASSIVE",
+     "net": "GND"
+    }
+   ]
+  },
+  {
+   "ref": "U1",
+   "symbol": "Amplifier_Operational:LM358",
+   "value": "LM358",
+   "footprint": "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "OUTPUT",
+     "net": "OA"
+    },
+    {
+     "num": "2",
+     "name": "-",
+     "type": "INPUT",
+     "net": "INV"
+    },
+    {
+     "num": "3",
+     "name": "+",
+     "type": "INPUT",
+     "net": "VREF"
+    },
+    {
+     "num": "5",
+     "name": "+",
+     "type": "INPUT",
+     "net": "VREF"
+    },
+    {
+     "num": "6",
+     "name": "-",
+     "type": "INPUT",
+     "net": "N$1"
+    },
+    {
+     "num": "7",
+     "name": "~",
+     "type": "OUTPUT",
+     "net": "N$1"
+    },
+    {
+     "num": "4",
+     "name": "V-",
+     "type": "PWRIN",
+     "net": "GND"
+    },
+    {
+     "num": "8",
+     "name": "V+",
+     "type": "PWRIN",
+     "net": "VCC"
+    }
+   ]
+  },
+  {
+   "ref": "C1",
+   "symbol": "Device:C",
+   "value": "100n",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "VCC"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "GND"
+    }
+   ]
+  },
+  {
+   "ref": "R1",
+   "symbol": "Device:R",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "VCC"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "VREF"
+    }
+   ]
+  },
+  {
+   "ref": "R2",
+   "symbol": "Device:R",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "VREF"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "GND"
+    }
+   ]
+  },
+  {
+   "ref": "C2",
+   "symbol": "Device:C",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "VREF"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "GND"
+    }
+   ]
+  },
+  {
+   "ref": "C3",
+   "symbol": "Device:C",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "IN"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "CIN"
+    }
+   ]
+  },
+  {
+   "ref": "R3",
+   "symbol": "Device:R",
+   "value": "10k",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "CIN"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "INV"
+    }
+   ]
+  },
+  {
+   "ref": "R4",
+   "symbol": "Device:R",
+   "value": "100k",
+   "footprint": "Resistor_SMD:R_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "INV"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "OA"
+    }
+   ]
+  },
+  {
+   "ref": "C4",
+   "symbol": "Device:C",
+   "value": "10u",
+   "footprint": "Capacitor_SMD:C_0805_2012Metric",
+   "tolerance": null,
+   "pins": [
+    {
+     "num": "1",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "OA"
+    },
+    {
+     "num": "2",
+     "name": "~",
+     "type": "PASSIVE",
+     "net": "OUT"
+    }
+   ]
+  }
+ ]
+}

@@ -92,6 +92,18 @@ def cmd_procgen(args):
     return 0
 
 
+def cmd_schematic(args):
+    from .schematic import export_run
+    status = 0
+    for run_dir in args.runs:
+        path, problems = export_run(run_dir)
+        print(f"{path}: {'connections match the circuit' if not problems else 'MISMATCH'}")
+        for p in problems:
+            print(f"  {p}")
+        status |= bool(problems)
+    return status
+
+
 def cmd_compare(args):
     from .evaluate import compare
     print(compare(args.runs))
@@ -138,6 +150,10 @@ def main(argv=None):
     pg.add_argument("--repair-fraction", type=float, default=0.0,
                     help="share of sessions that start from a planted bug and show the fix")
 
+    sc = sub.add_parser("schematic", help="KiCad schematic for built boards, via circuit-synth "
+                                          "(set CIRCUIT_GEN_CS_PYTHON; see schematic.py)")
+    sc.add_argument("runs", nargs="+", help="build or eval sample directories (with circuit.json)")
+
     c = sub.add_parser("compare", help="side-by-side pass rates of several eval runs")
     c.add_argument("runs", nargs="+", help="eval output directories")
 
@@ -166,7 +182,7 @@ def main(argv=None):
     args = p.parse_args(argv)
     return {"build": cmd_build, "design": cmd_design, "eval": cmd_eval,
             "compare": cmd_compare, "datagen": cmd_datagen, "export": cmd_export,
-            "procgen": cmd_procgen}[args.cmd](args)
+            "procgen": cmd_procgen, "schematic": cmd_schematic}[args.cmd](args)
 
 
 if __name__ == "__main__":
