@@ -57,7 +57,7 @@ static void disc(float cx, float cy, float r, color_t c) {
 }
 static void text(int font, int style, float x, float y, int width, int align, const char *s) {
     rdpq_set_mode_standard();
-    rdpq_text_print(&(rdpq_textparms_t){.style_id = style, .width = width, .align = align, .wrap = WRAP_WORD}, font, x, y, s);
+    rdpq_text_print(&(rdpq_textparms_t){.style_id = style, .width = width, .align = width ? align : ALIGN_LEFT, .wrap = width ? WRAP_WORD : WRAP_NONE}, font, x, y, s);
 }
 static void textf(int font, int style, float x, float y, int width, int align, const char *fmt, ...) {
     char buf[160]; va_list ap; va_start(ap, fmt); vsnprintf(buf, sizeof(buf), fmt, ap); va_end(ap);

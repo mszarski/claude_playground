@@ -9,7 +9,7 @@ and the fight with its guardian, Humbaba.
 | Track | What it is | State |
 |-------|------------|-------|
 | `index.html` | Browser prototype (three.js) that renders at 320x240 with 15-bit dithered colour, used to design the level and combat quickly | Playable |
-| N64 ROM (`n64/`) | The same level written in C with libdragon + tiny3d, built into a `.z64` for real hardware (flashcart) and emulators | Compiles; being tested in an emulator |
+| N64 ROM (`n64/`) | The same level written in C with libdragon + tiny3d, built into a `.z64` for real hardware (flashcart) and emulators | Boots and plays in the ares emulator (screenshots below) |
 | Web emulator page | The ROM running in the browser through EmulatorJS with a patched mupen64plus core | In progress |
 
 ## The demo level
@@ -63,3 +63,14 @@ make -C gilgamesh64/n64 T3D_INST=/path/to/tiny3d
 
 This produces `gilgamesh64/n64/gilgamesh64.z64`. Everything in the ROM (models, level, music) is generated in code
 from `n64/src/`; the only assets are two pixel fonts (`monogram` and `abaddon`, both CC0).
+
+Debug builds can skip ahead: `EXTRA_CFLAGS="-DDEBUG_GATE -DDEBUG_GATE_X=0.0f -DDEBUG_GATE_Z=-27.0f"` starts with all
+seals and the door open, and `-DDEBUG_POS -DDEBUG_POS_X=... -DDEBUG_POS_Z=...` starts anywhere on the map.
+
+## Screenshots (ares emulator)
+
+| Title | Steppe of Uruk |
+|---|---|
+| ![Title](screenshots/n64-title.png) | ![Steppe](screenshots/n64-steppe.png) |
+| **Cedar Forest** | **Humbaba** |
+| ![Forest](screenshots/n64-forest.png) | ![Humbaba](screenshots/n64-humbaba.png) |

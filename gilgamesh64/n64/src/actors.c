@@ -13,7 +13,7 @@ static MeshB *s_pb[MAX_PARTS];
 static int part_new(ModelDef *md, int parent, float x, float y, float z) {
     int i = md->n++;
     md->p[i] = (PartDef){parent, x, y, z, {0}};
-    s_pb[i] = mb_new(100.0f);
+    s_pb[i] = mb_new(1.0f);
     return i;
 }
 static MeshB *pb(int i) { return s_pb[i]; }
@@ -205,14 +205,14 @@ static void build_humbaba(void) {
     }
     model_bake(md);
     static const uint32_t eyeCols[3] = {RGB(0xFFD040), RGB(0xFF3020), RGB(0x604818)};
-    for (int e = 0; e < 3; e++) { MeshB *m = mb_new(100); mb_box(m, -45, 0, 0, 32, 18, 10, eyeCols[e]); mb_box(m, 45, 0, 0, 32, 18, 10, eyeCols[e]); MESH_EYES[e] = mb_bake(m); mb_free(m); }
+    for (int e = 0; e < 3; e++) { MeshB *m = mb_new(1); mb_box(m, -45, 0, 0, 32, 18, 10, eyeCols[e]); mb_box(m, 45, 0, 0, 32, 18, 10, eyeCols[e]); MESH_EYES[e] = mb_bake(m); mb_free(m); }
     M_HUMB.p[B_EYES].mesh = MESH_EYES[0];
 }
 
 static void build_misc(void) {
     MeshB *m;
     // sword trail: a flat arc in front of the hero (drawn additively)
-    m = mb_new(100);
+    m = mb_new(1);
     for (int i = 0; i < 12; i++) {
         float a0 = -1.6f + 3.2f * i / 12, a1 = -1.6f + 3.2f * (i + 1) / 12;
         float p[4][3] = {{sinf(a0) * 70, 0, cosf(a0) * 70}, {sinf(a0) * 205, 0, cosf(a0) * 205}, {sinf(a1) * 205, 0, cosf(a1) * 205}, {sinf(a1) * 70, 0, cosf(a1) * 70}};
@@ -221,32 +221,32 @@ static void build_misc(void) {
         mb_quad_raw(m, q, RGBA(255, 240, 190, 150));
     }
     MESH_ARC = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_disc(m, 0, 0, 0, 100, 10, RGBA(0, 0, 0, 90)); MESH_SHADOW = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_xform(m, 0, 0, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 28, 50, 4, RGB(0xFF6A2A), true); MESH_RETICLE = mb_bake(m); mb_free(m);
-    m = mb_new(100);   // heart: two lobes and a point
+    m = mb_new(1); mb_disc(m, 0, 0, 0, 100, 10, RGBA(0, 0, 0, 90)); MESH_SHADOW = mb_bake(m); mb_free(m);
+    m = mb_new(1); mb_xform(m, 0, 0, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 28, 50, 4, RGB(0xFF6A2A), true); MESH_RETICLE = mb_bake(m); mb_free(m);
+    m = mb_new(1);   // heart: two lobes and a point
     mb_box(m, -11, 6, 0, 22, 20, 12, RGB(0xFF3A4A)); mb_box(m, 11, 6, 0, 22, 20, 12, RGB(0xFF3A4A));
     mb_xform(m, 0, -8, 0, PI_F, PI_F / 4, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 22, 22, 4, RGB(0xE8303E), false);
     MESH_HEART = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_cyl(m, 0, 11, 0, 0, 22, 22, 4, RGB(0x3A64FF), false); mb_xform(m, 0, -11, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 22, 22, 4, RGB(0x2342C0), false); MESH_LAPIS = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_cyl(m, 0, 0, 0, 22, 22, 70, 8, RGB(0xF6D272), false); mb_cyl(m, 0, 37, 0, 24, 24, 6, 8, RGB(0x2A4DBF), true); mb_cyl(m, 0, -37, 0, 24, 24, 6, 8, RGB(0x2A4DBF), true);
+    m = mb_new(1); mb_cyl(m, 0, 11, 0, 0, 22, 22, 4, RGB(0x3A64FF), false); mb_xform(m, 0, -11, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 22, 22, 4, RGB(0x2342C0), false); MESH_LAPIS = mb_bake(m); mb_free(m);
+    m = mb_new(1); mb_cyl(m, 0, 0, 0, 22, 22, 70, 8, RGB(0xF6D272), false); mb_cyl(m, 0, 37, 0, 24, 24, 6, 8, RGB(0x2A4DBF), true); mb_cyl(m, 0, -37, 0, 24, 24, 6, 8, RGB(0x2A4DBF), true);
     for (int k = 0; k < 3; k++) mb_cyl(m, 0, -20 + k * 20, 0, 23, 23, 4, 8, RGB(0xB9852A), false);
     MESH_SEAL = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_cyl(m, 0, 450, 0, 50, 70, 900, 6, RGBA(255, 224, 128, 70), false); MESH_BEAM = mb_bake(m); mb_free(m);
-    m = mb_new(100);   // clay jar
+    m = mb_new(1); mb_cyl(m, 0, 450, 0, 50, 70, 900, 6, RGBA(255, 224, 128, 70), false); MESH_BEAM = mb_bake(m); mb_free(m);
+    m = mb_new(1);   // clay jar
     static const float prof[][2] = {{0, 26}, {20, 38}, {42, 40}, {64, 30}, {74, 15}, {88, 20}};
     for (int i = 0; i < 5; i++) { float y0 = prof[i][0], y1 = prof[i + 1][0]; mb_cyl(m, 0, (y0 + y1) / 2, 0, prof[i + 1][1], prof[i][1], y1 - y0, 8, i == 2 ? RGB(0x2A1A10) : RGB(0xB5562B), false); }
     mb_disc(m, 0, 88, 0, 18, 8, RGB(0x3A1A08));
     MESH_POT = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_cyl(m, 0, 20, 0, 0, 40, 40, 5, RGB(0xFF7A20), false); mb_xform(m, 0, -20, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 40, 40, 5, RGB(0xFFD040), false); MESH_FIRE = mb_bake(m); mb_free(m);
-    m = mb_new(100); mb_cyl(m, 0, 20, 0, 0, 40, 40, 5, RGB(0x80C0FF), false); mb_xform(m, 0, -20, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 40, 40, 5, RGB(0xE0F0FF), false); MESH_FIRE_R = mb_bake(m); mb_free(m);
-    m = mb_new(100);   // unit shock ring, radius 100cm
+    m = mb_new(1); mb_cyl(m, 0, 20, 0, 0, 40, 40, 5, RGB(0xFF7A20), false); mb_xform(m, 0, -20, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 40, 40, 5, RGB(0xFFD040), false); MESH_FIRE = mb_bake(m); mb_free(m);
+    m = mb_new(1); mb_cyl(m, 0, 20, 0, 0, 40, 40, 5, RGB(0x80C0FF), false); mb_xform(m, 0, -20, 0, PI_F, 0, 0, 1, 1, 1); mb_cyl(m, 0, 0, 0, 0, 40, 40, 5, RGB(0xE0F0FF), false); MESH_FIRE_R = mb_bake(m); mb_free(m);
+    m = mb_new(1);   // unit shock ring, radius 100cm
     for (int i = 0; i < 20; i++) {
         float a0 = i / 20.0f * TAU_F, a1 = (i + 1) / 20.0f * TAU_F;
         float p[4][3] = {{cosf(a0) * 85, 10, sinf(a0) * 85}, {cosf(a1) * 85, 10, sinf(a1) * 85}, {cosf(a1) * 115, 10, sinf(a1) * 115}, {cosf(a0) * 115, 10, sinf(a0) * 115}};
         mb_quad_raw(m, p, RGBA(255, 176, 80, 200));
     }
     MESH_SHOCK = mb_bake(m); mb_free(m);
-    for (int c = 0; c < 8; c++) { m = mb_new(100); mb_box(m, 0, 0, 0, 100, 100, 100, PART_COLORS[c]); MESH_PART[c] = mb_bake(m); mb_free(m); }
+    for (int c = 0; c < 8; c++) { m = mb_new(1); mb_box(m, 0, 0, 0, 100, 100, 100, PART_COLORS[c]); MESH_PART[c] = mb_bake(m); mb_free(m); }
 }
 
 static void draw_simple(const Mesh *mesh, V3 p, float ry, float rx, float s) {
@@ -953,7 +953,6 @@ void actors_draw_shadows(void) {
     if (B.state != BS_DEAD) draw_shadow(B.pos, 2.4f);
 }
 void actors_draw_additive(void) {
-    pickups_draw_additive();
     if (s_arcAlpha > 0.15f) {
         M4 root, tilt, m;
         m4_trs(&root, P.pos.x * RS, (P.pos.y + 1.25f) * RS, P.pos.z * RS, 0, P.facing, 0, RS * 0.01f);

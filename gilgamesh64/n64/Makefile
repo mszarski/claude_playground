@@ -7,7 +7,7 @@ T3D_INST ?= $(HOME)/tiny3d
 include $(N64_INST)/include/n64.mk
 include $(T3D_INST)/t3d.mk
 
-N64_CFLAGS += -std=gnu2x -O2 -Wno-error=unused-variable -Wno-error=unused-function
+N64_CFLAGS += -std=gnu2x -O2 -Wno-error=unused-variable -Wno-error=unused-function $(EXTRA_CFLAGS)
 
 PROJECT_NAME = gilgamesh64
 src = $(wildcard src/*.c)

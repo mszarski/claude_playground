@@ -198,7 +198,18 @@ static void start_game(void) {
     sfx(SFX_SELECT);
     G.state = ST_PLAY; synth_set_track(1);
     s_camPos = v3(0, 4, 42.2f);
+#if defined(DEBUG_GATE)
+    // debug: all seals collected, door open, start just north of the gate
+    G.seals[0] = G.seals[1] = G.seals[2] = true; G.duskSpawned = true;
+    G.gateOpen = true; world_set_door_collider(false); world_open_doors(1);
+    player_set(v3(DEBUG_GATE_X, 0, DEBUG_GATE_Z), PI_F);
+    s_camPos = v3(DEBUG_GATE_X, 4, DEBUG_GATE_Z + 6);
+#elif defined(DEBUG_POS)
+    player_set(v3(DEBUG_POS_X, 0, DEBUG_POS_Z), PI_F);
+    s_camPos = v3(DEBUG_POS_X, 4, DEBUG_POS_Z + 6);
+#else
     ui_say(INTRO, 5, NULL);
+#endif
     ui_area_card("Tablet V", "THE STEPPE OF URUK");
     G.region = 0;
 }
@@ -325,7 +336,7 @@ int main(void) {
         // ---------------------------------------------------------- 3D
         frameIdx = (frameIdx + 1) % FB_COUNT;
         mat_frame_begin(frameIdx);
-        t3d_viewport_set_projection(&viewport, T3D_DEG_TO_RAD(60.0f), 3.0f, 1900.0f);
+        t3d_viewport_set_projection(&viewport, T3D_DEG_TO_RAD(60.0f), 5.0f, 900.0f);
         t3d_viewport_look_at(&viewport, &(T3DVec3){{eye.x * RS, eye.y * RS, eye.z * RS}}, &(T3DVec3){{look.x * RS, look.y * RS, look.z * RS}}, &(T3DVec3){{0, 1, 0}});
 
         rdpq_attach(display_get(), display_get_zbuf());
@@ -345,7 +356,9 @@ int main(void) {
         t3d_light_set_count(1);
         t3d_state_set_drawflags(T3D_FLAG_SHADED | T3D_FLAG_DEPTH);
 
+#ifndef NO_SKY
         world_draw_sky(eye);
+#endif
         rdpq_mode_fog(RDPQ_FOG_STANDARD);
         rdpq_set_fog_color(fog);
         t3d_fog_set_range(fogNear * RS, fogFar * RS);
