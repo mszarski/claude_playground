@@ -2,6 +2,10 @@
 // Built with libdragon + tiny3d. Everything (models, level, music) is generated in code.
 #include "game.h"
 
+#ifndef GAME_FPS
+#define GAME_FPS 30
+#endif
+
 Game G;
 Input IN;
 float g_camYaw;
@@ -268,6 +272,7 @@ int main(void) {
     asset_init_compression(2);
     dfs_init(DFS_DEFAULT_LOCATION);
     display_init(RESOLUTION_320x240, DEPTH_16_BPP, FB_COUNT, GAMMA_NONE, FILTERS_RESAMPLE_ANTIALIAS_DEDITHER);
+    display_set_fps_limit(GAME_FPS);   // 30 fps like many N64 adventures; also halves emulator load
     rdpq_init();
     joypad_init();
     synth_init();
@@ -345,7 +350,7 @@ int main(void) {
         float ft = smoothf(clampf((-ref.z - 16) / 14, 0, 1));
         color_t fog = {
             (uint8_t)lerpf(FOG_STEPPE.r, FOG_FOREST.r, ft), (uint8_t)lerpf(FOG_STEPPE.g, FOG_FOREST.g, ft), (uint8_t)lerpf(FOG_STEPPE.b, FOG_FOREST.b, ft), 0xFF};
-        float fogNear = lerpf(30, 12, ft), fogFar = lerpf(80, 48, ft);
+        float fogNear = lerpf(22, 10, ft), fogFar = lerpf(56, 38, ft);   // short draw distance keeps the RSP load down
 
         // ---------------------------------------------------------- 3D
         frameIdx = (frameIdx + 1) % FB_COUNT;
@@ -368,7 +373,7 @@ int main(void) {
         t3d_light_set_ambient(amb);
         t3d_light_set_directional(0, dir, &ldir);
         t3d_light_set_count(1);
-        t3d_state_set_drawflags(T3D_FLAG_SHADED | T3D_FLAG_DEPTH);
+        t3d_state_set_drawflags(T3D_FLAG_SHADED | T3D_FLAG_DEPTH | T3D_FLAG_CULL_BACK);
 
 #ifndef NO_SKY
         world_draw_sky(eye);

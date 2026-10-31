@@ -55,6 +55,7 @@ typedef struct {
 
 MeshB *mb_new(float unit);
 void mb_free(MeshB *mb);
+void mb_box_bottoms(MeshB *mb, bool on);
 int  mb_tris(MeshB *mb);
 void mb_identity(MeshB *mb);
 void mb_xform(MeshB *mb, float px, float py, float pz, float rx, float ry, float rz, float sx, float sy, float sz);

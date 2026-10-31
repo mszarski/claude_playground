@@ -1,0 +1,2091 @@
+diff --git a/Makefile.common b/Makefile.common
+index 72aef3a..abb77b2 100644
+--- a/Makefile.common
++++ b/Makefile.common
+@@ -431,6 +431,20 @@ ifeq ($(HAVE_PARALLEL_RDP),1)
+ 	LDFLAGS += $(PARALLEL_RDP_LDFLAGS)
+ endif
+ 
++ifeq ($(HAVE_PARALLEL_RSP_INTERP), 1)
++	# parallel-rsp with a portable interpreter instead of the Lightning JIT
++	# (for Emscripten/WebAssembly). Vector unit uses the SSE path, which
++	# Emscripten maps onto WebAssembly SIMD.
++	SOURCES_CXX += $(RSPDIR_PARALLEL)/parallel.cpp \
++				   $(RSPDIR_PARALLEL)/rsp_interp.cpp \
++				   $(wildcard $(RSPDIR_PARALLEL)/rsp/*.cpp) \
++				   $(wildcard $(RSPDIR_PARALLEL)/arch/simd/rsp/*.cpp)
++	CXXFLAGS += -I$(RSPDIR_PARALLEL)/arch/simd/rsp
++	CFLAGS += -DHAVE_PARALLEL_RSP -DPARALLEL_INTEGRATION
++	CXXFLAGS += -DHAVE_PARALLEL_RSP -DPARALLEL_INTEGRATION -DPARALLEL_RSP_INTERP
++$(RSPDIR_PARALLEL)/%.o: CXXFLAGS += -msse4.1
++endif
++
+ ifeq ($(HAVE_PARALLEL_RSP), 1)
+ 	PARALLEL_RSP_ARCH := simd
+ 	SOURCES_CXX += $(RSPDIR_PARALLEL)/parallel.cpp \
+diff --git a/custom/mupen64plus-core/plugin/audio_libretro/audio_backend_libretro.c b/custom/mupen64plus-core/plugin/audio_libretro/audio_backend_libretro.c
+index f9014bd..30a5a0b 100644
+--- a/custom/mupen64plus-core/plugin/audio_libretro/audio_backend_libretro.c
++++ b/custom/mupen64plus-core/plugin/audio_libretro/audio_backend_libretro.c
+@@ -245,9 +245,28 @@ static void aiLenChanged(void* user_data, const void* buffer, size_t size)
+ {
+    uint32_t i;
+    int16_t *out      = NULL;
+-   int16_t *raw_data = (int16_t*)buffer;
++   int16_t *raw_data;
+    size_t frames     = size / 4;
+-   uint8_t *p        = (uint8_t*)buffer;
++   uint8_t *p;
++   /* Work on a copy: the byte swap below used to be done in place, which
++    * modified the game's audio buffers in emulated RDRAM. */
++   static uint8_t *swap_buf = NULL;
++   static size_t swap_cap = 0;
++
++   size &= ~(size_t)3;
++   if (size == 0)
++      return;
++   if (size > swap_cap)
++   {
++      uint8_t *nb = (uint8_t*)realloc(swap_buf, size);
++      if (!nb)
++         return;
++      swap_buf = nb;
++      swap_cap = size;
++   }
++   memcpy(swap_buf, buffer, size);
++   p        = swap_buf;
++   raw_data = (int16_t*)swap_buf;
+ 
+    /* Byte swap - handles endianness and channel order from N64 format */
+    for (i = 0; i < size; i += 4)
+diff --git a/mupen64plus-core/src/device/r4300/cached_interp.c b/mupen64plus-core/src/device/r4300/cached_interp.c
+index b46d99a..cc10332 100644
+--- a/mupen64plus-core/src/device/r4300/cached_interp.c
++++ b/mupen64plus-core/src/device/r4300/cached_interp.c
+@@ -290,8 +290,6 @@ void cached_interp_NOTCOMPILED2(void)
+ #define cached_interp_LDC2        cached_interp_RESERVED_COP2
+ #define cached_interp_DCTC2       cached_interp_RESERVED_COP2
+ #define cached_interp_LWC2        cached_interp_RESERVED_COP2
+-#define cached_interp_LLD         cached_interp_NI
+-#define cached_interp_SCD         cached_interp_NI
+ #define cached_interp_SDC2        cached_interp_RESERVED_COP2
+ #define cached_interp_SWC2        cached_interp_RESERVED_COP2
+ #define cached_interp_JR_IDLE     cached_interp_NI
+diff --git a/mupen64plus-core/src/device/r4300/cp0.c b/mupen64plus-core/src/device/r4300/cp0.c
+index 019d377..9eb254c 100644
+--- a/mupen64plus-core/src/device/r4300/cp0.c
++++ b/mupen64plus-core/src/device/r4300/cp0.c
+@@ -128,7 +128,7 @@ int check_cop1_unusable(struct r4300_core* r4300)
+ 
+     if (!(cp0_regs[CP0_STATUS_REG] & CP0_STATUS_CU1))
+     {
+-        cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_CPU | CP0_CAUSE_CE1;
++        cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_CPU | CP0_CAUSE_CE1);
+         exception_general(r4300);
+         return 1;
+     }
+@@ -141,7 +141,7 @@ int check_cop2_unusable(struct r4300_core* r4300)
+ 
+     if (!(cp0_regs[CP0_STATUS_REG] & CP0_STATUS_CU2))
+     {
+-        cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_CPU | CP0_CAUSE_CE2;
++        cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_CPU | CP0_CAUSE_CE2);
+         exception_general(r4300);
+         return 1;
+     }
+@@ -220,9 +220,10 @@ void TLB_refill_exception(struct r4300_core* r4300, uint32_t address, int w)
+         cp0_update_count(r4300);
+     }
+ 
+-    cp0_regs[CP0_CAUSE_REG] = (w == 1)
++    /* keep pending interrupt bits (IP7..IP0) */
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | ((w == 1)
+         ? CP0_CAUSE_EXCCODE_TLBS
+-        : CP0_CAUSE_EXCCODE_TLBL;
++        : CP0_CAUSE_EXCCODE_TLBL);
+ 
+     cp0_regs[CP0_BADVADDR_REG] = address;
+     cp0_regs[CP0_CONTEXT_REG] = (cp0_regs[CP0_CONTEXT_REG] & UINT32_C(0xFF80000F))
+diff --git a/mupen64plus-core/src/device/r4300/idec.c b/mupen64plus-core/src/device/r4300/idec.c
+index 831e26e..871f5d1 100644
+--- a/mupen64plus-core/src/device/r4300/idec.c
++++ b/mupen64plus-core/src/device/r4300/idec.c
+@@ -372,22 +372,22 @@ static const struct r4300_idec r4300_op_table[] = {
+ /* TLB opcodes table
+  * 176-239
+  */
+-    RESERVED,    TLBR,        TLBWI,       RESERVED,
+-    RESERVED,    RESERVED,    TLBWR,       RESERVED,
+-    TLBP,        RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    ERET,        RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
+-    RESERVED,    RESERVED,    RESERVED,    RESERVED,
++    NOP,         TLBR,        TLBWI,       NOP,
++    NOP,         NOP,         TLBWR,       NOP,
++    TLBP,        NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    ERET,        NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
++    NOP,         NOP,         NOP,         NOP,
+ /* COP1 opcodes table
+  * 240-247
+  */
+diff --git a/mupen64plus-core/src/device/r4300/interrupt.c b/mupen64plus-core/src/device/r4300/interrupt.c
+index 9c81a18..385a10f 100644
+--- a/mupen64plus-core/src/device/r4300/interrupt.c
++++ b/mupen64plus-core/src/device/r4300/interrupt.c
+@@ -340,7 +340,10 @@ void r4300_check_interrupt(struct r4300_core* r4300, uint32_t cause_ip, int set_
+     int* cp0_cycle_count = r4300_cp0_cycle_count(&r4300->cp0);
+ 
+     if (set_cause) {
+-        cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] | cause_ip) & ~CP0_CAUSE_EXCCODE_MASK;
++        /* Only set the pending bit: ExcCode is written when the interrupt
++         * exception is actually taken (check_int_handler). Clearing it here
++         * corrupted the cause of an exception being handled at that moment. */
++        cp0_regs[CP0_CAUSE_REG] |= cause_ip;
+     }
+     else {
+         cp0_regs[CP0_CAUSE_REG] &= ~cause_ip;
+@@ -380,7 +383,13 @@ void r4300_check_interrupt(struct r4300_core* r4300, uint32_t cause_ip, int set_
+ void raise_maskable_interrupt(struct r4300_core* r4300, uint32_t cause_ip)
+ {
+     uint32_t* cp0_regs = r4300_cp0_regs(&r4300->cp0);
+-    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] | cause_ip) & ~CP0_CAUSE_EXCCODE_MASK;
++    /* Set the pending bit only. ExcCode must not be touched unless the
++     * interrupt exception is really taken: an RCP/timer interrupt becoming
++     * pending while the CPU is inside another exception handler (EXL=1,
++     * before it has read Cause) used to wipe that exception's code, so e.g.
++     * libdragon saw its "COP1 unusable" exception as an interrupt and
++     * crashed. */
++    cp0_regs[CP0_CAUSE_REG] |= cause_ip;
+ 
+     if (!(cp0_regs[CP0_STATUS_REG] & cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00))) {
+         return;
+@@ -390,6 +399,7 @@ void raise_maskable_interrupt(struct r4300_core* r4300, uint32_t cause_ip)
+         return;
+     }
+ 
++    cp0_regs[CP0_CAUSE_REG] &= ~CP0_CAUSE_EXCCODE_MASK; /* ExcCode 0 = Int */
+     exception_general(r4300);
+ }
+ 
+@@ -413,7 +423,25 @@ void compare_int_handler(void* opaque)
+ 
+ void check_int_handler(void* opaque)
+ {
+-    exception_general((struct r4300_core*)opaque);
++    struct r4300_core* r4300 = (struct r4300_core*)opaque;
++    uint32_t* cp0_regs = r4300_cp0_regs(&r4300->cp0);
++
++    /* The CHECK_INT event was queued when the interrupt was raised, but by
++     * the time it fires the CPU may already be inside an exception/interrupt
++     * handler (EXL set, e.g. another interrupt was taken first at the same
++     * count) or may have disabled interrupts, or the interrupt may have been
++     * acknowledged. Taking it anyway nests a bogus interrupt inside the
++     * handler (clobbering EPC), which breaks libdragon's interrupt handler
++     * (e.g. "Coprocessor unusable" critical exception with audio).
++     * Re-check the conditions, like raise_maskable_interrupt() does; a still
++     * pending interrupt is re-checked when Status is written (MTC0). */
++    if (!(cp0_regs[CP0_STATUS_REG] & cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)))
++        return;
++    if ((cp0_regs[CP0_STATUS_REG] & (CP0_STATUS_IE | CP0_STATUS_EXL | CP0_STATUS_ERL)) != CP0_STATUS_IE)
++        return;
++
++    cp0_regs[CP0_CAUSE_REG] &= ~CP0_CAUSE_EXCCODE_MASK; /* ExcCode 0 = Int */
++    exception_general(r4300);
+ }
+ 
+ /* Special interrupt is a fake interrupt which porpose is
+diff --git a/mupen64plus-core/src/device/r4300/mips_instructions.def b/mupen64plus-core/src/device/r4300/mips_instructions.def
+index d6d46bd..c0d081e 100644
+--- a/mupen64plus-core/src/device/r4300/mips_instructions.def
++++ b/mupen64plus-core/src/device/r4300/mips_instructions.def
+@@ -119,7 +119,7 @@ DECLARE_INSTRUCTION(RESERVED)
+ 
+     DebugMessage(M64MSG_ERROR, "reserved opcode: %" PRIX32 ":%" PRIX32, PCADDR, *fast_mem_access(r4300, PCADDR));
+ 
+-    cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_RI;
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_RI);
+     exception_general(r4300);
+ }
+ 
+@@ -131,7 +131,7 @@ DECLARE_INSTRUCTION(RESERVED_COP2)
+ 
+     if (check_cop2_unusable(r4300)) { return; }
+ 
+-    cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_RI | CP0_CAUSE_CE2;
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_RI | CP0_CAUSE_CE2);
+     exception_general(r4300);
+ }
+ 
+@@ -142,7 +142,7 @@ DECLARE_INSTRUCTION(BREAK)
+     DECLARE_R4300
+     uint32_t* cp0_regs = r4300_cp0_regs(&r4300->cp0);
+ 
+-    cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_BP;
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_BP);
+     exception_general(r4300);
+ }
+ 
+@@ -151,7 +151,7 @@ DECLARE_INSTRUCTION(BREAK)
+ DECLARE_INSTRUCTION(LB)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     uint32_t value;
+@@ -165,7 +165,7 @@ DECLARE_INSTRUCTION(LB)
+ DECLARE_INSTRUCTION(LBU)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     uint32_t value;
+@@ -179,7 +179,7 @@ DECLARE_INSTRUCTION(LBU)
+ DECLARE_INSTRUCTION(LH)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     uint32_t value;
+@@ -193,7 +193,7 @@ DECLARE_INSTRUCTION(LH)
+ DECLARE_INSTRUCTION(LHU)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     uint32_t value;
+@@ -207,7 +207,7 @@ DECLARE_INSTRUCTION(LHU)
+ DECLARE_INSTRUCTION(LL)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     uint32_t value;
+@@ -218,10 +218,24 @@ DECLARE_INSTRUCTION(LL)
+     }
+ }
+ 
++DECLARE_INSTRUCTION(LLD)
++{
++    DECLARE_R4300
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
++    int64_t *lsrtp = &irt;
++    ADD_TO_PC(1);
++    uint64_t value;
++
++    if (r4300_read_aligned_dword(r4300, lsaddr, &value)) {
++        *lsrtp = (int64_t)value;
++        r4300->llbit = 1;
++    }
++}
++
+ DECLARE_INSTRUCTION(LW)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     uint32_t value;
+@@ -234,7 +248,7 @@ DECLARE_INSTRUCTION(LW)
+ DECLARE_INSTRUCTION(LWU)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -248,7 +262,7 @@ DECLARE_INSTRUCTION(LWU)
+ DECLARE_INSTRUCTION(LWL)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -265,7 +279,7 @@ DECLARE_INSTRUCTION(LWL)
+ DECLARE_INSTRUCTION(LWR)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -284,7 +298,7 @@ DECLARE_INSTRUCTION(LWR)
+ DECLARE_INSTRUCTION(LD)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -294,7 +308,7 @@ DECLARE_INSTRUCTION(LD)
+ DECLARE_INSTRUCTION(LDL)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -311,7 +325,7 @@ DECLARE_INSTRUCTION(LDL)
+ DECLARE_INSTRUCTION(LDR)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -332,7 +346,7 @@ DECLARE_INSTRUCTION(LDR)
+ DECLARE_INSTRUCTION(SB)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     unsigned int shift = bshift(lsaddr);
+@@ -343,7 +357,7 @@ DECLARE_INSTRUCTION(SB)
+ DECLARE_INSTRUCTION(SH)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+     unsigned int shift = hshift(lsaddr);
+@@ -354,7 +368,7 @@ DECLARE_INSTRUCTION(SH)
+ DECLARE_INSTRUCTION(SC)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -371,10 +385,30 @@ DECLARE_INSTRUCTION(SC)
+     }
+ }
+ 
++DECLARE_INSTRUCTION(SCD)
++{
++    DECLARE_R4300
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
++    int64_t *lsrtp = &irt;
++    ADD_TO_PC(1);
++
++    if (r4300->llbit)
++    {
++        if (r4300_write_aligned_dword(r4300, lsaddr, (uint64_t)*lsrtp, ~UINT64_C(0))) {
++            r4300->llbit = 0;
++            *lsrtp = 1;
++        }
++    }
++    else
++    {
++        *lsrtp = 0;
++    }
++}
++
+ DECLARE_INSTRUCTION(SW)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -384,7 +418,7 @@ DECLARE_INSTRUCTION(SW)
+ DECLARE_INSTRUCTION(SWL)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -401,7 +435,7 @@ DECLARE_INSTRUCTION(SWL)
+ DECLARE_INSTRUCTION(SWR)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -416,7 +450,7 @@ DECLARE_INSTRUCTION(SWR)
+ DECLARE_INSTRUCTION(SD)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -426,7 +460,7 @@ DECLARE_INSTRUCTION(SD)
+ DECLARE_INSTRUCTION(SDL)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -443,7 +477,7 @@ DECLARE_INSTRUCTION(SDL)
+ DECLARE_INSTRUCTION(SDR)
+ {
+     DECLARE_R4300
+-    const uint32_t lsaddr = (uint32_t) irs32 + (uint32_t) iimmediate;
++    const uint32_t lsaddr = r4300_ls_addr64(irs, iimmediate);
+     int64_t *lsrtp = &irt;
+     ADD_TO_PC(1);
+ 
+@@ -474,14 +508,14 @@ DECLARE_INSTRUCTION(ADDU)
+ DECLARE_INSTRUCTION(ADDI)
+ {
+     DECLARE_R4300
+-    irt = SE32((uint32_t) irs32 + (uint32_t) iimmediate);
++    irt = SE32(r4300_ls_addr64(irs, iimmediate));
+     ADD_TO_PC(1);
+ }
+ 
+ DECLARE_INSTRUCTION(ADDIU)
+ {
+     DECLARE_R4300
+-    irt = SE32((uint32_t) irs32 + (uint32_t) iimmediate);
++    irt = SE32(r4300_ls_addr64(irs, iimmediate));
+     ADD_TO_PC(1);
+ }
+ 
+@@ -1024,7 +1058,7 @@ DECLARE_INSTRUCTION(SYSCALL)
+     DECLARE_R4300
+     uint32_t* cp0_regs = r4300_cp0_regs(&r4300->cp0);
+ 
+-    cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_SYS;
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_SYS);
+     exception_general(r4300);
+ }
+ 
+@@ -1037,7 +1071,7 @@ DECLARE_INSTRUCTION(name) \
+     uint32_t* cp0_regs = r4300_cp0_regs(&r4300->cp0); \
+     if (cond) \
+     { \
+-        cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_TR; \
++        cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_TR); \
+         exception_general(r4300); \
+     } \
+     else \
+@@ -1441,7 +1475,7 @@ DECLARE_INSTRUCTION(LWC1)
+ {
+     DECLARE_R4300
+     const unsigned char lslfft = lfft;
+-    const uint32_t lslfaddr = (uint32_t) r4300_regs(r4300)[lfbase] + lfoffset;
++    const uint32_t lslfaddr = r4300_ls_addr64(r4300_regs(r4300)[lfbase], lfoffset);
+     if (check_cop1_unusable(r4300)) { return; }
+     ADD_TO_PC(1);
+ 
+@@ -1452,7 +1486,7 @@ DECLARE_INSTRUCTION(LDC1)
+ {
+     DECLARE_R4300
+     const unsigned char lslfft = lfft;
+-    const uint32_t lslfaddr = (uint32_t) r4300_regs(r4300)[lfbase] + lfoffset;
++    const uint32_t lslfaddr = r4300_ls_addr64(r4300_regs(r4300)[lfbase], lfoffset);
+     if (check_cop1_unusable(r4300)) { return; }
+     ADD_TO_PC(1);
+ 
+@@ -1463,7 +1497,7 @@ DECLARE_INSTRUCTION(SWC1)
+ {
+     DECLARE_R4300
+     const unsigned char lslfft = lfft;
+-    const uint32_t lslfaddr = (uint32_t) r4300_regs(r4300)[lfbase] + lfoffset;
++    const uint32_t lslfaddr = r4300_ls_addr64(r4300_regs(r4300)[lfbase], lfoffset);
+     if (check_cop1_unusable(r4300)) { return; }
+     ADD_TO_PC(1);
+ 
+@@ -1474,7 +1508,7 @@ DECLARE_INSTRUCTION(SDC1)
+ {
+     DECLARE_R4300
+     const unsigned char lslfft = lfft;
+-    const uint32_t lslfaddr = (uint32_t) r4300_regs(r4300)[lfbase] + lfoffset;
++    const uint32_t lslfaddr = r4300_ls_addr64(r4300_regs(r4300)[lfbase], lfoffset);
+     if (check_cop1_unusable(r4300)) { return; }
+     ADD_TO_PC(1);
+ 
+@@ -1524,7 +1558,7 @@ DECLARE_INSTRUCTION(DCFC1)
+     /* Unimplemented Operation */
+     (*r4300_cp1_fcr31(&r4300->cp1)) |= FCR31_CAUSE_UNIMPLOP_BIT;
+ 
+-    cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_FPE;
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_FPE);
+     exception_general(r4300);
+ }
+ 
+@@ -1570,7 +1604,7 @@ DECLARE_INSTRUCTION(DCTC1)
+     /* Unimplemented Operation */
+     (*r4300_cp1_fcr31(&r4300->cp1)) |= FCR31_CAUSE_UNIMPLOP_BIT;
+ 
+-    cp0_regs[CP0_CAUSE_REG] = CP0_CAUSE_EXCCODE_FPE;
++    cp0_regs[CP0_CAUSE_REG] = (cp0_regs[CP0_CAUSE_REG] & UINT32_C(0xff00)) | (CP0_CAUSE_EXCCODE_FPE);
+     exception_general(r4300);
+ }
+ 
+diff --git a/mupen64plus-core/src/device/r4300/pure_interp.c b/mupen64plus-core/src/device/r4300/pure_interp.c
+index 6456693..9f673ab 100644
+--- a/mupen64plus-core/src/device/r4300/pure_interp.c
++++ b/mupen64plus-core/src/device/r4300/pure_interp.c
+@@ -446,23 +446,32 @@ void InterpretOpcode(struct r4300_core* r4300)
+ 		case 5: /* Coprocessor 0 opcode 5: DMTC0 */
+ 			MTC0(r4300, op);
+ 			break;
+-		case 16: /* Coprocessor 0 opcode 16: TLB */
++		case 2:
++		case 3:
++		case 6:
++		case 7:
++		case 8:
++		case 9:
++		case 10:
++		case 11:
++		case 12:
++		case 13:
++		case 14:
++		case 15: /* Coprocessor 0 opcodes 2..3, 6..15: Reserved Instructions */
++			RESERVED(r4300, op);
++			break;
++		default: /* Coprocessor 0 opcode 16..31: TLB */
+ 			switch (op & 0x3F) {
+ 			case 1: TLBR(r4300, op); break;
+ 			case 2: TLBWI(r4300, op); break;
+ 			case 6: TLBWR(r4300, op); break;
+ 			case 8: TLBP(r4300, op); break;
+ 			case 24: ERET(r4300, op); break;
+-			default: /* TLB sub-opcodes 0, 3..5, 7, 9..23, 25..63:
+-			            Reserved Instructions */
+-				RESERVED(r4300, op);
++			default: /* TLB sub-opcodes 0, 3..5, 7, 9..23, 25..63: undefined */
++				NOP(r4300, 0);
+ 				break;
+ 			} /* switch (op & 0x3F) for Coprocessor 0 TLB opcodes */
+ 			break;
+-		default: /* Coprocessor 0 opcodes 2..3, 5..15, 17..31:
+-		            Reserved Instructions */
+-			RESERVED(r4300, op);
+-			break;
+ 		} /* switch ((op >> 21) & 0x1F) for the Coprocessor 0 prefix */
+ 		break;
+ 	case 17: /* Coprocessor 1 prefix */
+@@ -718,8 +727,9 @@ void InterpretOpcode(struct r4300_core* r4300)
+ 		else                NOP(r4300, 0);
+ 		break;
+ 	case 49: LWC1(r4300, op); break;
+-	case 52: /* Major opcode 52: LLD (Not implemented) */
+-		NI(r4300, op);
++	case 52: /* Major opcode 52: LLD */
++		if (RT_OF(op) != 0) LLD(r4300, op);
++		else                NOP(r4300, 0);
+ 		break;
+ 	case 53: LDC1(r4300, op); break;
+ 	case 55: /* Major opcode 55: LD */
+@@ -731,8 +741,9 @@ void InterpretOpcode(struct r4300_core* r4300)
+ 		else                NOP(r4300, 0);
+ 		break;
+ 	case 57: SWC1(r4300, op); break;
+-	case 60: /* Major opcode 60: SCD (Not implemented) */
+-		NI(r4300, op);
++	case 60: /* Major opcode 60: SCD */
++		if (RT_OF(op) != 0) SCD(r4300, op);
++		else                NOP(r4300, 0);
+ 		break;
+ 	case 61: SDC1(r4300, op); break;
+ 	case 63: SD(r4300, op); break;
+diff --git a/mupen64plus-core/src/device/r4300/r4300_core.c b/mupen64plus-core/src/device/r4300/r4300_core.c
+index 76e9f50..19027a5 100644
+--- a/mupen64plus-core/src/device/r4300/r4300_core.c
++++ b/mupen64plus-core/src/device/r4300/r4300_core.c
+@@ -20,6 +20,7 @@
+  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+ 
+ #include "r4300_core.h"
++#include "device/rcp/mi/mi_controller.h"
+ #include "cached_interp.h"
+ #if defined(COUNT_INSTR)
+ #include "instr_counters.h"
+@@ -351,6 +352,38 @@ int r4300_read_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64_
+  * address may not be word-aligned for byte or hword accesses.
+  * Alignment is taken care of when calling mem handler.
+  */
++/* MI repeat mode (MI_MODE bit 7, a.k.a. "init mode"): the next CPU write to
++ * RDRAM is repeated over (MI_MODE[6:0] + 1) bytes, then the mode clears
++ * itself. libdragon uses it for its hardware-accelerated memset. */
++static int r4300_mi_repeat_write(struct r4300_core* r4300, uint32_t paddr, uint64_t pattern, int patlen)
++{
++    uint32_t* mode = &r4300->mi->regs[MI_INIT_MODE_REG];
++    uint32_t len, off;
++    const struct mem_handler* handler;
++
++    /* only plain RDRAM writes are repeated here; RDRAM register writes
++     * (IPL3 init) keep the old behaviour */
++    if (!(*mode & 0x80) || paddr >= UINT32_C(0x03f00000))
++        return 0;
++
++    len = (*mode & 0x7f) + 1;
++    *mode &= ~UINT32_C(0x80);
++
++    invalidate_r4300_cached_code(r4300, UINT32_C(0x80000000) | paddr, len);
++    invalidate_r4300_cached_code(r4300, UINT32_C(0xa0000000) | paddr, len);
++
++    handler = mem_get_handler(r4300->mem, paddr);
++    for (off = 0; off < len; off += 4) {
++        uint32_t n = len - off;
++        uint32_t w, m;
++        if (n > 4) n = 4;
++        w = (patlen == 8) ? (uint32_t)(pattern >> (((paddr + off) & 4) ? 0 : 32)) : (uint32_t)pattern;
++        m = (n == 4) ? UINT32_C(0xffffffff) : ~(UINT32_C(0xffffffff) >> (8 * n));
++        mem_write32(handler, paddr + off, w, m);
++    }
++    return 1;
++}
++
+ int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_t value, uint32_t mask)
+ {
+     if ((address & UINT32_C(0xc0000000)) != UINT32_C(0x80000000)) {
+@@ -368,6 +401,9 @@ int r4300_write_aligned_word(struct r4300_core* r4300, uint32_t address, uint32_
+ 
+     address &= UINT32_C(0x1ffffffc);
+ 
++    if (r4300_mi_repeat_write(r4300, address, value, 4))
++        return 1;
++
+     mem_write32(mem_get_handler(r4300->mem, address), address & ~UINT32_C(3), value, mask);
+ 
+     return 1;
+@@ -398,6 +434,9 @@ int r4300_write_aligned_dword(struct r4300_core* r4300, uint32_t address, uint64
+ 
+     address &= UINT32_C(0x1ffffffc);
+ 
++    if (r4300_mi_repeat_write(r4300, address, value, 8))
++        return 1;
++
+     const struct mem_handler* handler = mem_get_handler(r4300->mem, address);
+     mem_write32(handler, address + 0, value >> 32,      mask >> 32);
+     mem_write32(handler, address + 4, (uint32_t) value, (uint32_t) mask      );
+diff --git a/mupen64plus-core/src/device/r4300/r4300_core.h b/mupen64plus-core/src/device/r4300/r4300_core.h
+index 5b5b7ea..459484a 100644
+--- a/mupen64plus-core/src/device/r4300/r4300_core.h
++++ b/mupen64plus-core/src/device/r4300/r4300_core.h
+@@ -253,4 +253,21 @@ void generic_jump_to(struct r4300_core* r4300, unsigned int address);
+ 
+ void savestates_load_set_pc(struct r4300_core* r4300, uint32_t pc);
+ 
++
++/* Compute a load/store effective address from a 64-bit base register.
++ * Accesses through the 64-bit XKPHYS segment (0x8000_0000_0000_0000 ..
++ * 0xBFFF_FFFF_FFFF_FFFF, used e.g. by libdragon's io_read/io_write) are
++ * folded into the equivalent 32-bit KSEG0 (cached) / KSEG1 (uncached)
++ * address, since the rest of the core only handles 29-bit physical addresses.
++ * Everything else is truncated to 32 bits as before. */
++static inline uint32_t r4300_ls_addr64(int64_t base, int64_t offset)
++{
++    uint64_t a = (uint64_t)base + (uint64_t)offset;
++    if ((a >> 62) == 2) {
++        uint32_t phys = (uint32_t)a & UINT32_C(0x1fffffff);
++        return (((a >> 59) & 7) == 2) ? (UINT32_C(0xa0000000) | phys) : (UINT32_C(0x80000000) | phys);
++    }
++    return (uint32_t)a;
++}
++
+ #endif
+diff --git a/mupen64plus-core/src/device/rcp/ai/ai_controller.c b/mupen64plus-core/src/device/rcp/ai/ai_controller.c
+index bc46a5f..9c2e324 100644
+--- a/mupen64plus-core/src/device/rcp/ai/ai_controller.c
++++ b/mupen64plus-core/src/device/rcp/ai/ai_controller.c
+@@ -98,6 +98,18 @@ static void do_dma(struct ai_controller* ai, struct ai_dma* dma)
+     add_interrupt_event(&ai->mi->r4300->cp0, AI_INT, dma->duration);
+ }
+ 
++/* push samples of the current DMA, clamped to RDRAM */
++static void ai_push(struct ai_controller* ai, uint32_t offset, uint32_t size)
++{
++    uint32_t addr = ai->fifo[0].address + offset;
++    uint32_t dram_size = ai->ri->rdram->dram_size;
++    if (size == 0 || addr >= dram_size)
++        return;
++    if (addr + size > dram_size)
++        size = dram_size - addr;
++    ai->iaout->push_samples(ai->aout, (unsigned char*)ai->ri->rdram->dram + addr, size & ~UINT32_C(3));
++}
++
+ static void fifo_push(struct ai_controller* ai)
+ {
+     unsigned int duration = get_dma_duration(ai) * ai->dma_modifier;
+@@ -175,8 +187,7 @@ void read_ai_regs(void* opaque, uint32_t address, uint32_t* value)
+         if (*value < ai->last_read)
+         {
+             unsigned int diff = ai->fifo[0].length - ai->last_read;
+-            unsigned char *p = (unsigned char*)&ai->ri->rdram->dram[ai->fifo[0].address/4];
+-            ai->iaout->push_samples(ai->aout, p + diff, ai->last_read - *value);
++            ai_push(ai, diff, ai->last_read - *value);
+             ai->last_read = *value;
+         }
+     }
+@@ -195,6 +206,7 @@ void write_ai_regs(void* opaque, uint32_t address, uint32_t value, uint32_t mask
+     {
+     case AI_LEN_REG:
+         masked_write(&ai->regs[AI_LEN_REG], value, mask);
++        ai->regs[AI_LEN_REG] &= UINT32_C(0x0003fff8); /* 18-bit length */
+         if (ai->regs[AI_LEN_REG] != 0) {
+             fifo_push(ai);
+         }
+@@ -207,6 +219,15 @@ void write_ai_regs(void* opaque, uint32_t address, uint32_t value, uint32_t mask
+         clear_rcp_interrupt(ai->mi, MI_INTR_AI);
+         return;
+ 
++    case AI_DRAM_ADDR_REG:
++        /* 24-bit, 8-byte aligned physical address. Games (e.g. libdragon)
++         * may write a KSEG0/KSEG1 virtual address; upper bits are ignored
++         * by the hardware. Not masking it made the audio backend read (and
++         * byte-swap in place!) far outside of RDRAM. */
++        masked_write(&ai->regs[AI_DRAM_ADDR_REG], value, mask);
++        ai->regs[AI_DRAM_ADDR_REG] &= UINT32_C(0x00fffff8);
++        return;
++
+     case AI_DACRATE_REG:
+         /* lazy audio format setting */
+         if ((ai->regs[reg]) != (value & mask))
+@@ -226,8 +247,7 @@ void ai_end_of_dma_event(void* opaque)
+     if (ai->last_read != 0)
+     {
+         unsigned int diff = ai->fifo[0].length - ai->last_read;
+-        unsigned char *p = (unsigned char*)&ai->ri->rdram->dram[ai->fifo[0].address/4];
+-        ai->iaout->push_samples(ai->aout, p + diff, ai->last_read);
++        ai_push(ai, diff, ai->last_read);
+         ai->last_read = 0;
+     }
+ 
+diff --git a/mupen64plus-core/src/device/rcp/rdp/rdp_core.c b/mupen64plus-core/src/device/rcp/rdp/rdp_core.c
+index f091801..1c7dc2c 100644
+--- a/mupen64plus-core/src/device/rcp/rdp/rdp_core.c
++++ b/mupen64plus-core/src/device/rcp/rdp/rdp_core.c
+@@ -27,6 +27,13 @@
+ #include "device/rcp/mi/mi_controller.h"
+ #include "device/rcp/rsp/rsp_core.h"
+ #include "plugin/plugin.h"
++#ifdef __LIBRETRO__
++#include <mupen64plus-next_common.h>
++#else
++#define current_rdp_type 0
++#define RDP_PLUGIN_ANGRYLION 1
++#define RDP_PLUGIN_PARALLEL 1
++#endif
+ 
+ static void update_dpc_status(struct rdp_core* dp, uint32_t w)
+ {
+@@ -107,6 +114,9 @@ void write_dpc_regs(void* opaque, uint32_t address, uint32_t value, uint32_t mas
+     }
+ 
+     masked_write(&dp->dpc_regs[reg], value, mask);
++    /* DPC_START/DPC_END are 24-bit, 8-byte aligned registers */
++    if (reg == DPC_START_REG || reg == DPC_END_REG)
++        dp->dpc_regs[reg] &= UINT32_C(0x00fffff8);
+ 
+     switch(reg)
+     {
+@@ -117,7 +127,16 @@ void write_dpc_regs(void* opaque, uint32_t address, uint32_t value, uint32_t mas
+         unprotect_framebuffers(&dp->fb);
+         gfx.processRDPList();
+         protect_framebuffers(&dp->fb);
+-        signal_rcp_interrupt(dp->mi, MI_INTR_DP);
++        if (current_rdp_type == RDP_PLUGIN_ANGRYLION || current_rdp_type == RDP_PLUGIN_PARALLEL)
++        {
++            /* LLE RDP plugins flag MI_INTR_DP themselves on SYNC_FULL;
++             * don't raise a spurious DP interrupt for every DPC_END write
++             * (libdragon's rdpq asserts on unexpected DP interrupts). */
++            if (dp->mi->regs[MI_INTR_REG] & MI_INTR_DP)
++                signal_rcp_interrupt(dp->mi, MI_INTR_DP);
++        }
++        else
++            signal_rcp_interrupt(dp->mi, MI_INTR_DP);
+         break;
+     }
+ }
+diff --git a/mupen64plus-core/src/device/rcp/ri/ri_controller.h b/mupen64plus-core/src/device/rcp/ri/ri_controller.h
+index 940fa80..ae79a4b 100644
+--- a/mupen64plus-core/src/device/rcp/ri/ri_controller.h
++++ b/mupen64plus-core/src/device/rcp/ri/ri_controller.h
+@@ -51,15 +51,26 @@ struct ri_controller
+ 
+ static osal_inline uint32_t ri_reg(uint32_t address)
+ {
+-    return (address & 0xffff) >> 2;
++    return (address & 0x1f) >> 2;
+ }
+ 
+-static osal_inline uint16_t ri_address_to_id_field(uint32_t address)
++static osal_inline uint32_t ri_address(uint32_t address)
+ {
+-    /* XXX: pure guessing, need harware test */
+-    return (uint16_t)(((address >> 20) == 0x03f)
+-        ? (address & 0x0007fc00) >> 10   /* RDRAM registers id_field: [19..10] */
+-        : (address & 0x00f00000) >> 20); /* RDRAM memory    id_field: [23..20] */
++    /* https://n64brew.dev/wiki/RDRAM_Interface#Memory_addressing */
++    return (((address >> 20) == 0x03f)
++        ? (((address & 0x3ff)))              | /* Adr[10:0]  */
++           (((address >> 10) & 0x1ff) << 11) | /* Adr[19:11] */
++           (((address >> 10) & 0x1ff) << 20)   /* Adr[28:20] */
++        : (((address & 0x7ff)))              | /* Adr[10:0]  */
++           (((address >> 11) & 0x1ff) << 11) | /* Adr[19:11] */
++           (((address >> 20) & 0x03f) << 20)); /* Adr[28:20] */
++}
++
++static osal_inline uint16_t ri_address_to_id_field(uint32_t address, uint8_t swapfield)
++{
++    /* https://n64brew.dev/wiki/RDRAM#RDRAM_addressing */
++    return (((swapfield  & ((address >> 11) & 0x1ff))) 
++          | ((~swapfield & ((address >> 20) & 0x1ff)))); /* AdrS[28:20] */
+ }
+ 
+ 
+diff --git a/mupen64plus-core/src/device/rcp/rsp/rsp_core.c b/mupen64plus-core/src/device/rcp/rsp/rsp_core.c
+index 550d9bb..52d984f 100644
+--- a/mupen64plus-core/src/device/rcp/rsp/rsp_core.c
++++ b/mupen64plus-core/src/device/rcp/rsp/rsp_core.c
+@@ -231,6 +231,7 @@ void poweron_rsp(struct rsp_core* sp)
+     memset(sp->fifo, 0, SP_DMA_FIFO_SIZE*sizeof(struct sp_dma));
+ 
+     sp->rsp_task_locked = 0;
++    sp->lle_generic = 0;
+     sp->mi->r4300->cp0.interrupt_unsafe_state &= ~INTR_UNSAFE_RSP;
+     sp->regs[SP_STATUS_REG] = 1;
+     sp->regs[SP_RD_LEN_REG] = 0xff8;
+@@ -375,12 +376,42 @@ void do_SP_Task(struct rsp_core* sp)
+     }
+     else
+     {
++        uint32_t intr;
++
+         sp->regs2[SP_PC_REG] &= 0xfff;
+         rsp.doRspCycles(0xffffffff);
+         sp->regs2[SP_PC_REG] |= save_pc;
+ 
+-        sp_delay_time = 0;
++        /* Generic (non OS gfx/audio) task, e.g. libdragon's rspq. Keep the
++         * SP status exactly as the LLE RSP left it (no fake TASKDONE/SIG2,
++         * no forced HALT/BROKE) and forward interrupts raised by the RSP
++         * (MTC0 SP_STATUS SET_INTR, BREAK with INTR_BREAK, RDP SYNC_FULL)
++         * to the CPU right away. */
++        sp->lle_generic = 1;
++        sp->rsp_task_locked = 0;
++        sp->mi->r4300->cp0.interrupt_unsafe_state &= ~INTR_UNSAFE_RSP;
++
++        intr = sp->mi->regs[MI_INTR_REG] & (MI_INTR_SP | MI_INTR_DP);
++        sp->mi->regs[MI_INTR_REG] &= ~intr;
++
++        if ((sp->regs[SP_STATUS_REG] & SP_STATUS_HALT) == 0)
++        {
++            /* RSP is still running (the LLE plugin returned because the
++             * ucode is spinning in a wait loop): resume it a bit later, or
++             * as soon as the CPU touches SP_STATUS. */
++            sp->rsp_task_locked = 1;
++            if (get_event(&sp->mi->r4300->cp0.q, SP_INT) == NULL)
++            {
++                cp0_update_count(sp->mi->r4300);
++                add_interrupt_event(&sp->mi->r4300->cp0, SP_INT, 2000);
++            }
++        }
++
++        if (intr)
++            signal_rcp_interrupt(sp->mi, intr);
++        return;
+     }
++    sp->lle_generic = 0;
+ 
+     sp->rsp_task_locked = 0;
+     sp->mi->r4300->cp0.interrupt_unsafe_state &= ~INTR_UNSAFE_RSP;
+@@ -405,6 +436,14 @@ void rsp_interrupt_event(void* opaque)
+ {
+     struct rsp_core* sp = (struct rsp_core*)opaque;
+ 
++    if (sp->lle_generic)
++    {
++        /* resume a paused generic LLE task */
++        if (sp->rsp_task_locked && (sp->regs[SP_STATUS_REG] & SP_STATUS_HALT) == 0)
++            do_SP_Task(sp);
++        return;
++    }
++
+     if (!sp->rsp_task_locked)
+     {
+         sp->regs[SP_STATUS_REG] |=
+diff --git a/mupen64plus-core/src/device/rcp/rsp/rsp_core.h b/mupen64plus-core/src/device/rcp/rsp/rsp_core.h
+index 2d067cf..c2b2c25 100644
+--- a/mupen64plus-core/src/device/rcp/rsp/rsp_core.h
++++ b/mupen64plus-core/src/device/rcp/rsp/rsp_core.h
+@@ -97,6 +97,7 @@ struct rsp_core
+     uint32_t regs[SP_REGS_COUNT];
+     uint32_t regs2[SP_REGS2_COUNT];
+     uint32_t rsp_task_locked;
++    uint32_t lle_generic; /* last task was a non-OS (e.g. libdragon) task run by an LLE RSP */
+ 
+     struct mi_controller* mi;
+     struct rdp_core* dp;
+diff --git a/mupen64plus-core/src/device/rdram/rdram.c b/mupen64plus-core/src/device/rdram/rdram.c
+index 28065ea..616c934 100644
+--- a/mupen64plus-core/src/device/rdram/rdram.c
++++ b/mupen64plus-core/src/device/rdram/rdram.c
+@@ -31,7 +31,7 @@
+ #include <string.h>
+ 
+ #define RDRAM_BCAST_ADDRESS_MASK UINT32_C(0x00080000)
+-
++#define RDRAM_MODE_CE_MASK UINT32_C(0x80000000)
+ 
+ /* XXX: deduce # of RDRAM modules from it's total size
+  * Assume only 2Mo RDRAM modules.
+@@ -59,18 +59,24 @@ static osal_inline uint16_t idfield_value(uint32_t device_id)
+ {
+     return ((((device_id >> 26) & 0x3f) <<  0)
+           | (((device_id >> 23) & 0x01) <<  6)
+-          | (((device_id >> 16) & 0xff) <<  7)
++          | (((device_id >>  8) & 0xff) <<  7)
+           | (((device_id >>  7) & 0x01) << 15));
+ }
+ 
++static osal_inline uint8_t swapfield_value(uint32_t address_select)
++{
++    return ((((address_select >> 25) & 0x7f) << 0)
++          | (((address_select >> 15) & 0x01) << 7));
++}
++
+ static size_t get_module(const struct rdram* rdram, uint32_t address)
+ {
+     size_t module;
+     size_t modules = get_modules_count(rdram);
+-    uint16_t id_field = ri_address_to_id_field(address);
+-
++    uint16_t id_field;
+ 
+     for (module = 0; module < modules; ++module) {
++        id_field = ri_address_to_id_field(ri_address(address), swapfield_value(rdram->regs[module][RDRAM_ADDR_SELECT_REG]));
+         if (id_field == idfield_value(rdram->regs[module][RDRAM_DEVICE_ID_REG])) {
+             return module;
+         }
+@@ -87,8 +93,6 @@ static void read_rdram_dram_corrupted(void* opaque, uint32_t address, uint32_t*
+     uint32_t addr = rdram_dram_address(address);
+     size_t module;
+ 
+-    *value = rdram->dram[addr];
+-
+     module = get_module(rdram, address);
+     if (module == RDRAM_MAX_MODULES_COUNT) {
+         *value = 0;
+@@ -97,7 +101,14 @@ static void read_rdram_dram_corrupted(void* opaque, uint32_t address, uint32_t*
+ 
+     /* corrupt read value if CC value is not calibrated */
+     uint32_t mode = rdram->regs[module][RDRAM_MODE_REG] ^ UINT32_C(0xc0c0c0c0);
+-    if ((mode & 0x80000000) && (cc_value(mode) == 0)) {
++    if ((mode & RDRAM_MODE_CE_MASK) && (cc_value(mode) == 0)) {
++        *value = 0;
++        return;
++    }
++
++    if (address < rdram->dram_size) {
++        *value = rdram->dram[addr];
++    } else {
+         *value = 0;
+     }
+ }
+@@ -107,7 +118,7 @@ static void map_corrupt_rdram(struct rdram* rdram, int corrupt)
+     struct mem_mapping mapping;
+ 
+     mapping.begin = MM_RDRAM_DRAM;
+-    mapping.end = MM_RDRAM_DRAM + rdram->dram_size - 1;
++    mapping.end = MM_RDRAM_DRAM + 0x3efffff;
+     mapping.type = M64P_MEM_RDRAM;
+     mapping.handler.opaque = rdram;
+     mapping.handler.read32 = (corrupt)
+@@ -131,6 +142,7 @@ void init_rdram(struct rdram* rdram,
+     rdram->dram = dram;
+     rdram->dram_size = dram_size;
+     rdram->r4300 = r4300;
++    rdram->corrupted_handler = 0;
+ }
+ 
+ void poweron_rdram(struct rdram* rdram)
+@@ -173,7 +185,11 @@ void read_rdram_regs(void* opaque, uint32_t address, uint32_t* value)
+         return;
+     }
+ 
+-    *value = rdram->regs[module][reg];
++    if (reg < RDRAM_REGS_COUNT) {
++        *value = rdram->regs[module][reg];
++    } else {
++        *value = 0;
++    }
+ 
+     /* some bits are inverted when read */
+     if (reg == RDRAM_MODE_REG) {
+@@ -185,33 +201,15 @@ void write_rdram_regs(void* opaque, uint32_t address, uint32_t value, uint32_t m
+ {
+     struct rdram* rdram = (struct rdram*)opaque;
+     uint32_t reg = rdram_reg(address);
++    uint32_t mode;
++    uint8_t corrupted_handler = 0;
+     size_t module;
+     size_t modules = get_modules_count(rdram);
+ 
+-    /* HACK: Detect when current Control calibration is about to start,
+-     * so we can set corrupted rdram_dram handler
+-     */
+-    if (address & RDRAM_BCAST_ADDRESS_MASK && reg == RDRAM_DELAY_REG) {
+-        map_corrupt_rdram(rdram, 1);
+-    }
+-
+-    /* HACK: Detect when current Control calibration is over,
+-     * so we can restore the original rdram_dram handler
+-     * and let dynarec have it's fast_memory enabled.
+-     */
+-    if (address & RDRAM_BCAST_ADDRESS_MASK && reg == RDRAM_MODE_REG) {
+-        map_corrupt_rdram(rdram, 0);
+-
+-        /* HACK: In the IPL3 procedure, at this point,
+-         * the amount of detected memory can be found in s4 */
+-        size_t ipl3_rdram_size = r4300_regs(rdram->r4300)[20] & UINT32_C(0x0fffffff);
+-        if (ipl3_rdram_size != rdram->dram_size) {
+-            DebugMessage(M64MSG_WARNING, "IPL3 detected %u MB of RDRAM != %u MB",
+-                (uint32_t) ipl3_rdram_size / (1024*1024), (uint32_t) rdram->dram_size / (1024*1024));
+-        }
++    if (reg >= RDRAM_REGS_COUNT) {
++        return;
+     }
+ 
+-
+     if (address & RDRAM_BCAST_ADDRESS_MASK) {
+         for (module = 0; module < modules; ++module) {
+             masked_write(&rdram->regs[module][reg], value, mask);
+@@ -223,6 +221,19 @@ void write_rdram_regs(void* opaque, uint32_t address, uint32_t value, uint32_t m
+             masked_write(&rdram->regs[module][reg], value, mask);
+         }
+     }
++
++    /* toggle corrupt handler based on CC value for all modules,
++     * only check values when writing to the mode register */
++    if (reg == RDRAM_MODE_REG) {
++        for (module = 0; module < modules; ++module) {
++            mode = rdram->regs[module][RDRAM_MODE_REG] ^ UINT32_C(0xc0c0c0c0);
++            corrupted_handler |= ((mode & RDRAM_MODE_CE_MASK) && (cc_value(mode) == 0));
++        }
++        if (rdram->corrupted_handler != corrupted_handler) {
++            map_corrupt_rdram(rdram, corrupted_handler);
++            rdram->corrupted_handler = corrupted_handler;
++        }
++    }
+ }
+ 
+ 
+diff --git a/mupen64plus-core/src/device/rdram/rdram.h b/mupen64plus-core/src/device/rdram/rdram.h
+index 3a208b7..6c30a9c 100644
+--- a/mupen64plus-core/src/device/rdram/rdram.h
++++ b/mupen64plus-core/src/device/rdram/rdram.h
+@@ -54,6 +54,8 @@ struct rdram
+     uint32_t* dram;
+     size_t dram_size;
+ 
++    uint8_t corrupted_handler;
++
+     struct r4300_core* r4300;
+ };
+ 
+diff --git a/mupen64plus-core/src/main/savestates.c b/mupen64plus-core/src/main/savestates.c
+index b0b9cf4..43f6383 100644
+--- a/mupen64plus-core/src/main/savestates.c
++++ b/mupen64plus-core/src/main/savestates.c
+@@ -1026,7 +1026,7 @@ int savestates_load_m64p(struct device* dev, const void *data)
+          */
+         for (i = 0; i < RDRAM_MAX_MODULES_COUNT; ++i) {
+             memcpy(dev->rdram.regs[i], dev->rdram.regs[0], RDRAM_REGS_COUNT*sizeof(dev->rdram.regs[0][0]));
+-            dev->rdram.regs[i][RDRAM_DEVICE_ID_REG] = ri_address_to_id_field(i * 0x200000) << 2;
++            dev->rdram.regs[i][RDRAM_DEVICE_ID_REG] = ri_address_to_id_field(ri_address(i * 0x200000), 0) << 2;
+         }
+ 
+         /* dd state */
+@@ -1383,7 +1383,7 @@ static int savestates_load_pj64(struct device* dev,
+      */
+     for (i = 0; i < (SaveRDRAMSize / 0x200000); ++i) {
+         memcpy(dev->rdram.regs[i], dev->rdram.regs[0], RDRAM_REGS_COUNT*sizeof(dev->rdram.regs[0][0]));
+-        dev->rdram.regs[i][RDRAM_DEVICE_ID_REG] = ri_address_to_id_field(i * 0x200000) << 2;
++        dev->rdram.regs[i][RDRAM_DEVICE_ID_REG] = ri_address_to_id_field(ri_address(i * 0x200000), 0) << 2;
+     }
+ 
+     /* dd state */
+diff --git a/mupen64plus-rsp-cxd4/ls_accurate.h b/mupen64plus-rsp-cxd4/ls_accurate.h
+new file mode 100644
+index 0000000..bfd902d
+--- /dev/null
++++ b/mupen64plus-rsp-cxd4/ls_accurate.h
+@@ -0,0 +1,315 @@
++/*
++ * Accurate RSP vector load/store (LWC2/SWC2) implementations for cxd4.
++ *
++ * Ported from parallel-rsp's rsp/ls.cpp (itself based on ares). cxd4's own
++ * versions only implement the element/alignment combinations used by
++ * commercial microcode and print "Illegal element"/"Weird addr" otherwise,
++ * which breaks libdragon/tiny3d microcode. This file is #included at the end
++ * of su.c and the LWC2/SWC2 dispatch tables point at these functions.
++ */
++
++#define ACC_DM_R8(a)      (DMEM[BES((a) & 0xFFFu)])
++#define ACC_DM_W8(a, v)   (DMEM[BES((a) & 0xFFFu)] = (u8)(v))
++#define ACC_VREG(vt)      ((u16 *)&VR[(vt)][0])
++
++static INLINE u8 acc_byte_from_halfwords(const u16 *arr, unsigned i)
++{
++    return (i & 1) ? (u8)(arr[i >> 1] & 0xff) : (u8)(arr[i >> 1] >> 8);
++}
++
++static INLINE void acc_byte_to_halfwords(u16 *arr, unsigned i, u8 b)
++{
++    const unsigned n = i >> 1;
++    if (i & 1)
++        arr[n] = (u16)((arr[n] & 0xff00) | (u16)b);
++    else
++        arr[n] = (u16)((arr[n] & 0x00ff) | ((u16)b << 8));
++}
++
++static void acc_LBV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 1) & 0xfff;
++    acc_byte_to_halfwords(ACC_VREG(rt), e & 0xf, ACC_DM_R8(addr));
++}
++
++static void acc_SBV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 1) & 0xfff;
++    ACC_DM_W8(addr, acc_byte_from_halfwords(ACC_VREG(rt), e & 0xf));
++}
++
++static void acc_LSV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 2;
++    const unsigned end = (e > 14) ? 16 : (e + 2);
++    unsigned i;
++    for (i = e; i < end; i++)
++        acc_byte_to_halfwords(ACC_VREG(rt), i & 0xf, ACC_DM_R8(addr++));
++}
++
++static void acc_SSV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 2) & 0xfff;
++    ACC_DM_W8(addr, acc_byte_from_halfwords(ACC_VREG(rt), e & 0xf));
++    ACC_DM_W8(addr + 1, acc_byte_from_halfwords(ACC_VREG(rt), (e + 1) & 0xf));
++}
++
++static void acc_LLV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 4;
++    const unsigned end = (e > 12) ? 16 : (e + 4);
++    unsigned i;
++    for (i = e; i < end; i++)
++        acc_byte_to_halfwords(ACC_VREG(rt), i & 0xf, ACC_DM_R8(addr++));
++}
++
++static void acc_SLV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 4) & 0xfff;
++    unsigned i;
++    for (i = e; i < e + 4; i++)
++        ACC_DM_W8(addr++, acc_byte_from_halfwords(ACC_VREG(rt), i & 0xf));
++}
++
++static void acc_LDV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 8;
++    const unsigned end = (e > 8) ? 16 : (e + 8);
++    unsigned i;
++    for (i = e; i < end; i++)
++        acc_byte_to_halfwords(ACC_VREG(rt), i & 0xf, ACC_DM_R8(addr++));
++}
++
++static void acc_SDV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 8) & 0xfff;
++    unsigned i;
++    for (i = 0; i < 8; i++)
++        ACC_DM_W8(addr + i, acc_byte_from_halfwords(ACC_VREG(rt), (e + i) & 0xf));
++}
++
++static void acc_LPV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 8) & 0xfff;
++    const unsigned index = (addr & 7) - e;
++    u16 *reg = ACC_VREG(rt);
++    unsigned i;
++    addr &= ~7u;
++    for (i = 0; i < 8; i++)
++        reg[i] = (u16)(ACC_DM_R8(addr + ((i + index) & 0xf)) << 8);
++}
++
++static void acc_SPV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 8) & 0xfff;
++    const u16 *reg = ACC_VREG(rt);
++    unsigned i;
++    for (i = e; i < e + 8; i++) {
++        const unsigned shift = ((i & 0xf) < 8) ? 8 : 7;
++        ACC_DM_W8(addr++, (s16)reg[i & 7] >> shift);
++    }
++}
++
++static void acc_LUV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 8) & 0xfff;
++    const unsigned index = (addr & 7) - e;
++    u16 *reg = ACC_VREG(rt);
++    unsigned i;
++    addr &= ~7u;
++    for (i = 0; i < 8; i++)
++        reg[i] = (u16)(ACC_DM_R8(addr + ((i + index) & 0xf)) << 7);
++}
++
++static void acc_SUV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 8) & 0xfff;
++    const u16 *reg = ACC_VREG(rt);
++    unsigned i;
++    for (i = e; i < e + 8; i++) {
++        const unsigned shift = ((i & 0xf) < 8) ? 7 : 8;
++        ACC_DM_W8(addr++, (s16)reg[i & 7] >> shift);
++    }
++}
++
++static void acc_LHV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 16;
++    const unsigned index = (addr & 7) - e;
++    u16 *reg = ACC_VREG(rt);
++    unsigned i;
++    addr &= ~7u;
++    for (i = 0; i < 8; i++)
++        reg[i] = (u16)(ACC_DM_R8(addr + ((index + i * 2) & 0xf)) << 7);
++}
++
++static void acc_SHV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 16) & 0xfff;
++    const unsigned index = addr & 7;
++    const u16 *reg = ACC_VREG(rt);
++    unsigned i;
++    addr &= ~7u;
++    for (i = 0; i < 8; i++) {
++        const unsigned b = e + (i << 1);
++        const u8 byte = (u8)((acc_byte_from_halfwords(reg, b & 0xf) << 1) |
++                             (acc_byte_from_halfwords(reg, (b + 1) & 0xf) >> 7));
++        ACC_DM_W8(addr + ((index + i * 2) & 0xf), byte);
++    }
++}
++
++static void acc_LFV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    u16 temp[8];
++    unsigned addr = SR[base] + offset * 16;
++    const unsigned index = (addr & 7) - e;
++    const unsigned end = (e > 8) ? 16 : (e + 8);
++    unsigned i;
++    addr &= ~7u;
++    for (i = 0; i < 4; i++) {
++        temp[i]     = (u16)(ACC_DM_R8(addr + ((index + i * 4) & 0xf)) << 7);
++        temp[i + 4] = (u16)(ACC_DM_R8(addr + ((index + i * 4 + 8) & 0xf)) << 7);
++    }
++    for (i = e; i < end; i++)
++        acc_byte_to_halfwords(ACC_VREG(rt), i, acc_byte_from_halfwords(temp, i));
++}
++
++#define ACC_SFV_CASE(a, b, c, d) \
++    ACC_DM_W8(addr + bse, (s16)reg[a] >> 7); \
++    ACC_DM_W8(addr + 4 + bse, (s16)reg[b] >> 7); \
++    ACC_DM_W8(addr + ((8 + bse) & 0xf), (s16)reg[c] >> 7); \
++    ACC_DM_W8(addr + ((12 + bse) & 0xf), (s16)reg[d] >> 7);
++
++static void acc_SFV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 16) & 0xfff;
++    const unsigned bse = addr & 7;
++    const u16 *reg = ACC_VREG(rt);
++    addr &= ~7u;
++    switch (e) {
++    case 0:
++    case 15: ACC_SFV_CASE(0, 1, 2, 3) break;
++    case 1:  ACC_SFV_CASE(6, 7, 4, 5) break;
++    case 4:  ACC_SFV_CASE(1, 2, 3, 0) break;
++    case 5:  ACC_SFV_CASE(7, 4, 5, 6) break;
++    case 8:  ACC_SFV_CASE(4, 5, 6, 7) break;
++    case 11: ACC_SFV_CASE(3, 0, 1, 2) break;
++    case 12: ACC_SFV_CASE(5, 6, 7, 4) break;
++    default:
++        ACC_DM_W8(addr + bse, 0);
++        ACC_DM_W8(addr + 4 + bse, 0);
++        ACC_DM_W8(addr + ((8 + bse) & 0xf), 0);
++        ACC_DM_W8(addr + ((12 + bse) & 0xf), 0);
++        break;
++    }
++}
++
++static void acc_LWV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 16;
++    unsigned i;
++    for (i = 16 - e; i < 16 + e; i++) {
++        acc_byte_to_halfwords(ACC_VREG(rt), i & 0xf, ACC_DM_R8(addr));
++        addr += 4;
++    }
++}
++
++static void acc_SWV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 16) & 0xfff;
++    unsigned bse = addr & 7;
++    unsigned i;
++    addr &= ~7u;
++    for (i = e; i < e + 16; i++)
++        ACC_DM_W8(addr + (bse++ & 0xf), acc_byte_from_halfwords(ACC_VREG(rt), i & 0xf));
++}
++
++static void acc_LQV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 16;
++    unsigned end = 16 + e - (addr & 0xf);
++    unsigned i;
++    if (end > 16) end = 16;
++    for (i = e; i < end; i++)
++        acc_byte_to_halfwords(ACC_VREG(rt), i & 0xf, ACC_DM_R8(addr++));
++}
++
++static void acc_SQV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 16) & 0xfff;
++    const unsigned end = e + (16 - (addr & 15));
++    unsigned i;
++    for (i = e; i < end; i++)
++        ACC_DM_W8(addr++, acc_byte_from_halfwords(ACC_VREG(rt), i & 15));
++}
++
++static void acc_LRV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 16;
++    const unsigned start = 16 - ((addr & 0xf) - e);
++    unsigned i;
++    addr &= ~0xfu;
++    for (i = start; i < 16; i++)
++        acc_byte_to_halfwords(ACC_VREG(rt), i & 0xf, ACC_DM_R8(addr++));
++}
++
++static void acc_SRV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = (SR[base] + offset * 16) & 0xfff;
++    const unsigned end = e + (addr & 0xf);
++    const unsigned bse = 16 - (addr & 0xf);
++    unsigned i;
++    addr &= ~0xfu;
++    for (i = e; i < end; i++)
++        ACC_DM_W8(addr++, acc_byte_from_halfwords(ACC_VREG(rt), (i + bse) & 0xf));
++}
++
++static void acc_LTV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr = SR[base] + offset * 16;
++    const unsigned start = addr & ~7u;
++    const unsigned vt0 = rt & ~7u;
++    unsigned j = e >> 1;
++    unsigned i;
++    addr = start + ((e + (addr & 8)) & 0xf);
++    for (i = 0; i < 16; j++) {
++        j &= 7;
++        acc_byte_to_halfwords(ACC_VREG(vt0 + j), i++, ACC_DM_R8(addr++));
++        if (addr == start + 16) addr = start;
++        acc_byte_to_halfwords(ACC_VREG(vt0 + j), i++, ACC_DM_R8(addr++));
++        if (addr == start + 16) addr = start;
++    }
++}
++
++static void acc_STV(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    unsigned addr, element, bse, i;
++    e &= ~1u;
++    rt &= ~7u;
++    addr = (SR[base] + offset * 16) & 0xfff;
++    element = 16 - e;
++    bse = (addr & 7) - e;
++    addr &= ~7u;
++    for (i = rt; i < rt + 8; i++) {
++        ACC_DM_W8(addr + (bse++ & 0xf), acc_byte_from_halfwords(ACC_VREG(i), element++ & 0xf));
++        ACC_DM_W8(addr + (bse++ & 0xf), acc_byte_from_halfwords(ACC_VREG(i), element++ & 0xf));
++    }
++}
++
++static void acc_res_lsw(unsigned rt, unsigned e, signed offset, unsigned base)
++{
++    (void)rt; (void)e; (void)offset; (void)base;
++}
++
++static const mwc2_func ACC_LWC2[2 * 8 * 2] = {
++    acc_LBV, acc_LSV, acc_LLV, acc_LDV, acc_LQV, acc_LRV, acc_LPV, acc_LUV,
++    acc_LHV, acc_LFV, acc_LWV, acc_LTV, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw,
++    acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw,
++    acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw,
++};
++static const mwc2_func ACC_SWC2[2 * 8 * 2] = {
++    acc_SBV, acc_SSV, acc_SLV, acc_SDV, acc_SQV, acc_SRV, acc_SPV, acc_SUV,
++    acc_SHV, acc_SFV, acc_SWV, acc_STV, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw,
++    acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw,
++    acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw, acc_res_lsw,
++};
+diff --git a/mupen64plus-rsp-cxd4/module.c b/mupen64plus-rsp-cxd4/module.c
+index 6b1c56b..49cf465 100644
+--- a/mupen64plus-rsp-cxd4/module.c
++++ b/mupen64plus-rsp-cxd4/module.c
+@@ -97,6 +97,7 @@ EXPORT u32 CALL API_PREFIX(DoRspCycles)(u32 cycles)
+       | (u32)DMEM[0xFC3] <<  0
+ #endif
+     ;
++    cxd4_task_type = task_type;
+     switch (task_type) {
+ #ifdef EXTERN_COMMAND_LIST_GBI
+     case M_GFXTASK:
+diff --git a/mupen64plus-rsp-cxd4/su.c b/mupen64plus-rsp-cxd4/su.c
+index 96613ac..0ab1e66 100644
+--- a/mupen64plus-rsp-cxd4/su.c
++++ b/mupen64plus-rsp-cxd4/su.c
+@@ -51,6 +51,7 @@ pu32 CR[NUMBER_OF_CP0_REGISTERS];
+ u8 conf[32];
+ 
+ int MF_SP_STATUS_TIMEOUT;
++u32 cxd4_task_type;
+ 
+ void SP_CP0_MF(unsigned int rt, unsigned int rd)
+ {
+@@ -111,7 +112,11 @@ static void MT_SP_STATUS(unsigned int rt)
+     *SP_STATUS_REG &= ~(!!(SR[rt] & 0x00000004) <<  1);
+     *MI_INTR_REG &= ~((SR[rt] & 0x00000008) >> 3); /* SP_CLR_INTR */
+     *MI_INTR_REG |=  ((SR[rt] & 0x00000010) >> 4); /* SP_SET_INTR */
+-    *SP_STATUS_REG |= (SR[rt] & 0x00000010) >> 4; /* int set halt */
++    /* "int set halt" hack: only for OS (gfx/audio) tasks. Generic microcode
++     * (e.g. libdragon rspq) keeps running after raising an interrupt, as on
++     * real hardware. */
++    if (cxd4_task_type == 1 || cxd4_task_type == 2)
++        *SP_STATUS_REG |= (SR[rt] & 0x00000010) >> 4; /* int set halt */
+     *SP_STATUS_REG &= ~(!!(SR[rt] & 0x00000020) <<  5);
+  /* *SP_STATUS_REG |=  (!!(SR[rt] & 0x00000040) <<  5); */
+     *SP_STATUS_REG &= ~(!!(SR[rt] & 0x00000080) <<  6);
+@@ -143,7 +148,7 @@ static void MT_SP_RESERVED(unsigned int rt)
+ }
+ static void MT_CMD_START(unsigned int rt)
+ {
+-    const u32 source = SR[rt] & 0xFFFFFFF8ul; /* Funnelcube demo by marshallh */
++    const u32 source = SR[rt] & 0x00FFFFF8ul; /* 24-bit register; Funnelcube demo by marshallh */
+ 
+     if (GET_RCP_REG(DPC_BUFBUSY_REG)) /* lock hazards not implemented */
+         message("MTC0\nCMD_START");
+@@ -157,7 +162,7 @@ static void MT_CMD_END(unsigned int rt)
+ {
+     if (GET_RCP_REG(DPC_BUFBUSY_REG))
+         message("MTC0\nCMD_END"); /* This is just CA-related. */
+-    GET_RCP_REG(DPC_END_REG) = SR[rt] & 0xFFFFFFF8ul;
++    GET_RCP_REG(DPC_END_REG) = SR[rt] & 0x00FFFFF8ul;
+     if (GET_RSP_INFO(ProcessRdpList) == NULL) /* zilmar GFX #1.2 */
+         return;
+     GET_RSP_INFO(ProcessRdpList)();
+@@ -229,7 +234,8 @@ void SP_DMA_READ(void)
+         i = 0;
+         --count;
+         do {
+-            offC = (count*length + *CR[0x0] + i) & 0x00001FF8ul;
++            /* SP memory address wraps inside the selected 4KB bank (DMEM or IMEM) */
++            offC = (*CR[0x0] & 0x00001000ul) | ((count*length + *CR[0x0] + i) & 0x00000FF8ul);
+             offD = (count*skip + *CR[0x1] + i) & 0x00FFFFF8ul;
+             *(pi64)(DMEM + offC) =
+                 *(pi64)(DRAM + offD)
+@@ -239,8 +245,6 @@ void SP_DMA_READ(void)
+         } while (i < length);
+     } while (count);
+ 
+-    if ((*CR[0x0] & 0x1000) ^ (offC & 0x1000))
+-        message("DMA over the DMEM-to-IMEM gap.");
+     GET_RCP_REG(SP_DMA_BUSY_REG)  =  0x00000000;
+     GET_RCP_REG(SP_STATUS_REG)   &= ~SP_STATUS_DMA_BUSY;
+     return;
+@@ -268,15 +272,14 @@ void SP_DMA_WRITE(void)
+         i = 0;
+         --count;
+         do {
+-            offC = (count*length + *CR[0x0] + i) & 0x00001FF8ul;
++            /* SP memory address wraps inside the selected 4KB bank (DMEM or IMEM) */
++            offC = (*CR[0x0] & 0x00001000ul) | ((count*length + *CR[0x0] + i) & 0x00000FF8ul);
+             offD = (count*skip + *CR[0x1] + i) & 0x00FFFFF8ul;
+             *(pi64)(DRAM + offD) = *(pi64)(DMEM + offC);
+             i += 0x000008;
+         } while (i < length);
+     } while (count);
+ 
+-    if ((*CR[0x0] & 0x1000) ^ (offC & 0x1000))
+-        message("DMA over the DMEM-to-IMEM gap.");
+     GET_RCP_REG(SP_DMA_BUSY_REG)  =  0x00000000;
+     GET_RCP_REG(SP_STATUS_REG)   &= ~SP_STATUS_DMA_BUSY;
+     return;
+@@ -1823,6 +1826,8 @@ static INLINE int REGIMM(u32 inst, u32 PC)
+     return 1;
+ }
+ 
++#include "ls_accurate.h"
++
+ static INLINE void MWC2_load(u32 inst)
+ {
+     s16 offset;
+@@ -1837,7 +1842,7 @@ static INLINE void MWC2_load(u32 inst)
+ #else
+     offset = (inst & 64) ? -(s16)(~inst%64 + 1) : inst % 64;
+ #endif
+-    LWC2[IW_RD(inst)](vt, element, offset, base);
++    ACC_LWC2[IW_RD(inst)](vt, element, offset, base);
+ }
+ static INLINE void MWC2_store(u32 inst)
+ {
+@@ -1853,7 +1858,7 @@ static INLINE void MWC2_store(u32 inst)
+ #else
+     offset = (inst & 64) ? -(s16)(~inst%64 + 1) : inst % 64;
+ #endif
+-    SWC2[IW_RD(inst)](vt, element, offset, base);
++    ACC_SWC2[IW_RD(inst)](vt, element, offset, base);
+ }
+ 
+ static INLINE void COP0(u32 inst)
+diff --git a/mupen64plus-rsp-cxd4/su.h b/mupen64plus-rsp-cxd4/su.h
+index 60b22ee..63aeb48 100644
+--- a/mupen64plus-rsp-cxd4/su.h
++++ b/mupen64plus-rsp-cxd4/su.h
+@@ -161,6 +161,7 @@ extern short MFC0_count[32];
+  * Set to a lower value for speed...you could get away with 10 sometimes.
+  */
+ extern int MF_SP_STATUS_TIMEOUT;
++extern u32 cxd4_task_type;
+ 
+ #define SLOT_OFF    ((BASE_OFF) + 0x000)
+ #define LINK_OFF    ((BASE_OFF) + 0x004)
+diff --git a/mupen64plus-rsp-paraLLEl/parallel.cpp b/mupen64plus-rsp-paraLLEl/parallel.cpp
+index c7ce7a0..63e77d9 100644
+--- a/mupen64plus-rsp-paraLLEl/parallel.cpp
++++ b/mupen64plus-rsp-paraLLEl/parallel.cpp
+@@ -1,4 +1,6 @@
+-#ifdef DEBUG_JIT
++#if defined(PARALLEL_RSP_INTERP)
++#include "rsp_interp.hpp"
++#elif defined(DEBUG_JIT)
+ #include "debug_rsp.hpp"
+ #else
+ #include "rsp_jit.hpp"
+@@ -14,7 +16,9 @@
+ namespace RSP
+ {
+ RSP_INFO rsp;
+-#ifdef DEBUG_JIT
++#if defined(PARALLEL_RSP_INTERP)
++RSP::Interp::CPU cpu;
++#elif defined(DEBUG_JIT)
+ RSP::CPU cpu;
+ #else
+ RSP::JIT::CPU cpu;
+@@ -74,6 +78,11 @@ extern "C"
+ 			auto mode = RSP::cpu.run();
+ 			if (mode == RSP::MODE_CHECK_FLAGS && (*RSP::cpu.get_state().cp0.irq & 1))
+ 				break;
++#if defined(PARALLEL_RSP_INTERP)
++			// Instruction budget exhausted: yield to the CPU, RSP keeps running.
++			if (mode == RSP::MODE_CONTINUE)
++				break;
++#endif
+ 		}
+ 
+ 		*RSP::rsp.SP_PC_REG = 0x04001000 | (RSP::cpu.get_state().pc & 0xffc);
+diff --git a/mupen64plus-rsp-paraLLEl/rsp/cp0.cpp b/mupen64plus-rsp-paraLLEl/rsp/cp0.cpp
+index 6647d58..e76e8db 100644
+--- a/mupen64plus-rsp-paraLLEl/rsp/cp0.cpp
++++ b/mupen64plus-rsp-paraLLEl/rsp/cp0.cpp
+@@ -118,9 +118,10 @@ extern "C"
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] &= ~0x3;
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_DRAM] &= ~0x7;
+ 
+-		// Check length.
+-		if (((*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] & 0xFFF) + length) > 0x1000)
+-			length = 0x1000 - (*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] & 0xFFF);
++		// The SP memory address wraps inside the selected 4KB bank (DMEM or
++		// IMEM), it never crosses from DMEM to IMEM. libdragon relies on this
++		// (e.g. rdpq's RSP Z-buffer clear).
++		const uint32_t bank = *rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] & 0x1000;
+ 
+ 		unsigned i = 0;
+ 		uint32_t source = *rsp->cp0.cr[CP0_REGISTER_DMA_DRAM];
+@@ -137,7 +138,7 @@ extern "C"
+ 			do
+ 			{
+ 				uint32_t source_addr = (source + j) & 0x7FFFFC;
+-				uint32_t dest_addr = (dest + j) & 0x1FFC;
++				uint32_t dest_addr = bank | ((dest + j) & 0xFFC);
+ 				uint32_t word = rsp->rdram[source_addr >> 2];
+ 
+ 				if (dest_addr & 0x1000)
+@@ -159,7 +160,7 @@ extern "C"
+ 		} while (++i <= count);
+ 
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_DRAM] = source;
+-		*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] = dest;
++		*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] = bank | (dest & 0xFFF);
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_READ_LENGTH] = 0xff8;
+ 
+ #ifdef INTENSE_DEBUG
+@@ -180,9 +181,10 @@ extern "C"
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] &= ~0x3;
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_DRAM] &= ~0x7;
+ 
+-		// Check length.
+-		if (((*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] & 0xFFF) + length) > 0x1000)
+-			length = 0x1000 - (*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] & 0xFFF);
++		// The SP memory address wraps inside the selected 4KB bank (DMEM or
++		// IMEM), it never crosses from DMEM to IMEM. libdragon relies on this
++		// (e.g. rdpq's RSP Z-buffer clear).
++		const uint32_t bank = *rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] & 0x1000;
+ 
+ 		uint32_t dest = *rsp->cp0.cr[CP0_REGISTER_DMA_DRAM];
+ 		uint32_t source = *rsp->cp0.cr[CP0_REGISTER_DMA_CACHE];
+@@ -199,7 +201,7 @@ extern "C"
+ 
+ 			do
+ 			{
+-				uint32_t source_addr = (source + j) & 0x1FFC;
++				uint32_t source_addr = bank | ((source + j) & 0xFFC);
+ 				uint32_t dest_addr = (dest + j) & 0x7FFFFC;
+ 
+ 				rsp->rdram[dest_addr >> 2] =
+@@ -212,7 +214,7 @@ extern "C"
+ 			dest += length + skip;
+ 		} while (++i <= count);
+ 
+-		*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] = source;
++		*rsp->cp0.cr[CP0_REGISTER_DMA_CACHE] = bank | (source & 0xFFF);
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_DRAM] = dest;
+ 		*rsp->cp0.cr[CP0_REGISTER_DMA_WRITE_LENGTH] = 0xff8;
+ #ifdef INTENSE_DEBUG
+@@ -260,17 +262,17 @@ extern "C"
+ 
+ 		case CP0_REGISTER_CMD_START:
+ #ifdef INTENSE_DEBUG
+-			fprintf(stderr, "CMD_START 0x%x\n", val & 0xfffffff8u);
++			fprintf(stderr, "CMD_START 0x%x\n", val & 0x00fffff8u);
+ #endif
+ 			*rsp->cp0.cr[CP0_REGISTER_CMD_START] = *rsp->cp0.cr[CP0_REGISTER_CMD_CURRENT] =
+-			    *rsp->cp0.cr[CP0_REGISTER_CMD_END] = val & 0xfffffff8u;
++			    *rsp->cp0.cr[CP0_REGISTER_CMD_END] = val & 0x00fffff8u;
+ 			break;
+ 
+ 		case CP0_REGISTER_CMD_END:
+ #ifdef INTENSE_DEBUG
+-			fprintf(stderr, "CMD_END 0x%x\n", val & 0xfffffff8u);
++			fprintf(stderr, "CMD_END 0x%x\n", val & 0x00fffff8u);
+ #endif
+-			*rsp->cp0.cr[CP0_REGISTER_CMD_END] = val & 0xfffffff8u;
++			*rsp->cp0.cr[CP0_REGISTER_CMD_END] = val & 0x00fffff8u;
+ 
+ #ifdef PARALLEL_INTEGRATION
+ 			RSP::rsp.ProcessRdpList();
+diff --git a/mupen64plus-rsp-paraLLEl/rsp_interp.cpp b/mupen64plus-rsp-paraLLEl/rsp_interp.cpp
+new file mode 100644
+index 0000000..d60501e
+--- /dev/null
++++ b/mupen64plus-rsp-paraLLEl/rsp_interp.cpp
+@@ -0,0 +1,282 @@
++// Portable interpreter backend for parallel-rsp (see rsp_interp.hpp).
++
++#include "rsp_interp.hpp"
++
++namespace RSP
++{
++namespace Interp
++{
++CPU::CPU()
++{
++}
++
++#define DMEM_BYTES(st) (reinterpret_cast<uint8_t *>((st).dmem))
++#define DMEM_B(st, a) (DMEM_BYTES(st)[((a) ^ 3) & 0xfffu])
++
++static inline uint32_t load_u8(CPUState &st, uint32_t addr)
++{
++	return DMEM_B(st, addr);
++}
++
++static inline uint32_t load_u16(CPUState &st, uint32_t addr)
++{
++	addr &= 0xfffu;
++	if (!(addr & 1))
++		return reinterpret_cast<const uint16_t *>(st.dmem)[(addr ^ 2) >> 1];
++	return (DMEM_B(st, addr) << 8) | DMEM_B(st, addr + 1);
++}
++
++static inline uint32_t load_u32(CPUState &st, uint32_t addr)
++{
++	addr &= 0xfffu;
++	if (!(addr & 3))
++		return st.dmem[addr >> 2];
++	return (DMEM_B(st, addr) << 24) | (DMEM_B(st, addr + 1) << 16) | (DMEM_B(st, addr + 2) << 8) |
++	       DMEM_B(st, addr + 3);
++}
++
++static inline void store_u8(CPUState &st, uint32_t addr, uint32_t v)
++{
++	DMEM_B(st, addr) = uint8_t(v);
++}
++
++static inline void store_u16(CPUState &st, uint32_t addr, uint32_t v)
++{
++	addr &= 0xfffu;
++	if (!(addr & 1))
++	{
++		reinterpret_cast<uint16_t *>(st.dmem)[(addr ^ 2) >> 1] = uint16_t(v);
++		return;
++	}
++	DMEM_B(st, addr) = uint8_t(v >> 8);
++	DMEM_B(st, addr + 1) = uint8_t(v);
++}
++
++static inline void store_u32(CPUState &st, uint32_t addr, uint32_t v)
++{
++	addr &= 0xfffu;
++	if (!(addr & 3))
++	{
++		st.dmem[addr >> 2] = v;
++		return;
++	}
++	DMEM_B(st, addr) = uint8_t(v >> 24);
++	DMEM_B(st, addr + 1) = uint8_t(v >> 16);
++	DMEM_B(st, addr + 2) = uint8_t(v >> 8);
++	DMEM_B(st, addr + 3) = uint8_t(v);
++}
++
++using VUOp = void (*)(RSP::CPUState *, unsigned vd, unsigned vs, unsigned vt, unsigned e);
++static const VUOp vu_ops[64] = {
++	RSP_VMULF, RSP_VMULU, RSP_VRNDP, RSP_VMULQ, RSP_VMUDL, RSP_VMUDM, RSP_VMUDN, RSP_VMUDH, RSP_VMACF, RSP_VMACU, RSP_VRNDN,
++	RSP_VMACQ, RSP_VMADL, RSP_VMADM, RSP_VMADN, RSP_VMADH, RSP_VADD, RSP_VSUB, nullptr, RSP_VABS, RSP_VADDC, RSP_VSUBC,
++	nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, RSP_VSAR, nullptr, nullptr, RSP_VLT,
++	RSP_VEQ, RSP_VNE, RSP_VGE, RSP_VCL, RSP_VCH, RSP_VCR, RSP_VMRG, RSP_VAND, RSP_VNAND, RSP_VOR, RSP_VNOR,
++	RSP_VXOR, RSP_VNXOR, nullptr, nullptr, RSP_VRCP, RSP_VRCPL, RSP_VRCPH, RSP_VMOV, RSP_VRSQ, RSP_VRSQL, RSP_VRSQH,
++	RSP_VNOP, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, RSP_VNOP
++};
++
++using LSOp = void (*)(RSP::CPUState *, unsigned rt, unsigned e, int offset, unsigned base);
++static const LSOp lwc2_ops[32] = {
++	RSP_LBV, RSP_LSV, RSP_LLV, RSP_LDV, RSP_LQV, RSP_LRV, RSP_LPV, RSP_LUV, RSP_LHV, RSP_LFV, nullptr, RSP_LTV,
++};
++static const LSOp swc2_ops[32] = {
++	RSP_SBV, RSP_SSV, RSP_SLV, RSP_SDV, RSP_SQV, RSP_SRV, RSP_SPV, RSP_SUV, RSP_SHV, RSP_SFV, RSP_SWV, RSP_STV,
++};
++
++ReturnMode CPU::run()
++{
++	CPUState &st = state;
++	uint32_t *sr = st.sr;
++	uint32_t pc = st.pc & 0xffcu;
++	bool delay_pending = st.has_delay_slot != 0;
++	uint32_t delay_target = st.branch_target & 0xffcu;
++	st.has_delay_slot = 0;
++
++	for (unsigned n = 0;; n++)
++	{
++		// Yield back to the host CPU once in a while so that a microcode
++		// spinning on a register we don't track can't hang the emulator.
++		if (n >= budget && !delay_pending)
++		{
++			st.pc = pc;
++			return MODE_CONTINUE;
++		}
++
++		const uint32_t instr = st.imem[pc >> 2];
++		uint32_t next = (pc + 4) & 0xffcu;
++		if (delay_pending)
++		{
++			// This instruction is in a branch delay slot.
++			next = delay_target;
++			delay_pending = false;
++		}
++
++		bool take = false;
++		uint32_t target = 0;
++		int exit_mode = MODE_CONTINUE;
++
++		const unsigned op = instr >> 26;
++		const unsigned rs = (instr >> 21) & 31;
++		const unsigned rt = (instr >> 16) & 31;
++		const unsigned rd = (instr >> 11) & 31;
++		const unsigned sa = (instr >> 6) & 31;
++		const int32_t simm = int16_t(instr);
++		const uint32_t uimm = uint16_t(instr);
++		const uint32_t btarget = (pc + 4 + (uint32_t(simm) << 2)) & 0xffcu;
++
++		switch (op)
++		{
++		case 000: // SPECIAL
++			switch (instr & 63)
++			{
++			case 000: sr[rd] = sr[rt] << sa; break;                                  // SLL
++			case 002: sr[rd] = sr[rt] >> sa; break;                                  // SRL
++			case 003: sr[rd] = uint32_t(int32_t(sr[rt]) >> sa); break;               // SRA
++			case 004: sr[rd] = sr[rt] << (sr[rs] & 31); break;                       // SLLV
++			case 006: sr[rd] = sr[rt] >> (sr[rs] & 31); break;                       // SRLV
++			case 007: sr[rd] = uint32_t(int32_t(sr[rt]) >> (sr[rs] & 31)); break;    // SRAV
++			case 010: // JR
++				take = true;
++				target = sr[rs] & 0xffcu;
++				break;
++			case 011: // JALR
++				take = true;
++				target = sr[rs] & 0xffcu;
++				sr[rd] = (pc + 8) & 0xffcu;
++				break;
++			case 015: // BREAK
++				*st.cp0.cr[CP0_REGISTER_SP_STATUS] |= SP_STATUS_BROKE | SP_STATUS_HALT;
++				if (*st.cp0.cr[CP0_REGISTER_SP_STATUS] & SP_STATUS_INTR_BREAK)
++					*st.cp0.irq |= 1;
++				sr[0] = 0;
++				st.pc = next;
++				return MODE_BREAK;
++			case 040: case 041: sr[rd] = sr[rs] + sr[rt]; break;                    // ADD/ADDU
++			case 042: case 043: sr[rd] = sr[rs] - sr[rt]; break;                    // SUB/SUBU
++			case 044: sr[rd] = sr[rs] & sr[rt]; break;                               // AND
++			case 045: sr[rd] = sr[rs] | sr[rt]; break;                               // OR
++			case 046: sr[rd] = sr[rs] ^ sr[rt]; break;                               // XOR
++			case 047: sr[rd] = ~(sr[rs] | sr[rt]); break;                            // NOR
++			case 052: sr[rd] = int32_t(sr[rs]) < int32_t(sr[rt]) ? 1 : 0; break;     // SLT
++			case 053: sr[rd] = sr[rs] < sr[rt] ? 1 : 0; break;                       // SLTU
++			default: break;
++			}
++			break;
++
++		case 001: // REGIMM
++		{
++			const bool neg = int32_t(sr[rs]) < 0;
++			switch (rt)
++			{
++			case 000: take = neg; break;   // BLTZ
++			case 001: take = !neg; break;  // BGEZ
++			case 020: take = neg; sr[31] = (pc + 8) & 0xffcu; break;  // BLTZAL
++			case 021: take = !neg; sr[31] = (pc + 8) & 0xffcu; break; // BGEZAL
++			default: break;
++			}
++			target = btarget;
++			break;
++		}
++
++		case 002: // J
++			take = true;
++			target = (instr << 2) & 0xffcu;
++			break;
++		case 003: // JAL
++			take = true;
++			target = (instr << 2) & 0xffcu;
++			sr[31] = (pc + 8) & 0xffcu;
++			break;
++		case 004: take = sr[rs] == sr[rt]; target = btarget; break;          // BEQ
++		case 005: take = sr[rs] != sr[rt]; target = btarget; break;          // BNE
++		case 006: take = int32_t(sr[rs]) <= 0; target = btarget; break;      // BLEZ
++		case 007: take = int32_t(sr[rs]) > 0; target = btarget; break;       // BGTZ
++
++		case 010: case 011: sr[rt] = sr[rs] + uint32_t(simm); break;                 // ADDI/ADDIU
++		case 012: sr[rt] = int32_t(sr[rs]) < simm ? 1 : 0; break;                    // SLTI
++		case 013: sr[rt] = sr[rs] < uint32_t(simm) ? 1 : 0; break;                   // SLTIU
++		case 014: sr[rt] = sr[rs] & uimm; break;                                     // ANDI
++		case 015: sr[rt] = sr[rs] | uimm; break;                                     // ORI
++		case 016: sr[rt] = sr[rs] ^ uimm; break;                                     // XORI
++		case 017: sr[rt] = uimm << 16; break;                                        // LUI
++
++		case 020: // COP0
++			if (rs == 000)
++				exit_mode = RSP_MFC0(&st, rt, rd);
++			else if (rs == 004)
++				exit_mode = RSP_MTC0(&st, rd, rt);
++			break;
++
++		case 022: // COP2
++			if (instr & (1u << 25))
++			{
++				VUOp vop = vu_ops[instr & 63];
++				if (!vop)
++					vop = RSP_RESERVED;
++				vop(&st, (instr >> 6) & 31, (instr >> 11) & 31, (instr >> 16) & 31, (instr >> 21) & 15);
++			}
++			else
++			{
++				const unsigned e = (instr >> 7) & 15;
++				switch (rs)
++				{
++				case 000: RSP_MFC2(&st, rt, rd, e); break;
++				case 002: RSP_CFC2(&st, rt, rd); break;
++				case 004: RSP_MTC2(&st, rt, rd, e); break;
++				case 006: RSP_CTC2(&st, rt, rd); break;
++				default: break;
++				}
++			}
++			break;
++
++		case 040: sr[rt] = uint32_t(int32_t(int8_t(load_u8(st, sr[rs] + simm)))); break;   // LB
++		case 041: sr[rt] = uint32_t(int32_t(int16_t(load_u16(st, sr[rs] + simm)))); break; // LH
++		case 043: case 047: sr[rt] = load_u32(st, sr[rs] + simm); break;                   // LW/LWU
++		case 044: sr[rt] = load_u8(st, sr[rs] + simm); break;                              // LBU
++		case 045: sr[rt] = load_u16(st, sr[rs] + simm); break;                             // LHU
++		case 050: store_u8(st, sr[rs] + simm, sr[rt]); break;                              // SB
++		case 051: store_u16(st, sr[rs] + simm, sr[rt]); break;                             // SH
++		case 053: store_u32(st, sr[rs] + simm, sr[rt]); break;                             // SW
++
++		case 062: // LWC2
++		case 072: // SWC2
++		{
++			int16_t off = int16_t(instr);
++			off = int16_t(off << 9);
++			off = int16_t(off >> 9);
++			const unsigned e = (instr >> 7) & 15;
++			LSOp lop = (op == 062) ? lwc2_ops[rd] : swc2_ops[rd];
++			if (lop)
++				lop(&st, rt, e, off, rs);
++			break;
++		}
++
++		default:
++			break;
++		}
++
++		sr[0] = 0;
++
++		if (exit_mode != MODE_CONTINUE)
++		{
++			// MFC0/MTC0 may ask us to stop: SP halted, an interrupt was raised,
++			// or a DMA wrote to IMEM (irrelevant for an interpreter).
++			st.dirty_blocks = 0;
++			if ((*st.cp0.cr[CP0_REGISTER_SP_STATUS] & SP_STATUS_HALT) || (*st.cp0.irq & 1))
++			{
++				st.pc = next;
++				return MODE_CHECK_FLAGS;
++			}
++		}
++
++		if (take)
++		{
++			delay_pending = true;
++			delay_target = target;
++		}
++		pc = next;
++	}
++}
++} // namespace Interp
++} // namespace RSP
+diff --git a/mupen64plus-rsp-paraLLEl/rsp_interp.hpp b/mupen64plus-rsp-paraLLEl/rsp_interp.hpp
+new file mode 100644
+index 0000000..c839e9c
+--- /dev/null
++++ b/mupen64plus-rsp-paraLLEl/rsp_interp.hpp
+@@ -0,0 +1,50 @@
++#ifndef RSP_INTERP_HPP__
++#define RSP_INTERP_HPP__
++
++// Portable (no JIT) interpreter backend for parallel-rsp.
++// Scalar instructions are interpreted here; COP0/COP2/LWC2/SWC2 reuse
++// parallel-rsp's accurate helper functions (rsp/*.cpp, arch/simd/rsp/*.cpp).
++// Used for targets without a usable JIT, e.g. Emscripten/WebAssembly.
++
++#include <stdint.h>
++#include <string.h>
++
++#include "rsp_op.hpp"
++#include "state.hpp"
++
++namespace RSP
++{
++namespace Interp
++{
++class alignas(64) CPU
++{
++public:
++	CPU();
++
++	CPU(CPU &&) = delete;
++	void operator=(CPU &&) = delete;
++
++	void set_dmem(uint32_t *dmem) { state.dmem = dmem; }
++	void set_imem(uint32_t *imem) { state.imem = imem; }
++	void set_rdram(uint32_t *rdram) { state.rdram = rdram; }
++
++	// The interpreter always fetches from IMEM directly; nothing to invalidate.
++	void invalidate_imem() {}
++
++	CPUState &get_state() { return state; }
++
++	// Runs until BREAK (MODE_BREAK), until a COP0 access requests a flag
++	// check (MODE_CHECK_FLAGS), or until the instruction budget is exhausted
++	// (MODE_CONTINUE: RSP is still running, caller should yield to the CPU).
++	ReturnMode run();
++
++	// Max instructions executed per run() call before yielding.
++	unsigned budget = 1u << 22;
++
++private:
++	CPUState state;
++};
++} // namespace Interp
++} // namespace RSP
++
++#endif
+diff --git a/mupen64plus-video-angrylion/parallel_al.cpp b/mupen64plus-video-angrylion/parallel_al.cpp
+index 3256fed..b6b99ed 100644
+--- a/mupen64plus-video-angrylion/parallel_al.cpp
++++ b/mupen64plus-video-angrylion/parallel_al.cpp
+@@ -144,6 +144,11 @@ std::unique_ptr<T> make_unique(Args&&... args) {
+ 
+ void parallel_alinit(uint32_t num)
+ {
++#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
++    // No threads available (WebAssembly build without pthreads/SharedArrayBuffer):
++    // creating a std::thread would abort, so always run on the calling thread.
++    num = 1;
++#endif
+     // auto-select number of workers based on the number of cores
+     if (num == 0) {
+         const char *env = getenv("ANGRYLION_NUM_THREADS");

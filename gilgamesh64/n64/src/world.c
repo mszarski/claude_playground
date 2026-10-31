@@ -163,10 +163,10 @@ static void palm(float x, float z, float s) {
     float y = height_at(x, z) - 0.1f, dir = srand01() * TAU_F, lean = 0.25f + srand01() * 0.3f;
     MeshB *m = at(x, y, z, 0, s);
     float tx = 0, tz = 0, ty = 0;
-    for (int i = 0; i < 5; i++) {
-        float off = lean * i * i * 0.07f;
-        tx = sinf(dir) * off; tz = cosf(dir) * off; ty = 0.6f + i * 1.15f;
-        mb_cyl(m, tx, ty, tz, 0.17f, 0.22f, 1.2f, 5, col_shade(C_TRUNK, 0.9f + 0.1f * (i & 1)), false);
+    for (int i = 0; i < 3; i++) {
+        float off = lean * i * i * 0.18f;
+        tx = sinf(dir) * off; tz = cosf(dir) * off; ty = 0.95f + i * 1.9f;
+        mb_cyl(m, tx, ty, tz, 0.17f, 0.22f, 1.95f, 4, col_shade(C_TRUNK, 0.9f + 0.1f * (i & 1)), false);
     }
     float top = ty + 0.6f;
     for (int i = 0; i < 7; i++) {
@@ -185,19 +185,19 @@ static void palm(float x, float z, float s) {
 static void cedar(float x, float z, float s, bool collide) {
     float y = height_at(x, z) - 0.2f;
     MeshB *m = at(x, y, z, srand01() * TAU_F, s);
-    mb_cyl(m, 0, 2.5f, 0, 0.28f, 0.45f, 5.0f, 5, C_CEDAR_T, false);
+    mb_cyl(m, 0, 2.5f, 0, 0.28f, 0.45f, 5.0f, 4, C_CEDAR_T, false);
     static const uint32_t tiers[3] = {RGB(0x2F5F2C), RGB(0x3A6E33), RGB(0x284F27)};
-    for (int i = 0; i < 3; i++) {
-        float r = 3.2f - i * 0.95f + srand01() * 0.4f;
-        mb_cyl(m, (srand01() - 0.5f) * 0.5f, 2.6f + i * 1.45f, (srand01() - 0.5f) * 0.5f, r * 0.9f, r, 0.6f, 6, tiers[(i + (int)(srand01() * 3)) % 3], true);
+    for (int i = 0; i < 2; i++) {   // two flat tiers: the cedar-of-Lebanon silhouette at low cost
+        float r = 3.2f - i * 1.3f + srand01() * 0.4f;
+        mb_cyl(m, (srand01() - 0.5f) * 0.5f, 2.8f + i * 1.9f, (srand01() - 0.5f) * 0.5f, r * 0.85f, r, 0.7f, 5, tiers[(i + (int)(srand01() * 3)) % 3], true);
     }
-    mb_cyl(m, 0, 2.6f + 3 * 1.45f + 0.3f, 0, 0, 0.9f, 1.3f, 5, tiers[0], false);
+    mb_cyl(m, 0, 2.8f + 2 * 1.9f + 0.3f, 0, 0, 0.9f, 1.4f, 4, tiers[0], false);
     if (collide) { add_circle(x, z, 0.55f * s); s_coll[s_ncoll - 1].canopy = 2.9f * s; }
 }
 static void rock(float x, float z, float s, bool collide) {
     MeshB *m = cb(x, z);
     mb_xform(m, x, height_at(x, z) + 0.1f * s, z, srand01(), srand01() * TAU_F, srand01() * 0.5f, s * (0.8f + srand01() * 0.5f), s * (0.5f + srand01() * 0.4f), s * (0.8f + srand01() * 0.5f));
-    mb_cyl(m, 0, 0, 0, 0.35f, 0.6f, 0.8f, 5, srand01() < 0.5f ? C_STONE : C_STONE_D, true);
+    mb_cyl(m, 0, 0, 0, 0.35f, 0.6f, 0.8f, 4, srand01() < 0.5f ? C_STONE : C_STONE_D, true);
     if (collide && s > 0.9f) add_circle(x, z, 0.5f * s);
 }
 
@@ -227,10 +227,7 @@ static void wall_run(float x0, float x1, float zc, float h, float d, float step)
         float w = minf(step, x1 - x);
         MeshB *m = at(x + w / 2, 0, zc, 0, 1);
         mb_box(m, 0, h / 2 - 0.6f, 0, w, h + 1.2f, d, C_BRICK);
-        for (float bx = -w / 2 + 0.6f; bx < w / 2; bx += 2.5f) mb_box(m, bx, h + 0.4f, 0, 1.3f, 1.0f, d, C_BRICK);
-        // brick courses suggested with darker bands
-        mb_box(m, 0, h * 0.33f, d / 2 + 0.01f, w, 0.12f, 0.02f, C_BRICK_D);
-        mb_box(m, 0, h * 0.66f, d / 2 + 0.01f, w, 0.12f, 0.02f, C_BRICK_D);
+        for (float bx = -w / 2 + 1.2f; bx < w / 2; bx += 5.0f) mb_box(m, bx, h + 0.4f, 0, 1.8f, 1.0f, d, C_BRICK);
     }
 }
 
@@ -267,7 +264,7 @@ static void build_props(void) {
                                      {-27, 19, 1.1f}, {-11, 40, 1}, {10, 40, 1.2f}, {27, -4, 1}, {-27, -14, 1}, {-2, 18, 0.9f}, {27, 38, 1.1f}, {-28, 40, 1}};
     for (unsigned i = 0; i < sizeof(palms) / sizeof(palms[0]); i++) palm(palms[i][0], palms[i][1], palms[i][2]);
     for (int i = 0; i < 18; i++) { float x = BX0 + srand01() * 60, z = -18 + srand01() * 58; if (fabsf(x - path_x(z)) > 3 && sqrtf((x - 20) * (x - 20) + (z - 20) * (z - 20)) > 5) rock(x, z, 0.5f + srand01() * 0.8f, true); }
-    for (int i = 0; i < 24; i++) { float side = srand01() < 0.5f ? -1 : 1; rock(side * (31 + srand01() * 4), -20 + srand01() * 64, 1.6f + srand01() * 2, false); }
+    for (int i = 0; i < 12; i++) { float side = srand01() < 0.5f ? -1 : 1; rock(side * (31 + srand01() * 4), -20 + srand01() * 64, 1.6f + srand01() * 2, false); }
 
     // ---- oasis well (Seal of Dawn)
     { MeshB *m = cb(20, 20); mb_identity(m); mb_disc(m, 20, -0.25f, 20, 3.5f, 12, C_WATER); }
@@ -345,7 +342,7 @@ static void build_props(void) {
         if (z > -26) continue;
         cedar(x, z, 0.85f + srand01() * 0.5f, true);
     }
-    for (int i = 0; i < 40; i++) { float side = srand01() < 0.5f ? -1 : 1; cedar(side * (32 + srand01() * 14), -20 - srand01() * 60, 1 + srand01() * 0.8f, false); }
+    for (int i = 0; i < 24; i++) { float side = srand01() < 0.5f ? -1 : 1; cedar(side * (32 + srand01() * 14), -20 - srand01() * 60, 1 + srand01() * 0.8f, false); }
     for (int i = 0; i < 12; i++) cedar(-40 + srand01() * 80, -80 - srand01() * 14, 1.2f + srand01() * 0.8f, false);
     for (int i = 0; i < 14; i++) { float a = i / 14.0f * TAU_F; if (sinf(a) > 0.9f) continue; cedar(ARENA_X + cosf(a) * (ARENA_R + 7), ARENA_Z + sinf(a) * (ARENA_R + 7), 1.4f + srand01() * 0.3f, true); }
     cedar(0, -72.5f, 2.4f, true);  // the great cedar
@@ -398,7 +395,10 @@ void world_draw_sky(V3 cam) {
     t3d_matrix_pop(1);
 }
 
+static int s_drawnTris, s_frameNo;
 void world_draw(V3 cam, float camYaw, float fogFar) {
+    if (++s_frameNo % 120 == 0) debugf("[perf] world triangles drawn: %d, fps %.1f\n", s_drawnTris, display_get_fps());
+    s_drawnTris = 0;
     float fx = sinf(camYaw), fz = cosf(camYaw);
     T3DMat4FP *fp = mat_alloc();
     t3d_mat4fp_identity(fp);
@@ -407,9 +407,14 @@ void world_draw(V3 cam, float camYaw, float fogFar) {
         if (!s_chunk[ix][iz].block) continue;
         float cx = CH_X0 + (ix + 0.5f) * CH_SIZE, cz = CH_Z0 + (iz + 0.5f) * CH_SIZE;
         float dx = cx - cam.x, dz = cz - cam.z, d = sqrtf(dx * dx + dz * dz);
-        if (d > fogFar + CH_SIZE) continue;
-        if (d > CH_SIZE * 1.2f && (dx * fx + dz * fz) / d < -0.45f) continue;   // behind the camera
+        if (d > fogFar + CH_SIZE * 0.7f) continue;
+        // horizontal view cone: ~38 degrees half-angle plus the chunk's bounding radius
+        if (d > CH_SIZE * 0.8f) {
+            float ang = acosf(clampf((dx * fx + dz * fz) / d, -1, 1));
+            if (ang > 0.70f + asinf(minf(1, CH_SIZE * 0.75f / d))) continue;
+        }
         mesh_draw(&s_chunk[ix][iz]);
+        s_drawnTris += s_chunk[ix][iz].tris;
     }
     t3d_matrix_pop(1);
     // doors

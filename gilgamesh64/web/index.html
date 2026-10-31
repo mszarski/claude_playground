@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gilgamesh 64</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@900&family=Nunito:wght@700;800&display=swap">
+<style>
+/* Layout: a dark console shelf; the 4:3 emulator screen sits centred, controls listed beneath it. */
+:root {
+  --night: #0b0a14;
+  --panel: #16132a;
+  --line: #3a3160;
+  --gold: #f2c14e;
+  --lapis: #5b86ff;
+  --text: #f3ead6;
+  --muted: #b3a98f;
+  --logo: "Cinzel Decorative", Georgia, serif;
+  --ui: "Nunito", "Trebuchet MS", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { margin: 0; background: var(--night); color: var(--text); font-family: var(--ui); }
+main { max-width: 960px; margin: 0 auto; padding-block: 20px 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 18px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { margin: 0; font-family: var(--logo); font-weight: 900; font-size: clamp(28px, 6vw, 44px); line-height: 1; color: #ffe08a; text-shadow: 0 3px 0 #8a4f0e; text-wrap: balance; }
+h1 span { color: var(--lapis); text-shadow: 0 3px 0 #13246b; }
+.sub { color: var(--muted); font-size: 15px; }
+#screen { width: 100%; max-width: 100%; aspect-ratio: 4 / 3; background: #000; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; }
+#game { width: 100%; height: 100%; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+.panel h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold); }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 18px; font-size: 15px; }
+.keys div { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+kbd { font-family: var(--ui); font-weight: 800; font-size: 13px; background: #241f40; border: 1px solid #5a4f80; border-bottom-width: 3px; border-radius: 5px; padding: 1px 7px; white-space: nowrap; color: var(--text); }
+p { margin: 0; line-height: 1.55; max-width: 70ch; color: var(--muted); font-size: 15px; }
+p + p { margin-top: 8px; }
+a { color: var(--lapis); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>GILGAMESH <span>64</span></h1>
+    <div class="sub">Tablet V · The Cedar Forest · N64 homebrew demo</div>
+  </header>
+  <div id="screen"><div id="game"></div></div>
+  <section class="panel">
+    <h2>Controls</h2>
+    <div class="keys">
+      <div><kbd>W A S D</kbd><span>Control stick</span></div>
+      <div><kbd>J</kbd><span>B · sword</span></div>
+      <div><kbd>Space</kbd><span>A · roll, talk, read</span></div>
+      <div><kbd>Shift</kbd><span>Z · lock on</span></div>
+      <div><kbd>K</kbd><span>R · raise shield</span></div>
+      <div><kbd>Q / E</kbd><span>C · turn camera</span></div>
+      <div><kbd>Enter</kbd><span>Start · pause</span></div>
+      <div><kbd>Gamepad</kbd><span>Works too</span></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>About</h2>
+    <p>This is a real Nintendo 64 ROM (built with libdragon and tiny3d), running in EmulatorJS with a mupen64plus core patched to support modern libdragon homebrew. Graphics are emulated pixel-accurately in software, so it needs a fast computer; expect it to run below full speed on phones.</p>
+    <p>Collect the three Seals of Shamash on the steppe of Uruk, open the cedar door, and face Humbaba, guardian of the Cedar Forest.</p>
+  </section>
+</main>
+<script>
+  EJS_player = '#game';
+  EJS_core = 'mupen64plus_next';
+  EJS_gameUrl = 'gilgamesh64.z64';
+  EJS_gameName = 'Gilgamesh 64';
+  EJS_pathtodata = 'data/';
+  EJS_color = '#f2c14e';
+  EJS_disableLocalStorage = true;   // required for EJS_defaultOptions to apply
+  EJS_defaultOptions = {
+    'mupen64plus-rdp-plugin': 'angrylion',
+    'mupen64plus-rsp-plugin': 'parallel'
+  };
+  EJS_defaultControls = {
+    0: {
+      0: { value: 'space', value2: 'BUTTON_1' },          // A
+      1: { value: 'j', value2: 'BUTTON_3' },              // B
+      3: { value: 'enter', value2: 'START' },             // Start
+      4: { value: 'up arrow', value2: 'DPAD_UP' },
+      5: { value: 'down arrow', value2: 'DPAD_DOWN' },
+      6: { value: 'left arrow', value2: 'DPAD_LEFT' },
+      7: { value: 'right arrow', value2: 'DPAD_RIGHT' },
+      10: { value: 'l', value2: 'LEFT_TOP_SHOULDER' },    // L (also locks on)
+      11: { value: 'k', value2: 'RIGHT_TOP_SHOULDER' },   // R shield
+      12: { value: 'shift', value2: 'LEFT_BOTTOM_SHOULDER' }, // Z lock-on
+      16: { value: 'd', value2: 'LEFT_STICK_X:+1' },
+      17: { value: 'a', value2: 'LEFT_STICK_X:-1' },
+      18: { value: 's', value2: 'LEFT_STICK_Y:+1' },
+      19: { value: 'w', value2: 'LEFT_STICK_Y:-1' },
+      20: { value: 'e', value2: 'RIGHT_STICK_X:+1' },     // C-right
+      21: { value: 'q', value2: 'RIGHT_STICK_X:-1' },     // C-left
+      22: { value: '', value2: 'RIGHT_STICK_Y:+1' },
+      23: { value: '', value2: 'RIGHT_STICK_Y:-1' }
+    },
+    1: {}, 2: {}, 3: {}
+  };
+</script>
+<script src="data/loader.js"></script>
+</body>
+</html>

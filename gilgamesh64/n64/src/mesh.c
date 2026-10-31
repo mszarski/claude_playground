@@ -8,6 +8,7 @@ struct MeshB {
     float r[3][3], t[3];        // current transform (rotation*scale, translation)
     BVert *v; int nv, cv;
     uint16_t *ti; int nt, ct;   // triangle indices (3 per tri)
+    bool boxBottoms;            // emit the underside of boxes (characters need them, scenery does not)
 };
 
 // ------------------------------------------------------------------ random + angles + colors
@@ -45,6 +46,7 @@ MeshB *mb_new(float unit) {
     mb_identity(mb);
     return mb;
 }
+void mb_box_bottoms(MeshB *mb, bool on) { mb->boxBottoms = on; }
 void mb_free(MeshB *mb) { if (!mb) return; free(mb->v); free(mb->ti); free(mb); }
 int mb_tris(MeshB *mb) { return mb->nt; }
 void mb_identity(MeshB *mb) { mb_xform(mb, 0, 0, 0, 0, 0, 0, 1, 1, 1); }
@@ -94,7 +96,7 @@ void mb_box(MeshB *mb, float cx, float cy, float cz, float w, float h, float d, 
     float x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - h / 2, y1 = cy + h / 2, z0 = cz - d / 2, z1 = cz + d / 2;
     uint32_t top = col_shade(col, 1.06f), side = col, bot = col_shade(col, 0.8f);
     mb_quad_raw(mb, (const float[4][3]){{x0, y1, z1}, {x1, y1, z1}, {x1, y1, z0}, {x0, y1, z0}}, top);   // +y
-    mb_quad_raw(mb, (const float[4][3]){{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}, bot);   // -y
+    if (mb->boxBottoms) mb_quad_raw(mb, (const float[4][3]){{x0, y0, z0}, {x1, y0, z0}, {x1, y0, z1}, {x0, y0, z1}}, bot);   // -y (rarely visible)
     mb_quad_raw(mb, (const float[4][3]){{x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}}, side);  // +z
     mb_quad_raw(mb, (const float[4][3]){{x1, y0, z0}, {x0, y0, z0}, {x0, y1, z0}, {x1, y1, z0}}, side);  // -z
     mb_quad_raw(mb, (const float[4][3]){{x1, y0, z1}, {x1, y0, z0}, {x1, y1, z0}, {x1, y1, z1}}, side);  // +x

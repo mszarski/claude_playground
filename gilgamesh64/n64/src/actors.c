@@ -14,6 +14,7 @@ static int part_new(ModelDef *md, int parent, float x, float y, float z) {
     int i = md->n++;
     md->p[i] = (PartDef){parent, x, y, z, {0}};
     s_pb[i] = mb_new(1.0f);
+    mb_box_bottoms(s_pb[i], true);
     return i;
 }
 static MeshB *pb(int i) { return s_pb[i]; }

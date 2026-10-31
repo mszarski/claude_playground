@@ -10,7 +10,7 @@ and the fight with its guardian, Humbaba.
 |-------|------------|-------|
 | `index.html` | Browser prototype (three.js) that renders at 320x240 with 15-bit dithered colour, used to design the level and combat quickly | Playable |
 | N64 ROM (`n64/`) | The same level written in C with libdragon + tiny3d, built into a `.z64` for real hardware (flashcart) and emulators | Boots and plays in the ares emulator (screenshots below) |
-| Web emulator page | The ROM running in the browser through EmulatorJS with a patched mupen64plus core | In progress |
+| Web emulator page (`web/`) | The ROM running in the browser through EmulatorJS with a patched mupen64plus core | Playable; slower than full speed (software graphics) |
 
 ## The demo level
 
@@ -76,3 +76,14 @@ seals and the door open, and `-DDEBUG_POS -DDEBUG_POS_X=... -DDEBUG_POS_Z=...` s
 | ![Forest](screenshots/n64-forest.png) | ![Humbaba](screenshots/n64-humbaba.png) |
 | **Boss fight** | **Ending** |
 | ![Fight](screenshots/n64-boss-fight.png) | ![Ending](screenshots/n64-ending.png) |
+
+## Play the ROM in a browser
+
+`web/` is a static page: serve it with any web server and open it.
+
+```bash
+python3 -m http.server -d gilgamesh64/web 8098
+```
+
+It uses EmulatorJS with a mupen64plus core patched for libdragon (`web/emulator/` has the patch and build notes).
+The web ROM is built with `EXTRA_CFLAGS=-DGAME_FPS=20`, which halves the emulator's work.
