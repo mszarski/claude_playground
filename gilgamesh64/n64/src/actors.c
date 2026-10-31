@@ -31,7 +31,7 @@ static void model_draw(const ModelDef *md, const Pose *ps, V3 pos, float facing,
     M4 world[MAX_PARTS], root, tilt, L, D;
     m4_trs(&root, pos.x * RS, pos.y * RS, pos.z * RS, 0, facing, 0, RS * md->scale);
     if (rootRx != 0 || rootRz != 0) { m4_trs(&tilt, 0, 0, 0, rootRx, 0, rootRz, 1); m4_mul(&root, &root, &tilt); }
-    if (flash > 0) rdpq_set_prim_color(RGBA32(255, 60, 30, (uint8_t)(flash * 200)));
+    if (flash > 0) rdpq_set_prim_color(RGBA32(255, 60, 30, (uint8_t)(flash * 110)));
     for (int i = 0; i < md->n; i++) {
         const PartDef *p = &md->p[i];
         m4_trs(&L, p->px + ps->ox[i], p->py + ps->oy[i], p->pz + ps->oz[i], ps->rx[i], ps->ry[i], ps->rz[i], 1);

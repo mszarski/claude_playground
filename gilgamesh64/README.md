@@ -74,3 +74,5 @@ seals and the door open, and `-DDEBUG_POS -DDEBUG_POS_X=... -DDEBUG_POS_Z=...` s
 | ![Title](screenshots/n64-title.png) | ![Steppe](screenshots/n64-steppe.png) |
 | **Cedar Forest** | **Humbaba** |
 | ![Forest](screenshots/n64-forest.png) | ![Humbaba](screenshots/n64-humbaba.png) |
+| **Boss fight** | **Ending** |
+| ![Fight](screenshots/n64-boss-fight.png) | ![Ending](screenshots/n64-ending.png) |
