@@ -391,9 +391,9 @@ static void pickups_update(float dt) {
         if (u->life <= 0) { u->used = false; continue; }
         if (P.state != P_DEAD && dist2d(u->pos, P.pos) < u->reach && u->t > 0.25f) {
             u->used = false;
-            if (u->kind == PK_HEART) { G.hp = G.hp + 2 > G.maxHp ? G.maxHp : G.hp + 2; sfx(SFX_HEART); }
-            else if (u->kind == PK_LAPIS) { G.lapis++; sfx(SFX_LAPIS); }
-            else { G.seals[u->id] = true; sfx(SFX_SEAL); particles_burst(P.pos, 20, PC_SPARK, 5, 6, 1); on_seal_collected(u->id); }
+            if (u->kind == PK_HEART) { debugf("[play] heart\n"); G.hp = G.hp + 2 > G.maxHp ? G.maxHp : G.hp + 2; sfx(SFX_HEART); }
+            else if (u->kind == PK_LAPIS) { debugf("[play] lapis\n"); G.lapis++; sfx(SFX_LAPIS); }
+            else { debugf("[play] collected seal %d\n", u->id); G.seals[u->id] = true; sfx(SFX_SEAL); particles_burst(P.pos, 20, PC_SPARK, 5, 6, 1); on_seal_collected(u->id); }
             hud_dirty();
         }
     }
@@ -699,6 +699,7 @@ static void enemy_update(Enemy *e, int idx, float dt) {
     case E_DEAD:
         if (e->t >= 0.5f) {
             e->state = E_GONE;
+            debugf("[play] %s defeated at (%.0f, %.0f)\n", e->kind ? "lion" : "scorpion-man", e->pos.x, e->pos.z);
             particles_burst(e->pos, 14, PC_SPIRIT, 4, 5, 0.8f);
             drop_loot(e->pos, 0.7f);
             if (s_lock == idx) s_lock = -1;

@@ -75,7 +75,7 @@ void on_seal_collected(int id) {
     ui_say(s_sealLines, 3, after_seal);
 }
 static float s_ringTimer = -1;
-void on_ring_cleared(void) { s_ringTimer = 0.5f; }
+void on_ring_cleared(void) { debugf("[play] lion ring cleared\n"); s_ringTimer = 0.5f; }
 static void show_ending(void) { debugf("[fight] ENDING SCREEN\n"); G.state = ST_ENDING; sfx(SFX_WIN); synth_set_track(1); }
 void on_boss_defeated(void) { debugf("[fight] HUMBABA DEFEATED t=%.1f\n", G.playTime); G.bossDead = true; ui_say(BOSS_END, 4, show_ending); }
 void hud_dirty(void) {}
@@ -128,11 +128,11 @@ static bool s_cutActive;
 
 static void play_cut(const Shot *shots, int n, void (*done)(void)) { memcpy(s_shots, shots, sizeof(Shot) * n); s_nShots = n; s_shot = 0; s_shotT = 0; s_cutDone = done; s_cutActive = true; }
 
-static void gate_done(void) {
+static void gate_done(void) { debugf("[play] cedar door opened\n");
     G.gateOpen = true; world_set_door_collider(false); G.checkpoint = v3(0, 0, GATE_Z + 4); G.shake = 0;
     ui_say(GATE_OPEN, 2, NULL);
 }
-void cutscene_gate(void) {
+void cutscene_gate(void) { debugf("[play] gate cutscene\n");
     Shot s[1] = {{v3(10, 5, -9), v3(6, 4, -12), v3(0, 4.5f, GATE_Z), 3.4f, 1}};
     sfx(SFX_DOOR);
     play_cut(s, 1, gate_done);
@@ -211,6 +211,9 @@ static void start_game(void) {
     player_set(v3(DEBUG_GATE_X, 0, DEBUG_GATE_Z), PI_F);
     s_camPos = v3(DEBUG_GATE_X, 4, DEBUG_GATE_Z + 6);
 #elif defined(DEBUG_POS)
+#ifdef DEBUG_SEALS
+    for (int i = 0; i < 3; i++) if (DEBUG_SEALS & (1 << i)) G.seals[i] = true;
+#endif
     player_set(v3(DEBUG_POS_X, 0, DEBUG_POS_Z), PI_F);
     s_camPos = v3(DEBUG_POS_X, 4, DEBUG_POS_Z + 6);
 #else
