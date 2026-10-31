@@ -990,10 +990,10 @@ class Game {
     const dark = [...w.buildings.values()].filter((b) => BUILDINGS[b.type].power && !b.powered && w.covered[w.idx(b.x, b.y)]);
     if (w.power.outage <= 0 && w.power.demand > w.power.supply && dark.length) issues.push([88, `Not enough power: ${Math.round(w.power.demand)} MW needed, ${Math.round(w.power.supply)} MW made. ${dark.length} building${dark.length > 1 ? 's are' : ' is'} dark (fences get power first). Build another Power Plant.`, dark[0]]);
     if (this.alarm && !cre.some((d) => d.loose && !d.carried && d.sedatedT <= 0 && d.sp.danger >= 4)) issues.push([86, 'Nothing dangerous is loose any more. Sound the all-clear (alarm button) so visitors can come back.', null]);
-    if (carn && !this.hasBuilding('ranger')) issues.push([85, 'You have dangerous carnivores but no Ranger Station. Nobody can tranquilize an escapee.', null]);
+    if (carn && !this.hasBuilding('ranger')) issues.push([85, 'You have dangerous carnivores but no Ranger Station. Nobody can tranquilize an escapee: build one (Staff menu).', null]);
     if (carn && !this.shelters().length) issues.push([70, 'There is nowhere for guests to shelter. A Visitor Center, Hotel or Bunker saves lives during a breach.', null]);
-    if (cre.length && !this.hasBuilding('maint')) issues.push([65, 'Without a Maintenance Shed, damaged fences are never repaired.', null]);
-    if (this.hasBuilding('power') && !this.hasBuilding('backup') && cre.some((d) => d.sp.strength >= 6)) issues.push([45, 'A Backup Generator keeps fences live during a grid failure.', null]);
+    if (cre.length && !this.hasBuilding('maint')) issues.push([65, 'Without a Maintenance Shed, damaged fences are never repaired: build one (Staff menu).', null]);
+    if (this.hasBuilding('power') && !this.hasBuilding('backup') && cre.some((d) => d.sp.strength >= 6)) issues.push([45, 'A Backup Generator (Power menu) keeps fences live during a grid failure.', null]);
     const bySp = {};
     for (const d of contained) (bySp[d.species] = bySp[d.species] || []).push(d);
     // clever escape artists beat electric fences eventually: point at the real fix
@@ -1015,7 +1015,8 @@ class Game {
       if (d.hunger > 75) issues.push([80, `${d.name} the ${d.sp.name} is starving. Put a ${d.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder in its paddock.`, d]);
       else if (p.fear < 0) issues.push([75, `${d.name} the ${d.sp.name} is terrified: it shares a paddock with a carnivore. Use Move… to separate them.`, d]);
       else if (p.social < 0) issues.push([75, `${d.name} the ${d.sp.name} is fighting a rival. Move one of them to its own paddock.`, d]);
-      else if (d.sp.social > 1 && p.social < 10) issues.push([40, `${d.name} the ${d.sp.name} is lonely. ${d.sp.name} like groups of ${d.sp.social}.`, d]);
+      else if (d.sp.social > 1 && p.social < 10) issues.push([40, `${d.name} the ${d.sp.name} is lonely. ${d.sp.name} like groups of ${d.sp.social}: use Hatch another in its paddock panel.`, d]);
+      else if (d.species === 'spino' && !reg.water) issues.push([55, `${d.name} the Spinosaurus needs water in its paddock: Dig Pond (Build menu) inside the fence.`, d]);
       else if (p.space < 18) issues.push([50, `${d.name}'s paddock is crowded. Enlarge it or move some dinosaurs out.`, d]);
       else if (p.forest < 8 && d.sp.forest > 0.2) issues.push([30, `${d.name} the ${d.sp.name} wants more tree cover. Plant trees in its paddock.`, d]);
       else if (d.sick > 0 && !this.hasBuilding('vet')) issues.push([60, `${d.name} is sick. A Vet Clinic would cure it quickly.`, d]);
@@ -1030,7 +1031,7 @@ class Game {
     }
     if (this.guests.length > 30 && !this.hasBuilding('restaurant')) issues.push([35, 'Hungry guests have nowhere to eat. Build a Restaurant.', null]);
     else { const nr = this.buildingsOfType('restaurant').length, hungry = this.guests.filter((gu) => gu.hunger > 70).length;
-      if (this.guests.length > 100 * nr && hungry > this.guests.length * 0.25) issues.push([42, `${this.guests.length} guests and only ${nr} restaurant${nr > 1 ? 's' : ''}: ${hungry} are going hungry and leaving unhappy. Aim for one per 80-100 guests, spread around the park.`, this.buildingsOfType('restaurant')[0]]); }
+      if (this.guests.length > 100 * nr && hungry > this.guests.length * 0.25) issues.push([42, `${this.guests.length} guests and only ${nr} restaurant${nr > 1 ? 's' : ''}: ${hungry} are going hungry and leaving unhappy. Aim for one per 80–100 guests, spread around the park.`, this.buildingsOfType('restaurant')[0]]); }
     if (this.guests.length > 60 && !this.hasBuilding('tour') && this.stars >= 1) issues.push([20, 'A Tour Station with a loop of Tour Track past the paddocks is the best crowd-pleaser.', null]);
     const crowded = this.guests.filter((gu) => gu.crowded);
     if (crowded.length > 25) issues.push([45, 'Paths are overcrowded and guests are unhappy. Use the Wide Path tool [I] on busy stretches, or add a second route.', crowded[0]]);
