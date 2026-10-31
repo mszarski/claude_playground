@@ -21,3 +21,7 @@ HF_PROVIDER = os.environ.get("CIRCUIT_GEN_HF_PROVIDER", "auto")
 HF_BASE_URL = os.environ.get("CIRCUIT_GEN_HF_BASE_URL", "")
 HF_MAX_TOKENS = int(os.environ.get("CIRCUIT_GEN_HF_MAX_TOKENS", "65536"))
 CLAUDE_MODEL = os.environ.get("CIRCUIT_GEN_CLAUDE_MODEL", "claude-opus-5-5")
+# Reasoning effort for the spec writer (hf backend). Writing requirements is
+# enumeration; at default effort Qwen3.8-27B often deliberated until it hit the
+# provider's 40,960-token cap and wrote nothing. "" leaves the provider default.
+SPEC_REASONING_EFFORT = os.environ.get("CIRCUIT_GEN_SPEC_EFFORT", "low")

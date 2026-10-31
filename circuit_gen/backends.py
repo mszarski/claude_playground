@@ -63,7 +63,7 @@ def _is_connection_error(e):
 def _assemble_stream(chunks):
     """Merge streamed chat chunks into an object shaped like a non-streamed response."""
     from types import SimpleNamespace as NS
-    content, finish, usage, calls = [], None, None, {}
+    content, reasoning, finish, usage, calls = [], [], None, None, {}
     for chunk in chunks:
         if getattr(chunk, "usage", None):
             usage = chunk.usage
@@ -74,6 +74,9 @@ def _assemble_stream(chunks):
         delta = choice.delta
         if delta.content:
             content.append(delta.content)
+        thought = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
+        if isinstance(thought, str) and thought:
+            reasoning.append(thought)
         for tc in delta.tool_calls or []:
             call = calls.setdefault(tc.index, {"id": None, "name": None, "args": []})
             call["id"] = tc.id or call["id"]
@@ -84,7 +87,8 @@ def _assemble_stream(chunks):
     tool_calls = [NS(id=c["id"] or f"call_{i}",
                      function=NS(name=c["name"], arguments="".join(c["args"])))
                   for i, c in sorted(calls.items())]
-    message = NS(content="".join(content), tool_calls=tool_calls or None)
+    message = NS(content="".join(content), tool_calls=tool_calls or None,
+                 reasoning="".join(reasoning))
     return NS(choices=[NS(message=message, finish_reason=finish)], usage=usage)
 
 
@@ -94,7 +98,8 @@ class HuggingFaceBackend:
     name = "hf"
 
     def __init__(self, model=None, client=None, provider=None, max_tokens=None,
-                 temperature=0.2, retries=7, thinking=None, base_url=None):
+                 temperature=0.2, retries=7, thinking=None, base_url=None,
+                 reasoning_effort=None):
         if client is None:
             from huggingface_hub import InferenceClient
             # base_url "" forces Inference Providers even when CIRCUIT_GEN_HF_BASE_URL is set.
@@ -113,6 +118,11 @@ class HuggingFaceBackend:
         # None leaves the server's default; False turns off a hybrid model's thinking mode
         # (Qwen3 chat_template_kwargs), e.g. for a model fine-tuned on sessions without it.
         self.thinking = thinking
+        # Sent as reasoning_effort ("low", "medium", "high") where the provider takes it.
+        # Long hidden reasoning is the usual reason a turn hits max_tokens.
+        self.reasoning_effort = reasoning_effort
+        self._turn_effort = None          # one-turn override, see lower_effort_next_turn
+        self._effort_supported = True
         self.messages = []
         self.tools = []
 
@@ -133,8 +143,14 @@ class HuggingFaceBackend:
         for attempt in range(self.retries + 1):
             try:
                 extra = {"tools": self.tools} if self.tools else {}
+                body = {}
                 if self.thinking is not None:
-                    extra["extra_body"] = {"chat_template_kwargs": {"enable_thinking": self.thinking}}
+                    body["chat_template_kwargs"] = {"enable_thinking": self.thinking}
+                effort = (self._turn_effort or self.reasoning_effort) if self._effort_supported else None
+                if effort:
+                    body["reasoning_effort"] = effort
+                if body:
+                    extra["extra_body"] = body
                 stream = self.client.chat_completion(
                     model=self.model, messages=self.messages,
                     max_tokens=self.max_tokens, temperature=self.temperature,
@@ -142,6 +158,10 @@ class HuggingFaceBackend:
                 return _assemble_stream(stream)
             except HfHubHTTPError as e:
                 status = getattr(e.response, "status_code", None)
+                if effort and status in (400, 422):
+                    # This provider does not take reasoning_effort: drop it and ask again.
+                    self._effort_supported = False
+                    continue
                 if attempt == self.retries or (status is not None and status < 500 and status != 429):
                     raise
                 time.sleep(_retry_delay(e, attempt))
@@ -151,8 +171,15 @@ class HuggingFaceBackend:
                     raise
                 time.sleep(_retry_delay(e, attempt))
 
+    def lower_effort_next_turn(self):
+        """Ask for low reasoning effort on the next turn only (after a cut-off reply)."""
+        self._turn_effort = "low"
+
     def step(self):
-        response = self._complete()
+        try:
+            response = self._complete()
+        finally:
+            self._turn_effort = None
         choice = response.choices[0]
         msg = choice.message
         calls = []
@@ -178,6 +205,11 @@ class HuggingFaceBackend:
             self.messages.append(assistant)
 
         record = {"finish_reason": choice.finish_reason, "message": assistant}
+        reasoning = getattr(msg, "reasoning", "") or ""
+        if reasoning:
+            # Not sent back to the model; kept so runaway turns can be diagnosed.
+            record["reasoning_chars"] = len(reasoning)
+            record["reasoning_tail"] = reasoning[-2000:]
         usage = getattr(response, "usage", None)
         if usage is not None:
             record["usage"] = {"prompt_tokens": usage.prompt_tokens,
@@ -188,7 +220,7 @@ class HuggingFaceBackend:
         """A fresh conversation with the same model and client."""
         return HuggingFaceBackend(model=self.model, client=self.client, max_tokens=self.max_tokens,
                                   temperature=self.temperature, retries=self.retries,
-                                  thinking=self.thinking)
+                                  thinking=self.thinking, reasoning_effort=self.reasoning_effort)
 
     def add_tool_results(self, results):
         for r in results:

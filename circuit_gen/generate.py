@@ -13,7 +13,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import library
+from . import config, library
 from .backends import ToolResult, make_backend
 from .checks import check_circuit
 from .runner import run_circuit_code
@@ -21,7 +21,7 @@ from .runner import run_circuit_code
 EXAMPLES_DIR = Path(__file__).parent / "examples"
 FEW_SHOT_EXAMPLES = ["ldo_3v3.py", "blinker_555.py"]
 MAX_TURNS = 40
-MAX_TOKEN_RETRIES = 2
+MAX_TOKEN_RETRIES = 3
 MAX_SPEC_REVISIONS = 1
 
 SYSTEM_PROMPT = """\
@@ -32,7 +32,10 @@ is only the circuit: correct parts, correct footprints, correct connections.
 
 How to work:
 1. Work out the circuit: the blocks needed and their component values. Write \
-   the key calculations as comments in the code.
+   the key calculations as comments in the code. Use standard design formulas \
+   for values; do not solve circuit equations at length in your head. When \
+   unsure of a value, submit your best attempt and let check_circuit and \
+   simulate measure it, then adjust from the numbers.
 2. Find every part in the installed KiCad libraries with search_symbols and \
    get_symbol. Use only symbols and pin names that these tools return; never \
    rely on memory for part names or pinouts.
@@ -300,8 +303,9 @@ def _validate_input(tool_name, data):
     return all(isinstance(data.get(k), str) and data.get(k) for k in schema["required"])
 
 
-CUT_OFF_NOTE = ("Your last reply ran out of space before it finished. Think briefly, then make "
-                "the next tool call.")
+CUT_OFF_NOTE = ("Your last reply ran out of space while you were still reasoning. Do not work "
+                "out the circuit equations by hand: make the next tool call now, with your best "
+                "design so far, and adjust it from what check_circuit or simulate reports.")
 
 REPEAT_NOTE = ("NOTE: you have now made this exact call {n} times, with the same arguments, "
                "and the result below is unchanged. Repeating it will not help: change the "
@@ -343,6 +347,8 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
     # The spec writer gets its own conversation so it can revise the spec mid-design.
     if spec_backend is None:
         spec_backend = backend.clone() if hasattr(backend, "clone") else backend
+    if hasattr(spec_backend, "reasoning_effort") and spec_backend is not backend:
+        spec_backend.reasoning_effort = config.SPEC_REASONING_EFFORT or None
     revisions = 0
     if spec_first:
         try:
@@ -373,10 +379,13 @@ def generate_circuit(description, workdir, backend=None, max_turns=MAX_TURNS, ma
             # Usually runaway reasoning; a fresh sample of the same turn tends to finish.
             if max_token_retries < MAX_TOKEN_RETRIES:
                 max_token_retries += 1
+                if hasattr(backend, "lower_effort_next_turn"):
+                    backend.lower_effort_next_turn()
                 backend.add_user_message(CUT_OFF_NOTE)
                 continue
             result.error = "response hit max_tokens"
             break
+        max_token_retries = 0   # only consecutive cut-offs end the session
 
         if not turn.tool_calls:
             # Open models sometimes stop early or paste code as text; push them back once or twice.

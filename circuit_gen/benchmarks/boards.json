@@ -153,7 +153,7 @@
  },
  {
   "id": "mic_preamp",
-  "description": "Single-supply 5 V microphone preamp for an electret mic: mic bias resistor, op-amp non-inverting stage with a gain of about 100 at 1 kHz, mid-supply reference, AC-coupled input and output. Mic input, power and audio output on pin headers. Name the nets VCC, GND, MIC and AUDIO_OUT.",
+  "description": "Single-supply 5 V microphone preamp for an electret mic: mic bias resistor, op-amp non-inverting stage with a gain of about 100 from 300 Hz to 3 kHz, mid-supply reference, AC-coupled input and output. Mic input, power and audio output on pin headers. Name the nets VCC, GND, MIC and AUDIO_OUT.",
   "tests": [
    {
     "name": "gain ~100 at 1 kHz",
@@ -532,7 +532,7 @@
  },
  {
   "id": "inverting_amp",
-  "description": "Single-supply 5 V inverting amplifier with a gain of -10 at 1 kHz, AC-coupled input and output, biased at mid-supply, able to drive a 10k load. Name the nets VCC, GND, IN and OUT.",
+  "description": "Single-supply 5 V inverting amplifier with a gain of -10 from 100 Hz to 10 kHz, AC-coupled input and output, biased at mid-supply, able to drive a 10k load. Name the nets VCC, GND, IN and OUT.",
   "tests": [
    {
     "name": "|gain| ~10 at 1 kHz into 10k",
@@ -572,7 +572,7 @@
  },
  {
   "id": "ce_amplifier",
-  "description": "Single NPN transistor common-emitter amplifier on a 9 V supply with a voltage gain of about 20 at 1 kHz into a 10k load. Use a voltage-divider bias with emitter degeneration so the gain does not depend on the transistor's beta, and AC-couple the input and output. Name the nets VCC, GND, IN and OUT.",
+  "description": "Single NPN transistor common-emitter amplifier on a 9 V supply with a voltage gain of about 20 from 100 Hz to 10 kHz into a 10k load. Use a voltage-divider bias with emitter degeneration so the gain does not depend on the transistor's beta, and AC-couple the input and output. Name the nets VCC, GND, IN and OUT.",
   "tests": [
    {
     "name": "gain ~20 at 1 kHz into 10k",

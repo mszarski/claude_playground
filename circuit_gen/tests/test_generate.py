@@ -100,13 +100,39 @@ class TestLoop:
         assert result.error == "model declined the request"
         assert result.attempts == []
 
+    def test_only_consecutive_cut_offs_end_the_session(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(generate.library, "search_footprints", lambda q: ["Lib:FP_1"])
+        cut = Turn(text="", stop="max_tokens")
+        look = lambda i: calls(("search_footprints", {"query": f"q{i}"}))
+        turns = [t for i in range(generate.MAX_TOKEN_RETRIES + 2) for t in (cut, look(i))]
+        backend = ScriptedBackend(turns + [say("done")] * 3)
+        result = generate.generate_circuit("anything", tmp_path, backend=backend)
+        assert result.error != "response hit max_tokens"
+
+    def test_cut_off_turn_is_retried_at_low_effort(self, tmp_path):
+        lowered = []
+        backend = ScriptedBackend([Turn(text="", stop="max_tokens"), say("done"), say("done"),
+                                   say("done")])
+        backend.lower_effort_next_turn = lambda: lowered.append(True)
+        generate.generate_circuit("anything", tmp_path, backend=backend)
+        assert lowered == [True]
+
+    def test_spec_writer_gets_spec_effort(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(generate.config, "SPEC_REASONING_EFFORT", "low")
+        spec_writer = ScriptedBackend([say('```python\nrequire("v(OUT)", 1, 2)\n```')])
+        spec_writer.reasoning_effort = None
+        designer = ScriptedBackend([say("done"), say("done"), say("done")])
+        generate.generate_circuit("Name the nets OUT and GND.", tmp_path, backend=designer,
+                                  spec_first=True, spec_backend=spec_writer)
+        assert spec_writer.reasoning_effort == "low"
+
     def test_retries_turn_after_max_tokens(self, tmp_path):
         cut = Turn(text="", stop="max_tokens")
         backend = ScriptedBackend([cut, cut, say("done"), say("done"), say("done")])
         result = generate.generate_circuit("anything", tmp_path, backend=backend)
         assert result.error is None and result.summary == "done"
 
-        backend = ScriptedBackend([cut, cut, cut])
+        backend = ScriptedBackend([cut] * (generate.MAX_TOKEN_RETRIES + 1))
         result = generate.generate_circuit("anything", tmp_path, backend=backend)
         assert result.error == "response hit max_tokens"
 
@@ -289,6 +315,46 @@ class TestHuggingFaceBackend:
         HuggingFaceBackend(model="m")
         HuggingFaceBackend(model="m", base_url="", provider="deepinfra")
         assert made == [{"base_url": "http://localhost:8000/v1"}, {"provider": "deepinfra"}]
+
+    def test_reasoning_effort_and_one_turn_override(self):
+        client = FakeInferenceClient([_hf_response(content=c) for c in "abc"])
+        b = HuggingFaceBackend(model="m", client=client, reasoning_effort="medium")
+        b.start("sys", "u", [])
+        b.step()
+        b.lower_effort_next_turn()
+        b.step()
+        b.step()
+        efforts = [r.get("extra_body", {}).get("reasoning_effort") for r in client.requests]
+        assert efforts == ["medium", "low", "medium"]
+        assert HuggingFaceBackend(model="m", client=client).clone().reasoning_effort is None
+        assert b.clone().reasoning_effort == "medium"
+
+    def test_provider_without_reasoning_effort_is_asked_again_without_it(self):
+        import httpx2
+        from huggingface_hub.errors import HfHubHTTPError
+        bad = HfHubHTTPError("Bad request", response=httpx2.Response(
+            400, request=httpx2.Request("POST", "https://router.example/v1/chat/completions")))
+        client = FakeInferenceClient([bad, _hf_response(content="ok"), _hf_response(content="ok")])
+        b = HuggingFaceBackend(model="m", client=client, reasoning_effort="low")
+        b.start("sys", "u", [])
+        assert b.step().text == "ok"
+        b.step()
+        assert "extra_body" in client.requests[0]
+        assert all("extra_body" not in r for r in client.requests[1:])
+
+    def test_reasoning_is_recorded_not_sent_back(self, monkeypatch):
+        import circuit_gen.backends as backends
+        from types import SimpleNamespace as NS
+        response = NS(choices=[NS(message=NS(content="", tool_calls=None, reasoning="x" * 5000),
+                                  finish_reason="length")],
+                      usage=NS(prompt_tokens=1, completion_tokens=40960))
+        b = HuggingFaceBackend(model="m", client=object())
+        monkeypatch.setattr(b, "_complete", lambda: response)
+        b.start("sys", "u", [])
+        turn = b.step()
+        assert turn.stop == "max_tokens" and turn.record["reasoning_chars"] == 5000
+        assert len(turn.record["reasoning_tail"]) == 2000
+        assert [m["role"] for m in b.messages] == ["system", "user"]
 
     def test_default_backend_is_hf(self, monkeypatch):
         monkeypatch.setattr("huggingface_hub.InferenceClient", lambda **kw: object())
