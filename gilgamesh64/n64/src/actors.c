@@ -484,7 +484,7 @@ static int find_target(void) {
     if (B.active && B.state != BS_DYING && B.state != BS_DEAD) {
         float dx = B.pos.x - P.pos.x, dz = B.pos.z - P.pos.z, d = sqrtf(dx * dx + dz * dz) + 1e-3f;
         float dot = (dx * fx + dz * fz) / d;
-        if (d < 26 && !(dot < -0.2f && d > 5)) { float sc = d * (1.6f - dot); if (sc < bs) best = 100; }
+        if (d < 26 && !(dot < -0.2f && d > 5)) { float sc = d * (1.6f - dot) * 0.35f; if (sc < bs) best = 100; }   // Humbaba wins lock-on during his fight
     }
     return best;
 }
@@ -895,8 +895,8 @@ void actors_init(void) {
     for (int i = 0; i < 5; i++) spawn_enemy(0, scorps[i][0], scorps[i][1], false);
     static const float lions[][2] = {{12.5f, -8}, {16, -12}, {12, -12.5f}};
     for (int i = 0; i < 3; i++) spawn_enemy(1, lions[i][0], lions[i][1], true);
-    spawn_enemy(1, -10, -40, false);
-    spawn_enemy(1, 14, -34, false);
+    spawn_enemy(1, -19, -29, false);   // forest lions, kept away from the arena entrance
+    spawn_enemy(1, 20, -27, false);
     static const float pots[][2] = {{-3, 35.5f}, {-3.9f, 36.6f}, {4.5f, 38}, {17.2f, 23.6f}, {23.4f, 16.6f}, {24, 24}, {-17, 4.5f}, {-24.5f, 3}, {12, -50}, {-12, -48}, {11, -61}, {-11, -62}, {2, -24.5f}, {-2.2f, -25}};
     for (int i = 0; i < 14; i++) add_pot(pots[i][0], pots[i][1]);
 }
