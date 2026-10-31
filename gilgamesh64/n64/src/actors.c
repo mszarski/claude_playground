@@ -976,4 +976,5 @@ void actors_animate(float dt) {
     animate_boss(dt);
     particles_update(dt);
 }
+void actors_debug_clear_ring(void) { for (int i = 0; i < s_nen; i++) if (s_en[i].ring) s_en[i].state = E_GONE; }
 float actors_cam_recenter(float dt) { float r = s_camRecenter; s_camRecenter = maxf(0, s_camRecenter - dt); return r; }

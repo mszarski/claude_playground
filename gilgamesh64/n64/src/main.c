@@ -98,6 +98,7 @@ bool context_run(V3 p) {
             s_enkLines[0] = (Line){"Enkidu", FLAVOUR[(int)(frand() * 4) & 3]};
             const char *hint = !G.seals[0] ? "The Seal of Dawn rests beside the oasis well, east of the city."
                              : !G.seals[1] ? "Scorpion-men guard the Seal of Noon at their camp in the west."
+                             : G.duskSpawned ? "The altar in the ring of standing stones is glowing. The Seal of Dusk waits for you there."
                                            : "The Seal of Dusk sleeps in the ring of standing stones to the north-east, where lions prowl.";
             s_enkLines[1] = (Line){"Enkidu", hint};
         }
@@ -216,6 +217,7 @@ static void start_game(void) {
 #endif
 #ifdef DEBUG_DUSK
     G.duskSpawned = true; spawn_seal(2, 14, -10);   // lion ring already cleared
+    { extern void actors_debug_clear_ring(void); actors_debug_clear_ring(); }
 #endif
     player_set(v3(DEBUG_POS_X, 0, DEBUG_POS_Z), PI_F);
     s_camPos = v3(DEBUG_POS_X, 4, DEBUG_POS_Z + 6);
@@ -386,7 +388,7 @@ int main(void) {
         rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
         actors_draw_shadows();
         t3d_state_set_drawflags(T3D_FLAG_SHADED | T3D_FLAG_DEPTH);
-        rdpq_mode_blender(RDPQ_BLENDER_ADDITIVE);
+        rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);   // additive overflows (wraps) on the RDP over bright ground
         actors_draw_additive();
         rdpq_mode_blender(0);
         rdpq_mode_zbuf(true, true);
