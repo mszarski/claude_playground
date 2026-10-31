@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .geometry import Contour, bez, fit_cubic, tangents
+from .geometry import Contour, bez, fit_cubic, fit_cubics, tangents
 from .params import val
 from .skeleton import Stroke
 
@@ -31,10 +31,15 @@ SAMPLES = 16             # samples per output cubic used for fitting
 
 
 class Pen:
-    def __init__(self, angle=20, width=80, contrast=0.5, name: str | None = None):
+    def __init__(self, angle=20, width=80, contrast=0.5, inside=0.5, name: str | None = None):
+        """``inside``: for closed strokes (bowls), the share of the thick/thin
+        modulation placed on the inner side. 0.5 = symmetric about the
+        skeleton; higher keeps the outer contour rounder and puts the stress
+        into the counter, as type designers usually draw it."""
         self.angle = angle
         self.width = width
         self.contrast = contrast
+        self.inside = inside
         self.name = name
 
     def _consts(self):
@@ -64,6 +69,14 @@ class Pen:
     def hairline(self) -> float:
         return val(self.width) * (1 - val(self.contrast))
 
+    def half_widths(self, direction_deg, inside=None) -> tuple[float, float]:
+        """(inner, outer) offsets for a closed stroke travelling in
+        ``direction_deg`` -- use the outer one to put a bowl's edge on a line."""
+        b = val(self.inside if inside is None else inside)
+        w = self.width_at(direction_deg)
+        hair = self.hairline
+        return hair / 2 + (w - hair) * b, hair / 2 + (w - hair) * (1 - b)
+
 
 @dataclass
 class StrokeEnd:
@@ -81,17 +94,34 @@ class Expanded:
     ends: list[StrokeEnd]
 
 
-def _offset(P: np.ndarray, t: np.ndarray, pen: Pen, side: float) -> np.ndarray:
+@dataclass
+class _Side:
+    """How one side of one skeleton segment is offset."""
+    pen: Pen
+    sign: float          # +1 left, -1 right
+    frac: float          # share of (width - hairline) on this side
+    dw0: float = 0.0     # width delta at segment start / end
+    dw1: float = 0.0
+
+
+def _offset(P: np.ndarray, t: np.ndarray, sd: "_Side", side: float | None = None) -> np.ndarray:
+    if not isinstance(sd, _Side):          # (P, t, pen, side) convenience form
+        sd = _Side(sd, side, 0.5)
+    t = np.asarray(t, float)
     T = tangents(P, t)
     theta = np.arctan2(T[:, 1], T[:, 0])
-    w = pen.widths(theta)
+    w = sd.pen.widths(theta)
+    hair = sd.pen.hairline
+    half = hair / 2 + (w - hair) * sd.frac + (sd.dw0 + (sd.dw1 - sd.dw0) * t) / 2
     N = np.stack([-T[:, 1], T[:, 0]], axis=1)  # left normal
-    return bez(P, t) + side * N * (w / 2)[:, None]
+    return bez(P, t) + sd.sign * N * half[:, None]
 
 
-def _offset_tangent(P, t: float, pen, side, h=1e-4) -> np.ndarray:
+def _offset_tangent(P, t: float, sd, side=None, h=1e-4) -> np.ndarray:
+    if not isinstance(sd, _Side):
+        sd = _Side(sd, side, 0.5)
     a, b = max(t - h, 0.0), min(t + h, 1.0)
-    d = _offset(P, np.array([b]), pen, side)[0] - _offset(P, np.array([a]), pen, side)[0]
+    d = _offset(P, np.array([b]), sd)[0] - _offset(P, np.array([a]), sd)[0]
     n = np.linalg.norm(d)
     if n < 1e-12:
         d = tangents(P, np.array([t]))[0]
@@ -99,34 +129,57 @@ def _offset_tangent(P, t: float, pen, side, h=1e-4) -> np.ndarray:
     return d / n
 
 
-def _side_chain(cubics, stroke: Stroke, pen: Pen, side: float, suffix: str) -> Contour:
+def _offset_tangents(P, ts: np.ndarray, sd: "_Side", h=1e-4) -> np.ndarray:
+    """Unit tangents of the offset curve at ``ts`` (one batched evaluation)."""
+    a, b = np.clip(ts - h, 0, 1), np.clip(ts + h, 0, 1)
+    pts = _offset(P, np.concatenate([a, b]), sd)
+    d = pts[len(ts):] - pts[:len(ts)]
+    n = np.linalg.norm(d, axis=1)
+    bad = n < 1e-12
+    if bad.any():
+        d[bad] = tangents(P, ts[bad]); n[bad] = 1.0
+    return d / n[:, None]
+
+
+def _side_chain(cubics, stroke: Stroke, pen: Pen, side: float, suffix: str, frac: float) -> Contour:
     """Offset chain along one side, in direction of travel."""
     chain = Contour()
-    P0 = cubics[0][0]
-    chain.add(_offset(P0, np.array([0.0]), pen, side)[0], "on", stroke.nodes[0].fullname + suffix)
+    nodes = stroke.nodes
+
+    def sd(i):
+        return _Side(pen, side, frac, nodes[i].dw, nodes[(i + 1) % len(nodes)].dw)
+
+    chain.add(_offset(cubics[0][0], np.array([0.0]), sd(0))[0], "on", nodes[0].fullname + suffix)
     for i, (P, kind) in enumerate(cubics):
-        end_node = stroke.nodes[(i + 1) % len(stroke.nodes)]
+        end_node = nodes[(i + 1) % len(nodes)]
         name = end_node.fullname + suffix
+        s_i = sd(i)
         if kind == "line":
-            chain.add(_offset(P, np.array([1.0]), pen, side)[0], "on", name)
+            chain.add(_offset(P, np.array([1.0]), s_i)[0], "on", name)
             continue
-        for k in range(CURVE_SEGMENTS):
-            ta, tb = k / CURVE_SEGMENTS, (k + 1) / CURVE_SEGMENTS
-            ts = np.linspace(ta, tb, SAMPLES + 1)
-            Q = _offset(P, ts, pen, side)
-            Q[0] = chain.pts[-1]  # exact continuity with previous point
-            C = fit_cubic(Q, _offset_tangent(P, ta, pen, side), _offset_tangent(P, tb, pen, side))
+        K, n = CURVE_SEGMENTS, SAMPLES
+        ts = np.linspace(0.0, 1.0, K * n + 1)
+        allQ = _offset(P, ts, s_i)
+        allQ[0] = chain.pts[-1]  # exact continuity with the previous point
+        Q = np.stack([allQ[k * n:(k + 1) * n + 1] for k in range(K)])
+        T = _offset_tangents(P, np.linspace(0.0, 1.0, K + 1), s_i)
+        Cs = fit_cubics(Q, T[:-1], T[1:])
+        for k, C in enumerate(Cs):
             chain.add(C[1], "off")
             chain.add(C[2], "off")
-            chain.add(C[3], "on", name if k == CURVE_SEGMENTS - 1 else None)
+            chain.add(C[3], "on", name if k == K - 1 else None)
     return chain
 
 
 def expand_stroke(stroke: Stroke, default_pen: Pen) -> Expanded:
     pen = stroke.pen or default_pen
     cubics = stroke.cubics()
-    left = _side_chain(cubics, stroke, pen, +1.0, ".l")
-    right = _side_chain(cubics, stroke, pen, -1.0, ".r")
+    fl = 0.5
+    if stroke.closed:
+        b = val(stroke.inside if stroke.inside is not None else pen.inside)
+        fl = b if stroke.is_ccw() else 1 - b       # left is inside for CCW travel
+    left = _side_chain(cubics, stroke, pen, +1.0, ".l", fl)
+    right = _side_chain(cubics, stroke, pen, -1.0, ".r", 1 - fl)
     if stroke.closed:
         for ch in (left, right):  # last on-point duplicates the first
             ch.pts.pop(); ch.types.pop(); ch.names.pop()
@@ -139,7 +192,7 @@ def expand_stroke(stroke: Stroke, default_pen: Pen) -> Expanded:
     for which, (P, _), node, t in (("start", cubics[0], stroke.nodes[0], 0.0),
                                    ("end", cubics[-1], stroke.nodes[-1], 1.0)):
         T = tangents(P, np.array([t]))[0]
-        w = float(pen.widths(np.array([math.atan2(T[1], T[0])]))[0])
+        w = float(pen.widths(np.array([math.atan2(T[1], T[0])]))[0]) + node.dw
         ends.append(StrokeEnd(node.fullname, node.pos.copy(), -T if which == "start" else T,
                               w, node.terminal, stroke.fullname))
     return Expanded([c], ends)

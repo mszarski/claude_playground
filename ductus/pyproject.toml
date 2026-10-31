@@ -18,14 +18,17 @@ dependencies = [
 [project.optional-dependencies]
 proof = ["matplotlib>=3.7", "freetype-py>=2.4", "pillow>=9"]
 validate = ["opentype-sanitizer>=9"]
-serve = ["starlette>=0.37", "uvicorn>=0.29", "watchfiles>=0.21"]
-test = ["pytest>=7"]
+serve = ["starlette>=0.37", "uvicorn>=0.29", "websockets>=12", "watchfiles>=0.21"]
+test = ["pytest>=7", "httpx>=0.27"]
 
 [project.scripts]
 ductus = "ductus.cli:app"
 
 [tool.setuptools]
-packages = ["ductus"]
+packages = ["ductus", "ductus.serve"]
+
+[tool.setuptools.package-data]
+"ductus.serve" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

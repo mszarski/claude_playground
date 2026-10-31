@@ -36,12 +36,15 @@ class CompiledGlyph:
     raw_signature: str                     # pre-merge structure (compatible by construction)
     signature: str                         # post-merge structure
     shift: float = 0.0
+    lsb: float = 0.0
+    rsb: float = 0.0
     strokes: list[Stroke] = field(default_factory=list, repr=False)
 
     def to_json(self) -> dict:
         return {
             "name": self.name, "unicode": self.unicode, "advance": self.advance,
             "bounds": self.bounds, "sides": self.sides,
+            "shift": self.shift, "lsb": self.lsb, "rsb": self.rsb,
             "svg": svg_path(self.contours),
             "contours": [c.to_json() for c in self.contours],
             "skeleton": self.skeleton, "points": self.points,
@@ -142,7 +145,11 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
         if o.stage != "skeleton" or not name.startswith(gdef.name + "."):
             continue
         if name in nodes:
-            nodes[name].pos = nodes[name].pos + np.array([o.dx, o.dy])
+            nd = nodes[name]
+            nd.pos = nd.pos + np.array([o.dx, o.dy])
+            nd.dw += o.dw
+            nd.da += o.da
+            nd.tension += o.dt
             used.add(name)
         elif name in raw_points:
             _move(*raw_points[name], o.dx, o.dy)
@@ -196,12 +203,22 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
     else:
         lsb = val(font.sidebearings[sides[0]])
         rsb = val(font.sidebearings[sides[1]])
+        for key in ("lsb", "rsb"):
+            o = overrides.get(f"{gdef.name}.{key}")
+            if o is not None:
+                used.add(o.name)
+                if key == "lsb":
+                    lsb += o.dx
+                else:
+                    rsb += o.dx
         shift = float(round(lsb - bounds[0]))
         advance = round(val(adv_spec)) if adv_spec is not None else round(bounds[2] - bounds[0] + lsb + rsb)
         for c in final:
             for p in c.pts:
                 p[0] += shift
         bounds = (bounds[0] + shift, bounds[1], bounds[2] + shift, bounds[3])
+    if bounds is None:
+        lsb = rsb = 0.0
 
     points = {n.fullname: [round(float(n.pos[0]) + shift, 2), round(float(n.pos[1]), 2)]
               for s in r.strokes for n in s.nodes}
@@ -216,9 +233,10 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
     return CompiledGlyph(
         name=gdef.name, unicode=gdef.unicode, advance=int(advance), contours=final,
         bounds=bounds, sides=tuple(sides),
-        skeleton=[s.to_json(shift) for s in r.strokes], points=points,
+        skeleton=[s.to_json(shift, font.pen) for s in r.strokes], points=points,
         outline_points=outline_points, raw_signature=raw_signature,
-        signature="|".join(c.signature() for c in final), shift=shift, strokes=r.strokes,
+        signature="|".join(c.signature() for c in final), shift=shift,
+        lsb=round(lsb, 2), rsb=round(rsb, 2), strokes=r.strokes,
     )
 
 

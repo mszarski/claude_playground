@@ -14,9 +14,11 @@ def ps_name(cf: CompiledFont) -> str:
     return re.sub(r"[^A-Za-z0-9]", "", cf.family) + "-" + re.sub(r"[^A-Za-z0-9]", "", cf.style)
 
 
-def build_otf(cf: CompiledFont, path) -> Path:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+def build_otf(cf: CompiledFont, path):
+    """Write to ``path`` (str/Path) or a binary file object."""
+    if isinstance(path, (str, Path)):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
     m = {k: round(v) for k, v in cf.metrics.items()}
     upm = cf.upm
     order = [".notdef"] + list(cf.glyphs)
@@ -59,7 +61,7 @@ def build_otf(cf: CompiledFont, path) -> Path:
                 fsType=0)
     fb.setupPost()
     fb.setupHead(unitsPerEm=upm)
-    fb.save(str(path))
+    fb.save(str(path) if isinstance(path, Path) else path)
     return path
 
 

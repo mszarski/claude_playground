@@ -13,7 +13,9 @@ overshoot = param(12,   range=(0, 25))
 counter   = param(300,  range=(200, 420))    # inner width of the n
 roundness = param(1.06, range=(0.9, 1.25))   # o counter relative to n counter
 
-font.pen       = Pen(angle=param(20, range=(0, 45)), width=stem, contrast=contrast)
+stress    = param(0.72, range=(0.5, 1.0))    # bowls: share of contrast on the inside
+
+font.pen       = Pen(angle=param(20, range=(0, 45)), width=stem, contrast=contrast, inside=stress)
 font.ascender  = ascender
 font.descender = -220
 font.xheight   = xheight
@@ -47,10 +49,10 @@ def bowl(p, x, width, height):
     """Closed elliptical bowl whose outer edge spans x..x+width and
     -overshoot..height+overshoot (vertical edges carry the full stem)."""
     pen = p.pen
-    half_v = pen.width_at(0) / 2       # horizontal travel at top/bottom
-    half_h = pen.width_at(90) / 2      # vertical travel at the sides
-    left, right = x + half_h, x + width - half_h
-    bottom, top = -overshoot + half_v, height + overshoot - half_v
+    _, out_v = pen.half_widths(0)      # outer offset where travel is horizontal
+    _, out_h = pen.half_widths(90)     # ... and vertical
+    left, right = x + out_h, x + width - out_h
+    bottom, top = -overshoot + out_v, height + overshoot - out_v
     cx, cy = (left + right) / 2, (bottom + top) / 2
     (p.path(name="bowl")
         .start((cx, bottom), name="bottom", dir=0)

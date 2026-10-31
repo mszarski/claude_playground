@@ -68,7 +68,7 @@ def _wrap(a: float) -> float:
     return (a + math.pi) % (2 * math.pi) - math.pi
 
 
-def hobby_cubic(p0, d0: float, p3, d1: float, tension: float = 1.0) -> np.ndarray:
+def hobby_cubic(p0, d0: float, p3, d1: float, t0: float = 1.0, t1: float = 1.0) -> np.ndarray:
     """Cubic from ``p0`` leaving at angle ``d0`` (radians) to ``p3`` arriving
     with direction ``d1``."""
     p0, p3 = np.asarray(p0, float), np.asarray(p3, float)
@@ -79,8 +79,8 @@ def hobby_cubic(p0, d0: float, p3, d1: float, tension: float = 1.0) -> np.ndarra
     ca = math.atan2(chord[1], chord[0])
     theta = _wrap(d0 - ca)
     phi = _wrap(ca - d1)
-    a = L * _rho(theta, phi) / tension
-    b = L * _rho(phi, theta) / tension
+    a = L * _rho(theta, phi) / t0
+    b = L * _rho(phi, theta) / t1
     c1 = p0 + a * np.array([math.cos(d0), math.sin(d0)])
     c2 = p3 - b * np.array([math.cos(d1), math.sin(d1)])
     return np.array([p0, c1, c2, p3])
@@ -95,44 +95,53 @@ def fit_cubic(Q: np.ndarray, t0: np.ndarray, t1: np.ndarray, iterations: int = 2
     """Fit one cubic to points ``Q`` (n,2). ``t0`` is the unit tangent at the
     start (direction of travel), ``t1`` the unit tangent at the end (direction
     of travel). Returns 4x2 control points."""
-    P0, P3 = Q[0], Q[-1]
-    seg = np.linalg.norm(np.diff(Q, axis=0), axis=1)
-    total = seg.sum()
-    chord = float(np.linalg.norm(P3 - P0))
-    if total < 1e-9:
-        return np.array([P0, P0, P3, P3])
-    u = np.concatenate([[0.0], np.cumsum(seg) / total])
-    a1 = a2 = total / 3
+    return fit_cubics(Q[None], np.asarray(t0)[None], np.asarray(t1)[None], iterations)[0]
+
+
+def fit_cubics(Q: np.ndarray, t0: np.ndarray, t1: np.ndarray, iterations: int = 2) -> np.ndarray:
+    """Batched :func:`fit_cubic`: ``Q`` (K,n,2), ``t0``/``t1`` (K,2) -> (K,4,2)."""
+    Q = np.asarray(Q, float)
+    P0, P3 = Q[:, 0], Q[:, -1]
+    seg = np.linalg.norm(np.diff(Q, axis=1), axis=2)            # (K, n-1)
+    total = seg.sum(axis=1)                                     # (K,)
+    chord = np.linalg.norm(P3 - P0, axis=1)
+    safe = np.where(total < 1e-9, 1.0, total)
+    u = np.concatenate([np.zeros((len(Q), 1)), np.cumsum(seg, axis=1) / safe[:, None]], axis=1)
+    fallback = (total / 3)[:, None]
     for it in range(iterations + 1):
         mu = 1 - u
         B0, B1, B2, B3 = mu ** 3, 3 * mu ** 2 * u, 3 * mu * u ** 2, u ** 3
-        A1 = B1[:, None] * t0[None, :]          # coefficient of a1
-        A2 = -B2[:, None] * t1[None, :]         # coefficient of a2 (P2 = P3 - a2*t1)
-        R = Q - ((B0 + B1)[:, None] * P0 + (B2 + B3)[:, None] * P3)
-        C = np.array([[np.sum(A1 * A1), np.sum(A1 * A2)],
-                      [np.sum(A1 * A2), np.sum(A2 * A2)]])
-        X = np.array([np.sum(A1 * R), np.sum(A2 * R)])
-        det = C[0, 0] * C[1, 1] - C[0, 1] ** 2
-        if abs(det) > 1e-12:
-            a1 = (X[0] * C[1, 1] - X[1] * C[0, 1]) / det
-            a2 = (C[0, 0] * X[1] - C[0, 1] * X[0]) / det
-        eps = 1e-3 * max(chord, total)
-        if a1 < eps or a2 < eps:
-            a1 = a2 = total / 3
-        P = np.array([P0, P0 + a1 * t0, P3 - a2 * t1, P3])
-        if it < iterations:  # Newton reparameterisation
-            B = bez(P, u)
-            d1 = bez_d1(P, u)
-            d2 = bez_d2(P, u)
-            diff = B - Q
-            num = np.sum(diff * d1, axis=1)
-            den = np.sum(d1 * d1, axis=1) + np.sum(diff * d2, axis=1)
-            ok = np.abs(den) > 1e-12
-            u = u.copy()
-            u[ok] -= num[ok] / den[ok]
+        A1 = B1[..., None] * t0[:, None, :]
+        A2 = -B2[..., None] * t1[:, None, :]
+        R = Q - ((B0 + B1)[..., None] * P0[:, None] + (B2 + B3)[..., None] * P3[:, None])
+        c00 = (A1 * A1).sum((1, 2)); c01 = (A1 * A2).sum((1, 2)); c11 = (A2 * A2).sum((1, 2))
+        x0 = (A1 * R).sum((1, 2)); x1 = (A2 * R).sum((1, 2))
+        det = c00 * c11 - c01 ** 2
+        ok = np.abs(det) > 1e-12
+        dsafe = np.where(ok, det, 1.0)
+        a1 = np.where(ok, (x0 * c11 - x1 * c01) / dsafe, total / 3)
+        a2 = np.where(ok, (c00 * x1 - c01 * x0) / dsafe, total / 3)
+        eps = 1e-3 * np.maximum(chord, total)
+        bad = (a1 < eps) | (a2 < eps)
+        a1 = np.where(bad, total / 3, a1)
+        a2 = np.where(bad, total / 3, a2)
+        P = np.stack([P0, P0 + a1[:, None] * t0, P3 - a2[:, None] * t1, P3], axis=1)   # (K,4,2)
+        if it < iterations:
+            uu = u[..., None]; mu_ = 1 - uu
+            Bp = mu_ ** 3 * P[:, None, 0] + 3 * mu_ ** 2 * uu * P[:, None, 1] + 3 * mu_ * uu ** 2 * P[:, None, 2] + uu ** 3 * P[:, None, 3]
+            d1 = 3 * mu_ ** 2 * (P[:, None, 1] - P[:, None, 0]) + 6 * mu_ * uu * (P[:, None, 2] - P[:, None, 1]) + 3 * uu ** 2 * (P[:, None, 3] - P[:, None, 2])
+            d2 = 6 * mu_ * (P[:, None, 2] - 2 * P[:, None, 1] + P[:, None, 0]) + 6 * uu * (P[:, None, 3] - 2 * P[:, None, 2] + P[:, None, 1])
+            diff = Bp - Q
+            num = (diff * d1).sum(2)
+            den = (d1 * d1).sum(2) + (diff * d2).sum(2)
+            okd = np.abs(den) > 1e-12
+            u = u - np.where(okd, num / np.where(okd, den, 1.0), 0.0)
             u = np.clip(u, 0, 1)
-            u[0], u[-1] = 0.0, 1.0
-            u = np.maximum.accumulate(u)
+            u[:, 0], u[:, -1] = 0.0, 1.0
+            u = np.maximum.accumulate(u, axis=1)
+    degenerate = total < 1e-9
+    if degenerate.any():
+        P[degenerate] = np.stack([P0, P0, P3, P3], axis=1)[degenerate]
     return P
 
 

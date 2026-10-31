@@ -40,7 +40,7 @@ def load_font(path) -> Font:
             raise DuctusError(f"{path}: set font.pen")
         font.pen = pens[0]
     for pen in {id(p): p for p in pens + [font.pen]}.values():
-        for attr in ("angle", "width", "contrast"):
+        for attr in ("angle", "width", "contrast", "inside"):
             v = getattr(pen, attr)
             if isinstance(v, Param):
                 if v.name is None:

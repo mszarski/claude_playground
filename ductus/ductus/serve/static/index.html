@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ductus Preview</title>
+<style>
+:root {
+  --bg: #f4f3f0; --panel: #fbfaf8; --line: #e2dfd9; --line-2: #d3cfc7;
+  --text: #22201c; --muted: #77726a; --faint: #a39e95;
+  --ink: #1d1c1a; --ghost: #cfcac1; --accent: #2f6fde; --accent-soft: #2f6fde22;
+  --skel: #d1495b; --guide: #b9b3a8; --ok: #2c8a4b; --warn: #b7791f; --bad: #c43d3d;
+  --canvas: #ffffff; --chip: #efede8;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161514; --panel: #1d1c1a; --line: #2e2c29; --line-2: #3a3834;
+    --text: #ebe8e2; --muted: #a29d94; --faint: #6f6a62;
+    --ink: #f1eee8; --ghost: #4a4741; --accent: #6b9cff; --accent-soft: #6b9cff2a;
+    --skel: #ff6b7d; --guide: #55524c; --canvas: #121110; --chip: #2a2825;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161514; --panel: #1d1c1a; --line: #2e2c29; --line-2: #3a3834;
+  --text: #ebe8e2; --muted: #a29d94; --faint: #6f6a62;
+  --ink: #f1eee8; --ghost: #4a4741; --accent: #6b9cff; --accent-soft: #6b9cff2a;
+  --skel: #ff6b7d; --guide: #55524c; --canvas: #121110; --chip: #2a2825;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+button { background: var(--chip); border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--line-2); }
+button:disabled { opacity: .4; cursor: default; }
+button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+input[type=number], input[type=text], select { background: var(--canvas); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; }
+input[type=number] { width: 70px; font-family: var(--mono); font-size: 12px; }
+input[type=range] { width: 100%; accent-color: var(--accent); margin: 2px 0 0; }
+
+#app { display: grid; height: 100%; grid-template-rows: auto auto 1fr; grid-template-columns: 270px 1fr 290px; }
+header { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 14px; margin: 0; letter-spacing: .02em; }
+header .family { color: var(--muted); }
+header .spacer { flex: 1; }
+.group { display: flex; gap: 4px; align-items: center; }
+.status { font-family: var(--mono); font-size: 11.5px; color: var(--muted); min-width: 220px; text-align: right; }
+.status .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 5px; vertical-align: 1px; }
+.status.busy .dot { background: var(--warn); }
+.status.down .dot { background: var(--bad); }
+#banner { grid-column: 1 / -1; display: none; background: color-mix(in srgb, var(--bad) 14%, var(--panel)); color: var(--bad); padding: 6px 12px; font-family: var(--mono); font-size: 12px; border-bottom: 1px solid var(--line); white-space: pre-wrap; }
+#banner.show { display: block; }
+
+aside { background: var(--panel); overflow: auto; min-height: 0; }
+#left { border-right: 1px solid var(--line); }
+#right { border-left: 1px solid var(--line); }
+section { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 8px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+section h2 .grow { flex: 1; }
+section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11.5px; padding: 1px 7px; }
+
+.param { margin-bottom: 9px; }
+.param .row { display: flex; align-items: center; gap: 6px; }
+.param label { flex: 1; font-family: var(--mono); font-size: 12px; }
+.param .mod { width: 8px; height: 8px; border-radius: 50%; border: 0; padding: 0; background: transparent; }
+.param.changed .mod { background: var(--accent); cursor: pointer; }
+.param .range { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
+.presets { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.presets button { font-size: 11.5px; padding: 1px 7px; }
+.presets button .x { margin-left: 5px; color: var(--faint); }
+
+#center { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; min-width: 0; }
+#strip { display: flex; gap: 6px; padding: 8px 10px; overflow-x: auto; border-bottom: 1px solid var(--line); background: var(--panel); align-items: stretch; }
+.thumb { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 7px; background: var(--canvas); cursor: pointer; padding: 3px 4px 2px; position: relative; text-align: center; }
+.thumb.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.thumb svg { display: block; height: 58px; }
+.thumb .nm { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.thumb .badge { position: absolute; top: 2px; right: 3px; font-size: 9.5px; font-family: var(--mono); background: var(--accent); color: white; border-radius: 8px; padding: 0 4px; }
+#strip .ctx { margin-left: auto; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; padding-left: 10px; }
+#strip .ctx input { width: 90px; font-family: var(--mono); }
+
+#stage { position: relative; min-height: 0; background: var(--canvas); overflow: hidden; }
+#canvas { width: 100%; height: 100%; display: block; touch-action: none; user-select: none; cursor: default; }
+#canvas.panning { cursor: grabbing; }
+#stage .hint { position: absolute; left: 10px; bottom: 8px; font-size: 11.5px; color: var(--faint); pointer-events: none; }
+#stage .zoombox { position: absolute; right: 10px; bottom: 8px; display: flex; gap: 4px; }
+#stage .zoombox button { font-size: 11.5px; padding: 1px 7px; background: var(--panel); }
+
+#textpanel { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 12px 10px; }
+#textpanel .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+#textpanel .bar input[type=text] { flex: 1; font-size: 14px; }
+#textpanel .bar input[type=range] { width: 120px; }
+#textout { font-family: var(--live-font, serif), "Adobe NotDef"; color: var(--ink); white-space: pre-wrap; overflow: auto; height: 170px; line-height: 1.2; font-size: 72px; }
+#textout .wf { display: flex; gap: 12px; align-items: baseline; }
+#textout .wf span.sz { font: 10.5px var(--mono); color: var(--faint); width: 30px; flex: none; text-align: right; }
+
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; margin-bottom: 8px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+.name { font-family: var(--mono); font-size: 12.5px; font-weight: 600; margin-bottom: 6px; overflow-wrap: anywhere; }
+.fields { display: grid; grid-template-columns: auto 1fr auto; gap: 5px 8px; align-items: center; margin-bottom: 8px; }
+.fields label { font-family: var(--mono); font-size: 12px; }
+.fields .unit { font-size: 11px; color: var(--faint); }
+.fields input { width: 100%; }
+.ovlist { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 11.5px; }
+.ovlist li { display: flex; gap: 6px; align-items: center; padding: 3px 4px; border-radius: 4px; cursor: pointer; }
+.ovlist li:hover { background: var(--chip); }
+.ovlist li.sel { background: var(--accent-soft); }
+.ovlist li .n { flex: 1; overflow-wrap: anywhere; }
+.ovlist li .v { color: var(--muted); }
+.ovlist li button { padding: 0 6px; font-size: 11px; }
+.empty { color: var(--faint); font-size: 12px; }
+.warn { color: var(--warn); font-size: 12px; margin: 4px 0; }
+.keys { font-size: 11.5px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+.keys kbd { font-family: var(--mono); font-size: 11px; background: var(--chip); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 6px 12px; border-radius: 6px; font-size: 12.5px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+#toast.show { opacity: .92; }
+
+/* canvas elements */
+.metric { stroke: var(--guide); stroke-width: 1; }
+.metric-label { fill: var(--faint); font: 10.5px var(--mono); }
+.adv { stroke: var(--guide); stroke-dasharray: 3 3; }
+.sb-hit { stroke: transparent; stroke-width: 10; cursor: ew-resize; }
+.sb-hit:hover + .sb-line, .sb-line.sel { stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.5; }
+.glyph-fill { fill: var(--ink); }
+.glyph-fill.outline-only { fill: none; }
+.glyph-outline { fill: none; stroke: var(--accent); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ghost { fill: var(--ghost); }
+.skel { fill: none; stroke: var(--skel); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.ctrl { stroke: var(--skel); stroke-width: 1; opacity: .5; vector-effect: non-scaling-stroke; }
+.node { fill: var(--canvas); stroke: var(--skel); stroke-width: 1.6; cursor: move; }
+.node.sel { fill: var(--skel); }
+.node:hover { stroke-width: 2.5; }
+.opt { fill: var(--canvas); stroke: var(--accent); stroke-width: 1.3; cursor: move; }
+.opt.sel { fill: var(--accent); }
+.onpt { fill: var(--accent); }
+.offpt { fill: none; stroke: var(--accent); stroke-width: 1; }
+.hline { stroke: var(--accent); stroke-width: 1; opacity: .5; }
+.handle-dir { fill: var(--skel); stroke: var(--canvas); stroke-width: 1.5; cursor: grab; }
+.handle-w { fill: var(--canvas); stroke: var(--text); stroke-width: 1.4; cursor: grab; }
+.handle-arm { stroke: var(--skel); stroke-width: 1.2; }
+.handle-warm { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 3; }
+.tip { fill: var(--text); font: 11px var(--mono); paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Ductus</h1><span class="family" id="family"></span>
+    <div class="group">
+      <button id="undo" title="Undo (⌘Z)">↶ Undo</button>
+      <button id="redo" title="Redo (⇧⌘Z)">↷ Redo</button>
+    </div>
+    <div class="group" id="toggles"></div>
+    <div class="group"><span style="color:var(--muted)">Terminals</span><select id="terminals"></select></div>
+    <span class="spacer"></span>
+    <span class="status" id="status"><span class="dot"></span>connecting…</span>
+    <button id="theme" title="Toggle theme">◐</button>
+  </header>
+  <div id="banner"></div>
+  <aside id="left">
+    <section>
+      <h2>Parameters <span class="grow"></span><button id="resetParams">Reset all</button><button id="copyParams" title="Copy current values as Python">Copy</button></h2>
+      <div id="params"></div>
+    </section>
+    <section>
+      <h2>Presets <span class="grow"></span></h2>
+      <div style="display:flex; gap:4px"><input type="text" id="presetName" placeholder="name current settings" style="flex:1"><button id="savePreset">Save</button></div>
+      <div class="presets" id="presets"></div>
+    </section>
+    <section>
+      <h2>Keys</h2>
+      <div class="keys">
+        <kbd>drag</kbd><span>points, ◆ direction, □ width, sidebearings</span>
+        <kbd>← → ↑ ↓</kbd><span>nudge 1 (⇧ 10)</span>
+        <kbd>[ ]</kbd><span>rotate direction 1° (⇧ 5°)</span>
+        <kbd>- =</kbd><span>width −/+ 2 (⇧ 10)</span>
+        <kbd>, .</kbd><span>tension −/+ 0.05</span>
+        <kbd>⌫</kbd><span>reset selected</span>
+        <kbd>Tab</kbd><span>next point (⇧ previous)</span>
+        <kbd>PgUp PgDn</kbd><span>previous / next glyph</span>
+        <kbd>F</kbd><span>fit · wheel zooms · drag empty space pans</span>
+        <kbd>⌘Z ⇧⌘Z</kbd><span>undo / redo</span>
+      </div>
+    </section>
+  </aside>
+  <div id="center">
+    <div id="strip"></div>
+    <div id="stage">
+      <svg id="canvas"><g id="world"></g><g id="overlay"></g></svg>
+      <div class="hint" id="hint"></div>
+      <div class="zoombox"><button id="zoomOut">−</button><button id="zoomFit">Fit</button><button id="zoomIn">+</button></div>
+    </div>
+    <div id="textpanel">
+      <div class="bar">
+        <input type="text" id="textin" value="nohm Hommo OHO mhn hoon" spellcheck="false" aria-label="Preview text">
+        <input type="range" id="textsize" min="12" max="200" value="72" aria-label="Text size">
+        <span id="textsizeval" style="font-family:var(--mono); font-size:11.5px; color:var(--muted); width:42px">72px</span>
+        <button id="waterfall">Waterfall</button>
+        <a id="download" download="ductus.otf" href="#"><button>Download .otf</button></a>
+      </div>
+      <div id="textout"></div>
+    </div>
+  </div>
+  <aside id="right"><div id="inspector"></div></aside>
+</div>
+<div id="toast"></div>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs = {}, parent) => {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+};
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ductus." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("ductus." + k, JSON.stringify(v)); } catch {} },
+};
+const round = (v, d = 0) => { const m = 10 ** d; return Math.round(v * m) / m; };
+const fmt = (v, d = 1) => { if (v == null) return "—"; const t = (+v).toFixed(d); return d > 0 ? t.replace(/\.?0+$/, "") : t; };
+const DELTAS = ["dx", "dy", "dw", "da", "dt"];
+
+const S = {
+  data: null, overrides: {}, payload: null,
+  glyph: store.get("glyph", "n"), sel: null,
+  view: Object.assign({ fill: true, outline: false, skeleton: true, nodes: true, opoints: false, metrics: true, context: true },
+                      store.get("view", {})),
+  z: 0.5, tx: 0, ty: 0, fitted: false, userView: false,
+  inflight: false, queue: [], seq: 0, sentAt: 0, rtt: null,
+  drag: null, pan: null, faceN: 0, face: null,
+  context: store.get("context", ""), waterfall: store.get("waterfall", false),
+  presets: store.get("presets", {}), localParams: {},
+};
+
+// ------------------------------------------------------------------ socket
+let ws;
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onopen = () => setStatus("ok", "connected");
+  ws.onclose = () => { setStatus("down", "disconnected — retrying"); S.inflight = false; setTimeout(connect, 1000); };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.seq != null && msg.seq === S.seq) {
+      S.inflight = false; S.rtt = performance.now() - S.sentAt;
+    }
+    if (msg.type === "problem") { toast(msg.message); }
+    else if (msg.type === "font") receive(msg);
+    pump();
+  };
+}
+function send(msg, coalesce) {
+  if (coalesce) {
+    const i = S.queue.findIndex((m) => m._key === coalesce);
+    if (i >= 0) {
+      const old = S.queue[i];
+      if (old.checkpoint) msg.checkpoint = true;
+      if (old.type === "params") msg.values = Object.assign({}, old.values, msg.values);
+      S.queue[i] = Object.assign(msg, { _key: coalesce });
+      return pump();
+    }
+    msg._key = coalesce;
+  }
+  S.queue.push(msg);
+  pump();
+}
+function pump() {
+  if (S.inflight || !S.queue.length || !ws || ws.readyState !== 1) return;
+  const msg = S.queue.shift();
+  delete msg._key;
+  msg.seq = ++S.seq;
+  S.inflight = true; S.sentAt = performance.now();
+  setStatus("busy");
+  ws.send(JSON.stringify(msg));
+}
+
+function receive(msg) {
+  S.payload = msg;
+  $("#banner").textContent = msg.error || "";
+  $("#banner").classList.toggle("show", !!msg.error);
+  if (msg.data) {
+    const first = !S.data;
+    S.data = msg.data;
+    S.overrides = msg.overrides || {};
+    if (!S.data.glyphs[S.glyph]) S.glyph = Object.keys(S.data.glyphs)[0];
+    if (first) { buildParams(); }
+    if (first || !S.fitted) fit();
+  }
+  if (msg.otf) loadFont(msg.otf);
+  render();
+}
+
+function setStatus(kind, text) {
+  const st = $("#status");
+  st.className = "status" + (kind === "busy" ? " busy" : kind === "down" ? " down" : "");
+  if (text) { st.innerHTML = `<span class="dot"></span>${text}`; return; }
+  if (kind === "busy") return;
+}
+function updateStatus() {
+  if (!S.data) return;
+  const t = S.data.timing || {};
+  const parts = [`compile ${fmt(t.compile, 0)} ms`, `otf ${fmt(t.emit, 0)} ms`];
+  if (S.rtt != null) parts.push(`round trip ${fmt(S.rtt, 0)} ms`);
+  setStatus(S.inflight ? "busy" : "ok", parts.join(" · "));
+}
+
+// ------------------------------------------------------------------ font face
+async function loadFont(b64) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const name = "DuctusLive" + (++S.faceN);
+  try {
+    const face = new FontFace(name, bytes.buffer);
+    await face.load();
+    document.fonts.add(face);
+    if (S.face) document.fonts.delete(S.face);
+    S.face = face;
+    document.documentElement.style.setProperty("--live-font", `"${name}"`);
+    const a = $("#download");
+    if (a._url) URL.revokeObjectURL(a._url);
+    a._url = URL.createObjectURL(new Blob([bytes], { type: "font/otf" }));
+    a.href = a._url;
+    a.download = (S.data ? S.data.family.replace(/\s+/g, "") : "ductus") + ".otf";
+  } catch (e) { toast("Font failed to load in browser: " + e.message); }
+}
+
+// ------------------------------------------------------------------ params
+function paramValue(n) { return S.data.params[n]; }
+function stepFor(spec) {
+  const r = spec.range; if (!r) return 1;
+  const span = r[1] - r[0];
+  return span <= 2 ? 0.01 : span <= 20 ? 0.1 : 1;
+}
+function buildParams() {
+  const box = $("#params"); box.innerHTML = "";
+  for (const [name, spec] of Object.entries(S.data.param_specs)) {
+    const d = document.createElement("div");
+    d.className = "param"; d.dataset.name = name;
+    const step = stepFor(spec);
+    d.innerHTML = `<div class="row"><button class="mod" title="Reset to default"></button><label for="p-${name}">${name}</label>
+      <input type="number" step="${step}" id="pn-${name}"></div>` +
+      (spec.range ? `<input type="range" id="p-${name}" min="${spec.range[0]}" max="${spec.range[1]}" step="${step}">
+      <div class="range"><span>${spec.range[0]}</span><span>default ${spec.default}</span><span>${spec.range[1]}</span></div>` : "");
+    box.appendChild(d);
+    const num = d.querySelector("input[type=number]"), rng = d.querySelector("input[type=range]");
+    const setv = (v, from) => {
+      v = +v; if (Number.isNaN(v)) return;
+      if (from !== num) num.value = v;
+      if (rng && from !== rng) rng.value = v;
+      S.localParams[name] = v;
+      d.classList.toggle("changed", Math.abs(v - spec.default) > 1e-9);
+      send({ type: "params", values: { [name]: v } }, "params");
+    };
+    num.addEventListener("change", () => setv(num.value, num));
+    if (rng) rng.addEventListener("input", () => setv(rng.value, rng));
+    d.querySelector(".mod").addEventListener("click", () => {
+      if (!d.classList.contains("changed")) return;
+      delete S.localParams[name];
+      send({ type: "reset_params", names: [name] });
+    });
+  }
+  syncParams();
+}
+function syncParams() {
+  for (const d of document.querySelectorAll(".param")) {
+    const name = d.dataset.name, spec = S.data.param_specs[name];
+    if (!spec) continue;
+    const v = name in S.localParams && S.inflight ? S.localParams[name] : paramValue(name);
+    const num = d.querySelector("input[type=number]"), rng = d.querySelector("input[type=range]");
+    if (document.activeElement !== num) num.value = round(v, 3);
+    if (rng && document.activeElement !== rng) rng.value = v;
+    d.classList.toggle("changed", Math.abs(v - spec.default) > 1e-9);
+  }
+}
+function renderPresets() {
+  const box = $("#presets"); box.innerHTML = "";
+  for (const name of Object.keys(S.presets)) {
+    const b = document.createElement("button");
+    b.innerHTML = `${name}<span class="x" title="Delete">×</span>`;
+    b.addEventListener("click", (e) => {
+      if (e.target.classList.contains("x")) { delete S.presets[name]; store.set("presets", S.presets); renderPresets(); return; }
+      S.localParams = { ...S.presets[name] };
+      send({ type: "reset_params" });
+      send({ type: "params", values: S.presets[name] });
+    });
+    box.appendChild(b);
+  }
+  if (!Object.keys(S.presets).length) box.innerHTML = `<span class="empty">Saved parameter sets appear here.</span>`;
+}
+
+// ------------------------------------------------------------------ geometry / view
+const svg = $("#canvas"), world = $("#world"), overlay = $("#overlay");
+const toScreen = (x, y) => [x * S.z + S.tx, -y * S.z + S.ty];
+const toFont = (sx, sy) => [(sx - S.tx) / S.z, -(sy - S.ty) / S.z];
+function mouseFont(e) { const r = svg.getBoundingClientRect(); return toFont(e.clientX - r.left, e.clientY - r.top); }
+function cur() { return S.data && S.data.glyphs[S.glyph]; }
+function originX() { const g = cur(); return g ? -g.shift : 0; }  // world x of the glyph's spaced origin
+
+function contextLayout() {
+  const g = cur(); if (!g) return [];
+  const items = [];
+  if (!S.view.context) return items;
+  let ctx = S.context || (g.unicode && String.fromCodePoint(g.unicode) === String.fromCodePoint(g.unicode).toUpperCase() &&
+                          /[A-Z]/.test(String.fromCodePoint(g.unicode)) ? "HO#OH" : "no#on");
+  if (!ctx.includes("#")) ctx = ctx + "#" + ctx;
+  const byChar = {};
+  for (const gg of Object.values(S.data.glyphs)) if (gg.unicode != null) byChar[String.fromCodePoint(gg.unicode)] = gg;
+  const [left, right] = ctx.split("#");
+  let x = originX();
+  for (const ch of [...left].reverse()) { const gg = byChar[ch]; if (!gg) continue; x -= gg.advance; items.push({ g: gg, x }); }
+  x = originX() + g.advance;
+  for (const ch of [...right]) { const gg = byChar[ch]; if (!gg) continue; items.push({ g: gg, x }); x += gg.advance; }
+  return items;
+}
+
+function fit() {
+  const g = cur(); if (!g) return;
+  const r = svg.getBoundingClientRect(); if (!r.width) return;
+  const m = S.data.metrics;
+  const ys = [m.descender - 40, Math.max(m.ascender, m.capheight) + 60];
+  const xs = [originX() - 80, originX() + g.advance + 80];
+  const z = Math.min(r.width / (xs[1] - xs[0]), r.height / (ys[1] - ys[0]));
+  S.z = z;
+  S.tx = r.width / 2 - ((xs[0] + xs[1]) / 2) * z;
+  S.ty = r.height / 2 + ((ys[0] + ys[1]) / 2) * z;
+  S.fitted = true; S.userView = false;
+  render();
+}
+function zoomAt(f, sx, sy) {
+  const [fx, fy] = toFont(sx, sy);
+  S.z = Math.min(20, Math.max(0.05, S.z * f));
+  S.tx = sx - fx * S.z; S.ty = sy + fy * S.z;
+  S.userView = true;
+  renderCanvas();
+}
+
+// ------------------------------------------------------------------ selection model
+function nodesOf(g) { const out = []; for (const s of g.skeleton) for (const n of s.nodes) out.push({ ...n, stroke: s.name }); return out; }
+function findNode(name) { const g = cur(); return g && nodesOf(g).find((n) => n.name === name); }
+function selectables() {
+  const g = cur(); if (!g) return [];
+  const list = nodesOf(g).map((n) => ({ kind: "node", name: n.name }));
+  if (S.view.opoints) for (const n of Object.keys(g.outline_points)) list.push({ kind: "outline", name: n });
+  return list;
+}
+function select(sel) { S.sel = sel; render(); }
+function ov(name) { return S.overrides[name] || { dx: 0, dy: 0, dw: 0, da: 0, dt: 0, stage: "skeleton" }; }
+
+function setOverride(name, values, stage, checkpoint, coalesce) {
+  const cleaned = {};
+  for (const k of DELTAS) cleaned[k] = round(values[k] || 0, k === "dt" ? 3 : 2);
+  S.overrides[name] = { ...cleaned, stage };  // optimistic
+  send({ type: "set", name, values: cleaned, stage, checkpoint }, coalesce);
+}
+
+// ------------------------------------------------------------------ render
+function render() {
+  if (!S.data) return;
+  $("#family").textContent = `${S.data.family} — ${Object.keys(S.data.glyphs).length} glyphs`;
+  $("#undo").disabled = !S.payload.can_undo;
+  $("#redo").disabled = !S.payload.can_redo;
+  const tsel = $("#terminals");
+  const opts = ["", ...S.payload.terminal_styles];
+  if (tsel.options.length !== opts.length) {
+    tsel.innerHTML = opts.map((o) => `<option value="${o}">${o || "font default"}</option>`).join("");
+  }
+  tsel.value = S.payload.terminals || "";
+  syncParams();
+  renderStrip();
+  renderCanvas();
+  renderInspector();
+  renderText();
+  updateStatus();
+}
+
+function glyphPath(g, attrs, parent) { return el("path", { d: g.svg || "", ...attrs }, parent); }
+
+function renderStrip() {
+  const strip = $("#strip");
+  const m = S.data.metrics;
+  const top = Math.max(m.ascender, m.capheight) + 30, bot = m.descender + 60;
+  let html = "";
+  for (const g of Object.values(S.data.glyphs)) {
+    const n = Object.keys(S.overrides).filter((k) => k.startsWith(g.name + ".")).length;
+    const w = Math.max(g.advance, 200);
+    html += `<div class="thumb${g.name === S.glyph ? " sel" : ""}" data-g="${g.name}">
+      ${n ? `<span class="badge">${n}</span>` : ""}
+      <svg viewBox="${(g.advance - w) / 2 - 20} ${-top} ${w + 40} ${top - bot}" style="width:${(w + 40) / (top - bot) * 58}px">
+        <g transform="scale(1,-1)"><line x1="-2000" x2="4000" y1="0" y2="0" stroke="var(--line)" vector-effect="non-scaling-stroke"/>
+        <path d="${g.svg || ""}" fill="var(--ink)"/></g></svg>
+      <div class="nm">${g.name}</div></div>`;
+  }
+  html += `<label class="ctx">context <input type="text" id="ctx" value="${S.context.replace(/"/g, "&quot;")}" placeholder="auto: no#on" title="# marks the glyph being edited"></label>`;
+  strip.innerHTML = html;
+  for (const t of strip.querySelectorAll(".thumb")) t.addEventListener("click", () => setGlyph(t.dataset.g));
+  $("#ctx").addEventListener("change", (e) => { S.context = e.target.value; store.set("context", S.context); renderCanvas(); });
+}
+function setGlyph(name) {
+  if (!S.data.glyphs[name]) return;
+  S.glyph = name; store.set("glyph", name); S.sel = null; S.fitted = false; fit();
+}
+
+function renderCanvas() {
+  const g = cur(); if (!g) return;
+  world.setAttribute("transform", `matrix(${S.z},0,0,${-S.z},${S.tx},${S.ty})`);
+  world.innerHTML = ""; overlay.innerHTML = "";
+  const r = svg.getBoundingClientRect();
+  const m = S.data.metrics;
+  const ox = originX();
+  const [xl] = toFont(0, 0), [xr] = toFont(r.width, 0);
+
+  if (S.view.metrics) {
+    const lines = [["baseline", 0], ["x-height", m.xheight], ["cap", m.capheight], ["ascender", m.ascender], ["descender", m.descender]];
+    for (const [label, y] of lines) {
+      const [, sy] = toScreen(0, y);
+      el("line", { x1: 0, x2: r.width, y1: sy, y2: sy, class: "metric" }, overlay);
+      const t = el("text", { x: 8, y: sy - 4, class: "metric-label" }, overlay); t.textContent = `${label} ${round(y)}`;
+    }
+  }
+  for (const it of contextLayout()) {
+    const grp = el("g", { transform: `translate(${it.x},0)` }, world);
+    glyphPath(it.g, { class: "ghost" }, grp);
+  }
+  const G = el("g", { transform: `translate(${ox},0)` }, world);
+  glyphPath(g, { class: "glyph-fill" + (S.view.fill ? "" : " outline-only") }, G);
+  if (S.view.outline || !S.view.fill) {
+    glyphPath(g, { class: "glyph-outline" }, G);
+  }
+  if (S.view.skeleton) {
+    let d = "";
+    for (const s of g.skeleton) {
+      s.segments.forEach((P, i) => {
+        d += (i === 0 ? `M${P[0][0]} ${P[0][1]}` : "") + `C${P[1][0]} ${P[1][1]} ${P[2][0]} ${P[2][1]} ${P[3][0]} ${P[3][1]}`;
+      });
+    }
+    el("path", { d, class: "skel" }, G);
+  }
+  // final outline points (screen space)
+  if (S.view.outline) {
+    for (const c of g.contours) {
+      const n = c.pts.length;
+      c.pts.forEach((p, i) => {
+        const [sx, sy] = toScreen(p[0] + ox, p[1]);
+        if (c.types[i] === "on") el("rect", { x: sx - 2, y: sy - 2, width: 4, height: 4, class: "onpt" }, overlay);
+        else {
+          el("circle", { cx: sx, cy: sy, r: 2.2, class: "offpt" }, overlay);
+          const j = c.types[(i + n - 1) % n] === "on" ? (i + n - 1) % n : (i + 1) % n;
+          const [ax, ay] = toScreen(c.pts[j][0] + ox, c.pts[j][1]);
+          el("line", { x1: ax, y1: ay, x2: sx, y2: sy, class: "hline" }, overlay);
+        }
+      });
+    }
+  }
+  // sidebearing lines
+  for (const [kind, wx] of [["lsb", ox], ["rsb", ox + g.advance]]) {
+    const [sx] = toScreen(wx, 0);
+    const hit = el("line", { x1: sx, x2: sx, y1: 0, y2: r.height, class: "sb-hit" }, overlay);
+    const sel = S.sel && S.sel.kind === kind;
+    el("line", { x1: sx, x2: sx, y1: 0, y2: r.height, class: "adv sb-line" + (sel ? " sel" : "") }, overlay);
+    hit.addEventListener("pointerdown", (e) => startDrag(e, { kind, name: `${g.name}.${kind}` }));
+  }
+  // named outline points
+  if (S.view.opoints || (S.sel && S.sel.kind === "outline")) {
+    for (const [name, p] of Object.entries(g.outline_points)) {
+      if (!S.view.opoints && name !== S.sel.name) continue;
+      const [sx, sy] = handlePos({ kind: "outline", name }, p[0] + ox, p[1]);
+      const sel = S.sel && S.sel.name === name;
+      const h = el("rect", { x: sx - 4, y: sy - 4, width: 8, height: 8, class: "opt" + (sel ? " sel" : "") }, overlay);
+      h.addEventListener("pointerdown", (e) => startDrag(e, { kind: "outline", name }));
+      title(h, name);
+    }
+  }
+  // skeleton nodes + handles for the selected one
+  if (S.view.nodes) {
+    for (const n of nodesOf(g)) {
+      const [sx, sy] = handlePos({ kind: "node", name: n.name }, n.x + ox, n.y);
+      const sel = S.sel && S.sel.kind === "node" && S.sel.name === n.name;
+      const c = el("circle", { cx: sx, cy: sy, r: sel ? 6 : 5, class: "node" + (sel ? " sel" : "") }, overlay);
+      c.addEventListener("pointerdown", (e) => startDrag(e, { kind: "node", name: n.name }));
+      title(c, n.name);
+      if (sel) drawNodeHandles(n, sx, sy);
+    }
+  }
+  // label of the dragged thing
+  if (S.drag && S.drag.label) {
+    const t = el("text", { x: S.drag.sx + 14, y: S.drag.sy - 12, class: "tip" }, overlay);
+    t.textContent = S.drag.label;
+  }
+  $("#hint").textContent = S.sel ? S.sel.name : `${g.name} · click a point to edit · ${S.view.opoints ? "" : "turn on “Outline pts” to edit expanded points"}`;
+}
+function title(node, text) { el("title", {}, node).textContent = text; }
+
+function handlePos(sel, wx, wy) {
+  const d = S.drag;
+  if (d && d.target.kind === sel.kind && d.target.name === sel.name && d.mode === "move" && d.preview) {
+    return toScreen(d.preview[0], d.preview[1]);
+  }
+  return toScreen(wx, wy);
+}
+
+function drawNodeHandles(n, sx, sy) {
+  const d = S.drag && S.drag.target.name === n.name ? S.drag : null;
+  const dir = (d && d.mode === "dir" && d.previewDir != null ? d.previewDir : n.dir) * Math.PI / 180;
+  const width = d && d.mode === "width" && d.previewW != null ? d.previewW : n.width;
+  const ux = Math.cos(dir), uy = Math.sin(dir);
+  // direction arm (screen space; y flipped)
+  const L = 70;
+  const hx = sx + ux * L, hy = sy - uy * L;
+  el("line", { x1: sx, y1: sy, x2: hx, y2: hy, class: "handle-arm" }, overlay);
+  const dh = el("path", { d: `M${hx} ${hy - 6}L${hx + 6} ${hy}L${hx} ${hy + 6}L${hx - 6} ${hy}Z`, class: "handle-dir" }, overlay);
+  dh.addEventListener("pointerdown", (e) => startDrag(e, { kind: "node", name: n.name }, "dir"));
+  title(dh, "drag to rotate direction (⇧ snaps to 15°)");
+  // width handles along the normal (font units)
+  if (width != null) {
+    const nx = -uy, ny = ux;
+    for (const side of [1, -1]) {
+      const wx = sx + side * nx * width / 2 * S.z, wy = sy - side * ny * width / 2 * S.z;
+      el("line", { x1: sx, y1: sy, x2: wx, y2: wy, class: "handle-warm" }, overlay);
+      const h = el("rect", { x: wx - 4.5, y: wy - 4.5, width: 9, height: 9, class: "handle-w" }, overlay);
+      h.addEventListener("pointerdown", (e) => startDrag(e, { kind: "node", name: n.name }, "width", side));
+      title(h, "drag to change stroke width here");
+    }
+  }
+}
+
+// ------------------------------------------------------------------ dragging
+function startDrag(e, target, mode = "move", side = 1) {
+  if (e.button !== 0) return;
+  e.stopPropagation(); e.preventDefault();
+  svg.setPointerCapture(e.pointerId);
+  const g = cur();
+  const ovName = target.name;
+  const stage = target.kind === "outline" ? "outline" : (ov(ovName).stage || "skeleton");
+  const node = target.kind === "node" ? findNode(target.name) : null;
+  const m = mouseFont(e);
+  S.drag = { target, mode, side, start: m, ov0: { ...ov(ovName) }, node0: node, stage, moved: false, ox: originX() };
+  if (target.kind !== (S.sel && S.sel.kind) || target.name !== (S.sel && S.sel.name)) S.sel = { kind: target.kind, name: target.name };
+  render();
+}
+function dragMove(e) {
+  const d = S.drag; if (!d) return;
+  const m = mouseFont(e);
+  const r = svg.getBoundingClientRect();
+  d.sx = e.clientX - r.left; d.sy = e.clientY - r.top;
+  let ddx = m[0] - d.start[0], ddy = m[1] - d.start[1];
+  if (!d.moved && Math.hypot(ddx, ddy) * S.z < 2) return;
+  const checkpoint = !d.moved; d.moved = true;
+  const v = { ...d.ov0 };
+  const t = d.target;
+  if (t.kind === "lsb" || t.kind === "rsb") {
+    v.dx = round(d.ov0.dx + (t.kind === "lsb" ? -ddx : ddx));
+    d.label = `${t.kind} ${fmt(cur()[t.kind] + (v.dx - ov(t.name).dx), 0)}`;
+  } else if (d.mode === "move") {
+    if (e.shiftKey) { if (Math.abs(ddx) > Math.abs(ddy)) ddy = 0; else ddx = 0; }
+    v.dx = round(d.ov0.dx + ddx); v.dy = round(d.ov0.dy + ddy);
+    let base = t.kind === "node" ? [d.node0.x, d.node0.y] : cur().outline_points[t.name];
+    d.preview = [base[0] + d.ox + (v.dx - d.ov0.dx), base[1] + (v.dy - d.ov0.dy)];
+    d.label = `Δ ${fmt(v.dx, 0)}, ${fmt(v.dy, 0)}`;
+  } else if (d.mode === "dir") {
+    const n = d.node0;
+    const a0 = Math.atan2(d.start[1] - n.y, d.start[0] - (n.x + d.ox));
+    const a1 = Math.atan2(m[1] - n.y, m[0] - (n.x + d.ox));
+    let delta = (a1 - a0) * 180 / Math.PI;
+    delta = ((delta + 540) % 360) - 180;
+    let newDir = n.dir + delta;
+    if (e.shiftKey) newDir = Math.round(newDir / 15) * 15;
+    newDir = round(newDir, 1);
+    v.da = round(d.ov0.da + (newDir - n.dir), 1);
+    d.previewDir = newDir;
+    d.label = `dir ${fmt(newDir)}° (Δ ${fmt(v.da)}°)`;
+  } else if (d.mode === "width") {
+    const n = d.node0, a = n.dir * Math.PI / 180;
+    const nx = -Math.sin(a), ny = Math.cos(a);
+    const proj = ((m[0] - (n.x + d.ox)) * nx + (m[1] - n.y) * ny) * d.side;
+    const newW = Math.max(2, round(2 * proj));
+    v.dw = round(d.ov0.dw + (newW - n.width));
+    d.previewW = newW;
+    d.label = `width ${fmt(newW, 0)} (Δ ${fmt(v.dw, 0)})`;
+  }
+  setOverride(t.name, v, d.stage, checkpoint, "drag");
+  renderCanvas();
+}
+function dragEnd() {
+  if (!S.drag) return;
+  S.drag = null;
+  render();
+}
+
+// pan / zoom
+svg.addEventListener("pointerdown", (e) => {
+  if (S.drag) return;
+  svg.setPointerCapture(e.pointerId);
+  S.pan = { x: e.clientX, y: e.clientY, tx: S.tx, ty: S.ty, moved: false };
+  svg.classList.add("panning");
+});
+svg.addEventListener("pointermove", (e) => {
+  if (S.drag) return dragMove(e);
+  if (S.pan) {
+    const dx = e.clientX - S.pan.x, dy = e.clientY - S.pan.y;
+    if (Math.hypot(dx, dy) > 3) S.pan.moved = true;
+    S.tx = S.pan.tx + dx; S.ty = S.pan.ty + dy;
+    if (S.pan.moved) { S.userView = true; renderCanvas(); }
+  }
+});
+const endPointer = () => {
+  if (S.drag) return dragEnd();
+  if (S.pan) { if (!S.pan.moved && S.sel) select(null); S.pan = null; svg.classList.remove("panning"); }
+};
+svg.addEventListener("pointerup", endPointer);
+svg.addEventListener("pointercancel", endPointer);
+svg.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const r = svg.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+new ResizeObserver(() => { if (S.data) { if (!S.userView) fit(); else renderCanvas(); } }).observe($("#stage"));
+$("#zoomFit").onclick = fit;
+$("#zoomIn").onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(1.25, r.width / 2, r.height / 2); };
+$("#zoomOut").onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(0.8, r.width / 2, r.height / 2); };
+
+// ------------------------------------------------------------------ inspector
+function renderInspector() {
+  const g = cur(); const box = $("#inspector");
+  if (!g) { box.innerHTML = ""; return; }
+  let html = "";
+  const sel = S.sel;
+  if (sel && (sel.kind === "node" || sel.kind === "outline")) {
+    const o = ov(sel.name);
+    const isNode = sel.kind === "node";
+    const n = isNode ? findNode(sel.name) : null;
+    const p = isNode ? [n.x, n.y] : g.outline_points[sel.name];
+    if (isNode && !n || !isNode && !p) { S.sel = null; return renderInspector(); }
+    html += `<section><h2>${isNode ? "Skeleton point" : "Outline point"}<span class="grow"></span>
+      <button id="resetSel" ${S.overrides[sel.name] ? "" : "disabled"}>Reset</button></h2>
+      <div class="name">${sel.name}</div><dl class="kv">
+      <dt>position</dt><dd>${fmt(p[0] - g.shift)}, ${fmt(p[1])}</dd>` +
+      (isNode ? `<dt>direction</dt><dd>${fmt(n.dir)}°</dd><dt>width</dt><dd>${fmt(n.width)}</dd><dt>tension</dt><dd>${fmt(n.tension, 3)}</dd>
+                 <dt>terminal</dt><dd>${n.terminal ? "yes" : "no"}</dd>` : "") +
+      `</dl><div class="fields">` +
+      field("dx", o.dx, "units") + field("dy", o.dy, "units") +
+      (isNode ? field("dw", o.dw, "width") + field("da", o.da, "deg") + field("dt", o.dt, "tension", 0.05) : "") +
+      `</div>` +
+      (isNode ? `<div class="fields"><label>stage</label><select id="stage"><option value="skeleton">skeleton (before expansion)</option><option value="outline">outline (both sides, after)</option></select><span></span></div>` : "") +
+      `</section>`;
+  } else if (sel && (sel.kind === "lsb" || sel.kind === "rsb")) {
+    const o = ov(sel.name);
+    html += `<section><h2>${sel.kind === "lsb" ? "Left" : "Right"} sidebearing<span class="grow"></span>
+      <button id="resetSel" ${S.overrides[sel.name] ? "" : "disabled"}>Reset</button></h2>
+      <div class="name">${sel.name}</div><dl class="kv"><dt>value</dt><dd>${fmt(g[sel.kind])}</dd>
+      <dt>side</dt><dd>${g.sides[sel.kind === "lsb" ? 0 : 1]}</dd></dl>
+      <div class="fields">${field("dx", o.dx, "units")}</div></section>`;
+  }
+  const mine = Object.entries(S.overrides).filter(([k]) => k.startsWith(g.name + "."));
+  html += `<section><h2>Glyph ${g.name}<span class="grow"></span><button id="resetGlyph" ${mine.length ? "" : "disabled"}>Reset glyph</button></h2>
+    <dl class="kv"><dt>unicode</dt><dd>${g.unicode != null ? "U+" + g.unicode.toString(16).toUpperCase().padStart(4, "0") : "—"}</dd>
+    <dt>advance</dt><dd>${g.advance}</dd>
+    <dt>sidebearings</dt><dd><a href="#" data-sb="lsb">${fmt(g.lsb, 0)}</a> / <a href="#" data-sb="rsb">${fmt(g.rsb, 0)}</a> (${g.sides.join(" / ")})</dd>
+    <dt>strokes</dt><dd>${g.skeleton.map((s) => s.name.slice(g.name.length + 1)).join(", ") || "—"}</dd></dl>
+    <h2 style="margin-top:10px">Overrides</h2>`;
+  html += mine.length ? `<ul class="ovlist">${mine.map(([k, o]) => `<li data-n="${k}" class="${S.sel && S.sel.name === k ? "sel" : ""}">
+      <span class="n">${k.slice(g.name.length + 1)}</span><span class="v">${summarize(o)}</span><button data-del="${k}" title="Remove">×</button></li>`).join("")}</ul>`
+    : `<div class="empty">No hand adjustments in this glyph yet. Drag a point.</div>`;
+  html += `</section>`;
+  const stale = (S.data.warnings || []).filter((w) => w.startsWith("override"));
+  if (stale.length) {
+    html += `<section><h2>Stale overrides</h2>${stale.map((w) => {
+      const name = (w.match(/'([^']+)'/) || [])[1];
+      return `<div class="warn">${name} <button data-del="${name}">remove</button></div>`; }).join("")}</section>`;
+  }
+  html += `<section><h2>Files</h2><dl class="kv"><dt>source</dt><dd>${S.payload.source}</dd><dt>overrides</dt><dd>${S.payload.overrides_file}</dd></dl></section>`;
+  box.innerHTML = html;
+
+  const st = $("#stage");
+  if (st && sel) {
+    st.value = ov(sel.name).stage || "skeleton";
+    st.addEventListener("change", () => setOverride(sel.name, ov(sel.name), st.value, true));
+  }
+  for (const inp of box.querySelectorAll("input[data-k]")) {
+    inp.addEventListener("change", () => {
+      const o = { ...ov(sel.name) }; o[inp.dataset.k] = +inp.value || 0;
+      setOverride(sel.name, o, sel.kind === "outline" ? "outline" : (o.stage || "skeleton"), true);
+    });
+  }
+  const rs = $("#resetSel"); if (rs) rs.onclick = () => send({ type: "remove", names: [sel.name] });
+  const rg = $("#resetGlyph"); if (rg) rg.onclick = () => send({ type: "remove", names: mine.map(([k]) => k) });
+  for (const li of box.querySelectorAll(".ovlist li")) li.addEventListener("click", (e) => {
+    if (e.target.dataset.del) return;
+    const k = li.dataset.n;
+    const kind = k.endsWith(".lsb") ? "lsb" : k.endsWith(".rsb") ? "rsb" : (cur().outline_points[k] ? "outline" : "node");
+    select({ kind, name: k });
+  });
+  for (const b of box.querySelectorAll("[data-del]")) b.addEventListener("click", (e) => { e.stopPropagation(); send({ type: "remove", names: [b.dataset.del] }); });
+  for (const a of box.querySelectorAll("[data-sb]")) a.addEventListener("click", (e) => { e.preventDefault(); select({ kind: a.dataset.sb, name: `${g.name}.${a.dataset.sb}` }); });
+}
+function field(k, v, unit, step = 1) {
+  return `<label for="f-${k}">${k}</label><input type="number" id="f-${k}" data-k="${k}" step="${step}" value="${round(v || 0, 3)}"><span class="unit">${unit}</span>`;
+}
+function summarize(o) {
+  const parts = [];
+  if (o.dx || o.dy) parts.push(`${fmt(o.dx, 0)},${fmt(o.dy, 0)}`);
+  if (o.dw) parts.push(`w${o.dw > 0 ? "+" : ""}${fmt(o.dw, 0)}`);
+  if (o.da) parts.push(`${o.da > 0 ? "+" : ""}${fmt(o.da)}°`);
+  if (o.dt) parts.push(`t${o.dt > 0 ? "+" : ""}${fmt(o.dt, 2)}`);
+  if (o.stage === "outline") parts.push("outline");
+  return parts.join(" ");
+}
+
+// ------------------------------------------------------------------ text
+function renderText() {
+  const out = $("#textout");
+  const text = $("#textin").value;
+  const size = +$("#textsize").value;
+  $("#textsizeval").textContent = size + "px";
+  $("#waterfall").classList.toggle("on", S.waterfall);
+  if (S.waterfall) {
+    out.style.fontSize = "";
+    out.innerHTML = [12, 16, 24, 36, 48, 72, 120].map((s) =>
+      `<div class="wf"><span class="sz">${s}</span><span style="font-size:${s}px">${escapeHtml(text)}</span></div>`).join("");
+  } else {
+    out.style.fontSize = size + "px";
+    out.textContent = text;
+  }
+}
+const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+$("#textin").addEventListener("input", () => { store.set("text", $("#textin").value); renderText(); });
+$("#textsize").addEventListener("input", () => { store.set("textsize", $("#textsize").value); renderText(); });
+$("#waterfall").addEventListener("click", () => { S.waterfall = !S.waterfall; store.set("waterfall", S.waterfall); renderText(); });
+$("#textin").value = store.get("text", $("#textin").value);
+$("#textsize").value = store.get("textsize", 72);
+
+// ------------------------------------------------------------------ header controls
+const TOGGLES = [["fill", "Fill"], ["outline", "Outline"], ["skeleton", "Skeleton"], ["nodes", "Points"], ["opoints", "Outline pts"], ["metrics", "Metrics"], ["context", "Context"]];
+function renderToggles() {
+  $("#toggles").innerHTML = TOGGLES.map(([k, l]) => `<button data-v="${k}" class="${S.view[k] ? "on" : ""}">${l}</button>`).join("");
+  for (const b of $("#toggles").querySelectorAll("button")) b.addEventListener("click", () => {
+    S.view[b.dataset.v] = !S.view[b.dataset.v]; store.set("view", S.view); renderToggles(); renderCanvas();
+  });
+}
+renderToggles();
+$("#undo").onclick = () => send({ type: "undo" });
+$("#redo").onclick = () => send({ type: "redo" });
+$("#terminals").onchange = (e) => send({ type: "terminals", name: e.target.value || null });
+$("#resetParams").onclick = () => { S.localParams = {}; send({ type: "reset_params" }); };
+$("#copyParams").onclick = () => {
+  const lines = Object.entries(S.data.param_specs).map(([n, s]) => {
+    const v = round(S.data.params[n], 4);
+    return `${n} = param(${v}${s.range ? `, range=(${s.range[0]}, ${s.range[1]})` : ""})`;
+  }).join("\n");
+  (navigator.clipboard ? navigator.clipboard.writeText(lines) : Promise.reject()).then(
+    () => toast("Copied parameters as Python"), () => { console.log(lines); toast("Clipboard unavailable — printed to console"); });
+};
+$("#savePreset").onclick = () => {
+  const name = $("#presetName").value.trim(); if (!name || !S.data) return;
+  S.presets[name] = { ...S.data.params }; store.set("presets", S.presets);
+  $("#presetName").value = ""; renderPresets();
+};
+$("#theme").onclick = () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark"; store.set("theme", r.dataset.theme);
+};
+if (store.get("theme", null)) document.documentElement.dataset.theme = store.get("theme");
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600); }
+
+// ------------------------------------------------------------------ keyboard
+document.addEventListener("keydown", (e) => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "select" || tag === "textarea") return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); send({ type: e.shiftKey ? "redo" : "undo" }); return; }
+  if (mod) return;
+  const g = cur(); if (!g) return;
+  const names = Object.keys(S.data.glyphs);
+  if (e.key === "PageDown" || e.key === "PageUp") {
+    e.preventDefault();
+    const i = names.indexOf(S.glyph);
+    setGlyph(names[(i + (e.key === "PageDown" ? 1 : -1) + names.length) % names.length]); return;
+  }
+  if (e.key === "f" || e.key === "F") { fit(); return; }
+  if (e.key === "Escape") { select(null); return; }
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const list = selectables(); if (!list.length) return;
+    let i = S.sel ? list.findIndex((s) => s.name === S.sel.name) : -1;
+    i = (i + (e.shiftKey ? -1 : 1) + list.length) % list.length;
+    select(list[i]); return;
+  }
+  if (!S.sel) return;
+  const name = S.sel.name, o = { ...ov(name) }, big = e.shiftKey;
+  const stage = S.sel.kind === "outline" ? "outline" : (o.stage || "skeleton");
+  let changed = true;
+  const isSb = S.sel.kind === "lsb" || S.sel.kind === "rsb";
+  switch (e.key) {
+    case "ArrowLeft": o.dx -= big ? 10 : 1; break;
+    case "ArrowRight": o.dx += big ? 10 : 1; break;
+    case "ArrowUp": if (isSb) changed = false; else o.dy += big ? 10 : 1; break;
+    case "ArrowDown": if (isSb) changed = false; else o.dy -= big ? 10 : 1; break;
+    case "[": case "{": if (S.sel.kind === "node") o.da += big ? 5 : 1; else changed = false; break;
+    case "]": case "}": if (S.sel.kind === "node") o.da -= big ? 5 : 1; else changed = false; break;
+    case "-": case "_": if (S.sel.kind === "node") o.dw -= big ? 10 : 2; else changed = false; break;
+    case "=": case "+": if (S.sel.kind === "node") o.dw += big ? 10 : 2; else changed = false; break;
+    case ",": case "<": if (S.sel.kind === "node") o.dt = round(o.dt - 0.05, 3); else changed = false; break;
+    case ".": case ">": if (S.sel.kind === "node") o.dt = round(o.dt + 0.05, 3); else changed = false; break;
+    case "Backspace": case "Delete": send({ type: "remove", names: [name] }); e.preventDefault(); return;
+    default: changed = false;
+  }
+  if (changed) {
+    e.preventDefault();
+    if (S.sel.kind === "lsb" && (e.key === "ArrowLeft" || e.key === "ArrowRight")) o.dx = ov(name).dx - (o.dx - ov(name).dx);
+    setOverride(name, o, stage, true);
+    renderCanvas(); renderInspector();
+  }
+});
+
+renderPresets();
+connect();
+</script>
+</body>
+</html>

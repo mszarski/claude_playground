@@ -1,4 +1,4 @@
-"""``ductus build | test | proof`` (``serve`` lands next)."""
+"""``ductus build | test | serve | proof``."""
 from __future__ import annotations
 
 import json
@@ -87,6 +87,16 @@ def test(font_py: Path,
                 f"{sum(f.level == 'warning' for f in findings)} warning(s) "
                 f"in {time.perf_counter() - t0:.1f}s", fg="red" if errors else "green", bold=True)
     raise typer.Exit(1 if errors else 0)
+
+
+@app.command()
+def serve(font_py: Path,
+          port: int = typer.Option(8765, "--port", "-p"),
+          host: str = typer.Option("127.0.0.1", "--host"),
+          overrides: Optional[Path] = typer.Option(None)):
+    """Live preview: sliders, draggable points, text in the compiled font."""
+    from .serve import serve as run
+    run(font_py, host=host, port=port, overrides_path=overrides)
 
 
 @app.command()
