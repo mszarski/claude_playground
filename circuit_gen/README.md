@@ -145,6 +145,11 @@ swapped or a MOSFET fitted backwards) must each fail them
 Results before October 17 used a weaker version: 9 boards had references and
 most boards had a single hidden test, so they may overstate pass rates.
 
+Qwen3.8-27B on the 8 boards added October 31, spec-first, 2 samples each:
+13/16 (81%), 7/8 boards solved at least once, 0 false accepts. Both
+`mfb_bandpass` samples failed when the spec writer ran out of its reply
+budget; one `nand_xor` sample ran out of turns.
+
 Qwen3.8-27B on the first 19 boards, spec-first (the default; the same model
 writes the spec), 2 samples per board: **32/38 (84%)**, 18/19 boards solved at
 least once, 14/19 every time, **0 false accepts**. The six failures: three ran
@@ -218,7 +223,8 @@ simulated across component tolerances) and exported as chat-format JSONL:
   `generate()` skips any board whose brief matches a benchmark board (up to
   the varied opener). Before October 31 it did not: 3 of the 1,491 sessions
   above duplicated `rc_lowpass` (twice) and `zener_regulator`, and were in the
-  data the 8B was fine-tuned on.
+  data the 8B was fine-tuned on. They are removed from `procgen_v3` in the
+  dataset: 2,288 sessions over all 20 families, 941 of them repair sessions.
 
 - **LLM-designed** (`datagen.py`): `datagen` writes new descriptions (167 in
   `benchmarks/train_boards.json`), `eval` designs them, and `export` keeps
