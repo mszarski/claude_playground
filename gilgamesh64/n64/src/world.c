@@ -340,14 +340,14 @@ static void build_props(void) {
     for (int i = 0; i < 160; i++) {
         float x = BX0 + 1 + srand01() * 58, z = -74 + srand01() * 48;
         float ax = x - ARENA_X, az = z - ARENA_Z;
-        if (sqrtf(ax * ax + az * az) < ARENA_R + 2.5f) continue;
+        if (sqrtf(ax * ax + az * az) < ARENA_R + 7.0f) continue;   // keep canopies out of the clearing
         if (fabsf(x) < 5 && z > ARENA_Z) continue;
         if (z > -26) continue;
         cedar(x, z, 0.85f + srand01() * 0.5f, true);
     }
     for (int i = 0; i < 40; i++) { float side = srand01() < 0.5f ? -1 : 1; cedar(side * (32 + srand01() * 14), -20 - srand01() * 60, 1 + srand01() * 0.8f, false); }
     for (int i = 0; i < 12; i++) cedar(-40 + srand01() * 80, -80 - srand01() * 14, 1.2f + srand01() * 0.8f, false);
-    for (int i = 0; i < 14; i++) { float a = i / 14.0f * TAU_F; if (sinf(a) > 0.9f) continue; cedar(ARENA_X + cosf(a) * (ARENA_R + 3), ARENA_Z + sinf(a) * (ARENA_R + 3), 1.4f + srand01() * 0.3f, true); }
+    for (int i = 0; i < 14; i++) { float a = i / 14.0f * TAU_F; if (sinf(a) > 0.9f) continue; cedar(ARENA_X + cosf(a) * (ARENA_R + 7), ARENA_Z + sinf(a) * (ARENA_R + 7), 1.4f + srand01() * 0.3f, true); }
     cedar(0, -72.5f, 2.4f, true);  // the great cedar
 
     // ---- seal pedestals (Dawn by the oasis, Noon at the camp)

@@ -214,6 +214,9 @@ static void start_game(void) {
 #ifdef DEBUG_SEALS
     for (int i = 0; i < 3; i++) if (DEBUG_SEALS & (1 << i)) G.seals[i] = true;
 #endif
+#ifdef DEBUG_DUSK
+    G.duskSpawned = true; spawn_seal(2, 14, -10);   // lion ring already cleared
+#endif
     player_set(v3(DEBUG_POS_X, 0, DEBUG_POS_Z), PI_F);
     s_camPos = v3(DEBUG_POS_X, 4, DEBUG_POS_Z + 6);
 #else
