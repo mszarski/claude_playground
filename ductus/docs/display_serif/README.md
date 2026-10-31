@@ -96,3 +96,25 @@ Critique (sheet `05.png`):
   smooth but the terminals' beards are thin and short.
 - **Next** — widen m, beef up the u cup's thick side via `n_bias` per glyph,
   longer s beards; then caps colour (E arms vs H bar).
+
+## 06 — u, m, beards (and a kit-wide spacing fix)
+
+Changes: `u` gets its own bias (`u_bias` 0.3) so the cup carries weight on
+the left wall like the n's arch does on the right; m arches 330 → 360;
+longer s/S beards. Kit fix found by the benchmark: side detection used to
+treat serif tips as a glyph's sides, so serifed straights got *round*
+sidebearings; now only the skeleton and contour parts decide.
+
+Critique (sheet `06.png`):
+- **Colour** — u and n now match; m no longer reads condensed. The word
+  "hamburgefonstiv" at 120 px has even colour except the heavy `g` loop.
+- **Spacing** — `m`→`b` is a touch tight after the side fix (both straight
+  now); `r`→`g` still open. Next: per-pair kerning is M5, but `r` wants a
+  smaller right sidebearing (per-glyph `sb`).
+- **Serifs** — consistent hairline serifs across h, m, n, u, r, i, H, E, A, v.
+- **Terminals** — balls (a, r, f), beards (s, S, G), the e's tapered
+  terminal: a coherent Didone set, distinct from the benchmark's wedges.
+- **Lumpy curves** — the s/S spine is now smooth; G's upper terminal is a
+  little blunt where the aperture cut meets the thick wall.
+- **Verdict** — credible display type at 72–120 px for this word set; not yet
+  release quality (spacing, g loop weight, G terminal).

@@ -228,7 +228,7 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
     # 8. spacing
     bounds = _bounds(final)
     sides = gdef.sides or (gb.inherited.sides if gb.inherited else None) or \
-        _detect_sides(r.strokes, [c for g in groups for c in g])
+        _detect_sides(r.strokes, stage["contours"])   # terminals (serifs) don't decide the side
     adv_spec = gdef.advance if gdef.advance is not None else (gb.inherited.advance if gb.inherited else None)
     if bounds is None:
         shift = 0.0
@@ -350,6 +350,6 @@ def _detect_sides(strokes: list[Stroke], contours: list[Contour] = ()) -> tuple[
         return ("straight", "straight")
     xs = np.concatenate(xs)
     lo, hi = xs.min(), xs.max()
-    left = "straight" if any(abs(v - lo) < 1 for v in verticals) else "round"
-    right = "straight" if any(abs(v - hi) < 1 for v in verticals) else "round"
+    left = "straight" if any(abs(v - lo) < 8 for v in verticals) else "round"
+    right = "straight" if any(abs(v - hi) < 8 for v in verticals) else "round"
     return (left, right)

@@ -9,7 +9,7 @@ and measuring the gap (SPEC rev. 2).
 | | |
 |---|---|
 | `examples/test_font/` | M1 sans test font (`n h m o H O space`) |
-| `examples/display_serif/` | **M2 original** high-contrast display serif (in progress: `o O`) |
+| `examples/display_serif/` | **M2 original** high-contrast display serif — `hamburgefonstiv` + `HOAGES` |
 | `benchmarks/geist_serif/` | M2 **internal benchmark only**, fitted to Geist Serif for measurement — never built or released |
 | `docs/representability.md` | benchmark report, one row per glyph per iteration |
 | `docs/display_serif/` | iteration sheets and self-critique for the original design |
@@ -23,11 +23,20 @@ point-compatible · `n.arch.shoulder` override survives stem changes · editor
 (sliders, draggable points → `overrides.yaml`, live text, ~110 ms slider
 round trip) · `ductus test` passes, 55 unit tests · this README.
 
-**Milestone 2 — started with `o`.** Bowl contour primitive (§5.4) · benchmark
-harness (`ductus bench`), parameter fitter (`ductus fit`) · editor reference
-onion-skin, error heat map and live scores · `o` at **IoU 0.986, Hausdorff
-1.8 units, 0 overrides** · original display serif `o`/`O`, 2 iterations.
-Next: `n` (junctions, width profiles, Hobby solve), then set the IoU target.
+**Milestone 2 — in progress.** All §5 primitive families exist and are
+tested: width profiles, L/R bias, contour bowls (with rotation and asymmetric
+walls), cuts, a terminal library (bracketed with slope, wedge, beak, ball,
+flat cuts) with swappable terminal sets, per-glyph spacing, and a genre kit
+(`ductus.kits.serif`). Benchmark (0 overrides, params by `ductus fit`):
+**o 0.984 · H 0.970 · n 0.931 · e 0.922 · v 0.904 · s 0.871 · g 0.848 ·
+a 0.785** IoU — see `docs/representability.md` for the trend, overlays and
+the gaps each glyph still shows. Proposed target: IoU ≥ 0.93 and Hausdorff
+≤ 20 units with ≤ 2 overrides. The original display serif renders the full
+test word `hamburgefonstiv` and `H O A G E S` (`docs/display_serif/06.png`,
+six iterations with critiques). Editor M2: reference onion skin, error heat
+map, stage inspector, overrides grouped by kind. Still to do: a `join()`
+primitive (a's bowl→stem), primitive handles in the editor, a joint fit of
+all shared params.
 
 ![preview](docs/preview.png)
 

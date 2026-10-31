@@ -102,7 +102,7 @@ def test_terminal_set_swap_restyles(sfont):
     from ductus.terminals import TerminalSet
     a = compile_font(sfont).glyphs["n"]
     b = compile_font(sfont, terminals=TerminalSet()).glyphs["n"]
-    assert a.signature != b.signature and b.bounds[0] > a.bounds[0]
+    assert a.signature != b.signature and a.advance > b.advance     # serifs widen the glyph
 
 
 def test_primitive_sweep_compatible(sfont):

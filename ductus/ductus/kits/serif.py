@@ -92,7 +92,7 @@ DEFAULTS: dict[str, tuple] = {
     "A_sb": (0, (-150, 80)),
     # display / test-word glyphs
     "m_width": (330, (250, 450)), "b_width": (500, (400, 620)), "b_bowl_l": (0.3, (0.0, 0.6)),
-    "u_width": (410, (300, 520)),
+    "u_width": (410, (300, 520)), "u_bias": (0.5, (0.1, 0.9)),
     "r_width": (230, (150, 330)), "r_y": (0.82, (0.6, 0.98)), "r_dir": (-30, (-80, 20)),
     "f_hook": (230, (120, 330)), "f_top": (720, (640, 790)), "f_bar_l": (90, (30, 160)), "f_bar_r": (150, (60, 240)),
     "f_end_y": (0.92, (0.8, 1.0)),
@@ -263,8 +263,9 @@ def define(font, P, glyphs: str | None = None, terminals=None):
 
     def _cup(p, x, width, top):
         """The arch rotated 180 degrees: leaves the right stem low, under the
-        bowl, up into the left stem."""
-        bias = P.n_bias
+        bowl, up into the left stem. Has its own bias: rotated, the eye wants
+        the weight in a different place than on the n."""
+        bias = P.u_bias
         hair = arch_pen.hairline
         left_half = hair / 2 + (val(P.stem) - hair) * val(bias)
         sh_y = -os_ + arch_pen.width_at(180) * (1 - val(bias))

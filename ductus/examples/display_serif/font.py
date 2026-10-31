@@ -19,13 +19,13 @@ P = kit.params(
     serif_len=62, serif_bracket=12, serif_ca=0.5, serif_cb=0.7, foot_tip=14,
     cap_serif_len=72, cap_serif_bracket=14, head_len=62, head_top=0,
     top_serif_len=58, top_serif_bracket=10, spur_len=60,
-    beak_len=70, beak_depth=16, ball_r=48, ball_drop=-22,
+    beak_len=95, beak_depth=14, ball_r=48, ball_drop=-22,
     # rounds (iteration 02 o, slight oblique counter)
     o_width=500, o_full_h=0.60, o_full_v=0.56, o_in_full_h=0.56, o_in_full_v=0.62, o_stress=6,
     # arches: hairline join, thick inside
     n_width=400, n_join_y=0.80, n_join_dir=50, n_join_in=0.3, n_shoulder_x=0.48, n_out_y=0.62,
     n_taper=0.15, n_taper_len=0.32, n_bias=0.42, n_tension=1.05,
-    m_width=330, u_width=400, b_width=500,
+    m_width=360, u_width=400, u_bias=0.3, b_width=500,
     H_width=560, H_bar_y=0.5, H_bar_t=16,
     # s / S: vertical terminal faces with hairline beards, spine swells mid-way
     s_width=360, s_t1_x=0.94, s_t1_y=0.74, s_t1_dir=180, s_cut1=0,
