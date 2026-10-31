@@ -168,7 +168,7 @@ budget; one `nand_xor` sample ran out of turns.
 Qwen3.8-27B on the first 19 boards, spec-first (the default; the same model
 writes the spec), 2 samples per board: **32/38 (84%)**, 18/19 boards solved at
 least once, 14/19 every time, **0 false accepts**. The six failures: three ran
-out of the 64k-token reply budget while designing (both Sallen-Key samples
+out of the reply budget (40,960 tokens) while designing (both Sallen-Key samples
 and one blinker), two spec writers reasoned past the budget and wrote
 nothing, and one spec used a net the description doesn't name (rejected).
 
