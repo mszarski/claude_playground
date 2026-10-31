@@ -1,0 +1,486 @@
+// ---------- Dinosaurs ----------
+'use strict';
+
+class Dino {
+  constructor(game, species, x, y) {
+    this.id = _eid++;
+    this.kind = 'dino';
+    this.game = game;
+    this.species = species;
+    this.sp = SPECIES[species];
+    this.x = x + 0.5; this.y = y + 0.5;
+    this.home = { x, y };
+    this.hp = this.sp.hp;
+    this.hunger = 25; this.stress = 15; this.comfort = 70;
+    this.sedation = 0; this.sedatedT = 0;
+    this.state = 'idle'; this.stateT = randf(1, 3);
+    this.path = null; this.pi = 0;
+    this.facing = chance(0.5) ? 1 : -1;
+    this.anim = rand() * 10; this.moving = false;
+    this.name = nameFor(species);
+    this.sick = 0; this.attackCD = 0; this.flash = 0; this.deterT = 0;
+    this.loose = false; this.carried = null; this.target = null;
+    this.thinkT = 0; this.age = 0; this.kills = 0;
+    this.comfortParts = {};
+    this.roarCD = randf(5, 20);
+    this.lastBreach = 0;
+    this.growth = 0.6; // hatchlings grow up over a couple of days
+    this.ageDays = 0;
+    this.lifespan = this.sp.life * randf(0.9, 1.15);
+  }
+  get elderly() { return this.ageDays > this.lifespan * 0.8; }
+  get sellValue() { return Math.round(this.sp.cost * (this.growth < 1 ? 0.25 : this.elderly ? 0.15 : 0.35)); }
+  get str() { return this.sp.strength * this.growth * (this.unstable ? 1.3 : 1); }
+
+  get tx() { return Math.floor(this.x); }
+  get ty() { return Math.floor(this.y); }
+  get camouflaged() { return !!(this.sp.camo && !this.game.research.has('sensors') && this.loose && this.state !== 'hunt' && this.state !== 'attack' && this.sedatedT <= 0); }
+  get speed() {
+    let s = this.sp.speed * 0.55;
+    if (this.hp < this.sp.hp * 0.4) s *= 0.7;
+    if (this.sick > 0) s *= 0.7;
+    if (this.elderly) s *= 0.8;
+    return s;
+  }
+
+  update(dt) {
+    const g = this.game, w = g.world;
+    this.anim += dt;
+    this.moving = false;
+    if (this.flash > 0) this.flash -= dt;
+    if (this.carried) return;
+    this.age += dt;
+    this.ageDays += dt / (g.secPerHour * 24);
+    if (this.ageDays > this.lifespan && !this.loose && this.sedatedT <= 0) { g.killDino(this, 'old age', true); return; }
+    if (this.elderly && !this.oldLogged) { this.oldLogged = true; if (this.growth >= 1) g.log(`${this.name} the ${this.sp.name} is getting old: about ${Math.max(1, Math.round(this.lifespan - this.ageDays))} days left.`, 'warn', this); }
+    if (this.growth < 1) {
+      this.growth = Math.min(1, this.growth + dt / 150);
+      if (this.growth >= 1) g.log(`${this.name} the ${this.sp.name} is fully grown.`, 'info', this);
+    }
+
+    // Sedation
+    if (this.sedatedT > 0) {
+      this.sedatedT -= dt;
+      // No helicopter (or every one is already carrying an animal)? A ground crew trucks it (slow and pricey)
+      if ((this.loose || this.relocate) && (!g.hasBuilding('helipad') || (g.helis.length && g.helis.every((h) => h.cargo)))) {
+        this.truckT = (this.truckT || 0) + dt;
+        if (this.truckT > 18) {
+          const dest = g.findPaddockFor(this);
+          if (dest) {
+            g.spend(12000, 'ops');
+            g.burst(this.x, this.y, '#e8d8a0', 8);
+            this.x = dest.x + 0.5; this.y = dest.y + 0.5; this.home = { x: dest.x, y: dest.y };
+            this.loose = false; this.relocate = false; this.orderSedate = false; this.sedatedT = 3; this.truckT = 0; this.noDestLogged = false;
+            g.world.regionsDirty = true;
+            g.log(`Ground crew trucked ${this.name} the ${this.sp.name} back to a paddock (-$12k). A helipad is faster.`, 'good', this);
+          } else {
+            this.truckT = 10;
+            if (!this.noDestLogged) { this.noDestLogged = true; g.log(g.makeRoomFor(this) || `No safe paddock for ${this.name} the ${this.sp.name}! The ground crew can't move it until there is one: repair the fence of its old paddock, or build a new one with a ${this.sp.diet === 'carn' ? 'Carnivore' : 'Herbivore'} Feeder.`, 'warn', this, true); }
+          }
+        }
+      } else this.truckT = 0;
+      if (this.sedatedT <= 0) {
+        this.sedation = 0; this.stress = Math.max(0, this.stress - 30);
+        this.state = 'idle'; this.stateT = 1;
+      }
+      return;
+    }
+    if (this.sedation > 0) this.sedation = Math.max(0, this.sedation - dt * 0.02);
+
+    // Needs
+    const hrate = (this.sp.diet === 'carn' ? 1.0 : 0.85) * g.season.hunger;
+    this.hunger = Math.min(100, this.hunger + dt * hrate * (this.loose ? 1.4 : 1));
+    if (this.hunger >= 100) this.hp -= dt * 0.8;
+    if (this.sick > 0) {
+      // Vets cure quickly; untreated illness slowly runs its course but costs health
+      const med = g.research.has('medicine') ? 2 : 1;
+      if (g.hasBuilding('vet')) { this.sick -= dt * 2.5 * med; }
+      else { this.sick -= dt * 0.12 * med; this.hp -= dt * (this.hunger > 60 ? 0.3 : 0.14); }
+      if (this.sick <= 0) { this.sick = 0; g.log(`${this.name} the ${this.sp.name} has recovered.`, 'good', this); }
+    }
+    if (this.hp <= 0) { g.killDino(this, this.hunger >= 100 ? 'starvation' : this.sick > 0 ? 'illness' : 'injuries'); return; }
+    if (this.hp < this.sp.hp && this.hunger < 60 && this.sick <= 0) this.hp = Math.min(this.sp.hp, this.hp + dt * 0.5);
+
+    // Stress drifts toward a target from comfort / hunger / weather
+    let target = (100 - this.comfort) * 0.85;
+    if (this.hunger > 55) target += (this.hunger - 55) * 1.1;
+    if (g.events.storm && g.events.storm.phase === 'active') target += 18;
+    if (g.events.quake > 0) target += 30;
+    if (this.loose) target += 15;
+    if (g.isNight && this.sp.clever) target += 12; // raptors prowl at night
+    if (this.sp.diet === 'carn') target += g.mod('carnStress', 0);
+    if (this.unstable) target += 15; // Dr. Wu's frog-DNA specials
+    target = clamp(target, 0, 100);
+    this.stress += (target - this.stress) * Math.min(1, dt * 0.08);
+    if (this.deterT > 0) this.deterT -= dt;
+    if (this.attackCD > 0) this.attackCD -= dt;
+
+    // Stuck inside a wall/building (e.g. fence rebuilt on top) -> pop to nearest free tile
+    if (!w.dinoPass(this.tx, this.ty)) {
+      const p = w.bfs(this.tx, this.ty, () => true, (x, y) => w.dinoPass(x, y), 400);
+      if (p && p.length) { const [nx, ny] = p[p.length - 1]; this.x = nx + 0.5; this.y = ny + 0.5; }
+      this.path = null;
+    }
+
+    this.roarCD -= dt;
+    if (this.roarCD <= 0) {
+      this.roarCD = randf(15, 40);
+      const call = this.sp.diet === 'carn' ? (this.sp.size >= 3 ? 'roar' : 'screech') : (this.sp.size >= 3 ? 'bellow' : 'honk');
+      if (this.sp.size >= 2 || this.loose || chance(0.3)) g.soundAt(call, this.x, this.y, this.loose ? 1 : 0.6);
+    }
+
+    this.thinkT -= dt;
+    switch (this.state) {
+      case 'idle':
+        this.stateT -= dt;
+        if (this.stateT <= 0) this.decide();
+        break;
+      case 'walk':
+      case 'tofeed':
+      case 'tofence':
+      case 'graze': {
+        const sp = this.state === 'walk' ? this.speed * (this.loose && this.stress > 70 ? 1.3 : 1) : this.speed;
+        const done = stepAlong(this, dt, sp, w.dinoPass, w);
+        if (done) this.arrive();
+        break;
+      }
+      case 'eat':
+        this.stateT -= dt;
+        if (this.stateT <= 0) { this.state = 'idle'; this.stateT = randf(1, 3); }
+        break;
+      case 'hunt':
+        this.updateHunt(dt);
+        break;
+      case 'attack':
+        this.updateFenceAttack(dt);
+        break;
+      default:
+        this.state = 'idle';
+    }
+  }
+
+  decide() {
+    const g = this.game, w = g.world;
+    const reg = w.regionAt(this.tx, this.ty);
+    // Loose carnivores look for prey
+    // raptors on the loose hunt whether or not they are hungry
+    if (this.sp.diet === 'carn' && (this.loose ? (this.sp.clever || this.hunger > 15) : this.hunger > 60)) {
+      const prey = this.findPrey(this.loose ? (this.sp.clever ? 14 : 10) : 30);
+      if (prey) { this.state = 'hunt'; this.target = prey; this.thinkT = 0; return; }
+    }
+    // Territorial giants fight rivals that share their paddock
+    if (this.sp.territorial && this.stress > 40 && !this.loose) {
+      const myReg = w.region[w.idx(this.tx, this.ty)];
+      const rival = g.dinos.find((o) => o !== this && o.sp.territorial && !o.carried && o.sedatedT <= 0 && w.region[w.idx(o.tx, o.ty)] === myReg);
+      if (rival && chance(0.5)) {
+        this.state = 'hunt'; this.target = rival; this.thinkT = 0;
+        if (!this.fightLogged) { this.fightLogged = true; g.log(`${this.name} the ${this.sp.name} is fighting ${rival.name} the ${rival.sp.name}! Separate them.`, 'bad', this, true); g.soundAt('roar', this.x, this.y, 1); }
+        return;
+      }
+    }
+    // Hungry: go to feeder
+    if (this.hunger > 50 && reg) {
+      const feeders = reg.feeders[this.sp.diet];
+      if (feeders.length) {
+        const f = pick(feeders);
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => {
+          const b = w.buildingAt(x, y); return b && b.id === f.id;
+        }, 3000);
+        if (p && p.length) {
+          p.pop(); // stop adjacent to the feeder
+          this.path = p; this.pi = 0; this.state = 'tofeed'; this.feederTarget = f;
+          if (!p.length) this.arrive();
+          return;
+        }
+      }
+      if (this.sp.diet === 'herb' && reg.forest > 0) {
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => w.terrain[w.idx(x, y)] === T_FOREST && w.dinoPass(x, y), 2500);
+        if (p) { this.path = p; this.pi = 0; this.state = 'graze'; if (!p.length) this.arrive(); return; }
+      }
+    }
+    // The Indominus schemes: every few days she picks a spot along her wall and works at it, calm or not
+    if (this.sp.camo && !this.loose && this.growth >= 1) {
+      this.schemeT = (this.schemeT === undefined ? randf(2, 4) * 24 : this.schemeT) - (this.decideClock ? (g.time - this.decideClock) : 0);
+      this.decideClock = g.time;
+      if (this.schemeT <= 0 && this.deterT <= 0 && this.planFenceAttack(true, true)) {
+        this.schemeT = randf(2, 4) * 24; this.scheming = true;
+        g.log(`${this.name} the ${this.sp.name} is clawing at her wall... Engineers need to get there before she's through.`, 'bad', this, true);
+        return;
+      }
+    }
+    // The hum stops: a predator notices the moment its fence goes quiet
+    if (!this.loose && this.deterT <= 0 && this.sp.diet === 'carn' && (w.power.outage > 0 || w.power.ratio < 1) && chance(0.35)) {
+      if (this.planFenceAttack(true)) {
+        if (!g.quietFenceLogged) { g.quietFenceLogged = true; g.log(`${this.name} the ${this.sp.name} has noticed the fences are dead...`, 'bad', this, true); }
+        return;
+      }
+    }
+    // Fence testing
+    const clever = this.sp.clever && chance(0.25);
+    if (!this.loose && this.deterT <= 0 && (this.stress > 62 || clever)) {
+      if (this.planFenceAttack(clever)) return;
+    }
+    // Loose: rampage on buildings if stressed and big
+    if (this.loose && this.sp.strength >= 5 && this.stress > 60 && chance(0.4)) {
+      // the park, not its own feeding trough
+      const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => { const b = w.buildingAt(x, y); return !!b && !BUILDINGS[b.type].feeds; }, 900);
+      if (p && p.length) { p.pop(); this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = true; return; }
+    }
+    // Clever girls: hungry loose raptors work at shelters they can smell people in
+    if (this.loose && this.sp.clever && this.hunger > 45 && chance(0.35)) {
+      const full = (b) => b && BUILDINGS[b.type].shelter && b.inside > 0;
+      const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => full(w.buildingAt(x, y)), 1400);
+      if (p && p.length) {
+        p.pop(); this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = true;
+        if (!this.shelterLogged) { this.shelterLogged = true; g.log(`${this.name} the ${this.sp.name} is testing the doors of a shelter full of guests!`, 'bad', this, true); }
+        return;
+      }
+    }
+    // Predators on the loose follow the noise: head for the nearest crowd within earshot
+    if (this.loose && this.sp.diet === 'carn' && this.sp.danger >= 4 && this.hunger > 25 && chance(0.6)) {
+      let best = null, bd = 28 * 28;
+      for (const gu of g.guests) { if (gu.hidden) continue; const d = dist2(this.x, this.y, gu.x, gu.y); if (d < bd) { bd = d; best = gu; } }
+      if (best) {
+        const gx = best.cx, gy = best.cy;
+        // stop a few tiles short: from there findPrey takes over and the guests get a chance to run
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => dist2(x, y, gx, gy) < 25, 2500);
+        if (p && p.length) { this.path = p.slice(0, 14); this.pi = 0; this.state = 'walk'; return; }
+      }
+    }
+    // Herbivores mostly sleep through the night
+    if (g.isNight && this.sp.diet === 'herb' && !this.loose && this.hunger < 70 && chance(0.8)) { this.state = 'idle'; this.stateT = randf(6, 12); this.sleeping = true; return; }
+    this.sleeping = false;
+    // Wander
+    if (chance(0.7)) {
+      const rad = this.loose ? 10 : 7;
+      for (let tries = 0; tries < 6; tries++) {
+        const tx = this.tx + randi(-rad, rad), ty = this.ty + randi(-rad, rad);
+        if (!w.dinoPass(tx, ty)) continue;
+        if (!this.loose && w.region[w.idx(tx, ty)] !== w.region[w.idx(this.tx, this.ty)]) continue;
+        // calm grazers stay near home even if a fence is down
+        if (this.loose && this.sp.danger < 4 && this.stress < 55 && (dist2(tx, ty, this.home.x, this.home.y) > 36 || w.path[w.idx(tx, ty)])) continue;
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => x === tx && y === ty, 1500);
+        if (p && p.length) { this.path = p; this.pi = 0; this.state = 'walk'; return; }
+      }
+    }
+    // a loose raptor doesn't stand around waiting to be darted
+    this.state = 'idle'; this.stateT = this.loose && this.sp.clever ? randf(0.3, 0.9) : randf(1.5, 4.5);
+  }
+
+  arrive() {
+    const g = this.game, w = g.world;
+    this.path = null;
+    if (this.state === 'tofeed') {
+      const f = this.feederTarget;
+      if (f && w.buildings.has(f.id)) {
+        const cost = (this.sp.diet === 'carn' ? 400 : 150) * (g.research.has('feeders') ? 0.5 : 1) * (this.sp.diet === 'carn' ? g.mod('feedMul') : 1);
+        g.spend(cost, 'food');
+        this.hunger = Math.max(0, this.hunger - 80);
+        this.state = 'eat'; this.stateT = 3;
+        if (this.sp.diet === 'carn') { g.burst(this.x + this.facing * 0.5, this.y, '#c83020', 8); g.soundAt('chomp', this.x, this.y, 1); }
+        else g.burst(this.x + this.facing * 0.5, this.y, '#e8c860', 6);
+        return;
+      }
+    } else if (this.state === 'graze') {
+      this.hunger = Math.max(0, this.hunger - 30);
+      this.state = 'eat'; this.stateT = 4;
+      return;
+    } else if (this.state === 'tofence') {
+      this.state = 'attack'; this.attackCD = 0.4; this.attackT = this.scheming ? randf(28, 40) : randf(8, 16); this.schemeBout = this.scheming; this.scheming = false;
+      return;
+    }
+    this.state = 'idle'; this.stateT = randf(1, 4);
+  }
+
+  planFenceAttack(clever, force) {
+    const w = this.game.world;
+    const isFence = (x, y) => {
+      if (!w.inb(x, y)) return false;
+      const f = w.fence[w.idx(x, y)];
+      return isSolidFence(f);
+    };
+    let goalFence = null;
+    if (clever) {
+      // Raptors look for the weakest point: unpowered or damaged fence along their paddock
+      const reg = w.regionAt(this.tx, this.ty);
+      if (reg) {
+        let best = null, bestScore = -Infinity;
+        for (let k = 0; k < 60; k++) {
+          const t = reg.tiles[Math.floor(rand() * reg.tiles.length)];
+          const x = t % w.W, y = (t / w.W) | 0;
+          for (const [dx, dy] of DIRS4) {
+            if (!isFence(x + dx, y + dy)) continue;
+            const j = w.idx(x + dx, y + dy);
+            const score = (w.fence[j] === F_ELECTRIC && !w.fencePowered[j] ? 100 : 0) + (100 - w.fenceHp[j] / FENCE_DEF[w.fence[j]].hp * 100) + (w.fence[j] === F_WALL ? -50 : 0);
+            if (score > bestScore) { bestScore = score; best = [x + dx, y + dy]; }
+          }
+        }
+        if (best && (bestScore > 20 || force)) goalFence = best;
+        else if (!(this.stress > 62)) return false;
+      }
+    }
+    const p = w.bfs(this.tx, this.ty, w.dinoPass, goalFence
+      ? (x, y) => x === goalFence[0] && y === goalFence[1]
+      : (x, y) => isFence(x, y), 2500);
+    if (!p || !p.length) return false;
+    p.pop();
+    this.path = p; this.pi = 0; this.state = 'tofence'; this.attackBuilding = false;
+    if (!p.length) this.arrive();
+    return true;
+  }
+
+  updateFenceAttack(dt) {
+    const g = this.game, w = g.world;
+    this.attackT -= dt;
+    if (this.attackT <= 0 || this.sedatedT > 0) { this.state = 'idle'; this.stateT = 2; this.attackBuilding = false; this.schemeBout = false; return; }
+    if (this.attackCD > 0) return;
+    this.attackCD = 1.1 + rand() * 0.5;
+    // find adjacent target
+    let tgt = null;
+    for (const [dx, dy] of DIRS4) {
+      const x = this.tx + dx, y = this.ty + dy;
+      if (!w.inb(x, y)) continue;
+      const j = w.idx(x, y);
+      if (!this.attackBuilding && (isSolidFence(w.fence[j]))) { tgt = { x, y, j, fence: true }; break; }
+      if (this.attackBuilding && w.bld[j]) { tgt = { x, y, j, b: w.buildings.get(w.bld[j]) }; break; }
+    }
+    if (!tgt) { this.state = 'idle'; this.stateT = 1; this.attackBuilding = false; return; }
+    this.facing = tgt.x + 0.5 > this.x ? 1 : -1;
+    this.lunge = 0.25;
+    const str = this.str;
+    if (tgt.fence) {
+      const type = w.fence[tgt.j];
+      let dmg;
+      if (type === F_ELECTRIC && w.fencePowered[tgt.j]) {
+        // ZAP
+        const brute = str >= (g.research.has('fence3') ? 11 : 8) && (this.stress > 85 || this.schemeBout);
+        dmg = brute ? str * 0.8 : str * 0.25;
+        this.flash = 0.25;
+        this.hp -= 3;
+        g.sparks(tgt.x + 0.5, tgt.y + 0.5);
+        g.soundAt('zap', tgt.x, tgt.y, 1);
+        if (!brute) {
+          this.deterT = randf(20, 40) * (this.sp.clever ? 0.6 : 1) * (g.research.has('fence3') ? 1.6 : 1);
+          this.stress = Math.min(100, this.stress + 4);
+          this.state = 'idle'; this.stateT = 2;
+        }
+      } else if (type === F_WALL || type === F_GATE) {
+        dmg = str * 1.4;
+        g.burst(tgt.x + 0.5, tgt.y + 0.5, '#9a9a90', 4);
+        g.soundAt('thud', tgt.x, tgt.y, 0.6);
+      } else {
+        dmg = str * 4.5;
+        g.burst(tgt.x + 0.5, tgt.y + 0.5, '#6a6a6a', 4);
+        g.soundAt('thud', tgt.x, tgt.y, 0.6);
+      }
+      g.damageFence(tgt.x, tgt.y, dmg, this);
+    } else if (tgt.b) {
+      g.damageBuilding(tgt.b, str * 3, this);
+      g.burst(tgt.x + 0.5, tgt.y + 0.5, '#8a6a4a', 5);
+      g.soundAt('thud', tgt.x, tgt.y, 0.7);
+    }
+    g.shake = Math.max(g.shake, str >= 8 ? 2 : 0.5);
+  }
+
+  findPrey(range) {
+    const g = this.game;
+    let best = null, bd = range * range;
+    if (this.loose) {
+      // the nearest person it can actually get to: a guest on the far side of an intact fence is no prey
+      const w = g.world, at = new Map();
+      for (const h of g.humans()) {
+        if (h.hidden || h.dead || dist2(this.x, this.y, h.x, h.y) >= bd) continue;
+        at.set(w.idx(Math.floor(h.x), Math.floor(h.y)), h);
+      }
+      if (at.size) {
+        const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => at.has(w.idx(x, y)), 2500);
+        if (p && p.length) { const [x, y] = p[p.length - 1]; best = at.get(w.idx(x, y)); bd = dist2(this.x, this.y, best.x, best.y); }
+      }
+    }
+    const angry = !this.loose && this.sp.size >= 3 && this.stress > 75;
+    if ((this.loose || angry) && this.sp.size >= 2) {
+      for (const j of g.jeeps) {
+        if (j.wrecked || !j.riders.length) continue;
+        if (angry && g.world.region[g.world.idx(j.tx, j.ty)] !== g.world.region[g.world.idx(this.tx, this.ty)]) continue;
+        const d = dist2(this.x, this.y, j.x, j.y);
+        if (d < bd) { bd = d; best = j; }
+      }
+    }
+    // Gyrospheres rolling through a carnivore's paddock look a lot like snacks in a jar
+    if (this.sp.diet === 'carn' && this.sp.danger >= 4 && (this.loose || this.hunger > 45 || this.stress > 55)) {
+      const myR = g.world.region[g.world.idx(this.tx, this.ty)];
+      for (const gy of g.gyros || []) {
+        if (gy.wrecked || !gy.riders.length || gy.state === 'parked') continue;
+        if (!this.loose && g.world.region[g.world.idx(gy.tx, gy.ty)] !== myR) continue;
+        const d = dist2(this.x, this.y, gy.x, gy.y);
+        if (d < bd) { bd = d; best = gy; }
+      }
+    }
+    // Contained carnivores (or loose ones) can also eat herbivores in their region
+    const myReg = g.world.region[g.world.idx(this.tx, this.ty)];
+    for (const d of g.dinos) {
+      if (d === this || d.sp.diet !== 'herb' || d.carried || d.dead) continue;
+      if (d.sp.size > this.sp.size + (this.sp.size >= 3 ? 0 : 0)) continue;
+      if (!this.loose && g.world.region[g.world.idx(d.tx, d.ty)] !== myReg) continue;
+      const dd = dist2(this.x, this.y, d.x, d.y);
+      if (dd < bd) { bd = dd; best = d; }
+    }
+    return best;
+  }
+
+  updateHunt(dt) {
+    const g = this.game, w = g.world;
+    const t = this.target;
+    if (!t || t.dead || t.hidden || t.carried || t.wrecked) { this.state = 'idle'; this.stateT = 1; this.target = null; return; }
+    const d = dist(this.x, this.y, t.x, t.y);
+    if (d > 16) { this.state = 'idle'; this.stateT = 1; this.target = null; return; }
+    if (d < 0.75) {
+      // Strike!
+      if (this.attackCD > 0) return;
+      this.attackCD = 1.2;
+      this.lunge = 0.3;
+      if (t.kind === 'jeep' || t.kind === 'gyro') {
+        if (t.kind === 'jeep') g.jeepAttacked(t, this); else g.gyroAttacked(t, this);
+        this.kills++; this.hunger = Math.max(0, this.hunger - 60);
+        this.state = 'eat'; this.stateT = 6; this.target = null; return;
+      }
+      if (t.kind === 'dino') {
+        t.hp -= this.str * (t.sp.territorial ? 2.5 : 12);
+        t.flash = 0.2; t.stress = 100;
+        if (t.sp.territorial && t.state !== 'hunt') { t.state = 'hunt'; t.target = this; }
+        g.shake = Math.max(g.shake, t.sp.size >= 3 ? 2.5 : 0.5);
+        g.burst(t.x, t.y, '#c83020', 6);
+        g.soundAt('chomp', t.x, t.y, 1);
+        if (t.hp <= 0) { g.killDino(t, t.sp.territorial ? `killed in a fight with ${this.name} the ${this.sp.name}` : `eaten by ${this.name} the ${this.sp.name}`); this.hunger = 0; this.kills++; this.state = 'eat'; this.stateT = 6; this.target = null; }
+      } else {
+        g.humanKilled(t, this);
+        this.hunger = Math.max(0, this.hunger - 50); this.kills++;
+        this.state = 'eat'; this.stateT = this.sp.clever ? 1.5 : 5; this.target = null;
+      }
+      return;
+    }
+    // Chase: re-path periodically, otherwise move directly when close
+    const sp = this.speed * (this.loose ? 1.55 : 1.3);
+    if (d < 1.6) {
+      const dx = t.x - this.x, dy = t.y - this.y;
+      const nx = this.x + (dx / d) * sp * dt, ny = this.y + (dy / d) * sp * dt;
+      if (w.dinoPass(Math.floor(nx), Math.floor(ny))) { this.x = nx; this.y = ny; this.moving = true; this.facing = dx > 0 ? 1 : -1; }
+      return;
+    }
+    if (this.thinkT <= 0 || !this.path) {
+      this.thinkT = 0.8;
+      const ttx = Math.floor(t.x), tty = Math.floor(t.y);
+      const p = w.bfs(this.tx, this.ty, w.dinoPass, (x, y) => Math.abs(x - ttx) <= 0 && Math.abs(y - tty) <= 0, 2500);
+      if (!p) { this.state = 'idle'; this.stateT = 2; this.target = null; return; }
+      this.path = p; this.pi = 0;
+      this.allowGoalBlock = true;
+    }
+    stepAlong(this, dt, sp, null, w);
+  }
+
+  sedate() {
+    this.sedatedT = 70; this.state = 'sedated'; this.path = null; this.target = null;
+    this.orderSedate = false; // order carried out (a relocation still follows via the relocate flag)
+    this.game.log(`${this.name} the ${this.sp.name} has been sedated.`, 'good', this);
+  }
+}
