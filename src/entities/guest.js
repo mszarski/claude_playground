@@ -158,7 +158,11 @@ class Guest {
     else if (this.shopUrge > 70) type = 'shop';
     // feeding time draws a crowd: in the hour before the noon and evening shows, people head for the stands
     else if (((g.hour >= 11 && g.hour < 12) || (g.hour >= 17 && g.hour < 18)) && g.hasBuilding('feedshow') && chance(0.5)) type = 'feedshow';
-    else if (chance(0.45)) type = pick(['tour', 'tour', 'gyro', 'gyro', 'lagoon', 'lagoon', 'arena', 'feedshow', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant']);
+    else if (chance(0.45)) {
+      // something to do: only among the attractions this park actually has
+      const opts = ['tour', 'tour', 'gyro', 'gyro', 'lagoon', 'lagoon', 'arena', 'feedshow', 'viewing', 'viewing', 'visitor', 'shop', 'restaurant'].filter((t) => g.hasBuilding(t));
+      if (opts.length) type = pick(opts);
+    }
     if (!type) return null;
     // a hotel only has so many rooms
     const cands = g.buildingsOfType(type).filter((b) => (b.powered || !BUILDINGS[b.type].power) && !(BUILDINGS[b.type].rooms && b.inside >= BUILDINGS[b.type].rooms));
