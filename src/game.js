@@ -1029,6 +1029,8 @@ class Game {
       if (vis.length && dark / vis.length > 0.3) issues.push([38, 'Guests are wandering dark paths tonight and hating it. Line the busy paths with Lamp Posts (Guests menu).', null]);
     }
     if (this.guests.length > 30 && !this.hasBuilding('restaurant')) issues.push([35, 'Hungry guests have nowhere to eat. Build a Restaurant.', null]);
+    else { const nr = this.buildingsOfType('restaurant').length, hungry = this.guests.filter((gu) => gu.hunger > 70).length;
+      if (this.guests.length > 100 * nr && hungry > this.guests.length * 0.25) issues.push([42, `${this.guests.length} guests and only ${nr} restaurant${nr > 1 ? 's' : ''}: ${hungry} are going hungry and leaving unhappy. Aim for one per 80-100 guests, spread around the park.`, this.buildingsOfType('restaurant')[0]]); }
     if (this.guests.length > 60 && !this.hasBuilding('tour') && this.stars >= 1) issues.push([20, 'A Tour Station with a loop of Tour Track past the paddocks is the best crowd-pleaser.', null]);
     const crowded = this.guests.filter((gu) => gu.crowded);
     if (crowded.length > 25) issues.push([45, 'Paths are overcrowded and guests are unhappy. Use the Wide Path tool [I] on busy stretches, or add a second route.', crowded[0]]);
