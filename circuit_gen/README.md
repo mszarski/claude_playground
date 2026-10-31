@@ -126,22 +126,26 @@ have no model, so their behaviour is not simulated.
 
 ## Benchmark results (October 2026)
 
-19 boards in `benchmarks/boards.json`: 12 simple ones and 7 harder analog ones
+27 boards in `benchmarks/boards.json`: 12 simple ones, 7 harder analog ones
 (Sallen-Key filter, inverting and difference amplifiers, common-emitter stage,
-discrete current source, zener regulator, reverse-polarity protection). All
-runs use the `hf` backend.
+discrete current source, zener regulator, reverse-polarity protection), and 8
+added on October 31 (three-op-amp instrumentation amplifier, MFB band-pass,
+window comparator, two-stage 60 dB amplifier, XOR from NAND gates, current
+mirror, high-side P-MOSFET switch, three-LED bar graph). All runs use the
+`hf` backend.
 
 Every board has a reference design in `benchmarks/reference/` and two or three
-hidden tests that the reference passes, so every spec is achievable. The tests
-are also checked from the other side: nine plausible wrong designs (a
+or more hidden tests that the reference passes, so every spec is achievable.
+The tests are also checked from the other side: 18 plausible wrong designs (a
 reference with one mistake, such as an LED without its resistor, a missing
-mic bias resistor or an undersized coupling capacitor) must each fail them
+mic bias resistor, an undersized coupling capacitor, comparator inputs
+swapped or a MOSFET fitted backwards) must each fail them
 (`tests/test_benchmark.py`).
 
 Results before October 17 used a weaker version: 9 boards had references and
 most boards had a single hidden test, so they may overstate pass rates.
 
-Qwen3.8-27B on the current benchmark, spec-first (the default; the same model
+Qwen3.8-27B on the first 19 boards, spec-first (the default; the same model
 writes the spec), 2 samples per board: **32/38 (84%)**, 18/19 boards solved at
 least once, 14/19 every time, **0 false accepts**. The six failures: three ran
 out of the 64k-token reply budget while designing (both Sallen-Key samples
@@ -195,10 +199,12 @@ simulated across component tolerances) and exported as chat-format JSONL:
 `sft_direct.jsonl` (description -> circuit code) and `sft_agentic.jsonl`
 (a tool-using design session). Benchmark boards are never used.
 
-- **Programmatic, no LLM** (`procgen.py`): 12 parametric families (LED
+- **Programmatic, no LLM** (`procgen.py`): 20 parametric families (LED
   resistor, divider, RC filters, linear regulators, inverting and
   non-inverting amps, Sallen-Key, 555 astable, zener regulator, MOSFET and
-  BJT switches, buffered reference). Values come from the design equations
+  BJT switches, buffered reference, and since October 31 instrumentation
+  amp, MFB band-pass, window comparator, two-stage amp, NAND-gate logic,
+  current mirror, high-side switch, LED bar graph). Values come from the design equations
   rounded to E-series; sessions are built from real tool calls. With
   `--repair-fraction`, some sessions start from a planted bug (one R or C off
   by ten) whose real check output is followed by a diagnosis and the fixed
@@ -208,6 +214,11 @@ simulated across component tolerances) and exported as chat-format JSONL:
   ```bash
   python -m circuit_gen procgen -n 1500 -o runs/procgen --repair-fraction 0.5
   ```
+
+  `generate()` skips any board whose brief matches a benchmark board (up to
+  the varied opener). Before October 31 it did not: 3 of the 1,491 sessions
+  above duplicated `rc_lowpass` (twice) and `zener_regulator`, and were in the
+  data the 8B was fine-tuned on.
 
 - **LLM-designed** (`datagen.py`): `datagen` writes new descriptions (167 in
   `benchmarks/train_boards.json`), `eval` designs them, and `export` keeps
@@ -258,7 +269,8 @@ against about 120 varied ones. Things to know before trying again:
   high-speed boards.
 - Simulation uses generic models, so it checks the circuit topology and
   values, not a specific part's datasheet limits (e.g. a MOSFET's real
-  threshold voltage).
+  threshold voltage). The op-amp model's output current is not drawn from its
+  supply pins, so `i(VCC)` misses current an op-amp delivers to a load.
 - Generated code runs in a subprocess on this machine. That is isolation of
   SKiDL state, not a security sandbox.
 

@@ -528,6 +528,436 @@ u[6] += u[7]
     return desc, code
 
 
+def _supplies_pm(rng):
+    v = rng.choice([12, 15])
+    return v, {"VPOS": v, "VNEG": -v}
+
+
+def instrumentation_amp(rng):
+    gain = rng.choice([10, 20, 30, 50, 200, 500])      # the benchmark board is gain 100
+    v, sup = _supplies_pm(rng)
+    diff_gain = 1 if gain <= 20 else 10
+    g1 = gain / diff_gain
+    rf = 10e3
+    rg = nearest(2 * rf / (g1 - 1))
+    actual = (1 + 2 * rf / rg) * diff_gain
+    rd = 10e3
+    rd2 = rd * diff_gain
+    desc = phrase(rng, f"Three-op-amp instrumentation amplifier with a differential gain of about "
+            f"{gain}, set by one gain resistor, with buffered high-impedance inputs and good "
+            f"common-mode rejection, on +/-{v} V supplies. Inputs, output and power on pin headers. "
+            f"Name the nets VPOS, VNEG, GND, IN_P, IN_N and OUT.")
+    code = f'''"""Instrumentation amplifier on +/-{v} V: gain = (1 + 2*{fmt(rf)}/{fmt(rg)}) * {fmt(rd2)}/{fmt(rd)} = {actual:.4g}.
+Input buffers for high impedance; 0.1% resistors in the difference stage for common-mode rejection."""
+vpos, vneg, gnd = Net("VPOS"), Net("VNEG"), Net("GND")
+inp, inn, out = Net("IN_P"), Net("IN_N"), Net("OUT")
+a1, a2, g1, g2, ni, inv = Net("A1"), Net("A2"), Net("G1"), Net("G2"), Net("NI"), Net("INV")
+vpos.drive = vneg.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(3)}
+j_in = {header(3)}
+j_out = {header(2)}
+j_pwr[1, 2, 3] += vpos, gnd, vneg
+j_in[1, 2, 3] += inp, inn, gnd
+j_out[1, 2] += out, gnd
+u1 = Part("Amplifier_Operational", "TL072", footprint="{SOIC8}")
+u2 = Part("Amplifier_Operational", "TL072", footprint="{SOIC8}")
+for u in (u1, u2):
+    u["V+"] += vpos
+    u["V-"] += vneg
+vpos & C("100n") & gnd
+vneg & C("100n") & gnd
+u1[3] += inp
+u1[2] += g1
+u1[1] += a1
+u1[5] += inn
+u1[6] += g2
+u1[7] += a2
+a1 & R("{fmt(rf)}", tolerance=0.01) & g1 & R("{fmt(rg)}", tolerance=0.01) & g2 & R("{fmt(rf)}", tolerance=0.01) & a2
+a2 & R("{fmt(rd)}", tolerance=0.001) & inv & R("{fmt(rd2)}", tolerance=0.001) & out
+a1 & R("{fmt(rd)}", tolerance=0.001) & ni & R("{fmt(rd2)}", tolerance=0.001) & gnd
+u2[2] += inv
+u2[3] += ni
+u2[1] += out
+u2[5] += gnd        # unused section as a follower at GND
+u2[6] += u2[7]
+{req("gain(OUT,IN_P)", actual * 0.88, actual * 1.12, f"differential gain ~{gain}", sources={**sup, "IN_P": "ac", "IN_N": 0}, analysis="ac", freq=100.0)}
+{req("gain(OUT,IN_P)", 0, max(0.05, actual * 0.002), "common-mode rejection", sources={**sup, "IN_P": "ac", "IN_N": "ac"}, analysis="ac", freq=100.0)}
+{req("i(IN_P)", 0, 1e-6, "high input impedance", sources={**sup, "IN_P": 0.1, "IN_N": 0.1})}
+'''
+    return desc, code
+
+
+def mfb_bandpass(rng):
+    while True:
+        f0 = rng.choice([200, 300, 500, 700, 1500, 2000, 3000, 5000])   # benchmark: 1 kHz
+        q = rng.choice([1, 1.5, 2, 3])
+        h0 = rng.choice([1, 2])
+        if 2 * q * q > h0:
+            break
+    v, sup = _supplies_pm(rng)
+    w = 2 * math.pi * f0
+    c = nearest(2 * q / (w * 47e3), E6)          # R3 near 47k
+    r1 = nearest(q / (h0 * w * c))
+    r2 = nearest(q / ((2 * q * q - h0) * w * c))
+    r3 = nearest(2 * q / (w * c))
+    desc = phrase(rng, f"Multiple-feedback active band-pass filter centred at {human(f0, 'Hz')} with a Q "
+            f"of about {q:g} and a gain of about {h0} at the centre frequency, using an op-amp on "
+            f"+/-{v} V supplies. Input, output and power on pin headers. Name the nets VPOS, VNEG, "
+            f"GND, IN and OUT.")
+    off = lambda f: h0 / math.sqrt(1 + q * q * (f / f0 - f0 / f) ** 2)
+    code = f'''"""MFB band-pass: f0 = {human(f0, 'Hz')}, Q = {q:g}, centre gain {h0}, C = {fmt(c)}:
+R1 = Q/(H0 w C) -> {fmt(r1)}, R2 = Q/((2Q^2 - H0) w C) -> {fmt(r2)}, R3 = 2Q/(w C) -> {fmt(r3)}."""
+vpos, vneg, gnd, inp, out = Net("VPOS"), Net("VNEG"), Net("GND"), Net("IN"), Net("OUT")
+x, inv = Net("X"), Net("INV")
+vpos.drive = vneg.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(3)}
+j_in = {header(2)}
+j_out = {header(2)}
+j_pwr[1, 2, 3] += vpos, gnd, vneg
+j_in[1, 2] += inp, gnd
+j_out[1, 2] += out, gnd
+u = Part("Amplifier_Operational", "TL072", footprint="{SOIC8}")
+u["V+"] += vpos
+u["V-"] += vneg
+vpos & C("100n") & gnd
+vneg & C("100n") & gnd
+inp & R("{fmt(r1)}", tolerance=0.01) & x
+x & R("{fmt(r2)}", tolerance=0.01) & gnd
+x & C("{fmt(c)}", tolerance=0.05) & out
+x & C("{fmt(c)}", tolerance=0.05) & inv
+inv & R("{fmt(r3)}", tolerance=0.01) & out
+u[2] += inv
+u[3] += gnd
+u[1] += out
+u[5] += gnd         # unused section as a follower at GND
+u[6] += u[7]
+{req("gain(OUT,IN)", h0 * 0.75, h0 * 1.25, f"gain ~{h0} at {human(f0, 'Hz')}", sources={**sup, "IN": "ac"}, analysis="ac", freq=float(f0))}
+{req("gain(OUT,IN)", 0, off(f0 / 5) * 1.6 + 0.02, f"rejects {human(f0 / 5, 'Hz')}", sources={**sup, "IN": "ac"}, analysis="ac", freq=float(f0 / 5))}
+{req("gain(OUT,IN)", 0, off(f0 * 5) * 1.6 + 0.02, f"rejects {human(f0 * 5, 'Hz')}", sources={**sup, "IN": "ac"}, analysis="ac", freq=float(f0 * 5))}
+'''
+    return desc, code
+
+
+def window_comparator(rng):
+    while True:
+        vcc = rng.choice([5, 9, 12])
+        lo = rng.choice([0.5, 1, 1.5, 2, 2.5, 3, 4]) * (vcc / 5)
+        hi = lo + rng.choice([0.5, 1, 1.5, 2]) * (vcc / 5)
+        if hi < vcc - 1 and (vcc, lo, hi) != (5, 2, 3):    # 2-3 V on 5 V is the benchmark
+            break
+    rtot = 50e3
+    rb = nearest(rtot * lo / vcc)
+    rm = nearest(rtot * (hi - lo) / vcc)
+    rt = nearest(rtot * (vcc - hi) / vcc)
+    s = rb + rm + rt
+    alo, ahi = vcc * rb / s, vcc * (rb + rm) / s
+    margin = min(0.5, (ahi - alo) / 4)
+    inside, below, above = (alo + ahi) / 2, alo - margin, ahi + margin
+    desc = phrase(rng, f"Window comparator on a {vcc:g} V supply: the output OUT is high while the "
+            f"input IN is between {lo:.3g} V and {hi:.3g} V and low otherwise. Use a dual op-amp as two "
+            f"comparators with thresholds from a resistor divider. Name the nets VCC, GND, IN and OUT.")
+    code = f'''"""Window comparator on {vcc:g} V: ladder {fmt(rt)}/{fmt(rm)}/{fmt(rb)} sets {ahi:.3g} V and {alo:.3g} V.
+U1A is high while IN is below the upper threshold, U1B while it is above the lower one;
+diodes to each output pull OUT low unless both are high."""
+vcc, gnd, inp, out = Net("VCC"), Net("GND"), Net("IN"), Net("OUT")
+vh, vl, oa, ob = Net("VH"), Net("VL"), Net("OA"), Net("OB")
+vcc.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(2)}
+j_in = {header(2)}
+j_out = {header(2)}
+j_pwr[1, 2] += vcc, gnd
+j_in[1, 2] += inp, gnd
+j_out[1, 2] += out, gnd
+u = Part("Amplifier_Operational", "LM358", footprint="{SOIC8}")
+u["V+"] += vcc
+u["V-"] += gnd
+vcc & C("100n") & gnd
+vcc & R("{fmt(rt)}", tolerance=0.01) & vh & R("{fmt(rm)}", tolerance=0.01) & vl & R("{fmt(rb)}", tolerance=0.01) & gnd
+u[3] += vh
+u[2] += inp
+u[1] += oa
+u[5] += inp
+u[6] += vl
+u[7] += ob
+vcc & R("10k") & out
+d1 = Part("Diode", "1N4148W", footprint="Diode_SMD:D_SOD-123")
+d2 = Part("Diode", "1N4148W", footprint="Diode_SMD:D_SOD-123")
+d1["A"] += out
+d1["K"] += oa
+d2["A"] += out
+d2["K"] += ob
+{req("v(OUT)", vcc * 0.9, vcc + 0.1, f"high inside the window ({inside:.3g} V)", sources={"VCC": vcc, "IN": round(inside, 3)})}
+{req("v(OUT)", 0, 1, f"low below the window ({below:.3g} V)", sources={"VCC": vcc, "IN": round(below, 3)})}
+{req("v(OUT)", 0, 1, f"low above the window ({above:.3g} V)", sources={"VCC": vcc, "IN": round(above, 3)})}
+'''
+    return desc, code
+
+
+def two_stage_amp(rng):
+    total = rng.choice([100, 200, 300, 400, 600, 2000])      # benchmark: 1000
+    vcc = rng.choice([9, 12, 15])
+    stage = math.sqrt(total)
+    rg = 1e3
+    rf = nearest(rg * (stage - 1))
+    actual = (1 + rf / rg) ** 2
+    desc = phrase(rng, f"Two-stage audio amplifier with a total gain of about {total} from 100 Hz to "
+            f"10 kHz, from a single {vcc:g} V supply: two op-amp gain stages with a mid-supply "
+            f"reference, AC coupling at the input, between the stages and at the output, able to "
+            f"drive a 10k load. Name the nets VCC, GND, IN and OUT.")
+    tests = "\n".join(req("gain(OUT,IN)", actual * 0.7, actual * 1.3, f"gain ~{total} at {human(f, 'Hz')}",
+                          sources={"VCC": vcc, "IN": "ac"}, loads={"OUT": 10000}, analysis="ac",
+                          freq=float(f)) for f in (100, 1000, 10000))
+    code = f'''"""Two non-inverting stages of gain 1 + {fmt(rf)}/{fmt(rg)} = {1 + rf / rg:.3g} each ({actual:.4g} total)
+on {vcc:g} V, mid-supply reference, AC coupling at the input, between stages and at the output."""
+vcc, gnd, inp, out = Net("VCC"), Net("GND"), Net("IN"), Net("OUT")
+ref, n1, i1, f1, o1 = Net("REF"), Net("N1"), Net("I1"), Net("F1"), Net("O1")
+n2, i2, f2, o2 = Net("N2"), Net("I2"), Net("F2"), Net("O2")
+vcc.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(2)}
+j_in = {header(2)}
+j_out = {header(2)}
+j_pwr[1, 2] += vcc, gnd
+j_in[1, 2] += inp, gnd
+j_out[1, 2] += out, gnd
+u = Part("Amplifier_Operational", "TL072", footprint="{SOIC8}")
+u["V+"] += vcc
+u["V-"] += gnd
+vcc & C("100n") & gnd
+vcc & R("10k") & ref & R("10k") & gnd
+ref & C("10u") & gnd
+inp & C("1u") & n1 & R("100k") & ref
+u[3] += n1
+u[2] += i1
+u[1] += o1
+i1 & R("{fmt(rf)}", tolerance=0.01) & o1
+i1 & R("{fmt(rg)}", tolerance=0.01) & f1 & C("10u") & gnd
+o1 & C("1u") & n2 & R("100k") & ref
+u[5] += n2
+u[6] += i2
+u[7] += o2
+i2 & R("{fmt(rf)}", tolerance=0.01) & o2
+i2 & R("{fmt(rg)}", tolerance=0.01) & f2 & C("10u") & gnd
+o2 & C("10u") & out
+{tests}
+'''
+    return desc, code
+
+
+# Gate-level functions built from 74HC00 NANDs (XOR is a benchmark board).
+NAND_FUNCTIONS = {
+    "AND": (lambda a, b: a and b, ["N1 = A nand B", "OUT = N1 nand N1"],
+            [(1, 2, 3, "a", "b", "n1"), (4, 5, 6, "n1", "n1", "out")]),
+    "OR": (lambda a, b: a or b, ["N1 = A nand A", "N2 = B nand B", "OUT = N1 nand N2"],
+           [(1, 2, 3, "a", "a", "n1"), (4, 5, 6, "b", "b", "n2"), (9, 10, 8, "n1", "n2", "out")]),
+    "NOR": (lambda a, b: not (a or b), ["N1 = A nand A", "N2 = B nand B", "N3 = N1 nand N2",
+                                        "OUT = N3 nand N3"],
+            [(1, 2, 3, "a", "a", "n1"), (4, 5, 6, "b", "b", "n2"), (9, 10, 8, "n1", "n2", "n3"),
+             (12, 13, 11, "n3", "n3", "out")]),
+}
+
+
+def nand_logic(rng):
+    func = rng.choice(sorted(NAND_FUNCTIONS))
+    vcc = rng.choice([3.3, 5])
+    pull = rng.choice([4.7e3, 10e3, 47e3, 100e3])
+    truth, steps, gates = NAND_FUNCTIONS[func]
+    desc = phrase(rng, f"{func} function built only from the NAND gates of a 74HC00 on {vcc:g} V, with "
+            f"{fmt(pull)} pull-down resistors on the inputs A and B so they read low when unconnected, "
+            f"inputs and output on pin headers. Name the nets VCC, GND, A, B and OUT.")
+    wiring = "\n".join(f"u[{i1}] += {x}\nu[{i2}] += {y}\nu[{o}] += {z}" for i1, i2, o, x, y, z in gates)
+    used = {g[0] for g in gates}
+    spare = [(1, 2, 3), (4, 5, 6), (9, 10, 8), (12, 13, 11)]
+    unused = "\n".join(f"u[{i1}] += gnd\nu[{i2}] += gnd" for i1, i2, o in spare if i1 not in used)
+    tests = "\n".join(
+        req("v(OUT)", vcc * 0.9 if truth(a, b) else 0, vcc + 0.1 if truth(a, b) else vcc * 0.1,
+            f"A={int(a)} B={int(b)} -> {int(bool(truth(a, b)))}",
+            sources={"VCC": vcc, "A": vcc if a else 0, "B": vcc if b else 0})
+        for a in (False, True) for b in (False, True))
+    code = f'''"""{func} from 74HC00 NAND gates: {'; '.join(steps)}.
+{fmt(pull)} pull-downs keep unconnected inputs low; unused gate inputs are tied to GND."""
+vcc, gnd, a, b, out = Net("VCC"), Net("GND"), Net("A"), Net("B"), Net("OUT")
+n1, n2, n3 = Net("N1"), Net("N2"), Net("N3")
+vcc.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(2)}
+j_in = {header(3)}
+j_out = {header(2)}
+j_pwr[1, 2] += vcc, gnd
+j_in[1, 2, 3] += a, b, gnd
+j_out[1, 2] += out, gnd
+u = Part("74xx", "74HC00", footprint="Package_SO:SOIC-14_3.9x8.7mm_P1.27mm")
+u["VCC"] += vcc
+u["GND"] += gnd
+vcc & C("100n") & gnd
+a & R("{fmt(pull)}") & gnd
+b & R("{fmt(pull)}") & gnd
+{wiring}
+{unused}
+{tests}
+'''
+    return desc, code
+
+
+def current_mirror(rng):
+    while True:
+        vcc = rng.choice([5, 9, 12, 15, 24])
+        i = rng.choice([0.0002, 0.0005, 0.001, 0.002, 0.005])
+        if (vcc, i) != (12, 0.001):                       # the benchmark board
+            break
+    re_ = nearest(0.3 / i)                                # ~0.3 V of emitter degeneration
+    rref = nearest((vcc - 0.65) / i - re_)
+    actual = (vcc - 0.65) / (rref + re_)
+    vlo, vhi = 1.5, vcc - 1.5
+    desc = phrase(rng, f"NPN transistor current mirror that sinks about {human(i, 'A')} into OUT from a "
+            f"{vcc:g} V supply, set by a single resistor, staying within 15% for OUT voltages from "
+            f"{vlo:g} V to {vhi:g} V. Name the nets VCC, GND and OUT.")
+    code = f'''"""NPN mirror: Iref = (Vcc - Vbe) / (Rref + Re) = ({vcc:g} - 0.65) / ({fmt(rref)} + {fmt(re_)}) = {human(actual, 'A')};
+{fmt(re_)} emitter degeneration in both legs raises the output resistance."""
+vcc, gnd, out, ref, e1, e2 = Net("VCC"), Net("GND"), Net("OUT"), Net("REF"), Net("E1"), Net("E2")
+vcc.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(2)}
+j_out = {header(2)}
+j_pwr[1, 2] += vcc, gnd
+j_out[1, 2] += out, gnd
+q1 = Part("Transistor_BJT", "BC847", footprint="Package_TO_SOT_SMD:SOT-23")
+q2 = Part("Transistor_BJT", "BC847", footprint="Package_TO_SOT_SMD:SOT-23")
+vcc & R("{fmt(rref)}", tolerance=0.01) & ref
+q1["C"] += ref
+q1["B"] += ref
+q1["E"] += e1
+q2["C"] += out
+q2["B"] += ref
+q2["E"] += e2
+e1 & R("{fmt(re_)}", tolerance=0.01) & gnd
+e2 & R("{fmt(re_)}", tolerance=0.01) & gnd
+vcc & C("100n") & gnd
+{req("i(OUT)", i * 0.85, i * 1.15, f"~{human(i, 'A')} with OUT at {vlo:g} V", sources={"VCC": vcc, "OUT": vlo})}
+{req("i(OUT)", i * 0.85, i * 1.15, f"~{human(i, 'A')} with OUT at {vhi:g} V", sources={"VCC": vcc, "OUT": vhi})}
+'''
+    return desc, code
+
+
+def high_side_switch(rng):
+    vsup = rng.choice([5, 9, 15, 24])                     # benchmark: 12 V
+    vlogic = rng.choice([3.3, 5])
+    iload = rng.choice([0.1, 0.25, 0.5, 1.0])
+    rload = vsup / iload
+    vnet = f"V{vsup:g}"
+    # Gate held at Vsup by 10k; the NPN pulls it down through Rs, so |Vgs| = Vsup * 10k / (10k + Rs).
+    rs = 0 if vsup <= 9 else nearest(10e3 * (vsup / 8 - 1))
+    vgs = vsup if rs == 0 else vsup * 10e3 / (10e3 + rs)
+    pull_down = f'gate & R("{fmt(rs)}") & col' if rs else "gate += col"
+    through = f" through {fmt(rs)}" if rs else ""
+    desc = phrase(rng, f"High-side switch that lets a {vlogic:g} V logic input CTRL connect a {vsup:g} V "
+            f"supply to a {human(iload, 'A')} load through a P-channel MOSFET, driven by an NPN "
+            f"transistor, keeping the gate-source voltage within the MOSFET's +/-12 V rating, with the "
+            f"load off when CTRL is floating. The load connects between LOAD_POS and GND. Name the "
+            f"nets {vnet}, GND, CTRL and LOAD_POS.")
+    code = f'''"""High-side switch on {vsup:g} V: AO3401A P-MOSFET with its gate held at {vnet} by 10k; a BC847
+pulls the gate down{through} so |Vgs| = {vgs:.3g} V. 10k base resistor, 100k base pull-down."""
+vsup, gnd, ctrl, load = Net("{vnet}"), Net("GND"), Net("CTRL"), Net("LOAD_POS")
+gate, col, base = Net("GATE"), Net("COL"), Net("BASE")
+vsup.drive = gnd.drive = POWER
+{PREAMBLE}
+j_pwr = {header(2)}
+j_load = {header(2)}
+j_ctrl = {header(2)}
+j_pwr[1, 2] += vsup, gnd
+j_load[1, 2] += load, gnd
+j_ctrl[1, 2] += ctrl, gnd
+q = Part("Transistor_FET", "AO3401A", footprint="Package_TO_SOT_SMD:SOT-23")
+q["S"] += vsup
+q["D"] += load
+q["G"] += gate
+vsup & R("10k") & gate
+{pull_down}
+n = Part("Transistor_BJT", "BC847", footprint="Package_TO_SOT_SMD:SOT-23")
+n["C"] += col
+n["E"] += gnd
+n["B"] += base
+ctrl & R("10k") & base & R("100k") & gnd
+vsup & C("10u") & gnd
+{req("v(LOAD_POS)", vsup * 0.95, vsup + 0.01, f"load on at CTRL={vlogic:g} V", sources={vnet: vsup, "CTRL": vlogic}, loads={"LOAD_POS": rload})}
+{req("v(LOAD_POS)", 0, 0.5, "load off at CTRL=0 V", sources={vnet: vsup, "CTRL": 0}, loads={"LOAD_POS": rload})}
+{req("v(LOAD_POS)", 0, 0.5, "load off with CTRL floating", sources={vnet: vsup}, loads={"LOAD_POS": rload})}
+'''
+    return desc, code
+
+
+def led_bar(rng):
+    while True:
+        vcc = rng.choice([5, 9, 12])
+        n = rng.choice([2, 3, 4])
+        step = rng.choice([0.5, 1, 1.5, 2]) * (vcc / 5)
+        first = rng.choice([0.5, 1, 1.5]) * (vcc / 5)
+        thr = [first + k * step for k in range(n)]
+        if thr[-1] < vcc - 1 and not (vcc == 5 and n == 3 and thr == [1, 2, 3]):   # benchmark
+            break
+    colour = rng.choice(["red", "green", "yellow"])
+    vf = LED_VF[colour]
+    iled = rng.choice([0.005, 0.01])
+    rled = nearest((vcc - vf) / iled)
+    # Ladder from VCC: R_top to the highest threshold, equal rungs between thresholds, R_bot to GND.
+    unit = 10e3
+    r_bot = nearest(unit * first / step)
+    r_top = nearest(unit * (vcc - thr[-1]) / step)
+    total = r_top + unit * (n - 1) + r_bot
+    actual = [vcc * (r_bot + k * unit) / total for k in range(n)]
+    names = [f"LED{k + 1}" for k in range(n)]
+    sections = [(3, 2, 1), (5, 6, 7), (10, 9, 8), (12, 13, 14)]
+    chain = ['vcc & R("{}", tolerance=0.01)'.format(fmt(r_top))]
+    chain += [f't{k} & R("{fmt(unit)}", tolerance=0.01)' for k in range(n, 1, -1)]
+    chain += ['t1 & R("{}", tolerance=0.01) & gnd'.format(fmt(r_bot))]
+    lines = [
+        'vcc, gnd, inp = Net("VCC"), Net("GND"), Net("IN")',
+        *(f't{k + 1} = Net("T{k + 1}")' for k in range(n)),
+        *(f'led{k + 1}_a = Net("{names[k]}")' for k in range(n)),
+        *(f'o{k + 1} = Net("O{k + 1}")' for k in range(n)),
+        "vcc.drive = gnd.drive = POWER",
+        PREAMBLE,
+        f"j_pwr = {header(2)}",
+        f"j_in = {header(2)}",
+        "j_pwr[1, 2] += vcc, gnd",
+        "j_in[1, 2] += inp, gnd",
+        'u = Part("Amplifier_Operational", "LM324", footprint="Package_SO:SOIC-14_3.9x8.7mm_P1.27mm")',
+        'u["V+"] += vcc',
+        'u["V-"] += gnd',
+        'vcc & C("100n") & gnd',
+        " & ".join(chain),
+    ]
+    for k in range(n):
+        plus, minus, o = sections[k]
+        lines += [f"u[{plus}] += inp", f"u[{minus}] += t{k + 1}", f"u[{o}] += o{k + 1}",
+                  f'led{k + 1} = Part("Device", "LED", value="{colour}", footprint="{LED_FP}")',
+                  f'o{k + 1} & R("{fmt(rled)}") & led{k + 1}_a',
+                  f'led{k + 1}_a += led{k + 1}["A"]', f'led{k + 1}["K"] += gnd']
+    for k in range(n, 4):
+        plus, minus, o = sections[k]
+        lines += [f"u[{plus}] += gnd        # unused section as a follower of GND",
+                  f"u[{minus}] += u[{o}]"]
+    for k in range(n):
+        gap = min(0.4, step / 3)
+        lines.append(req(f"v({names[k]})", vf - 0.4, vf + 0.5, f"{names[k]} lit at {actual[k] + gap:.3g} V",
+                         sources={"VCC": vcc, "IN": round(actual[k] + gap, 3)}))
+        lines.append(req(f"v({names[k]})", 0, 0.5, f"{names[k]} dark at {actual[k] - gap:.3g} V",
+                         sources={"VCC": vcc, "IN": round(actual[k] - gap, 3)}))
+    thr_text = ", ".join(f"{t:.3g} V" for t in thr)
+    desc = phrase(rng, f"{n}-LED bar-graph voltage indicator on {vcc:g} V: {colour} LEDs light one after "
+            f"another as the input IN rises past {thr_text}, using comparators from an LM324 quad "
+            f"op-amp, a resistor ladder for the thresholds, and a current-limiting resistor for each "
+            f"LED. Name the nets VCC, GND and IN, and the LED anode nets "
+            + ", ".join(f"{nm} ({t:.3g} V)" for nm, t in zip(names, thr)) + ".")
+    doc = (f'"""{n}-LED bar graph on {vcc:g} V: ladder sets {", ".join(f"{a:.3g} V" for a in actual)};\n'
+           f"LM324 sections compare IN with each threshold and drive a {colour} LED through "
+           f'{fmt(rled)} (~{human((vcc - vf) / rled, "A")})."""')
+    return desc, doc + "\n" + "\n".join(lines) + "\n"
+
+
 FAMILIES = {
     "led_resistor": led_resistor,
     "voltage_divider": voltage_divider,
@@ -541,7 +971,32 @@ FAMILIES = {
     "mosfet_switch": mosfet_switch,
     "bjt_led_switch": bjt_led_switch,
     "buffered_reference": buffered_reference,
+    "instrumentation_amp": instrumentation_amp,
+    "mfb_bandpass": mfb_bandpass,
+    "window_comparator": window_comparator,
+    "two_stage_amp": two_stage_amp,
+    "nand_logic": nand_logic,
+    "current_mirror": current_mirror,
+    "high_side_switch": high_side_switch,
+    "led_bar": led_bar,
 }
+
+
+def normalize(description):
+    """A description without its varied opener, for comparing briefs."""
+    d = description.strip()
+    for opener in sorted(OPENERS, key=len, reverse=True):
+        if opener and d.startswith(opener):
+            d = d[len(opener):]
+            break
+    return re.sub(r"\s+", " ", d).lower().rstrip(".")
+
+
+def _benchmark_briefs():
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent / "benchmarks" / "boards.json"
+    return {normalize(c["description"]) for c in json.loads(path.read_text())}
 
 
 def generate(n, seed=0, families=None, max_misses=50):
@@ -551,6 +1006,7 @@ def generate(n, seed=0, families=None, max_misses=50):
     small parameter space cannot stall the run.
     """
     rng = random.Random(seed)
+    held_out = _benchmark_briefs()   # never train on a benchmark board
     active = list(families or FAMILIES)
     misses = {f: 0 for f in active}
     boards, seen = [], set()
@@ -559,7 +1015,7 @@ def generate(n, seed=0, families=None, max_misses=50):
         family = active[turn % len(active)]
         turn += 1
         desc, code = FAMILIES[family](rng)
-        if desc in seen:
+        if desc in seen or normalize(desc) in held_out:
             misses[family] += 1
             if misses[family] >= max_misses:
                 active.remove(family)
@@ -696,7 +1152,7 @@ def _verify_one(args):
     return board, passed, feedback, circuit, repair
 
 
-def build_dataset(n, out_dir, seed=0, jobs=4, repair_fraction=0.0):
+def build_dataset(n, out_dir, seed=0, jobs=4, repair_fraction=0.0, families=None):
     """Generate n boards, verify them in parallel, export the ones that pass. Returns stats.
 
     A `repair_fraction` of the agentic sessions start from a planted bug
@@ -712,7 +1168,7 @@ def build_dataset(n, out_dir, seed=0, jobs=4, repair_fraction=0.0):
     out_dir = Path(out_dir)
     work = out_dir / "work"
     work.mkdir(parents=True, exist_ok=True)
-    boards = generate(n, seed=seed)
+    boards = generate(n, seed=seed, families=families)
     kept, failed = [], Counter()
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=jobs, mp_context=ctx) as pool:

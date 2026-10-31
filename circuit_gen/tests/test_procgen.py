@@ -51,3 +51,12 @@ def test_repair_session_shows_real_failure_then_fix(tmp_path):
     assert len(checks) == 2 and checks[1]["content"] == repair["diagnosis"]
     results = [m["content"] for m in session["messages"] if m["role"] == "tool"]
     assert results[-2].startswith("FAILED") and results[-1].startswith("PASSED")
+
+
+def test_never_reproduces_a_benchmark_board():
+    import json
+    from pathlib import Path
+    bench = {procgen.normalize(c["description"]) for c in json.loads(
+        (Path(procgen.__file__).parent / "benchmarks" / "boards.json").read_text())}
+    boards = procgen.generate(4000, seed=5)
+    assert not bench & {procgen.normalize(b["description"]) for b in boards}

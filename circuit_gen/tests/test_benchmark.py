@@ -58,6 +58,15 @@ MUTANTS = [
     ("inverting_amp", 'inp & C("10u") & cin', 'inp & C("100n") & cin'),   # input corner 160 Hz
     ("i2c_sensor_breakout", 'vcc & R("4.7k") & sda\n', ""),               # missing pull-up
     ("led_resistor", 'R("330")', 'R("100")'),                             # LED overdriven
+    ("instrumentation_amp", 'R("2.2k", tolerance=0.01)', 'R("22k", tolerance=0.01)'),  # gain 19
+    ("instrumentation_amp", 'ni & R("100k", tolerance=0.001)', 'ni & R("110k", tolerance=0.001)'),  # CMRR
+    ("mfb_bandpass", 'R("4.53k", tolerance=0.01)', 'R("45.3k", tolerance=0.01)'),  # centre moved
+    ("window_comparator", "u[5] += inp; u[6] += vl", "u[5] += vl; u[6] += inp"),  # inputs swapped
+    ("two_stage_audio_amp", "i1 & R(\"30k\") & o1", "i1 & R(\"3k\") & o1"),  # first stage gain 4
+    ("nand_xor", "u[13] += n3", "u[13] += n2"),                             # miswired last gate
+    ("bjt_current_mirror", 'R("11k", tolerance=0.01)', 'R("1.1k", tolerance=0.01)'),  # 10 mA
+    ("high_side_switch", 'q["S"] += v12; q["D"] += load', 'q["D"] += v12; q["S"] += load'),  # body diode
+    ("led_bar_3level", "(t1, t2, t3)", "(t3, t2, t1)"),                   # thresholds reversed
 ]
 
 

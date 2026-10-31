@@ -740,5 +740,411 @@
     ]
    }
   ]
+ },
+ {
+  "id": "instrumentation_amp",
+  "description": "Three-op-amp instrumentation amplifier with a differential gain of about 100, set by a single gain resistor, with buffered high-impedance inputs and good common-mode rejection, on +/-12 V supplies. Inputs, output and power on pin headers. Name the nets VPOS, VNEG, GND, IN_P, IN_N and OUT.",
+  "tests": [
+   {
+    "name": "differential gain ~100",
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": "ac",
+     "IN_N": 0
+    },
+    "measure": "gain(OUT,IN_P)",
+    "expect": [
+     90,
+     110
+    ]
+   },
+   {
+    "name": "common-mode gain < 0.05",
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": "ac",
+     "IN_N": "ac"
+    },
+    "measure": "gain(OUT,IN_P)",
+    "expect": [
+     0,
+     0.05
+    ]
+   },
+   {
+    "name": "input current < 1 uA",
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": 1,
+     "IN_N": 1
+    },
+    "measure": "i(IN_P)",
+    "expect": [
+     0,
+     1e-06
+    ]
+   }
+  ]
+ },
+ {
+  "id": "mfb_bandpass",
+  "description": "Multiple-feedback active band-pass filter centred at 1 kHz with a Q of about 2 and a gain of about 1 at the centre frequency, using an op-amp on +/-12 V supplies. Input, output and power on pin headers. Name the nets VPOS, VNEG, GND, IN and OUT.",
+  "tests": [
+   {
+    "name": "gain ~1 at 1 kHz",
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     0.8,
+     1.2
+    ]
+   },
+   {
+    "name": "rejects 200 Hz",
+    "analysis": "ac",
+    "freq": 200,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     0,
+     0.2
+    ]
+   },
+   {
+    "name": "rejects 5 kHz",
+    "analysis": "ac",
+    "freq": 5000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     0,
+     0.2
+    ]
+   }
+  ]
+ },
+ {
+  "id": "window_comparator",
+  "description": "Window comparator on a 5 V supply: the output OUT is high (above 4.5 V) while the input IN is between 2 V and 3 V and low (below 1 V) otherwise. Use a dual op-amp as two comparators with thresholds from a resistor divider. Name the nets VCC, GND, IN and OUT.",
+  "tests": [
+   {
+    "name": "high inside the window (2.5 V)",
+    "sources": {
+     "VCC": 5,
+     "IN": 2.5
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     4.5,
+     5.1
+    ]
+   },
+   {
+    "name": "low below the window (1.5 V)",
+    "sources": {
+     "VCC": 5,
+     "IN": 1.5
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     0,
+     1
+    ]
+   },
+   {
+    "name": "low above the window (3.5 V)",
+    "sources": {
+     "VCC": 5,
+     "IN": 3.5
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     0,
+     1
+    ]
+   }
+  ]
+ },
+ {
+  "id": "two_stage_audio_amp",
+  "description": "Two-stage audio amplifier with a total gain of about 1000 (60 dB) from 100 Hz to 10 kHz, from a single 9 V supply: two op-amp gain stages with a mid-supply reference, AC coupling at the input, between the stages and at the output, able to drive a 10k load. Name the nets VCC, GND, IN and OUT.",
+  "tests": [
+   {
+    "name": "gain ~1000 at 1 kHz into 10k",
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VCC": 9,
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     650,
+     1400
+    ],
+    "loads": {
+     "OUT": 10000
+    }
+   },
+   {
+    "name": "gain ~1000 at 100 Hz",
+    "analysis": "ac",
+    "freq": 100,
+    "sources": {
+     "VCC": 9,
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     650,
+     1400
+    ],
+    "loads": {
+     "OUT": 10000
+    }
+   },
+   {
+    "name": "gain ~1000 at 10 kHz",
+    "analysis": "ac",
+    "freq": 10000,
+    "sources": {
+     "VCC": 9,
+     "IN": "ac"
+    },
+    "measure": "gain(OUT,IN)",
+    "expect": [
+     650,
+     1400
+    ],
+    "loads": {
+     "OUT": 10000
+    }
+   }
+  ]
+ },
+ {
+  "id": "nand_xor",
+  "description": "Exclusive-OR built from the four NAND gates of a 74HC00 on 5 V, with 10k pull-down resistors on the inputs A and B so they read low when unconnected, inputs and output on pin headers. Name the nets VCC, GND, A, B and OUT.",
+  "tests": [
+   {
+    "name": "A=0 B=0 -> 0",
+    "sources": {
+     "VCC": 5,
+     "A": 0,
+     "B": 0
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     0,
+     0.5
+    ]
+   },
+   {
+    "name": "A=1 B=0 -> 1",
+    "sources": {
+     "VCC": 5,
+     "A": 5,
+     "B": 0
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     4.5,
+     5.1
+    ]
+   },
+   {
+    "name": "A=0 B=1 -> 1",
+    "sources": {
+     "VCC": 5,
+     "A": 0,
+     "B": 5
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     4.5,
+     5.1
+    ]
+   },
+   {
+    "name": "A=1 B=1 -> 0",
+    "sources": {
+     "VCC": 5,
+     "A": 5,
+     "B": 5
+    },
+    "measure": "v(OUT)",
+    "expect": [
+     0,
+     0.5
+    ]
+   }
+  ]
+ },
+ {
+  "id": "bjt_current_mirror",
+  "description": "NPN transistor current mirror that sinks about 1 mA into OUT from a 12 V supply, set by a single resistor, staying within 10% for OUT voltages from 2 V to 10 V. Name the nets VCC, GND and OUT.",
+  "tests": [
+   {
+    "name": "~1 mA with OUT at 2 V",
+    "sources": {
+     "VCC": 12,
+     "OUT": 2
+    },
+    "measure": "i(OUT)",
+    "expect": [
+     0.00085,
+     0.00115
+    ]
+   },
+   {
+    "name": "~1 mA with OUT at 10 V",
+    "sources": {
+     "VCC": 12,
+     "OUT": 10
+    },
+    "measure": "i(OUT)",
+    "expect": [
+     0.00085,
+     0.00115
+    ]
+   }
+  ]
+ },
+ {
+  "id": "high_side_switch",
+  "description": "High-side switch that lets a 3.3 V logic input CTRL connect a 12 V supply to a 1 A load through a P-channel MOSFET, driven by an NPN transistor, keeping the gate-source voltage within the MOSFET's +/-12 V rating, with the load off when CTRL is floating. The load connects between LOAD_POS and GND. Name the nets V12, GND, CTRL and LOAD_POS.",
+  "tests": [
+   {
+    "name": "load on at CTRL=3.3 V",
+    "sources": {
+     "V12": 12,
+     "CTRL": 3.3
+    },
+    "measure": "v(LOAD_POS)",
+    "expect": [
+     11.4,
+     12.01
+    ],
+    "loads": {
+     "LOAD_POS": 12
+    }
+   },
+   {
+    "name": "load off at CTRL=0 V",
+    "sources": {
+     "V12": 12,
+     "CTRL": 0
+    },
+    "measure": "v(LOAD_POS)",
+    "expect": [
+     0,
+     0.5
+    ],
+    "loads": {
+     "LOAD_POS": 12
+    }
+   },
+   {
+    "name": "load off with CTRL floating",
+    "sources": {
+     "V12": 12
+    },
+    "measure": "v(LOAD_POS)",
+    "expect": [
+     0,
+     0.5
+    ],
+    "loads": {
+     "LOAD_POS": 12
+    }
+   }
+  ]
+ },
+ {
+  "id": "led_bar_3level",
+  "description": "Three-LED bar-graph voltage indicator on 5 V: the LEDs light one after another as the input IN rises past 1 V, 2 V and 3 V, using comparators from an LM324 quad op-amp, a resistor ladder for the thresholds, and a current-limiting resistor for each LED. Name the nets VCC, GND and IN, and the LED anode nets LED1 (1 V), LED2 (2 V) and LED3 (3 V).",
+  "tests": [
+   {
+    "name": "all dark at 0.5 V",
+    "sources": {
+     "VCC": 5,
+     "IN": 0.5
+    },
+    "measure": "v(LED1)",
+    "expect": [
+     0,
+     0.5
+    ]
+   },
+   {
+    "name": "first LED lit at 1.5 V",
+    "sources": {
+     "VCC": 5,
+     "IN": 1.5
+    },
+    "measure": "v(LED1)",
+    "expect": [
+     1.5,
+     2.4
+    ]
+   },
+   {
+    "name": "second LED still dark at 1.5 V",
+    "sources": {
+     "VCC": 5,
+     "IN": 1.5
+    },
+    "measure": "v(LED2)",
+    "expect": [
+     0,
+     0.5
+    ]
+   },
+   {
+    "name": "second LED lit at 2.5 V",
+    "sources": {
+     "VCC": 5,
+     "IN": 2.5
+    },
+    "measure": "v(LED2)",
+    "expect": [
+     1.5,
+     2.4
+    ]
+   },
+   {
+    "name": "third LED lit at 3.5 V",
+    "sources": {
+     "VCC": 5,
+     "IN": 3.5
+    },
+    "measure": "v(LED3)",
+    "expect": [
+     1.5,
+     2.4
+    ]
+   }
+  ]
  }
 ]

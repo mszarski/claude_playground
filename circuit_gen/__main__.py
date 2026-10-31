@@ -87,7 +87,8 @@ def cmd_export(args):
 def cmd_procgen(args):
     from .procgen import build_dataset
     stats = build_dataset(args.n, args.out, seed=args.seed, jobs=args.jobs,
-                          repair_fraction=args.repair_fraction)
+                          repair_fraction=args.repair_fraction,
+                          families=args.families.split(",") if args.families else None)
     print(json.dumps(stats, indent=2))
     return 0
 
@@ -147,6 +148,8 @@ def main(argv=None):
     pg.add_argument("-o", "--out", required=True)
     pg.add_argument("--seed", type=int, default=0)
     pg.add_argument("--jobs", type=int, default=4)
+    pg.add_argument("--families", default=None,
+                    help="comma-separated families to generate (default: all)")
     pg.add_argument("--repair-fraction", type=float, default=0.0,
                     help="share of sessions that start from a planted bug and show the fix")
 
