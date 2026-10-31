@@ -119,8 +119,15 @@ static inline float render_voice(Voice *v, float dt) {
     v->t += dt;
     return s * env * v->vol;
 }
-void synth_init(void) { audio_init(RATE, 4); }
+void synth_init(void) {
+#ifndef DEBUG_NOAUDIO
+    audio_init(RATE, 4);
+#endif
+}
 void synth_update(void) {
+#ifdef DEBUG_NOAUDIO
+    return;
+#endif
     const float dt = 1.0f / RATE;
     while (audio_can_write()) {
         short *buf = audio_write_begin();
