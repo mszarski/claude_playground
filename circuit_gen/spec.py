@@ -57,7 +57,10 @@ different values.
 - A source fixes its net's voltage, so do not also require v() of that net, \
 and remember that a source overrides whatever the circuit would do there.
 - A DC (op) analysis shows one static state. For oscillators and blinkers, \
-require freq(NET) with analysis="tran", not high and low v() levels.
+require freq(NET) with analysis="tran", not high and low v() levels. For \
+switching regulators every requirement must be transient: avg() and ripple() \
+of the output and iavg() of the input, with duration=0.008; DC analysis \
+cannot show a switcher regulating.
 - Loads are resistances in ohms: a 10 mA load at 5 V is 500.
 
 Cover:

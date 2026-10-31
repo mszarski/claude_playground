@@ -270,3 +270,15 @@ def test_ground_sources_and_measures_are_harmless():
              {"sources": {"VCC": 5}, "measure": "v(GND)", "expect": [-0.01, 0.01]}]
     report = spice.simulate(circuit, tests)
     assert report.ok, report.summary()
+
+
+def test_switching_regulator_needs_transient_analysis():
+    from circuit_gen.spice import Netlist, _testbench
+    nl = Netlist()
+    nl.node_for("OUT")
+    nl.max_step = 1e-7                      # as set by a switching regulator
+    with pytest.raises(ValueError, match="switching regulator"):
+        _testbench(nl, {"measure": "v(OUT)", "sources": {}, "expect": [0, 1]})
+    lines, analysis, expr = _testbench(nl, {"measure": "avg(OUT)", "analysis": "tran",
+                                            "duration": 0.008, "expect": [0, 1]})
+    assert expr == "cg_m" and "1e-07" in analysis[0]

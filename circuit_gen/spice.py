@@ -443,6 +443,10 @@ def _testbench(nl, test):
         analysis += [f"meas tran cg_av avg v({n}) {window}", f"meas tran cg_mx max v({n}) {window}",
                      f"meas tran cg_mn min v({n}) {window}"]
         return lines, analysis, "(cg_av-cg_mn)/(cg_mx-cg_mn)"
+    if nl.max_step != float("inf"):
+        raise ValueError("this circuit has a switching regulator, which DC and AC analysis "
+                         "cannot show regulating: use analysis='tran' with avg(NET), "
+                         "ripple(NET) or iavg(NET) and duration=0.008")
     if kind == "v" and is_ground(a):
         expr = "0"                        # ground is the 0 V reference
     elif kind == "v":
