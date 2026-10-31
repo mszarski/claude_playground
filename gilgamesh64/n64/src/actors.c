@@ -444,6 +444,9 @@ static int hurt_player(int dmg, V3 src, bool unblockable) {
             return 2;   // blocked
         }
     }
+#ifdef DEBUG_GOD
+    debugf("[fight] player would take %d (invincible test build)\n", dmg); P.inv = 1.1f; return 1;
+#endif
     G.hp -= dmg; if (G.hp < 0) G.hp = 0;
     debugf("[fight] player hit for %d, hp=%d\n", dmg, G.hp);
     P.inv = 1.1f; P.state = P_HURT; P.t = 0; P.knock = v3(-dx / d * 9, 0, -dz / d * 9);

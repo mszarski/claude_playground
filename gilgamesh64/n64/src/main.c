@@ -185,7 +185,8 @@ static void camera_update(float dt, V3 *eye, V3 *look) {
         if (p.z < GATE_Z && desired.z > GATE_Z - 1.5f) desired.z = GATE_Z - 1.5f;
     }
     if (desired.x > -27 && desired.x < -13 && desired.z > 26 && desired.z < 38) desired.y = maxf(desired.y, 6);
-    if (boss_active() || (G.bossStarted && !G.bossDead)) {   // stay inside Humbaba's clearing
+    float pax = p.x - ARENA_X, paz = p.z - ARENA_Z;
+    if ((boss_active() || (G.bossStarted && !G.bossDead)) && sqrtf(pax * pax + paz * paz) < ARENA_R - 2.0f) {   // stay inside Humbaba's clearing
         float ax = desired.x - ARENA_X, az = desired.z - ARENA_Z, ad = sqrtf(ax * ax + az * az), lim = ARENA_R - 1.0f;
         if (ad > lim) { desired.x = ARENA_X + ax / ad * lim; desired.z = ARENA_Z + az / ad * lim; }
     }
