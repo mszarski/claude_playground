@@ -76,8 +76,8 @@ void on_seal_collected(int id) {
 }
 static float s_ringTimer = -1;
 void on_ring_cleared(void) { s_ringTimer = 0.5f; }
-static void show_ending(void) { G.state = ST_ENDING; sfx(SFX_WIN); synth_set_track(1); }
-void on_boss_defeated(void) { G.bossDead = true; ui_say(BOSS_END, 4, show_ending); }
+static void show_ending(void) { debugf("[fight] ENDING SCREEN\n"); G.state = ST_ENDING; sfx(SFX_WIN); synth_set_track(1); }
+void on_boss_defeated(void) { debugf("[fight] HUMBABA DEFEATED t=%.1f\n", G.playTime); G.bossDead = true; ui_say(BOSS_END, 4, show_ending); }
 void hud_dirty(void) {}
 
 const char *context_label(V3 p) {
@@ -137,7 +137,7 @@ void cutscene_gate(void) {
     sfx(SFX_DOOR);
     play_cut(s, 1, gate_done);
 }
-static void boss_intro_done(void) { ui_say(BOSS_INTRO, 3, boss_begin_fight); ui_area_card("Guardian of the Cedars", "HUMBABA"); }
+static void boss_intro_done(void) { debugf("[fight] boss fight begins\n"); ui_say(BOSS_INTRO, 3, boss_begin_fight); ui_area_card("Guardian of the Cedars", "HUMBABA"); }
 void cutscene_boss(void) {
     G.bossStarted = true;
     Shot s[2] = {{v3(6, 3, -40), v3(4, 2.5f, -46), v3(0, 4, -57), 2.2f, 0}, {v3(0, 2.2f, -49), v3(0, 2.6f, -50), v3(0, 5, -57), 2.0f, 2}};
@@ -162,7 +162,7 @@ static void camera_update(float dt, V3 *eye, V3 *look) {
     if (lock_target()) {
         float camH; bool isB; V3 tp = lock_target_pos(&camH, &isB);
         float dx = p.x - tp.x, dz = p.z - tp.z, d = sqrtf(dx * dx + dz * dz) + 1e-3f; dx /= d; dz /= d;
-        float dist = isB ? 8.5f : 6.2f;
+        float dist = isB ? 7.0f : 6.2f;
         desired = v3(p.x + dx * dist - dz * 1.4f, p.y + (isB ? 4.2f : 3), p.z + dz * dist + dx * 1.4f);
         float th = isB ? 3.2f : 1.0f;
         lk = v3(lerpf(head.x, tp.x, 0.4f), lerpf(head.y, tp.y + th, 0.4f), lerpf(head.z, tp.z, 0.4f));
@@ -185,6 +185,11 @@ static void camera_update(float dt, V3 *eye, V3 *look) {
         if (p.z < GATE_Z && desired.z > GATE_Z - 1.5f) desired.z = GATE_Z - 1.5f;
     }
     if (desired.x > -27 && desired.x < -13 && desired.z > 26 && desired.z < 38) desired.y = maxf(desired.y, 6);
+    if (boss_active() || (G.bossStarted && !G.bossDead)) {   // stay inside Humbaba's clearing
+        float ax = desired.x - ARENA_X, az = desired.z - ARENA_Z, ad = sqrtf(ax * ax + az * az), lim = ARENA_R - 1.0f;
+        if (ad > lim) { desired.x = ARENA_X + ax / ad * lim; desired.z = ARENA_Z + az / ad * lim; }
+    }
+    camera_push(&desired);
     float k = 1 - expf(-(lock_target() ? 5 : 8) * dt);
     s_camPos.x += (desired.x - s_camPos.x) * k; s_camPos.y += (desired.y - s_camPos.y) * k; s_camPos.z += (desired.z - s_camPos.z) * k;
     s_camPos.y = maxf(s_camPos.y, height_at(s_camPos.x, s_camPos.z) + 0.9f);
@@ -213,7 +218,7 @@ static void start_game(void) {
     ui_area_card("Tablet V", "THE STEPPE OF URUK");
     G.region = 0;
 }
-void game_over(void) { G.state = ST_GAMEOVER; }
+void game_over(void) { debugf("[fight] GAME OVER\n"); G.state = ST_GAMEOVER; }
 static void continue_game(void) {
     G.state = ST_PLAY; G.hp = G.maxHp;
     actors_continue();
@@ -373,6 +378,7 @@ int main(void) {
         rdpq_mode_zbuf(true, false);
         rdpq_mode_blender(RDPQ_BLENDER_MULTIPLY);
         actors_draw_shadows();
+        t3d_state_set_drawflags(T3D_FLAG_SHADED | T3D_FLAG_DEPTH);
         rdpq_mode_blender(RDPQ_BLENDER_ADDITIVE);
         actors_draw_additive();
         rdpq_mode_blender(0);

@@ -90,7 +90,8 @@ float height_at(float x, float z);
 void  world_build(void);
 void  world_draw(V3 cam, float camYaw, float fogFar);
 void  world_draw_sky(V3 cam);
-bool  resolve(V3 *pos, float r);   // push out of colliders, returns true if moved
+bool  resolve(V3 *pos, float r);
+void  camera_push(V3 *c);           // keep the camera out of trunks and canopies   // push out of colliders, returns true if moved
 void  world_open_doors(float k);   // 0 closed .. 1 open
 void  world_set_door_collider(bool on);
 void  world_update(float dt);

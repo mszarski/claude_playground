@@ -438,13 +438,14 @@ static int hurt_player(int dmg, V3 src, bool unblockable) {
     if (P.shield && !unblockable) {
         float dot = (dx * sinf(P.facing) + dz * cosf(P.facing)) / d;
         if (dot > 0.35f) {
-            sfx(SFX_BLOCK);
+            sfx(SFX_BLOCK); debugf("[fight] blocked\n");
             particles_burst(v3(P.pos.x + dx / d * 0.6f, P.pos.y, P.pos.z + dz / d * 0.6f), 6, PC_SPARK, 3, 2, 1.1f);
             P.vel = v3(-dx / d * 5, 0, -dz / d * 5);
             return 2;   // blocked
         }
     }
     G.hp -= dmg; if (G.hp < 0) G.hp = 0;
+    debugf("[fight] player hit for %d, hp=%d\n", dmg, G.hp);
     P.inv = 1.1f; P.state = P_HURT; P.t = 0; P.knock = v3(-dx / d * 9, 0, -dz / d * 9);
     sfx(SFX_HURT); G.shake = 0.25f; hud_dirty();
     particles_burst(P.pos, 6, PC_BLOOD, 3, 3, 1);
@@ -463,7 +464,8 @@ static void enemy_hit(Enemy *e, int dmg, float nx, float nz) {
 static void boss_hit(int dmg) {
     if (B.state == BS_DYING || B.state == BS_DEAD || !B.active) return;
     int mult = B.state == BS_STUNNED ? 2 : 1;
-    B.hp -= dmg * mult; B.flash = 0.18f; sfx(SFX_BOSSHIT); G.hitstop = 0.06f;
+    B.hp -= dmg * mult; B.flash = 0.18f;
+    debugf("[fight] boss hit %d x%d (state %d), boss hp=%d\n", dmg, mult, B.state, B.hp); sfx(SFX_BOSSHIT); G.hitstop = 0.06f;
     particles_burst(B.pos, 8, PC_LEAF, 4, 3, 2.5f);
     G.bossHpFrac = B.hp > 0 ? (float)B.hp / B.maxHp : 0;
     if (!B.phase2 && B.hp <= B.maxHp / 2) { B.phase2 = true; sfx(SFX_ROAR); G.shake = 0.6f; }
@@ -623,7 +625,7 @@ static void animate_player(float dt) {
 // ===================================================================== Enkidu
 static void enkidu_update(float dt) {
     float tx, tz;
-    if (G.bossStarted && !G.bossDead && B.active) { tx = 2.5f; tz = ARENA_Z + ARENA_R + 1.5f; }
+    if (G.bossStarted && !G.bossDead && B.active) { tx = 9.5f; tz = ARENA_Z + 13.5f; }
     else { float fx = sinf(P.facing), fz = cosf(P.facing); tx = P.pos.x - fx * 2.6f + fz * 1.3f; tz = P.pos.z - fz * 2.6f - fx * 1.3f; }
     float dx = tx - E.pos.x, dz = tz - E.pos.z, d = sqrtf(dx * dx + dz * dz) + 1e-3f;
     if (d > 24) { E.pos = v3(tx, 0, tz); resolve(&E.pos, 0.45f); }
@@ -760,6 +762,7 @@ static void boss_update(float dt) {
         B.facing = turn_toward(B.facing, toP, 2.5f * dt);
         if (B.t > (ph2 ? 0.55f : 1.0f)) {
             float r = frand(); B.t = 0;
+            debugf("[fight] boss picks attack\n");
             if (dist < 6.5f) B.state = r < 0.6f ? BS_SLAMW : r < 0.8f ? BS_WALK : BS_FIREW;
             else B.state = r < 0.4f ? BS_CHARGEW : r < 0.75f ? BS_FIREW : BS_WALK;
             if (B.state == BS_FIREW) sfx(SFX_FIRE);
@@ -813,7 +816,7 @@ static void boss_update(float dt) {
     float bx = B.pos.x - ARENA_X, bz = B.pos.z - ARENA_Z, bd = sqrtf(bx * bx + bz * bz), lim = ARENA_R - BOSS_RADIUS;
     if (bd > lim) {
         B.pos.x = ARENA_X + bx / bd * lim; B.pos.z = ARENA_Z + bz / bd * lim;
-        if (charging) { B.state = BS_STUNNED; B.t = 0; B.vel = v3(0, 0, 0); sfx(SFX_THUD); G.shake = 0.8f; particles_burst(B.pos, 14, PC_LEAF, 6, 6, 4); }
+        if (charging) { debugf("[fight] boss charged into a tree, stunned\n"); B.state = BS_STUNNED; B.t = 0; B.vel = v3(0, 0, 0); sfx(SFX_THUD); G.shake = 0.8f; particles_burst(B.pos, 14, PC_LEAF, 6, 6, 4); }
     }
     B.pos.y = height_at(B.pos.x, B.pos.z);
     if (P.state != P_DEAD && B.state != BS_DYING) {
@@ -863,7 +866,7 @@ static void projectiles_update(float dt) {
             if (r == 2) { f->reflected = true; float tx = B.pos.x - f->pos.x, tz = B.pos.z - f->pos.z, tl = sqrtf(tx * tx + tz * tz) + 1e-3f; f->vel = v3(tx / tl * 15, 0, tz / tl * 15); f->life = 3; sfx(SFX_REFLECT); }
             else if (r == 1) dead = true;
         } else if (f->reflected && B.active && dist2d(f->pos, B.pos) < BOSS_RADIUS + 0.6f) {
-            boss_hit(3); if (B.state != BS_DYING) { B.state = BS_STUNNED; B.t = 0.4f; }
+            debugf("[fight] reflected fireball hit boss\n"); boss_hit(3); if (B.state != BS_DYING) { B.state = BS_STUNNED; B.t = 0.4f; }
             dead = true;
         }
         V3 before = f->pos;

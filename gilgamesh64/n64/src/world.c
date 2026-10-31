@@ -26,13 +26,13 @@ float height_at(float x, float z) {
 }
 
 // ------------------------------------------------------------------ collision
-typedef struct { bool box; float x, z, r; float x0, x1, z0, z1; bool on; } Coll;
+typedef struct { bool box; float x, z, r; float x0, x1, z0, z1; bool on; float canopy; } Coll;
 #define MAX_COLL 360
 static Coll s_coll[MAX_COLL];
 static int s_ncoll;
 static int s_doorColl = -1;
-static void add_circle(float x, float z, float r) { if (s_ncoll < MAX_COLL) s_coll[s_ncoll++] = (Coll){false, x, z, r, 0, 0, 0, 0, true}; }
-static int add_box(float x0, float x1, float z0, float z1) { if (s_ncoll < MAX_COLL) s_coll[s_ncoll++] = (Coll){true, 0, 0, 0, x0, x1, z0, z1, true}; return s_ncoll - 1; }
+static void add_circle(float x, float z, float r) { if (s_ncoll < MAX_COLL) s_coll[s_ncoll++] = (Coll){false, x, z, r, 0, 0, 0, 0, true, 0}; }
+static int add_box(float x0, float x1, float z0, float z1) { if (s_ncoll < MAX_COLL) s_coll[s_ncoll++] = (Coll){true, 0, 0, 0, x0, x1, z0, z1, true, 0}; return s_ncoll - 1; }
 void world_set_door_collider(bool on) { if (s_doorColl >= 0) s_coll[s_doorColl].on = on; }
 
 extern void pots_resolve(V3 *pos, float r, bool *moved);
@@ -63,6 +63,18 @@ bool resolve(V3 *pos, float r) {
     pos->x = clampf(pos->x, BX0 + 0.5f, BX1 - 0.5f);
     pos->z = clampf(pos->z, BZ0 + 0.5f, BZ1 - 1.0f);
     return moved || ox != pos->x || oz != pos->z;
+}
+
+// Keep the camera out of tree trunks and, above trunk height, out of the cedar canopies.
+void camera_push(V3 *c) {
+    for (int i = 0; i < s_ncoll; i++) {
+        Coll *k = &s_coll[i];
+        if (k->box || !k->on) continue;
+        float r = k->r + 0.6f;
+        if (k->canopy > 0 && c->y > height_at(k->x, k->z) + 2.0f) r = k->canopy;
+        float dx = c->x - k->x, dz = c->z - k->z, q = dx * dx + dz * dz;
+        if (q < r * r) { float d = sqrtf(q); if (d < 1e-3f) { d = 1e-3f; dx = 1e-3f; } c->x = k->x + dx / d * r; c->z = k->z + dz / d * r; }
+    }
 }
 
 // ------------------------------------------------------------------ chunked static geometry
@@ -180,7 +192,7 @@ static void cedar(float x, float z, float s, bool collide) {
         mb_cyl(m, (srand01() - 0.5f) * 0.5f, 2.6f + i * 1.45f, (srand01() - 0.5f) * 0.5f, r * 0.9f, r, 0.6f, 6, tiers[(i + (int)(srand01() * 3)) % 3], true);
     }
     mb_cyl(m, 0, 2.6f + 3 * 1.45f + 0.3f, 0, 0, 0.9f, 1.3f, 5, tiers[0], false);
-    if (collide) add_circle(x, z, 0.55f * s);
+    if (collide) { add_circle(x, z, 0.55f * s); s_coll[s_ncoll - 1].canopy = 2.9f * s; }
 }
 static void rock(float x, float z, float s, bool collide) {
     MeshB *m = cb(x, z);
