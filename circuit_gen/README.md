@@ -145,6 +145,21 @@ swapped or a MOSFET fitted backwards) must each fail them
 Results before October 17 used a weaker version: 9 boards had references and
 most boards had a single hidden test, so they may overstate pass rates.
 
+**Current result.** Qwen3.8-27B, spec-first, all 27 boards, 2 samples each,
+after the reasoning-budget fixes (November 1): **51/54 (94%)**, 26/27 boards
+solved at least once, 25/27 every time, **0 false accepts**. No spec-writer
+turn hit the token cap (median 2.4k tokens, previously 35-41k); 44 of 572
+design turns did and were retried. Median sample time 48 s. Failures:
+`mfb_bandpass` twice (the model keeps re-deriving the MFB topology: out of
+turns, then out of tokens) and one `sallen_key_lowpass` out of turns.
+
+On November 1 the `ce_amplifier`, `inverting_amp` and `mic_preamp`
+descriptions were changed to state the band their hidden tests check
+(100 Hz-10 kHz, 300 Hz-3 kHz); they said only 1 kHz, so a design that met
+the description could fail. Earlier results used the old wording.
+
+Earlier runs, before those fixes:
+
 Qwen3.8-27B on the 8 boards added October 31, spec-first, 2 samples each:
 13/16 (81%), 7/8 boards solved at least once, 0 false accepts. Both
 `mfb_bandpass` samples failed when the spec writer ran out of its reply
@@ -195,7 +210,8 @@ back to the spec writer once.
 A false accept is a design the model declared finished that fails the hidden
 tests. Without a separate spec, the designer loosened or omitted the
 requirements it was failing. The remaining spec-first failures are the model
-running out of its 64k-token reply budget while reasoning.
+running out of its reply budget while reasoning (the provider caps replies at
+40,960 tokens); see the current result above for the fix.
 
 ## Training data
 
