@@ -10,6 +10,10 @@ Message Batches API (50% price, results within ~1 h). Two steps:
   python scripts/claude_baseline.py collect --out results/claude_baseline
 
 Score with scripts/cq_iou.py (same protocol for Claude's CadQuery and our models' DeepCAD programs).
+
+Rich / real parts (scripts/gen_rich_data.py, scripts/prep_real.py layout): `submit --rich data/rich/real --modes view4
+view1` uses a prompt that allows the full CadQuery feature set (fillets, chamfers, revolves, holes, shells, patterns);
+score the collected preds.pkl with scripts/rich_iou.py.
 """
 import argparse
 import base64
@@ -36,6 +40,12 @@ TASK = """Reconstruct this part as a CadQuery program. Requirements:
 - Centre the part at the origin and scale it so its longest bounding-box side is 200 units. Keep the axes as shown.
 - The program must start with `import cadquery as cq` and assign the final solid to a variable named `r`.
 Return only the program in a single ```python code block."""
+TASK_RICH = """Reconstruct this part as a CadQuery program. Requirements:
+- Use any CadQuery features the part needs: sketches and extrudes, revolves, holes (hole / cboreHole / cskHole),
+  fillets and chamfers, shells, patterns, boolean union / cut.
+- Centre the part at the origin. Keep the axes and orientation as shown; only proportions matter, not absolute size.
+- The program must start with `import cadquery as cq` and assign the final solid to a variable named `r`.
+Return only the program in a single ```python code block."""
 EXAMPLE = """Example of the expected style:
 ```python
 import cadquery as cq
@@ -44,23 +54,23 @@ r=w0.sketch().segment((-100,-60),(100,-60)).segment((100,60)).segment((-100,60))
 ```"""
 
 
-def grid_png(data, uid, mode):
+def grid_png(stem, mode):
     from PIL import Image
     from mm.vlm_cad import compose_views
     n = 4 if mode.startswith("view4") else 1
-    ims = [Image.open(os.path.join(data, "renders", f"{uid}_{k}.png")).convert("RGB") for k in range(n)]
+    ims = [Image.open(f"{stem}_{k}.png").convert("RGB") for k in range(n)]
     buf = io.BytesIO()
     compose_views(ims).save(buf, format="PNG")
     return base64.standard_b64encode(buf.getvalue()).decode()
 
 
-def request(data, uid, mode, prompt, effort):
+def request(stem, mode, prompt, effort, rich=False):
     content = [{"type": "image", "source": {"type": "base64", "media_type": "image/png",
-                                            "data": grid_png(data, uid, mode)}}]
+                                            "data": grid_png(stem, mode)}}]
     text = (VIEWS if mode.startswith("view4") else VIEW1) + "\n\n"
     if prompt:
         text += f"The designer's description of the part:\n{prompt}\n\n"
-    content.append({"type": "text", "text": text + TASK + "\n\n" + EXAMPLE})
+    content.append({"type": "text", "text": text + (TASK_RICH if rich else TASK + "\n\n" + EXAMPLE)})
     return {"model": MODEL, "max_tokens": 16000, "output_config": {"effort": effort},
             "messages": [{"role": "user", "content": content}]}
 
@@ -74,27 +84,40 @@ def submit(a):
     import anthropic
     from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
     from anthropic.types.messages.batch_create_params import Request
-    with open(a.uids_from, "rb") as f:
-        P = pickle.load(f)
-    uids, dup = P["uids"][: a.n], P["dup"][: a.n]
-    with open(os.path.join(a.data, "text_index.json")) as f:
-        text_index = json.load(f)
+    extra, text_index = {}, {}
+    if a.rich:
+        import pandas as pd
+        df = pd.concat([pd.read_parquet(os.path.join(a.rich, sh, "parts.parquet")).assign(shard=sh)
+                        for sh in sorted(os.listdir(a.rich)) if os.path.exists(os.path.join(a.rich, sh, "parts.parquet"))],
+                       ignore_index=True).head(a.n)
+        uids, dup = list(df.uid), [False] * len(df)
+        stems = [os.path.join(a.rich, sh, "renders", u) for sh, u in zip(df.shard, df.uid)]
+        extra = {"family": list(df.family), "gt_code": list(df.code), "stems": stems}
+        a.modes = [m for m in a.modes if "expert" not in m]
+    else:
+        with open(a.uids_from, "rb") as f:
+            P = pickle.load(f)
+        uids, dup = P["uids"][: a.n], P["dup"][: a.n]
+        stems = [os.path.join(a.data, "renders", u) for u in uids]
+        with open(os.path.join(a.data, "text_index.json")) as f:
+            text_index = json.load(f)
     reqs = []
     for i, u in enumerate(uids):
-        if not os.path.exists(os.path.join(a.data, "renders", f"{u}_0.png")):
+        if not os.path.exists(f"{stems[i]}_0.png"):
             continue                                   # GT program does not build: no render (scored as invalid)
         for mode in a.modes:
             prompt = text_index.get(u, {}).get("expert") if "expert" in mode else None
             if "expert" in mode and not prompt:
                 continue
             reqs.append(Request(custom_id=f"{i}_{mode.replace('+', '-')}",   # API allows [a-zA-Z0-9_-] only
-                                params=MessageCreateParamsNonStreaming(**request(a.data, u, mode, prompt, a.effort))))
+                                params=MessageCreateParamsNonStreaming(**request(stems[i], mode, prompt, a.effort,
+                                                                                 bool(a.rich)))))
     client = anthropic.Anthropic()
     batch = client.messages.batches.create(requests=reqs)
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "batch.json"), "w") as f:
         json.dump({"batch_id": batch.id, "uids": uids, "dup": list(map(bool, dup)), "modes": a.modes,
-                   "n_requests": len(reqs), "model": MODEL, "effort": a.effort}, f)
+                   "n_requests": len(reqs), "model": MODEL, "effort": a.effort, **extra}, f)
     print(f"[claude] submitted batch {batch.id}: {len(reqs)} requests ({len(uids)} uids x {a.modes})")
 
 
@@ -131,6 +154,7 @@ def collect(a):
         preds[mode][int(i)] = extract_code(text)
     with open(os.path.join(a.out, "preds.pkl"), "wb") as f:
         pickle.dump({"uids": meta["uids"], "dup": meta["dup"], "kind": "cadquery",
+                     **{k: meta[k] for k in ("family", "gt_code", "stems") if k in meta},
                      "preds": {f"claude:{m}": v for m, v in preds.items()}}, f)
     # batch price: half of $4 / $20 per MTok for claude-opus-5-5
     cost = usage["input_tokens"] * 2e-6 + usage["output_tokens"] * 10e-6
@@ -142,7 +166,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("submit")
     s.add_argument("--data", default="data")
-    s.add_argument("--uids_from", required=True, help="a baselines.py --save_preds file: same uids and dup mask")
+    s.add_argument("--uids_from", default=None, help="a baselines.py --save_preds file: same uids and dup mask")
+    s.add_argument("--rich", default=None, help="rich/real part shards dir instead of DeepCAD (full-feature prompt)")
     s.add_argument("--n", type=int, default=2000)
     s.add_argument("--modes", nargs="*", default=["view4", "view1", "view1+expert"])
     s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
