@@ -4,7 +4,7 @@
 const RESEARCH = [
   { id: 'fence2', name: 'Reinforced Fences', cost: 30000, hours: 30, desc: 'Electric fences get 60% more integrity.' },
   { id: 'fence3', name: 'High-Voltage Grid', cost: 70000, hours: 48, req: ['fence2'], desc: 'Shocks deter longer, and only the very strongest can push through a live fence.' },
-  { id: 'darts', name: 'Fast-Acting Tranquilizers', cost: 40000, hours: 36, desc: 'Every dinosaur needs one dart fewer to go down.' },
+  { id: 'darts', name: 'Fast-Acting Tranquilizers', cost: 40000, hours: 36, desc: 'Every dinosaur needs one dart fewer to go down, and darts miss a running target less often.' },
   { id: 'rangers', name: 'Ranger Training', cost: 35000, hours: 30, desc: 'Rangers run 30% faster and shoot from further away.' },
   { id: 'power', name: 'Efficient Turbines', cost: 45000, hours: 36, desc: 'Power plants produce 40% more electricity.' },
   { id: 'medicine', name: 'Dinosaur Medicine', cost: 30000, hours: 30, desc: 'Illness heals twice as fast, with or without a Vet Clinic.' },

@@ -9,9 +9,9 @@ grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 
 - **Paddocks & power** — electric fences only work inside a power plant's coverage (extend it with pylons). Concrete walls need no power but cost more.
 - **11 species** from Gallimimus to T. rex, plus Pteranodons in an Aviary and an endgame Indominus hybrid that camouflages itself.
-- **Dinosaur needs** — space, tree cover, water, herd size, food, and fear of predators all feed a comfort score. Stressed dinos test the fences; raptors look for the weakest spot.
-- **Guests** walk paths, eat, shop, ride the electric **jeep tour**, watch **Mosasaur** feeding shows, and flee to shelters when the alarm sounds.
-- **Disasters** — tropical storms with lightning, grid sabotage, earthquakes, volcanic eruptions, outbreaks, rampages, raptor probes, safety inspections. Trigger them yourself from the ☄ menu.
+- **Dinosaur needs** — space, tree cover, water, herd size, food, and fear of predators all feed a comfort score. Stressed dinos test the fences; raptors look for the weakest spot; when the grid dies, predators go for the dead fences; and the Indominus schemes against her walls every few days. Plant trees and **dig ponds** to keep them content, and top up an exhibit with **Hatch another** from its paddock panel.
+- **Guests** (each with a name and a hometown) walk paths, eat, shop, stay in the **Lodge Hotel** (40 rooms), ride the **jeep tour** and **gyrospheres**, crowd the **Feeding Grandstand** at feeding time, visit the **Mosasaur Lagoon** and **Raptor Arena**, and flee to shelters when the alarm sounds. Narrow paths jam in a panic: lay **wide paths** where the crowds are.
+- **Disasters** — tropical storms with lightning (and winds that tear at the Aviary mesh), grid sabotage, earthquakes, volcanic eruptions, outbreaks, rampages, raptor probes, safety inspections. Trigger them yourself from the ☄ menu. When power runs short, fences, staff and shelters stay lit first and a banner says how much more you need.
 - **Response tools** — evacuation alarm, siren towers, rangers with tranquilizer rifles, engineers, ACU helicopter airlifts and strikes, emergency fence repair, backup generators, vet clinics, and closing the park from the Main Gate.
 - **Campaign** — five chapters (Opening Season, Clever Girls, Monsoon, Site B, Jurassic World), each unlocking a perk for the ones after it.
 - **InGen calls** — investors, lawyers, the board and Dr. Wu phone in with deals that pay now and bite later.
@@ -20,7 +20,7 @@ grid sabotage, earthquakes, eruptions, outbreaks and very clever raptors.
 - **Research Lab** — upgrades (reinforced fences, high-voltage grid, faster darts, ranger training, turbines, medicine, feeders, motion sensors, ACU gunship, marketing) and genome research that unlocks species without stars.
 - **Seasons** — Spring, Summer (tourist peak), Monsoon (storms) and Cool Season; adjustable day length; a Calm mode with no disasters.
 - **Island codes** to share a map, and **medals** for each scenario with your best result saved.
-- Goals, an advisor, star rating, finances with history graphs, a news ticker, a breach cam, save/load, three difficulty levels, sandbox mode, synthesized sound effects and an original chiptune soundtrack.
+- Goals (with Show me / How? help), an advisor, a **Park Rating** breakdown (click the rating), finances with a daily net and history graphs, a news ticker, a breach cam, save/load, three difficulty levels, sandbox mode, synthesized sound effects and an original chiptune soundtrack.
 
 ## Play
 
@@ -31,7 +31,7 @@ Open `index.html` in any modern browser. No build step, no dependencies.
 | Input | Action |
 | --- | --- |
 | Left click | Use tool / select |
-| Drag | Build lines (paths, fences, walls) and areas (paddock, demolish, trees) |
+| Drag | Build lines (paths, fences, walls) and areas (paddock, demolish, trees, ponds) |
 | Right-drag, or drag with Inspect | Pan |
 | Mouse wheel / pinch | Zoom |
 | WASD / arrows | Pan |
