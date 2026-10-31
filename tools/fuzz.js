@@ -44,6 +44,11 @@
         setActiveGame(g2);
       }
       else if (r < 0.88) g.alarm = !g.alarm;
+      else if (r < 0.91) { for (let k = 0; k < 6; k++) g.digPond(x + (k % 3), y + ((k / 3) | 0)); }
+      else if (r < 0.93) { w.computeRegions(); const reg = w.regions.find((q) => !q.public && q.size > 20); if (reg) { const bp = g.copyPaddock(reg); if (bp) g.stamp(bp, x, y); if (chance(0.5)) UIX.doUndo(); } }
+      else if (r < 0.95) { w.computeRegions(); const reg = w.regions.find((q) => !q.public && q.size > 20); if (reg) { const t = reg.tiles[0]; UIX.select({ kind: 'paddock', x: t % w.W, y: (t / w.W) | 0 }); UIX.renderInfo(true); const btn = document.querySelector('[data-a=restock]'); if (btn) btn.click(); UIX.select(null); } }
+      else if (r < 0.96) { for (const f of ['showRating', 'showFinances', 'showResearch', 'showRoster']) { UIX[f](); UIX.closeModal(); } }
+      else if (r < 0.97) { const d = pick(g.dinos.filter((q) => !q.loose && !q.carried)); if (d) g.sellDino(d); }
       const G = GAME;
       for (let k = 0; k < 15; k++) G.update(1 / 30 * 4);
       actions++;
