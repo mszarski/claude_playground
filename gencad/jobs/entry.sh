@@ -44,7 +44,11 @@ need_cq() {
 need_vllm() {
   python -c "import vllm" 2>/dev/null && return
   apt-get update -qq && apt-get install -y -qq gcc g++ >/dev/null
-  pip install -q vllm
+  if [[ "${VLLM_NIGHTLY:-0}" == "1" ]]; then   # models newer than the last vLLM release
+    pip install -q -U --pre vllm --extra-index-url https://wheels.vllm.ai/nightly
+  else
+    pip install -q vllm
+  fi
   python -c "import vllm, torch, transformers; print('[vllm]', vllm.__version__, torch.__version__, transformers.__version__)"
 }
 
