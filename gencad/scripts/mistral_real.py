@@ -28,6 +28,8 @@ def main():
     ap.add_argument("--gpu_mem", type=float, default=0.95)
     ap.add_argument("--chunk", type=int, default=100)
     ap.add_argument("--temp", type=float, default=0.7)
+    ap.add_argument("--mistral_format", action="store_true",
+                    help="repo ships only Mistral-format params.json / consolidated weights (e.g. the NVFP4 checkpoint)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     import pandas as pd
@@ -43,7 +45,9 @@ def main():
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     t0 = time.time()
     llm = LLM(model=a.model, tensor_parallel_size=a.tp, max_model_len=a.max_len, max_num_seqs=a.max_seqs,
-              gpu_memory_utilization=a.gpu_mem, limit_mm_per_prompt={"image": 1})
+              gpu_memory_utilization=a.gpu_mem, limit_mm_per_prompt={"image": 1},
+              **({"tokenizer_mode": "mistral", "config_format": "mistral", "load_format": "mistral"}
+                 if a.mistral_format else {}))
     print(f"[mistral] loaded {a.model} in {time.time() - t0:.0f}s", flush=True)
     sp = SamplingParams(temperature=a.temp, top_p=0.95, max_tokens=a.max_tokens)
     for m in a.modes:
