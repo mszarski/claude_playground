@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ductus"
+version = "0.1.0"
+description = "A parametric font design language and compiler"
+requires-python = ">=3.11"
+dependencies = [
+    "fonttools>=4.40",
+    "skia-pathops>=0.8",
+    "numpy>=1.24",
+    "pyyaml>=6",
+    "typer>=0.9",
+]
+
+[project.optional-dependencies]
+proof = ["matplotlib>=3.7", "freetype-py>=2.4", "pillow>=9"]
+validate = ["opentype-sanitizer>=9"]
+serve = ["starlette>=0.37", "uvicorn>=0.29", "watchfiles>=0.21"]
+test = ["pytest>=7"]
+
+[project.scripts]
+ductus = "ductus.cli:app"
+
+[tool.setuptools]
+packages = ["ductus"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

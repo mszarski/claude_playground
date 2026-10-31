@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: ductus
+Version: 0.1.0
+Summary: A parametric font design language and compiler
+Requires-Python: >=3.11
+Requires-Dist: fonttools>=4.40
+Requires-Dist: skia-pathops>=0.8
+Requires-Dist: numpy>=1.24
+Requires-Dist: pyyaml>=6
+Requires-Dist: typer>=0.9
+Provides-Extra: proof
+Requires-Dist: matplotlib>=3.7; extra == "proof"
+Requires-Dist: freetype-py>=2.4; extra == "proof"
+Requires-Dist: pillow>=9; extra == "proof"
+Provides-Extra: validate
+Requires-Dist: opentype-sanitizer>=9; extra == "validate"
+Provides-Extra: serve
+Requires-Dist: starlette>=0.37; extra == "serve"
+Requires-Dist: uvicorn>=0.29; extra == "serve"
+Requires-Dist: watchfiles>=0.21; extra == "serve"
+Provides-Extra: test
+Requires-Dist: pytest>=7; extra == "test"
