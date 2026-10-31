@@ -93,7 +93,9 @@ def contact_sheet(rows: list[tuple[str, object]], out: Path, glyph_order=None, c
                 ax.set_title(g, fontsize=9, color="#555")
             if c == 0:
                 ax.set_ylabel(label, fontsize=7.5, color="#333", rotation=0, ha="right", va="center", labelpad=6)
-    fig.subplots_adjust(left=0.13, right=0.99, top=1 - 0.3 / height, bottom=0.02, wspace=0.05, hspace=0.08)
+    longest = max(len(line) for label, _ in rows for line in label.split("\n"))
+    fig_w = fig.get_size_inches()[0]
+    fig.subplots_adjust(left=min(0.45, (0.075 * longest + 0.25) / fig_w), right=0.99, top=1 - 0.3 / height, bottom=0.02, wspace=0.05, hspace=0.08)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=170, facecolor="white")
     plt.close(fig)

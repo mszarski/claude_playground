@@ -93,10 +93,82 @@ def test(font_py: Path,
 def serve(font_py: Path,
           port: int = typer.Option(8765, "--port", "-p"),
           host: str = typer.Option("127.0.0.1", "--host"),
+          reference: Optional[Path] = typer.Option(None, help="reference font for onion skin + error heat map"),
           overrides: Optional[Path] = typer.Option(None)):
-    """Live preview: sliders, draggable points, text in the compiled font."""
+    """Live editor: sliders, draggable points, text in the compiled font."""
     from .serve import serve as run
-    run(font_py, host=host, port=port, overrides_path=overrides)
+    run(font_py, host=host, port=port, overrides_path=overrides, reference=reference)
+
+
+def _default_reference(font_py: Path) -> Optional[Path]:
+    for cand in (font_py.parent / "reference" / "GeistSerif-Regular.woff2",
+                 Path("benchmarks/geist_serif/reference/GeistSerif-Regular.woff2")):
+        if cand.exists():
+            return cand
+    return None
+
+
+@app.command()
+def bench(font_py: Path,
+          reference: Optional[Path] = typer.Option(None, help="reference font (default: benchmarks/geist_serif/reference)"),
+          glyphs: str = typer.Option("", help="comma-separated glyph names (default: all non-empty glyphs)"),
+          docs: Path = typer.Option(Path("docs"), help="where representability.md and iterations/ live"),
+          note: str = typer.Option("", help="notes column for the report"),
+          iteration: Optional[int] = typer.Option(None, help="iteration number (default: next)"),
+          report: bool = typer.Option(True, help="append rows + overlays to docs/"),
+          overrides: Optional[Path] = typer.Option(None)):
+    """Score glyphs against a reference: IoU, Hausdorff, override count."""
+    from .bench.reference import Reference
+    from .bench.report import append_rows, next_iteration, overlay_image
+    from .bench.run import override_stats, score_font
+    ref_path = reference or _default_reference(font_py)
+    if ref_path is None:
+        raise typer.BadParameter("no reference font; run benchmarks/geist_serif/fetch_reference.py or pass --reference")
+    font = load_font(font_py)
+    ovs = _overrides_for(font_py, overrides)
+    cf = compile_font(font, overrides=ovs)
+    names = [g.strip() for g in glyphs.split(",") if g.strip()] or [n for n, g in cf.glyphs.items() if g.contours]
+    scores = score_font(cf, Reference(ref_path), names)
+    it = iteration or next_iteration(docs)
+    rows = []
+    for g, s in scores.items():
+        n, mag = override_stats(g, ovs)
+        prims = ", ".join(p.split(":", 1)[1] for p in cf.glyphs[g].primitives if p.startswith(("contour:", "terminal:")))
+        prims = prims or ", ".join(p.split(":", 1)[-1] for p in cf.glyphs[g].primitives)
+        typer.echo(f"{g:8} IoU {s.iou:.4f}  Hausdorff {s.hausdorff:6.1f}  mean {s.mean_dist:5.1f}  "
+                   f"Δadv {s.advance_delta:+4d}  overrides {n} (Σ|Δ| {mag:.0f})")
+        rows.append({"glyph": g, "iou": s.iou, "hausdorff": s.hausdorff, "mean_dist": s.mean_dist,
+                     "advance_delta": s.advance_delta, "overrides": n, "magnitude": mag,
+                     "primitives": prims, "notes": note})
+        if report:
+            overlay_image(s, docs / "iterations" / f"{it:02d}" / f"{g}.png", title=f"#{it:02d}  ")
+    if report:
+        typer.echo(f"report: {append_rows(docs, it, rows)}  overlays: {docs / 'iterations' / f'{it:02d}'}")
+
+
+@app.command()
+def fit(font_py: Path,
+        glyph: str = typer.Option(..., "--glyph"),
+        reference: Optional[Path] = typer.Option(None),
+        param: list[str] = typer.Option([], "--param", help="limit to these params (default: all ranged params that affect the glyph)"),
+        maxiter: int = typer.Option(400),
+        exclude: str = typer.Option("xheight,capheight,ascender,descender",
+                                    help="params never fitted (default: the fixed vertical metrics)"),
+        overrides: Optional[Path] = typer.Option(None)):
+    """Tune a glyph's parameters (not overrides) to minimise error vs the reference."""
+    from .bench.reference import Reference
+    from .bench.run import fit_glyph
+    ref_path = reference or _default_reference(font_py)
+    if ref_path is None:
+        raise typer.BadParameter("no reference font")
+    font = load_font(font_py)
+    r = fit_glyph(font, Reference(ref_path), glyph, _overrides_for(font_py, overrides), param or None, maxiter,
+                  exclude={e.strip() for e in exclude.split(",") if e.strip()})
+    typer.echo(f"{glyph}: IoU {r.before.iou:.4f} -> {r.after.iou:.4f}, Hausdorff {r.before.hausdorff:.1f} -> "
+               f"{r.after.hausdorff:.1f} ({r.evaluations} evaluations)")
+    typer.echo("# fitted values (paste into font.py defaults):")
+    for k, v in r.params.items():
+        typer.echo(f"{k} = {v:g}")
 
 
 @app.command()

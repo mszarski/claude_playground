@@ -32,7 +32,11 @@ HISTORY = 200
 
 
 class Session:
-    def __init__(self, font_path: Path, overrides_path: Path):
+    def __init__(self, font_path: Path, overrides_path: Path, reference=None):
+        self.reference = None
+        if reference:
+            from ..bench.reference import Reference
+            self.reference = Reference(reference)
         self.font_path = Path(font_path).resolve()
         self.ov_path = Path(overrides_path).resolve()
         self.font = load_font(self.font_path)
@@ -92,9 +96,38 @@ class Session:
                 out.append(f"override {name!r} does not match any point; ignored")
         return out
 
+    def reference_data(self) -> dict:
+        """Per glyph: the reference outline aligned to ours, scores, and a
+        distance-coloured sampling of our outline (error heat map)."""
+        from ..bench.metrics import distance_field, score_glyph
+        from ..geometry import svg_path
+        out = {}
+        t0 = time.perf_counter()
+        cache = self.__dict__.setdefault("_ref_cache", {})
+        for name, g in self.cf.glyphs.items():
+            rname = self.reference.name_for(g.unicode, name)
+            if rname is None or not g.contours:
+                continue
+            key = (name, g.advance, hash(tuple(tuple(p) for c in g.contours for p in c.pts)))
+            if key in cache:
+                out[name] = cache[key]
+                continue
+            rc, radv = self.reference.glyph(rname)
+            sc = score_glyph(name, g.contours, rc, g.advance, radv, self.cf.upm)
+            out[name] = {"svg": svg_path(sc.ref), "iou": round(sc.iou, 4), "hausdorff": round(sc.hausdorff, 1),
+                         "mean": round(sc.mean_dist, 2), "advance_delta": sc.advance_delta,
+                         "heat": distance_field(g.contours, sc.ref)}
+            cache[key] = out[name]
+        if len(cache) > 512:
+            cache.clear()
+        self.timing["reference"] = (time.perf_counter() - t0) * 1000
+        return out
+
     def payload(self) -> dict:
         data = self.cf.to_json() if self.cf else None
         if data is not None:
+            if self.reference is not None:
+                data["reference"] = self.reference_data()
             data["timing"] = {k: round(v, 1) for k, v in self.timing.items()}
         return {
             "type": "font", "version": self.version, "error": self.error, "data": data,
@@ -215,9 +248,9 @@ class Session:
             raise ValueError(f"unknown message type {t!r}")
 
 
-def create_app(font_path, overrides_path=None, watch: bool = True) -> Starlette:
+def create_app(font_path, overrides_path=None, watch: bool = True, reference=None) -> Starlette:
     font_path = Path(font_path).resolve()
-    session = Session(font_path, overrides_path or font_path.parent / "overrides.yaml")
+    session = Session(font_path, overrides_path or font_path.parent / "overrides.yaml", reference)
 
     async def broadcast(payload: str):
         for ws in list(session.clients):
@@ -296,8 +329,8 @@ def create_app(font_path, overrides_path=None, watch: bool = True) -> Starlette:
     return app
 
 
-def serve(font_path, host="127.0.0.1", port=8765, overrides_path=None):
+def serve(font_path, host="127.0.0.1", port=8765, overrides_path=None, reference=None):
     import uvicorn
-    app = create_app(font_path, overrides_path)
+    app = create_app(font_path, overrides_path, reference=reference)
     print(f"Ductus preview: http://{host}:{port}/  (watching {Path(font_path).resolve().parent})")
     uvicorn.run(app, host=host, port=port, log_level="warning")

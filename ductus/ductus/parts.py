@@ -194,6 +194,8 @@ class ContourBuilder:
         self.name = name
         self.contour = Contour()
         self.fullname = ""
+        self.group = None       # contours sharing a group are oriented together (outer + counter)
+        self.kind = "contour"
 
     def move(self, p, name=None):
         self.contour.add(pt(p), "on", name); return self
@@ -204,6 +206,11 @@ class ContourBuilder:
     def curve(self, c1, c2, p, name=None):
         self.contour.add(pt(c1), "off"); self.contour.add(pt(c2), "off")
         self.contour.add(pt(p), "on", name); return self
+
+    def curve_close(self, c1, c2):
+        """Final curve back to the first point."""
+        self.contour.add(pt(c1), "off"); self.contour.add(pt(c2), "off")
+        return self
 
     def close(self):
         c = self.contour
@@ -263,6 +270,11 @@ class Builder:
         self._contours.append(cb)
         return cb
 
+    def bowl(self, left, right, bottom, top, thick, thin, **kw):
+        """Contour-part bowl (outer + counter); see :mod:`ductus.contours`."""
+        from .contours import bowl
+        return bowl(self, left, right, bottom, top, thick, thin, **kw)
+
 
 class GlyphBuilder(Builder):
     def __init__(self, gdef: GlyphDef, font: Font):
@@ -290,6 +302,7 @@ class GlyphBuilder(Builder):
 class Realized:
     strokes: list[Stroke] = field(default_factory=list)
     contours: list[ContourBuilder] = field(default_factory=list)
+    parts: list[str] = field(default_factory=list)     # part functions used (for reports)
 
 
 def realize(b: Builder) -> Realized:
@@ -305,6 +318,8 @@ def realize(b: Builder) -> Realized:
         child = Builder(f"{b.scope}.{call.name}", b.font)
         call._fn(child, **copy.copy(call._kwargs))
         sub = realize(child)
+        out.parts.append(call._fn.__name__)
+        out.parts += sub.parts
         if not child.calls and len(child._strokes) + len(child._contours) == 1:
             for item in child._strokes + child._contours:
                 item.fullname = child.scope

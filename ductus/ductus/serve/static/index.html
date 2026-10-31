@@ -10,7 +10,7 @@
   --text: #22201c; --muted: #77726a; --faint: #a39e95;
   --ink: #1d1c1a; --ghost: #cfcac1; --accent: #2f6fde; --accent-soft: #2f6fde22;
   --skel: #d1495b; --guide: #b9b3a8; --ok: #2c8a4b; --warn: #b7791f; --bad: #c43d3d;
-  --canvas: #ffffff; --chip: #efede8;
+  --canvas: #ffffff; --chip: #efede8; --ref: #2f6fde; --ref-line: #2f6fde;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -19,14 +19,14 @@
     --bg: #161514; --panel: #1d1c1a; --line: #2e2c29; --line-2: #3a3834;
     --text: #ebe8e2; --muted: #a29d94; --faint: #6f6a62;
     --ink: #f1eee8; --ghost: #4a4741; --accent: #6b9cff; --accent-soft: #6b9cff2a;
-    --skel: #ff6b7d; --guide: #55524c; --canvas: #121110; --chip: #2a2825;
+    --skel: #ff6b7d; --guide: #55524c; --canvas: #121110; --chip: #2a2825; --ref: #6b9cff; --ref-line: #6b9cff;
   }
 }
 :root[data-theme="dark"] {
   --bg: #161514; --panel: #1d1c1a; --line: #2e2c29; --line-2: #3a3834;
   --text: #ebe8e2; --muted: #a29d94; --faint: #6f6a62;
   --ink: #f1eee8; --ghost: #4a4741; --accent: #6b9cff; --accent-soft: #6b9cff2a;
-  --skel: #ff6b7d; --guide: #55524c; --canvas: #121110; --chip: #2a2825;
+  --skel: #ff6b7d; --guide: #55524c; --canvas: #121110; --chip: #2a2825; --ref: #6b9cff; --ref-line: #6b9cff;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.4 var(--sans); }
@@ -132,6 +132,9 @@ section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; f
 .node { fill: var(--canvas); stroke: var(--skel); stroke-width: 1.6; cursor: move; }
 .node.sel { fill: var(--skel); }
 .node:hover { stroke-width: 2.5; }
+.cpt { fill: var(--canvas); stroke: var(--skel); stroke-width: 1.6; cursor: move; }
+.cpt.sel { fill: var(--skel); }
+.cpt:hover { stroke-width: 2.5; }
 .opt { fill: var(--canvas); stroke: var(--accent); stroke-width: 1.3; cursor: move; }
 .opt.sel { fill: var(--accent); }
 .onpt { fill: var(--accent); }
@@ -141,6 +144,12 @@ section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; f
 .handle-w { fill: var(--canvas); stroke: var(--text); stroke-width: 1.4; cursor: grab; }
 .handle-arm { stroke: var(--skel); stroke-width: 1.2; }
 .handle-warm { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 3; }
+.ref-fill { fill: var(--ref); stroke: var(--ref-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.heat { fill: none; stroke-width: 3.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+#refbox { display: none; align-items: center; gap: 6px; color: var(--muted); }
+#refbox.show { display: flex; }
+#refbox input { width: 80px; }
+.score { font-family: var(--mono); font-size: 12px; }
 .tip { fill: var(--text); font: 11px var(--mono); paint-order: stroke; stroke: var(--canvas); stroke-width: 3px; }
 </style>
 </head>
@@ -154,6 +163,7 @@ section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; f
     </div>
     <div class="group" id="toggles"></div>
     <div class="group"><span style="color:var(--muted)">Terminals</span><select id="terminals"></select></div>
+    <div class="group" id="refbox" title="Reference font (measurement only)"><button data-r="ref">Reference</button><button data-r="heat">Heat</button><input type="range" id="refop" min="0" max="1" step="0.05" aria-label="Reference opacity"></div>
     <span class="spacer"></span>
     <span class="status" id="status"><span class="dot"></span>connecting…</span>
     <button id="theme" title="Toggle theme">◐</button>
@@ -234,6 +244,7 @@ const S = {
   drag: null, pan: null, faceN: 0, face: null,
   context: store.get("context", ""), waterfall: store.get("waterfall", false),
   presets: store.get("presets", {}), localParams: {},
+  refView: Object.assign({ ref: true, heat: false, opacity: 0.35 }, store.get("refView", {})),
 };
 
 // ------------------------------------------------------------------ socket
@@ -303,6 +314,7 @@ function updateStatus() {
   if (!S.data) return;
   const t = S.data.timing || {};
   const parts = [`compile ${fmt(t.compile, 0)} ms`, `otf ${fmt(t.emit, 0)} ms`];
+  if (t.reference != null) parts.push(`ref ${fmt(t.reference, 0)} ms`);
   if (S.rtt != null) parts.push(`round trip ${fmt(S.rtt, 0)} ms`);
   setStatus(S.inflight ? "busy" : "ok", parts.join(" · "));
 }
@@ -439,9 +451,15 @@ function zoomAt(f, sx, sy) {
 // ------------------------------------------------------------------ selection model
 function nodesOf(g) { const out = []; for (const s of g.skeleton) for (const n of s.nodes) out.push({ ...n, stroke: s.name }); return out; }
 function findNode(name) { const g = cur(); return g && nodesOf(g).find((n) => n.name === name); }
+// named points of contour parts (bowls, raw contours): everything in g.points that isn't a skeleton node
+function contourPoints(g) {
+  const skel = new Set(nodesOf(g).map((n) => n.name));
+  return Object.entries(g.points).filter(([k]) => !skel.has(k)).map(([name, p]) => ({ name, x: p[0], y: p[1] }));
+}
 function selectables() {
   const g = cur(); if (!g) return [];
   const list = nodesOf(g).map((n) => ({ kind: "node", name: n.name }));
+  for (const c of contourPoints(g)) list.push({ kind: "point", name: c.name });
   if (S.view.opoints) for (const n of Object.keys(g.outline_points)) list.push({ kind: "outline", name: n });
   return list;
 }
@@ -469,6 +487,7 @@ function render() {
   tsel.value = S.payload.terminals || "";
   syncParams();
   renderStrip();
+  renderRefBox();
   renderCanvas();
   renderInspector();
   renderText();
@@ -537,6 +556,18 @@ function renderCanvas() {
     }
     el("path", { d, class: "skel" }, G);
   }
+  const R = S.data.reference && S.data.reference[g.name];
+  if (R && S.refView.ref) {
+    el("path", { d: R.svg, class: "ref-fill", "fill-opacity": S.refView.opacity, "stroke-opacity": Math.min(1, S.refView.opacity + 0.4) }, G);
+  }
+  if (R && S.refView.heat) {
+    for (const line of R.heat) {
+      for (let i = 0; i < line.length; i++) {
+        const a = line[i], b = line[(i + 1) % line.length];
+        el("line", { x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: "heat", stroke: heatColor((a[2] + b[2]) / 2) }, G);
+      }
+    }
+  }
   // final outline points (screen space)
   if (S.view.outline) {
     for (const c of g.contours) {
@@ -581,6 +612,15 @@ function renderCanvas() {
       c.addEventListener("pointerdown", (e) => startDrag(e, { kind: "node", name: n.name }));
       title(c, n.name);
       if (sel) drawNodeHandles(n, sx, sy);
+    }
+  }
+  if (S.view.nodes) {
+    for (const c of contourPoints(g)) {
+      const [sx, sy] = handlePos({ kind: "point", name: c.name }, c.x + ox, c.y);
+      const sel = S.sel && S.sel.name === c.name;
+      const h = el("rect", { x: sx - 5, y: sy - 5, width: 10, height: 10, class: "cpt" + (sel ? " sel" : "") }, overlay);
+      h.addEventListener("pointerdown", (e) => startDrag(e, { kind: "point", name: c.name }));
+      title(h, c.name);
     }
   }
   // label of the dragged thing
@@ -655,7 +695,7 @@ function dragMove(e) {
   } else if (d.mode === "move") {
     if (e.shiftKey) { if (Math.abs(ddx) > Math.abs(ddy)) ddy = 0; else ddx = 0; }
     v.dx = round(d.ov0.dx + ddx); v.dy = round(d.ov0.dy + ddy);
-    let base = t.kind === "node" ? [d.node0.x, d.node0.y] : cur().outline_points[t.name];
+    let base = t.kind === "node" ? [d.node0.x, d.node0.y] : t.kind === "point" ? cur().points[t.name] : cur().outline_points[t.name];
     d.preview = [base[0] + d.ox + (v.dx - d.ov0.dx), base[1] + (v.dy - d.ov0.dy)];
     d.label = `Δ ${fmt(v.dx, 0)}, ${fmt(v.dy, 0)}`;
   } else if (d.mode === "dir") {
@@ -726,13 +766,13 @@ function renderInspector() {
   if (!g) { box.innerHTML = ""; return; }
   let html = "";
   const sel = S.sel;
-  if (sel && (sel.kind === "node" || sel.kind === "outline")) {
+  if (sel && (sel.kind === "node" || sel.kind === "outline" || sel.kind === "point")) {
     const o = ov(sel.name);
     const isNode = sel.kind === "node";
     const n = isNode ? findNode(sel.name) : null;
-    const p = isNode ? [n.x, n.y] : g.outline_points[sel.name];
+    const p = isNode ? [n.x, n.y] : sel.kind === "point" ? g.points[sel.name] : g.outline_points[sel.name];
     if (isNode && !n || !isNode && !p) { S.sel = null; return renderInspector(); }
-    html += `<section><h2>${isNode ? "Skeleton point" : "Outline point"}<span class="grow"></span>
+    html += `<section><h2>${isNode ? "Skeleton point" : sel.kind === "point" ? "Contour point" : "Outline point"}<span class="grow"></span>
       <button id="resetSel" ${S.overrides[sel.name] ? "" : "disabled"}>Reset</button></h2>
       <div class="name">${sel.name}</div><dl class="kv">
       <dt>position</dt><dd>${fmt(p[0] - g.shift)}, ${fmt(p[1])}</dd>` +
@@ -757,7 +797,9 @@ function renderInspector() {
     <dl class="kv"><dt>unicode</dt><dd>${g.unicode != null ? "U+" + g.unicode.toString(16).toUpperCase().padStart(4, "0") : "—"}</dd>
     <dt>advance</dt><dd>${g.advance}</dd>
     <dt>sidebearings</dt><dd><a href="#" data-sb="lsb">${fmt(g.lsb, 0)}</a> / <a href="#" data-sb="rsb">${fmt(g.rsb, 0)}</a> (${g.sides.join(" / ")})</dd>
-    <dt>strokes</dt><dd>${g.skeleton.map((s) => s.name.slice(g.name.length + 1)).join(", ") || "—"}</dd></dl>
+    <dt>strokes</dt><dd>${g.skeleton.map((s) => s.name.slice(g.name.length + 1)).join(", ") || "—"}</dd>
+    <dt>primitives</dt><dd>${(g.primitives || []).join(", ") || "—"}</dd>
+    ${refScore(g)}</dl>
     <h2 style="margin-top:10px">Overrides</h2>`;
   html += mine.length ? `<ul class="ovlist">${mine.map(([k, o]) => `<li data-n="${k}" class="${S.sel && S.sel.name === k ? "sel" : ""}">
       <span class="n">${k.slice(g.name.length + 1)}</span><span class="v">${summarize(o)}</span><button data-del="${k}" title="Remove">×</button></li>`).join("")}</ul>`
@@ -788,12 +830,31 @@ function renderInspector() {
   for (const li of box.querySelectorAll(".ovlist li")) li.addEventListener("click", (e) => {
     if (e.target.dataset.del) return;
     const k = li.dataset.n;
-    const kind = k.endsWith(".lsb") ? "lsb" : k.endsWith(".rsb") ? "rsb" : (cur().outline_points[k] ? "outline" : "node");
+    const kind = k.endsWith(".lsb") ? "lsb" : k.endsWith(".rsb") ? "rsb" : findNode(k) ? "node" : cur().points[k] ? "point" : "outline";
     select({ kind, name: k });
   });
   for (const b of box.querySelectorAll("[data-del]")) b.addEventListener("click", (e) => { e.stopPropagation(); send({ type: "remove", names: [b.dataset.del] }); });
   for (const a of box.querySelectorAll("[data-sb]")) a.addEventListener("click", (e) => { e.preventDefault(); select({ kind: a.dataset.sb, name: `${g.name}.${a.dataset.sb}` }); });
 }
+function heatColor(d) {
+  const t = Math.max(0, Math.min(1, d / 12));         // 0 u -> green, >= 12 u -> red
+  return `hsl(${130 - 130 * t}, 70%, ${45 + 5 * (1 - t)}%)`;
+}
+function refScore(g) {
+  const R = S.data.reference && S.data.reference[g.name];
+  if (!R) return "";
+  return `<dt>vs reference</dt><dd class="score">IoU ${R.iou.toFixed(4)} · H ${fmt(R.hausdorff)}u · mean ${fmt(R.mean, 2)}u · Δadv ${R.advance_delta > 0 ? "+" : ""}${R.advance_delta}</dd>`;
+}
+function renderRefBox() {
+  const box = $("#refbox");
+  box.classList.toggle("show", !!(S.data && S.data.reference));
+  for (const b of box.querySelectorAll("button")) b.classList.toggle("on", !!S.refView[b.dataset.r]);
+  $("#refop").value = S.refView.opacity;
+}
+for (const b of document.querySelectorAll("#refbox button")) b.addEventListener("click", () => {
+  S.refView[b.dataset.r] = !S.refView[b.dataset.r]; store.set("refView", S.refView); renderRefBox(); renderCanvas();
+});
+$("#refop").addEventListener("input", (e) => { S.refView.opacity = +e.target.value; store.set("refView", S.refView); renderCanvas(); });
 function field(k, v, unit, step = 1) {
   return `<label for="f-${k}">${k}</label><input type="number" id="f-${k}" data-k="${k}" step="${step}" value="${round(v || 0, 3)}"><span class="unit">${unit}</span>`;
 }

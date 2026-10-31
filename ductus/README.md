@@ -1,9 +1,33 @@
 # Ductus
 
 A parametric font design language and compiler: glyphs are described as
-named strokes and parts driven by shared parameters (`font.py`), hand
+named strokes, contour parts and shared parameters (`font.py`), hand
 adjustments live as deltas in `overrides.yaml`, and the compiler emits a CFF
-`.otf`.
+`.otf`. The language grows by trying to represent real, high-quality type
+and measuring the gap (SPEC rev. 2).
+
+| | |
+|---|---|
+| `examples/test_font/` | M1 sans test font (`n h m o H O space`) |
+| `examples/display_serif/` | **M2 original** high-contrast display serif (in progress: `o O`) |
+| `benchmarks/geist_serif/` | M2 **internal benchmark only**, fitted to Geist Serif for measurement — never built or released |
+| `docs/representability.md` | benchmark report, one row per glyph per iteration |
+| `docs/display_serif/` | iteration sheets and self-critique for the original design |
+
+## Status
+
+**Milestone 1 — done.** Shared parts (`h`/`m` reuse the arch, `o`/`O` share a
+bowl) · `ductus build` → `.otf` validated by fontTools round-trip and OTS ·
+`stem`/`contrast`/`xheight` change every glyph · stem 40–160 sweep is
+point-compatible · `n.arch.shoulder` override survives stem changes · editor
+(sliders, draggable points → `overrides.yaml`, live text, ~110 ms slider
+round trip) · `ductus test` passes, 55 unit tests · this README.
+
+**Milestone 2 — started with `o`.** Bowl contour primitive (§5.4) · benchmark
+harness (`ductus bench`), parameter fitter (`ductus fit`) · editor reference
+onion-skin, error heat map and live scores · `o` at **IoU 0.986, Hausdorff
+1.8 units, 0 overrides** · original display serif `o`/`O`, 2 iterations.
+Next: `n` (junctions, width profiles, Hobby solve), then set the IoU target.
 
 ![preview](docs/preview.png)
 
@@ -15,6 +39,13 @@ adjustments live as deltas in `overrides.yaml`, and the compiler emits a CFF
 pip install -e ".[proof,validate,serve,test]"
 
 ductus serve examples/test_font/font.py                          # live editor at http://127.0.0.1:8765/
+
+# M2 benchmark (reference is downloaded for measurement only, git-ignored)
+python benchmarks/geist_serif/fetch_reference.py
+ductus bench benchmarks/geist_serif/font.py --glyphs o --note "what changed"   # row + overlays in docs/
+ductus fit   benchmarks/geist_serif/font.py --glyph o                          # tune params (not overrides)
+ductus serve examples/display_serif/font.py --reference benchmarks/geist_serif/reference/GeistSerif-Regular.woff2
+python examples/display_serif/make_sheet.py 03                                 # iteration sheet
 
 ductus build examples/test_font/font.py -o out/                 # static .otf (validated with fontTools + OTS)
 ductus build examples/test_font/font.py --set stem=120           # one-off parameter values
@@ -53,6 +84,55 @@ pytest
 Timings on the example font: full compile ≈ 65–90 ms (parameter changes),
 single-glyph compile ≈ 10 ms (dragging); .otf emit ≈ 6–10 ms.
 
+### Reference mode (`--reference`)
+
+![editor with reference](docs/editor_reference.png)
+
+*Reference* draws the reference glyph (aligned on bbox centres) over ours with
+adjustable opacity; *Heat* colours our outline by distance to it (green ≤ 1
+unit → red ≥ 12 units); the inspector shows live IoU / Hausdorff / mean
+distance / Δadvance. Scores are cached per outline, so a drag only rescores
+the glyph being edited. Contour-part points (bowl extrema) are draggable
+square handles.
+
+## Benchmark (M2)
+
+`ductus bench` compiles the font, aligns each glyph to the reference on the
+horizontal centre of the bounding boxes (spacing is scored separately as
+Δadv), and records raster IoU at 400 px/em, Hausdorff and mean outline
+distance, override count and magnitude, and the primitives used. Overlays
+(ours-only red, reference-only blue, worst point circled) go to
+`docs/iterations/NN/`.
+
+`ductus fit` tunes only *parameters* — measuring the language, not
+hand-tuning skill. It splits parameters by perturbation into shape params and
+spacing-only params; fits shape on mean outline distance (smooth, unlike
+raster IoU) with a Sobol global sample then Nelder–Mead from the best three
+starts; then fits spacing params in 1-D against the advance. Vertical metrics
+fixed by the spec are excluded by default (`--exclude`).
+
+**Licensing.** Geist Serif (SIL OFL) is fetched into a git-ignored folder and
+used only for measurement and overlays. Its outlines are never copied or
+imported; the fitted benchmark font stays in `benchmarks/` and is never built
+for release. The original design in `examples/display_serif/` is never
+fitted.
+
+## Bowls (contour parts)
+
+```python
+p.bowl(left, right, bottom, top, thick=stem, thin=hairline, stress=6,
+       fullness=(0.60, 0.56), inner_fullness=(0.56, 0.62))
+```
+
+Outer + counter contours, each 4 named extrema (`o.bowl.outer.top`,
+`o.bowl.inner.left`, …) and 4 cubic quadrants: always 4 on-curve + 8
+off-curve points per contour. `fullness` is handle length as a fraction of
+the quadrant (0.552 ≈ ellipse); an `(h, v)` pair sets the handles at the
+top/bottom and at the sides separately (a superellipse with independent
+exponents), or give 4 quadrants. `stress` rotates the counter's extrema
+(positive = classic oblique). The two contours are oriented as one group so
+the counter is always a hole.
+
 ## Overrides
 
 ```yaml
@@ -89,7 +169,20 @@ the thick/thin modulation put on the counter side. 0.5 offsets symmetrically
 values keep the outer contour elliptical and put the stress into the counter.
 The example font uses `stress = 0.72`.
 
-## Decisions on the open questions
+## Decisions on the open questions (SPEC §13)
+
+- **Bowl construction:** named-extrema construction (4 extrema + quadrant
+  handles), not a superellipse formula — every control is a nameable point
+  or a handle ratio, and the point structure is fixed. The `(h, v)` fullness
+  gives the superellipse's independent-exponent freedom.
+- **Hobby vs Spiro:** Hobby. Skeleton curves already use Hobby's handle
+  lengths with per-node tension; the full Hobby direction solve (mock
+  curvature continuity) arrives with `n`, where arches need it. Spiro would
+  make tension less direct to expose.
+- **Width profiles:** not yet built (needed by `n`); planned as small named
+  parametric functions over t (taper/swell), overridable by name.
+- **IoU/Hausdorff targets:** set after `n`; working assumption in
+  `docs/representability.md`.
 
 - **DSL ergonomics:** decorators (`@part`, `@glyph`) over builder objects.
   Parts are deferred calls, so `g.inherit("n"); g["stem"].top = ascender`

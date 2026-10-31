@@ -46,6 +46,12 @@ def load_font(path) -> Font:
                 if v.name is None:
                     v.name = f"{pen.name or 'pen'}_{attr}"
                 params.setdefault(v.name, v)
+    # params declared inline in font.sidebearings
+    for side, v in (font.sidebearings or {}).items():
+        if isinstance(v, Param):
+            if v.name is None:
+                v.name = f"sidebearing_{side}"
+            params.setdefault(v.name, v)
     font.params = params
     font.source_path = path
     return font

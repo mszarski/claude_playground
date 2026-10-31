@@ -38,13 +38,14 @@ class CompiledGlyph:
     shift: float = 0.0
     lsb: float = 0.0
     rsb: float = 0.0
+    primitives: list[str] = field(default_factory=list)
     strokes: list[Stroke] = field(default_factory=list, repr=False)
 
     def to_json(self) -> dict:
         return {
             "name": self.name, "unicode": self.unicode, "advance": self.advance,
             "bounds": self.bounds, "sides": self.sides,
-            "shift": self.shift, "lsb": self.lsb, "rsb": self.rsb,
+            "shift": self.shift, "lsb": self.lsb, "rsb": self.rsb, "primitives": self.primitives,
             "svg": svg_path(self.contours),
             "contours": [c.to_json() for c in self.contours],
             "skeleton": self.skeleton, "points": self.points,
@@ -162,15 +163,31 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
         e = expand_stroke(s, font.pen)
         groups.append(e.contours)
         ends += e.ends
+    by_group: dict[int, list[Contour]] = {}
     for cb in r.contours:
-        groups.append([cb.contour.copy()])
+        if cb.group is None:
+            groups.append([cb.contour.copy()])
+        else:
+            key = id(cb.group)
+            if key not in by_group:
+                by_group[key] = []
+                groups.append(by_group[key])
+            by_group[key].append(cb.contour.copy())
 
     # 5. terminals
     style = terminals or gb.terminal_style or font.terminals
+    prims = set()
     for end in ends:
         if end.kind:
-            for c in style(end):
+            extra = style(end)
+            if extra:
+                prims.add(f"terminal:{getattr(style, '__name__', 'custom')}")
+            for c in extra:
                 groups.append([c])
+    prims |= {f"part:{n}" for n in r.parts}
+    prims |= {f"contour:{cb.kind}" for cb in r.contours}
+    if r.strokes:
+        prims.add("stroke")
 
     # 6. outline overrides
     for name, o in overrides.items():
@@ -195,7 +212,8 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
 
     # 8. spacing
     bounds = _bounds(final)
-    sides = gdef.sides or (gb.inherited.sides if gb.inherited else None) or _detect_sides(r.strokes)
+    sides = gdef.sides or (gb.inherited.sides if gb.inherited else None) or \
+        _detect_sides(r.strokes, [c for g in groups for c in g])
     adv_spec = gdef.advance if gdef.advance is not None else (gb.inherited.advance if gb.inherited else None)
     if bounds is None:
         shift = 0.0
@@ -236,7 +254,7 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
         skeleton=[s.to_json(shift, font.pen) for s in r.strokes], points=points,
         outline_points=outline_points, raw_signature=raw_signature,
         signature="|".join(c.signature() for c in final), shift=shift,
-        lsb=round(lsb, 2), rsb=round(rsb, 2), strokes=r.strokes,
+        lsb=round(lsb, 2), rsb=round(rsb, 2), primitives=sorted(prims), strokes=r.strokes,
     )
 
 
@@ -269,11 +287,9 @@ def _bounds(contours: list[Contour]):
     return bp.bounds
 
 
-def _detect_sides(strokes: list[Stroke]) -> tuple[str, str]:
-    """A side is 'straight' if a vertical line segment of the skeleton sits
-    at that side's extreme, otherwise 'round'."""
-    if not strokes:
-        return ("straight", "straight")
+def _detect_sides(strokes: list[Stroke], contours: list[Contour] = ()) -> tuple[str, str]:
+    """A side is 'straight' if a vertical line -- a skeleton line segment or
+    a straight contour edge -- sits at that side's extreme, else 'round'."""
     xs = []
     verticals = []
     for s in strokes:
@@ -281,6 +297,18 @@ def _detect_sides(strokes: list[Stroke]) -> tuple[str, str]:
             xs.append(bez(P, np.linspace(0, 1, 9))[:, 0])
             if kind == "line" and abs(P[3][0] - P[0][0]) < 0.5 and abs(P[3][1] - P[0][1]) > 1:
                 verticals.append(P[0][0])
+    for c in contours:
+        poly = flatten(c, 8)
+        xs.append(poly[:, 0])
+        n = len(c.pts)
+        for i in range(n):
+            j = (i + 1) % n
+            if c.types[i] == "on" and c.types[j] == "on":
+                (x0, y0), (x1, y1) = c.pts[i], c.pts[j]
+                if abs(x1 - x0) < 0.5 and abs(y1 - y0) > 20:
+                    verticals.append(x0)
+    if not xs:
+        return ("straight", "straight")
     xs = np.concatenate(xs)
     lo, hi = xs.min(), xs.max()
     left = "straight" if any(abs(v - lo) < 1 for v in verticals) else "round"
