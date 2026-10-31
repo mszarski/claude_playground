@@ -9,7 +9,8 @@ and the fight with its guardian, Humbaba.
 | Track | What it is | State |
 |-------|------------|-------|
 | `index.html` | Browser prototype (three.js) that renders at 320x240 with 15-bit dithered colour, used to design the level and combat quickly | Playable |
-| N64 ROM (`n64/`, planned) | The same level written in C with libdragon + tiny3d, built into a `.z64` that runs on real hardware (flashcart) and in emulators, including a WebAssembly emulator page | Not started: needs the libdragon toolchain |
+| N64 ROM (`n64/`) | The same level written in C with libdragon + tiny3d, built into a `.z64` for real hardware (flashcart) and emulators | Compiles; being tested in an emulator |
+| Web emulator page | The ROM running in the browser through EmulatorJS with a patched mupen64plus core | In progress |
 
 ## The demo level
 
@@ -47,3 +48,18 @@ python3 -m http.server -d gilgamesh64 8064
 ```
 
 Then visit http://localhost:8064.
+
+## Build the N64 ROM
+
+Needs the libdragon toolchain (preview branch) and [tiny3d](https://github.com/HailToDodongo/tiny3d), each built with its own `./build.sh`.
+
+```bash
+export N64_INST=/opt/libdragon
+```
+
+```bash
+make -C gilgamesh64/n64 T3D_INST=/path/to/tiny3d
+```
+
+This produces `gilgamesh64/n64/gilgamesh64.z64`. Everything in the ROM (models, level, music) is generated in code
+from `n64/src/`; the only assets are two pixel fonts (`monogram` and `abaddon`, both CC0).
