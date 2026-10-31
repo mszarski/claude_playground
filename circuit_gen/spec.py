@@ -25,9 +25,12 @@ means exactly that.
 
 - measure: v(NET), i(NET) (magnitude of the current through the voltage \
 source on NET, always >= 0), gain(OUT,IN) with \
-analysis="ac" and an "ac" source on IN, or freq(NET), an oscillation \
-frequency in Hz, with analysis="tran" and duration= long enough for at least \
-four cycles. In AC analysis every measure is a \
+analysis="ac" and an "ac" source on IN. With analysis="tran" and duration= \
+in seconds: freq(NET), an oscillation frequency in Hz (run at least four \
+cycles); avg(NET), ripple(NET) (peak to peak) and duty(NET) (fraction of the \
+time high, 0 to 1) of a voltage, and iavg(NET), the average current magnitude \
+in the source on NET, all over the last quarter of the run after start-up (a \
+switching regulator needs a few milliseconds, e.g. duration=0.008). In AC analysis every measure is a \
 magnitude: gain() is never negative, so an inverting gain of -10 is 9 to 11.
 - sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}. \
 A net without a source is left floating (useful for "input left open" cases).
@@ -35,7 +38,8 @@ A net without a source is left floating (useful for "input left open" cases).
 nets, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
 - Use only the net names the description gives; internal nets do not exist yet.
 - Simulation uses generic models of passives, diodes, LEDs, op-amps, fixed \
-linear regulators, MOSFETs, BJTs, 555 timers and CMOS logic gates. \
+linear regulators, fixed-output LM2596 buck regulators, MOSFETs, BJTs, 555 \
+timers and CMOS logic gates (including Schmitt-trigger inputs). \
 Behaviour that depends on an unmodelled part (e.g. an MCU) cannot be \
 checked; skip it.
 - Boards built around an IC without a model (MCUs, interface transceivers \
@@ -75,10 +79,10 @@ class SpecError(ValueError):
     pass
 
 
-_UNQUOTED = re.compile(r"require\(\s*(v|i|gain|freq)\(\s*([^)]*?)\s*\)")
+_UNQUOTED = re.compile(r"require\(\s*(v|i|gain|freq|avg|ripple|duty|iavg)\(\s*([^)]*?)\s*\)")
 
 
-_MEASURE = re.compile(r"(v|i|freq)\([^,()]+\)|gain\([^,()]+,[^,()]+\)")
+_MEASURE = re.compile(r"(v|i|freq|avg|ripple|duty|iavg)\([^,()]+\)|gain\([^,()]+,[^,()]+\)")
 
 
 def _quote_measures(code):
@@ -164,7 +168,8 @@ def parse_requirements(text):
         if missing:
             raise SpecError(f"require(...) missing {', '.join(missing)}: {ast.unparse(call)[:80]}")
         if not _MEASURE.fullmatch(str(req["measure"]).replace(" ", "")):
-            raise SpecError("the measure must be v(NET), i(NET), freq(NET) or gain(OUT,IN): "
+            raise SpecError("the measure must be v(), i(), gain(OUT,IN), or a transient "
+                            "freq(), avg(), ripple(), duty() or iavg(): "
                             f"{ast.unparse(call)[:80]}")
         if float(req["low"]) > float(req["high"]):
             raise SpecError(f"low above high in: {ast.unparse(call)[:80]}")

@@ -68,13 +68,19 @@ Requirements:
 - measure: v(NET), i(NET) (magnitude of the current through the voltage \
   source on NET, always >= 0), or gain(OUT,IN) with \
   analysis="ac" and an "ac" source on IN. In AC analysis every measure is \
-  a magnitude: gain() is never negative. freq(NET) measures an oscillation \
-  frequency with analysis="tran" and duration= at least four cycles long.
+  a magnitude: gain() is never negative. With analysis="tran" and duration= \
+  in seconds: freq(NET) is an oscillation frequency (run at least four \
+  cycles); avg(NET), ripple(NET) (peak to peak), duty(NET) (fraction of the \
+  time high) and iavg(NET) (average current magnitude in the source on NET) \
+  are taken over the last quarter of the run, after start-up. A switching \
+  regulator needs a few milliseconds, e.g. duration=0.008.
 - sources: voltage sources from nets to ground, e.g. {"VCC": 5, "IN": "ac"}.
 - loads: resistors from a net to ground, e.g. {"OUT": 10000}, or to another \
   net, e.g. {"LOAD_NEG": {"to": "V12", "r": 12}}.
 - Generic models are used: R/C/L, diodes and LEDs, op-amps, fixed linear \
-  regulators, MOSFETs, BJTs, 555 timers and CMOS logic gates. Parts without \
+  regulators, fixed-output LM2596 buck regulators (switching at 150 kHz), \
+  MOSFETs, BJTs, 555 timers and CMOS logic gates (Schmitt-trigger parts such \
+  as the 74HC14 switch at about 0.55 and 0.33 Vcc). Parts without \
   a model (e.g. MCUs) are left out, so only require what the modelled parts \
   determine.
 

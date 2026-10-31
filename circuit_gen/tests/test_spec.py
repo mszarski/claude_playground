@@ -158,8 +158,8 @@ def test_named_nets_with_signs():
 
 @pytest.mark.parametrize("line,message", [
     ("require(freq, 0.7, 1.4)", "quoted string"),
-    ("require('freq', 0.7, 1.4)", "v(NET), i(NET)"),
-    ("require('resistance(R1)', 1, 2)", "v(NET), i(NET)"),
+    ("require('freq', 0.7, 1.4)", "the measure must be v(), i()"),
+    ("require('resistance(R1)', 1, 2)", "the measure must be v(), i()"),
     ("require('v(OUT)', 2.5, 2.5)", "single value"),
 ])
 def test_rejects_unmeasurable_or_unsatisfiable(line, message):

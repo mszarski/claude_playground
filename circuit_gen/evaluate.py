@@ -118,7 +118,8 @@ def summarize(cases, results, samples):
             if r["failed_at"]:
                 failures[r["failed_at"]] = failures.get(r["failed_at"], 0) + 1
         false_accepts = sum(r.get("false_accept", False) for r in runs)
-        boards.append({"id": case["id"], "tested": bool(case.get("tests")), "passed": passed,
+        boards.append({"id": case["id"], "tier": case.get("tier", "standard"),
+                       "tested": bool(case.get("tests")), "passed": passed,
                        "false_accepts": false_accepts,
                        "samples": len(runs), "pass_rate": passed / len(runs) if runs else 0.0,
                        "failures": failures, "infra_errors": infra})
@@ -135,6 +136,9 @@ def summarize(cases, results, samples):
         "solved_every_time": sum(b["passed"] == b["samples"] for b in boards),
         "infra_errors": sum(b["infra_errors"] for b in boards),
         "false_accepts": sum(b.get("false_accepts", 0) for b in boards),
+        "tiers": {tier: {"pass_rate": mean([b["pass_rate"] for b in boards if b["tier"] == tier]),
+                         "boards": sum(b["tier"] == tier for b in boards)}
+                  for tier in sorted({b["tier"] for b in boards})},
         "boards": boards,
     }
 
@@ -151,6 +155,9 @@ def format_table(summary):
               f"{summary['pass_rate_tested']:.0%} over boards with simulation tests.",
               f"Solved at least once: {summary['solved_at_least_once']}/{n}; "
               f"every time: {summary['solved_every_time']}/{n}."]
+    if len(summary.get("tiers", {})) > 1:
+        lines.append("By tier: " + "; ".join(f"{t} {v['pass_rate']:.0%} ({v['boards']} boards)"
+                                              for t, v in summary["tiers"].items()) + ".")
     lines.append(f"False accepts (model declared done, hidden tests failed): "
                  f"{summary.get('false_accepts', 0)}.")
     if summary.get("infra_errors"):

@@ -55,12 +55,35 @@ def parse_value(text):
 MODELS = """
 .subckt CG_OPAMP inp inn out vp vn
 * Single-pole op-amp: 100 dB DC gain, 1 MHz GBW, output limited to the rails.
+* Output current is drawn from V+ when sourcing and returned to V- when sinking.
 Gin 0 int inp inn 1e-3
 Rint int 0 1e8
 Cint int 0 1.59e-10
 Bout outi 0 V = max(min(V(int), V(vp)-0.05), V(vn)+0.05)
-Rout outi out 10
+Vos outi outs 0
+Rout outs out 10
+Bsrc vp 0 I = max(I(Vos), 0)
+Bsnk 0 vn I = max(-I(Vos), 0)
 Iq vp vn 0.5m
+.ends
+.subckt CG_BUCK vin sw gnd fb on vout=5 fsw=150k
+* Fixed-output buck controller (LM2596-style), switching at fsw, with a 2 ms soft
+* start; off while ON/OFF is above 1.3 V. The switch is a smooth conductance so the
+* external inductor, catch diode and capacitors carry the real ripple. Valid in
+* continuous conduction (load above about half the inductor ripple current); at
+* light loads a real part skips pulses and this model does not.
+Vsaw saw gnd PULSE(0 1 0 {0.99/fsw} {0.01/fsw} 0 {1/fsw})
+Btgt tgt gnd V = {vout} * min(time/2m, 1)
+* Feedforward D = (Vout + Vd) / (Vin + Vd) for a catch diode drop Vd ~ 0.4 V; the
+* integrator crosses over near 15 Hz, far below the output LC resonance, so it only
+* trims slow errors and cannot sustain ringing.
+Bi gnd cint I = (V(tgt,gnd) - V(fb,gnd)) * 1e-4
+Cint cint gnd 1u
+Rint cint gnd 1e9
+Bd dc gnd V = V(on,gnd) > 1.3 ? 0 : max(min((V(tgt,gnd) + V(cint,gnd) + 0.4) / max(V(vin,gnd) + 0.4, 1), 0.95), 0)
+Bsw vin sw I = (V(vin,gnd) - V(sw,gnd)) * (6.25 * (1 + tanh((V(dc,gnd) - V(saw,gnd)) * 200)) + 1e-6)
+Rfb fb gnd 100k
+Iq vin gnd 5m
 .ends
 .subckt CG_REG vi vo gnd vout=3.3 drop=1.0
 * Fixed-output linear regulator: regulates to vout until the input drops.
@@ -91,6 +114,7 @@ Iq vcc gnd 3m
 .ends
 .model CG_DIODE D(IS=2.5n N=1.75 RS=0.5 BV=100)
 .model CG_SCHOTTKY D(IS=1u N=1.05 RS=0.05 BV=40)
+.model CG_SCH SW(VT=0.44 VH=0.11 RON=1 ROFF=1e9)
 .model CG_NMOS NMOS(LEVEL=1 VTO=1.5 KP=20 LAMBDA=0.01)
 .model CG_PMOS PMOS(LEVEL=1 VTO=-1.5 KP=10 LAMBDA=0.01)
 .model CG_NPN NPN(IS=1e-14 BF=200 VAF=100)
@@ -133,6 +157,7 @@ class Netlist:
     node: dict = field(default_factory=dict)       # net name -> SPICE node
     unmodeled: list = field(default_factory=list)
     tolerances: dict = field(default_factory=dict)  # SPICE element -> (nominal, relative tolerance)
+    max_step: float = float("inf")                  # transient step cap (switching parts)
 
     def node_for(self, net):
         if net is None:
@@ -216,6 +241,20 @@ def _add_part(nl, part):
             nodes = [nl.node_for(n) or f"nc_{ref}_{u}_{i}" for i, n in enumerate((inp, inn, out))]
             nl.lines.append(f"X{ref}_{u} {nodes[0]} {nodes[1]} {nodes[2]} {vp} {vn} CG_OPAMP")
         return
+    if lib == "Regulator_Switching" and re.match(r"LM2596", name):
+        m = re.search(r"-(\d+(?:\.\d+)?)$", name)
+        need = ("VIN", "OUT", "GND", "FB")
+        if not m:
+            nl.unmodeled.append(f"{ref} (only fixed-output LM2596 -3.3/-5/-12 are simulated)")
+            return
+        if all(k in by_name and by_name[k]["net"] for k in need):
+            on = next((p for p in pins if "ON" in p["name"].upper()), None)
+            on_node = nl.node_for(on["net"]) if on and on.get("net") else f"nc_{ref}_on"
+            n = {k: nl.node_for(by_name[k]["net"]) for k in need}
+            nl.lines.append(f"X{ref} {n['VIN']} {n['OUT']} {n['GND']} {n['FB']} {on_node} "
+                            f"CG_BUCK vout={m.group(1)} fsw=150k")
+            nl.max_step = min(nl.max_step, 1 / (150e3 * 60))
+            return
     if lib == "Regulator_Linear" and info:
         vin = by_name.get("VI") or by_name.get("IN") or by_name.get("VIN")
         vout = by_name.get("VO") or by_name.get("OUT") or by_name.get("VOUT")
@@ -284,10 +323,21 @@ def _add_logic(nl, part, info):
             else:
                 units[lp["unit"]]["out"] = nl.node_for(p["net"])
     ref = part["ref"]
+    schmitt = "schmitt" in desc
     for u, unit in sorted(units.items()):
         if unit["out"] is None or any(i is None for i in unit["in"]) or not unit["in"]:
             continue                       # unused gate
-        highs = [f"(V({i},{gnd}) > V({vcc},{gnd})/2)" for i in unit["in"]]
+        if schmitt:
+            # Each input through a hysteresis switch: high above 0.55 Vcc, low below 0.33 Vcc.
+            highs = []
+            for k, i in enumerate(unit["in"]):
+                tag = f"{ref}_{u}_{k}"
+                nl.lines += [f"Bsc{tag} sc{tag} 0 V = V({i},{gnd})/max(V({vcc},{gnd}),0.1)",
+                             f"Bsu{tag} su{tag} 0 V = 1", f"Rsu{tag} su{tag} sx{tag} 1k",
+                             f"Ssw{tag} sx{tag} 0 sc{tag} 0 CG_SCH"]
+                highs.append(f"(V(sx{tag}) < 0.5)")
+        else:
+            highs = [f"(V({i},{gnd}) > V({vcc},{gnd})/2)" for i in unit["in"]]
         logic = highs[0] if combine is None else f" {combine} ".join(highs)
         if combine == "!=":
             logic = f"({highs[0]} != {highs[1]})" if len(highs) == 2 else highs[0]
@@ -327,6 +377,9 @@ class TestResult:
         return text + f", required {lo:g}..{hi:g}"
 
 
+TRAN_MEASURES = ("freq", "avg", "ripple", "duty", "iavg")
+
+
 def _testbench(nl, test):
     """SPICE lines for one test, plus the expression to print. Raises KeyError for unknown nets."""
     def node(net):
@@ -351,23 +404,45 @@ def _testbench(nl, test):
         else:
             lines.append(f"R_load{i} {node(net)} 0 {float(spec)}")
 
-    m = re.fullmatch(r"\s*(v|i|gain|freq)\(\s*([^,)]+?)\s*(?:,\s*([^)]+?)\s*)?\)\s*", test["measure"])
+    m = re.fullmatch(r"\s*(v|i|gain|freq|avg|ripple|duty|iavg)\(\s*([^,)]+?)\s*(?:,\s*([^)]+?)\s*)?\)\s*",
+                     test["measure"])
     if not m:
         raise ValueError(f"bad measure expression {test['measure']!r}")
     kind, a, b = m.group(1), m.group(2), m.group(3)
     ac = test.get("analysis", "op") == "ac"
-    if kind == "freq" or test.get("analysis") == "tran":
-        if kind != "freq" or test.get("analysis") != "tran":
-            raise ValueError("freq(NET) is measured with analysis='tran' (and only it)")
+    if kind in TRAN_MEASURES or test.get("analysis") == "tran":
+        if kind not in TRAN_MEASURES or test.get("analysis") != "tran":
+            raise ValueError(f"{', '.join(f'{k}(NET)' for k in TRAN_MEASURES)} are measured with "
+                             "analysis='tran' (and only they are)")
         duration = float(test.get("duration", 5.0))
+        step = min(duration / 5000, nl.max_step)
         n = node(a)
-        # Oscillation frequency from the 2nd to 3rd rising crossing of the mid level,
-        # skipping the start-up cycle.
-        analysis = [f"tran {duration / 5000:.6g} {duration:.6g} uic",
-                    f"let cg_lvl = (vecmax(v({n})) + vecmin(v({n})))/2",
-                    f"meas tran cg_t1 when v({n})=$&cg_lvl rise=2",
-                    f"meas tran cg_t2 when v({n})=$&cg_lvl rise=3"]
-        return lines, analysis, "1/(cg_t2-cg_t1)"
+        if kind == "freq":
+            # Oscillation frequency from the 2nd to 3rd rising crossing of the mid level,
+            # skipping the start-up cycle.
+            analysis = [f"tran {step:.6g} {duration:.6g} 0 {step:.6g} uic",
+                        f"let cg_lvl = (vecmax(v({n})) + vecmin(v({n})))/2",
+                        f"meas tran cg_t1 when v({n})=$&cg_lvl rise=2",
+                        f"meas tran cg_t2 when v({n})=$&cg_lvl rise=3"]
+            return lines, analysis, "1/(cg_t2-cg_t1)"
+        # Averages, ripple and duty over the last quarter of the run, after start-up.
+        t0 = 0.75 * duration
+        window = f"from={t0:.6g} to={duration:.6g}"
+        analysis = [f"tran {step:.6g} {duration:.6g} 0 {step:.6g} uic"]
+        if kind == "iavg":
+            if a not in test.get("sources", {}):
+                raise ValueError(f"iavg({a}) needs a source on {a}")
+            analysis.append(f"meas tran cg_m avg i(v_{n}) {window}")
+            return lines, analysis, "abs(cg_m)"
+        if kind == "avg":
+            analysis.append(f"meas tran cg_m avg v({n}) {window}")
+            return lines, analysis, "cg_m"
+        if kind == "ripple":
+            analysis.append(f"meas tran cg_m pp v({n}) {window}")
+            return lines, analysis, "cg_m"
+        analysis += [f"meas tran cg_av avg v({n}) {window}", f"meas tran cg_mx max v({n}) {window}",
+                     f"meas tran cg_mn min v({n}) {window}"]
+        return lines, analysis, "(cg_av-cg_mn)/(cg_mx-cg_mn)"
     if kind == "v" and is_ground(a):
         expr = "0"                        # ground is the 0 V reference
     elif kind == "v":

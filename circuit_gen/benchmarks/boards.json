@@ -1146,5 +1146,353 @@
     ]
    }
   ]
+ },
+ {
+  "id": "buck_5v",
+  "tier": "hard",
+  "description": "Step-down (buck) switching regulator that makes 5 V at up to 1 A from a 12 V to 24 V input, using an LM2596-5.0 fixed-output regulator with the inductor, catch diode and input and output capacitors of its typical application. Output ripple under 100 mV peak to peak and efficiency above 80%, so not a linear regulator. Input and output on 2-pin headers. Name the nets VIN, +5V and GND.",
+  "tests": [
+   {
+    "name": "5 V at 1 A from 12 V",
+    "measure": "avg(+5V)",
+    "expect": [
+     4.75,
+     5.25
+    ],
+    "sources": {
+     "VIN": 12
+    },
+    "loads": {
+     "+5V": 5
+    },
+    "analysis": "tran",
+    "duration": 0.01
+   },
+   {
+    "name": "5 V at 1 A from 24 V",
+    "measure": "avg(+5V)",
+    "expect": [
+     4.75,
+     5.25
+    ],
+    "sources": {
+     "VIN": 24
+    },
+    "loads": {
+     "+5V": 5
+    },
+    "analysis": "tran",
+    "duration": 0.01
+   },
+   {
+    "name": "ripple < 100 mV at 1 A",
+    "measure": "ripple(+5V)",
+    "expect": [
+     0,
+     0.1
+    ],
+    "sources": {
+     "VIN": 12
+    },
+    "loads": {
+     "+5V": 5
+    },
+    "analysis": "tran",
+    "duration": 0.01
+   },
+   {
+    "name": "efficient: input current < 0.52 A at 12 V, 1 A out",
+    "measure": "iavg(VIN)",
+    "expect": [
+     0.35,
+     0.52
+    ],
+    "sources": {
+     "VIN": 12
+    },
+    "loads": {
+     "+5V": 5
+    },
+    "analysis": "tran",
+    "duration": 0.01
+   }
+  ]
+ },
+ {
+  "id": "schmitt_rc_oscillator",
+  "tier": "hard",
+  "description": "Square-wave oscillator at about 1 kHz made from one Schmitt-trigger inverter of a 74HC14 with a resistor and capacitor, on 5 V, with a second inverter of the same chip buffering the output OUT. Unused inputs tied to a supply. Name the nets VCC, GND and OUT.",
+  "tests": [
+   {
+    "name": "~1 kHz",
+    "measure": "freq(OUT)",
+    "expect": [
+     750,
+     1300
+    ],
+    "analysis": "tran",
+    "duration": 0.02,
+    "sources": {
+     "VCC": 5
+    }
+   },
+   {
+    "name": "duty near 50%",
+    "measure": "duty(OUT)",
+    "expect": [
+     0.3,
+     0.7
+    ],
+    "analysis": "tran",
+    "duration": 0.02,
+    "sources": {
+     "VCC": 5
+    }
+   },
+   {
+    "name": "full 0-5 V swing",
+    "measure": "ripple(OUT)",
+    "expect": [
+     4.5,
+     5.1
+    ],
+    "analysis": "tran",
+    "duration": 0.02,
+    "sources": {
+     "VCC": 5
+    }
+   }
+  ]
+ },
+ {
+  "id": "pwm_555",
+  "tier": "hard",
+  "description": "555 timer PWM generator on 5 V at about 1 kHz with a duty cycle of about 25% (output high a quarter of the time), using a diode so the charge and discharge paths have separate resistors. Output OUT on a header. Name the nets VCC, GND and OUT.",
+  "tests": [
+   {
+    "name": "~1 kHz",
+    "measure": "freq(OUT)",
+    "expect": [
+     750,
+     1300
+    ],
+    "analysis": "tran",
+    "duration": 0.02,
+    "sources": {
+     "VCC": 5
+    }
+   },
+   {
+    "name": "duty ~25%",
+    "measure": "duty(OUT)",
+    "expect": [
+     0.17,
+     0.34
+    ],
+    "analysis": "tran",
+    "duration": 0.02,
+    "sources": {
+     "VCC": 5
+    }
+   }
+  ]
+ },
+ {
+  "id": "rail_splitter",
+  "tier": "hard",
+  "description": "Virtual ground for a single 9 V battery: an op-amp buffers a resistor divider so VMID sits at half the battery voltage and stays within 0.1 V of it while sourcing or sinking 10 mA, with decoupling. Battery and VMID on a header. Name the nets VBAT, GND and VMID.",
+  "tests": [
+   {
+    "name": "4.5 V unloaded",
+    "measure": "v(VMID)",
+    "expect": [
+     4.4,
+     4.6
+    ],
+    "sources": {
+     "VBAT": 9
+    }
+   },
+   {
+    "name": "4.5 V sourcing 10 mA",
+    "measure": "v(VMID)",
+    "expect": [
+     4.4,
+     4.6
+    ],
+    "sources": {
+     "VBAT": 9
+    },
+    "loads": {
+     "VMID": 450
+    }
+   },
+   {
+    "name": "4.5 V sinking 10 mA",
+    "measure": "v(VMID)",
+    "expect": [
+     4.4,
+     4.6
+    ],
+    "sources": {
+     "VBAT": 9
+    },
+    "loads": {
+     "VMID": {
+      "to": "VBAT",
+      "r": 450
+     }
+    }
+   },
+   {
+    "name": "battery current while sourcing 10 mA",
+    "measure": "i(VBAT)",
+    "expect": [
+     0.009,
+     0.016
+    ],
+    "sources": {
+     "VBAT": 9
+    },
+    "loads": {
+     "VMID": 450
+    }
+   }
+  ]
+ },
+ {
+  "id": "audio_mixer_3ch",
+  "tier": "hard",
+  "description": "Three-input audio mixer on a single 9 V supply: an op-amp inverting summing amplifier gives each of IN1, IN2 and IN3 a gain of about -1 from 100 Hz to 10 kHz, with AC-coupled inputs and output, a mid-supply bias, and the ability to drive a 10k load. Name the nets VCC, GND, IN1, IN2, IN3 and OUT.",
+  "tests": [
+   {
+    "name": "IN1 gain ~1 at 1 kHz",
+    "measure": "gain(OUT,IN1)",
+    "expect": [
+     0.85,
+     1.15
+    ],
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VCC": 9,
+     "IN1": "ac",
+     "IN2": 0,
+     "IN3": 0
+    },
+    "loads": {
+     "OUT": 10000
+    }
+   },
+   {
+    "name": "IN2 gain ~1 at 100 Hz",
+    "measure": "gain(OUT,IN2)",
+    "expect": [
+     0.85,
+     1.15
+    ],
+    "analysis": "ac",
+    "freq": 100,
+    "sources": {
+     "VCC": 9,
+     "IN1": 0,
+     "IN2": "ac",
+     "IN3": 0
+    },
+    "loads": {
+     "OUT": 10000
+    }
+   },
+   {
+    "name": "IN3 gain ~1 at 10 kHz",
+    "measure": "gain(OUT,IN3)",
+    "expect": [
+     0.85,
+     1.15
+    ],
+    "analysis": "ac",
+    "freq": 10000,
+    "sources": {
+     "VCC": 9,
+     "IN1": 0,
+     "IN2": 0,
+     "IN3": "ac"
+    },
+    "loads": {
+     "OUT": 10000
+    }
+   }
+  ]
+ },
+ {
+  "id": "balanced_line_receiver",
+  "tier": "hard",
+  "description": "Balanced line receiver on +/-12 V: a unity-gain op-amp difference amplifier using 0.1% resistors for common-mode rejection better than 40 dB, followed by a second-order Butterworth low-pass filter at about 20 kHz, so OUT = IN_P - IN_N in the audio band and ultrasonic noise is removed. Inputs, output and power on pin headers. Name the nets VPOS, VNEG, GND, IN_P, IN_N and OUT.",
+  "tests": [
+   {
+    "name": "differential gain ~1 at 1 kHz",
+    "measure": "gain(OUT,IN_P)",
+    "expect": [
+     0.9,
+     1.1
+    ],
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": "ac",
+     "IN_N": 0
+    }
+   },
+   {
+    "name": "common-mode gain < 0.01 (40 dB)",
+    "measure": "gain(OUT,IN_P)",
+    "expect": [
+     0,
+     0.01
+    ],
+    "analysis": "ac",
+    "freq": 1000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": "ac",
+     "IN_N": "ac"
+    }
+   },
+   {
+    "name": "flat at 10 kHz",
+    "measure": "gain(OUT,IN_P)",
+    "expect": [
+     0.85,
+     1.1
+    ],
+    "analysis": "ac",
+    "freq": 10000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": "ac",
+     "IN_N": 0
+    }
+   },
+   {
+    "name": "rejects 100 kHz",
+    "measure": "gain(OUT,IN_P)",
+    "expect": [
+     0,
+     0.1
+    ],
+    "analysis": "ac",
+    "freq": 100000,
+    "sources": {
+     "VPOS": 12,
+     "VNEG": -12,
+     "IN_P": "ac",
+     "IN_N": 0
+    }
+   }
+  ]
  }
 ]

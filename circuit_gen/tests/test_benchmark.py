@@ -67,6 +67,14 @@ MUTANTS = [
     ("bjt_current_mirror", 'R("11k", tolerance=0.01)', 'R("1.1k", tolerance=0.01)'),  # 10 mA
     ("high_side_switch", 'q["S"] += v12; q["D"] += load', 'q["D"] += v12; q["S"] += load'),  # body diode
     ("led_bar_3level", "(t1, t2, t3)", "(t3, t2, t1)"),                   # thresholds reversed
+    ("buck_5v", 'value="220u"', 'value="4.7u"'),                         # output cap too small
+    ("buck_5v", 'value="33u"', 'value="1u"'),                            # inductor far too small
+    ("schmitt_rc_oscillator", 'R("11k", tolerance=0.01)', 'R("110k", tolerance=0.01)'),  # 100 Hz
+    ("pwm_555", 'd = Part("Diode", "1N4148W", footprint="Diode_SMD:D_SOD-123")\nd["A"] += dis; d["K"] += thr\n', ""),  # no diode: duty > 50%
+    ("rail_splitter", "u[3] += div; u[2] += vmid; u[1] += vmid", "div += vmid"),  # unbuffered
+    ("audio_mixer_3ch", "    n & C(\"10u\") & c", "    n & C(\"10n\") & c"),  # inputs roll off below 1.6 kHz
+    ("balanced_line_receiver", 'ni & R("10k", tolerance=0.001) & gnd', 'ni & R("11k", tolerance=0.001) & gnd'),  # CMRR
+    ("balanced_line_receiver", 'm & C("2.2n") & out', 'm & C("22n") & out'),  # filter corner far too low
 ]
 
 

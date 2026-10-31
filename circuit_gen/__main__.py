@@ -57,6 +57,8 @@ def cmd_eval(args):
     if args.only:
         wanted = set(args.only.split(","))
         cases = [c for c in cases if c["id"] in wanted]
+    if args.tier:
+        cases = [c for c in cases if c.get("tier", "standard") == args.tier]
     summary = run_eval(cases, args.out, samples=args.samples, jobs=args.jobs,
                        resume=args.resume, **_opts(args))
     print()
@@ -128,6 +130,8 @@ def main(argv=None):
     e.add_argument("--samples", type=int, default=1, help="designs per board (model outputs vary)")
     e.add_argument("--jobs", type=int, default=4, help="samples run in parallel")
     e.add_argument("--only", default=None, help="comma-separated board ids to run")
+    e.add_argument("--tier", default=None, choices=["standard", "hard"],
+                   help="run only the boards of one tier")
     e.add_argument("--resume", action="store_true", help="reuse samples already finished in --out")
 
     g = sub.add_parser("datagen", help="write new (non-benchmark) board descriptions for training")
