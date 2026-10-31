@@ -696,6 +696,20 @@ error killed one revise job at install; relaunching unchanged worked.
   RL, below `vlm_grpo_real2` (~92), so **stopped at step ~6000 (~$58 spent; no checkpoint kept)**. A fair 4B test
   needs the 2B's full step count (~30k SFT + RL, ~$300+).
 
+### Claude Opus 5.5 zero-shot on real parts (`results/claude_real`; Oct 31)
+- `scripts/claude_baseline.py submit --rich data/rich/real --modes view4 view1 --effort high` (full-feature prompt:
+  fillets, chamfers, revolves, holes, shells allowed; batch API, 1200 requests, ~$11.6). Own IoU, paired on 600 parts:
+  | input | Claude | vlm_grpo_fullres | vlm_grpo_real2 one answer | vlm_grpo_real2 pipeline |
+  |---|---|---|---|---|
+  | view4 | **66.5** (IR 1.2 %) | 59.9 (-6.6 +- 1.3) | 65.1 (-1.3 +- 1.2) | **68.0** (+1.6 +- 1.1) |
+  | view1 | 50.3 (IR 1.7 %) | 57.0 (+6.7) | 59.5 (+9.3) | **62.6** (+12.3 +- 1.2) |
+  Per group view4: chamfer 67.9, fillet 64.8, plain 72.2, revolve 61.0. Unlike DeepCAD (Claude 83.4 vs our 91+, where
+  DeepCAD's own frame/style conventions dominate), on real designs with 4 views a frontier model zero-shot is about
+  level with our best trained 2B and almost never writes code that fails to build. With one view ours is far better.
+- Implications: Claude is a strong teacher for real parts (its programs on real train parts, verified against the
+  STEP, as SFT/RFT targets: ~1 cent per part via batch); and a Claude + ours ensemble picked by render agreement is
+  a cheap upper-bound test.
+
 ### Visual check and an "own" IoU quirk (`scripts/gallery.py`, bucket `results/gallery/gallery_view4.png`)
 14 test parts (8 random novel, 4 where GRPO beats SFT most, 2 where it is worst): input, GT, SFT, Claude, full-res, GRPO,
 same iso camera. Simple novel parts (plates, bars, blocks with a hole) are right for every method; complex stepped

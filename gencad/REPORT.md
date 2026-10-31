@@ -183,6 +183,12 @@ A second round of the same RL (`vlm_grpo_real2`, with more generated parts in th
 points faster per step than the 2B had; at that pace it would have ended below our 2B on DeepCAD, so it was
 stopped halfway (~$60). A fair test of a bigger model needs the 2B's full training length (~$300+).
 
+**Claude Opus 5.5 zero-shot on real parts.** With a prompt allowing the full CadQuery feature set, Claude scores
+66.5 on the 600 real parts from 4 views (our best: 65.1 single answer, 68.0 full pipeline, +1.6 ± 1.1) with almost no
+broken code (1.2 %), but only 50.3 from one view (ours 62.6). So the earlier "Claude is weaker" (DeepCAD, 83 vs 91)
+was mostly about DeepCAD's conventions: on real designs from 4 views a frontier model is already about as good as
+our trained 2B — which makes it a good teacher for real-part training data.
+
 ## Current standings (test set, own IoU %, all parts / novel parts)
 
 | model | 1 view | 4 views | 1 view + expert text | expert text only |
