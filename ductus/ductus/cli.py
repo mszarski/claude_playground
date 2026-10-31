@@ -148,27 +148,39 @@ def bench(font_py: Path,
 
 @app.command()
 def fit(font_py: Path,
-        glyph: str = typer.Option(..., "--glyph"),
+        glyph: str = typer.Option(..., "--glyph", help="glyph, or comma-separated glyphs fitted jointly"),
         reference: Optional[Path] = typer.Option(None),
-        param: list[str] = typer.Option([], "--param", help="limit to these params (default: all ranged params that affect the glyph)"),
+        param: list[str] = typer.Option([], "--param", help="params or globs (n_*); default: all ranged params that affect the glyph"),
         maxiter: int = typer.Option(400),
+        samples: int = typer.Option(256),
+        restarts: int = typer.Option(3),
         exclude: str = typer.Option("xheight,capheight,ascender,descender",
                                     help="params never fitted (default: the fixed vertical metrics)"),
+        save: Optional[Path] = typer.Option(None, help="merge fitted values into this YAML file"),
         overrides: Optional[Path] = typer.Option(None)):
-    """Tune a glyph's parameters (not overrides) to minimise error vs the reference."""
+    """Tune parameters (not overrides) to minimise error vs the reference."""
+    import yaml
     from .bench.reference import Reference
     from .bench.run import fit_glyph
     ref_path = reference or _default_reference(font_py)
     if ref_path is None:
         raise typer.BadParameter("no reference font")
     font = load_font(font_py)
-    r = fit_glyph(font, Reference(ref_path), glyph, _overrides_for(font_py, overrides), param or None, maxiter,
+    glyphs = [g.strip() for g in glyph.split(",") if g.strip()]
+    r = fit_glyph(font, Reference(ref_path), glyphs, _overrides_for(font_py, overrides), param or None, maxiter,
+                  samples=samples, restarts=restarts,
                   exclude={e.strip() for e in exclude.split(",") if e.strip()})
-    typer.echo(f"{glyph}: IoU {r.before.iou:.4f} -> {r.after.iou:.4f}, Hausdorff {r.before.hausdorff:.1f} -> "
-               f"{r.after.hausdorff:.1f} ({r.evaluations} evaluations)")
-    typer.echo("# fitted values (paste into font.py defaults):")
+    for g, s in r.scores.items():
+        typer.echo(f"{g}: IoU {s.iou:.4f}  Hausdorff {s.hausdorff:.1f}  mean {s.mean_dist:.2f}  dadv {s.advance_delta:+d}")
+    typer.echo(f"({r.evaluations} evaluations; first glyph before: IoU {r.before.iou:.4f})" if r.before else "")
     for k, v in r.params.items():
-        typer.echo(f"{k} = {v:g}")
+        typer.echo(f"  {k} = {v:g}")
+    if save:
+        data = yaml.safe_load(save.read_text()) if save.exists() else {}
+        data = data or {}
+        data.update({k: float(v) for k, v in r.params.items()})
+        save.write_text(yaml.safe_dump(dict(sorted(data.items())), sort_keys=False))
+        typer.echo(f"saved -> {save}")
 
 
 @app.command()

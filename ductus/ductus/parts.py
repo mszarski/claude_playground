@@ -50,6 +50,7 @@ class GlyphDef:
     unicode: int | None
     advance: Any = None
     sides: tuple[str, str] | None = None   # ("straight"|"round", ...) or None = detect
+    sb: tuple | None = None                # additive (left, right) sidebearing adjustments
 
 
 class Font:
@@ -76,10 +77,10 @@ class Font:
         self.source_path = None
         _current_font = self
 
-    def glyph(self, name: str, unicode: int | None = None, advance=None, sides=None):
+    def glyph(self, name: str, unicode: int | None = None, advance=None, sides=None, sb=None):
         def deco(fn):
             u = unicode if unicode is not None else _unicode_for(name)
-            self.glyphs[name] = GlyphDef(name, fn, u, advance, sides)
+            self.glyphs[name] = GlyphDef(name, fn, u, advance, sides, sb)
             return fn
         return deco
 
@@ -196,6 +197,7 @@ class ContourBuilder:
         self.fullname = ""
         self.group = None       # contours sharing a group are oriented together (outer + counter)
         self.kind = "contour"
+        self.negative = False   # True: subtracted from the glyph (apertures, cuts)
 
     def move(self, p, name=None):
         self.contour.add(pt(p), "on", name); return self
@@ -250,24 +252,35 @@ class Builder:
         raise KeyError(f"{self.scope}: no part instance named {name!r} "
                        f"(have {[c.name for c in self.calls]})")
 
-    def line(self, a, b, name: str = "line", names=("start", "end"), terminal=True, pen=None) -> Stroke:
-        s = Stroke(name, [], ["line"], pen=pen)
+    def line(self, a, b, name: str = "line", names=("start", "end"), terminal=True, pen=None,
+             profile=None, bias=None) -> Stroke:
+        s = Stroke(name, [], ["line"], pen=pen, profile=profile, bias=bias)
         ta, tb = terminal if isinstance(terminal, tuple) else (terminal, terminal)
         s.nodes = [Node(names[0], np.array(pt(a), float), terminal=ta),
                    Node(names[1], np.array(pt(b), float), terminal=tb)]
         self._strokes.append(s)
         return s
 
-    def path(self, name: str = "path", pen=None, inside=None) -> PathBuilder:
+    def path(self, name: str = "path", pen=None, inside=None, profile=None, bias=None) -> PathBuilder:
         """``inside`` (closed paths): share of the pen's contrast placed on
-        the inner side (0.5 = symmetric; default: the pen's ``inside``)."""
-        s = Stroke(name, [], [], pen=pen, inside=inside)
+        the inner side (0.5 = symmetric; default: the pen's ``inside``).
+        ``profile``: width along the stroke (:mod:`ductus.profiles`).
+        ``bias`` (open paths): share of the modulation on the left of travel."""
+        s = Stroke(name, [], [], pen=pen, inside=inside, profile=profile, bias=bias)
         self._strokes.append(s)
         return PathBuilder(s)
 
     def contour(self, name: str = "contour") -> ContourBuilder:
         cb = ContourBuilder(name)
         self._contours.append(cb)
+        return cb
+
+    def cut(self, name: str = "cut") -> ContourBuilder:
+        """A contour subtracted from the glyph after overlap removal
+        (apertures, notches)."""
+        cb = self.contour(name)
+        cb.negative = True
+        cb.kind = "cut"
         return cb
 
     def bowl(self, left, right, bottom, top, thick, thin, **kw):

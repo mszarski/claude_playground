@@ -117,6 +117,28 @@ imported; the fitted benchmark font stays in `benchmarks/` and is never built
 for release. The original design in `examples/display_serif/` is never
 fitted.
 
+## Primitives for a high-contrast serif (M2)
+
+| primitive | API | used by |
+|---|---|---|
+| width profiles | `p.path(..., profile=Profile((0, .2), (.35, 1), (1, 1)))`, `taper()`, `swell()`, `constant()` | n/h/m/r arch join, s spine, g ear/loop |
+| L/R bias | `p.path(..., bias=0.4)` — share of the modulation left of travel | arches (thicker inside) |
+| per-stroke pens | `Pen(angle=, width=, contrast=)` on any stroke | arches, hoods, monoline diagonals of v/A |
+| contour bowls | `p.bowl(..., fullness=(h, v), stress=, rotate=)` | o O b e g, a's tilted bowl |
+| cuts | `p.cut(...)` subtracted after overlap removal; terminals can cut too | e and G apertures, wedge heads, flat cuts |
+| terminal library | `bracketed(length, bracket, tip, curve, cup, slope, left=/right=)`, `wedge`, `beak`, `ball`, `flat(axis)`, all world-axis-aware | every serif, beak, ball, vertex |
+| terminal sets | `TerminalSet(default, foot=..., head=..., ...)` keyed by end tags | swap the set → restyle the font |
+| per-glyph spacing | `@glyph(..., sb=(dl, dr))` | v, A (negative sidebearings) |
+| kits | `ductus.kits.serif`: constructions written once against a param namespace | benchmark *and* original font |
+
+**Junctions** are handled by construction rather than a separate `join()`
+call: an arch starts *inside* the stem with a tapered profile, so the union
+produces the hairline join and the crotch; `n_join_*` and `n_taper*` control
+it. **Optical rules** are parameters of the kit (overshoot, `round_gain`,
+heavier cap stems, hairline horizontals from the pen) rather than a separate
+pass. Both are candidates to become first-class if overrides start piling up
+there (the *Overrides by kind* panel will show it).
+
 ## Bowls (contour parts)
 
 ```python
@@ -179,8 +201,9 @@ The example font uses `stress = 0.72`.
   lengths with per-node tension; the full Hobby direction solve (mock
   curvature continuity) arrives with `n`, where arches need it. Spiro would
   make tension less direct to expose.
-- **Width profiles:** not yet built (needed by `n`); planned as small named
-  parametric functions over t (taper/swell), overridable by name.
+- **Width profiles:** small knot curves over t in [0, 1] (smoothstep between
+  knots), knot values are params so they're fittable; helpers `taper`,
+  `swell`, `constant`. Profile × direction model, then split L/R by `bias`.
 - **IoU/Hausdorff targets:** set after `n`; working assumption in
   `docs/representability.md`.
 

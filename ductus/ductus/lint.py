@@ -72,7 +72,7 @@ def _span_at(contours, y: float, x: float) -> float | None:
     return None
 
 
-def check_stems(cg: CompiledGlyph, expected: float) -> list[Finding]:
+def check_stems(cg: CompiledGlyph, expected) -> list[Finding]:
     """Every vertical straight stroke must measure ``expected`` horizontally.
     Measured at several heights; the narrowest reading is used so that
     junctions (crossbars, arches) don't count."""
@@ -89,9 +89,12 @@ def check_stems(cg: CompiledGlyph, expected: float) -> list[Finding]:
                 out.append(Finding("stems", "error", f"{s.fullname}: stem not found in outline", cg.name))
                 continue
             w = min(spans)
-            if abs(w - expected) > STEM_TOLERANCE:
+            exp = expected(s) if callable(expected) else expected
+            if exp is None:
+                continue
+            if abs(w - exp) > STEM_TOLERANCE:
                 out.append(Finding("stems", "error",
-                                   f"{s.fullname}: measured {w:.1f}, expected {expected:.1f}", cg.name))
+                                   f"{s.fullname}: measured {w:.1f}, expected {exp:.1f}", cg.name))
     return out
 
 
@@ -154,12 +157,17 @@ def run_lints(font: Font, overrides: dict[str, Override] | None = None,
         cf = compile_font(font, overrides=overrides)
     except Exception as e:
         return [Finding("compile", "error", f"{type(e).__name__}: {e}")], None
-    with evaluating(cf.params):
-        expected_stem = val(font.pen.width)
+    def expected(stroke):
+        """A vertical stroke should measure its pen's vertical width; strokes
+        with a width profile or per-node width changes are skipped."""
+        if stroke.profile is not None or any(n.dw for n in stroke.nodes):
+            return None
+        with evaluating(cf.params):
+            return (stroke.pen or font.pen).width_at(90)
     for cg in cf.glyphs.values():
         findings += check_self_intersections(cg)
         findings += check_direction(cg)
-        findings += check_stems(cg, expected_stem)
+        findings += check_stems(cg, expected)
     findings += check_overrides(cf)
     for w in cf.warnings:
         if not w.startswith("override"):

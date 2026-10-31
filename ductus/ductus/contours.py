@@ -21,6 +21,9 @@ Controls
                     bottom-right, top-right, top-left, bottom-left.
   inner_fullness    the same for the counter (default: ``fullness``).
   outer_stress      optional rotation of the outer extrema (default 0).
+  rotate            rotate the whole bowl -- both contours, tangents
+                    included -- about its centre (degrees, CCW). For tilted
+                    bowls like the a's, whose top climbs into the stem.
 """
 from __future__ import annotations
 
@@ -73,9 +76,17 @@ def quadrant_contour(cb, ext: dict, fullness: list[float]):
     return cb
 
 
+def _rotate(cb, cx, cy, deg):
+    a = math.radians(deg)
+    ca, sa = math.cos(a), math.sin(a)
+    for p in cb.contour.pts:
+        x, y = p[0] - cx, p[1] - cy
+        p[0], p[1] = cx + x * ca - y * sa, cy + x * sa + y * ca
+
+
 def bowl(builder, left, right, bottom, top, thick, thin, stress=0.0, fullness=0.6,
          inner_fullness=None, thick_right=None, thin_bottom=None, outer_stress=0.0,
-         prefix: str = ""):
+         rotate=0.0, prefix: str = ""):
     """Add an outer + inner contour pair to ``builder``; returns both."""
     l, r, b, t = val(left), val(right), val(bottom), val(top)
     tl_ = val(thick)
@@ -90,4 +101,8 @@ def bowl(builder, left, right, bottom, top, thick, thin, stress=0.0, fullness=0.
     quadrant_contour(outer, extrema(l, r, b, t, val(outer_stress)), _four(fullness))
     quadrant_contour(inner, extrema(l + tl_, r - tr_, b + tb, t - th, val(stress)),
                      _four(inner_fullness if inner_fullness is not None else fullness))
+    rot = val(rotate)
+    if rot:
+        for cb in (outer, inner):
+            _rotate(cb, (l + r) / 2, (b + t) / 2, rot)
     return outer, inner

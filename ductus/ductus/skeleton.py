@@ -35,6 +35,8 @@ class Stroke:
     pen: Any = None
     fullname: str = ""
     inside: Any = None              # closed strokes: share of contrast on the inner side
+    profile: Any = None             # width profile along the stroke (ductus.profiles)
+    bias: Any = None                # open strokes: share of modulation on the left of travel
 
     def is_ccw(self) -> bool:
         P = np.array([n.pos for n in self.nodes])

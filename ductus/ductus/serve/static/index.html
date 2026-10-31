@@ -144,6 +144,12 @@ section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; f
 .handle-w { fill: var(--canvas); stroke: var(--text); stroke-width: 1.4; cursor: grab; }
 .handle-arm { stroke: var(--skel); stroke-width: 1.2; }
 .handle-warm { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 3; }
+.stage { fill-opacity: 0.12; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.stage-strokes { fill: #2f6fde; stroke: #2f6fde; }
+.stage-contours { fill: #2c8a4b; stroke: #2c8a4b; }
+.stage-terminals { fill: #b7791f; stroke: #b7791f; }
+.stage-cuts { fill: #c43d3d; stroke: #c43d3d; stroke-dasharray: 4 3; fill-opacity: 0.08; }
+.kind-chip { display: inline-block; font: 10.5px var(--mono); padding: 0 5px; border-radius: 8px; background: var(--chip); margin-left: 4px; }
 .ref-fill { fill: var(--ref); stroke: var(--ref-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .heat { fill: none; stroke-width: 3.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 #refbox { display: none; align-items: center; gap: 6px; color: var(--muted); }
@@ -556,6 +562,10 @@ function renderCanvas() {
     }
     el("path", { d, class: "skel" }, G);
   }
+  // stage inspector: raw geometry of each pipeline stage, before overlap removal
+  for (const st of ["strokes", "contours", "terminals", "cuts"]) {
+    if (S.view["st_" + st] && g.stages && g.stages[st]) el("path", { d: g.stages[st], class: `stage stage-${st}` }, G);
+  }
   const R = S.data.reference && S.data.reference[g.name];
   if (R && S.refView.ref) {
     el("path", { d: R.svg, class: "ref-fill", "fill-opacity": S.refView.opacity, "stroke-opacity": Math.min(1, S.refView.opacity + 0.4) }, G);
@@ -805,6 +815,7 @@ function renderInspector() {
       <span class="n">${k.slice(g.name.length + 1)}</span><span class="v">${summarize(o)}</span><button data-del="${k}" title="Remove">×</button></li>`).join("")}</ul>`
     : `<div class="empty">No hand adjustments in this glyph yet. Drag a point.</div>`;
   html += `</section>`;
+  html += overridesByKind();
   const stale = (S.data.warnings || []).filter((w) => w.startsWith("override"));
   if (stale.length) {
     html += `<section><h2>Stale overrides</h2>${stale.map((w) => {
@@ -835,6 +846,31 @@ function renderInspector() {
   });
   for (const b of box.querySelectorAll("[data-del]")) b.addEventListener("click", (e) => { e.stopPropagation(); send({ type: "remove", names: [b.dataset.del] }); });
   for (const a of box.querySelectorAll("[data-sb]")) a.addEventListener("click", (e) => { e.preventDefault(); select({ kind: a.dataset.sb, name: `${g.name}.${a.dataset.sb}` }); });
+}
+// what kind of thing an override adjusts -- recurring kinds should become primitives
+function overrideKind(name, o) {
+  if (/\.(lsb|rsb)$/.test(name)) return "spacing";
+  if (/\.(serif|wedge|beak|ball)\./.test(name)) return "terminal";
+  if (/\.(join|cup\.join)(\.|$)/.test(name)) return "junction";
+  if (/\.(outer|inner)\.(top|bottom|left|right)/.test(name)) return "bowl extreme";
+  if (/spine|\.s\b/.test(name)) return "spine";
+  if (o.stage === "outline") return "outline point";
+  if (o.dw || o.da || o.dt) return "stroke shape";
+  return "skeleton point";
+}
+function overridesByKind() {
+  const groups = {};
+  for (const [k, o] of Object.entries(S.overrides)) {
+    const kind = overrideKind(k, o);
+    (groups[kind] = groups[kind] || []).push(k);
+  }
+  const kinds = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length);
+  if (!kinds.length) return "";
+  return `<section><h2>Overrides by kind (font)</h2><ul class="ovlist">${kinds.map((kind) => {
+    const names = groups[kind], glyphs = new Set(names.map((n) => n.split(".")[0]));
+    const hint = glyphs.size >= 3 ? ` <span class="kind-chip" title="recurs in ${glyphs.size} glyphs">primitive?</span>` : "";
+    return `<li title="${names.join("\n")}"><span class="n">${kind}${hint}</span><span class="v">${names.length} in ${glyphs.size} glyph${glyphs.size > 1 ? "s" : ""}</span></li>`;
+  }).join("")}</ul></section>`;
 }
 function heatColor(d) {
   const t = Math.max(0, Math.min(1, d / 12));         // 0 u -> green, >= 12 u -> red
@@ -892,7 +928,8 @@ $("#textin").value = store.get("text", $("#textin").value);
 $("#textsize").value = store.get("textsize", 72);
 
 // ------------------------------------------------------------------ header controls
-const TOGGLES = [["fill", "Fill"], ["outline", "Outline"], ["skeleton", "Skeleton"], ["nodes", "Points"], ["opoints", "Outline pts"], ["metrics", "Metrics"], ["context", "Context"]];
+const TOGGLES = [["fill", "Fill"], ["outline", "Outline"], ["skeleton", "Skeleton"], ["nodes", "Points"], ["opoints", "Outline pts"], ["metrics", "Metrics"], ["context", "Context"],
+                 ["st_strokes", "⋯Strokes"], ["st_contours", "⋯Contours"], ["st_terminals", "⋯Terminals"], ["st_cuts", "⋯Cuts"]];
 function renderToggles() {
   $("#toggles").innerHTML = TOGGLES.map(([k, l]) => `<button data-v="${k}" class="${S.view[k] ? "on" : ""}">${l}</button>`).join("");
   for (const b of $("#toggles").querySelectorAll("button")) b.addEventListener("click", () => {

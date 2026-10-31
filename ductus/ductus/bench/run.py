@@ -62,15 +62,36 @@ def glyph_params(font, glyph: str, overrides, exclude=()) -> tuple[list[str], li
     return shape, spacing
 
 
-def fit_glyph(font, ref: Reference, glyph: str, overrides=None, params: list[str] | None = None,
+def expand_params(font, patterns) -> list[str]:
+    import fnmatch
+    out = []
+    for pat in patterns:
+        hits = [n for n, p in font.params.items() if p.range and fnmatch.fnmatchcase(n, pat)]
+        if not hits:
+            raise ValueError(f"no ranged parameter matches {pat!r}")
+        out += [h for h in hits if h not in out]
+    return out
+
+
+def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | None = None,
               maxiter: int = 400, base_params: dict[str, float] | None = None,
               samples: int = 256, restarts: int = 3, exclude=()) -> FitResult:
     """Tune ranged parameters (not overrides) to minimise shape error."""
     from scipy.optimize import minimize
     overrides = overrides or {}
     base_params = dict(base_params or {})
+    glyphs = [glyph] if isinstance(glyph, str) else list(glyph)
+    glyph = glyphs[0]
     if params:
-        names, spacing = list(params), []
+        names = expand_params(font, params)
+        names = [n for n in names if n not in exclude]
+        # split the requested params into shape vs spacing-only (by perturbation)
+        shape_all, spacing_all = set(), set()
+        for gname in glyphs:
+            sh, sp = glyph_params(font, gname, overrides, exclude)
+            shape_all |= set(sh); spacing_all |= set(sp)
+        spacing = [n for n in names if n in spacing_all and n not in shape_all]
+        names = [n for n in names if n not in spacing]
     else:
         names, spacing = glyph_params(font, glyph, overrides, exclude)
     if not names:
@@ -79,18 +100,28 @@ def fit_glyph(font, ref: Reference, glyph: str, overrides=None, params: list[str
     x0 = np.array([(base_params.get(n, font.params[n].default) - lo) / (hi - lo) for n, (lo, hi) in zip(names, ranges)])
     evals = [0]
 
-    def run(x):
+    def run_all(x):
         x = np.clip(x, 0, 1)
         vals = {**base_params, **{n: lo + xi * (hi - lo) for n, xi, (lo, hi) in zip(names, x, ranges)}}
-        cf = compile_font(font, vals, overrides, glyphs=[glyph])
-        return vals, score_font(cf, ref, [glyph])[glyph]
+        try:
+            cf = compile_font(font, vals, overrides, glyphs=glyphs)
+            return vals, score_font(cf, ref, glyphs)
+        except Exception:
+            return vals, None
+
+    def run(x):
+        vals, sc = run_all(x)
+        return vals, (sc[glyph] if sc else None)
 
     def objective(x):
         evals[0] += 1
-        _, s = run(x)
+        _, sc = run_all(x)
+        if sc is None:
+            return 1e3
         # mean outline distance is smooth in the parameters; raster IoU is
-        # piecewise and stalls the simplex. Advance error weighs in too.
-        return (s.mean_dist + 0.05 * s.hausdorff) / 10 + 10 * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
+        # piecewise and stalls the simplex.
+        pen = 10 * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
+        return sum((s.mean_dist + 0.05 * s.hausdorff) / 10 for s in sc.values()) / len(sc) + pen * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
 
     _, before = run(x0)
     # global: quasi-random sample of the parameter box, then local Nelder-Mead
@@ -98,7 +129,7 @@ def fit_glyph(font, ref: Reference, glyph: str, overrides=None, params: list[str
     # hairline thickness against counter shape)
     from scipy.stats import qmc
     d = len(names)
-    starts = [x0] + list(qmc.Sobol(d, seed=1).random(samples))
+    starts = [x0] + list(qmc.Sobol(d, seed=1).random_base2(max(1, int(np.ceil(np.log2(max(samples, 2)))))))
     scored = sorted(((objective(x), i) for i, x in enumerate(starts)))
     best_x, best_f = None, float("inf")
     for _, i in scored[:restarts]:
@@ -120,11 +151,13 @@ def fit_glyph(font, ref: Reference, glyph: str, overrides=None, params: list[str
 
         def adv_err(v, name=name):
             evals[0] += 1
-            cf = compile_font(font, {**vals, name: v}, overrides, glyphs=[glyph])
-            return abs(score_font(cf, ref, [glyph])[glyph].advance_delta)
+            cf = compile_font(font, {**vals, name: v}, overrides, glyphs=glyphs)
+            return sum(abs(s.advance_delta) for s in score_font(cf, ref, glyphs).values())
 
         vals[name] = float(minimize_scalar(adv_err, bounds=(lo, hi), method="bounded",
                                            options={"xatol": 0.25}).x)
-    cf = compile_font(font, vals, overrides, glyphs=[glyph])
-    after = score_font(cf, ref, [glyph])[glyph]
-    return FitResult(glyph, {n: round(vals[n], 4) for n in names + spacing}, before, after, evals[0])
+    cf = compile_font(font, vals, overrides, glyphs=glyphs)
+    scores = score_font(cf, ref, glyphs)
+    r = FitResult(glyph, {n: round(vals[n], 4) for n in names + spacing}, before, scores[glyph], evals[0])
+    r.scores = scores
+    return r

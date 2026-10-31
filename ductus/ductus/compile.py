@@ -39,6 +39,7 @@ class CompiledGlyph:
     lsb: float = 0.0
     rsb: float = 0.0
     primitives: list[str] = field(default_factory=list)
+    stages: dict = field(default_factory=dict)            # per-stage debug geometry (svg paths)
     strokes: list[Stroke] = field(default_factory=list, repr=False)
 
     def to_json(self) -> dict:
@@ -46,6 +47,7 @@ class CompiledGlyph:
             "name": self.name, "unicode": self.unicode, "advance": self.advance,
             "bounds": self.bounds, "sides": self.sides,
             "shift": self.shift, "lsb": self.lsb, "rsb": self.rsb, "primitives": self.primitives,
+            "stages": {k: svg_path(translated_contours(v, self.shift)) for k, v in self.stages.items() if v},
             "svg": svg_path(self.contours),
             "contours": [c.to_json() for c in self.contours],
             "skeleton": self.skeleton, "points": self.points,
@@ -159,12 +161,19 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
     # 4. expand strokes
     groups: list[list[Contour]] = []
     ends = []
+    stage = {"strokes": [], "contours": [], "terminals": [], "cuts": []}
     for s in r.strokes:
         e = expand_stroke(s, font.pen)
         groups.append(e.contours)
+        stage["strokes"] += e.contours
         ends += e.ends
     by_group: dict[int, list[Contour]] = {}
+    cuts: list[Contour] = []
     for cb in r.contours:
+        if cb.negative:
+            cuts.append(cb.contour.copy())
+            continue
+        stage["contours"].append(cb.contour)
         if cb.group is None:
             groups.append([cb.contour.copy()])
         else:
@@ -177,13 +186,17 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
     # 5. terminals
     style = terminals or gb.terminal_style or font.terminals
     prims = set()
+    from .terminals import TerminalSet, as_terminal
     for end in ends:
         if end.kind:
-            extra = style(end)
-            if extra:
-                prims.add(f"terminal:{getattr(style, '__name__', 'custom')}")
-            for c in extra:
+            st = style.style_for(end.kind) if isinstance(style, TerminalSet) else style
+            term = as_terminal(st(end))
+            if term.add or term.cut:
+                prims.add(f"terminal:{getattr(st, '__name__', 'custom')}")
+            for c in term.add:
                 groups.append([c])
+            stage["terminals"] += term.add
+            cuts += term.cut
     prims |= {f"part:{n}" for n in r.parts}
     prims |= {f"contour:{cb.kind}" for cb in r.contours}
     if r.strokes:
@@ -205,10 +218,12 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
 
     groups = [_orient(g) for g in groups]
     flat = [c for g in groups for c in g]
-    raw_signature = "|".join(c.signature() for c in flat)
+    cuts = [_orient([c])[0] for c in cuts]
+    raw_signature = "|".join(c.signature() for c in flat) + "".join("|-" + c.signature() for c in cuts)
 
-    # 7. remove overlaps, fix direction (outer CCW = PostScript convention), round
-    final = merge(flat)
+    stage["cuts"] = list(cuts)
+    # 7. remove overlaps, subtract cuts, fix direction (outer CCW), round
+    final = merge(flat, cuts=cuts)
 
     # 8. spacing
     bounds = _bounds(final)
@@ -221,6 +236,8 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
     else:
         lsb = val(font.sidebearings[sides[0]])
         rsb = val(font.sidebearings[sides[1]])
+        if gdef.sb is not None:
+            lsb += val(gdef.sb[0]); rsb += val(gdef.sb[1])
         for key in ("lsb", "rsb"):
             o = overrides.get(f"{gdef.name}.{key}")
             if o is not None:
@@ -254,19 +271,31 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
         skeleton=[s.to_json(shift, font.pen) for s in r.strokes], points=points,
         outline_points=outline_points, raw_signature=raw_signature,
         signature="|".join(c.signature() for c in final), shift=shift,
-        lsb=round(lsb, 2), rsb=round(rsb, 2), primitives=sorted(prims), strokes=r.strokes,
+        lsb=round(lsb, 2), rsb=round(rsb, 2), primitives=sorted(prims),
+        stages=stage, strokes=r.strokes,
     )
 
 
-def merge(contours: list[Contour], round_to_grid: bool = True) -> list[Contour]:
-    """Union with skia-pathops; returns outer-CCW contours rounded to integers."""
-    if not contours:
-        return []
+def _path(contours: list[Contour]):
     path = pathops.Path()
     pen = path.getPen()
     for c in contours:
         c.draw(pen)
+    return path
+
+
+def merge(contours: list[Contour], round_to_grid: bool = True, cuts: list[Contour] | None = None) -> list[Contour]:
+    """Union with skia-pathops (minus ``cuts``); returns outer-CCW contours,
+    rounded to integers."""
+    if not contours:
+        return []
+    path = _path(contours)
     path.simplify(fix_winding=True, keep_starting_points=True, clockwise=False)
+    if cuts:
+        cp = _path(cuts)
+        cp.simplify(fix_winding=True, keep_starting_points=True, clockwise=False)
+        path = pathops.op(path, cp, pathops.PathOp.DIFFERENCE, fix_winding=True,
+                          keep_starting_points=True, clockwise=False)
     rp = RecordingPen()
     path.draw(rp)
     out = Contour.from_ops(rp.value)
@@ -275,6 +304,16 @@ def merge(contours: list[Contour], round_to_grid: bool = True) -> list[Contour]:
             for p in c.pts:
                 p[0] = float(round(p[0]))
                 p[1] = float(round(p[1]))
+    return out
+
+
+def translated_contours(contours: list[Contour], dx: float) -> list[Contour]:
+    out = []
+    for c in contours:
+        cc = c.copy()
+        for p in cc.pts:
+            p[0] += dx
+        out.append(cc)
     return out
 
 

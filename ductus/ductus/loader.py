@@ -27,14 +27,17 @@ def load_font(path) -> Font:
         if len(fonts) != 1:
             raise DuctusError(f"{path}: define exactly one Font (preferably named `font`)")
         font = fonts[0]
+    import types
     params: dict[str, Param] = {}
-    for k, v in g.items():
-        if isinstance(v, Param):
-            if v.name is None:
-                v.name = k
-            params.setdefault(v.name, v)
+    scopes = [g] + [vars(v) for v in g.values() if isinstance(v, types.SimpleNamespace)]
+    for scope in scopes:
+        for k, v in scope.items():
+            if isinstance(v, Param):
+                if v.name is None:
+                    v.name = k
+                params.setdefault(v.name, v)
     # params declared inline on pens (``Pen(angle=param(...))``)
-    pens = [v for v in g.values() if isinstance(v, Pen)]
+    pens = [v for sc in scopes for v in sc.values() if isinstance(v, Pen)]
     if font.pen is None:
         if len(pens) != 1:
             raise DuctusError(f"{path}: set font.pen")

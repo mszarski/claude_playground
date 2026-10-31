@@ -49,8 +49,8 @@ def overlay_image(score: GlyphScore, out: Path, px: int = 400, upm: int = 1000, 
     from PIL import Image, ImageDraw
     a, b = bounds(score.ours) or (0, 0, 0, 0), bounds(score.ref) or (0, 0, 0, 0)
     box = (min(a[0], b[0], 0) - 60, min(a[1], b[1], -200) - 20, max(a[2], b[2]) + 60, max(a[3], b[3], 750) + 20)
-    A = raster(score.ours, box, px, upm)[::-1]
-    B = raster(score.ref, box, px, upm)[::-1]
+    A = raster(score.ours, box, px, upm)
+    B = raster(score.ref, box, px, upm)
     both = np.minimum(A, B)
     only_a, only_b = A - both, B - both
     img = np.ones(A.shape + (3,))
