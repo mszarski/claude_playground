@@ -167,7 +167,7 @@ void ui_draw_overlays(void) {
         rect(28, 30, 264, 180, RGBA32(12, 10, 30, 225));
         rect(28, 30, 264, 2, RGBA32(0xE8, 0xC2, 0x6A, 0xFF)); rect(28, 208, 264, 2, RGBA32(0xE8, 0xC2, 0x6A, 0xFF));
         text(FONT_TEXT, STY_GOLD, 40, 48, 0, ALIGN_LEFT, "TABLET V - THE CEDAR FOREST");
-        const char *q[5] = {"Find the Seal of Dawn at the oasis", "Take the Seal of Noon from the scorpion-men", "Win the Seal of Dusk at the standing stones", "Open the cedar door", "Defeat Humbaba"};
+        const char *q[5] = {"Seal of Dawn: the oasis well", "Seal of Noon: the scorpion camp", "Seal of Dusk: the standing stones", "Open the cedar door", "Defeat Humbaba"};
         bool done[5] = {G.seals[0], G.seals[1], G.seals[2], G.gateOpen, G.bossDead};
         for (int i = 0; i < 5; i++) { textf(FONT_TEXT, done[i] ? STY_GOLD : STY_DIM, 44, 68 + i * 13, 0, ALIGN_LEFT, "%s %s", done[i] ? "*" : "-", q[i]); }
         text(FONT_TEXT, STY_WHITE, 40, 142, 240, ALIGN_LEFT, "Stick: move   B: sword   A: roll / talk");
