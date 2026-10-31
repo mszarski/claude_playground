@@ -263,6 +263,12 @@ case "$STAGE" in
     mkdir -p /work/data/rich && tar -cf "/work/data/rich/real_train_${SHARD:-0}.tar" -C data/rich "real_train/${SHARD:-0}" \
         && ls -la "/work/data/rich/real_train_${SHARD:-0}.tar" ;;
 
+  mistral)    # zero-shot open-weight VLM via vLLM on all GPUs (scripts/mistral_real.py); INIT = HF model id
+    need_vllm   # RICH_TEST=1 unpacks the rich/real test shards; e.g. --rich data/rich/real --modes view4
+    if [[ "${RICH_TEST:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/test*.tar; do tar -xf "$t" -C data/rich; done; fi
+    export HF_XET_HIGH_PERFORMANCE=1
+    python scripts/mistral_real.py --model "${INIT:?set INIT=<hf model id>}" --out "results/$RUN/preds.pkl" "$@" ;;
+
   orient)     # orientation search on saved predictions (scripts/orient_fix.py) + scoring -> results/$RUN/orient*.{pkl,json}
     need_cq     # RICH_TEST=1: rich/real test parts (scored by rich_iou.py); else DeepCAD test (cq_iou.py)
     if [[ "${RICH_TEST:-0}" == "1" ]]; then
