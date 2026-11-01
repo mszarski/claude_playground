@@ -231,7 +231,9 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical",
         # the line), sagging by `sweep` at its middle otherwise (4/3: a
         # cubic's midpoint moves 3/4 as far as its handles)
         top0 = np.array([e_far + sg * FL, 0.0]); top1 = np.array(tip_t)
-        sw = np.array([0.0, -val(sweep) * 4 / 3])
+        # no deeper than 40% of the rise: more and the edge sags past the
+        # tip and the wedge folds over itself (its structure would change)
+        sw = np.array([0.0, -max(-0.4 * R, min(val(sweep), 0.4 * R)) * 4 / 3])
         _curve(c, F.w(*(top0 + (top1 - top0) / 3 + sw)), F.w(*(top0 + (top1 - top0) * 2 / 3 + sw)),
                F.w(*tip_t), f"{nm}.tip")
         c.add(F.w(*tip_b), "on", f"{nm}.tip_b")

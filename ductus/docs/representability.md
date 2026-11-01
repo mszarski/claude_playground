@@ -31,6 +31,33 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 10 — g and t off the distance limit
+
+Both sat at Hausdorff 20 u in iteration 09; now t **0.958 / 16.5 u**
+(from 0.946 / 19.9) and g **0.946 / 15.4 u** (from 0.939 / 20.0). Mean IoU
+0.963 → 0.964; no other glyph changed. Still 0 overrides.
+
+* **t** — Geist's t head is a flat top whose left flank is one concave curve
+  down into the crossbar's tip; ours rose in a straight slope to a point
+  17 u too tall. The wedge's sloped edge can now sag into a curve
+  (`sweep`, a cubic that is straight at 0; clamped to 40% of the rise so
+  it can't fold past the tip), and the t takes the existing `flat`:
+  `t_wedge_flat`, `t_wedge_sweep`. Where the new flank meets the tapered
+  bar almost tangentially, the boolean merge left an 8 u needle: merge now
+  drops on-curve points where the outline doubles back (> 170°) next to a
+  segment under 12 u.
+* **g** — two spots were at the limit, and fixing one exposed the other.
+  (1) The notch between the link and the lower loop: Geist's loop rises to
+  only ~19 u under the link, ours ~30 u, filling the notch; a thinner loop
+  top (`g_loop_top_t` −4) took Hausdorff to 17.8 at an IoU cost, which a
+  greedy search that also rewards lower Hausdorff recovered. (2) The upper
+  bowl's shoulder under the ear sits lower in Geist: new per-quadrant
+  fullness for the bowl's top-right (`g_tr_dh`, `g_tr_dv`), plus
+  `g_full_dv`, `g_in_full_dv`, `g_rot`. Also made fittable but not
+  ultimately used: the link's root (`g_link_root_dy/dir`) and the ear's
+  root (`g_ear_root_dx`); `g_loop_rot`'s range was widened (the fit sat on
+  its old 15° bound).
+
 ### Iteration 09 — exact scoring, head and foot shape, joint fit: mean IoU 0.949 → 0.963, 0 overrides
 
 | glyph | 08 | 09 | | glyph | 08 | 09 |
@@ -274,3 +301,19 @@ shared params over all glyphs is still to do.
 | 09 | 2026-11-01 | `f` | 0.9649 | 12.3 | 1.2 | +64 | 0 | 0 | contour, bracketed, flat | 09: exact IoU at the best offset; head wedge (flat tip/top, bracketed underside) and straight-bracket feet fitted; joint fit of shared params over 16 glyphs; per-glyph polish + constrained greedy; 0 overrides |
 | 09 | 2026-11-01 | `t` | 0.9458 | 19.9 | 2.0 | +67 | 0 | 0 | contour, flat, wedge | 09: exact IoU at the best offset; head wedge (flat tip/top, bracketed underside) and straight-bracket feet fitted; joint fit of shared params over 16 glyphs; per-glyph polish + constrained greedy; 0 overrides |
 | 09 | 2026-11-01 | `i` | 0.9888 | 6.1 | 0.5 | +47 | 0 | 0 | contour, bracketed, wedge | 09: exact IoU at the best offset; head wedge (flat tip/top, bracketed underside) and straight-bracket feet fitted; joint fit of shared params over 16 glyphs; per-glyph polish + constrained greedy; 0 overrides |
+| 10 | 2026-11-01 | `o` | 0.9840 | 1.8 | 0.8 | -14 | 0 | 0 | bowl | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `n` | 0.9675 | 11.7 | 1.3 | +1 | 0 | 0 | cut, bracketed, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `H` | 0.9948 | 2.0 | 0.4 | -10 | 0 | 0 | contour, bracketed | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `e` | 0.9506 | 7.5 | 1.8 | -25 | 0 | 0 | bowl, contour, cut | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `a` | 0.9562 | 13.3 | 1.6 | +1 | 0 | 0 | lobe, beak, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `s` | 0.9414 | 6.0 | 1.8 | +1 | 0 | 0 | beak | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `g` | 0.9456 | 15.4 | 1.8 | +66 | 0 | 0 | bowl, contour, cut | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `v` | 0.9660 | 16.9 | 1.2 | +0 | 0 | 0 | cut, bracketed, flat | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `h` | 0.9655 | 10.8 | 1.4 | -2 | 0 | 0 | cut, bracketed, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `m` | 0.9589 | 11.7 | 1.6 | +0 | 0 | 0 | cut, bracketed, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `u` | 0.9715 | 7.2 | 1.2 | +0 | 0 | 0 | cut, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `b` | 0.9594 | 12.0 | 1.8 | -16 | 0 | 0 | lobe, flat, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `r` | 0.9587 | 8.9 | 1.4 | +30 | 0 | 0 | bracketed, flat, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `f` | 0.9649 | 12.3 | 1.2 | +64 | 0 | 0 | contour, bracketed, flat | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `t` | 0.9575 | 16.5 | 1.8 | +67 | 0 | 0 | contour, flat, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 10 | 2026-11-01 | `i` | 0.9888 | 6.1 | 0.5 | +47 | 0 | 0 | contour, bracketed, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |

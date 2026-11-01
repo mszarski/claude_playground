@@ -40,6 +40,9 @@ DEFAULTS: dict[str, tuple] = {
     # head wedge fine shape (see terminals.wedge): flat tip, flat top, bracketed underside
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
+    "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
+    "g_tr_dh": (0, (-0.4, 0.3)), "g_tr_dv": (0, (-0.4, 0.3)),
+    "g_ear_root_dx": (0, (-60, 30)),   # the ear's sloped top starts on the bowl, left of its foot
     "g_link_root_dy": (0, (-40, 80)), "g_link_root_dir": (210, (170, 260)),   # where the link leaves the bowl
     "t_wedge_flat": (0, (0, 60)), "t_wedge_sweep": (0, (-20, 60)),   # the t's flat top and concave flank
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
@@ -111,7 +114,7 @@ DEFAULTS: dict[str, tuple] = {
     "g_bar_r": (450, (300, 560)),
     "g_low_t": (0.35, (0.05, 0.95)), "g_low_y": (0.5, (0.0, 1.0)), "g_low_dir": (-20, (-80, 40)), "g_loop_thick": (0.7, (0.2, 1.4)), "g_loop_tr": (0.9, (0.2, 1.6)),
     "g_loop_top_t": (80, (10, 140)), "g_loop_bot_t": (40, (5, 120)), "g_loop_full": (0.6, (0.4, 0.98)),
-    "g_loop_in_full": (0.6, (0.4, 0.98)), "g_loop_rot": (0, (-15, 15)), "g_loop_stress": (0, (-30, 30)),
+    "g_loop_in_full": (0.6, (0.4, 0.98)), "g_loop_rot": (0, (-15, 30)), "g_loop_stress": (0, (-30, 30)),
     # up to ~1: nearly square quadrants, for the g's flat-topped loop band
     "g_loop_full_v": (0.6, (0.4, 0.98)), "g_loop_in_full_v": (0.6, (0.4, 0.98)),
     # v
@@ -518,13 +521,18 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("g")
     def g_(gl):
         gl += bowl(x=P.g_bl, width=P.g_br - P.g_bl, bottom=P.g_bb, top=P.g_bt,
-                   thick=P.stem * P.g_thick, thin=P.hairline, full=P.g_full, in_full=P.g_in_full, name="bowl")
+                   thick=P.stem * P.g_thick, thin=P.hairline, full=((P.g_full, P.g_full + P.g_full_dv),       # br, tr, tl, bl: the
+                         (P.g_full + P.g_tr_dh, P.g_full + P.g_full_dv + P.g_tr_dv),   # shoulder
+                         (P.g_full, P.g_full + P.g_full_dv),       # under the ear
+                         (P.g_full, P.g_full + P.g_full_dv)),      # sits lower
+                   in_full=(P.g_in_full, P.g_in_full + P.g_in_full_dv), rotate=P.g_rot, name="bowl")
         cx = (P.g_bl + P.g_br) / 2
         if g_ear == "flag":
             # four-sided flag: flat bottom, vertical outer edge, sloped top
             rx = cx + (P.g_br - cx) * P.g_ear_root_x
             (gl.contour("ear").move((rx, P.g_ear_bot), "root_bottom").line((P.g_ear_x, P.g_ear_bot), "bottom")
-                .line((P.g_ear_x, P.g_ear_bot + P.g_ear_h), "top").line((rx, P.g_ear_root_y), "root_top").close())
+                .line((P.g_ear_x, P.g_ear_bot + P.g_ear_h), "top").line((rx + P.g_ear_root_dx, P.g_ear_root_y), "root_top")
+                .close())
         else:
             (gl.path(name="ear", profile=constant(P.g_ear_w))
                 .start((cx + (P.g_br - cx) * 0.6, P.g_bt - 30), name="root", terminal=False)
