@@ -85,7 +85,7 @@ P = kit.params(
     f_bar_t=40, fi_dx=175, f_end_w=0.91, f_end_dir=-9.0, f_hook=211, f_bar_l=132, f_bar_r=202, f_beak_depth=173,
     f_beak_len=106, f_end_y=0.94, f_top=750, f_top_dw=-23, f_bar_dy=-0.23,
     # i v
-    v_sb=-88, v_width=438, i_dot_y=662, i_dot_r=56, v_thick=85, v_thin=35, v_thin_dx=-20, v_vertex=0.53,
+    v_sb=-88, v_width=438, i_dot_y=662, i_dot_r=56, v_thick=85, v_thin=37, v_thin_dx=-20, v_vertex=0.53,
     # capitals
     H_width=450, H_bar_t=36, G_width=717, G_term_y=0.67, G_bar_y=0.475, G_serif=81,
     H_bar_y=0.515,
@@ -116,30 +116,52 @@ P = kit.params(
    
     w_width=690, w_thick=84, w_thin=40, w_v1=0.28,
     w_mid3_dx=-8.0, w_v2=0.74,
+    w_a2_top=0.86, w_thin_dx=-5.0,
    
    
-    y_width=420, y_vertex=0.48, y_tail_y=-120, y_end_x=-38, y_end_y=-174, y_end_w=2.0, z_width=390, z_thick=98,
+    y_width=414, y_vertex=0.47, y_tail_y=-120, y_end_x=-54, y_end_y=-173, y_end_w=2.0, z_width=390, z_thick=98,
     z_serif=86, z_wedge=104, z_bar_t=37,
     k_arm_x=326, k_join_y=161, x_width=368, x_thick=84, x_thin=34, x_thin_dx=-48,
     diag_foot_len=41, diag_foot_in=2.3,
-    B_flat_t=184, B_flat_b=204, D_flat=160, D_th=100, P_bot=292, R_leg_x0=211, R_leg_x=409, R_leg_w=94,
-    B_hair=31, B_th=99,
+    B_flat_t=208, B_flat_b=212, D_flat=160, D_th=100, P_bot=292, R_leg_x0=211, R_leg_x=409, R_leg_w=94,
+    B_hair=34, B_th=95,
+    B_mid=0.512, B_flat_m=113, B_in_full=0.66,
     C_width=679, C_face=0.9, C_top_y=470, C_term_y=160, C_cut_x=0.53, C_cut_y=68, C_cut_angle=150, C_cut_h2=0.4,
     C_thick_k=0.94, C_stress=6.0, C_in_full_dh=0.04, C_in_full_dv=-0.08, C_right_k=0.6, C_bottom_k=1.6,
     Q_tip_x=620, F_width=371, F_mid=0.81, F_mid_y=0.5, L_width=390, T_width=582, T_wedge=108, T_serif=144,
-    J_bot=-58, J_end_y=-202, J_end_w=1.6, J_end_dir=181, K_arm_x=428, K_join_y=282, K_leg_x=410, K_leg_y0=368,
-    K_leg_x0=142, K_thin=34, K_thick=91, M_width=576, M_thin=36, M_thick=95, N_width=512, U_join=220,
+    J_bot=-58, J_end_y=-202, J_end_w=1.6, J_end_dir=181, K_arm_x=428, K_join_y=282, K_leg_x=426, K_leg_y0=400,
+    K_leg_x0=103, K_thin=34, K_thick=94, M_width=576, M_thin=36, M_thick=95, N_width=512, U_join=220,
     N_dx0=-50, N_dx1=62, N_thick=95, M_fall_dx=40, M_rise_dx=-50, M_vdx=-40, M_vertex=0.54,
     U_end_w=0.22, V_width=512, V_thick=101, V_thin=34, V_vertex=0.52, V_thin_dx=-20, W_width=880, W_v1=0.29,
-    W_mid_dx=0.0, W_mid3_dx=-18.0, W_v2=0.72, X_width=464, X_thin=42, X_thin_dx=-36, Y_width=520, Y_join=0.39,
+    W_mid_dx=0, W_mid3_dx=-18, W_v2=0.72, X_width=464, X_thin=42, X_thin_dx=-36, Y_width=520, Y_join=0.39,
+    W_a2_top=0.85, W_thin_dx=-8,
     Y_thick=96, Z_thick=113, Z_serif=134, Z_wedge=136, Z_width=508,
+    fig_stem=88, fig_thin_k=1.1, zero_w=557, one_fy=634, one_flag=166, two_w=472, two_right_y=535,
+    two_mid_x=0.41, two_mid_y=266, two_mid_dir=210, two_bar_l=-25, two_bar_r=478, two_serif=186, two_wedge=96,
+    three_w=472, three_mid_y=388, three_mid_x=0.33, three_lr_y=203, three_end_x=0.06, three_end2_y=118,
+    three_end_dir=122, three_bot_x=0.47, three_ur_y=542, four_x=392, four_bar_r=562, four_thin=36, four_top=693,
+    five_w=536, five_stem_bot=371, five_stem_w=48, five_end_y=62, five_end_dir=159, six_w=499, six_hook_x=0.91,
+    six_face_y=561, six_wedge=108, six_hook_w=0.75, six_bowl_h=458, seven_w=500, seven_foot_l=147,
+    seven_foot_r=271, seven_serif=211, seven_wedge=120, eight_top_w=446, eight_waist=372, eight_thick_k=0.9,
+    eight_sp_x0=0.08, eight_sp_x1=0.92, eight_sp_w=0.65, eight_sp_y0=530, nine_bowl_h=466, nine_face_y=561,
+    nine_hook_w=0.75, nine_wedge=108, nine_w=499, nine_hook_x=0.93,
 )
-kit.define(font, P, glyphs="hamburgefonstivcdjklpqwxyz HOAGESBCDFIJKLMNPQRTUVWXYZ.,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
+kit.define(font, P, glyphs="hamburgefonstivcdjklpqwxyz HOAGESBCDFIJKLMNPQRTUVWXYZ0123456789.,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
            g_band="flat", b_style="lobe", E_serifs="wedge", G_jaw="serif")
 
 # side bearings (left, right) on top of sb_straight / sb_round, set from the
 # glyphs' measured side bearings in the overlays
 font.spacing.update({
+    "nine": (0, -2),
+    "eight": (-2, -8),
+    "seven": (8, -20),
+    "six": (-2, 0),
+    "five": (8, 0),
+    "four": (-4, -8),
+    "three": (28, 16),
+    "two": (40, 26),
+    "one": (-12, 34),
+    "zero": (-22, -22),
     "Z": (-12, -18),
     "Y": (-60, -60),
     "X": (-38, -62),

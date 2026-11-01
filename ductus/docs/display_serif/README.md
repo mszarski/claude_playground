@@ -662,3 +662,49 @@ Weakest:
 - **W**: the middle strokes' crossing differs from Geist's.
 - **B**: the waist sits a little low.
 - **K**: the leg's root on the arm.
+
+## 27 — digits, and the four weakest letters
+
+Sheet: `27.png` (a figures line under the pangrams).
+
+**Digits** 0–9: lining figures at the cap height, mostly on Geist's
+588-unit width. They are built from the kit's pieces:
+
+- **0**: a closed bowl (`fig_bowl`, the digits' own weight `fig_stem`).
+- **1**: a stem on a bracketed cap foot. Its top is cut off by a flag
+  running down-left (`one_*`).
+- **2**: a pen stroke from a flat-cut left end over the top, down the right
+  and across into a base bar, which ends in an E-style wedge.
+- **3**: two strokes meeting at the waist. The lower one ends in a
+  vertically cut terminal.
+- **4**: a stem, a crossbar and a thin diagonal from the stem's top.
+- **5**: a top bar and a short slanted stem (polygons), then a bowl stroke.
+- **6** and **9**: a closed bowl and a hook rising to a wedge-faced
+  terminal. The 9 is the 6 turned 180°, with its own values (`nine_*`):
+  shared, the two pulled each other's fits apart.
+- **7**: a top bar with a wedge at its left, and a tapering diagonal.
+- **8**: two stacked bowls crossed by a spine from the upper bowl's left to
+  the lower bowl's right, as Geist's has. The spine took the 8 from 0.80
+  to 0.87.
+
+Against Geist: 0 .97, 1 .95, 2 .86, 3 .87, 4 .92, 5 .88, 6 .82, 7 .93,
+8 .87, 9 .83 (mean 0.89). The 6 and 9 read correctly. Their remaining gap
+is the shape of the hook's curve.
+
+**The weakest letters**:
+
+- **K** (0.89 → 0.95): Geist's arm leaves the stem lower, and its leg
+  branches off the arm's lower edge and ends flat, with no foot. Ours does
+  the same now.
+- **B** (0.88 → 0.93): the arms either side of the waist curve away sooner
+  than the outer top and bottom ones. `dbowl` now takes a separate flat for
+  each arm (`B_flat_m`).
+- **y** (0.86): the tail now ends in Geist's tall flag (a 78-unit vertical
+  face).
+- **W** (0.86 → 0.87), **w** (0.89 → 0.91): Geist's thin middle stroke stops
+  at about 0.85 of the height, inside the thick one, which has a flat top.
+  The thin strokes' feet are offset from the thick ones' (`W_a2_top`,
+  `W_thin_dx`, and the w's twins). The W stays the weakest letter: its four
+  strokes fit Geist's only roughly.
+
+Over all 52 letters: 0.944.

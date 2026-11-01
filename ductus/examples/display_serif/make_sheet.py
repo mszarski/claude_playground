@@ -35,6 +35,8 @@ if "z" in cf.glyphs:
 if "Z" in cf.glyphs:
     lines[2:2] = [("THE QUICK BROWN FOX JUMPS OVER A LAZY DOG", 60),
                   ("Bold Ideas, Weird Mazes, Zany Jokes", 72)]
+if "nine" in cf.glyphs:
+    lines[3:3] = [("0123456789  1984 – 2026, 37/50 (8:15)", 72)]
 if "comma" in cf.glyphs:     # punctuation, set in a sentence and on its own
     lines[1:1] = [("“Ah,” she sighs; “is it (so) — or not?” Oh! it is: ’tis/isn’t.", 60),
                   (". , : ; - – — ' \" ‘ ’ “ ” ! ? ( ) /", 72)]
