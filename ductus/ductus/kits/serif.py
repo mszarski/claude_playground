@@ -105,6 +105,11 @@ DEFAULTS: dict[str, tuple] = {
     "s_angle": (0, (-40, 40)), "s_tension": (1.0, (0.6, 1.6)),
     "s_spread": (0.5, (0.08, 0.5)), "s_bias": (0.5, (0.15, 0.85)),
     # local weight at the s's nodes (width added there, interpolated between)
+    # the s's extremes may lean (Geist's are not vertical), and every node
+    # has its own tension (the top's is s_tension, the bottom's s_tension + s_bot_dt)
+    "s_left_dir": (270, (235, 305)), "s_right_dir": (270, (235, 305)),
+    "s_left_t": (1.0, (0.7, 1.6)), "s_mid_t": (1.0, (0.7, 1.6)), "s_right_t": (1.0, (0.7, 1.6)),
+    "s_bot_dt": (0, (-0.5, 0.5)), "s_t1_dw": (0, (-30, 40)), "s_t2_dw": (0, (-30, 40)),   # each end's own weight
     "s_top_dw": (0, (-40, 40)), "s_left_dw": (0, (-50, 50)), "s_mid_dw": (0, (-50, 50)),
     "s_right_dw": (0, (-50, 50)), "s_bot_dw": (0, (-40, 40)), "s_beak_len": (40, (0, 160)), "s_beak_depth": (60, (5, 200)), "s_t1_dir": (100, (20, 170)), "s_t2_dir": (100, (20, 170)), "s_cut1": (0, (-60, 60)), "s_cut2": (0, (-60, 60)),
     # g
@@ -449,13 +454,18 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         sw = Profile((0, P.s_ends), (0.5 - P.s_spread, P.s_ends), (0.5, P.s_swell), (0.5 + P.s_spread, P.s_ends),
                      (1, P.s_ends))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias)
-            .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", dir=P.s_t1_dir, terminal="s_top")
+            .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
             .curve_to((W * P.s_top_x, top), name="top", dir=180, tension=P.s_tension, width=P.s_top_dw)
-            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", dir=270, width=P.s_left_dw)
-            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", dir=P.s_mid_dir, width=P.s_mid_dw)
-            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", dir=270, width=P.s_right_dw)
-            .curve_to((W * P.s_bot_x, bot), name="bottom", dir=180, tension=P.s_tension, width=P.s_bot_dw)
-            .curve_to((W * P.s_t2_x, height * P.s_t2_y), name="t2", dir=P.s_t2_dir, terminal="s_bottom"))
+            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", dir=P.s_left_dir,
+                      tension=P.s_left_t, width=P.s_left_dw)
+            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", dir=P.s_mid_dir, tension=P.s_mid_t,
+                      width=P.s_mid_dw)
+            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", dir=P.s_right_dir,
+                      tension=P.s_right_t, width=P.s_right_dw)
+            .curve_to((W * P.s_bot_x, bot), name="bottom", dir=180, tension=P.s_tension + P.s_bot_dt,
+                      width=P.s_bot_dw)
+            .curve_to((W * P.s_t2_x, height * P.s_t2_y), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
+                      width=P.s_t2_dw))
 
     def tapered_bar(gl, x0, y0, x1, y1, stem_l):
         """A crossbar whose left end is a point: a pentagon, degenerate (a plain
