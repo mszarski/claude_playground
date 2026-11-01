@@ -104,3 +104,19 @@ def test_dp_override_round_trips():
     from ductus.overrides import Override, dump_overrides, parse_overrides
     ovs = {"s.spine.mid": Override("s.spine.mid", dp=7.5)}
     assert parse_overrides(yaml.safe_load(dump_overrides(ovs))) == ovs
+
+
+def test_spacing_table_and_kerning_reach_the_font(tmp_path):
+    from ductus.emit import build_otf, validate_otf
+    from fontTools.ttLib import TTFont
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    base = compile_font(f, glyphs=["n", "o"])
+    f.spacing["n"] = (10, -5)
+    f.kern("n", "o", -17)
+    cf = compile_font(f, glyphs=["n", "o"])
+    assert cf.glyphs["n"].advance == base.glyphs["n"].advance + 5
+    assert cf.kerning[("n", "o")] == -17
+    otf = build_otf(cf, tmp_path / "k.otf")
+    assert not validate_otf(otf)
+    t = TTFont(otf)
+    assert t["kern"].kernTables[0].kernTable[("n", "o")] == -17 and "GPOS" in t

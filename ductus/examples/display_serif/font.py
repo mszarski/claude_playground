@@ -15,7 +15,7 @@ P = kit.params(
     # weight and contrast: Didone end of the genre
     stem=96, cap_stem=104, hairline=22, round_gain=1.06, overshoot=11,
     arch_angle=25, arch_contrast=0.86,
-    sb_straight=36, sb_round=26,
+    sb_straight=36, sb_round=30,
     # serifs: flat hairlines, a whisper of bracket
     serif_len=74, serif_bracket=18, serif_ca=0.5, serif_cb=0.7, foot_tip=26,
     cap_serif_len=84, cap_serif_bracket=20, head_len=70, head_top=0,
@@ -32,7 +32,7 @@ P = kit.params(
     r_join_at=0.74, r_join_thin=16, r_join_angle=50, r_taper_len=0.32, r_end_w=1.0, t_turn_w=1.0,
     t_angle=0, t_contrast=0.8541667, t_bar_t=32, f_bar_t=32,
     # a: the bowl is a lobe on the stem -- hairline top join, heavier bottom join
-    a_hood_angle=25, a_far=46, a_top_at=292, a_top_thin=15, a_top_angle=18, a_bot_at=115, a_bot_thin=48, a_bot_angle=55,
+    a_hood_angle=25, a_far=46, a_top_at=292, a_top_thin=15, a_top_angle=18, a_bot_at=60, a_bot_thin=30, a_bot_angle=25,
     a_lobe_thick=98, a_lobe_thin_b=16, a_out_mid=0.48, a_in_mid=0.5, a_bx_out=0.6, a_bx_in=0.8,
 
     H_width=560, H_bar_y=0.5, H_bar_t=16,
@@ -57,7 +57,7 @@ P = kit.params(
     # at the tops of curves, so arch shoulders, hook tops and the s's arcs go
     # to true hairlines, and back into the descents, so the swell arrives late
     # and full -- the Bodoni arch, rather than a pen held at one angle
-    n_shoulder_pa=-10, n_leg_pa=5, u_shoulder_pa=-10, u_leg_pa=5,
+    n_shoulder_pa=-10, n_leg_pa=5,   # the u's cup takes no turns: they hooked its hairline
     f_top_pa=-30, f_end_pa=15, r_end_pa=-30, t_end_pa=0,
     a_top_pa=-30, a_term_pa=15,
     # b (iteration 10): the bowl hangs on the stem at hairline joins, as the a's
@@ -84,3 +84,12 @@ terms = kit.didone_set(P)
 terms.by_tag["s_top"] = ball(radius=P.ball_r * 0.8, side="below", drop=P.ball_drop)
 terms.by_tag["s_bottom"] = ball(radius=P.ball_r * 0.8, side="above", drop=P.ball_drop)
 kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=terms, b_style="lobe")
+
+# spacing (iteration 14): set between n's and o's, judged by eye at 72 px
+font.spacing.update({
+    "f": (0, -60),     # hook and bar overhang: closes f+n, f+o
+})
+font.kern("r", "g", -20)
+# the f's ball overhangs: keep it clear of dots, ascenders and the next f
+for right, v in (("i", 25), ("f", 20), ("b", 30), ("h", 30)):
+    font.kern("f", right, v)

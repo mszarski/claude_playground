@@ -273,3 +273,26 @@ Comparison: `13_vs_12.png` (set text, 110 px).
   (0.55 × cap stem) to the baseline with its small spur, short bar, flat arm.
   The kit gained `G_spur_bot`, `G_jaw_in` and a `G_spur` terminal tag for
   these experiments (defaults keep the old G).
+
+## 14 — spacing, kerning, the u and a joins
+
+Comparison: `14_vs_13.png` (set text, 96 px).
+
+- **Engine** — fonts can now carry a spacing table (`font.spacing = {glyph:
+  (left, right)}`, added to that glyph's sidebearings) and kerning
+  (`font.kern(left, right, value)`), emitted as GPOS pair kerning plus a
+  legacy `kern` table (which FreeType's proofs apply).
+- **Spacing** — set between n's and o's at 72 px. An automatic area-based
+  measure was tried as a cross-check and set aside: with these arches the
+  result depended mostly on the depth clamp. Rounds were tight (o's nearly
+  touching): round sidebearing 26 → 30. The f left a hole after it (hook and
+  bar overhang): right side −60, then kerned back out where the ball would
+  hit a dot, an ascender or another f (f+i 25, f+f 20, f+b / f+h 30).
+  r+g −20. (fi still nearly touches at large sizes: an fi ligature is the
+  real fix.)
+- **u** — the cup's hairline hooked where it left the bottom: the cup's
+  bottom height is set from the unturned pen, so the −10° nib turn there
+  made the stroke thinner than planned and the hairline dipped. The u's cup
+  now takes no nib turns.
+- **a** — the bowl met the stem with a step at its bottom join (at 115, 48
+  thick, 55°); now it tapers in low (60, 30, 25°).

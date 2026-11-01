@@ -69,6 +69,7 @@ class CompiledFont:
     warnings: list[str]
     overrides_used: list[str]
     compile_ms: float = 0.0
+    kerning: dict = None           # {(left, right): font units}, pairs of compiled glyphs only
 
     def to_json(self) -> dict:
         return {
@@ -120,13 +121,15 @@ def compile_font(font: Font, params: dict[str, float] | None = None,
                 raise
             except Exception as e:  # make the failing glyph obvious
                 raise DuctusError(f"glyph {gname!r}: {type(e).__name__}: {e}") from e
+        kerning = {(a, b): int(round(val(v))) for (a, b), v in getattr(font, "kerning", {}).items()
+                   if a in out and b in out and round(val(v))}
     if glyphs is None:
         for name in overrides:
             if name not in used:
                 warnings.append(f"override {name!r} does not match any point; ignored")
     specs = {n: {"default": p.default, "range": p.range} for n, p in font.params.items()}
     return CompiledFont(font.family, font.style, font.upm, metrics, values, specs, out,
-                        warnings, sorted(used), (time.perf_counter() - t0) * 1000)
+                        warnings, sorted(used), (time.perf_counter() - t0) * 1000, kerning)
 
 
 def _move(c: Contour, i: int, dx: float, dy: float):
@@ -273,6 +276,9 @@ def _compile_glyph_inner(font, gdef, overrides, used, terminals, handles) -> Com
         rsb = val(font.sidebearings[sides[1]])
         if gdef.sb is not None:
             lsb += val(gdef.sb[0]); rsb += val(gdef.sb[1])
+        if gdef.name in getattr(font, "spacing", {}):
+            dl, dr = font.spacing[gdef.name]
+            lsb += val(dl); rsb += val(dr)
         for key in ("lsb", "rsb"):
             o = overrides.get(f"{gdef.name}.{key}")
             if o is not None:

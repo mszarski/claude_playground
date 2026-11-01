@@ -110,8 +110,12 @@ def render_text(otf: Path, text: str, out: Path, size: int = 96, margin: int = 2
     face.set_pixel_sizes(0, size)
     asc = face.size.ascender >> 6
     desc = -(face.size.descender >> 6)
-    pen_x, glyphs = 0, []
+    pen_x, glyphs, prev = 0, [], None
     for ch in text:
+        idx = face.get_char_index(ch)
+        if prev is not None and face.has_kerning:
+            pen_x += face.get_kerning(prev, idx, freetype.FT_KERNING_UNFITTED).x >> 6
+        prev = idx
         # unhinted: the fonts carry no hints, and FreeType's autohinter snaps
         # thin horizontals (hairline serifs) -- proofs should show the outline
         face.load_char(ch, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_NO_HINTING)

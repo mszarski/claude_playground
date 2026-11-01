@@ -72,10 +72,18 @@ class Font:
             "straight": lambda: val(self.pen.width) * 0.5 + 30,
             "round": lambda: (val(self.pen.width) * 0.5 + 30) * 0.6,
         }
+        # per-glyph spacing: {glyph: (left, right)} added to that glyph's
+        # sidebearings (numbers or Exprs); kerning: {(left, right): value}
+        self.spacing: dict[str, tuple] = {}
+        self.kerning: dict[tuple[str, str], Any] = {}
         self.glyphs: dict[str, GlyphDef] = {}
         self.params: dict = {}          # filled in by the loader
         self.source_path = None
         _current_font = self
+
+    def kern(self, left: str, right: str, value):
+        """Kern the pair ``left`` ``right`` by ``value`` font units (negative = closer)."""
+        self.kerning[(left, right)] = value
 
     def glyph(self, name: str, unicode: int | None = None, advance=None, sides=None, sb=None):
         def deco(fn):

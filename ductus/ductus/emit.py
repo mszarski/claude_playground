@@ -61,6 +61,19 @@ def build_otf(cf: CompiledFont, path):
                 fsType=0)
     fb.setupPost()
     fb.setupHead(unitsPerEm=upm)
+    kerning = getattr(cf, "kerning", None) or {}
+    if kerning:
+        # GPOS pair kerning (what applications use) ...
+        fb.addOpenTypeFeatures("feature kern {\n" + "".join(
+            f"  pos {a} {b} {v};\n" for (a, b), v in sorted(kerning.items())) + "} kern;\n")
+        # ... and a legacy 'kern' table, which FreeType's proofs read directly
+        from fontTools.ttLib import newTable
+        from fontTools.ttLib.tables._k_e_r_n import KernTable_format_0
+        sub = KernTable_format_0()
+        sub.version, sub.format, sub.coverage, sub.tupleIndex = 0, 0, 1, 0
+        sub.kernTable = dict(kerning)
+        kt = newTable("kern"); kt.version = 0; kt.kernTables = [sub]
+        fb.font["kern"] = kt
     fb.save(str(path) if isinstance(path, Path) else path)
     return path
 
