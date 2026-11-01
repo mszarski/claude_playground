@@ -101,18 +101,25 @@ def exact_iou(ours: list[Contour], ref: list[Contour]) -> float:
 
 
 def _intersection_area(A: pathops.Path, B: pathops.Path) -> float:
-    """Skia's boolean ops can fail on exactly coincident edges; a shift of a
-    thousandth of a unit gets round that without changing the area."""
-    for eps in (0.0, 1e-3, -1e-3, 3e-3):
+    """Area of A ∩ B. Skia's boolean ops can fail -- or, worse, silently
+    return a wrong outline -- when edges nearly coincide. Each result is
+    checked against an independent one (area(A) - area(A - B)); on a
+    failure or a disagreement, B is nudged by a thousandth of a unit (which
+    can't change the area measurably) and the pair recomputed."""
+    aA = _area(A)
+    for eps in (0.0, 1e-3, -1e-3, 3e-3, -3e-3, 1e-2):
         Bt = B
         if eps:
             Bt = pathops.Path()
             B.draw(_Shift(Bt.getPen(), eps))
         try:
-            return _area(pathops.op(A, Bt, pathops.PathOp.INTERSECTION, fix_winding=True))
+            i1 = _area(pathops.op(A, Bt, pathops.PathOp.INTERSECTION, fix_winding=True))
+            i2 = aA - _area(pathops.op(A, Bt, pathops.PathOp.DIFFERENCE, fix_winding=True))
         except pathops.PathOpsError:
             continue
-    raise pathops.PathOpsError("intersection failed")
+        if abs(i1 - i2) <= 1e-4 * aA + 0.5:
+            return (i1 + i2) / 2
+    raise pathops.PathOpsError("intersection area could not be computed reliably")
 
 
 def _iou_shifted(A: pathops.Path, B: pathops.Path, dx: float) -> float:

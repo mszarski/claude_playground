@@ -193,39 +193,60 @@ def bracketed(length=40, bracket=30, tip=4, curve=(0.6, 0.6), cup=0, axis="verti
     return style
 
 
-def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical"):
+def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical",
+          tip=0.0, flat=0.0, bracket=0.0, corner=20.0, ca=0.7, cb=0.5):
     """Flag/wedge serif (head of n, spur of a): the cut line slopes from the
     far corner down to a tip ``length`` beyond the ``side`` edge and ``rise``
     below the end; the underside returns to the stem ``drop`` lower.
-    ``hollow`` (0..1) curves the underside inwards."""
+    ``hollow`` (0..1) curves the underside inwards.
+
+    Finer shape (all degenerate at 0, so the point structure never changes):
+    ``tip`` -- the tip is a short flat edge this tall, not a point;
+    ``flat`` -- the top runs flat this far in from the far corner before
+    sloping down; ``bracket`` (0..1) blends the underside from the
+    ``hollow`` curve to a bracket: nearly straight from the tip towards the
+    stem edge ``corner`` below the tip, then a fillet into the stem (``ca``,
+    ``cb`` = handle lengths from tip and from stem, as fractions of the way
+    to that corner)."""
     def style(end):
         F = Frame(end, axis)
         t = F.flat(end.name)
         sg = F.sigma(side)
         L, R, D, H = val(length), val(rise), val(drop), val(hollow)
+        T, FL, K = max(val(tip), 0.0), max(val(flat), 0.0), min(max(val(bracket), 0.0), 1.0)
         e_side, e_far = F.edge(sg), F.edge(-sg)
-        tip = (e_side + sg * L, -R)
-        handle(length, F.w(*tip), F.e * sg, label="wedge length")
-        handle(rise, F.w(*tip), -F.d, label="wedge rise")
-        under = (e_side, -R - D)
+        tip_t = (e_side + sg * L, -R)
+        tip_b = (tip_t[0], -R - T)
+        handle(length, F.w(*tip_t), F.e * sg, label="wedge length")
+        handle(rise, F.w(*tip_t), -F.d, label="wedge rise")
+        under = (e_side, -R - T - D)
         nm = f"{end.name}.wedge"
         c = Contour()
         c.add(F.w(e_far, 0), "on", f"{nm}.far")
-        c.add(F.w(*tip), "on", f"{nm}.tip")
-        mid = ((tip[0] + under[0]) / 2, (tip[1] + under[1]) / 2)
+        c.add(F.w(e_far + sg * FL, 0), "on", f"{nm}.flat")
+        c.add(F.w(*tip_t), "on", f"{nm}.tip")
+        c.add(F.w(*tip_b), "on", f"{nm}.tip_b")
+        # underside, hollow curve (the original)
+        mid = ((tip_b[0] + under[0]) / 2, (tip_b[1] + under[1]) / 2)
         sag = (sg * H * L * 0.35, H * D * 0.35)          # pulls the underside towards the stem corner
-        _curve(c, F.w(tip[0] + (mid[0] - tip[0]) * 0.66 - sag[0], tip[1] + (mid[1] - tip[1]) * 0.66 + sag[1]),
-               F.w(under[0] + (mid[0] - under[0]) * 0.66 - sag[0], under[1] + (mid[1] - under[1]) * 0.66 + sag[1]),
-               F.w(*under), f"{nm}.under")
-        c.add(F.w(e_far, -R - D), "on")
+        h1 = np.array([tip_b[0] + (mid[0] - tip_b[0]) * 0.66 - sag[0], tip_b[1] + (mid[1] - tip_b[1]) * 0.66 + sag[1]])
+        h2 = np.array([under[0] + (mid[0] - under[0]) * 0.66 - sag[0], under[1] + (mid[1] - under[1]) * 0.66 + sag[1]])
+        # underside as a bracket: towards the stem edge `corner` below the tip, then a fillet
+        C = np.array([e_side, tip_b[1] - val(corner)])
+        b1 = np.array(tip_b) + val(ca) * (C - np.array(tip_b))
+        b2 = np.array(under) + val(cb) * (C - np.array(under))
+        h1, h2 = h1 * (1 - K) + b1 * K, h2 * (1 - K) + b2 * K
+        _curve(c, F.w(*h1), F.w(*h2), F.w(*under), f"{nm}.under")
+        c.add(F.w(e_far, -R - T - D), "on")
         t.add.append(c if sg > 0 else c.reversed())   # CCW in world for either side
         m = 0.5 * max(end.width, 10)                  # bounded, like Frame.flat
         # only the stem's own corner above the sloped line goes: the cut
         # reaches just past the end (d = 0), not into whatever sits above it
         # (it used to delete the i's dot)
-        D = 0.25 * max(end.width, 20)
-        t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(*tip), F.w(tip[0] + sg * m, -R),
-                           F.w(tip[0] + sg * m, D), F.w(e_far - sg * m, D), F.w(e_far - sg * m, 0)]))
+        Dc = 0.25 * max(end.width, 20)
+        t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(e_far + sg * FL, 0), F.w(*tip_t),
+                           F.w(tip_t[0] + sg * m, -R), F.w(tip_t[0] + sg * m, Dc), F.w(e_far - sg * m, Dc),
+                           F.w(e_far - sg * m, 0)]))
         return t
     style.__name__ = "wedge"
     return style

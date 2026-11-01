@@ -37,6 +37,10 @@ DEFAULTS: dict[str, tuple] = {
     "serif_slope": (0, (-10, 50)), "cap_serif_slope": (0, (-10, 50)),
     "cap_serif_len": (80, (10, 180)), "cap_serif_bracket": (60, (0, 160)), "cap_serif_tip": (4, (0, 40)),
     "head_len": (80, (10, 160)), "head_rise": (60, (0, 140)), "head_drop": (55, (0, 140)), "head_hollow": (0.3, (0, 1)),
+    # head wedge fine shape (see terminals.wedge): flat tip, flat top, bracketed underside
+    "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
+    "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
+    "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
     "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
     "spur_len": (70, (0, 160)), "spur_rise": (60, (0, 140)), "spur_drop": (40, (0, 120)),
     "beak_len": (25, (0, 120)), "beak_depth": (70, (5, 200)),
@@ -207,6 +211,8 @@ def bracketed_set(P) -> TerminalSet:
                      curve=(P.serif_ca, P.serif_cb), cup=P.serif_cup, slope=P.serif_slope)
     cap = bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
                     curve=(P.serif_ca, P.serif_cb), cup=P.serif_cup, slope=P.cap_serif_slope)
+    head_shape = dict(tip=P.head_tip, flat=P.head_flat, bracket=P.head_bracket, corner=P.head_corner,
+                      ca=P.head_ca, cb=P.head_cb)
     wide = bracketed(left=dict(length=lazy_max(P.serif_len + P.foot_wide_dl, 0)),
                      right=dict(length=lazy_max(P.serif_len + P.foot_wide_dr, 0)),
                      bracket=P.serif_bracket, tip=P.serif_tip, curve=(P.foot_wide_ca, P.foot_wide_cb),
@@ -214,9 +220,10 @@ def bracketed_set(P) -> TerminalSet:
     return TerminalSet(
         none,
         foot=foot, foot_wide=wide, cap_foot=cap, cap_head=cap,
-        head=wedge(side="left", length=P.head_len, rise=P.head_rise, drop=P.head_drop, hollow=P.head_hollow),
+        head=wedge(side="left", length=P.head_len, rise=P.head_rise, drop=P.head_drop, hollow=P.head_hollow,
+                   **head_shape),
         u_head=wedge(side="left", length=lazy_max(P.head_len + P.u_head_dlen, 0), rise=P.head_rise, drop=P.head_drop,
-                     hollow=P.head_hollow),
+                     hollow=P.head_hollow, **head_shape),
         spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
                       curve=(P.serif_ca, P.serif_cb)),
@@ -374,8 +381,10 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         (p.path(name="arch", pen=arch_pen, bias=bias,
                 profile=Profile((0, m0), (P.n_taper_len, 1), (1, 1)))
             .start(st, name="join", dir=d0, terminal=False)
-            .curve_to((x + width * P.n_shoulder_x, sh_y), name="shoulder", dir=0, tension=P.n_tension)
-            .curve_to((leg_x + P.stem / 2 - left_half, top * P.n_out_y * 0.5), name="leg", dir=-90))
+            .curve_to((x + width * P.n_shoulder_x, sh_y), name="shoulder", dir=0, tension=P.n_tension,
+                      width=P.n_shoulder_dw)
+            .curve_to((leg_x + P.stem / 2 - left_half, top * P.n_out_y * 0.5), name="leg", dir=-90,
+                      tension=P.n_leg_t))
         notch_cut(p, J, val(edge), +1)
         join_handles(J, val(edge), +1, rising=True)
         taper_handle(p._strokes[-1], P.n_taper_len)

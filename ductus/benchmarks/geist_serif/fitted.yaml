@@ -228,12 +228,12 @@ s_width: 396.3994
 sb_round: 42.4411
 sb_straight: 14.5567
 serif_bracket: 61.4593
-serif_ca: 0.3807
-serif_cb: 0.6629
+serif_ca: 0.4
+serif_cb: 0.8
 serif_cup: -0.6572
-serif_len: 97.0282
-serif_slope: 1.152
-serif_tip: 11.2189
+serif_len: 82.0
+serif_slope: 32.0
+serif_tip: 4.0
 spur_drop: 53.9336
 spur_len: 77.8801
 spur_rise: 33.0159
