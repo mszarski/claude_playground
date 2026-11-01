@@ -523,3 +523,52 @@ The search has converged at these constructions. What separates ours from
 Geist now is slivers a few units wide along the edges. The internal
 benchmark, fitted directly to Geist, scores 0.977 on its 16 glyphs
 (onHeasgvhmburfti). The display face scores 0.969 on the same glyphs.
+
+## 24 — punctuation
+
+Sheet: `24.png` (a sentence and the set, under the first line).
+
+New glyphs: `. , : ; - – — ' " ‘ ’ “ ” ! ? ( ) /` (18 glyphs). They are
+built from the kit's own pieces, with no new primitives:
+
+- **Dots** (period, colon, semicolon, and the dots of ! and ?): circles of
+  `dot_r`, sitting on the baseline overshoot.
+- **Comma**: a ball with a tail curling down-left from its right side, to a
+  narrow tip `comma_tail` below. Its parameters are `comma_dx`,
+  `comma_tip_w` and `comma_bend`.
+- **Curly quotes**: the comma's contour scaled by `quote_k`. ’ hangs from
+  `quote_top`. ‘ is the same contour turned 180° about its ball, standing
+  on `quote_bot`. The doubles are pairs `quote_gap` apart.
+- **Straight quotes**: wedges from the cap height, `quote_w` at the top
+  tapering to `quote_tip_w`.
+- **Dashes**: bars of one thickness at one height, in three lengths.
+- **!**: a stem `excl_w` wide down to a shoulder, then a taper to a point,
+  plus the dot.
+- **?**: one stroke with the face's pen (thick upright, `quest_thin`
+  across). It runs from a flat-cut left end over the top, down the right
+  side, and into the neck, thinning into a flat cut above the dot.
+- **( )**: crescents, a pen stroke thinning to `paren_end_w` at both ends.
+  The ends leave `paren_end_dir` below the horizontal, so the curve stays
+  shallow at its ends and steep through the middle, as Geist's does.
+- **/**: a parallelogram.
+
+The kit's glyph filter now maps named glyphs (`comma`, `quoteleft`, …) to
+their characters, so a font asks for them by character in `glyphs=`.
+
+As with the letters, the values were set by searching against Geist's
+outlines, and spacing from its side bearings.
+
+Against Geist (IoU):
+
+| glyph | . | , | : | ; | ’ | ‘ | ” | “ | ' |
+|---|---|---|---|---|---|---|---|---|---|
+| IoU | .95 | .96 | .95 | .96 | .96 | .96 | .97 | .96 | .99 |
+
+| glyph | " | - | – | — | ! | ? | ( | ) | / |
+|---|---|---|---|---|---|---|---|---|---|
+| IoU | .99 | 1.0 | 1.0 | 1.0 | .98 | .89 | .92 | .92 | .99 |
+
+Mean over the punctuation: 0.963.
+
+Not done yet: & and * (closer to letters than to punctuation), and the
+letters a sentence still misses (d, l, y, …).

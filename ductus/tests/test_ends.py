@@ -147,3 +147,26 @@ def test_fi_ligature_compiles_emits_and_shapes(tmp_path):
     face = freetype.Face(str(otf))
     idx = _shape(otf, face, "fig")
     assert len(idx) == 2 and idx[0] == face.get_name_index(b"f_i")
+
+
+def test_punctuation_glyphs_are_mapped_and_shaped():
+    from fontTools.pens.boundsPen import BoundsPen
+    from ductus.emit import build_otf
+    from fontTools.ttLib import TTFont
+    import tempfile
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    cf = compile_font(f)
+    marks = ".,:;-–—'\"‘’“”!?()/"
+    with tempfile.TemporaryDirectory() as d:
+        t = TTFont(build_otf(cf, Path(d) / "p.otf"))
+        cmap, gs = t.getBestCmap(), t.getGlyphSet()
+        assert all(ord(c) in cmap for c in marks)
+
+        def box(c):
+            p = BoundsPen(gs)
+            gs[cmap[ord(c)]].draw(p)
+            return p.bounds
+        assert box(",")[1] < -100 < 0 < box(".")[3]          # the comma's tail hangs below the baseline
+        assert box("‘")[1] > 400 and box("’")[1] > 400        # quotes sit high
+        assert box("(")[1] < 0 < 700 < box("(")[3]            # parentheses span descent to above caps
+        assert gs[cmap[ord("—")]].width > gs[cmap[ord("–")]].width > gs[cmap[ord("-")]].width

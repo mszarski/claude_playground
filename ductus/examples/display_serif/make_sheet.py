@@ -30,6 +30,9 @@ glyph_view = [Image.open(build / "c1.png").convert("L"), Image.open(build / "c2.
 otf = build_otf(cf, build / "DuctusDisplay.otf")
 lines = [("hamburgefonstiv", 120), ("HOAGES  hamburgefonstiv", 72), ("Hamburgefonstiv OHAGES ishmon", 36),
          ("the shoe is on the other font", 24), ("hamburgefonstiv HOAGES", 14)]
+if "comma" in cf.glyphs:     # punctuation, set in a sentence and on its own
+    lines[1:1] = [("“Ah,” she sighs; “is it (so) — or not?” Oh! it is: ’tis/isn’t.", 60),
+                  (". , : ; - – — ' \" ‘ ’ “ ” ! ? ( ) /", 72)]
 text = [Image.open(render_text(otf, s, build / f"t{i}.png", size=sz)) for i, (s, sz) in enumerate(lines)]
 parts = text + glyph_view
 W = max(p.width for p in parts)

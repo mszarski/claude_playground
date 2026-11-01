@@ -237,6 +237,44 @@ DEFAULTS: dict[str, tuple] = {
     "G_width": (690, (560, 820)), "G_bar_y": (0.42, (0.3, 0.55)), "G_term_y": (0.72, (0.6, 0.9)),
     "G_serif": (110, (30, 220)),
     "S_width": (500, (380, 620)),
+    # punctuation. dot: radius (the period's, colon's, ! and ? dots)
+    "dot_r": (68, (40, 100)),
+    # comma: tail depth below the baseline, tip offset from the ball's centre,
+    # tip width, and how far below the ball's equator its outer curve bends
+    "comma_tail": (157, (80, 240)), "comma_dx": (-15, (-60, 40)), "comma_tip_w": (50, (10, 100)),
+    "comma_bend": (52, (0, 120)),
+    "semi_dx": (0, (-40, 40)),   # the semicolon's comma, right of its dot
+    # curly quotes: the comma shape scaled by quote_k; ’ tops out at quote_top,
+    # ‘ (turned) bottoms out at quote_bot; pairs are quote_gap apart (centres)
+    "quote_k": (0.9, (0.6, 1.2)), "quote_top": (724, (650, 800)), "quote_bot": (530, (450, 620)),
+    "quote_gap": (186, (120, 260)),
+    # straight quotes: a wedge from quote_w at the cap height to quote_tip_w,
+    # quote_h long; " pairs them quote_dbl_gap apart
+    "quote_w": (94, (40, 140)), "quote_tip_w": (4, (0, 40)), "quote_h": (210, (120, 300)),
+    "quote_dbl_gap": (140, (80, 220)),
+    # dashes: thickness, centre height; lengths of the hyphen, en and em dash
+    "dash_t": (52, (20, 90)), "dash_y": (322, (250, 400)), "hyphen_len": (319, (200, 420)),
+    "endash_len": (476, (380, 600)), "emdash_len": (798, (700, 960)),
+    # !: a wedge excl_w wide down to excl_shoulder, tapering to excl_tip_w at excl_bot
+    "excl_w": (97, (50, 140)), "excl_shoulder": (530, (400, 700)), "excl_tip_w": (35, (10, 80)),
+    "excl_bot": (170, (120, 260)),
+    # ?: a stroke (thick upright, thin across), from its left end round the top
+    # and down into the neck; quest_w: the pen's width, quest_thin: across the top
+    "quest_width": (465, (360, 560)), "quest_w": (100, (60, 140)), "quest_thin": (43, (15, 80)),
+    "quest_end_y": (487, (400, 600)), "quest_neck_x": (0.62, (0.4, 0.8)), "quest_neck_y": (330, (250, 420)),
+    "quest_bot": (170, (120, 260)), "quest_bot_w": (0.35, (0.15, 1.0)), "quest_tension": (1.0, (0.7, 1.4)),
+    "quest_top_x": (0.5, (0.3, 0.7)), "quest_right_y": (606, (450, 700)), "quest_neck_dir": (240, (200, 270)),
+    "quest_bot_dx": (-25, (-80, 30)),
+    # parentheses: crescent strokes; paren_w at the middle, thin to paren_end_w
+    # (share) at the ends; paren_top / paren_bot the ends' heights, paren_bow how
+    # far the middle bows out from the ends
+    "paren_w": (80, (40, 120)), "paren_end_w": (0.15, (0.05, 0.6)), "paren_top": (740, (680, 800)),
+    "paren_bot": (-126, (-200, -60)), "paren_bow": (200, (120, 300)),
+    "paren_end_dir": (33, (10, 80)),   # the ends' direction, degrees below the horizontal
+    "paren_tension": (1.0, (0.7, 1.4)),
+    # slash: horizontal width; from the descent to above the cap height
+    "slash_w": (56, (30, 100)), "slash_top": (745, (680, 800)), "slash_bot": (-110, (-200, -40)),
+    "slash_run": (356, (200, 480)),
     # the S's spine weight relative to the s's (a cap S often carries more)
     "S_swell_k": (1.0, (0.6, 1.8)),
     # E arm serifs with E_serifs="wedge": how far the wedge slopes back along the arm
@@ -430,7 +468,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     def g(name, sb=None, **kw):
         def deco(fn):
-            ch = name if len(name) == 1 else (" " if name == "space" else None)
+            from ..parts import _unicode_for
+            u = _unicode_for(name)
+            ch = chr(u) if u is not None else None
             lig = "_" in name and want is not None and all(c in want for c in name.split("_"))
             if want is None or (ch and ch in want) or name in (want or ()) or lig:
                 font.glyph(name, sb=sb, **kw)(fn)
@@ -957,6 +997,159 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                     t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy), mid=(P.S_mid_dx, P.S_mid_dy),
                     sides=(P.S_left_dy, P.S_right_dy), tops=(P.S_top_dx, P.S_bot_dx),
                     dw=(P.S_t1_dw, P.S_top_dw, P.S_left_dw, P.S_mid_dw, P.S_right_dw, P.S_bot_dw, P.S_t2_dw))
+
+    # ---- punctuation ----------------------------------------------------
+    def dot(gl, name, cx, cy, r):
+        k = 0.5523 * r
+        (gl.contour(name).move((cx, cy - r), "bottom").curve((cx + k, cy - r), (cx + r, cy - k), (cx + r, cy), "right")
+            .curve((cx + r, cy + k), (cx + k, cy + r), (cx, cy + r), "top")
+            .curve((cx - k, cy + r), (cx - r, cy + k), (cx - r, cy), "left")
+            .curve_close((cx - r, cy - k), (cx - k, cy - r)).close())
+
+    def comma_(gl, name, cx, cy, sc=1.0, turn=False):
+        """A ball with a tail curling down-left from its right side (turned
+        180 degrees about the ball's centre for the opening quote)."""
+        r, k = P.dot_r * sc, 0.5523 * P.dot_r * sc
+        tail = cy - (P.comma_tail + P.dot_r - os_) * sc
+        tx, tw = cx + P.comma_dx * sc, P.comma_tip_w * sc
+        tip_l, tip, tip_r = (tx - tw * 0.55, tail + 10 * sc), (tx, tail), (tx + tw * 0.45, tail + 45 * sc)
+        ctrl = (cx + r, cy - P.comma_bend * sc)
+        c1 = (tip_r[0] + (ctrl[0] - tip_r[0]) * 0.67, tip_r[1] + (ctrl[1] - tip_r[1]) * 0.67)
+        c2 = (cx + r + (ctrl[0] - cx - r) * 0.67, cy + (ctrl[1] - cy) * 0.67)
+        pts = [("p", tip_l, "tip_l"), ("p", tip, "tip"), ("p", tip_r, "tip_r"),
+               ("c", c1, c2, (cx + r, cy), "right"),
+               ("c", (cx + r, cy + k), (cx + k, cy + r), (cx, cy + r), "top"),
+               ("c", (cx - k, cy + r), (cx - r, cy + k), (cx - r, cy), "left"),
+               ("c", (cx - r, cy - k), (cx - k, cy - r), (cx, cy - r), "bottom")]
+        T = (lambda q: (2 * cx - q[0], 2 * cy - q[1])) if turn else (lambda q: q)
+        c = gl.contour(name).move(T(pts[0][1]), pts[0][2])
+        for it in pts[1:]:
+            c = c.line(T(it[1]), it[2]) if it[0] == "p" else c.curve(T(it[1]), T(it[2]), T(it[3]), it[4])
+        c.close()                               # closes with a line back to tip_l
+
+    def poly_(gl, name, pts):
+        c = gl.contour(name).move(*pts[0])
+        for q in pts[1:]:
+            c = c.line(*q)
+        c.close()
+
+    def quote_wedge(gl, name, cx):
+        top, w, tw = P.capheight, P.quote_w, P.quote_tip_w
+        poly_(gl, name, [((cx - tw / 2, top - P.quote_h), "bl"), ((cx + tw / 2, top - P.quote_h), "br"),
+                         ((cx + w / 2, top), "tr"), ((cx - w / 2, top), "tl")])
+
+    cy_dot = P.dot_r - os_
+
+    @g("period", sb=(0, 0))
+    def period(gl):
+        dot(gl, "dot", 0, cy_dot, P.dot_r)
+
+    @g("comma", sb=(0, 0))
+    def comma(gl):
+        comma_(gl, "comma", 0, cy_dot)
+
+    @g("colon", sb=(0, 0))
+    def colon(gl):
+        dot(gl, "dot", 0, cy_dot, P.dot_r)
+        dot(gl, "dot_top", 0, xh + os_ - P.dot_r, P.dot_r)
+
+    @g("semicolon", sb=(0, 0))
+    def semicolon(gl):
+        comma_(gl, "comma", P.semi_dx, cy_dot)
+        dot(gl, "dot_top", 0, xh + os_ - P.dot_r, P.dot_r)
+
+    @g("quoteright", sb=(0, 0))
+    def quoteright(gl):
+        r = P.dot_r * P.quote_k
+        comma_(gl, "quote", 0, P.quote_top - r, P.quote_k)
+
+    @g("quoteleft", sb=(0, 0))
+    def quoteleft(gl):
+        r = P.dot_r * P.quote_k
+        comma_(gl, "quote", 0, P.quote_bot + r, P.quote_k, turn=True)
+
+    @g("quotedblright", sb=(0, 0))
+    def quotedblright(gl):
+        r = P.dot_r * P.quote_k
+        comma_(gl, "quote_l", 0, P.quote_top - r, P.quote_k)
+        comma_(gl, "quote_r", P.quote_gap, P.quote_top - r, P.quote_k)
+
+    @g("quotedblleft", sb=(0, 0))
+    def quotedblleft(gl):
+        r = P.dot_r * P.quote_k
+        comma_(gl, "quote_l", 0, P.quote_bot + r, P.quote_k, turn=True)
+        comma_(gl, "quote_r", P.quote_gap, P.quote_bot + r, P.quote_k, turn=True)
+
+    @g("quotesingle", sb=(0, 0))
+    def quotesingle(gl):
+        quote_wedge(gl, "quote", 0)
+
+    @g("quotedbl", sb=(0, 0))
+    def quotedbl(gl):
+        quote_wedge(gl, "quote_l", 0)
+        quote_wedge(gl, "quote_r", P.quote_dbl_gap)
+
+    def dash(gl, length):
+        rect(gl, "bar", 0, P.dash_y - P.dash_t / 2, length, P.dash_y + P.dash_t / 2)
+
+    @g("hyphen", sb=(0, 0))
+    def hyphen(gl):
+        dash(gl, P.hyphen_len)
+
+    @g("endash", sb=(0, 0))
+    def endash(gl):
+        dash(gl, P.endash_len)
+
+    @g("emdash", sb=(0, 0))
+    def emdash(gl):
+        dash(gl, P.emdash_len)
+
+    @g("exclam", sb=(0, 0))
+    def exclam(gl):
+        w, tw, top = P.excl_w, P.excl_tip_w, P.capheight
+        poly_(gl, "stem", [((-tw / 2, P.excl_bot), "bl"), ((tw / 2, P.excl_bot), "br"),
+                           ((w / 2, P.excl_shoulder), "sr"), ((w / 2, top), "tr"), ((-w / 2, top), "tl"),
+                           ((-w / 2, P.excl_shoulder), "sl")])
+        dot(gl, "dot", 0, cy_dot, P.dot_r)
+
+    @g("question", sb=(0, 0))
+    def question(gl):
+        W, w = P.quest_width, P.quest_w
+        pen = Pen(angle=0, width=w, contrast=1 - P.quest_thin / w)
+        top = P.capheight + os_ - P.quest_thin / 2
+        nx = W * P.quest_neck_x
+        (gl.path(name="hook", pen=pen, profile=Profile((0, 1), (0.75, 1), (1, P.quest_bot_w)))
+            .start((w / 2, P.quest_end_y), name="end", dir=90, terminal="apex")
+            .curve_to((W * P.quest_top_x, top), name="top", dir=0, tension=P.quest_tension)
+            .curve_to((W - w / 2, P.quest_right_y), name="right", dir=270, tension=P.quest_tension)
+            .curve_to((nx, P.quest_neck_y), name="neck", dir=P.quest_neck_dir)
+            .curve_to((nx + P.quest_bot_dx, P.quest_bot), name="bottom", dir=270, terminal="apex"))
+        dot(gl, "dot", nx + P.quest_bot_dx, cy_dot, P.dot_r)
+
+    def paren(gl, flip):
+        pen = Pen(angle=0, width=P.paren_w, contrast=0)
+        mid_y = (P.paren_top + P.paren_bot) / 2
+        x_end, x_mid = (0, P.paren_bow) if flip else (P.paren_bow, 0)
+        a_ = P.paren_end_dir
+        d_top, d_bot = (360 - a_, 180 + a_) if flip else (180 + a_, 360 - a_)
+        (gl.path(name="arc", pen=pen, profile=Profile((0, P.paren_end_w), (0.5, 1), (1, P.paren_end_w)))
+            .start((x_end, P.paren_top), name="top", dir=d_top, terminal=False)
+            .curve_to((x_mid, mid_y), name="mid", dir=270, tension=P.paren_tension)
+            .curve_to((x_end, P.paren_bot), name="bottom", dir=d_bot, terminal=False, tension=P.paren_tension))
+
+    @g("parenleft", sb=(0, 0))
+    def parenleft(gl):
+        paren(gl, False)
+
+    @g("parenright", sb=(0, 0))
+    def parenright(gl):
+        paren(gl, True)
+
+    @g("slash", sb=(0, 0))
+    def slash(gl):
+        w, run = P.slash_w, P.slash_run
+        poly_(gl, "bar", [((0, P.slash_bot), "bl"), ((w, P.slash_bot), "br"),
+                          ((run + w, P.slash_top), "tr"), ((run, P.slash_top), "tl")])
 
     @g("space", advance=P.stem * 2.4)
     def space(gl):

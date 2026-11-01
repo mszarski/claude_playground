@@ -98,13 +98,35 @@ P = kit.params(
     G_spur_bot=0.035, G_head_bracket=33, G_head_slope=48, G_face=0.855,
     G_full_dh=0.03, G_in_full_dh=-0.03, G_stress=3, G_thick_k=0.955, stem=84,
     G_in_full_dv=0.01, G_thin_k=1.05,
+    slash_run=300, paren_w=84, paren_top=745, paren_bot=-145, paren_bow=190, paren_end_w=0.3, paren_end_dir=29,
+    paren_tension=1.2, comma_bend=62, quote_gap=176, quest_width=455, quest_w=95, quest_neck_x=0.52,
+    quest_neck_y=266, quest_bot_w=0.4, quest_tension=0.85, quest_thin=46, quest_end_y=463, quest_top_x=0.53,
+    quest_right_y=506, quest_neck_dir=250, quest_bot_dx=-15, semi_dx=12,
 )
-kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.bracketed_set(P), g_ear="flag",
+kit.define(font, P, glyphs="hamburgefonstivHOAGES .,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
            g_band="flat", b_style="lobe", E_serifs="wedge", G_jaw="serif")
 
 # side bearings (left, right) on top of sb_straight / sb_round, set from the
 # glyphs' measured side bearings in the overlays
 font.spacing.update({
+    "slash": (-28, -80),
+    "parenright": (-20, 18),
+    "parenleft": (18, -20),
+    "question": (20, 20),
+    "exclam": (-8, -6),
+    "quotedblright": (-6, -8),
+    "quotedblleft": (-8, -8),
+    "quoteright": (-10, -14),
+    "quoteleft": (-14, -12),
+    "quotedbl": (-12, -12),
+    "quotesingle": (-12, -12),
+    "emdash": (28, 28),
+    "endash": (40, 40),
+    "hyphen": (36, 36),
+    "semicolon": (-8, -8),
+    "colon": (-8, -8),
+    "comma": (-8, -8),
+    "period": (-8, -8),
     "space": (0, 44),   # a 250 u word space
     "h": (8, -6),
     "a": (4, -6),
