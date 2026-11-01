@@ -31,47 +31,43 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
-### All benchmark glyphs (iterations 04–05) — 0 overrides throughout
+### Iteration 06 — every benchmark glyph above target, 0 overrides
 
-Combined overlay: `docs/iterations/05/_all.png`. Every glyph is built from
-the serif kit (`ductus/kits/serif.py`) with parameters from `ductus fit`;
-no hand overrides anywhere.
+Combined overlay: `docs/iterations/06/_all.png`.
 
-| glyph | IoU | what got it there | remaining gap → next primitive |
-|---|---:|---|---|
-| o | 0.984 | bowl with (h, v) fullness | — |
-| H | 0.970 | joint n+H serif fit; **serif `slope`** (wedge-like taper to a sharp tip) | crossbar is a rectangle; reference bar is slightly thicker |
-| n | 0.931 | arch with taper **profile**, **bias**, own pen; **wedge** head with cut | head wedge top edge: reference rises less steeply; arch crotch slightly lower |
-| e | 0.922 | bowl − **aperture cut**; bar contour | terminal's upper edge: a cut can't make the reference's thin up-sweep → an **aperture with a curved terminal stroke** |
-| v | 0.904 | monoline diagonals, **flat cut** at the vertex, **asymmetric sloped top serifs** (was 0.855 symmetric) | vertex: reference is a narrower notch below the baseline |
-| s | 0.871 | spine stroke with **swell profile**, **beak** terminals | proportions: the fit trades the top arc against the spine — a two-stroke s (arc + spine) may represent it better |
-| g | 0.848 | upper bowl, hairline link, **lower loop as a contour bowl** (was 0.733 as a pen stroke) | link bulges left; ear angle |
-| a | 0.785 | **rotated, asymmetric bowl** (was 0.685 with an upright one) | bowl→stem junction and hood thickness: needs the SPEC's **`join()` primitive** (bowl meeting a stem with a hairline) |
+| glyph | IoU 05 → 06 | Hausdorff 06 | what closed the gap |
+|---|---:|---:|---|
+| o | 0.984 → 0.983 | 1.6 | — (bowl, (h, v) fullness) |
+| H | 0.970 → 0.970 | 5.0 | — (sloped bracketed serifs) |
+| v | 0.904 → **0.958** | 15.2 | measuring showed both arms are constant width and the vertex is the thick arm **clipped by the thin arm's outer edge** → a vertex-clip cut (tapers were the wrong idea) |
+| n | 0.931 → **0.941** | 18.4 | arch rebuilt on the **`join` primitive** (crotch height, hairline thickness, angle, notch); head refit fixed a stem top 20 u too high |
+| a | 0.785 → **0.938** | 7.8 | bowl rebuilt as a **lobe** hanging on the stem at two **joins**; the a's own hood pen angle; a bug fix (terminal cuts were 3 widths wide and sliced the bowl) |
+| e | 0.922 → **0.937** | 6.6 | aperture edge leaves the terminal tip at its own angle and depth (was a straight line + sag) |
+| s | 0.871 → **0.936** | 5.9 | **per-node width parameters** (pen × profile can't weight each curve of the s independently); bottom beak points *up* (wrong guess before); s gets its own beak params (it was sharing a's — fitting a silently changed s) |
+| g | 0.848 → **0.931** | 18.7 | lower loop's (h, v) fullness; a **flat bar** across the loop top with a trim cut — the reference loop is tilted *and* flat-topped, which one contour bowl can't do |
 
-Language gaps found this round, each closed by a primitive rather than
-overrides: bowl rotation + asymmetric walls (a), sloped serif tops (n, H, v),
-asymmetric per-side serifs on diagonals (v), contour loops (g), curved
-aperture edges (e), terminals that cut, per-glyph sidebearings (v's negative
-sidebearings). Bugs found by the benchmark: side detection counted serif
-tips as the glyph's sides; overlays were drawn upside-down; a fit run while
-the kit was being edited produced a bogus sidebearing (fits should run
-against a pinned source).
+**Primitives added this round:** `join` (junctions.py) used by arches, the
+u cup, r's ear and the new **`lobe`** contour part; per-node width params;
+vertex clip; flat bar + trim. **Fitter:** Powell polishing with an IoU-blended
+objective (`--method powell --objective iou`), staged fits (sub-part params
+first), and measured starting points for the benchmark when the search
+stalled in a wrong basin (v, g — measurement only, it's the benchmark).
 
-**Coupling.** Shared parameters are fitted once and then shared: fitting `n`
-moved `stem` 86 → 83, which cost `o` 0.03 IoU until `round_gain` (the
-"rounds heavier than straights" optical rule) was refitted. The final pass
-should be one joint fit of all shared params over all glyphs.
+**Bugs found by the benchmark:** oversized terminal cut boxes clipping
+neighbouring parts; the lobe counter crossing its outer contour with a thin
+bottom wall; naming collapse broken by cut contours (`n.arch.arch.*`);
+shared beak params coupling a and s.
 
-**Spacing.** Two shared sidebearings (straight/round) plus per-glyph
-adjustments leave Δadv errors of −27…+89 (g is worst). Spacing-from-shape is
-milestone M5; until then the benchmark scores shape and spacing separately.
+**Still open:** spacing — two shared sidebearings leave Δadv up to +67 (g)
+and +34 (n); that is M5 (spacing from shape). A final *joint* fit of all
+shared params over all glyphs is still to do.
 
 ### Proposed targets (after o and n, SPEC M2)
 
 * **IoU ≥ 0.93 and Hausdorff ≤ 20 units, with ≤ 2 overrides per glyph.**
   `o` shows parameters alone reach ~0.98 on simple shapes; `n` (0.931,
   20.4 u) is the first glyph with junctions and terminals and sets the bar
-  for complex ones. Met by o, H, n (borderline); not yet by e, v, s, g, a.
+  for complex ones. **Met by all eight benchmark glyphs as of iteration 06, with 0 overrides.**
 
 | iter | date | glyph | IoU | Hausdorff | mean | Δadv | overrides | Σ\|Δ\| | primitives | notes |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---|---|
@@ -94,3 +90,11 @@ milestone M5; until then the benchmark scores shape and spacing separately.
 | 05 | 2026-10-31 | `s` | 0.8707 | 13.3 | 3.9 | -4 | 0 | 0 | beak | 05: round_gain refit after the n fit moved the shared stem; 0 overrides |
 | 05 | 2026-10-31 | `g` | 0.8478 | 36.7 | 4.9 | +89 | 0 | 0 | bowl, flat | 05: round_gain refit after the n fit moved the shared stem; 0 overrides |
 | 05 | 2026-10-31 | `v` | 0.9039 | 27.8 | 2.9 | +0 | 0 | 0 | bracketed, flat | 05: round_gain refit after the n fit moved the shared stem; 0 overrides |
+| 06 | 2026-11-01 | `o` | 0.9834 | 1.6 | 0.8 | -19 | 0 | 0 | bowl | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `n` | 0.9407 | 18.4 | 2.2 | +34 | 0 | 0 | cut, bracketed, wedge | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `H` | 0.9702 | 5.0 | 1.1 | -6 | 0 | 0 | contour, bracketed | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `e` | 0.9365 | 6.6 | 2.2 | -27 | 0 | 0 | bowl, contour, cut | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `a` | 0.9377 | 7.8 | 2.1 | +2 | 0 | 0 | lobe, beak, wedge | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `s` | 0.9363 | 5.9 | 2.0 | -5 | 0 | 0 | beak | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `g` | 0.9306 | 18.7 | 2.2 | +67 | 0 | 0 | bowl, contour, cut | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 06 | 2026-11-01 | `v` | 0.9576 | 15.2 | 1.4 | -2 | 0 | 0 | cut, bracketed, flat | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |

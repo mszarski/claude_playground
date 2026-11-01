@@ -45,10 +45,11 @@ DEFAULTS: dict[str, tuple] = {
     "o_width": (505, (380, 640)), "o_full_h": (0.6, (0.4, 0.85)), "o_full_v": (0.6, (0.4, 0.85)),
     "o_in_full_h": (0.6, (0.4, 0.85)), "o_in_full_v": (0.6, (0.4, 0.85)), "o_stress": (0, (-20, 20)),
     # n
-    "n_width": (410, (300, 520)), "n_join_y": (0.80, (0.5, 0.97)), "n_join_dir": (40, (0, 85)),
-    "n_join_in": (0.35, (0.0, 0.5)),
+    "n_width": (410, (300, 520)),
+    "n_join_at": (0.78, (0.45, 0.95)), "n_join_thin": (30, (4, 90)), "n_join_angle": (45, (0, 85)),
+    "n_notch": (0, (0, 30)), "n_notch_w": (20, (4, 60)),
     "n_shoulder_x": (0.45, (0.2, 0.75)), "n_out_y": (0.62, (0.3, 0.9)),
-    "n_taper": (0.25, (0.02, 1.0)), "n_taper_len": (0.3, (0.02, 0.8)), "n_bias": (0.5, (0.1, 0.9)),
+    "n_taper_len": (0.3, (0.02, 0.8)), "n_bias": (0.5, (0.1, 0.9)),
     "n_tension": (1.0, (0.6, 1.8)),
     # H
     "H_width": (550, (420, 700)), "H_bar_y": (0.52, (0.35, 0.65)), "H_bar_t": (35, (5, 80)),
@@ -57,7 +58,8 @@ DEFAULTS: dict[str, tuple] = {
     "e_in_full_h": (0.6, (0.4, 0.85)), "e_in_full_v": (0.6, (0.4, 0.85)), "e_stress": (0, (-25, 25)),
     "e_thin_bottom": (1.0, (0.5, 2.5)),
     "e_bar_y": (0.57, (0.4, 0.7)), "e_bar_t": (35, (5, 80)),
-    "e_term_y": (150, (40, 260)), "e_term_angle": (15, (-40, 60)), "e_term_sag": (0, (-120, 120)),
+    "e_term_y": (150, (40, 260)), "e_cut_angle": (200, (150, 260)), "e_cut_y": (60, (-20, 200)),
+    "e_cut_h1": (0.4, (0.05, 1.2)), "e_cut_h2": (0.4, (0.05, 1.2)), "e_cut_x": (0.5, (0.25, 0.85)),
     # a
     "a_stem_x": (420, (300, 520)), "a_stem_top": (360, (250, 500)),
     "a_term_x": (110, (40, 220)), "a_term_y": (400, (300, 500)), "a_term_dir": (80, (30, 120)),
@@ -66,6 +68,13 @@ DEFAULTS: dict[str, tuple] = {
     "a_bowl_full_h": (0.6, (0.4, 0.85)), "a_bowl_full_v": (0.6, (0.4, 0.85)), "a_bowl_in": (0.6, (0.4, 0.85)),
     "a_bowl_stress": (0, (-30, 30)), "a_bowl_thin": (1.0, (0.4, 3.0)), "a_bowl_rot": (0, (-10, 35)),
     "a_bowl_r": (0.0, (-60, 60)), "a_bowl_tr": (0.4, (0.05, 1.5)), "a_stem_up": (0, (-40, 120)),
+    # a's bowl as a lobe on the stem (two joins)
+    "a_far": (40, (0, 150)), "a_top_at": (280, (150, 380)), "a_top_thin": (35, (6, 100)),
+    "a_top_angle": (20, (-40, 75)), "a_bot_at": (200, (40, 320)), "a_bot_thin": (70, (6, 180)),
+    "a_bot_angle": (30, (-40, 85)), "a_lobe_thick": (95, (30, 170)), "a_lobe_thin_b": (34, (6, 100)),
+    "a_out_mid": (0.45, (0.05, 0.95)), "a_in_mid": (0.5, (0.05, 0.95)), "a_bx_out": (0.5, (0.1, 0.95)),
+    "a_bx_in": (0.5, (0.1, 0.95)), "a_lobe_t": (1.0, (0.6, 1.8)), "a_lobe_ti": (1.0, (0.6, 1.8)),
+    "a_hood_end": (0.25, (0.0, 1.0)), "a_hood_angle": (30, (-30, 80)),
     "a_taper": (0.6, (0.05, 1.2)), "a_bias": (0.5, (0.1, 0.9)), "a_hood_thin": (0.6, (0.2, 1.5)),
     # s
     "s_width": (390, (300, 500)), "s_top_x": (0.45, (0.25, 0.7)), "s_left_y": (0.72, (0.55, 0.9)),
@@ -74,7 +83,10 @@ DEFAULTS: dict[str, tuple] = {
     "s_t1_x": (0.95, (0.7, 1.1)), "s_t1_y": (0.75, (0.55, 0.95)), "s_t2_x": (0.05, (-0.1, 0.3)),
     "s_t2_y": (0.22, (0.05, 0.45)), "s_swell": (1.0, (0.5, 1.6)), "s_ends": (0.6, (0.2, 1.4)),
     "s_angle": (0, (-40, 40)), "s_tension": (1.0, (0.6, 1.6)),
-    "s_spread": (0.5, (0.08, 0.5)), "s_t1_dir": (100, (20, 170)), "s_t2_dir": (100, (20, 170)), "s_cut1": (0, (-60, 60)), "s_cut2": (0, (-60, 60)),
+    "s_spread": (0.5, (0.08, 0.5)), "s_bias": (0.5, (0.15, 0.85)),
+    # local weight at the s's nodes (width added there, interpolated between)
+    "s_top_dw": (0, (-40, 40)), "s_left_dw": (0, (-50, 50)), "s_mid_dw": (0, (-50, 50)),
+    "s_right_dw": (0, (-50, 50)), "s_bot_dw": (0, (-40, 40)), "s_beak_len": (40, (0, 160)), "s_beak_depth": (60, (5, 200)), "s_t1_dir": (100, (20, 170)), "s_t2_dir": (100, (20, 170)), "s_cut1": (0, (-60, 60)), "s_cut2": (0, (-60, 60)),
     # g
     "g_bl": (30, (0, 120)), "g_br": (350, (250, 450)), "g_bb": (180, (120, 260)), "g_bt": (530, (480, 560)),
     "g_thick": (1.0, (0.5, 1.4)), "g_full": (0.6, (0.4, 0.85)), "g_in_full": (0.6, (0.4, 0.85)),
@@ -83,12 +95,21 @@ DEFAULTS: dict[str, tuple] = {
     "g_band_y": (55, (0, 140)), "g_band_x": (300, (150, 450)),
     "g_loop_l": (10, (-40, 100)), "g_loop_r": (480, (380, 560)), "g_loop_b": (-205, (-240, -150)),
     "g_loop_t": (40, (-40, 120)), "g_loop_w": (1.0, (0.4, 1.6)),
-    "g_link_x0": (0.3, (0.0, 0.9)), "g_link_w": (1.0, (0.15, 1.5)), "g_loop_thick": (0.7, (0.2, 1.4)), "g_loop_tr": (0.9, (0.2, 1.6)),
-    "g_loop_top_t": (80, (10, 140)), "g_loop_bot_t": (40, (5, 120)), "g_loop_full": (0.6, (0.4, 0.85)),
-    "g_loop_in_full": (0.6, (0.4, 0.85)), "g_loop_rot": (0, (-15, 15)), "g_loop_stress": (0, (-30, 30)),
+    "g_link_x0": (0.3, (0.0, 0.9)), "g_link_w": (1.0, (0.15, 1.5)),
+    "g_ear_h": (80, (20, 160)), "g_ear_root_x": (0.75, (0.4, 1.1)), "g_ear_root_y": (500, (420, 560)),
+    "g_ear_bot": (490, (420, 560)), "g_link_turn": (0.5, (0.1, 0.9)),
+    "g_link_w0": (0.4, (0.05, 1.5)), "g_link_w1": (1.0, (0.2, 2.0)), "g_link_tp": (0.5, (0.1, 0.9)),
+    "g_bar_top": (95, (40, 140)), "g_bar_bot": (12, (-40, 80)), "g_bar_l": (170, (60, 320)),
+    "g_bar_r": (450, (300, 560)),
+    "g_low_t": (0.35, (0.05, 0.95)), "g_low_y": (0.5, (0.0, 1.0)), "g_low_dir": (-20, (-80, 40)), "g_loop_thick": (0.7, (0.2, 1.4)), "g_loop_tr": (0.9, (0.2, 1.6)),
+    "g_loop_top_t": (80, (10, 140)), "g_loop_bot_t": (40, (5, 120)), "g_loop_full": (0.6, (0.4, 0.98)),
+    "g_loop_in_full": (0.6, (0.4, 0.98)), "g_loop_rot": (0, (-15, 15)), "g_loop_stress": (0, (-30, 30)),
+    # up to ~1: nearly square quadrants, for the g's flat-topped loop band
+    "g_loop_full_v": (0.6, (0.4, 0.98)), "g_loop_in_full_v": (0.6, (0.4, 0.98)),
     # v
     "v_width": (560, (420, 680)), "v_thick": (90, (40, 160)), "v_thin": (25, (5, 80)),
     "v_vertex": (0.5, (0.3, 0.7)), "v_os": (12, (0, 30)), "v_sb": (0, (-150, 80)),
+    "v_taper": (1.0, (0.3, 1.3)), "v_thin_dx": (0, (-80, 40)),
     "A_sb": (0, (-150, 80)),
     # display / test-word glyphs
     "m_width": (330, (250, 450)), "b_width": (500, (400, 620)), "b_bowl_l": (0.3, (0.0, 0.6)),
@@ -157,8 +178,11 @@ def bracketed_set(P) -> TerminalSet:
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
                       curve=(P.serif_ca, P.serif_cb)),
         **_vtops(P, P.top_serif_tip),
-        s_top=beak(side="above", length=P.beak_len, depth=P.beak_depth, axis=P.s_cut1),
-        s_bottom=beak(side="below", length=P.beak_len, depth=P.beak_depth, axis=P.s_cut2),
+        # s has its own beaks (sharing a's made fitting a silently change s); both
+        # rise above the stroke -- the top one past its upper edge, the bottom one
+        # up the vertical face of the lower terminal
+        s_top=beak(side="above", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut1),
+        s_bottom=beak(side="above", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut2),
         hood=beak(side="left", length=P.beak_len, depth=P.beak_depth, axis="vertical"),
         ear=flat("horizontal"), vertex=flat("vertical"), apex=flat("vertical"),
         cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
@@ -196,8 +220,8 @@ def didone_set(P) -> TerminalSet:
         cap_vfoot=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket * 0.7, tip=P.foot_tip,
                             curve=(P.serif_ca, P.serif_cb)),
         # s/S: vertical faces with hairline beards (top one hangs down, bottom one stands up)
-        s_top=beak(side="below", length=P.beak_len, depth=P.beak_depth, axis=P.s_cut1),
-        s_bottom=beak(side="above", length=P.beak_len, depth=P.beak_depth, axis=P.s_cut2),
+        s_top=beak(side="below", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut1),
+        s_bottom=beak(side="above", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut2),
         hood=ball(radius=P.ball_r, side="left", drop=P.ball_drop),
         r_ear=ball(radius=P.ball_r * 0.9, side="below", drop=P.ball_drop),
         f_hook=ball(radius=P.ball_r * 0.9, side="below", drop=P.ball_drop),
@@ -208,8 +232,13 @@ def didone_set(P) -> TerminalSet:
 
 # --------------------------------------------------------------------------
 
-def define(font, P, glyphs: str | None = None, terminals=None):
-    """Register the kit's glyphs on ``font``."""
+def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none"):
+    """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
+    short stroke taking the ``ear`` terminal, e.g. a ball) or ``"flag"`` (a
+    four-sided flag). ``g_band``: ``"flat"`` puts a flat bar across the top of
+    the g's lower loop (and trims the loop above it) -- a tilted loop with a
+    flat top, which one contour bowl can't make."""
+    from ..junctions import contact, join, notch_cut
     from ..parts import part
 
     font.pen = Pen(angle=0, width=P.stem, contrast=1 - P.hairline / P.stem)
@@ -242,40 +271,51 @@ def define(font, P, glyphs: str | None = None, terminals=None):
                fullness=full, inner_fullness=in_full, thin_bottom=thin_bottom, rotate=rotate,
                thick_right=thick_right)
 
+    def n_join(top):
+        return join(top * P.n_join_at, P.n_join_thin, P.n_join_angle, P.n_notch, P.n_notch_w)
+
     @part
     def arch(p, x, width, top=xh, flip=False):
-        """Leaves the stem as a hairline (profile taper), over the shoulder,
-        down into the leg. Ends inside the leg so the leg can be an exact stem.
-        ``flip`` rotates it 180 degrees about the glyph's centre (the cup of u)."""
+        """Leaves the stem at a :class:`Join` (hairline thinning at the crotch),
+        over the shoulder, down into the leg. Ends inside the leg so the leg
+        can be an exact stem. ``flip`` rotates it 180 degrees (the cup of u)."""
         if flip:
             return _cup(p, x, width, top)
         bias = P.n_bias
         hair = arch_pen.hairline
-        # outer (left of travel on the way down) edge of the arch at the leg = leg's outer edge
+        J = n_join(top)
+        edge = x + P.stem / 2
+        _, _, st, d0, thin = contact(J, val(edge), +1, rising=True)
+        m0 = thin / max(arch_pen.width_at(d0), 1.0)
         left_half = hair / 2 + (val(P.stem) - hair) * val(bias)
         leg_x = x + width
         sh_y = top + os_ - arch_pen.width_at(0) * (1 - val(bias))
         (p.path(name="arch", pen=arch_pen, bias=bias,
-                profile=Profile((0, P.n_taper), (P.n_taper_len, 1), (1, 1)))
-            .start((x + P.stem * P.n_join_in, top * P.n_join_y), name="join", dir=P.n_join_dir, terminal=False)
+                profile=Profile((0, m0), (P.n_taper_len, 1), (1, 1)))
+            .start(st, name="join", dir=d0, terminal=False)
             .curve_to((x + width * P.n_shoulder_x, sh_y), name="shoulder", dir=0, tension=P.n_tension)
             .curve_to((leg_x + P.stem / 2 - left_half, top * P.n_out_y * 0.5), name="leg", dir=-90))
+        notch_cut(p, J, val(edge), +1)
 
     def _cup(p, x, width, top):
-        """The arch rotated 180 degrees: leaves the right stem low, under the
-        bowl, up into the left stem. Has its own bias: rotated, the eye wants
-        the weight in a different place than on the n."""
+        """The arch rotated 180 degrees: leaves the right stem low through the
+        same Join (mirrored), under the bowl, up into the left stem. Has its
+        own bias: rotated, the eye wants the weight elsewhere than on the n."""
         bias = P.u_bias
         hair = arch_pen.hairline
+        R = x + width
+        J = join(top - top * P.n_join_at, P.n_join_thin, P.n_join_angle, P.n_notch, P.n_notch_w)
+        edge = R - P.stem / 2
+        _, _, st, d0, thin = contact(J, val(edge), -1, rising=False)
+        m0 = thin / max(arch_pen.width_at(d0), 1.0)
         left_half = hair / 2 + (val(P.stem) - hair) * val(bias)
         sh_y = -os_ + arch_pen.width_at(180) * (1 - val(bias))
-        R = x + width
         (p.path(name="cup", pen=arch_pen, bias=bias,
-                profile=Profile((0, P.n_taper), (P.n_taper_len, 1), (1, 1)))
-            .start((R - P.stem * P.n_join_in, top - top * P.n_join_y), name="join", dir=val(P.n_join_dir) + 180,
-                   terminal=False)
+                profile=Profile((0, m0), (P.n_taper_len, 1), (1, 1)))
+            .start(st, name="join", dir=d0, terminal=False)
             .curve_to((R - width * P.n_shoulder_x, sh_y), name="shoulder", dir=180, tension=P.n_tension)
             .curve_to((x - P.stem / 2 + left_half, top - top * P.n_out_y * 0.5), name="leg", dir=90))
+        notch_cut(p, J, val(edge), -1)
 
     @part
     def spine(p, width, height, stem_w):
@@ -286,13 +326,13 @@ def define(font, P, glyphs: str | None = None, terminals=None):
         bot = -os_ + sp.width_at(180) / 2
         sw = Profile((0, P.s_ends), (0.5 - P.s_spread, P.s_ends), (0.5, P.s_swell), (0.5 + P.s_spread, P.s_ends),
                      (1, P.s_ends))
-        (p.path(name="spine", pen=sp, profile=sw)
+        (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias)
             .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", dir=P.s_t1_dir, terminal="s_top")
-            .curve_to((W * P.s_top_x, top), name="top", dir=180, tension=P.s_tension)
-            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", dir=270)
-            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", dir=P.s_mid_dir)
-            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", dir=270)
-            .curve_to((W * P.s_bot_x, bot), name="bottom", dir=180, tension=P.s_tension)
+            .curve_to((W * P.s_top_x, top), name="top", dir=180, tension=P.s_tension, width=P.s_top_dw)
+            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", dir=270, width=P.s_left_dw)
+            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", dir=P.s_mid_dir, width=P.s_mid_dw)
+            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", dir=270, width=P.s_right_dw)
+            .curve_to((W * P.s_bot_x, bot), name="bottom", dir=180, tension=P.s_tension, width=P.s_bot_dw)
             .curve_to((W * P.s_t2_x, height * P.s_t2_y), name="t2", dir=P.s_t2_dir, terminal="s_bottom"))
 
     def rect(gl, name, x0, y0, x1, y1):
@@ -331,37 +371,38 @@ def define(font, P, glyphs: str | None = None, terminals=None):
         t = P.e_bar_t
         gl.contour("bar").move((th * 0.5, y - t / 2), "bl").line((w, y - t / 2), "br") \
             .line((w, y + t / 2), "tr").line((th * 0.5, y + t / 2), "tl").close()
-        # aperture: everything right of the centre between the bar and the
-        # terminal line goes
-        k = math.tan(math.radians(val(P.e_term_angle)))
-        cx, R = w * 0.5, w + 120
-        ty = P.e_term_y
-        # lower edge: a curve (sag > 0 bows it upwards) so the terminal can taper
-        c_ = (R, ty + (R - w) * k)
-        d_ = (cx, ty - (w - cx) * k)
-        sag = P.e_term_sag
-        (gl.cut("aperture").move((cx, y - t / 2), "a").line((R, y - t / 2), "b").line(c_, "c")
-            .curve((c_[0] + (d_[0] - c_[0]) / 3, c_[1] + (d_[1] - c_[1]) / 3 + sag),
-                   (c_[0] + 2 * (d_[0] - c_[0]) / 3, c_[1] + 2 * (d_[1] - c_[1]) / 3 + sag), d_, "d")
-            .close())
+        # aperture: right of the counter, between the bar and the terminal.
+        # Its lower edge *is* the terminal's upper edge: it leaves the
+        # terminal tip at ``e_cut_angle`` and runs into the counter.
+        R = w + 120
+        tip = (w, P.e_term_y)
+        d_ = (w * P.e_cut_x, P.e_cut_y)
+        a1 = math.radians(val(P.e_cut_angle))
+        L = math.hypot(val(d_[0]) - val(tip[0]), val(d_[1]) - val(tip[1]))
+        c1 = (tip[0] + math.cos(a1) * L * P.e_cut_h1, tip[1] + math.sin(a1) * L * P.e_cut_h1)
+        c2 = (d_[0] + L * P.e_cut_h2, d_[1])        # arrives at the counter travelling left
+        (gl.cut("aperture").move((w * P.e_cut_x, y - t / 2), "a").line((R, y - t / 2), "b")
+            .line((R, P.e_term_y), "c").line(tip, "tip").curve(c1, c2, d_, "d").close())
 
     @g("a")
     def a(gl):
         sx = P.a_stem_x
-        gl += stem_(x=sx, top=P.a_stem_top + P.a_stem_up, foot="spur", head=False)
-        hood_pen = Pen(angle=P.arch_angle, width=P.stem, contrast=1 - P.hairline * P.a_hood_thin / P.stem)
+        stem_top = P.a_stem_top + P.a_stem_up
+        gl += stem_(x=sx, top=stem_top, foot="spur", head=False)
+        hood_pen = Pen(angle=P.a_hood_angle, width=P.stem, contrast=1 - P.hairline * P.a_hood_thin / P.stem)
         top_y = xh + os_ - hood_pen.width_at(0) * (1 - val(P.a_bias))
         (gl.path(name="hood", pen=hood_pen, bias=P.a_bias,
-                 profile=Profile((0, P.a_taper), (0.25, 1), (1, 1)))
+                 profile=Profile((0, P.a_taper), (P.a_hood_end, 1), (1, 1)))
             .start((P.a_term_x, P.a_term_y), name="terminal", dir=P.a_term_dir, terminal="hood")
             .curve_to((P.a_term_x + (sx - P.a_term_x) * P.a_top_x, top_y), name="top", dir=0)
             # always end inside the stem, so hood and stem overlap
             .curve_to((sx, min(val(P.a_stem_top + (xh - P.a_stem_top) * (1 - P.a_out_y) * 0.5),
-                               val(P.a_stem_top + P.a_stem_up) - 6)), name="out", dir=-90))
-        gl += bowl(x=P.a_bowl_l, width=sx + P.a_bowl_r - P.a_bowl_l, bottom=-os_, top=P.a_bowl_top,
-                   thick=P.stem * P.a_bowl_thick, thin=P.hairline * P.a_bowl_thin, stress=P.a_bowl_stress,
-                   full=(P.a_bowl_full_h, P.a_bowl_full_v), in_full=P.a_bowl_in, rotate=P.a_bowl_rot,
-                   thick_right=P.stem * P.a_bowl_tr, name="bowl")
+                               val(stem_top) - 6)), name="out", dir=-90))
+        # the bowl hangs on the stem's left edge at two joins
+        gl.lobe(sx - P.stem / 2, -1, P.a_far, -os_,
+                join(P.a_top_at, P.a_top_thin, P.a_top_angle), join(P.a_bot_at, P.a_bot_thin, P.a_bot_angle),
+                thick=P.a_lobe_thick, thin_bottom=P.a_lobe_thin_b, out_mid=P.a_out_mid, in_mid=P.a_in_mid,
+                bx_out=P.a_bx_out, bx_in=P.a_bx_in, tension=P.a_lobe_t, in_tension=P.a_lobe_ti, prefix="bowl.")
 
     @g("s")
     def s(gl):
@@ -372,27 +413,57 @@ def define(font, P, glyphs: str | None = None, terminals=None):
         gl += bowl(x=P.g_bl, width=P.g_br - P.g_bl, bottom=P.g_bb, top=P.g_bt,
                    thick=P.stem * P.g_thick, thin=P.hairline, full=P.g_full, in_full=P.g_in_full, name="bowl")
         cx = (P.g_bl + P.g_br) / 2
-        (gl.path(name="ear", profile=constant(P.g_ear_w))
-            .start((cx + (P.g_br - cx) * 0.6, P.g_bt - 30), name="root", terminal=False)
-            .curve_to((P.g_ear_x, P.g_ear_y), name="tip", dir=10, terminal="ear"))
+        if g_ear == "flag":
+            # four-sided flag: flat bottom, vertical outer edge, sloped top
+            rx = cx + (P.g_br - cx) * P.g_ear_root_x
+            (gl.contour("ear").move((rx, P.g_ear_bot), "root_bottom").line((P.g_ear_x, P.g_ear_bot), "bottom")
+                .line((P.g_ear_x, P.g_ear_bot + P.g_ear_h), "top").line((rx, P.g_ear_root_y), "root_top").close())
+        else:
+            (gl.path(name="ear", profile=constant(P.g_ear_w))
+                .start((cx + (P.g_br - cx) * 0.6, P.g_bt - 30), name="root", terminal=False)
+                .curve_to((P.g_ear_x, P.g_ear_y), name="tip", dir=10, terminal="ear"))
         # link: leaves the bowl's bottom, swings out left, turns into the loop's top band
-        (gl.path(name="link", profile=constant(P.g_link_w))
+        # hairline through the turn, heavy where it runs into the loop's top band
+        (gl.path(name="link", profile=Profile((0, P.g_link_w0), (P.g_link_tp, P.g_link_w0),
+                                              (1, P.g_link_w1)))
             .start((P.g_bl + (cx - P.g_bl) * P.g_link_x0, P.g_bb + 12), name="root", dir=210, terminal=False)
             .curve_to((P.g_link_x, P.g_link_y), name="turn", dir=270)
+            # where the link bottoms out and swings into the loop's top band
+            .curve_to((P.g_link_x + (P.g_band_x - P.g_link_x) * P.g_low_t,
+                       P.g_band_y + (P.g_link_y - P.g_band_y) * P.g_low_y), name="low", dir=P.g_low_dir)
             .curve_to((P.g_band_x, P.g_band_y), name="band", dir=0))
         # lower loop: a contour bowl with its own walls (heavy top band)
         gl += bowl(x=P.g_loop_l, width=P.g_loop_r - P.g_loop_l, bottom=P.g_loop_b, top=P.g_loop_t,
                    thick=P.stem * P.g_loop_thick, thick_right=P.stem * P.g_loop_tr, thin=P.g_loop_top_t,
-                   thin_bottom=P.g_loop_bot_t, full=P.g_loop_full, in_full=P.g_loop_in_full,
+                   thin_bottom=P.g_loop_bot_t, full=(P.g_loop_full, P.g_loop_full_v),
+                   in_full=(P.g_loop_in_full, P.g_loop_in_full_v),
                    rotate=P.g_loop_rot, stress=P.g_loop_stress, name="loop")
+        if g_band == "flat":
+            rect(gl, "bar", P.g_bar_l, P.g_bar_bot, P.g_bar_r, P.g_bar_top)
+            # trim whatever of the tilted loop pokes above the bar (not the link)
+            (gl.cut("bar_trim").move((P.g_bar_l + 10, P.g_bar_top), "a").line((P.g_loop_r + 40, P.g_bar_top), "b")
+                .line((P.g_loop_r + 40, P.g_bar_top + 60), "c").line((P.g_bar_l + 10, P.g_bar_top + 60), "d").close())
 
     @g("v", sb=(P.v_sb, P.v_sb))
     def v(gl):
         W, vx = P.v_width, P.v_width * P.v_vertex
         thick = Pen(angle=0, width=P.v_thick, contrast=0)
         thin = Pen(angle=0, width=P.v_thin, contrast=0)
-        gl.line((0, xh), (vx, -P.v_os), name="left", names=("top", "vertex"), terminal=("vtop_l", "vertex"), pen=thick)
-        gl.line((W, xh), (vx, -P.v_os), name="right", names=("top", "vertex"), terminal=("vtop_r", "vertex"), pen=thin)
+        # the thick arm tapers towards the vertex (``v_taper`` = width there / at the top)
+        gl.line((0, xh), (vx, -P.v_os), name="left", names=("top", "vertex"), terminal=("vtop_l", "vertex"),
+                pen=thick, profile=Profile((0, 1), (1, P.v_taper)))
+        # both arms run to the vertex; below the crotch the thick arm is
+        # clipped by the thin arm's outer edge, leaving a narrow flat point
+        tx = vx + P.v_thin_dx
+        gl.line((W, xh), (tx, -P.v_os), name="right", names=("top", "vertex"), terminal=("vtop_r", "vertex"),
+                pen=thin)
+        dx, dy = val(W) - val(tx), val(xh) + val(P.v_os)
+        ln = math.hypot(dx, dy)
+        off = val(P.v_thin) / 2 * ln / dy                   # horizontal half-width of the thin arm
+        x_at = lambda y: val(tx) + off + (y + val(P.v_os)) * dx / dy   # thin arm's outer edge
+        y0, y1 = -val(P.v_os) - 30, val(xh) * 0.35
+        (gl.cut("vertex_clip").move((x_at(y0), y0), "a").line((x_at(y0) + 200, y0), "b")
+            .line((x_at(y1) + 200, y1), "c").line((x_at(y1), y1), "d").close())
 
     # ---- the rest of the test word and capitals -------------------------
     asc = P.ascender
@@ -430,9 +501,11 @@ def define(font, P, glyphs: str | None = None, terminals=None):
     @g("r")
     def r(gl):
         gl += stem_(x=0, top=xh + P.head_top, head="head")
+        J = n_join(xh)
+        _, _, st, d0, thin = contact(J, val(P.stem / 2), +1, rising=True)
         (gl.path(name="ear", pen=arch_pen, bias=P.n_bias,
-                 profile=Profile((0, P.n_taper), (P.n_taper_len, 1), (1, 1)))
-            .start((P.stem * P.n_join_in, xh * P.n_join_y), name="join", dir=P.n_join_dir, terminal=False)
+                 profile=Profile((0, thin / max(arch_pen.width_at(d0), 1.0)), (P.n_taper_len, 1), (1, 1)))
+            .start(st, name="join", dir=d0, terminal=False)
             .curve_to((P.r_width, xh * P.r_y), name="end", dir=P.r_dir, terminal="r_ear"))
 
     @g("f")

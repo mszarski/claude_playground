@@ -157,6 +157,8 @@ def fit(font_py: Path,
         exclude: str = typer.Option("xheight,capheight,ascender,descender",
                                     help="params never fitted (default: the fixed vertical metrics)"),
         save: Optional[Path] = typer.Option(None, help="merge fitted values into this YAML file"),
+        method: str = typer.Option("nelder-mead", help="nelder-mead (default) or powell (polishing)"),
+        objective: str = typer.Option("distance", help="distance (smooth; default) or iou (polishing towards the target)"),
         overrides: Optional[Path] = typer.Option(None)):
     """Tune parameters (not overrides) to minimise error vs the reference."""
     import yaml
@@ -168,7 +170,7 @@ def fit(font_py: Path,
     font = load_font(font_py)
     glyphs = [g.strip() for g in glyph.split(",") if g.strip()]
     r = fit_glyph(font, Reference(ref_path), glyphs, _overrides_for(font_py, overrides), param or None, maxiter,
-                  samples=samples, restarts=restarts,
+                  samples=samples, restarts=restarts, method=method, objective_kind=objective,
                   exclude={e.strip() for e in exclude.split(",") if e.strip()})
     for g, s in r.scores.items():
         typer.echo(f"{g}: IoU {s.iou:.4f}  Hausdorff {s.hausdorff:.1f}  mean {s.mean_dist:.2f}  dadv {s.advance_delta:+d}")

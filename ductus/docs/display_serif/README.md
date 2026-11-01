@@ -118,3 +118,20 @@ Critique (sheet `06.png`):
   little blunt where the aperture cut meets the thick wall.
 - **Verdict** — credible display type at 72–120 px for this word set; not yet
   release quality (spacing, g loop weight, G terminal).
+
+## 07–08 — on the join primitive
+
+The kit's arches (n h m r u) and the a's bowl are now built from the `join`
+primitive and the new `lobe` part, so the original font picked those up
+too: arches use `n_join_at/thin/angle`; the a's bowl hangs on its stem at a
+hairline top join and a heavier bottom join. Bug fixes from the benchmark
+(bounded terminal cuts) also apply here.
+
+Critique (sheet `08.png`):
+- **a** — the lobe gives it a proper Didone a: hairline top join into the
+  stem, weight on the left wall, a narrow counter. Better than any earlier
+  iteration.
+- **n h m r u** — unchanged in appearance (the join reproduces the old
+  construction's crotch), which is what a refactor should do.
+- **Remaining** — spacing (`r`→`g`), g's loop weight, G's blunt upper
+  terminal. Not release quality yet; credible display type at 72–120 px.

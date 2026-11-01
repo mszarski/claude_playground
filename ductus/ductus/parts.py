@@ -283,6 +283,11 @@ class Builder:
         cb.kind = "cut"
         return cb
 
+    def lobe(self, edge_x, side, far, bottom, top_join, bottom_join, thick, thin_bottom, **kw):
+        """Bowl closed by a stem, meeting it at two joins; see :func:`ductus.contours.lobe`."""
+        from .contours import lobe
+        return lobe(self, edge_x, side, far, bottom, top_join, bottom_join, thick, thin_bottom, **kw)
+
     def bowl(self, left, right, bottom, top, thick, thin, **kw):
         """Contour-part bowl (outer + counter); see :mod:`ductus.contours`."""
         from .contours import bowl
@@ -333,9 +338,11 @@ def realize(b: Builder) -> Realized:
         sub = realize(child)
         out.parts.append(call._fn.__name__)
         out.parts += sub.parts
-        if not child.calls and len(child._strokes) + len(child._contours) == 1:
-            for item in child._strokes + child._contours:
-                item.fullname = child.scope
+        # a part drawing exactly one item takes the part instance's name; cuts
+        # (notches, apertures) are decorations and don't count
+        drawn = child._strokes + [c for c in child._contours if not c.negative]
+        if not child.calls and len(drawn) == 1:
+            drawn[0].fullname = child.scope
         out.strokes += sub.strokes
         out.contours += sub.contours
     if isinstance(b, GlyphBuilder):

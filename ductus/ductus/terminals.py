@@ -90,9 +90,13 @@ class Frame:
         for P, nm in ((self.end.left, "cap.a"), (self.end.right, "cap.b"), (self.B, "cut.b"), (self.A, "cut.a")):
             c.add(P, "on", f"{name}.{nm}")
         t.add.append(c)
-        M = 3 * max(self.end.width, 40)
-        t.cut.append(poly([self.w(self.e_lo - M, 0), self.w(self.e_hi + M, 0),
-                           self.w(self.e_hi + M, M), self.w(self.e_lo - M, M)]))
+        # cut only what the stroke's own cap pushes past the line: a little
+        # wider than the stroke, as deep as a tilted cap can protrude. A big
+        # box would slice neighbouring parts (it did: the a's hood cut its bowl).
+        m = 0.5 * max(self.end.width, 10)
+        D = 2.0 * max(self.end.width, 20)
+        t.cut.append(poly([self.w(self.e_lo - m, 0), self.w(self.e_hi + m, 0),
+                           self.w(self.e_hi + m, D), self.w(self.e_lo - m, D)]))
         return t
 
 
@@ -191,9 +195,10 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical")
                F.w(*under), f"{nm}.under")
         c.add(F.w(e_far, -R - D), "on")
         t.add.append(c)
-        M = 3 * max(end.width, 40) + L
-        t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(*tip), F.w(tip[0] + sg * M, -R),
-                           F.w(tip[0] + sg * M, M), F.w(e_far - sg * M, M), F.w(e_far - sg * M, 0)]))
+        m = 0.5 * max(end.width, 10)                  # bounded, like Frame.flat
+        D = R + 2.0 * max(end.width, 20)
+        t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(*tip), F.w(tip[0] + sg * m, -R),
+                           F.w(tip[0] + sg * m, D), F.w(e_far - sg * m, D), F.w(e_far - sg * m, 0)]))
         return t
     style.__name__ = "wedge"
     return style

@@ -23,20 +23,18 @@ point-compatible · `n.arch.shoulder` override survives stem changes · editor
 (sliders, draggable points → `overrides.yaml`, live text, ~110 ms slider
 round trip) · `ductus test` passes, 55 unit tests · this README.
 
-**Milestone 2 — in progress.** All §5 primitive families exist and are
-tested: width profiles, L/R bias, contour bowls (with rotation and asymmetric
-walls), cuts, a terminal library (bracketed with slope, wedge, beak, ball,
-flat cuts) with swappable terminal sets, per-glyph spacing, and a genre kit
-(`ductus.kits.serif`). Benchmark (0 overrides, params by `ductus fit`):
-**o 0.984 · H 0.970 · n 0.931 · e 0.922 · v 0.904 · s 0.871 · g 0.848 ·
-a 0.785** IoU — see `docs/representability.md` for the trend, overlays and
-the gaps each glyph still shows. Proposed target: IoU ≥ 0.93 and Hausdorff
-≤ 20 units with ≤ 2 overrides. The original display serif renders the full
-test word `hamburgefonstiv` and `H O A G E S` (`docs/display_serif/06.png`,
-six iterations with critiques). Editor M2: reference onion skin, error heat
-map, stage inspector, overrides grouped by kind. Still to do: a `join()`
-primitive (a's bowl→stem), primitive handles in the editor, a joint fit of
-all shared params.
+**Milestone 2 — benchmark glyphs at target.** All §5 primitive families
+exist and are tested: width profiles, L/R bias, **joins** (arches) and
+**lobes** (stem bowls), contour bowls (rotation, asymmetric walls), cuts,
+a terminal library with swappable sets, per-node width params, per-glyph
+spacing, and the genre kit (`ductus.kits.serif`). Benchmark (0 overrides,
+params by `ductus fit`): **o 0.983 · H 0.970 · v 0.958 · n 0.941 · a 0.938 ·
+e 0.937 · s 0.936 · g 0.931** IoU — all above the target (IoU ≥ 0.93,
+Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
+original display serif renders `hamburgefonstiv` + `H O A G E S`
+(`docs/display_serif/`). Editor M2: reference onion skin, error heat map,
+stage inspector, overrides grouped by kind. Still to do: primitive handles
+in the editor, a joint fit of all shared params, spacing (M5).
 
 ![preview](docs/preview.png)
 
@@ -133,17 +131,18 @@ fitted.
 | width profiles | `p.path(..., profile=Profile((0, .2), (.35, 1), (1, 1)))`, `taper()`, `swell()`, `constant()` | n/h/m/r arch join, s spine, g ear/loop |
 | L/R bias | `p.path(..., bias=0.4)` — share of the modulation left of travel | arches (thicker inside) |
 | per-stroke pens | `Pen(angle=, width=, contrast=)` on any stroke | arches, hoods, monoline diagonals of v/A |
-| contour bowls | `p.bowl(..., fullness=(h, v), stress=, rotate=)` | o O b e g, a's tilted bowl |
+| contour bowls | `p.bowl(..., fullness=(h, v), stress=, rotate=)` | o O b e, g's loops |
+| joins | `join(at, thin, angle, notch)` — how a part meets a stem: crotch height, hairline thickness, angle, notch | n h m r u arches |
+| lobes | `p.lobe(edge_x, side, far, bottom, top_join, bottom_join, thick, thin_bottom, ...)` — a bowl closed by a stem at two joins | a (and d q b p) |
+| node widths | `.curve_to(..., width=dw)` with params | the s's local weight |
 | cuts | `p.cut(...)` subtracted after overlap removal; terminals can cut too | e and G apertures, wedge heads, flat cuts |
 | terminal library | `bracketed(length, bracket, tip, curve, cup, slope, left=/right=)`, `wedge`, `beak`, `ball`, `flat(axis)`, all world-axis-aware | every serif, beak, ball, vertex |
 | terminal sets | `TerminalSet(default, foot=..., head=..., ...)` keyed by end tags | swap the set → restyle the font |
 | per-glyph spacing | `@glyph(..., sb=(dl, dr))` | v, A (negative sidebearings) |
 | kits | `ductus.kits.serif`: constructions written once against a param namespace | benchmark *and* original font |
 
-**Junctions** are handled by construction rather than a separate `join()`
-call: an arch starts *inside* the stem with a tapered profile, so the union
-produces the hairline join and the crotch; `n_join_*` and `n_taper*` control
-it. **Optical rules** are parameters of the kit (overshoot, `round_gain`,
+**Junctions** are first-class: one `Join` describes how any curved part meets
+a stem, and both arches and lobes are built from it. **Optical rules** are parameters of the kit (overshoot, `round_gain`,
 heavier cap stems, hairline horizontals from the pen) rather than a separate
 pass. Both are candidates to become first-class if overrides start piling up
 there (the *Overrides by kind* panel will show it).

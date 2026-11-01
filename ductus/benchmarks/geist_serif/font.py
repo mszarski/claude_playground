@@ -15,4 +15,5 @@ font = Font("Ductus Bench Serif", upm=1000)
 
 fitted = yaml.safe_load((Path(__file__).parent / "fitted.yaml").read_text()) or {}
 P = kit.params(**fitted)
-kit.define(font, P, glyphs="onHeasgv", terminals=kit.bracketed_set(P))
+kit.define(font, P, glyphs="onHeasgv", terminals=kit.bracketed_set(P), g_ear="flag",
+           g_band="flat")

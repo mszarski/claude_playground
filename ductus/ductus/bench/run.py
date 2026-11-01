@@ -75,7 +75,8 @@ def expand_params(font, patterns) -> list[str]:
 
 def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | None = None,
               maxiter: int = 400, base_params: dict[str, float] | None = None,
-              samples: int = 256, restarts: int = 3, exclude=()) -> FitResult:
+              samples: int = 256, restarts: int = 3, exclude=(), method: str = "nelder-mead",
+              objective_kind: str = "distance") -> FitResult:
     """Tune ranged parameters (not overrides) to minimise shape error."""
     from scipy.optimize import minimize
     overrides = overrides or {}
@@ -121,7 +122,11 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
         # mean outline distance is smooth in the parameters; raster IoU is
         # piecewise and stalls the simplex.
         pen = 10 * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
-        return sum((s.mean_dist + 0.05 * s.hausdorff) / 10 for s in sc.values()) / len(sc) + pen * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
+        if objective_kind == "iou":
+            # polishing towards the benchmark target: IoU plus a distance term
+            return sum(5 * (1 - s.iou) + (s.mean_dist + 0.15 * s.hausdorff) / 10
+                       for s in sc.values()) / len(sc) + pen
+        return sum((s.mean_dist + 0.15 * s.hausdorff) / 10 for s in sc.values()) / len(sc) + pen * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
 
     _, before = run(x0)
     # global: quasi-random sample of the parameter box, then local Nelder-Mead
@@ -136,9 +141,15 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
         xs = starts[i]
         simplex = np.vstack([xs] + [np.clip(xs + 0.12 * np.eye(d)[k] * (1 if xs[k] < 0.5 else -1), 0, 1)
                                     for k in range(d)])
-        res = minimize(objective, xs, method="Nelder-Mead",
-                       options={"maxiter": maxiter, "xatol": 1e-4, "fatol": 1e-6,
-                                "initial_simplex": simplex, "adaptive": True})
+        if method == "powell":
+            # coordinate-wise line searches: better than a simplex at polishing
+            # many weakly coupled parameters from a good start
+            res = minimize(objective, xs, method="Powell", bounds=[(0, 1)] * d,
+                           options={"maxiter": max(2, maxiter // (10 * d)), "xtol": 1e-4, "ftol": 1e-6})
+        else:
+            res = minimize(objective, xs, method="Nelder-Mead",
+                           options={"maxiter": maxiter, "xatol": 1e-4, "fatol": 1e-6,
+                                    "initial_simplex": simplex, "adaptive": True})
         if res.fun < best_f:
             best_x, best_f = res.x, res.fun
     res = type("R", (), {"x": best_x})

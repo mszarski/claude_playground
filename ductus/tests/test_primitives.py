@@ -82,7 +82,12 @@ def test_terminals_add_and_cut(sfont):
     cf = compile_font(sfont)
     n = cf.glyphs["n"]
     assert "terminal:bracketed" in n.primitives and "terminal:wedge" in n.primitives
-    assert n.bounds[3] <= 540.5                           # wedge cut nothing above the stem top
+    from ductus.geometry import flatten
+    sx = n.points["n.stem.top"][0]
+    poly = np.concatenate([flatten(c, 16) for c in n.contours])
+    over_stem = poly[np.abs(poly[:, 0] - sx) <= 40.5]
+    assert over_stem[:, 1].max() <= 540.5                 # nothing of the stem above its top
+    assert n.bounds[3] > 545                              # ...but the cut didn't clip the arch next to it
     stem_x = n.points["n.stem.bottom"][0]
     assert stem_x - n.bounds[0] > 40 + 50 - 5            # serif/wedge reach past the stem's left edge
     v = cf.glyphs["v"]
