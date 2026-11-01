@@ -51,6 +51,9 @@ DEFAULTS: dict[str, tuple] = {
     "S_t1_dx": (0, (-0.2, 0.2)), "S_t1_dy": (0, (-0.2, 0.2)), "S_t2_dx": (0, (-0.2, 0.2)), "S_t2_dy": (0, (-0.2, 0.2)),
     "S_mid_dx": (0, (-0.15, 0.15)), "S_mid_dy": (0, (-0.15, 0.15)), "S_left_dy": (0, (-0.15, 0.15)),
     "S_right_dy": (0, (-0.15, 0.15)), "S_top_dx": (0, (-0.15, 0.15)), "S_bot_dx": (0, (-0.15, 0.15)),
+    # the S's stroke width at each node, added to the s's (font units)
+    "S_t1_dw": (0, (-40, 40)), "S_top_dw": (0, (-40, 40)), "S_left_dw": (0, (-40, 40)), "S_mid_dw": (0, (-40, 40)),
+    "S_right_dw": (0, (-40, 40)), "S_bot_dw": (0, (-40, 40)), "S_t2_dw": (0, (-40, 40)),
     "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 3.0)), "G_spur_w": (1.0, (0.5, 1.2)),
     "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
     "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
@@ -223,6 +226,10 @@ DEFAULTS: dict[str, tuple] = {
     # thin x hairline, fullness offsets from the o's
     "O_thick_k": (1.0, (0.7, 1.4)), "O_thin_k": (1.0, (0.5, 2.5)), "O_full_dh": (0, (-0.2, 0.2)),
     "O_full_dv": (0, (-0.2, 0.2)), "O_in_full_dh": (0, (-0.2, 0.2)), "O_in_full_dv": (0, (-0.2, 0.2)),
+    # the G's bowl, relative to the O's
+    "G_thick_k": (1.0, (0.8, 1.25)), "G_thin_k": (1.0, (0.6, 1.6)), "G_full_dh": (0, (-0.15, 0.15)),
+    "G_full_dv": (0, (-0.15, 0.15)), "G_in_full_dh": (0, (-0.15, 0.15)), "G_in_full_dv": (0, (-0.15, 0.15)),
+    "G_stress": (0, (-20, 20)),
     "O_width": (700, (560, 820)), "A_width": (680, (520, 820)), "A_bar_y": (0.32, (0.2, 0.45)),
     "A_apex": (40, (0, 120)), "A_thick": (115, (60, 180)), "A_thin": (28, (8, 80)),
     "E_width": (480, (380, 600)), "E_mid": (0.86, (0.6, 1.0)), "E_arm_t": (32, (8, 80)),
@@ -531,10 +538,12 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         notch_cut(p, J, val(edge), -1)
 
     @part
-    def spine(p, width, height, stem_w, swell_k=1.0, t1=(0, 0), t2=(0, 0), mid=(0, 0), sides=(0, 0), tops=(0, 0)):
+    def spine(p, width, height, stem_w, swell_k=1.0, t1=(0, 0), t2=(0, 0), mid=(0, 0), sides=(0, 0), tops=(0, 0),
+              dw=(0, 0, 0, 0, 0, 0, 0)):
         """The s/S spine: one stroke, width peaking mid-spine. ``t1``/``t2``,
         ``mid`` (x, y), ``sides`` (left y, right y) and ``tops`` (top x,
-        bottom x) offset the s's nodes: the S's own proportions."""
+        bottom x) offset the s's nodes: the S's own proportions. ``dw`` adds to
+        the s's width offsets at t1, top, left, mid, right, bottom, t2."""
         W = width
         sp = Pen(angle=P.s_angle, width=stem_w, contrast=1 - P.hairline / stem_w)
         top = height + os_ - sp.width_at(180) / 2
@@ -542,23 +551,23 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         e_, m_ = P.s_ends * swell_k, P.s_swell * swell_k
         sw = Profile((0, e_), (0.5 - P.s_spread, e_), (0.5, m_), (0.5 + P.s_spread, e_), (1, e_))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias, smooth=val(P.s_mid_free) >= 0.5)
-            .start((W * (P.s_t1_x + t1[0]), height * (P.s_t1_y + t1[1])), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
-            .curve_to((W * (P.s_top_x + tops[0]), top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
+            .start((W * (P.s_t1_x + t1[0]), height * (P.s_t1_y + t1[1])), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw + dw[0])
+            .curve_to((W * (P.s_top_x + tops[0]), top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw + dw[1])
             .curve_to((sp.width_at(90) / 2, height * (P.s_left_y + sides[0])), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
-                      tension=P.s_left_t, width=P.s_left_dw)
+                      tension=P.s_left_t, width=P.s_left_dw + dw[2])
             # s_mid_free: the spine's middle direction is solved (Hobby's mock-
             # curvature continuity) instead of imposed -- an imposed direction
             # makes both halves curl to meet it, and high contrast turns that
             # dip in direction into a kink in the width
             .curve_to((W * (P.s_mid_x + mid[0]), height * (P.s_mid_y + mid[1])), name="mid", pen_angle=P.s_mid_pa,
                       dir=None if val(P.s_mid_free) >= 0.5 else P.s_mid_dir, tension=P.s_mid_t,
-                      width=P.s_mid_dw)
+                      width=P.s_mid_dw + dw[3])
             .curve_to((W - sp.width_at(90) / 2, height * (P.s_right_y + sides[1])), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
-                      tension=P.s_right_t, width=P.s_right_dw)
+                      tension=P.s_right_t, width=P.s_right_dw + dw[4])
             .curve_to((W * (P.s_bot_x + tops[1]), bot), name="bottom", pen_angle=P.s_bot_pa, dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
-                      width=P.s_bot_dw)
+                      width=P.s_bot_dw + dw[5])
             .curve_to((W * (P.s_t2_x + t2[0]), height * (P.s_t2_y + t2[1])), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
-                      width=P.s_t2_dw, pen_angle=P.s_t2_pa))
+                      width=P.s_t2_dw + dw[6], pen_angle=P.s_t2_pa))
 
     def tapered_bar(gl, x0, y0, x1, y1, stem_l):
         """A crossbar whose left end is a point: a pentagon, degenerate (a plain
@@ -567,13 +576,13 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         (gl.contour("bar").move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((xa, y1), "tl")
             .line((x0 - P.bar_tip_dx, y0 + (y1 - y0) * P.bar_tip_y), "tip").close())
 
-    def cap_bowl(width):
-        """The O's bowl (also the G's)."""
+    def cap_bowl(width, thick_k=1.0, thin_k=1.0, dfull=(0, 0, 0, 0), stress=0):
+        """The O's bowl (also the G's, with its own offsets)."""
         ch = P.capheight
-        return bowl(x=0, width=width, bottom=-os_, top=ch + os_, thick=P.cap_stem * P.round_gain * P.O_thick_k,
-                    thin=P.hairline * P.O_thin_k, stress=P.o_stress,
-                    full=(P.o_full_h + P.O_full_dh, P.o_full_v + P.O_full_dv),
-                    in_full=(P.o_in_full_h + P.O_in_full_dh, P.o_in_full_v + P.O_in_full_dv))
+        return bowl(x=0, width=width, bottom=-os_, top=ch + os_, thick=P.cap_stem * P.round_gain * P.O_thick_k * thick_k,
+                    thin=P.hairline * P.O_thin_k * thin_k, stress=P.o_stress + stress,
+                    full=(P.o_full_h + P.O_full_dh + dfull[0], P.o_full_v + P.O_full_dv + dfull[1]),
+                    in_full=(P.o_in_full_h + P.O_in_full_dh + dfull[2], P.o_in_full_v + P.O_in_full_dv + dfull[3]))
 
     def rect(gl, name, x0, y0, x1, y1):
         gl.contour(name).move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((x0, y1), "tl").close()
@@ -896,7 +905,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("G")
     def G(gl):
         ch, W = P.capheight, P.G_width
-        gl += cap_bowl(W)
+        gl += cap_bowl(W, P.G_thick_k, P.G_thin_k, (P.G_full_dh, P.G_full_dv, P.G_in_full_dh, P.G_in_full_dv),
+                       P.G_stress)
         yb, yt = ch * P.G_bar_y, ch * P.G_term_y
         R = W + 100
         ry, cy = (ch + 2 * os_) / 2, ch / 2
@@ -945,7 +955,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def S(gl):
         gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem, swell_k=P.S_swell_k,
                     t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy), mid=(P.S_mid_dx, P.S_mid_dy),
-                    sides=(P.S_left_dy, P.S_right_dy), tops=(P.S_top_dx, P.S_bot_dx))
+                    sides=(P.S_left_dy, P.S_right_dy), tops=(P.S_top_dx, P.S_bot_dx),
+                    dw=(P.S_t1_dw, P.S_top_dw, P.S_left_dw, P.S_mid_dw, P.S_right_dw, P.S_bot_dw, P.S_t2_dw))
 
     @g("space", advance=P.stem * 2.4)
     def space(gl):

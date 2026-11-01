@@ -488,3 +488,38 @@ Against Geist (IoU):
 
 What remains are thin slivers along edges. G and S, the lowest at 0.89,
 differ mainly in where the curves' widths peak, not in construction.
+
+## 23 — G and S, then everything until it converged
+
+Sheet: `23.png`. Comparison: `23_vs_22.png`.
+
+Kit additions:
+- **S**: The S takes its own stroke width at every node of its curve
+  (`S_t1_dw`, `S_top_dw`, `S_left_dw`, `S_mid_dw`, `S_right_dw`, `S_bot_dw`,
+  `S_t2_dw`), added to the s's.
+- **G**: The G's bowl takes its own weight, fullness and stress relative to
+  the O's (`G_thick_k`, `G_thin_k`, `G_full_dh/dv`, `G_in_full_dh/dv`,
+  `G_stress`).
+- **A**: The apex now sits exactly at the cap height (`A_os_k` 0), as
+  Geist's does.
+
+Tried and dropped, because none improved the match:
+- running the G's diagonal foot cut on into the bowl;
+- concave inner edges on the E's wedges (they turned into fillets; Geist's
+  are nearly straight);
+- a separate nib angle and end-cut angles for the S;
+- separate inner bracket heights for the A's feet.
+
+Then I ran coordinate passes over every letter's own values, including
+values the face had left at their defaults, and over the face-wide values,
+until a full round no longer moved anything. One pass's best value for the
+g (`g_full` 0.57) made its bowl overlap itself. The lint caught it, and the
+g was re-searched without it.
+
+Against Geist: G 0.89 → 0.92, S 0.89 → 0.91, A 0.93 → 0.94, g 0.93 → 0.95,
+r 0.96 → 0.97, H 0.96 → 0.98. Mean IoU 0.955 → 0.961.
+
+The search has converged at these constructions. What separates ours from
+Geist now is slivers a few units wide along the edges. The internal
+benchmark, fitted directly to Geist, reaches about 0.976 on its lowercase,
+so the lowercase is within about 0.015 of that ceiling.
