@@ -31,6 +31,46 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 13 — the rest: mean IoU 0.970 → 0.975, every glyph ≥ 0.955
+
+| glyph | 12 | 13 | | glyph | 12 | 13 |
+|---|---:|---:|---|---|---:|---:|
+| o | 0.984 | 0.984 | | h | 0.966 | **0.974** |
+| n | 0.973 | **0.982** | | m | 0.962 | **0.969** |
+| H | 0.995 | 0.995 | | b | 0.959 | **0.975** |
+| e | 0.951 | **0.969** | | u | 0.977 | 0.981 |
+| a | 0.959 | 0.961 | | r | 0.976 | 0.980 |
+| s | 0.954 | 0.955 | | f | 0.973 | 0.978 |
+| g | 0.962 | 0.966 | | t | 0.959 | **0.979** |
+| v | 0.973 | 0.976 | | i | 0.992 | 0.992 |
+
+0 overrides; every Hausdorff ≤ 16.4 u. What it took:
+
+* **Pinned ranges.** `t_bar_r`, `a_bx_in` and `g_link_tp` sat exactly on
+  their range bounds: a fitted value stretches its range to include
+  itself but never past, so no fit could move them further (the t's bar
+  was 8 u short and could not grow). Widened.
+* **e** shared its wall thickness with the o: it now has its own per side
+  (`e_thick_dl`, `e_thick_dr`; the left wall was too thick its whole
+  height), and the bar stops short of the curved outer edge (`e_bar_rin`).
+* **Coupled moves.** The b's bowl wall and its reach only help together
+  (+9 u each: 0.959 → 0.966; either alone is worse), and so on across most
+  glyphs. The greedy search now also tries random 2–3-parameter moves, and
+  a multi-glyph version fitted the arch shared by n, h and m (mean 0.967
+  → 0.975), after which r, f, u and t were re-polished on their own params.
+* **A metric guard.** The search found an o with "IoU 1.007": skia can
+  return a wrong intersection *consistently* (both the intersection and
+  difference ops), which the earlier cross-check could not see. The
+  intersection may not exceed either area and must agree with a coarse
+  raster to 1%; otherwise the 0.5 u raster is used. Current scores were
+  unaffected; the merge also drops contours under 4 u² (a 1 u sliver at
+  the refitted v's vertex).
+* Tried and not used: the a's own stem weight and bottom (`a_stem_w`,
+  `a_stem_bot`); tilted top/bottom tangents for the s (`s_top_dir`,
+  `s_bot_dir`: horizontal is optimal). The s (0.955) and a (0.961) look
+  close to what this model can do; the s's remaining error is a weight
+  distribution along the stroke that a single pen angle can't follow.
+
 ### Iteration 12 — g and s: g 0.946 → 0.962, s 0.947 → 0.954
 
 Both were the lowest glyphs after iteration 11. Mean IoU 0.968 → 0.970,
@@ -425,3 +465,19 @@ shared params over all glyphs is still to do.
 | 12 | 2026-11-01 | `f` | 0.9734 | 12.3 | 0.9 | +64 | 0 | 0 | contour, bracketed, flat | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
 | 12 | 2026-11-01 | `t` | 0.9589 | 9.7 | 1.7 | +74 | 0 | 0 | contour, flat, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
 | 12 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 13 | 2026-11-01 | `o` | 0.9840 | 1.8 | 0.8 | -14 | 0 | 0 | bowl | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `n` | 0.9817 | 6.8 | 0.8 | +1 | 0 | 0 | cut, bracketed, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `H` | 0.9949 | 1.8 | 0.4 | -10 | 0 | 0 | contour, bracketed | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `e` | 0.9692 | 8.3 | 1.2 | -25 | 0 | 0 | bowl, contour, cut | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `a` | 0.9611 | 12.8 | 1.7 | +5 | 0 | 0 | lobe, flat, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `s` | 0.9550 | 10.1 | 1.5 | +3 | 0 | 0 | flat | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `g` | 0.9664 | 16.2 | 1.3 | +66 | 0 | 0 | bowl, contour, cut | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `v` | 0.9757 | 16.4 | 0.9 | +9 | 0 | 0 | cut, bracketed, flat | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `h` | 0.9743 | 8.6 | 1.1 | -2 | 0 | 0 | cut, bracketed, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `m` | 0.9692 | 9.6 | 1.3 | +0 | 0 | 0 | cut, bracketed, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `u` | 0.9809 | 14.6 | 1.0 | -4 | 0 | 0 | cut, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `b` | 0.9752 | 16.0 | 1.2 | -12 | 0 | 0 | lobe, flat, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `r` | 0.9795 | 7.3 | 1.0 | +29 | 0 | 0 | cut, bracketed, flat, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `f` | 0.9776 | 12.3 | 0.9 | +70 | 0 | 0 | contour, bracketed, flat | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `t` | 0.9793 | 9.7 | 1.5 | +76 | 0 | 0 | contour, flat, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 13 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
