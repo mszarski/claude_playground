@@ -40,6 +40,7 @@ DEFAULTS: dict[str, tuple] = {
     # head wedge fine shape (see terminals.wedge): flat tip, flat top, bracketed underside
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
+    "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
     "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
     "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
     "spur_len": (70, (0, 160)), "spur_rise": (60, (0, 140)), "spur_drop": (40, (0, 120)),
@@ -574,8 +575,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         # the h's ascender stem may carry a slightly different weight than the n's
         h_pen = Pen(angle=0, width=P.stem * P.h_stem_w, contrast=1 - P.hairline / (P.stem * P.h_stem_w))
         gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head", pen=h_pen)
-        gl += arch(x=0, width=P.n_width, edge_half=P.stem * P.h_stem_w / 2)
-        gl += stem_(x=P.n_width, top=xh * P.n_out_y, name="leg", head=False)
+        w = P.n_width + P.h_dwidth
+        gl += arch(x=0, width=w, edge_half=P.stem * P.h_stem_w / 2)
+        gl += stem_(x=w, top=xh * P.n_out_y, name="leg", head=False)
 
     @g("m")
     def m(gl):
