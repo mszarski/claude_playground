@@ -83,13 +83,20 @@ class Frame:
     def flat(self, name: str) -> Terminal:
         """Fill the gap between the stroke's own cap and the cut line, and
         cut everything beyond the line. Nothing to do if already aligned."""
+        # Always emit the fill and the cut, even when the cut line already
+        # matches the stroke's cap (they are then degenerate): whether they
+        # exist must not depend on parameter values (principle 4).
         t = Terminal()
-        if self.aligned:
-            return t
+        # the gap between the stroke's own cap and the cut line: a cap corner
+        # that pokes past the line is clamped onto it, so the fill is never a
+        # bow-tie (whose orientation -- and so point order -- would be arbitrary)
+        def inside(P, on_line):
+            return P if float(np.dot(np.asarray(P, float) - self.pos, self.d)) <= 0 else on_line
         c = Contour()
-        for P, nm in ((self.end.left, "cap.a"), (self.end.right, "cap.b"), (self.B, "cut.b"), (self.A, "cut.a")):
+        for P, nm in ((inside(self.end.left, self.A), "cap.a"), (self.A, "cut.a"),
+                      (self.B, "cut.b"), (inside(self.end.right, self.B), "cap.b")):
             c.add(P, "on", f"{name}.{nm}")
-        t.add.append(c)
+        t.add.append(c.reversed())          # frames are left-handed: reverse -> CCW in world
         # cut only what the stroke's own cap pushes past the line: a little
         # wider than the stroke, as deep as a tilted cap can protrude. A big
         # box would slice neighbouring parts (it did: the a's hood cut its bowl).
@@ -165,7 +172,7 @@ def bracketed(length=40, bracket=30, tip=4, curve=(0.6, 0.6), cup=0, axis="verti
         _curve(c, F.w(P["S2"][0] - span / 3, -cupv), F.w(N["S2"][0] + span / 3, -cupv), F.w(*N["S2"]), f"{nm}.n.tip")
         c.add(F.w(*N["S1"]), "on", f"{nm}.n.top")
         _curve(c, F.w(*N["c2"]), F.w(*N["c1"]), F.w(*N["S0"]), f"{nm}.n.bracket")
-        t.add.append(c)
+        t.add.append(c.reversed())          # built CCW in the (left-handed) frame -> CCW in world
         return t
     style.__name__ = "bracketed"
     return style
@@ -194,7 +201,7 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical")
                F.w(under[0] + (mid[0] - under[0]) * 0.66 - sag[0], under[1] + (mid[1] - under[1]) * 0.66 + sag[1]),
                F.w(*under), f"{nm}.under")
         c.add(F.w(e_far, -R - D), "on")
-        t.add.append(c)
+        t.add.append(c if sg > 0 else c.reversed())   # CCW in world for either side
         m = 0.5 * max(end.width, 10)                  # bounded, like Frame.flat
         D = R + 2.0 * max(end.width, 20)
         t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(*tip), F.w(tip[0] + sg * m, -R),
@@ -213,8 +220,9 @@ def beak(side="above", length=30, depth=60, axis="horizontal"):
         sg = F.sigma(side)
         e0 = F.edge(sg)
         L, D = val(length), val(depth)
-        t.add.append(poly([F.w(e0 - sg * 2, 0), F.w(e0 + sg * L, 0), F.w(e0, -D), F.w(e0 - sg * 2, -D)],
-                          [f"{end.name}.beak.base", f"{end.name}.beak.tip", f"{end.name}.beak.back", None]))
+        b = poly([F.w(e0 - sg * 2, 0), F.w(e0 + sg * L, 0), F.w(e0, -D), F.w(e0 - sg * 2, -D)],
+                 [f"{end.name}.beak.base", f"{end.name}.beak.tip", f"{end.name}.beak.back", None])
+        t.add.append(b if sg > 0 else b.reversed())   # CCW in world for either side
         return t
     style.__name__ = "beak"
     return style

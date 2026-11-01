@@ -215,9 +215,8 @@ class ContourBuilder:
         return self
 
     def close(self):
-        c = self.contour
-        if len(c.pts) > 1 and c.types[-1] == "on" and c.pts[-1] == c.pts[0]:
-            c.pts.pop(); c.types.pop(); c.names.pop()
+        """End the contour (it closes back to its first point). Points are
+        never dropped here: structure must not depend on coordinates."""
         return self
 
 

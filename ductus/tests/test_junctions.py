@@ -105,3 +105,19 @@ def test_g_band_option_adds_flat_bar():
     bench = compile_font(load_font(root / "benchmarks/geist_serif/font.py"), glyphs=["g"]).glyphs["g"]
     display = compile_font(load_font(root / "examples/display_serif/font.py"), glyphs=["g"]).glyphs["g"]
     assert "g.bar.tl" in bench.points and "g.bar.tl" not in display.points
+
+
+@pytest.mark.parametrize("path", ["benchmarks/geist_serif/font.py", "examples/display_serif/font.py"])
+def test_structure_fixed_at_extreme_corners(path):
+    """Every ranged param at its min (and max) at once must not change any
+    glyph's point structure: degenerate terminals, zero-size serifs and
+    collapsed walls keep their points and their order (principle 4)."""
+    from pathlib import Path
+    from ductus.loader import load_font
+    from ductus.lint import default_sweep
+    f = load_font(Path(__file__).resolve().parents[1] / path)
+    base = compile_font(f)
+    for st in default_sweep(f)[-2:]:
+        cf = compile_font(f, st)
+        bad = [g for g in cf.glyphs if cf.glyphs[g].raw_signature != base.glyphs[g].raw_signature]
+        assert not bad, bad

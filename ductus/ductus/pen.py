@@ -119,6 +119,7 @@ def _offset(P: np.ndarray, t: np.ndarray, sd, side: float | None = None) -> np.n
     if sd.profile is not None:
         half = half * sd.profile(sd.g0 + (sd.g1 - sd.g0) * t)
     half = half + (sd.dw0 + (sd.dw1 - sd.dw0) * t) / 2
+    half = np.maximum(half, 0.25)   # never negative: the outline would turn inside out
     N = np.stack([-T[:, 1], T[:, 0]], axis=1)  # left normal
     return bez(P, t) + sd.sign * N * half[:, None]
 

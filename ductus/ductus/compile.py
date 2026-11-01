@@ -131,7 +131,11 @@ def _orient(group: list[Contour]) -> list[Contour]:
     for i, c in enumerate(group):
         depth = sum(point_in_polygon(c.pts[0], polys[j])
                     for j in range(len(group)) if j != i)
-        ccw = c.area() > 0
+        a = c.area()
+        if abs(a) < 1.0:            # degenerate (e.g. a collapsed wedge): keep as built,
+            res.append(c)           # flipping it would change the point order
+            continue
+        ccw = a > 0
         res.append(c if ccw == (depth % 2 == 0) else c.reversed())
     return res
 
@@ -218,7 +222,8 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
 
     groups = [_orient(g) for g in groups]
     flat = [c for g in groups for c in g]
-    cuts = [_orient([c])[0] for c in cuts]
+    # cuts are not reoriented: pathops normalises them on their own, and
+    # flipping them would make their point order depend on values
     raw_signature = "|".join(c.signature() for c in flat) + "".join("|-" + c.signature() for c in cuts)
 
     stage["cuts"] = list(cuts)
