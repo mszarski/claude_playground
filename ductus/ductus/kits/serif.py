@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from types import SimpleNamespace
 
-from ..params import Param, lazy_max, val
+from ..params import Param, lazy_max, lazy_min, val
 from ..pen import Pen
 from ..profiles import Profile, constant
 from ..terminals import TerminalSet, beak, bracketed, flat, none, wedge
@@ -502,7 +502,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                                val(stem_top) - 6)), name="out", dir=-90))
         # the bowl hangs on the stem's left edge at two joins
         gl.lobe(sx - P.stem / 2, -1, P.a_far, -os_,
-                join(P.a_top_at, P.a_top_thin, P.a_top_angle), join(P.a_bot_at, P.a_bot_thin, P.a_bot_angle),
+                join(P.a_top_at, P.a_top_thin, P.a_top_angle),
+                # the bottom join never rises past the top one (the lobe would fold)
+                join(lazy_min(P.a_bot_at, P.a_top_at), P.a_bot_thin, P.a_bot_angle),
                 thick=P.a_lobe_thick, thin_bottom=P.a_lobe_thin_b, out_mid=P.a_out_mid, in_mid=P.a_in_mid,
                 bx_out=P.a_bx_out, bx_in=P.a_bx_in, tension=P.a_lobe_t, in_tension=P.a_lobe_ti, prefix="bowl.")
 

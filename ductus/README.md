@@ -28,11 +28,11 @@ exist and are tested: width profiles, L/R bias, **joins** (arches) and
 **lobes** (stem bowls), contour bowls (rotation, asymmetric walls), cuts,
 a terminal library with swappable sets, per-node width params, per-glyph
 spacing, and the genre kit (`ductus.kits.serif`). Benchmark — all of
-`hamburgefonstiv` + `H`, params by `ductus fit`, 3 overrides in total:
-**H 0.989 · o 0.985 · v 0.960 · i 0.956 · u 0.956 · f 0.953 · n 0.950 ·
-t 0.943 · b 0.943 · s 0.940 · a 0.937 · e 0.935 · r 0.935 · h 0.934 ·
-m 0.933 · g 0.931** IoU — every glyph meets the target (IoU ≥ 0.93,
-Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
+`hamburgefonstiv` + `H`, params by `ductus fit`, **0 overrides**, mean IoU 0.963:
+**H 0.995 · i 0.989 · o 0.984 · u 0.972 · n 0.968 · h 0.966 · v 0.966 ·
+f 0.965 · b 0.959 · m 0.959 · r 0.959 · a 0.956 · e 0.951 · t 0.946 ·
+s 0.941 · g 0.939** IoU (exact, on the outlines) — every glyph meets the
+target (IoU ≥ 0.93, Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
 original display serif renders `hamburgefonstiv` + `H O A G E S`
 (`docs/display_serif/`). Editor M2: reference onion skin, error heat map,
 stage inspector, overrides grouped by kind, **primitive handles**. Still to
