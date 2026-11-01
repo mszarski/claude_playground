@@ -30,7 +30,7 @@ P = kit.params(
     # n m h
     n_width=325, n_join_at=0.8, n_join_thin=25, n_join_angle=53, n_shoulder_x=0.59, n_out_y=0.41,
     n_taper_len=0.27, n_bias=0.52, n_tension=1.03, m_width=300, n_shoulder_pa=-5, n_leg_pa=7, n_leg_top=0.94,
-    n_leg_t=0.75, n_notch=0.6, n_notch_w=24, h_dwidth=-5, h_top=10,
+    n_leg_t=0.75, n_notch=0.6, n_notch_w=24, h_dwidth=-5, h_top=13.0,
     # u
     u_width=310, u_join_at=0.77, u_join_thin=29, u_join_angle=50, u_shoulder_x=0.55, u_out_y=0.35,
     u_tension=0.9, u_head_dlen=8.0, u_head_dtop=0.57, u_leg_t=0.82,
@@ -102,13 +102,44 @@ P = kit.params(
     paren_tension=1.2, comma_bend=62, quote_gap=176, quest_width=455, quest_w=95, quest_neck_x=0.52,
     quest_neck_y=266, quest_bot_w=0.4, quest_tension=0.85, quest_thin=46, quest_end_y=463, quest_top_x=0.53,
     quest_right_y=506, quest_neck_dir=250, quest_bot_dx=-15, semi_dx=12,
+    d_far=420, d_top_at=460, d_top_thin=58, d_bot_at=100, d_bot_thin=26, d_lobe_thick=90, d_lobe_thin_b=58,
+    d_out_mid=0.44, d_in_mid=0.56, d_bx_out=0.7, d_bx_in=1.0, d_crown_x=0.35, d_crown_t=26, d_top_angle=45,
+    q_top=-20, c_width=485, c_face=0.94, c_top_y=350, c_term_y=140, c_cut_x=0.62, c_cut_angle=165, j_bot=-28,
+    j_hook=168, j_end_y=-172, j_end_w=1.4,
+    j_end_dir=142,
+   
+   
+   
+   
+   
+   
+   
+    w_width=690, w_thick=84, w_thin=40, w_v1=0.28,
+    w_mid3_dx=-8.0, w_v2=0.74,
+   
+   
+    y_width=420, y_vertex=0.48, y_tail_y=-120, y_end_x=-38, y_end_y=-174, y_end_w=2.0, z_width=390, z_thick=98,
+    z_serif=86, z_wedge=104, z_bar_t=37,
+    k_arm_x=326, k_join_y=161, x_width=368, x_thick=84, x_thin=34, x_thin_dx=-48,
+    diag_foot_len=41, diag_foot_in=2.3,
 )
-kit.define(font, P, glyphs="hamburgefonstivHOAGES .,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
+kit.define(font, P, glyphs="hamburgefonstivcdjklpqwxyz HOAGES.,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
            g_band="flat", b_style="lobe", E_serifs="wedge", G_jaw="serif")
 
 # side bearings (left, right) on top of sb_straight / sb_round, set from the
 # glyphs' measured side bearings in the overlays
 font.spacing.update({
+    "z": (12, 12),
+    "y": (0, 22),
+    "x": (-40, -40),
+    "w": (0, 8),
+    "q": (-2, -36),
+    "p": (4, -2),
+    "l": (2, 4),
+    "k": (8, -38),
+    "j": (-76, 20),
+    "d": (0, 4),
+    "c": (8, -4),
     "slash": (-28, -80),
     "parenright": (-20, 18),
     "parenleft": (18, -20),

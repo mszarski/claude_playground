@@ -20,8 +20,8 @@ cf = compile_font(font, {}, load_overrides(HERE / "overrides.yaml"))
 build = DOCS / "_build"
 build.mkdir(parents=True, exist_ok=True)
 
-lower = [g for g in "hamburgefonstiv" if g in cf.glyphs]
-order = list(dict.fromkeys(lower)) + [g for g in "HOAGES" if g in cf.glyphs]
+lower = [g for g in "abcdefghijklmnopqrstuvwxyz" if g in cf.glyphs]
+order = list(dict.fromkeys(lower)) + [g for g in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if g in cf.glyphs]
 half = len(order) // 2 + 1
 contact_sheet([("", cf)], build / "c1.png", glyph_order=order[:half], cell=1.4)
 contact_sheet([("", cf)], build / "c2.png", glyph_order=order[half:], cell=1.4)
@@ -30,6 +30,8 @@ glyph_view = [Image.open(build / "c1.png").convert("L"), Image.open(build / "c2.
 otf = build_otf(cf, build / "DuctusDisplay.otf")
 lines = [("hamburgefonstiv", 120), ("HOAGES  hamburgefonstiv", 72), ("Hamburgefonstiv OHAGES ishmon", 36),
          ("the shoe is on the other font", 24), ("hamburgefonstiv HOAGES", 14)]
+if "z" in cf.glyphs:
+    lines[1:1] = [("the quick brown fox jumps over a lazy dog", 72)]
 if "comma" in cf.glyphs:     # punctuation, set in a sentence and on its own
     lines[1:1] = [("“Ah,” she sighs; “is it (so) — or not?” Oh! it is: ’tis/isn’t.", 60),
                   (". , : ; - – — ' \" ‘ ’ “ ” ! ? ( ) /", 72)]

@@ -237,6 +237,40 @@ DEFAULTS: dict[str, tuple] = {
     "G_width": (690, (560, 820)), "G_bar_y": (0.42, (0.3, 0.55)), "G_term_y": (0.72, (0.6, 0.9)),
     "G_serif": (110, (30, 220)),
     "S_width": (500, (380, 620)),
+    # ---- the rest of the lowercase (starting values measured off Geist's bounds)
+    "desc_stem": (-200, (-240, -160)),    # where descending stems (p q) end
+    # d / q: the lobe on the stem's left (like the a's), rising to a crown
+    "d_far": (450, (360, 540)), "d_top_at": (440, (300, 520)), "d_top_thin": (26, (8, 80)),
+    "d_top_angle": (40, (0, 80)), "d_bot_at": (110, (40, 200)), "d_bot_thin": (50, (8, 90)),
+    "d_bot_angle": (50, (0, 80)), "d_lobe_thick": (90, (50, 130)), "d_lobe_thin_b": (34, (10, 80)),
+    "d_out_mid": (0.5, (0.3, 0.7)), "d_in_mid": (0.5, (0.3, 0.7)), "d_bx_out": (0.75, (0.3, 1.0)),
+    "d_bx_in": (0.85, (0.3, 1.0)), "d_crown_x": (0.4, (0.1, 0.8)), "d_crown_t": (50, (15, 90)),
+    "q_dfar": (0, (-60, 60)), "q_top": (0, (-40, 60)),
+    "p_dfar": (0, (-60, 60)),
+    # c: the e's bowl and lower terminal; the upper terminal a vertical face
+    "c_width": (465, (380, 540)), "c_face": (0.9, (0.7, 1.0)), "c_top_y": (420, (330, 500)),
+    "c_term_y": (150, (80, 240)), "c_cut_x": (0.5, (0.3, 0.7)), "c_cut_y": (70, (20, 140)),
+    "c_cut_angle": (185, (150, 220)), "c_cut_h1": (0.3, (0.0, 0.9)), "c_cut_h2": (0.6, (0.0, 0.9)),
+    # j: the i's stem running below the baseline into a hook to the left
+    "j_bot": (-60, (-150, 60)), "j_hook": (190, (100, 280)), "j_end_y": (-150, (-200, -60)),
+    "j_end_w": (0.9, (0.3, 1.4)), "j_end_dir": (150, (100, 200)),
+    # k: thin arm with a top serif, thick leg with a foot
+    "k_arm_x": (356, (220, 520)), "k_join_y": (181, (80, 320)), "k_leg_x": (336, (220, 560)),
+    "k_leg_y0": (288, (180, 420)), "k_leg_x0": (135, (60, 260)), "k_thick": (87, (50, 130)),
+    "k_thin": (41, (10, 80)),
+    # w: two v's, sharing the middle apex
+    "w_width": (700, (520, 920)), "w_v1": (0.27, (0.15, 0.4)), "w_v2": (0.73, (0.6, 0.85)),
+    "w_thick": (88, (50, 130)), "w_thin": (34, (10, 70)), "w_mid_dx": (0, (-40, 40)), "w_mid3_dx": (0, (-60, 60)),
+    # x: thick falling stroke, thin rising one
+    "x_width": (310, (220, 600)), "x_thick": (88, (50, 130)), "x_thin": (34, (10, 70)),
+    "x_thin_dx": (0, (-60, 60)),
+    "diag_foot_len": (50, (10, 120)), "diag_foot_in": (1.0, (0.3, 3.0)),   # feet of diagonals   # the thin stroke's bottom, right of the thick one's top
+    # y: the v's thick arm; the thin arm runs on below the baseline into a tail
+    "y_width": (420, (300, 600)), "y_vertex": (0.5, (0.3, 0.7)), "y_tail_y": (-120, (-180, -40)),
+    "y_end_x": (60, (-40, 200)), "y_end_y": (-190, (-220, -120)), "y_end_w": (2.0, (0.5, 4.0)),
+    # z: bars and a thick diagonal; wedges at the top left and bottom right
+    "z_width": (430, (340, 520)), "z_bar_t": (34, (15, 60)), "z_thick": (90, (50, 130)),
+    "z_serif": (110, (40, 200)), "z_serif_w": (20, (8, 50)), "z_wedge": (80, (0, 160)),
     # punctuation. dot: radius (the period's, colon's, ! and ? dots)
     "dot_r": (68, (40, 100)),
     # comma: tail depth below the baseline, tip offset from the ball's centre,
@@ -320,8 +354,14 @@ def _vtops(P, tip) -> dict:
     def side(scale):
         return dict(length=P.top_serif_len * scale, bracket=P.top_serif_bracket, tip=tip,
                     slope=P.top_serif_slope, curve=(P.serif_ca, P.serif_cb))
+    def foot(scale):
+        return dict(length=P.diag_foot_len * scale, bracket=P.top_serif_bracket, tip=tip,
+                    slope=P.top_serif_slope, curve=(P.serif_ca, P.serif_cb))
     return {"vtop_l": bracketed(left=side(1.0), right=side(P.top_serif_in)),
-            "vtop_r": bracketed(left=side(P.top_serif_in), right=side(1.0))}
+            "vtop_r": bracketed(left=side(P.top_serif_in), right=side(1.0)),
+            # feet of diagonals (x, X, K): the outer side diag_foot_len, the inner scaled
+            "vfoot_l": bracketed(left=foot(1.0), right=foot(P.diag_foot_in)),
+            "vfoot_r": bracketed(left=foot(P.diag_foot_in), right=foot(1.0))}
 
 
 def bracketed_set(P) -> TerminalSet:
@@ -997,6 +1037,130 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                     t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy), mid=(P.S_mid_dx, P.S_mid_dy),
                     sides=(P.S_left_dy, P.S_right_dy), tops=(P.S_top_dx, P.S_bot_dx),
                     dw=(P.S_t1_dw, P.S_top_dw, P.S_left_dw, P.S_mid_dw, P.S_right_dw, P.S_bot_dw, P.S_t2_dw))
+
+    # ---- the rest of the lowercase --------------------------------------
+    def face_wedge(gl, name, x, ya, yb, L, sw, opens=-1):
+        """A wedge serif: a vertical face sw wide at x from the arm edge ya to
+        the tip yb, its inner edge sloping back L along the arm (opens=-1:
+        the arm runs left of x, as on an E; +1: right)."""
+        pts = [((x + opens * L, ya), "root"), ((x, ya), "a"), ((x, yb), "tip"), ((x + opens * sw, yb), "tip_in")]
+        if (val(yb) > val(ya)) == (opens < 0):     # counter-clockwise either way
+            pts = pts[::-1]
+        poly_(gl, name, pts)
+
+    @g("l")
+    def l(gl):
+        gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head")
+
+    def d_lobe(gl, far):
+        gl.lobe(-P.stem / 2, -1, far, -os_,
+                join(P.d_top_at, P.d_top_thin, P.d_top_angle), join(P.d_bot_at, P.d_bot_thin, P.d_bot_angle),
+                thick=P.d_lobe_thick, thin_bottom=P.d_lobe_thin_b, out_mid=P.d_out_mid, in_mid=P.d_in_mid,
+                bx_out=P.d_bx_out, bx_in=P.d_bx_in, prefix="bowl.",
+                crown=dict(x=P.d_crown_x, y=xh + os_, thick=P.d_crown_t))
+
+    @g("d")
+    def d(gl):
+        gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head", foot="spur")
+        d_lobe(gl, -P.d_far)
+
+    @g("q")
+    def q(gl):
+        gl += stem_(x=0, bottom=P.desc_stem, top=xh + os_ + P.q_top, head="apex", foot="foot")
+        d_lobe(gl, -P.d_far - P.q_dfar)
+
+    @g("p")
+    def p_(gl):
+        gl += stem_(x=0, bottom=P.desc_stem, top=xh + P.head_top, head="head", foot="foot")
+        gl.lobe(P.stem / 2, +1, P.b_far + P.p_dfar, -os_,
+                join(P.b_top_at, P.b_top_thin, P.b_top_angle), join(P.b_bot_at, P.b_bot_thin, P.b_bot_angle),
+                thick=P.b_lobe_thick, thin_bottom=P.b_lobe_thin_b, out_mid=P.b_out_mid, in_mid=P.b_in_mid,
+                bx_out=P.b_bx_out, bx_in=P.b_bx_in, tension=P.b_lobe_t, in_tension=P.b_lobe_ti, prefix="bowl.",
+                crown=dict(x=P.b_crown_x, y=xh + os_, thick=P.b_crown_t))
+
+    @g("c")
+    def c(gl):
+        w = P.c_width
+        th = P.stem * P.round_gain
+        gl += bowl(x=0, width=w, bottom=-os_, top=xh + os_, thick=th + P.e_thick_dl, thin=P.hairline,
+                   stress=P.e_stress, full=(P.e_full_h, P.e_full_v), in_full=(P.e_in_full_h, P.e_in_full_v),
+                   thin_bottom=P.hairline * P.e_thin_bottom, thick_right=th + P.e_thick_dr)
+        R = w + 120
+        xf = w * P.c_face
+        tip = (w, P.c_term_y)
+        d_ = (w * P.c_cut_x, P.c_cut_y)
+        a1 = math.radians(val(P.c_cut_angle))
+        L = math.hypot(val(d_[0]) - val(tip[0]), val(d_[1]) - val(tip[1]))
+        c1 = (tip[0] + math.cos(a1) * L * P.c_cut_h1, tip[1] + math.sin(a1) * L * P.c_cut_h1)
+        c2 = (d_[0] + L * P.c_cut_h2, d_[1])
+        (gl.cut("aperture").move((w * P.c_cut_x, P.c_top_y), "a").line((xf, P.c_top_y), "face")
+            .line((xf, xh + 200), "b").line((R, xh + 200), "c").line((R, P.c_term_y), "d")
+            .line(tip, "tip").curve(c1, c2, d_, "e").close())
+
+    @g("j")
+    def j(gl):
+        gl += stem_(x=0, bottom=P.j_bot, top=xh + P.head_top, head="head", foot=False)
+        hook_pen = Pen(angle=0, width=P.stem, contrast=1 - P.hairline / P.stem)
+        (gl.path(name="hook", pen=hook_pen, profile=Profile((0, 1), (0.5, 1), (1, P.j_end_w)))
+            .start((0, P.j_bot + 2), name="root", dir=270, terminal=False)
+            .curve_to((-P.j_hook, P.j_end_y), name="end", dir=P.j_end_dir, terminal="ear"))   # a blunt flag
+        r, k = P.i_dot_r, 0.5523 * P.i_dot_r
+        dot(gl, "dot", 0, P.i_dot_y, P.i_dot_r)
+
+    @g("k")
+    def k_(gl):
+        gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head", foot="foot")
+        thin = Pen(angle=0, width=P.k_thin, contrast=0)
+        thick = Pen(angle=0, width=P.k_thick, contrast=0)
+        gl.line((P.k_arm_x, xh), (0, P.k_join_y), name="arm", names=("top", "join"),
+                terminal=("vtop_r", False), pen=thin)
+        gl.line((P.k_leg_x0, P.k_leg_y0), (P.k_leg_x, 0), name="leg", names=("top", "foot"),
+                terminal=(False, "vertex"), pen=thick)     # Geist's k leg: no foot, a flat end
+
+    @g("w", sb=(P.v_sb, P.v_sb))
+    def w(gl):
+        W = P.w_width
+        thick = Pen(angle=0, width=P.w_thick, contrast=0)
+        thin = Pen(angle=0, width=P.w_thin, contrast=0)
+        v1, v2, mx = W * P.w_v1, W * P.w_v2, W * 0.5 + P.w_mid_dx
+        gl.line((0, xh), (v1, -P.v_os), name="a1", names=("top", "vertex"), terminal=("vtop_l", "vertex"), pen=thick)
+        gl.line((mx, xh), (v1, -P.v_os), name="a2", names=("top", "vertex"), terminal=("apex", "vertex"), pen=thin)
+        gl.line((mx + P.w_mid3_dx, xh), (v2, -P.v_os), name="a3", names=("top", "vertex"), terminal=("apex", "vertex"), pen=thick)
+        gl.line((W, xh), (v2, -P.v_os), name="a4", names=("top", "vertex"), terminal=("vtop_r", "vertex"), pen=thin)
+
+    @g("x")
+    def x_(gl):
+        W = P.x_width
+        thick = Pen(angle=0, width=P.x_thick, contrast=0)
+        thin = Pen(angle=0, width=P.x_thin, contrast=0)
+        gl.line((0, xh), (W, 0), name="fall", names=("top", "foot"), terminal=("vtop_l", "vfoot_r"), pen=thick)
+        gl.line((W, xh), (P.x_thin_dx, 0), name="rise", names=("top", "foot"), terminal=("vtop_r", "vfoot_l"), pen=thin)
+
+    @g("y", sb=(P.v_sb, P.v_sb))
+    def y_(gl):
+        W, vx = P.y_width, P.y_width * P.y_vertex
+        thick = Pen(angle=0, width=P.v_thick, contrast=0)
+        thin = Pen(angle=0, width=P.v_thin, contrast=0)
+        gl.line((0, xh), (vx, -P.v_os), name="left", names=("top", "vertex"), terminal=("vtop_l", "vertex"), pen=thick)
+        # the thin arm, straight on past the vertex into the tail
+        dx, dy = val(W) - val(vx), val(xh) + val(P.v_os)
+        tx = val(vx) - (val(P.y_tail_y) + val(P.v_os)) * -dx / dy
+        ang = math.degrees(math.atan2(-dy, -dx))
+        (gl.path(name="tail", pen=thin, profile=Profile((0, 1), (0.6, 1), (1, P.y_end_w)))
+            .start((W, xh), name="top", dir=ang, terminal="vtop_r")
+            .line_to((tx, P.y_tail_y), name="bend", dir=ang, terminal=False)
+            .curve_to((P.y_end_x, P.y_end_y), name="end", dir=180, terminal="ear"))   # a blunt, vertically cut flag
+
+    @g("z")
+    def z(gl):
+        W, t = P.z_width, P.z_bar_t
+        rect(gl, "top", 0, xh - t, W, xh)
+        rect(gl, "bottom", 0, 0, W, t)
+        hw = P.z_thick / 2
+        poly_(gl, "diag", [((0, t - 1), "bl"), ((hw * 2, t - 1), "br"), ((W, xh - t + 1), "tr"),
+                           ((W - hw * 2, xh - t + 1), "tl")])
+        face_wedge(gl, "serif_top", 0, xh - t + 1, xh - P.z_serif, P.z_wedge, P.z_serif_w, opens=+1)
+        face_wedge(gl, "serif_bottom", W, t - 1, P.z_serif, P.z_wedge, P.z_serif_w, opens=-1)
 
     # ---- punctuation ----------------------------------------------------
     def dot(gl, name, cx, cy, r):

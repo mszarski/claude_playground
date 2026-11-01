@@ -572,3 +572,41 @@ Mean over the punctuation: 0.963.
 
 Not done yet: & and * (closer to letters than to punctuation), and the
 letters a sentence still misses (d, l, y, …).
+
+## 25 — the rest of the lowercase
+
+Sheet: `25.png` (now the whole lowercase, with a pangram).
+
+New glyphs: c d j k l p q w x y z, built from existing pieces wherever
+possible.
+
+- **l**: the h's ascender stem.
+- **d, q**: the a/b lobe hung on the stem's *left*, rising to a crown
+  (`d_*`). d stands on a spur foot, as the u's right stem does. q's stem
+  runs to `desc_stem` on a bracketed foot.
+- **p**: the b's lobe on a descending stem (`p_dfar`).
+- **c**: the e's bowl and lower terminal (the same curved aperture edge).
+  The upper terminal is cut off by a vertical face, as the G's is (`c_*`).
+- **j**: the i's stem runs below the baseline into a hook to the left. Like
+  Geist's, the hook ends in a blunt, vertically cut flag.
+- **k**: Geist's k has a heavy arm with a flat top serif, and a leg that
+  branches off the arm and ends *flat* on the baseline, with no foot. Ours
+  is built the same way.
+- **w**: two v's sharing the middle apex. The right V's thick stroke has its
+  own top position (`w_mid3_dx`).
+- **x**: a thick falling stroke and a thin rising one. They are not mirror
+  images: the thin stroke's bottom is offset (`x_thin_dx`). The diagonals'
+  feet are new terminal tags, `vfoot_l` and `vfoot_r`, the bottom twins of
+  `vtop_*` (`diag_foot_len`, `diag_foot_in`). The straight-stem foot made
+  the x 134 u too wide.
+- **y**: the v's thick arm. The thin arm runs straight on past the vertex
+  into a tail ending in a blunt flag.
+- **z**: bars and a thick diagonal, with E-style wedges at the top left and
+  bottom right. These use a general `face_wedge` helper.
+
+Values came from searches against Geist, and spacing from its side bearings.
+Against Geist: c .92, d .91, j .95, k .94, l .99, p .96, q .92, w .89,
+x .92, y .86, z .89 (mean .923).
+
+The y's tail is the weakest. It ends close in, where Geist's curls further
+left.
