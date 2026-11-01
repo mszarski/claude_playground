@@ -274,6 +274,9 @@ def _compile_glyph_inner(font, gdef, overrides, used, terminals, handles) -> Com
     if bounds is None:
         shift = 0.0
         advance = round(val(adv_spec)) if adv_spec is not None else 0
+        if gdef.name in getattr(font, "spacing", {}):     # an empty glyph (space): widen the advance
+            dl, dr = font.spacing[gdef.name]
+            advance += round(val(dl) + val(dr))
     else:
         lsb = val(font.sidebearings[sides[0]])
         rsb = val(font.sidebearings[sides[1]])

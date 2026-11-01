@@ -14,7 +14,7 @@ font = Font("Ductus Display", upm=1000)
 P = kit.params(
     # weight, contrast, spacing
     hairline=32, round_gain=1.18, overshoot=11, arch_angle=40, arch_contrast=0.3, sb_straight=15, sb_round=42,
-    t_contrast=0.3, bar_t=50, bar_taper=0.87, bar_tip_dx=3, bar_tip_y=0.42,
+    t_contrast=0.3, bar_t=38, bar_taper=0.87, bar_tip_dx=3, bar_tip_y=0.42,
     # serifs and stroke ends
     serif_len=83, serif_bracket=70, serif_ca=0.41, serif_cb=0.85, foot_tip=60, cap_serif_len=85,
     cap_serif_bracket=64, head_len=71, head_top=15, top_serif_bracket=58, spur_len=79, beak_len=95,
@@ -30,8 +30,9 @@ P = kit.params(
     n_taper_len=0.26, n_bias=0.53, n_tension=1.05, m_width=300, n_shoulder_pa=-5, n_leg_pa=7, n_leg_top=0.94,
     n_leg_t=0.75, n_notch=0.6, n_notch_w=24, h_dwidth=-5, h_top=10,
     # u
-    u_width=330, u_join_at=0.77, u_join_thin=26, u_join_angle=50, u_shoulder_x=0.51, u_out_y=0.33,
-    u_tension=0.96, u_head_dlen=4.0, u_head_dtop=0.47, u_leg_t=0.95,
+    u_width=310, u_join_at=0.77, u_join_thin=29, u_join_angle=50, u_shoulder_x=0.55, u_out_y=0.35,
+    u_tension=0.9, u_head_dlen=8.0, u_head_dtop=0.57, u_leg_t=0.85,
+    u_bias=0.52, u_angle=36, u_taper_len=0.32,
     # r
     r_join_at=0.68, r_join_thin=10, r_join_angle=75, r_taper_len=0.64, r_end_w=1.27, r_end_pa=4, r_rsb=10,
     r_width=210, r_beak_depth=190, r_beak_len=110, r_cut_angle=4, r_dir=-5, r_y=0.92,
@@ -51,8 +52,9 @@ P = kit.params(
     # s S
     s_width=395, s_t1_x=0.9, s_t1_y=0.8, s_t1_dir=115, s_cut1=-6.0, s_t2_x=0.03, s_t2_y=0.2, s_t2_dir=123,
     s_cut2=3.0, s_top_x=0.44, s_left_y=0.75, s_mid_x=0.33, s_mid_y=0.54, s_mid_dir=-16, s_right_y=0.29,
-    s_bot_x=0.53, s_ends=0.81, s_swell=1.55, s_spread=0.23, s_tension=0.87, S_swell_k=1.05, s_angle=12.0,
-    S_t1_dx=0.02, S_t2_dx=-0.06, S_t2_dy=0.04,
+    s_bot_x=0.53, s_ends=0.81, s_swell=1.55, s_spread=0.23, s_tension=0.87, S_swell_k=0.99, s_angle=12.0,
+    S_t1_dx=0.03, S_t2_dx=-0.05, S_t2_dy=0.04,
+    S_mid_dx=0.04, S_right_dy=-0.04, S_bot_dx=-0.02, S_top_dx=0.02, S_t1_dy=-0.02,
     s_bias=0.54, s_t1_dw=-3.0, s_t2_dw=6.0, s_mid_dw=12.0, s_left_dw=-12.0, s_right_dw=-8.0, s_top_dw=3.0,
     s_bot_dw=3.0, s_t1_pa=-3.0, s_left_t=0.95, s_right_t=0.95, s_t2_pa=3.0, s_mid_t=1.05,
     # g
@@ -75,8 +77,9 @@ P = kit.params(
     v_sb=-88, v_width=440, i_dot_y=662, i_dot_r=56, v_thick=88, v_thin=35, v_thin_dx=-20, v_vertex=0.53,
     # capitals
     H_width=450, H_bar_t=36, G_width=720, G_term_y=0.68, G_bar_y=0.47, G_serif=75,
-    A_width=550, A_sb=-100, E_width=396, A_thick=105, A_thin=34, A_apex=20, O_width=690,
-    E_mid=0.77, E_arm_t=35, E_serif=100, E_serif_w=30, E_wedge=80, A_bar_y=0.36, G_jaw_in=0.4, G_jaw_dx=-95,
+    A_width=560, A_sb=-100, E_width=396, A_thick=100, A_thin=34, A_apex=15, O_width=690,
+    E_mid=0.77, E_arm_t=35, E_serif=135, E_serif_w=27, E_wedge=110, A_bar_y=0.34, G_jaw_in=0.4, G_jaw_dx=-95,
+    A_bracket_k=2.0, A_foot_dl=-20, E_mid_y=0.51,
     G_spur_bot=0.04, G_head_bracket=30, G_head_slope=45, G_face=0.86,
 )
 kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.bracketed_set(P), g_ear="flag",
@@ -85,6 +88,7 @@ kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.bracketed_set
 # side bearings (left, right) on top of sb_straight / sb_round, set from the
 # glyphs' measured side bearings in the overlays
 font.spacing.update({
+    "space": (0, 44),   # a 250 u word space
     "h": (8, -6),
     "a": (4, -6),
     "m": (8, -6),

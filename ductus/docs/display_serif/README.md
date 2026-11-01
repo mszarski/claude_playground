@@ -419,3 +419,33 @@ hairline), with a little more stress and vertical fullness to match.
 e against Geist: 0.880 → 0.956.
 
 Mean IoU against Geist: 0.918 → 0.924.
+
+## 21 — A, E, S, u (and the word space)
+
+Sheet: `21.png`. Comparison: `21_vs_20.png`.
+
+- **A**: Geist's feet are bracketed: they curve into the diagonals. Ours were
+  nearly flat, because the kit fixed the A's foot brackets at 0.7 × the cap
+  serifs'. That factor is now a parameter, `A_bracket_k`, with `A_foot_dl`
+  for the foot serifs' length, and the A uses 2.0. The crossbar comes down a
+  little and the apex narrows.
+
+  One trap: a longer foot serif scored higher (0.924) because its tip runs
+  out as a hairline 95 u past Geist's toe, a thin sliver that IoU barely
+  counts. The foot is now held to Geist's extent (`A_foot_dl` −20, 0.912).
+- **E**: The middle arm's height and the bottom arm's length were fixed in
+  the kit (½ the cap height, 1.04 × the top arm). They are now `E_mid_y` and
+  `E_bot_k`. The wedges are taller and longer (`E_serif` 135, `E_wedge` 110),
+  and the middle arm rises to 0.51.
+- **S**: Every node of the S's curve but its ends came from the s. The S
+  now has its own offsets for the middle point, both sides, and the top and
+  bottom points (`S_mid_dx/dy`, `S_left_dy`, `S_right_dy`, `S_top_dx`,
+  `S_bot_dx`). The middle moves right, the lower right side sits lower, and
+  the arms reach a little further round.
+- **u**: Narrower (310), with the cup's shoulder, bias and nib angle
+  retuned and a slightly longer head serif.
+- **word space**: Geist's is 250 u and ours was 206. The spacing table now
+  also applies to empty glyphs, so `"space": (0, 44)` widens it.
+
+Against Geist: A 0.83 → 0.91, E 0.85 → 0.92, S 0.83 → 0.88,
+u 0.88 → 0.97. Mean IoU 0.924 → 0.938.

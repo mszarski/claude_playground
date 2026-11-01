@@ -123,6 +123,13 @@ def test_spacing_table_and_kerning_reach_the_font(tmp_path):
     assert t["kern"].kernTables[0].kernTable[("n", "o")] == -17 and "GPOS" in t
 
 
+def test_spacing_table_widens_an_empty_glyph():
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    base = compile_font(f, glyphs=["space"]).glyphs["space"].advance
+    f.spacing["space"] = (5, 20)
+    assert compile_font(f, glyphs=["space"]).glyphs["space"].advance == base - 44 + 25
+
+
 def test_fi_ligature_compiles_emits_and_shapes(tmp_path):
     from ductus.emit import build_otf, validate_otf
     from ductus.proof import _shape

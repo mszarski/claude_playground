@@ -49,6 +49,8 @@ DEFAULTS: dict[str, tuple] = {
     # the S's arm ends, relative to the s's (shares of the width / height):
     # reaching further round, its near-vertical end cuts become tall faces
     "S_t1_dx": (0, (-0.2, 0.2)), "S_t1_dy": (0, (-0.2, 0.2)), "S_t2_dx": (0, (-0.2, 0.2)), "S_t2_dy": (0, (-0.2, 0.2)),
+    "S_mid_dx": (0, (-0.15, 0.15)), "S_mid_dy": (0, (-0.15, 0.15)), "S_left_dy": (0, (-0.15, 0.15)),
+    "S_right_dy": (0, (-0.15, 0.15)), "S_top_dx": (0, (-0.15, 0.15)), "S_bot_dx": (0, (-0.15, 0.15)),
     "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 3.0)), "G_spur_w": (1.0, (0.5, 1.2)),
     "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
     "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
@@ -170,6 +172,8 @@ DEFAULTS: dict[str, tuple] = {
     "v_vertex": (0.5, (0.3, 0.7)), "v_os": (12, (0, 30)), "v_sb": (0, (-150, 80)),
     "v_taper": (1.0, (0.3, 1.3)), "v_thin_dx": (0, (-80, 40)),
     "A_sb": (0, (-150, 80)),
+    "A_bracket_k": (0.7, (0.2, 3.0)),   # the A's foot brackets, relative to the cap serifs'
+    "A_foot_dl": (0, (-60, 60)),        # the A's foot serifs' length, added to the cap serifs'
     # display / test-word glyphs
     "m_width": (330, (250, 450)), "b_width": (500, (400, 620)), "b_bowl_l": (0.3, (0.0, 0.6)),
     "u_width": (410, (300, 520)), "u_bias": (0.5, (0.1, 0.9)),
@@ -224,6 +228,9 @@ DEFAULTS: dict[str, tuple] = {
     "S_swell_k": (1.0, (0.6, 1.8)),
     # E arm serifs with E_serifs="wedge": how far the wedge slopes back along the arm
     "E_wedge": (60, (0, 160)),
+    # the middle arm's height (share of the cap height) and the bottom arm's
+    # length (relative to the top arm's)
+    "E_mid_y": (0.5, (0.4, 0.6)), "E_bot_k": (1.04, (0.9, 1.15)),
     "ball_r": (42, (20, 80)), "ball_drop": (0, (-40, 60)),
     "foot_tip": (26, (4, 60)),
 }
@@ -304,7 +311,7 @@ def bracketed_set(P) -> TerminalSet:
         ear=flat("horizontal"), vertex=flat("vertical"), apex=flat("vertical"),
         cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
                              curve=(P.serif_ca, P.serif_cb), right=None),
-        cap_vfoot=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket * 0.7, tip=P.cap_serif_tip,
+        cap_vfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.cap_serif_tip,
                             curve=(P.serif_ca, P.serif_cb)),
         # the b's stem has no foot: it is chiselled off on a diagonal down to a point
         b_foot=flat(P.b_foot_angle),
@@ -346,7 +353,7 @@ def didone_set(P) -> TerminalSet:
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.foot_tip,
                       curve=(P.serif_ca, P.serif_cb)),
         **_vtops(P, P.foot_tip),
-        cap_vfoot=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket * 0.7, tip=P.foot_tip,
+        cap_vfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.foot_tip,
                             curve=(P.serif_ca, P.serif_cb)),
         # s/S: vertical faces with hairline beards (top one hangs down, bottom one stands up)
         s_top=beak(side="below", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut1),
@@ -501,8 +508,10 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         notch_cut(p, J, val(edge), -1)
 
     @part
-    def spine(p, width, height, stem_w, swell_k=1.0, t1=(0, 0), t2=(0, 0)):
-        """The s/S spine: one stroke, width peaking mid-spine."""
+    def spine(p, width, height, stem_w, swell_k=1.0, t1=(0, 0), t2=(0, 0), mid=(0, 0), sides=(0, 0), tops=(0, 0)):
+        """The s/S spine: one stroke, width peaking mid-spine. ``t1``/``t2``,
+        ``mid`` (x, y), ``sides`` (left y, right y) and ``tops`` (top x,
+        bottom x) offset the s's nodes: the S's own proportions."""
         W = width
         sp = Pen(angle=P.s_angle, width=stem_w, contrast=1 - P.hairline / stem_w)
         top = height + os_ - sp.width_at(180) / 2
@@ -511,19 +520,19 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         sw = Profile((0, e_), (0.5 - P.s_spread, e_), (0.5, m_), (0.5 + P.s_spread, e_), (1, e_))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias, smooth=val(P.s_mid_free) >= 0.5)
             .start((W * (P.s_t1_x + t1[0]), height * (P.s_t1_y + t1[1])), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
-            .curve_to((W * P.s_top_x, top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
-            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
+            .curve_to((W * (P.s_top_x + tops[0]), top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
+            .curve_to((sp.width_at(90) / 2, height * (P.s_left_y + sides[0])), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
                       tension=P.s_left_t, width=P.s_left_dw)
             # s_mid_free: the spine's middle direction is solved (Hobby's mock-
             # curvature continuity) instead of imposed -- an imposed direction
             # makes both halves curl to meet it, and high contrast turns that
             # dip in direction into a kink in the width
-            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", pen_angle=P.s_mid_pa,
+            .curve_to((W * (P.s_mid_x + mid[0]), height * (P.s_mid_y + mid[1])), name="mid", pen_angle=P.s_mid_pa,
                       dir=None if val(P.s_mid_free) >= 0.5 else P.s_mid_dir, tension=P.s_mid_t,
                       width=P.s_mid_dw)
-            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
+            .curve_to((W - sp.width_at(90) / 2, height * (P.s_right_y + sides[1])), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
                       tension=P.s_right_t, width=P.s_right_dw)
-            .curve_to((W * P.s_bot_x, bot), name="bottom", pen_angle=P.s_bot_pa, dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
+            .curve_to((W * (P.s_bot_x + tops[1]), bot), name="bottom", pen_angle=P.s_bot_pa, dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
                       width=P.s_bot_dw)
             .curve_to((W * (P.s_t2_x + t2[0]), height * (P.s_t2_y + t2[1])), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
                       width=P.s_t2_dw, pen_angle=P.s_t2_pa))
@@ -829,12 +838,12 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         gl += stem_(x=0, top=ch, pen=cap_pen, foot="cap_foot_l", head="cap_foot_l")
         t, sw, sh = P.E_arm_t, P.E_serif_w, P.E_serif
         rect(gl, "arm_top", 0, ch - t, W, ch)
-        rect(gl, "arm_bottom", 0, 0, W * 1.04, t)
-        y = ch * 0.5
+        rect(gl, "arm_bottom", 0, 0, W * P.E_bot_k, t)
+        y = ch * P.E_mid_y
         rect(gl, "arm_mid", 0, y - t / 2, W * P.E_mid, y + t / 2)
         if E_serifs == "rect":
             rect(gl, "serif_top", W - sw, ch - sh, W, ch)
-            rect(gl, "serif_bottom", W * 1.04 - sw, 0, W * 1.04, sh * 1.1)
+            rect(gl, "serif_bottom", W * P.E_bot_k - sw, 0, W * P.E_bot_k, sh * 1.1)
             rect(gl, "serif_mid", W * P.E_mid - sw, y - sh * 0.45, W * P.E_mid, y + sh * 0.45)
         else:
             # wedges: a vertical face sw wide at the arm's end, its inner edge
@@ -849,7 +858,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                     c = c.line(*pt)
                 c.close()
             wedge_("serif_top", W, ch - t + 1, ch - sh)
-            wedge_("serif_bottom", W * 1.04, t - 1, sh * 1.1)
+            wedge_("serif_bottom", W * P.E_bot_k, t - 1, sh * 1.1)
             Wm = W * P.E_mid
             wedge_("serif_mid_up", Wm, y, y + sh * 0.45)
             wedge_("serif_mid_dn", Wm, y, y - sh * 0.45)
@@ -906,7 +915,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @g("S")
     def S(gl):
-        gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem, swell_k=P.S_swell_k, t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy))
+        gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem, swell_k=P.S_swell_k,
+                    t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy), mid=(P.S_mid_dx, P.S_mid_dy),
+                    sides=(P.S_left_dy, P.S_right_dy), tops=(P.S_top_dx, P.S_bot_dx))
 
     @g("space", advance=P.stem * 2.4)
     def space(gl):
