@@ -31,7 +31,7 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
-### Iteration 13 — the rest: mean IoU 0.970 → 0.975, every glyph ≥ 0.955
+### Iteration 13 — the rest: mean IoU 0.970 → 0.976, every glyph ≥ 0.955
 
 | glyph | 12 | 13 | | glyph | 12 | 13 |
 |---|---:|---:|---|---|---:|---:|
