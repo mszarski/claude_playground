@@ -8,6 +8,7 @@ import numpy as np
 
 from ..compile import CompiledFont, compile_font
 from ..overrides import Override
+from ..compile import translated_contours
 from .metrics import GlyphScore, score_glyph
 from .reference import Reference
 
@@ -25,7 +26,8 @@ def score_font(cf: CompiledFont, ref: Reference, glyphs: list[str]) -> dict[str,
         if rname is None:
             raise KeyError(f"reference has no glyph for {g!r}")
         rc, radv = ref.glyph(rname)
-        out[g] = score_glyph(g, cg.contours, rc, cg.advance, radv, cf.upm)
+        terms = translated_contours(cg.stages.get("terminals", []), cg.shift) if cg.stages else []
+        out[g] = score_glyph(g, cg.contours, rc, cg.advance, radv, cf.upm, terminals=terms)
     return out
 
 
@@ -127,6 +129,14 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
             # falls below the benchmark target -- the average may not buy a
             # better mean by sacrificing one glyph
             base = sum(5 * (1 - s.iou) + (s.mean_dist + 0.15 * s.hausdorff) / 10 for s in sc.values()) / len(sc)
+            hinge = sum(50 * max(0.0, 0.93 - s.iou) + 0.5 * max(0.0, s.hausdorff - 20) for s in sc.values())
+            return base + hinge + pen
+        if objective_kind == "ends":
+            # stroke-end detail: outline distance near the terminals, with
+            # IoU and overall distance as ballast and the target hinge
+            def e(s):
+                return s.ends_mean if s.ends_mean == s.ends_mean else 0.0
+            base = sum(e(s) / 4 + 5 * (1 - s.iou) + s.mean_dist / 10 for s in sc.values()) / len(sc)
             hinge = sum(50 * max(0.0, 0.93 - s.iou) + 0.5 * max(0.0, s.hausdorff - 20) for s in sc.values())
             return base + hinge + pen
         if objective_kind == "iou":

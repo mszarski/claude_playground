@@ -264,6 +264,7 @@ t_contrast: 0.2676
 t_cut: 69.9492
 t_end_w: 0.2287
 t_tail: 248.7955
+t_tail_cut: 60.0
 t_tail_y: 123.0989
 t_top: 654.0
 t_turn: 132.6019

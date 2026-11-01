@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 import typer
 
 from .compile import compile_font
@@ -135,13 +136,22 @@ def bench(font_py: Path,
         n, mag = override_stats(g, ovs)
         prims = ", ".join(p.split(":", 1)[1] for p in cf.glyphs[g].primitives if p.startswith(("contour:", "terminal:")))
         prims = prims or ", ".join(p.split(":", 1)[-1] for p in cf.glyphs[g].primitives)
-        typer.echo(f"{g:8} IoU {s.iou:.4f}  Hausdorff {s.hausdorff:6.1f}  mean {s.mean_dist:5.1f}  "
+        ends = "" if s.ends_mean != s.ends_mean else f"  ends {s.ends_mean:4.1f}"
+        typer.echo(f"{g:8} IoU {s.iou:.4f}  Hausdorff {s.hausdorff:6.1f}  mean {s.mean_dist:5.1f}{ends}  "
                    f"Δadv {s.advance_delta:+4d}  overrides {n} (Σ|Δ| {mag:.0f})")
         rows.append({"glyph": g, "iou": s.iou, "hausdorff": s.hausdorff, "mean_dist": s.mean_dist,
                      "advance_delta": s.advance_delta, "overrides": n, "magnitude": mag,
                      "primitives": prims, "notes": note})
         if report:
             overlay_image(s, docs / "iterations" / f"{it:02d}" / f"{g}.png", title=f"#{it:02d}  ")
+    # stroke ends by terminal style (mean outline distance near them, u)
+    by: dict[str, list] = {}
+    for s in scores.values():
+        for st, v in s.ends.items():
+            by.setdefault(st, []).append(v)
+    if by:
+        typer.echo("stroke ends: " + "  ".join(f"{st} {np.mean(v):.2f}u ({len(v)} glyphs)"
+                                               for st, v in sorted(by.items(), key=lambda kv: -np.mean(kv[1]))))
     if report:
         typer.echo(f"report: {append_rows(docs, it, rows)}  overlays: {docs / 'iterations' / f'{it:02d}'}")
 
@@ -160,7 +170,7 @@ def fit(font_py: Path,
         method: str = typer.Option("nelder-mead", help="nelder-mead (default) or powell (polishing)"),
         only_improve: bool = typer.Option(False, "--only-improve",
                                           help="save only if every fitted glyph improves its IoU (and none on target falls off it)"),
-        objective: str = typer.Option("distance", help="distance (smooth; default), iou (polishing), or target (joint fits: no glyph may drop below target)"),
+        objective: str = typer.Option("distance", help="distance (smooth; default), iou (polishing), target (joint fits: no glyph may drop below target), or ends (outline distance near the stroke ends, with the target hinge)"),
         overrides: Optional[Path] = typer.Option(None)):
     """Tune parameters (not overrides) to minimise error vs the reference."""
     import yaml

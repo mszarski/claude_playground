@@ -174,7 +174,12 @@ def bracketed(length=40, bracket=30, tip=4, curve=(0.6, 0.6), cup=0, axis="verti
             if L > 0 or B > 0:
                 handle(L_expr, F.w(e0 + sg * L, 0), F.e * sg, label=f"serif length")
                 handle(B_expr, F.w(e0, -(T + B)), -F.d, label=f"serif bracket")
-            pts[sg] = dict(S0=(e0, -(T + B)), c1=(e0, -(T + B) + B * ca),
+            # the bracket starts on the stroke's own edge: straight up/down
+            # the frame for a stem, but along the slant for a diagonal (a
+            # vertical drop from the corner left a notch under the v's serifs)
+            back = -np.asarray(F.u, float)
+            k = float(np.dot(back, F.e)) / max(abs(float(np.dot(back, F.d))), 0.3)
+            pts[sg] = dict(S0=(e0 + k * (T + B), -(T + B)), c1=(e0 + k * (T + B - B * ca), -(T + B) + B * ca),
                            c2=(e0 + sg * L - sg * h * math.cos(sl), -T - h * math.sin(sl)),
                            S1=(e0 + sg * L, -T), S2=(e0 + sg * L, 0.0))
         P, N = pts[1], pts[-1]

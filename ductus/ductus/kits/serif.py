@@ -44,11 +44,16 @@ DEFAULTS: dict[str, tuple] = {
     "g_tr_dh": (0, (-0.4, 0.3)), "g_tr_dv": (0, (-0.4, 0.3)),
     "g_ear_root_dx": (0, (-60, 30)),   # the ear's sloped top starts on the bowl, left of its foot
     "g_link_root_dy": (0, (-40, 80)), "g_link_root_dir": (210, (170, 260)),   # where the link leaves the bowl
+    "t_tail_cut": (0, (-30, 85)),   # normal of the cut across the t's tail end (0: vertical cut)
     "t_wedge_flat": (0, (0, 60)), "t_wedge_sweep": (0, (-20, 60)),   # the t's flat top and concave flank
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
     "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
     "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
     "spur_len": (70, (0, 160)), "spur_rise": (60, (0, 140)), "spur_drop": (40, (0, 120)),
+    # spur fine shape, as for the head wedge (all degenerate at their defaults)
+    "spur_tip": (0, (0, 20)), "spur_flat": (0, (0, 40)), "spur_bracket": (0, (0, 1)),
+    "spur_corner": (20, (0, 80)), "spur_ca": (0.7, (0.0, 1.0)), "spur_cb": (0.5, (0.0, 1.0)),
+    "spur_sweep": (0, (-20, 40)),
     "beak_len": (25, (0, 120)), "beak_depth": (70, (5, 200)),
     "top_serif_len": (60, (0, 160)), "top_serif_bracket": (40, (0, 140)), "top_serif_tip": (10, (0, 60)),
     "top_serif_in": (1.0, (0.0, 1.5)), "top_serif_slope": (0, (-10, 50)),
@@ -230,7 +235,9 @@ def bracketed_set(P) -> TerminalSet:
                    **head_shape),
         u_head=wedge(side="left", length=lazy_max(P.head_len + P.u_head_dlen, 0), rise=P.head_rise, drop=P.head_drop,
                      hollow=P.head_hollow, **head_shape),
-        spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop),
+        spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop, tip=P.spur_tip,
+                   flat=P.spur_flat, bracket=P.spur_bracket, corner=P.spur_corner, ca=P.spur_ca, cb=P.spur_cb,
+                   sweep=P.spur_sweep),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
                       curve=(P.serif_ca, P.serif_cb)),
         **_vtops(P, P.top_serif_tip),
@@ -253,7 +260,7 @@ def bracketed_set(P) -> TerminalSet:
         # the f's hook ends in a plain vertical face; the t's top is a flat top
         # with a long flag down the left of the stem (a wedge)
         f_hook=flat("horizontal"),
-        t_tail=flat(0), t_top=wedge(side="left", length=P.t_wedge_len, rise=P.t_wedge_rise, drop=P.t_wedge_drop,
+        t_tail=flat(P.t_tail_cut), t_top=wedge(side="left", length=P.t_wedge_len, rise=P.t_wedge_rise, drop=P.t_wedge_drop,
                                           flat=P.t_wedge_flat, sweep=P.t_wedge_sweep),
     )
 

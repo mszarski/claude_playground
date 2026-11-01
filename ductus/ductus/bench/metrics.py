@@ -153,6 +153,11 @@ class GlyphScore:
     ours: list = field(repr=False, default=None)
     ref: list = field(repr=False, default=None)        # aligned
     worst: tuple = field(repr=False, default=None)      # (point on ours or ref, which)
+    # outline distance near the stroke ends (within ENDS_RADIUS of a terminal
+    # shape): mean over all of them, and per terminal style. IoU counts area,
+    # and a 4 u tip or a small fillet is almost none -- this is what sees them.
+    ends_mean: float = float("nan")
+    ends: dict = field(default_factory=dict)
 
 
 def align_best(ours: list[Contour], ref: list[Contour], window: float = 10.0):
@@ -189,8 +194,47 @@ class _Shift:
     def endPath(self): self.pen.endPath()
 
 
+ENDS_RADIUS = 30.0
+
+
+def terminal_style(c: Contour) -> str:
+    """A terminal shape's style, from its point names (``n.stem.top.wedge.tip``)."""
+    for nm in c.names:
+        if nm:
+            parts = nm.split(".")
+            for p in parts:
+                if p in ("serif", "wedge", "beak", "ball"):
+                    return {"serif": "bracketed"}.get(p, p)
+            return "cap" if "cap" in parts or "cut" in parts else parts[-1]
+    return "other"
+
+
+def ends_distance(P, dPQ, Q, dQP, terminals, radius: float = ENDS_RADIUS):
+    """Mean outline distance (both ways) at outline points within ``radius``
+    of a terminal shape's outline, overall and per style."""
+    if not terminals:
+        return float("nan"), {}
+    by_style: dict[str, list] = {}
+    for c in terminals:
+        by_style.setdefault(terminal_style(c), []).append(c)
+    allpts = np.concatenate([sample_outline([c], 2.0) for c in terminals])
+    def near(pts, tpts):
+        d, _ = cKDTree(tpts).query(pts)
+        return d <= radius
+    out, tot, n = {}, 0.0, 0
+    for st, cs in by_style.items():
+        tp = sample_outline(cs, 2.0)
+        mP, mQ = near(P, tp), near(Q, tp)
+        k = int(mP.sum() + mQ.sum())
+        if k:
+            out[st] = float((dPQ[mP].sum() + dQP[mQ].sum()) / k)
+    mP, mQ = near(P, allpts), near(Q, allpts)
+    k = int(mP.sum() + mQ.sum())
+    return (float((dPQ[mP].sum() + dQP[mQ].sum()) / k) if k else float("nan")), out
+
+
 def score_glyph(name: str, ours: list[Contour], ref: list[Contour], our_adv: int, ref_adv: int,
-                upm: int = 1000, px: int = PX_PER_EM) -> GlyphScore:
+                upm: int = 1000, px: int = PX_PER_EM, terminals: list[Contour] | None = None) -> GlyphScore:
     ref_al, dx, iou = align_best(ours, ref)
     a, b = bounds(ours), bounds(ref_al)
     if a is None or b is None:
@@ -205,9 +249,10 @@ def score_glyph(name: str, ours: list[Contour], ref: list[Contour], our_adv: int
         worst = (tuple(P[dPQ.argmax()]), "ours")
     else:
         worst = (tuple(Q[dQP.argmax()]), "ref")
+    ends_mean, ends = ends_distance(P, dPQ, Q, dQP, terminals)
     return GlyphScore(name, iou, float(max(dPQ.max(), dQP.max())),
                       float((dPQ.mean() + dQP.mean()) / 2), int(our_adv - ref_adv), dx,
-                      ours, ref_al, worst)
+                      ours, ref_al, worst, ends_mean, ends)
 
 
 def distance_field(ours: list[Contour], ref_aligned: list[Contour], step: float = 4.0) -> list[list[list[float]]]:
