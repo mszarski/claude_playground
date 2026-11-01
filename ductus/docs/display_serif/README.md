@@ -521,5 +521,5 @@ r 0.96 → 0.97, H 0.96 → 0.98. Mean IoU 0.955 → 0.961.
 
 The search has converged at these constructions. What separates ours from
 Geist now is slivers a few units wide along the edges. The internal
-benchmark, fitted directly to Geist, reaches about 0.976 on its lowercase,
-so the lowercase is within about 0.015 of that ceiling.
+benchmark, fitted directly to Geist, scores 0.977 on its 16 glyphs
+(onHeasgvhmburfti). The display face scores 0.969 on the same glyphs.
