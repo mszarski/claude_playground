@@ -51,6 +51,10 @@ DEFAULTS: dict[str, tuple] = {
     "t_tail_cut": (0, (-30, 85)),   # normal of the cut across the t's tail end (0: vertical cut)
     "t_wedge_flat": (0, (0, 60)), "t_wedge_sweep": (0, (-20, 60)),   # the t's flat top and concave flank
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
+    # where a leg stem stops, as a fraction of n_out_y: 1 = as before; ~0.55 hides
+    # the stem's top corner under the arch, which is not yet vertical higher up
+    "r_rsb": (0, (-80, 40)),   # the r's right sidebearing, added to the side's default (its ear overhangs)
+    "n_leg_top": (1.0, (0.5, 1.0)), "u_leg_top": (1.0, (0.5, 1.0)),   # (the u's left stem, from below)
     "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
     "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
     # Geist's stem is set in on the right between an arch/ear join and the
@@ -326,6 +330,7 @@ def didone_set(P) -> TerminalSet:
         f_hook=ball(radius=P.ball_r * 0.9, side="below", drop=P.ball_drop),
         ear=ball(radius=P.ball_r * 0.7, side="above"), vertex=flat("vertical"), apex=flat("vertical"),
         t_tail=flat(0), t_top=flat(P.t_cut + 90),
+        b_foot=flat("vertical"),   # the lobe-style b: its stem simply ends at the baseline
     )
 
 
@@ -505,7 +510,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def n(gl):
         gl += stem_(x=0, top=xh + P.head_top, head="head")
         gl += arch(x=0, width=P.n_width, inset=True)
-        gl += stem_(x=P.n_width, top=xh * P.n_out_y, name="leg", head=False)
+        gl += stem_(x=P.n_width, top=xh * P.n_out_y * P.n_leg_top, name="leg", head=False)
 
     @g("H")
     def H(gl):
@@ -653,22 +658,22 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head", pen=h_pen)
         w = P.n_width + P.h_dwidth
         gl += arch(x=0, width=w, edge_half=P.stem * P.h_stem_w / 2)   # no inset: the join is far below the head
-        gl += stem_(x=w, top=xh * P.n_out_y, name="leg", head=False)
+        gl += stem_(x=w, top=xh * P.n_out_y * P.n_leg_top, name="leg", head=False)
 
     @g("m")
     def m(gl):
         w = P.m_width
         gl += stem_(x=0, top=xh + P.head_top, head="head")
         gl += arch(x=0, width=w, name="arch1", inset=True)
-        gl += stem_(x=w, top=xh * P.n_out_y, name="leg1", head=False)
+        gl += stem_(x=w, top=xh * P.n_out_y * P.n_leg_top, name="leg1", head=False)
         gl += arch(x=w, width=w, name="arch2")
-        gl += stem_(x=2 * w, top=xh * P.n_out_y, name="leg2", head=False)
+        gl += stem_(x=2 * w, top=xh * P.n_out_y * P.n_leg_top, name="leg2", head=False)
 
     @g("u")
     def u(gl):
         w = P.u_width
         top = xh + P.head_top + P.u_head_dtop
-        gl += stem_(x=0, bottom=xh * (1 - P.u_out_y), top=top, head="u_head", foot=False, name="left")
+        gl += stem_(x=0, bottom=xh * (1 - P.u_out_y * P.u_leg_top), top=top, head="u_head", foot=False, name="left")
         gl += arch(x=0, width=w, flip=True)
         gl += stem_(x=w, top=top, head="u_head", foot="spur", name="right")
 
@@ -688,7 +693,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                    thin=P.hairline, stress=P.o_stress, full=(P.o_full_h, P.o_full_v),
                    in_full=(P.o_in_full_h, P.o_in_full_v))
 
-    @g("r")
+    @g("r", sb=(0, P.r_rsb))
     def r(gl):
         gl += stem_(x=0, top=xh + P.head_top, head="head", foot="foot_wide")
         J = join(val(xh) * P.r_join_at, P.r_join_thin, P.r_join_angle)

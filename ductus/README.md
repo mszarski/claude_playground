@@ -28,10 +28,10 @@ exist and are tested: width profiles, L/R bias, **joins** (arches) and
 **lobes** (stem bowls), contour bowls (rotation, asymmetric walls), cuts,
 a terminal library with swappable sets, per-node width and **pen-angle** params, per-glyph
 spacing, and the genre kit (`ductus.kits.serif`). Benchmark — all of
-`hamburgefonstiv` + `H`, params by `ductus fit`, **0 overrides**, mean IoU 0.976:
-**H 0.995 · i 0.992 · o 0.984 · n 0.982 · u 0.981 · r 0.980 · t 0.979 ·
-f 0.978 · v 0.976 · b 0.975 · h 0.974 · e 0.969 · m 0.969 · g 0.966 ·
-a 0.962 · s 0.960** IoU (exact, on the outlines), every glyph's Hausdorff
+`hamburgefonstiv` + `H`, params by `ductus fit`, **0 overrides**, mean IoU 0.977:
+**H 0.995 · i 0.992 · r 0.985 · o 0.984 · n 0.982 · u 0.980 · f 0.977 ·
+v 0.976 · b 0.975 · h 0.974 · m 0.971 · e 0.969 · a 0.967 · t 0.967 ·
+s 0.966 · g 0.966** IoU (exact, on the outlines), every glyph's Hausdorff
 ≤ 17 u, mean outline distance at the stroke ends ~1 u — all meet the
 target (IoU ≥ 0.93, Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
 original display serif renders `hamburgefonstiv` + `H O A G E S`

@@ -145,6 +145,9 @@ def _orient(group: list[Contour]) -> list[Contour]:
     for i, c in enumerate(group):
         depth = sum(point_in_polygon(c.pts[0], polys[j])
                     for j in range(len(group)) if j != i)
+        if getattr(c, "built_cw", False):        # open stroke: known winding
+            res.append(c.reversed() if depth % 2 == 0 else c)
+            continue
         a = c.area()
         if abs(a) < 1.0:            # degenerate (e.g. a collapsed wedge): keep as built,
             res.append(c)           # flipping it would change the point order
@@ -189,6 +192,12 @@ def _compile_glyph_inner(font, gdef, overrides, used, terminals, handles) -> Com
     stage = {"strokes": [], "contours": [], "terminals": [], "cuts": []}
     for s in r.strokes:
         e = expand_stroke(s, font.pen)
+        if not s.closed:
+            # an open stroke's outline is built clockwise (left side forward,
+            # right side back): orient it by construction, not by its signed
+            # area, which flips when an extreme setting twists the outline
+            for c in e.contours:
+                c.built_cw = True
         groups.append(e.contours)
         stage["strokes"] += e.contours
         ends += e.ends

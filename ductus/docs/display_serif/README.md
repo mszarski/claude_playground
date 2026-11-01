@@ -169,3 +169,36 @@ Critique (sheet `09.png`, vs `08.png`):
   not the nib) — next to fix.
 - **Remaining** — the S wobble, the b's stem/bowl junction (reads as "lb"
   at 120 px), r→g spacing, g's loop weight. Not release quality yet.
+
+## 10 — the S wobble, the b, the g loop, r spacing
+
+All four remaining issues from 09 fixed (sheet `10.png`):
+
+- **S / s wobble** — two causes, one in the engine, one in the design.
+  *Engine:* a stroke's width profile was placed along the stroke by bezier
+  parameter, which doesn't move at constant speed, and node deltas (width,
+  pen angle) were blended linearly per segment — both made the width's slope
+  jump at every node, a kink in the outline. Profiles now follow arc
+  length, and node deltas ease between nodes (zero slope at each node).
+  *Design:* the middle of the spine was told to run at −48°, steeper than
+  the curve wanted, so both halves curled to meet it — a wiggle that the
+  high contrast turned into bumps. Now −24°, with the swell (1.5) kept to
+  the straight part of the spine (spread 0.2): a heavier spine that stays
+  smooth where it bends.
+- **b** — read as "lb": a separate bowl laid its thick wall beside the
+  stem. The b is now built like the a: the stem *is* the bowl's left side,
+  with hairline joins at the crown and the foot (the kit's lobe), a bowl as
+  wide and full as the o's.
+- **n h m u** — a small step showed where a leg stem's flat end stood
+  beside the arch (or the u's cup) before it had turned vertical; the stems
+  now stop just past where the stroke is vertical (`n_leg_top`,
+  `u_leg_top` 0.55).
+- **g** — the lower loop lighter (walls 0.75 → 0.6 / 0.9 → 0.72, bottom
+  20 → 14): it no longer outweighs the upper bowl.
+- **r** — right sidebearing −20 (`r_rsb`): its ball overhangs; r→g and
+  r→a close up, r→n stays clear.
+
+Critique: at 120 px "hamburgefonstiv" now reads as one even Didone word —
+no "lb", no dark g, smooth s. Still to do for release: kerning (M5), the
+G's upper terminal (blunt where the aperture cut meets the thick wall),
+and the beards on s/S are a little ragged at the cut.

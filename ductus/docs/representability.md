@@ -31,6 +31,25 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 15 — engine: smooth widths along strokes
+
+Found while fixing the display serif's wobbly S (its notes, iteration 10):
+a stroke's width profile was placed by bezier parameter, which doesn't move
+at constant speed, and per-node deltas (width, pen angle) were blended
+linearly per segment — both made the width's slope jump at every node, a
+kink in the outline. Profiles now follow **arc length**, and node deltas
+**ease** between nodes (smoothstep: zero slope at each node). Also: open
+strokes are oriented by construction (they are built clockwise), not by
+signed area, which flipped when an extreme setting twisted an outline and
+so changed the point structure (the r's ear at the all-max sweep corner).
+
+Every fitted glyph had been tuned to the old interpolation, so the change
+first cost a few (a 0.962 → 0.954, t 0.979 → 0.965); refitting on the
+corrected engine recovered and passed them for most: **a 0.967, s 0.966,
+r 0.985, n 0.982**, m 0.971, h 0.974; t 0.967 (was 0.979 — the one glyph
+still below its old fit). Mean IoU 0.9764 → 0.9766, min 0.9655 (s); 0
+overrides.
+
 ### Iteration 14 — the pen angle can turn along a stroke
 
 New in the language: a skeleton node can turn the nib —
@@ -519,3 +538,19 @@ shared params over all glyphs is still to do.
 | 14 | 2026-11-01 | `f` | 0.9776 | 12.3 | 0.9 | +70 | 0 | 0 | contour, bracketed, flat | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
 | 14 | 2026-11-01 | `t` | 0.9793 | 9.7 | 1.5 | +76 | 0 | 0 | contour, flat, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
 | 14 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 15 | 2026-11-01 | `o` | 0.9840 | 1.8 | 0.8 | -14 | 0 | 0 | bowl | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `n` | 0.9824 | 6.1 | 0.8 | +1 | 0 | 0 | cut, bracketed, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `H` | 0.9949 | 1.8 | 0.4 | -10 | 0 | 0 | contour, bracketed | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `e` | 0.9692 | 8.3 | 1.2 | -25 | 0 | 0 | bowl, contour, cut | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `a` | 0.9671 | 12.6 | 1.5 | +5 | 0 | 0 | lobe, flat, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `s` | 0.9655 | 11.8 | 1.2 | +2 | 0 | 0 | flat | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `g` | 0.9658 | 16.2 | 1.3 | +66 | 0 | 0 | bowl, contour, cut | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `v` | 0.9757 | 16.4 | 0.9 | +9 | 0 | 0 | cut, bracketed, flat | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `h` | 0.9740 | 8.6 | 1.1 | -2 | 0 | 0 | cut, bracketed, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `m` | 0.9705 | 10.1 | 1.3 | +0 | 0 | 0 | cut, bracketed, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `u` | 0.9798 | 15.5 | 1.1 | -4 | 0 | 0 | cut, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `b` | 0.9752 | 16.0 | 1.2 | -12 | 0 | 0 | lobe, flat, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `r` | 0.9845 | 7.5 | 0.9 | +43 | 0 | 0 | cut, bracketed, flat, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `f` | 0.9773 | 11.3 | 0.8 | +70 | 0 | 0 | contour, bracketed, flat | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `t` | 0.9671 | 10.4 | 1.3 | +75 | 0 | 0 | contour, flat, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |
+| 15 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 15: engine -- profiles by arc length, node deltas eased (no kinks at nodes), open strokes oriented by construction; refit a s t r n/h/m; 0 overrides |

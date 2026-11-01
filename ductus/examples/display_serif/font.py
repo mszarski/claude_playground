@@ -38,8 +38,8 @@ P = kit.params(
     # s / S: vertical terminal faces with hairline beards, spine swells mid-way
     s_width=360, s_t1_x=0.94, s_t1_y=0.74, s_t1_dir=180, s_cut1=0,
     s_t2_x=0.05, s_t2_y=0.27, s_t2_dir=180, s_cut2=0,
-    s_top_x=0.5, s_left_y=0.73, s_mid_x=0.5, s_mid_y=0.48, s_mid_dir=-48, s_right_y=0.25, s_bot_x=0.5,
-    s_ends=0.85, s_swell=1.35, s_spread=0.3, s_tension=1.1, S_width=470,
+    s_top_x=0.5, s_left_y=0.73, s_mid_x=0.5, s_mid_y=0.48, s_mid_dir=-24, s_right_y=0.25, s_bot_x=0.5,
+    s_ends=0.85, s_swell=1.5, s_spread=0.2, s_tension=1.1, S_width=470,
     G_width=680, G_term_y=0.80, G_bar_y=0.42, G_serif=120,
     # e: aperture edge bowed so the terminal tapers to an upturned hairline
     e_width=460, e_term_y=150, e_cut_angle=205, e_cut_y=70, e_cut_x=0.5, e_cut_h1=0.45, e_cut_h2=0.4,
@@ -49,8 +49,8 @@ P = kit.params(
     g_bl=40, g_br=330, g_bb=205, g_bt=541, g_thick=0.95, g_full=0.58, g_in_full=0.58,
     g_ear_x=420, g_ear_y=545, g_ear_w=0.45,
     g_link_x0=0.85, g_link_x=46, g_link_y=128, g_band_x=300, g_band_y=46, g_link_w=0.35,
-    g_loop_l=8, g_loop_r=455, g_loop_b=-212, g_loop_t=60, g_loop_thick=0.75, g_loop_tr=0.9,
-    g_loop_top_t=18, g_loop_bot_t=20, g_loop_full=0.58, g_loop_in_full=0.6, g_loop_stress=6,
+    g_loop_l=8, g_loop_r=455, g_loop_b=-212, g_loop_t=60, g_loop_thick=0.6, g_loop_tr=0.72,
+    g_loop_top_t=18, g_loop_bot_t=14, g_loop_full=0.58, g_loop_in_full=0.6, g_loop_stress=6,
     # the nib turns along curved strokes (iteration 09): toward the horizontal
     # at the tops of curves, so arch shoulders, hook tops and the s's arcs go
     # to true hairlines, and back into the descents, so the swell arrives late
@@ -59,5 +59,14 @@ P = kit.params(
     s_top_pa=-30, s_left_pa=15, s_right_pa=15, s_bot_pa=-30,
     f_top_pa=-30, f_end_pa=15, r_end_pa=-30, t_bottom_pa=-30, t_end_pa=-15,
     a_top_pa=-30, a_term_pa=15,
+    # b (iteration 10): the bowl hangs on the stem at hairline joins, as the a's
+    # does -- the old separate bowl laid a thick wall beside the stem ("lb")
+    b_far=540, b_top_at=420, b_top_thin=14, b_top_angle=-35, b_bot_at=70, b_bot_thin=22, b_bot_angle=35,
+    b_lobe_thick=100, b_lobe_thin_b=16, b_crown_x=0.45, b_crown_t=16, b_top=0, b_foot=0,
+    b_out_mid=0.48, b_in_mid=0.5, b_bx_out=0.8, b_bx_in=0.85,
+    # the leg stems stop where the arch / cup has turned vertical, so their flat
+    # ends never show beside it (a step on the n's leg and the u's left stem)
+    n_leg_top=0.55, u_leg_top=0.55,
+    r_rsb=-20,   # the r's ball overhangs: close up r-g, r-a (r-n stays clear)
 )
-kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.didone_set(P))
+kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.didone_set(P), b_style="lobe")

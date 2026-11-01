@@ -118,6 +118,7 @@ class _Side:
     g1: float = 1.0
     pa0: float = 0.0     # pen-angle delta (radians) at segment start / end
     pa1: float = 0.0
+    arc: tuple = None    # (bezier t samples, arc-length fraction): position along the segment
 
 
 def _offset(P: np.ndarray, t: np.ndarray, sd, side: float | None = None) -> np.ndarray:
@@ -126,12 +127,20 @@ def _offset(P: np.ndarray, t: np.ndarray, sd, side: float | None = None) -> np.n
     t = np.asarray(t, float)
     T = tangents(P, t)
     theta = np.arctan2(T[:, 1], T[:, 0])
-    w = sd.pen.widths(theta, (sd.pa0 + (sd.pa1 - sd.pa0) * t) if (sd.pa0 or sd.pa1) else None)
+    # node deltas (pen angle, width) ease between nodes by arc length with a
+    # smoothstep: their slope is 0 at every node, so the outline has no kink
+    # there (linear blending made the width's slope jump at each node)
+    u = np.interp(t, *sd.arc) if sd.arc is not None else t
+    e = u * u * (3 - 2 * u)
+    w = sd.pen.widths(theta, (sd.pa0 + (sd.pa1 - sd.pa0) * e) if (sd.pa0 or sd.pa1) else None)
     hair = sd.pen.hairline
     half = hair / 2 + (w - hair) * sd.frac
     if sd.profile is not None:
-        half = half * sd.profile(sd.g0 + (sd.g1 - sd.g0) * t)
-    half = half + (sd.dw0 + (sd.dw1 - sd.dw0) * t) / 2
+        # position along the stroke by arc length: the bezier parameter
+        # doesn't move at constant speed, and using it made the profile's
+        # slope jump at every node -- a visible kink in the outline (the s)
+        half = half * sd.profile(sd.g0 + (sd.g1 - sd.g0) * u)
+    half = half + (sd.dw0 + (sd.dw1 - sd.dw0) * e) / 2
     half = np.maximum(half, 0.25)   # never negative: the outline would turn inside out
     N = np.stack([-T[:, 1], T[:, 0]], axis=1)  # left normal
     return bez(P, t) + sd.sign * N * half[:, None]
@@ -154,10 +163,23 @@ def _offset_tangent(P, t: float, sd, side=None) -> np.ndarray:
     return _offset_tangents(P, np.array([float(t)]), sd)[0]
 
 
+ARC_SAMPLES = 64
+
+
+def _arc_table(P: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+    """(t samples, arc-length fraction at each, total length) for one cubic."""
+    ts = np.linspace(0.0, 1.0, ARC_SAMPLES + 1)
+    pts = bez(P, ts)
+    seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+    cum = np.concatenate([[0.0], np.cumsum(seg)])
+    L = float(cum[-1])
+    return ts, (cum / L if L > 1e-9 else ts), L
+
+
 def _global_params(cubics) -> list[tuple[float, float]]:
-    """Map each segment to a sub-range of the stroke's global t (by control
-    polygon length -- structure-independent and cheap)."""
-    L = [float(np.linalg.norm(np.diff(P, axis=0), axis=1).sum()) for P, _ in cubics]
+    """Map each segment to a sub-range of the stroke's global position, by
+    arc length (structure-independent: always the same sample count)."""
+    L = [_arc_table(P)[2] for P, _ in cubics]
     total = sum(L) or 1.0
     out, acc = [], 0.0
     for l in L:
@@ -170,7 +192,8 @@ def _sides(stroke: Stroke, pen: Pen, cubics, sign: float, frac: float) -> list[_
     nodes = stroke.nodes
     g = _global_params(cubics)
     return [_Side(pen, sign, frac, nodes[i].dw, nodes[(i + 1) % len(nodes)].dw, stroke.profile, *g[i],
-                  math.radians(nodes[i].dpa), math.radians(nodes[(i + 1) % len(nodes)].dpa))
+                  math.radians(nodes[i].dpa), math.radians(nodes[(i + 1) % len(nodes)].dpa),
+                  _arc_table(cubics[i][0])[:2])
             for i in range(len(cubics))]
 
 
