@@ -194,7 +194,7 @@ def bracketed(length=40, bracket=30, tip=4, curve=(0.6, 0.6), cup=0, axis="verti
 
 
 def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical",
-          tip=0.0, flat=0.0, bracket=0.0, corner=20.0, ca=0.7, cb=0.5):
+          tip=0.0, flat=0.0, bracket=0.0, corner=20.0, ca=0.7, cb=0.5, sweep=0.0):
     """Flag/wedge serif (head of n, spur of a): the cut line slopes from the
     far corner down to a tip ``length`` beyond the ``side`` edge and ``rise``
     below the end; the underside returns to the stem ``drop`` lower.
@@ -207,7 +207,10 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical",
     ``hollow`` curve to a bracket: nearly straight from the tip towards the
     stem edge ``corner`` below the tip, then a fillet into the stem (``ca``,
     ``cb`` = handle lengths from tip and from stem, as fractions of the way
-    to that corner)."""
+    to that corner); ``sweep`` -- the sloped top edge is a curve sagging
+    this far below the straight line at its middle (a concave flank, like
+    the t's), straight at 0.
+    """
     def style(end):
         F = Frame(end, axis)
         t = F.flat(end.name)
@@ -224,7 +227,13 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical",
         c = Contour()
         c.add(F.w(e_far, 0), "on", f"{nm}.far")
         c.add(F.w(e_far + sg * FL, 0), "on", f"{nm}.flat")
-        c.add(F.w(*tip_t), "on", f"{nm}.tip")
+        # the sloped top edge: a cubic, straight when sweep is 0 (handles on
+        # the line), sagging by `sweep` at its middle otherwise (4/3: a
+        # cubic's midpoint moves 3/4 as far as its handles)
+        top0 = np.array([e_far + sg * FL, 0.0]); top1 = np.array(tip_t)
+        sw = np.array([0.0, -val(sweep) * 4 / 3])
+        _curve(c, F.w(*(top0 + (top1 - top0) / 3 + sw)), F.w(*(top0 + (top1 - top0) * 2 / 3 + sw)),
+               F.w(*tip_t), f"{nm}.tip")
         c.add(F.w(*tip_b), "on", f"{nm}.tip_b")
         # underside, hollow curve (the original)
         mid = ((tip_b[0] + under[0]) / 2, (tip_b[1] + under[1]) / 2)
@@ -244,9 +253,14 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical",
         # reaches just past the end (d = 0), not into whatever sits above it
         # (it used to delete the i's dot)
         Dc = 0.25 * max(end.width, 20)
-        t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(e_far + sg * FL, 0), F.w(*tip_t),
-                           F.w(tip_t[0] + sg * m, -R), F.w(tip_t[0] + sg * m, Dc), F.w(e_far - sg * m, Dc),
-                           F.w(e_far - sg * m, 0)]))
+        cut = Contour()
+        cut.add(F.w(e_far + -sg * 1, 0), "on")
+        cut.add(F.w(e_far + sg * FL, 0), "on")
+        _curve(cut, F.w(*(top0 + (top1 - top0) / 3 + sw)), F.w(*(top0 + (top1 - top0) * 2 / 3 + sw)), F.w(*tip_t))
+        for P in (F.w(tip_t[0] + sg * m, -R), F.w(tip_t[0] + sg * m, Dc), F.w(e_far - sg * m, Dc),
+                  F.w(e_far - sg * m, 0)):
+            cut.add(P, "on")
+        t.cut.append(cut)
         return t
     style.__name__ = "wedge"
     return style

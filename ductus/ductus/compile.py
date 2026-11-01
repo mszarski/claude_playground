@@ -331,6 +331,36 @@ def merge(contours: list[Contour], round_to_grid: bool = True, cuts: list[Contou
                 p[1] = float(round(p[1]))
         # slivers that rounding collapsed onto a point or a line
         out = [c for c in out if abs(c.area()) >= 0.5]
+        out = [_drop_spikes(c) for c in out]
+    return out
+
+
+def _drop_spikes(c: Contour, max_len: float = 12.0, min_turn_deg: float = 170.0) -> Contour:
+    """Remove needle spikes boolean ops leave where two edges meet almost
+    tangentially: an on-curve point where the outline turns back on itself
+    (> ``min_turn_deg``) next to a short segment (< ``max_len``). Real tips (serifs, beaks, vertices) turn far less."""
+    import math as _m
+    pts, types, names = [list(p) for p in c.pts], list(c.types), list(c.names)
+    changed = True
+    while changed and len(pts) > 4:
+        changed = False
+        n = len(pts)
+        for i in range(n):
+            if types[i] != "on" or types[(i + 1) % n] != "on":
+                continue
+            a, b, d = pts[i - 1], pts[i], pts[(i + 1) % n]
+            vin = (b[0] - a[0], b[1] - a[1]); vout = (d[0] - b[0], d[1] - b[1])
+            lin, lout = _m.hypot(*vin), _m.hypot(*vout)
+            if lin < 1e-9 or lout < 1e-9 or min(lin, lout) > max_len:
+                continue
+            cosang = (vin[0] * vout[0] + vin[1] * vout[1]) / (lin * lout)
+            if cosang < _m.cos(_m.radians(min_turn_deg)):
+                del pts[i], types[i], names[i]
+                changed = True
+                break
+    out = Contour()
+    for p, t, nm in zip(pts, types, names):
+        out.add(p, t, nm)
     return out
 
 

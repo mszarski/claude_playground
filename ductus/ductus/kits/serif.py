@@ -40,6 +40,8 @@ DEFAULTS: dict[str, tuple] = {
     # head wedge fine shape (see terminals.wedge): flat tip, flat top, bracketed underside
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
+    "g_link_root_dy": (0, (-40, 80)), "g_link_root_dir": (210, (170, 260)),   # where the link leaves the bowl
+    "t_wedge_flat": (0, (0, 60)), "t_wedge_sweep": (0, (-20, 60)),   # the t's flat top and concave flank
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
     "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
     "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
@@ -248,7 +250,8 @@ def bracketed_set(P) -> TerminalSet:
         # the f's hook ends in a plain vertical face; the t's top is a flat top
         # with a long flag down the left of the stem (a wedge)
         f_hook=flat("horizontal"),
-        t_tail=flat(0), t_top=wedge(side="left", length=P.t_wedge_len, rise=P.t_wedge_rise, drop=P.t_wedge_drop),
+        t_tail=flat(0), t_top=wedge(side="left", length=P.t_wedge_len, rise=P.t_wedge_rise, drop=P.t_wedge_drop,
+                                          flat=P.t_wedge_flat, sweep=P.t_wedge_sweep),
     )
 
 
@@ -530,7 +533,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         # hairline through the turn, heavy where it runs into the loop's top band
         (gl.path(name="link", profile=Profile((0, P.g_link_w0), (P.g_link_tp, P.g_link_w0),
                                               (1, P.g_link_w1)))
-            .start((P.g_bl + (cx - P.g_bl) * P.g_link_x0, P.g_bb + 12), name="root", dir=210, terminal=False)
+            .start((P.g_bl + (cx - P.g_bl) * P.g_link_x0, P.g_bb + 12 + P.g_link_root_dy), name="root",
+                   dir=P.g_link_root_dir, terminal=False)
             .curve_to((P.g_link_x, P.g_link_y), name="turn", dir=270)
             # where the link bottoms out and swings into the loop's top band
             .curve_to((P.g_link_x + (P.g_band_x - P.g_link_x) * P.g_low_t,
