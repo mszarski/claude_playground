@@ -118,7 +118,14 @@ def _intersection_area(A: pathops.Path, B: pathops.Path) -> float:
         except pathops.PathOpsError:
             continue
         if abs(i1 - i2) <= 1e-4 * aA + 0.5:
-            return (i1 + i2) / 2
+            i = (i1 + i2) / 2
+            # skia can also be wrong *consistently* (both ops): an
+            # intersection can't exceed either area, and must agree with a
+            # coarse raster (2.5 u pixels: well within 1%) -- a fitter
+            # found an o with "IoU 1.007" before this check
+            aB = _area(Bt)
+            if i <= min(aA, aB) + 0.5 and abs(i - _raster_intersection(A, Bt, 400)) <= 0.01 * min(aA, aB):
+                return i
     return _raster_intersection(A, B)
 
 

@@ -41,6 +41,8 @@ DEFAULTS: dict[str, tuple] = {
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
     "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
+    "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
+    "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
     "g_notch_x": (170, (100, 260)), "g_notch_y": (22, (-40, 80)), "g_notch_len": (0, (0, 160)),
     "g_notch_up": (19, (0, 50)), "g_notch_dn": (23, (0, 60)),
     "g_tr_dh": (0, (-0.4, 0.3)), "g_tr_dv": (0, (-0.4, 0.3)),
@@ -95,7 +97,7 @@ DEFAULTS: dict[str, tuple] = {
     "a_top_angle": (20, (-40, 75)), "a_bot_at": (200, (40, 320)), "a_bot_thin": (70, (6, 180)),
     "a_bot_angle": (30, (-40, 85)), "a_lobe_thick": (95, (30, 170)), "a_lobe_thin_b": (34, (6, 100)),
     "a_out_mid": (0.45, (0.05, 0.95)), "a_in_mid": (0.5, (0.05, 0.95)), "a_bx_out": (0.5, (0.1, 0.95)),
-    "a_bx_in": (0.5, (0.1, 0.95)), "a_lobe_t": (1.0, (0.6, 1.8)), "a_lobe_ti": (1.0, (0.6, 1.8)),
+    "a_bx_in": (0.5, (0.1, 1.0)), "a_lobe_t": (1.0, (0.6, 1.8)), "a_lobe_ti": (1.0, (0.6, 1.8)),
     "a_hood_end": (0.25, (0.0, 1.0)), "a_hood_angle": (30, (-30, 80)),
     "a_taper": (0.6, (0.05, 1.2)), "a_bias": (0.5, (0.1, 0.9)), "a_hood_thin": (0.6, (0.2, 1.5)),
     # s
@@ -125,7 +127,7 @@ DEFAULTS: dict[str, tuple] = {
     "g_link_x0": (0.3, (0.0, 0.9)), "g_link_w": (1.0, (0.15, 1.5)),
     "g_ear_h": (80, (20, 160)), "g_ear_root_x": (0.75, (0.4, 1.1)), "g_ear_root_y": (500, (420, 560)),
     "g_ear_bot": (490, (420, 560)), "g_link_turn": (0.5, (0.1, 0.9)),
-    "g_link_w0": (0.4, (0.05, 1.5)), "g_link_w1": (1.0, (0.2, 2.0)), "g_link_tp": (0.5, (0.1, 0.9)),
+    "g_link_w0": (0.4, (0.05, 1.5)), "g_link_w1": (1.0, (0.2, 2.0)), "g_link_tp": (0.5, (0.0, 0.9)),
     "g_bar_top": (95, (40, 140)), "g_bar_bot": (12, (-40, 80)), "g_bar_l": (170, (60, 320)),
     "g_bar_r": (450, (300, 560)),
     "g_low_t": (0.35, (0.05, 0.95)), "g_low_y": (0.5, (0.0, 1.0)), "g_low_dir": (-20, (-80, 40)), "g_loop_thick": (0.7, (0.2, 1.4)), "g_loop_tr": (0.9, (0.2, 1.6)),
@@ -178,7 +180,7 @@ DEFAULTS: dict[str, tuple] = {
     "f_end_dir": (-60, (-120, 0)), "f_end_w": (1.0, (0.2, 1.6)), "f_bar_t": (None, (5, 80)), "f_bar_dy": (0, (-40, 40)),
     "u_leg_t": (1.0, (0.6, 2.5)),
     "t_top": (660, (560, 740)), "t_turn": (110, (40, 200)), "t_tail": (170, (80, 260)), "t_tail_y": (60, (20, 150)),
-    "t_bar_l": (90, (30, 160)), "t_bar_r": (140, (60, 220)), "t_cut": (30, (-10, 70)),
+    "t_bar_l": (90, (30, 160)), "t_bar_r": (140, (60, 320)), "t_cut": (30, (-10, 70)),
     "i_dot_y": (690, (620, 760)), "i_dot_r": (55, (30, 90)),
     "bar_t": (32, (5, 80)),
     "O_width": (700, (560, 820)), "A_width": (680, (520, 820)), "A_bar_y": (0.32, (0.2, 0.45)),
@@ -505,13 +507,15 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def e(gl):
         w = P.e_width
         th = P.stem * P.round_gain
-        gl += bowl(x=0, width=w, bottom=-os_, top=xh + os_, thick=th, thin=P.hairline,
+        # the e's walls may differ from the o's (it shares round_gain)
+        gl += bowl(x=0, width=w, bottom=-os_, top=xh + os_, thick=th + P.e_thick_dl, thin=P.hairline,
                    stress=P.e_stress, full=(P.e_full_h, P.e_full_v), in_full=(P.e_in_full_h, P.e_in_full_v),
-                   thin_bottom=P.hairline * P.e_thin_bottom)
+                   thin_bottom=P.hairline * P.e_thin_bottom, thick_right=th + P.e_thick_dr)
         y = xh * P.e_bar_y
         t = P.e_bar_t
-        gl.contour("bar").move((th * 0.5, y - t / 2), "bl").line((w, y - t / 2), "br") \
-            .line((w, y + t / 2), "tr").line((th * 0.5, y + t / 2), "tl").close()
+        bx = w - P.e_bar_rin            # the bar stops short of the bowl's curved outer edge
+        gl.contour("bar").move((th * 0.5, y - t / 2), "bl").line((bx, y - t / 2), "br") \
+            .line((bx, y + t / 2), "tr").line((th * 0.5, y + t / 2), "tl").close()
         # aperture: right of the counter, between the bar and the terminal.
         # Its lower edge *is* the terminal's upper edge: it leaves the
         # terminal tip at ``e_cut_angle`` and runs into the counter.
@@ -529,7 +533,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def a(gl):
         sx = P.a_stem_x
         stem_top = P.a_stem_top + P.a_stem_up
-        gl += stem_(x=sx, top=stem_top, foot="spur", head=False)
+        # the a's stem may be a little lighter than the n's, and dip below the baseline
+        a_pen = Pen(angle=0, width=P.stem * P.a_stem_w, contrast=1 - P.hairline / (P.stem * P.a_stem_w))
+        gl += stem_(x=sx, top=stem_top, bottom=P.a_stem_bot, foot="spur", head=False, pen=a_pen)
         hood_pen = Pen(angle=P.a_hood_angle, width=P.stem, contrast=1 - P.hairline * P.a_hood_thin / P.stem)
         top_y = xh + os_ - hood_pen.width_at(0) * (1 - val(P.a_bias))
         (gl.path(name="hood", pen=hood_pen, bias=P.a_bias,
@@ -540,7 +546,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .curve_to((sx, min(val(P.a_stem_top + (xh - P.a_stem_top) * (1 - P.a_out_y) * 0.5),
                                val(stem_top) - 6)), name="out", dir=-90))
         # the bowl hangs on the stem's left edge at two joins
-        gl.lobe(sx - P.stem / 2, -1, P.a_far, -os_,
+        gl.lobe(sx - P.stem * P.a_stem_w / 2, -1, P.a_far, -os_,
                 join(P.a_top_at, P.a_top_thin, P.a_top_angle),
                 # the bottom join never rises past the top one (the lobe would fold)
                 join(lazy_min(P.a_bot_at, P.a_top_at), P.a_bot_thin, P.a_bot_angle),
