@@ -135,3 +135,37 @@ Critique (sheet `08.png`):
   construction's crotch), which is what a refactor should do.
 - **Remaining** — spacing (`r`→`g`), g's loop weight, G's blunt upper
   terminal. Not release quality yet; credible display type at 72–120 px.
+
+## 09 — the turning pen
+
+The language can now turn the nib along a stroke (a node's `pen_angle`),
+so the display serif uses it as a design tool rather than a fit. Three nib
+programs were compared on `hamburgefonstiv` (fixed nib / "tightening" /
+"calligraphic", the last two mirror images):
+
+- *Calligraphic* (the nib turns toward the stroke at the tops of curves, away
+  in the descents): early, heavy shoulders and a lumpy, twisting s. Lively,
+  but it fights the hairline serifs and ball terminals.
+- *Tightening* (the opposite): the arch leaves the stem as a true hairline
+  across the shoulder and swells late into the descent — the Bodoni arch.
+  The rest of the face (vertical stress, hairline serifs, balls) already
+  speaks that language. **Chosen, at 1.5× the first trial's strength.**
+
+Values (degrees, added to the pen's angle at that node): arch and cup
+shoulders −30, legs +15; s arcs (top/bottom) −30, sides +15; f hook top −30,
+end +15; r ear end −30; t tail bottom −30, end −15; a hood top −30, terminal
++15. Stems and bowls are untouched (the stems stay exactly `stem` wide —
+the normalisation is per sample).
+
+Critique (sheet `09.png`, vs `08.png`):
+- **n h m** — the clearest gain: hairline shoulders, the weight arriving in
+  the descent; the word at 120 px reads crisper and more Didone.
+- **u** — the cup now thins toward its bottom before rising into the right
+  stem, matching the arch's logic inverted.
+- **r f a** — ear, hook and hood tops finer before their balls; the balls
+  read as the heaviest point of each terminal, which is right.
+- **s S** — the spine keeps its weight while the arcs thin; but the S's
+  outer edge still wobbles (it did in 08 too: the spine's width profile,
+  not the nib) — next to fix.
+- **Remaining** — the S wobble, the b's stem/bowl junction (reads as "lb"
+  at 120 px), r→g spacing, g's loop weight. Not release quality yet.

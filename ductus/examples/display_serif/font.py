@@ -51,5 +51,13 @@ P = kit.params(
     g_link_x0=0.85, g_link_x=46, g_link_y=128, g_band_x=300, g_band_y=46, g_link_w=0.35,
     g_loop_l=8, g_loop_r=455, g_loop_b=-212, g_loop_t=60, g_loop_thick=0.75, g_loop_tr=0.9,
     g_loop_top_t=18, g_loop_bot_t=20, g_loop_full=0.58, g_loop_in_full=0.6, g_loop_stress=6,
+    # the nib turns along curved strokes (iteration 09): toward the horizontal
+    # at the tops of curves, so arch shoulders, hook tops and the s's arcs go
+    # to true hairlines, and back into the descents, so the swell arrives late
+    # and full -- the Bodoni arch, rather than a pen held at one angle
+    n_shoulder_pa=-30, n_leg_pa=15, u_shoulder_pa=-30, u_leg_pa=15,
+    s_top_pa=-30, s_left_pa=15, s_right_pa=15, s_bot_pa=-30,
+    f_top_pa=-30, f_end_pa=15, r_end_pa=-30, t_bottom_pa=-30, t_end_pa=-15,
+    a_top_pa=-30, a_term_pa=15,
 )
 kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.didone_set(P))

@@ -116,6 +116,9 @@ DEFAULTS: dict[str, tuple] = {
     "n_join_pa": (0, (-35, 35)), "n_shoulder_pa": (0, (-35, 35)), "n_leg_pa": (0, (-35, 35)),
     "a_term_pa": (0, (-35, 35)), "a_top_pa": (0, (-35, 35)),
     "t_bottom_pa": (0, (-35, 35)), "t_end_pa": (0, (-35, 35)),
+    "u_join_pa": (0, (-35, 35)), "u_shoulder_pa": (0, (-35, 35)), "u_leg_pa": (0, (-35, 35)),
+    "r_join_pa": (0, (-35, 35)), "r_end_pa": (0, (-35, 35)),
+    "f_top_pa": (0, (-35, 35)), "f_end_pa": (0, (-35, 35)),
     "s_t1_pa": (0, (-35, 35)), "s_top_pa": (0, (-35, 35)), "s_left_pa": (0, (-35, 35)),
     "s_mid_pa": (0, (-35, 35)), "s_right_pa": (0, (-35, 35)), "s_bot_pa": (0, (-35, 35)),
     "s_t2_pa": (0, (-35, 35)),
@@ -451,10 +454,11 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         sh_y = -os_ + cup_pen.width_at(180) * (1 - val(bias))
         (p.path(name="cup", pen=cup_pen, bias=bias,
                 profile=Profile((0, m0), (P.u_taper_len, 1), (1, 1)))
-            .start(st, name="join", dir=d0, terminal=False)
-            .curve_to((R - width * P.u_shoulder_x, sh_y), name="shoulder", dir=180, tension=P.u_tension)
+            .start(st, name="join", dir=d0, terminal=False, pen_angle=P.u_join_pa)
+            .curve_to((R - width * P.u_shoulder_x, sh_y), name="shoulder", dir=180, tension=P.u_tension,
+                      pen_angle=P.u_shoulder_pa)
             .curve_to((x - P.stem / 2 + left_half, top - top * P.u_out_y * 0.5), name="leg", dir=90,
-                      tension=P.u_leg_t))       # >1 stops the curve swinging out past the stem
+                      tension=P.u_leg_t, pen_angle=P.u_leg_pa))       # >1 stops the curve swinging out past the stem
         notch_cut(p, J, val(edge), -1)
 
     @part
@@ -693,8 +697,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         head_inset_cut(gl, P.stem / 2, val(xh) * P.r_join_at, lazy_max(P.head_inset + P.r_head_dinset, 0))
         (gl.path(name="ear", pen=arch_pen, bias=P.n_bias,
                  profile=Profile((0, thin / max(arch_pen.width_at(d0), 1.0)), (P.r_taper_len, 1), (1, P.r_end_w)))
-            .start(st, name="join", dir=d0, terminal=False)
-            .curve_to((P.r_width, xh * P.r_y), name="end", dir=P.r_dir, terminal="r_ear"))
+            .start(st, name="join", dir=d0, terminal=False, pen_angle=P.r_join_pa)
+            .curve_to((P.r_width, xh * P.r_y), name="end", dir=P.r_dir, terminal="r_ear", pen_angle=P.r_end_pa))
 
     @g("f")
     def f(gl):
@@ -705,8 +709,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         (gl.path(name="hook", pen=hook_pen, bias=P.n_bias, profile=Profile((0, 1), (0.6, 1), (1, P.f_end_w)))
             .start((0, y0 - 2), name="root", dir=90, terminal=False)
             .curve_to((P.f_hook * 0.45, top + os_ - hook_pen.width_at(0) / 2), name="top", dir=0,
-                      width=P.f_top_dw)
-            .curve_to((P.f_hook, top * P.f_end_y), name="end", dir=P.f_end_dir, terminal="f_hook"))
+                      width=P.f_top_dw, pen_angle=P.f_top_pa)
+            .curve_to((P.f_hook, top * P.f_end_y), name="end", dir=P.f_end_dir, terminal="f_hook",
+                      pen_angle=P.f_end_pa))
         tapered_bar(gl, -P.f_bar_l, xh - P.f_bar_t + P.f_bar_dy, P.f_bar_r, xh + P.f_bar_dy, -P.stem / 2)
 
     @g("t")
