@@ -610,3 +610,55 @@ x .92, y .86, z .89 (mean .923).
 
 The y's tail is the weakest. It ends close in, where Geist's curls further
 left.
+
+## 26 — the rest of the capitals
+
+Sheet: `26.png` (now the whole alphabet, with pangrams in both cases).
+
+New glyphs: B C D F I J K L M N P Q R T U V W X Y Z. The face now has a–z,
+A–Z and the punctuation.
+
+- **I, L, F, T**: cap stems with the E's arms and wedges (`face_wedge`).
+  The T's bar wedges on both ends point down.
+- **B, D, P, R**: a new `dbowl` helper. Geist's bowls leave the stem along
+  flat hairline arms before curving round, unlike the lowercase lobes. So
+  each bowl is an outer contour with flat runs off the stem, curving to the
+  far side, with its counter cut out. B stacks two (`B_mid`). P and R each
+  have their own bowl bottom (Geist's R bowl sits higher than its P's). R's
+  leg is a straight stroke ending flat, as Geist's does.
+- **C**: the c's aperture (vertical face above, curved terminal below) on the
+  cap bowl. Geist's C is not an O. Its right wall is thin (0.6 × the thick
+  one) and its bottom is heavy (1.6 × the hairline). `cap_bowl` now takes
+  those (`C_right_k`, `C_bottom_k`).
+- **Q**: the O plus a wedge tail, as one polygon.
+- **J**: the j's construction at cap size: a cap stem into a hook below the
+  baseline, ending in a blunt flag.
+- **K**: the k's arm and leg. The leg here has a diagonal foot (`vfoot_r`).
+- **M, N**: thin stems and thick diagonals. Geist's diagonals start and end
+  at the thin stems' edges, not their centres (`M_fall_dx`, `M_rise_dx`,
+  `M_vdx`, `N_dx0`, `N_dx1`). N went 0.79 → 0.97 with these. The N's
+  diagonal is clipped at the right stem and at its foot, so it can't poke
+  through.
+- **U**: a heavy left stem, a thin right one, and a pen-stroke cup thinning
+  to the right (`U_end_w`).
+- **V, W, X, Y, Z**: the v, w, x and z constructions at cap size. Y's arms
+  meet on a cap stem at `Y_join`.
+
+Values came from searches against Geist, and spacing from its side bearings.
+
+Against Geist (IoU):
+
+| glyph | B | C | D | F | I | J | K | L | M | N |
+|---|---|---|---|---|---|---|---|---|---|---|
+| IoU | .88 | .90 | .93 | .94 | .98 | .93 | .89 | .96 | .91 | .97 |
+
+| glyph | P | Q | R | T | U | V | W | X | Y | Z |
+|---|---|---|---|---|---|---|---|---|---|---|
+| IoU | .95 | .98 | .96 | .96 | .95 | .94 | .86 | .90 | .91 | .90 |
+
+Mean over the new capitals: 0.93. Over all 52 letters: 0.941.
+
+Weakest:
+- **W**: the middle strokes' crossing differs from Geist's.
+- **B**: the waist sits a little low.
+- **K**: the leg's root on the arm.

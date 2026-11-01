@@ -271,6 +271,50 @@ DEFAULTS: dict[str, tuple] = {
     # z: bars and a thick diagonal; wedges at the top left and bottom right
     "z_width": (430, (340, 520)), "z_bar_t": (34, (15, 60)), "z_thick": (90, (50, 130)),
     "z_serif": (110, (40, 200)), "z_serif_w": (20, (8, 50)), "z_wedge": (80, (0, 160)),
+    # ---- the rest of the capitals (starting values measured off Geist's bounds)
+    # D-bowls (B D P R): flat hairline arms off the stem, then a curve round
+    # to the far side. far: outer extreme from the stem's centre; flat: where
+    # the outer arms start curving; th: far wall; full: curve fullness
+    "B_mid": (0.5, (0.4, 0.6)), "B_far_t": (419, (320, 520)), "B_far_b": (443, (340, 540)),
+    "B_flat_t": (184, (60, 300)), "B_flat_b": (214, (60, 320)), "B_th": (94, (50, 140)),
+    "B_hair": (35, (15, 70)), "B_full": (0.6, (0.4, 0.85)), "B_in_full": (0.6, (0.4, 0.85)),
+    "D_far": (514, (400, 620)), "D_flat": (190, (60, 360)), "D_th": (110, (60, 160)),
+    "P_bot": (332, (260, 420)), "P_far": (434, (340, 540)), "P_flat": (184, (60, 300)),
+    "R_far": (423, (340, 540)), "R_bot": (332, (260, 420)), "R_leg_x0": (171, (80, 280)), "R_leg_x": (401, (300, 500)),
+    "R_leg_w": (90, (50, 130)),
+    "C_width": (623, (540, 720)), "C_face": (0.88, (0.7, 1.0)), "C_top_y": (480, (380, 600)),
+    "C_term_y": (200, (100, 300)), "C_cut_x": (0.5, (0.3, 0.7)), "C_cut_y": (100, (40, 200)),
+    "C_cut_angle": (185, (150, 220)), "C_cut_h1": (0.3, (0.0, 0.9)), "C_cut_h2": (0.6, (0.0, 0.9)),
+    "C_thick_k": (1.0, (0.8, 1.25)), "C_right_k": (1.0, (0.2, 1.2)), "C_bottom_k": (1.0, (0.5, 3.0)), "C_stress": (0, (-20, 20)), "C_in_full_dh": (0, (-0.15, 0.15)),
+    "C_in_full_dv": (0, (-0.15, 0.15)),
+    "F_width": (389, (300, 480)), "F_mid": (0.85, (0.6, 1.0)), "F_mid_y": (0.48, (0.38, 0.6)),
+    "L_width": (408, (320, 500)), "T_width": (614, (520, 720)), "T_wedge": (90, (0, 160)),
+    "T_serif": (120, (60, 200)),
+    "J_bot": (14, (-60, 120)), "J_hook": (233, (140, 320)), "J_end_y": (-190, (-240, -120)),
+    "J_end_w": (1.0, (0.4, 1.6)), "J_end_dir": (175, (120, 210)),
+    "K_arm_x": (420, (300, 540)), "K_join_y": (250, (120, 380)), "K_leg_x": (440, (340, 560)),
+    "K_leg_y0": (380, (250, 500)), "K_leg_x0": (230, (100, 340)), "K_thick": (100, (60, 140)),
+    "K_thin": (40, (15, 80)),
+    "M_width": (640, (540, 760)), "M_thin": (36, (15, 70)), "M_thick": (100, (60, 140)),
+    "M_vertex": (0.5, (0.4, 0.6)), "M_fall_dx": (0, (-60, 120)), "M_rise_dx": (0, (-120, 60)),
+    "M_vdx": (0, (-60, 60)),
+    "N_width": (560, (460, 660)), "N_thin": (36, (15, 70)), "N_thick": (100, (60, 140)),
+    "N_dx0": (0, (-60, 120)), "N_dx1": (0, (-120, 160)),   # the diagonal's ends, off the stems' centres
+    "U_width": (505, (420, 600)), "U_thin": (36, (15, 70)), "U_thick": (111, (70, 150)),
+    "U_join": (260, (150, 360)), "U_end_w": (0.32, (0.15, 0.8)),
+    "V_width": (560, (460, 660)), "V_thick": (105, (60, 150)), "V_thin": (34, (15, 70)),
+    "V_vertex": (0.5, (0.4, 0.6)), "V_thin_dx": (0, (-40, 40)),
+    "W_width": (950, (820, 1080)), "W_v1": (0.27, (0.15, 0.4)), "W_v2": (0.73, (0.6, 0.85)),
+    "W_mid_dx": (0, (-50, 50)), "W_mid3_dx": (0, (-60, 60)),
+    "X_width": (520, (400, 640)), "X_thick": (100, (60, 140)), "X_thin": (36, (15, 70)),
+    "X_thin_dx": (0, (-60, 60)),
+    "Y_width": (560, (460, 680)), "Y_join": (0.45, (0.3, 0.6)), "Y_thick": (100, (60, 140)),
+    "Y_thin": (34, (15, 70)),
+    "Z_width": (500, (400, 600)), "Z_thick": (105, (60, 150)), "Z_serif": (140, (60, 220)),
+    "Z_wedge": (100, (0, 180)),
+    # Q's tail: a wedge from the bowl's bottom to a point below right
+    "Q_t0": (233, (150, 320)), "Q_t1": (380, (300, 460)), "Q_tip_x": (628, (520, 740)),
+    "Q_tip_y": (-184, (-240, -120)), "Q_end_x": (722, (620, 820)), "Q_end_y": (-107, (-180, -40)),
     # punctuation. dot: radius (the period's, colon's, ! and ? dots)
     "dot_r": (68, (40, 100)),
     # comma: tail depth below the baseline, tip offset from the ball's centre,
@@ -656,11 +700,16 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         (gl.contour("bar").move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((xa, y1), "tl")
             .line((x0 - P.bar_tip_dx, y0 + (y1 - y0) * P.bar_tip_y), "tip").close())
 
-    def cap_bowl(width, thick_k=1.0, thin_k=1.0, dfull=(0, 0, 0, 0), stress=0):
-        """The O's bowl (also the G's, with its own offsets)."""
+    def cap_bowl(width, thick_k=1.0, thin_k=1.0, dfull=(0, 0, 0, 0), stress=0, right_k=None, bottom_k=None):
+        """The O's bowl (also the G's and C's, with their own offsets; the C's
+        right wall and bottom may differ: ``right_k`` x the thick wall,
+        ``bottom_k`` x the thin one)."""
         ch = P.capheight
-        return bowl(x=0, width=width, bottom=-os_, top=ch + os_, thick=P.cap_stem * P.round_gain * P.O_thick_k * thick_k,
-                    thin=P.hairline * P.O_thin_k * thin_k, stress=P.o_stress + stress,
+        th = P.cap_stem * P.round_gain * P.O_thick_k * thick_k
+        tn = P.hairline * P.O_thin_k * thin_k
+        return bowl(x=0, width=width, bottom=-os_, top=ch + os_, thick=th, thin=tn, stress=P.o_stress + stress,
+                    thick_right=None if right_k is None else th * right_k,
+                    thin_bottom=None if bottom_k is None else tn * bottom_k,
                     full=(P.o_full_h + P.O_full_dh + dfull[0], P.o_full_v + P.O_full_dv + dfull[1]),
                     in_full=(P.o_in_full_h + P.O_in_full_dh + dfull[2], P.o_in_full_v + P.O_in_full_dv + dfull[3]))
 
@@ -1161,6 +1210,226 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                            ((W - hw * 2, xh - t + 1), "tl")])
         face_wedge(gl, "serif_top", 0, xh - t + 1, xh - P.z_serif, P.z_wedge, P.z_serif_w, opens=+1)
         face_wedge(gl, "serif_bottom", W, t - 1, P.z_serif, P.z_wedge, P.z_serif_w, opens=-1)
+
+    # ---- the rest of the capitals ------------------------------------------
+    def dbowl(gl, name, sx, y0, y1, far, flat, th, tt, tb, full, in_full):
+        """A D-shaped bowl right of a stem whose right edge is at sx: flat arms
+        from the stem to ``flat`` (from the stem's centre), curving round to
+        the outer far extreme ``far``. Walls: far ``th``, top ``tt``, bottom
+        ``tb``. The counter is cut out."""
+        def shape(c, x0, ya, yb, fx, rx, k):
+            ym = (ya + yb) / 2
+            c.move((x0, ya), "bl").line((fx, ya), "b").curve((fx + (rx - fx) * k, ya), (rx, ym - (ym - ya) * k), (rx, ym), "far") \
+             .curve((rx, ym + (yb - ym) * k), (fx + (rx - fx) * k, yb), (fx, yb), "t").line((x0, yb), "tl").close()
+        shape(gl.contour(name), sx - 1, y0, y1, flat, far, full)
+        shape(gl.cut(name + "_counter"), sx, y0 + tb, y1 - tt, flat - th * 0.3, far - th, in_full)
+
+    def aperture_(gl, w, h, face, top_y, term_y, cut_x, cut_y, cut_angle, h1, h2):
+        """The c / C opening: a vertical face above, a curved lower terminal."""
+        R = w + 140
+        xf = w * face
+        tip = (w, term_y)
+        d_ = (w * cut_x, cut_y)
+        a1 = math.radians(val(cut_angle))
+        L = math.hypot(val(d_[0]) - val(tip[0]), val(d_[1]) - val(tip[1]))
+        c1 = (tip[0] + math.cos(a1) * L * h1, tip[1] + math.sin(a1) * L * h1)
+        c2 = (d_[0] + L * h2, d_[1])
+        (gl.cut("aperture").move((w * cut_x, top_y), "a").line((xf, top_y), "face")
+            .line((xf, h + 200), "b").line((R, h + 200), "c").line((R, term_y), "d")
+            .line(tip, "tip").curve(c1, c2, d_, "e").close())
+
+    def cap_stem(gl, x=0, head="cap_head", foot="cap_foot", name="stem", bottom=0, top=None, pen=None):
+        gl += stem_(x=x, bottom=bottom, top=P.capheight if top is None else top, pen=pen or cap_pen,
+                    foot=foot, head=head, name=name)
+
+    @g("I")
+    def I(gl):
+        cap_stem(gl)
+
+    @g("L")
+    def L_(gl):
+        ch, W, t = P.capheight, P.L_width, P.E_arm_t
+        cap_stem(gl, foot="cap_foot_l")
+        rect(gl, "arm", 0, 0, W, t)
+        face_wedge(gl, "serif", W, t - 1, P.E_serif * P.E_bot_sk, P.E_wedge, P.E_serif_w)
+
+    @g("F")
+    def F(gl):
+        ch, W, t = P.capheight, P.F_width, P.E_arm_t
+        cap_stem(gl, head="cap_foot_l")
+        rect(gl, "arm_top", 0, ch - t, W, ch)
+        face_wedge(gl, "serif_top", W, ch - t + 1, ch - P.E_serif, P.E_wedge, P.E_serif_w)
+        y, Wm = ch * P.F_mid_y, W * P.F_mid
+        rect(gl, "arm_mid", 0, y - t / 2, Wm, y + t / 2)
+        face_wedge(gl, "serif_mid_up", Wm, y, y + P.E_serif * P.E_mid_sk, P.E_wedge, P.E_serif_w)
+        face_wedge(gl, "serif_mid_dn", Wm, y, y - P.E_serif * P.E_mid_sk, P.E_wedge, P.E_serif_w)
+
+    @g("T")
+    def T(gl):
+        ch, W, t = P.capheight, P.T_width, P.E_arm_t
+        cap_stem(gl, head=False)
+        rect(gl, "bar", -W / 2, ch - t, W / 2, ch)
+        face_wedge(gl, "serif_l", -W / 2, ch - t + 1, ch - P.T_serif, P.T_wedge, P.E_serif_w, opens=+1)
+        face_wedge(gl, "serif_r", W / 2, ch - t + 1, ch - P.T_serif, P.T_wedge, P.E_serif_w, opens=-1)
+
+    @g("B")
+    def B(gl):
+        ch = P.capheight
+        cap_stem(gl, head="cap_foot_l", foot="cap_foot_l")
+        ym = ch * P.B_mid
+        sx = P.cap_stem / 2
+        dbowl(gl, "upper", sx, ym - P.B_hair / 2, ch, P.B_far_t, P.B_flat_t, P.B_th, P.B_hair, P.B_hair / 2,
+              P.B_full, P.B_in_full)
+        dbowl(gl, "lower", sx, 0, ym + P.B_hair / 2, P.B_far_b, P.B_flat_b, P.B_th, P.B_hair / 2, P.B_hair,
+              P.B_full, P.B_in_full)
+
+    @g("D")
+    def D(gl):
+        ch = P.capheight
+        cap_stem(gl, head="cap_foot_l", foot="cap_foot_l")
+        dbowl(gl, "bowl", P.cap_stem / 2, 0, ch, P.D_far, P.D_flat, P.D_th, P.B_hair, P.B_hair,
+              P.B_full, P.B_in_full)
+
+    def p_bowl(gl, far, bot):
+        ch = P.capheight
+        dbowl(gl, "bowl", P.cap_stem / 2, bot, ch, far, P.P_flat, P.B_th, P.B_hair, P.B_hair,
+              P.B_full, P.B_in_full)
+
+    @g("P")
+    def P_(gl):
+        cap_stem(gl, head="cap_foot_l")
+        p_bowl(gl, P.P_far, P.P_bot)
+
+    @g("R")
+    def R(gl):
+        cap_stem(gl, head="cap_foot_l")
+        p_bowl(gl, P.R_far, P.R_bot)
+        leg = Pen(angle=0, width=P.R_leg_w, contrast=0)
+        gl.line((P.R_leg_x0, P.R_bot + P.B_hair / 2), (P.R_leg_x, 0), name="leg", names=("top", "foot"),
+                terminal=(False, "vertex"), pen=leg)
+
+    @g("C")
+    def C(gl):
+        gl += cap_bowl(P.C_width, P.C_thick_k, 1.0, (0, 0, P.C_in_full_dh, P.C_in_full_dv), P.C_stress,
+                       right_k=P.C_right_k, bottom_k=P.C_bottom_k)
+        aperture_(gl, P.C_width, P.capheight, P.C_face, P.C_top_y, P.C_term_y, P.C_cut_x, P.C_cut_y,
+                  P.C_cut_angle, P.C_cut_h1, P.C_cut_h2)
+
+    @g("Q")
+    def Q(gl):
+        gl += cap_bowl(P.O_width)
+        poly_(gl, "tail", [((P.Q_t0, 6), "t0"), ((P.Q_tip_x, P.Q_tip_y), "tip"),
+                           ((P.Q_end_x, P.Q_end_y), "end"), ((P.Q_t1, -17), "t1")])
+
+    @g("J")
+    def J(gl):
+        cap_stem(gl, bottom=P.J_bot, foot=False)
+        (gl.path(name="hook", pen=cap_pen, profile=Profile((0, 1), (0.5, 1), (1, P.J_end_w)))
+            .start((0, P.J_bot + 2), name="root", dir=270, terminal=False)
+            .curve_to((-P.J_hook, P.J_end_y), name="end", dir=P.J_end_dir, terminal="ear"))
+
+    @g("K")
+    def K(gl):
+        ch = P.capheight
+        cap_stem(gl)
+        thin = Pen(angle=0, width=P.K_thin, contrast=0)
+        thick = Pen(angle=0, width=P.K_thick, contrast=0)
+        gl.line((P.K_arm_x, ch), (0, P.K_join_y), name="arm", names=("top", "join"),
+                terminal=("vtop_r", False), pen=thin)
+        gl.line((P.K_leg_x0, P.K_leg_y0), (P.K_leg_x, 0), name="leg", names=("top", "foot"),
+                terminal=(False, "vfoot_r"), pen=thick)
+
+    @g("M")
+    def M(gl):
+        ch, W = P.capheight, P.M_width
+        thin = Pen(angle=0, width=P.M_thin, contrast=0)
+        thick = Pen(angle=0, width=P.M_thick, contrast=0)
+        cap_stem(gl, x=0, head="cap_foot_l", pen=thin, name="left")
+        cap_stem(gl, x=W, name="right")
+        vx = W * P.M_vertex
+        # the diagonals' tops may stand off the stems' centres (M_fall_dx,
+        # M_rise_dx), and the thin one's foot off the thick one's (M_vdx)
+        gl.line((P.M_fall_dx, ch), (vx, 0), name="fall", names=("top", "vertex"), terminal=("apex", "vertex"), pen=thick)
+        gl.line((W + P.M_rise_dx, ch), (vx + P.M_vdx, 0), name="rise", names=("top", "vertex"),
+                terminal=("apex", "vertex"), pen=thin)
+
+    @g("N")
+    def N_(gl):
+        ch, W = P.capheight, P.N_width
+        thin = Pen(angle=0, width=P.N_thin, contrast=0)
+        thick = Pen(angle=0, width=P.N_thick, contrast=0)
+        cap_stem(gl, x=0, head="cap_foot_l", pen=thin, name="left")
+        cap_stem(gl, x=W, bottom=-os_, foot="vertex", pen=thin, name="right")
+        gl.line((P.N_dx0, ch), (W + P.N_dx1, -os_), name="diag", names=("top", "foot"), terminal=("apex", "vertex"),
+                pen=thick)
+        # nothing of the diagonal stands outside the right stem, or below the
+        # stem's foot (its flat-cut corner would poke through as a tick)
+        xr = W + P.N_thin / 2
+        (gl.cut("diag_clip").move((W - 250, -os_ - 60), "a").line((xr + 300, -os_ - 60), "b")
+            .line((xr + 300, ch * 0.5), "c").line((xr, ch * 0.5), "d").line((xr, -os_), "e")
+            .line((W - 250, -os_), "f").close())
+
+    @g("U")
+    def U(gl):
+        ch, W = P.capheight, P.U_width
+        thickp = Pen(angle=0, width=P.U_thick, contrast=1 - P.hairline / P.U_thick)
+        thinp = Pen(angle=0, width=P.U_thin, contrast=0)
+        cap_stem(gl, x=0, bottom=P.U_join, foot=False, pen=thickp, name="left")
+        cap_stem(gl, x=W, bottom=P.U_join, foot=False, pen=thinp, name="right")
+        (gl.path(name="cup", pen=thickp, profile=Profile((0, 1), (0.45, 1), (1, P.U_end_w)))
+            .start((0, P.U_join + 2), name="left", dir=270, terminal=False)
+            .curve_to((W * 0.48, -os_ + P.hairline / 2), name="bottom", dir=0)
+            .curve_to((W, P.U_join + 2), name="right", dir=90, terminal=False))
+
+    @g("V", sb=(P.v_sb, P.v_sb))
+    def V(gl):
+        ch, W, vx = P.capheight, P.V_width, P.V_width * P.V_vertex
+        thick = Pen(angle=0, width=P.V_thick, contrast=0)
+        thin = Pen(angle=0, width=P.V_thin, contrast=0)
+        gl.line((0, ch), (vx, -os_), name="left", names=("top", "vertex"), terminal=("vtop_l", "vertex"), pen=thick)
+        gl.line((W, ch), (vx + P.V_thin_dx, -os_), name="right", names=("top", "vertex"), terminal=("vtop_r", "vertex"),
+                pen=thin)
+
+    @g("W", sb=(P.v_sb, P.v_sb))
+    def W_(gl):
+        ch, W = P.capheight, P.W_width
+        thick = Pen(angle=0, width=P.V_thick, contrast=0)
+        thin = Pen(angle=0, width=P.V_thin, contrast=0)
+        v1, v2, mx = W * P.W_v1, W * P.W_v2, W * 0.5 + P.W_mid_dx
+        gl.line((0, ch), (v1, -os_), name="a1", names=("top", "vertex"), terminal=("vtop_l", "vertex"), pen=thick)
+        gl.line((mx, ch), (v1, -os_), name="a2", names=("top", "vertex"), terminal=("apex", "vertex"), pen=thin)
+        gl.line((mx + P.W_mid3_dx, ch), (v2, -os_), name="a3", names=("top", "vertex"), terminal=("apex", "vertex"),
+                pen=thick)
+        gl.line((W, ch), (v2, -os_), name="a4", names=("top", "vertex"), terminal=("vtop_r", "vertex"), pen=thin)
+
+    @g("X")
+    def X(gl):
+        ch, W = P.capheight, P.X_width
+        thick = Pen(angle=0, width=P.X_thick, contrast=0)
+        thin = Pen(angle=0, width=P.X_thin, contrast=0)
+        gl.line((0, ch), (W, 0), name="fall", names=("top", "foot"), terminal=("vtop_l", "vfoot_r"), pen=thick)
+        gl.line((W, ch), (P.X_thin_dx, 0), name="rise", names=("top", "foot"), terminal=("vtop_r", "vfoot_l"), pen=thin)
+
+    @g("Y")
+    def Y(gl):
+        ch, W = P.capheight, P.Y_width
+        thick = Pen(angle=0, width=P.Y_thick, contrast=0)
+        thin = Pen(angle=0, width=P.Y_thin, contrast=0)
+        jy = ch * P.Y_join
+        cap_stem(gl, x=W / 2, top=jy + 20, head=False)
+        gl.line((0, ch), (W / 2, jy), name="left", names=("top", "join"), terminal=("vtop_l", False), pen=thick)
+        gl.line((W, ch), (W / 2, jy), name="right", names=("top", "join"), terminal=("vtop_r", False), pen=thin)
+
+    @g("Z")
+    def Z(gl):
+        ch, W, t = P.capheight, P.Z_width, P.E_arm_t
+        rect(gl, "top", 0, ch - t, W, ch)
+        rect(gl, "bottom", 0, 0, W, t)
+        hw = P.Z_thick / 2
+        poly_(gl, "diag", [((0, t - 1), "bl"), ((hw * 2, t - 1), "br"), ((W, ch - t + 1), "tr"),
+                           ((W - hw * 2, ch - t + 1), "tl")])
+        face_wedge(gl, "serif_top", 0, ch - t + 1, ch - P.Z_serif, P.Z_wedge, P.E_serif_w, opens=+1)
+        face_wedge(gl, "serif_bottom", W, t - 1, P.Z_serif, P.Z_wedge, P.E_serif_w, opens=-1)
 
     # ---- punctuation ----------------------------------------------------
     def dot(gl, name, cx, cy, r):
