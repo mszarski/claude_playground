@@ -56,6 +56,7 @@ DEFAULTS: dict[str, tuple] = {
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
     # where a leg stem stops, as a fraction of n_out_y: 1 = as before; ~0.55 hides
     # the stem's top corner under the arch, which is not yet vertical higher up
+    "f_angle_d": (0, (-40, 40)),
     "fi_dx": (0, (-80, 260)),   # the fi ligature's i stem, from under the f's hook end
     "r_rsb": (0, (-80, 40)),   # the r's right sidebearing, added to the side's default (its ear overhangs)
     "n_leg_top": (1.0, (0.5, 1.0)), "u_leg_top": (1.0, (0.5, 1.0)),   # (the u's left stem, from below)
@@ -725,7 +726,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         reaches further: ``hook`` = the hook end's x)."""
         top = P.f_top
         hook = P.f_hook if hook is None else hook
-        hook_pen = Pen(angle=P.arch_angle, width=P.stem, contrast=P.arch_contrast)
+        # the hook's nib: the arch's, turned by f_angle_d (a Didone f wants it
+        # vertical -- at 25 degrees the hook went thick-thin-thick, a hump)
+        hook_pen = Pen(angle=P.arch_angle + P.f_angle_d, width=P.stem, contrast=P.arch_contrast)
         y0 = xh + (top - xh) * 0.35
         gl += stem_(x=0, top=y0, head=False, foot="foot_wide")
         (gl.path(name="hook", pen=hook_pen, bias=P.n_bias, profile=Profile((0, 1), (0.6, 1), (1, P.f_end_w)))

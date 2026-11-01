@@ -313,3 +313,17 @@ needed). Kit: the f is built by one helper shared with `f_i`, which is
 defined whenever f and i both are. `ductus bench` now skips glyphs the
 reference lacks when no glyphs are named (the Geist benchmark has an f_i
 too, but Geist Serif has no glyph to compare it with).
+
+## 16 — the f's ball
+
+Comparison: `16_vs_15.png`.
+
+The f's hook didn't end in its ball: it arrived at full weight (end width
+1.0, the nib turned +15° to thicken it) heading down-right at −60°, with the
+ball beside it, so the flat-cut end stuck out past the ball as a wedge. And
+the hook humped at the top: drawn with the arch's 25° nib it went thick
+(up the stem), thin (up-right, along the nib), thicker (across the top).
+Now the hook has a vertical nib like the rest of the face (`f_angle_d`, a new
+kit offset from the arch's angle), no nib turns, and it thins (0.6) as it
+turns down (−80°) into the ball — the r's ear works the same way. The fi
+ligature's long hook gets the same clean hairline.

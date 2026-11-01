@@ -58,7 +58,7 @@ P = kit.params(
     # to true hairlines, and back into the descents, so the swell arrives late
     # and full -- the Bodoni arch, rather than a pen held at one angle
     n_shoulder_pa=-10, n_leg_pa=5,   # the u's cup takes no turns: they hooked its hairline
-    f_top_pa=-30, f_end_pa=15, r_end_pa=-30, t_end_pa=0,
+    f_top_pa=0, f_end_pa=0, r_end_pa=-30, t_end_pa=0,
     a_top_pa=-30, a_term_pa=15,
     # b (iteration 10): the bowl hangs on the stem at hairline joins, as the a's
     # does -- the old separate bowl laid a thick wall beside the stem ("lb")
@@ -81,6 +81,10 @@ P = kit.params(
     # the t's tail ends in a plain hairline (a ball there read as a full stop)
     # fi ligature (iteration 15): the hook reaches over the i, whose dot is the ball
     fi_dx=175,
+    # f (iteration 16): the hook ran past its ball as a wedge (full-weight end at
+    # -60 degrees) and humped at the top (a 25-degree nib goes thick-thin-thick).
+    # Now a vertical nib, and the hook thins down into the ball
+    f_angle_d=-25, f_end_w=0.6, f_end_dir=-80,
 )
 terms = kit.didone_set(P)
 terms.by_tag["s_top"] = ball(radius=P.ball_r * 0.8, side="below", drop=P.ball_drop)
