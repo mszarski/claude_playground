@@ -39,8 +39,8 @@ P = kit.params(
     # s / S: vertical terminal faces with hairline beards, spine swells mid-way
     s_width=360, s_t1_x=0.9, s_t1_y=0.8, s_t1_dir=100, s_cut1=0,
     s_t2_x=0.08, s_t2_y=0.2, s_t2_dir=100, s_cut2=0,
-    s_top_x=0.5, s_left_y=0.73, s_mid_x=0.5, s_mid_y=0.48, s_mid_dir=-24, s_mid_free=1, s_right_y=0.25, s_bot_x=0.5,
-    s_ends=0.5, s_swell=2.2, s_spread=0.24, s_tension=1.1, S_width=470,
+    s_top_x=0.5, s_left_y=0.78, s_mid_x=0.5, s_mid_y=0.48, s_mid_dir=-24, s_mid_free=1, s_right_y=0.22, s_bot_x=0.5,
+    s_ends=0.5, s_swell=1.8, s_spread=0.24, s_tension=1.1, S_width=470,
     G_width=680, G_term_y=0.80, G_bar_y=0.42, G_serif=50, bar_t=22,
     G_beard_dw=70, G_beard_k=0.35, G_spur_w=0.55,   # the G's arm ends flat; lighter jaw (iteration 12)
     # e: aperture edge bowed so the terminal tapers to an upturned hairline

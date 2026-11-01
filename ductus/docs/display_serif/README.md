@@ -327,3 +327,14 @@ Now the hook has a vertical nib like the rest of the face (`f_angle_d`, a new
 kit offset from the arch's angle), no nib turns, and it thins (0.6) as it
 turns down (−80°) into the ball — the r's ear works the same way. The fi
 ligature's long hook gets the same clean hairline.
+
+## 17 — the s, again
+
+Comparison: `17_vs_16.png`.
+
+Next to the o, the s was too dark with nearly closed counters: the spine,
+solved for smooth curvature, ran at about −19° — nearly flat — and the 2.2
+swell turned it into a heavy bar across the middle. The s's left and right
+extremes now sit further apart vertically (0.78 / 0.22 of the height, were
+0.73 / 0.25), which steepens the solved spine into a proper diagonal, and
+the swell is 1.8. Its colour now matches the o, e and n; the S follows.
