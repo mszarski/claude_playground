@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 
 from .geometry import hobby_cubic, line_cubic
+from .params import val
 
 
 @dataclass
@@ -20,6 +21,7 @@ class Node:
     fullname: str = ""
     dw: float = 0.0                 # width delta at this node
     da: float = 0.0                 # direction delta (degrees)
+    dpa: float = 0.0                # pen-angle delta at this node (degrees, interpolated along segments)
 
     @property
     def tension_eff(self) -> float:
@@ -104,10 +106,12 @@ class Stroke:
         dirs = self.node_dirs()
         nodes = []
         for n, d in zip(self.nodes, dirs):
-            w = float(pen.widths(np.array([d]))[0]) + n.dw if pen is not None else None
+            w = (float(pen.widths(np.array([d]), np.array([math.radians(n.dpa)]))[0]) + n.dw
+                 if pen is not None else None)
             nodes.append({"name": n.fullname, "x": s(n.pos)[0], "y": s(n.pos)[1],
                           "dir": round(math.degrees(d), 2), "width": None if w is None else round(w, 2),
-                          "tension": round(n.tension_eff, 3), "terminal": bool(n.terminal)})
+                          "tension": round(n.tension_eff, 3), "terminal": bool(n.terminal),
+                          "pen_angle": None if pen is None else round(val(pen.angle) + n.dpa, 2)})
         return {
             "name": self.fullname,
             "closed": self.closed,

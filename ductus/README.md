@@ -26,12 +26,12 @@ round trip) · `ductus test` passes, 55 unit tests · this README.
 **Milestone 2 — all of `hamburgefonstiv` at target in the benchmark.** All §5 primitive families
 exist and are tested: width profiles, L/R bias, **joins** (arches) and
 **lobes** (stem bowls), contour bowls (rotation, asymmetric walls), cuts,
-a terminal library with swappable sets, per-node width params, per-glyph
+a terminal library with swappable sets, per-node width and **pen-angle** params, per-glyph
 spacing, and the genre kit (`ductus.kits.serif`). Benchmark — all of
 `hamburgefonstiv` + `H`, params by `ductus fit`, **0 overrides**, mean IoU 0.976:
 **H 0.995 · i 0.992 · o 0.984 · n 0.982 · u 0.981 · r 0.980 · t 0.979 ·
 f 0.978 · v 0.976 · b 0.975 · h 0.974 · e 0.969 · m 0.969 · g 0.966 ·
-a 0.961 · s 0.955** IoU (exact, on the outlines), every glyph's Hausdorff
+a 0.962 · s 0.960** IoU (exact, on the outlines), every glyph's Hausdorff
 ≤ 17 u, mean outline distance at the stroke ends ~1 u — all meet the
 target (IoU ≥ 0.93, Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
 original display serif renders `hamburgefonstiv` + `H O A G E S`

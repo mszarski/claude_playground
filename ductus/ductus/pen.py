@@ -52,13 +52,24 @@ class Pen:
         k = (w - hair) / max(abs(math.cos(a)), 1e-6)
         return a, hair, k
 
-    def widths(self, theta: np.ndarray) -> np.ndarray:
-        a, hair, k = self._consts()
+    def widths(self, theta: np.ndarray, dangle=None) -> np.ndarray:
+        """Width for travel directions ``theta`` (radians). ``dangle``: per-sample
+        turn of the nib (radians) -- the pen angle varying along a stroke. The
+        normalisation is per sample, so a vertical stroke stays exactly
+        ``width`` whatever the nib's angle there."""
+        a0, hair, _ = self._consts()
+        w = val(self.width)
         e = self.SOFTNESS
         soft = lambda x: np.sqrt(x * x + e * e) - e
-        s = np.sin(np.asarray(theta) - a)
-        c = abs(math.cos(a))
-        return hair + k * soft(s) * (c / soft(c) if c > 1e-6 else 1.0)
+        theta = np.asarray(theta, float)
+        a = a0 + (np.zeros_like(theta) if dangle is None else np.asarray(dangle, float))
+        # a nib held near vertical can't keep a vertical stroke at `width`
+        # (the normalisation divides by cos a): keep it within +-80 degrees
+        a = np.clip(a, -math.radians(80), math.radians(80))
+        c = np.maximum(np.abs(np.cos(a)), 1e-6)
+        k = (w - hair) / c
+        s = np.sin(theta - a)
+        return hair + k * soft(s) * (c / np.maximum(soft(c), 1e-12))
 
     def width_at(self, direction_deg) -> float:
         """Stroke width for travel direction (degrees)."""
@@ -105,6 +116,8 @@ class _Side:
     profile: object = None
     g0: float = 0.0      # global stroke parameter at segment start / end
     g1: float = 1.0
+    pa0: float = 0.0     # pen-angle delta (radians) at segment start / end
+    pa1: float = 0.0
 
 
 def _offset(P: np.ndarray, t: np.ndarray, sd, side: float | None = None) -> np.ndarray:
@@ -113,7 +126,7 @@ def _offset(P: np.ndarray, t: np.ndarray, sd, side: float | None = None) -> np.n
     t = np.asarray(t, float)
     T = tangents(P, t)
     theta = np.arctan2(T[:, 1], T[:, 0])
-    w = sd.pen.widths(theta)
+    w = sd.pen.widths(theta, (sd.pa0 + (sd.pa1 - sd.pa0) * t) if (sd.pa0 or sd.pa1) else None)
     hair = sd.pen.hairline
     half = hair / 2 + (w - hair) * sd.frac
     if sd.profile is not None:
@@ -156,7 +169,8 @@ def _global_params(cubics) -> list[tuple[float, float]]:
 def _sides(stroke: Stroke, pen: Pen, cubics, sign: float, frac: float) -> list[_Side]:
     nodes = stroke.nodes
     g = _global_params(cubics)
-    return [_Side(pen, sign, frac, nodes[i].dw, nodes[(i + 1) % len(nodes)].dw, stroke.profile, *g[i])
+    return [_Side(pen, sign, frac, nodes[i].dw, nodes[(i + 1) % len(nodes)].dw, stroke.profile, *g[i],
+                  math.radians(nodes[i].dpa), math.radians(nodes[(i + 1) % len(nodes)].dpa))
             for i in range(len(cubics))]
 
 

@@ -196,6 +196,7 @@ section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; f
         <kbd>[ ]</kbd><span>rotate direction 1° (⇧ 5°)</span>
         <kbd>- =</kbd><span>width −/+ 2 (⇧ 10)</span>
         <kbd>, .</kbd><span>tension −/+ 0.05</span>
+        <kbd>9 0</kbd><span>turn the pen −/+ 1° (⇧ 5°)</span>
         <kbd>⌫</kbd><span>reset selected</span>
         <kbd>Tab</kbd><span>next point (⇧ previous)</span>
         <kbd>PgUp PgDn</kbd><span>previous / next glyph</span>
@@ -241,7 +242,7 @@ const store = {
 };
 const round = (v, d = 0) => { const m = 10 ** d; return Math.round(v * m) / m; };
 const fmt = (v, d = 1) => { if (v == null) return "—"; const t = (+v).toFixed(d); return d > 0 ? t.replace(/\.?0+$/, "") : t; };
-const DELTAS = ["dx", "dy", "dw", "da", "dt", "dv"];
+const DELTAS = ["dx", "dy", "dw", "da", "dt", "dv", "dp"];
 
 const S = {
   data: null, overrides: {}, payload: null,
@@ -473,7 +474,7 @@ function selectables() {
   return list;
 }
 function select(sel) { S.sel = sel; render(); }
-function ov(name) { return S.overrides[name] || { dx: 0, dy: 0, dw: 0, da: 0, dt: 0, dv: 0, stage: "skeleton" }; }
+function ov(name) { return S.overrides[name] || { dx: 0, dy: 0, dw: 0, da: 0, dt: 0, dv: 0, dp: 0, stage: "skeleton" }; }
 
 function setOverride(name, values, stage, checkpoint, coalesce) {
   const cleaned = {};
@@ -846,11 +847,11 @@ function renderInspector() {
       <button id="resetSel" ${S.overrides[sel.name] ? "" : "disabled"}>Reset</button></h2>
       <div class="name">${sel.name}</div><dl class="kv">
       <dt>position</dt><dd>${fmt(p[0] - g.shift)}, ${fmt(p[1])}</dd>` +
-      (isNode ? `<dt>direction</dt><dd>${fmt(n.dir)}°</dd><dt>width</dt><dd>${fmt(n.width)}</dd><dt>tension</dt><dd>${fmt(n.tension, 3)}</dd>
+      (isNode ? `<dt>direction</dt><dd>${fmt(n.dir)}°</dd><dt>width</dt><dd>${fmt(n.width)}</dd><dt>tension</dt><dd>${fmt(n.tension, 3)}</dd>${n.pen_angle == null ? "" : `<dt>pen angle</dt><dd>${fmt(n.pen_angle)}°</dd>`}
                  <dt>terminal</dt><dd>${n.terminal ? "yes" : "no"}</dd>` : "") +
       `</dl><div class="fields">` +
       field("dx", o.dx, "units") + field("dy", o.dy, "units") +
-      (isNode ? field("dw", o.dw, "width") + field("da", o.da, "deg") + field("dt", o.dt, "tension", 0.05) : "") +
+      (isNode ? field("dw", o.dw, "width") + field("da", o.da, "deg") + field("dt", o.dt, "tension", 0.05) + field("dp", o.dp, "pen °") : "") +
       `</div>` +
       (isNode ? `<div class="fields"><label>stage</label><select id="stage"><option value="skeleton">skeleton (before expansion)</option><option value="outline">outline (both sides, after)</option></select><span></span></div>` : "") +
       `</section>`;
@@ -929,7 +930,7 @@ function overrideKind(name, o) {
   if (/\.(outer|inner)\.(top|bottom|left|right)/.test(name)) return "bowl extreme";
   if (/spine|\.s\b/.test(name)) return "spine";
   if (o.stage === "outline") return "outline point";
-  if (o.dw || o.da || o.dt) return "stroke shape";
+  if (o.dw || o.da || o.dt || o.dp) return "stroke shape";
   return "skeleton point";
 }
 function overridesByKind() {
@@ -975,6 +976,7 @@ function summarize(o) {
   if (o.da) parts.push(`${o.da > 0 ? "+" : ""}${fmt(o.da)}°`);
   if (o.dt) parts.push(`t${o.dt > 0 ? "+" : ""}${fmt(o.dt, 2)}`);
   if (o.dv) parts.push(`${o.dv > 0 ? "+" : ""}${fmt(o.dv, 2)}`);
+  if (o.dp) parts.push(`nib${o.dp > 0 ? "+" : ""}${fmt(o.dp)}°`);
   if (o.stage === "outline") parts.push("outline");
   return parts.join(" ");
 }
@@ -1088,6 +1090,8 @@ document.addEventListener("keydown", (e) => {
     case "=": case "+": if (S.sel.kind === "node") o.dw += big ? 10 : 2; else changed = false; break;
     case ",": case "<": if (S.sel.kind === "node") o.dt = round(o.dt - 0.05, 3); else changed = false; break;
     case ".": case ">": if (S.sel.kind === "node") o.dt = round(o.dt + 0.05, 3); else changed = false; break;
+    case "9": case "(": if (S.sel.kind === "node") o.dp = (o.dp || 0) - (big ? 5 : 1); else changed = false; break;
+    case "0": case ")": if (S.sel.kind === "node") o.dp = (o.dp || 0) + (big ? 5 : 1); else changed = false; break;
     case "Backspace": case "Delete": send({ type: "remove", names: [name] }); e.preventDefault(); return;
     default: changed = false;
   }

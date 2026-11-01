@@ -73,3 +73,34 @@ def test_needle_spikes_are_dropped():
     for p in [(0, 0), (100, 0), (100, 100), (0, 100)]:
         square.add(p, "on")
     assert len(_drop_spikes(square).pts) == 4
+
+
+# -- pen angle varying along a stroke ----------------------------------------
+
+def test_pen_turning_keeps_vertical_stems_exact_and_moves_the_thick_part():
+    from ductus.pen import Pen
+    pen = Pen(angle=20, width=100, contrast=0.8)
+    up = np.radians([90.0, 90.0, 90.0])
+    w = pen.widths(up, np.radians([0.0, 15.0, -25.0]))
+    assert np.allclose(w, 100.0)                        # a vertical stroke is always `width`
+    diag = np.radians([45.0])
+    assert pen.widths(diag, np.radians([30.0]))[0] != pytest.approx(pen.widths(diag)[0])
+    assert np.allclose(pen.widths(np.radians([10.0, 70.0])), pen.widths(np.radians([10.0, 70.0]), [0.0, 0.0]))
+
+
+def test_node_pen_angle_and_dp_override(bench_font):
+    from ductus.overrides import Override
+    base = compile_font(bench_font, glyphs=["s"]).glyphs["s"]
+    turned = compile_font(bench_font, glyphs=["s"],
+                          overrides={"s.spine.mid": Override("s.spine.mid", dp=25)}).glyphs["s"]
+    assert base.raw_signature == turned.raw_signature              # structure unchanged
+    assert abs(sum(c.area() for c in base.contours) - sum(c.area() for c in turned.contours)) > 50
+    mid = [n for st in turned.skeleton for n in st["nodes"] if n["name"] == "s.spine.mid"][0]
+    assert mid["pen_angle"] is not None
+
+
+def test_dp_override_round_trips():
+    import yaml
+    from ductus.overrides import Override, dump_overrides, parse_overrides
+    ovs = {"s.spine.mid": Override("s.spine.mid", dp=7.5)}
+    assert parse_overrides(yaml.safe_load(dump_overrides(ovs))) == ovs

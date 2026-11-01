@@ -111,6 +111,14 @@ DEFAULTS: dict[str, tuple] = {
     # local weight at the s's nodes (width added there, interpolated between)
     # the s's extremes may lean (Geist's are not vertical), and every node
     # has its own tension (the top's is s_tension, the bottom's s_tension + s_bot_dt)
+    # the nib turns along the s: pen-angle offset at each node (degrees)
+    # the nib turns along the arch (n h m), the a's hood, the t's tail
+    "n_join_pa": (0, (-35, 35)), "n_shoulder_pa": (0, (-35, 35)), "n_leg_pa": (0, (-35, 35)),
+    "a_term_pa": (0, (-35, 35)), "a_top_pa": (0, (-35, 35)),
+    "t_bottom_pa": (0, (-35, 35)), "t_end_pa": (0, (-35, 35)),
+    "s_t1_pa": (0, (-35, 35)), "s_top_pa": (0, (-35, 35)), "s_left_pa": (0, (-35, 35)),
+    "s_mid_pa": (0, (-35, 35)), "s_right_pa": (0, (-35, 35)), "s_bot_pa": (0, (-35, 35)),
+    "s_t2_pa": (0, (-35, 35)),
     "s_top_dir": (180, (160, 200)), "s_bot_dir": (180, (160, 200)),
     "s_left_dir": (270, (235, 305)), "s_right_dir": (270, (235, 305)),
     "s_left_t": (1.0, (0.7, 1.6)), "s_mid_t": (1.0, (0.7, 1.6)), "s_right_t": (1.0, (0.7, 1.6)),
@@ -416,11 +424,11 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         sh_y = top + os_ - arch_pen.width_at(0) * (1 - val(bias))
         (p.path(name="arch", pen=arch_pen, bias=bias,
                 profile=Profile((0, m0), (P.n_taper_len, 1), (1, 1)))
-            .start(st, name="join", dir=d0, terminal=False)
+            .start(st, name="join", dir=d0, terminal=False, pen_angle=P.n_join_pa)
             .curve_to((x + width * P.n_shoulder_x, sh_y), name="shoulder", dir=0, tension=P.n_tension,
-                      width=P.n_shoulder_dw)
+                      width=P.n_shoulder_dw, pen_angle=P.n_shoulder_pa)
             .curve_to((leg_x + P.stem / 2 - left_half, top * P.n_out_y * 0.5), name="leg", dir=-90,
-                      tension=P.n_leg_t))
+                      tension=P.n_leg_t, pen_angle=P.n_leg_pa))
         notch_cut(p, J, val(edge), +1)
         if inset:
             head_inset_cut(p, edge, val(top) * P.n_join_at, P.head_inset)
@@ -459,18 +467,18 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         sw = Profile((0, P.s_ends), (0.5 - P.s_spread, P.s_ends), (0.5, P.s_swell), (0.5 + P.s_spread, P.s_ends),
                      (1, P.s_ends))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias)
-            .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
-            .curve_to((W * P.s_top_x, top), name="top", dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
-            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", dir=P.s_left_dir,
+            .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
+            .curve_to((W * P.s_top_x, top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
+            .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
                       tension=P.s_left_t, width=P.s_left_dw)
-            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", dir=P.s_mid_dir, tension=P.s_mid_t,
+            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", pen_angle=P.s_mid_pa, dir=P.s_mid_dir, tension=P.s_mid_t,
                       width=P.s_mid_dw)
-            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", dir=P.s_right_dir,
+            .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
                       tension=P.s_right_t, width=P.s_right_dw)
-            .curve_to((W * P.s_bot_x, bot), name="bottom", dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
+            .curve_to((W * P.s_bot_x, bot), name="bottom", pen_angle=P.s_bot_pa, dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
                       width=P.s_bot_dw)
             .curve_to((W * P.s_t2_x, height * P.s_t2_y), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
-                      width=P.s_t2_dw))
+                      width=P.s_t2_dw, pen_angle=P.s_t2_pa))
 
     def tapered_bar(gl, x0, y0, x1, y1, stem_l):
         """A crossbar whose left end is a point: a pentagon, degenerate (a plain
@@ -541,8 +549,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         top_y = xh + os_ - hood_pen.width_at(0) * (1 - val(P.a_bias))
         (gl.path(name="hood", pen=hood_pen, bias=P.a_bias,
                  profile=Profile((0, P.a_taper), (P.a_hood_end, 1), (1, 1)))
-            .start((P.a_term_x, P.a_term_y), name="terminal", dir=P.a_term_dir, terminal="hood")
-            .curve_to((P.a_term_x + (sx - P.a_term_x) * P.a_top_x, top_y), name="top", dir=0)
+            .start((P.a_term_x, P.a_term_y), name="terminal", dir=P.a_term_dir, terminal="hood",
+                   pen_angle=P.a_term_pa)
+            .curve_to((P.a_term_x + (sx - P.a_term_x) * P.a_top_x, top_y), name="top", dir=0, pen_angle=P.a_top_pa)
             # always end inside the stem, so hood and stem overlap
             .curve_to((sx, min(val(P.a_stem_top + (xh - P.a_stem_top) * (1 - P.a_out_y) * 0.5),
                                val(stem_top) - 6)), name="out", dir=-90))
@@ -710,8 +719,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                  profile=Profile((0, 1), (0.55, 1), (0.8, P.t_turn_w), (1, P.t_end_w)))
             .start((0, P.t_top), name="top", terminal="t_top")
             .line_to((0, P.t_turn), name="turn")
-            .curve_to((P.t_tail * 0.55, -os_ + t_pen.width_at(0) / 2), name="bottom", dir=0)
-            .curve_to((P.t_tail, P.t_tail_y), name="end", dir=60, terminal="t_tail"))
+            .curve_to((P.t_tail * 0.55, -os_ + t_pen.width_at(0) / 2), name="bottom", dir=0, pen_angle=P.t_bottom_pa)
+            .curve_to((P.t_tail, P.t_tail_y), name="end", dir=60, terminal="t_tail", pen_angle=P.t_end_pa))
         tapered_bar(gl, -P.t_bar_l, xh - P.t_bar_t + P.t_bar_dy, P.t_bar_r, xh + P.t_bar_dy, -P.stem / 2)
 
     @g("i")

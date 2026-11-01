@@ -176,6 +176,7 @@ def _compile_glyph_inner(font, gdef, overrides, used, terminals, handles) -> Com
             nd.pos = nd.pos + np.array([o.dx, o.dy])
             nd.dw += o.dw
             nd.da += o.da
+            nd.dpa += o.dp
             nd.tension += o.dt
             used.add(name)
         elif name in raw_points:

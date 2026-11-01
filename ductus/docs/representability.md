@@ -31,6 +31,28 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 14 — the pen angle can turn along a stroke
+
+New in the language: a skeleton node can turn the nib —
+`curve_to(..., pen_angle=12)`, or a `dp` override on any node (the editor
+shows each node's pen angle; keys `9` / `0` turn it by 1°, ⇧ 5°). The turn is
+interpolated along the adjacent segments like a node's width delta, and the
+direction model normalises per sample, so a vertical stroke stays exactly
+`width` whatever the nib does. The nib is held within ±80° (the
+normalisation divides by cos of the angle; at the all-max sweep corner the
+t's pen plus a 35° turn passed 90° and the width blew up). Zero turn is
+bit-identical to before: no existing glyph changed.
+
+Geist kit: per-node turns on the s (`s_t1_pa` … `s_t2_pa`), the arch
+(`n_join_pa`, `n_shoulder_pa`, `n_leg_pa`), the a's hood (`a_term_pa`,
+`a_top_pa`) and the t's tail (`t_bottom_pa`, `t_end_pa`), all 0 by default.
+
+Result: **s 0.955 → 0.960**, a 0.961 → 0.962; the arch and the t's tail
+did not use it (the fits left those turns at 0). The fitted turns on the s
+are small (≤ 3.3°): Geist's weight distribution is mostly not a turning
+broad nib — its width profile and per-node widths already carry most of
+it. Mean IoU 0.976 → 0.976 (0.9761 → 0.9764); 0 overrides.
+
 ### Iteration 13 — the rest: mean IoU 0.970 → 0.976, every glyph ≥ 0.955
 
 | glyph | 12 | 13 | | glyph | 12 | 13 |
@@ -481,3 +503,19 @@ shared params over all glyphs is still to do.
 | 13 | 2026-11-01 | `f` | 0.9776 | 12.3 | 0.9 | +70 | 0 | 0 | contour, bracketed, flat | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
 | 13 | 2026-11-01 | `t` | 0.9793 | 9.7 | 1.5 | +76 | 0 | 0 | contour, flat, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
 | 13 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 13: refit the rest -- unpinned ranges, e walls/bar, coupled-move and multi-glyph search (n/h/m arches), metric guard against consistent skia errors; 0 overrides |
+| 14 | 2026-11-01 | `o` | 0.9840 | 1.8 | 0.8 | -14 | 0 | 0 | bowl | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `n` | 0.9817 | 6.8 | 0.8 | +1 | 0 | 0 | cut, bracketed, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `H` | 0.9949 | 1.8 | 0.4 | -10 | 0 | 0 | contour, bracketed | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `e` | 0.9692 | 8.3 | 1.2 | -25 | 0 | 0 | bowl, contour, cut | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `a` | 0.9620 | 12.8 | 1.7 | +5 | 0 | 0 | lobe, flat, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `s` | 0.9598 | 11.1 | 1.5 | +3 | 0 | 0 | flat | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `g` | 0.9664 | 16.2 | 1.3 | +66 | 0 | 0 | bowl, contour, cut | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `v` | 0.9757 | 16.4 | 0.9 | +9 | 0 | 0 | cut, bracketed, flat | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `h` | 0.9744 | 8.1 | 1.1 | -2 | 0 | 0 | cut, bracketed, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `m` | 0.9692 | 9.6 | 1.3 | +0 | 0 | 0 | cut, bracketed, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `u` | 0.9809 | 14.6 | 1.0 | -4 | 0 | 0 | cut, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `b` | 0.9752 | 16.0 | 1.2 | -12 | 0 | 0 | lobe, flat, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `r` | 0.9795 | 7.3 | 1.0 | +29 | 0 | 0 | cut, bracketed, flat, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `f` | 0.9776 | 12.3 | 0.9 | +70 | 0 | 0 | contour, bracketed, flat | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `t` | 0.9793 | 9.7 | 1.5 | +76 | 0 | 0 | contour, flat, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |
+| 14 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 14: pen angle varies along strokes (node pen_angle / dp override); s and a hood refitted; 0 overrides |

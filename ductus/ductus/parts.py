@@ -148,33 +148,35 @@ class PathBuilder:
     def __init__(self, stroke: Stroke):
         self.stroke = stroke
 
-    def _node(self, p, name, dir, tension=1.0, terminal=True, width=0):
+    def _node(self, p, name, dir, tension=1.0, terminal=True, width=0, pen_angle=0):
         i = len(self.stroke.nodes)
         n = Node(name or f"p{i}", np.array(pt(p), float),
-                 None if dir is None else val(dir), val(tension), terminal, dw=val(width))
+                 None if dir is None else val(dir), val(tension), terminal, dw=val(width), dpa=val(pen_angle))
         self.stroke.nodes.append(n)
         return n
 
     # ``dir``: direction of travel in degrees (None = inferred)
     # ``tension``: >1 flatter / tighter corners, <1 rounder (both sides of the node)
     # ``width``: added to the pen width at this node (interpolated along segments)
+    # ``pen_angle``: added to the pen's angle at this node (degrees, interpolated
+    #   along segments): the nib turns as the stroke goes
 
-    def start(self, p, name: str = "start", dir=None, terminal=True, tension=1.0, width=0):
+    def start(self, p, name: str = "start", dir=None, terminal=True, tension=1.0, width=0, pen_angle=0):
         if self.stroke.nodes:
             raise DuctusError("start() called twice")
-        self._node(p, name, dir, tension, terminal, width)
+        self._node(p, name, dir, tension, terminal, width, pen_angle)
         return self
 
-    def curve_to(self, p, name: str | None = None, dir=None, tension=1.0, terminal=True, width=0):
+    def curve_to(self, p, name: str | None = None, dir=None, tension=1.0, terminal=True, width=0, pen_angle=0):
         self._need_start()
         self.stroke.kinds.append("curve")
-        self._node(p, name, dir, tension, terminal, width)
+        self._node(p, name, dir, tension, terminal, width, pen_angle)
         return self
 
-    def line_to(self, p, name: str | None = None, dir=None, terminal=True, tension=1.0, width=0):
+    def line_to(self, p, name: str | None = None, dir=None, terminal=True, tension=1.0, width=0, pen_angle=0):
         self._need_start()
         self.stroke.kinds.append("line")
-        self._node(p, name, dir, tension, terminal, width)
+        self._node(p, name, dir, tension, terminal, width, pen_angle)
         return self
 
     def close(self, kind: str = "curve"):
