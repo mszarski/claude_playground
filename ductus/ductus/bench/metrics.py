@@ -1,11 +1,17 @@
 """Shape metrics between our glyph and a reference glyph.
 
-Both outlines are aligned on the horizontal centre of their bounding boxes
-(baselines shared), so spacing doesn't pollute the shape score; the advance
-difference is reported separately.
+The reference is shifted horizontally (baselines shared) to the offset that
+maximises the IoU, so spacing doesn't pollute the shape score; the advance
+difference is reported separately. (Until iteration 08 the bounding-box
+centres were aligned: with outlines on the integer grid, that offset moves
+in half-unit steps, and half a unit on a glyph with tall stems is worth
+~0.005 IoU -- the score jumped as parameters moved.)
 
-* ``iou``: raster intersection-over-union of anti-aliased coverage
-  (sum(min) / sum(max)) rendered at ``px`` pixels per em.
+* ``iou``: exact intersection-over-union of the filled outlines (areas of
+  the boolean intersection and union, computed on the curves with
+  skia-pathops). Until iteration 08 this was rasterised at 400 px/em, i.e.
+  2.5 units per pixel, which made the score step-shaped: small changes
+  often did not move it, and the fitters stalled on the steps.
 * ``hausdorff``: symmetric Hausdorff distance between the outlines, in
   font units; ``mean_dist``: mean of both directed nearest distances.
 """
@@ -14,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+import pathops
+from fontTools.pens.areaPen import AreaPen
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.pens.freetypePen import FreeTypePen
 from scipy.spatial import cKDTree
@@ -72,6 +80,51 @@ def sample_outline(contours: list[Contour], step: float = 2.0) -> np.ndarray:
     return np.concatenate(pts) if pts else np.zeros((0, 2))
 
 
+def _path(contours: list[Contour]) -> pathops.Path:
+    path = pathops.Path()
+    pen = path.getPen()
+    for c in contours:
+        c.draw(pen)
+    path.simplify(fix_winding=True)
+    return path
+
+
+def _area(path: pathops.Path) -> float:
+    pen = AreaPen()
+    path.draw(pen)
+    return abs(pen.value)
+
+
+def exact_iou(ours: list[Contour], ref: list[Contour]) -> float:
+    """Area of the intersection over area of the union, on the outlines."""
+    return _iou_shifted(_path(ours), _path(ref), 0.0)
+
+
+def _intersection_area(A: pathops.Path, B: pathops.Path) -> float:
+    """Skia's boolean ops can fail on exactly coincident edges; a shift of a
+    thousandth of a unit gets round that without changing the area."""
+    for eps in (0.0, 1e-3, -1e-3, 3e-3):
+        Bt = B
+        if eps:
+            Bt = pathops.Path()
+            B.draw(_Shift(Bt.getPen(), eps))
+        try:
+            return _area(pathops.op(A, Bt, pathops.PathOp.INTERSECTION, fix_winding=True))
+        except pathops.PathOpsError:
+            continue
+    raise pathops.PathOpsError("intersection failed")
+
+
+def _iou_shifted(A: pathops.Path, B: pathops.Path, dx: float) -> float:
+    Bt = B
+    if dx:
+        Bt = pathops.Path()
+        B.draw(_Shift(Bt.getPen(), dx))
+    inter = _intersection_area(A, Bt)
+    union = _area(A) + _area(B) - inter        # area is translation-invariant
+    return inter / union if union > 0 else 1.0
+
+
 def raster(contours: list[Contour], box, px: int = PX_PER_EM, upm: int = 1000) -> np.ndarray:
     s = px / upm
     x0, y0, x1, y1 = box
@@ -95,16 +148,49 @@ class GlyphScore:
     worst: tuple = field(repr=False, default=None)      # (point on ours or ref, which)
 
 
+def align_best(ours: list[Contour], ref: list[Contour], window: float = 10.0):
+    """Shift ``ref`` horizontally to the offset maximising the exact IoU,
+    searched around the bbox-centre offset. Returns (ref', dx, iou)."""
+    from scipy.optimize import minimize_scalar
+    _, dx0 = align(ours, ref)
+    if not ours or not ref:
+        return ref, dx0, None
+    A, B = _path(ours), _path(ref)
+
+    def neg_iou(dx):
+        return -_iou_shifted(A, B, dx)
+
+    r = minimize_scalar(neg_iou, bounds=(dx0 - window, dx0 + window), method="bounded",
+                        options={"xatol": 0.02})
+    dx, iou = (r.x, -r.fun) if -r.fun >= -neg_iou(dx0) else (dx0, -neg_iou(dx0))
+    return translated(ref, dx), float(dx), float(iou)
+
+
+class _Shift:
+    """Pen filter translating x by ``dx``."""
+    def __init__(self, pen, dx):
+        self.pen, self.dx = pen, dx
+
+    def _t(self, pts):
+        return [(x + self.dx, y) for x, y in pts]
+
+    def moveTo(self, p): self.pen.moveTo(*self._t([p]))
+    def lineTo(self, p): self.pen.lineTo(*self._t([p]))
+    def curveTo(self, *pts): self.pen.curveTo(*self._t(pts))
+    def qCurveTo(self, *pts): self.pen.qCurveTo(*self._t(pts[:-1]), *([pts[-1]] if pts[-1] is None else self._t([pts[-1]])))
+    def closePath(self): self.pen.closePath()
+    def endPath(self): self.pen.endPath()
+
+
 def score_glyph(name: str, ours: list[Contour], ref: list[Contour], our_adv: int, ref_adv: int,
                 upm: int = 1000, px: int = PX_PER_EM) -> GlyphScore:
-    ref_al, dx = align(ours, ref)
+    ref_al, dx, iou = align_best(ours, ref)
     a, b = bounds(ours), bounds(ref_al)
     if a is None or b is None:
         return GlyphScore(name, 1.0 if a is None and b is None else 0.0, float("nan"), float("nan"),
                           our_adv - ref_adv, dx, ours, ref_al)
-    box = (min(a[0], b[0]) - 4, min(a[1], b[1]) - 4, max(a[2], b[2]) + 4, max(a[3], b[3]) + 4)
-    A, B = raster(ours, box, px, upm), raster(ref_al, box, px, upm)
-    iou = float(np.minimum(A, B).sum() / max(np.maximum(A, B).sum(), 1e-9))
+    if iou is None:
+        iou = exact_iou(ours, ref_al)
     P, Q = sample_outline(ours), sample_outline(ref_al)
     dPQ, _ = cKDTree(Q).query(P)
     dQP, _ = cKDTree(P).query(Q)
