@@ -31,6 +31,36 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 12 — g and s: g 0.946 → 0.962, s 0.947 → 0.954
+
+Both were the lowest glyphs after iteration 11. Mean IoU 0.968 → 0.970,
+min 0.946 → 0.951 (e); 0 overrides. A difference map (Geist-only ink vs
+ours-only ink) was what found both problems; the outline overlays alone
+had been misread.
+
+* **g: a structural notch.** In Geist the link does not run into the lower
+  loop on the left: a wedge-shaped notch opens to the left between the
+  link's bottom and the loop's thin top-left arm, closing ~7 u wide under
+  the crossbar; the two meet only through the crossbar. Ours filled the
+  wedge solid. No fit could find it — a global fit of all 30-odd link,
+  loop and bar params gained 0.0002, and a lower, thinner loop top or more
+  rotation (the loop is tilted, not rotated) made things far worse — so
+  the notch is now modelled directly: a wedge cut with its tip at
+  (`g_notch_x`, `g_notch_y`), `g_notch_len` long, edges `g_notch_up` /
+  `g_notch_dn` degrees off the horizontal (length 0 = no notch, the old
+  g). With it in place a constrained greedy search over all g params went
+  0.948 → 0.962.
+* **s: weight distribution along the stroke.** The error was spread
+  thinly; the s needed more freedom, not a fix: its left/right extremes can
+  lean (`s_left_dir`, `s_right_dir`; Geist's right extreme leans ~2°),
+  every node has its own tension (`s_left_t`, `s_mid_t`, `s_right_t`,
+  `s_bot_dt`), and each end its own weight (`s_t1_dw`, `s_t2_dw`: the
+  bottom end's lower edge sat 10 u high, and the cut's fill poked out past
+  it as a notch). All default to the old shape, which the display serif's
+  S shares.
+
+Lowest now: e 0.951, a 0.959, t 0.959, b 0.959.
+
 ### Iteration 11 — stroke ends: outline distance near the ends 1.48 → 1.07 u
 
 The question was how to get the finer detail at the ends of strokes. About
@@ -379,3 +409,19 @@ shared params over all glyphs is still to do.
 | 11 | 2026-11-01 | `f` | 0.9734 | 12.3 | 0.9 | +64 | 0 | 0 | contour, bracketed, flat | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
 | 11 | 2026-11-01 | `t` | 0.9589 | 9.7 | 1.7 | +74 | 0 | 0 | contour, flat, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
 | 11 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 12 | 2026-11-01 | `o` | 0.9840 | 1.8 | 0.8 | -14 | 0 | 0 | bowl | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `n` | 0.9728 | 8.7 | 1.1 | +1 | 0 | 0 | cut, bracketed, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `H` | 0.9949 | 1.8 | 0.4 | -10 | 0 | 0 | contour, bracketed | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `e` | 0.9506 | 7.5 | 1.8 | -25 | 0 | 0 | bowl, contour, cut | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `a` | 0.9586 | 13.9 | 1.8 | +5 | 0 | 0 | lobe, flat, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `s` | 0.9544 | 10.1 | 1.5 | +3 | 0 | 0 | flat | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `g` | 0.9615 | 16.2 | 1.4 | +66 | 0 | 0 | bowl, contour, cut | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `v` | 0.9732 | 16.3 | 0.9 | +7 | 0 | 0 | cut, bracketed, flat | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `h` | 0.9661 | 10.8 | 1.3 | -2 | 0 | 0 | cut, bracketed, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `m` | 0.9624 | 11.5 | 1.5 | +0 | 0 | 0 | cut, bracketed, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `u` | 0.9767 | 7.2 | 1.0 | -2 | 0 | 0 | cut, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `b` | 0.9593 | 16.0 | 1.7 | -20 | 0 | 0 | lobe, flat, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `r` | 0.9760 | 8.1 | 0.9 | +33 | 0 | 0 | cut, bracketed, flat, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `f` | 0.9734 | 12.3 | 0.9 | +64 | 0 | 0 | contour, bracketed, flat | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `t` | 0.9589 | 9.7 | 1.7 | +74 | 0 | 0 | contour, flat, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |
+| 12 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 12: g link/loop notch (cut); s leaning extremes, per-node tension, per-end weight; 0 overrides |

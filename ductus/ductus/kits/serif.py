@@ -41,6 +41,8 @@ DEFAULTS: dict[str, tuple] = {
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
     "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
+    "g_notch_x": (170, (100, 260)), "g_notch_y": (22, (-40, 80)), "g_notch_len": (0, (0, 160)),
+    "g_notch_up": (19, (0, 50)), "g_notch_dn": (23, (0, 60)),
     "g_tr_dh": (0, (-0.4, 0.3)), "g_tr_dv": (0, (-0.4, 0.3)),
     "g_ear_root_dx": (0, (-60, 30)),   # the ear's sloped top starts on the bowl, left of its foot
     "g_link_root_dy": (0, (-40, 80)), "g_link_root_dir": (210, (170, 260)),   # where the link leaves the bowl
@@ -585,6 +587,15 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                    thin_bottom=P.g_loop_bot_t, full=(P.g_loop_full, P.g_loop_full_v),
                    in_full=(P.g_loop_in_full, P.g_loop_in_full_v),
                    rotate=P.g_loop_rot, stress=P.g_loop_stress, name="loop")
+        # the notch between the link and the lower loop's top-left arm: a
+        # wedge opening to the left, tip at (g_notch_x, g_notch_y), edges
+        # g_notch_up / g_notch_dn degrees above/below the horizontal,
+        # g_notch_len long (0: none -- the old g)
+        nx, ny, nl = val(P.g_notch_x), val(P.g_notch_y), max(val(P.g_notch_len), 0.0)
+        au, ad = math.radians(val(P.g_notch_up)), math.radians(val(P.g_notch_dn))
+        (gl.cut("link_notch").move((nx, ny), "tip")
+            .line((nx - nl * math.cos(au), ny + nl * math.sin(au)), "upper")
+            .line((nx - nl * math.cos(ad), ny - nl * math.sin(ad)), "lower").close())
         if g_band == "flat":
             rect(gl, "bar", P.g_bar_l, P.g_bar_bot, P.g_bar_r, P.g_bar_top)
             # trim whatever of the tilted loop pokes above the bar (not the link)
