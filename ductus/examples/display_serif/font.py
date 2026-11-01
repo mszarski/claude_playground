@@ -46,7 +46,8 @@ P = kit.params(
     b_bx_out=0.74, b_bx_in=0.8, b_foot_angle=-57, b_spur_drop=100, b_spur_len=100, b_spur_rise=98,
     # e
     e_width=475, e_term_y=157, e_cut_angle=188, e_cut_x=0.54, e_cut_h1=0.25, e_cut_h2=0.68, e_full_h=0.74,
-    e_full_v=0.45, e_in_full_h=0.4, e_in_full_v=0.66, e_stress=8.0, e_thick_dl=-8.0, e_thick_dr=-16.0,
+    e_full_v=0.48, e_in_full_h=0.4, e_in_full_v=0.78, e_stress=4.0, e_thick_dl=-8.0, e_thick_dr=-4.0,
+    e_thin_bottom=2.4,   # the bowl's bottom: 2.4 x hairline
     # s S
     s_width=395, s_t1_x=0.9, s_t1_y=0.8, s_t1_dir=115, s_cut1=-6.0, s_t2_x=0.03, s_t2_y=0.2, s_t2_dir=123,
     s_cut2=3.0, s_top_x=0.44, s_left_y=0.75, s_mid_x=0.33, s_mid_y=0.54, s_mid_dir=-16, s_right_y=0.29,
@@ -56,10 +57,13 @@ P = kit.params(
     s_bot_dw=3.0, s_t1_pa=-3.0, s_left_t=0.95, s_right_t=0.95, s_t2_pa=3.0, s_mid_t=1.05,
     # g
     g_br=440, g_bt=532, g_thick=1.1, g_full=0.55, g_in_full=0.62, g_ear_y=620, g_ear_w=0.45, g_link_x0=0.42,
-    g_link_y=121, g_band_x=278, g_band_y=42, g_link_w=1.5, g_loop_l=-2, g_loop_r=508, g_loop_t=96,
+    g_link_y=106, g_band_x=188, g_band_y=42, g_link_w=1.5, g_loop_l=-2, g_loop_r=508, g_loop_t=96,
     g_loop_thick=0.94, g_loop_tr=1.1, g_loop_top_t=48, g_loop_bot_t=26, g_loop_full=0.5, g_loop_in_full=0.53,
-    g_loop_stress=5, g_rot=4.0, g_loop_rot=15.0, g_ear_h=100,
-    g_link_root_dir=190, g_link_root_dy=5.0, g_link_w0=0.7, g_link_w1=1.8, g_low_y=0.47,
+    g_loop_stress=5, g_rot=4.0, g_loop_rot=15.0, g_ear_h=90,
+    g_link_root_dir=190, g_link_root_dy=5.0, g_link_w0=0.7, g_link_w1=1.9, g_low_y=0.47,
+    g_link_x=60, g_link_tp=0.2, g_low_t=0.3, g_ear_root_x=0.4, g_ear_root_dx=5, g_ear_root_y=510,
+    # the notch where the link meets the band
+    g_notch_len=90, g_notch_x=120, g_notch_y=20, g_notch_up=23, g_notch_dn=19,
     # t
     t_turn_w=1.05, t_angle=30, t_bar_t=40, t_tail=246, t_tail_y=120, t_end_dir=0, t_end_w=0.28, t_turn=133,
     t_bar_l=126, t_bar_r=238, t_top=654, t_wedge_sweep=45, t_wedge_len=5.0, t_wedge_rise=88, t_wedge_drop=0.0,

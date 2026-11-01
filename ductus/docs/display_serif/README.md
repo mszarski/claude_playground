@@ -400,3 +400,22 @@ was needed: I tried one and it gained nothing once the arms reached far
 enough. S against Geist: 0.77 → 0.83.
 
 Mean IoU against Geist: 0.912 → 0.918.
+
+## 20 — the g's link and the e's bottom
+
+Sheet: `20.png`. Comparison: `20_vs_19.png`.
+
+**g.** Geist's link leaves the bowl, swings left, and comes back into the
+band with a notch cut where it meets it. The kit had that notch already
+(`g_notch_*`); the display face had it switched off (length 0). It is now
+90 u long, and its tip is at 120/20. The link was reshaped around it: it
+turns lower and further out, it is heavier into the band, and the band
+starts further left. The ear flag is taller and starts further left on the
+bowl. g against Geist: 0.874 → 0.933.
+
+**e.** The bottom of the bowl was a hairline where Geist's is a real
+stroke. `e_thin_bottom` is now 2.4 (the bowl's bottom is 2.4 × the
+hairline), with a little more stress and vertical fullness to match.
+e against Geist: 0.880 → 0.956.
+
+Mean IoU against Geist: 0.918 → 0.924.
