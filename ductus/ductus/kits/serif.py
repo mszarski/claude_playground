@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from types import SimpleNamespace
 
-from ..params import Param, val
+from ..params import Param, lazy_max, val
 from ..pen import Pen
 from ..profiles import Profile, constant
 from ..terminals import TerminalSet, beak, bracketed, flat, none, wedge
@@ -37,7 +37,7 @@ DEFAULTS: dict[str, tuple] = {
     "serif_slope": (0, (-10, 50)), "cap_serif_slope": (0, (-10, 50)),
     "cap_serif_len": (80, (10, 180)), "cap_serif_bracket": (60, (0, 160)), "cap_serif_tip": (4, (0, 40)),
     "head_len": (80, (10, 160)), "head_rise": (60, (0, 140)), "head_drop": (55, (0, 140)), "head_hollow": (0.3, (0, 1)),
-    "u_head_dlen": (0, (-10, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
+    "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
     "spur_len": (70, (0, 160)), "spur_rise": (60, (0, 140)), "spur_drop": (40, (0, 120)),
     "beak_len": (25, (0, 120)), "beak_depth": (70, (5, 200)),
     "top_serif_len": (60, (0, 160)), "top_serif_bracket": (40, (0, 140)), "top_serif_tip": (10, (0, 60)),
@@ -207,14 +207,15 @@ def bracketed_set(P) -> TerminalSet:
                      curve=(P.serif_ca, P.serif_cb), cup=P.serif_cup, slope=P.serif_slope)
     cap = bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
                     curve=(P.serif_ca, P.serif_cb), cup=P.serif_cup, slope=P.cap_serif_slope)
-    wide = bracketed(left=dict(length=P.serif_len + P.foot_wide_dl), right=dict(length=P.serif_len + P.foot_wide_dr),
+    wide = bracketed(left=dict(length=lazy_max(P.serif_len + P.foot_wide_dl, 0)),
+                     right=dict(length=lazy_max(P.serif_len + P.foot_wide_dr, 0)),
                      bracket=P.serif_bracket, tip=P.serif_tip, curve=(P.foot_wide_ca, P.foot_wide_cb),
                      cup=P.serif_cup, slope=P.serif_slope)
     return TerminalSet(
         none,
         foot=foot, foot_wide=wide, cap_foot=cap, cap_head=cap,
         head=wedge(side="left", length=P.head_len, rise=P.head_rise, drop=P.head_drop, hollow=P.head_hollow),
-        u_head=wedge(side="left", length=P.head_len + P.u_head_dlen, rise=P.head_rise, drop=P.head_drop,
+        u_head=wedge(side="left", length=lazy_max(P.head_len + P.u_head_dlen, 0), rise=P.head_rise, drop=P.head_drop,
                      hollow=P.head_hollow),
         spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
@@ -261,7 +262,7 @@ def didone_set(P) -> TerminalSet:
         cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.foot_tip,
                              curve=(P.serif_ca, P.serif_cb), right=None),
         head=head,
-        u_head=bracketed(left=dict(length=P.head_len + P.u_head_dlen, bracket=P.serif_bracket, tip=P.foot_tip),
+        u_head=bracketed(left=dict(length=lazy_max(P.head_len + P.u_head_dlen, 0), bracket=P.serif_bracket, tip=P.foot_tip),
                          right=None, curve=(P.serif_ca, P.serif_cb)),
         spur=bracketed(right=dict(length=P.spur_len * 0.6, bracket=P.serif_bracket * 0.6, tip=P.foot_tip),
                                   left=None, curve=(P.serif_ca, P.serif_cb)),

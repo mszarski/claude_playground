@@ -31,6 +31,53 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 08 — the rest of `hamburgefonstiv`: 16 glyphs at target, 3 overrides
+
+Added `h m b u r f t i`. All 16 benchmark glyphs meet the target (IoU ≥ 0.93,
+Hausdorff ≤ 20 u, ≤ 2 overrides); 3 overrides in total (`h` 2, `r` 1).
+Overlays: `docs/iterations/08/_all.png`.
+
+| glyph | IoU | Hausdorff | overrides | what it took |
+|---|---:|---:|---:|---|
+| h | 0.934 | 14.0 | 2 | arch joins on the h's (slightly heavier) stem edge; `h.@n_width −6`, `h.@serif_len −10` |
+| m | 0.933 | 17.5 | 0 | two arches, own width |
+| b | 0.943 | 16.0 | 0 | lobe with a crown node; the stem is chiselled off, not footed |
+| u | 0.956 | 11.0 | 0 | own cup (the n's arch turned round is not a u); heads longer than the n's (`u_head_dlen`) |
+| r | 0.935 | 15.3 | 1 | ear cut almost vertically (no beak); lopsided foot; `r.@foot_wide_dl −6` |
+| f | 0.953 | 15.2 | 0 | hook end/weight (`f_top_dw` thins it across the top), tapered bar, lopsided foot |
+| t | 0.943 | 20.0 | 0 | own pen (thick crescent tail), tapered bar |
+| i | 0.956 | 17.9 | 0 | — |
+
+New genre-kit controls (all default to the old shapes, so the display serif
+is unchanged): `u_head_dlen/dtop`, `r_cut_angle`, `foot_wide` terminal with
+`foot_wide_dl/dr/ca/cb` (feet longer on the right, straighter brackets),
+tapered crossbars (`bar_taper`, `bar_tip_y`, `bar_tip_dx`), `f_top_dw`,
+`f_end_dir/w`, `f_bar_t/dy`, `t_angle/contrast`, `t_bar_t/dy`,
+`t_turn_w/end_w`, `b_foot_angle`, `b_crown_x/t`.
+
+Engine fixes found by these glyphs:
+
+* **Terminal cuts bounded by the cap's own corners.** A flat terminal's cut
+  box reached half a stroke width past the stroke on each side and sliced a
+  slot into the b's bowl (Hausdorff 25.9 → 21.0 before refitting). Its depth
+  is likewise only as deep as a tilted cap protrudes; the old depth deleted
+  the i's dot (in the display serif too).
+* **Merge drops slivers that rounding collapses** to a point or line.
+* **Stem lint takes the most common reading,** not the narrowest: the u's
+  left stem is short enough that the head wedge fell inside the sampled span.
+* **Fit plateaus.** Two coupled controls can be invisible one at a time: the
+  bar's tip height does nothing while the taper is 0, so the fitter left the
+  bar rectangular (setting both by a probe gave f +0.02). Likewise the IoU is
+  measured with bounding-box centres aligned, so lengthening one end of a
+  glyph shifts the whole comparison; the r and t needed *both* ends moved
+  together (r: foot −6 with ear −7; t: bar and tail ~+18 each), which neither
+  Powell nor Nelder–Mead found. The last t step was a greedy coordinate
+  search constrained to Hausdorff ≤ 20.
+* The r's override is on a knife edge (dv −5 → 0.930, −6 → 0.935): integer
+  rounding of the outline moves the bbox centre by half a unit. Worth an
+  alignment that doesn't depend on extremes (e.g. area centroid) in a later
+  iteration.
+
 ### Iteration 07 — joint fit of the shared parameters
 
 Shared parameters were found by perturbation: `stem`, `hairline`,
@@ -95,7 +142,7 @@ shared params over all glyphs is still to do.
 * **IoU ≥ 0.93 and Hausdorff ≤ 20 units, with ≤ 2 overrides per glyph.**
   `o` shows parameters alone reach ~0.98 on simple shapes; `n` (0.931,
   20.4 u) is the first glyph with junctions and terminals and sets the bar
-  for complex ones. **Met by all eight benchmark glyphs as of iteration 06, with 0 overrides.**
+  for complex ones. **Met by all eight benchmark glyphs as of iteration 06, with 0 overrides; by all 16 (`hamburgefonstiv` + H) as of iteration 08, with 3.**
 
 | iter | date | glyph | IoU | Hausdorff | mean | Δadv | overrides | Σ\|Δ\| | primitives | notes |
 |---:|---|---|---:|---:|---:|---:|---:|---:|---|---|
@@ -134,3 +181,19 @@ shared params over all glyphs is still to do.
 | 07 | 2026-11-01 | `s` | 0.9395 | 6.8 | 1.8 | +2 | 0 | 0 | beak | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
 | 07 | 2026-11-01 | `g` | 0.9312 | 18.7 | 2.2 | +67 | 0 | 0 | bowl, contour, cut | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
 | 07 | 2026-11-01 | `v` | 0.9597 | 15.0 | 1.3 | +0 | 0 | 0 | cut, bracketed, flat | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 08 | 2026-11-01 | `o` | 0.9849 | 1.6 | 0.8 | -14 | 0 | 0 | bowl | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `n` | 0.9501 | 17.5 | 1.8 | +29 | 0 | 0 | cut, bracketed, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `H` | 0.9893 | 2.8 | 0.6 | -13 | 0 | 0 | contour, bracketed | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `e` | 0.9354 | 6.7 | 2.4 | -25 | 0 | 0 | bowl, contour, cut | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `a` | 0.9370 | 7.8 | 2.1 | +2 | 0 | 0 | lobe, beak, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `s` | 0.9395 | 6.8 | 1.8 | +2 | 0 | 0 | beak | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `g` | 0.9312 | 18.7 | 2.2 | +67 | 0 | 0 | bowl, contour, cut | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `v` | 0.9597 | 15.0 | 1.3 | +0 | 0 | 0 | cut, bracketed, flat | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `h` | 0.9337 | 14.0 | 2.4 | +8 | 2 | 0 | cut, bracketed, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `m` | 0.9326 | 17.5 | 2.5 | +29 | 0 | 0 | cut, bracketed, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `u` | 0.9561 | 11.0 | 1.9 | +2 | 0 | 0 | cut, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `b` | 0.9425 | 16.0 | 2.1 | -22 | 0 | 0 | lobe, flat, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `r` | 0.9346 | 15.3 | 2.2 | +43 | 1 | 0 | bracketed, flat, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `f` | 0.9534 | 15.2 | 1.6 | +71 | 0 | 0 | contour, bracketed, flat | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `t` | 0.9426 | 20.0 | 2.1 | +69 | 0 | 0 | contour, flat, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |
+| 08 | 2026-11-01 | `i` | 0.9564 | 17.9 | 1.6 | +75 | 0 | 0 | contour, bracketed, wedge | 08: rest of hamburgefonstiv (h m b u r f t i); new kit controls (u heads, r flat-cut ear, lopsided feet, tapered f/t bars, f hook top weight, t pen, b chisel foot + lobe crown); terminal cuts bounded by the cap's corners; 3 overrides (h 2, r 1) |

@@ -23,18 +23,20 @@ point-compatible · `n.arch.shoulder` override survives stem changes · editor
 (sliders, draggable points → `overrides.yaml`, live text, ~110 ms slider
 round trip) · `ductus test` passes, 55 unit tests · this README.
 
-**Milestone 2 — benchmark glyphs at target, joint fit done.** All §5 primitive families
+**Milestone 2 — all of `hamburgefonstiv` at target in the benchmark.** All §5 primitive families
 exist and are tested: width profiles, L/R bias, **joins** (arches) and
 **lobes** (stem bowls), contour bowls (rotation, asymmetric walls), cuts,
 a terminal library with swappable sets, per-node width params, per-glyph
-spacing, and the genre kit (`ductus.kits.serif`). Benchmark (0 overrides,
-params by `ductus fit`, shared params fitted jointly): **H 0.989 · o 0.985 ·
-v 0.960 · n 0.950 · s 0.940 · a 0.937 · e 0.935 · g 0.931** IoU — all above the target (IoU ≥ 0.93,
+spacing, and the genre kit (`ductus.kits.serif`). Benchmark — all of
+`hamburgefonstiv` + `H`, params by `ductus fit`, 3 overrides in total:
+**H 0.989 · o 0.985 · v 0.960 · i 0.956 · u 0.956 · f 0.953 · n 0.950 ·
+t 0.943 · b 0.943 · s 0.940 · a 0.937 · e 0.935 · r 0.935 · h 0.934 ·
+m 0.933 · g 0.931** IoU — every glyph meets the target (IoU ≥ 0.93,
 Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
 original display serif renders `hamburgefonstiv` + `H O A G E S`
 (`docs/display_serif/`). Editor M2: reference onion skin, error heat map,
 stage inspector, overrides grouped by kind, **primitive handles**. Still to
-do: spacing (M5), the rest of `hamburgefonstiv` in the benchmark.
+do: spacing (M5).
 
 ![preview](docs/preview.png)
 
