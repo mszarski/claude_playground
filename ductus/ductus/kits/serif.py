@@ -41,7 +41,7 @@ DEFAULTS: dict[str, tuple] = {
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
     "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
-    "G_spur_bot": (0, (0, 0.4)), "G_jaw_in": (0, (0, 1)),
+    "G_spur_bot": (0, (0, 0.4)), "G_jaw_in": (0, (0, 1)), "G_jaw_dx": (0, (-120, 60)),
     "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 1.2)), "G_spur_w": (1.0, (0.5, 1.2)),
     "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
     "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
@@ -71,6 +71,8 @@ DEFAULTS: dict[str, tuple] = {
     "spur_tip": (0, (0, 20)), "spur_flat": (0, (0, 40)), "spur_bracket": (0, (0, 1)),
     "spur_corner": (20, (0, 80)), "spur_ca": (0.7, (0.0, 1.0)), "spur_cb": (0.5, (0.0, 1.0)),
     "spur_sweep": (0, (-20, 40)),
+    # the G's spur, apart from the u's / b's
+    "G_spur_len": (70, (0, 160)), "G_spur_rise": (60, (0, 140)), "G_spur_drop": (40, (0, 160)),
     "beak_len": (25, (0, 120)), "beak_depth": (70, (5, 200)),
     "top_serif_len": (60, (0, 160)), "top_serif_bracket": (40, (0, 140)), "top_serif_tip": (10, (0, 60)),
     "top_serif_in": (1.0, (0.0, 1.5)), "top_serif_slope": (0, (-10, 50)),
@@ -211,6 +213,10 @@ DEFAULTS: dict[str, tuple] = {
     "G_width": (690, (560, 820)), "G_bar_y": (0.42, (0.3, 0.55)), "G_term_y": (0.72, (0.6, 0.9)),
     "G_serif": (110, (30, 220)),
     "S_width": (500, (380, 620)),
+    # the S's spine weight relative to the s's (a cap S often carries more)
+    "S_swell_k": (1.0, (0.6, 1.8)),
+    # E arm serifs with E_serifs="wedge": how far the wedge slopes back along the arm
+    "E_wedge": (60, (0, 160)),
     "ball_r": (42, (20, 80)), "ball_drop": (0, (-40, 60)),
     "foot_tip": (26, (4, 60)),
 }
@@ -272,7 +278,7 @@ def bracketed_set(P) -> TerminalSet:
         spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop, tip=P.spur_tip,
                    flat=P.spur_flat, bracket=P.spur_bracket, corner=P.spur_corner, ca=P.spur_ca, cb=P.spur_cb,
                    sweep=P.spur_sweep),
-        G_spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop, tip=P.spur_tip,
+        G_spur=wedge(side="right", length=P.G_spur_len, rise=P.G_spur_rise, drop=P.G_spur_drop, tip=P.spur_tip,
                    flat=P.spur_flat, bracket=P.spur_bracket, corner=P.spur_corner, ca=P.spur_ca, cb=P.spur_cb,
                    sweep=P.spur_sweep),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
@@ -347,14 +353,16 @@ def didone_set(P) -> TerminalSet:
 # --------------------------------------------------------------------------
 
 def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none",
-           b_style: str = "bowl"):
+           b_style: str = "bowl", E_serifs: str = "rect"):
     """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
     short stroke taking the ``ear`` terminal, e.g. a ball) or ``"flag"`` (a
     four-sided flag). ``g_band``: ``"flat"`` puts a flat bar across the top of
     the g's lower loop (and trims the loop above it) -- a tilted loop with a
     flat top, which one contour bowl can't make. ``b_style``: ``"bowl"`` (a
     free bowl overlapping the stem) or ``"lobe"`` (a lobe hanging on the
-    stem at two joins, like the a's bowl mirrored)."""
+    stem at two joins, like the a's bowl mirrored). ``E_serifs``: ``"rect"``
+    (upright bars at the arm ends) or ``"wedge"`` (vertical faces whose inner
+    edges slope back E_wedge along the arm)."""
     from ..handles import handle
     from ..junctions import contact, join, join_handles, notch_cut
     from ..parts import part
@@ -478,14 +486,14 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         notch_cut(p, J, val(edge), -1)
 
     @part
-    def spine(p, width, height, stem_w):
+    def spine(p, width, height, stem_w, swell_k=1.0):
         """The s/S spine: one stroke, width peaking mid-spine."""
         W = width
         sp = Pen(angle=P.s_angle, width=stem_w, contrast=1 - P.hairline / stem_w)
         top = height + os_ - sp.width_at(180) / 2
         bot = -os_ + sp.width_at(180) / 2
-        sw = Profile((0, P.s_ends), (0.5 - P.s_spread, P.s_ends), (0.5, P.s_swell), (0.5 + P.s_spread, P.s_ends),
-                     (1, P.s_ends))
+        e_, m_ = P.s_ends * swell_k, P.s_swell * swell_k
+        sw = Profile((0, e_), (0.5 - P.s_spread, e_), (0.5, m_), (0.5 + P.s_spread, e_), (1, e_))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias, smooth=val(P.s_mid_free) >= 0.5)
             .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
             .curve_to((W * P.s_top_x, top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
@@ -806,12 +814,30 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         gl += stem_(x=0, top=ch, pen=cap_pen, foot="cap_foot_l", head="cap_foot_l")
         t, sw, sh = P.E_arm_t, P.E_serif_w, P.E_serif
         rect(gl, "arm_top", 0, ch - t, W, ch)
-        rect(gl, "serif_top", W - sw, ch - sh, W, ch)
         rect(gl, "arm_bottom", 0, 0, W * 1.04, t)
-        rect(gl, "serif_bottom", W * 1.04 - sw, 0, W * 1.04, sh * 1.1)
         y = ch * 0.5
         rect(gl, "arm_mid", 0, y - t / 2, W * P.E_mid, y + t / 2)
-        rect(gl, "serif_mid", W * P.E_mid - sw, y - sh * 0.45, W * P.E_mid, y + sh * 0.45)
+        if E_serifs == "rect":
+            rect(gl, "serif_top", W - sw, ch - sh, W, ch)
+            rect(gl, "serif_bottom", W * 1.04 - sw, 0, W * 1.04, sh * 1.1)
+            rect(gl, "serif_mid", W * P.E_mid - sw, y - sh * 0.45, W * P.E_mid, y + sh * 0.45)
+        else:
+            # wedges: a vertical face sw wide at the arm's end, its inner edge
+            # sloping back to meet the arm E_wedge further in
+            L = P.E_wedge
+            def wedge_(name, x, ya, yb):        # arm edge at ya, serif tip at yb
+                pts = [((x - L, ya), "root"), ((x, ya), "a"), ((x, yb), "tip"), ((x - sw, yb), "tip_in")]
+                if val(yb) > val(ya):           # counter-clockwise, as rect() draws
+                    pts = pts[::-1]
+                c = gl.contour(name).move(*pts[0])
+                for pt in pts[1:]:
+                    c = c.line(*pt)
+                c.close()
+            wedge_("serif_top", W, ch - t + 1, ch - sh)
+            wedge_("serif_bottom", W * 1.04, t - 1, sh * 1.1)
+            Wm = W * P.E_mid
+            wedge_("serif_mid_up", Wm, y, y + sh * 0.45)
+            wedge_("serif_mid_dn", Wm, y, y - sh * 0.45)
 
     @g("G")
     def G(gl):
@@ -837,6 +863,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         qb = max(0.0, 1 - ((val(cy) - val(yb)) / val(ry)) ** 2)
         exb = W / 2 + (W / 2) * qb ** 0.42
         sx = W - (W - exb) * P.G_jaw_in - sw_ * 0.5
+        sx = sx + P.G_jaw_dx                     # the jaw may stand inside the bowl's edge
         spur_pen = Pen(angle=0, width=sw_, contrast=1 - P.hairline / sw_)
         # the jaw may stop inside the bowl's curve (G_spur_bot, a share of the cap
         # height) instead of standing on the baseline; its foot is the G_spur tag
@@ -846,7 +873,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @g("S")
     def S(gl):
-        gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem)
+        gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem, swell_k=P.S_swell_k)
 
     @g("space", advance=P.stem * 2.4)
     def space(gl):

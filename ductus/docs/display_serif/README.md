@@ -338,3 +338,37 @@ swell turned it into a heavy bar across the middle. The s's left and right
 extremes now sit further apart vertically (0.78 / 0.22 of the height, were
 0.73 / 0.25), which steepens the solved spine into a proper diagonal, and
 the swell is 1.8. Its colour now matches the o, e and n; the S follows.
+
+## 18 — toward Geist Serif
+
+Sheet: `18.png`. Comparison: `18_vs_17.png`.
+
+Asked to get "much closer" to Geist Serif. Next to it at the same size the
+Didone read as a different face. Its letters were 80–300 u wider, the
+contrast was much higher, the joins and hairlines thin, the serifs short
+flat hairlines, and it had ball terminals where Geist has wedges and flags.
+This iteration gives up the Didone. The face now uses the serif kit's
+bracketed terminal set (wedge heads, bracketed feet, the g's flag ear and
+flat band). Its values were set group by group (widths and spacing, weight
+and contrast, joins, serifs, then each letter) from side-by-side overlays
+with the bench's IoU against Geist as the guide, and rounded. A short
+coordinate search placed the capitals, which the benchmark never fitted. No
+outlines are copied: every glyph is still the kit's strokes, pens and
+terminals. Mean IoU against Geist went from 0.556 to 0.912. The lowercase is
+mostly 0.88–0.98; A, E, G and S are 0.77–0.85.
+
+Kit additions:
+- `E_serifs="wedge"`: the E's arm serifs as wedges sloping back `E_wedge`
+  along the arm.
+- `S_swell_k`: the S's spine weight relative to the s's.
+- `G_jaw_dx`: the G's jaw can stand inside the bowl's edge.
+- The G's spur has its own `G_spur_len/rise/drop`, so tuning the u's spur no
+  longer moves it.
+
+Side bearings come from the glyphs' measured side bearings, with a few
+kerns (r against o, e and s; f against o).
+
+Still visibly different: the G's jaw (Geist's stem stands free of the bowl
+down to a point at the baseline), the S's ends (Geist's have vertical
+beards), the g's link (Geist cuts a notch where it meets the band), and the
+bottom of the e (heavier in Geist).

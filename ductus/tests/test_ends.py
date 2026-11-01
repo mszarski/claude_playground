@@ -111,7 +111,8 @@ def test_spacing_table_and_kerning_reach_the_font(tmp_path):
     from fontTools.ttLib import TTFont
     f = load_font(ROOT / "examples/display_serif/font.py")
     base = compile_font(f, glyphs=["n", "o"])
-    f.spacing["n"] = (10, -5)
+    l0, r0 = f.spacing.get("n", (0, 0))
+    f.spacing["n"] = (l0 + 10, r0 - 5)
     f.kern("n", "o", -17)
     cf = compile_font(f, glyphs=["n", "o"])
     assert cf.glyphs["n"].advance == base.glyphs["n"].advance + 5

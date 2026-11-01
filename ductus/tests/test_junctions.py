@@ -102,9 +102,13 @@ def test_g_band_option_adds_flat_bar():
     from pathlib import Path
     from ductus.loader import load_font
     root = Path(__file__).resolve().parents[1]
+    from ductus import Font
+    from ductus.kits import serif as kit
     bench = compile_font(load_font(root / "benchmarks/geist_serif/font.py"), glyphs=["g"]).glyphs["g"]
-    display = compile_font(load_font(root / "examples/display_serif/font.py"), glyphs=["g"]).glyphs["g"]
-    assert "g.bar.tl" in bench.points and "g.bar.tl" not in display.points
+    plain = Font("no band", upm=1000)
+    P = kit.params()
+    kit.define(plain, P, glyphs="g", terminals=kit.bracketed_set(P), g_ear="flag")
+    assert "g.bar.tl" in bench.points and "g.bar.tl" not in compile_font(plain).glyphs["g"].points
 
 
 @pytest.mark.parametrize("path", ["benchmarks/geist_serif/font.py", "examples/display_serif/font.py"])
