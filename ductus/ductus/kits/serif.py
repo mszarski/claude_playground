@@ -41,6 +41,7 @@ DEFAULTS: dict[str, tuple] = {
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
     "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
+    "G_spur_bot": (0, (0, 0.4)), "G_jaw_in": (0, (0, 1)),
     "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 1.2)), "G_spur_w": (1.0, (0.5, 1.2)),
     "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
     "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
@@ -269,6 +270,9 @@ def bracketed_set(P) -> TerminalSet:
         spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop, tip=P.spur_tip,
                    flat=P.spur_flat, bracket=P.spur_bracket, corner=P.spur_corner, ca=P.spur_ca, cb=P.spur_cb,
                    sweep=P.spur_sweep),
+        G_spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop, tip=P.spur_tip,
+                   flat=P.spur_flat, bracket=P.spur_bracket, corner=P.spur_corner, ca=P.spur_ca, cb=P.spur_cb,
+                   sweep=P.spur_sweep),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
                       curve=(P.serif_ca, P.serif_cb)),
         **_vtops(P, P.top_serif_tip),
@@ -319,6 +323,8 @@ def didone_set(P) -> TerminalSet:
                          right=None, curve=(P.serif_ca, P.serif_cb)),
         spur=bracketed(right=dict(length=P.spur_len * 0.6, bracket=P.serif_bracket * 0.6, tip=P.foot_tip),
                                   left=None, curve=(P.serif_ca, P.serif_cb)),
+        G_spur=bracketed(right=dict(length=P.spur_len * 0.6, bracket=P.serif_bracket * 0.6, tip=P.foot_tip),
+                         left=None, curve=(P.serif_ca, P.serif_cb)),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.foot_tip,
                       curve=(P.serif_ca, P.serif_cb)),
         **_vtops(P, P.foot_tip),
@@ -802,9 +808,16 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .line((ex - bw, yt - bh), "d").line((ex - bw, yt), "e").line((W * 0.5, yt), "f").close())
         # the jaw: a stem whose outer edge stays at the bowl's right, weight G_spur_w x cap stem
         sw_ = P.cap_stem * P.G_spur_w
-        sx = W - sw_ * 0.5
+        # G_jaw_in: the jaw's outer edge moves from the bowl's widest point (0)
+        # to the bowl's own outer edge at the bar's height (1), so the curve
+        # below continues it rather than the jaw standing outside the bowl
+        qb = max(0.0, 1 - ((val(cy) - val(yb)) / val(ry)) ** 2)
+        exb = W / 2 + (W / 2) * qb ** 0.42
+        sx = W - (W - exb) * P.G_jaw_in - sw_ * 0.5
         spur_pen = Pen(angle=0, width=sw_, contrast=1 - P.hairline / sw_)
-        gl += stem_(x=sx, top=yb, pen=spur_pen, foot="spur", head=False, name="spur")
+        # the jaw may stop inside the bowl's curve (G_spur_bot, a share of the cap
+        # height) instead of standing on the baseline; its foot is the G_spur tag
+        gl += stem_(x=sx, bottom=ch * P.G_spur_bot, top=yb, pen=spur_pen, foot="G_spur", head=False, name="spur")
         rect(gl, "bar", sx - sw_ / 2 - P.G_serif, yb - P.bar_t, sx + sw_ / 2, yb)
         rect(gl, "beard", ex - bw, yt - bh, ex, yt + 2)
 

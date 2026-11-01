@@ -254,3 +254,22 @@ Comparison: `12_vs_11.png` (set text, 96 px, unscaled).
   (0.75 × cap stem) with a short bar.
 - Proofs render unhinted now (the fonts have no hints; FreeType's autohinter
   was snapping the hairline serifs).
+
+## 13 — t bottom, G jaw
+
+Comparison: `13_vs_12.png` (set text, 110 px).
+
+- **t** — the tail rose at 25° and ended in a square cut at 0.3 of the
+  width: with vertical stress the flat bottom is a hairline, the rising part
+  thickens, and the end cut was thicker again — a wave. Now the tail stays
+  nearly level (end direction 10°, ending at y 35) and thins to 0.2, below
+  the bottom's hairline: one clean sweep out of the stem, the weight carried
+  round the outside of the curve.
+- **G** — the jaw was a full-weight stem standing beside the bowl, a dark
+  block. Tried and rejected: stopping the jaw inside the bowl (it floated as
+  a separate block, since the bowl curves in below the bar), drawing it as
+  a pen stroke along the bowl (left slivers of the bowl inside it), and
+  letting the bowl's wall be the jaw (it read as a C). Kept: a slim jaw
+  (0.55 × cap stem) to the baseline with its small spur, short bar, flat arm.
+  The kit gained `G_spur_bot`, `G_jaw_in` and a `G_spur` terminal tag for
+  these experiments (defaults keep the old G).

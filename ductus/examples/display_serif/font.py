@@ -42,7 +42,7 @@ P = kit.params(
     s_top_x=0.5, s_left_y=0.73, s_mid_x=0.5, s_mid_y=0.48, s_mid_dir=-24, s_mid_free=1, s_right_y=0.25, s_bot_x=0.5,
     s_ends=0.5, s_swell=2.2, s_spread=0.24, s_tension=1.1, S_width=470,
     G_width=680, G_term_y=0.80, G_bar_y=0.42, G_serif=50, bar_t=22,
-    G_beard_dw=70, G_beard_k=0.35, G_spur_w=0.75,   # the G's arm ends flat; lighter jaw (iteration 12)
+    G_beard_dw=70, G_beard_k=0.35, G_spur_w=0.55,   # the G's arm ends flat; lighter jaw (iteration 12)
     # e: aperture edge bowed so the terminal tapers to an upturned hairline
     e_width=460, e_term_y=160, e_cut_angle=180, e_cut_y=70, e_cut_x=0.5, e_cut_h1=0.45, e_cut_h2=0.4,
     e_bar_y=0.56, e_bar_t=16,
@@ -75,7 +75,7 @@ P = kit.params(
     # arch: the hairline leaves the stem high and curves away (it left low on a
     # straight 50-degree diagonal, which read italic); gentler nib turns
     # t: a longer tail rising gently into a ball, like the face's other terminals
-    t_tail=260, t_tail_y=70, t_end_dir=25, t_end_w=0.3, t_turn=190, t_bottom_pa=20,
+    t_tail=260, t_tail_y=35, t_end_dir=10, t_end_w=0.2, t_turn=220, t_bottom_pa=0,
     # iteration 12: heavier hairlines and serifs (hold up at text sizes and when
     # proofs are scaled), tighter spacing; the s's spine carries its weight;
     # the t's tail ends in a plain hairline (a ball there read as a full stop)
