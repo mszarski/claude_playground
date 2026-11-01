@@ -49,6 +49,10 @@ DEFAULTS: dict[str, tuple] = {
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
     "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
     "u_head_dlen": (0, (-40, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
+    # Geist's stem is set in on the right between an arch/ear join and the
+    # head: a strip `head_inset` wide is cut from `head_inset_y` above the
+    # join's crotch to the top (0: no inset)
+    "head_inset": (0, (0, 20)), "head_inset_y": (40, (0, 140)), "r_head_dinset": (0, (-10, 15)),
     "spur_len": (70, (0, 160)), "spur_rise": (60, (0, 140)), "spur_drop": (40, (0, 120)),
     # spur fine shape, as for the head wedge (all degenerate at their defaults)
     "spur_tip": (0, (0, 20)), "spur_flat": (0, (0, 40)), "spur_bracket": (0, (0, 1)),
@@ -244,9 +248,10 @@ def bracketed_set(P) -> TerminalSet:
         # s has its own beaks (sharing a's made fitting a silently change s); both
         # rise above the stroke -- the top one past its upper edge, the bottom one
         # up the vertical face of the lower terminal
-        s_top=beak(side="above", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut1),
-        s_bottom=beak(side="above", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut2),
-        hood=beak(side="left", length=P.beak_len, depth=P.beak_depth, axis="vertical"),
+        # Geist's s ends are plain angled cuts (a sharp corner, no beak: the
+        # fit had shrunk the beaks to nothing, leaving a 2 u flap)
+        s_top=flat(P.s_cut1), s_bottom=flat(P.s_cut2),
+        hood=flat("vertical"),   # Geist's a: the hood curves down to a plain horizontal cut
         ear=flat("horizontal"), vertex=flat("vertical"), apex=flat("vertical"),
         cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
                              curve=(P.serif_ca, P.serif_cb), right=None),
@@ -348,6 +353,13 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                fullness=full, inner_fullness=in_full, thin_bottom=thin_bottom, rotate=rotate,
                thick_right=thick_right)
 
+    def head_inset_cut(p, edge_x, crotch_y, inset, name="head_inset"):
+        """Cut a strip `inset` wide off the right edge of a headed stem, from
+        `head_inset_y` above the join's crotch to well above the head."""
+        y0 = crotch_y + P.head_inset_y
+        (p.cut(name).move((edge_x - inset, y0), "a").line((edge_x + 1, y0), "b")
+            .line((edge_x + 1, xh + 400), "c").line((edge_x - inset, xh + 400), "d").close())
+
     def n_join(top):
         # val(top): the join height must be (number x param) to get a handle
         return join(val(top) * P.n_join_at, P.n_join_thin, P.n_join_angle, P.n_notch, P.n_notch_w)
@@ -375,7 +387,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             acc += L
 
     @part
-    def arch(p, x, width, top=xh, flip=False, edge_half=None):
+    def arch(p, x, width, top=xh, flip=False, edge_half=None, inset=False):
         """Leaves the stem at a :class:`Join` (hairline thinning at the crotch),
         over the shoulder, down into the leg. Ends inside the leg so the leg
         can be an exact stem. ``flip`` rotates it 180 degrees (the cup of u)."""
@@ -400,6 +412,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .curve_to((leg_x + P.stem / 2 - left_half, top * P.n_out_y * 0.5), name="leg", dir=-90,
                       tension=P.n_leg_t))
         notch_cut(p, J, val(edge), +1)
+        if inset:
+            head_inset_cut(p, edge, val(top) * P.n_join_at, P.head_inset)
         join_handles(J, val(edge), +1, rising=True)
         taper_handle(p._strokes[-1], P.n_taper_len)
 
@@ -463,7 +477,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("n")
     def n(gl):
         gl += stem_(x=0, top=xh + P.head_top, head="head")
-        gl += arch(x=0, width=P.n_width)
+        gl += arch(x=0, width=P.n_width, inset=True)
         gl += stem_(x=P.n_width, top=xh * P.n_out_y, name="leg", head=False)
 
     @g("H")
@@ -597,14 +611,14 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         h_pen = Pen(angle=0, width=P.stem * P.h_stem_w, contrast=1 - P.hairline / (P.stem * P.h_stem_w))
         gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head", pen=h_pen)
         w = P.n_width + P.h_dwidth
-        gl += arch(x=0, width=w, edge_half=P.stem * P.h_stem_w / 2)
+        gl += arch(x=0, width=w, edge_half=P.stem * P.h_stem_w / 2)   # no inset: the join is far below the head
         gl += stem_(x=w, top=xh * P.n_out_y, name="leg", head=False)
 
     @g("m")
     def m(gl):
         w = P.m_width
         gl += stem_(x=0, top=xh + P.head_top, head="head")
-        gl += arch(x=0, width=w, name="arch1")
+        gl += arch(x=0, width=w, name="arch1", inset=True)
         gl += stem_(x=w, top=xh * P.n_out_y, name="leg1", head=False)
         gl += arch(x=w, width=w, name="arch2")
         gl += stem_(x=2 * w, top=xh * P.n_out_y, name="leg2", head=False)
@@ -639,6 +653,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         J = join(val(xh) * P.r_join_at, P.r_join_thin, P.r_join_angle)
         _, _, st, d0, thin = contact(J, val(P.stem / 2), +1, rising=True)
         join_handles(J, val(P.stem / 2), +1, rising=True)
+        head_inset_cut(gl, P.stem / 2, val(xh) * P.r_join_at, lazy_max(P.head_inset + P.r_head_dinset, 0))
         (gl.path(name="ear", pen=arch_pen, bias=P.n_bias,
                  profile=Profile((0, thin / max(arch_pen.width_at(d0), 1.0)), (P.r_taper_len, 1), (1, P.r_end_w)))
             .start(st, name="join", dir=d0, terminal=False)

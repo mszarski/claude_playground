@@ -31,6 +31,52 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 11 — stroke ends: outline distance near the ends 1.48 → 1.07 u
+
+The question was how to get the finer detail at the ends of strokes. About
+a quarter of all error was within 30 u of a terminal — 89% of the v's, 71%
+of the i's, 66% of the r's — and IoU barely rewards it: a 4 u tip or a
+small fillet is almost no area. Now:
+
+* **Measured.** `ductus bench` reports, per glyph, the mean outline
+  distance at outline points within 30 u of a terminal shape (`ends`), and
+  a per-style summary line. Over the 13 glyphs with terminals:
+  **1.48 → 1.07 u** (−28%); bracketed 0.98 → 0.72, wedge 1.73 → 1.09,
+  cuts 1.37 → 0.93; beaks no longer occur (below).
+* **Fitted on.** `ductus fit --objective ends`: that distance, with IoU and
+  the whole-outline mean as ballast and the target hinge. Used for a joint
+  fit of every terminal parameter over all 16 glyphs, then of the head
+  wedge over the 7 headed glyphs.
+* **Primitive fixes found on the way:**
+  * *Brackets on diagonals.* A bracketed serif dropped its bracket
+    vertically from the stroke's corner; on a slanted stroke that left a
+    notch under the serif (v's top serifs; also the display serif's v and
+    A). The bracket now starts on the stroke's own edge. v 0.966 → 0.973.
+  * *Head inset at joins.* Geist's stem is set in on the right between an
+    arch or ear join and the head (~4 u on n and m, ~8 u on r; none on i,
+    u, or the h's long ascender): `head_inset`, `head_inset_y`,
+    `r_head_dinset`. r 0.957 → 0.976, n 0.968 → 0.973.
+  * *t tail* is cut at an angle, not vertically: `t_tail_cut`
+    (Hausdorff 16.5 → 9.7).
+  * *Spurs* get the head wedge's fine-shape controls (`spur_tip`, `_flat`,
+    `_bracket`, `_corner`, `_ca`, `_cb`, `_sweep`).
+  * *No beaks where Geist has none.* The s's beaks had been fitted down to
+    nothing, leaving a 2 u flap outside the stroke; the a's hood beak (107 u
+    deep) stood in for the hood's curved outer edge and left a notch where
+    that edge curved away. Both are plain cuts in the Geist kit now (the
+    display serif keeps its beaks/balls). The a gives up 0.0008 IoU for
+    having no artifact. (Running the beak's back edge along the stroke
+    direction instead was tried and is wrong for curved strokes: the a's
+    Hausdorff went to 42.)
+  * Rounded corners on cuts were *not* added: Geist's cut corners on r, f
+    and t are sharp.
+* Robustness: when skia can't produce a self-consistent intersection
+  even after nudging, the IoU falls back to a 0.5 u raster for that one
+  evaluation instead of failing the fit.
+
+Mean IoU 0.9645 → 0.9682 (min 0.946, g), mean Hausdorff 10.0 → 9.9 u
+(max 16.3, v). Still 0 overrides.
+
 ### Iteration 10 — g and t off the distance limit
 
 Both sat at Hausdorff 20 u in iteration 09; now t **0.958 / 16.5 u**
@@ -317,3 +363,19 @@ shared params over all glyphs is still to do.
 | 10 | 2026-11-01 | `f` | 0.9649 | 12.3 | 1.2 | +64 | 0 | 0 | contour, bracketed, flat | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
 | 10 | 2026-11-01 | `t` | 0.9575 | 16.5 | 1.8 | +67 | 0 | 0 | contour, flat, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
 | 10 | 2026-11-01 | `i` | 0.9888 | 6.1 | 0.5 | +47 | 0 | 0 | contour, bracketed, wedge | 10: t head with flat top + concave flank (wedge sweep); g lower loop/link notch and upper-bowl shoulder; merge drops needle spikes; 0 overrides |
+| 11 | 2026-11-01 | `o` | 0.9840 | 1.8 | 0.8 | -14 | 0 | 0 | bowl | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `n` | 0.9728 | 8.7 | 1.1 | +1 | 0 | 0 | cut, bracketed, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `H` | 0.9949 | 1.8 | 0.4 | -10 | 0 | 0 | contour, bracketed | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `e` | 0.9506 | 7.5 | 1.8 | -25 | 0 | 0 | bowl, contour, cut | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `a` | 0.9586 | 13.9 | 1.8 | +5 | 0 | 0 | lobe, flat, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `s` | 0.9466 | 7.7 | 1.7 | +2 | 0 | 0 | flat | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `g` | 0.9456 | 15.4 | 1.8 | +66 | 0 | 0 | bowl, contour, cut | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `v` | 0.9732 | 16.3 | 0.9 | +7 | 0 | 0 | cut, bracketed, flat | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `h` | 0.9661 | 10.8 | 1.3 | -2 | 0 | 0 | cut, bracketed, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `m` | 0.9624 | 11.5 | 1.5 | +0 | 0 | 0 | cut, bracketed, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `u` | 0.9767 | 7.2 | 1.0 | -2 | 0 | 0 | cut, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `b` | 0.9593 | 16.0 | 1.7 | -20 | 0 | 0 | lobe, flat, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `r` | 0.9760 | 8.1 | 0.9 | +33 | 0 | 0 | cut, bracketed, flat, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `f` | 0.9734 | 12.3 | 0.9 | +64 | 0 | 0 | contour, bracketed, flat | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `t` | 0.9589 | 9.7 | 1.7 | +74 | 0 | 0 | contour, flat, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |
+| 11 | 2026-11-01 | `i` | 0.9918 | 10.0 | 0.4 | +47 | 0 | 0 | contour, bracketed, wedge | 11: stroke ends -- ends metric + ends objective; diagonal brackets, head inset at joins, t tail cut angle, spur shape controls; s and a hood as plain cuts (no beak artifacts); 0 overrides |

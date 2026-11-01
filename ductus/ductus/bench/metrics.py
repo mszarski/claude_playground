@@ -119,7 +119,26 @@ def _intersection_area(A: pathops.Path, B: pathops.Path) -> float:
             continue
         if abs(i1 - i2) <= 1e-4 * aA + 0.5:
             return (i1 + i2) / 2
-    raise pathops.PathOpsError("intersection area could not be computed reliably")
+    return _raster_intersection(A, B)
+
+
+def _raster_intersection(A: pathops.Path, B: pathops.Path, px: int = 2000) -> float:
+    """Last resort when skia can't intersect the two reliably: coverage of
+    both at 0.5 u per pixel (rare; the exact area is used whenever it is
+    self-consistent)."""
+    pa, pb = FreeTypePen(None), FreeTypePen(None)
+    A.draw(pa); B.draw(pb)
+    ba, bb = BoundsPen(None), BoundsPen(None)
+    A.draw(ba); B.draw(bb)
+    if ba.bounds is None or bb.bounds is None:
+        return 0.0
+    x0, y0 = min(ba.bounds[0], bb.bounds[0]) - 2, min(ba.bounds[1], bb.bounds[1]) - 2
+    x1, y1 = max(ba.bounds[2], bb.bounds[2]) + 2, max(ba.bounds[3], bb.bounds[3]) + 2
+    k = px / 1000
+    w, h = int((x1 - x0) * k) + 2, int((y1 - y0) * k) + 2
+    tr = (k, 0, 0, k, -x0 * k, -y0 * k)
+    ra, rb = pa.array(width=w, height=h, transform=tr), pb.array(width=w, height=h, transform=tr)
+    return float(np.minimum(ra, rb).sum()) / (k * k)
 
 
 def _iou_shifted(A: pathops.Path, B: pathops.Path, dx: float) -> float:
