@@ -372,3 +372,31 @@ Still visibly different: the G's jaw (Geist's stem stands free of the bowl
 down to a point at the baseline), the S's ends (Geist's have vertical
 beards), the g's link (Geist cuts a notch where it meets the band), and the
 bottom of the e (heavier in Geist).
+
+## 19 — the G's jaw and the S's ends
+
+Sheet: `19.png`. Comparison: `19_vs_18.png`.
+
+**G.** Geist's jaw is a vertical stem with a bracketed serif on top, which
+serves as the bar. It stands free of the bowl down to the baseline, where
+it is cut off on a diagonal to a point. The upper terminal has no beard:
+it is the bowl's own wall cut off by a tall vertical face. Ours was a stem
+under a flat bar, with a beard rectangle hanging off the arm. The kit's new
+`G_jaw="serif"` option builds Geist's construction:
+- The jaw stem's head is a bracketed serif (`G_serif`, `G_head_bracket`,
+  `G_head_slope`).
+- Its foot is a diagonal cut (`G_cut`).
+- The bowl is trimmed at the stem's outer edge.
+- The aperture leaves the terminal as a vertical face at `G_face` of the
+  width.
+
+G against Geist: 0.75 → 0.85.
+
+**S.** The S used the s's arm-end positions, so its arms stopped short of
+where Geist's reach. `S_t1_dx/dy` and `S_t2_dx/dy` move the S's ends
+further round. There, the arms arrive almost vertically, so the existing
+near-vertical end cut becomes the tall face Geist has. No beard terminal
+was needed: I tried one and it gained nothing once the arms reached far
+enough. S against Geist: 0.77 → 0.83.
+
+Mean IoU against Geist: 0.912 → 0.918.

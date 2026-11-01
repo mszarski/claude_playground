@@ -22,8 +22,7 @@ P = kit.params(
     head_tip=13, head_flat=8, head_bracket=0.5, head_corner=19, head_ca=0.76, head_cb=0.59, head_inset=4,
     head_inset_y=24, serif_cup=-0.67, serif_slope=32, serif_tip=3, top_serif_slope=30, top_serif_tip=7,
     cap_serif_slope=35, cap_serif_tip=5, foot_wide_dr=20, spur_rise=33, spur_drop=48,
-    spur_flat=31, spur_corner=26, spur_ca=0.24, spur_cb=0.76, spur_sweep=1.5, spur_tip=1, G_spur_len=20,
-    G_spur_rise=0, G_spur_drop=0.0,
+    spur_flat=31, spur_corner=26, spur_ca=0.24, spur_cb=0.76, spur_sweep=1.5, spur_tip=1,
     # o
     o_full_h=0.71, o_full_v=0.42, o_in_full_h=0.46, o_in_full_v=0.79,
     # n m h
@@ -51,7 +50,8 @@ P = kit.params(
     # s S
     s_width=395, s_t1_x=0.9, s_t1_y=0.8, s_t1_dir=115, s_cut1=-6.0, s_t2_x=0.03, s_t2_y=0.2, s_t2_dir=123,
     s_cut2=3.0, s_top_x=0.44, s_left_y=0.75, s_mid_x=0.33, s_mid_y=0.54, s_mid_dir=-16, s_right_y=0.29,
-    s_bot_x=0.53, s_ends=0.81, s_swell=1.55, s_spread=0.23, s_tension=0.87, S_swell_k=1.0, s_angle=12.0,
+    s_bot_x=0.53, s_ends=0.81, s_swell=1.55, s_spread=0.23, s_tension=0.87, S_swell_k=1.05, s_angle=12.0,
+    S_t1_dx=0.02, S_t2_dx=-0.06, S_t2_dy=0.04,
     s_bias=0.54, s_t1_dw=-3.0, s_t2_dw=6.0, s_mid_dw=12.0, s_left_dw=-12.0, s_right_dw=-8.0, s_top_dw=3.0,
     s_bot_dw=3.0, s_t1_pa=-3.0, s_left_t=0.95, s_right_t=0.95, s_t2_pa=3.0, s_mid_t=1.05,
     # g
@@ -59,11 +59,7 @@ P = kit.params(
     g_link_y=121, g_band_x=278, g_band_y=42, g_link_w=1.5, g_loop_l=-2, g_loop_r=508, g_loop_t=96,
     g_loop_thick=0.94, g_loop_tr=1.1, g_loop_top_t=48, g_loop_bot_t=26, g_loop_full=0.5, g_loop_in_full=0.53,
     g_loop_stress=5, g_rot=4.0, g_loop_rot=15.0, g_ear_h=100,
-    g_link_root_dir=190,
-    g_link_root_dy=5.0,
-    g_link_w0=0.7,
-    g_link_w1=1.8,
-    g_low_y=0.47,
+    g_link_root_dir=190, g_link_root_dy=5.0, g_link_w0=0.7, g_link_w1=1.8, g_low_y=0.47,
     # t
     t_turn_w=1.05, t_angle=30, t_bar_t=40, t_tail=246, t_tail_y=120, t_end_dir=0, t_end_w=0.28, t_turn=133,
     t_bar_l=126, t_bar_r=238, t_top=654, t_wedge_sweep=45, t_wedge_len=5.0, t_wedge_rise=88, t_wedge_drop=0.0,
@@ -74,12 +70,13 @@ P = kit.params(
     # i v
     v_sb=-88, v_width=440, i_dot_y=662, i_dot_r=56, v_thick=88, v_thin=35, v_thin_dx=-20, v_vertex=0.53,
     # capitals
-    H_width=450, H_bar_t=36, G_width=680, G_term_y=0.8, G_bar_y=0.48, G_serif=60, G_beard_dw=20,
-    G_beard_k=0.8, A_width=550, A_sb=-100, E_width=396, A_thick=105, A_thin=34, A_apex=20, O_width=690,
-    E_mid=0.77, E_arm_t=35, E_serif=100, E_serif_w=30, E_wedge=80, A_bar_y=0.36, G_jaw_in=0.2, G_jaw_dx=-70,
+    H_width=450, H_bar_t=36, G_width=720, G_term_y=0.68, G_bar_y=0.47, G_serif=75,
+    A_width=550, A_sb=-100, E_width=396, A_thick=105, A_thin=34, A_apex=20, O_width=690,
+    E_mid=0.77, E_arm_t=35, E_serif=100, E_serif_w=30, E_wedge=80, A_bar_y=0.36, G_jaw_in=0.4, G_jaw_dx=-95,
+    G_spur_bot=0.04, G_head_bracket=30, G_head_slope=45, G_face=0.86,
 )
 kit.define(font, P, glyphs="hamburgefonstivHOAGES ", terminals=kit.bracketed_set(P), g_ear="flag",
-           g_band="flat", b_style="lobe", E_serifs="wedge")
+           g_band="flat", b_style="lobe", E_serifs="wedge", G_jaw="serif")
 
 # side bearings (left, right) on top of sb_straight / sb_round, set from the
 # glyphs' measured side bearings in the overlays
@@ -102,7 +99,7 @@ font.spacing.update({
     "H": (4, 4),
     "O": (10, 10),
     "A": (24, 24),
-    "G": (10, -10),
+    "G": (10, -38),
     "E": (4, 12),
     "S": (10, 10),
 })

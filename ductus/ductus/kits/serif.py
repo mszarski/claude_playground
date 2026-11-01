@@ -42,7 +42,14 @@ DEFAULTS: dict[str, tuple] = {
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
     "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
     "G_spur_bot": (0, (0, 0.4)), "G_jaw_in": (0, (0, 1)), "G_jaw_dx": (0, (-120, 60)),
-    "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 1.2)), "G_spur_w": (1.0, (0.5, 1.2)),
+    # G_jaw="serif": the jaw's head serif (bracket, slope) and its foot, cut off
+    # on a diagonal (G_cut: the cut's normal, degrees) down to a point
+    "G_face": (0.92, (0.7, 1.0)),   # x of the terminal's vertical face, share of the width
+    "G_head_bracket": (40, (0, 120)), "G_head_slope": (30, (0, 60)), "G_cut": (45, (15, 75)),
+    # the S's arm ends, relative to the s's (shares of the width / height):
+    # reaching further round, its near-vertical end cuts become tall faces
+    "S_t1_dx": (0, (-0.2, 0.2)), "S_t1_dy": (0, (-0.2, 0.2)), "S_t2_dx": (0, (-0.2, 0.2)), "S_t2_dy": (0, (-0.2, 0.2)),
+    "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 3.0)), "G_spur_w": (1.0, (0.5, 1.2)),
     "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
     "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
     "g_notch_x": (170, (100, 260)), "g_notch_y": (22, (-40, 80)), "g_notch_len": (0, (0, 160)),
@@ -290,6 +297,9 @@ def bracketed_set(P) -> TerminalSet:
         # Geist's s ends are plain angled cuts (a sharp corner, no beak: the
         # fit had shrunk the beaks to nothing, leaving a 2 u flap)
         s_top=flat(P.s_cut1), s_bottom=flat(P.s_cut2),
+        G_head=bracketed(length=P.G_serif, bracket=P.G_head_bracket, tip=P.cap_serif_tip,
+                         curve=(P.serif_ca, P.serif_cb), slope=P.G_head_slope),
+        G_foot=flat(P.G_cut),
         hood=flat("vertical"),   # Geist's a: the hood curves down to a plain horizontal cut
         ear=flat("horizontal"), vertex=flat("vertical"), apex=flat("vertical"),
         cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
@@ -353,7 +363,8 @@ def didone_set(P) -> TerminalSet:
 # --------------------------------------------------------------------------
 
 def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none",
-           b_style: str = "bowl", E_serifs: str = "rect"):
+           b_style: str = "bowl", E_serifs: str = "rect",
+           G_jaw: str = "bar"):
     """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
     short stroke taking the ``ear`` terminal, e.g. a ball) or ``"flag"`` (a
     four-sided flag). ``g_band``: ``"flat"`` puts a flat bar across the top of
@@ -362,7 +373,11 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     free bowl overlapping the stem) or ``"lobe"`` (a lobe hanging on the
     stem at two joins, like the a's bowl mirrored). ``E_serifs``: ``"rect"``
     (upright bars at the arm ends) or ``"wedge"`` (vertical faces whose inner
-    edges slope back E_wedge along the arm)."""
+    edges slope back E_wedge along the arm). ``G_jaw``: ``"bar"`` (a stem
+    under a flat bar) or ``"serif"`` (a stem with a bracketed head serif for
+    the bar, standing to the baseline and cut off there on a diagonal; the
+    bowl is trimmed at the stem's outer edge; the upper terminal is the bowl's
+    wall cut off by a vertical face at G_face of the width, with no beard)."""
     from ..handles import handle
     from ..junctions import contact, join, join_handles, notch_cut
     from ..parts import part
@@ -486,7 +501,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         notch_cut(p, J, val(edge), -1)
 
     @part
-    def spine(p, width, height, stem_w, swell_k=1.0):
+    def spine(p, width, height, stem_w, swell_k=1.0, t1=(0, 0), t2=(0, 0)):
         """The s/S spine: one stroke, width peaking mid-spine."""
         W = width
         sp = Pen(angle=P.s_angle, width=stem_w, contrast=1 - P.hairline / stem_w)
@@ -495,7 +510,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         e_, m_ = P.s_ends * swell_k, P.s_swell * swell_k
         sw = Profile((0, e_), (0.5 - P.s_spread, e_), (0.5, m_), (0.5 + P.s_spread, e_), (1, e_))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias, smooth=val(P.s_mid_free) >= 0.5)
-            .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
+            .start((W * (P.s_t1_x + t1[0]), height * (P.s_t1_y + t1[1])), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
             .curve_to((W * P.s_top_x, top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
             .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
                       tension=P.s_left_t, width=P.s_left_dw)
@@ -510,7 +525,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                       tension=P.s_right_t, width=P.s_right_dw)
             .curve_to((W * P.s_bot_x, bot), name="bottom", pen_angle=P.s_bot_pa, dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
                       width=P.s_bot_dw)
-            .curve_to((W * P.s_t2_x, height * P.s_t2_y), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
+            .curve_to((W * (P.s_t2_x + t2[0]), height * (P.s_t2_y + t2[1])), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
                       width=P.s_t2_dw, pen_angle=P.s_t2_pa))
 
     def tapered_bar(gl, x0, y0, x1, y1, stem_l):
@@ -852,9 +867,16 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         ex = W / 2 + (W / 2) * q ** 0.42          # outer edge of the bowl at the terminal
         bh = P.G_serif * P.G_beard_k              # beard length
         bw = P.E_serif_w + P.G_beard_dw           # beard width
-        # aperture steps around the beard so the beard survives the cut
-        (gl.cut("aperture").move((W * 0.5, yb), "a").line((R, yb), "b").line((R, yt - bh), "c")
-            .line((ex - bw, yt - bh), "d").line((ex - bw, yt), "e").line((W * 0.5, yt), "f").close())
+        if G_jaw == "serif":
+            # the terminal is the bowl's own wall cut off vertically at
+            # G_face of the width: the opening below yt, the face above it
+            xf = W * P.G_face
+            (gl.cut("aperture").move((W * 0.5, yb), "a").line((R, yb), "b").line((R, ch + 200), "c")
+                .line((xf, ch + 200), "d").line((xf, yt), "e").line((W * 0.5, yt), "f").close())
+        else:
+            # aperture steps around the beard so the beard survives the cut
+            (gl.cut("aperture").move((W * 0.5, yb), "a").line((R, yb), "b").line((R, yt - bh), "c")
+                .line((ex - bw, yt - bh), "d").line((ex - bw, yt), "e").line((W * 0.5, yt), "f").close())
         # the jaw: a stem whose outer edge stays at the bowl's right, weight G_spur_w x cap stem
         sw_ = P.cap_stem * P.G_spur_w
         # G_jaw_in: the jaw's outer edge moves from the bowl's widest point (0)
@@ -867,13 +889,24 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         spur_pen = Pen(angle=0, width=sw_, contrast=1 - P.hairline / sw_)
         # the jaw may stop inside the bowl's curve (G_spur_bot, a share of the cap
         # height) instead of standing on the baseline; its foot is the G_spur tag
-        gl += stem_(x=sx, bottom=ch * P.G_spur_bot, top=yb, pen=spur_pen, foot="G_spur", head=False, name="spur")
-        rect(gl, "bar", sx - sw_ / 2 - P.G_serif, yb - P.bar_t, sx + sw_ / 2, yb)
-        rect(gl, "beard", ex - bw, yt - bh, ex, yt + 2)
+        if G_jaw == "serif":
+            # the bowl stops at the jaw's outer edge (it would bulge past it),
+            # up to where the head serif's bracket takes over (the trim must
+            # not reach the serif, whose right half stands over the bowl)
+            ytr = yb - P.G_head_bracket
+            (gl.cut("jaw_trim").move((sx + sw_ / 2, -os_ - 60), "a").line((R, -os_ - 60), "b")
+                .line((R, ytr), "c").line((sx + sw_ / 2, ytr), "d").close())
+            gl += stem_(x=sx, bottom=ch * P.G_spur_bot, top=yb, pen=spur_pen, foot="G_foot", head="G_head",
+                        name="spur")
+        else:
+            gl += stem_(x=sx, bottom=ch * P.G_spur_bot, top=yb, pen=spur_pen, foot="G_spur", head=False,
+                        name="spur")
+            rect(gl, "bar", sx - sw_ / 2 - P.G_serif, yb - P.bar_t, sx + sw_ / 2, yb)
+            rect(gl, "beard", ex - bw, yt - bh, ex, yt + 2)
 
     @g("S")
     def S(gl):
-        gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem, swell_k=P.S_swell_k)
+        gl += spine(width=P.S_width, height=P.capheight, stem_w=P.cap_stem, swell_k=P.S_swell_k, t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy))
 
     @g("space", advance=P.stem * 2.4)
     def space(gl):
