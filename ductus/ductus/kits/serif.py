@@ -48,6 +48,7 @@ DEFAULTS: dict[str, tuple] = {
     "g_tr_dh": (0, (-0.4, 0.3)), "g_tr_dv": (0, (-0.4, 0.3)),
     "g_ear_root_dx": (0, (-60, 30)),   # the ear's sloped top starts on the bowl, left of its foot
     "g_link_root_dy": (0, (-40, 80)), "g_link_root_dir": (210, (170, 260)),   # where the link leaves the bowl
+    "t_end_dir": (60, (10, 90)),   # direction the t's tail leaves at its end
     "t_tail_cut": (0, (-30, 85)),   # normal of the cut across the t's tail end (0: vertical cut)
     "t_wedge_flat": (0, (0, 60)), "t_wedge_sweep": (0, (-20, 60)),   # the t's flat top and concave flank
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
@@ -126,7 +127,7 @@ DEFAULTS: dict[str, tuple] = {
     "s_t1_pa": (0, (-35, 35)), "s_top_pa": (0, (-35, 35)), "s_left_pa": (0, (-35, 35)),
     "s_mid_pa": (0, (-35, 35)), "s_right_pa": (0, (-35, 35)), "s_bot_pa": (0, (-35, 35)),
     "s_t2_pa": (0, (-35, 35)),
-    "s_top_dir": (180, (160, 200)), "s_bot_dir": (180, (160, 200)),
+    "s_top_dir": (180, (160, 200)), "s_bot_dir": (180, (160, 200)), "s_mid_free": (0, (0, 1)),   # >= 0.5: solve the mid direction
     "s_left_dir": (270, (235, 305)), "s_right_dir": (270, (235, 305)),
     "s_left_t": (1.0, (0.7, 1.6)), "s_mid_t": (1.0, (0.7, 1.6)), "s_right_t": (1.0, (0.7, 1.6)),
     "s_bot_dt": (0, (-0.5, 0.5)), "s_t1_dw": (0, (-30, 40)), "s_t2_dw": (0, (-30, 40)),   # each end's own weight
@@ -195,7 +196,7 @@ DEFAULTS: dict[str, tuple] = {
     "t_angle": (0, (-60, 60)), "t_contrast": (None, (0.0, 0.95)), "t_bar_t": (None, (5, 80)), "t_bar_dy": (0, (-40, 40)),
     "f_end_dir": (-60, (-120, 0)), "f_end_w": (1.0, (0.2, 1.6)), "f_bar_t": (None, (5, 80)), "f_bar_dy": (0, (-40, 40)),
     "u_leg_t": (1.0, (0.6, 2.5)),
-    "t_top": (660, (560, 740)), "t_turn": (110, (40, 200)), "t_tail": (170, (80, 260)), "t_tail_y": (60, (20, 150)),
+    "t_top": (660, (560, 740)), "t_turn": (110, (40, 200)), "t_tail": (170, (80, 360)), "t_tail_y": (60, (20, 150)),
     "t_bar_l": (90, (30, 160)), "t_bar_r": (140, (60, 320)), "t_cut": (30, (-10, 70)),
     "i_dot_y": (690, (620, 760)), "i_dot_r": (55, (30, 90)),
     "bar_t": (32, (5, 80)),
@@ -475,12 +476,17 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         bot = -os_ + sp.width_at(180) / 2
         sw = Profile((0, P.s_ends), (0.5 - P.s_spread, P.s_ends), (0.5, P.s_swell), (0.5 + P.s_spread, P.s_ends),
                      (1, P.s_ends))
-        (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias)
+        (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias, smooth=val(P.s_mid_free) >= 0.5)
             .start((W * P.s_t1_x, height * P.s_t1_y), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw)
             .curve_to((W * P.s_top_x, top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw)
             .curve_to((sp.width_at(90) / 2, height * P.s_left_y), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
                       tension=P.s_left_t, width=P.s_left_dw)
-            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", pen_angle=P.s_mid_pa, dir=P.s_mid_dir, tension=P.s_mid_t,
+            # s_mid_free: the spine's middle direction is solved (Hobby's mock-
+            # curvature continuity) instead of imposed -- an imposed direction
+            # makes both halves curl to meet it, and high contrast turns that
+            # dip in direction into a kink in the width
+            .curve_to((W * P.s_mid_x, height * P.s_mid_y), name="mid", pen_angle=P.s_mid_pa,
+                      dir=None if val(P.s_mid_free) >= 0.5 else P.s_mid_dir, tension=P.s_mid_t,
                       width=P.s_mid_dw)
             .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
                       tension=P.s_right_t, width=P.s_right_dw)
@@ -730,7 +736,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .start((0, P.t_top), name="top", terminal="t_top")
             .line_to((0, P.t_turn), name="turn")
             .curve_to((P.t_tail * 0.55, -os_ + t_pen.width_at(0) / 2), name="bottom", dir=0, pen_angle=P.t_bottom_pa)
-            .curve_to((P.t_tail, P.t_tail_y), name="end", dir=60, terminal="t_tail", pen_angle=P.t_end_pa))
+            .curve_to((P.t_tail, P.t_tail_y), name="end", dir=P.t_end_dir, terminal="t_tail", pen_angle=P.t_end_pa))
         tapered_bar(gl, -P.t_bar_l, xh - P.t_bar_t + P.t_bar_dy, P.t_bar_r, xh + P.t_bar_dy, -P.stem / 2)
 
     @g("i")

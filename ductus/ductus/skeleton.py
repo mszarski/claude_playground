@@ -39,6 +39,8 @@ class Stroke:
     inside: Any = None              # closed strokes: share of contrast on the inner side
     profile: Any = None             # width profile along the stroke (ductus.profiles)
     bias: Any = None                # open strokes: share of modulation on the left of travel
+    smooth: bool = False            # open strokes: solve free node directions for continuous
+                                    # (mock) curvature, as METAFONT does; False = chord rule
 
     def is_ccw(self) -> bool:
         P = np.array([n.pos for n in self.nodes])
@@ -50,6 +52,56 @@ class Stroke:
 
     def directions(self) -> list[float]:
         """Direction of travel (radians) at every node."""
+        out = self._chord_directions()
+        if self.smooth and not self.closed:
+            out = self._hobby_directions(out)
+        return out
+
+    def _hobby_directions(self, chord_dirs: list[float]) -> list[float]:
+        """Free node directions (``dir=None``, not next to a line) chosen so the
+        mock curvature arriving at each node equals the one leaving it --
+        Hobby's spline with unit tensions (the tensions still shape the
+        handles). Free ends use curl 1. A direction imposed on an inflection
+        makes both sides curl to meet it; with high contrast that dip turns
+        into a kink in the width. Fixed directions stay as given."""
+        n = len(self.nodes)
+        if n < 3:
+            return chord_dirs
+        P = np.array([nd.pos for nd in self.nodes], float)
+        ch = np.diff(P, axis=0)
+        d = np.maximum(np.hypot(ch[:, 0], ch[:, 1]), 1e-9)
+        c = np.unwrap(np.arctan2(ch[:, 1], ch[:, 0]))
+        free = []
+        for i, nd in enumerate(self.nodes):
+            near_line = (i > 0 and self.kinds[i - 1] == "line") or (i < n - 1 and self.kinds[i] == "line")
+            free.append(nd.dir is None and not near_line)
+        if not any(free):
+            return chord_dirs
+        # reference angle per node, near its chords (for unwrapping fixed dirs)
+        ref = np.array([c[0]] + [(c[i - 1] + c[i]) / 2 for i in range(1, n - 1)] + [c[-1]])
+        known = np.array(chord_dirs, float)
+        known = ref + (known - ref + math.pi) % (2 * math.pi) - math.pi
+        A = np.zeros((n, n)); b = np.zeros(n)
+        for k in range(n):
+            if not free[k]:
+                A[k, k] = 1.0; b[k] = known[k]
+            elif k == 0:                                    # curl 1: theta_0 = phi_1
+                A[k, 0] = 1.0; A[k, 1] = 1.0; b[k] = 2 * c[0]
+            elif k == n - 1:                                # curl 1: phi_n = theta_(n-1)
+                A[k, n - 2] = 1.0; A[k, n - 1] = 1.0; b[k] = 2 * c[n - 2]
+            else:
+                # METAFONT's mock-curvature equation for unit tensions,
+                # A th[k-1] + (B + C) th[k] + D th[k+1] = -B psi[k] - D psi[k+1],
+                # rewritten in absolute directions (th = dir - chord angle)
+                A[k, k - 1] = 1 / d[k - 1]
+                A[k, k] = 2 * (1 / d[k - 1] + 1 / d[k])
+                A[k, k + 1] = 1 / d[k]
+                b[k] = 3 * c[k - 1] / d[k - 1] + 3 * c[k] / d[k]
+        sol = np.linalg.solve(A, b)
+        return [float(sol[i]) + (math.radians(self.nodes[i].da) if free[i] else 0.0) if free[i] else chord_dirs[i]
+                for i in range(n)]
+
+    def _chord_directions(self) -> list[float]:
         n = len(self.nodes)
         nseg = len(self.kinds)
         out = []

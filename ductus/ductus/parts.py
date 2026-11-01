@@ -262,12 +262,16 @@ class Builder:
         self._strokes.append(s)
         return s
 
-    def path(self, name: str = "path", pen=None, inside=None, profile=None, bias=None) -> PathBuilder:
+    def path(self, name: str = "path", pen=None, inside=None, profile=None, bias=None,
+             smooth=False) -> PathBuilder:
         """``inside`` (closed paths): share of the pen's contrast placed on
         the inner side (0.5 = symmetric; default: the pen's ``inside``).
         ``profile``: width along the stroke (:mod:`ductus.profiles`).
-        ``bias`` (open paths): share of the modulation on the left of travel."""
-        s = Stroke(name, [], [], pen=pen, inside=inside, profile=profile, bias=bias)
+        ``bias`` (open paths): share of the modulation on the left of travel.
+        ``smooth`` (open paths): nodes without a ``dir`` get the direction that
+        makes the curvature continuous through them (Hobby / METAFONT),
+        instead of the chord between their neighbours."""
+        s = Stroke(name, [], [], pen=pen, inside=inside, profile=profile, bias=bias, smooth=bool(smooth))
         self._strokes.append(s)
         return PathBuilder(s)
 

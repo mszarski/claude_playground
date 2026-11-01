@@ -202,3 +202,31 @@ Critique: at 120 px "hamburgefonstiv" now reads as one even Didone word —
 no "lb", no dark g, smooth s. Still to do for release: kerning (M5), the
 G's upper terminal (blunt where the aperture cut meets the thick wall),
 and the beards on s/S are a little ragged at the cut.
+
+## 11 — fixing what looked weird (word level, not zoomed letters)
+
+After 09–10 the face looked worse at word size than its letters did zoomed in
+(see `history.png`: the same text re-rendered from every commit). This round
+was judged only on the set word at 120 px against the previous iteration
+(`11_vs_10.png`). What read as "weird", and the fixes:
+
+- **s / S** — arms ending in chunky triangular beaks, thick right to the end,
+  and a kink mid-spine. Now: hairline arms rising into **ball terminals**
+  (the face's terminals are balls everywhere else), and the spine's middle
+  direction is **solved** instead of imposed. New in the engine: a path can
+  ask for its free node directions to be solved for continuous curvature
+  (`path(..., smooth=True)`, Hobby's/METAFONT's mock-curvature equations);
+  an imposed direction made both halves curl to meet it, and with this much
+  contrast that dip in direction became a kink in the width.
+- **arches (n h m, u)** — the hairline left the stem low on a straight 50°
+  diagonal, which read italic. It now leaves high (`n_join_at` 0.84, angle
+  30) and curves away; the nib turns are gentler (−10 / +5).
+- **t** — the tail was a short downward stub. Now it curves into a rising
+  hairline tail with a ball (`t_end_dir` is a parameter now); a longer tail
+  was tried first and its ball read as a full stop ("st.iv").
+- **e** — the lower terminal ended in a slanted spike; the aperture cut now
+  leaves it level (180°), a fine flat end.
+
+Still to do: spacing is loose overall (M5 kerning and a tighter default),
+the G's upper terminal, and a second look at the u's bottom join and the
+a's bowl at large sizes.
