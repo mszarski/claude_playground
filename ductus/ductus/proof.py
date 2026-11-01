@@ -112,7 +112,9 @@ def render_text(otf: Path, text: str, out: Path, size: int = 96, margin: int = 2
     desc = -(face.size.descender >> 6)
     pen_x, glyphs = 0, []
     for ch in text:
-        face.load_char(ch, freetype.FT_LOAD_RENDER)
+        # unhinted: the fonts carry no hints, and FreeType's autohinter snaps
+        # thin horizontals (hairline serifs) -- proofs should show the outline
+        face.load_char(ch, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_NO_HINTING)
         g = face.glyph
         bmp = g.bitmap
         arr = np.array(bmp.buffer, dtype=np.uint8).reshape(bmp.rows, bmp.width) if bmp.rows else None

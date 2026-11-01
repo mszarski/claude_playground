@@ -230,3 +230,27 @@ was judged only on the set word at 120 px against the previous iteration
 Still to do: spacing is loose overall (M5 kerning and a tighter default),
 the G's upper terminal, and a second look at the u's bottom join and the
 a's bowl at large sizes.
+
+## 12 — heavier hairlines and serifs, tighter spacing; G, t, s again
+
+Comparison: `12_vs_11.png` (set text, 96 px, unscaled).
+
+- **Weight** — hairline 14 → 22, serif tips 14 → 26, brackets 12/14 → 18/20,
+  serifs a little longer (62 → 74, caps 72 → 84, heads 62 → 70). At 14 units
+  the serifs vanished whenever a proof was scaled down, and the face read as
+  a sans with odd swellings. (Measured at 96 px they are now 3 px thick.)
+- **Spacing** — straight / round sidebearings 46/34 → 36/26.
+- **s** — its spine was the thinnest stroke: the solved spine runs at −19°,
+  nearly horizontal, which a vertical-stress pen draws as a hairline. The
+  swell now carries it (2.2 over a narrower spread): the spine is the s's
+  heaviest stroke, as a Didone s's should be.
+- **t** — the ball on the tail read as a stuck-on hook (and, further out, as
+  a full stop). The tail is now long and low and ends in a plain hairline,
+  the nib turned a little at the bottom so the curve keeps weight.
+- **G** — the arm ended in a staircase (a 26-wide beard hanging from a
+  110-wide arm), and the jaw was a full-weight stem plus a long bar: a dark
+  block. New G controls: beard width/length (`G_beard_dw`, `G_beard_k`) and
+  jaw weight (`G_spur_w`). Now the arm ends flat and the jaw is lighter
+  (0.75 × cap stem) with a short bar.
+- Proofs render unhinted now (the fonts have no hints; FreeType's autohinter
+  was snapping the hairline serifs).

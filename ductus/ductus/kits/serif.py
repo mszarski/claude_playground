@@ -41,6 +41,7 @@ DEFAULTS: dict[str, tuple] = {
     "head_tip": (0, (0, 20)), "head_flat": (0, (0, 40)), "head_bracket": (0, (0, 1)),
     "head_corner": (20, (0, 80)), "head_ca": (0.7, (0.0, 1.0)), "head_cb": (0.5, (0.0, 1.0)),
     "g_full_dv": (0, (-0.3, 0.3)), "g_in_full_dv": (0, (-0.3, 0.3)), "g_rot": (0, (-15, 15)),  # upper bowl shape
+    "G_beard_dw": (0, (-10, 80)), "G_beard_k": (0.6, (0.1, 1.2)), "G_spur_w": (1.0, (0.5, 1.2)),
     "a_stem_w": (1.0, (0.85, 1.15)), "a_stem_bot": (0, (-20, 20)),
     "e_thick_dl": (0, (-40, 30)), "e_thick_dr": (0, (-40, 30)), "e_bar_rin": (0, (-10, 40)),
     "g_notch_x": (170, (100, 260)), "g_notch_y": (22, (-40, 80)), "g_notch_len": (0, (0, 160)),
@@ -794,14 +795,18 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         ry, cy = (ch + 2 * os_) / 2, ch / 2
         q = max(0.0, 1 - ((val(yt) - val(cy)) / val(ry)) ** 2)
         ex = W / 2 + (W / 2) * q ** 0.42          # outer edge of the bowl at the terminal
-        bh = P.G_serif * 0.6                      # beard length
+        bh = P.G_serif * P.G_beard_k              # beard length
+        bw = P.E_serif_w + P.G_beard_dw           # beard width
         # aperture steps around the beard so the beard survives the cut
         (gl.cut("aperture").move((W * 0.5, yb), "a").line((R, yb), "b").line((R, yt - bh), "c")
-            .line((ex - P.E_serif_w, yt - bh), "d").line((ex - P.E_serif_w, yt), "e").line((W * 0.5, yt), "f").close())
-        sx = W - P.cap_stem * 0.5
-        gl += stem_(x=sx, top=yb, pen=cap_pen, foot="spur", head=False, name="spur")
-        rect(gl, "bar", sx - P.cap_stem / 2 - P.G_serif, yb - P.bar_t, sx + P.cap_stem / 2, yb)
-        rect(gl, "beard", ex - P.E_serif_w, yt - bh, ex, yt + 2)
+            .line((ex - bw, yt - bh), "d").line((ex - bw, yt), "e").line((W * 0.5, yt), "f").close())
+        # the jaw: a stem whose outer edge stays at the bowl's right, weight G_spur_w x cap stem
+        sw_ = P.cap_stem * P.G_spur_w
+        sx = W - sw_ * 0.5
+        spur_pen = Pen(angle=0, width=sw_, contrast=1 - P.hairline / sw_)
+        gl += stem_(x=sx, top=yb, pen=spur_pen, foot="spur", head=False, name="spur")
+        rect(gl, "bar", sx - sw_ / 2 - P.G_serif, yb - P.bar_t, sx + sw_ / 2, yb)
+        rect(gl, "beard", ex - bw, yt - bh, ex, yt + 2)
 
     @g("S")
     def S(gl):
