@@ -449,3 +449,42 @@ Sheet: `21.png`. Comparison: `21_vs_20.png`.
 
 Against Geist: A 0.83 → 0.91, E 0.85 → 0.92, S 0.83 → 0.88,
 u 0.88 → 0.97. Mean IoU 0.924 → 0.938.
+
+## 22 — everything
+
+Sheet: `22.png`. Comparison: `22_vs_21.png`.
+
+A pass over every glyph, then over the face-wide values.
+
+Kit additions:
+- **A**: The apex's overshoot is `A_os_k`. Geist's apex stops nearly at the
+  cap height. The feet now have their own tags (`A_lfoot`, `A_rfoot`), so
+  the inner serifs between the feet can run longer than the outer ones
+  (`A_foot_in_dl`). The outer toes stay at Geist's extent.
+- **E**: The middle and bottom serifs' heights (`E_mid_sk`, `E_bot_sk`)
+  and the stem's serif brackets (`E_bracket_k`) are adjustable.
+- **O, G**: The capital bowls have their own weight and fullness
+  (`O_thick_k`, `O_thin_k`, `O_*_dh/dv`), through a shared `cap_bowl`. They
+  were the o's weight scaled by the cap stem, lighter than Geist's. Now 8%
+  heavier, with 15% heavier hairlines.
+
+Face-wide values: the stem goes 86 → 84. The v's top serifs are shorter
+outside and longer inside (`top_serif_len` 50, `top_serif_in` 1.8). Its
+outer serifs had run out as hairlines past Geist's, the same trap as the
+A's toe. Every lowercase letter got a coordinate pass over its own values.
+The side bearings were re-matched afterwards.
+
+Against Geist (IoU):
+
+| | o | n | H | e | a | s | g | v | h | m | u |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 21 | .98 | .97 | .96 | .96 | .93 | .93 | .93 | .93 | .95 | .96 | .97 |
+| 22 | .98 | .98 | .96 | .96 | .95 | .95 | .93 | .98 | .97 | .96 | .97 |
+
+| | b | r | f | t | i | O | A | E | G | S | mean |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 21 | .94 | .95 | .96 | .93 | .98 | .91 | .91 | .92 | .85 | .88 | .938 |
+| 22 | .97 | .96 | .97 | .96 | .99 | .98 | .93 | .94 | .89 | .89 | .955 |
+
+What remains are thin slivers along edges. G and S, the lowest at 0.89,
+differ mainly in where the curves' widths peak, not in construction.

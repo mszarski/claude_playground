@@ -174,6 +174,8 @@ DEFAULTS: dict[str, tuple] = {
     "A_sb": (0, (-150, 80)),
     "A_bracket_k": (0.7, (0.2, 3.0)),   # the A's foot brackets, relative to the cap serifs'
     "A_foot_dl": (0, (-60, 60)),        # the A's foot serifs' length, added to the cap serifs'
+    "A_foot_in_dl": (0, (-60, 80)),     # ... and the inner serifs' (between the feet), added again
+    "A_os_k": (1.0, (0.0, 1.5)),        # the apex's overshoot above the cap height, x overshoot
     # display / test-word glyphs
     "m_width": (330, (250, 450)), "b_width": (500, (400, 620)), "b_bowl_l": (0.3, (0.0, 0.6)),
     "u_width": (410, (300, 520)), "u_bias": (0.5, (0.1, 0.9)),
@@ -217,6 +219,10 @@ DEFAULTS: dict[str, tuple] = {
     "t_bar_l": (90, (30, 160)), "t_bar_r": (140, (60, 320)), "t_cut": (30, (-10, 70)),
     "i_dot_y": (690, (620, 760)), "i_dot_r": (55, (30, 90)),
     "bar_t": (32, (5, 80)),
+    # the cap rounds' (O, G) own weight and shape: thick x round_gain x cap stem,
+    # thin x hairline, fullness offsets from the o's
+    "O_thick_k": (1.0, (0.7, 1.4)), "O_thin_k": (1.0, (0.5, 2.5)), "O_full_dh": (0, (-0.2, 0.2)),
+    "O_full_dv": (0, (-0.2, 0.2)), "O_in_full_dh": (0, (-0.2, 0.2)), "O_in_full_dv": (0, (-0.2, 0.2)),
     "O_width": (700, (560, 820)), "A_width": (680, (520, 820)), "A_bar_y": (0.32, (0.2, 0.45)),
     "A_apex": (40, (0, 120)), "A_thick": (115, (60, 180)), "A_thin": (28, (8, 80)),
     "E_width": (480, (380, 600)), "E_mid": (0.86, (0.6, 1.0)), "E_arm_t": (32, (8, 80)),
@@ -231,6 +237,9 @@ DEFAULTS: dict[str, tuple] = {
     # the middle arm's height (share of the cap height) and the bottom arm's
     # length (relative to the top arm's)
     "E_mid_y": (0.5, (0.4, 0.6)), "E_bot_k": (1.04, (0.9, 1.15)),
+    # the middle and bottom serifs' heights relative to E_serif; the stem's
+    # serif brackets relative to the cap serifs'
+    "E_mid_sk": (0.45, (0.2, 0.8)), "E_bot_sk": (1.1, (0.6, 1.6)), "E_bracket_k": (1.0, (0.3, 2.5)),
     "ball_r": (42, (20, 80)), "ball_drop": (0, (-40, 60)),
     "foot_tip": (26, (4, 60)),
 }
@@ -309,10 +318,17 @@ def bracketed_set(P) -> TerminalSet:
         G_foot=flat(P.G_cut),
         hood=flat("vertical"),   # Geist's a: the hood curves down to a plain horizontal cut
         ear=flat("horizontal"), vertex=flat("vertical"), apex=flat("vertical"),
-        cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
+        cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket * P.E_bracket_k, tip=P.cap_serif_tip,
                              curve=(P.serif_ca, P.serif_cb), right=None),
         cap_vfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.cap_serif_tip,
                             curve=(P.serif_ca, P.serif_cb)),
+        # the A's feet: the inner serifs (between the feet) may run longer
+        A_lfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.cap_serif_tip,
+                          curve=(P.serif_ca, P.serif_cb),
+                          right=dict(length=lazy_max(P.cap_serif_len + P.A_foot_dl + P.A_foot_in_dl, 0))),
+        A_rfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.cap_serif_tip,
+                          curve=(P.serif_ca, P.serif_cb),
+                          left=dict(length=lazy_max(P.cap_serif_len + P.A_foot_dl + P.A_foot_in_dl, 0))),
         # the b's stem has no foot: it is chiselled off on a diagonal down to a point
         b_foot=flat(P.b_foot_angle),
         # r and f have their own beaks (shared ones would couple them to a's hood)
@@ -341,7 +357,7 @@ def didone_set(P) -> TerminalSet:
     return TerminalSet(
         none,
         foot=foot, foot_wide=foot, cap_foot=cap, cap_head=cap,
-        cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.foot_tip,
+        cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket * P.E_bracket_k, tip=P.foot_tip,
                              curve=(P.serif_ca, P.serif_cb), right=None),
         head=head,
         u_head=bracketed(left=dict(length=lazy_max(P.head_len + P.u_head_dlen, 0), bracket=P.serif_bracket, tip=P.foot_tip),
@@ -355,6 +371,13 @@ def didone_set(P) -> TerminalSet:
         **_vtops(P, P.foot_tip),
         cap_vfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.foot_tip,
                             curve=(P.serif_ca, P.serif_cb)),
+        # the A's feet: the inner serifs (between the feet) may run longer
+        A_lfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.foot_tip,
+                          curve=(P.serif_ca, P.serif_cb),
+                          right=dict(length=lazy_max(P.cap_serif_len + P.A_foot_dl + P.A_foot_in_dl, 0))),
+        A_rfoot=bracketed(length=P.cap_serif_len + P.A_foot_dl, bracket=P.cap_serif_bracket * P.A_bracket_k, tip=P.foot_tip,
+                          curve=(P.serif_ca, P.serif_cb),
+                          left=dict(length=lazy_max(P.cap_serif_len + P.A_foot_dl + P.A_foot_in_dl, 0))),
         # s/S: vertical faces with hairline beards (top one hangs down, bottom one stands up)
         s_top=beak(side="below", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut1),
         s_bottom=beak(side="above", length=P.s_beak_len, depth=P.s_beak_depth, axis=P.s_cut2),
@@ -543,6 +566,14 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         xa = x0 + (stem_l - x0) * P.bar_taper
         (gl.contour("bar").move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((xa, y1), "tl")
             .line((x0 - P.bar_tip_dx, y0 + (y1 - y0) * P.bar_tip_y), "tip").close())
+
+    def cap_bowl(width):
+        """The O's bowl (also the G's)."""
+        ch = P.capheight
+        return bowl(x=0, width=width, bottom=-os_, top=ch + os_, thick=P.cap_stem * P.round_gain * P.O_thick_k,
+                    thin=P.hairline * P.O_thin_k, stress=P.o_stress,
+                    full=(P.o_full_h + P.O_full_dh, P.o_full_v + P.O_full_dv),
+                    in_full=(P.o_in_full_h + P.O_in_full_dh, P.o_in_full_v + P.O_in_full_dv))
 
     def rect(gl, name, x0, y0, x1, y1):
         gl.contour(name).move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((x0, y1), "tl").close()
@@ -814,9 +845,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("O")
     def O(gl):
         ch = P.capheight
-        gl += bowl(x=0, width=P.O_width, bottom=-os_, top=ch + os_, thick=P.cap_stem * P.round_gain,
-                   thin=P.hairline, stress=P.o_stress, full=(P.o_full_h, P.o_full_v),
-                   in_full=(P.o_in_full_h, P.o_in_full_v))
+        gl += cap_bowl(P.O_width)
 
     @g("A", sb=(P.A_sb, P.A_sb))
     def A(gl):
@@ -824,12 +853,13 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         thick = Pen(angle=0, width=P.A_thick, contrast=0)
         thin = Pen(angle=0, width=P.A_thin, contrast=0)
         ax = W / 2
-        gl.line((ax - P.A_apex * 0.5, ch + os_), (0, 0), name="left", names=("apex", "foot"),
-                terminal=("apex", "cap_vfoot"), pen=thin)
-        gl.line((ax + P.A_apex * 0.5 - P.A_thick * 0.3, ch + os_), (W, 0), name="right", names=("apex", "foot"),
-                terminal=("apex", "cap_vfoot"), pen=thick)
+        top = ch + os_ * P.A_os_k
+        gl.line((ax - P.A_apex * 0.5, top), (0, 0), name="left", names=("apex", "foot"),
+                terminal=("apex", "A_lfoot"), pen=thin)
+        gl.line((ax + P.A_apex * 0.5 - P.A_thick * 0.3, top), (W, 0), name="right", names=("apex", "foot"),
+                terminal=("apex", "A_rfoot"), pen=thick)
         y = ch * P.A_bar_y
-        k = (ch + os_) / (W / 2)
+        k = top / (W / 2)
         rect(gl, "bar", y / k, y - P.bar_t / 2, W - y / k, y + P.bar_t / 2)
 
     @g("E")
@@ -843,8 +873,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         rect(gl, "arm_mid", 0, y - t / 2, W * P.E_mid, y + t / 2)
         if E_serifs == "rect":
             rect(gl, "serif_top", W - sw, ch - sh, W, ch)
-            rect(gl, "serif_bottom", W * P.E_bot_k - sw, 0, W * P.E_bot_k, sh * 1.1)
-            rect(gl, "serif_mid", W * P.E_mid - sw, y - sh * 0.45, W * P.E_mid, y + sh * 0.45)
+            rect(gl, "serif_bottom", W * P.E_bot_k - sw, 0, W * P.E_bot_k, sh * P.E_bot_sk)
+            rect(gl, "serif_mid", W * P.E_mid - sw, y - sh * P.E_mid_sk, W * P.E_mid, y + sh * P.E_mid_sk)
         else:
             # wedges: a vertical face sw wide at the arm's end, its inner edge
             # sloping back to meet the arm E_wedge further in
@@ -858,17 +888,15 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                     c = c.line(*pt)
                 c.close()
             wedge_("serif_top", W, ch - t + 1, ch - sh)
-            wedge_("serif_bottom", W * P.E_bot_k, t - 1, sh * 1.1)
+            wedge_("serif_bottom", W * P.E_bot_k, t - 1, sh * P.E_bot_sk)
             Wm = W * P.E_mid
-            wedge_("serif_mid_up", Wm, y, y + sh * 0.45)
-            wedge_("serif_mid_dn", Wm, y, y - sh * 0.45)
+            wedge_("serif_mid_up", Wm, y, y + sh * P.E_mid_sk)
+            wedge_("serif_mid_dn", Wm, y, y - sh * P.E_mid_sk)
 
     @g("G")
     def G(gl):
         ch, W = P.capheight, P.G_width
-        th = P.cap_stem * P.round_gain
-        gl += bowl(x=0, width=W, bottom=-os_, top=ch + os_, thick=th, thin=P.hairline,
-                   stress=P.o_stress, full=(P.o_full_h, P.o_full_v), in_full=(P.o_in_full_h, P.o_in_full_v))
+        gl += cap_bowl(W)
         yb, yt = ch * P.G_bar_y, ch * P.G_term_y
         R = W + 100
         ry, cy = (ch + 2 * os_) / 2, ch / 2
