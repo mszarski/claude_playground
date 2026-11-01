@@ -70,6 +70,7 @@ class CompiledFont:
     overrides_used: list[str]
     compile_ms: float = 0.0
     kerning: dict = None           # {(left, right): font units}, pairs of compiled glyphs only
+    ligatures: dict = None         # {ligature glyph: components}, all compiled
 
     def to_json(self) -> dict:
         return {
@@ -128,8 +129,10 @@ def compile_font(font: Font, params: dict[str, float] | None = None,
             if name not in used:
                 warnings.append(f"override {name!r} does not match any point; ignored")
     specs = {n: {"default": p.default, "range": p.range} for n, p in font.params.items()}
+    ligatures = {lg: comps for lg, comps in getattr(font, "ligatures", {}).items()
+                 if lg in out and all(c in out for c in comps)}
     return CompiledFont(font.family, font.style, font.upm, metrics, values, specs, out,
-                        warnings, sorted(used), (time.perf_counter() - t0) * 1000, kerning)
+                        warnings, sorted(used), (time.perf_counter() - t0) * 1000, kerning, ligatures)
 
 
 def _move(c: Contour, i: int, dx: float, dy: float):

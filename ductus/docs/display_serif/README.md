@@ -296,3 +296,20 @@ Comparison: `14_vs_13.png` (set text, 96 px).
   now takes no nib turns.
 - **a** — the bowl met the stem with a step at its bottom join (at 115, 48
   thick, 55°); now it tapers in low (60, 30, 25°).
+
+## 15 — fi ligature
+
+Comparison: `15_vs_14.png` (set text, 120 px).
+
+The f's ball came within a hair of the i's dot at display sizes; kerning
+can only trade that for a hole. Now an fi ligature: the f's hook reaches
+over the i (by `fi_dx` 175, which keeps the i stem at its usual distance from
+the f) and its ball *is* the i's dot; the f's bar runs across to the dotless
+i stem, which stops at the bar's top.
+
+Engine: `font.ligature(glyph, components)`, emitted as a GSUB `liga`
+substitution; proofs apply the font's own GSUB ligatures (no HarfBuzz
+needed). Kit: the f is built by one helper shared with `f_i`, which is
+defined whenever f and i both are. `ductus bench` now skips glyphs the
+reference lacks when no glyphs are named (the Geist benchmark has an f_i
+too, but Geist Serif has no glyph to compare it with).

@@ -62,10 +62,20 @@ def build_otf(cf: CompiledFont, path):
     fb.setupPost()
     fb.setupHead(unitsPerEm=upm)
     kerning = getattr(cf, "kerning", None) or {}
+    ligatures = getattr(cf, "ligatures", None) or {}
+    fea = ""
+    if ligatures:
+        # GSUB standard ligatures (longest first, as feature files expect)
+        fea += "feature liga {\n" + "".join(
+            f"  sub {' '.join(comps)} by {lg};\n"
+            for lg, comps in sorted(ligatures.items(), key=lambda kv: -len(kv[1]))) + "} liga;\n"
     if kerning:
         # GPOS pair kerning (what applications use) ...
-        fb.addOpenTypeFeatures("feature kern {\n" + "".join(
-            f"  pos {a} {b} {v};\n" for (a, b), v in sorted(kerning.items())) + "} kern;\n")
+        fea += "feature kern {\n" + "".join(
+            f"  pos {a} {b} {v};\n" for (a, b), v in sorted(kerning.items())) + "} kern;\n"
+    if fea:
+        fb.addOpenTypeFeatures(fea)
+    if kerning:
         # ... and a legacy 'kern' table, which FreeType's proofs read directly
         from fontTools.ttLib import newTable
         from fontTools.ttLib.tables._k_e_r_n import KernTable_format_0

@@ -120,3 +120,22 @@ def test_spacing_table_and_kerning_reach_the_font(tmp_path):
     assert not validate_otf(otf)
     t = TTFont(otf)
     assert t["kern"].kernTables[0].kernTable[("n", "o")] == -17 and "GPOS" in t
+
+
+def test_fi_ligature_compiles_emits_and_shapes(tmp_path):
+    from ductus.emit import build_otf, validate_otf
+    from ductus.proof import _shape
+    from fontTools.ttLib import TTFont
+    import freetype
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    cf = compile_font(f)
+    assert cf.ligatures == {"f_i": ("f", "i")} and cf.glyphs["f_i"].unicode is None
+    otf = build_otf(cf, tmp_path / "l.otf")
+    assert not validate_otf(otf)
+    tt = TTFont(otf)
+    ligs = [(first, e.Component, e.LigGlyph) for lk in tt["GSUB"].table.LookupList.Lookup
+            for st in lk.SubTable for first, es in st.ligatures.items() for e in es]
+    assert ("f", ["i"], "f_i") in ligs
+    face = freetype.Face(str(otf))
+    idx = _shape(otf, face, "fig")
+    assert len(idx) == 2 and idx[0] == face.get_name_index(b"f_i")

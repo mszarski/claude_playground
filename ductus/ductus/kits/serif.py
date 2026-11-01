@@ -56,6 +56,7 @@ DEFAULTS: dict[str, tuple] = {
     "h_dwidth": (0, (-40, 40)),   # the h's arch relative to the n's width
     # where a leg stem stops, as a fraction of n_out_y: 1 = as before; ~0.55 hides
     # the stem's top corner under the arch, which is not yet vertical higher up
+    "fi_dx": (0, (-80, 260)),   # the fi ligature's i stem, from under the f's hook end
     "r_rsb": (0, (-80, 40)),   # the r's right sidebearing, added to the side's default (its ear overhangs)
     "n_leg_top": (1.0, (0.5, 1.0)), "u_leg_top": (1.0, (0.5, 1.0)),   # (the u's left stem, from below)
     "n_shoulder_dw": (0, (-30, 30)), "n_leg_t": (1.0, (0.7, 1.6)),   # arch: weight at the shoulder, turn into the leg
@@ -369,7 +370,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def g(name, sb=None, **kw):
         def deco(fn):
             ch = name if len(name) == 1 else (" " if name == "space" else None)
-            if want is None or (ch and ch in want) or name in (want or ()):
+            lig = "_" in name and want is not None and all(c in want for c in name.split("_"))
+            if want is None or (ch and ch in want) or name in (want or ()) or lig:
                 font.glyph(name, sb=sb, **kw)(fn)
             return fn
         return deco
@@ -718,19 +720,37 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .start(st, name="join", dir=d0, terminal=False, pen_angle=P.r_join_pa)
             .curve_to((P.r_width, xh * P.r_y), name="end", dir=P.r_dir, terminal="r_ear", pen_angle=P.r_end_pa))
 
-    @g("f")
-    def f(gl):
+    def f_body(gl, bar_r=None, hook=None):
+        """The f: stem, hook, bar (shared by f and the f_i ligature, whose hook
+        reaches further: ``hook`` = the hook end's x)."""
         top = P.f_top
+        hook = P.f_hook if hook is None else hook
         hook_pen = Pen(angle=P.arch_angle, width=P.stem, contrast=P.arch_contrast)
         y0 = xh + (top - xh) * 0.35
         gl += stem_(x=0, top=y0, head=False, foot="foot_wide")
         (gl.path(name="hook", pen=hook_pen, bias=P.n_bias, profile=Profile((0, 1), (0.6, 1), (1, P.f_end_w)))
             .start((0, y0 - 2), name="root", dir=90, terminal=False)
-            .curve_to((P.f_hook * 0.45, top + os_ - hook_pen.width_at(0) / 2), name="top", dir=0,
+            .curve_to((hook * 0.45, top + os_ - hook_pen.width_at(0) / 2), name="top", dir=0,
                       width=P.f_top_dw, pen_angle=P.f_top_pa)
-            .curve_to((P.f_hook, top * P.f_end_y), name="end", dir=P.f_end_dir, terminal="f_hook",
+            .curve_to((hook, top * P.f_end_y), name="end", dir=P.f_end_dir, terminal="f_hook",
                       pen_angle=P.f_end_pa))
-        tapered_bar(gl, -P.f_bar_l, xh - P.f_bar_t + P.f_bar_dy, P.f_bar_r, xh + P.f_bar_dy, -P.stem / 2)
+        tapered_bar(gl, -P.f_bar_l, xh - P.f_bar_t + P.f_bar_dy, P.f_bar_r if bar_r is None else bar_r,
+                    xh + P.f_bar_dy, -P.stem / 2)
+
+    @g("f")
+    def f(gl):
+        f_body(gl)
+
+    # fi: the f's ball is the i's dot -- a dotless i stands under the hook's end,
+    # and the f's bar runs across to it; the i stem stops at the bar's top
+    if want is None or {"f", "i"} <= set(want):
+        @g("f_i")
+        def f_i(gl):
+            xi = P.f_hook + P.fi_dx
+            f_body(gl, bar_r=xi, hook=xi)
+            gl += stem_(x=xi, top=xh + P.f_bar_dy, head=False, name="i_stem")
+
+        font.ligature("f_i", ("f", "i"))
 
     @g("t")
     def t(gl):

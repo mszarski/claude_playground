@@ -76,10 +76,16 @@ class Font:
         # sidebearings (numbers or Exprs); kerning: {(left, right): value}
         self.spacing: dict[str, tuple] = {}
         self.kerning: dict[tuple[str, str], Any] = {}
+        self.ligatures: dict[str, tuple[str, ...]] = {}   # {ligature glyph: component glyphs}
         self.glyphs: dict[str, GlyphDef] = {}
         self.params: dict = {}          # filled in by the loader
         self.source_path = None
         _current_font = self
+
+    def ligature(self, glyph: str, components):
+        """Substitute ``components`` (glyph names, in order) by ``glyph`` -- an
+        OpenType ``liga`` ligature, e.g. ``font.ligature("f_i", ("f", "i"))``."""
+        self.ligatures[glyph] = tuple(components)
 
     def kern(self, left: str, right: str, value):
         """Kern the pair ``left`` ``right`` by ``value`` font units (negative = closer)."""

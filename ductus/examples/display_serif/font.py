@@ -79,6 +79,8 @@ P = kit.params(
     # iteration 12: heavier hairlines and serifs (hold up at text sizes and when
     # proofs are scaled), tighter spacing; the s's spine carries its weight;
     # the t's tail ends in a plain hairline (a ball there read as a full stop)
+    # fi ligature (iteration 15): the hook reaches over the i, whose dot is the ball
+    fi_dx=175,
 )
 terms = kit.didone_set(P)
 terms.by_tag["s_top"] = ball(radius=P.ball_r * 0.8, side="below", drop=P.ball_drop)

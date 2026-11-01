@@ -102,6 +102,32 @@ def contact_sheet(rows: list[tuple[str, object]], out: Path, glyph_order=None, c
     return out
 
 
+def _shape(otf: Path, face, text: str) -> list[int]:
+    """Glyph indices for ``text``, with the font's GSUB ligatures applied
+    (greedily, longest first) -- enough shaping for proofs, without HarfBuzz."""
+    from fontTools.ttLib import TTFont
+    tt = TTFont(str(otf))
+    cmap = tt.getBestCmap()
+    names = [cmap.get(ord(ch), ".notdef") for ch in text]
+    ligs = []
+    if "GSUB" in tt:
+        for lookup in tt["GSUB"].table.LookupList.Lookup:
+            for st in lookup.SubTable:
+                if st.LookupType == 4:
+                    for first, entries in st.ligatures.items():
+                        for e in entries:
+                            ligs.append(((first, *e.Component), e.LigGlyph))
+    ligs.sort(key=lambda kv: -len(kv[0]))
+    out, i = [], 0
+    while i < len(names):
+        for comps, lg in ligs:
+            if tuple(names[i:i + len(comps)]) == comps:
+                out.append(lg); i += len(comps); break
+        else:
+            out.append(names[i]); i += 1
+    return [face.get_name_index(n.encode()) for n in out]
+
+
 def render_text(otf: Path, text: str, out: Path, size: int = 96, margin: int = 24):
     """Rasterise ``text`` with the compiled font through FreeType."""
     import freetype
@@ -111,14 +137,13 @@ def render_text(otf: Path, text: str, out: Path, size: int = 96, margin: int = 2
     asc = face.size.ascender >> 6
     desc = -(face.size.descender >> 6)
     pen_x, glyphs, prev = 0, [], None
-    for ch in text:
-        idx = face.get_char_index(ch)
+    for idx in _shape(otf, face, text):
         if prev is not None and face.has_kerning:
             pen_x += face.get_kerning(prev, idx, freetype.FT_KERNING_UNFITTED).x >> 6
         prev = idx
         # unhinted: the fonts carry no hints, and FreeType's autohinter snaps
         # thin horizontals (hairline serifs) -- proofs should show the outline
-        face.load_char(ch, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_NO_HINTING)
+        face.load_glyph(idx, freetype.FT_LOAD_RENDER | freetype.FT_LOAD_NO_HINTING)
         g = face.glyph
         bmp = g.bitmap
         arr = np.array(bmp.buffer, dtype=np.uint8).reshape(bmp.rows, bmp.width) if bmp.rows else None

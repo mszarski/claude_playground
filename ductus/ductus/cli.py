@@ -128,8 +128,11 @@ def bench(font_py: Path,
     font = load_font(font_py)
     ovs = _overrides_for(font_py, overrides)
     cf = compile_font(font, overrides=ovs)
-    names = [g.strip() for g in glyphs.split(",") if g.strip()] or [n for n, g in cf.glyphs.items() if g.contours]
-    scores = score_font(cf, Reference(ref_path), names)
+    ref = Reference(ref_path)
+    # by default, every glyph the reference also has (not e.g. a ligature it lacks)
+    names = [g.strip() for g in glyphs.split(",") if g.strip()] or \
+        [n for n, g in cf.glyphs.items() if g.contours and ref.name_for(g.unicode, n) is not None]
+    scores = score_font(cf, ref, names)
     it = iteration or next_iteration(docs)
     rows = []
     for g, s in scores.items():
