@@ -137,6 +137,7 @@ DEFAULTS: dict[str, tuple] = {
     # the bar's height, bar_tip_dx further out) with the top edge sloping in to
     # the stem (bar_taper of the way). 0 / 1 / 0 is a plain rectangle.
     "bar_taper": (0, (0, 1)), "bar_tip_y": (1, (0, 1)), "bar_tip_dx": (0, (-20, 40)),
+    "f_top_dw": (0, (-50, 30)),   # the f hook's weight across its top
     "foot_wide_dl": (0, (-50, 30)), "foot_wide_dr": (0, (-20, 60)),   # r and f: lopsided feet
     "foot_wide_ca": (0.6, (0.0, 1.0)), "foot_wide_cb": (0.6, (0.0, 1.0)),  # ... with straighter brackets
     "r_cut_angle": (0, (-45, 45)),     # normal of the cut
@@ -618,7 +619,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         gl += stem_(x=0, top=y0, head=False, foot="foot_wide")
         (gl.path(name="hook", pen=hook_pen, bias=P.n_bias, profile=Profile((0, 1), (0.6, 1), (1, P.f_end_w)))
             .start((0, y0 - 2), name="root", dir=90, terminal=False)
-            .curve_to((P.f_hook * 0.45, top + os_ - hook_pen.width_at(0) / 2), name="top", dir=0)
+            .curve_to((P.f_hook * 0.45, top + os_ - hook_pen.width_at(0) / 2), name="top", dir=0,
+                      width=P.f_top_dw)
             .curve_to((P.f_hook, top * P.f_end_y), name="end", dir=P.f_end_dir, terminal="f_hook"))
         tapered_bar(gl, -P.f_bar_l, xh - P.f_bar_t + P.f_bar_dy, P.f_bar_r, xh + P.f_bar_dy, -P.stem / 2)
 
