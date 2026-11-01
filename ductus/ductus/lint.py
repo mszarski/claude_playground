@@ -1,6 +1,8 @@
 """Lints run by ``ductus test`` (spec section 7)."""
 from __future__ import annotations
 
+from collections import Counter
+
 import itertools
 from dataclasses import dataclass
 
@@ -74,8 +76,10 @@ def _span_at(contours, y: float, x: float) -> float | None:
 
 def check_stems(cg: CompiledGlyph, expected) -> list[Finding]:
     """Every vertical straight stroke must measure ``expected`` horizontally.
-    Measured at several heights; the narrowest reading is used so that
-    junctions (crossbars, arches) don't count."""
+    Measured at several heights. A stem is exact along most of its length,
+    while junctions (crossbars, arches) widen it and terminals (a head wedge
+    on a short stem) narrow it locally, so the most common reading counts;
+    with no repeated reading, the narrowest."""
     out = []
     for s in cg.strokes:
         for P, kind in s.cubics():
@@ -83,12 +87,14 @@ def check_stems(cg: CompiledGlyph, expected) -> list[Finding]:
                 continue
             x = P[0][0] + cg.shift
             spans = [_span_at(cg.contours, P[0][1] + f * (P[3][1] - P[0][1]), x)
-                     for f in (0.15, 0.3, 0.7, 0.85)]
+                     for f in (0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85)]
             spans = [w for w in spans if w is not None]
             if not spans:
                 out.append(Finding("stems", "error", f"{s.fullname}: stem not found in outline", cg.name))
                 continue
-            w = min(spans)
+            counts = Counter(round(w * 2) / 2 for w in spans)
+            mode, n = counts.most_common(1)[0]
+            w = mode if n > 1 else min(spans)
             exp = expected(s) if callable(expected) else expected
             if exp is None:
                 continue

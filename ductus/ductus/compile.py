@@ -329,6 +329,8 @@ def merge(contours: list[Contour], round_to_grid: bool = True, cuts: list[Contou
             for p in c.pts:
                 p[0] = float(round(p[0]))
                 p[1] = float(round(p[1]))
+        # slivers that rounding collapsed onto a point or a line
+        out = [c for c in out if abs(c.area()) >= 0.5]
     return out
 
 

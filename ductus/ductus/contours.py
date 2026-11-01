@@ -113,7 +113,8 @@ def bowl(builder, left, right, bottom, top, thick, thin, stress=0.0, fullness=0.
 
 
 def lobe(builder, edge_x, side, far, bottom, top_join, bottom_join, thick, thin_bottom,
-         out_mid=0.5, in_mid=0.5, bx_out=0.5, bx_in=0.5, tension=1.0, in_tension=1.0, prefix: str = ""):
+         out_mid=0.5, in_mid=0.5, bx_out=0.5, bx_in=0.5, tension=1.0, in_tension=1.0, prefix: str = "",
+         crown=None):
     """A bowl closed by a stem (a d q / b p).
 
     Outer contour and counter both start and end on the stem edge, at two
@@ -134,8 +135,15 @@ def lobe(builder, edge_x, side, far, bottom, top_join, bottom_join, thick, thin_
     far side towards the stem); ``bx_in`` the counter's (fraction from its far
     wall towards the outer bottom extreme -- it can never pass it).
 
-    Fixed structure: each contour has 4 named nodes (``top far bottom end``)
-    joined by 3 Hobby cubics, closed by straight runs along/inside the stem.
+    ``crown`` (optional, a structural choice per glyph): ``dict(x=, y=,
+    thick=)`` adds a top extreme between the top join and the far side -- for
+    bowls that join the stem low and rise above it (b, p). ``x`` is a
+    fraction from the stem edge towards ``far``, ``y`` the outer top,
+    ``thick`` the wall there.
+
+    Fixed structure: each contour has 4 named nodes (``top far bottom end``),
+    or 5 with a crown (``top crown far bottom end``), joined by Hobby cubics
+    and closed by straight runs along/inside the stem.
     """
     from .geometry import hobby_cubic
     from .junctions import contact
@@ -154,26 +162,39 @@ def lobe(builder, edge_x, side, far, bottom, top_join, bottom_join, thick, thin_
     d_bot = 0.0 if side < 0 else 180.0
     d_end = math.degrees(math.atan2(math.sin(math.radians(b_ang)), -away * math.cos(math.radians(b_ang))))
     dirs = [d_top, d_far, d_bot, d_end]
-
-    o_pts = [to, (f, b + (to[1] - b) * val(out_mid)), (f + (ex - f) * val(bx_out), b), bo]
+    names = ["top", "far", "bottom", "end"]
     fi = f - away * th
+    top_o = to[1]
+    if crown is not None:
+        cy_o = val(crown["y"])
+        cx_o = ex + (f - ex) * val(crown["x"])
+        top_o = cy_o
+    o_pts = [to, (f, b + (top_o - b) * val(out_mid)), (f + (ex - f) * val(bx_out), b), bo]
     # the counter's bottom sits between its far wall and the *outer* bottom, so
     # it always starts climbing to its (higher) crotch before the outer does --
     # otherwise the two bottom curves can cross when the bottom wall is thin
-    i_pts = [tc, (fi, b + tb + (tc[1] - b - tb) * val(in_mid)), (fi + (o_pts[2][0] - fi) * val(bx_in), b + tb), bc]
+    top_i = tc[1] if crown is None else cy_o - val(crown["thick"])
+    i_pts = [tc, (fi, b + tb + (top_i - b - tb) * val(in_mid)), (fi + (o_pts[2][0] - fi) * val(bx_in), b + tb), bc]
+    if crown is not None:
+        cx_i = ex + (fi - ex) * val(crown["x"])
+        o_pts.insert(1, (cx_o, cy_o))
+        i_pts.insert(1, (cx_i, top_i))
+        d_crown = 0.0 if side > 0 else 180.0              # travelling away from the stem
+        dirs = [d_top, d_crown, d_far, d_bot, d_end]
+        names = ["top", "crown", "far", "bottom", "end"]
+        handle(crown["thick"], (cx_i, top_i), (0, -1), label="lobe crown")
 
     def chain(cb, pts, tens):
-        names = ["top", "far", "bottom", "end"]
         cb.move(pts[0], names[0])
-        for k in range(1, 4):
+        for k in range(1, len(pts)):
             C = hobby_cubic(pts[k - 1], math.radians(dirs[k - 1]), pts[k], math.radians(dirs[k]), tens, tens)
             cb.curve(tuple(C[1]), tuple(C[2]), tuple(C[3]), names[k])
 
     from .junctions import join_handles
     join_handles(top_join, ex, side, rising=True)
     join_handles(bottom_join, ex, side, rising=False)
-    handle(thick, i_pts[1], (-away, 0), label="lobe wall")
-    handle(thin_bottom, i_pts[2], (0, 1), label="lobe bottom")
+    handle(thick, i_pts[-3], (-away, 0), label="lobe wall")
+    handle(thin_bottom, i_pts[-2], (0, 1), label="lobe bottom")
     outer = builder.contour(prefix + "outer")
     inner = builder.contour(prefix + "inner")
     outer.group = inner.group = object()

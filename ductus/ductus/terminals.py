@@ -101,10 +101,20 @@ class Frame:
         # cut only what the stroke's own cap pushes past the line: a little
         # wider than the stroke, as deep as a tilted cap can protrude. A big
         # box would slice neighbouring parts (it did: the a's hood cut its bowl).
-        m = 0.5 * max(self.end.width, 10)
-        D = 2.0 * max(self.end.width, 20)
-        t.cut.append(poly([self.w(self.e_lo - m, 0), self.w(self.e_hi + m, 0),
-                           self.w(self.e_hi + m, D), self.w(self.e_lo - m, D)]))
+        m = 1.0
+        # as deep as the tilted cap actually pokes past the line (+1): ~0 when
+        # the cut is aligned with the cap, so it never reaches neighbours
+        # above the end (it used to delete the i's dot)
+        cosang = min(1.0, abs(float(np.dot(self.u, self.d))))
+        tan = math.sqrt(max(0.0, 1 - cosang * cosang)) / max(cosang, 1e-3)
+        D = 0.5 * self.end.width * tan + 1.0
+        # across the line: as far as the cap's own corners reach (on a tilted
+        # cut they sit wider than their projections A/B), plus a hair -- no
+        # further, or it slices whatever the stroke runs into (the b's bowl)
+        ec = [float(np.dot(np.asarray(P, float) - self.pos, self.e)) for P in (self.end.left, self.end.right)]
+        lo, hi = min(self.e_lo, *ec), max(self.e_hi, *ec)
+        t.cut.append(poly([self.w(lo - m, 0), self.w(hi + m, 0),
+                           self.w(hi + m, D), self.w(lo - m, D)]))
         return t
 
 
@@ -210,7 +220,10 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical")
         c.add(F.w(e_far, -R - D), "on")
         t.add.append(c if sg > 0 else c.reversed())   # CCW in world for either side
         m = 0.5 * max(end.width, 10)                  # bounded, like Frame.flat
-        D = R + 2.0 * max(end.width, 20)
+        # only the stem's own corner above the sloped line goes: the cut
+        # reaches just past the end (d = 0), not into whatever sits above it
+        # (it used to delete the i's dot)
+        D = 0.25 * max(end.width, 20)
         t.cut.append(poly([F.w(e_far + -sg * 1, 0), F.w(*tip), F.w(tip[0] + sg * m, -R),
                            F.w(tip[0] + sg * m, D), F.w(e_far - sg * m, D), F.w(e_far - sg * m, 0)]))
         return t

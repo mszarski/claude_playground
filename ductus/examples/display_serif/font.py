@@ -26,6 +26,10 @@ P = kit.params(
     n_width=400, n_join_at=0.74, n_join_thin=16, n_join_angle=50, n_shoulder_x=0.48, n_out_y=0.62,
     n_taper_len=0.32, n_bias=0.42, n_tension=1.05,
     m_width=360, u_width=400, u_bias=0.3, b_width=500,
+    u_join_at=0.74, u_join_thin=16, u_join_angle=50, u_shoulder_x=0.48, u_out_y=0.62, u_taper_len=0.32,
+    u_tension=1.05, u_angle=25,
+    r_join_at=0.74, r_join_thin=16, r_join_angle=50, r_taper_len=0.32, r_end_w=1.0, t_turn_w=1.0, t_end_w=1.0,
+    t_angle=0, t_contrast=0.8541667, t_bar_t=32, f_bar_t=32,
     # a: the bowl is a lobe on the stem -- hairline top join, heavier bottom join
     a_hood_angle=25, a_far=46, a_top_at=292, a_top_thin=15, a_top_angle=18, a_bot_at=115, a_bot_thin=48, a_bot_angle=55,
     a_lobe_thick=98, a_lobe_thin_b=16, a_out_mid=0.48, a_in_mid=0.5, a_bx_out=0.6, a_bx_in=0.8,

@@ -37,6 +37,7 @@ DEFAULTS: dict[str, tuple] = {
     "serif_slope": (0, (-10, 50)), "cap_serif_slope": (0, (-10, 50)),
     "cap_serif_len": (80, (10, 180)), "cap_serif_bracket": (60, (0, 160)), "cap_serif_tip": (4, (0, 40)),
     "head_len": (80, (10, 160)), "head_rise": (60, (0, 140)), "head_drop": (55, (0, 140)), "head_hollow": (0.3, (0, 1)),
+    "u_head_dlen": (0, (-10, 60)), "u_head_dtop": (0, (-30, 30)),   # the u's heads relative to n's
     "spur_len": (70, (0, 160)), "spur_rise": (60, (0, 140)), "spur_drop": (40, (0, 120)),
     "beak_len": (25, (0, 120)), "beak_depth": (70, (5, 200)),
     "top_serif_len": (60, (0, 160)), "top_serif_bracket": (40, (0, 140)), "top_serif_tip": (10, (0, 60)),
@@ -114,9 +115,41 @@ DEFAULTS: dict[str, tuple] = {
     # display / test-word glyphs
     "m_width": (330, (250, 450)), "b_width": (500, (400, 620)), "b_bowl_l": (0.3, (0.0, 0.6)),
     "u_width": (410, (300, 520)), "u_bias": (0.5, (0.1, 0.9)),
+    # the u's cup has its own join and shoulder (it is not just the n rotated)
+    "u_join_at": (0.78, (0.45, 0.95)), "u_join_thin": (30, (4, 90)), "u_join_angle": (45, (0, 85)),
+    "u_shoulder_x": (0.45, (0.2, 0.75)), "u_out_y": (0.62, (0.3, 0.9)), "u_taper_len": (0.3, (0.02, 0.8)),
+    "u_tension": (1.0, (0.6, 1.8)), "u_angle": (30, (-20, 70)),
+    "h_top": (0, (-40, 80)), "h_stem_w": (1.0, (0.85, 1.15)),
+    # b as a lobe hanging on the stem's right edge (b_style="lobe")
+    "b_far": (500, (380, 640)), "b_top_at": (430, (300, 520)), "b_top_thin": (30, (6, 100)),
+    "b_top_angle": (-30, (-75, 40)), "b_bot_at": (110, (20, 260)), "b_bot_thin": (60, (6, 180)),
+    "b_bot_angle": (30, (-40, 85)), "b_lobe_thick": (100, (30, 170)), "b_lobe_thin_b": (34, (6, 100)),
+    "b_out_mid": (0.5, (0.05, 0.95)), "b_in_mid": (0.5, (0.05, 0.95)), "b_bx_out": (0.5, (0.1, 0.95)),
+    "b_bx_in": (0.5, (0.1, 0.95)), "b_lobe_t": (1.0, (0.6, 1.8)), "b_lobe_ti": (1.0, (0.6, 1.8)),
+    "b_top": (0, (-40, 80)), "b_foot": (0, (-40, 60)),
+    "b_crown_x": (0.4, (0.05, 0.9)), "b_crown_t": (34, (6, 100)),
+    "b_spur_len": (20, (0, 100)), "b_spur_rise": (20, (0, 100)), "b_spur_drop": (20, (0, 100)),
+    "b_foot_angle": (-52, (-89, -10)),
     "r_width": (230, (150, 330)), "r_y": (0.82, (0.6, 0.98)), "r_dir": (-30, (-80, 20)),
     "f_hook": (230, (120, 330)), "f_top": (720, (640, 790)), "f_bar_l": (90, (30, 160)), "f_bar_r": (150, (60, 240)),
-    "f_end_y": (0.92, (0.8, 1.0)),
+    "f_end_y": (0.92, (0.8, 1.0)), "f_beak_len": (25, (0, 120)), "f_beak_depth": (70, (5, 200)),
+    # crossbars of f and t: the left end can come to a point (at bar_tip_y of
+    # the bar's height, bar_tip_dx further out) with the top edge sloping in to
+    # the stem (bar_taper of the way). 0 / 1 / 0 is a plain rectangle.
+    "bar_taper": (0, (0, 1)), "bar_tip_y": (1, (0, 1)), "bar_tip_dx": (0, (-20, 40)),
+    "foot_wide_dl": (0, (-50, 30)), "foot_wide_dr": (0, (-20, 60)),   # r and f: lopsided feet
+    "foot_wide_ca": (0.6, (0.0, 1.0)), "foot_wide_cb": (0.6, (0.0, 1.0)),  # ... with straighter brackets
+    "r_cut_angle": (0, (-45, 45)),     # normal of the cut
+    "r_beak_len": (25, (0, 120)), "r_beak_depth": (70, (5, 200)),
+    # the r's ear meets the stem through its own join (lower and deeper than the n's)
+    "r_join_at": (0.72, (0.4, 0.95)), "r_join_thin": (40, (4, 160)), "r_join_angle": (40, (-20, 85)),
+    "r_taper_len": (0.3, (0.02, 0.9)), "r_end_w": (1.0, (0.3, 2.0)),
+    # the t's tail thins along the bottom into a fine terminal
+    "t_turn_w": (1.0, (0.3, 1.6)), "t_end_w": (0.6, (0.1, 1.6)),
+    "t_wedge_len": (40, (0, 140)), "t_wedge_rise": (100, (0, 200)), "t_wedge_drop": (10, (0, 100)),
+    "t_angle": (0, (-60, 60)), "t_contrast": (None, (0.0, 0.95)), "t_bar_t": (None, (5, 80)), "t_bar_dy": (0, (-40, 40)),
+    "f_end_dir": (-60, (-120, 0)), "f_end_w": (1.0, (0.2, 1.6)), "f_bar_t": (None, (5, 80)), "f_bar_dy": (0, (-40, 40)),
+    "u_leg_t": (1.0, (0.6, 2.5)),
     "t_top": (660, (560, 740)), "t_turn": (110, (40, 200)), "t_tail": (170, (80, 260)), "t_tail_y": (60, (20, 150)),
     "t_bar_l": (90, (30, 160)), "t_bar_r": (140, (60, 220)), "t_cut": (30, (-10, 70)),
     "i_dot_y": (690, (620, 760)), "i_dot_r": (55, (30, 90)),
@@ -140,7 +173,10 @@ def params(**values) -> SimpleNamespace:
     if unknown:
         raise KeyError(f"unknown kit params: {sorted(unknown)}")
     ns = {}
+    inherit = {"t_contrast": 0.6, "t_bar_t": 32, "f_bar_t": 32}   # defaults for None entries
     for name, (dflt, rng) in DEFAULTS.items():
+        if dflt is None:
+            dflt = inherit[name]
         v = values.get(name, dflt)
         if isinstance(v, tuple):
             dflt, rng = v
@@ -170,10 +206,15 @@ def bracketed_set(P) -> TerminalSet:
                      curve=(P.serif_ca, P.serif_cb), cup=P.serif_cup, slope=P.serif_slope)
     cap = bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.cap_serif_tip,
                     curve=(P.serif_ca, P.serif_cb), cup=P.serif_cup, slope=P.cap_serif_slope)
+    wide = bracketed(left=dict(length=P.serif_len + P.foot_wide_dl), right=dict(length=P.serif_len + P.foot_wide_dr),
+                     bracket=P.serif_bracket, tip=P.serif_tip, curve=(P.foot_wide_ca, P.foot_wide_cb),
+                     cup=P.serif_cup, slope=P.serif_slope)
     return TerminalSet(
         none,
-        foot=foot, cap_foot=cap, cap_head=cap,
+        foot=foot, foot_wide=wide, cap_foot=cap, cap_head=cap,
         head=wedge(side="left", length=P.head_len, rise=P.head_rise, drop=P.head_drop, hollow=P.head_hollow),
+        u_head=wedge(side="left", length=P.head_len + P.u_head_dlen, rise=P.head_rise, drop=P.head_drop,
+                     hollow=P.head_hollow),
         spur=wedge(side="right", length=P.spur_len, rise=P.spur_rise, drop=P.spur_drop),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.top_serif_tip,
                       curve=(P.serif_ca, P.serif_cb)),
@@ -189,9 +230,15 @@ def bracketed_set(P) -> TerminalSet:
                              curve=(P.serif_ca, P.serif_cb), right=None),
         cap_vfoot=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket * 0.7, tip=P.cap_serif_tip,
                             curve=(P.serif_ca, P.serif_cb)),
-        r_ear=beak(side="below", length=P.beak_len, depth=P.beak_depth, axis="horizontal"),
-        f_hook=beak(side="below", length=P.beak_len, depth=P.beak_depth, axis="horizontal"),
-        t_tail=flat(0), t_top=flat(P.t_cut + 90),
+        # the b's stem has no foot: it is chiselled off on a diagonal down to a point
+        b_foot=flat(P.b_foot_angle),
+        # r and f have their own beaks (shared ones would couple them to a's hood)
+        # Geist's r ear is not beaked: a thick stroke sheared off almost vertically
+        r_ear=flat(P.r_cut_angle),
+        # the f's hook ends in a plain vertical face; the t's top is a flat top
+        # with a long flag down the left of the stem (a wedge)
+        f_hook=flat("horizontal"),
+        t_tail=flat(0), t_top=wedge(side="left", length=P.t_wedge_len, rise=P.t_wedge_rise, drop=P.t_wedge_drop),
     )
 
 
@@ -209,10 +256,13 @@ def didone_set(P) -> TerminalSet:
     balls = ball(radius=P.ball_r, side="left", drop=P.ball_drop)
     return TerminalSet(
         none,
-        foot=foot, cap_foot=cap, cap_head=cap,
+        foot=foot, foot_wide=foot, cap_foot=cap, cap_head=cap,
         cap_foot_l=bracketed(length=P.cap_serif_len, bracket=P.cap_serif_bracket, tip=P.foot_tip,
                              curve=(P.serif_ca, P.serif_cb), right=None),
-        head=head, spur=bracketed(right=dict(length=P.spur_len * 0.6, bracket=P.serif_bracket * 0.6, tip=P.foot_tip),
+        head=head,
+        u_head=bracketed(left=dict(length=P.head_len + P.u_head_dlen, bracket=P.serif_bracket, tip=P.foot_tip),
+                         right=None, curve=(P.serif_ca, P.serif_cb)),
+        spur=bracketed(right=dict(length=P.spur_len * 0.6, bracket=P.serif_bracket * 0.6, tip=P.foot_tip),
                                   left=None, curve=(P.serif_ca, P.serif_cb)),
         top=bracketed(length=P.top_serif_len, bracket=P.top_serif_bracket, tip=P.foot_tip,
                       curve=(P.serif_ca, P.serif_cb)),
@@ -232,12 +282,15 @@ def didone_set(P) -> TerminalSet:
 
 # --------------------------------------------------------------------------
 
-def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none"):
+def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none",
+           b_style: str = "bowl"):
     """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
     short stroke taking the ``ear`` terminal, e.g. a ball) or ``"flag"`` (a
     four-sided flag). ``g_band``: ``"flat"`` puts a flat bar across the top of
     the g's lower loop (and trims the loop above it) -- a tilted loop with a
-    flat top, which one contour bowl can't make."""
+    flat top, which one contour bowl can't make. ``b_style``: ``"bowl"`` (a
+    free bowl overlapping the stem) or ``"lobe"`` (a lobe hanging on the
+    stem at two joins, like the a's bowl mirrored)."""
     from ..handles import handle
     from ..junctions import contact, join, join_handles, notch_cut
     from ..parts import part
@@ -299,7 +352,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             acc += L
 
     @part
-    def arch(p, x, width, top=xh, flip=False):
+    def arch(p, x, width, top=xh, flip=False, edge_half=None):
         """Leaves the stem at a :class:`Join` (hairline thinning at the crotch),
         over the shoulder, down into the leg. Ends inside the leg so the leg
         can be an exact stem. ``flip`` rotates it 180 degrees (the cup of u)."""
@@ -308,7 +361,9 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         bias = P.n_bias
         hair = arch_pen.hairline
         J = n_join(top)
-        edge = x + P.stem / 2
+        # the join sits on the stem's actual edge (the h's stem is a little
+        # heavier: on n's edge its notch cut a pinhole inside the stem)
+        edge = x + (P.stem / 2 if edge_half is None else edge_half)
         _, _, st, d0, thin = contact(J, val(edge), +1, rising=True)
         m0 = thin / max(arch_pen.width_at(d0), 1.0)
         left_half = hair / 2 + (val(P.stem) - hair) * val(bias)
@@ -324,23 +379,25 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         taper_handle(p._strokes[-1], P.n_taper_len)
 
     def _cup(p, x, width, top):
-        """The arch rotated 180 degrees: leaves the right stem low through the
-        same Join (mirrored), under the bowl, up into the left stem. Has its
-        own bias: rotated, the eye wants the weight elsewhere than on the n."""
+        """The u's cup: leaves the right stem low through a Join (the arch's
+        geometry rotated 180 degrees, with its own u_* values -- the u isn't
+        simply an n turned round), under the bowl, up into the left stem."""
         bias = P.u_bias
-        hair = arch_pen.hairline
+        cup_pen = Pen(angle=P.u_angle, width=P.stem, contrast=arch_pen.contrast)
+        hair = cup_pen.hairline
         R = x + width
-        J = join(top - top * P.n_join_at, P.n_join_thin, P.n_join_angle, P.n_notch, P.n_notch_w)
+        J = join(val(top) - val(top) * P.u_join_at, P.u_join_thin, P.u_join_angle, P.n_notch, P.n_notch_w)
         edge = R - P.stem / 2
         _, _, st, d0, thin = contact(J, val(edge), -1, rising=False)
-        m0 = thin / max(arch_pen.width_at(d0), 1.0)
+        m0 = thin / max(cup_pen.width_at(d0), 1.0)
         left_half = hair / 2 + (val(P.stem) - hair) * val(bias)
-        sh_y = -os_ + arch_pen.width_at(180) * (1 - val(bias))
-        (p.path(name="cup", pen=arch_pen, bias=bias,
-                profile=Profile((0, m0), (P.n_taper_len, 1), (1, 1)))
+        sh_y = -os_ + cup_pen.width_at(180) * (1 - val(bias))
+        (p.path(name="cup", pen=cup_pen, bias=bias,
+                profile=Profile((0, m0), (P.u_taper_len, 1), (1, 1)))
             .start(st, name="join", dir=d0, terminal=False)
-            .curve_to((R - width * P.n_shoulder_x, sh_y), name="shoulder", dir=180, tension=P.n_tension)
-            .curve_to((x - P.stem / 2 + left_half, top - top * P.n_out_y * 0.5), name="leg", dir=90))
+            .curve_to((R - width * P.u_shoulder_x, sh_y), name="shoulder", dir=180, tension=P.u_tension)
+            .curve_to((x - P.stem / 2 + left_half, top - top * P.u_out_y * 0.5), name="leg", dir=90,
+                      tension=P.u_leg_t))       # >1 stops the curve swinging out past the stem
         notch_cut(p, J, val(edge), -1)
 
     @part
@@ -360,6 +417,13 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .curve_to((W - sp.width_at(90) / 2, height * P.s_right_y), name="right", dir=270, width=P.s_right_dw)
             .curve_to((W * P.s_bot_x, bot), name="bottom", dir=180, tension=P.s_tension, width=P.s_bot_dw)
             .curve_to((W * P.s_t2_x, height * P.s_t2_y), name="t2", dir=P.s_t2_dir, terminal="s_bottom"))
+
+    def tapered_bar(gl, x0, y0, x1, y1, stem_l):
+        """A crossbar whose left end is a point: a pentagon, degenerate (a plain
+        rectangle) at the defaults; always five points (principle 4)."""
+        xa = x0 + (stem_l - x0) * P.bar_taper
+        (gl.contour("bar").move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((xa, y1), "tl")
+            .line((x0 - P.bar_tip_dx, y0 + (y1 - y0) * P.bar_tip_y), "tip").close())
 
     def rect(gl, name, x0, y0, x1, y1):
         gl.contour(name).move((x0, y0), "bl").line((x1, y0), "br").line((x1, y1), "tr").line((x0, y1), "tl").close()
@@ -496,8 +560,10 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @g("h")
     def h(gl):
-        gl += stem_(x=0, top=asc + P.head_top * 0.5, head="head")
-        gl += arch(x=0, width=P.n_width)
+        # the h's ascender stem may carry a slightly different weight than the n's
+        h_pen = Pen(angle=0, width=P.stem * P.h_stem_w, contrast=1 - P.hairline / (P.stem * P.h_stem_w))
+        gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head", pen=h_pen)
+        gl += arch(x=0, width=P.n_width, edge_half=P.stem * P.h_stem_w / 2)
         gl += stem_(x=P.n_width, top=xh * P.n_out_y, name="leg", head=False)
 
     @g("m")
@@ -512,12 +578,21 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("u")
     def u(gl):
         w = P.u_width
-        gl += stem_(x=0, bottom=xh * (1 - P.n_out_y), top=xh + P.head_top, head="head", foot=False, name="left")
+        top = xh + P.head_top + P.u_head_dtop
+        gl += stem_(x=0, bottom=xh * (1 - P.u_out_y), top=top, head="u_head", foot=False, name="left")
         gl += arch(x=0, width=w, flip=True)
-        gl += stem_(x=w, top=xh + P.head_top, head="head", foot="spur", name="right")
+        gl += stem_(x=w, top=top, head="u_head", foot="spur", name="right")
 
     @g("b")
     def b(gl):
+        if b_style == "lobe":
+            gl += stem_(x=0, bottom=P.b_foot, top=asc + P.head_top * 0.5 + P.b_top, head="head", foot="b_foot")
+            gl.lobe(P.stem / 2, +1, P.b_far, -os_,
+                    join(P.b_top_at, P.b_top_thin, P.b_top_angle), join(P.b_bot_at, P.b_bot_thin, P.b_bot_angle),
+                    thick=P.b_lobe_thick, thin_bottom=P.b_lobe_thin_b, out_mid=P.b_out_mid, in_mid=P.b_in_mid,
+                    bx_out=P.b_bx_out, bx_in=P.b_bx_in, tension=P.b_lobe_t, in_tension=P.b_lobe_ti, prefix="bowl.",
+                    crown=dict(x=P.b_crown_x, y=xh + os_, thick=P.b_crown_t))
+            return
         gl += stem_(x=0, top=asc + P.head_top * 0.5, head="head", foot=False)
         x0 = P.stem * P.b_bowl_l
         gl += bowl(x=x0, width=P.b_width - x0, bottom=-os_, top=xh + os_, thick=P.stem * P.round_gain,
@@ -526,11 +601,12 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @g("r")
     def r(gl):
-        gl += stem_(x=0, top=xh + P.head_top, head="head")
-        J = n_join(xh)
+        gl += stem_(x=0, top=xh + P.head_top, head="head", foot="foot_wide")
+        J = join(val(xh) * P.r_join_at, P.r_join_thin, P.r_join_angle)
         _, _, st, d0, thin = contact(J, val(P.stem / 2), +1, rising=True)
+        join_handles(J, val(P.stem / 2), +1, rising=True)
         (gl.path(name="ear", pen=arch_pen, bias=P.n_bias,
-                 profile=Profile((0, thin / max(arch_pen.width_at(d0), 1.0)), (P.n_taper_len, 1), (1, 1)))
+                 profile=Profile((0, thin / max(arch_pen.width_at(d0), 1.0)), (P.r_taper_len, 1), (1, P.r_end_w)))
             .start(st, name="join", dir=d0, terminal=False)
             .curve_to((P.r_width, xh * P.r_y), name="end", dir=P.r_dir, terminal="r_ear"))
 
@@ -539,22 +615,26 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         top = P.f_top
         hook_pen = Pen(angle=P.arch_angle, width=P.stem, contrast=P.arch_contrast)
         y0 = xh + (top - xh) * 0.35
-        gl += stem_(x=0, top=y0, head=False)
-        (gl.path(name="hook", pen=hook_pen, bias=P.n_bias)
+        gl += stem_(x=0, top=y0, head=False, foot="foot_wide")
+        (gl.path(name="hook", pen=hook_pen, bias=P.n_bias, profile=Profile((0, 1), (0.6, 1), (1, P.f_end_w)))
             .start((0, y0 - 2), name="root", dir=90, terminal=False)
             .curve_to((P.f_hook * 0.45, top + os_ - hook_pen.width_at(0) / 2), name="top", dir=0)
-            .curve_to((P.f_hook, top * P.f_end_y), name="end", dir=-60, terminal="f_hook"))
-        rect(gl, "bar", -P.f_bar_l, xh - P.bar_t, P.f_bar_r, xh)
+            .curve_to((P.f_hook, top * P.f_end_y), name="end", dir=P.f_end_dir, terminal="f_hook"))
+        tapered_bar(gl, -P.f_bar_l, xh - P.f_bar_t + P.f_bar_dy, P.f_bar_r, xh + P.f_bar_dy, -P.stem / 2)
 
     @g("t")
     def t(gl):
         tail_pen = Pen(angle=P.arch_angle, width=P.stem, contrast=P.arch_contrast)
-        (gl.path(name="stem", bias=0.5)
+        # the t has its own pen: its tail is a thick crescent in some designs,
+        # a hairline in others (normalised, so the vertical stem stays exact)
+        t_pen = Pen(angle=P.t_angle, width=P.stem, contrast=P.t_contrast)
+        (gl.path(name="stem", bias=0.5, pen=t_pen,
+                 profile=Profile((0, 1), (0.55, 1), (0.8, P.t_turn_w), (1, P.t_end_w)))
             .start((0, P.t_top), name="top", terminal="t_top")
             .line_to((0, P.t_turn), name="turn")
-            .curve_to((P.t_tail * 0.55, -os_ + font.pen.hairline / 2), name="bottom", dir=0)
+            .curve_to((P.t_tail * 0.55, -os_ + t_pen.width_at(0) / 2), name="bottom", dir=0)
             .curve_to((P.t_tail, P.t_tail_y), name="end", dir=60, terminal="t_tail"))
-        rect(gl, "bar", -P.t_bar_l, xh - P.bar_t, P.t_bar_r, xh)
+        tapered_bar(gl, -P.t_bar_l, xh - P.t_bar_t + P.t_bar_dy, P.t_bar_r, xh + P.t_bar_dy, -P.stem / 2)
 
     @g("i")
     def i(gl):
