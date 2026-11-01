@@ -158,7 +158,9 @@ def fit(font_py: Path,
                                     help="params never fitted (default: the fixed vertical metrics)"),
         save: Optional[Path] = typer.Option(None, help="merge fitted values into this YAML file"),
         method: str = typer.Option("nelder-mead", help="nelder-mead (default) or powell (polishing)"),
-        objective: str = typer.Option("distance", help="distance (smooth; default) or iou (polishing towards the target)"),
+        only_improve: bool = typer.Option(False, "--only-improve",
+                                          help="save only if every fitted glyph improves its IoU and stays within target"),
+        objective: str = typer.Option("distance", help="distance (smooth; default), iou (polishing), or target (joint fits: no glyph may drop below target)"),
         overrides: Optional[Path] = typer.Option(None)):
     """Tune parameters (not overrides) to minimise error vs the reference."""
     import yaml
@@ -177,6 +179,15 @@ def fit(font_py: Path,
     typer.echo(f"({r.evaluations} evaluations; first glyph before: IoU {r.before.iou:.4f})" if r.before else "")
     for k, v in r.params.items():
         typer.echo(f"  {k} = {v:g}")
+    if save and only_improve:
+        from .bench.run import score_font
+        before = score_font(compile_font(font, overrides=_overrides_for(font_py, overrides), glyphs=glyphs),
+                            Reference(ref_path), glyphs)
+        worse = [g for g, sc in r.scores.items()
+                 if sc.iou <= before[g].iou or sc.iou < 0.93 or sc.hausdorff > 20]
+        if worse:
+            typer.secho(f"not saved: no improvement (or below target) for {', '.join(worse)}", fg="yellow")
+            save = None
     if save:
         data = yaml.safe_load(save.read_text()) if save.exists() else {}
         data = data or {}

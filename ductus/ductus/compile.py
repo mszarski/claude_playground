@@ -40,6 +40,7 @@ class CompiledGlyph:
     rsb: float = 0.0
     primitives: list[str] = field(default_factory=list)
     stages: dict = field(default_factory=dict)            # per-stage debug geometry (svg paths)
+    handles: list = field(default_factory=list)           # primitive handles (spaced coords)
     strokes: list[Stroke] = field(default_factory=list, repr=False)
 
     def to_json(self) -> dict:
@@ -48,6 +49,7 @@ class CompiledGlyph:
             "bounds": self.bounds, "sides": self.sides,
             "shift": self.shift, "lsb": self.lsb, "rsb": self.rsb, "primitives": self.primitives,
             "stages": {k: svg_path(translated_contours(v, self.shift)) for k, v in self.stages.items() if v},
+            "handles": [{**h, "x": round(h["x"] + self.shift, 2), "y": round(h["y"], 2)} for h in self.handles],
             "svg": svg_path(self.contours),
             "contours": [c.to_json() for c in self.contours],
             "skeleton": self.skeleton, "points": self.points,
@@ -100,8 +102,20 @@ def compile_font(font: Font, params: dict[str, float] | None = None,
         for gname, gdef in font.glyphs.items():
             if glyphs is not None and gname not in glyphs:
                 continue
+            # per-glyph parameter overrides: ``<glyph>.@<param>: {dv: ...}``
+            local = {}
+            for oname, o in overrides.items():
+                if oname.startswith(gname + ".@"):
+                    pname = oname[len(gname) + 2:]
+                    if pname in values:
+                        local[pname] = values[pname] + o.dv
+                        used.add(oname)
             try:
-                out[gname] = _compile_glyph(font, gdef, overrides, used, terminals)
+                if local:
+                    with evaluating({**values, **local}):
+                        out[gname] = _compile_glyph(font, gdef, overrides, used, terminals)
+                else:
+                    out[gname] = _compile_glyph(font, gdef, overrides, used, terminals)
             except DuctusError:
                 raise
             except Exception as e:  # make the failing glyph obvious
@@ -141,6 +155,12 @@ def _orient(group: list[Contour]) -> list[Contour]:
 
 
 def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) -> CompiledGlyph:
+    from .handles import collecting
+    with collecting() as handles:
+        return _compile_glyph_inner(font, gdef, overrides, used, terminals, handles)
+
+
+def _compile_glyph_inner(font, gdef, overrides, used, terminals, handles) -> CompiledGlyph:
     gb = GlyphBuilder(gdef, font)
     gdef.fn(gb)
     r = realize(gb)
@@ -277,7 +297,7 @@ def _compile_glyph(font: Font, gdef: GlyphDef, overrides, used: set, terminals) 
         outline_points=outline_points, raw_signature=raw_signature,
         signature="|".join(c.signature() for c in final), shift=shift,
         lsb=round(lsb, 2), rsb=round(rsb, 2), primitives=sorted(prims),
-        stages=stage, strokes=r.strokes,
+        stages=stage, handles=list(handles), strokes=r.strokes,
     )
 
 

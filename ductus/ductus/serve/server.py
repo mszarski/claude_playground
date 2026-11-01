@@ -90,6 +90,10 @@ class Session:
             known |= set(g.points) | set(g.outline_points) | {f"{g.name}.lsb", f"{g.name}.rsb"}
         out = []
         for name, o in self.overrides.items():
+            if ".@" in name:                     # per-glyph parameter override
+                g, _, pname = name.partition(".@")
+                if g in self.cf.glyphs and pname in self.font.params:
+                    continue
             hit = name in known or (o.stage == "outline" and
                                     any(k in known for k in (name + ".l", name + ".r")))
             if not hit:

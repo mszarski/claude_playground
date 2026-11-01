@@ -238,7 +238,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     four-sided flag). ``g_band``: ``"flat"`` puts a flat bar across the top of
     the g's lower loop (and trims the loop above it) -- a tilted loop with a
     flat top, which one contour bowl can't make."""
-    from ..junctions import contact, join, notch_cut
+    from ..handles import handle
+    from ..junctions import contact, join, join_handles, notch_cut
     from ..parts import part
 
     font.pen = Pen(angle=0, width=P.stem, contrast=1 - P.hairline / P.stem)
@@ -272,7 +273,30 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
                thick_right=thick_right)
 
     def n_join(top):
-        return join(top * P.n_join_at, P.n_join_thin, P.n_join_angle, P.n_notch, P.n_notch_w)
+        # val(top): the join height must be (number x param) to get a handle
+        return join(val(top) * P.n_join_at, P.n_join_thin, P.n_join_angle, P.n_notch, P.n_notch_w)
+
+    def taper_handle(stroke, t_expr):
+        """Handle at the point ``t`` along a stroke (by control-polygon length),
+        moving along the stroke: the end of a taper profile."""
+        import numpy as np
+        from ..geometry import bez
+        cub = stroke.cubics()
+        lens = [float(np.linalg.norm(np.diff(C, axis=0), axis=1).sum()) for C, _ in cub]
+        total = sum(lens) or 1.0
+        t, acc = val(t_expr) * total, 0.0
+        for (C, _), L in zip(cub, lens):
+            if acc + L >= t or (C is cub[-1][0]):
+                u = min(max((t - acc) / max(L, 1e-9), 0.0), 1.0)
+                pt_ = bez(C, np.array([u]))[0]
+                from ..geometry import bez_d1
+                d = bez_d1(C, np.array([u]))[0]
+                # t is measured along the control polygon: dt moves u by
+                # dt*total/L, i.e. the point by |B'(u)|*total/L font units
+                rate = float(np.linalg.norm(d)) * total / max(L, 1e-9)
+                handle(t_expr, pt_, d, rate=rate, label="taper length")
+                return
+            acc += L
 
     @part
     def arch(p, x, width, top=xh, flip=False):
@@ -296,6 +320,8 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             .curve_to((x + width * P.n_shoulder_x, sh_y), name="shoulder", dir=0, tension=P.n_tension)
             .curve_to((leg_x + P.stem / 2 - left_half, top * P.n_out_y * 0.5), name="leg", dir=-90))
         notch_cut(p, J, val(edge), +1)
+        join_handles(J, val(edge), +1, rising=True)
+        taper_handle(p._strokes[-1], P.n_taper_len)
 
     def _cup(p, x, width, top):
         """The arch rotated 180 degrees: leaves the right stem low through the

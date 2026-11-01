@@ -31,6 +31,34 @@ hand work it took. One row per glyph per iteration; overlays live in
 * 03 — residual error is ≤ 1.8 units everywhere (under a pixel at 400 px/em);
   the fitted walls are physically sensible (stem 100.5, hairline 33.5).
 
+### Iteration 07 — joint fit of the shared parameters
+
+Shared parameters were found by perturbation: `stem`, `hairline`,
+`overshoot`, `round_gain` and the serif curve (`serif_ca`, `serif_cb`,
+`serif_cup`) shape 2–6 benchmark glyphs each; `sb_straight` / `sb_round`
+space 5–6. They were fitted **jointly over all eight glyphs** with a
+`target` objective (IoU + distance, plus a hinge penalty for any glyph
+falling below IoU 0.93 or above 20 u Hausdorff — the mean may not be bought
+with one glyph), then spacing jointly, then each glyph's own parameters
+re-polished against the new shared values.
+
+| glyph | 06 | 07 |
+|---|---:|---:|
+| o | 0.983 | 0.985 |
+| n | 0.941 | **0.950** |
+| H | 0.970 | **0.989** |
+| e | 0.937 | 0.935 |
+| a | 0.938 | 0.937 |
+| s | 0.936 | **0.940** |
+| g | 0.931 | 0.931 |
+| v | 0.958 | 0.960 |
+
+Mean IoU 0.951 → 0.953, min 0.931. Lesson: the per-glyph re-polish made 4
+of 8 glyphs *worse* (its objective trades a little IoU for distance), and a
+blind merge would have pushed g below target. Polish results are now only
+accepted if they improve the glyph and keep it on target
+(`ductus fit --only-improve`).
+
 ### Iteration 06 — every benchmark glyph above target, 0 overrides
 
 Combined overlay: `docs/iterations/06/_all.png`.
@@ -98,3 +126,11 @@ shared params over all glyphs is still to do.
 | 06 | 2026-11-01 | `s` | 0.9363 | 5.9 | 2.0 | -5 | 0 | 0 | beak | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
 | 06 | 2026-11-01 | `g` | 0.9306 | 18.7 | 2.2 | +67 | 0 | 0 | bowl, contour, cut | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
 | 06 | 2026-11-01 | `v` | 0.9576 | 15.2 | 1.4 | -2 | 0 | 0 | cut, bracketed, flat | 06: join primitive (arches + lobe), bounded terminal cuts, v vertex clip, s node widths, g flat bar; Powell/IoU polish; 0 overrides |
+| 07 | 2026-11-01 | `o` | 0.9849 | 1.6 | 0.8 | -14 | 0 | 0 | bowl | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `n` | 0.9501 | 17.5 | 1.9 | +29 | 0 | 0 | cut, bracketed, wedge | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `H` | 0.9893 | 2.8 | 0.7 | -13 | 0 | 0 | contour, bracketed | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `e` | 0.9354 | 6.7 | 2.4 | -25 | 0 | 0 | bowl, contour, cut | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `a` | 0.9370 | 7.8 | 2.1 | +2 | 0 | 0 | lobe, beak, wedge | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `s` | 0.9395 | 6.8 | 1.8 | +2 | 0 | 0 | beak | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `g` | 0.9312 | 18.7 | 2.2 | +67 | 0 | 0 | bowl, contour, cut | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |
+| 07 | 2026-11-01 | `v` | 0.9597 | 15.0 | 1.3 | +0 | 0 | 0 | cut, bracketed, flat | 07: joint fit of shared params (stem, hairline, overshoot, round_gain, serif curves) over all 8 glyphs with a no-glyph-below-target objective; per-glyph re-polish accepted only where it improved; 0 overrides |

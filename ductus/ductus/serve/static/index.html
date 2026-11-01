@@ -150,6 +150,9 @@ section h2 button { text-transform: none; letter-spacing: 0; font-weight: 400; f
 .stage-terminals { fill: #b7791f; stroke: #b7791f; }
 .stage-cuts { fill: #c43d3d; stroke: #c43d3d; stroke-dasharray: 4 3; fill-opacity: 0.08; }
 .kind-chip { display: inline-block; font: 10.5px var(--mono); padding: 0 5px; border-radius: 8px; background: var(--chip); margin-left: 4px; }
+.phandle { fill: #e07a10; stroke: var(--canvas); stroke-width: 1.5; cursor: grab; }
+.phandle.sel { fill: #b85c00; }
+.phandle-arm { stroke: #e07a10; stroke-width: 1.2; stroke-dasharray: 3 2; pointer-events: none; }
 .ref-fill { fill: var(--ref); stroke: var(--ref-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .heat { fill: none; stroke-width: 3.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 #refbox { display: none; align-items: center; gap: 6px; color: var(--muted); }
@@ -238,7 +241,7 @@ const store = {
 };
 const round = (v, d = 0) => { const m = 10 ** d; return Math.round(v * m) / m; };
 const fmt = (v, d = 1) => { if (v == null) return "—"; const t = (+v).toFixed(d); return d > 0 ? t.replace(/\.?0+$/, "") : t; };
-const DELTAS = ["dx", "dy", "dw", "da", "dt"];
+const DELTAS = ["dx", "dy", "dw", "da", "dt", "dv"];
 
 const S = {
   data: null, overrides: {}, payload: null,
@@ -470,7 +473,7 @@ function selectables() {
   return list;
 }
 function select(sel) { S.sel = sel; render(); }
-function ov(name) { return S.overrides[name] || { dx: 0, dy: 0, dw: 0, da: 0, dt: 0, stage: "skeleton" }; }
+function ov(name) { return S.overrides[name] || { dx: 0, dy: 0, dw: 0, da: 0, dt: 0, dv: 0, stage: "skeleton" }; }
 
 function setOverride(name, values, stage, checkpoint, coalesce) {
   const cleaned = {};
@@ -633,6 +636,31 @@ function renderCanvas() {
       title(h, c.name);
     }
   }
+  // primitive handles: drag to change a parameter for this glyph only
+  if (S.view.phandles) {
+    // handles sharing an anchor (a join's height, thickness and notch) fan
+    // out along their own axes so each one can be grabbed
+    const placed = [];
+    (g.handles || []).forEach((h, i) => {
+      const d = S.drag && S.drag.target.kind === "param" && S.drag.hidx === i ? S.drag : null;
+      const [ax0, ay0] = toScreen(h.x + ox, h.y);
+      const k = placed.filter(([x, y]) => Math.hypot(x - ax0, y - ay0) < 22).length;
+      placed.push([ax0, ay0]);
+      const off = (16 + 14 * k) / S.z;                       // font units
+      const wx = h.x + ox + h.ax * off + (d ? d.proj * h.ax : 0);
+      const wy = h.y + h.ay * off + (d ? d.proj * h.ay : 0);
+      const [sx, sy] = toScreen(wx, wy);
+      const [bx, by] = [ax0, ay0];
+      el("line", { x1: bx, y1: by, x2: sx, y2: sy, class: "phandle-arm" }, overlay);
+      // a small triangle pointing along the handle's axis (screen y is flipped)
+      const ux = h.ax, uy = -h.ay, px = -uy, py = ux;
+      const tri = `M${sx + ux * 8} ${sy + uy * 8}L${sx + px * 5} ${sy + py * 5}L${sx - px * 5} ${sy - py * 5}Z`;
+      const sel = S.sel && S.sel.kind === "param" && S.sel.param === h.param;
+      const t = el("path", { d: tri, class: "phandle" + (sel ? " sel" : "") }, overlay);
+      t.addEventListener("pointerdown", (e) => startParamDrag(e, h, i));
+      title(t, `${h.label}: ${h.param} = ${fmt(h.value, 2)} (drag: this glyph only)`);
+    });
+  }
   // label of the dragged thing
   if (S.drag && S.drag.label) {
     const t = el("text", { x: S.drag.sx + 14, y: S.drag.sy - 12, class: "tip" }, overlay);
@@ -689,8 +717,40 @@ function startDrag(e, target, mode = "move", side = 1) {
   if (target.kind !== (S.sel && S.sel.kind) || target.name !== (S.sel && S.sel.name)) S.sel = { kind: target.kind, name: target.name };
   render();
 }
+function startParamDrag(e, h, i) {
+  if (e.button !== 0) return;
+  e.stopPropagation(); e.preventDefault();
+  svg.setPointerCapture(e.pointerId);
+  const name = `${cur().name}.@${h.param}`;
+  S.sel = { kind: "param", name, param: h.param };
+  S.drag = { target: { kind: "param", name }, mode: "param", h, hidx: i, start: mouseFont(e),
+             dv0: ov(name).dv || 0, proj: 0, moved: false };
+  render();
+}
+// keep the glyph's value inside the parameter's declared range
+function clampDv(param, dv) {
+  const spec = S.data.param_specs[param], glob = S.data.params[param];
+  if (!spec || !spec.range) return dv;
+  return Math.min(spec.range[1] - glob, Math.max(spec.range[0] - glob, dv));
+}
+function paramDragMove(e, d) {
+  const m = mouseFont(e);
+  const r = svg.getBoundingClientRect();
+  d.sx = e.clientX - r.left; d.sy = e.clientY - r.top;
+  d.proj = (m[0] - d.start[0]) * d.h.ax + (m[1] - d.start[1]) * d.h.ay;
+  if (!d.moved && Math.abs(d.proj) * S.z < 2) return;
+  const checkpoint = !d.moved; d.moved = true;
+  let dv = d.dv0 + d.proj / d.h.per_unit;
+  const span = d.h.range ? d.h.range[1] - d.h.range[0] : 100;
+  dv = clampDv(d.h.param, round(dv, span <= 2 ? 3 : 1));
+  const v = { ...ov(d.target.name), dv };
+  d.label = `${d.h.param} ${fmt(d.h.value - (ov(d.target.name).dv || 0) + dv, 2)} (Δ ${dv > 0 ? "+" : ""}${fmt(dv, 2)})`;
+  setOverride(d.target.name, v, "skeleton", checkpoint, "drag");
+  renderCanvas();
+}
 function dragMove(e) {
   const d = S.drag; if (!d) return;
+  if (d.mode === "param") return paramDragMove(e, d);
   const m = mouseFont(e);
   const r = svg.getBoundingClientRect();
   d.sx = e.clientX - r.left; d.sy = e.clientY - r.top;
@@ -794,6 +854,18 @@ function renderInspector() {
       `</div>` +
       (isNode ? `<div class="fields"><label>stage</label><select id="stage"><option value="skeleton">skeleton (before expansion)</option><option value="outline">outline (both sides, after)</option></select><span></span></div>` : "") +
       `</section>`;
+  } else if (sel && sel.kind === "param") {
+    const o = ov(sel.name);
+    const spec = S.data.param_specs[sel.param] || {};
+    const glob = S.data.params[sel.param];
+    html += `<section><h2>Glyph parameter<span class="grow"></span>
+      <button id="resetSel" ${S.overrides[sel.name] ? "" : "disabled"}>Reset</button></h2>
+      <div class="name">${sel.name}</div><dl class="kv">
+      <dt>font value</dt><dd>${fmt(glob, 3)}</dd><dt>this glyph</dt><dd>${fmt(glob + (o.dv || 0), 3)}</dd>
+      <dt>range</dt><dd>${spec.range ? spec.range.join(" … ") : "—"}</dd></dl>
+      <div class="fields">${field("dv", o.dv || 0, "Δ", 0.01)}</div>
+      <div class="empty">Changes ${sel.param} for <b>${g.name}</b> only. Recurring per-glyph changes
+      suggest the shared value (or the primitive) is wrong.</div></section>`;
   } else if (sel && (sel.kind === "lsb" || sel.kind === "rsb")) {
     const o = ov(sel.name);
     html += `<section><h2>${sel.kind === "lsb" ? "Left" : "Right"} sidebearing<span class="grow"></span>
@@ -841,6 +913,7 @@ function renderInspector() {
   for (const li of box.querySelectorAll(".ovlist li")) li.addEventListener("click", (e) => {
     if (e.target.dataset.del) return;
     const k = li.dataset.n;
+    if (k.includes(".@")) { select({ kind: "param", name: k, param: k.split(".@")[1] }); return; }
     const kind = k.endsWith(".lsb") ? "lsb" : k.endsWith(".rsb") ? "rsb" : findNode(k) ? "node" : cur().points[k] ? "point" : "outline";
     select({ kind, name: k });
   });
@@ -849,6 +922,7 @@ function renderInspector() {
 }
 // what kind of thing an override adjusts -- recurring kinds should become primitives
 function overrideKind(name, o) {
+  if (name.includes(".@")) return "glyph parameter";
   if (/\.(lsb|rsb)$/.test(name)) return "spacing";
   if (/\.(serif|wedge|beak|ball)\./.test(name)) return "terminal";
   if (/\.(join|cup\.join)(\.|$)/.test(name)) return "junction";
@@ -900,6 +974,7 @@ function summarize(o) {
   if (o.dw) parts.push(`w${o.dw > 0 ? "+" : ""}${fmt(o.dw, 0)}`);
   if (o.da) parts.push(`${o.da > 0 ? "+" : ""}${fmt(o.da)}°`);
   if (o.dt) parts.push(`t${o.dt > 0 ? "+" : ""}${fmt(o.dt, 2)}`);
+  if (o.dv) parts.push(`${o.dv > 0 ? "+" : ""}${fmt(o.dv, 2)}`);
   if (o.stage === "outline") parts.push("outline");
   return parts.join(" ");
 }
@@ -929,7 +1004,7 @@ $("#textsize").value = store.get("textsize", 72);
 
 // ------------------------------------------------------------------ header controls
 const TOGGLES = [["fill", "Fill"], ["outline", "Outline"], ["skeleton", "Skeleton"], ["nodes", "Points"], ["opoints", "Outline pts"], ["metrics", "Metrics"], ["context", "Context"],
-                 ["st_strokes", "⋯Strokes"], ["st_contours", "⋯Contours"], ["st_terminals", "⋯Terminals"], ["st_cuts", "⋯Cuts"]];
+                 ["phandles", "Handles"], ["st_strokes", "⋯Strokes"], ["st_contours", "⋯Contours"], ["st_terminals", "⋯Terminals"], ["st_cuts", "⋯Cuts"]];
 function renderToggles() {
   $("#toggles").innerHTML = TOGGLES.map(([k, l]) => `<button data-v="${k}" class="${S.view[k] ? "on" : ""}">${l}</button>`).join("");
   for (const b of $("#toggles").querySelectorAll("button")) b.addEventListener("click", () => {
@@ -987,6 +1062,17 @@ document.addEventListener("keydown", (e) => {
     select(list[i]); return;
   }
   if (!S.sel) return;
+  if (S.sel.kind === "param" && e.key.startsWith("Arrow")) {
+    // one font unit of movement along the handle per press (shift: 10)
+    e.preventDefault();
+    const h = (g.handles || []).find((x) => x.param === S.sel.param);
+    if (!h) return;
+    const dir = e.key === "ArrowUp" || e.key === "ArrowRight" ? 1 : -1;
+    const o = { ...ov(S.sel.name) };
+    o.dv = clampDv(S.sel.param, round((o.dv || 0) + dir * (e.shiftKey ? 10 : 1) / h.per_unit, 3));
+    setOverride(S.sel.name, o, "skeleton", true);
+    return;
+  }
   const name = S.sel.name, o = { ...ov(name) }, big = e.shiftKey;
   const stage = S.sel.kind === "outline" ? "outline" : (o.stage || "skeleton");
   let changed = true;

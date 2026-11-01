@@ -95,7 +95,7 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
         names = [n for n in names if n not in spacing]
     else:
         names, spacing = glyph_params(font, glyph, overrides, exclude)
-    if not names:
+    if not names and not spacing:
         raise ValueError(f"no ranged parameters affect {glyph!r}")
     ranges = np.array([font.params[n].range for n in names], float)
     x0 = np.array([(base_params.get(n, font.params[n].default) - lo) / (hi - lo) for n, (lo, hi) in zip(names, ranges)])
@@ -122,6 +122,13 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
         # mean outline distance is smooth in the parameters; raster IoU is
         # piecewise and stalls the simplex.
         pen = 10 * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
+        if objective_kind == "target":
+            # joint fits: IoU blend, plus a hinge penalty for any glyph that
+            # falls below the benchmark target -- the average may not buy a
+            # better mean by sacrificing one glyph
+            base = sum(5 * (1 - s.iou) + (s.mean_dist + 0.15 * s.hausdorff) / 10 for s in sc.values()) / len(sc)
+            hinge = sum(50 * max(0.0, 0.93 - s.iou) + 0.5 * max(0.0, s.hausdorff - 20) for s in sc.values())
+            return base + hinge + pen
         if objective_kind == "iou":
             # polishing towards the benchmark target: IoU plus a distance term
             return sum(5 * (1 - s.iou) + (s.mean_dist + 0.15 * s.hausdorff) / 10
@@ -129,6 +136,11 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
         return sum((s.mean_dist + 0.15 * s.hausdorff) / 10 for s in sc.values()) / len(sc) + pen * float(np.sum(np.clip(x - 1, 0, None) + np.clip(-x, 0, None)))
 
     _, before = run(x0)
+    if not names:                                   # spacing-only fit: skip the shape search
+        best_x = x0
+        res = type("R", (), {"x": x0})
+        vals, after = run(x0)
+        return _fit_spacing(font, ref, glyphs, glyph, overrides, vals, names, spacing, before, evals)
     # global: quasi-random sample of the parameter box, then local Nelder-Mead
     # from the best few (a single local start gets stuck, e.g. trading
     # hairline thickness against counter shape)
@@ -154,8 +166,11 @@ def fit_glyph(font, ref: Reference, glyph, overrides=None, params: list[str] | N
             best_x, best_f = res.x, res.fun
     res = type("R", (), {"x": best_x})
     vals, after = run(res.x)
-    # spacing: shape scores ignore position, so fit sidebearing params
-    # afterwards, one at a time, against the advance difference
+    return _fit_spacing(font, ref, glyphs, glyph, overrides, vals, names, spacing, before, evals)
+
+def _fit_spacing(font, ref, glyphs, glyph, overrides, vals, names, spacing, before, evals):
+    """Shape scores ignore position, so sidebearing params are fitted
+    afterwards, one at a time, against the advance difference."""
     from scipy.optimize import minimize_scalar
     for name in spacing:
         lo, hi = font.params[name].range

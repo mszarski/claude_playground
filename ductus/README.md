@@ -23,18 +23,18 @@ point-compatible · `n.arch.shoulder` override survives stem changes · editor
 (sliders, draggable points → `overrides.yaml`, live text, ~110 ms slider
 round trip) · `ductus test` passes, 55 unit tests · this README.
 
-**Milestone 2 — benchmark glyphs at target.** All §5 primitive families
+**Milestone 2 — benchmark glyphs at target, joint fit done.** All §5 primitive families
 exist and are tested: width profiles, L/R bias, **joins** (arches) and
 **lobes** (stem bowls), contour bowls (rotation, asymmetric walls), cuts,
 a terminal library with swappable sets, per-node width params, per-glyph
 spacing, and the genre kit (`ductus.kits.serif`). Benchmark (0 overrides,
-params by `ductus fit`): **o 0.983 · H 0.970 · v 0.958 · n 0.941 · a 0.938 ·
-e 0.937 · s 0.936 · g 0.931** IoU — all above the target (IoU ≥ 0.93,
+params by `ductus fit`, shared params fitted jointly): **H 0.989 · o 0.985 ·
+v 0.960 · n 0.950 · s 0.940 · a 0.937 · e 0.935 · g 0.931** IoU — all above the target (IoU ≥ 0.93,
 Hausdorff ≤ 20 u, ≤ 2 overrides); see `docs/representability.md`. The
 original display serif renders `hamburgefonstiv` + `H O A G E S`
 (`docs/display_serif/`). Editor M2: reference onion skin, error heat map,
-stage inspector, overrides grouped by kind. Still to do: primitive handles
-in the editor, a joint fit of all shared params, spacing (M5).
+stage inspector, overrides grouped by kind, **primitive handles**. Still to
+do: spacing (M5), the rest of `hamburgefonstiv` in the benchmark.
 
 ![preview](docs/preview.png)
 
@@ -112,7 +112,11 @@ distance, override count and magnitude, and the primitives used. Overlays
 `docs/iterations/NN/`.
 
 `ductus fit` tunes only *parameters* — measuring the language, not
-hand-tuning skill. It splits parameters by perturbation into shape params and
+hand-tuning skill. Options: `--param` globs; several `--glyph`s fit jointly;
+`--method powell` for polishing; `--objective distance|iou|target`
+(`target` adds a penalty for any glyph below the benchmark target — used for
+the joint fit of shared params); `--only-improve` saves only if every glyph
+improves; `--save fitted.yaml`. It splits parameters by perturbation into shape params and
 spacing-only params; fits shape on mean outline distance (smooth, unlike
 raster IoU) with a Sobol global sample then Nelder–Mead from the best three
 starts; then fits spacing params in 1-D against the advance. Vertical metrics
@@ -163,6 +167,19 @@ exponents), or give 4 quadrants. `stress` rotates the counter's extrema
 (positive = classic oblique). The two contours are oriented as one group so
 the counter is always a hole.
 
+### Primitive handles
+
+Turn on **Handles**: orange arrows sit on primitive *parameters* rather than
+points — serif length and bracket, wedge length and rise, beak length,
+ball radius, join height and thickness, notch depth, taper length along an
+arch, lobe joins and walls, bowl walls. Dragging one (or arrow keys, ⇧ ×10)
+writes a **per-glyph parameter override** `n.@serif_len: { dv: 6 }`: the
+parameter changes for that glyph only, clamped to its declared range. A
+primitive registers a handle only when its value is a plain parameter (or
+parameter × constant), so every drag maps to one parameter. Recurring
+per-glyph overrides of the same parameter mean the shared value — or the
+primitive — is wrong; *Overrides by kind* groups them as "glyph parameter".
+
 ## Overrides
 
 ```yaml
@@ -171,6 +188,7 @@ n.arch.join:          { dx: 0, dy: 0, dw: -18, da: -8 }     # thinner, steeper j
 o.bowl.top:           { dx: 0, dy: 0, dt: 0.15 }            # flatter curve through the top
 m.arch2.shoulder_out: { dx: -6, dy: 4, stage: outline }     # move both expanded points
 o.lsb:                { dx: 6, dy: 0 }                      # sidebearing adjustment
+n.@serif_len:         { dx: 0, dy: 0, dv: 8 }               # parameter changed for this glyph only
 ```
 
 `dw` is interpolated linearly along the segments next to the node; `da`

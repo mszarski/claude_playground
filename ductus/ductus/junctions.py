@@ -19,6 +19,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from .handles import handle
 from .params import val
 
 
@@ -70,9 +71,19 @@ def contact(J: Join, edge_x: float, side: int, rising: bool = True):
 def notch_cut(builder, J: Join, edge_x: float, side: int, name: str = "notch"):
     """Cut a small triangular notch into the stem at the crotch (if any)."""
     at, _, _, depth, w = J.resolved()
+    handle(J.notch, (edge_x - side * max(depth, 0.0), at), (-side, 0), label="notch depth")
     cb = builder.cut(name)
     d = max(depth, 0.0)
     # with depth 0 the triangle is degenerate (zero area) but keeps the structure
     cb.move((edge_x + side * 0.5, at + w / 2), "a").line((edge_x - side * d, at), "tip") \
         .line((edge_x + side * 0.5, at - w / 2), "b").close()
     return cb
+
+
+def join_handles(J: Join, edge_x: float, side: int, rising: bool = True):
+    """Handles for a join's crotch height and entry thickness."""
+    crotch, outer, _, _, _ = contact(J, edge_x, side, rising)
+    a = math.radians(val(J.angle))
+    sgn = 1 if rising else -1
+    handle(J.at, crotch, (0, 1), label="join height")
+    handle(J.thin, outer, (0, sgn), rate=1 / max(math.cos(a), 0.2), label="join thickness")

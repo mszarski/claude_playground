@@ -8,6 +8,9 @@ Fields (all deltas, all optional):
   the adjacent segments)
 * ``da`` -- rotate the direction of travel at a skeleton node (degrees)
 * ``dt`` -- add to the curve tension at a skeleton node (>0 = flatter)
+* ``dv`` -- per-glyph parameter override: on a name ``<glyph>.@<param>``,
+  add ``dv`` to that parameter while compiling that glyph only (written by
+  the editor's primitive handles)
 * ``stage`` -- ``skeleton`` (default) or ``outline``
 """
 from __future__ import annotations
@@ -18,7 +21,7 @@ from pathlib import Path
 import yaml
 
 STAGES = ("skeleton", "outline")
-DELTAS = ("dx", "dy", "dw", "da", "dt")
+DELTAS = ("dx", "dy", "dw", "da", "dt", "dv")
 
 
 @dataclass
@@ -30,6 +33,7 @@ class Override:
     dw: float = 0.0
     da: float = 0.0
     dt: float = 0.0
+    dv: float = 0.0
 
     def is_zero(self) -> bool:
         return all(abs(getattr(self, k)) < 1e-9 for k in DELTAS)

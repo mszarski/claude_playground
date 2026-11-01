@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import math
 
+from .handles import handle
 from .params import val
 
 QUADRANTS = ("br", "tr", "tl", "bl")
@@ -101,6 +102,9 @@ def bowl(builder, left, right, bottom, top, thick, thin, stress=0.0, fullness=0.
     quadrant_contour(outer, extrema(l, r, b, t, val(outer_stress)), _four(fullness))
     quadrant_contour(inner, extrema(l + tl_, r - tr_, b + tb, t - th, val(stress)),
                      _four(inner_fullness if inner_fullness is not None else fullness))
+    ie = extrema(l + tl_, r - tr_, b + tb, t - th, val(stress))
+    handle(thick, ie["left"], (1, 0), label="bowl thick")
+    handle(thin, ie["top"], (0, -1), label="bowl thin")
     rot = val(rotate)
     if rot:
         for cb in (outer, inner):
@@ -165,6 +169,11 @@ def lobe(builder, edge_x, side, far, bottom, top_join, bottom_join, thick, thin_
             C = hobby_cubic(pts[k - 1], math.radians(dirs[k - 1]), pts[k], math.radians(dirs[k]), tens, tens)
             cb.curve(tuple(C[1]), tuple(C[2]), tuple(C[3]), names[k])
 
+    from .junctions import join_handles
+    join_handles(top_join, ex, side, rising=True)
+    join_handles(bottom_join, ex, side, rising=False)
+    handle(thick, i_pts[1], (-away, 0), label="lobe wall")
+    handle(thin_bottom, i_pts[2], (0, 1), label="lobe bottom")
     outer = builder.contour(prefix + "outer")
     inner = builder.contour(prefix + "inner")
     outer.group = inner.group = object()

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .geometry import Contour
+from .handles import handle
 from .params import val
 
 
@@ -153,12 +154,16 @@ def bracketed(length=40, bracket=30, tip=4, curve=(0.6, 0.6), cup=0, axis="verti
             sv = spec.get(sg, {})
             if sv is None or sv == 0:
                 sv = {"length": 0, "bracket": 0, "tip": 0}
-            L = val(sv.get("length", length)); B = val(sv.get("bracket", bracket))
+            L_expr, B_expr = sv.get("length", length), sv.get("bracket", bracket)
+            L = val(L_expr); B = val(B_expr)
             T = val(sv.get("tip", tip)); cv = sv.get("curve", curve)
             ca, cb = val(cv[0]), val(cv[1])
             sl = math.radians(val(sv.get("slope", slope)))
             e0 = F.edge(sg)
             h = L * cb      # handle at the tip, pointing back towards the stem, rising by ``slope``
+            if L > 0 or B > 0:
+                handle(L_expr, F.w(e0 + sg * L, 0), F.e * sg, label=f"serif length")
+                handle(B_expr, F.w(e0, -(T + B)), -F.d, label=f"serif bracket")
             pts[sg] = dict(S0=(e0, -(T + B)), c1=(e0, -(T + B) + B * ca),
                            c2=(e0 + sg * L - sg * h * math.cos(sl), -T - h * math.sin(sl)),
                            S1=(e0 + sg * L, -T), S2=(e0 + sg * L, 0.0))
@@ -190,6 +195,8 @@ def wedge(side="left", length=60, rise=50, drop=40, hollow=0.0, axis="vertical")
         L, R, D, H = val(length), val(rise), val(drop), val(hollow)
         e_side, e_far = F.edge(sg), F.edge(-sg)
         tip = (e_side + sg * L, -R)
+        handle(length, F.w(*tip), F.e * sg, label="wedge length")
+        handle(rise, F.w(*tip), -F.d, label="wedge rise")
         under = (e_side, -R - D)
         nm = f"{end.name}.wedge"
         c = Contour()
@@ -220,6 +227,7 @@ def beak(side="above", length=30, depth=60, axis="horizontal"):
         sg = F.sigma(side)
         e0 = F.edge(sg)
         L, D = val(length), val(depth)
+        handle(length, F.w(e0 + sg * L, 0), F.e * sg, label="beak length")
         b = poly([F.w(e0 - sg * 2, 0), F.w(e0 + sg * L, 0), F.w(e0, -D), F.w(e0 - sg * 2, -D)],
                  [f"{end.name}.beak.base", f"{end.name}.beak.tip", f"{end.name}.beak.back", None])
         t.add.append(b if sg > 0 else b.reversed())   # CCW in world for either side
@@ -238,6 +246,7 @@ def ball(radius=40, side="right", drop=0.0, inset=0.0, axis=None):
         ec = F.edge(sg) - sg * (r + val(inset))
         dc = -r * 0.85 - val(drop)
         cx, cy = F.w(ec, dc)
+        handle(radius, (cx, cy + r), (0, 1), label="ball radius")
         k = 0.5523 * r
         c = Contour()
         nm = f"{end.name}.ball"
