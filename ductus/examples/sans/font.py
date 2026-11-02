@@ -117,6 +117,20 @@ P = kit.params(
     brk_arm=70,
     brk_top=750,
     brk_bot=-109,
+    brace_w=358,
+    brace_pen=82,
+    brace_x=0.44,
+    hash_w=403,
+    hash_slant=138,
+    hash_t=74,
+    hash_bar_t=68,
+    hash_y0=230,
+    hash_gap=206,
+    pct_w=712,
+    pct_ring_w=300,
+    pct_ring_h=362,
+    pct_thick=64,
+    pct_slash_w=53,
 )
 kit.define(font, P, glyphs="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "
                            "ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿı´`¨¸˚ÆŒØæœøß"
