@@ -114,7 +114,7 @@ Key pairs, ours / Geist:
 | TA | −65 | −90 |
 | LT | −95 | −140 |
 
-![words vs Geist Sans](02_vs_geist.png)
-
-In the comparison, ours is the upper row of each pair. Geist also tucks a
+The words comparison against Geist Sans is not committed, because renders
+of the reference stay out of the repo. To regenerate it, run
+`tools/fitting/cmpw.py`. Geist also tucks a
 few pairs our profile kerner leaves alone, such as rn −40 and Fl −20.
