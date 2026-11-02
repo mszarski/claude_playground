@@ -26,7 +26,7 @@ DEFAULTS: dict[str, tuple] = {
     "xheight": (530, (480, 580)), "capheight": (710, (660, 760)), "ascender": (750, (700, 800)),
     "overshoot": (12, (0, 25)), "head_top": (14, (0, 40)),
     # weight / contrast
-    "stem": (86, (50, 140)), "cap_stem": (94, (50, 150)), "hairline": (30, (6, 70)),
+    "stem": (86, (50, 140)), "cap_stem": (94, (50, 150)), "hairline": (30, (6, 120)),
     "round_gain": (1.15, (0.9, 1.4)),
     "arch_angle": (30, (-20, 70)), "arch_contrast": (0.6, (0.0, 0.95)),
     # spacing
@@ -93,18 +93,18 @@ DEFAULTS: dict[str, tuple] = {
     "o_in_full_h": (0.6, (0.4, 0.85)), "o_in_full_v": (0.6, (0.4, 0.85)), "o_stress": (0, (-20, 20)),
     # n
     "n_width": (410, (300, 520)),
-    "n_join_at": (0.78, (0.45, 0.95)), "n_join_thin": (30, (4, 90)), "n_join_angle": (45, (0, 85)),
+    "n_join_at": (0.78, (0.45, 0.95)), "n_join_thin": (30, (4, 120)), "n_join_angle": (45, (0, 85)),
     "n_notch": (0, (0, 30)), "n_notch_w": (20, (4, 60)),
     "n_shoulder_x": (0.45, (0.2, 0.75)), "n_out_y": (0.62, (0.3, 0.9)),
     "n_taper_len": (0.3, (0.02, 0.8)), "n_bias": (0.5, (0.1, 0.9)),
     "n_tension": (1.0, (0.6, 1.8)),
     # H
-    "H_width": (550, (420, 700)), "H_bar_y": (0.52, (0.35, 0.65)), "H_bar_t": (35, (5, 80)),
+    "H_width": (550, (420, 700)), "H_bar_y": (0.52, (0.35, 0.65)), "H_bar_t": (35, (5, 120)),
     # e
     "e_width": (470, (380, 600)), "e_full_h": (0.6, (0.4, 0.85)), "e_full_v": (0.6, (0.4, 0.85)),
     "e_in_full_h": (0.6, (0.4, 0.85)), "e_in_full_v": (0.6, (0.4, 0.85)), "e_stress": (0, (-25, 25)),
     "e_thin_bottom": (1.0, (0.5, 2.5)),
-    "e_bar_y": (0.57, (0.4, 0.7)), "e_bar_t": (35, (5, 80)),
+    "e_bar_y": (0.57, (0.4, 0.7)), "e_bar_t": (35, (5, 120)),
     "e_term_y": (150, (40, 260)), "e_cut_angle": (200, (150, 260)), "e_cut_y": (60, (-20, 200)),
     "e_cut_h1": (0.4, (0.05, 1.2)), "e_cut_h2": (0.4, (0.05, 1.2)), "e_cut_x": (0.5, (0.25, 0.85)),
     # a
@@ -116,7 +116,7 @@ DEFAULTS: dict[str, tuple] = {
     "a_bowl_stress": (0, (-30, 30)), "a_bowl_thin": (1.0, (0.4, 3.0)), "a_bowl_rot": (0, (-10, 35)),
     "a_bowl_r": (0.0, (-60, 60)), "a_bowl_tr": (0.4, (0.05, 1.5)), "a_stem_up": (0, (-40, 120)),
     # a's bowl as a lobe on the stem (two joins)
-    "a_far": (40, (0, 150)), "a_top_at": (280, (150, 380)), "a_top_thin": (35, (6, 100)),
+    "a_far": (40, (0, 150)), "a_top_at": (280, (150, 380)), "a_top_thin": (35, (6, 120)),
     "a_top_angle": (20, (-40, 75)), "a_bot_at": (200, (40, 320)), "a_bot_thin": (70, (6, 180)),
     "a_bot_angle": (30, (-40, 85)), "a_lobe_thick": (95, (30, 170)), "a_lobe_thin_b": (34, (6, 100)),
     "a_out_mid": (0.45, (0.05, 0.95)), "a_in_mid": (0.5, (0.05, 0.95)), "a_bx_out": (0.5, (0.1, 0.95)),
@@ -128,7 +128,7 @@ DEFAULTS: dict[str, tuple] = {
     "s_mid_x": (0.5, (0.3, 0.7)), "s_mid_y": (0.45, (0.3, 0.6)), "s_mid_dir": (-25, (-70, 10)),
     "s_right_y": (0.28, (0.1, 0.45)), "s_bot_x": (0.5, (0.25, 0.75)),
     "s_t1_x": (0.95, (0.7, 1.1)), "s_t1_y": (0.75, (0.55, 0.95)), "s_t2_x": (0.05, (-0.1, 0.3)),
-    "s_t2_y": (0.22, (0.05, 0.45)), "s_swell": (1.0, (0.5, 1.6)), "s_ends": (0.6, (0.2, 1.4)),
+    "s_t2_y": (0.22, (0.05, 0.45)), "s_swell": (1.0, (0.5, 2.0)), "s_ends": (0.6, (0.2, 1.4)),
     "s_angle": (0, (-40, 40)), "s_tension": (1.0, (0.6, 1.6)),
     "s_spread": (0.5, (0.08, 0.5)), "s_bias": (0.5, (0.15, 0.85)),
     # local weight at the s's nodes (width added there, interpolated between)
@@ -171,7 +171,7 @@ DEFAULTS: dict[str, tuple] = {
     # up to ~1: nearly square quadrants, for the g's flat-topped loop band
     "g_loop_full_v": (0.6, (0.4, 0.98)), "g_loop_in_full_v": (0.6, (0.4, 0.98)),
     # v
-    "v_width": (560, (420, 680)), "v_thick": (90, (40, 160)), "v_thin": (25, (5, 80)),
+    "v_width": (560, (420, 680)), "v_thick": (90, (40, 160)), "v_thin": (25, (5, 120)),
     "v_vertex": (0.5, (0.3, 0.7)), "v_os": (12, (0, 30)), "v_sb": (0, (-150, 80)),
     "v_taper": (1.0, (0.3, 1.3)), "v_thin_dx": (0, (-80, 40)),
     "A_sb": (0, (-150, 80)),
@@ -183,18 +183,18 @@ DEFAULTS: dict[str, tuple] = {
     "m_width": (330, (250, 450)), "b_width": (500, (400, 620)), "b_bowl_l": (0.3, (0.0, 0.6)),
     "u_width": (410, (300, 520)), "u_bias": (0.5, (0.1, 0.9)),
     # the u's cup has its own join and shoulder (it is not just the n rotated)
-    "u_join_at": (0.78, (0.45, 0.95)), "u_join_thin": (30, (4, 90)), "u_join_angle": (45, (0, 85)),
+    "u_join_at": (0.78, (0.45, 0.95)), "u_join_thin": (30, (4, 120)), "u_join_angle": (45, (0, 85)),
     "u_shoulder_x": (0.45, (0.2, 0.75)), "u_out_y": (0.62, (0.3, 0.9)), "u_taper_len": (0.3, (0.02, 0.8)),
     "u_tension": (1.0, (0.6, 1.8)), "u_angle": (30, (-20, 70)),
     "h_top": (0, (-40, 80)), "h_stem_w": (1.0, (0.85, 1.15)),
     # b as a lobe hanging on the stem's right edge (b_style="lobe")
-    "b_far": (500, (380, 640)), "b_top_at": (430, (300, 520)), "b_top_thin": (30, (6, 100)),
+    "b_far": (500, (380, 640)), "b_top_at": (430, (300, 520)), "b_top_thin": (30, (6, 120)),
     "b_top_angle": (-30, (-75, 40)), "b_bot_at": (110, (20, 260)), "b_bot_thin": (60, (6, 180)),
     "b_bot_angle": (30, (-40, 85)), "b_lobe_thick": (100, (30, 170)), "b_lobe_thin_b": (34, (6, 100)),
     "b_out_mid": (0.5, (0.05, 0.95)), "b_in_mid": (0.5, (0.05, 0.95)), "b_bx_out": (0.5, (0.1, 0.95)),
     "b_bx_in": (0.5, (0.1, 0.95)), "b_lobe_t": (1.0, (0.6, 1.8)), "b_lobe_ti": (1.0, (0.6, 1.8)),
     "b_top": (0, (-40, 80)), "b_foot": (0, (-40, 60)),
-    "b_crown_x": (0.4, (0.05, 0.9)), "b_crown_t": (34, (6, 100)),
+    "b_crown_x": (0.4, (0.05, 0.9)), "b_crown_t": (34, (6, 120)),
     "b_spur_len": (20, (0, 100)), "b_spur_rise": (20, (0, 100)), "b_spur_drop": (20, (0, 100)),
     "b_foot_angle": (-52, (-89, -10)),
     "r_width": (230, (150, 330)), "r_y": (0.82, (0.6, 0.98)), "r_dir": (-30, (-80, 20)),
@@ -215,13 +215,13 @@ DEFAULTS: dict[str, tuple] = {
     # the t's tail thins along the bottom into a fine terminal
     "t_turn_w": (1.0, (0.3, 1.6)), "t_end_w": (0.6, (0.1, 1.6)),
     "t_wedge_len": (40, (0, 140)), "t_wedge_rise": (100, (0, 200)), "t_wedge_drop": (10, (0, 100)),
-    "t_angle": (0, (-60, 60)), "t_contrast": (None, (0.0, 0.95)), "t_bar_t": (None, (5, 80)), "t_bar_dy": (0, (-40, 40)),
-    "f_end_dir": (-60, (-120, 0)), "f_end_w": (1.0, (0.2, 1.6)), "f_bar_t": (None, (5, 80)), "f_bar_dy": (0, (-40, 40)),
+    "t_angle": (0, (-60, 60)), "t_contrast": (None, (0.0, 0.95)), "t_bar_t": (None, (5, 120)), "t_bar_dy": (0, (-40, 40)),
+    "f_end_dir": (-60, (-120, 0)), "f_end_w": (1.0, (0.2, 1.6)), "f_bar_t": (None, (5, 120)), "f_bar_dy": (0, (-40, 40)),
     "u_leg_t": (1.0, (0.6, 2.5)),
     "t_top": (660, (560, 740)), "t_turn": (110, (40, 200)), "t_tail": (170, (80, 360)), "t_tail_y": (60, (20, 150)),
     "t_bar_l": (90, (30, 160)), "t_bar_r": (140, (60, 320)), "t_cut": (30, (-10, 70)),
     "i_dot_y": (690, (620, 760)), "i_dot_r": (55, (30, 90)),
-    "bar_t": (32, (5, 80)),
+    "bar_t": (32, (5, 120)),
     # the cap rounds' (O, G) own weight and shape: thick x round_gain x cap stem,
     # thin x hairline, fullness offsets from the o's
     "O_thick_k": (1.0, (0.7, 1.4)), "O_thin_k": (1.0, (0.5, 2.5)), "O_full_dh": (0, (-0.2, 0.2)),
@@ -231,20 +231,28 @@ DEFAULTS: dict[str, tuple] = {
     "G_full_dv": (0, (-0.15, 0.15)), "G_in_full_dh": (0, (-0.15, 0.15)), "G_in_full_dv": (0, (-0.15, 0.15)),
     "G_stress": (0, (-20, 20)),
     "O_width": (700, (560, 820)), "A_width": (680, (520, 820)), "A_bar_y": (0.32, (0.2, 0.45)),
-    "A_apex": (40, (0, 120)), "A_thick": (115, (60, 180)), "A_thin": (28, (8, 80)),
-    "E_width": (480, (380, 600)), "E_mid": (0.86, (0.6, 1.0)), "E_arm_t": (32, (8, 80)),
+    "A_apex": (40, (0, 120)), "A_thick": (115, (60, 180)), "A_thin": (28, (8, 120)),
+    "E_width": (480, (380, 600)), "E_mid": (0.86, (0.6, 1.0)), "E_arm_t": (32, (8, 120)),
     "E_serif": (90, (20, 180)), "E_serif_w": (26, (8, 60)),
     "G_width": (690, (560, 820)), "G_bar_y": (0.42, (0.3, 0.55)), "G_term_y": (0.72, (0.6, 0.9)),
     "G_serif": (110, (30, 220)),
     "S_width": (500, (380, 620)),
+    # single-storey g (g_style="single"): stem foot, hook width, end height/direction/width
+    "gs_bot": (60, (-80, 200)), "gs_w": (380, (280, 480)), "gs_end_y": (-110, (-180, 0)),
+    "gs_end_dir": (120, (90, 180)), "gs_end_w": (1.0, (0.4, 1.6)), "descender_g": (-162, (-220, -120)),
+    # sans_set: cut angles of curved strokes' ends (the cut's normal, degrees;
+    # 90 = a horizontal cut)
+    "sans_cut_s1": (90, (0, 180)), "sans_cut_s2": (90, (0, 180)), "sans_cut_hood": (90, (0, 180)),
+    "sans_cut_r": (90, (0, 180)), "sans_cut_f": (90, (0, 180)), "sans_cut_t": (90, (0, 180)),
+    "sans_cut_ear": (0, (-90, 180)),
     # ---- the rest of the lowercase (starting values measured off Geist's bounds)
     "desc_stem": (-200, (-240, -160)),    # where descending stems (p q) end
     # d / q: the lobe on the stem's left (like the a's), rising to a crown
-    "d_far": (450, (360, 540)), "d_top_at": (440, (300, 520)), "d_top_thin": (26, (8, 80)),
-    "d_top_angle": (40, (0, 80)), "d_bot_at": (110, (40, 200)), "d_bot_thin": (50, (8, 90)),
+    "d_far": (450, (360, 540)), "d_top_at": (440, (300, 520)), "d_top_thin": (26, (8, 120)),
+    "d_top_angle": (40, (0, 80)), "d_bot_at": (110, (40, 200)), "d_bot_thin": (50, (8, 120)),
     "d_bot_angle": (50, (0, 80)), "d_lobe_thick": (90, (50, 130)), "d_lobe_thin_b": (34, (10, 80)),
     "d_out_mid": (0.5, (0.3, 0.7)), "d_in_mid": (0.5, (0.3, 0.7)), "d_bx_out": (0.75, (0.3, 1.0)),
-    "d_bx_in": (0.85, (0.3, 1.0)), "d_crown_x": (0.4, (0.1, 0.8)), "d_crown_t": (50, (15, 90)),
+    "d_bx_in": (0.85, (0.3, 1.0)), "d_crown_x": (0.4, (0.1, 0.8)), "d_crown_t": (50, (15, 120)),
     "q_dfar": (0, (-60, 60)), "q_top": (0, (-40, 60)),
     "p_dfar": (0, (-60, 60)),
     # c: the e's bowl and lower terminal; the upper terminal a vertical face
@@ -257,20 +265,20 @@ DEFAULTS: dict[str, tuple] = {
     # k: thin arm with a top serif, thick leg with a foot
     "k_arm_x": (356, (220, 520)), "k_join_y": (181, (80, 320)), "k_leg_x": (336, (220, 560)),
     "k_leg_y0": (288, (180, 420)), "k_leg_x0": (135, (60, 260)), "k_thick": (87, (50, 130)),
-    "k_thin": (41, (10, 80)),
+    "k_thin": (41, (10, 120)),
     # w: two v's, sharing the middle apex
     "w_width": (700, (520, 920)), "w_v1": (0.27, (0.15, 0.4)), "w_v2": (0.73, (0.6, 0.85)),
-    "w_thick": (88, (50, 130)), "w_thin": (34, (10, 70)), "w_mid_dx": (0, (-40, 40)), "w_mid3_dx": (0, (-60, 60)),
+    "w_thick": (88, (50, 130)), "w_thin": (34, (10, 120)), "w_mid_dx": (0, (-40, 40)), "w_mid3_dx": (0, (-60, 60)),
     "w_a2_top": (1.0, (0.6, 1.0)), "w_thin_dx": (0, (-30, 60)),
     # x: thick falling stroke, thin rising one
-    "x_width": (310, (220, 600)), "x_thick": (88, (50, 130)), "x_thin": (34, (10, 70)),
+    "x_width": (310, (220, 600)), "x_thick": (88, (50, 130)), "x_thin": (34, (10, 120)),
     "x_thin_dx": (0, (-60, 60)),
     "diag_foot_len": (50, (10, 120)), "diag_foot_in": (1.0, (0.3, 3.0)),   # feet of diagonals   # the thin stroke's bottom, right of the thick one's top
     # y: the v's thick arm; the thin arm runs on below the baseline into a tail
     "y_width": (420, (300, 600)), "y_vertex": (0.5, (0.3, 0.7)), "y_tail_y": (-120, (-180, -40)),
     "y_end_x": (60, (-40, 200)), "y_end_y": (-190, (-220, -120)), "y_end_w": (2.0, (0.5, 4.0)),
     # z: bars and a thick diagonal; wedges at the top left and bottom right
-    "z_width": (430, (340, 520)), "z_bar_t": (34, (15, 60)), "z_thick": (90, (50, 130)),
+    "z_width": (430, (340, 520)), "z_bar_t": (34, (15, 120)), "z_thick": (90, (50, 130)),
     "z_serif": (110, (40, 200)), "z_serif_w": (20, (8, 50)), "z_wedge": (80, (0, 160)),
     # ---- the rest of the capitals (starting values measured off Geist's bounds)
     # D-bowls (B D P R): flat hairline arms off the stem, then a curve round
@@ -278,7 +286,7 @@ DEFAULTS: dict[str, tuple] = {
     # the outer arms start curving; th: far wall; full: curve fullness
     "B_mid": (0.5, (0.4, 0.6)), "B_far_t": (419, (320, 520)), "B_far_b": (443, (340, 540)),
     "B_flat_t": (184, (60, 300)), "B_flat_b": (214, (60, 320)), "B_th": (94, (50, 140)),
-    "B_hair": (35, (15, 70)), "B_flat_m": (223, (60, 340)), "B_full": (0.6, (0.4, 0.85)), "B_in_full": (0.6, (0.4, 0.85)),   # B_flat_m: the flats either side of the B's waist
+    "B_hair": (35, (15, 120)), "B_flat_m": (223, (60, 340)), "B_full": (0.6, (0.4, 0.85)), "B_in_full": (0.6, (0.4, 0.85)),   # B_flat_m: the flats either side of the B's waist
     "D_far": (514, (400, 620)), "D_flat": (190, (60, 360)), "D_th": (110, (60, 160)),
     "P_bot": (332, (260, 420)), "P_far": (434, (340, 540)), "P_flat": (184, (60, 300)),
     "R_far": (423, (340, 540)), "R_bot": (332, (260, 420)), "R_leg_x0": (171, (80, 280)), "R_leg_x": (401, (300, 500)),
@@ -295,23 +303,23 @@ DEFAULTS: dict[str, tuple] = {
     "J_end_w": (1.0, (0.4, 1.6)), "J_end_dir": (175, (120, 210)),
     "K_arm_x": (420, (300, 540)), "K_join_y": (250, (120, 380)), "K_leg_x": (440, (340, 560)),
     "K_leg_y0": (380, (250, 500)), "K_leg_x0": (230, (100, 340)), "K_thick": (100, (60, 140)),
-    "K_thin": (40, (15, 80)),
-    "M_width": (640, (540, 760)), "M_thin": (36, (15, 70)), "M_thick": (100, (60, 140)),
+    "K_thin": (40, (15, 120)),
+    "M_width": (640, (540, 760)), "M_thin": (36, (15, 120)), "M_thick": (100, (60, 140)),
     "M_vertex": (0.5, (0.4, 0.6)), "M_fall_dx": (0, (-60, 120)), "M_rise_dx": (0, (-120, 60)),
     "M_vdx": (0, (-60, 60)),
-    "N_width": (560, (460, 660)), "N_thin": (36, (15, 70)), "N_thick": (100, (60, 140)),
+    "N_width": (560, (460, 660)), "N_thin": (36, (15, 120)), "N_thick": (100, (60, 140)),
     "N_dx0": (0, (-60, 120)), "N_dx1": (0, (-120, 160)),   # the diagonal's ends, off the stems' centres
-    "U_width": (505, (420, 600)), "U_thin": (36, (15, 70)), "U_thick": (111, (70, 150)),
+    "U_width": (505, (420, 600)), "U_thin": (36, (15, 120)), "U_thick": (111, (70, 150)),
     "U_join": (260, (150, 360)), "U_end_w": (0.32, (0.15, 0.8)),
-    "V_width": (560, (460, 660)), "V_thick": (105, (60, 150)), "V_thin": (34, (15, 70)),
+    "V_width": (560, (460, 660)), "V_thick": (105, (60, 150)), "V_thin": (34, (15, 120)),
     "V_vertex": (0.5, (0.4, 0.6)), "V_thin_dx": (0, (-40, 40)),
     "W_width": (950, (820, 1080)), "W_v1": (0.27, (0.15, 0.4)), "W_v2": (0.73, (0.6, 0.85)),
     "W_mid_dx": (0, (-50, 50)), "W_mid3_dx": (0, (-60, 60)), "W_a2_top": (1.0, (0.6, 1.0)),
     "W_thin_dx": (0, (-30, 60)),   # the thin strokes' feet, right of the thick ones' (as on v)
-    "X_width": (520, (400, 640)), "X_thick": (100, (60, 140)), "X_thin": (36, (15, 70)),
+    "X_width": (520, (400, 640)), "X_thick": (100, (60, 140)), "X_thin": (36, (15, 120)),
     "X_thin_dx": (0, (-60, 60)),
     "Y_width": (560, (460, 680)), "Y_join": (0.45, (0.3, 0.6)), "Y_thick": (100, (60, 140)),
-    "Y_thin": (34, (15, 70)),
+    "Y_thin": (34, (15, 120)),
     "Z_width": (500, (400, 600)), "Z_thick": (105, (60, 150)), "Z_serif": (140, (60, 220)),
     "Z_wedge": (100, (0, 180)),
     # Q's tail: a wedge from the bowl's bottom to a point below right
@@ -332,7 +340,7 @@ DEFAULTS: dict[str, tuple] = {
     "three_ur_dx": (-20, (-80, 40)), "three_bot_x": (0.5, (0.3, 0.7)), "three_end_x": (0.12, (0.0, 0.3)),
     "three_end2_y": (110, (40, 200)), "three_end_dir": (110, (60, 160)),
     "four_x": (410, (340, 480)), "four_bar_y": (200, (140, 260)), "four_bar_t": (40, (20, 70)),
-    "four_bar_r": (580, (500, 640)), "four_thin": (36, (15, 70)), "four_top": (725, (690, 760)),
+    "four_bar_r": (580, (500, 640)), "four_thin": (36, (15, 120)), "four_top": (725, (690, 760)),
     "five_w": (480, (400, 560)), "five_top_l": (130, (80, 200)), "five_top_r": (501, (420, 560)),
     "five_bar_t": (85, (40, 120)), "five_stem_bot": (395, (330, 460)), "five_stem_w": (44, (20, 80)),
     "five_bowl_top": (430, (380, 500)), "five_end_x": (60, (20, 140)), "five_end_y": (80, (30, 160)),
@@ -583,6 +591,21 @@ def bracketed_set(P) -> TerminalSet:
     )
 
 
+def sans_set(P) -> TerminalSet:
+    """No serifs: stems end square (their own butt ends), diagonals and
+    curved strokes are cut off flat -- horizontally unless a cut angle is
+    given (``sans_cut_*``, degrees of the cut's normal, as ``flat`` takes)."""
+    hz = flat("vertical")              # a horizontal cut
+    cut = lambda a: flat(a)
+    return TerminalSet(
+        none,
+        vtop_l=hz, vtop_r=hz, vfoot_l=hz, vfoot_r=hz, A_lfoot=hz, A_rfoot=hz, cap_vfoot=hz,
+        apex=hz, vertex=hz, b_foot=hz, G_foot=hz,
+        s_top=cut(P.sans_cut_s1), s_bottom=cut(P.sans_cut_s2),
+        hood=cut(P.sans_cut_hood), r_ear=cut(P.sans_cut_r), f_hook=cut(P.sans_cut_f),
+        t_tail=cut(P.sans_cut_t), ear=cut(P.sans_cut_ear))
+
+
 def didone_set(P) -> TerminalSet:
     """Flat hairline serifs with a minimal bracket, ball terminals, vertical
     hairline beaks."""
@@ -634,6 +657,7 @@ def didone_set(P) -> TerminalSet:
 # --------------------------------------------------------------------------
 
 def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none",
+           g_style: str = "double",
            b_style: str = "bowl", E_serifs: str = "rect",
            G_jaw: str = "bar"):
     """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
@@ -907,6 +931,18 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @g("g")
     def g_(gl):
+        if g_style == "single":
+            # single-storey: the d's lobe on a stem that runs below the
+            # baseline into a hook to the left
+            gl += stem_(x=0, bottom=P.gs_bot, top=xh + os_ + P.q_top, head="apex", foot=False)
+            d_lobe(gl, -P.d_far)
+            hook_pen = Pen(angle=0, width=P.stem, contrast=1 - P.hairline / P.stem)
+            bot = P.descender_g + P.hairline / 2
+            (gl.path(name="hook", pen=hook_pen, profile=Profile((0, 1), (0.7, 1), (1, P.gs_end_w)))
+                .start((0, P.gs_bot + 2), name="root", dir=270, terminal=False)
+                .curve_to((-P.gs_w * 0.45, bot), name="bottom", dir=180)
+                .curve_to((-P.gs_w, P.gs_end_y), name="end", dir=P.gs_end_dir, terminal="ear"))
+            return
         gl += bowl(x=P.g_bl, width=P.g_br - P.g_bl, bottom=P.g_bb, top=P.g_bt,
                    thick=P.stem * P.g_thick, thin=P.hairline, full=((P.g_full, P.g_full + P.g_full_dv),       # br, tr, tl, bl: the
                          (P.g_full + P.g_tr_dh, P.g_full + P.g_full_dv + P.g_tr_dv),   # shoulder
