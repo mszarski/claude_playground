@@ -244,6 +244,12 @@ DEFAULTS: dict[str, tuple] = {
     "R_leg_dir": (300, (260, 340)),
     "Q_b0x": (440, (300, 600)), "Q_b0y": (130, (40, 260)), "Q_b1x": (640, (500, 780)), "Q_b1y": (-120, (-220, -20)),
     "Q_bar_w": (88, (40, 130)), "N_dy": (0, (-30, 30)),
+    "eight_overlap": (1.0, (0.3, 1.2)), "gs_dfar": (0, (-80, 40)),
+    "seven_stem": (90, (50, 130)), "seven_top_dir": (240, (200, 270)), "seven_foot_dir": (250, (220, 290)),
+    "pound_foot_x": (0.3, (0.15, 0.5)), "pound_foot_dir": (90, (60, 120)), "pound_rise_x": (0.32, (0.15, 0.5)),
+    "pound_rise_y": (0.62, (0.4, 0.8)), "pound_top_x": (0.62, (0.4, 0.8)), "pound_end_x": (0.92, (0.75, 1.05)),
+    "pound_end_y": (0.83, (0.65, 0.95)), "pound_end_w": (0.6, (0.3, 1.4)), "pound_bar_l": (0.08, (-0.1, 0.3)),
+    "pound_bar_r": (0.66, (0.45, 0.9)), "pound_base_k": (1.3, (0.6, 2.0)),
     # single-storey g (g_style="single"): stem foot, hook width, end height/direction/width
     "gs_bot": (60, (-80, 200)), "gs_w": (380, (280, 480)), "gs_end_y": (-110, (-180, 0)),
     "gs_end_dir": (120, (90, 180)), "gs_end_w": (1.0, (0.4, 1.6)), "descender_g": (-162, (-220, -120)),
@@ -665,7 +671,7 @@ def didone_set(P) -> TerminalSet:
 
 def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none",
            g_style: str = "double", l_style: str = "stem", J_style: str = "hook", R_leg: str = "line",
-           Q_style: str = "wedge",
+           Q_style: str = "wedge", seven_style: str = "poly",
            b_style: str = "bowl", E_serifs: str = "rect",
            G_jaw: str = "bar"):
     """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
@@ -943,7 +949,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
             # single-storey: the d's lobe on a stem that runs below the
             # baseline into a hook to the left
             gl += stem_(x=0, bottom=P.gs_bot, top=xh + os_ + P.q_top, head="apex", foot=False)
-            d_lobe(gl, -P.d_far)
+            d_lobe(gl, -P.d_far - P.gs_dfar)
             hook_pen = Pen(angle=0, width=P.stem, contrast=1 - P.hairline / P.stem)
             bot = P.descender_g + P.hairline / 2
             (gl.path(name="hook", pen=hook_pen, profile=Profile((0, 1), (0.7, 1), (1, P.gs_end_w)))
@@ -1742,15 +1748,28 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def seven(gl):
         W, ch, bt = P.seven_w, P.capheight, P.seven_bar_t
         rect(gl, "bar", 0, ch - bt, W, ch)
-        poly_(gl, "diag", [((P.seven_foot_l, 0), "bl"), ((P.seven_foot_r, 0), "br"), ((W, ch - bt + 51), "tr"),
-                           ((W - P.seven_top_w, ch - bt), "tl")])
-        face_wedge(gl, "serif", 0, ch - bt + 1, ch - P.seven_serif, P.seven_wedge, P.E_serif_w, opens=+1)
+        if seven_style == "curve":
+            # a grotesque's 7: a pen stroke from the bar's right end, bowing
+            # as it falls to the baseline
+            pen = Pen(angle=0, width=P.seven_stem, contrast=0)
+            fx = (P.seven_foot_l + P.seven_foot_r) / 2
+            (gl.path(name="diag", pen=pen)
+                .start((W - P.seven_stem * 0.45, ch - bt / 2), name="top", dir=P.seven_top_dir, terminal=False)
+                .curve_to((fx, 0), name="foot", dir=P.seven_foot_dir, terminal="vertex"))
+        else:
+            poly_(gl, "diag", [((P.seven_foot_l, 0), "bl"), ((P.seven_foot_r, 0), "br"), ((W, ch - bt + 51), "tr"),
+                               ((W - P.seven_top_w, ch - bt), "tl")])
+        if seven_style != "curve":
+            face_wedge(gl, "serif", 0, ch - bt + 1, ch - P.seven_serif, P.seven_wedge, P.E_serif_w, opens=+1)
 
     @g("eight", sb=(0, 0))
     def eight(gl):
         W, h, Wt = P.eight_w, P.fig_h, P.eight_top_w
-        gl += fig_bowl(0, W, -os_, P.eight_waist + P.hairline, P.eight_thick_k)
-        gl += fig_bowl((W - Wt) / 2, Wt, P.eight_waist - P.hairline, h, P.eight_thick_k * 0.9, name="upper")
+        # the bowls overlap at the waist by eight_overlap x 2 hairlines: 1, each
+        # keeps its whole wall there (a double waist); 0.5, the walls coincide
+        ov = P.hairline * P.eight_overlap
+        gl += fig_bowl(0, W, -os_, P.eight_waist + ov, P.eight_thick_k)
+        gl += fig_bowl((W - Wt) / 2, Wt, P.eight_waist - ov, h, P.eight_thick_k * 0.9, name="upper")
         sp = Pen(angle=0, width=P.fig_stem * P.eight_sp_w, contrast=0)
         gl.line((W * P.eight_sp_x0, P.eight_sp_y0), (W * P.eight_sp_x1, P.eight_sp_y1), name="spine",
                 names=("top", "bottom"), terminal=(False, False), pen=sp)
@@ -2112,13 +2131,13 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def sterling(gl):
         W, ch = P.pound_w, P.capheight
         pen = Pen(angle=0, width=P.cap_stem, contrast=1 - P.hairline / P.cap_stem)
-        (gl.path(name="hook", pen=pen, profile=Profile((0, 1), (0.7, 1), (1, 0.6)))
-            .start((W * 0.3, 40), name="foot", dir=90, terminal=False)
-            .curve_to((W * 0.32, ch * 0.62), name="rise", dir=85)
-            .curve_to((W * 0.62, ch + os_ - P.hairline / 2), name="top", dir=0)
-            .curve_to((W * 0.92, ch * 0.83), name="end", dir=-70, terminal="ear"))
-        rect(gl, "cross", W * 0.08, P.pound_bar_y - P.math_t / 2, W * 0.66, P.pound_bar_y + P.math_t / 2)
-        rect(gl, "base", 0, 0, W, P.E_arm_t * 1.3)
+        (gl.path(name="hook", pen=pen, profile=Profile((0, 1), (0.7, 1), (1, P.pound_end_w)))
+            .start((W * P.pound_foot_x, 40), name="foot", dir=P.pound_foot_dir, terminal=False)
+            .curve_to((W * P.pound_rise_x, ch * P.pound_rise_y), name="rise", dir=85)
+            .curve_to((W * P.pound_top_x, ch + os_ - P.hairline / 2), name="top", dir=0)
+            .curve_to((W * P.pound_end_x, ch * P.pound_end_y), name="end", dir=-70, terminal="ear"))
+        rect(gl, "cross", W * P.pound_bar_l, P.pound_bar_y - P.math_t / 2, W * P.pound_bar_r, P.pound_bar_y + P.math_t / 2)
+        rect(gl, "base", 0, 0, W, P.E_arm_t * P.pound_base_k)
 
     @g("asciicircum", sb=(0, 0))
     def asciicircum(gl):
