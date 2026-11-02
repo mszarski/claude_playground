@@ -128,6 +128,62 @@ def _shape(otf: Path, face, text: str) -> list[int]:
     return [face.get_name_index(n.encode()) for n in out]
 
 
+def gpos_kerning(otf: Path) -> dict:
+    import os
+    p = str(otf)
+    key = (p, os.path.getmtime(p))
+    if key not in _GPOS_CACHE:
+        _GPOS_CACHE.clear()
+        _GPOS_CACHE[key] = _gpos_kerning(p)
+    return _GPOS_CACHE[key]
+
+
+_GPOS_CACHE: dict = {}
+
+
+def _gpos_kerning(otf) -> dict:
+    """Pair kerning from the font's GPOS ``kern`` feature, by glyph name:
+    {(left, right): font units}. Pair formats 1 (glyph pairs) and 2 (class
+    pairs), extension lookups included. (FreeType's kerning API reads only a
+    legacy ``kern`` table, and ignores ours in CFF fonts; applications use GPOS.)"""
+    from fontTools.ttLib import TTFont
+    tt = TTFont(str(otf))
+    if "GPOS" not in tt:
+        return {}
+    gpos = tt["GPOS"].table
+    idx = sorted({i for fr in gpos.FeatureList.FeatureRecord if fr.FeatureTag == "kern"
+                  for i in fr.Feature.LookupListIndex})
+    pairs: dict = {}
+    order = tt.getGlyphOrder()
+    for i in idx:
+        lk = gpos.LookupList.Lookup[i]
+        for st in lk.SubTable:
+            if lk.LookupType == 9:
+                st = st.ExtSubTable
+            if getattr(st, "LookupType", 2) != 2:
+                continue
+            if st.Format == 1:
+                for first, ps in zip(st.Coverage.glyphs, st.PairSet):
+                    for pv in ps.PairValueRecord:
+                        v = getattr(pv.Value1, "XAdvance", 0) if pv.Value1 else 0
+                        if v:
+                            pairs.setdefault((first, pv.SecondGlyph), v)
+            elif st.Format == 2:
+                cov = set(st.Coverage.glyphs)
+                c1, c2 = st.ClassDef1.classDefs, st.ClassDef2.classDefs
+                by2: dict = {}
+                for g in order:
+                    by2.setdefault(c2.get(g, 0), []).append(g)
+                for first in cov:
+                    rec = st.Class1Record[c1.get(first, 0)]
+                    for k, r2 in enumerate(rec.Class2Record):
+                        v = getattr(r2.Value1, "XAdvance", 0) if r2.Value1 else 0
+                        if v:
+                            for second in by2.get(k, ()):
+                                pairs.setdefault((first, second), v)
+    return pairs
+
+
 def render_text(otf: Path, text: str, out: Path, size: int = 96, margin: int = 24):
     """Rasterise ``text`` with the compiled font through FreeType."""
     import freetype
@@ -137,9 +193,14 @@ def render_text(otf: Path, text: str, out: Path, size: int = 96, margin: int = 2
     asc = face.size.ascender >> 6
     desc = -(face.size.descender >> 6)
     pen_x, glyphs, prev = 0, [], None
+    kern = gpos_kerning(otf)
+    scale = size / face.units_per_EM
+    from fontTools.ttLib import TTFont
+    order = TTFont(str(otf)).getGlyphOrder()
     for idx in _shape(otf, face, text):
-        if prev is not None and face.has_kerning:
-            pen_x += face.get_kerning(prev, idx, freetype.FT_KERNING_UNFITTED).x >> 6
+        if prev is not None:
+            v = kern.get((order[prev], order[idx]), 0)
+            pen_x += int(round(v * scale))
         prev = idx
         # unhinted: the fonts carry no hints, and FreeType's autohinter snaps
         # thin horizontals (hairline serifs) -- proofs should show the outline

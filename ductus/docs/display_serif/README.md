@@ -807,3 +807,54 @@ Symbols mean: 0.886 → 0.898.
 A tooling bug, now fixed: the spacing script keyed non-ASCII letters by
 character ("Æ") instead of glyph name ("AE"), so their spacing never
 applied. Spacing now settles to zero on a second pass.
+
+## 30 — kerning
+
+Sheet: `30.png` (now set with the kerning).
+
+The face now carries 5,476 kerning pairs over its 145 letters and
+punctuation marks (accented letters included). They are not copied from
+Geist: they come from a new **optical auto-kerner** (`ductus/kerning.py`),
+run over our own outlines by a new command, `ductus kern font.py`. The
+command writes `kerning.json`, which the font loads. It is data, so builds
+stay fast; regenerate it after changing shapes or spacing.
+
+**How it measures.** Each glyph's left and right ink extents are sampled
+every 5 u of height. For a pair at its advances, the white at each height
+is the right glyph's left edge minus the left glyph's right edge. A pair's
+optical distance is a power mean of those gaps (p = −32: close to the
+closest approach, but every height counts), with gaps capped at 500 u.
+
+**What it corrects.** Spacing already sets each glyph's side bearings for
+ordinary neighbours. So a pair is compared with what its two glyphs give
+against a neutral flat edge, d(L,|) + d(|,R) − d(|,|), and only the
+difference (the pair's interaction) is kerned, at strength 0.6 (0.3 for
+punctuation). Round sides cancel: oo, OO, on and nn all come out 0.
+What's left is the T's bar over x-height letters, parallel diagonals (AV,
+VA), L before T and Y, and punctuation under F and P.
+
+**Serifs** are discounted in the measure. Protrusions under 80 u tall and
+100 u deep are smoothed to the stem behind them, because you read the stem,
+not the serif tip. Without this, o–n came out −35. The T's bar, 250 u deep,
+still counts.
+
+**Clearance.** A kern never brings the two outlines closer than 90 u, as a
+true 2-D distance, so the A's foot serif under the V's diagonal counts. It
+only limits tightening: pairs that sit close anyway are never pushed apart.
+
+**Calibration.** Geist's kerning was used only to choose the four settings
+and to measure agreement:
+- **Letter pairs:** mean |difference| 12.6 u, correlation 0.70.
+- **Big pairs** (the 316 Geist kerns by 60 u or more): 263 get the same
+  sign, and 127 are within 30 u.
+- **Where they differ:** mostly Geist's choices. It doesn't kern Ty, Tv,
+  Kv or rT, which optically could be. It kerns quote–A pairs more, and
+  T./F, less. Geist also kerns many small class pairs (1,623 letter pairs
+  against our 457).
+
+**Proofs now show kerning.** FreeType's kerning API reads only a legacy
+`kern` table, and ignores ours in these CFF fonts. Proofs had silently set
+every pair unkerned, Geist's included. `proof.render_text` now reads pair
+kerning from GPOS (`proof.gpos_kerning`: glyph and class pairs, extension
+lookups). The four by-eye pairs from iteration 14 are superseded by the
+measured ones.

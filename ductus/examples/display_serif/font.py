@@ -281,6 +281,13 @@ font.spacing.update({
     "E": (4, 12),
     "S": (10, 10),
 })
-# the r's flag overhangs round letters, the f's hook overhangs o
-for left, right, v in (("r", "o", -25), ("r", "e", -25), ("r", "s", -20), ("f", "o", -40)):
-    font.kern(left, right, v)
+# kerning: measured from the outlines by `ductus kern` (optical auto-kerning;
+# regenerate after changing shapes or spacing). Pairs set by hand below it
+# would override it.
+import json as _json
+from pathlib import Path as _Path
+
+_kern = _Path(__file__).with_name("kerning.json")
+if _kern.exists():
+    for _l, _r, _v in _json.loads(_kern.read_text())["pairs"]:
+        font.kern(_l, _r, _v)

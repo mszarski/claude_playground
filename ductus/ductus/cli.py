@@ -110,6 +110,35 @@ def _default_reference(font_py: Path) -> Optional[Path]:
 
 
 @app.command()
+def kern(font_py: Path,
+         out: Optional[Path] = typer.Option(None, help="JSON file to write (default: kerning.json beside the font)"),
+         strength: float = typer.Option(0.6, help="share of the optical difference to correct"),
+         punct_strength: float = typer.Option(0.3, help="... for pairs with punctuation"),
+         clearance: float = typer.Option(90, help="closest the outlines may come (font units)"),
+         min_abs: int = typer.Option(10, help="drop smaller kerns")):
+    """Optical auto-kerning: measure every letter/punctuation pair of the
+    compiled font and write the suggested kerns as data for the font to load."""
+    import unicodedata
+    from .kerning import autokern
+    font = load_font(font_py)
+    font.kerning = {}                      # measure the font as spaced, unkerned
+    cf = compile_font(font, overrides=_overrides_for(font_py, None))
+    names = [n for n, g in cf.glyphs.items() if g.contours and g.unicode is not None
+             and unicodedata.category(chr(g.unicode))[0] in "LP"]
+    t0 = time.perf_counter()
+    pairs = autokern(cf.glyphs, names, min_abs=min_abs, strength=strength, punct_strength=punct_strength,
+                     clearance=clearance)
+    out = out or font_py.parent / "kerning.json"
+    out.write_text(json.dumps({
+        "generated_by": "ductus kern",
+        "settings": {"strength": strength, "punct_strength": punct_strength, "clearance": clearance,
+                     "min_abs": min_abs},
+        "glyphs": len(names),
+        "pairs": [[a, b, v] for (a, b), v in sorted(pairs.items())]}, indent=0, ensure_ascii=False) + "\n")
+    typer.echo(f"{len(pairs)} pairs from {len(names)} glyphs in {time.perf_counter() - t0:.1f}s -> {out}")
+
+
+@app.command()
 def bench(font_py: Path,
           reference: Optional[Path] = typer.Option(None, help="reference font (default: benchmarks/geist_serif/reference)"),
           glyphs: str = typer.Option("", help="comma-separated glyph names (default: all non-empty glyphs)"),

@@ -206,3 +206,26 @@ def test_combine_sets_parts_side_by_side_as_one_outline():
     assert a.advance < ae.advance < a.advance + e.advance        # overlapped, not just set side by side
     assert len(ae.contours) == 3                                  # one outline, two counters (as Geist's)
     assert _bounds(ae.contours)[2] > _bounds(a.contours)[2] + 200
+
+
+def test_autokern_kerns_interactions_not_ordinary_pairs():
+    from ductus.kerning import Kerner
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    cf = compile_font(f, glyphs=list("AVTonHLe"))
+    kr = Kerner(cf.glyphs, strength=0.6, punct_strength=0.3, clearance=90)
+    for a, b in ("HH", "nn", "oo", "on", "no", "Ho"):
+        assert kr.kern(a, b) == 0, a + b                  # spacing already handles these
+    for a, b in ("To", "AV", "LT", "Te"):
+        assert kr.kern(a, b) <= -50, a + b                # overhangs and parallel diagonals
+    k = kr.kern("A", "V")
+    assert kr._closest("A", "V")(k) >= 90 - 1e-6         # never closer than the clearance
+
+
+def test_gpos_kerning_reaches_proofs(tmp_path):
+    from ductus.emit import build_otf
+    from ductus.proof import gpos_kerning
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    cf = compile_font(f, glyphs=["T", "o", "n"])
+    cf.kerning = {("T", "o"): -77}
+    k = gpos_kerning(build_otf(cf, tmp_path / "k.otf"))
+    assert k[("T", "o")] == -77 and ("T", "n") not in k
