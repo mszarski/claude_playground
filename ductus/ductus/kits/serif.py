@@ -237,6 +237,13 @@ DEFAULTS: dict[str, tuple] = {
     "G_width": (690, (560, 820)), "G_bar_y": (0.42, (0.3, 0.55)), "G_term_y": (0.72, (0.6, 0.9)),
     "G_serif": (110, (30, 220)),
     "S_width": (500, (380, 620)),
+    # grotesque options: square-ish dots; the l's tail (l_style="tail"); the R's
+    # curved leg (R_leg="curve"); the J on the baseline (J_style="base")
+    "dot_square": (0, (0, 1)), "l_turn": (150, (60, 300)), "l_tail": (120, (40, 220)),
+    "l_tail_y": (40, (0, 120)), "l_end_w": (1.0, (0.4, 1.4)), "l_end_dir": (20, (-20, 90)),
+    "R_leg_dir": (300, (260, 340)),
+    "Q_b0x": (440, (300, 600)), "Q_b0y": (130, (40, 260)), "Q_b1x": (640, (500, 780)), "Q_b1y": (-120, (-220, -20)),
+    "Q_bar_w": (88, (40, 130)), "N_dy": (0, (-30, 30)),
     # single-storey g (g_style="single"): stem foot, hook width, end height/direction/width
     "gs_bot": (60, (-80, 200)), "gs_w": (380, (280, 480)), "gs_end_y": (-110, (-180, 0)),
     "gs_end_dir": (120, (90, 180)), "gs_end_w": (1.0, (0.4, 1.6)), "descender_g": (-162, (-220, -120)),
@@ -359,7 +366,7 @@ DEFAULTS: dict[str, tuple] = {
     # the 8's spine: a stroke across the waist, from the upper bowl's left
     # down to the lower bowl's right (shares of the width; heights)
     "eight_sp_x0": (0.2, (0.0, 0.5)), "eight_sp_y0": (540, (440, 640)), "eight_sp_x1": (0.8, (0.5, 1.0)),
-    "eight_sp_y1": (230, (130, 330)), "eight_sp_w": (0.8, (0.3, 1.3)),
+    "eight_sp_y1": (230, (130, 330)), "eight_sp_w": (0.8, (0.05, 1.3)),
     # ---- accents (drawn at the lowercase position) ---------------------------
     "acc_y0": (583, (540, 620)), "acc_y1": (745, (690, 800)),        # bottom / top of acute, grave, circumflex
     "acute_bot_w": (30, (10, 60)), "acute_top_w": (97, (50, 140)), "acute_run": (76, (20, 140)),
@@ -439,7 +446,7 @@ DEFAULTS: dict[str, tuple] = {
     # tip width, and how far below the ball's equator its outer curve bends
     "comma_tail": (157, (80, 240)), "comma_dx": (-15, (-60, 40)), "comma_tip_w": (50, (10, 100)),
     "comma_bend": (52, (0, 120)),
-    "semi_dx": (0, (-40, 40)),   # the semicolon's comma, right of its dot
+    "semi_dx": (0, (-40, 40)), "colon_dy": (0, (-80, 20)),   # the colon's (and semicolon's) upper dot, lowered   # the semicolon's comma, right of its dot
     # curly quotes: the comma shape scaled by quote_k; ’ tops out at quote_top,
     # ‘ (turned) bottoms out at quote_bot; pairs are quote_gap apart (centres)
     "quote_k": (0.9, (0.6, 1.2)), "quote_top": (724, (650, 800)), "quote_bot": (530, (450, 620)),
@@ -657,7 +664,8 @@ def didone_set(P) -> TerminalSet:
 # --------------------------------------------------------------------------
 
 def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "stroke", g_band: str = "none",
-           g_style: str = "double",
+           g_style: str = "double", l_style: str = "stem", J_style: str = "hook", R_leg: str = "line",
+           Q_style: str = "wedge",
            b_style: str = "bowl", E_serifs: str = "rect",
            G_jaw: str = "bar"):
     """Register the kit's glyphs on ``font``. ``g_ear``: ``"stroke"`` (a
@@ -1122,7 +1130,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     def i(gl):
         gl += stem_(x=0, top=xh + P.head_top, head="head")
         r = P.i_dot_r
-        k = 0.5523 * r
+        k = r * (0.5523 + (1 - 0.5523) * P.dot_square)
         y = P.i_dot_y
         (gl.contour("dot").move((0, y - r), "bottom").curve((k, y - r), (r, y - k), (r, y), "right")
             .curve((r, y + k), (k, y + r), (0, y + r), "top").curve((-k, y + r), (-r, y + k), (-r, y), "left")
@@ -1247,6 +1255,15 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @g("l")
     def l(gl):
+        if l_style == "tail":
+            # a grotesque's l: the stem turns into a short tail at its foot, like the t's
+            pen = Pen(angle=P.t_angle, width=P.stem, contrast=P.t_contrast)
+            (gl.path(name="stem", bias=0.5, pen=pen, profile=Profile((0, 1), (0.6, 1), (1, P.l_end_w)))
+                .start((0, asc + P.head_top * 0.5 + P.h_top), name="top", terminal="t_top")
+                .line_to((0, P.l_turn), name="turn")
+                .curve_to((P.l_tail * 0.55, -os_ + pen.width_at(0) / 2), name="bottom", dir=0)
+                .curve_to((P.l_tail, P.l_tail_y), name="end", dir=P.l_end_dir, terminal="t_tail"))
+            return
         gl += stem_(x=0, top=asc + P.head_top * 0.5 + P.h_top, head="head")
 
     def d_lobe(gl, far):
@@ -1457,6 +1474,12 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         cap_stem(gl, head="cap_foot_l")
         p_bowl(gl, P.R_far, P.R_bot)
         leg = Pen(angle=0, width=P.R_leg_w, contrast=0)
+        if R_leg == "curve":
+            # a grotesque's R: the leg leaves the bowl and bends down to stand upright
+            (gl.path(name="leg", pen=leg)
+                .start((P.R_leg_x0, P.R_bot + P.B_hair / 2), name="top", dir=P.R_leg_dir, terminal=False)
+                .curve_to((P.R_leg_x, 0), name="foot", dir=270, terminal="vertex"))
+            return
         gl.line((P.R_leg_x0, P.R_bot + P.B_hair / 2), (P.R_leg_x, 0), name="leg", names=("top", "foot"),
                 terminal=(False, "vertex"), pen=leg)
 
@@ -1470,12 +1493,24 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("Q")
     def Q(gl):
         gl += cap_bowl(P.O_width)
+        if Q_style == "bar":
+            # a grotesque's Q: a straight bar crossing the bowl's lower right
+            gl.line((P.Q_b0x, P.Q_b0y), (P.Q_b1x, P.Q_b1y), name="tail", names=("in", "out"),
+                    terminal=("apex", "apex"), pen=Pen(angle=0, width=P.Q_bar_w, contrast=0))
+            return
         poly_(gl, "tail", [((P.Q_t0, 6), "t0"), ((P.Q_tip_x, P.Q_tip_y), "tip"),
                            ((P.Q_end_x, P.Q_end_y), "end"), ((P.Q_t1, -17), "t1")])
 
     @g("J")
     def J(gl):
         cap_stem(gl, bottom=P.J_bot, foot=False)
+        if J_style == "base":
+            # a grotesque's J: the hook turns along the baseline and back up
+            (gl.path(name="hook", pen=cap_pen, profile=Profile((0, 1), (0.5, 1), (1, P.J_end_w)))
+                .start((0, P.J_bot + 2), name="root", dir=270, terminal=False)
+                .curve_to((-P.J_hook * 0.5, -os_ + P.hairline / 2), name="bottom", dir=180)
+                .curve_to((-P.J_hook, P.J_end_y), name="end", dir=P.J_end_dir, terminal="apex"))
+            return
         (gl.path(name="hook", pen=cap_pen, profile=Profile((0, 1), (0.5, 1), (1, P.J_end_w)))
             .start((0, P.J_bot + 2), name="root", dir=270, terminal=False)
             .curve_to((-P.J_hook, P.J_end_y), name="end", dir=P.J_end_dir, terminal="ear"))
@@ -1512,7 +1547,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         thick = Pen(angle=0, width=P.N_thick, contrast=0)
         cap_stem(gl, x=0, head="cap_foot_l", pen=thin, name="left")
         cap_stem(gl, x=W, bottom=-os_, foot="vertex", pen=thin, name="right")
-        gl.line((P.N_dx0, ch), (W + P.N_dx1, -os_), name="diag", names=("top", "foot"), terminal=("apex", "vertex"),
+        gl.line((P.N_dx0, ch), (W + P.N_dx1, -os_ + P.N_dy), name="diag", names=("top", "foot"), terminal=("apex", "vertex"),
                 pen=thick)
         # nothing of the diagonal stands outside the right stem, or below the
         # stem's foot (its flat-cut corner would poke through as a tick)
@@ -2100,7 +2135,7 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     # ---- punctuation ----------------------------------------------------
     def dot(gl, name, cx, cy, r):
-        k = 0.5523 * r
+        k = r * (0.5523 + (1 - 0.5523) * P.dot_square)      # dot_square 1: a square with rounded corners
         (gl.contour(name).move((cx, cy - r), "bottom").curve((cx + k, cy - r), (cx + r, cy - k), (cx + r, cy), "right")
             .curve((cx + r, cy + k), (cx + k, cy + r), (cx, cy + r), "top")
             .curve((cx - k, cy + r), (cx - r, cy + k), (cx - r, cy), "left")
@@ -2151,12 +2186,12 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
     @g("colon", sb=(0, 0))
     def colon(gl):
         dot(gl, "dot", 0, cy_dot, P.dot_r)
-        dot(gl, "dot_top", 0, xh + os_ - P.dot_r, P.dot_r)
+        dot(gl, "dot_top", 0, xh + os_ - P.dot_r + P.colon_dy, P.dot_r)
 
     @g("semicolon", sb=(0, 0))
     def semicolon(gl):
         comma_(gl, "comma", P.semi_dx, cy_dot)
-        dot(gl, "dot_top", 0, xh + os_ - P.dot_r, P.dot_r)
+        dot(gl, "dot_top", 0, xh + os_ - P.dot_r + P.colon_dy, P.dot_r)
 
     @g("quoteright", sb=(0, 0))
     def quoteright(gl):
