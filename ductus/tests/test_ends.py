@@ -171,3 +171,27 @@ def test_punctuation_and_digit_glyphs_are_mapped_and_shaped():
         assert box("(")[1] < 0 < 700 < box("(")[3]            # parentheses span descent to above caps
         assert gs[cmap[ord("—")]].width > gs[cmap[ord("–")]].width > gs[cmap[ord("-")]].width
         assert 650 < box("0")[3] < 760 and box("1")[1] == 0          # lining figures
+
+
+def test_composites_place_marks_on_their_base():
+    from ductus.compile import _bounds
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    cf = compile_font(f, glyphs=["a", "aacute", "A", "Aacute", "ccedilla", "c"])
+    a, aa, A, AA = (cf.glyphs[n] for n in ("a", "aacute", "A", "Aacute"))
+    assert aa.unicode == ord("á") and aa.advance == a.advance
+    ba, baa, bA, bAA = (_bounds(g.contours) for g in (a, aa, A, AA))
+    assert baa[3] > ba[3] + 100                        # the acute stands above the a
+    lift = f.capheight - f.xheight
+    assert abs((bAA[3] - bA[3]) - (baa[3] - ba[3]) - (lift - (bA[3] - ba[3]))) < 20   # caps: lifted by cap - x height
+    bc, bcc = _bounds(cf.glyphs["c"].contours), _bounds(cf.glyphs["ccedilla"].contours)
+    assert bcc[1] < bc[1] - 100                        # the cedilla hangs below the c
+    assert len(cf.glyphs["ccedilla"].contours) == len(cf.glyphs["c"].contours)   # merged into the c's outline
+
+
+def test_slant_shears_the_finished_outline():
+    from ductus.compile import _bounds
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    up = compile_font(f, {"at_slant": 0}, glyphs=["at"]).glyphs["at"]
+    sl = compile_font(f, glyphs=["at"]).glyphs["at"]
+    assert up.raw_signature == sl.raw_signature
+    assert _bounds(sl.contours) != _bounds(up.contours)

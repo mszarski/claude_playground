@@ -708,3 +708,63 @@ is the shape of the hook's curve.
   strokes fit Geist's only roughly.
 
 Over all 52 letters: 0.944.
+
+## 28 — accented letters and the remaining symbols
+
+Sheet: `28.png` (accent and symbol lines under the figures).
+
+**Accented letters**: the Latin-1 set, 53 glyphs: À Á Â Ã Ä Å Ç È–Ë Ì–Ï Ñ
+Ò–Ö Ù–Ü Ý à–å ç è–ë ì–ï ñ ò–ö ù–ü ý ÿ, and the dotless ı they need.
+
+- **Composites**, new in the compiler. `font.composite("aacute", "a",
+  ["acutecomb"])` copies the compiled base's outline and places each mark
+  on it, then merges the result like any other glyph. Marks are drawn at the
+  lowercase position. On capitals, top marks are lifted by cap height −
+  x-height (Geist's capital accents sit exactly that much higher).
+- **Placement**: Geist sets acute and grave by their foot, not their centre.
+  The acute's centre stands about 60 u right of the base's, the grave's
+  about 80 u left (`acute_dx`, `grave_dx`). E, U and Y centre their marks
+  over their arms rather than their ink (`acc_dx_<base>`). This one
+  convention took the acute/grave letters from 0.65–0.85 to 0.92–0.98.
+- **Marks**: acute and grave are slanted wedges, and the circumflex a
+  chevron. The tilde is a uniform pen stroke, the dieresis two dots and the
+  ring a small bowl. The cedilla is a pen-drawn curl. Each is also a
+  standalone spacing accent (´ ` ¨ ¸ ˚), and the combining marks have zero
+  advance.
+- **Pinholes**: the compiler now drops contours under 40 u² (it was 4). The
+  cedilla's curl left 10–27 u² pinholes; no real contour is that small.
+
+Accented letters against Geist: mean 0.941. The lowest are the ç and Ç
+(0.85, the cedilla's curl) and the ý ÿ (0.87, the y itself).
+
+**Symbols**: & * % · # $ + < = > @ [ \ ] ^ _ { | } ~ … • ° × € £. With
+these, all of printable ASCII is covered.
+
+- **Bars and dots**: _ | [ ] · • … ° are bars, rings and dots.
+- **Strokes**: + = < > × are uniform strokes. < > are heavier at the point,
+  and each sits at its own height.
+- **#**: two slanted bars crossed by two flat ones.
+- **%**: two rings and a slash with its own ends.
+- **$**: the S, set taller and lower, with a thin bar through it.
+- **\***: six tapered petals, none upright, as Geist's.
+- **{ }**: two pen strokes meeting at a beak.
+- **~**: the tilde mark lowered, as Geist does.
+- **€**: the C's bowl and aperture with two bars.
+- **&**: one pen stroke (`smooth=True`) from the right arm, round the lower
+  bowl, up through the loop and down to the leg.
+- **@**: an inner bowl and stem inside an open ring, then **slanted**. Geist's
+  @ is italic, so the compiler gained `font.slant(glyph, degrees)`, which
+  shears a finished outline. The stems lint skips sheared glyphs. The slant
+  took the @ from 0.38 to 0.64.
+- **^ £**: Geist has no ^ or £, so these are designed without a reference.
+  The ^ is a chevron at caret height. The £ is a hooked pen stroke, a
+  crossbar and a base.
+
+Symbols against Geist: mean 0.886. Weakest:
+- **@** (0.64): Geist's inner bowl is an italic a, ours a bowl and stem.
+- **&** (0.69): the loop and leg differ in proportion.
+- **{ }** (0.76): Geist's beak is blunter.
+- **~** (0.79).
+
+Still missing: Æ Œ Ø ß and their lowercase, other accents (caron, macron,
+ogonek, …), and broader kerning.

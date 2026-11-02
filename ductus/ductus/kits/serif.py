@@ -352,6 +352,59 @@ DEFAULTS: dict[str, tuple] = {
     # down to the lower bowl's right (shares of the width; heights)
     "eight_sp_x0": (0.2, (0.0, 0.5)), "eight_sp_y0": (540, (440, 640)), "eight_sp_x1": (0.8, (0.5, 1.0)),
     "eight_sp_y1": (230, (130, 330)), "eight_sp_w": (0.8, (0.3, 1.3)),
+    # ---- accents (drawn at the lowercase position) ---------------------------
+    "acc_y0": (583, (540, 620)), "acc_y1": (745, (690, 800)),        # bottom / top of acute, grave, circumflex
+    "acute_bot_w": (30, (10, 60)), "acute_top_w": (97, (50, 140)), "acute_run": (76, (20, 140)),
+    "circ_w": (306, (220, 380)), "circ_top_w": (100, (50, 150)), "circ_leg_w": (25, (10, 50)),
+    "circ_in": (40, (10, 90)),
+    "tilde_len": (302, (220, 380)), "tilde_lo": (627, (580, 680)), "tilde_hi": (691, (640, 740)),
+    "tilde_w": (46, (20, 80)), "tilde_dir": (55, (20, 80)),
+    "diaer_r": (56, (35, 75)), "diaer_gap": (180, (130, 240)), "diaer_y": (662, (620, 700)),
+    "ring_w": (166, (120, 220)), "ring_h": (160, (120, 220)), "ring_y0": (577, (540, 620)),
+    "ring_thick": (38, (20, 60)), "ring_thin": (22, (10, 50)),
+    "ced_w": (60, (30, 90)), "ced_thin": (20, (8, 40)), "ced_len": (125, (80, 180)), "ced_drop": (200, (150, 240)),
+    "ced_neck": (-60, (-100, -20)),
+    # placement: acute and grave sit by their foot, not their centre, so their
+    # centres stand off the base's (acute right, grave left); some bases
+    # centre their marks off their ink's centre (E and U on their arms, ...)
+    "acute_dx": (65, (0, 120)), "grave_dx": (-80, (-140, 0)),
+    "acc_dx_E": (40, (-40, 100)), "acc_dx_U": (45, (-40, 100)), "acc_dx_Y": (20, (-40, 100)),
+    "acc_dx_y": (0, (-60, 100)), "acc_dx_a": (0, (-60, 60)), "acc_dx_A": (-6, (-60, 60)),
+    "acc_dx_c": (0, (-60, 60)), "acc_dx_C": (0, (-60, 60)),
+    # ---- symbols (starting values off Geist; ^ and £ have no reference) -----
+    "math_t": (40, (20, 70)), "math_y": (279, (220, 340)), "math_w": (408, (320, 480)),
+    "eq_gap": (145, (90, 200)), "eq_dy": (0, (-40, 40)), "lt_dy": (0, (-40, 40)), "eq_t": (40, (20, 70)),
+    "lt_w": (446, (360, 520)), "lt_h": (508, (420, 580)), "lt_t": (42, (20, 90)), "lt_end_k": (1.0, (0.3, 1.2)),
+    "times_w": (396, (320, 460)),
+    "mid_dot_y": (297, (240, 360)), "bullet_r": (112, (70, 150)), "bullet_y": (311, (250, 380)),
+    "ellipsis_gap": (190, (140, 240)),
+    "under_w": (476, (380, 560)), "under_y": (-47, (-100, -10)), "under_t": (52, (25, 80)),
+    "bar_w": (56, (30, 90)), "bar_top": (745, (680, 800)), "bar_bot": (-110, (-200, -40)),
+    "brk_w": (263, (180, 340)), "brk_stem": (62, (35, 100)), "brk_arm": (40, (20, 70)),
+    "brk_top": (745, (680, 800)), "brk_bot": (-134, (-200, -60)),
+    "brace_w": (318, (240, 400)), "brace_pen": (62, (35, 100)), "brace_x": (0.5, (0.3, 0.7)),
+    "hash_w": (491, (400, 580)), "hash_slant": (60, (0, 140)), "hash_t": (50, (25, 80)),
+    "hash_gap": (230, (160, 300)), "hash_bar_t": (44, (20, 70)), "hash_y0": (236, (160, 320)),
+    "hash_y1": (474, (400, 560)),
+    "pct_w": (688, (600, 780)), "pct_ring_w": (240, (180, 300)), "pct_ring_h": (330, (260, 400)),
+    "pct_thick": (60, (30, 90)), "pct_slash_w": (44, (20, 80)), "pct_s0": (130, (0, 260)), "pct_s1": (110, (0, 260)),
+    "deg_w": (280, (200, 340)), "deg_t": (50, (25, 80)),
+    "dollar_bar": (30, (15, 50)), "dollar_h": (710, (640, 820)), "dollar_y0": (0, (-60, 40)),
+    "dollar_bar_dx": (0, (-40, 40)), "dollar_top": (800, (740, 860)), "dollar_bot": (-90, (-150, -40)),
+    "ast_r": (177, (130, 220)), "ast_y": (551, (480, 620)), "ast_tip_w": (70, (30, 110)),
+    "ast_root_w": (14, (0, 40)), "ast_rot": (0, (-30, 30)),
+    "at_w": (909, (800, 1000)), "at_h": (915, (820, 1000)), "at_bot": (-190, (-240, -120)),
+    "at_ring_t": (50, (25, 80)), "at_in_w": (330, (260, 420)), "at_in_h": (430, (360, 500)),
+    "at_in_x": (0.33, (0.25, 0.45)), "at_in_y": (90, (40, 160)), "at_slant": (14, (0, 25)),
+    "amp_w": (620, (540, 700)), "amp_arm_x": (0.9, (0.75, 1.0)), "amp_arm_y": (330, (250, 420)),
+    "amp_loop_x": (0.45, (0.3, 0.6)), "amp_loop_w": (220, (160, 300)), "amp_waist_y": (430, (360, 500)),
+    "amp_leg_x": (1.0, (0.85, 1.1)), "amp_pen": (90, (60, 120)),
+    "euro_x0": (110, (60, 180)), "euro_w": (555, (480, 640)), "euro_bar_l": (7, (-20, 60)),
+    "euro_bar_r": (470, (380, 560)), "euro_y0": (290, (230, 350)), "euro_y1": (430, (370, 500)),
+    "pound_w": (520, (440, 600)), "pound_bar_y": (330, (260, 400)),
+    "caret_w": (420, (320, 500)), "caret_h": (330, (260, 400)), "caret_y0": (380, (320, 440)),
+    "caret_t": (50, (25, 80)),
+    "atilde_dy": (-391, (-460, -320)),
     # punctuation. dot: radius (the period's, colon's, ! and ? dots)
     "dot_r": (68, (40, 100)),
     # comma: tail depth below the baseline, tip offset from the ball's centre,
@@ -700,34 +753,34 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
 
     @part
     def spine(p, width, height, stem_w, swell_k=1.0, t1=(0, 0), t2=(0, 0), mid=(0, 0), sides=(0, 0), tops=(0, 0),
-              dw=(0, 0, 0, 0, 0, 0, 0)):
+              dw=(0, 0, 0, 0, 0, 0, 0), y0=0):
         """The s/S spine: one stroke, width peaking mid-spine. ``t1``/``t2``,
         ``mid`` (x, y), ``sides`` (left y, right y) and ``tops`` (top x,
         bottom x) offset the s's nodes: the S's own proportions. ``dw`` adds to
         the s's width offsets at t1, top, left, mid, right, bottom, t2."""
         W = width
         sp = Pen(angle=P.s_angle, width=stem_w, contrast=1 - P.hairline / stem_w)
-        top = height + os_ - sp.width_at(180) / 2
-        bot = -os_ + sp.width_at(180) / 2
+        top = y0 + height + os_ - sp.width_at(180) / 2
+        bot = y0 - os_ + sp.width_at(180) / 2
         e_, m_ = P.s_ends * swell_k, P.s_swell * swell_k
         sw = Profile((0, e_), (0.5 - P.s_spread, e_), (0.5, m_), (0.5 + P.s_spread, e_), (1, e_))
         (p.path(name="spine", pen=sp, profile=sw, bias=P.s_bias, smooth=val(P.s_mid_free) >= 0.5)
-            .start((W * (P.s_t1_x + t1[0]), height * (P.s_t1_y + t1[1])), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw + dw[0])
+            .start((W * (P.s_t1_x + t1[0]), y0 + height * (P.s_t1_y + t1[1])), name="t1", pen_angle=P.s_t1_pa, dir=P.s_t1_dir, terminal="s_top", width=P.s_t1_dw + dw[0])
             .curve_to((W * (P.s_top_x + tops[0]), top), name="top", pen_angle=P.s_top_pa, dir=P.s_top_dir, tension=P.s_tension, width=P.s_top_dw + dw[1])
-            .curve_to((sp.width_at(90) / 2, height * (P.s_left_y + sides[0])), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
+            .curve_to((sp.width_at(90) / 2, y0 + height * (P.s_left_y + sides[0])), name="left", pen_angle=P.s_left_pa, dir=P.s_left_dir,
                       tension=P.s_left_t, width=P.s_left_dw + dw[2])
             # s_mid_free: the spine's middle direction is solved (Hobby's mock-
             # curvature continuity) instead of imposed -- an imposed direction
             # makes both halves curl to meet it, and high contrast turns that
             # dip in direction into a kink in the width
-            .curve_to((W * (P.s_mid_x + mid[0]), height * (P.s_mid_y + mid[1])), name="mid", pen_angle=P.s_mid_pa,
+            .curve_to((W * (P.s_mid_x + mid[0]), y0 + height * (P.s_mid_y + mid[1])), name="mid", pen_angle=P.s_mid_pa,
                       dir=None if val(P.s_mid_free) >= 0.5 else P.s_mid_dir, tension=P.s_mid_t,
                       width=P.s_mid_dw + dw[3])
-            .curve_to((W - sp.width_at(90) / 2, height * (P.s_right_y + sides[1])), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
+            .curve_to((W - sp.width_at(90) / 2, y0 + height * (P.s_right_y + sides[1])), name="right", pen_angle=P.s_right_pa, dir=P.s_right_dir,
                       tension=P.s_right_t, width=P.s_right_dw + dw[4])
             .curve_to((W * (P.s_bot_x + tops[1]), bot), name="bottom", pen_angle=P.s_bot_pa, dir=P.s_bot_dir, tension=P.s_tension + P.s_bot_dt,
                       width=P.s_bot_dw + dw[5])
-            .curve_to((W * (P.s_t2_x + t2[0]), height * (P.s_t2_y + t2[1])), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
+            .curve_to((W * (P.s_t2_x + t2[0]), y0 + height * (P.s_t2_y + t2[1])), name="t2", dir=P.s_t2_dir, terminal="s_bottom",
                       width=P.s_t2_dw + dw[6], pen_angle=P.s_t2_pa))
 
     def tapered_bar(gl, x0, y0, x1, y1, stem_l):
@@ -1604,6 +1657,317 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         sp = Pen(angle=0, width=P.fig_stem * P.eight_sp_w, contrast=0)
         gl.line((W * P.eight_sp_x0, P.eight_sp_y0), (W * P.eight_sp_x1, P.eight_sp_y1), name="spine",
                 names=("top", "bottom"), terminal=(False, False), pen=sp)
+
+    # ---- accents and accented letters ------------------------------------
+    # The marks are glyphs of their own (combining: zero advance; spacing:
+    # with side bearings), drawn at the lowercase position; accented letters
+    # are font.composite()s of a base and marks, placed by the compiler.
+    def acute_(gl, flip=False):
+        y0, y1, bw, tw, run = P.acc_y0, P.acc_y1, P.acute_bot_w, P.acute_top_w, P.acute_run
+        pts = [(0, y0), (bw, y0), (run + tw, y1 - 4), (run + tw, y1), (run, y1)]
+        if flip:                       # the grave: the acute mirrored
+            pts = [(-x, y) for x, y in pts][::-1]
+        poly_(gl, "mark", [(q, None) for q in pts])
+
+    def circumflex_(gl):
+        y0, y1, w, tw, lw = P.acc_y0, P.acc_y1, P.circ_w, P.circ_top_w, P.circ_leg_w
+        poly_(gl, "mark", [((0, y0 + 4), "l0"), ((3, y0), "l1"), ((lw, y0), "l2"), ((w / 2, y1 - P.circ_in), "in"),
+                           ((w - lw, y0), "r2"), ((w - 3, y0), "r1"), ((w, y0 + 4), "r0"),
+                           ((w / 2 + tw / 2, y1), "tr"), ((w / 2 - tw / 2, y1), "tl")])
+
+    def tilde_(gl):
+        L, lo, hi, a = P.tilde_len, P.tilde_lo, P.tilde_hi, P.tilde_dir
+        pen = Pen(angle=0, width=P.tilde_w, contrast=0)
+        (gl.path(name="mark", pen=pen)
+            .start((0, lo), name="l", dir=a, terminal=False)
+            .curve_to((L * 0.35, hi), name="hump", dir=0)
+            .curve_to((L * 0.65, lo + (hi - lo) * 0.2), name="trough", dir=0)
+            .curve_to((L, hi + (hi - lo) * 0.3), name="r", dir=a, terminal=False))
+
+    def dieresis_(gl):
+        dot(gl, "dot_l", 0, P.diaer_y, P.diaer_r)
+        dot(gl, "dot_r", P.diaer_gap, P.diaer_y, P.diaer_r)
+
+    def ring_(gl):
+        gl += bowl(name="ring", x=0, width=P.ring_w, bottom=P.ring_y0, top=P.ring_y0 + P.ring_h,
+                   thick=P.ring_thick, thin=P.ring_thin)
+
+    def cedilla_(gl):
+        pen = Pen(angle=0, width=P.ced_w, contrast=1 - P.ced_thin / P.ced_w)
+        L, d = P.ced_len, P.ced_drop
+        (gl.path(name="mark", pen=pen, profile=Profile((0, 0.5), (0.3, 1), (1, 0.7)))
+            .start((0, 15), name="root", dir=262, terminal=False)
+            .curve_to((-8, P.ced_neck), name="neck", dir=0)
+            .curve_to((L * 0.75, -(d + P.ced_neck) / 2 + P.ced_neck * 0.3), name="curl", dir=270)
+            .curve_to((-L * 0.25, -d + P.ced_thin / 2), name="end", dir=180, terminal="ear"))
+
+    MARKS = {"grave": lambda gl: acute_(gl, True), "acute": acute_, "circumflex": circumflex_, "tilde": tilde_,
+             "dieresis": dieresis_, "ring": ring_, "cedilla": cedilla_}
+    ACCENTED = {   # base: {accent: composite glyph}
+        "A": "grave acute circumflex tilde dieresis ring", "E": "grave acute circumflex dieresis",
+        "I": "grave acute circumflex dieresis", "N": "tilde", "O": "grave acute circumflex tilde dieresis",
+        "U": "grave acute circumflex dieresis", "Y": "acute", "C": "cedilla",
+        "a": "grave acute circumflex tilde dieresis ring", "e": "grave acute circumflex dieresis",
+        "dotlessi": "grave acute circumflex dieresis", "n": "tilde", "o": "grave acute circumflex tilde dieresis",
+        "u": "grave acute circumflex dieresis", "y": "acute dieresis", "c": "cedilla"}
+    from fontTools.agl import toUnicode as _tou
+    comp_names = {}
+    for base_, accs in ACCENTED.items():
+        for acc in accs.split():
+            nm = ("i" if base_ == "dotlessi" else base_) + acc
+            ch_ = _tou(nm)
+            if len(ch_) == 1 and (want is None or ch_ in want) and (want is None or base_ != "dotlessi" or True):
+                comp_names[nm] = (base_, acc)
+    used_marks = {acc for _, acc in comp_names.values()}
+    spacing_marks = {"grave": "grave", "acute": "acute", "dieresis": "dieresis", "cedilla": "cedilla", "ring": "ring"}
+    for acc in MARKS:
+        if acc in used_marks:
+            font.glyph(acc + "comb", advance=0)(lambda gl, f=MARKS[acc]: f(gl))
+        sp = spacing_marks.get(acc)
+        if sp and (want is None or _tou(sp) in want):
+            font.glyph(sp, sb=(0, 0))(lambda gl, f=MARKS[acc]: f(gl))
+    if want is None or any(b == "dotlessi" for b, _ in comp_names.values()) or "ı" in (want or ()):
+        @font.glyph("dotlessi")
+        def dotlessi(gl):
+            gl += stem_(x=0, top=xh + P.head_top, head="head")
+    mark_dx = {"acute": P.acute_dx, "grave": P.grave_dx}
+    for nm, (base_, acc) in comp_names.items():
+        dx = mark_dx.get(acc, 0) + (getattr(P, "acc_dx_" + base_) if "acc_dx_" + base_ in DEFAULTS else 0)
+        font.composite(nm, base_, [acc + "comb"], dx=dx)
+
+    # ---- symbols ------------------------------------------------------------
+    sym_pen = lambda w: Pen(angle=0, width=w, contrast=0)
+    cy_math = P.math_y
+
+    @g("plus", sb=(0, 0))
+    def plus(gl):
+        w, t = P.math_w, P.math_t
+        rect(gl, "h", 0, cy_math - t / 2, w, cy_math + t / 2)
+        rect(gl, "v", w / 2 - t / 2, cy_math - w / 2, w / 2 + t / 2, cy_math + w / 2)
+
+    @g("equal", sb=(0, 0))
+    def equal(gl):
+        w, t, gp, cy = P.math_w, P.eq_t, P.eq_gap, cy_math + P.eq_dy
+        rect(gl, "lo", 0, cy - gp / 2 - t / 2, w, cy - gp / 2 + t / 2)
+        rect(gl, "hi", 0, cy + gp / 2 - t / 2, w, cy + gp / 2 + t / 2)
+
+    def chevron(gl, flip):
+        w, h, t, cy = P.lt_w, P.lt_h, P.lt_t, cy_math + P.lt_dy
+        tip, a, b = ((w, cy), (0, cy + h / 2), (0, cy - h / 2)) if flip else \
+                    ((0, cy), (w, cy + h / 2), (w, cy - h / 2))
+        pr = Profile((0, P.lt_end_k), (1, 1))      # heavier at the point
+        gl.line(a, tip, name="upper", names=("end", "tip"), terminal=(False, False), pen=sym_pen(t), profile=pr)
+        gl.line(b, tip, name="lower", names=("end", "tip"), terminal=(False, False), pen=sym_pen(t), profile=pr)
+
+    @g("less", sb=(0, 0))
+    def less(gl):
+        chevron(gl, False)
+
+    @g("greater", sb=(0, 0))
+    def greater(gl):
+        chevron(gl, True)
+
+    @g("multiply", sb=(0, 0))
+    def multiply(gl):
+        w, t = P.times_w, P.math_t
+        gl.line((0, cy_math - w / 2), (w, cy_math + w / 2), name="a", names=("s", "e"), terminal=(False, False),
+                pen=sym_pen(t))
+        gl.line((0, cy_math + w / 2), (w, cy_math - w / 2), name="b", names=("s", "e"), terminal=(False, False),
+                pen=sym_pen(t))
+
+    @g("periodcentered", sb=(0, 0))
+    def periodcentered(gl):
+        dot(gl, "dot", 0, P.mid_dot_y, P.dot_r)
+
+    @g("bullet", sb=(0, 0))
+    def bullet(gl):
+        dot(gl, "dot", 0, P.bullet_y, P.bullet_r)
+
+    @g("ellipsis", sb=(0, 0))
+    def ellipsis(gl):
+        for k in range(3):
+            dot(gl, f"dot{k}", k * P.ellipsis_gap, cy_dot, P.dot_r)
+
+    @g("underscore", sb=(0, 0))
+    def underscore(gl):
+        rect(gl, "bar", 0, P.under_y - P.under_t / 2, P.under_w, P.under_y + P.under_t / 2)
+
+    @g("bar", sb=(0, 0))
+    def bar_(gl):
+        rect(gl, "bar", 0, P.bar_bot, P.bar_w, P.bar_top)
+
+    def bracket(gl, flip):
+        w, st, at, top, bot = P.brk_w, P.brk_stem, P.brk_arm, P.brk_top, P.brk_bot
+        x0 = w - st if flip else 0
+        rect(gl, "stem", x0, bot, x0 + st, top)
+        rect(gl, "top", 0, top - at, w, top)
+        rect(gl, "bottom", 0, bot, w, bot + at)
+
+    @g("bracketleft", sb=(0, 0))
+    def bracketleft(gl):
+        bracket(gl, False)
+
+    @g("bracketright", sb=(0, 0))
+    def bracketright(gl):
+        bracket(gl, True)
+
+    @g("backslash", sb=(0, 0))
+    def backslash(gl):
+        w, run = P.slash_w, P.slash_run
+        poly_(gl, "bar", [((run, P.slash_bot), "bl"), ((run + w, P.slash_bot), "br"),
+                          ((w, P.slash_top), "tr"), ((0, P.slash_top), "tl")])
+
+    def brace(gl, flip):
+        W, top, bot = P.brace_w, P.brk_top, P.brk_bot
+        mid = (top + bot) / 2
+        pen = Pen(angle=0, width=P.brace_pen, contrast=1 - P.hairline / P.brace_pen)
+        sx = (lambda x: W - x) if flip else (lambda x: x)
+        sd = (lambda d: 180 - d) if flip else (lambda d: d)
+        xs = W * P.brace_x
+        for nm, ya, yb, da in (("upper", top - P.hairline / 2, mid, 1), ("lower", bot + P.hairline / 2, mid, -1)):
+            (gl.path(name=nm, pen=pen, profile=Profile((0, 0.6), (0.3, 1), (0.8, 1), (1, 0.4)))
+                .start((sx(W - 10), ya), name="end", dir=sd(180), terminal=False)
+                .curve_to((sx(xs), ya - (ya - yb) * 0.3), name="upper", dir=sd(270 if da > 0 else 90))
+                .curve_to((sx(xs), yb + (ya - yb) * 0.15), name="lower", dir=sd(270 if da > 0 else 90))
+                .curve_to((sx(10), yb), name="beak", dir=sd(180), terminal=False))
+
+    @g("braceleft", sb=(0, 0))
+    def braceleft(gl):
+        brace(gl, False)
+
+    @g("braceright", sb=(0, 0))
+    def braceright(gl):
+        brace(gl, True)
+
+    @g("numbersign", sb=(0, 0))
+    def numbersign(gl):
+        w, sl, t, gp = P.hash_w, P.hash_slant, P.hash_t, P.hash_gap
+        x0 = (w - gp) / 2 - sl / 2
+        for k, nm in ((0, "v1"), (1, "v2")):
+            x = x0 + k * gp
+            poly_(gl, nm, [((x, 0), "bl"), ((x + t, 0), "br"), ((x + t + sl, P.capheight), "tr"),
+                           ((x + sl, P.capheight), "tl")])
+        bt = P.hash_bar_t
+        rect(gl, "h1", 0, P.hash_y0 - bt / 2, w, P.hash_y0 + bt / 2)
+        rect(gl, "h2", 0, P.hash_y1 - bt / 2, w, P.hash_y1 + bt / 2)
+
+    @g("percent", sb=(0, 0))
+    def percent(gl):
+        W, rw, rh, th = P.pct_w, P.pct_ring_w, P.pct_ring_h, P.pct_thick
+        ch = P.capheight
+        gl += bowl(name="ring_top", x=0, width=rw, bottom=ch + os_ - rh, top=ch + os_, thick=th, thin=P.hairline)
+        gl += bowl(name="ring_bottom", x=W - rw, width=rw, bottom=-os_, top=-os_ + rh, thick=th, thin=P.hairline)
+        sw = P.pct_slash_w
+        x0, x1 = P.pct_s0, W - P.pct_s1
+        poly_(gl, "slash", [((x0, -os_), "bl"), ((x0 + sw, -os_), "br"), ((x1, ch + os_), "tr"),
+                            ((x1 - sw, ch + os_), "tl")])
+
+    @g("degree", sb=(0, 0))
+    def degree(gl):
+        ch, w = P.capheight, P.deg_w
+        gl += bowl(name="ring", x=0, width=w, bottom=ch + os_ - w, top=ch + os_, thick=P.deg_t, thin=P.deg_t * 0.8)
+
+    @g("dollar", sb=(0, 0))
+    def dollar(gl):
+        gl += spine(width=P.S_width, height=P.dollar_h, stem_w=P.cap_stem, swell_k=P.S_swell_k,
+                    t1=(P.S_t1_dx, P.S_t1_dy), t2=(P.S_t2_dx, P.S_t2_dy), mid=(P.S_mid_dx, P.S_mid_dy),
+                    sides=(P.S_left_dy, P.S_right_dy), tops=(P.S_top_dx, P.S_bot_dx),
+                    dw=(P.S_t1_dw, P.S_top_dw, P.S_left_dw, P.S_mid_dw, P.S_right_dw, P.S_bot_dw, P.S_t2_dw),
+                    y0=P.dollar_y0)
+        x = P.S_width / 2 + P.dollar_bar_dx
+        rect(gl, "bar", x - P.dollar_bar / 2, P.dollar_bot, x + P.dollar_bar / 2, P.dollar_top)
+
+    @g("asterisk", sb=(0, 0))
+    def asterisk(gl):
+        cy, R, tw, rw = P.ast_y, P.ast_r, P.ast_tip_w, P.ast_root_w
+        for k in range(6):                          # six tapered petals (Geist's: none upright)
+            a = math.radians(P.ast_rot + 60 * k)
+            ux, uy = math.cos(a), math.sin(a)
+            px, py = -uy, ux
+            tip = (ux * R, cy + uy * R)
+            mid = (ux * R * 0.7, cy + uy * R * 0.7)
+            poly_(gl, f"petal{k}", [((px * rw / 2, cy + py * rw / 2), "r1"), ((mid[0] + px * tw / 2, mid[1] + py * tw / 2), "m1"),
+                                    ((tip[0] + px * tw * 0.3, tip[1] + py * tw * 0.3), "t1"),
+                                    ((tip[0] - px * tw * 0.3, tip[1] - py * tw * 0.3), "t2"),
+                                    ((mid[0] - px * tw / 2, mid[1] - py * tw / 2), "m2"), ((-px * rw / 2, cy - py * rw / 2), "r2")])
+
+    font.slant("at", P.at_slant)       # Geist's @ is an italic form
+
+    @g("at", sb=(0, 0))
+    def at(gl):
+        W, H, bot, t = P.at_w, P.at_h, P.at_bot, P.at_ring_t
+        iw, ih = P.at_in_w, P.at_in_h
+        ix, iy = W * P.at_in_x, P.at_in_y
+        pen = Pen(angle=0, width=t * 1.6, contrast=1 - t * 0.6 / (t * 1.6))
+        sx = ix + iw + P.stem / 2                   # the inner stem's centre
+        gl += bowl(name="inner", x=ix, width=iw, bottom=iy, top=iy + ih, thick=P.stem, thin=P.hairline)
+        gl += stem_(x=sx - P.stem / 2, bottom=iy, top=iy + ih, head=False, foot=False, name="stem")
+        cy = bot + H / 2
+        (gl.path(name="ring", pen=pen)
+            .start((sx - P.stem / 2, iy + 20), name="root", dir=300, terminal=False)
+            .curve_to((W - t, cy), name="right", dir=90)
+            .curve_to((W * 0.5, bot + H - t / 2), name="top", dir=180)
+            .curve_to((t, cy), name="left", dir=270)
+            .curve_to((W * 0.5, bot + t / 2), name="bottom", dir=0)
+            .curve_to((W * 0.85, bot + H * 0.12), name="end", dir=30, terminal=False))
+
+    @g("ampersand", sb=(0, 0))
+    def ampersand(gl):
+        W, ch = P.amp_w, P.capheight
+        pen = Pen(angle=0, width=P.amp_pen, contrast=1 - P.hairline / P.amp_pen)
+        lx, lw = W * P.amp_loop_x, P.amp_loop_w
+        top = ch + os_ - P.hairline / 2
+        (gl.path(name="stroke", pen=pen, smooth=True)
+            .start((W * P.amp_arm_x, P.amp_arm_y), name="arm", dir=250, terminal="apex")
+            .curve_to((W * 0.42, -os_ + P.hairline), name="bottom", dir=180)
+            .curve_to((P.amp_pen / 2, 180), name="left", dir=90)
+            .curve_to((lx - lw * 0.1, P.amp_waist_y), name="waist", dir=45)
+            .curve_to((lx + lw / 2 - P.amp_pen / 2, 620), name="loop_r", dir=90)
+            .curve_to((lx, top), name="top", dir=180)
+            .curve_to((lx - lw / 2 + P.amp_pen / 2, 600), name="loop_l", dir=270)
+            .curve_to((W * P.amp_leg_x, 0), name="leg", dir=310, terminal="vertex"))
+
+    @g("Euro", sb=(0, 0))
+    def euro(gl):
+        x0, w = P.euro_x0, P.euro_w
+        gl += bowl(name="bowl", x=x0, width=w, bottom=-os_, top=P.capheight + os_,
+                   thick=P.cap_stem * P.round_gain * P.O_thick_k * P.C_thick_k, thin=P.hairline * P.O_thin_k,
+                   stress=P.o_stress + P.C_stress, thick_right=P.cap_stem * P.round_gain * P.C_right_k,
+                   thin_bottom=P.hairline * P.C_bottom_k)
+        (gl.cut("aperture").move((x0 + w * 0.6, P.C_top_y), "a").line((x0 + w * P.C_face, P.C_top_y), "f")
+            .line((x0 + w * P.C_face, P.capheight + 200), "b").line((x0 + w + 140, P.capheight + 200), "c")
+            .line((x0 + w + 140, P.C_term_y), "d").line((x0 + w, P.C_term_y), "tip")
+            .line((x0 + w * 0.6, P.C_cut_y), "e").close())
+        t = P.math_t
+        rect(gl, "bar_lo", P.euro_bar_l, P.euro_y0 - t / 2, P.euro_bar_r, P.euro_y0 + t / 2)
+        rect(gl, "bar_hi", P.euro_bar_l + 20, P.euro_y1 - t / 2, P.euro_bar_r + 20, P.euro_y1 + t / 2)
+
+    @g("sterling", sb=(0, 0))
+    def sterling(gl):
+        W, ch = P.pound_w, P.capheight
+        pen = Pen(angle=0, width=P.cap_stem, contrast=1 - P.hairline / P.cap_stem)
+        (gl.path(name="hook", pen=pen, profile=Profile((0, 1), (0.7, 1), (1, 0.6)))
+            .start((W * 0.3, 40), name="foot", dir=90, terminal=False)
+            .curve_to((W * 0.32, ch * 0.62), name="rise", dir=85)
+            .curve_to((W * 0.62, ch + os_ - P.hairline / 2), name="top", dir=0)
+            .curve_to((W * 0.92, ch * 0.83), name="end", dir=-70, terminal="ear"))
+        rect(gl, "cross", W * 0.08, P.pound_bar_y - P.math_t / 2, W * 0.66, P.pound_bar_y + P.math_t / 2)
+        rect(gl, "base", 0, 0, W, P.E_arm_t * 1.3)
+
+    @g("asciicircum", sb=(0, 0))
+    def asciicircum(gl):
+        w, h, y0, t = P.caret_w, P.caret_h, P.caret_y0, P.caret_t
+        gl.line((0, y0), (w / 2, y0 + h), name="l", names=("s", "e"), terminal=(False, False), pen=sym_pen(t))
+        gl.line((w, y0), (w / 2, y0 + h), name="r", names=("s", "e"), terminal=(False, False), pen=sym_pen(t))
+
+    @g("asciitilde", sb=(0, 0))
+    def asciitilde(gl):
+        L, lo, hi, a = P.tilde_len, P.tilde_lo + P.atilde_dy, P.tilde_hi + P.atilde_dy, P.tilde_dir
+        (gl.path(name="wave", pen=sym_pen(P.tilde_w))
+            .start((0, lo), name="l", dir=a, terminal=False)
+            .curve_to((L * 0.35, hi), name="hump", dir=0)
+            .curve_to((L * 0.65, lo + (hi - lo) * 0.2), name="trough", dir=0)
+            .curve_to((L, hi + (hi - lo) * 0.3), name="r", dir=a, terminal=False))
 
     # ---- punctuation ----------------------------------------------------
     def dot(gl, name, cx, cy, r):

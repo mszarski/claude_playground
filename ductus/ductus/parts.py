@@ -77,6 +77,8 @@ class Font:
         self.spacing: dict[str, tuple] = {}
         self.kerning: dict[tuple[str, str], Any] = {}
         self.ligatures: dict[str, tuple[str, ...]] = {}   # {ligature glyph: component glyphs}
+        self.composites: dict[str, dict] = {}              # {glyph: {base, marks, unicode, dx, gap}}
+        self.slants: dict[str, Any] = {}                   # {glyph: degrees}: outline sheared after merging
         self.glyphs: dict[str, GlyphDef] = {}
         self.params: dict = {}          # filled in by the loader
         self.source_path = None
@@ -86,6 +88,22 @@ class Font:
         """Substitute ``components`` (glyph names, in order) by ``glyph`` -- an
         OpenType ``liga`` ligature, e.g. ``font.ligature("f_i", ("f", "i"))``."""
         self.ligatures[glyph] = tuple(components)
+
+    def composite(self, glyph: str, base: str, marks, unicode: int | None = None, dx=0, gap=None):
+        """A glyph made of an already defined ``base`` glyph and ``marks``
+        (mark glyph names), e.g. ``font.composite("aacute", "a", ["acutecomb"])``.
+        Marks are drawn at the lowercase position (above the x-height, or
+        below the baseline); the compiler centres each on the base's ink
+        (plus ``dx``) and, on capitals, lifts top marks by cap height -
+        x-height (plus ``gap``). Outlines are copied, so the result is an
+        ordinary glyph."""
+        u = unicode if unicode is not None else _unicode_for(glyph)
+        self.composites[glyph] = {"base": base, "marks": tuple(marks), "unicode": u, "dx": dx, "gap": gap}
+
+    def slant(self, glyph: str, degrees):
+        """Shear ``glyph``'s finished outline by ``degrees`` (an italic form
+        within an upright face, e.g. Geist's @)."""
+        self.slants[glyph] = degrees
 
     def kern(self, left: str, right: str, value):
         """Kern the pair ``left`` ``right`` by ``value`` font units (negative = closer)."""

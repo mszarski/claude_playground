@@ -173,7 +173,8 @@ def run_lints(font: Font, overrides: dict[str, Override] | None = None,
     for cg in cf.glyphs.values():
         findings += check_self_intersections(cg)
         findings += check_direction(cg)
-        findings += check_stems(cg, expected)
+        if cg.name not in getattr(font, "slants", {}):     # a sheared glyph's stems aren't upright
+            findings += check_stems(cg, expected)
     findings += check_overrides(cf)
     for w in cf.warnings:
         if not w.startswith("override"):

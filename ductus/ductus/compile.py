@@ -5,6 +5,7 @@ plus a few internal handles used by lints.
 """
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -122,6 +123,25 @@ def compile_font(font: Font, params: dict[str, float] | None = None,
                 raise
             except Exception as e:  # make the failing glyph obvious
                 raise DuctusError(f"glyph {gname!r}: {type(e).__name__}: {e}") from e
+        # composites (accented letters): copies of compiled base + mark outlines
+        comps = getattr(font, "composites", {})
+        extra: dict[str, CompiledGlyph] = {}
+
+        def compiled(name):
+            if name in out:
+                return out[name]
+            if name not in extra:
+                extra[name] = _compile_glyph(font, font.glyphs[name], overrides, used, terminals)
+            return extra[name]
+        for cname, spec in comps.items():
+            if glyphs is not None and cname not in glyphs:
+                continue
+            if spec["base"] not in font.glyphs or any(m not in font.glyphs for m in spec["marks"]):
+                continue
+            try:
+                out[cname] = _compose(cname, spec, compiled, metrics, font)
+            except Exception as e:
+                raise DuctusError(f"composite {cname!r}: {type(e).__name__}: {e}") from e
         kerning = {(a, b): int(round(val(v))) for (a, b), v in getattr(font, "kerning", {}).items()
                    if a in out and b in out and round(val(v))}
     if glyphs is None:
@@ -133,6 +153,42 @@ def compile_font(font: Font, params: dict[str, float] | None = None,
                  if lg in out and all(c in out for c in comps)}
     return CompiledFont(font.family, font.style, font.upm, metrics, values, specs, out,
                         warnings, sorted(used), (time.perf_counter() - t0) * 1000, kerning, ligatures)
+
+
+def _compose(name, spec, compiled, metrics, font) -> CompiledGlyph:
+    """Copy the base glyph's outline and place each mark on it: centred on the
+    base's ink (plus ``dx``); top marks (drawn above the x-height) lifted to
+    the cap height on capitals, plus ``gap``; bottom marks as drawn."""
+    import dataclasses
+    base = compiled(spec["base"])
+    contours = [c.copy() for c in base.contours]
+    bb = _bounds(base.contours)
+    cx = (bb[0] + bb[2]) / 2 + val(spec["dx"])
+    # capitals (their top past halfway to the cap height) lift top marks by
+    # cap height - x-height; lowercase bases leave them where they are drawn
+    xh, ch = metrics["xheight"], metrics["capheight"]
+    lift = (ch - xh) if bb and bb[3] > (xh + ch) / 2 else 0.0
+    for m in spec["marks"]:
+        mk = compiled(m)
+        mb = _bounds(mk.contours)
+        if mb is None:
+            continue
+        dx = cx - (mb[0] + mb[2]) / 2
+        top = mb[1] > metrics["xheight"] * 0.5          # a mark above, not below
+        dy = (lift + (val(spec["gap"]) if spec["gap"] is not None else 0.0)) if top else 0.0
+        for c in mk.contours:
+            cc = c.copy()
+            for p in cc.pts:
+                p[0] += dx
+                p[1] += dy
+            contours.append(cc)
+    contours = merge(contours)          # one outline: overlaps removed, directions fixed
+    return dataclasses.replace(
+        base, name=name, unicode=spec["unicode"], contours=contours, bounds=_bounds(contours),
+        skeleton=[], points={}, outline_points={}, stages={}, handles=[], strokes=[],
+        primitives=[f"composite:{spec['base']}+" + "+".join(spec["marks"])],
+        raw_signature=base.raw_signature + "|" + "|".join(compiled(m).raw_signature for m in spec["marks"]),
+        signature=base.signature + "|" + "|".join(compiled(m).signature for m in spec["marks"]))
 
 
 def _move(c: Contour, i: int, dx: float, dy: float):
@@ -265,6 +321,13 @@ def _compile_glyph_inner(font, gdef, overrides, used, terminals, handles) -> Com
     stage["cuts"] = list(cuts)
     # 7. remove overlaps, subtract cuts, fix direction (outer CCW), round
     final = merge(flat, cuts=cuts)
+    # an optional slant: the finished outline sheared (``font.slant(glyph, degrees)``)
+    sl = getattr(font, "slants", {}).get(gdef.name)
+    if sl is not None and val(sl):
+        k = math.tan(math.radians(val(sl)))
+        for c in final:
+            for p in c.pts:
+                p[0] += p[1] * k
 
     # 8. spacing
     bounds = _bounds(final)
@@ -352,7 +415,7 @@ def merge(contours: list[Contour], round_to_grid: bool = True, cuts: list[Contou
                 p[0] = float(round(p[0]))
                 p[1] = float(round(p[1]))
         # slivers that rounding collapsed onto a point or a line
-        out = [c for c in out if abs(c.area()) >= 4.0]      # no real contour is 2x2 u
+        out = [c for c in out if abs(c.area()) >= 40.0]     # no real contour is ~6x6 u (pinholes are)
         out = [_drop_spikes(c) for c in out]
     return out
 
