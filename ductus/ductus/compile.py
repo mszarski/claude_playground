@@ -136,7 +136,8 @@ def compile_font(font: Font, params: dict[str, float] | None = None,
         for cname, spec in comps.items():
             if glyphs is not None and cname not in glyphs:
                 continue
-            if spec["base"] not in font.glyphs or any(m not in font.glyphs for m in spec["marks"]):
+            needed = [p[0] for p in spec["parts"]] if "parts" in spec else [spec["base"], *spec["marks"]]
+            if any(n not in font.glyphs for n in needed):
                 continue
             try:
                 out[cname] = _compose(cname, spec, compiled, metrics, font)
@@ -160,6 +161,8 @@ def _compose(name, spec, compiled, metrics, font) -> CompiledGlyph:
     base's ink (plus ``dx``); top marks (drawn above the x-height) lifted to
     the cap height on capitals, plus ``gap``; bottom marks as drawn."""
     import dataclasses
+    if "parts" in spec:
+        return _combine(name, spec, compiled)
     base = compiled(spec["base"])
     contours = [c.copy() for c in base.contours]
     bb = _bounds(base.contours)
@@ -189,6 +192,29 @@ def _compose(name, spec, compiled, metrics, font) -> CompiledGlyph:
         primitives=[f"composite:{spec['base']}+" + "+".join(spec["marks"])],
         raw_signature=base.raw_signature + "|" + "|".join(compiled(m).raw_signature for m in spec["marks"]),
         signature=base.signature + "|" + "|".join(compiled(m).signature for m in spec["marks"]))
+
+
+def _combine(name, spec, compiled) -> CompiledGlyph:
+    """Parts set side by side (each at its own dx, dy from the first's
+    origin), merged into one outline; the advance runs to the last part's."""
+    import dataclasses
+    parts = [(compiled(g), val(dx), val(dy)) for g, dx, dy in spec["parts"]]
+    contours = []
+    for cg, dx, dy in parts:
+        for c in cg.contours:
+            cc = c.copy()
+            for p in cc.pts:
+                p[0] += dx
+                p[1] += dy
+            contours.append(cc)
+    contours = merge(contours)
+    first, last = parts[0][0], parts[-1]
+    return dataclasses.replace(
+        first, name=name, unicode=spec["unicode"], contours=contours, bounds=_bounds(contours),
+        advance=int(round(last[1] + last[0].advance)), skeleton=[], points={}, outline_points={}, stages={},
+        handles=[], strokes=[], primitives=["combine:" + "+".join(g for g, *_ in spec["parts"])],
+        raw_signature="|".join(cg.raw_signature for cg, *_ in parts),
+        signature="|".join(cg.signature for cg, *_ in parts))
 
 
 def _move(c: Contour, i: int, dx: float, dy: float):

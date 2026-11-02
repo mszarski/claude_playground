@@ -150,21 +150,33 @@ P = kit.params(
     acc_dx_A=-18.0, acc_dx_U=40, acc_dx_E=45, acc_dx_C=35, math_t=34, times_w=364, lt_w=444, lt_h=426, lt_t=54,
     lt_dy=8.0, lt_end_k=1.2,
     ellipsis_gap=200, brk_w=245, brk_stem=82, brk_arm=34, brace_w=350, brace_pen=82, brace_x=0.47, hash_w=419,
+    brace_end_w=1.4, brace_beak_w=1.7, brace_beak_x=22,
     hash_slant=132, hash_t=59, hash_gap=206, hash_bar_t=53, pct_w=696, pct_ring_w=288, pct_ring_h=354,
     pct_slash_w=59, deg_w=274, deg_t=47, dollar_bar=36, ast_r=171, ast_y=551, ast_tip_w=55, ast_root_w=14.0,
     pct_s0=80, pct_s1=70, dollar_h=660, dollar_y0=24,
-    at_w=899, at_bot=-202, at_ring_t=58, at_in_w=340, at_in_h=450, at_in_y=42, at_h=955, at_in_x=0.27,
-    at_slant=14.0,
-    amp_w=560, amp_arm_x=0.98, amp_arm_y=378, amp_loop_x=0.45, amp_loop_w=300, amp_waist_y=398, amp_leg_x=0.96,
-    amp_pen=102, euro_x0=62, euro_w=635, euro_bar_l=-13.0, euro_y0=272, euro_y1=424,
+    at_w=899, at_bot=-190, at_ring_t=58, at_in_w=340, at_in_h=450, at_in_y=42, at_h=945, at_in_x=0.27,
+    at_slant=14.0, at_root_dir=348, at_end_x=0.82, at_end_y=0.09, at_end_dir=22, at_pen_k=1.4,
+    amp_w=560, amp_arm_x=0.98, amp_arm_y=378, amp_loop_x=0.47, amp_loop_w=300, amp_waist_y=382, amp_leg_x=0.9,
+    amp_pen=98, euro_x0=62, euro_w=635, euro_bar_l=-13.0, euro_y0=272, euro_y1=424,
+    amp_loop_lx=-40, amp_left_y=200, amp_waist_dir=15.0, amp_leg_dir=294,
     eq_dy=-4.0, eq_t=37, eq_gap=150,
+    oslash_w=56, oslash_x0=-6.0, oslash_os=8.0, Oslash_x0=14.0, AE_x=522, AE_top_x=469, AE_thick=62,
+    AE_top_l=56, AE_top_w=392, AE_bot_w=411, OE_x=497, OE_dw=0, OE_top_w=392, OE_mid_w=306, OE_bot_w=406,
+    OE_right_k=0.2,
+    ae_dx=333, oe_dx=417, ss_top=494, ss_top_x=192, ss_lr_y=128, ss_bot_x=305, ss_end_y=112, ss_waist_x=160,
+    ss_waist_y=372, tl_len=262, tl_amp=70, tl_w=58, tl_dir=80,
 )
-kit.define(font, P, glyphs="hamburgefonstivcdjklpqwxyz HOAGESBCDFIJKLMNPQRTUVWXYZ0123456789ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿı´`¨¸˚&*%·#$+<=>@[\\]^_{|}~…•°×€£.,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
+kit.define(font, P, glyphs="hamburgefonstivcdjklpqwxyz HOAGESBCDFIJKLMNPQRTUVWXYZ0123456789ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöùúûüýÿı´`¨¸˚ÆŒØæœøß&*%·#$+<=>@[\\]^_{|}~…•°×€£.,:;-–—'\"‘’“”!?()/", terminals=kit.bracketed_set(P), g_ear="flag",
            g_band="flat", b_style="lobe", E_serifs="wedge", G_jaw="serif")
 
 # side bearings (left, right) on top of sb_straight / sb_round, set from the
 # glyphs' measured side bearings in the overlays
 font.spacing.update({
+    "germandbls": (-2, -16),
+    "oslash": (8, -8),
+    "Oslash": (10, 10),
+    "OE": (10, 12),
+    "AE": (-76, 12),
     "Euro": (-8, 20),
     "multiply": (60, 60),
     "degree": (-20, -20),

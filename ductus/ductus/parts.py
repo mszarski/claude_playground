@@ -100,6 +100,13 @@ class Font:
         u = unicode if unicode is not None else _unicode_for(glyph)
         self.composites[glyph] = {"base": base, "marks": tuple(marks), "unicode": u, "dx": dx, "gap": gap}
 
+    def combine(self, glyph: str, parts, unicode: int | None = None):
+        """A glyph made of other glyphs set side by side and merged into one
+        outline: ``parts`` = [(glyph, dx, dy), ...] (æ = a + e). Side
+        bearings come from the first and last parts."""
+        u = unicode if unicode is not None else _unicode_for(glyph)
+        self.composites[glyph] = {"parts": [tuple(p) for p in parts], "unicode": u}
+
     def slant(self, glyph: str, degrees):
         """Shear ``glyph``'s finished outline by ``degrees`` (an italic form
         within an upright face, e.g. Geist's @)."""

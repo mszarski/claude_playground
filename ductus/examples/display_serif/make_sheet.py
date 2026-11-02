@@ -39,6 +39,7 @@ if "nine" in cf.glyphs:
     lines[3:3] = [("0123456789  1984 – 2026, 37/50 (8:15)", 72)]
 if "eacute" in cf.glyphs:
     lines[4:4] = [("Ça déjà vu: naïve façade, crème brûlée — El Niño, Ångström, Zoë", 60),
+                  ("Æsop’s Œuvre: søster, Straße, encyclopædia, œuvre — ØRE", 60),
                   ("ÀÁÂÃÄÅ ÇÈÉÊË ÌÍÎÏ ÑÒÓÔÕÖ ÙÚÛÜÝ àáâãäå çèéêë ìíîï ñòóôõö ùúûü ýÿ", 48)]
 if "ampersand" in cf.glyphs:
     lines[6:6] = [("& * % # $ + < = > @ [ \\ ] ^ _ { | } ~ … • · ° × € £", 60)]

@@ -768,3 +768,42 @@ Symbols against Geist: mean 0.886. Weakest:
 
 Still missing: Æ Œ Ø ß and their lowercase, other accents (caron, macron,
 ogonek, …), and broader kerning.
+
+## 29 — Æ Œ Ø æ œ ø ß, and the weakest symbols
+
+Sheet: `29.png` (a line of them under the accents).
+
+- **Ø ø**: the O / o with a slanted bar (`Oslash_*`, `oslash_*`). 0.98 each.
+- **Æ**: the A's left diagonal (thick, on the A's foot) and a crossbar,
+  joined to the E's stem and arms. The top arm reaches back over the
+  diagonal's top (`AE_*`). The E's arms are now one helper, `e_arms`.
+  0.83.
+- **Œ**: the cap bowl, with the E's stem and arms. The bowl's right wall
+  *is* the stem: a cut to trim it took the arms too. Geist's bowl is thin
+  on the right, like its C (`OE_right_k`). 0.85.
+
+  Another sliver trap: the search pushed the bowl past the stem (0.88),
+  where its hairline showed through inside the E. The bowl now stops at
+  the stem's outer edge (`OE_dw` ≤ 0).
+- **æ œ**: `font.combine(glyph, [(part, dx, dy), …])`, new in the compiler,
+  sets a + e and o + e side by side and merges them into one outline (one
+  outer contour, two counters, as Geist's). The only values are the
+  offsets (`ae_dx`, `oe_dx`). æ 0.90, œ 0.96.
+- **ß**: a stem on a left-only foot (a new `foot_l` tag). One pen stroke
+  then runs over the top, round the upper bowl, through the waist and the
+  lower bowl, and ends in a vertical-faced terminal (`ss_*`). 0.85.
+
+**Symbols**, the weakest from iteration 28:
+
+| symbol | before | after | what changed |
+|---|---|---|---|
+| & | .69 | .79 | the loop's sides, the left curve, the waist and leg angles are parameters |
+| @ | .64 | .68 | the ring's root angle, right side, pen and tail end are parameters |
+| { } | .76 | .82 | heavier ends, a blunter beak set in from the edge (`brace_*`) |
+| ~ | .79 | .82 | its own values (`tl_*`), apart from the tilde accent |
+
+Symbols mean: 0.886 → 0.898.
+
+A tooling bug, now fixed: the spacing script keyed non-ASCII letters by
+character ("Æ") instead of glyph name ("AE"), so their spacing never
+applied. Spacing now settles to zero on a second pass.

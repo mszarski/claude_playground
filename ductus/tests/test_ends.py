@@ -195,3 +195,14 @@ def test_slant_shears_the_finished_outline():
     sl = compile_font(f, glyphs=["at"]).glyphs["at"]
     assert up.raw_signature == sl.raw_signature
     assert _bounds(sl.contours) != _bounds(up.contours)
+
+
+def test_combine_sets_parts_side_by_side_as_one_outline():
+    from ductus.compile import _bounds
+    f = load_font(ROOT / "examples/display_serif/font.py")
+    cf = compile_font(f, glyphs=["a", "e", "ae"])
+    a, e, ae = cf.glyphs["a"], cf.glyphs["e"], cf.glyphs["ae"]
+    assert ae.unicode == ord("æ")
+    assert a.advance < ae.advance < a.advance + e.advance        # overlapped, not just set side by side
+    assert len(ae.contours) == 3                                  # one outline, two counters (as Geist's)
+    assert _bounds(ae.contours)[2] > _bounds(a.contours)[2] + 200
