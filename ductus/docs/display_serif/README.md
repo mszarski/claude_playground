@@ -899,3 +899,12 @@ was 127). Still apart:
 - “A (−30 against −140) and LT (−50 against −140): the quote and the L's
   arm stand high, where the clearance and our measure keep them looser.
 - AV (−160 against −110): ours runs tighter.
+
+## 32 — the B's waist
+
+A kit bug found while building Ductus Sans (see `docs/sans/README.md`).
+The B's two bowls each kept only half a hairline at the waist, so their
+counters met and the waist pinched to a point at the stem. Each bowl now
+keeps a full hairline wall there. With its waist flats re-tuned
+(`B_flat_m` 158), the B against Geist rose from 0.93 to 0.95. Kerning was
+regenerated.

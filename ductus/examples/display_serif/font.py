@@ -125,7 +125,7 @@ P = kit.params(
     diag_foot_len=41, diag_foot_in=2.3,
     B_flat_t=208, B_flat_b=212, D_flat=160, D_th=100, P_bot=292, R_leg_x0=211, R_leg_x=409, R_leg_w=94,
     B_hair=34, B_th=95,
-    B_mid=0.512, B_flat_m=113, B_in_full=0.66,
+    B_mid=0.512, B_flat_m=158, B_in_full=0.66,
     C_width=679, C_face=0.9, C_top_y=470, C_term_y=160, C_cut_x=0.53, C_cut_y=68, C_cut_angle=150, C_cut_h2=0.4,
     C_thick_k=0.94, C_stress=6.0, C_in_full_dh=0.04, C_in_full_dv=-0.08, C_right_k=0.6, C_bottom_k=1.6,
     Q_tip_x=620, F_width=371, F_mid=0.81, F_mid_y=0.5, L_width=390, T_width=582, T_wedge=108, T_serif=144,

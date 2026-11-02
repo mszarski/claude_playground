@@ -1447,9 +1447,12 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         cap_stem(gl, head="cap_foot_l", foot="cap_foot_l")
         ym = ch * P.B_mid
         sx = P.cap_stem / 2
-        dbowl(gl, "upper", sx, ym - P.B_hair / 2, ch, P.B_far_t, P.B_flat_t, P.B_th, P.B_hair, P.B_hair / 2,
+        # the bowls overlap by a hairline at the waist; each keeps a full
+        # hairline wall there, so the waist is one hairline thick (half walls
+        # left the counters touching: a waist pinched to a point)
+        dbowl(gl, "upper", sx, ym - P.B_hair / 2, ch, P.B_far_t, P.B_flat_t, P.B_th, P.B_hair, P.B_hair,
               P.B_full, P.B_in_full, flat_bot=P.B_flat_m)
-        dbowl(gl, "lower", sx, 0, ym + P.B_hair / 2, P.B_far_b, P.B_flat_m, P.B_th, P.B_hair / 2, P.B_hair,
+        dbowl(gl, "lower", sx, 0, ym + P.B_hair / 2, P.B_far_b, P.B_flat_m, P.B_th, P.B_hair, P.B_hair,
               P.B_full, P.B_in_full, flat_bot=P.B_flat_b)
 
     @g("D")
@@ -1546,15 +1549,16 @@ def define(font, P, glyphs: str | None = None, terminals=None, g_ear: str = "str
         thin = Pen(angle=0, width=P.N_thin, contrast=0)
         thick = Pen(angle=0, width=P.N_thick, contrast=0)
         cap_stem(gl, x=0, head="cap_foot_l", pen=thin, name="left")
-        cap_stem(gl, x=W, bottom=-os_, foot="vertex", pen=thin, name="right")
+        cap_stem(gl, x=W, bottom=-os_ + P.N_dy, foot="vertex", pen=thin, name="right")
         gl.line((P.N_dx0, ch), (W + P.N_dx1, -os_ + P.N_dy), name="diag", names=("top", "foot"), terminal=("apex", "vertex"),
                 pen=thick)
         # nothing of the diagonal stands outside the right stem, or below the
         # stem's foot (its flat-cut corner would poke through as a tick)
         xr = W + P.N_thin / 2
-        (gl.cut("diag_clip").move((W - 250, -os_ - 60), "a").line((xr + 300, -os_ - 60), "b")
-            .line((xr + 300, ch * 0.5), "c").line((xr, ch * 0.5), "d").line((xr, -os_), "e")
-            .line((W - 250, -os_), "f").close())
+        yb = -os_ + P.N_dy
+        (gl.cut("diag_clip").move((W - 250, yb - 60), "a").line((xr + 300, yb - 60), "b")
+            .line((xr + 300, ch * 0.5), "c").line((xr, ch * 0.5), "d").line((xr, yb), "e")
+            .line((W - 250, yb), "f").close())
 
     @g("U")
     def U(gl):

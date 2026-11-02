@@ -115,7 +115,7 @@ def test_primitive_sweep_compatible(sfont):
     assert not [f for f in findings if f.level == "error"]
 
 
-@pytest.mark.parametrize("path", ["examples/display_serif/font.py", "benchmarks/geist_serif/font.py"])
+@pytest.mark.parametrize("path", ["examples/display_serif/font.py", "examples/sans/font.py", "benchmarks/geist_serif/font.py"])
 def test_kit_fonts_lint_clean_and_compatible(path):
     font = load_font(ROOT / path)
     findings, cf = run_lints(font, {}, parse_sweep(["stem=60,130", "hairline=10,50"]))

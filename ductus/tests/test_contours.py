@@ -82,6 +82,7 @@ def test_bowl_override_moves_point_and_handles(write_font):
 
 @pytest.mark.parametrize("path,sweep", [
     pytest.param("examples/display_serif/font.py", ["stem=60,140"], id="display"),
+    pytest.param("examples/sans/font.py", ["stem=60,140"], id="sans"),
 ])
 def test_m2_fonts_are_compatible_and_lint_clean(path, sweep):
     """SPEC M2 done-when 5: compatibility sweeps still pass with the new primitives."""

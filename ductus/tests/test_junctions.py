@@ -111,7 +111,7 @@ def test_g_band_option_adds_flat_bar():
     assert "g.bar.tl" in bench.points and "g.bar.tl" not in compile_font(plain).glyphs["g"].points
 
 
-@pytest.mark.parametrize("path", ["benchmarks/geist_serif/font.py", "examples/display_serif/font.py"])
+@pytest.mark.parametrize("path", ["benchmarks/geist_serif/font.py", "examples/display_serif/font.py", "examples/sans/font.py"])
 def test_structure_fixed_at_extreme_corners(path):
     """Every ranged param at its min (and max) at once must not change any
     glyph's point structure: degenerate terminals, zero-size serifs and
