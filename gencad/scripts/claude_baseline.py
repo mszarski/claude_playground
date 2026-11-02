@@ -90,6 +90,11 @@ def submit(a):
         df = pd.concat([pd.read_parquet(os.path.join(a.rich, sh, "parts.parquet")).assign(shard=sh)
                         for sh in sorted(os.listdir(a.rich)) if os.path.exists(os.path.join(a.rich, sh, "parts.parquet"))],
                        ignore_index=True)
+        if a.exclude_batch:                            # parts already sent in earlier batches
+            done = set()
+            for fn in a.exclude_batch:
+                done |= set(json.load(open(fn))["uids"])
+            df = df[~df.uid.isin(done)]
         df = (df.sample(n=min(a.n, len(df)), random_state=a.seed) if a.sample else df.head(a.n)).reset_index(drop=True)
         uids, dup = list(df.uid), [False] * len(df)
         stems = [os.path.join(a.rich, sh, "renders", u) for sh, u in zip(df.shard, df.uid)]
@@ -171,6 +176,7 @@ def main():
     s.add_argument("--rich", default=None, help="rich/real part shards dir instead of DeepCAD (full-feature prompt)")
     s.add_argument("--sample", action="store_true", help="--rich: random --n parts across shards (teacher data)")
     s.add_argument("--seed", type=int, default=0)
+    s.add_argument("--exclude_batch", nargs="*", default=None, help="batch.json files whose uids to skip")
     s.add_argument("--n", type=int, default=2000)
     s.add_argument("--modes", nargs="*", default=["view4", "view1", "view1+expert"])
     s.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
