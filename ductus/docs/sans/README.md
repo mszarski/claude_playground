@@ -56,3 +56,65 @@ Against Geist Sans: all 175 glyphs 0.912, the 52 letters 0.937. Weakest:
 
 The sans font is linted, compatibility-swept and checked at its range
 extremes in the test suite, alongside the serif.
+
+## 02 — the weakest glyphs, and Geist's kerning style
+
+![iteration 02](02.png)
+
+**Glyphs.** New kit options, each fitted against the reference:
+- `eight_overlap`: the 8's bowls now meet in a shorter waist;
+- `seven_style="curve"`: the 7's diagonal is a bowed pen stroke, with no
+  face wedge under the bar;
+- a parameterised £: foot, rise, top, ear end, bar extent and base weight;
+- `gs_dfar` for the single-storey g's bowl.
+
+The searches also covered ~ ^ ç ? @ { } &.
+
+| Glyph | Before | After |
+|---|---|---|
+| ? | 0.79 | 0.93 |
+| 8 | 0.82 | 0.93 |
+| 7 | 0.76 | 0.88 |
+| £ | 0.61 | 0.84 |
+| & | 0.82 | 0.83 |
+| g | 0.80 | 0.81 |
+| standalone cedilla | 0.38 | 0.46 |
+
+The cedilla is a 60-unit mark, so a few units of offset cost a lot of
+IoU; ç and Ç are 0.87–0.89. Mean IoU over all 175 glyphs rose from 0.913
+to 0.916.
+
+The overlays show ~ ^ @ and { } (0.74–0.81) already following the
+reference closely. What remains is stroke-end angles and a slightly
+different ~ curve.
+
+**Kerning style.** Geist Sans kerns heavily: 2,525 of the 4,624
+letter/punctuation pairs measured. The display serif kerns far fewer. The
+per-glyph style weights in `kern_style.json` (`[as left, as right]`) are
+least-squares fits to Geist Sans's kerning, regularised toward 1. Generated
+with `ductus kern examples/sans/font.py --clearance 60 --min-abs 5`, giving
+9,094 pairs.
+
+| Agreement with Geist Sans | Correlation | MAE |
+|---|---|---|
+| Letter pairs, before | 0.57 | 14.8 u |
+| Letter pairs, now | 0.68 | 12.1 u |
+| All pairs, before | 0.56 | 11.6 u |
+| All pairs, now | 0.71 | 8.9 u |
+
+Key pairs, ours / Geist:
+
+| Pair | Ours | Geist |
+|---|---|---|
+| To | −70 | −80 |
+| AV | −105 | −106 |
+| P. | −110 | −110 |
+| Yo | −75 | −70 |
+| Wa | −50 | −44 |
+| TA | −65 | −90 |
+| LT | −95 | −140 |
+
+![words vs Geist Sans](02_vs_geist.png)
+
+In the comparison, ours is the upper row of each pair. Geist also tucks a
+few pairs our profile kerner leaves alone, such as rn −40 and Fl −20.
