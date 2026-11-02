@@ -273,6 +273,12 @@ case "$STAGE" in
     export HF_XET_HIGH_PERFORMANCE=1
     python scripts/mistral_real.py --model "${INIT:?set INIT=<hf model id>}" --out "results/$RUN/preds.pkl" "$@" ;;
 
+  richiou)    # score a rich/real preds file (scripts/rich_iou.py) -> results/$RUN/rich_{iou.json,rows.pkl}
+    need_cq     # REAL=1 unpacks the real training parts (GT STEP files), RICH_TEST=1 the test shards
+    if [[ "${REAL:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/real_train_*.tar; do tar -xf "$t" -C data/rich; done; fi
+    if [[ "${RICH_TEST:-0}" == "1" ]]; then mkdir -p data/rich; for t in /work/data/rich/test*.tar; do tar -xf "$t" -C data/rich; done; fi
+    python scripts/rich_iou.py --preds "results/$RUN/preds.pkl" --out "results/$RUN/rich_iou.json" --rows "results/$RUN/rich_rows.pkl" "$@" ;;
+
   orient)     # orientation search on saved predictions (scripts/orient_fix.py) + scoring -> results/$RUN/orient*.{pkl,json}
     need_cq     # RICH_TEST=1: rich/real test parts (scored by rich_iou.py); else DeepCAD test (cq_iou.py)
     if [[ "${RICH_TEST:-0}" == "1" ]]; then
