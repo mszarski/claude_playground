@@ -100,7 +100,8 @@ class Kerner:
 
     def __init__(self, glyphs: dict, power: float = -32.0, depth: float = 500.0, strength: float = 0.5,
                  punct_strength: float | None = None, edge: float = 40.0, clearance: float = 20.0,
-                 limit: tuple = (-160.0, 60.0), serif_height: float = 80.0, serif_reach: float = 100.0):
+                 limit: tuple = (-160.0, 60.0), serif_height: float = 80.0, serif_reach: float = 100.0,
+                 weights: dict | None = None):
         self.adv = {n: g.advance for n, g in glyphs.items()}
         self.raw = {n: profiles(g.contours) for n, g in glyphs.items() if g.contours}
         # the optical measure reads stems, not serif tips; collisions use the raw outline
@@ -113,6 +114,9 @@ class Kerner:
         self.punct = {n for n, g in glyphs.items()
                       if g.unicode is not None and unicodedata.category(chr(g.unicode))[0] in "PS"}
         self.edge, self.clearance, self.limit = edge, clearance, limit
+        # style: per-glyph weights {glyph: [as left glyph (its right side), as right glyph (its left side)]};
+        # a pair's kern is scaled by the product (a house style -- which sides kern, how hard)
+        self.weights = weights or {}
         self._d: dict = {}
 
     def gap(self, left: str, right: str) -> np.ndarray:
@@ -128,15 +132,23 @@ class Kerner:
             self._d[key] = _distance(self.gap(left, right), self.power, self.depth)
         return self._d[key]
 
-    def kern(self, left: str, right: str) -> int:
+    def correction(self, left: str, right: str) -> float:
+        """The optical correction before style weights, limits and clearance."""
         if left not in self.prof or right not in self.prof:
-            return 0
+            return 0.0
         d = self.distance(left, right)
         exp = self.distance(left, "|") + self.distance("|", right) - self.distance("|", "|")
         if np.isnan(d) or np.isnan(exp):
-            return 0
+            return 0.0
         st = self.punct_strength if (left in self.punct or right in self.punct) else self.strength
-        k = -st * (d - exp)
+        return -st * (d - exp)
+
+    def kern(self, left: str, right: str) -> int:
+        if left not in self.prof or right not in self.prof:
+            return 0
+        k = self.correction(left, right)
+        if self.weights:
+            k *= self.weights.get(left, (1.0, 1.0))[0] * self.weights.get(right, (1.0, 1.0))[1]
         k = float(np.clip(k, *self.limit))
         # a kern never brings the outlines closer than ``clearance`` -- the
         # true (2-D) distance between the left glyph's right edge and the

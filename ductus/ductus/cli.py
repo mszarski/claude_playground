@@ -115,7 +115,8 @@ def kern(font_py: Path,
          strength: float = typer.Option(0.6, help="share of the optical difference to correct"),
          punct_strength: float = typer.Option(0.3, help="... for pairs with punctuation"),
          clearance: float = typer.Option(90, help="closest the outlines may come (font units)"),
-         min_abs: int = typer.Option(10, help="drop smaller kerns")):
+         min_abs: int = typer.Option(10, help="drop smaller kerns"),
+         style: Optional[Path] = typer.Option(None, help="per-glyph style weights JSON (default: kern_style.json beside the font, if present)")):
     """Optical auto-kerning: measure every letter/punctuation pair of the
     compiled font and write the suggested kerns as data for the font to load."""
     import unicodedata
@@ -125,14 +126,27 @@ def kern(font_py: Path,
     cf = compile_font(font, overrides=_overrides_for(font_py, None))
     names = [n for n, g in cf.glyphs.items() if g.contours and g.unicode is not None
              and unicodedata.category(chr(g.unicode))[0] in "LP"]
+    # style weights {glyph: [as left glyph, as right glyph]}; accented letters
+    # take their base's, combined glyphs (æ) their outer parts'
+    style = style or (font_py.parent / "kern_style.json")
+    weights = json.loads(style.read_text()) if style.exists() else {}
+    for cname, spec in getattr(font, "composites", {}).items():
+        if cname in weights:
+            continue
+        if "base" in spec and spec["base"] in weights:
+            weights[cname] = weights[spec["base"]]
+        elif "parts" in spec:
+            first, last = spec["parts"][0][0], spec["parts"][-1][0]
+            if first in weights and last in weights:
+                weights[cname] = [weights[last][0], weights[first][1]]
     t0 = time.perf_counter()
     pairs = autokern(cf.glyphs, names, min_abs=min_abs, strength=strength, punct_strength=punct_strength,
-                     clearance=clearance)
+                     clearance=clearance, weights=weights)
     out = out or font_py.parent / "kerning.json"
     out.write_text(json.dumps({
         "generated_by": "ductus kern",
         "settings": {"strength": strength, "punct_strength": punct_strength, "clearance": clearance,
-                     "min_abs": min_abs},
+                     "min_abs": min_abs, "style": style.name if weights else None},
         "glyphs": len(names),
         "pairs": [[a, b, v] for (a, b), v in sorted(pairs.items())]}, indent=0, ensure_ascii=False) + "\n")
     typer.echo(f"{len(pairs)} pairs from {len(names)} glyphs in {time.perf_counter() - t0:.1f}s -> {out}")

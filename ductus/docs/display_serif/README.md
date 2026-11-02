@@ -858,3 +858,44 @@ every pair unkerned, Geist's included. `proof.render_text` now reads pair
 kerning from GPOS (`proof.gpos_kerning`: glyph and class pairs, extension
 lookups). The four by-eye pairs from iteration 14 are superseded by the
 measured ones.
+
+## 31 — kerning in Geist's style
+
+Sheet: `31.png` (set with the kerning).
+
+The optical kerner measures the same thing as in iteration 30. What
+changed is the *house style*: which sides kern, and how hard. Each glyph
+gets two style weights, one for its right side (as the left glyph of a
+pair) and one for its left side (as the right glyph). A pair's kern is our
+optical correction × the left glyph's weight × the right glyph's weight.
+The 2-D clearance is applied afterwards, as before.
+
+The weights are fitted to Geist's kerning by alternating least squares,
+pulled toward 1. That's two numbers per glyph for 70 glyphs; the values
+themselves still come from our outlines. They are stored as
+`examples/display_serif/kern_style.json`, which `ductus kern` applies
+(`--style` to point elsewhere). Accented letters take their base's
+weights, and æ/œ their outer parts'.
+
+What the weights say about Geist:
+- **T:** both sides at about half strength (0.58 and 0.50).
+- **K:** after a K, Geist barely kerns (0.37).
+- **y and v:** before a y almost never (0.13), before a v rarely (0.37).
+  So Ty, Tv and Kv are now 0 or nearly.
+- **r:** its right side is weaker (0.66), so rT is 0.
+- **V:** Geist kerns it harder (about 1.4 on both sides).
+- **Punctuation:** the period and comma kern harder after letters (1.8,
+  1.4).
+
+Agreement with Geist's kerning, iteration 30 → 31:
+
+| pairs | mean diff. | correlation |
+|---|---|---|
+| letter–letter | 12.6 → 11.5 u | 0.70 → 0.77 |
+| letter–punctuation | 10.8 → 8.0 u | 0.58 → 0.75 |
+
+Of the 316 pairs Geist kerns by 60 u or more, 166 are now within 30 u (it
+was 127). Still apart:
+- “A (−30 against −140) and LT (−50 against −140): the quote and the L's
+  arm stand high, where the clearance and our measure keep them looser.
+- AV (−160 against −110): ours runs tighter.
