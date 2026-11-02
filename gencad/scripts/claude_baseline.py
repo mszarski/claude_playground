@@ -14,6 +14,10 @@ Score with scripts/cq_iou.py (same protocol for Claude's CadQuery and our models
 Rich / real parts (scripts/gen_rich_data.py, scripts/prep_real.py layout): `submit --rich data/rich/real --modes view4
 view1` uses a prompt that allows the full CadQuery feature set (fillets, chamfers, revolves, holes, shells, patterns);
 score the collected preds.pkl with scripts/rich_iou.py.
+
+Second attempt (teacher data): `retry --src <out of a scored --rich run> --below 0.8 --out <dir>` renders each weak
+attempt with the input cameras (or keeps its build error) and asks Claude to correct it, given the input views and
+the render of its own program; `collect` works on the result as usual (same uids layout, attempt kept in batch.json).
 """
 import argparse
 import base64
@@ -132,20 +136,21 @@ def collect(a):
     with open(os.path.join(a.out, "batch.json")) as f:
         meta = json.load(f)
     client = anthropic.Anthropic()
+    ids = meta.get("batch_ids") or [meta["batch_id"]]
     while True:
-        b = client.messages.batches.retrieve(meta["batch_id"])
-        if b.processing_status == "ended" or not a.wait:
+        bs = [client.messages.batches.retrieve(i) for i in ids]
+        if all(b.processing_status == "ended" for b in bs) or not a.wait:
             break
-        print(f"[claude] {b.processing_status}: {b.request_counts}", flush=True)
+        print(f"[claude] {[b.processing_status for b in bs]}", flush=True)
         time.sleep(60)
-    if b.processing_status != "ended":
-        print(f"[claude] batch not finished: {b.processing_status} {b.request_counts}")
+    if not all(b.processing_status == "ended" for b in bs):
+        print(f"[claude] batch not finished: {[(b.processing_status, b.request_counts) for b in bs]}")
         return
     n = len(meta["uids"])
     preds = {m: [None] * n for m in meta["modes"]}
     usage = {"input_tokens": 0, "output_tokens": 0}
     status = {}
-    for r in client.messages.batches.results(meta["batch_id"]):
+    for r in (r for i in ids for r in client.messages.batches.results(i)):
         i, mode = r.custom_id.split("_", 1)
         mode = {m.replace("+", "-"): m for m in meta["modes"]}[mode]
         status[r.result.type] = status.get(r.result.type, 0) + 1
@@ -167,6 +172,61 @@ def collect(a):
     print(f"[claude] results {status}; tokens {usage}; batch cost ~${cost:.2f}; wrote {a.out}/preds.pkl")
 
 
+RETRY = """A previous attempt at this part:
+```python
+{code}
+```
+{result}
+Compare it with the part in the first image and write the corrected program (same requirements as above)."""
+
+
+def retry(a):
+    import anthropic
+    from pebble import ProcessPool
+    from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+    from anthropic.types.messages.batch_create_params import Request
+    from scripts.build_revision import work as render_attempt
+    from mm.sysutil import usable_cpus
+    P = pickle.load(open(os.path.join(a.src, "preds.pkl"), "rb"))
+    R = pickle.load(open(os.path.join(a.src, "rich_rows.pkl"), "rb"))["rows"]["claude:view4"]
+    codes = P["preds"]["claude:view4"]
+    idx = [i for i, r in enumerate(R) if r is not None and r["own"] < a.below]
+    print(f"[retry] {len(idx)} of {len(R)} attempts below {a.below}", flush=True)
+    os.makedirs(os.path.join(a.out, "attempts"), exist_ok=True)
+    fb = {}
+    with ProcessPool(max_workers=usable_cpus()) as pool:
+        futs = {i: pool.schedule(render_attempt, args=((str(i), codes[i] or "r = None", a.out),), timeout=120) for i in idx}
+        for i, fu in futs.items():
+            try:
+                _, err, stem = fu.result()
+            except Exception as e:  # noqa: BLE001
+                err, stem = f"building it timed out ({type(e).__name__})", None
+            fb[i] = (err, stem)
+    reqs = []
+    for i in idx:
+        err, stem = fb[i]
+        req = request(P["stems"][i], "view4", None, a.effort, True)
+        if stem:
+            req["messages"][0]["content"].insert(1, {"type": "image", "source": {
+                "type": "base64", "media_type": "image/png", "data": grid_png(stem, "view4")}})
+            result = ("The second image shows what this program builds, rendered with the same four cameras as the "
+                      "first image.")
+        else:
+            result = f"It failed to build: {err or 'no program was produced'}"
+        req["messages"][0]["content"][-1]["text"] += "\n\n" + RETRY.format(code=codes[i] or "(none)", result=result)
+        reqs.append(Request(custom_id=f"{i}_view4", params=MessageCreateParamsNonStreaming(**req)))
+    client = anthropic.Anthropic()
+    ids = []
+    for s0 in range(0, len(reqs), a.chunk):                # the batch API caps a batch at 256 MB
+        ids.append(client.messages.batches.create(requests=reqs[s0:s0 + a.chunk]).id)
+        print(f"[retry] submitted batch {ids[-1]} ({len(reqs[s0:s0 + a.chunk])} requests)", flush=True)
+    meta = {"batch_ids": ids, "uids": P["uids"], "dup": P["dup"], "modes": ["view4"], "model": MODEL,
+            "effort": a.effort, "family": P["family"], "gt_code": P["gt_code"], "stems": P["stems"],
+            "attempt": {str(i): codes[i] for i in idx}, "attempt_stem": {str(i): fb[i][1] for i in idx},
+            "attempt_error": {str(i): fb[i][0] for i in idx}, "src": a.src}
+    json.dump(meta, open(os.path.join(a.out, "batch.json"), "w"))
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -184,8 +244,14 @@ def main():
     c = sub.add_parser("collect")
     c.add_argument("--out", default="results/claude_baseline")
     c.add_argument("--wait", action="store_true")
+    t = sub.add_parser("retry")
+    t.add_argument("--src", required=True, help="a scored --rich run (preds.pkl + rich_rows.pkl)")
+    t.add_argument("--below", type=float, default=0.8)
+    t.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+    t.add_argument("--chunk", type=int, default=2500)
+    t.add_argument("--out", required=True)
     a = ap.parse_args()
-    submit(a) if a.cmd == "submit" else collect(a)
+    {"submit": submit, "collect": collect, "retry": retry}[a.cmd](a)
 
 
 if __name__ == "__main__":
