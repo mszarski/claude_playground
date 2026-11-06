@@ -68,6 +68,7 @@ def main() -> None:
     ap.add_argument("--max-steps", type=int, default=-1)
     ap.add_argument("--vllm", action="store_true", help="use vLLM (colocate) for fast rollouts")
     ap.add_argument("--n-eval", type=int, default=200)
+    ap.add_argument("--eval-batch", type=int, default=4)
     args = ap.parse_args()
     bootstrap(args.dataset)
 
@@ -152,6 +153,12 @@ def main() -> None:
     tok.padding_side = "left"
     model.eval()
     model.config.use_cache = True
+    trainer.optimizer = None
+    trainer.model_wrapped = None
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
 
     @torch.no_grad()
     def generate(prompts):
@@ -161,7 +168,7 @@ def main() -> None:
         return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
 
     test = ds["test"].select(range(min(args.n_eval, len(ds["test"]))))
-    result = evaluate(test, generate, batch_size=16)
+    result = evaluate(test, generate, batch_size=args.eval_batch)
     print(format_report(result))
     with open("eval_grpo.json", "w") as f:
         json.dump(result, f, indent=1)

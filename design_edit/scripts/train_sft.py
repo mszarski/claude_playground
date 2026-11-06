@@ -60,6 +60,7 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=4)
     ap.add_argument("--grad-accum", type=int, default=4)
     ap.add_argument("--n-eval", type=int, default=200)
+    ap.add_argument("--eval-batch", type=int, default=4)
     ap.add_argument("--max-steps", type=int, default=-1)
     ap.add_argument("--no-push", action="store_true", help="local smoke test: skip Hub uploads")
     ap.add_argument("--report-to", default="trackio")
@@ -122,6 +123,12 @@ def main() -> None:
     # Quick held-out eval with greedy decoding.
     model.eval()
     model.config.use_cache = True
+    trainer.optimizer = None
+    trainer.model_wrapped = None
+    import gc
+
+    gc.collect()
+    torch.cuda.empty_cache()
     tok.padding_side = "left"
 
     @torch.no_grad()
@@ -132,7 +139,7 @@ def main() -> None:
         return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
 
     test = ds["test"].select(range(min(args.n_eval, len(ds["test"]))))
-    result = evaluate(test, generate, batch_size=16)
+    result = evaluate(test, generate, batch_size=args.eval_batch)
     print(format_report(result))
     summary = {k: v for k, v in result.items() if k != "rows"}
     with open("eval_sft.json", "w") as f:
