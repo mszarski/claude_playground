@@ -1,8 +1,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#     "trl>=1.0",
-#     "transformers>=5.0",
+#     "trl[vllm]==1.17.1",
 #     "peft>=0.17",
 #     "accelerate>=1.0",
 #     "datasets>=3.0",
@@ -58,7 +57,12 @@ def main() -> None:
     ap.add_argument("--dataset", required=True)
     ap.add_argument("--model", required=True, help="SFT checkpoint (merged)")
     ap.add_argument("--output", required=True)
-    ap.add_argument("--n-prompts", type=int, default=4000)
+    ap.add_argument("--split", default="train", help="training split (e.g. grpo_train: prompts with reward variance)")
+    ap.add_argument("--n-prompts", type=int, default=100_000)
+    ap.add_argument("--epochs", type=float, default=1.0)
+    ap.add_argument("--vllm-mem", type=float, default=0.3, help="GPU fraction for colocated vLLM")
+    ap.add_argument("--no-push", action="store_true", help="smoke test: no checkpoints or Hub uploads")
+    ap.add_argument("--report-to", default="trackio")
     ap.add_argument("--kinds", default="", help="comma-separated edit kinds to train on (default all)")
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-5)
@@ -83,7 +87,7 @@ def main() -> None:
         ds = load_dataset("json", data_files={s: str(Path(args.dataset) / f"{s}.jsonl") for s in ("train", "test")})
     else:
         ds = load_dataset(args.dataset)
-    train = ds["train"]
+    train = ds[args.split]
     if args.kinds:
         keep = set(args.kinds.split(","))
         train = train.filter(lambda r: r["kind"] in keep)
@@ -116,21 +120,22 @@ def main() -> None:
         loss_type="dapo",
         reward_weights=[1.0, 0.1],
         max_steps=args.max_steps,
-        num_train_epochs=1,
+        num_train_epochs=args.epochs,
         bf16=True,
         gradient_checkpointing=True,
         logging_steps=5,
         log_completions=True,
-        save_strategy="steps",
-        save_steps=200,
+        save_strategy="no" if args.no_push else "steps",
+        save_steps=100,
         save_total_limit=1,
-        push_to_hub=True,
+        push_to_hub=not args.no_push,
         hub_model_id=args.output,
         hub_private_repo=True,
         hub_strategy="every_save",
         use_vllm=args.vllm,
         vllm_mode="colocate",
-        report_to="trackio",
+        vllm_gpu_memory_utilization=args.vllm_mem,
+        report_to=args.report_to,
         project="design-edit",
         run_name=f"grpo-{args.model.split('/')[-1]}",
     )
@@ -144,8 +149,9 @@ def main() -> None:
     )
     trainer.train()
     model = trainer.model.merge_and_unload()
-    model.push_to_hub(args.output, private=True)
-    trainer.processing_class.push_to_hub(args.output, private=True)
+    if not args.no_push:
+        model.push_to_hub(args.output, private=True)
+        trainer.processing_class.push_to_hub(args.output, private=True)
 
     import torch
 
@@ -174,8 +180,9 @@ def main() -> None:
         json.dump(result, f, indent=1)
     from huggingface_hub import upload_file
 
-    upload_file(path_or_fileobj="eval_grpo.json", path_in_repo="eval_grpo.json", repo_id=args.output,
-                token=os.environ.get("HF_TOKEN"))
+    if not args.no_push:
+        upload_file(path_or_fileobj="eval_grpo.json", path_in_repo="eval_grpo.json", repo_id=args.output,
+                    token=os.environ.get("HF_TOKEN"))
 
 
 if __name__ == "__main__":
