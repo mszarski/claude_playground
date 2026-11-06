@@ -56,6 +56,36 @@ def sample_example(rng: random.Random, seed_lo: int, seed_hi: int, kinds: dict[s
     }
 
 
+def build_novel(n: int, seed: int) -> list[dict]:
+    """Eval-only split of edit types that never appear in training (edits.NOVEL)."""
+    rng = random.Random(seed)
+    rows, seen = [], set()
+    while len(rows) < n:
+        kind = rng.choice(list(edits.NOVEL))
+        doc = generate_design(rng.randint(1_100_000, 1_199_999), max_sections=rng.choice([1, 2, 2, 3]))
+        ex = edits.NOVEL[kind](doc, rng)
+        if ex is None:
+            continue
+        row = to_row(ex)
+        if (row["before"], row["instruction"]) in seen:
+            continue
+        seen.add((row["before"], row["instruction"]))
+        rows.append(row)
+    return rows
+
+
+def to_row(ex) -> dict:
+    return {
+        "prompt": prompt_messages(ex.before, ex.instruction),
+        "completion": [{"role": "assistant", "content": format_patch(diff(ex.before, ex.after))}],
+        "before": serialize(ex.before),
+        "after": serialize(ex.after),
+        "relax": json.dumps(ex.relax),
+        "kind": ex.kind,
+        "instruction": ex.instruction,
+    }
+
+
 def build(n: int, seed: int, seed_range: tuple[int, int], allowed: set[str]) -> list[dict]:
     rng = random.Random(seed)
     kinds = {
@@ -82,6 +112,8 @@ def main() -> None:
     ap.add_argument("--n-test", type=int, default=500)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--holdout-kinds", default="", help="comma-separated edit kinds to keep out of train")
+    ap.add_argument("--n-novel", type=int, default=300, help="size of the eval-only novel-edit split")
+    ap.add_argument("--splits", default="train,test,test_novel", help="which splits to (re)build")
     ap.add_argument("--out", default="data")
     ap.add_argument("--push", default=None, help="Hub dataset repo id, e.g. user/design-edits")
     ap.add_argument("--public", action="store_true", help="make the pushed dataset public (default private)")
@@ -93,12 +125,18 @@ def main() -> None:
         ap.error(f"unknown kinds: {sorted(unknown)}; choose from {sorted(edits.ALL_EDITS)}")
     all_kinds = set(edits.ALL_EDITS)
 
-    train = build(args.n_train, args.seed, (0, 999_999), all_kinds - holdout)
-    test = build(args.n_test, args.seed + 1, (1_000_000, 1_099_999), all_kinds)
+    want = set(args.splits.split(","))
+    splits = {}
+    if "train" in want:
+        splits["train"] = build(args.n_train, args.seed, (0, 999_999), all_kinds - holdout)
+    if "test" in want:
+        splits["test"] = build(args.n_test, args.seed + 1, (1_000_000, 1_099_999), all_kinds)
+    if "test_novel" in want:
+        splits["test_novel"] = build_novel(args.n_novel, args.seed + 2)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    for name, rows in (("train", train), ("test", test)):
+    for name, rows in splits.items():
         with open(out / f"{name}.jsonl", "w") as f:
             for r in rows:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -108,7 +146,7 @@ def main() -> None:
     if args.push:
         from datasets import Dataset, DatasetDict
 
-        DatasetDict({"train": Dataset.from_list(train), "test": Dataset.from_list(test)}).push_to_hub(
+        DatasetDict({k: Dataset.from_list(v) for k, v in splits.items()}).push_to_hub(
             args.push, private=not args.public)
         print(f"pushed to https://huggingface.co/datasets/{args.push}")
 

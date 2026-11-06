@@ -106,6 +106,7 @@ def relaxed_ok(r: dict[str, Any], old: Any, new: Any) -> bool:
     allowed   value in r["values"]                   ("snap to the type scale": either neighbor is fine)
     contrast  contrast vs r["bg"] >= r["min"]        ("fix the contrast": any readable color)
     hue       same color family as r["target"]       ("make it yellow": any yellow)
+    darker / lighter  lower / higher luminance than before  ("make the body text darker")
     """
     cmp = r["cmp"]
     if new is None:
@@ -124,6 +125,10 @@ def relaxed_ok(r: dict[str, Any], old: Any, new: Any) -> bool:
             return a[1] < 0.2 and abs(a[2] - b[2]) < 0.35
         dh = min(abs(a[0] - b[0]), 1 - abs(a[0] - b[0])) * 360
         return a[1] >= 0.3 and dh <= 25
+    if cmp in ("darker", "lighter"):
+        if _hsv(new) is None or _hsv(old) is None:
+            return False
+        return (_luminance(new) < _luminance(old)) == (cmp == "darker")
     new_n, old_n = _num(new), _num(old)
     if new_n is None or old_n is None:
         return False

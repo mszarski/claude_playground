@@ -443,4 +443,125 @@ def compose(doc: Node, rng: random.Random, n_edits: int = 2) -> EditExample | No
     return EditExample(doc, cur, text, "compose", relax)
 
 
-ALL_EDITS: dict[str, EditFn] = {**FORWARD, **REPAIR, "compose": compose}
+# ---------------------------------------------------------------------------
+# Novel edits: EVALUATION ONLY. Never used to build training data, so they
+# measure whether the model learned the patch language or just the templates.
+# ---------------------------------------------------------------------------
+
+NOVEL: dict[str, EditFn] = {}
+
+
+def novel(fn: EditFn) -> EditFn:
+    NOVEL[fn.__name__] = fn
+    return fn
+
+
+@novel
+def set_weight(doc: Node, rng: random.Random) -> EditExample | None:
+    t, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "text" and n["props"].get("weight", 400) < 700
+                           and not n["props"].get("name", "").endswith(" label"))) or (None, None)
+    if t is None:
+        return None
+    after, f = mutate(doc)
+    f(t["id"])["props"]["weight"] = 700
+    instr = phrase(rng, "make {l} bold", "bold {l}", "{l} should be bold", l=label(t))
+    return EditExample(doc, after, instr, "set_weight")
+
+
+@novel
+def add_border(doc: Node, rng: random.Random) -> EditExample | None:
+    n, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "frame" and "stroke" not in n["props"]
+                           and p is not None and not is_button(n))) or (None, None)
+    if n is None:
+        return None
+    after, f = mutate(doc)
+    f(n["id"])["props"]["stroke"] = "#E5E7EB"
+    instr = phrase(rng, "add a subtle border around {l}", "give {l} a light outline", "put a thin border on {l}",
+                   l=label(n))
+    return EditExample(doc, after, instr, "add_border", [{"id": n["id"], "prop": "stroke", "cmp": "any"}])
+
+
+@novel
+def promote_button(doc: Node, rng: random.Random) -> EditExample | None:
+    """Secondary -> primary style. Needs ``unset`` (drop the stroke), which is rare in training."""
+    prim = [n for n, _ in walk(doc) if is_button(n) and "stroke" not in n["props"]]
+    sec, _ = pick(rng, nodes(doc, lambda n, p: is_button(n) and "stroke" in n["props"] and n["children"])) or (None, None)
+    if sec is None or not prim:
+        return None
+    brand = prim[0]["props"]["fill"]
+    after, f = mutate(doc)
+    nb = f(sec["id"])
+    nb["props"]["fill"] = brand
+    del nb["props"]["stroke"]
+    nb["children"][0]["props"]["color"] = "#FFFFFF"
+    instr = phrase(rng, "make {l} a primary button", "{l} should be styled like the main call to action, "
+                   "same color as the other primary buttons", "promote {l} to primary style", l=label(sec))
+    return EditExample(doc, after, instr, "promote_button",
+                       [{"id": nb["children"][0]["id"], "prop": "color", "cmp": "contrast", "bg": brand, "min": 3.0}])
+
+
+@novel
+def set_width(doc: Node, rng: random.Random) -> EditExample | None:
+    n, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "frame" and "w" in n["props"] and p is not None)) or (None, None)
+    if n is None:
+        return None
+    w = rng.choice([v for v in (320, 400, 440, 480, 560, 640) if v != n["props"]["w"]])
+    after, f = mutate(doc)
+    f(n["id"])["props"]["w"] = w
+    instr = phrase(rng, "make {l} {w}px wide", "set the width of {l} to {w}", "resize {l} to {w} wide", l=label(n), w=w)
+    return EditExample(doc, after, instr, "set_width")
+
+
+@novel
+def darken_text(doc: Node, rng: random.Random) -> EditExample | None:
+    t, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "text" and n["props"].get("color") == "#6B7280")) or (None, None)
+    if t is None:
+        return None
+    after, f = mutate(doc)
+    f(t["id"])["props"]["color"] = "#374151"
+    instr = phrase(rng, "make {l} darker", "{l} is too faint, darken it", "bump up the contrast on {l}", l=label(t))
+    return EditExample(doc, after, instr, "darken_text", [{"id": t["id"], "prop": "color", "cmp": "darker"}])
+
+
+@novel
+def spread_out(doc: Node, rng: random.Random) -> EditExample | None:
+    n, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "frame" and n["props"].get("layout") == "row"
+                           and len(n["children"]) >= 2 and n["props"].get("justify") != "between"
+                           and not is_button(n))) or (None, None)
+    if n is None:
+        return None
+    after, f = mutate(doc)
+    f(n["id"])["props"]["justify"] = "between"
+    instr = phrase(rng, "spread the items in {l} out to the edges", "push the contents of {l} apart (space between)",
+                   l=label(n))
+    return EditExample(doc, after, instr, "spread_out")
+
+
+@novel
+def duplicate_setting(doc: Node, rng: random.Random) -> EditExample | None:
+    """Copy a settings row with a new label: a multi-node insert of a whole subtree."""
+    row, parent = pick(rng, nodes(doc, lambda n, p: n["props"].get("name", "").endswith(" row")
+                                  and len(n["children"]) == 2)) or (None, None)
+    if row is None:
+        return None
+    used = {n["props"].get("text") for n, _ in walk(doc)}
+    new = pick(rng, [s for s in g.SETTINGS if s not in used])
+    if new is None:
+        return None
+    after, f = mutate(doc)
+    base = int(next_id(after)[1:])
+    lab, tog = row["children"]
+    copy_row = {"id": f"n{base}", "type": "frame", "props": {**row["props"], "name": f"{new} row"}, "children": [
+        {"id": f"n{base + 1}", "type": "text", "children": [], "props": {**lab["props"], "name": f"{new} label", "text": new}},
+        {"id": f"n{base + 2}", "type": "rect", "children": [],
+         "props": {**tog["props"], "name": f"{new} toggle", "fill": "#D1D5DB"}}]}
+    kids = f(parent["id"])["children"]
+    kids.insert([c["id"] for c in kids].index(row["id"]) + 1, copy_row)
+    old = lab["props"]["text"]
+    instr = phrase(rng, "add a \u201c{n}\u201d setting below \u201c{o}\u201d, styled the same, toggled off",
+                   "duplicate the \u201c{o}\u201d row underneath it, rename it \u201c{n}\u201d and switch it off",
+                   n=new, o=old)
+    return EditExample(doc, after, instr, "duplicate_setting")
+
+
+ALL_EDITS: dict[str, EditFn] = {**FORWARD, **REPAIR, "compose": compose}  # training kinds only

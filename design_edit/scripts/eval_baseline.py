@@ -24,15 +24,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from design_edit.evaluate import evaluate, format_report  # noqa: E402
 
 
-def chat(base_url: str, token: str, model: str, messages: list[dict], max_tokens: int = 8192) -> str:
-    body = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0}).encode()
+def chat(base_url: str, token: str, model: str, messages: list[dict], max_tokens: int = 8192,
+         temperature: float = 0.0) -> str:
+    body = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens,
+                       "temperature": temperature}).encode()
     for attempt in range(4):
         req = urllib.request.Request(f"{base_url}/chat/completions", data=body, method="POST", headers={
             "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
                 return json.load(resp)["choices"][0]["message"]["content"] or ""
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
+        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:  # incl. resets, bad JSON
             if attempt == 3:
                 return f"// request failed: {e}"
             time.sleep(2 ** (attempt + 1))
