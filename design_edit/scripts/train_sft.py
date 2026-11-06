@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "trl>=1.0",
-#     "transformers>=4.56",
+#     "transformers>=5.0",
 #     "peft>=0.17",
 #     "accelerate>=1.0",
 #     "datasets>=3.0",
@@ -91,7 +91,7 @@ def main() -> None:
         gradient_accumulation_steps=args.grad_accum,
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=0.03,
         max_length=args.max_length,
         gradient_checkpointing=True,
         logging_steps=10,

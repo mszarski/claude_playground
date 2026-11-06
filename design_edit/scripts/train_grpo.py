@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "trl>=1.0",
-#     "transformers>=4.56",
+#     "transformers>=5.0",
 #     "peft>=0.17",
 #     "accelerate>=1.0",
 #     "datasets>=3.0",
@@ -105,7 +105,7 @@ def main() -> None:
         output_dir="grpo-out",
         learning_rate=args.lr,
         lr_scheduler_type="constant_with_warmup",
-        warmup_ratio=0.05,
+        warmup_steps=0.05,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         num_generations=args.num_generations,
