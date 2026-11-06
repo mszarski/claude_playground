@@ -128,13 +128,9 @@ def main() -> None:
         gradient_checkpointing=True,
         logging_steps=5,
         log_completions=True,
-        save_strategy="no" if args.no_push else "steps",
-        save_steps=100,
-        save_total_limit=1,
-        push_to_hub=not args.no_push,
-        hub_model_id=args.output,
-        hub_private_repo=True,
-        hub_strategy="every_save",
+        # No mid-run checkpoints: Hub checkpoint pushes trigger a Trackio static-Space sync that
+        # fails for private repos. The merged model is pushed once at the end instead.
+        save_strategy="no",
         use_vllm=args.vllm,
         vllm_mode="colocate",
         vllm_gpu_memory_utilization=args.vllm_mem,
