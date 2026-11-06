@@ -332,6 +332,98 @@ def set_opacity(doc: Node, rng: random.Random) -> EditExample | None:
     return EditExample(doc, after, instr, "set_opacity")
 
 
+# --- Operation-coverage edits (added in v2). They teach unset, justify, weight and subtree
+# --- inserts through requests that differ from the held-out NOVEL ones.
+
+@forward
+def remove_border(doc: Node, rng: random.Random) -> EditExample | None:
+    n, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "frame" and "stroke" in n["props"]
+                           and not is_button(n) and p is not None)) or (None, None)
+    if n is None:
+        return None
+    after, f = mutate(doc)
+    del f(n["id"])["props"]["stroke"]
+    instr = phrase(rng, "remove the border from {l}", "get rid of the outline on {l}", "{l} doesn't need a stroke",
+                   l=label(n))
+    return EditExample(doc, after, instr, "remove_border")
+
+
+@forward
+def justify_items(doc: Node, rng: random.Random) -> EditExample | None:
+    target = rng.choice(["end", "center", "start"])
+    n, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "frame" and n["props"].get("layout") == "row"
+                           and len(n["children"]) >= 2 and not is_button(n)
+                           and n["props"].get("justify", "start") != target)) or (None, None)
+    if n is None:
+        return None
+    after, f = mutate(doc)
+    f(n["id"])["props"]["justify"] = target
+    words = {"end": ("push the items in {l} to the right", "right-align the contents of {l}"),
+             "center": ("center the items in {l} horizontally", "bunch the contents of {l} in the middle"),
+             "start": ("move the items in {l} to the left", "left-align the contents of {l}")}[target]
+    instr = phrase(rng, *words, "set justify to {t} on {l}", l=label(n), t=target)
+    return EditExample(doc, after, instr, "justify_items")
+
+
+@forward
+def set_weight_value(doc: Node, rng: random.Random) -> EditExample | None:
+    t, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "text" and n["props"].get("weight", 400) > 400)) or (None, None)
+    if t is None:
+        return None
+    w = rng.choice([v for v in (400, 500) if v != t["props"]["weight"]])
+    after, f = mutate(doc)
+    f(t["id"])["props"]["weight"] = w
+    if w == 400:
+        instr = phrase(rng, "make {l} regular weight", "{l} is too heavy, use the normal weight",
+                       "set the font weight of {l} to 400", l=label(t))
+    else:
+        instr = phrase(rng, "set the font weight of {l} to 500", "make {l} medium weight", l=label(t))
+    return EditExample(doc, after, instr, "set_weight_value")
+
+
+@forward
+def lighten_text(doc: Node, rng: random.Random) -> EditExample | None:
+    t, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "text" and n["props"].get("color") == "#111827"
+                           and p is not None and p["props"].get("fill", "#FFFFFF") in ("#FFFFFF", "#F9FAFB"))) or (None, None)
+    if t is None:
+        return None
+    after, f = mutate(doc)
+    f(t["id"])["props"]["color"] = "#6B7280"
+    instr = phrase(rng, "make {l} more muted", "{l} should use the secondary text color",
+                   "tone down {l}, it's too dark", l=label(t))
+    # Any lighter color that stays readable is fine.
+    return EditExample(doc, after, instr, "lighten_text",
+                       [{"id": t["id"], "prop": "color", "cmp": "lighter"}])
+
+
+@forward
+def add_field(doc: Node, rng: random.Random) -> EditExample | None:
+    """Insert a 4-node form field (field > label, input > placeholder) after a named field."""
+    fld, form_ = pick(rng, nodes(doc, lambda n, p: n["props"].get("name", "").endswith(" field")
+                                 and len(n["children"]) == 2)) or (None, None)
+    if fld is None:
+        return None
+    used = {n["props"].get("text") for n, _ in walk(doc)}
+    name = pick(rng, [x for x in g.FIELDS + ["Phone", "Job title", "Team size"] if x not in used])
+    if name is None:
+        return None
+    after, f = mutate(doc)
+    base = int(next_id(after)[1:])
+    lab, inp = fld["children"]
+    ph = inp["children"][0] if inp["children"] else None
+    new_inp_kids = [] if ph is None else [{"id": f"n{base + 3}", "type": "text", "children": [],
+                                           "props": {**ph["props"], "name": f"{name} placeholder",
+                                                     "text": f"Enter {name.lower()}"}}]
+    new = {"id": f"n{base}", "type": "frame", "props": {**fld["props"], "name": f"{name} field"}, "children": [
+        {"id": f"n{base + 1}", "type": "text", "children": [], "props": {**lab["props"], "name": f"{name} label", "text": name}},
+        {"id": f"n{base + 2}", "type": "frame", "children": new_inp_kids, "props": {**inp["props"], "name": f"{name} input"}}]}
+    kids = f(form_["id"])["children"]
+    kids.insert([c["id"] for c in kids].index(fld["id"]) + 1, new)
+    instr = phrase(rng, "add a \u201c{n}\u201d field after the {o} field", "insert a {n} input below {o}, same style",
+                   n=name, o=fld["props"]["name"].removesuffix(" field"))
+    return EditExample(doc, after, instr, "add_field")
+
+
 # ---------------------------------------------------------------------------
 # Repairs (reverse edits): corrupt a clean design, ask for the fix
 # ---------------------------------------------------------------------------
@@ -407,6 +499,19 @@ def restore_missing_label(doc: Node, rng: random.Random) -> EditExample | None:
     instr = phrase(rng, "the {n} is empty, give it a “{t}” label", "add the text “{t}” inside the {n}",
                    n=btn["props"]["name"], t=lab)
     return EditExample(broken, doc, instr, "restore_missing_label")
+
+
+@repair
+def reset_opacity(doc: Node, rng: random.Random) -> EditExample | None:
+    """Teaches ``unset``: a node was made semi-transparent by accident."""
+    n, _ = pick(rng, nodes(doc, lambda n, p: p is not None and "opacity" not in n["props"])) or (None, None)
+    if n is None:
+        return None
+    broken, f = mutate(doc)
+    f(n["id"])["props"]["opacity"] = rng.choice([0.3, 0.5, 0.6, 0.8])
+    instr = phrase(rng, "{l} looks washed out, make it fully opaque again", "remove the transparency on {l}",
+                   "reset the opacity of {l}", l=label(n))
+    return EditExample(broken, doc, instr, "reset_opacity")
 
 
 # ---------------------------------------------------------------------------
