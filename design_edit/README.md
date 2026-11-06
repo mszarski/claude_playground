@@ -141,6 +141,24 @@ operations. This is the failure mode Figma cites for moving from imitation learn
 held-out novel splits the right test for whether GRPO generalizes better than SFT. GRPO must train only on
 training edit types, so the novel splits stay held out.
 
+## Is RL viable? pass@8 before GRPO
+
+`scripts/sample_model.py` draws 8 samples per request (vLLM, T=1.0) from v2 SFT. GRPO can only reinforce a
+patch it actually samples, and only learns from groups whose rewards differ.
+
+| held-out novel edit | pass@8 | GRPO can help? |
+|---|---|---|
+| `set_weight` | 0.80–0.93 | yes |
+| `darken_text` | 0.67–0.70 | yes |
+| `duplicate_setting` | 0.07 | barely |
+| `spread_out` | 0.00–0.03 | no: `justify=between` is never sampled |
+| `promote_button` | 0.00 | no: `unset stroke` is never sampled alongside the fill change |
+
+For two of the three 0% edits, RL from this checkpoint *cannot* help: the correct patch is outside what the policy
+samples, so the fix there is training data. On the training side, only 12.6% of the 1,500-prompt GRPO pool
+(reworded and multi-part requests) has reward variance across 8 samples. The rest are solved every time and give
+zero advantage, so GRPO trains only on the variance-bearing subset (`grpo_train`).
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
