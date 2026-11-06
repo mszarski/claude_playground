@@ -24,10 +24,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+# vLLM's flashinfer sampler JIT-compiles with nvcc, which the default Jobs image lacks.
+os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
 
 def bootstrap(dataset_repo: str) -> None:

@@ -34,6 +34,9 @@ import os
 import sys
 from pathlib import Path
 
+# vLLM's flashinfer sampler JIT-compiles with nvcc, which the default Jobs image lacks.
+os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+
 
 def bootstrap(dataset_repo: str) -> None:
     """Make ``design_edit`` importable: use the local checkout, or fetch it from the dataset repo's code/ dir."""
@@ -135,6 +138,7 @@ def main() -> None:
         use_vllm=args.vllm,
         vllm_mode="colocate",
         vllm_gpu_memory_utilization=args.vllm_mem,
+        vllm_max_model_length=3072,
         report_to=args.report_to,
         project="design-edit",
         run_name=f"grpo-{args.model.split('/')[-1]}",
