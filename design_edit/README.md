@@ -159,6 +159,40 @@ samples, so the fix there is training data. On the training side, only 12.6% of 
 (reworded and multi-part requests) has reward variance across 8 samples. The rest are solved every time and give
 zero advantage, so GRPO trains only on the variance-bearing subset (`grpo_train`).
 
+## GRPO from v2: did not generalize
+
+GRPO (TRL 1.17, vLLM colocated, LoRA r=32, DAPO loss, no KL, 8 generations, T=1.0) from v2 SFT on the 974
+training prompts with reward variance (`grpo_train`), 1.5 epochs, about 87 min on one RTX PRO 6000 (about $4):
+[`mszarski/design-edit-grpo`](https://huggingface.co/mszarski/design-edit-grpo). Mean training reward on those
+prompts went from 1.437 (first quarter of the run) to 1.530 (last quarter), out of a maximum of 1.6.
+
+| split | v1 SFT | v2 SFT | **v2 + GRPO** |
+|---|---|---|---|
+| `test` | 0.990 | 0.998 | 0.994 |
+| `test_paraphrased` | 0.924 | 0.945 | 0.941 |
+| `test_coverage` | – | 1.000 | 1.000 |
+| `test_novel` | 0.577 | 0.553 | 0.513 |
+| `test_novel_paraphrased` | 0.614 | 0.579 | 0.562 |
+
+| held-out novel edit | v2 | v2 + GRPO |
+|---|---|---|
+| `darken_text` | 0.41 | **0.20** |
+| `set_weight` | 0.57 | 0.54 |
+| `duplicate_setting` | 0.00 | 0.07 |
+| `promote_button` / `spread_out` | 0.00 | 0.00 |
+
+GRPO improved the prompts it trained on and was flat on in-distribution tests, but it **reduced** held-out
+generalization. The clearest case is `darken_text`: 41 of 51 outputs are now `#6B7280`, the `lighten_text` value
+(a no-op), against about 30 under v2. RL on the policy's own samples *sharpened* its most likely answer, and where
+that answer was wrong for a new request, it got more wrong. Design-lint violations on the novel split dropped
+(0.020 → 0.003), so the lint term of the reward did have an effect.
+
+**What this says about the recipe.** At this scale, with a synthetic distribution the SFT model already solves,
+GRPO polishes but does not add capabilities. pass@8 showed the missing behaviors (`unset` plus fill for "primary",
+`justify=between` for "spread out") are never sampled, so no reward can reach them. Figma's claim that RL
+generalizes better than imitation fits a setting with **diverse environments and expert-written criteria**,
+where the policy explores across many tasks. Polishing a narrow set of templates is not that.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
@@ -171,8 +205,10 @@ zero advantage, so GRPO trains only on the variance-bearing subset (`grpo_train`
   source of "make it look right" data.
 
 Not built yet, in priority order:
-- **GRPO on training edit types, evaluated on the held-out ones** (see v2 above): does RL generalize where SFT didn't?
-  Measure pass@8 on the novel splits first, to see whether sampling ever finds the right answer.
+- **Diversity before RL.** Randomize target values within each edit type (v2 copies `#6B7280` and `end` from
+  templates), add many more edit types with fewer examples each, and use real designs. Then re-measure pass@8 on held-out edits.
+- **GRPO with entropy kept up**: use higher temperature, or a KL or entropy bonus, so RL doesn't collapse onto the SFT
+  mode, and train on a broader prompt mix rather than only the variance-bearing subset.
 - **More varied training values.** v2 shows the model copies specific values from templates (`#6B7280`, `end`).
   Randomizing target values within each edit type should push it toward reading the request.
 - **GRPO where the model is close.** RL needs some correct samples per group. Measure pass@8 on the
