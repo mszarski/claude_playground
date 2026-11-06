@@ -109,6 +109,38 @@ The model generalizes to new *properties* when the request names them, but not t
 `spread_out` ("push apart" reworded as "increase the gap"). This is despite the value-preservation check and the
 step-by-step equivalence judge in `scripts/paraphrase.py`.
 
+## v2: covering the missing operations
+
+v2 adds 6 training edits that use exactly the operations v1 never trained on, through *different* requests than
+the held-out novel edits: `remove_border` and `reset_opacity` (`unset`), `justify_items` (`justify=start/center/end`),
+`set_weight_value` (400 or 500), `lighten_text`, and `add_field` (a 4-node subtree insert). 2,452 of the 12k
+training rows are LLM-reworded. Same recipe (1 epoch, LoRA r=32, about 61 min, about $3):
+[`mszarski/design-edit-sft-v2`](https://huggingface.co/mszarski/design-edit-sft-v2), data in
+[`mszarski/design-edits-v2`](https://huggingface.co/datasets/mszarski/design-edits-v2).
+
+| split | v1 SFT | **v2 SFT** |
+|---|---|---|
+| `test` | 0.990 | **0.998** |
+| `test_paraphrased` | 0.924 | **0.945** |
+| `test_coverage` (the 6 new edits) | – | **1.000** |
+| `test_novel` | **0.577** | 0.553 |
+| `test_novel_paraphrased` | **0.614** | 0.579 |
+
+**Knowing an operation did not transfer to new requests that need it.** The model learned every new edit
+perfectly (1.000), but the held-out ones didn't move:
+
+| novel edit | v1 | v2 | what changed |
+|---|---|---|---|
+| `spread_out` | 0.00 | 0.00 | now reaches for `justify` in half the cases (v1: never), but picks `end`, the value from the new "push right" requests |
+| `promote_button` | 0.00 | 0.00 | still never emits `unset`, though it does so perfectly for "remove the border" |
+| `duplicate_setting` | 0.00 | 0.00 | content right, insert index still wrong |
+| `darken_text` | 0.47 | 0.41 | **negative transfer**: "bump up the contrast" now often outputs `#6B7280`, the exact color `lighten_text` targets (a no-op) |
+
+SFT learned *request template → patch template* mappings, including specific values, rather than composable
+operations. This is the failure mode Figma cites for moving from imitation learning to RL. It makes the
+held-out novel splits the right test for whether GRPO generalizes better than SFT. GRPO must train only on
+training edit types, so the novel splits stay held out.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
@@ -121,9 +153,10 @@ step-by-step equivalence judge in `scripts/paraphrase.py`.
   source of "make it look right" data.
 
 Not built yet, in priority order:
-- **Cover the operation space in training.** Add training edits that use `unset`, `justify` and `weight`, and
-  subtree duplication. Keep a *different* set of novel edits held out, so `test_novel` stays a real generalization test.
-- **Paraphrase part of the training set** with `scripts/paraphrase.py`, to close the 7-point rewording gap.
+- **GRPO on training edit types, evaluated on the held-out ones** (see v2 above): does RL generalize where SFT didn't?
+  Measure pass@8 on the novel splits first, to see whether sampling ever finds the right answer.
+- **More varied training values.** v2 shows the model copies specific values from templates (`#6B7280`, `end`).
+  Randomizing target values within each edit type should push it toward reading the request.
 - **GRPO where the model is close.** RL needs some correct samples per group. Measure pass@8 on the
   failing edit types first. `promote_button` (one missing line) and `duplicate_setting` (right content, wrong
   index) are good candidates; `spread_out` probably needs data first.
