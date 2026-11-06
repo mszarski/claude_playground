@@ -18,11 +18,13 @@ generator.py ──► designs ──► edits.py ──► (before, request, af
 |---|---|
 | `design_edit/schema.py` | Design tree, a one-node-per-line **design DSL**, the **patch language** (`set` / `unset` / `delete` / `move` / `insert`), `apply_patch`, and `diff(a, b)`, which builds the canonical patch from `a` to `b`. |
 | `design_edit/generator.py` | Procedural UI designs (cards, forms, navbars, pricing tables, settings lists) built on spacing, type and color scales. Nodes get semantic names that requests can refer to. |
-| `design_edit/edits.py` | 18 edit types. **Forward** edits (recolor, retext, resize, spacing, radius, add, delete, reorder, layout, align, opacity) and **repairs** (break a clean design, ask for the fix: contrast, off-scale spacing or type, inconsistent buttons, missing label), plus multi-part `compose`. Vague requests carry `relax` rules ("bigger" means any larger value; "yellow" means any yellow). |
+| `design_edit/edits.py` | 18 edit types. **Forward** edits (recolor, retext, resize, spacing, radius, add, delete, reorder, layout, align, opacity) and **repairs** (break a clean design, ask for the fix: contrast, off-scale spacing or type, inconsistent buttons, missing label), plus multi-part `compose`. `NOVEL` holds 7 more edit types that are **eval-only**. Vague requests carry `relax` rules ("bigger" means any larger value; "yellow" means any yellow). |
 | `design_edit/rewards.py` | Scores a patch by its **effect**, not its text. Measures: valid, F1 over change facts, exact match, and new design-lint violations. Folds them into one scalar for RL. |
 | `design_edit/evaluate.py` | Evaluation that works with any model, with a per-edit-type report. |
 | `design_edit/render.py` | Renders a design to HTML or PNG (Playwright), for viewing data or for a VLM judge. |
 | `scripts/build_dataset.py` | Builds train and test sets (test uses disjoint design seeds) and can push them to the Hub. |
+| `scripts/paraphrase.py` | Rewrites requests in varied human voices via the HF router. Keeps quoted text, numbers and hex values verbatim, and checks equivalence with an LLM judge. |
+| `scripts/eval_model.py` | Scores a Hub model on any splits (PEP 723, runs on HF Jobs). |
 | `scripts/eval_baseline.py` | Zero-shot baseline for any OpenAI-compatible endpoint (default: HF Inference router). |
 | `scripts/train_sft.py` | Stage 1: LoRA SFT with loss on the patch only. Merges the adapter, pushes the model, evaluates. A PEP 723 script, runnable on HF Jobs. |
 | `scripts/train_grpo.py` | Stage 2: GRPO from the SFT checkpoint, rewarded by `rewards.score`. |
@@ -67,23 +69,45 @@ hf jobs uv run --flavor a100-large --timeout 4h --secrets HF_TOKEN scripts/train
     --dataset <user>/design-edits --model <user>/design-edit-sft --output <user>/design-edit-grpo
 ```
 
-## Results (held-out test split, same templates as train)
+## Results
 
-| model | valid | exact | F1 | new lint |
+Exact-match rate. The SFT model is Qwen3-4B-Instruct + LoRA, 1 epoch on 10k examples (about 51 min on one
+RTX PRO 6000, about $3): [`mszarski/design-edit-sft`](https://huggingface.co/mszarski/design-edit-sft) (private),
+with per-example outputs in its `eval_*.json` files. The baselines are zero-shot through the HF router, on the
+first 150 rows of each split.
+
+| split | what it tests | Llama-3.3-70B | Qwen3.8-27B (thinking) | **4B SFT** |
 |---|---|---|---|---|
-| Llama-3.3-70B-Instruct, zero-shot (n=150) | 0.907 | 0.707 | 0.770 | 0.013 |
-| Qwen3.8-27B (thinking), zero-shot (n=150) | 1.000 | 0.860 | 0.908 | 0.027 |
-| **Qwen3-4B-Instruct + LoRA SFT, 10k examples** (n=200) | **1.000** | **0.990** | **0.993** | **0.000** |
+| `test` (500) | unseen designs, training templates | 0.707 | 0.860 | **0.990** |
+| `test_paraphrased` (490) | same edits, requests rewritten by an LLM in human voices | 0.633 | 0.787 | **0.924** |
+| `test_novel` (300) | 7 edit types never seen in training | 0.673 | **0.933** | 0.577 |
+| `test_novel_paraphrased` (290) | both | 0.620 | **0.793** | 0.614 |
 
-SFT: 1 epoch, LoRA rank 32, about 51 min on one RTX PRO 6000 (about $3 on HF Jobs). Model:
-[`mszarski/design-edit-sft`](https://huggingface.co/mszarski/design-edit-sft) (private), per-example
-outputs in `eval_sft.json` there.
+Patch validity is 1.00 for the SFT model on every split: it always produces a patch that parses and applies.
 
-**This test set is saturated.** It uses unseen designs but the same templates and request phrasings as
-training, and both misses were data problems rather than model errors: an ambiguous reference (two
-identical "Get started" buttons, now excluded by the generator) and a reference answer worse than the
-prediction. It shows the format and the pipeline work. It does not show the model generalizes, and GRPO
-on this distribution would have nothing left to learn. The next thing to build is a harder eval (see below).
+**Reworded requests: fine.** SFT loses 7 points (99 → 92) from rewording, the same drop as the large models,
+and still beats them by 13+ points. The model learned to resolve messy references ("the text that says
+'Join thousands…'", "the top bar thing"), not just the template wording.
+
+**New edit types: the gap is data coverage.** Training targets contain only `set` / `insert` / `move` / `delete`,
+and never edit `justify`, `weight`, `stroke` or `w`. Per novel edit type:
+
+| edit | SFT exact | failure |
+|---|---|---|
+| `add_border` | 1.00 | (`stroke` unseen but named clearly: generalizes) |
+| `set_width` | 1.00 | (`w` unseen: generalizes) |
+| `set_weight` | 0.64 | uses 600 for "bold" (reference: 700); debatable |
+| `darken_text` | 0.47 | no-op color, or `fill` instead of `color` on text |
+| `promote_button` | 0.00 | sets the fill but never emits `unset stroke`; `unset` never appears in training |
+| `spread_out` | 0.00 | "spread out" becomes a larger `gap`; `justify` edits never appear in training |
+| `duplicate_setting` | 0.00 | copied subtree is right, but it is inserted under the wrong parent or at the wrong index |
+
+The model generalizes to new *properties* when the request names them, but not to an unseen *operation*
+(`unset`), an unseen mapping from intent to property ("spread out" means `justify`), or new insertion arithmetic.
+
+**Label noise.** A hand-check of 30 random rewrites found about 1–2 that change the meaning, mostly
+`spread_out` ("push apart" reworded as "increase the gap"). This is despite the value-preservation check and the
+step-by-step equivalence judge in `scripts/paraphrase.py`.
 
 ## Design decisions and next steps
 
@@ -96,8 +120,13 @@ on this distribution would have nothing left to learn. The next thing to build i
 - **Repairs are reverse edits.** Break a clean design in a known way, so the correct fix is known exactly. This is the cheapest
   source of "make it look right" data.
 
-Not built yet, in priority order (the first three make the eval hard enough for RL to matter):
-- **Generalization eval.** Use `build_dataset.py --holdout-kinds` to measure transfer to unseen edit types.
+Not built yet, in priority order:
+- **Cover the operation space in training.** Add training edits that use `unset`, `justify` and `weight`, and
+  subtree duplication. Keep a *different* set of novel edits held out, so `test_novel` stays a real generalization test.
+- **Paraphrase part of the training set** with `scripts/paraphrase.py`, to close the 7-point rewording gap.
+- **GRPO where the model is close.** RL needs some correct samples per group. Measure pass@8 on the
+  failing edit types first. `promote_button` (one missing line) and `duplicate_setting` (right content, wrong
+  index) are good candidates; `spread_out` probably needs data first.
 - **Real designs.** Import Figma Community files through the REST API and convert them to the DSL. Synthetic templates are narrow.
 - **More natural requests.** Have an LLM rewrite the template requests, and keep a held-out set of human-written requests.
 - **VLM judge reward.** Use `render.screenshot` on before and after, then have a vision model grade against designer-written
