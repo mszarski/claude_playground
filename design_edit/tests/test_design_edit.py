@@ -82,3 +82,11 @@ def test_lint_flags_low_contrast_and_off_scale():
     doc = schema.parse('frame#n1 "R" layout=col gap=7 fill=#FFFFFF\n  text#n2 "T" text="a" size=15 color=#F3F4F6')
     issues = rewards.lint(doc)
     assert {"contrast:n2", "type_scale:n2", "spacing:n1:gap"} <= set(issues)
+
+
+def test_edits_never_target_ambiguous_labels():
+    for seed in range(300):
+        doc = generator.generate_design(seed, max_sections=3)
+        for n, _ in edits.nodes(doc, lambda n, p: True):
+            same = [m for m, _ in schema.walk(doc) if edits.label(m) == edits.label(n)]
+            assert len(same) == 1

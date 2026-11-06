@@ -67,12 +67,23 @@ hf jobs uv run --flavor a100-large --timeout 4h --secrets HF_TOKEN scripts/train
     --dataset <user>/design-edits --model <user>/design-edit-sft --output <user>/design-edit-grpo
 ```
 
-## Baselines (zero-shot, 150 test examples)
+## Results (held-out test split, same templates as train)
 
-| model | valid | exact | F1 |
-|---|---|---|---|
-| Llama-3.3-70B-Instruct | 0.907 | 0.707 | 0.770 |
-| Qwen3.8-27B (thinking) | 1.000 | 0.860 | 0.908 |
+| model | valid | exact | F1 | new lint |
+|---|---|---|---|---|
+| Llama-3.3-70B-Instruct, zero-shot (n=150) | 0.907 | 0.707 | 0.770 | 0.013 |
+| Qwen3.8-27B (thinking), zero-shot (n=150) | 1.000 | 0.860 | 0.908 | 0.027 |
+| **Qwen3-4B-Instruct + LoRA SFT, 10k examples** (n=200) | **1.000** | **0.990** | **0.993** | **0.000** |
+
+SFT: 1 epoch, LoRA rank 32, about 51 min on one RTX PRO 6000 (about $3 on HF Jobs). Model:
+[`mszarski/design-edit-sft`](https://huggingface.co/mszarski/design-edit-sft) (private), per-example
+outputs in `eval_sft.json` there.
+
+**This test set is saturated.** It uses unseen designs but the same templates and request phrasings as
+training, and both misses were data problems rather than model errors: an ambiguous reference (two
+identical "Get started" buttons, now excluded by the generator) and a reference answer worse than the
+prediction. It shows the format and the pipeline work. It does not show the model generalizes, and GRPO
+on this distribution would have nothing left to learn. The next thing to build is a harder eval (see below).
 
 ## Design decisions and next steps
 
@@ -85,9 +96,9 @@ hf jobs uv run --flavor a100-large --timeout 4h --secrets HF_TOKEN scripts/train
 - **Repairs are reverse edits.** Break a clean design in a known way, so the correct fix is known exactly. This is the cheapest
   source of "make it look right" data.
 
-Not built yet:
+Not built yet, in priority order (the first three make the eval hard enough for RL to matter):
+- **Generalization eval.** Use `build_dataset.py --holdout-kinds` to measure transfer to unseen edit types.
 - **Real designs.** Import Figma Community files through the REST API and convert them to the DSL. Synthetic templates are narrow.
 - **More natural requests.** Have an LLM rewrite the template requests, and keep a held-out set of human-written requests.
 - **VLM judge reward.** Use `render.screenshot` on before and after, then have a vision model grade against designer-written
   criteria. Add it as a third reward function in `train_grpo.py` for requests the programmatic checks can't verify.
-- **Generalization eval.** Use `build_dataset.py --holdout-kinds` to measure transfer to unseen edit types.

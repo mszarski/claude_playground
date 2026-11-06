@@ -62,7 +62,15 @@ def repair(fn: EditFn) -> EditFn:
 # ---------------------------------------------------------------------------
 
 def nodes(doc: Node, pred: Callable[[Node, Node | None], bool]) -> list[tuple[Node, Node | None]]:
-    return [(n, p) for n, p in walk(doc) if pred(n, p)]
+    """Candidate targets matching ``pred`` that a request can name unambiguously.
+
+    Nodes whose label is shared with another node (e.g. two identical "Get started" buttons)
+    are excluded: "the Get started label" would have more than one right answer.
+    """
+    counts: dict[str, int] = {}
+    for n, _ in walk(doc):
+        counts[label(n)] = counts.get(label(n), 0) + 1
+    return [(n, p) for n, p in walk(doc) if pred(n, p) and counts[label(n)] == 1]
 
 
 def is_button(n: Node) -> bool:
