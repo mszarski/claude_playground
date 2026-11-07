@@ -6,6 +6,9 @@
 #     "accelerate>=1.0",
 #     "datasets>=3.0",
 #     "huggingface_hub>=0.34",
+#     "vllm>=0.22",
+#     "kernels",
+#     "flash-linear-attention",
 # ]
 # ///
 """Score a Hub model (e.g. the SFT checkpoint) on one or more dataset splits, greedy decoding.
@@ -21,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -49,6 +53,8 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=None, help="max rows per split")
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--no-push", action="store_true")
+    ap.add_argument("--vllm", action="store_true", help="generate with vLLM (much faster for large models)")
+    ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
     args = ap.parse_args()
     bootstrap(args.dataset)
 
@@ -59,16 +65,30 @@ def main() -> None:
 
     from design_edit.evaluate import evaluate, format_report
 
-    tok = AutoTokenizer.from_pretrained(args.model)
-    tok.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16, device_map="auto").eval()
+    tkw = {"enable_thinking": False} if args.no_think else {}
 
-    @torch.no_grad()
-    def generate(prompts):
-        texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True) for p in prompts]
-        enc = tok(texts, return_tensors="pt", padding=True).to(model.device)
-        out = model.generate(**enc, max_new_tokens=320, do_sample=False, pad_token_id=tok.pad_token_id)
-        return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
+    if args.vllm:
+        os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")  # no nvcc on the Jobs image
+        from vllm import LLM, SamplingParams
+
+        llm = LLM(model=args.model, dtype="bfloat16", max_model_len=4096, gpu_memory_utilization=0.9,
+                  limit_mm_per_prompt={"image": 0})
+        params = SamplingParams(temperature=0.0, max_tokens=320)
+
+        def generate(prompts):
+            outs = llm.chat(prompts, params, chat_template_kwargs=tkw, use_tqdm=False)
+            return [o.outputs[0].text for o in outs]
+    else:
+        tok = AutoTokenizer.from_pretrained(args.model)
+        tok.padding_side = "left"
+        model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16, device_map="auto").eval()
+
+        @torch.no_grad()
+        def generate(prompts):
+            texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True, **tkw) for p in prompts]
+            enc = tok(texts, return_tensors="pt", padding=True).to(model.device)
+            out = model.generate(**enc, max_new_tokens=320, do_sample=False, pad_token_id=tok.pad_token_id)
+            return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
 
     overall = {}
     for split in args.splits.split(","):

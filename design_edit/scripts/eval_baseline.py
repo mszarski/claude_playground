@@ -25,9 +25,9 @@ from design_edit.evaluate import evaluate, format_report  # noqa: E402
 
 
 def chat(base_url: str, token: str, model: str, messages: list[dict], max_tokens: int = 8192,
-         temperature: float = 0.0) -> str:
+         temperature: float = 0.0, extra: dict | None = None) -> str:
     body = json.dumps({"model": model, "messages": messages, "max_tokens": max_tokens,
-                       "temperature": temperature}).encode()
+                       "temperature": temperature, **(extra or {})}).encode()
     for attempt in range(4):
         req = urllib.request.Request(f"{base_url}/chat/completions", data=body, method="POST", headers={
             "Authorization": f"Bearer {token}", "Content-Type": "application/json"})
@@ -49,6 +49,7 @@ def main() -> None:
     ap.add_argument("--base-url", default="https://router.huggingface.co/v1")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--out", default=None, help="write per-row results as JSON")
+    ap.add_argument("--no-think", action="store_true", help="disable reasoning (chat_template_kwargs enable_thinking=false)")
     args = ap.parse_args()
     token = os.environ["HF_TOKEN"]
 
@@ -56,7 +57,8 @@ def main() -> None:
 
     def generate(prompts):
         with ThreadPoolExecutor(args.workers) as pool:
-            return list(pool.map(lambda p: chat(args.base_url, token, args.model, p), prompts))
+            extra = {"chat_template_kwargs": {"enable_thinking": False}} if args.no_think else None
+            return list(pool.map(lambda p: chat(args.base_url, token, args.model, p, extra=extra), prompts))
 
     result = evaluate(rows, generate, batch_size=args.workers * 4)
     print(f"model: {args.model}  (n={len(rows)})")

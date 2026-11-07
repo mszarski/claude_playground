@@ -8,6 +8,8 @@
 #     "datasets>=3.0",
 #     "huggingface_hub>=0.34",
 #     "trackio",
+#     "kernels",
+#     "flash-linear-attention",
 # ]
 # ///
 """Stage 1: supervised fine-tuning on synthetic (design, request) -> patch examples.
@@ -64,6 +66,8 @@ def main() -> None:
     ap.add_argument("--max-steps", type=int, default=-1)
     ap.add_argument("--no-push", action="store_true", help="local smoke test: skip Hub uploads")
     ap.add_argument("--report-to", default="trackio")
+    ap.add_argument("--no-think", action="store_true",
+                    help="train/eval with enable_thinking=False (hybrid reasoning models, e.g. Qwen3.8)")
     args = ap.parse_args()
     bootstrap(args.dataset)
 
@@ -83,6 +87,9 @@ def main() -> None:
     if args.max_train:
         train = train.select(range(min(args.max_train, len(train))))
     train = train.select_columns(["prompt", "completion"])
+    template_kwargs = {"enable_thinking": False} if args.no_think else {}
+    if template_kwargs:
+        train = train.add_column("chat_template_kwargs", [template_kwargs] * len(train))
 
     config = SFTConfig(
         output_dir="sft-out",
@@ -102,6 +109,7 @@ def main() -> None:
         use_cpu=not torch.cuda.is_available(),
         project="design-edit",
         run_name=f"sft-{args.model.split('/')[-1]}",
+        model_init_kwargs={"dtype": torch.bfloat16},
     )
     trainer = SFTTrainer(
         model=args.model,
@@ -133,7 +141,8 @@ def main() -> None:
 
     @torch.no_grad()
     def generate(prompts):
-        texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True) for p in prompts]
+        texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True, **template_kwargs)
+                 for p in prompts]
         enc = tok(texts, return_tensors="pt", padding=True).to(model.device)
         out = model.generate(**enc, max_new_tokens=256, do_sample=False, pad_token_id=tok.pad_token_id)
         return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
