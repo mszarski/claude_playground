@@ -56,14 +56,16 @@ def sample_example(rng: random.Random, seed_lo: int, seed_hi: int, kinds: dict[s
     }
 
 
-def build_novel(n: int, seed: int) -> list[dict]:
-    """Eval-only split of edit types that never appear in training (edits.NOVEL)."""
+def build_novel(n: int, seed: int, registry: dict | None = None,
+                seed_range: tuple[int, int] = (1_100_000, 1_199_999)) -> list[dict]:
+    """Eval-only split of edit types that never appear in training (edits.NOVEL by default, or edits.GOAL)."""
+    registry = edits.NOVEL if registry is None else registry
     rng = random.Random(seed)
     rows, seen = [], set()
     while len(rows) < n:
-        kind = rng.choice(list(edits.NOVEL))
-        doc = generate_design(rng.randint(1_100_000, 1_199_999), max_sections=rng.choice([1, 2, 2, 3]))
-        ex = edits.NOVEL[kind](doc, rng)
+        kind = rng.choice(list(registry))
+        doc = generate_design(rng.randint(*seed_range), max_sections=rng.choice([1, 2, 2, 3]))
+        ex = registry[kind](doc, rng)
         if ex is None:
             continue
         row = to_row(ex)
@@ -133,6 +135,8 @@ def main() -> None:
         splits["test"] = build(args.n_test, args.seed + 1, (1_000_000, 1_099_999), all_kinds)
     if "test_novel" in want:
         splits["test_novel"] = build_novel(args.n_novel, args.seed + 2)
+    if "test_goal" in want:
+        splits["test_goal"] = build_novel(args.n_novel, args.seed + 3, edits.GOAL, (1_200_000, 1_299_999))
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

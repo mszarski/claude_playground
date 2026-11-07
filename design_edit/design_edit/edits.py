@@ -537,6 +537,81 @@ def duplicate_node(doc: Node, rng: random.Random) -> EditExample | None:
     return EditExample(doc, after, instr, "duplicate_node")
 
 
+# --- v4 goal-level training edits: the request names a goal or a reference element, and the
+# --- model has to work out the concrete property changes (including unset) itself.
+
+STYLE_PROPS = ("fill", "stroke", "radius", "pad")
+
+
+@forward
+def match_button(doc: Node, rng: random.Random) -> EditExample | None:
+    btns = [n for n, _ in nodes(doc, lambda n, p: is_button(n) and n["children"])]
+    pairs = [(a, b) for a in btns for b in btns if a is not b and
+             ({k: a["props"].get(k) for k in STYLE_PROPS} != {k: b["props"].get(k) for k in STYLE_PROPS}
+              or a["children"][0]["props"].get("color") != b["children"][0]["props"].get("color"))]
+    if not pairs:
+        return None
+    a, b = rng.choice(pairs)
+    after, f = mutate(doc)
+    na = f(a["id"])
+    for k in STYLE_PROPS:
+        if k in b["props"]:
+            na["props"][k] = b["props"][k]
+        else:
+            na["props"].pop(k, None)
+    na["children"][0]["props"]["color"] = b["children"][0]["props"]["color"]
+    instr = phrase(rng, "make {a} match {b}", "style {a} the same way as {b}", "{a} should look like {b}",
+                   a=label(a), b=label(b))
+    return EditExample(doc, after, instr, "match_button")
+
+
+@forward
+def demote_button(doc: Node, rng: random.Random) -> EditExample | None:
+    btn, _ = pick(rng, nodes(doc, lambda n, p: is_button(n) and "stroke" not in n["props"] and n["children"])) or (None, None)
+    if btn is None:
+        return None
+    after, f = mutate(doc)
+    nb = f(btn["id"])
+    nb["props"]["fill"] = "#FFFFFF"
+    nb["props"]["stroke"] = "#D1D5DB"
+    nb["children"][0]["props"]["color"] = "#111827"
+    instr = phrase(rng, "make {l} a secondary button", "demote {l} to secondary style",
+                   "{l} shouldn't compete with the main action, make it secondary", l=label(btn))
+    return EditExample(doc, after, instr, "demote_button")
+
+
+@forward
+def match_text_style(doc: Node, rng: random.Random) -> EditExample | None:
+    texts = [n for n, _ in nodes(doc, lambda n, p: n["type"] == "text")]
+    keys = ("size", "weight", "color")
+    pairs = [(a, b) for a in texts for b in texts
+             if a is not b and any(a["props"].get(k) != b["props"].get(k) for k in keys)]
+    if not pairs:
+        return None
+    a, b = rng.choice(pairs)
+    after, f = mutate(doc)
+    na = f(a["id"])
+    for k in keys:
+        na["props"][k] = b["props"][k]
+    instr = phrase(rng, "make {a} use the same text style as {b}", "{a} should be styled like {b}",
+                   "match the typography of {a} to {b}", a=label(a), b=label(b))
+    return EditExample(doc, after, instr, "match_text_style")
+
+
+@forward
+def match_spacing(doc: Node, rng: random.Random) -> EditExample | None:
+    frames = [n for n, _ in nodes(doc, lambda n, p: n["type"] == "frame" and "gap" in n["props"] and not is_button(n))]
+    pairs = [(a, b) for a in frames for b in frames if a is not b and a["props"]["gap"] != b["props"]["gap"]]
+    if not pairs:
+        return None
+    a, b = rng.choice(pairs)
+    after, f = mutate(doc)
+    f(a["id"])["props"]["gap"] = b["props"]["gap"]
+    instr = phrase(rng, "use the same spacing in {a} as in {b}", "make the gap in {a} match {b}",
+                   "{a} should have the same item spacing as {b}", a=label(a), b=label(b))
+    return EditExample(doc, after, instr, "match_spacing")
+
+
 # ---------------------------------------------------------------------------
 # Repairs (reverse edits): corrupt a clean design, ask for the fix
 # ---------------------------------------------------------------------------
@@ -781,5 +856,62 @@ def duplicate_setting(doc: Node, rng: random.Random) -> EditExample | None:
                    n=new, o=old)
     return EditExample(doc, after, instr, "duplicate_setting")
 
+
+
+# ---------------------------------------------------------------------------
+# GOAL: held-out, EVALUATION ONLY (v4). Goal-level requests whose concrete changes
+# must be inferred from conventions visible in the design.
+# ---------------------------------------------------------------------------
+
+GOAL: dict[str, EditFn] = {}
+
+
+def goal(fn: EditFn) -> EditFn:
+    GOAL[fn.__name__] = fn
+    return fn
+
+
+@goal
+def disable_button(doc: Node, rng: random.Random) -> EditExample | None:
+    btn, _ = pick(rng, nodes(doc, lambda n, p: is_button(n) and "opacity" not in n["props"])) or (None, None)
+    if btn is None:
+        return None
+    after, f = mutate(doc)
+    f(btn["id"])["props"]["opacity"] = 0.4
+    instr = phrase(rng, "make {l} look disabled", "grey out {l}, it's not available yet", "show {l} as inactive",
+                   l=label(btn))
+    return EditExample(doc, after, instr, "disable_button",
+                       [{"id": btn["id"], "prop": "opacity", "cmp": "allowed",
+                         "values": [0.3, 0.35, 0.4, 0.45, 0.5, 0.6]}])
+
+
+@goal
+def highlight_plan(doc: Node, rng: random.Random) -> EditExample | None:
+    plans = [n for n, _ in walk(doc) if n["props"].get("name", "").endswith(" plan")]
+    feat = [n for n in plans if n["props"].get("stroke") not in (None, "#E5E7EB")]
+    plain = [n for n in plans if n["props"].get("stroke") == "#E5E7EB"]
+    if not feat or not plain:
+        return None
+    a, b = rng.choice(plain), feat[0]
+    after, f = mutate(doc)
+    f(a["id"])["props"]["stroke"] = b["props"]["stroke"]
+    instr = phrase(rng, "give {a} the same highlighted outline as {b}", "highlight {a} the way {b} is highlighted",
+                   a=label(a), b=label(b))
+    return EditExample(doc, after, instr, "highlight_plan")
+
+
+@goal
+def toggle_on(doc: Node, rng: random.Random) -> EditExample | None:
+    toggles = [n for n, _ in walk(doc) if n["props"].get("name", "").endswith(" toggle")]
+    on = [t for t in toggles if t["props"].get("fill") != "#D1D5DB"]
+    off = [t for t in toggles if t["props"].get("fill") == "#D1D5DB"]
+    if not on or not off:
+        return None
+    t = rng.choice(off)
+    setting = t["props"]["name"].removesuffix(" toggle")
+    after, f = mutate(doc)
+    f(t["id"])["props"]["fill"] = on[0]["props"]["fill"]
+    instr = phrase(rng, "turn on {s}", "enable {s}", "switch {s} on", s=setting)
+    return EditExample(doc, after, instr, "toggle_on")
 
 ALL_EDITS: dict[str, EditFn] = {**FORWARD, **REPAIR, "compose": compose}  # training kinds only
