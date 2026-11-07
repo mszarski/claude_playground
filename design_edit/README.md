@@ -230,6 +230,53 @@ becomes `gap` or `justify=start`. pass@8 is 0 for both, so this checkpoint still
 These two need goal-level training requests ("make it match the other primary buttons", "space them evenly"),
 probably with designer-written criteria, which is where Figma puts its RL investment.
 
+## v4: goal-level training requests
+
+v4 adds four goal-level training edits, where the request names a goal or a reference element and the model
+works out the concrete changes: `match_button` ("make A match B"), `demote_button` ("make X a secondary button",
+the reverse of the held-out promote), `match_text_style`, `match_spacing`. A new held-out set `test_goal` (240 rows,
+never in training) has `disable_button`, `highlight_plan` ("highlight the Free plan the way Pro is
+highlighted") and `toggle_on` ("turn on Dark mode", where the on-color must be read off another toggle).
+Same recipe, about 64 min, about $3: [`mszarski/design-edit-sft-v4`](https://huggingface.co/mszarski/design-edit-sft-v4).
+
+**Scoring fix: alternative answers.** Qwen3.8-27B first scored 0.50 on `test_goal`, mostly from answers that
+were valid but different from the reference (disabled = grey fill + grey label instead of lower opacity;
+highlighting also restyles the plan's button). Examples now carry `alts`, other correct answers, and `score()` takes
+the best match. `scripts/rescore.py` re-scores saved outputs offline. With this fix Qwen3.8-27B scores 0.94.
+
+| split | v3 | **v4** | Qwen3.8-27B zero-shot |
+|---|---|---|---|
+| `test` | 0.996 | 0.992 | 0.860 |
+| `test_paraphrased` | 0.943 | 0.943 | 0.787 |
+| `test_novel` | 0.657 | **0.763** | 0.933 |
+| `test_novel_paraphrased` | 0.652 | **0.759** | 0.793 |
+| `test_goal` | **0.650** | 0.438 | 0.938 |
+
+| held-out edit | v3 | v4 | v4 pass@8 |
+|---|---|---|---|
+| `promote_button` | 0.00 | **0.73** (0.81 reworded) | 0.77 |
+| `set_weight` ("bold") | 0.61 | **0.82** | 0.98 |
+| `darken_text` | 0.80 | 0.86 | 1.00 |
+| `duplicate_setting` | 0.64 | 0.50 | 0.93 |
+| `spread_out` | 0.00 | 0.00 | 0.00 |
+| `disable_button` (goal) | 0.60 | 0.35 | 0.47 |
+| `highlight_plan` (goal) | 0.89 | 0.57 | 0.75 |
+| `toggle_on` (goal) | 0.50 | 0.61 | 0.74 |
+
+**Goal training transfers to the reverse goal but leaks into nearby ones.** Training "make X secondary" taught the
+reverse: "promote X to primary" went from 0.00 to 0.73 (correct fill, `unset stroke`, white label). But the new
+recipes now fire on goals they don't fit:
+- "show X as inactive" gets the *secondary-button* recipe (white fill, grey border; 24 of 149);
+- "highlight the plan like the featured one" copies the brand color into the card's **fill** (the `match_button`
+  copy-the-fill habit) instead of its border, creating unreadable text (lint +1.2 per row);
+- "turn on X" still uses near-black rather than reading the on-color off another toggle.
+
+So the model learns each goal as a fixed recipe and applies whichever recipe is nearest, rather than reading
+the conventions in the design. Qwen3.8-27B, reasoning zero-shot, still leads on `test_goal` (0.94) and `test_novel`
+(0.93). The 4B model wins only on the trained edit types and reworded requests. v4's pass@8 on the goal set is 0.58 (0.47–0.75 per type),
+so a GRPO run on goal-*style* training prompts now has signal, but these results suggest the bigger gain is many
+more goal types, each seen a few times, so no single recipe dominates.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
@@ -242,8 +289,10 @@ probably with designer-written criteria, which is where Figma puts its RL invest
   source of "make it look right" data.
 
 Not built yet, in priority order:
-- **Goal-level requests in training** ("match the other primary buttons", "tidy this up"), whose patch needs the
-  model to work out several concrete changes. v3 shows the operations transfer once they're varied, but the goal-to-changes step does not.
+- **Many more goal types, few examples each** (v4 shows 4 goal types become fixed recipes that leak into nearby
+  goals). An LLM could propose goals and a strong model could write candidate patches, filtered by the reward.
+- **Distill from a reasoning model**: Qwen3.8-27B is 0.94 on `test_goal` zero-shot. Its filtered answers on
+  generated goal prompts are a cheap source of goal-level SFT data.
 - **Real designs** (Figma REST API; needs a Figma token) for broader structure than the 5 templates.
 - **GRPO from v3 on held-out-style goals.** v3's pass@8 is 0.79–0.92 on `duplicate_setting` / `darken_text`, so RL
   now has signal there. It still needs training goals that aren't the test set.
