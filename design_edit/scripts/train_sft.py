@@ -111,10 +111,13 @@ def main() -> None:
         run_name=f"sft-{args.model.split('/')[-1]}",
         model_init_kwargs={"dtype": torch.bfloat16},
     )
+    # Text-only tokenizer: multimodal checkpoints (e.g. Qwen3.8) would otherwise load an image/video processor.
+    tok = AutoTokenizer.from_pretrained(args.model)
     trainer = SFTTrainer(
         model=args.model,
         train_dataset=train,
         args=config,
+        processing_class=tok,
         peft_config=LoraConfig(r=args.lora_r, lora_alpha=2 * args.lora_r, lora_dropout=0.05,
                                target_modules="all-linear", task_type="CAUSAL_LM"),
     )
@@ -122,7 +125,6 @@ def main() -> None:
 
     # Merge LoRA into the base so GRPO / serving can load a plain checkpoint.
     model = trainer.model.merge_and_unload()
-    tok = AutoTokenizer.from_pretrained(args.model)
     if not args.no_push:
         model.push_to_hub(args.output, private=True)
         tok.push_to_hub(args.output, private=True)
