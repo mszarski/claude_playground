@@ -316,6 +316,9 @@ def main() -> None:
         out = model.generate(**enc, max_new_tokens=256, do_sample=False, pad_token_id=tok.pad_token_id)
         return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
 
+    if args.n_eval <= 0:  # large models: skip the slow HF-generate eval; use eval_model.py --vllm instead
+        print("skipping in-script eval (--n-eval 0)")
+        return
     test = ds["test"].select(range(min(args.n_eval, len(ds["test"]))))
     result = evaluate(test, generate, batch_size=args.eval_batch)
     print(format_report(result))

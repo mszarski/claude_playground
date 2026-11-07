@@ -377,6 +377,53 @@ Full splits for the 27B SFT: `test` 0.976, `test_paraphrased` 0.933, `test_novel
 training (0.83 → 0.55). Held-out *edit types* didn't improve (0.85 → 0.84; `spread_out` still 0). That gap is what
 the next RL stage targets.
 
+### RL on the 27B with validator + visual-judge rewards
+
+GRPO from the 27B SFT checkpoint on 240 prompts (`rl_mix`: half unlabeled goal prompts, half reworded or multi-part
+template prompts). Reward: reference score where a reference exists; otherwise −1 invalid / 0 empty / the visual
+judge's four dimensions gated on *fulfilled*, minus 0.25 per new lint or rendered-geometry issue. vLLM runs as a
+server on a second H200 (the 27B doesn't fit training + sampling on one GPU); Chromium renders inside the job.
+lr 5e-6, 60 steps, about 44 min of training: [`mszarski/design-edit-grpo27b`](https://huggingface.co/mszarski/design-edit-grpo27b).
+Mean reward rose from about 0.9 to about 1.1; 1,003 patches judged.
+
+| split | 27B + SFT | 27B + SFT + GRPO |
+|---|---|---|
+| `test` | 0.976 | 0.976 |
+| `test_paraphrased` | 0.933 | 0.933 |
+| `test_novel` | 0.823 | 0.830 |
+| `test_novel_paraphrased` | 0.776 | 0.779 |
+| `test_goal` (rubric) | 0.983 | 0.983 |
+
+Unlike the 4B run with a weak text judge, this reward did no harm. It also barely helped: `duplicate_setting`
+0.93 → 1.00, but `spread_out` stays at 0 and `promote_button` at about 0.5. The run was deliberately conservative
+(low lr, 60 steps, 240 prompts) and the policy was already strong on its training prompts. Moving the held-out
+gaps likely needs a larger and more varied RL environment (Figma's stated focus) and more steps.
+
+**Engineering notes from this stage**
+- *A reward-function resource leak hung the first 27B GRPO run at step 3 for about 2 h.* A new thread pool per
+  reward call started a fresh Chromium per thread per step until memory ran out. Fixed with one persistent pool
+  and a per-item timeout. Smoke tests should run past a few steps.
+- Multimodal checkpoints (Qwen3.8) need the processor configs copied next to merged weights, or vLLM won't load them.
+- In-script HF-generate eval on a 27B with the PyTorch linear-attention fallback is very slow. Use `--n-eval 0`
+  and `eval_model.py --vllm`.
+
+## Where this ends up
+
+| | `test` | `test_paraphrased` | `test_novel` | `test_goal` (rubric) |
+|---|---|---|---|---|
+| Llama-3.3-70B zero-shot | 0.707 | 0.633 | 0.673 | – |
+| Qwen3.8-27B thinking zero-shot | 0.860 | 0.787 | **0.933** | **0.992** |
+| Qwen3.8-27B no-think zero-shot | 0.820 | – | 0.853 | 0.983 |
+| best 4B SFT (v3) | **0.996** | 0.943 | 0.657 | 0.829 |
+| **Qwen3.8-27B no-think + SFT + GRPO** | 0.976 | 0.933 | 0.830 | 0.983 |
+
+(Zero-shot `test`/`test_novel` rows: first 150 per split; fine-tuned rows: full splits.)
+
+The fine-tuned 27B in fast no-think mode is the best all-round model. It's nearly as precise on known edit types
+as the best 4B, keeps the base model's goal-level judgment, and generalizes to new edit types far better than any
+4B. The open gaps: new *edit types* that need a convention the model never saw (`spread_out` → `justify=between`),
+where only the thinking base model succeeds, and a bigger RL stage to close them.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
