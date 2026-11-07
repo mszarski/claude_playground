@@ -85,6 +85,7 @@ def to_row(ex) -> dict:
         "relax": json.dumps(ex.relax),
         "kind": ex.kind,
         "instruction": ex.instruction,
+        "alts": json.dumps([{"after": serialize(a), "relax": r} for a, r in ex.alts]),
     }
 
 

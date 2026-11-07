@@ -88,3 +88,35 @@ def test_edits_never_target_ambiguous_labels():
         for n, _ in edits.nodes(doc, lambda n, p: True):
             same = [m for m, _ in schema.walk(doc) if edits.label(m) == edits.label(n)]
             assert len(same) == 1
+
+
+def test_goal_alternative_answers_score_exact():
+    n = 0
+    for seed in range(300):
+        doc = generator.generate_design(seed, max_sections=3)
+        for fn in edits.GOAL.values():
+            ex = fn(doc, random.Random(seed))
+            if ex is None:
+                continue
+            for alt, relax in ex.alts:
+                patch = schema.format_patch(schema.diff(ex.before, alt))
+                alts = [{"after": schema.serialize(alt), "relax": relax}]
+                assert rewards.score(ex.before, ex.after, patch, ex.relax, alts).exact
+                n += 1
+    assert n > 50
+
+
+def test_disabled_accepts_grey_fill_convention():
+    for seed in range(100):
+        doc = generator.generate_design(seed)
+        ex = edits.disable_button(doc, random.Random(seed))
+        if ex and ex.before is not None and schema.find(ex.before, ex.after["id"]):
+            btn_id = next(k for k in schema.index_nodes(ex.after)
+                          if schema.find(ex.after, k)["props"].get("opacity") == 0.4)
+            lab_id = schema.find(ex.before, btn_id)["children"][0]["id"]
+            alts = [{"after": schema.serialize(a), "relax": r} for a, r in ex.alts]
+            s = rewards.score(ex.before, ex.after, f"set {btn_id} fill=#D1D5DB\nset {lab_id} color=#6B7280",
+                              ex.relax, alts)
+            assert s.exact
+            return
+    raise AssertionError("no disable_button example generated")

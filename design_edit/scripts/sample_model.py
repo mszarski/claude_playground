@@ -80,7 +80,7 @@ def main() -> None:
         rows, by_kind = [], defaultdict(list)
         for r, o in zip(ds, outs):
             texts = [c.text for c in o.outputs]
-            scores = [score(r["before"], r["after"], t, r["relax"]) for t in texts]
+            scores = [score(r["before"], r["after"], t, r["relax"], r.get("alts")) for t in texts]
             rewards = [s.reward for s in scores]
             row = {"kind": r["kind"], "instruction": r["instruction"],
                    "n_exact": sum(s.exact for s in scores), "n_valid": sum(s.valid for s in scores),

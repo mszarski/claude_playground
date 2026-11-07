@@ -209,21 +209,32 @@ class Score:
 
 
 def score(before: Node | str, after: Node | str, patch_text: str,
-          relax: list[dict[str, Any]] | str | None = None) -> Score:
+          relax: list[dict[str, Any]] | str | None = None,
+          alts: list[dict[str, Any]] | str | None = None) -> Score:
+    """Score a patch against the reference edit, or the best-matching alternative.
+
+    ``alts`` lists other equally valid answers, each ``{"after": doc, "relax": [...]}``
+    (e.g. "make it look disabled" = lower opacity OR grey fill + grey label).
+    """
     before = parse(before) if isinstance(before, str) else before
-    after = parse(after) if isinstance(after, str) else after
     relax = json.loads(relax) if isinstance(relax, str) else (relax or [])
+    alts = json.loads(alts) if isinstance(alts, str) else (alts or [])
     try:
         pred_doc = apply_patch(before, patch_text)
         pred_facts = change_facts(before, pred_doc)
     except (PatchError, ValueError, KeyError, IndexError) as e:
         return Score(False, 0.0, 0.0, 0.0, False, 0, -1.0, str(e))
-    gold = change_facts(before, after)
-    p, r, f1 = fact_f1(gold, pred_facts, before, relax)
-    exact = f1 == 1.0 and len(pred_facts) == len(gold)
-    new_lint = max(0, len(set(lint(pred_doc)) - set(lint(after))))
-    reward = f1 + (0.5 if exact else 0.0) - 0.25 * new_lint
-    return Score(True, p, r, f1, exact, new_lint, reward)
+    best: Score | None = None
+    for ref, ref_relax in [(after, relax)] + [(a["after"], a.get("relax", [])) for a in alts]:
+        ref = parse(ref) if isinstance(ref, str) else ref
+        gold = change_facts(before, ref)
+        p, r, f1 = fact_f1(gold, pred_facts, before, ref_relax)
+        exact = f1 == 1.0 and len(pred_facts) == len(gold)
+        new_lint = max(0, len(set(lint(pred_doc)) - set(lint(ref))))
+        cand = Score(True, p, r, f1, exact, new_lint, f1 + (0.5 if exact else 0.0) - 0.25 * new_lint)
+        if best is None or cand.reward > best.reward:
+            best = cand
+    return best
 
 
 def score_dict(*args: Any, **kw: Any) -> dict[str, Any]:

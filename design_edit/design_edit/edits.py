@@ -40,6 +40,8 @@ class EditExample:
     kind: str
     # Each entry: {"id": node id, "prop": key, "cmp": "gt" | "lt" | "any"}
     relax: list[dict[str, Any]] = field(default_factory=list)
+    # Other equally valid answers: [(after_doc, relax), ...]. Used by held-out goal edits.
+    alts: list[tuple[Node, list[dict[str, Any]]]] = field(default_factory=list)
 
 
 EditFn = Callable[[Node, random.Random], "EditExample | None"]
@@ -880,9 +882,19 @@ def disable_button(doc: Node, rng: random.Random) -> EditExample | None:
     f(btn["id"])["props"]["opacity"] = 0.4
     instr = phrase(rng, "make {l} look disabled", "grey out {l}, it's not available yet", "show {l} as inactive",
                    l=label(btn))
+    # Alternative convention: grey fill + grey label (any light grey fill, any mid grey label).
+    alt, fa = mutate(doc)
+    fa(btn["id"])["props"]["fill"] = "#E5E7EB"
+    alt_relax = [{"id": btn["id"], "prop": "fill", "cmp": "allowed",
+                  "values": ["#E5E7EB", "#D1D5DB", "#F3F4F6", "#E2E8F0", "#CBD5E1", "#F9FAFB"]}]
+    if btn["children"]:
+        lab = btn["children"][0]
+        fa(lab["id"])["props"]["color"] = "#9CA3AF"
+        alt_relax.append({"id": lab["id"], "prop": "color", "cmp": "allowed",
+                          "values": ["#9CA3AF", "#6B7280", "#A1A1AA", "#94A3B8", "#D1D5DB", "#71717A"]})
     return EditExample(doc, after, instr, "disable_button",
                        [{"id": btn["id"], "prop": "opacity", "cmp": "allowed",
-                         "values": [0.3, 0.35, 0.4, 0.45, 0.5, 0.6]}])
+                         "values": [0.3, 0.35, 0.4, 0.45, 0.5, 0.6]}], alts=[(alt, alt_relax)])
 
 
 @goal
@@ -897,7 +909,21 @@ def highlight_plan(doc: Node, rng: random.Random) -> EditExample | None:
     f(a["id"])["props"]["stroke"] = b["props"]["stroke"]
     instr = phrase(rng, "give {a} the same highlighted outline as {b}", "highlight {a} the way {b} is highlighted",
                    a=label(a), b=label(b))
-    return EditExample(doc, after, instr, "highlight_plan")
+    # Alternative: also restyle the plan's button like the featured plan's button (featured = border + primary CTA).
+    alts = []
+    a_btn = next((c for c in a["children"] if is_button(c) and c["children"]), None)
+    b_btn = next((c for c in b["children"] if is_button(c) and c["children"]), None)
+    if a_btn is not None and b_btn is not None:
+        alt, fa = mutate(after)
+        nb = fa(a_btn["id"])
+        for k in ("fill", "stroke"):
+            if k in b_btn["props"]:
+                nb["props"][k] = b_btn["props"][k]
+            else:
+                nb["props"].pop(k, None)
+        nb["children"][0]["props"]["color"] = b_btn["children"][0]["props"]["color"]
+        alts.append((alt, []))
+    return EditExample(doc, after, instr, "highlight_plan", alts=alts)
 
 
 @goal

@@ -19,7 +19,7 @@ def evaluate(rows: Iterable[dict], generate: GenerateFn, batch_size: int = 8) ->
         batch = rows[i:i + batch_size]
         outs = generate([r["prompt"] for r in batch])
         for r, out in zip(batch, outs):
-            s = score(r["before"], r["after"], out, r["relax"])
+            s = score(r["before"], r["after"], out, r["relax"], r.get("alts"))
             per_row.append({"kind": r["kind"], "output": out, **{m: float(getattr(s, m)) for m in METRICS},
                             "error": s.error})
     return summarize(per_row) | {"rows": per_row}
