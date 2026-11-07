@@ -388,7 +388,8 @@ def lighten_text(doc: Node, rng: random.Random) -> EditExample | None:
     if t is None:
         return None
     after, f = mutate(doc)
-    f(t["id"])["props"]["color"] = "#6B7280"
+    # v3: random lighter gray, so the model can't learn one fixed output color for this request.
+    f(t["id"])["props"]["color"] = rng.choice(["#374151", "#4B5563", "#6B7280", "#9CA3AF"])
     instr = phrase(rng, "make {l} more muted", "{l} should use the secondary text color",
                    "tone down {l}, it's too dark", l=label(t))
     # Any lighter color that stays readable is fine.
@@ -422,6 +423,118 @@ def add_field(doc: Node, rng: random.Random) -> EditExample | None:
     instr = phrase(rng, "add a \u201c{n}\u201d field after the {o} field", "insert a {n} input below {o}, same style",
                    n=name, o=fld["props"]["name"].removesuffix(" field"))
     return EditExample(doc, after, instr, "add_field")
+
+
+# --- v3 diversity edits: generic and explicit, so the model learns operations rather than one
+# --- request -> one patch mappings. justify=between and "primary style" stay held out (NOVEL).
+
+PROP_WORDS = {"size": "font size", "weight": "font weight", "color": "text color", "fill": "background",
+              "stroke": "border color", "w": "width", "h": "height", "radius": "corner radius",
+              "gap": "gap", "pad": "padding", "opacity": "opacity", "align": "cross-axis alignment",
+              "justify": "main-axis alignment"}
+PALETTE = ["#111827", "#374151", "#6B7280", "#FFFFFF", "#F3F4F6", "#E5E7EB", "#D1D5DB",
+           *g.BRANDS.values(), "#CA8A04", "#0891B2", "#65A30D"]
+
+
+def _prop_choices(n: Node, p: Node | None) -> dict[str, list]:
+    t = n["type"]
+    if t == "text":
+        return {"size": g.TYPE_SCALE, "weight": [300, 400, 500, 600, 700, 800], "color": PALETTE}
+    out: dict[str, list] = {"radius": g.RADII, "fill": PALETTE, "opacity": [0.2, 0.4, 0.5, 0.7, 0.9]}
+    if t in ("rect", "image"):
+        out |= {"w": [24, 36, 48, 64, 120, 200], "h": [16, 20, 24, 48, 120, 160]}
+    if t == "frame" and p is not None:
+        out |= {"stroke": PALETTE, "w": [240, 280, 320, 360, 400, 480]}
+        if n["props"].get("layout") in ("row", "col"):
+            out |= {"gap": g.SPACING, "pad": g.SPACING, "align": ["start", "center", "end"]}
+        if n["props"].get("layout") == "row":
+            out["justify"] = ["start", "center", "end"]
+    return out
+
+
+@forward
+def set_prop(doc: Node, rng: random.Random) -> EditExample | None:
+    n, p = pick(rng, nodes(doc, lambda n, p: p is not None)) or (None, None)
+    if n is None:
+        return None
+    choices = _prop_choices(n, p)
+    prop = rng.choice(sorted(choices))
+    vals = [v for v in choices[prop] if v != n["props"].get(prop)]
+    v = rng.choice(vals)
+    after, f = mutate(doc)
+    f(n["id"])["props"][prop] = v
+    shown = f"{int(v * 100)}%" if prop == "opacity" else (f"{v}px" if prop in ("size", "w", "h", "radius", "gap", "pad") and rng.random() < 0.5 else v)
+    instr = phrase(rng, "set the {w} of {l} to {v}", "change {l}'s {w} to {v}", "{l}: {w} {v}",
+                   w=PROP_WORDS[prop], l=label(n), v=shown)
+    return EditExample(doc, after, instr, "set_prop")
+
+
+@forward
+def unset_prop(doc: Node, rng: random.Random) -> EditExample | None:
+    optional = ("stroke", "opacity", "radius", "fill")
+    n, _ = pick(rng, nodes(doc, lambda n, p: p is not None and n["type"] != "text"
+                           and any(k in n["props"] for k in optional))) or (None, None)
+    if n is None:
+        return None
+    prop = rng.choice([k for k in optional if k in n["props"]])
+    after, f = mutate(doc)
+    del f(n["id"])["props"][prop]
+    instr = phrase(rng, "remove the {w} from {l}", "clear {l}'s {w}", "{l} shouldn't have a {w}",
+                   w={"stroke": "border", "fill": "background fill"}.get(prop, PROP_WORDS[prop]), l=label(n))
+    return EditExample(doc, after, instr, "unset_prop")
+
+
+@forward
+def restyle_button(doc: Node, rng: random.Random) -> EditExample | None:
+    """Explicit multi-part restyle: fill + label color + border, every part stated in the request."""
+    btn, _ = pick(rng, nodes(doc, lambda n, p: is_button(n) and n["children"])) or (None, None)
+    if btn is None:
+        return None
+    after, f = mutate(doc)
+    nb = f(btn["id"])
+    lab = nb["children"][0]
+    if rng.random() < 0.6:
+        word, hexv = rng.choice([kv for kv in COLOR_WORDS.items() if kv[0] not in ("gray", "yellow")
+                                 and kv[1] != nb["props"].get("fill")])
+        nb["props"]["fill"] = hexv
+        lab["props"]["color"] = "#FFFFFF"
+        had_border = nb["props"].pop("stroke", None) is not None
+        instr = phrase(rng, "make {l} {w} with white text{b}", "restyle {l}: {w} background, white label{b}",
+                       l=label(btn), w=word, b=" and no border" if had_border else "")
+    else:
+        if nb["props"].get("stroke") and nb["props"].get("fill") == "#FFFFFF":
+            return None  # already an outline button: the request would be a no-op
+        nb["props"]["fill"] = "#FFFFFF"
+        nb["props"]["stroke"] = "#D1D5DB"
+        lab["props"]["color"] = "#111827"
+        instr = phrase(rng, "make {l} white with a gray border and dark text", "restyle {l} as an outline button: "
+                       "white fill, #D1D5DB border, #111827 label", l=label(btn))
+    return EditExample(doc, after, instr, "restyle_button")
+
+
+@forward
+def duplicate_node(doc: Node, rng: random.Random) -> EditExample | None:
+    """Copy a node (with its subtree) right after itself: exercises subtree inserts and index arithmetic."""
+    n, p = pick(rng, nodes(doc, lambda n, p: p is not None and p["id"] != doc["id"]
+                           and p["props"].get("layout") in ("row", "col")
+                           and sum(1 for _ in walk(n)) <= 8)) or (None, None)
+    if n is None:
+        return None
+    after, f = mutate(doc)
+    nxt = int(next_id(after)[1:])
+
+    def clone(node: Node) -> Node:
+        nonlocal nxt
+        c = {"id": f"n{nxt}", "type": node["type"], "props": dict(node["props"]), "children": []}
+        nxt += 1
+        c["children"] = [clone(k) for k in node["children"]]
+        return c
+
+    kids = f(p["id"])["children"]
+    kids.insert([k["id"] for k in kids].index(n["id"]) + 1, clone(n))
+    instr = phrase(rng, "duplicate {l}", "make a copy of {l} right after it", "copy {l} and place the copy after it",
+                   l=label(n))
+    return EditExample(doc, after, instr, "duplicate_node")
 
 
 # ---------------------------------------------------------------------------

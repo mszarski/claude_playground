@@ -51,15 +51,13 @@ def test_invalid_patches_raise(bad):
 
 
 def test_reward_ordering():
-    doc = generator.generate_design(3)
-    ex = edits.compose(doc, random.Random(1))
-    gold = schema.format_patch(schema.diff(ex.before, ex.after))
-    assert len(gold.splitlines()) >= 2
-    first_line = gold.splitlines()[0]
-    full = rewards.score(ex.before, ex.after, gold).reward
-    partial = rewards.score(ex.before, ex.after, first_line).reward
-    wrong = rewards.score(ex.before, ex.after, "set n1 fill=#000000").reward
-    invalid = rewards.score(ex.before, ex.after, "not a patch").reward
+    before = schema.parse('frame#n1 "R" layout=col gap=8\n  text#n2 "T" text="a" size=14 color=#111827')
+    after = schema.parse('frame#n1 "R" layout=col gap=16\n  text#n2 "T" text="a" size=20 color=#111827')
+    gold = "set n1 gap=16\nset n2 size=20"
+    full = rewards.score(before, after, gold).reward
+    partial = rewards.score(before, after, "set n1 gap=16").reward
+    wrong = rewards.score(before, after, "set n2 color=#FF0000").reward
+    invalid = rewards.score(before, after, "not a patch").reward
     assert full > partial > wrong > invalid == -1.0
 
 
