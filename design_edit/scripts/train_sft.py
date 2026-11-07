@@ -49,6 +49,19 @@ def bootstrap(dataset_repo: str) -> None:
     sys.path.insert(0, str(Path(path) / "code"))
 
 
+def copy_processor_files(base: str, output: str) -> None:
+    """Multimodal bases (e.g. Qwen3.8) need their processor configs next to the weights for vLLM to load them."""
+    from huggingface_hub import HfApi, hf_hub_download
+    from huggingface_hub.errors import EntryNotFoundError
+
+    api = HfApi()
+    for f in ("preprocessor_config.json", "video_preprocessor_config.json", "vocab.json", "merges.txt"):
+        try:
+            api.upload_file(path_or_fileobj=hf_hub_download(base, f), path_in_repo=f, repo_id=output)
+        except EntryNotFoundError:
+            pass
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", required=True)
@@ -128,6 +141,7 @@ def main() -> None:
     if not args.no_push:
         model.push_to_hub(args.output, private=True)
         tok.push_to_hub(args.output, private=True)
+        copy_processor_files(args.model, args.output)
         print(f"pushed merged model to https://huggingface.co/{args.output}")
 
     # Quick held-out eval with greedy decoding.
