@@ -34,8 +34,7 @@ def _style(node: Node) -> str:
     for key, css in (("w", "width"), ("h", "height")):
         if key in p:
             s.append(f"{css}:{p[key]}px")
-            if key == "w":
-                s.append("max-width:100%")
+            s.append(f"flex-shrink:0")  # fixed sizes are fixed, as in Figma: overflow is visible, not hidden
     if "fill" in p and node["type"] != "text":
         s.append(f"background:{p['fill']}")
     if "stroke" in p:
