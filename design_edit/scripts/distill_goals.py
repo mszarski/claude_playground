@@ -39,6 +39,11 @@ HELD_OUT = re.compile(
     r"disabl|inactive|grey(ed)? out|gray(ed)? out|unavailable|highlight|featured|toggle|switch(ed)? (on|off)|"
     r"turn(ed)? (on|off)|enable|spread|space between|evenly|distribut|primary|call to action|\bcta\b|promot|"
     r"\bbold\b|darker|darken|border|outline|wide|width|duplicate|copy", re.I)
+# Plan-card emphasis is the held-out highlight_plan goal.
+PLAN_EMPH = re.compile(
+    r"(\bplans?\b|\b(free|starter|pro|team|enterprise)\b).*(stand out|emphasi|prominen|attention|draw the eye|focal|"
+    r"visually distinct|pop)|(stand out|emphasi|prominen|attention|focal|visually distinct|pop).*"
+    r"(\bplans?\b|\b(free|starter|pro|team|enterprise)\b)", re.I)
 
 ANGLES = [
     "visual hierarchy", "readability", "consistency with the rest of the design", "a calmer, less cluttered feel",
@@ -74,7 +79,7 @@ Answer with one word: GOOD or BAD."""
 def propose(doc_text: str, rng: random.Random, model: str, token: str, url: str) -> str | None:
     out = chat(url, token, model, [{"role": "user", "content": PROPOSE.format(design=doc_text, angle=rng.choice(ANGLES))}],
                max_tokens=120, temperature=1.0).strip().strip('"')
-    if not out or out.startswith("// request failed") or len(out) > 300 or HELD_OUT.search(out):
+    if not out or out.startswith("// request failed") or len(out) > 300 or HELD_OUT.search(out) or PLAN_EMPH.search(out):
         return None
     return out
 
@@ -92,11 +97,16 @@ def judge(before_text: str, request: str, patch: str, model: str, token: str, ur
 
 def one(seed: int, args, token: str) -> tuple[str, dict | None]:
     rng = random.Random(seed)
-    doc = generate_design(rng.randint(2_000_000, 2_999_999), max_sections=rng.choice([1, 2, 2, 3]))
+    lo = 3_000_000 if args.propose_only else 2_000_000  # disjoint designs from the distilled SFT set
+    doc = generate_design(rng.randint(lo, lo + 999_999), max_sections=rng.choice([1, 2, 2, 3]))
     text = serialize(doc)
     req = propose(text, rng, args.proposer, token, args.base_url)
     if req is None:
         return "rejected_request", None
+    if args.propose_only:  # unlabeled goal prompt for RL with a judge reward
+        return "kept", {"prompt": prompt_messages(doc, req), "completion": [{"role": "assistant", "content": ""}],
+                        "before": text, "after": text, "relax": "[]", "kind": "goal_prompt",
+                        "instruction": req, "orig_instruction": req, "alts": "[]"}
     patch = solve(doc, req, args.teacher, token, args.base_url)
     if not patch:
         return "no_patch", None
@@ -129,6 +139,7 @@ def main() -> None:
     ap.add_argument("--base-url", default="https://router.huggingface.co/v1")
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--propose-only", action="store_true", help="only write goal prompts (no teacher, no labels)")
     args = ap.parse_args()
     token = os.environ["HF_TOKEN"]
 

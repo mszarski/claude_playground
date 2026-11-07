@@ -66,6 +66,10 @@ def main() -> None:
     ap.add_argument("--vllm-mem", type=float, default=0.3, help="GPU fraction for colocated vLLM")
     ap.add_argument("--no-push", action="store_true", help="smoke test: no checkpoints or Hub uploads")
     ap.add_argument("--report-to", default="trackio")
+    ap.add_argument("--reward", choices=["reference", "rubric"], default="reference",
+                    help="reference: match the labeled edit; rubric: LLM judge on goal prompts (no labels)")
+    ap.add_argument("--judge-model", default="Qwen/Qwen3-235B-A22B-Instruct-2507")
+    ap.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
     ap.add_argument("--kinds", default="", help="comma-separated edit kinds to train on (default all)")
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-5)
@@ -95,7 +99,7 @@ def main() -> None:
         keep = set(args.kinds.split(","))
         train = train.filter(lambda r: r["kind"] in keep)
     train = train.shuffle(seed=1).select(range(min(args.n_prompts, len(train))))
-    train = train.select_columns(["prompt", "before", "after", "relax", "kind"])
+    train = train.select_columns(["prompt", "before", "after", "relax", "kind", "instruction"])
 
     def text_of(c):
         return c[0]["content"] if isinstance(c, list) else c
@@ -109,6 +113,37 @@ def main() -> None:
         return [1.0 if score(b, a, text_of(c), r).valid else 0.0
                 for c, b, a, r in zip(completions, before, after, relax)]
 
+    from concurrent.futures import ThreadPoolExecutor
+
+    from design_edit.judge import judge_pass
+    from design_edit.rewards import lint
+    from design_edit.schema import PatchError, apply_patch, diff, format_patch, parse
+
+    judge_stats = {"pass": 0, "fail": 0, "unreachable": 0}
+
+    def _rubric_one(before_text, instruction, completion):
+        doc = parse(before_text)
+        try:
+            after_doc = apply_patch(doc, completion)
+        except (PatchError, ValueError, KeyError, IndexError):
+            return -1.0
+        canon = format_patch(diff(doc, after_doc)) if after_doc["id"] == doc["id"] else ""
+        if not canon:
+            return 0.0
+        new_lint = len(set(lint(after_doc)) - set(lint(doc)))
+        verdict = judge_pass(instruction, before_text, canon, args.judge_model)
+        judge_stats["unreachable" if verdict is None else ("pass" if verdict else "fail")] += 1
+        return (1.0 if verdict else 0.0) - 0.25 * new_lint
+
+    def rubric_reward(completions, before, instruction, **_):
+        """Label-free reward for goal prompts: judge verdict on the applied change, minus new lint."""
+        with ThreadPoolExecutor(32) as pool:
+            out = list(pool.map(lambda x: _rubric_one(*x),
+                                zip(before, instruction, [text_of(c) for c in completions])))
+        if sum(judge_stats.values()) % 256 < len(out):
+            print(f"judge stats: {judge_stats}", flush=True)
+        return out
+
     config = GRPOConfig(
         output_dir="grpo-out",
         learning_rate=args.lr,
@@ -119,7 +154,7 @@ def main() -> None:
         num_generations=args.num_generations,
         max_completion_length=256,
         temperature=1.0,
-        beta=0.0,                      # no KL term; rely on the clipped objective
+        beta=args.beta,                # 0 = no KL term; rely on the clipped objective
         loss_type="dapo",
         reward_weights=[1.0, 0.1],
         max_steps=args.max_steps,
@@ -141,7 +176,7 @@ def main() -> None:
     )
     trainer = GRPOTrainer(
         model=args.model,
-        reward_funcs=[patch_reward, valid_reward],
+        reward_funcs=[rubric_reward if args.reward == "rubric" else patch_reward, valid_reward],
         train_dataset=train,
         args=config,
         peft_config=LoraConfig(r=args.lora_r, lora_alpha=2 * args.lora_r, target_modules="all-linear",
