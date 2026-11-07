@@ -285,7 +285,8 @@ def main() -> None:
 
     @torch.no_grad()
     def generate(prompts):
-        texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True) for p in prompts]
+        texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True,
+                                         **({"enable_thinking": False} if args.no_think else {})) for p in prompts]
         enc = tok(texts, return_tensors="pt", padding=True).to(model.device)
         out = model.generate(**enc, max_new_tokens=256, do_sample=False, pad_token_id=tok.pad_token_id)
         return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
