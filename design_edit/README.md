@@ -193,6 +193,43 @@ GRPO polishes but does not add capabilities. pass@8 showed the missing behaviors
 generalizes better than imitation fits a setting with **diverse environments and expert-written criteria**,
 where the policy explores across many tasks. Polishing a narrow set of templates is not that.
 
+## v3: diversity instead of RL
+
+v3 keeps the recipe (fresh LoRA SFT from Qwen3-4B, 1 epoch, about 61 min, about $3) and changes only the data:
+target values are randomized (`lighten_text` now picks one of four grays, where it used to always be `#6B7280`),
+and four broad edit families are added: `set_prop` and `unset_prop` (any property, value stated), `restyle_button`
+(an explicit fill + label + border change), and `duplicate_node` (any subtree copied after itself). 28 training
+edit types; 2,370 of 11,970 rows reworded. `justify=between` and goal-level "primary style" stay held out.
+[`mszarski/design-edit-sft-v3`](https://huggingface.co/mszarski/design-edit-sft-v3),
+data [`mszarski/design-edits-v3`](https://huggingface.co/datasets/mszarski/design-edits-v3).
+
+| split | v1 SFT | v2 SFT | v2 + GRPO | **v3 SFT** |
+|---|---|---|---|---|
+| `test` | 0.990 | 0.998 | 0.994 | 0.996 |
+| `test_paraphrased` | 0.924 | 0.945 | 0.941 | 0.943 |
+| `test_novel` | 0.577 | 0.553 | 0.513 | **0.657** |
+| `test_novel_paraphrased` | 0.614 | 0.579 | 0.562 | **0.652** |
+| `test_coverage` / `test_coverage_v3` | – | 1.000 / – | 1.000 / – | 1.000 / 1.000 |
+
+| held-out novel edit | v2 | GRPO | **v3** | v3 pass@8 |
+|---|---|---|---|---|
+| `darken_text` | 0.41 | 0.20 | **0.80** (0.91 reworded) | 0.92 |
+| `duplicate_setting` | 0.00 | 0.07 | **0.64** | 0.79 |
+| `set_weight` ("bold") | 0.57 | 0.54 | 0.61 | 0.87 |
+| `promote_button` | 0.00 | 0.00 | 0.00 | 0.00 |
+| `spread_out` | 0.00 | 0.00 | 0.00 | 0.00 |
+
+**Diversity did what RL could not.** Removing the fixed `#6B7280` lifted `darken_text` from 0.41 to 0.80.
+Generic `duplicate_node` (copy any subtree after itself) transferred to the held-out "duplicate this settings row,
+rename it, switch it off": 0.00 → 0.64. It is the first held-out edit that went from impossible to mostly right.
+
+**What still fails is turning a goal into concrete changes.** For "promote X to primary style", v3 changes only the fill,
+usually to the wrong color (the brand color appears in 5 of 26 outputs). It never removes the border or whitens the
+label, even though it does exactly that for `restyle_button` when each step is stated (1.000). "Spread out" still
+becomes `gap` or `justify=start`. pass@8 is 0 for both, so this checkpoint still can't be RL-trained into them.
+These two need goal-level training requests ("make it match the other primary buttons", "space them evenly"),
+probably with designer-written criteria, which is where Figma puts its RL investment.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
@@ -205,8 +242,11 @@ where the policy explores across many tasks. Polishing a narrow set of templates
   source of "make it look right" data.
 
 Not built yet, in priority order:
-- **Diversity before RL.** Randomize target values within each edit type (v2 copies `#6B7280` and `end` from
-  templates), add many more edit types with fewer examples each, and use real designs. Then re-measure pass@8 on held-out edits.
+- **Goal-level requests in training** ("match the other primary buttons", "tidy this up"), whose patch needs the
+  model to work out several concrete changes. v3 shows the operations transfer once they're varied, but the goal-to-changes step does not.
+- **Real designs** (Figma REST API; needs a Figma token) for broader structure than the 5 templates.
+- **GRPO from v3 on held-out-style goals.** v3's pass@8 is 0.79–0.92 on `duplicate_setting` / `darken_text`, so RL
+  now has signal there. It still needs training goals that aren't the test set.
 - **GRPO with entropy kept up**: use higher temperature, or a KL or entropy bonus, so RL doesn't collapse onto the SFT
   mode, and train on a broader prompt mix rather than only the variance-bearing subset.
 - **More varied training values.** v2 shows the model copies specific values from templates (`#6B7280`, `end`).
