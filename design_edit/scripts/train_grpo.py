@@ -220,10 +220,21 @@ def main() -> None:
         dims = sum(bool(v[d]) for d in DIMENSIONS) / len(DIMENSIONS)
         return (dims if v["fulfilled"] else 0.0) - penalty
 
+    # One pool for the whole run: each worker thread keeps its own Chromium (thread-local Renderer).
+    # A fresh pool per call leaked a browser per thread per step and hung the run at step 3.
+    visual_pool = ThreadPoolExecutor(8)
+
     def visual_reward(completions, before, after, relax, instruction, **_):
-        with ThreadPoolExecutor(16) as pool:
-            out = list(pool.map(lambda x: _visual_one(*x),
-                                zip(before, after, relax, instruction, [text_of(c) for c in completions])))
+        futs = [visual_pool.submit(_visual_one, *x)
+                for x in zip(before, after, relax, instruction, [text_of(c) for c in completions])]
+        out = []
+        for f in futs:
+            try:
+                out.append(f.result(timeout=300))
+            except Exception as e:  # a stuck render or judge call must never stall training
+                visual_stats["unreachable"] += 1
+                print(f"visual reward error: {type(e).__name__}: {e}", flush=True)
+                out.append(0.0)
         print(f"visual judge stats: {visual_stats}", flush=True)
         return out
 
