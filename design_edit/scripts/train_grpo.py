@@ -2,6 +2,9 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "trl[vllm]==1.17.1",
+#     "playwright",
+#     "kernels",
+#     "flash-linear-attention",
 #     "peft>=0.17",
 #     "accelerate>=1.0",
 #     "datasets>=3.0",
@@ -66,10 +69,15 @@ def main() -> None:
     ap.add_argument("--vllm-mem", type=float, default=0.3, help="GPU fraction for colocated vLLM")
     ap.add_argument("--no-push", action="store_true", help="smoke test: no checkpoints or Hub uploads")
     ap.add_argument("--report-to", default="trackio")
-    ap.add_argument("--reward", choices=["reference", "rubric"], default="reference",
+    ap.add_argument("--reward", choices=["reference", "rubric", "visual"], default="reference",
                     help="reference: match the labeled edit; rubric: LLM judge on goal prompts (no labels)")
     ap.add_argument("--judge-model", default="Qwen/Qwen3-235B-A22B-Instruct-2507")
     ap.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
+    ap.add_argument("--visual-judge", default="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8")
+    ap.add_argument("--vllm-server", action="store_true",
+                    help="2-GPU mode: vLLM server on GPU 1, training on GPU 0 (for models too big to colocate)")
+    ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
+    ap.add_argument("--batch-prompts", type=int, default=0, help="unused; kept for CLI compatibility")
     ap.add_argument("--kinds", default="", help="comma-separated edit kinds to train on (default all)")
     ap.add_argument("--num-generations", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-5)
@@ -83,8 +91,34 @@ def main() -> None:
     args = ap.parse_args()
     bootstrap(args.dataset)
 
+    import subprocess
+    import time
+    import urllib.request
+
+    if args.reward == "visual":
+        # The visual reward renders designs: install Chromium (and its system libraries) into the job image.
+        subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"], check=True)
+    server = None
+    if args.vllm_server:
+        env = dict(os.environ, CUDA_VISIBLE_DEVICES="1", VLLM_USE_FLASHINFER_SAMPLER="0")
+        server = subprocess.Popen(["trl", "vllm-serve", "--model", args.model, "--tensor-parallel-size", "1",
+                                   "--max-model-len", "3072", "--gpu-memory-utilization", "0.9"], env=env)
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # trainer sees only GPU 0 (set before torch initializes CUDA)
+        for _ in range(180):
+            try:
+                urllib.request.urlopen("http://localhost:8000/health/", timeout=5)
+                break
+            except OSError:
+                if server.poll() is not None:
+                    raise RuntimeError("vLLM server exited during startup")
+                time.sleep(10)
+        else:
+            raise RuntimeError("vLLM server did not become healthy in 30 min")
+
     from datasets import load_dataset
     from peft import LoraConfig
+    import torch
+    from transformers import AutoTokenizer
     from trl import GRPOConfig, GRPOTrainer
 
     from design_edit.evaluate import evaluate, format_report
@@ -135,6 +169,51 @@ def main() -> None:
         judge_stats["unreachable" if verdict is None else ("pass" if verdict else "fail")] += 1
         return (1.0 if verdict else 0.0) - 0.25 * new_lint
 
+    import threading
+
+    from design_edit.visual_judge import DIMENSIONS
+    from design_edit.visual_judge import judge as visual_judge
+
+    _tl = threading.local()
+
+    def _renderer():
+        if not hasattr(_tl, "r"):
+            from design_edit.geometry import Renderer
+            _tl.r = Renderer().__enter__()
+        return _tl.r
+
+    visual_stats = {"judged": 0, "unreachable": 0}
+
+    def _visual_one(before_text, after_text, relax_text, instruction, completion):
+        """Reference-matched prompts keep the reference score; goal prompts get validators + visual judge."""
+        if after_text != before_text:  # has a reference edit
+            return score(before_text, after_text, completion, relax_text).reward
+        doc = parse(before_text)
+        try:
+            after_doc = apply_patch(doc, completion)
+        except (PatchError, ValueError, KeyError, IndexError):
+            return -1.0
+        canon = format_patch(diff(doc, after_doc)) if after_doc["id"] == doc["id"] else ""
+        if not canon:
+            return 0.0
+        r = _renderer()
+        penalty = 0.25 * (len(set(lint(after_doc)) - set(lint(doc))) + len(r.new_issues(doc, after_doc)))
+        v = visual_judge(r.screenshot(doc), r.screenshot(after_doc), instruction, canon, args.visual_judge)
+        if v is None:
+            visual_stats["unreachable"] += 1
+            return 0.0 - penalty
+        visual_stats["judged"] += 1
+        # Fulfilment gates the rest: a change that ignores the request earns nothing for being tidy.
+        dims = sum(bool(v[d]) for d in DIMENSIONS) / len(DIMENSIONS)
+        return (dims if v["fulfilled"] else 0.0) - penalty
+
+    def visual_reward(completions, before, after, relax, instruction, **_):
+        with ThreadPoolExecutor(16) as pool:
+            out = list(pool.map(lambda x: _visual_one(*x),
+                                zip(before, after, relax, instruction, [text_of(c) for c in completions])))
+        print(f"visual judge stats: {visual_stats}", flush=True)
+        return out
+
     def rubric_reward(completions, before, instruction, **_):
         """Label-free reward for goal prompts: judge verdict on the applied change, minus new lint."""
         with ThreadPoolExecutor(32) as pool:
@@ -166,8 +245,10 @@ def main() -> None:
         # No mid-run checkpoints: Hub checkpoint pushes trigger a Trackio static-Space sync that
         # fails for private repos. The merged model is pushed once at the end instead.
         save_strategy="no",
-        use_vllm=args.vllm,
-        vllm_mode="colocate",
+        use_vllm=args.vllm or args.vllm_server,
+        vllm_mode="server" if args.vllm_server else "colocate",
+        chat_template_kwargs={"enable_thinking": False} if args.no_think else None,
+        model_init_kwargs={"dtype": torch.bfloat16},
         vllm_gpu_memory_utilization=args.vllm_mem,
         vllm_max_model_length=3072,
         report_to=args.report_to,
@@ -176,7 +257,8 @@ def main() -> None:
     )
     trainer = GRPOTrainer(
         model=args.model,
-        reward_funcs=[rubric_reward if args.reward == "rubric" else patch_reward, valid_reward],
+        processing_class=AutoTokenizer.from_pretrained(args.model),  # text-only, even for multimodal checkpoints
+        reward_funcs=[{"rubric": rubric_reward, "visual": visual_reward}.get(args.reward, patch_reward), valid_reward],
         train_dataset=train,
         args=config,
         peft_config=LoraConfig(r=args.lora_r, lora_alpha=2 * args.lora_r, target_modules="all-linear",
