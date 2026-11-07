@@ -320,6 +320,28 @@ teacher) generalizes poorly for goal-level editing. The obvious next step, now t
 exists, is **RL with rubric rewards**: GRPO where the reward is `judge_goal`'s verdict on goal-style
 training prompts, not reference matching. v5's pass@8 on `test_goal` is 0.60, so there's signal.
 
+## RL with an LLM-judge reward (4B, from v3)
+
+GRPO from v3 (no goal training) on 748 *unlabeled* goal prompts (proposer only, no teacher answers; plan-emphasis
+prompts filtered as too close to `highlight_plan`). Reward: a **Qwen3-235B judge** (generic 3-line rubric,
+one-word PASS/FAIL) on the applied change, minus 0.25 per new lint violation; −1 for invalid patches; KL β=0.02.
+1.5 epochs, about 76 min ($3.70): [`mszarski/design-edit-grpo-rubric`](https://huggingface.co/mszarski/design-edit-grpo-rubric).
+Mean training reward rose from about 0.3 to about 0.6. Evaluation uses a *different* judge (gpt-oss-120b) with per-goal designer rubrics.
+
+| split | v3 | v3 + judge-reward GRPO |
+|---|---|---|
+| `test` | 0.996 | 0.982 |
+| `test_paraphrased` | 0.943 | 0.920 |
+| `test_novel` | 0.657 | **0.740** |
+| `test_goal` (rubric, gpt-oss-120b) | **0.829** | 0.696 |
+
+RL helped the held-out *edit types* (+8 points) but hurt held-out *goals*. The policy moved toward
+conspicuous **fill** changes: "highlight the plan like the featured one" now changes the card fill 22 times (v3: 6),
+breaking readability, and "make it look disabled" uses fill-only changes far more than opacity. The cheap
+training judge with a generic rubric rewards visible change; the stricter evaluation rubric does not. **RL optimizes
+whatever the reward actually rewards**, which is why Figma's post emphasizes shaping reward models and expert-written criteria.
+A per-goal-type rubric, a stronger or visual judge, and geometry checks in the reward are the next things to fix.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
