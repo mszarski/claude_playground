@@ -277,6 +277,49 @@ the conventions in the design. Qwen3.8-27B, reasoning zero-shot, still leads on 
 so a GRPO run on goal-*style* training prompts now has signal, but these results suggest the bigger gain is many
 more goal types, each seen a few times, so no single recipe dominates.
 
+## v5: distilled goals, and grading goals with rubrics
+
+**Distillation** (`scripts/distill_goals.py`). An LLM proposes free-form goal requests for generated designs (14
+angles: hierarchy, readability, consistency, decluttering, ...). Requests resembling held-out goals are rejected by
+keyword. Qwen3.8-27B (thinking) writes the patch, kept only if it applies, changes something, adds no lint, and
+a judge rates it GOOD. 2,004 of 3,500 kept. A second filter dropped 27 whose *patches* mimic held-out goals
+(bordered button made filled, button opacity). v5 = v4 train + 1,977 distilled goals, same SFT recipe
+(about 71 min): [`mszarski/design-edit-sft-v5`](https://huggingface.co/mszarski/design-edit-sft-v5).
+
+**Rubric grading** (`scripts/judge_goal.py`). Goal requests have many valid answers, and hand-listing them
+(`alts`) kept under-counting. Each goal type now has a short designer-written rubric ("reads as unavailable;
+label still visible; must not look like an ordinary secondary button; nothing else changes"). gpt-oss-120b, a
+different family from the Qwen teacher, grades each applied change. Sanity check: 18/18 reference answers pass,
+18/18 wrong answers fail. By hand, its verdicts on v5's disabled outputs are sensible: gray text on same-gray
+fill 0/32, classic disabled styling 28/28, secondary-button recipe 0/18.
+
+| model | `test` | `test_novel` | `test_goal` strict | **`test_goal` rubric** |
+|---|---|---|---|---|
+| Qwen3.8-27B zero-shot | 0.860 | 0.933 | 0.938 | **0.992** |
+| v3 SFT (no goal training) | 0.996 | 0.657 | 0.650 | **0.829** |
+| v4 SFT (+ 4 goal recipes) | 0.992 | 0.763 | 0.438 | 0.646 |
+| v5 SFT (+ 2k distilled goals) | 0.994 | **0.817** | 0.287 | 0.546 |
+
+| rubric pass on `test_goal` | v3 | v4 | v5 |
+|---|---|---|---|
+| `disable_button` | **0.89** | 0.69 | 0.43 |
+| `highlight_plan` | **0.89** | 0.57 | 0.64 |
+| `toggle_on` | 0.50 | 0.61 | **0.87** |
+
+On `test_novel`, v5 is the best 4B model yet (0.817: darken 1.00, bold 0.98, duplicate row 0.79; promote fell from
+0.73 to 0.50, as expected after removing promote-like distilled rows).
+
+**On held-out goals, every round of goal training made the 4B model worse** (rubric: 0.83 → 0.65 → 0.55),
+even though each round helped some neighbor. v5's distilled "de-emphasize X" goals (grey fill + grey text)
+turned "make it look disabled" into gray-on-gray (32 of 149 outputs). Each goal pattern learned by SFT becomes a recipe
+that fires on whatever request resembles it. A 27B reasoning model reads the design's conventions and passes
+99%. The 4B SFT student imitates the teacher's *outputs* and doesn't pick up that reasoning.
+
+This is the strongest evidence in this repo for Figma's position: imitation (SFT, even distilled from a strong
+teacher) generalizes poorly for goal-level editing. The obvious next step, now that a trustworthy rubric grader
+exists, is **RL with rubric rewards**: GRPO where the reward is `judge_goal`'s verdict on goal-style
+training prompts, not reference matching. v5's pass@8 on `test_goal` is 0.60, so there's signal.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
@@ -291,8 +334,10 @@ more goal types, each seen a few times, so no single recipe dominates.
 Not built yet, in priority order:
 - **Many more goal types, few examples each** (v4 shows 4 goal types become fixed recipes that leak into nearby
   goals). An LLM could propose goals and a strong model could write candidate patches, filtered by the reward.
-- **Distill from a reasoning model**: Qwen3.8-27B is 0.94 on `test_goal` zero-shot. Its filtered answers on
-  generated goal prompts are a cheap source of goal-level SFT data.
+- **GRPO with a rubric-judge reward** on distilled goal prompts (training goals, not test goals), from v3 or v5.
+  Rubric pass on held-out goals is the metric to beat (v3 0.83, Qwen3.8-27B 0.99).
+- **A larger student** (e.g. Qwen3.8-27B LoRA, as the Figma post suggests for its newer model). The 4B student can't
+  absorb the teacher's reasoning through SFT.
 - **Real designs** (Figma REST API; needs a Figma token) for broader structure than the 5 templates.
 - **GRPO from v3 on held-out-style goals.** v3's pass@8 is 0.79–0.92 on `duplicate_setting` / `darken_text`, so RL
   now has signal there. It still needs training goals that aren't the test set.
