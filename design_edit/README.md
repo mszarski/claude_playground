@@ -342,6 +342,41 @@ training judge with a generic rubric rewards visible change; the stricter evalua
 whatever the reward actually rewards**, which is why Figma's post emphasizes shaping reward models and expert-written criteria.
 A per-goal-type rubric, a stronger or visual judge, and geometry checks in the reward are the next things to fix.
 
+## Matching Figma's recipe: validators, self-healing teacher, Qwen3.8-27B
+
+After reading the post itself, three pieces were added to match it more closely:
+
+1. **Validators** (`geometry.py`, `visual_judge.py`). Designs render in Chromium. Each edit is checked for new
+   clipping, sibling overlap, text overflow and off-page content (0 issues across 300 clean designs; fixed sizes no
+   longer shrink silently). A vision judge (Llama-4-Maverick, a different family from the Qwen teacher) grades
+   before/after screenshots on *fulfilled / preserved / legible / contained*. It agrees with the expected verdict on
+   36/40 calibration cases: 19/20 bad edits rejected, 17/20 good ones passed.
+2. **Self-healing teacher** (`distill_heal.py`). Qwen3.8-27B (thinking) attempts each proposed edit. The validators
+   and visual judge send their specific problems back, and the teacher revises (up to 3 attempts). 1,543 edits
+   passed everything, about 30% of them via revision; 1,490 remain after dropping held-out-like patches.
+3. **Qwen3.8-27B student**, Figma's reported base. It's a vision-language model with hybrid linear attention:
+   loaded text-only, trained and served with `enable_thinking=False` (fast mode), LoRA r=32, 1 epoch on 7,490 rows
+   (6,000 template rows correct by construction + 1,490 self-healed teacher edits; the hand-written goal recipes that
+   leaked in v4 were left out). About 78 min on one H200 (about $8): [`mszarski/design-edit-sft27b`](https://huggingface.co/mszarski/design-edit-sft27b).
+
+Thinking-off baseline: Qwen3.8-27B with `enable_thinking=False` keeps nearly all of its goal-level judgment
+(rubric 0.983 vs 0.992 with thinking) at a fraction of the latency. That's the fair starting point.
+
+| model (same rows) | `test` | `test_novel` | `test_goal` (rubric) |
+|---|---|---|---|
+| Qwen3.8-27B thinking, zero-shot | 0.860 | 0.933 | 0.992 |
+| Qwen3.8-27B no-think, zero-shot | 0.820 | 0.853 | 0.983 |
+| **Qwen3.8-27B no-think + SFT** | **0.973** | 0.840 | **0.983** |
+| best 4B (v3 / v5) | 0.996 | 0.817 | 0.829 |
+
+Full splits for the 27B SFT: `test` 0.976, `test_paraphrased` 0.933, `test_novel` 0.823, `test_novel_paraphrased`
+0.776, coverage 0.985 / 0.995.
+
+**Scale preserved generalization under SFT.** The 27B learned the format and the precise template edits
+(0.82 → 0.97) **without** losing its goal-level judgment (0.983, unchanged). Every 4B lost it under the same kind of
+training (0.83 → 0.55). Held-out *edit types* didn't improve (0.85 → 0.84; `spread_out` still 0). That gap is what
+the next RL stage targets.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,
