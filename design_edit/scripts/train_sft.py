@@ -55,7 +55,8 @@ def copy_processor_files(base: str, output: str) -> None:
     from huggingface_hub.errors import EntryNotFoundError
 
     api = HfApi()
-    for f in ("preprocessor_config.json", "video_preprocessor_config.json", "vocab.json", "merges.txt"):
+    for f in ("preprocessor_config.json", "video_preprocessor_config.json", "processor_config.json", "vocab.json",
+              "merges.txt"):
         try:
             api.upload_file(path_or_fileobj=hf_hub_download(base, f), path_in_repo=f, repo_id=output)
         except EntryNotFoundError:
