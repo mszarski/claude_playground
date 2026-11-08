@@ -81,6 +81,8 @@ def main() -> None:
     ap.add_argument("--report-to", default="trackio")
     ap.add_argument("--no-think", action="store_true",
                     help="train/eval with enable_thinking=False (hybrid reasoning models, e.g. Qwen3.8)")
+    ap.add_argument("--template-kwargs", default=None,
+                    help='JSON chat-template kwargs, e.g. \'{"reasoning_strength": "none"}\' for Muse-Glimmer')
     args = ap.parse_args()
     bootstrap(args.dataset)
 
@@ -101,6 +103,8 @@ def main() -> None:
         train = train.select(range(min(args.max_train, len(train))))
     train = train.select_columns(["prompt", "completion"])
     template_kwargs = {"enable_thinking": False} if args.no_think else {}
+    if args.template_kwargs:
+        template_kwargs.update(json.loads(args.template_kwargs))
     if template_kwargs:
         train = train.add_column("chat_template_kwargs", [template_kwargs] * len(train))
 

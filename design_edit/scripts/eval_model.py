@@ -55,6 +55,7 @@ def main() -> None:
     ap.add_argument("--no-push", action="store_true")
     ap.add_argument("--vllm", action="store_true", help="generate with vLLM (much faster for large models)")
     ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
+    ap.add_argument("--template-kwargs", default=None, help="JSON chat-template kwargs")
     args = ap.parse_args()
     bootstrap(args.dataset)
 
@@ -66,6 +67,8 @@ def main() -> None:
     from design_edit.evaluate import evaluate, format_report
 
     tkw = {"enable_thinking": False} if args.no_think else {}
+    if args.template_kwargs:
+        tkw.update(json.loads(args.template_kwargs))
 
     if args.vllm:
         os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")  # no nvcc on the Jobs image

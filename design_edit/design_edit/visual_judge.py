@@ -2,6 +2,8 @@
 
 Mirrors the criteria in Figma's post ("the requested element is present, legible, and contained;
 unrelated content is preserved"): each dimension is judged separately, not as one overall score.
+"minimal" was added after RL learned to over-edit (adding bold to "bump up the contrast"): the other
+dimensions only noticed changes to *other* elements.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ import urllib.error
 import urllib.request
 
 ROUTER = "https://router.huggingface.co/v1"
-DIMENSIONS = ("fulfilled", "preserved", "legible", "contained")
+DIMENSIONS = ("fulfilled", "preserved", "legible", "contained", "minimal")
 
 PROMPT = """You are a senior product designer reviewing an edit to a UI design.
 Image 1 is BEFORE the edit, image 2 is AFTER.
@@ -28,8 +30,12 @@ Judge each dimension independently, true or false:
 - preserved: nothing unrelated to the request visibly changed.
 - legible: all text in AFTER is readable (no low-contrast, hidden or same-color text).
 - contained: nothing in AFTER overlaps, is clipped, overflows its container or runs off the page.
+- minimal: the patch changes ONLY what the request needs. Extra changes to the edited element itself count as
+  NOT minimal, e.g. making text bold or larger when only its color was asked for. Changes needed to keep the
+  result readable or consistent (e.g. whitening a label on a newly dark button) are fine. Use the patch to check
+  this, not just the image.
 
-Reply with only a JSON object: {{"fulfilled": bool, "preserved": bool, "legible": bool, "contained": bool, "reason": "<one sentence>"}}"""
+Reply with only a JSON object: {{"fulfilled": bool, "preserved": bool, "legible": bool, "contained": bool, "minimal": bool, "reason": "<one sentence>"}}"""
 
 
 def _img(png: bytes) -> dict:

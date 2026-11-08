@@ -33,13 +33,19 @@ RUBRICS = {
   grey fill and/or grey label, or a muted outline style).
 - The label must stay visible: it may be low-contrast, but not the same color as the fill.
 - It must not look like an ordinary active secondary button (a white button with dark text is NOT disabled).
-- Nothing other than that button (and its label) changes.""",
+- Nothing other than that button (and its label) changes.
+- Minimal: no extra changes beyond what the request needs, including on the edited element itself (e.g. no added
+  bold, size, or unrelated color changes that the request didn't ask for).""",
     "highlight_plan": """- The target plan card is emphasized the same way as the referenced featured plan (e.g. the same accent-colored
   border; optionally also its call-to-action styled like the featured plan's).
 - All text stays readable (no dark text on a saturated fill).
-- Other plans do not change.""",
+- Other plans do not change.
+- Minimal: no extra changes beyond what the request needs, including on the edited element itself (e.g. no added
+  bold, size, or unrelated color changes that the request didn't ask for).""",
     "toggle_on": """- The named toggle now looks ON, using the same on-state color as the design's other on toggles.
-- Nothing else changes.""",
+- Nothing else changes.
+- Minimal: no extra changes beyond what the request needs, including on the edited element itself (e.g. no added
+  bold, size, or unrelated color changes that the request didn't ask for).""",
 }
 
 JUDGE = """You are a senior product designer grading an edit to a UI design.

@@ -87,9 +87,11 @@ def main() -> None:
     ap.add_argument("--judge-model", default="Qwen/Qwen3-235B-A22B-Instruct-2507")
     ap.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
     ap.add_argument("--visual-judge", default="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8")
+    ap.add_argument("--free-changes", type=int, default=3, help="property changes allowed before the edit-size penalty")
     ap.add_argument("--vllm-server", action="store_true",
                     help="2-GPU mode: vLLM server on GPU 1, training on GPU 0 (for models too big to colocate)")
     ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
+    ap.add_argument("--template-kwargs", default=None, help="JSON chat-template kwargs")
     ap.add_argument("--batch-prompts", type=int, default=0, help="unused; kept for CLI compatibility")
     ap.add_argument("--kinds", default="", help="comma-separated edit kinds to train on (default all)")
     ap.add_argument("--num-generations", type=int, default=8)
@@ -163,7 +165,7 @@ def main() -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     from design_edit.judge import judge_pass
-    from design_edit.rewards import lint
+    from design_edit.rewards import change_facts, lint
     from design_edit.schema import PatchError, apply_patch, diff, format_patch, parse
 
     judge_stats = {"pass": 0, "fail": 0, "unreachable": 0}
@@ -211,6 +213,10 @@ def main() -> None:
             return 0.0
         r = _renderer()
         penalty = 0.25 * (len(set(lint(after_doc)) - set(lint(doc))) + len(r.new_issues(doc, after_doc)))
+        # Edit-size penalty: goal edits rarely need more than a few property changes; larger patches pay a little
+        # per extra change, so RL can't buy judge approval with extra emphasis.
+        n_changes = len(change_facts(doc, after_doc))
+        penalty += 0.1 * max(0, n_changes - args.free_changes)
         v = visual_judge(r.screenshot(doc), r.screenshot(after_doc), instruction, canon, args.visual_judge)
         if v is None:
             visual_stats["unreachable"] += 1
@@ -271,7 +277,8 @@ def main() -> None:
         save_strategy="no",
         use_vllm=args.vllm or args.vllm_server,
         vllm_mode="server" if args.vllm_server else "colocate",
-        chat_template_kwargs={"enable_thinking": False} if args.no_think else None,
+        chat_template_kwargs=({"enable_thinking": False} if args.no_think else {})
+        | (json.loads(args.template_kwargs) if args.template_kwargs else {}) or None,
         model_init_kwargs={"dtype": torch.bfloat16},
         vllm_gpu_memory_utilization=args.vllm_mem,
         vllm_max_model_length=3072,
@@ -311,7 +318,9 @@ def main() -> None:
     @torch.no_grad()
     def generate(prompts):
         texts = [tok.apply_chat_template(p, tokenize=False, add_generation_prompt=True,
-                                         **({"enable_thinking": False} if args.no_think else {})) for p in prompts]
+                                         **({"enable_thinking": False} if args.no_think else {}),
+                                         **(json.loads(args.template_kwargs) if args.template_kwargs else {}))
+                 for p in prompts]
         enc = tok(texts, return_tensors="pt", padding=True).to(model.device)
         out = model.generate(**enc, max_new_tokens=256, do_sample=False, pad_token_id=tok.pad_token_id)
         return tok.batch_decode(out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True)
