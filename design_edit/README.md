@@ -451,6 +451,30 @@ as the best 4B, keeps the base model's goal-level judgment, and generalizes to n
 4B. The open gaps: new *edit types* that need a convention the model never saw (`spread_out` → `justify=between`),
 where only the thinking base model succeeds, and a bigger RL stage to close them.
 
+## Screening non-Chinese base models (zero-shot, no-think)
+
+Every candidate run through the HF router in fast (thinking-off) mode on the first 150 rows of `test` and
+`test_novel` and all 240 rows of `test_goal` (rubric-judged by gpt-oss-120b). "Lenient" rewrites `set #n5` to
+`set n5` (a zero-shot ID-format habit that any SFT fixes) before scoring. Judge noise is about ±0.02.
+
+| model | maker, license | trainable here? | valid | `test` (lenient) | `test_novel` (lenient) | `test_goal` rubric |
+|---|---|---|---|---|---|---|
+| Muse-Spark-Open-816B-A42B | Meta, custom (gated) | no (816B MoE) | 1.00 | 0.853 | 0.840 | **0.988** |
+| **Muse-Glimmer-30B** | Meta, Apache-2.0 | **yes** (30B dense) | 0.97 | **0.860** | 0.760 | 0.979 |
+| Gemma-4-31B-it | Google, Apache-2.0 | yes (31B dense) | 0.95 | 0.800 | 0.633 | 0.933–0.950 |
+| Gemma-4-26B-A4B-it | Google, Apache-2.0 | yes (MoE, 4B active) | 0.85 | 0.600 | 0.513 | 0.933 |
+| Inkling | Thinking Machines, Apache-2.0 | no (1.9 TB) | 0.79 | 0.773 | 0.713 | 0.850 |
+| Inkling-Small | Thinking Machines, Apache-2.0 | no (532 GB) | 0.80 | 0.753 | 0.713 | 0.867 |
+| Granite-4.2-30B | IBM, Apache-2.0 | yes | 0.37 | 0.400 | 0.460 | 0.588 |
+| *Qwen3.8-27B (reference)* | *Alibaba, Apache-2.0* | *yes* | *0.99* | *0.820* | ***0.853*** | *0.983* |
+
+- **Muse-Glimmer-30B is the best trainable non-Chinese base.** It roughly matches Qwen3.8-27B zero-shot
+  (slightly better on `test`, behind on `test_novel`, equal on goals), it's Apache-2.0, and it's supported by transformers.
+- **Muse-Spark-Open** is the strongest model overall but far too large to fine-tune here. It's a good teacher
+  for the self-healing pipeline instead of Qwen.
+- **Inkling** (named in Figma's post) underperforms here even after the format fix, mostly on goal-level edits.
+- **Gemma-4-31B** is solid but weaker on unseen edit types; Granite struggles with the format.
+
 ## Design decisions and next steps
 
 - **Patches, not rewrites.** Output is about 1–5 lines instead of a 2k-token document. It is cheap to decode, easy to verify,

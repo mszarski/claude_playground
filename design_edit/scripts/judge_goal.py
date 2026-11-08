@@ -77,7 +77,8 @@ def judge_row(row: dict, output: str, model: str, token: str, url: str) -> bool:
         v = re.findall(r"VERDICT:\s*(PASS|FAIL)", out.upper())
         if v:
             return v[-1] == "PASS"
-    raise RuntimeError(f"judge gave no verdict for: {row['instruction']}")
+    print(f"warning: judge gave no verdict, counting as FAIL: {row['instruction']}", file=sys.stderr)
+    return False
 
 
 def main() -> None:
