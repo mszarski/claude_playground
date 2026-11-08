@@ -89,6 +89,7 @@ def main() -> None:
     ap.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
     ap.add_argument("--visual-judge", default="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8")
     ap.add_argument("--free-changes", type=int, default=3, help="property changes allowed before the edit-size penalty")
+    ap.add_argument("--save-steps", type=int, default=0, help="push LoRA checkpoints every N steps (0 = off)")
     ap.add_argument("--vllm-server", action="store_true",
                     help="2-GPU mode: vLLM server on GPU 1, training on GPU 0 (for models too big to colocate)")
     ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
@@ -273,9 +274,15 @@ def main() -> None:
         gradient_checkpointing=True,
         logging_steps=5,
         log_completions=True,
-        # No mid-run checkpoints: Hub checkpoint pushes trigger a Trackio static-Space sync that
-        # fails for private repos. The merged model is pushed once at the end instead.
-        save_strategy="no",
+        # Mid-run LoRA checkpoints (pushed to <output>-ckpt) only with --save-steps and without Trackio:
+        # with Trackio, Hub checkpoint pushes trigger a static-Space sync that fails for private repos.
+        save_strategy="steps" if args.save_steps > 0 else "no",
+        save_steps=args.save_steps if args.save_steps > 0 else 500,
+        save_total_limit=None,
+        push_to_hub=args.save_steps > 0 and not args.no_push,
+        hub_model_id=f"{args.output}-ckpt",
+        hub_private_repo=True,
+        hub_strategy="all_checkpoints",
         use_vllm=args.vllm or args.vllm_server,
         vllm_mode="server" if args.vllm_server else "colocate",
         chat_template_kwargs=({"enable_thinking": False} if args.no_think else {})
