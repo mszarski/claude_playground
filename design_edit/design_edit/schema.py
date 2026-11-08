@@ -217,10 +217,21 @@ def parse(text: str) -> Node:
 # Patches
 # ---------------------------------------------------------------------------
 
+_CHANNEL_TOKENS = re.compile(r"<\|(?:message|eot|end|start|channel|return|call)\|>")
+
+
 def strip_fences(text: str) -> str:
-    """Remove markdown code fences a model might wrap its patch in."""
+    """Extract the patch from raw model output.
+
+    Handles markdown code fences, and channel-style chat formats (e.g. Muse-Glimmer's ATEM format, where a reply
+    may contain a reasoning segment addressed ``to=self`` before the answer addressed ``to=user``): keep only the
+    final ``to=user`` message and drop any leftover channel tokens.
+    """
+    if "to=user" in text:
+        text = text.rsplit("to=user", 1)[1]
+    text = _CHANNEL_TOKENS.sub("\n", text)
     m = re.search(r"```[a-zA-Z]*\n(.*?)```", text, re.S)
-    return m.group(1) if m else text
+    return (m.group(1) if m else text).strip("\n")
 
 
 def parse_patch(text: str) -> list[dict[str, Any]]:

@@ -120,3 +120,12 @@ def test_disabled_accepts_grey_fill_convention():
             assert s.exact
             return
     raise AssertionError("no disable_button example generated")
+
+
+def test_patch_extraction_from_channel_format():
+    doc = schema.parse('frame#n1 "R" layout=col\n  text#n2 "T" text="a" size=14')
+    for raw in [" to=user<|message|>set n2 size=20<|eot|>",
+                " to=self<|message|>bigger title<|eot|><|start|>assistant to=user<|message|>set n2 size=20",
+                " to=user set n2 size=20",
+                "```patch\nset n2 size=20\n```"]:
+        assert schema.find(schema.apply_patch(doc, raw), "n2")["props"]["size"] == 20, raw

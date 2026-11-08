@@ -80,7 +80,12 @@ def main() -> None:
 
         def generate(prompts):
             outs = llm.chat(prompts, params, chat_template_kwargs=tkw, use_tqdm=False)
-            return [o.outputs[0].text for o in outs]
+            texts = [o.outputs[0].text for o in outs]
+            if not getattr(generate, "_shown", False):
+                generate._shown = True
+                for t in texts[:2]:
+                    print("raw output sample:", repr(t[:200]), flush=True)
+            return texts
     else:
         tok = AutoTokenizer.from_pretrained(args.model)
         tok.padding_side = "left"
