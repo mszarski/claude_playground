@@ -451,6 +451,32 @@ as the best 4B, keeps the base model's goal-level judgment, and generalizes to n
 4B. The open gaps: new *edit types* that need a convention the model never saw (`spread_out` → `justify=between`),
 where only the thinking base model succeeds, and a bigger RL stage to close them.
 
+## Fixing the judges' over-editing blind spot
+
+Both judges only checked for changes to *other* elements, so the big RL run's extra emphasis on the edited element
+("darker **and** bold") passed. Added a **minimal** criterion to the visual judge (5th dimension) and to every goal
+rubric, plus an edit-size penalty in the RL reward (0.1 per property change beyond 3 on goal prompts).
+
+Calibration on a set built around the failure (Llama-4-Maverick visual judge):
+
+| case | old 4-dim judge passes | new 5-dim judge passes |
+|---|---|---|
+| correct edits (should pass) | 16 / 20 | 16 / 20 |
+| correct edit + extra emphasis on the same element (should fail) | **11 / 19** | **0 / 19** |
+| other bad edits (should fail) | 1 / 20 | 0 / 20 |
+
+Re-judging the saved 27B `test_goal` outputs with the minimal-aware rubric (gpt-oss-120b):
+
+| model | old rubric | new rubric |
+|---|---|---|
+| 27B SFT | 0.983 | **0.950** |
+| 27B SFT + GRPO small | 0.983 | 0.925 |
+| 27B SFT + GRPO big | 0.971 | **0.512** |
+
+The fixed judge exposes the big run's over-editing (`disable_button` 0.23) and shows the small run had started
+to drift as well. **By the corrected measure, the 27B SFT checkpoint is the best model so far.** Earlier rubric
+numbers in this README use the old rubric.
+
 ## Screening non-Chinese base models (zero-shot, no-think)
 
 Every candidate run through the HF router in fast (thinking-off) mode on the first 150 rows of `test` and
