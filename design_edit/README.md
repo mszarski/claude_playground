@@ -451,6 +451,30 @@ as the best 4B, keeps the base model's goal-level judgment, and generalizes to n
 4B. The open gaps: new *edit types* that need a convention the model never saw (`spread_out` → `justify=between`),
 where only the thinking base model succeeds, and a bigger RL stage to close them.
 
+## All goal-rubric numbers, re-graded with the *minimal* criterion
+
+Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
+this README use the old rubric. Re-scoring saved outputs with the current parser reproduced every reported
+exact-match number, so only the rubric numbers changed.
+
+| model | old rubric | **current rubric** |
+|---|---|---|
+| Qwen3.8-27B thinking, zero-shot | 0.992 | 0.988 |
+| Qwen3.8-27B no-think, zero-shot | 0.983 | 0.983 |
+| Muse-Glimmer-30B zero-shot | 0.979 | 0.979 |
+| Muse-Spark-Open zero-shot | 0.988 | 0.975 |
+| Gemma-4-31B / Gemma-4-26B-A4B zero-shot | about 0.94 / 0.933 | 0.929 / 0.908 |
+| Inkling / Inkling-Small zero-shot | 0.850 / 0.867 | 0.838 / 0.829 |
+| Granite-4.2-30B zero-shot | 0.588 | 0.404 |
+| 4B SFT v3 / v4 / v5 | 0.829 / 0.646 / 0.546 | 0.833 / 0.658 / 0.537 |
+| 4B v3 + judge-reward GRPO | 0.696 | 0.700 |
+| Qwen 27B SFT / + GRPO small / + GRPO big | 0.983 / 0.983 / 0.971 | **0.950** / 0.925 / 0.512 |
+| Muse-Glimmer SFT / + GRPO (fixed judge) | – | 0.921 / 0.908 |
+
+Models that weren't RL-trained barely move (within the judge's ±0.02 noise; Granite's drop is where it was already
+far behind). The *minimal* criterion mostly penalizes the RL-trained models, which is where over-editing happened.
+Rankings are unchanged.
+
 ## Muse-Glimmer-30B (Meta, Apache-2.0): SFT and RL with the fixed judge
 
 Same 7,490-row SFT recipe as the Qwen 27B, using `--template-kwargs '{"reasoning_strength": "none"}'` (the template's
