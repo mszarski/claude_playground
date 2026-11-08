@@ -451,6 +451,38 @@ as the best 4B, keeps the base model's goal-level judgment, and generalizes to n
 4B. The open gaps: new *edit types* that need a convention the model never saw (`spread_out` → `justify=between`),
 where only the thinking base model succeeds, and a bigger RL stage to close them.
 
+## Muse-Glimmer-30B (Meta, Apache-2.0): SFT and RL with the fixed judge
+
+Same 7,490-row SFT recipe as the Qwen 27B, using `--template-kwargs '{"reasoning_strength": "none"}'` (the template's
+fast mode). Muse-Glimmer uses a channel chat format (`to=self` reasoning / `to=user` answer); `strip_fences` now keeps
+only the final `to=user` message, so evaluation and RL rewards parse it. SFT took about 61 min on one H200 (about $6).
+RL is GRPO from the SFT checkpoint with the fixed reward (visual judge incl. *minimal*, edit-size penalty), KL β=0.02,
+a 50/50 goal/reference prompt mix (`rl_fixed`), and 200 steps, about 2.2 h on 2× H200 (about $22), with checkpoints every 50 steps
+in `mszarski/design-edit-grpo-glimmer-ckpt`.
+
+| split | Qwen3.8-27B SFT | **Muse-Glimmer SFT** | Muse-Glimmer SFT + RL |
+|---|---|---|---|
+| `test` | 0.976 | **0.982** | 0.976 |
+| `test_paraphrased` | 0.933 | **0.933** | 0.916 |
+| `test_novel` | **0.823** | 0.773 | 0.767 |
+| `test_novel_paraphrased` | **0.776** | 0.728 | 0.710 |
+| `test_goal` strict | 0.629 | **0.775** | 0.750 |
+| `test_goal` rubric (with *minimal*) | **0.950** | 0.921 | 0.908 |
+| avg patch lines on goals | – | 1.14 | 1.46 |
+
+- **A fully non-Chinese base gets within a few points of Qwen after the same SFT.** It's more precise on known edits,
+  more often exactly right on goals, and weaker on unseen edit types (`add_border` 0.73, `promote_button` 0.46).
+- **RL with the fixed judge still didn't help.** Over-editing is much milder than in the earlier big run (patch size
+  1.14 → 1.46 lines vs a goal rubric collapse before), and `promote_button` improved (0.46 → 0.65). But
+  `duplicate_setting` fell 1.00 → 0.21 from an **off-by-one**: "duplicate the row *underneath* it" now inserts the
+  copy *above* it. Identical content in a different order is invisible to a screenshot judge, so RL drifted on
+  exactly what the reward couldn't see.
+
+Across five RL runs the pattern holds: **GRPO in this repo reliably finds and exploits the reward's blind spots**
+(fill changes, extra emphasis, insertion order). With rewards this coarse, the SFT checkpoint is the best model. The next
+improvement has to come from the reward side: structural checks on *where* things moved (the change-fact
+machinery in `rewards.py` can verify order for reference prompts), or rubrics with per-request expected effects.
+
 ## Fixing the judges' over-editing blind spot
 
 Both judges only checked for changes to *other* elements, so the big RL run's extra emphasis on the edited element
