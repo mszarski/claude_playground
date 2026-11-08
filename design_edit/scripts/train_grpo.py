@@ -167,7 +167,7 @@ def main() -> None:
     from concurrent.futures import ThreadPoolExecutor
 
     from design_edit.judge import judge_pass
-    from design_edit.rewards import change_facts, lint
+    from design_edit.rewards import change_facts, lint, placement_violations
     from design_edit.schema import PatchError, apply_patch, diff, format_patch, parse
 
     judge_stats = {"pass": 0, "fail": 0, "unreachable": 0}
@@ -219,6 +219,9 @@ def main() -> None:
         # per extra change, so RL can't buy judge approval with extra emphasis.
         n_changes = len(change_facts(doc, after_doc))
         penalty += 0.1 * max(0, n_changes - args.free_changes)
+        # Structural placement: "below X" / "above X" / "underneath it" must be honoured exactly. A screenshot judge
+        # can't reliably see order (RL drifted to inserting a duplicate above instead of below).
+        penalty += min(1.0, 0.5 * len(placement_violations(instruction, doc, after_doc)))
         v = visual_judge(r.screenshot(doc), r.screenshot(after_doc), instruction, canon, args.visual_judge)
         if v is None:
             visual_stats["unreachable"] += 1

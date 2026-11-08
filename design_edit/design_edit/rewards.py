@@ -239,3 +239,103 @@ def score(before: Node | str, after: Node | str, patch_text: str,
 
 def score_dict(*args: Any, **kw: Any) -> dict[str, Any]:
     return asdict(score(*args, **kw))
+
+
+# ---------------------------------------------------------------------------
+# Placement: verify spatial instructions ("below X", "above X") structurally
+# ---------------------------------------------------------------------------
+
+# Longest alternatives first, whole words only ("under" must not match inside "underneath").
+_AFTER = r"\b(?:underneath|beneath|below|under|following|after|to the right of|right of|next to)\b"
+_BEFORE = r"\b(?:on top of|to the left of|left of|ahead of|above|before)\b"
+
+
+def _mentions(request: str, node: Node) -> list[int]:
+    """Positions in the request where this node is referred to (by name or text)."""
+    low = request.lower()
+    out = []
+    for key in (node["props"].get("name"), node["props"].get("text")):
+        if isinstance(key, str) and len(key) >= 3:
+            k = key.lower()
+            for cand in {k, k.removesuffix(" button"), k.removesuffix(" row"), k.removesuffix(" field")}:
+                if len(cand) >= 3:
+                    i = low.find(cand)
+                    while i != -1:
+                        out.append(i)
+                        i = low.find(cand, i + 1)
+    return out
+
+
+def _lis_keep(seq: list[int]) -> set[int]:
+    """Indices (into seq) of one longest increasing subsequence: the elements that did NOT move."""
+    import bisect
+    tails, tails_idx, prev = [], [], [-1] * len(seq)
+    for i, v in enumerate(seq):
+        j = bisect.bisect_left(tails, v)
+        if j == len(tails):
+            tails.append(v); tails_idx.append(i)
+        else:
+            tails[j] = v; tails_idx[j] = i
+        prev[i] = tails_idx[j - 1] if j > 0 else -1
+    keep, k = set(), tails_idx[-1] if tails_idx else -1
+    while k != -1:
+        keep.add(k); k = prev[k]
+    return keep
+
+
+def placement_violations(request: str, before: Node, after: Node) -> list[str]:
+    """Inserted or moved nodes that ignore a spatial cue in the request.
+
+    "Placed" nodes are new (top of an inserted subtree), re-parented, or reordered relative to their original
+    siblings (outside the longest still-in-order run, so siblings merely shifted by an insert don't count).
+    For each spatial cue ("below X", "above X", "underneath it", ...) the placed node must sit directly after
+    (or before) X. Returns violation descriptions; empty when there are no cues or no placed nodes.
+    """
+    b_idx, a_idx = index_nodes(before), index_nodes(after)
+    placed = []
+    for nid, (node, parent) in a_idx.items():
+        if parent is not None and nid not in b_idx and parent["id"] in b_idx:
+            placed.append((node, parent))
+        elif parent is not None and nid in b_idx and b_idx[nid][1] is not None and b_idx[nid][1]["id"] != parent["id"]:
+            placed.append((node, parent))
+    for pid, (pnode, _) in a_idx.items():
+        if pid not in b_idx:
+            continue
+        common = [c["id"] for c in pnode["children"] if c["id"] in b_idx and b_idx[c["id"]][1] is not None
+                  and b_idx[c["id"]][1]["id"] == pid]
+        old_order = [c["id"] for c in b_idx[pid][0]["children"]]
+        seq = [old_order.index(c) for c in common]
+        keep = _lis_keep(seq)
+        placed += [(a_idx[c][0], pnode) for i, c in enumerate(common) if i not in keep]
+    if not placed:
+        return []
+    low = request.lower()
+    # Cues only apply within their own clause ("Put A above B. Also, add C under D" = two clauses).
+    bounds = [0] + [m.end() for m in re.finditer(r"[.;\n]|,? and then |,? then |\balso\b,?", low)] + [len(low)]
+    clauses = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1) if bounds[i + 1] > bounds[i]]
+    mentions = sorted((pos, nid) for nid, (n, _) in b_idx.items() for pos in _mentions(request, n))
+    out = []
+    for node, parent in placed:
+        sibs = [c["id"] for c in parent["children"]]
+        pos = sibs.index(node["id"])
+        is_new = node["id"] not in b_idx
+        names = _mentions(request, node) if not is_new else []
+        for c0, c1 in clauses:
+            clause = low[c0:c1]
+            # the clause must be about this node: it names it, or (for new nodes) it inserts something
+            if not (any(c0 <= m < c1 for m in names) or
+                    (is_new and re.search(r"\b(add|insert|duplicate|copy|create)\b", clause))):
+                continue
+            cues = [(c0 + m.start(), c0 + m.end(), "after") for m in re.finditer(_AFTER, clause)] + \
+                   [(c0 + m.start(), c0 + m.end(), "before") for m in re.finditer(_BEFORE, clause)]
+            for cstart, cend, rel in cues:
+                if low[cend:cend + 6].strip().startswith(("it", "that", "them")):
+                    refs = [nid for mpos, nid in mentions if c0 <= mpos < cstart and nid in sibs and nid != node["id"]][-1:]
+                else:
+                    refs = [nid for mpos, nid in mentions
+                            if 0 <= mpos - cend <= 40 and mpos < c1 and nid in sibs and nid != node["id"]][:1]
+                for ref_id in refs:
+                    rpos = sibs.index(ref_id)
+                    if not (pos == rpos + 1 if rel == "after" else pos == rpos - 1):
+                        out.append(f"{node['id']} should be {rel} {ref_id}")
+    return sorted(set(out))

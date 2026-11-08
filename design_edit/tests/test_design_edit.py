@@ -129,3 +129,20 @@ def test_patch_extraction_from_channel_format():
                 " to=user set n2 size=20",
                 "```patch\nset n2 size=20\n```"]:
         assert schema.find(schema.apply_patch(doc, raw), "n2")["props"]["size"] == 20, raw
+
+
+def test_placement_violations():
+    from design_edit.rewards import placement_violations
+    before = schema.parse('frame#n1 "List" layout=col\n  text#n2 "Alpha" text="Alpha" size=14\n'
+                          '  text#n3 "Beta" text="Beta" size=14\n  text#n4 "Gamma" text="Gamma" size=14')
+    ins = lambda i: schema.apply_patch(before, f'insert n1 {i} text#n9 "New" text="New" size=14')
+    assert placement_violations("add a line below Beta", before, ins(2)) == []
+    assert placement_violations("add a line below Beta", before, ins(1))            # above instead of below
+    assert placement_violations("add a line above Beta", before, ins(1)) == []
+    assert placement_violations("duplicate the Beta row underneath it", before, ins(2)) == []
+    assert placement_violations("duplicate the Beta row underneath it", before, ins(1))
+    assert placement_violations("make the list blue", before, ins(0)) == []         # no spatial cue
+    moved = schema.apply_patch(before, "move n4 n1 0")
+    assert placement_violations("move Gamma above Alpha", before, moved) == []
+    # siblings merely shifted by an insert elsewhere are not "placed"
+    assert placement_violations("put Alpha above Beta. Also add a line at the end", before, ins(3)) == []

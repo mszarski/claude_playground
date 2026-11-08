@@ -26,7 +26,8 @@ Request: {request}
 Patch that was applied (for reference): {patch}
 
 Judge each dimension independently, true or false:
-- fulfilled: the AFTER image clearly does what the request asks.
+- fulfilled: the AFTER image clearly does what the request asks, including putting things exactly where it says
+  (above / below / next to the named element).
 - preserved: nothing unrelated to the request visibly changed.
 - legible: all text in AFTER is readable (no low-contrast, hidden or same-color text).
 - contained: nothing in AFTER overlaps, is clipped, overflows its container or runs off the page.
