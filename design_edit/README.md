@@ -407,6 +407,32 @@ gaps likely needs a larger and more varied RL environment (Figma's stated focus)
 - In-script HF-generate eval on a 27B with the PyTorch linear-attention fallback is very slow. Use `--n-eval 0`
   and `eval_model.py --vllm`.
 
+### Scaling up the 27B RL run: over-editing
+
+The same reward at larger scale: 2,155 prompts (1,555 goal prompts incl. 807 new ones + 600 reworded/multi-part
+template prompts), lr 1e-5, 420 steps, about 4.9 h of training on 2× H200 (about $52), 9,441 patches judged:
+[`mszarski/design-edit-grpo27b-big`](https://huggingface.co/mszarski/design-edit-grpo27b-big).
+
+| split | 27B SFT | + GRPO small (60 steps) | + GRPO big (420 steps) |
+|---|---|---|---|
+| `test` | 0.976 | 0.976 | 0.970 |
+| `test_paraphrased` | 0.933 | 0.933 | 0.908 |
+| `test_novel` | 0.823 | **0.830** | 0.673 |
+| `test_novel_paraphrased` | 0.776 | **0.779** | 0.662 |
+| `test_goal` strict / F1 | 0.629 / 0.699 | 0.654 / 0.732 | 0.375 / 0.793 |
+| `test_goal` rubric | **0.983** | **0.983** | 0.971 |
+
+More RL made the model **over-edit**: it adds unrequested emphasis to the element it was asked to change. "Bump up
+the contrast on the Company link" became `weight=700 color=#111827` (darker *and* bold; the small run gave
+`color=#374151`), and "show the button as inactive" also changes the label's weight. F1 rising while exact match falls
+is the signature: the requested change is still there, plus extras. `promote_button` improved (0.50 → 0.65), and
+`spread_out` is still 0 (never sampled).
+
+Cause: the visual judge rewards edits that look *clearly done*, and its "preserved" check only looks for changes to
+*other* elements, so extra changes to the same element cost nothing. 420 steps found and exploited that gap. Fixes for
+a next run: a "minimal" rubric dimension (changes only what the request needs), an edit-size or extra-fact penalty,
+a KL anchor to the SFT model (β > 0), and more reference-scored prompts, which do penalize extras.
+
 ## Where this ends up
 
 | | `test` | `test_paraphrased` | `test_novel` | `test_goal` (rubric) |
@@ -415,7 +441,8 @@ gaps likely needs a larger and more varied RL environment (Figma's stated focus)
 | Qwen3.8-27B thinking zero-shot | 0.860 | 0.787 | **0.933** | **0.992** |
 | Qwen3.8-27B no-think zero-shot | 0.820 | – | 0.853 | 0.983 |
 | best 4B SFT (v3) | **0.996** | 0.943 | 0.657 | 0.829 |
-| **Qwen3.8-27B no-think + SFT + GRPO** | 0.976 | 0.933 | 0.830 | 0.983 |
+| **Qwen3.8-27B no-think + SFT + GRPO (small)** | 0.976 | 0.933 | 0.830 | 0.983 |
+| Qwen3.8-27B no-think + SFT + GRPO (big) | 0.970 | 0.908 | 0.673 | 0.971 |
 
 (Zero-shot `test`/`test_novel` rows: first 150 per split; fine-tuned rows: full splits.)
 
