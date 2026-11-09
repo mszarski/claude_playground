@@ -505,6 +505,28 @@ Identical reward and settings (placement checks included), from the Muse-Glimmer
 Muse-Glimmer is as good a *starting point* as Qwen after SFT, but it responds worse to RL with this reward. Its
 intermediate checkpoints (`mszarski/design-edit-grpo-glimmer-fixed-ckpt`, every 50 steps) may hold a better trade-off.
 
+## Gemma-4-31B (Google, Apache-2.0): best SFT model on unseen edit types
+
+Same 7,490-row SFT recipe, `--no-think`. Gemma's template strips thought blocks from history, so with thinking off
+the inference prompt ends in an empty thought channel that the training text lacks. TRL trains on the common prefix
+with a warning; the eval showed no formatting issues (bare patches). About 1.7 h on one H200 (about $8.50):
+[`mszarski/design-edit-sft-gemma`](https://huggingface.co/mszarski/design-edit-sft-gemma).
+
+| split | Qwen3.8-27B SFT | Muse-Glimmer-30B SFT | **Gemma-4-31B SFT** |
+|---|---|---|---|
+| `test` | 0.976 | 0.982 | **0.988** |
+| `test_paraphrased` | 0.933 | 0.933 | 0.933 |
+| `test_novel` | 0.823 | 0.773 | **0.890** |
+| `test_novel_paraphrased` | 0.776 | 0.728 | **0.835** |
+| `test_goal` strict | 0.629 | **0.775** | 0.733 |
+| `test_goal` rubric (current) | **0.950** | 0.921 | 0.933 |
+
+- **`spread_out` 0.00 → 0.63**, the first model to solve it. "Spread the items out" needs `justify=between`, which never
+  appears in training; every Qwen, Muse and 4B model scored 0 there, before and after RL. `promote_button` 0.62
+  (best SFT), `duplicate_setting` 1.00.
+- **Largest SFT gain of any base:** zero-shot Gemma was the weakest of the three on unseen edit types (0.63); after the
+  same SFT it's the best (0.89). Zero-shot ranking didn't predict post-SFT ranking.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
