@@ -480,6 +480,31 @@ reference matching on template prompts. GRPO from the 27B SFT checkpoint, KL β=
 can't show (order, placement), a judge criterion for over-editing, and reference matching to anchor precision.
 Each earlier failure pointed to the next missing piece.
 
+### Same full reward on Muse-Glimmer-30B: RL doesn't transfer as well
+
+Identical reward and settings (placement checks included), from the Muse-Glimmer SFT checkpoint, 200 steps, about 2.1 h
+(about $21): [`mszarski/design-edit-grpo-glimmer-fixed`](https://huggingface.co/mszarski/design-edit-grpo-glimmer-fixed).
+
+| split | Qwen SFT | **Qwen + RL (full)** | Muse SFT | Muse + RL (no placement) | Muse + RL (full) |
+|---|---|---|---|---|---|
+| `test` | 0.976 | 0.972 | **0.982** | 0.976 | 0.968 |
+| `test_paraphrased` | **0.933** | 0.918 | **0.933** | 0.916 | 0.902 |
+| `test_novel` | **0.823** | 0.800 | 0.773 | 0.767 | 0.703 |
+| `test_goal` strict | 0.629 | **0.954** | 0.775 | 0.750 | 0.833 |
+| `test_goal` rubric (current) | 0.950 | **0.996** | 0.921 | 0.908 | 0.842 |
+| avg patch lines on goals | 1.43 | 1.51 | 1.14 | 1.46 | 1.18 |
+
+- **The same reward that took Qwen to 0.996 lowered Muse-Glimmer's goal rubric (0.921 → 0.842)**, even though its
+  strict goal score rose (0.775 → 0.833) and patches stayed small.
+- **Placement drift persists on Muse**: `duplicate_setting` 0.43. RL still learned to insert the copy *above*
+  ("insert … 4" instead of 5). The placement check flags every such output, but it can only penalize prompts seen in
+  training; "duplicate this row underneath it" is a held-out request type, and Muse generalized the drift where Qwen didn't.
+- `add_border` 0.73 → 0.41: both SFT and RL add an unrequested corner radius, and RL does it more often.
+
+**Conclusion: Qwen3.8-27B + SFT + RL (full reward) is the best model; Muse-Glimmer SFT is the best non-Chinese one.**
+Muse-Glimmer is as good a *starting point* as Qwen after SFT, but it responds worse to RL with this reward. Its
+intermediate checkpoints (`mszarski/design-edit-grpo-glimmer-fixed-ckpt`, every 50 steps) may hold a better trade-off.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
