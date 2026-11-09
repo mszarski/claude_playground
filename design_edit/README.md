@@ -527,6 +527,34 @@ with a warning; the eval showed no formatting issues (bare patches). About 1.7 h
 - **Largest SFT gain of any base:** zero-shot Gemma was the weakest of the three on unseen edit types (0.63); after the
   same SFT it's the best (0.89). Zero-shot ranking didn't predict post-SFT ranking.
 
+### Same full reward on Gemma-4-31B, and the three-way comparison
+
+Identical RL reward and settings from the Gemma SFT checkpoint, 200 steps, about 2.9 h on 2× H200:
+[`mszarski/design-edit-grpo-gemma-fixed`](https://huggingface.co/mszarski/design-edit-grpo-gemma-fixed).
+
+| split | Qwen SFT | **Qwen + RL** | Muse SFT | Muse + RL | **Gemma SFT** | Gemma + RL |
+|---|---|---|---|---|---|---|
+| `test` | 0.976 | 0.972 | 0.982 | 0.968 | **0.988** | 0.980 |
+| `test_paraphrased` | **0.933** | 0.918 | **0.933** | 0.902 | **0.933** | 0.924 |
+| `test_novel` | 0.823 | 0.800 | 0.773 | 0.703 | **0.890** | 0.853 |
+| `test_novel_paraphrased` | 0.776 | 0.765 | 0.728 | 0.669 | **0.835** | 0.807 |
+| `test_goal` strict | 0.629 | **0.954** | 0.775 | 0.833 | 0.733 | 0.779 |
+| `test_goal` rubric (current) | 0.950 | **0.996** | 0.921 | 0.842 | 0.933 | 0.929 |
+| `spread_out` (novel) | 0.00 | 0.00 | 0.00 | 0.00 | 0.63 | **0.66** |
+
+- **RL with the same reward helped only Qwen on goal edits.** Gemma's rubric is flat (0.933 → 0.929) and
+  Muse-Glimmer's drops. All three lose a bit on unseen edit types, and all three learn to skip `unset stroke` on
+  `promote_button` (the near-invisible border), so that drift is a reward blind spot, not a model quirk.
+- **Gemma keeps its `spread_out` win through RL** (0.63 → 0.66), the only base that ever solved it.
+
+**Which model to use**
+
+| need | model |
+|---|---|
+| goal-level edits ("make it look disabled", "highlight like the featured plan") | **Qwen3.8-27B SFT + RL** (`design-edit-grpo27b-fixed`): rubric 0.996, strict 0.954 |
+| unseen edit types / generalization, and the best non-Chinese model | **Gemma-4-31B SFT** (`design-edit-sft-gemma`): novel 0.890, `test` 0.988, goals 0.933 |
+| non-Chinese with RL | Gemma-4-31B SFT + RL: about the same as Gemma SFT, slightly better strict goals |
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
