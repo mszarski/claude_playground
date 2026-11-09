@@ -111,6 +111,9 @@ def main() -> None:
         if not args.no_push:
             upload_file(path_or_fileobj=path, path_in_repo=path, repo_id=args.model)
     print("\nSUMMARY " + json.dumps(overall))
+    # vLLM engine processes can keep the job alive after all results are uploaded; exit hard.
+    sys.stdout.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":
