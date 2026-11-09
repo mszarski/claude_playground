@@ -451,6 +451,35 @@ as the best 4B, keeps the base model's goal-level judgment, and generalizes to n
 4B. The open gaps: new *edit types* that need a convention the model never saw (`spread_out` → `justify=between`),
 where only the thinking base model succeeds, and a bigger RL stage to close them.
 
+## Qwen 27B RL with the complete fixed reward: the first clear RL win
+
+The reward now includes everything learned so far: the visual judge with *minimal* and placement checks, the edit-size
+penalty, **structural placement checks** (`rewards.placement_violations`: "below X" / "above X" / "underneath it"
+verified on the patched tree; it flags 10/10 of the Muse RL's misplaced duplicates and 1/1530 reference answers), and
+reference matching on template prompts. GRPO from the 27B SFT checkpoint, KL β=0.02, 50/50 goal/reference prompts
+(`rl_fixed`), lr 1e-5, 200 steps, about 2.6 h on 2× H200 (about $28): [`mszarski/design-edit-grpo27b-fixed`](https://huggingface.co/mszarski/design-edit-grpo27b-fixed).
+
+| split | 27B SFT | GRPO small | GRPO big | **GRPO, full fixed reward** |
+|---|---|---|---|---|
+| `test` | **0.976** | **0.976** | 0.970 | 0.972 |
+| `test_paraphrased` | **0.933** | **0.933** | 0.908 | 0.918 |
+| `test_novel` | 0.823 | **0.830** | 0.673 | 0.800 |
+| `test_goal` strict | 0.629 | 0.654 | 0.375 | **0.954** |
+| `test_goal` rubric (current) | 0.950 | 0.925 | 0.512 | **0.996** |
+| avg patch lines on goals | 1.43 | 1.51 | 1.71 | 1.51 |
+
+- **Held-out goal edits: 0.950 → 0.996 rubric and 0.629 → 0.954 strict**, the best result in the repo, above
+  Qwen3.8-27B with thinking (0.988), in fast no-think mode. "Make it look disabled" went 0.41 → 0.93 exact: the model
+  now makes the minimal conventional edit instead of extra emphasis. Patch size didn't grow.
+- **Placement held**: `duplicate_setting` stays 1.00 (the Muse run without the check fell to 0.21).
+- **Remaining drift**: `promote_button` 0.46 → 0.15 exact (F1 0.80). RL learned to skip `unset stroke`, removing a
+  1px light-gray border that is nearly invisible on a newly filled button, while still setting the fill and the white
+  label. Again RL dropped the one change the reward couldn't see. `test_paraphrased` and `test_novel` dip 1.5–2.5 points.
+
+**Takeaway:** RL works here once the reward covers what matters: deterministic structural checks for what screenshots
+can't show (order, placement), a judge criterion for over-editing, and reference matching to anchor precision.
+Each earlier failure pointed to the next missing piece.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
