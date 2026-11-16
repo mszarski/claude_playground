@@ -72,6 +72,12 @@ struct BpOptions {
   bool directivity_weight = false; ///< weight by the element patterns
   std::int32_t spreading = 0;      ///< multiply by (R_tx R_rx)^(spreading/2): 0 none, 1, 2
   PositionLookup position_lookup = PositionLookup::Analytic;
+  /// Refraction at a flat sediment-water interface (ASASIN Sec. III-B, DECISIONS.md D-23).
+  /// Points with z > interface_z are in the sediment; sound travels at each ping's sound
+  /// speed above the interface and at sediment_speed below it, along the Snell path.
+  bool refraction = false;
+  double interface_z = 0.0;      ///< m, NED (z down)
+  double sediment_speed = 1700.0;  ///< m/s
   /// Ray culling (ASASIN Sec. II-C, DECISIONS.md D-09). The output points must form a
   /// grid of grid_rows x grid_cols in row-major order. Blocks of cull_block x cull_block
   /// points whose corners all lie outside a ping's transmit or receive beam are skipped

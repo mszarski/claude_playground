@@ -102,6 +102,31 @@ On a rail the element beam (about 110°) is far wider than the angle the rail su
 so resolution is limited by the rail length, not by D/2 (which would be 0.125 mm and
 would need 5.7 m of rail at this range).
 
+## 3D near-field imaging of a buried object
+
+Source: `tests/python/test_volume.py`. CPU. A `subbottom` sonar (20 kHz, 20 kHz
+bandwidth, one projector, four receivers) rastered over a 1.8 m square at 7.5 cm steps
+(625 pings), 1.5 m above the seabed. Water 1500 m/s, sediment 1700 m/s. A 0.5 m cylinder
+(a line of scatterers on its axis) buried 0.30 m. Navigation is the truth. The volume is
+built as horizontal layers at 5 mm depth steps.
+
+| Quantity | Refraction on | Refraction off |
+| --- | --- | --- |
+| Depth of the brightest voxel | 0.300 m | 0.265 m |
+| Error against the true 0.30 m | 0.000 m | −0.035 m (predicted at nadir: −0.035 m) |
+| Peak level | reference | −0.75 dB |
+| Level in the depth slice at the true depth | reference | −15.0 dB |
+
+- "Defocuses with refraction off": mostly it is misplaced. The peak drops by only
+  0.75 dB because this aperture subtends at most about 27° at the object, so the delay
+  error is nearly the same for every ping and reads as a depth shift. A wider aperture
+  or a larger sound-speed contrast would blur it more.
+- The travel-time routine matches a brute-force least-time search to 1e-10 and satisfies
+  Snell's law at the crossing point to 1e-7.
+- Not modelled: transmission loss and attenuation in the sediment, a rough or sloping
+  interface, shear waves, and the cylinder's own scattering (it is a line of points).
+- Multi-layer GeoTIFF output of the volume is not written yet.
+
 ## Motion estimation
 
 Source: `tests/python/test_motion.py`. CPU. Scenario: `sas_auv` at 200 kHz (wavelength

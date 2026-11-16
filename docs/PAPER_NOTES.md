@@ -299,9 +299,9 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
 | Bistatic ray culling | same `CullKernel` (transmitter and receiver tested separately) | `tests/python/test_culling.py::test_bistatic_culling_tests_transmitter_and_receiver_separately` | done (CPU) |
-| Refraction at the sediment–water interface | | | pending |
-| Volume as 2D layers over focus depth | | | pending |
-| Slices and maximum intensity projections | | | pending |
+| Refraction at the sediment–water interface | `refracted_time` in `libs/recon/include/sonar/recon/backproject_kernel.hpp`; `SedimentProvider` in `python/gpusonar/sim/propagation.py` | `tests/python/test_volume.py::test_refracted_time_is_the_least_time_path`, `::test_cylinder_appears_at_the_correct_depth_with_refraction`, `::test_cylinder_is_misplaced_and_defocused_without_refraction` | done (CPU) |
+| Volume as 2D layers over focus depth | `python/gpusonar/recon/volume.py` (`image_volume`) | `tests/python/test_volume.py` | done (CPU) |
+| Slices and maximum intensity projections | same (`Volume.depth_slice`, `Volume.mip`) | `::test_slices_and_maximum_intensity_projections` | done; multi-layer GeoTIFF not yet |
 
 ### Performance model (Sec. III-C, Fig. 9)
 

@@ -179,6 +179,71 @@ class ImageSourceProvider(EigenrayProvider):
         return out
 
 
+def snell_crossing(source, points, c_water: float, c_sediment: float, interface_z: float):
+    """Least-time paths from a source in the water to points below a flat interface.
+
+    Returns (travel time [S], crossing points [S, 3]). Points above the interface get the
+    straight path and a crossing point equal to the point itself.
+    """
+    source = np.asarray(source, dtype=float)
+    points = np.atleast_2d(np.asarray(points, dtype=float))
+    a = interface_z - source[2]
+    b = points[:, 2] - interface_z
+    h = points[:, :2] - source[:2]
+    dist = np.linalg.norm(h, axis=1)
+    below = (b > 0) & (a > 0)
+    bb = np.where(below, b, 1.0)
+    u = dist * a / (a + bb)
+    for _ in range(40):
+        l1 = np.sqrt(u**2 + a**2)
+        l2 = np.sqrt((dist - u) ** 2 + bb**2)
+        f = u / (c_water * l1) - (dist - u) / (c_sediment * l2)
+        df = a**2 / (c_water * l1**3) + bb**2 / (c_sediment * l2**3)
+        u = np.clip(u - f / df, 0.0, dist)
+    t_refr = np.sqrt(u**2 + a**2) / c_water + np.sqrt((dist - u) ** 2 + bb**2) / c_sediment
+    unit = np.divide(h, dist[:, None], out=np.zeros_like(h), where=dist[:, None] > 0)
+    cross = np.column_stack([source[:2] + unit * u[:, None], np.full(len(points), interface_z)])
+    t_direct = np.linalg.norm(points - source, axis=1) / c_water
+    return np.where(below, t_refr, t_direct), np.where(below[:, None], cross, points)
+
+
+class SedimentProvider(EigenrayProvider):
+    """Water over a fluid sediment half-space with a flat interface: one refracted
+    eigenray per point (Snell's law). Used for buried objects.
+
+    Amplitude is spherical spreading over the travel-time distance times a constant
+    two-way-independent transmission factor; angle-dependent transmission and sediment
+    attenuation come with the boundary models in milestone 12.
+    """
+
+    tier = "image_source"
+
+    def __init__(self, sound_speed: float, sediment_speed: float, interface_z: float,
+                 transmission: complex = 1.0):
+        self.sound_speed = float(sound_speed)
+        self.sediment_speed = float(sediment_speed)
+        self.interface_z = float(interface_z)
+        self.transmission = complex(transmission)
+
+    def eigenrays(self, source, points) -> EigenraySet:
+        source = np.asarray(source, dtype=float)
+        points = np.atleast_2d(np.asarray(points, dtype=float))
+        t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z)
+        launch = cross - source
+        launch /= np.linalg.norm(launch, axis=1)[:, None]
+        below = points[:, 2] > self.interface_z
+        arrival = points - cross
+        norm = np.linalg.norm(arrival, axis=1)
+        arrival = np.where(norm[:, None] > 0, arrival / np.maximum(norm, 1e-300)[:, None], launch)
+        s = len(points)
+        amp = np.where(below, self.transmission, 1.0) / (self.sound_speed * t)
+        return EigenraySet(
+            delay=t[:, None], amplitude=amp[:, None].astype(complex), launch=launch[:, None, :],
+            arrival=arrival[:, None, :], n_surface=np.zeros((s, 1), dtype=int),
+            n_bottom=np.zeros((s, 1), dtype=int), valid=np.ones((s, 1), dtype=bool),
+            sound_speed=self.sound_speed)
+
+
 def make_provider(tier: str, sound_speed: float, options: dict | None = None) -> EigenrayProvider:
     options = options or {}
     if tier == "free_field":

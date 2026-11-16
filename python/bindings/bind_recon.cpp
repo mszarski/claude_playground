@@ -7,6 +7,7 @@
 #include "sonar/dsp/conditioning.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
 #include "sonar/recon/backproject.hpp"
+#include "sonar/recon/backproject_kernel.hpp"
 #include "vec_caster.hpp"
 
 namespace py = pybind11;
@@ -175,7 +176,7 @@ void bind_recon(py::module_& m) {
          float fov_factor, bool directivity_weight, int spreading, const py::object& weights,
          Backend backend, bool return_weight_sum, int cull_block, const py::object& grid_shape,
          const py::object& stats_out, const std::string& position_lookup,
-         int trajectory_upsample) -> py::object {
+         int trajectory_upsample, const py::object& refraction) -> py::object {
         const auto ptrs = ping_list(pings);
         const auto pts = point_list(points);
         const auto opt = make_options(interp, stop_and_hop, fov_factor, directivity_weight, spreading,
@@ -189,6 +190,13 @@ void bind_recon(py::module_& m) {
           opt_mut.position_lookup = recon::PositionLookup::Texture;
         } else {
           throw std::invalid_argument("position_lookup must be 'analytic', 'software_table' or 'texture'");
+        }
+        if (!refraction.is_none()) {
+          // (interface_z, sediment_speed)
+          const auto r = refraction.cast<std::pair<double, double>>();
+          opt_mut.refraction = true;
+          opt_mut.interface_z = r.first;
+          opt_mut.sediment_speed = r.second;
         }
         const int upsample = position_lookup == "analytic" ? 0 : trajectory_upsample;
         recon::BpStats stats;
@@ -221,10 +229,15 @@ void bind_recon(py::module_& m) {
       py::arg("return_weight_sum") = false, py::arg("cull_block") = 0,
       py::arg("grid_shape") = py::none(), py::arg("stats") = py::none(),
       py::arg("position_lookup") = "analytic", py::arg("trajectory_upsample") = 8,
+      py::arg("refraction") = py::none(),
       "Time-domain backprojection of conditioned pings onto points [n, 3].\n"
       "Returns the complex coherent sum per point. With cull_block > 0 and grid_shape\n"
       "(rows, cols), blocks of points outside a ping's beams are skipped for that ping;\n"
       "pass a dict as `stats` to receive the block counts.");
+
+  m.def("refracted_time", &recon::refracted_time, py::arg("sensor"), py::arg("point"),
+        py::arg("c_water"), py::arg("c_sediment"), py::arg("interface_z"),
+        "One-way travel time with Snell refraction at a flat interface (the kernel's routine).");
 
   m.def(
       "debug_delays",

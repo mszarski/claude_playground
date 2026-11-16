@@ -1,13 +1,14 @@
 """Simulator: scenes, propagation providers and the scenario runner."""
 
 from .propagation import (EigenrayProvider, EigenraySet, FreeFieldProvider, ImageSourceProvider,
+                          SedimentProvider, snell_crossing,
                           make_provider, two_way_paths)
 from .scene import Scene, build_scene, polar_grid, seafloor_patch
 from .simulator import (Collection, ScenarioResult, make_pose, run_scenario, simulate_collection,
                         simulate_ping)
 
 __all__ = [
-    "EigenrayProvider", "EigenraySet", "FreeFieldProvider", "ImageSourceProvider",
+    "EigenrayProvider", "EigenraySet", "SedimentProvider", "snell_crossing", "FreeFieldProvider", "ImageSourceProvider",
     "make_provider", "two_way_paths", "Scene", "build_scene", "polar_grid",
     "ScenarioResult", "make_pose", "run_scenario", "simulate_ping", "Collection",
     "simulate_collection", "seafloor_patch",

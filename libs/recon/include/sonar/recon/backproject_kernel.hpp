@@ -133,6 +133,30 @@ SONAR_INLINE float element_delay(const BpGroup& g, const BpRecord& e, const RefD
   return dr / (static_cast<float>(g.sound_speed) - range_rate);
 }
 
+/// One-way travel time from a sensor in the water to a point, with refraction at a flat
+/// interface when the point lies below it. The ray obeys Snell's law, which is the path
+/// of least time (Fermat): the crossing point is found by Newton iteration on the
+/// derivative of the travel time, which is convex in the crossing offset.
+SONAR_INLINE double refracted_time(const Vec3d& sensor, const Vec3d& x, double c_water,
+                                   double c_sediment, double interface_z) {
+  const double a = interface_z - sensor.z;  // sensor height above the interface
+  const double b = x.z - interface_z;       // point depth below it
+  if (!(a > 0.0) || !(b > 0.0)) return norm(x - sensor) / c_water;  // no crossing: straight ray
+  const double dx = x.x - sensor.x, dy = x.y - sensor.y;
+  const double dist = std::sqrt(dx * dx + dy * dy);  // horizontal separation
+  // u: horizontal distance from the sensor to the crossing point, in [0, dist].
+  double u = dist * a / (a + b);  // straight-line crossing as the starting guess
+  for (int i = 0; i < 8; ++i) {
+    const double l1 = std::sqrt(u * u + a * a);
+    const double l2 = std::sqrt((dist - u) * (dist - u) + b * b);
+    const double f = u / (c_water * l1) - (dist - u) / (c_sediment * l2);
+    const double df = a * a / (c_water * l1 * l1 * l1) + b * b / (c_sediment * l2 * l2 * l2);
+    u -= f / df;
+    u = u < 0.0 ? 0.0 : (u > dist ? dist : u);
+  }
+  return std::sqrt(u * u + a * a) / c_water + std::sqrt((dist - u) * (dist - u) + b * b) / c_sediment;
+}
+
 /// True when `dir` lies inside factor * FWHM / 2 of the boresight in both planes.
 SONAR_INLINE bool in_field_of_view(const Vec3f& boresight, const Vec3f& az, const Vec3f& el,
                                    float bw_az, float bw_el, const Vec3f& dir, float factor) {
@@ -362,15 +386,37 @@ struct BpKernel {
         wgt *= static_cast<float>(ref.r_tx) * r_elem;
       }
 
-      const float pos = ref.frac0 + dtau * fs;
-      const float pos_floor = std::floor(pos);
-      const std::int64_t n = ref.n0 + static_cast<std::int64_t>(pos_floor);
+      std::int64_t n;
+      float frac, cyc = 0.0F;
+      if (opt.refraction) {
+        // Each leg is its own Snell path, so the differential shortcut does not apply:
+        // the full delay of this element is computed in double. Near-field volumes are
+        // small, so the extra cost is acceptable.
+        Mat3d rot;
+        const Vec3d ref_pos = reference_position(g, opt.stop_and_hop ? 0.0 : ref.tau, rot,
+                                                 trajectory_residual(g, ig, traj, ref.tau));
+        const Vec3d elem = ref_pos + rot * Vec3d(e.d);
+        const double tau_e =
+            refracted_time(g.tx_pos, x, g.sound_speed, opt.sediment_speed, opt.interface_z) +
+            refracted_time(elem, x, g.sound_speed, opt.sediment_speed, opt.interface_z);
+        const double sp = (tau_e - g.start_time) * g.sample_rate;
+        const double sp_floor = std::floor(sp);
+        n = static_cast<std::int64_t>(sp_floor);
+        frac = static_cast<float>(sp - sp_floor);
+        const double c2 = g.carrier * tau_e;
+        cyc = static_cast<float>(c2 - std::floor(c2));
+      } else {
+        const float pos = ref.frac0 + dtau * fs;
+        const float pos_floor = std::floor(pos);
+        n = ref.n0 + static_cast<std::int64_t>(pos_floor);
+        frac = pos - pos_floor;
+        if (fc != 0.0F) cyc = ref.phase0 + fc * dtau;
+      }
       float re, im;
       const float* s = samples + 2 * (g.sample_offset + ir * g.n_samples);
-      if (!interpolate(s, g.n_samples, n, pos - pos_floor, re, im)) continue;
+      if (!interpolate(s, g.n_samples, n, frac, re, im)) continue;
 
       if (fc != 0.0F) {
-        float cyc = ref.phase0 + fc * dtau;
         cyc -= std::floor(cyc);
         const float cs = std::cos(two_pi * cyc), sn = std::sin(two_pi * cyc);
         const float rr = re * cs - im * sn;

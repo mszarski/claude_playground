@@ -14,13 +14,16 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
-| 9–13 | not started | |
+| 9 3D near-field imaging | done on CPU; GeoTIFF output missing | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
+| 10–13 | not started | |
 
 ## What is next
 
-1. Milestone 9: 3D near-field imaging (refraction at the sediment interface, layers over
-   focus depth, slices and maximum intensity projections).
-2. Milestone 8 leftovers (see "Motion estimation limits").
+1. Milestone 10: flank array (far-field FFT beamformer against backprojection, MVDR,
+   CFAR, tracking, calibration, the multi-board `sync` stage, the sonar-equation tool).
+2. GeoTIFF output (single and multi-layer), debug products per stage and the processing
+   log: the framework items of the paper's Sec. II are still open.
+3. Milestone 8 leftovers (see "Motion estimation limits").
 3. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.
@@ -93,6 +96,24 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - The reference transmits 5, 6.25 or 8.33 MHz only. Nothing in it supports sonar carrier
   frequencies; stages 3–6 need their own transmit chain.
 - Docs say probe "L12-5 D"; code says "L7-3".
+
+## Not started at all
+
+- Milestone 10: flank-array processing, detection, tracking, calibration estimation, the
+  `sync` stage, the sonar-equation tool, sparse-array ambiguity reports.
+- Milestone 11: Holoscan operators and sources. Holoscan cannot be installed in the
+  build container (no CUDA; wheels are for Python 3.12).
+- Milestone 12: `PHYSICS_NOTES.md`, the Bellhop provider, reverberation (both methods),
+  boundary and noise models, physics validation. The reference reports are behind
+  blocked hosts.
+- Milestone 13: benchmark harness, power-law fit, real-time factors, multi-GPU, Jetson
+  instructions. None of this can be measured without a GPU.
+- Framework: GeoTIFF output, per-stage debug products, the processing log, and a single
+  YAML-driven processing chain (today scenarios are YAML; the processing steps are
+  called from Python).
+- Scenes: faceted seafloor with bathymetry, spheres, plates, rocks, wreck, pool walls
+  as surfaces. Built-in scenarios still missing: Phase 1 pool test, flat seafloor with
+  objects, wreck with large motion, Popoto trials, flank-array targets in noise.
 
 ## Motion estimation limits so far
 
