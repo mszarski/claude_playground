@@ -1,0 +1,27 @@
+# Rail SAS in the pool (plan Phase 5a): the P4-2v probe on the motorised rail, looking
+# sideways and 20 degrees down at the pool floor 1.9 m away, 151 pings 2 mm apart. On the
+# floor: a ball, a short pipe, a brick and pebbles. Rail position is exact here; see
+# `rail_position_errors` for the perturbed case.
+# Limit: the tiled floor is 40,000 scatterers per square metre, far below one per
+# resolution cell (about a third of a millimetre in range), so it is a sparse texture.
+name: rail_objects
+sonar: sas_rail
+fidelity: free_field
+sonar_overrides:
+  receive: {window: {range: [1.9, 2.1]}}
+environment: {sound_speed: 1480.0, temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, -0.684]
+  rpy: [0, 0, 0]
+  velocity: [0.02, 0, 0]
+  stop_and_go: true
+pings: {count: 151, interval: 0.1}
+scene:
+  - {type: seafloor, label: floor, x_range: [-0.05, 0.35], y_range: [1.76, 1.99], density: 40000.0, lambert_mu_db: -25.0}
+  - {type: sphere, label: ball, centre: [0.08, 1.85, -0.02], radius: 0.02, density: 800000.0, mu_db: -10.0}
+  - {type: cylinder, label: pipe, start: [0.14, 1.83, -0.01], end: [0.22, 1.87, -0.01], radius: 0.01, density: 800000.0, mu_db: -10.0}
+  - {type: box, label: brick, min: [0.20, 1.90, -0.03], max: [0.26, 1.93, 0.0], density: 500000.0, mu_db: -12.0}
+  - {type: rocks, label: pebbles, x_range: [0.02, 0.30], y_range: [1.94, 1.98], count: 10, radius_range: [0.004, 0.008], density: 2000000.0, mu_db: -12.0}
+absorption: none
+receiver: {noise_rms: 0.0, adc: false}
+seed: 15

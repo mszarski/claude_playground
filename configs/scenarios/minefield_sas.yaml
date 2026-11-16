@@ -1,0 +1,27 @@
+# Stripmap SAS over rippled sand with mine-like objects: two cylinders (2 m long, one
+# across track and one along), a sphere and scattered rocks, with sway and heave that
+# navigation does not report. Seafloor at z = 0, sonar at 15 m altitude. Sand ripples
+# (5 cm amplitude, 0.8 m wavelength) modulate the seafloor return through their slopes.
+# About 13,000 scatterers and 80 pings: minutes on a CPU, seconds with the CUDA backend.
+name: minefield_sas
+sonar: sas_auv
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 100.0e3, window: {range: [38.0, 52.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+platform:
+  position: [0, 0, -15.0]
+  rpy: [0, 0, 0]
+  velocity: [1.2, 0, 0]            # 0.24 m per ping
+  motion: {sway_rms: 0.01, heave_rms: 0.004, correlation_pings: 8.0, nav_knows_disturbance: false, dvl_altitude_noise: 0.001}
+pings: {count: 80, interval: 0.2}
+scene:
+  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [36.0, 48.0], density: 30.0, lambert_mu_db: -27.0,
+     ripples: {amplitude: 0.05, wavelength: 0.8, direction_deg: 70.0}}
+  - {type: cylinder, label: cylinder_across, start: [7.0, 40.0, -0.25], end: [7.0, 42.0, -0.25], radius: 0.25, density: 500.0, mu_db: -12.0}
+  - {type: cylinder, label: cylinder_along, start: [10.0, 43.5, -0.25], end: [12.0, 43.5, -0.25], radius: 0.25, density: 500.0, mu_db: -12.0}
+  - {type: sphere, label: sphere, centre: [13.5, 40.5, -0.4], radius: 0.4, density: 500.0, mu_db: -12.0}
+  - {type: rocks, label: rocks, x_range: [5.0, 15.0], y_range: [44.5, 46.5], count: 8, radius_range: [0.1, 0.3], density: 500.0, mu_db: -15.0}
+absorption: none
+receiver: {noise_rms: 0.0, adc: false}
+seed: 14

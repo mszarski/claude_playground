@@ -25,13 +25,15 @@ class Scene:
     amplitudes: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=complex))
     velocities: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))  # m/s
     labels: list[str] = field(default_factory=list)  # one per added object, for ground truth
+    counts: list[int] = field(default_factory=list)  # scatterers each of those added
     # Per scatterer: 1 = a boundary patch whose amplitude scales with sqrt(sin(grazing_in) *
     # sin(grazing_out)) (Lambert's law); 0 = a point target with a fixed amplitude.
     lambert: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
     # Per scatterer: unit surface normal (pointing into the water), or NaN for none. A
     # Lambert scatterer without a normal is a patch of a horizontal boundary.
     normals: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
-    # ("sphere", centre [3], radius) and ("box", min [3], max [3]) primitives that block sound.
+    # ("sphere", centre [3], radius), ("box", min [3], max [3]) and ("capsule", (end_a, end_b),
+    # radius) primitives that block sound.
     occluders: list = field(default_factory=list)
 
     def __len__(self) -> int:
@@ -56,7 +58,16 @@ class Scene:
             np.asarray(normals, dtype=float), (n, 3)).copy()
         self.normals = np.vstack([self.normals, nrm])
         self.labels.append(label)
+        self.counts.append(n)
         return self
+
+    def label_masks(self) -> dict:
+        """{label: boolean mask over the scatterers}; pieces sharing a label are merged."""
+        out, start = {}, 0
+        for label, n in zip(self.labels, self.counts):
+            out.setdefault(label, np.zeros(len(self), dtype=bool))[start:start + n] = True
+            start += n
+        return out
 
     def add_surface(self, positions, normals, mu_db: float, density: float, label: str,
                     rng: np.random.Generator | None = None, velocity=(0.0, 0.0, 0.0)) -> "Scene":
@@ -90,6 +101,20 @@ class Scene:
                 far = np.where(np.abs(d) > 0, np.maximum(t0, t1), np.where((s >= lo) & (s <= hi), np.inf, -np.inf))
                 enter, leave = near.max(axis=1), far.min(axis=1)
                 ok &= ~((enter < leave) & (leave > 0.0) & (enter < t_end))
+            elif kind == "capsule":
+                # A cylinder with rounded ends: closest approach of the two segments.
+                p0, p1 = (np.asarray(v, dtype=float) for v in a)
+                e, r = p1 - p0, 0.999 * float(b)
+                w = s - p0
+                aa = np.maximum((d * d).sum(axis=1), 1e-30)
+                ee = float(e @ e)
+                bb, cc, ff = d @ e, d @ w, float(e @ w)
+                denom = aa * ee - bb * bb
+                t = np.where(denom > 1e-12 * aa * ee, np.clip((bb * ff - cc * ee) / np.maximum(denom, 1e-30), 0.0, t_end), 0.0)
+                u = (bb * t + ff) / ee
+                t = np.where(u < 0.0, np.clip(-cc / aa, 0.0, t_end), np.where(u > 1.0, np.clip((bb - cc) / aa, 0.0, t_end), t))
+                u = np.clip(u, 0.0, 1.0)
+                ok &= np.linalg.norm(w + t[:, None] * d - u[:, None] * e, axis=1) >= r
             else:
                 raise ValueError(f"unknown occluder {kind!r}")
         return ok
@@ -168,6 +193,30 @@ def sphere_points(centre, radius: float, density: float, rng: np.random.Generato
     v = rng.standard_normal((n, 3))
     v /= np.linalg.norm(v, axis=1, keepdims=True)
     return np.asarray(centre, dtype=float) + radius * v, v
+
+
+def cylinder_points(end_a, end_b, radius: float, density: float, rng: np.random.Generator,
+                    caps: bool = True):
+    """Random points on a cylinder between two end points, with outward normals."""
+    a, b = np.asarray(end_a, dtype=float), np.asarray(end_b, dtype=float)
+    axis = b - a
+    length = np.linalg.norm(axis)
+    axis = axis / length
+    ref = np.array([0.0, 0.0, 1.0]) if abs(axis[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    u = np.cross(axis, ref)
+    u /= np.linalg.norm(u)
+    v = np.cross(axis, u)
+    n = max(int(round(2.0 * np.pi * radius * length * density)), 8)
+    phi, along = rng.uniform(0.0, 2.0 * np.pi, n), rng.uniform(0.0, length, n)
+    radial = np.cos(phi)[:, None] * u + np.sin(phi)[:, None] * v
+    pts, normals = [a + along[:, None] * axis + radius * radial], [radial]
+    if caps:
+        m = max(int(round(np.pi * radius**2 * density)), 1)
+        for centre, sign in ((a, -1.0), (b, 1.0)):
+            rr, ph = radius * np.sqrt(rng.uniform(0.0, 1.0, m)), rng.uniform(0.0, 2.0 * np.pi, m)
+            pts.append(centre + rr[:, None] * (np.cos(ph)[:, None] * u + np.sin(ph)[:, None] * v))
+            normals.append(np.tile(sign * axis, (m, 1)))
+    return np.vstack(pts), np.vstack(normals)
 
 
 def box_faces(lo, hi):
@@ -255,6 +304,21 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
             scene.add_surface(pts, normals, float(item.get("mu_db", -20.0)), float(item["density"]),
                               item.get("label", "sphere"), rng, vel)
             scene.occluders.append(("sphere", list(item["centre"]), float(item["radius"])))
+        elif kind == "cylinder":
+            pts, normals = cylinder_points(item["start"], item["end"], float(item["radius"]),
+                                           float(item["density"]), rng, bool(item.get("caps", True)))
+            scene.add_surface(pts, normals, float(item.get("mu_db", -15.0)), float(item["density"]),
+                              item.get("label", "cylinder"), rng, vel)
+            if item.get("occlude", True):
+                scene.occluders.append(("capsule", (list(item["start"]), list(item["end"])), float(item["radius"])))
+        elif kind == "volume":
+            # Point scatterers spread through a box (sediment inhomogeneities, bubbles, fish):
+            # isotropic, complex Gaussian amplitudes of the given RMS.
+            lo, hi = np.asarray(item["min"], dtype=float), np.asarray(item["max"], dtype=float)
+            n = int(item["count"])
+            pts = rng.uniform(lo, hi, (n, 3))
+            a = float(item.get("rms_amplitude", 1.0)) * (rng.standard_normal(n) + 1j * rng.standard_normal(n)) / np.sqrt(2.0)
+            scene.add_points(pts, a, vel, item.get("label", "volume"))
         elif kind == "box":
             _add_box(scene, item["min"], item["max"], item, rng, vel, outward=True)
             scene.occluders.append(("box", list(item["min"]), list(item["max"])))

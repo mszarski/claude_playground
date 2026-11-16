@@ -1,0 +1,30 @@
+# Phase 1 pool test with hard and soft targets (plan, "Pool test plan"), stock L12-5 probe.
+# The probe face is 0.5 m below the surface, looking along +x at the far wall 2.8 m away.
+# In the fan: a cinder block, a vertical metal pipe, a rope, the wire frame, a side wall.
+# The probe's elevation beam is about 4 degrees, so only a 16 cm slab around the probe's
+# depth is modelled; floor and surface lie outside it and are left out.
+# Limit: walls need about 250,000 scatterers per square metre for one per resolution cell
+# at 5 MHz; 150,000 are used, so wall speckle is slightly under-developed.
+name: pool_fls_l12_5d
+sonar: l12_5d
+fidelity: free_field
+# Fixed front-end gain (the chain is uncalibrated; amplitude is the echo of a 0 dB target
+# at 1 m): chosen so the strongest echo uses most of the ADC range.
+sonar_overrides:
+  transmit: {waveform: {amplitude: 60.0}}
+environment: {temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, 0.5]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 2, interval: 0.1}   # both multiplexer halves
+scene:
+  - {type: plate, label: far_wall, origin: [2.8, -1.3, 0.42], edge_u: [0, 0, 0.16], edge_v: [0, 2.6, 0], density: 150000.0, mu_db: -18.0}
+  - {type: plate, label: side_wall, origin: [0.9, 1.05, 0.42], edge_u: [1.9, 0, 0], edge_v: [0, 0, 0.16], density: 60000.0, mu_db: -18.0}
+  - {type: box, label: cinder_block, min: [1.7, -0.45, 0.42], max: [1.9, -0.05, 0.58], density: 150000.0, mu_db: -12.0}
+  - {type: cylinder, label: pipe, start: [1.3, 0.30, 0.42], end: [1.3, 0.30, 0.58], radius: 0.025, density: 200000.0, mu_db: -8.0, caps: false}
+  - {type: wire, label: rope, start: [2.2, 0.55, 0.42], end: [2.2, 0.55, 0.58], spacing: 0.0005, target_strength_db: -75.0}
+  - {type: wire, label: wire_1m, start: [1.0, -0.10, 0.45], end: [1.0, -0.10, 0.55], spacing: 0.00025, target_strength_db: -60.0}
+  - {type: wire, label: wire_2m, start: [2.0, 0.10, 0.45], end: [2.0, 0.10, 0.55], spacing: 0.00025, target_strength_db: -60.0}
+receiver: {noise_rms: 3.0e-4, adc: true}     # a little over half an ADC step of noise
+seed: 11

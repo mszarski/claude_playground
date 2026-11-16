@@ -1,0 +1,32 @@
+# Phase 2: the P4-2v phased array in a larger pool or dock, 5 to 10 m. In the fan: the far
+# wall at 9.5 m, pool steps (three risers), a ladder (two rails and four rungs), and a lane
+# rope of floats. The elevation beam is about 2 degrees, so a 0.4 m slab around the probe's
+# depth is modelled; floor and surface are outside it.
+name: pool_fls_p4_2v
+sonar: p4_2v
+fidelity: free_field
+# Fixed front-end gain (the chain is uncalibrated; amplitude is the echo of a 0 dB target
+# at 1 m): chosen so the strongest echo uses about a quarter of the ADC range.
+sonar_overrides:
+  transmit: {waveform: {amplitude: 10000.0}}
+environment: {temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, 1.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - {type: plate, label: far_wall, origin: [9.5, -4.5, 0.8], edge_u: [0, 0, 0.4], edge_v: [0, 9.0, 0], density: 12000.0, mu_db: -18.0}
+  - {type: box, label: step_1, min: [8.6, -3.5, 0.8], max: [9.5, -1.5, 1.2], density: 12000.0, mu_db: -15.0}
+  - {type: box, label: step_2, min: [8.3, -3.5, 0.95], max: [8.6, -1.5, 1.2], density: 12000.0, mu_db: -15.0}
+  - {type: box, label: step_3, min: [8.0, -3.5, 1.1], max: [8.3, -1.5, 1.2], density: 12000.0, mu_db: -15.0}
+  - {type: cylinder, label: ladder_rail_a, start: [6.5, 1.8, 0.8], end: [6.5, 1.8, 1.2], radius: 0.02, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: cylinder, label: ladder_rail_b, start: [6.5, 2.3, 0.8], end: [6.5, 2.3, 1.2], radius: 0.02, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: cylinder, label: ladder_rung_1, start: [6.5, 1.8, 0.85], end: [6.5, 2.3, 0.85], radius: 0.015, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: cylinder, label: ladder_rung_2, start: [6.5, 1.8, 1.0], end: [6.5, 2.3, 1.0], radius: 0.015, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: cylinder, label: ladder_rung_3, start: [6.5, 1.8, 1.15], end: [6.5, 2.3, 1.15], radius: 0.015, density: 60000.0, mu_db: -8.0, caps: false}
+  - {type: sphere, label: float_1, centre: [7.5, -0.6, 1.0], radius: 0.06, density: 40000.0, mu_db: -10.0}
+  - {type: sphere, label: float_2, centre: [7.5, 0.0, 1.0], radius: 0.06, density: 40000.0, mu_db: -10.0}
+  - {type: sphere, label: float_3, centre: [7.5, 0.6, 1.0], radius: 0.06, density: 40000.0, mu_db: -10.0}
+receiver: {noise_rms: 1.0e-3, adc: true}     # about two ADC steps of noise
+seed: 12

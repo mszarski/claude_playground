@@ -241,3 +241,43 @@ def test_wreck_scenario_through_motion_estimation_and_imaging():
     face = (X > 8.2) & (X < 10.8) & (Y > 40.7) & (Y < 41.3)
     assert 10 * np.log10(est[floor].mean() / est[shadow].mean()) > 10.0
     assert 10 * np.log10(est[face].mean() / est[floor].mean()) > 12.0
+
+
+# --- cylinders, volume clutter, per-object bookkeeping ---------------------------------------
+
+def test_cylinder_points_normals_and_shadow():
+    item = {"type": "cylinder", "start": [5.0, -1.0, 0.0], "end": [5.0, 1.0, 0.0], "radius": 0.25, "density": 2000.0}
+    scene = build_scene([item], rng())
+    axis_dist = np.hypot(scene.positions[:, 0] - 5.0, scene.positions[:, 2])
+    side = np.abs(scene.normals[:, 1]) < 0.5                                # caps have normals along the axis
+    assert 0.8 < side.mean() < 0.95
+    assert np.allclose(axis_dist[side], 0.25)                               # the side wall
+    assert np.all(axis_dist[~side] <= 0.25 + 1e-9)                          # the end caps
+    assert np.allclose(np.abs(scene.positions[~side][:, 1]), 1.0)
+    radial = (scene.positions[side] - np.array([5.0, 0.0, 0.0])) * [1, 0, 1] / 0.25
+    assert np.allclose(scene.normals[side], radial, atol=1e-9)
+    # Shadow of the capsule: behind the cylinder is hidden, beside and beyond its ends is not.
+    pts = np.array([[8.0, 0.0, 0.0], [8.0, 1.0, 0.0], [8.0, 0.0, 0.35], [8.0, 0.0, 0.6], [8.0, 2.4, 0.0],
+                    [4.0, 0.0, 0.0], [4.75, 0.0, 0.0], [5.25, 0.0, 0.0]])
+    assert scene.visible(np.zeros(3), pts).tolist() == [False, False, False, True, True, True, True, False]
+    # About half the side wall faces a distant sonar.
+    q, p, amp, _, _ = two_way_paths(FreeFieldProvider(C), np.array([-50.0, 0, 0]), np.array([-50.0, 0, 0]),
+                                    scene.positions, scene.amplitudes, lambert=scene.lambert, normals=scene.normals)
+    assert 0.40 < len(amp) / len(scene) < 0.50
+
+
+def test_volume_clutter_and_label_masks():
+    scene = build_scene([
+        {"type": "volume", "label": "clutter", "min": [-1, -1, 0.1], "max": [1, 1, 0.5], "count": 500, "rms_amplitude": 0.01},
+        {"type": "box", "label": "crate", "min": [2, 2, 0], "max": [3, 3, 1], "density": 100.0},
+        {"type": "points", "label": "pinger", "positions": [[0, 0, 0]]},
+    ], rng())
+    masks = scene.label_masks()
+    assert set(masks) == {"clutter", "crate", "pinger"}
+    assert masks["clutter"].sum() == 500 and masks["pinger"].sum() == 1
+    assert masks["crate"].sum() == len(scene) - 501                         # six faces under one label
+    assert sum(m.sum() for m in masks.values()) == len(scene)
+    clutter = scene.positions[masks["clutter"]]
+    assert clutter[:, 2].min() >= 0.1 and clutter[:, 2].max() <= 0.5
+    assert np.sqrt(np.mean(np.abs(scene.amplitudes[masks["clutter"]]) ** 2)) == pytest.approx(0.01, rel=0.1)
+    assert not scene.lambert[masks["clutter"]].any()

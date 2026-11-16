@@ -7,6 +7,7 @@
 #        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch the source first
 #        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
+#        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
@@ -37,11 +38,6 @@ nvcc --version | tail -1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=ON \
       -DPython3_EXECUTABLE="$(which python3)"
 cmake --build build
-if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
-  PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}" --pixel "${GPUSONAR_PIXEL:-0.05}" \
-      --modes "${GPUSONAR_MODES:-sas,fls,flank}"
-  exit 0
-fi
 if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   # External GPL-3 propagation programs, used as separate processes by the eigenray tier
   # and as test oracles (docs/OPEN_SOURCE.md). Built outside the source tree; never linked.
@@ -51,6 +47,21 @@ if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   (cd /opt/at && make -k all > /opt/at/build.log 2>&1 || true)
   ls -la /opt/at/Bellhop/bellhop.exe /opt/at/Kraken/kraken.exe /opt/at/KrakenField/field.exe
   export GPUSONAR_BELLHOP=/opt/at/Bellhop/bellhop.exe GPUSONAR_KRAKEN_DIR=/opt/at
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
+  PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}" --pixel "${GPUSONAR_PIXEL:-0.05}" \
+      --modes "${GPUSONAR_MODES:-sas,fls,flank}"
+  exit 0
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "gallery" ]; then
+  # Every mode's realistic scenario, simulated and imaged; figures and numbers are uploaded
+  # to GPUSONAR_UPLOAD_REPO (a Hugging Face dataset) when it is set.
+  pip install -q matplotlib
+  PYTHONPATH=python python3 tools/gallery.py --backend cuda --out /work/gallery ${GPUSONAR_GALLERY_ARGS:-}
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/gallery gallery --type dataset > /dev/null
+  fi
+  exit 0
 fi
 echo "=== ctest (C++ suites) ==="
 ctest --test-dir build --output-on-failure -E pytest | tail -5

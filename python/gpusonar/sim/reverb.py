@@ -155,24 +155,41 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
                                   max_range, min_range=min_range, strength=strength) / step
     power = np.interp(times, coarse, density, left=0.0, right=0.0) / fs
+    # Reverberation occupies the pulse's band only, so it is generated at a reduced rate
+    # (at least four times the bandwidth) and interpolated to the record's rate.
+    band = max(abs(wf.f_stop - wf.f_start), 4.0 / wf.duration)
+    decim = max(int(fs // (4.0 * band)), 1)
+    fs_low = fs / decim
+    n_low = int(np.ceil(len(times) / decim))
+    t_low = times[0] + np.arange(n_low) / fs_low
+    p_low = np.interp(t_low, coarse, density, left=0.0, right=0.0) / fs_low
+    pulse_low = baseband_pulse(wf, fs_low, fc) * wf.amplitude
     dphi = 2.0 * np.pi / n_azimuth
-    sigma = np.sqrt(power * dphi / 2.0)                    # per real component, per sector
-    n_fft = len(times)
-    f = np.fft.fftfreq(n_fft, 1.0 / fs)
-    total = np.zeros((positions.shape[0], n_fft), dtype=np.complex64)
+    sigma = np.sqrt(p_low * dphi / 2.0)                    # per real component, per sector
+    f = np.fft.fftfreq(n_low, 1.0 / fs_low)
+    total = np.zeros((positions.shape[0], n_low), dtype=np.complex64)
     offsets = positions - centre
     w = (2.0 * np.pi * (f + fc)).astype(np.float32)
     for m in range(n_azimuth):
         phi = (m + 0.5) * dphi
-        b = sigma * (rng.standard_normal(n_fft) + 1j * rng.standard_normal(n_fft))
+        b = sigma * (rng.standard_normal(n_low) + 1j * rng.standard_normal(n_low))
         spectrum = np.fft.fft(b).astype(np.complex64)
         lead = ((offsets @ np.array([np.cos(phi), np.sin(phi), 0.0])) / c).astype(np.float32)   # [channels]
         arg = lead[:, None] * w[None, :]
         total += spectrum[None, :] * (np.cos(arg) + 1j * np.sin(arg))
-    pulse_spectrum = np.fft.fft(pulse, n_fft)
-    series = np.fft.ifft(total * pulse_spectrum[None, :], axis=1)
-    # Sample k of the convolution is at times[0] + k / fs; the record starts len(pulse) - 1 later.
-    start = len(pulse) - 1
+    total *= np.fft.fft(pulse_low, n_low).astype(np.complex64)[None, :]
+    # Band-limited interpolation to the record's rate: zero-pad the spectrum.
+    n_full = n_low * decim
+    if decim > 1:
+        padded = np.zeros((positions.shape[0], n_full), dtype=np.complex64)
+        half = n_low // 2
+        padded[:, :half] = total[:, :half]
+        padded[:, n_full - (n_low - half):] = total[:, half:]
+        series = np.fft.ifft(padded, axis=1) * decim
+    else:
+        series = np.fft.ifft(total, axis=1)
+    # Sample k of the convolution is at times[0] + k / fs; the record starts one pulse later.
+    start = int(round((s.start_time - times[0]) * fs))
     out = series[:, start:start + n]
     if carrier:
         t_abs = s.start_time + np.arange(n) / fs

@@ -1,0 +1,29 @@
+# Phase 3 mid-range forward-looking sonar in a harbour: sonar 2 m above a sandy floor,
+# looking at a quay wall 28 m ahead, with six pilings, a mooring block and scattered rocks.
+# Limit: the floor has 60 scatterers per square metre, well under one per resolution cell
+# beyond a few metres, so it shows as separate points, not developed speckle.
+name: harbour_fls_750k
+sonar: fls_750k
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 400.0e3, window: {range: [4.0, 34.0]}, tvg: null}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+platform:
+  position: [0, 0, -2.0]           # seafloor at z = 0
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.2}
+scene:
+  - {type: seafloor, label: seafloor, x_range: [4.0, 28.0], y_range: [-18.0, 18.0], density: 60.0, lambert_mu_db: -27.0}
+  - {type: plate, label: quay_wall, origin: [28.0, -18.0, -3.0], edge_u: [0, 0, 3.0], edge_v: [0, 36.0, 0], density: 300.0, mu_db: -15.0}
+  - {type: cylinder, label: piling_1, start: [14.0, -6.0, -3.0], end: [14.0, -6.0, 0.0], radius: 0.15, density: 800.0, mu_db: -10.0}
+  - {type: cylinder, label: piling_2, start: [14.0, -2.0, -3.0], end: [14.0, -2.0, 0.0], radius: 0.15, density: 800.0, mu_db: -10.0}
+  - {type: cylinder, label: piling_3, start: [14.0, 2.0, -3.0], end: [14.0, 2.0, 0.0], radius: 0.15, density: 800.0, mu_db: -10.0}
+  - {type: cylinder, label: piling_4, start: [20.0, -6.0, -3.0], end: [20.0, -6.0, 0.0], radius: 0.15, density: 800.0, mu_db: -10.0}
+  - {type: cylinder, label: piling_5, start: [20.0, -2.0, -3.0], end: [20.0, -2.0, 0.0], radius: 0.15, density: 800.0, mu_db: -10.0}
+  - {type: cylinder, label: piling_6, start: [20.0, 2.0, -3.0], end: [20.0, 2.0, 0.0], radius: 0.15, density: 800.0, mu_db: -10.0}
+  - {type: box, label: mooring_block, min: [10.0, 6.0, -0.8], max: [11.0, 7.0, 0.0], density: 1500.0, mu_db: -12.0}
+  - {type: rocks, label: rocks, x_range: [6.0, 24.0], y_range: [8.0, 16.0], count: 12, radius_range: [0.15, 0.4], density: 1500.0, mu_db: -15.0}
+absorption: francois_garrison
+receiver: {noise_rms: 0.0, adc: false}
+seed: 13

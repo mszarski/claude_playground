@@ -58,17 +58,13 @@ Updated at the end of each milestone. Newest facts first within each section.
    figures, flank hydrophone sensitivity, the 28-hydrophone batching scheme, and tests that
    the sonar-equation tool reproduces the plan's link budgets. Differences that remain are
    listed under "Differences from the plan".
-2. **Ceres and SuiteSparse (copyleft): handled, confirm you agree.** Ubuntu's
-   `libceres-dev` links SuiteSparse CHOLMOD/SPQR, which are GPL. Motion estimation is built
-   against Ceres 2.2.0 compiled from source with `-DSUITESPARSE=OFF` (BSD only), and CMake
-   refuses a SuiteSparse-linked Ceres unless `-DSONAR_ALLOW_SUITESPARSE=ON` is given. The
-   cost is no sparse linear solver (dense QR is used), which matters only for very long
-   runs. Say if you would rather allow the distro package.
-3. **Holoscan versions.** The ultrasound reference at `24d405e` pins Sensor Bridge 2.7.0
-   and Holoscan 4.4.0 with six local SDK patches. Sensor Bridge HEAD is 3.0.0 on Holoscan
-   5.0, which is not API compatible. Proposed: build our ultrasound source against the
-   reference's pinned pair, and keep the low-rate flank source on stock operators so it
-   can follow either line. Confirm.
+2. **Ceres and SuiteSparse: settled.** The owner confirmed BSD only. Motion estimation
+   is built against Ceres 2.2.0 compiled with `-DSUITESPARSE=OFF`, and CMake refuses a
+   SuiteSparse-linked Ceres unless `-DSONAR_ALLOW_SUITESPARSE=ON` is given. The cost is no
+   sparse linear solver (dense QR), which matters only for very long runs.
+3. **Holoscan versions: settled.** The owner approved building the ultrasound source
+   against the reference's pinned pair (Sensor Bridge 2.7.0, Holoscan 4.4.0, six local SDK
+   patches) and keeping the low-rate flank source on stock operators. Not built yet.
 4. **Jetson receive path.** Per the Sensor Bridge source, AGX Orin is Linux-sockets only
    and AGX Thor is built without RoCE (CoE or sockets). 38.4 Gbit/s ultrasound capture
    therefore looks like DGX Spark / IGX only; the 49 Mbit/s flank source is fine anywhere.
@@ -77,10 +73,9 @@ Updated at the end of each milestone. Newest facts first within each section.
    boards and the reference channels are dropped before beamforming. `popoto_4x8` (32
    hydrophones, reference summed into one input per board) stays as an alternative the
    plan does not describe.
-6. **Copyleft test oracles.** Bellhop / Acoustics Toolbox and bellhopcuda (GPL-3), k-Wave
-   (LGPL-3) and PyMUST (LGPL) are proposed as separate-process oracles only, as the brief
-   allows. Nothing copyleft is installed in the build or linked. Say if any of these should
-   not be used even as an oracle.
+6. **Copyleft test oracles: settled.** The owner approved Bellhop and KRAKEN (GPL-3)
+   built and run as separate programs by the GPU job; nothing copyleft is linked. k-Wave
+   (LGPL-3) and PyMUST (LGPL) would be used the same way and are not installed.
 7. **Reading.** TR 0702 is now fetched (`docs/refs/`, not committed) and summarised in
    `PHYSICS_NOTES.md`. TR 9407 is distribution-limited on DTIC and was not fetched; the
    open literature it draws on is used instead, as the brief allows. If you can supply
