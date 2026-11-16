@@ -16,13 +16,17 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU; GeoTIFF output missing | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
-| 11–13 | not started | |
+| 11 Holoscan integration | not started | Holoscan has not been installed anywhere yet. |
+| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702), the Bellhop provider as an external process, Rayleigh bottom reflection, validation against Bellhop on Pekeris and Munk cases (`tests/python/test_propagation.py`, skipped without Bellhop). Not done: both reverberation methods, surface and bottom scattering models, ambient and self-noise models, K-distributed clutter, the KRAKEN/RAM cross-check, the seamount case (range-dependent bathymetry is not supported), re-running the long-range scenarios at the `eigenray` tier. |
+| 13 Performance | **partly** | Done: benchmark harness, timings on T4, L4, A10G and A100, power-law fit, real-time factors, multi-GPU tile splitting (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement, measured multi-GPU scaling, verified GFLOPS values. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## What is next
 
-1. Milestones 11–13 each need something this container does not have: a Holoscan
-   install (11), the propagation reference reports and a Bellhop build (12), a GPU (13).
-   See "Not started at all".
+1. Milestone 12: reverberation (frozen point scatterers for FLS/SAS, a scattering-function
+   method for the flank array), scattering-strength and noise models, then the long-range
+   scenarios at the `eigenray` tier.
+2. Kernel speed on GPUs with slow float64: field-of-view test before the float64 solve.
+3. Milestone 11 needs a Holoscan install (a GPU job image with the SDK would do).
 2. GeoTIFF output (single and multi-layer), debug products per stage and the processing
    log: the framework items of the paper's Sec. II are still open.
 3. Milestone 8 leftovers (see "Motion estimation limits").
@@ -124,11 +128,6 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 - Milestone 11: Holoscan operators and sources. Holoscan cannot be installed in the
   build container (no CUDA; wheels are for Python 3.12).
-- Milestone 12: `PHYSICS_NOTES.md`, the Bellhop provider, reverberation (both methods),
-  boundary and noise models, physics validation. The reference reports are behind
-  blocked hosts.
-- Milestone 13: benchmark harness, power-law fit, real-time factors, multi-GPU, Jetson
-  instructions. None of this can be measured without a GPU.
 - Framework: GeoTIFF output, per-stage debug products, the processing log, and a single
   YAML-driven processing chain (today scenarios are YAML; the processing steps are
   called from Python).

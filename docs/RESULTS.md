@@ -1,9 +1,76 @@
 # Results
 
-Measured by this repository's tests and tools. Every number here was produced on the
-**CPU (host) backend** in a container with no GPU; nothing in this file is a GPU result.
+Measured by this repository's tests and tools. Accuracy numbers were produced on the
+**CPU (host) backend**; the same tests pass on the CUDA backend (NVIDIA T4). Speed numbers
+are in "Performance" and say which machine each came from.
 Each row names what it is compared with. Where the brief asks for a comparison that
 could not be made, that is stated.
+
+## Performance
+
+Source: `tools/benchmark.py`, run through `tools/gpu_job.sh` on rented x86_64 GPU machines
+(Hugging Face Jobs, CUDA 12.6). Raw output: `docs/benchmarks/*.json`. Protocol as in the
+paper: each dataset processed three times in a row, the last run reported. Times cover the
+backprojection call only, including copying pings into the kernel's input and the
+host-to-device transfer. They exclude simulation and conditioning, which run on the CPU.
+**None of these is a DGX Spark or a Jetson.**
+
+Datasets (simulated, fixed):
+
+- **SAS:** `sas_auv`, 400 pings × 16 channels × 9,534 baseband samples; seafloor image
+  2560 × 1200 pixels at 5 cm (128 m × 60 m); linear interpolation; each ping limited to
+  the beam's λ/D extent. Collection time 80 s.
+- **FLS:** `l12_5d`, both mux halves (2 × 64 channels); fan of 4000 ranges × 1602 bearings.
+- **Flank:** `flank_32`, one ping of 32 channels × 171,072 baseband samples; map of
+  16,000 ranges × 482 bearings out to 10 km. Ping cycle 14.3 s.
+
+| GPU | SAS, no culling | SAS, culling b = 16 | Culling speedup | SAS real-time factor (culled) | FLS fan (6.4 Mpixel) | Flank map (7.7 Mpixel) | Flank real-time factor |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Tesla T4 | 13.68 s | 2.13 s | 6.4× | 37× | 0.28 s | 0.33 s | 43× |
+| L4 | 7.46 s | 1.22 s | 6.1× | 66× | 0.14 s | 0.19 s | 76× |
+| A10G | 6.55 s | 1.14 s | 5.7× | 70× | 0.14 s | 0.20 s | 73× |
+| A100 (80 GB) | 1.05 s | 0.80 s | 1.3× | 100× | 0.14 s | 0.16 s | 92× |
+
+- The culled image is bit-identical to the unculled one on every GPU. 11% of
+  (ping, block) pairs are kept.
+- Real-time factor is collection time over imaging time for this image size. It does not
+  include conditioning or motion estimation.
+- **FLS:** a 6.4-megapixel fan takes 0.14–0.28 s, so 3.5–7 frames per second at that size.
+  A display-sized fan (about 1 megapixel) would be several times faster; the frame rate
+  the rig can deliver is not known yet, so no real-time factor is claimed.
+- **What limits the kernel is double precision.** The per-ping reference delay is
+  computed in float64 (`DECISIONS.md` D-06). The T4, L4 and A10G run float64 at a small
+  fraction of their float32 rate; the A100 does not, and is 6× faster than the A10G
+  without culling although its nominal float32 throughput is lower. Culling hides most of
+  this (rejected pings cost nothing), which is why it gains 6× on those cards and only
+  1.3× on the A100. The Jetson and GB10 GPUs should be expected to behave like the T4
+  class until measured. Doing the field-of-view test before the float64 solve, or
+  replacing float64 with float-float arithmetic, are the obvious next steps; neither is
+  done.
+- The A100's culled time (0.80 s) is close to the fixed cost of copying and uploading
+  0.5 GB of samples per call, which the current driver repeats on every call.
+
+**Power-law fit** (the paper's Fig. 9 model, `y = a·x^b`, runtime against single-precision
+GFLOPS):
+
+| Runs | Fit | Quality |
+| --- | --- | --- |
+| SAS, no culling | y ≈ 644 · x^−0.49 | R² = 0.08 in log space |
+| SAS, culled | y ≈ 98 · x^−0.44 | R² = 0.47 |
+| Paper (its own data, seven GPUs) | y ≈ 485307 · x^−0.755 | not stated |
+
+- The GFLOPS values used (T4 8,141; L4 30,290; A10G 31,240; A100 19,490) are nominal
+  float32 figures **recalled from vendor specifications and not verified here**; the paper
+  took its values from Wikipedia, which the build container cannot reach.
+- With four points the fit is poor, for the reason above: float32 GFLOPS does not predict
+  a kernel whose cost is partly float64. Only the exponent is comparable with the paper,
+  whose prefactor belongs to its own dataset.
+- **Multi-GPU:** tile splitting is implemented (`recon.multigpu.backproject_tiles`); a
+  dual-A10G run was queued and had not been scheduled when this was written. Scaling is
+  not measured.
+
+CPU reference points (4 cores of the build container, earlier sections): the culling test
+dataset runs at about 7e7 pixel-records per second, against 1.4e9 to 1.9e10 on the GPUs.
 
 ## FLS: resolution on simulated point targets
 
@@ -311,7 +378,8 @@ Without culling: 1.78 s.
   figures are CPU and a different geometry, so they are not a like-for-like comparison.
   The gain depends on how much of the image each ping can see: a 15 m collection where
   each ping covered most of the image gave only 1.1×.
-- GPU speedup: not measured (no device).
+- On GPUs the gain is larger (5.7× to 6.4× on T4, L4 and A10G; 1.3× on an A100): see
+  "Performance".
 
 ## Simulator
 
@@ -329,4 +397,5 @@ Source: `tests/python/test_sim.py`.
 
 ## Not yet measured
 
-Every speed figure; anything with multipath, reverberation or realistic noise.
+Speed on the DGX Spark and Jetson; multi-GPU scaling; anything with reverberation or
+realistic noise.
