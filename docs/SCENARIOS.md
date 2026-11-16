@@ -180,12 +180,12 @@ boat at anchor.
 | Boat at anchor | tracked, 0.9 m, 0.02 m/s; classified static |
 | Detections per ping | 56 to 66 |
 | Confirmed tracks | 65 |
-| Track classes | 5 mover, 30 static, 16 line, 14 uncertain |
+| Track classes | 5 mover, 30 static, 15 line, 15 uncertain |
 | Tracks called movers that are not the boat | 4 |
 
 - Everything on the bed makes tracks. From the tracks alone, 30 are static (boulders,
-  debris), 16 are detections sliding along the pipeline as the aspect changes ("line":
-  motion along a linear feature cannot be told from the feature standing still), and 14
+  debris), 15 are detections sliding along the pipeline as the aspect changes ("line":
+  motion along a linear feature cannot be told from the feature standing still), and 15
   jump about too much to say. Before the line rule and the requirement that a mover be
   seen on most pings, 24 tracks were called movers.
 - Four movers remain that are not the boat. They were not examined one by one; a track at

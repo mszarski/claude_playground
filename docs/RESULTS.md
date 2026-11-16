@@ -706,7 +706,7 @@ Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
 | `fls_120k_transit` | 7 | 1 | 6 | 0 | — | 0 | 0 |
 | `fls_170k_transit` | 4 | 1 | 3 | 0 | — | 0 | 0 |
 | `fls_330k_transit` | 2 | 1 | 1 | 0 | — | 0 | 0 |
-| `fls_120k_cluttered_seabed` | 65 | 5 | 30 | 16 | — | 14 | 4 |
+| `fls_120k_cluttered_seabed` | 65 | 5 | 30 | 15 | — | 15 | 4 |
 | `fls_120k_rough_surface` | 57 | 9 | 1 | 8 | — | 39 | 8 |
 | `fls_170k_traffic` | 11 | 5 | 2 | 1 | — | 3 | 3 |
 | `popoto_far_mover` | 6 | 1 | 1 | — | 4 | 0 | 0 |

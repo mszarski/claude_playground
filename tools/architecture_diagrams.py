@@ -116,7 +116,7 @@ def draw_backends(path):
     for i, (g, stage, host, cuda, where, note) in enumerate(STAGES):
         y = top - 0.5 - i * 0.46
         if g != group:
-            ax.plot([0.2, 15.3], [y + 0.36, y + 0.36], color=GRID, lw=0.8)
+            ax.plot([0.2, 15.3], [y + 0.23, y + 0.23], color=GRID, lw=0.8)
             group = g
         ax.text(0.2, y, f"{g}: ", fontsize=8.5, color=MUTED, va="center")
         ax.text(1.55, y, stage, fontsize=9, va="center")

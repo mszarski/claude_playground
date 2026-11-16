@@ -118,9 +118,9 @@
       "counts": {
         "mover": 5,
         "static": 30,
-        "line": 16,
+        "line": 15,
         "multipath": 0,
-        "uncertain": 14
+        "uncertain": 15
       },
       "targets": {
         "boat_under_way": {

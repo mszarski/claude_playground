@@ -210,7 +210,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
     surface reverberation at 10 m/s wind nothing was detected, the boat included. The
     rough-sea example was moved to 120 kHz, where the waves show.
   - In the cluttered scene 65 tracks are classified 5 mover (one is the boat), 30 static,
-    16 line, 14 uncertain; under the rough sea 57 tracks are 9 mover (one is the boat),
+    15 line, 15 uncertain; under the rough sea 57 tracks are 9 mover (one is the boat),
     39 uncertain. A buoy, a rock and a steady wave face still look alike.
   - In deep water the ship's echo arrives about 300 m late in range, consistent with a
     bottom path; ranges are not corrected for propagation.
