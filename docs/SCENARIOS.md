@@ -162,7 +162,9 @@ comparison with the spherical-spreading estimate.
 
 ## What no scenario has yet
 
-- Surface and floor multipath in the pool scenes.
+- Multipath in the pool scenes. Surface and floor bounces arrive well outside the probes'
+  narrow elevation beams, but bounces off the side walls lie in the fan and would show as
+  ghost targets; the image-source tier can model walls and is not used here yet.
 - A moving platform in the forward-looking scenes, or more than one ping of them.
 - A flank or Popoto scene with a sound-speed profile other than isovelocity.
 - Fully developed speckle on large surfaces (scatterer counts are kept affordable).
