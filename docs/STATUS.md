@@ -50,8 +50,10 @@ Updated at the end of each milestone. Newest facts first within each section.
 
 ## Open questions for the project owner
 
-1. **Plan PDF.** `docs/plan/GPU-FLS-Phased-Plan.pdf` is not in the repo yet. Hardware
-   numbers currently come from the brief alone.
+1. **Plan PDF: received** (`docs/plan/GPU-FLS-Phased-Plan.pdf`). Applied: Popoto front-end
+   figures, flank hydrophone sensitivity, the 28-hydrophone batching scheme, and tests that
+   the sonar-equation tool reproduces the plan's link budgets. Differences that remain are
+   listed under "Differences from the plan".
 2. **Ceres and SuiteSparse (copyleft): handled, confirm you agree.** Ubuntu's
    `libceres-dev` links SuiteSparse CHOLMOD/SPQR, which are GPL. Motion estimation is built
    against Ceres 2.2.0 compiled from source with `-DSUITESPARSE=OFF` (BSD only), and CMake
@@ -66,13 +68,11 @@ Updated at the end of each milestone. Newest facts first within each section.
 4. **Jetson receive path.** Per the Sensor Bridge source, AGX Orin is Linux-sockets only
    and AGX Thor is built without RoCE (CoE or sockets). 38.4 Gbit/s ultrasound capture
    therefore looks like DGX Spark / IGX only; the 49 Mbit/s flank source is fine anywhere.
-5. **`popoto_4x8` reference channel.** Four 8-input boards give 32 inputs. A shared
-   reference "wired into one input on every board" on a dedicated input would leave 28
-   hydrophones, not 32. What is implemented: 32 hydrophones, with the reference summed
-   into the first hydrophone input of each board as two short chirp bursts per ping at
-   38–48 kHz, above the 20–35 kHz acoustic band. That needs an analogue summing node per
-   board and enough ADC bandwidth (the assumed 102.4 kSPS just allows it). Confirm this
-   matches what the hardware can do, or say which variant to build instead.
+5. **Board batching: settled by the plan.** `popoto_4x7` follows it: one dedicated
+   reference input per board, 7 hydrophones each, 28 in all; the sync stage aligns the
+   boards and the reference channels are dropped before beamforming. `popoto_4x8` (32
+   hydrophones, reference summed into one input per board) stays as an alternative the
+   plan does not describe.
 6. **Copyleft test oracles.** Bellhop / Acoustics Toolbox and bellhopcuda (GPL-3), k-Wave
    (LGPL-3) and PyMUST (LGPL) are proposed as separate-process oracles only, as the brief
    allows. Nothing copyleft is installed in the build or linked. Say if any of these should
@@ -83,6 +83,23 @@ Updated at the end of each milestone. Newest facts first within each section.
    TR 9407, put it in `docs/refs/`. PICMUS data itself is
    reachable through a Hugging Face mirror (`zeahub/picmus`, a converted layout); the
    published PICMUS reference numbers could not be fetched, so none are quoted yet.
+
+## Differences from the plan
+
+- **Phase 3 (0.5–1 MHz, 64 elements, 20–50 m)** has no sonar config; the brief's list of
+  named sonars skips it.
+- **`sas_auv`** uses a 0.64 m receive array (16 × 4 cm) advancing 0.32 m per ping. The
+  plan's example is a 0.32 m array at about 0.8 m/s. Same rule (advance half the array
+  per ping), different size.
+- **Popoto noise level.** The plan's Phase 0 estimate (37 dB at 1 km, 13 dB at 2 km) does
+  not state its noise level; 38 dB re 1 µPa²/Hz reproduces it and is what the test uses.
+- **Phase 1 range resolution.** The plan says about 0.5 mm; the `l12_5d` config assumes a
+  50% bandwidth pulse and measures 0.28 mm. The probe's real bandwidth at 5 MHz is unknown.
+- **Receive ring.** The plan places the 1024-frame default in `scanner_hardware.py`; at the
+  pinned commit it is `HololinkTransportConfig.rx_pages` in the C++ transport header
+  (`HOLOSCAN_NOTES.md`).
+- The plan's AUV compute table agrees with what the Sensor Bridge source shows (RoCE on
+  ConnectX hosts only).
 
 ## Discrepancies between the brief and the references
 

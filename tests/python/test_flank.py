@@ -140,7 +140,8 @@ def test_array_pattern_of_a_uniform_array_has_grating_lobes_where_expected():
 # --- transmit blanking ---------------------------------------------------------------------------
 
 def test_transmit_blanking_zeroes_the_pulse_interval():
-    sonar = SonarModel.load("popoto_8", {"receive": {"window": {"range": [0.0, 150.0]}}})   # starts at transmit
+    sonar = SonarModel.load("popoto_8", {"receive": {"window": {"range": [0.0, 150.0]}},     # starts at transmit
+                                          "transmit": {"waveform": {"duration": 0.05}}})
     rec = simulate_ping(sonar, make_pose(), Scene(), noise_rms=1e-3, adc=False, rng=np.random.default_rng(0))
     flank.blank_transmit(rec, guard=0.01, taper=0.005)
     x = rec.samples.array
@@ -204,3 +205,41 @@ def test_detection_range_follows_from_the_snr_curve():
     assert eq.table([1000.0])[0]["tl_db"] == pytest.approx(60.0 + eq.absorption_db_per_m() * 1000.0)
     with pytest.raises(ValueError, match="uncalibrated"):
         SonarEquation.from_sonar(SonarModel.load("l12_5d"), NOISE_SPECTRUM)
+
+
+# --- the plan's link budgets ----------------------------------------------------------------------
+
+@pytest.mark.parametrize("range_m, source_level, target_db, plan_snr", [
+    (100.0, 170.0, 0.0, 60.0), (1000.0, 180.0, 0.0, 29.0), (10000.0, 200.0, 0.0, -3.0),
+    (10000.0, 210.0, 0.0, 7.0), (10000.0, 200.0, 20.0, 17.0), (1000.0, 180.0, 10.0, 39.0),
+])
+def test_sonar_equation_reproduces_the_plans_phase_6_link_budget(range_m, source_level, target_db, plan_snr):
+    """docs/plan, Phase 6: spherical spreading, 12 C seawater, noise 45 dB re 1 uPa^2/Hz at
+    8 kHz, 1 s chirp, 15 dB of array gain. (The plan used the Ainslie-McColm formula.)"""
+    eq = SonarEquation(source_level_db=source_level, center_frequency=8e3, bandwidth=4e3,
+                       pulse_duration=1.0, n_elements=32, noise_spectrum_db=45.0,
+                       target_strength_db=target_db, temperature=12.0, salinity=35.0,
+                       absorption_model="ainslie_mccolm", array_gain_db=15.0)
+    assert eq.snr(range_m) == pytest.approx(plan_snr, abs=1.0)
+    assert eq.absorption_db_per_m() * 1000 == pytest.approx(0.64, abs=0.06)       # plan: ~0.64 dB/km
+
+
+def test_sonar_equation_against_the_plans_popoto_estimate():
+    """docs/plan, Phase 0: +10 dB target, 0.5 s chirp, eight elements, 190 dB source:
+    about 37 dB at 1 km, 13 dB at 2 km, none by 3 km. The plan does not state the noise
+    level it used; 38 dB re 1 uPa^2/Hz reproduces both figures."""
+    eq = SonarEquation(source_level_db=190.0, center_frequency=27e3, bandwidth=10e3, pulse_duration=0.5,
+                       n_elements=8, noise_spectrum_db=38.0, target_strength_db=10.0,
+                       temperature=12.0, salinity=35.0, absorption_model="ainslie_mccolm")
+    assert eq.absorption_db_per_m() * 1000 == pytest.approx(5.6, abs=0.4)         # plan: ~5.6 dB/km
+    assert eq.snr(1000.0) == pytest.approx(37.0, abs=1.5)
+    assert eq.snr(2000.0) == pytest.approx(13.0, abs=1.5)
+    assert eq.snr(3000.0) < 0.0
+
+
+def test_configs_carry_the_plans_front_end_numbers():
+    p = SonarModel.load("popoto_8").config
+    assert p["receive"]["gain_db"] == 43.0                      # 43 dB preamp
+    assert p["receive"]["adc_full_scale"] == pytest.approx(0.0185 * 10 ** (43 / 20), rel=0.01)   # 37 mVpp at the input
+    assert p["transmit"]["waveform"]["duration"] == 0.5
+    assert SonarModel.load("flank_32").config["receive"]["sensitivity_db"] == -208.0

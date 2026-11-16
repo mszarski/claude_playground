@@ -229,3 +229,47 @@ def test_direct_path_method_gives_offsets():
     est = sync.estimate_clocks_direct_path(rec)
     true_offset = np.array(clocks["offset"]) - clocks["offset"][0]
     np.testing.assert_allclose(est.offset, true_offset, atol=0.5e-6)
+
+
+# --- the plan's batching scheme: a dedicated reference input per board (28 hydrophones) ------
+
+def four_by_seven_ping(single_clock=False, seed=0, range_m=600.0, bearing_deg=0.0):
+    over = {"receive": {"window": {"range": [range_m - 150.0, range_m + 150.0]}},
+            "transmit": {"waveform": {"duration": 0.05}}}
+    if single_clock:
+        over["receive"]["boards"] = [
+            {"first": 8 * i, "count": 8, "clock_offset": 0.0, "clock_drift_ppm": 0.0,
+             "reference_channel": 8 * i + 7} for i in range(4)]
+    sonar = SonarModel.load("popoto_4x7", over)
+    b = np.radians(bearing_deg)
+    target = range_m * np.array([np.sin(b), np.cos(b), 0.0])
+    truth = {}
+    rec = simulate_ping(sonar, make_pose(), Scene().add_points([target], target_strength_db=10.0),
+                        environment={"sound_speed": C}, absorption_model="none", adc=False,
+                        rng=np.random.default_rng(seed), clock_truth=truth)
+    return sonar, rec, target, truth
+
+
+def test_dedicated_reference_inputs_leave_28_hydrophones():
+    sonar, rec, target, truth = four_by_seven_ping()
+    x = rec.samples.array
+    fs = rec.samples.sample_rate
+    # Reference inputs carry the two bursts and nothing else: no echo on them.
+    echo = slice(int(0.19 * fs), int(0.30 * fs))          # target echo, between the bursts
+    assert np.abs(x[7, echo]).max() == 0 and np.abs(x[6, echo]).max() > 0
+    ref = sonar.config["receive"]["reference"]
+    report = sync.synchronise(rec, ref)
+    true_offset = np.array(truth["offset"]) - truth["offset"][0]
+    np.testing.assert_allclose(report.estimate.offset, true_offset, atol=0.1e-6)
+    assert report.ok and report.residual.max() < report.tolerance
+    hydro = sync.drop_reference_channels(rec)
+    assert hydro.samples.n_channels == 28
+    assert gs.validate(hydro).ok, str(gs.validate(hydro))
+    assert hydro.metadata.channel_element == [i for i in range(32) if i % 8 != 7]
+    # Beam pattern of the 28 synchronised hydrophones against the same array on one clock.
+    _, ideal, _, _ = four_by_seven_ping(single_clock=True)
+    ideal = sync.drop_reference_channels(ideal)
+    bearings = np.radians(np.linspace(-12.0, 12.0, 481))
+    synced, single = beam_pattern(hydro, 600.0, bearings), beam_pattern(ideal, 600.0, bearings)
+    strong = single > 0.1 * single.max()
+    assert np.abs(20 * np.log10(synced[strong] / single[strong])).max() < 1.0

@@ -26,8 +26,11 @@ receive:
   sample_rate: 64000.0
   adc_bits: 24
   adc_full_scale: 2.5            # V
-  sensitivity_db: -180.0
-  gain_db: 0.0
+  # Plan, Phase 6: piezo elements with a preamp at each; AS-1 (-208 dBV re 1 uPa) as the
+  # calibration reference. 28 dB of preamp gain is a placeholder.
+  sensitivity_db: -208.0
+  gain_db: 28.0
+  bandpass_hz: [2000.0, 20000.0]
   window: {range: [100.0, 10000.0]}   # 13.3 s round trip at 10 km
 
 unconfirmed:

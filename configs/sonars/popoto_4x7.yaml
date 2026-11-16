@@ -1,0 +1,40 @@
+# Four Popoto boards batched as the plan describes (Phase 0, "More than eight channels by
+# batching boards"): one input on every board carries a shared reference signal, leaving
+# 7 hydrophones per board, 28 in all. Each board has its own sample clock; the sync stage
+# aligns them from the reference, and the four reference channels are then dropped.
+base: popoto_8
+name: popoto_4x7
+
+array:
+  layout_choice: line28
+  layouts:
+    line28:
+      # 32 channels: on each board, inputs 0-6 are hydrophones and input 7 is the
+      # reference. Hydrophones are spaced 11.1 cm over 3 m; a reference channel has no
+      # acoustic position (it repeats its neighbour's and is never beamformed).
+      layout: line
+      positions: [-1.5, -1.3889, -1.2778, -1.1667, -1.0556, -0.9444, -0.8333, -0.8333,
+                  -0.7222, -0.6111, -0.5, -0.3889, -0.2778, -0.1667, -0.0556, -0.0556,
+                  0.0556, 0.1667, 0.2778, 0.3889, 0.5, 0.6111, 0.7222, 0.7222,
+                  0.8333, 0.9444, 1.0556, 1.1667, 1.2778, 1.3889, 1.5, 1.5]
+
+receive:
+  boards:
+    - {first: 0,  count: 8, clock_offset: 0.0,      clock_drift_ppm: 0.0,  jitter_rms: 2.0e-8, reference_channel: 7}
+    - {first: 8,  count: 8, clock_offset: 3.1e-4,   clock_drift_ppm: 12.0, jitter_rms: 2.0e-8, reference_channel: 15}
+    - {first: 16, count: 8, clock_offset: -1.7e-4,  clock_drift_ppm: -8.0, jitter_rms: 2.0e-8, reference_channel: 23}
+    - {first: 24, count: 8, clock_offset: 5.2e-5,   clock_drift_ppm: 25.0, jitter_rms: 2.0e-8, reference_channel: 31}
+  reference:
+    mode: sync_chirp
+    dedicated: true              # the reference inputs carry no hydrophone signal
+    f_start: 22.0e3              # a dedicated input can carry an in-band reference
+    f_stop: 32.0e3
+    duration: 4.0e-3
+    level: 0.5                   # V peak at the ADC
+    lead: 5.0e-3
+    tail: 10.0e-3
+    channels: [7, 15, 23, 31]
+
+unconfirmed:
+  - receive.boards               # whether boards can be batched at all is a question for Popoto
+  - receive.reference

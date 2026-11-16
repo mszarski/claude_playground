@@ -89,6 +89,8 @@ def add_reference_signal(record: "core.PingRecord", sonar, clocks: dict) -> None
         if channel not in record.metadata.channel_element:
             continue
         row = record.metadata.channel_element.index(channel)
+        if ref.get("dedicated"):
+            x[row] = 0.0                      # a reference input has no hydrophone on it
         offset = clocks["offset"][board]
         drift = clocks["drift_ppm"][board] * 1e-6
         t_true = s.start_time + offset + n / (s.sample_rate * (1.0 + drift))

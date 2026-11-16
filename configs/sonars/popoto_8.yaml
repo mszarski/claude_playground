@@ -24,8 +24,8 @@ transmit:
   waveform:
     type: lfm
     f_start: 20.0e3
-    f_stop: 35.0e3
-    duration: 0.05
+    f_stop: 35.0e3                # the plan's example is a 22-32 kHz sweep inside this band
+    duration: 0.5                 # s, as in the plan's Phase 0 link budget
     window_alpha: 0.1
     source_level_db: 190.0       # dB re 1 uPa at 1 m
 
@@ -33,16 +33,18 @@ receive:
   kind: real
   sample_rate: 102400.0
   adc_bits: 24
-  adc_full_scale: 2.5            # V
-  sensitivity_db: -180.0         # dB re 1 V/uPa, hydrophone plus preamplifier
-  gain_db: 0.0
+  # Plan, Phase 0 (PMM6081 ICD): 43 dB preamp, 37 mVpp full scale at the input.
+  # Referred to the preamp output that is 18.5 mV * 10^(43/20) = 2.61 V peak.
+  adc_full_scale: 2.61           # V at the ADC
+  sensitivity_db: -208.0         # dB re 1 V/uPa: an AS-1 class passive hydrophone
+  gain_db: 43.0
   highpass_corner_hz: 100.0      # ICD value; 10 Hz has also been quoted
   window: {range: [50.0, 2000.0]}
 
 unconfirmed:
   - receive.sample_rate          # Popoto ADC rate
   - receive.adc_bits
-  - receive.sensitivity_db
+  - receive.sensitivity_db       # depends on the hydrophones wired to the board
   - receive.highpass_corner_hz
   - receive.simultaneous_sampling   # whether the 8 inputs record simultaneously
   - transmit.waveform.duration

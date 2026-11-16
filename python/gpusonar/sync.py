@@ -204,6 +204,43 @@ def resample_boards(record, estimate: ClockEstimate) -> None:
     record.metadata = meta
 
 
+def select_channels(record, rows) -> "core.PingRecord":
+    """A copy of `record` holding only the given channel rows (samples, geometry,
+    calibration and channel maps)."""
+    rows = [int(r) for r in rows]
+    out = record.copy()
+    s = out.samples
+    kind = s.kind
+    s.array = record.samples.array[rows]
+    s.kind = kind
+    out.samples = s
+    geo = out.geometry
+    geo.rx = [record.geometry.rx[r] for r in rows]
+    out.geometry = geo
+    cal = out.calibration
+    cal.gain = [record.calibration.gain[r] for r in rows]
+    cal.phase = [record.calibration.phase[r] for r in rows]
+    cal.delay = [record.calibration.delay[r] for r in rows]
+    cal.position_offset = [record.calibration.position_offset[r] for r in rows]
+    out.calibration = cal
+    meta = out.metadata
+    meta.channel_element = [record.metadata.channel_element[r] for r in rows]
+    meta.channel_board = [record.metadata.channel_board[r] for r in rows]
+    boards = meta.boards
+    for b in boards:
+        b.reference_channel = -1          # row numbers no longer apply
+    meta.boards = boards
+    out.metadata = meta
+    return out
+
+
+def drop_reference_channels(record) -> "core.PingRecord":
+    """After synchronisation: the record without the boards' dedicated reference inputs,
+    ready for beamforming on hydrophones only."""
+    refs = {b.reference_channel for b in record.metadata.boards if b.reference_channel >= 0}
+    return select_channels(record, [r for r in range(record.samples.n_channels) if r not in refs])
+
+
 @dataclass
 class SyncReport:
     estimate: ClockEstimate
