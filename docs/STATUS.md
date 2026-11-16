@@ -144,23 +144,49 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 ## The owner's designs (traceable; see `DESIGN.md`)
 
-- Sonars: `fls_120k` (300 m), `fls_170k` (600 m), `fls_330k` (300 m), each 128 elements
-  with a 120 degree sector and a configurable vertical field of view and tilt (`fov`
-  block); `sas_minsas120` (330 kHz, 40 kHz, 1.09 m array, modelled on the Kraken MINSAS
-  120); `popoto_array` (any number of hydrophones, boards of eight follow).
-- Scenarios: `fls_{120,170,330}k_transit` (AUV at 20 m under way; a boat hull under way,
-  an anchored boat, a buoy, a seabed pinnacle; seabed and surface reverberation fixed in
-  the world), `sas_minsas_survey` (two legs over a wreck, cable, rocks, calibration cube),
-  `popoto_far_mover` (moving ownship, ship-sized mover at 6 km).
-- `tools/design_report.py` derives every design number from the config files, checks 25
+- Sonars: `fls_120k` (300 m), `fls_170k` (450 m, agreed down from 600 m), `fls_330k`
+  (300 m), each 128 elements with a 120 degree sector and a configurable vertical field of
+  view and tilt (`fov` block); `sas_minsas120` (330 kHz, 40 kHz, 1.09 m array, modelled on
+  the Kraken MINSAS 120, now set for 2.1 cm along track); `popoto_array` (any number of
+  hydrophones, boards of eight follow); `popoto_long_range` (32 hydrophones, 4–6 kHz,
+  197 dB: the 12 km design).
+- **12 km with the Popoto boards** (`tools/popoto_range_study.py`, `DESIGN.md` section 5):
+  the 27.5 kHz band cannot do it; 4 to 6 kHz can, with 195 dB from 32 hydrophones (about
+  270 W acoustic, omnidirectional) for 13 dB under spherical spreading. The shipped design
+  has 2 dB more. In simulation it tracks a ship at 12 km in 100 m of water over sand, and at
+  8 km in a winter duct; it does **not** see the same ship at 4 km under a summer
+  thermocline over mud. No projector is chosen; electrical power is unknown.
+- **MINSAS resolution**, measured on a simulated point target: 2.0 cm along track and
+  1.9 cm in ground range unweighted; the survey figures use Hamming range weighting
+  (2.6 cm, sidelobes −41 dB). Along-track ambiguities were −15 dB at the old 0.4 m per
+  ping and are −36 dB at 0.544 m (half the array); the survey speed is now 2.18 m/s.
+  The receive array went from 32 elements at 3.4 cm to 48 at 2.27 cm (same length): the
+  coarser pitch left ghost copies of the cable and wreck 6.9 m along track (−42 dB on a
+  point; now −47 to −54 dB at 10.3 m, still visible beside the brightest objects).
+- Scenarios: `fls_{120,170,330}k_transit`; `fls_120k_cluttered_seabed`,
+  `fls_120k_rough_surface`, `fls_170k_traffic` (boats with keel, propeller and wake;
+  boulders, debris, a pipeline; waves); `sas_minsas_survey`, `sas_minsas_boulder_field`,
+  `sas_minsas_rocky_ripples`; `popoto_far_mover`, `popoto_12km`, `popoto_env_*` (four
+  oceans). Results, figures and animations in `SCENARIOS.md`.
+- `tools/design_report.py` derives every design number from the config files, checks 30
   requirements, draws the diagrams and writes `DESIGN.md`; `test_design.py` fails if a
-  requirement is unmet or the document is stale. `CONFIGURATION.md` lists every key.
+  requirement is unmet or the document is stale. `tools/scenario_diagrams.py` draws every
+  scenario's geometry from its file. `CONFIGURATION.md` lists every key.
 - Everything runs on a CPU (`README.md`, "Everything on a CPU"); CPU run times are in
-  `SCENARIOS.md`.
-- What the design numbers say that needs a decision: the 170 kHz sonar has only 14 dB of
-  noise-limited margin on a boat hull at 600 m; the SAS at 215 dB keeps one cell of sand
-  13 dB above noise to about 117 m, not 200 m; the far-mover scenario needed a 1 s sweep at
-  185 dB to hold a ship at 6 km on 32 hydrophones (0.5 s at 180 dB did not).
+  `SCENARIOS.md`. The host backend used one core in these runs.
+- Found along the way, and what was done:
+  - At 330 kHz one cell of sea surface at 250 m is below the noise floor, and with strong
+    surface reverberation at 10 m/s wind nothing was detected, the boat included. The
+    rough-sea example was moved to 120 kHz, where the waves show.
+  - In the cluttered and rough scenes the boats are tracked but so is the clutter (65 and
+    more tracks). There is no classification.
+  - In deep water the ship's echo arrives about 300 m late in range, consistent with a
+    bottom path; ranges are not corrected for propagation.
+  - At 330 kHz the anchored boat in `fls_330k_transit` was not tracked in the full-size
+    run. Not investigated.
+- What the design numbers say that needs a decision: the SAS at 215 dB keeps one cell of
+  sand 13 dB above noise to about 117 m, not 200 m; a 197 dB source at 5 kHz is a large
+  projector and amplifier for a small vehicle.
 - Not real: source levels, sensitivities, element sizes and ADC choices are design values
   in the configs, flagged `unconfirmed`. Nothing is built.
 
@@ -168,7 +194,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 - Scene objects (`sim/scene.py`, `test_scene_objects.py`): points, polar grids, wires,
   seafloor patches (flat, sloped, rippled), plates, spheres, boxes, cylinders, rocks, pool
-  walls, volume clutter.
+  walls, volume clutter, hulls, cables, boats (hull, keel, propeller, wake), sea-surface
+  wave facets, debris.
   Surface points carry a normal and scatter by Lambert's law about it; spheres and boxes
   cast shadows (a sphere on the seafloor leaves the floor behind it more than 10 dB
   darker in the forward-looking image).
@@ -184,9 +211,10 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `flank_patrol`, `popoto_trial_*`. Other scenarios: a point grid per sonar,
   `stripmap_points`, `rail_points`, `rail_position_errors`, `pool_wires_l12_5d`,
   `buried_cylinder`, `flank_target_{1,5,10}km`.
-- Gaps in those scenes: no surface or floor multipath in the pool scenes; one ping and a
-  stationary platform in the forward-looking ones; isovelocity water in the long-range
-  ones; large surfaces have fewer scatterers than resolution cells; no specular echoes.
+- Gaps in those scenes: no surface or floor multipath in the pool scenes; direct paths
+  only to objects in the forward-looking sea scenes; range-independent oceans in the
+  long-range ones; frozen wave facets and a wake that does not grow; large surfaces have
+  fewer scatterers than resolution cells; no specular echoes.
 - In `flank_patrol` the −3 dB small vehicle is not detected, and multipath splits the
   wreck into several tracks (5 confirmed tracks for 2 objects).
 

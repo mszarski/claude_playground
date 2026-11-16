@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon, Wedge  # noqa: E402
 
 from gpusonar import acoustics  # noqa: E402
-from gpusonar.config import load_scenario_config, load_sonar_config  # noqa: E402
+from gpusonar.config import list_configs, load_scenario_config, load_sonar_config  # noqa: E402
 from gpusonar.sim.noise import wenz_spectrum_db  # noqa: E402
 from gpusonar.sonar import SonarModel  # noqa: E402
 from gpusonar.sonar_equation import SonarEquation  # noqa: E402
@@ -46,25 +46,26 @@ plt.rcParams.update({"figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "sa
                      "grid.linewidth": 0.6, "axes.spines.top": False, "axes.spines.right": False,
                      "font.size": 10})
 
-DESIGN_SONARS = ["fls_120k", "fls_170k", "fls_330k", "sas_minsas120", "popoto_array"]
+DESIGN_SONARS = ["fls_120k", "fls_170k", "fls_330k", "sas_minsas120", "popoto_array", "popoto_long_range"]
 SCENARIO_OF = {"fls_120k": "fls_120k_transit", "fls_170k": "fls_170k_transit", "fls_330k": "fls_330k_transit",
-               "sas_minsas120": "sas_minsas_survey", "popoto_array": "popoto_far_mover"}
+               "sas_minsas120": "sas_minsas_survey", "popoto_array": "popoto_far_mover",
+               "popoto_long_range": "popoto_12km"}
 # Assumptions of the link budgets (not requirements): stated in the report.
-# SAS: one resolution cell of seabed, 3.3 cm x 1.9 cm, Lambert -27 dB at 15 degrees grazing:
+# SAS: one resolution cell of seabed, 2.1 cm x 1.9 cm, Lambert -27 dB at 15 degrees grazing:
 # -27 + 10 log10(sin^2 15) + 10 log10(0.033 x 0.019) = -70.7 dB.
-SAS_CELL_TS = -27.0 + 10 * np.log10(np.sin(np.radians(15.0)) ** 2) + 10 * np.log10(0.033 * 0.01875)
+SAS_CELL_TS = -27.0 + 10 * np.log10(np.sin(np.radians(15.0)) ** 2) + 10 * np.log10(0.021 * 0.01875)
 TARGET_STRENGTH_DB = {"fls_120k": 5.0, "fls_170k": 5.0, "fls_330k": 5.0, "sas_minsas120": float(SAS_CELL_TS),
-                      "popoto_array": 25.0}
+                      "popoto_array": 25.0, "popoto_long_range": 25.0}
 TARGET_NOTE = {"fls_120k": "small boat hull", "fls_170k": "small boat hull", "fls_330k": "small boat hull",
-               "sas_minsas120": "one resolution cell of seabed (3.3 cm x 1.9 cm) at -27 dB Lambert and 15 degrees grazing; "
+               "sas_minsas120": "one resolution cell of seabed (2.1 cm x 1.9 cm) at -27 dB Lambert and 15 degrees grazing; "
                                 "array gain includes the pings of the synthetic aperture at full range",
-               "popoto_array": "ship-sized target"}
+               "popoto_array": "ship-sized target", "popoto_long_range": "ship-sized target"}
 WIND = 5.0
 
 
 def sonar_for(name: str) -> SonarModel:
     """The sonar as its scenario uses it (the Popoto array is scaled there)."""
-    if name == "popoto_array":
+    if name.startswith("popoto"):
         over = load_scenario_config(SCENARIO_OF[name])["sonar_overrides"]
         over = {k: v for k, v in over.items() if k in ("array", "transmit")}
         return SonarModel.load(name, over)
@@ -84,7 +85,7 @@ def derive(name: str) -> dict:
     length = s.n_elements * pitch
     rx = cfg["receive"]
     r_max = float(rx["window"]["range"][1])
-    if name == "popoto_array":
+    if name.startswith("popoto"):
         r_max = float(load_scenario_config(SCENARIO_OF[name])["sonar_overrides"]["receive"]["window"]["range"][1])
     fs, bits = float(rx["sample_rate"]), int(rx.get("adc_bits", 16))
     duration = float(w["duration"])
@@ -148,7 +149,7 @@ def requirements(D: dict) -> list:
     def add(rid, text, where, value, ok):
         out.append({"id": rid, "requirement": text, "set_in": where, "value": value, "met": bool(ok)})
 
-    for name, f, rng, vfov, tilted in (("fls_120k", 120.0, 300.0, 20.0, False), ("fls_170k", 170.0, 600.0, 5.0, True),
+    for name, f, rng, vfov, tilted in (("fls_120k", 120.0, 300.0, 20.0, False), ("fls_170k", 170.0, 450.0, 5.0, True),
                                        ("fls_330k", 330.0, 300.0, 5.0, True)):
         d = D[name]
         tag = name.split("_")[1].upper()
@@ -181,13 +182,13 @@ def requirements(D: dict) -> list:
     types = {i["label"]: i["type"] for i in sc["scene"]}
     add("SAS-1", "SAS like the Kraken MINSAS 120 at 330 kHz", "configs/sonars/sas_minsas120.yaml: transmit.waveform, array",
         f"{d['centre_frequency_khz']:.0f} kHz, {d['bandwidth_khz']:.0f} kHz, {d['array_length_m']:.2f} m array, "
-        f"{d['along_track_resolution_cm']:.1f} x {d['range_resolution_cm']:.1f} cm (published: 40 kHz, 1.09 m, 3.3 x 3.0 cm)",
+        f"{d['along_track_resolution_cm']:.1f} x {d['range_resolution_cm']:.1f} cm (published: 40 kHz, 1.09 m, 3.3 x 3.0 cm, or 2.1 x 1.9 cm post-processed)",
         abs(d["centre_frequency_khz"] - 330) < 0.5 and abs(d["bandwidth_khz"] - 40) < 0.5
-        and abs(d["array_length_m"] - 1.09) < 0.01 and abs(d["along_track_resolution_cm"] - 3.3) < 0.05)
+        and abs(d["array_length_m"] - 1.09) < 0.01 and abs(d["along_track_resolution_cm"] - 2.1) < 0.05)
     add("SAS-2", "Survey paths", "configs/scenarios/sas_minsas_survey.yaml: platform.legs",
         f"{len(sc['platform']['legs'])} legs, headings " + ", ".join(f"{leg['heading_deg']:.0f}" for leg in sc["platform"]["legs"])
         + f" degrees; {sc['platform']['speed'] * sc['pings']['interval']:.2f} m per ping (limit {d['max_advance_per_ping_m']:.3f} m)",
-        len(sc["platform"]["legs"]) >= 2 and sc["platform"]["speed"] * sc["pings"]["interval"] <= d["max_advance_per_ping_m"])
+        len(sc["platform"]["legs"]) >= 2 and sc["platform"]["speed"] * sc["pings"]["interval"] <= d["max_advance_per_ping_m"] + 1e-6)
     add("SAS-3", "Seabed with a shipwreck, a cable, rocks and a cube for calibration",
         "configs/scenarios/sas_minsas_survey.yaml: scene", ", ".join(types),
         {"wreck_hull", "cable", "rocks", "calibration_cube"} <= set(types))
@@ -204,6 +205,34 @@ def requirements(D: dict) -> list:
     add("POP-2", "The Popoto array scales to more elements", "configs/sonars/popoto_array.yaml: array.count, receive.board_size",
         "; ".join(f"{s.n_elements} hydrophones on {len(s.boards)} boards" for s in counts),
         [s.n_elements for s in counts] == [8, 16, 32, 64] and [len(s.boards) for s in counts] == [1, 2, 4, 8])
+    d = D["popoto_long_range"]
+    study = json.loads((ROOT / "docs" / "design" / "popoto_range_study.json").read_text())
+    best = study["fixed_count"][str(d["elements"])]
+    add("POP-3", "Frequency and source level that take the Popoto array to 12 km",
+        "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)",
+        f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones, {d['pulse_ms'] / 1e3:.0f} s pulse: "
+        f"{d['_eq'].snr(12000.0):.0f} dB at 12 km with spherical spreading (study: {best['source_level_db']:.0f} dB at "
+        f"{best['best_frequency_hz'] / 1e3:.1f} kHz for 13 dB)",
+        d["_eq"].snr(12000.0) >= 13.0 and d["max_range_m"] >= 12000.0)
+    envs = sorted(n for n in list_configs("scenarios") if n.startswith("popoto_env_"))
+    seen = set()
+    for n in envs:
+        e = load_scenario_config(n)["propagation"]["environment"]
+        seen.add((e["depth"], e["bottom_speed"], tuple(e["ssp_speed"])))
+    add("POP-4", "Popoto examples with different ocean characteristics, sound-speed profiles, bottom types and depths",
+        "configs/scenarios/popoto_env_summer_mud_60m.yaml: propagation.environment (and the other popoto_env_* files)", f"{len(envs)} environments: " + ", ".join(envs),
+        len(envs) >= 4 and len(seen) == len(envs))
+    extra = {n: {i["type"] for i in load_scenario_config(n)["scene"]}
+             for n in ("fls_120k_cluttered_seabed", "fls_120k_rough_surface", "fls_170k_traffic")}
+    add("FLS-X", "More FLS examples: a realistic boat, clutter on the seabed, waves on the sea surface",
+        "configs/scenarios/fls_120k_cluttered_seabed.yaml: scene (also fls_120k_rough_surface, fls_170k_traffic)",
+        "; ".join(f"{n}: {', '.join(sorted(t))}" for n, t in extra.items()),
+        all("boat" in t for t in extra.values()) and "debris" in extra["fls_120k_cluttered_seabed"]
+        and "sea_surface" in extra["fls_120k_rough_surface"])
+    rocks = {n: sum(int(i.get("count", 0)) for i in load_scenario_config(n)["scene"] if i["type"] == "rocks")
+             for n in ("sas_minsas_boulder_field", "sas_minsas_rocky_ripples")}
+    add("SAS-4", "More SAS examples with rocks", "configs/scenarios/sas_minsas_boulder_field.yaml: scene (also sas_minsas_rocky_ripples)",
+        "; ".join(f"{n}: {c} rocks" for n, c in rocks.items()), all(c >= 20 for c in rocks.values()))
     for name in DESIGN_SONARS:
         cfg = load_sonar_config(name)
         add(f"CFG-{name}", f"`{name}`: elements and array configurable",
@@ -323,7 +352,7 @@ def draw_link_budgets(D, path):
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.6), constrained_layout=True)
     groups = [("Forward-looking sonars", ["fls_120k", "fls_170k", "fls_330k"], np.geomspace(20, 1500, 200)),
               ("SAS (one seabed resolution cell)", ["sas_minsas120"], np.geomspace(10, 400, 200)),
-              ("Popoto array, 6-10 kHz (hydrophone count)", ["popoto_array"], np.geomspace(500, 30000, 200))]
+              ("Popoto arrays (6-10 kHz by count; 12 km design)", ["popoto_array"], np.geomspace(500, 30000, 200))]
     for ax, (title, names, r) in zip(axes, groups):
         if names == ["popoto_array"]:
             eq = D["popoto_array"]["_eq"]
@@ -333,8 +362,15 @@ def draw_link_budgets(D, path):
                                   temperature=eq.temperature, salinity=eq.salinity)
                 ax.plot(r / 1e3, e.snr(r), color=col, lw=2, label=f"{n} hydrophones")
                 ax.annotate(f"{n}", (r[-1] / 1e3, e.snr(r[-1])), textcoords="offset points", xytext=(4, 0), fontsize=8, va="center")
+            lr = D["popoto_long_range"]
+            ax.plot(r / 1e3, lr["_eq"].snr(r), color=INK, lw=2, ls="--",
+                    label=f"popoto_long_range: {lr['elements']} at {lr['centre_frequency_khz']:.0f} kHz, {lr['source_level_db']:.0f} dB")
+            ax.plot(12.0, lr["_eq"].snr(12000.0), "o", color=INK, ms=8, mec=SURFACE, mew=2)
+            ax.annotate(f"{lr['_eq'].snr(12000.0):.0f} dB at 12 km", (12.0, lr["_eq"].snr(12000.0)), textcoords="offset points",
+                        xytext=(8, 14), fontsize=8)
             ax.set_xlabel("range (km)")
             ax.axvline(6.0, color=MUTED, lw=0.8, ls=":")
+            ax.axvline(12.0, color=MUTED, lw=0.8, ls=":")
         else:
             for name, col in zip(names, (BLUE, ORANGE, AQUA)):
                 d = D[name]
@@ -502,7 +538,7 @@ def write_report(D, reqs, out_md):
              "- **One description per scenario.** `configs/scenarios/<name>.yaml` names a sonar, the platform's motion,\n"
              "  the scene, the propagation model, reverberation and noise.\n"
              "- **Runs on a CPU.** Every stage has a host implementation; the CUDA backend is optional and gives the same\n"
-             "  results. Section 7 lists measured CPU run times.\n")
+             "  results. `SCENARIOS.md` lists measured CPU run times.\n")
     L.append("## 2. Requirements and where each is met\n")
     L.append("| Id | Requirement (owner) | Set in | Value found | Met |\n| --- | --- | --- | --- | --- |")
     for r in reqs:
@@ -568,7 +604,41 @@ def write_report(D, reqs, out_md):
              f"{d['range_for_13_db_m']:.0f} m, not the {d['max_range_m']:.0f} m of the receive window "
              f"({d['snr_at_max_range_db']:.0f} dB there). Objects are much stronger than one cell of sand. The array gain "
              "is evaluated at full range and is smaller closer in, so the curve is optimistic at short range.\n"
-             "- **170 kHz:** the margin at 600 m is thin; a boat hull there is near the detection threshold before any reverberation.\n")
+             "- **170 kHz:** specified to 450 m after the first budget showed 14 dB at 600 m.\n")
+    study = json.loads((ROOT / "docs" / "design" / "popoto_range_study.json").read_text())
+    cur, lr = study["current_array"], D["popoto_long_range"]
+    L.append("### Popoto array to 12 km: which frequency and how much power\n")
+    L.append("![Source level needed for 12 km against frequency](design/popoto_range_study.png)\n")
+    L.append(f"From `tools/popoto_range_study.py`: target +{study['target_strength_db']:.0f} dB, {study['pulse_s']:.0f} s pulse, "
+             f"{study['snr_db']:.0f} dB at the beamformer output, ambient noise at 5 m/s wind, spherical spreading plus absorption.\n")
+    L.append(f"- **The present band cannot do it.** At {cur['frequency_hz'] / 1e3:.1f} kHz absorption alone costs about "
+             f"{float(acoustics.absorption(cur['frequency_hz'], 12.0, 35.0, 50.0, model='ainslie_mccolm')) * 24000.0:.0f} dB over the 24 km round trip; 12 km would need "
+             f"{cur['source_level_needed_at_range_db']:.0f} dB. With {cur['hydrophones']} hydrophones at {cur['source_level_db']:.0f} dB "
+             f"that band reaches about {cur['reach_at_its_source_level_m'] / 1e3:.1f} km on this budget.\n"
+             "- **The frequency has to come down to 4 to 6 kHz.** Below that, ambient noise rises and a half-wavelength array of a\n"
+             "  given count gets long; above it, absorption takes over.\n")
+    L.append("| Array (half-wavelength spacing) | Best frequency | Array length | Source level for 12 km | Acoustic power, omnidirectional projector |\n| --- | --- | --- | --- | --- |")
+    for n, v in study["fixed_count"].items():
+        L.append(f"| {n} hydrophones | {v['best_frequency_hz'] / 1e3:.1f} kHz | {v['array_length_m']:.1f} m | {v['source_level_db']:.0f} dB | {v['acoustic_power_w_omni']:.0f} W |")
+    for a, v in study["fixed_aperture"].items():
+        L.append(f"| {float(a):.1f} m aperture ({v['hydrophones']} hydrophones) | {v['best_frequency_hz'] / 1e3:.1f} kHz | {float(a):.1f} m | {v['source_level_db']:.0f} dB | {v['acoustic_power_w_omni']:.0f} W |")
+    L.append(f"\n- **Chosen (`popoto_long_range`):** {lr['elements']} hydrophones at {lr['pitch_mm'] / 10:.0f} cm ({lr['array_length_m']:.1f} m), "
+             f"{lr['centre_frequency_khz'] - lr['bandwidth_khz'] / 2:.0f} to {lr['centre_frequency_khz'] + lr['bandwidth_khz'] / 2:.0f} kHz, "
+             f"{lr['pulse_ms'] / 1e3:.0f} s, {lr['source_level_db']:.0f} dB: {lr['_eq'].snr(12000.0):.0f} dB at 12 km on this budget. "
+             "Acoustic power is 10^((SL - 170.8 - DI) / 10) W; a projector with directivity needs less, and electrical power is\n"
+             "  higher by the transducer's efficiency (not known until a projector is chosen). Doubling the hydrophones saves 3 dB;\n"
+             "  doubling the pulse length saves 3 dB.\n"
+             "- **Spherical spreading is the cautious case.** In shallow water sound is trapped between surface and bottom:")
+    if study["bellhop"]:
+        L.append("  Bellhop for 100 m of isovelocity water over sand, 3 m aperture, gives\n\n"
+                 "| Frequency | One-way loss, Bellhop | One-way loss, spherical | Source level for 12 km (noise only) |\n| --- | --- | --- | --- |")
+        for b in study["bellhop"]:
+            L.append(f"| {b['frequency_hz'] / 1e3:.0f} kHz | {b['one_way_loss_db']:.1f} dB | {b['spherical_one_way_loss_db']:.1f} dB | {b['source_level_db']:.0f} dB |")
+        L.append("\n  That is 14 dB less loss each way, but it holds only for that depth, bottom and profile, and at those levels\n"
+                 "  reverberation, not noise, decides detection. The `popoto_env_*` scenarios (`SCENARIOS.md`) show how much the\n"
+                 "  environment moves the answer: a downward-refracting summer profile over mud loses far more than spherical spreading.\n")
+    L.append("- The boards sample at 102.4 kHz and need no change for this band; the hydrophones, the projector and its power\n"
+             "  amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.\n")
     L.append("- These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short\n"
              "  and medium range.\n- Source levels are design values, not measured; the front-end sensitivities and gains in the configs are placeholders.\n"
              "- For the Popoto array the simulation uses Bellhop multipath, which in shallow water carries more energy to long\n"
@@ -578,7 +648,9 @@ def write_report(D, reqs, out_md):
         L.append(f"![{SCENARIO_OF[n]}](design/geometry_{SCENARIO_OF[n]}.png)\n")
     L.append("![sas_minsas_survey](design/geometry_sas_minsas_survey.png)\n")
     L.append("![popoto_far_mover](design/geometry_popoto_far_mover.png)\n")
-    L.append("Simulated images, detections and tracks for each of these are in `SCENARIOS.md`.\n")
+    L.append("Every scenario, including those not shown here, has a plan and side view drawn from its file by\n"
+             "`tools/scenario_diagrams.py` in `docs/scenarios/`. Simulated images, animations, detections and tracks are in\n"
+             "`SCENARIOS.md`.\n")
     return "\n".join(L)
 
 

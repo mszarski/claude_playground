@@ -51,11 +51,17 @@ SONAR_CMAKE_ARGS=-DSONAR_ENABLE_CUDA=OFF tools/test.sh      # build and run ever
 tools/build_oracles.sh ~/at                                 # Bellhop and KRAKEN (needs gfortran), prints two exports
 tools/build_nvus_reference.sh ~/nvus                        # the ultrasound reference's native module, patched
 tools/design_report.py                                      # docs/DESIGN.md and its diagrams
-tools/gallery.py --backend host                             # every realistic scenario, full size
-tools/gallery.py --backend host --quick                     # the same, thinned: a few minutes in all
+tools/scenario_diagrams.py                                  # docs/scenarios/<name>.png: geometry of every scenario
+tools/popoto_range_study.py --range 12000                   # frequency and source level for a range
+tools/gallery.py --backend host                             # every realistic scenario, full size: figure and animation
+tools/gallery.py --backend host --quick                     # the same, thinned
 ```
 
-Measured CPU run times of every scenario are in `docs/SCENARIOS.md`. Without Bellhop the
+The host backend ran on one core here: the full gallery is about five hours of one core
+in all, 72 minutes of it the flank patrol (per-scenario times are in `docs/SCENARIOS.md`), so run scenarios side by side with
+`--only`.
+
+Without Bellhop the
 long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everything else runs.
 
 ## Layout
@@ -77,9 +83,20 @@ long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everyt
 
 ## Realistic scenes for every mode
 
-`docs/SCENARIOS.md` shows one or more extended scenes per mode (pool, harbour, seafloor
-objects, wreck, mined seabed, rail, buried objects, flank patrol), each simulated and
-imaged end to end. Reproduce them with `tools/gallery.py` (`--quick` on a CPU; needs `matplotlib`).
+`docs/SCENARIOS.md` shows 25 extended scenes across the modes, each simulated and imaged
+end to end, each with a geometry diagram, a result figure and an animation:
+
+- forward-looking: pool, harbour, seafloor objects; the 120, 170 and 330 kHz designs under
+  way against boats, a buoy and a pinnacle; a cluttered seabed with a pipeline; a rough sea
+  with waves; boat traffic;
+- synthetic aperture: a wreck and a mined seabed with unknown motion; the MINSAS-class
+  survey over a wreck, cable and calibration cube; a boulder field; rippled sand with a
+  rock outcrop; the rail; buried objects in 3D;
+- long range: the flank patrol; the Popoto array against a ship at 6 km and at 12 km, and
+  in four other oceans (winter duct over sand, summer thermocline over mud, shallow gravel,
+  deep water over silt).
+
+Reproduce them with `tools/gallery.py` (needs `matplotlib`; `--quick` thins the scenes).
 
 ## Documents
 

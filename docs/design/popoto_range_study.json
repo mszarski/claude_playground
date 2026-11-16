@@ -1,0 +1,94 @@
+{
+  "range_m": 12000.0,
+  "target_strength_db": 25.0,
+  "pulse_s": 1.0,
+  "snr_db": 13.0,
+  "fixed_count": {
+    "8": {
+      "best_frequency_hz": 4161.823844826959,
+      "source_level_db": 201.16658947794718,
+      "array_length_m": 1.4416756267706636,
+      "acoustic_power_w_omni": 1088.0752903370862
+    },
+    "16": {
+      "best_frequency_hz": 4161.823844826959,
+      "source_level_db": 198.15628952130737,
+      "array_length_m": 2.8833512535413273,
+      "acoustic_power_w_omni": 544.037645168543
+    },
+    "32": {
+      "best_frequency_hz": 4161.823844826959,
+      "source_level_db": 195.14598956466756,
+      "array_length_m": 5.7667025070826545,
+      "acoustic_power_w_omni": 272.01882258427145
+    },
+    "64": {
+      "best_frequency_hz": 4161.823844826959,
+      "source_level_db": 192.13568960802775,
+      "array_length_m": 11.533405014165309,
+      "acoustic_power_w_omni": 136.00941129213572
+    }
+  },
+  "fixed_aperture": {
+    "1.5": {
+      "best_frequency_hz": 5501.079168879683,
+      "source_level_db": 200.32810724916553,
+      "hydrophones": 11,
+      "acoustic_power_w_omni": 897.0377605183662
+    },
+    "3.0": {
+      "best_frequency_hz": 5501.079168879683,
+      "source_level_db": 197.3178072925257,
+      "hydrophones": 22,
+      "acoustic_power_w_omni": 448.51888025918305
+    },
+    "6.0": {
+      "best_frequency_hz": 5501.079168879683,
+      "source_level_db": 194.3075073358859,
+      "hydrophones": 44,
+      "acoustic_power_w_omni": 224.2594401295915
+    }
+  },
+  "bellhop": [
+    {
+      "frequency_hz": 2000.0,
+      "one_way_loss_db": 68.98897256556386,
+      "hydrophones": 8,
+      "source_level_db": 174.53631351503128,
+      "acoustic_power_w_omni": 2.363912251609221,
+      "spherical_one_way_loss_db": 83.10889028648225
+    },
+    {
+      "frequency_hz": 4000.0,
+      "one_way_loss_db": 70.38645069627593,
+      "hydrophones": 16,
+      "source_level_db": 169.80716767709617,
+      "acoustic_power_w_omni": 0.7956402912752442,
+      "spherical_one_way_loss_db": 84.56563767673529
+    },
+    {
+      "frequency_hz": 8000.0,
+      "one_way_loss_db": 75.08552999321569,
+      "hydrophones": 32,
+      "source_level_db": 170.9814398156787,
+      "acoustic_power_w_omni": 1.0426630459824844,
+      "spherical_one_way_loss_db": 89.26359343406608
+    },
+    {
+      "frequency_hz": 12000.0,
+      "one_way_loss_db": 82.64227561145242,
+      "hydrophones": 48,
+      "source_level_db": 181.09040989994105,
+      "acoustic_power_w_omni": 10.691557845370099,
+      "spherical_one_way_loss_db": 96.81824627460713
+    }
+  ],
+  "current_array": {
+    "frequency_hz": 27500.0,
+    "hydrophones": 8,
+    "pulse_s": 0.5,
+    "source_level_db": 190.0,
+    "source_level_needed_at_range_db": 319.12944638796745,
+    "reach_at_its_source_level_m": 2832.1861005632545
+  }
+}

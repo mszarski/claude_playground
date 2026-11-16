@@ -22,8 +22,8 @@ from gpusonar.sim import run_scenario
 fls = SonarModel.load("fls_330k", {"array": {"count": 256},
                                    "fov": {"vertical_deg": 10.0, "tilt_up_deg": 6.0}})
 
-# A longer SAS receive array (the MINSAS 180 class): 48 elements instead of 32.
-sas = SonarModel.load("sas_minsas120", {"array": {"count": 48}})
+# A longer SAS receive array (1.81 m, the MINSAS 180 class): 80 elements instead of 48.
+sas = SonarModel.load("sas_minsas120", {"array": {"count": 80}})
 
 # A Popoto array of 64 hydrophones: eight boards follow automatically.
 popoto = SonarModel.load("popoto_array", {"array": {"count": 64}})
@@ -94,13 +94,22 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `receive.boards` | boards spelled out, each with clock offset, drift, jitter and reference channel |
 | `receive.reference` | the shared synchronisation signal wired to every board |
 
+## Diagrams and checks that follow the files
+
+| Tool | What it writes |
+| --- | --- |
+| `tools/design_report.py` | `docs/DESIGN.md`, `docs/design/*.png`: derived numbers, link budgets and the requirement checks |
+| `tools/scenario_diagrams.py` | `docs/scenarios/<name>.png` for every scenario: plan and side view, and for Bellhop scenarios the sound-speed profile and transmission loss |
+| `tools/popoto_range_study.py` | `docs/design/popoto_range_study.png`: source level against frequency for a given range (`--range`, `--ts`, `--pulse`, `--depth`) |
+| `tools/gallery.py` | `docs/figures/<name>.png` and `<name>.gif`: the simulated image, detections and tracks, and an animation, with numbers in `gallery.json` (`--quick` thins the scene, `--no-animation` skips the GIF) |
+
 ## Scenario files
 
 | Key | Meaning |
 | --- | --- |
 | `sonar`, `sonar_overrides` | which sonar, and changes to it |
 | `fidelity` | `free_field`, `image_source` (flat surface and bottom, walls), `sediment` (refraction into the bed), `eigenray` (Bellhop, external) |
-| `propagation` | options of that tier (boundary depths, bottom properties, bounce order, Bellhop grid, arrivals kept, wind) |
+| `propagation` | options of that tier (boundary depths, bottom properties, bounce order, Bellhop grid, arrivals kept, wind). For `eigenray`: `environment: {depth, ssp_depth, ssp_speed, bottom_speed, bottom_density, bottom_attenuation, bathymetry}` is the ocean (sound-speed profile, bottom type, depth) |
 | `environment` | `sound_speed`, `temperature`, `salinity`, `water_depth` |
 | `absorption` | `francois_garrison`, `ainslie_mccolm` or `none` |
 | `seed` | random seed of the scene, noise and reverberation |
@@ -113,7 +122,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `platform.stop_and_go` | a rail: still during each ping |
 | `platform.motion` | sway and heave that navigation does not report (`sway_rms`, `heave_rms`, `correlation_pings`, `nav_knows_disturbance`) |
 | `platform.raster` | a stop-and-go grid of positions: `x: [start, stop, step]`, `y: [...]` |
-| `platform.legs`, `platform.speed` | survey legs: each `{start, heading_deg, pings or length}`; yaw follows the heading |
+| `platform.legs`, `platform.speed` | survey legs: each `{start, heading_deg, pings or length}`; yaw follows the heading. For a multi-element SAS, set `speed × pings.interval` to half the array length so phase centres are evenly spaced |
 | `pings.count`, `pings.interval` | number of transmits and time between them |
 
 ### `scene`: a list of objects
@@ -133,6 +142,9 @@ Every object may have `label`, and `velocity: [vx, vy, vz]` to move it.
 | `cable` | cylinders along waypoints | `waypoints`, `radius`, `density`, `mu_db` |
 | `hull` | a ship hull, afloat or wrecked | `origin`, `length`, `beam`, `depth`, `heading_deg`, `count`, `mu_db`, `keel_down`, `occlude` |
 | `rocks` | random spheres on the bed | `x_range`, `y_range`, `count`, `radius_range`, `depth` |
+| `debris` | random boxes on the bed (crates, blocks); each casts a shadow | `x_range`, `y_range`, `count`, `size_range`, `depth`, `density`, `mu_db` |
+| `boat` | a boat afloat: hull, fin keel, propeller and rudder cluster, and optionally the bubble wake left astern (labelled `<label>_wake`, fixed in the water) | `origin` (amidships, waterline), `length`, `beam`, `draft`, `keel_depth`, `heading_deg`, `count`, `propeller_ts_db`, `wake: {length, count, strength_db_per_m, spread, depth}` |
+| `sea_surface` | a patch of the surface with waves, seen from below: facets on a sum of wave trains, normals into the water | `x_range`, `y_range`, `density`, `mu_db`, `waves: [{amplitude, wavelength, direction_deg}]`, `velocity` (drift) |
 | `pool` | walls and floor facing inwards | `x_range`, `y_range`, `z_range`, `density` |
 | `volume` | scatterers through a box | `min`, `max`, `count`, `rms_amplitude` |
 

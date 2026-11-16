@@ -82,7 +82,7 @@ def test_ambient_noise_in_a_baseband_record_has_the_stated_level():
 
 def test_survey_legs_look_at_one_patch_from_both_sides():
     cfg = load_scenario_config("sas_minsas_survey")
-    # One marker abeam of each leg's first pings (the transmit beam is 3.5 degrees wide).
+    # One marker abeam of each leg's first pings (the transmit beam is 5.4 degrees wide).
     cfg["scene"] = [{"type": "points", "label": "marker", "positions": [[0.4, 50.0, 0.0], [39.6, 50.0, 0.0]]}]
     for leg in cfg["platform"]["legs"]:
         leg["pings"] = 3
@@ -91,7 +91,7 @@ def test_survey_legs_look_at_one_patch_from_both_sides():
     yaw = [r.geometry.rx_pose.rpy[2] for r in result.records]
     assert yaw[:3] == [0.0] * 3 and yaw[3:] == pytest.approx([np.pi] * 3)
     step = np.diff(result.true_positions, axis=0)
-    assert np.allclose(step[0], [0.4, 0.0, 0.0]) and np.allclose(step[4], [-0.4, 0.0, 0.0])
+    assert np.allclose(step[0], [0.544, 0.0, 0.0]) and np.allclose(step[4], [-0.544, 0.0, 0.0])   # half the array per ping
     assert result.times[3] - result.times[2] > 20.0                         # the turn takes time
     # Starboard of each leg points at the marker: the boresight's y component flips.
     looks = [np.asarray(core.rotation_ned(*r.geometry.rx_pose.rpy)) @ np.asarray(r.geometry.rx[0].boresight) for r in result.records]

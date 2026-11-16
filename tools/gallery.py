@@ -48,6 +48,60 @@ def display(power, target_median=0.2):
     return core.drc(np.sqrt(power).astype(np.float32), target_median=target_median)[0]
 
 
+def write_animation(path, anim, fps=2.0):
+    """Write a GIF from `anim`: frames (2-D arrays), extent, labels, per-frame titles and
+    optional per-frame overlays [(xs, ys, style dict), ...]."""
+    from matplotlib.animation import FuncAnimation, PillowWriter
+    frames = anim["frames"]
+    fig, ax = plt.subplots(figsize=anim.get("figsize", (6.4, 5.0)), constrained_layout=True)
+    im = ax.imshow(frames[0], extent=anim["extent"], cmap="gray", vmin=anim["vmin"], vmax=anim["vmax"],
+                   aspect=anim.get("aspect", "equal"), origin=anim.get("origin", "lower"), interpolation="nearest")
+    ax.set_xlabel(anim["xlabel"])
+    ax.set_ylabel(anim["ylabel"])
+    title = ax.set_title(anim["titles"][0], fontsize=9)
+    artists = []
+
+    def draw(i):
+        im.set_data(frames[i])
+        title.set_text(anim["titles"][i])
+        while artists:
+            artists.pop().remove()
+        for xs, ys, style in (anim.get("overlays") or [[]] * len(frames))[i]:
+            artists.extend(ax.plot(xs, ys, **style))
+        return [im, title]
+
+    FuncAnimation(fig, draw, frames=len(frames), blit=False).save(path, writer=PillowWriter(fps=fps), dpi=anim.get("dpi", 80))
+    plt.close(fig)
+
+
+def shrink(a, max_side=420):
+    """Decimate a 2-D frame for an animation by block averaging."""
+    k = max(int(np.ceil(max(a.shape) / max_side)), 1)
+    if k == 1:
+        return a
+    h, w = a.shape[0] // k * k, a.shape[1] // k * k
+    return a[:h, :w].reshape(h // k, k, w // k, k).mean(axis=(1, 3))
+
+
+def polar_to_grid(values, ranges, bearings, origin_xy, heading, gx, gy):
+    """Resample a [range, bearing] map onto world points (gx ahead, gy to starboard)."""
+    dx, dy = gx - origin_xy[0], gy - origin_xy[1]
+    r = np.hypot(dx, dy)
+    b = np.arctan2(dy, dx) - heading
+    ir = np.rint((r - ranges[0]) / (ranges[1] - ranges[0])).astype(int)
+    ib = np.rint((b - bearings[0]) / (bearings[1] - bearings[0])).astype(int)
+    ok = (ir >= 0) & (ir < len(ranges)) & (ib >= 0) & (ib < len(bearings))
+    out = np.zeros(gx.shape, dtype=np.float32)
+    out[ok] = values[ir[ok], ib[ok]]
+    return out
+
+
+def sweep_frames(image, radius, n=10):
+    """A ping travelling out: the image revealed ring by ring (`radius` per pixel)."""
+    edges = np.linspace(radius[radius > 0].min(), radius.max(), n + 1)[1:]
+    return [np.where(radius <= e, image, 0.0) for e in edges], [f"echoes back from within {e:.4g} m" for e in edges]
+
+
 def object_levels(scene, power, to_pixel, median=None):
     """Mean image power over each labelled object's scatterers, in dB over the image median."""
     median = float(np.median(power)) if median is None else float(median)
@@ -113,9 +167,15 @@ def run_fls(name, cfg, backend, quick):
     ax.set_ylabel("forward (m)")
     ax.set_title(f"{name}: {cfg['sonar']}, {len(records)} ping(s), {len(scene)} scatterers (simulated)")
     fig.colorbar(m, ax=ax, label="display level (range gain, then dynamic range compression)", shrink=0.8)
+    half = ranges[-1] * np.sin(bearings[-1])
+    gy, gx = np.meshgrid(np.linspace(-half, half, 420), np.linspace(ranges[0] * 0.9, ranges[-1], 380))
+    cart = polar_to_grid(display(power, p.get("median", 0.2)), ranges, bearings, (0.0, 0.0), 0.0, gx, gy)
+    frames, titles = sweep_frames(cart, np.hypot(gx, gy))
+    anim = dict(frames=frames, titles=[f"{name}: {t}" for t in titles], extent=[-half, half, gx[0, 0], gx[-1, 0]],
+                xlabel="across (m)", ylabel="forward (m)", vmin=0.0, vmax=1.0)
     return fig, {"scatterers": len(scene), "hidden_fraction": float(1.0 - seen.mean()),
                  "object_over_median_db": levels,
-                 "dynamic_range_db": float(db(power.max(), np.median(power)))}
+                 "dynamic_range_db": float(db(power.max(), np.median(power)))}, anim
 
 
 # --- stripmap SAS ----------------------------------------------------------------------------
@@ -180,7 +240,11 @@ def run_sas(name, cfg, backend, quick):
     np.atleast_1d(axes)[0].set_ylabel("along track x (m)")
     fig.colorbar(m, ax=axes, label="dB re median seafloor", shrink=0.85)
     fig.suptitle(f"{name}: {len(records)} pings, {len(result.scene)} scatterers, motion unknown to navigation (simulated)")
-    return fig, metrics
+    order = [k for k in ("Navigation only", "Estimated motion", "True motion") if k in panels]
+    anim = dict(frames=[shrink(np.clip(db(panels[k], ref), -15, 30)) for k in order],
+                titles=[f"{name}: {k.lower()}" for k in order], extent=[y[0], y[-1], x[-1], x[0]], origin="upper",
+                xlabel="ground range y (m)", ylabel="along track x (m)", vmin=-15, vmax=30)
+    return fig, metrics, anim
 
 
 def run_rail(name, cfg, backend, quick):
@@ -206,8 +270,16 @@ def run_rail(name, cfg, backend, quick):
     ax.set_ylabel("ground range (m)")
     ax.set_title(f"{name}: {cfg['sonar']}, {len(records)} pings, {len(result.scene)} scatterers (simulated)")
     fig.colorbar(m, ax=ax, label="dB re image median", shrink=0.8)
+    coarse = points[::2, ::2]
+    frames, titles = [], []
+    for k in np.linspace(len(records) / 6, len(records), 6).astype(int):
+        part = np.abs(recon.sas_image(records[:k], coarse, interp="linear", backend=backend)) ** 2
+        frames.append(np.clip(db(part, np.median(power)), -10, 40).T)
+        titles.append(f"{name}: first {k} of {len(records)} pings ({k * 0.2:.1f} cm of rail)")
+    anim = dict(frames=frames, titles=titles, extent=[x[0] * 100, x[-1] * 100, y[0], y[-1]], aspect="auto",
+                xlabel="along the rail (cm)", ylabel="ground range (m)", vmin=-10, vmax=40)
     return fig, {"scatterers": len(result.scene), "pings": len(records), "object_over_median_db": levels,
-                 "sharpness": sharpness(power)}
+                 "sharpness": sharpness(power)}, anim
 
 
 # --- buried objects --------------------------------------------------------------------------
@@ -253,7 +325,12 @@ def run_buried(name, cfg, backend, quick):
     axes[2].set_ylabel("depth below the interface (m)")
     fig.colorbar(m, ax=axes, label="dB re sediment clutter", shrink=0.85)
     fig.suptitle(f"{name}: {len(records)} pings, refraction at the interface on (simulated)")
-    return fig, metrics
+    sel = range(0, len(depths), 2)
+    anim = dict(frames=[np.clip(20 * np.log10(np.maximum(mag[i] / ref, 1e-6)), -6, 30) for i in sel],
+                titles=[f"{name}: slice {depths[i] * 100:.0f} cm below the interface" for i in sel],
+                extent=[y[0], y[-1], x[-1], x[0]], origin="upper", xlabel="y (m)", ylabel="x (m)", vmin=-6, vmax=30,
+                figsize=(5.4, 5.4))
+    return fig, metrics, anim
 
 
 # --- flank array -----------------------------------------------------------------------------
@@ -265,7 +342,7 @@ def run_flank(name, cfg, backend, quick):
     tracker = detect.Tracker(range_sigma=5.0, bearing_sigma=np.radians(0.7), confirm_hits=3, max_misses=2,
                              initial_speed_sigma=5.0)
     first = None
-    counts = []
+    counts, maps = [], []
     for i, rec in enumerate(result.records):
         bm = flank.farfield_beamform(rec, bearings, window="hann").valid()
         # Multipath spreads each echo over tens of metres, far more than a range sample, so
@@ -283,6 +360,7 @@ def run_flank(name, cfg, backend, quick):
         tracks = tracker.update(i * interval, hits)
         if first is None:
             first = (ranges, power, hits)
+        maps.append(shrink(np.clip(db(power, np.median(power)), 0, 40)))
     t_last = (len(result.records) - 1) * interval
     truth = {}
     start = 0
@@ -331,7 +409,18 @@ def run_flank(name, cfg, backend, quick):
     axes[1].set_title(f"Confirmed tracks over {len(result.records)} pings (dashed: truth)")
     axes[1].set_aspect("equal", adjustable="datalim")
     fig.suptitle(f"{name}: {cfg['sonar']}, multipath, bottom and surface reverberation, ambient noise (simulated)")
-    return fig, metrics
+    overlays = []
+    for i in range(len(maps)):
+        marks = []
+        for label, (pos, vel) in truth.items():
+            q = pos[:2] + vel[:2] * i * interval
+            marks.append(([np.hypot(q[0], q[1])], [np.degrees(np.arctan2(q[0], q[1]))],
+                          dict(marker="o", mfc="none", mec="#eb6834", ms=13, ls="none")))
+        overlays.append(marks)
+    anim = dict(frames=maps, titles=[f"{name}: ping {i + 1} of {len(maps)}, t = {i * interval:.0f} s (circles: truth)" for i in range(len(maps))],
+                extent=[ranges[0], ranges[-1], np.degrees(bearings[0]), np.degrees(bearings[-1])], aspect="auto",
+                xlabel="range (m)", ylabel="bearing (deg)", vmin=0, vmax=40, overlays=overlays, figsize=(7.0, 4.6))
+    return fig, metrics, anim
 
 
 def run_popoto(name, cfg, backend, quick):
@@ -352,9 +441,18 @@ def run_popoto(name, cfg, backend, quick):
     ax.set_ylabel("bearing (deg)")
     ax.set_title(f"{name}: 8 hydrophones, multipath, bottom reverberation, noise (simulated)")
     fig.colorbar(m, ax=ax, label="dB re map median", shrink=0.8)
-    return fig, {"peak_range_m": float(bm.ranges[ir]), "peak_bearing_deg": float(np.degrees(bearings[ib])),
+    # The echo arriving: the map revealed range by range, as it is received.
+    full = shrink(np.clip(db(power, floor), 0, 35))
+    r_axis = np.linspace(bm.ranges[0], bm.ranges[-1], full.shape[1])
+    edges = np.linspace(r_axis[0], r_axis[-1], 11)[1:]
+    anim = dict(frames=[np.where(r_axis[None, :] <= e, full, 0.0) for e in edges],
+                titles=[f"{name}: echoes received from within {e:.0f} m" for e in edges],
+                extent=[bm.ranges[0], bm.ranges[-1], np.degrees(bearings[0]), np.degrees(bearings[-1])], aspect="auto",
+                xlabel="range (m)", ylabel="bearing (deg)", vmin=0, vmax=35, figsize=(7.0, 4.2))
+    metrics = {"peak_range_m": float(bm.ranges[ir]), "peak_bearing_deg": float(np.degrees(bearings[ib])),
                  "true_range_m": float(np.linalg.norm(target[:2])),
                  "peak_over_median_db": float(db(power.max(), floor))}
+    return fig, metrics, anim
 
 
 # --- moving ownship: detection and tracking in the world frame ---------------------------------
@@ -397,6 +495,8 @@ def scene_truth(cfg):
         elif "centre" in item:
             centre = np.asarray(item["centre"], dtype=float)
         elif "x_range" in item:
+            if max(np.ptp(item["x_range"]), np.ptp(item["y_range"])) > 30.0:
+                continue                                        # an area (seabed, waves, a boulder field), not a target
             centre = np.array([np.mean(item["x_range"]), np.mean(item["y_range"]), float(item.get("depth", 0.0))])
         else:
             continue
@@ -424,8 +524,11 @@ def plot_tracks(ax, tracks, truth, own, t_last, title):
 
 FLS_TRANSIT = {
     "fls_120k_transit": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
-    "fls_170k_transit": dict(r=(40.0, 596.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
+    "fls_170k_transit": dict(r=(30.0, 446.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
     "fls_330k_transit": dict(r=(20.0, 298.0, 0.04), cell=12, guard_m=6.0, train_m=30.0),
+    "fls_120k_cluttered_seabed": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
+    "fls_120k_rough_surface": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
+    "fls_170k_traffic": dict(r=(30.0, 446.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
 }
 
 
@@ -440,7 +543,7 @@ def run_fls_transit(name, cfg, backend, quick):
     bearings = np.radians(np.arange(-60.0, 60.01, 0.4))
     cell_m = p["cell"] * p["r"][2]
     guard, train = int(round(p["guard_m"] / cell_m)), int(round(p["train_m"] / cell_m))
-    per_ping, first = [], None
+    per_ping, first, polar = [], None, []
     for rec in result.records:
         origin = rec.rx_positions().mean(axis=0)
         img = recon.fan_image([rec], ranges, bearings, interp="linear", window="hann", backend=backend)
@@ -455,6 +558,7 @@ def run_fls_transit(name, cfg, backend, quick):
                          for h in hits])
         if first is None:
             first = (r_cells, power, origin)
+        polar.append((display(power.T * r_cells[:, None] ** 3), origin))
     tracks = world_tracks(per_ping, result.times, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3,
                           max_misses=2, initial_speed_sigma=6.0, process_noise=0.3)
     truth = scene_truth(cfg)
@@ -481,14 +585,43 @@ def run_fls_transit(name, cfg, backend, quick):
     plot_tracks(axes[1], tracks, truth, result.true_positions, t_last,
                 f"World-frame tracks over {len(result.records)} pings (dashed: truth)")
     fig.suptitle(f"{name}: {cfg['sonar']}, ownship under way; seabed and surface reverberation, noise (simulated)")
-    return fig, metrics
+    # World-fixed frames: ownship moves up the picture, static things stay put.
+    r_far = r_cells[-1]
+    gy, gx = np.meshgrid(np.linspace(-0.87 * r_far, 0.87 * r_far, 440), np.linspace(0.0, r_far + 25.0, 300))
+    frames, overlays = [], []
+    for i, (disp, own) in enumerate(polar):
+        frames.append(polar_to_grid(disp, r_cells, bearings, own[:2], 0.0, gx, gy))
+        marks = [([own[1]], [own[0]], dict(marker="^", color="#eb6834", ms=9, ls="none"))]
+        for label, (pos, vel) in truth.items():
+            q = pos[:2] + vel[:2] * float(result.times[i])
+            marks.append(([q[1]], [q[0]], dict(marker="o", mfc="none", mec="#2a78d6", ms=12, ls="none")))
+        overlays.append(marks)
+    anim = dict(frames=frames, titles=[f"{name}: ping {i + 1} of {len(frames)}, t = {result.times[i]:.2f} s (circles: truth, triangle: ownship)" for i in range(len(frames))],
+                extent=[gy[0, 0], gy[0, -1], gx[0, 0], gx[-1, 0]], xlabel="y, to starboard (m)", ylabel="x, ahead (m)",
+                vmin=0.0, vmax=1.0, overlays=overlays, figsize=(7.4, 5.4))
+    return fig, metrics, anim
+
+
+SAS_SURVEY = {
+    # `zoom`: (label, side in metres) of the full-resolution crops under the leg images.
+    "sas_minsas_survey": dict(x=(0.0, 40.0), y=(38.5, 62.0), what="two survey legs over a wreck, cable, rocks and calibration cube", wreck=True,
+                              zoom=[("calibration_cube", 3.0), ("rocks", 8.0), ("wreck_deckhouse", 8.0)]),
+    "sas_minsas_boulder_field": dict(x=(1.0, 31.0), y=(39.0, 64.0), what="a boulder field on sand", wreck=False,
+                                     zoom=[("boulders", 10.0), ("boulders", 4.0), ("boulders", 1.5)]),
+    "sas_minsas_rocky_ripples": dict(x=(1.0, 31.0), y=(39.0, 64.0), what="rippled sand, a rock outcrop, stones and a cable", wreck=False,
+                                     zoom=[("outcrop", 9.0), ("stones", 4.0), ("cable", 3.0)]),
+}
 
 
 def run_sas_survey(name, cfg, backend, quick):
+    p = SAS_SURVEY[name]
     result = run_scenario(cfg, backend=backend)
-    recon.prepare(result.records, backend=backend)
-    pixel = 0.1 if quick else 0.05
-    x, y = np.arange(0.0, 40.0, pixel), np.arange(38.5, 62.0, pixel)
+    # Hamming-weighted pulse compression: range sidelobes drop from -15 dB to -41 dB beyond 10 cm, so
+    # bright points stop smearing across the picture; the ground-range width goes from 1.8 cm to 2.6 cm
+    # (tests/python/test_minsas_resolution.py measures both).
+    recon.prepare(result.records, window="hamming", backend=backend)
+    pixel = 0.08 if quick else 0.02                        # 2 cm: the image resolves 2.0 cm x 2.6 cm
+    x, y = np.arange(*p["x"], pixel), np.arange(*p["y"], pixel)
     X, Y = np.meshgrid(x, y, indexing="ij")
     points = np.stack([X, Y, np.zeros_like(X)], axis=-1)
 
@@ -498,33 +631,74 @@ def run_sas_survey(name, cfg, backend, quick):
         return [(a, b) if 0 <= a < len(x) and 0 <= b < len(y) else None for a, b in zip(i, j)]
 
     legs = sorted(set(result.legs))
-    metrics = {"pings": len(result.records), "scatterers": len(result.scene), "legs": {}}
-    fig, axes = plt.subplots(1, len(legs), figsize=(7.2 * len(legs), 7.0), sharey=True, constrained_layout=True)
+    metrics = {"pings": len(result.records), "scatterers": len(result.scene), "pixel_m": pixel, "legs": {}}
+    nz = len(p["zoom"])
+    fig = plt.figure(figsize=(max(8.0 * len(legs), 13.0), 13.0), constrained_layout=True)
+    gs_ = fig.add_gridspec(2, len(legs) * nz, height_ratios=[1.75, 1.0])
+    axes = [fig.add_subplot(gs_[0, k * nz:(k + 1) * nz]) for k in range(len(legs))]
+    zoom_axes = [fig.add_subplot(gs_[1, k * len(legs):(k + 1) * len(legs)]) for k in range(nz)]
+    full_res = None
     # Strips of seabed just north and just south of the wreck: each leg shadows one of them.
     north = (X > 17.0) & (X < 24.0) & (Y > 53.0) & (Y < 55.5)
     south = (X > 17.0) & (X < 24.0) & (Y > 44.5) & (Y < 47.0)
-    for ax, leg in zip(np.atleast_1d(axes), legs):
+    anim = None
+    for ax, leg in zip(axes, legs):
         recs = [r for r, k in zip(result.records, result.legs) if k == leg]
-        power = np.abs(recon.sas_image(recs, points, interp="linear", backend=backend)) ** 2
+        # 1.6 beamwidths of aperture weighted by the beam patterns: the same 2.0 cm along track as the
+        # default, with the nearest along-track sidelobes at -36 dB instead of -23 dB (measured on a point).
+        power = np.abs(recon.sas_image(recs, points, interp="linear", fov_factor=1.6, directivity_weight=True, replica_window="hamming",
+                                       backend=backend)) ** 2
         covered = power > 0                                   # pixels this leg's beams reached
         median = float(np.median(power[covered]))
         side = float(np.sign(np.mean([r.rx_positions().mean(axis=0)[1] for r in recs]) - 50.0))
-        metrics["legs"][f"leg_{leg + 1}"] = {
-            "sonar_side_of_wreck": "y below" if side < 0 else "y above",
-            "covered_fraction": float(covered.mean()),
-            "far_strip_over_near_strip_db": float(db(power[north & covered].mean(), power[south & covered].mean())
-                                                  * (1.0 if side < 0 else -1.0)),
-            "object_over_median_db": object_levels(result.scene, power, to_pixel, median)}
+        m_leg = {"sonar_side": "y below" if side < 0 else "y above", "covered_fraction": float(covered.mean()),
+                 "object_over_median_db": object_levels(result.scene, power, to_pixel, median)}
+        if p["wreck"]:
+            m_leg["far_strip_over_near_strip_db"] = float(db(power[north & covered].mean(), power[south & covered].mean())
+                                                          * (1.0 if side < 0 else -1.0))
+        metrics["legs"][f"leg_{leg + 1}"] = m_leg
         m = ax.imshow(db(power, median), extent=[y[0], y[-1], x[-1], x[0]], cmap="gray", vmin=-12, vmax=30,
-                      aspect="equal")
+                      aspect="equal", interpolation="nearest")
         ax.invert_yaxis()
         heading = cfg["platform"]["legs"][leg]["heading_deg"]
         ax.set_title(f"Leg {leg + 1}: heading {heading:.0f} deg, sonar at y = {cfg['platform']['legs'][leg]['start'][1]:.0f} m")
         ax.set_xlabel("y (m)")
-    np.atleast_1d(axes)[0].set_ylabel("x (m)")
+        if full_res is None:
+            # Crops of leg 1 at the pixel the image was formed on: nothing is resampled for display.
+            full_res = np.clip(db(power, median), -12, 30)
+            masks = result.scene.label_masks()
+            for za, (label, side_m) in zip(zoom_axes, p["zoom"]):
+                pts_l = result.scene.positions[masks[label]]
+                # Centre on the object nearest the label's centroid (one rock of a field, not the gap between rocks).
+                c = pts_l[np.argmin(np.linalg.norm(pts_l[:, :2] - pts_l[:, :2].mean(axis=0), axis=1)), :2]
+                i0, j0 = int((c[0] - side_m / 2 - x[0]) / pixel), int((c[1] - side_m / 2 - y[0]) / pixel)
+                n_px = int(side_m / pixel)
+                i0, j0 = int(np.clip(i0, 0, len(x) - n_px)), int(np.clip(j0, 0, len(y) - n_px))
+                crop = full_res[i0:i0 + n_px, j0:j0 + n_px]
+                za.imshow(crop, extent=[y[j0], y[j0 + n_px - 1], x[i0 + n_px - 1], x[i0]], cmap="gray", vmin=-12, vmax=30,
+                          aspect="equal", interpolation="nearest")
+                za.invert_yaxis()
+                za.set_title(f"Leg 1, {label}: {side_m:g} m x {side_m:g} m at {pixel * 100:g} cm pixels", fontsize=9)
+                za.set_xlabel("y (m)")
+                ax.add_patch(plt.Rectangle((y[j0], x[i0]), side_m, side_m, fill=False, ec="#eb6834", lw=1.2))
+            zoom_axes[0].set_ylabel("x (m)")
+        if anim is None:
+            # The synthetic aperture building up: the image from the first pings of the leg.
+            step = max(int(round(0.08 / pixel)), 1)
+            coarse = points[::step, ::step]
+            frames, titles = [], []
+            for k in np.linspace(len(recs) / 8, len(recs), 8).astype(int):
+                part = np.abs(recon.sas_image(recs[:k], coarse, interp="linear", fov_factor=1.6, directivity_weight=True, replica_window="hamming",
+                                              backend=backend)) ** 2
+                frames.append(shrink(np.clip(db(part, median), -12, 30)))
+                titles.append(f"{name}: leg 1, first {k} of {len(recs)} pings")
+            anim = dict(frames=frames, titles=titles, extent=[y[0], y[-1], x[0], x[-1]], xlabel="y (m)", ylabel="x (m)",
+                        vmin=-12, vmax=30, figsize=(6.0, 6.4))
+    axes[0].set_ylabel("x (m)")
     fig.colorbar(m, ax=axes, label="dB re image median", shrink=0.8)
-    fig.suptitle(f"{name}: {cfg['sonar']}, two survey legs over a wreck, cable, rocks and calibration cube (simulated)")
-    return fig, metrics
+    fig.suptitle(f"{name}: {cfg['sonar']}, {p['what']} (simulated); boxes mark the crops below")
+    anim["full_res"] = (full_res, f"{name}_leg1_full.png")      # the whole of leg 1, one image pixel per file pixel
+    return fig, metrics, anim
 
 
 def run_popoto_far(name, cfg, backend, quick):
@@ -532,6 +706,7 @@ def run_popoto_far(name, cfg, backend, quick):
     result = run_scenario(cfg, backend=backend)
     bearings = np.radians(np.arange(-40.0, 40.01, 0.5))
     per_ping, first = [], None
+    maps, owns = [], []
     n_total = result.records[0].samples.n_channels
     scaling = {}
     for i, rec in enumerate(result.records):
@@ -560,6 +735,8 @@ def run_popoto_far(name, cfg, backend, quick):
                          for h in hits])
         if first is None:
             first = (ranges, power)
+        maps.append(shrink(np.clip(db(power, np.median(power)), 0, 30)))
+        owns.append(origin)
     tracks = world_tracks(per_ping, result.times, range_sigma=15.0, bearing_sigma=np.radians(1.0), confirm_hits=3,
                           max_misses=2, initial_speed_sigma=8.0, process_noise=0.05)
     truth = scene_truth(cfg)
@@ -582,18 +759,37 @@ def run_popoto_far(name, cfg, backend, quick):
     fig.colorbar(m, ax=axes[0], label="dB re map median", shrink=0.8)
     plot_tracks(axes[1], tracks, truth, result.true_positions, t_last,
                 f"World-frame tracks over {len(result.records)} pings (dashed: truth)")
-    fig.suptitle(f"{name}: Popoto-board array, ownship under way, ship-sized mover at 6 km; multipath, reverberation, noise (simulated)")
-    return fig, metrics
+    rng_km = np.hypot(*next(iter(truth.values()))[0][:2]) / 1e3
+    fig.suptitle(f"{name}: Popoto-board array, ownship under way, ship-sized mover at {rng_km:.0f} km; multipath, reverberation, noise (simulated)")
+    overlays = []
+    for i, own in enumerate(owns):
+        marks = []
+        for label, (pos, vel) in truth.items():
+            q = pos[:2] + vel[:2] * float(result.times[i]) - own[:2]
+            marks.append(([np.hypot(q[0], q[1])], [np.degrees(np.arctan2(q[0], q[1]))],
+                          dict(marker="o", mfc="none", mec="#eb6834", ms=13, ls="none")))
+        overlays.append(marks)
+    anim = dict(frames=maps, titles=[f"{name}: ping {i + 1} of {len(maps)}, t = {result.times[i]:.0f} s (circle: truth)" for i in range(len(maps))],
+                extent=[ranges[0], ranges[-1], np.degrees(bearings[0]), np.degrees(bearings[-1])], aspect="auto",
+                xlabel="range (m)", ylabel="bearing from broadside (deg)", vmin=0, vmax=30, overlays=overlays,
+                figsize=(7.0, 4.6))
+    return fig, metrics, anim
 
 
 RUNNERS = {
     "pool_fls_l12_5d": run_fls, "pool_fls_p4_2v": run_fls, "seafloor_objects_fls": run_fls,
     "harbour_fls_750k": run_fls, "fls_120k_transit": run_fls_transit, "fls_170k_transit": run_fls_transit,
-    "fls_330k_transit": run_fls_transit, "wreck_sas": run_sas, "minefield_sas": run_sas,
-    "sas_minsas_survey": run_sas_survey, "rail_objects": run_rail, "buried_objects": run_buried,
-    "flank_patrol": run_flank, "popoto_far_mover": run_popoto_far, "popoto_trial_1000m": run_popoto,
+    "fls_330k_transit": run_fls_transit, "fls_120k_cluttered_seabed": run_fls_transit,
+    "fls_120k_rough_surface": run_fls_transit, "fls_170k_traffic": run_fls_transit,
+    "wreck_sas": run_sas, "minefield_sas": run_sas,
+    "sas_minsas_survey": run_sas_survey, "sas_minsas_boulder_field": run_sas_survey,
+    "sas_minsas_rocky_ripples": run_sas_survey, "rail_objects": run_rail, "buried_objects": run_buried,
+    "flank_patrol": run_flank, "popoto_far_mover": run_popoto_far, "popoto_12km": run_popoto_far,
+    "popoto_env_summer_mud_60m": run_popoto_far, "popoto_env_winter_sand_200m": run_popoto_far,
+    "popoto_env_gravel_30m": run_popoto_far, "popoto_env_deep_silt_1000m": run_popoto_far,
+    "popoto_trial_1000m": run_popoto,
 }
-NEEDS_BELLHOP = {"flank_patrol", "popoto_trial_1000m", "popoto_far_mover"}
+NEEDS_BELLHOP = {n for n in RUNNERS if n.startswith(("flank_", "popoto_"))}
 
 # Thinned versions for a CPU: fewer scatterers and pings, same geometry.
 QUICK = {
@@ -607,9 +803,19 @@ QUICK = {
     "fls_120k_transit": lambda c: _thin_transit(c),
     "fls_170k_transit": lambda c: _thin_transit(c),
     "fls_330k_transit": lambda c: _thin_transit(c),
-    "sas_minsas_survey": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=50, start=[10.0, 0.0, -12.0]),
-                                    c["platform"]["legs"][1].update(pings=50, start=[30.0, 100.0, -12.0])),
+    "sas_minsas_survey": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=40, start=[9.0, 0.0, -12.0]),
+                                    c["platform"]["legs"][1].update(pings=40, start=[31.0, 100.0, -12.0])),
     "popoto_far_mover": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=12)),
+    "popoto_12km": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=16)),
+    "popoto_env_summer_mud_60m": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=16)),
+    "popoto_env_winter_sand_200m": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=16)),
+    "popoto_env_gravel_30m": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=16)),
+    "popoto_env_deep_silt_1000m": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=16)),
+    "fls_120k_cluttered_seabed": lambda c: _thin_transit(c),
+    "fls_120k_rough_surface": lambda c: _thin_transit(c),
+    "fls_170k_traffic": lambda c: _thin_transit(c),
+    "sas_minsas_boulder_field": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=40, start=[4.0, 0.0, -12.0])),
+    "sas_minsas_rocky_ripples": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=40, start=[4.0, 0.0, -12.0])),
     "flank_patrol": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=8),
                                c["sonar_overrides"].update(transmit={"waveform": {"duration": 0.2}})),
 }
@@ -618,7 +824,7 @@ QUICK = {
 def _thin_transit(cfg):
     cfg["pings"].update(count=4)
     for item in cfg["scene"]:
-        if "count" in item and item["type"] == "hull":
+        if "count" in item and item["type"] in ("hull", "boat"):
             item["count"] = int(item["count"] * 0.4)
     _scale_density(cfg, 0.5)
 
@@ -635,6 +841,7 @@ def main():
     ap.add_argument("--only", default="")
     ap.add_argument("--out", default="docs/figures")
     ap.add_argument("--quick", action="store_true")
+    ap.add_argument("--no-animation", action="store_true", help="figures and numbers only")
     args = ap.parse_args()
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
     out = Path(args.out)
@@ -650,8 +857,19 @@ def main():
         if args.quick and name in QUICK:
             QUICK[name](cfg)
         t = time.perf_counter()
-        fig, metrics = RUNNERS[name](name, cfg, backend, args.quick)
+        out_ = RUNNERS[name](name, cfg, backend, args.quick)
+        fig, metrics = out_[0], out_[1]
         metrics["seconds"] = round(time.perf_counter() - t, 1)
+        if len(out_) > 2 and out_[2] is not None and "full_res" in out_[2]:
+            image, fname = out_[2].pop("full_res")
+            if not args.quick:
+                from PIL import Image                          # 8-bit greyscale: a third the size of an RGBA file
+                Image.fromarray(np.uint8(np.clip((image[::-1] + 12.0) / 42.0, 0.0, 1.0) * 255.0), mode="L").save(
+                    out / fname, optimize=True)
+                metrics["full_resolution_image"] = fname
+        if len(out_) > 2 and out_[2] is not None and not args.no_animation:
+            write_animation(out / f"{name}.gif", out_[2])
+            metrics["animation"] = f"{name}.gif"
         metrics["backend"] = args.backend
         metrics["quick"] = bool(args.quick)
         fig.savefig(out / f"{name}.png", dpi=110)

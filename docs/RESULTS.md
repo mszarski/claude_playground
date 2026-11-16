@@ -609,6 +609,43 @@ Source: `tests/python/test_sim.py`.
 | Arrival time with a 30 m/s receiver | within 0.2 µs of the implicit solution |
 | Doppler shift, 5 m/s closing target, 8 kHz | within 0.2% of 53.5 Hz |
 
+## MINSAS-class SAS: resolution on a simulated point target
+
+Source: `tests/python/test_minsas_resolution.py`; survey geometry (12 m altitude, 45 to 50 m
+ground range, 64 pings), `sas_minsas120`.
+
+| Quantity | Design | Measured |
+| --- | --- | --- |
+| Along-track width, −3 dB | 2.1 cm (half the 4.2 cm projector) | 2.0 cm |
+| Ground-range width, unweighted | 1.9 cm (c / 2B, 40 kHz, on the ground at 15 degrees) | 1.9 cm |
+| Ground-range width, Hamming replica | — | 2.6 cm |
+| Range sidelobes beyond 10 cm, unweighted / Hamming | — | −26 dB / −41 dB |
+| Along-track sidelobes beyond 5 cm, default aperture / 1.6 beamwidths weighted | — | −23 dB / −36 dB |
+| Along-track ghosts at 0.4 m per ping / 0.544 m per ping (half the array) | — | −15 dB / −36 dB |
+| Along-track ambiguity (grating lobe of the receive phase centres): 32 elements at 3.4 cm / the shipped 48 at 2.27 cm | — | −42 dB, 6.9 m away at 51 m / −47 to −54 dB, 10.3 m away |
+
+Kraken's sheet for the MINSAS 120 gives 3.3 cm × 3.0 cm, or 2.1 cm × 1.9 cm post-processed;
+the simulated sonar is set to the finer figure. This is a simulation of a design, not a
+measurement of that product.
+
+## Popoto array: frequency and source level for 12 km
+
+Source: `tools/popoto_range_study.py`, `docs/design/popoto_range_study.json`, checked against
+the sonar equation in `tests/python/test_design.py`. Target +25 dB, 1 s pulse, 13 dB at the
+beamformer output, wind 5 m/s, spherical spreading plus absorption.
+
+| Array | Best frequency | Source level | Acoustic power, omnidirectional |
+| --- | --- | --- | --- |
+| 8 hydrophones | 4.2 kHz | 201 dB | 1090 W |
+| 16 | 4.2 kHz | 198 dB | 540 W |
+| 32 | 4.2 kHz | 195 dB | 270 W |
+| 64 | 4.2 kHz | 192 dB | 140 W |
+| the present 8 at 27.5 kHz | — | 319 dB (not possible); 190 dB reaches 2.8 km | — |
+
+Bellhop for 100 m of isovelocity water over sand gives 14 dB less loss each way at 4 kHz
+(70.4 dB against 84.6 dB including absorption), where 170 dB would do on noise alone; then
+reverberation decides. Simulated outcomes in five oceans are in `SCENARIOS.md`.
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

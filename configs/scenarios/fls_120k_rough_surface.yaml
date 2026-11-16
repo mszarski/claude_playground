@@ -1,0 +1,47 @@
+# 120 kHz forward-looking sonar under a rough sea: 10 m/s of wind, a 1.2 m swell 40 m long
+# with a 6 m wind sea on top. The 20 degree vertical beam meets the underside of the surface
+# from about 115 m: wave faces turned towards the sonar return sound, the backs of the
+# waves and the troughs behind them do not, so the surface shows as bands that drift with
+# the waves. In that clutter: a boat under way with keel, propeller and wake, a kayak-sized
+# target and a mooring buoy. AUV at 20 m, 2 m/s; 60 m of water.
+# The surface is modelled once, by the wave facets, so there is no statistical surface
+# boundary under `reverberation` here (that would count it twice).
+# The patch of facets starts at 45 m, where the surface is 24 degrees above the boresight.
+# Earlier versions started it at 120 m and at 95 m, and the edge of the patch made a line of
+# false detections; the surface close in is steep to the sonar and returns strongly even
+# far down the beam, so the picture still shows where the patch begins.
+# Limits: the wave patch is frozen facets drifting at a fixed speed (no orbital motion, no
+# breaking, no bubble layer other than the boat's wake) and far fewer facets than
+# resolution cells. Its Lambert strength (-8 dB about each facet) is chosen so that the mean
+# backscatter near 7 degrees grazing is about the Chapman-Harris value for this wind
+# (-23 dB); that formula was fitted below 6.4 kHz, so the level is a placeholder.
+# Direct paths only. The same scene at 330 kHz showed no surface at all: one cell of it is
+# below that sonar's noise floor at 250 m (docs/SCENARIOS.md).
+name: fls_120k_rough_surface
+sonar: fls_120k
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 40000.0, window: {range: [20.0, 300.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 60.0}
+platform:
+  position: [0, 0, 20.0]
+  rpy: [0, 0, 0]
+  velocity: [2.0, 0, 0]
+pings: {count: 8, interval: 0.5}
+scene:
+  - {type: boat, label: boat_under_way, origin: [235.0, -45.0, 0.0], length: 10.0, beam: 3.2, draft: 0.6, keel_depth: 1.2,
+     heading_deg: 80.0, velocity: [0.87, 4.92, 0.0], count: 500, wake: {length: 60.0, count: 400, strength_db_per_m: -20.0}}
+  - {type: points, label: kayak, positions: [[205.0, 35.0, 0.3], [206.5, 35.0, 0.3], [208.0, 35.0, 0.3]], target_strength_db: -22.0,
+     velocity: [-1.2, 0.5, 0.0]}
+  - {type: sphere, label: mooring_buoy, centre: [255.0, 60.0, 1.5], radius: 0.6, density: 60.0, mu_db: -8.0}
+  - {type: sea_surface, label: waves, x_range: [45.0, 297.0], y_range: [-150.0, 150.0], density: 0.5, mu_db: -8.0,
+     velocity: [0.3, 0.2, 0.0],
+     waves: [{amplitude: 0.6, wavelength: 40.0, direction_deg: 15.0}, {amplitude: 0.15, wavelength: 6.0, direction_deg: 50.0}]}
+reverberation:
+  - {boundary_z: 60.0, mu_db: -27.0}
+synthesis: {beam_floor_db: -45.0}
+absorption: francois_garrison
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 10.0, shipping: 0.5}
+seed: 62

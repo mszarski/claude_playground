@@ -1,0 +1,30 @@
+# MINSAS-class SAS over rippled sand with a rock outcrop: sand ripples 4 cm high and 60 cm
+# apart, a cluster of large rocks, small stones scattered around it and a cable running
+# past. One leg, 12 m altitude, 2.18 m/s (4.2 kn), 0.544 m per ping.
+# Limits: exact navigation; ripples change the return through their slope only (they do
+# not shadow one another); sparse sand texture.
+name: sas_minsas_rocky_ripples
+sonar: sas_minsas120
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 60.0e3, window: {range: [38.0, 68.0]}}
+  transmit: {waveform: {duration: 2.5e-3}}
+environment: {sound_speed: 1500.0, temperature: 10.0, salinity: 35.0}
+platform:
+  speed: 2.176                   # 0.544 m per ping: exactly half the 1.088 m array, so phase centres are evenly spaced
+  legs:
+    - {start: [-1.0, 0.0, -12.0], heading_deg: 0.0, pings: 64}
+pings: {interval: 0.25}
+scene:
+  - {type: seafloor, label: rippled_sand, x_range: [-2.0, 34.0], y_range: [37.0, 66.0], density: 18.0, lambert_mu_db: -27.0,
+     ripples: {amplitude: 0.04, wavelength: 0.6, direction_deg: 80.0}}
+  - {type: rocks, label: outcrop, x_range: [12.0, 20.0], y_range: [46.0, 54.0], count: 12, radius_range: [0.4, 1.3],
+     density: 80.0, mu_db: -14.0}
+  - {type: rocks, label: stones, x_range: [4.0, 28.0], y_range: [41.0, 62.0], count: 35, radius_range: [0.08, 0.25],
+     density: 400.0, mu_db: -14.0}
+  - {type: cable, label: cable, radius: 0.04, density: 300.0, mu_db: -10.0,
+     waypoints: [[2.0, 58.0, -0.04], [10.0, 56.5, -0.04], [22.0, 59.0, -0.04], [31.0, 57.0, -0.04]]}
+synthesis: {beam_floor_db: -40.0}
+absorption: francois_garrison
+receiver: {noise_rms: 0.0, adc: false}
+seed: 72

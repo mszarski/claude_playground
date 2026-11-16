@@ -378,6 +378,77 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                                   item.get("label", "cable"), rng, vel)
                 if item.get("occlude", True):
                     scene.occluders.append(("capsule", (list(p0), list(p1)), float(item["radius"])))
+        elif kind == "sea_surface":
+            # A patch of the sea surface with waves, seen from below: facets on a sum of
+            # wave trains `waves: [{amplitude, wavelength, direction_deg}, ...]`, each with
+            # its normal pointing down into the water, so slopes facing the sonar return
+            # more (Lambert about the facet). `velocity` gives the patch a drift.
+            pts, a = seafloor_patch(item["x_range"], item["y_range"], float(item["density"]), float(item.get("depth", 0.0)),
+                                    lambert_rms_amplitude(float(item.get("mu_db", -30.0)), float(item["density"])), rng)
+            gx, gy = np.zeros(len(pts)), np.zeros(len(pts))
+            for wave in item.get("waves", []):
+                height, gradient = relief((0.0, 0.0), wave)
+                pts[:, 2] += height(pts[:, 0], pts[:, 1])
+                dx, dy = gradient(pts[:, 0], pts[:, 1])
+                gx, gy = gx + dx, gy + dy
+            normals = np.column_stack([-gx, -gy, np.ones(len(pts))])
+            normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+            scene.add_points(pts, a, vel, item.get("label", "sea_surface"), lambert=True, normals=normals)
+        elif kind == "boat":
+            # A boat afloat: hull, keel, propeller and rudder at the stern, and optionally the
+            # bubble wake it has left astern. `origin` is amidships on the waterline.
+            length, beam, draft = float(item["length"]), float(item["beam"]), float(item["draft"])
+            heading = float(item.get("heading_deg", 0.0))
+            h = np.radians(heading)
+            along, across = np.array([np.cos(h), np.sin(h), 0.0]), np.array([-np.sin(h), np.cos(h), 0.0])
+            origin = np.asarray(item["origin"], dtype=float)
+            label = item.get("label", "boat")
+            n = int(item.get("count", 800))
+            pts, normals, areas = hull_points(origin, length, beam, draft, heading, n, rng)
+            mu = 10.0 ** (float(item.get("mu_db", -8.0)) / 10.0)
+            a = np.sqrt(mu * areas) * (rng.standard_normal(n) + 1j * rng.standard_normal(n)) / np.sqrt(2.0)
+            scene.add_points(pts, a, vel, label, lambert=True, normals=normals)
+            keel_depth = float(item.get("keel_depth", 0.0))
+            if keel_depth > 0.0:
+                # A fin keel under the middle third: a thin plate seen from either side.
+                for sign in (1.0, -1.0):
+                    kp, kn = plate_points(origin + along * (-length / 6) + np.array([0.0, 0.0, draft]),
+                                          along * (length / 3), np.array([0.0, 0.0, keel_depth]),
+                                          float(item.get("keel_density", 40.0)), rng)
+                    scene.add_surface(kp, sign * across, float(item.get("mu_db", -8.0)), float(item.get("keel_density", 40.0)),
+                                      label, rng, vel)
+            # Propeller and rudder: a compact cluster of strong scatterers under the stern.
+            stern = origin - along * (0.45 * length) + np.array([0.0, 0.0, 0.8 * draft])
+            k = int(item.get("propeller_points", 12))
+            prop = stern + rng.normal(0.0, 0.15, (k, 3))
+            ts_prop = float(item.get("propeller_ts_db", -5.0))
+            scene.add_points(prop, np.sqrt(10.0 ** (ts_prop / 10.0) / k) * (rng.standard_normal(k) + 1j * rng.standard_normal(k)) / np.sqrt(2.0),
+                             vel, label)
+            wake = item.get("wake")
+            if wake:
+                # Bubbles astern: a wedge of volume scatterers that stays where the boat has
+                # been (it does not move with the boat) and is densest near the stern.
+                m, wl = int(wake.get("count", 600)), float(wake["length"])
+                s_along = wl * rng.uniform(0.0, 1.0, m) ** 1.5
+                half_w = 0.5 * beam + float(wake.get("spread", 0.06)) * s_along
+                wp = (origin - along * (0.5 * length) - along[None, :] * s_along[:, None]
+                      + across[None, :] * (rng.uniform(-1.0, 1.0, m) * half_w)[:, None])
+                wp[:, 2] = rng.uniform(0.1, float(wake.get("depth", 2.0)), m)
+                ts_wake = float(wake.get("strength_db_per_m", -25.0)) + 10.0 * np.log10(wl)
+                scene.add_points(wp, np.sqrt(10.0 ** (ts_wake / 10.0) / m) * (rng.standard_normal(m) + 1j * rng.standard_normal(m)) / np.sqrt(2.0),
+                                 (0.0, 0.0, 0.0), label + "_wake")
+        elif kind == "debris":
+            # Seabed clutter: small boxes of random size and position (crates, blocks, junk).
+            x, y, depth = item["x_range"], item["y_range"], float(item.get("depth", 0.0))
+            lo_s, hi_s = item.get("size_range", [0.3, 1.2])
+            for _ in range(int(item["count"])):
+                size = rng.uniform(lo_s, hi_s, 3) * np.array([1.0, 1.0, 0.6])
+                cx, cy = float(rng.uniform(*x)), float(rng.uniform(*y))
+                lo = [cx - size[0] / 2, cy - size[1] / 2, depth - size[2]]
+                hi = [cx + size[0] / 2, cy + size[1] / 2, depth]
+                _add_box(scene, lo, hi, {**item, "type": "debris", "label": item.get("label", "debris")}, rng, vel,
+                         outward=True)
+                scene.occluders.append(("box", lo, hi))
         elif kind == "volume":
             # Point scatterers spread through a box (sediment inhomogeneities, bubbles, fish):
             # isotropic, complex Gaussian amplitudes of the given RMS.

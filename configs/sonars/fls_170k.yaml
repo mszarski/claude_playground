@@ -1,4 +1,4 @@
-# Forward-looking sonar, 170 kHz, 600 m: a horizontal line array on an AUV with a 120 degree
+# Forward-looking sonar, 170 kHz, 450 m (agreed with the owner; 600 m left 14 dB of margin): a horizontal line array on an AUV with a 120 degree
 # sector. Requirements from the owner: centre frequency, range, 120 degrees horizontal,
 # vertical field of view 5 degrees, tilted up 2.0 degrees. Everything else is a design choice derived
 # in docs/DESIGN.md (pitch for no grating lobes over the sector, 128 channels, band, pulse).
@@ -37,7 +37,7 @@ receive:
   adc_full_scale: 1.0            # V
   sensitivity_db: -190.0         # dB re 1 V/uPa
   gain_db: 20.0
-  window: {range: [5.0, 600.0]}
+  window: {range: [5.0, 450.0]}
 
 unconfirmed:
   - array                        # element count, pitch and sizes are design values, not built

@@ -1,0 +1,25 @@
+# MINSAS-class SAS over a boulder field: 45 rocks from 15 cm to 90 cm radius scattered on
+# flat sand, each with its highlight towards the sonar and its shadow behind. One leg,
+# 12 m altitude, 2.18 m/s (4.2 kn), 0.544 m per ping (half the array).
+# Limits: exact navigation; rocks are rough spheres half sunk in the sand; the sand has
+# far fewer scatterers than the 2 cm resolution cells.
+name: sas_minsas_boulder_field
+sonar: sas_minsas120
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 60.0e3, window: {range: [38.0, 68.0]}}
+  transmit: {waveform: {duration: 2.5e-3}}
+environment: {sound_speed: 1500.0, temperature: 10.0, salinity: 35.0}
+platform:
+  speed: 2.176                   # 0.544 m per ping: exactly half the 1.088 m array, so phase centres are evenly spaced
+  legs:
+    - {start: [-1.0, 0.0, -12.0], heading_deg: 0.0, pings: 64}
+pings: {interval: 0.25}
+scene:
+  - {type: seafloor, label: sand, x_range: [-2.0, 34.0], y_range: [37.0, 66.0], density: 18.0, lambert_mu_db: -27.0}
+  - {type: rocks, label: boulders, x_range: [3.0, 29.0], y_range: [40.0, 63.0], count: 45, radius_range: [0.15, 0.9],
+     density: 90.0, mu_db: -14.0}
+synthesis: {beam_floor_db: -40.0}
+absorption: francois_garrison
+receiver: {noise_rms: 0.0, adc: false}
+seed: 71

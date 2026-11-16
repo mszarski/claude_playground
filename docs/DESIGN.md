@@ -18,7 +18,7 @@ chosen in a config file, or arithmetic on those. Published figures used for comp
 - **One description per scenario.** `configs/scenarios/<name>.yaml` names a sonar, the platform's motion,
   the scene, the propagation model, reverberation and noise.
 - **Runs on a CPU.** Every stage has a host implementation; the CUDA backend is optional and gives the same
-  results. Section 7 lists measured CPU run times.
+  results. `SCENARIOS.md` lists measured CPU run times.
 
 ## 2. Requirements and where each is met
 
@@ -30,7 +30,7 @@ chosen in a config file, or arithmetic on those. Published figures used for comp
 | FLS-120K-4 | Vertical field of view 20 degrees, adjustable | `configs/sonars/fls_120k.yaml: fov.vertical_deg, fov.tilt_up_deg` | 20 degrees, tilted up 0.0 degrees | yes |
 | FLS-120K-5 | Ownship (an AUV at about 20 m) under way against static and moving targets, one a boat hull; seabed and sea surface fixed in the world | `configs/scenarios/fls_120k_transit.yaml: platform, scene, reverberation` | depth 20 m, 2 m/s; moving: boat_under_way; static: boat_at_anchor, mooring_buoy, pinnacle; 2 boundaries with ownship Doppler | yes |
 | FLS-170K-1 | Centre frequency 170 kHz | `configs/sonars/fls_170k.yaml: transmit.waveform.f_start, f_stop` | 170 kHz | yes |
-| FLS-170K-2 | Range 600 m | `configs/sonars/fls_170k.yaml: receive.window.range` | 600 m; SNR there 14 dB (link budget) | yes |
+| FLS-170K-2 | Range 450 m | `configs/sonars/fls_170k.yaml: receive.window.range` | 450 m; SNR there 35 dB (link budget) | yes |
 | FLS-170K-3 | 120 degrees horizontal field of view | `configs/sonars/fls_170k.yaml: fov.horizontal_deg` | 120 degrees; no grating lobe within +/-80 degrees | yes |
 | FLS-170K-4 | Vertical field of view 5 degrees, adjustable, steered up | `configs/sonars/fls_170k.yaml: fov.vertical_deg, fov.tilt_up_deg` | 5 degrees, tilted up 2.0 degrees | yes |
 | FLS-170K-5 | Ownship (an AUV at about 20 m) under way against static and moving targets, one a boat hull; seabed and sea surface fixed in the world | `configs/scenarios/fls_170k_transit.yaml: platform, scene, reverberation` | depth 20 m, 2 m/s; moving: boat_under_way; static: boat_at_anchor, mooring_buoy, pinnacle; 2 boundaries with ownship Doppler | yes |
@@ -39,16 +39,21 @@ chosen in a config file, or arithmetic on those. Published figures used for comp
 | FLS-330K-3 | 120 degrees horizontal field of view | `configs/sonars/fls_330k.yaml: fov.horizontal_deg` | 120 degrees; no grating lobe within +/-77 degrees | yes |
 | FLS-330K-4 | Vertical field of view 5 degrees, adjustable, steered up | `configs/sonars/fls_330k.yaml: fov.vertical_deg, fov.tilt_up_deg` | 5 degrees, tilted up 3.5 degrees | yes |
 | FLS-330K-5 | Ownship (an AUV at about 20 m) under way against static and moving targets, one a boat hull; seabed and sea surface fixed in the world | `configs/scenarios/fls_330k_transit.yaml: platform, scene, reverberation` | depth 20 m, 2 m/s; moving: boat_under_way; static: boat_at_anchor, mooring_buoy, pinnacle; 2 boundaries with ownship Doppler | yes |
-| SAS-1 | SAS like the Kraken MINSAS 120 at 330 kHz | `configs/sonars/sas_minsas120.yaml: transmit.waveform, array` | 330 kHz, 40 kHz, 1.09 m array, 3.3 x 1.9 cm (published: 40 kHz, 1.09 m, 3.3 x 3.0 cm) | yes |
-| SAS-2 | Survey paths | `configs/scenarios/sas_minsas_survey.yaml: platform.legs` | 2 legs, headings 0, 180 degrees; 0.40 m per ping (limit 0.544 m) | yes |
+| SAS-1 | SAS like the Kraken MINSAS 120 at 330 kHz | `configs/sonars/sas_minsas120.yaml: transmit.waveform, array` | 330 kHz, 40 kHz, 1.09 m array, 2.1 x 1.9 cm (published: 40 kHz, 1.09 m, 3.3 x 3.0 cm, or 2.1 x 1.9 cm post-processed) | yes |
+| SAS-2 | Survey paths | `configs/scenarios/sas_minsas_survey.yaml: platform.legs` | 2 legs, headings 0, 180 degrees; 0.54 m per ping (limit 0.544 m) | yes |
 | SAS-3 | Seabed with a shipwreck, a cable, rocks and a cube for calibration | `configs/scenarios/sas_minsas_survey.yaml: scene` | seabed, wreck_hull, wreck_deckhouse, wreck_mast, cable, rocks, calibration_cube | yes |
 | POP-1 | Popoto array with ownship moving and a big moving target many km away | `configs/scenarios/popoto_far_mover.yaml: platform.velocity, scene` | ownship 1.5 m/s; target at 6.1 km moving 6 m/s, +25 dB | yes |
 | POP-2 | The Popoto array scales to more elements | `configs/sonars/popoto_array.yaml: array.count, receive.board_size` | 8 hydrophones on 1 boards; 16 hydrophones on 2 boards; 32 hydrophones on 4 boards; 64 hydrophones on 8 boards | yes |
+| POP-3 | Frequency and source level that take the Popoto array to 12 km | `configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)` | 5 kHz, 197 dB, 32 hydrophones, 1 s pulse: 15 dB at 12 km with spherical spreading (study: 195 dB at 4.2 kHz for 13 dB) | yes |
+| POP-4 | Popoto examples with different ocean characteristics, sound-speed profiles, bottom types and depths | `configs/scenarios/popoto_env_summer_mud_60m.yaml: propagation.environment (and the other popoto_env_* files)` | 4 environments: popoto_env_deep_silt_1000m, popoto_env_gravel_30m, popoto_env_summer_mud_60m, popoto_env_winter_sand_200m | yes |
+| FLS-X | More FLS examples: a realistic boat, clutter on the seabed, waves on the sea surface | `configs/scenarios/fls_120k_cluttered_seabed.yaml: scene (also fls_120k_rough_surface, fls_170k_traffic)` | fls_120k_cluttered_seabed: boat, cable, debris, rocks, seafloor; fls_120k_rough_surface: boat, points, sea_surface, sphere; fls_170k_traffic: boat | yes |
+| SAS-4 | More SAS examples with rocks | `configs/scenarios/sas_minsas_boulder_field.yaml: scene (also sas_minsas_rocky_ripples)` | sas_minsas_boulder_field: 45 rocks; sas_minsas_rocky_ripples: 47 rocks | yes |
 | CFG-fls_120k | `fls_120k`: elements and array configurable | `configs/sonars/fls_120k.yaml: array.count, array.pitch, fov` | overrides checked: count 2x gives 2x aperture | yes |
 | CFG-fls_170k | `fls_170k`: elements and array configurable | `configs/sonars/fls_170k.yaml: array.count, array.pitch, fov` | overrides checked: count 2x gives 2x aperture | yes |
 | CFG-fls_330k | `fls_330k`: elements and array configurable | `configs/sonars/fls_330k.yaml: array.count, array.pitch, fov` | overrides checked: count 2x gives 2x aperture | yes |
 | CFG-sas_minsas120 | `sas_minsas120`: elements and array configurable | `configs/sonars/sas_minsas120.yaml: array.count, array.pitch` | overrides checked: count 2x gives 2x aperture | yes |
 | CFG-popoto_array | `popoto_array`: elements and array configurable | `configs/sonars/popoto_array.yaml: array.count, array.pitch` | overrides checked: count 2x gives 2x aperture | yes |
+| CFG-popoto_long_range | `popoto_long_range`: elements and array configurable | `configs/sonars/popoto_long_range.yaml: array.count, array.pitch` | overrides checked: count 2x gives 2x aperture | yes |
 
 Each row is checked by `tests/python/test_design.py`; the scenarios are run by `tests/python/test_realistic_scenes.py` (thinned) and `tools/gallery.py` (full size).
 
@@ -56,41 +61,41 @@ Each row is checked by `tests/python/test_design.py`; the scenarios are run by `
 
 ![Arrays and beams](design/arrays.png)
 
-| Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | How it is derived |
-| --- | --- | --- | --- | --- | --- | --- |
-| Centre frequency (kHz) | 120 | 170 | 330 | 330 | 8 | config: mean of `f_start`, `f_stop` |
-| Bandwidth (kHz) | 20 | 20 | 30 | 40 | 4 | config |
-| Wavelength (mm) | 12.50 | 8.82 | 4.55 | 4.55 | 187.50 | c / f at 1500 m/s |
-| Elements | 128 | 128 | 128 | 32 | 32 | config: `array.count` |
-| Pitch (mm) | 6.0 | 4.2 | 2.2 | 34.0 | 94.0 | config: `array.pitch` |
-| Pitch at the top of the band (wavelengths) | 0.520 | 0.504 | 0.506 | 7.933 | 0.627 | pitch / (c / f_stop) |
-| Steering with no grating lobe (deg, each side) | 67 | 80 | 77 | 0 | 37 | asin(wavelength / pitch − 1) |
-| Array length (m) | 0.768 | 0.538 | 0.282 | 1.088 | 3.008 | elements × pitch |
-| Beamwidth at broadside (deg) | 0.83 | 0.83 | 0.82 | 0.21 | 3.16 | 0.886 wavelength / length |
-| Cross-range cell at full range (m) | 4.33 | 8.73 | 4.29 | 0.74 | 375.55 | range × beamwidth |
-| Range resolution (cm) | 3.75 | 3.75 | 2.50 | 1.88 | 18.75 | c / 2B, before windowing |
-| Horizontal field of view (deg) | 120 | 120 | 120 | 7 | omni | config: `fov.horizontal_deg` or element width |
-| Vertical field of view (deg) | 20 | 5 | 5 | 19 | omni | config: `fov.vertical_deg` or element height |
-| Boresight above horizontal (deg) | 0.0 | 2.0 | 3.5 | -15.0 | 0.0 | config: `fov.tilt_up_deg` or `array.boresight` |
-| Element width along the array (mm) | 5.3 | 3.7 | 1.9 | 33.0 | omni | config, or 0.886 wavelength / horizontal field of view |
-| Element height (mm) | 31.7 | 89.6 | 46.1 | 12.0 | omni | config, or 0.886 wavelength / vertical field of view |
-| Capture boards | 1 | 1 | 1 | 1 | 4 | config: `receive.board_size` |
+| Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | `popoto_long_range` | How it is derived |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Centre frequency (kHz) | 120 | 170 | 330 | 330 | 8 | 5 | config: mean of `f_start`, `f_stop` |
+| Bandwidth (kHz) | 20 | 20 | 30 | 40 | 4 | 2 | config |
+| Wavelength (mm) | 12.50 | 8.82 | 4.55 | 4.55 | 187.50 | 300.00 | c / f at 1500 m/s |
+| Elements | 128 | 128 | 128 | 48 | 32 | 32 | config: `array.count` |
+| Pitch (mm) | 6.0 | 4.2 | 2.2 | 22.7 | 94.0 | 150.0 | config: `array.pitch` |
+| Pitch at the top of the band (wavelengths) | 0.520 | 0.504 | 0.506 | 5.289 | 0.627 | 0.600 | pitch / (c / f_stop) |
+| Steering with no grating lobe (deg, each side) | 67 | 80 | 77 | 0 | 37 | 42 | asin(wavelength / pitch − 1) |
+| Array length (m) | 0.768 | 0.538 | 0.282 | 1.088 | 3.008 | 4.800 | elements × pitch |
+| Beamwidth at broadside (deg) | 0.83 | 0.83 | 0.82 | 0.21 | 3.16 | 3.17 | 0.886 wavelength / length |
+| Cross-range cell at full range (m) | 4.33 | 6.54 | 4.29 | 0.74 | 375.55 | 703.26 | range × beamwidth |
+| Range resolution (cm) | 3.75 | 3.75 | 2.50 | 1.88 | 18.75 | 37.50 | c / 2B, before windowing |
+| Horizontal field of view (deg) | 120 | 120 | 120 | 10 | omni | omni | config: `fov.horizontal_deg` or element width |
+| Vertical field of view (deg) | 20 | 5 | 5 | 19 | omni | omni | config: `fov.vertical_deg` or element height |
+| Boresight above horizontal (deg) | 0.0 | 2.0 | 3.5 | -15.0 | 0.0 | 0.0 | config: `fov.tilt_up_deg` or `array.boresight` |
+| Element width along the array (mm) | 5.3 | 3.7 | 1.9 | 22.0 | omni | omni | config, or 0.886 wavelength / horizontal field of view |
+| Element height (mm) | 31.7 | 89.6 | 46.1 | 12.0 | omni | omni | config, or 0.886 wavelength / vertical field of view |
+| Capture boards | 1 | 1 | 1 | 1 | 4 | 4 | config: `receive.board_size` |
 
-SAS-specific (`sas_minsas120`): along-track resolution 3.3 cm (half the 6.6 cm transmit aperture); transmit beam 3.5 degrees, so the synthetic aperture is 3.1 m long at 50 m; the platform may advance at most 0.544 m per ping (half the array), which at the full 200 m range allows 2.00 m/s. Kraken publishes 40 kHz, a 109 cm array, 3.3 cm × 3.0 cm and 2 to 6 knots for the MINSAS 120; the 330 kHz centre frequency is the owner's figure; element count, pitch and element sizes are choices made here.
+SAS-specific (`sas_minsas120`): along-track resolution 2.1 cm (half the 4.2 cm transmit aperture); transmit beam 5.5 degrees, so the synthetic aperture is 4.8 m long at 50 m; the platform may advance at most 0.544 m per ping (half the array), which at the full 200 m range allows 2.00 m/s. Kraken publishes 40 kHz, a 109 cm array, 3.3 cm × 3.0 cm and 2 to 6 knots for the MINSAS 120; the 330 kHz centre frequency is the owner's figure; element count, pitch and element sizes are choices made here.
 
 The Popoto array is shown as its scenario uses it (32 hydrophones, 6–10 kHz). `array.count` sets the size; boards of eight inputs follow.
 
 ## 4. Timing and data
 
-| Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | How it is derived |
-| --- | --- | --- | --- | --- | --- | --- |
-| Full range (m) | 300 | 600 | 300 | 200 | 6800 | config: `receive.window.range` (scenario window for the Popoto array) |
-| Pulse length (ms) | 10.0 | 20.0 | 10.0 | 5.0 | 1000.0 | config |
-| Shortest ping interval (s) | 0.410 | 0.820 | 0.410 | 0.272 | 10.067 | 2 × range / c + pulse |
-| ADC rate (kHz) | 500.0 | 750.0 | 1500.0 | 1500.0 | 102.4 | config: `receive.sample_rate` |
-| ADC bits | 16 | 16 | 16 | 16 | 24 | config |
-| Samples per ping per channel | 205000 | 615000 | 615000 | 407500 | 1030827 | interval × rate |
-| Raw data rate while receiving (Mbit/s) | 1024.0 | 1536.0 | 3072.0 | 768.0 | 78.6 | elements × rate × bits |
+| Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | `popoto_long_range` | How it is derived |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Full range (m) | 300 | 450 | 300 | 200 | 6800 | 12700 | config: `receive.window.range` (scenario window for the Popoto array) |
+| Pulse length (ms) | 10.0 | 20.0 | 10.0 | 5.0 | 1000.0 | 1000.0 | config |
+| Shortest ping interval (s) | 0.410 | 0.620 | 0.410 | 0.272 | 10.067 | 17.933 | 2 × range / c + pulse |
+| ADC rate (kHz) | 500.0 | 750.0 | 1500.0 | 1500.0 | 102.4 | 102.4 | config: `receive.sample_rate` |
+| ADC bits | 16 | 16 | 16 | 16 | 24 | 24 | config |
+| Samples per ping per channel | 205000 | 465000 | 615000 | 407500 | 1030827 | 1836373 | interval × rate |
+| Raw data rate while receiving (Mbit/s) | 1024.0 | 1536.0 | 3072.0 | 1152.0 | 78.6 | 78.6 | elements × rate × bits |
 
 The simulations take the receive chain as already at complex baseband (twice the bandwidth), which is what a
 front end with digital down-conversion would deliver; the ADC rates above are for sampling the carrier directly.
@@ -102,21 +107,61 @@ front end with digital down-conversion would deliver; the ADC rates above are fo
 Output SNR = SL − 2 TL + TS − NL + array gain + 10 log10(T), with spherical spreading plus Francois–Garrison
 absorption and the four-term ambient-noise fit at 5 m/s wind (`gpusonar.sonar_equation`).
 
-| Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` |
-| --- | --- | --- | --- | --- | --- |
-| Source level (dB re 1 µPa at 1 m) | 210 | 210 | 210 | 215 | 185 |
-| Absorption (dB/km) | 41.3 | 52.9 | 83.7 | 79.5 | 0.6 |
-| Noise spectrum level (dB re 1 µPa²/Hz) | 28.9 | 30.3 | 35.4 | 35.4 | 47.9 |
-| Target strength assumed (dB) | 5 | 5 | 5 | -71 | 25 |
-| Array gain (dB) | 21.1 | 21.1 | 21.1 | 28.6 | 15.1 |
-| Pulse-compression gain, 10 log10(BT) (dB) | 23.0 | 26.0 | 24.8 | 23.0 | 36.0 |
-| **SNR at full range (dB)** | 63.3 | 14.1 | 31.4 | -9.5 | 15.4 |
-| Range at which SNR falls to 13 dB (m) | 724 | 608 | 384 | 117 | 7439 |
+| Quantity | `fls_120k` | `fls_170k` | `fls_330k` | `sas_minsas120` | `popoto_array` | `popoto_long_range` |
+| --- | --- | --- | --- | --- | --- | --- |
+| Source level (dB re 1 µPa at 1 m) | 210 | 210 | 210 | 215 | 185 | 197 |
+| Absorption (dB/km) | 41.3 | 52.9 | 83.7 | 79.5 | 0.6 | 0.3 |
+| Noise spectrum level (dB re 1 µPa²/Hz) | 28.9 | 30.3 | 35.4 | 35.4 | 47.9 | 51.5 |
+| Target strength assumed (dB) | 5 | 5 | 5 | -73 | 25 | 25 |
+| Array gain (dB) | 21.1 | 21.1 | 21.1 | 32.3 | 15.1 | 15.1 |
+| Pulse-compression gain, 10 log10(BT) (dB) | 23.0 | 26.0 | 24.8 | 23.0 | 36.0 | 33.0 |
+| **SNR at full range (dB)** | 63.3 | 35.0 | 31.4 | -7.8 | 15.4 | 13.4 |
+| Range at which SNR falls to 13 dB (m) | 724 | 608 | 384 | 123 | 7439 | 12915 |
 
-Target assumed: `fls_120k`: small boat hull; `fls_170k`: small boat hull; `fls_330k`: small boat hull; `sas_minsas120`: one resolution cell of seabed (3.3 cm x 1.9 cm) at -27 dB Lambert and 15 degrees grazing; array gain includes the pings of the synthetic aperture at full range; `popoto_array`: ship-sized target.
+Target assumed: `fls_120k`: small boat hull; `fls_170k`: small boat hull; `fls_330k`: small boat hull; `sas_minsas120`: one resolution cell of seabed (2.1 cm x 1.9 cm) at -27 dB Lambert and 15 degrees grazing; array gain includes the pings of the synthetic aperture at full range; `popoto_array`: ship-sized target; `popoto_long_range`: ship-sized target.
 
-- **SAS:** with a 215 dB source a single cell of seabed stays 13 dB above noise out to 117 m, not the 200 m of the receive window (-10 dB there). Objects are much stronger than one cell of sand. The array gain is evaluated at full range and is smaller closer in, so the curve is optimistic at short range.
-- **170 kHz:** the margin at 600 m is thin; a boat hull there is near the detection threshold before any reverberation.
+- **SAS:** with a 215 dB source a single cell of seabed stays 13 dB above noise out to 123 m, not the 200 m of the receive window (-8 dB there). Objects are much stronger than one cell of sand. The array gain is evaluated at full range and is smaller closer in, so the curve is optimistic at short range.
+- **170 kHz:** specified to 450 m after the first budget showed 14 dB at 600 m.
+
+### Popoto array to 12 km: which frequency and how much power
+
+![Source level needed for 12 km against frequency](design/popoto_range_study.png)
+
+From `tools/popoto_range_study.py`: target +25 dB, 1 s pulse, 13 dB at the beamformer output, ambient noise at 5 m/s wind, spherical spreading plus absorption.
+
+- **The present band cannot do it.** At 27.5 kHz absorption alone costs about 136 dB over the 24 km round trip; 12 km would need 319 dB. With 8 hydrophones at 190 dB that band reaches about 2.8 km on this budget.
+- **The frequency has to come down to 4 to 6 kHz.** Below that, ambient noise rises and a half-wavelength array of a
+  given count gets long; above it, absorption takes over.
+
+| Array (half-wavelength spacing) | Best frequency | Array length | Source level for 12 km | Acoustic power, omnidirectional projector |
+| --- | --- | --- | --- | --- |
+| 8 hydrophones | 4.2 kHz | 1.4 m | 201 dB | 1088 W |
+| 16 hydrophones | 4.2 kHz | 2.9 m | 198 dB | 544 W |
+| 32 hydrophones | 4.2 kHz | 5.8 m | 195 dB | 272 W |
+| 64 hydrophones | 4.2 kHz | 11.5 m | 192 dB | 136 W |
+| 1.5 m aperture (11 hydrophones) | 5.5 kHz | 1.5 m | 200 dB | 897 W |
+| 3.0 m aperture (22 hydrophones) | 5.5 kHz | 3.0 m | 197 dB | 449 W |
+| 6.0 m aperture (44 hydrophones) | 5.5 kHz | 6.0 m | 194 dB | 224 W |
+
+- **Chosen (`popoto_long_range`):** 32 hydrophones at 15 cm (4.8 m), 4 to 6 kHz, 1 s, 197 dB: 15 dB at 12 km on this budget. Acoustic power is 10^((SL - 170.8 - DI) / 10) W; a projector with directivity needs less, and electrical power is
+  higher by the transducer's efficiency (not known until a projector is chosen). Doubling the hydrophones saves 3 dB;
+  doubling the pulse length saves 3 dB.
+- **Spherical spreading is the cautious case.** In shallow water sound is trapped between surface and bottom:
+  Bellhop for 100 m of isovelocity water over sand, 3 m aperture, gives
+
+| Frequency | One-way loss, Bellhop | One-way loss, spherical | Source level for 12 km (noise only) |
+| --- | --- | --- | --- |
+| 2 kHz | 69.0 dB | 83.1 dB | 175 dB |
+| 4 kHz | 70.4 dB | 84.6 dB | 170 dB |
+| 8 kHz | 75.1 dB | 89.3 dB | 171 dB |
+| 12 kHz | 82.6 dB | 96.8 dB | 181 dB |
+
+  That is 14 dB less loss each way, but it holds only for that depth, bottom and profile, and at those levels
+  reverberation, not noise, decides detection. The `popoto_env_*` scenarios (`SCENARIOS.md`) show how much the
+  environment moves the answer: a downward-refracting summer profile over mud loses far more than spherical spreading.
+
+- The boards sample at 102.4 kHz and need no change for this band; the hydrophones, the projector and its power
+  amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.
 
 - These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short
   and medium range.
@@ -136,4 +181,6 @@ Target assumed: `fls_120k`: small boat hull; `fls_170k`: small boat hull; `fls_3
 
 ![popoto_far_mover](design/geometry_popoto_far_mover.png)
 
-Simulated images, detections and tracks for each of these are in `SCENARIOS.md`.
+Every scenario, including those not shown here, has a plan and side view drawn from its file by
+`tools/scenario_diagrams.py` in `docs/scenarios/`. Simulated images, animations, detections and tracks are in
+`SCENARIOS.md`.

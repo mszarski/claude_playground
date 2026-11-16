@@ -29,9 +29,9 @@ def quick(name):
     cfg = load_scenario_config(name)
     if name in gallery.QUICK:
         gallery.QUICK[name](cfg)
-    fig, metrics = gallery.RUNNERS[name](name, cfg, HOST, True)
-    gallery.plt.close(fig)
-    return metrics
+    out = gallery.RUNNERS[name](name, cfg, HOST, True)
+    gallery.plt.close(out[0])
+    return out[1]
 
 
 def test_every_mode_has_a_realistic_scenario():
@@ -137,7 +137,7 @@ def test_high_frequency_fls_sees_the_surface_targets_in_its_tilted_beam(name):
 def test_sas_survey_images_the_seabed_from_both_sides():
     m = quick("sas_minsas_survey")
     one, two = m["legs"]["leg_1"], m["legs"]["leg_2"]
-    assert one["sonar_side_of_wreck"] != two["sonar_side_of_wreck"]
+    assert one["sonar_side"] != two["sonar_side"]
     for leg in (one, two):
         assert leg["covered_fraction"] > 0.4
         assert leg["far_strip_over_near_strip_db"] < -10.0                   # the wreck's shadow falls away from the sonar
@@ -154,3 +154,55 @@ def test_popoto_array_tracks_a_distant_mover_and_gains_with_size():
     gain = m["peak_over_median_db_by_hydrophone_count"]
     assert gain["8"] < gain["16"] < gain["32"]
     assert gain["32"] - gain["8"] == pytest.approx(6.0, abs=2.5)             # 10 log10(4)
+
+
+# --- more examples: realistic boats, clutter, waves, rocks, other oceans -----------------------
+
+def test_fls_over_a_cluttered_seabed_still_tracks_the_boats():
+    m = quick("fls_120k_cluttered_seabed")
+    t = m["targets"]
+    assert set(t) == {"boat_under_way", "boat_at_anchor"}                    # areas of seabed are not targets
+    assert t["boat_under_way"]["tracked"] and t["boat_under_way"]["position_error_m"] < 4.0
+    assert t["boat_under_way"]["track_velocity_xy"][1] < -2.5                # crossing to port at 5 m/s
+    assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 1.2
+    # Boulders, debris and the pipeline are real echoes: many detections and tracks that are not boats.
+    assert min(m["detections_per_ping"]) > 20 and m["confirmed_tracks"] > 10
+
+
+def test_fls_170k_separates_closing_crossing_and_anchored_boats():
+    t = quick("fls_170k_traffic")["targets"]
+    assert t["boat_closing"]["tracked"] and t["boat_closing"]["track_velocity_xy"][0] < -4.5
+    assert t["boat_crossing"]["tracked"] and t["boat_crossing"]["track_velocity_xy"][1] > 3.0
+    assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 0.6
+
+
+@pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
+def test_popoto_long_range_design_holds_a_ship_at_12_km():
+    m = quick("popoto_12km")
+    ship = m["targets"]["ship"]
+    assert ship["tracked"] and ship["position_error_m"] < 150.0
+    assert ship["track_velocity_xy"][0] < -2.0
+    gain = m["peak_over_median_db_by_hydrophone_count"]
+    assert gain["8"] < gain["16"] < gain["32"] and gain["32"] > 18.0
+
+
+@pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
+def test_the_ocean_decides_what_the_popoto_array_sees():
+    # Same sonar, same ship. Winter water over sand at 8 km: tracked. Summer thermocline over
+    # mud at 4 km, half the range: the downward-bent sound is absorbed by the bottom and the
+    # ship near the surface is not detected.
+    winter, summer = quick("popoto_env_winter_sand_200m"), quick("popoto_env_summer_mud_60m")
+    assert winter["targets"]["ship"]["tracked"] and winter["targets"]["ship"]["position_error_m"] < 150.0
+    assert not summer["targets"]["ship"]["tracked"]
+    assert (winter["peak_over_median_db_by_hydrophone_count"]["32"]
+            - summer["peak_over_median_db_by_hydrophone_count"]["32"]) > 10.0
+
+
+@pytest.mark.parametrize("name, rocks, floor", [("sas_minsas_boulder_field", ["boulders"], "sand"),
+                                                ("sas_minsas_rocky_ripples", ["outcrop", "stones", "cable"], "rippled_sand")])
+def test_minsas_images_rocks_above_the_seabed(name, rocks, floor):
+    leg = quick(name)["legs"]["leg_1"]
+    assert leg["covered_fraction"] > 0.6
+    lv = leg["object_over_median_db"]
+    for label in rocks:
+        assert lv[label] > lv[floor] + 4.0, label

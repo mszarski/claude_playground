@@ -44,7 +44,8 @@ def test_every_named_sonar_is_shipped():
     # Anything beyond those is listed here on purpose, so additions are deliberate.
     assert shipped - set(ALL_SONARS) == {"subbottom", "popoto_4x7", "fls_750k",
                                          # the owner's designs (docs/DESIGN.md)
-                                         "fls_120k", "fls_170k", "fls_330k", "sas_minsas120", "popoto_array"}
+                                         "fls_120k", "fls_170k", "fls_330k", "sas_minsas120", "popoto_array",
+                                         "popoto_long_range"}
 
 
 @pytest.mark.parametrize("name", ALL_SONARS)

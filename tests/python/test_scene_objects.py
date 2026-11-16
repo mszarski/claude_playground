@@ -281,3 +281,51 @@ def test_volume_clutter_and_label_masks():
     assert clutter[:, 2].min() >= 0.1 and clutter[:, 2].max() <= 0.5
     assert np.sqrt(np.mean(np.abs(scene.amplitudes[masks["clutter"]]) ** 2)) == pytest.approx(0.01, rel=0.1)
     assert not scene.lambert[masks["clutter"]].any()
+
+
+# --- boats, waves and seabed clutter ---------------------------------------------------
+
+def test_sea_surface_facets_follow_the_waves_and_face_down_into_the_water():
+    item = {"type": "sea_surface", "label": "waves", "x_range": [0.0, 80.0], "y_range": [-20.0, 20.0], "density": 2.0,
+            "mu_db": -22.0, "waves": [{"amplitude": 0.6, "wavelength": 40.0, "direction_deg": 0.0},
+                                      {"amplitude": 0.15, "wavelength": 6.0, "direction_deg": 50.0}]}
+    scene = build_scene([item], rng())
+    z = scene.positions[:, 2]
+    assert 0.5 < z.max() <= 0.75 and -0.75 <= z.min() < -0.5       # the two wave trains add
+    assert np.all(scene.normals[:, 2] > 0.5)                       # z is down: normals point into the water
+    assert np.allclose(np.linalg.norm(scene.normals, axis=1), 1.0)
+    # A sonar below and to the -x side gets more from faces tilted towards it than from faces tilted away.
+    tilt = scene.normals[:, 0]
+    assert tilt.std() > 0.03 and abs(tilt.mean()) < 0.02
+    flat = build_scene([{**item, "waves": []}], rng())
+    assert np.allclose(flat.positions[:, 2], 0.0) and np.allclose(flat.normals, [0.0, 0.0, 1.0])
+
+
+def test_boat_has_hull_keel_propeller_and_a_wake_that_stays_behind():
+    item = {"type": "boat", "label": "launch", "origin": [100.0, 0.0, 0.0], "length": 10.0, "beam": 3.0, "draft": 0.6,
+            "keel_depth": 1.2, "heading_deg": 0.0, "velocity": [4.0, 0.0, 0.0], "count": 400,
+            "wake": {"length": 50.0, "count": 300}}
+    scene = build_scene([item], rng())
+    masks = scene.label_masks()
+    assert set(masks) == {"launch", "launch_wake"}
+    boat, wake = scene.positions[masks["launch"]], scene.positions[masks["launch_wake"]]
+    assert boat[:, 0].min() > 94.0 and boat[:, 0].max() < 106.0
+    assert boat[:, 2].max() == pytest.approx(1.8, abs=0.05)        # keel foot: draft plus keel depth
+    assert boat[:, 2].min() >= -0.05                               # nothing above the waterline is modelled
+    assert wake[:, 0].max() <= 95.0 and wake[:, 0].min() >= 45.0   # astern only
+    assert np.all((wake[:, 2] > 0.0) & (wake[:, 2] <= 2.0))        # bubbles in the top two metres
+    assert np.median(wake[:, 0]) > 70.0                            # densest near the stern
+    moved = scene.at_time(2.0)
+    assert np.allclose(moved[masks["launch"]] - boat, [8.0, 0.0, 0.0])
+    assert np.allclose(moved[masks["launch_wake"]], wake)          # the wake is water, not boat
+    bare = build_scene([{k: v for k, v in item.items() if k not in ("wake", "keel_depth")}], rng())
+    assert set(bare.label_masks()) == {"launch"} and bare.positions[:, 2].max() < 1.1   # hull and propeller only
+
+
+def test_debris_is_boxes_on_the_bed_that_cast_shadows():
+    scene = build_scene([{"type": "debris", "label": "junk", "x_range": [10.0, 30.0], "y_range": [-5.0, 5.0], "depth": 40.0,
+                          "count": 7, "size_range": [0.5, 1.5], "density": 20.0, "mu_db": -10.0}], rng())
+    assert len(scene.occluders) == 7 and all(o[0] == "box" for o in scene.occluders)
+    p = scene.positions
+    assert p[:, 2].max() <= 40.0 + 1e-9 and p[:, 2].min() >= 40.0 - 0.9 - 1e-9      # at most 0.6 x 1.5 m tall
+    assert p[:, 0].min() > 9.0 and p[:, 0].max() < 31.0

@@ -1,0 +1,22 @@
+# The Popoto-board array sized for 12 km (tools/popoto_range_study.py, docs/DESIGN.md):
+# 32 hydrophones at half-wavelength spacing for 5 kHz (4.8 m), a 4-6 kHz sweep of 1 s from
+# a separate projector at 197 dB (about 420 W acoustic if omnidirectional). The boards sample at 102.4 kHz and are AC-coupled far
+# below this band, so only the hydrophones, the projector and its amplifier change.
+base: popoto_array
+name: popoto_long_range
+
+array:
+  count: 32
+  pitch: 0.15                    # m; half a wavelength at 5 kHz
+
+transmit:
+  lever_arm: [0, 0, 1.5]
+  waveform:
+    f_start: 4.0e3
+    f_stop: 6.0e3
+    duration: 1.0
+    source_level_db: 197.0       # dB re 1 uPa at 1 m: 13 dB at 12 km with spherical spreading, plus 2 dB (docs/DESIGN.md)
+
+unconfirmed:
+  - transmit                     # no projector chosen; 197 dB at 5 kHz is a large, heavy source
+  - array.pitch

@@ -405,3 +405,40 @@ document cannot drift from the configs.
 The owner chose to keep the reference's fast native path for long windows. The change is a
 patch file applied to a copy of the pinned checkout (`third_party/patches/`), three lines
 of host C++ raising one limit; the reference repository itself is not modified or vendored.
+
+### D-46 SAS surveys advance half the array per ping
+With one projector and N receivers the phase centres of a ping span half the array. Survey
+scenarios set speed × ping interval to exactly that (0.544 m for `sas_minsas120`), so the
+phase centres of successive pings are evenly spaced. At the earlier 0.4 m they overlapped
+unevenly and a point target had along-track ghosts at −15 dB; at 0.544 m the worst is
+−36 dB (`test_minsas_resolution.py`). A real vehicle cannot hold this exactly; redundant
+phase centres are also what motion estimation uses, so a real survey trades one for the other.
+
+### D-47 Weighting in the survey figures
+The MINSAS survey figures use a Hamming-weighted replica and an aperture 1.6 beamwidths long
+weighted by the beam patterns. That costs range resolution (2.6 cm against 1.9 cm) for range
+sidelobes of −41 dB, and keeps 2.0 cm along track with −36 dB sidelobes. The unweighted
+numbers are what the design table quotes; both are measured in the same test. The library
+defaults are unchanged.
+
+### D-48 One model per boundary
+A scenario models the sea surface either statistically (a `reverberation` boundary) or as
+explicit wave facets (a `sea_surface` scene item), never both. With both, the first rough-sea
+example counted the surface twice. The facets show wave structure; the statistical boundary
+gives Doppler-shifted reverberation without structure.
+
+### D-49 The 12 km Popoto design
+`popoto_long_range` is sized by `tools/popoto_range_study.py` on spherical spreading, the
+cautious case: 4–6 kHz, 32 hydrophones at half a wavelength, 1 s sweep, and 197 dB, which is
+2 dB over the 195 dB the study gives for 13 dB at 12 km. Shallow-water ducting helps and a
+summer thermocline over mud hurts by more than that margin (`SCENARIOS.md`), so the number
+is a starting point for a trial, not a guarantee. No projector is chosen.
+
+### D-50 MINSAS-class receive array: 48 elements at 2.27 cm
+Kraken does not publish the element count. With 32 elements over 1.09 m the receive phase
+centres are 1.7 cm apart, which meets the usual half-projector-length sampling rule for the
+4.2 cm projector but leaves an along-track grating lobe at 7.6 degrees that the beams only
+take down to −42 dB; the survey images showed it as ghost cables. 48 elements put it at 11
+degrees and −47 to −54 dB. More elements were not pursued: the receive element narrows with
+the pitch, so the lobe stays near its first null, and the projector's sidelobes fall slowly.
+

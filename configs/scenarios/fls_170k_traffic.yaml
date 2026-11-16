@@ -1,0 +1,35 @@
+# 170 kHz forward-looking sonar in boat traffic out to 450 m: one boat closing nearly
+# head-on at 6 m/s, one crossing at 4 m/s, one at anchor, each with a keel and a propeller,
+# the two under way trailing wakes. AUV at 20 m in 60 m of water, 2 m/s. First-order
+# surface and bottom bounces to every object, seabed and surface reverberation, noise.
+name: fls_170k_traffic
+sonar: fls_170k
+fidelity: image_source
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 40000.0, window: {range: [30.0, 450.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 60.0}
+propagation:
+  surface_z: 0.0
+  bottom_z: 60.0
+  max_order: 1
+  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+platform:
+  position: [0, 0, 20.0]
+  rpy: [0, 0, 0]
+  velocity: [2.0, 0, 0]
+pings: {count: 8, interval: 0.75}
+scene:
+  - {type: boat, label: boat_closing, origin: [400.0, 30.0, 0.0], length: 12.0, beam: 3.6, draft: 0.8, keel_depth: 0.0,
+     heading_deg: 175.0, velocity: [-5.98, 0.52, 0.0], count: 250, wake: {length: 80.0, count: 150, strength_db_per_m: -22.0}}
+  - {type: boat, label: boat_crossing, origin: [300.0, -110.0, 0.0], length: 10.0, beam: 3.2, draft: 0.6, keel_depth: 1.2,
+     heading_deg: 85.0, velocity: [0.35, 3.98, 0.0], count: 250, wake: {length: 60.0, count: 150, strength_db_per_m: -22.0}}
+  - {type: boat, label: boat_at_anchor, origin: [330.0, 120.0, 0.0], length: 9.0, beam: 3.0, draft: 0.6, keel_depth: 1.0,
+     heading_deg: -30.0, count: 200}
+reverberation:
+  - {boundary_z: 60.0, mu_db: -27.0}
+  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 5.0}
+absorption: francois_garrison
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+seed: 63

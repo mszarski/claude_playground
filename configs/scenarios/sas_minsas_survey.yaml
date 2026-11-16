@@ -2,8 +2,10 @@
 # looking to starboard at the same patch of seabed from 50 m, so every object is seen from
 # both sides. On the seabed (z = 0): a shipwreck (an upright hull 18 m long with a
 # deckhouse and a mast), a cable snaking across the patch, scattered rocks, and a 0.5 m
-# cube as a calibration target. Altitude 12 m, 1.6 m/s, a ping every 0.25 s (0.4 m per
-# ping against the 0.545 m half-array).
+# cube as a calibration target. Altitude 12 m, 2.18 m/s (4.2 kn), a ping every 0.25 s:
+# 0.544 m per ping, exactly half the array, so the phase centres of successive pings are
+# evenly spaced (at 0.4 m per ping they overlap unevenly and along-track ambiguities rise
+# from -36 dB to -15 dB; tests/python/test_minsas_resolution.py).
 # Limits: navigation is exact (see `wreck_sas` and `minefield_sas` for unknown motion);
 # the seabed has far fewer scatterers than resolution cells; the turn between legs is not
 # simulated; the receive chain is taken as already at baseband.
@@ -15,7 +17,7 @@ sonar_overrides:
   transmit: {waveform: {duration: 2.5e-3}}
 environment: {sound_speed: 1500.0, temperature: 10.0, salinity: 35.0}
 platform:
-  speed: 1.6
+  speed: 2.176                   # 0.544 m per ping: exactly half the 1.088 m array, so phase centres are evenly spaced
   legs:
     - {start: [0.0, 0.0, -12.0], heading_deg: 0.0, pings: 80}        # northbound, wreck to starboard
     - {start: [40.0, 100.0, -12.0], heading_deg: 180.0, pings: 80}   # southbound, 100 m over, looking back

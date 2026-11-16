@@ -1,0 +1,119 @@
+{
+  "flank_patrol": {
+    "frequency_hz": 8000.0,
+    "source_depth_m": 30.0,
+    "target_range_m": 2857.0980032193506,
+    "target_depth_m": 61.8,
+    "one_way_loss_db": 58.14330664054103,
+    "spherical_spreading_db": 69.11850275324385,
+    "water_depth_m": 100.0
+  },
+  "flank_target_10km": {
+    "frequency_hz": 8000.0,
+    "source_depth_m": 30.0,
+    "target_range_m": 10000.0,
+    "target_depth_m": 50.0,
+    "one_way_loss_db": 66.17316479700543,
+    "spherical_spreading_db": 80.0,
+    "water_depth_m": 100.0
+  },
+  "flank_target_1km": {
+    "frequency_hz": 8000.0,
+    "source_depth_m": 30.0,
+    "target_range_m": 1000.0,
+    "target_depth_m": 50.0,
+    "one_way_loss_db": 52.167116129063864,
+    "spherical_spreading_db": 60.0,
+    "water_depth_m": 100.0
+  },
+  "flank_target_5km": {
+    "frequency_hz": 8000.0,
+    "source_depth_m": 30.0,
+    "target_range_m": 5000.0,
+    "target_depth_m": 50.0,
+    "one_way_loss_db": 61.606101065166506,
+    "spherical_spreading_db": 73.97940008672037,
+    "water_depth_m": 100.0
+  },
+  "popoto_12km": {
+    "frequency_hz": 5000.0,
+    "source_depth_m": 10.0,
+    "target_range_m": 12026.637102698327,
+    "target_depth_m": 4.0,
+    "one_way_loss_db": 67.247218862786,
+    "spherical_spreading_db": 81.60288413131289,
+    "water_depth_m": 100.0
+  },
+  "popoto_env_deep_silt_1000m": {
+    "frequency_hz": 5000.0,
+    "source_depth_m": 50.0,
+    "target_range_m": 10031.948963187562,
+    "target_depth_m": 4.0,
+    "one_way_loss_db": 72.61643580642871,
+    "spherical_spreading_db": 80.02770628101194,
+    "water_depth_m": 1000.0
+  },
+  "popoto_env_gravel_30m": {
+    "frequency_hz": 5000.0,
+    "source_depth_m": 8.0,
+    "target_range_m": 3104.834939252005,
+    "target_depth_m": 3.0,
+    "one_way_loss_db": 52.90346573654109,
+    "spherical_spreading_db": 69.84077033902831,
+    "water_depth_m": 30.0
+  },
+  "popoto_env_summer_mud_60m": {
+    "frequency_hz": 5000.0,
+    "source_depth_m": 10.0,
+    "target_range_m": 4079.215610874228,
+    "target_depth_m": 4.0,
+    "one_way_loss_db": 88.84683625055109,
+    "spherical_spreading_db": 72.21153321954705,
+    "water_depth_m": 60.0
+  },
+  "popoto_env_winter_sand_200m": {
+    "frequency_hz": 5000.0,
+    "source_depth_m": 10.0,
+    "target_range_m": 8039.900496896712,
+    "target_depth_m": 4.0,
+    "one_way_loss_db": 64.18707187362371,
+    "spherical_spreading_db": 78.1050134776653,
+    "water_depth_m": 200.0
+  },
+  "popoto_far_mover": {
+    "frequency_hz": 8000.0,
+    "source_depth_m": 10.0,
+    "target_range_m": 6053.0983801686225,
+    "target_depth_m": 4.0,
+    "one_way_loss_db": 62.842706043160575,
+    "spherical_spreading_db": 75.63955464995813,
+    "water_depth_m": 100.0
+  },
+  "popoto_trial_1000m": {
+    "frequency_hz": 27500.0,
+    "source_depth_m": 5.0,
+    "target_range_m": 1000.0,
+    "target_depth_m": 15.0,
+    "one_way_loss_db": 48.61857801541093,
+    "spherical_spreading_db": 60.0,
+    "water_depth_m": 30.0
+  },
+  "popoto_trial_100m": {
+    "frequency_hz": 27500.0,
+    "source_depth_m": 5.0,
+    "target_range_m": 100.0,
+    "target_depth_m": 15.0,
+    "one_way_loss_db": 35.745208772913,
+    "spherical_spreading_db": 40.0,
+    "water_depth_m": 30.0
+  },
+  "popoto_trial_2000m": {
+    "frequency_hz": 27500.0,
+    "source_depth_m": 5.0,
+    "target_range_m": 2000.0,
+    "target_depth_m": 15.0,
+    "one_way_loss_db": 53.01828575354223,
+    "spherical_spreading_db": 66.02059991327963,
+    "water_depth_m": 30.0
+  }
+}
