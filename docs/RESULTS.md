@@ -102,6 +102,33 @@ On a rail the element beam (about 110°) is far wider than the angle the rail su
 so resolution is limited by the rail length, not by D/2 (which would be 0.125 mm and
 would need 5.7 m of rail at this range).
 
+## Motion estimation
+
+Source: `tests/python/test_motion.py`. CPU. Scenario: `sas_auv` at 200 kHz (wavelength
+7.5 mm), 40 pings at 0.24 m (so 4 of 16 phase centres overlap between pings), 15 m
+altitude, speckle seafloor of 25 scatterers/m² plus one bright point, short Gaussian
+pulse. True trajectory: smooth random sway of 10 mm RMS (39 mm peak, five wavelengths)
+and heave of 4 mm RMS. Navigation reports a straight level line; the DVL altitude has
+1 mm noise. 1248 delay measurements, none rejected.
+
+| Quantity | Result | Stated bound |
+| --- | --- | --- |
+| Sway error, RMS | 0.109 mm = λ/69 | λ/20 |
+| Heave error, RMS | 0.328 mm = λ/23 | λ/4 |
+| Sway error after the coarse pass only | 0.295 mm | — |
+| Point-response peak, navigation only, against the true-motion image | −10.01 dB | — |
+| Point-response peak, after motion estimation | +0.03 dB | within 1 dB |
+
+- Both Ceres passes converged (8 and 7 iterations).
+- Heave is the weaker estimate, as expected: grazing angles here span only 17° to 27°, so
+  the delays say much more about sway than heave, and the DVL term carries the altitude.
+- Solver checks on synthetic delays: exact delays are inverted to 10 µm; with twelve
+  20 µs outliers the Huber loss keeps sway inside a wavelength (3.8 mm) where the squared
+  loss gives 198 mm; correlation weighting cuts the error by more than 3× when a fifth of
+  the measurements are poor.
+- Not measured: image contrast loss (only the point-response peak), behaviour with
+  attitude errors, and anything on real data.
+
 ## Kernel accuracy
 
 Source: `tests/python/test_backproject.py`.
@@ -174,4 +201,4 @@ Source: `tests/python/test_sim.py`.
 
 ## Not yet measured
 
-Motion-estimation accuracy, detection range, and every speed figure.
+Detection range, and every speed figure.

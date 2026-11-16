@@ -272,18 +272,18 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| Coarse and fine delay estimation | | | pending |
-| Eq. 4 residual, first-order kinematics | | | pending |
-| Eq. 5 loss, Huber (Eq. 3) or squared | | | pending |
-| Correlation-coefficient weighting | | | pending |
-| Eq. 6 smoothness | | | pending |
-| Eq. 7 DVL term | | | pending |
-| Eq. 8 solve with Ceres LM and autodiff | | | pending |
-| Two-pass phase unwrapping | | | pending |
-| Surge from DVL | | | pending |
-| Surge from along-track estimation | | | pending |
-| Attitude from INS | | | pending |
-| Known bathymetry option | | | pending |
+| Coarse and fine delay estimation | `python/gpusonar/motion.py` (`correlate_window`, `measure_delays`) | `tests/python/test_motion.py::test_sway_and_heave_errors_are_a_small_fraction_of_a_wavelength`, `::test_fine_pass_improves_on_the_coarse_pass` | done (NumPy) |
+| Eq. 4 residual, first-order kinematics | `libs/motion/src/dpc_solver.cpp` (`DelayResidual`, `time_of_flight`) | `::test_residual_is_zero_at_the_truth_and_has_the_stated_sign`, `::test_solver_recovers_sway_and_heave_from_exact_delays` | done |
+| Eq. 5 loss, Huber (Eq. 3) or squared | same (`SolveOptions::huber`) | `::test_huber_loss_resists_outliers_where_squared_loss_does_not` | done |
+| Correlation-coefficient weighting | same (`use_weights`) | `::test_correlation_weighting_downweights_bad_measurements` | done |
+| Eq. 6 smoothness | same (`SmoothResidual`) | `::test_smoothness_term_reduces_noise_and_dvl_term_holds_altitude` | done |
+| Eq. 7 DVL term | same (`DvlResidual`) | same test | done |
+| Eq. 8 solve with Ceres LM and autodiff | same (`solve`) | all of `tests/python/test_motion.py` | done |
+| Two-pass phase unwrapping | `python/gpusonar/motion.py` (`estimate_motion`) | `::test_fine_pass_improves_on_the_coarse_pass` | done |
+| Surge from DVL | `python/gpusonar/motion.py` (`_ping_nav`) | end-to-end tests use it | done |
+| Surge from along-track estimation | | | **not implemented** |
+| Attitude from INS | enters Eq. 4 through `PingNav::rpy` | none with non-zero attitude | implemented, untested |
+| Known bathymetry option | `MotionOptions.bathymetry` | `::test_flat_seafloor_assumption_can_be_replaced_by_known_bathymetry` (flat function only) | done, lightly tested |
 
 ### Pre- and post-processing (Sec. II-E, Eq. 9–12)
 

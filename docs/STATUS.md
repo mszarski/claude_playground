@@ -13,14 +13,15 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 5 Run-time optimisations | done on CPU; GPU halves not run | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). Compiled but **not run**: the device slab, the CUDA culling pass, and the hardware texture path (`test_hardware_texture_matches_software_table` is skipped). |
 | 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
-| 8–13 | not started | |
+| 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
+| 9–13 | not started | |
 
 ## What is next
 
-1. Milestone 8: motion estimation (delay estimation between overlapping phase centres,
-   the Ceres solve of Eq. 8, two-pass unwrapping). Ceres is being built from source
-   without SuiteSparse so that no GPL code is linked.
-2. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
+1. Milestone 9: 3D near-field imaging (refraction at the sediment interface, layers over
+   focus depth, slices and maximum intensity projections).
+2. Milestone 8 leftovers (see "Motion estimation limits").
+3. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.
 3. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
@@ -41,11 +42,12 @@ Updated at the end of each milestone. Newest facts first within each section.
 
 1. **Plan PDF.** `docs/plan/GPU-FLS-Phased-Plan.pdf` is not in the repo yet. Hardware
    numbers currently come from the brief alone.
-2. **Ceres and SuiteSparse (copyleft).** Ubuntu's `libceres-dev` links SuiteSparse
-   CHOLMOD/SPQR, which are GPL. Ceres itself is BSD and builds without SuiteSparse. Motion
-   estimation (milestone 8) will use a Ceres built with `-DSUITESPARSE=OFF` unless you say
-   the distro package is acceptable. The distro package is installed in this container but
-   nothing links it yet.
+2. **Ceres and SuiteSparse (copyleft): handled, confirm you agree.** Ubuntu's
+   `libceres-dev` links SuiteSparse CHOLMOD/SPQR, which are GPL. Motion estimation is built
+   against Ceres 2.2.0 compiled from source with `-DSUITESPARSE=OFF` (BSD only), and CMake
+   refuses a SuiteSparse-linked Ceres unless `-DSONAR_ALLOW_SUITESPARSE=ON` is given. The
+   cost is no sparse linear solver (dense QR is used), which matters only for very long
+   runs. Say if you would rather allow the distro package.
 3. **Holoscan versions.** The ultrasound reference at `24d405e` pins Sensor Bridge 2.7.0
    and Holoscan 4.4.0 with six local SDK patches. Sensor Bridge HEAD is 3.0.0 on Holoscan
    5.0, which is not API compatible. Proposed: build our ultrasound source against the
@@ -91,6 +93,19 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - The reference transmits 5, 6.25 or 8.33 MHz only. Nothing in it supports sonar carrier
   frequencies; stages 3–6 need their own transmit chain.
 - Docs say probe "L12-5 D"; code says "L7-3".
+
+## Motion estimation limits so far
+
+- **Surge by along-track estimation (ref [9]) is not implemented.** Surge comes from the
+  DVL sample in each record.
+- Delay estimation is NumPy, not C++; only the solve is C++.
+- Tested with zero roll, pitch and yaw. Attitude and lever arms are in the residual
+  (Eq. 4's Ω), but no test perturbs them yet.
+- λ1 and λ2 are at their defaults; the tuning sweep has not been run.
+- Known-bathymetry option: the hook exists and is tested only against a flat function.
+- The scenario's ping spacing (0.24 m) leaves a quarter of the phase centres overlapping.
+  At the full 0.32 m advance there is no overlap and DPC cannot work, as in real systems.
+- Dense linear solver (no SuiteSparse): fine for hundreds of pings.
 
 ## Conditioning limits so far
 

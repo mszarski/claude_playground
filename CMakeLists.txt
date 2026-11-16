@@ -59,6 +59,29 @@ add_subdirectory(libs/sim)
 add_subdirectory(libs/dsp)
 add_subdirectory(libs/recon)
 
+# Motion estimation needs Ceres Solver (BSD). Ceres can be built with SuiteSparse, which
+# is GPL; the Ubuntu package is. This project does not link copyleft code into the core
+# without the owner's sign-off, so such a Ceres is refused unless explicitly allowed.
+# Build Ceres with -DSUITESPARSE=OFF and point SONAR_CERES_DIR (or CMAKE_PREFIX_PATH) at it.
+set(SONAR_CERES_DIR "/opt/ceres-nosuitesparse" CACHE PATH "Install prefix of a Ceres built without SuiteSparse")
+option(SONAR_ALLOW_SUITESPARSE "Allow a Ceres that links SuiteSparse (GPL)" OFF)
+set(SONAR_HAVE_MOTION OFF)
+find_package(Ceres QUIET CONFIG PATHS "${SONAR_CERES_DIR}" NO_DEFAULT_PATH)
+if(NOT Ceres_FOUND)
+  find_package(Ceres QUIET CONFIG)
+endif()
+if(Ceres_FOUND)
+  if("SuiteSparse" IN_LIST CERES_COMPILED_COMPONENTS AND NOT SONAR_ALLOW_SUITESPARSE)
+    message(WARNING "gpusonar: the Ceres found at ${Ceres_DIR} links SuiteSparse (GPL). "
+                    "Motion estimation is NOT built. Build Ceres with -DSUITESPARSE=OFF, or set "
+                    "-DSONAR_ALLOW_SUITESPARSE=ON if the project owner has agreed.")
+  else()
+    set(SONAR_HAVE_MOTION ON)
+    add_subdirectory(libs/motion)
+  endif()
+endif()
+message(STATUS "gpusonar: motion estimation ${SONAR_HAVE_MOTION} (Ceres: ${Ceres_DIR})")
+
 if(SONAR_BUILD_PYTHON)
   find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
   execute_process(

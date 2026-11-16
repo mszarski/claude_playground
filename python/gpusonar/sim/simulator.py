@@ -115,6 +115,77 @@ def _set_board_clocks(record, sonar: SonarModel, truth: bool) -> None:
 
 
 @dataclass
+class Collection:
+    """A multi-ping run with a true trajectory and what navigation reported."""
+
+    records: list            # poses as navigation reported them (what a processor gets)
+    true_positions: np.ndarray   # [n + 1, 3] true platform position at each transmit (one extra node)
+    nav_positions: np.ndarray    # [n, 3]
+    times: np.ndarray            # [n] transmit times, s
+    scene: Scene
+
+
+def smooth_disturbance(n: int, rms: float, correlation_pings: float, rng: np.random.Generator) -> np.ndarray:
+    """A smooth zero-mean random sequence: white noise through a Gaussian filter, scaled to `rms`."""
+    if rms <= 0.0:
+        return np.zeros(n)
+    pad = int(4 * correlation_pings) + 1
+    white = rng.standard_normal(n + 2 * pad)
+    k = np.arange(-pad, pad + 1)
+    kernel = np.exp(-0.5 * (k / correlation_pings) ** 2)
+    out = np.convolve(white, kernel / kernel.sum(), mode="same")[pad:pad + n]
+    out -= out[0]                       # start on the nominal track
+    return out * rms / max(out.std(), 1e-12)
+
+
+def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interval: float,
+                        start=(0.0, 0.0, -15.0), speed: float = 1.2, sway_rms: float = 0.0,
+                        heave_rms: float = 0.0, correlation_pings: float = 8.0,
+                        nav_knows_disturbance: bool = False, dvl_altitude_noise: float = 0.0,
+                        environment: dict | None = None, rng: np.random.Generator | None = None,
+                        seafloor_depth: float = 0.0, backend=core.Backend.Host, **ping_kwargs) -> Collection:
+    """Fly a straight line along +x with sway (y) and heave (z) disturbances.
+
+    The true trajectory is piecewise linear: during ping i the platform moves at
+    v_i = (p_{i+1} - p_i) / interval, the paper's first-order kinematic model. Echoes are
+    synthesised from the truth. Each record then carries what navigation would report:
+    the nominal straight track (unless `nav_knows_disturbance`), plus a DVL sample with
+    the true altitude and surge speed.
+    """
+    rng = rng or np.random.default_rng(0)
+    start = np.asarray(start, dtype=float)
+    t = np.arange(n_pings + 1) * interval
+    truth = np.tile(start, (n_pings + 1, 1))
+    truth[:, 0] += speed * t
+    truth[:, 1] += smooth_disturbance(n_pings + 1, sway_rms, correlation_pings, rng)
+    truth[:, 2] += smooth_disturbance(n_pings + 1, heave_rms, correlation_pings, rng)
+    nominal = np.tile(start, (n_pings, 1))
+    nominal[:, 0] += speed * t[:-1]
+
+    records = []
+    for i in range(n_pings):
+        v_true = (truth[i + 1] - truth[i]) / interval
+        rec = simulate_ping(sonar, make_pose(truth[i], velocity=v_true), scene, environment=environment,
+                            sequence=i, time_ns=1_700_000_000_000_000_000 + int(round(t[i] * 1e9)),
+                            scenario_time=t[i], rng=rng, backend=backend, **ping_kwargs)
+        nav_pos = truth[i] if nav_knows_disturbance else nominal[i]
+        nav_vel = v_true if nav_knows_disturbance else np.array([speed, 0.0, 0.0])
+        geo = rec.geometry
+        geo.rx_pose = make_pose(nav_pos, velocity=nav_vel)
+        geo.tx_pose = geo.rx_pose
+        rec.geometry = geo
+        dvl = core.DvlSample()
+        dvl.t = 0.0
+        dvl.velocity_body = (speed, 0.0, 0.0)
+        dvl.altitude = float(seafloor_depth - truth[i, 2] + dvl_altitude_noise * rng.standard_normal())
+        nav = rec.navigation
+        nav.dvl = [dvl]
+        rec.navigation = nav
+        records.append(rec)
+    return Collection(records, truth, nominal if not nav_knows_disturbance else truth[:-1], t[:-1], scene)
+
+
+@dataclass
 class ScenarioResult:
     records: list
     scene: Scene
@@ -135,8 +206,8 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     env = resolve_environment(cfg.get("environment"))
     tier = cfg.get("fidelity", "free_field")
     provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
-    scene = build_scene(cfg.get("scene", []))
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
+    scene = build_scene(cfg.get("scene", []), rng)
 
     plat = cfg.get("platform", {})
     position = np.asarray(plat.get("position", [0.0, 0.0, 0.0]), dtype=float)

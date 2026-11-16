@@ -2,11 +2,13 @@
 
 from .propagation import (EigenrayProvider, EigenraySet, FreeFieldProvider, ImageSourceProvider,
                           make_provider, two_way_paths)
-from .scene import Scene, build_scene, polar_grid
-from .simulator import ScenarioResult, make_pose, run_scenario, simulate_ping
+from .scene import Scene, build_scene, polar_grid, seafloor_patch
+from .simulator import (Collection, ScenarioResult, make_pose, run_scenario, simulate_collection,
+                        simulate_ping)
 
 __all__ = [
     "EigenrayProvider", "EigenraySet", "FreeFieldProvider", "ImageSourceProvider",
     "make_provider", "two_way_paths", "Scene", "build_scene", "polar_grid",
-    "ScenarioResult", "make_pose", "run_scenario", "simulate_ping",
+    "ScenarioResult", "make_pose", "run_scenario", "simulate_ping", "Collection",
+    "simulate_collection", "seafloor_patch",
 ]

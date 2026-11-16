@@ -173,8 +173,8 @@ The residual is `(−p_z,i) − altitude_DVL[i]`. `p_z,1` is `−altitude_DVL[1]
 origin on the seafloor below the first ping.
 
 ### D-16 λ1, λ2
-Config values `motion.lambda_smooth`, `motion.lambda_dvl`. Defaults are set in milestone 8
-from a sweep on simulated data and recorded here with the sweep result.
+Config values `lambda_smooth`, `lambda_dvl` in `MotionOptions`, both 1 by default with the
+residual scales of D-31. The planned sweep on simulated data has not been run.
 
 ### D-17 DPC details
 Classic displaced-phase-centre overlap: with `N` receivers at pitch `d` and an along-track
@@ -259,3 +259,22 @@ compares the −3 dB along-track width with `D/2`. Processing more of the main l
 allowed and gives a finer result (15.6 mm against 20 mm null to null in the test scenario).
 For the rail, where the element beam is far wider than the rail subtends, the reference
 is the aperture-limited `0.886·λR/(2L)`.
+
+### D-30 Unknowns of the motion solve
+The paper's unknowns are per-ping velocities, with positions obtained by integration.
+The Ceres problem here uses the sway and heave positions at each transmit as its
+parameter blocks, with `v_i = (p_{i+1} − p_i)/Δt_i`. This is a linear, one-to-one change
+of variables (the first position is fixed), so the loss of Eq. 8 and its minimiser are
+unchanged. The gain is sparsity: a delay residual touches three neighbouring pings
+instead of every earlier one. One extra node after the last ping gives it a velocity.
+
+### D-31 Scales and weights in the motion solve
+- Delay residuals are divided by `residual_scale_periods / f_c` (default 1/16 period)
+  before the loss, so Eq. 3's fixed threshold of 1 is one such unit.
+- Eq. 6 residuals are divided by `smooth_scale` (default 2 mm/s) and Eq. 7 residuals by
+  `dvl_scale` (default 5 mm); `lambda_smooth` and `lambda_dvl` then multiply those terms
+  and both default to 1. A sweep to tune them (D-16) has not been run; the defaults
+  passed the acceptance scenario unchanged.
+- The first ping is the anchor: its sway is zero and its height is minus its DVL altitude.
+- Ceres is built without SuiteSparse and the problem uses the dense QR solver, which is
+  adequate for hundreds of pings. A sparse solver would be needed for very long runs.

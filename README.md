@@ -5,7 +5,7 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 to 7 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
+**State: early.** Milestones 1 to 8 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
 for what exists, what is next, and what has only been compiled and never run on a GPU.
 
 The repository also holds the older `trajectory_classifier` Python package, which is
@@ -16,6 +16,19 @@ unrelated to the sonar suite.
 Requirements (Ubuntu 24.04 names): `cmake ninja-build g++ libhdf5-dev libeigen3-dev
 libgtest-dev libomp-dev`, Python 3.10+ with `pybind11 numpy scipy h5py pyyaml pytest`.
 A CUDA toolkit is optional.
+
+Motion estimation needs Ceres Solver built **without SuiteSparse** (SuiteSparse is GPL and
+the Ubuntu Ceres package links it):
+
+```bash
+git clone -b 2.2.0 https://github.com/ceres-solver/ceres-solver && cd ceres-solver
+cmake -S . -B build -G Ninja -DSUITESPARSE=OFF -DCXSPARSE=OFF -DLAPACK=OFF -DGFLAGS=OFF \
+      -DMINIGLOG=ON -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DUSE_CUDA=OFF \
+      -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=/opt/ceres-nosuitesparse
+cmake --build build && sudo cmake --install build
+```
+
+Without it the suite still builds; motion estimation is left out and its tests skip.
 
 ```bash
 tools/test.sh            # configure, build, run GoogleTest and pytest
@@ -36,7 +49,8 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 | `libs/sim` | simulator synthesis kernel |
 | `libs/dsp` | baseband conversion, pulse compression, calibration, TVG, whitening, DRC |
 | `libs/recon` | the backprojection kernel (host and CUDA from one source) |
-| `libs/{motion,detect,holoscan_ops}` | not started |
+| `libs/motion` | Ceres solve of ASASIN Eq. 8 (sway and heave) |
+| `libs/{detect,holoscan_ops}` | not started |
 | `third_party/` | vendored pocketfft (BSD-3) |
 | `python/gpusonar` | bindings and the Python layer (sources, configs, tools) |
 | `configs/` | named sonars and scenarios (YAML) |

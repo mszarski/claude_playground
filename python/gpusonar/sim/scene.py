@@ -55,7 +55,29 @@ def polar_grid(origin, forward, across, ranges, bearings_deg, depth_offset=0.0) 
     return pts
 
 
-def build_scene(items: list[dict]) -> Scene:
+def seafloor_patch(x_range, y_range, density: float, depth: float = 0.0, rms_amplitude: float = 1.0,
+                   rng: np.random.Generator | None = None, bathymetry=None):
+    """Random point scatterers on the seafloor: the point-scatterer model of reverberation.
+
+    Positions are uniform over the patch, `density` per square metre; amplitudes are
+    complex Gaussian, which gives fully developed (Rayleigh) speckle once several
+    scatterers share a resolution cell. `bathymetry(x, y)` returns the seafloor depth
+    offset from `depth` (positive down) when the floor is not flat.
+    Returns (positions [n, 3], amplitudes [n]).
+    """
+    rng = rng or np.random.default_rng()
+    area = (x_range[1] - x_range[0]) * (y_range[1] - y_range[0])
+    n = int(round(area * density))
+    x = rng.uniform(x_range[0], x_range[1], n)
+    y = rng.uniform(y_range[0], y_range[1], n)
+    z = np.full(n, float(depth))
+    if bathymetry is not None:
+        z = z + bathymetry(x, y)
+    amp = rms_amplitude * (rng.standard_normal(n) + 1j * rng.standard_normal(n)) / np.sqrt(2.0)
+    return np.column_stack([x, y, z]), amp
+
+
+def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Scene:
     """Build a scene from the `scene:` list of a scenario config."""
     scene = Scene()
     for item in items:
@@ -69,6 +91,10 @@ def build_scene(items: list[dict]) -> Scene:
             pts = polar_grid(item.get("origin", [0, 0, 0]), item["forward"], item["across"],
                              item["ranges"], item["bearings_deg"], item.get("depth_offset", 0.0))
             scene.add_points(pts, amp, vel, item.get("label", "polar_grid"), ts)
+        elif kind == "seafloor":
+            pts, a = seafloor_patch(item["x_range"], item["y_range"], float(item["density"]),
+                                    float(item.get("depth", 0.0)), float(item.get("rms_amplitude", 1.0)), rng)
+            scene.add_points(pts, a, vel, item.get("label", "seafloor"))
         else:
             raise ValueError(f"unknown scene item type {kind!r}")
     return scene
