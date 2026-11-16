@@ -5,7 +5,8 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 to 10 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
+**State: early.** Milestones 1 to 10 of 13 are done, 12 and 13 are partly done, and the CUDA backend has
+been run and benchmarked on rented GPUs (not yet on a DGX Spark or Jetson); see [`docs/STATUS.md`](docs/STATUS.md)
 for what exists, what is next, and what has only been compiled and never run on a GPU.
 
 The repository also holds the older `trajectory_classifier` Python package, which is

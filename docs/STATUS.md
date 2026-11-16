@@ -17,15 +17,15 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 9 3D near-field imaging | done on CPU; GeoTIFF output missing | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
 | 11 Holoscan integration | not started | Holoscan has not been installed anywhere yet. |
-| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702), the Bellhop provider as an external process, Rayleigh bottom reflection, validation against Bellhop on Pekeris and Munk cases (`tests/python/test_propagation.py`, skipped without Bellhop). Not done: both reverberation methods, surface and bottom scattering models, ambient and self-noise models, K-distributed clutter, the KRAKEN/RAM cross-check, the seamount case (range-dependent bathymetry is not supported), re-running the long-range scenarios at the `eigenray` tier. |
-| 13 Performance | **partly** | Done: benchmark harness, timings on T4, L4, A10G and A100, power-law fit, real-time factors, multi-GPU tile splitting (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement, measured multi-GPU scaling, verified GFLOPS values. Jetson build notes in `docs/JETSON.md` are untested. |
+| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). Not done: the scattering-function reverberation method, surface scattering and loss, a Jackson-type bottom model, volume scattering, time spreading, the KRAKEN/RAM cross-check, the seamount case, re-running the long-range scenarios at the `eigenray` tier. |
+| 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; multi-GPU tile splitting with an identical image (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; a benchmark large enough not to be overhead-bound (multi-GPU scaling and the fit both need it); verified GFLOPS values. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## What is next
 
-1. Milestone 12: reverberation (frozen point scatterers for FLS/SAS, a scattering-function
-   method for the flank array), scattering-strength and noise models, then the long-range
-   scenarios at the `eigenray` tier.
-2. Kernel speed on GPUs with slow float64: field-of-view test before the float64 solve.
+1. Milestone 12: the scattering-function reverberation method for the flank array,
+   surface models, then the long-range scenarios at the `eigenray` tier with the new
+   noise and reverberation.
+2. Kernel driver: keep samples on the device between calls; a larger benchmark.
 3. Milestone 11 needs a Holoscan install (a GPU job image with the SDK would do).
 2. GeoTIFF output (single and multi-layer), debug products per stage and the processing
    log: the framework items of the paper's Sec. II are still open.

@@ -304,3 +304,16 @@ and the delay estimator in `motion.py` are NumPy. The brief asks for a C++/CUDA 
 each stage as a library function and a Holoscan operator. These were written in Python
 first to get tested behaviour; porting the per-ping ones (far-field beamformer, CFAR,
 sync resampler) to the kernel framework is outstanding work, listed in `STATUS.md`.
+
+### D-35 Float32 pre-test ahead of the float64 solve
+Measured on GPUs, the float64 reference-delay solve (D-06) dominated run time on every
+card with slow float64. The kernel now tests each (point, ping) pair against the ping's
+beam in float32 first, using the transmit-time geometry widened by the array extent, the
+platform's motion and attitude change during the flight time, and 2 cm for trajectory
+residuals. It only rejects pairs the exact per-element test would also reject, so images
+are unchanged. Pings with zero attitude rates reuse one rotation matrix. The precision
+argument of D-06 is untouched: accepted pairs go through the same split-precision path.
+
+### D-36 Bellhop time convention
+Bellhop's arrival phases follow exp(−iωt). This suite uses exp(+iωt) (an echo of delay τ
+carries exp(−j2πfτ)), so arrival amplitudes are conjugated on reading.

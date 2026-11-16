@@ -24,53 +24,72 @@ Datasets (simulated, fixed):
 - **Flank:** `flank_32`, one ping of 32 channels × 171,072 baseband samples; map of
   16,000 ranges × 482 bearings out to 10 km. Ping cycle 14.3 s.
 
-| GPU | SAS, no culling | SAS, culling b = 16 | Culling speedup | SAS real-time factor (culled) | FLS fan (6.4 Mpixel) | Flank map (7.7 Mpixel) | Flank real-time factor |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Tesla T4 | 13.68 s | 2.13 s | 6.4× | 37× | 0.28 s | 0.33 s | 43× |
-| L4 | 7.46 s | 1.22 s | 6.1× | 66× | 0.14 s | 0.19 s | 76× |
-| A10G | 6.55 s | 1.14 s | 5.7× | 70× | 0.14 s | 0.20 s | 73× |
-| A100 (80 GB) | 1.05 s | 0.80 s | 1.3× | 100× | 0.14 s | 0.16 s | 92× |
+Two rounds were run. The first exposed that the kernel's float64 work dominated on most
+GPUs; the kernel was then changed to reject out-of-beam (point, ping) pairs with a
+float32 test before any float64 work and to skip float64 trigonometry for pings without
+attitude rates. Images are unchanged (same tests, bit-identical culled and unculled).
 
-- The culled image is bit-identical to the unculled one on every GPU. 11% of
-  (ping, block) pairs are kept.
-- Real-time factor is collection time over imaging time for this image size. It does not
-  include conditioning or motion estimation.
-- **FLS:** a 6.4-megapixel fan takes 0.14–0.28 s, so 3.5–7 frames per second at that size.
-  A display-sized fan (about 1 megapixel) would be several times faster; the frame rate
-  the rig can deliver is not known yet, so no real-time factor is claimed.
-- **What limits the kernel is double precision.** The per-ping reference delay is
-  computed in float64 (`DECISIONS.md` D-06). The T4, L4 and A10G run float64 at a small
-  fraction of their float32 rate; the A100 does not, and is 6× faster than the A10G
-  without culling although its nominal float32 throughput is lower. Culling hides most of
-  this (rejected pings cost nothing), which is why it gains 6× on those cards and only
-  1.3× on the A100. The Jetson and GB10 GPUs should be expected to behave like the T4
-  class until measured. Doing the field-of-view test before the float64 solve, or
-  replacing float64 with float-float arithmetic, are the obvious next steps; neither is
-  done.
-- The A100's culled time (0.80 s) is close to the fixed cost of copying and uploading
-  0.5 GB of samples per call, which the current driver repeats on every call.
+Current kernel:
+
+| GPU | SAS, no culling | SAS, culling b = 16 | SAS real-time factor (culled) | FLS fan (6.4 Mpixel) | Flank map (7.7 Mpixel) | Flank real-time factor |
+| --- | --- | --- | --- | --- | --- | --- |
+| Tesla T4 | 1.48 s | 1.26 s | 64× | 0.20 s | 0.27 s | 54× |
+| L4 | 0.81 s | 0.68 s | 118× | 0.09 s | 0.16 s | 90× |
+| A10G | 0.80 s | 0.69 s | 116× | 0.10 s | 0.17 s | 82× |
+| A100 (80 GB) | 0.86 s | 0.68 s | 118× | 0.13 s | 0.15 s | 96× |
+
+Before the change (`docs/benchmarks/before_pretest/`), for the SAS dataset:
+
+| GPU | No culling | Culling b = 16 | Culling speedup |
+| --- | --- | --- | --- |
+| Tesla T4 | 13.68 s | 2.13 s | 6.4× |
+| L4 | 7.46 s | 1.22 s | 6.1× |
+| A10G | 6.55 s | 1.14 s | 5.7× |
+| A100 (80 GB) | 1.05 s | 0.80 s | 1.3× |
+
+- **Float64 was the bottleneck.** The T4, L4 and A10G run float64 at a small fraction of
+  their float32 rate; the A100 does not, and was 6× faster than the A10G before the
+  change although its nominal float32 throughput is lower. The float32 pre-test made the
+  unculled kernel 9× faster on the T4 and 8× on the L4 and A10G.
+- **Ray culling now adds 1.16× to 1.26×** on these GPUs, because the pre-test already
+  skips most of what culling skips. The paper's "factor of two" was measured against a
+  kernel without such a test; the first-round figures (5.7× to 6.4×) are the comparable
+  ones here, and they depend strongly on the GPU's float64 speed. The culled image is
+  bit-identical on every GPU; 11% of (ping, block) pairs are kept.
+- **The SAS benchmark is now overhead-bound.** Three very different GPUs finish in
+  0.68 s: what is left is mostly copying 0.5 GB of samples into the kernel's input and
+  uploading it, which the driver repeats on every call. A larger dataset, and keeping
+  samples on the device between calls, are needed before these numbers say much about
+  the GPUs.
+- Real-time factor is collection time over imaging time for this image size. It excludes
+  conditioning and motion estimation, which run on the CPU.
+- **FLS:** a 6.4-megapixel fan takes 0.09–0.20 s. The frame rate the rig can deliver is
+  not known yet, so no real-time factor is claimed.
+
+**Multi-GPU** (two A10G, image split into two bands of rows): 0.61 s against 0.68 s on
+one, a factor of 1.13, with an identical image. That is the fixed per-call overhead again,
+not a measure of how the kernel scales; it needs the larger dataset too.
 
 **Power-law fit** (the paper's Fig. 9 model, `y = a·x^b`, runtime against single-precision
-GFLOPS):
+GFLOPS), four GPUs, SAS dataset:
 
-| Runs | Fit | Quality |
+| Runs | Fit | R² in log space |
 | --- | --- | --- |
-| SAS, no culling | y ≈ 644 · x^−0.49 | R² = 0.08 in log space |
-| SAS, culled | y ≈ 98 · x^−0.44 | R² = 0.47 |
+| Current kernel, no culling | y ≈ 88 · x^−0.46 | 0.94 |
+| Current kernel, culled | y ≈ 74 · x^−0.46 | 0.87 |
+| First round, no culling | y ≈ 644 · x^−0.49 | 0.08 |
 | Paper (its own data, seven GPUs) | y ≈ 485307 · x^−0.755 | not stated |
 
 - The GFLOPS values used (T4 8,141; L4 30,290; A10G 31,240; A100 19,490) are nominal
   float32 figures **recalled from vendor specifications and not verified here**; the paper
   took its values from Wikipedia, which the build container cannot reach.
-- With four points the fit is poor, for the reason above: float32 GFLOPS does not predict
-  a kernel whose cost is partly float64. Only the exponent is comparable with the paper,
-  whose prefactor belongs to its own dataset.
-- **Multi-GPU:** tile splitting is implemented (`recon.multigpu.backproject_tiles`); a
-  dual-A10G run was queued and had not been scheduled when this was written. Scaling is
-  not measured.
+- Only the exponent is comparable with the paper; its prefactor belongs to its dataset.
+  Ours is shallower (−0.46 against −0.755), and with the benchmark overhead-bound and
+  only four points, of which three are near the floor, it should not be used to predict
+  anything yet.
 
-CPU reference points (4 cores of the build container, earlier sections): the culling test
-dataset runs at about 7e7 pixel-records per second, against 1.4e9 to 1.9e10 on the GPUs.
+CPU reference point: the build container's 4 cores run the culling test set at about
+1e8 pixel-records per second; the GPUs above reach 1e10 to 3e10 on the SAS dataset.
 
 ## FLS: resolution on simulated point targets
 
@@ -272,6 +291,38 @@ board, plus 20 ns of jitter. Shared reference: two out-of-band chirp bursts per 
 - The 1PPS and direct-path methods recover offsets in their tests (to 1 ns and 0.5 µs);
   they do not measure drift within a ping.
 
+## Propagation, reverberation and noise (milestone 12, in progress)
+
+Source: `tests/python/test_propagation.py` (needs Bellhop, an external GPL-3 program run
+as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
+
+| Check | Result | Tolerance asked |
+| --- | --- | --- |
+| Image-source provider against Bellhop, Pekeris waveguide (100 m, 1600 m/s bottom), 1 kHz: coherent transmission loss, 0.1–3 km | 0.06 dB median, 0.4 dB worst | "within stated tolerances": 0.3 dB median, 1 dB worst |
+| Same, incoherent transmission loss, 1 and 8 kHz | 0.1 dB median, 0.7 dB worst | 1 dB |
+| Same, delays of the first four arrivals | within 2 µs | 2 µs |
+| Bellhop provider lookup between grid nodes against a direct Bellhop run, 8 kHz | delays within 20 µs | 20 µs |
+| Echo of a target at 1 km through the `eigenray` tier against the `image_source` tier | envelope correlation above 0.9, energy within 1 dB | — |
+| Bottom reverberation level against time, Lambert seabed, against the analytic prediction | within 2 dB in every range bin, mean within 1 dB | 2 dB |
+| Reverberation envelope statistics | Rayleigh: mean within 3%, scintillation index 1 ± 0.25 | — |
+| Clutter with patch texture (shape 1) | scintillation index 2.0–2.6 against 1.2 without | K-distributed "can be made" |
+| Generated ambient noise against the requested spectrum, 0.5–30 kHz | within 1 dB | — |
+| Coherence between hydrophones in isotropic noise against sin(kd)/(kd) | within 0.12 | — |
+
+- Bellhop writes bounce phases for the opposite time convention; the reader conjugates
+  them. Before that the coherent comparison was off by 4 dB median.
+- The Munk-profile test checks Bellhop's own output for sound-channel behaviour. No
+  provider of ours claims a refracting profile except the Bellhop one, so there is nothing
+  independent to compare there. The seamount case is not run: range-dependent bathymetry
+  is not supported yet.
+- Not done: the scattering-function reverberation method, surface scattering and loss
+  (Chapman–Harris, bubbles), a Jackson-type bottom model, volume scattering, time
+  spreading, the KRAKEN/RAM cross-check at 6–10 kHz, and re-running the long-range
+  scenarios at the `eigenray` tier. TR 0702 has no fully specified worked example to
+  reproduce (`PHYSICS_NOTES.md` section 9).
+- The ambient-noise coefficients are written from memory and flagged as unverified in
+  `python/gpusonar/sim/noise.py`.
+
 ## 3D near-field imaging of a buried object
 
 Source: `tests/python/test_volume.py`. CPU. A `subbottom` sonar (20 kHz, 20 kHz
@@ -378,8 +429,8 @@ Without culling: 1.78 s.
   figures are CPU and a different geometry, so they are not a like-for-like comparison.
   The gain depends on how much of the image each ping can see: a 15 m collection where
   each ping covered most of the image gave only 1.1×.
-- On GPUs the gain is larger (5.7× to 6.4× on T4, L4 and A10G; 1.3× on an A100): see
-  "Performance".
+- These CPU figures predate the kernel's float32 pre-test. With it, the same unculled
+  run takes 1.11 s and culling adds about 1.1×. GPU figures are in "Performance".
 
 ## Simulator
 
@@ -397,5 +448,4 @@ Source: `tests/python/test_sim.py`.
 
 ## Not yet measured
 
-Speed on the DGX Spark and Jetson; multi-GPU scaling; anything with reverberation or
-realistic noise.
+Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

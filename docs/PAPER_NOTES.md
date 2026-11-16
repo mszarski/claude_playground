@@ -307,7 +307,7 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| Three-run benchmark harness | | | pending |
-| Power-law fit against GFLOPS | | | pending |
-| Real-time factor | | | pending |
-| Multi-GPU by image tiles | | | pending |
+| Three-run benchmark harness | `tools/benchmark.py` | run on four GPU types; output in `docs/benchmarks/` | done |
+| Power-law fit against GFLOPS | `RESULTS.md`, "Performance" | — | done on four GPUs; GFLOPS values unverified; fit not yet meaningful (benchmark overhead-bound) |
+| Real-time factor | `tools/benchmark.py` | — | measured on T4, L4, A10G, A100; not on DGX Spark or Jetson |
+| Multi-GPU by image tiles | `python/gpusonar/recon/multigpu.py` | benchmark on two A10Gs: identical image | implemented; scaling not yet measurable |
