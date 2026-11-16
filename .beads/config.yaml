@@ -73,3 +73,5 @@
 
 sync:
     remote: "git+https://github.com/mszarski/claude_playground"
+export:
+    auto: true

@@ -1,0 +1,8 @@
+set(_sim_sources src/synth.cpp)
+if(SONAR_HAVE_CUDA)
+  list(APPEND _sim_sources src/synth_cuda.cu)
+endif()
+add_library(sonar_sim ${_sim_sources})
+add_library(sonar::sim ALIAS sonar_sim)
+target_include_directories(sonar_sim PUBLIC include)
+target_link_libraries(sonar_sim PUBLIC sonar::core PRIVATE sonar_warnings)
