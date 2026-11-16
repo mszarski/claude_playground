@@ -50,18 +50,9 @@ if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   export GPUSONAR_BELLHOP=/opt/at/Bellhop/bellhop.exe GPUSONAR_KRAKEN_DIR=/opt/at
 fi
 if [ "${GPUSONAR_NVUS:-0}" = "1" ]; then
-  # The NVIDIA ultrasound reference's native module at the pinned commit, without its SDK:
-  # enough for the simulated-hardware tests of the nvus_scanner source.
-  pip install -q nanobind==3.0.1
-  git clone -q https://github.com/nvidia-holoscan/holoscan-ultrasound-imaging /opt/nvus-src
-  git -C /opt/nvus-src checkout -q 24d405e
-  cmake -S /opt/nvus-src -B /opt/nvus-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNVUS_BUILD_PYTHON=ON \
-        -DPython_EXECUTABLE="$(which python3)" > /dev/null
-  cmake --build /opt/nvus-build > /dev/null
-  mkdir -p /opt/nvus-pkg/nvus
-  ln -sf /opt/nvus-src/python/nvus/* /opt/nvus-pkg/nvus/
-  ln -sf /opt/nvus-build/_scanner*.so /opt/nvus-pkg/nvus/
-  export GPUSONAR_NVUS_PYTHON=/opt/nvus-pkg GPUSONAR_NVUS_DIR=/opt/nvus-src
+  # The NVIDIA ultrasound reference's native module at the pinned commit with the
+  # long-window patch, without its SDK: for the nvus_scanner source's tests.
+  eval "$(tools/build_nvus_reference.sh /opt/nvus | tail -1)"
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
   PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}" --pixel "${GPUSONAR_PIXEL:-0.05}" \

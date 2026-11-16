@@ -4,11 +4,13 @@ programs the scan sequence and acquires; this module turns each observation into
 records. No reference code is changed and nothing here touches the FPGA.
 
 The scan is the forward-looking one this suite needs from the rig: one unsteered plane-wave
-transmit per multiplexer half ("odd" then "even"), each with the longest receive window
-the reference's sequence compiler accepts. That limit is the compiler's, not the FPGA's:
-65,480 samples at 50 MHz, a little under 0.97 m of range (docs/HOLOSCAN_NOTES.md 5.5).
-Windows of 2 to 3 m need the reference's slower Python driver or a change to its
-compiler; this source reports the limit instead of working around it.
+transmit per multiplexer half ("odd" then "even"), each with a receive window as deep as
+asked. Upstream, the reference's sequence compiler stops at 65,536 samples (0.88 m of
+range at 50 MHz). This repository carries a small patch to its host C++
+(`third_party/patches/`, applied by `tools/build_nvus_reference.sh`) that raises the limit
+to 262,144 samples (3.5 m), so the 2 to 3 m pool window stays on the fast native path.
+The patch touches the sequence compiler and one runtime check; no FPGA code. A 21 MB frame
+per transmit has not been tried on hardware (docs/HOLOSCAN_NOTES.md 9.1).
 
 Hardware: by default the reference's `FakeHardware` (no device, placeholder frames), which
 exercises sequence compilation, the acquisition loop and the hand-over. On the rig, build
@@ -68,7 +70,7 @@ def compile_scan(native, depth_m: float, interval_us: float, sound_speed: float)
 def max_depth(native=None, sound_speed: float = 1480.0, interval_us: float = 20000.0) -> float:
     """The deepest window (m) the reference's sequence compiler accepts, found by bisection."""
     native = native or load_reference()
-    lo, hi = 0.04, 4.0
+    lo, hi = 0.04, 8.0
     while hi - lo > 1e-4:
         mid = 0.5 * (lo + hi)
         try:

@@ -1,0 +1,43 @@
+diff --git a/cpp/include/nvus/runtime.hpp b/cpp/include/nvus/runtime.hpp
+index 91c70d0..8a6bc39 100644
+--- a/cpp/include/nvus/runtime.hpp
++++ b/cpp/include/nvus/runtime.hpp
+@@ -16,6 +16,12 @@
+ #include <vector>
+ 
+ namespace nvus {
++// gpusonar patch: longest receive window per event, in samples. Upstream fixes this at
++// 65536 (1.3 ms at 50 MHz, under 1 m of range); a 3 m sonar window needs about 220,000.
++// Host-side limit only: the capture length is a host-written value and frames are sized
++// from it (hsb_backend.cpp). Not exercised on hardware.
++inline constexpr unsigned long kMaxReceiveSamples = 262144;
++
+ using Clock = std::chrono::steady_clock;
+ struct Event {
+   uint64_t event_id = 0;
+diff --git a/cpp/src/runtime.cpp b/cpp/src/runtime.cpp
+index b2ab890..3b3ae18 100644
+--- a/cpp/src/runtime.cpp
++++ b/cpp/src/runtime.cpp
+@@ -67,7 +67,7 @@ void Run::validate(const PreparedSequence &s) {
+   for (const auto &e : s.events) {
+     if (!ids.insert(e.event_id).second)
+       throw std::invalid_argument("duplicate event ID");
+-    if (e.rx_side > 1 || !e.samples || e.samples > 65536 || e.samples % 2 ||
++    if (e.rx_side > 1 || !e.samples || e.samples > kMaxReceiveSamples || e.samples % 2 ||
+         e.packet.empty() || !e.interval_ns || e.interval_ns > INT64_MAX)
+       throw std::invalid_argument(
+           "invalid event receive selection, samples, packet or interval");
+diff --git a/cpp/src/sequence.cpp b/cpp/src/sequence.cpp
+index 7630e6a..8d69bad 100644
+--- a/cpp/src/sequence.cpp
++++ b/cpp/src/sequence.cpp
+@@ -105,7 +105,7 @@ PlaneWaveAction compile_plane_waves(const std::vector<double> &angles,
+           "Depth, sound speed and interval must be finite, positive and within range");
+   const double requested_samples =
+       std::ceil(2. * (config.depth_mm * .001 * 1.1) / config.sound_speed_m_s * 50000000.);
+-  require(std::isfinite(requested_samples) && requested_samples >= 1 && requested_samples <= 65536,
++  require(std::isfinite(requested_samples) && requested_samples >= 1 && requested_samples <= double(kMaxReceiveSamples),
+           "Depth requires an unsupported receive window");
+   const auto samples = (uint32_t(requested_samples) + 1) & ~1u;
+   require(config.interval_us >= 10.1 + .4 + samples / 50. + 20.,

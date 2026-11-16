@@ -648,10 +648,16 @@ built from the pinned commit **without** the SDK (`-DNVUS_BUILD_PYTHON=ON`, nano
 and its `FakeHardware`:
 
 - The compiled sequence is two events, "odd" then "even", 65,534 samples each.
-- **The compiler's limit is measured: 0.881 m.** A deeper window raises "Depth requires
-  an unsupported receive window". So the native path cannot give the 2 to 3 m pool window
-  as the reference stands; that needs the Python driver (`Evm.init(samples=...)`), or a
-  change to the reference's `sequence.cpp` (host C++, not FPGA). Owner's call which.
+- **The compiler's limit is measured: 0.881 m upstream** (65,536 samples; "Depth requires an
+  unsupported receive window" beyond). The owner chose to patch the compiler and keep the
+  fast path: `third_party/patches/holoscan-ultrasound-imaging-24d405e-long-window.patch`
+  raises the limit to 262,144 samples (3.5 m) in `sequence.cpp` and the matching check in
+  `runtime.cpp`, through one constant in `runtime.hpp`. Host C++ only; no FPGA code.
+  `tools/build_nvus_reference.sh` applies it to a copy of the pinned checkout and builds.
+  With it, a 2.95 m window compiles to 219,258 samples per multiplexer half (21 MB per
+  frame) and runs through the reference's loop with its simulated hardware; a simulated
+  echo at 2.5 m images within 0.4 mm. **Not known:** whether the FPGA FIFO, the transport
+  and the receive ring sustain 21 MB frames at 38.4 Gbit/s (open question 2).
 - A three-repetition run yields six valid records with the right element halves.
 - Simulated echoes written into the frames the reference's loop hands over image at the
   target (0.6 m on the boresight, within 0.4 mm and 0.15 degrees).
