@@ -1,0 +1,40 @@
+{
+  "flat water": {
+    "band_depth_db_p90_minus_p10": 0.0
+  },
+  "two regular wave trains, tilted facets only": {
+    "band_depth_db_p90_minus_p10": 12.081729777624158
+  },
+  "irregular sea, tilted facets only": {
+    "band_depth_db_p90_minus_p10": 10.669416426854237
+  },
+  "irregular sea with small-scale roughness (as shipped)": {
+    "band_depth_db_p90_minus_p10": 8.561073913163456
+  },
+  "waves travelling": {
+    "world_frame_shift_m": [
+      10.0,
+      -2.0
+    ],
+    "sonar_frame_shift_m": [
+      8.0,
+      -2.0
+    ],
+    "correlation": 0.3207356810230912,
+    "sonar_advance_m": 2.0,
+    "seconds": 1.0
+  },
+  "waves frozen": {
+    "world_frame_shift_m": [
+      0.0,
+      0.0
+    ],
+    "sonar_frame_shift_m": [
+      -2.0,
+      0.0
+    ],
+    "correlation": 0.38047286425086224,
+    "sonar_advance_m": 2.0,
+    "seconds": 1.0
+  }
+}

@@ -106,30 +106,75 @@ struct SynthKernel {
     const double d_m = (tm - t0) * (tm - t1);
     const double d_1 = (t1 - t0) * (t1 - tm);
 
-    for (auto n = static_cast<std::int64_t>(n_first); n <= static_cast<std::int64_t>(n_last); ++n) {
-      const double t = start + static_cast<double>(n) / fs;
-      const double u =
-          0.5 * T * (t - t0) * (t - t1) / d_m + T * (t - t0) * (t - tm) / d_1;
-      double env, phase, freq;
-      if (!waveform_eval(w, u, env, phase, freq)) continue;
+    // The frequency-dependent part of the amplitude (both beam patterns and absorption)
+    // is smooth in frequency, and the pulse's frequency is constant (CW, Gaussian) or
+    // linear in emission time (LFM). It is evaluated at kKnots + 1 emission times and
+    // interpolated between them, instead of at every sample: two pattern evaluations and
+    // a power per sample were most of the cost of a long pulse.
+    constexpr int kKnots = 16;
+    double knot[kKnots + 1];
+    const bool swept = w.type == 1 && w.f_stop != w.f_start;
+    const int n_knots = swept ? kKnots : 1;
+    for (int i = 0; i <= n_knots; ++i) {
+      const double freq = swept ? w.f_start + (w.f_stop - w.f_start) * i / n_knots
+                                : (w.type == 0 ? w.f_start : 0.5 * (w.f_start + w.f_stop));
       const double ratio = f_ref > 0.0 ? freq / f_ref : 1.0;
-      double amp = gain * env;
-      amp *= directivity(params.tx.axes, params.tx.beamwidth_az, params.tx.beamwidth_el, out_dir, ratio);
-      amp *= directivity(e.axes, e.beamwidth_az, e.beamwidth_el, back_dir, ratio);
-      amp *= std::pow(10.0, -absorption_db_per_m(params, freq) * path_len / 20.0);
-      if (amp == 0.0) continue;
-      if (params.complex_baseband) {
-        // The receiver mixes with its nominal clock, so use nominal sample time.
-        const double t_nominal = params.start_time + static_cast<double>(n) / params.sample_rate;
-        double cyc = phase - params.center_frequency * t_nominal;
-        cyc -= std::floor(cyc);
-        const double cs = std::cos(pi2 * cyc), sn = std::sin(pi2 * cyc);
-        accumulate(dst + 2 * n, static_cast<float>(amp * (a_re * cs - a_im * sn)));
-        accumulate(dst + 2 * n + 1, static_cast<float>(amp * (a_re * sn + a_im * cs)));
-      } else {
-        double cyc = phase - std::floor(phase);
-        const double cs = std::cos(pi2 * cyc), sn = std::sin(pi2 * cyc);
-        accumulate(dst + n, static_cast<float>(amp * (a_re * cs - a_im * sn)));
+      knot[i] = gain *
+                directivity(params.tx.axes, params.tx.beamwidth_az, params.tx.beamwidth_el, out_dir, ratio) *
+                directivity(e.axes, e.beamwidth_az, e.beamwidth_el, back_dir, ratio) *
+                std::pow(10.0, -absorption_db_per_m(params, freq) * path_len / 20.0);
+    }
+    const double knots_per_second = n_knots / T;
+
+    // Emission time as a function of arrival time, u(t) = (t - t0) (ua (t - t1) + ub (t - tm)).
+    const double ua = 0.5 * T / d_m, ub = T / d_1;
+    const double inv_fs = 1.0 / fs;
+    const bool baseband = params.complex_baseband;
+    // Phase (cycles) of sample n: the pulse's phase at its emission time, less the mixer's
+    // phase for a baseband receiver (which mixes on its nominal clock).
+    auto cycles = [&](std::int64_t n) {
+      const double t = start + static_cast<double>(n) * inv_fs;
+      double cyc = waveform_phase(w, (t - t0) * (ua * (t - t1) + ub * (t - tm)));
+      if (baseband) cyc -= params.center_frequency * (params.start_time + static_cast<double>(n) / params.sample_rate);
+      return cyc - std::floor(cyc);
+    };
+
+    // The phasor is advanced by a recurrence and re-seeded exactly every kBlock samples:
+    // z[n+1] = z[n] r[n], r[n+1] = r[n] q. That is exact for a phase quadratic in n; the
+    // cubic term left over (range curvature times sweep rate) is below 1e-9 cycles a block.
+    constexpr std::int64_t kBlock = 16;
+    const auto first = static_cast<std::int64_t>(n_first), last = static_cast<std::int64_t>(n_last);
+    for (std::int64_t n0 = first; n0 <= last; n0 += kBlock) {
+      const double c0 = cycles(n0), c1 = cycles(n0 + 1), c2 = cycles(n0 + 2);
+      double z_re = std::cos(pi2 * c0), z_im = std::sin(pi2 * c0);
+      double r_re = std::cos(pi2 * (c1 - c0)), r_im = std::sin(pi2 * (c1 - c0));
+      const double q_re = std::cos(pi2 * (c2 - 2.0 * c1 + c0)), q_im = std::sin(pi2 * (c2 - 2.0 * c1 + c0));
+      const std::int64_t n_end = n0 + kBlock - 1 < last ? n0 + kBlock - 1 : last;
+      for (std::int64_t n = n0; n <= n_end; ++n) {
+        const double t = start + static_cast<double>(n) * inv_fs;
+        const double u = (t - t0) * (ua * (t - t1) + ub * (t - tm));
+        const double env = waveform_envelope(w, u);
+        if (env != 0.0) {
+          double x = u * knots_per_second;
+          int ik = static_cast<int>(x);
+          if (ik > n_knots - 1) ik = n_knots - 1;
+          x -= ik;
+          const double amp = env * ((1.0 - x) * knot[ik] + x * knot[ik + 1]);
+          if (amp != 0.0) {
+            if (baseband) {
+              accumulate(dst + 2 * n, static_cast<float>(amp * (a_re * z_re - a_im * z_im)));
+              accumulate(dst + 2 * n + 1, static_cast<float>(amp * (a_re * z_im + a_im * z_re)));
+            } else {
+              accumulate(dst + n, static_cast<float>(amp * (a_re * z_re - a_im * z_im)));
+            }
+          }
+        }
+        const double nz_re = z_re * r_re - z_im * r_im;
+        z_im = z_re * r_im + z_im * r_re;
+        z_re = nz_re;
+        const double nr_re = r_re * q_re - r_im * q_im;
+        r_im = r_re * q_im + r_im * q_re;
+        r_re = nr_re;
       }
     }
   }

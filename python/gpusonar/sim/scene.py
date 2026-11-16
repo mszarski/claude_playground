@@ -35,6 +35,13 @@ class Scene:
     # ("sphere", centre [3], radius), ("box", min [3], max [3]) and ("capsule", (end_a, end_b),
     # radius) primitives that block sound.
     occluders: list = field(default_factory=list)
+    # Surfaces that change shape with time (waves): (first index, count, fn) where
+    # fn(x [n], y [n], t) returns (z [n], normals [n, 3]) for those scatterers.
+    dynamic: list = field(default_factory=list)
+    # Scatterers whose echo does not keep its phase from ping to ping (small-scale surface
+    # roughness, bubbles): (first index, count, rms amplitude, seed). Their complex
+    # amplitudes are drawn afresh for every ping time.
+    redrawn: list = field(default_factory=list)
 
     def __len__(self) -> int:
         return self.positions.shape[0]
@@ -120,8 +127,33 @@ class Scene:
         return ok
 
     def at_time(self, t: float) -> np.ndarray:
-        """Scatterer positions at scenario time t (first-order motion)."""
-        return self.positions + self.velocities * t
+        """Scatterer positions at scenario time t: first-order motion, then the shape of
+        any time-varying surface."""
+        points = self.positions + self.velocities * t
+        for first, count, fn in self.dynamic:
+            points[first:first + count, 2] = fn(points[first:first + count, 0], points[first:first + count, 1], t)[0]
+        return points
+
+    def amplitudes_at(self, t: float) -> np.ndarray:
+        """Scatterer amplitudes at scenario time t."""
+        if not self.redrawn:
+            return self.amplitudes
+        amp = self.amplitudes.copy()
+        for first, count, rms, seed in self.redrawn:
+            rng = np.random.default_rng([int(seed), int(round(t * 1e6))])
+            amp[first:first + count] = rms * (rng.standard_normal(count) + 1j * rng.standard_normal(count)) / np.sqrt(2.0)
+        return amp
+
+    def normals_at(self, t: float) -> np.ndarray:
+        """Surface normals at scenario time t."""
+        if not self.dynamic:
+            return self.normals
+        normals = self.normals.copy()
+        moved = self.positions + self.velocities * t
+        for first, count, fn in self.dynamic:
+            keep = ~np.isnan(normals[first:first + count, 0])       # scatterers without a normal stay without
+            normals[first:first + count][keep] = fn(moved[first:first + count, 0], moved[first:first + count, 1], t)[1][keep]
+        return normals
 
 
 def polar_grid(origin, forward, across, ranges, bearings_deg, depth_offset=0.0) -> np.ndarray:
@@ -285,6 +317,61 @@ def relief(slope=(0.0, 0.0), ripples: dict | None = None):
     return height, gradient
 
 
+GRAVITY = 9.81
+
+
+def wave_components(item: dict, rng: np.random.Generator) -> np.ndarray:
+    """Wave trains of a `sea_surface` item as rows [amplitude, kx, ky, omega, phase].
+
+    `waves: [{amplitude, wavelength, direction_deg, phase}]` gives regular trains.
+    `spectrum: {wind_speed, significant_height, direction_deg, spread_deg, components}`
+    gives an irregular wind sea: a Pierson-Moskowitz spectrum for that wind (m/s), sampled
+    at `components` frequencies from 0.6 to 5 times the peak, each train with a random
+    phase and a direction drawn about the mean with `spread_deg` standard deviation, the
+    whole scaled to `significant_height` when that is given (a sea not fully developed).
+    Every train travels at its deep-water speed, omega^2 = g k, unless `frozen: true`.
+    """
+    rows = []
+    for w in item.get("waves", []):
+        k = 2.0 * np.pi / float(w["wavelength"])
+        th = np.radians(float(w.get("direction_deg", 0.0)))
+        rows.append([float(w["amplitude"]), k * np.cos(th), k * np.sin(th), np.sqrt(GRAVITY * k), float(w.get("phase", 0.0))])
+    spec = item.get("spectrum")
+    if spec:
+        u, n = float(spec["wind_speed"]), int(spec.get("components", 30))
+        peak = 0.877 * GRAVITY / u
+        edges = np.geomspace(0.6 * peak, 5.0 * peak, n + 1)
+        omega, d_omega = np.sqrt(edges[:-1] * edges[1:]), np.diff(edges)
+        density = 8.1e-3 * GRAVITY**2 / omega**5 * np.exp(-0.74 * (GRAVITY / (u * omega)) ** 4)
+        amp = np.sqrt(2.0 * density * d_omega)
+        if "significant_height" in spec:
+            amp *= float(spec["significant_height"]) / (4.0 * np.sqrt(np.sum(amp**2) / 2.0))
+        th = np.radians(float(spec.get("direction_deg", 0.0)) + float(spec.get("spread_deg", 20.0)) * rng.standard_normal(n))
+        k = omega**2 / GRAVITY
+        rows += [[a, kk * np.cos(t), kk * np.sin(t), o, ph]
+                 for a, kk, t, o, ph in zip(amp, k, th, omega, rng.uniform(0.0, 2.0 * np.pi, n))]
+    comp = np.array(rows, dtype=float).reshape(-1, 5)
+    if item.get("frozen", False):
+        comp[:, 3] = 0.0
+    return comp
+
+
+def wave_surface(components: np.ndarray, depth: float = 0.0):
+    """fn(x, y, t) -> (z, normals) for the sum of the wave trains; normals point down into the water."""
+    def fn(x, y, t):
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        z, gx, gy = np.full(x.shape, float(depth)), np.zeros(x.shape), np.zeros(x.shape)
+        for a, kx, ky, omega, phase in components:
+            arg = kx * x + ky * y - omega * t + phase
+            z += a * np.sin(arg)
+            c = a * np.cos(arg)
+            gx += c * kx
+            gy += c * ky
+        normals = np.column_stack([-gx, -gy, np.ones(x.shape)])
+        return z, normals / np.linalg.norm(normals, axis=1, keepdims=True)
+    return fn
+
+
 def _add_box(scene: Scene, lo, hi, item: dict, rng, vel, outward: bool, skip_top: bool = False) -> None:
     """Surface points on the faces of an axis-aligned box, normals outward or inward."""
     for i, (origin, u, v) in enumerate(box_faces(lo, hi)):
@@ -379,21 +466,40 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                 if item.get("occlude", True):
                     scene.occluders.append(("capsule", (list(p0), list(p1)), float(item["radius"])))
         elif kind == "sea_surface":
-            # A patch of the sea surface with waves, seen from below: facets on a sum of
-            # wave trains `waves: [{amplitude, wavelength, direction_deg}, ...]`, each with
-            # its normal pointing down into the water, so slopes facing the sonar return
-            # more (Lambert about the facet). `velocity` gives the patch a drift.
+            # A patch of the sea surface with waves, seen from below: facets on a sum of wave
+            # trains (`waves`, `spectrum`: see wave_components), each with its normal pointing
+            # down into the water, so slopes facing the sonar return more (Lambert about the
+            # facet). The facets stay where they are (plus `velocity`, a surface drift) and the
+            # wave shape travels through them at each train's own speed.
             pts, a = seafloor_patch(item["x_range"], item["y_range"], float(item["density"]), float(item.get("depth", 0.0)),
                                     lambert_rms_amplitude(float(item.get("mu_db", -30.0)), float(item["density"])), rng)
-            gx, gy = np.zeros(len(pts)), np.zeros(len(pts))
-            for wave in item.get("waves", []):
-                height, gradient = relief((0.0, 0.0), wave)
-                pts[:, 2] += height(pts[:, 0], pts[:, 1])
-                dx, dy = gradient(pts[:, 0], pts[:, 1])
-                gx, gy = gx + dx, gy + dy
-            normals = np.column_stack([-gx, -gy, np.ones(len(pts))])
-            normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+            components = wave_components(item, rng)
+            surface = wave_surface(components, float(item.get("depth", 0.0)))
+            pts[:, 2], normals = surface(pts[:, 0], pts[:, 1], 0.0)
+            moving = bool(np.any(components[:, 3] != 0.0)) if len(components) else False
+            # The small scatterers on the surface lose their phase in milliseconds at these
+            # frequencies, so each ping sees a new speckle on the same wave shape, unless
+            # `coherent: true` keeps one realisation (useful for testing).
+            fresh = not bool(item.get("coherent", False))
+            seed = int(rng.integers(0, 2**31))
+            if moving:
+                scene.dynamic.append((len(scene), len(pts), surface))
+            if fresh:
+                scene.redrawn.append((len(scene), len(pts),
+                                      lambert_rms_amplitude(float(item.get("mu_db", -30.0)), float(item["density"])), seed))
             scene.add_points(pts, a, vel, item.get("label", "sea_surface"), lambert=True, normals=normals)
+            if "isotropic_db" in item:
+                # Small-scale roughness and bubbles scatter back at any tilt. Without this part a
+                # facet tilted away from the sonar returns nothing and the troughs are black; with
+                # it they are only darker. Strength in dB per square metre, the same at every angle.
+                n = len(pts)
+                iso = lambert_rms_amplitude(float(item["isotropic_db"]), float(item["density"]))
+                if moving:
+                    scene.dynamic.append((len(scene), n, surface))
+                if fresh:
+                    scene.redrawn.append((len(scene), n, iso, seed + 1))
+                scene.add_points(pts.copy(), iso * (rng.standard_normal(n) + 1j * rng.standard_normal(n)) / np.sqrt(2.0),
+                                 vel, item.get("label", "sea_surface"))
         elif kind == "boat":
             # A boat afloat: hull, keel, propeller and rudder at the stern, and optionally the
             # bubble wake it has left astern. `origin` is amidships on the waterline.

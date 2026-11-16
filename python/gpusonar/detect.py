@@ -103,6 +103,7 @@ class Track:
     misses: int = 0
     confirmed: bool = False
     history: list = field(default_factory=list)   # (time, x, y)
+    snr: list = field(default_factory=list)       # SNR (dB) of each detection it took
 
 
 class Tracker:
@@ -162,6 +163,7 @@ class Tracker:
             t.state = t.state + k @ (d.xy() - h @ t.state)
             t.cov = (np.eye(4) - k @ h) @ t.cov
             t.hits += 1
+            t.snr.append(d.snr_db)
             t.misses = 0
             t.confirmed = t.confirmed or t.hits >= self.confirm_hits
         for t in self.tracks:
@@ -175,6 +177,7 @@ class Tracker:
             xy = d.xy()
             tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov)
             tr.history.append((time, float(xy[0]), float(xy[1])))
+            tr.snr.append(d.snr_db)
             self.tracks.append(tr)
             self._next_id += 1
         return [t for t in self.tracks if t.confirmed]

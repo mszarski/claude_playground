@@ -819,6 +819,41 @@
     "backend": "host",
     "quick": false
   },
+  "sas_minsas_speckle": {
+    "pings": 44,
+    "scatterers": 445567,
+    "pixel_m": 0.02,
+    "legs": {
+      "leg_1": {
+        "sonar_side": "y below",
+        "covered_fraction": 1.0,
+        "object_over_median_db": {
+          "seabed": 14.246444702148438,
+          "calibration_cube": 29.73329734802246,
+          "cable": 21.4908504486084,
+          "rocks": 24.34548568725586,
+          "pipe": 27.26322364807129
+        },
+        "speckle_contrast": 1.211547613143921,
+        "bare_seabed_mean_over_median_db": 2.7660470008850098,
+        "ghost": {
+          "calibration_cube": {
+            "object_over_bare_seabed_db": 26.967248916625977,
+            "at_copy_over_bare_seabed_db": 2.074385643005371
+          },
+          "cable": {
+            "object_over_bare_seabed_db": 18.724802017211914,
+            "at_copy_over_bare_seabed_db": 0.29046085476875305
+          }
+        }
+      }
+    },
+    "seconds": 817.5,
+    "full_resolution_image": "sas_minsas_speckle_leg1_full.png",
+    "animation": "sas_minsas_speckle.gif",
+    "backend": "host",
+    "quick": false
+  },
   "sas_minsas_survey": {
     "pings": 160,
     "scatterers": 21367,

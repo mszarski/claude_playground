@@ -70,14 +70,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     if len(scene) > 0:
         tx_position = np.array(record.tx_position())
         rx_reference = record.rx_positions().mean(axis=0)
-        points, amplitudes = scene.at_time(scenario_time), scene.amplitudes
+        points, amplitudes = scene.at_time(scenario_time), scene.amplitudes_at(scenario_time)
         if scene.occluders:
             # Shadowing: a scatterer hidden from the projector or from the array returns nothing.
             seen = scene.visible(tx_position, points) & scene.visible(rx_reference, points)
             amplitudes = np.where(seen, amplitudes, 0.0)
         q, p, amp, vq, vp = two_way_paths(provider, tx_position, rx_reference, points, amplitudes,
                                           scene.velocities, scene.lambert,
-                                          scene.normals if len(scene.normals) == len(scene) else None)
+                                          scene.normals_at(scenario_time) if len(scene.normals) == len(scene) else None)
         if beam_floor_db is not None and len(amp):
             # Skip paths that leave and return far down both beam patterns: with narrow
             # beams most scatterers contribute nothing measurable to most pings.

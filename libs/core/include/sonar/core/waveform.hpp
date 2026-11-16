@@ -37,6 +37,27 @@ SONAR_INLINE double gaussian_sigma(double bandwidth) {
   return std::sqrt(2.0 * 0.6931471805599453) / (pi * bandwidth);
 }
 
+/// Phase (cycles) of the pulse at emission time u, without the check that u is inside it.
+SONAR_INLINE double waveform_phase(const WaveformParams& w, double u) {
+  switch (w.type) {
+    case 0: return w.f_start * u;
+    case 1: return (w.f_start + 0.5 * (w.f_stop - w.f_start) / w.duration * u) * u;
+    case 2: return 0.5 * (w.f_start + w.f_stop) * (u - 0.5 * w.duration);
+    default: return 0.0;
+  }
+}
+
+/// Envelope of the pulse at emission time u; zero outside it.
+SONAR_INLINE double waveform_envelope(const WaveformParams& w, double u) {
+  if (u < 0.0 || u > w.duration) return 0.0;
+  if (w.type == 2) {
+    const double sigma = gaussian_sigma(w.f_stop - w.f_start);
+    const double d = u - 0.5 * w.duration;
+    return std::exp(-0.5 * (d / sigma) * (d / sigma));
+  }
+  return tukey(u / w.duration, w.window_alpha);
+}
+
 /// Evaluate the pulse at emission time u (s). Returns false outside the pulse.
 /// The analytic signal is amplitude * envelope * exp(j 2 pi phase_cycles).
 /// `freq` is the instantaneous frequency (Hz), for frequency-dependent losses.

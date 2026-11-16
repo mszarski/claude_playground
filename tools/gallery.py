@@ -32,7 +32,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 import gpusonar as gs  # noqa: E402
-from gpusonar import detect, flank, motion, recon  # noqa: E402
+from gpusonar import classify, detect, flank, motion, recon  # noqa: E402
 from gpusonar.config import load_scenario_config  # noqa: E402
 from gpusonar.sim import find_bellhop, run_scenario  # noqa: E402
 
@@ -504,11 +504,47 @@ def scene_truth(cfg):
     return truth
 
 
-def plot_tracks(ax, tracks, truth, own, t_last, title):
+KIND_STYLE = {"mover": dict(color="#eb6834", lw=3.0, zorder=4), "static": dict(color="#2a78d6", lw=2.0, zorder=3),
+              "line": dict(color="#1baf7a", lw=1.5, zorder=2),
+              "multipath": dict(color="#eda100", lw=1.5, zorder=2), "uncertain": dict(color="0.72", lw=1.0, zorder=1)}
+
+
+def classify_and_score(tracks, truth, t_last, gate, **kw):
+    """Classify the tracks (gpusonar.classify) and score the result against the scene:
+    the kind given to each true object's track, and how many tracks called movers are
+    not on an object that moves."""
+    classes = classify.classify_tracks(tracks, **kw)
+    by_id = {c.id: c for c in classes}
+    out = {"counts": classify.summary(classes), "targets": {}}
+    moving_ends = []
+    for label, (pos, vel) in truth.items():
+        end = pos[:2] + vel[:2] * t_last
+        if np.hypot(*vel[:2]) > 0.0:
+            moving_ends.append(end)
+        best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
+        if best is not None and np.hypot(best.state[1] - end[0], best.state[0] - end[1]) < gate:
+            c = by_id[best.id]
+            out["targets"][label] = {"kind": c.kind, "speed_m_s": c.speed, "speed_sigma_m_s": c.speed_sigma,
+                                     "truly_moving": bool(np.hypot(*vel[:2]) > 0.0)}
+    out["movers_not_on_a_moving_object"] = int(sum(
+        c.kind == "mover" and all(np.hypot(c.position[1] - e[0], c.position[0] - e[1]) >= gate for e in moving_ends)
+        for c in classes))
+    return classes, out
+
+
+def plot_tracks(ax, tracks, truth, own, t_last, title, classes=None):
+    kinds = {c.id: c.kind for c in classes} if classes else {}
     for tr in tracks:
         h = np.array(tr.history)
-        ax.plot(h[:, 1], h[:, 2], "-", lw=2.5)
-        ax.plot(h[-1, 1], h[-1, 2], "k.", ms=6)
+        style = KIND_STYLE[kinds[tr.id]] if kinds else dict(lw=2.5)
+        ax.plot(h[:, 1], h[:, 2], "-", **style)
+        if not kinds or kinds[tr.id] in ("mover", "static"):
+            ax.plot(h[-1, 1], h[-1, 2], "k.", ms=6)
+    if kinds:
+        from matplotlib.lines import Line2D
+        counts = classify.summary(classes)
+        ax.legend(handles=[Line2D([], [], label=f"{k} ({counts[k]})", **{a: v for a, v in KIND_STYLE[k].items() if a != "zorder"})
+                           for k in KIND_STYLE if counts[k]], loc="lower left", fontsize=8, title="track class")
     for label, (pos, vel) in truth.items():
         end = pos[:2] + vel[:2] * t_last
         ax.plot([pos[1], end[1]], [pos[0], end[0]], "--", lw=1, color="0.35")
@@ -566,6 +602,10 @@ def run_fls_transit(name, cfg, backend, quick):
     metrics = {"pings": len(result.records), "scatterers": len(result.scene),
                "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
                "targets": score_tracks(tracks, truth, t_last, gate=15.0)}
+    # A mover's fitted speed must be five times its uncertainty; positions must fit a line to 2.5 m.
+    classes, metrics["classification"] = classify_and_score(
+        tracks, truth, t_last, 15.0, min_speed=0.5, max_fit_rms=2.5,
+        linear={"length": 40.0, "width": 3.0})
     for label, m in metrics["targets"].items():
         if m.get("tracked"):
             m["track_speed_m_s"] = float(np.hypot(*m["track_velocity_xy"]))
@@ -583,7 +623,7 @@ def run_fls_transit(name, cfg, backend, quick):
     axes[0].set_title("First ping (circles: true positions)")
     fig.colorbar(m, ax=axes[0], label="display level (range gain, dynamic range compression)", shrink=0.75)
     plot_tracks(axes[1], tracks, truth, result.true_positions, t_last,
-                f"World-frame tracks over {len(result.records)} pings (dashed: truth)")
+                f"World-frame tracks over {len(result.records)} pings (dashed: truth)", classes)
     fig.suptitle(f"{name}: {cfg['sonar']}, ownship under way; seabed and surface reverberation, noise (simulated)")
     # World-fixed frames: ownship moves up the picture, static things stay put.
     r_far = r_cells[-1]
@@ -610,6 +650,11 @@ SAS_SURVEY = {
                                      zoom=[("boulders", 10.0), ("boulders", 4.0), ("boulders", 1.5)]),
     "sas_minsas_rocky_ripples": dict(x=(1.0, 31.0), y=(39.0, 64.0), what="rippled sand, a rock outcrop, stones and a cable", wreck=False,
                                      zoom=[("outcrop", 9.0), ("stones", 4.0), ("cable", 3.0)]),
+    # `speckle`: a box of bare seabed (x0, x1, y0, y1) for the speckle statistics; `ghost`: objects whose
+    # along-track ambiguity copy (offset in metres) falls on bare seabed inside the image.
+    "sas_minsas_speckle": dict(x=(0.0, 13.0), y=(47.0, 53.0), what="a seabed with developed speckle, cube, cable, rocks and a pipe",
+                               wreck=False, zoom=[("calibration_cube", 2.0), ("rocks", 3.0), ("pipe", 3.0)],
+                               speckle=(2.8, 4.2, 47.3, 52.7), ghost=(["calibration_cube", "cable"], 10.3)),
 }
 
 
@@ -653,6 +698,23 @@ def run_sas_survey(name, cfg, backend, quick):
         side = float(np.sign(np.mean([r.rx_positions().mean(axis=0)[1] for r in recs]) - 50.0))
         m_leg = {"sonar_side": "y below" if side < 0 else "y above", "covered_fraction": float(covered.mean()),
                  "object_over_median_db": object_levels(result.scene, power, to_pixel, median)}
+        if "speckle" in p:
+            x0, x1, y0, y1 = p["speckle"]
+            bare = power[(X > x0) & (X < x1) & (Y > y0) & (Y < y1)]
+            # Developed speckle: intensity is exponential, so its standard deviation equals its mean.
+            m_leg["speckle_contrast"] = float(bare.std() / bare.mean())
+            m_leg["bare_seabed_mean_over_median_db"] = float(db(bare.mean(), median))
+            masks_ = result.scene.label_masks()
+            labels, offset = p["ghost"]
+            for label in labels:
+                # Where the copy of this object falls: the same pixels moved along the track.
+                pts_g = result.scene.positions[masks_[label]] + np.array([offset, 0.0, 0.0])
+                pix = [q for q in to_pixel(pts_g) if q is not None]
+                here = np.mean([power[q] for q in pix])
+                obj = np.mean([power[q] for q in to_pixel(result.scene.positions[masks_[label]]) if q is not None])
+                m_leg.setdefault("ghost", {})[label] = {
+                    "object_over_bare_seabed_db": float(db(obj, bare.mean())),
+                    "at_copy_over_bare_seabed_db": float(db(here, bare.mean()))}
         if p["wreck"]:
             m_leg["far_strip_over_near_strip_db"] = float(db(power[north & covered].mean(), power[south & covered].mean())
                                                           * (1.0 if side < 0 else -1.0))
@@ -745,6 +807,10 @@ def run_popoto_far(name, cfg, backend, quick):
                "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
                "targets": score_tracks(tracks, truth, t_last, gate=200.0),
                "peak_over_median_db_by_hydrophone_count": scaling}
+    own_last = result.true_positions[-1]
+    classes, metrics["classification"] = classify_and_score(
+        tracks, truth, t_last, 200.0, min_speed=1.0, static_speed=1.0, max_fit_rms=60.0,
+        multipath={"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (own_last[1], own_last[0])})
     ranges, power = first
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.8), constrained_layout=True)
     m = axes[0].imshow(db(power, np.median(power)), extent=[ranges[0], ranges[-1], np.degrees(bearings[-1]), np.degrees(bearings[0])],
@@ -758,7 +824,7 @@ def run_popoto_far(name, cfg, backend, quick):
     axes[0].set_title(f"First ping, {n_total} hydrophones")
     fig.colorbar(m, ax=axes[0], label="dB re map median", shrink=0.8)
     plot_tracks(axes[1], tracks, truth, result.true_positions, t_last,
-                f"World-frame tracks over {len(result.records)} pings (dashed: truth)")
+                f"World-frame tracks over {len(result.records)} pings (dashed: truth)", classes)
     rng_km = np.hypot(*next(iter(truth.values()))[0][:2]) / 1e3
     fig.suptitle(f"{name}: Popoto-board array, ownship under way, ship-sized mover at {rng_km:.0f} km; multipath, reverberation, noise (simulated)")
     overlays = []
@@ -783,7 +849,7 @@ RUNNERS = {
     "fls_120k_rough_surface": run_fls_transit, "fls_170k_traffic": run_fls_transit,
     "wreck_sas": run_sas, "minefield_sas": run_sas,
     "sas_minsas_survey": run_sas_survey, "sas_minsas_boulder_field": run_sas_survey,
-    "sas_minsas_rocky_ripples": run_sas_survey, "rail_objects": run_rail, "buried_objects": run_buried,
+    "sas_minsas_rocky_ripples": run_sas_survey, "sas_minsas_speckle": run_sas_survey, "rail_objects": run_rail, "buried_objects": run_buried,
     "flank_patrol": run_flank, "popoto_far_mover": run_popoto_far, "popoto_12km": run_popoto_far,
     "popoto_env_summer_mud_60m": run_popoto_far, "popoto_env_winter_sand_200m": run_popoto_far,
     "popoto_env_gravel_30m": run_popoto_far, "popoto_env_deep_silt_1000m": run_popoto_far,
@@ -815,6 +881,7 @@ QUICK = {
     "fls_120k_rough_surface": lambda c: _thin_transit(c),
     "fls_170k_traffic": lambda c: _thin_transit(c),
     "sas_minsas_boulder_field": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=40, start=[4.0, 0.0, -12.0])),
+    "sas_minsas_speckle": lambda c: _scale_density(c, 0.02),
     "sas_minsas_rocky_ripples": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=40, start=[4.0, 0.0, -12.0])),
     "flank_patrol": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=8),
                                c["sonar_overrides"].update(transmit={"waveform": {"duration": 0.2}})),

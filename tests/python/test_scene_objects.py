@@ -329,3 +329,51 @@ def test_debris_is_boxes_on_the_bed_that_cast_shadows():
     p = scene.positions
     assert p[:, 2].max() <= 40.0 + 1e-9 and p[:, 2].min() >= 40.0 - 0.9 - 1e-9      # at most 0.6 x 1.5 m tall
     assert p[:, 0].min() > 9.0 and p[:, 0].max() < 31.0
+
+
+# --- a sea that moves ------------------------------------------------------------------
+
+def _sea(**extra):
+    item = {"type": "sea_surface", "label": "waves", "x_range": [0.0, 200.0], "y_range": [-20.0, 20.0], "density": 1.0,
+            "mu_db": -8.0, "waves": [{"amplitude": 0.5, "wavelength": 40.0, "direction_deg": 0.0}], **extra}
+    return build_scene([item], rng())
+
+
+def test_waves_travel_at_their_deep_water_speed_through_facets_that_stay_put():
+    scene = _sea()
+    speed = np.sqrt(9.81 * 40.0 / (2 * np.pi))                     # 7.9 m/s for a 40 m wave
+    p0, p1 = scene.at_time(0.0), scene.at_time(1.0)
+    assert np.allclose(p0[:, :2], p1[:, :2])                       # the water does not travel with the wave
+    k = 2 * np.pi / 40.0
+    assert np.allclose(p0[:, 2], 0.5 * np.sin(k * p0[:, 0]), atol=1e-9)
+    assert np.allclose(p1[:, 2], 0.5 * np.sin(k * (p1[:, 0] - speed * 1.0)), atol=1e-9)   # the shape moved 7.9 m
+    n1 = scene.normals_at(1.0)
+    assert np.allclose(n1[:, 0] / n1[:, 2], -0.5 * k * np.cos(k * (p1[:, 0] - speed)), atol=1e-9)
+    frozen = _sea(frozen=True)
+    assert np.allclose(frozen.at_time(5.0), frozen.at_time(0.0)) and not frozen.dynamic
+
+
+def test_surface_speckle_is_new_each_ping_unless_asked_to_stay():
+    scene = _sea()
+    a0, a1 = scene.amplitudes_at(0.0), scene.amplitudes_at(0.5)
+    assert abs(np.vdot(a0, a1)) < 0.1 * np.vdot(a0, a0).real       # uncorrelated between pings
+    assert np.allclose(scene.amplitudes_at(0.5), a1)               # but the same every time a ping is re-run
+    assert np.mean(np.abs(a1) ** 2) == pytest.approx(np.mean(np.abs(a0) ** 2), rel=0.2)
+    kept = _sea(coherent=True)
+    assert np.array_equal(kept.amplitudes_at(0.5), kept.amplitudes_at(0.0))
+
+
+def test_wind_sea_spectrum_has_the_height_asked_for_and_irregular_crests():
+    from gpusonar.sim.scene import wave_components
+    comp = wave_components({"spectrum": {"wind_speed": 10.0, "significant_height": 1.2, "direction_deg": 15.0,
+                                         "spread_deg": 25.0, "components": 30}}, rng())
+    assert comp.shape == (30, 5)
+    assert 4.0 * np.sqrt(np.sum(comp[:, 0] ** 2) / 2.0) == pytest.approx(1.2)
+    k = np.hypot(comp[:, 1], comp[:, 2])
+    assert np.allclose(comp[:, 3] ** 2, 9.81 * k)                  # deep-water dispersion
+    peak = 2 * np.pi / k[np.argmax(comp[:, 0])]
+    assert 40.0 < peak < 120.0                                     # the 10 m/s peak is near 83 m
+    directions = np.degrees(np.arctan2(comp[:, 2], comp[:, 1]))
+    assert abs(directions.mean() - 15.0) < 15.0 and 10.0 < directions.std() < 40.0
+    full = wave_components({"spectrum": {"wind_speed": 10.0, "components": 60}}, rng())
+    assert 4.0 * np.sqrt(np.sum(full[:, 0] ** 2) / 2.0) == pytest.approx(0.21 * 100.0 / 9.81, rel=0.15)   # fully developed
