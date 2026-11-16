@@ -36,19 +36,21 @@ Updated at the end of each milestone. Newest facts first within each section.
 ## Where the code has run
 
 - **CPU:** everything, in an x86_64 cloud container (the development container has no GPU).
-- **GPU:** the CUDA backend has been built and run on rented x86_64 machines through
-  Hugging Face Jobs (`tools/gpu_job.sh`, image `nvidia/cuda:12.6.3-devel-ubuntu24.04`).
-  On an NVIDIA T4, all ten GPU tests pass: echo synthesis against the CPU, backprojection
-  against the independent reference for all three interpolators, and the hardware texture
-  position lookup against the software table. Benchmarks on several GPU types are in
-  `RESULTS.md`.
+- **GPU:** the CUDA backend is built and run on rented x86_64 machines through Hugging
+  Face Jobs (`tools/gpu_job.sh`, image `nvidia/cuda:12.6.3-devel-ubuntu24.04`). The job
+  can also build Ceres and the Bellhop/KRAKEN oracles, so the whole suite runs there. On
+  an NVIDIA T4 the full suite passes (last run: 264 passed, 0 failed, 8 skipped: five need the PICMUS data, one the GeoTIFF library, one the reference checkout, one is a check for builds without CUDA). That covers
+  echo synthesis, backprojection (all interpolators, culling, texture lookup, sessions),
+  cuFFT conditioning, CFAR, the Holoscan pipelines, motion estimation, the long-range
+  scenarios with GPU synthesis and the wreck scenario end to end. Benchmarks on T4, L4,
+  A10G, A100 and two A10Gs are in `RESULTS.md`.
 - **Holoscan:** SDK 4.6.0 (`pip install holoscan-cu12`) on the same rented T4; the
-  operator pipelines run there. It cannot be imported in the development container (its
-  CUDA runtime is too old), so those tests skip locally.
+  operator pipelines run there, including one fed by the emulated flank board over UDP.
+  It cannot be imported in the development container (its CUDA runtime is too old), so
+  those tests skip locally.
 - **Not yet:** the brief's actual targets. Nothing has run on a DGX Spark, a Jetson, or
   any aarch64 machine, and nothing has touched Sensor Bridge hardware or its emulator.
-- Motion estimation was not part of the GPU run (that job image has no Ceres); it has no
-  GPU code.
+- Motion estimation has no GPU code; it runs on the CPU of whichever machine.
 
 ## Open questions for the project owner
 
