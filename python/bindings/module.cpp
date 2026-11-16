@@ -67,6 +67,8 @@ PYBIND11_MODULE(_gpusonar, m) {
   m.attr("SCHEMA_VERSION") = py::make_tuple(kSchemaMajor, kSchemaMinor, kSchemaPatch);
   m.def("cuda_compiled", &cuda_compiled);
   m.def("cuda_available", &cuda_available);
+  m.def("cuda_device_count", &cuda_device_count);
+  m.def("cuda_device_name", [](int d) { return std::string(cuda_device_name(d)); });
 
   m.def("rotation_ned", [](double roll, double pitch, double yaw) {
     const Mat3d r = rotation_ned(roll, pitch, yaw);

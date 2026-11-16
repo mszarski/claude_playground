@@ -23,6 +23,10 @@ nvcc --version | tail -1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=ON \
       -DPython3_EXECUTABLE="$(which python3)"
 cmake --build build
+if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
+  PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}"
+  exit 0
+fi
 echo "=== ctest (C++ suites) ==="
 ctest --test-dir build --output-on-failure -E pytest | tail -5
 echo "=== pytest (all, with skip reasons) ==="

@@ -85,6 +85,7 @@ struct BpOptions {
   std::int32_t cull_block = 0;
   std::int64_t grid_rows = 0;
   std::int64_t grid_cols = 0;
+  std::int32_t device = 0;  ///< CUDA device index (multi-GPU: one call per device, per image tile)
 };
 
 /// What culling did, for the processing log.

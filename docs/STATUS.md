@@ -8,9 +8,9 @@ Updated at the end of each milestone. Newest facts first within each section.
 | --- | --- | --- |
 | 1 Notes and survey | done | `PAPER_NOTES.md`, `HOLOSCAN_NOTES.md`, `OPEN_SOURCE.md`, `DECISIONS.md`; `tools/test.sh` builds and runs GoogleTest and pytest |
 | 2 Record format and file replay | done | `RECORD_FORMAT.md`; `tests/cpp/test_record_io.cpp`, `tests/python/test_record.py`, `tests/python/test_sources.py` |
-| 3 Simulator, point targets, all sonar configs | done on CPU; GPU half not run | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. `test_gpu_forward_model_matches_cpu` is **skipped** here (no device). |
-| 4 Backprojection kernel, FLS mode | done on CPU; GPU half not run; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. GPU-versus-reference tests are **skipped** here. PICMUS: resolution measured; published reference numbers and contrast not done. |
-| 5 Run-time optimisations | done on CPU; GPU halves not run | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). Compiled but **not run**: the device slab, the CUDA culling pass, and the hardware texture path (`test_hardware_texture_matches_software_table` is skipped). |
+| 3 Simulator, point targets, all sonar configs | done; GPU forward model verified on a T4 | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. |
+| 4 Backprojection kernel, FLS mode | done; GPU kernel verified on a T4; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. PICMUS: resolution measured; published reference numbers and contrast not done. |
+| 5 Run-time optimisations | done; device slab, CUDA culling and hardware texture lookup verified on a T4 | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). |
 | 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
@@ -29,19 +29,20 @@ Updated at the end of each milestone. Newest facts first within each section.
 3. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.
-3. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
 
-## Environment this was built in, and what that limits
+## Where the code has run
 
-- The work so far was done in an x86_64 cloud container with **no GPU**. The brief's
-  development host is a DGX Spark.
-- Every kernel has a host backend and a CUDA backend from the same source
-  (`DECISIONS.md` A-03). Here the CUDA backend is **compiled** with nvcc 12.0
-  (`cmake -DSONAR_ENABLE_CUDA=ON`, host compiler g++-12) but has **never been executed**.
-- Consequences until someone runs `tools/test.sh` on the Spark:
-  - GPU-versus-CPU agreement tests are skipped, not passed.
-  - No GPU timing exists. Nothing in this repo reports a GPU speed.
-  - Holoscan cannot be installed or run here (it needs CUDA and Python 3.12 wheels).
+- **CPU:** everything, in an x86_64 cloud container (the development container has no GPU).
+- **GPU:** the CUDA backend has been built and run on rented x86_64 machines through
+  Hugging Face Jobs (`tools/gpu_job.sh`, image `nvidia/cuda:12.6.3-devel-ubuntu24.04`).
+  On an NVIDIA T4, all ten GPU tests pass: echo synthesis against the CPU, backprojection
+  against the independent reference for all three interpolators, and the hardware texture
+  position lookup against the software table. Benchmarks on several GPU types are in
+  `RESULTS.md`.
+- **Not yet:** the brief's actual targets. Nothing has run on a DGX Spark, a Jetson, or
+  any aarch64 machine, and Holoscan has not been installed anywhere.
+- Motion estimation was not part of the GPU run (that job image has no Ceres); it has no
+  GPU code.
 
 ## Open questions for the project owner
 
@@ -72,9 +73,10 @@ Updated at the end of each milestone. Newest facts first within each section.
    (LGPL-3) and PyMUST (LGPL) are proposed as separate-process oracles only, as the brief
    allows. Nothing copyleft is installed in the build or linked. Say if any of these should
    not be used even as an oracle.
-7. **Blocked reading.** The container's network policy blocks `apl.washington.edu`
-   (TR 0702, TR 9407), `oalib-acoustics.org` and the original PICMUS host. Either allow
-   those hosts in the environment or drop the PDFs in `docs/refs/`. PICMUS data itself is
+7. **Reading.** TR 0702 is now fetched (`docs/refs/`, not committed) and summarised in
+   `PHYSICS_NOTES.md`. TR 9407 is distribution-limited on DTIC and was not fetched; the
+   open literature it draws on is used instead, as the brief allows. If you can supply
+   TR 9407, put it in `docs/refs/`. PICMUS data itself is
    reachable through a Hugging Face mirror (`zeahub/picmus`, a converted layout); the
    published PICMUS reference numbers could not be fetched, so none are quoted yet.
 

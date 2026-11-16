@@ -50,6 +50,7 @@ std::size_t backproject_memory_required(const BpInputs& inputs, std::size_t n_po
 void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
                       const BpOptions& options, const std::vector<float>& sinc_table,
                       std::complex<float>* image, float* weight_sum, BpStats* stats) {
+  cuda_check(cudaSetDevice(options.device), "select device");
   // One device allocation for the whole call (ASASIN Sec. II-C).
   SlabAllocator slab(Backend::Cuda);
   slab.reserve(backproject_memory_required(inputs, points.size(), options, weight_sum != nullptr,
