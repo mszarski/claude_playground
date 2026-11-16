@@ -102,6 +102,46 @@ On a rail the element beam (about 110°) is far wider than the angle the rail su
 so resolution is limited by the rail length, not by D/2 (which would be 0.125 mm and
 would need 5.7 m of rail at this range).
 
+## Flank array: beamforming and the sonar equation
+
+Source: `tests/python/test_flank.py`. CPU. Free field (`free_field` tier), one ping.
+
+Far-field beamformer against backprojection, `flank_32`, target at 5 km, bearings 0°, 17°
+and −35°: the two complex maps differ by less than 2% of the peak over a ±6° by ±1 m
+patch. At 8 m (inside the 96 m Fraunhofer distance) the far-field beamformer keeps 49% of
+the peak and its beam is 13.6° wide against 3.2° for backprojection.
+
+Beam width (−3 dB) and ambiguities, uniform weighting:
+
+| Array | Measured width | Theory | Highest lobe outside the main lobe, measured (wideband pulse) | Predicted, single frequency | Predicted, band average |
+| --- | --- | --- | --- | --- | --- |
+| `flank_32`, 32 × 9.4 cm, 6–10 kHz | 3.14° | 3.16° (0.886·λ/L) | −17.6 dB | −13.2 dB (a sidelobe) | −15.1 dB |
+| `popoto_8` dense, 8 × 2.7 cm, 20–35 kHz | 12.83° | 12.82° | −17.4 dB | −12.8 dB (a sidelobe) | −14.9 dB |
+| `popoto_8` sparse, 8 elements over 3 m | 0.70° | 0.73° (array factor at 27.5 kHz) | −10.2 dB | 0.0 dB (a full ambiguity) | −8.3 dB |
+
+- `flank_32` and the dense Popoto layout have no grating lobes at broadside; what is
+  listed is the ordinary first sidelobe.
+- The sparse layout buys an 18× narrower beam with ambiguities: at any single frequency
+  some other bearing responds at full height. Over the 20–35 kHz band those lobes fall at
+  different bearings and average down to about −8 dB (−10 dB measured with the simulated
+  pulse). `flank.ambiguity_report` produces this for any layout and band.
+
+Sonar equation against simulation, `flank_32`, 200 dB source, 1 s LFM, 10 dB target,
+white noise at 50 dB re 1 µPa²/Hz, 32 hydrophones:
+
+| Range | Predicted output SNR | Simulated output SNR (mean of two noise draws) |
+| --- | --- | --- |
+| 1 km | 53.7 dB | 52.4 dB |
+| 5 km | 20.5 dB | 18.7 dB |
+| 10 km | 1.9 dB | 4.2 dB |
+
+- All within the 3 dB acceptance band. Predicted detection range at a 13 dB threshold:
+  6.7 km.
+- At 10 km the simulated figure reads high because the peak is picked from a noisy
+  envelope at low SNR.
+- This is spherical spreading plus absorption in white noise. Multipath, reverberation
+  and ambient noise spectra are milestone 12, and will change these numbers.
+
 ## 3D near-field imaging of a buried object
 
 Source: `tests/python/test_volume.py`. CPU. A `subbottom` sonar (20 kHz, 20 kHz
@@ -226,4 +266,4 @@ Source: `tests/python/test_sim.py`.
 
 ## Not yet measured
 
-Detection range, and every speed figure.
+Detection and tracking performance, and every speed figure.

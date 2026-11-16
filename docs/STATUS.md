@@ -15,7 +15,8 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU; GeoTIFF output missing | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
-| 10–13 | not started | |
+| 10 Flank array | **in progress** | Done: far-field beamformer against backprojection, beam width and ambiguity patterns for `flank_32` and both `popoto_8` layouts, the sonar-equation tool against simulation, transmit blanking (`tests/python/test_flank.py`). Not done: MVDR, normalisation and CFAR, tracking, calibration estimation, the `sync` stage. |
+| 11–13 | not started | |
 
 ## What is next
 
@@ -99,8 +100,6 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 ## Not started at all
 
-- Milestone 10: flank-array processing, detection, tracking, calibration estimation, the
-  `sync` stage, the sonar-equation tool, sparse-array ambiguity reports.
 - Milestone 11: Holoscan operators and sources. Holoscan cannot be installed in the
   build container (no CUDA; wheels are for Python 3.12).
 - Milestone 12: `PHYSICS_NOTES.md`, the Bellhop provider, reverberation (both methods),
