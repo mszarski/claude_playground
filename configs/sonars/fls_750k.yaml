@@ -1,0 +1,46 @@
+# Phase 3 of the plan: the mid-range step. A custom 64-element array at 0.5-1 MHz for
+# 20-50 m, to try array building, a low-frequency front end and FPGA decimation before
+# the 300 m design. The plan gives the band, the element count, the range and a 90-130
+# degree sector; everything else here is a placeholder chosen to be self-consistent.
+name: fls_750k
+mode: fls
+nominal_sound_speed: 1500.0
+
+array:
+  layout: uniform_line
+  count: 64
+  pitch: 0.001                   # m; half a wavelength at 750 kHz, so a wide sector has no grating lobes
+  axis: [0, 1, 0]
+  boresight: [1, 0, 0]
+  element_width: 0.0009
+  element_height: 0.01
+
+transmit:
+  kind: point
+  lever_arm: [0, 0, 0.03]
+  beamwidth_az: 2.1              # rad: a 120 degree sector
+  aperture_height: 0.01
+  waveform:
+    type: lfm
+    f_start: 650.0e3
+    f_stop: 850.0e3
+    duration: 0.5e-3
+    window_alpha: 0.1
+    amplitude: 1.0
+
+receive:
+  kind: real
+  sample_rate: 3.0e6             # before any FPGA decimation
+  adc_bits: 12
+  adc_full_scale: 1.0
+  window: {range: [1.0, 50.0]}
+  # Francois-Garrison absorption at 750 kHz is about 0.2 dB/m: 20 dB two-way at 50 m on
+  # top of 68 dB of spreading. The ramp is a placeholder for whatever the front end gives.
+  tvg:
+    time: [0.0013, 0.067]
+    gain_db: [0.0, 80.0]
+
+unconfirmed:
+  - array                        # not designed
+  - transmit                     # no projector chosen
+  - receive                      # front end (AFE5932 class or other) not chosen

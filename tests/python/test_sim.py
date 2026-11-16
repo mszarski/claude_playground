@@ -42,7 +42,7 @@ def test_every_named_sonar_is_shipped():
     shipped = set(list_configs("sonars"))
     assert set(ALL_SONARS) <= shipped                 # the nine the brief names
     # Anything beyond those is listed here on purpose, so additions are deliberate.
-    assert shipped - set(ALL_SONARS) == {"subbottom", "popoto_4x7"}
+    assert shipped - set(ALL_SONARS) == {"subbottom", "popoto_4x7", "fls_750k"}
 
 
 @pytest.mark.parametrize("name", ALL_SONARS)
@@ -482,3 +482,27 @@ def test_hardware_gain_ramp_is_applied_and_recorded():
     t = a.samples.start_time + np.arange(a.samples.n_samples) / a.samples.sample_rate
     gain = 10 ** (np.interp(t, [0.0, 0.04], [0.0, 40.0]) / 20)
     np.testing.assert_allclose(a.samples.array, b.samples.array * gain, rtol=1e-5, atol=1e-12)
+
+
+def test_phase_3_sonar_images_its_point_grid():
+    """`fls_750k` (the plan's 0.5-1 MHz mid-range step): the grid scenario runs, every
+    target is found within a range cell and a beamwidth, and absorption is what limits it."""
+    from gpusonar import acoustics, recon
+    from gpusonar.config import load_scenario_config
+    cfg = load_scenario_config("point_grid_fls_750k")
+    cfg["scene"][0].update(ranges=[5, 30, 45], bearings_deg=[-50, 0, 25])
+    result = run_scenario(cfg)
+    rec = result.records[0]
+    assert gs.validate(rec).error_count == 0
+    centre = rec.rx_positions().mean(axis=0)
+    for target in result.scene.positions:
+        offset = target - centre
+        rng_m, bearing = np.linalg.norm(offset), np.arctan2(offset[1], offset[0])
+        ranges = rng_m + np.arange(-0.05, 0.0501, 0.001)
+        bearings = bearing + np.radians(np.arange(-3.0, 3.01, 0.1))
+        img = np.abs(recon.fan_image([rec.copy()], ranges, bearings, interp="linear").image)
+        ir, ib = np.unravel_index(np.argmax(img), img.shape)
+        assert abs(ranges[ir] - rng_m) < 0.006                      # c / 2B = 3.75 mm
+        assert abs(np.degrees(bearings[ib] - bearing)) < 1.0        # beam about 1.6 degrees at broadside
+    alpha = float(acoustics.absorption(750e3, 12.0, 35.0, 5.0))
+    assert 0.15 < alpha < 0.30                                      # dB/m: 15 to 30 dB two-way at 50 m

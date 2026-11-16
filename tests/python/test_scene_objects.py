@@ -196,6 +196,7 @@ def test_seafloor_objects_scenario_has_shadows():
 
 @pytest.mark.skipif(not __import__("gpusonar").cuda_available(),
                     reason="four minutes of synthesis on a CPU; runs where there is a CUDA device")
+@pytest.mark.skipif(not __import__("gpusonar").core.HAVE_MOTION, reason="built without Ceres")
 def test_wreck_scenario_through_motion_estimation_and_imaging():
     """The whole SAS chain on an extended scene: simulate the wreck run with motion that
     navigation does not know, estimate the motion from the data, image, and compare with

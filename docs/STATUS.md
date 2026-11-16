@@ -153,6 +153,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - Not modelled: specular highlights (a smooth sphere or plate glint), diffraction into
   shadows, shadows of boundary-reflected paths (they are treated as direct), rotated
   boxes, meshes. Seafloor relief does not shadow itself.
+- Sonar configs beyond the brief's nine: `subbottom`, `popoto_4x7` (the plan's wiring),
+  `fls_750k` (the plan's Phase 3 mid-range step; every value a placeholder).
 - Built-in scenarios: a point grid per sonar, `stripmap_points`, `rail_points`,
   `rail_position_errors`, `pool_wires_l12_5d` (Phase 1 pool test), `seafloor_objects_fls`,
   `wreck_sas` (large unknown motion), `buried_cylinder`, `flank_target_{1,5,10}km`,

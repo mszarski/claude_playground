@@ -196,9 +196,9 @@ class FlankUdpSource(Source):
     """Ping records from blocks arriving as UDP datagrams: a stand-in for the Sensor
     Bridge socket receiver, and the receive side of the emulator test.
 
-    A receiver thread drains the socket and assembles pings as they arrive, so slow
-    processing downstream delays records but does not lose samples (up to `queue_pings`
-    waiting records; beyond that the oldest waiting ping is dropped and counted).
+    One thread drains the socket and a second assembles pings, so slow processing
+    downstream delays records but does not lose samples (up to `queue_pings` waiting
+    records; beyond that the oldest waiting ping is dropped and counted).
     Iteration ends after `max_pings` records or `timeout` seconds without one.
     """
 
@@ -219,19 +219,31 @@ class FlankUdpSource(Source):
         self.bad_blocks = 0
         self.overrun_pings = 0
         self._queue = queue.Queue(maxsize=queue_pings)
+        self._blocks = queue.Queue()
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._receive, daemon=True)
-        self._thread.start()
+        self._threads = [threading.Thread(target=self._receive, daemon=True),
+                         threading.Thread(target=self._assemble, daemon=True)]
+        for thread in self._threads:
+            thread.start()
 
     def _receive(self) -> None:
-        import queue
+        """Drain the socket and nothing else: assembling a finished ping takes tens of
+        milliseconds, long enough to overflow a small socket buffer."""
         while not self._stop.is_set():
             try:
-                data = self.socket.recv(65535)
+                self._blocks.put(self.socket.recv(65535))
             except socket.timeout:
                 continue
             except OSError:
                 return
+
+    def _assemble(self) -> None:
+        import queue
+        while not self._stop.is_set():
+            try:
+                data = self._blocks.get(timeout=0.2)
+            except queue.Empty:
+                continue
             try:
                 records = self.assembler.feed(data)
             except BlockError:
@@ -259,7 +271,8 @@ class FlankUdpSource(Source):
     def close(self) -> None:
         self._stop.set()
         self.socket.close()
-        self._thread.join(timeout=2.0)
+        for thread in self._threads:
+            thread.join(timeout=2.0)
 
 
 class FlankBoardEmulator:

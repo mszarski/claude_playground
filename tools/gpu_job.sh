@@ -6,6 +6,7 @@
 # Usage: tools/gpu_job.sh            from a checkout
 #        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch the source first
 #        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them
+#        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
@@ -22,6 +23,15 @@ if [ -n "${GPUSONAR_TARBALL_REPO:-}" ]; then
   hf download "$GPUSONAR_TARBALL_REPO" gpusonar.tar.gz --type dataset --local-dir /work > /dev/null
   mkdir -p /work/src && tar -xzf /work/gpusonar.tar.gz -C /work/src
   cd /work/src
+fi
+if [ "${GPUSONAR_CERES:-0}" = "1" ]; then
+  # Ceres Solver without SuiteSparse (BSD; SuiteSparse is GPL), for motion estimation.
+  git clone -q -b 2.2.0 --depth 1 https://github.com/ceres-solver/ceres-solver /opt/ceres-src
+  cmake -S /opt/ceres-src -B /opt/ceres-build -G Ninja -DSUITESPARSE=OFF -DCXSPARSE=OFF -DLAPACK=OFF \
+        -DGFLAGS=OFF -DMINIGLOG=ON -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DUSE_CUDA=OFF \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/opt/ceres-nosuitesparse > /dev/null
+  cmake --build /opt/ceres-build > /dev/null && cmake --install /opt/ceres-build > /dev/null
 fi
 nvcc --version | tail -1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=ON \

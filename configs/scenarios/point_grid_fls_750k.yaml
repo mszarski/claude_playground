@@ -1,0 +1,21 @@
+# Point-target grid for `fls_750k` (plan Phase 3): targets from 5 to 45 m over a wide sector.
+name: point_grid_fls_750k
+sonar: fls_750k
+fidelity: free_field
+environment: {temperature: 12.0, salinity: 35.0}
+platform:
+  position: [0, 0, 5.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 5.0]
+    forward: [1.0, 0.0, 0.0]
+    across: [0.0, 1.0, 0.0]
+    ranges: [5, 15, 30, 45]
+    bearings_deg: [-50, -25, 0, 25, 50]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1
