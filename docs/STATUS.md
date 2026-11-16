@@ -39,11 +39,13 @@ Updated at the end of each milestone. Newest facts first within each section.
 - **CPU:** everything, in an x86_64 cloud container (the development container has no GPU).
 - **GPU:** the CUDA backend is built and run on rented x86_64 machines through Hugging
   Face Jobs (`tools/gpu_job.sh`, image `nvidia/cuda:12.6.3-devel-ubuntu24.04`). The job
-  can also build Ceres and the Bellhop/KRAKEN oracles, so the whole suite runs there. On
-  an NVIDIA T4 the full suite passes (last run: 264 passed, 0 failed, 8 skipped: five need the PICMUS data, one the GeoTIFF library, one the reference checkout, one is a check for builds without CUDA). That covers
+  can also build Ceres, the Bellhop/KRAKEN oracles and the ultrasound reference's native
+  module, so the whole suite runs there. On
+  an NVIDIA T4 the full suite passes (last run: 288 passed, 0 failed, 6 skipped: five need the PICMUS data, one is a check for builds without CUDA). That covers
   echo synthesis, backprojection (all interpolators, culling, texture lookup, sessions),
   cuFFT conditioning, CFAR, the Holoscan pipelines, motion estimation, the long-range
-  scenarios with GPU synthesis and the wreck scenario end to end. Benchmarks on T4, L4,
+  scenarios with GPU synthesis, the realistic scenes of every mode, and the ultrasound
+  source on the reference's native runtime (built there from the pinned commit). Benchmarks on T4, L4,
   A10G, A100 and two A10Gs are in `RESULTS.md`.
 - **Holoscan:** SDK 4.6.0 (`pip install holoscan-cu12`) on the same rented T4; the
   operator pipelines run there, including one fed by the emulated flank board over UDP.
