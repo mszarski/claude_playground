@@ -278,3 +278,29 @@ instead of every earlier one. One extra node after the last ping gives it a velo
 - The first ping is the anchor: its sway is zero and its height is minus its DVL altitude.
 - Ceres is built without SuiteSparse and the problem uses the dense QR solver, which is
   adequate for hundreds of pings. A sparse solver would be needed for very long runs.
+
+### D-32 Shared reference for board synchronisation
+The brief asks for a shared reference signal wired into one input on every board, and
+for 32 hydrophones on four 8-input boards. Both hold if the reference is *summed* into a
+hydrophone input instead of replacing it. The reference is two short chirp bursts per
+ping, above the acoustic band (38–48 kHz against 20–35 kHz), one just after the receive
+window opens and one just before it closes. One burst gives a board's clock offset; the
+spacing of the two gives its drift. Burst timing is estimated from the correlation
+envelope and refined with the correlation phase. Boards are then resampled onto the
+first board's timeline with a windowed-sinc interpolator, and the bursts are measured
+again as the residual check. All parameters are in `configs/sonars/popoto_4x8.yaml`.
+A CW pilot tone was considered and rejected: it gives the offset only modulo its period.
+
+### D-33 MVDR training data
+The adaptive beamformer estimates each range block's covariance from the other range
+blocks (excluding a guard). With the echo itself in the training data, MVDR at high SNR
+treats the echo's small mismatch from its steering vector as interference and cancels it;
+that happened in the first version here. The cost: it does not separate two point targets
+at the same range.
+
+### D-34 Stages still in Python
+`flank.py`, `detect.py`, `calibrate.py`, `sync.py`, `sonar_equation.py`, `processing.py`
+and the delay estimator in `motion.py` are NumPy. The brief asks for a C++/CUDA core with
+each stage as a library function and a Holoscan operator. These were written in Python
+first to get tested behaviour; porting the per-ping ones (far-field beamformer, CFAR,
+sync resampler) to the kernel framework is outstanding work, listed in `STATUS.md`.

@@ -5,7 +5,7 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 to 9 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
+**State: early.** Milestones 1 to 10 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
 for what exists, what is next, and what has only been compiled and never run on a GPU.
 
 The repository also holds the older `trajectory_classifier` Python package, which is
@@ -52,7 +52,7 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 | `libs/motion` | Ceres solve of ASASIN Eq. 8 (sway and heave) |
 | `libs/{detect,holoscan_ops}` | not started |
 | `third_party/` | vendored pocketfft (BSD-3) |
-| `python/gpusonar` | bindings and the Python layer (sources, configs, tools) |
+| `python/gpusonar` | bindings and the Python layer: sources, configs, simulator scenes, SAS and volume imaging, flank beamforming, detection, tracking, calibration, sync, sonar equation |
 | `configs/` | named sonars and scenarios (YAML) |
 | `tests/cpp`, `tests/python` | GoogleTest and pytest suites |
 | `docs/` | notes, decisions, record format, status |
@@ -97,6 +97,29 @@ result = run_scenario("stripmap_points")                 # 90 pings past three t
 grid = recon.stripmap_grid(result.records, ground_range=(36.0, 47.0), pixel=(0.02, 0.04))
 image = recon.sas_image(result.records, grid.points)     # along-track x ground range, complex
 ```
+
+## Flank array: range x bearing map, detections, predicted range
+
+```python
+import numpy as np
+from gpusonar import detect, flank
+from gpusonar.sim import run_scenario
+from gpusonar.sonar import SonarModel
+from gpusonar.sonar_equation import SonarEquation
+
+ping = run_scenario("point_grid_flank_32").records[0]
+bearings = np.radians(np.arange(-60, 60.5, 0.5))
+beams = flank.farfield_beamform(ping, bearings).valid()     # or flank.mvdr_beamform
+power = abs(beams.data) ** 2
+hits = detect.cluster(detect.cfar(power, pfa=1e-6), power, beams.ranges, bearings)
+
+eq = SonarEquation.from_sonar(SonarModel.load("flank_32"), noise_spectrum_db=50.0)
+print(eq.detection_range(threshold_db=13.0))
+```
+
+For several boards with their own clocks, run `gpusonar.sync.synchronise(record, reference)`
+on the raw record first. For an array with unknown channel errors,
+`gpusonar.calibrate.estimate_channel_errors` on pings of known sources.
 
 ## Reading recorded data
 

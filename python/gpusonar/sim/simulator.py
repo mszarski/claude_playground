@@ -47,6 +47,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   noise_rms: float = 0.0, adc: bool = True, spreading: bool = True,
                   rng: np.random.Generator | None = None, tx_pose: "core.Pose | None" = None,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
+                  channel_errors: dict | None = None, clock_truth: dict | None = None,
                   backend=core.Backend.Host) -> "core.PingRecord":
     """Simulate one transmit and return its record."""
     env = resolve_environment(environment, depth=pose.position[2])
@@ -56,7 +57,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     provider = provider or make_provider("free_field", c)
     # The true board clock errors drive synthesis, then are cleared: the record a
     # processor receives does not know them (the sync stage estimates them).
-    _set_board_clocks(record, sonar, truth=True)
+    clocks = _set_board_clocks(record, sonar, truth=True, rng=rng)
+    if clock_truth is not None:
+        clock_truth.update(clocks)
+    if channel_errors is not None and channel_errors.get("position") is not None:
+        # True element position errors drive synthesis; the processor is not told.
+        cal = record.calibration
+        cal.position_offset = [tuple(p) for p in np.asarray(channel_errors["position"], dtype=float)]
+        record.calibration = cal
     if len(scene) > 0:
         tx_position = np.array(record.tx_position())
         rx_reference = record.rx_positions().mean(axis=0)
@@ -67,7 +75,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                              absorption=absorption_table(sonar, env, absorption_model),
                              spreading=spreading, backend=backend,
                              platform_acceleration=tuple(float(a) for a in acceleration))
+    receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)
+    if channel_errors is not None:
+        receiver.apply_channel_errors(record, channel_errors)
     if ins_rate > 0.0:
         _add_true_ins(record, np.asarray(acceleration, dtype=float), ins_rate)
     samples = record.samples.array
@@ -104,14 +115,26 @@ def _add_true_ins(record, accel: np.ndarray, rate: float) -> None:
     record.navigation = nav
 
 
-def _set_board_clocks(record, sonar: SonarModel, truth: bool) -> None:
+def _set_board_clocks(record, sonar: SonarModel, truth: bool, rng=None) -> dict:
+    """Write the boards' true clock errors into the record (truth=True) or clear them.
+    Returns the truth: {"offset": [...], "drift_ppm": [...]} per board. Each ping draws
+    its own jitter on top of the configured offset."""
     meta = record.metadata
     boards = meta.boards
+    offsets, drifts = [], []
     for board, cfg in zip(boards, sonar.boards):
-        board.clock_offset = float(cfg.get("clock_offset", 0.0)) if truth else 0.0
-        board.clock_drift_ppm = float(cfg.get("clock_drift_ppm", 0.0)) if truth else 0.0
+        offset = float(cfg.get("clock_offset", 0.0))
+        jitter = float(cfg.get("jitter_rms", 0.0))
+        if truth and jitter > 0.0 and rng is not None:
+            offset += jitter * float(rng.standard_normal())
+        drift = float(cfg.get("clock_drift_ppm", 0.0))
+        board.clock_offset = offset if truth else 0.0
+        board.clock_drift_ppm = drift if truth else 0.0
+        offsets.append(offset)
+        drifts.append(drift)
     meta.boards = boards
     record.metadata = meta
+    return {"offset": offsets, "drift_ppm": drifts}
 
 
 @dataclass

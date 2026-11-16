@@ -15,13 +15,14 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU; GeoTIFF output missing | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
-| 10 Flank array | **in progress** | Done: far-field beamformer against backprojection, beam width and ambiguity patterns for `flank_32` and both `popoto_8` layouts, the sonar-equation tool against simulation, transmit blanking (`tests/python/test_flank.py`). Not done: MVDR, normalisation and CFAR, tracking, calibration estimation, the `sync` stage. |
+| 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
 | 11–13 | not started | |
 
 ## What is next
 
-1. Milestone 10: flank array (far-field FFT beamformer against backprojection, MVDR,
-   CFAR, tracking, calibration, the multi-board `sync` stage, the sonar-equation tool).
+1. Milestones 11–13 each need something this container does not have: a Holoscan
+   install (11), the propagation reference reports and a Bellhop build (12), a GPU (13).
+   See "Not started at all".
 2. GeoTIFF output (single and multi-layer), debug products per stage and the processing
    log: the framework items of the paper's Sec. II are still open.
 3. Milestone 8 leftovers (see "Motion estimation limits").
@@ -61,10 +62,12 @@ Updated at the end of each milestone. Newest facts first within each section.
    and AGX Thor is built without RoCE (CoE or sockets). 38.4 Gbit/s ultrasound capture
    therefore looks like DGX Spark / IGX only; the 49 Mbit/s flank source is fine anywhere.
 5. **`popoto_4x8` reference channel.** Four 8-input boards give 32 inputs. A shared
-   reference "wired into one input on every board" leaves 28 hydrophones, not 32.
-   Proposed default: 32 hydrophones, with the reference summed into one hydrophone input
-   per board as an out-of-band pilot tone; the dedicated-input variant (28 hydrophones)
-   stays available. Confirm which matches the hardware plan.
+   reference "wired into one input on every board" on a dedicated input would leave 28
+   hydrophones, not 32. What is implemented: 32 hydrophones, with the reference summed
+   into the first hydrophone input of each board as two short chirp bursts per ping at
+   38–48 kHz, above the 20–35 kHz acoustic band. That needs an analogue summing node per
+   board and enough ADC bandwidth (the assumed 102.4 kSPS just allows it). Confirm this
+   matches what the hardware can do, or say which variant to build instead.
 6. **Copyleft test oracles.** Bellhop / Acoustics Toolbox and bellhopcuda (GPL-3), k-Wave
    (LGPL-3) and PyMUST (LGPL) are proposed as separate-process oracles only, as the brief
    allows. Nothing copyleft is installed in the build or linked. Say if any of these should
@@ -97,6 +100,23 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - The reference transmits 5, 6.25 or 8.33 MHz only. Nothing in it supports sonar carrier
   frequencies; stages 3–6 need their own transmit chain.
 - Docs say probe "L12-5 D"; code says "L7-3".
+
+## Flank array limits so far
+
+- The flank stages (`flank.py`, `detect.py`, `calibrate.py`, `sync.py`,
+  `sonar_equation.py`) are Python/NumPy, not C++/CUDA, and not Holoscan operators.
+- Everything was tested at the `free_field` tier in white noise. The long-range scenarios
+  must be re-run at `eigenray` in milestone 12 before the detection ranges mean anything.
+- The built-in scenarios "Popoto trial at 100 m, 1 km and 2 km" and "flank-array target at
+  1, 5 and 10 km in noise" exist only as test code, not as scenario YAML files.
+- No test runs a full 10 km ping with the 1 s pulse through detection and tracking; the
+  10 km case was checked for SNR only.
+- Tracking uses the built-in nearest-neighbour Kalman tracker. Stone Soup was not used.
+- Clustering does not merge a target's sidelobe detections.
+- The sync stage's reference is a design proposal (open question 5), not a description of
+  existing hardware. Drift from the 1PPS and direct-path methods needs consecutive pings
+  and is not implemented.
+- Synthetic aperture with the flank array along track (the stretch goal) is not attempted.
 
 ## Not started at all
 

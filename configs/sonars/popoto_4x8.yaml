@@ -14,15 +14,24 @@ array:
 receive:
   # Clock errors are the simulator's truth; the sync stage has to estimate them.
   boards:
-    - {first: 0,  count: 8, clock_offset: 0.0,      clock_drift_ppm: 0.0,  jitter_rms: 2.0e-8}
-    - {first: 8,  count: 8, clock_offset: 3.1e-4,   clock_drift_ppm: 12.0, jitter_rms: 2.0e-8}
-    - {first: 16, count: 8, clock_offset: -1.7e-4,  clock_drift_ppm: -8.0, jitter_rms: 2.0e-8}
-    - {first: 24, count: 8, clock_offset: 5.2e-5,   clock_drift_ppm: 25.0, jitter_rms: 2.0e-8}
-  # Shared reference for synchronisation. See STATUS.md, open question 5.
+    - {first: 0,  count: 8, clock_offset: 0.0,      clock_drift_ppm: 0.0,  jitter_rms: 2.0e-8, reference_channel: 0}
+    - {first: 8,  count: 8, clock_offset: 3.1e-4,   clock_drift_ppm: 12.0, jitter_rms: 2.0e-8, reference_channel: 8}
+    - {first: 16, count: 8, clock_offset: -1.7e-4,  clock_drift_ppm: -8.0, jitter_rms: 2.0e-8, reference_channel: 16}
+    - {first: 24, count: 8, clock_offset: 5.2e-5,   clock_drift_ppm: 25.0, jitter_rms: 2.0e-8, reference_channel: 24}
+  # Shared reference for synchronisation: one electrical signal wired to every board,
+  # summed into the first hydrophone input of each. It is a short chirp above the
+  # acoustic band, sent at two known instants of the receive window, so it gives each
+  # board's clock offset (from one burst) and drift (from the spacing of the two) without
+  # using up a hydrophone. See STATUS.md, open question 5.
   reference:
-    mode: pilot_tone             # summed into one hydrophone input per board, out of band
-    frequency: 40.0e3
-    level: 1.0e-3                # V
+    mode: sync_chirp
+    f_start: 38.0e3
+    f_stop: 48.0e3
+    duration: 4.0e-3
+    level: 2.0e-3                # V peak at the ADC
+    lead: 5.0e-3                 # first burst this long after the window opens,
+    tail: 10.0e-3                # second burst this long before it closes
+    channels: [0, 8, 16, 24]     # the input on each board that carries it
 
 unconfirmed:
   - receive.boards

@@ -142,6 +142,69 @@ white noise at 50 dB re 1 µPa²/Hz, 32 hydrophones:
 - This is spherical spreading plus absorption in white noise. Multipath, reverberation
   and ambient noise spectra are milestone 12, and will change these numbers.
 
+## Flank array: adaptive beamforming, detection, tracking
+
+Source: `tests/python/test_detect.py`. CPU. `flank_32`, 0.1 s pulse, targets near 2 km.
+
+| Check | Result |
+| --- | --- |
+| MVDR against conventional, white noise only (target SNR) | 17.3 dB against 19.7 dB: 2.4 dB worse |
+| MVDR against conventional, with a broadband jammer 30 dB above ambient at −20° | 19.4 dB against 5.5 dB: 13.9 dB better |
+| MVDR output looking straight at the jammer | within 1.5 dB of conventional (nothing to reject) |
+| CA-CFAR false-alarm rate on noise with a 20 dB level ramp, design 1e-2 and 1e-3 | within 25% of design |
+| Split-window normaliser on a 30 dB level ramp | background flat within 0.5 dB |
+| Detection of a 10 dB target at 2040 m, 12°, in noise | range within 1 m, bearing within 1°, SNR above 20 dB |
+| Tracking a target crossing at 5 m/s over 20 pings, two injected false alarms per ping | position within 10 m at 1.9 km, velocity within 1 m/s, at most one spurious confirmed track |
+
+- MVDR's 2.4 dB loss in white noise is the price of estimating a 32 × 32 covariance per
+  sub-band from one ping. It pays off only when there is something directional to reject.
+- The MVDR here rejects interference that extends in range (jammers, directional noise,
+  reverberation). It does not separate two point targets at the same range: the cell under
+  test is kept out of the covariance so that the echo is not cancelled.
+- The last pulse length of a compressed record has only a partial replica overlap. Beam
+  maps mark it (`BeamMap.n_valid`); running CFAR over it produces false alarms.
+- A target's own sidelobes cross a CFAR threshold at the same range and other bearings.
+  The tracking test keeps the strongest detection per ping; a sidelobe-aware clustering
+  step is not written.
+
+## Flank array: calibration and multi-board synchronisation
+
+Source: `tests/python/test_calibration_sync.py`. CPU.
+
+Calibration, `flank_32`, five known sources at 1 km from −40° to +40°. Injected: gain
+1 dB RMS, phase 20° RMS, element position 5 mm RMS in the array plane.
+
+| Quantity | Worst error over 32 channels |
+| --- | --- |
+| Gain | 0.007 dB |
+| Phase | 0.015° |
+| Position | 0.018 mm |
+
+Applying the estimate restores the beam peak to within 1% and removes most of the raised
+far-sidelobe floor. Noise-free; errors with noise have not been characterised. The array's
+mean gain, mean phase and mean position offset cannot be observed and are set to 1, 0, 0.
+
+Synchronisation, `popoto_4x8` (four boards, 32 hydrophones, 20–35 kHz). Injected clock
+offsets of 310, −170 and 52 µs and drifts of 12, −8 and 25 ppm relative to the first
+board, plus 20 ns of jitter. Shared reference: two out-of-band chirp bursts per ping.
+
+| Quantity | Result | Requirement |
+| --- | --- | --- |
+| Offset estimate, worst error | 0.05 µs | — |
+| Drift estimate, worst error | 0.00014 ppm | — |
+| Misalignment left after resampling | 0.50 µs | 1.43 µs (a twentieth of a period at 35 kHz) |
+| Beam peak, unsynchronised, against a single-clock array | −8.2 dB | — |
+| Beam peak, synchronised | −0.003 dB | — |
+| Largest difference on any lobe above −20 dB | 0.18 dB | 1 dB |
+
+- The 0.50 µs residual is dominated by the resampler acting on the reference bursts
+  themselves, which sit at 38–48 kHz, close to the 51.2 kHz Nyquist limit. In the acoustic
+  band the alignment is better than that, as the beam pattern shows.
+- The stage raises `SyncError` and refuses to pass the record on when the residual exceeds
+  the tolerance (tested by giving it the wrong reference description).
+- The 1PPS and direct-path methods recover offsets in their tests (to 1 ns and 0.5 µs);
+  they do not measure drift within a ping.
+
 ## 3D near-field imaging of a buried object
 
 Source: `tests/python/test_volume.py`. CPU. A `subbottom` sonar (20 kHz, 20 kHz
@@ -266,4 +329,4 @@ Source: `tests/python/test_sim.py`.
 
 ## Not yet measured
 
-Detection and tracking performance, and every speed figure.
+Every speed figure; anything with multipath, reverberation or realistic noise.
