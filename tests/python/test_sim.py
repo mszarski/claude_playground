@@ -42,7 +42,9 @@ def test_every_named_sonar_is_shipped():
     shipped = set(list_configs("sonars"))
     assert set(ALL_SONARS) <= shipped                 # the nine the brief names
     # Anything beyond those is listed here on purpose, so additions are deliberate.
-    assert shipped - set(ALL_SONARS) == {"subbottom", "popoto_4x7", "fls_750k"}
+    assert shipped - set(ALL_SONARS) == {"subbottom", "popoto_4x7", "fls_750k",
+                                         # the owner's designs (docs/DESIGN.md)
+                                         "fls_120k", "fls_170k", "fls_330k", "sas_minsas120", "popoto_array"}
 
 
 @pytest.mark.parametrize("name", ALL_SONARS)
