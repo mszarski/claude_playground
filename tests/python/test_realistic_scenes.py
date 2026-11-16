@@ -16,6 +16,7 @@ import gpusonar as gs
 from gpusonar.config import load_scenario_config
 from gpusonar.sim import find_bellhop
 
+pytest.importorskip("matplotlib", reason="the gallery tool draws its figures with matplotlib")
 _spec = importlib.util.spec_from_file_location(
     "gallery", pathlib.Path(__file__).resolve().parents[2] / "tools" / "gallery.py")
 gallery = importlib.util.module_from_spec(_spec)

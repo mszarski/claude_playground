@@ -17,7 +17,7 @@ apt-get install -y -qq cmake ninja-build g++ git python3-dev python3-pip python3
     libhdf5-dev libeigen3-dev libgtest-dev libgmock-dev libomp-dev > /dev/null
 python3 -m venv /opt/venv
 . /opt/venv/bin/activate
-pip install -q numpy scipy h5py pyyaml pytest pybind11 hdf5plugin huggingface_hub rasterio pyproj
+pip install -q numpy scipy h5py pyyaml pytest pybind11 hdf5plugin huggingface_hub rasterio pyproj matplotlib
 # Holoscan SDK 4.x (CUDA 12 build) for the operator tests; they skip if this fails.
 pip install -q holoscan-cu12 || echo "holoscan not installed"
 ulimit -s 32768 || true
@@ -71,7 +71,6 @@ fi
 if [ "${GPUSONAR_JOB:-tests}" = "gallery" ]; then
   # Every mode's realistic scenario, simulated and imaged; figures and numbers are uploaded
   # to GPUSONAR_UPLOAD_REPO (a Hugging Face dataset) when it is set.
-  pip install -q matplotlib
   PYTHONPATH=python python3 tools/gallery.py --backend cuda --out /work/gallery ${GPUSONAR_GALLERY_ARGS:-}
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/gallery gallery --type dataset > /dev/null

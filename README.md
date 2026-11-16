@@ -62,7 +62,7 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 
 `docs/SCENARIOS.md` shows one or more extended scenes per mode (pool, harbour, seafloor
 objects, wreck, mined seabed, rail, buried objects, flank patrol), each simulated and
-imaged end to end. Reproduce them with `tools/gallery.py` (`--quick` on a CPU).
+imaged end to end. Reproduce them with `tools/gallery.py` (`--quick` on a CPU; needs `matplotlib`).
 
 ## Documents
 
