@@ -179,3 +179,48 @@ def test_tracker_drops_a_target_that_disappears():
     for k in range(4, 8):
         tracker.update(float(k), [])
     assert tracker.tracks == []
+
+
+# --- the C++ / CUDA CFAR kernel against the NumPy one ----------------------------------------
+
+def _cfar_case():
+    rng = np.random.default_rng(12)
+    power = rng.exponential(1.0, size=(61, 3000)).astype(np.float32)
+    power[30, 1500] = 400.0
+    power[5, 3] = 300.0                      # near the edge: a short training window
+    power[50, 2995] = 300.0
+    return power
+
+
+@pytest.mark.parametrize("guard, train", [(4, 32), (0, 8), (10, 100)])
+def test_cfar_kernel_matches_numpy(guard, train):
+    import gpusonar as gs
+    power = _cfar_case()
+    want = detect.cfar(power, pfa=1e-5, guard=guard, train=train)
+    got, ratio = gs.core.cfar(power, pfa=1e-5, guard=guard, train=train, return_ratio=True)
+    assert got.dtype == bool and got.shape == power.shape
+    np.testing.assert_array_equal(got, want)
+    assert got[30, 1500] and got[5, 3] and got[50, 2995]
+    np.testing.assert_allclose(ratio, detect.normalise(power.astype(float), guard, train), rtol=2e-6)
+    np.testing.assert_array_equal(detect.cfar(power, pfa=1e-5, guard=guard, train=train,
+                                              backend=gs.core.Backend.Host), want)
+    assert gs.core.cfar_threshold_factor(1e-5, 2 * train) == pytest.approx(
+        detect.cfar_threshold_factor(1e-5, 2 * train))
+
+
+def test_cfar_kernel_false_alarm_rate():
+    import gpusonar as gs
+    rng = np.random.default_rng(3)
+    power = rng.exponential(1.0, size=(200, 5000)).astype(np.float32)
+    rate = gs.core.cfar(power, pfa=1e-3, guard=4, train=32).mean()
+    assert rate == pytest.approx(1e-3, rel=0.15)
+
+
+@pytest.mark.skipif(not __import__("gpusonar").cuda_available(), reason="no CUDA device")
+def test_cfar_kernel_on_the_gpu_is_identical():
+    import gpusonar as gs
+    power = _cfar_case()
+    host, host_ratio = gs.core.cfar(power, pfa=1e-5, return_ratio=True)
+    gpu, gpu_ratio = gs.core.cfar(power, pfa=1e-5, return_ratio=True, backend=gs.core.Backend.Cuda)
+    np.testing.assert_array_equal(gpu, host)
+    np.testing.assert_array_equal(gpu_ratio, host_ratio)

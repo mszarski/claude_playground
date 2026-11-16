@@ -1,0 +1,43 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "Tesla T4"
+  ],
+  "modes": {
+    "sas": {
+      "dataset": "400 pings x 16 channels x 9534 samples; image 6400 x 3000 at 2 cm",
+      "pixels": 19200000,
+      "records": 6400,
+      "collection_time_s": 80.0,
+      "time_s": 6.6089392569999745,
+      "runs_s": [
+        7.621178721000206,
+        6.619777917999954,
+        6.6089392569999745
+      ],
+      "real_time_factor": 12.104816959131012,
+      "pixel_records_per_s": 18592998849.225235,
+      "session_prepare_s": 0.3690542329998152,
+      "session_time_s": 6.145464635000053,
+      "session_runs_s": [
+        6.219424878000154,
+        6.124135770000066,
+        6.145464635000053
+      ],
+      "session_identical": true,
+      "session_resident_mb": 488.69248,
+      "session_real_time_factor": 13.017730106911486,
+      "session_pixel_records_per_s": 19995233444.21604,
+      "time_culled_s": 5.1030571320000035,
+      "culling_speedup": 1.2950941143803698,
+      "culled_identical": true,
+      "ping_blocks_kept": 0.10039488031914894,
+      "real_time_factor_culled": 15.67687719942226,
+      "session_time_culled_s": 4.613021131999858,
+      "session_culled_identical": true,
+      "session_real_time_factor_culled": 17.342214074210847
+    }
+  }
+}

@@ -58,6 +58,7 @@ add_subdirectory(libs/io)
 add_subdirectory(libs/sim)
 add_subdirectory(libs/dsp)
 add_subdirectory(libs/recon)
+add_subdirectory(libs/detect)
 
 # Motion estimation needs Ceres Solver (BSD). Ceres can be built with SuiteSparse, which
 # is GPL; the Ubuntu package is. This project does not link copyleft code into the core

@@ -1,0 +1,43 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "NVIDIA A100-SXM4-80GB"
+  ],
+  "modes": {
+    "sas": {
+      "dataset": "400 pings x 16 channels x 9534 samples; image 6400 x 3000 at 2 cm",
+      "pixels": 19200000,
+      "records": 6400,
+      "collection_time_s": 80.0,
+      "time_s": 2.02438157099823,
+      "runs_s": [
+        3.011597115000768,
+        2.1877639279991854,
+        2.02438157099823
+      ],
+      "real_time_factor": 39.518241593432265,
+      "pixel_records_per_s": 60700019087.511955,
+      "session_prepare_s": 0.35501178199774586,
+      "session_time_s": 1.3746951040011481,
+      "session_runs_s": [
+        1.4949418989999685,
+        1.375062731000071,
+        1.3746951040011481
+      ],
+      "session_identical": true,
+      "session_resident_mb": 488.69248,
+      "session_real_time_factor": 58.194722427652714,
+      "session_pixel_records_per_s": 89387093648.87457,
+      "time_culled_s": 1.7776048809973872,
+      "culling_speedup": 1.1388253895108458,
+      "culled_identical": true,
+      "ping_blocks_kept": 0.10039488031914894,
+      "real_time_factor_culled": 45.0043768754242,
+      "session_time_culled_s": 1.1937670609986526,
+      "session_culled_identical": true,
+      "session_real_time_factor_culled": 67.0147490357755
+    }
+  }
+}

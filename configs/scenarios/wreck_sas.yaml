@@ -1,22 +1,25 @@
-# Stripmap SAS past a wreck (a 3 m box on the seafloor) with large unknown motion: sway
-# and heave of several wavelengths that navigation does not report, which is the input
+# Stripmap SAS past a wreck (a 3 m box on the seafloor) with unknown motion: sway of more
+# than a wavelength (7.5 mm) and heave that navigation does not report, which is the input
 # motion estimation is for. Frame: seafloor at z = 0, sonar at 15 m altitude.
-# About 3000 scatterers and 90 pings: slow on a CPU; run it with the CUDA backend.
+# The advance per ping is 0.24 m, less than half the 0.64 m array, so consecutive pings
+# share phase centres (what displaced-phase-centre micronavigation needs). The receive
+# chain is taken as already at baseband to keep synthesis affordable: about 9000
+# scatterers and 80 pings take about four minutes to synthesise on four CPU cores.
 name: wreck_sas
 sonar: sas_auv
 fidelity: free_field
 sonar_overrides:
-  receive: {window: {range: [38.0, 52.0]}}
+  receive: {kind: baseband, sample_rate: 100.0e3, window: {range: [38.0, 52.0]}}
 environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
 platform:
   position: [0, 0, -15.0]
   rpy: [0, 0, 0]
-  velocity: [1.6, 0, 0]            # 0.32 m per ping
-  motion: {sway_rms: 0.03, heave_rms: 0.02, correlation_pings: 8.0, nav_knows_disturbance: false}
-pings: {count: 90, interval: 0.2}
+  velocity: [1.2, 0, 0]            # 0.24 m per ping
+  motion: {sway_rms: 0.01, heave_rms: 0.004, correlation_pings: 8.0, nav_knows_disturbance: false, dvl_altitude_noise: 0.001}
+pings: {count: 80, interval: 0.2}
 scene:
-  - {type: seafloor, label: seafloor, x_range: [11.0, 18.0], y_range: [39.0, 45.0], density: 30.0, lambert_mu_db: -27.0}
-  - {type: box, label: wreck, min: [13.0, 41.0, -1.0], max: [16.0, 42.0, 0.0], density: 120.0, mu_db: -15.0}
+  - {type: seafloor, label: seafloor, x_range: [-3.0, 22.0], y_range: [36.0, 48.0], density: 25.0, lambert_mu_db: -27.0}
+  - {type: box, label: wreck, min: [8.0, 41.0, -1.0], max: [11.0, 42.0, 0.0], density: 120.0, mu_db: -15.0}
 absorption: none
 receiver: {noise_rms: 0.0, adc: false}
 seed: 5

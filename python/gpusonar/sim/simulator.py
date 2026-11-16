@@ -261,6 +261,7 @@ class ScenarioResult:
     records: list
     scene: Scene
     config: dict
+    true_positions: np.ndarray = None      # [n_pings, 3] platform position at each transmit
 
 
 def run_scenario(name_or_config, overrides: dict | None = None, output: str | None = None,
@@ -348,4 +349,4 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
                               np.stack([scene.amplitudes.real, scene.amplitudes.imag], axis=1))
             w.write_truth_text("fidelity", tier)
             w.write_truth_text("labels", json.dumps(scene.labels))
-    return ScenarioResult(records, scene, cfg)
+    return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float))

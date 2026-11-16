@@ -57,6 +57,7 @@ void samples_from_array(Samples& s, const py::array& in) {
 
 void bind_sim(py::module_& m);
 void bind_recon(py::module_& m);
+void bind_detect(py::module_& m);
 #if SONAR_HAVE_MOTION
 void bind_motion(py::module_& m);
 #endif
@@ -328,6 +329,7 @@ PYBIND11_MODULE(_gpusonar, m) {
   py::enum_<Backend>(m, "Backend").value("Host", Backend::Host).value("Cuda", Backend::Cuda);
   bind_sim(m);
   bind_recon(m);
+  bind_detect(m);
 #if SONAR_HAVE_MOTION
   bind_motion(m);
   m.attr("HAVE_MOTION") = true;

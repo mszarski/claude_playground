@@ -1,0 +1,43 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "NVIDIA L4"
+  ],
+  "modes": {
+    "sas": {
+      "dataset": "400 pings x 16 channels x 9534 samples; image 6400 x 3000 at 2 cm",
+      "pixels": 19200000,
+      "records": 6400,
+      "collection_time_s": 80.0,
+      "time_s": 3.356681137999999,
+      "runs_s": [
+        4.132023244999999,
+        3.3423917989999836,
+        3.356681137999999
+      ],
+      "real_time_factor": 23.83306507560207,
+      "pixel_records_per_s": 36607587956.12479,
+      "session_prepare_s": 0.2527270319999957,
+      "session_time_s": 3.0253633290000153,
+      "session_runs_s": [
+        3.056401436000016,
+        3.0272940110000093,
+        3.0253633290000153
+      ],
+      "session_identical": true,
+      "session_resident_mb": 488.69248,
+      "session_real_time_factor": 26.443104943181385,
+      "session_pixel_records_per_s": 40616609192.72661,
+      "time_culled_s": 2.5029653890000247,
+      "culling_speedup": 1.3410817236034764,
+      "culled_identical": true,
+      "ping_blocks_kept": 0.10039488031914894,
+      "real_time_factor_culled": 31.962087990342248,
+      "session_time_culled_s": 2.17795047300001,
+      "session_culled_identical": true,
+      "session_real_time_factor_culled": 36.731781090414
+    }
+  }
+}

@@ -192,3 +192,51 @@ def test_seafloor_objects_scenario_has_shadows():
     hidden = ~scene.visible(np.array([0.0, 0.0, -1.0]))
     floor = np.isnan(scene.normals).any(axis=1)
     assert 0.02 < hidden[floor].mean() < 0.4                             # part of the floor is in shadow
+
+
+@pytest.mark.skipif(not __import__("gpusonar").cuda_available(),
+                    reason="four minutes of synthesis on a CPU; runs where there is a CUDA device")
+def test_wreck_scenario_through_motion_estimation_and_imaging():
+    """The whole SAS chain on an extended scene: simulate the wreck run with motion that
+    navigation does not know, estimate the motion from the data, image, and compare with
+    the image made with the true track."""
+    import gpusonar as gs
+    from gpusonar import motion
+    from gpusonar.sim import run_scenario
+    result = run_scenario("wreck_sas", backend=gs.core.Backend.Cuda)
+    records, truth = result.records, result.true_positions
+    recon.prepare(records)
+    estimate = motion.estimate_motion(records)
+    wavelength = 1500.0 / 200e3
+    assert np.abs(truth[:, 1]).max() > wavelength                    # more than a wavelength of sway
+    assert np.sqrt(np.mean((estimate.y - truth[:, 1]) ** 2)) < wavelength / 5
+    assert np.sqrt(np.mean((estimate.z - truth[:, 2]) ** 2)) < wavelength / 4
+
+    x, y = np.arange(6.0, 13.0, 0.025), np.arange(39.0, 46.5, 0.025)
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    points = np.stack([X, Y, np.zeros_like(X)], axis=-1)
+
+    def image(recs):
+        return np.abs(recon.sas_image(recs, points, interp="linear", backend=gs.core.Backend.Cuda)) ** 2
+
+    def sharpness(im):
+        return float((im**2).sum() / im.sum() ** 2 * im.size)
+
+    with_true = [r.copy() for r in records]
+    velocity = np.gradient(truth, 0.2, axis=0)
+    for r, p, v in zip(with_true, truth, velocity):
+        geo = r.geometry
+        pose = geo.rx_pose
+        pose.position, pose.velocity = tuple(p), tuple(v)
+        geo.rx_pose = geo.tx_pose = pose
+        r.geometry = geo
+    with_estimate = [r.copy() for r in records]
+    motion.apply_motion(with_estimate, estimate)
+    nav, est, true = image(records), image(with_estimate), image(with_true)
+    assert sharpness(est) > 0.8 * sharpness(true)
+    assert sharpness(est) > 2.0 * sharpness(nav)
+    shadow = (X > 8.4) & (X < 10.6) & (Y > 42.3) & (Y < 44.0)        # behind the 1 m high box
+    floor = (X > 8.4) & (X < 10.6) & (Y > 39.3) & (Y < 40.6)
+    face = (X > 8.2) & (X < 10.8) & (Y > 40.7) & (Y < 41.3)
+    assert 10 * np.log10(est[floor].mean() / est[shadow].mean()) > 10.0
+    assert 10 * np.log10(est[face].mean() / est[floor].mean()) > 12.0

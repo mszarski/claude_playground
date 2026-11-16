@@ -100,7 +100,7 @@ def test_emulated_board_over_udp(pings):
                           "max_pings": 3, "timeout": 5.0})
     try:
         emulator = FlankBoardEmulator(records, INTERVAL, block_samples=128)
-        sender = emulator.send(source.port)
+        sender = emulator.send(source.port, pace=0.1)        # paced: small socket buffers drop bursts
         out = list(source)
         sender.join(timeout=30.0)
     finally:

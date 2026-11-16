@@ -1,6 +1,7 @@
 """Detection and tracking on range x bearing maps: normalisation, CFAR, clustering, tracks.
 
-NumPy implementations of the detection stage. Inputs are power maps [n_bearing, n_range].
+Inputs are power maps [n_bearing, n_range]. CFAR also exists as a C++ kernel for the host
+and CUDA backends (libs/detect; `cfar(..., backend=...)`); the rest is NumPy.
 """
 
 from __future__ import annotations
@@ -42,8 +43,18 @@ def cfar_threshold_factor(pfa: float, n_train: int) -> float:
     return n_train * (pfa ** (-1.0 / n_train) - 1.0)
 
 
-def cfar(power: np.ndarray, pfa: float = 1e-4, guard: int = 4, train: int = 32) -> np.ndarray:
-    """Cell-averaging constant-false-alarm-rate detector along range. Returns a boolean map."""
+def cfar(power: np.ndarray, pfa: float = 1e-4, guard: int = 4, train: int = 32, backend=None,
+         device: int = 0) -> np.ndarray:
+    """Cell-averaging constant-false-alarm-rate detector along range. Returns a boolean map.
+
+    With `backend` (core.Backend.Host or .Cuda) the C++ kernel runs instead of NumPy; it
+    takes the map as float32 and gives the same detections except where a cell sits
+    within rounding of its threshold.
+    """
+    if backend is not None:
+        from . import _gpusonar as core
+        return core.cfar(np.ascontiguousarray(power, dtype=np.float32), pfa=pfa, guard=guard, train=train,
+                         backend=backend, device=device)
     power = np.asarray(power, dtype=float)
     mean, count = _window_mean(power, guard, train)
     factor = count * (pfa ** (-1.0 / count) - 1.0)

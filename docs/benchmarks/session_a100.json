@@ -1,0 +1,93 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "NVIDIA A100-SXM4-80GB"
+  ],
+  "modes": {
+    "sas": {
+      "dataset": "400 pings x 16 channels x 9534 samples; image 2560 x 1200 at 5 cm",
+      "pixels": 3072000,
+      "records": 6400,
+      "collection_time_s": 80.0,
+      "time_s": 0.6998702539931401,
+      "runs_s": [
+        1.7531666290014982,
+        0.7081341969969799,
+        0.6998702539931401
+      ],
+      "real_time_factor": 114.30690123427382,
+      "pixel_records_per_s": 28092064047.335136,
+      "session_prepare_s": 0.35303524900518823,
+      "session_time_s": 0.23056409900164,
+      "session_runs_s": [
+        0.32871003600303084,
+        0.2265168090016232,
+        0.23056409900164
+      ],
+      "session_identical": true,
+      "session_resident_mb": 488.69248,
+      "session_real_time_factor": 346.97509432910874,
+      "session_pixel_records_per_s": 85272599182.32176,
+      "time_culled_s": 0.7563044839989743,
+      "culling_speedup": 0.9253816006650692,
+      "culled_identical": true,
+      "ping_blocks_kept": 0.10864979166666666,
+      "real_time_factor_culled": 105.7775032312363,
+      "session_time_culled_s": 0.1943349759967532,
+      "session_culled_identical": true,
+      "session_real_time_factor_culled": 411.66032820225104
+    },
+    "fls": {
+      "dataset": "2 pings x 64 channels x 22400 baseband samples; fan 4000 ranges x 1602 bearings",
+      "pixels": 6408000,
+      "records": 128,
+      "collection_time_s": 0.007972972972972973,
+      "time_s": 0.16848512800061144,
+      "runs_s": [
+        0.13212727700010873,
+        0.1450195689976681,
+        0.16848512800061144
+      ],
+      "real_time_factor": 0.047321523671478224,
+      "pixel_records_per_s": 4868227894.8503,
+      "session_prepare_s": 0.04500427000311902,
+      "session_time_s": 0.12113590499939164,
+      "session_runs_s": [
+        0.12725273500109324,
+        0.12302450200513704,
+        0.12113590499939164
+      ],
+      "session_identical": true,
+      "session_resident_mb": 22.950656,
+      "session_real_time_factor": 0.06581841257563573,
+      "session_pixel_records_per_s": 6771105561.180388
+    },
+    "flank": {
+      "dataset": "1 ping x 32 channels x 171072 baseband samples; map 16000 ranges x 482 bearings",
+      "pixels": 7712000,
+      "records": 32,
+      "collection_time_s": 14.333333333333334,
+      "time_s": 0.1564380429990706,
+      "runs_s": [
+        0.15829612700326834,
+        0.15717849000066053,
+        0.1564380429990706
+      ],
+      "real_time_factor": 91.62306724470139,
+      "pixel_records_per_s": 1577519094.9011433,
+      "session_prepare_s": 0.012756670999806374,
+      "session_time_s": 0.12918453499878524,
+      "session_runs_s": [
+        0.1360898350030766,
+        0.13794283400056884,
+        0.12918453499878524
+      ],
+      "session_identical": true,
+      "session_resident_mb": 43.801344,
+      "session_real_time_factor": 110.95239328351582,
+      "session_pixel_records_per_s": 1910321541.2148256
+    }
+  }
+}

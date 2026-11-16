@@ -304,6 +304,10 @@ and the delay estimator in `motion.py` are NumPy. The brief asks for a C++/CUDA 
 each stage as a library function and a Holoscan operator. These were written in Python
 first to get tested behaviour; porting the per-ping ones (far-field beamformer, CFAR,
 sync resampler) to the kernel framework is outstanding work, listed in `STATUS.md`.
+Update: cell-averaging CFAR and the split-window normaliser are now a C++ kernel for both
+backends (`libs/detect`), identical to the NumPy version on the test maps. The flank
+range × bearing map can already be formed by the backprojection kernel (the benchmark does
+so); the FFT beamformer, clustering, tracking, calibration and sync remain NumPy.
 
 ### D-35 Float32 pre-test ahead of the float64 solve
 Measured on GPUs, the float64 reference-delay solve (D-06) dominated run time on every

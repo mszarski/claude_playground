@@ -74,31 +74,39 @@ runs, images bit-identical to the one-shot calls on every row:
 | GPU, dataset | One-shot | Session | Session, culled | Real-time factor (session, culled) | Two GPUs (session, culled) | Scaling on two |
 | --- | --- | --- | --- | --- | --- | --- |
 | Tesla T4, SAS 2560 × 1200 at 5 cm | 1.53 s | 1.04 s | 0.80 s | 100× | — | — |
+| L4, SAS 2560 × 1200 at 5 cm | 0.81 s | 0.49 s | 0.36 s | 225× | — | — |
 | A10G, SAS 2560 × 1200 at 5 cm | 0.83 s | 0.44 s | 0.33 s | 243× | 0.19 s | 1.71× |
+| A100 (80 GB), SAS 2560 × 1200 at 5 cm | 0.70 s | 0.23 s | 0.19 s | 412× | — | — |
+| Tesla T4, SAS 6400 × 3000 at 2 cm | 6.61 s | 6.15 s | 4.61 s | 17× | — | — |
+| L4, SAS 6400 × 3000 at 2 cm | 3.36 s | 3.03 s | 2.18 s | 37× | — | — |
 | A10G, SAS 6400 × 3000 at 2 cm | 3.09 s | 2.71 s | 1.99 s | 40× | 1.15 s | 1.73× |
+| A100 (80 GB), SAS 6400 × 3000 at 2 cm | 2.02 s | 1.38 s | 1.19 s | 67× | — | — |
 | Tesla T4, FLS fan 4000 × 1602 | 0.20 s | 0.19 s | — | — | — | — |
 | A10G, FLS fan 4000 × 1602 | 0.094 s | 0.085 s | — | — | — | — |
 | Tesla T4, flank map 16000 × 482 | 0.18 s | 0.15 s | — | 94× (no culling) | — | — |
 | A10G, flank map 16000 × 482 | 0.18 s | 0.073 s | — | 197× (no culling) | — | — |
 
-- **The overhead was the per-call upload.** With it gone the A10G does the 5 cm image in
-  0.44 s and the T4 in 1.04 s: the GPUs separate again.
+- **The overhead was the per-call upload.** With it gone the 5 cm image takes 1.04 s on
+  the T4, 0.49 s on the L4, 0.44 s on the A10G and 0.23 s on the A100: the GPUs separate
+  again.
 - **The benchmark is no longer overhead-bound at 2 cm.** The A10G images 4.5 × 10¹⁰
   pixel-records per second at both pixel sizes (4.46 and 4.53), so the 2 cm figure
   measures the kernel.
 - **Multi-GPU:** two A10G give 1.71× to 1.73× over one, with an identical image (the
   one-shot figure was 1.13× to 1.20×, bounded by each device's upload). What is left of
   the gap to 2× is not broken down; point and image transfers run per call on each device.
-- Only one- and two-GPU points on one GPU type were measured for sessions. The L4 and
-  A100 were not re-run, so the power-law fit below still uses the one-shot numbers.
+- Two-GPU scaling was measured on one GPU type only (A10G).
 
 **Power-law fit** (the paper's Fig. 9 model, `y = a·x^b`, runtime against single-precision
 GFLOPS), four GPUs, SAS dataset:
 
 | Runs | Fit | R² in log space |
 | --- | --- | --- |
-| Current kernel, no culling | y ≈ 88 · x^−0.46 | 0.94 |
-| Current kernel, culled | y ≈ 74 · x^−0.46 | 0.87 |
+| Sessions, 2 cm image, no culling (compute-bound) | y ≈ 783 · x^−0.57 | 0.34 |
+| Sessions, 2 cm image, culled | y ≈ 779 · x^−0.59 | 0.44 |
+| Sessions, 5 cm image, no culling | y ≈ 188 · x^−0.60 | 0.38 |
+| One-shot calls, 5 cm, no culling (overhead-bound) | y ≈ 88 · x^−0.46 | 0.94 |
+| One-shot calls, 5 cm, culled (overhead-bound) | y ≈ 74 · x^−0.46 | 0.87 |
 | First round, no culling | y ≈ 644 · x^−0.49 | 0.08 |
 | Paper (its own data, seven GPUs) | y ≈ 485307 · x^−0.755 | not stated |
 
@@ -106,9 +114,14 @@ GFLOPS), four GPUs, SAS dataset:
   float32 figures **recalled from vendor specifications and not verified here**; the paper
   took its values from Wikipedia, which the build container cannot reach.
 - Only the exponent is comparable with the paper; its prefactor belongs to its dataset.
-  Ours is shallower (−0.46 against −0.755), and with the benchmark overhead-bound and
-  only four points, of which three are near the floor, it should not be used to predict
-  anything yet.
+  On the compute-bound session timings ours is −0.57 to −0.60 against the paper's −0.755.
+- **The fit is poor (R² 0.34 to 0.44) and should not be used to predict a new GPU.** The
+  A100 is twice as fast as the T4-L4-A10G trend puts a card of its nominal float32 rate
+  (without it the exponent stays at −0.58 to −0.61 but the prefactor moves by 40%). The
+  kernel's float64 reference-delay solve favours cards with fast float64, which a
+  single-precision GFLOPS axis cannot represent; the unverified GFLOPS figures may also
+  be wrong. The high R² of the one-shot rows was three cards sitting on the same overhead
+  floor, not a good model.
 
 CPU reference point: the build container's 4 cores run the culling test set at about
 1e8 pixel-records per second; the GPUs above reach 1e10 to 3e10 on the SAS dataset.
@@ -475,6 +488,34 @@ and heave of 4 mm RMS. Navigation reports a straight level line; the DVL altitud
   the measurements are poor.
 - Not measured: image contrast loss (only the point-response peak), behaviour with
   attitude errors, and anything on real data.
+
+## SAS on an extended scene with unknown motion (`wreck_sas`)
+
+Source: scenario `wreck_sas`; `tests/python/test_scene_objects.py` (the end-to-end test
+runs only where there is a CUDA device; the figures below are from a CPU run of the same
+steps). A 3 × 1 × 1 m box on a seafloor of 7500 Lambert scatterers, 80 pings at 0.24 m,
+15 m altitude, sway 10 mm RMS (27 mm peak, 3.6 wavelengths) and heave 4 mm RMS that
+navigation does not report. Chain: simulate, pulse compress, displaced-phase-centre
+motion estimation, backprojection at 2.5 cm.
+
+![wreck_sas with navigation only, estimated motion and true motion](figures/wreck_sas.png)
+
+| Quantity | Navigation only | Estimated motion | True motion |
+| --- | --- | --- | --- |
+| Sway error, RMS | 1.34 λ | 0.089 λ | — |
+| Heave error, RMS | — | 0.098 λ | — |
+| Image sharpness (Σ I² · N / (Σ I)²) | 69 | 272 | 279 |
+| Seafloor over shadow behind the box | 13.7 dB | 14.7 dB | 14.8 dB |
+| Box face over seafloor | 20.4 dB | 20.3 dB | 20.2 dB |
+
+- With the estimated track the image is within 3% of the true-motion sharpness; with
+  navigation alone it is four times less sharp. The shadow contrast barely depends on
+  focus because the shadow is much larger than the blur.
+- The bright band at 40.6 to 41 m is the box's top and near face laid over towards the
+  sonar (it is 1 m above the image plane), and it smears along track for the same reason.
+- The seafloor is 25 scatterers per square metre, far fewer than one per resolution cell,
+  so it shows as separate points, not developed speckle. Synthesis took 245 s on four CPU
+  cores; motion estimation 1 s (2528 delay measurements).
 
 ## Kernel accuracy
 
