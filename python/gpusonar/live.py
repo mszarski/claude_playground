@@ -2,6 +2,7 @@
 
     source (boards over UDP, a recording, or the simulator)
       -> record raw pings                      (always: the recording is the flight data)
+      -> synchronise the capture boards        (when there are several: shared reference, sync.py)
       -> prepare (baseband, pulse compression)
       -> beamform (range x bearing)
       -> detect (cell-averaging CFAR, clustering)
@@ -29,6 +30,7 @@ from .taps import TapWriter
 DEFAULTS = {
     "bearings_deg": [-40.0, 40.0, 0.5],        # first, last, step: from broadside
     "window": "hann",                          # aperture weighting
+    "sync": None,                              # several boards: {sonar: popoto_4x7} or {reference: {...}}, see sync.py
     "beamformer": "backprojection",            # the kernel (host or CUDA); or "farfield" / "mvdr" (NumPy, host)
     "backend": "auto",                         # "auto": CUDA when built and present, else host; "host"; "cuda"
     "look": "starboard",                       # which side of a line array the bearings are on
@@ -138,6 +140,15 @@ class LiveChain:
         self._tap_cfg = taps or {}
         self.nav = nav                         # None: the records already carry the pose (simulation, replay)
         self.pings_without_nav = 0
+        self._reference = None
+        if self.cfg.get("sync"):
+            sc = self.cfg["sync"]
+            if "reference" in sc:
+                self._reference = sc["reference"]
+            else:
+                from .sonar import SonarModel
+                self._reference = SonarModel.load(sc["sonar"], sc.get("sonar_overrides")).config["receive"]["reference"]
+        self.boards_out_of_sync = 0
         want = self.cfg["backend"]
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
         self._origin = None                    # world position of the array at the first ping
@@ -166,6 +177,20 @@ class LiveChain:
         if tap:
             tap.records("raw", [record])
         cfg = self.cfg
+        sync_facts = None
+        if self._reference is not None:
+            # Boards run on their own clocks: line them up on the shared reference and drop its inputs.
+            from . import sync
+            rep_ = sync.synchronise(record, self._reference, enforce=False)
+            sync_facts = {"ok": rep_.ok, "worst_residual_us": float(rep_.residual.max() * 1e6),
+                          "offsets_us": [float(v * 1e6) for v in rep_.estimate.offset],
+                          "drift_ppm": [float(v) for v in rep_.estimate.drift_ppm]}
+            if not rep_.ok:
+                self.boards_out_of_sync += 1   # reported; this ping's detections are still passed on, flagged
+            if self._reference.get("dedicated"):
+                record = sync.drop_reference_channels(record)   # those inputs carry no hydrophone
+            if tap:
+                tap.records("sync", [record])
         from . import recon
         recon.prepare([record], backend=self.backend)        # baseband and pulse compression (cuFFT on a GPU)
         if tap:
@@ -199,6 +224,16 @@ class LiveChain:
         hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
         hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
         hits = [h for h in hits if h.snr_db > cfg["min_snr_db"]]
+        if self._reference is not None and not self._reference.get("dedicated"):
+            # A reference summed into hydrophone inputs leaves its two bursts in the data, one just
+            # after the window opens and one just before it closes: no detections are taken there.
+            c = record.environment.sound_speed
+            s_ = record.samples
+            t_open, t_close = s_.start_time, s_.start_time + s_.n_samples / s_.sample_rate
+            pulse, burst = record.transmit.waveform.duration, float(self._reference["duration"])
+            lo = 0.5 * c * (t_open + float(self._reference["lead"]) + burst)
+            hi = 0.5 * c * (t_close - float(self._reference["tail"]) - pulse - burst)
+            hits = [h for h in hits if lo < h.range < hi]
         if tap:
             tap.arrays("beamform", power=power.astype(np.float32), ranges=ranges, bearings=self.bearings)
 
@@ -226,6 +261,7 @@ class LiveChain:
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
+            "sync": sync_facts,
             "detections": [{"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db} for h in hits],
             "tracks": [{"id": c_.id, "kind": c_.kind, "parent": c_.parent,
                         # World coordinates: x north, y east, metres, in the frame the records use.

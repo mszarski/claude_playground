@@ -605,7 +605,7 @@ def run_fls_transit(name, cfg, backend, quick):
     # A mover's fitted speed must be five times its uncertainty; positions must fit a line to 2.5 m.
     classes, metrics["classification"] = classify_and_score(
         tracks, truth, t_last, 15.0, min_speed=0.5, max_fit_rms=2.5,
-        linear={"length": 40.0, "width": 3.0})
+        linear={"length": 40.0, "width": 2.0})
     for label, m in metrics["targets"].items():
         if m.get("tracked"):
             m["track_speed_m_s"] = float(np.hypot(*m["track_velocity_xy"]))

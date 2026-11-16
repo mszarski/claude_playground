@@ -54,12 +54,15 @@ tools/design_report.py                                      # docs/DESIGN.md and
 tools/scenario_diagrams.py                                  # docs/scenarios/<name>.png: geometry of every scenario
 tools/popoto_range_study.py --range 12000                   # frequency and source level for a range
 tools/gallery.py --backend host                             # every realistic scenario, full size: figure and animation
+tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --scenario popoto_far_mover --out run/   # the vehicle chain on a simulation
+tools/inspect_tap.py run/taps/ping0000 --stage prepare --plot ping.png                          # look at any stage's data
+tools/calibrate_sim.py fls --log dive.h5 --scenario fls_120k_transit                            # fit the simulator to a real log
 tools/gallery.py --backend host --quick                     # the same, thinned
 ```
 
-The host backend ran on one core here: the full gallery is about five hours of one core
-in all, 72 minutes of it the flank patrol (per-scenario times are in `docs/SCENARIOS.md`), so run scenarios side by side with
-`--only`.
+The host backend uses every core (OpenMP). Per-scenario times on four cores are in
+`docs/SCENARIOS.md`; all 26 gallery scenarios take about an hour in total, the 120 kHz transit 77 s and the
+flank patrol eleven minutes (72 before the kernel rework).
 
 Without Bellhop the
 long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everything else runs.
@@ -83,7 +86,7 @@ long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everyt
 
 ## Realistic scenes for every mode
 
-`docs/SCENARIOS.md` shows 25 extended scenes across the modes, each simulated and imaged
+`docs/SCENARIOS.md` shows 26 extended scenes across the modes, each simulated and imaged
 end to end, each with a geometry diagram, a result figure and an animation:
 
 - forward-looking: pool, harbour, seafloor objects; the 120, 170 and 330 kHz designs under
@@ -100,6 +103,9 @@ Reproduce them with `tools/gallery.py` (needs `matplotlib`; `--quick` thins the 
 
 ## Documents
 
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how the pieces fit, what runs on a GPU, and how to capture, inspect and re-inject data at every stage.
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): the Popoto array on a vehicle: one program, one YAML file, what the vehicle must provide, what is unconfirmed.
+- [`docs/SIM_CALIBRATION.md`](docs/SIM_CALIBRATION.md): fitting the simulator to a real FLS log or a SAS image.
 - [`docs/DESIGN.md`](docs/DESIGN.md): the sonar designs, generated from the config files: requirements and where each is met, arrays and beams, timing, link budgets, diagrams.
 - [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): every key of the sonar and scenario files.
 - [`docs/SCENARIOS.md`](docs/SCENARIOS.md): the realistic scenes of every mode, with figures, numbers and CPU run times.

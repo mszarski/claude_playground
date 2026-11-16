@@ -20,18 +20,48 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). The scattering-function reverberation method (`sim/reverb.py`, D-37): level within 2 dB of the analytic prediction and of the point-scatterer method, array coherence checked. Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise, all with bottom reverberation, and compared with the spherical estimate (`test_long_range.py`). Sea-surface backscatter (Chapman–Harris) and rough-surface reflection loss (`test_surface.py`, D-38). Rays against normal modes (KRAKEN) at 8 kHz: within 0.21 dB from 1 to 10 km (`test_kraken_crosscheck.py`); that check found the arrival cap of the first long-range scenarios too low, now fixed (D-39). Range-dependent bathymetry through Bellhop (a 2-D ridge; `test_propagation.py`). Not done: reverberation from sloping bathymetry, bubble absorption and the APL-UW high-frequency surface model, a Jackson-type bottom model, volume scattering, time spreading, the RAM cross-check, a 3-D seamount. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; sessions that keep samples on the device (D-40), which removed the per-call overhead (A10G SAS 0.83 s → 0.44 s) and brought two-GPU scaling to 1.7×, images bit-identical; a 2 cm SAS image that is compute-bound; baseband conversion and pulse compression on the device with cuFFT (35–48× faster than four CPU threads, D-42) (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; verified GFLOPS figures; handing conditioned samples to the backprojection session without a round trip through host memory; motion estimation is CPU. Jetson build notes in `docs/JETSON.md` are untested. |
 
+## Since the last round (see the sections it points to)
+
+- **Architecture** (`ARCHITECTURE.md`): one record between all stages; taps after any
+  stage, simulator stages included, as container files that are also sources; tools to
+  inspect and export them. A table of what runs on a GPU, tied to the code by a test.
+- **Deployment** (`DEPLOYMENT.md`): `tools/sonar_live.py` runs the long-range chain one
+  ping at a time from one YAML file: record, synchronise boards, condition, beamform,
+  detect, track, classify, report. The same program runs on a scenario, a recording, an
+  emulated board over UDP, and a directory of WAV recordings. Navigation comes in as UDP
+  JSON. Nothing has run on a vehicle; the board forwarder and the navigation adapter are
+  not written.
+- **Simulator calibration** (`SIM_CALIBRATION.md`): fits boundary strengths and noise to an
+  FLS log (absolute or relative levels) and reads seabed scatterer density and shadow depth
+  from a SAS image. Checked on logs made by the simulator with hidden settings, not on
+  real data: none is available here.
+- **Classification** (`classify.py`): mover, static, line, multipath, uncertain, from the
+  track alone.
+- **Developed speckle** (`sas_minsas_speckle`): the ambiguity copies seen in the sparse SAS
+  scenes are covered by a seabed with 2.6 scatterers per cell.
+- **Sea surface**: waves travel at their physical speed, an irregular spectrum replaces
+  two sinusoids, speckle is new each ping; the bands were measured to be fixed in the
+  world, not the view.
+- **Speed**: the synthesis kernel is 5.7 times faster; the earlier note that the host
+  backend was single-threaded was wrong (several jobs were sharing the machine).
+
 ## What is next
 
-1. Milestone 11: the reference's SDK build with the long-window patch and a rig run; the
+1. Real data: a first FLS log or SAS image through `tools/calibrate_sim.py`, and a first
+   Popoto recording through `tools/sonar_live.py`. Everything in those paths has only seen
+   simulated input.
+2. The two vehicle adapters: board samples to WAV-with-sidecar or UDP blocks; the
+   vehicle's navigation message to the JSON the chain reads.
+3. Milestone 11: the reference's SDK build with the long-window patch and a rig run; the
    flank assembler behind the Sensor Bridge receiver and emulator; C++ operators.
-2. Milestone 13: keep conditioned samples on the device for the backprojection session;
-   Spark and Jetson measurements when the hardware is available.
-3. Milestone 12: a Jackson-type bottom, reverberation from sloping bathymetry, time
-   spreading, a high-frequency surface model.
-4. Port the remaining NumPy stages (FFT beamformer, clustering, sync, calibration) to the kernel framework.
-5. Milestone 8 leftovers (see "Motion estimation limits").
-6. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
-   numbers once the paper can be read.
+4. Milestone 13: keep conditioned samples on the device for the backprojection session;
+   reverberation generation on the device; Spark and Jetson measurements.
+5. Milestone 12: a Jackson-type bottom, reverberation from sloping bathymetry, time
+   spreading, a high-frequency surface model with bubbles.
+6. Classification beyond the track: extent and shape, so a buoy is not a rock and a wave
+   face is not a boat; range correction for bottom-bounce arrivals.
+7. A full survey scene with developed speckle (5.6 million scatterers: a GPU job).
+8. Milestone 8 leftovers (see "Motion estimation limits"); PICMUS contrast.
 
 ## Where the code has run
 
@@ -162,7 +192,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   ping and are −36 dB at 0.544 m (half the array); the survey speed is now 2.18 m/s.
   The receive array went from 32 elements at 3.4 cm to 48 at 2.27 cm (same length): the
   coarser pitch left ghost copies of the cable and wreck 6.9 m along track (−42 dB on a
-  point; now −47 to −54 dB at 10.3 m, still visible beside the brightest objects).
+  point; now −47 to −54 dB at 10.3 m, visible beside the brightest objects on the sparse
+  seabeds and covered on a seabed with developed speckle).
 - Scenarios: `fls_{120,170,330}k_transit`; `fls_120k_cluttered_seabed`,
   `fls_120k_rough_surface`, `fls_170k_traffic` (boats with keel, propeller and wake;
   boulders, debris, a pipeline; waves); `sas_minsas_survey`, `sas_minsas_boulder_field`,
@@ -172,18 +203,19 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   requirements, draws the diagrams and writes `DESIGN.md`; `test_design.py` fails if a
   requirement is unmet or the document is stale. `tools/scenario_diagrams.py` draws every
   scenario's geometry from its file. `CONFIGURATION.md` lists every key.
-- Everything runs on a CPU (`README.md`, "Everything on a CPU"); CPU run times are in
-  `SCENARIOS.md`. The host backend used one core in these runs.
+- Everything runs on a CPU (`README.md`, "Everything on a CPU"); CPU run times on four
+  cores are in `SCENARIOS.md`.
 - Found along the way, and what was done:
   - At 330 kHz one cell of sea surface at 250 m is below the noise floor, and with strong
     surface reverberation at 10 m/s wind nothing was detected, the boat included. The
     rough-sea example was moved to 120 kHz, where the waves show.
-  - In the cluttered and rough scenes the boats are tracked but so is the clutter (65 and
-    more tracks). There is no classification.
+  - In the cluttered scene 65 tracks are classified 5 mover (one is the boat), 30 static,
+    16 line, 14 uncertain; under the rough sea 57 tracks are 9 mover (one is the boat),
+    39 uncertain. A buoy, a rock and a steady wave face still look alike.
   - In deep water the ship's echo arrives about 300 m late in range, consistent with a
     bottom path; ranges are not corrected for propagation.
-  - At 330 kHz the anchored boat in `fls_330k_transit` was not tracked in the full-size
-    run. Not investigated.
+  - At 330 kHz the anchored boat in `fls_330k_transit` is not tracked: it peaks at 12 dB
+    at 277 m, under the 13 dB detection limit, against 22 dB for the boat at 238 m.
 - What the design numbers say that needs a decision: the SAS at 215 dB keeps one cell of
   sand 13 dB above noise to about 117 m, not 200 m; a 197 dB source at 5 kHz is a large
   projector and amplifier for a small vehicle.
@@ -213,8 +245,9 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `buried_cylinder`, `flank_target_{1,5,10}km`.
 - Gaps in those scenes: no surface or floor multipath in the pool scenes; direct paths
   only to objects in the forward-looking sea scenes; range-independent oceans in the
-  long-range ones; frozen wave facets and a wake that does not grow; large surfaces have
-  fewer scatterers than resolution cells; no specular echoes.
+  long-range ones; a wake that does not grow; no breaking waves or bubble layer; large
+  surfaces have fewer scatterers than resolution cells except in `sas_minsas_speckle`; no
+  specular echoes.
 - In `flank_patrol` the −3 dB small vehicle is not detected, and multipath splits the
   wreck into several tracks (5 confirmed tracks for 2 objects).
 

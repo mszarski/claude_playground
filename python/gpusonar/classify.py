@@ -2,8 +2,8 @@
 
 Rule-based, from the track alone (no image features, no learning):
 
-  mover       its positions fit a straight line through time whose speed is well above the
-              scatter of the fit;
+  mover       it was seen on most pings and its positions fit a straight line through time
+              whose speed is well above the scatter of the fit;
   static      it was seen on most pings and its fitted speed is small;
   multipath   it has the bearing and the velocity of a stronger track and lies a little
               further out in range: a later arrival of the same object by a longer path
@@ -62,7 +62,8 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
                     linear: dict | None = None) -> list[TrackClass]:
     """Classify confirmed tracks.
 
-    `min_speed` (m/s) and `significance` (fitted speed over its sigma) make a mover;
+    `min_speed` (m/s) and `significance` (fitted speed over its sigma, raised for short tracks
+    by Student's t: 5 becomes 6.6 at eight points and 13 at four) make a mover;
     `static_speed` and `min_seen` make a static object; `max_fit_rms` (m) rejects tracks
     whose positions scatter more than the sensor's accuracy allows. `multipath` switches on
     echo grouping: {"max_excess_range": m, "bearing": rad, "velocity": m/s, "origin": (x, y)}.
@@ -71,20 +72,25 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
     through this track along its velocity and no further than `length` along it.
     """
     out = []
+    from scipy import stats
     for tr in tracks:
         pos, v, rms, sigma = fit_velocity(tr.history)
         speed = float(np.hypot(*v))
         n = len(tr.history)
+        # The fit's scatter is itself estimated from few points (2n - 4 degrees of freedom), so a
+        # short track needs a larger ratio for the same confidence: Student's t against the normal.
+        dof = max(2 * n - 4, 1)
+        need = significance * float(stats.t.ppf(0.9995, dof) / stats.norm.ppf(0.9995))
         seen = tr.hits / max(n, 1)
         snr = float(np.mean(tr.snr)) if getattr(tr, "snr", None) else float("nan")
         steady = max_fit_rms is None or rms <= max_fit_rms
         if n < min_points or not steady:
             kind = "uncertain"
-        elif speed >= min_speed and speed >= significance * sigma:
-            kind = "mover"
+        elif speed >= min_speed and speed >= need * sigma and seen >= min_seen:
+            kind = "mover"                       # a real object is there on most pings; a glint that comes and goes is not
         elif speed < static_speed and seen >= min_seen:
             kind = "static"
-        elif speed < significance * sigma and seen >= min_seen and speed < 3.0 * static_speed:
+        elif speed < need * sigma and seen >= min_seen and speed < 3.0 * static_speed:
             kind = "static"                      # slow and not distinguishable from standing still
         else:
             kind = "uncertain"

@@ -18,8 +18,13 @@ pictures, all made from its YAML file:
   `tools/gallery.py --backend cuda`.
 - Numbers below are from the full-size CPU run in `docs/figures/gallery.json`. Where a
   scenario also ran earlier on an NVIDIA A10G, the numbers agreed to the digits shown.
-- **CPU times** are for one core: the host backend ran single-threaded here, in a shared
-  4-core x86_64 container with two or three other jobs running. Treat them as upper bounds.
+- **CPU times** are wall-clock on a 4-core x86_64 container with nothing else running. The
+  host backend uses all four cores (OpenMP). An earlier version of this table was measured
+  with several jobs sharing the machine and before the synthesis kernel was reworked
+  (`DECISIONS.md` D-51); those times were 4 to 8 times longer and its note that the host
+  backend was single-threaded was wrong.
+- Tracks are classified from the track alone (`classify.py`): mover, static, line (sliding
+  along a row of other tracks), multipath (an echo of a stronger track), uncertain.
 
 All of it is simulation. Scenes are clouds of point scatterers on object surfaces
 (`DECISIONS.md` D-41): they give highlights, shadows, layover and speckle, not specular
@@ -27,28 +32,29 @@ glints, diffraction or resonances.
 
 | Mode | Scenario | Sonar | Scene | Physics in the run | CPU time |
 | --- | --- | --- | --- | --- | --- |
-| FLS, pool, Phase 1 | `pool_fls_l12_5d` | L12-5, 5 MHz, both mux halves | far wall, side wall, cinder block, pipe, rope, two wires | free field, shadows, 12-bit ADC, noise | 29 s |
-| FLS, pool, Phase 2 | `pool_fls_p4_2v` | P4-2v, 2.7 MHz | far wall, three steps, ladder, three lane floats | same | 28 s |
-| FLS, sea, Phase 3 | `harbour_fls_750k` | 64 elements, 750 kHz | sandy floor, quay wall, six pilings, mooring block, rocks | free field, shadows, absorption | 54 s |
-| FLS, sea, Phase 4 | `seafloor_objects_fls` | 128 elements, 300 kHz | seafloor, sphere, box, rocks | free field, shadows | 10 s |
-| FLS, owner's design | `fls_120k_transit` | `fls_120k`, 300 m, 20° vertical | boat hull under way, boat at anchor, buoy, seabed pinnacle | AUV at 20 m making 2 m/s; seabed and surface reverberation fixed in the world, ownship Doppler, noise; 10 pings, detection, tracking | 9 min |
-| FLS, owner's design | `fls_170k_transit` | `fls_170k`, 450 m, 5° tilted up 2° | same objects | same | 18 min |
-| FLS, owner's design | `fls_330k_transit` | `fls_330k`, 300 m, 5° tilted up 3.5° | same objects | same | 15 min |
-| FLS, cluttered seabed | `fls_120k_cluttered_seabed` | `fls_120k` | boat with keel, propeller and wake; anchored boat; sand, 22 boulders, 12 pieces of debris, a pipeline | same, 8 pings | 5 min |
-| FLS, rough sea | `fls_120k_rough_surface` | `fls_120k` | swell and wind sea on the surface (wave facets), boat with wake, kayak, buoy | same; the surface is the facets, bottom reverberation, noise at 10 m/s wind | 18 min |
-| FLS, traffic | `fls_170k_traffic` | `fls_170k` | three boats: closing, crossing, at anchor, two with wakes | as the transits, 8 pings | 16 min |
-| SAS, AUV | `wreck_sas` | 16 elements, 200 kHz | seafloor, 3 m box | free field, shadows, unknown sway and heave, motion estimation | 4 min |
-| SAS, AUV | `minefield_sas` | same | rippled sand, two 2 m cylinders, sphere, rocks | same | 6 min |
-| SAS, owner's design | `sas_minsas_survey` | `sas_minsas120`, 330 kHz | wreck (hull, deckhouse, mast), cable, rocks, calibration cube | two opposite legs, shadows, exact navigation; 2 cm pixels | 15 min |
-| SAS, rocks | `sas_minsas_boulder_field` | same | 45 boulders, 15 to 90 cm radius, on sand | one leg, shadows; 2 cm pixels | 12 min |
-| SAS, rocks | `sas_minsas_rocky_ripples` | same | rippled sand, a 12-rock outcrop, 35 stones, a cable | same | 7 min |
-| SAS, rail | `rail_objects` | P4-2v on the rail | pool floor, ball, pipe, brick, pebbles | free field, shadows, stop-and-go | 24 min |
-| 3D, buried | `buried_objects` | sub-bottom, 20 kHz, raster | buried cylinder and sphere, rough interface, sediment clutter | refraction at the interface | 5 min |
-| Flank array | `flank_patrol` | 32 hydrophones, 6–10 kHz | moving 56 m target, small vehicle, wreck | Bellhop multipath, bottom and surface reverberation, ambient noise, six pings, detection and tracking | 72 min |
-| Popoto array | `popoto_trial_1000m` (also 100 m, 2000 m) | 8 hydrophones, 27.5 kHz | one +10 dB target | Bellhop multipath, bottom reverberation, ambient noise | 29 s |
-| Popoto, owner's design | `popoto_far_mover` | 32 hydrophones, 6–10 kHz, 185 dB | ship-sized mover at 6 km | ownship at 1.5 m/s, Bellhop, reverberation with ownship Doppler, noise; six pings, tracking | 14 min |
-| Popoto, 12 km | `popoto_12km` | `popoto_long_range`: 32 hydrophones, 4–6 kHz, 197 dB | ship-sized mover at 12 km | same; 100 m isovelocity over sand | 13 min |
-| Popoto, other oceans | `popoto_env_winter_sand_200m`, `popoto_env_summer_mud_60m`, `popoto_env_gravel_30m`, `popoto_env_deep_silt_1000m` | same | the same ship at 8, 4, 3 and 10 km | same, each with its own profile, bottom and depth | 12 min, 2 min, 10 min, 103 s |
+| FLS, pool, Phase 1 | `pool_fls_l12_5d` | L12-5, 5 MHz, both mux halves | far wall, side wall, cinder block, pipe, rope, two wires | free field, shadows, 12-bit ADC, noise | 15 s |
+| FLS, pool, Phase 2 | `pool_fls_p4_2v` | P4-2v, 2.7 MHz | far wall, three steps, ladder, three lane floats | same | 11 s |
+| FLS, sea, Phase 3 | `harbour_fls_750k` | 64 elements, 750 kHz | sandy floor, quay wall, six pilings, mooring block, rocks | free field, shadows, absorption | 14 s |
+| FLS, sea, Phase 4 | `seafloor_objects_fls` | 128 elements, 300 kHz | seafloor, sphere, box, rocks | free field, shadows | 5 s |
+| FLS, owner's design | `fls_120k_transit` | `fls_120k`, 300 m, 20° vertical | boat hull under way, boat at anchor, buoy, seabed pinnacle | AUV at 20 m making 2 m/s; seabed and surface reverberation fixed in the world, ownship Doppler, noise; 10 pings, detection, tracking | 77 s |
+| FLS, owner's design | `fls_170k_transit` | `fls_170k`, 450 m, 5° tilted up 2° | same objects | same | 3 min |
+| FLS, owner's design | `fls_330k_transit` | `fls_330k`, 300 m, 5° tilted up 3.5° | same objects | same | 3 min |
+| FLS, cluttered seabed | `fls_120k_cluttered_seabed` | `fls_120k` | boat with keel, propeller and wake; anchored boat; sand, 22 boulders, 12 pieces of debris, a pipeline | same, 8 pings | 54 s |
+| FLS, rough sea | `fls_120k_rough_surface` | `fls_120k` | swell and wind sea on the surface (wave facets), boat with wake, kayak, buoy | same; the surface is the facets, bottom reverberation, noise at 10 m/s wind | 2 min |
+| FLS, traffic | `fls_170k_traffic` | `fls_170k` | three boats: closing, crossing, at anchor, two with wakes | as the transits, 8 pings | 2 min |
+| SAS, AUV | `wreck_sas` | 16 elements, 200 kHz | seafloor, 3 m box | free field, shadows, unknown sway and heave, motion estimation | 42 s |
+| SAS, AUV | `minefield_sas` | same | rippled sand, two 2 m cylinders, sphere, rocks | same | 56 s |
+| SAS, owner's design | `sas_minsas_survey` | `sas_minsas120`, 330 kHz | wreck (hull, deckhouse, mast), cable, rocks, calibration cube | two opposite legs, shadows, exact navigation; 2 cm pixels | 3 min |
+| SAS, rocks | `sas_minsas_boulder_field` | same | 45 boulders, 15 to 90 cm radius, on sand | one leg, shadows; 2 cm pixels | 98 s |
+| SAS, developed speckle | `sas_minsas_speckle` | same | a seabed of 5000 scatterers per square metre (2.6 per resolution cell), cube, cable, rocks, pipe | one leg, shadows; 390,000 seabed scatterers | 14 min |
+| SAS, rocks | `sas_minsas_rocky_ripples` | same | rippled sand, a 12-rock outcrop, 35 stones, a cable | same | 105 s |
+| SAS, rail | `rail_objects` | P4-2v on the rail | pool floor, ball, pipe, brick, pebbles | free field, shadows, stop-and-go | 3 min |
+| 3D, buried | `buried_objects` | sub-bottom, 20 kHz, raster | buried cylinder and sphere, rough interface, sediment clutter | refraction at the interface | 109 s |
+| Flank array | `flank_patrol` | 32 hydrophones, 6–10 kHz | moving 56 m target, small vehicle, wreck | Bellhop multipath, bottom and surface reverberation, ambient noise, six pings, detection and tracking | 11 min |
+| Popoto array | `popoto_trial_1000m` (also 100 m, 2000 m) | 8 hydrophones, 27.5 kHz | one +10 dB target | Bellhop multipath, bottom reverberation, ambient noise | 11 s |
+| Popoto, owner's design | `popoto_far_mover` | 32 hydrophones, 6–10 kHz, 185 dB | ship-sized mover at 6 km | ownship at 1.5 m/s, Bellhop, reverberation with ownship Doppler, noise; six pings, tracking | 4 min |
+| Popoto, 12 km | `popoto_12km` | `popoto_long_range`: 32 hydrophones, 4–6 kHz, 197 dB | ship-sized mover at 12 km | same; 100 m isovelocity over sand | 2 min |
+| Popoto, other oceans | `popoto_env_winter_sand_200m`, `popoto_env_summer_mud_60m`, `popoto_env_gravel_30m`, `popoto_env_deep_silt_1000m` | same | the same ship at 8, 4, 3 and 10 km | same, each with its own profile, bottom and depth | 2 min, 52 s, 2 min, 59 s |
 
 Point-target scenarios for measuring resolution (`point_grid_*`, `stripmap_points`,
 `rail_points`, `pool_wires_l12_5d`) and the long-range link-budget cases
@@ -139,13 +145,18 @@ objects stay put.
 | Mooring buoy | tracked, 0.7 m, 0.13 m/s | tracked, 0.2 m, 0.04 m/s | tracked, 0.5 m, 0.09 m/s |
 | Seabed pinnacle | tracked, 3.9 m, 0.62 m/s | not in the beam | not in the beam |
 | Detections per ping / confirmed tracks | 5 to 10 / 7 | 3 to 5 / 4 | 2 to 3 / 2 |
+| Track classes | 1 mover (the boat under way), 6 static | 1 mover, 3 static | 1 mover, 1 static |
+| Tracks called movers that are not on a moving object | 0 | 0 | 0 |
 
 - Position is the track's distance from the object's centre at the last ping; speed is the
   track's.
 - The 5 degree beams of the two higher-frequency sonars are tilted up and never reach the
   seabed, so the pinnacle is absent, as designed.
-- At 330 kHz the anchored boat was not tracked in this run. Not investigated; in the
-  thinned test run of the same scenario it is not required either.
+- At 330 kHz the anchored boat is not tracked. Its strongest cell reaches 11.8 to 12.4 dB
+  over the local background, under the 13 dB a detection must have; the boat under way,
+  39 m closer, reaches 21.5 to 23.7 dB. Absorption at 330 kHz is about 100 dB/km, so those
+  39 m cost 8 dB both ways, plus spreading. The 300 m range of this sonar holds for a
+  target the size of the nearer boat and not much beyond 270 m for the smaller one.
 - The 170 kHz sonar is specified to 450 m (was 600 m): the link budget in `DESIGN.md` gives
   35 dB on a boat hull there.
 
@@ -165,14 +176,20 @@ boat at anchor.
 
 | Quantity | Result |
 | --- | --- |
-| Boat under way (true velocity 1.71, −4.70 m/s) | tracked, 0.4 m, velocity 1.54, -5.31 m/s |
-| Boat at anchor | tracked, 0.9 m, 0.02 m/s |
+| Boat under way (true velocity 1.71, −4.70 m/s) | tracked, 0.4 m, velocity 1.54, −5.31 m/s; classified mover |
+| Boat at anchor | tracked, 0.9 m, 0.02 m/s; classified static |
 | Detections per ping | 56 to 66 |
 | Confirmed tracks | 65 |
+| Track classes | 5 mover, 30 static, 16 line, 14 uncertain |
+| Tracks called movers that are not the boat | 4 |
 
-- Both boats are tracked, but so is everything on the bed: boulders, debris and the
-  pipeline are real echoes and each makes a track. Nothing here tells a boat from a
-  boulder except that one of them moves; classification is not written.
+- Everything on the bed makes tracks. From the tracks alone, 30 are static (boulders,
+  debris), 16 are detections sliding along the pipeline as the aspect changes ("line":
+  motion along a linear feature cannot be told from the feature standing still), and 14
+  jump about too much to say. Before the line rule and the requirement that a mover be
+  seen on most pings, 24 tracks were called movers.
+- Four movers remain that are not the boat. They were not examined one by one; a track at
+  an end of the pipeline has neighbours on one side only and escapes the line rule.
 - The pipeline shows as a line across the picture, and the wake as a streak astern of the
   moving boat. The wake is a fixed cloud laid down at the start; it does not grow.
 - Direct paths only: no surface or bottom bounce to the objects.
@@ -185,34 +202,55 @@ boat at anchor.
 
 ![fls_120k_rough_surface animation](figures/fls_120k_rough_surface.gif)
 
-10 m/s of wind: a 1.2 m swell 40 m long with a 6 m wind sea on top. The 20 degree beam's half-power edge meets the
-underside of the surface at about 115 m; the surface closer in is seen further down the beam. Wave faces turned towards the sonar return
-sound and their backs do not, so the surface shows as bands.
+10 m/s of wind over an irregular wind sea 1.2 m in significant height: a Pierson–Moskowitz
+spectrum sampled at 30 wave trains with random phases, spread 25 degrees about the wind.
+Each train travels at its own deep-water speed, so crests move through the world (the
+longest, 83 m, at 11 m/s) and the pattern changes shape as it goes. The 20 degree beam's
+half-power edge meets the underside of the surface at about 115 m; the surface closer in
+is seen further down the beam.
 
 | Quantity | Result |
 | --- | --- |
-| Boat under way with wake | tracked, 0.3 m, velocity 0.75, 4.84 m/s (true 0.87, 4.92) |
-| Kayak (three −22 dB points) | **not tracked**: the nearest track is 8 m away and moves another way |
+| Boat under way with wake | tracked, 0.8 m, velocity 0.76, 4.66 m/s (true 0.87, 4.92); classified mover |
+| Kayak (three −22 dB points) | **not tracked** |
 | Mooring buoy | **not tracked** |
-| Detections per ping / confirmed tracks | 118 to 135 / 150 |
+| Detections per ping / confirmed tracks | 45 to 59 / 57 |
+| Track classes | 9 mover, 1 static, 8 line, 39 uncertain |
+| Tracks called movers that are not the boat | 8 |
 
-- The boat stands out and is tracked to a fraction of a metre. Everything else the tracker
-  reports is waves: about 125 detections a ping from wave faces, which hold together long
-  enough to confirm 150 tracks. A kayak-sized target is lost among them.
-- The surface is modelled once, by the wave facets; there is no statistical surface
-  boundary in this scenario, which would count it twice. The patch of facets is finite
-  (45 to 297 m ahead, 150 m either side), which is why the clutter has straight edges at the
-  sides and at 45 m. Close in, the surface is steep to the sonar and returns strongly even far
-  down the beam: most of the clutter tracks are between 50 and 110 m.
-- The facets' strength is set so the mean backscatter near 7 degrees grazing is about the
-  Chapman–Harris value for this wind (−23 dB). That formula was fitted below 6.4 kHz, so
-  at 120 kHz the level is a placeholder. The facets are frozen and drift; there is no
-  orbital motion, breaking or bubble layer.
+- The boat is tracked to under a metre and called a mover. Of the other 56 tracks, 39 are
+  uncertain (seen on too few pings, or jumping), which is what wave glints should be; 8
+  are still called movers. Bright wave faces do move, at metres per second, so speed alone
+  does not reject them. A kayak-sized target is lost.
+
+**What the bands are, and which frame they are in** (`tools/rough_surface_bands.py`):
+
+![rough_surface_bands](figures/rough_surface_bands.png)
+
+- Top row, the surface alone on a world-fixed grid. Flat water has no bands. Two regular
+  wave trains, the first version of this scene, give evenly spaced slanted stripes that go
+  black: with only tilted Lambert facets, a wave's back face returns nothing once its slope
+  exceeds the grazing angle (5.4 degrees for that swell, reached beyond 215 m). The
+  irregular sea gives patches instead of stripes, and tilt-independent small-scale
+  roughness (−30 dB per square metre, a placeholder) makes the dark parts darker instead
+  of black. Depth of the banding against flat water, 90th minus 10th percentile of 4 m
+  averages: 12.1 dB for the regular trains, 10.7 dB for the irregular sea, 8.6 dB as shipped.
+- Bottom row, two pings a second apart, the sonar having advanced 2 m. **With the waves
+  frozen, the pattern does not move in the world frame (0 m) and so moves back 2 m in the
+  sonar's frame: it is fixed to the world, not to the view.** With the waves travelling,
+  it moves 10 m ahead and 2 m to port in that second, the speed of the long waves.
+  (Measured by cross-correlation after dividing out the fall-off with range, which is
+  fixed to the sonar and otherwise dominates the measurement.)
+- In the earlier version the crests only drifted at 0.36 m/s and the speckle was the same
+  on every ping, so over the 3.5 s of the animation nothing visibly moved in either frame.
+  The speckle is now drawn afresh each ping, as the small scatterers on a real surface
+  lose their phase in milliseconds.
+- Still not there: breaking, bubble plumes, one crest shadowing another, Doppler from the
+  water's orbital motion. The patch of facets is finite (45 to 297 m ahead, 150 m either
+  side) and its edges show. Strengths are placeholders (see the scenario file).
 - **The same scene at 330 kHz showed no surface at all.** One resolution cell of surface is
-  about −31 dB there, below that sonar's noise floor at 250 m, and with the statistical
-  surface boundary also switched on at 10 m/s nothing was detected in eight pings, the boat
-  included. That version is not shipped; a 330 kHz sonar would need a shorter range or more
-  source level to work under a rough surface.
+  about −31 dB there, below that sonar's noise floor at 250 m. A 330 kHz sonar would need a
+  shorter range or more source level to work under a rough surface.
 
 ### Traffic: `fls_170k_traffic`
 
@@ -228,8 +266,10 @@ sound and their backs do not, so the surface shows as bands.
 | Crossing at 300 m | 0.35, 3.98 | 0.38, 4.26 | 1.0 m |
 | At anchor at 350 m | 0, 0 | −0.12, 0.11 | 1.7 m |
 
-7 to 11 detections per ping gave 11 confirmed tracks for three boats: the crossing boat's
-wake breaks into several tracks of its own.
+7 to 11 detections per ping gave 11 confirmed tracks for three boats. Classes: 5 mover,
+2 static, 1 line, 3 uncertain. The two moving boats are movers and the anchored one is
+static; three more tracks are called movers and were not examined (the crossing boat's
+hull and wake give several tracks close together).
 
 ## Synthetic aperture sonar
 
@@ -308,6 +348,40 @@ range sidelobes. The seabed in these scenes has far fewer scatterers than resolu
 cells (8 to 18 per square metre against 2,000 cells), so it images as separate points, not
 as developed speckle.
 
+### A seabed with developed speckle: `sas_minsas_speckle`
+
+![sas_minsas_speckle geometry](scenarios/sas_minsas_speckle.png)
+
+![sas_minsas_speckle](figures/sas_minsas_speckle.png)
+
+![sas_minsas_speckle animation](figures/sas_minsas_speckle.gif)
+
+The other survey scenes have 8 to 18 seabed scatterers per square metre against about
+2000 resolution cells: separate points on black. Here a 13 m × 6 m strip has 5000 per
+square metre, 2.6 in every cell, and every one of the 390,000 is synthesised. Objects have
+the same density on their surfaces.
+
+| Quantity | Result |
+| --- | --- |
+| Speckle contrast of bare seabed (standard deviation of intensity over its mean; 1.0 is fully developed) | 1.21 |
+| Calibration cube / cable over bare seabed | 27.0 dB / 18.7 dB |
+| Level where the cube's along-track copy falls (10.3 m along), over bare seabed | +2.1 dB |
+| Level where the cable's copy falls, over bare seabed | +0.3 dB |
+| CPU time (four cores) | 14 min |
+
+- This is what the sonar's picture should look like: continuous texture, objects with a
+  bright face and a clean shadow.
+- **The ambiguity copies are covered.** The question left open by the sparse scenes was
+  whether the −47 dB along-track copy of each object would show on a real seabed. Where
+  the cube's copy falls, the image is 2 dB above the surrounding seabed on average (the
+  copy is about as strong as the seabed itself, 29 dB below the cube); the cable's is
+  lost. Neither is visible in the picture. A much brighter object than these would still
+  show.
+- `tools/calibrate_sim.py sas` run on this figure's full-resolution picture reads back
+  6100 scatterers per square metre (5000 were put in) and a 9 cm² speckle cell.
+- The strip is small because of the cost. The same density over the 40 m × 28 m survey
+  scene is 5.6 million scatterers: a GPU job.
+
 ### Rocks: `sas_minsas_boulder_field` and `sas_minsas_rocky_ripples`
 
 ![sas_minsas_boulder_field geometry](scenarios/sas_minsas_boulder_field.png)
@@ -342,8 +416,8 @@ as developed speckle.
   −54 dB, depending on the geometry (`test_minsas_resolution.py`), for half as many
   channels again. It still shows beside the brightest objects in these figures, because
   they are 50 dB and more above the floor: the simulated seabed is empty between its
-  scatterers, and the figures show 42 dB of range anchored on that empty floor. Whether a
-  real seabed's speckle would cover a −47 dB copy is not shown here. More elements do not
+  scatterers, and the figures show 42 dB of range anchored on that empty floor. On a
+  seabed with developed speckle the copies are covered (`sas_minsas_speckle`, above). More elements do not
   help much further: the receive element narrows with the pitch, and the projector's
   sidelobes fall slowly.
 
@@ -404,12 +478,14 @@ the beam, in 100 m of isovelocity water.
 
 | Quantity | Result |
 | --- | --- |
-| Ship | tracked, 41 m from truth, velocity −5.69, 0.10 m/s (true −6, 0) |
+| Ship | tracked, 41 m from truth, velocity −5.69, 0.10 m/s (true −6, 0); classified mover |
 | Peak over map median with 8 / 16 / 32 hydrophones | 20.6 / 23.7 / 26.3 dB |
 | Detections per ping / confirmed tracks | 3 to 7 / 6 |
+| Track classes | 1 mover, 4 multipath of it, 1 static |
 
-Each doubling of the array adds about 3 dB, as it should. Multipath and reverberation give
-five tracks that are not the ship.
+Each doubling of the array adds about 3 dB, as it should. Of the five tracks that are not
+the ship, four have its bearing and velocity a little further out in range and are
+attached to it as later arrivals; one is called static.
 
 ### 12 km: `popoto_12km`
 
@@ -436,14 +512,16 @@ a projector not yet chosen). In this scenario, 100 m of isovelocity water over s
 
 | Quantity | Result |
 | --- | --- |
-| Ship at 12 km | tracked, 16 m from truth, velocity −4.03, −0.64 m/s (true −6, 0) |
+| Ship at 12 km | tracked, 16 m from truth, velocity −4.03, −0.64 m/s (true −6, 0); classified mover |
+| Track classes | 3 mover, 8 multipath |
 | Peak over map median with 8 / 16 / 32 hydrophones | 17.2 / 20.3 / 23.6 dB |
 | Detections per ping / confirmed tracks | 6 to 14 / 11 |
 | One-way loss to the target, Bellhop (no absorption) | 67.2 dB, against 81.6 dB for spherical spreading |
 
 - The shallow channel carries 14 dB more each way than spherical spreading, so this case
   has margin the link budget does not count. Ten of the eleven tracks are not the ship:
-  with that much energy the limit is reverberation and multipath, not noise.
+  eight are attached to a stronger track as later arrivals; two more are called movers,
+  lie within 200 m of the ship and were not attached. Why was not examined.
 - The track's speed is low by a third over six pings 20 s apart.
 
 ### Other oceans: `popoto_env_*`

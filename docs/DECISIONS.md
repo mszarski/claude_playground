@@ -442,3 +442,48 @@ take down to −42 dB; the survey images showed it as ghost cables. 48 elements 
 degrees and −47 to −54 dB. More elements were not pursued: the receive element narrows with
 the pitch, so the lobe stays near its first null, and the projector's sidelobes fall slowly.
 
+### D-51 Synthesis kernel: amplitude interpolated over the pulse, phasor by recurrence
+Per sample the kernel evaluated two beam patterns, a power and a sine and cosine. The
+frequency-dependent amplitude is now evaluated at 17 emission times across the pulse and
+interpolated (it is smooth in frequency and the sweep is linear), and the phasor is
+advanced by a second-order recurrence re-seeded exactly every 16 samples. Host and CUDA
+share the kernel, so both change. 5.7 times faster on the 120 kHz transit; the simulator's
+tests against analytic delays, amplitudes, Doppler and the frequency-domain oracle are
+unchanged and pass.
+
+### D-52 A sea surface that travels, with new speckle each ping
+Wave facets stay where they are in the water and the wave shape moves through them at each
+train's deep-water speed (omega squared = g k), from a Pierson-Moskowitz spectrum with
+random phases and directional spread. The facets' complex amplitudes are drawn afresh for
+every ping, because the small scatterers on a real surface lose their phase in
+milliseconds at these frequencies. Without the first, crests stood still; without the
+second, the image texture was a pattern nailed to the water and wave faces made tracks
+that lasted for ever. A tilt-independent term stands for small-scale roughness and bubbles.
+
+### D-53 Classification from the track alone
+`classify.py` uses only what a track has: fitted velocity and its uncertainty, how often
+it was seen, where the other tracks are. That is enough to separate movers from static
+objects, to mark detections sliding along a pipeline or wake, and to attach multipath
+echoes to their source. It is not enough to tell a buoy from a rock; that needs image
+features and is not attempted.
+
+### D-54 Taps are container files
+A tap writes the ping records after a stage with the ordinary record writer, so a tap is
+also a source and no second format exists. Products that are not records go beside them as
+.npz and .json. The simulator's internal stages are saved as arrays, since a record is not
+complete until the last of them.
+
+### D-55 The live chain beamforms with the backprojection kernel
+For the long-range arrays the range x bearing map is made by the same kernel as every
+other image, on a grid of ranges and bearings. It is exact in the near field, 11 times
+faster on a CPU than the NumPy far-field beamformer at 32 channels, and already has a CUDA
+build. The NumPy far-field and MVDR beamformers stay as alternatives and as cross-checks.
+
+### D-56 Calibrating the simulator by simulating its parts
+The simulator's output power is linear in each boundary's strength and in the noise
+level. `simcal.py` simulates each alone through the same imaging as the log and fits the
+log's range profile as a non-negative sum. Nothing has to be known about processing gains,
+because the log and the simulated parts go through the same processing. With relative
+levels only differences between terms are reported. A closed-form sonar-equation fit was
+the alternative; it would need every gain in the chain to be modelled a second time.
+

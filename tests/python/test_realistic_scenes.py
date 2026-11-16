@@ -25,10 +25,12 @@ _spec.loader.exec_module(gallery)
 HOST = gs.core.Backend.Host
 
 
-def quick(name):
+def quick(name, pings=None):
     cfg = load_scenario_config(name)
     if name in gallery.QUICK:
         gallery.QUICK[name](cfg)
+    if pings:
+        cfg["pings"]["count"] = pings
     out = gallery.RUNNERS[name](name, cfg, HOST, True)
     gallery.plt.close(out[0])
     return out[1]
@@ -206,3 +208,63 @@ def test_minsas_images_rocks_above_the_seabed(name, rocks, floor):
     lv = leg["object_over_median_db"]
     for label in rocks:
         assert lv[label] > lv[floor] + 4.0, label
+
+
+# --- classification of the tracks ------------------------------------------------------------
+
+# Four pings, as in the thinned runs above, are too few to call anything a mover with
+# confidence (the classifier asks for 13 sigma at four points), so these use more.
+
+# The thinned scenes have fewer scatterers on each hull, so a track's centroid wanders more than
+# at full size and the classes are less clean; only what holds at this size is asserted here.
+# The full-size classes are in docs/figures/gallery.json and checked by the last test below.
+
+def test_transit_tracks_are_classified_mover_or_static():
+    c = quick("fls_120k_transit", pings=8)["classification"]
+    assert c["targets"]["boat_under_way"]["kind"] == "mover"
+    assert c["targets"]["boat_under_way"]["speed_m_s"] == pytest.approx(4.0, abs=0.6)
+    assert c["targets"]["mooring_buoy"]["kind"] == "static"
+
+
+def test_four_pings_are_not_enough_to_call_a_mover():
+    c = quick("fls_120k_transit")["classification"]
+    assert c["targets"]["boat_under_way"]["kind"] == "uncertain" and c["counts"]["mover"] == 0
+    assert c["targets"]["mooring_buoy"]["kind"] == "static"
+
+
+def test_clutter_tracks_are_mostly_not_called_movers():
+    m = quick("fls_120k_cluttered_seabed", pings=8)
+    c = m["classification"]
+    assert c["targets"]["boat_at_anchor"]["kind"] == "static"
+    assert c["targets"]["boat_under_way"]["kind"] in ("mover", "line")      # it moves; at this size a boulder ahead can put it in a row
+    assert c["counts"]["mover"] <= 0.2 * m["confirmed_tracks"]              # the seabed's tracks are static, line or uncertain
+    assert c["counts"]["static"] + c["counts"]["line"] >= 0.4 * m["confirmed_tracks"]
+
+
+@pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
+def test_the_distant_ship_is_a_mover_and_nothing_else_far_from_it_is():
+    c = quick("popoto_far_mover", pings=6)["classification"]
+    assert c["targets"]["ship"]["kind"] == "mover" and c["movers_not_on_a_moving_object"] == 0
+
+
+def test_documented_full_size_classes():
+    """The numbers quoted in docs/SCENARIOS.md and docs/RESULTS.md, from the stored full-size run."""
+    import json
+    g = json.loads((pathlib.Path(__file__).resolve().parents[2] / "docs" / "figures" / "gallery.json").read_text())
+    for name in ("fls_120k_transit", "fls_170k_transit", "fls_330k_transit"):
+        c = g[name]["classification"]
+        assert c["counts"]["mover"] == 1 and c["movers_not_on_a_moving_object"] == 0, name
+        assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["mooring_buoy"]["kind"] == "static", name
+    c = g["fls_120k_cluttered_seabed"]["classification"]
+    assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["boat_at_anchor"]["kind"] == "static"
+    assert c["counts"]["mover"] <= 6 and c["counts"]["static"] + c["counts"]["line"] >= 40
+    c = g["popoto_far_mover"]["classification"]
+    assert c["counts"]["mover"] == 1 and c["counts"]["multipath"] >= 3
+    assert g["sas_minsas_speckle"]["legs"]["leg_1"]["speckle_contrast"] < 1.4
+
+
+def test_speckle_scene_runs_and_reports_its_statistics():
+    leg = quick("sas_minsas_speckle")["legs"]["leg_1"]
+    assert leg["speckle_contrast"] > 1.0                                     # thinned to 100 per square metre: sparse
+    assert set(leg["ghost"]) == {"calibration_cube", "cable"}
+    assert leg["ghost"]["calibration_cube"]["object_over_bare_seabed_db"] > 10.0

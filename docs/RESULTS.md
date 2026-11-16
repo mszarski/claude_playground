@@ -646,6 +646,104 @@ Bellhop for 100 m of isovelocity water over sand gives 14 dB less loss each way 
 (70.4 dB against 84.6 dB including absorption), where 170 dB would do on noise alone; then
 reverberation decides. Simulated outcomes in five oceans are in `SCENARIOS.md`.
 
+## CPU speed after the synthesis kernel rework
+
+Four cores of an x86_64 container, nothing else running; the same scenarios before and
+after `DECISIONS.md` D-51. "Before" for the whole scenarios was measured with other jobs
+sharing the machine, so only the synthesis line is a like-for-like comparison.
+
+| What | Before | After |
+| --- | --- | --- |
+| Synthesis, `fls_120k_transit`, one ping (1691 scatterers, 128 channels, 10 ms pulse) | 7.95 s | 1.40 s (5.7×) |
+| The same on one thread / four threads | — | 12.3 s / 3.1 s before the phasor recurrence: 4.0× from threads |
+| `fls_120k_transit`, 10 pings, whole scenario | 512 s (shared) | 77 s |
+| `fls_170k_transit` | 1090 s (shared) | 198 s |
+| `fls_330k_transit` | 885 s (shared) | 169 s |
+| `fls_120k_cluttered_seabed` | 279 s (shared) | 54 s |
+| `flank_patrol`, synthesis per ping (real samples at 64 kHz, 1 s pulse, multipath) | not separated | 91 s of about 100 s |
+
+Simulator accuracy tests (delays, amplitudes, Doppler, the frequency-domain oracle;
+`test_sim.py`) pass unchanged. The kernel is shared with the CUDA build.
+
+## Simulation and imaging on a GPU against four CPU cores
+
+Whole gallery scenarios (simulate, image, detect, track), same code, `--backend cuda` on an
+NVIDIA L4 against `--backend host` on four x86_64 cores. Numbers reported by the two runs
+agree to the digits printed (speckle contrast 1.2115 on both; the same 57 tracks and
+classes under the rough sea).
+
+| Scenario | Scatterers | CPU, four cores | L4 | What limits the GPU run |
+| --- | --- | --- | --- | --- |
+| `sas_minsas_speckle` | 445,567 | 818 s | 96 s | synthesis is on the device; path geometry per ping is NumPy |
+| `sas_minsas_boulder_field` | 27,620 | 98 s | 18 s | |
+| `fls_120k_rough_surface` | 77,106 | 140 s | 33 s | |
+| `fls_120k_transit` | 1,691 | 77 s | 49 s | boundary reverberation is generated on the CPU |
+| `fls_120k_cluttered_seabed` | 7,882 | 54 s | 39 s | the same |
+
+The more of a scene is explicit scatterers, the more the GPU gives. Scenes whose
+background is statistical reverberation are held back by its CPU generator.
+
+## Long-range live chain
+
+Source: `tests/python/test_live.py`, `tools/sonar_live.py --scenario popoto_far_mover`.
+
+| Quantity | Result |
+| --- | --- |
+| Processing per ping, 32 channels × 50,134 complex samples, backprojection kernel, four CPU cores | 0.55 s |
+| The same with the NumPy far-field beamformer | 6.1 s |
+| Tracks at the last of six pings, both beamformers | 1 mover (the ship, −5.8 and −6.0 m/s against −6) with 4 multipath tracks attached |
+| Replay of the chain's own recording | same track identities and classes, positions equal to 1e-6 m |
+| Four boards with offsets over 100 µs, synchronised on the shared reference | residual under 1 µs; target at 600 m found within 1.5 m and 1 degree; without the stage the peak is under half as high |
+| Standing target seen from an ownship making 1.5 m/s, pose from navigation datagrams | classified static, under 0.6 m/s; without navigation it carries ownship's 1.5 m/s |
+
+## Track classification
+
+Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
+(`docs/figures/gallery.json`).
+
+| Scene | Confirmed tracks | Mover | Static | Line | Multipath | Uncertain | Movers not on a moving object |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `fls_120k_transit` | 7 | 1 | 6 | 0 | — | 0 | 0 |
+| `fls_170k_transit` | 4 | 1 | 3 | 0 | — | 0 | 0 |
+| `fls_330k_transit` | 2 | 1 | 1 | 0 | — | 0 | 0 |
+| `fls_120k_cluttered_seabed` | 65 | 5 | 30 | 16 | — | 14 | 4 |
+| `fls_120k_rough_surface` | 57 | 9 | 1 | 8 | — | 39 | 8 |
+| `fls_170k_traffic` | 11 | 5 | 2 | 1 | — | 3 | 3 |
+| `popoto_far_mover` | 6 | 1 | 1 | — | 4 | 0 | 0 |
+| `popoto_12km` | 11 | 3 | 0 | — | 8 | 0 | 0 (two extra movers lie within 200 m of the ship) |
+| `popoto_env_winter_sand_200m` | 5 | 1 | 0 | — | 3 | 1 | 0 |
+| `popoto_env_gravel_30m` | 1 | 1 | 0 | — | 0 | 0 | 0 |
+
+Every true mover that was tracked is classified mover; every tracked static object is
+static. Twenty tracks of pure position noise (1 m) give no movers.
+
+## Simulator calibration against a log with hidden settings
+
+Source: `tests/python/test_simcal.py`; see `SIM_CALIBRATION.md`.
+
+| Quantity | Hidden | Found |
+| --- | --- | --- |
+| Bottom strength offset, absolute log | +6.0 dB | +6.1 dB |
+| Surface strength offset | −4.0 dB | −4.0 dB |
+| Ambient noise level | 38.0 dB re 1 µPa²/Hz | 38.0 dB |
+| Fit misfit | — | 0.17 dB RMS |
+| Bottom minus surface offset, log scaled by an unknown 37 dB | 10.0 dB | within 1.5 dB |
+| Seabed density from SAS image speckle, sparse / dense | 400 / 6000 per m² | 620 / 8000 per m² |
+| Speckle cell area | 5.2 cm² (design) | 5.6 to 6.6 cm² |
+
+The logs come from the same simulator, so these numbers show the method works, not how
+well the simulator's models fit a real sea.
+
+## Sea surface: frame and band depth
+
+Source: `tools/rough_surface_bands.py`, `docs/figures/rough_surface_bands.json`.
+
+| Quantity | Result |
+| --- | --- |
+| Pattern shift in the world frame over 1 s, waves frozen, sonar advancing 2 m | 0 m (correlation 0.38 after detrending, fresh speckle each ping) |
+| The same, waves travelling | 10 m ahead, 2 m to port |
+| Band depth against flat water: two regular trains / irregular sea / with small-scale roughness | 12.1 / 10.7 / 8.6 dB |
+
 ## Not yet measured
 
 Speed on the DGX Spark and Jetson; multi-GPU scaling on a dataset large enough to show it.

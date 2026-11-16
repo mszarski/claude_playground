@@ -144,3 +144,59 @@ def test_navigation_datagrams_put_the_pose_into_the_records(pings):
     with LiveChain(CHAIN) as chain:
         wrong = nearest(chain.run(again)[-1], -60.0 - 1.5 * (N - 1) * INTERVAL, 320.0)
     assert wrong["speed_m_s"] == pytest.approx(1.5, abs=0.5)
+
+
+def test_boards_on_their_own_clocks_are_synchronised_before_beamforming():
+    from test_calibration_sync import four_board_ping
+    sonar, rec, target, truth = four_board_ping(bearing_deg=10.0)
+    assert np.ptp(truth["offset"]) > 100e-6                        # the boards start far apart
+    x = rec.samples.array                                          # the helper's ping has no noise: add some
+    s_ = rec.samples
+    s_.array = x + 2e-7 * np.random.default_rng(1).standard_normal(x.shape)
+    rec.samples = s_
+    ref = sonar.config["receive"]["reference"]
+    chain_cfg = dict(CHAIN, sync={"reference": ref}, bearings_deg=[-30.0, 30.0, 0.5],
+                     cfar={"pfa": 1e-6, "guard_m": 5.0, "train_m": 20.0}, range_cell_m=0.5)
+
+    def peak(chain):
+        p, r = chain.last["power"], chain.last["ranges"]
+        inside = (r > 520.0) & (r < 680.0)
+        ib, ir = np.unravel_index(np.argmax(p[:, inside]), p[:, inside].shape)
+        return float(p[:, inside].max()), float(r[inside][ir]), float(np.degrees(chain.bearings[ib]))
+
+    with LiveChain(chain_cfg) as chain:
+        report = chain.process(rec.copy())
+        level, rng_m, bearing = peak(chain)
+    assert report["sync"]["ok"] and report["sync"]["worst_residual_us"] < 1.0
+    assert max(abs(v) for v in report["sync"]["offsets_us"]) > 100.0
+    assert rng_m == pytest.approx(600.0, abs=1.5) and bearing == pytest.approx(10.0, abs=1.0)
+    # The reference bursts summed into the hydrophone inputs are not reported as detections.
+    c = 1500.0
+    assert all(d["range_m"] > 450.0 + 0.5 * c * (ref["lead"] + ref["duration"]) for d in report["detections"])
+    assert any(abs(d["range_m"] - 600.0) < 3.0 for d in report["detections"])
+    # Without the sync stage the same ping does not focus: the peak is lower and elsewhere.
+    with LiveChain(dict(chain_cfg, sync=None)) as chain:
+        chain.process(rec.copy())
+        unsynced, _, bearing_un = peak(chain)
+    assert unsynced < 0.5 * level
+
+
+def test_recordings_dropped_into_a_directory_are_processed_as_they_appear(tmp_path):
+    import yaml
+    from scipy.io import wavfile
+    rate = 96000
+    rng = np.random.default_rng(0)
+    for k in range(2):
+        audio = (rng.standard_normal((rate // 2, 8)) * 300).astype(np.int16)
+        wavfile.write(tmp_path / f"rec{k}.wav", rate, audio)
+        (tmp_path / f"rec{k}.yaml").write_text(yaml.safe_dump({
+            "array_id": "popoto_8", "mode": "flank", "file": f"rec{k}.wav",
+            "elements": {"count": 8, "pitch": 0.027, "axis": [1, 0, 0]},
+            "transmit": {"waveform": {"type": "lfm", "f_start": 20000, "f_stop": 35000, "duration": 0.01}, "lever_arm": [0.0, 0.0, 0.5]},
+            "pings": {"times": [0.05, 0.25], "window": [0.0, 0.15]}, "recording_start_ns": 1_700_000_000_000_000_000 + k * 10**9,
+            "environment": {"sound_speed": 1480.0}}))
+    (tmp_path / "broken.yaml").write_text("file: missing.wav\n")
+    src = make_source({"type": "wav_watch", "directory": str(tmp_path), "settle": 0.0, "timeout": 1.0, "poll": 0.1})
+    records = list(src)
+    assert len(records) == 4 and src.done == ["rec0.yaml", "rec1.yaml"]
+    assert records[0].samples.n_channels == 8 and records[2].transmit.time_ns > records[1].transmit.time_ns

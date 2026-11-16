@@ -509,3 +509,61 @@ def test_phase_3_sonar_images_its_point_grid():
         assert abs(np.degrees(bearings[ib] - bearing)) < 1.0        # beam about 1.6 degrees at broadside
     alpha = float(acoustics.absorption(750e3, 12.0, 35.0, 5.0))
     assert 0.15 < alpha < 0.30                                      # dB/m: 15 to 30 dB two-way at 50 m
+
+
+# --- swept pulse through frequency-dependent beams and absorption, sample by sample ----
+
+def _directivity_at(element, direction, ratio):
+    """_directivity with the pattern scaled to another frequency (narrower at higher)."""
+    class Scaled:
+        boresight = element.boresight
+        beamwidth_az = element.beamwidth_az / ratio
+        beamwidth_el = element.beamwidth_el / ratio
+    return _directivity(Scaled, direction)
+
+
+@pytest.mark.parametrize("kind", ["real", "baseband"])
+def test_swept_pulse_off_axis_matches_a_sample_by_sample_evaluation(kind):
+    """The kernel interpolates the frequency-dependent amplitude across the pulse and advances
+    the phase by a recurrence. Here every sample is evaluated directly instead: a point near
+    the edge of a 5 degree vertical beam, where the pattern changes most across the sweep,
+    with absorption that changes across the band."""
+    from gpusonar import acoustics
+    c = 1500.0
+    env = {"sound_speed": c, "temperature": 12.0, "salinity": 35.0, "depth": 20.0}
+    extra = {"receive": {"kind": kind}} if kind == "real" else {"receive": {"kind": "baseband", "sample_rate": 60e3}}
+    sonar = small("fls_330k", 95.0, 110.0, **extra)
+    # 100 m ahead, 6.5 degrees above a boresight tilted up 3.5 degrees: past the half-power point.
+    el = np.radians(3.5 + 3.0)
+    p = np.array([100.0 * np.cos(el) * np.cos(0.3), 100.0 * np.cos(el) * np.sin(0.3), -100.0 * np.sin(el)])
+    amp = 0.7 * np.exp(0.9j)
+    rec = simulate_ping(sonar, make_pose(), Scene().add_points([p], amplitude=amp), environment=env, adc=False)
+    x = rec.samples.array
+    fs, t0, n = rec.samples.sample_rate, rec.samples.start_time, rec.samples.n_samples
+    w = rec.transmit.waveform
+    fc = sonar.center_frequency
+    t = t0 + np.arange(n) / fs
+    tx, rx = np.array(rec.tx_position()), rec.rx_positions()
+    k = (w.f_stop - w.f_start) / w.duration
+    worst = 0.0
+    for ch in (0, 64, 127):
+        r1, r2 = np.linalg.norm(p - tx), np.linalg.norm(p - rx[ch])
+        u = t - (r1 + r2) / c
+        inside = (u >= 0) & (u <= w.duration)
+        f = w.f_start + k * u
+        phase = (w.f_start + 0.5 * k * u) * u
+        edge = 0.5 * w.window_alpha
+        xr = np.clip(u / w.duration, 0, 1)
+        tukey = np.where(xr < edge, 0.5 * (1 - np.cos(np.pi * xr / max(edge, 1e-12))),
+                         np.where(xr > 1 - edge, 0.5 * (1 - np.cos(np.pi * (1 - xr) / max(edge, 1e-12))), 1.0))
+        a = np.array([_directivity_at(rec.geometry.tx, p - tx, fi / fc) * _directivity_at(rec.geometry.rx[ch], p - rx[ch], fi / fc)
+                      for fi in f])
+        alpha = acoustics.absorption(f, env["temperature"], env["salinity"], env["depth"], 8.0, "francois_garrison")
+        a = a * 10.0 ** (-alpha * (r1 + r2) / 20.0) * tukey * w.amplitude / (r1 * r2) * inside
+        analytic = amp * a * np.exp(2j * np.pi * phase)
+        want = analytic.real if kind == "real" else analytic * np.exp(-2j * np.pi * fc * t)
+        assert np.abs(want).max() > 0
+        # The pattern must really change across the sweep for this to test anything.
+        assert a[inside].max() / max(a[inside][a[inside] > 0].min(), 1e-30) > 1.05
+        worst = max(worst, float(np.linalg.norm(x[ch] - want) / np.linalg.norm(want)))
+    assert worst < 2e-3
