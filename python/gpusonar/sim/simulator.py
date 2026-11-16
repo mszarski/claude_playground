@@ -100,6 +100,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                              absorption=absorption_table(sonar, env, absorption_model),
                              spreading=spreading, backend=backend,
                              platform_acceleration=tuple(float(a) for a in acceleration))
+    from .. import taps
+    taps.sim_tap(record, "echoes")
     for item in reverberation or []:
         # Boundary reverberation by the scattering-function method (sim/reverb.py).
         from . import reverb
@@ -116,12 +118,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"))
+    taps.sim_tap(record, "reverberation")
     receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)
     if channel_errors is not None:
         receiver.apply_channel_errors(record, channel_errors)
     if ins_rate > 0.0:
         _add_true_ins(record, np.asarray(acceleration, dtype=float), ins_rate)
+    taps.sim_tap(record, "reference_and_clocks")
     samples = record.samples.array
     if noise_rms > 0.0:
         samples = receiver.add_noise(samples, noise_rms, rng or np.random.default_rng())
@@ -146,9 +150,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             samples = samples + noise_models.gaussian_noise(
                 samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
                 positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+    taps.sim_tap(record, "noise", samples)
     samples = receiver.apply_hardware_tvg(record, samples)
+    taps.sim_tap(record, "hardware_gain", samples)
     if adc:
         samples = receiver.apply_adc(record, samples)
+    taps.sim_tap(record, "adc", samples)
     s = record.samples
     kind = s.kind
     s.array = samples

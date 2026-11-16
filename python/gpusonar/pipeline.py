@@ -13,7 +13,16 @@ so a run can be repeated exactly.
       - {stage: motion}                                    # SAS micronavigation
       - {stage: sas_image, ground_range: [36, 47], pixel: [0.02, 0.04]}
       - {stage: drc, target_median: 0.2}
-    output: {geotiff: out.tif, log: run.jsonl, debug_dir: debug/}
+    output: {geotiff: out.tif, log: run.jsonl, debug_dir: debug/, taps: {dir: taps/}}
+
+`taps` writes the ping records after the source and after every step as container files
+(gpusonar/taps.py). A later run can start from any of them:
+
+    source: {type: tap, dir: taps/, stage: whiten}
+    steps: [...the steps after whiten...]
+
+and `source: {type: scenario, name: ..., sim_taps: dir/}` also saves the samples after
+each stage inside the simulator.
 """
 
 from __future__ import annotations
@@ -62,7 +71,17 @@ def _load_records(cfg: dict, log: _Log) -> list:
     kind = cfg.get("type")
     if kind == "scenario":
         from .sim import run_scenario
-        records = run_scenario(cfg["name"], cfg.get("overrides")).records
+        from . import taps
+        if cfg.get("sim_taps"):
+            # Samples after every simulator stage (echoes, reverberation, noise, gain, ADC).
+            with taps.sim_capture(cfg["sim_taps"]):
+                records = run_scenario(cfg["name"], cfg.get("overrides")).records
+        else:
+            records = run_scenario(cfg["name"], cfg.get("overrides")).records
+    elif kind == "tap":
+        # Records captured after a stage of an earlier run: start the chain from there.
+        from . import taps
+        records = taps.read_tap(cfg["dir"], cfg["stage"])
     else:
         with make_source(cfg) as src:
             records = list(src)
@@ -154,11 +173,18 @@ def run(config, backend=None) -> RunResult:
     debug_dir = out_cfg.get("debug_dir")
     if debug_dir:
         os.makedirs(debug_dir, exist_ok=True)
+    tap = None
+    if out_cfg.get("taps"):
+        from .taps import TapWriter
+        tap_cfg = out_cfg["taps"] if isinstance(out_cfg["taps"], dict) else {"dir": out_cfg["taps"]}
+        tap = TapWriter(tap_cfg["dir"], tap_cfg.get("stages", "all"))
     t_start = time.perf_counter()
     try:
         log.write(event="start", config_yaml=dump_yaml(cfg), backend=str(backend).split(".")[-1],
                   cuda_devices=[core.cuda_device_name(i) for i in range(core.cuda_device_count())])
         state = RunResult(records=_load_records(cfg["source"], log))
+        if tap:
+            tap.records("source", state.records)
         for i, step in enumerate(cfg.get("steps", [])):
             params = dict(step)
             name = params.pop("stage")
@@ -166,6 +192,11 @@ def run(config, backend=None) -> RunResult:
             facts = _stage(name, params, state, backend)
             elapsed = time.perf_counter() - t
             log.write(event="stage", index=i, stage=name, seconds=elapsed, parameters=params, **facts)
+            if tap:
+                # The records as they now stand (a container file, usable as a source), and the image.
+                tap.records(name, state.records)
+                products = {k: v for k, v in (("image", state.image), ("display", state.display)) if v is not None}
+                tap.arrays(name, **products)
             if debug_dir:
                 # A debug product per stage: the first ping's samples, and the image if there is one.
                 product = {"samples_ping0": state.records[0].samples.array}

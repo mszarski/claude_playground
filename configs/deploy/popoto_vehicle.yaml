@@ -1,0 +1,32 @@
+# The Popoto-board array on a vehicle: tools/sonar_live.py configs/deploy/popoto_vehicle.yaml
+# One file says where pings come from, how they are processed and where results go.
+# docs/DEPLOYMENT.md explains each part and what is not yet confirmed against hardware.
+
+source:
+  type: flank_udp                # blocks from the capture boards (sources/flank_stream.py)
+  sonar: popoto_long_range       # configs/sonars/popoto_long_range.yaml: array, band, sampling
+  host: 0.0.0.0
+  port: 5700
+  timeout: 30.0                  # s without a ping before the run ends
+  # sonar_overrides: {receive: {window: {range: [500.0, 13000.0]}}}
+
+nav:                             # the vehicle's navigation: JSON datagrams (gpusonar/live.py, NavListener)
+  port: 5702                     # {"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}, NED metres, radians
+  # static: {x: 0.0, y: 0.0, z: 10.0, yaw: 0.0}     # instead, for a bench or a moored array
+
+chain:                           # gpusonar/live.py; anything left out keeps its default
+  bearings_deg: [-60.0, 60.0, 0.5]
+  look: starboard
+  range_cell_m: 2.0
+  cfar: {pfa: 1.0e-5, guard_m: 100.0, train_m: 300.0}
+  min_snr_db: 9.0
+  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
+  classify:
+    min_speed: 1.0
+    multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
+
+output:
+  recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5     # every raw ping, before processing
+  report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl      # one line per ping: detections and tracks
+  report_udp: [127.0.0.1, 5701]                       # the same line to the vehicle computer
+  taps: {dir: /data/sonar/taps, pings: 2}             # every stage of the first two pings
