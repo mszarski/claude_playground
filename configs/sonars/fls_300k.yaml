@@ -1,0 +1,44 @@
+# Stages 3-4 FLS: custom 128-element array, 0.3 m aperture.
+name: fls_300k
+mode: fls
+nominal_sound_speed: 1500.0
+
+array:
+  layout: uniform_line
+  count: 128
+  pitch: 0.0025                  # m; half a wavelength at 300 kHz
+  axis: [0, 1, 0]
+  boresight: [1, 0, 0]
+  element_width: 0.0023
+  element_height: 0.02
+
+transmit:
+  kind: point
+  lever_arm: [0, 0, 0.05]
+  beamwidth_az: 1.6
+  aperture_height: 0.02
+  waveform:
+    type: lfm
+    f_start: 270.0e3
+    f_stop: 330.0e3
+    duration: 1.0e-3
+    window_alpha: 0.1
+    amplitude: 1.0
+
+receive:
+  kind: real
+  sample_rate: 1.25e6
+  adc_bits: 16
+  adc_full_scale: 1.0
+  window: {range: [1.0, 300.0]}
+  # Analogue time-varying gain ahead of the ADC. Without it a 300 m echo is below one
+  # 16-bit step. Knots are time since transmit (s) and gain (dB), linear in between.
+  tvg:
+    time: [0.0013, 0.4]
+    gain_db: [0.0, 90.0]
+
+unconfirmed:
+  - array                     # custom array not yet designed in detail
+  - receive.sample_rate
+  - receive.adc_bits
+  - receive.tvg

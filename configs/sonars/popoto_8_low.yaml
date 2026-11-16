@@ -1,0 +1,19 @@
+# Stage 0, low band: the same Popoto board receiving at 6-10 kHz from a separate
+# low-frequency projector. Possible because the hydrophone inputs are AC-coupled
+# well below this band.
+base: popoto_8
+name: popoto_8_low
+
+array:
+  layout_choice: sparse          # 2.7 cm pitch is far finer than needed at 8 kHz
+
+transmit:
+  lever_arm: [0, 0, 1.0]
+  waveform:
+    f_start: 6.0e3
+    f_stop: 10.0e3
+    duration: 0.5
+    source_level_db: 175.0       # 170-180 dB projector
+
+unconfirmed:
+  - transmit.waveform.source_level_db

@@ -1,0 +1,35 @@
+# Stage 6: 32 hydrophones over 3.0 m on an AUV flank, separate projector.
+name: flank_32
+mode: flank
+nominal_sound_speed: 1500.0
+
+array:
+  layout: uniform_line
+  count: 32
+  pitch: 0.094                   # m
+  axis: [1, 0, 0]
+  boresight: [0, 1, 0]
+
+transmit:
+  kind: point
+  lever_arm: [0, 0, 0.5]
+  waveform:
+    type: lfm
+    f_start: 6.0e3
+    f_stop: 10.0e3
+    duration: 1.0
+    window_alpha: 0.05
+    source_level_db: 200.0       # configurable from 170 to 210
+
+receive:
+  kind: real
+  sample_rate: 64000.0
+  adc_bits: 24
+  adc_full_scale: 2.5            # V
+  sensitivity_db: -180.0
+  gain_db: 0.0
+  window: {range: [100.0, 10000.0]}   # 13.3 s round trip at 10 km
+
+unconfirmed:
+  - receive                      # flank capture board not yet designed
+  - transmit.lever_arm

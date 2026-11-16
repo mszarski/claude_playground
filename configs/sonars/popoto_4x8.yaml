@@ -1,0 +1,29 @@
+# Four Popoto boards batched into one 32-hydrophone array over 3 m. Each board has
+# its own sample clock; the sync stage aligns them.
+base: popoto_8
+name: popoto_4x8
+
+array:
+  layout_choice: uniform32
+  layouts:
+    uniform32:
+      layout: uniform_line
+      count: 32
+      pitch: 0.094
+
+receive:
+  # Clock errors are the simulator's truth; the sync stage has to estimate them.
+  boards:
+    - {first: 0,  count: 8, clock_offset: 0.0,      clock_drift_ppm: 0.0,  jitter_rms: 2.0e-8}
+    - {first: 8,  count: 8, clock_offset: 3.1e-4,   clock_drift_ppm: 12.0, jitter_rms: 2.0e-8}
+    - {first: 16, count: 8, clock_offset: -1.7e-4,  clock_drift_ppm: -8.0, jitter_rms: 2.0e-8}
+    - {first: 24, count: 8, clock_offset: 5.2e-5,   clock_drift_ppm: 25.0, jitter_rms: 2.0e-8}
+  # Shared reference for synchronisation. See STATUS.md, open question 5.
+  reference:
+    mode: pilot_tone             # summed into one hydrophone input per board, out of band
+    frequency: 40.0e3
+    level: 1.0e-3                # V
+
+unconfirmed:
+  - receive.boards
+  - receive.reference

@@ -1,0 +1,21 @@
+# Point-target grid for `popoto_8`: targets on a range x bearing fan about the boresight.
+name: point_grid_popoto_8
+sonar: popoto_8
+fidelity: free_field
+environment: {temperature: 15.0, salinity: 35.0}
+platform:
+  position: [0, 0, 5.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 5.0]
+    forward: [0.0, 1.0, 0.0]
+    across: [1.0, 0.0, 0.0]
+    ranges: [100, 500, 1000, 1800]
+    bearings_deg: [-40, -20, 0, 20, 40]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

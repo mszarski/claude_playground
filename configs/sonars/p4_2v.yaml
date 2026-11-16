@@ -1,0 +1,37 @@
+# Stage 2 FLS: Verasonics P4-2v phased array on the same electronics.
+name: p4_2v
+mode: fls
+nominal_sound_speed: 1480.0
+
+array:
+  layout: uniform_line
+  count: 64
+  pitch: 0.0003                  # m; about half a wavelength at 2.72 MHz
+  axis: [0, 1, 0]
+  boresight: [1, 0, 0]
+  element_width: 0.00025
+  element_height: 0.014
+
+transmit:
+  kind: point
+  lever_arm: [0, 0, 0]
+  beamwidth_az: 1.4
+  aperture_height: 0.014
+  waveform:
+    type: gaussian
+    f_start: 1.7136e6
+    f_stop: 3.7264e6             # 2.72 MHz centre, 74% -6 dB bandwidth
+    duration: 3.0e-6
+    amplitude: 1.0
+
+receive:
+  kind: real
+  sample_rate: 50.0e6
+  adc_bits: 12
+  adc_full_scale: 1.0
+  window: {range: [5.0, 10.0]}
+
+unconfirmed:
+  - array.element_width
+  - array.element_height
+  - transmit.beamwidth_az

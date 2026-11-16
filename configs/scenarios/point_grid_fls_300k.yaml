@@ -1,0 +1,21 @@
+# Point-target grid for `fls_300k`: targets on a range x bearing fan about the boresight.
+name: point_grid_fls_300k
+sonar: fls_300k
+fidelity: free_field
+environment: {temperature: 12.0, salinity: 35.0}
+platform:
+  position: [0, 0, 10.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 10.0]
+    forward: [1.0, 0.0, 0.0]
+    across: [0.0, 1.0, 0.0]
+    ranges: [20, 80, 150, 250]
+    bearings_deg: [-40, -20, 0, 20, 40]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

@@ -243,7 +243,7 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
 | YAML config-driven chain | | | pending |
-| Readers from a common base class | | | pending |
+| Readers from a common base class | `python/gpusonar/sources/base.py` | `tests/python/test_sources.py` | done (container, WAV); simulator and Holoscan sources pending |
 | GeoTIFF output | | | pending |
 | Debug products per stage | | | pending |
 | Processing log with performance metrics | | | pending |
@@ -252,16 +252,16 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| NED frame, Eq. 2 rotation, lever arms | | | pending |
+| NED frame, Eq. 2 rotation, lever arms | `libs/core/include/sonar/core/vec.hpp`, `libs/core/src/record.cpp` | `tests/cpp/test_geometry.cpp` (`RotationNed.MatchesEquation2EntryByEntry`, `WorldPosition.*`) | done |
 | Origin on the seafloor below the first ping | | | pending |
 | Stripmap grid sized from the beamwidth | | | pending |
-| Sign conventions for roll, pitch, yaw | | | pending |
+| Sign conventions for roll, pitch, yaw | `libs/core/include/sonar/core/vec.hpp` | `tests/cpp/test_geometry.cpp` (`PositiveRollLowersStarboard`, `PositivePitchRaisesBow`, `PositiveYawRotatesToStarboard`) | done |
 
 ### Backprojection and run-time (Sec. II-A, II-C, Eq. 1)
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| Eq. 1 forward model (simulator) | | | pending |
+| Eq. 1 forward model (simulator) | `libs/sim/include/sonar/sim/synth_kernel.hpp` | `tests/python/test_sim.py::test_gaussian_echo_delay_and_amplitude`, `::test_time_domain_synthesis_matches_frequency_domain_oracle`, `::test_receiver_moves_during_reception` | done (CPU; GPU run pending) |
 | Time-domain backprojection, continuous receive motion | | | pending |
 | Stop-and-hop option | | | pending |
 | Slab allocator, stages report need up front | | | pending |

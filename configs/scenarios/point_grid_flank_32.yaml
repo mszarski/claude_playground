@@ -1,0 +1,21 @@
+# Point-target grid for `flank_32`: targets on a range x bearing fan about the boresight.
+name: point_grid_flank_32
+sonar: flank_32
+fidelity: free_field
+environment: {temperature: 10.0, salinity: 35.0}
+platform:
+  position: [0, 0, 30.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 30.0]
+    forward: [0.0, 1.0, 0.0]
+    across: [1.0, 0.0, 0.0]
+    ranges: [1000, 3000, 5000, 9000]
+    bearings_deg: [-40, -20, 0, 20, 40]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

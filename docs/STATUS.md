@@ -8,14 +8,14 @@ Updated at the end of each milestone. Newest facts first within each section.
 | --- | --- | --- |
 | 1 Notes and survey | done | `PAPER_NOTES.md`, `HOLOSCAN_NOTES.md`, `OPEN_SOURCE.md`, `DECISIONS.md`; `tools/test.sh` builds and runs GoogleTest and pytest |
 | 2 Record format and file replay | done | `RECORD_FORMAT.md`; `tests/cpp/test_record_io.cpp`, `tests/python/test_record.py`, `tests/python/test_sources.py` |
-| 3 Simulator, point targets, all sonar configs | in progress | synthesis kernel compiles for host and CUDA; scenarios and tests not yet written |
-| 4–13 | not started | |
+| 3 Simulator, point targets, all sonar configs | done on CPU; GPU half not run | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. `test_gpu_forward_model_matches_cpu` is **skipped** here (no device). |
+| 4 Backprojection kernel, FLS mode | in progress | |
+| 5–13 | not started | |
 
 ## What is next
 
-1. Milestone 3: sonar configs, scenario runner, analytic delay and amplitude tests,
-   frequency-domain oracle.
-2. Milestone 4: backprojection kernel and FLS mode, PICMUS comparison.
+1. Milestone 4: backprojection kernel and FLS mode, PICMUS comparison.
+2. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
 
 ## Environment this was built in, and what that limits
 
@@ -83,6 +83,18 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - The reference transmits 5, 6.25 or 8.33 MHz only. Nothing in it supports sonar carrier
   frequencies; stages 3–6 need their own transmit chain.
 - Docs say probe "L12-5 D"; code says "L7-3".
+
+## Simulator limits so far
+
+- Scenes are point scatterers only. Seafloor, objects, walls as surfaces, sediment and
+  moving-target tracks come with the later milestones that need them.
+- Tiers `free_field` and `image_source` exist. `eigenray` (Bellhop) is milestone 12 and
+  raises `NotImplementedError` until then.
+- Noise is white Gaussian at a given RMS. Ambient spectra, self-noise and array coherence
+  are milestone 12.
+- Arbitrary (sampled) transmit replicas cannot be synthesised yet; CW, LFM and Gaussian can.
+- `fls_300k` needed an analogue gain ramp to register a 300 m echo in 16 bits; the ramp in
+  its config is a placeholder, flagged unconfirmed.
 
 ## Known deviations from the paper
 

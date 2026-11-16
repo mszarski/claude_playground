@@ -1,0 +1,45 @@
+# Stage 1 FLS: Sonosray L12-5 D linear probe on the TI AFE5932EVM reference rig.
+name: l12_5d
+mode: fls
+nominal_sound_speed: 1480.0      # fresh water, about 20 C
+
+array:
+  layout: uniform_line
+  count: 128
+  pitch: 0.0003                  # m; about one wavelength at 5 MHz
+  axis: [0, 1, 0]                # elements run athwartships
+  boresight: [1, 0, 0]           # looking forward
+  element_width: 0.00027         # m; sets the element azimuth beamwidth
+  element_height: 0.004          # m; elevation aperture
+
+transmit:
+  kind: point                    # one wide (diverging) transmit from the array centre
+  lever_arm: [0, 0, 0]
+  beamwidth_az: 0.8              # rad; width of the insonified fan
+  aperture_height: 0.004
+  waveform:
+    type: gaussian               # stands in for the pulser's 2-cycle burst through the probe
+    f_start: 3.75e6
+    f_stop: 6.25e6               # 5 MHz centre, 50% -6 dB bandwidth
+    duration: 2.0e-6
+    amplitude: 1.0               # uncalibrated chain: echo amplitude of a 0 dB target at 1 m
+
+receive:
+  kind: real
+  sample_rate: 50.0e6
+  adc_bits: 12
+  adc_full_scale: 1.0
+  window: {range: [0.75, 2.95]}  # m; about 150k samples
+  # The rig captures 64 of the 128 elements per transmit. The reference's "odd" setting
+  # routes elements 0-63 and "even" routes 64-127 (HOLOSCAN_NOTES.md), so a full
+  # aperture takes two transmits.
+  mux:
+    groups:
+      - {first: 0, count: 64}
+      - {first: 64, count: 64}
+
+unconfirmed:
+  - array.element_width
+  - array.element_height
+  - transmit.waveform        # probe bandwidth at 5 MHz not measured
+  - transmit.beamwidth_az

@@ -1,0 +1,19 @@
+# Stage 5a SAS: the P4-2v probe looking sideways from a motorised rail.
+# Use `base: l12_5d` in an override file to put the linear probe on the rail instead.
+base: p4_2v
+name: sas_rail
+mode: sas
+
+array:
+  axis: [1, 0, 0]                # elements along the rail
+  boresight: [0, 0.9396926, 0.3420201]   # starboard, 20 degrees below horizontal
+
+transmit:
+  beamwidth_az: 1.4
+  boresight: [0, 0.9396926, 0.3420201]
+
+receive:
+  window: {range: [1.0, 5.0]}
+
+rail:
+  step: 0.0005                   # m between pings

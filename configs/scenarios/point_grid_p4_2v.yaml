@@ -1,0 +1,21 @@
+# Point-target grid for `p4_2v`: targets on a range x bearing fan about the boresight.
+name: point_grid_p4_2v
+sonar: p4_2v
+fidelity: free_field
+environment: {temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, 1.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 1.0]
+    forward: [1.0, 0.0, 0.0]
+    across: [0.0, 1.0, 0.0]
+    ranges: [5.5, 7.0, 8.5, 9.5]
+    bearings_deg: [-30, -15, 0, 15, 30]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

@@ -1,0 +1,21 @@
+# Point-target grid for `l12_5d`: targets on a range x bearing fan about the boresight.
+name: point_grid_l12_5d
+sonar: l12_5d
+fidelity: free_field
+environment: {temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, 0.5]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 2, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 0.5]
+    forward: [1.0, 0.0, 0.0]
+    across: [0.0, 1.0, 0.0]
+    ranges: [1.0, 1.5, 2.0, 2.5]
+    bearings_deg: [-15, -7.5, 0, 7.5, 15]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

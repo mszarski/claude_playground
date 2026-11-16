@@ -1,0 +1,21 @@
+# Point-target grid for `sas_rail`: targets on a range x bearing fan about the boresight.
+name: point_grid_sas_rail
+sonar: sas_rail
+fidelity: free_field
+environment: {temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, 0.5]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.1}
+scene:
+  - type: polar_grid
+    label: grid
+    origin: [0, 0, 0.5]
+    forward: [0.0, 0.9396926, 0.3420201]
+    across: [1.0, 0.0, 0.0]
+    ranges: [1.5, 2.5, 3.5, 4.5]
+    bearings_deg: [-10, 0, 10]
+    target_strength_db: 0.0
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

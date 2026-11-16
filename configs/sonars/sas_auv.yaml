@@ -1,0 +1,39 @@
+# Stage 5b SAS: one projector and an along-track receive array on an AUV.
+name: sas_auv
+mode: sas
+nominal_sound_speed: 1500.0
+
+array:
+  layout: uniform_line
+  count: 16
+  pitch: 0.04                    # m; along-track resolution is about pitch / 2
+  axis: [1, 0, 0]
+  boresight: [0, 0.9396926, 0.3420201]   # starboard, 20 degrees down
+  element_width: 0.04
+  element_height: 0.03
+
+transmit:
+  kind: point
+  lever_arm: [0, 0, 0]
+  boresight: [0, 0.9396926, 0.3420201]
+  aperture_width: 0.04
+  aperture_height: 0.03
+  waveform:
+    type: lfm
+    f_start: 180.0e3
+    f_stop: 220.0e3
+    duration: 2.0e-3
+    window_alpha: 0.1
+    amplitude: 1.0
+
+receive:
+  kind: real
+  sample_rate: 1.0e6
+  adc_bits: 16
+  adc_full_scale: 1.0
+  window: {range: [10.0, 150.0]}
+
+unconfirmed:
+  - array
+  - transmit.waveform         # band anywhere in 100-300 kHz
+  - receive.sample_rate
