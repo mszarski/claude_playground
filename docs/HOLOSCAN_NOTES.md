@@ -634,6 +634,34 @@ Adapter inputs available per ping: `event_id`, `rx_side` (0/1), `samples`, host 
 (`steady_clock`), the 2176-byte TX packet, `interval_ns`, the sequence `id`/`config_id`, and the
 `uint8` buffer of `samples * 96` bytes (`US:cpp/include/nvus/runtime.hpp:20-25,90-104`).
 
+### 9.1 What is built on the reference so far
+
+`python/gpusonar/sources/nvus_scanner.py` (`type: nvus_scanner`) drives the reference's
+native runtime unchanged: `compile_plane_waves([0.0], PlaneWaveConfig)` for one unsteered
+transmit per multiplexer half, `Scanner(hardware).run(...)`, `Run.next_observation()`, and
+each observation's buffers through our frame adapter into ping records (plane-wave
+transmit, capture start from the manifest's `rx_start_ticks` and `tx_delay_ticks`, the
+attenuation code and sequence identity kept in the record's metadata).
+
+Verified here (`tests/python/test_nvus_scanner.py`), with the reference's native module
+built from the pinned commit **without** the SDK (`-DNVUS_BUILD_PYTHON=ON`, nanobind 3.0.1)
+and its `FakeHardware`:
+
+- The compiled sequence is two events, "odd" then "even", 65,534 samples each.
+- **The compiler's limit is measured: 0.881 m.** A deeper window raises "Depth requires
+  an unsupported receive window". So the native path cannot give the 2 to 3 m pool window
+  as the reference stands; that needs the Python driver (`Evm.init(samples=...)`), or a
+  change to the reference's `sequence.cpp` (host C++, not FPGA). Owner's call which.
+- A three-repetition run yields six valid records with the right element halves.
+- Simulated echoes written into the frames the reference's loop hands over image at the
+  target (0.6 m on the boresight, within 0.4 mm and 0.15 degrees).
+
+Not verified: the SDK build (`NVUS_WITH_HOLOLINK=ON` against Sensor Bridge 2.7.0 and
+Holoscan 4.4.0 with the reference's six patches) and anything on hardware. On the rig the
+only difference for this source is the hardware object passed in
+(`make_hololink_hardware(config, execution)` as in `examples/scanner_cpp_live.py`).
+`FakeHardware` returns placeholder content, not zeros.
+
 ## 10. Open questions
 
 1. Which SDK line do we build on: the reference's HSB 2.7.0 + Holoscan 4.4.0 + six patches, or

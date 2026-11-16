@@ -7,6 +7,7 @@
 #        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch the source first
 #        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
+#        GPUSONAR_NVUS=1 tools/gpu_job.sh       also build the ultrasound reference's native module (no SDK)
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -47,6 +48,20 @@ if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   (cd /opt/at && make -k all > /opt/at/build.log 2>&1 || true)
   ls -la /opt/at/Bellhop/bellhop.exe /opt/at/Kraken/kraken.exe /opt/at/KrakenField/field.exe
   export GPUSONAR_BELLHOP=/opt/at/Bellhop/bellhop.exe GPUSONAR_KRAKEN_DIR=/opt/at
+fi
+if [ "${GPUSONAR_NVUS:-0}" = "1" ]; then
+  # The NVIDIA ultrasound reference's native module at the pinned commit, without its SDK:
+  # enough for the simulated-hardware tests of the nvus_scanner source.
+  pip install -q nanobind==3.0.1
+  git clone -q https://github.com/nvidia-holoscan/holoscan-ultrasound-imaging /opt/nvus-src
+  git -C /opt/nvus-src checkout -q 24d405e
+  cmake -S /opt/nvus-src -B /opt/nvus-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNVUS_BUILD_PYTHON=ON \
+        -DPython_EXECUTABLE="$(which python3)" > /dev/null
+  cmake --build /opt/nvus-build > /dev/null
+  mkdir -p /opt/nvus-pkg/nvus
+  ln -sf /opt/nvus-src/python/nvus/* /opt/nvus-pkg/nvus/
+  ln -sf /opt/nvus-build/_scanner*.so /opt/nvus-pkg/nvus/
+  export GPUSONAR_NVUS_PYTHON=/opt/nvus-pkg GPUSONAR_NVUS_DIR=/opt/nvus-src
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
   PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}" --pixel "${GPUSONAR_PIXEL:-0.05}" \

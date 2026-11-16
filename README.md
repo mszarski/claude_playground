@@ -58,6 +58,12 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 | `tests/cpp`, `tests/python` | GoogleTest and pytest suites |
 | `docs/` | notes, decisions, record format, status |
 
+## Realistic scenes for every mode
+
+`docs/SCENARIOS.md` shows one or more extended scenes per mode (pool, harbour, seafloor
+objects, wreck, mined seabed, rail, buried objects, flank patrol), each simulated and
+imaged end to end. Reproduce them with `tools/gallery.py` (`--quick` on a CPU).
+
 ## Documents
 
 - [`docs/STATUS.md`](docs/STATUS.md): progress, open questions, deviations.
@@ -212,7 +218,7 @@ Every source ends in the same thing: a `PingRecord` per transmit. What exists fo
 | Popoto modem or any multichannel recorder | record to `.wav`, describe it in a YAML sidecar (geometry, transmit, ping times), `make_source({"type": "wav", ...})` | works on simulated recordings; no real Popoto file has been read |
 | Several recorder boards with their own clocks | as above, then `gpusonar.sync.synchronise(record, reference)` | tested on simulated clocks; reference-signal wiring per the plan (`popoto_4x7`) |
 | PICMUS plane-wave ultrasound sets | `tools/fetch_picmus.py`, `make_source({"type": "picmus", ...})` | works, tested |
-| Holoscan ultrasound rig (TI TX7332 / AFE5832LP board, L12-5 or P4-2v) | the NVIDIA reference acquires; `gpusonar.sources.nvus.frame_to_record` turns each raw frame into a record | decoder verified against the reference's own decoder on synthetic frames; **never run on hardware** |
+| Holoscan ultrasound rig (TI TX7332 / AFE5832LP board, L12-5 or P4-2v) | `make_source({"type": "nvus_scanner", ...})`: the NVIDIA reference's native runtime programs one plane wave per multiplexer half and acquires; each observation becomes two records | runs against the reference's simulated hardware (built from the pinned commit); the reference's compiler limits the window to 0.88 m; **never run on hardware or with the SDK build** |
 | Flank array capture board (32 channels, 24-bit, 64 kSPS) | blocks of samples with a small header, assembled into pings: `make_source({"type": "flank_udp", ...})`, or `PingAssembler.feed(block)` behind any transport | tested against an emulated board over UDP, including lost blocks; the board does not exist yet, so the block layout (`sources/flank_stream.py`) is provisional; not yet run through the Sensor Bridge receiver |
 
 Ultrasound rig, step by step (all on the Holoscan host; nothing here changes FPGA code):
@@ -222,19 +228,22 @@ Ultrasound rig, step by step (all on the Holoscan host; nothing here changes FPG
    Bridge (3.0, Holoscan 5) does not build with it; see `docs/HOLOSCAN_NOTES.md`.
 2. Work through the first-run checklist in `docs/HOLOSCAN_NOTES.md` section 11, receive
    only and with the high-voltage supplies off, before any transmit.
-3. Program one wide transmit per multiplexer half with a long receive window through the
-   reference's own sequence API (section 5 of the notes says which calls and what the
-   limits are).
-4. Hand each raw frame to the adapter with the sonar config and the multiplexer setting:
+3. Build the reference (`./setup` on the rig; for a dry run without hardware,
+   `cmake -S . -B build -DNVUS_BUILD_PYTHON=ON` gives the native module alone) and make its
+   `nvus` package importable, or set `GPUSONAR_NVUS_PYTHON` to the directory holding it.
+4. Acquire through the reference's own sequence API:
 
 ```python
-from gpusonar.sonar import SonarModel
-from gpusonar.sources import nvus
+from gpusonar.sources import make_source
 
-sonar = SonarModel.load("l12_5d")
-record = nvus.frame_to_record(frame_bytes, sonar, "odd", sequence=n)      # elements 0-63
+source = make_source({"type": "nvus_scanner", "sonar": "l12_5d", "repetitions": 100,
+                      "hardware": hardware})        # omit `hardware` for the simulated one
+for record in source:                                # "odd" half, then "even", per repetition
+    ...
 ```
 
+   The window is the longest the reference's compiler accepts, 0.88 m. A 2 to 3 m window
+   needs its slower Python driver or a change to its compiler (`docs/HOLOSCAN_NOTES.md` 9.1).
 5. From there it is the same chain as the simulator: `recon.fan_image([odd, even], ...)`
    or the Holoscan operators above.
 

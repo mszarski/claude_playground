@@ -1,0 +1,209 @@
+{
+  "pool_fls_l12_5d": {
+    "scatterers": 139592,
+    "hidden_fraction": 0.42766061092326213,
+    "object_over_median_db": {
+      "far_wall": 30.976280890529022,
+      "side_wall": 13.127326073857484,
+      "cinder_block": 42.62244101288224,
+      "pipe": 48.02680610937411,
+      "rope": 3.7893354879573526,
+      "wire_1m": 77.48984230320876,
+      "wire_2m": 66.80688873871576
+    },
+    "dynamic_range_db": 78.24273577620833,
+    "seconds": 4.3,
+    "backend": "cuda",
+    "quick": false
+  },
+  "pool_fls_p4_2v": {
+    "scatterers": 182303,
+    "hidden_fraction": 0.6586836201269315,
+    "object_over_median_db": {
+      "far_wall": 48.375373712570834,
+      "step_1": 34.27586054841529,
+      "step_2": 41.21435188534164,
+      "step_3": 39.50053754453976,
+      "ladder_rail_a": 55.42024750409658,
+      "ladder_rail_b": 55.84534797655706,
+      "ladder_rung_1": 52.32510754074134,
+      "ladder_rung_2": 52.48913449285321,
+      "ladder_rung_3": 52.21372088672528,
+      "float_1": 45.67232707399456,
+      "float_2": 47.7201216666645,
+      "float_3": 48.68569386080537
+    },
+    "dynamic_range_db": 63.20605894402447,
+    "seconds": 3.2,
+    "backend": "cuda",
+    "quick": false
+  },
+  "seafloor_objects_fls": {
+    "scatterers": 17947,
+    "hidden_fraction": 0.4027414052487881,
+    "object_over_median_db": {
+      "seafloor": 28.215097453654604,
+      "sphere": 43.43555461207636,
+      "box": 44.22584897346812,
+      "rocks": 35.29732861613307
+    },
+    "dynamic_range_db": 59.265634926200505,
+    "seconds": 0.6,
+    "backend": "cuda",
+    "quick": false
+  },
+  "harbour_fls_750k": {
+    "scatterers": 120224,
+    "hidden_fraction": 0.21460773223316476,
+    "object_over_median_db": {
+      "seafloor": 35.72165166262647,
+      "quay_wall": 55.81247442930963,
+      "piling_1": 56.46520217822592,
+      "piling_2": 58.45768799695524,
+      "piling_3": 57.76546382503467,
+      "piling_4": 55.850949942334964,
+      "piling_5": 56.84466896242653,
+      "piling_6": 56.91800011459054,
+      "mooring_block": 38.06398157039041,
+      "rocks": 34.33210922146507
+    },
+    "dynamic_range_db": 69.57065916129555,
+    "seconds": 3.1,
+    "backend": "cuda",
+    "quick": false
+  },
+  "wreck_sas": {
+    "scatterers": 9180,
+    "pings": 80,
+    "sway_error_rms_wavelengths": 0.08929747952452706,
+    "heave_error_rms_wavelengths": 0.09776498118611494,
+    "sharpness": {
+      "Navigation only": 69.14740753173828,
+      "Estimated motion": 272.3188171386719,
+      "True motion": 278.82147216796875
+    },
+    "object_over_median_db": {
+      "seafloor": 25.24081039428711,
+      "wreck": 29.21204376220703
+    },
+    "seconds": 5.2,
+    "backend": "cuda",
+    "quick": false
+  },
+  "minefield_sas": {
+    "scatterers": 14870,
+    "pings": 80,
+    "sway_error_rms_wavelengths": 0.08047292191208559,
+    "heave_error_rms_wavelengths": 0.08705716621166815,
+    "sharpness": {
+      "Navigation only": 219.5345916748047,
+      "Estimated motion": 320.855224609375,
+      "True motion": 319.06842041015625
+    },
+    "object_over_median_db": {
+      "seafloor": 21.930187225341797,
+      "cylinder_across": 20.04203987121582,
+      "cylinder_along": 22.922760009765625,
+      "sphere": 22.769412994384766,
+      "rocks": 22.13115882873535
+    },
+    "seconds": 8.4,
+    "backend": "cuda",
+    "quick": false
+  },
+  "rail_objects": {
+    "scatterers": 22942,
+    "pings": 151,
+    "object_over_median_db": {
+      "floor": 28.079463958740234,
+      "ball": 29.73883056640625,
+      "pipe": 31.727100372314453,
+      "brick": 30.09381866455078,
+      "pebbles": 27.7086181640625
+    },
+    "sharpness": 145.60906982421875,
+    "seconds": 39.8,
+    "backend": "cuda",
+    "quick": false
+  },
+  "buried_objects": {
+    "scatterers": 4964,
+    "pings": 625,
+    "cylinder_top_depth_m": {
+      "true": 0.25,
+      "refraction_on": 0.25999999999999995,
+      "refraction_off": 0.22999999999999995
+    },
+    "sphere_top_depth_m": {
+      "true": 0.14,
+      "refraction_on": 0.13999999999999999,
+      "refraction_off": 0.12999999999999998
+    },
+    "cylinder_over_clutter_db": 21.117107391357422,
+    "seconds": 30.4,
+    "backend": "cuda",
+    "quick": false
+  },
+  "flank_patrol": {
+    "pings": 6,
+    "detections_per_ping": [
+      5,
+      6,
+      5,
+      7,
+      6,
+      5
+    ],
+    "confirmed_tracks": 5,
+    "targets": {
+      "submarine": {
+        "tracked": true,
+        "position_error_m": 30.4994831467322,
+        "true_velocity": [
+          3.0,
+          0.0
+        ],
+        "track_velocity": [
+          3.0501607260280252,
+          -0.46877225414146695
+        ]
+      },
+      "small_vehicle": {
+        "tracked": false,
+        "position_error_m": 1289.2547616760482,
+        "true_velocity": [
+          0.82,
+          1.82
+        ],
+        "track_velocity": [
+          0.025547551092811892,
+          -0.007552493544632832
+        ]
+      },
+      "wreck": {
+        "tracked": true,
+        "position_error_m": 6.240129893328513,
+        "true_velocity": [
+          0.0,
+          0.0
+        ],
+        "track_velocity": [
+          0.025547551092811892,
+          -0.007552493544632832
+        ]
+      }
+    },
+    "seconds": 239.4,
+    "backend": "cuda",
+    "quick": false
+  },
+  "popoto_trial_1000m": {
+    "peak_range_m": 1000.1214365178889,
+    "peak_bearing_deg": 0.0,
+    "true_range_m": 1000.0,
+    "peak_over_median_db": 30.04544448852539,
+    "seconds": 6.7,
+    "backend": "cuda",
+    "quick": false
+  }
+}

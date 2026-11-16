@@ -16,14 +16,15 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
-| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). The raw-frame adapter for the ultrasound reference, checked against the reference's decoder (`test_nvus_adapter.py`). The low-rate flank source on the host side: block format, ping assembler, UDP source and board emulator (`test_flank_stream.py`), and a Holoscan pipeline fed by the emulated board over UDP that detects its target, run on a T4 (`test_holoscan.py`). Not done: the ultrasound source built against the reference at the pinned commit, the flank source behind the Sensor Bridge receiver and its emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
+| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). The raw-frame adapter for the ultrasound reference, checked against the reference's decoder (`test_nvus_adapter.py`). The low-rate flank source on the host side: block format, ping assembler, UDP source and board emulator (`test_flank_stream.py`), and a Holoscan pipeline fed by the emulated board over UDP that detects its target, run on a T4 (`test_holoscan.py`). The ultrasound source driven through the reference's native runtime at the pinned commit, against its simulated hardware (`test_nvus_scanner.py`); this measured the reference compiler's window limit at 0.88 m. Not done: the reference's SDK build (Sensor Bridge 2.7.0, Holoscan 4.4.0) and any hardware run, a window beyond 0.88 m, the flank source behind the Sensor Bridge receiver and its emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
 | 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). The scattering-function reverberation method (`sim/reverb.py`, D-37): level within 2 dB of the analytic prediction and of the point-scatterer method, array coherence checked. Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise, all with bottom reverberation, and compared with the spherical estimate (`test_long_range.py`). Sea-surface backscatter (Chapman–Harris) and rough-surface reflection loss (`test_surface.py`, D-38). Rays against normal modes (KRAKEN) at 8 kHz: within 0.21 dB from 1 to 10 km (`test_kraken_crosscheck.py`); that check found the arrival cap of the first long-range scenarios too low, now fixed (D-39). Range-dependent bathymetry through Bellhop (a 2-D ridge; `test_propagation.py`). Not done: reverberation from sloping bathymetry, bubble absorption and the APL-UW high-frequency surface model, a Jackson-type bottom model, volume scattering, time spreading, the RAM cross-check, a 3-D seamount. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; sessions that keep samples on the device (D-40), which removed the per-call overhead (A10G SAS 0.83 s → 0.44 s) and brought two-GPU scaling to 1.7×, images bit-identical; a 2 cm SAS image that is compute-bound; baseband conversion and pulse compression on the device with cuFFT (35–48× faster than four CPU threads, D-42) (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; verified GFLOPS figures; handing conditioned samples to the backprojection session without a round trip through host memory; motion estimation is CPU. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## What is next
 
-1. Milestone 11: the ultrasound source built against the reference at its pinned commit;
-   the flank assembler behind the Sensor Bridge receiver and emulator; C++ operators.
+1. Milestone 11: the reference's SDK build and a rig run; a 2 to 3 m window (owner to choose:
+   the reference's Python driver, or a change to its sequence compiler); the flank
+   assembler behind the Sensor Bridge receiver and emulator; C++ operators.
 2. Milestone 13: keep conditioned samples on the device for the backprojection session;
    Spark and Jetson measurements when the hardware is available.
 3. Milestone 12: a Jackson-type bottom, reverberation from sloping bathymetry, time
@@ -143,7 +144,8 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 ## Scenes and scenarios
 
 - Scene objects (`sim/scene.py`, `test_scene_objects.py`): points, polar grids, wires,
-  seafloor patches (flat, sloped, rippled), plates, spheres, boxes, rocks, pool walls.
+  seafloor patches (flat, sloped, rippled), plates, spheres, boxes, cylinders, rocks, pool
+  walls, volume clutter.
   Surface points carry a normal and scatter by Lambert's law about it; spheres and boxes
   cast shadows (a sphere on the seafloor leaves the floor behind it more than 10 dB
   darker in the forward-looking image).
@@ -152,13 +154,18 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   boxes, meshes. Seafloor relief does not shadow itself.
 - Sonar configs beyond the brief's nine: `subbottom`, `popoto_4x7` (the plan's wiring),
   `fls_750k` (the plan's Phase 3 mid-range step; every value a placeholder).
-- Built-in scenarios: a point grid per sonar, `stripmap_points`, `rail_points`,
-  `rail_position_errors`, `pool_wires_l12_5d` (Phase 1 pool test), `seafloor_objects_fls`,
-  `wreck_sas` (large unknown motion), `buried_cylinder`, `flank_target_{1,5,10}km`,
-  `popoto_trial_{100,1000,2000}m`.
-- `wreck_sas` has been run end to end (simulate, motion estimation, image; `RESULTS.md`
-  and `docs/figures/wreck_sas.png`). Its test needs a CUDA device; on a CPU only a
-  2-ping smoke test runs. The pool scenario has no walls or surface.
+- Every mode has a realistic scenario run end to end, with figures and numbers in
+  `docs/SCENARIOS.md` (full size on an A10G) and thinned versions as tests
+  (`test_realistic_scenes.py`): `pool_fls_l12_5d`, `pool_fls_p4_2v`, `harbour_fls_750k`,
+  `seafloor_objects_fls`, `wreck_sas`, `minefield_sas`, `rail_objects`, `buried_objects`,
+  `flank_patrol`, `popoto_trial_*`. Other scenarios: a point grid per sonar,
+  `stripmap_points`, `rail_points`, `rail_position_errors`, `pool_wires_l12_5d`,
+  `buried_cylinder`, `flank_target_{1,5,10}km`.
+- Gaps in those scenes: no surface or floor multipath in the pool scenes; one ping and a
+  stationary platform in the forward-looking ones; isovelocity water in the long-range
+  ones; large surfaces have fewer scatterers than resolution cells; no specular echoes.
+- In `flank_patrol` the −3 dB small vehicle is not detected, and multipath splits the
+  wreck into several tracks (5 confirmed tracks for 2 objects).
 
 ## Motion estimation limits so far
 
