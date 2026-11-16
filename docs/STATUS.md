@@ -14,9 +14,9 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
-| 9 3D near-field imaging | done on CPU; GeoTIFF output missing | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
+| 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
-| 11 Holoscan integration | not started | Holoscan has not been installed anywhere yet. |
+| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). Not done: the ultrasound source built against the reference at the pinned commit, the low-rate flank source, an emulated-source test with the Sensor Bridge emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
 | 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). Not done: the scattering-function reverberation method, surface scattering and loss, a Jackson-type bottom model, volume scattering, time spreading, the KRAKEN/RAM cross-check, the seamount case, re-running the long-range scenarios at the `eigenray` tier. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; multi-GPU tile splitting with an identical image (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; a benchmark large enough not to be overhead-bound (multi-GPU scaling and the fit both need it); verified GFLOPS values. Jetson build notes in `docs/JETSON.md` are untested. |
 
@@ -27,8 +27,6 @@ Updated at the end of each milestone. Newest facts first within each section.
    noise and reverberation.
 2. Kernel driver: keep samples on the device between calls; a larger benchmark.
 3. Milestone 11 needs a Holoscan install (a GPU job image with the SDK would do).
-2. GeoTIFF output (single and multi-layer), debug products per stage and the processing
-   log: the framework items of the paper's Sec. II are still open.
 3. Milestone 8 leftovers (see "Motion estimation limits").
 3. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
@@ -43,8 +41,11 @@ Updated at the end of each milestone. Newest facts first within each section.
   against the independent reference for all three interpolators, and the hardware texture
   position lookup against the software table. Benchmarks on several GPU types are in
   `RESULTS.md`.
+- **Holoscan:** SDK 4.6.0 (`pip install holoscan-cu12`) on the same rented T4; the
+  operator pipelines run there. It cannot be imported in the development container (its
+  CUDA runtime is too old), so those tests skip locally.
 - **Not yet:** the brief's actual targets. Nothing has run on a DGX Spark, a Jetson, or
-  any aarch64 machine, and Holoscan has not been installed anywhere.
+  any aarch64 machine, and nothing has touched Sensor Bridge hardware or its emulator.
 - Motion estimation was not part of the GPU run (that job image has no Ceres); it has no
   GPU code.
 
@@ -145,9 +146,6 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 - Milestone 11: Holoscan operators and sources. Holoscan cannot be installed in the
   build container (no CUDA; wheels are for Python 3.12).
-- Framework: GeoTIFF output, per-stage debug products, the processing log, and a single
-  YAML-driven processing chain (today scenarios are YAML; the processing steps are
-  called from Python).
 - Scenes: faceted seafloor with bathymetry, spheres, plates, rocks, wreck, pool walls
   as surfaces. Built-in scenarios still missing: Phase 1 pool test, flat seafloor with
   objects, wreck with large motion, Popoto trials, flank-array targets in noise.

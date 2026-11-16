@@ -14,6 +14,9 @@ apt-get install -y -qq cmake ninja-build g++ git python3-dev python3-pip python3
 python3 -m venv /opt/venv
 . /opt/venv/bin/activate
 pip install -q numpy scipy h5py pyyaml pytest pybind11 hdf5plugin huggingface_hub
+# Holoscan SDK 4.x (CUDA 12 build) for the operator tests; they skip if this fails.
+pip install -q holoscan-cu12 || echo "holoscan not installed"
+ulimit -s 32768 || true
 if [ -n "${GPUSONAR_TARBALL_REPO:-}" ]; then
   hf download "$GPUSONAR_TARBALL_REPO" gpusonar.tar.gz --type dataset --local-dir /work > /dev/null
   mkdir -p /work/src && tar -xzf /work/gpusonar.tar.gz -C /work/src

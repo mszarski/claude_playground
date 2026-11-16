@@ -122,6 +122,25 @@ For several boards with their own clocks, run `gpusonar.sync.synchronise(record,
 on the raw record first. For an array with unknown channel errors,
 `gpusonar.calibrate.estimate_channel_errors` on pings of known sources.
 
+## Run a whole chain from one YAML file
+
+```bash
+tools/sonar_run.py configs/chains/stripmap_points.yaml
+```
+
+The config names the source, the steps and the outputs (GeoTIFF, a JSON-lines processing
+log with per-stage timings, optional debug products per stage). `python/gpusonar/pipeline.py`
+lists the stages. GeoTIFF output needs `pip install rasterio pyproj`.
+
+## Live pipelines with Holoscan
+
+`python/gpusonar/holoscan_ops.py` wraps the stages as Holoscan operators
+(`PingSourceOp`, `ConditionOp`, `FanImageOp`, `DetectOp`, `DisplayPrepOp`) and
+`FanPipeline` composes them. Needs the Holoscan SDK (`pip install holoscan-cu12` on a
+CUDA 12 machine); see `tests/python/test_holoscan.py` for pipelines fed by the simulator
+and by file replay. Capture from the ultrasound rig and the flank board is not connected
+yet (`docs/STATUS.md`).
+
 ## Reading recorded data
 
 ```python

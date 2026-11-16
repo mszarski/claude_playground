@@ -242,11 +242,11 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| YAML config-driven chain | | | pending |
+| YAML config-driven chain | `python/gpusonar/pipeline.py`, `tools/sonar_run.py`, `configs/chains/` | `tests/python/test_pipeline.py::test_chain_runs_from_a_config_and_produces_the_image` | done |
 | Readers from a common base class | `python/gpusonar/sources/base.py` | `tests/python/test_sources.py` | done (container, WAV); simulator and Holoscan sources pending |
-| GeoTIFF output | | | pending |
-| Debug products per stage | | | pending |
-| Processing log with performance metrics | | | pending |
+| GeoTIFF output | `python/gpusonar/output.py` (rasterio/GDAL; multi-layer for volumes) | `::test_geotiff_is_georeferenced_where_the_targets_are`, `::test_multi_layer_geotiff_for_a_volume` | done; UTM grid convergence ignored |
+| Debug products per stage | `python/gpusonar/pipeline.py` (`output.debug_dir`) | `::test_debug_products_exist_for_every_stage` | done |
+| Processing log with performance metrics | `python/gpusonar/pipeline.py` (JSON lines: config, per-stage time and choices, data issues, real-time factor) | `::test_processing_log_has_timings_choices_and_the_config` | done |
 
 ### Geometry (Sec. II-B, Eq. 2)
 
@@ -301,7 +301,7 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Bistatic ray culling | same `CullKernel` (transmitter and receiver tested separately) | `tests/python/test_culling.py::test_bistatic_culling_tests_transmitter_and_receiver_separately` | done (CPU) |
 | Refraction at the sediment–water interface | `refracted_time` in `libs/recon/include/sonar/recon/backproject_kernel.hpp`; `SedimentProvider` in `python/gpusonar/sim/propagation.py` | `tests/python/test_volume.py::test_refracted_time_is_the_least_time_path`, `::test_cylinder_appears_at_the_correct_depth_with_refraction`, `::test_cylinder_is_misplaced_and_defocused_without_refraction` | done (CPU) |
 | Volume as 2D layers over focus depth | `python/gpusonar/recon/volume.py` (`image_volume`) | `tests/python/test_volume.py` | done (CPU) |
-| Slices and maximum intensity projections | same (`Volume.depth_slice`, `Volume.mip`) | `::test_slices_and_maximum_intensity_projections` | done; multi-layer GeoTIFF not yet |
+| Slices and maximum intensity projections | same (`Volume.depth_slice`, `Volume.mip`) | `::test_slices_and_maximum_intensity_projections` | done; multi-layer GeoTIFF through `output.write_geotiff` |
 
 ### Performance model (Sec. III-C, Fig. 9)
 

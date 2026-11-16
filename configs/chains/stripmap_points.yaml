@@ -1,0 +1,12 @@
+# The ASASIN chain on the simulated stripmap collection: conditioning, whitening,
+# time-varying gain, backprojection with ray culling, dynamic range compression, GeoTIFF.
+# (Navigation is exact in this scenario, so there is no motion-estimation step.)
+source: {type: scenario, name: stripmap_points}
+steps:
+  - {stage: prepare}
+  - {stage: whiten, gamma: 0.1}
+  - {stage: sas_image, ground_range: [36.0, 47.0], pixel: [0.02, 0.04], interp: linear}
+  - {stage: drc, target_median: 0.2}
+output:
+  geotiff: stripmap_points.tif
+  log: stripmap_points.jsonl
