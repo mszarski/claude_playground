@@ -11,7 +11,7 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 3 Simulator, point targets, all sonar configs | done; GPU forward model verified on a T4 | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. |
 | 4 Backprojection kernel, FLS mode | done; GPU kernel verified on a T4; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. PICMUS: resolution measured; published reference numbers and contrast not done. |
 | 5 Run-time optimisations | done; device slab, CUDA culling and hardware texture lookup verified on a T4 | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). |
-| 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
+| 6 Conditioning, pulse compression, post-processing | done; baseband conversion and pulse compression also on the device, verified on T4 and A10G | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. Host FFT is pocketfft; the CUDA build uses cuFFT for baseband conversion and pulse compression (D-42). Whitening, median TVG, calibration and DRC are host only. |
 | 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
@@ -88,8 +88,8 @@ Updated at the end of each milestone. Newest facts first within each section.
 
 ## Differences from the plan
 
-- **Phase 3 (0.5–1 MHz, 64 elements, 20–50 m)** has no sonar config; the brief's list of
-  named sonars skips it.
+- **Phase 3 (0.5–1 MHz, 64 elements, 20–50 m)** is not in the brief's list of named
+  sonars. `fls_750k` covers it with placeholder values.
 - **`sas_auv`** uses a 0.64 m receive array (16 × 4 cm) advancing 0.32 m per ping. The
   plan's example is a 0.32 m array at about 0.8 m/s. Same rule (advance half the array
   per ping), different size.
@@ -133,7 +133,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   host and CUDA backends (`libs/detect`, `detect.cfar(..., backend=...)`).
 - Detection, tracking, MVDR, calibration and sync were tested at the `free_field` tier in
   white noise. Only the SNR of the long-range scenarios has been checked at the `eigenray`
-  tier (with bottom reverberation for `flank_32`).
+  tier, with bottom reverberation.
 - No test runs a full 10 km ping with the 1 s pulse through detection and tracking; the
   10 km case was checked for SNR only.
 - Tracking uses the built-in nearest-neighbour Kalman tracker. Stone Soup was not used.
@@ -182,9 +182,10 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   stage for data that stays at passband.
 - The Doppler bank picks one hypothesis per record (the brief allows "a small bank");
   per-range or per-beam selection is not done.
-- The hardware gain-ramp limits of the reference rig (12 dB, at most about 122 µs on the
-  TX73L64) are documented in `HOLOSCAN_NOTES.md` but not yet a named model in config;
-  `apply_tvg` already makes up whatever ramp the record declares.
+- The reference rig's receive-attenuator ramp is a named model (`gpusonar/hardware.py`,
+  `receive.gain_ramp` in `l12_5d.yaml`): it reproduces the reference's register values
+  and enforces its encoder limits (12 dB, start within 10.23 µs, at most 122.4 µs). It is
+  over before the sonar window opens, so range gain there is digital (`apply_tvg`).
 
 ## Kernel limits so far
 
@@ -194,31 +195,44 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   (about 1 mm and 7° for 0.17 m/s at 200 kHz with a 2 ms, 40 kHz sweep). Nothing
   compensates this yet; the Doppler bank in milestone 6 is where it belongs.
 
-- The sound-speed-profile option (eigenray travel-time table) is not in the kernel yet;
-  delays are straight-ray at one sound speed per ping. Planned with milestone 12.
-- `make_inputs` copies every ping's samples into one buffer per call. Fine for tests;
-  the slab allocator in milestone 5 replaces it.
+- The sound-speed-profile option (eigenray travel-time table) is not in the kernel;
+  delays are straight-ray at one sound speed per ping (plus the flat-interface Snell
+  option). The simulator can bend rays (Bellhop); the imaging side cannot yet.
+- `make_inputs` copies every ping's samples into one host buffer. A session
+  (`BackprojectSession`) does that once and keeps the device copy between calls; a
+  one-shot `backproject` call still does it every time.
 - Real passband input is rejected; convert with `to_baseband` first.
-- The FLS scan sequence for the reference rig, the hardware gain-ramp model with its
-  digital make-up, and multi-angle compounding on our own probes are not done. Plane-wave
+- The FLS scan sequence for the reference rig and multi-angle compounding on our own
+  probes are not done. Plane-wave
   compounding itself works (PICMUS).
 
 ## Simulator limits so far
 
-- Scenes are point scatterers only. Seafloor, objects, walls as surfaces, sediment and
-  moving-target tracks come with the later milestones that need them.
-- Tiers `free_field` and `image_source` exist. `eigenray` (Bellhop) is milestone 12 and
-  raises `NotImplementedError` until then.
-- Noise is white Gaussian at a given RMS. Ambient spectra, self-noise and array coherence
-  are milestone 12.
+- Everything is synthesised from point scatterers (see "Scenes and scenarios" for what
+  that leaves out).
+- Tiers: `free_field`, `image_source`, `sediment` and `eigenray` (Bellhop as an external
+  program; without it those scenarios and tests skip).
 - Arbitrary (sampled) transmit replicas cannot be synthesised yet; CW, LFM and Gaussian can.
+- The scattering-function reverberation assumes a stationary platform, an omnidirectional
+  projector and a flat uniform boundary (D-37).
 - `fls_300k` needed an analogue gain ramp to register a 300 m echo in 16 bits; the ramp in
   its config is a placeholder, flagged unconfirmed.
 
 ## Known deviations from the paper
 
-None in implemented code yet. Planned resolutions of the paper's gaps are in
-`DECISIONS.md` (D-01 to D-25), each tied to a numbered gap in `PAPER_NOTES.md` Part 2.
+Each is argued in `DECISIONS.md`; the paper's own gaps and how they were filled are
+D-01 to D-25, tied to `PAPER_NOTES.md` Part 2. Deviations in implemented code:
+
+- Whitening and median TVG apply the square root of the paper's gain, read as a power
+  gain (D-20); the literal reading is kept as an option and tested not to flatten.
+- The motion solve uses ping positions as parameters instead of per-ping velocities; the
+  minimiser is the same (D-30).
+- The kernel tests each (point, ping) pair against the beam in float32 before the float64
+  delay solve (D-35); images are unchanged.
+- Two device slabs instead of one allocation per run: the resident collection and one per
+  call (D-40).
+- Not in the paper at all: the flank array stages, the long-range propagation and
+  reverberation models, the capture sources.
 
 ## Issue tracker
 

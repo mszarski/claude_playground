@@ -30,6 +30,10 @@ receive:
   adc_bits: 12
   adc_full_scale: 1.0
   window: {range: [0.75, 2.95]}  # m; about 150k samples
+  # The reference's shipped receive-attenuator ramp (./nvus run pw4cm): 12 dB down at 2 us,
+  # back to 0 dB over 10 us. It is over long before this window opens, so range gain is
+  # digital here (HOLOSCAN_NOTES.md section 6).
+  gain_ramp: {model: tx73l64_dtgc, start_db: 12.0, start_us: 2.0, ramp_us: 10.0}
   # The rig captures 64 of the 128 elements per transmit. The reference's "odd" setting
   # routes elements 0-63 and "even" routes 64-127 (HOLOSCAN_NOTES.md), so a full
   # aperture takes two transmits.

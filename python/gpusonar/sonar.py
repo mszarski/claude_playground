@@ -282,6 +282,12 @@ class SonarModel:
         m.channel_board = [int(self.channel_board[i]) for i in group]
         m.hardware_gain_db = float(rx.get("gain_db", 0.0))
         tvg = rx.get("tvg")
+        if rx.get("gain_ramp"):
+            # A named hardware model (gpusonar.hardware) instead of explicit knots.
+            if tvg:
+                raise ValueError("give receive.tvg or receive.gain_ramp, not both")
+            from .hardware import expand_gain_ramp
+            tvg = expand_gain_ramp(rx["gain_ramp"])
         if tvg:
             m.tvg_time = [float(x) for x in tvg["time"]]
             m.tvg_gain_db = [float(x) for x in tvg["gain_db"]]

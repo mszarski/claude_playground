@@ -101,6 +101,24 @@ grid = recon.stripmap_grid(result.records, ground_range=(36.0, 47.0), pixel=(0.0
 image = recon.sas_image(result.records, grid.points)     # along-track x ground range, complex
 ```
 
+On a GPU machine pass `backend=gpusonar.core.Backend.Cuda`: conditioning (cuFFT) and
+backprojection then run on the device. To image the same pings more than once (tiles,
+depth layers, several GPUs, repeated focus trials), build a session so the samples are
+uploaded once:
+
+```python
+from gpusonar import core, motion
+
+recon.prepare(result.records, backend=core.Backend.Cuda)           # baseband + pulse compression
+session = core.BackprojectSession(result.records)
+image = session.backproject(grid.points.reshape(-1, 3), interp="linear", fov_factor=1.13,
+                            backend=core.Backend.Cuda).reshape(grid.points.shape[:2])
+```
+
+With motion that navigation does not know, estimate it from the data first
+(`estimate = motion.estimate_motion(records); motion.apply_motion(records, estimate)`);
+the `wreck_sas` scenario and `docs/figures/wreck_sas.png` show the whole chain.
+
 ## Flank array: range x bearing map, detections, predicted range
 
 ```python

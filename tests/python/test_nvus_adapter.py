@@ -108,3 +108,33 @@ def test_capture_spike_is_zeroed_and_wrong_mux_is_rejected():
     assert nvus.frame_to_record(frame, SonarModel.load("p4_2v"), "odd").samples.n_channels == 64
     with pytest.raises(ValueError, match="mux halves"):
         nvus.frame_to_record(frame, SonarModel.load("p4_2v"), "even")
+
+
+# --- the reference rig's receive attenuator ramp ---------------------------------------------
+
+def test_dtgc_model_reproduces_the_reference_register_values():
+    """Values worked out from the reference's encoder (HOLOSCAN_NOTES.md section 6)."""
+    from gpusonar import hardware
+    shipped = hardware.tx73l64_dtgc(12.0, 2.0, 10.0)
+    assert shipped["reg_0x05"] == 0x3230 and shipped["reg_0x06"] == 0x3015
+    assert shipped["ramp_s"] == pytest.approx(10.08e-6)
+    assert shipped["tvg"] == {"time": [pytest.approx(2e-6), pytest.approx(12.08e-6)], "gain_db": [-12.0, 0.0]}
+    # The longest ramp one segment can hold at 12 dB.
+    assert hardware.tx73l64_dtgc(12.0, 2.0, 122.4)["ramp_s"] == pytest.approx(122.4e-6)
+    for bad in ((12.0, 2.0, 130.0), (12.5, 2.0, 10.0), (12.0, 11.0, 10.0), (0.1, 2.0, 10.0)):
+        with pytest.raises(ValueError):
+            hardware.tx73l64_dtgc(*bad)
+    assert hardware.tx73l64_fixed_attenuation_db(23) == -5.75
+    with pytest.raises(ValueError):
+        hardware.tx73l64_fixed_attenuation_db(49)
+
+
+def test_reference_probe_config_declares_the_ramp_and_it_is_over_before_the_window():
+    from gpusonar.sim import make_pose
+    sonar = SonarModel.load("l12_5d")
+    rec = sonar.make_record(make_pose())
+    assert list(rec.metadata.tvg_gain_db) == [-12.0, 0.0]
+    assert rec.metadata.tvg_time[1] == pytest.approx(12.08e-6)
+    assert rec.samples.start_time > 50 * rec.metadata.tvg_time[1]        # the window opens about 1 ms in
+    with pytest.raises(ValueError, match="not both"):
+        SonarModel.load("l12_5d", {"receive": {"tvg": {"time": [0.0, 1e-3], "gain_db": [0.0, 6.0]}}}).make_record(make_pose())
