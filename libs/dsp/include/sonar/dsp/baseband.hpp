@@ -1,6 +1,7 @@
 // Down-conversion to complex baseband with decimation.
 #pragma once
 
+#include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 
 namespace sonar::dsp {
@@ -20,6 +21,9 @@ struct BasebandOptions {
 /// snapped to an FFT bin; the exact value is written to samples.center_frequency.
 /// Baseband phase is referenced to the transmit instant (t = 0), the convention the
 /// backprojection kernel assumes. Accepts real passband, analytic or baseband input.
-void to_baseband(PingRecord& record, const BasebandOptions& options = {});
+/// On the CUDA backend the transforms run on the device (cuFFT); the result differs from
+/// the host's only by float32 rounding.
+void to_baseband(PingRecord& record, const BasebandOptions& options = {},
+                 Backend backend = Backend::Host, int device = 0);
 
 }  // namespace sonar::dsp

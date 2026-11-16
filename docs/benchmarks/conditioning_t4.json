@@ -1,0 +1,30 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "Tesla T4"
+  ],
+  "modes": {
+    "conditioning": {
+      "dataset": "8 pings x 16 channels x 95334 real samples at 1 MHz",
+      "ping_interval_s": 0.2,
+      "host_s_per_ping": 0.21744862074990579,
+      "host_runs_s_per_ping": [
+        0.21376594125001702,
+        0.21361259100001462,
+        0.21744862074990579
+      ],
+      "host_real_time_factor": 0.919757500922602,
+      "device_s_per_ping": 0.006202822125032981,
+      "device_runs_s_per_ping": [
+        0.023979993125067267,
+        0.006287266750064191,
+        0.006202822125032981
+      ],
+      "device_real_time_factor": 32.243387923837425,
+      "device_max_relative_difference": 2.48624445475798e-07,
+      "speedup": 35.05640116171308
+    }
+  }
+}

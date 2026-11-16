@@ -101,6 +101,37 @@ def flank_dataset(scale):
                         f"map {pts.shape[0]} ranges x {pts.shape[1]} bearings"}
 
 
+def conditioning_benchmark(backend, n_pings=8):
+    """Raw 1 MHz real-passband SAS pings to compressed baseband: per-ping time on the host
+    and on the device, against the 0.2 s ping interval."""
+    sonar = SonarModel.load("sas_auv", {"receive": {"window": {"range": [30.0, 100.0]}}})
+    scene = Scene().add_points([[1.0, 60.0, 20.0]])
+    raw = [simulate_ping(sonar, make_pose(position=(i * 0.32, 0.0, 0.0), velocity=(1.6, 0, 0)), scene,
+                         environment={"sound_speed": 1500.0}, absorption_model="none", adc=False,
+                         sequence=i, backend=backend) for i in range(n_pings)]
+    entry = {"dataset": f"{n_pings} pings x 16 channels x {raw[0].samples.n_samples} real samples at 1 MHz",
+             "ping_interval_s": 0.2}
+    out = {}
+    for name, be in (("host", core.Backend.Host), ("device", backend)):
+        if name == "device" and backend == core.Backend.Host:
+            continue
+        times = []
+        for _ in range(3):
+            recs = [r.copy() for r in raw]
+            t = time.perf_counter()
+            recon.prepare(recs, backend=be)
+            times.append((time.perf_counter() - t) / n_pings)
+        out[name] = recs
+        entry[f"{name}_s_per_ping"] = times[-1]
+        entry[f"{name}_runs_s_per_ping"] = times
+        entry[f"{name}_real_time_factor"] = 0.2 / times[-1]
+    if "device" in out:
+        a, b = out["host"][0].samples.array, out["device"][0].samples.array
+        entry["device_max_relative_difference"] = float(np.abs(a - b).max() / np.abs(a).max())
+        entry["speedup"] = entry["host_s_per_ping"] / entry["device_s_per_ping"]
+    return entry
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", default="cuda" if gs.cuda_available() else "host")
@@ -116,6 +147,14 @@ def main():
     print(f"backend {args.backend}; devices {result['devices'] or 'none'}; scale {args.scale}")
     builders = {"sas": sas_dataset, "fls": fls_dataset, "flank": flank_dataset}
     for mode in args.modes.split(","):
+        if mode == "conditioning":
+            entry = conditioning_benchmark(backend)
+            result["modes"][mode] = entry
+            print(f"[conditioning] {entry['dataset']}")
+            for k, v in entry.items():
+                if k != "dataset":
+                    print(f"    {k}: {v}")
+            continue
         d = builders[mode](args.scale, args.pixel) if mode == "sas" else builders[mode](args.scale)
         pts, kw = d["points"], d["kwargs"]
         flat = pts.reshape(-1, 3)

@@ -61,7 +61,7 @@ Before the change (`docs/benchmarks/before_pretest/`), for the SAS dataset:
   uploading it, which a one-shot call repeats every time. The session figures below
   remove that.
 - Real-time factor is collection time over imaging time for this image size. It excludes
-  conditioning and motion estimation, which run on the CPU.
+  conditioning (see "Conditioning on the device" below) and motion estimation.
 - **FLS:** a 6.4-megapixel fan takes 0.09–0.20 s. The frame rate the rig can deliver is
   not known yet, so no real-time factor is claimed.
 
@@ -96,6 +96,27 @@ runs, images bit-identical to the one-shot calls on every row:
   one-shot figure was 1.13× to 1.20×, bounded by each device's upload). What is left of
   the gap to 2× is not broken down; point and image transfers run per call on each device.
 - Two-GPU scaling was measured on one GPU type only (A10G).
+
+**Conditioning on the device** (`docs/benchmarks/conditioning_*.json`, D-42). Raw
+real-passband SAS pings (16 channels × 95,334 samples at 1 MHz) to compressed complex
+baseband: conversion with decimation, then pulse compression. Per ping, third of three
+runs, against the 0.2 s ping interval:
+
+| Machine | Host (CPU threads) | Device (cuFFT) | Speed-up | Real-time factor on the device | Largest difference from the host result |
+| --- | --- | --- | --- | --- | --- |
+| Tesla T4 job (4 vCPU) | 217 ms (0.92× real time) | 6.2 ms | 35× | 32× | 2.5 × 10⁻⁷ of the peak |
+| A10G job (4 vCPU) | 165 ms (1.2× real time) | 3.4 ms | 48× | 58× | 2.1 × 10⁻⁷ of the peak |
+
+- **Conditioning, not backprojection, was the limit on a whole SAS chain.** On the CPU it
+  barely keeps up with the sonar (and falls behind on the T4 machine), while the kernel
+  images at 100× real time or more. On the device, conditioning plus the session
+  backprojection (0.33 s per 400 pings, culled, A10G) comes to about 4 ms per ping, some
+  50× real time. Motion estimation is still CPU and is not in that figure.
+- The first device call of a run includes making the FFT plans (24 to 34 ms per ping in
+  the first run above); plans are cached per size and device.
+- Samples go to the device and back for each stage; they are not yet handed to the
+  backprojection session without returning to host memory.
+- Whitening, median TVG, calibration and DRC are still host only.
 
 **Power-law fit** (the paper's Fig. 9 model, `y = a·x^b`, runtime against single-precision
 GFLOPS), four GPUs, SAS dataset:

@@ -1,0 +1,30 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "NVIDIA A10G"
+  ],
+  "modes": {
+    "conditioning": {
+      "dataset": "8 pings x 16 channels x 95334 real samples at 1 MHz",
+      "ping_interval_s": 0.2,
+      "host_s_per_ping": 0.16451033237500212,
+      "host_runs_s_per_ping": [
+        0.16652921274999244,
+        0.1813594588749936,
+        0.16451033237500212
+      ],
+      "host_real_time_factor": 1.215729110218433,
+      "device_s_per_ping": 0.0034316380000092295,
+      "device_runs_s_per_ping": [
+        0.034340566374993386,
+        0.0035639618750025193,
+        0.0034316380000092295
+      ],
+      "device_real_time_factor": 58.28120565148833,
+      "device_max_relative_difference": 2.1206646749760694e-07,
+      "speedup": 47.939302564710985
+    }
+  }
+}

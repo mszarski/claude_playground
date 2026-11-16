@@ -93,17 +93,19 @@ def ensure_baseband(records, **kwargs):
     return records
 
 
-def prepare(records, *, compress: bool = True, window: str = "none", **baseband_kwargs):
+def prepare(records, *, compress: bool = True, window: str = "none", backend=core.Backend.Host,
+            device: int = 0, **baseband_kwargs):
     """Make records ready for backprojection, in place: complex baseband, pulse compressed.
 
     Each record remembers that it has been compressed (in metadata.extra_json), so
-    calling this twice is harmless.
+    calling this twice is harmless. With the CUDA backend the transforms run on the
+    device (cuFFT); the records still come back to host memory.
     """
-    ensure_baseband(records, **baseband_kwargs)
+    ensure_baseband(records, backend=backend, device=device, **baseband_kwargs)
     if compress:
         for r in records:
             if not _state(r).get("compressed"):
-                core.pulse_compress(r, window=window)
+                core.pulse_compress(r, window=window, backend=backend, device=device)
                 _set_state(r, compressed=True, replica_window=window)
     return records
 
@@ -118,7 +120,7 @@ def fan_image(records, ranges, bearings_rad, *, interp: str = "sinc", window: st
     plane of the array axis and the boresight.
     """
     records = list(records)
-    prepare(records, compress=compress, window=replica_window)
+    prepare(records, compress=compress, window=replica_window, backend=backend)
     all_pos = np.vstack([r.rx_positions() for r in records])
     _, forward, _, _ = array_frame(records[0])
     origin = all_pos.mean(axis=0)

@@ -1,6 +1,7 @@
 // Pulse compression: matched filtering against the transmitted waveform.
 #pragma once
 
+#include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 
 namespace sonar::dsp {
@@ -23,7 +24,9 @@ struct PulseCompressionOptions {
 /// start is placed at t, so an echo of delay tau peaks at t = tau, with the phase a
 /// baseband impulse at tau would have. The gain is normalised so the peak equals the
 /// echo amplitude: a compressed image keeps the units of the input.
-void pulse_compress(PingRecord& record, const PulseCompressionOptions& options = {});
+/// On the CUDA backend the transforms run on the device (cuFFT).
+void pulse_compress(PingRecord& record, const PulseCompressionOptions& options = {},
+                    Backend backend = Backend::Host, int device = 0);
 
 /// The baseband replica used above, sampled at `sample_rate` (complex, interleaved).
 std::vector<std::complex<float>> make_replica(const Waveform& waveform, double sample_rate,

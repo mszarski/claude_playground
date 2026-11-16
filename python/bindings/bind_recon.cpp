@@ -127,7 +127,7 @@ void bind_recon(py::module_& m) {
   m.def(
       "to_baseband",
       [](PingRecord& record, double center_frequency, double bandwidth, double band_margin,
-         double oversample, double edge_taper) {
+         double oversample, double edge_taper, Backend backend, int device) {
         dsp::BasebandOptions o;
         o.center_frequency = center_frequency;
         o.bandwidth = bandwidth;
@@ -135,10 +135,11 @@ void bind_recon(py::module_& m) {
         o.oversample = oversample;
         o.edge_taper = edge_taper;
         py::gil_scoped_release release;
-        dsp::to_baseband(record, o);
+        dsp::to_baseband(record, o, backend, device);
       },
       py::arg("record"), py::arg("center_frequency") = 0.0, py::arg("bandwidth") = 0.0,
       py::arg("band_margin") = 1.5, py::arg("oversample") = 2.0, py::arg("edge_taper") = 0.1,
+      py::arg("backend") = Backend::Host, py::arg("device") = 0,
       "Convert record.samples in place to complex baseband at a reduced rate.");
 
   m.def("remove_dc", [](PingRecord& r) { dsp::remove_dc(r); }, "Remove each channel's mean.");
@@ -209,7 +210,7 @@ void bind_recon(py::module_& m) {
 
   m.def(
       "pulse_compress",
-      [](PingRecord& record, const std::string& window, double doppler_scale) {
+      [](PingRecord& record, const std::string& window, double doppler_scale, Backend backend, int device) {
         dsp::PulseCompressionOptions o;
         if (window == "none") {
           o.window = dsp::ReplicaWindow::None;
@@ -222,9 +223,10 @@ void bind_recon(py::module_& m) {
         }
         o.doppler_scale = doppler_scale;
         py::gil_scoped_release release;
-        dsp::pulse_compress(record, o);
+        dsp::pulse_compress(record, o, backend, device);
       },
       py::arg("record"), py::arg("window") = "none", py::arg("doppler_scale") = 1.0,
+      py::arg("backend") = Backend::Host, py::arg("device") = 0,
       "Matched-filter record.samples (complex baseband) in place. An echo of delay tau\n"
       "peaks at time tau with its amplitude preserved.");
 

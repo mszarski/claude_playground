@@ -1,10 +1,13 @@
-add_library(sonar_dsp
-  src/fft.cpp
-  src/baseband.cpp
-  src/conditioning.cpp
-  src/pulse_compression.cpp)
+set(_dsp_sources src/fft.cpp src/baseband.cpp src/conditioning.cpp src/pulse_compression.cpp)
+if(SONAR_HAVE_CUDA)
+  list(APPEND _dsp_sources src/dsp_cuda.cu)
+endif()
+add_library(sonar_dsp ${_dsp_sources})
 add_library(sonar::dsp ALIAS sonar_dsp)
 target_include_directories(sonar_dsp PUBLIC include)
 # Vendored header: keep its warnings out of our build.
 target_include_directories(sonar_dsp SYSTEM PRIVATE ${CMAKE_SOURCE_DIR}/third_party/pocketfft)
 target_link_libraries(sonar_dsp PUBLIC sonar::core PRIVATE sonar_warnings)
+if(SONAR_HAVE_CUDA)
+  target_link_libraries(sonar_dsp PRIVATE CUDA::cufft)
+endif()

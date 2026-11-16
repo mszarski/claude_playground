@@ -341,3 +341,63 @@ def test_scan_conversion_puts_a_fan_pixel_at_its_cartesian_position():
     assert out.max() == pytest.approx(1.0, abs=0.02)
     # Outside the fan is filled, not extrapolated.
     assert out[np.argmin(np.abs(y - 9.0)), 0] == 0.0
+
+
+# --- conditioning on the device (cuFFT) against the host ------------------------------------
+
+needs_cuda = pytest.mark.skipif(not gs.cuda_available(), reason="no CUDA device")
+
+
+def _raw_ping(name, overrides=None, target=(1.5, 0.05, 0.0)):
+    sonar = SonarModel.load(name, overrides)
+    return simulate_ping(sonar, make_pose(), Scene().add_points([list(target)]),
+                         environment={"sound_speed": 1480.0}, absorption_model="none", noise_rms=1e-3,
+                         rng=np.random.default_rng(8))
+
+
+@needs_cuda
+@pytest.mark.parametrize("name, overrides, target", [
+    ("l12_5d", {"receive": {"window": {"range": [1.4, 1.6]}}}, (1.5, 0.05, 0.0)),           # real passband in
+    ("flank_32", {"receive": {"window": {"range": [900.0, 1100.0]}}}, (0.0, 1000.0, 0.0)),  # long LFM
+    ("sas_auv", {"receive": {"kind": "baseband", "sample_rate": 100e3, "window": {"range": [38.0, 52.0]}}},
+     (0.0, 42.0, 15.0)),                                                                     # complex in
+])
+def test_device_conditioning_matches_the_host(name, overrides, target):
+    host = _raw_ping(name, overrides, target)
+    dev = host.copy()
+    gs.core.to_baseband(host)
+    gs.core.to_baseband(dev, backend=gs.core.Backend.Cuda)
+    assert dev.samples.array.shape == host.samples.array.shape
+    assert dev.samples.sample_rate == host.samples.sample_rate
+    assert dev.samples.center_frequency == host.samples.center_frequency
+    scale = np.abs(host.samples.array).max()
+    assert np.abs(dev.samples.array - host.samples.array).max() < 2e-4 * scale
+    gs.core.pulse_compress(host, window="hann")
+    gs.core.pulse_compress(dev, window="hann", backend=gs.core.Backend.Cuda)
+    scale = np.abs(host.samples.array).max()
+    assert np.abs(dev.samples.array - host.samples.array).max() < 2e-4 * scale
+    # Repeated calls reuse the cached plans and give the same answer.
+    again = _raw_ping(name, overrides, target)
+    gs.core.to_baseband(again, backend=gs.core.Backend.Cuda)
+    gs.core.pulse_compress(again, window="hann", backend=gs.core.Backend.Cuda)
+    np.testing.assert_array_equal(again.samples.array, dev.samples.array)
+
+
+@needs_cuda
+def test_image_from_device_conditioning_matches():
+    from gpusonar import recon
+    a = [_raw_ping("l12_5d", {"receive": {"window": {"range": [1.4, 1.6]}}})]
+    b = [a[0].copy()]
+    ranges = np.linspace(1.47, 1.53, 121)
+    bearings = np.radians(np.linspace(-2.0, 6.0, 81))
+    host = recon.fan_image(a, ranges, bearings, interp="linear").image
+    dev = recon.fan_image(b, ranges, bearings, interp="linear", backend=gs.core.Backend.Cuda).image
+    assert np.abs(dev - host).max() < 1e-3 * np.abs(host).max()
+
+
+def test_conditioning_without_a_cuda_build_says_so():
+    if gs.cuda_compiled():
+        pytest.skip("built with CUDA")
+    rec = _raw_ping("l12_5d", {"receive": {"window": {"range": [1.4, 1.6]}}})
+    with pytest.raises(RuntimeError, match="CUDA"):
+        gs.core.to_baseband(rec, backend=gs.core.Backend.Cuda)

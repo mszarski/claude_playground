@@ -8,7 +8,13 @@
 
 namespace sonar::dsp {
 
-void to_baseband(PingRecord& record, const BasebandOptions& opt) {
+#if SONAR_HAVE_CUDA
+void baseband_cuda(const float* in, bool is_real, std::int64_t n_channels, std::int64_t n,
+                   std::int64_t n_out, std::int64_t k0, std::int64_t half, float taper_bins,
+                   float gain, std::complex<float> rot, float* out, int device);
+#endif
+
+void to_baseband(PingRecord& record, const BasebandOptions& opt, Backend backend, int device) {
   Samples& s = record.samples;
   if (s.n_samples <= 0 || s.n_channels <= 0) return;
   if (s.data.size() != s.expected_size()) throw std::invalid_argument("to_baseband: samples not allocated");
@@ -49,6 +55,15 @@ void to_baseband(PingRecord& record, const BasebandOptions& opt) {
 
   std::vector<float> out(static_cast<std::size_t>(s.n_channels) * n_out * 2);
   const auto sn = static_cast<std::int64_t>(n);
+  if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+    baseband_cuda(s.data.data(), is_real, s.n_channels, sn, static_cast<std::int64_t>(n_out), k0, half,
+                  static_cast<float>(taper_bins), gain, rot, out.data(), device);
+#else
+    throw std::runtime_error("to_baseband: built without the CUDA backend");
+#endif
+  } else {
+  (void)device;
   parallel_for_host(s.n_channels, [&](std::int64_t c) {
     std::vector<std::complex<float>> x(n);
     if (is_real) {
@@ -77,6 +92,7 @@ void to_baseband(PingRecord& record, const BasebandOptions& opt) {
     const float undo = static_cast<float>(n_out);  // fft(inverse) divided by n_out
     for (std::size_t i = 0; i < n_out; ++i) dst[i] = y[i] * (gain * undo) * rot;
   });
+  }
 
   s.data = std::move(out);
   s.kind = SampleKind::ComplexBaseband;

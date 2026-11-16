@@ -376,3 +376,12 @@ primitives, once per ping, on the host. This gives highlights, shadows and speck
 is what imaging and detection tests need; it does not give specular glints, diffraction
 or resonances, and it is not a substitute for a boundary-element or k-Wave model of a
 target.
+
+### D-42 Conditioning on the device with cuFFT
+Baseband conversion and pulse compression run on the CUDA backend with cuFFT for the
+transforms and small kernels between them (`libs/dsp/src/dsp_cuda.cu`); the host path
+keeps pocketfft. The arithmetic is the same and results agree to 2 × 10⁻⁷ of the peak.
+Plans are cached per (device, length, batch) for the life of the process, and a lock is
+held while a plan executes, so two threads conditioning on one device take turns. cuFFT
+ships with the CUDA toolkit (NVIDIA licence, linked only into the CUDA build). Whitening,
+median TVG, calibration and DRC remain host code: they are cheap next to the transforms.

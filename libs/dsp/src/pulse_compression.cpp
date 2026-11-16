@@ -63,7 +63,12 @@ std::vector<std::complex<float>> make_replica(const Waveform& waveform, double s
   return out;
 }
 
-void pulse_compress(PingRecord& record, const PulseCompressionOptions& opt) {
+#if SONAR_HAVE_CUDA
+void pulse_compress_cuda(float* data, std::int64_t n_channels, std::int64_t n, std::int64_t n_fft,
+                         const std::complex<float>* h, int device);
+#endif
+
+void pulse_compress(PingRecord& record, const PulseCompressionOptions& opt, Backend backend, int device) {
   Samples& s = record.samples;
   if (s.kind != SampleKind::ComplexBaseband) {
     throw std::invalid_argument("pulse_compress: samples must be complex baseband; run to_baseband first");
@@ -85,6 +90,16 @@ void pulse_compress(PingRecord& record, const PulseCompressionOptions& opt) {
   fft(h, false);
   for (auto& v : h) v = std::conj(v);
 
+  if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+    pulse_compress_cuda(s.data.data(), s.n_channels, s.n_samples, static_cast<std::int64_t>(n_fft), h.data(),
+                        device);
+    return;
+#else
+    throw std::runtime_error("pulse_compress: built without the CUDA backend");
+#endif
+  }
+  (void)device;
   parallel_for_host(s.n_channels, [&](std::int64_t c) {
     std::vector<std::complex<float>> x(n_fft, {0.0F, 0.0F});
     std::complex<float>* ch = s.channel_complex(c);

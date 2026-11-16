@@ -116,7 +116,7 @@ Roles: depend / vendor / port / test-oracle only / reference reading only / reje
 | pocketfft (C++) | github.com/mreineck/pocketfft, branch `cpp` (default) | BSD 3-clause (LICENSE.md, Max-Planck-Society) | 2026-10-18 (HEAD 4d865cb) | — | cloned; single-header c2c FFT **built and run here** | vendor (CPU FFT) | One header, `pocketfft_hdronly.h`; no PyPI package named `pocketfft` |
 | KISS FFT | github.com/mborgerding/kissfft | BSD-3-Clause (COPYING) | 2026-11-15 (HEAD 57a7017) | — | cloned only; apt `libkissfft-dev` candidate 131.1.0 | reject (pocketfft preferred) or fallback | — |
 | FFTW | github.com/FFTW/fftw3 | **GPL-2.0-or-later** (COPYING) | 2026-10-17 (HEAD a7b679c) | — | cloned only; apt candidate 3.3.10 | reject for core; test-oracle only with sign-off | pyFFTW's own wrapper is BSD-3 per PyPI but it still links FFTW |
-| cuFFT | NVIDIA CUDA toolkit | proprietary: PyPI `nvidia-cufft-cu12` metadata says `LicenseRef-NVIDIA-Proprietary`; EULA text unverified | PyPI 11.4.1.4 | — | PyPI metadata only | depend (GPU FFT, dynamic link) | — |
+| cuFFT | NVIDIA CUDA toolkit | proprietary: PyPI `nvidia-cufft-cu12` metadata says `LicenseRef-NVIDIA-Proprietary`; EULA text unverified | PyPI 11.4.1.4 | — | in use since D-42: the toolkit's `libcufft` (11.x with CUDA 12), run on T4 and A10G | depend (GPU FFT, dynamic link, CUDA build only) | Baseband conversion and pulse compression; pocketfft stays the host FFT |
 
 ## 3. Notes on the non-obvious items
 

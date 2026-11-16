@@ -80,7 +80,7 @@ def sas_image(records, points: np.ndarray, *, interp: str = "sinc", fov_factor: 
     more of the along-track ambiguities.
     """
     records = list(records)
-    prepare(records, compress=compress, window=replica_window)
+    prepare(records, compress=compress, window=replica_window, backend=backend)
     shape = points.shape[:2]
     kw = {}
     if cull_block > 0 and fov_factor > 0:
