@@ -304,6 +304,9 @@ as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
 | Bellhop provider lookup between grid nodes against a direct Bellhop run, 8 kHz | delays within 20 µs | 20 µs |
 | Echo of a target at 1 km through the `eigenray` tier against the `image_source` tier | envelope correlation above 0.9, energy within 1 dB | — |
 | Bottom reverberation level against time, Lambert seabed, against the analytic prediction | within 2 dB in every range bin, mean within 1 dB | 2 dB |
+| Scattering-function reverberation level against the same analytic prediction (6 pings averaged) | within 2 dB in every range bin, mean within 1 dB | 2 dB |
+| Scattering-function against point-scatterer reverberation, same seabed | within 2 dB in every range block | — |
+| Coherence of generated reverberation between hydrophones 1 and 2 spacings apart | J0(kd) within 0.1 | — |
 | Reverberation envelope statistics | Rayleigh: mean within 3%, scintillation index 1 ± 0.25 | — |
 | Clutter with patch texture (shape 1) | scintillation index 2.0–2.6 against 1.2 without | K-distributed "can be made" |
 | Generated ambient noise against the requested spectrum, 0.5–30 kHz | within 1 dB | — |
@@ -315,7 +318,7 @@ as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
   provider of ours claims a refracting profile except the Bellhop one, so there is nothing
   independent to compare there. The seamount case is not run: range-dependent bathymetry
   is not supported yet.
-- Not done: the scattering-function reverberation method, surface scattering and loss
+- Not done: surface scattering and loss
   (Chapman–Harris, bubbles), a Jackson-type bottom model, volume scattering, time
   spreading, the KRAKEN/RAM cross-check at 6–10 kHz, and re-running the long-range
   scenarios at the `eigenray` tier. TR 0702 has no fully specified worked example to
@@ -329,23 +332,29 @@ Source: `tests/python/test_long_range.py`, scenarios `flank_target_{1,5,10}km` a
 `popoto_trial_{100,1000,2000}m`. Bellhop arrivals (up to 8 per leg, so up to 64 two-way
 paths per target), isovelocity water over a flat fluid bottom (1600 m/s, 1.8 g/cm³,
 0.5 dB/λ), Ainslie–McColm absorption at 12 °C, ambient noise with isotropic-field
-coherence across the array, +10 dB target, one ping, conventional beamforming.
+coherence across the array, +10 dB target, one ping, conventional beamforming. The flank
+scenarios add bottom reverberation by the scattering-function method (Lambert, −27 dB);
+the Popoto ones have none.
 "Spherical estimate" is the sonar-equation tool with the same source, noise and target.
 
-| Scenario | Water depth | Output SNR, eigenray tier | Spherical estimate | Difference |
-| --- | --- | --- | --- | --- |
-| `flank_32`, 200 dB source, 1 s LFM, noise 45 dB: 1 km | 100 m | 58.4 dB | 58.8 dB | −0.4 dB |
-| 5 km | 100 m | 29.9 dB | 25.7 dB | +4.2 dB |
-| 10 km | 100 m | 17.6 dB | 7.2 dB | +10.5 dB |
-| `popoto_8`, 190 dB source, 0.5 s LFM, noise 38 dB: 100 m | 30 m | 83.1 dB | 86.9 dB | −3.8 dB |
-| 1 km | 30 m | 39.3 dB | 36.6 dB | +2.7 dB |
-| 2 km | 30 m | 22.1 dB | 13.1 dB | +9.0 dB |
+| Scenario | Water depth | Output SNR, eigenray tier | Same, without reverberation | Spherical estimate (noise only) | Difference |
+| --- | --- | --- | --- | --- | --- |
+| `flank_32`, 200 dB source, 1 s LFM, noise 45 dB: 1 km | 100 m | 28.6 dB | 58.4 dB | 58.8 dB | −30.1 dB |
+| 5 km | 100 m | 29.5 dB | 29.9 dB | 25.7 dB | +3.8 dB |
+| 10 km | 100 m | 17.9 dB | 17.6 dB | 7.2 dB | +10.7 dB |
+| `popoto_8`, 190 dB source, 0.5 s LFM, noise 38 dB: 100 m | 30 m | — | 83.1 dB | 86.9 dB | −3.8 dB |
+| 1 km | 30 m | — | 39.3 dB | 36.6 dB | +2.7 dB |
+| 2 km | 30 m | — | 22.1 dB | 13.1 dB | +9.0 dB |
 
 - At long range the shallow-water duct keeps more energy than spherical spreading
   assumes, so the simple estimate is pessimistic there by up to 10 dB in this environment.
   At short range multipath interference can cost a few dB (−3.8 dB at 100 m).
-- **This is not a detection-range prediction.** There is no reverberation in these runs
-  (at long range in shallow water it, not ambient noise, usually sets the limit), no
+- With this seabed and source the flank array is reverberation-limited at 1 km (30 dB
+  below the noise-only estimate) and noise-limited at 5 and 10 km. The 0.3–0.4 dB changes
+  at 5 and 10 km are within one noise draw. The balance depends directly on the assumed
+  −27 dB Lambert parameter and 45 dB noise level, neither measured.
+- **This is not a detection-range prediction.** Reverberation is bottom only, with a
+  projector taken as omnidirectional; there is no surface reverberation, no
   surface roughness loss, no platform self-noise, one noise draw, and an idealised flat
   bottom. The plan's own caveat applies: each of those can move the result by 10 dB.
 - The SNR is the peak within 60 ms after the first arrival over the mean noise power on

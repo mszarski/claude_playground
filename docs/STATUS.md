@@ -17,14 +17,13 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
 | 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). Not done: the ultrasound source built against the reference at the pinned commit, the low-rate flank source, an emulated-source test with the Sensor Bridge emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
-| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise and compared with the spherical estimate (`test_long_range.py`). Not done: the scattering-function reverberation method (so the long-range runs have no reverberation), surface scattering and loss, a Jackson-type bottom model, volume scattering, time spreading, the KRAKEN/RAM cross-check, the seamount case. |
+| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). The scattering-function reverberation method (`sim/reverb.py`, D-37): level within 2 dB of the analytic prediction and of the point-scatterer method, array coherence checked. Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise, the flank ones with bottom reverberation, and compared with the spherical estimate (`test_long_range.py`). Not done: reverberation in the Popoto trial scenarios, surface scattering and loss, a Jackson-type bottom model, volume scattering, time spreading, the KRAKEN/RAM cross-check, the seamount case. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; multi-GPU tile splitting with an identical image (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; a benchmark large enough not to be overhead-bound (multi-GPU scaling and the fit both need it); verified GFLOPS values. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## What is next
 
-1. Milestone 12: the scattering-function reverberation method for the flank array,
-   surface models, then the long-range scenarios at the `eigenray` tier with the new
-   noise and reverberation.
+1. Milestone 12: surface scattering and loss, the KRAKEN cross-check, a Jackson-type
+   bottom, the seamount case.
 2. Kernel driver: keep samples on the device between calls; a larger benchmark.
 3. Milestone 11 needs a Holoscan install (a GPU job image with the SDK would do).
 3. Milestone 8 leftovers (see "Motion estimation limits").
@@ -131,7 +130,7 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `sonar_equation.py`) are Python/NumPy, not C++/CUDA, and not Holoscan operators.
 - Detection, tracking, MVDR, calibration and sync were tested at the `free_field` tier in
   white noise. Only the SNR of the long-range scenarios has been checked at the `eigenray`
-  tier, and without reverberation.
+  tier (with bottom reverberation for `flank_32`).
 - No test runs a full 10 km ping with the 1 s pulse through detection and tracking; the
   10 km case was checked for SNR only.
 - Tracking uses the built-in nearest-neighbour Kalman tracker. Stone Soup was not used.

@@ -317,3 +317,15 @@ argument of D-06 is untouched: accepted pairs go through the same split-precisio
 ### D-36 Bellhop time convention
 Bellhop's arrival phases follow exp(−iωt). This suite uses exp(+iωt) (an echo of delay τ
 carries exp(−j2πfτ)), so arrival amplitudes are conjugated on reading.
+
+### D-37 Two reverberation methods
+Imaging modes use point scatterers on the boundary (`scene.seafloor_patch`): the same
+scatterers are seen from every ping, which synthetic aperture processing needs. Long-range
+modes use the scattering-function method (`sim/reverb.py`): reverberation power against
+time from eigenray pairs over range rings, realised as Gaussian sequences per azimuth
+sector and delayed to each hydrophone. It costs the same at 10 km as at 100 m but draws
+new noise each ping, so it must not be used for SAS. Only paths travelling towards the
+boundary count as incident. The projector is taken as omnidirectional in azimuth, the
+platform as stationary, and arrival elevation is ignored when steering to the hydrophones;
+all three are limits to lift, not physics choices. The two methods agree within 2 dB on a
+flat uniform seabed (`test_reverberation.py`).

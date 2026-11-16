@@ -6,7 +6,7 @@ from .propagation import (EigenrayProvider, EigenraySet, FreeFieldProvider, Imag
 from .bellhop import (BellhopError, BellhopProvider, OceanEnvironment, find_bellhop, munk_profile,
                       run_bellhop)
 from .propagation import rayleigh_reflection
-from . import noise
+from . import noise, reverb
 from .scene import Scene, build_scene, lambert_rms_amplitude, polar_grid, seafloor_patch
 from .simulator import (Collection, ScenarioResult, make_pose, run_scenario, simulate_collection,
                         simulate_ping)

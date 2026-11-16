@@ -21,4 +21,7 @@ absorption: ainslie_mccolm
 receiver:
   adc: false
   ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz
+# Bottom reverberation by the scattering-function method; Lambert, Mackenzie's -27 dB.
+reverberation:
+  - {boundary_z: 100.0, mu_db: -27.0}
 seed: 1

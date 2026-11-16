@@ -49,11 +49,15 @@ def test_flank_target_at_the_eigenray_tier(name, range_m, capsys):
               f"difference {snr - spherical:+.1f} dB")
     # Shallow-water ducting keeps more energy than spherical spreading predicts; the gap
     # opens with range. Multipath also splits the echo, so the peak gains less than the
-    # energy does. Bounds are loose: this is a comparison, not a calibration.
-    assert snr > spherical - 3.0
+    # energy does. The scenarios include bottom reverberation (scattering-function
+    # method). Bounds are loose: this is a comparison, not a calibration.
     if range_m >= 5000.0:
-        assert snr > spherical + 3.0
-    assert snr < spherical + 30.0
+        # Noise-limited: bottom reverberation is below the ambient noise here.
+        assert snr > spherical + 1.0
+        assert snr < spherical + 30.0
+    else:
+        # Reverberation-limited: the spherical estimate in noise alone is far too optimistic.
+        assert 15.0 < snr < spherical - 10.0
 
 
 @pytest.mark.parametrize("name, range_m", [("popoto_trial_100m", 100.0), ("popoto_trial_1000m", 1000.0),

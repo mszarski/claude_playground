@@ -48,7 +48,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   rng: np.random.Generator | None = None, tx_pose: "core.Pose | None" = None,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
-                  noise_spectrum=None,
+                  noise_spectrum=None, reverberation: list | None = None,
                   backend=core.Backend.Host) -> "core.PingRecord":
     """Simulate one transmit and return its record."""
     env = resolve_environment(environment, depth=pose.position[2])
@@ -76,6 +76,16 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                              absorption=absorption_table(sonar, env, absorption_model),
                              spreading=spreading, backend=backend,
                              platform_acceleration=tuple(float(a) for a in acceleration))
+    for item in reverberation or []:
+        # Boundary reverberation by the scattering-function method (sim/reverb.py).
+        from . import reverb
+        w = sonar.waveform_config
+        fc = 0.5 * (float(w["f_start"]) + float(w.get("f_stop", w["f_start"])))
+        alpha = float(acoustics.absorption(fc, env.get("temperature", 10.0), env.get("salinity", 35.0),
+                                           env.get("depth", 0.0), env.get("ph", 8.0), absorption_model))
+        reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item["mu_db"]),
+                                 rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
+                                 absorption_db_per_m=alpha, max_range=item.get("max_range"))
     receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)
     if channel_errors is not None:
@@ -281,6 +291,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             absorption_model=cfg.get("absorption", "francois_garrison"),
             noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
             noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
+            reverberation=cfg.get("reverberation"),
             rng=rng, backend=backend))
 
     if output:
