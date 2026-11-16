@@ -5,6 +5,7 @@
 #
 # Usage: tools/gpu_job.sh            from a checkout
 #        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch the source first
+#        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
@@ -27,8 +28,19 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=ON \
       -DPython3_EXECUTABLE="$(which python3)"
 cmake --build build
 if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
-  PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}"
+  PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}" --pixel "${GPUSONAR_PIXEL:-0.05}" \
+      --modes "${GPUSONAR_MODES:-sas,fls,flank}"
   exit 0
+fi
+if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
+  # External GPL-3 propagation programs, used as separate processes by the eigenray tier
+  # and as test oracles (docs/OPEN_SOURCE.md). Built outside the source tree; never linked.
+  apt-get install -y -qq gfortran make > /dev/null
+  git clone -q --depth 1 https://github.com/oalib-acoustics/Acoustics-Toolbox /opt/at
+  sed -i 's/-mcpu=apple-m2/-march=native/' /opt/at/Makefile
+  (cd /opt/at && make -k all > /opt/at/build.log 2>&1 || true)
+  ls -la /opt/at/Bellhop/bellhop.exe /opt/at/Kraken/kraken.exe /opt/at/KrakenField/field.exe
+  export GPUSONAR_BELLHOP=/opt/at/Bellhop/bellhop.exe GPUSONAR_KRAKEN_DIR=/opt/at
 fi
 echo "=== ctest (C++ suites) ==="
 ctest --test-dir build --output-on-failure -E pytest | tail -5

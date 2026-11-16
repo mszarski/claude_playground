@@ -58,10 +58,13 @@ def image_volume(records, x, y, depths, *, interface_z: float | None = None,
     kw = {}
     if cull_block > 0 and fov_factor > 0:
         kw = dict(cull_block=cull_block, grid_shape=X.shape)
+    # One session for all layers: on a GPU the samples are uploaded once.
+    from .multigpu import make_session
+    session = make_session(records, kw)
     layers = []
     for z in depths:
         pts = np.column_stack([X.ravel(), Y.ravel(), np.full(X.size, z)])
-        img = core.backproject(records, pts, interp=interp, fov_factor=fov_factor, stop_and_hop=True,
+        img = session.backproject(pts, interp=interp, fov_factor=fov_factor, stop_and_hop=True,
                                refraction=refraction, backend=backend, **kw)
         layers.append(img.reshape(X.shape))
     return Volume(np.stack(layers), depths, x, y)

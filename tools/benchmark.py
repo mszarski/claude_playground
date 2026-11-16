@@ -46,7 +46,7 @@ def timed3(fn):
     return times[-1], times, out
 
 
-def sas_dataset(scale):
+def sas_dataset(scale, pixel=0.05):
     n_pings = max(int(round(200 * scale)), 20)
     advance, interval, tilt = 0.32, 0.2, np.radians(20.0)
     sonar = SonarModel.load("sas_auv", {
@@ -57,7 +57,6 @@ def sas_dataset(scale):
                              scene, environment={"sound_speed": 1500.0}, absorption_model="none", adc=False,
                              sequence=i) for i in range(n_pings)]
     recon.prepare(records)
-    pixel = 0.05
     x = np.arange(0.0, n_pings * advance, pixel)
     y = np.arange(32.0, 92.0, pixel)
     X, Y = np.meshgrid(x, y, indexing="ij")
@@ -107,6 +106,7 @@ def main():
     ap.add_argument("--backend", default="cuda" if gs.cuda_available() else "host")
     ap.add_argument("--scale", type=float, default=1.0)
     ap.add_argument("--modes", default="sas,fls,flank")
+    ap.add_argument("--pixel", type=float, default=0.05, help="SAS pixel size, m")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
     backend = core.Backend.Cuda if args.backend == "cuda" else core.Backend.Host
@@ -116,7 +116,7 @@ def main():
     print(f"backend {args.backend}; devices {result['devices'] or 'none'}; scale {args.scale}")
     builders = {"sas": sas_dataset, "fls": fls_dataset, "flank": flank_dataset}
     for mode in args.modes.split(","):
-        d = builders[mode](args.scale)
+        d = builders[mode](args.scale, args.pixel) if mode == "sas" else builders[mode](args.scale)
         pts, kw = d["points"], d["kwargs"]
         flat = pts.reshape(-1, 3)
         n_records = sum(r.samples.n_channels for r in d["records"])
@@ -130,6 +130,16 @@ def main():
         entry["time_s"], entry["runs_s"] = t, all_t
         entry["real_time_factor"] = d["collection_time"] / t
         entry["pixel_records_per_s"] = flat.shape[0] * n_records / t
+        # The same work through a session: inputs built once, samples resident on the device.
+        t0 = time.perf_counter()
+        session = core.BackprojectSession(d["records"])
+        entry["session_prepare_s"] = time.perf_counter() - t0
+        ts, all_ts, img_s = timed3(lambda: session.backproject(flat, backend=backend, **kw))
+        entry["session_time_s"], entry["session_runs_s"] = ts, all_ts
+        entry["session_identical"] = bool(np.array_equal(img, img_s))
+        entry["session_resident_mb"] = session.resident_bytes / 1e6
+        entry["session_real_time_factor"] = d["collection_time"] / ts
+        entry["session_pixel_records_per_s"] = flat.shape[0] * n_records / ts
         if mode == "sas":
             stats = {}
 
@@ -143,12 +153,22 @@ def main():
             entry["culled_identical"] = bool(np.array_equal(img, img_c))
             entry["ping_blocks_kept"] = stats["ping_blocks_kept"] / stats["ping_blocks_total"]
             entry["real_time_factor_culled"] = d["collection_time"] / tc
+            tsc, _, img_sc = timed3(lambda: session.backproject(flat, backend=backend, cull_block=16,
+                                                                grid_shape=pts.shape[:2], **kw))
+            entry["session_time_culled_s"] = tsc
+            entry["session_culled_identical"] = bool(np.array_equal(img, img_sc))
+            entry["session_real_time_factor_culled"] = d["collection_time"] / tsc
             if n_dev > 1:
                 tm, _, img_m = timed3(lambda: backproject_tiles(d["records"], pts, cull_block=16, **kw))
                 entry["time_multi_gpu_s"] = tm
                 entry["multi_gpu_devices"] = n_dev
                 entry["multi_gpu_scaling"] = tc / tm
                 entry["multi_gpu_identical"] = bool(np.array_equal(img_c.reshape(pts.shape[:2]), img_m))
+                tms, _, img_ms = timed3(lambda: backproject_tiles(d["records"], pts, cull_block=16,
+                                                                  session=session, **kw))
+                entry["session_time_multi_gpu_s"] = tms
+                entry["session_multi_gpu_scaling"] = tsc / tms
+                entry["session_multi_gpu_identical"] = bool(np.array_equal(img_c.reshape(pts.shape[:2]), img_ms))
         result["modes"][mode] = entry
         print(f"[{mode}] {d['describe']}")
         for k, v in entry.items():

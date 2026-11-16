@@ -80,3 +80,42 @@ def absorption(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0,
     except KeyError as e:
         raise ValueError(f"unknown absorption model {model!r}") from e
     return fn(frequency, temperature, salinity, depth, ph)
+
+
+# --- sea surface ---------------------------------------------------------------------------------
+
+KNOTS_PER_MS = 1.943844
+
+
+def chapman_harris_db(grazing, wind_speed: float, frequency: float):
+    """Sea-surface backscattering strength in dB (Chapman and Harris, JASA 34, 1962).
+
+    S = 3.3 beta log10(theta / 30) - 42.4 log10(beta) + 2.6,
+    beta = 158 (v f^(1/3))^(-0.58), theta the grazing angle in degrees, v the wind speed in
+    knots, f in Hz. `grazing` is in radians and `wind_speed` in m/s here. The fit was made
+    to explosive-source data from 400 to 6400 Hz and grazing angles below about 40
+    degrees; using it at 8 kHz and above is an extrapolation.
+    """
+    theta = np.degrees(np.maximum(np.asarray(grazing, dtype=float), 1e-3))
+    v = max(float(wind_speed), 0.1) * KNOTS_PER_MS
+    beta = 158.0 * (v * float(frequency) ** (1.0 / 3.0)) ** -0.58
+    return 3.3 * beta * np.log10(theta / 30.0) - 42.4 * np.log10(beta) + 2.6
+
+
+def rms_wave_height(wind_speed: float) -> float:
+    """RMS surface displacement in m of a fully developed sea (Pierson-Moskowitz):
+    significant height 0.21 U^2 / g, and rms displacement a quarter of that. U is strictly
+    the wind at 19.5 m; the difference from the usual 10 m wind is ignored."""
+    return 0.25 * 0.21 * float(wind_speed) ** 2 / 9.81
+
+
+def surface_coherent_reflection(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+    """Amplitude of the coherent (specular) reflection from a rough surface relative to a
+    flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing) the Rayleigh parameter.
+
+    This removes all scattered energy from the forward path, so it overstates the loss
+    when Gamma is large (much of the scattered sound still travels down range).
+    """
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    gamma = 2.0 * k * rms_wave_height(wind_speed) * np.sin(np.asarray(grazing, dtype=float))
+    return np.exp(-0.5 * gamma**2)

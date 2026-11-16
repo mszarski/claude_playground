@@ -84,3 +84,34 @@ def test_pipeline_keeps_up_with_a_real_time_replay():
     # Not falling behind: the last image is no later than the first by more than a ping period.
     assert latency[-1] < latency[0] + 0.04, latency
     assert elapsed < span + 2.0
+
+
+def test_flank_pipeline_from_an_emulated_capture_board():
+    """The low-rate source end to end: an emulated 32-channel, 24-bit, 64 kSPS board sends
+    blocks over UDP; the source assembles pings; the Holoscan pipeline images and detects."""
+    from gpusonar.sources import FlankBoardEmulator, make_source
+    overrides = {"receive": {"window": {"range": [1850.0, 2150.0]}}, "transmit": {"waveform": {"duration": 0.1}}}
+    sonar = SonarModel.load("flank_32", overrides)
+    b = np.radians(12.0)
+    scene = Scene().add_points([2040.0 * np.array([np.sin(b), np.cos(b), 0.0])], target_strength_db=10.0)
+    pings = [simulate_ping(sonar, make_pose(), scene, environment={"sound_speed": 1500.0}, noise_rms=1e-6,
+                           absorption_model="none", sequence=i, rng=np.random.default_rng(i))
+             for i in range(3)]
+    source = make_source({"type": "flank_udp", "sonar": "flank_32", "sonar_overrides": overrides,
+                          "max_pings": 3, "timeout": 20.0})
+    try:
+        sender = FlankBoardEmulator(pings, ping_interval=3.2, block_samples=128).send(source.port, pace=0.25)
+        ranges = np.linspace(1900.0, 2150.0, 1500)
+        bearings = np.radians(np.arange(-30.0, 30.01, 1.0))
+        app = hops.FanPipeline(source, n_pings=3, ranges=ranges, bearings_rad=bearings, detect_targets=True)
+        app.run()
+        sender.join(timeout=60.0)
+    finally:
+        source.close()
+    if source.assembler.lost_samples:
+        pytest.skip(f"the loopback dropped {source.assembler.lost_samples} samples")
+    assert len(app.sink.items) == 3 and source.assembler.dropped_pings == 0
+    for item in app.sink.items:
+        best = max(item["detections"], key=lambda d: d.snr_db)
+        assert best.range == pytest.approx(2040.0, abs=1.5)
+        assert np.degrees(best.bearing) == pytest.approx(12.0, abs=1.0)

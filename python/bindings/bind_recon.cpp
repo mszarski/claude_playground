@@ -63,6 +63,64 @@ recon::BpOptions make_options(const std::string& interp, bool stop_and_hop, floa
   return o;
 }
 
+recon::BpInputs session_inputs(const py::list& pings, const py::object& weights, int trajectory_upsample) {
+  const auto ptrs = ping_list(pings);
+  std::vector<std::vector<float>> w;
+  const bool has_w = !weights.is_none();
+  if (has_w) w = weights.cast<std::vector<std::vector<float>>>();
+  py::gil_scoped_release release;
+  return recon::make_inputs(ptrs, has_w ? &w : nullptr, trajectory_upsample);
+}
+
+py::object session_backproject(recon::BpSession& session, const ArrD& points, const std::string& interp,
+                               bool stop_and_hop, float fov_factor, bool directivity_weight,
+                               int spreading, Backend backend, bool return_weight_sum, int cull_block,
+                               const py::object& grid_shape, const py::object& stats_out,
+                               const std::string& position_lookup, const py::object& refraction,
+                               int device) {
+  const auto pts = point_list(points);
+  auto opt = make_options(interp, stop_and_hop, fov_factor, directivity_weight, spreading, cull_block,
+                          grid_shape);
+  if (position_lookup == "analytic") {
+    opt.position_lookup = recon::PositionLookup::Analytic;
+  } else if (position_lookup == "software_table") {
+    opt.position_lookup = recon::PositionLookup::SoftwareTable;
+  } else if (position_lookup == "texture") {
+    opt.position_lookup = recon::PositionLookup::Texture;
+  } else {
+    throw std::invalid_argument("position_lookup must be 'analytic', 'software_table' or 'texture'");
+  }
+  if (opt.position_lookup != recon::PositionLookup::Analytic && session.inputs().trajectory.empty()) {
+    throw std::invalid_argument("this session was built without trajectory tables (trajectory_upsample = 0)");
+  }
+  opt.device = device;
+  if (!refraction.is_none()) {
+    // (interface_z, sediment_speed)
+    const auto r = refraction.cast<std::pair<double, double>>();
+    opt.refraction = true;
+    opt.interface_z = r.first;
+    opt.sediment_speed = r.second;
+  }
+  recon::BpStats stats;
+  py::array_t<std::complex<float>> image(static_cast<py::ssize_t>(pts.size()));
+  py::array_t<float> wsum(static_cast<py::ssize_t>(return_weight_sum ? pts.size() : 0));
+  std::fill_n(image.mutable_data(), pts.size(), std::complex<float>{});
+  if (return_weight_sum) std::fill_n(wsum.mutable_data(), pts.size(), 0.0F);
+  {
+    auto* img = image.mutable_data();
+    auto* ws = return_weight_sum ? wsum.mutable_data() : nullptr;
+    py::gil_scoped_release release;
+    session.backproject(backend, pts, opt, img, ws, &stats);
+  }
+  if (!stats_out.is_none()) {
+    auto d = stats_out.cast<py::dict>();
+    d["ping_blocks_total"] = stats.ping_blocks_total;
+    d["ping_blocks_kept"] = stats.ping_blocks_kept;
+  }
+  if (return_weight_sum) return py::make_tuple(image, wsum);
+  return std::move(image);
+}
+
 }  // namespace
 
 void bind_recon(py::module_& m) {
@@ -170,6 +228,11 @@ void bind_recon(py::module_& m) {
       "Matched-filter record.samples (complex baseband) in place. An echo of delay tau\n"
       "peaks at time tau with its amplitude preserved.");
 
+  const char* bp_doc =
+      "Time-domain backprojection of conditioned pings onto points [n, 3].\n"
+      "Returns the complex coherent sum per point. With cull_block > 0 and grid_shape\n"
+      "(rows, cols), blocks of points outside a ping's beams are skipped for that ping;\n"
+      "pass a dict as `stats` to receive the block counts.";
   m.def(
       "backproject",
       [](const py::list& pings, const ArrD& points, const std::string& interp, bool stop_and_hop,
@@ -177,51 +240,11 @@ void bind_recon(py::module_& m) {
          Backend backend, bool return_weight_sum, int cull_block, const py::object& grid_shape,
          const py::object& stats_out, const std::string& position_lookup,
          int trajectory_upsample, const py::object& refraction, int device) -> py::object {
-        const auto ptrs = ping_list(pings);
-        const auto pts = point_list(points);
-        const auto opt = make_options(interp, stop_and_hop, fov_factor, directivity_weight, spreading,
-                                      cull_block, grid_shape);
-        auto opt_mut = opt;
-        if (position_lookup == "analytic") {
-          opt_mut.position_lookup = recon::PositionLookup::Analytic;
-        } else if (position_lookup == "software_table") {
-          opt_mut.position_lookup = recon::PositionLookup::SoftwareTable;
-        } else if (position_lookup == "texture") {
-          opt_mut.position_lookup = recon::PositionLookup::Texture;
-        } else {
-          throw std::invalid_argument("position_lookup must be 'analytic', 'software_table' or 'texture'");
-        }
-        opt_mut.device = device;
-        if (!refraction.is_none()) {
-          // (interface_z, sediment_speed)
-          const auto r = refraction.cast<std::pair<double, double>>();
-          opt_mut.refraction = true;
-          opt_mut.interface_z = r.first;
-          opt_mut.sediment_speed = r.second;
-        }
         const int upsample = position_lookup == "analytic" ? 0 : trajectory_upsample;
-        recon::BpStats stats;
-        std::vector<std::vector<float>> w;
-        const bool has_w = !weights.is_none();
-        if (has_w) w = weights.cast<std::vector<std::vector<float>>>();
-        py::array_t<std::complex<float>> image(static_cast<py::ssize_t>(pts.size()));
-        py::array_t<float> wsum(static_cast<py::ssize_t>(return_weight_sum ? pts.size() : 0));
-        std::fill_n(image.mutable_data(), pts.size(), std::complex<float>{});
-        if (return_weight_sum) std::fill_n(wsum.mutable_data(), pts.size(), 0.0F);
-        {
-          auto* img = image.mutable_data();
-          auto* ws = return_weight_sum ? wsum.mutable_data() : nullptr;
-          py::gil_scoped_release release;
-          const recon::BpInputs in = recon::make_inputs(ptrs, has_w ? &w : nullptr, upsample);
-          recon::backproject(backend, in, pts, opt_mut, img, ws, &stats);
-        }
-        if (!stats_out.is_none()) {
-          auto d = stats_out.cast<py::dict>();
-          d["ping_blocks_total"] = stats.ping_blocks_total;
-          d["ping_blocks_kept"] = stats.ping_blocks_kept;
-        }
-        if (return_weight_sum) return py::make_tuple(image, wsum);
-        return std::move(image);
+        recon::BpSession session(session_inputs(pings, weights, upsample));
+        return session_backproject(session, points, interp, stop_and_hop, fov_factor, directivity_weight,
+                                   spreading, backend, return_weight_sum, cull_block, grid_shape,
+                                   stats_out, position_lookup, refraction, device);
       },
       py::arg("pings"), py::arg("points"), py::arg("interp") = "sinc",
       py::arg("stop_and_hop") = false, py::arg("fov_factor") = 0.0F,
@@ -230,11 +253,36 @@ void bind_recon(py::module_& m) {
       py::arg("return_weight_sum") = false, py::arg("cull_block") = 0,
       py::arg("grid_shape") = py::none(), py::arg("stats") = py::none(),
       py::arg("position_lookup") = "analytic", py::arg("trajectory_upsample") = 8,
-      py::arg("refraction") = py::none(), py::arg("device") = 0,
-      "Time-domain backprojection of conditioned pings onto points [n, 3].\n"
-      "Returns the complex coherent sum per point. With cull_block > 0 and grid_shape\n"
-      "(rows, cols), blocks of points outside a ping's beams are skipped for that ping;\n"
-      "pass a dict as `stats` to receive the block counts.");
+      py::arg("refraction") = py::none(), py::arg("device") = 0, bp_doc);
+
+  py::class_<recon::BpSession>(m, "BackprojectSession",
+      "A collection prepared once and imaged many times (tiles, depth layers, several\n"
+      "devices). On the CUDA backend the samples stay on the device between calls.")
+      .def(py::init([](const py::list& pings, const py::object& weights, int trajectory_upsample) {
+             return std::make_unique<recon::BpSession>(session_inputs(pings, weights, trajectory_upsample));
+           }),
+           py::arg("pings"), py::arg("weights") = py::none(), py::arg("trajectory_upsample") = 0)
+      .def_property_readonly("resident_bytes", &recon::BpSession::resident_bytes,
+                             "Bytes this session holds on CUDA devices.")
+      .def(
+          "backproject",
+          [](recon::BpSession& session, const ArrD& points, const std::string& interp, bool stop_and_hop,
+             float fov_factor, bool directivity_weight, int spreading, Backend backend,
+             bool return_weight_sum, int cull_block, const py::object& grid_shape,
+             const py::object& stats_out, const std::string& position_lookup,
+             const py::object& refraction, int device) -> py::object {
+            return session_backproject(session, points, interp, stop_and_hop, fov_factor,
+                                       directivity_weight, spreading, backend, return_weight_sum,
+                                       cull_block, grid_shape, stats_out, position_lookup, refraction,
+                                       device);
+          },
+          py::arg("points"), py::arg("interp") = "sinc", py::arg("stop_and_hop") = false,
+          py::arg("fov_factor") = 0.0F, py::arg("directivity_weight") = false,
+          py::arg("spreading") = 0, py::arg("backend") = Backend::Host,
+          py::arg("return_weight_sum") = false, py::arg("cull_block") = 0,
+          py::arg("grid_shape") = py::none(), py::arg("stats") = py::none(),
+          py::arg("position_lookup") = "analytic", py::arg("refraction") = py::none(),
+          py::arg("device") = 0, bp_doc);
 
   m.def("refracted_time", &recon::refracted_time, py::arg("sensor"), py::arg("point"),
         py::arg("c_water"), py::arg("c_sediment"), py::arg("interface_z"),

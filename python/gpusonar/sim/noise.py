@@ -3,9 +3,9 @@ and the right coherence across an array.
 
 Ambient spectrum: the widely used four-term empirical fit to the Wenz curves (turbulence,
 shipping, wind, thermal), as given by Coates (1990) and repeated in the underwater
-communications literature. **The coefficients below are written from memory and have not
-been checked against a source in this repository's build environment; verify before
-relying on absolute levels.** Levels are spectrum levels in dB re 1 uPa^2/Hz.
+communications literature. The coefficients were checked against two independent
+copies of the formulas (the ns-3 UAN noise model and arXiv:1801.03641); the original
+book was not consulted. Levels are spectrum levels in dB re 1 uPa^2/Hz.
 """
 
 from __future__ import annotations

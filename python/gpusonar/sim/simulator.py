@@ -69,9 +69,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     if len(scene) > 0:
         tx_position = np.array(record.tx_position())
         rx_reference = record.rx_positions().mean(axis=0)
-        q, p, amp, vq, vp = two_way_paths(provider, tx_position, rx_reference,
-                                          scene.at_time(scenario_time), scene.amplitudes,
-                                          scene.velocities, scene.lambert)
+        points, amplitudes = scene.at_time(scenario_time), scene.amplitudes
+        if scene.occluders:
+            # Shadowing: a scatterer hidden from the projector or from the array returns nothing.
+            seen = scene.visible(tx_position, points) & scene.visible(rx_reference, points)
+            amplitudes = np.where(seen, amplitudes, 0.0)
+        q, p, amp, vq, vp = two_way_paths(provider, tx_position, rx_reference, points, amplitudes,
+                                          scene.velocities, scene.lambert,
+                                          scene.normals if len(scene.normals) == len(scene) else None)
         core.synthesize_into(record, q, p, amp, vq, vp,
                              absorption=absorption_table(sonar, env, absorption_model),
                              spreading=spreading, backend=backend,
@@ -83,8 +88,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         fc = 0.5 * (float(w["f_start"]) + float(w.get("f_stop", w["f_start"])))
         alpha = float(acoustics.absorption(fc, env.get("temperature", 10.0), env.get("salinity", 35.0),
                                            env.get("depth", 0.0), env.get("ph", 8.0), absorption_model))
-        reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item["mu_db"]),
+        strength = None
+        if item.get("model", "lambert") == "chapman_harris":
+            strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
+        elif item.get("model", "lambert") != "lambert":
+            raise ValueError(f"unknown reverberation model {item['model']!r}")
+        reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item.get("mu_db", -27.0)),
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
+                                 strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"))
     receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)
@@ -201,14 +212,16 @@ def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interv
                         heave_rms: float = 0.0, correlation_pings: float = 8.0,
                         nav_knows_disturbance: bool = False, dvl_altitude_noise: float = 0.0,
                         environment: dict | None = None, rng: np.random.Generator | None = None,
-                        seafloor_depth: float = 0.0, backend=core.Backend.Host, **ping_kwargs) -> Collection:
+                        seafloor_depth: float = 0.0, backend=core.Backend.Host,
+                        stop_and_go: bool = False, **ping_kwargs) -> Collection:
     """Fly a straight line along +x with sway (y) and heave (z) disturbances.
 
     The true trajectory is piecewise linear: during ping i the platform moves at
     v_i = (p_{i+1} - p_i) / interval, the paper's first-order kinematic model. Echoes are
     synthesised from the truth. Each record then carries what navigation would report:
     the nominal straight track (unless `nav_knows_disturbance`), plus a DVL sample with
-    the true altitude and surge speed.
+    the true altitude and surge speed. With `stop_and_go` (a rail) the platform stands
+    still during each ping; the disturbances are then position errors of the rail.
     """
     rng = rng or np.random.default_rng(0)
     start = np.asarray(start, dtype=float)
@@ -222,12 +235,12 @@ def simulate_collection(sonar: SonarModel, scene: Scene, *, n_pings: int, interv
 
     records = []
     for i in range(n_pings):
-        v_true = (truth[i + 1] - truth[i]) / interval
+        v_true = np.zeros(3) if stop_and_go else (truth[i + 1] - truth[i]) / interval
         rec = simulate_ping(sonar, make_pose(truth[i], velocity=v_true), scene, environment=environment,
                             sequence=i, time_ns=1_700_000_000_000_000_000 + int(round(t[i] * 1e9)),
                             scenario_time=t[i], rng=rng, backend=backend, **ping_kwargs)
         nav_pos = truth[i] if nav_knows_disturbance else nominal[i]
-        nav_vel = v_true if nav_knows_disturbance else np.array([speed, 0.0, 0.0])
+        nav_vel = v_true if (nav_knows_disturbance or stop_and_go) else np.array([speed, 0.0, 0.0])
         geo = rec.geometry
         geo.rx_pose = make_pose(nav_pos, velocity=nav_vel)
         geo.tx_pose = geo.rx_pose
@@ -281,18 +294,44 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     n_sub = len(sonar.mux_groups)
     # A rail moves between pings and stands still during each one.
     stop_and_go = bool(plat.get("stop_and_go", False))
-    for i in range(count):
-        t = i * interval
-        pose = make_pose(position + velocity * t, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity)
-        truth_positions.append(position + velocity * t)
-        records.append(simulate_ping(
-            sonar, pose, scene, environment=env, provider=provider, sequence=i,
-            sub_sequence=i % n_sub, time_ns=start_ns + int(round(t * 1e9)), scenario_time=t,
-            absorption_model=cfg.get("absorption", "francois_garrison"),
-            noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
-            noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
-            reverberation=cfg.get("reverberation"),
-            rng=rng, backend=backend))
+    ping_kwargs = dict(
+        provider=provider, absorption_model=cfg.get("absorption", "francois_garrison"),
+        noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
+        noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
+        reverberation=cfg.get("reverberation"))
+    motion = plat.get("motion")
+    raster = plat.get("raster")
+    if motion is not None:
+        # A straight run along +x with sway and heave the navigation does not know about
+        # (unless nav_knows_disturbance): the input for motion estimation.
+        if np.any(np.abs(velocity[1:]) > 0) or np.any(np.asarray(rpy, dtype=float) != 0):
+            raise ValueError("platform.motion needs a level platform moving along +x")
+        col = simulate_collection(
+            sonar, scene, n_pings=count, interval=interval, start=position, speed=float(velocity[0]),
+            sway_rms=float(motion.get("sway_rms", 0.0)), heave_rms=float(motion.get("heave_rms", 0.0)),
+            correlation_pings=float(motion.get("correlation_pings", 8.0)),
+            nav_knows_disturbance=bool(motion.get("nav_knows_disturbance", False)),
+            dvl_altitude_noise=float(motion.get("dvl_altitude_noise", 0.0)), environment=env, rng=rng,
+            seafloor_depth=float(motion.get("seafloor_depth", 0.0)), backend=backend,
+            stop_and_go=stop_and_go, **ping_kwargs)
+        records, truth_positions = col.records, list(col.true_positions[:count])
+    else:
+        if raster is not None:
+            # A stop-and-go raster over x and y at the platform's z: {x: [start, stop, step], y: [...]}.
+            xs = np.arange(*[float(v) for v in raster["x"]])
+            ys = np.arange(*[float(v) for v in raster["y"]])
+            positions = [np.array([px, py, position[2]]) for px in xs for py in ys]
+            stop_and_go = True
+        else:
+            positions = [position + velocity * (i * interval) for i in range(count)]
+        for i, pos in enumerate(positions):
+            t = i * interval
+            pose = make_pose(pos, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity)
+            truth_positions.append(pos)
+            records.append(simulate_ping(
+                sonar, pose, scene, environment=env, sequence=i, sub_sequence=i % n_sub,
+                time_ns=start_ns + int(round(t * 1e9)), scenario_time=t, rng=rng, backend=backend,
+                **ping_kwargs))
 
     if output:
         opts = core.WriterOptions()

@@ -180,3 +180,36 @@ def test_make_provider_builds_the_eigenray_tier():
     p = gs.sim.make_provider("eigenray", 1500.0, {"environment": PEKERIS, "frequency": 8000.0,
                                                   "max_range": 500.0})
     assert isinstance(p, BellhopProvider) and p.tier == "eigenray"
+
+
+# --- range-dependent bathymetry: a ridge between source and receiver -------------------------
+
+@needs_bellhop
+def test_ridge_shadows_and_strips_steep_paths():
+    """A ridge rising to 60 m in 200 m of water. Receivers inside the ridge get nothing;
+    beyond it the loss is higher than over a flat bottom (up-slope reflection steepens
+    rays past the critical angle); before it nothing changes."""
+    base = dict(depth=200.0, sound_speed=1500.0, bottom_speed=1600.0, bottom_density=1.8, bottom_attenuation=0.5)
+    ridge = [[0.0, 200.0], [3000.0, 200.0], [4000.0, 60.0], [5000.0, 200.0], [8000.0, 200.0]]
+    ranges = np.array([1000.0, 2500.0, 4000.0, 6000.0, 8000.0])
+    flat = run_bellhop(OceanEnvironment(**base), 8000.0, 30.0, [150.0], ranges)
+    env = OceanEnvironment(**base, bathymetry=ridge)
+    assert env.depth_at(4000.0) == pytest.approx(60.0) and env.depth_at(3500.0) == pytest.approx(130.0)
+    with_ridge = run_bellhop(env, 8000.0, 30.0, [150.0], ranges)
+    tl_flat = flat.transmission_loss(coherent=False)[0]
+    tl_ridge = with_ridge.transmission_loss(coherent=False)[0]
+    np.testing.assert_allclose(tl_ridge[:2], tl_flat[:2], atol=0.3)        # before the ridge
+    assert len(with_ridge.amplitude[0][2]) == 0                            # 150 m deep under a 60 m crest
+    assert np.all(tl_ridge[3:] > tl_flat[3:] + 1.5)                        # behind it
+    # The provider carries it through: no eigenrays to a point inside the seabed.
+    provider = BellhopProvider(env, 8000.0, max_range=8200.0, range_step=100.0, depth_step=10.0, max_arrivals=40)
+    es = provider.eigenrays(np.array([0.0, 0.0, 30.0]), np.array([[4000.0, 0.0, 150.0], [6000.0, 0.0, 150.0]]))
+    assert not es.valid[0].any() and es.valid[1].any()
+
+
+@needs_bellhop
+def test_bathymetry_is_validated():
+    env = OceanEnvironment(depth=100.0, bathymetry=[[0.0, 100.0], [1000.0, 150.0]])
+    from gpusonar.sim.bellhop import BellhopError
+    with pytest.raises(BellhopError, match="bathymetry"):
+        run_bellhop(env, 8000.0, 30.0, [50.0], [500.0])

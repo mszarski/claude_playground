@@ -187,3 +187,43 @@ def test_gpu_kernel_matches_reference(interp):
     assert np.abs(got - want).max() / np.abs(want).max() < 2e-4
     host = gs.core.backproject([rec], targets, interp=interp)
     assert np.abs(got - host).max() / np.abs(want).max() < 1e-5
+
+
+# --- sessions: a collection prepared once and imaged many times ------------------------------
+
+def test_session_matches_the_one_shot_call():
+    from gpusonar.sim import run_scenario
+    from gpusonar import recon as grecon
+    records = run_scenario("point_grid_fls_300k").records
+    grecon.prepare(records)
+    rng = np.random.default_rng(0)
+    pts = np.column_stack([rng.uniform(-3, 3, 400), rng.uniform(2, 12, 400), rng.uniform(-0.5, 0.5, 400)])
+    one_shot = gs.core.backproject(records, pts, fov_factor=1.5)
+    session = gs.core.BackprojectSession(records)
+    first = session.backproject(pts, fov_factor=1.5)
+    second = session.backproject(pts[:100], fov_factor=1.5)
+    np.testing.assert_array_equal(first, one_shot)
+    np.testing.assert_array_equal(second, one_shot[:100])
+    assert session.resident_bytes == 0                      # host backend keeps nothing on a device
+    with pytest.raises(ValueError, match="trajectory"):
+        session.backproject(pts, position_lookup="software_table")
+
+
+@pytest.mark.skipif(not gs.core.cuda_available(), reason="no CUDA device")
+def test_session_keeps_samples_on_the_device():
+    from gpusonar.sim import run_scenario
+    from gpusonar import recon as grecon
+    records = run_scenario("point_grid_fls_300k").records
+    grecon.prepare(records)
+    rng = np.random.default_rng(1)
+    pts = np.column_stack([rng.uniform(-3, 3, 2000), rng.uniform(2, 12, 2000), np.zeros(2000)])
+    one_shot = gs.core.backproject(records, pts, fov_factor=1.5, backend=gs.core.Backend.Cuda)
+    session = gs.core.BackprojectSession(records)
+    a = session.backproject(pts, fov_factor=1.5, backend=gs.core.Backend.Cuda)
+    held = session.resident_bytes
+    n_samples = sum(r.samples.array.size for r in records)
+    assert held >= n_samples * 8                            # complex64 samples are resident
+    b = session.backproject(pts, fov_factor=1.5, backend=gs.core.Backend.Cuda)
+    assert session.resident_bytes == held                   # second call uploads nothing more
+    np.testing.assert_array_equal(a, one_shot)
+    np.testing.assert_array_equal(b, one_shot)

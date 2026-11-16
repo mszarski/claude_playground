@@ -1,0 +1,51 @@
+{
+  "backend": "cuda",
+  "scale": 2.0,
+  "machine": "x86_64",
+  "devices": [
+    "NVIDIA A10G",
+    "NVIDIA A10G"
+  ],
+  "modes": {
+    "sas": {
+      "dataset": "400 pings x 16 channels x 9534 samples; image 6400 x 3000 at 2 cm",
+      "pixels": 19200000,
+      "records": 6400,
+      "collection_time_s": 80.0,
+      "time_s": 3.0932882219967723,
+      "runs_s": [
+        3.998725272998854,
+        3.089482659997884,
+        3.0932882219967723
+      ],
+      "real_time_factor": 25.86244612807486,
+      "pixel_records_per_s": 39724717252.72299,
+      "session_prepare_s": 0.2810404690026189,
+      "session_time_s": 2.713668055002927,
+      "session_runs_s": [
+        2.756249629001104,
+        2.715064477000851,
+        2.713668055002927
+      ],
+      "session_identical": true,
+      "session_resident_mb": 488.69248,
+      "session_real_time_factor": 29.480392729874147,
+      "session_pixel_records_per_s": 45281883233.086685,
+      "time_culled_s": 2.349718474000838,
+      "culling_speedup": 1.3164505689610837,
+      "culled_identical": true,
+      "ping_blocks_kept": 0.10039488031914894,
+      "real_time_factor_culled": 34.046631920029526,
+      "session_time_culled_s": 1.9860657200006244,
+      "session_culled_identical": true,
+      "session_real_time_factor_culled": 40.28064086417787,
+      "time_multi_gpu_s": 1.5102295090000553,
+      "multi_gpu_devices": 2,
+      "multi_gpu_scaling": 1.5558684689962259,
+      "multi_gpu_identical": true,
+      "session_time_multi_gpu_s": 1.1470328409996,
+      "session_multi_gpu_scaling": 1.731481130278568,
+      "session_multi_gpu_identical": true
+    }
+  }
+}

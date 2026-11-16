@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .. import acoustics
 from .propagation import EigenrayProvider, EigenraySet
 
 
@@ -37,9 +38,15 @@ def find_bellhop() -> str | None:
 
 @dataclass
 class OceanEnvironment:
-    """A range-independent ocean for Bellhop: sound-speed profile over a flat bottom."""
+    """An ocean for Bellhop: a sound-speed profile over a flat bottom, or over a bottom
+    whose depth changes with range from the source (`bathymetry`).
 
-    depth: float                                   # water depth, m
+    With bathymetry the model is 2-D: the same depth profile is used on every bearing
+    from every source, so it describes a ridge or slope seen along one line, not a
+    3-D seamount.
+    """
+
+    depth: float                                   # water depth, m (the deepest point with bathymetry)
     ssp_depth: np.ndarray = None                   # m, from 0 to `depth`
     ssp_speed: np.ndarray = None                   # m/s
     bottom_speed: float = 1600.0                   # m/s, fluid half-space
@@ -47,6 +54,14 @@ class OceanEnvironment:
     bottom_attenuation: float = 0.5                # dB per wavelength
     surface: str = "vacuum"                        # pressure release
     sound_speed: float = 1500.0                    # used when no profile is given
+    bathymetry: list = None                        # [[range_m, depth_m], ...] from the source, or None
+
+    def depth_at(self, range_m):
+        """Water depth at a horizontal range from the source."""
+        if self.bathymetry is None:
+            return np.full_like(np.asarray(range_m, dtype=float), self.depth)
+        b = np.asarray(self.bathymetry, dtype=float)
+        return np.interp(range_m, b[:, 0], b[:, 1])
 
     def profile(self):
         if self.ssp_depth is None:
@@ -77,7 +92,16 @@ def write_env(path: str, env: OceanEnvironment, frequency: float, source_depth: 
     z, c = env.profile()
     lines = [f"'{title}'", f"{frequency:.6f}", "1", "'CVW'", f"{len(z)}  0.0  {env.depth:.4f}"]
     lines += [f"  {zi:.4f}  {ci:.4f}  /" for zi, ci in zip(z, c)]
-    lines += ["'A' 0.0",
+    if env.bathymetry is not None:
+        b = np.asarray(env.bathymetry, dtype=float)
+        if b.ndim != 2 or b.shape[1] != 2 or np.any(np.diff(b[:, 0]) <= 0) or b[:, 1].max() > env.depth + 1e-6:
+            raise BellhopError("bathymetry must be [[range_m, depth_m], ...] with increasing range "
+                               "and no depth below `depth`")
+        r_end = 1.2 * max(float(np.max(receiver_ranges)), b[-1, 0]) + 1000.0
+        rows = [(-1000.0, b[0, 1])] + [tuple(v) for v in b if v[0] > -1000.0] + [(r_end, b[-1, 1])]
+        with open(os.path.splitext(path)[0] + ".bty", "w", encoding="ascii") as f:
+            f.write("'L'\n" + f"{len(rows)}\n" + "".join(f"{r / 1000.0:.6f} {d:.4f}\n" for r, d in rows))
+    lines += ["'A~' 0.0" if env.bathymetry is not None else "'A' 0.0",
               f" {env.depth:.4f}  {env.bottom_speed:.4f} 0.0 {env.bottom_density:.4f} {env.bottom_attenuation:.4f} /",
               "1", f"{source_depth:.6f} /"]
     rd = np.atleast_1d(np.asarray(receiver_depths, dtype=float))
@@ -197,8 +221,11 @@ class BellhopProvider(EigenrayProvider):
     def __init__(self, env: OceanEnvironment, frequency: float, max_range: float,
                  range_step: float | None = None, depth_step: float | None = None,
                  max_arrivals: int = 8, n_beams: int = 0, angles=(-80.0, 80.0),
-                 min_range: float = 1.0):
+                 min_range: float = 1.0, wind_speed: float = 0.0):
         self.env = env
+        # Wind speed (m/s) for the rough-surface reflection loss, applied per surface bounce
+        # to Bellhop's flat-surface arrivals (acoustics.surface_coherent_reflection). 0: flat.
+        self.wind_speed = float(wind_speed)
         self.frequency = float(frequency)
         self.max_arrivals = int(max_arrivals)
         self.n_beams = n_beams
@@ -222,6 +249,7 @@ class BellhopProvider(EigenrayProvider):
         points = np.atleast_2d(np.asarray(points, dtype=float))
         arr = self.arrivals_for(source[2])
         c_src = self.env.speed_at(source[2])
+        c_surface = self.env.speed_at(0.0)
         s, k = len(points), self.max_arrivals
         out = EigenraySet(
             delay=np.zeros((s, k)), amplitude=np.zeros((s, k), dtype=complex),
@@ -239,6 +267,12 @@ class BellhopProvider(EigenrayProvider):
             amp = arr.amplitude[iz[i]][ir[i]]
             if len(amp) == 0:
                 continue
+            if self.wind_speed > 0.0:
+                # Grazing angle at the surface from the launch angle by Snell's law.
+                cos_s = np.clip(np.cos(arr.launch_angle[iz[i]][ir[i]]) * c_surface / c_src, -1.0, 1.0)
+                loss = acoustics.surface_coherent_reflection(np.arccos(cos_s), self.wind_speed,
+                                                             self.frequency, c_surface)
+                amp = amp * loss ** arr.n_surface[iz[i]][ir[i]]
             order = np.argsort(-np.abs(amp))[:k]
             n = len(order)
             la, aa = arr.launch_angle[iz[i]][ir[i]][order], arr.arrival_angle[iz[i]][ir[i]][order]

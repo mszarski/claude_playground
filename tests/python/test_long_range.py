@@ -4,6 +4,7 @@ spherical-spreading estimate. Needs Bellhop (external; GPUSONAR_BELLHOP)."""
 import numpy as np
 import pytest
 
+from gpusonar import _gpusonar as core
 from gpusonar import flank
 from gpusonar.config import load_scenario_config
 from gpusonar.sim import find_bellhop, run_scenario
@@ -31,7 +32,9 @@ def output_snr_db(record, target, bearings_deg=(-1.0, 0.0, 1.0)):
 
 def scenario_snr(name):
     cfg = load_scenario_config(name)
-    result = run_scenario(cfg)
+    # The 10 km case has thousands of two-way paths; synthesis runs on the GPU when there is one.
+    backend = core.Backend.Cuda if core.cuda_available() else core.Backend.Host
+    result = run_scenario(cfg, backend=backend)
     assert cfg["fidelity"] == "eigenray"
     return output_snr_db(result.records[0], result.scene.positions[0]), cfg
 
@@ -51,10 +54,12 @@ def test_flank_target_at_the_eigenray_tier(name, range_m, capsys):
     # opens with range. Multipath also splits the echo, so the peak gains less than the
     # energy does. The scenarios include bottom reverberation (scattering-function
     # method). Bounds are loose: this is a comparison, not a calibration.
-    if range_m >= 5000.0:
+    if range_m >= 10000.0:
         # Noise-limited: bottom reverberation is below the ambient noise here.
-        assert snr > spherical + 1.0
-        assert snr < spherical + 30.0
+        assert spherical + 3.0 < snr < spherical + 30.0
+    elif range_m >= 5000.0:
+        # Reverberation and noise are comparable; ducting gain and reverberation roughly cancel.
+        assert spherical - 6.0 < snr < spherical + 6.0
     else:
         # Reverberation-limited: the spherical estimate in noise alone is far too optimistic.
         assert 15.0 < snr < spherical - 10.0
@@ -71,5 +76,7 @@ def test_popoto_trial_at_the_eigenray_tier(name, range_m, capsys):
     with capsys.disabled():
         print(f"\n[eigenray tier] {name}: SNR {snr:.1f} dB; spherical-spreading estimate {spherical:.1f} dB; "
               f"difference {snr - spherical:+.1f} dB")
-    assert snr > spherical - 4.0
-    assert snr < spherical + 30.0
+    if range_m >= 2000.0:
+        assert spherical + 3.0 < snr < spherical + 30.0          # noise-limited, ducted
+    else:
+        assert 15.0 < snr < spherical - 3.0                      # reverberation-limited

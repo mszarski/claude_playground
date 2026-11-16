@@ -12,7 +12,7 @@ propagation:
   max_range: 1500
   range_step: 25.0
   depth_step: 2.0
-  max_arrivals: 8
+  max_arrivals: 24        # keeps the two-way echo energy within about 0.5 dB (RESULTS.md)
 platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
 pings: {count: 1, interval: 15.0}
 scene:

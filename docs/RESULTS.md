@@ -56,19 +56,41 @@ Before the change (`docs/benchmarks/before_pretest/`), for the SAS dataset:
   kernel without such a test; the first-round figures (5.7× to 6.4×) are the comparable
   ones here, and they depend strongly on the GPU's float64 speed. The culled image is
   bit-identical on every GPU; 11% of (ping, block) pairs are kept.
-- **The SAS benchmark is now overhead-bound.** Three very different GPUs finish in
+- **These one-shot SAS numbers are overhead-bound.** Three very different GPUs finish in
   0.68 s: what is left is mostly copying 0.5 GB of samples into the kernel's input and
-  uploading it, which the driver repeats on every call. A larger dataset, and keeping
-  samples on the device between calls, are needed before these numbers say much about
-  the GPUs.
+  uploading it, which a one-shot call repeats every time. The session figures below
+  remove that.
 - Real-time factor is collection time over imaging time for this image size. It excludes
   conditioning and motion estimation, which run on the CPU.
 - **FLS:** a 6.4-megapixel fan takes 0.09–0.20 s. The frame rate the rig can deliver is
   not known yet, so no real-time factor is claimed.
 
-**Multi-GPU** (two A10G, image split into two bands of rows): 0.61 s against 0.68 s on
-one, a factor of 1.13, with an identical image. That is the fixed per-call overhead again,
-not a measure of how the kernel scales; it needs the larger dataset too.
+**Sessions: samples kept on the device** (`docs/benchmarks/session_*.json`, D-40). The
+tables above are one-shot calls, which rebuild the kernel inputs and upload 0.5 GB of
+samples every time. A session does both once (0.28 s on the A10G host, 0.37 s on the T4
+host; 489 MB resident) and each call then moves only points and image. Third of three
+runs, images bit-identical to the one-shot calls on every row:
+
+| GPU, dataset | One-shot | Session | Session, culled | Real-time factor (session, culled) | Two GPUs (session, culled) | Scaling on two |
+| --- | --- | --- | --- | --- | --- | --- |
+| Tesla T4, SAS 2560 × 1200 at 5 cm | 1.53 s | 1.04 s | 0.80 s | 100× | — | — |
+| A10G, SAS 2560 × 1200 at 5 cm | 0.83 s | 0.44 s | 0.33 s | 243× | 0.19 s | 1.71× |
+| A10G, SAS 6400 × 3000 at 2 cm | 3.09 s | 2.71 s | 1.99 s | 40× | 1.15 s | 1.73× |
+| Tesla T4, FLS fan 4000 × 1602 | 0.20 s | 0.19 s | — | — | — | — |
+| A10G, FLS fan 4000 × 1602 | 0.094 s | 0.085 s | — | — | — | — |
+| Tesla T4, flank map 16000 × 482 | 0.18 s | 0.15 s | — | 94× (no culling) | — | — |
+| A10G, flank map 16000 × 482 | 0.18 s | 0.073 s | — | 197× (no culling) | — | — |
+
+- **The overhead was the per-call upload.** With it gone the A10G does the 5 cm image in
+  0.44 s and the T4 in 1.04 s: the GPUs separate again.
+- **The benchmark is no longer overhead-bound at 2 cm.** The A10G images 4.5 × 10¹⁰
+  pixel-records per second at both pixel sizes (4.46 and 4.53), so the 2 cm figure
+  measures the kernel.
+- **Multi-GPU:** two A10G give 1.71× to 1.73× over one, with an identical image (the
+  one-shot figure was 1.13× to 1.20×, bounded by each device's upload). What is left of
+  the gap to 2× is not broken down; point and image transfers run per call on each device.
+- Only one- and two-GPU points on one GPU type were measured for sessions. The L4 and
+  A100 were not re-run, so the power-law fit below still uses the one-shot numbers.
 
 **Power-law fit** (the paper's Fig. 9 model, `y = a·x^b`, runtime against single-precision
 GFLOPS), four GPUs, SAS dataset:
@@ -307,6 +329,8 @@ as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
 | Scattering-function reverberation level against the same analytic prediction (6 pings averaged) | within 2 dB in every range bin, mean within 1 dB | 2 dB |
 | Scattering-function against point-scatterer reverberation, same seabed | within 2 dB in every range block | — |
 | Coherence of generated reverberation between hydrophones 1 and 2 spacings apart | J0(kd) within 0.1 | — |
+| Surface reverberation level, Chapman–Harris at 8 m/s, against S(θ) × area / r⁴ (`test_surface.py`) | within 2 dB in every range bin | — |
+| Chapman–Harris formula against its second published form (wind in m/s, constant 107) | within 0.3 dB | — |
 | Reverberation envelope statistics | Rayleigh: mean within 3%, scintillation index 1 ± 0.25 | — |
 | Clutter with patch texture (shape 1) | scintillation index 2.0–2.6 against 1.2 without | K-distributed "can be made" |
 | Generated ambient noise against the requested spectrum, 0.5–30 kHz | within 1 dB | — |
@@ -316,45 +340,85 @@ as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
   them. Before that the coherent comparison was off by 4 dB median.
 - The Munk-profile test checks Bellhop's own output for sound-channel behaviour. No
   provider of ours claims a refracting profile except the Bellhop one, so there is nothing
-  independent to compare there. The seamount case is not run: range-dependent bathymetry
-  is not supported yet.
-- Not done: surface scattering and loss
-  (Chapman–Harris, bubbles), a Jackson-type bottom model, volume scattering, time
-  spreading, the KRAKEN/RAM cross-check at 6–10 kHz, and re-running the long-range
-  scenarios at the `eigenray` tier. TR 0702 has no fully specified worked example to
+  independent to compare there.
+- Range-dependent bathymetry (`OceanEnvironment(bathymetry=...)`, passed to Bellhop as a
+  bathymetry file): a ridge rising from 200 m to 60 m at 4 km leaves the loss unchanged
+  before it (within 0.3 dB), gives no arrivals inside it, and adds more than 1.5 dB behind
+  it at 8 kHz (measured 2 to 10 dB). The model is 2-D: one depth profile on every bearing.
+  Reverberation still assumes a flat boundary, so there is no ridge echo yet.
+- Not done: bubble absorption and a high-frequency surface model (Chapman–Harris is a
+  400–6400 Hz fit), a Jackson-type bottom model, volume scattering, time spreading, the
+  RAM cross-check. TR 0702 has no fully specified worked example to
   reproduce (`PHYSICS_NOTES.md` section 9).
-- The ambient-noise coefficients are written from memory and flagged as unverified in
-  `python/gpusonar/sim/noise.py`.
+- The ambient-noise coefficients (four-term fit to the Wenz curves) were checked against
+  two independent copies of the formulas, not against the original book.
+
+## Rays against normal modes at 8 kHz
+
+Source: `tests/python/test_kraken_crosscheck.py`. Bellhop and KRAKEN, both run as separate
+programs. Isovelocity 100 m of water over a fluid bottom (1600 m/s, 1.8 g/cm³, 0.5 dB/λ),
+source at 30 m, receiver at 50 m, 8 kHz, 1 to 10 km. Incoherent transmission loss (arrivals
+summed in power against modes summed in power; the coherent field at 8 kHz changes over
+centimetres and is not a useful comparison).
+
+| Check | Result |
+| --- | --- |
+| Rays minus modes, 1–10 km | at most 0.21 dB |
+| Rays minus modes, 2–10 km | below 0.1 dB (−0.01 dB at 10 km, where the loss is 66.2 dB) |
+| Eigenray provider with 80 arrivals kept, against modes | within 0.5 dB at every range |
+| Eigenray provider with 8 arrivals kept, at 10 km | 4.9 dB too much loss one way |
+
+- **A fault this check found.** The long-range scenarios first shipped with 8 arrivals per
+  leg. That keeps the strongest paths, so the peak of the compressed echo was right, but
+  it dropped two thirds of the one-way energy at 10 km, and with it most of the
+  reverberation. The scenarios now keep 24 to 80 arrivals (D-39) and the table below was
+  re-measured.
+- RAM (parabolic equation) was not run: PyRAM is the permissive candidate and is not
+  installed here.
 
 ## Long-range scenarios at the eigenray tier
 
 Source: `tests/python/test_long_range.py`, scenarios `flank_target_{1,5,10}km` and
-`popoto_trial_{100,1000,2000}m`. Bellhop arrivals (up to 8 per leg, so up to 64 two-way
+`popoto_trial_{100,1000,2000}m`. Bellhop arrivals (16 to 80 per leg, so up to 6400 two-way
 paths per target), isovelocity water over a flat fluid bottom (1600 m/s, 1.8 g/cm³,
-0.5 dB/λ), Ainslie–McColm absorption at 12 °C, ambient noise with isotropic-field
-coherence across the array, +10 dB target, one ping, conventional beamforming. The flank
-scenarios add bottom reverberation by the scattering-function method (Lambert, −27 dB);
-the Popoto ones have none.
-"Spherical estimate" is the sonar-equation tool with the same source, noise and target.
+0.5 dB/λ), flat sea surface, Ainslie–McColm absorption at 12 °C, ambient noise with
+isotropic-field coherence across the array, +10 dB target, one ping, conventional
+beamforming. All add bottom reverberation by the scattering-function method
+(Lambert, −27 dB). Output SNR is the peak of the
+compressed echo over the mean background on the same beam. "Spherical estimate" is the
+sonar-equation tool with the same source, noise and target, noise only. CPU.
 
-| Scenario | Water depth | Output SNR, eigenray tier | Same, without reverberation | Spherical estimate (noise only) | Difference |
+| Scenario | Water depth | Output SNR | Same, without reverberation | Spherical estimate | Difference |
 | --- | --- | --- | --- | --- | --- |
-| `flank_32`, 200 dB source, 1 s LFM, noise 45 dB: 1 km | 100 m | 28.6 dB | 58.4 dB | 58.8 dB | −30.1 dB |
-| 5 km | 100 m | 29.5 dB | 29.9 dB | 25.7 dB | +3.8 dB |
-| 10 km | 100 m | 17.9 dB | 17.6 dB | 7.2 dB | +10.7 dB |
-| `popoto_8`, 190 dB source, 0.5 s LFM, noise 38 dB: 100 m | 30 m | — | 83.1 dB | 86.9 dB | −3.8 dB |
-| 1 km | 30 m | — | 39.3 dB | 36.6 dB | +2.7 dB |
-| 2 km | 30 m | — | 22.1 dB | 13.1 dB | +9.0 dB |
+| `flank_32`, 200 dB source, 1 s LFM, noise 45 dB: 1 km | 100 m | 28.1 dB | 57.9 dB | 58.8 dB | −30.7 dB |
+| 5 km | 100 m | 24.1 dB | 29.6 dB | 25.7 dB | −1.6 dB |
+| 10 km | 100 m | 18.6 dB | 18.1 dB | 7.2 dB | +11.4 dB |
+| `popoto_8`, 190 dB source, 0.5 s LFM, noise 38 dB: 100 m | 30 m | 53.6 dB | 83.1 dB | 86.9 dB | −33.3 dB |
+| 1 km | 30 m | 26.2 dB | 39.3 dB | 36.6 dB | −10.4 dB |
+| 2 km | 30 m | 21.6 dB | 22.1 dB | 13.1 dB | +8.5 dB |
 
 - At long range the shallow-water duct keeps more energy than spherical spreading
-  assumes, so the simple estimate is pessimistic there by up to 10 dB in this environment.
-  At short range multipath interference can cost a few dB (−3.8 dB at 100 m).
+  assumes, so the noise-only estimate is pessimistic there by about 10 dB in this
+  environment. At short range multipath interference can cost a few dB (−3.8 dB at 100 m
+  without reverberation).
+- The Popoto trial in 30 m of water is reverberation-limited at 100 m and 1 km (30 and
+  13 dB below the figure without reverberation) and noise-limited at 2 km.
 - With this seabed and source the flank array is reverberation-limited at 1 km (30 dB
-  below the noise-only estimate) and noise-limited at 5 and 10 km. The 0.3–0.4 dB changes
-  at 5 and 10 km are within one noise draw. The balance depends directly on the assumed
-  −27 dB Lambert parameter and 45 dB noise level, neither measured.
-- **This is not a detection-range prediction.** Reverberation is bottom only, with a
-  projector taken as omnidirectional; there is no surface reverberation, no
+  below the noise-only figure), about evenly limited at 5 km (reverberation costs 5.5 dB)
+  and noise-limited at 10 km (the 0.5 dB change there is within one noise draw). The
+  balance depends directly on the assumed −27 dB Lambert parameter and 45 dB noise level,
+  neither measured.
+- The SNR here is a peak. Multipath spreads the echo over tens of milliseconds, so the
+  energy gain of the duct is larger than the peak gain shown.
+- **Sensitivity to the sea surface** (flank scenarios, 5 m/s wind, not shipped as
+  scenarios). Adding Chapman–Harris surface reverberation: 26.4, 22.7 and 19.4 dB at 1, 5
+  and 10 km (a loss of 1.7 and 1.4 dB at 1 and 5 km; +0.8 dB at 10 km, within a noise
+  draw). Adding the rough-surface reflection loss as well: 36.4, 28.3 and 18.4 dB. The
+  SNR *rises* at 1 and 5 km because the coherent-loss model strips surface-bounce paths,
+  and those carry most of the reverberation while the target's direct path is untouched.
+  That model overstates the loss (D-38), so this is a bound on the effect, not an estimate.
+- **This is not a detection-range prediction.** The shipped scenarios have bottom
+  reverberation only, with a projector taken as omnidirectional, and no
   surface roughness loss, no platform self-noise, one noise draw, and an idealised flat
   bottom. The plan's own caveat applies: each of those can move the result by 10 dB.
 - The SNR is the peak within 60 ms after the first arrival over the mean noise power on

@@ -1,7 +1,15 @@
 """Scenes: collections of point scatterers with amplitude and velocity.
 
-Every scene object reduces to point scatterers for synthesis. Extended objects
-(seafloor facets, spheres, walls) are added as generators that emit points.
+Every scene object reduces to point scatterers for synthesis. Extended objects (seafloor
+with relief, plates, walls, spheres, boxes, rocks) are generators that emit surface points
+with a normal each, and may register an occluder.
+
+Surface points scatter by Lambert's law about their own normal, so a face turned away
+from the sonar returns nothing. Occluders (spheres and axis-aligned boxes) block the
+straight line between the sonar and any scatterer behind them, which is what puts an
+acoustic shadow behind an object. Both use straight lines from the sonar: with a
+multipath provider, boundary-reflected paths are shadowed as if they were direct.
+Specular highlights and diffraction are not modelled.
 """
 
 from __future__ import annotations
@@ -20,12 +28,17 @@ class Scene:
     # Per scatterer: 1 = a boundary patch whose amplitude scales with sqrt(sin(grazing_in) *
     # sin(grazing_out)) (Lambert's law); 0 = a point target with a fixed amplitude.
     lambert: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
+    # Per scatterer: unit surface normal (pointing into the water), or NaN for none. A
+    # Lambert scatterer without a normal is a patch of a horizontal boundary.
+    normals: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))
+    # ("sphere", centre [3], radius) and ("box", min [3], max [3]) primitives that block sound.
+    occluders: list = field(default_factory=list)
 
     def __len__(self) -> int:
         return self.positions.shape[0]
 
     def add_points(self, positions, amplitude=1.0, velocity=(0.0, 0.0, 0.0), label="points",
-                   target_strength_db=None, lambert: bool = False) -> "Scene":
+                   target_strength_db=None, lambert: bool = False, normals=None) -> "Scene":
         """Add scatterers. `amplitude` is the pressure ratio at 1 m (10^(TS/20))."""
         pos = np.atleast_2d(np.asarray(positions, dtype=float))
         if pos.shape[1] != 3:
@@ -39,8 +52,47 @@ class Scene:
         self.amplitudes = np.concatenate([self.amplitudes, amp])
         self.velocities = np.vstack([self.velocities, vel])
         self.lambert = np.concatenate([self.lambert, np.full(n, bool(lambert))])
+        nrm = np.full((n, 3), np.nan) if normals is None else np.broadcast_to(
+            np.asarray(normals, dtype=float), (n, 3)).copy()
+        self.normals = np.vstack([self.normals, nrm])
         self.labels.append(label)
         return self
+
+    def add_surface(self, positions, normals, mu_db: float, density: float, label: str,
+                    rng: np.random.Generator | None = None, velocity=(0.0, 0.0, 0.0)) -> "Scene":
+        """Add Lambert surface points: complex Gaussian amplitudes scaled so `density`
+        points per square metre give the backscattering strength mu + 10 log10(cos_in cos_out),
+        the cosines taken from each point's normal."""
+        rng = rng or np.random.default_rng()
+        n = len(positions)
+        amp = lambert_rms_amplitude(mu_db, density) * (rng.standard_normal(n) + 1j * rng.standard_normal(n)) / np.sqrt(2.0)
+        return self.add_points(positions, amp, velocity, label, lambert=True, normals=normals)
+
+    def visible(self, sensor, positions: np.ndarray | None = None) -> np.ndarray:
+        """[P] bool: the straight line from `sensor` to each scatterer misses every occluder."""
+        pts = self.positions if positions is None else positions
+        ok = np.ones(len(pts), dtype=bool)
+        s = np.asarray(sensor, dtype=float)
+        d = pts - s                                           # segment s + t d, t in [0, 1]
+        t_end = 1.0 - 1e-4                                    # stop just short of the scatterer itself
+        for kind, a, b in self.occluders:
+            if kind == "sphere":
+                c, r = np.asarray(a, dtype=float), 0.999 * float(b)
+                t = np.clip(((c - s) * d).sum(axis=1) / np.maximum((d * d).sum(axis=1), 1e-30), 0.0, t_end)
+                ok &= np.linalg.norm(s + t[:, None] * d - c, axis=1) >= r
+            elif kind == "box":
+                lo = np.asarray(a, dtype=float) + 1e-4
+                hi = np.asarray(b, dtype=float) - 1e-4
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    t0 = (lo - s) / d
+                    t1 = (hi - s) / d
+                near = np.where(np.abs(d) > 0, np.minimum(t0, t1), np.where((s >= lo) & (s <= hi), -np.inf, np.inf))
+                far = np.where(np.abs(d) > 0, np.maximum(t0, t1), np.where((s >= lo) & (s <= hi), np.inf, -np.inf))
+                enter, leave = near.max(axis=1), far.min(axis=1)
+                ok &= ~((enter < leave) & (leave > 0.0) & (enter < t_end))
+            else:
+                raise ValueError(f"unknown occluder {kind!r}")
+        return ok
 
     def at_time(self, t: float) -> np.ndarray:
         """Scatterer positions at scenario time t (first-order motion)."""
@@ -92,9 +144,77 @@ def seafloor_patch(x_range, y_range, density: float, depth: float = 0.0, rms_amp
     return np.column_stack([x, y, z]), amp
 
 
+def wire(start, end, spacing: float) -> np.ndarray:
+    """Points along a thin wire or line from `start` to `end`, `spacing` apart."""
+    a, b = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+    n = max(int(np.ceil(np.linalg.norm(b - a) / spacing)) + 1, 2)
+    return a + np.linspace(0.0, 1.0, n)[:, None] * (b - a)
+
+
+def plate_points(origin, edge_u, edge_v, density: float, rng: np.random.Generator):
+    """Random points on the parallelogram origin + a u + b v (a, b in [0, 1]) and its unit
+    normal u x v. Returns (positions [n, 3], normal [3])."""
+    o, u, v = (np.asarray(x, dtype=float) for x in (origin, edge_u, edge_v))
+    cross = np.cross(u, v)
+    area = np.linalg.norm(cross)
+    n = max(int(round(area * density)), 1)
+    ab = rng.uniform(0.0, 1.0, (n, 2))
+    return o + ab[:, :1] * u + ab[:, 1:] * v, cross / area
+
+
+def sphere_points(centre, radius: float, density: float, rng: np.random.Generator):
+    """Random points on a sphere and their outward normals."""
+    n = max(int(round(4.0 * np.pi * radius**2 * density)), 8)
+    v = rng.standard_normal((n, 3))
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    return np.asarray(centre, dtype=float) + radius * v, v
+
+
+def box_faces(lo, hi):
+    """The six faces of an axis-aligned box as (origin, edge_u, edge_v) with outward normals u x v."""
+    lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
+    e = np.diag(hi - lo)
+    faces = []
+    for axis in range(3):
+        u, v = e[(axis + 1) % 3], e[(axis + 2) % 3]
+        faces.append((lo, v, u))                         # normal -axis
+        faces.append((lo + e[axis], u, v))               # normal +axis
+    return faces
+
+
+def relief(slope=(0.0, 0.0), ripples: dict | None = None):
+    """Seafloor depth offset z(x, y) (positive down) and its gradient, for a tilted plane
+    plus sinusoidal ripples {amplitude, wavelength, direction_deg}."""
+    sx, sy = (float(v) for v in slope)
+    amp = float(ripples["amplitude"]) if ripples else 0.0
+    k = 2.0 * np.pi / float(ripples["wavelength"]) if ripples else 0.0
+    th = np.radians(float(ripples.get("direction_deg", 0.0))) if ripples else 0.0
+    cx, cy = np.cos(th), np.sin(th)
+
+    def height(x, y):
+        return sx * x + sy * y + amp * np.sin(k * (cx * x + cy * y))
+
+    def gradient(x, y):
+        g = amp * k * np.cos(k * (cx * x + cy * y))
+        return sx + g * cx, sy + g * cy
+
+    return height, gradient
+
+
+def _add_box(scene: Scene, lo, hi, item: dict, rng, vel, outward: bool, skip_top: bool = False) -> None:
+    """Surface points on the faces of an axis-aligned box, normals outward or inward."""
+    for i, (origin, u, v) in enumerate(box_faces(lo, hi)):
+        if skip_top and i == 4:                              # the face at minimum z (NED: the top)
+            continue
+        pts, normal = plate_points(origin, u, v, float(item["density"]), rng)
+        scene.add_surface(pts, normal if outward else -normal, float(item.get("mu_db", -20.0)),
+                          float(item["density"]), item.get("label", item["type"]), rng, vel)
+
+
 def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Scene:
     """Build a scene from the `scene:` list of a scenario config."""
     scene = Scene()
+    rng = rng or np.random.default_rng()
     for item in items:
         kind = item["type"]
         ts = item.get("target_strength_db")
@@ -112,7 +232,48 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                    else float(item.get("rms_amplitude", 1.0)))
             pts, a = seafloor_patch(item["x_range"], item["y_range"], float(item["density"]),
                                     float(item.get("depth", 0.0)), rms, rng)
-            scene.add_points(pts, a, vel, item.get("label", "seafloor"), lambert=mu is not None)
+            normals = None
+            if item.get("slope") is not None or item.get("ripples") is not None:
+                # Relief: move the points onto the surface and give each its normal (up = -z).
+                if mu is None:
+                    raise ValueError("a seafloor with slope or ripples needs lambert_mu_db")
+                height, gradient = relief(item.get("slope", (0.0, 0.0)), item.get("ripples"))
+                pts[:, 2] += height(pts[:, 0], pts[:, 1])
+                gx, gy = gradient(pts[:, 0], pts[:, 1])
+                normals = np.column_stack([gx, gy, -np.ones(len(pts))])
+                normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+            scene.add_points(pts, a, vel, item.get("label", "seafloor"), lambert=mu is not None, normals=normals)
+        elif kind == "wire":
+            scene.add_points(wire(item["start"], item["end"], float(item.get("spacing", 0.01))), amp, vel,
+                             item.get("label", "wire"), ts)
+        elif kind == "plate":
+            pts, normal = plate_points(item["origin"], item["edge_u"], item["edge_v"], float(item["density"]), rng)
+            scene.add_surface(pts, normal, float(item.get("mu_db", -20.0)), float(item["density"]),
+                              item.get("label", "plate"), rng, vel)
+        elif kind == "sphere":
+            pts, normals = sphere_points(item["centre"], float(item["radius"]), float(item["density"]), rng)
+            scene.add_surface(pts, normals, float(item.get("mu_db", -20.0)), float(item["density"]),
+                              item.get("label", "sphere"), rng, vel)
+            scene.occluders.append(("sphere", list(item["centre"]), float(item["radius"])))
+        elif kind == "box":
+            _add_box(scene, item["min"], item["max"], item, rng, vel, outward=True)
+            scene.occluders.append(("box", list(item["min"]), list(item["max"])))
+        elif kind == "pool":
+            # Walls and floor facing inwards; the water surface is left to the propagation tier.
+            x, y, z = item["x_range"], item["y_range"], item["z_range"]
+            _add_box(scene, [x[0], y[0], z[0]], [x[1], y[1], z[1]], item, rng, vel, outward=False,
+                     skip_top=True)
+        elif kind == "rocks":
+            x, y = item["x_range"], item["y_range"]
+            r_lo, r_hi = item.get("radius_range", [0.1, 0.3])
+            for _ in range(int(item["count"])):
+                r = float(rng.uniform(r_lo, r_hi))
+                c = [float(rng.uniform(*x)), float(rng.uniform(*y)), float(item.get("depth", 0.0)) - 0.3 * r]
+                pts, normals = sphere_points(c, r, float(item["density"]), rng)
+                keep = pts[:, 2] < float(item.get("depth", 0.0))           # the part above the floor
+                scene.add_surface(pts[keep], normals[keep], float(item.get("mu_db", -15.0)),
+                                  float(item["density"]), item.get("label", "rocks"), rng, vel)
+                scene.occluders.append(("sphere", c, r))
         else:
             raise ValueError(f"unknown scene item type {kind!r}")
     return scene

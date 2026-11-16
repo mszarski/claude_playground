@@ -586,6 +586,29 @@ Limits and gaps:
 - Frame counter is 16-bit on the wire; the host extends it (`RoceReceiverMetadata::frame_number`,
   `HSB:src/hololink/operators/roce_receiver/roce_receiver.hpp:51`).
 
+### 8.1 What is implemented for this source
+
+`python/gpusonar/sources/flank_stream.py` holds the host side, independent of transport:
+
+- A provisional block layout (the board is not designed): a 128-byte header carrying the
+  sample counter, the sample index and number of the latest transmit, a gain code, an
+  overflow flag and the capture start time, then 24-bit samples. A 6400-sample block is
+  614,528 bytes, a multiple of 128.
+- `PingAssembler`: continuous blocks in, ping records out, using the receive window of the
+  sonar config. A gap in the sample counter discards only the ping it cuts through and is
+  counted; joining a stream mid-window skips that ping.
+- `FlankUdpSource` (`type: flank_udp`): blocks as UDP datagrams, drained by a receiver
+  thread. This is a stand-in for `LinuxReceiverOp`, which delivers the same opaque bytes;
+  behind the Sensor Bridge receiver the assembler is fed from the receiver's output tensor
+  instead of a socket. That wiring is not written or tested.
+- `FlankBoardEmulator`: plays simulated pings as the board would send them.
+
+Tested (`tests/python/test_flank_stream.py`, and in the Holoscan pipeline in
+`test_holoscan.py`): samples recovered to half an LSB for block sizes 128, 1000 and 6400;
+a lost block costs one ping; UDP loopback; detection of a target at 2040 m and 12 degrees
+through the whole chain. Not tested: the Sensor Bridge emulator (`serve_linux_file`), PTP
+time, two sources aligned in time.
+
 ## 9. What we reuse / what we replace
 
 | Piece | Decision | Notes |

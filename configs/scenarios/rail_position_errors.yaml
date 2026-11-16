@@ -1,0 +1,7 @@
+# Rail SAS with rail position errors: the same run as `rail_points`, but the carriage is
+# off its commanded position by a fraction of a millimetre (across the rail and
+# vertically) and navigation reports the commanded positions.
+base: rail_points
+name: rail_position_errors
+platform:
+  motion: {sway_rms: 0.0003, heave_rms: 0.0002, correlation_pings: 10.0, nav_knows_disturbance: false, seafloor_depth: 0.0}

@@ -22,18 +22,66 @@ T* slab_upload(SlabAllocator& slab, const T* host, std::size_t count) {
   return dev;
 }
 
-}  // namespace
-
-/// Slab bytes one backprojection call needs. This is the stage's memory report.
-std::size_t backproject_memory_required(const BpInputs& inputs, std::size_t n_points,
-                                        const BpOptions& options, bool with_weight_sum,
-                                        std::size_t alignment) {
+/// Slab bytes of the per-collection inputs.
+std::size_t collection_bytes(const BpInputs& inputs, std::size_t table_size, std::size_t alignment) {
   std::size_t n = 0;
   n += align_up(inputs.groups.size() * sizeof(BpGroup), alignment);
   n += align_up(inputs.records.size() * sizeof(BpRecord), alignment);
   n += align_up(inputs.samples.size() * 2 * sizeof(float), alignment);
+  n += align_up(table_size * sizeof(float), alignment);
+  return n;
+}
+
+}  // namespace
+
+/// The per-collection inputs on one device, in a slab of their own.
+struct BpResident {
+  explicit BpResident(int dev) : device(dev), slab(Backend::Cuda) {}
+  int device;
+  SlabAllocator slab;
+  const BpGroup* groups = nullptr;
+  const BpRecord* records = nullptr;
+  const float* samples = nullptr;
+  const float* table = nullptr;
+};
+
+BpResident* bp_resident_create(const BpInputs& inputs, const std::vector<float>& sinc_table, int device) {
+  cuda_check(cudaSetDevice(device), "select device");
+  auto* r = new BpResident(device);
+  try {
+    r->slab.reserve(collection_bytes(inputs, sinc_table.size(), r->slab.alignment()));
+    r->slab.commit();
+    r->groups = slab_upload(r->slab, inputs.groups.data(), inputs.groups.size());
+    r->records = slab_upload(r->slab, inputs.records.data(), inputs.records.size());
+    r->samples = slab_upload(r->slab, reinterpret_cast<const float*>(inputs.samples.data()),
+                             2 * inputs.samples.size());
+    r->table = slab_upload(r->slab, sinc_table.data(), sinc_table.size());
+  } catch (...) {
+    delete r;
+    throw;
+  }
+  return r;
+}
+
+void bp_resident_destroy(BpResident* resident) {
+  if (resident == nullptr) return;
+  cudaSetDevice(resident->device);  // the slab must be freed on the device that holds it
+  delete resident;
+}
+
+int bp_resident_device(const BpResident* resident) { return resident->device; }
+std::size_t bp_resident_bytes(const BpResident* resident) { return resident->slab.capacity(); }
+
+/// Slab bytes one backprojection call needs. This is the stage's memory report. With the
+/// collection already resident on the device, only the per-call arrays count.
+std::size_t backproject_memory_required(const BpInputs& inputs, std::size_t n_points,
+                                        const BpOptions& options, bool with_weight_sum,
+                                        std::size_t alignment, bool resident = false) {
+  std::size_t n = 0;
+  if (!resident) {
+    n += collection_bytes(inputs, static_cast<std::size_t>((kSincPhases + 1) * kSincTaps), alignment);
+  }
   n += align_up(n_points * sizeof(Vec3d), alignment);
-  n += align_up(static_cast<std::size_t>((kSincPhases + 1) * kSincTaps) * sizeof(float), alignment);
   n += align_up(n_points * 2 * sizeof(float), alignment);
   if (options.position_lookup == PositionLookup::SoftwareTable) {
     n += align_up(inputs.trajectory.size() * sizeof(Vec3f), alignment);
@@ -49,20 +97,32 @@ std::size_t backproject_memory_required(const BpInputs& inputs, std::size_t n_po
 
 void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
                       const BpOptions& options, const std::vector<float>& sinc_table,
-                      std::complex<float>* image, float* weight_sum, BpStats* stats) {
+                      std::complex<float>* image, float* weight_sum, BpStats* stats,
+                      const BpResident* resident) {
   cuda_check(cudaSetDevice(options.device), "select device");
   // One device allocation for the whole call (ASASIN Sec. II-C).
   SlabAllocator slab(Backend::Cuda);
   slab.reserve(backproject_memory_required(inputs, points.size(), options, weight_sum != nullptr,
-                                           slab.alignment()));
+                                           slab.alignment(), resident != nullptr));
   slab.commit();
   const std::size_t n_points = points.size();
-  const BpGroup* d_groups = slab_upload(slab, inputs.groups.data(), inputs.groups.size());
-  const BpRecord* d_records = slab_upload(slab, inputs.records.data(), inputs.records.size());
-  const float* d_samples = slab_upload(slab, reinterpret_cast<const float*>(inputs.samples.data()),
-                                       2 * inputs.samples.size());
+  const BpGroup* d_groups;
+  const BpRecord* d_records;
+  const float* d_samples;
+  const float* d_table;
+  if (resident != nullptr) {
+    d_groups = resident->groups;
+    d_records = resident->records;
+    d_samples = resident->samples;
+    d_table = resident->table;
+  } else {
+    d_groups = slab_upload(slab, inputs.groups.data(), inputs.groups.size());
+    d_records = slab_upload(slab, inputs.records.data(), inputs.records.size());
+    d_samples = slab_upload(slab, reinterpret_cast<const float*>(inputs.samples.data()),
+                            2 * inputs.samples.size());
+    d_table = slab_upload(slab, sinc_table.data(), sinc_table.size());
+  }
   const Vec3d* d_points = slab_upload(slab, points.data(), n_points);
-  const float* d_table = slab_upload(slab, sinc_table.data(), sinc_table.size());
   // Upload the image: the kernel accumulates into what is already there.
   float* d_image = slab_upload(slab, reinterpret_cast<const float*>(image), 2 * n_points);
   float* d_wsum = weight_sum != nullptr ? slab_upload(slab, weight_sum, n_points) : nullptr;

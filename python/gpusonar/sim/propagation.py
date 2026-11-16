@@ -279,6 +279,8 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
         return FreeFieldProvider(sound_speed)
     if tier == "image_source":
         return ImageSourceProvider(sound_speed, **options)
+    if tier == "sediment":
+        return SedimentProvider(sound_speed, **options)
     if tier == "eigenray":
         from .bellhop import BellhopProvider, OceanEnvironment
         opts = dict(options)
@@ -288,7 +290,7 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
 
 
 def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points, amplitudes,
-                  velocities=None, lambert=None):
+                  velocities=None, lambert=None, normals=None):
     """Kernel paths for every (outbound eigenray, return eigenray) pair.
 
     Returns q [P, 3], p [P, 3], amplitude [P] and velocities ([P, 3] each or None).
@@ -313,10 +315,20 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
         # (horizontal) boundary. The amplitude drawn for the patch is shared by all pairs.
         sin_in = np.abs(out.arrival[:, :, 2])
         sin_out = np.abs(back.arrival[:, :, 2])
+        if normals is not None:
+            # Surface points with their own normal: the cosine from the normal replaces the
+            # sine of the grazing angle, and a face turned away from a path returns nothing.
+            nrm = np.asarray(normals, dtype=float)
+            has = np.isfinite(nrm).all(axis=1)
+            n_safe = np.where(has[:, None], nrm, 0.0)
+            cos_in = np.maximum(-(out.arrival * n_safe[:, None, :]).sum(axis=2), 0.0)
+            cos_out = np.maximum(-(back.arrival * n_safe[:, None, :]).sum(axis=2), 0.0)
+            sin_in = np.where(has[:, None], cos_in, sin_in)
+            sin_out = np.where(has[:, None], cos_out, sin_out)
         factor = np.sqrt(sin_in[:, :, None] * sin_out[:, None, :])
         amp = np.where(np.asarray(lambert, dtype=bool)[:, None, None], amp * factor, amp)
     amp = amp.reshape(-1)
-    valid = (out.valid[:, :, None] & back.valid[:, None, :]).reshape(-1)
+    valid = (out.valid[:, :, None] & back.valid[:, None, :]).reshape(-1) & (amp != 0)
     vq = vp = None
     if velocities is not None and np.any(velocities):
         # Images move with the scatterer horizontally; vertical image motion is mirrored

@@ -329,3 +329,46 @@ boundary count as incident. The projector is taken as omnidirectional in azimuth
 platform as stationary, and arrival elevation is ignored when steering to the hydrophones;
 all three are limits to lift, not physics choices. The two methods agree within 2 dB on a
 flat uniform seabed (`test_reverberation.py`).
+
+### D-38 Sea-surface models
+Backscatter: Chapman and Harris (1962), S = 3.3β log10(θ/30) − 42.4 log10(β) + 2.6,
+β = 158 (v f^(1/3))^(−0.58), θ in degrees, v in knots, f in Hz. The coefficients were
+checked against two published forms (158 with knots, 107 with m/s; they are the same
+formula). The fit covers 400–6400 Hz; at 8 kHz it is a mild extrapolation and at 27.5 kHz
+a large one (bubbles dominate there; the APL-UW model of TR 9407 is the right one and is
+not implemented because the report could not be obtained). For a path pair with different
+grazing angles the strength is taken at their mean.
+
+Forward loss: the coherent reflection coefficient exp(−Γ²/2), Γ = 2 k h sin θ, with h the
+Pierson–Moskowitz rms height (significant height 0.21 U²/g, a quarter of it rms), applied
+per surface bounce to Bellhop's flat-surface arrivals (`BellhopProvider(wind_speed=...)`).
+It removes all scattered energy from the forward path, which overstates the loss when Γ is
+large, so it is off by default and the shipped scenarios use a flat surface. Bubble
+absorption is not modelled.
+
+### D-39 Arrival cap of the eigenray provider
+The provider keeps the strongest `max_arrivals` rays per point. The first long-range
+scenarios used 8, which the KRAKEN cross-check showed drops 4.9 dB of one-way energy at
+10 km in 100 m of water. The scenarios now set the cap per range (24 to 80) so the
+one-way energy is within 0.1 dB of the normal-mode sum. Cost: the number of two-way paths
+is the square of the cap, so the 10 km case takes minutes to synthesise on a CPU.
+
+### D-40 Sessions: collection data stays on the device
+`recon::BpSession` (Python `core.BackprojectSession`) builds the kernel inputs once and,
+on the CUDA backend, uploads samples, ping and element tables and the interpolation table
+to each device on first use; they stay until the session is destroyed. A call then moves
+only its points and its image. The one-shot `backproject` is a session used once. Volume
+layers and multi-GPU tiles use a session. This departs from the paper's single allocation
+per run: there are now two slabs per device (the resident collection, and one per call
+for points, image and culling mask), each still reserved and committed in one piece.
+
+### D-41 Extended objects are clouds of surface points
+Spheres, boxes, plates, rocks and pool walls are random points on their surfaces, each
+with a normal and a complex Gaussian amplitude scaled for a Lambert strength, synthesised
+by the same point-scatterer kernel as everything else. A face turned away returns nothing
+(cosine from the normal clipped at zero). Shadows come from testing the straight line
+from the projector and from the array centre to every scatterer against sphere and box
+primitives, once per ping, on the host. This gives highlights, shadows and speckle, which
+is what imaging and detection tests need; it does not give specular glints, diffraction
+or resonances, and it is not a substitute for a boundary-element or k-Wave model of a
+target.

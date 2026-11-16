@@ -7,6 +7,7 @@
 
 #include <complex>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 #include "sonar/core/platform.hpp"
@@ -122,6 +123,36 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
 void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3d>& points,
                  const BpOptions& options, std::complex<float>* image, float* weight_sum = nullptr,
                  BpStats* stats = nullptr);
+
+/// Per-collection kernel inputs kept on a CUDA device between calls (docs/DECISIONS.md D-40).
+struct BpResident;
+
+/// A collection prepared once and imaged many times: tiles, depth layers, autofocus
+/// iterations, several devices. On the CUDA backend the samples, ping and element tables
+/// and the interpolation table are uploaded to a device on first use there and stay until
+/// the session is destroyed; each call then moves only its points and its image. On the
+/// host backend a session just saves rebuilding the inputs.
+class BpSession {
+ public:
+  explicit BpSession(BpInputs inputs);
+  ~BpSession();
+  BpSession(const BpSession&) = delete;
+  BpSession& operator=(const BpSession&) = delete;
+
+  const BpInputs& inputs() const { return inputs_; }
+  /// Same contract as the free function `backproject`. Safe to call from several threads
+  /// with different `options.device`.
+  void backproject(Backend backend, const std::vector<Vec3d>& points, const BpOptions& options,
+                   std::complex<float>* image, float* weight_sum = nullptr, BpStats* stats = nullptr);
+  /// Bytes held on all devices so far.
+  std::size_t resident_bytes() const;
+
+ private:
+  BpInputs inputs_;
+  std::vector<float> sinc_table_;
+  mutable std::mutex mutex_;
+  std::vector<BpResident*> resident_;
+};
 
 /// The culling mask on its own: one byte per (ping, block), 1 = visit. Host backend.
 std::vector<unsigned char> cull_mask(const BpInputs& inputs, const std::vector<Vec3d>& points,

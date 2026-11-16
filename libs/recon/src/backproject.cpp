@@ -13,7 +13,12 @@ namespace sonar::recon {
 #if SONAR_HAVE_CUDA
 void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
                       const BpOptions& options, const std::vector<float>& sinc_table,
-                      std::complex<float>* image, float* weight_sum, BpStats* stats);
+                      std::complex<float>* image, float* weight_sum, BpStats* stats,
+                      const BpResident* resident);
+BpResident* bp_resident_create(const BpInputs& inputs, const std::vector<float>& sinc_table, int device);
+void bp_resident_destroy(BpResident* resident);
+int bp_resident_device(const BpResident* resident);
+std::size_t bp_resident_bytes(const BpResident* resident);
 #endif
 
 namespace {
@@ -201,20 +206,12 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
   return in;
 }
 
-void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3d>& points,
-                 const BpOptions& options, std::complex<float>* image, float* weight_sum,
-                 BpStats* stats) {
-  if (points.empty() || inputs.groups.empty()) return;
-  const std::vector<float> table = make_sinc_table();
+namespace {
+
+void backproject_host(const BpInputs& inputs, const std::vector<float>& table,
+                      const std::vector<Vec3d>& points, const BpOptions& options,
+                      std::complex<float>* image, float* weight_sum, BpStats* stats) {
   const bool cull = culling_enabled(options, points.size());
-  if (backend == Backend::Cuda) {
-#if SONAR_HAVE_CUDA
-    backproject_cuda(inputs, points, options, table, image, weight_sum, stats);
-    return;
-#else
-    throw std::runtime_error("backproject: built without the CUDA backend");
-#endif
-  }
   BpKernel k{inputs.groups.data(),
              inputs.records.data(),
              reinterpret_cast<const float*>(inputs.samples.data()),
@@ -243,6 +240,67 @@ void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3
     for (unsigned char m : mask) stats->ping_blocks_kept += m;
   }
   parallel_for_host(static_cast<std::int64_t>(points.size()), k);
+}
+
+}  // namespace
+
+void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3d>& points,
+                 const BpOptions& options, std::complex<float>* image, float* weight_sum,
+                 BpStats* stats) {
+  if (points.empty() || inputs.groups.empty()) return;
+  const std::vector<float> table = make_sinc_table();
+  if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+    backproject_cuda(inputs, points, options, table, image, weight_sum, stats, nullptr);
+    return;
+#else
+    throw std::runtime_error("backproject: built without the CUDA backend");
+#endif
+  }
+  backproject_host(inputs, table, points, options, image, weight_sum, stats);
+}
+
+BpSession::BpSession(BpInputs inputs) : inputs_(std::move(inputs)), sinc_table_(make_sinc_table()) {}
+
+BpSession::~BpSession() {
+#if SONAR_HAVE_CUDA
+  for (BpResident* r : resident_) bp_resident_destroy(r);
+#endif
+}
+
+std::size_t BpSession::resident_bytes() const {
+  std::size_t n = 0;
+#if SONAR_HAVE_CUDA
+  const std::lock_guard<std::mutex> lock(mutex_);
+  for (const BpResident* r : resident_) n += bp_resident_bytes(r);
+#endif
+  return n;
+}
+
+void BpSession::backproject(Backend backend, const std::vector<Vec3d>& points, const BpOptions& options,
+                            std::complex<float>* image, float* weight_sum, BpStats* stats) {
+  if (points.empty() || inputs_.groups.empty()) return;
+  if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+    const BpResident* resident = nullptr;
+    {
+      // Upload once per device; other devices wait only while one is being filled.
+      const std::lock_guard<std::mutex> lock(mutex_);
+      for (const BpResident* r : resident_) {
+        if (bp_resident_device(r) == options.device) resident = r;
+      }
+      if (resident == nullptr) {
+        resident_.push_back(bp_resident_create(inputs_, sinc_table_, options.device));
+        resident = resident_.back();
+      }
+    }
+    backproject_cuda(inputs_, points, options, sinc_table_, image, weight_sum, stats, resident);
+    return;
+#else
+    throw std::runtime_error("backproject: built without the CUDA backend");
+#endif
+  }
+  backproject_host(inputs_, sinc_table_, points, options, image, weight_sum, stats);
 }
 
 void debug_delays(const BpInputs& inputs, const std::vector<Vec3d>& points, const BpOptions& options,

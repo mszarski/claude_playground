@@ -12,11 +12,14 @@ propagation:
   max_range: 1300
   range_step: 10.0
   depth_step: 1.0
-  max_arrivals: 8
+  max_arrivals: 32        # keeps the two-way echo energy within about 0.5 dB (RESULTS.md)
 platform: {position: [0, 0, 5.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
 pings: {count: 1, interval: 5.0}
 scene:
   - {type: points, label: target, positions: [[0.0, 1000.0, 15.0]], target_strength_db: 10.0}
+# Bottom reverberation by the scattering-function method; Lambert, Mackenzie's -27 dB.
+reverberation:
+  - {boundary_z: 30.0, mu_db: -27.0}
 absorption: ainslie_mccolm
 receiver:
   adc: false

@@ -1,0 +1,23 @@
+# Phase 1 pool test (plan, "Pool test plan"): thin wire targets on a frame at 0.5, 1 and
+# 2 m, to measure beam width and range resolution with the stock L12-5 probe.
+# Wires are vertical lines of point scatterers; only the part inside the probe's narrow
+# elevation beam matters, so 10 cm of each is modelled. Pool walls, floor and surface are
+# not in this scenario: at 5 MHz a wall needs more scatterers per square metre than is
+# practical, and the receive window ends before the far wall.
+name: pool_wires_l12_5d
+sonar: l12_5d
+fidelity: free_field
+sonar_overrides:
+  receive: {window: {range: [0.4, 2.2]}}
+environment: {temperature: 20.0, salinity: 0.0}
+platform:
+  position: [0, 0, 0.5]            # probe face 0.5 m below the surface
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 2, interval: 0.1}   # both multiplexer halves
+scene:
+  - {type: wire, label: wire_0p5m, start: [0.5, 0.00, 0.45], end: [0.5, 0.00, 0.55], spacing: 0.00025, target_strength_db: -60.0}
+  - {type: wire, label: wire_1m,   start: [1.0, 0.05, 0.45], end: [1.0, 0.05, 0.55], spacing: 0.00025, target_strength_db: -60.0}
+  - {type: wire, label: wire_2m,   start: [2.0, -0.10, 0.45], end: [2.0, -0.10, 0.55], spacing: 0.00025, target_strength_db: -60.0}
+receiver: {noise_rms: 0.0, adc: true}
+seed: 1

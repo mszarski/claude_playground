@@ -66,9 +66,14 @@ def baseband_pulse(waveform, sample_rate: float, center_frequency: float) -> np.
 
 def reverberation_power(provider: EigenrayProvider, source, boundary_z: float, times: np.ndarray,
                         mu_db: float, absorption_db_per_m: float = 0.0, max_range: float | None = None,
-                        ring_width: float | None = None, min_range: float = 0.0) -> np.ndarray:
+                        ring_width: float | None = None, min_range: float = 0.0,
+                        strength=None) -> np.ndarray:
     """Reverberation power per radian of azimuth in each time bin, for unit source
-    amplitude at 1 m, from a flat boundary at depth `boundary_z` with Lambert parameter mu.
+    amplitude at 1 m, from a flat boundary at depth `boundary_z`.
+
+    The scattering strength is Lambert's law with parameter `mu_db`, or `strength`: a
+    function of the incident and scattered grazing angles (radians) returning the linear
+    scattering strength per unit area.
 
     `times` are the centres of uniform time bins (two-way time after transmit).
     """
@@ -83,23 +88,34 @@ def reverberation_power(provider: EigenrayProvider, source, boundary_z: float, t
         return power
     pts = np.column_stack([source[0] + rings, np.full_like(rings, source[1]), np.full_like(rings, boundary_z)])
     es = provider.eigenrays(source, pts)
-    mu = 10.0 ** (mu_db / 10.0)
+    if strength is None:
+        mu = 10.0 ** (mu_db / 10.0)
+        strength = lambda g_in, g_out: mu * np.sin(g_in) * np.sin(g_out)     # noqa: E731
     side = 1.0 if boundary_z >= source[2] else -1.0        # incident paths travel towards the boundary
     incident = es.valid & (es.arrival[:, :, 2] * side > 0.0)
-    sin_g = np.abs(es.arrival[:, :, 2])                    # sine of the grazing angle at the boundary
+    graze = np.arcsin(np.clip(np.abs(es.arrival[:, :, 2]), 0.0, 1.0))   # grazing angle at the boundary
     a2 = np.where(incident, np.abs(es.amplitude) ** 2, 0.0)
     k = es.delay.shape[1]
     area = rings * dr                                      # ring area per radian of azimuth
     for i in range(k):
         for j in range(k):
             t = es.delay[:, i] + es.delay[:, j]
-            p = a2[:, i] * a2[:, j] * mu * sin_g[:, i] * sin_g[:, j] * area
+            p = a2[:, i] * a2[:, j] * strength(graze[:, i], graze[:, j]) * area
             if absorption_db_per_m:
                 p = p * 10.0 ** (-absorption_db_per_m * c * t / 10.0)
             idx = np.rint((t - times[0]) / dt).astype(int)
             ok = (idx >= 0) & (idx < len(times)) & (p > 0)
             np.add.at(power, idx[ok], p[ok])
     return power
+
+
+def chapman_harris_strength(wind_speed: float, frequency: float):
+    """Sea-surface scattering strength function for `reverberation_power`. Chapman-Harris is
+    a backscattering fit; for a path pair with different grazing angles it is evaluated at
+    their mean."""
+    from .. import acoustics
+    return lambda g_in, g_out: 10.0 ** (acoustics.chapman_harris_db(0.5 * (g_in + g_out), wind_speed,
+                                                                    frequency) / 10.0)
 
 
 def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
@@ -111,7 +127,7 @@ def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
 def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_db: float,
                       rng: np.random.Generator, n_azimuth: int | None = None,
                       absorption_db_per_m: float = 0.0, max_range: float | None = None,
-                      power_step: float | None = None) -> np.ndarray:
+                      power_step: float | None = None, strength=None) -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
@@ -137,7 +153,7 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         coarse = np.array([times[0], times[0] + step])
     min_range = 0.6 * 0.5 * c * coarse[0] if coarse[0] > 0.2 else 0.0
     density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
-                                  max_range, min_range=min_range) / step
+                                  max_range, min_range=min_range, strength=strength) / step
     power = np.interp(times, coarse, density, left=0.0, right=0.0) / fs
     dphi = 2.0 * np.pi / n_azimuth
     sigma = np.sqrt(power * dphi / 2.0)                    # per real component, per sector
