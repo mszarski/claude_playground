@@ -250,3 +250,12 @@ The kernel evaluates the receive body's attitude exactly at each point's arrival
 phase error on a 3 m array yawing at 0.02 rad/s over a 10 km round trip. Each element's
 differential delay uses that element's own range rate. Neglected: the change of attitude
 during the differential delay itself (at most the aperture over c, about 2 ms).
+
+### D-29 What "along-track resolution within 10% of D/2" is measured against
+`D/2` is the stripmap resolution when each point is integrated over the angular extent
+`λ/D` of an element of length `D`. `sas_image` therefore limits each ping to
+`fov_factor = 1.13` (= 1/0.886) times the FWHM beam, which is that extent, and the test
+compares the −3 dB along-track width with `D/2`. Processing more of the main lobe is
+allowed and gives a finer result (15.6 mm against 20 mm null to null in the test scenario).
+For the rail, where the element beam is far wider than the rail subtends, the reference
+is the aperture-limited `0.886·λR/(2L)`.

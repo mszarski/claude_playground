@@ -150,9 +150,11 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
 
     records, truth_positions = [], []
     n_sub = len(sonar.mux_groups)
+    # A rail moves between pings and stands still during each one.
+    stop_and_go = bool(plat.get("stop_and_go", False))
     for i in range(count):
         t = i * interval
-        pose = make_pose(position + velocity * t, rpy, velocity)
+        pose = make_pose(position + velocity * t, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity)
         truth_positions.append(position + velocity * t)
         records.append(simulate_ping(
             sonar, pose, scene, environment=env, provider=provider, sequence=i,

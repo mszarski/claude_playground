@@ -12,13 +12,14 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 4 Backprojection kernel, FLS mode | done on CPU; GPU half not run; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. GPU-versus-reference tests are **skipped** here. PICMUS: resolution measured; published reference numbers and contrast not done. |
 | 5 Run-time optimisations | done on CPU; GPU halves not run | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). Compiled but **not run**: the device slab, the CUDA culling pass, and the hardware texture path (`test_hardware_texture_matches_software_table` is skipped). |
 | 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
-| 7 SAS with known navigation | not started | |
+| 7 SAS with known navigation | done on CPU | `tests/python/test_sas.py`: stripmap grid per the paper's Fig. 4, targets focus at their positions, along-track width within 4% of D/2 at three ranges, rail width within 2% of the aperture-limited theory. Numbers in `RESULTS.md`. |
 | 8–13 | not started | |
 
 ## What is next
 
-1. Milestone 7: SAS with known navigation (rail and stripmap scenarios, grid sized from
-   the beamwidth, along-track resolution against D/2).
+1. Milestone 8: motion estimation (delay estimation between overlapping phase centres,
+   the Ceres solve of Eq. 8, two-pass unwrapping). Ceres is being built from source
+   without SuiteSparse so that no GPL code is linked.
 2. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.

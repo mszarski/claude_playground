@@ -253,8 +253,8 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
 | NED frame, Eq. 2 rotation, lever arms | `libs/core/include/sonar/core/vec.hpp`, `libs/core/src/record.cpp` | `tests/cpp/test_geometry.cpp` (`RotationNed.MatchesEquation2EntryByEntry`, `WorldPosition.*`) | done |
-| Origin on the seafloor below the first ping | | | pending |
-| Stripmap grid sized from the beamwidth | | | pending |
+| Origin on the seafloor below the first ping | scene convention: `configs/scenarios/stripmap_points.yaml`; `python/gpusonar/recon/sas.py` (`plane_z`) | `tests/python/test_sas.py::test_grid_follows_the_paper_geometry` | done as a convention the scenarios and grid follow; no automatic re-origin of foreign data yet |
+| Stripmap grid sized from the beamwidth | `python/gpusonar/recon/sas.py` (`stripmap_grid`) | `tests/python/test_sas.py::test_grid_follows_the_paper_geometry` | done |
 | Sign conventions for roll, pitch, yaw | `libs/core/include/sonar/core/vec.hpp` | `tests/cpp/test_geometry.cpp` (`PositiveRollLowersStarboard`, `PositivePitchRaisesBow`, `PositiveYawRotatesToStarboard`) | done |
 
 ### Backprojection and run-time (Sec. II-A, II-C, Eq. 1)

@@ -5,7 +5,7 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 to 6 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
+**State: early.** Milestones 1 to 7 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
 for what exists, what is next, and what has only been compiled and never run on a GPU.
 
 The repository also holds the older `trajectory_classifier` Python package, which is
@@ -72,6 +72,17 @@ YAML file; no signal-processing code changes.
 
 The PICMUS benchmark: `tools/fetch_picmus.py <dir>`, then run the tests with
 `GPUSONAR_PICMUS_DIR=<dir>`.
+
+## Simulate and image a stripmap SAS run
+
+```python
+from gpusonar import recon
+from gpusonar.sim import run_scenario
+
+result = run_scenario("stripmap_points")                 # 90 pings past three targets
+grid = recon.stripmap_grid(result.records, ground_range=(36.0, 47.0), pixel=(0.02, 0.04))
+image = recon.sas_image(result.records, grid.points)     # along-track x ground range, complex
+```
 
 ## Reading recorded data
 

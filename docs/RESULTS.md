@@ -67,6 +67,41 @@ challenge. Sinc interpolation, uniform weighting, no post-processing.
 - The targets image 0.2 mm deeper than the nominal lattice (10.2, 15.2, … mm). The
   offset is uniform; it is a property of the data's time origin and was left alone.
 
+## SAS with known navigation
+
+Source: `tests/python/test_sas.py`, scenarios `stripmap_points` and `rail_points`. CPU.
+Widths are −3 dB. Navigation is the simulator's truth.
+
+Stripmap: `sas_auv` (200 kHz, 40 kHz LFM, 16 receivers at 4 cm, element length D = 4 cm),
+15 m altitude, 1.6 m/s, 90 pings at 0.32 m, each ping processed over the beam's λ/D extent.
+
+| Target ground range | Along-track width | Against D/2 = 20.00 mm | Along-track position error |
+| --- | --- | --- | --- |
+| 38.0 m | 20.49 mm | +2.5% | −2.0 mm |
+| 41.2 m | 20.74 mm | +3.7% | −2.0 mm |
+| 45.0 m | 20.51 mm | +2.6% | −2.0 mm |
+
+- Ground-range width at 41.2 m: 18.84 mm against 17.68 mm (0.886·c/2B projected onto the
+  seafloor), +6.6%.
+- The width does not change with range, as D/2 predicts. A real aperture of the same
+  0.64 m array would resolve about 10 cm at this range.
+- Processing the whole main lobe (null to null) instead gives 15.6 mm, finer than D/2.
+  D/2 is the figure for a processed extent of λ/D; that extent is the default.
+- The constant −2 mm along-track offset is a tenth of a resolution cell. It is consistent
+  with range-Doppler coupling of the LFM pulse on a moving platform, which nothing
+  compensates yet; that attribution has not been tested by removing the motion.
+
+Rail: `sas_rail` (P4-2v probe, 2.72 MHz, 64 elements), 151 stop-and-go positions at 2 mm
+(0.30 m of travel), target at 2.0 m.
+
+| Quantity | Measured | Theory |
+| --- | --- | --- |
+| Along-track width | 1.579 mm | 1.558 mm = 0.886·λR/(2L), L = 0.3095 m (+1.3%) |
+
+On a rail the element beam (about 110°) is far wider than the angle the rail subtends,
+so resolution is limited by the rail length, not by D/2 (which would be 0.125 mm and
+would need 5.7 m of rail at this range).
+
 ## Kernel accuracy
 
 Source: `tests/python/test_backproject.py`.
@@ -139,4 +174,4 @@ Source: `tests/python/test_sim.py`.
 
 ## Not yet measured
 
-SAS resolution, motion-estimation accuracy, detection range, and every speed figure.
+Motion-estimation accuracy, detection range, and every speed figure.

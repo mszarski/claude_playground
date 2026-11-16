@@ -3,5 +3,7 @@
 from .fls import (FanImage, aperture_weights, array_frame, ensure_baseband, fan_image,
                   grating_lobes, max_unambiguous_steer, polar_points, prepare)
 
-__all__ = ["FanImage", "aperture_weights", "array_frame", "ensure_baseband", "fan_image",
+from .sas import StripmapGrid, sas_image, stripmap_grid
+
+__all__ = ["StripmapGrid", "sas_image", "stripmap_grid", "FanImage", "aperture_weights", "array_frame", "ensure_baseband", "fan_image",
            "grating_lobes", "max_unambiguous_steer", "polar_points", "prepare"]
