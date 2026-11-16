@@ -265,7 +265,7 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Time-domain backprojection, continuous receive motion | `libs/recon/include/sonar/recon/backproject_kernel.hpp` | `tests/python/test_backproject.py::test_kernel_matches_reference`, `::test_kernel_matches_reference_with_motion_and_weights`, `::test_phase_error_under_one_degree_at_10_km` | done (CPU; GPU run pending) |
 | Stop-and-hop option | same, `BpOptions::stop_and_hop` | `tests/python/test_backproject.py::test_stop_and_hop_differs_from_continuous_motion_by_the_expected_amount` | done |
 | Slab allocator, stages report need up front | `libs/core/include/sonar/core/allocator.hpp`; used by `libs/recon/src/backproject_cuda.cu` (`backproject_memory_required`) | `tests/cpp/test_allocator.cpp` | done on host; device slab compiled, not run |
-| Texture position lookup | | | pending |
+| Texture position lookup | `trajectory_residual` in `libs/recon/include/sonar/recon/backproject_kernel.hpp`; texture set-up in `libs/recon/src/backproject_cuda.cu` | `tests/python/test_position_lookup.py` | done as a software table and a host emulation of texture filtering; the hardware texture path is compiled, not run |
 | Ray culling on b×b blocks, speedup reported | `CullKernel` in `libs/recon/include/sonar/recon/backproject_kernel.hpp` | `tests/python/test_culling.py` | done (CPU speedup in `RESULTS.md`; GPU not measured) |
 
 ### Motion estimation (Sec. II-D, Eq. 3–8)

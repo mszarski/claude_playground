@@ -66,10 +66,12 @@ void bind_sim(py::module_& m) {
       "synthesize_into",
       [](PingRecord& record, const ArrD& q, const ArrD& p, const ArrC& amplitude,
          const py::object& q_velocity, const py::object& p_velocity,
-         const py::object& absorption, bool spreading, Backend backend) {
+         const py::object& absorption, bool spreading, Backend backend,
+         const Vec3d& platform_acceleration) {
         const auto paths = make_paths(q, p, amplitude, q_velocity, p_velocity);
         sim::SynthParams params = sim::params_from_record(record);
         params.spreading = spreading;
+        params.platform_acceleration = platform_acceleration;
         if (!absorption.is_none()) {
           // (f_min, f_max, table of kAbsorptionTableSize values in dB/m)
           const auto t = absorption.cast<py::tuple>();
@@ -89,6 +91,7 @@ void bind_sim(py::module_& m) {
       py::arg("q_velocity") = py::none(), py::arg("p_velocity") = py::none(),
       py::arg("absorption") = py::none(), py::arg("spreading") = true,
       py::arg("backend") = Backend::Host,
+      py::arg("platform_acceleration") = Vec3d{},
       "Add the echoes of two-way paths into record.samples. The record supplies geometry,\n"
       "waveform, sampling and board clocks; its samples must already be allocated.");
   m.attr("ABSORPTION_TABLE_SIZE") = sim::kAbsorptionTableSize;

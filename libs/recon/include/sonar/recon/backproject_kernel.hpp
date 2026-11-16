@@ -7,6 +7,10 @@
 #include "sonar/core/directivity.hpp"
 #include "sonar/recon/backproject.hpp"
 
+#if SONAR_DEVICE_BUILD
+#include <cuda_runtime.h>
+#endif
+
 namespace sonar::recon {
 
 /// Reference delay of one group at one point, solved in double precision.
@@ -21,15 +25,58 @@ struct RefDelay {
   float phase0;     ///< carrier phase, cycles, in [0, 1)
 };
 
-/// Position of the receive reference point at time t after transmit, and the body
-/// attitude then.
-SONAR_INLINE Vec3d reference_position(const BpGroup& g, double t, Mat3d& rot) {
-  rot = rotation_ned(g.rx_rpy.x + g.rx_rates.x * t, g.rx_rpy.y + g.rx_rates.y * t,
-                     g.rx_rpy.z + g.rx_rates.z * t);
-  return g.rx_pos + g.rx_vel * t + rot * g.ref_lever;
+/// Where the kernel reads trajectory residuals from.
+struct TrajectoryAccess {
+  const Vec3f* table = nullptr;  ///< concatenated residual tables (host memory or device memory)
+  PositionLookup mode = PositionLookup::Analytic;
+#if SONAR_DEVICE_BUILD
+  cudaTextureObject_t texture = 0;  ///< 2-D float4 texture: row = ping, column = table entry
+#endif
+};
+
+/// Residual of the platform trajectory about its first-order model at time t.
+/// The residual is small (millimetres to centimetres), which is what lets float32
+/// values and 8-bit hardware interpolation weights meet the phase budget.
+SONAR_INLINE Vec3d trajectory_residual(const BpGroup& g, std::int64_t ig, const TrajectoryAccess& a,
+                                       double t) {
+  if (a.mode == PositionLookup::Analytic || g.traj_count < 2) return Vec3d{};
+  double u = (t - g.traj_t0) / g.traj_dt;
+  const double last = static_cast<double>(g.traj_count - 1);
+  u = u < 0.0 ? 0.0 : (u > last ? last : u);
+#if defined(__CUDA_ARCH__)
+  if (a.mode == PositionLookup::Texture) {
+    // Hardware linear filtering between texel centres (at integer + 0.5).
+    const float4 v = tex2D<float4>(a.texture, static_cast<float>(u) + 0.5F,
+                                   static_cast<float>(ig) + 0.5F);
+    return Vec3d(static_cast<double>(v.x), static_cast<double>(v.y), static_cast<double>(v.z));
+  }
+#else
+  (void)ig;
+#endif
+  auto i = static_cast<std::int64_t>(u);
+  if (i > g.traj_count - 2) i = g.traj_count - 2;
+  float w = static_cast<float>(u - static_cast<double>(i));
+  if (a.mode == PositionLookup::Texture) {
+    // Host emulation of the texture unit: the weight is held with 8 fractional bits.
+    w = std::floor(w * 256.0F + 0.5F) / 256.0F;
+  }
+  const Vec3f p0 = a.table[g.traj_offset + i];
+  const Vec3f p1 = a.table[g.traj_offset + i + 1];
+  return Vec3d(p0 + (p1 - p0) * w);
 }
 
-SONAR_INLINE RefDelay reference_delay(const BpGroup& g, const Vec3d& x, bool stop_and_hop) {
+/// Position of the receive reference point at time t after transmit, and the body
+/// attitude then.
+SONAR_INLINE Vec3d reference_position(const BpGroup& g, double t, Mat3d& rot,
+                                      const Vec3d& residual = Vec3d{}) {
+  rot = rotation_ned(g.rx_rpy.x + g.rx_rates.x * t, g.rx_rpy.y + g.rx_rates.y * t,
+                     g.rx_rpy.z + g.rx_rates.z * t);
+  return g.rx_pos + g.rx_vel * t + rot * g.ref_lever + residual;
+}
+
+SONAR_INLINE RefDelay reference_delay(const BpGroup& g, const Vec3d& x, bool stop_and_hop,
+                                      std::int64_t ig = 0,
+                                      const TrajectoryAccess& traj = TrajectoryAccess{}) {
   RefDelay r;
   const Vec3d from_tx = x - g.tx_pos;
   r.r_tx = g.tx_plane_wave != 0 ? dot(from_tx, g.tx_dir) : norm(from_tx);
@@ -42,17 +89,19 @@ SONAR_INLINE RefDelay reference_delay(const BpGroup& g, const Vec3d& x, bool sto
     // The receiver keeps moving and turning until the echo arrives: tau is implicit.
     // The map contracts by v/c per pass, so three passes reach round-off.
     for (int i = 0; i < 3; ++i) {
-      w = x - reference_position(g, tau, rot);
+      w = x - reference_position(g, tau, rot, trajectory_residual(g, ig, traj, tau));
       r_rx = norm(w);
       tau = (r.r_tx + r_rx) / g.sound_speed;
     }
-    w = x - reference_position(g, tau, rot);
+    w = x - reference_position(g, tau, rot, trajectory_residual(g, ig, traj, tau));
     r_rx = norm(w);
     // Velocity of the reference point at arrival (translation plus lever-arm rotation),
     // by central difference of the exact position.
     Mat3d rot_h;
     const double h = 1e-3;
-    v_ref = (reference_position(g, tau + h, rot_h) - reference_position(g, tau - h, rot_h)) / (2.0 * h);
+    v_ref = (reference_position(g, tau + h, rot_h, trajectory_residual(g, ig, traj, tau + h)) -
+             reference_position(g, tau - h, rot_h, trajectory_residual(g, ig, traj, tau - h))) /
+            (2.0 * h);
   }
   r.tau = tau;
   r.r_rx = r_rx;
@@ -221,6 +270,7 @@ struct BpKernel {
   std::int64_t n_groups;
   BpOptions opt;
   const unsigned char* mask = nullptr;  ///< culling mask [n_groups * n_blocks], or null
+  TrajectoryAccess traj;
   std::int64_t blocks_c = 0, n_blocks = 0;
 
   /// Interpolate record samples `s` (n complex values) at position n + frac.
@@ -266,9 +316,10 @@ struct BpKernel {
   }
 
   /// Contribution of one group to point x. Returns the weight that contributed.
-  SONAR_HD float group_sum(const BpGroup& g, const Vec3d& x, float& acc_re, float& acc_im) const {
+  SONAR_HD float group_sum(const BpGroup& g, std::int64_t ig, const Vec3d& x, float& acc_re,
+                           float& acc_im) const {
     const float two_pi = 6.2831853F;
-    const RefDelay ref = reference_delay(g, x, opt.stop_and_hop);
+    const RefDelay ref = reference_delay(g, x, opt.stop_and_hop, ig, traj);
 
     float tx_gain = 1.0F;
     if (opt.fov_factor > 0.0F || opt.directivity_weight) {
@@ -344,7 +395,7 @@ struct BpKernel {
     }
     for (std::int64_t ig = 0; ig < n_groups; ++ig) {
       if (mask != nullptr && mask[ig * n_blocks + ib] == 0) continue;
-      wsum += group_sum(groups[ig], x, acc_re, acc_im);
+      wsum += group_sum(groups[ig], ig, x, acc_re, acc_im);
     }
     image[2 * ip] += acc_re;
     image[2 * ip + 1] += acc_im;

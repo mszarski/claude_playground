@@ -35,6 +35,9 @@ std::size_t backproject_memory_required(const BpInputs& inputs, std::size_t n_po
   n += align_up(n_points * sizeof(Vec3d), alignment);
   n += align_up(static_cast<std::size_t>((kSincPhases + 1) * kSincTaps) * sizeof(float), alignment);
   n += align_up(n_points * 2 * sizeof(float), alignment);
+  if (options.position_lookup == PositionLookup::SoftwareTable) {
+    n += align_up(inputs.trajectory.size() * sizeof(Vec3f), alignment);
+  }
   if (with_weight_sum) n += align_up(n_points * sizeof(float), alignment);
   if (options.cull_block > 0) {
     const std::int64_t blocks = block_count(options.grid_rows, options.cull_block) *
@@ -64,7 +67,53 @@ void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
   float* d_wsum = weight_sum != nullptr ? slab_upload(slab, weight_sum, n_points) : nullptr;
 
   BpKernel k{d_groups, d_records, d_samples, d_points, d_table, d_image, d_wsum,
-             static_cast<std::int64_t>(inputs.groups.size()), options};
+             static_cast<std::int64_t>(inputs.groups.size()), options, nullptr, TrajectoryAccess{},
+             0, 0};
+  // Trajectory residuals: a plain device table, or a texture with hardware filtering.
+  cudaArray_t traj_array = nullptr;
+  cudaTextureObject_t traj_texture = 0;
+  if (!inputs.trajectory.empty() && options.position_lookup != PositionLookup::Analytic) {
+    k.traj.mode = options.position_lookup;
+    if (options.position_lookup == PositionLookup::SoftwareTable) {
+      k.traj.table = slab_upload(slab, inputs.trajectory.data(), inputs.trajectory.size());
+    } else {
+      // One row per ping, one column per table entry. Texture memory is managed by the
+      // driver, outside the slab.
+      std::size_t width = 1;
+      for (const BpGroup& g : inputs.groups) {
+        if (static_cast<std::size_t>(g.traj_count) > width) width = static_cast<std::size_t>(g.traj_count);
+      }
+      const std::size_t height = inputs.groups.size();
+      std::vector<float> texels(width * height * 4, 0.0F);
+      for (std::size_t ig = 0; ig < height; ++ig) {
+        const BpGroup& g = inputs.groups[ig];
+        for (std::int32_t c = 0; c < g.traj_count; ++c) {
+          const Vec3f& v = inputs.trajectory[static_cast<std::size_t>(g.traj_offset + c)];
+          float* t = texels.data() + (ig * width + static_cast<std::size_t>(c)) * 4;
+          t[0] = v.x;
+          t[1] = v.y;
+          t[2] = v.z;
+        }
+      }
+      const cudaChannelFormatDesc desc = cudaCreateChannelDesc<float4>();
+      cuda_check(cudaMallocArray(&traj_array, &desc, width, height), "allocate trajectory texture");
+      cuda_check(cudaMemcpy2DToArray(traj_array, 0, 0, texels.data(), width * 4 * sizeof(float),
+                                     width * 4 * sizeof(float), height, cudaMemcpyHostToDevice),
+                 "upload trajectory texture");
+      cudaResourceDesc res{};
+      res.resType = cudaResourceTypeArray;
+      res.res.array.array = traj_array;
+      cudaTextureDesc tex{};
+      tex.addressMode[0] = cudaAddressModeClamp;
+      tex.addressMode[1] = cudaAddressModeClamp;
+      tex.filterMode = cudaFilterModeLinear;   // the hardware interpolation the paper uses
+      tex.readMode = cudaReadModeElementType;
+      tex.normalizedCoords = 0;
+      cuda_check(cudaCreateTextureObject(&traj_texture, &res, &tex, nullptr), "create trajectory texture");
+      k.traj.texture = traj_texture;
+    }
+  }
+
   // Coarse culling pass on the device, then the per-point kernel reads the mask.
   if (options.cull_block > 0) {
     const std::int64_t br = block_count(options.grid_rows, options.cull_block);
@@ -89,6 +138,8 @@ void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
     *stats = BpStats{};
   }
   parallel_for_cuda(static_cast<std::int64_t>(n_points), k);
+  if (traj_texture != 0) cudaDestroyTextureObject(traj_texture);
+  if (traj_array != nullptr) cudaFreeArray(traj_array);
   cuda_check(cudaMemcpy(image, d_image, 2 * n_points * sizeof(float), cudaMemcpyDeviceToHost),
              "download image");
   if (weight_sum != nullptr) {

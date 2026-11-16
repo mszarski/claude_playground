@@ -116,11 +116,14 @@ arithmetic. Test: kernel delays and phases against a long-double reference at 10
 ### D-07 Texture position lookup
 Hardware linear filtering uses 8 fractional bits for the interpolation weight and float32
 values. So the texture holds only the *residual* of each ping's trajectory about its
-first-order model `p0 + v·t` (the paper's kinematic model), relative to a local origin.
+first-order model `p0 + v·t` (the paper's kinematic model).
 The residual is millimetres to centimetres, which float32 and 8-bit weights resolve to
 well under a micron. The table is upsampled by `texture.upsample` (default 8) with cubic
 interpolation. `position_lookup: analytic | software_table | texture`; default `analytic`
 (first-order only), with the other two for trajectories that are not linear within a ping.
+The table is built from the ping's INS samples (uniformly spaced). On the device the
+texture is 2-D, one row per ping. On the host backend `texture` runs the same 8-bit-weight
+arithmetic in software, which is how the precision claim is tested without a GPU.
 
 ### D-08 Allocator
 Two phases. Stages call `reserve(bytes, alignment)` while the pipeline is built; `commit()`

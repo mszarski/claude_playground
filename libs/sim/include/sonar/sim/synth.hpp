@@ -49,6 +49,9 @@ struct SynthParams {
   bool complex_baseband = false;  ///< false: real passband output
   double center_frequency = 0.0;  ///< mixing frequency for baseband output; directivity reference
   bool spreading = true;          ///< apply 1/(R_out * R_back)
+  /// Acceleration of the transmitter and every receiver (world, m/s^2): the part of the
+  /// platform's motion within a ping that the record's first-order pose cannot express.
+  Vec3d platform_acceleration;
   /// Absorption in dB/m, tabulated uniformly over [f_min, f_max].
   double absorption_f_min = 0.0;
   double absorption_f_max = 0.0;

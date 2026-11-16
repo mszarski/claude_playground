@@ -107,11 +107,23 @@ void bind_recon(py::module_& m) {
       [](const py::list& pings, const ArrD& points, const std::string& interp, bool stop_and_hop,
          float fov_factor, bool directivity_weight, int spreading, const py::object& weights,
          Backend backend, bool return_weight_sum, int cull_block, const py::object& grid_shape,
-         const py::object& stats_out) -> py::object {
+         const py::object& stats_out, const std::string& position_lookup,
+         int trajectory_upsample) -> py::object {
         const auto ptrs = ping_list(pings);
         const auto pts = point_list(points);
         const auto opt = make_options(interp, stop_and_hop, fov_factor, directivity_weight, spreading,
                                       cull_block, grid_shape);
+        auto opt_mut = opt;
+        if (position_lookup == "analytic") {
+          opt_mut.position_lookup = recon::PositionLookup::Analytic;
+        } else if (position_lookup == "software_table") {
+          opt_mut.position_lookup = recon::PositionLookup::SoftwareTable;
+        } else if (position_lookup == "texture") {
+          opt_mut.position_lookup = recon::PositionLookup::Texture;
+        } else {
+          throw std::invalid_argument("position_lookup must be 'analytic', 'software_table' or 'texture'");
+        }
+        const int upsample = position_lookup == "analytic" ? 0 : trajectory_upsample;
         recon::BpStats stats;
         std::vector<std::vector<float>> w;
         const bool has_w = !weights.is_none();
@@ -124,8 +136,8 @@ void bind_recon(py::module_& m) {
           auto* img = image.mutable_data();
           auto* ws = return_weight_sum ? wsum.mutable_data() : nullptr;
           py::gil_scoped_release release;
-          const recon::BpInputs in = recon::make_inputs(ptrs, has_w ? &w : nullptr);
-          recon::backproject(backend, in, pts, opt, img, ws, &stats);
+          const recon::BpInputs in = recon::make_inputs(ptrs, has_w ? &w : nullptr, upsample);
+          recon::backproject(backend, in, pts, opt_mut, img, ws, &stats);
         }
         if (!stats_out.is_none()) {
           auto d = stats_out.cast<py::dict>();
@@ -141,6 +153,7 @@ void bind_recon(py::module_& m) {
       py::arg("weights") = py::none(), py::arg("backend") = Backend::Host,
       py::arg("return_weight_sum") = false, py::arg("cull_block") = 0,
       py::arg("grid_shape") = py::none(), py::arg("stats") = py::none(),
+      py::arg("position_lookup") = "analytic", py::arg("trajectory_upsample") = 8,
       "Time-domain backprojection of conditioned pings onto points [n, 3].\n"
       "Returns the complex coherent sum per point. With cull_block > 0 and grid_shape\n"
       "(rows, cols), blocks of points outside a ping's beams are skipped for that ping;\n"

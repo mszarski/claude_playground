@@ -17,6 +17,14 @@ namespace sonar::recon {
 
 enum class Interp : std::int32_t { Nearest = 0, Linear = 1, Sinc = 2 };
 
+/// How the receive platform's position during reception is obtained (DECISIONS.md D-07).
+enum class PositionLookup : std::int32_t {
+  Analytic = 0,       ///< first-order pose model only
+  SoftwareTable = 1,  ///< plus a tabulated residual, linear interpolation in float32
+  Texture = 2,        ///< plus the residual from GPU texture memory with hardware filtering
+                      ///< (on the host backend: the same 8-bit-weight arithmetic, emulated)
+};
+
 inline constexpr int kSincTaps = 8;
 inline constexpr int kSincPhases = 128;
 inline constexpr double kSincKaiserBeta = 6.0;
@@ -39,6 +47,11 @@ struct BpGroup {
   std::int64_t n_records = 0;
   std::int64_t sample_offset = 0;  ///< index of this group's first complex sample
   std::int64_t n_samples = 0;      ///< samples per record
+  // Trajectory residual table: position minus the first-order model, world frame.
+  std::int64_t traj_offset = 0;    ///< first entry of this ping in BpInputs::trajectory
+  std::int32_t traj_count = 0;     ///< entries; 0 = no table
+  double traj_t0 = 0.0;            ///< time of entry 0 after transmit, s
+  double traj_dt = 1.0;            ///< spacing, s
   // Transmit beam, for the field-of-view test and directivity weighting.
   Vec3f tx_boresight, tx_az, tx_el;
   float tx_bw_az = 0.0F, tx_bw_el = 0.0F;  ///< NaN = omnidirectional
@@ -58,6 +71,7 @@ struct BpOptions {
   float fov_factor = 0.0F;         ///< accept directions within fov_factor * FWHM / 2; 0 = no limit
   bool directivity_weight = false; ///< weight by the element patterns
   std::int32_t spreading = 0;      ///< multiply by (R_tx R_rx)^(spreading/2): 0 none, 1, 2
+  PositionLookup position_lookup = PositionLookup::Analytic;
   /// Ray culling (ASASIN Sec. II-C, DECISIONS.md D-09). The output points must form a
   /// grid of grid_rows x grid_cols in row-major order. Blocks of cull_block x cull_block
   /// points whose corners all lie outside a ping's transmit or receive beam are skipped
@@ -78,12 +92,17 @@ struct BpInputs {
   std::vector<BpGroup> groups;
   std::vector<BpRecord> records;
   std::vector<std::complex<float>> samples;  ///< all records, concatenated
+  std::vector<Vec3f> trajectory;             ///< residual tables of all pings, concatenated
 };
 
 /// Build kernel inputs from conditioned ping records (complex baseband or analytic).
 /// `weights`, when given, holds one aperture weight per channel of each record.
+/// `trajectory_upsample` > 0 builds each ping's residual table from its INS samples,
+/// upsampled by that factor with cubic interpolation (the paper upsamples before
+/// loading the texture).
 BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
-                     const std::vector<std::vector<float>>* weights = nullptr);
+                     const std::vector<std::vector<float>>* weights = nullptr,
+                     int trajectory_upsample = 0);
 
 /// Coherent sum at each output point, added into `image` (size points.size()).
 /// `weight_sum`, when not null, receives the sum of weights that contributed per point.

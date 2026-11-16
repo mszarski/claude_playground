@@ -55,8 +55,54 @@ std::vector<unsigned char> cull_mask(const BpInputs& inputs, const std::vector<V
   return mask;
 }
 
+namespace {
+
+/// Catmull-Rom interpolation of irregularly indexed samples at fractional index u.
+Vec3d cubic(const std::vector<Vec3d>& v, double u) {
+  const auto n = static_cast<std::int64_t>(v.size());
+  auto i = static_cast<std::int64_t>(std::floor(u));
+  if (i > n - 2) i = n - 2;
+  if (i < 0) i = 0;
+  const double f = u - static_cast<double>(i);
+  const Vec3d& p1 = v[static_cast<std::size_t>(i)];
+  const Vec3d& p2 = v[static_cast<std::size_t>(i + 1)];
+  // One-sided ends: extrapolate the missing neighbour linearly.
+  const Vec3d p0 = i > 0 ? v[static_cast<std::size_t>(i - 1)] : p1 * 2.0 - p2;
+  const Vec3d p3 = i + 2 < n ? v[static_cast<std::size_t>(i + 2)] : p2 * 2.0 - p1;
+  const double f2 = f * f, f3 = f2 * f;
+  return (p0 * (-f3 + 2.0 * f2 - f) + p1 * (3.0 * f3 - 5.0 * f2 + 2.0) +
+          p2 * (-3.0 * f3 + 4.0 * f2 + f) + p3 * (f3 - f2)) * 0.5;
+}
+
+/// Residual table of one ping from its INS samples, which must be uniformly spaced.
+void append_trajectory(const PingRecord& p, int upsample, BpGroup& g, std::vector<Vec3f>& table) {
+  const auto& ins = p.navigation.ins;
+  if (upsample <= 0 || ins.size() < 2) return;
+  const double dt = (ins.back().t - ins.front().t) / static_cast<double>(ins.size() - 1);
+  for (std::size_t k = 1; k < ins.size(); ++k) {
+    if (std::abs((ins[k].t - ins[k - 1].t) - dt) > 1e-6 * dt) {
+      throw std::invalid_argument("backproject: INS samples must be uniformly spaced to build the "
+                                  "trajectory table; resample them first");
+    }
+  }
+  std::vector<Vec3d> residual(ins.size());
+  for (std::size_t k = 0; k < ins.size(); ++k) {
+    residual[k] = ins[k].position - (p.geometry.rx_pose.position + p.geometry.rx_pose.velocity * ins[k].t);
+  }
+  const std::size_t n_out = (ins.size() - 1) * static_cast<std::size_t>(upsample) + 1;
+  g.traj_offset = static_cast<std::int64_t>(table.size());
+  g.traj_count = static_cast<std::int32_t>(n_out);
+  g.traj_t0 = ins.front().t;
+  g.traj_dt = dt / upsample;
+  for (std::size_t k = 0; k < n_out; ++k) {
+    table.push_back(Vec3f(cubic(residual, static_cast<double>(k) / upsample)));
+  }
+}
+
+}  // namespace
+
 BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
-                     const std::vector<std::vector<float>>* weights) {
+                     const std::vector<std::vector<float>>* weights, int trajectory_upsample) {
   BpInputs in;
   std::size_t total_samples = 0, total_records = 0;
   for (const PingRecord* p : pings) {
@@ -120,6 +166,7 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
     g.tx_el = Vec3f(world_direction(p.geometry.tx_pose, tx_axes.el));
     g.tx_bw_az = static_cast<float>(p.geometry.tx.beamwidth_az);
     g.tx_bw_el = static_cast<float>(p.geometry.tx.beamwidth_el);
+    append_trajectory(p, trajectory_upsample, g, in.trajectory);
     in.groups.push_back(g);
 
     if (weights != nullptr && (*weights)[ip].size() != n) {
@@ -168,7 +215,13 @@ void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3
              reinterpret_cast<float*>(image),
              weight_sum,
              static_cast<std::int64_t>(inputs.groups.size()),
-             options};
+             options,
+             nullptr,
+             TrajectoryAccess{},
+             0,
+             0};
+  k.traj.table = inputs.trajectory.data();
+  k.traj.mode = inputs.trajectory.empty() ? PositionLookup::Analytic : options.position_lookup;
   std::vector<unsigned char> mask;
   if (cull) {
     mask = cull_mask(inputs, points, options);
@@ -191,7 +244,7 @@ void debug_delays(const BpInputs& inputs, const std::vector<Vec3d>& points, cons
   phase_cycles.assign(points.size() * n_rec, 0.0);
   for (std::size_t ip = 0; ip < points.size(); ++ip) {
     for (const BpGroup& g : inputs.groups) {
-      const RefDelay ref = reference_delay(g, points[ip], options.stop_and_hop);
+      const RefDelay ref = reference_delay(g, points[ip], options.stop_and_hop);  // analytic path
       for (std::int64_t ir = 0; ir < g.n_records; ++ir) {
         const auto rec = static_cast<std::size_t>(g.first_record + ir);
         Vec3f to_point;

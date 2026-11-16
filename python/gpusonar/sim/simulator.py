@@ -46,6 +46,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   scenario_time: float = 0.0, absorption_model: str = "francois_garrison",
                   noise_rms: float = 0.0, adc: bool = True, spreading: bool = True,
                   rng: np.random.Generator | None = None, tx_pose: "core.Pose | None" = None,
+                  acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   backend=core.Backend.Host) -> "core.PingRecord":
     """Simulate one transmit and return its record."""
     env = resolve_environment(environment, depth=pose.position[2])
@@ -64,8 +65,11 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                           scene.velocities)
         core.synthesize_into(record, q, p, amp, vq, vp,
                              absorption=absorption_table(sonar, env, absorption_model),
-                             spreading=spreading, backend=backend)
+                             spreading=spreading, backend=backend,
+                             platform_acceleration=tuple(float(a) for a in acceleration))
     _set_board_clocks(record, sonar, truth=False)
+    if ins_rate > 0.0:
+        _add_true_ins(record, np.asarray(acceleration, dtype=float), ins_rate)
     samples = record.samples.array
     if noise_rms > 0.0:
         samples = receiver.add_noise(samples, noise_rms, rng or np.random.default_rng())
@@ -78,6 +82,26 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     s.kind = kind
     record.samples = s
     return record
+
+
+def _add_true_ins(record, accel: np.ndarray, rate: float) -> None:
+    """Attach error-free INS samples covering the receive window (true trajectory)."""
+    s = record.samples
+    t_end = s.start_time + s.n_samples / s.sample_rate
+    pose = record.geometry.rx_pose
+    p0, v0 = np.array(pose.position), np.array(pose.velocity)
+    out = []
+    for t in np.arange(0.0, t_end + 1.5 / rate, 1.0 / rate):
+        a = core.InsSample()
+        a.t = float(t)
+        a.position = tuple(p0 + v0 * t + 0.5 * accel * t * t)
+        a.rpy = tuple(np.array(pose.rpy) + np.array(pose.rates) * t)
+        a.velocity = tuple(v0 + accel * t)
+        a.rates = pose.rates
+        out.append(a)
+    nav = record.navigation
+    nav.ins = out
+    record.navigation = nav
 
 
 def _set_board_clocks(record, sonar: SonarModel, truth: bool) -> None:

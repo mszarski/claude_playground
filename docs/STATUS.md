@@ -10,13 +10,14 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 2 Record format and file replay | done | `RECORD_FORMAT.md`; `tests/cpp/test_record_io.cpp`, `tests/python/test_record.py`, `tests/python/test_sources.py` |
 | 3 Simulator, point targets, all sonar configs | done on CPU; GPU half not run | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. `test_gpu_forward_model_matches_cpu` is **skipped** here (no device). |
 | 4 Backprojection kernel, FLS mode | done on CPU; GPU half not run; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. GPU-versus-reference tests are **skipped** here. PICMUS: resolution measured; published reference numbers and contrast not done. |
-| 5 Run-time optimisations | **partly**: culling and allocator done, texture lookup not done | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup printed), `tests/cpp/test_allocator.cpp`. The device slab and the CUDA culling pass are compiled, not run. **Texture position lookup is not implemented.** |
+| 5 Run-time optimisations | done on CPU; GPU halves not run | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). Compiled but **not run**: the device slab, the CUDA culling pass, and the hardware texture path (`test_hardware_texture_matches_software_table` is skipped). |
 | 6–13 | not started | pulse compression and baseband conversion already exist (needed by milestone 4) |
 
 ## What is next
 
-1. Finish milestone 5: sensor positions in texture memory (`DECISIONS.md` D-07), with the
-   software table as its oracle. Then milestone 6.
+1. Milestone 6: conditioning (calibration, DC removal, band-pass, digital TVG), the
+   Doppler hypothesis bank, whitening, median TVG, dynamic range compression, scan
+   conversion. Baseband conversion and matched filtering already exist.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.
 3. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
@@ -89,6 +90,12 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - Docs say probe "L12-5 D"; code says "L7-3".
 
 ## Kernel limits so far
+
+- The trajectory table holds the residual of the platform *position* only. Attitude
+  within a ping is still the first-order model (exact for constant rates).
+- An LFM pulse received by a platform with a closing speed shows range-Doppler coupling
+  (about 1 mm and 7° for 0.17 m/s at 200 kHz with a 2 ms, 40 kHz sweep). Nothing
+  compensates this yet; the Doppler bank in milestone 6 is where it belongs.
 
 - The sound-speed-profile option (eigenray travel-time table) is not in the kernel yet;
   delays are straight-ray at one sound speed per ping. Planned with milestone 12.

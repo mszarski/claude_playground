@@ -12,8 +12,8 @@ namespace sonar::sim {
 /// Also returns the two leg lengths.
 SONAR_INLINE double arrival_time(const SynthElement& tx, const SynthElement& rx,
                                  const SynthPath& path, double c, double u, double& r_out,
-                                 double& r_back) {
-  const Vec3d tx_pos = tx.position + tx.velocity * u;
+                                 double& r_back, const Vec3d& accel = Vec3d{}) {
+  const Vec3d tx_pos = tx.position + tx.velocity * u + accel * (0.5 * u * u);
   // Time the wavefront meets the (slowly moving) outbound point.
   double ts = u;
   for (int i = 0; i < 3; ++i) {
@@ -24,7 +24,7 @@ SONAR_INLINE double arrival_time(const SynthElement& tx, const SynthElement& rx,
   const Vec3d p_pos = path.p + path.p_velocity * ts;
   double t = ts;
   for (int i = 0; i < 4; ++i) {
-    r_back = norm(p_pos - (rx.position + rx.velocity * t));
+    r_back = norm(p_pos - (rx.position + rx.velocity * t + accel * (0.5 * t * t)));
     t = ts + r_back / c;
   }
   return t;
@@ -71,9 +71,9 @@ struct SynthKernel {
     // as a function of arrival time is then a quadratic through these three points,
     // which captures Doppler and range curvature over the pulse.
     double ro0, rb0, rom, rbm, ro1, rb1;
-    const double t0 = arrival_time(params.tx, e, path, c, 0.0, ro0, rb0);
-    const double tm = arrival_time(params.tx, e, path, c, 0.5 * T, rom, rbm);
-    const double t1 = arrival_time(params.tx, e, path, c, T, ro1, rb1);
+    const double t0 = arrival_time(params.tx, e, path, c, 0.0, ro0, rb0, params.platform_acceleration);
+    const double tm = arrival_time(params.tx, e, path, c, 0.5 * T, rom, rbm, params.platform_acceleration);
+    const double t1 = arrival_time(params.tx, e, path, c, T, ro1, rb1, params.platform_acceleration);
 
     // Channel sample clock.
     const double fs = params.sample_rate * (1.0 + e.clock_drift);
