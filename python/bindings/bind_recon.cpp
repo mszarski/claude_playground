@@ -35,7 +35,8 @@ std::vector<Vec3d> point_list(const ArrD& points) {
 }
 
 recon::BpOptions make_options(const std::string& interp, bool stop_and_hop, float fov_factor,
-                              bool directivity_weight, int spreading) {
+                              bool directivity_weight, int spreading, int cull_block = 0,
+                              const py::object& grid_shape = py::none()) {
   recon::BpOptions o;
   if (interp == "nearest") {
     o.interp = recon::Interp::Nearest;
@@ -51,6 +52,12 @@ recon::BpOptions make_options(const std::string& interp, bool stop_and_hop, floa
   o.fov_factor = fov_factor;
   o.directivity_weight = directivity_weight;
   o.spreading = spreading;
+  o.cull_block = cull_block;
+  if (!grid_shape.is_none()) {
+    const auto shape = grid_shape.cast<std::pair<std::int64_t, std::int64_t>>();
+    o.grid_rows = shape.first;
+    o.grid_cols = shape.second;
+  }
   return o;
 }
 
@@ -99,10 +106,13 @@ void bind_recon(py::module_& m) {
       "backproject",
       [](const py::list& pings, const ArrD& points, const std::string& interp, bool stop_and_hop,
          float fov_factor, bool directivity_weight, int spreading, const py::object& weights,
-         Backend backend, bool return_weight_sum) -> py::object {
+         Backend backend, bool return_weight_sum, int cull_block, const py::object& grid_shape,
+         const py::object& stats_out) -> py::object {
         const auto ptrs = ping_list(pings);
         const auto pts = point_list(points);
-        const auto opt = make_options(interp, stop_and_hop, fov_factor, directivity_weight, spreading);
+        const auto opt = make_options(interp, stop_and_hop, fov_factor, directivity_weight, spreading,
+                                      cull_block, grid_shape);
+        recon::BpStats stats;
         std::vector<std::vector<float>> w;
         const bool has_w = !weights.is_none();
         if (has_w) w = weights.cast<std::vector<std::vector<float>>>();
@@ -115,7 +125,12 @@ void bind_recon(py::module_& m) {
           auto* ws = return_weight_sum ? wsum.mutable_data() : nullptr;
           py::gil_scoped_release release;
           const recon::BpInputs in = recon::make_inputs(ptrs, has_w ? &w : nullptr);
-          recon::backproject(backend, in, pts, opt, img, ws);
+          recon::backproject(backend, in, pts, opt, img, ws, &stats);
+        }
+        if (!stats_out.is_none()) {
+          auto d = stats_out.cast<py::dict>();
+          d["ping_blocks_total"] = stats.ping_blocks_total;
+          d["ping_blocks_kept"] = stats.ping_blocks_kept;
         }
         if (return_weight_sum) return py::make_tuple(image, wsum);
         return std::move(image);
@@ -124,9 +139,12 @@ void bind_recon(py::module_& m) {
       py::arg("stop_and_hop") = false, py::arg("fov_factor") = 0.0F,
       py::arg("directivity_weight") = false, py::arg("spreading") = 0,
       py::arg("weights") = py::none(), py::arg("backend") = Backend::Host,
-      py::arg("return_weight_sum") = false,
+      py::arg("return_weight_sum") = false, py::arg("cull_block") = 0,
+      py::arg("grid_shape") = py::none(), py::arg("stats") = py::none(),
       "Time-domain backprojection of conditioned pings onto points [n, 3].\n"
-      "Returns the complex coherent sum per point.");
+      "Returns the complex coherent sum per point. With cull_block > 0 and grid_shape\n"
+      "(rows, cols), blocks of points outside a ping's beams are skipped for that ping;\n"
+      "pass a dict as `stats` to receive the block counts.");
 
   m.def(
       "debug_delays",

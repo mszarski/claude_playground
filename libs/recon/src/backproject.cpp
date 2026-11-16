@@ -13,8 +13,47 @@ namespace sonar::recon {
 #if SONAR_HAVE_CUDA
 void backproject_cuda(const BpInputs& inputs, const std::vector<Vec3d>& points,
                       const BpOptions& options, const std::vector<float>& sinc_table,
-                      std::complex<float>* image, float* weight_sum);
+                      std::complex<float>* image, float* weight_sum, BpStats* stats);
 #endif
+
+namespace {
+
+bool culling_enabled(const BpOptions& o, std::size_t n_points) {
+  if (o.cull_block <= 0) return false;
+  if (!(o.fov_factor > 0.0F)) {
+    throw std::invalid_argument("backproject: culling needs a field-of-view limit (fov_factor > 0)");
+  }
+  if (o.grid_rows <= 0 || o.grid_cols <= 0 ||
+      static_cast<std::size_t>(o.grid_rows * o.grid_cols) != n_points) {
+    throw std::invalid_argument("backproject: culling needs grid_rows x grid_cols == number of points");
+  }
+  return true;
+}
+
+}  // namespace
+
+float aperture_radius(const BpInputs& inputs) {
+  float r = 0.0F;
+  for (const BpRecord& e : inputs.records) {
+    const float d = norm(e.d);
+    if (d > r) r = d;
+  }
+  return r;
+}
+
+std::vector<unsigned char> cull_mask(const BpInputs& inputs, const std::vector<Vec3d>& points,
+                                     const BpOptions& options) {
+  if (!culling_enabled(options, points.size())) return {};
+  const std::int64_t br = block_count(options.grid_rows, options.cull_block);
+  const std::int64_t bc = block_count(options.grid_cols, options.cull_block);
+  const auto n_groups = static_cast<std::int64_t>(inputs.groups.size());
+  std::vector<unsigned char> mask(static_cast<std::size_t>(n_groups * br * bc));
+  const CullKernel k{inputs.groups.data(), inputs.records.data(), points.data(), mask.data(),
+                     options.grid_rows, options.grid_cols, options.cull_block, br, bc,
+                     options.fov_factor, aperture_radius(inputs)};
+  parallel_for_host(n_groups * br * bc, k);
+  return mask;
+}
 
 BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
                      const std::vector<std::vector<float>>* weights) {
@@ -108,12 +147,14 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
 }
 
 void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3d>& points,
-                 const BpOptions& options, std::complex<float>* image, float* weight_sum) {
+                 const BpOptions& options, std::complex<float>* image, float* weight_sum,
+                 BpStats* stats) {
   if (points.empty() || inputs.groups.empty()) return;
   const std::vector<float> table = make_sinc_table();
+  const bool cull = culling_enabled(options, points.size());
   if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
-    backproject_cuda(inputs, points, options, table, image, weight_sum);
+    backproject_cuda(inputs, points, options, table, image, weight_sum, stats);
     return;
 #else
     throw std::runtime_error("backproject: built without the CUDA backend");
@@ -128,6 +169,18 @@ void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3
              weight_sum,
              static_cast<std::int64_t>(inputs.groups.size()),
              options};
+  std::vector<unsigned char> mask;
+  if (cull) {
+    mask = cull_mask(inputs, points, options);
+    k.mask = mask.data();
+    k.blocks_c = block_count(options.grid_cols, options.cull_block);
+    k.n_blocks = block_count(options.grid_rows, options.cull_block) * k.blocks_c;
+  }
+  if (stats != nullptr) {
+    stats->ping_blocks_total = static_cast<std::int64_t>(mask.size());
+    stats->ping_blocks_kept = 0;
+    for (unsigned char m : mask) stats->ping_blocks_kept += m;
+  }
   parallel_for_host(static_cast<std::int64_t>(points.size()), k);
 }
 

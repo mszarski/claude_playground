@@ -82,6 +82,27 @@ Source: `tests/python/test_backproject.py`.
 The phase errors are the worst case over random targets, against long-double arithmetic.
 The tests assert 0.05°; the requirement is 1°.
 
+## Ray culling
+
+Source: `tests/python/test_culling.py::test_report_cpu_speedup`. **CPU backend, 4 cores.**
+Stripmap geometry: `sas_auv`, 200 pings over 64 m of track, 16 receivers each, image
+400 × 240 points, linear interpolation, field of view 1.5 × FWHM. Best of three runs.
+Without culling: 1.78 s.
+
+| Block size b | Speedup | (ping, block) pairs kept |
+| --- | --- | --- |
+| 4 | 1.60× | 19% |
+| 8 | 1.68× | 21% |
+| 16 | 1.62× | 25% |
+| 32 | 1.61× | 33% |
+
+- The image with culling on is bit-identical to the image without it, in every test.
+- The paper reports "a factor of two" for its GPU implementation on its own data. These
+  figures are CPU and a different geometry, so they are not a like-for-like comparison.
+  The gain depends on how much of the image each ping can see: a 15 m collection where
+  each ping covered most of the image gave only 1.1×.
+- GPU speedup: not measured (no device).
+
 ## Simulator
 
 Source: `tests/python/test_sim.py`.

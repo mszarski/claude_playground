@@ -103,6 +103,113 @@ SONAR_INLINE bool in_field_of_view(const Vec3f& boresight, const Vec3f& az, cons
   return true;
 }
 
+/// Field-of-view test widened by `margin` radians, for whole blocks of points.
+SONAR_INLINE bool in_field_of_view_margin(const Vec3f& boresight, const Vec3f& az, const Vec3f& el,
+                                          float bw_az, float bw_el, const Vec3f& dir, float factor,
+                                          float margin) {
+  const bool omni_az = !(bw_az == bw_az);
+  const bool omni_el = !(bw_el == bw_el);
+  if (omni_az && omni_el) return true;
+  const float half_pi = 1.5707963F;
+  if (margin >= half_pi) return true;
+  if (dot(dir, boresight) <= -std::sin(margin)) return false;
+  if (!omni_az) {
+    const float lim = 0.5F * factor * bw_az + margin;
+    if (lim < half_pi && std::abs(dot(dir, az)) > std::sin(lim)) return false;
+  }
+  if (!omni_el) {
+    const float lim = 0.5F * factor * bw_el + margin;
+    if (lim < half_pi && std::abs(dot(dir, el)) > std::sin(lim)) return false;
+  }
+  return true;
+}
+
+/// Number of blocks along a grid dimension of n points.
+SONAR_INLINE std::int64_t block_count(std::int64_t n, std::int64_t block) {
+  return (n + block - 1) / block;
+}
+
+/// Coarse pass of ray culling: decides, per (ping, block), whether any point of the
+/// block can lie in both the transmit and the receive beam of that ping.
+///
+/// A block is kept when any of its four corners passes the field-of-view test. The
+/// paper relies on beam convexity for this, but a beam narrower than a block can pass
+/// between the corners, so the test is widened by the angle the block subtends from
+/// the sonar (plus the array's own extent and its motion during the flight time).
+/// Kept blocks are then tested point by point, without the margin, in the main kernel.
+struct CullKernel {
+  const BpGroup* groups;
+  const BpRecord* records;
+  const Vec3d* points;
+  unsigned char* mask;  ///< [n_groups * n_blocks]
+  std::int64_t rows, cols, block;
+  std::int64_t blocks_r, blocks_c;
+  float fov_factor;
+  float aperture_radius;  ///< largest element offset from a group's reference, m
+
+  SONAR_HD void operator()(std::int64_t idx) const {
+    const std::int64_t n_blocks = blocks_r * blocks_c;
+    const std::int64_t ig = idx / n_blocks;
+    const std::int64_t ib = idx % n_blocks;
+    const std::int64_t br = ib / blocks_c, bc = ib % blocks_c;
+    const std::int64_t r0 = br * block, c0 = bc * block;
+    std::int64_t r1 = r0 + block - 1, c1 = c0 + block - 1;
+    if (r1 > rows - 1) r1 = rows - 1;
+    if (c1 > cols - 1) c1 = cols - 1;
+    const Vec3d corner[4] = {points[r0 * cols + c0], points[r0 * cols + c1],
+                             points[r1 * cols + c0], points[r1 * cols + c1]};
+    const Vec3d centre = (corner[0] + corner[1] + corner[2] + corner[3]) * 0.25;
+    double radius = 0.0;
+    for (int k = 0; k < 4; ++k) {
+      const double d = norm(corner[k] - centre);
+      if (d > radius) radius = d;
+    }
+
+    const BpGroup& g = groups[ig];
+    Mat3d rot;
+    const Vec3d rx = reference_position(g, 0.0, rot);
+    const BpRecord& e = records[g.first_record];  // elements of a ping share their pattern
+    const float half_pi = 1.5707963F;
+    bool keep = false;
+    for (int k = 0; k < 4 && !keep; ++k) {
+      // Receive side.
+      const Vec3d to_rx = corner[k] - rx;
+      const double dist_rx = norm(to_rx);
+      const double reach = radius + static_cast<double>(aperture_radius);
+      float margin_rx = half_pi;
+      if (dist_rx > reach) {
+        const double flight = 2.0 * (dist_rx + radius) / g.sound_speed;
+        const double drift = norm(g.rx_vel) * flight;        // receiver motion before arrival
+        const double turn = norm(g.rx_rates) * flight;       // attitude change before arrival
+        const double a = std::asin((reach + drift) / dist_rx < 1.0 ? (reach + drift) / dist_rx : 1.0) + turn;
+        margin_rx = a < static_cast<double>(half_pi) ? static_cast<float>(a) : half_pi;
+      }
+      const Vec3f dir_rx = Vec3f(rot.transposed() * (to_rx / (dist_rx > 1e-12 ? dist_rx : 1e-12)));
+      if (!in_field_of_view_margin(e.boresight, e.az, e.el, e.bw_az, e.bw_el, dir_rx, fov_factor,
+                                   margin_rx)) {
+        continue;
+      }
+      // Transmit side (tested separately: the pair may be bistatic).
+      if (g.tx_plane_wave != 0) {
+        keep = true;
+        break;
+      }
+      const Vec3d to_tx = corner[k] - g.tx_pos;
+      const double dist_tx = norm(to_tx);
+      float margin_tx = half_pi;
+      if (dist_tx > radius) {
+        margin_tx = static_cast<float>(std::asin(radius / dist_tx));
+      }
+      const Vec3f dir_tx = Vec3f(to_tx / (dist_tx > 1e-12 ? dist_tx : 1e-12));
+      if (in_field_of_view_margin(g.tx_boresight, g.tx_az, g.tx_el, g.tx_bw_az, g.tx_bw_el, dir_tx,
+                                  fov_factor, margin_tx)) {
+        keep = true;
+      }
+    }
+    mask[idx] = keep ? 1 : 0;
+  }
+};
+
 struct BpKernel {
   const BpGroup* groups;
   const BpRecord* records;
@@ -113,6 +220,8 @@ struct BpKernel {
   float* weight_sum;         ///< may be null
   std::int64_t n_groups;
   BpOptions opt;
+  const unsigned char* mask = nullptr;  ///< culling mask [n_groups * n_blocks], or null
+  std::int64_t blocks_c = 0, n_blocks = 0;
 
   /// Interpolate record samples `s` (n complex values) at position n + frac.
   SONAR_HD bool interpolate(const float* s, std::int64_t n_samples, std::int64_t n, float frac,
@@ -229,7 +338,12 @@ struct BpKernel {
   SONAR_HD void operator()(std::int64_t ip) const {
     const Vec3d x = points[ip];
     float acc_re = 0.0F, acc_im = 0.0F, wsum = 0.0F;
+    std::int64_t ib = 0;
+    if (mask != nullptr) {
+      ib = (ip / opt.grid_cols / opt.cull_block) * blocks_c + (ip % opt.grid_cols) / opt.cull_block;
+    }
     for (std::int64_t ig = 0; ig < n_groups; ++ig) {
+      if (mask != nullptr && mask[ig * n_blocks + ib] == 0) continue;
       wsum += group_sum(groups[ig], x, acc_re, acc_im);
     }
     image[2 * ip] += acc_re;

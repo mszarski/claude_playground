@@ -1,4 +1,5 @@
 add_library(sonar_core
+  src/allocator.cpp
   src/platform.cpp
   src/record.cpp)
 add_library(sonar::core ALIAS sonar_core)

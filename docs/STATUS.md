@@ -10,12 +10,13 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 2 Record format and file replay | done | `RECORD_FORMAT.md`; `tests/cpp/test_record_io.cpp`, `tests/python/test_record.py`, `tests/python/test_sources.py` |
 | 3 Simulator, point targets, all sonar configs | done on CPU; GPU half not run | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. `test_gpu_forward_model_matches_cpu` is **skipped** here (no device). |
 | 4 Backprojection kernel, FLS mode | done on CPU; GPU half not run; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. GPU-versus-reference tests are **skipped** here. PICMUS: resolution measured; published reference numbers and contrast not done. |
-| 5 Run-time optimisations | not started | |
+| 5 Run-time optimisations | **partly**: culling and allocator done, texture lookup not done | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup printed), `tests/cpp/test_allocator.cpp`. The device slab and the CUDA culling pass are compiled, not run. **Texture position lookup is not implemented.** |
 | 6–13 | not started | pulse compression and baseband conversion already exist (needed by milestone 4) |
 
 ## What is next
 
-1. Milestone 5: slab allocator, texture position lookup, block ray culling.
+1. Finish milestone 5: sensor positions in texture memory (`DECISIONS.md` D-07), with the
+   software table as its oracle. Then milestone 6.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.
 3. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.

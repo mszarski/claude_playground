@@ -264,9 +264,9 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 | Eq. 1 forward model (simulator) | `libs/sim/include/sonar/sim/synth_kernel.hpp` | `tests/python/test_sim.py::test_gaussian_echo_delay_and_amplitude`, `::test_time_domain_synthesis_matches_frequency_domain_oracle`, `::test_receiver_moves_during_reception` | done (CPU; GPU run pending) |
 | Time-domain backprojection, continuous receive motion | `libs/recon/include/sonar/recon/backproject_kernel.hpp` | `tests/python/test_backproject.py::test_kernel_matches_reference`, `::test_kernel_matches_reference_with_motion_and_weights`, `::test_phase_error_under_one_degree_at_10_km` | done (CPU; GPU run pending) |
 | Stop-and-hop option | same, `BpOptions::stop_and_hop` | `tests/python/test_backproject.py::test_stop_and_hop_differs_from_continuous_motion_by_the_expected_amount` | done |
-| Slab allocator, stages report need up front | | | pending |
+| Slab allocator, stages report need up front | `libs/core/include/sonar/core/allocator.hpp`; used by `libs/recon/src/backproject_cuda.cu` (`backproject_memory_required`) | `tests/cpp/test_allocator.cpp` | done on host; device slab compiled, not run |
 | Texture position lookup | | | pending |
-| Ray culling on b×b blocks, speedup reported | | | pending |
+| Ray culling on b×b blocks, speedup reported | `CullKernel` in `libs/recon/include/sonar/recon/backproject_kernel.hpp` | `tests/python/test_culling.py` | done (CPU speedup in `RESULTS.md`; GPU not measured) |
 
 ### Motion estimation (Sec. II-D, Eq. 3–8)
 
@@ -298,7 +298,7 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| Bistatic ray culling | | | pending |
+| Bistatic ray culling | same `CullKernel` (transmitter and receiver tested separately) | `tests/python/test_culling.py::test_bistatic_culling_tests_transmitter_and_receiver_separately` | done (CPU) |
 | Refraction at the sediment–water interface | | | pending |
 | Volume as 2D layers over focus depth | | | pending |
 | Slices and maximum intensity projections | | | pending |

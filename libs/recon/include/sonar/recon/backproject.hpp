@@ -58,6 +58,19 @@ struct BpOptions {
   float fov_factor = 0.0F;         ///< accept directions within fov_factor * FWHM / 2; 0 = no limit
   bool directivity_weight = false; ///< weight by the element patterns
   std::int32_t spreading = 0;      ///< multiply by (R_tx R_rx)^(spreading/2): 0 none, 1, 2
+  /// Ray culling (ASASIN Sec. II-C, DECISIONS.md D-09). The output points must form a
+  /// grid of grid_rows x grid_cols in row-major order. Blocks of cull_block x cull_block
+  /// points whose corners all lie outside a ping's transmit or receive beam are skipped
+  /// for that ping. Needs fov_factor > 0. cull_block = 0 disables culling.
+  std::int32_t cull_block = 0;
+  std::int64_t grid_rows = 0;
+  std::int64_t grid_cols = 0;
+};
+
+/// What culling did, for the processing log.
+struct BpStats {
+  std::int64_t ping_blocks_total = 0;  ///< pings x blocks
+  std::int64_t ping_blocks_kept = 0;   ///< those the kernel actually visited
 };
 
 /// Everything the kernel needs, in flat arrays.
@@ -75,7 +88,12 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
 /// Coherent sum at each output point, added into `image` (size points.size()).
 /// `weight_sum`, when not null, receives the sum of weights that contributed per point.
 void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3d>& points,
-                 const BpOptions& options, std::complex<float>* image, float* weight_sum = nullptr);
+                 const BpOptions& options, std::complex<float>* image, float* weight_sum = nullptr,
+                 BpStats* stats = nullptr);
+
+/// The culling mask on its own: one byte per (ping, block), 1 = visit. Host backend.
+std::vector<unsigned char> cull_mask(const BpInputs& inputs, const std::vector<Vec3d>& points,
+                                     const BpOptions& options);
 
 /// Test hook: the delay each record contributes at each point, as the kernel computes it.
 /// Returns, per (point, record): sample position (double precision equivalent) and
