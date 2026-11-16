@@ -26,6 +26,18 @@ class BeamMap:
     bearings: np.ndarray    # rad, from the boresight towards increasing element index
     times: np.ndarray       # two-way time of each column, s
     ranges: np.ndarray      # c * t / 2, m
+    n_valid: int = 0        # columns with a fully overlapped replica; later ones are not usable
+
+    def valid(self) -> "BeamMap":
+        """The map without the tail where the matched filter only partly overlaps the data
+        (the last pulse length of the record). Detection must not run on that tail."""
+        n = self.n_valid or self.data.shape[1]
+        return BeamMap(self.data[:, :n], self.bearings, self.times[:n], self.ranges[:n], n)
+
+
+def _n_valid(record) -> int:
+    s = record.samples
+    return max(int(s.n_samples - np.ceil(record.transmit.waveform.duration * s.sample_rate)), 1)
 
 
 def _element_offsets(record):
@@ -64,7 +76,7 @@ def farfield_beamform(record, bearings_rad, window: str = "rect") -> BeamMap:
         out[i] = np.fft.ifft((w[:, None] * X * steer).sum(axis=0))
     times = record.samples.start_time + np.arange(n) / fs
     return BeamMap(out, np.asarray(bearings_rad, dtype=float), times,
-                   0.5 * record.environment.sound_speed * times)
+                   0.5 * record.environment.sound_speed * times, _n_valid(record))
 
 
 def backprojection_map(record, ranges, bearings_rad, window: str = "rect", **kw):
@@ -97,6 +109,86 @@ def blank_transmit(record, guard: float = 0.0, taper: float = 0.0) -> None:
     kind = s.kind
     s.array = (s.array * w[None, :]).astype(s.array.dtype)
     s.kind = kind
+    record.samples = s
+
+
+def mvdr_beamform(record, bearings_rad, n_subbands: int = 32, loading: float = 3e-2,
+                  block: int = 256, guard_blocks: int = 1) -> BeamMap:
+    """Adaptive (minimum-variance distortionless-response) beamformer.
+
+    The band is split into `n_subbands` sub-bands, narrow against c / aperture so that one
+    steering vector describes the array response in each. In every sub-band and every
+    range block, the element covariance R is estimated from the *other* range blocks (all
+    but the block itself and `guard_blocks` either side), and the weights
+    w = R^-1 a / (a^H R^-1 a) pass the look direction undistorted while minimising what
+    that training data contains: directional noise, jammers, reverberation that extends in
+    range. Sub-band outputs are summed, which restores range resolution.
+
+    The block's own samples are left out of R on purpose. With a strong echo in the
+    training data, MVDR treats the small mismatch between the echo and its steering vector
+    as interference and cancels the echo itself.
+
+    `loading` is diagonal loading as a fraction of the mean element power in the training
+    data: it limits noise gain and makes the weights tolerant of calibration errors.
+
+    The output is scaled by the number of elements so that a target reads the same as in
+    the conventional sum beamformer and in backprojection (which have a gain of N).
+    Costs to know about: each sub-band has only about n_samples / n_subbands independent
+    snapshots to estimate an N x N covariance from, so in plain white noise MVDR is a few
+    dB worse than the conventional beamformer; more sub-bands model the array better but
+    leave fewer snapshots each.
+    """
+    prepare([record])
+    x = record.samples.array
+    fs, fc = record.samples.sample_rate, record.samples.center_frequency
+    n_el, n = x.shape
+    X = np.fft.fft(x, axis=1)
+    f_bb = np.fft.fftfreq(n, 1.0 / fs)
+    w = record.transmit.waveform
+    lo, hi = min(w.f_start, w.f_stop) - fc, max(w.f_start, w.f_stop) - fc
+    edges = np.linspace(lo, hi, n_subbands + 1)
+    tau = steering_delays(record, bearings_rad)                  # [B, N]
+    n_blocks = int(np.ceil(n / block))
+    if n_blocks < 2 * guard_blocks + 3:
+        raise ValueError("record too short for this block size: no training data would be left")
+    out = np.zeros((len(tau), n), dtype=np.complex128)
+    eye = np.eye(n_el)
+    for k in range(n_subbands):
+        sel = (f_bb >= edges[k]) & (f_bb < edges[k + 1])
+        if not sel.any():
+            continue
+        xk = np.fft.ifft(np.where(sel[None, :], X, 0.0), axis=1)          # [N, n]
+        f_abs = fc + 0.5 * (edges[k] + edges[k + 1])
+        a = np.exp(2j * np.pi * f_abs * tau)                              # [B, N] steering vectors
+        blocks = [xk[:, i * block:(i + 1) * block] for i in range(n_blocks)]
+        outer = [b @ b.conj().T for b in blocks]
+        counts = [b.shape[1] for b in blocks]
+        total, total_count = sum(outer), sum(counts)
+        for i in range(n_blocks):
+            j0, j1 = max(i - guard_blocks, 0), min(i + guard_blocks + 1, n_blocks)
+            r = (total - sum(outer[j0:j1])) / (total_count - sum(counts[j0:j1]))
+            r = r + loading * np.trace(r).real / n_el * eye
+            ra = np.linalg.solve(r, a.T).T                                # rows: R^-1 a
+            weights = ra / np.einsum("bn,bn->b", a.conj(), ra)[:, None]
+            out[:, i * block:(i + 1) * block] += n_el * (weights.conj() @ blocks[i])
+    times = record.samples.start_time + np.arange(n) / fs
+    return BeamMap(out.astype(np.complex64), np.asarray(bearings_rad, dtype=float), times,
+                   0.5 * record.environment.sound_speed * times, _n_valid(record))
+
+
+def add_jammer(record, bearing_rad: float, rms: float, rng: np.random.Generator) -> None:
+    """Add a far-field broadband noise source to a raw real-passband record: the same white
+    noise on every channel, each with its plane-wave lead. For tests and scenarios."""
+    s = record.samples
+    if s.is_complex():
+        raise ValueError("add_jammer works on raw real-passband records")
+    x = s.array
+    n = x.shape[1]
+    noise = np.fft.rfft(rng.standard_normal(n) * rms)
+    f = np.fft.rfftfreq(n, 1.0 / s.sample_rate)
+    lead = steering_delays(record, [bearing_rad])[0]              # [N]
+    jam = np.fft.irfft(noise[None, :] * np.exp(2j * np.pi * f[None, :] * lead[:, None]), n=n, axis=1)
+    s.array = (x + jam).astype(np.float32)
     record.samples = s
 
 
