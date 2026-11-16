@@ -9,13 +9,16 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 1 Notes and survey | done | `PAPER_NOTES.md`, `HOLOSCAN_NOTES.md`, `OPEN_SOURCE.md`, `DECISIONS.md`; `tools/test.sh` builds and runs GoogleTest and pytest |
 | 2 Record format and file replay | done | `RECORD_FORMAT.md`; `tests/cpp/test_record_io.cpp`, `tests/python/test_record.py`, `tests/python/test_sources.py` |
 | 3 Simulator, point targets, all sonar configs | done on CPU; GPU half not run | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. `test_gpu_forward_model_matches_cpu` is **skipped** here (no device). |
-| 4 Backprojection kernel, FLS mode | in progress | |
-| 5–13 | not started | |
+| 4 Backprojection kernel, FLS mode | done on CPU; GPU half not run; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. GPU-versus-reference tests are **skipped** here. PICMUS: resolution measured; published reference numbers and contrast not done. |
+| 5 Run-time optimisations | not started | |
+| 6–13 | not started | pulse compression and baseband conversion already exist (needed by milestone 4) |
 
 ## What is next
 
-1. Milestone 4: backprojection kernel and FLS mode, PICMUS comparison.
-2. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
+1. Milestone 5: slab allocator, texture position lookup, block ray culling.
+2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
+   numbers once the paper can be read.
+3. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
 
 ## Environment this was built in, and what that limits
 
@@ -83,6 +86,17 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - The reference transmits 5, 6.25 or 8.33 MHz only. Nothing in it supports sonar carrier
   frequencies; stages 3–6 need their own transmit chain.
 - Docs say probe "L12-5 D"; code says "L7-3".
+
+## Kernel limits so far
+
+- The sound-speed-profile option (eigenray travel-time table) is not in the kernel yet;
+  delays are straight-ray at one sound speed per ping. Planned with milestone 12.
+- `make_inputs` copies every ping's samples into one buffer per call. Fine for tests;
+  the slab allocator in milestone 5 replaces it.
+- Real passband input is rejected; convert with `to_baseband` first.
+- The FLS scan sequence for the reference rig, the hardware gain-ramp model with its
+  digital make-up, and multi-angle compounding on our own probes are not done. Plane-wave
+  compounding itself works (PICMUS).
 
 ## Simulator limits so far
 

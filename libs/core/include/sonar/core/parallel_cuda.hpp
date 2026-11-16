@@ -52,6 +52,20 @@ class DeviceBuffer {
   explicit DeviceBuffer(const std::vector<T>& host) : DeviceBuffer(host.data(), host.size()) {}
   DeviceBuffer(const DeviceBuffer&) = delete;
   DeviceBuffer& operator=(const DeviceBuffer&) = delete;
+  DeviceBuffer(DeviceBuffer&& o) noexcept : ptr_(o.ptr_), size_(o.size_) {
+    o.ptr_ = nullptr;
+    o.size_ = 0;
+  }
+  DeviceBuffer& operator=(DeviceBuffer&& o) noexcept {
+    if (this != &o) {
+      if (ptr_ != nullptr) cudaFree(ptr_);
+      ptr_ = o.ptr_;
+      size_ = o.size_;
+      o.ptr_ = nullptr;
+      o.size_ = 0;
+    }
+    return *this;
+  }
   ~DeviceBuffer() {
     if (ptr_ != nullptr) cudaFree(ptr_);
   }

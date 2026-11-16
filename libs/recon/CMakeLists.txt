@@ -1,0 +1,8 @@
+set(_recon_sources src/backproject.cpp src/sinc_table.cpp)
+if(SONAR_HAVE_CUDA)
+  list(APPEND _recon_sources src/backproject_cuda.cu)
+endif()
+add_library(sonar_recon ${_recon_sources})
+add_library(sonar::recon ALIAS sonar_recon)
+target_include_directories(sonar_recon PUBLIC include)
+target_link_libraries(sonar_recon PUBLIC sonar::core PRIVATE sonar_warnings)

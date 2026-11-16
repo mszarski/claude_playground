@@ -7,7 +7,7 @@
 
 #include "sonar/core/platform.hpp"
 
-namespace sonar::sim {
+namespace sonar {
 
 /// Plain-data waveform description (a device-friendly copy of sonar::Waveform).
 struct WaveformParams {
@@ -70,4 +70,22 @@ SONAR_INLINE bool waveform_eval(const WaveformParams& w, double u, double& envel
   }
 }
 
-}  // namespace sonar::sim
+}  // namespace sonar
+
+#include "sonar/core/record.hpp"
+
+namespace sonar {
+
+/// Device-friendly copy of a record's waveform description.
+inline WaveformParams waveform_params(const Waveform& w) {
+  WaveformParams p;
+  p.type = static_cast<int>(w.type);
+  p.f_start = w.f_start;
+  p.f_stop = w.f_stop;
+  p.duration = w.duration;
+  p.window_alpha = w.window_alpha;
+  p.amplitude = w.amplitude;
+  return p;
+}
+
+}  // namespace sonar

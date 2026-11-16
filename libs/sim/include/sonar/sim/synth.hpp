@@ -9,7 +9,7 @@
 #include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 #include "sonar/core/vec.hpp"
-#include "sonar/sim/waveform.hpp"
+#include "sonar/core/waveform.hpp"
 
 namespace sonar::sim {
 

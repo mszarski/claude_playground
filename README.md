@@ -5,7 +5,7 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 and 2 of 13 are done; see [`docs/STATUS.md`](docs/STATUS.md)
+**State: early.** Milestones 1 to 4 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
 for what exists, what is next, and what has only been compiled and never run on a GPU.
 
 The repository also holds the older `trajectory_classifier` Python package, which is
@@ -34,7 +34,10 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 | `libs/core` | ping record, geometry (ASASIN Eq. 2), directivity, host/CUDA `parallel_for` |
 | `libs/io` | HDF5 container reader and writer, validator |
 | `libs/sim` | simulator synthesis kernel |
-| `libs/{dsp,recon,motion,detect,holoscan_ops}` | not started |
+| `libs/dsp` | baseband conversion, pulse compression, FFT wrapper |
+| `libs/recon` | the backprojection kernel (host and CUDA from one source) |
+| `libs/{motion,detect,holoscan_ops}` | not started |
+| `third_party/` | vendored pocketfft (BSD-3) |
 | `python/gpusonar` | bindings and the Python layer (sources, configs, tools) |
 | `configs/` | named sonars and scenarios (YAML) |
 | `tests/cpp`, `tests/python` | GoogleTest and pytest suites |
@@ -43,11 +46,32 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 ## Documents
 
 - [`docs/STATUS.md`](docs/STATUS.md): progress, open questions, deviations.
+- [`docs/RESULTS.md`](docs/RESULTS.md): measured numbers against theory and benchmarks.
 - [`docs/PAPER_NOTES.md`](docs/PAPER_NOTES.md): the ASASIN paper, equation by equation, with its gaps.
 - [`docs/DECISIONS.md`](docs/DECISIONS.md): every choice made where the paper or brief is silent.
 - [`docs/HOLOSCAN_NOTES.md`](docs/HOLOSCAN_NOTES.md): how the NVIDIA ultrasound reference acquires data.
 - [`docs/OPEN_SOURCE.md`](docs/OPEN_SOURCE.md): open-source projects checked, licences, proposed roles.
 - [`docs/RECORD_FORMAT.md`](docs/RECORD_FORMAT.md): the ping record container and the WAV sidecar.
+
+## Simulate and image a forward-looking sonar ping
+
+```python
+import numpy as np
+from gpusonar import recon
+from gpusonar.sim import run_scenario
+
+result = run_scenario("point_grid_l12_5d")          # two pings: the two mux halves
+fan = recon.fan_image(result.records,
+                      ranges=np.linspace(0.8, 2.9, 1500),
+                      bearings_rad=np.radians(np.linspace(-20, 20, 801)))
+print(abs(fan.image).shape)                         # range x bearing
+```
+
+Scenarios live in `configs/scenarios`, sonars in `configs/sonars`. A new sonar is a new
+YAML file; no signal-processing code changes.
+
+The PICMUS benchmark: `tools/fetch_picmus.py <dir>`, then run the tests with
+`GPUSONAR_PICMUS_DIR=<dir>`.
 
 ## Reading recorded data
 

@@ -56,6 +56,8 @@ target_compile_options(sonar_warnings INTERFACE
 add_subdirectory(libs/core)
 add_subdirectory(libs/io)
 add_subdirectory(libs/sim)
+add_subdirectory(libs/dsp)
+add_subdirectory(libs/recon)
 
 if(SONAR_BUILD_PYTHON)
   find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)

@@ -56,6 +56,7 @@ void samples_from_array(Samples& s, const py::array& in) {
 }  // namespace
 
 void bind_sim(py::module_& m);
+void bind_recon(py::module_& m);
 
 PYBIND11_MODULE(_gpusonar, m) {
   m.doc() = "gpusonar native core";
@@ -320,4 +321,5 @@ PYBIND11_MODULE(_gpusonar, m) {
 
   py::enum_<Backend>(m, "Backend").value("Host", Backend::Host).value("Cuda", Backend::Cuda);
   bind_sim(m);
+  bind_recon(m);
 }

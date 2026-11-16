@@ -57,13 +57,7 @@ void synthesize(Backend backend, const SynthParams& params, const std::vector<Sy
 
 SynthParams params_from_record(const PingRecord& record) {
   SynthParams p;
-  const Waveform& w = record.transmit.waveform;
-  p.waveform.type = static_cast<int>(w.type);
-  p.waveform.f_start = w.f_start;
-  p.waveform.f_stop = w.f_stop;
-  p.waveform.duration = w.duration;
-  p.waveform.window_alpha = w.window_alpha;
-  p.waveform.amplitude = w.amplitude;
+  p.waveform = waveform_params(record.transmit.waveform);
   p.sound_speed = record.environment.sound_speed;
   p.sample_rate = record.samples.sample_rate;
   p.start_time = record.samples.start_time;

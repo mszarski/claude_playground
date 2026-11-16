@@ -220,3 +220,30 @@ so only the exponent is comparable.
 The transmitter is not assumed stationary during long pulses in the simulator. On receive,
 `pulse_compression.doppler_bank` holds a small set of time-scaled replicas; the best
 hypothesis per channel block (or a fixed hypothesis from navigation) is used.
+
+### D-26 What "resolution within 10% of theory" is measured against
+The brief asks for range resolution within 10% of `c/2B` and beam width within 10% of
+theory. Both need a level and a pulse shape to be testable:
+
+- **Range.** The −3 dB width of the point response along range, after pulse compression.
+  Theory is computed for the actual pulse: a Gaussian spectrum of −6 dB width `B`
+  compresses to a −3 dB width of `0.88 · c/2B`; a flat (LFM) spectrum gives `0.886 · c/2B`.
+  The test requires the measurement within 10% of that, and also checks it against the
+  nominal `c/2B`. For reference, `c/2B` exactly is the −3.9 dB width of a flat spectrum.
+- **Bearing.** The −3 dB width of the point response across bearing, uniform aperture
+  weighting, against `0.886 · λ/L` at the centre frequency, with `L = N · pitch`.
+
+Measured values are in `RESULTS.md`.
+
+### D-27 Pulse reference
+Backprojection samples each record at the two-way delay, so the record's time axis must
+mark delay. Pulse compression does that: an echo of delay τ peaks at t = τ. A record
+remembers it has been compressed in `metadata.extra_json` (`gpusonar.compressed`), so
+`recon.prepare` is idempotent. This uses the free-form field and leaves the schema alone.
+
+### D-28 Array attitude during reception
+The kernel evaluates the receive body's attitude exactly at each point's arrival time
+(`R(rpy + rates · τ)`), not to first order in τ. A first-order offset model put 74° of
+phase error on a 3 m array yawing at 0.02 rad/s over a 10 km round trip. Each element's
+differential delay uses that element's own range rate. Neglected: the change of attitude
+during the differential delay itself (at most the aperture over c, about 2 ms).
