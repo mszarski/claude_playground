@@ -114,7 +114,13 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
         elif item.get("model", "lambert") != "lambert":
             raise ValueError(f"unknown reverberation model {item['model']!r}")
-        reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item.get("mu_db", -27.0)),
+        # `offset_db` moves the boundary's strength up or down whatever its model: what
+        # calibration against a real log adjusts (gpusonar/simcal.py).
+        offset = float(item.get("offset_db", 0.0))
+        if strength is not None and offset != 0.0:
+            base, scale = strength, 10.0 ** (offset / 10.0)
+            strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
+        reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"))
