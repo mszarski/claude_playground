@@ -232,6 +232,7 @@ PYBIND11_MODULE(_gpusonar, m) {
       .def_readwrite("calibration", &PingRecord::calibration)
       .def_readwrite("environment", &PingRecord::environment)
       .def_readwrite("metadata", &PingRecord::metadata)
+      .def("copy", [](const PingRecord& r) { return PingRecord(r); }, "Deep copy.")
       .def("set_default_channel_tables",
            [](PingRecord& r) { set_default_channel_tables(r); },
            "Fill calibration and channel maps with neutral defaults sized to the samples.")

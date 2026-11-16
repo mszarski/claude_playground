@@ -11,13 +11,15 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 3 Simulator, point targets, all sonar configs | done on CPU; GPU half not run | `tests/python/test_sim.py`: delay and amplitude against analytic values on every sonar, an independent frequency-domain oracle, Doppler, receiver motion, surface image, board clocks, ADC. `test_gpu_forward_model_matches_cpu` is **skipped** here (no device). |
 | 4 Backprojection kernel, FLS mode | done on CPU; GPU half not run; PICMUS partly | `tests/python/test_backproject.py` (precision, independent reference), `tests/python/test_fls.py` (resolution, beam width, grating lobes), `tests/python/test_picmus.py`. Numbers in `RESULTS.md`. GPU-versus-reference tests are **skipped** here. PICMUS: resolution measured; published reference numbers and contrast not done. |
 | 5 Run-time optimisations | done on CPU; GPU halves not run | `tests/python/test_culling.py` (image bit-identical with culling on, including a beam narrower than a block and a bistatic pair; CPU speedup in `RESULTS.md`), `tests/cpp/test_allocator.cpp`, `tests/python/test_position_lookup.py` (trajectory table restores focus under within-ping acceleration; 8-bit texture arithmetic emulated on the host stays inside the phase budget). Compiled but **not run**: the device slab, the CUDA culling pass, and the hardware texture path (`test_hardware_texture_matches_software_table` is skipped). |
-| 6–13 | not started | pulse compression and baseband conversion already exist (needed by milestone 4) |
+| 6 Conditioning, pulse compression, post-processing | done on CPU; no GPU versions yet | `tests/python/test_conditioning.py`: compression gain against 10·log10(BT), replica windows, Doppler bank, calibration, deterministic TVG with hardware-ramp make-up, whitening (Eq. 9), median TVG (Eq. 10), DRC (Eq. 11–12), scan conversion. Numbers in `RESULTS.md`. The `dsp` stages run on the CPU only (pocketfft); a cuFFT backend is not written. |
+| 7 SAS with known navigation | not started | |
+| 8–13 | not started | |
 
 ## What is next
 
-1. Milestone 6: conditioning (calibration, DC removal, band-pass, digital TVG), the
-   Doppler hypothesis bank, whitening, median TVG, dynamic range compression, scan
-   conversion. Baseband conversion and matched filtering already exist.
+1. Milestone 7: SAS with known navigation (rail and stripmap scenarios, grid sized from
+   the beamwidth, along-track resolution against D/2).
+2. A cuFFT backend for the `dsp` stages, so conditioning also runs on the device.
 2. PICMUS leftovers: contrast/CNR on the cyst phantom; comparison with the published
    numbers once the paper can be read.
 3. On the first GPU host: run `tools/test.sh` and confirm the skipped GPU tests pass.
@@ -88,6 +90,16 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 - The reference transmits 5, 6.25 or 8.33 MHz only. Nothing in it supports sonar carrier
   frequencies; stages 3–6 need their own transmit chain.
 - Docs say probe "L12-5 D"; code says "L7-3".
+
+## Conditioning limits so far
+
+- The band-pass is the band selection inside `to_baseband`; there is no separate filter
+  stage for data that stays at passband.
+- The Doppler bank picks one hypothesis per record (the brief allows "a small bank");
+  per-range or per-beam selection is not done.
+- The hardware gain-ramp limits of the reference rig (12 dB, at most about 122 µs on the
+  TX73L64) are documented in `HOLOSCAN_NOTES.md` but not yet a named model in config;
+  `apply_tvg` already makes up whatever ramp the record declares.
 
 ## Kernel limits so far
 

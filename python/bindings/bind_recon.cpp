@@ -4,6 +4,7 @@
 #include <pybind11/stl.h>
 
 #include "sonar/dsp/baseband.hpp"
+#include "sonar/dsp/conditioning.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
 #include "sonar/recon/backproject.hpp"
 #include "vec_caster.hpp"
@@ -80,6 +81,72 @@ void bind_recon(py::module_& m) {
       py::arg("record"), py::arg("center_frequency") = 0.0, py::arg("bandwidth") = 0.0,
       py::arg("band_margin") = 1.5, py::arg("oversample") = 2.0, py::arg("edge_taper") = 0.1,
       "Convert record.samples in place to complex baseband at a reduced rate.");
+
+  m.def("remove_dc", [](PingRecord& r) { dsp::remove_dc(r); }, "Remove each channel's mean.");
+  m.def("apply_calibration", [](PingRecord& r) { dsp::apply_calibration(r); },
+        "Apply per-channel gain, phase and delay calibration to complex baseband samples,\n"
+        "then reset those tables.");
+  m.def(
+      "apply_tvg",
+      [](PingRecord& r, double spreading_db_per_decade, double absorption_db_per_m,
+         double reference_range, double max_gain_db, bool undo_hardware_ramp) {
+        dsp::TvgOptions o;
+        o.spreading_db_per_decade = spreading_db_per_decade;
+        o.absorption_db_per_m = absorption_db_per_m;
+        o.reference_range = reference_range;
+        o.max_gain_db = max_gain_db;
+        o.undo_hardware_ramp = undo_hardware_ramp;
+        dsp::apply_tvg(r, o);
+      },
+      py::arg("record"), py::arg("spreading_db_per_decade") = 40.0,
+      py::arg("absorption_db_per_m") = 0.0, py::arg("reference_range") = 1.0,
+      py::arg("max_gain_db") = 120.0, py::arg("undo_hardware_ramp") = true,
+      "Deterministic digital time-varying gain; makes up what the hardware ramp did not.");
+  m.def(
+      "whiten",
+      [](const py::list& pings, double gamma, double smooth_hz, bool power_gain) {
+        std::vector<PingRecord*> ptrs;
+        for (const auto& item : pings) ptrs.push_back(&item.cast<PingRecord&>());
+        dsp::WhitenOptions o;
+        o.gamma = gamma;
+        o.smooth_hz = smooth_hz;
+        o.power_gain = power_gain;
+        const auto g = dsp::whiten(ptrs, o);
+        return py::array_t<float>(static_cast<py::ssize_t>(g.size()), g.data());
+      },
+      py::arg("pings"), py::arg("gamma") = 0.1, py::arg("smooth_hz") = 0.0,
+      py::arg("power_gain") = true,
+      "Spectral whitening (ASASIN Eq. 9), in place. Returns G(f) in FFT bin order.");
+  m.def(
+      "median_tvg",
+      [](const py::list& pings, double alpha, bool power_gain, std::int64_t smooth_samples) {
+        std::vector<PingRecord*> ptrs;
+        for (const auto& item : pings) ptrs.push_back(&item.cast<PingRecord&>());
+        dsp::MedianTvgOptions o;
+        o.alpha = alpha;
+        o.power_gain = power_gain;
+        o.smooth_samples = smooth_samples;
+        const auto g = dsp::median_tvg(ptrs, o);
+        return py::array_t<float>(static_cast<py::ssize_t>(g.size()), g.data());
+      },
+      py::arg("pings"), py::arg("alpha") = 0.01, py::arg("power_gain") = true,
+      py::arg("smooth_samples") = 0,
+      "Median time-varying gain (ASASIN Eq. 10), in place. Returns G(t).");
+  m.def(
+      "drc",
+      [](const py::array_t<float, py::array::c_style | py::array::forcecast>& magnitude,
+         double target_median, double percentile) {
+        std::vector<float> v(magnitude.data(), magnitude.data() + magnitude.size());
+        dsp::DrcOptions o;
+        o.target_median = target_median;
+        o.percentile = percentile;
+        const double q = dsp::drc(v, o);
+        py::array_t<float> out(std::vector<py::ssize_t>(magnitude.shape(), magnitude.shape() + magnitude.ndim()));
+        std::copy(v.begin(), v.end(), out.mutable_data());
+        return py::make_tuple(out, q);
+      },
+      py::arg("magnitude"), py::arg("target_median") = 0.2, py::arg("percentile") = 99.99,
+      "Dynamic range compression (ASASIN Eq. 11-12). Returns (image in [0, 1], q).");
 
   m.def(
       "pulse_compress",

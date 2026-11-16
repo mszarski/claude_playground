@@ -82,6 +82,26 @@ Source: `tests/python/test_backproject.py`.
 The phase errors are the worst case over random targets, against long-double arithmetic.
 The tests assert 0.05°; the requirement is 1°.
 
+## Conditioning, pulse compression and post-processing
+
+Source: `tests/python/test_conditioning.py`. CPU.
+
+| Check | Measured | Against |
+| --- | --- | --- |
+| LFM compression gain, B = 4 kHz, T = 0.25 s | 29.99 dB | 10·log10(BT) = 30.00 dB |
+| LFM compression gain, B = 4 kHz, T = 0.05 s | 23.00 dB | 23.01 dB |
+| LFM compression gain, B = 15 kHz, T = 0.02 s | 24.76 dB | 24.77 dB |
+| Unweighted LFM peak sidelobe | −13.3 dB ± 1 | −13.3 dB (sinc) |
+| Hamming-weighted replica peak sidelobe | below −30 dB | — |
+| Whitening (Eq. 9): in-band spread of a 12 dB tilt + 6 dB ripple, after | below 1 dB | flat |
+| Median TVG (Eq. 10): intensity spread over a 30 dB decay, after | below 1 dB | flat |
+| Median TVG with a 60 dB target on 6 of 64 channels: change in gain | below 3 dB | a mean-based gain would notch by more than 40 dB |
+| DRC (Eq. 11–12): output median for targets 0.1, 0.2, 0.5 | within 0.001 | the target |
+| Calibration: residual after removing injected gain, phase, delay | below 1e-4 | exact |
+| Doppler bank, 1 s LFM, target closing at 6 m/s | 6 m/s ± 1 (1 m/s grid) | truth; the zero-Doppler replica loses more than half the peak |
+
+The compression gain is the output SNR over the input SNR measured in the signal band.
+
 ## Ray culling
 
 Source: `tests/python/test_culling.py::test_report_cpu_speedup`. **CPU backend, 4 cores.**

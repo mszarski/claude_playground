@@ -289,10 +289,10 @@ Status values: `pending`, `done`. A `done` row names the file and the test.
 
 | Item | File | Test | Status |
 | --- | --- | --- | --- |
-| Spectral whitening, Eq. 9 | | | pending |
-| Median time-varying gain, Eq. 10 | | | pending |
-| Dynamic range compression, Eq. 11 | | | pending |
-| Closed-form brightness, Eq. 12 | | | pending |
+| Spectral whitening, Eq. 9 | `libs/dsp/src/conditioning.cpp` (`whiten`) | `tests/python/test_conditioning.py::test_whitening_flattens_a_known_transfer_function`, `::test_whitening_gamma_sets_how_far_weak_bands_are_raised`, `::test_whitening_literal_amplitude_reading_does_not_flatten` | done (CPU) |
+| Median time-varying gain, Eq. 10 | same file (`median_tvg`) | `::test_median_tvg_flattens_intensity_over_range`, `::test_median_tvg_ignores_bright_scatterers` | done (CPU) |
+| Dynamic range compression, Eq. 11 | same file (`drc`) | `::test_drc_hits_the_target_median`, `::test_drc_makes_the_background_visible` | done (CPU) |
+| Closed-form brightness, Eq. 12 | same file (`drc`) | `::test_drc_hits_the_target_median` (q checked against Eq. 12 independently) | done (CPU) |
 
 ### 3D near-field imaging (Sec. III-B)
 

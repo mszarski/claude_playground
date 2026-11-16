@@ -1,6 +1,7 @@
 add_library(sonar_dsp
   src/fft.cpp
   src/baseband.cpp
+  src/conditioning.cpp
   src/pulse_compression.cpp)
 add_library(sonar::dsp ALIAS sonar_dsp)
 target_include_directories(sonar_dsp PUBLIC include)

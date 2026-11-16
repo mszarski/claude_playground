@@ -5,7 +5,7 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 to 4 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
+**State: early.** Milestones 1 to 6 of 13 are done on the CPU backend; see [`docs/STATUS.md`](docs/STATUS.md)
 for what exists, what is next, and what has only been compiled and never run on a GPU.
 
 The repository also holds the older `trajectory_classifier` Python package, which is
@@ -31,10 +31,10 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
 
 | Path | Contents |
 | --- | --- |
-| `libs/core` | ping record, geometry (ASASIN Eq. 2), directivity, host/CUDA `parallel_for` |
+| `libs/core` | ping record, geometry (ASASIN Eq. 2), directivity, slab allocator, host/CUDA `parallel_for` |
 | `libs/io` | HDF5 container reader and writer, validator |
 | `libs/sim` | simulator synthesis kernel |
-| `libs/dsp` | baseband conversion, pulse compression, FFT wrapper |
+| `libs/dsp` | baseband conversion, pulse compression, calibration, TVG, whitening, DRC |
 | `libs/recon` | the backprojection kernel (host and CUDA from one source) |
 | `libs/{motion,detect,holoscan_ops}` | not started |
 | `third_party/` | vendored pocketfft (BSD-3) |
