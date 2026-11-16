@@ -152,6 +152,14 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
     g.rx_rpy = rx_pose.rpy;
     g.rx_rates = rx_pose.rates;
     g.ref_lever = mean_lever;
+    g.rot0 = rotation_ned(rx_pose.rpy.x, rx_pose.rpy.y, rx_pose.rpy.z);
+    g.static_attitude = (rx_pose.rates.x == 0.0 && rx_pose.rates.y == 0.0 && rx_pose.rates.z == 0.0) ? 1 : 0;
+    g.speed = static_cast<float>(norm(rx_pose.velocity));
+    g.turn_rate = static_cast<float>(norm(rx_pose.rates));
+    for (std::size_t i = 0; i < n; ++i) {
+      const auto r = static_cast<float>(norm(lever[i] - mean_lever));
+      if (r > g.aperture) g.aperture = r;
+    }
     g.sound_speed = p.environment.sound_speed;
     g.start_time = p.samples.start_time;
     g.sample_rate = p.samples.sample_rate;

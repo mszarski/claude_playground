@@ -69,8 +69,12 @@ SONAR_INLINE Vec3d trajectory_residual(const BpGroup& g, std::int64_t ig, const 
 /// attitude then.
 SONAR_INLINE Vec3d reference_position(const BpGroup& g, double t, Mat3d& rot,
                                       const Vec3d& residual = Vec3d{}) {
-  rot = rotation_ned(g.rx_rpy.x + g.rx_rates.x * t, g.rx_rpy.y + g.rx_rates.y * t,
-                     g.rx_rpy.z + g.rx_rates.z * t);
+  if (g.static_attitude != 0) {
+    rot = g.rot0;  // no attitude rates: skip six float64 trigonometric calls per evaluation
+  } else {
+    rot = rotation_ned(g.rx_rpy.x + g.rx_rates.x * t, g.rx_rpy.y + g.rx_rates.y * t,
+                       g.rx_rpy.z + g.rx_rates.z * t);
+  }
   return g.rx_pos + g.rx_vel * t + rot * g.ref_lever + residual;
 }
 
@@ -343,6 +347,28 @@ struct BpKernel {
   SONAR_HD float group_sum(const BpGroup& g, std::int64_t ig, const Vec3d& x, float& acc_re,
                            float& acc_im) const {
     const float two_pi = 6.2831853F;
+    if (opt.fov_factor > 0.0F && g.n_records > 0) {
+      // Cheap float32 pre-test before the float64 delay solve: most GPUs run float64 at
+      // a small fraction of their float32 rate, and most (point, ping) pairs of a
+      // stripmap image are out of beam. The test uses the transmit-time geometry and is
+      // widened by everything that can change before the echo arrives (array extent,
+      // platform motion, attitude change), so it only rejects pairs the exact per-element
+      // test below would reject too.
+      const Vec3d w0 = x - (g.rx_pos + g.rot0 * g.ref_lever);
+      const Vec3f wb = Vec3f(g.rot0.transposed() * w0);
+      const float dist = norm(wb);
+      const float flight = 2.0F * dist / static_cast<float>(g.sound_speed);
+      const float reach = g.aperture + g.speed * flight + 0.02F;  // + trajectory residual allowance
+      if (dist > reach) {
+        const float ratio = reach / dist;
+        const float margin = std::asin(ratio < 1.0F ? ratio : 1.0F) + g.turn_rate * flight + 1e-3F;
+        const BpRecord& e0 = records[g.first_record];  // elements of a ping share their pattern
+        if (!in_field_of_view_margin(e0.boresight, e0.az, e0.el, e0.bw_az, e0.bw_el, wb / dist,
+                                     opt.fov_factor, margin)) {
+          return 0.0F;
+        }
+      }
+    }
     const RefDelay ref = reference_delay(g, x, opt.stop_and_hop, ig, traj);
 
     float tx_gain = 1.0F;

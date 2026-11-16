@@ -17,12 +17,15 @@ class Scene:
     amplitudes: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=complex))
     velocities: np.ndarray = field(default_factory=lambda: np.zeros((0, 3)))  # m/s
     labels: list[str] = field(default_factory=list)  # one per added object, for ground truth
+    # Per scatterer: 1 = a boundary patch whose amplitude scales with sqrt(sin(grazing_in) *
+    # sin(grazing_out)) (Lambert's law); 0 = a point target with a fixed amplitude.
+    lambert: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))
 
     def __len__(self) -> int:
         return self.positions.shape[0]
 
     def add_points(self, positions, amplitude=1.0, velocity=(0.0, 0.0, 0.0), label="points",
-                   target_strength_db=None) -> "Scene":
+                   target_strength_db=None, lambert: bool = False) -> "Scene":
         """Add scatterers. `amplitude` is the pressure ratio at 1 m (10^(TS/20))."""
         pos = np.atleast_2d(np.asarray(positions, dtype=float))
         if pos.shape[1] != 3:
@@ -35,6 +38,7 @@ class Scene:
         self.positions = np.vstack([self.positions, pos])
         self.amplitudes = np.concatenate([self.amplitudes, amp])
         self.velocities = np.vstack([self.velocities, vel])
+        self.lambert = np.concatenate([self.lambert, np.full(n, bool(lambert))])
         self.labels.append(label)
         return self
 
@@ -53,6 +57,17 @@ def polar_grid(origin, forward, across, ranges, bearings_deg, depth_offset=0.0) 
     pts = pts.reshape(-1, 3)
     pts[:, 2] += depth_offset
     return pts
+
+
+def lambert_rms_amplitude(mu_db: float, density: float) -> float:
+    """RMS amplitude of each scatterer so that a patch of `density` scatterers per square
+    metre has the Lambert backscattering strength S = mu + 10 log10(sin(g_in) sin(g_out)).
+
+    The point-scatterer model of reverberation: the variance of the summed amplitude from
+    an area dA is (scattering cross-section per unit area) x dA. The angular factor is
+    applied per path at synthesis time (Scene.lambert).
+    """
+    return float(np.sqrt(10.0 ** (mu_db / 10.0) / density))
 
 
 def seafloor_patch(x_range, y_range, density: float, depth: float = 0.0, rms_amplitude: float = 1.0,
@@ -92,9 +107,12 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                              item["ranges"], item["bearings_deg"], item.get("depth_offset", 0.0))
             scene.add_points(pts, amp, vel, item.get("label", "polar_grid"), ts)
         elif kind == "seafloor":
+            mu = item.get("lambert_mu_db")
+            rms = (lambert_rms_amplitude(float(mu), float(item["density"])) if mu is not None
+                   else float(item.get("rms_amplitude", 1.0)))
             pts, a = seafloor_patch(item["x_range"], item["y_range"], float(item["density"]),
-                                    float(item.get("depth", 0.0)), float(item.get("rms_amplitude", 1.0)), rng)
-            scene.add_points(pts, a, vel, item.get("label", "seafloor"))
+                                    float(item.get("depth", 0.0)), rms, rng)
+            scene.add_points(pts, a, vel, item.get("label", "seafloor"), lambert=mu is not None)
         else:
             raise ValueError(f"unknown scene item type {kind!r}")
     return scene

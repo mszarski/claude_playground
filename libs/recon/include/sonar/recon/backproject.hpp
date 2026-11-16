@@ -39,6 +39,12 @@ struct BpGroup {
   // rx_pos + rx_vel t + R(rx_rpy + rx_rates t) ref_lever, evaluated exactly.
   Vec3d rx_pos, rx_vel, rx_rpy, rx_rates;
   Vec3d ref_lever;
+  // Derived on the host so the kernel can avoid float64 work (see group_sum):
+  Mat3d rot0;                      ///< body-to-world rotation at transmit
+  std::int32_t static_attitude = 0;  ///< 1 when the attitude rates are zero: rot0 holds throughout
+  float aperture = 0.0F;           ///< largest element offset from the reference point, m
+  float speed = 0.0F;              ///< |rx_vel|, m/s
+  float turn_rate = 0.0F;          ///< |rx_rates|, rad/s
   double sound_speed = 1500.0;
   double start_time = 0.0;      ///< time of sample 0 after transmit
   double sample_rate = 0.0;

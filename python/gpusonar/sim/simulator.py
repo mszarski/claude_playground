@@ -70,7 +70,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         rx_reference = record.rx_positions().mean(axis=0)
         q, p, amp, vq, vp = two_way_paths(provider, tx_position, rx_reference,
                                           scene.at_time(scenario_time), scene.amplitudes,
-                                          scene.velocities)
+                                          scene.velocities, scene.lambert)
         core.synthesize_into(record, q, p, amp, vq, vp,
                              absorption=absorption_table(sonar, env, absorption_model),
                              spreading=spreading, backend=backend,

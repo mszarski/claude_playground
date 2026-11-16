@@ -145,4 +145,7 @@ def test_report_cpu_speedup(capsys):
         print(f"\n[culling, CPU backend] {len(records)} pings x {len(pts)} points, no culling: {t_plain:.2f} s")
         for block, speedup, kept in rows:
             print(f"[culling, CPU backend] b={block:2d}: speedup {speedup:.2f}x, blocks kept {100 * kept:.0f}%")
-    assert max(r[1] for r in rows) > 1.5
+    # The kernel now rejects out-of-beam (point, ping) pairs with a cheap float32 test
+    # before any float64 work, which took most of what block culling used to gain on a
+    # CPU. Culling must still never cost time.
+    assert max(r[1] for r in rows) > 0.95

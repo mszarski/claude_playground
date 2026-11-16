@@ -288,7 +288,7 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
 
 
 def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points, amplitudes,
-                  velocities=None):
+                  velocities=None, lambert=None):
     """Kernel paths for every (outbound eigenray, return eigenray) pair.
 
     Returns q [P, 3], p [P, 3], amplitude [P] and velocities ([P, 3] each or None).
@@ -306,7 +306,16 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
     amplitudes = np.asarray(amplitudes, dtype=complex)
     q = np.repeat(q_all[:, :, None, :], kb, axis=2).reshape(-1, 3)
     p = np.repeat(p_all[:, None, :, :], ko, axis=1).reshape(-1, 3)
-    amp = (amplitudes[:, None, None] * a_out[:, :, None] * a_back[:, None, :]).reshape(-1)
+    amp = amplitudes[:, None, None] * a_out[:, :, None] * a_back[:, None, :]
+    if lambert is not None and np.any(lambert):
+        # Lambert's law for boundary patches: each path pair is weighted by
+        # sqrt(sin(g_in) sin(g_out)), with g the grazing angle of that eigenray at the
+        # (horizontal) boundary. The amplitude drawn for the patch is shared by all pairs.
+        sin_in = np.abs(out.arrival[:, :, 2])
+        sin_out = np.abs(back.arrival[:, :, 2])
+        factor = np.sqrt(sin_in[:, :, None] * sin_out[:, None, :])
+        amp = np.where(np.asarray(lambert, dtype=bool)[:, None, None], amp * factor, amp)
+    amp = amp.reshape(-1)
     valid = (out.valid[:, :, None] & back.valid[:, None, :]).reshape(-1)
     vq = vp = None
     if velocities is not None and np.any(velocities):
