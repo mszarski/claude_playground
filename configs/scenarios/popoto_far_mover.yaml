@@ -1,0 +1,45 @@
+# Popoto-board array against a large mover far away: ownship at 10 m depth making 1.5 m/s
+# along its own array, 32 hydrophones (four boards) in the 6-10 kHz band with a separate
+# projector, and a ship-sized target (five highlights along 120 m, about +25 dB in all)
+# 6 km off the beam, crossing at 6 m/s. 100 m of water; multipath from Bellhop (needs
+# GPUSONAR_BELLHOP), bottom and sea-surface reverberation with ownship's Doppler, ambient
+# noise. Six pings 12 s apart.
+# The array size is one number: `sonar_overrides.array.count` (8 = one board).
+# Limits: isovelocity water over a flat bottom, a stationary-source propagation model
+# re-used at each ping's position, highlights of fixed strength, ideal board clocks, and
+# the receive chain taken as already at baseband.
+name: popoto_far_mover
+sonar: popoto_array
+fidelity: eigenray
+sonar_overrides:
+  array: {count: 32, pitch: 0.094}                   # half a wavelength at 8 kHz
+  transmit:
+    lever_arm: [0, 0, 1.0]
+    # A 1 s sweep at 185 dB: with 0.5 s at 180 dB the ship at 6 km is 8 dB above the
+    # background on 32 hydrophones, too little to detect reliably.
+    waveform: {f_start: 6.0e3, f_stop: 10.0e3, duration: 1.0, source_level_db: 185.0}
+  receive: {kind: baseband, sample_rate: 16.0e3, window: {range: [5200.0, 6800.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+propagation:
+  environment: {depth: 100.0, sound_speed: 1500.0, bottom_speed: 1600.0, bottom_density: 1.8, bottom_attenuation: 0.5}
+  frequency: 8000.0
+  max_range: 7200
+  range_step: 25.0
+  depth_step: 2.0
+  max_arrivals: 32
+platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 6, interval: 12.0}
+scene:
+  - type: points
+    label: ship
+    positions: [[740.0, 6000.0, 4.0], [770.0, 6000.0, 4.0], [800.0, 6000.0, 4.0], [830.0, 6000.0, 4.0], [860.0, 6000.0, 4.0]]
+    target_strength_db: 18.0
+    velocity: [-6.0, 0.0, 0.0]
+reverberation:
+  - {boundary_z: 100.0, mu_db: -27.0}
+  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 5.0}
+absorption: ainslie_mccolm
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}
+seed: 41

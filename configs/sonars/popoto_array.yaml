@@ -1,0 +1,18 @@
+# A Popoto-board hydrophone array of any size: change `array.count` (and `array.pitch`
+# for another band) and the capture boards follow, eight inputs each. With the defaults
+# it is the same array as `popoto_8`; `popoto_far_mover` uses it with 32 hydrophones in
+# the low band. Boards made this way have ideal clocks; give `receive.boards` explicitly
+# (as in `popoto_4x7`) to model clock errors and the synchronisation reference.
+base: popoto_8
+name: popoto_array
+
+array:
+  layout_choice: scalable
+  layouts:
+    scalable:
+      layout: uniform_line
+      count: 8
+      pitch: 0.027               # m; half a wavelength at 27.5 kHz
+
+receive:
+  board_size: 8                  # hydrophone inputs per Popoto board

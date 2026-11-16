@@ -219,6 +219,41 @@ def cylinder_points(end_a, end_b, radius: float, density: float, rng: np.random.
     return np.vstack(pts), np.vstack(normals)
 
 
+def hull_points(origin, length: float, beam: float, depth: float, heading_deg: float, n: int,
+                rng: np.random.Generator, keel_down: bool = True):
+    """Random points on a simple ship hull, with outward normals and the area each stands for.
+
+    The hull runs `length` from stern to bow along `heading_deg` (0 = +x, 90 = +y) with
+    `origin` at the middle of its deck line. Its half-breadth tapers to both ends,
+    b(u) = beam / 2 * sqrt(1 - |2u - 1|^3), and each section is half an ellipse `depth`
+    deep. With `keel_down` the deck edge is at origin z and the keel `depth` below it (a
+    floating boat with origin z at the waterline shows its underwater body; a wreck sitting
+    upright on the seabed has origin z = seabed - depth). Returns (points, normals, areas).
+    """
+    u = rng.uniform(0.02, 0.98, n)
+    th = rng.uniform(0.0, np.pi, n)
+    sign = 1.0 if keel_down else -1.0
+
+    def surface(u_, th_):
+        half = 0.5 * beam * np.sqrt(np.maximum(1.0 - np.abs(2.0 * u_ - 1.0) ** 3, 0.0))
+        return np.stack([(u_ - 0.5) * length, half * np.cos(th_), sign * depth * np.sin(th_) * (half / (0.5 * beam)) ** 0.5],
+                        axis=-1)
+
+    p = surface(u, th)
+    eps = 1e-4
+    du = (surface(u + eps, th) - surface(u - eps, th)) / (2 * eps)
+    dth = (surface(u, th + eps) - surface(u, th - eps)) / (2 * eps)
+    cross = np.cross(du, dth)
+    jac = np.linalg.norm(cross, axis=1)
+    normals = cross / np.maximum(jac, 1e-12)[:, None]
+    outward = (normals * (p - np.array([0.0, 0.0, 0.0]))).sum(axis=1) < 0
+    normals[outward] *= -1.0                              # away from the centreline
+    areas = jac * (0.96 * np.pi) / n
+    h = np.radians(heading_deg)
+    rot = np.array([[np.cos(h), -np.sin(h), 0.0], [np.sin(h), np.cos(h), 0.0], [0.0, 0.0, 1.0]])
+    return np.asarray(origin, dtype=float) + p @ rot.T, normals @ rot.T, areas
+
+
 def box_faces(lo, hi):
     """The six faces of an axis-aligned box as (origin, edge_u, edge_v) with outward normals u x v."""
     lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
@@ -311,6 +346,38 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                               item.get("label", "cylinder"), rng, vel)
             if item.get("occlude", True):
                 scene.occluders.append(("capsule", (list(item["start"]), list(item["end"])), float(item["radius"])))
+        elif kind == "hull":
+            # A ship hull as a Lambert surface: a floating boat (keel down from the
+            # waterline) or a wreck on the seabed.
+            n = int(item.get("count", 4000))
+            pts, normals, areas = hull_points(item["origin"], float(item["length"]), float(item["beam"]),
+                                              float(item["depth"]), float(item.get("heading_deg", 0.0)), n, rng,
+                                              bool(item.get("keel_down", True)))
+            a = np.sqrt(10.0 ** (float(item.get("mu_db", -10.0)) / 10.0) * areas) * (
+                rng.standard_normal(n) + 1j * rng.standard_normal(n)) / np.sqrt(2.0)
+            scene.add_points(pts, a, vel, item.get("label", "hull"), lambert=True, normals=normals)
+            if item.get("occlude", False):
+                # A capsule along the keel line stands in for the hull as a shadow caster
+                # (static hulls only: occluders do not move with a target).
+                if np.any(np.asarray(vel, dtype=float) != 0.0):
+                    raise ValueError("hull: occlude is for hulls that do not move")
+                length, beam, depth = float(item["length"]), float(item["beam"]), float(item["depth"])
+                radius = 0.45 * min(beam, 2.0 * depth)
+                h = np.radians(float(item.get("heading_deg", 0.0)))
+                along = np.array([np.cos(h), np.sin(h), 0.0])
+                sign = 1.0 if item.get("keel_down", True) else -1.0
+                mid = np.asarray(item["origin"], dtype=float) + np.array([0.0, 0.0, sign * 0.5 * depth])
+                half = max(0.5 * length - radius, 0.0) * 0.85
+                scene.occluders.append(("capsule", (list(mid - half * along), list(mid + half * along)), radius))
+        elif kind == "cable":
+            # A cable or pipe along a polyline of waypoints, as cylinders end to end.
+            way = np.asarray(item["waypoints"], dtype=float)
+            for p0, p1 in zip(way[:-1], way[1:]):
+                pts, normals = cylinder_points(p0, p1, float(item["radius"]), float(item["density"]), rng, caps=False)
+                scene.add_surface(pts, normals, float(item.get("mu_db", -12.0)), float(item["density"]),
+                                  item.get("label", "cable"), rng, vel)
+                if item.get("occlude", True):
+                    scene.occluders.append(("capsule", (list(p0), list(p1)), float(item["radius"])))
         elif kind == "volume":
             # Point scatterers spread through a box (sediment inhomogeneities, bubbles, fish):
             # isotropic, complex Gaussian amplitudes of the given RMS.

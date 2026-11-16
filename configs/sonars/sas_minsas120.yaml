@@ -1,0 +1,46 @@
+# Interferometric-class synthetic aperture sonar modelled on the Kraken MINSAS 120, as
+# the owner's example. From Kraken's published sheets: 40 kHz linear FM, a 109 cm receive
+# array, 3.3 cm x 3.0 cm resolution, up to 200 m range per side, 2 to 6 knots. The centre
+# frequency (330 kHz) is the owner's figure. The element count, pitch, element sizes,
+# pulse length, source level and sampling are design choices here, not Kraken's
+# (docs/DESIGN.md); only one side and one receive row are modelled.
+name: sas_minsas120
+mode: sas
+nominal_sound_speed: 1500.0
+
+array:
+  layout: uniform_line
+  count: 32
+  pitch: 0.034                   # m; 32 x 3.4 cm = 1.09 m
+  axis: [1, 0, 0]                # along track
+  boresight: [0, 0.9659258, 0.2588190]   # starboard, 15 degrees below horizontal
+  element_width: 0.033           # along track
+  element_height: 0.012          # sets the elevation beam (about 19 degrees)
+
+transmit:
+  kind: point
+  lever_arm: [0, 0, 0]
+  boresight: [0, 0.9659258, 0.2588190]
+  aperture_width: 0.066          # along-track resolution is about half of this: 3.3 cm
+  aperture_height: 0.012
+  waveform:
+    type: lfm
+    f_start: 310.0e3
+    f_stop: 350.0e3              # 40 kHz: c / 2B = 1.9 cm before windowing
+    duration: 5.0e-3
+    window_alpha: 0.1
+    source_level_db: 215.0           # design value; sets how far the seabed stays above noise (docs/DESIGN.md)
+
+receive:
+  kind: real
+  sample_rate: 1.5e6
+  adc_bits: 16
+  adc_full_scale: 1.0
+  sensitivity_db: -190.0
+  gain_db: 20.0
+  window: {range: [10.0, 200.0]}
+
+unconfirmed:
+  - array
+  - transmit
+  - receive

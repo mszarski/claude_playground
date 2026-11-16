@@ -385,3 +385,23 @@ Plans are cached per (device, length, batch) for the life of the process, and a 
 held while a plan executes, so two threads conditioning on one device take turns. cuFFT
 ships with the CUDA toolkit (NVIDIA licence, linked only into the CUDA build). Whitening,
 median TVG, calibration and DRC remain host code: they are cheap next to the transforms.
+
+### D-43 Reverberation for a moving sonar with beams
+The scattering-function generator (D-37) now weights each azimuth and each path by the
+transmit and element beam patterns (the same sinc model as the simulator and the kernel),
+and shifts each azimuth's reverberation by the Doppler of the sonar's own velocity towards
+it, pulse included. The boundary is therefore fixed in the world while the sonar moves.
+Still approximate: no range walk within a ping, arrival elevation is ignored when steering
+to the elements, and each ping draws new noise (so it suits detection and tracking, not
+synthetic aperture or ping-to-ping coherence).
+
+### D-44 Design traceability
+The config files are the only place a design value lives. `tools/design_report.py` derives
+the rest and writes `docs/DESIGN.md`, including a table of the owner's requirements, the
+config key that meets each, and a check. A test regenerates the report and compares, so the
+document cannot drift from the configs.
+
+### D-45 Patch to the ultrasound reference
+The owner chose to keep the reference's fast native path for long windows. The change is a
+patch file applied to a copy of the pinned checkout (`third_party/patches/`), three lines
+of host C++ raising one limit; the reference repository itself is not modified or vendored.

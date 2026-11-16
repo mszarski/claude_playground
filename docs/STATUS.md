@@ -16,15 +16,14 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
-| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). The raw-frame adapter for the ultrasound reference, checked against the reference's decoder (`test_nvus_adapter.py`). The low-rate flank source on the host side: block format, ping assembler, UDP source and board emulator (`test_flank_stream.py`), and a Holoscan pipeline fed by the emulated board over UDP that detects its target, run on a T4 (`test_holoscan.py`). The ultrasound source driven through the reference's native runtime at the pinned commit, against its simulated hardware (`test_nvus_scanner.py`); this measured the reference compiler's window limit at 0.88 m. Not done: the reference's SDK build (Sensor Bridge 2.7.0, Holoscan 4.4.0) and any hardware run, a window beyond 0.88 m, the flank source behind the Sensor Bridge receiver and its emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
+| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). The raw-frame adapter for the ultrasound reference, checked against the reference's decoder (`test_nvus_adapter.py`). The low-rate flank source on the host side: block format, ping assembler, UDP source and board emulator (`test_flank_stream.py`), and a Holoscan pipeline fed by the emulated board over UDP that detects its target, run on a T4 (`test_holoscan.py`). The ultrasound source driven through the reference's native runtime at the pinned commit, against its simulated hardware (`test_nvus_scanner.py`). The reference's compiler stopped at a 0.88 m window; the owner chose to patch it: `third_party/patches/` raises the limit to 3.5 m (host C++ only), `tools/build_nvus_reference.sh` builds the patched module on a CPU, and a 2.95 m window now runs through the reference's fast loop. Not done: the reference's SDK build (Sensor Bridge 2.7.0, Holoscan 4.4.0) and any hardware run (21 MB frames are untried there), the flank source behind the Sensor Bridge receiver and its emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
 | 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). The scattering-function reverberation method (`sim/reverb.py`, D-37): level within 2 dB of the analytic prediction and of the point-scatterer method, array coherence checked. Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise, all with bottom reverberation, and compared with the spherical estimate (`test_long_range.py`). Sea-surface backscatter (Chapman–Harris) and rough-surface reflection loss (`test_surface.py`, D-38). Rays against normal modes (KRAKEN) at 8 kHz: within 0.21 dB from 1 to 10 km (`test_kraken_crosscheck.py`); that check found the arrival cap of the first long-range scenarios too low, now fixed (D-39). Range-dependent bathymetry through Bellhop (a 2-D ridge; `test_propagation.py`). Not done: reverberation from sloping bathymetry, bubble absorption and the APL-UW high-frequency surface model, a Jackson-type bottom model, volume scattering, time spreading, the RAM cross-check, a 3-D seamount. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; sessions that keep samples on the device (D-40), which removed the per-call overhead (A10G SAS 0.83 s → 0.44 s) and brought two-GPU scaling to 1.7×, images bit-identical; a 2 cm SAS image that is compute-bound; baseband conversion and pulse compression on the device with cuFFT (35–48× faster than four CPU threads, D-42) (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; verified GFLOPS figures; handing conditioned samples to the backprojection session without a round trip through host memory; motion estimation is CPU. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## What is next
 
-1. Milestone 11: the reference's SDK build and a rig run; a 2 to 3 m window (owner to choose:
-   the reference's Python driver, or a change to its sequence compiler); the flank
-   assembler behind the Sensor Bridge receiver and emulator; C++ operators.
+1. Milestone 11: the reference's SDK build with the long-window patch and a rig run; the
+   flank assembler behind the Sensor Bridge receiver and emulator; C++ operators.
 2. Milestone 13: keep conditioned samples on the device for the backprojection session;
    Spark and Jetson measurements when the hardware is available.
 3. Milestone 12: a Jackson-type bottom, reverberation from sloping bathymetry, time
@@ -142,6 +141,28 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   existing hardware. Drift from the 1PPS and direct-path methods needs consecutive pings
   and is not implemented.
 - Synthetic aperture with the flank array along track (the stretch goal) is not attempted.
+
+## The owner's designs (traceable; see `DESIGN.md`)
+
+- Sonars: `fls_120k` (300 m), `fls_170k` (600 m), `fls_330k` (300 m), each 128 elements
+  with a 120 degree sector and a configurable vertical field of view and tilt (`fov`
+  block); `sas_minsas120` (330 kHz, 40 kHz, 1.09 m array, modelled on the Kraken MINSAS
+  120); `popoto_array` (any number of hydrophones, boards of eight follow).
+- Scenarios: `fls_{120,170,330}k_transit` (AUV at 20 m under way; a boat hull under way,
+  an anchored boat, a buoy, a seabed pinnacle; seabed and surface reverberation fixed in
+  the world), `sas_minsas_survey` (two legs over a wreck, cable, rocks, calibration cube),
+  `popoto_far_mover` (moving ownship, ship-sized mover at 6 km).
+- `tools/design_report.py` derives every design number from the config files, checks 25
+  requirements, draws the diagrams and writes `DESIGN.md`; `test_design.py` fails if a
+  requirement is unmet or the document is stale. `CONFIGURATION.md` lists every key.
+- Everything runs on a CPU (`README.md`, "Everything on a CPU"); CPU run times are in
+  `SCENARIOS.md`.
+- What the design numbers say that needs a decision: the 170 kHz sonar has only 14 dB of
+  noise-limited margin on a boat hull at 600 m; the SAS at 215 dB keeps one cell of sand
+  13 dB above noise to about 117 m, not 200 m; the far-mover scenario needed a 1 s sweep at
+  185 dB to hold a ship at 6 km on 32 hydrophones (0.5 s at 180 dB did not).
+- Not real: source levels, sensitivities, element sizes and ADC choices are design values
+  in the configs, flagged `unconfirmed`. Nothing is built.
 
 ## Scenes and scenarios
 

@@ -49,6 +49,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
                   noise_spectrum=None, reverberation: list | None = None,
+                  beam_floor_db: float | None = None,
                   backend=core.Backend.Host) -> "core.PingRecord":
     """Simulate one transmit and return its record."""
     env = resolve_environment(environment, depth=pose.position[2])
@@ -77,6 +78,24 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         q, p, amp, vq, vp = two_way_paths(provider, tx_position, rx_reference, points, amplitudes,
                                           scene.velocities, scene.lambert,
                                           scene.normals if len(scene.normals) == len(scene) else None)
+        if beam_floor_db is not None and len(amp):
+            # Skip paths that leave and return far down both beam patterns: with narrow
+            # beams most scatterers contribute nothing measurable to most pings.
+            from . import reverb
+            keep = np.ones(len(amp), dtype=bool)
+            tx_gain = reverb.element_power_pattern(record.geometry.tx,
+                                                   np.asarray(core.rotation_ned(*record.geometry.tx_pose.rpy)))
+            rx_gain = reverb.element_power_pattern(record.geometry.rx[0],
+                                                   np.asarray(core.rotation_ned(*record.geometry.rx_pose.rpy)))
+            gain = np.ones(len(amp))
+            for fn, origin, target in ((tx_gain, tx_position, q), (rx_gain, rx_reference, p)):
+                if fn is not None:
+                    d = target - origin
+                    gain = gain * fn(d / np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-12))
+            keep = gain >= 10.0 ** (beam_floor_db / 10.0)
+            q, p, amp = q[keep], p[keep], amp[keep]
+            if vq is not None:
+                vq, vp = vq[keep], vp[keep]
         core.synthesize_into(record, q, p, amp, vq, vp,
                              absorption=absorption_table(sonar, env, absorption_model),
                              spreading=spreading, backend=backend,
@@ -108,15 +127,25 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         samples = receiver.add_noise(samples, noise_rms, rng or np.random.default_rng())
     if noise_spectrum is not None:
         # Ambient noise with a spectrum (dB re 1 uPa^2/Hz against Hz) and the coherence of
-        # an isotropic field across the array. Real passband records only.
-        if np.iscomplexobj(samples):
-            raise ValueError("noise_spectrum needs a real passband record (receive.kind: real)")
+        # an isotropic field across the array.
         from . import noise as noise_models
         rx_cfg = sonar.config["receive"]
         sens = float(rx_cfg.get("sensitivity_db") or 0.0) + float(rx_cfg.get("gain_db", 0.0))
-        samples = samples + noise_models.gaussian_noise(
-            samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
-            positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+        if np.iscomplexobj(samples):
+            # A baseband record covers a band `sample_rate` wide about the carrier: white
+            # noise at the spectrum level of the centre frequency, independent between
+            # channels (true of an isotropic field at half-wavelength spacing). The complex
+            # envelope carries twice the power of the real signal in that band.
+            fs_bb = record.samples.sample_rate
+            level = float(np.asarray(noise_spectrum(np.array([record.samples.center_frequency])))[0])
+            sigma = np.sqrt(2.0 * 10.0 ** (level / 10.0) * fs_bb) * 10.0 ** (sens / 20.0)
+            g = rng or np.random.default_rng()
+            samples = samples + (sigma / np.sqrt(2.0)) * (
+                g.standard_normal(samples.shape) + 1j * g.standard_normal(samples.shape)).astype(samples.dtype)
+        else:
+            samples = samples + noise_models.gaussian_noise(
+                samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
+                positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
     samples = receiver.apply_hardware_tvg(record, samples)
     if adc:
         samples = receiver.apply_adc(record, samples)
@@ -262,6 +291,8 @@ class ScenarioResult:
     scene: Scene
     config: dict
     true_positions: np.ndarray = None      # [n_pings, 3] platform position at each transmit
+    legs: list = None                      # survey leg index of each record (platform.legs), or None
+    times: np.ndarray = None               # [n_pings] scenario time of each transmit, s
 
 
 def run_scenario(name_or_config, overrides: dict | None = None, output: str | None = None,
@@ -299,10 +330,37 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         provider=provider, absorption_model=cfg.get("absorption", "francois_garrison"),
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
-        reverberation=cfg.get("reverberation"))
+        reverberation=cfg.get("reverberation"),
+        beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"))
     motion = plat.get("motion")
     raster = plat.get("raster")
-    if motion is not None:
+    legs_cfg = plat.get("legs")
+    leg_of_record, ping_times = None, None
+    if legs_cfg is not None:
+        # Survey legs: straight runs, each with its own start, heading and length. The
+        # platform's yaw follows the heading (0 = +x, 90 = +y), so a side-looking sonar
+        # looks to starboard of each leg.
+        speed = float(plat.get("speed", np.linalg.norm(velocity)))
+        leg_of_record, ping_times, t = [], [], 0.0
+        for leg_index, leg in enumerate(legs_cfg):
+            heading = np.radians(float(leg["heading_deg"]))
+            direction = np.array([np.cos(heading), np.sin(heading), 0.0])
+            start = np.asarray(leg["start"], dtype=float)
+            n_leg = int(leg["pings"]) if "pings" in leg else int(np.floor(float(leg["length"]) / (speed * interval))) + 1
+            for i in range(n_leg):
+                pos = start + direction * speed * (i * interval)
+                pose = make_pose(pos, (0.0, 0.0, heading), (0.0, 0.0, 0.0) if stop_and_go else speed * direction)
+                truth_positions.append(pos)
+                seq = len(records)
+                records.append(simulate_ping(
+                    sonar, pose, scene, environment=env, sequence=seq, sub_sequence=seq % n_sub,
+                    time_ns=start_ns + int(round(t * 1e9)), scenario_time=t, rng=rng, backend=backend,
+                    **ping_kwargs))
+                leg_of_record.append(leg_index)
+                ping_times.append(t)
+                t += interval
+            t += float(leg.get("turn_time", 30.0))           # the turn to the next leg is not simulated
+    elif motion is not None:
         # A straight run along +x with sway and heave the navigation does not know about
         # (unless nav_knows_disturbance): the input for motion estimation.
         if np.any(np.abs(velocity[1:]) > 0) or np.any(np.asarray(rpy, dtype=float) != 0):
@@ -349,4 +407,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
                               np.stack([scene.amplitudes.real, scene.amplitudes.imag], axis=1))
             w.write_truth_text("fidelity", tier)
             w.write_truth_text("labels", json.dumps(scene.labels))
-    return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float))
+    if ping_times is None:
+        ping_times = [i * interval for i in range(len(records))]
+    return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), leg_of_record,
+                          np.asarray(ping_times, dtype=float))

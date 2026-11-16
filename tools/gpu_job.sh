@@ -40,14 +40,9 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=ON \
       -DPython3_EXECUTABLE="$(which python3)"
 cmake --build build
 if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
-  # External GPL-3 propagation programs, used as separate processes by the eigenray tier
-  # and as test oracles (docs/OPEN_SOURCE.md). Built outside the source tree; never linked.
+  # External GPL-3 propagation programs, run as separate processes (docs/OPEN_SOURCE.md).
   apt-get install -y -qq gfortran make > /dev/null
-  git clone -q --depth 1 https://github.com/oalib-acoustics/Acoustics-Toolbox /opt/at
-  sed -i 's/-mcpu=apple-m2/-march=native/' /opt/at/Makefile
-  (cd /opt/at && make -k all > /opt/at/build.log 2>&1 || true)
-  ls -la /opt/at/Bellhop/bellhop.exe /opt/at/Kraken/kraken.exe /opt/at/KrakenField/field.exe
-  export GPUSONAR_BELLHOP=/opt/at/Bellhop/bellhop.exe GPUSONAR_KRAKEN_DIR=/opt/at
+  eval "$(tools/build_oracles.sh /opt/at | tail -1)"
 fi
 if [ "${GPUSONAR_NVUS:-0}" = "1" ]; then
   # The NVIDIA ultrasound reference's native module at the pinned commit with the

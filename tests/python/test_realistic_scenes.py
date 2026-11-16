@@ -38,6 +38,7 @@ def test_every_mode_has_a_realistic_scenario():
     modes = {name: load_scenario_config(name)["sonar"] for name in gallery.RUNNERS}
     sonars = set(modes.values())
     assert {"l12_5d", "p4_2v", "fls_300k", "fls_750k"} <= sonars            # forward-looking, phases 1 to 4
+    assert {"fls_120k", "fls_170k", "fls_330k", "sas_minsas120", "popoto_array"} <= sonars   # the owner's designs
     assert {"sas_auv", "sas_rail", "subbottom"} <= sonars                   # SAS, rail SAS, 3D
     assert {"flank_32", "popoto_8"} <= sonars                               # long-range arrays
     for name in gallery.RUNNERS:
@@ -109,3 +110,47 @@ def test_flank_patrol_detects_and_tracks():
     assert abs(sub["track_velocity"][1]) < 1.0
     assert wreck["tracked"] and np.hypot(*wreck["track_velocity"]) < 0.6     # it does not move
     assert max(m["detections_per_ping"]) <= 6                               # no flood of false alarms
+
+
+# --- the owner's designs: moving ownship, world-fixed boundaries -----------------------------
+
+def test_fls_120k_transit_tracks_static_and_moving_targets_from_a_moving_auv():
+    m = quick("fls_120k_transit")
+    t = m["targets"]
+    assert t["boat_under_way"]["tracked"] and t["boat_under_way"]["track_speed_m_s"] == pytest.approx(4.0, abs=1.0)
+    assert t["boat_under_way"]["track_velocity_xy"][1] < -2.5                # crossing to port
+    for name, limit in (("boat_at_anchor", 0.6), ("mooring_buoy", 0.6), ("pinnacle", 1.2)):
+        assert t[name]["tracked"], name
+        assert t[name]["track_speed_m_s"] < limit, name                       # fixed in the world, though ownship moves
+    assert max(m["detections_per_ping"]) <= 12
+
+
+@pytest.mark.parametrize("name", ["fls_170k_transit", "fls_330k_transit"])
+def test_high_frequency_fls_sees_the_surface_targets_in_its_tilted_beam(name):
+    m = quick(name)
+    t = m["targets"]
+    assert t["boat_under_way"]["tracked"] and t["boat_under_way"]["track_speed_m_s"] == pytest.approx(4.0, abs=1.2)
+    assert t["mooring_buoy"]["tracked"] and t["mooring_buoy"]["track_speed_m_s"] < 0.6
+    assert not t["pinnacle"]["tracked"]                                      # the seabed is below the 5 degree beam
+
+
+def test_sas_survey_images_the_seabed_from_both_sides():
+    m = quick("sas_minsas_survey")
+    one, two = m["legs"]["leg_1"], m["legs"]["leg_2"]
+    assert one["sonar_side_of_wreck"] != two["sonar_side_of_wreck"]
+    for leg in (one, two):
+        assert leg["covered_fraction"] > 0.4
+        assert leg["far_strip_over_near_strip_db"] < -10.0                   # the wreck's shadow falls away from the sonar
+        lv = leg["object_over_median_db"]
+        assert lv["wreck_hull"] > 20 and lv["calibration_cube"] > 15 and lv["cable"] > 15
+
+
+@pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
+def test_popoto_array_tracks_a_distant_mover_and_gains_with_size():
+    m = quick("popoto_far_mover")
+    ship = m["targets"]["ship"]
+    assert ship["tracked"] and ship["position_error_m"] < 200.0
+    assert ship["track_velocity_xy"][0] < -2.0                               # moving towards -x
+    gain = m["peak_over_median_db_by_hydrophone_count"]
+    assert gain["8"] < gain["16"] < gain["32"]
+    assert gain["32"] - gain["8"] == pytest.approx(6.0, abs=2.5)             # 10 log10(4)

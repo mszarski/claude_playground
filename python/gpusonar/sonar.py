@@ -62,6 +62,37 @@ def _beamwidth(cfg: dict, key: str, size_key: str, wavelength: float) -> float:
     return float("nan")
 
 
+def apply_fov(cfg: dict) -> dict:
+    """Expand a config's `fov` block into boresights and beamwidths.
+
+        fov: {horizontal_deg: 120, vertical_deg: 20, tilt_up_deg: 0}
+
+    sets the element and transmit beamwidths (FWHM) in azimuth and elevation and tilts
+    both boresights up from the horizontal `array.boresight` by `tilt_up_deg` (z is down,
+    so up is -z). Explicit `beamwidth_*` or `transmit.boresight` keys win over the block.
+    """
+    fov = cfg.get("fov")
+    if not fov or fov.get("applied"):
+        return cfg
+    import copy
+    cfg = copy.deepcopy(cfg)
+    cfg["fov"]["applied"] = True
+    arr, tx = cfg["array"], cfg["transmit"]
+    level = _unit(arr.get("boresight", [1.0, 0.0, 0.0]))
+    if abs(level[2]) > 1e-9:
+        raise ValueError("fov: array.boresight must be horizontal; set the tilt with fov.tilt_up_deg")
+    tilt = np.radians(float(fov.get("tilt_up_deg", 0.0)))
+    boresight = [float(v) for v in np.cos(tilt) * level - np.sin(tilt) * np.array([0.0, 0.0, 1.0])]
+    arr["boresight"] = boresight
+    tx.setdefault("boresight", boresight)
+    for block in (arr, tx):
+        if fov.get("horizontal_deg") is not None:
+            block.setdefault("beamwidth_az", float(np.radians(fov["horizontal_deg"])))
+        if fov.get("vertical_deg") is not None:
+            block.setdefault("beamwidth_el", float(np.radians(fov["vertical_deg"])))
+    return cfg
+
+
 @dataclass
 class SonarModel:
     name: str
@@ -84,6 +115,7 @@ class SonarModel:
 
     @classmethod
     def from_config(cls, cfg: dict) -> "SonarModel":
+        cfg = apply_fov(cfg)
         tx_wf = cfg["transmit"]["waveform"]
         fc = 0.5 * (float(tx_wf["f_start"]) + float(tx_wf.get("f_stop", tx_wf["f_start"])))
         c = float(cfg.get("nominal_sound_speed", 1500.0))
@@ -92,7 +124,10 @@ class SonarModel:
         if "layouts" in arr:
             # Several named element layouts for one board (e.g. dense and sparse).
             choice = arr.get("layout_choice")
-            arr = {**arr, **arr["layouts"][choice]}
+            # Keys given beside `layouts` (for example `array.count` in an override) win
+            # over the chosen layout's own, so an array scales with one number.
+            top = {k: v for k, v in arr.items() if k not in ("layouts", "layout_choice")}
+            arr = {**arr["layouts"][choice], **top}
         positions = _positions(arr)
         n = positions.shape[0]
 
@@ -112,6 +147,12 @@ class SonarModel:
                 raise ValueError("mux group refers to an element outside the array")
 
         boards_cfg = rx.get("boards")
+        if not boards_cfg and rx.get("board_size"):
+            # Capture boards of a fixed channel count, as many as the array needs, so the
+            # array scales by changing `array.count` alone. Ideal clocks unless
+            # `receive.boards` spells them out.
+            size = int(rx["board_size"])
+            boards_cfg = [{"first": first, "count": min(size, n - first)} for first in range(0, n, size)]
         channel_board = np.zeros(n, dtype=np.int32)
         boards: list[dict] = [{}]
         if boards_cfg:

@@ -2,10 +2,12 @@
 """Run the realistic scenario of every mode end to end and save a picture and a few
 numbers for each: simulate, condition, (estimate motion,) image, (detect, track).
 
-  FLS    pool_fls_l12_5d, pool_fls_p4_2v, seafloor_objects_fls, harbour_fls_750k
-  SAS    wreck_sas, minefield_sas (with motion estimation), rail_objects
+  FLS    pool_fls_l12_5d, pool_fls_p4_2v, seafloor_objects_fls, harbour_fls_750k,
+         fls_120k_transit, fls_170k_transit, fls_330k_transit (moving ownship, tracking)
+  SAS    wreck_sas, minefield_sas (with motion estimation), sas_minsas_survey (two legs),
+         rail_objects
   3D     buried_objects
-  flank  flank_patrol (needs Bellhop), popoto_trial_1000m (needs Bellhop)
+  flank  flank_patrol, popoto_far_mover, popoto_trial_1000m (all need Bellhop)
 
 Usage: tools/gallery.py [--backend cuda|host] [--only name,name] [--out docs/figures]
                         [--quick]   thinned scenes and fewer pings, for a CPU
@@ -46,9 +48,9 @@ def display(power, target_median=0.2):
     return core.drc(np.sqrt(power).astype(np.float32), target_median=target_median)[0]
 
 
-def object_levels(scene, power, to_pixel):
+def object_levels(scene, power, to_pixel, median=None):
     """Mean image power over each labelled object's scatterers, in dB over the image median."""
-    median = float(np.median(power))
+    median = float(np.median(power)) if median is None else float(median)
     out = {}
     for label, mask in scene.label_masks().items():
         idx = [i for i in to_pixel(scene.positions[mask]) if i is not None]
@@ -355,12 +357,243 @@ def run_popoto(name, cfg, backend, quick):
                  "peak_over_median_db": float(db(power.max(), floor))}
 
 
+# --- moving ownship: detection and tracking in the world frame ---------------------------------
+
+def world_tracks(detections_per_ping, times, **tracker_kw):
+    """Track detections given as world (x, y) per ping. Returns the tracker's confirmed
+    tracks; each state is [y, x, vy, vx] (the tracker's across, forward order)."""
+    tracker = detect.Tracker(**tracker_kw)
+    tracks = []
+    for t, hits in zip(times, detections_per_ping):
+        tracks = tracker.update(float(t), [detect.Detection(float(np.hypot(x, y)), float(np.arctan2(y, x)), snr, 1)
+                                           for x, y, snr in hits])
+    return tracks
+
+
+def score_tracks(tracks, truth, t_last, gate):
+    """For each true object (position at t = 0, velocity), the nearest confirmed track at the last ping."""
+    out = {}
+    for label, (pos, vel) in truth.items():
+        end = pos[:2] + vel[:2] * t_last
+        best = min(tracks, key=lambda tr: np.hypot(tr.state[1] - end[0], tr.state[0] - end[1]), default=None)
+        if best is None:
+            out[label] = {"tracked": False}
+            continue
+        err = float(np.hypot(best.state[1] - end[0], best.state[0] - end[1]))
+        out[label] = {"tracked": bool(err < gate), "position_error_m": err,
+                      "true_velocity_xy": [float(vel[0]), float(vel[1])],
+                      "track_velocity_xy": [float(best.state[3]), float(best.state[2])]}
+    return out
+
+
+def scene_truth(cfg):
+    """{label: (centre at t = 0, velocity)} of a scenario's scene items."""
+    truth = {}
+    for item in cfg["scene"]:
+        if "positions" in item:
+            centre = np.asarray(item["positions"], dtype=float).mean(axis=0)
+        elif "origin" in item:
+            centre = np.asarray(item["origin"], dtype=float)
+        elif "centre" in item:
+            centre = np.asarray(item["centre"], dtype=float)
+        elif "x_range" in item:
+            centre = np.array([np.mean(item["x_range"]), np.mean(item["y_range"]), float(item.get("depth", 0.0))])
+        else:
+            continue
+        truth[item["label"]] = (centre, np.asarray(item.get("velocity", (0.0, 0.0, 0.0)), dtype=float))
+    return truth
+
+
+def plot_tracks(ax, tracks, truth, own, t_last, title):
+    for tr in tracks:
+        h = np.array(tr.history)
+        ax.plot(h[:, 1], h[:, 2], "-", lw=2.5)
+        ax.plot(h[-1, 1], h[-1, 2], "k.", ms=6)
+    for label, (pos, vel) in truth.items():
+        end = pos[:2] + vel[:2] * t_last
+        ax.plot([pos[1], end[1]], [pos[0], end[0]], "--", lw=1, color="0.35")
+        ax.plot(pos[1], pos[0], "o", mfc="none", color="0.35", ms=9)
+        ax.annotate(label, (end[1], end[0]), textcoords="offset points", xytext=(7, 5), fontsize=8)
+    ax.plot(own[:, 1], own[:, 0], "-", color="C3", lw=2)
+    ax.annotate("ownship", (own[-1, 1], own[-1, 0]), textcoords="offset points", xytext=(7, 5), fontsize=8, color="C3")
+    ax.set_xlabel("y, to starboard (m)")
+    ax.set_ylabel("x, ahead (m)")
+    ax.set_title(title)
+    ax.set_aspect("equal", adjustable="datalim")
+
+
+FLS_TRANSIT = {
+    "fls_120k_transit": dict(r=(20.0, 298.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
+    "fls_170k_transit": dict(r=(40.0, 596.0, 0.06), cell=8, guard_m=6.0, train_m=30.0),
+    "fls_330k_transit": dict(r=(20.0, 298.0, 0.04), cell=12, guard_m=6.0, train_m=30.0),
+}
+
+
+def run_fls_transit(name, cfg, backend, quick):
+    p = dict(FLS_TRANSIT[name])
+    if quick:                                             # half the range sampling, same cell size
+        p["r"] = (p["r"][0], p["r"][1], 2 * p["r"][2])
+        p["cell"] = p["cell"] // 2
+    result = run_scenario(cfg, backend=backend)
+    ranges = np.arange(*p["r"])
+    ranges = ranges[:len(ranges) // p["cell"] * p["cell"]]
+    bearings = np.radians(np.arange(-60.0, 60.01, 0.4))
+    cell_m = p["cell"] * p["r"][2]
+    guard, train = int(round(p["guard_m"] / cell_m)), int(round(p["train_m"] / cell_m))
+    per_ping, first = [], None
+    for rec in result.records:
+        origin = rec.rx_positions().mean(axis=0)
+        img = recon.fan_image([rec], ranges, bearings, interp="linear", window="hann", backend=backend)
+        fine = np.abs(img.image) ** 2
+        # Power in range cells of about half a metre; rows are bearings for the detector.
+        power = fine.reshape(-1, p["cell"], fine.shape[1]).mean(axis=1).T
+        r_cells = ranges.reshape(-1, p["cell"]).mean(axis=1)
+        hits = detect.cluster(detect.cfar(power, pfa=1e-7, guard=guard, train=train), power, r_cells, bearings,
+                              guard=guard, train=train)
+        hits = [h for h in hits if h.snr_db > 13.0 and h.cells >= 2]
+        per_ping.append([(origin[0] + h.range * np.cos(h.bearing), origin[1] + h.range * np.sin(h.bearing), h.snr_db)
+                         for h in hits])
+        if first is None:
+            first = (r_cells, power, origin)
+    tracks = world_tracks(per_ping, result.times, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3,
+                          max_misses=2, initial_speed_sigma=6.0, process_noise=0.3)
+    truth = scene_truth(cfg)
+    t_last = float(result.times[-1])
+    metrics = {"pings": len(result.records), "scatterers": len(result.scene),
+               "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
+               "targets": score_tracks(tracks, truth, t_last, gate=15.0)}
+    for label, m in metrics["targets"].items():
+        if m.get("tracked"):
+            m["track_speed_m_s"] = float(np.hypot(*m["track_velocity_xy"]))
+    r_cells, power, origin = first
+    R, B = np.meshgrid(r_cells, bearings, indexing="ij")
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6.5), constrained_layout=True)
+    m = axes[0].pcolormesh(origin[1] + R * np.sin(B), origin[0] + R * np.cos(B), display(power.T * r_cells[:, None] ** 3),
+                           cmap="gray", vmin=0.0, vmax=1.0, shading="auto", rasterized=True)
+    for label, (pos, _) in truth.items():
+        axes[0].plot(pos[1], pos[0], "o", mfc="none", ms=13, label=label)
+    axes[0].legend(loc="lower left", fontsize=8)
+    axes[0].set_aspect("equal")
+    axes[0].set_xlabel("y, to starboard (m)")
+    axes[0].set_ylabel("x, ahead (m)")
+    axes[0].set_title("First ping (circles: true positions)")
+    fig.colorbar(m, ax=axes[0], label="display level (range gain, dynamic range compression)", shrink=0.75)
+    plot_tracks(axes[1], tracks, truth, result.true_positions, t_last,
+                f"World-frame tracks over {len(result.records)} pings (dashed: truth)")
+    fig.suptitle(f"{name}: {cfg['sonar']}, ownship under way; seabed and surface reverberation, noise (simulated)")
+    return fig, metrics
+
+
+def run_sas_survey(name, cfg, backend, quick):
+    result = run_scenario(cfg, backend=backend)
+    recon.prepare(result.records, backend=backend)
+    pixel = 0.1 if quick else 0.05
+    x, y = np.arange(0.0, 40.0, pixel), np.arange(38.5, 62.0, pixel)
+    X, Y = np.meshgrid(x, y, indexing="ij")
+    points = np.stack([X, Y, np.zeros_like(X)], axis=-1)
+
+    def to_pixel(pts):
+        i = np.rint((pts[:, 0] - x[0]) / pixel).astype(int)
+        j = np.rint((pts[:, 1] - y[0]) / pixel).astype(int)
+        return [(a, b) if 0 <= a < len(x) and 0 <= b < len(y) else None for a, b in zip(i, j)]
+
+    legs = sorted(set(result.legs))
+    metrics = {"pings": len(result.records), "scatterers": len(result.scene), "legs": {}}
+    fig, axes = plt.subplots(1, len(legs), figsize=(7.2 * len(legs), 7.0), sharey=True, constrained_layout=True)
+    # Strips of seabed just north and just south of the wreck: each leg shadows one of them.
+    north = (X > 17.0) & (X < 24.0) & (Y > 53.0) & (Y < 55.5)
+    south = (X > 17.0) & (X < 24.0) & (Y > 44.5) & (Y < 47.0)
+    for ax, leg in zip(np.atleast_1d(axes), legs):
+        recs = [r for r, k in zip(result.records, result.legs) if k == leg]
+        power = np.abs(recon.sas_image(recs, points, interp="linear", backend=backend)) ** 2
+        covered = power > 0                                   # pixels this leg's beams reached
+        median = float(np.median(power[covered]))
+        side = float(np.sign(np.mean([r.rx_positions().mean(axis=0)[1] for r in recs]) - 50.0))
+        metrics["legs"][f"leg_{leg + 1}"] = {
+            "sonar_side_of_wreck": "y below" if side < 0 else "y above",
+            "covered_fraction": float(covered.mean()),
+            "far_strip_over_near_strip_db": float(db(power[north & covered].mean(), power[south & covered].mean())
+                                                  * (1.0 if side < 0 else -1.0)),
+            "object_over_median_db": object_levels(result.scene, power, to_pixel, median)}
+        m = ax.imshow(db(power, median), extent=[y[0], y[-1], x[-1], x[0]], cmap="gray", vmin=-12, vmax=30,
+                      aspect="equal")
+        ax.invert_yaxis()
+        heading = cfg["platform"]["legs"][leg]["heading_deg"]
+        ax.set_title(f"Leg {leg + 1}: heading {heading:.0f} deg, sonar at y = {cfg['platform']['legs'][leg]['start'][1]:.0f} m")
+        ax.set_xlabel("y (m)")
+    np.atleast_1d(axes)[0].set_ylabel("x (m)")
+    fig.colorbar(m, ax=axes, label="dB re image median", shrink=0.8)
+    fig.suptitle(f"{name}: {cfg['sonar']}, two survey legs over a wreck, cable, rocks and calibration cube (simulated)")
+    return fig, metrics
+
+
+def run_popoto_far(name, cfg, backend, quick):
+    from gpusonar import sync
+    result = run_scenario(cfg, backend=backend)
+    bearings = np.radians(np.arange(-40.0, 40.01, 0.5))
+    per_ping, first = [], None
+    n_total = result.records[0].samples.n_channels
+    scaling = {}
+    for i, rec in enumerate(result.records):
+        origin = rec.rx_positions().mean(axis=0)
+        if i == 0:
+            # The same ping through arrays of fewer hydrophones (the middle ones).
+            target = result.scene.positions.mean(axis=0)
+            for n in sorted({8, 16, 32, n_total} & set(range(1, n_total + 1))):
+                first_row = (n_total - n) // 2
+                sub = sync.select_channels(rec, range(first_row, first_row + n))
+                bm = flank.farfield_beamform(sub, bearings, window="hann").valid()
+                pw = np.abs(bm.data) ** 2
+                rng_t = float(np.hypot(target[0] - origin[0], target[1] - origin[1]))
+                near = np.abs(bm.ranges - rng_t) < 120.0
+                scaling[str(n)] = float(db(pw[:, near].max(), np.median(pw)))
+        bm = flank.farfield_beamform(rec, bearings, window="hann").valid()
+        fine = np.abs(bm.data) ** 2
+        k = max(int(round(2.0 / (bm.ranges[1] - bm.ranges[0]))), 1)        # 2 m range cells
+        n = fine.shape[1] // k * k
+        power = fine[:, :n].reshape(len(bearings), -1, k).mean(axis=2)
+        ranges = bm.ranges[:n].reshape(-1, k).mean(axis=1)
+        hits = detect.cluster(detect.cfar(power, pfa=1e-5, guard=50, train=150), power, ranges, bearings, guard=50, train=150)
+        hits = [h for h in hits if h.snr_db > 9.0]
+        # Bearing is from broadside (+y) towards +x, the array's own axis.
+        per_ping.append([(origin[0] + h.range * np.sin(h.bearing), origin[1] + h.range * np.cos(h.bearing), h.snr_db)
+                         for h in hits])
+        if first is None:
+            first = (ranges, power)
+    tracks = world_tracks(per_ping, result.times, range_sigma=15.0, bearing_sigma=np.radians(1.0), confirm_hits=3,
+                          max_misses=2, initial_speed_sigma=8.0, process_noise=0.05)
+    truth = scene_truth(cfg)
+    t_last = float(result.times[-1])
+    metrics = {"pings": len(result.records), "hydrophones": int(n_total),
+               "detections_per_ping": [len(h) for h in per_ping], "confirmed_tracks": len(tracks),
+               "targets": score_tracks(tracks, truth, t_last, gate=200.0),
+               "peak_over_median_db_by_hydrophone_count": scaling}
+    ranges, power = first
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5.8), constrained_layout=True)
+    m = axes[0].imshow(db(power, np.median(power)), extent=[ranges[0], ranges[-1], np.degrees(bearings[-1]), np.degrees(bearings[0])],
+                       cmap="gray", vmin=0, vmax=30, aspect="auto")
+    axes[0].invert_yaxis()
+    for label, (pos, _) in truth.items():
+        axes[0].plot(np.hypot(pos[0], pos[1]), np.degrees(np.arctan2(pos[0], pos[1])), "o", mfc="none", ms=14, label=label)
+    axes[0].legend(loc="upper right", fontsize=8)
+    axes[0].set_xlabel("range (m)")
+    axes[0].set_ylabel("bearing from broadside (deg)")
+    axes[0].set_title(f"First ping, {n_total} hydrophones")
+    fig.colorbar(m, ax=axes[0], label="dB re map median", shrink=0.8)
+    plot_tracks(axes[1], tracks, truth, result.true_positions, t_last,
+                f"World-frame tracks over {len(result.records)} pings (dashed: truth)")
+    fig.suptitle(f"{name}: Popoto-board array, ownship under way, ship-sized mover at 6 km; multipath, reverberation, noise (simulated)")
+    return fig, metrics
+
+
 RUNNERS = {
     "pool_fls_l12_5d": run_fls, "pool_fls_p4_2v": run_fls, "seafloor_objects_fls": run_fls,
-    "harbour_fls_750k": run_fls, "wreck_sas": run_sas, "minefield_sas": run_sas, "rail_objects": run_rail,
-    "buried_objects": run_buried, "flank_patrol": run_flank, "popoto_trial_1000m": run_popoto,
+    "harbour_fls_750k": run_fls, "fls_120k_transit": run_fls_transit, "fls_170k_transit": run_fls_transit,
+    "fls_330k_transit": run_fls_transit, "wreck_sas": run_sas, "minefield_sas": run_sas,
+    "sas_minsas_survey": run_sas_survey, "rail_objects": run_rail, "buried_objects": run_buried,
+    "flank_patrol": run_flank, "popoto_far_mover": run_popoto_far, "popoto_trial_1000m": run_popoto,
 }
-NEEDS_BELLHOP = {"flank_patrol", "popoto_trial_1000m"}
+NEEDS_BELLHOP = {"flank_patrol", "popoto_trial_1000m", "popoto_far_mover"}
 
 # Thinned versions for a CPU: fewer scatterers and pings, same geometry.
 QUICK = {
@@ -371,9 +604,23 @@ QUICK = {
     "minefield_sas": lambda c: (_scale_density(c, 0.3), c["pings"].update(count=40)),
     "rail_objects": lambda c: (_scale_density(c, 0.1), c["pings"].update(count=51)),
     "buried_objects": lambda c: c["platform"].update(raster={"x": [-0.9, 0.9001, 0.15], "y": [-0.9, 0.9001, 0.15]}),
+    "fls_120k_transit": lambda c: _thin_transit(c),
+    "fls_170k_transit": lambda c: _thin_transit(c),
+    "fls_330k_transit": lambda c: _thin_transit(c),
+    "sas_minsas_survey": lambda c: (_scale_density(c, 0.5), c["platform"]["legs"][0].update(pings=50, start=[10.0, 0.0, -12.0]),
+                                    c["platform"]["legs"][1].update(pings=50, start=[30.0, 100.0, -12.0])),
+    "popoto_far_mover": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=12)),
     "flank_patrol": lambda c: (c["pings"].update(count=4), c["propagation"].update(max_arrivals=8),
                                c["sonar_overrides"].update(transmit={"waveform": {"duration": 0.2}})),
 }
+
+
+def _thin_transit(cfg):
+    cfg["pings"].update(count=4)
+    for item in cfg["scene"]:
+        if "count" in item and item["type"] == "hull":
+            item["count"] = int(item["count"] * 0.4)
+    _scale_density(cfg, 0.5)
 
 
 def _scale_density(cfg, factor):

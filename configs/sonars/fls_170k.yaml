@@ -1,0 +1,45 @@
+# Forward-looking sonar, 170 kHz, 600 m: a horizontal line array on an AUV with a 120 degree
+# sector. Requirements from the owner: centre frequency, range, 120 degrees horizontal,
+# vertical field of view 5 degrees, tilted up 2.0 degrees. Everything else is a design choice derived
+# in docs/DESIGN.md (pitch for no grating lobes over the sector, 128 channels, band, pulse).
+name: fls_170k
+mode: fls
+nominal_sound_speed: 1500.0
+
+# Field of view: sets the element and transmit beamwidths and tilts both boresights.
+fov:
+  horizontal_deg: 120.0
+  vertical_deg: 5.0
+  tilt_up_deg: 2.0
+
+array:
+  layout: uniform_line
+  count: 128
+  pitch: 0.0042                  # m; no grating lobe inside +/-60 degrees up to the top of the band
+  axis: [0, 1, 0]                # athwartships
+  boresight: [1, 0, 0]           # forward (the fov block applies the tilt)
+
+transmit:
+  kind: point                    # one projector insonifying the whole sector
+  lever_arm: [0, 0, 0.1]
+  waveform:
+    type: lfm
+    f_start: 160.0e3
+    f_stop: 180.0e3
+    duration: 20.0e-3
+    window_alpha: 0.1
+    source_level_db: 210.0       # dB re 1 uPa at 1 m; link budget in docs/DESIGN.md
+
+receive:
+  kind: real
+  sample_rate: 0.75e6
+  adc_bits: 16
+  adc_full_scale: 1.0            # V
+  sensitivity_db: -190.0         # dB re 1 V/uPa
+  gain_db: 20.0
+  window: {range: [5.0, 600.0]}
+
+unconfirmed:
+  - array                        # element count, pitch and sizes are design values, not built
+  - transmit.waveform.source_level_db
+  - receive                      # front end not chosen

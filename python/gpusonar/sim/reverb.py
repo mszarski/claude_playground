@@ -67,9 +67,14 @@ def baseband_pulse(waveform, sample_rate: float, center_frequency: float) -> np.
 def reverberation_power(provider: EigenrayProvider, source, boundary_z: float, times: np.ndarray,
                         mu_db: float, absorption_db_per_m: float = 0.0, max_range: float | None = None,
                         ring_width: float | None = None, min_range: float = 0.0,
-                        strength=None) -> np.ndarray:
+                        strength=None, pattern=None) -> np.ndarray:
     """Reverberation power per radian of azimuth in each time bin, for unit source
     amplitude at 1 m, from a flat boundary at depth `boundary_z`.
+
+    With `pattern` = (azimuths [M], transmit_gain, receive_gain), each a function of unit
+    direction vectors [..., 3] in the world frame returning a power gain, the result is
+    [M, n_time]: the power per radian arriving from each azimuth, weighted by the two beam
+    patterns along each path's own elevation.
 
     The scattering strength is Lambert's law with parameter `mu_db`, or `strength`: a
     function of the incident and scattered grazing angles (radians) returning the linear
@@ -97,6 +102,28 @@ def reverberation_power(provider: EigenrayProvider, source, boundary_z: float, t
     a2 = np.where(incident, np.abs(es.amplitude) ** 2, 0.0)
     k = es.delay.shape[1]
     area = rings * dr                                      # ring area per radian of azimuth
+    if pattern is not None:
+        azimuths, tx_gain, rx_gain = pattern
+        ca, sa = np.cos(azimuths)[:, None, None], np.sin(azimuths)[:, None, None]
+        lx, ly, lz = es.launch[None, :, :, 0], es.launch[None, :, :, 1], es.launch[None, :, :, 2]
+        # Each path leaves (and, by reciprocity, returns) along its launch direction,
+        # turned to the sector's azimuth.
+        d = np.stack([lx * ca - ly * sa, lx * sa + ly * ca, np.broadcast_to(lz, (len(azimuths),) + lz.shape[1:])], axis=-1)
+        w_tx, w_rx = tx_gain(d), rx_gain(d)                # [M, rings, k]
+        out = np.zeros((len(azimuths), len(times)))
+        cols = np.arange(len(azimuths))[:, None]
+        for i in range(k):
+            for j in range(k):
+                t = es.delay[:, i] + es.delay[:, j]
+                p = a2[:, i] * a2[:, j] * strength(graze[:, i], graze[:, j]) * area
+                if absorption_db_per_m:
+                    p = p * 10.0 ** (-absorption_db_per_m * c * t / 10.0)
+                idx = np.rint((t - times[0]) / dt).astype(int)
+                ok = (idx >= 0) & (idx < len(times)) & (p > 0)
+                if not ok.any():
+                    continue
+                np.add.at(out, (cols, idx[ok][None, :]), p[ok][None, :] * w_tx[:, ok, i] * w_rx[:, ok, j])
+        return out
     for i in range(k):
         for j in range(k):
             t = es.delay[:, i] + es.delay[:, j]
@@ -116,6 +143,38 @@ def chapman_harris_strength(wind_speed: float, frequency: float):
     from .. import acoustics
     return lambda g_in, g_out: 10.0 ** (acoustics.chapman_harris_db(0.5 * (g_in + g_out), wind_speed,
                                                                     frequency) / 10.0)
+
+
+def element_power_pattern(element, rotation: np.ndarray, frequency_ratio: float = 1.0):
+    """Power gain of a record's element (or transmitter) towards world directions [..., 3]:
+    the same separable sinc model as the simulator and the kernel (core/directivity.hpp).
+    Returns None for an omnidirectional element."""
+    bw_az, bw_el = float(element.beamwidth_az), float(element.beamwidth_el)
+    if not (np.isfinite(bw_az) or np.isfinite(bw_el)):
+        return None
+    b = rotation @ np.asarray(element.boresight, dtype=float)
+    b /= np.linalg.norm(b)
+    ref = rotation @ np.array([0.0, 0.0, 1.0])
+    if abs(ref @ b) > 0.999:
+        ref = rotation @ np.array([1.0, 0.0, 0.0])
+        az = ref - b * (ref @ b)
+        az /= np.linalg.norm(az)
+        el = np.cross(b, az)
+    else:
+        el = ref - b * (ref @ b)
+        el /= np.linalg.norm(el)
+        az = np.cross(el, b)
+
+    def gain(d):
+        front = d @ b
+        g = np.ones(d.shape[:-1])
+        if np.isfinite(bw_az):
+            g = g * np.sinc(0.886 * frequency_ratio * (d @ az) / bw_az)
+        if np.isfinite(bw_el):
+            g = g * np.sinc(0.886 * frequency_ratio * (d @ el) / bw_el)
+        return np.where(front > 0.0, g * g, 0.0)
+
+    return gain
 
 
 def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
@@ -152,32 +211,70 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     if len(coarse) < 2:
         coarse = np.array([times[0], times[0] + step])
     min_range = 0.6 * 0.5 * c * coarse[0] if coarse[0] > 0.2 else 0.0
-    density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
-                                  max_range, min_range=min_range, strength=strength) / step
-    power = np.interp(times, coarse, density, left=0.0, right=0.0) / fs
+    dphi = 2.0 * np.pi / n_azimuth
+    azimuths = (np.arange(n_azimuth) + 0.5) * dphi
+    # Beam patterns, when the sonar has them: the transmit beam and the element pattern
+    # shape the reverberation in azimuth and select paths by elevation.
+    rotation = np.asarray(core.rotation_ned(*record.geometry.rx_pose.rpy))
+    tx_rotation = np.asarray(core.rotation_ned(*record.geometry.tx_pose.rpy))
+    tx_gain = element_power_pattern(record.geometry.tx, tx_rotation)
+    rx_gain = element_power_pattern(record.geometry.rx[0], rotation)
+    if tx_gain is None and rx_gain is None:
+        density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
+                                      max_range, min_range=min_range, strength=strength) / step
+        density = np.broadcast_to(density, (n_azimuth, len(coarse)))
+    else:
+        one = lambda d: np.ones(d.shape[:-1])                # noqa: E731
+        density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
+                                      max_range, min_range=min_range, strength=strength,
+                                      pattern=(azimuths, tx_gain or one, rx_gain or one)) / step
+    power = np.interp(times, coarse, density.mean(axis=0), left=0.0, right=0.0) / fs
     # Reverberation occupies the pulse's band only, so it is generated at a reduced rate
     # (at least four times the bandwidth) and interpolated to the record's rate.
-    band = max(abs(wf.f_stop - wf.f_start), 4.0 / wf.duration)
+    # A moving sonar shifts each azimuth's reverberation by up to 2 v f / c either way.
+    speed = float(np.linalg.norm(record.geometry.rx_pose.velocity))
+    band = max(abs(wf.f_stop - wf.f_start), 4.0 / wf.duration) + 4.0 * speed * fc / c
     decim = max(int(fs // (4.0 * band)), 1)
     fs_low = fs / decim
     n_low = int(np.ceil(len(times) / decim))
     t_low = times[0] + np.arange(n_low) / fs_low
-    p_low = np.interp(t_low, coarse, density, left=0.0, right=0.0) / fs_low
     pulse_low = baseband_pulse(wf, fs_low, fc) * wf.amplitude
-    dphi = 2.0 * np.pi / n_azimuth
-    sigma = np.sqrt(p_low * dphi / 2.0)                    # per real component, per sector
     f = np.fft.fftfreq(n_low, 1.0 / fs_low)
     total = np.zeros((positions.shape[0], n_low), dtype=np.complex64)
     offsets = positions - centre
     w = (2.0 * np.pi * (f + fc)).astype(np.float32)
+    # The boundary is fixed in the world: a moving sonar sees each azimuth's reverberation
+    # shifted by the Doppler of its own speed towards that azimuth (two-way).
+    velocity = np.asarray(record.geometry.rx_pose.velocity, dtype=float)
+    # A uniform line array needs one complex exponential per sector, not one per channel.
+    along = offsets - offsets[0]
+    uniform = len(offsets) > 2 and np.allclose(along[1:], np.arange(1, len(offsets))[:, None] * along[1], atol=1e-9)
+    pulse_spectrum = np.fft.fft(pulse_low, n_low)
     for m in range(n_azimuth):
-        phi = (m + 0.5) * dphi
+        sigma = np.sqrt(np.interp(t_low, coarse, density[m], left=0.0, right=0.0) / fs_low * dphi / 2.0)
+        if not sigma.any():
+            continue
+        u = np.array([np.cos(azimuths[m]), np.sin(azimuths[m]), 0.0])
         b = sigma * (rng.standard_normal(n_low) + 1j * rng.standard_normal(n_low))
-        spectrum = np.fft.fft(b).astype(np.complex64)
-        lead = ((offsets @ np.array([np.cos(phi), np.sin(phi), 0.0])) / c).astype(np.float32)   # [channels]
-        arg = lead[:, None] * w[None, :]
-        total += spectrum[None, :] * (np.cos(arg) + 1j * np.sin(arg))
-    total *= np.fft.fft(pulse_low, n_low).astype(np.complex64)[None, :]
+        doppler = 2.0 * (velocity @ u) * fc / c
+        if doppler != 0.0:
+            # Every echo from this azimuth is the pulse shifted in frequency: shift the
+            # scatterer sequence and the pulse together.
+            b = b * np.exp(2j * np.pi * doppler * (t_low - t_low[0]))
+            shifted = pulse_low * np.exp(2j * np.pi * doppler * np.arange(len(pulse_low)) / fs_low)
+            spectrum = (np.fft.fft(b) * np.fft.fft(shifted, n_low)).astype(np.complex64)
+        else:
+            spectrum = (np.fft.fft(b) * pulse_spectrum).astype(np.complex64)
+        lead = ((offsets @ u) / c).astype(np.float32)        # [channels]
+        if uniform:
+            row = spectrum * np.exp(1j * (w * lead[0])).astype(np.complex64)
+            stride = np.exp(1j * (w * (lead[1] - lead[0]))).astype(np.complex64)
+            for ch in range(len(offsets)):
+                total[ch] += row
+                row = row * stride
+        else:
+            arg = lead[:, None] * w[None, :]
+            total += spectrum[None, :] * (np.cos(arg) + 1j * np.sin(arg))
     # Band-limited interpolation to the record's rate: zero-pad the spectrum.
     n_full = n_low * decim
     if decim > 1:

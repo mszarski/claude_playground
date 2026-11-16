@@ -1,0 +1,43 @@
+# 170 kHz forward-looking sonar on an AUV in transit: ownship at 20 m depth in 60 m of
+# water, moving ahead at 2 m/s, pinging every 1.0 s out to 600 m. The seabed and the sea
+# surface are fixed in the world, so their reverberation carries the Doppler of ownship's
+# own speed, bearing by bearing. In the water: a boat hull under way across the bow at
+# 4 m/s, an anchored boat, a mooring buoy just under the surface, and a rock pinnacle on
+# the seabed (inside the vertical beam of the 120 kHz sonar only).
+# Frame: x ahead, y to starboard, z down from the sea surface.
+# Limits: reverberation is a statistical model (Lambert seabed, Chapman-Harris surface far
+# above its fitted band), hull highlights have no specular part, the bottom-bounce and
+# surface-bounce paths to targets are first order only, and the receive chain is taken as
+# already at baseband (the config's ADC rate is 170 kHz-band real sampling).
+name: fls_170k_transit
+sonar: fls_170k
+fidelity: image_source
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 40000.0, window: {range: [40.0, 600.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 60.0}
+propagation:
+  surface_z: 0.0
+  bottom_z: 60.0
+  max_order: 1
+  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+platform:
+  position: [0, 0, 20.0]
+  rpy: [0, 0, 0]
+  velocity: [2.0, 0, 0]
+pings: {count: 8, interval: 1.0}
+scene:
+  - {type: hull, label: boat_under_way, origin: [470.0, 90.0, 0.0], length: 12.0, beam: 3.5, depth: 1.2, heading_deg: -90.0,
+     count: 600, mu_db: -8.0, velocity: [0.0, -4.0, 0.0]}
+  - {type: hull, label: boat_at_anchor, origin: [540.0, -110.0, 0.0], length: 9.0, beam: 3.0, depth: 1.0, heading_deg: 30.0,
+     count: 500, mu_db: -8.0}
+  - {type: sphere, label: mooring_buoy, centre: [360.0, 40.0, 2.0], radius: 0.6, density: 60.0, mu_db: -8.0}
+  - {type: rocks, label: pinnacle, x_range: [245.0, 255.0], y_range: [-40.0, -30.0], count: 5, radius_range: [1.0, 2.0],
+     depth: 60.0, density: 4.0, mu_db: -12.0}
+reverberation:
+  - {boundary_z: 60.0, mu_db: -27.0}
+  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 5.0}
+absorption: francois_garrison
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+seed: 2170

@@ -41,6 +41,23 @@ tools/test.sh            # configure, build, run GoogleTest and pytest
   (for example `CUDAHOSTCXX=g++-12` with CUDA 12.0).
 - From Python: `PYTHONPATH=python python3 -c "import gpusonar"`.
 
+## Everything on a CPU
+
+No GPU is needed for anything here. The CUDA backend is an optional second implementation
+of the same kernels and gives the same results.
+
+```bash
+SONAR_CMAKE_ARGS=-DSONAR_ENABLE_CUDA=OFF tools/test.sh      # build and run every test
+tools/build_oracles.sh ~/at                                 # Bellhop and KRAKEN (needs gfortran), prints two exports
+tools/build_nvus_reference.sh ~/nvus                        # the ultrasound reference's native module, patched
+tools/design_report.py                                      # docs/DESIGN.md and its diagrams
+tools/gallery.py --backend host                             # every realistic scenario, full size
+tools/gallery.py --backend host --quick                     # the same, thinned: a few minutes in all
+```
+
+Measured CPU run times of every scenario are in `docs/SCENARIOS.md`. Without Bellhop the
+long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everything else runs.
+
 ## Layout
 
 | Path | Contents |
@@ -66,6 +83,9 @@ imaged end to end. Reproduce them with `tools/gallery.py` (`--quick` on a CPU; n
 
 ## Documents
 
+- [`docs/DESIGN.md`](docs/DESIGN.md): the sonar designs, generated from the config files: requirements and where each is met, arrays and beams, timing, link budgets, diagrams.
+- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): every key of the sonar and scenario files.
+- [`docs/SCENARIOS.md`](docs/SCENARIOS.md): the realistic scenes of every mode, with figures, numbers and CPU run times.
 - [`docs/STATUS.md`](docs/STATUS.md): progress, open questions, deviations.
 - [`docs/RESULTS.md`](docs/RESULTS.md): measured numbers against theory and benchmarks.
 - [`docs/PAPER_NOTES.md`](docs/PAPER_NOTES.md): the ASASIN paper, equation by equation, with its gaps.
