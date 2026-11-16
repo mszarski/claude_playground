@@ -39,7 +39,10 @@ def peak_time(x, fs, start):
 # --- configs -------------------------------------------------------------------
 
 def test_every_named_sonar_is_shipped():
-    assert sorted(list_configs("sonars")) == sorted(ALL_SONARS)
+    shipped = set(list_configs("sonars"))
+    assert set(ALL_SONARS) <= shipped                 # the nine the brief names
+    # Anything beyond those is listed here on purpose, so additions are deliberate.
+    assert shipped - set(ALL_SONARS) == {"subbottom"}
 
 
 @pytest.mark.parametrize("name", ALL_SONARS)
