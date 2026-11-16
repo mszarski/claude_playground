@@ -107,13 +107,17 @@ class ImageSourceProvider(EigenrayProvider):
     def __init__(self, sound_speed: float, surface_z: float | None = 0.0,
                  bottom_z: float | None = None, surface_coefficient: complex = -1.0,
                  bottom_coefficient: complex = 0.5, max_order: int = 2,
-                 walls: list[dict] | None = None):
+                 walls: list[dict] | None = None, bottom: dict | None = None):
         self.sound_speed = float(sound_speed)
         self.surface_z = surface_z
         self.bottom_z = bottom_z
         self.surface_coefficient = complex(surface_coefficient)
         self.bottom_coefficient = complex(bottom_coefficient)
         self.max_order = int(max_order)
+        # Fluid sediment half-space {speed, density (g/cm^3), attenuation (dB/wavelength)}:
+        # when given, each bottom bounce uses the Rayleigh reflection coefficient at the
+        # ray's grazing angle instead of the constant `bottom_coefficient`.
+        self.bottom = bottom
         # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex}.
         # Walls are applied to first order only, on top of the vertical image series.
         self.walls = walls or []
@@ -167,6 +171,12 @@ class ImageSourceProvider(EigenrayProvider):
         for j, (img, coef, ns, nb) in enumerate(rays):
             r, u = _direct(source, img, c)
             out.delay[:, j] = r / c
+            if self.bottom is not None and nb > 0:
+                # In an isovelocity layer every bounce of one image path has the same
+                # grazing angle: that of the straight line to the image.
+                grazing = np.arcsin(np.clip(np.abs(u[:, 2]), 0.0, 1.0))
+                coef = (self.surface_coefficient**ns
+                        * rayleigh_reflection(grazing, c, **self.bottom) ** nb)
             out.amplitude[:, j] = coef / r
             out.launch[:, j] = u
             # Direction of travel at the real point: mirror the vertical component once per bounce.
@@ -244,6 +254,25 @@ class SedimentProvider(EigenrayProvider):
             sound_speed=self.sound_speed)
 
 
+def rayleigh_reflection(grazing, c_water: float, speed: float, density: float,
+                        attenuation: float = 0.0, water_density: float = 1.0):
+    """Plane-wave pressure reflection coefficient of a fluid half-space (Rayleigh).
+
+    `grazing` in radians; `density` in the same units as `water_density`; `attenuation` in
+    dB per wavelength, entering as an imaginary part of the sediment sound speed.
+    R = (m sin(g) - sqrt(n^2 - cos^2(g))) / (m sin(g) + sqrt(n^2 - cos^2(g))),
+    m = rho_b / rho_w, n = c_w / c_b.
+    """
+    g = np.asarray(grazing, dtype=float)
+    delta = attenuation / (40.0 * np.pi * np.log10(np.e))      # loss tangent from dB/wavelength
+    c_b = speed / (1.0 + 1j * delta)
+    m = density / water_density
+    n = c_water / c_b
+    root = np.sqrt(n**2 - np.cos(g) ** 2 + 0j)
+    root = np.where(root.imag < 0, -root, root)                 # decaying branch in the sediment
+    return (m * np.sin(g) - root) / (m * np.sin(g) + root)
+
+
 def make_provider(tier: str, sound_speed: float, options: dict | None = None) -> EigenrayProvider:
     options = options or {}
     if tier == "free_field":
@@ -251,7 +280,10 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
     if tier == "image_source":
         return ImageSourceProvider(sound_speed, **options)
     if tier == "eigenray":
-        raise NotImplementedError("the eigenray tier (Bellhop provider) arrives in milestone 12")
+        from .bellhop import BellhopProvider, OceanEnvironment
+        opts = dict(options)
+        env = OceanEnvironment(**opts.pop("environment"))
+        return BellhopProvider(env, **opts)
     raise ValueError(f"unknown fidelity tier {tier!r}")
 
 
