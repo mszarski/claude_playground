@@ -1,0 +1,24 @@
+# Flank-array target at 10000 m in noise, shallow water, at the eigenray tier (Bellhop).
+# Needs Bellhop as an external program (GPUSONAR_BELLHOP). Frame: z = 0 is the sea surface.
+name: flank_target_10km
+sonar: flank_32
+fidelity: eigenray
+sonar_overrides:
+  receive: {window: {range: [9600, 10400]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+propagation:
+  environment: {depth: 100.0, sound_speed: 1500.0, bottom_speed: 1600.0, bottom_density: 1.8, bottom_attenuation: 0.5}
+  frequency: 8000.0
+  max_range: 10500
+  range_step: 25.0
+  depth_step: 2.0
+  max_arrivals: 8
+platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 1, interval: 15.0}
+scene:
+  - {type: points, label: target, positions: [[0.0, 10000.0, 50.0]], target_strength_db: 10.0}
+absorption: ainslie_mccolm
+receiver:
+  adc: false
+  ambient_noise: {level_db: 45.0}     # the plan's link-budget assumption at 8 kHz
+seed: 1

@@ -48,6 +48,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   rng: np.random.Generator | None = None, tx_pose: "core.Pose | None" = None,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
+                  noise_spectrum=None,
                   backend=core.Backend.Host) -> "core.PingRecord":
     """Simulate one transmit and return its record."""
     env = resolve_environment(environment, depth=pose.position[2])
@@ -84,6 +85,17 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     samples = record.samples.array
     if noise_rms > 0.0:
         samples = receiver.add_noise(samples, noise_rms, rng or np.random.default_rng())
+    if noise_spectrum is not None:
+        # Ambient noise with a spectrum (dB re 1 uPa^2/Hz against Hz) and the coherence of
+        # an isotropic field across the array. Real passband records only.
+        if np.iscomplexobj(samples):
+            raise ValueError("noise_spectrum needs a real passband record (receive.kind: real)")
+        from . import noise as noise_models
+        rx_cfg = sonar.config["receive"]
+        sens = float(rx_cfg.get("sensitivity_db") or 0.0) + float(rx_cfg.get("gain_db", 0.0))
+        samples = samples + noise_models.gaussian_noise(
+            samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
+            positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
     samples = receiver.apply_hardware_tvg(record, samples)
     if adc:
         samples = receiver.apply_adc(record, samples)
@@ -93,6 +105,19 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     s.kind = kind
     record.samples = s
     return record
+
+
+def _noise_spectrum(cfg):
+    """Spectrum callable from a scenario's `receiver.ambient_noise` mapping:
+    {level_db: 45} for a flat spectrum, or {wind_speed: 5, shipping: 0.5} for the Wenz fit."""
+    if not cfg:
+        return None
+    from . import noise as noise_models
+    if "level_db" in cfg:
+        level = float(cfg["level_db"])
+        return lambda f: np.full_like(np.asarray(f, dtype=float), level)
+    return lambda f: noise_models.wenz_spectrum_db(f, float(cfg.get("wind_speed", 5.0)),
+                                                    float(cfg.get("shipping", 0.5)))
 
 
 def _add_true_ins(record, accel: np.ndarray, rate: float) -> None:
@@ -255,6 +280,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             sub_sequence=i % n_sub, time_ns=start_ns + int(round(t * 1e9)), scenario_time=t,
             absorption_model=cfg.get("absorption", "francois_garrison"),
             noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
+            noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
             rng=rng, backend=backend))
 
     if output:

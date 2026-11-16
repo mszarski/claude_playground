@@ -323,6 +323,34 @@ as a separate process), `test_reverberation.py`, `test_noise.py`. CPU.
 - The ambient-noise coefficients are written from memory and flagged as unverified in
   `python/gpusonar/sim/noise.py`.
 
+## Long-range scenarios at the eigenray tier
+
+Source: `tests/python/test_long_range.py`, scenarios `flank_target_{1,5,10}km` and
+`popoto_trial_{100,1000,2000}m`. Bellhop arrivals (up to 8 per leg, so up to 64 two-way
+paths per target), isovelocity water over a flat fluid bottom (1600 m/s, 1.8 g/cm³,
+0.5 dB/λ), Ainslie–McColm absorption at 12 °C, ambient noise with isotropic-field
+coherence across the array, +10 dB target, one ping, conventional beamforming.
+"Spherical estimate" is the sonar-equation tool with the same source, noise and target.
+
+| Scenario | Water depth | Output SNR, eigenray tier | Spherical estimate | Difference |
+| --- | --- | --- | --- | --- |
+| `flank_32`, 200 dB source, 1 s LFM, noise 45 dB: 1 km | 100 m | 58.4 dB | 58.8 dB | −0.4 dB |
+| 5 km | 100 m | 29.9 dB | 25.7 dB | +4.2 dB |
+| 10 km | 100 m | 17.6 dB | 7.2 dB | +10.5 dB |
+| `popoto_8`, 190 dB source, 0.5 s LFM, noise 38 dB: 100 m | 30 m | 83.1 dB | 86.9 dB | −3.8 dB |
+| 1 km | 30 m | 39.3 dB | 36.6 dB | +2.7 dB |
+| 2 km | 30 m | 22.1 dB | 13.1 dB | +9.0 dB |
+
+- At long range the shallow-water duct keeps more energy than spherical spreading
+  assumes, so the simple estimate is pessimistic there by up to 10 dB in this environment.
+  At short range multipath interference can cost a few dB (−3.8 dB at 100 m).
+- **This is not a detection-range prediction.** There is no reverberation in these runs
+  (at long range in shallow water it, not ambient noise, usually sets the limit), no
+  surface roughness loss, no platform self-noise, one noise draw, and an idealised flat
+  bottom. The plan's own caveat applies: each of those can move the result by 10 dB.
+- The SNR is the peak within 60 ms after the first arrival over the mean noise power on
+  the same beam. Multipath spreads the echo, so its energy is higher than its peak shows.
+
 ## 3D near-field imaging of a buried object
 
 Source: `tests/python/test_volume.py`. CPU. A `subbottom` sonar (20 kHz, 20 kHz

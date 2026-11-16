@@ -17,7 +17,7 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU (Python/NumPy stages), with gaps listed below | `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
 | 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). Not done: the ultrasound source built against the reference at the pinned commit, the low-rate flank source, an emulated-source test with the Sensor Bridge emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
-| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). Not done: the scattering-function reverberation method, surface scattering and loss, a Jackson-type bottom model, volume scattering, time spreading, the KRAKEN/RAM cross-check, the seamount case, re-running the long-range scenarios at the `eigenray` tier. |
+| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise and compared with the spherical estimate (`test_long_range.py`). Not done: the scattering-function reverberation method (so the long-range runs have no reverberation), surface scattering and loss, a Jackson-type bottom model, volume scattering, time spreading, the KRAKEN/RAM cross-check, the seamount case. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; multi-GPU tile splitting with an identical image (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; a benchmark large enough not to be overhead-bound (multi-GPU scaling and the fit both need it); verified GFLOPS values. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## What is next
@@ -129,10 +129,9 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
 
 - The flank stages (`flank.py`, `detect.py`, `calibrate.py`, `sync.py`,
   `sonar_equation.py`) are Python/NumPy, not C++/CUDA, and not Holoscan operators.
-- Everything was tested at the `free_field` tier in white noise. The long-range scenarios
-  must be re-run at `eigenray` in milestone 12 before the detection ranges mean anything.
-- The built-in scenarios "Popoto trial at 100 m, 1 km and 2 km" and "flank-array target at
-  1, 5 and 10 km in noise" exist only as test code, not as scenario YAML files.
+- Detection, tracking, MVDR, calibration and sync were tested at the `free_field` tier in
+  white noise. Only the SNR of the long-range scenarios has been checked at the `eigenray`
+  tier, and without reverberation.
 - No test runs a full 10 km ping with the 1 s pulse through detection and tracking; the
   10 km case was checked for SNR only.
 - Tracking uses the built-in nearest-neighbour Kalman tracker. Stone Soup was not used.
