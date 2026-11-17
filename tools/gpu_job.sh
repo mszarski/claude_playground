@@ -40,6 +40,8 @@ holoscan_flag=""
 if [ "${GPUSONAR_HOLOSCAN_CPP:-0}" = "1" ]; then
   # Headers and CMake files of the same SDK version as the Python wheel (the wheel has neither).
   apt-get install -y -qq --no-install-recommends holoscan=4.6.0-1 'holoscan-cuda-12=4.6.0*' > /dev/null
+  pip install -q "cmake>=3.30.4"            # Holoscan 4.6's CMake files ask for it; Ubuntu 24.04 has 3.28
+  hash -r
   holoscan_flag="-DSONAR_BUILD_HOLOSCAN=ON"
 fi
 nvcc --version | tail -1
