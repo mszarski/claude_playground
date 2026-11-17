@@ -105,10 +105,20 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             q, p, amp = q[keep], p[keep], amp[keep]
             if vq is not None:
                 vq, vp = vq[keep], vp[keep]
-        core.synthesize_into(record, q, p, amp, vq, vp,
-                             absorption=absorption_table(sonar, env, absorption_model),
-                             spreading=spreading, backend=backend,
-                             platform_acceleration=tuple(float(a) for a in acceleration))
+        if record.transmit.waveform.type == core.WaveformType.Arbitrary:
+            # A sampled pulse: the NumPy synthesiser (sim/waveform.py). The C++/CUDA kernel
+            # evaluates analytic pulses only, so `backend` does not apply to this step.
+            from . import waveform as sampled
+            sampled.note_numpy_fallback(record, backend, engine)
+            sampled.synthesize_into(record, sonar.sampled_waveform, q, p, amp, vq, vp,
+                                    absorption=absorption_table(sonar, env, absorption_model),
+                                    spreading=spreading,
+                                    platform_acceleration=tuple(float(a) for a in acceleration))
+        else:
+            core.synthesize_into(record, q, p, amp, vq, vp,
+                                 absorption=absorption_table(sonar, env, absorption_model),
+                                 spreading=spreading, backend=backend,
+                                 platform_acceleration=tuple(float(a) for a in acceleration))
     from .. import taps
     taps.sim_tap(record, "echoes")
     for item in reverberation or []:
