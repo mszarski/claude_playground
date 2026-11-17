@@ -56,6 +56,8 @@ DEFAULTS = {
     "classify_sigma": 2.0,              # ... by more than this many sigma
     "water_depth": None,                # m; None: the record's environment.water_depth (0 or NaN: unknown)
     "surface_z": 0.0,                   # z of the sea surface in the frame the navigation uses
+    "ssp": None,                        # {depth: [m...], speed: [m/s...]}: depth_m by a ray traced through this profile
+                                        # instead of the straight line (which is wrong by s^2 g / 2c in a gradient g)
     "roll_sigma_deg": 0.0,              # the navigation's roll accuracy, added to the elevation sigma
     "depth_process_noise": 0.5,         # m per sqrt(s): how fast a track's depth may wander
     "row_tolerance_m": 0.02,            # elements within this of one line are one row
@@ -205,14 +207,17 @@ def outside_water(z: float, sigma: float, water_depth: float | None, surface_z: 
 
 
 def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_depth, ssp_speed,
-              water_depth: float | None = None, step: float = 1.0) -> float:
+              water_depth: float | None = None, step: float | None = None) -> float:
     """Depth at which an arrival seen at `elevation` (rad, up positive, level-referenced) at
     `receiver_depth` started, back along the ray for the one-way travel time slant_range / c
     (c: the sound speed at the receiver) through a sound-speed profile, linear between its
-    knots. Snell's law in steps of `step` m along the ray; the ray turns where it would have
-    to enter water too fast for it, and is mirrored at the surface (depth 0) and, with
-    `water_depth`, at the bottom. In constant sound speed this is the straight line, folded."""
+    knots. Snell's law in steps of `step` m along the ray (default: a two-thousandth of the
+    range, between 0.5 and 10 m); the ray turns where it would have to enter water too fast
+    for it, and is mirrored at the surface (depth 0) and, with `water_depth`, at the bottom.
+    In constant sound speed this is the straight line, folded."""
     zs, cs = np.asarray(ssp_depth, dtype=float), np.asarray(ssp_speed, dtype=float)
+    if step is None:
+        step = min(max(slant_range / 2000.0, 0.5), 10.0)
     speed = lambda z: float(np.interp(z, zs, cs))                       # noqa: E731
     c0 = speed(receiver_depth)
     snell = np.cos(elevation) / c0

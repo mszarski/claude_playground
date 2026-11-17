@@ -208,6 +208,9 @@ void bind_live(py::module_& m) {
       py::arg("hop") = 512, py::arg("first") = 0, py::arg("n_blocks") = -1, py::arg("first_deg") = -30.0, py::arg("last_deg") = 30.0,
       py::arg("step_deg") = 0.5, py::arg("look") = "starboard",
       "Elevation (rad, array frame, up positive) and quality of a noise source at a cone bearing, from stacked rows.");
+  m.def("live_ray_depth", &live::ray_depth, py::arg("receiver_depth"), py::arg("elevation"), py::arg("slant_range"),
+        py::arg("ssp_depth"), py::arg("ssp_speed"), py::arg("water_depth") = 0.0,
+        "Depth an arrival started at, back along the ray through a sound-speed profile (elevation.hpp).");
   m.def(
       "live_fold_depth",
       [](double z, double water_depth, double surface_z) {
@@ -289,6 +292,9 @@ void bind_live(py::module_& m) {
           num("roll_sigma", eo.roll_sigma);
           num("depth_process_noise", o.tracker.depth_process_noise);
           num("row_tolerance_m", eo.row_tolerance_m);
+          if (e.contains("ssp_depth")) eo.ssp_depth = e["ssp_depth"].cast<std::vector<double>>();
+          if (e.contains("ssp_speed")) eo.ssp_speed = e["ssp_speed"].cast<std::vector<double>>();
+          if (eo.ssp_depth.size() != eo.ssp_speed.size()) throw std::invalid_argument("elevation.ssp: depth and speed must be as long as each other");
         }
         if (kw.contains("sync")) {
           const py::dict r = kw["sync"].cast<py::dict>();

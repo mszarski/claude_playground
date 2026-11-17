@@ -55,13 +55,20 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_roll_sigma_deg") c.elevation.roll_sigma = v * kDeg;
   else if (key == "elevation_depth_process_noise") c.tracker.depth_process_noise = v;
   else if (key == "elevation_row_tolerance_m") c.elevation.row_tolerance_m = p.elevation.row_tolerance_m = v;
-  else if (key == "dead_channels") {
-    c.dead_channels.clear();
+  else if (key == "dead_channels" || key == "elevation_ssp_depth" || key == "elevation_ssp_speed") {
+    // Comma-separated lists.
+    std::vector<double> list;
     std::size_t at = 0;
     while (at < value.size()) {
       const std::size_t comma = std::min(value.find(',', at), value.size());
-      if (comma > at) c.dead_channels.push_back(std::atoll(value.substr(at, comma - at).c_str()));
+      if (comma > at) list.push_back(std::atof(value.substr(at, comma - at).c_str()));
       at = comma + 1;
+    }
+    if (key == "elevation_ssp_depth") c.elevation.ssp_depth = list;
+    else if (key == "elevation_ssp_speed") c.elevation.ssp_speed = list;
+    else {
+      c.dead_channels.clear();
+      for (double x : list) c.dead_channels.push_back(static_cast<std::int64_t>(x));
     }
   }
   else if (key == "backend") c.backend = p.sbl.backend = value == "cuda" ? Backend::Cuda : Backend::Host;

@@ -392,6 +392,8 @@ Report LiveChain::process(PingRecord& record) {
           d.depth_m = d.image_depth_m;
           d.path = "direct";
         }
+        // Back along the ray through the profile, not the straight line.
+        if (!eo.ssp_depth.empty()) d.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, level, e.range, eo.ssp_depth, eo.ssp_speed, water);
         if (!e.ambiguous) {
           m.depth = d.image_depth_m;
           m.depth_sigma = d.depth_sigma_m;
@@ -424,6 +426,12 @@ Report LiveChain::process(PingRecord& record) {
         } else {
           rt.depth_m = tr->depth;
           rt.path = "direct";
+        }
+        if (!eo.ssp_depth.empty()) {
+          // The track's straight-line depth as an arrival angle at its range, then along the ray.
+          const double slant = std::hypot(rt.range_m, tr->depth - f.origin.z);
+          rt.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, std::asin((f.origin.z - tr->depth) / slant), slant, eo.ssp_depth,
+                                                eo.ssp_speed, water);
         }
         // Its straight-line depth is above the surface or below the bottom: a bounce.
         if (eo.classify && outside_water(tr->depth, rt.depth_sigma_m, water, eo.surface_z, eo.classify_sigma)) rt.kind = "multipath";

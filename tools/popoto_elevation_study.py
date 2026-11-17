@@ -98,7 +98,7 @@ def second_lobe_db(heights, outs, true_deg):
     while hi < len(p) - 1 and p[hi + 1] < p[hi]:
         hi += 1
     rest = np.concatenate([p[:lo], p[hi + 1:]])
-    return float(10.0 * np.log10(rest.max())) if len(rest) else float("-inf")
+    return float(max(10.0 * np.log10(max(rest.max(), 1e-30)), -99.0)) if len(rest) else -99.0     # -99: none
 
 
 def link_snr(ranges, target_db):
@@ -168,7 +168,9 @@ def main():
     print("\nDEPTH: one-sigma depth error = range x sigma (m), at the SNR the link budget gives one row (spherical spreading).")
     print("  SNR above 40 dB is taken as 40 dB: closer in, reverberation and calibration set the limit, not noise.")
     R["depth_sigma_m"] = {}
-    chosen = [f"2 rows, {2.0 * up_max:.2f} m apart", f"3 rows at {-up_max:+.2f}, {mid:+.2f}, {up_max:+.2f} m", "2 rows, 1.00 m apart"]
+    two, three = f"2 rows, {2.0 * up_max:.2f} m apart", f"3 rows at {-up_max:+.2f}, +0.00, {up_max:+.2f} m (equal)"
+    chosen = [two, three, "2 rows, 1.00 m apart"]
+    R["chosen"] = {"two_rows": two, "three_rows": three, "wide": chosen[2]}
     for label, ts in (("ship, +25 dB", 25.0), ("small target, +5 dB", 5.0)):
         snr = link_snr(ranges, ts)
         R["link_snr_db"][label] = dict(zip(map(str, ranges), snr))
@@ -197,7 +199,7 @@ def main():
     print(f"  Second lobe inside the searched sector ({SECTOR[0]:.0f} to {SECTOR[1]:.0f} deg), band-averaged, dB below the true one,")
     print("  and how often the estimator lands more than 5 deg from the truth (Monte Carlo):")
     R["ambiguity"] = {}
-    for name in chosen[:2] + [f"3 rows at {-up_max:+.2f}, +0.00, {up_max:+.2f} m (equal)", "4 rows, 0.125 m apart"]:
+    for name in chosen[:2] + [f"3 rows at {-up_max:+.2f}, {mid:+.2f}, {up_max:+.2f} m", "4 rows, 0.125 m apart"]:
         h, o = geometries[name]
         R["ambiguity"][name] = {}
         for true in (0.0, 10.0, 20.0):
@@ -207,7 +209,8 @@ def main():
                 est = spectrum(h, o, s, true, rng, args.trials)
                 wrong[str(s)] = float((np.abs(est - true) > 5.0).mean())
             R["ambiguity"][name][str(true)] = {"second_lobe_db": lobe, "wrong_lobe_fraction": wrong}
-            print(f"    {name:44s} arrival at {true:4.0f} deg: lobe {lobe:6.1f} dB; wrong {100 * wrong['13.0']:5.1f}% at 13 dB, "
+            print(f"    {name:44s} arrival at {true:4.0f} deg: lobe " + ("  none" if lobe <= -99.0 else f"{lobe:6.1f} dB")
+                  + f"; wrong {100 * wrong['13.0']:5.1f}% at 13 dB, "
                   f"{100 * wrong['20.0']:5.1f}% at 20 dB")
 
     # --- which elevations arrive --------------------------------------------------------------------
@@ -259,6 +262,19 @@ def main():
     R["multipath"]["elevation_beamwidth_deg"] = width
     print(f"  The rows' own beam in elevation is {width:.0f} deg wide ({2.0 * up_max:.2f} m aperture): arrivals are never separated")
     print("  by elevation, only by range; elevation is measured on each arrival once range has separated it.")
+
+    # --- refraction -------------------------------------------------------------------------------
+    print("\nREFRACTION: the chain takes the ray as straight. Depth from a ray traced through a sound-speed gradient")
+    print("  (elevation.ray_depth) minus the straight-line depth, m, array at 100 m, arrival from 2 and 8 degrees below level:")
+    R["refraction_error_m"] = {}
+    for label, g in (("isothermal water, +0.017 /s", 0.017), ("thermocline, -0.10 /s", -0.10)):
+        row = {}
+        for r in (1000.0, 3000.0, 6000.0):
+            row[str(r)] = [float(el.ray_depth(100.0, -np.radians(a), r, [0.0, 3000.0], [1500.0 - g * 100.0, 1500.0 + g * 2900.0])
+                                 - (100.0 + r * np.sin(np.radians(a)))) for a in (2.0, 8.0)]
+        R["refraction_error_m"][label] = row
+        print(f"    {label}: " + "; ".join(f"{float(r) / 1e3:.0f} km: {v[0]:+.0f} / {v[1]:+.0f}" for r, v in row.items()))
+    print("  Beyond a few kilometres in a gradient the straight line is wrong by more than the measurement: use the profile.")
 
     # --- sensitivity ------------------------------------------------------------------------------
     d = 2.0 * up_max

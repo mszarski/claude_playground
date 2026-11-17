@@ -41,6 +41,8 @@ struct ElevationOptions {
   double classify_sigma = 2.0;     ///< ... by more than this many sigma
   double water_depth = 0.0;        ///< m; 0: the record's environment.water_depth (NaN or 0 there: unknown)
   double surface_z = 0.0;          ///< z of the sea surface in the navigation's frame
+  /// A sound-speed profile (m, m/s): depth_m then comes from a ray traced through it, not the straight line.
+  std::vector<double> ssp_depth, ssp_speed;
   double roll_sigma = 0.0;         ///< rad: the navigation's roll accuracy, added to the elevation sigma
   double row_tolerance_m = 0.02;   ///< elements within this of one line are one row
 };
@@ -96,6 +98,13 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
 /// A straight-line depth folded back into the water column and the path that put it where it was
 /// ("direct", "surface", "bottom", "multiple", "unknown"). water_depth <= 0 or NaN: only the surface is known.
 std::pair<double, std::string> fold_depth(double z, double water_depth, double surface_z = 0.0);
+
+/// Depth at which an arrival seen at `elevation` (rad, up positive, level-referenced) at `receiver_depth`
+/// started, back along the ray for the one-way travel time slant_range / c through a sound-speed profile
+/// (linear between its knots; Snell's law in steps; turning points; mirrored at the surface and, with a
+/// water depth > 0, at the bottom). The counterpart of elevation.ray_depth in Python.
+double ray_depth(double receiver_depth, double elevation, double slant_range, const std::vector<double>& ssp_depth,
+                 const std::vector<double>& ssp_speed, double water_depth = 0.0);
 
 /// Whether a straight-line depth lies outside the water column by more than n_sigma sigma.
 bool outside_water(double z, double sigma, double water_depth, double surface_z = 0.0, double n_sigma = 2.0);

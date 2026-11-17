@@ -95,6 +95,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
                           "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
                           "water_depth": float(e["water_depth"] or 0.0), "surface_z": float(e["surface_z"]),
+                          "ssp_depth": [float(v) for v in (e["ssp"] or {}).get("depth", [])],
+                          "ssp_speed": [float(v) for v in (e["ssp"] or {}).get("speed", [])],
                           "roll_sigma": float(np.radians(e["roll_sigma_deg"])), "depth_process_noise": float(e["depth_process_noise"]),
                           "row_tolerance_m": float(e["row_tolerance_m"])}
     if reference is not None:
@@ -404,6 +406,10 @@ class LiveChain:
                     sigma_z = float(e.range * np.cos(level) * e.sigma)
                     folded, path = (elevation.fold_depth(image, water, el_cfg["surface_z"]) if el_cfg["fold"]
                                     else (image, "direct"))
+                    if el_cfg["ssp"]:
+                        # Back along the ray through the profile, not the straight line.
+                        folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], level, e.range,
+                                                                           el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"], water)
                     extra[i].update(depth_m=folded, depth_sigma_m=sigma_z, image_depth_m=image, path=path)
                     if not e.ambiguous:
                         depth, depth_sigma = image, sigma_z
@@ -425,6 +431,11 @@ class LiveChain:
                     continue
                 sigma_z = float(np.sqrt(tr.depth_var))
                 folded, path = (elevation.fold_depth(tr.depth, water, el_cfg["surface_z"]) if el_cfg["fold"] else (tr.depth, "direct"))
+                if el_cfg["ssp"]:
+                    # The track's straight-line depth as an arrival angle at its range, then along the ray.
+                    slant = float(np.hypot(np.hypot(c_.position[1] - own[0], c_.position[0] - own[1]), tr.depth - origin[2]))
+                    folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], float(np.arcsin((origin[2] - tr.depth) / slant)),
+                                                                       slant, el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"], water)
                 track_extra[c_.id] = {"depth_m": folded, "depth_sigma_m": sigma_z, "path": path}
                 if el_cfg["classify"] and elevation.outside_water(tr.depth, sigma_z, water, el_cfg["surface_z"], el_cfg["classify_sigma"]):
                     c_.kind = "multipath"      # its straight-line depth is above the surface or below the bottom: a bounce

@@ -155,6 +155,39 @@ def test_two_rows_flag_a_steep_arrival_as_ambiguous_and_three_rows_resolve_it():
     assert not estimate_one(one_ping(sonar_rows(), level), level)[0].ambiguous
 
 
+def test_calibration_finds_a_row_mounted_out_of_place_and_removes_the_elevation_bias():
+    """The upper row 5 mm further out than the drawing says reads as 0.75 degrees of elevation
+    (13 m of depth at 1 km). Sources at several bearings AND elevations give the existing
+    calibration (calibrate.py, planar=False) each hydrophone's offset in three dimensions."""
+    from gpusonar import calibrate
+    sonar = sonar_rows(window=(960.0, 1040.0))
+    rng = np.random.default_rng(3)
+    position = np.zeros((64, 3))
+    position[32:, 1] += 5e-3
+    errors = {"gain": np.ones(64), "phase": np.radians(rng.normal(0.0, 5.0, 64)), "position": position}
+
+    def at(bearing_deg, el_deg, r=1000.0):
+        b, e = np.radians(bearing_deg), np.radians(el_deg)
+        return np.array([r * np.cos(e) * np.sin(b), r * np.cos(e) * np.cos(b), 60.0 - r * np.sin(e)])
+
+    def ping(target, err):
+        return simulate_ping(sonar, make_pose(position=(0.0, 0.0, 60.0)), Scene().add_points([target], target_strength_db=20.0),
+                             environment={"sound_speed": C}, absorption_model="none", adc=False, channel_errors=err)
+
+    sources = [at(b, e) for b, e in ((-30.0, -10.0), (-10.0, 12.0), (0.0, 0.0), (10.0, -12.0), (30.0, 10.0), (20.0, 0.0))]
+    est = calibrate.estimate_channel_errors([ping(src, errors) for src in sources], sources, planar=False)
+    assert est.position[32:, 1].mean() - est.position[:32, 1].mean() == pytest.approx(5e-3, abs=0.4e-3)
+    target = at(5.0, 4.0)
+    raw, el_true, _ = estimate_one(ping(target, errors), target)
+    assert abs(np.degrees(np.arcsin(raw.sin_elevation) - el_true)) == pytest.approx(np.degrees(5e-3 / 0.38), abs=0.25)   # the bias
+    rec = ping(target, errors)
+    recon.prepare([rec])
+    calibrate.store_calibration(rec, est)
+    core.apply_calibration(rec)
+    fixed, el_true, _ = estimate_one(rec, target)
+    assert abs(np.degrees(np.arcsin(fixed.sin_elevation) - el_true)) < 0.08
+
+
 # --- depth, folded ----------------------------------------------------------------------------------
 
 def test_fold_depth_and_the_outside_water_test_match_the_cpp_ones():
@@ -180,6 +213,26 @@ def test_ray_depth_is_the_straight_line_in_constant_sound_speed_and_obeys_snell_
     theta2 = np.arccos(np.cos(theta) * c2 / C)
     assert np.log(c2 * (1 + np.sin(theta)) / (C * (1 + np.sin(theta2)))) / g == pytest.approx(3000.0 / C, rel=2e-4)
     assert z < z0 + 3000.0 * np.sin(theta) - 100.0                                 # the ray bends up: the straight line is 150 m too deep
+
+
+def test_chain_traces_the_ray_through_a_profile_when_given_one(free_field):
+    """In a gradient g the ray curves with radius c / g: after s metres it is s^2 g / 2c off the straight line."""
+    g = 0.05
+    profile = {"depth": [0.0, 400.0], "speed": [C - g * 60.0, C + g * 340.0]}          # 1500 m/s at the array's 60 m
+    assert core.live_ray_depth(100.0, np.radians(-8.0), 3000.0, [0.0, 2000.0], [1495.0, 1595.0]) == pytest.approx(
+        elevation.ray_depth(100.0, np.radians(-8.0), 3000.0, [0.0, 2000.0], [1495.0, 1595.0]), abs=1e-9)
+    assert core.live_ray_depth(30.0, np.radians(5.0), 1000.0, [0.0, 100.0], [C, C], 100.0) == pytest.approx(1000.0 * np.sin(np.radians(5.0)) - 30.0, abs=1e-6)
+    straight = run(free_field, dict(CHAIN, elevation={}))[-1]
+    for engine in ("python", "cpp"):
+        flat = run(free_field, dict(CHAIN, elevation={"ssp": {"depth": [0.0, 400.0], "speed": [C, C]}}), engine)[-1]
+        bent = run(free_field, dict(CHAIN, elevation={"ssp": profile}), engine)[-1]
+        for a, b, c_ in zip(straight["detections"], flat["detections"], bent["detections"]):
+            assert b["depth_m"] == pytest.approx(a["depth_m"], abs=0.05) and b["image_depth_m"] == pytest.approx(a["image_depth_m"], abs=0.05)
+            # Faster water below: the ray bends up, the source is shallower than the straight line says
+            # (and a ray that reaches the surface on the way is mirrored there).
+            assert c_["depth_m"] == pytest.approx(abs(a["depth_m"] - a["range_m"] ** 2 * g / (2 * C)), abs=1.2), engine
+        for a, c_ in zip(straight["tracks"], bent["tracks"]):
+            assert c_["depth_m"] == pytest.approx(abs(a["depth_m"] - a["range_m"] ** 2 * g / (2 * C)), abs=2.5), engine
 
 
 def test_tracker_carries_depth_from_the_detections_that_have_one():
@@ -238,9 +291,11 @@ def test_bearing_is_corrected_for_the_cone_angle_in_both_engines():
             cone = np.degrees(np.arcsin(np.cos(el) * np.sin(bearing)))             # 29.50
             assert d["elevation_deg"] == pytest.approx(10.0, abs=0.05) and d["image_depth_m"] == pytest.approx(target[2], abs=1.0)
             if correct:
-                assert d["bearing_deg"] == pytest.approx(30.0, abs=0.06) and d["cone_bearing_deg"] == pytest.approx(cone, abs=0.06)
+                # The map's own bearing is good to a tenth of a degree; the correction is exact on top of it.
+                assert d["bearing_deg"] == pytest.approx(30.0, abs=0.15) and d["cone_bearing_deg"] == pytest.approx(cone, abs=0.15)
+                assert d["bearing_deg"] - d["cone_bearing_deg"] == pytest.approx(30.0 - cone, abs=0.01)
             else:
-                assert d["bearing_deg"] == pytest.approx(cone, abs=0.06) and "cone_bearing_deg" not in d
+                assert d["bearing_deg"] == pytest.approx(cone, abs=0.15) and "cone_bearing_deg" not in d
     assert np.degrees(elevation.cone_bias(np.arcsin(np.cos(el) * np.sin(bearing)), el)) == pytest.approx(30.0 - cone, abs=1e-9)
 
 

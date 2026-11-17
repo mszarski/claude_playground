@@ -315,6 +315,43 @@ std::pair<double, std::string> fold_depth(double z, double water_depth, double s
   return {surface_z + folded, path};
 }
 
+double ray_depth(double receiver_depth, double elevation, double slant_range, const std::vector<double>& zs,
+                 const std::vector<double>& cs, double water_depth) {
+  if (zs.empty() || zs.size() != cs.size()) throw std::invalid_argument("ray_depth: the profile needs depths and as many speeds");
+  auto speed = [&](double z) {                      // numpy.interp: linear between knots, held outside them
+    if (z <= zs.front()) return cs.front();
+    if (z >= zs.back()) return cs.back();
+    const auto hi = static_cast<std::size_t>(std::upper_bound(zs.begin(), zs.end(), z) - zs.begin());
+    const double w = (z - zs[hi - 1]) / (zs[hi] - zs[hi - 1]);
+    return cs[hi - 1] + w * (cs[hi] - cs[hi - 1]);
+  };
+  const double step = std::min(std::max(slant_range / 2000.0, 0.5), 10.0);
+  const double c0 = speed(receiver_depth);
+  const double snell = std::cos(elevation) / c0;
+  double z = receiver_depth, remaining = slant_range / c0;
+  bool down = elevation < 0.0;
+  const bool bottom = std::isfinite(water_depth) && water_depth > 0.0;
+  while (remaining > 0.0) {
+    const double c = speed(z);
+    const double sin_t = std::sqrt(std::max(1.0 - (snell * c) * (snell * c), 0.0));
+    const double ds = std::min(step, remaining * c);
+    double z_next = z + (down ? 1.0 : -1.0) * std::max(sin_t, 1e-4) * ds;
+    if (z_next < 0.0) {
+      z_next = -z_next;
+      down = true;
+    } else if (bottom && z_next > water_depth) {
+      z_next = 2.0 * water_depth - z_next;
+      down = false;
+    } else if (snell * speed(z_next) >= 1.0 && snell * c < 1.0) {
+      down = !down;                                 // a turning point: back towards slower water
+      z_next = z;
+    }
+    z = z_next;
+    remaining -= ds / c;
+  }
+  return z;
+}
+
 bool outside_water(double z, double sigma, double water_depth, double surface_z, double n_sigma) {
   if (!(std::isfinite(z) && std::isfinite(sigma))) return false;
   const double d = z - surface_z;
