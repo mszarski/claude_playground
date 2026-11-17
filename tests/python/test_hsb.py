@@ -307,7 +307,9 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
-    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
+    # Half of real time: the receiver's socket buffer (not ours to size, and not raisable in a container)
+    # holds about 10 ms of the stream at full rate, and one late wake-up of its thread then costs packets.
+    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "0.5"))
     w = gs.RecordWriter(str(tmp_path / "pings.h5"))
     for r in copies(pings):
         w.write(r)

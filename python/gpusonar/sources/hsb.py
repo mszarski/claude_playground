@@ -173,6 +173,7 @@ class FrameReceiver:
         self.bad_frames = 0             # not a block of this stream (wrong size, magic, channel count)
         self.packets_dropped = 0        # the receiver's cumulative count
         self.first_frame_number = None
+        self.trouble_frames = []        # frame numbers at which a loss or a damaged frame was noticed (the first 16)
         self._last_frame_number = None
         self.pings = 0
 
@@ -188,12 +189,16 @@ class FrameReceiver:
                 self.first_frame_number = number
             else:
                 self.frames_lost += number - self._last_frame_number - 1
+                if number - self._last_frame_number > 1 and len(self.trouble_frames) < 16:
+                    self.trouble_frames.append(number)
             self._last_frame_number = number
         self.packets_dropped = max(self.packets_dropped, int(get("packets_dropped", 0) or 0))
         size = len(frame)
         received = get("frame_bytes_received", None)
         if received is not None and int(received) < size:
             self.frames_damaged += 1
+            if number is not None and len(self.trouble_frames) < 16:
+                self.trouble_frames.append(number)
             return []
         if self.frame_bytes is not None and size != self.frame_bytes:
             self.bad_frames += 1
@@ -211,7 +216,7 @@ class FrameReceiver:
         a = self.assembler
         return {"frames": self.frames, "frames_lost": self.frames_lost, "frames_damaged": self.frames_damaged,
                 "frames_repeated": self.frames_repeated, "bad_frames": self.bad_frames,
-                "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number,
+                "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number, "trouble_frames": list(self.trouble_frames),
                 "pings": self.pings, "dropped_pings": a.dropped_pings, "lost_samples": a.lost_samples}
 
 
@@ -502,7 +507,12 @@ if Operator is not None:
             import hololink
             from holoscan.conditions import BooleanCondition
             self._running = BooleanCondition(self, name="running", enable_tick=True)
-            options = {} if self._affinity is None else {"receiver_affinity": self._affinity}
+            import os
+            # Sensor Bridge pins its receiver thread to core 2 unless told otherwise. The socket buffer holds
+            # only about 10 ms of this stream, so a thread that has to wait for one busy core loses packets:
+            # by default it may run on any core this process may.
+            affinity = self._affinity if self._affinity is not None else set(os.sched_getaffinity(0))
+            options = {"receiver_affinity": affinity}
             rx = hololink.operators.LinuxReceiverOp(
                 self, self._running, name="receiver", frame_size=self._frame_size, frame_context=self._cuda.context,
                 hololink_channel=self._channel, device=Board(), pages=self._queue, queue_size=self._queue, **options)
