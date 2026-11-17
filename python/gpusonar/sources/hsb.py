@@ -43,6 +43,7 @@ FRAME_SAMPLES = 400            # 6.25 ms of the 64 kSPS stream: 38,528 bytes wit
 # Sensor Bridge's receiver leaves at the system default (208 KB of kernel accounting, about 48
 # datagrams) unless a frame is larger, and which a container may not be able to raise. On loopback
 # 1600-sample frames (110 datagrams) lost 5 frames in 502 and 800-sample frames (55) 1 in 1003.
+# 400-sample frames still lost one frame per run at real time and none at half of it.
 FRAME_ALIGN = 128              # the Sensor Bridge data plane moves frames in 128-byte pages
 
 

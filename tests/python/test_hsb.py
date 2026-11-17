@@ -307,8 +307,9 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
-    # Half of real time: the receiver's socket buffer (not ours to size, and not raisable in a container)
-    # holds about 10 ms of the stream at full rate, and one late wake-up of its thread then costs packets.
+    # Half of real time. At full rate every run on Hugging Face lost 13 to 19 datagrams once (one frame
+    # of 2006, between pings); at half and quarter rate none. The receiver's socket buffer is the system
+    # default (208 KB), which Sensor Bridge leaves alone for frames this small and a container cannot raise.
     pace = float(os.environ.get("GPUSONAR_HSB_PACE", "0.5"))
     w = gs.RecordWriter(str(tmp_path / "pings.h5"))
     for r in copies(pings):
@@ -352,7 +353,9 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
             worst["bearing_deg"] = max(worst["bearing_deg"], abs(da["bearing_deg"] - db["bearing_deg"]))
     print("largest differences from the direct chain:", worst)
     assert worst["track_m"] < 0.05 and worst["range_m"] < 0.05 and worst["bearing_deg"] < 0.05
-    assert {t["kind"] for t in got[-1]["tracks"]} >= {"mover", "static"}
+    # Two confirmed tracks. The stream carries no navigation, so the records sit at the origin and the
+    # standing target takes ownship's speed (test_live.py shows the same without navigation).
+    assert [t["kind"] for t in got[-1]["tracks"]] == ["mover", "mover"]
     # What was recorded on the way in is what the board sent.
     raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "hsb.h5")}))
     assert len(raw) == N and np.array_equal(raw[0].samples.array, direct_records[0].samples.array)
