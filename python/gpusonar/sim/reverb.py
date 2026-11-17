@@ -65,7 +65,8 @@ import warnings
 
 from .. import _gpusonar as core
 from . import engine as _engine
-from . import reverb_bistatic
+from . import reverb_bistatic, reverb_relief
+from .bathymetry import make_bathymetry
 from .propagation import EigenrayProvider
 
 
@@ -217,6 +218,12 @@ def element_power_pattern(element, rotation: np.ndarray, frequency_ratio: float 
         return np.where(front > 0.0, g * g, 0.0)
 
     return gain
+
+
+def _pattern_key(element):
+    """What distinguishes one element's beam pattern from another's."""
+    widths = tuple(None if not np.isfinite(w) else round(float(w), 9) for w in (element.beamwidth_az, element.beamwidth_el))
+    return (tuple(round(float(v), 9) for v in element.boresight) if any(w is not None for w in widths) else None, widths)
 
 
 def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
@@ -396,7 +403,9 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
                       power_step: float | None = None, strength=None, engine: str | None = None,
                       backend=core.Backend.Host, geometry: str = "monostatic", n_elevation: int | None = None,
                       strength_map=None, azimuth_subsamples: int = 1, statistics: dict | None = None,
-                      guard: float = 0.0, band_taper: bool = False) -> np.ndarray:
+                      guard: float = 0.0, band_taper: bool = False, bathymetry=None,
+                      scatterer_motion: dict | None = None, shadowing: bool = True,
+                      bottom_bounces: str = "exclude") -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
@@ -418,6 +427,25 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     long and one nominal beamwidth (wavelength / array extent) wide. {"model": "rayleigh"}
     or None is the Gaussian default.
 
+    `bathymetry` (sim/bathymetry.py: a Bathymetry, a function depth(x, y) or a mapping) is a
+    seabed with relief in place of the flat boundary at `boundary_z` (reverb_relief.py:
+    cells at their own depth, true facet area, angles to the facet, shadowing unless
+    `shadowing=False`). Paths with a bottom bounce before the cell are left out, or with
+    `bottom_bounces="flat"` taken as the provider's flat-bottom paths (an approximation). An
+    exactly level bathymetry runs the flat code at that depth. Needs `geometry="bistatic"`.
+
+    `scatterer_motion` = {"velocity": [vx, vy, vz], "rms_speed": m/s, "rms_vertical_speed":
+    m/s, "wind_speed": m/s} moves the scatterers (needs `geometry="bistatic"`): `velocity`
+    is their mean velocity in the world (a drifting surface, a current carrying a volume
+    layer) and shifts each cell by TR 0702 eq. (72); `rms_speed` is random motion on every
+    axis and `rms_vertical_speed` on the vertical only (`wind_speed` sets the latter to the
+    rms vertical speed of the wind sea, acoustics.rms_surface_vertical_speed), which spread
+    each component's Doppler into a Gaussian of standard deviation
+    (f / c) sqrt(rms_speed^2 |k|^2 + rms_vertical_speed^2 k_z^2), k = a_in + a_back the sum
+    of the two legs' directions of travel on arrival at the cell (|k| = 2 for backscatter).
+    The spread is realised as Doppler lines closer than the pulse can resolve
+    (reverb_bistatic.doppler_lines), each an independent sequence.
+
     `band_taper` and `guard` deal with leakage along the record. The generator works in
     frequency at a reduced rate: the delays to the hydrophones and the interpolation to the
     record's rate are ideal (sinc) operations, whose response to one sample falls only as
@@ -435,8 +463,22 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     if geometry not in ("monostatic", "bistatic"):
         raise ValueError(f"unknown reverberation geometry {geometry!r}: use 'monostatic' or 'bistatic'")
     bistatic = geometry == "bistatic"
-    if not bistatic and (strength_map is not None or n_elevation is not None or azimuth_subsamples != 1):
-        raise ValueError("strength_map, n_elevation and azimuth_subsamples need geometry='bistatic'")
+    if not bistatic and (strength_map is not None or n_elevation is not None or azimuth_subsamples != 1
+                         or bathymetry is not None or scatterer_motion):
+        raise ValueError("strength_map, n_elevation, azimuth_subsamples, bathymetry and scatterer_motion need "
+                         "geometry='bistatic'")
+    motion = dict(scatterer_motion or {})
+    unknown = set(motion) - {"velocity", "rms_speed", "rms_vertical_speed", "wind_speed"}
+    if unknown:
+        raise ValueError(f"unknown scatterer_motion keys {sorted(unknown)}")
+    rms_vertical = float(motion.get("rms_vertical_speed", 0.0))
+    if "wind_speed" in motion and "rms_vertical_speed" not in motion:
+        from .. import acoustics
+        rms_vertical = acoustics.rms_surface_vertical_speed(float(motion["wind_speed"]))
+    motion_kw = dict(scatterer_velocity=motion.get("velocity"), scatterer_rms_speed=float(motion.get("rms_speed", 0.0)),
+                     scatterer_rms_vertical_speed=rms_vertical)
+    if motion_kw["scatterer_rms_speed"] < 0.0 or rms_vertical < 0.0:
+        raise ValueError("scatterer_motion: rms speeds must not be negative")
     s = record.samples
     wf = record.transmit.waveform
     real = s.kind == core.SampleKind.RealPassband
@@ -464,6 +506,11 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     tx_rotation = np.asarray(core.rotation_ned(*record.geometry.tx_pose.rpy))
     tx_gain = element_power_pattern(record.geometry.tx, tx_rotation)
     rx_gain = element_power_pattern(record.geometry.rx[0], rotation)
+    if len({_pattern_key(e) for e in record.geometry.rx}) > 1:
+        # One sequence per direction is shared by all channels, with a delay each: a gain per
+        # channel and direction would have to enter the steering kernel (host and CUDA).
+        warnings.warn("reverberation: the receive elements have different beam patterns; the first element's "
+                      "pattern is used for all of them", RuntimeWarning, stacklevel=2)
     rx_velocity = np.asarray(record.geometry.rx_pose.velocity, dtype=float)
     tx_velocity = np.asarray(record.geometry.tx_pose.velocity, dtype=float)
     components = sector_of_row = None
@@ -472,12 +519,22 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         separation = float(np.hypot(*(tx_position[:2] - centre[:2])))
         if coarse[0] > 0.2:
             min_range = max(0.6 * 0.5 * c * coarse[0] - 0.5 * separation, 0.0)
-        found = reverb_bistatic.directional_power(
-            provider, tx_position, centre, boundary_z, coarse, azimuths, frequency=fc, mu_db=mu_db, strength=strength,
-            tx_velocity=tx_velocity, rx_velocity=rx_velocity, tx_gain=tx_gain, rx_gain=rx_gain,
-            absorption_db_per_m=absorption_db_per_m, max_range=max_range, min_range=min_range,
-            n_elevation=9 if n_elevation is None else int(n_elevation), strength_map=strength_map,
-            subsamples=int(azimuth_subsamples))
+        common = dict(frequency=fc, mu_db=mu_db, strength=strength, tx_velocity=tx_velocity, rx_velocity=rx_velocity,
+                      tx_gain=tx_gain, rx_gain=rx_gain, absorption_db_per_m=absorption_db_per_m, max_range=max_range,
+                      n_elevation=9 if n_elevation is None else int(n_elevation), strength_map=strength_map,
+                      subsamples=int(azimuth_subsamples))
+        if any(v is not None and np.any(v) for v in motion_kw.values()):
+            common.update(motion_kw)
+        bed = None if bathymetry is None else make_bathymetry(bathymetry)
+        if bed is not None and bed.flat_depth is not None:
+            boundary_z, bed = bed.flat_depth, None                         # exactly level: the flat code
+        if bed is not None:
+            found = reverb_relief.directional_power(provider, tx_position, centre, bed, coarse, azimuths,
+                                                    min_range=0.0, shadowing=shadowing,
+                                                    bottom_bounces=bottom_bounces, **common)
+        else:
+            found = reverb_bistatic.directional_power(provider, tx_position, centre, boundary_z, coarse, azimuths,
+                                                      min_range=min_range, **common)
         by_direction = found["power"] / step                              # [sectors, elevations, coarse]
         mean_density = by_direction.sum(axis=1).mean(axis=0)
         # The components with power, in order of sector then elevation.
@@ -488,6 +545,21 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         density = flat[rows]
         components = (found["direction"].reshape(-1, 3)[rows], found["doppler"].reshape(-1)[rows])
         sector_of_row = rows // by_direction.shape[1]
+        spread = found["spread"].reshape(-1)[rows]
+        doppler_extent = 0.0
+        if spread.any():
+            # Random scatterer motion: each component becomes Doppler lines about its mean
+            # shift, with the component's power shared among them.
+            lines = [reverb_bistatic.doppler_lines(float(sp), wf.duration) for sp in spread]
+            count = np.array([len(w) for _, w in lines])
+            index = np.repeat(np.arange(len(rows)), count)
+            offsets, weights = np.concatenate([o for o, _ in lines]), np.concatenate([w for _, w in lines])
+            density = density[index] * weights[:, None]
+            components = (components[0][index], components[1][index] + offsets)
+            sector_of_row = sector_of_row[index]
+            doppler_extent = float(np.abs(offsets).max())
+        if motion_kw["scatterer_velocity"] is not None:
+            doppler_extent += 2.0 * float(np.linalg.norm(motion_kw["scatterer_velocity"])) * fc / c
     elif tx_gain is None and rx_gain is None:
         density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
                                       max_range, min_range=min_range, strength=strength) / step
@@ -507,6 +579,8 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     if bistatic:
         speed = 0.5 * (speed + float(np.linalg.norm(tx_velocity)))       # each platform shifts by v f / c
     band = max(abs(wf.f_stop - wf.f_start), 4.0 / wf.duration) + 4.0 * speed * fc / c
+    if bistatic and doppler_extent > 0.0:
+        band += 2.0 * doppler_extent                                       # the scatterers' own shifts, either way
     decim = max(int(fs // (4.0 * band)), 1)
     fs_low = fs / decim
     n_low = int(np.ceil(len(times) / decim))

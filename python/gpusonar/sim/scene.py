@@ -474,6 +474,19 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                 gx, gy = gradient(pts[:, 0], pts[:, 1])
                 normals = np.column_stack([gx, gy, -np.ones(len(pts))])
                 normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+            if item.get("bathymetry") is not None:
+                # The seabed of sim/bathymetry.py, as a `reverberation` item describes it, so
+                # that the scatterer seabed and the scattering-function reverberation are the
+                # same bottom: each point at the bed's own depth there (`depth` is not used)
+                # with the facet's normal. The points are drawn per horizontal square metre;
+                # a facet's true area is larger by 1 / cos(slope), hence the amplitude factor.
+                from .bathymetry import make_bathymetry
+                if mu is None or normals is not None:
+                    raise ValueError("a seafloor with bathymetry needs lambert_mu_db (or a model) and takes no slope or ripples")
+                bed = make_bathymetry(item["bathymetry"])
+                pts[:, 2] = bed.depth(pts[:, 0], pts[:, 1])
+                normals = bed.normal(pts[:, 0], pts[:, 1])
+                a = a * np.sqrt(bed.area_factor(pts[:, 0], pts[:, 1]))
             if sediment is not None:
                 scene.modifiers.append((len(scene), len(pts), sediment))
             scene.add_points(pts, a, vel, item.get("label", "seafloor"), lambert=mu is not None, normals=normals)

@@ -237,6 +237,23 @@ class BellhopProvider(EigenrayProvider):
         self._cache: dict[float, Arrivals] = {}
         self.sound_speed = env.speed_at(0.0)
 
+    def along_profile(self, profile) -> "BellhopProvider":
+        """This provider for one bearing over relief: the same ocean with the depth profile
+        `profile` = [[range_m, depth_m], ...] from the source (Bellhop's own bathymetry, so
+        bottom bounces and blocked rays are traced over it). Used once per azimuth sector by
+        the reverberation over relief (sim/reverb_relief.py): N x 2-D."""
+        import copy
+        import dataclasses
+        profile = [[float(r), float(d)] for r, d in profile]
+        deepest = max(self.env.depth, max(d for _, d in profile))
+        other = copy.copy(self)
+        other.env = dataclasses.replace(self.env, depth=deepest, bathymetry=profile)
+        dz = self.depths[1] - self.depths[0] if len(self.depths) > 1 else deepest / 50.0
+        other.depths = np.arange(0.5 * dz, deepest, dz)
+        other._cache = {}
+        other.relief_aware = True
+        return other
+
     def arrivals_for(self, source_depth: float) -> Arrivals:
         key = round(float(source_depth), 2)
         if key not in self._cache:

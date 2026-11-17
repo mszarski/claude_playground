@@ -201,6 +201,18 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             extra["guard"] = float(item["guard"])
         if item.get("band_taper") is not None:
             extra["band_taper"] = bool(item["band_taper"])
+        # `bathymetry` (sim/bathymetry.py: a seabed with relief instead of boundary_z),
+        # `shadowing: false`, `scatterer_motion: {velocity, rms_speed, rms_vertical_speed,
+        # wind_speed}` (moving scatterers: TR 0702 eq. 72 and a Doppler spread).
+        if item.get("bathymetry") is not None:
+            extra["bathymetry"] = item["bathymetry"]
+            item = dict(item, boundary_z=item.get("boundary_z", 0.0))
+        if item.get("shadowing") is not None:
+            extra["shadowing"] = bool(item["shadowing"])
+        if item.get("bottom_bounces") is not None:
+            extra["bottom_bounces"] = str(item["bottom_bounces"])
+        if item.get("scatterer_motion") is not None:
+            extra["scatterer_motion"] = dict(item["scatterer_motion"])
         reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,

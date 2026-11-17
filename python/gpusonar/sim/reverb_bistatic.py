@@ -91,7 +91,52 @@ def _leg(es, side):
     graze = np.arcsin(np.clip(np.abs(arrival[:, :, 2]), 0.0, 1.0))
     slowness = np.hypot(arrival[:, :, 0], arrival[:, :, 1]) / es.sound_speed
     return dict(a2=a2, delay=np.where(a2 > 0.0, es.delay[:, keep], 0.0), graze=graze, slowness=slowness,
-                horizontal=np.hypot(launch[:, :, 0], launch[:, :, 1]), vertical=launch[:, :, 2])
+                horizontal=np.hypot(launch[:, :, 0], launch[:, :, 1]), vertical=launch[:, :, 2],
+                arrival_horizontal=np.hypot(arrival[:, :, 0], arrival[:, :, 1]), arrival_vertical=arrival[:, :, 2])
+
+
+def scatterer_doppler(frequency: float, sound_speed: float, velocity, incident, scattered_back):
+    """Frequency shift from the scatterers' own mean velocity, first order in v / c:
+
+        -f / c x V_T . (a_q + a_p),
+
+    `incident` = a_q the unit vector of travel of the transmit-leg ray on arrival at the
+    scatterer and `scattered_back` = a_p that of the receive-leg ray traced from the
+    receiver (the scattered wave travels along -a_p). This is TR 0702 eq. (72),
+    gamma = (1 - V_T . S_Tq) / (1 + V_T . S_Tp), with the slowness vectors at the scatterer
+    S_Tq = a_q / c and S_Tp = a_p / c (gradients of each leg's travel time with respect to
+    the scatterer's position)."""
+    k = np.asarray(incident, dtype=float) + np.asarray(scattered_back, dtype=float)
+    return -frequency / sound_speed * (k @ np.asarray(velocity, dtype=float))
+
+
+def scatterer_doppler_variance(frequency: float, sound_speed: float, incident, scattered_back,
+                               rms_speed: float = 0.0, rms_vertical_speed: float = 0.0):
+    """Variance (Hz^2) of the frequency shift from random scatterer velocities: independent
+    Gaussian velocity components of standard deviation `rms_speed` on every axis (volume
+    scatterers), plus `rms_vertical_speed` on the vertical only (a boundary that heaves, such
+    as the sea surface). The shift of one scatterer is -f / c x v . k with k = a_q + a_p,
+    so its variance is (f / c)^2 (rms_speed^2 |k|^2 + rms_vertical_speed^2 k_z^2). For
+    backscatter at grazing angle g, |k| = 2 and k_z = 2 sin(g)."""
+    k = np.asarray(incident, dtype=float) + np.asarray(scattered_back, dtype=float)
+    return (frequency / sound_speed) ** 2 * (rms_speed**2 * np.sum(k * k, axis=-1) + rms_vertical_speed**2 * k[..., 2] ** 2)
+
+
+def doppler_lines(spread: float, pulse_length: float, max_lines: int = 41):
+    """A Gaussian Doppler spread of standard deviation `spread` (Hz) as a set of lines:
+    (offsets [n] in Hz, weights [n] summing to 1), with mean 0 and variance spread^2 exactly.
+    The lines are no further apart than half the frequency resolution 1 / pulse_length of
+    the pulse, so that within a pulse they are indistinguishable from the continuum (the
+    bins in total Doppler of TR 0702 eq. (129)); one line when the spread is below a
+    twentieth of that resolution."""
+    if not spread > 0.0 or spread * pulse_length < 0.05:
+        return np.zeros(1), np.ones(1)
+    n = int(min(max(np.ceil(6.0 * spread * pulse_length / 0.5) + 1, 5), max_lines))
+    n += 1 - n % 2                                                 # odd: one line at the mean
+    x = np.linspace(-3.0, 3.0, n)
+    w = np.exp(-0.5 * x * x)
+    w /= w.sum()
+    return spread * x / np.sqrt(np.sum(w * x * x)), w
 
 
 def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, times: np.ndarray,
@@ -99,7 +144,8 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
                       tx_velocity=(0.0, 0.0, 0.0), rx_velocity=(0.0, 0.0, 0.0), tx_gain=None, rx_gain=None,
                       absorption_db_per_m: float = 0.0, max_range: float | None = None, min_range: float = 0.0,
                       ring_width: float | None = None, n_elevation: int = 1, strength_map=None,
-                      subsamples: int = 1) -> dict:
+                      subsamples: int = 1, scatterer_velocity=None, scatterer_rms_speed: float = 0.0,
+                      scatterer_rms_vertical_speed: float = 0.0) -> dict:
     """Reverberation power per radian of receiver azimuth in each time bin, for unit source
     amplitude at 1 m, from a flat boundary at depth `boundary_z`, by arrival direction.
 
@@ -117,7 +163,15 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
       power      [M, E, n_time]  E = n_elevation bins of the ray's elevation at the receiver
       direction  [M, E, 3]       unit vector from the receiver towards the arrival (power-weighted mean)
       doppler    [M, E]          Hz at `frequency` (power-weighted mean)
+      spread     [M, E]          Hz: rms Doppler spread from random scatterer motion (power-weighted
+                                 mean of the variance), zero without it
+
+    `scatterer_velocity` (world vector) is the scatterers' mean velocity and
+    `scatterer_rms_speed`, `scatterer_rms_vertical_speed` their random motion
+    (`scatterer_doppler`, `scatterer_doppler_variance`).
     """
+    moving = scatterer_velocity is not None and bool(np.any(np.asarray(scatterer_velocity, dtype=float)))
+    random_motion = scatterer_rms_speed > 0.0 or scatterer_rms_vertical_speed > 0.0
     tx, rx = np.asarray(tx, dtype=float), np.asarray(rx, dtype=float)
     vt, vr = np.asarray(tx_velocity, dtype=float), np.asarray(rx_velocity, dtype=float)
     azimuths = np.asarray(azimuths, dtype=float)
@@ -133,7 +187,8 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
     r_max = max_range or 0.5 * c * (times[-1] + dt) + 0.5 * separation
     dr = ring_width or 0.25 * c * dt
     rings = np.arange(min_range + 0.5 * dr, r_max, dr)
-    out = dict(power=np.zeros((n_az, n_el, n_t)), direction=np.zeros((n_az, n_el, 3)), doppler=np.zeros((n_az, n_el)))
+    out = dict(power=np.zeros((n_az, n_el, n_t)), direction=np.zeros((n_az, n_el, 3)), doppler=np.zeros((n_az, n_el)),
+               spread=np.zeros((n_az, n_el)))
     if len(rings) == 0:
         return out
     side = 1.0 if boundary_z >= rx[2] else -1.0
@@ -166,6 +221,7 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
     power = np.zeros(n_comp * n_t)
     weight = np.zeros(n_comp)
     moment = np.zeros((n_comp, 4))                                 # sum of power x (direction, Doppler)
+    variance = np.zeros(n_comp)                                    # sum of power x Doppler variance
     per_chunk = max(1, CHUNK_CELLS // len(rings))
     for first in range(0, n_az, per_chunk):
         sectors = np.arange(first, min(first + per_chunk, n_az))
@@ -194,6 +250,9 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
                 u_q = np.stack([h_q * cq, h_q * sq, v_q], axis=-1)                   # leaving the transmitter
                 w_q = a2_q * cell if tx_gain is None else a2_q * cell * tx_gain(u_q)
                 f_q = u_q @ vt
+                if moving or random_motion:
+                    ah_q = forth["arrival_horizontal"][j, q]
+                    a_q = np.stack([ah_q * cq, ah_q * sq, forth["arrival_vertical"][j, q]], axis=-1)
                 for p in range(k_r):
                     a2_p = back["a2"][:, p]
                     if not a2_p.any():
@@ -220,6 +279,16 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
                     flat = comp.ravel()
                     weight += np.bincount(flat, weights=w, minlength=n_comp)
                     f_d = (frequency / c) * (f_q + u_p @ vr)
+                    if moving or random_motion:
+                        ah_p = back["arrival_horizontal"][None, :, p]
+                        a_p = np.stack([ah_p * cp, ah_p * sp,
+                                        np.broadcast_to(back["arrival_vertical"][None, :, p], d.shape)], axis=-1)
+                        if moving:
+                            f_d = f_d + scatterer_doppler(frequency, c, scatterer_velocity, a_q, a_p)
+                        if random_motion:
+                            var = scatterer_doppler_variance(frequency, c, a_q, a_p, scatterer_rms_speed,
+                                                             scatterer_rms_vertical_speed)
+                            variance += np.bincount(flat, weights=w * var.ravel(), minlength=n_comp)
                     for axis in range(3):
                         moment[:, axis] += np.bincount(flat, weights=w * u_p[..., axis].ravel(), minlength=n_comp)
                     moment[:, 3] += np.bincount(flat, weights=w * f_d.ravel(), minlength=n_comp)
@@ -236,6 +305,9 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
     out["power"] = power.reshape(n_az, n_el, n_t)
     out["direction"] = direction.reshape(n_az, n_el, 3)
     out["doppler"] = doppler.reshape(n_az, n_el)
+    spread = np.zeros(n_comp)
+    spread[has] = np.sqrt(variance[has] / weight[has])
+    out["spread"] = spread.reshape(n_az, n_el)
     return out
 
 
