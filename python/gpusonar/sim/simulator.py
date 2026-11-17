@@ -144,7 +144,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             if missing:
                 raise ValueError(f"fluid_sediment reverberation needs {missing}")
             extra = {k: (item[k] if k == "roughness_model" else float(item[k])) for k in ("roughness_model", "small_scale_kh") if k in item}
-            strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys}, **extra)
+            if item.get("geometry", "monostatic") == "bistatic":
+                # The model at the true bistatic azimuth of each cell (pi is backscatter).
+                strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731
+                    g_in, g_out, fc, env.get("sound_speed", 1500.0), azimuth=azimuth, **_p)
+            else:
+                strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys}, **extra)
         elif item.get("model") == "volume":
             # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
             # (fish, plankton, bubbles), as a sheet at its centre depth.
@@ -158,12 +163,39 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         offset = float(item.get("offset_db", 0.0))
         if strength is not None and offset != 0.0:
             base, scale = strength, 10.0 ** (offset / 10.0)
-            strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
+            if reverb.reverb_bistatic.takes_azimuth(base):
+                strength = lambda g_in, g_out, azimuth=np.pi, _b=base, _s=scale: _s * _b(g_in, g_out, azimuth)  # noqa: E731
+            else:
+                strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
+        # New keys, all optional (sim/reverb.py, sim/reverb_bistatic.py): `geometry: bistatic`
+        # (the transmitter's and receiver's own positions and velocities, arrival elevation),
+        # with it `n_elevation`, `azimuth_subsamples` and `strength_map: {range, offset_db,
+        # azimuth_deg, origin}` (a boundary whose strength varies over it); `statistics:
+        # {model: k, shape, cell_time, cell_azimuth_deg}` (K-distributed reverberation);
+        # `band_taper` and `guard` (against leakage from the strong start of a long record
+        # into its weak end).
+        extra = {}
+        if item.get("geometry") is not None:
+            extra["geometry"] = str(item["geometry"])
+        if item.get("n_elevation") is not None:
+            extra["n_elevation"] = int(item["n_elevation"])
+        if item.get("azimuth_subsamples") is not None:
+            extra["azimuth_subsamples"] = int(item["azimuth_subsamples"])
+        if item.get("strength_map") is not None:
+            m = item["strength_map"]
+            extra["strength_map"] = m if callable(m) else reverb.reverb_bistatic.table_strength_map(
+                m["range"], m["offset_db"], m.get("azimuth_deg"), m.get("origin", (0.0, 0.0)))
+        if item.get("statistics") is not None:
+            extra["statistics"] = dict(item["statistics"])
+        if item.get("guard") is not None:
+            extra["guard"] = float(item["guard"])
+        if item.get("band_taper") is not None:
+            extra["band_taper"] = bool(item["band_taper"])
         reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"), backend=backend,
-                                 engine=engine)
+                                 engine=engine, **extra)
     taps.sim_tap(record, "reverberation")
     receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)

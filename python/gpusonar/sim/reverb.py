@@ -23,12 +23,31 @@ Only paths travelling towards the boundary count as incident (a receiver placed 
 Bellhop boundary also sees the reflected arrival; Lambert's law is defined on the incident
 intensity).
 
-Limits: the projector is taken as omnidirectional in azimuth, monostatic (one provider call from the array centre serves both legs), the
-platform is treated as stationary (no Doppler spread), the arrival elevation is ignored
-when steering to the hydrophones (fine at the low grazing angles of long ranges), and the
-boundary is flat and uniform. Each ping draws new noise, so this method cannot support
-synthetic aperture processing; the point-scatterer method (scene.seafloor_patch) is the
-one for imaging modes.
+What the default (`geometry="monostatic"`) models: one provider call from the array centre
+serves both legs (the transmitter is taken to be at the array centre and to move with it);
+the transmit pattern and the pattern of the first receive element weight each azimuth
+sector and each path, at the path's own elevation at the sonar (its launch direction, not
+its grazing angle at the boundary); each sector is shifted by the Doppler of the receive
+platform's horizontal velocity towards the sector's azimuth, two-way, as if every path
+were horizontal (no elevation factor, no vertical velocity); the arrival elevation is
+ignored when steering to the hydrophones (fine at the low grazing angles of long ranges);
+the boundary is flat and uniform.
+
+`geometry="bistatic"` (reverb_bistatic.py) lifts those: separate transmitter and receiver
+positions and velocities, the scattering strength at the true grazing angles and bistatic
+azimuth, the Doppler of each platform along its own ray, the arrival elevation in the
+steering, and a boundary strength that may vary over the boundary. The generator then
+works on components (azimuth sector x elevation bin), each with its own direction and
+Doppler shift, instead of horizontal azimuth sectors.
+
+`statistics={"model": "k", "shape": nu}` makes the reverberation K-distributed: the power of
+each resolution cell (a cell of time and azimuth) is multiplied by a gamma variate of unit
+mean and shape nu before the Gaussian speckle is drawn, so the mean power is unchanged.
+
+Limits that remain: the boundary is flat and the medium horizontally stratified; eigenray
+pairs add incoherently; there is no range walk within a ping; each ping draws new noise,
+so this method cannot support synthetic aperture processing; the point-scatterer method
+(scene.seafloor_patch) is the one for imaging modes.
 
 Steps 3 and 4 (the generation of the time series, most of the cost) also exist in C++
 (libs/sim/src/reverb.cpp, with a CUDA backend for the sum over sectors), which is used by
@@ -42,8 +61,11 @@ from __future__ import annotations
 
 import numpy as np
 
+import warnings
+
 from .. import _gpusonar as core
 from . import engine as _engine
+from . import reverb_bistatic
 from .propagation import EigenrayProvider
 
 
@@ -203,17 +225,80 @@ def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
 SECTOR_RUN_BYTES = 64 << 20
 
 
+def taper_pulse(pulse: np.ndarray, n: int) -> np.ndarray:
+    """The pulse with its spectrum rolled off to zero at the Nyquist frequency: unchanged
+    below half of it, a raised cosine from there up. Returned as `n` samples of one period
+    (what precedes the pulse's first sample is at the end), so that its transform over `n`
+    points is the tapered spectrum exactly."""
+    if len(pulse) > n:
+        return pulse
+    f = np.abs(np.fft.fftfreq(n))                                  # cycles per sample, 0 .. 0.5
+    window = np.where(f <= 0.25, 1.0, 0.5 * (1.0 + np.cos(np.pi * (f - 0.25) / 0.25)))
+    return np.fft.ifft(np.fft.fft(pulse, n) * window)
+
+
+class CellTexture:
+    """The texture of K-distributed reverberation: a gamma variate of unit mean and shape
+    `shape` for each resolution cell, as the factor on the amplitude (its square root) of
+    one row's sequence at the reduced rate.
+
+    A cell is `cell_samples` samples long and covers the rows of one group (`group_of_row`:
+    the sectors, or the components, that lie in one azimuth cell). The variates come from a
+    generator of their own, seeded by one draw from the caller's, so both engines consume
+    the caller's generator alike. Rows must be asked for in increasing order of group.
+
+    Intensity = texture x exponential speckle has mean 1 x the cell's power, and
+    E{I^2} / E{I}^2 = 2 (1 + 1 / shape): the K distribution's value, 2 (Rayleigh) as
+    shape -> infinity.
+    """
+
+    def __init__(self, rng, shape: float, n_low: int, cell_samples: int, group_of_row):
+        if not shape > 0.0:
+            raise ValueError("K-distributed reverberation needs a positive shape")
+        self.rng = np.random.default_rng(int(rng.integers(0, 2**63 - 1)))
+        self.shape, self.n_low, self.cell = float(shape), int(n_low), max(int(cell_samples), 1)
+        self.group_of_row = np.asarray(group_of_row)
+        self.group, self.row = None, None
+
+    def __call__(self, row: int) -> np.ndarray:
+        group = int(self.group_of_row[row])
+        if group != self.group:
+            n_cells = -(-self.n_low // self.cell)
+            tau = self.rng.gamma(self.shape, 1.0 / self.shape, n_cells)
+            self.row = np.sqrt(np.repeat(tau, self.cell)[:self.n_low])
+            self.group = group
+        return self.row
+
+
+def cpp_has_components() -> bool:
+    """True when the built extension's reverberation generator takes components (a
+    direction and a Doppler shift per row); an older build has azimuth sectors only."""
+    return "direction" in (getattr(core.sim_reverb_accumulate, "__doc__", "") or "")
+
+
 def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n, start_time, time0, fc, c,
-                n_azimuth, decim, n_low, velocity, carrier, real, backend):
+                n_azimuth, decim, n_low, velocity, carrier, real, backend, components=None, texture=None):
     """The reverberation of every channel in the record's window, [channels, n], by the C++
     generator. The random numbers are drawn here, in the order `_series_numpy` draws them
     (for each sector with power: n_low for the real part, then n_low for the imaginary
-    part), in runs of sectors so that no more than SECTOR_RUN_BYTES of them are held at once."""
+    part), in runs of sectors so that no more than SECTOR_RUN_BYTES of them are held at once.
+
+    With `components` = (direction [rows, 3], doppler [rows]) each row of the density is a
+    component with that arrival direction and frequency shift. `texture` (CellTexture)
+    scales each row's deviates."""
     density = np.ascontiguousarray(density[:1] if same_in_azimuth else density, dtype=float)
     coarse = np.ascontiguousarray(coarse, dtype=float)
-    # A sector without power draws nothing (as in `_series_numpy`).
-    active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low)
-    n_active = (n_azimuth if active[0] else 0) if len(active) == 1 else int(active.sum())
+    extra = {}
+    if components is not None:
+        extra = dict(direction=np.ascontiguousarray(components[0], dtype=float),
+                     doppler=np.ascontiguousarray(components[1], dtype=float))
+        active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low, components=True)
+        rows = np.flatnonzero(active)
+    else:
+        # A sector without power draws nothing (as in `_series_numpy`).
+        active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low)
+        rows = (np.arange(n_azimuth) if active[0] else np.arange(0)) if len(active) == 1 else np.flatnonzero(active)
+    n_active = len(rows)
     offsets = np.ascontiguousarray(offsets, dtype=float)
     pulse_low = np.ascontiguousarray(pulse_low, dtype=complex)
     velocity = tuple(float(v) for v in velocity)
@@ -221,14 +306,18 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
     run = max(1, SECTOR_RUN_BYTES // (16 * n_low))
     for first in range(0, n_active, run):
         normals = rng.standard_normal((min(run, n_active - first), 2, n_low))
+        if texture is not None:
+            for k in range(normals.shape[0]):
+                normals[k] *= texture(rows[first + k])[None, :]
         core.sim_reverb_accumulate(total, coarse, density, first, normals, pulse_low, offsets, fs, time0, fc, c,
-                                   n_azimuth, decim, velocity=velocity, backend=backend)
+                                   n_azimuth, decim, velocity=velocity, backend=backend, **extra)
     return core.sim_reverb_finish(total, fs, n, start_time, time0, fc, decim, carrier=carrier, real_output=real)
 
 
 def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,
-                  n_azimuth, decim, n_low, velocity, carrier, real):
-    """The reverberation of every channel in the record's window, [channels, n], in NumPy."""
+                  n_azimuth, decim, n_low, velocity, carrier, real, components=None, texture=None):
+    """The reverberation of every channel in the record's window, [channels, n], in NumPy.
+    `components` and `texture` as in `_series_cpp`."""
     fs_low = fs / decim
     t_low = times[0] + np.arange(n_low) / fs_low
     dphi = 2.0 * np.pi / n_azimuth
@@ -244,13 +333,20 @@ def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, sta
     along = offsets - offsets[0]
     uniform = len(offsets) > 2 and np.allclose(along[1:], np.arange(1, len(offsets))[:, None] * along[1], atol=1e-9)
     pulse_spectrum = np.fft.fft(pulse_low, n_low)
-    for m in range(n_azimuth):
+    for m in range(n_azimuth if components is None else len(density)):
         sigma = np.sqrt(np.interp(t_low, coarse, density[m], left=0.0, right=0.0) / fs_low * dphi / 2.0)
         if not sigma.any():
             continue
-        u = np.array([np.cos(azimuths[m]), np.sin(azimuths[m]), 0.0])
         b = sigma * (rng.standard_normal(n_low) + 1j * rng.standard_normal(n_low))
-        doppler = 2.0 * (velocity @ u) * fc / c
+        if texture is not None:
+            b = b * texture(m)
+        if components is None:
+            u = np.array([np.cos(azimuths[m]), np.sin(azimuths[m]), 0.0])
+            doppler = 2.0 * (velocity @ u) * fc / c
+        else:
+            # A component has its own arrival direction (with elevation) and Doppler shift.
+            u = np.asarray(components[0][m], dtype=float)
+            doppler = float(components[1][m])
         if doppler != 0.0:
             # Every echo from this azimuth is the pulse shifted in frequency: shift the
             # scatterer sequence and the pulse together.
@@ -294,7 +390,9 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
                       rng: np.random.Generator, n_azimuth: int | None = None,
                       absorption_db_per_m: float = 0.0, max_range: float | None = None,
                       power_step: float | None = None, strength=None, engine: str | None = None,
-                      backend=core.Backend.Host) -> np.ndarray:
+                      backend=core.Backend.Host, geometry: str = "monostatic", n_elevation: int | None = None,
+                      strength_map=None, azimuth_subsamples: int = 1, statistics: dict | None = None,
+                      guard: float = 0.0, band_taper: bool = False) -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
@@ -303,7 +401,38 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation that
     generates the time series; `backend` is where the C++ one sums the sectors (host or
     CUDA). `rng` is advanced identically by both.
+
+    `geometry="bistatic"` takes the transmitter's and the receiver's own positions and
+    velocities from the record (reverb_bistatic.py; see the header). With it, `n_elevation`
+    is the number of bins of arrival elevation (default 9: 20 degrees each), `strength_map`
+    a function of world (x, y) giving a linear factor on the boundary's strength, and
+    `azimuth_subsamples` the azimuths evaluated within a sector. `strength` may then take
+    the bistatic azimuth as a third argument.
+
+    `statistics` = {"model": "k", "shape": nu, "cell_time": s, "cell_azimuth_deg": degrees}
+    draws K-distributed reverberation with shape nu; a cell is by default 1 / bandwidth
+    long and one nominal beamwidth (wavelength / array extent) wide. {"model": "rayleigh"}
+    or None is the Gaussian default.
+
+    `band_taper` and `guard` deal with leakage along the record. The generator works in
+    frequency at a reduced rate: the delays to the hydrophones and the interpolation to the
+    record's rate are ideal (sinc) operations, whose response to one sample falls only as
+    1 / distance wherever the spectrum is not zero at the reduced rate's Nyquist frequency
+    (a CW pulse's sidelobes are about 28 dB down there). The strong start of a record
+    therefore leaks into its weak far end, forwards and, the series being periodic,
+    backwards round the period: visible when the power falls by more than about 50 dB
+    across the record, as it does over a long-range window. `band_taper=True` rolls the
+    pulse's spectrum off smoothly to zero between half the Nyquist frequency and Nyquist
+    (outside the band the rate was chosen for), which removes the 1 / distance tail, and
+    appends two pulse lengths of silence to the generated series to keep what is left of
+    the wrap-round out of the record; `guard` (seconds) sets that silence directly. The
+    defaults (off, 0) keep earlier results.
     """
+    if geometry not in ("monostatic", "bistatic"):
+        raise ValueError(f"unknown reverberation geometry {geometry!r}: use 'monostatic' or 'bistatic'")
+    bistatic = geometry == "bistatic"
+    if not bistatic and (strength_map is not None or n_elevation is not None or azimuth_subsamples != 1):
+        raise ValueError("strength_map, n_elevation and azimuth_subsamples need geometry='bistatic'")
     s = record.samples
     wf = record.transmit.waveform
     real = s.kind == core.SampleKind.RealPassband
@@ -331,7 +460,31 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     tx_rotation = np.asarray(core.rotation_ned(*record.geometry.tx_pose.rpy))
     tx_gain = element_power_pattern(record.geometry.tx, tx_rotation)
     rx_gain = element_power_pattern(record.geometry.rx[0], rotation)
-    if tx_gain is None and rx_gain is None:
+    rx_velocity = np.asarray(record.geometry.rx_pose.velocity, dtype=float)
+    tx_velocity = np.asarray(record.geometry.tx_pose.velocity, dtype=float)
+    components = sector_of_row = None
+    if bistatic:
+        tx_position = np.asarray(record.tx_position(), dtype=float)
+        separation = float(np.hypot(*(tx_position[:2] - centre[:2])))
+        if coarse[0] > 0.2:
+            min_range = max(0.6 * 0.5 * c * coarse[0] - 0.5 * separation, 0.0)
+        found = reverb_bistatic.directional_power(
+            provider, tx_position, centre, boundary_z, coarse, azimuths, frequency=fc, mu_db=mu_db, strength=strength,
+            tx_velocity=tx_velocity, rx_velocity=rx_velocity, tx_gain=tx_gain, rx_gain=rx_gain,
+            absorption_db_per_m=absorption_db_per_m, max_range=max_range, min_range=min_range,
+            n_elevation=9 if n_elevation is None else int(n_elevation), strength_map=strength_map,
+            subsamples=int(azimuth_subsamples))
+        by_direction = found["power"] / step                              # [sectors, elevations, coarse]
+        mean_density = by_direction.sum(axis=1).mean(axis=0)
+        # The components with power, in order of sector then elevation.
+        flat = by_direction.reshape(-1, len(coarse))
+        rows = np.flatnonzero(flat.any(axis=1))
+        if len(rows) == 0:
+            rows = np.array([0])
+        density = flat[rows]
+        components = (found["direction"].reshape(-1, 3)[rows], found["doppler"].reshape(-1)[rows])
+        sector_of_row = rows // by_direction.shape[1]
+    elif tx_gain is None and rx_gain is None:
         density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
                                       max_range, min_range=min_range, strength=strength) / step
         density = np.broadcast_to(density, (n_azimuth, len(coarse)))
@@ -340,24 +493,60 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         density = reverberation_power(provider, centre, boundary_z, coarse, mu_db, absorption_db_per_m,
                                       max_range, min_range=min_range, strength=strength,
                                       pattern=(azimuths, tx_gain or one, rx_gain or one)) / step
-    power = np.interp(times, coarse, density.mean(axis=0), left=0.0, right=0.0) / fs
+    if not bistatic:
+        mean_density = density.mean(axis=0)
+    power = np.interp(times, coarse, mean_density, left=0.0, right=0.0) / fs
     # Reverberation occupies the pulse's band only, so it is generated at a reduced rate
     # (at least four times the bandwidth) and interpolated to the record's rate.
     # A moving sonar shifts each azimuth's reverberation by up to 2 v f / c either way.
     speed = float(np.linalg.norm(record.geometry.rx_pose.velocity))
+    if bistatic:
+        speed = 0.5 * (speed + float(np.linalg.norm(tx_velocity)))       # each platform shifts by v f / c
     band = max(abs(wf.f_stop - wf.f_start), 4.0 / wf.duration) + 4.0 * speed * fc / c
     decim = max(int(fs // (4.0 * band)), 1)
     fs_low = fs / decim
     n_low = int(np.ceil(len(times) / decim))
+    if guard < 0.0:
+        raise ValueError("reverberation guard must not be negative")
+    if band_taper:
+        guard = max(guard, 2.0 * wf.duration)
+    if guard > 0.0:
+        n_low += int(np.ceil(guard * fs_low))                              # no power there: beyond the coarse grid
     pulse_low = baseband_pulse(wf, fs_low, fc) * wf.amplitude
+    if band_taper:
+        pulse_low = taper_pulse(pulse_low, n_low)
     start = int(round((s.start_time - times[0]) * fs))
-    if _engine.resolve(engine) == "cpp":
-        out = _series_cpp(rng, coarse, density, tx_gain is None and rx_gain is None, pulse_low, positions - centre,
-                          fs, n, s.start_time, times[0], fc, c, n_azimuth, decim, n_low,
-                          record.geometry.rx_pose.velocity, carrier, real, backend)
+    texture = None
+    model = (statistics or {}).get("model", "rayleigh")
+    if model not in ("rayleigh", "gaussian", "k"):
+        raise ValueError(f"unknown reverberation statistics {model!r}: use 'rayleigh' or 'k'")
+    if model == "k":
+        if "shape" not in statistics:
+            raise ValueError("K-distributed reverberation needs statistics.shape")
+        shape = float(statistics["shape"])
+        if np.isfinite(shape):                                             # infinite shape is Rayleigh
+            cell_time = float(statistics.get("cell_time") or 1.0 / max(abs(wf.f_stop - wf.f_start), 1.0 / wf.duration))
+            extent = float(np.linalg.norm(positions.max(axis=0) - positions.min(axis=0)))
+            if statistics.get("cell_azimuth_deg") is not None:
+                cell_azimuth = np.radians(float(statistics["cell_azimuth_deg"]))
+            else:
+                cell_azimuth = (c / fc) / extent if extent > 0.0 else dphi
+            per_cell = max(int(round(cell_azimuth / dphi)), 1)             # sectors in one azimuth cell
+            sectors = np.arange(n_azimuth) if sector_of_row is None else sector_of_row
+            texture = CellTexture(rng, shape, n_low, int(round(cell_time * fs_low)), sectors // per_cell)
+    chosen = _engine.resolve(engine)
+    if chosen == "cpp" and components is not None and not cpp_has_components():
+        warnings.warn("bistatic reverberation: this build of the C++ generator has azimuth sectors only; "
+                      "falling back to the NumPy engine", RuntimeWarning, stacklevel=2)
+        chosen = "numpy"
+    if chosen == "cpp":
+        out = _series_cpp(rng, coarse, density, not bistatic and tx_gain is None and rx_gain is None, pulse_low,
+                          positions - centre, fs, n, s.start_time, times[0], fc, c, n_azimuth, decim, n_low,
+                          record.geometry.rx_pose.velocity, carrier, real, backend, components, texture)
     else:
         out = _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, s.start_time, times, fc, c,
-                            n_azimuth, decim, n_low, record.geometry.rx_pose.velocity, carrier, real)
+                            n_azimuth, decim, n_low, record.geometry.rx_pose.velocity, carrier, real,
+                            components, texture)
     x = s.array + out.astype(s.array.dtype)
     kind = s.kind
     s.array = x

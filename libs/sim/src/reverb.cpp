@@ -52,6 +52,13 @@ void check(const ReverbPower& power, const ReverbParams& params) {
   if (power.n_coarse < 1 || power.coarse == nullptr || power.density == nullptr) {
     throw std::invalid_argument("reverb: empty power grid");
   }
+  if ((power.direction == nullptr) != (power.doppler == nullptr)) {
+    throw std::invalid_argument("reverb: components need both a direction and a Doppler shift");
+  }
+  if (power.direction != nullptr) {
+    if (power.n_rows < 1) throw std::invalid_argument("reverb: no components");
+    return;
+  }
   if (power.n_rows != 1 && power.n_rows != params.n_azimuth) {
     throw std::invalid_argument("reverb: the density must have one row, or one per azimuth sector");
   }
@@ -73,6 +80,13 @@ void sigma_row(const ReverbParams& params, const ReverbPower& power, std::int64_
 std::vector<std::int64_t> active_sectors(const ReverbParams& params, const ReverbPower& power) {
   const std::vector<std::uint8_t> rows = reverb_active_rows(params, power);
   std::vector<std::int64_t> sectors;
+  if (power.direction != nullptr) {
+    // Component mode: a "sector" is a row of the density.
+    for (std::int64_t r = 0; r < power.n_rows; ++r) {
+      if (rows[r] != 0) sectors.push_back(r);
+    }
+    return sectors;
+  }
   for (std::int64_t m = 0; m < params.n_azimuth; ++m) {
     if (rows[power.n_rows == 1 ? 0 : m] != 0) sectors.push_back(m);
   }
@@ -148,9 +162,11 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
     throw std::invalid_argument("reverb: normals must cover sectors with power only");
   }
   if (n_sectors == 0) return;
+  const bool components = power.direction != nullptr;
   // With one density for all sectors, sigma is worked out once.
+  const bool shared = power.n_rows == 1 && !components;
   std::vector<double> shared_sigma;
-  if (power.n_rows == 1) {
+  if (shared) {
     shared_sigma.resize(static_cast<std::size_t>(n_low));
     sigma_row(params, power, 0, shared_sigma.data());
   }
@@ -183,17 +199,22 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
     parallel_for_host(count, [&](std::int64_t j) {
       const std::int64_t m = sectors[first + begin + j];
       const double azimuth = (static_cast<double>(m) + 0.5) * dphi;
-      const double ux = std::cos(azimuth), uy = std::sin(azimuth);
+      // The arrival direction: the sector's azimuth in the horizontal plane, or the
+      // component's own direction (which may have elevation).
+      const double ux = components ? power.direction[3 * m] : std::cos(azimuth);
+      const double uy = components ? power.direction[3 * m + 1] : std::sin(azimuth);
+      const double uz = components ? power.direction[3 * m + 2] : 0.0;
       std::vector<double> own_sigma;
-      if (power.n_rows != 1) {
+      if (!shared) {
         own_sigma.resize(static_cast<std::size_t>(n_low));
         sigma_row(params, power, m, own_sigma.data());
       }
-      const double* s = power.n_rows == 1 ? shared_sigma.data() : own_sigma.data();
+      const double* s = shared ? shared_sigma.data() : own_sigma.data();
       const double* g_re = normals + (begin + j) * 2 * n_low;
       const double* g_im = g_re + n_low;
       auto* b = reinterpret_cast<cf*>(spectra.data() + 2 * j * n_low);
-      const double doppler = 2.0 * (params.velocity.x * ux + params.velocity.y * uy) * fc / c;
+      const double doppler =
+          components ? power.doppler[m] : 2.0 * (params.velocity.x * ux + params.velocity.y * uy) * fc / c;
       if (doppler != 0.0) {
         const double rate = kTwoPi * doppler;
         std::vector<cf> shifted(static_cast<std::size_t>(n_low));
@@ -220,7 +241,9 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
       }
       for (std::int64_t ch = 0; ch < n_channels; ++ch) {
         const double* o = offsets + 3 * ch;
-        lead[j * n_channels + ch] = static_cast<float>((o[0] * ux + o[1] * uy) / c);
+        // Sector mode keeps the two-term sum of the NumPy code (uz is zero there).
+        lead[j * n_channels + ch] = components ? static_cast<float>((o[0] * ux + o[1] * uy + o[2] * uz) / c)
+                                               : static_cast<float>((o[0] * ux + o[1] * uy) / c);
       }
     });
     // Step 2: every sector into every channel with its plane-wave lead.

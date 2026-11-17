@@ -8,6 +8,7 @@
 #include <pybind11/stl.h>
 
 #include <cstring>
+#include <optional>
 
 #include "sonar/sim/paths.hpp"
 #include "sonar/sim/reverb.hpp"
@@ -252,18 +253,37 @@ void bind_simcpp(py::module_& m) {
     return p;
   };
 
-  const auto reverb_power = [](const ArrD& coarse, const ArrD& density) {
+  // `direction` [rows, 3] and `doppler` [rows] (both or neither) make each row of the density a
+  // component with its own arrival direction and Doppler shift (sonar/sim/reverb.hpp).
+  const auto reverb_power = [](const ArrD& coarse, const ArrD& density, const std::optional<ArrD>& direction,
+                               const std::optional<ArrD>& doppler) {
     if (coarse.ndim() != 1 || density.ndim() != 2 || density.shape(1) != coarse.shape(0)) {
       throw std::invalid_argument("density must have shape [rows, len(coarse)]");
     }
-    return sim::ReverbPower{coarse.data(), coarse.shape(0), density.data(), density.shape(0)};
+    sim::ReverbPower power{coarse.data(), coarse.shape(0), density.data(), density.shape(0)};
+    if (direction.has_value() != doppler.has_value()) {
+      throw std::invalid_argument("direction and doppler are given together");
+    }
+    if (direction) {
+      if (direction->ndim() != 2 || direction->shape(0) != density.shape(0) || direction->shape(1) != 3 ||
+          doppler->ndim() != 1 || doppler->shape(0) != density.shape(0)) {
+        throw std::invalid_argument("direction must have shape [rows, 3] and doppler [rows]");
+      }
+      power.direction = direction->data();
+      power.doppler = doppler->data();
+    }
+    return power;
   };
 
   m.def(
       "sim_reverb_active",
       [reverb_params, reverb_power](const ArrD& coarse, const ArrD& density, double sample_rate, double time0,
-                                    std::int64_t n_azimuth, std::int64_t decimation, std::int64_t n_low) {
-        const sim::ReverbPower power = reverb_power(coarse, density);
+                                    std::int64_t n_azimuth, std::int64_t decimation, std::int64_t n_low,
+                                    bool components) {
+        sim::ReverbPower power = reverb_power(coarse, density, std::nullopt, std::nullopt);
+        // Which rows have power does not depend on the directions: any non-null pointers
+        // select component mode (the rows need not match n_azimuth).
+        if (components) power.direction = power.doppler = density.data();
         const sim::ReverbParams p =
             reverb_params(sample_rate, 0, 0.0, time0, 0.0, 1500.0, n_azimuth, decimation, n_low, Vec3d{}, false, false);
         std::vector<std::uint8_t> active;
@@ -276,7 +296,7 @@ void bind_simcpp(py::module_& m) {
         return out;
       },
       py::arg("coarse"), py::arg("density"), py::arg("sample_rate"), py::arg("time0"), py::arg("n_azimuth"),
-      py::arg("decimation"), py::arg("n_low"),
+      py::arg("decimation"), py::arg("n_low"), py::arg("components") = false,
       "Which rows of a reverberation power density [rows, len(coarse)] give a sector any power at the reduced "
       "rate: the sectors that take random numbers.");
 
@@ -284,7 +304,7 @@ void bind_simcpp(py::module_& m) {
       "sim_reverb_sigma",
       [reverb_params, reverb_power](const ArrD& coarse, const ArrD& density, double sample_rate, double time0,
                                     std::int64_t n_azimuth, std::int64_t decimation, std::int64_t n_low) {
-        const sim::ReverbPower power = reverb_power(coarse, density);
+        const sim::ReverbPower power = reverb_power(coarse, density, std::nullopt, std::nullopt);
         const sim::ReverbParams p =
             reverb_params(sample_rate, 0, 0.0, time0, 0.0, 1500.0, n_azimuth, decimation, n_low, Vec3d{}, false, false);
         std::vector<double> sigma;
@@ -305,8 +325,9 @@ void bind_simcpp(py::module_& m) {
                                     const ArrD& normals, const ArrC& pulse, const ArrD& offsets, double sample_rate,
                                     double time0, double center_frequency, double sound_speed,
                                     std::int64_t n_azimuth, std::int64_t decimation, const Vec3d& velocity,
-                                    Backend backend, int device) {
-        const sim::ReverbPower power = reverb_power(coarse, density);
+                                    Backend backend, int device, const std::optional<ArrD>& direction,
+                                    const std::optional<ArrD>& doppler) {
+        const sim::ReverbPower power = reverb_power(coarse, density, direction, doppler);
         require_points(offsets, "offsets");
         const py::ssize_t n_channels = offsets.shape(0);
         if (total.ndim() != 2 || total.shape(0) != n_channels || !total.writeable()) {
@@ -327,10 +348,12 @@ void bind_simcpp(py::module_& m) {
       py::arg("total").noconvert(), py::arg("coarse"), py::arg("density"), py::arg("first"), py::arg("normals"),
       py::arg("pulse"), py::arg("offsets"), py::arg("sample_rate"), py::arg("time0"), py::arg("center_frequency"),
       py::arg("sound_speed"), py::arg("n_azimuth"), py::arg("decimation"), py::arg("velocity") = Vec3d{},
-      py::arg("backend") = Backend::Host, py::arg("device") = 0,
+      py::arg("backend") = Backend::Host, py::arg("device") = 0, py::arg("direction") = py::none(),
+      py::arg("doppler") = py::none(),
       "Add a run of azimuth sectors of scattering-function reverberation into `total` (complex64 [channels, n_low], "
       "in place), from the power density [rows, len(coarse)]: `normals` [sectors, 2, n_low] are standard normal "
-      "deviates for the sectors with power starting at the `first`-th.");
+      "deviates for the sectors with power starting at the `first`-th. With `direction` [rows, 3] and `doppler` "
+      "[rows], each row is a component with that arrival direction and frequency shift instead of an azimuth sector.");
 
   m.def(
       "sim_reverb_finish",

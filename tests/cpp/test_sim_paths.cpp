@@ -247,3 +247,55 @@ TEST(Reverb, RejectsNormalsThatDoNotMatchTheActiveSectors) {
   EXPECT_NO_THROW(sim::reverb_series(Backend::Host, p, power, normals.data(), 3, pulse.data(), 1, offsets.data(), 1,
                                      out.data()));
 }
+
+TEST(Reverb, ComponentsHaveTheirOwnDirectionAndDoppler) {
+  // Component mode: a row of the density is a component with an arrival direction (here
+  // straight down, which no azimuth sector can be) and a frequency shift. With a
+  // one-sample pulse the series of the element at the origin is the component's sequence
+  // times exp(2 pi i f_d t); an element three samples of travel further along the
+  // direction receives it three samples earlier; one displaced across it, unchanged.
+  sim::ReverbParams p;
+  p.sample_rate = 8000.0;
+  p.n_samples = 256;
+  p.center_frequency = 16000.0;  // a whole number of cycles per sample: no carrier phase from a lead in samples
+  p.sound_speed = kC;
+  p.n_azimuth = 4;               // only scales the density here
+  p.n_low = 256;
+  p.velocity = Vec3d{50.0, 50.0, 0.0};  // not used in component mode
+  const std::vector<double> coarse{-1.0, 1.0};
+  const double level = 0.25 * 8000.0 * 2.0 / (2.0 * kPi / 4.0);  // sigma = 0.5
+  const std::vector<double> density{level, level, 0.0, 0.0};     // the second component has no power
+  const std::vector<double> direction{0.0, 0.0, 1.0, 1.0, 0.0, 0.0};
+  const std::vector<double> doppler{1000.0, -300.0};
+  sim::ReverbPower power{coarse.data(), 2, density.data(), 2};
+  power.direction = direction.data();
+  power.doppler = doppler.data();
+  EXPECT_EQ(sim::reverb_active_sectors(p, power), 1);
+  std::mt19937 gen(5);
+  std::normal_distribution<double> normal;
+  std::vector<double> normals(2 * 256);
+  for (double& v : normals) v = normal(gen);
+  const std::vector<std::complex<double>> pulse{{1.0, 0.0}};
+  const std::vector<double> offsets{0.0, 0.0, 0.0, 0.0, 0.0, 3.0 * kC / 8000.0, 0.3, 0.2, 0.0};
+  std::vector<float> out(2 * 3 * 256);
+  sim::reverb_series(Backend::Host, p, power, normals.data(), 1, pulse.data(), 1, offsets.data(), 3, out.data());
+  const auto expected = [&](int k) {
+    const double a = 2.0 * kPi * 1000.0 * k / 8000.0;
+    return 0.5 * std::complex<double>(normals[k], normals[256 + k]) * std::complex<double>(std::cos(a), std::sin(a));
+  };
+  for (int k = 0; k < 256; ++k) {
+    const std::complex<double> origin(out[2 * k], out[2 * k + 1]);
+    const std::complex<double> deeper(out[2 * (256 + k)], out[2 * (256 + k) + 1]);
+    const std::complex<double> aside(out[2 * (512 + k)], out[2 * (512 + k) + 1]);
+    EXPECT_NEAR(std::abs(origin - expected(k)), 0.0, 2e-4) << k;
+    EXPECT_NEAR(std::abs(deeper - expected((k + 3) % 256)), 0.0, 2e-4) << k;
+    EXPECT_NEAR(std::abs(aside - origin), 0.0, 2e-4) << k;
+  }
+  // Both arrays or neither; and the normals must cover the components with power.
+  sim::ReverbPower half = power;
+  half.doppler = nullptr;
+  EXPECT_THROW(sim::reverb_active_sectors(p, half), std::invalid_argument);
+  EXPECT_THROW(sim::reverb_series(Backend::Host, p, power, normals.data(), 2, pulse.data(), 1, offsets.data(), 3,
+                                  out.data()),
+               std::invalid_argument);
+}

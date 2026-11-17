@@ -41,7 +41,7 @@ struct ReverbParams {
   /// interpolated to the record's rate.
   std::int64_t decimation = 1;
   std::int64_t n_low = 0;
-  Vec3d velocity;                 ///< of the sonar (world): Doppler of each sector, two-way
+  Vec3d velocity;                 ///< of the sonar (world): Doppler of each sector, two-way (sector mode)
   bool carrier = false;           ///< put the series on the carrier (real or analytic records)
   bool real_output = false;       ///< keep the real part: `out` is then [channels, n_samples] floats
 };
@@ -53,6 +53,14 @@ struct ReverbPower {
   std::int64_t n_coarse = 0;
   const double* density = nullptr;  ///< [n_rows, n_coarse]
   std::int64_t n_rows = 0;          ///< n_azimuth, or 1 when every sector has the same density
+  /// Component mode (both set, or neither). Each row of the density is then one component
+  /// of the reverberation with its own arrival direction and Doppler shift, in place of
+  /// the azimuth sector of that index: n_rows is any number, ReverbParams::velocity is not
+  /// used, and n_azimuth only scales the density (sigma^2 = density / fs_low * dphi / 2).
+  /// This is how bistatic geometry, the Doppler of both platforms and the arrival
+  /// elevation reach the generator (python/gpusonar/sim/reverb_bistatic.py).
+  const double* direction = nullptr;  ///< [n_rows, 3] unit vector from the array towards the arrival (world)
+  const double* doppler = nullptr;    ///< [n_rows] frequency shift of the component, Hz
 };
 
 /// Standard deviation of each sector's sequence at the reduced rate, [n_rows, n_low]:
@@ -64,7 +72,7 @@ std::vector<double> reverb_sigma(const ReverbParams& params, const ReverbPower& 
 /// sector without power is skipped and consumes no random numbers.
 std::vector<std::uint8_t> reverb_active_rows(const ReverbParams& params, const ReverbPower& power);
 
-/// Number of sectors with power.
+/// Number of sectors with power (in component mode: of components with power).
 std::int64_t reverb_active_sectors(const ReverbParams& params, const ReverbPower& power);
 
 /// True when the receive elements (offsets [n_channels, 3]) lie on a uniformly spaced
