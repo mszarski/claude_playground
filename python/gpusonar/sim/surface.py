@@ -49,6 +49,20 @@ APL-UW handbook (TR 9407), which was not read. Two things are here.
    100 kHz. So this law grows too fast with frequency; a warning is raised above
    `TRUSTED_BUBBLE_FREQUENCY`. Use a measured table where one exists.
 
+   The derivation was re-checked step by step (tests/python/test_bubble_layer.py; PHYSICS_NOTES
+   Sec. 20) and is not where the gap comes from. The unit of n is m^-4 (the source's own count
+   of 4.7e7 bubbles per m^3 at 13 m/s, its eq. 24 and Fig. 9, needs it); the population's air
+   fraction at 2 m in a 10.5 m/s wind, 0.76e-7, agrees with an independent quote of 1e-7; the
+   radii in play (33 to 330 micrometres for 100 to 10 kHz) are inside the 10 micrometre to
+   1 mm range; and integrating the full damped response of every radius (`bubble_layer_medium`)
+   gives 20 to 45 % MORE extinction than the resonant approximation, not less. What a pure
+   extinction law leaves out is physical: refraction in the layer, and the sound the bubbles
+   scatter back when the layer is opaque. Both are in the two further models below
+   (`hall_novarini_layer`, `hall_novarini_screened`); the difference from the handbook law
+   that remains (2 to 3 times its dB at 10 to 30 kHz) is a disagreement between this
+   population with linear bubble acoustics and a law fitted to measurements at sea, most
+   likely the patchiness of real bubble clouds, which no opened source lets us quantify.
+
 2. Surface backscattering strength at high frequency (`kraus_surface_db`), an empirical
    formula in wind speed, frequency and grazing angle (opened: Morency and Stilwell,
    arXiv:2210.06535, 2022, Sec. II-F, quoting D. Kraus, "Fundamentals of ocean acoustics", lecture
@@ -143,7 +157,148 @@ def bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: fl
     return (10.0 / math.log(10.0)) * 2.0 * bubble_layer_depth_integral(frequency, wind_speed, sound_speed) / np.sin(g)
 
 
-BUBBLE_LOSS_MODELS = {"hall_novarini": bubble_loss_db}
+# --- The bubble layer as an effective medium (models `hall_novarini_layer`, `hall_novarini_screened`).
+#
+# Opened: Beelen, Nijhof, de Jong, van Wijngaarden and Krug, "Bubble curtains for noise
+# mitigation: one vs. two", arXiv:2410.14415v1 (2024), eqs. (6)-(9), who print the model of
+# Commander and Prosperetti (JASA 85, 1989; not opened) with these constants:
+#
+#     c^2 / c_m^2 = 1 + 4 pi c^2 integral a n(a) / (w0^2 - w^2 + 2 i b w) da                  (6)
+#     w0^2 = p0 / (rho a^2) (Re Phi - 2 s / (a p0))                                          (7)
+#     b    = 2 mu / (rho a^2) + p0 / (2 rho a^2 w) Im Phi + w^2 a / (2 c)                    (8)
+#     Phi  = 3 g / (1 - 3 i (g - 1) x (sqrt(i / x) coth sqrt(i / x) - 1))                    (9)
+#
+# p0 = p_inf + 2 s / a, s = 72.8 mN/m, mu = 1 mPa s, g = 1.4, thermal diffusivity of air
+# D = 18.46e-6 m^2/s; the three terms of b are viscous, thermal and radiation damping. The
+# source prints "x = D / (w a)"; x must be a pure number (it sits under a square root beside i),
+# so x = D / (w a^2) is used: a misprint in the source, and the only reading with the right
+# limits (Phi -> 3 g for large bubbles, adiabatic; Phi -> 3 for small ones, isothermal: tested).
+WATER_VISCOSITY, SURFACE_TENSION, AIR_DIFFUSIVITY = 1.0e-3, 72.8e-3, 18.46e-6
+
+
+def bubble_oscillator(radius, frequency: float, depth=0.0, sound_speed: float = 1500.0):
+    """(w0^2, b): squared natural angular frequency and damping coefficient (1/s) of an air
+    bubble of `radius` (m) at `depth` (m) driven at `frequency` (Hz); eqs. (7)-(9) above."""
+    a = np.asarray(radius, dtype=float)
+    w = 2.0 * np.pi * float(frequency)
+    p0 = ATMOSPHERE + WATER_DENSITY * GRAVITY * np.asarray(depth, dtype=float) + 2.0 * SURFACE_TENSION / a
+    x = AIR_DIFFUSIVITY / (w * a * a)
+    root = np.sqrt(1j / x)
+    phi = 3.0 * AIR_GAMMA / (1.0 - 3.0j * (AIR_GAMMA - 1.0) * x * (root / np.tanh(root) - 1.0))
+    w0_sq = p0 / (WATER_DENSITY * a * a) * (phi.real - 2.0 * SURFACE_TENSION / (a * p0))
+    b = (2.0 * WATER_VISCOSITY / (WATER_DENSITY * a * a) + p0 / (2.0 * WATER_DENSITY * a * a * w) * phi.imag
+         + w * w * a / (2.0 * sound_speed))
+    return w0_sq, b
+
+
+def bubble_layer_medium(frequency: float, depth, wind_speed: float, sound_speed: float = 1500.0, n_radius: int = 1600):
+    """The Hall-Novarini layer as an effective medium at `depth` (array, m): a dict with
+    `extinction` and `scattering` (1/m of intensity) and `phase_speed` (m/s).
+
+    Every bubble radius of the population is integrated with its full damped response, eq. (6);
+    nothing is assumed about resonance. extinction = 2 |Im k_m|; scattering is the integral
+    of 4 pi |f|^2 n with f = a w^2 / (w0^2 - w^2 + 2 i b w), the bubble's scattering amplitude
+    in eq. (6) (the two are tied by the optical theorem: their ratio at one radius is the
+    radiation part of b over b)."""
+    z = np.atleast_1d(np.asarray(depth, dtype=float))
+    w = 2.0 * np.pi * float(frequency)
+    k = w / float(sound_speed)
+    a = np.geomspace(R_MIN, R_MAX, int(n_radius))
+    w0_sq, b = bubble_oscillator(a[None, :], frequency, z[:, None], sound_speed)
+    n = hall_novarini_density(a[None, :], z[:, None], wind_speed)
+    f = a[None, :] * w * w / (w0_sq - w * w + 2.0j * b * w)
+    km = k * np.sqrt(1.0 + 4.0 * np.pi / (k * k) * np.trapezoid(f * n, a, axis=1))
+    return {"extinction": 2.0 * np.abs(km.imag), "scattering": 4.0 * np.pi * np.trapezoid(np.abs(f) ** 2 * n, a, axis=1),
+            "phase_speed": w / km.real}
+
+
+def _layer_profile(frequency: float, wind_speed: float, sound_speed: float, n_depth: int = 240):
+    u = max(float(wind_speed), 0.0)
+    scale = 0.4 if u <= 7.5 else 0.4 + 0.115 * (u - 7.5)
+    z = np.linspace(0.0, 14.0 * scale, n_depth)
+    return z, bubble_layer_medium(frequency, z, u, sound_speed)
+
+
+def bubble_layer_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0, screened: bool = False):
+    """Loss in dB at one surface bounce through the Hall-Novarini layer treated as an
+    effective medium (model `hall_novarini_layer`; with `screened`, `hall_novarini_screened`).
+
+    Differences from `bubble_loss_db`, each from first principles:
+      - extinction from the full damped response of every radius (`bubble_layer_medium`),
+        not the resonant approximation, so the population's edges do not switch the loss off;
+      - the ray is refracted in the layer: Snell's law with the layer's phase speed,
+        cos t(z) = cos t0 c_m(z) / c, replaces the straight path and the 2 degree floor. Where
+        bubbles below resonance dominate the layer is slow and the ray steepens (a shorter
+        path); a ray that would turn below the surface (a fast layer, shallow angle) is
+        integrated to its turning depth only;
+      - `screened`: an optically thick layer is not a hole. Of the energy it removes from the
+        path, the bubbles scatter back into the water the single-scattering albedo of a deep
+        layer of isotropic scatterers, A = (w/2) (1 - m ln(1 + 1/m)), m = sin t0, w the
+        layer's ratio of scattering to extinction (the single-scattering result of radiative
+        transfer for a half-space, derived in PHYSICS_NOTES Sec. 20). The energy left is
+        exp(-T) + A (1 - exp(-T)). This is an upper bound on what comes back near the
+        specular path: A counts all directions.
+    """
+    z, medium = _layer_profile(frequency, wind_speed, sound_speed)
+    g = np.asarray(grazing, dtype=float)
+    cos0 = np.cos(g).reshape(-1, 1)
+    arg = 1.0 - (cos0 * medium["phase_speed"][None, :] / float(sound_speed)) ** 2            # sin^2 of the local grazing angle
+    # From below (the last depth) up to the surface, or to the first depth where the ray turns.
+    alive = np.cumprod((arg > 0.0)[:, ::-1], axis=1)[:, ::-1].astype(bool)
+    root = np.sqrt(np.where(alive, np.maximum(arg, 0.0), 0.0))
+    beta = medium["extinction"]
+    # A depth step with sin^2 linear across it: dz * 2 / (s1 + s2), finite at a turning point.
+    denom = np.maximum(root[:, 1:] + root[:, :-1], 1e-12)
+    steps = 0.5 * (beta[None, 1:] + beta[None, :-1]) * np.diff(z)[None, :] * 2.0 / denom
+    tau = 2.0 * np.sum(np.where(alive[:, 1:], steps, 0.0), axis=1)
+    kept = np.exp(-tau)
+    if screened:
+        total = float(np.trapezoid(beta, z))
+        albedo = float(np.trapezoid(medium["scattering"], z)) / total if total > 0.0 else 0.0
+        m = np.maximum(np.sin(g).ravel(), 1e-9)
+        kept = kept + 0.5 * albedo * (1.0 - m * np.log1p(1.0 / m)) * (1.0 - kept)
+    out = -10.0 * np.log10(np.maximum(kept, 1e-300))
+    return out.reshape(g.shape) if g.ndim else float(out[0])
+
+
+def bubble_screened_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+    """`bubble_layer_loss_db` with the scattered return of an opaque layer (model `hall_novarini_screened`)."""
+    return bubble_layer_loss_db(grazing, wind_speed, frequency, sound_speed, screened=True)
+
+
+def apl_1994_bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+    """Surface bubble loss per bounce, dB, by the empirical law the owner adopted (model
+    `apl_1994`, the recommended one):
+
+        loss = 1.26e-3 / sin(t) * U^1.57 * f^0.85                       U >= 6 m/s
+        loss = (the value at 6 m/s) * exp(1.2 (U - 6))                  U <  6 m/s
+
+    t the grazing angle, U the wind speed at 10 m in m/s, f in kHz.
+
+    Source: the formula was read in arlpy 1.9.3 (`arlpy.uwa.bubble_surface_loss`; BSD
+    3-clause, Copyright (c) 2016-2020 Acoustic Research Laboratory), whose docstring says
+    "computed based on APL model (1994)", and in the same authors' UnderwaterAcoustics.jl
+    (`surface_reflection_coef`, MIT licence, commit 7b9c47e), which cites "APL-UW Technical
+    Report 9407 II-21". TR 9407 itself was not read. This is our own code for that formula:
+    arlpy takes the angle from the vertical and returns an amplitude factor; here the angle is
+    grazing and the result is dB of energy. Neither source states a range of frequency, wind
+    speed or angle, and neither caps the loss; 1 / sin(t) diverges at grazing incidence, so the
+    angle is floored at `MIN_GRAZING` (our guard) and a warning is raised above `MAX_WIND`.
+    `sound_speed` is not used.
+    """
+    u = max(float(wind_speed), 0.0)
+    if u > MAX_WIND:
+        warnings.warn(f"apl_1994 bubble loss: wind speed {wind_speed} m/s is above {MAX_WIND} m/s; the sources "
+                      "state no range and the power law is an extrapolation there", stacklevel=2)
+    f = float(frequency) / 1e3
+    base = 1.26e-3 * max(u, 6.0) ** 1.57 * f**0.85
+    if u < 6.0:
+        base = 1.26e-3 * 6.0**1.57 * f**0.85 * math.exp(1.2 * (u - 6.0))
+    return base / np.sin(np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING))
+
+
+BUBBLE_LOSS_MODELS = {"hall_novarini": bubble_loss_db, "hall_novarini_layer": bubble_layer_loss_db,
+                      "hall_novarini_screened": bubble_screened_loss_db, "apl_1994": apl_1994_bubble_loss_db}
 
 
 def bubble_loss_table(model: str, wind_speed: float, frequency: float, sound_speed: float = 1500.0):

@@ -76,6 +76,9 @@ def main() -> None:
         header(f"Bubble loss per surface bounce, dB, {f_hz / 1e3:g} kHz (resonant radius {surface.resonant_radius(f_hz) * 1e6:.0f} um)")
         for u in args.wind:
             print(row(f"hall_novarini, {u:g} m/s", surface.bubble_loss_db(g, u, f_hz, c)))
+            print(row(f"hall_novarini_layer, {u:g} m/s", surface.bubble_layer_loss_db(g, u, f_hz, c)))
+            print(row(f"hall_novarini_screened, {u:g} m/s", surface.bubble_screened_loss_db(g, u, f_hz, c)))
+            print(row(f"apl_1994 (adopted), {u:g} m/s", surface.apl_1994_bubble_loss_db(g, u, f_hz, c)))
             if oracle is not None:
                 # arlpy takes the angle from the vertical and returns an amplitude factor.
                 print(row(f"arlpy oracle, {u:g} m/s", [-20 * np.log10(float(oracle.bubble_surface_loss(u, f_hz, np.pi / 2 - a))) for a in np.maximum(g, surface.MIN_GRAZING)]))

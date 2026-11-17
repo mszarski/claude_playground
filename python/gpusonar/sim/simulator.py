@@ -49,7 +49,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
                   noise_spectrum=None, reverberation: list | None = None,
-                  beam_floor_db: float | None = None,
+                  beam_floor_db: float | None = None, noise_statistics: dict | None = None,
                   backend=core.Backend.Host, engine: str | None = None) -> "core.PingRecord":
     """Simulate one transmit and return its record.
 
@@ -247,12 +247,21 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             level = float(np.asarray(noise_spectrum(np.array([record.samples.center_frequency])))[0])
             sigma = np.sqrt(2.0 * 10.0 ** (level / 10.0) * fs_bb) * 10.0 ** (sens / 20.0)
             g = rng or np.random.default_rng()
-            samples = samples + (sigma / np.sqrt(2.0)) * (
+            ambient = (sigma / np.sqrt(2.0)) * (
                 g.standard_normal(samples.shape) + 1j * g.standard_normal(samples.shape)).astype(samples.dtype)
+            stats = noise_models.noise_statistics(noise_statistics)
+            if stats is not None:
+                # K-distributed noise (`ambient_noise.statistics`, sim/noise.py): the gamma
+                # texture on the complex envelope; white here, so no filter follows it.
+                slow = stats["correlation_time"] > 0.0
+                ambient = ambient * noise_models.gamma_texture(
+                    samples.shape[1], fs_bb, stats["shape"], stats["correlation_time"], g, samples.shape[0],
+                    stats["common"] if slow else False).astype(np.float32)
+            samples = samples + ambient
         else:
-            samples = samples + noise_models.gaussian_noise(
+            samples = samples + noise_models.k_noise(
                 samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
-                positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+                noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
     taps.sim_tap(record, "noise", samples)
     samples = receiver.apply_hardware_tvg(record, samples)
     taps.sim_tap(record, "hardware_gain", samples)
@@ -449,6 +458,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         provider=provider, absorption_model=cfg.get("absorption", "francois_garrison"),
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
+        noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
         reverberation=cfg.get("reverberation"),
         beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"), engine=engine)
     motion = plat.get("motion")
