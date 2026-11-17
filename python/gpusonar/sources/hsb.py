@@ -38,7 +38,9 @@ import numpy as np
 from ..sonar import SonarModel
 from .flank_stream import FULL_SCALE_COUNTS, HEADER_BYTES, BlockError, PingAssembler, encode_block
 
-FRAME_SAMPLES = 1600           # 25 ms of the 64 kSPS stream: 153,728 bytes with 32 channels
+FRAME_SAMPLES = 800            # 12.5 ms of the 64 kSPS stream: 76,928 bytes with 32 channels. A frame leaves the sender
+                               # as one burst of datagrams, and this one fits a default-sized (208 KB) socket buffer:
+                               # 1600-sample frames lost about 1 in 100 on loopback where the buffer could not be raised.
 FRAME_ALIGN = 128              # the Sensor Bridge data plane moves frames in 128-byte pages
 
 
@@ -463,7 +465,7 @@ if Operator is not None:
         """
 
         def __init__(self, chain, receiver: FrameReceiver, hololink_channel, cuda: CudaDriver, frame_size: int,
-                     n_pings: int | None = None, queue_frames: int = 64, idle_timeout: float | None = 15.0,
+                     n_pings: int | None = None, queue_frames: int = 128, idle_timeout: float | None = 15.0,
                      on_report=None, receiver_affinity=None):
             self.chain, self.receiver = chain, receiver
             self._channel, self._cuda, self._frame_size = hololink_channel, cuda, int(frame_size)
