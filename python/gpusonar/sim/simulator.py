@@ -155,7 +155,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             from . import bottom as bottom_model
             keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
             if "sediment" in item:
-                item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file")), **item)
+                item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
             missing = [k for k in keys if k not in item]
             if missing:
                 raise ValueError(f"fluid_sediment reverberation needs {missing}")
@@ -464,6 +464,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         cfg = name_or_config
     else:
         cfg = load_scenario_config(name_or_config, overrides)
+    cfg = acoustics.resolve_sea_state(cfg)     # `sea_state: 0..9` wherever `wind_speed` is accepted
     sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
     env = resolve_environment(cfg.get("environment"))
     tier = cfg.get("fidelity", "free_field")

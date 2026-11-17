@@ -17,8 +17,39 @@
 # status: confirmed   - every number in the entry was read from the cited public document.
 # status: unconfirmed - illustrative; a warning is raised when it is used.
 #
+# One convention in this file: the model takes RATIOS to the water above the sediment (rho, nu).
+# A block in physical units states the water it refers to, and the loader divides by it. The two
+# sources below agree on the ratios (1.845 and 1.178 for medium sand, 1.147 and 0.984 for very
+# fine silt) although one prints kg/m3 and m/s for water of 1000 kg/m3 and 1500 m/s and the
+# other for 1023 kg/m3 and 1528 m/s: the ratio is what both took from their source
+# (tests/python/test_sediment_table.py checks this).
+#
+# Reflection-only entries (`reflection_only: true`, a `reflection:` block): density, sound speed
+# and loss parameter only, read from UnderwaterAcoustics.jl. They serve the flat-interface
+# reflection coefficient (image-source `bottom: {sediment: name}`, Bellhop
+# `environment: {sediment: name}`, bottom.sediment_reflection). They have no roughness or volume
+# parameters, so the scattering models refuse them unless the scenario item gives w2, gamma2
+# and sigma2 itself. `unconfirmed_fields` lists parameters of an otherwise confirmed entry
+# that could not be settled; a warning is raised when one is used.
+#
+# `grain_size_phi: [low, high]` is the mean grain size range (phi = -log2 of the diameter in mm)
+# that Lurton, Lamarche et al., "Backscatter measurements by seafloor-mapping sonars: Guidelines
+# and Recommendations" (GeoHab Backscatter Working Group, 2015; CC BY 4.0;
+# doi:10.5281/zenodo.10089261), Table 2-1, gives for that sediment name. That table ("Adapted
+# from APL 1994 ... nominal values for c1 and rho1 (1500 m/s and 1000 kg/m3)") prints density,
+# velocity and absorption in dB per wavelength for nine classes, clay to coarse sand, and is a
+# second open source for those nine rows: it agrees with the entries here to its printed digits
+# (tests/python/test_sediment_table.py), with one exception noted at coarse_silt. It has no
+# roughness or volume parameters either.
+#
+# Still missing for every reflection-only row: w2, gamma2, sigma2. No open source that could be
+# reached gives them, or a regression against grain size that would (docs/ORG_ARL_SURVEY.md,
+# section 10, lists what was searched and what could not be opened). They are not filled with
+# guesses. tools/fit_sediment.py fits them to measured backscattering strength and writes a
+# row with `status: fitted (...)`.
+#
 # APL-UW TR 9407 (limited distribution) holds the usual table from clay to rough rock; it was
-# not read. The two confirmed rows below were read from an arXiv paper whose authors attribute
+# not read. The two complete rows below were read from an arXiv paper whose authors attribute
 # them to TR 9407. No other complete row was found on arXiv:
 # - Olson, Lyons and Saebo, arXiv:1601.06078, Table II gives "generic rock" as an elastic solid
 #   only (compressional speed 3600 m/s, shear speed 1900 m/s, density 2500 kg/m3, loss
@@ -28,6 +59,7 @@
 #   arXiv:2003.11156 Tables 1-2) lack the roughness and volume parameters.
 
 medium_sand:
+  grain_size_phi: [1.0, 2.0]
   physical:
     density: 1845.0
     sound_speed: 1767.0
@@ -46,10 +78,15 @@ medium_sand:
     strength is printed there in m^(4 - gamma).
   assumptions: >-
     The paper does not print its water density and sound speed; 1000 kg/m3 and 1500 m/s are
-    assumed here to form the ratios. "Vol. Scat. Strength [dB/m]" is read as 10 log10 of the
-    volume scattering cross section per unit volume in 1/m.
+    used here to form the ratios. That choice is now supported: it gives rho = 1.845 and
+    nu = 1.178, and UnderwaterAcoustics.jl (MIT; src/stdlib.jl:122, "MediumSand", attributed
+    there to APL-UW TR 9407 IV-6 Table 2) gives 1887.44 / 1023 = 1.8450 and
+    1800.29 / 1528 = 1.1782 for the same sediment; its loss parameter 0.01624 is within 0.4 %
+    of the 0.016189 that follows from 10 dB/m at 20 kHz. "Vol. Scat. Strength [dB/m]" is read
+    as 10 log10 of the volume scattering cross section per unit volume in 1/m.
 
 very_fine_silt:
+  grain_size_phi: [7.0, 8.0]
   physical:
     density: 1147.0
     sound_speed: 1476.0
@@ -65,8 +102,12 @@ very_fine_silt:
     Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1, column "Very Fine Silt" (values
     attributed there to APL-UW TR 9407; attenuation at 20 kHz; spectral strength in m^(4 - gamma)).
   assumptions: >-
-    Water density 1000 kg/m3 and sound speed 1500 m/s assumed (not printed in the paper).
-    "Vol. Scat. Strength [dB/m]" read as 10 log10 of the volume cross section per unit volume in 1/m.
+    Water density 1000 kg/m3 and sound speed 1500 m/s used to form the ratios (not printed in
+    the paper). Supported by UnderwaterAcoustics.jl (src/stdlib.jl:134, "VeryFineSilt"):
+    1173.38 / 1023 = 1.1470 and 1503.09 / 1528 = 0.9837 against 1.147 and 0.984 here; its loss
+    parameter 0.00194 is 2.4 % above the 0.001893 that follows from the paper's two-digit
+    1.4 dB/m. "Vol. Scat. Strength [dB/m]" read as 10 log10 of the volume cross section per
+    unit volume in 1/m.
 
 placeholder_sand:
   rho: 1.9
@@ -81,3 +122,294 @@ placeholder_sand:
     scenarios already use for a sand bottom (1.9, 1650 m/s, 0.8 dB per wavelength); roughness
     and volume numbers were chosen to give about -30 dB backscattering strength at 20 degrees
     and 100 kHz.
+
+
+# --- Reflection-only entries --------------------------------------------------------------
+# Read from UnderwaterAcoustics.jl (org-arl, MIT licence), src/stdlib.jl lines 113-136, commit
+# 7b9c47e (2026-11-12), whose comment reads "seabeds from APL-UW TR 9407 (1994), IV-6 Table 2;
+# ratios evaluated wrt reference rho=1023, c=1528". Each line there is
+# FluidBoundary(density kg/m3, sound speed m/s, dimensionless loss parameter); the numbers
+# are copied as printed and the reference water is the one that comment states. TR 9407 was
+# not read. The loss parameter is the one of src/basic.jl:171 (dB per wavelength /
+# (40 pi / ln 10)), the same as `delta` here. Its rows MediumSand and VeryFineSilt are the two
+# complete entries above and are not repeated.
+
+rock:
+  reflection:
+    density: 2557.50
+    sound_speed: 3820.00
+    delta: 0.01374
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:115, "Rock"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+pebbles:
+  reflection:
+    density: 2557.50
+    sound_speed: 2750.40
+    delta: 0.01374
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:116, "Pebbles"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+sandy_gravel:
+  reflection:
+    density: 2549.32
+    sound_speed: 2073.50
+    delta: 0.01705
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  unconfirmed_fields: [nu]
+  note: >-
+    The sound speed is uncertain. The table line gives 2073.50 m/s, a ratio of 1.3570. Two
+    tests in the same repository use the ratio 1.3370 with this entry's density ratio 2.492
+    and loss 0.01705 (test/test_pekeris.jl:229, FluidBoundary(2.492 * 1023, 1.3370 * 1528,
+    0.01705); test/test_basic.jl:57). One of the two is a typing error and nothing read
+    here decides which; both keep the column monotonic. The table's value is carried.
+    With 1.3370 the speed would be 2042.94 m/s for water of 1528 m/s.
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:117, "SandyGravel"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+very_coarse_sand:
+  reflection:
+    density: 2455.20
+    sound_speed: 1996.64
+    delta: 0.01667
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:118, "VeryCoarseSand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+muddy_sandy_gravel:
+  reflection:
+    density: 2367.22
+    sound_speed: 1952.48
+    delta: 0.0163
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:119, "MuddySandyGravel"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+coarse_sand:
+  grain_size_phi: [0.0, 1.0]
+  reflection:
+    density: 2282.31
+    sound_speed: 1910.46
+    delta: 0.01638
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:120, "CoarseSand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+gravelly_muddy_sand:
+  reflection:
+    density: 2200.47
+    sound_speed: 1870.42
+    delta: 0.01645
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:121, "GravellyMuddySand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+muddy_gravel:
+  reflection:
+    density: 1652.15
+    sound_speed: 1741.31
+    delta: 0.0161
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:123, "MuddyGravel"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+fine_sand:
+  grain_size_phi: [2.0, 3.0]
+  reflection:
+    density: 1484.37
+    sound_speed: 1691.95
+    delta: 0.01602
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:124, "FineSand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+muddy_sand:
+  reflection:
+    density: 1369.80
+    sound_speed: 1650.24
+    delta: 0.01728
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:125, "MuddySand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+very_fine_sand:
+  grain_size_phi: [3.0, 4.0]
+  reflection:
+    density: 1297.16
+    sound_speed: 1614.79
+    delta: 0.01875
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:126, "VeryFineSand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+clayey_sand:
+  reflection:
+    density: 1252.15
+    sound_speed: 1583.62
+    delta: 0.02019
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:127, "ClayeySand"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+coarse_silt:
+  grain_size_phi: [4.0, 5.0]
+  note: >-
+    The two open sources differ slightly on the sound speed: 1555.35 / 1528 = 1.0179 here
+    (UnderwaterAcoustics.jl) against 1523 / 1500 = 1.0153 in the GeoHab report's Table 2-1.
+    Density and loss agree. The difference moves the normal-incidence reflection loss by
+    0.1 dB; the value of the source this entry was read from is kept.
+  reflection:
+    density: 1222.49
+    sound_speed: 1555.35
+    delta: 0.02158
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:128, "CoarseSilt"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+sandy_silt:
+  reflection:
+    density: 1195.89
+    sound_speed: 1527.85
+    delta: 0.01261
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:129, "SandySilt"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+medium_silt:
+  grain_size_phi: [5.0, 6.0]
+  reflection:
+    density: 1175.43
+    sound_speed: 1510.43
+    delta: 0.00676
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:130, "MediumSilt"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+sandy_mud:
+  reflection:
+    density: 1175.43
+    sound_speed: 1508.59
+    delta: 0.00386
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:131, "SandyMud"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+fine_silt:
+  grain_size_phi: [6.0, 7.0]
+  reflection:
+    density: 1174.40
+    sound_speed: 1506.76
+    delta: 0.00306
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:132, "FineSilt"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+sandy_clay:
+  reflection:
+    density: 1173.38
+    sound_speed: 1504.93
+    delta: 0.00242
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:133, "SandyClay"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+silty_clay:
+  reflection:
+    density: 1172.36
+    sound_speed: 1501.11
+    delta: 0.00163
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:135, "SiltyClay"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.
+
+clay:
+  grain_size_phi: [8.0, null]
+  reflection:
+    density: 1171.34
+    sound_speed: 1497.44
+    delta: 0.00148
+    water_density: 1023.0
+    water_sound_speed: 1528.0
+  reflection_only: true
+  status: confirmed
+  source: >-
+    UnderwaterAcoustics.jl (MIT), src/stdlib.jl:136, "Clay"; attributed there to APL-UW
+    TR 9407 (1994), IV-6 Table 2.

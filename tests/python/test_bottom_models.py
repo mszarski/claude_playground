@@ -189,7 +189,7 @@ def test_sediment_table(tmp_path):
     with pytest.warns(UserWarning, match="unconfirmed"):
         assert bottom.sediment("placeholder_sand") == SAND
     with pytest.raises(ValueError, match="unknown sediment"):
-        bottom.sediment("clay")
+        bottom.sediment("no_such_sediment")
     mine = tmp_path / "sediments.yaml"
     mine.write_text("site: {rho: 1.8, nu: 1.12, delta: 0.01, w2: 1.0e-5, gamma2: 3.0, sigma2: 0.001, status: confirmed, source: test}\n"
                     "half: {rho: 1.8, nu: 1.12}\n")

@@ -156,25 +156,87 @@ def sediment_table(path=None) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def sediment(name: str, path=None) -> dict:
-    """The six parameters of a named sediment from `configs/sediments.yaml` (or `path`). An
-    entry gives them directly, or gives `physical:` values that `parameters_from_physical`
-    converts. An entry whose `status` is not "confirmed" raises a warning: its numbers are not
-    from a source."""
-    import warnings
+REFLECTION_KEYS = ("rho", "nu", "delta")
+DB_PER_WAVELENGTH = 40.0 * math.pi / math.log(10.0)
+"""dB per wavelength for a loss parameter delta of one: a = delta 40 pi / ln 10 (the same
+conversion as in `propagation.rayleigh_reflection`; UnderwaterAcoustics.jl (MIT), src/basic.jl:171-179,
+prints it and attributes it to APL-UW TR 9407, IV-9 equation (4))."""
+
+
+def _entry(name: str, path=None) -> dict:
+    """A table entry with its ratios worked out. `physical:` gives all six parameters in
+    physical units; `reflection:` gives density (kg/m3), sound_speed (m/s) and the loss
+    parameter delta with the water density and sound speed the source's ratios refer to."""
     table = sediment_table(path)
     if name not in table:
         raise ValueError(f"unknown sediment {name!r}; the table has {sorted(table)}")
     entry = table[name]
     if "physical" in entry:
         entry = dict(parameters_from_physical(**{k: float(v) for k, v in entry["physical"].items()}), **entry)
-    missing = [k for k in SEDIMENT_KEYS if k not in entry]
+    if "reflection" in entry:
+        r = {k: float(v) for k, v in entry["reflection"].items()}
+        entry = dict({"rho": r["density"] / r["water_density"], "nu": r["sound_speed"] / r["water_sound_speed"],
+                      "delta": r["delta"]}, **entry)
+    return entry
+
+
+def _warn_status(name: str, entry: dict, keys) -> None:
+    import warnings
+    # "confirmed": read from a cited source. "fitted (...)": fitted to measurements by
+    # tools/fit_sediment.py; what the data left open is in `unconfirmed_fields`.
+    if entry.get("status") != "confirmed" and not str(entry.get("status", "")).startswith("fitted"):
+        warnings.warn(f"sediment {name!r} is {entry.get('status', 'unconfirmed')}: its parameters are not from a "
+                      "measured or published source", stacklevel=3)
+    doubtful = [k for k in entry.get("unconfirmed_fields", []) if k in keys]
+    if doubtful:
+        warnings.warn(f"sediment {name!r}: {doubtful} could not be confirmed (see the entry's note in the sediment "
+                      "table)", stacklevel=3)
+
+
+def is_reflection_only(name: str, path=None) -> bool:
+    """True for an entry that carries density, speed and loss but no roughness or volume parameters."""
+    entry = _entry(name, path)
+    return any(k not in entry for k in SEDIMENT_KEYS) and all(k in entry for k in REFLECTION_KEYS)
+
+
+def sediment(name: str, path=None, supplied=None) -> dict:
+    """The six parameters of a named sediment from `configs/sediments.yaml` (or `path`). An
+    entry gives them directly, or gives `physical:` values that `parameters_from_physical`
+    converts. An entry whose `status` is not "confirmed" raises a warning: its numbers are not
+    from a source.
+
+    Entries marked `reflection_only` carry the density ratio, speed ratio and loss parameter
+    only. They are enough for the reflection coefficient (`sediment_reflection`) and not for
+    the scattering strength: asking for one here is an error naming the missing parameters,
+    unless `supplied` (the scenario item) gives them, in which case what the table has is returned."""
+    entry = _entry(name, path)
+    missing = [k for k in SEDIMENT_KEYS if k not in entry and k not in (supplied or {})]
+    if missing:
+        what = ("is reflection-only (density, sound speed and loss; usable for bottom reflection): for a "
+                "scattering strength give" if entry.get("reflection_only") else "lacks")
+        raise ValueError(f"sediment {name!r} {what} {missing}")
+    _warn_status(name, entry, SEDIMENT_KEYS)
+    return {k: float(entry[k]) for k in SEDIMENT_KEYS if k in entry}
+
+
+def sediment_reflection(name: str, path=None) -> dict:
+    """{rho, nu, delta} of a named sediment: all that the flat-interface reflection coefficient
+    needs. Works for every entry, the reflection-only ones included."""
+    entry = _entry(name, path)
+    missing = [k for k in REFLECTION_KEYS if k not in entry]
     if missing:
         raise ValueError(f"sediment {name!r} lacks {missing}")
-    if entry.get("status") != "confirmed":
-        warnings.warn(f"sediment {name!r} is {entry.get('status', 'unconfirmed')}: its parameters are not from a "
-                      "measured or published source", stacklevel=2)
-    return {k: float(entry[k]) for k in SEDIMENT_KEYS}
+    _warn_status(name, entry, REFLECTION_KEYS)
+    return {k: float(entry[k]) for k in REFLECTION_KEYS}
+
+
+def fluid_halfspace(name: str, water_sound_speed: float, path=None) -> dict:
+    """A named sediment as the fluid half-space the eigenray providers take:
+    {speed (m/s), density (relative to the water), attenuation (dB per wavelength)}, with
+    speed = nu x the water sound speed given here (the table holds ratios)."""
+    par = sediment_reflection(name, path)
+    return {"speed": par["nu"] * float(water_sound_speed), "density": par["rho"],
+            "attenuation": par["delta"] * DB_PER_WAVELENGTH}
 
 
 def _vertical(k2, horizontal):
