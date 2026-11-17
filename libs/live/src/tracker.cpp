@@ -31,13 +31,22 @@ M2 measurement_cov(const Detection& d, const TrackerOptions& o) {
 void take_depth(Track& t, const Detection& d) {
   if (!(std::isfinite(d.depth) && std::isfinite(d.depth_sigma) && d.depth_sigma > 0.0)) return;
   const double r = d.depth_sigma * d.depth_sigma;
+  double z = d.depth;
+  if (d.depth_ambiguous) {
+    // Several candidates: the nearest to the depth the track has, if within three sigma.
+    if (!std::isfinite(t.depth)) return;
+    for (double c : d.depth_alternatives) {
+      if (std::abs(c - t.depth) < std::abs(z - t.depth)) z = c;
+    }
+    if (std::abs(z - t.depth) > 3.0 * std::sqrt(t.depth_var + r)) return;
+  }
   if (!std::isfinite(t.depth)) {
-    t.depth = d.depth;
+    t.depth = z;
     t.depth_var = r;
     return;
   }
   const double k = t.depth_var / (t.depth_var + r);
-  t.depth += k * (d.depth - t.depth);
+  t.depth += k * (z - t.depth);
   t.depth_var *= 1.0 - k;
 }
 

@@ -1,0 +1,25 @@
+# Stage 3: two rows 1.8 m apart on the full face, 100 m of isovelocity water over sand, a target
+# at 60 m depth 3 km away (image-source multipath to first order). Two rows this far apart repeat
+# every 9.6 degrees; here water depth and range confine every arrival to within 4 degrees of
+# level, so with chain.elevation.sector_from_depth the elevation is unambiguous.
+#   chain: configs/deploy/popoto_face_2row.yaml (without its sync section: these pings are at baseband)
+name: popoto_face_2row_shallow
+sonar: popoto_long_range_2row
+fidelity: image_source
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [2700.0, 3300.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 100.0}
+propagation:
+  surface_z: 0.0
+  bottom_z: 100.0
+  max_order: 1
+  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+platform: {position: [0, 0, 30.0], rpy: [0.0349, 0, 0], velocity: [1.5, 0, 0]}
+pings: {count: 4, interval: 5.0}
+scene:
+  - {type: points, label: target, positions: [[400.0, 2970.0, 60.0]], target_strength_db: 15.0}
+absorption: ainslie_mccolm
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+seed: 23

@@ -18,6 +18,10 @@ struct Detection {
   double depth = std::numeric_limits<double>::quiet_NaN();        ///< m, straight-line depth from elevation (stacked rows); NaN: none
   double depth_sigma = std::numeric_limits<double>::quiet_NaN();
   double first_range = std::numeric_limits<double>::quiet_NaN();  ///< m, the nearest cell of the cluster (its leading edge)
+  /// The elevation was ambiguous: `depth` is one candidate and these are the others. A track that
+  /// has a depth takes the one that fits it; a track without one waits.
+  bool depth_ambiguous = false;
+  std::vector<double> depth_alternatives{};
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]

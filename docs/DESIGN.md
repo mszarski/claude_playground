@@ -85,190 +85,301 @@ SAS-specific (`sas_minsas120`): along-track resolution 2.1 cm (half the 4.2 cm t
 
 The Popoto array is shown as its scenario uses it (32 hydrophones, 6–10 kHz). `array.count` sets the size; boards of eight inputs follow.
 
-### Option: stacked rows on the long-range Popoto array (elevation and depth)
+### The long-range Popoto array as a staged build: one row, then stacked rows (elevation and depth)
 
-One horizontal line of hydrophones measures one angle: the angle between an arrival and the line itself (the cone
-angle). It cannot tell an echo from above from one from below, it reports the bearing of anything off the
-horizontal a little wrong, and it knows nothing of depth. A second line of 32 hydrophones at a different height on the
-vehicle (or a third) measures the missing angle, in the active mode and in the passive one.
+One horizontal line of hydrophones measures one angle, the angle between an arrival and the line (the cone angle). It cannot tell an
+echo from above from one from below, reports the bearing of anything off the horizontal a little wrong, and knows nothing of depth.
+More lines at other heights measure the missing angle, in the active mode (the main one) and in the passive one.
 
-This is an option. One row stays the default; the software processes a one-row array exactly as before (the report
-lines are identical to the last digit, checked). The numbers below are from `tools/popoto_elevation_study.py`
-(analysis, with the estimator checked by Monte Carlo) and `tools/popoto_elevation_bench.py` (the software run on
-simulated pings). Nothing here has been on a vehicle.
+**What the owner has said, and how it is read here.**
 
-**What is offered**
+| The owner's words | Read as | Where it is |
+| --- | --- | --- |
+| "I can have a vertical straight face 2m high and 9m long" | the full vehicle offers a flat vertical face of 2 m × 9 m to mount on (confirmed) | `platform` in `popoto_long_range_2row/_3row.yaml` |
+| "Let's eval both two and three" | two rows and three rows are both evaluated and both shipped | stages 3 and 4 below |
+| "Probably row by row" | each board serves one row (default); four of each row per board stays an alternative | `array.interleave` |
+| "Sure make it configurable" (roll accuracy and its time stamp) | roll accuracy, and whether attitude is taken at the ping or at each echo's arrival, are settings | `elevation.roll_sigma_deg`, `attitude_time` |
+| "We wont have a long range SVP but we can measure auv local speed of sound and we will have some idea of water depth" | local sound speed and an approximate water depth come from the vehicle; the gradient along the path is unknown and is carried as an uncertainty | `sound_speed`, `water_depth`, `water_depth_sigma_m`, `gradient_sigma_per_s` |
+| "the popoto at 9m x 2 is still for active as well right" | yes: active pinging is the main mode on the face; listening is supported with the same rows | |
+| "to start w probably have two rows of 32 or maybe even one for early prototyping. Test auv will only have probably like 2-3 span we can attach and it much elevation" | the first hardware is a prototype on a test AUV: one row of 32, or two rows of 32, over 2 to 3 m of hull, with not much height to spread rows over | stages 1 and 2 |
+| "Does our array need to be 64? We can add just need to understand what we get" | the number of hydrophones is open; the trade space below says what each addition buys | *Trade space* |
 
-| | One row (default) | Two rows | Three rows |
+Not answered, and still open: the compute for the boards' full sample rate, and whether Popoto boards can be batched and how tightly they
+synchronise. Not given: the test AUV's usable height, its projector and source level, the trial site's depths. These are parameters in the
+config files, flagged `unconfirmed`; nothing below depends on a guess in code.
+
+**The stages.** One software path, both engines, takes every stage from its files alone; each stage has a sonar file, a deployment file
+and a simulated trial that the tests run.
+
+| | Stage 1: test AUV, 1 x 32 | Stage 2: test AUV, 2 x 32 | Stage 3: full face, 2 x 32 | Stage 4: full face, 3 x 32 |
+| --- | --- | --- | --- | --- |
+| Sonar file | `popoto_testauv_1row` | `popoto_testauv_2row` | `popoto_long_range_2row` | `popoto_long_range_3row` |
+| Deployment file | `popoto_testauv_1row` | `popoto_testauv_2row` | `popoto_face_2row` | `popoto_vehicle_elevation` |
+| Simulated trial | `popoto_testauv_trial_1row` | `popoto_testauv_trial_2row` | `popoto_face_2row_shallow` | `popoto_elevation_free`, `_shallow`, `_rehearsal` |
+| Mounting | hull, 3 m × 0.4 m | hull, 3 m × 0.4 m | flat vertical face, 9 m × 2 m | flat vertical face, 9 m × 2 m |
+| Hydrophones (rows × per row) | 32 (1 × 32) | 64 (2 × 32) | 64 (2 × 32) | 96 (3 × 32) |
+| Capture boards of 8 inputs | 4 | 8 | 8 | 12 |
+| Row length, spacing | 2.88 m, 9 cm (0.36 λ at 6 kHz) | 2.88 m, 9 cm (0.36 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) |
+| Row heights about the centre (m) | 0 | -0.15, +0.15 | -0.90, +0.90 | -0.90, -0.35, +0.90 |
+| Beam at broadside | 5.3° | 5.3° | 3.2° | 3.2° |
+| Row's gain against sea noise / against the boards' own noise (dB) | 12.9 / 15.1 | 12.9 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 |
+| Pulse, and the range it hides | 0.1 s, 75 m | 0.1 s, 75 m | 1 s, 750 m | 1 s, 750 m |
+| Noise-limited reach, ship (+25 dB) / small target (+5 dB), km | 7.7 / 2.9 | 8.5 / 3.3 | 14.0 / 6.0 | 14.7 / 6.4 |
+| Elevation, one sigma at 20 dB | none | 0.91° | 0.15° | 0.15° |
+| Highest repeat of the elevation response in the searched sector | n/a | -1.5 dB | -0.6 dB | -4.1 dB |
+| Raw data rate while receiving (Mbit/s) | 79 | 157 | 157 | 236 |
+| Cables: one per hydrophone + the sync reference to each board | 32 + 4 | 64 + 8 | 64 + 8 | 96 + 12 |
+
+Reach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file (197 dB, **not chosen for the test AUV**); reverberation and the channel decide earlier or later.
+
+**Stage 1, one row on the test AUV: what it is for.** It proves the chain on real boards: capture, synchronisation of four boards, the stream,
+recording, conditioning, beamforming, detection, tracking, classification, the report to the vehicle. Bearing and range are the full system's;
+only the beam is wider. It is the 32-hydrophone array of `popoto_4x8` / `flank_32` (3 m) with the long-range band and waveform.
+
+| Row of 32 over | Beam | Gain against sea noise | Reach, ship / small (km) |
 | --- | --- | --- | --- |
-| Sonar file | `popoto_long_range` | `popoto_long_range_2row` | `popoto_long_range_3row` |
-| Row heights about the hull's centreline (m) | 0 | -0.19, +0.19 | -0.19, 0, +0.19 |
-| Hydrophones | 32 | 64 | 96 |
-| Capture boards (8 inputs each, own clock, one synchronisation reference input summed in) | 4 | 8 | 12 |
-| Cables to the boards: one per hydrophone, plus the reference to every board | 32 + 4 | 64 + 8 | 96 + 12 |
-| Raw data rate while receiving, 102.4 kHz × 24 bit (Mbit/s) | 79 | 157 | 236 |
-| One ping to 12.7 km as recorded now, 1,836,373 samples per channel × 4 bytes (MB) | 235 | 470 | 705 |
-| The same per hour at one ping every 17.9 s (GB) | 47 | 94 | 142 |
-| Processing per ping, C++ chain on 4 CPU threads of a shared machine, pings of the `popoto_12km` scenario's size (s) | 1.20 | 1.85 | 2.90 |
-| The same for one full-length ping at the boards' rate (1,809,067 real samples per channel), against the 17.9 s between pings (s) | 15.5 | 23.5 | 37.7 |
-| One-sigma elevation at 13 / 20 / 30 dB (deg) | none | 1.60 / 0.72 / 0.23 | 1.60 / 0.72 / 0.23 |
-| Second elevation lobe inside ±30°, arrival at 0° / 10° / 20° | n/a | -8 dB / -1 dB / -1 dB | none / -12 dB / -11 dB |
-| Detection against one row, same false-alarm rate (dB) | 0 | 2.4 | 3.7 |
+| 2 m | 7.6° | 11.3 dB | 7.2 / 2.7 |
+| 3 m | 5.3° | 12.9 dB | 7.7 / 2.9 |
+| 4.8 m (the full row) | 3.2° | 15.1 dB | 8.5 / 3.3 |
 
-The heights assume a round hull of 0.533 m (21 inch) with the rows 45° below and above its widest point. **The hull, its fairing and where hydrophones can be mounted are not confirmed**; the heights are in the sonar files under
-`unconfirmed`, and the layout takes any heights, any number of rows, and an offset outwards for each (a curved hull).
+Closer together than half a wavelength the hydrophones hear the same sea noise: 32 over 3 m gain 12.9 dB, what 20 at half a wavelength would.
+The other twelve still count against the boards' own noise and against a dead channel, and they are the full system's count, boards and wiring.
+A higher band would suit the short row (0.09 m is half a wavelength at 8.3 kHz) but would be another projector and another band than
+the full face's, so the prototype keeps 4–6 kHz. Its pulse is 0.1 s: the array cannot listen while it transmits, a 1 s pulse hides everything
+inside 750 m and 0.1 s everything inside 75 m, at 10 dB less processing gain. With a 185 dB projector instead, the 3 m row reaches 4.4 / 1.5 km.
 
-**How accurate, and what that is in depth.** The bound on elevation for one arrival in noise is
-σ(sin e) = 1 / (k √(2 ρ Σ(h − h̄)²)), with ρ the signal-to-noise ratio at one hydrophone after pulse compression, h the
-heights of all hydrophones and k the band's RMS wavenumber. For two rows d apart and a row's SNR ρ_row after its own
-beamforming that is λ / (π d √(2 ρ_row)): accuracy is bought with row separation and with SNR, nothing else. The
-estimator in the chain reaches the bound (Monte Carlo over bound: 0.99 at 20 dB; on simulated pings within 30%).
+**Stage 2, a second row on the test AUV.** It proves the elevation chain: the row split, the elevation search, attitude and depth. The usable
+height is not known, so the separation is a parameter:
 
-| Rows | 13 dB | 20 dB | 30 dB | No second lobe within (at 6 kHz) | Fits the assumed hull |
-| --- | --- | --- | --- | --- | --- |
-| 2 rows, 0.07 m apart | 8.11° | 3.62° | 1.15° | ±90° | yes |
-| 2 rows, 0.15 m apart | 4.06° | 1.81° | 0.57° | ±56° | yes |
-| 2 rows, 0.25 m apart | 2.43° | 1.09° | 0.34° | ±30° | yes |
-| 2 rows, 0.38 m apart | 1.60° | 0.72° | 0.23° | ±19° | yes |
-| 2 rows, 0.50 m apart | 1.22° | 0.54° | 0.17° | ±14° | no |
-| 2 rows, 0.75 m apart | 0.81° | 0.36° | 0.11° | ±10° | no |
-| 2 rows, 1.00 m apart | 0.61° | 0.27° | 0.09° | ±7° | no |
+| Rows apart | Elevation at 13 / 20 / 30 dB | No repeat within (6 kHz) | Depth at 300 m (30 dB) | Depth at 1 km (20 dB) |
+| --- | --- | --- | --- | --- |
+| 0.10 m | 6.08° / 2.72° / 0.86° | ±90° | 4.5 m | 47 m |
+| 0.15 m | 4.06° / 1.81° / 0.57° | ±56° | 3.0 m | 32 m |
+| 0.20 m | 3.04° / 1.36° / 0.43° | ±39° | 2.2 m | 24 m |
+| 0.30 m | 2.03° / 0.91° / 0.29° | ±25° | 1.5 m | 16 m |
+| 0.40 m | 1.52° / 0.68° / 0.21° | ±18° | 1.1 m | 12 m |
+| 0.50 m | 1.22° / 0.54° / 0.17° | ±14° | 0.9 m | 9 m |
 
-Three or four rows inside the same 0.38 m are no more accurate than two (0.72° at 20 dB): the top-to-bottom span sets the accuracy. What the middle row buys is the removal of the second lobe.
+0.30 m is shipped (a placeholder). Below about 0.15 m a second row gives the sign of the elevation and little more and is not worth its
+four boards; from 0.3 m it gives depth to a few metres at trial ranges. What the prototype cannot show: the accuracy and the repeats of rows
+many wavelengths apart, the full row's beam, and the range.
 
-Depth error is range × elevation error. With the link budget of Sec. 5 for one row (spherical spreading, noise only):
+Simulated trials (raw 102.4 kHz, boards on their own clocks, the vehicle rolling 2°/s, 30 m of water): stage 1 synchronises to 0.44 µs and finds the target
+at 500 m within 0.9 m and 0.01°; stage 2 reads a target at 22 m depth, 300 m away, as 24, 22, 22, 25 m.
+
+**Stages 3 and 4, the full face.** Outer rows at -0.90 and +0.90 m (0.1 m kept free at the top and bottom of the 2 m: our choice, not confirmed),
+1.80 m apart, which is 4.8 to 7.2 wavelengths. Accuracy is bought with separation and SNR, nothing else: for one arrival in noise
+σ(sin e) = 1 / (k √(2 ρ Σ(h − h̄)²)), ρ the SNR at one hydrophone after pulse compression, h the hydrophones' heights, k the band's RMS wavenumber.
+The estimator reaches it (Monte Carlo over bound 1.00; on simulated pings within 30%).
+
+| Rows | 13 dB | 20 dB | 30 dB |
+| --- | --- | --- | --- |
+| 2 rows, 0.38 m apart | 1.60° | 0.72° | 0.23° |
+| 2 rows, 0.50 m apart | 1.22° | 0.54° | 0.17° |
+| 2 rows, 1.00 m apart | 0.61° | 0.27° | 0.09° |
+| 2 rows, 1.50 m apart | 0.41° | 0.18° | 0.06° |
+| 2 rows, 1.80 m apart | 0.34° | 0.15° | 0.05° |
+| 2 rows, 2.00 m apart | 0.30° | 0.14° | 0.04° |
+| 3 rows at -0.90, -0.35, +0.90 m | 0.33° | 0.15° | 0.05° |
+| 3 rows at -0.90, +0.00, +0.90 m (equal) | 0.34° | 0.15° | 0.05° |
+
+**Two rows repeat.** Rows 1.80 m apart cannot tell elevations λ/d apart: 12.0° at 4 kHz, 9.6° at 5 kHz, 8.0° at 6 kHz.
+The band smears the repeats, but with true time delays over 4–6 kHz the m-th repeat is still at sinc²(m B / 2 f) of the true peak whatever the
+separation: -0.6 dB, -2.4 dB, -5.9 dB, -12.6 dB for m = 1 to 4. How often the estimator lands on a repeat, in clean noise:
+
+| Searching | 13 dB | 20 dB | 30 dB |
+| --- | --- | --- | --- |
+| two rows, searching -30 to 30 deg | 10.8% | 0.0% | 0.0% |
+| two rows, searching -9.6 to 9.6 deg | 5.6% | 0.0% | 0.0% |
+| two rows, searching -4.8 to 4.8 deg (half a repeat each side) | 0.0% | 0.0% | 0.0% |
+
+So in clean noise the band does resolve two rows from 20 dB up. But the margin is 0.6 dB, and a range sidelobe of another arrival or a few degrees of
+phase error between rows tips it. The chain therefore never trusts a repeat within 1 dB of the peak: with two rows on the face every detection is
+flagged `elevation_ambiguous` and carries its candidates, unless something else decides:
+
+- **Water depth and range.** Straight rays cannot arrive from steeper than atan(depth × (bounces + 1) / range). Where that is inside ±4.8° (half a
+  repeat) there is one candidate; `elevation.sector_from_depth` searches only there. Two rows are unambiguous beyond (direct / one bounce / two):
+
+  | Water depth | 30 m | 100 m | 300 m | 1000 m | 3000 m |
+  | --- | --- | --- | --- | --- | --- |
+  | Range | 0.4 / 0.7 / 1.1 km | 1.2 / 2.4 / 3.6 km | 3.6 / 7.1 / 10.7 km | 11.9 / 23.8 / 35.7 km | 35.7 / 71.5 / 107.2 km |
+
+- **The track.** A track that has a depth takes the candidate that fits it (they are 167 m of depth apart per km of range); a track without one waits
+  for an unambiguous detection and is not started on a guess.
+- **A third row.**
+
+**Three rows: where the middle one goes.** With the outer rows fixed, the highest repeat inside ±30° over the band (worst of arrivals at 0°, 10°, 20°)
+against the middle row's height (the mirror image about the centre is the same):
+
+| Middle row at (m) | -0.85 | -0.75 | -0.65 | -0.55 | -0.45 | -0.35 | -0.25 | -0.15 | -0.05 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Highest repeat (dB) | -0.6 | -0.8 | -1.2 | -1.9 | -2.9 | -4.1 | -4.1 | -2.7 | -1.7 |
+
+Lowest at -0.35 m (0.55 m above the bottom row): -4.1 dB, against -1.6 dB with equal spacing and -0.6 dB with two rows.
+(On the 0.38 m span studied first, equal spacing was best; many wavelengths apart, unequal is.) Wrong picks searching ±30°, arrival at 2° / at 15°:
+
+| Rows | 10 dB | 13 dB | 20 dB | 30 dB |
+| --- | --- | --- | --- | --- |
+| 3 rows at -0.90, -0.35, +0.90 m | 0.1% / 0.0% | 0.0% / 0.0% | 0.0% / 0.0% | 0.0% / 0.0% |
+| 3 rows at -0.90, +0.00, +0.90 m (equal) | 2.8% / 1.2% | 0.3% / 0.0% | 0.0% / 0.0% | 0.0% / 0.0% |
+| 2 rows, 1.80 m apart | 27.0% / 26.5% | 9.9% / 9.2% | 0.0% / 0.0% | 0.0% / 0.0% |
+
+Three rows are no more accurate than two (the outer rows set that); the third buys an answer instead of candidates, and 1.3 dB of detection.
+
+**Two rows or three: side by side.**
+
+| | Two rows (stage 3) | Three rows (stage 4, recommended) |
+| --- | --- | --- |
+| Hydrophones, boards, cables | 64, 8, 64 + 8 | 96, 12, 96 + 12 |
+| Elevation at 13 / 20 / 30 dB | 0.34° / 0.15° / 0.05° | 0.33° / 0.15° / 0.05° |
+| Highest repeat | -0.6 dB: never trusted alone | -4.1 dB |
+| Wrong pick at 13 dB, clean noise, ±30° | 10% | 0.0% |
+| One answer without help | where water depth and range bound the arrivals to ±4.8° (100 m of water: beyond 2.4 km with one bounce) | everywhere above about 10 dB a row |
+| Deep water, short range | candidates only, until a track has a depth | works |
+| Detection against one row | +2.4 dB | +3.7 dB |
+| A dead board | the row it serves loses 8 of 32; the estimate carries on | the same |
+| A dead row | no elevation | two rows left: stage 3's behaviour |
+| Processing per ping, scenario size, C++ on 4 shared CPU threads (one row: 0.63 s) | 1.41 s | 2.54 s |
+| Raw data rate | 157 Mbit/s | 236 Mbit/s |
+| Simulated check | `popoto_face_2row_shallow`: target at 60 m, 3 km: read 53, 50, 52, 48 m with the water-depth bound; without it 6 candidates | free field, channel and rehearsal below |
+
+**Recommended: three rows** as the default of the option, with two rows a sound first step on the face (the middle row can be added later: its boards and
+cables are separate) and the right choice only where the water is shallow against the ranges of interest. Both are shipped.
+
+**What the angle is in depth, and what limits it.** Depth error is range × elevation error. From noise alone, on the link budget of Sec. 5 for one row:
 
 | Target, rows | 1 km | 6 km | 12 km |
 | --- | --- | --- | --- |
 | *ship, +25 dB: SNR* | 65 dB | 31 dB | 15 dB |
+| ship, +25 dB; 3 rows at -0.90, -0.35, +0.90 m | 0.3 m | 4.6 m | 57 m |
 | ship, +25 dB; 2 rows, 0.38 m apart | 1.2 m | 22 m | 278 m |
-| ship, +25 dB; 2 rows, 1.00 m apart | 0.5 m | 8.4 m | 106 m |
 | *small target, +5 dB: SNR* | 45 dB | 11 dB | -5 dB |
+| small target, +5 dB; 3 rows at -0.90, -0.35, +0.90 m | 0.3 m | 46 m | not detected |
 | small target, +5 dB; 2 rows, 0.38 m apart | 1.2 m | 222 m | not detected |
-| small target, +5 dB; 2 rows, 1.00 m apart | 0.5 m | 84 m | not detected |
 
-(SNR above 40 dB is counted as 40 dB.) Read plainly: on a hull of this size the option gives **depth to a few metres at 1 km, to about 22 m at 6 km on a ship-sized target, and at 12 km only whether the echo comes from
-above or below, after several pings** (278 m one-sigma per ping; a track averages its pings). Rows a metre apart would be 2.6 times better and do not fit.
-At short range the limit is not noise but roll, mounting and the channel (below).
+(SNR above 40 dB counted as 40 dB.) Rows 1.8 m apart are five times better than the 0.38 m of a small hull. But noise is no longer what limits depth:
 
-**Which lobe.** Two rows d apart cannot tell elevations λ / d apart in sin(e). Half a wavelength apart (0.125 m at 6 kHz) there is
-no second lobe at all; at 0.38 m the sector without one is ±19° at 6 kHz (±30° at 4 kHz). The band smears the second lobe
-only a little: with two rows it stands 1.4 dB below the true one for an arrival at 10° and 0.6 dB at 20°, and at 13 dB the
-estimator picks it 6% of the time at 20°. The chain flags such detections (`elevation_ambiguous`) and keeps them out of the tracks' depth.
-A third row halfway (rows 0.19 m apart, less than a wavelength) leaves no lobe above -11 dB anywhere in ±30°.
-On a hull this small equal spacing is the better choice; unequal spacings pay only when the span is several wavelengths.
+| What | 1 km | 6 km | 12 km |
+| --- | --- | --- | --- |
+| Roll known to 0.2° | 3.5 m | 20.9 m | 41.9 m |
+| Mean sound-speed gradient along the path unknown by 0.017 /s (isothermal water: pressure alone) | 6 m | 204 m | 816 m |
+| Mean sound-speed gradient along the path unknown by 0.05 /s | 17 m | 600 m | 2400 m |
+| Mean sound-speed gradient along the path unknown by 0.1 /s | 33 m | 1200 m | 4800 m |
 
-How steep arrivals are decides between two rows and three (straight rays; direct path / one bounce / two bounces):
 
-| Water depth | 1 km | 3 km | 6 km | 12 km |
-| --- | --- | --- | --- | --- |
-| 30 m | 1.7/3.4/5.1° | 0.6/1.1/1.7° | 0.3/0.6/0.9° | 0.1/0.3/0.4° |
-| 100 m | 5.7/11.3/16.7° | 1.9/3.8/5.7° | 1.0/1.9/2.9° | 0.5/1.0/1.4° |
-| 1000 m | 45.0/63.4/71.6° | 18.4/33.7/45.0° | 9.5/18.4/26.6° | 4.8/9.5/14.0° |
+**No long-range sound-speed profile will exist.** The vehicle measures the sound speed where it is; that fixes the angle at the array exactly (and is
+used for beamforming). It does not fix the path: a mean vertical gradient g curves the ray with radius c/g, range² × g / 2c from the straight line.
+Beyond 158 m (gradient known to 0.05 /s, 20 dB) or 465 m (known to 0.017 /s) the unknown gradient, not the measurement, limits depth.
+So: the chain assumes a gradient (`elevation.gradient_per_s`; 0.017 /s, isothermal water, in the vehicle's file: an assumption) and follows the ray through
+it; it adds range² × `gradient_sigma_per_s` / 2c to every reported depth sigma (0.05 /s by default, from the span between isothermal water and a thermocline
+averaged over the column: unconfirmed); a track's sigma keeps that term however many pings it averages. **Depth is good to metres inside a kilometre and
+to tens of metres at a few kilometres; beyond that the report still gives, reliably, the angle at the array, whether the echo comes from above or below, which
+arrival of a group came first, and how a track's elevation changes.** A measured profile, if one ever exists, goes in `elevation.ssp` and removes the term.
 
-In shallow water beyond 1 km everything arrives within about 10° of level and **two rows are enough**. In deep water, or inside
-1 km, arrivals are steeper and **three rows are needed** to trust the lobe. A sand bottom reflects fully only below 25° grazing, so steeper bounce paths die out.
+**Bearing.** A line reports sin(cone) = cos(elevation) × sin(bearing). With the elevation known the chain reports the horizontal bearing (`bearing_deg`;
+`cone_bearing_deg` keeps the old value). Error removed: 0.03° at 2° elevation; 0.22° at 5° elevation; 0.89° at 10° elevation; 3.81° at 20° elevation (45° off broadside).
 
-**Bearing.** A line reports sin(cone) = cos(elevation) × sin(bearing): the bearing of an arrival off the horizontal is too small.
-With the elevation known the chain reports the horizontal bearing (`bearing_deg`; `cone_bearing_deg` keeps the old value).
-Error removed, in degrees:
+**In a channel.** One target sends back several echoes. Range separates them (resolution 0.375 m) and elevation is measured on each; the direct one
+is first, and the chain takes the first arrival of each detection. Followed straight back, a surface echo points at the target's mirror image above the
+surface and a bottom echo at its image below the bottom: folded back both give the target's depth, and where the image lay says which path it was (`path`).
+The three rows' own beam in elevation is now 5.6° wide (40° on 0.38 m): direct and surface arrivals differ by more than that within 205 m for an array or target at 10 m, 614 m for an array or target at 30 m, 2046 m for an array or target at 100 m,
+so inside about a kilometre two arrivals in one range cell begin to separate in elevation; beyond it only range separates them. A target near the
+surface merges with its own surface echo at every useful range (beyond 0.6 km at 4 m depth) and reads as a source at the surface.
+The water depth the bottom fold needs is the vehicle's approximate one (`water_depth`, `water_depth_sigma_m`): its uncertainty goes, doubled, into the depth
+of bottom-bounce arrivals and into the test that marks a track below the bottom as multipath.
 
-| Elevation | 15° off broadside | 30° | 45° | 60° | Cross-range at 45°, 1 km / 12 km |
-| --- | --- | --- | --- | --- | --- |
-| 2° | 0.01 | 0.02 | 0.03 | 0.06 | 1 m / 7 m |
-| 5° | 0.06 | 0.13 | 0.22 | 0.38 | 4 m / 46 m |
-| 10° | 0.24 | 0.51 | 0.89 | 1.57 | 16 m / 187 m |
-| 20° | 0.99 | 2.15 | 3.81 | 7.16 | 66 m / 797 m |
-
-In shallow water at long range this is small (arrivals within 2° of level: 0.03°). It matters in deep water and close in.
-
-**In a channel.** One target sends back several echoes: straight, by the surface, by the bottom, and by mixtures. In 100 m of water with the array at 30 m and a target at 50 m depth 1 km away they arrive from -1.1°, +4.6° (3.0 m later in range) and -6.8° (7.0 m later).
-
-- The rows' own beam in elevation is 40° wide. Arrivals are **never separated by elevation**, only by range (resolution 0.375 m); elevation is then measured on each arrival that range has separated.
-- The direct echo is the first. The chain searches back to the leading edge of each detection and takes the first arrival that stands
-  clear (`elevation.arrival: first`), so the depth it reports is the direct path's.
-- Followed straight back, a surface echo points at the target's mirror image above the surface and a bottom echo at its image below
-  the bottom. Folded back into the water column both give the target's depth again, and where the image lay says which path it
-  was (`path`: direct, surface, bottom). A track whose depth stays outside the water column is marked multipath without needing its
-  parent track.
-- Direct and surface echoes are 2 × (array depth) × (target depth) / range apart. For a target near the surface they are one
-  detection at every useful range (beyond 0.6 km for a target at 4 m; 8 km at 50 m). The merged pair reads as a source at the surface,
-  which for a ship is the right answer and for a shallow diver or mine is a depth error of its own depth.
-- Echoes that go out by one path and back by another arrive between these, two at a time from different elevations at the same
-  range. Their elevation is a mixture; the quality figure drops and below `min_quality` none is reported.
-- The unweighted pulse has range sidelobes 13 dB down. In a channel the neighbours' sidelobes pull each arrival's elevation by up to
-  about a degree (17 m at 1 km): in multipath, that and not noise is the short-range accuracy.
-
-Measured on simulated pings (C++ chain; the Python chain agrees to 0.01° and 0.2 m):
+Measured on simulated pings (C++ chain; the Python chain agrees to 0.02° and 0.3 m):
 
 | Scenario | Truth | Reported |
 | --- | --- | --- |
-| `popoto_elevation_free`: free field, vehicle rolled 3°, three targets near 1 km, 5 pings | depths 10, 60, 160 m | track depth errors -0.3, -0.1, -0.4 m (reported sigma 2.2 m) |
-| `popoto_elevation_shallow`: 100 m of water, bounces to second order, target at 1 km | depth 50 m, direct path -1.15° | depth 40 to 42 m over 4 pings, path direct |
-| `popoto_elevation_rehearsal`: raw 102.4 kHz, 8 boards on their own clocks, rolled 4°, pitched 1°, 100 m of water | targets at 60 m and 8 m | boards synchronised to 0.42 µs; 60 to 63 m; the shallow one 0.7 to 1.4 m (its direct and surface echoes merged) |
+| `popoto_elevation_free`: three rows, free field, rolled 3°, three targets near 1 km | depths 10, 60, 160 m | track depth errors -0.1, -0.0, -0.2 m |
+| `popoto_elevation_shallow`: 100 m of water, bounces to second order, 1 km | depth 50 m, direct path -1.15° | 49, 48, 49, 49 m, -1.1, -1.0, -1.1, -1.1°, path direct |
+| `popoto_elevation_rehearsal`: raw 102.4 kHz, 12 boards on their own clocks, rolled 4° and rolling 1.5°/s, local sound speed 1490 m/s | targets at 60 m and 8 m, 1 km | boards synchronised to 0.49 µs; 61, 59, 59 m (with the attitude of the ping instead of the arrival: 12, 10, 10 m); the shallow one 4.4, 2.2, 4.6 m, merged with its surface echo |
 
-**Passive.** Listening (`--passive`, `--listen` with `elevation=1`) gives every bearing an elevation the same way: each row is steered at
-the bearing in every frequency bin and block of a frame, and the rows' beams are steered over elevation. On simulated broadband
-sources 1 km away at 20 m and 250 m depth, heard from 100 m with the vehicle rolled 3°, each 0.2 s frame gives both elevations within
-1.5° (`tests/python/test_elevation.py`). The second-lobe and roll remarks above apply unchanged; there is no range, so no depth,
-from one position.
+**What the vehicle and the mounting must provide.**
 
-**Bent rays.** By default depth is range × the sine of the level elevation: a straight ray. In a sound-speed gradient g the ray curves
-with radius c / g and the straight line is wrong by about range² × g / 2c: 6 m at 1 km; 51 m at 3 km; 204 m at 6 km in isothermal water (+0.017 /s),
-far more through a thermocline. Given a profile (`elevation.ssp`) the chain follows the ray through it instead, with turning
-points and reflections. **Beyond a few kilometres depth needs the profile**; the vehicle has to supply one (CTD cast or model).
-
-**What the vehicle and the mounting must provide.** Elevation is measured against the vehicle; depth needs it against the horizon.
-
-| Error source | Elevation error | Depth error at 1 km / 6 km / 12 km |
+| Error source | Elevation error | Depth error at 1 / 6 / 12 km |
 | --- | --- | --- |
 | Roll known to 0.1° | 0.1° | 1.7 / 10 / 21 m |
 | Roll known to 0.2° | 0.2° | 3.5 / 21 / 42 m |
 | Roll known to 0.5° | 0.5° | 8.7 / 52 / 105 m |
 | Roll known to 1.0° | 1.0° | 17.5 / 105 / 209 m |
-| One row further out than the drawing by 1.0 mm | 0.15° | 3 / 16 / 32 m |
-| One row further out than the drawing by 5.0 mm | 0.75° | 13 / 79 / 158 m |
-| Phase mismatch between the rows' channels of 5.0° of phase | 0.63° | 11 / 66 / 132 m |
-| Clock error between boards on different rows of 0.5 µs | 0.11° | 2 / 12 / 24 m |
-| Clock error between boards on different rows of 1.0 µs | 0.23° | 4 / 24 / 47 m |
-| Clock error between boards on different rows of 8.3 µs | 1.88° | 33 / 197 / 393 m |
+| One row further out from the face than the other by 1.0 mm | 0.032° | 0.6 / 3.3 / 6.7 m |
+| One row further out from the face than the other by 5.0 mm | 0.159° | 2.8 / 16.7 / 33.3 m |
+| Phase mismatch between rows of 5.0° of phase | 0.133° | 2.3 / 13.9 / 27.8 m |
+| Phase mismatch between rows of 10.0° of phase | 0.265° | 4.6 / 27.8 / 55.6 m |
+| Clock error between boards on different rows of 0.5 µs | 0.024° | 0.4 / 2.5 / 5.0 m |
+| Clock error between boards on different rows of 1.0 µs | 0.048° | 0.8 / 5.0 / 10.0 m |
+| Clock error between boards on different rows of 8.3 µs | 0.396° | 6.9 / 41.5 / 83.0 m |
 
-- **Roll.** Roll error is elevation error one for one. The attitude sensor's roll accuracy is the first number to ask the vehicle
-  team for; it is `elevation.roll_sigma_deg` in the deployment file (0.2° assumed, unconfirmed) and goes into every reported depth
-  sigma. **Not done yet:** the chain applies the roll navigation gives for the transmit time. An echo from 12 km arrives 16 s
-  later; if the vehicle rolls in between, the difference is a depth error. Until roll is applied at each echo's arrival time the
-  depths hold for a vehicle that keeps its roll over a ping.
-- **Mounting.** The rows' heights matter little (a 5 mm error in separation is 0.13° at 10° elevation, nothing at 0°). Their offset outwards
-  matters a great deal: 1 mm is 0.15°. No drawing will be that good; the offset is calibrated in water (below).
-- **Synchronisation.** The present tolerance between boards (a twentieth of a period, 8.3 µs) is fine for bearing and far too
-  loose for elevation. The reference scheme reaches 0.42 µs in simulation with 300 µs offsets and 25 ppm drifts (0.1°). Wiring
-  each board to four hydrophones of each row at the same stations (`array.interleave: 4`) makes the rows of a pair share a
-  clock and removes the term for two rows; the price is that a dead board then takes four stations out of both rows.
-- **Calibration.** The existing calibration (`calibrate.py`) fits each channel's gain, phase and position from known sources. With
-  rows it must be run with sources at several elevations as well as bearings (a source lowered to three depths at three
-  bearings); in simulation it recovers a row mounted 5 mm out to 0.4 mm and removes the 0.75° it caused.
-- **Dead channels.** Rows are found from the hydrophone positions in the record, whatever the wiring. `chain.dead_channels` leaves
-  channels out; a dead hydrophone or a dead board shortens a row and the estimate carries on (tested with one hydrophone and
-  one board out: depths within 5 m at 1 km).
+- **Roll is now the first limit of the angle.** Everything that scales with the rows' separation shrank 4.7 times against a small hull; roll did not.
+  `elevation.roll_sigma_deg` (0.2° assumed) goes into every sigma. **Attitude is taken at each echo's arrival** (`attitude_time: arrival`): an echo from
+  12 km arrives 16 s after the ping, and the chain uses the navigation samples around that time (they are written into each record). Without samples it
+  falls back to the ping's attitude and adds `attitude_rate_sigma_deg_s` × the time of flight. In the rehearsal above the difference is 50 m at 1 km.
+- **Synchronisation.** Row by row (the owner's choice), boards of different rows must agree to about 1 µs (0.05°); the present tolerance of 8.3 µs is 0.4°.
+  The reference scheme reaches 0.49 µs in simulation. Whether real boards do is the open question. `array.interleave: 4` (four of each row per board)
+  removes the term for two rows and stays available.
+- **Mounting and calibration.** 1 mm of one row standing out from the face is 0.03°. The existing calibration, run with sources at several depths
+  (`planar=False`), recovers a row 5 mm out to 0.4 mm in simulation.
+- **Sound speed and water depth** from the vehicle: `sound_speed` and `water_depth` in the navigation datagrams, or as settings.
 
-**Data path.** Checked at the boards' rate (102.4 kHz, 24 bit) with 64 and 96 channels: board blocks over UDP (64 and 42 samples a datagram, 1600 and 2438 datagrams a second), the C++ and Python assemblers,
-Sensor Bridge frames (307,328 and 460,928 bytes for 1600 samples), the container file and the C++ chain all carry them unchanged
-(samples back within half a count). The record format already stores every hydrophone's position: no format change.
-The elevation stage runs on the backprojection kernel (host or CUDA), so it needs no GPU code of its own; it has not been run on a GPU.
+### Trade space: how many hydrophones, and where
 
-**Compute.** Cost grows in proportion to the rows. On pings already at baseband (8 kHz complex, the scenario's size) the C++ chain takes 1.2, 1.9 and 2.9 s for one, two and three rows.
-On one full-length ping as the boards deliver it (102.4 kHz real, 0.5 to 13 km) it takes 15, 24 and 38 s on 4 CPU threads of a shared machine, against 17.9 s between pings:
-**on a CPU of this class the chain does not keep up with two or three rows at the boards' full rate, and barely with one.** The band is 2 kHz wide, so the
-samples carry 13 times more than needed: converting to baseband and decimating before the chain (on the boards or in a first stage on the
-vehicle computer), or a GPU (the one-row map was 17 times faster on an L4, `RESULTS.md`), closes the gap. Neither is done for rows; it is a
-decision to take with the vehicle computer.
+The outline (9 m × 2 m face, 4–6 kHz, 197 dB, 1 s pulse; noise-limited reach on the budget of Sec. 5):
 
-**What it does not improve.** Bearing resolution and range resolution (the array is no longer and the band no wider). Left/right: rows in one vertical plane cannot tell port from starboard; the hull behind the array does that, as now. Detection range, much: 2.4 dB with two rows, roughly a tenth more range under spherical spreading. Depth at 12 km in shallow water.
+| Channels | As | Beam | Map gain | Reach ship / small (km) | Elevation at 20 dB | Boards |
+| --- | --- | --- | --- | --- | --- | --- |
+| 32 | 1 x 32 at 0.15 m | 3.2° | 15.1 dB | 12.8 / 5.3 | none | 4 |
+| 64 | 1 x 64 at 0.14 m | 1.7° | 17.8 dB | 14.2 / 6.1 | none | 8 |
+| 64 | 2 x 32 at 0.15 m | 3.2° | 17.4 dB | 14.0 / 6.0 | 0.15° (repeat -0.6 dB) | 8 |
+| 96 | 1 x 96 at 0.094 m | 1.7° | 17.8 dB | 14.2 / 6.1 | none | 12 |
+| 96 | 2 x 48 at 0.15 m | 2.1° | 19.2 dB | 15.0 / 6.5 | 0.15° (repeat -0.6 dB) | 12 |
+| 96 | 3 x 32 at 0.15 m | 3.2° | 18.8 dB | 14.7 / 6.4 | 0.15° (repeat -4.1 dB) | 12 |
 
-**Unconfirmed, and for the owner to decide** (all in config under `unconfirmed`, none in code): the hull diameter and where rows can be
-mounted, which sets the separation and with it every accuracy above; whether 8 or 12 boards, their power and their cabling fit the
-vehicle; row-by-row or interleaved wiring; the attitude sensor's roll accuracy and its time stamp; whether the vehicle can supply
-water depth and a sound-speed profile; and, as for one row, whether Popoto boards can be batched and synchronised at all.
+**Does it need to be 64?** For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. Sixty-four buy one of two things. As one row of 64 filling
+the face: 2.7 dB, a beam of 1.7° instead of 3.2°, 3 dB less reverberation in the beam, noise-limited reach 12.8 → 14.2 km (ship) and
+5.3 → 6.1 km (small target), no elevation. As two rows of 32: nearly the same gain in the map (17.4 against 17.8 dB), the old beam,
+and elevation, as candidates. Bearing and range against elevation is the trade for a fixed channel count; 96 as three rows make the elevation unambiguous.
+
+| A row of | Length | Beam | Gain (sea noise) | Reach ship / small (km) | Reverberation in the beam against 32 | Boards a row |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 at 0.15 m | 2.40 m | 6.3° | 12.0 dB | 11.4 / 4.6 | +3.0 dB | 2 |
+| 24 at 0.15 m | 3.60 m | 4.2° | 13.8 dB | 12.2 / 5.0 | +1.2 dB | 3 |
+| 32 at 0.15 m (today) | 4.80 m | 3.2° | 15.1 dB | 12.8 / 5.3 | -0.0 dB | 4 |
+| 48 at 0.15 m | 7.20 m | 2.1° | 16.8 dB | 13.7 / 5.8 | -1.8 dB | 6 |
+| 60 at 0.15 m (fills the face) | 9.00 m | 1.7° | 17.8 dB | 14.2 / 6.1 | -2.7 dB | 8 |
+| 64 at 0.14 m (fills the face) | 8.96 m | 1.7° | 17.8 dB | 14.2 / 6.1 | -2.7 dB | 8 |
+| 96 at 0.094 m (fills the face) | 9.02 m | 1.7° | 17.8 dB | 14.2 / 6.1 | -2.7 dB | 12 |
+| 32 at 0.28 m (sparse, fills the face) (repeats in bearing at -11 dB when steered 30°) | 8.96 m | 1.7° | 17.6 dB | 14.1 / 6.0 | -2.7 dB | 4 |
+
+- **Along the face.** Each doubling of a filled row is 3 dB against noise, half the beam and 3 dB less reverberation; in noise-limited range about a tenth.
+  The knee is the face: 60 hydrophones at half a wavelength fill 9 m, and more in the same length buy nothing against sea noise. Sparser than half a
+  wavelength gives the narrow beam for fewer hydrophones but full repeats in bearing when steered.
+- **Up the face.** The second row buys elevation and 2.4 dB of detection; the third makes elevation unambiguous (+1.3 dB); a fourth adds half a decibel.
+  Accuracy is set by the outer rows' separation, not the count.
+- **Noise or reverberation.** More source level buys noise-limited range (6 dB is worth four times the hydrophones in a row) and nothing against
+  reverberation; a longer row buys both. Where reverberation limits (short and medium range in the scenarios), length is the only one that helps.
+- **Band.** Another band moves every row: spacing and row length scale with the wavelength, the reach with absorption and noise
+  (`tools/popoto_range_study.py`), and the rows' repeat spacing with it.
+- **Cost** goes with the channel count: boards = channels / 8, one cable per hydrophone and one reference per board, 2.46 Mbit/s and 7.3 MB per ping per
+  channel (to 12.7 km, as recorded now), compute in proportion (measured at 32, 64 and 96 channels).
+- **Passive.** Listening gains with the row's length like the active map, and the rows give each bearing an elevation; the repeats and the roll apply unchanged.
+
+**Data path and compute.** Checked at the boards' rate (102.4 kHz, 24 bit) with 32, 64 and 96 channels: board blocks over UDP (128, 64 and 42 samples a datagram), the C++ and Python
+assemblers, Sensor Bridge frames (307,328 and 460,928 bytes for 1600 samples at 64 and 96 channels), the container file and the chain carry them
+unchanged. The record format already stores every hydrophone's position and the attitude samples: no format change. On pings of the `popoto_12km`
+scenario's size (baseband) the C++ chain takes 0.63, 1.41 and 2.54 s for one, two and three rows on 4 shared CPU threads, against 17.9 s between pings:
+real time with room. The elevation search itself is the part that grew with the wide rows (a finer grid over ±30°): about 0.6 s of the three-row figure.
+**At the boards' full rate it is not real time on such a CPU**: one full-length ping (102.4 kHz real, 0.5 to 13 km) took 15, 24 and 38 s (measured with the
+earlier, closer rows; the map dominates and does not depend on the heights). The band is 2 kHz wide, so the samples carry 13 times more than needed: converting to
+baseband and decimating before the chain, or a GPU (the one-row map was 17 times faster on an L4, `RESULTS.md`; rows not yet run on one), closes the gap. **Open: which.**
+
+**What carries over from stage to stage, and what changes.** Unchanged: the boards and their count per row, the synchronisation scheme, the stream and record
+formats, the software and its settings, the report. Changed: the hydrophones' spacing and cabling (0.09 m on the test AUV, 0.15 m on the face), the rows'
+heights, the projector and pulse, the compute (in proportion to the channels), and from stage 3 on the handling of candidates.
+
+**What stacked rows do not improve.** Bearing and range resolution; left/right (the face decides that); detection range, much; depth at long range without
+a profile.
 
 ## 4. Timing and data
 

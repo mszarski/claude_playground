@@ -1,21 +1,20 @@
-# The two-row long-range array with every board on its own clock, for rehearsals: eight boards
-# of eight inputs, clock offsets, drifts and jitter as the simulator's truth, and the shared
-# synchronisation reference (one electrical signal wired to every board and summed into its
-# first input, above the acoustic band: see popoto_4x8.yaml). The chain has to estimate the
-# clocks; elevation is the stage most sensitive to what is left (docs/DESIGN.md Sec. 3).
+# The two-row full-face array with every board on its own clock, for rehearsals: 8 boards of eight inputs with clock
+# offsets, drifts and jitter as the simulator's truth, and the shared synchronisation reference (one
+# electrical signal wired to every board and summed into its first input, above the acoustic band:
+# see popoto_4x8.yaml). The chain has to estimate the clocks.
 base: popoto_long_range_2row
 name: popoto_long_range_2row_clocks
 
 receive:
   boards:
-    - {first: 0,  count: 8, clock_offset: 0.0,     clock_drift_ppm: 0.0,   jitter_rms: 2.0e-8, reference_channel: 0}
-    - {first: 8,  count: 8, clock_offset: 3.1e-4,  clock_drift_ppm: 12.0,  jitter_rms: 2.0e-8, reference_channel: 8}
-    - {first: 16, count: 8, clock_offset: -1.7e-4, clock_drift_ppm: -8.0,  jitter_rms: 2.0e-8, reference_channel: 16}
-    - {first: 24, count: 8, clock_offset: 5.2e-5,  clock_drift_ppm: 25.0,  jitter_rms: 2.0e-8, reference_channel: 24}
-    - {first: 32, count: 8, clock_offset: -2.4e-4, clock_drift_ppm: 17.0,  jitter_rms: 2.0e-8, reference_channel: 32}
-    - {first: 40, count: 8, clock_offset: 1.3e-4,  clock_drift_ppm: -21.0, jitter_rms: 2.0e-8, reference_channel: 40}
-    - {first: 48, count: 8, clock_offset: 2.8e-4,  clock_drift_ppm: 4.0,   jitter_rms: 2.0e-8, reference_channel: 48}
-    - {first: 56, count: 8, clock_offset: -9.0e-5, clock_drift_ppm: -14.0, jitter_rms: 2.0e-8, reference_channel: 56}
+    - {first: 0, count: 8, clock_offset: 0.00e+00, clock_drift_ppm: 0.0, jitter_rms: 2.0e-8, reference_channel: 0}
+    - {first: 8, count: 8, clock_offset: -1.04e-04, clock_drift_ppm: 24.4, jitter_rms: 2.0e-8, reference_channel: 8}
+    - {first: 16, count: 8, clock_offset: -1.09e-04, clock_drift_ppm: 14.4, jitter_rms: 2.0e-8, reference_channel: 16}
+    - {first: 24, count: 8, clock_offset: 2.22e-04, clock_drift_ppm: -5.4, jitter_rms: 2.0e-8, reference_channel: 24}
+    - {first: 32, count: 8, clock_offset: -3.70e-05, clock_drift_ppm: -6.4, jitter_rms: 2.0e-8, reference_channel: 32}
+    - {first: 40, count: 8, clock_offset: -2.36e-04, clock_drift_ppm: -1.1, jitter_rms: 2.0e-8, reference_channel: 40}
+    - {first: 48, count: 8, clock_offset: -1.55e-04, clock_drift_ppm: -12.1, jitter_rms: 2.0e-8, reference_channel: 48}
+    - {first: 56, count: 8, clock_offset: -1.89e-04, clock_drift_ppm: -15.3, jitter_rms: 2.0e-8, reference_channel: 56}
   reference:
     mode: sync_chirp
     f_start: 38.0e3

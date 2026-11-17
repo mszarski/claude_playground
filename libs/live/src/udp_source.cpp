@@ -244,6 +244,9 @@ bool Navigation::push(const std::string& json) {
   fix.time_ns = std::strtoll(json.c_str() + json.find(':', at) + 1, nullptr, 10);
   const char* keys[9] = {"x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"};
   for (int i = 0; i < 9; ++i) find(keys[i], fix.v[i]);
+  fix.v[9] = fix.v[10] = std::nan("");
+  find("sound_speed", fix.v[9]);
+  find("water_depth", fix.v[10]);
   fixes_.push_back(fix);
   if (fixes_.size() > 600) fixes_.pop_front();
   return true;
@@ -252,7 +255,7 @@ bool Navigation::push(const std::string& json) {
 bool Navigation::apply(PingRecord& record) const {
   if (fixes_.empty()) return false;
   const std::int64_t t = record.transmit.time_ns;
-  double v[9];
+  double v[9] = {};
   std::size_t i = 0;
   while (i < fixes_.size() && fixes_[i].time_ns < t) ++i;
   if (i == 0 || i == fixes_.size()) {
@@ -269,6 +272,26 @@ bool Navigation::apply(PingRecord& record) const {
     pose->rpy = {v[3], v[4], v[5]};
     pose->velocity = {v[6], v[7], v[8]};
   }
+  // The nearest fix's sound speed and water depth, and the fixes around the receive window.
+  const Fix* nearest = &fixes_.front();
+  for (const Fix& fx : fixes_) {
+    if (std::llabs(fx.time_ns - t) < std::llabs(nearest->time_ns - t)) nearest = &fx;
+  }
+  if (std::isfinite(nearest->v[9]) && nearest->v[9] > 0.0) record.environment.sound_speed = nearest->v[9];
+  if (std::isfinite(nearest->v[10]) && nearest->v[10] > 0.0) record.environment.water_depth = nearest->v[10];
+  const Samples& s = record.samples;
+  const auto window_ns = static_cast<std::int64_t>((s.start_time + static_cast<double>(s.n_samples) / s.sample_rate) * 1e9);
+  std::vector<InsSample> history;
+  for (const Fix& fx : fixes_) {
+    if (fx.time_ns < t - 2000000000LL || fx.time_ns > t + window_ns + 2000000000LL) continue;
+    InsSample a{};
+    a.t = static_cast<double>(fx.time_ns - t) * 1e-9;
+    a.position = {fx.v[0], fx.v[1], fx.v[2]};
+    a.rpy = {fx.v[3], fx.v[4], fx.v[5]};
+    a.velocity = {fx.v[6], fx.v[7], fx.v[8]};
+    history.push_back(a);
+  }
+  if (history.size() > 1) record.navigation.ins = std::move(history);   // a fixed pose has one fix and no history
   return true;
 }
 

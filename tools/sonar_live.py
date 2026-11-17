@@ -60,6 +60,8 @@ def export_template(cfg: dict, path: str) -> str:
         # Stacked rows: elevation=1 and one elevation_<key> per setting (docs/CONFIGURATION.md).
         o["elevation"] = 1
         el["roll_sigma_deg"] = float(np.degrees(el.pop("roll_sigma")))
+        el["sector_margin_deg"] = float(np.degrees(el.pop("sector_margin")))
+        el["attitude_rate_sigma_deg_s"] = float(np.degrees(el.pop("attitude_rate_sigma")))
         for key in ("ssp_depth", "ssp_speed"):
             values = el.pop(key)
             if values:

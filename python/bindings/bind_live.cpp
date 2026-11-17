@@ -261,6 +261,7 @@ void bind_live(py::module_& m) {
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();
+        get("sound_speed", o.sound_speed);
         if (kw.contains("dead_channels")) o.dead_channels = kw["dead_channels"].cast<std::vector<std::int64_t>>();
         if (kw.contains("elevation")) {
           const py::dict e = kw["elevation"].cast<py::dict>();
@@ -281,6 +282,17 @@ void bind_live(py::module_& m) {
           num("first_arrival_db", eo.first_arrival_db);
           num("first_arrival_snr_db", eo.first_arrival_snr_db);
           num("min_quality", eo.min_quality);
+          num("ambiguity_sigma", eo.ambiguity_sigma);
+          num("alternatives_db", eo.alternatives_db);
+          flag("sector_from_depth", eo.sector_from_depth);
+          num("sector_bounces", eo.sector_bounces);
+          num("sector_margin", eo.sector_margin);
+          num("water_depth_sigma", eo.water_depth_sigma);
+          flag("attitude_arrival", eo.attitude_arrival);
+          num("attitude_rate_sigma", eo.attitude_rate_sigma);
+          flag("use_gradient", eo.use_gradient);
+          num("gradient", eo.gradient);
+          num("gradient_sigma", eo.gradient_sigma);
           num("ambiguity_db", eo.ambiguity_db);
           flag("correct_bearing", eo.correct_bearing);
           flag("depth", eo.depth);

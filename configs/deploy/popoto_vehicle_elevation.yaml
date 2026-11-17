@@ -1,38 +1,39 @@
-# The Popoto long-range array with stacked rows (elevation and depth as well as bearing):
+# Stage 4, the recommended form: three rows on the 9 m x 2 m face (elevation and depth as well as bearing).
 #   tools/sonar_live.py configs/deploy/popoto_vehicle_elevation.yaml
-# The same file as popoto_vehicle.yaml except for the sonar (two rows; popoto_long_range_3row
-# for three) and the `chain.elevation` section. docs/DEPLOYMENT.md, "Stacked rows".
+# Stages: docs/DESIGN.md Sec. 3; how to run and what the vehicle must supply: docs/DEPLOYMENT.md.
 
 source:
   type: flank_udp
-  sonar: popoto_long_range_2row  # 64 hydrophones on 8 boards; popoto_long_range_3row: 96 on 12
+  sonar: popoto_long_range_3row_clocks
   host: 0.0.0.0
   port: 5700
   timeout: 30.0
 
-nav:                             # roll and pitch are now used: depth error = range x roll error
-  port: 5702                     # {"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}, NED metres, radians
+nav:                             # JSON datagrams (gpusonar/live.py, NavListener): pose, attitude and, where the vehicle has
+  port: 5702                     # them, "sound_speed" (m/s at the vehicle) and "water_depth" (m)
 
 chain:
+  sync: {reference: {f_start: 38.0e3, f_stop: 48.0e3, duration: 4.0e-3, lead: 5.0e-3, tail: 10.0e-3}}   # the shared reference summed into each board's first input
   bearings_deg: [-60.0, 60.0, 0.5]
   look: starboard
   range_cell_m: 2.0
   cfar: {pfa: 1.0e-5, guard_m: 100.0, train_m: 300.0}
   min_snr_db: 9.0
+  # sound_speed: 1500.0          # m/s at the vehicle, when navigation does not send it
   tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
   classify:
     min_speed: 1.0
     multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
   elevation:                     # leave the section out (or use a one-row sonar) for the chain as it was
-    sector_deg: [-30.0, 30.0, 0.5]   # elevation searched, vehicle frame, up positive
-    min_quality: 0.6             # below this no elevation is reported for a detection
-    ambiguity_db: 1.5            # a second lobe this close to the first: flagged, not used for depth
-    correct_bearing: true        # bearing_deg becomes the horizontal bearing (cone_bearing_deg keeps the old value)
-    depth: true                  # depth_m on detections and tracks
-    fold: true                   # bounce arrivals folded back into the water column
-    classify: true               # a track whose straight-line depth is outside the water is multipath
-    water_depth: null            # m; set it, or the fold and the bottom test use the surface only
+    sector_deg: [-30.0, 30.0, 0.25]  # elevation searched, vehicle frame, up positive: first, last, step
+    attitude_time: arrival       # roll, pitch, yaw as they were when each echo arrived (navigation's history); transmit: at the ping
+    attitude_rate_sigma_deg_s: 0.5   # added per second an echo's arrival lies beyond the attitude samples (unconfirmed)
     roll_sigma_deg: 0.2          # the navigation's roll accuracy (unconfirmed): goes into every depth sigma
+    water_depth: null            # m; null: what navigation sends ("water_depth"), else unknown
+    water_depth_sigma_m: 5.0     # how well it is known (the owner: "some idea of water depth"; unconfirmed)
+    gradient_per_s: 0.017        # assumed mean sound-speed gradient: isothermal water (pressure alone). No long-range profile exists
+    gradient_sigma_per_s: 0.05   # how wrong that may be (0.017 isothermal to 0.1 across a thermocline; unconfirmed): into depth sigma
+    # ssp: {depth: [...], speed: [...]}   # a measured profile, if there ever is one: replaces the gradient
   # dead_channels: [17]          # channel rows to leave out (a failed hydrophone); a whole board: its eight rows
 
 output:
@@ -42,5 +43,9 @@ output:
   taps: {dir: /data/sonar/taps, pings: 2}
 
 unconfirmed:
+  - chain.sync                         # the reference generator and its wiring are hardware to build
   - chain.elevation.roll_sigma_deg     # what the vehicle's attitude sensor delivers
-  - chain.elevation.water_depth        # from the vehicle's altimeter and depth sensor, or the chart
+  - chain.elevation.attitude_rate_sigma_deg_s
+  - chain.elevation.water_depth_sigma_m
+  - chain.elevation.gradient_per_s     # an assumption, not a measurement
+  - chain.elevation.gradient_sigma_per_s

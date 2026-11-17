@@ -70,6 +70,8 @@ class Detection:
     depth: float = float("nan")         # m, straight-line depth from elevation (stacked rows); NaN: none
     depth_sigma: float = float("nan")
     first_range: float = float("nan")   # m, the nearest cell of the cluster (its leading edge)
+    depth_alternatives: list | None = None   # None: `depth` is the depth. A list: the elevation was ambiguous and these are
+                                             # the other candidates' depths; a track with a depth takes the one that fits
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -138,16 +140,25 @@ class Tracker:
         return j @ np.diag([self.range_sigma**2, self.bearing_sigma**2]) @ j.T
 
     @staticmethod
-    def _take_depth(t: Track, d: Detection) -> None:
-        """A scalar Kalman update of the track's depth with a detection's, when it has one."""
+    def _take_depth(t: Track, d: Detection, gate: float = 3.0) -> None:
+        """A scalar Kalman update of the track's depth with a detection's, when it has one. An
+        ambiguous detection offers several candidates: a track that already has a depth takes
+        the nearest if it is within `gate` sigma, and a track without one waits."""
         if not (np.isfinite(d.depth) and np.isfinite(d.depth_sigma) and d.depth_sigma > 0.0):
             return
         r = d.depth_sigma**2
+        z = d.depth
+        if d.depth_alternatives is not None:
+            if not np.isfinite(t.depth):
+                return
+            z = min([d.depth] + list(d.depth_alternatives), key=lambda c: abs(c - t.depth))
+            if abs(z - t.depth) > gate * np.sqrt(t.depth_var + r):
+                return
         if not np.isfinite(t.depth):
-            t.depth, t.depth_var = d.depth, r
+            t.depth, t.depth_var = z, r
             return
         k = t.depth_var / (t.depth_var + r)
-        t.depth += k * (d.depth - t.depth)
+        t.depth += k * (z - t.depth)
         t.depth_var *= 1.0 - k
 
     def update(self, time: float, detections: list[Detection]) -> list[Track]:

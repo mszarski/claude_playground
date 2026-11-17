@@ -504,12 +504,25 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             positions = [position + velocity * (i * interval) for i in range(count)]
         for i, pos in enumerate(positions):
             t = i * interval
-            pose = make_pose(pos, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity)
+            # platform.rates (rad/s): the vehicle rolls, pitches and yaws during the ping, from `rpy` at each
+            # transmit. The echoes are made with the turning array; the record handed to a processor then
+            # holds what navigation would give it: the attitude at the transmit and samples of it over
+            # the receive window (navigation.ins, platform.attitude_rate_hz a second), not the rates.
+            rates = plat.get("rates")
+            pose = make_pose(pos, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity, rates or (0.0, 0.0, 0.0))
             truth_positions.append(pos)
             records.append(simulate_ping(
                 sonar, pose, scene, environment=env, sequence=i, sub_sequence=i % n_sub,
                 time_ns=start_ns + int(round(t * 1e9)), scenario_time=t, rng=rng, backend=backend,
                 **ping_kwargs))
+            if rates and any(float(v) != 0.0 for v in rates):
+                _add_true_ins(records[-1], np.zeros(3), float(plat.get("attitude_rate_hz", 10.0)))
+                g = records[-1].geometry
+                for name in ("tx_pose", "rx_pose"):
+                    q = getattr(g, name)
+                    q.rates = (0.0, 0.0, 0.0)
+                    setattr(g, name, q)
+                records[-1].geometry = g
 
     if output:
         opts = core.WriterOptions()

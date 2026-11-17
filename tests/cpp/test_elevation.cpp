@@ -201,6 +201,123 @@ TEST(Elevation, TakesTheFirstArrivalOfSeveralInTheRangeWindow) {
   EXPECT_NEAR(std::asin(e.sin_elevation) / kDeg, 6.0, 0.3);
 }
 
+TEST(Elevation, RowsManyWavelengthsApartOfferCandidatesAndAThirdRowOrABoundedSectorDecides) {
+  // The 2 m x 9 m face: rows 1.8 m apart repeat every 9.6 degrees at 5 kHz.
+  const Vec3d target{80.0, 500.0, 50.0 - 44.0};          // 5 degrees up
+  PingRecord two = empty_record({-0.9, 0.9}, {0.0, 0.0});
+  add_echo(two, target, 1.0);
+  const ElevationFrame f2 = elevation_frame(two, find_rows(two), true);
+  const double want = truth(f2, target).elevation / kDeg;
+  ElevationEstimate e = estimate_one(two, target);
+  EXPECT_TRUE(e.ambiguous);
+  ASSERT_GE(e.alternatives.size(), 2U);
+  // The candidates are the repeats, and the truth is the estimate or one of them.
+  double nearest = std::abs(std::asin(e.sin_elevation) / kDeg - want);
+  for (const Vec3d& w : e.alternatives) nearest = std::min(nearest, std::abs(std::asin(-w.z) / kDeg - want));
+  EXPECT_LT(nearest, 0.1);
+  // Searching only half a repeat either side of the truth: one answer.
+  ElevationOptions narrow;
+  narrow.first_deg = want - 4.5;
+  narrow.last_deg = want + 4.5;
+  e = estimate_one(two, target, 1e-30, narrow);
+  EXPECT_FALSE(e.ambiguous);
+  EXPECT_NEAR(std::asin(e.sin_elevation) / kDeg, want, 0.05);
+  // The same from the water depth: 12 m of water, the array at 6 m, one bounce, 500 m away: nothing arrives
+  // from more than 2 degrees off level (plus the margin), well inside half a repeat.
+  PingRecord shallow = empty_record({-0.9, 0.9}, {0.0, 0.0}, 0.0, 6.0);
+  const Vec3d near_level{80.0, 500.0, 9.0};
+  add_echo(shallow, near_level, 1.0);
+  ElevationOptions prior;
+  prior.sector_from_depth = true;
+  prior.sector_bounces = 1.0;
+  prior.water_depth = 12.0;
+  e = estimate_one(shallow, near_level, 1e-30, prior);
+  EXPECT_FALSE(e.ambiguous);
+  EXPECT_NEAR(elevation_frame(shallow, find_rows(shallow), true).origin.z + e.range * e.world.z, 9.0, 0.3);
+  EXPECT_TRUE(estimate_one(shallow, near_level).ambiguous);
+  // Three rows, the middle one 0.55 m above the lowest: the highest repeat is 4 dB down, one answer.
+  PingRecord three = empty_record({-0.9, -0.35, 0.9}, {0.0, 0.0, 0.0});
+  add_echo(three, target, 1.0);
+  e = estimate_one(three, target);
+  EXPECT_FALSE(e.ambiguous);
+  EXPECT_TRUE(e.alternatives.empty());
+  EXPECT_NEAR(std::asin(e.sin_elevation) / kDeg, truth(elevation_frame(three, find_rows(three), true), target).elevation / kDeg, 0.05);
+  // ... unless the noise could swap them: 48 hydrophones at -9 dB each.
+  e = estimate_one(three, target, 48.0 * 8.0);
+  EXPECT_TRUE(e.ambiguous);
+}
+
+TEST(Elevation, UsesTheAttitudeAtTheEchosArrivalWhenTheRecordHasItsHistory) {
+  // The vehicle was level at the ping and rolled 3 degrees by the time the echo came back (0.67 s later; the
+  // pulse here is 10 ms). The echo is made with the rolled array; the record's pose says level.
+  const Vec3d target{0.0, 500.0, 80.0};
+  PingRecord rolled = empty_record({-0.9, -0.35, 0.9}, {0.0, 0.0, 0.0}, 3.0 * kDeg);
+  add_echo(rolled, target, 1.0);
+  PingRecord rec = empty_record({-0.9, -0.35, 0.9}, {0.0, 0.0, 0.0}, 0.0);
+  rec.samples.data = rolled.samples.data;
+  for (int i = 0; i <= 8; ++i) {
+    InsSample a{};
+    a.t = 0.1 * i;
+    a.rpy = Vec3d{4.5 * kDeg * a.t, 0.0, 0.0};          // 3 degrees at 0.667 s
+    rec.navigation.ins.push_back(a);
+  }
+  Vec3d rpy;
+  double gap = 1.0;
+  ASSERT_TRUE(attitude_at(rec, 0.25, rpy, gap));
+  EXPECT_NEAR(rpy.x / kDeg, 1.125, 1e-9);
+  EXPECT_EQ(gap, 0.0);
+  ASSERT_TRUE(attitude_at(rec, 1.0, rpy, gap));
+  EXPECT_NEAR(gap, 0.2, 1e-12);
+  const ElevationFrame f = elevation_frame(rec, find_rows(rec), true);
+  ElevationOptions o;
+  ElevationEstimate e = estimate_one(rec, target, 1e-30, o);
+  EXPECT_NEAR(std::abs(f.origin.z + e.range * e.world.z - target.z), 500.0 * std::sin(3.0 * kDeg), 2.0);   // 26 m with the pose's attitude
+  o.attitude_arrival = true;
+  o.attitude_rate_sigma = 1.0 * kDeg;
+  e = estimate_one(rec, target, 1e-30, o);
+  EXPECT_NEAR(f.origin.z + e.range * e.world.z, target.z, 0.6);
+  EXPECT_EQ(e.attitude_gap, 0.0);
+  // No history: the pose's attitude, and the sigma owns up to the time of flight at the rate the vehicle may roll.
+  rec.navigation.ins.clear();
+  e = estimate_one(rec, target, 1e-30, o);
+  EXPECT_NEAR(e.attitude_gap, 2.0 * 500.9 / kC + 0.005, 0.01);
+  EXPECT_NEAR(e.sigma / kDeg, e.attitude_gap, 0.01);
+}
+
+TEST(Depth, SigmaTermsThatDoNotComeFromNoise) {
+  EXPECT_NEAR(refraction_sigma(3000.0, 1500.0, 0.017), 51.0, 1e-9);     // isothermal water, 3 km
+  EXPECT_NEAR(refraction_sigma(12000.0, 1500.0, 0.05), 2400.0, 1e-9);
+  EXPECT_TRUE(outside_water(125.0, 10.0, 100.0));
+  EXPECT_FALSE(outside_water(125.0, 10.0, 100.0, 0.0, 2.0, 10.0));      // the bottom itself known to 10 m
+  // The assumed-gradient ray: range^2 g / 2c above the straight line.
+  const double g = 0.05, own = 100.0;
+  const double z = ray_depth(own, -2.0 * kDeg, 3000.0, {0.0, 10100.0}, {1500.0 - g * own, 1500.0 + g * 10000.0});
+  EXPECT_NEAR(z - (own + 3000.0 * std::sin(2.0 * kDeg)), -3000.0 * 3000.0 * g / 3000.0, 6.0);
+}
+
+TEST(Tracker, ChoosesAmongAnAmbiguousDetectionsCandidates) {
+  TrackerOptions o;
+  o.confirm_hits = 1;
+  o.depth_process_noise = 0.0;
+  Tracker tracker(o);
+  auto det = [](double depth, std::vector<double> others, bool ambiguous) {
+    Detection d{500.0, 0.1, 20.0, 1};
+    d.depth = depth;
+    d.depth_sigma = 4.0;
+    d.depth_ambiguous = ambiguous;
+    d.depth_alternatives = std::move(others);
+    return d;
+  };
+  tracker.update(0.0, {det(136.0, {52.0}, true)});
+  EXPECT_TRUE(std::isnan(tracker.tracks()[0].depth));                  // a track does not start on a guess
+  tracker.update(1.0, {det(50.0, {}, false)});
+  EXPECT_NEAR(tracker.tracks()[0].depth, 50.0, 1e-9);
+  tracker.update(2.0, {det(136.0, {52.0, -32.0}, true)});              // the candidate that fits
+  EXPECT_NEAR(tracker.tracks()[0].depth, 51.0, 1e-9);
+  tracker.update(3.0, {det(136.0, {220.0}, true)});                    // none fits: left alone
+  EXPECT_NEAR(tracker.tracks()[0].depth, 51.0, 1e-9);
+}
+
 TEST(Depth, FoldsBounceArrivalsBackIntoTheWaterColumn) {
   EXPECT_EQ(fold_depth(50.0, 100.0).second, "direct");
   EXPECT_NEAR(fold_depth(-50.0, 100.0).first, 50.0, 1e-12);

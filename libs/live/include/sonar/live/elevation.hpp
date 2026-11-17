@@ -25,7 +25,11 @@ namespace sonar::live {
 
 struct ElevationOptions {
   bool enabled = false;            ///< off: the chain as it was; on with a one-row array: the same
-  double first_deg = -30.0, last_deg = 30.0, step_deg = 0.5;  ///< elevation searched, vehicle frame, up positive
+  double first_deg = -30.0, last_deg = 30.0, step_deg = 0.25;  ///< elevation searched, vehicle frame, up positive
+  /// Search only where water depth and range let an arrival come from: straight rays with this many
+  /// boundary bounces, plus a margin (rad). Needs the water depth.
+  bool sector_from_depth = false;
+  double sector_bounces = 1.0, sector_margin = 0.017453292519943295;
   double range_window_m = 0.0;     ///< half-width of the range search about a detection; 0: 1.5 range cells
   std::int64_t max_detections = 32;  ///< strongest detections given an elevation, per ping
   /// Take the earliest arrival in the range window that is within first_arrival_db of the strongest
@@ -33,13 +37,25 @@ struct ElevationOptions {
   bool first_arrival = true;
   double first_arrival_db = 8.0, first_arrival_snr_db = 13.0;
   double min_quality = 0.6;        ///< below this no elevation is reported
-  double ambiguity_db = 1.5;       ///< a second lobe within this of the first: flagged, not used for depth
+  double ambiguity_db = 1.0;       ///< a second lobe within this of the first is never trusted, and
+  double ambiguity_sigma = 3.0;    ///< one further down must lose by this many sigma of the noise: else flagged ambiguous
+  double alternatives_db = 6.0;    ///< lobes within this of the first are the candidates a track chooses among
   bool correct_bearing = true;     ///< report and track the horizontal bearing, not the cone angle
   bool depth = true;               ///< report depth, and let tracks carry it
   bool fold = true;                ///< fold a depth outside the water column back in
   bool classify = true;            ///< a track whose depth lies outside the water column is multipath
   double classify_sigma = 2.0;     ///< ... by more than this many sigma
   double water_depth = 0.0;        ///< m; 0: the record's environment.water_depth (NaN or 0 there: unknown)
+  double water_depth_sigma = 0.0;  ///< m: into the bottom test and the depth of bottom-bounce arrivals
+  /// Roll, pitch and yaw as they were when each echo arrived, from the record's attitude history
+  /// (navigation.ins); false: as the record's pose has them.
+  bool attitude_arrival = false;
+  double attitude_rate_sigma = 0.0;  ///< rad/s: added uncertainty per second of gap to the nearest attitude sample
+  /// An assumed mean vertical sound-speed gradient (1/s): depth along the ray through
+  /// c(z) = local speed + gradient (z - own depth) instead of the straight line.
+  bool use_gradient = false;
+  double gradient = 0.0;
+  double gradient_sigma = 0.05;    ///< 1/s: how well the gradient is known; depth sigma gains range^2 x this / 2c
   double surface_z = 0.0;          ///< z of the sea surface in the navigation's frame
   /// A sound-speed profile (m, m/s): depth_m then comes from a ray traced through it, not the straight line.
   std::vector<double> ssp_depth, ssp_speed;
@@ -61,6 +77,15 @@ struct ElevationFrame {
   std::vector<double> heights;  ///< element positions along `up`, m about the origin (the elements used)
 };
 ElevationFrame elevation_frame(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, bool starboard);
+/// The same with another attitude (roll, pitch, yaw) than the pose's.
+ElevationFrame elevation_frame(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, bool starboard, const Vec3d& rpy);
+
+/// Attitude from the record's history (navigation.ins, seconds after the transmit) at time t: interpolated
+/// between the samples around it (gap 0), or the nearest sample and its distance in time. False without a history.
+bool attitude_at(const PingRecord& record, double t, Vec3d& rpy, double& gap);
+
+/// Depth uncertainty (m) from a mean sound-speed gradient known only to gradient_sigma (1/s): range^2 sigma / 2c.
+double refraction_sigma(double slant_range, double sound_speed, double gradient_sigma);
 
 /// World unit vector towards an arrival at a cone angle and an elevation in the array's frame.
 Vec3d arrival_direction(const ElevationFrame& frame, double sin_cone, double sin_elevation);
@@ -80,6 +105,8 @@ struct ElevationEstimate {
   double snr_db = 0.0;         ///< at one hydrophone
   double range = 0.0;          ///< slant range of the peak, m
   Vec3d world;                 ///< unit vector towards the arrival (north, east, down)
+  std::vector<Vec3d> alternatives;  ///< the other candidate lobes, when ambiguous
+  double attitude_gap = 0.0;   ///< s between the echo's arrival and the attitude used for it
 };
 
 struct ElevationHit {
@@ -107,7 +134,8 @@ double ray_depth(double receiver_depth, double elevation, double slant_range, co
                  const std::vector<double>& ssp_speed, double water_depth = 0.0);
 
 /// Whether a straight-line depth lies outside the water column by more than n_sigma sigma.
-bool outside_water(double z, double sigma, double water_depth, double surface_z = 0.0, double n_sigma = 2.0);
+bool outside_water(double z, double sigma, double water_depth, double surface_z = 0.0, double n_sigma = 2.0,
+                   double water_depth_sigma = 0.0);
 
 struct PassiveElevation {
   double elevation = 0.0;  ///< rad, array frame, up positive
