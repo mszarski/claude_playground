@@ -2,18 +2,71 @@
 # Use in a scenario:  reverberation: [{model: fluid_sediment, boundary_z: ..., sediment: <name>}]
 # (keys given in the item override the table's).
 #
-# Each entry: rho (density ratio), nu (sound-speed ratio), delta (loss parameter),
-# w2 (roughness spectral strength, m^(4 - gamma2), wavenumbers in rad/m), gamma2 (spectral
-# exponent), sigma2 (volume parameter), and `source` and `status`.
+# An entry gives the six model parameters directly:
+#   rho (density ratio), nu (sound-speed ratio), delta (loss parameter),
+#   w2 (roughness spectral strength, m^(4 - gamma2), wavenumbers in rad/m), gamma2 (spectral
+#   exponent), sigma2 (volume parameter: volume cross section per unit volume / attenuation in dB/m)
+# or a `physical:` block in the units of its source, converted by
+# bottom.parameters_from_physical (the conversion is written out there and tested):
+#   density kg/m3, sound_speed m/s, attenuation_db_per_m at attenuation_frequency (Hz),
+#   w2 m^(4 - gamma2), gamma2, volume_strength_db (10 log10 of the volume cross section per
+#   unit volume in 1/m), water_density kg/m3, water_sound_speed m/s.
+# A spectral strength quoted in cm^4 (1 cm reference length) must be converted first:
+# bottom.w2_from_cm4.
 #
-# status: confirmed   - every number was read from the cited public document.
-# status: unconfirmed - illustrative or from memory; a warning is raised when it is used.
+# status: confirmed   - every number in the entry was read from the cited public document.
+# status: unconfirmed - illustrative; a warning is raised when it is used.
 #
-# NO measured or published sediment is listed. The usual table of named sediments (clay to
-# rough rock, by grain size) is in APL-UW TR 9407, which is limited-distribution and was not
-# read. The open papers that could be opened give either only geoacoustic values or rows
-# that their authors copied from TR 9407, which are not reproduced here. Add entries for a
-# site from measurements or from a public paper, with its citation in `source`.
+# APL-UW TR 9407 (limited distribution) holds the usual table from clay to rough rock; it was
+# not read. The two confirmed rows below were read from an arXiv paper whose authors attribute
+# them to TR 9407. No other complete row was found on arXiv:
+# - Olson, Lyons and Saebo, arXiv:1601.06078, Table II gives "generic rock" as an elastic solid
+#   only (compressional speed 3600 m/s, shear speed 1900 m/s, density 2500 kg/m3, loss
+#   parameters 0.0018 and 0.085; attributed there to TR 9407 Table IV.2), with no roughness or
+#   volume parameters for it. That is not a fluid-sediment row, so it is not an entry.
+# - Tables of sound speed, density and attenuation alone (arXiv:1611.00608 Table 1,
+#   arXiv:2003.11156 Tables 1-2) lack the roughness and volume parameters.
+
+medium_sand:
+  physical:
+    density: 1845.0
+    sound_speed: 1767.0
+    attenuation_db_per_m: 10.0
+    attenuation_frequency: 20.0e3
+    w2: 1.410e-4
+    gamma2: 3.25
+    volume_strength_db: -20.0
+    water_density: 1000.0
+    water_sound_speed: 1500.0
+  status: confirmed
+  source: >-
+    Brown, Johnson and Brownstead, "Simulation and testing results for a sub-bottom imaging
+    sonar", arXiv:1809.08459, Table 1, column "Medium Sand" (the paper says the values are
+    taken from APL-UW TR 9407 and that the attenuation is given at 20 kHz). The spectral
+    strength is printed there in m^(4 - gamma).
+  assumptions: >-
+    The paper does not print its water density and sound speed; 1000 kg/m3 and 1500 m/s are
+    assumed here to form the ratios. "Vol. Scat. Strength [dB/m]" is read as 10 log10 of the
+    volume scattering cross section per unit volume in 1/m.
+
+very_fine_silt:
+  physical:
+    density: 1147.0
+    sound_speed: 1476.0
+    attenuation_db_per_m: 1.4
+    attenuation_frequency: 20.0e3
+    w2: 1.638e-5
+    gamma2: 3.25
+    volume_strength_db: -28.6
+    water_density: 1000.0
+    water_sound_speed: 1500.0
+  status: confirmed
+  source: >-
+    Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1, column "Very Fine Silt" (values
+    attributed there to APL-UW TR 9407; attenuation at 20 kHz; spectral strength in m^(4 - gamma)).
+  assumptions: >-
+    Water density 1000 kg/m3 and sound speed 1500 m/s assumed (not printed in the paper).
+    "Vol. Scat. Strength [dB/m]" read as 10 log10 of the volume cross section per unit volume in 1/m.
 
 placeholder_sand:
   rho: 1.9

@@ -9,9 +9,8 @@ below about 60 degrees of grazing and for k x rms relief (at scales near the aco
 wavelength) below about one. Opt-in alternatives (`roughness_model=`, see "Other regimes"
 below) add the Kirchhoff approximation near the specular direction, the small-slope
 approximation that joins the two, and the composite-roughness (large-scale slope) average at
-small grazing angles. No table of named sediments with these six parameters is shipped: none
-was found outside the handbook (`configs/sediments.yaml` holds the placeholder and says
-what is missing; `sediment()` reads it).
+small grazing angles. Named sediments are in `configs/sediments.yaml` (`sediment()` reads it):
+two rows read from an arXiv paper that attributes them to the handbook, and the placeholder.
 
 Parameters (dimensionless unless noted), as in the published models:
   rho     sediment density / water density
@@ -121,13 +120,32 @@ the roughness and volume numbers were chosen to give a backscattering strength n
 
 
 SEDIMENT_KEYS = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
+_DB_PER_NEPER = 20.0 / math.log(10.0)
 
 
-def sediment(name: str, path=None) -> dict:
-    """The six parameters of a named sediment from `configs/sediments.yaml` (or `path`). An
-    entry whose `status` is not "confirmed" raises a warning: its numbers are not from a
-    source."""
-    import warnings
+def w2_from_cm4(strength_cm4: float, gamma2: float) -> float:
+    """Spectral strength in m^(4 - gamma2) (wavenumbers in rad/m) from the form with a 1 cm
+    reference length, W = beta (h K)^(-gamma2), h = 1 cm, beta in cm^4 (Bentrem et al.,
+    arXiv:physics/0607146, eq. (7) with K = 2 pi f / c, who take it from Mourad and Jackson):
+    W [m^4] = 1e-8 beta (0.01 K [1/m])^(-gamma2), so w2 = beta 10^(2 gamma2 - 8)."""
+    return float(strength_cm4) * 10.0 ** (2.0 * float(gamma2) - 8.0)
+
+
+def parameters_from_physical(*, density: float, sound_speed: float, attenuation_db_per_m: float,
+                             attenuation_frequency: float, w2: float, gamma2: float, volume_strength_db: float,
+                             water_density: float, water_sound_speed: float) -> dict:
+    """The six model parameters from a sediment given in physical units:
+    rho = density / water density;  nu = sound speed / water sound speed;
+    delta from the attenuation a (dB/m) at frequency f: the amplitude decays as
+    exp(-Im(k2) x) with Im(k2) = 2 pi f delta / c_sediment, so a = (20 / ln 10) 2 pi f delta / c_sediment;
+    sigma2 = volume scattering cross section per unit volume (1/m, 10^(dB / 10)) / a."""
+    delta = attenuation_db_per_m * sound_speed / (_DB_PER_NEPER * 2.0 * math.pi * attenuation_frequency)
+    return {"rho": density / water_density, "nu": sound_speed / water_sound_speed, "delta": delta, "w2": float(w2),
+            "gamma2": float(gamma2), "sigma2": 10.0 ** (volume_strength_db / 10.0) / attenuation_db_per_m}
+
+
+def sediment_table(path=None) -> dict:
+    """The entries of `configs/sediments.yaml` (or `path`) as written."""
     from pathlib import Path
 
     import yaml
@@ -135,13 +153,24 @@ def sediment(name: str, path=None) -> dict:
     from .. import config
     file = Path(path) if path is not None else config.config_dir() / "sediments.yaml"
     with open(file) as f:
-        table = yaml.safe_load(f) or {}
+        return yaml.safe_load(f) or {}
+
+
+def sediment(name: str, path=None) -> dict:
+    """The six parameters of a named sediment from `configs/sediments.yaml` (or `path`). An
+    entry gives them directly, or gives `physical:` values that `parameters_from_physical`
+    converts. An entry whose `status` is not "confirmed" raises a warning: its numbers are not
+    from a source."""
+    import warnings
+    table = sediment_table(path)
     if name not in table:
-        raise ValueError(f"unknown sediment {name!r} in {file}; it has {sorted(table)}")
+        raise ValueError(f"unknown sediment {name!r}; the table has {sorted(table)}")
     entry = table[name]
+    if "physical" in entry:
+        entry = dict(parameters_from_physical(**{k: float(v) for k, v in entry["physical"].items()}), **entry)
     missing = [k for k in SEDIMENT_KEYS if k not in entry]
     if missing:
-        raise ValueError(f"sediment {name!r} in {file} lacks {missing}")
+        raise ValueError(f"sediment {name!r} lacks {missing}")
     if entry.get("status") != "confirmed":
         warnings.warn(f"sediment {name!r} is {entry.get('status', 'unconfirmed')}: its parameters are not from a "
                       "measured or published source", stacklevel=2)

@@ -1206,6 +1206,9 @@ Sources opened, and what was taken from each:
 | Olson and Jackson, "Scattering from layered seafloors", arXiv:2009.12420 (2020), eqs. (13)-(16), (20) | Jackson's perturbation-theory factor A for a fluid half-space. Not used in the code: a test checks that our own derivation gives the same number. |
 | Olson, "A series approximation to the Kirchhoff integral", arXiv:2106.08287 (2021), eqs. (13), (24) and Sec. II.B | The spectrum/covariance convention and the form of the two-dimensional Kirchhoff integral, with the statement that the Kirchhoff and small-slope approximations both use it with the argument (change of vertical wavenumber)^2. |
 | Nennouche, Khalighi, Dowhuszko and Merad, arXiv:2603.23727v2 (2026), eqs. (20)-(23) | The Hall-Novarini bubble population (after Keiffer, Novarini and Norton, JASA 97, 1995): all its constants. |
+| Brown, Johnson and Brownstead, arXiv:1809.08459 (2018), Table 1 | Two sediment rows (medium sand, very fine silt), attributed there to TR 9407. |
+| Bentrem, Sample, Kalcic and Duncan, arXiv:physics/0607146 (2006), eq. (7), Table II | The centimetre form of the roughness spectrum (for unit conversion) and the definitions of the six parameters. |
+| Olson, Lyons and Saebo, arXiv:1601.06078 (2016), Sec. III | Statement that the first-order small-slope cross section is a geoacoustic factor times the Kirchhoff integral (supports the form used; no formula printed). |
 | Morency and Stilwell, arXiv:2210.06535 (2022), Sec. II-E and II-F | Empirical surface backscattering law and the SEARAY bottom law with bottom types 1-4 (they quote D. Kraus's lecture notes). No validity range is given there. |
 
 Our own derivations (each tested against an independent calculation):
@@ -1226,13 +1229,20 @@ Our own derivations (each tested against an independent calculation):
 
 Not found in any source that could be opened, so not implemented or left as a parameter:
 
-- A table of named sediments with the six model parameters. The open papers found either
-  give geoacoustic values only, or reproduce rows they attribute to TR 9407 (Brown, Johnson
-  and Brownstead, arXiv:1809.08459, Table 1: medium sand and very fine silt; Olson, Lyons and
-  Saebo, arXiv:1601.06078, Table II: generic rock). Those rows were not copied.
+- More named sediments than the two rows now in `configs/sediments.yaml` (medium sand and very
+  fine silt, read from Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1, who attribute
+  them to TR 9407; the owner allowed arXiv papers that cite it). Olson, Lyons and Saebo,
+  arXiv:1601.06078, Table II gives generic rock only as an elastic solid, without roughness or
+  volume parameters, so it is not a row. The paper's water values are not printed: 1000 kg/m3
+  and 1500 m/s are assumed for the ratios.
+- The handbook's formulas for surface bubble loss, surface and bottom backscattering strength,
+  surface forward loss and the Kirchhoff/composite interpolation: no arXiv paper found prints
+  them (Bentrem et al., arXiv:physics/0607146, print only the six-parameter list and the
+  spectrum convention, their eq. (7), used for `bottom.w2_from_cm4`).
 - Hamilton's regressions, Mourad and Jackson (1989), Williams and Jackson (1998), Jackson,
   Winebrenner and Ishimaru (1986), Thorsos (1988, 1990), Hall (1989), Ainslie (2005), Dahl's
-  papers and McDaniel's review: none could be opened.
+  papers and McDaniel's review: none could be opened (pubs.aip.org, ieeexplore.ieee.org and
+  core.ac.uk answer automated requests with a browser challenge).
 - The published interpolation between the Kirchhoff and composite results, and the published
   choice of the composite split: ours are documented in `bottom.py`.
 - A physical rough-surface plus bubble-layer backscattering model: only the empirical law is in.

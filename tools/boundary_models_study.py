@@ -17,9 +17,8 @@ import argparse
 import warnings
 
 import numpy as np
-import yaml
 
-from gpusonar import acoustics, config
+from gpusonar import acoustics
 from gpusonar.sim import bottom, surface
 
 ANGLES = np.array([2.0, 5.0, 10.0, 20.0, 30.0, 45.0, 60.0, 75.0, 85.0, 90.0])
@@ -43,8 +42,7 @@ def main() -> None:
     c = args.sound_speed
     warnings.simplefilter("ignore")                       # the range warnings are the subject of the notes below
 
-    with open(config.config_dir() / "sediments.yaml") as f:
-        table = yaml.safe_load(f)
+    table = bottom.sediment_table()
     for f_hz in args.frequency:
         for name, entry in table.items():
             par = bottom.sediment(name)
