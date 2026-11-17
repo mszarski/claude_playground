@@ -76,6 +76,29 @@ def build_novel(n: int, seed: int, registry: dict | None = None,
     return rows
 
 
+def build_balanced(registry: dict, per_kind: int, seed: int, seed_range: tuple[int, int]) -> list[dict]:
+    """Eval-only split with the same number of rows for every edit kind (small kinds are no longer 14-row estimates)."""
+    rng = random.Random(seed)
+    rows, seen = [], set()
+    for kind, fn in registry.items():
+        n = tries = 0
+        while n < per_kind and tries < per_kind * 400:
+            tries += 1
+            doc = generate_design(rng.randint(*seed_range), max_sections=rng.choice([1, 2, 2, 3]))
+            ex = fn(doc, rng)
+            if ex is None:
+                continue
+            row = to_row(ex)
+            key = (row["before"], row["instruction"])
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
+            n += 1
+    rng.shuffle(rows)
+    return rows
+
+
 def to_row(ex) -> dict:
     return {
         "prompt": prompt_messages(ex.before, ex.instruction),
@@ -117,6 +140,7 @@ def main() -> None:
     ap.add_argument("--holdout-kinds", default="", help="comma-separated edit kinds to keep out of train")
     ap.add_argument("--n-novel", type=int, default=300, help="size of the eval-only novel-edit split")
     ap.add_argument("--splits", default="train,test,test_novel", help="which splits to (re)build")
+    ap.add_argument("--per-kind", type=int, default=150, help="rows per edit kind in the *_big balanced splits")
     ap.add_argument("--out", default="data")
     ap.add_argument("--push", default=None, help="Hub dataset repo id, e.g. user/design-edits")
     ap.add_argument("--public", action="store_true", help="make the pushed dataset public (default private)")
@@ -136,6 +160,10 @@ def main() -> None:
         splits["test"] = build(args.n_test, args.seed + 1, (1_000_000, 1_099_999), all_kinds)
     if "test_novel" in want:
         splits["test_novel"] = build_novel(args.n_novel, args.seed + 2)
+    if "test_novel_big" in want:
+        splits["test_novel_big"] = build_balanced(edits.NOVEL, args.per_kind, args.seed + 12, (1_100_000, 1_199_999))
+    if "test_goal_big" in want:
+        splits["test_goal_big"] = build_balanced(edits.GOAL, args.per_kind, args.seed + 13, (1_200_000, 1_299_999))
     if "test_goal" in want:
         splits["test_goal"] = build_novel(args.n_novel, args.seed + 3, edits.GOAL, (1_200_000, 1_299_999))
 

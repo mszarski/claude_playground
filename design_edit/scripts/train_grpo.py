@@ -88,6 +88,8 @@ def main() -> None:
     ap.add_argument("--judge-model", default="Qwen/Qwen3-235B-A22B-Instruct-2507")
     ap.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
     ap.add_argument("--visual-judge", default="meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8")
+    ap.add_argument("--reward-version", type=int, default=1,
+                    help="goal reward: 1 = judge + penalties; 2 = + full change list for the judge and teacher refs")
     ap.add_argument("--free-changes", type=int, default=3, help="property changes allowed before the edit-size penalty")
     ap.add_argument("--save-steps", type=int, default=0, help="push LoRA checkpoints every N steps (0 = off)")
     ap.add_argument("--vllm-server", action="store_true",
@@ -150,7 +152,10 @@ def main() -> None:
         keep = set(args.kinds.split(","))
         train = train.filter(lambda r: r["kind"] in keep)
     train = train.shuffle(seed=1).select(range(min(args.n_prompts, len(train))))
-    train = train.select_columns(["prompt", "before", "after", "relax", "kind", "instruction"])
+    keep_cols = ["prompt", "before", "after", "relax", "kind", "instruction"]
+    if "refs" in train.column_names:  # teacher references for goal prompts (JSON list of "after" docs)
+        keep_cols.append("refs")
+    train = train.select_columns(keep_cols)
 
     def text_of(c):
         return c[0]["content"] if isinstance(c, list) else c
@@ -201,43 +206,29 @@ def main() -> None:
 
     visual_stats = {"judged": 0, "unreachable": 0}
 
-    def _visual_one(before_text, after_text, relax_text, instruction, completion):
-        """Reference-matched prompts keep the reference score; goal prompts get validators + visual judge."""
+    from design_edit.goal_reward import goal_reward
+
+    def _visual_one(before_text, after_text, relax_text, instruction, completion, refs_text="[]"):
+        """Reference-matched prompts keep the reference score; goal prompts get the label-free goal reward."""
         if after_text != before_text:  # has a reference edit
             return score(before_text, after_text, completion, relax_text).reward
-        doc = parse(before_text)
-        try:
-            after_doc = apply_patch(doc, completion)
-        except (PatchError, ValueError, KeyError, IndexError):
-            return -1.0
-        canon = format_patch(diff(doc, after_doc)) if after_doc["id"] == doc["id"] else ""
-        if not canon:
-            return 0.0
-        r = _renderer()
-        penalty = 0.25 * (len(set(lint(after_doc)) - set(lint(doc))) + len(r.new_issues(doc, after_doc)))
-        # Edit-size penalty: goal edits rarely need more than a few property changes; larger patches pay a little
-        # per extra change, so RL can't buy judge approval with extra emphasis.
-        n_changes = len(change_facts(doc, after_doc))
-        penalty += 0.1 * max(0, n_changes - args.free_changes)
-        # Structural placement: "below X" / "above X" / "underneath it" must be honoured exactly. A screenshot judge
-        # can't reliably see order (RL drifted to inserting a duplicate above instead of below).
-        penalty += min(1.0, 0.5 * len(placement_violations(instruction, doc, after_doc)))
-        v = visual_judge(r.screenshot(doc), r.screenshot(after_doc), instruction, canon, args.visual_judge)
-        if v is None:
+        refs = json.loads(refs_text) if refs_text else []
+        res = goal_reward(before_text, instruction, completion, judge_model=args.visual_judge, renderer=_renderer(),
+                          free_changes=args.free_changes, version=args.reward_version, refs=refs)
+        if res["valid"] and res["verdict"] is None and not res["judge_reachable"]:
             visual_stats["unreachable"] += 1
-            return 0.0 - penalty
-        visual_stats["judged"] += 1
-        # Fulfilment gates the rest: a change that ignores the request earns nothing for being tidy.
-        dims = sum(bool(v[d]) for d in DIMENSIONS) / len(DIMENSIONS)
-        return (dims if v["fulfilled"] else 0.0) - penalty
+        elif res["verdict"] is not None:
+            visual_stats["judged"] += 1
+        return res["reward"]
 
     # One pool for the whole run: each worker thread keeps its own Chromium (thread-local Renderer).
     # A fresh pool per call leaked a browser per thread per step and hung the run at step 3.
     visual_pool = ThreadPoolExecutor(8)
 
-    def visual_reward(completions, before, after, relax, instruction, **_):
+    def visual_reward(completions, before, after, relax, instruction, **kw):
+        refs = kw.get("refs") or ["[]"] * len(before)
         futs = [visual_pool.submit(_visual_one, *x)
-                for x in zip(before, after, relax, instruction, [text_of(c) for c in completions])]
+                for x in zip(before, after, relax, instruction, [text_of(c) for c in completions], refs)]
         out = []
         for f in futs:
             try:

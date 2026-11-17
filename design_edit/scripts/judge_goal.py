@@ -95,25 +95,35 @@ def main() -> None:
     ap.add_argument("--base-url", default="https://router.huggingface.co/v1")
     ap.add_argument("--workers", type=int, default=12)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--repeats", type=int, default=1, help="judge every row N times and average")
     args = ap.parse_args()
     token = os.environ["HF_TOKEN"]
 
     outs = load_outputs(args.outputs)
     rows = [json.loads(line) for line in open(args.data)]
     assert len(outs) == len(rows), "row count mismatch"
-    with ThreadPoolExecutor(args.workers) as pool:
-        verdicts = list(pool.map(lambda ro: judge_row(ro[0], ro[1]["output"], args.judge, token, args.base_url),
-                                 zip(rows, outs)))
+    runs = []
+    for _ in range(args.repeats):
+        with ThreadPoolExecutor(args.workers) as pool:
+            runs.append(list(pool.map(lambda ro: judge_row(ro[0], ro[1]["output"], args.judge, token, args.base_url),
+                                      zip(rows, outs))))
+    # Per-row score = share of repeats that passed; averaging repeats cuts the judge's run-to-run noise.
+    scores = [sum(v) / len(v) for v in zip(*runs)]
     by = defaultdict(list)
-    for r, v in zip(rows, verdicts):
+    for r, v in zip(rows, scores):
         by[r["kind"]].append(v)
     print(f"{'kind':<20}{'n':>5}{'judged pass':>13}")
-    print(f"{'OVERALL':<20}{len(verdicts):>5}{sum(verdicts) / len(verdicts):>13.3f}")
+    print(f"{'OVERALL':<20}{len(scores):>5}{sum(scores) / len(scores):>13.3f}")
     for k, v in sorted(by.items()):
         print(f"{k:<20}{len(v):>5}{sum(v) / len(v):>13.3f}")
+    if args.repeats > 1:
+        agree = sum(len(set(v)) == 1 for v in zip(*runs)) / len(scores)
+        print(f"repeats: {args.repeats}; rows where all repeats agree: {agree:.3f}; "
+              f"per-run pass rates: {[round(sum(r) / len(r), 3) for r in runs]}")
     if args.out:
-        Path(args.out).write_text(json.dumps({"verdicts": verdicts}, indent=1))
-
+        # same shape as eval JSONs, so compare.py can bootstrap it (metric "exact" = judged pass share)
+        Path(args.out).write_text(json.dumps({"rows": [{"kind": r["kind"], "exact": s, "output": o["output"]}
+                                                       for r, s, o in zip(rows, scores, outs)]}, indent=1))
 
 if __name__ == "__main__":
     main()

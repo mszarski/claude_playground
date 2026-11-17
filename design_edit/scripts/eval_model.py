@@ -7,6 +7,8 @@
 #     "datasets>=3.0",
 #     "huggingface_hub>=0.34",
 #     "vllm>=0.22",
+#     "trl==1.17.1",
+#     "peft>=0.17",
 #     "kernels",
 #     "flash-linear-attention",
 # ]
@@ -56,8 +58,33 @@ def main() -> None:
     ap.add_argument("--vllm", action="store_true", help="generate with vLLM (much faster for large models)")
     ap.add_argument("--no-think", action="store_true", help="enable_thinking=False in the chat template")
     ap.add_argument("--template-kwargs", default=None, help="JSON chat-template kwargs")
+    ap.add_argument("--adapter", default=None,
+                    help="LoRA checkpoint to merge into --model first, as <repo>/<subfolder> (e.g. user/run-ckpt/checkpoint-50)")
     args = ap.parse_args()
     bootstrap(args.dataset)
+
+    out_repo, out_prefix, model_path = args.model, "", args.model
+    if args.adapter:
+        # Merge on CPU and save locally, so the GPU is free for vLLM afterwards.
+        import torch as _torch
+        from huggingface_hub import snapshot_download
+        from peft import PeftModel
+        from trl.trainer.utils import create_model_from_path
+
+        repo, sub = args.adapter.rsplit("/", 1)
+        ckpt = os.path.join(snapshot_download(repo, allow_patterns=[f"{sub}/adapter_*"]), sub)
+        base = create_model_from_path(args.model, dtype=_torch.bfloat16)  # same loader the trainer used
+        merged = PeftModel.from_pretrained(base, ckpt).merge_and_unload()
+        model_path = "/tmp/merged_model"
+        merged.save_pretrained(model_path)
+        aux = snapshot_download(args.model, ignore_patterns=["*.safetensors", "eval_*", "sample_*"])
+        import shutil
+        for f in os.listdir(aux):
+            if os.path.isfile(os.path.join(aux, f)) and not os.path.exists(os.path.join(model_path, f)):
+                shutil.copy(os.path.join(aux, f), model_path)
+        del merged, base
+        out_repo, out_prefix = repo, sub + "/"
+        print(f"merged {args.adapter} into {args.model} -> {model_path}", flush=True)
 
     import torch
     from datasets import load_dataset
@@ -74,7 +101,7 @@ def main() -> None:
         os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")  # no nvcc on the Jobs image
         from vllm import LLM, SamplingParams
 
-        llm = LLM(model=args.model, dtype="bfloat16", max_model_len=4096, gpu_memory_utilization=0.9,
+        llm = LLM(model=model_path, dtype="bfloat16", max_model_len=4096, gpu_memory_utilization=0.9,
                   limit_mm_per_prompt={"image": 0})
         params = SamplingParams(temperature=0.0, max_tokens=320)
 
@@ -87,9 +114,9 @@ def main() -> None:
                     print("raw output sample:", repr(t[:200]), flush=True)
             return texts
     else:
-        tok = AutoTokenizer.from_pretrained(args.model)
+        tok = AutoTokenizer.from_pretrained(model_path)
         tok.padding_side = "left"
-        model = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.bfloat16, device_map="auto").eval()
+        model = AutoModelForCausalLM.from_pretrained(model_path, dtype=torch.bfloat16, device_map="auto").eval()
 
         @torch.no_grad()
         def generate(prompts):
@@ -109,7 +136,7 @@ def main() -> None:
         path = f"eval_{split}.json"
         Path(path).write_text(json.dumps(result, indent=1))
         if not args.no_push:
-            upload_file(path_or_fileobj=path, path_in_repo=path, repo_id=args.model)
+            upload_file(path_or_fileobj=path, path_in_repo=out_prefix + path, repo_id=out_repo)
     print("\nSUMMARY " + json.dumps(overall))
     # vLLM engine processes can keep the job alive after all results are uploaded; exit hard.
     sys.stdout.flush()
