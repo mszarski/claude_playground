@@ -19,7 +19,7 @@ from test_live import CHAIN, INTERVAL, N, OVERRIDES, copies, pings  # noqa: F401
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 TOOL = ROOT / "tools" / "sonar_live_hsb.py"
-FRAME = 1600                       # samples per frame: 25 ms, 153,728 bytes
+FRAME = 400                        # samples per frame: 6.25 ms, 38,528 bytes
 LEAD = 1.0                         # s of stream before the first transmit
 
 
@@ -31,7 +31,7 @@ def assemble(frames, **options):
 def test_frames_are_all_one_size_and_hold_the_pings(pings):
     stream = hsb.FrameStream(pings, FRAME, lead_seconds=LEAD)
     frames = list(stream)
-    assert len(frames) == stream.n_frames and {len(f) for f in frames} == {hsb.frame_bytes(32, FRAME)} == {153728}
+    assert len(frames) == stream.n_frames and {len(f) for f in frames} == {hsb.frame_bytes(32, FRAME)} == {38528}
     assert len(frames[0]) % 128 == 0
     heads = [decode_block(f) for f in frames]
     assert [h["sample_index"] for h in heads] == [k * FRAME for k in range(len(frames))]      # continuous, tail padded
@@ -307,7 +307,10 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     reason = sensor_bridge_reason()
     if reason:
         pytest.skip(reason)
-    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "1.0"))
+    # Half of real time. At full rate every run on Hugging Face lost 13 to 19 datagrams once (one frame
+    # of 2006, between pings); at half and quarter rate none. The receiver's socket buffer is the system
+    # default (208 KB), which Sensor Bridge leaves alone for frames this small and a container cannot raise.
+    pace = float(os.environ.get("GPUSONAR_HSB_PACE", "0.5"))
     w = gs.RecordWriter(str(tmp_path / "pings.h5"))
     for r in copies(pings):
         w.write(r)
@@ -334,6 +337,7 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     assert stats["bad_frames"] == 0 and stats["lost_samples"] == 0
     # The same pings straight through the chain: framed and assembled here, no transport.
     direct_records = hsb.records_from_frames(hsb.frames_from_records(copies(pings), FRAME, lead_seconds=LEAD), "flank_32", OVERRIDES)
+    sent_samples = direct_records[0].samples.array.copy()            # the chain conditions records in place
     with LiveChain(CHAIN) as chain:
         direct = chain.run(direct_records)
     got = lines(tmp_path / "hsb.jsonl")
@@ -350,7 +354,9 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
             worst["bearing_deg"] = max(worst["bearing_deg"], abs(da["bearing_deg"] - db["bearing_deg"]))
     print("largest differences from the direct chain:", worst)
     assert worst["track_m"] < 0.05 and worst["range_m"] < 0.05 and worst["bearing_deg"] < 0.05
-    assert {t["kind"] for t in got[-1]["tracks"]} >= {"mover", "static"}
+    # Two confirmed tracks. The stream carries no navigation, so the records sit at the origin and the
+    # standing target takes ownship's speed (test_live.py shows the same without navigation).
+    assert [t["kind"] for t in got[-1]["tracks"]] == ["mover", "mover"]
     # What was recorded on the way in is what the board sent.
     raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "hsb.h5")}))
-    assert len(raw) == N and np.array_equal(raw[0].samples.array, direct_records[0].samples.array)
+    assert len(raw) == N and np.array_equal(raw[0].samples.array, sent_samples)

@@ -8,6 +8,8 @@
 # Needs: a CUDA 12 toolkit with nvcc, Holoscan 4.x C++ package and the matching `holoscan`
 # Python wheel in the active python3 (tools/gpu_job.sh with GPUSONAR_HOLOSCAN_CPP=1 installs
 # both), CMake >= 3.24, root for apt (HSB_SKIP_APT=1 when the packages are already there).
+# HSB_UDP_PATCH=1 applies third_party/patches/hsb-2.7.0-emulator-udp-socket.patch (see its header): needed
+# only where raw sockets are not permitted; the emulator then also wants HSB_EMULATOR_UDP_SOCKET=1.
 # HSB_JOBS (default 6) bounds the parallel compiles: each takes over a gigabyte, and a container
 # reports the host's cores, not its own share.
 # HSB_CUDA_ARCH (default: native) is passed as CMAKE_CUDA_ARCHITECTURES: set it to a number
@@ -22,7 +24,7 @@ tag=2.7.0
 export DEBIAN_FRONTEND=noninteractive
 if [ "${HSB_SKIP_APT:-0}" != "1" ]; then
   # What Sensor Bridge's docker/Dockerfile installs, less the display, RoCE and DOCA parts.
-  apt-get install -y -qq --no-install-recommends git curl ca-certificates ninja-build pkgconf zlib1g-dev \
+  apt-get install -y -qq --no-install-recommends git patch curl ca-certificates ninja-build pkgconf zlib1g-dev \
       libfmt-dev libyaml-cpp-dev libcurlpp-dev libcurl4-openssl-dev libssl-dev libnuma-dev libelf-dev \
       libvulkan1 libegl1 > /dev/null        # the Python module links Holoscan's visualiser, so its libraries must load
   if ! dpkg -s libnvcomp5-dev-cuda-12 > /dev/null 2>&1; then
@@ -39,6 +41,12 @@ if [ "${HSB_SKIP_APT:-0}" != "1" ]; then
 fi
 rm -rf "$prefix/src" "$prefix/build"
 git clone -q -c advice.detachedHead=false --depth 1 -b "$tag" "$ref" "$prefix/src"
+if [ "${HSB_UDP_PATCH:-0}" = "1" ]; then
+  # Opt-in: lets the emulator send through an ordinary UDP socket when HSB_EMULATOR_UDP_SOCKET=1 is in
+  # its environment, for containers without CAP_NET_RAW. Unpatched behaviour stays the default.
+  here=$(cd "$(dirname "$0")/.." && pwd)
+  patch -d "$prefix/src" -p1 -s < "$here/third_party/patches/hsb-$tag-emulator-udp-socket.patch"
+fi
 cmake -S "$prefix/src" -B "$prefix/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
       -DCMAKE_CUDA_ARCHITECTURES="${HSB_CUDA_ARCH:-native}" -DPython3_ROOT_DIR="$(python3 -c 'import sys; print(sys.prefix)')" \
       -DPython3_FIND_VIRTUALENV=FIRST \

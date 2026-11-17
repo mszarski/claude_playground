@@ -38,7 +38,12 @@ import numpy as np
 from ..sonar import SonarModel
 from .flank_stream import FULL_SCALE_COUNTS, HEADER_BYTES, BlockError, PingAssembler, encode_block
 
-FRAME_SAMPLES = 1600           # 25 ms of the 64 kSPS stream: 153,728 bytes with 32 channels
+FRAME_SAMPLES = 400            # 6.25 ms of the 64 kSPS stream: 38,528 bytes with 32 channels, 160 frames a second.
+# A frame leaves the sender as one burst of datagrams into the receiver's socket buffer, which
+# Sensor Bridge's receiver leaves at the system default (208 KB of kernel accounting, about 48
+# datagrams) unless a frame is larger, and which a container may not be able to raise. On loopback
+# 1600-sample frames (110 datagrams) lost 5 frames in 502 and 800-sample frames (55) 1 in 1003.
+# 400-sample frames still lost one frame per run at real time and none at half of it.
 FRAME_ALIGN = 128              # the Sensor Bridge data plane moves frames in 128-byte pages
 
 
@@ -169,6 +174,7 @@ class FrameReceiver:
         self.bad_frames = 0             # not a block of this stream (wrong size, magic, channel count)
         self.packets_dropped = 0        # the receiver's cumulative count
         self.first_frame_number = None
+        self.trouble_frames = []        # frame numbers at which a loss or a damaged frame was noticed (the first 16)
         self._last_frame_number = None
         self.pings = 0
 
@@ -184,12 +190,16 @@ class FrameReceiver:
                 self.first_frame_number = number
             else:
                 self.frames_lost += number - self._last_frame_number - 1
+                if number - self._last_frame_number > 1 and len(self.trouble_frames) < 16:
+                    self.trouble_frames.append(number)
             self._last_frame_number = number
         self.packets_dropped = max(self.packets_dropped, int(get("packets_dropped", 0) or 0))
         size = len(frame)
         received = get("frame_bytes_received", None)
         if received is not None and int(received) < size:
             self.frames_damaged += 1
+            if number is not None and len(self.trouble_frames) < 16:
+                self.trouble_frames.append(number)
             return []
         if self.frame_bytes is not None and size != self.frame_bytes:
             self.bad_frames += 1
@@ -207,7 +217,7 @@ class FrameReceiver:
         a = self.assembler
         return {"frames": self.frames, "frames_lost": self.frames_lost, "frames_damaged": self.frames_damaged,
                 "frames_repeated": self.frames_repeated, "bad_frames": self.bad_frames,
-                "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number,
+                "packets_dropped": self.packets_dropped, "first_frame_number": self.first_frame_number, "trouble_frames": list(self.trouble_frames),
                 "pings": self.pings, "dropped_pings": a.dropped_pings, "lost_samples": a.lost_samples}
 
 
@@ -221,7 +231,10 @@ def records_from_frames(frames: Iterable, sonar: str | SonarModel = "flank_32", 
 def raw_sockets_permitted() -> bool:
     """Whether this process may open the raw IP socket Sensor Bridge's emulator sends its data
     through (CAP_NET_RAW: root on an ordinary machine; not granted in every container)."""
+    import os
     import socket
+    if os.environ.get("HSB_EMULATOR_UDP_SOCKET") == "1":    # an emulator built with HSB_UDP_PATCH=1 needs none
+        return True
     try:
         socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW).close()
     except OSError:
@@ -256,7 +269,8 @@ class HsbBoardEmulator:
         log = log or (lambda text: None)
         if not raw_sockets_permitted():
             raise PermissionError("Sensor Bridge's emulator sends through a raw IP socket, which this process may not open "
-                                  "(it needs CAP_NET_RAW: run as root, or give the container that capability)")
+                                  "(it needs CAP_NET_RAW: run as root, give the container that capability, or build with "
+                                  "HSB_UDP_PATCH=1 and set HSB_EMULATOR_UDP_SOCKET=1)")
         hsb = hemu.HSBEmulator()
         data_plane = hemu.LinuxDataPlane(hsb, hemu.IPAddress(self.ip), 0, 0)   # data plane 0, sensor 0
         hsb.start()
@@ -459,7 +473,7 @@ if Operator is not None:
         """
 
         def __init__(self, chain, receiver: FrameReceiver, hololink_channel, cuda: CudaDriver, frame_size: int,
-                     n_pings: int | None = None, queue_frames: int = 64, idle_timeout: float | None = 15.0,
+                     n_pings: int | None = None, queue_frames: int = 256, idle_timeout: float | None = 15.0,
                      on_report=None, receiver_affinity=None):
             self.chain, self.receiver = chain, receiver
             self._channel, self._cuda, self._frame_size = hololink_channel, cuda, int(frame_size)
@@ -494,7 +508,9 @@ if Operator is not None:
             import hololink
             from holoscan.conditions import BooleanCondition
             self._running = BooleanCondition(self, name="running", enable_tick=True)
-            options = {} if self._affinity is None else {"receiver_affinity": self._affinity}
+            # Sensor Bridge pins its receiver thread to core 2 (HOLOLINK_AFFINITY names another); its Python
+            # binding takes one core number here, not a set (a set fails to convert in 2.7.0).
+            options = {} if self._affinity is None else {"receiver_affinity": int(self._affinity)}
             rx = hololink.operators.LinuxReceiverOp(
                 self, self._running, name="receiver", frame_size=self._frame_size, frame_context=self._cuda.context,
                 hololink_channel=self._channel, device=Board(), pages=self._queue, queue_size=self._queue, **options)
