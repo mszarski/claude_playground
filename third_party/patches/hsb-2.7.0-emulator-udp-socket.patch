@@ -1,0 +1,89 @@
+Holoscan Sensor Bridge 2.7.0, board emulator: optional ordinary UDP socket for the data plane.
+
+Why: the emulator's Linux data plane (LinuxDataPlane = RoCEv2DataPlane) sends through a raw IP
+socket, socket(AF_INET, SOCK_RAW, IPPROTO_RAW), which needs CAP_NET_RAW. Containers such as
+Hugging Face Jobs run as root without it ("Failed to create socket: 1 - Operation not permitted").
+The emulator's enumeration (BOOTP broadcast) and control sockets are ordinary UDP sockets already.
+
+What: with HSB_EMULATOR_UDP_SOCKET=1 in the emulator's environment the data socket is a UDP socket
+bound to the board's address and the usual data source port (12288), and each packet is handed to
+the kernel from the first byte after the UDP header. Without the variable nothing changes.
+
+On the wire: the UDP payload (BTH, RETH, immediate, data, frame metadata, iCRC) is byte for byte
+what the raw socket sends, from the same source address and port. The IP and UDP headers are the
+kernel's: TTL, identification and the don't-fragment bit are the kernel's choices and the UDP
+checksum is filled in (the raw path sends zero). The iCRC is still computed over the headers the
+emulator built, so a receiver that verified it against the real IP header fields could differ;
+Sensor Bridge's LinuxReceiver reads only the UDP payload and does not check the iCRC or the sender.
+
+Host C++ only (src/hololink/emulation/src/linux); applied by tools/build_hsb.sh when HSB_UDP_PATCH=1.
+
+--- a/src/hololink/emulation/src/linux/rocev2_data_plane.cpp
++++ b/src/hololink/emulation/src/linux/rocev2_data_plane.cpp
+@@ -46,7 +46,7 @@
+     transmitter_ = &ROCEV2_TRANSMITTER;
+     ((RoCEv2Transmitter*)transmitter_)->init_metadata(rocev2_ctxt, source_ip);
+ 
+-    int data_socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
++    int data_socket_fd = rocev2_udp_socket() ? socket(AF_INET, SOCK_DGRAM, 0) : socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+     if (data_socket_fd < 0) {
+         fprintf(stderr, "Failed to create socket: %d - %s\n", errno, strerror(errno));
+         throw std::runtime_error("Failed to create socket");
+@@ -58,6 +58,18 @@
+         fprintf(stderr, "Failed to set socket reused address: %d - %s\n", errno, strerror(errno));
+         throw std::runtime_error("Failed to set socket reuse");
+     }
++    if (rocev2_udp_socket()) {
++        // Same source address and port as the headers the raw socket would have carried.
++        struct sockaddr_in source_addr {};
++        source_addr.sin_family = AF_INET;
++        source_addr.sin_port = htons(DATA_SOURCE_UDP_PORT);
++        source_addr.sin_addr.s_addr = source_ip.ip_address;
++        if (bind(data_socket_fd, (struct sockaddr*)&source_addr, sizeof(source_addr)) < 0) {
++            fprintf(stderr, "Failed to bind data socket: %d - %s\n", errno, strerror(errno));
++            close(data_socket_fd);
++            throw std::runtime_error("Failed to bind data socket");
++        }
++    }
+     rocev2_ctxt->data_socket_fd = data_socket_fd;
+ }
+ 
+--- a/src/hololink/emulation/src/linux/rocev2_data_plane.hpp
++++ b/src/hololink/emulation/src/linux/rocev2_data_plane.hpp
+@@ -1,6 +1,7 @@
+ #ifndef STM32_ROCEV2_TRANSMITTER_HPP
+ #define STM32_ROCEV2_TRANSMITTER_HPP
+ 
++#include <cstdlib>
+ #include "../../rocev2_data_plane.hpp"
+ #include "../common/rocev2_transmitter.hpp"
+ #include "data_plane.hpp"
+@@ -22,6 +23,17 @@
+ 
+ namespace hololink::emulation {
+ 
++// HSB_EMULATOR_UDP_SOCKET=1: send the data plane through an ordinary UDP socket (the kernel
++// builds the IP and UDP headers) instead of a raw IP socket, for hosts without CAP_NET_RAW.
++inline bool rocev2_udp_socket()
++{
++    static const bool enabled = [] {
++        const char* value = getenv("HSB_EMULATOR_UDP_SOCKET");
++        return value && value[0] == '1';
++    }();
++    return enabled;
++}
++
+ /**
+  * Per-transmission context for RoCEv2Transmitter (`RoCEv2Ctxt`).
+  *
+--- a/src/hololink/emulation/src/linux/rocev2_transmitter.cpp
++++ b/src/hololink/emulation/src/linux/rocev2_transmitter.cpp
+@@ -36,7 +36,7 @@
+     // so drop the Ethernet header bytes from the first chunk.
+     return eth_socket_send(rocev2_ctxt->data_socket_fd,
+         &rocev2_ctxt->dest_addr, sizeof(rocev2_ctxt->dest_addr),
+-        tx_buffers, /*skip_head_bytes=*/ETHER_HDR_LEN);
++        tx_buffers, /*skip_head_bytes=*/rocev2_udp_socket() ? ETHER_HDR_LEN + IP_HDR_LEN + UDP_HDR_LEN : ETHER_HDR_LEN);
+ }
+ 
+ } // namespace hololink::emulation

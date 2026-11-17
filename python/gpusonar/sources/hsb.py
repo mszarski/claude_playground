@@ -221,7 +221,10 @@ def records_from_frames(frames: Iterable, sonar: str | SonarModel = "flank_32", 
 def raw_sockets_permitted() -> bool:
     """Whether this process may open the raw IP socket Sensor Bridge's emulator sends its data
     through (CAP_NET_RAW: root on an ordinary machine; not granted in every container)."""
+    import os
     import socket
+    if os.environ.get("HSB_EMULATOR_UDP_SOCKET") == "1":    # an emulator built with HSB_UDP_PATCH=1 needs none
+        return True
     try:
         socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW).close()
     except OSError:
@@ -256,7 +259,8 @@ class HsbBoardEmulator:
         log = log or (lambda text: None)
         if not raw_sockets_permitted():
             raise PermissionError("Sensor Bridge's emulator sends through a raw IP socket, which this process may not open "
-                                  "(it needs CAP_NET_RAW: run as root, or give the container that capability)")
+                                  "(it needs CAP_NET_RAW: run as root, give the container that capability, or build with "
+                                  "HSB_UDP_PATCH=1 and set HSB_EMULATOR_UDP_SOCKET=1)")
         hsb = hemu.HSBEmulator()
         data_plane = hemu.LinuxDataPlane(hsb, hemu.IPAddress(self.ip), 0, 0)   # data plane 0, sensor 0
         hsb.start()

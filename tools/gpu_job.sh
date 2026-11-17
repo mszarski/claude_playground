@@ -64,6 +64,12 @@ fi
 if [ "${GPUSONAR_HSB:-0}" = "1" ]; then
   # NVIDIA Holoscan Sensor Bridge, built natively (its own flow is a Docker build): the board
   # emulator and the Linux receiver operator for the loopback test of sources/hsb.py.
+  # Its emulator sends through a raw socket; where the container does not permit one, build it with
+  # the opt-in patch that lets it use an ordinary UDP socket, and switch that on.
+  if ! python3 -c "import socket; socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)" 2> /dev/null; then
+    export HSB_UDP_PATCH=1 HSB_EMULATOR_UDP_SOCKET=1
+    echo "raw sockets not permitted: Sensor Bridge emulator patched to use a UDP socket"
+  fi
   hsb_env=$(tools/build_hsb.sh /opt/hsb | tail -1) && eval "$hsb_env" || echo "Sensor Bridge not built: its tests will skip"
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
