@@ -740,6 +740,9 @@ Simulated echoes and simulated noise sources; no real data.
 ### On a GPU (L4, Hugging Face Job, CUDA 12.6)
 
 Source: `tools/live_benchmark.py` on the six `popoto_12km` pings; `tests/python/test_doa.py`.
+The whole suite on that machine, CUDA build with the Holoscan C++ operators: 437 passed,
+46 skipped (Bellhop, KRAKEN, Ceres, PICMUS data and the ultrasound reference were not
+installed in that job), C++ suites all passed.
 The host rows are that machine's CPU (faster than the four cores used above).
 
 | Chain per ping (median of pings 2–6) | Host | CUDA |
@@ -793,6 +796,10 @@ cores with other jobs running: indicative.
 | Pairing outbound and return paths (1.25 million paths) | bit-identical indices | 54 ms / 214 ms |
 | Reverberation, same random numbers, ten cases (line and planar arrays, decimated, passband, moving, beam patterns) | sample for sample within 3e-7 of the largest sample (single-precision FFT) | |
 | One ping of `fls_120k_transit` (128 channels, 767 sectors, two boundaries): reverberation / whole ping | whole ping within 3.5e-7 of the peak | 1.9–2.1 s / 6.4–7.6 s; 4.3–4.6 s / 8.7–9.9 s |
+
+The reverberation sum's CUDA build was compiled and run on an L4: ten cases against the
+host and against NumPy, and a whole scenario, agree within the tests' 1e-4 of the peak.
+Its speed on the device has not been measured.
 
 MVDR gains least: its cost is one matrix product per block, and the build uses no
 instruction-set flags, so Eigen runs SSE2 where NumPy's BLAS uses AVX.
