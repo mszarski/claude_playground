@@ -67,6 +67,9 @@ class Detection:
     bearing: float          # rad
     snr_db: float
     cells: int
+    depth: float = float("nan")         # m, straight-line depth from elevation (stacked rows); NaN: none
+    depth_sigma: float = float("nan")
+    first_range: float = float("nan")   # m, the nearest cell of the cluster (its leading edge)
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -88,7 +91,7 @@ def cluster(detections: np.ndarray, power: np.ndarray, ranges, bearings, guard: 
         w = power[ib, ir]
         out.append(Detection(float((w * ranges[ir]).sum() / w.sum()),
                              float((w * bearings[ib]).sum() / w.sum()),
-                             float(10 * np.log10(snr[ib, ir].max())), int(len(ib))))
+                             float(10 * np.log10(snr[ib, ir].max())), int(len(ib)), first_range=float(ranges[ir].min())))
     return out
 
 
@@ -104,6 +107,8 @@ class Track:
     confirmed: bool = False
     history: list = field(default_factory=list)   # (time, x, y)
     snr: list = field(default_factory=list)       # SNR (dB) of each detection it took
+    depth: float = float("nan")                   # m, from the detections that carried one
+    depth_var: float = float("inf")
 
 
 class Tracker:
@@ -113,8 +118,9 @@ class Tracker:
 
     def __init__(self, process_noise: float = 0.05, range_sigma: float = 2.0,
                  bearing_sigma: float = np.radians(1.0), gate: float = 4.0, confirm_hits: int = 3,
-                 max_misses: int = 3, initial_speed_sigma: float = 10.0):
+                 max_misses: int = 3, initial_speed_sigma: float = 10.0, depth_process_noise: float = 0.5):
         self.q = process_noise
+        self.depth_q = depth_process_noise     # m per sqrt(s)
         self.range_sigma = range_sigma
         self.bearing_sigma = bearing_sigma
         self.gate = gate
@@ -131,6 +137,19 @@ class Tracker:
         j = np.array([[s, d.range * c], [c, -d.range * s]])
         return j @ np.diag([self.range_sigma**2, self.bearing_sigma**2]) @ j.T
 
+    @staticmethod
+    def _take_depth(t: Track, d: Detection) -> None:
+        """A scalar Kalman update of the track's depth with a detection's, when it has one."""
+        if not (np.isfinite(d.depth) and np.isfinite(d.depth_sigma) and d.depth_sigma > 0.0):
+            return
+        r = d.depth_sigma**2
+        if not np.isfinite(t.depth):
+            t.depth, t.depth_var = d.depth, r
+            return
+        k = t.depth_var / (t.depth_var + r)
+        t.depth += k * (d.depth - t.depth)
+        t.depth_var *= 1.0 - k
+
     def update(self, time: float, detections: list[Detection]) -> list[Track]:
         dt = 0.0 if self._time is None else time - self._time
         self._time = time
@@ -142,6 +161,8 @@ class Tracker:
         for t in self.tracks:
             t.state = f @ t.state
             t.cov = f @ t.cov @ f.T + q
+            if np.isfinite(t.depth_var):
+                t.depth_var += self.depth_q**2 * dt
         unused = list(range(len(detections)))
         # Confirmed tracks choose first, each taking its nearest gated detection.
         for t in sorted(self.tracks, key=lambda tr: not tr.confirmed):
@@ -164,6 +185,7 @@ class Tracker:
             t.cov = (np.eye(4) - k @ h) @ t.cov
             t.hits += 1
             t.snr.append(d.snr_db)
+            self._take_depth(t, d)
             t.misses = 0
             t.confirmed = t.confirmed or t.hits >= self.confirm_hits
         for t in self.tracks:
@@ -178,6 +200,7 @@ class Tracker:
             tr = Track(self._next_id, np.array([xy[0], xy[1], 0.0, 0.0]), cov)
             tr.history.append((time, float(xy[0]), float(xy[1])))
             tr.snr.append(d.snr_db)
+            self._take_depth(tr, d)
             self.tracks.append(tr)
             self._next_id += 1
         return [t for t in self.tracks if t.confirmed]

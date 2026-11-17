@@ -17,6 +17,14 @@
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)
 //   sync (0 | 1) sync_f_start sync_f_stop sync_duration sync_lead sync_tail sync_dedicated (0 | 1)
 //   passive: n_fft hop n_average passive_method (sbl | conventional)
+//   stacked rows (elevation and depth; active and passive): elevation (0 | 1) elevation_first_deg
+//   elevation_last_deg elevation_step_deg elevation_first_arrival (0 | 1) elevation_first_arrival_db
+//   elevation_first_arrival_snr_db elevation_range_window_m elevation_max_detections
+//   elevation_min_quality elevation_ambiguity_db elevation_correct_bearing elevation_depth
+//   elevation_fold elevation_classify elevation_classify_sigma (0 | 1 each, or a number)
+//   elevation_water_depth elevation_surface_z elevation_roll_sigma_deg elevation_depth_process_noise
+//   elevation_ssp_depth elevation_ssp_speed (comma-separated lists) elevation_row_tolerance_m
+//   dead_channels (comma-separated channel rows)
 //
 // --template: a container file holding one ping record of the sonar (geometry, waveform,
 // receive window); write it with `tools/sonar_live.py CONFIG --export-template template.h5`.

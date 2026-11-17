@@ -35,7 +35,7 @@ def _unit(v) -> np.ndarray:
 
 
 def _positions(array_cfg: dict) -> np.ndarray:
-    """Element lever arms [N, 3] from a `uniform_line` or `explicit` layout."""
+    """Element lever arms [N, 3] from a `uniform_line`, `line`, `stacked_lines` or `explicit` layout."""
     layout = array_cfg.get("layout", "uniform_line")
     origin = np.asarray(array_cfg.get("origin", [0.0, 0.0, 0.0]), dtype=float)
     if layout == "uniform_line":
@@ -53,6 +53,39 @@ def _positions(array_cfg: dict) -> np.ndarray:
         if pos.ndim != 2 or pos.shape[1] != 3:
             raise ValueError("array.positions must be a list of [x, y, z]")
         return origin + pos
+    if layout == "stacked_lines":
+        # Two or more parallel lines at different heights on the vehicle (elevation as well as
+        # bearing). Channels run row by row. Each row: `up` (m towards the vehicle's top, i.e. -z,
+        # made perpendicular to the axis), `out` (m along the boresight, for a curved hull) and
+        # `along` (m along the axis), and optionally its own `count`, `pitch` or `positions`.
+        # `interleave: n` orders the channels n from each row in turn instead (with boards of
+        # eight inputs and two rows, n = 4 puts the same stations of both rows on one board,
+        # so the rows of a board share its clock).
+        axis = _unit(array_cfg.get("axis", [1.0, 0.0, 0.0]))
+        up = np.array([0.0, 0.0, -1.0]) - axis * -axis[2]
+        up = _unit(up)
+        out_dir = np.asarray(array_cfg.get("boresight", [0.0, 1.0, 0.0]), dtype=float)
+        out_dir = _unit(out_dir - axis * (out_dir @ axis) - up * (out_dir @ up))
+        rows = array_cfg.get("rows")
+        if not rows:
+            raise ValueError("array.layout stacked_lines needs array.rows")
+        parts = []
+        for row in rows:
+            if row.get("positions") is not None:
+                along = np.asarray(row["positions"], dtype=float)
+            else:
+                n = int(row.get("count", array_cfg.get("count", 0)))
+                if n < 1:
+                    raise ValueError("stacked_lines: give array.count or a count for every row")
+                along = (np.arange(n) - (n - 1) / 2.0) * float(row.get("pitch", array_cfg.get("pitch")))
+            along = along + float(row.get("along", 0.0))
+            parts.append(origin + along[:, None] * axis + float(row.get("up", 0.0)) * up + float(row.get("out", 0.0)) * out_dir)
+        n_inter = int(array_cfg.get("interleave", 0))
+        if n_inter > 0:
+            if len({len(p) for p in parts}) != 1:
+                raise ValueError("stacked_lines: interleave needs rows of equal count")
+            parts = [p[i:i + n_inter] for i in range(0, len(parts[0]), n_inter) for p in parts]
+        return np.vstack(parts)
     raise ValueError(f"unknown array layout {layout!r}")
 
 

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 
 #include "sonar/live/detections.hpp"
@@ -13,7 +14,7 @@ std::vector<Detection> cluster(const unsigned char* detections, const float* pow
   for (std::int64_t start = 0; start < n_rows * n_cols; ++start) {
     if (!detections[start] || seen[static_cast<std::size_t>(start)]) continue;
     // One group: everything reachable through touching cells, diagonals included.
-    double w_sum = 0.0, r_sum = 0.0, b_sum = 0.0, best = 0.0;
+    double w_sum = 0.0, r_sum = 0.0, b_sum = 0.0, best = 0.0, nearest = 1e300;
     std::int64_t cells = 0;
     stack.assign(1, start);
     seen[static_cast<std::size_t>(start)] = 1;
@@ -24,6 +25,7 @@ std::vector<Detection> cluster(const unsigned char* detections, const float* pow
       const double w = static_cast<double>(power[i]);
       w_sum += w;
       r_sum += w * ranges[static_cast<std::size_t>(col)];
+      nearest = std::min(nearest, ranges[static_cast<std::size_t>(col)]);
       b_sum += w * bearings[static_cast<std::size_t>(row)];
       if (static_cast<double>(ratio[i]) > best) best = static_cast<double>(ratio[i]);
       ++cells;
@@ -39,7 +41,9 @@ std::vector<Detection> cluster(const unsigned char* detections, const float* pow
         }
       }
     }
-    out.push_back({r_sum / w_sum, b_sum / w_sum, 10.0 * std::log10(best), cells});
+    Detection d{r_sum / w_sum, b_sum / w_sum, 10.0 * std::log10(best), cells};
+    d.first_range = nearest;
+    out.push_back(d);
   }
   return out;
 }

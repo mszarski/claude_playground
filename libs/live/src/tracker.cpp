@@ -27,6 +27,20 @@ M2 measurement_cov(const Detection& d, const TrackerOptions& o) {
   return j * p * j.transpose();
 }
 
+// A scalar Kalman update of the track's depth with a detection's, when it has one.
+void take_depth(Track& t, const Detection& d) {
+  if (!(std::isfinite(d.depth) && std::isfinite(d.depth_sigma) && d.depth_sigma > 0.0)) return;
+  const double r = d.depth_sigma * d.depth_sigma;
+  if (!std::isfinite(t.depth)) {
+    t.depth = d.depth;
+    t.depth_var = r;
+    return;
+  }
+  const double k = t.depth_var / (t.depth_var + r);
+  t.depth += k * (d.depth - t.depth);
+  t.depth_var *= 1.0 - k;
+}
+
 }  // namespace
 
 std::vector<const Track*> Tracker::update(double time, const std::vector<Detection>& detections) {
@@ -45,6 +59,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     Eigen::Map<M4> p(t.cov);
     x = f * x;
     p = f * p * f.transpose() + q;
+    if (std::isfinite(t.depth_var)) t.depth_var += opt_.depth_process_noise * opt_.depth_process_noise * dt;
   }
   std::vector<std::size_t> unused(detections.size());
   for (std::size_t j = 0; j < unused.size(); ++j) unused[j] = j;
@@ -79,6 +94,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p = (M4::Identity() - k * h) * p;
     ++t->hits;
     t->snr.push_back(d.snr_db);
+    take_depth(*t, d);
     t->misses = 0;
     t->confirmed = t->confirmed || t->hits >= opt_.confirm_hits;
   }
@@ -98,6 +114,7 @@ std::vector<const Track*> Tracker::update(double time, const std::vector<Detecti
     p(2, 2) = p(3, 3) = opt_.initial_speed_sigma * opt_.initial_speed_sigma;
     tr.history.push_back({time, p0[0], p0[1]});
     tr.snr.push_back(d.snr_db);
+    take_depth(tr, d);
     tracks_.push_back(std::move(tr));
   }
   std::vector<const Track*> confirmed;

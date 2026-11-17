@@ -111,6 +111,14 @@ program `build/bin/sonar_live_holoscan`), built and run on a GPU machine with Ho
 
 ### Bearings: the map, or sparse Bayesian learning
 
+`chain: {elevation: {...}}` with an array of stacked rows adds one stage after detection
+(`gpusonar/elevation.py`, `libs/live/src/elevation.cpp`): each row is mapped on its own
+and the maps added; at each detection the whole array is steered over elevation with the
+backprojection kernel (host or CUDA: no kernel of its own); the report gains elevation,
+depth and the corrected bearing, and tracks carry depth. Both engines do it and are
+compared in `tests/python/test_elevation.py`; `tests/cpp/test_elevation.cpp` tests the
+library alone. Without the key, or with one row, the stage is not there.
+
 `chain: {doa: map}` (default) takes bearings from the beamformed map: one detection per
 beam-wide blob. `doa: sbl` keeps the map and CFAR for *where in range* something is, then
 solves for *which bearings* at each detected range with multi-frequency sparse Bayesian

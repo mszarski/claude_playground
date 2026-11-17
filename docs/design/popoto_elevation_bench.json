@@ -1,0 +1,192 @@
+{
+  "cpu_threads": 4,
+  "stream": {
+    "1": {
+      "channels": 32,
+      "boards": 4,
+      "samples_per_ping": 116054,
+      "udp_block_samples": 128,
+      "udp_block_bytes": 12416,
+      "udp_blocks_per_second": 800.0,
+      "python_assembler_ok": true,
+      "cpp_assembler_ok": true,
+      "udp_loopback_ok": true,
+      "udp_lost_samples": 0,
+      "hsb_frame_bytes": 153728,
+      "hsb_frames_ok": true,
+      "recording_bytes_per_ping": 14877644,
+      "recording_ok": true,
+      "chain_seconds_per_ping_full_rate_short_window": 0.457578729,
+      "chain_found_the_target": true
+    },
+    "2": {
+      "channels": 64,
+      "boards": 8,
+      "samples_per_ping": 116054,
+      "udp_block_samples": 64,
+      "udp_block_bytes": 12416,
+      "udp_blocks_per_second": 1600.0,
+      "python_assembler_ok": true,
+      "cpp_assembler_ok": true,
+      "udp_loopback_ok": true,
+      "udp_lost_samples": 0,
+      "hsb_frame_bytes": 307328,
+      "hsb_frames_ok": true,
+      "recording_bytes_per_ping": 29735848,
+      "recording_ok": true,
+      "chain_seconds_per_ping_full_rate_short_window": 0.862401925,
+      "chain_found_the_target": true
+    },
+    "3": {
+      "channels": 96,
+      "boards": 12,
+      "samples_per_ping": 116054,
+      "udp_block_samples": 42,
+      "udp_block_bytes": 12224,
+      "udp_blocks_per_second": 2438.095238095238,
+      "python_assembler_ok": true,
+      "cpp_assembler_ok": true,
+      "udp_loopback_ok": true,
+      "udp_lost_samples": 0,
+      "hsb_frame_bytes": 460928,
+      "hsb_frames_ok": true,
+      "recording_bytes_per_ping": 44595224,
+      "recording_ok": true,
+      "chain_seconds_per_ping_full_rate_short_window": 1.242857444,
+      "chain_found_the_target": true
+    }
+  },
+  "timing_scenario_size": {
+    "1": {
+      "seconds_per_ping": 1.202729778,
+      "all": [
+        1.164938878,
+        1.170995804,
+        1.230019885,
+        1.202729778
+      ],
+      "detections": 13,
+      "with_elevation": 0,
+      "samples_per_channel": 22934
+    },
+    "2": {
+      "seconds_per_ping": 1.852078826,
+      "all": [
+        1.779600339,
+        1.82186695,
+        1.87130759,
+        1.852078826
+      ],
+      "detections": 13,
+      "with_elevation": 13,
+      "samples_per_channel": 22934
+    },
+    "3": {
+      "seconds_per_ping": 2.89911648,
+      "all": [
+        2.613328462,
+        2.816376299,
+        2.91335309,
+        2.89911648
+      ],
+      "detections": 12,
+      "with_elevation": 12,
+      "samples_per_channel": 22934
+    }
+  },
+  "timing_full_length": {
+    "1": {
+      "seconds_per_ping": 15.48410622,
+      "all": [
+        15.48410622
+      ],
+      "detections": 4,
+      "with_elevation": 0,
+      "samples_per_channel": 1809067,
+      "raw_bytes": 231560576,
+      "simulate_seconds": 3.942617261999944
+    },
+    "2": {
+      "seconds_per_ping": 23.54128975,
+      "all": [
+        23.54128975
+      ],
+      "detections": 4,
+      "with_elevation": 4,
+      "samples_per_channel": 1809067,
+      "raw_bytes": 463121152,
+      "simulate_seconds": 5.298269835998358
+    },
+    "3": {
+      "seconds_per_ping": 37.66080622,
+      "all": [
+        37.66080622
+      ],
+      "detections": 3,
+      "with_elevation": 3,
+      "samples_per_channel": 1809067,
+      "raw_bytes": 694681728,
+      "simulate_seconds": 7.385911774002395
+    }
+  },
+  "scenarios": {
+    "free_field": {
+      "tracks": 3,
+      "depth_errors_m": [
+        -0.2569164379999993,
+        -0.08013183999999995,
+        -0.4125351000000137
+      ],
+      "depth_sigma_m": [
+        1.818332834,
+        1.88482088,
+        2.224422642
+      ],
+      "roll_deg": 3.0,
+      "pings": 5
+    },
+    "shallow": {
+      "true_depth_m": 50.0,
+      "depth_m": [
+        41.37966181,
+        40.18528665,
+        42.22146856,
+        41.40247453
+      ],
+      "elevation_deg": [
+        -0.6519041958,
+        -0.583475777,
+        -0.700136167,
+        -0.6532145328
+      ],
+      "true_elevation_deg": -1.1457628381751033,
+      "path": [
+        "direct",
+        "direct",
+        "direct",
+        "direct"
+      ]
+    },
+    "rehearsal": {
+      "sync_ok": true,
+      "worst_residual_us": 0.4233423864,
+      "deep_true_m": 60.0,
+      "deep_depth_m": [
+        60.91553652,
+        60.17486381,
+        62.10520297,
+        63.39544156
+      ],
+      "shallow_true_m": 8.0,
+      "shallow_depth_m": [
+        1.350953068,
+        0.687439289,
+        1.3299895,
+        0.8638093026
+      ],
+      "roll_deg": 4.0,
+      "pitch_deg": 1.0,
+      "boards": 8
+    }
+  }
+}

@@ -5,6 +5,10 @@
 //     -> [SBL bearings at each detected range gate] -> track in a world-fixed frame
 //     -> classify -> report (JSON)
 //
+// With `elevation` and an array of stacked rows (elevation.hpp): each row is mapped on its own and
+// the rows' power added, every detection gets an elevation and a depth, its bearing is corrected
+// for the elevation, and tracks carry depth. One row, or the option off: the chain as it was.
+//
 // and, for listening without transmitting, PassiveChain: frames -> SBL -> a bearing-time
 // record for a downstream tracker.
 #pragma once
@@ -18,6 +22,7 @@
 #include "sonar/live/beamform.hpp"
 #include "sonar/live/detections.hpp"
 #include "sonar/live/doa.hpp"
+#include "sonar/live/elevation.hpp"
 #include "sonar/live/sync.hpp"
 
 namespace sonar::live {
@@ -47,17 +52,31 @@ struct ChainOptions {
   ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, 60.0, false, 40.0, 2.0, true, 800.0, 0.05235987755982988, 2.5, 0.0, 0.0};
   bool sync = false;           ///< several capture boards: synchronise on the shared reference first
   Reference reference;
+  ElevationOptions elevation;  ///< stacked rows: elevation and depth (off by default)
+  std::vector<std::int64_t> dead_channels;  ///< channel rows (after synchronisation) left out of every stage
   Backend backend = Backend::Host;
   int device = 0;
 };
 
 struct ReportDetection {
   double range_m, bearing_deg, snr_db;
+  // With stacked rows (Report::rows > 0):
+  bool elevation_valid = false;                      ///< an elevation was found with enough quality
+  double elevation_deg = 0.0, elevation_sigma_deg = 0.0, elevation_quality = 0.0;  ///< level-referenced, up positive
+  bool elevation_ambiguous = false;
+  bool bearing_corrected = false;
+  double cone_bearing_deg = 0.0;                     ///< what the line array alone reported
+  bool has_depth = false;
+  double depth_m = 0.0, depth_sigma_m = 0.0, image_depth_m = 0.0;
+  std::string path{};
 };
 struct ReportTrack {
   std::int64_t id, parent;
   std::string kind;
   double x, y, vx, vy, speed, range_m, mean_snr_db, seen;  ///< world x north, y east
+  bool depth_reported = false, has_depth = false;    ///< stacked rows with depth on; the track has taken a depth
+  double depth_m = 0.0, depth_sigma_m = 0.0;
+  std::string path{};
 };
 struct Report {
   std::int64_t ping = 0, sequence = 0, time_ns = 0;
@@ -68,6 +87,7 @@ struct Report {
   double sync_worst_residual_us = 0.0;
   std::vector<double> sync_offsets_us, sync_drift_ppm;
   double processing_seconds = 0.0;
+  std::int64_t rows = 0;     ///< > 0: the array's rows, and elevation fields are in the report
   std::string json() const;  ///< one line, the same fields as the Python chain's report
 };
 
@@ -103,6 +123,8 @@ struct PassiveOptions {
   double bearing_first_deg = -80.0, bearing_last_deg = 80.0, bearing_step_deg = 0.5;
   bool use_sbl = true;                ///< false: conventional beam power
   DoaOptions sbl;
+  ElevationOptions elevation;         ///< stacked rows: an elevation with every bearing
+  bool starboard = true;
 };
 
 struct PassiveFrame {
@@ -110,13 +132,16 @@ struct PassiveFrame {
   std::vector<DoaPeak> peaks;
   std::vector<float> spectrum;
   double noise = 0.0;
+  std::vector<double> elevations;     ///< rad, level-referenced, up positive: one per peak (stacked rows), else empty
+  std::vector<double> elevation_quality;
 };
 
 /// Bearing-time record of one stretch of data: a frame every (n_fft + (n_average - 1) hop) samples.
 std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const PassiveOptions& options,
                                            std::vector<double>* bearings = nullptr);
 
-/// The frames as JSON lines: {"time_ns", "time_s", "bearings_deg": [...], "power_db": [...], "snr_db": [...]}.
+/// The frames as JSON lines: {"time_ns", "time_s", "bearings_deg": [...], "power_db": [...], "snr_db": [...]}
+/// and, with stacked rows, "elevations_deg": [...], "elevation_quality": [...].
 std::string passive_json(const std::vector<PassiveFrame>& frames, std::int64_t record_time_ns);
 
 }  // namespace sonar::live
