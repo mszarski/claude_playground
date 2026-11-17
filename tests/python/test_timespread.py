@@ -186,3 +186,34 @@ def test_a_ping_with_time_spreading_changes_only_the_bounce_arrival():
     assert not np.allclose(rough[:, tail], flat[:, tail], atol=1e-3 * np.abs(flat).max())  # the bounce arrivals differ
     assert not np.allclose(rough[:, tail], later[:, tail], atol=1e-3 * np.abs(flat).max()) # and change with time
     assert np.allclose(rough[:, head], later[:, head], atol=1e-9 * np.abs(flat).max())
+
+
+def test_bubble_loss_removes_energy_from_both_parts_of_a_surface_bounce():
+    inner, pts, _ = one_bounce()
+    base = inner.eigenrays(SOURCE, pts)
+    j = int(np.flatnonzero(base.n_surface[0] == 1)[0])
+    par = {"rms_height": 0.2, "mean_square_slope": 0.03, "rms_vertical_speed": 0.0}
+    dry = TimeSpreadProvider(inner, frequency=F, surface=par, seed=5).eigenrays(SOURCE, pts)
+    wet = TimeSpreadProvider(inner, frequency=F, surface=boundary_parameters(dict(par, bubble_loss_db=3.0), surface=True), seed=5).eigenrays(SOURCE, pts)
+    assert np.allclose(np.abs(wet.amplitude[0, 2:]) ** 2, np.abs(dry.amplitude[0, 2:]) ** 2 * 10 ** -0.3)     # the tail
+    assert abs(wet.amplitude[0, j]) ** 2 == pytest.approx(abs(dry.amplitude[0, j]) ** 2 * 10 ** -0.3)        # the coherent part
+    assert wet.amplitude[0, 1 - j] == dry.amplitude[0, 1 - j]                                                  # the direct ray
+    table = boundary_parameters({"bubble_loss_db": {"grazing_deg": [0.0, 90.0], "loss_db": [6.0, 0.0]}}, surface=True)
+    only = TimeSpreadProvider(inner, frequency=F, surface=table).eigenrays(SOURCE, pts)                        # bubbles, flat surface
+    grazing = np.degrees(np.arcsin(abs(base.launch[0, j, 2])))
+    assert 20 * np.log10(abs(only.amplitude[0, j]) / abs(base.amplitude[0, j])) == pytest.approx(-6.0 * (1 - grazing / 90.0), abs=1e-9)
+
+
+def test_the_sst_style_scenario_runs_and_its_bounce_arrivals_fade():
+    from gpusonar.sim import run_scenario
+    from gpusonar.config import load_scenario_config
+    cfg = load_scenario_config("flank_sst_shallow")
+    cfg["pings"]["count"] = 2
+    quiet = dict(cfg, reverberation=None, receiver={"adc": False})
+    a, b = (r.samples.array for r in run_scenario(quiet).records)
+    assert np.isfinite(a).all() and np.abs(a).max() > 0
+    assert not np.allclose(a, b, atol=1e-3 * np.abs(a).max())            # the surface changed between pings
+    full = run_scenario(cfg).records[0].samples.array
+    assert np.abs(full - a).max() > 0                                    # reverberation and noise were added
+    again = run_scenario(quiet).records[0].samples.array
+    assert np.array_equal(again, a)                                      # the seed reproduces the ping

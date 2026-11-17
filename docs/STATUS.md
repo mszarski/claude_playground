@@ -22,12 +22,15 @@ Updated at the end of each milestone. Newest facts first within each section.
 
 ## Since the last round (see the sections it points to)
 
-- **SST equivalence, started** (D-62): time spreading of boundary-bounce paths
-  (`sim/timespread.py`, scenario key `time_spread`) and volume-scattering layers
-  (`reverberation: {model: volume}`) are in, tested and measured. Still missing and
-  waiting on sources: a Jackson-type bottom scattering model and surface bubble loss. The
-  handbook SST takes them from (APL-UW TR 9407) is limited-distribution and was not read.
-
+- **SST equivalence** (D-62, D-63; `RESULTS.md`): time spreading of boundary-bounce paths
+  (`time_spread`), volume-scattering layers (`model: volume`), a rough fluid sediment
+  bottom model (`model: fluid_sediment`) and a bubble-loss table are in and tested;
+  `flank_sst_shallow` uses all of them. The handbook SST takes its boundary models from
+  (APL-UW TR 9407) is limited-distribution and was not read: the time-spreading split and
+  tail are open substitutes, the bottom model is derived here, and there is no wind law
+  for bubble loss and no table of named sediments. Not in yet: the Kirchhoff and
+  composite-roughness parts of the published bottom models, angle spreading, and the
+  bottom model for point-scatterer seabeds (they keep Lambert's law).
 - **The live chain in C++** (`libs/live`, `build/bin/sonar_live`; `ARCHITECTURE.md`,
   D-58): board stream to pings, navigation, synchronisation, clustering, tracking,
   classification and the report, as a library and a standalone program with no Python at

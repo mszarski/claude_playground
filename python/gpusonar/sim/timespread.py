@@ -82,7 +82,15 @@ def boundary_parameters(cfg: dict | None, *, surface: bool) -> dict | None:
     for key in out:
         if key in cfg:
             out[key] = float(cfg[key])
-    return out if out["rms_height"] > 0.0 else None
+    # Energy absorbed by near-surface bubbles at each bounce: a number in dB, or a table
+    # {grazing_deg: [...], loss_db: [...]}. No wind-speed law is built in (the APL-UW one is in
+    # a handbook that was not available): supply measured or published values.
+    loss = cfg.get("bubble_loss_db", 0.0)
+    if isinstance(loss, dict):
+        out["bubble_loss"] = (np.radians(np.asarray(loss["grazing_deg"], dtype=float)), np.asarray(loss["loss_db"], dtype=float))
+    elif float(loss) != 0.0:
+        out["bubble_loss"] = (np.array([0.0, np.pi / 2]), np.array([float(loss), float(loss)]))
+    return out if out["rms_height"] > 0.0 or "bubble_loss" in out else None
 
 
 class TimeSpreadProvider(EigenrayProvider):
@@ -174,6 +182,7 @@ class TimeSpreadProvider(EigenrayProvider):
                                                   base.n_surface, base.n_bottom)
         cos_launch = np.clip(np.hypot(base.launch[..., 0], base.launch[..., 1]), 0.0, 1.0)
         coherent2 = np.ones((s, k))            # product of exp(-Gamma^2) over the bounces
+        absorbed = np.ones((s, k))             # intensity factor left after absorption (bubbles) at the bounces
         mean_excess = np.zeros((s, k))         # s: mean delay of the incoherent part after the specular one
         speed2 = np.zeros((s, k))              # (m/s)^2 x sin^2(grazing), summed over bounces
         for i in range(frac.shape[-1]):
@@ -188,12 +197,16 @@ class TimeSpreadProvider(EigenrayProvider):
                 grazing = np.arccos(cos_g)
                 r = acoustics.rough_coherent_reflection(grazing, par["rms_height"], self.frequency, c_b or c)
                 coherent2 = np.where(here, coherent2 * r**2, coherent2)
+                if "bubble_loss" in par:
+                    loss_db = np.interp(grazing, *par["bubble_loss"])
+                    absorbed = np.where(here, absorbed * 10.0 ** (-loss_db / 10.0), absorbed)
                 f = np.where(here, frac[..., i], 0.5)
                 t1, t2 = f * base.delay, (1.0 - f) * base.delay
                 mean_excess += np.where(here, 2.0 * par["mean_square_slope"] * t1 * t2 / np.maximum(t1 + t2, 1e-12), 0.0)
                 v2 = par["rms_vertical_speed"] ** 2 + self.platform_speed**2 * par["mean_square_slope"]
                 speed2 += np.where(here, v2 * np.sin(grazing) ** 2, 0.0)
-        incoherent = np.where(bounces & self.incoherent, np.abs(base.amplitude) ** 2 * (1.0 - coherent2), 0.0)
+        total = np.where(bounces, base.amplitude * np.sqrt(absorbed), base.amplitude)   # what the boundary does not absorb
+        incoherent = np.where(bounces & self.incoherent, np.abs(total) ** 2 * (1.0 - coherent2), 0.0)
         # Taps: equally spaced from one spacing after the specular delay, exponential mean intensity.
         j = np.arange(1, self.taps + 1)
         spacing = np.maximum(3.0 * mean_excess / self.taps, self.min_spacing)             # [S, K]
@@ -216,7 +229,7 @@ class TimeSpreadProvider(EigenrayProvider):
         rep = lambda a: np.repeat(a[:, :, None], self.taps, axis=2)                        # noqa: E731
         return EigenraySet(
             delay=widen(base.delay, base.delay[..., None] + tau),
-            amplitude=widen(np.where(bounces, base.amplitude * np.sqrt(coherent2), base.amplitude), tap_amp),
+            amplitude=widen(np.where(bounces, total * np.sqrt(coherent2), base.amplitude), tap_amp),
             launch=widen(base.launch, rep(base.launch)), arrival=widen(base.arrival, rep(base.arrival)),
             n_surface=widen(base.n_surface, rep(base.n_surface)), n_bottom=widen(base.n_bottom, rep(base.n_bottom)),
             valid=widen(base.valid, rep(bounces) & (incoherent[..., None] > 0.0)), sound_speed=c)

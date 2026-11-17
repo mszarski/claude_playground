@@ -121,6 +121,15 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         strength = None
         if item.get("model", "lambert") == "chapman_harris":
             strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
+        elif item.get("model") == "fluid_sediment":
+            # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
+            # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
+            from . import bottom as bottom_model
+            keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
+            missing = [k for k in keys if k not in item]
+            if missing:
+                raise ValueError(f"fluid_sediment reverberation needs {missing}")
+            strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys})
         elif item.get("model") == "volume":
             # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
             # (fish, plankton, bubbles), as a sheet at its centre depth.

@@ -830,6 +830,10 @@ volume strength times layer thickness - implied, not stated.]
 
 ### 6.4 What is missing, and the open-literature substitutes
 
+[OURS, implemented] Bottom backscatter / bistatic: `sim/bottom.py`, derived there
+(`DECISIONS.md` D-63). Volume layers as sheets: `reverb.volume_layer_strength`. Surface
+statistics from wind: `acoustics.mean_square_slope`, `rms_surface_vertical_speed`.
+
 All of the following are **[GK]** - cited from general knowledge, not from a
 document read for these notes. Any formula below is "from memory, verify
 before use".

@@ -578,3 +578,24 @@ marking on DTIC and the download was refused in this environment, so it was not 
 - Cost: each bounce ray becomes 1 + taps rays one way, so a two-way path through bounces
   on both legs becomes (1 + taps)^2 paths.
 - A user who holds TR 9407 can replace the three substitutes; they are three functions.
+
+### D-63 The bottom scattering model is derived here, not transcribed
+SST's bottom models (`JacksonBottom`, `APLBottom`) are defined in documents that could not
+be read (TR 9407; Jackson and Richardson's book). The owner said to finish without them.
+`sim/bottom.py` therefore derives the two terms those models share: interface roughness by
+first-order perturbation theory for a fluid sediment with a power-law spectrum, and
+sediment volume scattering by reciprocity. The derivation is in the module's docstring.
+It is tested against results that do not depend on any handbook: the pressure-release and
+rigid limits, no contrast, reciprocity, the reflection coefficient at normal incidence and
+at the critical angle, and the depth integral of the volume term.
+- It uses the published models' six parameters, so values from the literature can be put
+  straight in. No table of named sediments is shipped; `PLACEHOLDER_SAND` is illustrative
+  and says so.
+- Not included, and present in the published models: the Kirchhoff regime near vertical
+  incidence, the composite-roughness correction, elastic and layered bottoms. The module
+  states its range (grazing below about 60 degrees, small k x relief).
+- It feeds the scattering-function reverberation (`model: fluid_sediment`). Seabeds made
+  of point scatterers (SAS, close-range FLS) still use Lambert's law;
+  `bottom.equivalent_lambert_mu_db` gives the matching strength at one grazing angle.
+- Surface bubble loss is a number or a table per bounce (`time_spread.surface.bubble_loss_db`).
+  No wind-speed law is built in: the usual one is in TR 9407.

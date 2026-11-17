@@ -810,6 +810,33 @@ frequency and sea state; with time spreading their energy is kept, arrives sprea
 milliseconds and fades from ping to ping. The direct echo is unchanged (within 0.07 dB).
 Not compared with measurements: the shape of the tail is a placeholder exponential.
 
+## Bottom scattering from a rough fluid sediment (`sim/bottom.py`)
+
+Source: `tests/python/test_bottom.py`. Derived here (D-63), not taken from a handbook.
+
+| Check | Result |
+| --- | --- |
+| Pressure-release limit, backscatter and bistatic out of plane | 4 k⁴ sin²θᵢ sin²θₛ W to 1e-6 |
+| Rigid limit, backscatter | 4 k⁴ (1 + cos²θ)² W to 1e-6 |
+| No contrast / swapping incident and scattered directions | no scattering / same value to 1e-10 |
+| Reflection coefficient: below the critical angle without loss, at normal incidence | magnitude 1; (Z − 1)/(Z + 1) |
+| Volume term against a layer-by-layer sum over depth | equal to 1e-5; a fifth or less below the critical angle |
+| Roughness term against frequency at a fixed angle | f^(4 − γ₂) to 1e-9 |
+| Reverberation with the model against Lambert's law, bin by bin | the ratio of the two strengths at each bin's grazing angle, within 5% |
+
+With the placeholder sand (illustrative values, not a measured sediment), backscattering
+strength in dB at 5°, 10°, 20°, 30°, 45°, 60°:
+
+| Frequency | 5° | 10° | 20° | 30° | 45° | 60° |
+| --- | --- | --- | --- | --- | --- | --- |
+| 30 kHz | −47.7 | −38.1 | −30.8 | −26.5 | −25.1 | −24.0 |
+| 100 kHz | −46.0 | −36.4 | −29.4 | −26.0 | −24.7 | −23.3 |
+| 300 kHz | −43.7 | −34.1 | −27.4 | −25.2 | −24.0 | −22.2 |
+
+Lambert's law at −27 dB gives −48.2, −42.2, −36.3, −33.0, −30.0, −28.2 at the same angles:
+the two differ by up to 6 dB in shape across a swath, which is the point of having the model.
+These numbers describe the placeholder, not any seabed.
+
 ## Stages ported from NumPy to C++
 
 Source: `tests/python/test_beamform_cpp.py`, `tests/python/test_sim_cpp.py`,
