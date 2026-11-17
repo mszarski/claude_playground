@@ -83,4 +83,4 @@ fi
 echo "=== ctest (C++ suites) ==="
 ctest --test-dir build --output-on-failure -E pytest | tail -5
 echo "=== pytest (all, with skip reasons) ==="
-PYTHONPATH=python python3 -m pytest -q -rs tests/python "$@"
+PYTHONPATH=python${PYTHONPATH:+:$PYTHONPATH} python3 -m pytest -q -rs tests/python "$@"
