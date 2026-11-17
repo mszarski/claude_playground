@@ -1093,3 +1093,52 @@ equation was unrecoverable):
     only its consequence (63) is usable.
 23. Doppler-spread rule (p. 101) divides by sin(grazing angle); see 3.6.
 24. (36): image-vector term `2|S_p - B_p| z_R`; re-derive before relying on it.
+
+## Boundary models from the open literature (substitutes for TR 9407)
+
+Code: `python/gpusonar/sim/bottom.py`, `python/gpusonar/sim/surface.py`, `configs/sediments.yaml`,
+`tools/boundary_models_study.py`. Everything here is opt-in; defaults reproduce earlier results.
+TR 9407 was not read. Sources could only be opened from arXiv in this environment (journal
+sites, DTIC, IOA and CORE were unreachable), which decided what could be confirmed.
+
+Sources opened, and what was taken from each:
+
+| Source | Taken |
+|---|---|
+| Olson and Jackson, "Scattering from layered seafloors", arXiv:2009.12420 (2020), eqs. (13)-(16), (20) | Jackson's perturbation-theory factor A for a fluid half-space. Not used in the code: a test checks that our own derivation gives the same number. |
+| Olson, "A series approximation to the Kirchhoff integral", arXiv:2106.08287 (2021), eqs. (13), (24) and Sec. II.B | The spectrum/covariance convention and the form of the two-dimensional Kirchhoff integral, with the statement that the Kirchhoff and small-slope approximations both use it with the argument (change of vertical wavenumber)^2. |
+| Nennouche, Khalighi, Dowhuszko and Merad, arXiv:2603.23727v2 (2026), eqs. (20)-(23) | The Hall-Novarini bubble population (after Keiffer, Novarini and Norton, JASA 97, 1995): all its constants. |
+| Morency and Stilwell, arXiv:2210.06535 (2022), Sec. II-E and II-F | Empirical surface backscattering law and the SEARAY bottom law with bottom types 1-4 (they quote D. Kraus's lecture notes). No validity range is given there. |
+
+Our own derivations (each tested against an independent calculation):
+
+- Kirchhoff cross section, prefactor |V|^2 / (8 pi) (q^2 / qz)^2 times the Kirchhoff integral.
+  Checks: equals perturbation theory for small relief near the specular direction; the
+  scattered energy over the hemisphere is 0.88-1.00 of |V|^2 (placeholder sand, 30-300 kHz,
+  20-70 degrees incidence; 0.81-1.03 for the "combined" model).
+- Structure function constant of a power-law spectrum (checked against the integral).
+- The Kirchhoff integral for a power-law structure function, evaluated on a rotated path in
+  the complex plane (checked against direct quadrature and the closed form for gamma2 = 3).
+- Small-slope form: perturbation factor times the Kirchhoff integral / (2 pi qz^2).
+- Composite roughness: the split wavenumber (k x small-scale rms height = 0.5, our choice),
+  the large-scale slope variance, the Gaussian slope average with shadowed facets dropped.
+- "combined": the small-slope result averaged over the large-scale slopes.
+- Resonant-bubble extinction 2 pi^2 a_R^2 n(a_R) / k (checked by integrating damped-bubble
+  cross sections over radius) and the per-bounce loss as two slant crossings of the layer.
+
+Not found in any source that could be opened, so not implemented or left as a parameter:
+
+- A table of named sediments with the six model parameters. The open papers found either
+  give geoacoustic values only, or reproduce rows they attribute to TR 9407 (Brown, Johnson
+  and Brownstead, arXiv:1809.08459, Table 1: medium sand and very fine silt; Olson, Lyons and
+  Saebo, arXiv:1601.06078, Table II: generic rock). Those rows were not copied.
+- Hamilton's regressions, Mourad and Jackson (1989), Williams and Jackson (1998), Jackson,
+  Winebrenner and Ishimaru (1986), Thorsos (1988, 1990), Hall (1989), Ainslie (2005), Dahl's
+  papers and McDaniel's review: none could be opened.
+- The published interpolation between the Kirchhoff and composite results, and the published
+  choice of the composite split: ours are documented in `bottom.py`.
+- A physical rough-surface plus bubble-layer backscattering model: only the empirical law is in.
+
+Known weakness: the bubble loss law is 2 to 8 times the dB of the law arlpy implements
+(`arlpy.uwa.bubble_surface_loss`, used as an oracle only) between 10 and 100 kHz at 10 m/s,
+and the gap grows with frequency. It is an upper estimate above about 10 kHz.

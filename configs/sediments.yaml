@@ -1,0 +1,30 @@
+# Named parameter sets for the fluid-sediment bottom model (python/gpusonar/sim/bottom.py).
+# Use in a scenario:  reverberation: [{model: fluid_sediment, boundary_z: ..., sediment: <name>}]
+# (keys given in the item override the table's).
+#
+# Each entry: rho (density ratio), nu (sound-speed ratio), delta (loss parameter),
+# w2 (roughness spectral strength, m^(4 - gamma2), wavenumbers in rad/m), gamma2 (spectral
+# exponent), sigma2 (volume parameter), and `source` and `status`.
+#
+# status: confirmed   - every number was read from the cited public document.
+# status: unconfirmed - illustrative or from memory; a warning is raised when it is used.
+#
+# NO measured or published sediment is listed. The usual table of named sediments (clay to
+# rough rock, by grain size) is in APL-UW TR 9407, which is limited-distribution and was not
+# read. The open papers that could be opened give either only geoacoustic values or rows
+# that their authors copied from TR 9407, which are not reproduced here. Add entries for a
+# site from measurements or from a public paper, with its citation in `source`.
+
+placeholder_sand:
+  rho: 1.9
+  nu: 1.1
+  delta: 0.0147
+  w2: 2.0e-5
+  gamma2: 3.25
+  sigma2: 0.002
+  status: unconfirmed
+  source: >-
+    Not a measured or published sediment. Density, speed and loss are the values the
+    scenarios already use for a sand bottom (1.9, 1650 m/s, 0.8 dB per wavelength); roughness
+    and volume numbers were chosen to give about -30 dB backscattering strength at 20 degrees
+    and 100 kHz.

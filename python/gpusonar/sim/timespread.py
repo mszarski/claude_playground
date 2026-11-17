@@ -66,7 +66,7 @@ def _uniform(key: np.ndarray, stream: int) -> np.ndarray:
     return ((h >> np.uint64(11)).astype(np.float64) + 0.5) / float(1 << 53)
 
 
-def boundary_parameters(cfg: dict | None, *, surface: bool) -> dict | None:
+def boundary_parameters(cfg: dict | None, *, surface: bool, frequency: float | None = None) -> dict | None:
     """{rms_height, mean_square_slope, rms_vertical_speed} from a config section: given
     directly, or for the sea surface from `wind_speed` (Pierson-Moskowitz height and vertical
     speed, Cox-Munk slope). None or all zero: no spreading at that boundary."""
@@ -82,11 +82,19 @@ def boundary_parameters(cfg: dict | None, *, surface: bool) -> dict | None:
     for key in out:
         if key in cfg:
             out[key] = float(cfg[key])
-    # Energy absorbed by near-surface bubbles at each bounce: a number in dB, or a table
-    # {grazing_deg: [...], loss_db: [...]}. No wind-speed law is built in (the APL-UW one is in
-    # a handbook that was not available): supply measured or published values.
+    # Energy absorbed by near-surface bubbles at each bounce: a number in dB, a table
+    # {grazing_deg: [...], loss_db: [...]}, or a wind-speed law {model: hall_novarini} built from
+    # open sources (sim/surface.py; the APL-UW law is in a handbook that was not available).
     loss = cfg.get("bubble_loss_db", 0.0)
-    if isinstance(loss, dict):
+    if isinstance(loss, dict) and "model" in loss:
+        # {model: hall_novarini, wind_speed}: a wind-speed law (sim/surface.py). The wind defaults
+        # to the section's `wind_speed`; the frequency is the wrapper's.
+        from . import surface as surface_model
+        if not surface or frequency is None or "wind_speed" not in {**cfg, **loss}:
+            raise ValueError("time_spread: a bubble loss model needs the surface section, a wind_speed and the frequency")
+        out["bubble_loss"] = surface_model.bubble_loss_table(str(loss["model"]), float(loss.get("wind_speed", cfg.get("wind_speed"))),
+                                                             float(loss.get("frequency", frequency)))
+    elif isinstance(loss, dict):
         out["bubble_loss"] = (np.radians(np.asarray(loss["grazing_deg"], dtype=float)), np.asarray(loss["loss_db"], dtype=float))
     elif float(loss) != 0.0:
         out["bubble_loss"] = (np.array([0.0, np.pi / 2]), np.array([float(loss), float(loss)]))
@@ -262,7 +270,7 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
     """Wrap a provider according to a scenario's `time_spread` section:
     {surface: {wind_speed | rms_height, mean_square_slope, rms_vertical_speed}, bottom: {...},
      taps, min_spacing, coherence_length, seed}."""
-    surface = boundary_parameters(cfg.get("surface"), surface=True)
+    surface = boundary_parameters(cfg.get("surface"), surface=True, frequency=float(cfg.get("frequency", frequency)))
     bottom = boundary_parameters(cfg.get("bottom"), surface=False)
     surface_z = getattr(provider, "surface_z", 0.0)
     bottom_z = getattr(provider, "bottom_z", None)
