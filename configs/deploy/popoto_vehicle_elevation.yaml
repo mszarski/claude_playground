@@ -1,4 +1,4 @@
-# Stage 4, the recommended form: three rows on the 9 m x 2 m face (elevation and depth as well as bearing).
+# Stage 5, the recommended form: three rows (outer rows 1.5 m apart) on the 9 m x 2 m face (elevation and depth as well as bearing).
 #   tools/sonar_live.py configs/deploy/popoto_vehicle_elevation.yaml
 # Stages: docs/DESIGN.md Sec. 3; how to run and what the vehicle must supply: docs/DEPLOYMENT.md.
 

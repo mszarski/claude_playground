@@ -58,7 +58,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | --- | --- |
 | `array.layout` | `uniform_line` (default), `line` (positions along one axis), `stacked_lines` (parallel rows at different heights) or `explicit` (x, y, z each) |
 | `array.rows` | for `stacked_lines`: one entry per row, `{up, out, along}` in metres (towards the vehicle's top; along the boresight, for a curved hull; along the axis), optionally its own `count`, `pitch` or `positions`. Channels run row by row |
-| `platform: {name, span_m, height_m, mounting}` | what the vehicle offers to mount on (the test AUV's hull, the 2 m × 9 m face): read by the studies, the diagrams and the tests, not by the processing |
+| `platform: {name, span_m, height_m, mounting}` | what there is to mount on (the test AUV's hull, the static drop-in frame, the 2 m × 9 m face): read by the studies, the diagrams and the tests, not by the processing. On the face also `usable_span_m` and `row_baseline_m` (the owner's working values: rows within 7 m, outer rows 1.5 m apart); on the static array `static: true` and `depth_m` |
 | `array.interleave` | for `stacked_lines`: take this many channels from each row in turn instead (4 with two rows and boards of eight: a board then holds the same stations of both rows and they share its clock) |
 | `array.count`, `array.pitch` | number of elements and spacing (m) of a uniform line |
 | `array.positions` | for `line`: metres along the axis; for `explicit`: `[x, y, z]` per element |

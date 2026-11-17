@@ -1,4 +1,4 @@
-# Stage 3: two rows 1.8 m apart on the 9 m x 2 m face (elevation where water depth and range bound the arrivals).
+# Stage 4: two rows 1.5 m apart on the 9 m x 2 m face (elevation where water depth and range bound the arrivals).
 #   tools/sonar_live.py configs/deploy/popoto_face_2row.yaml
 # Stages: docs/DESIGN.md Sec. 3; how to run and what the vehicle must supply: docs/DEPLOYMENT.md.
 
