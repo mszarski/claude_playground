@@ -124,15 +124,27 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         strength = None
         if item.get("model", "lambert") == "chapman_harris":
             strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
+        elif item.get("model") in ("kraus_surface", "searay_bottom"):
+            # Empirical high-frequency laws (sim/surface.py): {model: kraus_surface, wind_speed}
+            # for the surface, {model: searay_bottom, bottom_type: mud|sand|gravel|rock} for the bottom.
+            from . import surface as surface_model
+            strength = (surface_model.kraus_surface_strength(float(item["wind_speed"]), fc) if item["model"] == "kraus_surface"
+                        else surface_model.searay_bottom_strength(fc, item["bottom_type"]))
         elif item.get("model") == "fluid_sediment":
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
             # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
+            # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
+            # roughness_model (perturbation | kirchhoff | small_slope | composite | combined),
+            # small_scale_kh.
             from . import bottom as bottom_model
             keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
+            if "sediment" in item:
+                item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file")), **item)
             missing = [k for k in keys if k not in item]
             if missing:
                 raise ValueError(f"fluid_sediment reverberation needs {missing}")
-            strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys})
+            extra = {k: (item[k] if k == "roughness_model" else float(item[k])) for k in ("roughness_model", "small_scale_kh") if k in item}
+            strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys}, **extra)
         elif item.get("model") == "volume":
             # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
             # (fish, plankton, bubbles), as a sheet at its centre depth.
