@@ -555,6 +555,67 @@ Identical RL reward and settings from the Gemma SFT checkpoint, 200 steps, about
 | unseen edit types / generalization, and the best non-Chinese model | **Gemma-4-31B SFT** (`design-edit-sft-gemma`): novel 0.890, `test` 0.988, goals 0.933 |
 | non-Chinese with RL | Gemma-4-31B SFT + RL: about the same as Gemma SFT, slightly better strict goals |
 
+## Measurement pass: bigger held-out sets, checkpoints, and a reward audit
+
+**Bigger balanced held-out sets** (`test_novel_big`: 7 unseen edit types × 150; `test_goal_big`: 3 goal types × 150),
+with bootstrap 95% CIs (`scripts/compare.py`). Exact match:
+
+| model | `test_novel_big` | `test_goal_big` |
+|---|---|---|
+| Qwen3.8-27B zero-shot, no-think (hosted) | **0.888** [0.867, 0.907] | 0.962 [0.944, 0.978] |
+| Qwen SFT | 0.765 [0.738, 0.791] | 0.829 [0.793, 0.862] |
+| Qwen SFT + RL, step 150 | 0.810 [0.785, 0.833] | 0.938 |
+| Qwen SFT + RL, step 200 (final) | 0.732 [0.706, 0.760] | **0.969** [0.953, 0.984] |
+| Gemma SFT | 0.837 [0.813, 0.859] | 0.829 [0.796, 0.862] |
+| Gemma SFT + RL, step 150 | **0.863** [0.841, 0.883] | 0.900 |
+| Gemma SFT + RL, step 200 (final) | 0.752 [0.726, 0.778] | 0.889 [0.858, 0.918] |
+| Muse-Glimmer SFT | 0.704 [0.675, 0.730] | 0.853 |
+
+What the larger sets changed:
+- **The zero-shot base beats every fine-tune on unseen edit types**, mostly through `promote_button` (base 1.00;
+  fine-tunes 0.10–0.77). SFT on narrow data erodes abilities the base already has. The 26-row sample hid this.
+- **The hosted baseline is not stable.** The same 240 old goal rows scored 0.650 strict a week earlier and 0.950 now
+  (same model id on the router), so zero-shot numbers from different days are not comparable. Fine-tuned models are
+  our own checkpoints and are stable.
+- **`spread_out` is a flawed test type**: in 115/150 rows the reference edit renders pixel-identical to the original
+  (`justify=between` on a container that hugs its content). Ignore it when ranking models.
+
+**Checkpoints** (`eval_model.py --adapter` merges a saved LoRA checkpoint, then evals):
+
+| RL step | Qwen `test` | Qwen novel-big | Qwen goal-big | Gemma `test` | Gemma novel-big | Gemma goal-big |
+|---|---|---|---|---|---|---|
+| 0 (SFT) | 0.976 | 0.765 | 0.829 | 0.988 | 0.837 | 0.829 |
+| 50 | 0.980 | 0.769 | 0.842 | 0.986 | 0.847 | 0.831 |
+| 100 | 0.984 | 0.771 | 0.882 | 0.988 | 0.840 | 0.873 |
+| **150** | 0.978 | **0.809** | 0.938 | 0.978 | **0.863** | **0.900** |
+| 200 | 0.972 | 0.732 | **0.969** | 0.980 | 0.752 | 0.889 |
+
+Up to step 150 RL improves **both** goals and unseen edit types on both models (all differences significant). The
+loss on unseen types happens entirely in the last 50 steps: `promote_button` on Qwen is 0.45 (SFT) → 0.77 (step 150)
+→ 0.21 (step 200). **Step 150 is the better checkpoint for both models**; stopping by held-out eval would have caught it.
+
+**Reward audit** (`scripts/audit_reward.py`): score saved outputs with the RL goal reward while hiding the reference,
+then compare with the truth. 345 outputs from five models on `test_novel_big`:
+
+| reward | wrong outputs given full reward | right outputs denied full reward |
+|---|---|---|
+| v1 (used in all RL runs so far) | **56%** | 36% |
+| v2: + full change list + 2× close-ups for the judge | 69% | **16%** |
+| v2 + teacher references (Qwen thinking, Muse-Spark-Open) | **15%** | 24% |
+
+- v1 gave full reward to **100% of wrong `promote_button` outputs** (the skipped border removal), and rejected 57–73% of
+  *correct* `darken_text` / `set_weight` edits: the screenshot judge reports "nothing changed" for subtle changes.
+  So v1 paid for conspicuous edits and for omitting invisible ones, which is exactly what RL drifted to.
+- Close-ups + change list fix the false rejections but make the judge more lenient; **teacher references** are what
+  remove false accepts (`promote_button` 100% → 0%, `add_border` 60% → 3%). Their cost: where teachers disagree with
+  the reference, right answers lose reward (24%).
+
+**What this means for the next RL run**
+1. Use reward v2 with teacher references on goal prompts (`--reward-version 2`, a `refs` column).
+2. Select the checkpoint by held-out eval (every 50 steps), not the last step.
+3. Fix or drop `spread_out`; keep the big balanced sets and CIs as the standard eval.
+4. SFT data is the bigger lever for unseen edit types than RL: the base model already does `promote_button`.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
