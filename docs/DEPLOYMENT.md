@@ -128,9 +128,28 @@ sink); `tools/gpu_job.sh` with `GPUSONAR_HOLOSCAN_CPP=1` shows the install on a 
 Ubuntu 24.04 CUDA image. Run and compared with the standalone program on an L4
 (`RESULTS.md`).
 
+## Through Holoscan Sensor Bridge's receiver
+
+```bash
+tools/build_hsb.sh /opt/hsb          # Sensor Bridge 2.7.0: emulator, socket receiver, Python bindings, against Holoscan 4.6.0
+tools/sonar_live_hsb.py serve --scenario flank_target_1km --ip 127.0.0.1             # the simulator behind Sensor Bridge's emulator
+tools/sonar_live_hsb.py receive configs/deploy/popoto_vehicle.yaml --hololink 127.0.0.1 --report out.jsonl
+```
+
+`serve` cuts the board stream into fixed-size frames (one block of the UDP format each)
+and sends them with Sensor Bridge's own emulator; `receive` is a Holoscan application of
+Sensor Bridge's `LinuxReceiverOp`, an operator that turns frames back into pings
+(`python/gpusonar/sources/hsb.py`), and the chain. On a real board only `receive` runs.
+
+State (`RESULTS.md`): Sensor Bridge builds natively and imports on an L4; our operators,
+run inside Holoscan behind a stand-in that emits what the receiver emits, give the direct
+chain's reports exactly, and a withheld frame drops exactly its ping. The loopback through
+the emulator itself has not run on Hugging Face: the emulator opens a raw socket, which
+those containers do not permit. It should run unchanged on a GPU machine or container with
+CAP_NET_RAW (plain Docker grants it). The RoCE receiver needs real network cards.
+
 ## What is not there yet
 
-- The UDP source operator behind Holoscan Sensor Bridge's receiver, in place of a plain socket.
 
 - The two adapters named above (board forwarder, navigation).
 - A service wrapper beyond the example unit `configs/deploy/sonar_live.service` (paths and

@@ -715,6 +715,9 @@ cores.
 | `sonar_live --listen`: an untriggered stream of real samples over UDP, two noise sources | every stretch recorded; both sources within 0.6° in at least 80% of frames |
 | The Holoscan application of C++ operators (`sonar_live_holoscan`, Holoscan 4.6.0, on an L4) against the standalone program on a replay | reports identical field for field (processing time aside); the recorder's copy equals the raw input |
 | The Holoscan application fed by the emulated board over UDP with navigation | all pings, ownship position from navigation, mover and static tracks |
+| Sensor Bridge 2.7.0 built natively against Holoscan 4.6.0 on an L4 (`tools/build_hsb.sh`) | builds (272 targets, about 7.5 minutes) and imports, receiver operator and emulator included |
+| Frames-to-pings operator inside Holoscan behind a stand-in for Sensor Bridge's receiver, six pings as 502 frames of 153,728 bytes | reports equal to the direct chain's (processing time aside); no frame lost; with one frame withheld exactly one ping is dropped |
+| Loopback through Sensor Bridge's emulator and `LinuxReceiverOp` | NOT run: the emulator's raw socket is refused in Hugging Face containers ("Failed to create socket: Operation not permitted") |
 
 ## Bearings by sparse Bayesian learning
 
