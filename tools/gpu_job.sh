@@ -12,6 +12,9 @@
 #        GPUSONAR_HSB=1 tools/gpu_job.sh        also build Holoscan Sensor Bridge 2.7.0 (emulator, Linux receiver, Python;
 #                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
+#        GPUSONAR_JOB=benchall tools/gpu_job.sh  run tools/gpu_benchmark_all.py: every stage with a CUDA backend, host
+#                                               against CUDA (GPUSONAR_ORACLES=1 for the Bellhop scenarios; GPUSONAR_SCALE,
+#                                               GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5")
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
@@ -85,6 +88,19 @@ if [ "${GPUSONAR_JOB:-tests}" = "gallery" ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/gallery gallery --type dataset > /dev/null
   fi
   exit 0
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "benchall" ]; then
+  # Every stage with a CUDA backend timed on the host and on the device (tools/gpu_benchmark_all.py):
+  # the table goes to the log, and with the JSON to GPUSONAR_UPLOAD_REPO (a Hugging Face dataset) when it is set.
+  mkdir -p /work/benchall
+  status=0
+  PYTHONPATH=python python3 tools/gpu_benchmark_all.py --backend cuda --scale "${GPUSONAR_SCALE:-1}" --out /work/benchall/gpu_benchmark_all.md \
+      --json /work/benchall/gpu_benchmark_all.json ${GPUSONAR_BENCHALL_ARGS:-} || status=$?
+  [ -f /work/benchall/gpu_benchmark_all.md ] && cat /work/benchall/gpu_benchmark_all.md
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/benchall/gpu_benchmark_all.md ]; then
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/benchall benchall --type dataset > /dev/null
+  fi
+  exit "$status"
 fi
 echo "=== ctest (C++ suites) ==="
 ctest --test-dir build --output-on-failure -E pytest | tail -5
