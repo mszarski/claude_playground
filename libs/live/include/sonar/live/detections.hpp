@@ -17,6 +17,7 @@ struct Detection {
   std::int64_t cells = 1;
   double depth = std::numeric_limits<double>::quiet_NaN();        ///< m, straight-line depth from elevation (stacked rows); NaN: none
   double depth_sigma = std::numeric_limits<double>::quiet_NaN();
+  double first_range = std::numeric_limits<double>::quiet_NaN();  ///< m, the nearest cell of the cluster (its leading edge)
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]

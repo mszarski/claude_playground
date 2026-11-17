@@ -69,6 +69,7 @@ class Detection:
     cells: int
     depth: float = float("nan")         # m, straight-line depth from elevation (stacked rows); NaN: none
     depth_sigma: float = float("nan")
+    first_range: float = float("nan")   # m, the nearest cell of the cluster (its leading edge)
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -90,7 +91,7 @@ def cluster(detections: np.ndarray, power: np.ndarray, ranges, bearings, guard: 
         w = power[ib, ir]
         out.append(Detection(float((w * ranges[ir]).sum() / w.sum()),
                              float((w * bearings[ib]).sum() / w.sum()),
-                             float(10 * np.log10(snr[ib, ir].max())), int(len(ib))))
+                             float(10 * np.log10(snr[ib, ir].max())), int(len(ib)), first_range=float(ranges[ir].min())))
     return out
 
 

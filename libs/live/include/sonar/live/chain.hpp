@@ -68,7 +68,7 @@ struct ReportDetection {
   double cone_bearing_deg = 0.0;                     ///< what the line array alone reported
   bool has_depth = false;
   double depth_m = 0.0, depth_sigma_m = 0.0, image_depth_m = 0.0;
-  std::string path;
+  std::string path{};
 };
 struct ReportTrack {
   std::int64_t id, parent;
@@ -76,7 +76,7 @@ struct ReportTrack {
   double x, y, vx, vy, speed, range_m, mean_snr_db, seen;  ///< world x north, y east
   bool depth_reported = false, has_depth = false;    ///< stacked rows with depth on; the track has taken a depth
   double depth_m = 0.0, depth_sigma_m = 0.0;
-  std::string path;
+  std::string path{};
 };
 struct Report {
   std::int64_t ping = 0, sequence = 0, time_ns = 0;

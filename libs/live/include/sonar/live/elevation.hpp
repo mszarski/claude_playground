@@ -28,6 +28,10 @@ struct ElevationOptions {
   double first_deg = -30.0, last_deg = 30.0, step_deg = 0.5;  ///< elevation searched, vehicle frame, up positive
   double range_window_m = 0.0;     ///< half-width of the range search about a detection; 0: 1.5 range cells
   std::int64_t max_detections = 32;  ///< strongest detections given an elevation, per ping
+  /// Take the earliest arrival in the range window that is within first_arrival_db of the strongest
+  /// and first_arrival_snr_db above the noise (the direct path arrives first); false: the strongest.
+  bool first_arrival = true;
+  double first_arrival_db = 8.0, first_arrival_snr_db = 13.0;
   double min_quality = 0.6;        ///< below this no elevation is reported
   double ambiguity_db = 1.5;       ///< a second lobe within this of the first: flagged, not used for depth
   bool correct_bearing = true;     ///< report and track the horizontal bearing, not the cone angle
@@ -76,10 +80,15 @@ struct ElevationEstimate {
   Vec3d world;                 ///< unit vector towards the arrival (north, east, down)
 };
 
-/// Elevation of each detection (slant range m, cone bearing rad). `backgrounds` is the map's mean
-/// noise power at each and `noise_weight` the sum of squared aperture weights that made the map.
+struct ElevationHit {
+  double range = 0.0, bearing = 0.0;  ///< slant range m, cone bearing rad
+  double first_range = 0.0;           ///< range of the cluster's nearest cell, m; NaN: not known
+};
+
+/// Elevation of each detection. `backgrounds` is the map's mean noise power at each and
+/// `noise_weight` the sum of squared aperture weights that made the map.
 std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows,
-                                                  const std::vector<std::pair<double, double>>& hits,
+                                                  const std::vector<ElevationHit>& hits,
                                                   const std::vector<double>& backgrounds, const ElevationFrame& frame,
                                                   const ElevationOptions& options, double noise_weight, double range_cell,
                                                   Backend backend = Backend::Host, int device = 0);

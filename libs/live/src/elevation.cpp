@@ -165,7 +165,7 @@ double weight_power(std::int64_t n_elements, bool hann) {
 }
 
 std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows,
-                                                  const std::vector<std::pair<double, double>>& hits,
+                                                  const std::vector<ElevationHit>& hits,
                                                   const std::vector<double>& backgrounds, const ElevationFrame& frame,
                                                   const ElevationOptions& o, double noise_weight, double range_cell,
                                                   Backend backend, int device) {
@@ -179,8 +179,7 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
   const auto n_e = static_cast<std::int64_t>(grid.size());
   const double half = o.range_window_m > 0.0 ? o.range_window_m : 1.5 * range_cell;
   const double dr = 0.25 * c / band;                      // half a range resolution cell
-  const auto n_half = static_cast<std::int64_t>(std::ceil(half / dr));
-  const std::int64_t n_r = 2 * n_half + 1;
+  const auto n_hi = static_cast<std::int64_t>(std::ceil(half / dr));
   const auto n_k = static_cast<std::int64_t>(rows.size());
   const auto n_h = static_cast<std::int64_t>(hits.size());
   double n_total = 0.0, sum_sq = 0.0;
@@ -198,16 +197,26 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
   // Points of constant two-way path (projector -> point -> array centre) along elevation: the
   // projector is not at the array's centre, and at constant range from the array the path
   // would change with elevation by far more than the rows' own differences.
-  std::vector<Vec3d> points(static_cast<std::size_t>(n_h * n_e * n_r));
+  // The range searched: about the detection, and back to the leading edge of its cluster (the
+  // direct arrival is the first), but no further than eight half-windows.
+  std::vector<std::int64_t> n_lo(hits.size()), first_point(hits.size() + 1, 0);
+  for (std::size_t i = 0; i < hits.size(); ++i) {
+    double lead = half;
+    if (std::isfinite(hits[i].first_range)) lead = std::min(std::max(hits[i].range - hits[i].first_range + range_cell, half), 8.0 * half);
+    n_lo[i] = static_cast<std::int64_t>(std::ceil(lead / dr));
+    first_point[i + 1] = first_point[i] + n_e * (n_lo[i] + n_hi + 1);
+  }
+  std::vector<Vec3d> points(static_cast<std::size_t>(first_point.back()));
   std::vector<double> rho(points.size());
   for (std::int64_t i = 0; i < n_h; ++i) {
-    const double sb = std::sin(hits[static_cast<std::size_t>(i)].second);
+    const double sb = std::sin(hits[static_cast<std::size_t>(i)].bearing);
+    const std::int64_t n_half = n_lo[static_cast<std::size_t>(i)], n_r = n_half + n_hi + 1;
     for (std::int64_t e = 0; e < n_e; ++e) {
       const Vec3d u = arrival_direction(frame, sb, std::sin(grid[static_cast<std::size_t>(e)]));
       for (std::int64_t j = 0; j < n_r; ++j) {
-        const double path = 2.0 * (hits[static_cast<std::size_t>(i)].first + dr * static_cast<double>(j - n_half));
+        const double path = 2.0 * (hits[static_cast<std::size_t>(i)].range + dr * static_cast<double>(j - n_half));
         const double r = (path * path - dot(tx, tx)) / (2.0 * (path - dot(u, tx)));
-        const auto at = static_cast<std::size_t>((i * n_e + e) * n_r + j);
+        const auto at = static_cast<std::size_t>(first_point[static_cast<std::size_t>(i)] + e * n_r + j);
         rho[at] = r;
         points[at] = frame.origin + u * r;
       }
@@ -216,7 +225,7 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
   // Each row's coherent sum at every point (one row's samples in memory at a time).
   std::vector<std::vector<std::complex<float>>> z(static_cast<std::size_t>(n_k));
   recon::BpOptions bp;
-  bp.interp = recon::Interp::Linear;
+  bp.interp = recon::Interp::Sinc;   // linear interpolation ripples each row by a per cent or two with elevation: 0.1 degree of bias
   bp.device = device;
   for (std::int64_t k = 0; k < n_k; ++k) {
     const PingRecord sub = row_record(record, rows[static_cast<std::size_t>(k)]);
@@ -225,20 +234,42 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
     z[static_cast<std::size_t>(k)].assign(points.size(), {0.0F, 0.0F});
     recon::backproject(backend, inputs, points, bp, z[static_cast<std::size_t>(k)].data());
   }
-  std::vector<double> p(static_cast<std::size_t>(n_e * n_r));
+  std::vector<double> p;
   for (std::int64_t i = 0; i < n_h; ++i) {
-    const auto base = static_cast<std::size_t>(i * n_e * n_r);
-    std::size_t best = 0;
+    const auto base = static_cast<std::size_t>(first_point[static_cast<std::size_t>(i)]);
+    const std::int64_t n_r = n_lo[static_cast<std::size_t>(i)] + n_hi + 1;
+    p.assign(static_cast<std::size_t>(n_e * n_r), 0.0);
     for (std::size_t q = 0; q < p.size(); ++q) {
       std::complex<double> sum{0.0, 0.0};
       for (std::int64_t k = 0; k < n_k; ++k) sum += std::complex<double>(z[static_cast<std::size_t>(k)][base + q]);
       p[q] = std::norm(sum);
-      if (p[q] > p[best]) best = q;
     }
-    const auto e = static_cast<std::int64_t>(best) / n_r, j = static_cast<std::int64_t>(best) % n_r;
+    const double noise = backgrounds[static_cast<std::size_t>(i)] / noise_weight;   // at one hydrophone
+    std::vector<double> over(static_cast<std::size_t>(n_r), 0.0);                    // best over elevation, at each range
+    for (std::int64_t ee = 0; ee < n_e; ++ee) {
+      for (std::int64_t jj = 0; jj < n_r; ++jj) over[static_cast<std::size_t>(jj)] = std::max(over[static_cast<std::size_t>(jj)], p[static_cast<std::size_t>(ee * n_r + jj)]);
+    }
+    auto j = static_cast<std::int64_t>(std::max_element(over.begin(), over.end()) - over.begin());
+    if (o.first_arrival) {
+      // Bounce paths are longer than the direct one: take the earliest arrival that stands clear
+      // of the noise and is not far below the strongest.
+      const double floor = std::max(over[static_cast<std::size_t>(j)] * std::pow(10.0, -o.first_arrival_db / 10.0),
+                                    n_total * noise * std::pow(10.0, o.first_arrival_snr_db / 10.0));
+      for (std::int64_t jj = 1; jj < j; ++jj) {
+        const double v = over[static_cast<std::size_t>(jj)];
+        if (v >= floor && v >= over[static_cast<std::size_t>(jj - 1)] && v > over[static_cast<std::size_t>(jj + 1)]) {
+          j = jj;
+          break;
+        }
+      }
+    }
     auto col = [&](std::int64_t ee) { return p[static_cast<std::size_t>(ee * n_r + j)]; };
+    std::int64_t e = 0;
+    for (std::int64_t ee = 1; ee < n_e; ++ee) {
+      if (col(ee) > col(e)) e = ee;
+    }
     ElevationEstimate& el = out[static_cast<std::size_t>(i)];
-    el.range = rho[base + best];
+    el.range = rho[base + static_cast<std::size_t>(e * n_r + j)];
     const bool edge = e == 0 || e == n_e - 1;
     const double frac = edge ? 0.0 : parabola(col(e - 1), col(e), col(e + 1));
     const double angle = grid[static_cast<std::size_t>(e)] + frac * o.step_deg * kDeg;
@@ -260,14 +291,13 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
       }
     }
     el.quality = incoherent > 0.0 ? coherent / (coherent_gain * incoherent) : 0.0;
-    const double noise = backgrounds[static_cast<std::size_t>(i)] / noise_weight;   // at one hydrophone
     const double snr = noise > 0.0 ? col(e) / (n_total * n_total * noise) : std::numeric_limits<double>::infinity();
     el.snr_db = 10.0 * std::log10(std::max(snr, 1e-30));
     el.sin_elevation = std::sin(angle);
     const double sigma_sin = spread > 0.0 && snr > 0.0 ? 1.0 / (k_rms * std::sqrt(2.0 * snr * spread))
                                                         : std::numeric_limits<double>::infinity();
     el.sigma = std::hypot(sigma_sin / std::max(std::cos(angle), 1e-6), o.roll_sigma);
-    el.world = arrival_direction(frame, std::sin(hits[static_cast<std::size_t>(i)].second), el.sin_elevation);
+    el.world = arrival_direction(frame, std::sin(hits[static_cast<std::size_t>(i)].bearing), el.sin_elevation);
     el.valid = el.quality >= o.min_quality && std::isfinite(el.sigma);
   }
   return out;

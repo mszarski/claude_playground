@@ -40,6 +40,9 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_step_deg") c.elevation.step_deg = p.elevation.step_deg = v;
   else if (key == "elevation_range_window_m") c.elevation.range_window_m = v;
   else if (key == "elevation_max_detections") c.elevation.max_detections = static_cast<std::int64_t>(v);
+  else if (key == "elevation_first_arrival") c.elevation.first_arrival = v != 0.0;
+  else if (key == "elevation_first_arrival_db") c.elevation.first_arrival_db = v;
+  else if (key == "elevation_first_arrival_snr_db") c.elevation.first_arrival_snr_db = v;
   else if (key == "elevation_min_quality") c.elevation.min_quality = p.elevation.min_quality = v;
   else if (key == "elevation_ambiguity_db") c.elevation.ambiguity_db = v;
   else if (key == "elevation_correct_bearing") c.elevation.correct_bearing = v != 0.0;

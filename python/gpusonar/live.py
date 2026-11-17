@@ -89,6 +89,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
         e = _merge(EL, cfg["elevation"])
         o["elevation"] = {"first_deg": float(e["sector_deg"][0]), "last_deg": float(e["sector_deg"][1]), "step_deg": float(e["sector_deg"][2]),
                           "range_window_m": float(e["range_window_m"] or 0.0), "max_detections": int(e["max_detections"]),
+                          "first_arrival": e["arrival"] == "first", "first_arrival_db": float(e["first_arrival_db"]),
+                          "first_arrival_snr_db": float(e["first_arrival_snr_db"]),
                           "min_quality": float(e["min_quality"]), "ambiguity_db": float(e["ambiguity_db"]),
                           "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
                           "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
@@ -366,7 +368,7 @@ class LiveChain:
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
                                      int(np.argmin(np.abs(ranges - hits[i].range)))]) for i in order]
             window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
-            got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing) for i in order], background, frame,
+            got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing, hits[i].first_range) for i in order], background, frame,
                                      el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),
                                      range_cell=cfg["range_cell_m"], backend=self.backend)
             for i, e in zip(order, got):

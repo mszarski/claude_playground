@@ -325,7 +325,7 @@ Report LiveChain::process(PingRecord& record) {
     for (std::size_t i = 0; i < order.size(); ++i) order[i] = i;
     std::stable_sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) { return hits[a].snr_db > hits[b].snr_db; });
     if (static_cast<std::int64_t>(order.size()) > eo.max_detections) order.resize(static_cast<std::size_t>(std::max<std::int64_t>(eo.max_detections, 0)));
-    std::vector<std::pair<double, double>> at;
+    std::vector<ElevationHit> at;
     std::vector<double> background;
     for (std::size_t i : order) {
       std::int64_t ib = 0, ir = 0;
@@ -337,7 +337,7 @@ Report LiveChain::process(PingRecord& record) {
       }
       const auto cell_at = static_cast<std::size_t>(ib * n_cells + ir);
       background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) : 0.0);
-      at.emplace_back(hits[i].range, hits[i].bearing);
+      at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
     }
     double noise_weight = 0.0;
     for (const auto& r : rows) noise_weight += weight_power(static_cast<std::int64_t>(r.size()), opt_.hann && opt_.beamformer != "mvdr");

@@ -55,6 +55,9 @@ def _positions(array_cfg: dict) -> np.ndarray:
         # bearing). Channels run row by row. Each row: `up` (m towards the vehicle's top, i.e. -z,
         # made perpendicular to the axis), `out` (m along the boresight, for a curved hull) and
         # `along` (m along the axis), and optionally its own `count`, `pitch` or `positions`.
+        # `interleave: n` orders the channels n from each row in turn instead (with boards of
+        # eight inputs and two rows, n = 4 puts the same stations of both rows on one board,
+        # so the rows of a board share its clock).
         axis = _unit(array_cfg.get("axis", [1.0, 0.0, 0.0]))
         up = np.array([0.0, 0.0, -1.0]) - axis * -axis[2]
         up = _unit(up)
@@ -74,6 +77,11 @@ def _positions(array_cfg: dict) -> np.ndarray:
                 along = (np.arange(n) - (n - 1) / 2.0) * float(row.get("pitch", array_cfg.get("pitch")))
             along = along + float(row.get("along", 0.0))
             parts.append(origin + along[:, None] * axis + float(row.get("up", 0.0)) * up + float(row.get("out", 0.0)) * out_dir)
+        n_inter = int(array_cfg.get("interleave", 0))
+        if n_inter > 0:
+            if len({len(p) for p in parts}) != 1:
+                raise ValueError("stacked_lines: interleave needs rows of equal count")
+            parts = [p[i:i + n_inter] for i in range(0, len(parts[0]), n_inter) for p in parts]
         return np.vstack(parts)
     raise ValueError(f"unknown array layout {layout!r}")
 

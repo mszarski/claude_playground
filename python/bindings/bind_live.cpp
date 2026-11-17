@@ -274,6 +274,9 @@ void bind_live(py::module_& m) {
           num("step_deg", eo.step_deg);
           num("range_window_m", eo.range_window_m);
           if (e.contains("max_detections")) eo.max_detections = e["max_detections"].cast<std::int64_t>();
+          flag("first_arrival", eo.first_arrival);
+          num("first_arrival_db", eo.first_arrival_db);
+          num("first_arrival_snr_db", eo.first_arrival_snr_db);
           num("min_quality", eo.min_quality);
           num("ambiguity_db", eo.ambiguity_db);
           flag("correct_bearing", eo.correct_bearing);

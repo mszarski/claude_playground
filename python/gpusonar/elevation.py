@@ -43,6 +43,10 @@ DEFAULTS = {
     "sector_deg": [-30.0, 30.0, 0.5],   # elevation searched, in the vehicle's frame: first, last, step (up positive)
     "range_window_m": None,             # half-width of the range search about a detection; None: 1.5 range cells
     "max_detections": 32,               # strongest detections given an elevation, per ping
+    "arrival": "first",                 # "first": the earliest arrival in the range window that is within
+    "first_arrival_db": 8.0,            #   this of the strongest and
+    "first_arrival_snr_db": 13.0,       #   this far above the noise (the direct path arrives first);
+                                        # "strongest": the strongest arrival
     "min_quality": 0.6,                 # below this (several arrivals in one cell, interference) no elevation is reported
     "ambiguity_db": 1.5,                # a second lobe within this of the first: flagged, and not used for depth
     "correct_bearing": True,            # report and track the horizontal bearing, not the cone angle
@@ -201,37 +205,33 @@ def outside_water(z: float, sigma: float, water_depth: float | None, surface_z: 
 
 
 def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_depth, ssp_speed,
-              water_depth: float | None = None, step: float = 5.0) -> float:
+              water_depth: float | None = None, step: float = 1.0) -> float:
     """Depth at which an arrival seen at `elevation` (rad, up positive, level-referenced) at
-    `receiver_depth` started, `slant_range` (m: half the two-way time times the sound speed at
-    the receiver) back along the ray through a sound-speed profile (linear between the knots;
-    Snell's law, with turning points). The ray is mirrored at the surface and, when `water_depth`
-    is given, at the bottom. In constant sound speed this is the straight line, folded."""
+    `receiver_depth` started, back along the ray for the one-way travel time slant_range / c
+    (c: the sound speed at the receiver) through a sound-speed profile, linear between its
+    knots. Snell's law in steps of `step` m along the ray; the ray turns where it would have
+    to enter water too fast for it, and is mirrored at the surface (depth 0) and, with
+    `water_depth`, at the bottom. In constant sound speed this is the straight line, folded."""
     zs, cs = np.asarray(ssp_depth, dtype=float), np.asarray(ssp_speed, dtype=float)
-    c0 = float(np.interp(receiver_depth, zs, cs))
-    z, theta = float(receiver_depth), float(-elevation)        # theta: angle below the horizontal, going out
-    snell = np.cos(theta) / c0
-    travel, t = slant_range / c0, 0.0                          # one-way time
-    going_down = theta >= 0.0
-    while t < travel:
-        c = float(np.interp(z, zs, cs))
-        cos_t = min(snell * c, 1.0)
-        sin_t = np.sqrt(max(1.0 - cos_t**2, 0.0))
-        if sin_t < 1e-6:
-            # At a turning point: the ray bends towards the lower sound speed.
-            grad = float(np.interp(z + 0.5, zs, cs) - np.interp(z - 0.5, zs, cs))
-            going_down = grad < 0.0
-            sin_t = 1e-6
-        ds = min(step, (travel - t) * c)
-        z += (1.0 if going_down else -1.0) * sin_t * ds
-        t += ds / c
-        if z < 0.0:
-            z, going_down = -z, True
-        elif water_depth and z > water_depth:
-            z, going_down = 2.0 * water_depth - z, False
-        elif snell * float(np.interp(z, zs, cs)) >= 1.0 and sin_t > 1e-6:
-            going_down = not going_down                         # refracted back before reaching the next layer
-            z += (1.0 if going_down else -1.0) * sin_t * ds
+    speed = lambda z: float(np.interp(z, zs, cs))                       # noqa: E731
+    c0 = speed(receiver_depth)
+    snell = np.cos(elevation) / c0
+    z, down = float(receiver_depth), elevation < 0.0
+    remaining = slant_range / c0                                        # s
+    while remaining > 0.0:
+        c = speed(z)
+        sin_t = np.sqrt(max(1.0 - (snell * c) ** 2, 0.0))
+        ds = min(step, remaining * c)
+        z_next = z + (1.0 if down else -1.0) * max(sin_t, 1e-4) * ds
+        if z_next < 0.0:
+            z_next, down = -z_next, True
+        elif water_depth and z_next > water_depth:
+            z_next, down = 2.0 * water_depth - z_next, False
+        elif snell * speed(z_next) >= 1.0 and snell * c < 1.0:
+            down = not down                                             # a turning point: back towards slower water
+            z_next = z
+        z = z_next
+        remaining -= ds / c
     return z
 
 
@@ -265,7 +265,8 @@ def weight_power(n_elements: int, window: str) -> float:
 
 def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, noise_weight: float,
              range_cell: float, backend=core.Backend.Host) -> list[Elevation]:
-    """Elevation of each detection. `hits` are (slant range, cone bearing rad); `backgrounds`
+    """Elevation of each detection. `hits` are (slant range, cone bearing rad, range of the
+    cluster's nearest cell or NaN); `backgrounds`
     the map's mean noise power at each; `noise_weight` the sum of squared aperture weights that
     made the map, so that background / noise_weight is the noise power at one hydrophone;
     `subs` the rows' records (conditioned)."""
@@ -281,15 +282,20 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
     se = np.sin(grid)
     half = cfg["range_window_m"] if cfg.get("range_window_m") else 1.5 * range_cell
     dr = 0.25 * c / band                                    # half a range resolution cell
-    n_r = int(np.ceil(half / dr))
-    offsets = dr * np.arange(-n_r, n_r + 1)
+    n_hi = int(np.ceil(half / dr))
     counts = np.array([len(r) for r in rows], dtype=float)
     n_total = counts.sum()
     coherent_gain = n_total**2 / (counts**2).sum()          # |sum of rows|^2 over sum of |row|^2, for one plane wave
     spread = float(((frame.heights - frame.heights.mean()) ** 2).sum())
     k_rms = rms_wavenumber(f_low, f_high, c)
     tx = tx_position(record) - frame.origin
-    for i, (rng, bearing) in enumerate(hits):
+    for i, (rng, bearing, first) in enumerate(hits):
+        # The range searched: about the detection, and back to the leading edge of its cluster
+        # (the direct arrival is the first), but no further than eight half-windows.
+        lead = half
+        if np.isfinite(first):
+            lead = min(max(rng - first + range_cell, half), 8.0 * half)
+        offsets = dr * np.arange(-int(np.ceil(lead / dr)), n_hi + 1)
         sb = float(np.sin(bearing))
         u = direction(frame, sb, se)                                        # [E, 3]
         # Points of constant two-way path (projector -> point -> array centre) along elevation: the
@@ -298,10 +304,22 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
         path = 2.0 * (rng + offsets)                                        # [R]
         rho = (path[None, :] ** 2 - tx @ tx) / (2.0 * (path[None, :] - (u @ tx)[:, None]))   # [E, R]
         pts = frame.origin + rho[:, :, None] * u[:, None, :]                # [E, R, 3]
-        z = np.array([core.backproject([s], pts.reshape(-1, 3), interp="linear", backend=backend).reshape(pts.shape[:2])
+        z = np.array([core.backproject([s], pts.reshape(-1, 3), interp="sinc", backend=backend).reshape(pts.shape[:2])
                       for s in subs])                                       # [K, E, R]
         p = np.abs(z.sum(axis=0)) ** 2
-        e, j = np.unravel_index(int(np.argmax(p)), p.shape)
+        noise = backgrounds[i] / noise_weight                                # at one hydrophone
+        best = p.max(axis=0)                                                 # over elevation, at each range
+        j = int(np.argmax(best))
+        if cfg["arrival"] == "first":
+            # Bounce paths are longer than the direct one: take the earliest arrival that stands
+            # clear of the noise and is not far below the strongest.
+            floor = max(best[j] * 10.0 ** (-cfg["first_arrival_db"] / 10.0),
+                        n_total * noise * 10.0 ** (cfg["first_arrival_snr_db"] / 10.0))
+            for jj in range(1, j):
+                if best[jj] >= floor and best[jj] >= best[jj - 1] and best[jj] > best[jj + 1]:
+                    j = jj
+                    break
+        e = int(np.argmax(p[:, j]))
         col = p[:, j]
         el = out[i]
         el.range = float(rho[e, j])
@@ -325,7 +343,6 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
         j0, j1 = max(j - 1, 0), min(j + 2, p.shape[1])
         incoherent = float((np.abs(z[:, e, j0:j1]) ** 2).sum())
         el.quality = float(p[e, j0:j1].sum() / (coherent_gain * incoherent)) if incoherent > 0.0 else 0.0
-        noise = backgrounds[i] / noise_weight                                # at one hydrophone
         rho = float(col[e]) / (n_total**2 * noise) if noise > 0.0 else float("inf")
         el.snr_db = float(10.0 * np.log10(max(rho, 1e-30)))
         el.sin_elevation = float(np.sin(angle))
@@ -334,6 +351,27 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
         el.world = tuple(float(v) for v in direction(frame, sb, el.sin_elevation))
         el.valid = bool(el.quality >= cfg["min_quality"] and np.isfinite(el.sigma))
     return out
+
+
+def profile(record, subs, frame: Frame, bearing: float, ranges, sector_deg=(-30.0, 30.0, 0.5), backend=core.Backend.Host):
+    """For analysis: the arrivals along range at one cone bearing. At each of `ranges` (m, slant)
+    the elevation of the peak (rad, array frame), its coherent power and its quality.
+    Bounce arrivals of one target show up as later peaks at other elevations."""
+    grid = np.radians(np.arange(sector_deg[0], sector_deg[1] + 0.5 * sector_deg[2], sector_deg[2]))
+    sb = float(np.sin(bearing))
+    u = direction(frame, sb, np.sin(grid))
+    tx = tx_position(record) - frame.origin
+    path = 2.0 * np.asarray(ranges, dtype=float)
+    rho = (path[None, :] ** 2 - tx @ tx) / (2.0 * (path[None, :] - (u @ tx)[:, None]))
+    pts = frame.origin + rho[:, :, None] * u[:, None, :]
+    z = np.array([core.backproject([s], pts.reshape(-1, 3), interp="sinc", backend=backend).reshape(pts.shape[:2]) for s in subs])
+    p = np.abs(z.sum(axis=0)) ** 2
+    e = np.argmax(p, axis=0)
+    cols = np.arange(p.shape[1])
+    counts = np.array([s.samples.n_channels for s in subs], dtype=float)
+    incoherent = (np.abs(z[:, e, cols]) ** 2).sum(axis=0)
+    quality = p[e, cols] / np.maximum(counts.sum() ** 2 / (counts**2).sum() * incoherent, 1e-300)
+    return grid[e], p[e, cols], quality
 
 
 # --- passive: elevation of each bearing -----------------------------------------------------------
