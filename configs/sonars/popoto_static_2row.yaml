@@ -6,10 +6,9 @@
 base: popoto_long_range
 name: popoto_static_2row
 build: popoto_static_2x32
-platform: {name: static_array, kind: static, span_m: 3.0, height_m: 1.6, row_baseline_m: 1.5, mounting: frame lowered from the surface or standing on the bottom,
-  static: true, depth_m: 10.0}
+platform: {name: static_array, kind: static, span_m: 5.4, height_m: 1.6, usable_span_m: 4.8, row_baseline_m: 1.5, mounting: frame lowered from the surface or standing
+    on the bottom, static: true, depth_m: 10.0}
 array:
-  pitch: 0.09
   layout_choice: two_rows
   layouts:
     two_rows:
@@ -30,7 +29,7 @@ hardware:
     gain_db: 43.0
     input_full_scale_vpp: 0.037
     clock_tolerance_ppm: 25.0
-    row_module: row32_short
+    row_module: long_4p8m
     wiring: row_by_row
     position_m: [0.0, 0.0, 0.0]
     cable_slack_m: 0.5
@@ -38,6 +37,7 @@ hardware:
   sound_speed: {rung: gradient_prior}
   water_depth: {source: typed}
   compute: {option: decimate_first_cpu}
-unconfirmed: [platform.span_m, platform.height_m, platform.depth_m, array.layouts.two_rows.rows, platform.row_baseline_m, receive.window, hardware.hydrophone.model,
-  hardware.hydrophone.noise_db, hardware.hydrophone.band_hz, hardware.boards.overload_damage_vpp, hardware.boards.gain_switchable, hardware.projector.model, hardware.projector.amplifier,
-  hardware.projector.blanking_after_s, hardware.navigation.unit, hardware.navigation.rate_hz, hardware.navigation.timestamp_sigma_s, hardware.compute.unit]
+unconfirmed: [platform.span_m, platform.height_m, platform.usable_span_m, platform.depth_m, array.layouts.two_rows.rows, platform.row_baseline_m, receive.window,
+  hardware.hydrophone.model, hardware.hydrophone.noise_db, hardware.hydrophone.band_hz, hardware.boards.overload_damage_vpp, hardware.boards.gain_switchable, hardware.projector.model,
+  hardware.projector.amplifier, hardware.projector.blanking_after_s, hardware.navigation.unit, hardware.navigation.rate_hz, hardware.navigation.timestamp_sigma_s,
+  hardware.compute.unit]

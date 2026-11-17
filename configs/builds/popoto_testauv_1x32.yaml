@@ -18,7 +18,7 @@ platform:
   height_m: 0.40                 # usable height: NO figure from the owner ("not much elevation"); a placeholder
 
 array:
-  module: row32_short            # the row design (count, pitch, hydrophone): configs/builds/modules/row32_short.yaml
+  module: testauv_short            # the row design (count, pitch, hydrophone): configs/builds/modules/testauv_short.yaml
   rows: 1
   look: starboard
   wiring: row_by_row             # the owner: "Probably row by row": every board serves one row

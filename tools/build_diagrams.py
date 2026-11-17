@@ -40,11 +40,12 @@ RC = {"figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor
       "axes.edgecolor": MUTED, "axes.labelcolor": INK, "xtick.color": MUTED, "ytick.color": MUTED}
 
 STAGES = [   # (label, sonar file, deployment file, file stem): the staged Popoto plan
-    ("1: test AUV, 1 x 32", "popoto_testauv_1row", "popoto_testauv_1row", "testauv_1x32"),
+    ("1: test AUV, 1 x 32 (short row)", "popoto_testauv_1row", "popoto_testauv_1row", "testauv_1x32"),
     ("2: static array, 2 x 32", "popoto_static_2row", "popoto_static_2row", "static_2x32"),
     ("3: static array, 3 x 32", "popoto_static_3row", "popoto_static_3row", "static_3x32"),
-    ("4: full face, 2 x 32", "popoto_long_range_2row", "popoto_face_2row", "face_2x32"),
-    ("5: full face, 3 x 32", "popoto_long_range_3row", "popoto_vehicle_elevation", "face_3x32"),
+    ("4: full face, 1 x 32", "popoto_face_1row", "popoto_face_1row", "face_1x32"),
+    ("5: full face, 2 x 32", "popoto_long_range_2row", "popoto_face_2row", "face_2x32"),
+    ("6: full face, 3 x 32", "popoto_long_range_3row", "popoto_vehicle_elevation", "face_3x32"),
 ]
 
 

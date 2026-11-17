@@ -269,3 +269,19 @@ For a sampled transmit pulse the same switch also selects the echo synthesiser (
 by default, NumPy reference); analytic pulses are synthesised by the C++ kernel only.
 
 Source types and how to tap, inspect and re-inject data: `ARCHITECTURE.md`.
+
+## Build specs, and what they add to the other files
+
+`configs/builds/<build>.yaml` describes a build in spec-sheet terms; `tools/build_from_spec.py` generates
+the sonar, deployment and scenario files from it. Fields: `REFERENCE_DESIGN.md`.
+
+| Key | Where | Meaning |
+| --- | --- | --- |
+| `unconfirmed` | any sonar or scenario file | dotted keys whose values are assumptions. Through `base:` the lists **accumulate** (a child no longer hides its base's flags) |
+| `confirmed` | a file with `base:` | takes flags off the inherited list: the entry itself and anything below it (`confirmed: [receive]` clears `receive.boards`). Naming a key under `unconfirmed` again puts it back |
+| `platform: {name, kind, span_m, height_m, usable_span_m, usable_height_m, row_baseline_m, mounting, static, depth_m}` | sonar file | what the array is mounted on; read by the diagrams, the parts list and the validator, not by the simulator or the chain |
+| `hardware: {hydrophone, boards, sync, projector, navigation, sound_speed, water_depth, compute, storage}` | sonar file | the build's parts as the spec names them (models, inputs per board, where the boards sit for cable lengths, the synchronisation scheme and its tolerance target): for the diagrams and the parts list only |
+| `build` | sonar file | the spec the file was generated from |
+| `receive.window` | every stage sonar file | stated in each file from the spec's `operation.range_m` (first range `null`: the pulse's blind range) |
+| `truth` | generated scenarios, `popoto_12km_2row`, `_3row` | what the self-tests check reports against; the simulator ignores it |
+| `GPUSONAR_CONFIG_PATH` | environment | further config trees searched after `configs/` (how a generated build is used in place); `config.add_config_dir(path)` does the same in code |

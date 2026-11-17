@@ -178,6 +178,52 @@ First time in water with rows (the static array first, then the face), after ste
 4. Two rows 1.5 m apart (frame or face): check `elevation_alternatives_deg` on that source (candidates 11.5° apart) and that
    `sector_from_depth` with the site's water depth leaves the right one.
 
+## From a build spec: generated deployment files, diagrams, parts and checklists
+
+The stage sonar and deployment files are generated from build specs (`configs/builds/<build>.yaml`) by
+`tools/build_from_spec.py`; a test fails if a committed file is not what its spec generates, so change the
+spec, then `tools/build_from_spec.py --write-shipped`. `REFERENCE_DESIGN.md` is the guide for a new build.
+
+| Build | Row module | Sonar file | Deployment file | Hardware and timing diagrams |
+| --- | --- | --- | --- | --- |
+| `popoto_testauv_1x32` | `testauv_short` (the one exception) | `popoto_testauv_1row` | `popoto_testauv_1row` | `design/build_testauv_1x32_*.png` |
+| `popoto_static_2x32`, `popoto_static_3x32` | `long_4p8m` | `popoto_static_2row`, `_3row` | `popoto_static_2row`, `_3row` | `design/build_static_2x32_*.png`, `_3x32_` |
+| `popoto_face_1x32` | `long_4p8m` | `popoto_face_1row` | `popoto_face_1row` | `design/build_face_1x32_*.png` |
+| `popoto_face_2x32` | `long_4p8m` | `popoto_long_range_2row` | `popoto_face_2row` | `design/build_face_2x32_*.png` |
+| `popoto_face_3x32` | `long_4p8m` | `popoto_long_range_3row` | `popoto_vehicle_elevation` | `design/build_face_3x32_*.png` |
+
+- **One row design.** The owner: "Yes treat auv special case and have static array the longer row." The static
+  array and the face carry the same row module (32 hydrophones over 4.8 m, four boards); the test AUV's
+  short row exists only because of that vehicle's span. The face starts with one row, then two, then three.
+- **Each sonar file states its receive window** (`receive.window`): from the pulse's blind range to 2 km on
+  the test AUV, 3 km on the static array, 12.7 km on the face. Before, every stage silently inherited the
+  eight-hydrophone board's 50 m to 2 km. A full-window ping on the face is 1.7 million samples a channel
+  (666 MB recorded with three rows): for a bench run give `source.sonar_overrides: {receive: {window: {range: [...]}}}`.
+- **For a build, per stage:** `tools/build_from_spec.py <build> --out DIR` writes `BUILD.md` (the bring-up
+  checklist with that build's tolerances), `COMMANDS.txt` (simulate, emulate, run, the C++ program with
+  `chain.options`, listening with `listen.options`), the diagrams and `parts.md`; `--self-test` runs the
+  simulated trials through both engines against their truth.
+- **Parts:** `design/popoto_parts.md` (generated; quantities per stage, what the design asks of each part,
+  what fixes it, the plan's own words, where the plan and the files disagree).
+
+### The projector's direct sound and the first usable range
+
+At every placeholder position the projector overloads the nearest inputs (19 dB over full scale on the face,
+34 to 36 dB on the test AUV and the static frame; `DESIGN.md` Sec. 3 has the table and the options). Until
+the inputs' recovery time is measured: record one ping at the lowest source level and look at the raw samples
+of the nearest hydrophone (`tools/inspect_tap.py`), then at full level; put the recovery in the spec
+(`projector.blanking_after_s`), and move the first synchronisation burst after it (`sync.reference.lead_s`;
+the validator warns while it is not). The chain ignores everything before the receive window, which opens at
+the blind range; it does not protect an input.
+
+### The 12 km design point
+
+`DESIGN.md`, *The 12 km design point*. To run it: `popoto_12km` (one row), `popoto_12km_2row` with
+`configs/deploy/popoto_face_2row.yaml`, `popoto_12km_3row` with `configs/deploy/popoto_vehicle_elevation.yaml`
+(leave the `sync` section out: these pings are at baseband; set `chain.elevation.water_depth: 100`).
+`tools/popoto_12km_study.py` runs all three row counts in each shipped environment and writes
+`design/popoto_12km.json`. Bellhop is needed for the ducted cases; image-source paths run anywhere.
+
 ## Listening without transmitting
 
 The array is for active pings; the same backend also gives passive bearings from any

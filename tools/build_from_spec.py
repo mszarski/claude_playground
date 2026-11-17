@@ -217,7 +217,7 @@ def build_md(spec: dict, d: dict, perf: dict, warnings: list, out: Path) -> str:
                   "Row offsets: a source at three known depths at two or three bearings; `calibrate.estimate_channel_errors(..., planar=False)`; store the result with the sonar.",
                   "Elevation: the same source; `depth_m` against its depth, level and " + ("with the frame tilted" if static else "rolled 5°") + ". An error that follows the roll is the attitude source or its time stamp.",
                   ]
-        if d["rows"] == 2:
+        if d["rows"] == 2 and el["repeat_spacing_deg"]:
             steps.append(f"Two rows: the candidates (`elevation_alternatives_deg`) are {el['repeat_spacing_deg']:.1f}° apart; with the site's water depth typed in or sent by navigation, `sector_from_depth` must leave the right one.")
     steps.append("Feed back: every measured value replaces its assumption in the spec and moves to `confirmed`; generate again and re-run the self-tests (docs/REFERENCE_DESIGN.md, step 7).")
     L += [f"{i + 1}. {s}" for i, s in enumerate(steps)]
@@ -395,6 +395,17 @@ def _stream_test(spec: dict) -> dict:
     return out
 
 
+def field_table() -> str:
+    """The spec's fields as a Markdown table (docs/REFERENCE_DESIGN.md holds it; a test keeps the two together)."""
+    L = ["| Field | Unit | Needed | Meaning | Where a spec sheet has it | If unknown |", "| --- | --- | --- | --- | --- | --- |"]
+    for section, fields in bs.SCHEMA.items():
+        for name, (kind, unit, required, meaning, where, unknown) in fields.items():
+            if isinstance(kind, tuple):
+                meaning = f"{meaning} (one of: {', '.join(kind)})"
+            L.append(f"| `{section}.{name}` | {unit or '—'} | {'yes' if required else 'no'} | {meaning} | {where or '—'} | {unknown} |")
+    return "\n".join(L)
+
+
 # --- the shipped builds -------------------------------------------------------------------------------
 
 def shipped_files() -> dict:
@@ -421,9 +432,13 @@ def main(argv=None):
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--only", help="self-tests to run, comma separated: " + ", ".join(KINDS))
     ap.add_argument("--engines", default="python,cpp")
+    ap.add_argument("--fields", action="store_true", help="print the table of the spec's fields")
     ap.add_argument("--write-shipped", action="store_true")
     ap.add_argument("--check-shipped", action="store_true")
     args = ap.parse_args(argv)
+    if args.fields:
+        print(field_table())
+        return 0
     if args.write_shipped or args.check_shipped:
         bad = []
         for rel, text in shipped_files().items():

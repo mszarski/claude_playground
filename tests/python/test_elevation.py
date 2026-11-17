@@ -173,7 +173,8 @@ def test_stage_layouts_put_rows_at_their_heights_and_boards_follow():
     for m in (s2, s3):
         plat = m.config["platform"]
         assert plat["static"] is True and np.ptp(m.positions[:, 0]) <= plat["span_m"] and np.ptp(m.positions[:, 2]) <= plat["height_m"]
-        assert np.allclose(m.positions[:32, [0, 1]], p1.positions[:, [0, 1]])     # each row is the test AUV's row
+        assert np.allclose(m.positions[:32, [0, 1]], two.positions[:32, [0, 1]])  # each row is the face's row: one row module ("have static array the longer row")
+        assert not np.allclose(m.positions[:32, 0], p1.positions[:, 0])           # the test AUV's short row is the exception
     assert sorted(set(np.round(-s3.positions[:, 2], 3))) == pytest.approx([-0.75, -0.20, 0.75])
     assert np.ptp(sonar_rows(NEAR2).positions[:, 2]) == pytest.approx(0.30)
     short = SonarModel.load("popoto_testauv_1row", {"array": {"pitch": 0.0625}})
@@ -777,6 +778,8 @@ def test_exported_command_carries_the_elevation_settings(tmp_path):
     sys.path.insert(0, str(ROOT / "tools"))
     import sonar_live
     cfg = load_yaml(ROOT / "configs" / "deploy" / "popoto_vehicle_elevation.yaml")
+    # The sonar files now state their operational window (750 m to 12.7 km: 1.7 million samples a channel); a short one here.
+    cfg["source"]["sonar_overrides"] = {"receive": {"window": {"range": [900.0, 1000.0]}}}
     cmd = sonar_live.export_template(cfg, str(tmp_path / "t.h5"))
     for part in ("elevation=1", "elevation_first_deg=-30", "elevation_step_deg=0.25", "elevation_roll_sigma_deg=0.2", "elevation_attitude_arrival=1",
                  "elevation_use_gradient=1", "elevation_gradient=0.017", "elevation_gradient_sigma=0.05", "elevation_water_depth_sigma=5", "sync=1"):
@@ -786,5 +789,7 @@ def test_exported_command_carries_the_elevation_settings(tmp_path):
         chain = load_yaml(ROOT / "configs" / "deploy" / f"{name}.yaml")["chain"]
         opts = live.cpp_chain_options(chain, live.sync_reference(chain))
         core.LiveChainCpp(dict(opts, backend=core.Backend.Host))                   # every key is one the C++ chain takes
-    two = sonar_live.export_template(load_yaml(ROOT / "configs" / "deploy" / "popoto_face_2row.yaml"), str(tmp_path / "u.h5"))
+    face2 = load_yaml(ROOT / "configs" / "deploy" / "popoto_face_2row.yaml")
+    face2["source"]["sonar_overrides"] = {"receive": {"window": {"range": [900.0, 1000.0]}}}
+    two = sonar_live.export_template(face2, str(tmp_path / "u.h5"))
     assert "elevation_sector_from_depth=1" in two and "elevation_sector_bounces=1" in two

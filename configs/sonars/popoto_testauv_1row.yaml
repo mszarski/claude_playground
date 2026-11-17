@@ -21,7 +21,7 @@ hardware:
     gain_db: 43.0
     input_full_scale_vpp: 0.037
     clock_tolerance_ppm: 25.0
-    row_module: row32_short
+    row_module: testauv_short
     wiring: row_by_row
     position_m: [0.0, 0.0, 0.0]
     cable_slack_m: 0.5

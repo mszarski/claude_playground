@@ -6,7 +6,7 @@
 # every other value is an assumption and is carried as `unconfirmed` into the generated files.
 build: popoto_face_2x32
 title: "Full face, two rows of 32"
-stage: "4: full face, 2 x 32"
+stage: "5: full face, 2 x 32"
 base_sonar: popoto_long_range    # the generated sonar file extends this shipped one: only what differs is written
 names: {sonar: popoto_long_range_2row, deploy: popoto_face_2row}
 
@@ -20,7 +20,7 @@ platform:
   confirmed: [span_m, height_m]
 
 array:
-  module: row32_long            # the row design (count, pitch, hydrophone): configs/builds/modules/row32_long.yaml
+  module: long_4p8m             # the row design (count, pitch, hydrophone): configs/builds/modules/long_4p8m.yaml
   rows: 2
   heights_m: [-0.75, 0.75]   # m above the centre of the face, lowest row first (the owner: "the vertical spacing is maybe a 1.5")
   look: starboard

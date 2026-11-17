@@ -6,66 +6,66 @@ Status words: `chosen` (named in the owner's plan, `docs/plan/GPU-FLS-Phased-Pla
 
 ## Quantities and status
 
-| Item | Status | 1: test AUV, 1 x 32 | 2: static array, 2 x 32 | 3: static array, 3 x 32 | 4: full face, 2 x 32 | 5: full face, 3 x 32 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Array hydrophones | specified, not chosen | 32 | 64 | 96 | 64 | 96 |
-| Reference hydrophones (calibration) | chosen | 2 | 2 | 2 | 2 | 2 |
-| Capture boards (Popoto PMM6081) | chosen | 4 | 8 | 12 | 8 | 12 |
-| Input protection, blanking and recovery | unconfirmed | 32 inputs | 64 inputs | 96 inputs | 64 inputs | 96 inputs |
-| Projector | specified, not chosen | 1 | 1 | 1 | 1 | 1 |
-| Power amplifier and matching | specified, not chosen | 1 | 1 | 1 | 1 | 1 |
-| Synchronisation reference generator and distribution | specified, not chosen | 1 generator, 4 lines | 1 generator, 8 lines | 1 generator, 12 lines | 1 generator, 8 lines | 1 generator, 12 lines |
-| Hydrophone cables | specified, not chosen | 32 | 64 | 96 | 64 | 96 |
-| Network: boards to the compute unit | specified, not chosen | 4 board ports + 1 | 8 board ports + 1 | 12 board ports + 1 | 8 board ports + 1 | 12 board ports + 1 |
-| Compute unit | specified, not chosen | 1 | 1 | 1 | 1 | 1 |
-| Storage | specified, not chosen | 1 | 1 | 1 | 1 | 1 |
-| Navigation and attitude (not named) | chosen / unconfirmed | 1 | 0 or 1 | 0 or 1 | 1 | 1 |
-| Sound speed at the array, and water depth | unconfirmed | from the platform | from the platform | from the platform | from the platform | from the platform |
-| Mounting: face or frame, fairing | unconfirmed | 1 | 1 | 1 | 1 | 1 |
-| Power | unconfirmed | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied |
-| Spares and failure tolerance | specified, not chosen | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones |
+| Item | Status | 1: test AUV, 1 x 32 (short row) | 2: static array, 2 x 32 | 3: static array, 3 x 32 | 4: full face, 1 x 32 | 5: full face, 2 x 32 | 6: full face, 3 x 32 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Array hydrophones | specified, not chosen | 32 | 64 | 96 | 32 | 64 | 96 |
+| Reference hydrophones (calibration) | chosen | 2 | 2 | 2 | 2 | 2 | 2 |
+| Capture boards (Popoto PMM6081) | chosen | 4 | 8 | 12 | 4 | 8 | 12 |
+| Input protection, blanking and recovery | unconfirmed | 32 inputs | 64 inputs | 96 inputs | 32 inputs | 64 inputs | 96 inputs |
+| Projector | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Power amplifier and matching | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Synchronisation reference generator and distribution | specified, not chosen | 1 generator, 4 lines | 1 generator, 8 lines | 1 generator, 12 lines | 1 generator, 4 lines | 1 generator, 8 lines | 1 generator, 12 lines |
+| Hydrophone cables | specified, not chosen | 32 | 64 | 96 | 32 | 64 | 96 |
+| Network: boards to the compute unit | specified, not chosen | 4 board ports + 1 | 8 board ports + 1 | 12 board ports + 1 | 4 board ports + 1 | 8 board ports + 1 | 12 board ports + 1 |
+| Compute unit | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Storage | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Navigation and attitude; a static frame: tilt and compass sensor | chosen / unconfirmed | 1 | 0 or 1 | 0 or 1 | 1 | 1 | 1 |
+| Sound speed at the array, and water depth | unconfirmed | from the platform | from the platform | from the platform | from the platform | from the platform | from the platform |
+| Mounting: face or frame, fairing | unconfirmed | 1 | 1 | 1 | 1 | 1 | 1 |
+| Power | unconfirmed | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied |
+| Spares and failure tolerance | specified, not chosen | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones |
 
 ## Numbers that size the parts
 
-| | 1: test AUV, 1 x 32 | 2: static array, 2 x 32 | 3: static array, 3 x 32 | 4: full face, 2 x 32 | 5: full face, 3 x 32 |
-| --- | --- | --- | --- | --- | --- |
-| Hydrophones, boards | 32, 4 | 64, 8 | 96, 12 | 64, 8 | 96, 12 |
-| Data rate: a board / all | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s |
-| Receive window (stated in the sonar file) | 75–2000 m | 75–3000 m | 75–3000 m | 750–12700 m | 750–12700 m |
-| Shortest ping interval | 2.77 s | 4.10 s | 4.10 s | 17.93 s | 17.93 s |
-| Recording: a ping / an hour | 35 MB / 45.48 GB | 105 MB / 92.07 GB | 157 MB / 138.11 GB | 444 MB / 89.11 GB | 666 MB / 133.66 GB |
-| Cables: shortest–longest, total (boards assumed at the array's centre) | 0.5–1.9 m, 39 m | 1.3–2.6 m, 126 m | 0.7–2.6 m, 172 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m |
-| Projector to the nearest hydrophone | 0.30 m | 0.25 m | 0.25 m | 1.84 m | 1.69 m |
-| Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +34 dB | 209 dB re 1 µPa: +36 dB | 209 dB re 1 µPa: +36 dB | 192 dB re 1 µPa: +18 dB | 192 dB re 1 µPa: +19 dB |
-| Direct sound ends | 0.101 s (blind inside 75 m) | 0.101 s (blind inside 75 m) | 0.101 s (blind inside 75 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) |
-| Source level that just reaches full scale | 163 dB | 161 dB | 161 dB | 179 dB | 178 dB |
-| Clock agreement between rows (0.05° of elevation) | one row: n/a | 0.87 µs | 0.87 µs | 0.87 µs | 0.87 µs |
-| Clock agreement within a row (clean beams) | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs |
-| Compute, option A (CPU, decimated pings of scenario size) | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads |
-| Compute, CPU at the boards' full rate, no decimation | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads |
-| Compute, option A with the decimate-first stage | pending | pending | pending | pending | pending |
-| Compute, option B (GPU, same decimated pings) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) |
+| | 1: test AUV, 1 x 32 (short row) | 2: static array, 2 x 32 | 3: static array, 3 x 32 | 4: full face, 1 x 32 | 5: full face, 2 x 32 | 6: full face, 3 x 32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Hydrophones, boards | 32, 4 | 64, 8 | 96, 12 | 32, 4 | 64, 8 | 96, 12 |
+| Data rate: a board / all | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s |
+| Receive window (stated in the sonar file) | 75–2000 m | 75–3000 m | 75–3000 m | 750–12700 m | 750–12700 m | 750–12700 m |
+| Shortest ping interval | 2.77 s | 4.10 s | 4.10 s | 17.93 s | 17.93 s | 17.93 s |
+| Recording: a ping / an hour | 35 MB / 45.48 GB | 105 MB / 92.07 GB | 157 MB / 138.11 GB | 222 MB / 44.55 GB | 444 MB / 89.11 GB | 666 MB / 133.66 GB |
+| Cables: shortest–longest, total (boards assumed at the array's centre) | 0.5–1.9 m, 39 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m | 0.6–2.8 m, 54 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m |
+| Projector to the nearest hydrophone | 0.30 m | 0.26 m | 0.26 m | 1.68 m | 1.84 m | 1.69 m |
+| Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +34 dB | 209 dB re 1 µPa: +35 dB | 209 dB re 1 µPa: +35 dB | 193 dB re 1 µPa: +19 dB | 192 dB re 1 µPa: +18 dB | 192 dB re 1 µPa: +19 dB |
+| Direct sound ends | 0.101 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) |
+| Source level that just reaches full scale | 163 dB | 162 dB | 162 dB | 178 dB | 179 dB | 178 dB |
+| Clock agreement between rows (0.05° of elevation) | one row: n/a | 0.87 µs | 0.87 µs | one row: n/a | 0.87 µs | 0.87 µs |
+| Clock agreement within a row (clean beams) | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs |
+| Compute, option A (CPU, decimated pings of scenario size) | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads |
+| Compute, CPU at the boards' full rate, no decimation | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads |
+| Compute, option A with the decimate-first stage | pending | pending | pending | pending | pending | pending |
+| Compute, option B (GPU, same decimated pings) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) |
 
-CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, decimated), 4 shared threads. timing_scenario_size, timing_full_length and the stream check's chain time: measured with the earlier row heights (outer rows 1.8 m apart) on an otherwise idle machine; the *_under_load values: this run, with the machine shared with other jobs (load average about 15 on 4 threads) Full rate: C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights. GPU figures: C++ chain, bearings from the map, backprojection; median seconds per ping after the first; NVIDIA L4 on AMD EPYC 7R13 Processor (8 threads), 2026-11-17 21:54:16 UTC, 15,467 samples a channel (scenario size, baseband), the tree before the row heights changed to 1.5 m; raw full-rate pings have not been run on a GPU. Decimate-first: pending (docs/design/popoto_stage2.json does not exist: the decimate-first stage is being built separately).
+CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, decimated), 4 shared threads, measured on the face's sonar files with 1, 2 and 3 rows of 32: the other stages have the same channel counts and shorter windows, so these are upper figures for them. timing_scenario_size, timing_full_length and the stream check's chain time: measured with the earlier row heights (outer rows 1.8 m apart) on an otherwise idle machine; the *_under_load values: this run, with the machine shared with other jobs (load average about 15 on 4 threads) Full rate: C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights. GPU figures: C++ chain, bearings from the map, backprojection; median seconds per ping after the first; NVIDIA L4 on AMD EPYC 7R13 Processor (8 threads), 2026-11-17 21:54:16 UTC, 15,467 samples a channel (scenario size, baseband), the tree before the row heights changed to 1.5 m; raw full-rate pings have not been run on a GPU. Decimate-first: pending (docs/design/popoto_stage2.json does not exist: the decimate-first stage is being built separately).
 
 ## What the design asks of each part, and what the plan says
 
 **Array hydrophones** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): usable over 4–6 kHz; sensitivity as assumed in the files, -208 dB re 1 V/µPa (another value changes the full-scale pressure and the noise figure below, not the processing); own noise plus the input's below the sea's at 5 kHz: 51 dB re 1 µPa²/Hz at 5 m/s wind (15 nV/√Hz at the board input with that sensitivity; 40 dB, 4.0 nV/√Hz, in a calm sea); matched in phase between rows (5° of mismatch is 0.16° of elevation at a 1.5 m baseline: `sensitivity.phase_mismatch_error_deg` of the study) or calibrated in water; omnidirectional in the vertical plane over the searched sector.
+- Requirement (6: full face, 3 x 32): usable over 4–6 kHz; sensitivity as assumed in the files, -208 dB re 1 V/µPa (another value changes the full-scale pressure and the noise figure below, not the processing); own noise plus the input's below the sea's at 5 kHz: 51 dB re 1 µPa²/Hz at 5 m/s wind (15 nV/√Hz at the board input with that sensitivity; 40 dB, 4.0 nV/√Hz, in a calm sea); matched in phase between rows (5° of mismatch is 0.16° of elevation at a 1.5 m baseline: `sensitivity.phase_mismatch_error_deg` of the study) or calibrated in water; omnidirectional in the vertical plane over the searched sector.
 - Fixed by: `receive.sensitivity_db`; link budget of DESIGN.md Sec. 5 (ambient noise, `gpusonar.sim.noise.wenz_spectrum_db`); `sensitivity` of popoto_elevation_study.json.
 - The plan (p. 12, Phase 0): "Popoto doesn't list hydrophones of its own, so "Popoto hydrophones" here means ordinary passive hydrophones wired to the board's inputs."
 - The plan (p. 12, Hardware design, item 1 (the integrated array, not the Popoto boards)): "32 low-cost piezo elements potted in polyurethane along a 3 m strip, each with a low-noise preamp and band-pass filter (about 2–20 kHz) at the element, driving differential pairs."
 - Open: which hydrophone; its noise and band; whether the board's own input noise is below the figure above (the plan gives none).
 
 **Reference hydrophones (calibration)** — chosen.
-- Requirement (5: full face, 3 x 32): a calibrated sensitivity in the band, to check every channel in water and to be the source's monitor in the row-offset calibration (`calibrate.estimate_channel_errors(..., planar=False)`).
+- Requirement (6: full face, 3 x 32): a calibrated sensitivity in the band, to check every channel in water and to be the source's monitor in the row-offset calibration (`calibrate.estimate_channel_errors(..., planar=False)`).
 - Fixed by: DEPLOYMENT.md, first time in water with rows.
 - The plan (p. 12, Hardware design, item 1): "Two calibrated reference hydrophones (for example AS-1, −208 dBV re 1 µPa) check sensitivity."
 - The plan (p. 19, costs): "the AS-1 hydrophone (€412 ex VAT)"
 - Open: the plan names the AS-1 "for example"; its calibration band is not quoted there.
 
 **Capture boards (Popoto PMM6081)** — chosen.
-- Requirement (5: full face, 3 x 32): 8 inputs each (96 hydrophones); samples 4–6 kHz: the files assume 102.4 kHz and 24 bits; all inputs of a board sampled together; 19.7 Mbit/s a board over the network; boards of different rows agree to 0.87 µs for 0.05° of elevation (0.057° per µs, rows 1.5 m apart); boards of one row agree to 8.3 µs for clean beams (a twentieth of a period at 6 kHz); input range: the projector's direct sound at the nearest hydrophone (1.69 m) is 192 dB re 1 µPa = 23.6 V at the ADC, **19 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.1 ms to 1.004 s after the trigger.
+- Requirement (6: full face, 3 x 32): 8 inputs each (96 hydrophones); samples 4–6 kHz: the files assume 102.4 kHz and 24 bits; all inputs of a board sampled together; 19.7 Mbit/s a board over the network; boards of different rows agree to 0.87 µs for 0.05° of elevation (0.057° per µs, rows 1.5 m apart); boards of one row agree to 8.3 µs for clean beams (a twentieth of a period at 6 kHz); input range: the projector's direct sound at the nearest hydrophone (1.69 m) is 192 dB re 1 µPa = 23.6 V at the ADC, **19 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.1 ms to 1.004 s after the trigger.
 - Fixed by: `receive.board_size`, `receive.sample_rate`, `receive.adc_bits`, `receive.adc_full_scale`, `receive.gain_db`; `sensitivity.clock_us_for_deg` and `projector` of popoto_elevation_study.json.
 - The plan (p. 13, 'What Popoto documents', Receive inputs (source: PMM6081 ICD)): "8 single-ended hydrophone inputs, 43 dB preamp, 37 mVpp full scale, 100 Hz high-pass"
 - The plan (p. 13, Timing (PMM6081 ICD)): "1PPS input, battery-backed clock"
@@ -79,17 +79,18 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Open: sample rate, word length and simultaneous sampling are assumptions; the band is below the 10–100 kHz the plan says the board is specified for; whether boards can be batched; the plan advises against more than two.
 
 **Input protection, blanking and recovery** — unconfirmed.
-- Requirement (5: full face, 3 x 32): the projector's direct sound at the nearest hydrophone (1.69 m) is 192 dB re 1 µPa = 23.6 V at the ADC, **19 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.1 ms to 1.004 s after the trigger. The inputs must survive it and recover before the first range of interest; the recovery time is not known and the simulator models neither the direct sound nor the recovery. Three ways out, none chosen: clamp and accept the recovery; move the projector (full scale at 15 m from the nearest hydrophone); or lower the source level while close (full scale at 178 dB).
-  - 1: test AUV, 1 x 32: the projector's direct sound at the nearest hydrophone (0.30 m) is 207 dB re 1 µPa = 131.2 V at the ADC, **34 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 0.2 ms to 0.101 s after the trigger.
-  - 2: static array, 2 x 32: the projector's direct sound at the nearest hydrophone (0.25 m) is 209 dB re 1 µPa = 156.7 V at the ADC, **36 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 0.2 ms to 0.101 s after the trigger.
-  - 3: static array, 3 x 32: the projector's direct sound at the nearest hydrophone (0.25 m) is 209 dB re 1 µPa = 156.7 V at the ADC, **36 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 0.2 ms to 0.101 s after the trigger.
-  - 4: full face, 2 x 32: the projector's direct sound at the nearest hydrophone (1.84 m) is 192 dB re 1 µPa = 21.7 V at the ADC, **18 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.2 ms to 1.004 s after the trigger.
+- Requirement (6: full face, 3 x 32): the projector's direct sound at the nearest hydrophone (1.69 m) is 192 dB re 1 µPa = 23.6 V at the ADC, **19 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.1 ms to 1.004 s after the trigger. The inputs must survive it and recover before the first range of interest; the recovery time is not known and the simulator models neither the direct sound nor the recovery. Three ways out, none chosen: clamp and accept the recovery; move the projector (full scale at 15 m from the nearest hydrophone); or lower the source level while close (full scale at 178 dB).
+  - 1: test AUV, 1 x 32 (short row): the projector's direct sound at the nearest hydrophone (0.30 m) is 207 dB re 1 µPa = 131.2 V at the ADC, **34 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 0.2 ms to 0.101 s after the trigger.
+  - 2: static array, 2 x 32: the projector's direct sound at the nearest hydrophone (0.26 m) is 209 dB re 1 µPa = 152.5 V at the ADC, **35 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 0.2 ms to 0.102 s after the trigger.
+  - 3: static array, 3 x 32: the projector's direct sound at the nearest hydrophone (0.26 m) is 209 dB re 1 µPa = 152.5 V at the ADC, **35 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 0.2 ms to 0.102 s after the trigger.
+  - 4: full face, 1 x 32: the projector's direct sound at the nearest hydrophone (1.68 m) is 193 dB re 1 µPa = 23.8 V at the ADC, **19 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.1 ms to 1.004 s after the trigger.
+  - 5: full face, 2 x 32: the projector's direct sound at the nearest hydrophone (1.84 m) is 192 dB re 1 µPa = 21.7 V at the ADC, **18 dB over** full scale (2.61 V; the input's full scale is 173 dB re 1 µPa), from 1.2 ms to 1.004 s after the trigger.
 - Fixed by: `transmit.lever_arm`, `transmit.waveform.source_level_db`, `receive.adc_full_scale`; `projector` of popoto_elevation_study.json.
 - The plan (p. 12, Hardware design, item 5): "The projector is separate, so no transmit/receive switch is needed; preamp inputs are clamped and the software ignores samples during transmit."
 - Open: recovery time of the inputs after overload; whether the clamp the plan describes exists on these boards.
 
 **Projector** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): 197 dB re 1 µPa at 1 m over 4–6 kHz for a 1 s sweep (a duty of 5.6% at the shortest ping interval, 17.9 s); 417 W acoustic if omnidirectional (10^((SL − 170.8)/10)); its place relative to the array known to a few centimetres (it is in every record and the beamformer uses the true path).
+- Requirement (6: full face, 3 x 32): 197 dB re 1 µPa at 1 m over 4–6 kHz for a 1 s sweep (a duty of 5.6% at the shortest ping interval, 17.9 s); 417 W acoustic if omnidirectional (10^((SL − 170.8)/10)); its place relative to the array known to a few centimetres (it is in every record and the beamformer uses the true path).
 - Fixed by: `transmit.waveform` (source level from the 12 km link budget, DESIGN.md Sec. 5); `transmit.lever_arm`.
 - The plan (p. 13, Transmit (PMM6081 spec)): "190 dB re 1 µPa at 1 m with the PMT-28 transducer, 20–35 kHz"
 - The plan (p. 14): "The PMT-28 can't transmit there, so this needs a separate low-frequency speaker, and Popoto should confirm the sample rate and filtering."
@@ -97,13 +98,13 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Open: which projector; whether one exists at this level in this band at a size the platform takes; its beam pattern; its position.
 
 **Power amplifier and matching** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): drives the projector to 197 dB over 4–6 kHz for 1 s; electrical power = acoustic power / the projector's efficiency (not known until a projector is chosen); a trigger whose instant is in the board stream.
+- Requirement (6: full face, 3 x 32): drives the projector to 197 dB over 4–6 kHz for 1 s; electrical power = acoustic power / the projector's efficiency (not known until a projector is chosen); a trigger whose instant is in the board stream.
 - Fixed by: `transmit.waveform`.
 - The plan (p. 12, Hardware design, item 4): "The FPGA plays the chirp through a DAC to a class-D power amplifier, matching transformer and projector. Stage 1 uses an underwater speaker; stage 2 uses a free-flooded ring or flextensional projector with a 1–2 kW amplifier and a capacitor bank."
 - Open: power, energy storage for the pulse, how the transmit instant reaches the boards.
 
 **Synchronisation reference generator and distribution** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): a burst 38–48 kHz, 4 ms, twice a ping, 2 mV peak at the ADC (14 µV at the input), summed into the first input of every board without loading the hydrophone on it; the lines' delays equal to a fraction of the tolerance: boards of different rows agree to 0.87 µs for 0.05° of elevation (0.057° per µs, rows 1.5 m apart); boards of one row agree to 8.3 µs for clean beams (a twentieth of a period at 6 kHz).
+- Requirement (6: full face, 3 x 32): a burst 38–48 kHz, 4 ms, twice a ping, 2 mV peak at the ADC (14 µV at the input), summed into the first input of every board without loading the hydrophone on it; the lines' delays equal to a fraction of the tolerance: boards of different rows agree to 0.87 µs for 0.05° of elevation (0.057° per µs, rows 1.5 m apart); boards of one row agree to 8.3 µs for clean beams (a twentieth of a period at 6 kHz).
 - Fixed by: `receive.reference`, `chain.sync`; `sensitivity.clock_us_for_deg` of popoto_elevation_study.json.
 - The plan (p. 14, batching boards): "Best method: wire one shared reference signal into one input on every board (leaving 7 hydrophones per board, 28 in all)."
 - The plan (p. 14): "Alternatives: use the direct transmit pulse, which every board hears, or the 1PPS time-stamps."
@@ -111,22 +112,22 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Open: the summing circuit is hardware to design: the plan's method gives the reference an input of its own (7 hydrophones a board), the files sum it into a hydrophone input (8 a board); 0.4–0.5 µs is reached in simulation, real boards are unconfirmed.
 
 **Hydrophone cables** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): 0.8 to 3.6 m, 2.3 m on average, 218 m in all, ASSUMING the boards sit at [0, 0, 0] m from the array's centre (behind the face) and each run goes along the face, then up or down, with 0.5 m of slack; screened, single-ended into the boards as the plan describes them; capacitance loads a passive hydrophone (loss = C_h / (C_h + C_cable): to be checked against the chosen hydrophone).
-  - 1: test AUV, 1 x 32: 0.5 to 1.9 m, 1.2 m on average, 39 m in all.
-  - 2: static array, 2 x 32: 1.3 to 2.6 m, 2.0 m on average, 126 m in all.
-  - 3: static array, 3 x 32: 0.7 to 2.6 m, 1.8 m on average, 172 m in all.
-  - 4: full face, 2 x 32: 1.3 to 3.6 m, 2.5 m on average, 157 m in all.
+- Requirement (6: full face, 3 x 32): 0.8 to 3.6 m, 2.3 m on average, 218 m in all, ASSUMING the boards sit at [0, 0, 0] m from the array's centre (behind the face) and each run goes along the face, then up or down, with 0.5 m of slack; screened, single-ended into the boards as the plan describes them; capacitance loads a passive hydrophone (loss = C_h / (C_h + C_cable): to be checked against the chosen hydrophone).
+  - 1: test AUV, 1 x 32 (short row): 0.5 to 1.9 m, 1.2 m on average, 39 m in all.
+  - 2: static array, 2 x 32: 1.3 to 3.6 m, 2.5 m on average, 157 m in all.
+  - 4: full face, 1 x 32: 0.6 to 2.8 m, 1.7 m on average, 54 m in all.
+  - 5: full face, 2 x 32: 1.3 to 3.6 m, 2.5 m on average, 157 m in all.
 - Fixed by: hydrophone positions (`array`), `hardware.boards.position_m`, `hardware.boards.cable_slack_m`.
 - Open: where the boards really sit; connectors; penetrators.
 
 **Network: boards to the compute unit** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): 19.7 Mbit/s from each board, 235.9 Mbit/s in all while receiving; UDP blocks of at most 16 kB (the block format of `sources/flank_stream.py`); no loss tolerated inside a ping (a lost block discards the ping).
+- Requirement (6: full face, 3 x 32): 19.7 Mbit/s from each board, 235.9 Mbit/s in all while receiving; UDP blocks of at most 16 kB (the block format of `sources/flank_stream.py`); no loss tolerated inside a ping (a lost block discards the ping).
 - Fixed by: `receive.sample_rate` × `receive.adc_bits` × channels; `source.port` of the deployment file.
 - The plan (p. 13, Software (PMM6081 spec)): "Debian Linux on a quad-core Arm; Python, C++ and MATLAB APIs; Ethernet"
 - Open: whether the boards can stream raw samples over Ethernet at all (the plan documents recording to .wav files).
 
 **Compute unit** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): one ping every 17.9 s at the shortest. Option A, decimate first on a CPU: 2.54 s a ping on 4 shared CPU threads (C++ chain, pings of the popoto_12km scenario's size (baseband, decimated); earlier row heights, an otherwise idle machine); at the boards' full rate without decimation: 37.7 s a ping on 4 shared CPU threads (C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights): NOT real time without decimating first; with the decimate-first stage: pending (docs/design/popoto_stage2.json does not exist: the decimate-first stage is being built separately). Option B, a GPU: 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads): C++ chain, bearings from the map, backprojection; median seconds per ping after the first; 15,467 samples a channel (scenario size, baseband), the row heights before the 1.5 m change. Full-rate raw pings were not run on a GPU.
+- Requirement (6: full face, 3 x 32): one ping every 17.9 s at the shortest. Option A, decimate first on a CPU: 2.54 s a ping on 4 shared CPU threads (C++ chain, pings of the popoto_12km scenario's size (baseband, decimated); earlier row heights, an otherwise idle machine); at the boards' full rate without decimation: 37.7 s a ping on 4 shared CPU threads (C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights): NOT real time without decimating first; with the decimate-first stage: pending (docs/design/popoto_stage2.json does not exist: the decimate-first stage is being built separately). Option B, a GPU: 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads): C++ chain, bearings from the map, backprojection; median seconds per ping after the first; 15,467 samples a channel (scenario size, baseband), the row heights before the 1.5 m change. Full-rate raw pings were not run on a GPU.
 - Fixed by: docs/design/popoto_elevation_bench.json (`timing_scenario_size`, `timing_full_length`); docs/benchmarks/gpu_benchmark_all_l4.json (group `live`).
 - The plan (p. 9, AUV compute): "Develop on DGX Spark, and plan a dedicated port-and-benchmark step before choosing the vehicle computer."
 - The plan (p. 9, table): "Jetson AGX Orin: Linux sockets, 10GbE, CPU-bound; 15–75 W; Module 100 × 87 mm; $3,499 dev kit"
@@ -135,33 +136,33 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Open: which computer; neither option has been timed at the boards' full rate on the hardware that would be used.
 
 **Storage** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): 666 MB a ping as recorded (1,733,974 samples × 96 channels × 4 bytes, window 750–12700 m), 133.66 GB an hour at 201 pings; listening continuously 106.17 GB an hour.
+- Requirement (6: full face, 3 x 32): 666 MB a ping as recorded (1,733,974 samples × 96 channels × 4 bytes, window 750–12700 m), 133.66 GB an hour at 201 pings; listening continuously 106.17 GB an hour.
 - Fixed by: `receive.window`, `receive.sample_rate`; `output.recording` of the deployment file.
 - Open: capacity and write rate of the volume; whether to store decimated pings instead.
 
-**Navigation and attitude (SPRINT-Nav)** — chosen.
-- Requirement (5: full face, 3 x 32): position, velocity, roll, pitch, yaw, time-stamped against the boards' time, through the ping and until its last echo (17.9 s); roll accuracy goes one for one into elevation (0.2° is 3.5 m of depth at 1 km). SPRINT-Nav: accuracy, output rate and time-stamp accuracy are from its datasheet — to be supplied.
+**Navigation and attitude; a static frame: tilt and compass sensor** — chosen.
+- Requirement (6: full face, 3 x 32): position, velocity, roll, pitch, yaw, time-stamped against the boards' time, through the ping and until its last echo (17.9 s); roll accuracy goes one for one into elevation (0.2° is 3.5 m of depth at 1 km). SPRINT-Nav: accuracy, output rate and time-stamp accuracy are from its datasheet — to be supplied.
 - Fixed by: `nav.port`; `chain.elevation.roll_sigma_deg`, `attitude_time`; `sensitivity.roll_depth_error_m` of popoto_elevation_study.json.
 - Open: the unit's figures and message format; the adapter from its messages to the navigation datagram.
 
 **Sound speed at the array, and water depth** — unconfirmed.
-- Requirement (5: full face, 3 x 32): local sound speed (it sets beamforming and the angle at the array) and an approximate water depth with its uncertainty (folding bottom bounces; bounding the search of two rows).
+- Requirement (6: full face, 3 x 32): local sound speed (it sets beamforming and the angle at the array) and an approximate water depth with its uncertainty (folding bottom bounces; bounding the search of two rows).
 - Fixed by: `sound_speed`, `water_depth` in the navigation datagram or `chain.sound_speed`, `chain.elevation.water_depth`, `water_depth_sigma_m`.
 - Open: which sensors; DVL altitude plus depth as the water-depth source.
 
 **Mounting: face or frame, fairing** — unconfirmed.
-- Requirement (5: full face, 3 x 32): rows in one plane: 1 mm of one row standing out is 0.038° of elevation; hydrophone positions along a row to a small fraction of 30 cm (a wavelength), or calibrated; clear of the projector's near field and of machinery.
+- Requirement (6: full face, 3 x 32): rows in one plane: 1 mm of one row standing out is 0.038° of elevation; hydrophone positions along a row to a small fraction of 30 cm (a wavelength), or calibrated; clear of the projector's near field and of machinery.
 - Fixed by: `array` (positions), `platform`; `sensitivity.out_offset_error_deg` of popoto_elevation_study.json.
 - The plan (p. 12, Hardware design, item 6): "The array sits in a faired strip decoupled from the hull, away from thrusters; flow and machinery noise set the real noise floor."
 - Open: the mechanical design is not started.
 
 **Power** — unconfirmed.
-- Requirement (5: full face, 3 x 32): consumers: 12 boards, the reference generator, the amplifier (pulsed: 1 s every 17.9 s at most), the compute unit, the network. No draw is known for any of them.
+- Requirement (6: full face, 3 x 32): consumers: 12 boards, the reference generator, the amplifier (pulsed: 1 s every 17.9 s at most), the compute unit, the network. No draw is known for any of them.
 - Fixed by: —.
 - Open: every figure.
 
 **Spares and failure tolerance** — specified, not chosen.
-- Requirement (5: full face, 3 x 32): a dead hydrophone is named in `chain.dead_channels` and left out; a dead board takes 8 of a row's 32 and the estimate carries on; a dead row leaves two rows: the two-row behaviour (candidates, not one elevation). The chain does not detect a dead channel by itself. One spare board and one board's worth of hydrophones is a proposal, not a requirement derived from anything.
+- Requirement (6: full face, 3 x 32): a dead hydrophone is named in `chain.dead_channels` and left out; a dead board takes 8 of a row's 32 and the estimate carries on; a dead row leaves two rows: the two-row behaviour (candidates, not one elevation). The chain does not detect a dead channel by itself. One spare board and one board's worth of hydrophones is a proposal, not a requirement derived from anything.
 - Fixed by: `chain.dead_channels`; tests/python/test_elevation.py (dead hydrophone, dead board, dead row).
 - Open: spares policy.
 
@@ -190,9 +191,9 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Network: boards to the compute unit: whether the boards can stream raw samples over Ethernet at all (the plan documents recording to .wav files).
 - Compute unit: which computer; neither option has been timed at the boards' full rate on the hardware that would be used.
 - Storage: capacity and write rate of the volume; whether to store decimated pings instead.
-- Navigation and attitude (SPRINT-Nav): the unit's figures and message format; the adapter from its messages to the navigation datagram.
+- Navigation and attitude; a static frame: tilt and compass sensor: the unit's figures and message format; the adapter from its messages to the navigation datagram.
 - Sound speed at the array, and water depth: which sensors; DVL altitude plus depth as the water-depth source.
 - Mounting: face or frame, fairing: the mechanical design is not started.
 - Power: every figure.
 - Spares and failure tolerance: spares policy.
-- Frame attitude (tilt and compass sensor): whether the frame carries a sensor; how its depth and heading are measured.
+- Navigation and attitude; a static frame: tilt and compass sensor: whether the frame carries a sensor; how its depth and heading are measured.

@@ -11,15 +11,16 @@ base_sonar: popoto_long_range    # the generated sonar file extends this shipped
 names: {sonar: popoto_static_2row, deploy: popoto_static_2row}
 
 platform:
-  kind: static                   # a frame lowered and left in place. The owner gave NO dimensions: every value here is a placeholder
+  kind: static                   # a frame lowered and left in place
   name: static_array
   mounting: frame lowered from the surface or standing on the bottom
-  span_m: 3.0
-  height_m: 1.6
-  depth_m: 10.0                  # where the frame hangs
+  span_m: 5.4                    # follows from the owner's decision ("have static array the longer row"): the 4.8 m row module plus a margin,
+  usable_span_m: 4.8             # 0.3 m at each end here: the margin is this pair of numbers, a parameter
+  height_m: 1.6                  # outer rows 1.5 m apart as on the face, 0.05 m free top and bottom: a parameter
+  depth_m: 10.0                  # where the frame hangs: NOT given by the owner, a placeholder
 
 array:
-  module: row32_short            # the row design (count, pitch, hydrophone): configs/builds/modules/row32_short.yaml
+  module: long_4p8m                # the row design (count, pitch, hydrophone): configs/builds/modules/long_4p8m.yaml
   rows: 2
   heights_m: [-0.75, 0.75]   # m above the centre of the face, lowest row first (the owner: "the vertical spacing is maybe a 1.5")
   look: starboard

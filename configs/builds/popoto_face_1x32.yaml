@@ -1,15 +1,16 @@
-# Build spec: The face to start with: three rows of the SHORT row module inside the 7 m zone.
-# The owner: "Keep at 32, can start with a smaller array in the 7m zone": the test AUV's and the static array's row, on the face.
+# Build spec: The face to start with: ONE row of the long module.
+# The owner: "Keep at 32, can start with a smaller array in the 7m zone": read, after "have static array the longer row", as fewer rows
+# of the one row design (start with one, then two, then three), not a shorter row.
 # One file says what the build IS, in spec-sheet terms; tools/build_from_spec.py makes the sonar, deployment and scenario
 # files, the diagrams, the parts list, the expected performance and the bring-up checklist from it.
 # Fields, units and what to do when a value is unknown: docs/REFERENCE_DESIGN.md.
 # A section's `confirmed` list names the fields that are measured, from a datasheet in hand, or stated by the owner;
 # every other value is an assumption and is carried as `unconfirmed` into the generated files.
-build: popoto_face_initial_3x32
-title: "Face, initial: three rows of the short module"
-stage: "face, initial: 3 x 32 short"
+build: popoto_face_1x32
+title: "Full face, one row of 32"
+stage: "4: full face, 1 x 32"
 base_sonar: popoto_long_range    # the generated sonar file extends this shipped one: only what differs is written
-names: {sonar: popoto_face_initial_3x32, deploy: popoto_face_initial_3x32}
+names: {sonar: popoto_face_1row, deploy: popoto_face_1row}
 
 platform:
   kind: vehicle
@@ -21,9 +22,8 @@ platform:
   confirmed: [span_m, height_m]
 
 array:
-  module: row32_short           # the row design (count, pitch, hydrophone): configs/builds/modules/row32_short.yaml
-  rows: 3
-  heights_m: [-0.75, -0.20, 0.75]   # m above the centre of the face, lowest row first (the owner: "the vertical spacing is maybe a 1.5")
+  module: long_4p8m             # the row design (count, pitch, hydrophone): configs/builds/modules/long_4p8m.yaml
+  rows: 1
   look: starboard
   wiring: row_by_row             # the owner: "Probably row by row": every board serves one row
 
@@ -39,7 +39,7 @@ boards:
   clock_tolerance_ppm: 25.0      # assumptions: whether boards can be batched at all is a question for Popoto
   clock_offset_max_s: 3.0e-4
   jitter_rms_s: 2.0e-8
-  clocks: {seed: 33}             # drawn inside the tolerance above
+  clocks: {seed: 41}             # drawn inside the tolerance above
   confirmed: [model, inputs, gain_db, input_full_scale_vpp]
 
 sync:
@@ -97,4 +97,4 @@ trial:                           # the water the simulated trials are in: placeh
   roll_deg: 3.0
   roll_rate_deg_s: 1.5
   speed_m_s: 1.5
-  seed: 11
+  seed: 23

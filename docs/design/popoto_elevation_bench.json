@@ -149,22 +149,22 @@
       ]
     },
     "static_2row": {
-      "sync_residual_us": 0.4889713532,
+      "sync_residual_us": 0.4889779547,
       "true_depth_m": 60.0,
       "range_m": 2600.5362908446405,
       "water_depth_m": 100.0,
       "boards": 8,
       "depth_m": [
-        59.27594412,
-        55.98309665,
-        55.97937668,
-        57.94578045
+        56.34842571,
+        52.46452301,
+        55.50188364,
+        58.13968403
       ],
       "depth_sigma_m": [
-        121.54165,
-        121.5409888,
-        121.526199,
-        121.5415669
+        121.5323057,
+        121.5170005,
+        121.5156758,
+        121.531613
       ],
       "ambiguous": [
         false,
@@ -180,22 +180,22 @@
       ]
     },
     "static_3row": {
-      "sync_residual_us": 0.3991696478,
+      "sync_residual_us": 0.3991810284,
       "true_depth_m": 18.0,
       "range_m": 150.24187940940942,
       "water_depth_m": 30.0,
       "boards": 12,
       "depth_m": [
-        17.36002214,
-        17.36237314,
-        17.36192318,
-        17.36603275
+        17.36134489,
+        17.36171957,
+        17.36085097,
+        17.36119445
       ],
       "depth_sigma_m": [
-        2.646675536,
-        2.646668871,
-        2.646675068,
-        2.646664993
+        2.646671874,
+        2.646675149,
+        2.64667104,
+        2.64667186
       ],
       "ambiguous": [
         false,
@@ -215,10 +215,10 @@
       "range_m": 300.0,
       "water_depth_m": 30.0,
       "depth_m": [
-        27.69546653,
-        27.71548538,
-        27.6956524,
-        27.69493568
+        27.68852128,
+        27.68930267,
+        27.68941847,
+        27.68744882
       ],
       "path": [
         "bottom",
@@ -235,14 +235,14 @@
         90.0
       ],
       "depth_errors_m": [
-        0.02280659000000007,
-        0.030055099999998447,
-        0.022410440000001586
+        -0.004289746999999622,
+        0.012758310000002382,
+        0.03041905000000611
       ],
       "depth_sigma_m": [
-        3.568117506,
-        3.768212235,
-        4.450958257
+        3.568110001,
+        3.768228244,
+        4.4509489
       ],
       "tilt_deg": 2.0
     },
@@ -255,13 +255,13 @@
         "mover"
       ],
       "mover_speed_m_s": [
-        3.016074524
+        3.008396712
       ],
       "mover_vx_m_s": [
-        3.016070401
+        3.008392853
       ],
       "mover_depth_m": [
-        22.13771314
+        22.13238281
       ]
     },
     "static_passive": {
@@ -271,7 +271,7 @@
         -8.38680324538189,
         3.1956258945791256
       ],
-      "worst_elevation_error_deg": 0.051206637423083734,
+      "worst_elevation_error_deg": 0.04734746859644545,
       "source_rms_over_noise": [
         1.0,
         0.7
@@ -415,5 +415,6 @@
       "samples_per_channel": 22934
     }
   },
-  "timing_note": "timing_scenario_size, timing_full_length and the stream check's chain time: measured with the earlier row heights (outer rows 1.8 m apart) on an otherwise idle machine; the *_under_load values: this run, with the machine shared with other jobs (load average about 15 on 4 threads)"
+  "timing_note": "timing_scenario_size, timing_full_length and the stream check's chain time: measured with the earlier row heights (outer rows 1.8 m apart) on an otherwise idle machine; the *_under_load values: this run, with the machine shared with other jobs (load average about 15 on 4 threads)",
+  "static_note": "the static_* scenario entries were re-measured with the long row module (32 at 0.15 m) after the owner's decision; the other entries and the timings are as before"
 }

@@ -153,6 +153,315 @@
           "classified_multipath": 0
         }
       }
+    },
+    "popoto_12km: 100 m isovelocity over sand, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 360.8,
+        "chain_seconds_per_ping": 1.7496092750043317,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 14.23039268,
+            "detections": 5,
+            "range_error_m": 4.764198255095835,
+            "bearing_error_deg": -0.26316167040018135
+          },
+          {
+            "detected": true,
+            "snr_db": 16.65414208,
+            "detections": 7,
+            "range_error_m": 18.74451056332873,
+            "bearing_error_deg": -0.24472718245841918
+          },
+          {
+            "detected": true,
+            "snr_db": 14.06955619,
+            "detections": 10,
+            "range_error_m": 8.891578981585553,
+            "bearing_error_deg": -0.39828131702029346
+          },
+          {
+            "detected": true,
+            "snr_db": 16.9313024,
+            "detections": 11,
+            "range_error_m": 6.417078505932295,
+            "bearing_error_deg": -0.23686154233039058
+          },
+          {
+            "detected": true,
+            "snr_db": 17.14252732,
+            "detections": 14,
+            "range_error_m": 0.6576639634004096,
+            "bearing_error_deg": -0.1270927959523782
+          },
+          {
+            "detected": true,
+            "snr_db": 11.84099683,
+            "detections": 7,
+            "range_error_m": 15.66934567952012,
+            "bearing_error_deg": -0.5246504521870202
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 15.44226738,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 5.429165093,
+            "vx": -5.426234946,
+            "depth_m": null
+          },
+          {
+            "kind": "mover",
+            "speed_m_s": 5.879673506,
+            "vx": -5.878983002,
+            "depth_m": null
+          },
+          {
+            "kind": "mover",
+            "speed_m_s": 6.063694125,
+            "vx": -6.035845934,
+            "depth_m": null
+          },
+          {
+            "kind": "static",
+            "speed_m_s": 2.071024636,
+            "vx": -1.580401434,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 3,
+          "multipath": 5,
+          "static": 1,
+          "uncertain": 1
+        },
+        "later_arrivals": {
+          "tracks": 6,
+          "classified_multipath": 5
+        }
+      }
+    },
+    "popoto_env_deep_silt_1000m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 84.3,
+        "chain_seconds_per_ping": 2.0274389540027187,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 2,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 2,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 1,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "popoto_env_gravel_30m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 623.9,
+        "chain_seconds_per_ping": 4.229767968998203,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 26.16450961,
+            "detections": 1,
+            "range_error_m": -0.7416602624507505,
+            "bearing_error_deg": -0.23252434740018169
+          },
+          {
+            "detected": true,
+            "snr_db": 27.78145109,
+            "detections": 1,
+            "range_error_m": 0.07633266880657175,
+            "bearing_error_deg": -0.23200837045841904
+          },
+          {
+            "detected": true,
+            "snr_db": 27.04858981,
+            "detections": 1,
+            "range_error_m": 1.0156215829047142,
+            "bearing_error_deg": -0.27116413602029343
+          },
+          {
+            "detected": true,
+            "snr_db": 31.7802505,
+            "detections": 1,
+            "range_error_m": 2.000201475206268,
+            "bearing_error_deg": -0.18880535933039067
+          },
+          {
+            "detected": true,
+            "snr_db": 29.4815752,
+            "detections": 1,
+            "range_error_m": 2.557917172242014,
+            "bearing_error_deg": -0.19727012305237823
+          },
+          {
+            "detected": true,
+            "snr_db": 26.48700927,
+            "detections": 1,
+            "range_error_m": 3.2232189992118947,
+            "bearing_error_deg": -0.4395544824870202
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 27.41502045,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 5.978938654,
+            "vx": -5.978921857,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "popoto_env_summer_mud_60m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 35.9,
+        "chain_seconds_per_ping": 3.8678234754988807,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      }
     }
   }
 }

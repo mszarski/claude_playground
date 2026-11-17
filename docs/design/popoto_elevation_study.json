@@ -697,6 +697,7 @@
       "cables": 36,
       "platform": {
         "name": "test_auv",
+        "kind": "vehicle",
         "span_m": 3.0,
         "height_m": 0.4,
         "mounting": "hull"
@@ -724,19 +725,19 @@
       "rows": 2,
       "channels": 64,
       "boards": 8,
-      "pitch_m": 0.09,
-      "row_length_m": 2.88,
-      "pitch_wavelengths_at_6khz": 0.36,
+      "pitch_m": 0.15,
+      "row_length_m": 4.8,
+      "pitch_wavelengths_at_6khz": 0.6,
       "heights_m": [
         -0.75,
         0.75
       ],
       "baseline_m": 1.5,
-      "beamwidth_deg": 5.2879229842282225,
-      "gain_isotropic_noise_db": 12.863922161721122,
+      "beamwidth_deg": 3.172753790536934,
+      "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 2.380518038324267,
-      "reverberation_margin_vs_32_at_half_wavelength_db": -2.218487496163564,
+      "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
       "blind_range_m": 75.0,
@@ -744,27 +745,30 @@
       "cables": 72,
       "platform": {
         "name": "static_array",
-        "span_m": 3.0,
+        "kind": "static",
+        "span_m": 5.4,
         "height_m": 1.6,
+        "usable_span_m": 4.8,
+        "row_baseline_m": 1.5,
         "mounting": "frame lowered from the surface or standing on the bottom",
         "static": true,
         "depth_m": 10.0
       },
-      "reach_ship_m": 8535.031999400555,
+      "reach_ship_m": 9379.653498961372,
       "snr_ship_db": {
-        "500.0": 65.12507554506482,
-        "1000.0": 52.75928537405643,
-        "3000.0": 32.37607380747335,
-        "6000.0": 18.38733191421929,
-        "12000.0": 2.4510479542702814
+        "500.0": 67.31265316654274,
+        "1000.0": 54.94686299553437,
+        "3000.0": 34.56365142895128,
+        "6000.0": 20.574909535697223,
+        "12000.0": 4.638625575748216
       },
-      "reach_small_m": 3284.1597576999625,
+      "reach_small_m": 3671.379854148251,
       "snr_small_db": {
-        "500.0": 45.12507554506482,
-        "1000.0": 32.75928537405643,
-        "3000.0": 12.376073807473349,
-        "6000.0": -1.6126680857807099,
-        "12000.0": -17.54895204572972
+        "500.0": 47.31265316654275,
+        "1000.0": 34.94686299553437,
+        "3000.0": 14.563651428951284,
+        "6000.0": 0.5749095356972251,
+        "12000.0": -15.361374424251784
       },
       "elevation_sigma_deg_at_20_db": 0.18117430135704787,
       "repeat_spacing_deg": 11.536959032815489,
@@ -783,16 +787,16 @@
           "total_m": 17.031220231663365
         },
         "3000.0": {
-          "from_noise_m": 2.281873302435941,
+          "from_noise_m": 1.7738326568176594,
           "roll_0p2_deg_m": 10.471975511965978,
           "gradient_0p05_m": 150.0,
-          "total_m": 150.38240993178553
+          "total_m": 150.37555902944337
         },
         "6000.0": {
-          "from_noise_m": 22.843288121427012,
+          "from_noise_m": 17.757414671369414,
           "roll_0p2_deg_m": 20.943951023931955,
           "gradient_0p05_m": 600.0,
-          "total_m": 600.7998542748586
+          "total_m": 600.6279837472641
         },
         "12000.0": null
       },
@@ -803,20 +807,20 @@
       "rows": 3,
       "channels": 96,
       "boards": 12,
-      "pitch_m": 0.09,
-      "row_length_m": 2.88,
-      "pitch_wavelengths_at_6khz": 0.36,
+      "pitch_m": 0.15,
+      "row_length_m": 4.8,
+      "pitch_wavelengths_at_6khz": 0.6,
       "heights_m": [
         -0.75,
         -0.2,
         0.75
       ],
       "baseline_m": 1.5,
-      "beamwidth_deg": 5.2879229842282225,
-      "gain_isotropic_noise_db": 12.863922161721122,
+      "beamwidth_deg": 3.172753790536934,
+      "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 3.715181789907186,
-      "reverberation_margin_vs_32_at_half_wavelength_db": -2.218487496163564,
+      "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
       "blind_range_m": 75.0,
@@ -824,27 +828,30 @@
       "cables": 108,
       "platform": {
         "name": "static_array",
-        "span_m": 3.0,
+        "kind": "static",
+        "span_m": 5.4,
         "height_m": 1.6,
+        "usable_span_m": 4.8,
+        "row_baseline_m": 1.5,
         "mounting": "frame lowered from the surface or standing on the bottom",
         "static": true,
         "depth_m": 10.0
       },
-      "reach_ship_m": 9043.235645226818,
+      "reach_ship_m": 9924.535958352139,
       "snr_ship_db": {
-        "500.0": 65.12507554506482,
-        "1000.0": 52.75928537405644,
-        "3000.0": 32.376073807473354,
-        "6000.0": 18.38733191421929,
-        "12000.0": 2.4510479542702814
+        "500.0": 67.31265316654274,
+        "1000.0": 54.94686299553437,
+        "3000.0": 34.56365142895128,
+        "6000.0": 20.574909535697223,
+        "12000.0": 4.638625575748213
       },
-      "reach_small_m": 3515.8522189672667,
+      "reach_small_m": 3926.89293306351,
       "snr_small_db": {
-        "500.0": 45.125075545064824,
-        "1000.0": 32.75928537405644,
-        "3000.0": 12.376073807473349,
-        "6000.0": -1.6126680857807099,
-        "12000.0": -17.54895204572972
+        "500.0": 47.31265316654275,
+        "1000.0": 34.94686299553437,
+        "3000.0": 14.56365142895128,
+        "6000.0": 0.5749095356972216,
+        "12000.0": -15.361374424251787
       },
       "elevation_sigma_deg_at_20_db": 0.17906448500007635,
       "repeat_spacing_deg": 11.536959032815489,
@@ -863,22 +870,70 @@
           "total_m": 17.031152262023774
         },
         "3000.0": {
-          "from_noise_m": 2.2553003636584457,
+          "from_noise_m": 1.7531759680607444,
           "roll_0p2_deg_m": 10.471975511965978,
           "gradient_0p05_m": 150.0,
-          "total_m": 150.38200906642234
+          "total_m": 150.37531678137273
         },
         "6000.0": {
-          "from_noise_m": 22.577272783906157,
+          "from_noise_m": 17.55062549845384,
           "roll_0p2_deg_m": 20.943951023931955,
           "gradient_0p05_m": 600.0,
-          "total_m": 600.7897987906017
+          "total_m": 600.6219056443745
         },
         "12000.0": null
       },
       "sonar": "popoto_static_3row"
     },
-    "4: full face, 2 x 32": {
+    "4: full face, 1 x 32": {
+      "hydrophones_per_row": 32,
+      "rows": 1,
+      "channels": 32,
+      "boards": 4,
+      "pitch_m": 0.15,
+      "row_length_m": 4.8,
+      "pitch_wavelengths_at_6khz": 0.6,
+      "heights_m": [
+        -0.0
+      ],
+      "baseline_m": 0.0,
+      "beamwidth_deg": 3.172753790536934,
+      "gain_isotropic_noise_db": 15.051499783199056,
+      "gain_uncorrelated_noise_db": 15.051499783199061,
+      "rows_detection_gain_db": 0.0,
+      "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
+      "source_level_db": 197.0,
+      "pulse_s": 1.0,
+      "blind_range_m": 750.0,
+      "data_rate_mbit_s": 78.6432,
+      "cables": 36,
+      "platform": {
+        "name": "full_face",
+        "kind": "vehicle",
+        "span_m": 9.0,
+        "height_m": 2.0,
+        "usable_span_m": 7.0,
+        "mounting": "flat vertical face"
+      },
+      "reach_ship_m": 12799.069019588129,
+      "snr_ship_db": {
+        "500.0": 77.31265316654276,
+        "1000.0": 64.94686299553436,
+        "3000.0": 44.56365142895128,
+        "6000.0": 30.574909535697223,
+        "12000.0": 14.638625575748215
+      },
+      "reach_small_m": 5347.119849555807,
+      "snr_small_db": {
+        "500.0": 57.31265316654275,
+        "1000.0": 44.94686299553437,
+        "3000.0": 24.56365142895128,
+        "6000.0": 10.574909535697223,
+        "12000.0": -5.361374424251785
+      },
+      "sonar": "popoto_face_1row"
+    },
+    "5: full face, 2 x 32": {
       "hydrophones_per_row": 32,
       "rows": 2,
       "channels": 64,
@@ -903,6 +958,7 @@
       "cables": 72,
       "platform": {
         "name": "full_face",
+        "kind": "vehicle",
         "span_m": 9.0,
         "height_m": 2.0,
         "usable_span_m": 7.0,
@@ -962,7 +1018,7 @@
       },
       "sonar": "popoto_long_range_2row"
     },
-    "5: full face, 3 x 32": {
+    "6: full face, 3 x 32": {
       "hydrophones_per_row": 32,
       "rows": 3,
       "channels": 96,
@@ -988,6 +1044,7 @@
       "cables": 108,
       "platform": {
         "name": "full_face",
+        "kind": "vehicle",
         "span_m": 9.0,
         "height_m": 2.0,
         "usable_span_m": 7.0,
