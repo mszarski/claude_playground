@@ -229,6 +229,60 @@ Whether there are additional non-commercial terms could not be checked (EULA hos
 Failed: `arlpy` (dependency pins; 3.5). Not on PyPI: `RITSAR`, `pocketfft`. Needs a manual extra: `vbeam` (install `jax`).
 Imported fine on 3.13: acoular, pyroomacoustics, stonesoup, gtsam, h5py, zarr, z5py, tensorstore, pymust, k-wave-python, ultraspy, ustb, pyuff-ustb, sarpy, pybind11, nanobind, pyram, holoocean (client only).
 
+### 3.12 Sources used for the SST-equivalence simulator work (D-62 to D-79)
+
+Added after the survey above, when the simulator's models were extended. Nothing in this
+list is linked, vendored or installed as a dependency; the papers are sources of
+formulas and table rows, each cited where it is used in the code.
+
+**Papers read (arXiv, opened through the abstract and HTML pages).** The owner's ruling
+for this work: "Use anything from arxiv that cites things you need".
+
+| Paper | What was taken | Where |
+|---|---|---|
+| Lavia, Gonzalez and Blanc, "Modelling High-Frequency Backscattering from a Mesh of Curved Surfaces Using Kirchhoff Approximation", arXiv:1805.06945v2 (2018) | eq. (1) the Kirchhoff backscatter integral; eq. (5) the sphere; eq. (6) the finite cylinder without caps (they cite Gaunaurd 1985); eq. (7) the disc end cap; TS = 20 log10\|f\| | `sim/targets.py` (D-65). Eq. (6)'s phase as read differs from eq. (1) by a quarter turn; not settled |
+| Olson and Jackson, arXiv:2009.12420 (2020), eqs. (13)–(16), (20) | Jackson's perturbation factor for a fluid half-space, as a check only: our own derivation matches it to 1e-10 | `tests/python/test_bottom_models.py` (D-66) |
+| Olson, arXiv:2106.08287 (2021), eqs. (13), (24), Sec. II.B | spectrum convention and the form of the 2-D Kirchhoff integral; the statement that Kirchhoff and small-slope share it | `sim/bottom.py` (D-66) |
+| Olson, Lyons and Sæbø, arXiv:1601.06078, Sec. III and Table II | only the statement that first-order small-slope is a geoacoustic factor times the Kirchhoff integral; the "generic rock" elastic values are recorded in a YAML comment and not used | `sim/bottom.py`, `configs/sediments.yaml` (D-67) |
+| Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1 (values they attribute to TR 9407) | two sediment rows, six numbers each: medium sand and very fine silt | `configs/sediments.yaml` (D-67) |
+| Bentrem, Sample, Kalcic and Duncan, arXiv:physics/0607146, eq. (7) and Table II | the centimetre form of the roughness spectrum, as the basis of a unit conversion; definitions of the six parameters | `bottom.w2_from_cm4` |
+| Nennouche, Khalighi, Dowhuszko and Merad, arXiv:2603.23727v2 (2026), eqs. (20)–(23) (they cite Keiffer, Novarini and Norton, JASA 97, 1995) | the Hall–Novarini bubble population and its constants. The unit of n is not printed there; m⁻⁴ was assumed | `sim/surface.py` (D-68) |
+| Morency and Stilwell, arXiv:2210.06535 (2022), Sec. II-E, II-F (they quote D. Kraus's lecture notes) | an empirical surface backscatter law and the SEARAY bottom law with types 1–4; no validity range is given | `sim/surface.py` (D-68) |
+| arXiv:1611.00608 Table 1, arXiv:2003.11156 Tables 1–2 | looked at, nothing taken (sound speed, density and attenuation only) | — |
+| APL-UW TR 0702 (Goddard 2008), the local extract in `docs/refs/` (not committed) | equations and statements as cited in `PHYSICS_NOTES.md`; the only source for the reverberation, waveform, spreading and validation work | throughout |
+
+**Not read.** APL-UW TR 9407 (limited distribution; still not fetched or read). Jackson,
+Winebrenner and Ishimaru 1986; Mourad and Jackson 1989; Williams and Jackson 1998; Hall
+1989; Hamilton's regressions; Urick's table of simple target shapes; Dahl's ASIAEX
+papers; McDaniel's wind laws. Nothing is taken from any of them; where the code needs
+what they contain it uses a derivation of its own or says what is missing
+(`STATUS.md`, open question 8).
+
+**arlpy as a comparison oracle only.** `tools/boundary_models_study.py` imports
+`arlpy.uwa` (BSD 3-clause, see 3.5) if it is installed and prints
+`arlpy.uwa.bubble_surface_loss` (its docstring: "APL model (1994)") beside our bubble
+law. That is the only use: a study tool, optional, skipped with a message when arlpy is
+absent. The core does not import arlpy, its formula was not read or ported, and no value
+from it is used by any code. What the repository holds from it is comparison text only:
+the ratios of our law to its output in the `surface.py` docstring, and the printed dB
+values in `RESULTS.md`. Whether calling a BSD implementation of a handbook law as an oracle is
+acceptable is an owner's question (`STATUS.md`, open question 9).
+
+**Holoscan Sensor Bridge 2.7.0: an optional patch to its board emulator.** The survey row
+in 2a was made at the repository's HEAD (VERSION 3.0.0, Apache-2.0 per its LICENSE;
+`third_party_licenses/` present, not audited); `tools/build_hsb.sh` builds release 2.7.0
+against Holoscan 4.6.0 as a separate tree outside this repository. Nothing of Sensor
+Bridge is vendored or linked into the core.
+`third_party/patches/hsb-2.7.0-emulator-udp-socket.patch` (D-79) is a diff of our own
+change to three host C++ files of the emulator
+(`src/hololink/emulation/src/linux/rocev2_data_plane.hpp`, `rocev2_data_plane.cpp`,
+`rocev2_transmitter.cpp`; 27 changed lines), carrying the few context lines a diff
+needs. It is applied at build time to that separately built third-party tree, and only
+when `HSB_UDP_PATCH=1`; the patched emulator behaves as stock unless
+`HSB_EMULATOR_UDP_SOCKET=1` is set when it runs. The patch file's header states what it
+changes and why. The licence of release 2.7.0 itself was not re-read for this note; the
+Apache-2.0 statement is the survey's, at HEAD.
+
 ## 4. ASASIN coverage map
 
 **No public ASASIN code or data was found.** How this was checked: (a) the arXiv abstract page for 2101.05888 has no code link and its comment field is
@@ -266,6 +320,11 @@ no release statement, and the test data is only described as "a small SAS datase
 | Holoscan online docs, NGC containers, CUDA/cuFFT EULA text | docs.nvidia.com, catalog.ngc.nvidia.com | blocked; facts taken from the cloned repo docs and PyPI metadata |
 | k-Wave site, Ceres site | www.k-wave.org, ceres-solver.org | blocked; repos used |
 | arXiv API (`export.arxiv.org`) | export.arxiv.org | blocked; arxiv.org abstract, PDF and search pages worked |
+| APL-UW TR 9407 and other DTIC reports (Urick's shapes among them) | apps.dtic.mil | HTTP 403; TR 9407 is limited-distribution and was not sought further |
+| Classic boundary-scattering papers (Jackson, Winebrenner and Ishimaru 1986; Mourad and Jackson 1989; Williams and Jackson 1998; Hall 1989) | pubs.aip.org | allowed during the SST work, but answered with a browser challenge page (HTTP 403, "Just a moment..."); not circumvented |
+| Open copies of the same papers and of Urick's table | core.ac.uk | first outside the allowed hosts; once allowed, the same browser challenge (HTTP 403); the fetch tool could not resolve it |
+| IEEE papers (Hamilton's regressions were sought here too) | ieeexplore.ieee.org | once allowed, returned an empty HTTP 202; nothing read |
+| Institute of Acoustics proceedings, HLS Research pages, FAO documents | www.ioa.org.uk, www.hlsresearch.com, www.fao.org | outside the allowed hosts; not requested further |
 | GitHub REST repo endpoint, GitHub web search/topics | api.github.com (direct), github.com/search | not enabled / 403; `gh api search/repositories` worked and was used |
 | HoloOcean main repository and Unreal EULA text | github.com/byu-holoocean/HoloOcean | not accessible anonymously (Epic account linking) |
 | `apl-ocean-engineering/marine_acoustic_msgs`, `creatis-ULTIM/MUST`, `ustb/ustb` on GitHub | github.com | do not resolve; correct locations are `apl-ocean-engineering/marine_msgs` and `unioslo/USTB`; MUST has no GitHub repo that was found |

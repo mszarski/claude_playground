@@ -114,7 +114,8 @@ Reproduce them with `tools/gallery.py` (needs `matplotlib`; `--quick` thins the 
 - [`docs/SIM_CALIBRATION.md`](docs/SIM_CALIBRATION.md): fitting the simulator to a real FLS log or a SAS image.
 - [`docs/DESIGN.md`](docs/DESIGN.md): the sonar designs, generated from the config files: requirements and where each is met, arrays and beams, timing, link budgets, diagrams.
 - [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): every key of the sonar and scenario files.
-- [`docs/SCENARIOS.md`](docs/SCENARIOS.md): the realistic scenes of every mode, with figures, numbers and CPU run times.
+- [`docs/SCENARIOS.md`](docs/SCENARIOS.md): the realistic scenes of every mode, with figures, numbers and CPU run times; the target, spreading and TR 0702 validation scenarios.
+- [`docs/PHYSICS_NOTES.md`](docs/PHYSICS_NOTES.md): SST (APL-UW TR 0702) section by section, and the derivations behind the simulator's propagation, reverberation, target and boundary models.
 - [`docs/STATUS.md`](docs/STATUS.md): progress, open questions, deviations.
 - [`docs/RESULTS.md`](docs/RESULTS.md): measured numbers against theory and benchmarks.
 - [`docs/PAPER_NOTES.md`](docs/PAPER_NOTES.md): the ASASIN paper, equation by equation, with its gaps.
@@ -223,6 +224,33 @@ The 10 km case has thousands of two-way paths; pass `backend=gpusonar.core.Backe
 `run_scenario` on a GPU machine. The tests that compare the eigenray tier with normal
 modes also need KRAKEN (`GPUSONAR_KRAKEN_DIR`, the root of an Acoustics Toolbox build).
 `GPUSONAR_ORACLES=1 tools/gpu_job.sh` builds both in a clean container.
+
+### Simulator options after SST (APL-UW TR 0702)
+
+The simulator also has, all opt-in and all listed key by key in `docs/CONFIGURATION.md`:
+
+- targets as sets of highlights with strength against aspect, and smooth spheres,
+  cylinders, plates and discs that return specular glints (`type: target`);
+- seabeds and bottom reverberation from a rough fluid sediment model, with two named
+  sediments (`sediment: medium_sand`), Kirchhoff, small-slope and composite regimes;
+- time spreading of boundary-bounce paths, with angle and frequency spreading
+  (`time_spread:`);
+- reverberation with separate, moving transmitter and receiver, K statistics, moving
+  scatterers and a seabed with relief (`geometry: bistatic`, `statistics:`,
+  `scatterer_motion:`, `bathymetry:`); volume-scattering layers;
+- sampled transmit pulses: LFM, HFM, stepped FM, Barker and m-sequence codes, or samples
+  from a file (`transmit.waveform: {type: sampled, ...}`).
+
+`tools/sst_validation.py` checks these against TR 0702 section by section
+(`docs/figures/sst_validation.md`). What to know before relying on them
+(`docs/STATUS.md`, "Simulator limits so far"): they were tested file by file on the CPU,
+and the full suite and a GPU job have not yet been run with them merged; bistatic
+reverberation has a known Doppler defect when a leg has several eigenrays (two xfail
+tests); echoes of a sampled pulse are synthesised in NumPy only (7 to 22 s against 1.0 to
+1.4 s for the kernel in the one case timed); the wind-speed bubble-loss law is an upper
+estimate above 10 kHz; and
+the boundary models are open-literature substitutes for a handbook (APL-UW TR 9407) that
+was not read.
 
 ## Run a whole chain from one YAML file
 

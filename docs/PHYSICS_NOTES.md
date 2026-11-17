@@ -1257,7 +1257,7 @@ What `sim/reverb.py` and `sim/reverb_bistatic.py` do, against Sec. 5 above. [OUR
 throughout: the derivations here are ours; TR 0702 supplies eqs. (63), (68), (71), (89),
 (96), (103) and the structure of Sec. 11.2-11.3, nothing else.
 
-### 12.1 What the default (monostatic) generator models
+### 14.1 What the default (monostatic) generator models
 
 Established by reading the code and by tests (`tests/python/test_reverb_bistatic.py`):
 
@@ -1290,9 +1290,9 @@ results must not change):
   (the series being periodic) backwards round the period. Negligible while the power
   falls by less than about 50 dB across the record; measured on a 30 m - 3 km record
   (100 dB): +7 dB over 50-75 % of the record, +25 dB over 90-97 %. `band_taper: true`
-  removes it (within 0.2 dB to the end of that record); see 12.5.
+  removes it (within 0.2 dB to the end of that record); see 14.5.
 
-### 12.2 Bistatic geometry (`geometry: bistatic`)
+### 14.2 Bistatic geometry (`geometry: bistatic`)
 
 The directional form of the scattering function, (129) with the receiver factored out as
 in (121): cells of the boundary are binned by two-way time and by arrival direction at
@@ -1352,13 +1352,13 @@ height over the boundary where the transmitter is far from the receiver
 (`azimuth_subsamples`). Chapman-Harris is a backscatter fit and is used at the mean
 grazing angle whatever the bistatic azimuth.
 
-### 12.3 Range-varying boundary (`strength_map`)
+### 14.3 Range-varying boundary (`strength_map`)
 
 A factor on the scattering strength as a function of world position, applied per cell.
 The boundary itself stays flat (bathymetry would change the eigenrays). From a scenario:
 a table of dB against range, optionally azimuth, about a fixed origin.
 
-### 12.4 K-distributed reverberation (`statistics: {model: k, shape}`)
+### 14.4 K-distributed reverberation (`statistics: {model: k, shape}`)
 
 TR 0702 says SST's point-scatterer and DDD methods can make K-distributed reverberation
 and gives no method (Sec. 8 above). Ours is the compound representation: each resolution
@@ -1381,16 +1381,16 @@ beamforming come out of the array structure, as the levels do. `shape` has no de
 (a property of the seabed to be measured or assumed). What is not modelled: correlation
 of the texture between pings (each ping draws its own) and between neighbouring cells.
 
-### 12.5 Leakage along a long record (`band_taper`, `guard`)
+### 14.5 Leakage along a long record (`band_taper`, `guard`)
 
-See 12.1. `band_taper` multiplies the pulse's spectrum by 1 below a quarter of the
+See 14.1. `band_taper` multiplies the pulse's spectrum by 1 below a quarter of the
 generation rate and a raised cosine from there to Nyquist (the rate is at least four times
 the pulse's band, so the band is untouched), which makes the spectrum continuous round
 Nyquist and the delay/interpolation responses fall fast; two pulse lengths of silence
 are generated after the record to keep the remaining wrap-round out. Both engines get
 the same tapered pulse.
 
-### 12.6 Property tests (Sec. 9 above)
+### 14.6 Property tests (Sec. 9 above)
 
 `tests/python/test_reverb_statistics.py`, on both engines:
 
@@ -1409,7 +1409,7 @@ Code: `python/gpusonar/sim/waveform.py`, `libs/dsp/src/pulse_compression.cpp`
 everything quoted from SST: TR 0702 Sec. 4.1 (eqs. 3-6), Sec. 4.3 (the script on
 p. 20-21), Sec. 4.5.1 (eqs. 14-19), Sec. 4.6.3 (eq. 29), Sec. 8.3 and 9.1 (eqs. 63, 68).
 
-### 12.1 What is carried where
+### 15.1 What is carried where
 
 A sampled pulse is a complex envelope b about a carrier F on a uniform grid:
 `q(u) = A Re{ b(u) exp(2 pi i F u) }`, `0 <= u <= T` (TR 0702 eq. 4 without the
@@ -1426,7 +1426,7 @@ correlates as for the analytic pulses. Nothing was added to the record.
 Cost: the replica is stored with every ping (as float64 in the file). A 1 s pulse
 at 6-10 kHz is 40 001 samples; a 1 ms pulse at 270-330 kHz is 1 321.
 
-### 12.2 Echo synthesis
+### 15.2 Echo synthesis
 
 Per (path, channel) the kernel's own steps are kept (Sec. 10, "Analytic-pulse
 synthesis vs SST"): exact arrival times of the start, middle and end of the pulse
@@ -1441,7 +1441,7 @@ with b interpolated between its samples. This is SST's `VarDelay` (14) with
 `T_c(t) = t - u(t)`, except that the delay comes from the exact solve at every
 output sample instead of linear interpolation of a slow delay track. Doppler is
 therefore a time scaling of envelope and carrier together, with range curvature
-across the pulse; the first-order factor (63)/(68) is reproduced (12.4) but not
+across the pulse; the first-order factor (63)/(68) is reproduced (15.4) but not
 used.
 
 Interpolation is on the envelope, not on the passband signal, so the band
@@ -1450,7 +1450,7 @@ the carrier. For speed it is done in two stages: the windowed sinc once, onto a
 table 8 times finer than the envelope's samples (`table_factor`), then a four-point
 cubic in that table at each output sample. (SST tabulates the coefficients on a grid
 512 times finer and takes the nearest, eq. 18; we tabulate the signal.) The measured
-errors in 12.4 are with both stages.
+errors in 15.4 are with both stages.
 
 Loss that depends on frequency (absorption, both beam patterns) cannot use an
 instantaneous frequency, which a sampled pulse does not have. It is applied in
@@ -1479,7 +1479,7 @@ at 8 kHz (measured 6.9e-3 relative error against the closed form with 3 passes,
 7e-8 with 8). The NumPy sampled path runs 8 passes. The analytic kernel was left
 as it is.
 
-### 12.3 The interpolator against TR 0702 eq. 19
+### 15.3 The interpolator against TR 0702 eq. 19
 
 TR 0702 gives the rule `M >= 2.5 / (1 - alpha)` for the Hann-windowed sinc (17) and
 no error figure. Measured response of our implementation of (17) as a continuous
@@ -1503,7 +1503,7 @@ The `VarDelay` script (two tones at 220 and 440 Hz, 8 kHz real samples, delay
 second within 0.02 Hz, and the output equals `x(t - T(t))` within 5.1e-3 (M = 6,
 Hann), 2.3e-4 (M = 16, Hann), 1.5e-6 (M = 16, Kaiser).
 
-### 12.4 Measured accuracy
+### 15.4 Measured accuracy
 
 - Sampled copy of a Tukey-tapered LFM against the analytic LFM (sas_auv,
   omnidirectional, no absorption, moving sonar), relative rms difference of the
@@ -1525,7 +1525,7 @@ Hann), 2.3e-4 (M = 16, Hann), 1.5e-6 (M = 16, Kaiser).
   -21.9 dB (Barker 13; -22.3 dB for ideal chips) and -22.3 dB (127-chip
   m-sequence; -23.0 dB for ideal chips). The difference is the band limit.
 
-### 12.5 Limits
+### 15.5 Limits
 
 - Emission time is a quadratic through three exact arrival times, as in the
   analytic kernel: exact for constant radial speed, second order in acceleration
@@ -1549,13 +1549,13 @@ Model: the boundary is a set of tilted mirrors (facets) with Gaussian slopes, va
 per axis; one bounce, r1 and r2 the path lengths before and after it, g the grazing angle,
 q = 1/r1 + 1/r2, (x, y) a facet's position from the specular point, x along the path.
 
-**12.1 Geometry.** To second order the path through (x, y) is longer by
+**16.1 Geometry.** To second order the path through (x, y) is longer by
 `c tau = (x^2 sin^2 g + y^2) q / 2`: ellipses of equal delay, 1/sin g longer along the path.
 With `(x sin g, y) = rho (cos psi, sin psi)`, `rho^2 = 2 c tau / q`: seen along the ray the
 ellipse is a circle. The facet reflects source to receiver if its slopes are
 `s_x = x sin(g) q / 2`, `s_y = y q / (2 sin g)`.
 
-**12.2 Angles.** The tap of excess delay tau leaves the source `rho / r1` from the specular
+**16.2 Angles.** The tap of excess delay tau leaves the source `rho / r1` from the specular
 ray and arrives `rho / r2` from it: `angle^2 = 2 c tau r2 / (r1 (r1 + r2))` at the source.
 Its place on the circle has density `exp(kappa cos 2 psi)`,
 `kappa = (c tau q / 4 mss)(1 / sin^2 g - 1)`. With Gaussian slopes the angles are Gaussian,
@@ -1566,13 +1566,13 @@ the aperture: `sigma_v cos g` for a vertical line, `sigma_v sin g` for a horizon
 across the path. Limit: the turn must stay inside the grazing angle (the code stops a turn
 towards the horizontal at 0.9 of the ray's elevation); shadowing is not modelled.
 
-**12.3 Decay time.** The same slopes give `tau = 2 (s_x^2 + s_y^2 sin^2 g) / (c q)`, mean
+**16.3 Decay time.** The same slopes give `tau = 2 (s_x^2 + s_y^2 sin^2 g) / (c q)`, mean
 `T = mss (1 + sin^2 g) t1 t2 / (t1 + t2)`. TR 0702's rule of thumb is `2 mss t1 t2 / (t1 + t2)`:
 the same at normal incidence, twice as long at low grazing angles. The shape is not an
 exponential but `exp(-tau (a + b) / 4ab) I0(tau (a - b) / 4ab) / (2 sqrt(ab))`,
 `a = mss t1 t2 / (t1 + t2)`, `b = a sin^2 g`. (`decay_time: facet`; the default stays the rule.)
 
-**12.4 Frequency.** A boundary displaced by zeta changes the path by `-2 zeta sin g`: the
+**16.4 Frequency.** A boundary displaced by zeta changes the path by `-2 zeta sin g`: the
 field is `exp(i chi zeta(t))`, `chi = 2 k sin g`. For Gaussian zeta of rms height h and rms
 speed v the scattered part has correlation `exp(-Gamma^2)(exp(chi^2 C(t)) - 1)`, C the
 height correlation, so the second moment of its spectrum is exactly
@@ -1588,7 +1588,7 @@ What the default process gives: one gain per tap per ping (ping-to-ping fading o
 spread within a ping). `doppler: true` makes each sinusoid of the process a ray with its
 own shift, so the same process runs through the ping.
 
-**12.5 Several bounces.** Each bounce: `c_i delta(tau) + (1 - c_i) h_i(tau)`. A path: the
+**16.5 Several bounces.** Each bounce: `c_i delta(tau) + (1 - c_i) h_i(tau)`. A path: the
 convolution. Tail energy `1 - prod c_i`, mean `sum (1 - c_i) T_i / (1 - prod c_i)`; two
 rough bounces of equal T give `tau exp(-tau / T) / T^2` (zero at the specular delay, peak
 at T), where one exponential of mean 2T is highest at once and has rms spread 2T instead of
@@ -1601,7 +1601,7 @@ sqrt(2) T: the error TR 0702's author describes. (`multi_bounce: convolve`.)
 Additions to Sec. 14 (`sim/reverb_bistatic.py`, `sim/reverb_relief.py`, `sim/bathymetry.py`).
 [OURS] except where an equation of TR 0702 is cited.
 
-### 15.1 What TR 0702 says about scatterer Doppler
+### 17.1 What TR 0702 says about scatterer Doppler
 
 Only this: the total Doppler of an echo is split into the platform factor `Gamma_pq` (71)
 and the scatterer factor `gamma` (72); every cell "is assumed to contain scatterers with a
@@ -1613,7 +1613,7 @@ volume (those are in the boundary models SST takes from TR 9407, which we do not
 Sec. 10.6.2 gives the consequence we test against: a Gaussian spread `sigma_gamma` gives a
 coherence time `1 / (2 pi f sigma_gamma)` (96).
 
-### 15.2 Mean velocity
+### 17.2 Mean velocity
 
 With `a_q`, `a_p` the unit vectors of travel, on arrival at the cell, of the transmit-leg
 ray and of the receive-leg ray traced from the receiver, the slowness vectors at the
@@ -1629,7 +1629,7 @@ f_d(cell) = f / c (V_S . u_Sq + V_R . u_Rp)  -  f / c V_T . k
 bisector plane does not change the path length). `a` comes from the eigenrays' arrival
 vectors, so for a bounce path it is the direction at the cell, not at the platform.
 
-### 15.3 Random motion: the Doppler spread
+### 17.3 Random motion: the Doppler spread
 
 One scatterer with velocity `v` is shifted by `-f/c v . k`. For independent Gaussian
 velocity components the shift is Gaussian with
@@ -1668,7 +1668,7 @@ projected on its own ray (elevation included), so heave is exact to first order 
 2 f w / c straight down). Attitude rates (the velocity of an element from pitch rate times
 its lever arm) are not included: the array is given its centre's velocity.
 
-### 15.4 Relief
+### 17.4 Relief
 
 `bathymetry` gives the bed's depth D(x, y) (NED, positive down). Per cell of the polar grid
 about the receiver's ground point:
@@ -1723,7 +1723,7 @@ processing), and prints one row per statement of the report (`--out`; the last r
 `tests/python/test_sst_validation.py`. Sec. 9 above said what is reproducible; this is what was
 done about it. Nothing here was taken from any source but TR 0702's own text.
 
-**17.1 The two worked examples.** `configs/scenarios/sst_pursuit.yaml` (Sec. 3, Fig. 2) and
+**18.1 The two worked examples.** `configs/scenarios/sst_pursuit.yaml` (Sec. 3, Fig. 2) and
 `sst_asiaex.yaml` (Sec. 12.2-12.6, Figs. 3-5) hold what the report prints and, under
 `unconfirmed`, values of our own for everything it does not (speeds, depths, beams, pulse
 length, wind and levels for Pursuit; depths, sound speed, ping interval, sediment and the wind
@@ -1742,7 +1742,7 @@ A simulator of echoes has no one-way source (SST's `DirectSignal`). The ASIAEX p
 with a relay: a point of -20 dB strength 0.1 m from the projector, so that the transmit leg
 is 0.1 m long and (1 / 0.1) x 0.1 = 1 leaves the return leg alone.
 
-**17.2 What the examples showed.**
+**18.2 What the examples showed.**
 
 - *One Doppler per component is wrong for pairs of different eigenrays (defect, not fixed).*
   A reverberation component is (azimuth sector, elevation of the receive ray) with one Doppler
@@ -1772,7 +1772,7 @@ is 0.1 m long and (1 / 0.1) x 0.1 = 1 leaves the return leg alone.
   Pursuit; tonals), K-distributed noise, the removal of near-specular reverberation when time
   spreading is on, a near-specular surface scattering model (Figs. 3-4, panels 3-5).
 
-**17.3 Closed forms through the whole simulator.** `sst_echo_level.yaml`: the compressed echo
+**18.3 Closed forms through the whole simulator.** `sst_echo_level.yaml`: the compressed echo
 of a 7 dB highlight is SL - 2 TL + TS in free field, and each of the six groups of eigenray
 pairs of an image medium has the level and delay of eqs. (36)-(38) and (66); a moving highlight
 through a sampled pulse and the Doppler bank. `sst_sediment_reverb.yaml`: reverberation of

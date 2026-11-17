@@ -599,3 +599,422 @@ at the critical angle, and the depth integral of the volume term.
   `bottom.equivalent_lambert_mu_db` gives the matching strength at one grazing angle.
 - Surface bubble loss is a number or a table per bounce (`time_spread.surface.bubble_loss_db`).
   No wind-speed law is built in: the usual one is in TR 9407.
+- Later additions, all opt-in, leave this entry's default unchanged: the Kirchhoff,
+  small-slope and composite regimes (D-66), two named sediments (D-67), a wind-speed
+  bubble law of limited standing (D-68), and the model for point-scatterer seabeds (D-64).
+
+### D-64 Targets and model-driven seabeds are per-ping scene modifiers, not a wider kernel
+SST's targets are sets of highlights with aspect tables, delays and an `ExternalTarget`
+hook; ours were fixed point clouds. `Scene.evaluate(t, tx, rx, frequency, sound_speed)`
+(`sim/scene.py`) now calls each modifier once per ping with the projector and receiver
+positions, and returns points, amplitudes and velocities that enter the eigenray pairing
+as ordinary scatterers. `sim/targets.py` supplies the modifiers: `HighlightTarget` (a
+rigid set of highlights on a trajectory, with `AspectTable`, per-highlight `delay`,
+`common_center`, `random_position`), the Kirchhoff shapes of D-65, and
+`SedimentScatterers` (a `seafloor` item with `model: fluid_sediment`).
+- Why: both engines, every provider and the record stay unchanged, and the cost is one
+  evaluation per ping, as with SST's `ExternalTarget`. Without modifiers `evaluate`
+  returns exactly what `at_time`/`amplitudes_at` returned; sample hashes of six scenarios
+  were identical before and after on both engines.
+- Rejected: an amplitude and delay per (path, frequency) in the kernel or the record. It
+  would touch the C++ and CUDA kernels and the schema.
+- The price: aspect, glint position and sediment angles come from straight lines to the
+  sonar. A bounce pair gets the direct geometry's target amplitude; a seabed scatterer
+  gets the model's strength at the direct angles times Lambert's ratio for its own. Only
+  the value and group delay of a `response` at the centre frequency are carried, and the
+  seabed model is evaluated at the centre frequency only.
+- Sediment scatterers keep the Lambert flag: their amplitude is multiplied by
+  sqrt(sigma / (sin g_in sin g_out)), so the existing per-pair Lambert factor in both
+  engines makes the direct pair exact without touching the C++ pairing.
+- A highlight's `delay` and `common_center` are displacements along the bisector of the
+  two directions, with the amplitude rescaled so the spreading loss is that of the true
+  place. This keeps "one amplitude and one apparent position per path". `common_center`
+  reproduces SST's behaviour but saves no eigenray work here.
+- Ground truth in the record holds nominal values for targets (glint amplitudes are
+  written as 0): the real ones are per ping.
+
+### D-65 Specular shapes by the Kirchhoff approximation, with a `resolved` mode; cylinder obliquity is cos, not cos squared
+`SphereGlint`, `CylinderGlint`, `PlateGlint`, `DiscGlint` (rigid, or scaled by
+`reflection`) follow the Kirchhoff backscatter integral of Lavia, Gonzalez and Blanc,
+arXiv:1805.06945v2, eqs. (1), (5), (6), (7). The large-argument form of eq. (6), the
+rectangle closed form, the bistatic element n.(s + r)/2, the phases for the simulator's
+exp(+i omega t) convention and the resolved shapes are derived here and flagged so in the
+code.
+- Two modes for every shape but the sphere. Default: one highlight carrying the far-field
+  pattern, for long-range sonars. `resolved: true` with `spacing`: a row or grid of
+  coherent points at half a wavelength or less with the Kirchhoff element amplitude. The
+  imaging sonars see man-made objects inside L^2/lambda, where a closed-form target
+  strength is wrong; the resolved row gives the far-field pattern (0.3% from eq. (6) at
+  45 degrees) and the near field from the same code.
+- Cylinder obliquity factor: cos(theta), which is what eqs. (1) and (6) of the opened
+  source give. The often-quoted cos^2 form in Urick's table of simple shapes is not used:
+  that table could not be opened (core.ac.uk, apps.dtic.mil and www.fao.org were outside
+  the allowed hosts), and nothing is taken from Urick.
+- Warnings once each for ka < 10, the unresolved mode used inside L^2/lambda, and spacing
+  above half a wavelength. The ka threshold is ours, from the exact rigid-sphere series
+  (0.63 dB from a^2/4 for ka >= 10).
+- Unconfirmed: eq. (6)'s phase as read through the web fetch differs from eq. (1) by a
+  quarter turn. Magnitudes are tested against eq. (6), phases against eq. (1) by
+  quadrature and a large-plate mirror test; whether the difference is a transcription
+  problem or the paper's convention was not settled.
+- Not modelled: creeping waves, elastic resonances, reflections between shapes, the
+  sphere's finite-range factor (r - a)/r; plates cast no shadow; `occlude` is for static
+  targets only.
+
+### D-66 Rough-bottom regimes: small-slope as the interpolation, `combined` as the full model, our own composite split
+`bottom.py` gains `roughness_model`: `perturbation` (default, bit-identical to D-63),
+`kirchhoff`, `small_slope`, `composite`, `combined`. The published interpolation and
+composite criteria (Jackson, Winebrenner and Ishimaru 1986; Mourad and Jackson 1989;
+Williams and Jackson 1998) could not be opened, so these are documented substitutes.
+- Interpolation between regimes is the small-slope approximation (perturbation factor x
+  Kirchhoff integral / (2 pi q_z^2)), not a blend. It equals perturbation theory for small
+  relief and Kirchhoff in the specular direction, and its hemisphere energy stays within
+  0.87 to 1.03 of |V|^2.
+- Rejected: a smooth minimum of Kirchhoff and composite. For a sediment the Kirchhoff
+  result is below perturbation theory at 20 to 30 degrees (it carries the normal-incidence
+  reflection coefficient), so the minimum pulled the valid perturbation result down by
+  about 6 dB.
+- `combined` is the small-slope result averaged over Gaussian large-scale slopes with
+  shadowed facets dropped: one expression for near-specular, intermediate and small
+  grazing angles with no switch. Cost: large-scale slopes are counted twice near specular,
+  widening the peak by about the rms slope. `composite` alone (Bragg scattering only) is
+  meaningful only at low and moderate grazing angles.
+- The split between small and large scales is at k x h_small = 0.5, exposed as
+  `small_scale_kh`. It is our choice, not a published value, and the low-angle level
+  depends on it (for `medium_sand` at 100 kHz the composite correction to the roughness
+  term is +24 dB at 2 degrees).
+- Confirmed from opened sources: the perturbation factor against Jackson's form in Olson
+  and Jackson, arXiv:2009.12420, eqs. (13)-(16), (20) (agreement 1e-10, used only in a
+  test); the spectrum convention and the form of the 2-D Kirchhoff integral from Olson,
+  arXiv:2106.08287. The Kirchhoff prefactor, the structure constant, the integral's
+  evaluation on a rotated complex path and the small-slope prefactor are derived here and
+  each tested independently.
+
+### D-67 Named sediments come from arXiv secondary sources; TR 9407 is still unread
+The first pass shipped no named sediments: the only tables found (in arXiv papers) are
+attributed by their authors to TR 9407, and were treated as copies of the restricted
+handbook. The owner then ruled: "Use anything from arxiv that cites things you need".
+- `configs/sediments.yaml` now holds `medium_sand` and `very_fine_silt`
+  (`status: confirmed`), read from Brown, Johnson and Brownstead, arXiv:1809.08459,
+  Table 1, plus `placeholder_sand` (`status: unconfirmed`, warns when used). Scenario
+  items take `sediment: <name>` and `sediment_file`.
+- Rows are stored in the units their source prints (a `physical:` block with `source`
+  and `assumptions`) and converted in code (`bottom.parameters_from_physical`), so the
+  numbers can be checked against the paper by eye and the conversions are tested.
+- Two assumptions sit inside the "confirmed" rows, recorded per entry: the water
+  reference for the ratios (1000 kg/m^3, 1500 m/s; the paper does not print it), and the
+  reading of "Vol. Scat. Strength [dB/m]" as 10 log10 of the volume cross section per
+  unit volume in 1/m.
+- Generic rock is not a row. The only arXiv source (Olson, Lyons and Saebo,
+  arXiv:1601.06078, Table II) gives elastic parameters with no roughness or volume terms,
+  and the fluid model would be the wrong one. The values are in a comment in the YAML.
+- TR 9407 itself was not read, and the Hamilton regressions were not found. Other arXiv
+  tables seen (arXiv:1611.00608, arXiv:2003.11156) give only sound speed, density and
+  attenuation.
+
+### D-68 Bubble loss from the Hall-Novarini population; two empirical laws; arlpy as an oracle only
+`sim/surface.py` adds `bubble_loss_db` (`time_spread.surface.bubble_loss_db:
+{model: hall_novarini, wind_speed}`), `kraus_surface_db` (reverberation item
+`{model: kraus_surface, wind_speed}`) and `searay_bottom_db`
+(`{model: searay_bottom, bottom_type}`).
+- Bubble loss: the Hall-Novarini bubble population with all its constants as printed in
+  Nennouche et al., arXiv:2603.23727v2, eqs. (20)-(23), with resonant-bubble extinction
+  and two slant crossings of the layer derived here. It is the only wind-speed law that
+  could be built from an opened source. The owner's arXiv ruling (D-67) did not help: no
+  arXiv paper found prints a bubble-loss law, and pubs.aip.org, core.ac.uk and
+  ieeexplore.ieee.org refused automated access.
+- Status: weak above about 10 kHz. It grows too fast with frequency (2.3 to 7.5 times
+  the arlpy value in dB at 10 m/s; `RESULTS.md`) and should be read as an upper estimate
+  there; the code warns. A measured table per bounce (D-63) remains the better input.
+  The unit of the population density n is not printed in the source; m^-4 was taken, the
+  unit that makes its eqs. (19) and (24) consistent.
+- The empirical surface law and the SEARAY bottom law are taken as printed in Morency
+  and Stilwell, arXiv:2210.06535, Sec. II-E, II-F (they quote D. Kraus's lecture notes).
+  The source gives no validity range. Ours: the Kraus law is held constant above 60
+  degrees, the bubble slant path has a 2 degree grazing floor, and warnings fire for wind
+  above 20 m/s, the bubble law above 10 kHz and the Kraus law below 10 kHz. The SEARAY
+  law was not asked for; it came with the surface law in the same source.
+- `tools/boundary_models_study.py` calls `arlpy.uwa.bubble_surface_loss` (BSD; its
+  docstring says "APL model (1994)") to print a comparison column. Its formula was not
+  read or copied, no value from it is used by any code (the ratios to it are quoted in
+  the `surface.py` docstring and in `RESULTS.md`), and the core does not import it.
+  If the owner judges that too close to the restricted handbook, the oracle block in the
+  tool and two sentences in `surface.py` and `PHYSICS_NOTES.md` are what to delete.
+- Not built: a physical rough-surface plus bubble-layer backscatter model.
+
+### D-69 Bistatic reverberation by components
+`geometry: bistatic` (`sim/reverb_bistatic.py`) lifts the monostatic assumption of the
+scattering-function method (D-37, D-43): transmitter and receiver at different places,
+each moving.
+- Power is computed on a receiver-centred polar grid and binned by two-way time, rather
+  than by constructing SST's iso-time ellipse. The same code then serves any eigenray
+  provider, and the arrival azimuth is the grid's own coordinate.
+- Each leg's eigenrays are taken along one line of horizontal distance (stratified
+  medium, flat boundary), the transmit leg from a half-ring table with its delay
+  corrected by the horizontal slowness: two provider calls instead of sectors x rings.
+- Strength is evaluated at both true grazing angles and the bistatic azimuth
+  (`fluid_sediment` uses the azimuth; Lambert and volume do not depend on it;
+  Chapman-Harris is still a backscatter fit, used at the mean grazing angle).
+- Contributions are grouped into components by (azimuth sector, arrival-elevation bin;
+  9 bins by default), each with a power-weighted mean 3-D direction and Doppler shift
+  f/c (V_S.u_Sq + V_R.u_Rp), eq. (71) to first order. No separate Doppler bins: TR 0702
+  notes there is typically one Doppler cell per direction, and this keeps the generator a
+  list of delayed, shifted Gaussian sequences that the existing C++ and CUDA steering
+  kernel handles unchanged. Components more than 120 dB below the strongest are dropped.
+- **Known defect of this choice** (found by the validation of D-78; not fixed in the
+  merged tree): pairs with different transmit legs that share a receive ray share one
+  shift, whereas eq. (71) gives each pair its own. Two strict xfail tests pin it
+  (`test_sst_validation.py::test_reverberation_gives_each_eigenray_pair_its_own_doppler`,
+  `::test_bottom_paths_change_nothing_before_they_can_arrive`). The fix proposed is to
+  add Doppler or the transmit path to the component key; it is in progress.
+- Opt-in, because random draws and steering differ from the sector generator. Default
+  outputs are bit-identical to before on both engines (16 arrays compared).
+- `strength_map` (a callable of world x, y, or a table of dB against range and optionally
+  azimuth) makes the boundary's strength vary with place; it needs `geometry: bistatic`.
+- Left alone so that old results do not change: the nearest-bin ripple of the default
+  `reverberation_power` (-1.4 to +1.7 dB between neighbouring 1 ms bins; the ten-bin mean
+  is right; the new code deposits linearly and has none), and the default mode's Doppler,
+  which treats every path as horizontal.
+- Not done: per-element receive patterns. The first element's pattern stands for all; a
+  gain per direction and channel would have to enter the steering kernel on host and
+  CUDA. No shipped sonar has differing elements, and a `RuntimeWarning` fires if they do.
+
+### D-70 K-distributed reverberation by a gamma texture
+`statistics: {model: k, shape, cell_time, cell_azimuth_deg}`.
+- Compound representation: a unit-mean gamma texture per resolution cell of time
+  (1/bandwidth by default) and azimuth (wavelength/extent), multiplying the Gaussian
+  deviates. No engine change, and mean power is untouched. The moments it is tested
+  against are derived from gamma and exponential moments; no external value was used.
+- `shape` has no default: it is a seabed property with no confirmed value. Infinite
+  shape or `model: rayleigh` is bit-identical to the default.
+- Statistics after beamforming come from the array structure: N cells give a second
+  moment of 2(1 + 1/(N x shape)).
+- Limits: the texture is independent between pings and between neighbouring cells, and
+  components in one azimuth cell share it even when they come from different path pairs.
+
+### D-71 Leakage along long records: `band_taper` exists and stays opt-in
+The generator's ideal (frequency-domain) delays and its interpolation at the reduced rate
+have sinc responses, and the pulse spectrum is not zero at Nyquist, so the strong start
+of a record leaks into its weak far end. `band_taper: true` rolls the pulse spectrum off
+with a raised cosine from half the generation Nyquist to Nyquist and generates two pulse
+lengths of silence after the record (`guard: seconds` sets that length).
+- Measured on a 30 m to 3 km CW record (100 dB of level change): up to +54 dB excess at
+  the far end without the taper, 0.2 dB or less with it (`RESULTS.md`).
+- The coordinator's first plan was to make the taper the default, as a bug fix. It was
+  then measured on four shipped scenarios (`fls_120k_transit`, `fls_170k_transit`,
+  `fls_330k_transit`, `popoto_trial_100m`): it changes nothing beyond 0.06 dB on the FLS
+  scenarios and 0.3 dB on `popoto_trial_100m`. None of those shows leakage, so the
+  default is unchanged and every earlier result stands. The other shipped scenarios were
+  not measured. The validation scenario `sst_pursuit`, added afterwards (0.5 to 5 s of
+  record at one go), sets `band_taper: true` itself.
+- Use it for a short pulse on a record whose reverberation falls by more than about
+  50 dB (the first measurement's threshold; the follow-up puts the practical limit at
+  about 60 dB).
+- With the taper and a moving platform the small anti-causal part of the tapered pulse
+  gets a constant phase error in the Doppler-shifted copy; identical on both engines and
+  not visible in the level tests.
+
+### D-72 Scatterer Doppler in reverberation
+`scatterer_motion` on a reverberation item (needs `geometry: bistatic`). TR 0702 gives
+only the split into a platform factor (71) and a scatterer factor (72), bins of total
+Doppler (129) and the coherence-time result (96); it gives no distribution for surface
+or volume.
+- Mean velocity (`velocity`) enters each cell as -f/c V.k, k the sum of the two legs'
+  travel directions at the cell: eq. (72) to first order.
+- Random motion is a Gaussian spread, sigma_f = (f/c) sqrt(rms_speed^2 |k|^2 +
+  rms_vertical_speed^2 k_z^2): an isotropic part and a vertical-only part, the two cases
+  with a clear physical parameter (volume scatterers; a heaving surface, whose rms
+  vertical speed `wind_speed` sets from the existing `acoustics.rms_surface_vertical_speed`).
+- Realised as unresolved Doppler lines (SST's bins of total Doppler), Gaussian-weighted,
+  spaced at most half the pulse resolution 1/T, at most 41, each an independent
+  sequence. Rejected: a time-varying filter. With lines the generator and the CUDA
+  kernel stay unchanged and the mean power is exact. A spread below 1/20 of 1/T is left
+  as one line.
+- No drift law from wind is built in (none was confirmed from an opened source), nor
+  orbital wave motion or Bragg phase speed; `velocity` and `rms_speed` carry them by hand.
+- Ping-to-ping coherence stays outside the scattering-function method: it draws new
+  sequences every ping, which is consistent whenever there is any spread and remains
+  wrong for a still sonar over a still bottom.
+- The component path projects each platform's full velocity on its own ray (heave and
+  the cos(elevation) factor are tested); attitude rates times lever arm are not included.
+
+### D-73 Reverberation over relief
+`bathymetry` on a reverberation item (needs `geometry: bistatic`) or on a scene
+`seafloor` item. `sim/bathymetry.py` describes the bed (a plane, a grid, depth against
+range and optionally azimuth, or a callable); `sim/reverb_relief.py` computes the power.
+- Each cell sits at its own depth with eigenrays asked for at the cell itself, its true
+  facet area, grazing angles to the facet normal on both legs (a facet turned away
+  returns nothing), the bistatic azimuth in the facet frame, and arrival direction and
+  Doppler from the true position.
+- Shadowing: a horizon map per apparent origin (the platform, or its image in the
+  surface) along straight lines, with a 0.2 mrad tolerance; `shadowing: false` turns it
+  off. It is skipped for refracted paths.
+- Legs with a bottom bounce before the cell are excluded by default, because image paths
+  over relief are not physical. The cost was measured on a level bed: under 0.2 dB within
+  about two water depths, 5 to 6 dB beyond five with a reflective bottom (`RESULTS.md`).
+  `bottom_bounces: flat` keeps them as the provider's flat-bottom images: exact on a
+  level bed, error not bounded over relief.
+- With Bellhop, `BellhopProvider.along_profile` runs it once per azimuth sector over that
+  bearing's depth profile (N x 2-D). Transmitter and receiver must be over one ground
+  point, otherwise `NotImplementedError`; no out-of-plane reflection.
+- A bathymetry that is exactly level routes to the flat code, so results cannot drift.
+- One description serves reverberation items and scene seafloors. The scene's scatterer
+  seabed is not shadowed by its own relief, so the two methods differ behind a ridge.
+
+### D-74 A sampled transmit pulse is carried in the record's existing fields
+`transmit.waveform: {type: sampled, source: lfm | hfm | stepped_fm | barker | mseq | code
+| samples | file}` (`sim/waveform.py`, `sonar.py`). The record already had
+`WaveformType::Arbitrary` (3), `replica` and `replica_sample_rate`, written, read and
+validated; nothing was added to the schema.
+- `replica` holds the real passband pulse Re{b(u) exp(2 pi i F u)}, sample 0 at emission
+  time 0; `replica_sample_rate` defaults to four times the top of the band;
+  `f_start`/`f_stop` are the occupied band and their mean is the carrier F
+  (`RECORD_FORMAT.md`). A real passband series fully determines the envelope, so
+  processing rebuilds it (analytic signal, mixed down) and a record read back from a file
+  compresses identically.
+- Rejected: a complex replica (it would change the meaning of an existing field), and
+  regenerating the pulse from the scenario config (a record must be processable alone).
+- Cost: the replica is stored with every ping as float64 (a 1 s pulse at 6 to 10 kHz is
+  40,001 samples).
+- The matched filter for an arbitrary waveform is built in C++
+  (`libs/dsp/src/pulse_compression.cpp`, `build_arbitrary`, including `doppler_scale` and
+  replica windows), so one place serves Python, the live chain and the CUDA compress
+  path, which takes the host-built filter. Before this, `pulse_compress` threw for
+  `Arbitrary`.
+- CW cannot be given as `sampled` (zero bandwidth is refused); `ComplexAnalytic` output
+  is refused, as in the kernel.
+
+### D-75 Echoes of a sampled pulse: the envelope interpolated at solved emission times, Kaiser window, NumPy for now
+- Per (path, channel) the synthesiser follows the analytic kernel's own steps: exact
+  arrival times of pulse start, middle and end, emission time as the quadratic through
+  them, echo b(u(t)) exp(2 pi i F u(t)). Envelope and carrier are both time-scaled, so
+  the kernel's exact delay and Doppler are kept. SST's `VarDelay` interpolates a slow
+  delay track linearly; that approximation is not needed here.
+- Interpolation is on the envelope, so its accuracy depends on bandwidth / envelope
+  rate whatever the carrier. Two stages: a 16-tap windowed sinc onto a table 8 times
+  finer, then a 4-point cubic.
+- Window: Kaiser, 16 taps, shape 12, by default; Hann (SST's, TR 0702 eqs. 15-17)
+  available. Measured at the same length: -117 dB against -62 dB. The shape 12 is from
+  our own sweep.
+- Absorption and beam patterns are applied across the spectrum, piecewise linear between
+  `gain_knots + 1` frequencies (default 8 intervals), because a sampled pulse has no
+  instantaneous frequency. Agrees with the analytic kernel to under 1e-3 for an LFM.
+- Sampled-pulse synthesis runs in NumPy only, with a visible fallback: the record's
+  `extra_json` gets `{"gpusonar": {"echo_synthesis": "numpy_sampled"}}`, and asking for
+  the C++ engine or the CUDA backend warns once. Reason: the kernel is a plain-data
+  struct mirrored in a `.cu` file that cannot be compiled in the development container.
+  Path pairing and reverberation keep their C++ engine. A C++/CUDA port is in progress.
+- Found on the way, outside this work: the analytic kernel's arrival-time fixed-point
+  solve stops after 3 passes outbound and 4 on return, leaving about (R/c)(v/c)^3
+  (0.007 rad at 8 kHz for 12 m/s closing at 400 m). The NumPy path runs 8 passes; the
+  kernel was left as it is (an open question in `STATUS.md`).
+
+### D-76 Angle and frequency spreading of bounce paths from one facet model
+New opt-in keys under `time_spread` (`sim/timespread.py`): `angle_spread`, `doppler`,
+`doppler_spectrum`, `doppler_lines`. One model, tilted mirrors with Gaussian slopes,
+gives the iso-delay geometry, the tap directions, a decay time and the multi-bounce
+rule (D-77), so the options are consistent with each other. All formulas are derived in
+the module docstring and `PHYSICS_NOTES.md` Sec. 16 and tested against exact geometry or
+Monte Carlo; no coefficient comes from any paper and nothing from TR 9407. With the new
+keys absent the eigenrays are identical to D-62's.
+- Angle: a tap of excess delay tau lies on a circle of radius rho, rho^2 = 2 c tau r1 r2 /
+  (r1 + r2), seen along the ray; its position on the circle is drawn per tap from the
+  density Gaussian facet slopes give. The direction rides in the eigenray's
+  `launch`/`arrival`, so both engines carry it with no fallback.
+- Frequency within a ping: the existing ping-to-ping process is already a sum of
+  sinusoids; with `doppler` each sinusoid becomes its own ray with a path-length rate, so
+  the same process continues through the ping and ping-to-ping statistics and seeds are
+  unchanged. The C++ pairing returns one velocity per scatterer, so rays with a range
+  rate are paired in NumPy with a one-time `RuntimeWarning` (synthesis stays in C++). A
+  C++/CUDA port of that pairing is in progress.
+- **Finding: the Doppler width goes as sin g, not 1/sin g.** A boundary displaced by zeta
+  changes the path by -2 zeta sin g; for a Gaussian surface the scattered part's spectrum
+  has second moment exactly sigma_nu^2 = (2 f v sin g / c)^2 / (1 - exp(-Gamma^2)). TR
+  0702 p. 101 prints the rule with a division by sin g. The derivation settles note 23 of
+  `PHYSICS_NOTES.md` Sec. 11. TR 0702's remark that the ASIAEX surface spread is "less
+  than 10 Hz" does not decide between the two: both readings are under 10 Hz for that
+  geometry (`RESULTS.md`).
+- `doppler_spectrum: gaussian` uses the derived rms width (the Gaussian shape is exact
+  only for Gamma >> 1; at small Gamma only the rms width is right). The default
+  `lorentzian` is SST's AR(1), unchanged; it has no rms width.
+- With `angle_spread` on, platform-motion Doppler comes from the tap directions through
+  the kernel, so the V sqrt(mss) term is dropped within a ping to avoid counting it twice.
+- Limits: second-order (small-angle) geometry, with a turn towards the horizontal
+  clamped at 0.9 of the ray's elevation; no shadowing; isotropic slopes (no up-wind /
+  cross-wind difference) and no mean surface Doppler shift; taps cut at three mean
+  delays, so coherence falls faster than Gaussian beyond about 1.5 coherence lengths; tap
+  directions fixed across pings; with several rough bounces the sonar-end direction comes
+  from the first and the far-end from the last. Not compared with measured spreads
+  (Dahl's papers were not opened).
+- Found and not fixed: the realisation key uses floor(position / coherence_length). A
+  sonar exactly on a cell edge (x = 0, where the array mean can be -1e-17) puts projector
+  and array in different cells, so out-leg and back-leg tails are independent. Fixing it
+  changes existing realisations (an open question in `STATUS.md`).
+
+### D-77 The facet decay time and convolved bounces are offered, not made the default
+- `decay_time: facet`: the facet model gives T = mss (1 + sin^2 g) t1 t2 / (t1 + t2), with
+  a shape that is not exponential. TR 0702's rule of thumb (D-62, the default) equals it
+  at normal incidence and is twice as long at low grazing. The rule stays the default: it
+  is what SST documents and what earlier results used, and the facet value was checked
+  against a Monte Carlo of slopes, not against data.
+- `multi_bounce: convolve`: each bounce is c_i delta + (1 - c_i) h_i, convolved on the
+  tap grid, so a bounce delays the tail only when it scatters. The default `sum` adds
+  the mean delays into one exponential, the error TR 0702's author describes for SST.
+  `sum` stays the default for reproducibility of earlier results.
+- What the validation found (D-78): with the ASIAEX parameters `sum` does not show the
+  defect as TR 0702 words it but one of the opposite sign, because the bottom there is
+  93% coherent with the longer decay and `sum` gives all scattered energy the summed
+  delay. The validation recommends `convolve` whenever the two boundaries differ, and
+  suggests considering it as the default. That is the owner's call (`STATUS.md`).
+
+### D-78 Validation examples carry our own parameters, marked unconfirmed; a relay stands in for a one-way source
+`tools/sst_validation.py`, `tests/python/test_sst_validation.py` and the scenarios
+`sst_pursuit`, `sst_asiaex`, `sst_echo_level`, `sst_sediment_reverb` check the simulator
+against TR 0702 itself, section by section (`docs/figures/sst_validation.md`).
+- TR 0702 gives no complete numerical test case. For its two worked examples (Pursuit,
+  Fig. 2; ASIAEX, Figs. 3-5) everything it does not print is our choice and sits under
+  `unconfirmed` in the scenario file, each chosen to place one feature the text names
+  (for Pursuit: carrier 9.9 kHz, vehicle 20 m/s at 350 m, water 1275 m, target 2.5 m/s
+  away at 2124 m with three -10 dB highlights, 0.1 s pulse, 20 degree sinc beams, wind
+  8 m/s). Assertions are against closed forms for our geometry, never against the
+  figures. Neither is a numerical reproduction and neither may be presented as one.
+- The Pursuit source level of 230 dB is not a design value: it is only there to put
+  reverberation about 10 dB over wind noise in the displayed band.
+- One-way path: the simulator has no one-way source (SST's `DirectSignal`). In
+  `sst_asiaex` a -20 dB point relay 0.1 m from the projector makes one; the outbound
+  multipath is 55 dB down. No simulator change was needed. Not done: a real one-way
+  source, so target-radiated noise and tonals cannot be checked.
+- The reverberation hook is checked against the first-order formula the generator
+  implements; its 3.6 Hz gap to the exact eq. (71) at 20 m/s and 9.9 kHz is reported
+  separately as a documented limit (echoes use the exact factor).
+- The defect it found (D-69) is recorded with strict xfail tests rather than fixed
+  inside the validation package, which edits no simulator module.
+- The readings chosen for TR 0702's inconsistent passages (items 17 to 24 of
+  `PHYSICS_NOTES.md` Sec. 11) are each pinned by a named test; the table is at the end
+  of `docs/figures/sst_validation.md`.
+
+### D-79 Sensor Bridge's emulator gets an opt-in UDP-socket patch; the loopback test runs at half real time
+The loopback through Sensor Bridge 2.7.0's board emulator and `LinuxReceiverOp` could not
+run on Hugging Face Jobs: the emulator's data plane opens a raw IP socket, which needs
+CAP_NET_RAW, and those containers refuse it.
+- `third_party/patches/hsb-2.7.0-emulator-udp-socket.patch` (27 changed lines in three
+  files under `src/hololink/emulation/src/linux/`): with `HSB_EMULATOR_UDP_SOCKET=1` in
+  the emulator's environment the data socket is an ordinary UDP socket bound to the
+  board address and port 12288, and the send skips the emulator-built IP and UDP
+  headers. Without the variable nothing changes.
+- Opt-in twice: `tools/build_hsb.sh` applies the patch only when `HSB_UDP_PATCH=1`, and
+  the patched emulator behaves as stock without the run-time variable.
+  `tools/gpu_job.sh` sets both only when `GPUSONAR_HSB=1` and a raw socket cannot be
+  opened. The patch is applied at build time to a separately built third-party tree;
+  nothing of Sensor Bridge is vendored.
+- On the wire the UDP payload (BTH, RETH, immediate, data, frame metadata, iCRC) is the
+  same bytes from the same source address and port. The IP and UDP headers are the
+  kernel's (TTL, identification, DF, a filled-in UDP checksum). The iCRC is still
+  computed over the emulator's own header fields; `LinuxReceiver` does not check the
+  iCRC or the sender, and accepted the packets. A receiver that checked could differ.
+- Rejected: loosening the report comparison to tolerate the frame lost at real-time
+  pace. The sender was slowed instead: the test's pace is 0.5 (`GPUSONAR_HSB_PACE`
+  overrides), the default frame is 400 samples (38,528 bytes) and the receiver queue is
+  256 frames. Why real time loses one burst per run is not established (`RESULTS.md`).
+- Not covered by the patch or the runs: the RoCE receiver, and the unpatched emulator on
+  a machine with CAP_NET_RAW.

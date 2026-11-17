@@ -4,7 +4,7 @@
 serves both legs, so its loci of constant two-way time are circles about the sonar and
 every azimuth has the same paths. This module computes the same quantity without those
 assumptions, after the directional form of SST's scattering function (TR 0702 Sec. 11.2-11.3;
-docs/PHYSICS_NOTES.md Sec. 5.3-5.4 and the section on this module at its end):
+docs/PHYSICS_NOTES.md Sec. 5.3-5.4, 14 and 17):
 
 * The boundary is cut into cells on a polar grid about the point below (or above) the
   receiver: azimuth sectors, which are also the arrival directions the generator works
