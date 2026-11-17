@@ -217,3 +217,441 @@ def test_the_sst_style_scenario_runs_and_its_bounce_arrivals_fade():
     assert np.abs(full - a).max() > 0                                    # reverberation and noise were added
     again = run_scenario(quiet).records[0].samples.array
     assert np.array_equal(again, a)                                      # the seed reproduces the ping
+
+
+# ---- Angle and frequency spreading, convolved bounces (the options beyond SST) ----------------
+
+ROUGH = {"rms_height": 0.3, "mean_square_slope": 4e-4, "rms_vertical_speed": 0.3}     # Gamma >> 1: no coherent part
+
+
+def bounce_taps(e, base, j, taps, lines=1):
+    """The taps of ray j of the one field point: (amplitude, delay, launch, arrival), [J(, M)]."""
+    k = base.delay.shape[1]
+    shape = (k, taps) if lines == 1 else (k, taps, lines)
+    part = lambda a: a[0, k:].reshape(shape + a.shape[2:])[j]          # noqa: E731
+    return part(e.amplitude), part(e.delay), part(e.launch), part(e.arrival)
+
+
+def steep_bounce():
+    """A surface bounce at 39 degrees grazing, 3/8 of the way along its path."""
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=None, max_order=1)
+    pts = np.array([[100.0, 0.0, 50.0]])
+    base = inner.eigenrays(SOURCE, pts)
+    j = int(np.flatnonzero(base.n_surface[0] == 1)[0])
+    return inner, pts, base, j, np.arcsin(abs(base.launch[0, j, 2])), 30.0 / 80.0
+
+
+def test_the_options_off_give_the_output_of_the_version_before_them():
+    """Sums over the eigenrays of a two-boundary case, from sim/timespread.py as it was before
+    angle spreading, within-ping Doppler, the facet decay time and convolved bounces."""
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=2)
+    pts = np.array([[500.0, 40.0, 40.0], [300.0, -20.0, 10.0]])
+    kw = dict(frequency=F, surface=boundary_parameters({"wind_speed": 6.0}, surface=True),
+              bottom={"rms_height": 0.03, "mean_square_slope": 0.02, "rms_vertical_speed": 0.0},
+              surface_z=0.0, bottom_z=80.0, taps=4, seed=5)
+    p = TimeSpreadProvider(inner, **kw)
+    p.set_ping(7.0, 1.5)
+    e = p.eigenrays(SOURCE, pts)
+    a = e.amplitude[e.valid]
+    assert e.delay.shape == (2, 25) and int(e.valid.sum()) == 42 and e.range_rate is None
+    assert complex(a.sum()) == pytest.approx(0.0071019667758292085 + 8.887691937657543e-05j, rel=1e-9)
+    assert float(np.abs(a).sum()) == pytest.approx(0.028625828421519003, rel=1e-9)
+    assert float(e.delay[e.valid].sum()) == pytest.approx(12.002601952374846, rel=1e-12)
+    # Naming the defaults changes nothing, and the taps keep the specular directions.
+    q = TimeSpreadProvider(inner, angle_spread=False, doppler=False, decay_time="rule_of_thumb", multi_bounce="sum",
+                           doppler_spectrum="lorentzian", doppler_lines=8, **kw)
+    q.set_ping(7.0, 1.5)
+    same = q.eigenrays(SOURCE, pts)
+    assert np.array_equal(same.amplitude, e.amplitude) and np.array_equal(same.delay, e.delay)
+    base = inner.eigenrays(SOURCE, pts)
+    k = base.delay.shape[1]
+    assert np.array_equal(e.launch[:, k:].reshape(2, k, 4, 3), np.repeat(base.launch[:, :, None], 4, axis=2))
+
+
+def test_a_taps_direction_is_that_of_the_facet_with_its_delay():
+    """Exact geometry: follow each tap's launch direction to the surface. The path through that
+    point is longer than the specular one by the tap's excess delay, and the tap arrives from
+    that point. (Second-order geometry: the error is of the order of the turn over the grazing angle.)"""
+    inner, pts, base, j, grazing, _ = steep_bounce()
+    for mss, tolerance in ((4e-4, 0.11), (2.5e-5, 0.03)):
+        par = dict(ROUGH, mean_square_slope=mss)
+        for seed in range(20):
+            e = spread(inner, par, taps=8, seed=seed, angle_spread=True).eigenrays(SOURCE, pts)
+            off = spread(inner, par, taps=8, seed=seed).eigenrays(SOURCE, pts)
+            assert np.array_equal(e.amplitude, off.amplitude) and np.array_equal(e.delay, off.delay)
+            assert np.array_equal(e.launch[0, :2], base.launch[0]) and np.array_equal(e.arrival[0, :2], base.arrival[0])   # the coherent rays
+            _, delay, launch, arrival = bounce_taps(e, base, j, 8)
+            facet = SOURCE + (-SOURCE[2] / launch[:, 2])[:, None] * launch
+            to_point = pts[0] - facet
+            excess = (np.linalg.norm(facet - SOURCE, axis=1) + np.linalg.norm(to_point, axis=1)) / C - base.delay[0, j]
+            assert np.allclose(excess, delay - base.delay[0, j], rtol=tolerance)
+            exact = to_point / np.linalg.norm(to_point, axis=1)[:, None]
+            turn = np.linalg.norm(arrival - base.arrival[0, j], axis=1)
+            assert np.all(np.linalg.norm(arrival - exact, axis=1) < tolerance * turn)
+            assert np.allclose(np.linalg.norm(launch, axis=1), 1.0) and np.all(turn > 0)
+
+
+def angle_statistics(decay_time, n_seeds=300, taps=24):
+    """Intensity-weighted mean-square turn of the taps at the source, in the vertical plane and across it."""
+    inner, pts, base, j, grazing, f = steep_bounce()
+    u = base.launch[0, j]
+    in_plane = np.array([-u[2] * u[0], -u[2] * u[1], u[0] ** 2 + u[1] ** 2])
+    in_plane /= np.linalg.norm(in_plane)
+    sums = np.zeros(3)
+    for seed in range(n_seeds):
+        e = spread(inner, ROUGH, taps=taps, seed=seed, angle_spread=True, decay_time=decay_time).eigenrays(SOURCE, pts)
+        amp, _, launch, _ = bounce_taps(e, base, j, taps)
+        d = launch - u
+        sums += [np.sum(abs(amp) ** 2 * (d @ in_plane) ** 2), np.sum(abs(amp) ** 2 * d[:, 1] ** 2), np.sum(abs(amp) ** 2)]
+    return sums[0] / sums[2], sums[1] / sums[2], grazing, f
+
+
+def test_rms_angular_spread_matches_the_closed_forms():
+    mss = ROUGH["mean_square_slope"]
+    # TR 0702's decay time: T = 2 mss t1 t2 / (t1 + t2), so <angle^2> = 2 c T r2 / (r1 (r1 + r2)) = 4 mss (r2 / (r1 + r2))^2.
+    v2, h2, grazing, f = angle_statistics("rule_of_thumb")
+    assert np.sqrt(v2 + h2) == pytest.approx(2.0 * np.sqrt(mss) * (1.0 - f), rel=0.05)
+    # Facet decay time: Gaussian in each plane, 2 mss (r2 / (r1 + r2))^2 in the vertical plane and sin^2(g) of it across.
+    v2, h2, grazing, f = angle_statistics("facet")
+    assert np.sqrt(v2) == pytest.approx(np.sqrt(2.0 * mss) * (1.0 - f), rel=0.06)
+    assert np.sqrt(h2) == pytest.approx(np.sqrt(2.0 * mss) * np.sin(grazing) * (1.0 - f), rel=0.06)
+    assert h2 < v2                                                       # the glitter is longer along the path
+
+
+def test_facet_decay_time_and_shape():
+    """T = mss (1 + sin^2 g) t1 t2 / (t1 + t2), and the shape of a sum of two squared Gaussians
+    (checked by drawing slopes and using tau = 2 (sx^2 + sy^2 sin^2 g) t1 t2 / (t1 + t2))."""
+    from gpusonar.sim.timespread import facet_delay_density
+    inner, pts, base, j, grazing, f = steep_bounce()
+    mss, taps, lines = ROUGH["mean_square_slope"], 30, 2
+    e = spread(inner, ROUGH, taps=taps, decay_time="facet", doppler=True, doppler_lines=lines).eigenrays(SOURCE, pts)
+    amp, delay, _, _ = bounce_taps(e, base, j, taps, lines)
+    w = (abs(amp) ** 2).sum(axis=1)                                     # with `doppler` the lines' magnitudes are not random
+    tau = delay[:, 0] - base.delay[0, j]
+    lever = f * (1.0 - f) * base.delay[0, j]
+    expected = mss * (1.0 + np.sin(grazing) ** 2) * lever
+    assert np.sum(w * tau) / np.sum(w) == pytest.approx(expected, rel=1e-9)
+    rule = spread(inner, ROUGH, taps=taps, doppler=True, doppler_lines=lines).eigenrays(SOURCE, pts)
+    w_rule = (abs(bounce_taps(rule, base, j, taps, lines)[0]) ** 2).sum(axis=1)
+    tau_rule = bounce_taps(rule, base, j, taps, lines)[1][:, 0] - base.delay[0, j]
+    assert np.sum(w_rule * tau_rule) / np.sum(w_rule) == pytest.approx(2.0 * mss * lever, rel=1e-9)
+    assert np.sum(w) == pytest.approx(np.sum(w_rule), rel=1e-12)        # the same energy
+    rng = np.random.default_rng(1)
+    sx, sy = rng.normal(0.0, np.sqrt(mss / 2.0), (2, 400_000))
+    drawn = 2.0 * (sx**2 + sy**2 * np.sin(grazing) ** 2) * lever
+    assert drawn.mean() == pytest.approx(expected, rel=0.01)
+    hist, edges = np.histogram(drawn, bins=np.linspace(0.0, 3.0 * expected, 31), density=True)
+    mid = 0.5 * (edges[1:] + edges[:-1])
+    density = facet_delay_density(mid, mss * lever, mss * lever * np.sin(grazing) ** 2)
+    assert np.allclose(hist[1:] * np.mean(drawn < 3.0 * expected), density[1:], rtol=0.06)
+    assert facet_delay_density(0.3, 0.5, 0.5) == pytest.approx(np.exp(-0.3))            # equal axes: the exponential
+    # The taps sample that density on a grid of three mean delays (their delays are then scaled to give the mean).
+    on_grid = facet_delay_density(3.0 * expected * np.arange(1, taps + 1) / taps, mss * lever, mss * lever * np.sin(grazing) ** 2)
+    assert np.allclose(w / w.sum(), on_grid / on_grid.sum(), rtol=1e-9)
+
+
+def test_array_coherence_of_the_tail_drops_as_the_angular_spread_predicts():
+    """Two hydrophones d apart see the tail with coherence exp(-d^2 / 2 sigma_d^2),
+    sigma_d = lambda / (2 pi sigma_S), sigma_S the rms spread of the direction cosine along
+    the line joining them (TR 0702 eqs. 100-103). Vertical aperture: sigma_S = sigma_v cos(g);
+    horizontal, across the path: sigma_S = sigma_v sin(g)."""
+    inner, pts, base, j, grazing, f = steep_bounce()
+    mss, taps = ROUGH["mean_square_slope"], 24
+    k = 2.0 * np.pi * F / C
+    sigma_v = np.sqrt(2.0 * mss) * (1.0 - f)
+    sigma = {"vertical": sigma_v * np.cos(grazing), "horizontal": sigma_v * np.sin(grazing)}
+    axis = {"vertical": np.array([0.0, 0.0, 1.0]), "horizontal": np.array([0.0, 1.0, 0.0])}
+    fields = {name: [] for name in sigma}
+    fixed = {name: [] for name in sigma}
+    for seed in range(400):
+        e = spread(inner, ROUGH, taps=taps, seed=seed, angle_spread=True, decay_time="facet").eigenrays(SOURCE, pts)
+        o = spread(inner, ROUGH, taps=taps, seed=seed, decay_time="facet").eigenrays(SOURCE, pts)
+        amp, _, launch, _ = bounce_taps(e, base, j, taps)
+        _, _, launch0, _ = bounce_taps(o, base, j, taps)
+        for name in sigma:
+            sigma_d = 1.0 / (k * sigma[name])                           # lambda / (2 pi sigma_S)
+            row, row0 = [], []
+            for d in (0.5 * sigma_d, sigma_d, 1.5 * sigma_d):
+                # A plane wave from direction `launch` at the two hydrophones, +-d/2 along the axis.
+                # The taps' gains are independent with zero mean, so the cross terms between taps
+                # average to nothing and are left out: y+ conj(y-) -> sum |a|^2 exp(i k d s).
+                row.append((np.sum(abs(amp) ** 2 * np.exp(1j * k * d * (launch @ axis[name]))), np.sum(abs(amp) ** 2)))
+                phase0 = 0.5 * k * d * (launch0 @ axis[name])
+                row0.append((np.sum(amp * np.exp(1j * phase0)), np.sum(amp * np.exp(-1j * phase0))))
+            fields[name].append(row)
+            fixed[name].append(row0)
+    for name in sigma:
+        y = np.array(fields[name])                                      # [seed, distance, (cross, power)]
+        coherence = np.abs(np.sum(y[..., 0], axis=0)) / np.sum(y[..., 1], axis=0).real
+        # (Beyond about 1.5 sigma_d the taps' cut at three mean delays shows: the coherence falls faster than the Gaussian.)
+        assert coherence == pytest.approx(np.exp(-0.5 * np.array([0.25, 1.0, 2.25])), abs=0.08), name
+        y0 = np.array(fixed[name])                                      # without angle spreading: one direction, every realisation
+        same = np.abs(y0[..., 0] * np.conj(y0[..., 1])) / abs(y0[..., 0]) ** 2
+        assert same == pytest.approx(1.0, abs=1e-9), name
+    assert sigma["horizontal"] < sigma["vertical"]                      # so the coherence length across the path is the longer
+
+
+def test_without_the_doppler_option_the_tail_is_frozen_during_a_ping():
+    """What the process gives by default: one complex gain per tap per ping. It changes from
+    ping to ping (tested above) and not within one: no ray has a range rate, so a tone
+    through a bounce comes back as a tone. With `doppler` the sinusoids the gain is made of
+    become rays of their own, and their sum at the ping time is that gain."""
+    inner, pts, base, j, _, _ = steep_bounce()
+    for spectrum in ("lorentzian", "gaussian"):
+        frozen = spread(inner, ROUGH, taps=5, seed=2, doppler_spectrum=spectrum)
+        moving = spread(inner, ROUGH, taps=5, seed=2, doppler_spectrum=spectrum, doppler=True)
+        for p in (frozen, moving):
+            p.set_ping(3.7)
+        a, b = frozen.eigenrays(SOURCE, pts), moving.eigenrays(SOURCE, pts)
+        assert a.range_rate is None and b.range_rate.shape == b.delay.shape == (1, 2 + 2 * 5 * 8)
+        assert np.all(b.range_rate[0, :2] == 0.0) and np.any(b.range_rate[0, 2:] != 0.0)
+        assert np.allclose(bounce_taps(b, base, j, 5, 8)[0].sum(axis=1), bounce_taps(a, base, j, 5)[0], rtol=1e-12)
+        # Over a time t the lines turn by 2 pi nu t: the gain at a later ping is the lines' sum then.
+        later = spread(inner, ROUGH, taps=5, seed=2, doppler_spectrum=spectrum)
+        later.set_ping(3.7 + 0.8)
+        amp = bounce_taps(b, base, j, 5, 8)[0]
+        nu = -F * b.range_rate[0, 2:].reshape(2, 5, 8)[j] / C
+        assert np.allclose((amp * np.exp(2j * np.pi * nu * 0.8)).sum(axis=1), bounce_taps(later.eigenrays(SOURCE, pts), base, j, 5)[0], rtol=1e-6)
+
+
+@pytest.mark.parametrize("height", [0.3, 0.012])
+def test_doppler_width_of_a_tone_through_one_surface_bounce(height):
+    """rms width sigma_nu = 2 f v sin(g) / c / sqrt(1 - exp(-Gamma^2)); the tone's coherence
+    falls as exp(-t^2 / 2 sigma_t^2), sigma_t = 1 / (2 pi sigma_nu) (TR 0702 eqs. 95-96 with
+    sigma_gamma = sigma_nu / f). Mean power is that of the frozen tail."""
+    inner, pts, base, j, grazing, _ = steep_bounce()
+    v = 0.3
+    par = dict(ROUGH, rms_height=height, rms_vertical_speed=v)
+    gamma2 = (2.0 * (2.0 * np.pi * F / C) * height * np.sin(grazing)) ** 2
+    assert gamma2 > 20.0 if height == 0.3 else 0.1 < gamma2 < 1.0
+    sigma_nu = 2.0 * F * v * np.sin(grazing) / C / np.sqrt(1.0 - np.exp(-gamma2))
+    assert sigma_nu < 10.0                                              # TR 0702, p. 98: "less than 10 Hz" at 8 kHz
+    taps, lines = 4, 8
+    t = np.array([0.0, 0.5, 1.0, 2.0]) / (2.0 * np.pi * sigma_nu)       # lags in units of sigma_t
+    nus, powers, tones, frozen_power = [], [], [], []
+    for seed in range(500):
+        e = spread(inner, par, taps=taps, seed=seed, doppler=True, doppler_spectrum="gaussian", doppler_lines=lines).eigenrays(SOURCE, pts)
+        amp = bounce_taps(e, base, j, taps, lines)[0].reshape(-1)
+        nu = -F * e.range_rate[0, 2:].reshape(2, -1)[j] / C
+        nus.append(nu)
+        powers.append(abs(amp) ** 2)
+        tones.append((amp[:, None] * np.exp(2j * np.pi * nu[:, None] * t)).sum(axis=0))    # the received tone at the lags
+        o = spread(inner, par, taps=taps, seed=seed, doppler_spectrum="gaussian", doppler_lines=lines).eigenrays(SOURCE, pts)
+        frozen_power.append(np.sum(abs(bounce_taps(o, base, j, taps)[0]) ** 2))
+    nus, powers, tones = np.array(nus), np.array(powers), np.array(tones)
+    assert np.sqrt(np.sum(powers * nus**2) / np.sum(powers)) == pytest.approx(sigma_nu, rel=0.03)
+    assert abs(np.sum(powers * nus) / np.sum(powers)) < 0.05 * sigma_nu                   # no mean shift
+    coherence = np.abs(np.mean(tones * np.conj(tones[:, :1]), axis=0)) / np.mean(abs(tones[:, 0]) ** 2)
+    assert coherence == pytest.approx(np.exp(-0.5 * np.array([0.0, 0.25, 1.0, 4.0])), abs=0.06)
+    incoherent = abs(base.amplitude[0, j]) ** 2 * (1.0 - np.exp(-gamma2))
+    assert powers.sum(axis=1) == pytest.approx(incoherent, rel=1e-9)                     # every realisation: the lines' powers add up
+    assert np.mean(abs(tones) ** 2, axis=0) == pytest.approx(incoherent, rel=0.1)        # and the tone's mean power at any time
+    assert np.mean(frozen_power) == pytest.approx(incoherent, rel=0.1)
+
+
+def test_no_boundary_motion_no_doppler_and_a_bottom_spreads_only_with_the_sonars_motion():
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=80.0, max_order=1)
+    pts = np.array([[100.0, 0.0, 50.0]])
+    still = dict(ROUGH, rms_vertical_speed=0.0)
+    kw = dict(frequency=F, surface_z=0.0, bottom_z=80.0, taps=3, doppler=True, doppler_spectrum="gaussian")
+    calm = TimeSpreadProvider(inner, surface=still, bottom=still, **kw)
+    assert not np.any(calm.eigenrays(SOURCE, pts).range_rate)           # zero wind speed (no vertical speed): no spread
+    assert spread(inner, None, doppler=True).eigenrays(SOURCE, pts).range_rate is None   # flat: the rays as they were
+    windy = TimeSpreadProvider(inner, surface=ROUGH, bottom=still, **kw).eigenrays(SOURCE, pts)
+    base = inner.eigenrays(SOURCE, pts)
+    rate = windy.range_rate[0, 3:].reshape(3, 3, 8)
+    assert np.any(rate[base.n_surface[0] == 1] != 0.0) and not np.any(rate[base.n_bottom[0] == 1])
+    under_way = TimeSpreadProvider(inner, surface=None, bottom=still, **kw)
+    under_way.set_ping(0.0, platform_speed=2.0)
+    rate = under_way.eigenrays(SOURCE, pts).range_rate[0, 3:].reshape(3, 3, 8)[base.n_bottom[0] == 1]
+    grazing = np.arcsin(abs(base.launch[0, base.n_bottom[0] == 1, 2]))[0]
+    expected = 2.0 * 2.0 * np.sqrt(still["mean_square_slope"]) * np.sin(grazing)          # 2 (V sqrt(mss)) sin g, as a range rate
+    assert np.sqrt(np.mean(rate**2)) == pytest.approx(expected, rel=0.5)                   # 24 draws
+    # With angle spreading the sonar's motion acts through the taps' directions instead.
+    both = TimeSpreadProvider(inner, surface=None, bottom=still, angle_spread=True, **kw)
+    both.set_ping(0.0, platform_speed=2.0)
+    assert not np.any(both.eigenrays(SOURCE, pts).range_rate)
+
+
+def two_rough_bounces(**kw):
+    """Source and point at mid-depth, surface and bottom both rough: the two rays with one
+    bounce from each boundary. Returns the taps' mean intensities and excess delays per ray."""
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=60.0, max_order=2, bottom_coefficient=1.0)
+    src, pts = np.array([0.0, 0.0, 30.0]), np.array([[400.0, 0.0, 30.0]])
+    par = {"rms_height": 0.3, "mean_square_slope": 0.01, "rms_vertical_speed": 0.0}
+    base = inner.eigenrays(src, pts)
+    two = np.flatnonzero((base.n_surface[0] == 1) & (base.n_bottom[0] == 1))
+    one = np.flatnonzero(base.n_surface[0] + base.n_bottom[0] == 1)
+    p = TimeSpreadProvider(inner, frequency=F, surface=kw.pop("surface", par), bottom=kw.pop("bottom", par), surface_z=0.0, bottom_z=60.0,
+                           doppler=True, doppler_lines=2, **kw)
+    e = p.eigenrays(src, pts)
+    k, taps = base.delay.shape[1], p.taps
+    weight = (abs(e.amplitude[0, k:].reshape(k, taps, 2)) ** 2).sum(axis=2)               # mean tap intensities, exactly
+    tau = e.delay[0, k:].reshape(k, taps, 2)[:, :, 0] - base.delay[0][:, None]
+    return base, e, weight, tau, two, one
+
+
+def test_convolved_bounces_start_low_and_last_longer():
+    base, _, w_sum, tau_sum, two, one = two_rough_bounces(taps=40)
+    _, _, w_con, tau_con, _, _ = two_rough_bounces(taps=40, multi_bounce="convolve")
+    assert len(two) == 2 and len(one) == 2
+    assert np.array_equal(w_sum[one], w_con[one]) and np.array_equal(tau_sum[one], tau_con[one])     # one bounce: nothing to convolve
+    r = int(two[0])
+    t_total = base.delay[0, r]
+    t_one = 2.0 * 0.01 * (0.25 * t_total) * (0.75 * t_total) / t_total                     # each bounce: a quarter of the way from one end
+    mean = lambda w, tau: np.sum(w * tau) / np.sum(w)                                      # noqa: E731
+    rms = lambda w, tau: np.sqrt(np.sum(w * tau**2) / np.sum(w) - mean(w, tau) ** 2)       # noqa: E731
+    assert mean(w_sum[r], tau_sum[r]) == pytest.approx(2.0 * t_one, rel=1e-9)
+    assert mean(w_con[r], tau_con[r]) == pytest.approx(2.0 * t_one, rel=1e-9)
+    assert np.sum(w_con[r]) == pytest.approx(np.sum(w_sum[r]), rel=1e-12)                  # the same energy
+    # One exponential of mean 2T (what TR 0702's author calls too high at first and too low later)
+    # against the convolution of two of mean T, tau exp(-tau / T) / T^2.
+    assert np.argmax(w_sum[r]) == 0 and np.argmax(w_con[r]) > 0
+    erlang = tau_con[r] * np.exp(-tau_con[r] / t_one)
+    assert np.allclose(w_con[r] / w_con[r].sum(), erlang / erlang.sum(), atol=0.004)
+    early = lambda w, tau: w[tau < 0.3 * t_one].sum() / w.sum()                            # noqa: E731
+    assert early(w_con[r], tau_con[r]) < 0.5 * early(w_sum[r], tau_sum[r])
+    # Spread about the mean: sqrt(2) T for the convolution, 2 T for the single exponential (both cut at three means).
+    assert rms(w_con[r], tau_con[r]) < 0.85 * rms(w_sum[r], tau_sum[r])
+
+
+def test_convolved_bounces_with_partly_coherent_boundaries():
+    """Tail energy 1 - c1 c2 of the total and mean delay ((1 - c1) T1 + (1 - c2) T2) / (1 - c1 c2):
+    a bounce delays the tail only when it scatters."""
+    smooth = {"rms_height": 0.02, "mean_square_slope": 0.01, "rms_vertical_speed": 0.0}
+    rough = {"rms_height": 0.05, "mean_square_slope": 0.03, "rms_vertical_speed": 0.0}
+    base, e, w, tau, two, _ = two_rough_bounces(taps=30, multi_bounce="convolve", surface=rough, bottom=smooth)
+    for r in two:
+        g = np.arcsin(abs(base.launch[0, r, 2]))
+        gam = lambda h: np.exp(-(2.0 * (2.0 * np.pi * F / C) * h * np.sin(g)) ** 2)        # noqa: E731
+        c_s, c_b = gam(0.05), gam(0.02)
+        assert 0.05 < c_s < c_b < 0.95
+        lever = 0.25 * 0.75 * base.delay[0, r]
+        t_s, t_b = 2.0 * 0.03 * lever, 2.0 * 0.01 * lever
+        total = abs(base.amplitude[0, r]) ** 2
+        assert np.sum(w[r]) == pytest.approx(total * (1.0 - c_s * c_b), rel=1e-9)
+        assert abs(e.amplitude[0, r]) ** 2 == pytest.approx(total * c_s * c_b, rel=1e-9)
+        assert np.sum(w[r] * tau[r]) / np.sum(w[r]) == pytest.approx(((1 - c_s) * t_s + (1 - c_b) * t_b) / (1 - c_s * c_b), rel=1e-9)
+
+
+@pytest.mark.parametrize("mode", ["sum", "convolve"])
+def test_with_two_rough_bounces_the_first_turns_the_launch_and_the_last_the_arrival(mode):
+    """Each end's mean-square turn is that of the bounce nearest to it with its share of the
+    excess delay: 2 c (T / 2 of 2 T) r_far / (r_near (r_near + r_far)) = 4 mss (3/4)^2 here."""
+    mss = 1e-3
+    par = {"rms_height": 0.3, "mean_square_slope": mss, "rms_vertical_speed": 0.0}
+    base, e, w, _, two, one = two_rough_bounces(taps=12, multi_bounce=mode, angle_spread=True, surface=par, bottom=par)
+    k = base.delay.shape[1]
+    launch = e.launch[0, k:].reshape(k, 12, 2, 3)[:, :, 0]
+    arrival = e.arrival[0, k:].reshape(k, 12, 2, 3)[:, :, 0]
+    for r in two:
+        for end, specular in ((launch, base.launch), (arrival, base.arrival)):
+            turn2 = np.sum((end[r] - specular[0, r]) ** 2, axis=1)
+            assert np.sum(w[r] * turn2) / np.sum(w[r]) == pytest.approx(4.0 * mss * 0.75**2, rel=0.02)
+    r = int(one[0])                                                      # one bounce, half way: both ends 4 mss (1/2)^2
+    assert np.sum(w[r] * np.sum((launch[r] - base.launch[0, r]) ** 2, axis=1)) / np.sum(w[r]) == pytest.approx(mss, rel=0.02)
+
+
+def test_the_scenario_with_every_option_runs_on_both_engines():
+    import warnings
+    from gpusonar.sim import run_scenario
+    from gpusonar.config import load_scenario_config
+    cfg = load_scenario_config("flank_sst_spread")
+    cfg["pings"]["count"] = 1
+    assert all(cfg["time_spread"][key] for key in ("angle_spread", "doppler")) and cfg["time_spread"]["multi_bounce"] == "convolve"
+    cfg["time_spread"] = dict(cfg["time_spread"], taps=2, doppler_lines=2)                 # (a quicker run)
+    quiet = dict(cfg, reverberation=None, receiver={"adc": False}, sonar_overrides={"receive": {"window": {"range": [990, 1090]}}})
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)                  # the announced NumPy pairing
+        a = run_scenario(quiet).records[0].samples.array
+        b = run_scenario(quiet, engine="numpy").records[0].samples.array
+    assert np.isfinite(a).all() and np.abs(a).max() > 0
+    assert np.allclose(a, b, atol=1e-6 * np.abs(a).max())
+    # Angle spreading alone needs no fallback: the C++ pairing carries the directions.
+    quiet["time_spread"] = dict(cfg["time_spread"], doppler=False)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        c = run_scenario(quiet).records[0].samples.array
+    d = run_scenario(quiet, engine="numpy").records[0].samples.array
+    assert np.allclose(c, d, atol=1e-6 * np.abs(c).max()) and not np.allclose(c, a, atol=1e-3 * np.abs(a).max())
+
+
+def test_spread_rays_through_the_pairing_and_both_engines():
+    """Angle spreading rides in the eigenrays' directions: the C++ and NumPy pairings give the
+    same paths. A range rate is paired in NumPy (with a warning) and becomes the velocity of
+    the path's apparent position along the ray."""
+    import warnings
+    from gpusonar.sim import propagation
+    from gpusonar.sim.propagation import two_way_paths
+    inner, pts, base, j, _, _ = steep_bounce()
+    tx, rx = SOURCE, SOURCE + np.array([0.0, 0.0, 0.5])
+    amp = np.array([1.0 + 0.0j])
+    angled = spread(inner, ROUGH, taps=3, seed=4, angle_spread=True)
+    a, b = (two_way_paths(angled, tx, rx, pts, amp, engine=engine) for engine in ("cpp", "numpy"))
+    assert a[0].shape == ((1 + 1 + 3) ** 2, 3) and a[3] is None
+    for x, y in zip(a[:3], b[:3]):
+        assert np.allclose(x, y, rtol=1e-12, atol=1e-12)
+    e = angled.eigenrays(tx, pts)
+    keep = e.valid[0]
+    q = tx + C * e.delay[0][keep][:, None] * e.launch[0][keep]           # apparent positions: along each tap's own direction
+    assert np.allclose(a[0][::5], q, atol=1e-9)
+    moving = spread(inner, ROUGH, taps=3, seed=4, doppler=True, doppler_lines=2)
+    propagation._warned_doppler_fallback = False
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        q, p, w, vq, vp = two_way_paths(moving, tx, rx, pts, amp, engine="cpp")
+    assert any("NumPy" in str(c.message) for c in caught)
+    e, back = moving.eigenrays(tx, pts), moving.eigenrays(rx, pts)
+    keep = e.valid[0]
+    n = int(keep.sum())
+    assert n == 1 + 1 + 3 * 2 and len(q) == n * n and vq.shape == vp.shape == (n * n, 3)
+    assert np.allclose(vq.reshape(n, n, 3), (e.range_rate[0][keep][:, None] * e.launch[0][keep])[:, None, :])
+    assert np.allclose(vp.reshape(n, n, 3), (back.range_rate[0][keep][:, None] * back.launch[0][keep])[None, :, :])
+    assert two_way_paths(spread(inner, ROUGH, taps=3, seed=4), tx, rx, pts, amp, engine="numpy")[3] is None
+
+
+def test_a_cw_ping_shows_the_lines_of_the_doppler_spread_tail():
+    """End to end through the synthesis kernel: a 0.5 s tone, one surface bounce with one tap of
+    one line each way (projector and array in different coherence cells, so the two differ).
+    The direct echo stays at the carrier; the echoes with one bounce are shifted by the
+    frequency of the ray that bounced and the echo with a bounce each way by the sum."""
+    f0 = 8000.0
+    sonar = SonarModel.load("flank_32", {"transmit": {"waveform": {"type": "cw", "f_start": f0, "f_stop": f0, "duration": 0.5, "window_alpha": 0.0}},
+                                         "receive": {"window": {"range": [140.0, 600.0]}}})
+    inner = ImageSourceProvider(C, surface_z=0.0, bottom_z=None, max_order=1)
+    scene = Scene().add_points([[3.0, 154.0, 50.0]], target_strength_db=10.0)
+    pose = make_pose(position=(3.0, 4.0, 32.0))
+    par = dict(ROUGH, rms_vertical_speed=2.5)                            # faster than any sea: lines several Hz apart
+    kw = dict(environment={"sound_speed": C}, adc=False, noise_rms=0.0)
+    flat = simulate_ping(sonar, pose, scene, provider=inner, **kw)
+    tx, rx = np.array(flat.tx_position()), flat.rx_positions().mean(axis=0)
+    assert np.linalg.norm(tx - rx) > 0.4
+    for seed in range(200):                                              # a realisation whose four lines stand apart
+        prov = TimeSpreadProvider(inner, frequency=f0, surface=par, taps=1, seed=seed, coherence_length=0.25, doppler=True,
+                                  doppler_spectrum="gaussian", doppler_lines=1)
+        nu_out, nu_back = (-f0 * e.range_rate[0, 2:][e.valid[0, 2:]][0] / C for e in (prov.eigenrays(tx, scene.positions), prov.eigenrays(rx, scene.positions)))
+        lines = np.array([0.0, nu_out, nu_back, nu_out + nu_back])
+        if np.min(np.diff(np.sort(lines))) > 8.0:
+            break
+    else:
+        raise AssertionError("no realisation with separated lines")
+    rec = simulate_ping(sonar, pose, scene, provider=prov, **kw)       # (the default engine: the pairing falls back to NumPy)
+    x = rec.samples.array[16]
+    n = 1 << 21
+    spectrum = abs(np.fft.rfft(x * np.hanning(len(x)), n))
+    freq = np.fft.rfftfreq(n, 1.0 / rec.samples.sample_rate)
+    near = (freq > f0 - 150.0) & (freq < f0 + 150.0)
+    found = []
+    work = np.where(near, spectrum, 0.0)
+    for _ in range(4):                                                   # the four strongest lines
+        i = int(np.argmax(work))
+        found.append(freq[i])
+        work[abs(freq - freq[i]) < 4.0] = 0.0
+    assert np.sort(found) == pytest.approx(np.sort(f0 + lines), abs=0.3)
+    assert work.max() < 0.3 * spectrum[near].max()                       # and nothing else of that size
+    # A point in free water returns the tone alone.
+    y = simulate_ping(sonar, pose, scene, **kw).samples.array[16]
+    tone = abs(np.fft.rfft(y * np.hanning(len(y)), n))
+    inside = abs(freq - f0) < 5.0
+    assert np.sum(tone[near & inside] ** 2) > 0.9 * np.sum(tone[near] ** 2)
+    assert np.sum(spectrum[near & inside] ** 2) < 0.6 * np.sum(spectrum[near] ** 2)
