@@ -260,12 +260,10 @@ Earlier in the round:
     responses, and `sum` was −2.3 dB right after the pulse and +3.7 dB later in the ASIAEX
     set-up. `sum` remains as an option. Earlier time-spreading numbers in `RESULTS.md`
     were produced under `sum` and are marked so; they were not re-measured.
-12. **Passes of the analytic kernel's arrival-time solve: (3, 4) to (4, 4)?** The solve
-    stops after 3 passes outbound and 4 on return, leaving a constant phase offset of
-    about 2πf (R/c)(v/c)³: 0.007 rad at 8 kHz for 12 m/s closing at 400 m (6.9e-3 against
-    the closed form). The counts are now parameters (D-81). With (4, 4) the error is
-    5.5e-5, at under 1% cost; it would change every existing record with moving geometry
-    at the 1e-3 level or below. The coordinator recommends switching. Your decision.
+12. **Passes of the analytic kernel's arrival-time solve.** Settled by the owner: the
+    default is now (4, 4) (D-83). It was (3, 4), which left 0.007 rad at 8 kHz for 12 m/s
+    closing at 400 m; (4, 4) leaves 5.5e-5. Records of moving scenes differ from earlier
+    ones at the 1e-3 level or below.
 13. **Time-spread coherence cells at an edge.** The realisation key is
     floor(position / coherence_length); a sonar exactly on a cell edge (x = 0) can put
     projector and array in different cells, making the out-leg and back-leg tails
