@@ -1018,3 +1018,15 @@ CAP_NET_RAW, and those containers refuse it.
   256 frames. Why real time loses one burst per run is not established (`RESULTS.md`).
 - Not covered by the patch or the runs: the RoCE receiver, and the unpatched emulator on
   a machine with CAP_NET_RAW.
+
+### D-83 The echo kernel runs four outbound passes of the arrival-time solve
+
+The kernel finds when sound meets a moving point by fixed-point passes, each gaining a
+factor v/c. It ran three outbound and four on return, which leaves (R/c)(v/c)^3 outbound:
+0.14 us, a phase of 0.007 rad at 8 kHz, for a target closing at 12 m/s from 400 m
+(measured 6.9e-3 against the closed form; `RESULTS.md`, "Sampled pulses and per-ray Doppler
+in the C++ engine"). It is a constant phase offset of the echo; the Doppler factor was
+already right. With (4, 4) the error is 5.5e-5 for under 1 % of a (path, channel) pair's
+cost. The owner chose to switch ("Switch the echo kernel"). Consequence: records of scenes
+with motion differ from earlier ones at the 1e-3 level or below; static scenes are
+unchanged. `arrival_passes=(3, 4)` reproduces the old kernel; sampled pulses keep (8, 8).

@@ -301,7 +301,7 @@ def test_doppler_bank_finds_a_moving_highlight_through_a_sampled_pulse():
     """A highlight target closing at 6 m/s, an m-sequence given as samples, the Doppler bank:
     the range rate, the time scale of eq. (68), and the level."""
     found = sv.check_sampled_doppler()
-    assert found["synthesis"] == "numpy_sampled"
+    assert found["synthesis"] is None                                   # the C++ kernel ran (no NumPy note)
     assert found["bank_range_rate"] == found["true_range_rate"]
     assert found["bank_range_rate_fine"] == pytest.approx(found["true_range_rate"], abs=0.11)
     assert found["eq68_time_scale"] == pytest.approx(found["exact_time_scale"], rel=1e-12)

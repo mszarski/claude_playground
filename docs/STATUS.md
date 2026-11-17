@@ -247,11 +247,10 @@ Earlier in the round:
     after the pulse and +3.7 dB later, relative to `convolve`). The validation recommends
     `convolve` whenever the two boundaries differ. Changing the default changes earlier
     time-spreading results (D-77).
-12. **Passes of the analytic kernel's arrival-time solve.** It stops after 3 passes
-    outbound and 4 on return, leaving about (R/c)(v/c)³: 0.007 rad at 8 kHz for 12 m/s
-    closing at 400 m (6.9e-3 against the closed form with 3 passes, 7e-8 with 8). Raising
-    it touches the host kernel and the `.cu` file and changes results at that level
-    (D-75). Raise it?
+12. **Passes of the analytic kernel's arrival-time solve.** Settled by the owner: the
+    default is now (4, 4) (D-83). It was (3, 4), which left 0.007 rad at 8 kHz for 12 m/s
+    closing at 400 m; (4, 4) leaves 5.5e-5. Records of moving scenes differ from earlier
+    ones at the 1e-3 level or below.
 13. **Time-spread coherence cells at an edge.** The realisation key is
     floor(position / coherence_length); a sonar exactly on a cell edge (x = 0) can put
     projector and array in different cells, making the out-leg and back-leg tails

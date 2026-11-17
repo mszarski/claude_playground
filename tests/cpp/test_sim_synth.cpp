@@ -93,7 +93,6 @@ TEST(Synth, ArrivalTimePassesConvergeToTheClosedForm) {
   EXPECT_EQ(t_default, t44);  // the defaults are (4, 4)
   const double left = (r0 / kC) * std::pow(v / kC, 3);  // 0.137 us
   EXPECT_NEAR(std::abs(t34 - exact), left, 0.1 * left);
-  const double t44 = sim::arrival_time(at_origin, at_origin, path, kC, 0.0, r_out, r_back, Vec3d{}, 4, 4);
   EXPECT_NEAR(std::abs(t44 - exact), left * v / kC, 0.2 * left * v / kC);
   const double t88 = sim::arrival_time(at_origin, at_origin, path, kC, 0.0, r_out, r_back, Vec3d{}, 8, 8);
   EXPECT_NEAR(t88, exact, 1e-15);

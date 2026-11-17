@@ -1863,20 +1863,20 @@ of 3 over the analytic kernel with beams is the nine-band sum at every sample
 u meets the moving outbound point, then the moving receiver, by fixed-point passes
 `t <- u + r(t) / c`; each pass gains a factor v/c. It has always run 3 passes outbound and
 4 on return. The counts are now parameters (`SynthParams::arrival_passes_out/back`,
-`arrival_passes=(out, back)` in Python), default unchanged. For a target closing at 12 m/s
+`arrival_passes=(out, back)` in Python). For a target closing at 12 m/s
 from 400 m, 8 kHz CW, against the closed form (echo at `f (c + v)/(c - v)` from
 `2 R / (c + v)`), relative rms = phase error in rad:
 
-| passes (out, back) | (3, 4) default | (4, 4) | (4, 5) | (5, 5) | (8, 8) |
+| passes (out, back) | (3, 4) earlier default | (4, 4) default | (4, 5) | (5, 5) | (8, 8) |
 |---|---|---|---|---|---|
 | error | 6.9e-3 | 5.5e-5 | 5.5e-5 | 4.4e-7 | 3.7e-8 (float32) |
 
 The default's error is the outbound residual `2 pi f (R/c)(v/c)^3` (6.9e-3 predicted); it
 grows with range, frequency and the cube of speed, and is a constant phase offset of the
 echo (the Doppler factor itself is right). One more outbound pass removes it to 5.5e-5.
-Sampled pulses use (8, 8), as the NumPy reference does. Analytic pulses keep (3, 4), so
-existing records are bit-identical (checked on 7 shipped scenarios against the previous
-build). Cost of the passes alone: 0.33 us (3, 4) to 1.2 us (8, 8) of core time per
+Sampled pulses use (8, 8), as the NumPy reference does. Analytic pulses ran (3, 4) until
+the owner chose (4, 4) as the default (D-83): records of moving scenes change at the 1e-3
+level or below, static scenes not at all. Cost of the passes alone: 0.33 us (3, 4) to 1.2 us (8, 8) of core time per
 (path, channel) pair, against 40 us or more for a pair with a 1 ms pulse in the window:
 about 2 % at most, and not resolvable in whole-ping times on the loaded machine.
 
