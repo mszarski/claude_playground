@@ -306,3 +306,63 @@ def test_sbl_mode_keeps_the_maps_detection_where_it_resolves_nothing():
             got = chain.process(active_ping([2.0, 4.0]))["detections"]
         key = lambda d: (round(d["range_m"], 3), round(d["bearing_deg"], 3))  # noqa: E731
         assert sorted(map(key, got)) == sorted(map(key, want))
+
+
+@needs_exe
+def test_program_listens_to_an_untriggered_board_stream(tmp_path):
+    """--listen: blocks with no transmit mark, over UDP, become passive bearing frames as they arrive."""
+    import socket
+    import time
+    from gpusonar.sources.flank_stream import FULL_SCALE_COUNTS, encode_block
+    from test_doa import passive_record
+    base = passive_record([(-20.0, 1.0), (15.0, 0.5)], seconds=2.0)
+    # The boards send real samples: put the baseband record on its carrier at four times the rate.
+    xb, fs_b, fc = base.samples.array, base.samples.sample_rate, base.samples.center_frequency
+    up, n = 4, base.samples.array.shape[1]
+    spec = np.zeros((xb.shape[0], up * n), dtype=complex)
+    spec[:, :n // 2], spec[:, -(n // 2):] = np.fft.fft(xb, axis=1)[:, :n // 2], np.fft.fft(xb, axis=1)[:, -(n // 2):]
+    t = np.arange(up * n) / (up * fs_b)
+    real = np.real(up * np.fft.ifft(spec, axis=1) * np.exp(2j * np.pi * fc * t)[None, :]).astype(np.float32)
+    rec = base.copy()
+    s_ = rec.samples
+    s_.array = real
+    s_.kind = core.SampleKind.RealPassband
+    s_.sample_rate = up * fs_b
+    s_.start_time = 0.0
+    rec.samples = s_
+    w = gs.RecordWriter(str(tmp_path / "template.h5"))
+    w.write(rec)
+    w.close()
+    full_scale = rec.metadata.adc_full_scale
+    scale = FULL_SCALE_COUNTS / (full_scale if np.isfinite(full_scale) else 1.0)
+    x = real.T                                                     # [samples, channels]
+    counts = np.rint(x * min(scale, 0.2 * FULL_SCALE_COUNTS / np.abs(x).max())).astype(np.int32)
+    N_FFT, HOP = 1024, 512                                         # the same 32 ms blocks at the higher rate
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    n_frames = len(counts) // (N_FFT + 11 * HOP)
+    proc = subprocess.Popen([str(EXE), "--udp", str(port), "--template", str(tmp_path / "template.h5"), "--listen", "--band", "4000", "6000",
+                             "--recording", str(tmp_path / "rec.h5"), "--report", str(tmp_path / "rep.jsonl"), "--pings", str(n_frames),
+                             f"n_fft={N_FFT}", f"hop={HOP}", "n_average=12", "bearing_first_deg=-60", "bearing_last_deg=60", "sbl_min_snr_db=3"],
+                            stderr=subprocess.PIPE, text=True)
+    try:
+        time.sleep(1.0)
+        tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        for i, first in enumerate(range(0, len(counts), 128)):
+            tx.sendto(encode_block(counts[first:first + 128], first, -1, 0, 0, 0, 5_000_000_000), ("127.0.0.1", port))
+            if i % 4 == 3:
+                time.sleep(0.002)
+        _, err = proc.communicate(timeout=120.0)
+    finally:
+        proc.kill()
+    frames = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
+    if "0 dropped, 0 samples lost" not in err or len(frames) < n_frames:
+        pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")
+    assert n_frames >= 5 and frames[0]["time_ns"] >= 5_000_000_000 and frames[1]["time_ns"] > frames[0]["time_ns"]
+    good = sum(1 for f in frames if len(f["bearings_deg"]) == 2 and abs(min(f["bearings_deg"]) + 20.0) < 0.6
+               and abs(max(f["bearings_deg"]) - 15.0) < 0.6)
+    assert good >= 0.8 * len(frames)
+    raw = list(make_source({"type": "container", "path": str(tmp_path / "rec.h5")}))
+    assert len(raw) == n_frames and raw[0].samples.array.shape[1] == N_FFT + 11 * HOP

@@ -69,7 +69,7 @@ def encode_block(counts: np.ndarray, sample_index: int, tx_sample: int = -1, pin
         raise BlockError("sample outside the 24-bit range")
     n, ch = counts.shape
     header = _HEADER.pack(MAGIC, VERSION, ch, n, sample_index, tx_sample, ping_index, gain_code, flags, start_ns)
-    u = counts.astype("<i4").view(np.uint8).reshape(n, ch, 4)[:, :, :3]
+    u = np.ascontiguousarray(counts, dtype="<i4").view(np.uint8).reshape(n, ch, 4)[:, :, :3]
     return header.ljust(HEADER_BYTES, b"\0") + u.tobytes()
 
 
