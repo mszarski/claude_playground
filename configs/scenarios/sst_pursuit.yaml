@@ -1,0 +1,80 @@
+# The "Pursuit" example of SST (APL-UW TR 0702, Sec. 3 and Fig. 2), as far as the report
+# describes it: a high-speed vehicle with a monostatic forward-looking sonar chases a simple
+# three-highlight target; five receive channels; a narrow-band tone near 10 kHz; the display
+# runs from 0.5 to 5 s and from 9.6 to 10.2 kHz.
+#
+# TR 0702 gives NO speeds, depths, beam patterns, pulse length, wind or target strength (they
+# are in the example script of the SST distribution, which we do not have). Every block
+# listed under `unconfirmed` holds OUR choices, made so that the features the text describes
+# can appear at all; the result is not a numerical reproduction of Fig. 2 and must not be
+# presented as one. What the choices were made for:
+#   - vehicle depth 350 m: surface reverberation starts at 2 x 350 / 1500 = 0.47 s, from
+#     overhead, just before the display starts (the text: "the early part of the signal comes
+#     from almost directly overhead");
+#   - water depth 1275 m: the first path with one leg reflected from the bottom arrives at
+#     2 x 1275 / 1500 = 1.7 s (the text: a streak "that starts at about 1.7 seconds ... results
+#     from a path that reflects from the bottom"; which path SST's streak is, is not stated);
+#   - carrier 9.9 kHz, vehicle 20 m/s, target 2.5 m/s directly away, 2124 m ahead: the echo
+#     arrives at 2.8 s near 10.13 kHz and the main-lobe reverberation ridge is near 10.16 kHz
+#     (the text: "the blip at about 2.8 seconds and 10.13 kHz", below the ridge);
+#   - highlights of -10 dB: the echo is below the reverberation in level (the text: "the
+#     target doesn't show at all on the level plot");
+#   - source level 230 dB: the surface reverberation stands about 10 dB above the wind noise
+#     in the displayed band (the text: "the dominant feature in the figure is the reverberation").
+# Not in this scenario because the simulator has no one-way source: the noise radiated by
+# the fleeing target, which SST's example includes.
+# Frame: x ahead of the vehicle at transmit, z down, z = 0 the sea surface.
+name: sst_pursuit
+sonar: flank_32
+fidelity: image_source
+sonar_overrides:
+  name: sst_pursuit_sonar
+  array:
+    count: 5                     # TR 0702: five receive channels
+    pitch: 0.075                 # half a wavelength at 9.9 kHz
+    axis: [0, 1, 0]
+    boresight: [1, 0, 0]         # forward-looking
+    beamwidth_az: 0.349          # 20 degrees (FWHM), each element; sinc pattern with sidelobes
+    beamwidth_el: 0.349
+  transmit:
+    lever_arm: [0, 0, 0]         # monostatic
+    beamwidth_az: 0.349
+    beamwidth_el: 0.349
+    waveform: {type: cw, f_start: 9900.0, f_stop: 9900.0, duration: 0.1, window_alpha: 0.1, source_level_db: 230.0}
+  receive:
+    sample_rate: 32000.0
+    window: {range: [375.0, 3750.0]}     # 0.5 s to 5 s (+ the pulse), the span of Fig. 2
+environment: {sound_speed: 1500.0, temperature: 8.0, salinity: 35.0}
+propagation:
+  surface_z: 0.0
+  bottom_z: 1275.0
+  max_order: 2
+  bottom_coefficient: 0.5
+platform: {position: [0, 0, 350.0], rpy: [0, 0, 0], velocity: [20.0, 0, 0]}
+pings: {count: 1, interval: 10.0}
+scene:
+  - type: target
+    label: target
+    origin: [2124.0, 0.0, 350.0]
+    velocity: [2.5, 0.0, 0.0]
+    heading_deg: 0.0
+    highlights:                  # TR 0702: "a simple three-highlight target"
+      - {position: [-8.0, 0, 0], target_strength_db: -10.0}
+      - {position: [0.0, 0, 0], target_strength_db: -10.0}
+      - {position: [8.0, 0, 0], target_strength_db: -10.0}
+reverberation:
+  # The mode that carries Doppler per arrival direction: the vehicle's speed along each ray,
+  # with its elevation. 2-degree elevation bins so that the Doppler of the surface return can
+  # follow the ray from overhead to ahead.
+  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 8.0, geometry: bistatic, n_elevation: 90, n_azimuth: 72, band_taper: true}
+absorption: francois_garrison
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 8.0, shipping: 0.5}
+seed: 2
+unconfirmed:
+  - platform                      # depth and speed of the vehicle
+  - propagation                   # water depth, bottom reflection coefficient
+  - scene                         # target range, depth, speed, highlight positions and strengths
+  - reverberation                 # wind speed; Chapman-Harris used above its fitted band and angles
+  - sonar_overrides               # carrier, pulse length, beam patterns, source level, element spacing

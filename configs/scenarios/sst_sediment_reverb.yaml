@@ -1,0 +1,31 @@
+# Closed-form check through the whole simulator (tools/sst_validation.py, "checks"): bottom
+# reverberation from a named sediment against the integral of its scattering strength.
+# An omnidirectional sonar 20 m above a flat bottom of `medium_sand` (configs/sediments.yaml:
+# the row read from arXiv:1809.08459 Table 1), a 2 ms tone at 20 kHz, the direct path only,
+# no absorption: the mean intensity at two-way time t is then
+#     sigma(grazing) x pi c T / R^3,   R = c (t - T / 2) / 2,  sin(grazing) = 20 m / R
+# (ring of the bottom of width c T / 2 along the slant range, two-way spreading 1 / R^4).
+# The tool runs it three ways: this file (scattering-function reverberation), the same
+# sediment as point scatterers in the scene, and with LFM pulses of three bandwidths and a
+# point target for the signal-to-reverberation ratio after pulse compression.
+name: sst_sediment_reverb
+sonar: popoto_8
+fidelity: free_field
+sonar_overrides:
+  name: sst_sediment_reverb_sonar
+  transmit:
+    lever_arm: [0, 0, 0]
+    waveform: {type: cw, f_start: 20000.0, f_stop: 20000.0, duration: 0.002, window_alpha: 0.0, source_level_db: 190.0}
+  receive:
+    kind: baseband
+    sample_rate: 20000.0
+    window: {range: [25.0, 150.0]}
+environment: {sound_speed: 1500.0}
+platform: {position: [0, 0, 0.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 6, interval: 1.0}
+scene: []
+reverberation:
+  - {model: fluid_sediment, sediment: medium_sand, boundary_z: 20.0}
+absorption: none
+receiver: {noise_rms: 0.0, adc: false}
+seed: 3

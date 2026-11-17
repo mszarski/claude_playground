@@ -1714,3 +1714,68 @@ normals, amplitudes scaled by `(1 + |grad D|^2)^(1/4)` because the points are dr
 horizontal area. The scene does not shadow its seabed with its own relief (only listed
 occluders shadow), so the two methods differ behind a ridge.
 
+
+## 18. Validation against TR 0702 itself [OURS]
+
+`tools/sst_validation.py` runs what TR 0702 lets one check, end to end (scenario -> records ->
+processing), and prints one row per statement of the report (`--out`; the last run is in
+`docs/figures/sst_validation.md`, its numbers in `sst_validation.json`). The assertions are in
+`tests/python/test_sst_validation.py`. Sec. 9 above said what is reproducible; this is what was
+done about it. Nothing here was taken from any source but TR 0702's own text.
+
+**17.1 The two worked examples.** `configs/scenarios/sst_pursuit.yaml` (Sec. 3, Fig. 2) and
+`sst_asiaex.yaml` (Sec. 12.2-12.6, Figs. 3-5) hold what the report prints and, under
+`unconfirmed`, values of our own for everything it does not (speeds, depths, beams, pulse
+length, wind and levels for Pursuit; depths, sound speed, ping interval, sediment and the wind
+laws for ASIAEX). They are not numerical reproductions of the figures. Each feature the text
+describes is checked as a number against a closed form for our geometry:
+
+- Pursuit: the ridge of the surface reverberation against `f (1 + 2 v cos(angle) / c)` at each
+  time (the "hook"); the onset of the first return with a bottom-reflected leg at `2 D / c`;
+  the echo of the three highlights against eq. (66) with eq. (68), sample by sample; the echo
+  below the reverberation in level and apart from it in Doppler.
+- ASIAEX: arrival times and levels of the five eigenrays against eqs. (36)-(38); identical,
+  crisp pulses without time spreading; tails and ping-to-ping variation with it; decay times
+  against the rule of thumb of Sec. 12.4; the surface Doppler spread; the two-bounce tail.
+
+A simulator of echoes has no one-way source (SST's `DirectSignal`). The ASIAEX path is made
+with a relay: a point of -20 dB strength 0.1 m from the projector, so that the transmit leg
+is 0.1 m long and (1 / 0.1) x 0.1 = 1 leaves the return leg alone.
+
+**17.2 What the examples showed.**
+
+- *One Doppler per component is wrong for pairs of different eigenrays (defect, not fixed).*
+  A reverberation component is (azimuth sector, elevation of the receive ray) with one Doppler
+  shift, the power-weighted mean over every transmit path and every time that arrives from
+  there (Sec. 14, "typically one Doppler cell per direction" taken literally). With several
+  eigenrays per leg, pairs that share a receive ray share a shift: in Pursuit the return with a
+  bottom-reflected transmit leg and a direct receive leg is given the Doppler of the direct
+  pair, and where the direct pair sits in a null of the beam it is given the bottom pair's.
+  The second is visible as a change of the record a second before any bottom path can arrive.
+  Two tests are marked xfail for it. Eq. (71) gives each pair pq its own factor; the cure is a
+  Doppler bin (or the transmit path) in the component's key.
+- *The reverberation's Doppler is first order in v / c.* At 20 m/s and 9.9 kHz it is 3.6 Hz
+  below eq. (71), a quarter of the resolution of a 0.1 s pulse; echoes use the exact factor.
+- *Eq. (36) is right as printed* (item 24 of Sec. 11): it equals a leg-by-leg unfolding for
+  every sequence of up to three bounces, and so do (37), (40), (41) against the provider.
+- *The "less than 10 Hz" of Sec. 12.3 does not settle note 23.* For our ASIAEX geometry the
+  spread is 0.3 Hz (AR(1) half-width) or 0.7 Hz (Gaussian rms) with sin(g), and 6.5 Hz with
+  the rule as printed on p. 101 (1 / sin(g)): all under 10 Hz. Sec. 16 derives sin(g).
+- *`multi_bounce: sum` and the remark on p. 104.* TR 0702 does not say how SST combined two
+  bounces; it says the result is "too high immediately after the pulse and too low later".
+  Our `sum` (one exponential with the summed mean delay) has that error when both bounces
+  scatter. With the ASIAEX bottom as printed (rmsHeight 0.012: 93 % coherent on the
+  surface-bottom path, with the longer decay) its error has the other sign: all the scattered
+  energy is given the bottom's delay although 7 % of it met a rough bottom. `convolve` is the
+  one to use where the two boundaries differ.
+- *Not in the simulator, so not checked:* a one-way source (the target's radiated noise in
+  Pursuit; tonals), K-distributed noise, the removal of near-specular reverberation when time
+  spreading is on, a near-specular surface scattering model (Figs. 3-4, panels 3-5).
+
+**17.3 Closed forms through the whole simulator.** `sst_echo_level.yaml`: the compressed echo
+of a 7 dB highlight is SL - 2 TL + TS in free field, and each of the six groups of eigenray
+pairs of an image medium has the level and delay of eqs. (36)-(38) and (66); a moving highlight
+through a sampled pulse and the Doppler bank. `sst_sediment_reverb.yaml`: reverberation of
+`medium_sand` against `sigma(grazing) pi c T / R^3`, as scattering-function reverberation and as
+point scatterers; signal-to-reverberation after pulse compression against
+`TS - 10 log10(sigma pi c R / B)`, 3 dB per octave. Numbers: `docs/figures/sst_validation.md`.
