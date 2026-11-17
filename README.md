@@ -55,6 +55,9 @@ tools/scenario_diagrams.py                                  # docs/scenarios/<na
 tools/popoto_range_study.py --range 12000                   # frequency and source level for a range
 tools/gallery.py --backend host                             # every realistic scenario, full size: figure and animation
 tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --scenario popoto_far_mover --out run/   # the vehicle chain on a simulation
+tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --export-template template.h5          # template + command for the C++ program
+build/bin/sonar_live --replay run/recording.h5 doa=sbl                                         # the same chain in C++, sparse Bayesian bearings
+build/bin/sonar_live --passive run/recording.h5 --band 4000 6000                               # passive bearing-time record
 tools/inspect_tap.py run/taps/ping0000 --stage prepare --plot ping.png                          # look at any stage's data
 tools/calibrate_sim.py fls --log dive.h5 --scenario fls_120k_transit                            # fit the simulator to a real log
 tools/gallery.py --backend host --quick                     # the same, thinned

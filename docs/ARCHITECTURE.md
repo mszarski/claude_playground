@@ -78,10 +78,44 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   32 channels and 50,000 samples), and it runs on a GPU unchanged.
 - **Not on a GPU, and why.** Clustering, tracking and classification handle tens of
   objects per ping. MVDR, whitening, median TVG, DRC, board synchronisation and motion
-  estimation are CPU code; none is the bottleneck of a chain that uses them. Reverberation
-  generation is NumPy FFTs and is the largest CPU-only cost in the simulator.
+  estimation are CPU code; none is the bottleneck of a chain that uses them. Sparse
+  Bayesian bearings are C++ on the CPU (Eigen, one thread per frequency): the systems are
+  32 × 32 and a range gate takes tens of milliseconds, so a CUDA build has not been
+  written. Reverberation generation is NumPy FFTs and is the largest CPU-only cost in the
+  simulator.
 - The CPU path is complete: everything runs without a GPU and gives the same results.
   `RESULTS.md` has the GPU timings and the comparison.
+
+## What is C++ and what is Python
+
+The long-range array's live chain exists twice, on purpose.
+
+- **C++ (`libs/live`, program `build/bin/sonar_live`)**: board blocks over UDP to ping
+  records, navigation, recording, board synchronisation, conditioning, backprojection to
+  range × bearing, CFAR, clustering, sparse Bayesian bearings, tracking, classification,
+  the JSON report. No Python at run time. This is what goes on a vehicle.
+- **Python (`gpusonar/live.py`, `tools/sonar_live.py`)**: the same chain stage by stage in
+  NumPy on top of the same C++ kernels, with taps after every stage and the simulator as a
+  source. `chain: {engine: cpp}` puts the C++ chain behind the same class.
+- The tests hold the two together: clustering, tracker state, classes, synchronisation
+  offsets and whole reports are compared (`tests/python/test_live_cpp.py`), and
+  `tests/cpp/test_live.cpp` tests the library without Python.
+
+Everywhere else the split is: kernels and file format in C++ (CUDA where listed above),
+the simulator's scene and propagation, SAS motion estimation glue, calibration and all
+tools in Python. Holoscan operators are Python wrappers (`holoscan_ops.py`); C++
+operators have not been written, because Holoscan cannot be built in this environment.
+
+### Bearings: the map, or sparse Bayesian learning
+
+`chain: {doa: map}` (default) takes bearings from the beamformed map: one detection per
+beam-wide blob. `doa: sbl` keeps the map and CFAR for *where in range* something is, then
+solves for *which bearings* at each detected range with multi-frequency sparse Bayesian
+learning (`libs/live/src/doa.cpp`). It separates arrivals closer than a beamwidth,
+including coherent ones (multipath of one ping), from a single snapshot. Where a gate
+holds no discrete arrival the map's detection is kept. The same solver on averaged
+spectra of a recording gives passive bearing-time records (`sonar_live --passive`,
+`core.doa_passive`). `RESULTS.md` has the measurements, `DECISIONS.md` D-57 the reasons.
 
 ## Calibrating the simulator to real data
 
@@ -97,6 +131,7 @@ real array's channel errors.
 | Path | What |
 | --- | --- |
 | `libs/core`, `libs/dsp`, `libs/recon`, `libs/sim`, `libs/detect`, `libs/io` | C++20 / CUDA: record, conditioning, backprojection, synthesis, CFAR, container file |
+| `libs/live`, `apps/sonar_live.cpp` | C++20: the long-range array's live chain and the standalone program `build/bin/sonar_live` |
 | `python/gpusonar/` | bindings and everything else: `sim/`, `sources/`, `recon/`, `pipeline.py`, `live.py`, `taps.py`, `detect.py`, `classify.py`, `flank.py`, `motion.py`, `sync.py`, `calibrate.py`, `simcal.py`, `holoscan_ops.py` |
 | `configs/` | `sonars/`, `scenarios/`, `chains/`, `deploy/` |
 | `tools/` | `test.sh`, `gallery.py`, `sonar_live.py`, `inspect_tap.py`, `calibrate_sim.py`, `design_report.py`, `scenario_diagrams.py`, `architecture_diagrams.py`, `popoto_range_study.py`, `benchmark.py`, `gpu_job.sh` |

@@ -33,14 +33,19 @@ STAGES = [
     ("Simulator", "Ambient noise, hardware gain, ADC", "NumPy", None, "sim.noise, sim.receiver", ""),
     ("Conditioning", "Baseband conversion, pulse compression", "C++ (pocketfft)", "cuFFT", "recon.prepare(backend=)", ""),
     ("Conditioning", "Calibration, TVG, whitening, median TVG, DRC", "C++", None, "core.whiten, core.drc ...", "light"),
-    ("Conditioning", "Board synchronisation, array calibration", "NumPy", None, "sync, calibrate", "once per ping / per trial"),
+    ("Conditioning", "Board synchronisation", "C++ (libs/live) and NumPy", None, "live chain; sync", "once per ping"),
+    ("Conditioning", "Array calibration", "NumPy", None, "calibrate", "once per trial"),
     ("Imaging", "Backprojection: fan, stripmap, volume, range x bearing", "C++ kernel, OpenMP", "same kernel, CUDA",
      "core.backproject(backend=), BpSession", "with ray culling; the bulk of processing"),
     ("Imaging", "Far-field FFT beamformer, MVDR", "NumPy", None, "flank", "the live chain uses the kernel instead"),
     ("Imaging", "Motion estimation (SAS)", "C++ and Ceres", None, "motion", "BSD build of Ceres"),
     ("Detection", "CFAR", "C++ kernel", "same kernel, CUDA", "detect.cfar(backend=)", ""),
-    ("Detection", "Clustering, tracking, classification", "NumPy / SciPy", None, "detect, classify",
+    ("Detection", "Sparse Bayesian bearings (active gates, passive)", "C++ (Eigen, OpenMP)", None,
+     "core.doa_gate, core.doa_passive, doa: sbl", "32 x 32 systems per frequency"),
+    ("Detection", "Clustering, tracking, classification", "C++ (libs/live) and NumPy", None, "live chain; detect, classify",
      "tens of objects per ping: nothing to accelerate"),
+    ("Live chain", "Board stream to pings, navigation, report", "C++", None, "build/bin/sonar_live",
+     "the program that goes on the vehicle"),
 ]
 
 

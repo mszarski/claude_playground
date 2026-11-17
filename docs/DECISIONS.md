@@ -487,3 +487,37 @@ because the log and the simulated parts go through the same processing. With rel
 levels only differences between terms are reported. A closed-form sonar-equation fit was
 the alternative; it would need every gain in the chain to be modelled a second time.
 
+### D-57 Sparse Bayesian learning for bearings; the map and CFAR stay for range
+Asked for: source-separated bearings from the long-range array to hand to a downstream
+batch tracker, by "ILRMA or normal correlation or whatever is state of the art". Chosen:
+multi-frequency sparse Bayesian learning (SBL; Gerstoft, Mecklenbräuker, Xenaki and
+Nannuru 2016), one source-power vector shared by every frequency in the band, noise
+re-estimated from the residual.
+- The active case is the hard one for the usual high-resolution methods: echoes of one
+  ping from two bearings (two targets, or a target and its bottom bounce) are coherent
+  and there is one snapshot per range gate. MVDR and MUSIC need many snapshots and
+  incoherent sources. SBL works on one snapshot and does not care about coherence.
+- ILRMA and other blind separation recover source *waveforms* without array geometry. The
+  array's geometry is known and the tracker wants bearings, so a geometric method uses
+  more of what is known. Cross-correlation (GCC-PHAT) gives pairwise delays, good for two
+  hydrophones, weaker than a 32-element solution.
+- SBL is not a detector over range. The beamformed map and CFAR say at which ranges
+  something is; SBL then says from which bearings at each of those ranges. Where it finds
+  no discrete arrival the map's detection is kept, so the option never loses a detection.
+- The same solver takes averaged spectra of unsynchronised listening and gives passive
+  bearing-time records with source powers and the noise level in the samples' units.
+- Cost control: frequencies subsampled to 24, grid points pruned as their power collapses,
+  a coarse grid then a fine one around what survived, peaks closer than 0.2 beamwidths
+  folded together, and SBL skipped on gates whose conventional spectrum has no peak 8 dB
+  over its median. All are options (`doa.hpp`, `chain.hpp`).
+- Host only (Eigen, MPL2). A CUDA build would batch 32 × 32 solves; not written, because
+  a gate takes tens of milliseconds against a ping interval of many seconds.
+
+### D-58 The live chain is a C++ library with a standalone program
+`libs/live` holds every stage after the kernels: stream assembly, navigation, board
+synchronisation, clustering, the tracker, the classifier, the report. `build/bin/sonar_live`
+is the deployable: no Python interpreter on the vehicle. The Python chain stays, because
+taps, the simulator and the tools hang off it, and because two implementations compared by
+tests catch errors in both. The deployment file stays the one place settings live:
+`tools/sonar_live.py --export-template` turns it into the C++ program's template record
+and command line. A YAML reader in C++ would have added a dependency for the same result.

@@ -8,11 +8,24 @@ path, end to end, on simulated data, on recordings and on an emulated board over
 
 ## What runs
 
-One program, one YAML file:
+One YAML file, and either of two programs that read the same settings:
 
 ```bash
-tools/sonar_live.py configs/deploy/popoto_vehicle.yaml
+tools/sonar_live.py configs/deploy/popoto_vehicle.yaml            # Python: taps, simulator, rehearsal
+tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --export-template template.h5
+build/bin/sonar_live --udp 5700 --template template.h5 --nav-port 5702 ...   # C++: no Python on the vehicle
 ```
+
+`--export-template` writes one empty ping record of the configured sonar (array geometry,
+waveform, receive window, ADC scale), which is all the C++ program needs to know about the
+array, and prints the complete `build/bin/sonar_live` command for the file's `chain`,
+`nav` and `output` sections. The C++ program takes the same options as `key=value`
+arguments or from `--options FILE` (the list is at the top of `apps/sonar_live.cpp`); it
+also replays a recording (`--replay`) and listens passively (`--passive`, below). It
+depends on the suite's C++ libraries, HDF5 and, for a GPU, CUDA.
+
+`tools/sonar_live.py --engine cpp` runs the C++ chain behind the Python program, for
+taps and rehearsal with exactly the code that will be deployed.
 
 | Part of the file | What it sets |
 | --- | --- |
@@ -21,7 +34,7 @@ tools/sonar_live.py configs/deploy/popoto_vehicle.yaml
 | `chain` | the processing: board synchronisation, bearings, range cell, CFAR, tracker, classifier, CPU or GPU |
 | `output` | the raw recording, the report file, the report's UDP destination, taps |
 
-Per ping, in order (`python/gpusonar/live.py`):
+Per ping, in order (`libs/live/src/chain.cpp`; `python/gpusonar/live.py` is the same in Python):
 
 1. Stamp the pose from navigation into the record.
 2. **Write the raw ping to the recording.** This happens before any processing, so a
@@ -29,7 +42,9 @@ Per ping, in order (`python/gpusonar/live.py`):
 3. Synchronise the capture boards on the shared reference and drop or blank it (`sync.py`).
 4. Baseband conversion and pulse compression.
 5. Beamform to range × bearing with the backprojection kernel.
-6. CFAR and clustering: detections with range, bearing and SNR.
+6. CFAR and clustering: detections with range, bearing and SNR. With `doa: sbl`, the
+   bearings at each detected range are then solved for by sparse Bayesian learning, which
+   separates arrivals inside one beam.
 7. Track in a world-fixed frame, so ownship's motion is not put on the targets.
 8. Classify each track: mover, static, multipath of another track, uncertain.
 9. Emit one JSON object: detections, tracks (position, velocity, kind), sync state,
@@ -76,7 +91,26 @@ interval. From ping 4 on the report holds one mover (the ship, −5.8 m/s agains
    settings (`--replay`), and its background can be used to calibrate the simulator
    (`SIM_CALIBRATION.md`) so later rehearsals match the site.
 
+## Listening without transmitting
+
+The array is for active pings; the same backend also gives passive bearings from any
+stretch of recorded samples:
+
+```bash
+build/bin/sonar_live --passive recording.h5 --band 4000 6000 n_fft=256 hop=128 n_average=12
+```
+
+One JSON line per frame: time, the bearings of the sources found, their powers and the
+noise level, in the units of the samples squared. Options: `passive_method=conventional`
+for the plain beamformer's bearing-time record, `sbl_min_snr_db`, `sbl_max_sources`, the
+bearing grid. This is a batch tool over a recording; a continuous passive stream from the
+boards (no transmit to cut pings on) is not wired into the UDP source.
+
 ## What is not there yet
+
+- Holoscan operators in C++. The Python wrappers exist (`holoscan_ops.py`); the C++ chain
+  is one call per ping (`LiveChain::process`) and is meant to be wrapped as one operator.
+- Sparse Bayesian bearings on a GPU (CPU only; see `ARCHITECTURE.md`).
 
 - The two adapters named above (board forwarder, navigation).
 - A service wrapper. A systemd unit that runs the one command and restarts it is enough;

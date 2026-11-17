@@ -37,6 +37,10 @@ DEFAULTS = {
     "range_cell_m": 2.0,                       # power is averaged into cells this long before detection
     "cfar": {"pfa": 1e-5, "guard_m": 100.0, "train_m": 300.0},
     "min_snr_db": 9.0,
+    "engine": "python",                        # "cpp": libs/live does every stage after recording (what build/bin/sonar_live runs)
+    "doa": "map",                              # "sbl": sparse Bayesian bearings at each detected range (engine cpp)
+    "sbl": {"grid_step_deg": 0.25, "max_sources": 6, "min_snr_db": 6.0, "dynamic_range_db": 20.0,
+            "max_gates": 24, "min_contrast_db": 8.0, "max_iterations": 20, "tolerance": 0.01},
     "tracker": {"range_sigma": 15.0, "bearing_sigma_deg": 1.0, "confirm_hits": 3, "max_misses": 2,
                 "initial_speed_sigma": 8.0, "process_noise": 0.05},
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": 60.0,
@@ -49,6 +53,46 @@ def _merge(base: dict, over: dict | None) -> dict:
     for k, v in (over or {}).items():
         out[k] = _merge(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
     return out
+
+
+def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
+    """The chain section of a deployment file as the options of the C++ chain (`core.LiveChainCpp`,
+    and `key=value` arguments of build/bin/sonar_live). `cfg` is merged over the defaults first."""
+    cfg = _merge(DEFAULTS, cfg)
+    if cfg["beamformer"] != "backprojection":
+        raise ValueError("the C++ chain beamforms by backprojection; set beamformer: backprojection or engine: python")
+    b, t, c, s = cfg["bearings_deg"], cfg["tracker"], cfg["classify"], cfg["sbl"]
+    o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2], "range_cell_m": cfg["range_cell_m"],
+         "cfar_pfa": cfg["cfar"]["pfa"], "cfar_guard_m": cfg["cfar"]["guard_m"], "cfar_train_m": cfg["cfar"]["train_m"],
+         "min_snr_db": cfg["min_snr_db"], "hann": cfg["window"] == "hann", "starboard": cfg["look"] == "starboard",
+         "doa": cfg["doa"], "sbl_grid_step_deg": s["grid_step_deg"], "sbl_max_sources": int(s["max_sources"]),
+         "sbl_min_snr_db": s["min_snr_db"], "sbl_dynamic_range_db": s["dynamic_range_db"],
+         "sbl_max_gates": int(s["max_gates"]), "sbl_min_contrast_db": s["min_contrast_db"],
+         "sbl_max_iterations": int(s["max_iterations"]), "sbl_tolerance": s["tolerance"],
+         "tracker_range_sigma": t["range_sigma"], "tracker_bearing_sigma": float(np.radians(t["bearing_sigma_deg"])),
+         "tracker_confirm_hits": int(t["confirm_hits"]), "tracker_max_misses": int(t["max_misses"]),
+         "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
+         "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"], "classify_max_fit_rms": c["max_fit_rms"],
+         "multipath": bool(c.get("multipath"))}
+    if c.get("multipath"):
+        m = c["multipath"]
+        o.update(multipath_max_excess_range=m["max_excess_range"], multipath_bearing=float(np.radians(m["bearing_deg"])),
+                 multipath_velocity=m["velocity"])
+    if reference is not None:
+        o["sync"] = {k: (bool(reference[k]) if k == "dedicated" else float(reference[k]))
+                     for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated") if k in reference}
+    return o
+
+
+def sync_reference(cfg: dict) -> dict | None:
+    """The shared reference signal a chain's `sync` section names, or None."""
+    sc = cfg.get("sync")
+    if not sc:
+        return None
+    if "reference" in sc:
+        return sc["reference"]
+    from .sonar import SonarModel
+    return SonarModel.load(sc["sonar"], sc.get("sonar_overrides")).config["receive"]["reference"]
 
 
 class NavListener:
@@ -140,17 +184,19 @@ class LiveChain:
         self._tap_cfg = taps or {}
         self.nav = nav                         # None: the records already carry the pose (simulation, replay)
         self.pings_without_nav = 0
-        self._reference = None
-        if self.cfg.get("sync"):
-            sc = self.cfg["sync"]
-            if "reference" in sc:
-                self._reference = sc["reference"]
-            else:
-                from .sonar import SonarModel
-                self._reference = SonarModel.load(sc["sonar"], sc.get("sonar_overrides")).config["receive"]["reference"]
+        self._reference = sync_reference(self.cfg)
         self.boards_out_of_sync = 0
         want = self.cfg["backend"]
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
+        if self.cfg["doa"] not in ("map", "sbl"):
+            raise ValueError(f"doa: {self.cfg['doa']!r} (map or sbl)")
+        if self.cfg["engine"] not in ("python", "cpp"):
+            raise ValueError(f"engine: {self.cfg['engine']!r} (python or cpp)")
+        self._cpp = None
+        if self.cfg["engine"] == "cpp" or self.cfg["doa"] == "sbl":
+            # One C++ object does synchronisation, conditioning, beamforming, detection, bearings,
+            # tracking and classification; this class keeps the navigation, recording, taps and report.
+            self._cpp = core.LiveChainCpp(dict(cpp_chain_options(self.cfg, self._reference), backend=self.backend))
         self._origin = None                    # world position of the array at the first ping
         self._t0 = None
         self.pings = 0
@@ -177,6 +223,19 @@ class LiveChain:
         if tap:
             tap.records("raw", [record])
         cfg = self.cfg
+        if self._cpp is not None:
+            report = json.loads(self._cpp.process(record))
+            report.update(ping=index, pings_without_nav=self.pings_without_nav,
+                          processing_seconds=time.perf_counter() - t_wall)
+            if report.get("sync") and not report["sync"]["ok"]:
+                self.boards_out_of_sync += 1
+            power, ranges, _ = self._cpp.last_map()
+            if tap:
+                tap.records("prepare", [record])               # conditioned in place by the C++ chain
+                tap.arrays("beamform", power=power, ranges=ranges, bearings=self.bearings)
+                tap.json("report", report)
+            self.last = {"power": power, "ranges": ranges, "hits": report["detections"], "classes": report["tracks"]}
+            return self._emit(report)
         sync_facts = None
         if self._reference is not None:
             # Boards run on their own clocks: line them up on the shared reference and drop its inputs.
@@ -274,6 +333,9 @@ class LiveChain:
         if tap:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}
+        return self._emit(report)
+
+    def _emit(self, report: dict) -> dict:
         line = json.dumps(report)
         if self._report:
             self._report.write(line + "\n")

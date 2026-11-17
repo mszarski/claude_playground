@@ -696,6 +696,50 @@ Source: `tests/python/test_live.py`, `tools/sonar_live.py --scenario popoto_far_
 | Four boards with offsets over 100 µs, synchronised on the shared reference | residual under 1 µs; target at 600 m found within 1.5 m and 1 degree; without the stage the peak is under half as high |
 | Standing target seen from an ownship making 1.5 m/s, pose from navigation datagrams | classified static, under 0.6 m/s; without navigation it carries ownship's 1.5 m/s |
 
+## The live chain in C++ against the Python chain
+
+Source: `tests/python/test_live_cpp.py`, `tests/cpp/test_live.cpp`; the 12 km rows are the
+`popoto_12km` scenario (32 hydrophones, 22,934 complex samples a ping at 8 kHz, Bellhop
+multipath, reverberation, noise) through `configs/deploy/popoto_vehicle.yaml` on four CPU
+cores.
+
+| Quantity | Result |
+| --- | --- |
+| Clusters, tracker state and history, classes (mover, static, line, multipath) on the same detections | equal to 1e-8 |
+| Whole reports on six simulated pings | same detections within 0.05 m and 0.05°, same track identities, classes and parents |
+| Board synchronisation, four boards | offsets equal to the Python stage's within 0.05 µs; the target focuses, and does not without it |
+| Stream assembler on the emulated board's blocks | same pings, sample for sample; a lost block drops its ping in both |
+| `popoto_12km`, six pings: detections per ping, track classes and ranges | identical in both chains (5, 7, 10, 11, 14, 7 detections; ten tracks) |
+| `popoto_12km`, processing per ping | C++ 0.42–0.51 s, Python 0.51–0.55 s (the kernels are shared; the ping interval is 19.9 s) |
+| The standalone program over UDP with navigation datagrams | all pings assembled, ownship position from navigation, mover and static tracks |
+
+## Bearings by sparse Bayesian learning
+
+Source: `tests/python/test_doa.py`, `tests/cpp/test_live.cpp`. `popoto_long_range`: 32
+hydrophones at half a wavelength, 4–6 kHz, conventional beam 3.2° wide at broadside.
+Simulated echoes and simulated noise sources; no real data.
+
+| Quantity | Result |
+| --- | --- |
+| Two echoes of one ping at one range, 1.8°, 2.0° and 2.5° apart (at −10°, +3° and +21°) | both found within 0.4°; the conventional spectrum of the same snapshots has one maximum between them |
+| An echo 15 dB below another two beamwidths away | found within 0.5°; with the strong echo alone, nothing is reported at the sidelobe |
+| Noise only | no bearing above a 12 dB threshold |
+| Chain with `doa: sbl` on the two-echo ping | two detections at the echoes' bearings where `doa: map` gives one |
+| Passive, two noise sources 2.8° apart (−20° and −17.2°, the second 3 dB down), 4 s of data | both within 0.6° in at least 80% of frames; the conventional bearing-time record has one lobe over the pair |
+| Passive, sources at −20° and +15° through the standalone program | both within 0.6° in at least 80% of frames |
+| Passive, one source 10 dB below the noise at each hydrophone | found in at least 90% of frames, median bearing within 0.3°; its power comes back within 20% and the noise level within 10%, in the samples' units |
+| Time for one active range gate (two-echo ping, 0.25° grid over ±40°) | 45 ms |
+| Time for one passive frame of 208 ms of data (0.5° grid) | about 170 ms |
+| `popoto_12km`, `doa: sbl`: bearings of the last ping's detections on the ship (0.0° to 0.54° of bearing wide) | spread 0.32°, against 1.09° from the map |
+| `popoto_12km`, `doa: sbl`: processing per ping | 1.6–3.7 s (up to 11 gates a ping; many arrivals per gate keep many bearings alive, so a gate costs several times the two-echo case); 3–7.7 s before the iteration cap was lowered from 60 to 20, with bearings unchanged to 0.02° |
+
+Limits: SBL does not separate arrivals in range, only in bearing at a range the detector
+found; a line array's bearing is a cone, so a bottom-bounce arrival at a steep angle
+appears at a shifted bearing; with `doa: sbl` the classifier's choice of which track is
+the source and which its multipath differed from the map's on `popoto_12km` (one mover and
+eight multipath tracks against three movers), and neither has been compared with truth
+beyond the ship's speed.
+
 ## Track classification
 
 Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery

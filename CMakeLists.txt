@@ -59,6 +59,12 @@ add_subdirectory(libs/sim)
 add_subdirectory(libs/dsp)
 add_subdirectory(libs/recon)
 add_subdirectory(libs/detect)
+add_subdirectory(libs/live)
+
+# The long-range chain as a standalone program (no Python at run time).
+add_executable(sonar_live_app apps/sonar_live.cpp)
+set_target_properties(sonar_live_app PROPERTIES OUTPUT_NAME sonar_live RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+target_link_libraries(sonar_live_app PRIVATE sonar::live sonar::io Threads::Threads sonar_warnings)
 
 # Motion estimation needs Ceres Solver (BSD). Ceres can be built with SuiteSparse, which
 # is GPL; the Ubuntu package is. This project does not link copyleft code into the core

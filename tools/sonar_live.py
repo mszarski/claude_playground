@@ -6,6 +6,10 @@
     tools/sonar_live.py CONFIG --scenario popoto_12km                  # the simulator, same chain
     tools/sonar_live.py CONFIG --emulate flank_target_1km --port 0     # simulated pings sent as
                                                                        # board blocks over UDP
+    tools/sonar_live.py CONFIG --engine cpp ...                        # any of the above through libs/live
+    tools/sonar_live.py CONFIG --export-template template.h5           # for the standalone C++ program:
+                                                                       # writes the array's template record and
+                                                                       # prints the build/bin/sonar_live command
 
 Paths under `output` may hold strftime fields (%Y%m%d_%H%M%S). --out DIR puts every output
 in DIR instead. Ends when the source does, or after --pings.
@@ -16,12 +20,54 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
 from gpusonar.config import load_yaml  # noqa: E402
 from gpusonar.live import LiveChain, NavListener  # noqa: E402
 from gpusonar.sources import make_source  # noqa: E402
+
+
+def export_template(cfg: dict, path: str) -> str:
+    """Write one empty ping record of the configured sonar (array, waveform, receive window, ADC
+    scale) and return the command that runs the same deployment file through build/bin/sonar_live."""
+    import shlex
+
+    from gpusonar import core
+    from gpusonar.live import cpp_chain_options, sync_reference
+    from gpusonar.sonar import SonarModel
+    src = cfg["source"]
+    sonar = SonarModel.load(src["sonar"], src.get("sonar_overrides"))
+    env = {"sound_speed": float(src["sound_speed"])} if src.get("sound_speed") else None
+    writer = core.RecordWriter(path)
+    writer.write(sonar.make_record(core.Pose(), environment=env))
+    writer.close()
+    chain = cfg.get("chain") or {}
+    o = cpp_chain_options(chain, sync_reference(chain))
+    sync = o.pop("sync", None)
+    o["look"] = "starboard" if o.pop("starboard") else "port"
+    o["window"] = "hann" if o.pop("hann") else "none"
+    o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
+    if "multipath_bearing" in o:
+        o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
+    o["multipath"] = int(o["multipath"])
+    if sync:
+        o["sync"] = 1
+        o.update({f"sync_{k}": (int(v) if isinstance(v, bool) else v) for k, v in sync.items()})
+    out = cfg.get("output") or {}
+    cmd = ["build/bin/sonar_live", "--udp", str(src.get("port", 5700)), "--template", path]
+    if (cfg.get("nav") or {}).get("port"):
+        cmd += ["--nav-port", str(cfg["nav"]["port"])]
+    if out.get("recording"):
+        cmd += ["--recording", time.strftime(out["recording"])]
+    if out.get("report"):
+        cmd += ["--report", time.strftime(out["report"])]
+    if out.get("report_udp"):
+        cmd += ["--report-udp", f"{out['report_udp'][0]}:{out['report_udp'][1]}"]
+    cmd += [f"{k}={v:.10g}" if isinstance(v, float) else f"{k}={v}" for k, v in o.items()]
+    return " ".join(shlex.quote(c) for c in cmd)
 
 
 def main(argv=None):
@@ -34,8 +80,16 @@ def main(argv=None):
     ap.add_argument("--out", help="directory for the recording, report and taps")
     ap.add_argument("--pings", type=int)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--engine", choices=["python", "cpp"], help="override chain.engine")
+    ap.add_argument("--export-template", metavar="FILE",
+                    help="write the configured sonar's template record and print the equivalent build/bin/sonar_live command")
     args = ap.parse_args(argv)
     cfg = load_yaml(args.config)
+    if args.engine:
+        cfg["chain"] = dict(cfg.get("chain") or {}, engine=args.engine)
+    if args.export_template:
+        print(export_template(cfg, args.export_template))
+        return 0
     out = dict(cfg.get("output") or {})
     stamp = time.strftime
     if args.out:

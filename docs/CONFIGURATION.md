@@ -171,11 +171,17 @@ Every object may have `label`, and `velocity: [vx, vy, vz]` to move it.
 | Key | Meaning |
 | --- | --- |
 | `sync` | several capture boards: `{sonar: popoto_4x7}` takes the reference description from that sonar; `{reference: {...}}` gives it directly; absent for one board or one clock |
+| `engine` | `python` (default: stage by stage, every tap) or `cpp` (`libs/live` does everything after recording; needs `beamformer: backprojection`) |
 | `beamformer`, `backend` | `backprojection` (the kernel; host or CUDA), `farfield` or `mvdr` (NumPy); `auto`, `host` or `cuda` |
+| `doa`, `sbl: {grid_step_deg, max_sources, min_snr_db, dynamic_range_db, max_gates, min_contrast_db, max_iterations, tolerance}` | `map` (default: bearings from the beamformed map) or `sbl` (sparse Bayesian bearings at each detected range; runs the C++ engine). `max_gates`: ranges solved per ping, strongest first. `min_contrast_db`: a gate whose conventional spectrum peaks less than this over its median keeps the map's detection |
 | `bearings_deg`, `look`, `window` | `[first, last, step]` from broadside; `starboard` or `port`; aperture weighting |
 | `range_cell_m` | power is averaged into cells this long before detection |
 | `cfar: {pfa, guard_m, train_m}`, `min_snr_db` | detector windows in metres; detections below this SNR are dropped |
 | `tracker: {range_sigma, bearing_sigma_deg, confirm_hits, max_misses, initial_speed_sigma, process_noise}` | the Kalman tracker |
 | `classify: {min_speed, static_speed, max_fit_rms, multipath: {max_excess_range, bearing_deg, velocity}}` | `gpusonar/classify.py`; `multipath: null` switches echo grouping off |
+
+The C++ program `build/bin/sonar_live` takes the same settings as `key=value` arguments;
+`tools/sonar_live.py CONFIG --export-template template.h5` prints them for a deployment
+file. Passive listening adds `n_fft`, `hop`, `n_average`, `passive_method` (`DEPLOYMENT.md`).
 
 Source types and how to tap, inspect and re-inject data: `ARCHITECTURE.md`.
