@@ -820,9 +820,16 @@ def darken_text(doc: Node, rng: random.Random) -> EditExample | None:
 
 @novel
 def spread_out(doc: Node, rng: random.Random) -> EditExample | None:
+    # Only rows that are wider than their content, so space-between visibly changes something: a fixed width, or a
+    # stretched child of a column. (On a hug-content row the edit renders pixel-identical: 115/150 rows of the
+    # first test_novel_big were such no-ops.)
+    def has_slack(n: Node, p: Node | None) -> bool:
+        return "w" in n["props"] or (p is not None and p["props"].get("layout") == "col"
+                                     and p["props"].get("align", "stretch") == "stretch")
+
     n, _ = pick(rng, nodes(doc, lambda n, p: n["type"] == "frame" and n["props"].get("layout") == "row"
                            and len(n["children"]) >= 2 and n["props"].get("justify") != "between"
-                           and not is_button(n))) or (None, None)
+                           and not is_button(n) and has_slack(n, p))) or (None, None)
     if n is None:
         return None
     after, f = mutate(doc)
