@@ -1,0 +1,4245 @@
+{
+  "header": {
+    "date_utc": "2026-11-17 21:54:16",
+    "commit": "",
+    "machine": "x86_64",
+    "processor": "AMD EPYC 7R13 Processor",
+    "python": "3.12.3",
+    "numpy": "2.5.5",
+    "host_threads": 8,
+    "cpu_count": 8,
+    "omp_num_threads": null,
+    "cuda_compiled": true,
+    "cuda_available": true,
+    "cuda_used": true,
+    "gpus": [
+      "NVIDIA L4"
+    ],
+    "bellhop": "/opt/at/Bellhop/bellhop.exe",
+    "reverb_components_in_cpp": true,
+    "sim_engine": "cpp",
+    "quick": false,
+    "scale": 1.0,
+    "repeats": 3,
+    "case_budget_s": 60.0,
+    "groups": [
+      "synthesis",
+      "reverb",
+      "scenarios",
+      "imaging",
+      "conditioning",
+      "detect",
+      "live",
+      "hostonly"
+    ],
+    "wall_seconds": 2886.0192592144012
+  },
+  "cases": [
+    {
+      "group": "synthesis",
+      "case": "fls_120k_transit",
+      "what": "FLS, analytic LFM, moving hull, image-source bounces",
+      "sizes": {
+        "pings": 4,
+        "channels": 128,
+        "samples": 15334,
+        "scatterers": 1691,
+        "paths/ping": 7004
+      },
+      "host_s": 5.545524011999987,
+      "cuda_s": 0.5609488979998787,
+      "speedup": 9.88597006210927,
+      "agreement": 6.64639449904818e-07,
+      "note": "scenario fls_120k_transit; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        5.580034798000042,
+        5.545524011999987,
+        5.634691010000097
+      ],
+      "cuda_runs": [
+        0.5612421040000299,
+        0.5609488979998787,
+        0.5610020990000066
+      ],
+      "host_warmup_s": 5.540741993999973,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 1.2092590160000327,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "fls_glints_on_sediment",
+      "what": "FLS, aspect-dependent glints on a sediment scatterer seabed",
+      "sizes": {
+        "pings": 4,
+        "channels": 128,
+        "samples": 1650,
+        "scatterers": 31214,
+        "paths/ping": 6380
+      },
+      "host_s": 2.418111498999906,
+      "cuda_s": 0.2526556329999039,
+      "speedup": 9.570780078356004,
+      "agreement": 5.73129643692e-07,
+      "note": "scenario fls_glints_on_sediment; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        2.7508400929998515,
+        2.418111498999906,
+        2.4378684079999857
+      ],
+      "cuda_runs": [
+        0.2527603349999481,
+        0.2527152529999057,
+        0.2526556329999039
+      ],
+      "host_warmup_s": 2.446779306000053,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.2531789800000297,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "point_grid_fls_300k",
+      "what": "FLS, analytic pulse, point grid",
+      "sizes": {
+        "pings": 1,
+        "channels": 128,
+        "samples": 500641,
+        "scatterers": 20,
+        "paths/ping": 20
+      },
+      "host_s": 0.00973593300000175,
+      "cuda_s": 0.047119250999912765,
+      "speedup": 0.20662325468670492,
+      "agreement": 4.507961987486151e-08,
+      "note": "scenario point_grid_fls_300k; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.010275450000108322,
+        0.009887464000030377,
+        0.00973593300000175
+      ],
+      "cuda_runs": [
+        0.047119250999912765,
+        0.049980770000047414,
+        0.0491751080000995
+      ],
+      "host_warmup_s": 0.010264170000027661,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.04693745700001273,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "minefield_sas",
+      "what": "SAS, analytic LFM, scatterer seafloor and objects",
+      "sizes": {
+        "pings": 20,
+        "channels": 16,
+        "samples": 2067,
+        "scatterers": 14870,
+        "paths/ping": 10399
+      },
+      "host_s": 14.293272150999883,
+      "cuda_s": 0.33753739899998436,
+      "speedup": 42.34574359269903,
+      "agreement": 8.123597683286627e-07,
+      "note": "scenario minefield_sas; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        14.36840168699996,
+        14.293272150999883,
+        14.312326303999953
+      ],
+      "cuda_runs": [
+        0.33889009799986525,
+        0.3375539700000445,
+        0.33753739899998436
+      ],
+      "host_warmup_s": 14.285600552000005,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.33834092999995846,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "rail_cylinder_glint",
+      "what": "rail SAS, aspect-dependent glint of a cylinder",
+      "sizes": {
+        "pings": 30,
+        "channels": 64,
+        "samples": 13664,
+        "scatterers": 400,
+        "paths/ping": 400
+      },
+      "host_s": 0.9793587159999788,
+      "cuda_s": 0.08310388199993213,
+      "speedup": 11.784752919253263,
+      "agreement": 3.9614700372336475e-07,
+      "note": "scenario rail_cylinder_glint; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.0175862970002072,
+        1.0735456280001472,
+        0.9793587159999788
+      ],
+      "cuda_runs": [
+        0.08310388199993213,
+        0.08322080299990375,
+        0.08434583999996903
+      ],
+      "host_warmup_s": 1.036745018000147,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.0834885579999991,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "flank_sst_shallow",
+      "what": "flank array, analytic LFM, time spreading (taps on bounce paths)",
+      "sizes": {
+        "pings": 4,
+        "channels": 32,
+        "samples": 115200,
+        "scatterers": 1,
+        "paths/ping": 289
+      },
+      "host_s": 14.538142636999964,
+      "cuda_s": 1.0499146749998545,
+      "speedup": 13.84697536207119,
+      "agreement": 3.9767894619043507e-07,
+      "note": "scenario flank_sst_shallow; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        14.538142636999964,
+        14.570290112999828,
+        14.573196699999926
+      ],
+      "cuda_runs": [
+        1.0499146749998545,
+        1.0506428259998302,
+        1.0507715769999777
+      ],
+      "host_warmup_s": 14.546048644999928,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 1.0501971490000415,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "flank_sst_spread",
+      "what": "flank array, time spreading with doppler: true and angle spread",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "scatterers": 1,
+        "paths/ping": 1024
+      },
+      "host_s": 12.862258723999958,
+      "cuda_s": 0.7776300119999178,
+      "speedup": 16.540332195925224,
+      "agreement": 7.647244736732033e-07,
+      "note": "scenario flank_sst_spread; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        12.892498391000117,
+        12.862258723999958,
+        12.95980184799987
+      ],
+      "cuda_runs": [
+        0.7776300119999178,
+        0.7779103190000569,
+        0.7777060759999586
+      ],
+      "host_warmup_s": 12.898935930000107,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.7780421809998188,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "sst_pursuit (CW)",
+      "what": "analytic CW, moving sonar and moving three-highlight target",
+      "sizes": {
+        "pings": 4,
+        "channels": 5,
+        "samples": 147200,
+        "scatterers": 3,
+        "paths/ping": 75
+      },
+      "host_s": 0.06686528599993835,
+      "cuda_s": 0.056702280999843424,
+      "speedup": 1.1792345002862052,
+      "agreement": 4.685861511011672e-08,
+      "note": "scenario sst_pursuit; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.06689021900001535,
+        0.06812512600004084,
+        0.06686528599993835
+      ],
+      "cuda_runs": [
+        0.056932543999892005,
+        0.056702280999843424,
+        0.05673195899998973
+      ],
+      "host_warmup_s": 0.06755240899997261,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.05735272999982044,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "flank, sampled m-sequence",
+      "what": "sampled pulse (type: sampled, mseq), time spreading",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "scatterers": 1,
+        "paths/ping": 289
+      },
+      "host_s": 13.77721451399998,
+      "cuda_s": 0.6988910680001936,
+      "speedup": 19.712964072386974,
+      "agreement": 3.8683172300932184e-07,
+      "note": "scenario flank_sst_shallow; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        13.901939489999904,
+        13.803024241999992,
+        13.77721451399998
+      ],
+      "cuda_runs": [
+        0.6989961770000264,
+        0.6988910680001936,
+        0.6989562390001538
+      ],
+      "host_warmup_s": 13.893426219000048,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.6995053860000553,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "flank, sampled m-sequence, no patterns/absorption",
+      "what": "sampled pulse (type: sampled, mseq), time spreading; beam patterns and absorption off",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "scatterers": 1,
+        "paths/ping": 289
+      },
+      "host_s": 5.607170868999901,
+      "cuda_s": 0.36756071800004975,
+      "speedup": 15.255087375792813,
+      "agreement": 3.879398260026452e-07,
+      "note": "scenario flank_sst_shallow; kernel only",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        5.640940051000143,
+        5.628420477999953,
+        5.607170868999901
+      ],
+      "cuda_runs": [
+        0.36972998800001733,
+        0.3697888859999239,
+        0.36756071800004975
+      ],
+      "host_warmup_s": 5.655014514999948,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.3693619900000158,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "flank, sampled LFM",
+      "what": "sampled pulse (type: sampled, lfm), time spreading",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "scatterers": 1,
+        "paths/ping": 289
+      },
+      "host_s": 13.788552283999934,
+      "cuda_s": 0.6988779760001762,
+      "speedup": 19.72955617075628,
+      "agreement": 3.9441795038419205e-07,
+      "note": "scenario flank_sst_shallow; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        13.855857777999972,
+        13.788552283999934,
+        13.80866630200012
+      ],
+      "cuda_runs": [
+        0.698904352999989,
+        0.6989082630000212,
+        0.6988779760001762
+      ],
+      "host_warmup_s": 14.025622209000176,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.6992329700001392,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "flank, sampled LFM, no patterns/absorption",
+      "what": "sampled pulse (type: sampled, lfm), time spreading; beam patterns and absorption off",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "scatterers": 1,
+        "paths/ping": 289
+      },
+      "host_s": 5.603729583000131,
+      "cuda_s": 0.36732559699999,
+      "speedup": 15.255483496839682,
+      "agreement": 3.911433175496508e-07,
+      "note": "scenario flank_sst_shallow; kernel only",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        5.7094152510001095,
+        5.628400171000067,
+        5.603729583000131
+      ],
+      "cuda_runs": [
+        0.36944357600009425,
+        0.3673755859999801,
+        0.36732559699999
+      ],
+      "host_warmup_s": 5.6661908640001,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.36925585999983923,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "FLS, sampled m-sequence",
+      "what": "sampled pulse (mseq), moving hull, image-source bounces",
+      "sizes": {
+        "pings": 2,
+        "channels": 128,
+        "samples": 15334,
+        "scatterers": 1691,
+        "paths/ping": 7004
+      },
+      "host_s": 8.886212483000008,
+      "cuda_s": 0.5544900739998866,
+      "speedup": 16.025918045562392,
+      "agreement": 6.76934799805109e-07,
+      "note": "scenario fls_120k_transit; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        9.14841754400004,
+        8.886212483000008,
+        8.950617718000103
+      ],
+      "cuda_runs": [
+        0.554594724000026,
+        0.5544900739998866,
+        0.5546334059999936
+      ],
+      "host_warmup_s": 8.841356771000164,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.5548932479998712,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "FLS, sampled m-sequence, no patterns/absorption",
+      "what": "sampled pulse (mseq), moving hull, image-source bounces; beam patterns and absorption off",
+      "sizes": {
+        "pings": 2,
+        "channels": 128,
+        "samples": 15334,
+        "scatterers": 1691,
+        "paths/ping": 7004
+      },
+      "host_s": 3.3735591550000663,
+      "cuda_s": 0.31958832500004064,
+      "speedup": 10.555952427234747,
+      "agreement": 6.692231492074215e-07,
+      "note": "scenario fls_120k_transit; kernel only",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        3.3853713940000034,
+        3.3735591550000663,
+        3.5579175130001204
+      ],
+      "cuda_runs": [
+        0.3196911850000106,
+        0.31967187500004,
+        0.31958832500004064
+      ],
+      "host_warmup_s": 3.431738905999964,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.32019249299992225,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "synthesis",
+      "case": "FLS, sampled LFM",
+      "what": "sampled pulse (lfm), moving hull, image-source bounces",
+      "sizes": {
+        "pings": 2,
+        "channels": 128,
+        "samples": 15334,
+        "scatterers": 1691,
+        "paths/ping": 7004
+      },
+      "host_s": 9.05406728600019,
+      "cuda_s": 0.5547021350000705,
+      "speedup": 16.32239487594372,
+      "agreement": 6.671022113077934e-07,
+      "note": "scenario fls_120k_transit; kernel only (paths prepared once on the host)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        9.10584730000005,
+        9.074436485999968,
+        9.05406728600019
+      ],
+      "cuda_runs": [
+        0.5547021350000705,
+        0.5548246049997942,
+        0.5549567769999157
+      ],
+      "host_warmup_s": 8.874655161999954,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.5548661170000742,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "reverb",
+      "case": "monostatic sectors, flank (sediment + surface + volume)",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 6,
+        "channels": 32,
+        "samples": 115200,
+        "components": 1176,
+        "low-rate samples": 44801
+      },
+      "host_s": 4.33009610199997,
+      "cuda_s": 4.065120256,
+      "speedup": 1.065182781643144,
+      "agreement": 6.928619825893227e-07,
+      "note": "reverberation items of flank_sst_shallow",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        4.381145037000124,
+        4.33009610199997,
+        4.3776737299999695
+      ],
+      "cuda_runs": [
+        4.189094311999952,
+        4.065120256,
+        4.101211139000043
+      ],
+      "host_warmup_s": 4.306792217000066,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.07638146799968126,
+        "reverberation steering/summation kernel": 1.4608111099994403,
+        "reverberation interpolation to the record's rate": 1.5822326599998178,
+        "reverberation random draws and texture": 1.1160991630008539
+      },
+      "host_counts": {
+        "rows": 1176,
+        "n_low": 806418,
+        "calls": 18
+      },
+      "cuda_warmup_s": 4.104988926000033,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.07584422199988694,
+        "reverberation steering/summation kernel": 1.2221545489999244,
+        "reverberation interpolation to the record's rate": 1.5697273859998404,
+        "reverberation random draws and texture": 1.1032729929997913
+      },
+      "cuda_counts": {
+        "rows": 1176,
+        "n_low": 806418,
+        "calls": 18
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "monostatic sectors, flank (sediment + surface + volume): kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 6,
+        "channels": 32,
+        "samples": 115200,
+        "components": 1176,
+        "low-rate samples": 44801
+      },
+      "host_s": 1.4608111099994403,
+      "cuda_s": 1.2221545489999244,
+      "speedup": 1.195275271196107,
+      "agreement": 6.928619825893227e-07,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "reverb",
+      "case": "monostatic sectors, moving FLS (bottom + surface)",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 4,
+        "channels": 128,
+        "samples": 15334,
+        "components": 1536,
+        "low-rate samples": 15735
+      },
+      "host_s": 2.6167967119999958,
+      "cuda_s": 2.2913477090000924,
+      "speedup": 1.1420338788921407,
+      "agreement": 2.1852076339097023e-06,
+      "note": "reverberation items of fls_120k_transit",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        2.6167967119999958,
+        2.6642820889999257,
+        2.639576009999928
+      ],
+      "cuda_runs": [
+        2.2913477090000924,
+        2.3132436359999247,
+        2.409992877999912
+      ],
+      "host_warmup_s": 2.4501764199999343,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.6026028030000816,
+        "reverberation steering/summation kernel": 1.3564594580000175,
+        "reverberation interpolation to the record's rate": 0.09094097600018358,
+        "reverberation random draws and texture": 0.5343035170001258
+      },
+      "host_counts": {
+        "rows": 1536,
+        "n_low": 125880,
+        "calls": 8
+      },
+      "cuda_warmup_s": 2.2543715660001453,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.6186122149999846,
+        "reverberation steering/summation kernel": 1.0138699520002774,
+        "reverberation interpolation to the record's rate": 0.08972711000001254,
+        "reverberation random draws and texture": 0.5247304289998738
+      },
+      "cuda_counts": {
+        "rows": 1536,
+        "n_low": 125880,
+        "calls": 8
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "monostatic sectors, moving FLS (bottom + surface): kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 4,
+        "channels": 128,
+        "samples": 15334,
+        "components": 1536,
+        "low-rate samples": 15735
+      },
+      "host_s": 1.3564594580000175,
+      "cuda_s": 1.0138699520002774,
+      "speedup": 1.3379028102409394,
+      "agreement": 2.1852076339097023e-06,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "reverb",
+      "case": "monostatic, fluid-sediment bottom",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 2,
+        "channels": 8,
+        "samples": 3374,
+        "components": 144,
+        "low-rate samples": 1708
+      },
+      "host_s": 0.011495695999883537,
+      "cuda_s": 0.011397874000067532,
+      "speedup": 1.008582477733604,
+      "agreement": 2.909499237933789e-07,
+      "note": "reverberation items of sst_sediment_reverb",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.011595118000059301,
+        0.011529854999935196,
+        0.011495695999883537
+      ],
+      "cuda_runs": [
+        0.011549667000053887,
+        0.011535887000036382,
+        0.011397874000067532
+      ],
+      "host_warmup_s": 0.011368303999915952,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.0014984509998612339,
+        "reverberation steering/summation kernel": 0.0027246180000020104,
+        "reverberation interpolation to the record's rate": 0.0010243850001643295,
+        "reverberation random draws and texture": 0.005562404999636783
+      },
+      "host_counts": {
+        "rows": 144,
+        "n_low": 3416,
+        "calls": 2
+      },
+      "cuda_warmup_s": 0.01192180299995016,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.0015017200000784214,
+        "reverberation steering/summation kernel": 0.0025909259998115886,
+        "reverberation interpolation to the record's rate": 0.0010327840000172728,
+        "reverberation random draws and texture": 0.005565944000181844
+      },
+      "cuda_counts": {
+        "rows": 144,
+        "n_low": 3416,
+        "calls": 2
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "monostatic, fluid-sediment bottom: kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 2,
+        "channels": 8,
+        "samples": 3374,
+        "components": 144,
+        "low-rate samples": 1708
+      },
+      "host_s": 0.0027246180000020104,
+      "cuda_s": 0.0025909259998115886,
+      "speedup": 1.0516000843714348,
+      "agreement": 2.909499237933789e-07,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "reverb",
+      "case": "K-distributed (statistics: k), flank",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 2,
+        "channels": 32,
+        "samples": 115200,
+        "components": 392,
+        "low-rate samples": 44801
+      },
+      "host_s": 1.4701467940001294,
+      "cuda_s": 1.3839673420000054,
+      "speedup": 1.0622698595442173,
+      "agreement": 1.5626030446183145e-06,
+      "note": "reverberation items of flank_sst_shallow",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.5268111119999048,
+        1.4701467940001294,
+        1.5017719410000154
+      ],
+      "cuda_runs": [
+        1.3839673420000054,
+        1.396583714000144,
+        1.4427433580001434
+      ],
+      "host_warmup_s": 1.4938501749998068,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.009704302000045573,
+        "reverberation steering/summation kernel": 0.47905688300033944,
+        "reverberation interpolation to the record's rate": 0.5056763440002214,
+        "reverberation random draws and texture": 0.45528199699947436
+      },
+      "host_counts": {
+        "rows": 392,
+        "n_low": 268806,
+        "calls": 6
+      },
+      "cuda_warmup_s": 1.4206438310000067,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.009937734999994063,
+        "reverberation steering/summation kernel": 0.39633596199996646,
+        "reverberation interpolation to the record's rate": 0.5078874309999719,
+        "reverberation random draws and texture": 0.4493932360001054
+      },
+      "cuda_counts": {
+        "rows": 392,
+        "n_low": 268806,
+        "calls": 6
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "K-distributed (statistics: k), flank: kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 2,
+        "channels": 32,
+        "samples": 115200,
+        "components": 392,
+        "low-rate samples": 44801
+      },
+      "host_s": 0.47905688300033944,
+      "cuda_s": 0.39633596199996646,
+      "speedup": 1.2087141438867968,
+      "agreement": 1.5626030446183145e-06,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "reverb",
+      "case": "bistatic, moving platforms (Doppler-binned components)",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 2,
+        "channels": 5,
+        "samples": 147200,
+        "components": 25540,
+        "low-rate samples": 11201
+      },
+      "host_s": 23.703954103999877,
+      "cuda_s": 23.034942693000175,
+      "speedup": 1.0290433286470906,
+      "agreement": 3.3143645927767156e-07,
+      "note": "reverberation items of sst_pursuit",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        23.703954103999877,
+        23.945623123000132
+      ],
+      "cuda_runs": [
+        23.034942693000175,
+        23.18344587499996
+      ],
+      "host_warmup_s": 24.08713759400007,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 2.1059316849998595,
+        "reverberation steering/summation kernel": 15.302193906000184,
+        "reverberation interpolation to the record's rate": 0.13244166399999813,
+        "reverberation random draws and texture": 5.814413691999789
+      },
+      "host_counts": {
+        "rows": 25540,
+        "n_low": 784070,
+        "calls": 70
+      },
+      "cuda_warmup_s": 23.138829977000114,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 2.101221115000044,
+        "reverberation steering/summation kernel": 14.631863462999718,
+        "reverberation interpolation to the record's rate": 0.14095853499998157,
+        "reverberation random draws and texture": 5.804820706000328
+      },
+      "cuda_counts": {
+        "rows": 25540,
+        "n_low": 784070,
+        "calls": 70
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "bistatic, moving platforms (Doppler-binned components): kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 2,
+        "channels": 5,
+        "samples": 147200,
+        "components": 25540,
+        "low-rate samples": 11201
+      },
+      "host_s": 15.302193906000184,
+      "cuda_s": 14.631863462999718,
+      "speedup": 1.045813060291026,
+      "agreement": 3.3143645927767156e-07,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "reverb",
+      "case": "bistatic with scatterer_motion (drift and wind sea)",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 2,
+        "channels": 5,
+        "samples": 147200,
+        "components": 58576,
+        "low-rate samples": 12063
+      },
+      "host_s": 73.32367807800006,
+      "cuda_s": 71.607500071,
+      "speedup": 1.0239664561016435,
+      "agreement": 3.5656487870567577e-07,
+      "note": "reverberation items of sst_pursuit",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        73.32367807800006
+      ],
+      "cuda_runs": [
+        71.607500071
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": true,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.8308015439997689,
+        "reverberation steering/summation kernel": 57.462767841000414,
+        "reverberation interpolation to the record's rate": 0.12940324600026543,
+        "reverberation random draws and texture": 14.415127748999339
+      },
+      "host_counts": {
+        "rows": 58576,
+        "n_low": 2050710,
+        "calls": 170
+      },
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": true,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 0.8475295270002334,
+        "reverberation steering/summation kernel": 55.836404515000595,
+        "reverberation interpolation to the record's rate": 0.1194606820001809,
+        "reverberation random draws and texture": 14.305870296999274
+      },
+      "cuda_counts": {
+        "rows": 58576,
+        "n_low": 2050710,
+        "calls": 170
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "bistatic with scatterer_motion (drift and wind sea): kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 2,
+        "channels": 5,
+        "samples": 147200,
+        "components": 58576,
+        "low-rate samples": 12063
+      },
+      "host_s": 57.462767841000414,
+      "cuda_s": 55.836404515000595,
+      "speedup": 1.0291272932081952,
+      "agreement": 3.5656487870567577e-07,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "reverb",
+      "case": "bistatic over bathymetry (sloping plane)",
+      "what": "whole generator: power, random draws, kernel, interpolation",
+      "sizes": {
+        "calls": 2,
+        "channels": 32,
+        "samples": 115200,
+        "components": 3528,
+        "low-rate samples": 44801
+      },
+      "host_s": 10.191752263000126,
+      "cuda_s": 9.447168739000062,
+      "speedup": 1.0788155207735681,
+      "agreement": 1.374946366994566e-06,
+      "note": "reverberation items of flank_sst_shallow",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        10.191752263000126,
+        10.278769332000138,
+        10.307927415999984
+      ],
+      "cuda_runs": [
+        9.506524185999751,
+        9.473006155999883,
+        9.447168739000062
+      ],
+      "host_warmup_s": 10.342673159000014,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 1.8611637819999487,
+        "reverberation steering/summation kernel": 4.544013311002118,
+        "reverberation interpolation to the record's rate": 0.5338416700001289,
+        "reverberation random draws and texture": 3.1897979939978995
+      },
+      "host_counts": {
+        "rows": 3528,
+        "n_low": 1702438,
+        "calls": 38
+      },
+      "cuda_warmup_s": 9.422439323999697,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "reverberation power (strength, propagation, Doppler bins)": 1.9020653560000937,
+        "reverberation steering/summation kernel": 3.841534351998689,
+        "reverberation interpolation to the record's rate": 0.5049671940000735,
+        "reverberation random draws and texture": 3.1376455830013583
+      },
+      "cuda_counts": {
+        "rows": 3528,
+        "n_low": 1702438,
+        "calls": 38
+      }
+    },
+    {
+      "group": "reverb",
+      "case": "bistatic over bathymetry (sloping plane): kernel",
+      "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+      "sizes": {
+        "calls": 2,
+        "channels": 32,
+        "samples": 115200,
+        "components": 3528,
+        "low-rate samples": 44801
+      },
+      "host_s": 4.544013311002118,
+      "cuda_s": 3.841534351998689,
+      "speedup": 1.1828641617217195,
+      "agreement": 1.374946366994566e-06,
+      "note": "agreement is the whole generator's (same random numbers on both)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [],
+      "cuda_runs": []
+    },
+    {
+      "group": "scenarios",
+      "case": "sst_asiaex",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 20,
+        "channels": 1,
+        "samples": 3051,
+        "paths/ping": 2809
+      },
+      "host_s": 0.08443892500008587,
+      "cuda_s": 0.06247725999992326,
+      "speedup": 1.3515145350514666,
+      "agreement": 4.5283125282936486e-08,
+      "note": "29 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.09357875900013823,
+        0.09068531000002622,
+        0.08443892500008587
+      ],
+      "cuda_runs": [
+        0.06247725999992326,
+        0.06945260100019368,
+        0.07082986000023084
+      ],
+      "host_warmup_s": 0.08450730799995654,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 6.113100016591488e-05,
+        "scene modifiers (aspect, glints, seabed models)": 9.398499969393015e-05,
+        "eigenrays (free field, image source)": 0.0012180349986010697,
+        "time-spread taps": 0.05008264800062534,
+        "path pairing": 0.0016236319993367943,
+        "echo synthesis kernel": 0.024178808999295143,
+        "receiver (reference, gain, ADC)": 6.566399770235876e-05
+      },
+      "host_counts": {
+        "paths": 56180,
+        "synth_calls": 20
+      },
+      "cuda_warmup_s": 0.06391039599975556,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 5.541099972106167e-05,
+        "scene modifiers (aspect, glints, seabed models)": 8.877099890014506e-05,
+        "eigenrays (free field, image source)": 0.0011353389973010053,
+        "time-spread taps": 0.037050444003853045,
+        "path pairing": 0.0014259869990382867,
+        "echo synthesis kernel": 0.016173898998204095,
+        "receiver (reference, gain, ADC)": 6.136100000730949e-05
+      },
+      "cuda_counts": {
+        "paths": 56180,
+        "synth_calls": 20
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "sst_echo_level",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 1,
+        "channels": 4,
+        "samples": 9334,
+        "paths/ping": 9
+      },
+      "host_s": 0.005203171000175644,
+      "cuda_s": 0.004514121999818599,
+      "speedup": 1.1526429725170775,
+      "agreement": 4.60254442209155e-08,
+      "note": "33 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.00897874199972648,
+        0.009564359999785665,
+        0.005203171000175644
+      ],
+      "cuda_runs": [
+        0.004626642999937758,
+        0.004514121999818599,
+        0.004586852000102226
+      ],
+      "host_warmup_s": 0.004066596000029676,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 0.0001124419995903736,
+        "scene modifiers (aspect, glints, seabed models)": 0.00013412199996309937,
+        "eigenrays (free field, image source)": 4.865199980486068e-05,
+        "path pairing": 4.204900051263394e-05,
+        "echo synthesis kernel": 0.001726533999772073,
+        "receiver (reference, gain, ADC)": 3.6399997043190524e-06
+      },
+      "host_counts": {
+        "paths": 9,
+        "synth_calls": 1
+      },
+      "cuda_warmup_s": 0.005095549000088795,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 9.973199985324754e-05,
+        "scene modifiers (aspect, glints, seabed models)": 0.00011674100005620858,
+        "eigenrays (free field, image source)": 4.392100026961998e-05,
+        "path pairing": 3.8579999909416074e-05,
+        "echo synthesis kernel": 0.001574601000356779,
+        "receiver (reference, gain, ADC)": 3.250000190746505e-06
+      },
+      "cuda_counts": {
+        "paths": 9,
+        "synth_calls": 1
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "sst_pursuit",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 1,
+        "channels": 5,
+        "samples": 147200,
+        "paths/ping": 75,
+        "reverb components": 12770
+      },
+      "host_s": 12.01782300099967,
+      "cuda_s": 11.644671756999742,
+      "speedup": 1.0320448057091538,
+      "agreement": 5.8644847481568e-08,
+      "note": "64 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        12.160106242999973,
+        12.01782300099967,
+        12.427329109999846
+      ],
+      "cuda_runs": [
+        11.733082415999888,
+        11.734758702999898,
+        11.644671756999742
+      ],
+      "host_warmup_s": 12.03655081800025,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 0.0001555620001454372,
+        "scene modifiers (aspect, glints, seabed models)": 0.00018157299973609042,
+        "eigenrays (free field, image source)": 0.0015687689997321286,
+        "path pairing": 7.04120002410491e-05,
+        "echo synthesis kernel": 0.01674705699997503,
+        "reverberation power (strength, propagation, Doppler bins)": 1.0645919100002175,
+        "reverberation steering/summation kernel": 7.7227802720008185,
+        "reverberation interpolation to the record's rate": 0.0661543480000546,
+        "reverberation random draws and texture": 2.9200731559990345,
+        "reverberation set-up (grids, pulse, patterns)": 0.19335897500013743,
+        "receiver (reference, gain, ADC)": 2.1249999917927198e-05,
+        "ambient noise with a spectrum (real passband)": 0.02800112100021579
+      },
+      "host_counts": {
+        "paths": 75,
+        "synth_calls": 1,
+        "reverb_rows": 12770,
+        "reverb_kernel_calls": 35
+      },
+      "cuda_warmup_s": 11.632144865999635,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 0.00015979199997673277,
+        "scene modifiers (aspect, glints, seabed models)": 0.00014208199991117,
+        "eigenrays (free field, image source)": 0.0016104019996419083,
+        "path pairing": 5.394100026023807e-05,
+        "echo synthesis kernel": 0.014404286000171851,
+        "reverberation power (strength, propagation, Doppler bins)": 1.0912688600001275,
+        "reverberation steering/summation kernel": 7.347712690999742,
+        "reverberation interpolation to the record's rate": 0.06617936999964513,
+        "reverberation random draws and texture": 2.898038801000439,
+        "reverberation set-up (grids, pulse, patterns)": 0.19311429999970642,
+        "receiver (reference, gain, ADC)": 1.9690000044647604e-05,
+        "ambient noise with a spectrum (real passband)": 0.027965068999947107
+      },
+      "cuda_counts": {
+        "paths": 75,
+        "synth_calls": 1,
+        "reverb_rows": 12770,
+        "reverb_kernel_calls": 35
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "sst_sediment_reverb",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 6,
+        "channels": 8,
+        "samples": 3374,
+        "reverb components": 432
+      },
+      "host_s": 0.06463593699982084,
+      "cuda_s": 0.06377307499997187,
+      "speedup": 1.0135301927945195,
+      "agreement": 2.862236215404022e-07,
+      "note": "13 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.0657836310001585,
+        0.07945590999997876,
+        0.06463593699982084
+      ],
+      "cuda_runs": [
+        0.06448656400016262,
+        0.06880452499990497,
+        0.06377307499997187
+      ],
+      "host_warmup_s": 0.06362452499979554,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 1.0680000286811264e-05,
+        "eigenrays (free field, image source)": 0.0002015519999076787,
+        "reverberation power (strength, propagation, Doppler bins)": 0.004196706999664457,
+        "reverberation steering/summation kernel": 0.008174050999514293,
+        "reverberation interpolation to the record's rate": 0.0030318719996103027,
+        "reverberation random draws and texture": 0.016625345001102687,
+        "reverberation set-up (grids, pulse, patterns)": 0.002121210000495921,
+        "receiver (reference, gain, ADC)": 2.2981000256550033e-05
+      },
+      "host_counts": {
+        "reverb_rows": 432,
+        "reverb_kernel_calls": 6
+      },
+      "cuda_warmup_s": 0.06415369100022872,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 9.77099989540875e-06,
+        "eigenrays (free field, image source)": 0.00019918199950552662,
+        "reverberation power (strength, propagation, Doppler bins)": 0.004156277001129638,
+        "reverberation steering/summation kernel": 0.007916607999504777,
+        "reverberation interpolation to the record's rate": 0.003089602000272862,
+        "reverberation random draws and texture": 0.01670424699977957,
+        "reverberation set-up (grids, pulse, patterns)": 0.0021128600005795306,
+        "receiver (reference, gain, ADC)": 2.4440000288450392e-05
+      },
+      "cuda_counts": {
+        "reverb_rows": 432,
+        "reverb_kernel_calls": 6
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "flank_sst_shallow",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 4,
+        "channels": 32,
+        "samples": 115200,
+        "paths/ping": 289,
+        "reverb components": 2352
+      },
+      "host_s": 23.90413962799994,
+      "cuda_s": 9.75928888899989,
+      "speedup": 2.449373094687597,
+      "agreement": 1.1821230408482427e-06,
+      "note": "74 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        23.91576583599999,
+        23.90413962799994
+      ],
+      "cuda_runs": [
+        9.768561783999758,
+        10.04647957599991,
+        9.75928888899989
+      ],
+      "host_warmup_s": 23.83544959300025,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 9.279100004278007e-05,
+        "scene modifiers (aspect, glints, seabed models)": 4.789100012203562e-05,
+        "eigenrays (free field, image source)": 0.01245168800051033,
+        "time-spread taps": 0.006097253999541863,
+        "path pairing": 0.00031346400055554113,
+        "echo synthesis kernel": 14.711199846,
+        "reverberation power (strength, propagation, Doppler bins)": 0.14111075000027995,
+        "reverberation steering/summation kernel": 2.9827593830004844,
+        "reverberation interpolation to the record's rate": 3.1504447820002497,
+        "reverberation random draws and texture": 2.2481470289985737,
+        "reverberation set-up (grids, pulse, patterns)": 0.19433478200107857,
+        "receiver (reference, gain, ADC)": 0.00011848200074382476,
+        "ambient noise with a spectrum (real passband)": 0.42334534200017515
+      },
+      "host_counts": {
+        "paths": 1156,
+        "synth_calls": 4,
+        "reverb_rows": 2352,
+        "reverb_kernel_calls": 36
+      },
+      "cuda_warmup_s": 9.980750602000171,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 9.728100030770293e-05,
+        "scene modifiers (aspect, glints, seabed models)": 4.7419999646081124e-05,
+        "eigenrays (free field, image source)": 0.012158943000486033,
+        "time-spread taps": 0.006053192999388557,
+        "path pairing": 0.0003121750009995594,
+        "echo synthesis kernel": 1.0516891779993784,
+        "reverberation power (strength, propagation, Doppler bins)": 0.1414883809998173,
+        "reverberation steering/summation kernel": 2.5513982140005282,
+        "reverberation interpolation to the record's rate": 3.133482549999826,
+        "reverberation random draws and texture": 2.2415109220000886,
+        "reverberation set-up (grids, pulse, patterns)": 0.17925596299983226,
+        "receiver (reference, gain, ADC)": 0.00011410999923100462,
+        "ambient noise with a spectrum (real passband)": 0.41358092000018587
+      },
+      "cuda_counts": {
+        "paths": 1156,
+        "synth_calls": 4,
+        "reverb_rows": 2352,
+        "reverb_kernel_calls": 36
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "flank_sst_spread",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 4,
+        "channels": 32,
+        "samples": 115200,
+        "paths/ping": 1024,
+        "reverb components": 1568
+      },
+      "host_s": 57.996804151000106,
+      "cuda_s": 9.123039870999946,
+      "speedup": 6.357179730777968,
+      "agreement": 1.20080596407948e-06,
+      "note": "92 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        57.996804151000106
+      ],
+      "cuda_runs": [
+        9.162865388999762,
+        9.123039870999946,
+        9.499719064999681
+      ],
+      "host_warmup_s": 58.07594920099973,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 9.593099957783124e-05,
+        "scene modifiers (aspect, glints, seabed models)": 4.573099977278616e-05,
+        "eigenrays (free field, image source)": 0.008394035999572225,
+        "time-spread taps": 0.014181710001139436,
+        "path pairing": 0.00044999899955655565,
+        "echo synthesis kernel": 51.72134367200033,
+        "reverberation power (strength, propagation, Doppler bins)": 0.1313347000000249,
+        "reverberation steering/summation kernel": 1.9151188090004325,
+        "reverberation interpolation to the record's rate": 2.076096365999547,
+        "reverberation random draws and texture": 1.487008319999859,
+        "reverberation set-up (grids, pulse, patterns)": 0.16271153599927857,
+        "receiver (reference, gain, ADC)": 0.00011528999993970501,
+        "ambient noise with a spectrum (real passband)": 0.43379087299990715
+      },
+      "host_counts": {
+        "paths": 4096,
+        "synth_calls": 4,
+        "reverb_rows": 1568,
+        "reverb_kernel_calls": 24
+      },
+      "cuda_warmup_s": 9.154493570999875,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 9.749199989528279e-05,
+        "scene modifiers (aspect, glints, seabed models)": 3.896999987773597e-05,
+        "eigenrays (free field, image source)": 0.008301978998133563,
+        "time-spread taps": 0.014904656000453542,
+        "path pairing": 0.0004580450004141312,
+        "echo synthesis kernel": 3.1095672780002133,
+        "reverberation power (strength, propagation, Doppler bins)": 0.13228518500045539,
+        "reverberation steering/summation kernel": 1.6988459489994057,
+        "reverberation interpolation to the record's rate": 2.1279321509996407,
+        "reverberation random draws and texture": 1.4903356780014292,
+        "reverberation set-up (grids, pulse, patterns)": 0.11959508800055119,
+        "receiver (reference, gain, ADC)": 0.00011167399998157634,
+        "ambient noise with a spectrum (real passband)": 0.39301093800031595
+      },
+      "cuda_counts": {
+        "paths": 4096,
+        "synth_calls": 4,
+        "reverb_rows": 1568,
+        "reverb_kernel_calls": 24
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "popoto_elevation_free",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 5,
+        "channels": 64,
+        "samples": 15467,
+        "paths/ping": 3
+      },
+      "host_s": 0.1980404869996164,
+      "cuda_s": 0.2968171710003844,
+      "speedup": 0.6672137138567361,
+      "agreement": 2.1230603051291457e-08,
+      "note": "24 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.1980404869996164,
+        0.1985657549998905,
+        0.2042415399996571
+      ],
+      "cuda_runs": [
+        0.30140098399988347,
+        0.2968171710003844,
+        0.30410124099989844
+      ],
+      "host_warmup_s": 0.197106223999981,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 0.00012939199996253592,
+        "scene modifiers (aspect, glints, seabed models)": 4.9230999593419256e-05,
+        "eigenrays (free field, image source)": 0.0002641030009726819,
+        "path pairing": 0.0003174269995724899,
+        "echo synthesis kernel": 0.046771110000008775,
+        "receiver (reference, gain, ADC)": 0.00012846200070271152
+      },
+      "host_counts": {
+        "paths": 15,
+        "synth_calls": 5
+      },
+      "cuda_warmup_s": 0.29617794299974776,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 0.0001865129997895565,
+        "scene modifiers (aspect, glints, seabed models)": 4.832200011151144e-05,
+        "eigenrays (free field, image source)": 0.0002651750014592835,
+        "path pairing": 0.00031280299845093396,
+        "echo synthesis kernel": 0.1481614519998402,
+        "receiver (reference, gain, ADC)": 0.00012373400022624992
+      },
+      "cuda_counts": {
+        "paths": 15,
+        "synth_calls": 5
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "popoto_elevation_shallow",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 4,
+        "channels": 64,
+        "samples": 14400,
+        "paths/ping": 25
+      },
+      "host_s": 0.40162433199975567,
+      "cuda_s": 0.26449995499979195,
+      "speedup": 1.5184287347045922,
+      "agreement": 1.0714084550565277e-07,
+      "note": "72 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.41578136399994037,
+        0.40162433199975567,
+        0.41450957799997923
+      ],
+      "cuda_runs": [
+        0.2652442839998912,
+        0.2668190559998038,
+        0.26449995499979195
+      ],
+      "host_warmup_s": 0.4201284239998131,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 7.764099973428529e-05,
+        "scene modifiers (aspect, glints, seabed models)": 3.819999983534217e-05,
+        "eigenrays (free field, image source)": 0.0003355850008119887,
+        "path pairing": 0.0002569919988673064,
+        "echo synthesis kernel": 0.2880552150004405,
+        "receiver (reference, gain, ADC)": 9.993100002247957e-05
+      },
+      "host_counts": {
+        "paths": 100,
+        "synth_calls": 4
+      },
+      "cuda_warmup_s": 0.2651718429997345,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 7.748100006210734e-05,
+        "scene modifiers (aspect, glints, seabed models)": 3.3071999951062026e-05,
+        "eigenrays (free field, image source)": 0.0003166539991070749,
+        "path pairing": 0.0002528140012145741,
+        "echo synthesis kernel": 0.15498743000034665,
+        "receiver (reference, gain, ADC)": 8.62300003063865e-05
+      },
+      "cuda_counts": {
+        "paths": 100,
+        "synth_calls": 4
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "popoto_12km (Bellhop)",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 6,
+        "channels": 32,
+        "samples": 22934,
+        "paths/ping": 8000,
+        "reverb components": 2340
+      },
+      "host_s": 118.18464972399988,
+      "cuda_s": 34.10235723000005,
+      "speedup": 3.465585939614524,
+      "agreement": 1.920141285168644e-07,
+      "note": "77 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        118.18464972399988
+      ],
+      "cuda_runs": [
+        34.10235723000005
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": true,
+      "host_stages": {
+        "scene construction": 8.564100016883458e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.101099961597356e-05,
+        "eigenrays (Bellhop, external program)": 16.359000070000093,
+        "path pairing": 0.0013245080012893595,
+        "echo synthesis kernel": 87.7036566429997,
+        "reverberation power (strength, propagation, Doppler bins)": 8.348993180999969,
+        "reverberation steering/summation kernel": 3.626281800999095,
+        "reverberation interpolation to the record's rate": 0.38466179800070677,
+        "reverberation random draws and texture": 1.5328256719994897,
+        "reverberation set-up (grids, pulse, patterns)": 0.04331530399940675,
+        "receiver (reference, gain, ADC)": 0.00013774199896943173
+      },
+      "host_counts": {
+        "paths": 48000,
+        "synth_calls": 6,
+        "reverb_rows": 2340,
+        "reverb_kernel_calls": 24
+      },
+      "cuda_warmup_s": 34.010444461000134,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 9.94120000541443e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.120099988038419e-05,
+        "eigenrays (Bellhop, external program)": 16.457817818000876,
+        "path pairing": 0.0008871210006873298,
+        "echo synthesis kernel": 3.9675847800003794,
+        "reverberation power (strength, propagation, Doppler bins)": 8.32255996199956,
+        "reverberation steering/summation kernel": 3.221266814999126,
+        "reverberation interpolation to the record's rate": 0.3480499610004699,
+        "reverberation random draws and texture": 1.5433520410010715,
+        "reverberation set-up (grids, pulse, patterns)": 0.04456522199916435,
+        "receiver (reference, gain, ADC)": 0.00013620099889521953
+      },
+      "cuda_counts": {
+        "paths": 48000,
+        "synth_calls": 6,
+        "reverb_rows": 2340,
+        "reverb_kernel_calls": 24
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "popoto_12km (image-source stand-in)",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 6,
+        "channels": 32,
+        "samples": 22934,
+        "paths/ping": 125,
+        "reverb components": 2340
+      },
+      "host_s": 7.192804600999807,
+      "cuda_s": 5.660527412000192,
+      "speedup": 1.270695127410075,
+      "agreement": 1.714084958452261e-08,
+      "note": "69 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        7.203450916999827,
+        7.192804600999807,
+        7.373742508000305
+      ],
+      "cuda_runs": [
+        5.726836985999853,
+        5.7197840499998165,
+        5.660527412000192
+      ],
+      "host_warmup_s": 7.139016652999999,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 8.771100010562805e-05,
+        "scene modifiers (aspect, glints, seabed models)": 5.619000057777157e-05,
+        "eigenrays (free field, image source)": 0.04770729900110382,
+        "path pairing": 0.00043035599946961156,
+        "echo synthesis kernel": 1.4124113350003427,
+        "reverberation power (strength, propagation, Doppler bins)": 0.12691856499850473,
+        "reverberation steering/summation kernel": 3.5416870499998367,
+        "reverberation interpolation to the record's rate": 0.3555670370005828,
+        "reverberation random draws and texture": 1.5312491659992702,
+        "reverberation set-up (grids, pulse, patterns)": 0.044513565001125244,
+        "receiver (reference, gain, ADC)": 0.0001410520003446436
+      },
+      "host_counts": {
+        "paths": 750,
+        "synth_calls": 6,
+        "reverb_rows": 2340,
+        "reverb_kernel_calls": 24
+      },
+      "cuda_warmup_s": 5.559047435999673,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 8.409099973505363e-05,
+        "scene modifiers (aspect, glints, seabed models)": 5.064999959358829e-05,
+        "eigenrays (free field, image source)": 0.04279846500003259,
+        "path pairing": 0.00044286700040174765,
+        "echo synthesis kernel": 0.2312425460004306,
+        "reverberation power (strength, propagation, Doppler bins)": 0.12726863099805996,
+        "reverberation steering/summation kernel": 3.181163120000747,
+        "reverberation interpolation to the record's rate": 0.3674207750000278,
+        "reverberation random draws and texture": 1.5287368569988757,
+        "reverberation set-up (grids, pulse, patterns)": 0.044524991002163006,
+        "receiver (reference, gain, ADC)": 0.00013714099986827932
+      },
+      "cuda_counts": {
+        "paths": 750,
+        "synth_calls": 6,
+        "reverb_rows": 2340,
+        "reverb_kernel_calls": 24
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "popoto_far_mover (Bellhop)",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 6,
+        "channels": 32,
+        "samples": 50134,
+        "paths/ping": 5120,
+        "reverb components": 2352
+      },
+      "host_s": 137.4986950970001,
+      "cuda_s": 31.112126047999936,
+      "speedup": 4.419456738021261,
+      "agreement": 2.2404638781688704e-07,
+      "note": "88 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        137.4986950970001
+      ],
+      "cuda_runs": [
+        31.112126047999936
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": true,
+      "host_stages": {
+        "scene construction": 8.88609997673484e-05,
+        "scene modifiers (aspect, glints, seabed models)": 7.201000016721082e-05,
+        "eigenrays (Bellhop, external program)": 8.426994504999584,
+        "path pairing": 0.0007458470008714357,
+        "echo synthesis kernel": 111.35736597000005,
+        "reverberation power (strength, propagation, Doppler bins)": 3.8357688110004347,
+        "reverberation steering/summation kernel": 9.336907181999777,
+        "reverberation interpolation to the record's rate": 0.8016064500002358,
+        "reverberation random draws and texture": 3.307085019999704,
+        "reverberation set-up (grids, pulse, patterns)": 0.09205440800042197,
+        "receiver (reference, gain, ADC)": 0.00016158200060090167
+      },
+      "host_counts": {
+        "paths": 30720,
+        "synth_calls": 6,
+        "reverb_rows": 2352,
+        "reverb_kernel_calls": 48
+      },
+      "cuda_warmup_s": 30.878423225999995,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 8.521100016878336e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.348099987008027e-05,
+        "eigenrays (Bellhop, external program)": 8.424859549999837,
+        "path pairing": 0.0007373130010819295,
+        "echo synthesis kernel": 5.272509074000936,
+        "reverberation power (strength, propagation, Doppler bins)": 3.8581157989997337,
+        "reverberation steering/summation kernel": 9.051515370000743,
+        "reverberation interpolation to the record's rate": 0.7888944989990705,
+        "reverberation random draws and texture": 3.297212767000019,
+        "reverberation set-up (grids, pulse, patterns)": 0.08228997800142679,
+        "receiver (reference, gain, ADC)": 0.00015582500145683298
+      },
+      "cuda_counts": {
+        "paths": 30720,
+        "synth_calls": 6,
+        "reverb_rows": 2352,
+        "reverb_kernel_calls": 48
+      }
+    },
+    {
+      "group": "scenarios",
+      "case": "popoto_far_mover (image-source stand-in)",
+      "what": "run_scenario end to end: echoes, reverberation, noise, receiver",
+      "sizes": {
+        "pings": 6,
+        "channels": 32,
+        "samples": 50134,
+        "paths/ping": 125,
+        "reverb components": 2352
+      },
+      "host_s": 16.863752847999876,
+      "cuda_s": 13.682785334999608,
+      "speedup": 1.232479530674473,
+      "agreement": 2.586726274648176e-08,
+      "note": "73 % of the host time is in the two kernels with a CUDA build",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        16.863752847999876,
+        17.11924813199994,
+        16.927532200000314
+      ],
+      "cuda_runs": [
+        13.682785334999608,
+        13.99032067500002,
+        13.779763963999812
+      ],
+      "host_warmup_s": 16.88080526700014,
+      "host_warmup_counted": false,
+      "host_stages": {
+        "scene construction": 8.419000005233102e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.276300064200768e-05,
+        "eigenrays (free field, image source)": 0.030526042000474263,
+        "path pairing": 0.0004344880003372964,
+        "echo synthesis kernel": 2.7494382509994466,
+        "reverberation power (strength, propagation, Doppler bins)": 0.09119131399938851,
+        "reverberation steering/summation kernel": 9.531282403001114,
+        "reverberation interpolation to the record's rate": 0.7844726559983428,
+        "reverberation random draws and texture": 3.296841002000747,
+        "reverberation set-up (grids, pulse, patterns)": 0.0851481909994618,
+        "receiver (reference, gain, ADC)": 0.0001559300003464159
+      },
+      "host_counts": {
+        "paths": 750,
+        "synth_calls": 6,
+        "reverb_rows": 2352,
+        "reverb_kernel_calls": 48
+      },
+      "cuda_warmup_s": 14.031465671000205,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {
+        "scene construction": 8.313099988299655e-05,
+        "scene modifiers (aspect, glints, seabed models)": 7.016100016699056e-05,
+        "eigenrays (free field, image source)": 0.026971247000801668,
+        "path pairing": 0.00044473599882621784,
+        "echo synthesis kernel": 0.45811438799955795,
+        "reverberation power (strength, propagation, Doppler bins)": 0.09043530900089536,
+        "reverberation steering/summation kernel": 8.560751278999305,
+        "reverberation interpolation to the record's rate": 0.8995234600001822,
+        "reverberation random draws and texture": 3.2707722970012583,
+        "reverberation set-up (grids, pulse, patterns)": 0.08158230199842365,
+        "receiver (reference, gain, ADC)": 0.00014837499975328683
+      },
+      "cuda_counts": {
+        "paths": 750,
+        "synth_calls": 6,
+        "reverb_rows": 2352,
+        "reverb_kernel_calls": 48
+      }
+    },
+    {
+      "group": "imaging",
+      "case": "sas",
+      "what": "stripmap SAS backprojection (tools/benchmark.py sas)",
+      "sizes": {
+        "pings": 200,
+        "channels": 16,
+        "samples": 9534,
+        "pixels": 1536000
+      },
+      "host_s": 11.855412000999877,
+      "cuda_s": 0.3496514499997829,
+      "speedup": 33.90637161952921,
+      "agreement": 1.772772200784496e-07,
+      "note": "collection time 40 s",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        12.05137897700024,
+        11.855412000999877,
+        11.872525253000276
+      ],
+      "cuda_runs": [
+        0.3544485729998996,
+        0.3496514499997829,
+        0.3592247800002042
+      ],
+      "host_warmup_s": 11.87111510700015,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.9683138770001278,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "imaging",
+      "case": "sas, session",
+      "what": "stripmap SAS backprojection (tools/benchmark.py sas); samples resident (BackprojectSession)",
+      "sizes": {
+        "pings": 200,
+        "channels": 16,
+        "samples": 9534,
+        "pixels": 1536000
+      },
+      "host_s": 11.771369820000018,
+      "cuda_s": 0.18455248000009306,
+      "speedup": 63.78331962807589,
+      "agreement": 1.772772200784496e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        11.837283169999864,
+        11.868672571000388,
+        11.771369820000018
+      ],
+      "cuda_runs": [
+        0.18455248000009306,
+        0.1848915450000277,
+        0.18610938299980262
+      ],
+      "host_warmup_s": 11.750727199000266,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.20658812000010585,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "imaging",
+      "case": "sas, culled",
+      "what": "stripmap SAS backprojection (tools/benchmark.py sas); ping blocks outside the beam skipped (cull_block 16)",
+      "sizes": {
+        "pings": 200,
+        "channels": 16,
+        "samples": 9534,
+        "pixels": 1536000
+      },
+      "host_s": 10.214521343999877,
+      "cuda_s": 0.3350247009998384,
+      "speedup": 30.488860413921554,
+      "agreement": 1.772772200784496e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        10.214521343999877,
+        10.287205855000138,
+        10.31126522400018
+      ],
+      "cuda_runs": [
+        0.3400280300002123,
+        0.3350247009998384,
+        0.335298875999797
+      ],
+      "host_warmup_s": 10.305596343000161,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.33692832900032954,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "imaging",
+      "case": "fls",
+      "what": "forward-looking fan backprojection (tools/benchmark.py fls)",
+      "sizes": {
+        "pings": 2,
+        "channels": 64,
+        "samples": 22400,
+        "pixels": 1602000
+      },
+      "host_s": 1.197070758999871,
+      "cuda_s": 0.04380832400011059,
+      "speedup": 27.325189591750856,
+      "agreement": 3.504866540009256e-06,
+      "note": "collection time 0.00797 s",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.197070758999871,
+        1.2456283300002724,
+        1.2240388210002493
+      ],
+      "cuda_runs": [
+        0.044628335000197694,
+        0.04380832400011059,
+        0.04475962700007585
+      ],
+      "host_warmup_s": 1.2203285949999554,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.044282480999754625,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "imaging",
+      "case": "fls, session",
+      "what": "forward-looking fan backprojection (tools/benchmark.py fls); samples resident (BackprojectSession)",
+      "sizes": {
+        "pings": 2,
+        "channels": 64,
+        "samples": 22400,
+        "pixels": 1602000
+      },
+      "host_s": 1.1909817040000235,
+      "cuda_s": 0.038037136000184546,
+      "speedup": 31.31102467846804,
+      "agreement": 3.504866540009256e-06,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.1909817040000235,
+        1.1947111969998332,
+        1.1958830419998776
+      ],
+      "cuda_runs": [
+        0.03840953000008085,
+        0.038037136000184546,
+        0.03957900700015671
+      ],
+      "host_warmup_s": 1.184909202000199,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.042063160999987304,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "imaging",
+      "case": "flank",
+      "what": "flank array range x bearing map (tools/benchmark.py flank)",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 171072,
+        "pixels": 1928000
+      },
+      "host_s": 0.444426927999757,
+      "cuda_s": 0.048717570999997406,
+      "speedup": 9.122518197793168,
+      "agreement": 2.574423007660007e-06,
+      "note": "collection time 14.3 s",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.4547970489998079,
+        0.4600503500000741,
+        0.444426927999757
+      ],
+      "cuda_runs": [
+        0.04940024000006815,
+        0.04900738500009538,
+        0.048717570999997406
+      ],
+      "host_warmup_s": 0.4376099470000554,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.050116820000312146,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "imaging",
+      "case": "flank, session",
+      "what": "flank array range x bearing map (tools/benchmark.py flank); samples resident (BackprojectSession)",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 171072,
+        "pixels": 1928000
+      },
+      "host_s": 0.4055645810003625,
+      "cuda_s": 0.018201117999979033,
+      "speedup": 22.282399410894964,
+      "agreement": 2.574423007660007e-06,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.42073150699980033,
+        0.4261467599999378,
+        0.4055645810003625
+      ],
+      "cuda_runs": [
+        0.019286781000118935,
+        0.018201117999979033,
+        0.01892172700036099
+      ],
+      "host_warmup_s": 0.41427419899991946,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.022780979000344814,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "sas_auv raw: to_baseband",
+      "what": "SAS pings at the ADC rate; real passband to complex baseband (FFT)",
+      "sizes": {
+        "pings": 8,
+        "channels": 16,
+        "samples": 95334,
+        "kind": "real"
+      },
+      "host_s": 0.9496227509998789,
+      "cuda_s": 0.015708893999999418,
+      "speedup": 60.45128008374836,
+      "agreement": 3.308368572071141e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.9543146749997504,
+        0.9677636870001152,
+        0.9496227509998789
+      ],
+      "cuda_runs": [
+        0.016030586999931984,
+        0.015708893999999418,
+        0.015760592999868095
+      ],
+      "host_warmup_s": 0.9721282260002226,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.21241998300001796,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "sas_auv raw: pulse_compress",
+      "what": "SAS pings at the ADC rate; matched filter",
+      "sizes": {
+        "pings": 8,
+        "channels": 16,
+        "samples": 11520,
+        "kind": "complex"
+      },
+      "host_s": 0.04546734799987462,
+      "cuda_s": 0.007075114999679499,
+      "speedup": 6.4263758259666846,
+      "agreement": 3.065063923918242e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.04554354800029614,
+        0.04603294400021696,
+        0.04546734799987462
+      ],
+      "cuda_runs": [
+        0.007089186000030168,
+        0.007075114999679499,
+        0.007094606999999087
+      ],
+      "host_warmup_s": 0.045911444000012125,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.008381013999951392,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "sas_auv raw: recon.prepare",
+      "what": "SAS pings at the ADC rate; both steps as processing calls them",
+      "sizes": {
+        "pings": 8,
+        "channels": 16,
+        "samples": 95334,
+        "kind": "real"
+      },
+      "host_s": 1.0078714729997955,
+      "cuda_s": 0.0229889520001052,
+      "speedup": 43.84155802296613,
+      "agreement": 4.0230647345928474e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.0125186850000318,
+        1.0136021910002455,
+        1.0078714729997955
+      ],
+      "cuda_runs": [
+        0.023074492999967333,
+        0.0229889520001052,
+        0.023473536999972566
+      ],
+      "host_warmup_s": 1.0020757450001838,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.0245482139998785,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "flank_32 raw: to_baseband",
+      "what": "flank array ping, 1 s LFM; real passband to complex baseband (FFT)",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 904534,
+        "kind": "real"
+      },
+      "host_s": 1.4177542079996783,
+      "cuda_s": 0.07655354899998201,
+      "speedup": 18.519771147383533,
+      "agreement": 3.894982447540024e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.4184597159996883,
+        1.4958916489999865,
+        1.4177542079996783
+      ],
+      "cuda_runs": [
+        0.07738479099998585,
+        0.07655354899998201,
+        0.07780722699999387
+      ],
+      "host_warmup_s": 1.552321572999972,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.06745775599983972,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "flank_32 raw: pulse_compress",
+      "what": "flank array ping, 1 s LFM; matched filter",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 169785,
+        "kind": "complex"
+      },
+      "host_s": 0.06054641300033836,
+      "cuda_s": 0.013484111999787274,
+      "speedup": 4.490203952718098,
+      "agreement": 3.2695469327430106e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.06074597499991796,
+        0.06054641300033836,
+        0.06080391500017868
+      ],
+      "cuda_runs": [
+        0.014955841999835684,
+        0.013886967999951594,
+        0.013484111999787274
+      ],
+      "host_warmup_s": 0.08825361800018072,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.015010703999905672,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "flank_32 raw: recon.prepare",
+      "what": "flank array ping, 1 s LFM; both steps as processing calls them",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 904534,
+        "kind": "real"
+      },
+      "host_s": 1.441625175000354,
+      "cuda_s": 0.09042811700010134,
+      "speedup": 15.942222649607293,
+      "agreement": 4.634852266761687e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.441625175000354,
+        1.518253839999943,
+        1.4530843080001432
+      ],
+      "cuda_runs": [
+        0.09321976600040216,
+        0.09042811700010134,
+        0.09249599599979774
+      ],
+      "host_warmup_s": 1.4807347030000528,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.09051176899993152,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "flank, sampled m-sequence: to_baseband",
+      "what": "arbitrary-waveform matched filter (replica from the record's samples); real passband to complex baseband (FFT)",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "kind": "real"
+      },
+      "host_s": 0.02397752600018066,
+      "cuda_s": 0.003614319999996951,
+      "speedup": 6.634035171263442,
+      "agreement": 3.090255489369526e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.041245069000069634,
+        0.04130957000006674,
+        0.02397752600018066
+      ],
+      "cuda_runs": [
+        0.003675309999835008,
+        0.003635758999735117,
+        0.003614319999996951
+      ],
+      "host_warmup_s": 0.024072686999716097,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.004976586999873689,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "flank, sampled m-sequence: pulse_compress",
+      "what": "arbitrary-waveform matched filter (replica from the record's samples); matched filter",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 21600,
+        "kind": "complex"
+      },
+      "host_s": 0.027123747999667103,
+      "cuda_s": 0.013239330000033078,
+      "speedup": 2.0487251242773867,
+      "agreement": 2.2769760480570001e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.027171939000254497,
+        0.027123747999667103,
+        0.02720378999993045
+      ],
+      "cuda_runs": [
+        0.013283561000207555,
+        0.013239330000033078,
+        0.013387861999945017
+      ],
+      "host_warmup_s": 0.026918964999822492,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.015191805000085878,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "flank, sampled m-sequence: recon.prepare",
+      "what": "arbitrary-waveform matched filter (replica from the record's samples); both steps as processing calls them",
+      "sizes": {
+        "pings": 1,
+        "channels": 32,
+        "samples": 115200,
+        "kind": "real"
+      },
+      "host_s": 0.050585667000177637,
+      "cuda_s": 0.016983381000045483,
+      "speedup": 2.9785392555252788,
+      "agreement": 3.009705506630797e-07,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.050585667000177637,
+        0.0629773849996127,
+        0.050934491000134585
+      ],
+      "cuda_runs": [
+        0.017179152000153408,
+        0.016983381000045483,
+        0.01739790700003141
+      ],
+      "host_warmup_s": 0.0678385809997053,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.01774812199982989,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "conditioning",
+      "case": "Doppler bank, sampled m-sequence",
+      "what": "pulse_compress once per range-rate hypothesis (what processing.doppler_bank does), on the backend",
+      "sizes": {
+        "hypotheses": 17,
+        "channels": 32,
+        "samples": 21600
+      },
+      "host_s": 0.4687625299998217,
+      "cuda_s": 0.2465890460002811,
+      "speedup": 1.9009868345866725,
+      "agreement": 2.697285108015559e-07,
+      "note": "processing.doppler_bank itself passes no backend: see the host-only table",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.4895127830000092,
+        0.4687625299998217,
+        0.4800517840003522
+      ],
+      "cuda_runs": [
+        0.2465890460002811,
+        0.272834931000034,
+        0.2836059690002912
+      ],
+      "host_warmup_s": 0.45825564799997665,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.24628961200005506,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "detect",
+      "case": "CFAR",
+      "what": "cell-averaging CFAR along range on a bearing x range power map",
+      "sizes": {
+        "bearings": 241,
+        "range cells": 8000
+      },
+      "host_s": 0.06164669600002526,
+      "cuda_s": 0.008354373999736708,
+      "speedup": 7.378972500149991,
+      "agreement": 0.0,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.06164669600002526,
+        0.062167913999928714,
+        0.06213392399968143
+      ],
+      "cuda_runs": [
+        0.008410683999954927,
+        0.008354373999736708,
+        0.008360302999790292
+      ],
+      "host_warmup_s": 0.06576070100027209,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.04014970500020354,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "detect",
+      "case": "doa_gate (sbl)",
+      "what": "bearings at range gates of a conditioned ping: sparse Bayesian learning",
+      "sizes": {
+        "gates": 24,
+        "channels": 32,
+        "bearing grid": 481,
+        "n_fft": 256
+      },
+      "host_s": 2.0678999740002837,
+      "cuda_s": 1.1051320829997167,
+      "speedup": 1.8711790253951155,
+      "agreement": 0.0,
+      "note": "SBL options of the live chain (iterations, tolerance, sources)",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        2.526640459999726,
+        2.0678999740002837,
+        2.145811321999645
+      ],
+      "cuda_runs": [
+        1.1110632530003386,
+        1.1051320829997167,
+        1.1093609109998397
+      ],
+      "host_warmup_s": 2.1495288669998445,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 1.2356354550001925,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "detect",
+      "case": "doa_passive (sbl)",
+      "what": "passive bearing-time record of one stretch of data, sparse Bayesian learning",
+      "sizes": {
+        "frames": 3,
+        "channels": 32,
+        "samples": 15467,
+        "bearing grid": 321
+      },
+      "host_s": 0.22794597300025998,
+      "cuda_s": 0.18356383099990126,
+      "speedup": 1.241780430047696,
+      "agreement": 0.0,
+      "note": "",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.2496820179999304,
+        0.24237360799997987,
+        0.22794597300025998
+      ],
+      "cuda_runs": [
+        0.18356383099990126,
+        0.18422110900019106,
+        0.18393261500023073
+      ],
+      "host_warmup_s": 0.26385600899993733,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": 0.18372805199987852,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine python, doa map, backprojection",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.1565116384999783,
+      "cuda_s": 0.02073823650016493,
+      "speedup": 7.547008083292596,
+      "agreement": 3.2427986578475117e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.161793349500158,
+        0.1572944090000874,
+        0.1565116384999783
+      ],
+      "cuda_runs": [
+        0.02116043249975519,
+        0.020790102500086505,
+        0.02073823650016493
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine cpp, doa map, backprojection",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.1454215519997888,
+      "cuda_s": 0.009685215999979846,
+      "speedup": 15.014796985435472,
+      "agreement": 3.210675235989957e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.14661187849969792,
+        0.1454215519997888,
+        0.15193981049992544
+      ],
+      "cuda_runs": [
+        0.009876903500071421,
+        0.009947129499778384,
+        0.009685215999979846
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine cpp, doa sbl, backprojection",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.23859886100012773,
+      "cuda_s": 0.14443914849994144,
+      "speedup": 1.651898834063152,
+      "agreement": 3.210675235989957e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; doa sbl always runs the C++ chain; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.23859886100012773,
+        0.24904920600010882,
+        0.24471856849982032
+      ],
+      "cuda_runs": [
+        0.14451997450009912,
+        0.14443914849994144,
+        0.14507289649986888
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine cpp, doa map, farfield",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.19870348999984344,
+      "cuda_s": 0.18487883200009492,
+      "speedup": 1.0747768570916838,
+      "agreement": 3.239236651264214e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.1995417104999433,
+        0.20344314449994272,
+        0.19870348999984344
+      ],
+      "cuda_runs": [
+        0.18612308350020612,
+        0.18682682899998326,
+        0.18487883200009492
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine cpp, doa map, mvdr",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 29
+      },
+      "host_s": 1.6481546105001144,
+      "cuda_s": 1.682030261500131,
+      "speedup": 0.9798602606769962,
+      "agreement": 3.8717208906003267e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 29 / cuda 29, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.901867510999864,
+        1.6481546105001144,
+        1.703949053499855
+      ],
+      "cuda_runs": [
+        1.682030261500131,
+        1.7912430625001434,
+        1.7138548034999985
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine python, doa map, farfield",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 3.0333356700000422,
+      "cuda_s": 3.0296456845001103,
+      "speedup": 1.0012179594197468,
+      "agreement": 3.2577221860594385e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; this beamformer is NumPy on the host in the Python engine (conditioning and CFAR use the backend); detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        3.0333356700000422,
+        3.042081936999921,
+        3.04607325950019
+      ],
+      "cuda_runs": [
+        3.0336105520000274,
+        3.0354506170001514,
+        3.0296456845001103
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine python, doa map, mvdr",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 29
+      },
+      "host_s": 2.261902933500096,
+      "cuda_s": 2.1918463774998145,
+      "speedup": 1.0319623476898017,
+      "agreement": 3.763542332596189e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; this beamformer is NumPy on the host in the Python engine (conditioning and CFAR use the backend); detections of the last ping host 29 / cuda 29, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        2.261902933500096,
+        2.387649092500169,
+        2.4519134304998715
+      ],
+      "cuda_runs": [
+        2.1918463774998145,
+        2.2731153085001097,
+        2.2865110995001032
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine cpp, doa sbl, farfield",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.2734094105001077,
+      "cuda_s": 0.3199654014999851,
+      "speedup": 0.8544967962735197,
+      "agreement": 3.239236651264214e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; doa sbl always runs the C++ chain; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.3527122360001158,
+        0.2806536529999448,
+        0.2734094105001077
+      ],
+      "cuda_runs": [
+        0.3243204604998482,
+        0.3213160450002306,
+        0.3199654014999851
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "1 row: engine cpp, doa sbl, mvdr",
+      "what": "popoto_long_range with the chain of popoto_vehicle.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 1,
+        "pings": 5,
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 1.7703824865000115,
+      "cuda_s": 1.8137252115000138,
+      "speedup": 0.9761029263279876,
+      "agreement": 3.8717208906003267e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; doa sbl always runs the C++ chain; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        1.8813287230000242,
+        1.7703824865000115,
+        2.1750930435000555
+      ],
+      "cuda_runs": [
+        1.8137252115000138,
+        1.8191154595001535,
+        1.8778233950001777
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "2 rows + elevation: engine python, doa map, backprojection",
+      "what": "popoto_long_range_2row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 2,
+        "pings": 5,
+        "channels": 64,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.32211967099988215,
+      "cuda_s": 0.050520245000143404,
+      "speedup": 6.3760512443866375,
+      "agreement": 3.4389857729199134e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.3233860284999537,
+        0.32279119500003617,
+        0.32211967099988215
+      ],
+      "cuda_runs": [
+        0.050993917000141664,
+        0.050549690999787344,
+        0.050520245000143404
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "2 rows + elevation: engine cpp, doa map, backprojection",
+      "what": "popoto_long_range_2row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 2,
+        "pings": 5,
+        "channels": 64,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.29525258149988076,
+      "cuda_s": 0.02115541799980747,
+      "speedup": 13.956357728434758,
+      "agreement": 3.181241396619159e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.29525258149988076,
+        0.3141046470002493,
+        0.3061259794999387
+      ],
+      "cuda_runs": [
+        0.022068484999863358,
+        0.02132178950000707,
+        0.02115541799980747
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "2 rows + elevation: engine cpp, doa sbl, backprojection",
+      "what": "popoto_long_range_2row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 2,
+        "pings": 5,
+        "channels": 64,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.3723477420001018,
+      "cuda_s": 0.15700265199984642,
+      "speedup": 2.3716016083630613,
+      "agreement": 3.181241396619159e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; doa sbl always runs the C++ chain; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.3811993120000352,
+        0.3723477420001018,
+        0.38146367050012486
+      ],
+      "cuda_runs": [
+        0.1572840809999434,
+        0.15700265199984642,
+        0.1583979710001131
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "2 rows + elevation: engine cpp, doa map, farfield",
+      "what": "popoto_long_range_2row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 2,
+        "pings": 5,
+        "channels": 64,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.3756144014998881,
+      "cuda_s": 0.3656657310000355,
+      "speedup": 1.027207008085348,
+      "agreement": 3.6419491022674104e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.39791708450025,
+        0.3756144014998881,
+        0.38420687250027186
+      ],
+      "cuda_runs": [
+        0.3656657310000355,
+        0.4307315644996379,
+        0.38064074049998453
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "2 rows + elevation: engine cpp, doa map, mvdr",
+      "what": "popoto_long_range_2row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 2,
+        "pings": 5,
+        "channels": 64,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 18
+      },
+      "host_s": 3.411433120500078,
+      "cuda_s": 3.363117772500118,
+      "speedup": 1.01436623730368,
+      "agreement": 3.5097569685926907e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 18 / cuda 18, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        3.4138563609999437,
+        3.411433120500078,
+        3.446775147999915
+      ],
+      "cuda_runs": [
+        3.405738045499902,
+        3.363117772500118,
+        3.4132703730001595
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "3 rows + elevation: engine python, doa map, backprojection",
+      "what": "popoto_long_range_3row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 3,
+        "pings": 5,
+        "channels": 96,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.48693361350001396,
+      "cuda_s": 0.0767977969999265,
+      "speedup": 6.340463301316833,
+      "agreement": 3.210487531219153e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.491851262499722,
+        0.49476702749961987,
+        0.48693361350001396
+      ],
+      "cuda_runs": [
+        0.0767977969999265,
+        0.07768684949996896,
+        0.0789614254999833
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "3 rows + elevation: engine cpp, doa map, backprojection",
+      "what": "popoto_long_range_3row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 3,
+        "pings": 5,
+        "channels": 96,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.44288545399990653,
+      "cuda_s": 0.031026881999878242,
+      "speedup": 14.274249471849751,
+      "agreement": 3.275332329072787e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.44288545399990653,
+        0.4439322219998303,
+        0.4510169019999921
+      ],
+      "cuda_runs": [
+        0.03138474050001605,
+        0.03168338050022612,
+        0.031026881999878242
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "3 rows + elevation: engine cpp, doa sbl, backprojection",
+      "what": "popoto_long_range_3row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 3,
+        "pings": 5,
+        "channels": 96,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.5290002630001709,
+      "cuda_s": 0.16651407199992718,
+      "speedup": 3.176910255371103,
+      "agreement": 3.275332329072787e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; doa sbl always runs the C++ chain; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.5810827215000245,
+        0.5371029059999728,
+        0.5290002630001709
+      ],
+      "cuda_runs": [
+        0.1685447055001532,
+        0.16651407199992718,
+        0.1665924679998625
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "3 rows + elevation: engine cpp, doa map, farfield",
+      "what": "popoto_long_range_3row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 3,
+        "pings": 5,
+        "channels": 96,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 3
+      },
+      "host_s": 0.5848029804999442,
+      "cuda_s": 0.5517740975001288,
+      "speedup": 1.0598594300628756,
+      "agreement": 3.4510247411934944e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 3 / cuda 3, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        0.5887916350000069,
+        0.5848029804999442,
+        0.5972479749998456
+      ],
+      "cuda_runs": [
+        0.5545869244997448,
+        0.5517740975001288,
+        0.5663310340000862
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    },
+    {
+      "group": "live",
+      "case": "3 rows + elevation: engine cpp, doa map, mvdr",
+      "what": "popoto_long_range_3row with the chain of popoto_vehicle_elevation.yaml; seconds per ping (median after the first)",
+      "sizes": {
+        "rows": 3,
+        "pings": 5,
+        "channels": 96,
+        "samples": 15467,
+        "bearings": 241,
+        "detections": 19
+      },
+      "host_s": 5.221992245499905,
+      "cuda_s": 5.094935777000046,
+      "speedup": 1.0249377958939987,
+      "agreement": 3.5411978098665626e-07,
+      "note": "the first ping of each run is the warm-up; agreement: power map of the last ping; detections of the last ping host 19 / cuda 19, the same",
+      "host_error": null,
+      "cuda_error": null,
+      "host_runs": [
+        5.221992245499905,
+        5.395370155500132
+      ],
+      "cuda_runs": [
+        5.105459369999835,
+        5.094935777000046
+      ],
+      "host_warmup_s": null,
+      "host_warmup_counted": false,
+      "host_stages": {},
+      "host_counts": {},
+      "cuda_warmup_s": null,
+      "cuda_warmup_counted": false,
+      "cuda_stages": {},
+      "cuda_counts": {}
+    }
+  ],
+  "host_only": [
+    {
+      "group": "reverb",
+      "case": "reverberation, monostatic sectors, flank (sediment + surface + volume): everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 6,
+        "channels": 32,
+        "samples": 115200,
+        "components": 1176,
+        "low-rate samples": 44801
+      },
+      "host_s": 2.86928499200053,
+      "note": "reverberation power 0.0764 s, reverberation random draws and texture 1.12 s, reverberation interpolation to the record's rate 1.58 s",
+      "host_error": null,
+      "host_runs": [
+        2.86928499200053
+      ]
+    },
+    {
+      "group": "reverb",
+      "case": "reverberation, monostatic sectors, moving FLS (bottom + surface): everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 4,
+        "channels": 128,
+        "samples": 15334,
+        "components": 1536,
+        "low-rate samples": 15735
+      },
+      "host_s": 1.2603372539999782,
+      "note": "reverberation power 0.6026 s, reverberation random draws and texture 0.5343 s, reverberation interpolation to the record's rate 0.0909 s",
+      "host_error": null,
+      "host_runs": [
+        1.2603372539999782
+      ]
+    },
+    {
+      "group": "reverb",
+      "case": "reverberation, monostatic, fluid-sediment bottom: everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 2,
+        "channels": 8,
+        "samples": 3374,
+        "components": 144,
+        "low-rate samples": 1708
+      },
+      "host_s": 0.008771077999881527,
+      "note": "reverberation power 0.0015 s, reverberation random draws and texture 0.0056 s, reverberation interpolation to the record's rate 0.0010 s",
+      "host_error": null,
+      "host_runs": [
+        0.008771077999881527
+      ]
+    },
+    {
+      "group": "reverb",
+      "case": "reverberation, K-distributed (statistics: k), flank: everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 2,
+        "channels": 32,
+        "samples": 115200,
+        "components": 392,
+        "low-rate samples": 44801
+      },
+      "host_s": 0.9910899109997899,
+      "note": "reverberation power 0.0097 s, reverberation random draws and texture 0.4553 s, reverberation interpolation to the record's rate 0.5057 s",
+      "host_error": null,
+      "host_runs": [
+        0.9910899109997899
+      ]
+    },
+    {
+      "group": "reverb",
+      "case": "reverberation, bistatic, moving platforms (Doppler-binned components): everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 2,
+        "channels": 5,
+        "samples": 147200,
+        "components": 25540,
+        "low-rate samples": 11201
+      },
+      "host_s": 8.401760197999693,
+      "note": "reverberation power 2.11 s, reverberation random draws and texture 5.81 s, reverberation interpolation to the record's rate 0.1324 s",
+      "host_error": null,
+      "host_runs": [
+        8.401760197999693
+      ]
+    },
+    {
+      "group": "reverb",
+      "case": "reverberation, bistatic with scatterer_motion (drift and wind sea): everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 2,
+        "channels": 5,
+        "samples": 147200,
+        "components": 58576,
+        "low-rate samples": 12063
+      },
+      "host_s": 15.860910236999644,
+      "note": "reverberation power 0.8308 s, reverberation random draws and texture 14.42 s, reverberation interpolation to the record's rate 0.1294 s",
+      "host_error": null,
+      "host_runs": [
+        15.860910236999644
+      ]
+    },
+    {
+      "group": "reverb",
+      "case": "reverberation, bistatic over bathymetry (sloping plane): everything but the kernel",
+      "what": "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+      "sizes": {
+        "calls": 2,
+        "channels": 32,
+        "samples": 115200,
+        "components": 3528,
+        "low-rate samples": 44801
+      },
+      "host_s": 5.647738951998008,
+      "note": "reverberation power 1.86 s, reverberation random draws and texture 3.19 s, reverberation interpolation to the record's rate 0.5338 s",
+      "host_error": null,
+      "host_runs": [
+        5.647738951998008
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: path pairing",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.0060091740006100736,
+      "note": "0.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.0060091740006100736
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: eigenrays (free field, image source)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.10271576100149105,
+      "note": "0.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.10271576100149105
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: eigenrays (Bellhop, external program)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 24.785994574999677,
+      "note": "6.6 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        24.785994574999677
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: time-spread taps",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.07036161200130664,
+      "note": "0.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.07036161200130664
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: scene modifiers (aspect, glints, seabed models)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.0008427069997196668,
+      "note": "0.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.0008427069997196668
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: scene construction",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.0010819729996001115,
+      "note": "0.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.0010819729996001115
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: reverberation power (strength, propagation, Doppler bins)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 13.744105937998484,
+      "note": "3.7 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        13.744105937998484
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: reverberation random draws and texture",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 16.33985470999778,
+      "note": "4.4 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        16.33985470999778
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: reverberation interpolation to the record's rate",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 7.62203530899933,
+      "note": "2.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        7.62203530899933
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: reverberation set-up (grids, pulse, patterns)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.8175579710014063,
+      "note": "0.2 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.8175579710014063
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: ambient noise with a spectrum (real passband)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.8851373360002981,
+      "note": "0.2 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.8851373360002981
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: receiver (reference, gain, ADC)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 0.0011720059992512688,
+      "note": "0.0 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        0.0011720059992512688
+      ]
+    },
+    {
+      "group": "scenarios",
+      "case": "simulator: other (records, baseband noise draws, bookkeeping)",
+      "what": "no CUDA build; sum over the whole-scenario cases (host runs)",
+      "sizes": {},
+      "host_s": 1.3378574369994567,
+      "note": "0.4 % of the host time of those cases",
+      "host_error": null,
+      "host_runs": [
+        1.3378574369994567
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "processing.doppler_bank",
+      "what": "the shipped Doppler bank (calls pulse_compress on the host backend only)",
+      "sizes": {
+        "hypotheses": 17,
+        "channels": 32,
+        "samples": 21600
+      },
+      "host_s": 0.4689243030002217,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.4689243030002217,
+        0.47088881900026536,
+        0.4987539180001477
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "doa_gate (conventional)",
+      "what": "the conventional beamformer on the same snapshots: takes a backend argument but has no CUDA kernel",
+      "sizes": {
+        "gates": 24,
+        "channels": 32,
+        "bearing grid": 481,
+        "n_fft": 256
+      },
+      "host_s": 0.15341336100027547,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.1555758810000043,
+        0.15637709200018435,
+        0.15341336100027547
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "flank.farfield_beamform",
+      "what": "far-field delay-and-sum in NumPy (the Python chain's `beamformer: farfield`)",
+      "sizes": {
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241
+      },
+      "host_s": 3.016267077000066,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        3.038788643999851,
+        3.0198156060000656,
+        3.016267077000066
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "flank.mvdr_beamform",
+      "what": "sub-band MVDR in NumPy (the Python chain's `beamformer: mvdr`)",
+      "sizes": {
+        "channels": 32,
+        "samples": 15467,
+        "bearings": 241
+      },
+      "host_s": 2.1330947929996,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        2.655816950999906,
+        2.1895449600001484,
+        2.1330947929996
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "sim.noise.gaussian_noise",
+      "what": "ambient noise with the Wenz spectrum and isotropic coherence across the array",
+      "sizes": {
+        "channels": 32,
+        "samples": 640000
+      },
+      "host_s": 0.49683246000040526,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.49686453399999664,
+        0.49683246000040526,
+        0.5017993689998548
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "flank_sst_spread, one ping: path pairing",
+      "what": "two_way_paths: pairing outgoing and returning rays (C++ on the host)",
+      "sizes": {
+        "pings": 1
+      },
+      "host_s": 8.915099988371367e-05,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        8.915099988371367e-05
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "flank_sst_spread, one ping: time-spread taps",
+      "what": "TimeSpreadProvider.eigenrays: taps, Doppler lines, angle spread (NumPy)",
+      "sizes": {
+        "pings": 1
+      },
+      "host_s": 0.0027124870002808166,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.0027124870002808166
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "flank_sst_spread, one ping: eigenrays (free field, image source)",
+      "what": "ImageSourceProvider.eigenrays (C++ on the host)",
+      "sizes": {
+        "pings": 1
+      },
+      "host_s": 8.408099984080764e-05,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        8.408099984080764e-05
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "fls_glints_on_sediment, one ping: scene modifiers (aspect, glints, seabed models)",
+      "what": "Scene.evaluate and Scene.visible (NumPy): aspect-dependent targets, glints, seabed model, occlusion",
+      "sizes": {
+        "pings": 1
+      },
+      "host_s": 0.02265974800047843,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.02265974800047843
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "fls_glints_on_sediment: scene construction",
+      "what": "build_scene (NumPy)",
+      "sizes": {},
+      "host_s": 0.0037388499999906344,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.0037388499999906344
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "motion.estimate_motion",
+      "what": "displaced-phase-centre delays (NumPy) and the Ceres solve",
+      "sizes": {
+        "pings": 80
+      },
+      "host_s": 0.5140488050001295,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.5140488050001295,
+        0.5200091750002684,
+        0.5147298229999251
+      ]
+    },
+    {
+      "group": "hostonly",
+      "case": "detect.cfar (NumPy)",
+      "what": "the NumPy CFAR used when no backend is passed",
+      "sizes": {
+        "bearings": 241,
+        "range cells": 8000
+      },
+      "host_s": 0.04104052499997124,
+      "note": "",
+      "host_error": null,
+      "host_runs": [
+        0.04551213700005974,
+        0.04170999600000869,
+        0.04104052499997124
+      ]
+    }
+  ],
+  "scenario_breakdown": [
+    {
+      "case": "sst_asiaex",
+      "backend": "host",
+      "total_s": 0.08443892500008587,
+      "stages": {
+        "scene construction": 6.113100016591488e-05,
+        "scene modifiers (aspect, glints, seabed models)": 9.398499969393015e-05,
+        "eigenrays (free field, image source)": 0.0012180349986010697,
+        "time-spread taps": 0.05008264800062534,
+        "path pairing": 0.0016236319993367943,
+        "echo synthesis kernel": 0.024178808999295143,
+        "receiver (reference, gain, ADC)": 6.566399770235876e-05,
+        "other (records, baseband noise draws, bookkeeping)": 0.007115021004665323
+      }
+    },
+    {
+      "case": "sst_asiaex",
+      "backend": "cuda",
+      "total_s": 0.06247725999992326,
+      "stages": {
+        "scene construction": 5.541099972106167e-05,
+        "scene modifiers (aspect, glints, seabed models)": 8.877099890014506e-05,
+        "eigenrays (free field, image source)": 0.0011353389973010053,
+        "time-spread taps": 0.037050444003853045,
+        "path pairing": 0.0014259869990382867,
+        "echo synthesis kernel": 0.016173898998204095,
+        "receiver (reference, gain, ADC)": 6.136100000730949e-05,
+        "other (records, baseband noise draws, bookkeeping)": 0.006486048002898315
+      }
+    },
+    {
+      "case": "sst_echo_level",
+      "backend": "host",
+      "total_s": 0.005203171000175644,
+      "stages": {
+        "scene construction": 0.0001124419995903736,
+        "scene modifiers (aspect, glints, seabed models)": 0.00013412199996309937,
+        "eigenrays (free field, image source)": 4.865199980486068e-05,
+        "path pairing": 4.204900051263394e-05,
+        "echo synthesis kernel": 0.001726533999772073,
+        "receiver (reference, gain, ADC)": 3.6399997043190524e-06,
+        "other (records, baseband noise draws, bookkeeping)": 0.003135732000828284
+      }
+    },
+    {
+      "case": "sst_echo_level",
+      "backend": "cuda",
+      "total_s": 0.004514121999818599,
+      "stages": {
+        "scene construction": 9.973199985324754e-05,
+        "scene modifiers (aspect, glints, seabed models)": 0.00011674100005620858,
+        "eigenrays (free field, image source)": 4.392100026961998e-05,
+        "path pairing": 3.8579999909416074e-05,
+        "echo synthesis kernel": 0.001574601000356779,
+        "receiver (reference, gain, ADC)": 3.250000190746505e-06,
+        "other (records, baseband noise draws, bookkeeping)": 0.002637296999182581
+      }
+    },
+    {
+      "case": "sst_pursuit",
+      "backend": "host",
+      "total_s": 12.01782300099967,
+      "stages": {
+        "scene construction": 0.0001555620001454372,
+        "scene modifiers (aspect, glints, seabed models)": 0.00018157299973609042,
+        "eigenrays (free field, image source)": 0.0015687689997321286,
+        "path pairing": 7.04120002410491e-05,
+        "echo synthesis kernel": 0.01674705699997503,
+        "reverberation power (strength, propagation, Doppler bins)": 1.0645919100002175,
+        "reverberation steering/summation kernel": 7.7227802720008185,
+        "reverberation interpolation to the record's rate": 0.0661543480000546,
+        "reverberation random draws and texture": 2.9200731559990345,
+        "reverberation set-up (grids, pulse, patterns)": 0.19335897500013743,
+        "receiver (reference, gain, ADC)": 2.1249999917927198e-05,
+        "ambient noise with a spectrum (real passband)": 0.02800112100021579,
+        "other (records, baseband noise draws, bookkeeping)": 0.004118595999443642
+      }
+    },
+    {
+      "case": "sst_pursuit",
+      "backend": "cuda",
+      "total_s": 11.644671756999742,
+      "stages": {
+        "scene construction": 0.00015979199997673277,
+        "scene modifiers (aspect, glints, seabed models)": 0.00014208199991117,
+        "eigenrays (free field, image source)": 0.0016104019996419083,
+        "path pairing": 5.394100026023807e-05,
+        "echo synthesis kernel": 0.014404286000171851,
+        "reverberation power (strength, propagation, Doppler bins)": 1.0912688600001275,
+        "reverberation steering/summation kernel": 7.347712690999742,
+        "reverberation interpolation to the record's rate": 0.06617936999964513,
+        "reverberation random draws and texture": 2.898038801000439,
+        "reverberation set-up (grids, pulse, patterns)": 0.19311429999970642,
+        "receiver (reference, gain, ADC)": 1.9690000044647604e-05,
+        "ambient noise with a spectrum (real passband)": 0.027965068999947107,
+        "other (records, baseband noise draws, bookkeeping)": 0.004002473000127793
+      }
+    },
+    {
+      "case": "sst_sediment_reverb",
+      "backend": "host",
+      "total_s": 0.06463593699982084,
+      "stages": {
+        "scene construction": 1.0680000286811264e-05,
+        "eigenrays (free field, image source)": 0.0002015519999076787,
+        "reverberation power (strength, propagation, Doppler bins)": 0.004196706999664457,
+        "reverberation steering/summation kernel": 0.008174050999514293,
+        "reverberation interpolation to the record's rate": 0.0030318719996103027,
+        "reverberation random draws and texture": 0.016625345001102687,
+        "reverberation set-up (grids, pulse, patterns)": 0.002121210000495921,
+        "receiver (reference, gain, ADC)": 2.2981000256550033e-05,
+        "other (records, baseband noise draws, bookkeeping)": 0.03025153899898214
+      }
+    },
+    {
+      "case": "sst_sediment_reverb",
+      "backend": "cuda",
+      "total_s": 0.06377307499997187,
+      "stages": {
+        "scene construction": 9.77099989540875e-06,
+        "eigenrays (free field, image source)": 0.00019918199950552662,
+        "reverberation power (strength, propagation, Doppler bins)": 0.004156277001129638,
+        "reverberation steering/summation kernel": 0.007916607999504777,
+        "reverberation interpolation to the record's rate": 0.003089602000272862,
+        "reverberation random draws and texture": 0.01670424699977957,
+        "reverberation set-up (grids, pulse, patterns)": 0.0021128600005795306,
+        "receiver (reference, gain, ADC)": 2.4440000288450392e-05,
+        "other (records, baseband noise draws, bookkeeping)": 0.029560087999016105
+      }
+    },
+    {
+      "case": "flank_sst_shallow",
+      "backend": "host",
+      "total_s": 23.90413962799994,
+      "stages": {
+        "scene construction": 9.279100004278007e-05,
+        "scene modifiers (aspect, glints, seabed models)": 4.789100012203562e-05,
+        "eigenrays (free field, image source)": 0.01245168800051033,
+        "time-spread taps": 0.006097253999541863,
+        "path pairing": 0.00031346400055554113,
+        "echo synthesis kernel": 14.711199846,
+        "reverberation power (strength, propagation, Doppler bins)": 0.14111075000027995,
+        "reverberation steering/summation kernel": 2.9827593830004844,
+        "reverberation interpolation to the record's rate": 3.1504447820002497,
+        "reverberation random draws and texture": 2.2481470289985737,
+        "reverberation set-up (grids, pulse, patterns)": 0.19433478200107857,
+        "receiver (reference, gain, ADC)": 0.00011848200074382476,
+        "ambient noise with a spectrum (real passband)": 0.42334534200017515,
+        "other (records, baseband noise draws, bookkeeping)": 0.033676143997581676
+      }
+    },
+    {
+      "case": "flank_sst_shallow",
+      "backend": "cuda",
+      "total_s": 9.75928888899989,
+      "stages": {
+        "scene construction": 9.728100030770293e-05,
+        "scene modifiers (aspect, glints, seabed models)": 4.7419999646081124e-05,
+        "eigenrays (free field, image source)": 0.012158943000486033,
+        "time-spread taps": 0.006053192999388557,
+        "path pairing": 0.0003121750009995594,
+        "echo synthesis kernel": 1.0516891779993784,
+        "reverberation power (strength, propagation, Doppler bins)": 0.1414883809998173,
+        "reverberation steering/summation kernel": 2.5513982140005282,
+        "reverberation interpolation to the record's rate": 3.133482549999826,
+        "reverberation random draws and texture": 2.2415109220000886,
+        "reverberation set-up (grids, pulse, patterns)": 0.17925596299983226,
+        "receiver (reference, gain, ADC)": 0.00011410999923100462,
+        "ambient noise with a spectrum (real passband)": 0.41358092000018587,
+        "other (records, baseband noise draws, bookkeeping)": 0.028099639000174648
+      }
+    },
+    {
+      "case": "flank_sst_spread",
+      "backend": "host",
+      "total_s": 57.996804151000106,
+      "stages": {
+        "scene construction": 9.593099957783124e-05,
+        "scene modifiers (aspect, glints, seabed models)": 4.573099977278616e-05,
+        "eigenrays (free field, image source)": 0.008394035999572225,
+        "time-spread taps": 0.014181710001139436,
+        "path pairing": 0.00044999899955655565,
+        "echo synthesis kernel": 51.72134367200033,
+        "reverberation power (strength, propagation, Doppler bins)": 0.1313347000000249,
+        "reverberation steering/summation kernel": 1.9151188090004325,
+        "reverberation interpolation to the record's rate": 2.076096365999547,
+        "reverberation random draws and texture": 1.487008319999859,
+        "reverberation set-up (grids, pulse, patterns)": 0.16271153599927857,
+        "receiver (reference, gain, ADC)": 0.00011528999993970501,
+        "ambient noise with a spectrum (real passband)": 0.43379087299990715,
+        "other (records, baseband noise draws, bookkeeping)": 0.04611717800116821
+      }
+    },
+    {
+      "case": "flank_sst_spread",
+      "backend": "cuda",
+      "total_s": 9.123039870999946,
+      "stages": {
+        "scene construction": 9.749199989528279e-05,
+        "scene modifiers (aspect, glints, seabed models)": 3.896999987773597e-05,
+        "eigenrays (free field, image source)": 0.008301978998133563,
+        "time-spread taps": 0.014904656000453542,
+        "path pairing": 0.0004580450004141312,
+        "echo synthesis kernel": 3.1095672780002133,
+        "reverberation power (strength, propagation, Doppler bins)": 0.13228518500045539,
+        "reverberation steering/summation kernel": 1.6988459489994057,
+        "reverberation interpolation to the record's rate": 2.1279321509996407,
+        "reverberation random draws and texture": 1.4903356780014292,
+        "reverberation set-up (grids, pulse, patterns)": 0.11959508800055119,
+        "receiver (reference, gain, ADC)": 0.00011167399998157634,
+        "ambient noise with a spectrum (real passband)": 0.39301093800031595,
+        "other (records, baseband noise draws, bookkeeping)": 0.027554787999179098
+      }
+    },
+    {
+      "case": "popoto_elevation_free",
+      "backend": "host",
+      "total_s": 0.1980404869996164,
+      "stages": {
+        "scene construction": 0.00012939199996253592,
+        "scene modifiers (aspect, glints, seabed models)": 4.9230999593419256e-05,
+        "eigenrays (free field, image source)": 0.0002641030009726819,
+        "path pairing": 0.0003174269995724899,
+        "echo synthesis kernel": 0.046771110000008775,
+        "receiver (reference, gain, ADC)": 0.00012846200070271152,
+        "other (records, baseband noise draws, bookkeeping)": 0.1503807619988038
+      }
+    },
+    {
+      "case": "popoto_elevation_free",
+      "backend": "cuda",
+      "total_s": 0.2968171710003844,
+      "stages": {
+        "scene construction": 0.0001865129997895565,
+        "scene modifiers (aspect, glints, seabed models)": 4.832200011151144e-05,
+        "eigenrays (free field, image source)": 0.0002651750014592835,
+        "path pairing": 0.00031280299845093396,
+        "echo synthesis kernel": 0.1481614519998402,
+        "receiver (reference, gain, ADC)": 0.00012373400022624992,
+        "other (records, baseband noise draws, bookkeeping)": 0.14771917200050666
+      }
+    },
+    {
+      "case": "popoto_elevation_shallow",
+      "backend": "host",
+      "total_s": 0.40162433199975567,
+      "stages": {
+        "scene construction": 7.764099973428529e-05,
+        "scene modifiers (aspect, glints, seabed models)": 3.819999983534217e-05,
+        "eigenrays (free field, image source)": 0.0003355850008119887,
+        "path pairing": 0.0002569919988673064,
+        "echo synthesis kernel": 0.2880552150004405,
+        "receiver (reference, gain, ADC)": 9.993100002247957e-05,
+        "other (records, baseband noise draws, bookkeeping)": 0.11276076800004375
+      }
+    },
+    {
+      "case": "popoto_elevation_shallow",
+      "backend": "cuda",
+      "total_s": 0.26449995499979195,
+      "stages": {
+        "scene construction": 7.748100006210734e-05,
+        "scene modifiers (aspect, glints, seabed models)": 3.3071999951062026e-05,
+        "eigenrays (free field, image source)": 0.0003166539991070749,
+        "path pairing": 0.0002528140012145741,
+        "echo synthesis kernel": 0.15498743000034665,
+        "receiver (reference, gain, ADC)": 8.62300003063865e-05,
+        "other (records, baseband noise draws, bookkeeping)": 0.1087462739988041
+      }
+    },
+    {
+      "case": "popoto_12km (Bellhop)",
+      "backend": "host",
+      "total_s": 118.18464972399988,
+      "stages": {
+        "scene construction": 8.564100016883458e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.101099961597356e-05,
+        "eigenrays (Bellhop, external program)": 16.359000070000093,
+        "path pairing": 0.0013245080012893595,
+        "echo synthesis kernel": 87.7036566429997,
+        "reverberation power (strength, propagation, Doppler bins)": 8.348993180999969,
+        "reverberation steering/summation kernel": 3.626281800999095,
+        "reverberation interpolation to the record's rate": 0.38466179800070677,
+        "reverberation random draws and texture": 1.5328256719994897,
+        "reverberation set-up (grids, pulse, patterns)": 0.04331530399940675,
+        "receiver (reference, gain, ADC)": 0.00013774199896943173,
+        "other (records, baseband noise draws, bookkeeping)": 0.1843063530013751
+      }
+    },
+    {
+      "case": "popoto_12km (Bellhop)",
+      "backend": "cuda",
+      "total_s": 34.10235723000005,
+      "stages": {
+        "scene construction": 9.94120000541443e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.120099988038419e-05,
+        "eigenrays (Bellhop, external program)": 16.457817818000876,
+        "path pairing": 0.0008871210006873298,
+        "echo synthesis kernel": 3.9675847800003794,
+        "reverberation power (strength, propagation, Doppler bins)": 8.32255996199956,
+        "reverberation steering/summation kernel": 3.221266814999126,
+        "reverberation interpolation to the record's rate": 0.3480499610004699,
+        "reverberation random draws and texture": 1.5433520410010715,
+        "reverberation set-up (grids, pulse, patterns)": 0.04456522199916435,
+        "receiver (reference, gain, ADC)": 0.00013620099889521953,
+        "other (records, baseband noise draws, bookkeeping)": 0.19597669599988876
+      }
+    },
+    {
+      "case": "popoto_12km (image-source stand-in)",
+      "backend": "host",
+      "total_s": 7.192804600999807,
+      "stages": {
+        "scene construction": 8.771100010562805e-05,
+        "scene modifiers (aspect, glints, seabed models)": 5.619000057777157e-05,
+        "eigenrays (free field, image source)": 0.04770729900110382,
+        "path pairing": 0.00043035599946961156,
+        "echo synthesis kernel": 1.4124113350003427,
+        "reverberation power (strength, propagation, Doppler bins)": 0.12691856499850473,
+        "reverberation steering/summation kernel": 3.5416870499998367,
+        "reverberation interpolation to the record's rate": 0.3555670370005828,
+        "reverberation random draws and texture": 1.5312491659992702,
+        "reverberation set-up (grids, pulse, patterns)": 0.044513565001125244,
+        "receiver (reference, gain, ADC)": 0.0001410520003446436,
+        "other (records, baseband noise draws, bookkeeping)": 0.13203527499854317
+      }
+    },
+    {
+      "case": "popoto_12km (image-source stand-in)",
+      "backend": "cuda",
+      "total_s": 5.660527412000192,
+      "stages": {
+        "scene construction": 8.409099973505363e-05,
+        "scene modifiers (aspect, glints, seabed models)": 5.064999959358829e-05,
+        "eigenrays (free field, image source)": 0.04279846500003259,
+        "path pairing": 0.00044286700040174765,
+        "echo synthesis kernel": 0.2312425460004306,
+        "reverberation power (strength, propagation, Doppler bins)": 0.12726863099805996,
+        "reverberation steering/summation kernel": 3.181163120000747,
+        "reverberation interpolation to the record's rate": 0.3674207750000278,
+        "reverberation random draws and texture": 1.5287368569988757,
+        "reverberation set-up (grids, pulse, patterns)": 0.044524991002163006,
+        "receiver (reference, gain, ADC)": 0.00013714099986827932,
+        "other (records, baseband noise draws, bookkeeping)": 0.13665727800025707
+      }
+    },
+    {
+      "case": "popoto_far_mover (Bellhop)",
+      "backend": "host",
+      "total_s": 137.4986950970001,
+      "stages": {
+        "scene construction": 8.88609997673484e-05,
+        "scene modifiers (aspect, glints, seabed models)": 7.201000016721082e-05,
+        "eigenrays (Bellhop, external program)": 8.426994504999584,
+        "path pairing": 0.0007458470008714357,
+        "echo synthesis kernel": 111.35736597000005,
+        "reverberation power (strength, propagation, Doppler bins)": 3.8357688110004347,
+        "reverberation steering/summation kernel": 9.336907181999777,
+        "reverberation interpolation to the record's rate": 0.8016064500002358,
+        "reverberation random draws and texture": 3.307085019999704,
+        "reverberation set-up (grids, pulse, patterns)": 0.09205440800042197,
+        "receiver (reference, gain, ADC)": 0.00016158200060090167,
+        "other (records, baseband noise draws, bookkeeping)": 0.33984445099849836
+      }
+    },
+    {
+      "case": "popoto_far_mover (Bellhop)",
+      "backend": "cuda",
+      "total_s": 31.112126047999936,
+      "stages": {
+        "scene construction": 8.521100016878336e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.348099987008027e-05,
+        "eigenrays (Bellhop, external program)": 8.424859549999837,
+        "path pairing": 0.0007373130010819295,
+        "echo synthesis kernel": 5.272509074000936,
+        "reverberation power (strength, propagation, Doppler bins)": 3.8581157989997337,
+        "reverberation steering/summation kernel": 9.051515370000743,
+        "reverberation interpolation to the record's rate": 0.7888944989990705,
+        "reverberation random draws and texture": 3.297212767000019,
+        "reverberation set-up (grids, pulse, patterns)": 0.08228997800142679,
+        "receiver (reference, gain, ADC)": 0.00015582500145683298,
+        "other (records, baseband noise draws, bookkeeping)": 0.3356871809955919
+      }
+    },
+    {
+      "case": "popoto_far_mover (image-source stand-in)",
+      "backend": "host",
+      "total_s": 16.863752847999876,
+      "stages": {
+        "scene construction": 8.419000005233102e-05,
+        "scene modifiers (aspect, glints, seabed models)": 6.276300064200768e-05,
+        "eigenrays (free field, image source)": 0.030526042000474263,
+        "path pairing": 0.0004344880003372964,
+        "echo synthesis kernel": 2.7494382509994466,
+        "reverberation power (strength, propagation, Doppler bins)": 0.09119131399938851,
+        "reverberation steering/summation kernel": 9.531282403001114,
+        "reverberation interpolation to the record's rate": 0.7844726559983428,
+        "reverberation random draws and texture": 3.296841002000747,
+        "reverberation set-up (grids, pulse, patterns)": 0.0851481909994618,
+        "receiver (reference, gain, ADC)": 0.0001559300003464159,
+        "other (records, baseband noise draws, bookkeeping)": 0.29411561799952324
+      }
+    },
+    {
+      "case": "popoto_far_mover (image-source stand-in)",
+      "backend": "cuda",
+      "total_s": 13.682785334999608,
+      "stages": {
+        "scene construction": 8.313099988299655e-05,
+        "scene modifiers (aspect, glints, seabed models)": 7.016100016699056e-05,
+        "eigenrays (free field, image source)": 0.026971247000801668,
+        "path pairing": 0.00044473599882621784,
+        "echo synthesis kernel": 0.45811438799955795,
+        "reverberation power (strength, propagation, Doppler bins)": 0.09043530900089536,
+        "reverberation steering/summation kernel": 8.560751278999305,
+        "reverberation interpolation to the record's rate": 0.8995234600001822,
+        "reverberation random draws and texture": 3.2707722970012583,
+        "reverberation set-up (grids, pulse, patterns)": 0.08158230199842365,
+        "receiver (reference, gain, ADC)": 0.00014837499975328683,
+        "other (records, baseband noise draws, bookkeeping)": 0.29388865000055375
+      }
+    }
+  ],
+  "skipped": [],
+  "not_timed": [
+    "recon.image_volume, recon.sas_image, recon.fan_image, flank.backprojection_map, elevation.estimate / elevation.profile and the PICMUS evaluation (benchmarks.py) all call the one backprojection kernel timed under `imaging` and inside the `live` cases (the elevation stage is in the rows with `+ elevation`); they have no kernel of their own.",
+    "recon.multigpu.backproject_tiles (several devices) is timed by tools/benchmark.py on machines with more than one GPU.",
+    "The Holoscan operators (holoscan_ops.py, C++ operators) wrap the same kernels; they need the Holoscan SDK and are covered by their tests.",
+    "pipeline.run takes a backend and passes it to prepare and to the imaging stages timed here."
+  ]
+}
