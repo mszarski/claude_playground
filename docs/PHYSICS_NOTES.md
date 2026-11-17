@@ -1091,7 +1091,9 @@ equation was unrecoverable):
     square root in (132).
 22. (61) writes position updates as `(V . S)(t - t0)` (a scalar times time);
     only its consequence (63) is usable.
-23. Doppler-spread rule (p. 101) divides by sin(grazing angle); see 3.6.
+23. Doppler-spread rule (p. 101) divides by sin(grazing angle); see 3.6. *Settled by
+    derivation: the width goes as sin(g), not 1 / sin(g) (Sec. 16.4). The ASIAEX "less than
+    10 Hz" remark does not decide it (Sec. 18.2).*
 24. (36): image-vector term `2|S_p - B_p| z_R`; re-derive before relying on it.
 
 ---
@@ -1331,7 +1333,7 @@ independent of the number of sectors in provider calls and `sectors x rings x K_
 in arithmetic.
 
 Components: contributions are collected into (azimuth sector, bin of the receive ray's
-elevation at the receiver, bin of total Doppler shift) - see 15.5; the first version had
+elevation at the receiver, bin of total Doppler shift) - see 17.5; the first version had
 no Doppler bin, which was a defect. A component has its power against time, the
 power-weighted mean of its `u_Rp` (its arrival direction, with elevation) and the
 power-weighted mean of its `f_d`. The generator draws one complex Gaussian sequence per
@@ -1459,6 +1461,10 @@ gain is piecewise linear in frequency. This is the first step towards SST's FIR
 filter per path (22); the split parts are cut to the pulse's own length, so a gain
 that changes fast across the band smears less than it should at the pulse's ends.
 
+*Superseded by Sec. 19.1: the C++ kernel now synthesises sampled pulses on the host (CUDA
+written, to be verified on a GPU), and NumPy is the reference engine. The paragraph below
+is as first written, and its timings are of the NumPy path.*
+
 Engines: NumPy only. The C++/CUDA kernel (`synth_kernel.hpp`, mirrored in the
 `.cu` file) evaluates closed-form pulses in a plain-data struct with no array
 argument; giving it a replica means a device buffer and a second kernel. A sampled
@@ -1476,7 +1482,8 @@ leg and 4 on the return leg, each pass gaining a factor v/c. The residual is
 `(R/c) (v/c)^3`: 0.14 us for a target closing at 12 m/s at 400 m, which is 0.007 rad
 at 8 kHz (measured 6.9e-3 relative error against the closed form with 3 passes,
 7e-8 with 8). The NumPy sampled path runs 8 passes. The analytic kernel was left
-as it is.
+as it is. (Sec. 19.2: the pass counts are now parameters; the analytic default is still
+(3, 4).)
 
 ### 15.3 The interpolator against TR 0702 eq. 19
 
@@ -1539,7 +1546,8 @@ Hann), 2.3e-4 (M = 16, Hann), 1.5e-6 (M = 16, Kaiser).
 TR 0702 has time spreading and a slow (AR(1)) change of the tail; it has no angle spreading
 ("not yet", p. 93), takes its frequency-spread width from TR 9407 (not read), and says its
 multi-bounce shape is wrong (p. 104). What follows is derived here, not transcribed; it is
-implemented in `sim/timespread.py` (options, all off by default) and tested in
+implemented in `sim/timespread.py` (options; all were off by default when this was written,
+and `multi_bounce: convolve` of 16.5 has since become the default) and tested in
 `tests/python/test_timespread.py`. The only things used from TR 0702 are the relations
 between a Gaussian spread and a coherence width, eqs. (89), (96), (103), and the remark that
 the ASIAEX surface Doppler spread was "less than 10 Hz" (p. 98), as a sanity bound.
@@ -1585,13 +1593,15 @@ Doppler shift from the kernel, `f V . (u_tap - u_specular) / c`, rms about
 "speed of the reflection point x sqrt(mss)" within a factor `r2 / (sqrt(2) (r1 + r2))`.
 What the default process gives: one gain per tap per ping (ping-to-ping fading only, no
 spread within a ping). `doppler: true` makes each sinusoid of the process a ray with its
-own shift, so the same process runs through the ping.
+own shift, so the same process runs through the ping. (Such rays were first paired in NumPy
+with a warning; the C++ pairing now carries a range rate per ray, Sec. 19.3.)
 
 **16.5 Several bounces.** Each bounce: `c_i delta(tau) + (1 - c_i) h_i(tau)`. A path: the
 convolution. Tail energy `1 - prod c_i`, mean `sum (1 - c_i) T_i / (1 - prod c_i)`; two
 rough bounces of equal T give `tau exp(-tau / T) / T^2` (zero at the specular delay, peak
 at T), where one exponential of mean 2T is highest at once and has rms spread 2T instead of
-sqrt(2) T: the error TR 0702's author describes. (`multi_bounce: convolve`.)
+sqrt(2) T: the error TR 0702's author describes. (`multi_bounce: convolve`, the default
+since the owner's decision recorded in `DECISIONS.md` D-82; `sum` is the earlier rule.)
 
 ---
 
@@ -1737,7 +1747,7 @@ the cells are summed), so the count is a few per direction, not `bins x directio
 nothing moving there is one bin and the components, and the realisations, are as before;
 with motion the realisations of the bistatic mode changed.
 
-The random-motion lines of 15.3 are applied to each component afterwards, as before.
+The random-motion lines of 17.3 are applied to each component afterwards, as before.
 
 The shift itself is now the factor of (71) and (72), not its first-order form (the
 difference is `(v / c)^2 f` in size: 3.6 Hz at 20 m/s and 9.9 kHz).
@@ -1771,7 +1781,9 @@ is 0.1 m long and (1 / 0.1) x 0.1 = 1 leaves the return leg alone.
 
 **18.2 What the examples showed.**
 
-- *One Doppler per component is wrong for pairs of different eigenrays (defect, not fixed).*
+- *One Doppler per component is wrong for pairs of different eigenrays (a defect when this
+  was written; fixed since by keying components by Doppler bin, Sec. 17.5, and the two tests
+  below are no longer xfail).*
   A reverberation component is (azimuth sector, elevation of the receive ray) with one Doppler
   shift, the power-weighted mean over every transmit path and every time that arrives from
   there (Sec. 14, "typically one Doppler cell per direction" taken literally). With several
@@ -1783,6 +1795,7 @@ is 0.1 m long and (1 / 0.1) x 0.1 = 1 leaves the return leg alone.
   Doppler bin (or the transmit path) in the component's key.
 - *The reverberation's Doppler is first order in v / c.* At 20 m/s and 9.9 kHz it is 3.6 Hz
   below eq. (71), a quarter of the resolution of a 0.1 s pulse; echoes use the exact factor.
+  (No longer so in bistatic mode: Sec. 17.5 uses the exact factor.)
 - *Eq. (36) is right as printed* (item 24 of Sec. 11): it equals a leg-by-leg unfolding for
   every sequence of up to three bounces, and so do (37), (40), (41) against the provider.
 - *The "less than 10 Hz" of Sec. 12.3 does not settle note 23.* For our ASIAEX geometry the

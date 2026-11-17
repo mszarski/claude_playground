@@ -767,6 +767,7 @@ each moving.
   (`test_sst_validation.py::test_reverberation_gives_each_eigenray_pair_its_own_doppler`,
   `::test_bottom_paths_change_nothing_before_they_can_arrive`). The fix proposed is to
   add Doppler or the transmit path to the component key; it is in progress.
+  *Later: fixed, see D-80.*
 - Opt-in, because random draws and steering differ from the sector generator. Default
   outputs are bit-identical to before on both engines (16 arrays compared).
 - `strength_map` (a callable of world x, y, or a table of dB against range and optionally
@@ -908,6 +909,7 @@ validated; nothing was added to the schema.
   solve stops after 3 passes outbound and 4 on return, leaving about (R/c)(v/c)^3
   (0.007 rad at 8 kHz for 12 m/s closing at 400 m). The NumPy path runs 8 passes; the
   kernel was left as it is (an open question in `STATUS.md`).
+- *Later: the synthesis was ported to the C++ kernel, see D-81.*
 
 ### D-76 Angle and frequency spreading of bounce paths from one facet model
 New opt-in keys under `time_spread` (`sim/timespread.py`): `angle_spread`, `doppler`,
@@ -926,7 +928,7 @@ keys absent the eigenrays are identical to D-62's.
   the same process continues through the ping and ping-to-ping statistics and seeds are
   unchanged. The C++ pairing returns one velocity per scatterer, so rays with a range
   rate are paired in NumPy with a one-time `RuntimeWarning` (synthesis stays in C++). A
-  C++/CUDA port of that pairing is in progress.
+  C++/CUDA port of that pairing is in progress. *Later: done on the host, see D-81.*
 - **Finding: the Doppler width goes as sin g, not 1/sin g.** A boundary displaced by zeta
   changes the path by -2 zeta sin g; for a Gaussian surface the scattered part's spectrum
   has second moment exactly sigma_nu^2 = (2 f v sin g / c)^2 / (1 - exp(-Gamma^2)). TR
@@ -966,6 +968,7 @@ keys absent the eigenrays are identical to D-62's.
   93% coherent with the longer decay and `sum` gives all scattered energy the summed
   delay. The validation recommends `convolve` whenever the two boundaries differ, and
   suggests considering it as the default. That is the owner's call (`STATUS.md`).
+- *Later: the owner decided for `convolve`, see D-82.*
 
 ### D-78 Validation examples carry our own parameters, marked unconfirmed; a relay stands in for a one-way source
 `tools/sst_validation.py`, `tests/python/test_sst_validation.py` and the scenarios
@@ -986,7 +989,8 @@ against TR 0702 itself, section by section (`docs/figures/sst_validation.md`).
   source, so target-radiated noise and tonals cannot be checked.
 - The reverberation hook is checked against the first-order formula the generator
   implements; its 3.6 Hz gap to the exact eq. (71) at 20 m/s and 9.9 kHz is reported
-  separately as a documented limit (echoes use the exact factor).
+  separately as a documented limit (echoes use the exact factor). *Later: the bistatic
+  mode uses the exact factor and the check is against eq. (71) itself, see D-80.*
 - The defect it found (D-69) is recorded with strict xfail tests rather than fixed
   inside the validation package, which edits no simulator module.
 - The readings chosen for TR 0702's inconsistent passages (items 17 to 24 of
@@ -1018,3 +1022,84 @@ CAP_NET_RAW, and those containers refuse it.
   256 frames. Why real time loses one burst per run is not established (`RESULTS.md`).
 - Not covered by the patch or the runs: the RoCE receiver, and the unpatched emulator on
   a machine with CAP_NET_RAW.
+
+### D-80 Reverberation components are keyed by total Doppler (follow-on to D-69)
+D-69 grouped bistatic reverberation by (azimuth sector, arrival-elevation bin) with one
+Doppler shift each, the power-weighted mean over every eigenray pair and every two-way
+time arriving from there. The validation (D-78) showed that to be a defect. It is fixed:
+the component key gains a third part, a bin of total Doppler shift, SST's own cell of
+TR 0702 eq. (129).
+- Chosen over keying by transmit path: a Doppler bin also separates early from late
+  returns of one pair, and needs no ray identity, which Bellhop does not give.
+- Bins span every shift the speeds allow (f v / c per platform, 2 f v / c for scatterers,
+  plus a 5% margin) and are half the pulse resolution wide (0.5 / T), since nothing finer
+  is observable within a pulse. There are at most `max_doppler_bins` (default 128, a new
+  key on the reverberation item); they widen if more would be needed, which bounds the
+  count for long pulses.
+- Stored sparsely: only components that receive power exist, since most (direction,
+  Doppler) cells are empty. In practice a few per direction.
+- The shift is now the exact factor of eqs. (71)/(72), (Gamma x gamma - 1) f, not its
+  first-order form. This removes the 3.6 Hz gap at 20 m/s and 9.9 kHz that D-78 recorded
+  as a limit.
+- What changed and what did not: default (monostatic) outputs are bit-identical (the same
+  16-array check); bistatic with nothing moving is unchanged (one bin, same code path and
+  summation order); bistatic realisations with moving platforms or scatterers changed,
+  from the keying and from the exact factor. No C++, kernel or `.cu` change was needed.
+- The two strict xfail tests of D-69 pass with their markers removed.
+- Cost on the Pursuit ping (72 sectors, 90 elevation bins, 0.1 s pulse, 20 m/s): 2484
+  sequences and 5.8 s with one bin (the old behaviour), 12770 sequences and 28.3 s with
+  the default 128 (`RESULTS.md`). With Doppler bins, fewer elevation bins would give the
+  same Doppler fidelity for less; the scenario was not retuned.
+- Still so: within one Doppler bin the shift is a mean (error at most half a bin, which a
+  pulse cannot resolve); the direction is a mean within an elevation bin; one shift per
+  echo for the whole pulse, no range walk.
+
+### D-81 Sampled pulses and per-ray range rates move into the C++ engine (follow-on to D-75 and D-76)
+D-75 synthesised echoes of a sampled pulse in NumPy only, and D-76 paired rays that carry
+a range rate in NumPy with a warning. Both fallbacks are removed on the host. The CUDA
+side is written; it had not been compiled or run when this was recorded.
+- Sampled pulses use the same kernel header as analytic pulses
+  (`synth_kernel.hpp`, a second pair function `pair_sampled`), with the envelope table as
+  plain data: built once in NumPy (`SampledWaveform.kernel_table()`), passed as a pointer
+  in the parameter block, uploaded by the CUDA driver. One kernel header then serves host
+  and device, and the table is the reference engine's own, so the engines differ only in
+  rounding. Rejected: a C++ table builder, a second implementation of the interpolator to
+  keep in step. Consequence: a C++-only caller must supply the table.
+- Frequency-dependent gain is the per-sample sum of gain-weighted bands, the same linear
+  expression as NumPy's, so there is no approximation to bound. Cost: about three times
+  the analytic kernel with beams (attributed to the nine-band sum at every sample; not
+  profiled).
+- `table_factor: 0` and more than 32 `gain_knots` stay in NumPy, with a warning and the
+  `echo_synthesis: numpy_sampled` note in the record: the kernel reads a table and holds
+  a fixed-size gain array. The note is now written only when NumPy ran.
+- Arrival-time pass counts are parameters (`SynthParams::arrival_passes_out/back`;
+  `arrival_passes=(out, back)` on `core.synthesize_into`). The analytic default stays
+  (3, 4), so existing analytic records stay bit-identical (7 of 7 scenarios compared);
+  sampled pulses use (8, 8), as the NumPy reference does. Whether to raise the analytic
+  default to (4, 4) is the owner's decision (`STATUS.md`): it removes the 0.007 rad offset
+  at under 1% cost and changes every existing record with moving geometry at the 1e-3
+  level or below.
+- The C++ pairing (`sim::two_way_paths_doppler`) takes a range rate per eigenray on each
+  leg and returns a velocity for each end of each pair. The kernel already took two
+  velocities per path, so nothing else had to change. The NumPy branch remains as the
+  reference engine. Path pairing has no CUDA backend and never had one.
+- The extension must be rebuilt after this change: the new Python calls
+  `core.synthesize_into(..., envelope=...)` and `sim_two_way_paths(..., out_range_rate=...)`,
+  which an old build does not have.
+
+### D-82 `time_spread.multi_bounce` defaults to `convolve` (follow-on to D-77; the owner's decision)
+D-77 kept `sum` as the default for reproducibility and left the choice to the owner. The
+owner asked: "should we do what the validation agent asked? Why wouldn't we? Which is
+physically realistic". The default is now `convolve`.
+- Reason: a cascade of independent bounces is the convolution of their responses. `sum`
+  gives every scattered part the summed delay, which is wrong when the bounces differ: in
+  the ASIAEX set-up it is -2.3 dB just after the pulse and +3.7 dB later, relative to
+  `convolve` (`RESULTS.md`).
+- `sum` remains as an option, as the earlier rule.
+- The facet decay time (`decay_time: facet`) remains opt-in: it was checked against a
+  Monte Carlo of slopes, not against data, and TR 0702's rule is what SST documents.
+- Consequence for earlier numbers: results for paths with two or more rough bounces that
+  were produced before this change were produced under `sum`. In `RESULTS.md` that is the
+  section "Time spreading of bounce paths and volume layers" and the rows labelled `sum`
+  in the spreading study; they were not re-measured. Single-bounce rays are bit-identical
+  between the two modes.

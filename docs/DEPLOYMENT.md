@@ -203,12 +203,29 @@ and sends them with Sensor Bridge's own emulator; `receive` is a Holoscan applic
 Sensor Bridge's `LinuxReceiverOp`, an operator that turns frames back into pings
 (`python/gpusonar/sources/hsb.py`), and the chain. On a real board only `receive` runs.
 
-State (`RESULTS.md`): Sensor Bridge builds natively and imports on an L4; our operators,
-run inside Holoscan behind a stand-in that emits what the receiver emits, give the direct
-chain's reports exactly, and a withheld frame drops exactly its ping. The loopback through
-the emulator itself has not run on Hugging Face: the emulator opens a raw socket, which
-those containers do not permit. It should run unchanged on a GPU machine or container with
-CAP_NET_RAW (plain Docker grants it). The RoCE receiver needs real network cards.
+State (`RESULTS.md`, "Sensor Bridge loopback"): Sensor Bridge 2.7.0 builds natively
+against Holoscan 4.6.0, and our operators, run inside Holoscan behind a stand-in that emits
+what the receiver emits, give the direct chain's reports exactly; a withheld frame drops
+exactly its ping.
+
+The emulator opens a raw socket, which Hugging Face containers refuse. With
+`HSB_UDP_PATCH=1 tools/build_hsb.sh /opt/hsb` and `HSB_EMULATOR_UDP_SOCKET=1` in the
+emulator's environment it sends through an ordinary UDP socket instead
+(`third_party/patches/hsb-2.7.0-emulator-udp-socket.patch`, `DECISIONS.md` D-79);
+`tools/gpu_job.sh` sets both when `GPUSONAR_HSB=1` and raw sockets are refused. Without the
+variable the patched emulator behaves as stock.
+
+With the patch the loopback ran on T4 and L4 jobs. At half real time (`serve --pace 0.5`;
+the default `--pace` is 1.0, real time) all frames arrive and the reports equal the direct
+chain's. Two things are not settled. The loopback test's final assertions have not yet
+passed in a job: they were corrected after the last job and await the GPU job on the
+merged tree. And at real-time pace each run loses one burst of datagrams, which costs one
+frame, for a reason not established; the receiver's socket buffer is the system default
+(208 KB), which those containers cannot raise.
+
+On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock emulator
+should run unpatched; that is untested. So is the RoCE receiver, which needs real network
+cards.
 
 ## What is not there yet
 

@@ -244,13 +244,12 @@ The simulator also has, all opt-in and all listed key by key in `docs/CONFIGURAT
 `tools/sst_validation.py` checks these against TR 0702 section by section
 (`docs/figures/sst_validation.md`). What to know before relying on them
 (`docs/STATUS.md`, "Simulator limits so far"): they were tested file by file on the CPU,
-and the full suite and a GPU job have not yet been run with them merged; bistatic
-reverberation has a known Doppler defect when a leg has several eigenrays (two xfail
-tests); echoes of a sampled pulse are synthesised in NumPy only (7 to 22 s against 1.0 to
-1.4 s for the kernel in the one case timed); the wind-speed bubble-loss law is an upper
-estimate above 10 kHz; and
-the boundary models are open-literature substitutes for a handbook (APL-UW TR 9407) that
-was not read.
+and the full suite and a GPU job with them merged were running, with no result yet, when
+this was written; the CUDA side of sampled-pulse synthesis is written and unverified
+(on the host it runs in the C++ kernel, about 3 times the analytic kernel's time with
+beams in the one case timed); the wind-speed bubble-loss law is an upper estimate above
+10 kHz; and the boundary models are open-literature substitutes for a handbook (APL-UW
+TR 9407) that was not read.
 
 ## Run a whole chain from one YAML file
 

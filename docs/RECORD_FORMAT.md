@@ -94,9 +94,11 @@ reader, writer and validator are as they were (`DECISIONS.md` D-74).
   so a record read back from a file pulse-compresses as the one in memory did.
 - The replica is stored with every ping as float64: a 1 s pulse at 6–10 kHz is 40,001
   samples.
-- Records the simulator makes from a sampled pulse carry
-  `{"gpusonar": {"echo_synthesis": "numpy_sampled"}}` in `metadata/extra_json`, which
-  says the echoes were synthesised by the NumPy engine (D-75).
+- A record the simulator makes from a sampled pulse carries
+  `{"gpusonar": {"echo_synthesis": "numpy_sampled"}}` in `metadata/extra_json` when its
+  echoes were synthesised by the NumPy engine. Since D-81 the C++ kernel is the default
+  and writes no such note; NumPy runs when it is asked for, with `table_factor: 0`, or
+  with more than 32 `gain_knots`.
 
 **`geometry/`**
 

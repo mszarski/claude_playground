@@ -1,6 +1,6 @@
 """Scattering-function reverberation with separate, moving transmitter and receiver
 (sim/reverb_bistatic.py, `geometry="bistatic"`), after SST's formulation (TR 0702 Sec. 10-11;
-docs/PHYSICS_NOTES.md Sec. 5 and its last section).
+docs/PHYSICS_NOTES.md Sec. 5, 14 and 17).
 
 Each piece is checked against something independent of the code under test: an integral
 over a Cartesian grid, reciprocity, the travel time through a known patch (the iso-time

@@ -808,6 +808,10 @@ hydrophone after pulse compression, relative to a flat surface:
 | Coherent loss only (the simulator before) | −6.7 dB | −56 dB | 0 | −61 dB |
 | Time spreading | +0.8 dB | −6.4 dB | 0.71 | +5.6 dB |
 
+These numbers were produced when `multi_bounce` defaulted to `sum`. Since D-82 the default
+is `convolve`, which changes paths with two or more rough bounces (single-bounce rays are
+bit-identical); the table was not re-measured.
+
 So the earlier model removed the surface-bounce arrivals almost entirely at this
 frequency and sea state; with time spreading their energy is kept, arrives spread over
 milliseconds and fades from ping to ping. The direct echo is unchanged (within 0.07 dB).
@@ -846,8 +850,13 @@ The eight sections from here to "Validation against TR 0702" were measured by th
 did each piece of work, on their own branches, on the CPU. Each section gives its command.
 Three things apply to all of them:
 
-- The full CPU suite and a GPU job have **not** yet been run on the merged tree. Each
-  agent ran its own test files and the neighbouring ones; the counts are given per section.
+- The full CPU suite and a GPU job on the merged tree were running, with no result
+  reported, when this was written. Each agent ran its own test files and the neighbouring
+  ones; the counts are given per section.
+- Three things changed after these sections were first measured, and each is marked where
+  it applies: the reverberation Doppler defect was fixed (D-80), sampled-pulse synthesis
+  and the pairing of rays with a range rate moved into the C++ engine (D-81), and
+  `time_spread.multi_bounce` now defaults to `convolve` (D-82).
 - Several commands are one-off measurement scripts kept in the session's scratch
   directory, not in the repository. Where that is so the row says "one-off script" and
   names the test that asserts the same thing.
@@ -1007,9 +1016,10 @@ C++ gave the same figures wherever both were run. Decisions D-69, D-70, D-71.
 | Replica-correlation gain, LFM 20 ms at 0.5 / 1 / 2 / 4 kHz (TR 0702 p. 70) | +2.73, +3.01, +3.13 dB per octave (8.87 dB over three; ideal 9.03) |
 | Engine agreement in the new modes | 5 bistatic cases plus texture and taper cases pass at the 5e-6 tolerance, generator state identical |
 
-The Doppler rows above are for single patches and a geometry without a bottom. With
-several eigenrays per leg the one-Doppler-per-component grouping is wrong: see "The
-defect the validation found" below.
+The Doppler rows above are for single patches and a geometry without a bottom, and were
+measured with one Doppler shift per (sector, elevation) component. With several eigenrays
+per leg that grouping was wrong; components are now also keyed by Doppler bin: see "The
+defect the validation found, and its fix" below.
 
 Leakage along a long record (D-71). A 30 m to 3 km CW record, 100 dB of level change,
 generated intensity over expected power, both engines:
@@ -1154,8 +1164,9 @@ buys:
 So the rule gives roughly 1–3% amplitude error. Our default interpolator (16-tap Kaiser,
 shape 12) measures −117 dB for α up to 0.5; a 16-tap Hann gives −62 dB.
 
-- Sampled-pulse echoes are synthesised in NumPy only; at the speed above, scenes of 10^5
-  scatterers are out of reach until the kernel port (in progress) lands.
+- When this section was measured, sampled-pulse echoes were synthesised in NumPy only.
+  They are now synthesised by the C++ kernel on the host (17.7 s to 2.4 s in the case
+  timed); see "Sampled pulses and per-ray Doppler in the C++ engine" below.
 - Found outside this work: the analytic kernel's arrival-time solve stops after 3 passes
   outbound and 4 on return. For a target closing at 12 m/s at 400 m the residual is
   0.14 µs, or 0.007 rad at 8 kHz; measured 6.9e-3 against the closed form with 3 passes
@@ -1204,8 +1215,8 @@ Two-bounce tail (surface-bottom-surface ray, 24 taps):
 
 | `multi_bounce` | Energy in the first three mean delays | rms | Mean |
 | --- | --- | --- | --- |
-| `sum` (default) | 0.61 / 0.26 / 0.11 | 8.85 ms | 11.31 ms |
-| `convolve` | 0.57 / 0.34 / 0.08 | 7.40 ms | 11.31 ms |
+| `sum` (the default when this was measured) | 0.61 / 0.26 / 0.11 | 8.85 ms | 11.31 ms |
+| `convolve` (the default since D-82) | 0.57 / 0.34 / 0.08 | 7.40 ms | 11.31 ms |
 
 This table came from a separate rerun of the same function after the ray selection was
 fixed; the full tool was not rerun end to end afterwards.
@@ -1219,6 +1230,9 @@ Pings (16 pings, 3 taps, strongest bounce arrival, 32-hydrophone horizontal line
 | + `doppler` (gaussian) | −9.36 dB | 1.00 | 1.00 | 1024 |
 | + both | −14.10 dB | 0.74 | 1.00 | 1024 |
 
+These pings were run when `multi_bounce` defaulted to `sum` (the scenario's bounce paths
+with two rough bounces therefore used it); they were not re-measured after D-82.
+
 The peak-level column is not a reliable comparison: 16 pings, 3 taps, one sample, and with
 an LFM a Doppler line also shifts in delay. Only the coherence columns mean something, and
 the end-to-end coherence was not checked against a closed form at ping level (the
@@ -1227,9 +1241,19 @@ Doppler spreads.
 
 ## Validation against TR 0702 (`tools/sst_validation.py`)
 
-Source: `tests/python/test_sst_validation.py` (24 passed, 2 xfailed, in 92 s on the C++
-engine and 120 s with `GPUSONAR_SIM_ENGINE=numpy`); scenarios `sst_pursuit`, `sst_asiaex`,
-`sst_echo_level`, `sst_sediment_reverb`. Decision D-78.
+Source: `tests/python/test_sst_validation.py`; scenarios `sst_pursuit`, `sst_asiaex`,
+`sst_echo_level`, `sst_sediment_reverb`. Decision D-78. As first run: 24 passed, 2 xfailed,
+in 92 s on the C++ engine and 120 s with `GPUSONAR_SIM_ENGINE=numpy`. The two xfail markers
+have since been removed with the fix of the reverberation Doppler defect (D-80), and the
+file passed together with the four `test_reverb_*` files (108 passed, 5 skipped for CUDA).
+
+**Which run the numbers come from.** The committed matrix, its JSON and the two figures
+were made by the first full run, before that fix, and had not been regenerated when this
+was written (`git log -1 -- docs/figures/sst_validation.md` shows whether they have been
+since). The Pursuit rows on reverberation below carry the numbers after the fix, from
+`PYTHONPATH=python python3 tools/sst_validation.py --only pursuit --json <file>`; all other
+numbers in this section are from the first full run. The figure of the Pursuit example is
+the one from before the fix.
 
 Command (matrix, numbers and figures, about 2 minutes):
 `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
@@ -1254,13 +1278,13 @@ One ping as written (7 s to run); reverberation-only runs averaged over 3 pings.
 
 | Feature TR 0702 names | Result |
 | --- | --- |
-| Reverberation hook (early return from overhead through sidelobes, late return from the main lobe) | ridge minus f(1 + 2v cos(angle)/c): median −1.2 Hz, max 12.5 Hz once settled (resolution cell 14.4 Hz); 97% of 178 segments inside a one-pulse-length bracket; shift 128 Hz before 0.7 s, 261 Hz after 4 s. Measured on the run without the bottom |
-| Bottom-bounce streak | onset 1.725 s against 2D/c = 1.700 s; on the eq. (71) track it is 14.1 dB above the no-bottom run |
+| Reverberation hook (early return from overhead through sidelobes, late return from the main lobe). After the fix | settled ridge minus the closed form of exact eq. (71): median −0.75 Hz, max 12.7 Hz (resolution cell 14.4 Hz); 98% of segments inside a one-pulse-length bracket; shift 124 Hz before 0.7 s, 264 Hz after 4 s (late closed form 266 Hz). First run, against the first-order form: −1.2 / 12.5 Hz, 97% of 178 segments, 128 / 261 Hz, measured on the run without the bottom |
+| Bottom-bounce streak. After the fix | onset 1.750 s against 2D/c = 1.700 s; on the eq. (71) track it is 16.7 dB above the no-bottom run. First run: 1.725 s, 14.1 dB |
 | Target echo | arrival 2.7900 s (closed form 2.7889); frequency 10133.73 Hz (eq. 68: 10133.73); record against eqs. (66)+(68) for the three highlights: 0.32% rms, level +0.009 dB |
 | Doppler separation of the echo | 25 Hz below the ridge; −5.6 dB re reverberation in the 9.6–10.2 kHz band (the level rises 0.6 dB); its spectrogram cell is 12.9 dB above the reverberation there |
 | Reverberation dominates | ridge PSD over noise PSD: median 25.4 dB; band level over noise: median 11.2 dB, above it in 95% of segments |
 | The parts add | full minus echoes minus reverberation is noise at 50.6 dB re µPa²/Hz, against 50.6 asked for |
-| First-order reverberation Doppler against exact eq. (71) | 3.6 Hz low at 20 m/s and 9.9 kHz (a documented limit; echoes use the exact factor) |
+| Reverberation Doppler against exact eq. (71) | first run: the first-order form was 3.6 Hz low at 20 m/s and 9.9 kHz. Since the fix the bistatic mode uses the exact factor (D-80) |
 
 Time spreading does not matter in this scene: the direct echo is unchanged (0.0); the echo
 with a surface-reflected leg is −5.5 dB re direct and changes by −0.7 dB. It is left out
@@ -1289,7 +1313,8 @@ Pierson–Moskowitz and Cox–Munk wind laws. The one-way path is made with a �
 - The "less than 10 Hz" remark does not settle the sin g against 1/sin g question (D-76):
   TR 0702's printed p. 101 rule gives 6.5 Hz for this geometry, also under 10 Hz. The
   question is settled by the derivation, not by this number.
-- `multi_bounce: sum` does not show SST's stated defect with these parameters; it shows
+- `multi_bounce` (this comparison is why `convolve` became the default, D-82): `sum`
+  does not show SST's stated defect with these parameters; it shows
   the opposite sign. On the surface-bottom path the bottom is 93% coherent with the
   longer decay, and `sum` gives all scattered energy the summed delay (8.2 ms mean
   against 2.4 ms for `convolve`). Relative to `convolve`, `sum` is −2.3 dB right after the
@@ -1310,25 +1335,64 @@ Pierson–Moskowitz and Cox–Munk wind laws. The one-way path is made with a �
 | Signal-to-reverberation after pulse compression, 1 / 2 / 4 kHz | 27.39 / 30.68 / 33.38 dB against 27.44 / 30.45 / 33.46 closed form; max error 0.23 dB; +3.29 and +2.70 dB per octave |
 | Eqs. (36), (37), (40), (41) as printed, 7 bounce sequences of up to 3 bounces | agree with a leg-by-leg unfolding and the provider to 1e-16 |
 
-### The defect the validation found (open)
+### The defect the validation found, and its fix
 
-Bistatic reverberation gives each component, an (azimuth sector, elevation of the receive
-ray) pair, one Doppler shift: the power-weighted mean over all transmit paths and times
-arriving from there. Pairs with different transmit legs that share a receive ray
-therefore share a shift, where eq. (71) gives each pair its own. Not fixed in the merged
-tree; a fix is in progress.
-
-| Evidence | Result |
-| --- | --- |
-| Mean Doppler from dead ahead against a direct integration with eq. (71) per pair | off by up to 34 Hz with one bottom bounce (1.7 Hz without a bottom) |
-| End to end: putting the bottom into the Pursuit scene | changes the spectrogram by +12.4 dB at 1.27 s and 10045 Hz, 0.4 s before any bottom path can arrive (1.7 s) |
-| In the component table | the 22.6° component sits in a beam null for the direct pair; its Doppler is 185.8 Hz with the bottom, 243.8 Hz without |
-| Above the streak | +4.5 dB at 40 Hz above the streak's track, where eq. (71) allows nothing |
-
-Pinned by two strict xfail tests,
+As first merged, bistatic reverberation gave each component, an (azimuth sector, elevation
+of the receive ray) pair, one Doppler shift: the power-weighted mean over all transmit
+paths and times arriving from there. Pairs with different transmit legs that share a
+receive ray therefore shared a shift, where eq. (71) gives each pair its own. The
+validation pinned this with two strict xfail tests. It is fixed (D-80): components are
+also keyed by a bin of total Doppler shift, and the shift is the exact factor of
+eqs. (71)/(72). Both tests,
 `test_reverberation_gives_each_eigenray_pair_its_own_doppler` and
-`test_bottom_paths_change_nothing_before_they_can_arrive`; the companion
-`test_doppler_comparison_is_sound_without_a_bottom` passes.
+`test_bottom_paths_change_nothing_before_they_can_arrive`, pass with their markers removed.
+
+Before-numbers are from the first validation run; after-numbers from
+`PYTHONPATH=python python3 tools/sst_validation.py --only pursuit --json <file>` after the
+fix.
+
+| Quantity | Before | After |
+| --- | --- | --- |
+| Mean Doppler from dead ahead against per-pair eq. (71), with one bottom bounce | off by up to 34 Hz | 1.5 Hz |
+| The same, without a bottom | 1.7 Hz | 1.4 Hz |
+| Largest change before any bottom path can arrive (1.7 s) | +12.4 dB at 1.27 s, 10045 Hz | +4.6 dB at 0.875 s, 10045 Hz (test limit 6 dB) |
+| 40 Hz above the bottom streak's track, relative to no bottom | +4.5 dB | −0.4 dB |
+| Bottom streak on the eq. (71) track, relative to no bottom | 14.1 dB | 16.7 dB |
+| Bottom streak on the "direct both ways" track | not in the first report | +1.1 dB |
+| Bottom streak onset (closed form 1.700 s) | 1.725 s | 1.750 s (inside the test's 1.65–1.85 s window) |
+| Hook: settled ridge minus closed form, median / max (cell 14.4 Hz) | −1.2 / 12.5 Hz, against the first-order form | −0.75 / 12.7 Hz, against exact eq. (71) |
+| Hook: segments inside the one-pulse bracket | 97% | 98% |
+| Hook: shift before 0.7 s / after 4 s | 128 / 261 Hz | 124 / 264 Hz (late closed form 266 Hz) |
+
+- In the component table before the fix, the 22.6° component sat in a beam null for the
+  direct pair; its Doppler was 185.8 Hz with the bottom and 243.8 Hz without.
+- The remaining +4.6 dB before onset, at 0.875 s, is read by the fix's author as the
+  difference in random draws between the two runs (adding the bottom adds components, so
+  the sequences differ). It was not isolated further.
+
+Cost of the fix, on the Pursuit reverberation item (72 sectors, 90 elevation bins, 0.1 s
+pulse, 20 m/s), one ping (one-off script `cost.py`, not in the repository):
+
+| `max_doppler_bins` | Sequences | Time for the ping |
+| --- | --- | --- |
+| 1 (the old behaviour) | 2484 | 5.8 s |
+| 128 (default) | 12770 | 28.3 s |
+
+New tests in `test_reverb_bistatic.py`:
+`test_doppler_bins_cover_the_shifts_at_the_pulse_resolution`;
+`test_doppler_of_one_direction_changes_along_the_record` (with one elevation bin the mean
+shift follows eq. (71) within one bin at every time; with a single Doppler bin it is off
+by more than 100 Hz);
+`test_eigenray_pairs_keep_their_own_doppler_and_arrive_no_earlier` (power and Doppler
+unchanged before 2D/c; mean shift within 3 Hz of the four-pair integration afterwards).
+Default (monostatic) outputs are bit-identical to before, and bistatic with nothing
+moving is unchanged; bistatic realisations with motion changed. Tests at the time:
+`test_sst_validation.py`, `test_reverb_bistatic.py`, `test_reverb_motion.py`,
+`test_reverb_relief.py`, `test_reverb_statistics.py` together 108 passed, 5 skipped
+(CUDA), with Bellhop available; `test_reverberation.py` and `test_sim_cpp.py` passed. The
+30-minute suites were not rerun. Nothing new needs a GPU run for this fix; the CUDA tests
+of `test_sim_cpp.py` and `test_cuda_bistatic_reverberation_matches_the_host` are still
+outstanding.
 
 ### What could not be checked
 
@@ -1359,7 +1423,8 @@ The loopback test as a whole
 (`test_loopback_through_sensor_bridge_gives_the_direct_chains_reports`) has **not yet
 passed in a job**. Its last two assertions were wrong in the test, not in the transport;
 they were corrected and the correction was checked locally without transport, but not
-re-run on a GPU (a GPU run is pending). The last job therefore still shows
+re-run on a GPU. They await the GPU job on the merged tree, which was running with no
+result reported when this was written. The last finished job therefore still shows
 `1 failed, 7 passed`.
 
 | Job | Machine | Frame | Pace | Frames sent / used | Lost or damaged | Datagrams dropped | Pings |
@@ -1401,6 +1466,111 @@ re-run on a GPU (a GPU run is pending). The last job therefore still shows
   `engine: cpp`, the CUDA chain backend, `serve --scenario`, navigation and the
   idle-timeout stop through this path; frames larger than 400 samples at reduced pace; a
   full `gpu_job.sh` run without `-k hsb`.
+
+## Sampled pulses and per-ray Doppler in the C++ engine
+
+Source: `tests/python/test_sampled_engine.py` (new), `tests/cpp/test_sim_synth.cpp` (new),
+`tests/python/test_timespread.py`. Decision D-81. This removes the two NumPy fallbacks of
+the sections "Sampled transmit waveforms" and "Angle and frequency spreading" on the host.
+**The CUDA side is written and was not compiled or run when these numbers were taken**; the
+tests that check it are listed at the end and skip without a device.
+
+C++ kernel against the NumPy reference for a sampled pulse
+(`PYTHONPATH=python python3 -m pytest tests/python/test_sampled_engine.py -q -s`, 46 cases,
+real and baseband):
+
+| Case group | Relative rms |
+| --- | --- |
+| Sampled LFM, omnidirectional, oversample 2 and 8 | 5.3e-8 to 5.4e-8 |
+| Beams and absorption, 0 / 3 / 8 knots, with platform acceleration | 3.2e-8 to 6.0e-8 |
+| Every tier (free field, image source, time spread, reverberation, sediment, Bellhop) | 1.2e-9 to 4.9e-7 |
+| Barker, m-sequence, HFM, stepped FM | 4.8e-8 to 5.8e-8 |
+| 12 m/s closing at 400 m, target or sonar moving | 2.6e-9 to 3.3e-9 |
+| Board clock errors (3 µs, 40 ppm) | 5.9e-8 |
+
+- Worst single sample: 3.4e-7 of the peak. Test tolerance: 2e-6 rms and 5e-6 per sample.
+- The differences are float32 rounding: the kernel adds each path into the float32
+  record, NumPy sums in double and rounds once.
+- Independent of NumPy: a table of ones reproduces the analytic CW pulse exactly; a ramp
+  envelope is read to 2e-12; three weighted bands give the weighted sum of the knot gains.
+- Analytic scenarios against the previous build: 7 of 7 hash identically
+  (`point_grid_flank_32`, `point_grid_fls_300k`, `point_grid_sas_auv`,
+  `point_grid_popoto_8`, `flank_sst_shallow`, `rail_points`, `flank_sst_spread`). Two
+  Bellhop scenarios were not compared (the script ran without `GPUSONAR_BELLHOP`).
+
+Timing (one-off script `timing.py beams|omni`, not in the repository): 300 scatterers ×
+128 channels, `fls_300k`, 1 ms pulse, 4 shared cores at load 8, best of 3 for the C++
+rows, one run for NumPy.
+
+| | NumPy (before) | C++ (after) | Analytic kernel |
+| --- | --- | --- | --- |
+| Beams and absorption | 17.7 s | 2.4 s | 0.80 s |
+| Omnidirectional | 2.8 s | 0.54 s | 0.32 s |
+
+The C++ sampled path is still 3× the analytic kernel with beams, attributed to the
+nine-band sum at every sample (not profiled). A 10^5-scatterer scene was not timed, and a
+`flank_32` timing case did not finish inside its 280 s limit, so it has no number.
+
+Arrival-time pass count. The counts are now parameters; the analytic default is still
+(3, 4) and sampled pulses use (8, 8). Error against the closed form for 12 m/s closing at
+400 m, 8 kHz CW (relative rms, which is the phase error in rad):
+
+| Passes (out, back) | (3, 4) default | (4, 4) | (4, 5) | (5, 5) | (8, 8) |
+| --- | --- | --- | --- | --- | --- |
+| Error | 6.9e-3 | 5.5e-5 | 5.5e-5 | 4.4e-7 | 3.7e-8 |
+
+- The default's error matches the predicted 2πf (R/c)(v/c)³ = 6.9e-3. It is a constant
+  phase offset of the echo; the Doppler factor itself is right.
+- Cost: the solves alone take about 0.33 µs (3, 4) to 1.2 µs (8, 8) of core time per
+  (path, channel) pair, against 40 µs or more for a pair with a 1 ms pulse in the window:
+  about 2% at most. These figures are noisy (±50%) because the machine was loaded;
+  whole-ping times did not resolve the difference.
+- Whether the analytic default becomes (4, 4) is an open question for the owner
+  (`STATUS.md`).
+
+Pairing with a range rate per ray (`sim::two_way_paths_doppler`):
+
+| Check | Result |
+| --- | --- |
+| C++ against NumPy pairing on random rays (5 cases: either leg, moving scatterers, Lambert weights with normals) | 1e-14 |
+| `flank_sst_spread` through the C++ pairing and through the old NumPy one | bit-identical record |
+| End to end on the C++ engine: a 0.5 s tone through a bounce with `doppler` | three Doppler lines within 0.3 Hz |
+
+Tests at the time: 331 Python tests passed, 32 skipped (the CUDA tests plus existing
+skips), across `test_sampled_waveform`, `test_sampled_engine`, `test_timespread`,
+`test_sim`, `test_sim_cpp`, `test_propagation`, `test_scene_objects`,
+`test_scene_sediment`, `test_architecture`, `test_reverberation`, `test_reverb_bistatic`,
+`test_record`, `test_pipeline`, `test_conditioning`, `test_design`. All eight C++
+GoogleTest binaries passed, run directly (`test_sim_synth`: 5 pass, 1 CUDA skip). The
+full Python suite was not run to completion (killed after 10 minutes on a loaded machine).
+
+To be run on a GPU build (all skip in the development container):
+`test_sampled_engine.py::test_cuda_and_host_kernels_agree_on_a_sampled_pulse` (6 cases),
+`::test_cuda_and_host_agree_on_a_sampled_pulse_through_a_scenario` (2 cases),
+`::test_cuda_kernel_takes_the_arrival_pass_count`,
+`test_timespread.py::test_per_ray_doppler_on_the_cuda_kernel_matches_the_host`,
+`build/tests/cpp/test_sim_synth --gtest_filter=Synth.CudaAndHostAgreeOnASampledPulse`, and
+the existing CUDA tests of `test_sim.py` and `test_sim_cpp.py`, because the analytic pair
+function now takes its pass count from the parameter block.
+
+### What in the simulator still runs in NumPy
+
+Profiled with a one-off script (`prof.py <scenario>`, not in the repository), one ping,
+C++ engine. In these profiles C++ synthesis dominates (24.1 of 30.8 s; 6.8 of 15.5 s); the
+largest NumPy item is ambient noise.
+
+| Where | Behaviour | Cost |
+| --- | --- | --- |
+| `reverb.py`: bistatic components when the extension lacks them (`cpp_has_components`) | explicit warning, the whole generator falls to NumPy | only on an old build; not measured |
+| `reverb.py::_series_cpp`: random draws and K texture (`CellTexture`) | silent; NumPy on both engines by design (same seeds, D-61) | 0.67 s of 3.6 s reverberation (`flank_sst_spread`); 1.07 s of 5.8 s (`flank_sst_shallow`) |
+| `reverb.py::reverberation_power`, `reverb_bistatic.directional_power` | NumPy on both engines | 0.03 s per ping |
+| `noise.py::gaussian_noise` | NumPy only; no C++ exists | 2.0 s of a 15–31 s ping (32 × 115,200 samples) |
+| `timespread.py` (taps, angle and frequency spreading) | NumPy only; wraps the inner provider | 4 ms for one scatterer; not measured for large scenes |
+| `ImageSourceProvider` with a wall on axis 2, or field points not shaped [S, 3] | silent NumPy | not measured |
+| `scene.py` / `targets.py` modifiers (`Scene.evaluate`) | NumPy only | about 10 ms per ping (`fls_glints_on_sediment`), after a one-off 0.77 s import of `bottom.py` |
+| `simulator.py`: `beam_floor_db` filter, ADC, board clocks | NumPy only | not measured; not visible in the profiles |
+| Bellhop provider | external process plus NumPy | not measured |
+| Sampled pulse: table build; `table_factor: 0`; more than 32 knots | the table build is NumPy; the other two fall back with a warning | table build 0.02 s once |
 
 ## Stages ported from NumPy to C++
 
