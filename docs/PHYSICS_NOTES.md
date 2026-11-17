@@ -1093,3 +1093,101 @@ equation was unrecoverable):
     only its consequence (63) is usable.
 23. Doppler-spread rule (p. 101) divides by sin(grazing angle); see 3.6.
 24. (36): image-vector term `2|S_p - B_p| z_R`; re-derive before relying on it.
+
+---
+
+## 12. Targets with aspect dependence, specular glints, and model-driven seabed scatterers
+
+Added with `python/gpusonar/sim/targets.py`. This is our own section, not notes on TR 0702.
+
+### 12.1 What SST has and what we added
+
+TR 0702's targets (Sec. 4 above) are sets of highlights; aspect dependence exists only through
+an external program called once per ping with the distance and direction of the projector and
+receiver. `HighlightTarget` is that program built in: at each ping `Scene.evaluate` hands every
+target the projector position, the receive reference position, the centre frequency and the
+sound speed, and gets back positions, complex amplitudes and velocities for its highlights.
+These go into the eigenray pairing as ordinary scatterers, so both engines see them.
+
+| SST | Here |
+|---|---|
+| highlight: strength, position, velocity in the target frame | `Highlight.position`, `target_strength_db` / `amplitude`; velocity from the target's motion (`velocity`, `turn_rate_deg`, or a `trajectory` function) |
+| complex frequency-dependent response | `Highlight.response`, reduced to its value and group delay at the centre frequency (the synthesis kernel has one amplitude and one delay per path) |
+| reception-to-transmission delay | `Highlight.delay`: the highlight is moved back along the bisector of the two directions by c tau / |s + r|, with its amplitude scaled so the spreading loss stays that of the true place |
+| `commonCenter` | `common_center`: the highlight is put on the bisector through the target's origin at the place with its own two-way path length. (SST does this to save eigenray sets; we still compute one set per highlight, so it only reproduces the behaviour) |
+| `randomPosition` | `random_position` |
+| group number | not needed: every highlight has its own eigenrays |
+| `ExternalTarget` | `AspectTable` and the shapes below; any object with `evaluate(PingContext)` can be put in `Scene.modifiers` |
+
+Not carried: the shape of a frequency response across the band beyond its group delay.
+
+### 12.2 Geometric-acoustics shapes
+
+Source: E. Lavia, J. D. Gonzalez, S. Blanc, "Modelling high-frequency backscattering from a
+mesh of curved surfaces using Kirchhoff approximation", arXiv:1805.06945v2 (2018). Taken from
+it: the Kirchhoff backscattering integral, Eq. (1); the sphere, Eq. (5); the finite cylinder
+without end caps, Eq. (6) (which they cite to Gaunaurd 1985); the flat end cap, Eq. (7);
+TS = 20 log10 |f|. Everything else in this subsection is [OURS], derived from Eq. (1) and
+checked numerically in `tests/python/test_scene_targets.py`.
+
+With s, r the unit vectors from a surface point to the source and the receiver, B = s + r,
+and amplitudes as pressure ratios at 1 m (|amplitude|^2 = differential cross section):
+
+```
+sphere, radius a          one highlight at  centre + a n,  n = B / |B| (iterated for finite range)
+                          amplitude a / 2                      TS = 10 log10(a^2 / 4)   [limit of Eq. 5]
+cylinder side, radius a   glint line at the azimuth of B_perp (B without its part along the axis)
+                          per unit length  exp(i pi/4) sqrt(a |B_perp| / (4 lambda))
+  whole length L, far     L sqrt(a |B_perp| / (4 lambda)) sinc(k L B_par / 2)
+  backscatter, theta_n from broadside:
+                          |f|^2 = (a L^2 / 2 lambda) cos(theta_n) sinc^2(k L sin(theta_n))   [large-argument form of Eq. 6]
+flat element dA           i (1 / lambda) (n.B / 2) dA,   lit when n.s > 0 and n.r > 0
+  rectangle, far          (A / lambda) (n.B / 2) sinc(k B.u / 2) sinc(k B.v / 2)
+  disc radius a, far      (pi a^2 / lambda) (n.B / 2) 2 J1(x) / x,  x = k a |B_tangential|    [Eq. 7]
+```
+
+Phases are for the simulator's exp(+i w t) signals (the conjugate of Eq. (1)'s convention): a
+flat element is a quarter period early and a glint line an eighth, relative to a point
+scatterer at the same place. With these a large plate sums to the mirror image of the source.
+
+Remarks:
+
+* The cylinder's obliquity factor is cos(theta_n), which is what Eqs. (1) and (6) give. Tables
+  of "simple forms" in the sonar textbooks are often quoted with cos^2; that table could not
+  be opened here, so nothing is taken from it.
+* Eq. (6) as we read it differs from Eq. (1), integrated numerically, by a quarter turn of
+  phase; magnitudes agree to 0.3 % out to 45 degrees from broadside and 1.7 % at 60 degrees
+  (k a = 42). Magnitudes are tested against Eq. (6), phases against Eq. (1).
+* Bistatic use of the flat element with n.(s + r) / 2 is a symmetrised Kirchhoff form: equal to
+  Eq. (1) for backscatter, reciprocal, exact at the specular direction, approximate in the sidelobes.
+* `resolved: true` replaces a far-field pattern by a row (cylinder) or grid (plate, disc) of
+  coherent points at most half a wavelength apart, each with the directions it sees itself.
+  The sum is then right in the near field too (range < L^2 / lambda), which is where imaging
+  sonars see man-made objects. One ping sees the Fresnel zone about the foot of the
+  perpendicular from the sonar; a synthetic aperture along the cylinder sees the line.
+* Validity: k a >> 1. The exact rigid sphere (partial-wave series) is within 0.63 dB of a^2/4
+  for k a >= 10, 0.23 dB for k a >= 20, 1.3 dB for k a >= 5 (measured in the tests); a warning
+  is given below k a = 10. Not here: creeping waves, elastic resonances, edge diffraction
+  beyond what the Kirchhoff edges give, multiple reflections between shapes, the sphere's
+  finite-range factor (r - a) / r.
+* Directions are straight lines from the sonar. With a multipath provider each bounce pair
+  gets the amplitude and glint position of the direct geometry.
+
+### 12.3 Seabed scatterers that follow the bottom model
+
+A `seafloor` item with `model: fluid_sediment` keeps the point-scatterer picture of Sec. 5.2
+(one complex Gaussian draw per scatterer, kept from ping to ping) but replaces "sqrt(scattering
+strength at the ray angles)" by the model of `sim/bottom.py`: per ping each amplitude is
+
+```
+g_i / sqrt(density) * sqrt( sigma(g_in, g_out, azimuth) / (sin g_in sin g_out) )
+```
+
+with the angles on the straight lines to the projector and the receive reference point, taken
+from the scatterer's own normal where the floor has relief. The scatterers keep the Lambert
+flag, so the pairing multiplies each eigenray pair by sqrt(sin g_in sin g_out) of that pair:
+the direct pair gets exactly sqrt(sigma); a pair with a boundary bounce gets sigma of the direct
+angles times Lambert's ratio for its own angles (an approximation, chosen so that neither
+engine had to change). The frequency is the centre frequency: the model's change of strength
+across the band is not carried. Mean level: `E|amplitude|^2 x density = sigma`, the quantity
+the scattering-function reverberation integrates, so the two agree (tested).
