@@ -135,7 +135,8 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
                       ring_width: float | None = None, n_elevation: int = 1, strength_map=None,
                       subsamples: int = 1, scatterer_velocity=None, scatterer_rms_speed: float = 0.0,
                       scatterer_rms_vertical_speed: float = 0.0, shadowing: bool = True,
-                      bottom_bounces: str = "exclude") -> dict:
+                      bottom_bounces: str = "exclude", doppler_resolution: float | None = None,
+                      max_doppler_bins: int = 128) -> dict:
     """As `reverb_bistatic.directional_power` (same arguments and result), for a bed given by
     `bathymetry` instead of a flat boundary at one depth. `bottom_bounces`: "exclude" or
     "flat" (see the header)."""
@@ -157,7 +158,7 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
     dr = ring_width or 0.25 * c * dt
     rings = np.arange(min_range + 0.5 * dr, r_max, dr)
     out = dict(power=np.zeros((n_az, n_el, n_t)), direction=np.zeros((n_az, n_el, 3)), doppler=np.zeros((n_az, n_el)),
-               spread=np.zeros((n_az, n_el)))
+               spread=np.zeros((n_az, n_el)), elevation_bin=np.full((n_az, n_el), -1, dtype=np.int64))
     if len(rings) == 0:
         return out
     for name, platform in (("transmitter", tx), ("receiver", rx)):
@@ -172,11 +173,9 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
         scatter = lambda s_in, s_out, az: strength(np.arcsin(s_in), np.arcsin(s_out))         # noqa: E731
     horizon_args = (rings[-1] + separation + 2.0 * dr, dr, max(720, 4 * n_az * subsamples))
     horizons: dict = {}
-    n_comp = n_az * n_el
-    power = np.zeros(n_comp * n_t)
-    weight = np.zeros(n_comp)
-    moment = np.zeros((n_comp, 4))
-    variance = np.zeros(n_comp)
+    v_s = np.asarray(scatterer_velocity, dtype=float) if moving else np.zeros(3)
+    total = rb.ComponentSum(n_az, n_el, n_t, rb.doppler_bins(
+        frequency, c, (np.linalg.norm(vt), np.linalg.norm(vr), np.linalg.norm(v_s)), doppler_resolution, max_doppler_bins))
     per_chunk = max(1, rb.CHUNK_CELLS // (4 * len(rings)))
     fan = hasattr(provider, "along_profile")
     if fan:
@@ -230,37 +229,11 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
                         pw = pw * rx_gain(u_p)
                     if absorption_db_per_m:
                         pw = pw * 10.0 ** (-absorption_db_per_m * c * t / 10.0)
-                    pos = (t - times[0]) / dt
-                    i0 = np.floor(pos).astype(np.int64)
-                    frac = pos - i0
-                    ok = (pw > 0.0) & np.isfinite(pw)
-                    lo, hi = ok & (i0 >= 0) & (i0 < n_t), ok & (i0 >= -1) & (i0 < n_t - 1)
                     elevation = np.arcsin(np.clip(u_p[:, 2], -1.0, 1.0))
-                    comp = comp_base + np.clip(np.floor((elevation + 0.5 * np.pi) / np.pi * n_el).astype(int), 0, n_el - 1)
-                    w_lo, w_hi = np.where(lo, pw * (1.0 - frac), 0.0), np.where(hi, pw * frac, 0.0)
-                    power += np.bincount((comp * n_t + i0)[lo], weights=w_lo[lo], minlength=n_comp * n_t)
-                    power += np.bincount((comp * n_t + i0 + 1)[hi], weights=w_hi[hi], minlength=n_comp * n_t)
-                    w = w_lo + w_hi
-                    weight += np.bincount(comp, weights=w, minlength=n_comp)
-                    f_d = (frequency / c) * (u_q @ vt + u_p @ vr)
-                    if moving:
-                        f_d = f_d + rb.scatterer_doppler(frequency, c, scatterer_velocity, a_q, a_p)
-                    if random_motion:
-                        var = rb.scatterer_doppler_variance(frequency, c, a_q, a_p, scatterer_rms_speed,
-                                                            scatterer_rms_vertical_speed)
-                        variance += np.bincount(comp, weights=w * var, minlength=n_comp)
-                    for axis in range(3):
-                        moment[:, axis] += np.bincount(comp, weights=w * u_p[:, axis], minlength=n_comp)
-                    moment[:, 3] += np.bincount(comp, weights=w * f_d, minlength=n_comp)
-    has = weight > rb.NEGLIGIBLE * weight.max(initial=0.0)
-    power = power.reshape(n_comp, n_t)
-    power[~has] = 0.0
-    direction = np.zeros((n_comp, 3))
-    mean = moment[has, :3] / weight[has, None]
-    direction[has] = mean / np.linalg.norm(mean, axis=1, keepdims=True)
-    doppler, spread = np.zeros(n_comp), np.zeros(n_comp)
-    doppler[has] = moment[has, 3] / weight[has]
-    spread[has] = np.sqrt(variance[has] / weight[has])
-    out.update(power=power.reshape(n_az, n_el, n_t), direction=direction.reshape(n_az, n_el, 3),
-               doppler=doppler.reshape(n_az, n_el), spread=spread.reshape(n_az, n_el))
-    return out
+                    base = comp_base + np.clip(np.floor((elevation + 0.5 * np.pi) / np.pi * n_el).astype(int), 0, n_el - 1)
+                    f_d = (rb.doppler_factor(c, u_q @ vt, u_p @ vr, a_q @ v_s if moving else None,
+                                             a_p @ v_s if moving else None) - 1.0) * frequency
+                    var = (rb.scatterer_doppler_variance(frequency, c, a_q, a_p, scatterer_rms_speed,
+                                                         scatterer_rms_vertical_speed) if random_motion else None)
+                    total.add(base, f_d, (t - times[0]) / dt, pw, u_p, var)
+    return total.result()

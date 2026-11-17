@@ -9,8 +9,8 @@ evaluated for our geometry (TR 0702 eqs. 36-41, 63, 66, 68, 71 and the rules of 
 Then closed forms through the whole simulator that the feature tests check at module level
 only.
 
-Two tests are expected to fail (xfail, strict) and say why: a defect found in the
-reverberation generator, which this package was told to report and not to fix.
+Two tests pin a defect this package found in the reverberation generator (one Doppler shift
+per arrival direction); they were strict xfails until the reverberation package fixed it.
 """
 
 import sys
@@ -76,7 +76,7 @@ def test_pursuit_reverberation_hook_follows_the_closed_form(pursuit):
     assert hook["early_shift_hz"] < 0.6 * hook["late_shift_hz"]
     assert hook["rank_correlation_with_time"] > 0.9
     assert hook["late_shift_hz"] == pytest.approx(hook["late_closed_form_hz"], abs=0.35 * cell)
-    # The generator is first order in v / c; the exact factor of eq. (71) is 3.6 Hz higher at 20 m/s.
+    # The closed form is eq. (71) itself, as the generator now has it; the first-order form is 3.6 Hz lower at 20 m/s.
     assert -5.0 < hook["first_order_minus_eq71_hz"] < 0.0
 
 
@@ -136,15 +136,13 @@ def test_pursuit_surface_reverberation_dominates(pursuit):
     assert noise["psd_db_re_upa2_per_hz"] == pytest.approx(noise["scenario_spectrum_db"], abs=0.5)
 
 
-DEFECT = ("Defect in sim/reverb_bistatic.py + the generator (reported, not fixed here): a reverberation component is "
-          "(azimuth sector, elevation of the RECEIVE ray) and carries ONE Doppler shift, the power-weighted mean over all "
-          "transmit paths and all times that arrive from there. Eigenray pairs with different transmit legs (direct and "
-          "bottom-reflected) that share a receive ray therefore share a shift: the weaker pair is given the stronger "
-          "pair's Doppler. TR 0702 eq. (71) gives each pair pq its own. Fix: bin components by Doppler as well "
-          "(or by transmit path).")
+# The defect these two tests pinned (fixed in sim/reverb_bistatic.py: components are keyed by Doppler bin as well): a
+# reverberation component was (azimuth sector, elevation of the RECEIVE ray) and carried ONE Doppler shift, the
+# power-weighted mean over all transmit paths and all times that arrive from there. Eigenray pairs with different
+# transmit legs (direct and bottom-reflected) that share a receive ray therefore shared a shift: the weaker pair was
+# given the stronger pair's Doppler. TR 0702 eq. (71) gives each pair pq its own.
 
 
-@pytest.mark.xfail(strict=True, reason=DEFECT)
 def test_reverberation_gives_each_eigenray_pair_its_own_doppler():
     """Deterministic form: the mean Doppler shift of the surface return from dead ahead
     against two-way time, from the generator's components and from a direct integration
@@ -162,9 +160,6 @@ def test_doppler_comparison_is_sound_without_a_bottom():
     assert found["max_error_with_bottom_paths_hz"] < 3.0
 
 
-@pytest.mark.xfail(strict=True, reason=DEFECT + " Seen end to end: with the bottom in the scenario the spectrogram changes "
-                                              "more than a second before the first bottom path can arrive, where the "
-                                              "direct return is in a null of the beam and the bottom pair sets the shift.")
 def test_bottom_paths_change_nothing_before_they_can_arrive(pursuit):
     """Causality, end to end: before 2 D / c the record with a reflecting bottom and the
     record without one differ only by their random draws (three pings averaged, 70 Hz bands,

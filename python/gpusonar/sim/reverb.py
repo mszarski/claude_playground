@@ -37,8 +37,8 @@ the boundary is flat and uniform.
 positions and velocities, the scattering strength at the true grazing angles and bistatic
 azimuth, the Doppler of each platform along its own ray, the arrival elevation in the
 steering, and a boundary strength that may vary over the boundary. The generator then
-works on components (azimuth sector x elevation bin), each with its own direction and
-Doppler shift, instead of horizontal azimuth sectors.
+works on components (azimuth sector x elevation bin x bin of total Doppler shift), each
+with its own direction and Doppler shift, instead of horizontal azimuth sectors.
 
 `statistics={"model": "k", "shape": nu}` makes the reverberation K-distributed: the power of
 each resolution cell (a cell of time and azimuth) is multiplied by a gamma variate of unit
@@ -405,7 +405,7 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
                       strength_map=None, azimuth_subsamples: int = 1, statistics: dict | None = None,
                       guard: float = 0.0, band_taper: bool = False, bathymetry=None,
                       scatterer_motion: dict | None = None, shadowing: bool = True,
-                      bottom_bounces: str = "exclude") -> np.ndarray:
+                      bottom_bounces: str = "exclude", max_doppler_bins: int = 128) -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
@@ -417,7 +417,9 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
 
     `geometry="bistatic"` takes the transmitter's and the receiver's own positions and
     velocities from the record (reverb_bistatic.py; see the header). With it, `n_elevation`
-    is the number of bins of arrival elevation (default 9: 20 degrees each), `strength_map`
+    is the number of bins of arrival elevation (default 9: 20 degrees each), `max_doppler_bins`
+    (128) the most bins of total Doppler shift the components are keyed by (they are half the
+    pulse's resolution 1 / T wide, or wider when that would take more bins), `strength_map`
     a function of world (x, y) giving a linear factor on the boundary's strength, and
     `azimuth_subsamples` the azimuths evaluated within a sector. `strength` may then take
     the bistatic azimuth as a third argument.
@@ -522,7 +524,8 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
         common = dict(frequency=fc, mu_db=mu_db, strength=strength, tx_velocity=tx_velocity, rx_velocity=rx_velocity,
                       tx_gain=tx_gain, rx_gain=rx_gain, absorption_db_per_m=absorption_db_per_m, max_range=max_range,
                       n_elevation=9 if n_elevation is None else int(n_elevation), strength_map=strength_map,
-                      subsamples=int(azimuth_subsamples))
+                      subsamples=int(azimuth_subsamples), doppler_resolution=0.5 / wf.duration,
+                      max_doppler_bins=int(max_doppler_bins))
         if any(v is not None and np.any(v) for v in motion_kw.values()):
             common.update(motion_kw)
         bed = None if bathymetry is None else make_bathymetry(bathymetry)

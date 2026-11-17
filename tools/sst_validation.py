@@ -238,8 +238,10 @@ def hook_frequency(t, g: dict, azimuth: float = 0.0):
 
 
 def hook_first_order(t, g: dict, azimuth: float = 0.0):
-    """The same to first order in v / c, f (1 + 2 v cos(angle) / c): what the reverberation
-    generator implements (sim/reverb_bistatic.py: f_d = f / c (V_S . u_Sq + V_R . u_Rp))."""
+    """The same to first order in v / c, f (1 + 2 v cos(angle) / c). The reverberation
+    generator used this until its components were keyed by Doppler; it now uses the factor
+    of eq. (71) itself (sim/reverb_bistatic.doppler_factor), so `hook_frequency` is its
+    closed form and this one is kept to state the difference."""
     t = np.asarray(t, dtype=float)
     slant = 0.5 * g["c"] * t
     cos_el = np.sqrt(np.clip(1.0 - (g["z"] / np.maximum(slant, 1e-9)) ** 2, 0.0, 1.0))
@@ -353,7 +355,9 @@ def pursuit(reverb_pings: int = 3) -> dict:
     # A segment centred at tc holds returns of two-way time tc - T/2 on average (the pulse is T long).
     te = tc - 0.5 * pulse
     predicted = hook_frequency(te, g)
-    first_order = hook_first_order(te, g)
+    # The generator's closed form: eq. (71) exactly (the keys below keep the name they had
+    # when the generator was first order in v / c).
+    first_order = hook_frequency(te, g)
     start = 2.0 * g["z"] / c
     ok = (te > start + 0.02) & (tc < t0 + 2.0 * (g["window"][1] - g["window"][0]) / c)
     search = (f > f0 - 40.0) & (f < f_max + 40.0)
@@ -365,8 +369,8 @@ def pursuit(reverb_pings: int = 3) -> dict:
     resolution = 1.44 / segment                               # -3 dB width of a Hann window of this length
     # Early on the Doppler rises by more than a resolution cell within one pulse length: the
     # ridge of a segment must lie between the closed form one pulse earlier and now.
-    lo = np.nan_to_num(hook_first_order(tc - pulse - 0.5 * segment, g), nan=f0) - 0.5 * resolution
-    hi = hook_first_order(tc + 0.5 * segment, g) + 0.5 * resolution
+    lo = np.nan_to_num(hook_frequency(tc - pulse - 0.5 * segment, g), nan=f0) - 0.5 * resolution
+    hi = hook_frequency(tc + 0.5 * segment, g) + 0.5 * resolution
     settled = ok & (te > 4.0 * g["z"] / c)                     # the closed form changes by < 1 cell per pulse from here
     early, late = ok & (tc < 0.7), ok & (tc > 4.0)
     out["hook"] = {
@@ -523,11 +527,11 @@ def pursuit_doppler_of_cross_pairs(n_elevation: int = 90, bottom: bool = True) -
     and their one Doppler shift each) against a direct integration over the surface in which
     every pair of paths has the shift of eq. (71).
 
-    A deterministic statement of the defect seen in the Pursuit spectrogram: a component is
-    (azimuth sector, elevation of the RECEIVE ray) and has one Doppler shift, the
-    power-weighted mean over everything that arrives from there. Returns with a direct ray
-    whose transmit leg went by the bottom arrive from the same direction as (much stronger,
-    earlier) returns by the direct ray both ways, and are given their shift."""
+    This pinned a defect, since fixed: a component used to be (azimuth sector, elevation of
+    the RECEIVE ray) with one Doppler shift, the power-weighted mean over everything that
+    arrived from there, so returns with a direct ray whose transmit leg went by the bottom
+    were given the shift of the (much stronger, earlier) returns by the direct ray both
+    ways. Components are now keyed by Doppler bin as well (reverb_bistatic.ComponentSum)."""
     from gpusonar.sim import reverb_bistatic
     from gpusonar.sim.propagation import ImageSourceProvider
     g = pursuit_geometry()
@@ -555,7 +559,7 @@ def pursuit_doppler_of_cross_pairs(n_elevation: int = 90, bottom: bool = True) -
         for p in "db":
             t = (slant[q] + slant[p]) / c
             w = amp2[q] * amp2[p] * mu * sin_g[q] * sin_g[p] * r
-            shift = f0 * v * (cos_v[p] + cos_v[q]) / c                  # eq. (71) to first order, as the generator has it
+            shift = f0 * ((1.0 + v * cos_v[p] / c) / (1.0 - v * cos_v[q] / c) - 1.0)      # eq. (71), as the generator has it
             k = np.rint((t - times[0]) / dt).astype(int)
             inside = (k >= 0) & (k < len(times))
             num += np.bincount(k[inside], weights=(w * shift)[inside], minlength=len(times))
@@ -1219,22 +1223,23 @@ def matrix(results: dict | None = None) -> list[dict]:
                        f"{100 * p['hook']['fraction_inside_slew_bracket']:.0f} % of segments inside the bracket of one pulse length; "
                        f"shift {p['hook']['early_shift_hz']:.0f} Hz before 0.7 s, {p['hook']['late_shift_hz']:.0f} Hz after 4 s"))
     row("Sec. 3", "Main ridge at the Doppler of straight ahead (eq. 63 / 71)",
-        "generator shifts each component by f / c (V_S . u + V_R . u): first order in v / c",
+        "generator shifts each component by (Gamma - 1) f with the factor of eq. (71) itself",
         mine + "test_pursuit_reverberation_hook_follows_the_closed_form",
-        m(P, lambda p: f"first-order ridge {p['hook']['main_lobe_ridge_first_order_hz']:.1f} Hz; exact eq. (71) {p['hook']['main_lobe_ridge_eq71_hz']:.1f} Hz: "
-                       f"the generator is {-p['hook']['first_order_minus_eq71_hz']:.1f} Hz low at 20 m/s (limit, documented)"))
+        m(P, lambda p: f"exact eq. (71) ridge {p['hook']['main_lobe_ridge_eq71_hz']:.1f} Hz (the first-order form is "
+                       f"{-p['hook']['first_order_minus_eq71_hz']:.1f} Hz lower at 20 m/s; the generator used it until its components were keyed by Doppler)"))
     row("Sec. 3", "A streak starting at about 1.7 s that merges with the ridge: a path that reflects from the bottom",
         "image-source provider under the reverberation (pairs of direct and bottom-reflected legs)",
         mine + "test_pursuit_bottom_bounce_streak_starts_when_geometry_says",
         m(P, lambda p: f"onset {p['bottom_bounce']['measured_onset_s']:.3f} s, closed form 2 D / c = {p['bottom_bounce']['closed_form_onset_s']:.3f} s "
                        f"(our depth); on the track of eq. (71) the return is {p['bottom_bounce']['on_true_track_db_re_no_bottom']:.1f} dB above the run "
                        f"without a bottom ({p['bottom_bounce']['control_40hz_above_track_db_re_no_bottom']:+.1f} dB 40 Hz above it, where eq. (71) "
-                       f"allows nothing: the defect of the next row)"))
+                       f"allows nothing)"))
     row("Sec. 3 / Sec. 11.2", "(implied) each eigenray pair has its own Doppler, eq. (71)",
-        "one Doppler per (azimuth, receive elevation) component: pairs that share a receive ray share a shift",
-        mine + "test_reverberation_gives_each_eigenray_pair_its_own_doppler (xfail), "
-        "::test_bottom_paths_change_nothing_before_they_can_arrive (xfail)",
-        m(P, lambda p: f"DEFECT: adding the bottom changes the record before any bottom path can arrive, by "
+        "components keyed by (azimuth, receive elevation, bin of total Doppler): pairs with different shifts are not merged "
+        "(was one Doppler per direction: a defect found here, fixed in the reverberation package)",
+        mine + "test_reverberation_gives_each_eigenray_pair_its_own_doppler, "
+        "::test_bottom_paths_change_nothing_before_they_can_arrive",
+        m(P, lambda p: f"Adding the bottom changes the record before any bottom path can arrive by at most "
                        f"{p['bottom_bounce']['largest_change_before_onset_db']:+.1f} dB near {p['bottom_bounce']['largest_change_at_s_hz'][0]:.2f} s, "
                        f"{p['bottom_bounce']['largest_change_at_s_hz'][1]:.0f} Hz"
                        + (f"; mean Doppler from dead ahead off by up to {p['cross_pairs']['max_error_with_bottom_paths_hz']:.0f} Hz "
@@ -1378,9 +1383,9 @@ def matrix(results: dict | None = None) -> list[dict]:
     row("Sec. 11.1, eqs. (110)-(111)", "Point scatterers placed by marching outward in range", "uniform Poisson patches (`seafloor`)", "not implemented as printed",
         "Different placement, same statistics: see the Sec. 10.5 row")
     row("Sec. 11.2, eqs. (113)-(129)", "Directional Doppler density: one Gaussian per (time, Doppler, direction) cell; receiver applied last",
-        "`reverb_bistatic.directional_power` + generator: (azimuth, elevation) components with ONE Doppler each",
-        t + "test_reverb_bistatic.py; " + mine + "test_reverberation_gives_each_eigenray_pair_its_own_doppler (xfail)",
-        "Level and array structure covered; Doppler is not a separate bin: wrong for pairs of different eigenrays (defect row above)")
+        "`reverb_bistatic.directional_power` + generator: (azimuth, elevation, Doppler bin) components",
+        t + "test_reverb_bistatic.py; " + mine + "test_reverberation_gives_each_eigenray_pair_its_own_doppler",
+        "Level, array structure and a Doppler per pair of eigenrays covered (bins of total Doppler no finer than half the pulse's 1 / T)")
     row("Sec. 11.3, eqs. (130)-(135)", "Scattering function convolved with the source spectrum, Cholesky factor, overlap-add",
         "-", "not implemented in that form", "Our generator convolves the pulse with a Gaussian sequence per direction (keeps the waveform); levels agree "
         "with the same integral (Sec. 6.4.3 row)")

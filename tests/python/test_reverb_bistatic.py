@@ -496,3 +496,100 @@ def test_strength_table_interpolates_in_range_and_azimuth():
     assert db(50.0, 0.0) == pytest.approx(0.0) and db(900.0, 0.0) == pytest.approx(10.0)   # held beyond the ends
     by_range = reverb_bistatic.table_strength_map([0.0, 10.0], [0.0, -10.0])
     assert 10 * np.log10(by_range(np.array(3.0), np.array(4.0))) == pytest.approx(-5.0)
+
+
+# --- components are keyed by Doppler -----------------------------------------------------------
+
+def mean_doppler(found, sector=0):
+    power, doppler = found["power"][sector], found["doppler"][sector]
+    return (power * doppler[:, None]).sum(axis=0) / np.maximum(power.sum(axis=0), 1e-300), power.sum(axis=0)
+
+
+def test_doppler_bins_cover_the_shifts_at_the_pulse_resolution():
+    lo, width, n = reverb_bistatic.doppler_bins(10e3, C, (20.0, 20.0, 0.0), resolution=5.0, max_bins=128)
+    assert lo == pytest.approx(-1.05 * 10e3 * 40.0 / C) and width == 5.0 and n == int(np.ceil(-2 * lo / 5.0))
+    assert lo + n * width >= -lo                                     # everything the speeds allow
+    # No more than the cap: the bins widen instead. Scatterers count twice (both legs).
+    lo, width, n = reverb_bistatic.doppler_bins(10e3, C, (20.0, 20.0, 1.0), resolution=0.5, max_bins=64)
+    assert n == 64 and width == pytest.approx(-2 * lo / 64) and lo == pytest.approx(-1.05 * 10e3 * 42.0 / C)
+    assert reverb_bistatic.doppler_bins(10e3, C, (0.0, 0.0, 0.0), 5.0, 128) == (0.0, 1.0, 1)      # nothing moves
+    # The factor itself, not its first-order form.
+    v_tx, v_rx = np.array([15.0, -3.0, 2.0]), np.array([-8.0, 12.0, 1.0])
+    point = np.array([60.0, -80.0, 0.0])
+    u_s, u_r = (point - TX) / np.linalg.norm(point - TX), (point - RX) / np.linalg.norm(point - RX)
+    assert reverb_bistatic.doppler_factor(C, v_tx @ u_s, v_rx @ u_r) == pytest.approx(
+        exact_doppler_factor(TX, RX, point, v_tx, v_rx), abs=1e-14)
+
+
+def test_doppler_of_one_direction_changes_along_the_record():
+    """A sonar moving at 20 m/s, 350 m below the surface: from dead ahead the surface return
+    comes first from steep rays (little Doppler) and later from shallow ones (2 f v / c).
+    With one elevation bin the whole sector is one direction; keyed by Doppler, its
+    components give every two-way time its own shift, eq. (71) exactly (within a bin of
+    the mean over one time bin). With a single Doppler bin (what the generator had) the late,
+    strong return sets one shift for the whole record."""
+    f0, v, z = 9.9e3, 20.0, 350.0
+    sonar = np.array([0.0, 0.0, z])
+    times = np.arange(0.5, 3.0, 0.01)
+    kw = dict(frequency=f0, mu_db=MU_DB, tx_velocity=(v, 0, 0), rx_velocity=(v, 0, 0), n_elevation=1)
+    found = reverb_bistatic.directional_power(FreeFieldProvider(C), sonar, sonar, 0.0, times, sectors(72),
+                                              doppler_resolution=5.0, **kw)
+    single = reverb_bistatic.directional_power(FreeFieldProvider(C), sonar, sonar, 0.0, times, sectors(72),
+                                               max_doppler_bins=1, **kw)
+    model, power = mean_doppler(found)
+    old, power_old = mean_doppler(single)
+    cos_angle = np.sqrt(1.0 - (z / (0.5 * C * times)) ** 2) * np.cos(sectors(72)[0])
+    beta = v * cos_angle / C
+    exact = f0 * ((1.0 + beta) / (1.0 - beta) - 1.0)
+    lit = times > 2.0 * z / C + 0.03
+    assert np.abs(model - exact)[lit].max() < 5.0                    # one 5 Hz bin (the shift moves within a time bin early on)
+    assert np.ptp(old[lit]) < 1e-6 and np.abs(old - exact)[lit].max() > 100.0
+    np.testing.assert_allclose(power[lit], power_old[lit], rtol=1e-9)          # the same power, in more components
+    # A handful of components per direction, at most one per Doppler bin.
+    _, width, n_bins = reverb_bistatic.doppler_bins(f0, C, (v, v, 0.0), 5.0, 128)
+    per_sector = (found["elevation_bin"] >= 0).sum(axis=1)
+    assert found["power"].shape[1] == per_sector.max() <= n_bins and per_sector.max() > 5
+    assert (found["power"][found["elevation_bin"] < 0] == 0).all()
+    used = found["elevation_bin"][0] >= 0
+    assert np.all(np.diff(found["doppler"][0][used]) > 0)            # in order of Doppler within the elevation bin
+
+
+def test_eigenray_pairs_keep_their_own_doppler_and_arrive_no_earlier():
+    """Surface reverberation under a bottom (one reflection allowed): the pairs with a leg by
+    the bottom arrive from 2 D / c on, with their own (lower) shift. Before that nothing
+    changes from the run without a bottom, in power or in Doppler; after it the mean shift
+    is the power-weighted mean of eq. (71) over the four pairs, by a direct integration."""
+    f0, v, z, depth, beta_b = 9.9e3, 20.0, 350.0, 1275.0, 0.5
+    sonar = np.array([0.0, 0.0, z])
+    times = np.arange(0.5, 3.0, 0.01)
+    kw = dict(frequency=f0, mu_db=MU_DB, tx_velocity=(v, 0, 0), rx_velocity=(v, 0, 0), n_elevation=9,
+              doppler_resolution=5.0)
+    with_bottom = reverb_bistatic.directional_power(
+        ImageSourceProvider(C, surface_z=0.0, bottom_z=depth, bottom_coefficient=beta_b, max_order=1), sonar, sonar, 0.0,
+        times, sectors(72), **kw)
+    without = reverb_bistatic.directional_power(ImageSourceProvider(C, surface_z=0.0, bottom_z=None, max_order=0),
+                                                sonar, sonar, 0.0, times, sectors(72), **kw)
+    model, power = mean_doppler(with_bottom)
+    alone, power_alone = mean_doppler(without)
+    onset = 2.0 * depth / C
+    before = (times > 2.0 * z / C + 0.03) & (times < onset - 0.02)
+    np.testing.assert_allclose(power[before], power_alone[before], rtol=1e-9)
+    assert np.abs(model - alone)[before].max() < 2.5                 # the bottom pairs may share a bin: half its width
+    # Direct integration over the surface of the first sector.
+    r = np.arange(0.25, 4000.0, 0.5)
+    slant = {"d": np.hypot(r, z), "b": np.hypot(r, 2.0 * depth - z)}
+    amp2 = {"d": 1.0 / slant["d"] ** 2, "b": beta_b**2 / slant["b"] ** 2}
+    sin_g = {"d": z / slant["d"], "b": (2.0 * depth - z) / slant["b"]}
+    cos_v = {k: r / slant[k] * np.cos(sectors(72)[0]) for k in slant}
+    num, den = np.zeros(len(times)), np.zeros(len(times))
+    for q in "db":
+        for p in "db":
+            k = np.rint(((slant[q] + slant[p]) / C - times[0]) / 0.01).astype(int)
+            w = amp2[q] * amp2[p] * sin_g[q] * sin_g[p] * r
+            shift = f0 * ((1.0 + v * cos_v[p] / C) / (1.0 - v * cos_v[q] / C) - 1.0)
+            ok = (k >= 0) & (k < len(times))
+            num += np.bincount(k[ok], weights=(w * shift)[ok], minlength=len(times))
+            den += np.bincount(k[ok], weights=w[ok], minlength=len(times))
+    mixed = (times > onset + 0.05) & (times < 2.0 * (2.0 * depth - z) / C - 0.05)
+    assert np.abs(model - num / den)[mixed].max() < 3.0
+    assert np.abs(alone - num / den)[mixed].max() > 10.0             # the bottom pairs do pull the mean down
