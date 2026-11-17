@@ -191,3 +191,37 @@ def test_scattering_function_on_a_real_passband_record():
         x = rec.samples.array
         levels[kind] = np.mean(np.abs(x) ** 2) * (2.0 if kind == "real" else 1.0)
     assert 10 * np.log10(levels["real"] / levels["baseband"]) == pytest.approx(0.0, abs=1.0)
+
+
+def test_volume_layer_level_follows_the_sonar_equation():
+    """A volume-scattering layer collapsed onto a sheet at its centre (SST's ReverbLayer): the
+    sheet's strength per unit area is Sv x thickness at every angle, so against Lambert's law
+    the prediction loses its sin^2(grazing) and keeps everything else."""
+    sv_db, thickness = -70.0, 20.0
+    intensity = 0.0
+    for seed in range(6):
+        sonar, rec = empty_baseband_ping()
+        reverb.add_reverberation(rec, FreeFieldProvider(C), boundary_z=0.0, mu_db=0.0, rng=np.random.default_rng(seed),
+                                 strength=reverb.volume_layer_strength(sv_db, thickness))
+        intensity = intensity + (np.abs(rec.samples.array) ** 2).mean(axis=0) / 6
+    s = rec.samples
+    t = s.start_time + np.arange(s.n_samples) / s.sample_rate
+    slant = 0.5 * C * (t - 0.5 * PULSE)
+    ok = (slant > 1.5 * HEIGHT) & (slant < 200.0)
+    predicted = 10 ** (sv_db / 10) * thickness * np.pi * C * PULSE / slant**3
+    edges = np.linspace(np.flatnonzero(ok)[0], np.flatnonzero(ok)[-1], 13).astype(int)
+    diffs = np.array([10 * np.log10(intensity[a:b].mean() / predicted[a:b].mean())
+                      for a, b in zip(edges[:-1], edges[1:])])
+    assert np.abs(diffs).max() < 2.0, diffs
+    assert abs(diffs.mean()) < 1.0
+
+
+def test_scenario_volume_layer_item_scales_with_its_strength():
+    from gpusonar.sim import Scene, make_pose, simulate_ping
+    sonar, _ = empty_baseband_ping()
+    def power(sv_db):
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                            reverberation=[{"model": "volume", "layer": [40.0, 60.0], "sv_db": sv_db}], rng=np.random.default_rng(2))
+        return float((np.abs(rec.samples.array) ** 2).mean())
+    assert power(-60.0) > 0.0
+    assert 10 * np.log10(power(-60.0) / power(-70.0)) == pytest.approx(10.0, abs=0.01)      # the same random numbers, ten times the power

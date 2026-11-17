@@ -109,6 +109,29 @@ def rms_wave_height(wind_speed: float) -> float:
     return 0.25 * 0.21 * float(wind_speed) ** 2 / 9.81
 
 
+def mean_square_slope(wind_speed: float) -> float:
+    """Mean-square slope of the wind-roughened sea surface (both axes together), Cox and Munk
+    (1954), clean surface: 0.003 + 0.00512 U, U in m/s at 12.5 m (taken as the 10 m wind)."""
+    return 0.003 + 0.00512 * max(float(wind_speed), 0.0)
+
+
+def rms_surface_vertical_speed(wind_speed: float) -> float:
+    """RMS vertical speed in m/s of the surface of a fully developed sea: the square root of the
+    second moment of the Pierson-Moskowitz frequency spectrum
+    S(w) = a g^2 w^-5 exp(-b (g / (U w))^4), a = 0.0081, b = 0.74, which integrates to
+    m2 = a sqrt(pi) U^2 / (4 sqrt(b)). (The zeroth moment gives `rms_wave_height`.)"""
+    a, b = 0.0081, 0.74
+    return float(np.sqrt(a * np.sqrt(np.pi) / (4.0 * np.sqrt(b))) * max(float(wind_speed), 0.0))
+
+
+def rough_coherent_reflection(grazing, rms_height: float, frequency: float, sound_speed: float = 1500.0):
+    """Amplitude of the coherent reflection from a boundary of given rms height relative to a
+    flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)."""
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    gamma = 2.0 * k * float(rms_height) * np.sin(np.asarray(grazing, dtype=float))
+    return np.exp(-0.5 * gamma**2)
+
+
 def surface_coherent_reflection(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
     """Amplitude of the coherent (specular) reflection from a rough surface relative to a
     flat one: exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing) the Rayleigh parameter.

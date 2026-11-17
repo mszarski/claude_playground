@@ -779,6 +779,37 @@ Limits: SBL does not separate arrivals in range, only in bearing at a range the 
 found; a line array's bearing is a cone, so a bottom-bounce arrival at a steep angle
 appears at a shifted bearing.
 
+## Time spreading of bounce paths and volume layers (SST TR 0702 Sec. 12 and 6.5)
+
+Source: `tests/python/test_timespread.py`, `tools/timespread_study.py`,
+`tests/python/test_reverberation.py`. The model and what it substitutes for the
+unavailable TR 9407 are in `DECISIONS.md` D-62.
+
+| Quantity | Result |
+| --- | --- |
+| Coherent part of a surface-bounce ray | the Rayleigh-parameter factor, to 1e-12 |
+| Coherent plus incoherent intensity, mean of 400 realisations | the flat-boundary intensity within 6% |
+| Mean excess delay of the incoherent part, bounce in mid-path | mss × half the one-way time (TR 0702's rule), within 8% over 300 realisations |
+| The same, bounce near the source | mss × twice the short leg, within 10% of the rule |
+| Correlation of the tap amplitudes at the lag where the model says 1/e | 0.37 ± 0.08; under 0.12 at forty times that lag; unchanged for ever when nothing moves |
+| Scatterers 0.6 m apart / 360 m apart | fade together / independently |
+| A ping with and without time spreading | identical up to the first bounce arrival, different after it, and different again 30 s later |
+| Volume layer (−70 dB re 1/m, 20 m thick) as a sheet: level against the sonar equation | within 2 dB in every range bin, mean within 1 dB |
+
+One target at 1 km in 100 m of water, flank array at 8 kHz, wind 6 m/s (rms height
+0.19 m, mean-square slope 0.034, rms vertical speed 0.39 m/s), 40 pings 15 s apart, one
+hydrophone after pulse compression, relative to a flat surface:
+
+| | Energy of all bounce arrivals | Strongest bounce peak | Its scintillation index | Energy 5 to 12 ms after it |
+| --- | --- | --- | --- | --- |
+| Coherent loss only (the simulator before) | −6.7 dB | −56 dB | 0 | −61 dB |
+| Time spreading | +0.8 dB | −6.4 dB | 0.71 | +5.6 dB |
+
+So the earlier model removed the surface-bounce arrivals almost entirely at this
+frequency and sea state; with time spreading their energy is kept, arrives spread over
+milliseconds and fades from ping to ping. The direct echo is unchanged (within 0.07 dB).
+Not compared with measurements: the shape of the tail is a placeholder exponential.
+
 ## Stages ported from NumPy to C++
 
 Source: `tests/python/test_beamform_cpp.py`, `tests/python/test_sim_cpp.py`,

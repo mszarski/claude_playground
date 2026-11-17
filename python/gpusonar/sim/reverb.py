@@ -144,6 +144,14 @@ def reverberation_power(provider: EigenrayProvider, source, boundary_z: float, t
     return power
 
 
+def volume_layer_strength(sv_db: float, thickness: float):
+    """A volume-scattering layer as SST treats it (TR 0702 Sec. 6.5): collapsed onto a sheet at
+    its centre depth. The sheet's scattering strength per unit area is the volume scattering
+    strength (per m, `sv_db` in dB re 1/m) times the layer's thickness, whatever the angles."""
+    areal = 10.0 ** (float(sv_db) / 10.0) * float(thickness)
+    return lambda g_in, g_out: np.full(np.broadcast(np.asarray(g_in), np.asarray(g_out)).shape, areal)
+
+
 def chapman_harris_strength(wind_speed: float, frequency: float):
     """Sea-surface scattering strength function for `reverberation_power`. Chapman-Harris is
     a backscattering fit; for a path pair with different grazing angles it is evaluated at

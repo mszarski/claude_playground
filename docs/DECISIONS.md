@@ -555,3 +555,26 @@ generator ends in the same state. A counter-based generator on the device would 
 faster and would change every seeded result; not done. Reverberation's FFTs and its
 power stage (which calls Python strength and beam-pattern functions) remain on the CPU;
 the sum over azimuth sectors into every channel is the kernel with a CUDA build.
+
+### D-62 Time spreading: SST's algorithm with open substitutes for what TR 9407 supplies
+`sim/timespread.py` wraps any eigenray provider and gives each bounce path a coherent part
+and a random, slowly changing tail of later arrivals (TR 0702 Sec. 12.4). TR 0702 takes
+three things from APL-UW TR 9407: the coherent/incoherent split, the shape of the
+intensity impulse response and the frequency spread. TR 9407 carries a limited-distribution
+marking on DTIC and the download was refused in this environment, so it was not used.
+- Split: Rayleigh-parameter coherent reflection, exp(-Gamma^2) in intensity. The rest of
+  the flat-boundary intensity is the incoherent part, so energy is conserved on average.
+- Decay time: TR 0702's own rule of thumb. Its two cases (mid-path, near one end) are the
+  two ends of T = 2 mss t1 t2 / (t1 + t2), which is used for any bounce position.
+- Shape: exponential, a handful of taps with their delays scaled so the mean excess delay
+  is the model's. Dahl's measured shapes are not exponential; this is a placeholder shape.
+- Time variation: exponential correlation, which is what SST's AR(1) filter gives, at the
+  Doppler width of a mirror moving at the boundary's rms vertical speed. Realised as a sum
+  of sinusoids with Cauchy-distributed frequencies keyed by a hash of (seed, place, ray,
+  tap), so no state is carried between pings.
+- Surface statistics from wind: Pierson-Moskowitz height and vertical speed, Cox-Munk slope.
+- Reverberation keeps using the flat-boundary paths: it is incoherent already, and its
+  backscatter geometry is far from the specular direction, so nothing is counted twice.
+- Cost: each bounce ray becomes 1 + taps rays one way, so a two-way path through bounces
+  on both legs becomes (1 + taps)^2 paths.
+- A user who holds TR 9407 can replace the three substitutes; they are three functions.

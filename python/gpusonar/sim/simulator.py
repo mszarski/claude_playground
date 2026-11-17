@@ -61,6 +61,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                time_ns=time_ns, environment=env, tx_pose=tx_pose)
     c = record.environment.sound_speed
     provider = provider or make_provider("free_field", c)
+    if hasattr(provider, "set_ping"):
+        # Time-spread bounce paths fade with time and with the sonar's own speed.
+        v = pose.velocity
+        provider.set_ping(scenario_time, float(np.hypot(v[0], v[1])))
     # The true board clock errors drive synthesis, then are cleared: the record a
     # processor receives does not know them (the sync stage estimates them).
     clocks = _set_board_clocks(record, sonar, truth=True, rng=rng)
@@ -117,6 +121,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         strength = None
         if item.get("model", "lambert") == "chapman_harris":
             strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
+        elif item.get("model") == "volume":
+            # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
+            # (fish, plankton, bubbles), as a sheet at its centre depth.
+            top, bottom = (float(v) for v in item["layer"])
+            strength = reverb.volume_layer_strength(float(item["sv_db"]), abs(bottom - top))
+            item = dict(item, boundary_z=0.5 * (top + bottom))
         elif item.get("model", "lambert") != "lambert":
             raise ValueError(f"unknown reverberation model {item['model']!r}")
         # `offset_db` moves the boundary's strength up or down whatever its model: what
@@ -125,7 +135,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         if strength is not None and offset != 0.0:
             base, scale = strength, 10.0 ** (offset / 10.0)
             strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
-        reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
+        reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"), backend=backend,
@@ -332,6 +342,11 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
     if engine is not None and hasattr(provider, "engine"):
         provider.engine = engine
+    if cfg.get("time_spread"):
+        from . import timespread
+        spread = dict(cfg["time_spread"])
+        spread.setdefault("seed", int(cfg.get("seed", 0)))
+        provider = timespread.wrap(provider, spread, frequency=sonar.center_frequency)
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
     scene = build_scene(cfg.get("scene", []), rng)
 

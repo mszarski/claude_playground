@@ -421,6 +421,9 @@ Control parameters on `Boundary` (p. 100-101); computed from wind speed by
 | `meanSquareSlope` | decay time of the incoherent tail. Rule of thumb: spreading time ~ mss x (half the total one-way travel time) for a mid-path bounce; ~ mss x (twice the travel time of the shorter leg) for a bounce near one end. |
 | `rmsVerticalSpeed` | Doppler spread from surface motion. Second component from motion of the reflection point: (speed of that motion) x sqrt(mss). Total RMS vertical speed = root-sum-square. Doppler spread = f x total RMS vertical speed / (c x sin(grazing angle)). |
 
+[OURS, implemented] `sim/timespread.py` implements this section with open substitutes for
+the three TR 9407 items; see `DECISIONS.md` D-62 and `RESULTS.md`.
+
 [OURS] The last formula is transcribed as stated (p. 101); dividing by
 sin(grazing angle) is unexpected (a vertically moving reflector normally gives
 a shift proportional to sin(grazing)). Treat as unverified until TR 9407 II.8

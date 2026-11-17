@@ -22,6 +22,12 @@ Updated at the end of each milestone. Newest facts first within each section.
 
 ## Since the last round (see the sections it points to)
 
+- **SST equivalence, started** (D-62): time spreading of boundary-bounce paths
+  (`sim/timespread.py`, scenario key `time_spread`) and volume-scattering layers
+  (`reverberation: {model: volume}`) are in, tested and measured. Still missing and
+  waiting on sources: a Jackson-type bottom scattering model and surface bubble loss. The
+  handbook SST takes them from (APL-UW TR 9407) is limited-distribution and was not read.
+
 - **The live chain in C++** (`libs/live`, `build/bin/sonar_live`; `ARCHITECTURE.md`,
   D-58): board stream to pings, navigation, synchronisation, clustering, tracking,
   classification and the report, as a library and a standalone program with no Python at
