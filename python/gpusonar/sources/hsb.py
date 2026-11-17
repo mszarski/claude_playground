@@ -507,12 +507,9 @@ if Operator is not None:
             import hololink
             from holoscan.conditions import BooleanCondition
             self._running = BooleanCondition(self, name="running", enable_tick=True)
-            import os
-            # Sensor Bridge pins its receiver thread to core 2 unless told otherwise. The socket buffer holds
-            # only about 10 ms of this stream, so a thread that has to wait for one busy core loses packets:
-            # by default it may run on any core this process may.
-            affinity = self._affinity if self._affinity is not None else set(os.sched_getaffinity(0))
-            options = {"receiver_affinity": affinity}
+            # Sensor Bridge pins its receiver thread to core 2 (HOLOLINK_AFFINITY names another); its Python
+            # binding takes one core number here, not a set (a set fails to convert in 2.7.0).
+            options = {} if self._affinity is None else {"receiver_affinity": int(self._affinity)}
             rx = hololink.operators.LinuxReceiverOp(
                 self, self._running, name="receiver", frame_size=self._frame_size, frame_context=self._cuda.context,
                 hololink_channel=self._channel, device=Board(), pages=self._queue, queue_size=self._queue, **options)
