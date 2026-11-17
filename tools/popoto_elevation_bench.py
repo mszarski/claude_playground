@@ -44,7 +44,8 @@ from gpusonar.sources.flank_stream import decode_block  # noqa: E402
 
 core = gs.core
 SONARS = {1: "popoto_long_range", 2: "popoto_long_range_2row", 3: "popoto_long_range_3row"}
-TARGETS = [[740.0 + 60.0 * i, 12000.0, 4.0 + 20.0 * (i % 3)] for i in range(6)]
+TARGETS = [[12000.0 * np.sin(np.radians(b)) + 0.0, (11600.0 + 80.0 * i) * np.cos(np.radians(b)), 4.0 + 20.0 * (i % 4)]
+           for i, b in enumerate(np.linspace(-50.0, 50.0, 12))]            # twelve targets over the sector, 11.6 to 12.5 km
 
 
 def pings(rows, overrides, targets, n, position=(0.0, 0.0, 10.0), noise=2e-6, ts=30.0):
@@ -75,12 +76,12 @@ def stream_check(rows):
     sonar, recs = pings(rows, over, [[100.0, 950.0, 40.0]], 2, noise=1e-5, ts=10.0)
     n_ch = recs[0].samples.n_channels
     lsb = recs[0].metadata.adc_full_scale / 2**23
-    interval = 2.0
+    interval = 3.0
     out = {"channels": n_ch, "boards": len(sonar.boards), "samples_per_ping": int(recs[0].samples.n_samples)}
 
     def same(got):
         return bool(len(got) == len(recs) and all(
-            g.samples.array.shape == w.samples.array.shape and np.abs(g.samples.array - w.samples.array).max() <= 0.5 * lsb * (1 + 1e-6)
+            g.samples.array.shape == w.samples.array.shape and np.abs(g.samples.array - w.samples.array).max() <= 0.501 * lsb
             for g, w in zip(got, recs)))
 
     # Blocks as the boards would send them: a datagram stays under 16 kB whatever the channel count.
@@ -203,7 +204,7 @@ def main():
         print("TIMING: one full-length ping, 0.5-13 km at 102.4 kHz real (the deployment file's window)")
         for rows in (1, 2, 3):
             t0 = time.perf_counter()
-            _, recs = pings(rows, None, [[740.0, 6000.0, 30.0]], 1)
+            _, recs = pings(rows, {"receive": {"window": {"range": [500.0, 13000.0]}}}, [[740.0, 6000.0, 30.0]], 1, ts=40.0)
             t = time_chain(recs, rows)
             t.update(samples_per_channel=int(recs[0].samples.n_samples), raw_bytes=int(recs[0].samples.array.nbytes),
                      simulate_seconds=time.perf_counter() - t0 - t["seconds_per_ping"])

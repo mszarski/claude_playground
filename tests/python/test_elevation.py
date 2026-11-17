@@ -319,6 +319,19 @@ def test_cpp_chain_gives_the_python_chains_elevation_and_depth(free_field):
                 assert a[key] == pytest.approx(b[key], abs=0.2), key
 
 
+def test_interleaved_wiring_gives_the_same_depths():
+    """Four hydrophones of each row per board (the rows of a board share its clock): the chain finds
+    the rows from the positions, so the channel order does not matter."""
+    from gpusonar.config import load_scenario_config
+    sc = load_scenario_config("popoto_elevation_free")
+    sc["sonar_overrides"]["array"] = {"interleave": 4}
+    sc["pings"]["count"] = 3
+    records = run_scenario(sc).records
+    for engine in ("python", "cpp"):
+        last = run(records, dict(CHAIN, elevation={}), engine)[-1]
+        assert last["rows"] == 2 and sorted(t["depth_m"] for t in last["tracks"]) == pytest.approx([10.0, 60.0, 160.0], abs=4.0), engine
+
+
 def test_one_row_is_processed_exactly_as_without_the_option():
     """The option on a one-row array, and the option off, give the same report lines in both engines."""
     sonar = SonarModel.load("popoto_long_range", {"receive": dict(BASEBAND, window={"range": [800.0, 1200.0]})})

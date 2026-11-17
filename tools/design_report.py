@@ -556,8 +556,12 @@ def stacked_rows(D) -> list:
     L.append(f"| The same per hour at one ping every {lr['min_ping_interval_s']:.1f} s (GB) | "
              + " | ".join(f"{k * 32 * n * 4 / 1e9 * 3600.0 / lr['min_ping_interval_s']:.0f}" for k in (1, 2, 3)) + " |")
     t = B["timing_scenario_size"]
-    L.append(f"| Processing per ping, C++ chain on {B['cpu_threads']} CPU threads, pings of the `popoto_12km` scenario's size (s) | "
+    L.append(f"| Processing per ping, C++ chain on {B['cpu_threads']} CPU threads of a shared machine, pings of the `popoto_12km` scenario's size (s) | "
              + " | ".join(f"{t[k]['seconds_per_ping']:.2f}" for k in "123") + " |")
+    full = B.get("timing_full_length") or {}
+    if full:
+        L.append(f"| The same for one full-length ping at the boards' rate ({full['1']['samples_per_channel']:,} real samples per channel), "
+                 f"against the {lr['min_ping_interval_s']:.1f} s between pings (s) | " + " | ".join(f"{full[k]['seconds_per_ping']:.1f}" for k in "123") + " |")
     L.append(f"| One-sigma elevation at 13 / 20 / 30 dB (deg) | none | "
              + " | ".join(" / ".join(f"{acc[g]['sigma_deg'][k]:.2f}" for k in ("13.0", "20.0", "30.0")) for g in (two, three)) + " |")
     half = S["unambiguous_half_sector_deg"][f"{d:.3f}"]
@@ -660,7 +664,12 @@ def stacked_rows(D) -> list:
              f"depth {min(sh['depth_m']):.0f} to {max(sh['depth_m']):.0f} m over {len(sh['depth_m'])} pings, path {sh['path'][0]} |")
     L.append(f"| `popoto_elevation_rehearsal`: raw 102.4 kHz, {re['boards']} boards on their own clocks, rolled {re['roll_deg']:.0f}°, pitched {re['pitch_deg']:.0f}°, 100 m of water | "
              f"targets at {re['deep_true_m']:.0f} m and {re['shallow_true_m']:.0f} m | boards synchronised to {re['worst_residual_us']:.2f} µs; "
-             f"{min(re['deep_depth_m']):.0f} to {max(re['deep_depth_m']):.0f} m; the shallow one {min(re['shallow_depth_m']):.0f} to {max(re['shallow_depth_m']):.0f} m (its direct and surface echoes merged) |")
+             f"{min(re['deep_depth_m']):.0f} to {max(re['deep_depth_m']):.0f} m; the shallow one {min(re['shallow_depth_m']):.1f} to {max(re['shallow_depth_m']):.1f} m (its direct and surface echoes merged) |")
+    L.append("\n**Passive.** Listening (`--passive`, `--listen` with `elevation=1`) gives every bearing an elevation the same way: each row is steered at\n"
+             "the bearing in every frequency bin and block of a frame, and the rows' beams are steered over elevation. On simulated broadband\n"
+             "sources 1 km away at 20 m and 250 m depth, heard from 100 m with the vehicle rolled 3°, each 0.2 s frame gives both elevations within\n"
+             "1.5° (`tests/python/test_elevation.py`). The second-lobe and roll remarks above apply unchanged; there is no range, so no depth,\n"
+             "from one position.")
     rf = S["refraction_error_m"]
     k0 = next(iter(rf))
     L.append("\n**Bent rays.** By default depth is range × the sine of the level elevation: a straight ray. In a sound-speed gradient g the ray curves\n"
@@ -673,15 +682,15 @@ def stacked_rows(D) -> list:
     L.append("| Error source | Elevation error | Depth error at 1 km / 6 km / 12 km |\n| --- | --- | --- |")
     for a, v in se["roll_depth_error_m"].items():
         L.append(f"| Roll known to {a}° | {a}° | {v[0]:.1f} / {v[1]:.0f} / {v[2]:.0f} m |")
-    for label, key, unit in (("One row further out than the drawing by", "out_offset_error_deg", "mm"),
+    for label, key, unit in (("One row further out than the drawing by", "out_offset_error_deg", " mm"),
                              ("Phase mismatch between the rows' channels of", "phase_mismatch_error_deg", "° of phase"),
-                             ("Clock error between boards on different rows of", "board_clock_error_deg", "µs")):
+                             ("Clock error between boards on different rows of", "board_clock_error_deg", " µs")):
         for a, v in se[key].items():
             if key == "board_clock_error_deg" and a not in ("0.5", "1.0", "8.3"):
                 continue
             if key != "board_clock_error_deg" and a not in ("1.0", "5.0"):
                 continue
-            L.append(f"| {label} {a} {unit} | {v:.2f}° | " + " / ".join(f"{r * np.radians(v):.0f}" for r in (1000.0, 6000.0, 12000.0)) + " m |")
+            L.append(f"| {label} {a}{unit} | {v:.2f}° | " + " / ".join(f"{r * np.radians(v):.0f}" for r in (1000.0, 6000.0, 12000.0)) + " m |")
     L.append(f"\n- **Roll.** Roll error is elevation error one for one. The attitude sensor's roll accuracy is the first number to ask the vehicle\n"
              "  team for; it is `elevation.roll_sigma_deg` in the deployment file (0.2° assumed, unconfirmed) and goes into every reported depth\n"
              "  sigma. **Not done yet:** the chain applies the roll navigation gives for the transmit time. An echo from 12 km arrives 16 s\n"
@@ -707,6 +716,16 @@ def stacked_rows(D) -> list:
              f"Sensor Bridge frames ({st['2']['hsb_frame_bytes']:,} and {st['3']['hsb_frame_bytes']:,} bytes for 1600 samples), the container file and the C++ chain all carry them unchanged\n"
              "(samples back within half a count). The record format already stores every hydrophone's position: no format change.\n"
              "The elevation stage runs on the backprojection kernel (host or CUDA), so it needs no GPU code of its own; it has not been run on a GPU.\n")
+    if full:
+        L.append(f"**Compute.** Cost grows in proportion to the rows. On pings already at baseband (8 kHz complex, the scenario's size) the C++ chain takes "
+                 f"{t['1']['seconds_per_ping']:.1f}, {t['2']['seconds_per_ping']:.1f} and {t['3']['seconds_per_ping']:.1f} s for one, two and three rows.\n"
+                 f"On one full-length ping as the boards deliver it (102.4 kHz real, 0.5 to 13 km) it takes {full['1']['seconds_per_ping']:.0f}, "
+                 f"{full['2']['seconds_per_ping']:.0f} and {full['3']['seconds_per_ping']:.0f} s on {B['cpu_threads']} CPU threads of a shared machine, "
+                 f"against {lr['min_ping_interval_s']:.1f} s between pings:\n"
+                 "**on a CPU of this class the chain does not keep up with two or three rows at the boards' full rate, and barely with one.** "
+                 "The band is 2 kHz wide, so the\nsamples carry 13 times more than needed: converting to baseband and decimating before the chain "
+                 "(on the boards or in a first stage on the\nvehicle computer), or a GPU (the one-row map was 17 times faster on an L4, `RESULTS.md`), "
+                 "closes the gap. Neither is done for rows; it is a\ndecision to take with the vehicle computer.\n")
     L.append("**What it does not improve.** Bearing resolution and range resolution (the array is no longer and the band no wider). "
              "Left/right: rows in one vertical plane cannot tell port from starboard; the hull behind the array does that, as now. "
              f"Detection range, much: {gain['2']['rows_added_as_power_db']:.1f} dB with two rows, roughly a tenth more range under spherical spreading. "
