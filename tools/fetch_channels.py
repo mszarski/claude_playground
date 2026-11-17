@@ -25,29 +25,82 @@ import urllib.request
 RECORD = "21287414"
 BASE = f"https://zenodo.org/api/records/{RECORD}/files"
 
-# name: (size in bytes, md5)
-FILES = {
-    "purple_1.mat": (712812521, "5a4261d9c51e35c322c92db3c497c793"),      # SPACE'08, 60 m, cross array (32)
-    "purple_3.mat": (534541341, "a449f2256ccf59f0295bb8ce21c24590"),      # SPACE'08, 200 m, vertical (24)
-    "purple_5.mat": (354079789, "f3f6c16a4139d2dc258a7cad295c75d6"),      # SPACE'08, 1 km, vertical (12)
-    "purple_6.mat": (712812521, "2694d019f694a1e11e7a2799df426277"),      # the same systems, second recording
+FILES = {   # every file of Zenodo record 21287414: name: (bytes, md5)
+    "black.mat": (161710585, "16307b935cac01d02902e04a265f08cd"),
+    "blue_1.mat": (206132594, "6776481ad636e40b1d6038fa37121fb7"),
+    "blue_2.mat": (206132594, "60cc9bf8a5e9e64b75b5fcaf6b196993"),
+    "blue_3.mat": (206132594, "4476d3f79d7eeb086574e0b3a3b74050"),
+    "blue_4.mat": (206132594, "eaedef33a4bab70ffa6afaa835a897d1"),
+    "blue_5.mat": (206132594, "262be5cf3cb79ede4cb04b56c4884a6f"),
+    "blue_6.mat": (206132594, "be0b1923ad4d4aab5b6730bf5c3fb4d2"),
+    "blue_7.mat": (206132594, "3ee1ab5b0862193fd470376601e6ff07"),
+    "blue_8.mat": (206132594, "b15d1853c6808c6cb4f7fdb13a4aa1ea"),
+    "blue_9.mat": (206132594, "3c78f02efccd985e5892176ecc58726e"),
+    "blue_10.mat": (206132602, "0c5ee94f97430f1c412e3ba576fc7327"),
+    "blue_11.mat": (206132602, "01d87d09cb1fea67bbf1eb9027100b83"),
+    "blue_12.mat": (206132602, "6b6829dc9e7ecb4cc17b99a3ecfbdf2a"),
+    "blue_13.mat": (206132602, "073b8d3dcdfc674fe930b18ef92b7082"),
+    "blue_14.mat": (206132602, "249e57eac6cceaec64831269e489b29d"),
+    "blue_15.mat": (206132602, "38f35c9185aace525296d817f5ac9d68"),
+    "blue_16.mat": (206132602, "da08ff1d6635e95ebff0403a3510d566"),
+    "blue_17.mat": (206132602, "8d57a6daceab00ce794bbc1846a341ad"),
+    "blue_18.mat": (206132602, "e0da8f06b03ee4ccabd2b0f9b7f2242a"),
+    "blue_19.mat": (206132602, "f778e04f493cd33b4f3722456cb8dc63"),
+    "blue_20.mat": (206132602, "e10357d16a86c5ee996ca2710dcd32fe"),
+    "brown.mat": (660486317, "c653cdf5f94b84715d6ac357f158aa82"),
+    "green.mat": (1094029080, "7300ba02d788a551a3b59e164bfe59fb"),
+    "pink_1.mat": (1496605964, "b276fb275a41fc75a286b30f3eafa999"),
+    "pink_2.mat": (1496605964, "616da90fb3a8c5cf9633654f378aef08"),
+    "pink_3.mat": (1440393938, "876e935e057e36391f5250e7dd2ac15e"),
+    "purple_1.mat": (712812521, "5a4261d9c51e35c322c92db3c497c793"),
+    "purple_2.mat": (712812521, "0707b7d09df3c592d4462135c6bc2019"),
+    "purple_3.mat": (534541341, "a449f2256ccf59f0295bb8ce21c24590"),
+    "purple_4.mat": (534541341, "ac50e6b05fad13729821d4835a9d0a2b"),
+    "purple_5.mat": (354079789, "f3f6c16a4139d2dc258a7cad295c75d6"),
+    "purple_6.mat": (712812521, "2694d019f694a1e11e7a2799df426277"),
+    "purple_7.mat": (712812521, "1aabf286a99ec62d3264a1bd0c2c87a2"),
     "purple_8.mat": (534541341, "f6f3f3befbbfaba44d8bbe9fd30069c5"),
+    "purple_9.mat": (534541341, "9a4e8018c447f3af521b8c62119f1fd3"),
     "purple_10.mat": (354079789, "edd40719f8df6e225462d4f8eaaf9a2f"),
-    "purple_11.mat": (712812521, "ed09ab649b89f127fe0b715a541c359b"),     # third recording
+    "purple_11.mat": (712812521, "ed09ab649b89f127fe0b715a541c359b"),
+    "purple_12.mat": (712812521, "fb99c1a26e085791ae84bc8ea2a111b3"),
     "purple_13.mat": (534541341, "8c7030d26d33d5586e662e1a5965206b"),
+    "purple_14.mat": (534541341, "b1baaa8d865083e17457488621d30d6d"),
     "purple_15.mat": (354079789, "3e19b310d857c0e9ce9c8912bf156473"),
-    "red_1.mat": (191566442, "76ee45172cd0bf5deb4a7bfb04907884"),         # Singapore, 25 kHz, drifting
-    "yellow_4.mat": (360679714, "538d4374097df37d13f952947c9ff6db"),      # KAM'11, 7 km
+    "red_1.mat": (191566442, "76ee45172cd0bf5deb4a7bfb04907884"),
+    "red_2.mat": (191566442, "cb1b4566f5e9db67b93c072dbce8db06"),
+    "red_3.mat": (191566442, "befb441590ddafc4383746cc0526d4b6"),
+    "red_4.mat": (191566442, "bbab171a6af14632944d1fee157cde86"),
+    "yellow_1.mat": (821046493, "55828835d6a1aed660f749b9c53e594e"),
+    "yellow_2.mat": (821046493, "5c399ecf8f7001fec5248bbd36ac29d0"),
+    "yellow_3.mat": (984922035, "b38c9ba7351ee735b00e7b2b4332693b"),
+    "yellow_4.mat": (360679714, "538d4374097df37d13f952947c9ff6db"),
+    "yellow_5.mat": (834576462, "281f2caded81d7cfbfbac2a60baaca1e"),
+    "yellow_6.mat": (394887977, "a03482e6d624d0de3f19a26db64c86ef"),
+    "black_noise.mat": (104793, "75f955908bfa7bf3261b0f855e8b0bbe"),
+    "blue_noise.mat": (155097, "039ffcd3d74cb87f418b052933e0b750"),
+    "green_noise.mat": (7416, "bfe52230fb115a1007fe68993f3f9088"),
+    "pink_noise_1.mat": (614833, "69d9eea390c0e07c23931fe6c62fc433"),
+    "pink_noise_2.mat": (614833, "5476a608fc72cbd6f2e0a8717bd7aa3f"),
+    "pink_noise_3.mat": (514576, "dd85b83304be903ef9890f2ebdb9df9d"),
     "purple_noise_1.mat": (580006, "5300e408a09cf0662ab3f5ceb0f83b11"),
+    "purple_noise_2.mat": (580006, "0091fcdb5677a954eebe3e3c96c7eb7b"),
     "purple_noise_3.mat": (306031, "d340e5e50de3c3505c0d9a44fd579301"),
+    "purple_noise_4.mat": (306031, "00afbabffe2082ae09d03974fac9bcf1"),
     "purple_noise_5.mat": (117081, "1d162196563dd4f392dd848675e81ec5"),
     "red_noise.mat": (5176, "0c525d72db00608ff77f3b8537bdf06f"),
-    "blue_noise.mat": (155097, "039ffcd3d74cb87f418b052933e0b750"),
+    "yellow_noise_1.mat": (614833, "c65a2596ff7c6a714e9750c64a02deb8"),
+    "yellow_noise_2.mat": (614833, "645eeab85da7401c7b4b390fe5fb15e2"),
+    "yellow_noise_3.mat": (313722, "8300c8384ad00efe679c1c38530e5200"),
+    "yellow_noise_4.mat": (313722, "f8207560e1c689e56b36f57d525d2f7f"),
 }
 SETS = {
     "validation": ["purple_1.mat", "purple_3.mat", "purple_5.mat"],
     "purple": ["purple_1.mat", "purple_3.mat", "purple_5.mat", "purple_6.mat", "purple_8.mat", "purple_10.mat",
                "purple_11.mat", "purple_13.mat", "purple_15.mat"],
+    # What tools/channel_validation.py --sites all uses (5.6 GB): SPACE'08, Norway'24, Mariana, Singapore'24, KAM'11, MACE'10.
+    "all-sites": ["purple_1.mat", "purple_3.mat", "purple_5.mat", "purple_6.mat", "purple_8.mat", "purple_10.mat", "purple_11.mat",
+                  "purple_13.mat", "green.mat", "black.mat", "red_1.mat", "red_2.mat", "yellow_1.mat", "yellow_4.mat", "blue_1.mat"],
     "noise": ["purple_noise_1.mat", "purple_noise_3.mat", "purple_noise_5.mat", "red_noise.mat", "blue_noise.mat"],
     "all-small": ["purple_5.mat", "red_1.mat", "yellow_4.mat"],
 }

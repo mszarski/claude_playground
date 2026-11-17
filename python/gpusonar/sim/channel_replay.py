@@ -447,6 +447,45 @@ def arrival_statistics(channel: TimeVaryingChannel, receiver: int, delay_bin: in
             "tail_profile": inc_raw, "tail_fit_bins": int(stop)}
 
 
+def subband_statistics(channel: TimeVaryingChannel, receiver: int, delay_bin: int, *, before: int = 2, after: int = 8,
+                        reference: np.ndarray | None = None, fraction: float = 0.7, nfft: int = 512, line_half_width: float = 0.3) -> dict:
+    """The arrival at `delay_bin` in the lower and the upper half of the band: a test of how its
+    spreading scales with frequency inside one measurement.
+
+    The arrival's bins (delay_bin - before .. delay_bin + after, Hann-tapered at the ends) are
+    transformed along delay to H(t, f); f covers +-fs_delay / 2 about fc, of which the estimate
+    occupies the middle half. The lower band is the bins in -fraction fs_delay / 4 .. 0, the
+    upper 0 .. +fraction fs_delay / 4. Returned per band: centre frequency (Hz), rms Doppler
+    width and coherent share (as `arrival_statistics`), and their upper / lower ratios. For a
+    path whose length changes in time the Doppler width is proportional to frequency; for a
+    rough-surface bounce the logarithm of the coherent share is proportional to its square."""
+    h = channel.h[:, receiver, :]
+    if reference is not None:
+        h = h * np.conj(reference[:, receiver])[:, None]
+    k0, k1 = max(delay_bin - before, 0), min(delay_bin + after + 1, channel.n_delay)
+    seg = h[:, k0:k1]
+    n = seg.shape[1]
+    taper = np.ones(n)
+    edge = max(1, min(before, 2))
+    taper[:edge] = 0.5 * (1.0 - np.cos(np.pi * (np.arange(edge) + 0.5) / edge))
+    taper[-2:] = taper[:2][::-1] if n > 4 else 1.0
+    size = 64
+    hf = np.fft.fft(seg * taper, size, axis=1)
+    f = np.fft.fftfreq(size, 1.0 / channel.fs_delay)
+    edge_f = fraction * channel.fs_delay / 4.0
+    out = {}
+    for name, sel in (("lower", (f < 0) & (f >= -edge_f)), ("upper", (f > 0) & (f <= edge_f))):
+        x = hf[:, sel]
+        nu, sp = doppler_spectrum(x, channel.fs_time, nfft)
+        w = spectrum_widths(nu, sp, floor=float(np.median(sp[np.abs(nu) > 0.35 * channel.fs_time])), line_half_width=line_half_width)
+        power = (np.abs(x) ** 2).mean(axis=0).sum()
+        out[name] = {"frequency": float(channel.fc + f[sel].mean()), "doppler_rms": w["rms"], "doppler_w50": w["w50"],
+                     "coherent_fraction": float((np.abs(x.mean(axis=0)) ** 2).sum() / max(power, 1e-300))}
+    out["frequency_ratio"] = out["upper"]["frequency"] / out["lower"]["frequency"]
+    out["doppler_ratio"] = out["upper"]["doppler_rms"] / max(out["lower"]["doppler_rms"], 1e-12)
+    return out
+
+
 def scattering_function(channel: TimeVaryingChannel, receiver: int = 0, nfft: int = 256, reference: np.ndarray | None = None):
     """Delay-Doppler scattering function S[nu, tau] of one receiver: the Welch spectrum over
     time of every delay bin. Returns (nu Hz, tau s, S)."""

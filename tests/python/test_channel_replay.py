@@ -390,6 +390,94 @@ def test_validation_procedure_recovers_a_known_wind_and_tells_the_options_apart(
     assert len(paths) == 3 and all(p.stat().st_size > 10_000 for p in paths)
 
 
+def test_subband_doppler_scales_with_frequency_for_a_moving_path():
+    """A path whose delay wanders has a phase 2 pi f delay(t): its Doppler width is proportional to
+    the frequency, so the upper half of the band is wider than the lower by the ratio of their
+    centre frequencies. A path with fading that does not depend on frequency gives a ratio of 1."""
+    rng = np.random.default_rng(8)
+    n_time, n_delay = 3400, 96
+    t = np.arange(n_time) / FS_T
+    wander = sum(a * np.sin(2 * np.pi * f * t + p) for a, f, p in zip(rng.normal(0, 1, 40), rng.uniform(0.05, 1.5, 40), rng.uniform(0, 6.28, 40)))
+    wander *= 4e-5 / wander.std()                                # 40 us rms: 3 rad at 12.5 kHz
+    h = np.zeros((n_time, 1, n_delay), dtype=complex)
+    for i in range(n_time):
+        h[i, 0] = cr.band_pulse(n_delay, FS_D, BW, 2e-3 + wander[i]) * np.exp(-2j * np.pi * FC * wander[i])
+    moving = cr.TimeVaryingChannel(h=h, fs_time=FS_T, fs_delay=FS_D, fc=FC)
+    out = cr.subband_statistics(moving, 0, _bin(2e-3), line_half_width=0.0)
+    assert out["frequency_ratio"] == pytest.approx(1.2, abs=0.08) and out["upper"]["frequency"] > FC > out["lower"]["frequency"]
+    assert out["doppler_ratio"] == pytest.approx(out["frequency_ratio"], rel=0.05)
+    rate = np.gradient(wander, 1.0 / FS_T).std()
+    assert out["upper"]["doppler_rms"] == pytest.approx(out["upper"]["frequency"] * rate, rel=0.1)
+    flat = cr.synthetic_channel([{"delay": 2e-3, "incoherent": 1.0, "doppler_width": 1.5}], n_receivers=6, **GRID)
+    ratios = [cr.subband_statistics(flat, m, _bin(2e-3), line_half_width=0.0)["doppler_ratio"] for m in range(6)]
+    assert np.mean(ratios) == pytest.approx(1.0, abs=0.06)
+
+
+def _sites_tool():
+    import importlib.util
+    import sys
+    tools = pathlib.Path(__file__).resolve().parents[2] / "tools"
+    if str(tools) not in sys.path:
+        sys.path.insert(0, str(tools))
+    spec = importlib.util.spec_from_file_location("channel_sites", tools / "channel_sites.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    return tool
+
+
+def test_all_sites_table_survey_and_dependencies(tmp_path):
+    """tools/channel_sites.py without the data: every site has a verdict and a reason; the
+    model-free survey finds the arrivals of a synthetic channel with their statistics; the
+    closed forms used for the cross-arrival comparison are those of sim/timespread.py."""
+    tool = _sites_tool()
+    assert set(tool.SITES) == {"purple", "green", "black", "red", "yellow", "blue", "pink", "brown"}
+    assert all(s["protocol"] and s["why"] and s["geometry"] for s in tool.SITES.values())
+    assert [n for n, s in tool.SITES.items() if s["protocol"] == "full"] == ["purple"]
+    rls = cr.TimeVaryingChannel(h=np.zeros((2, 1, 4), complex), fs_time=1.0, fs_delay=13020.83, fc=FC, meta={"lambda": 0.995})
+    lms = cr.TimeVaryingChannel(h=np.zeros((2, 1, 4), complex), fs_time=1.0, fs_delay=9000.0, fc=6e3, meta={"mu": 1.0 / 14400.0})
+    assert tool.tracker_bandwidth(rls)[0] == pytest.approx(10.36, abs=0.01) and "stated" in tool.tracker_bandwidth(rls)[1]
+    assert tool.tracker_bandwidth(lms)[0] == pytest.approx(0.0497, abs=0.001) and "assumed" in tool.tracker_bandwidth(lms)[1]
+    ch = cr.synthetic_channel([{"delay": 1e-3, "amplitude": 2.0}, {"delay": 3e-3, "incoherent": 1.0, "doppler_width": 1.5},
+                               {"delay": 6e-3, "incoherent": 0.5, "doppler_width": 1.0, "doppler_spectrum": "lorentzian"}], n_receivers=2, noise=1e-4, **GRID)
+    rows = [r for r in tool.survey(ch) if not r["is_reference"]]
+    assert len(rows) == 4
+    gauss = [r for r in rows if abs(r["delay_ms"] - 2.0) < 0.2]
+    lor = [r for r in rows if abs(r["delay_ms"] - 5.0) < 0.2]
+    assert np.mean([r["doppler_rms"] for r in gauss]) == pytest.approx(1.5, rel=0.15)
+    assert np.mean([r["doppler_shape"] for r in gauss]) < 3.0 < np.mean([r["doppler_shape"] for r in lor])
+    assert np.mean([r["scintillation"] for r in gauss]) == pytest.approx(1.0, abs=0.3)
+    # The cross-arrival closed forms: one surface bounce at 60 m, wind 4 m/s.
+    val = lambda v: [v, 0.0]  # noqa: E731
+    meas = {k: val(1.0) for k in tool.cv.METRICS}
+    meas.update(level_db=val(-10.0), doppler_rms=val(1.6), coherent_arrival=val(0.01))
+    site = {"label": "purple_1", "recording": 0, "range": 60.0, "wind_speed": 4.0, "floor_db_re_direct": -35.0, "wind_fit": {},
+            "groups": [{"name": "S", "n_surface": 1, "measured": meas, "model": {"A": meas, "C": meas}}]}
+    dep = tool.dependencies({"sites": [site]})
+    assert len(dep) == 1 and dep[0]["fitted_here"] and dep[0]["n_surface"] == 1
+    g = np.arctan2(11.0 + 11.7 + 0.0375 * 8, 60.0)
+    assert np.radians(dep[0]["grazing_deg"]) == pytest.approx(g, abs=2e-3)
+    assert dep[0]["doppler_closed_form"] == pytest.approx(2.0 * 12500.0 * acoustics.rms_surface_vertical_speed(4.0) * np.sin(g) / 1500.0, rel=0.01)
+    assert dep[0]["gamma2"] == pytest.approx((4.0 * np.pi * 12500.0 / 1500.0 * acoustics.rms_wave_height(4.0) * np.sin(g)) ** 2, rel=0.02)
+    text = tool.report(dep, [], {"red": {"tracker": "2 (LMS)", "files": {"x": tool.survey(ch)}}}, {1: 4.0})
+    assert "What each site allows" in text and "| red | x |" in text and "recording 1: 4.00 m/s" in text
+    tool.figure(dep, [], {}, tmp_path / "d.png")
+    assert (tmp_path / "d.png").stat().st_size > 10_000
+    assert tool.main(["--data", str(tmp_path / "nothing")]) == 2
+
+
+@needs_data
+def test_purple_doppler_width_grows_with_frequency_inside_the_band():
+    """SPACE'08 at 60 m: the surface arrivals are wider in the upper half of the band than in the
+    lower, by about the ratio of the frequencies (a width independent of frequency would give 1)."""
+    if not (pathlib.Path(_DIR) / "purple_1.mat").exists():
+        pytest.skip("purple_1.mat not fetched")
+    rows = _sites_tool().frequency_scaling(pathlib.Path(_DIR), ["purple_1"], n_receivers=4)
+    assert len(rows) >= 3
+    ratio = np.mean([r["doppler_ratio"] for r in rows])
+    assert rows[0]["frequency_ratio"] == pytest.approx(1.216, abs=0.01)
+    assert 1.12 < ratio < 1.38
+
+
 def test_validation_tool_says_what_is_missing_without_data(tmp_path, capsys):
     assert _tool().main(["--data", str(tmp_path)]) == 2
     assert "fetch_channels.py" in capsys.readouterr().out
