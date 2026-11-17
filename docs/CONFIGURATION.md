@@ -91,6 +91,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `transmit.waveform.interp_taps`, `interp_window`, `interp_beta` | interpolator: taps (16), `kaiser` (default, shape 12) or `hann` (TR 0702 eq. 17) |
 | `transmit.waveform.gain_knots` | frequency intervals across the band for frequency-dependent absorption and beam patterns (8; 0: at the band centre) |
 | `transmit.waveform.replica_sample_rate` | rate of the real replica stored in the record (default 4 × the top of the band) |
+| `transmit.direct_path` | absent or `false` (default): as before. `true`: the simulator adds the pulse as the hydrophones hear it straight from the projector at `transmit.lever_arm` (`sim/sources.py` `direct_arrival`): each element's own distance for the level (source level, 1/r), delay and phase (the array's near field), the element patterns, the projector's pattern per element when it has one, and the surface and bottom images when the scenario's provider has boundaries. `{boundaries: false}`: the straight arrival only. Analytic pulses: the C++ kernel on both engines; sampled pulses: C++ or NumPy by engine. Matters when the receive window includes the pulse, or with `receive.overload` |
 
 ### `receive`
 
@@ -106,6 +107,11 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `receive.board_size` | channels per capture board; boards are created to fit `array.count` |
 | `receive.boards` | boards spelled out, each with clock offset, drift, jitter and reference channel |
 | `receive.reference` | the shared synchronisation signal wired to every board |
+| `receive.overload` | absent (default): the receiver as before. Present (even empty): a behavioural front end that clips and recovers (`sim/receiver.py` `apply_front_end`; `PHYSICS_NOTES.md` Sec. 21), NumPy on both engines, real (passband) records only. **No key below defaults to a hardware value**; example values in the scenarios and tests are illustrative. With `transmit.direct_path` the time from the transmit to the opening of the window is simulated too (direct arrival only), so the window starts in the state the transmit left. The truth (per-channel overload, intervals) is in `ScenarioResult.front_end`, `simulate_ping(front_end_truth=...)` and the simulator taps, never in the record |
+| `receive.overload.preamp: {limit_v, gain_db, dead_time, dead_output, recovery_tau, scope}` | the input stage, modelled only when given. `limit_v`: its output swing in volts at its output, required (one number, or `[negative, positive]` magnitudes for unequal rails); `gain_db`: the part of `receive.gain_db` up to that output (default: all of it); `dead_time` (s, 0): after its last clipped sample the output stays on that rail (`dead_output: rail`, default) or at zero (`zero`); `recovery_tau` (s, 0): the gain then returns as 1 − exp(−t/τ); `scope`: `channel` (default) or `board` (the dead time and recovery are shared by all channels of a capture board) |
+| `receive.overload.highpass_corner_hz` | the AC coupling between the input stage and the ADC, modelled only when given: a one-pole high-pass. A clipped burst whose output has a mean (unequal rails, a rail held through a dead time) leaves a charge that decays with 1/(2π f) and can hold the ADC on its rail |
+| `receive.overload.adc: {limit_v, clip, dead_time, dead_output, recovery_tau, scope}` | the ADC stage: clips at `receive.adc_full_scale` (or `limit_v`; `clip: false` removes the stage); the other keys as for `preamp` |
+| `receive.overload.gain_switch: {gain_db, until, ramp, report}` | transmit-time gain switching, the mitigation to compare: the input gain is changed by `gain_db` (required, negative) until `until` seconds after the transmit (default: the pulse length) and returns linearly in dB over `ramp` seconds. `report: true` (default) writes it into the record's existing gain-ramp fields, which `apply_tvg` undoes (the live chain does not); not together with `receive.tvg` unless `report: false` |
 
 ## Diagrams and checks that follow the files
 
@@ -114,6 +120,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `tools/design_report.py` | `docs/DESIGN.md`, `docs/design/*.png`: derived numbers, link budgets and the requirement checks |
 | `tools/scenario_diagrams.py` | `docs/scenarios/<name>.png` for every scenario: plan and side view, and for Bellhop scenarios the sound-speed profile and transmission loss |
 | `tools/popoto_range_study.py` | `docs/design/popoto_range_study.png`: source level against frequency for a given range (`--range`, `--ts`, `--pulse`, `--depth`) |
+| `tools/direct_sound_study.py` | `docs/design/direct_sound_study.json`: the projector's direct level and the overload in dB at every hydrophone of a sonar file, and for 0.1 s and 1 s pulses the time after the pulse at which each channel is back within tolerance and the minimum range that leaves, for illustrative recovery parameters (`--pulses`, `--sets`, `--gain-tolerance-db`, `--offset-tolerance-db`, `--overrides`) |
 | `tools/architecture_diagrams.py` | `docs/architecture/*.png`: data flow and taps, stage by backend, deployment, simulator calibration |
 | `tools/rough_surface_bands.py` | `docs/figures/rough_surface_bands.png`: what makes the bands under a rough sea and which frame they are fixed in |
 | `tools/gallery.py` | `docs/figures/<name>.png` and `<name>.gif`: the simulated image, detections and tracks, and an animation, with numbers in `gallery.json` (`--quick` thins the scene, `--no-animation` skips the GIF) |

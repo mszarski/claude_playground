@@ -54,6 +54,9 @@ What runs where:
              read with the windowed-sinc interpolator of sim/waveform.py. Both `engine`
              settings use it (the eigenrays under it come from the selected engine).
 
+The sonar's own projector heard directly (`transmit.direct_path`, `direct_arrival` at the end
+of this file) is such a pulse from the projector's position; see docs/PHYSICS_NOTES.md Sec. 21.
+
 Limits: positions and velocities are first order over a record (straight lines), as for
 echoes; eigenrays are found once per ping for the source's position at the transmit
 instant; the receive beam pattern is taken at the record's centre frequency for sampled
@@ -140,7 +143,7 @@ def _tonal_lines(sig: dict, rng) -> list:
 
 # --- paths ----------------------------------------------------------------------------------
 
-def one_way_paths(provider, rx_reference, position, velocity=None):
+def one_way_paths(provider, rx_reference, position, velocity=None, bounces: bool = False):
     """Eigenrays from a source at `position` to the receiver, as apparent sources seen from
     `rx_reference`: (p [K, 3], excess amplitude [K] complex, velocity [K, 3]).
 
@@ -163,6 +166,9 @@ def one_way_paths(provider, rx_reference, position, velocity=None):
     w = w + ((arrival @ v) - np.einsum("ij,ij->i", w, launch))[:, None] * launch
     if rays.range_rate is not None:
         w = w + rays.range_rate[0][valid][:, None] * launch
+    if bounces:
+        # Also the number of boundary bounces of each ray (the direct arrival's projector pattern).
+        return p, amp[valid], w, (np.asarray(rays.n_surface)[0] + np.asarray(rays.n_bottom)[0])[valid]
     return p, amp[valid], w
 
 
@@ -403,9 +409,12 @@ def _source_sonar(sonar, sig: dict):
     return SonarModel.from_config(cfg)
 
 
-def _pulse(record, sonar, source, sig, provider, env, absorption_model, scenario_time, c, backend, engine, spreading, acceleration):
+def _pulse(record, sonar, source, sig, provider, env, absorption_model, scenario_time, c, backend, engine, spreading, acceleration,
+           ray_gain=None):
     """The one-way arrivals of every emission of a pulsed source that reaches the record,
-    through the echo synthesis kernel (module docstring): [C, N] to add, or None."""
+    through the echo synthesis kernel (module docstring): [C, N] to add, or None.
+    `ray_gain(p, bounces) -> [C]` (the direct arrival's projector pattern): the kernel is then
+    run once per ray and each ray's arrivals are scaled per channel."""
     from .simulator import absorption_table
     if sig.get("_sonar") is None:
         sig["_sonar"] = _source_sonar(sonar, sig)
@@ -439,6 +448,7 @@ def _pulse(record, sonar, source, sig, provider, env, absorption_model, scenario
     t = work.transmit
     t.waveform = template.transmit.waveform
     work.transmit = t
+    weighted = None
     for t_e in times:
         shift = t_e - KERNEL_LEG / c                       # kernel time = true time - shift
         pose = core.Pose()
@@ -459,7 +469,10 @@ def _pulse(record, sonar, source, sig, provider, env, absorption_model, scenario
         work.samples = smp
         src_pos, src_vel = source.at(scenario_time + t_e)
         rx_ref = np.asarray(work.rx_positions(), dtype=float).mean(axis=0)
-        p, amp, w = one_way_paths(provider, rx_ref, src_pos, src_vel)
+        if ray_gain is None:
+            p, amp, w = one_way_paths(provider, rx_ref, src_pos, src_vel)
+        else:
+            p, amp, w, n_bounce = one_way_paths(provider, rx_ref, src_pos, src_vel, bounces=True)
         if len(p) == 0:
             continue
         tx_pos = np.asarray(pose.position, dtype=float)
@@ -470,13 +483,30 @@ def _pulse(record, sonar, source, sig, provider, env, absorption_model, scenario
             cyc = center * shift
             amp = amp * np.exp(-2j * np.pi * (cyc - np.floor(cyc)))
         p_kernel = p - w * (KERNEL_LEG / c)
-        if sampled:
-            wf_mod.synthesize(work, src_sonar.sampled_waveform, q, p_kernel, amp, vq, w, absorption=table,
-                              spreading=spreading, platform_acceleration=tuple(float(a) for a in acceleration),
-                              backend=backend, engine=engine)
-        else:
-            core.synthesize_into(work, q, p_kernel, amp, vq, w, absorption=table, spreading=spreading, backend=backend,
-                                 platform_acceleration=tuple(float(a) for a in acceleration))
+
+        def run(rays):
+            if sampled:
+                wf_mod.synthesize(work, src_sonar.sampled_waveform, q[rays], p_kernel[rays], amp[rays], vq[rays], w[rays], absorption=table,
+                                  spreading=spreading, platform_acceleration=tuple(float(a) for a in acceleration),
+                                  backend=backend, engine=engine)
+            else:
+                core.synthesize_into(work, q[rays], p_kernel[rays], amp[rays], vq[rays], w[rays], absorption=table, spreading=spreading,
+                                     backend=backend, platform_acceleration=tuple(float(a) for a in acceleration))
+
+        if ray_gain is None:
+            run(slice(None))
+            continue
+        for k in range(len(p)):
+            # One ray at a time, so that each can be weighted per channel.
+            smp = work.samples
+            smp.array = np.zeros_like(smp.array)
+            smp.kind = kind
+            work.samples = smp
+            run(slice(k, k + 1))
+            part = np.asarray(ray_gain(p[k], int(n_bounce[k])))[:, None] * np.array(work.samples.array)
+            weighted = part if weighted is None else weighted + part
+    if ray_gain is not None:
+        return weighted
     return np.array(work.samples.array)
 
 
@@ -585,3 +615,92 @@ def _stream_analytic_tones(record, paths, env_abs, c, tones, time_zero, spreadin
                        time_zero=time_zero, spreading=spreading)
         out = part if out is None else out + part
     return out
+
+
+# --- the sonar's own projector heard directly (`transmit.direct_path`) -----------------------
+
+class _Projector:
+    """The sonar's projector as a one-way source: where it is at the transmit instant, moving
+    with the vehicle."""
+
+    def __init__(self, position, velocity, scenario_time: float):
+        self.position, self.velocity, self.time = np.asarray(position, dtype=float), np.asarray(velocity, dtype=float), float(scenario_time)
+        self.signals, self.state = [{"type": "waveform", "ping_offset": 0.0}], {}
+
+    def at(self, t: float):
+        return self.position + self.velocity * (float(t) - self.time), self.velocity
+
+
+def direct_path_config(sonar) -> dict | None:
+    """`transmit.direct_path` of a sonar: None when absent or false (nothing changes), else
+    {"boundaries": bool}. `true` is {boundaries: true}: the arrival straight from the projector
+    and every other eigenray the scenario's provider finds between the projector and the array
+    (surface and bottom images, to the provider's bounce order). `{boundaries: false}`: the
+    straight arrival only."""
+    cfg = sonar.config["transmit"].get("direct_path")
+    if not cfg:
+        return None
+    cfg = {} if cfg is True else dict(cfg)
+    unknown = set(cfg) - {"boundaries"}
+    if unknown:
+        raise ValueError(f"transmit.direct_path: unknown keys {sorted(unknown)}")
+    return {"boundaries": bool(cfg.get("boundaries", True))}
+
+
+def direct_arrival(record, sonar, provider, options: dict | None = None, *, environment: dict,
+                   absorption_model: str = "francois_garrison", scenario_time: float = 0.0, backend=None,
+                   engine: str | None = None, spreading: bool = True, acceleration=(0.0, 0.0, 0.0),
+                   window: tuple | None = None):
+    """The transmitted pulse as the array hears it straight from the projector (and off the
+    boundaries): [C, N] in the record's sample units for the record's receive window, or for
+    `window` = (start_time, n_samples); None when nothing arrives in it. Nothing is added to
+    the record.
+
+    This is a one-way source at the projector's true position (`record.tx_position()`), moving
+    with the vehicle, emitting the sonar's own waveform at the transmit instant, through the
+    one-way pulse path above: the same kernel as the echoes (C++, host or CUDA, for analytic
+    pulses on both engines; C++ or NumPy by `engine` for a sampled pulse), with each
+    element's own distance to the projector (and to its images) for the delay, the phase and
+    the 1/r spreading, the receive pattern of each element in the arrival's own direction,
+    absorption, the board clocks and the true element positions.
+
+    The one-way path makes the projector omnidirectional. A projector with a beam pattern is
+    weighted here, per ray and per element, by its pattern at the band centre in the direction
+    the ray leaves it towards that element: the straight line from the apparent source to the
+    element, mirrored in the horizontal once per boundary bounce (exact for flat horizontal
+    boundaries and straight rays; with walls or bent rays, an approximation)."""
+    from .propagation import make_provider
+    options = options or {"boundaries": True}
+    c = record.environment.sound_speed
+    backend = core.Backend.Host if backend is None else backend
+    if not options.get("boundaries", True):
+        provider = make_provider("free_field", c)
+    h = 1e-4
+    tx_position = np.asarray(record.tx_position(0.0), dtype=float)
+    tx_velocity = (np.asarray(record.tx_position(h), dtype=float) - np.asarray(record.tx_position(-h), dtype=float)) / (2.0 * h)
+    projector = _Projector(tx_position, tx_velocity, scenario_time)
+    work = record
+    if window is not None:
+        # Another stretch of time on the same sample clock (the interval before the window opens).
+        work = record.copy()
+        smp = work.samples
+        kind = smp.kind
+        smp.array = np.zeros((smp.n_channels, int(window[1])), dtype=smp.array.dtype)
+        smp.kind = kind
+        smp.start_time = float(window[0])
+        work.samples = smp
+    tx = record.geometry.tx
+    ray_gain = None
+    if tx.beamwidth_az == tx.beamwidth_az or tx.beamwidth_el == tx.beamwidth_el:
+        rot_tx = np.asarray(core.rotation_ned(*record.geometry.tx_pose.rpy))
+        elements, _ = _elements(record)
+
+        def ray_gain(p, n_bounce):
+            d = elements - np.asarray(p, dtype=float)[None, :]
+            d = d / np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-12)
+            if n_bounce % 2:
+                d = d * np.array([1.0, 1.0, -1.0])
+            return wf_mod._directivity(tx, rot_tx, d, np.array([1.0]))[:, 0]
+
+    return _pulse(work, sonar, projector, projector.signals[0], provider, environment, absorption_model, scenario_time, c,
+                  backend, engine, spreading, acceleration, ray_gain=ray_gain)
