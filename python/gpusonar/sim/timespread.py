@@ -31,10 +31,12 @@ What comes from TR 0702 and what does not:
   2 f v sin(grazing) / c for a boundary moving vertically at rms speed v (the Doppler of a
   mirror), with v the root-sum-square of the surface's own speed and (speed of the
   reflection point) x sqrt(mss) as TR 0702 states.
-- Several bounces on one path: by default the mean excess delays add and one exponential
-  with that mean is used. TR 0702 says its own multi-bounce shape is wrong ("too high
-  immediately after the pulse and too low later"); so is that one, in the same way.
-  `multi_bounce="convolve"` convolves the bounces' responses instead (4 below).
+- Several bounces on one path: by default the bounces' responses are convolved (4 below),
+  which is what a cascade of independent bounces gives. `multi_bounce="sum"` is the earlier
+  rule: the mean excess delays add and one exponential with that mean is used. TR 0702 says
+  its own multi-bounce shape is wrong ("too high immediately after the pulse and too low
+  later"); `sum` is wrong in that way for two rough bounces, and the other way round when
+  one bounce is mostly coherent with the longer decay (tools/sst_validation.py, ASIAEX).
 - The same realisation is used for scatterers within `coherence_length` of each other, so
   the highlights of one target fade together and distant targets fade independently.
 
@@ -253,7 +255,7 @@ class TimeSpreadProvider(EigenrayProvider):
     decay_time: "rule_of_thumb" (TR 0702's) or "facet" (2).
     doppler: the tail varies during a ping; each tap is then `doppler_lines` rays, each with a
     `range_rate` (3). doppler_spectrum: "lorentzian" or "gaussian".
-    multi_bounce: "sum" or "convolve" (4).
+    multi_bounce: "convolve" (default) or "sum" (4).
     """
 
     def __init__(self, inner: EigenrayProvider, *, frequency: float, surface: dict | None = None,
@@ -262,7 +264,7 @@ class TimeSpreadProvider(EigenrayProvider):
                  surface_sound_speed: float | None = None, bottom_sound_speed: float | None = None,
                  incoherent: bool = True, angle_spread: bool = False, decay_time: str = "rule_of_thumb",
                  doppler: bool = False, doppler_spectrum: str = "lorentzian", doppler_lines: int = 8,
-                 multi_bounce: str = "sum"):
+                 multi_bounce: str = "convolve"):
         self.angle_spread, self.doppler = bool(angle_spread), bool(doppler)
         self.decay_time, self.doppler_spectrum, self.multi_bounce = str(decay_time), str(doppler_spectrum), str(multi_bounce)
         self.doppler_lines = int(doppler_lines)
@@ -578,4 +580,4 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
                               doppler=bool(cfg.get("doppler", False)),
                               doppler_spectrum=str(cfg.get("doppler_spectrum", "lorentzian")),
                               doppler_lines=int(cfg.get("doppler_lines", 8)),
-                              multi_bounce=str(cfg.get("multi_bounce", "sum")))
+                              multi_bounce=str(cfg.get("multi_bounce", "convolve")))

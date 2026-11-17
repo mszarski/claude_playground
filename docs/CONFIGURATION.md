@@ -143,7 +143,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `time_spread.doppler_spectrum` | `lorentzian` (SST's AR(1) process, half-width 2 f v sin(grazing) / c) or `gaussian` (rms width 2 f v sin(grazing) / c / sqrt(1 - coherent fraction), derived in `sim/timespread.py`). Also sets the ping-to-ping fading |
 | `time_spread.doppler_lines` | sinusoids the process of each tap is made of (8). Changing it changes the realisation |
 | `time_spread.decay_time` | `rule_of_thumb` (TR 0702: 2 mss t1 t2 / (t1 + t2), exponential) or `facet` (mss (1 + sin² grazing) t1 t2 / (t1 + t2) with the shape that Gaussian facet slopes give) |
-| `time_spread.multi_bounce` | `sum` (one exponential whose mean is the sum of the bounces' means) or `convolve` (the convolution of the bounces' tails; a bounce delays the tail only when it scatters) |
+| `time_spread.multi_bounce` | `convolve` (default: the convolution of the bounces' tails; a bounce delays the tail only when it scatters) or `sum` (the earlier rule: one exponential whose mean is the sum of the bounces' means; wrong when the bounces differ) |
 | `environment` | `sound_speed`, `temperature`, `salinity`, `water_depth` |
 | `absorption` | `francois_garrison`, `ainslie_mccolm` or `none` |
 | `seed` | random seed of the scene, noise and reverberation |

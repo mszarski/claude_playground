@@ -257,8 +257,8 @@ def test_asiaex_surface_doppler_spread_is_under_10_hz(asiaex):
 def test_asiaex_two_bounce_tail_sum_against_convolve(asiaex):
     """ "Now turn your attention to the multiple-bounce peaks ... The intensity is too high
     immediately after the pulse and too low later." TR 0702 does not say how SST combined two
-    bounces. Ours by default adds the mean delays into one exponential (`sum`);
-    `convolve` convolves the bounces' responses.
+    bounces. Our earlier rule (`sum`) adds the mean delays into one exponential; the default
+    (`convolve`) convolves the bounces' responses.
 
     With two bounces that both scatter (the variant), `sum` has the stated defect. With the
     ASIAEX bottom as printed (93 % coherent, long decay) its error has the other sign: every

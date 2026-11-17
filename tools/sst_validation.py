@@ -636,14 +636,14 @@ def asiaex_runs(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> d
     fast = {"pings": {"count": int(doppler_pings), "interval": 0.05}}
     return dict(
         flat=_quiet_run(ASIAEX, {"time_spread": None}),
-        spread=_quiet_run(ASIAEX),                                              # 20 pings, as in TR 0702
+        spread=_quiet_run(ASIAEX, {"time_spread": {"multi_bounce": "sum"}}),                                        # 20 pings, as in TR 0702
         convolve=_quiet_run(ASIAEX, {"time_spread": {"multi_bounce": "convolve"}}),
-        sum_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}}),
+        sum_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "sum"}}),
         convolve_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "convolve"}}),
         surface_many=_quiet_run(ASIAEX, {**surface_only, "pings": {"count": int(many)}}),
         surface_fast=_quiet_run(ASIAEX, {**surface_only, **fast}),
         surface_fast_gaussian=_quiet_run(ASIAEX, {**surface_only, **fast, "time_spread": {"doppler_spectrum": "gaussian"}}),
-        rough_sum=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": BOTH_ROUGH}),
+        rough_sum=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "sum"}}),
         rough_convolve=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "convolve"}}),
         bottom_seeds=[_quiet_run(ASIAEX, {**bottom_only, "time_spread": {"seed": 1000 + k}}) for k in range(int(seeds))])
 
@@ -1423,7 +1423,7 @@ def matrix(results: dict | None = None) -> list[dict]:
     row("Sec. 12.6", "Wind 3 m/s fits the tail, 4 m/s the variability (McDanielSurface)", "Pierson-Moskowitz height, Cox-Munk slope", "cannot be checked",
         "Needs the McDaniel laws and the data of Dahl (2002); only figures in TR 0702")
     row("Sec. 12.6", "Multiple-bounce peaks: intensity too high immediately after the pulse and too low later",
-        "`multi_bounce: sum` (default) against `convolve`", mine + "test_asiaex_two_bounce_tail_sum_against_convolve",
+        "`multi_bounce: sum` against `convolve` (default)", mine + "test_asiaex_two_bounce_tail_sum_against_convolve",
         m(A, lambda a: f"ASIAEX parameters (bottom {a['two_bounces']['coherent_fraction_bottom']:.2f} coherent): `sum` is {a['two_bounces']['sum_over_convolve_early_db']:+.1f} dB "
                        f"right after the pulse and {a['two_bounces']['sum_over_convolve_late_db']:+.1f} dB later re `convolve` (tail centroid "
                        f"{a['two_bounces']['tail_centroid_sum_ms']:.1f} against {a['two_bounces']['tail_centroid_convolve_ms']:.1f} ms) - the OPPOSITE sign; "
