@@ -28,8 +28,15 @@ Updated at the end of each milestone. Newest facts first within each section.
   run time. Compared stage by stage and report by report with the Python chain; the
   Python chain can run it (`engine: cpp`). One deployment file drives both.
 - **Sparse Bayesian bearings** (`doa: sbl`, D-57): separates arrivals inside one beam of
-  the long-range array, from one ping. Also passive bearing-time records from a recording
-  (`sonar_live --passive`). CPU only.
+  the long-range array, from one ping. Host and CUDA kernels. Passive bearing-time records
+  from a recording (`--passive`) or from the untriggered board stream (`--listen`, D-60).
+- **Holoscan in C++** (`libs/holoscan_ops`, `build/bin/sonar_live_holoscan`, D-59): six
+  operators around the live library; built against Holoscan 4.6.0 and run on an L4, with
+  reports identical to the standalone program's.
+- **Ports from NumPy to C++** (D-61): far-field and MVDR beamforming, array calibration,
+  path geometry, reverberation (its sum also on CUDA). NumPy versions kept as references.
+- **On a GPU** (L4): the long-range chain takes 18 ms a ping (0.48 s with SBL); track
+  classes on the 12 km scene were scored against the simulated truth (`RESULTS.md`).
 
 - **Architecture** (`ARCHITECTURE.md`): one record between all stages; taps after any
   stage, simulator stages included, as container files that are also sources; tools to
@@ -62,11 +69,11 @@ Updated at the end of each milestone. Newest facts first within each section.
 2. The two vehicle adapters: board samples to WAV-with-sidecar or UDP blocks; the
    vehicle's navigation message to the JSON the chain reads.
 3. Milestone 11: the reference's SDK build with the long-window patch and a rig run; the
-   flank assembler behind the Sensor Bridge receiver and emulator; C++ Holoscan operators
-   (the C++ live chain is one call per ping and is ready to be wrapped; Holoscan cannot be
-   built here).
+   flank assembler behind the Sensor Bridge receiver and emulator (the C++ operators take
+   blocks from a plain UDP socket).
 4. Milestone 13: keep conditioned samples on the device for the backprojection session;
-   reverberation generation on the device; Spark and Jetson measurements.
+   reverberation's FFTs and random numbers on the device (its sum is); Spark and Jetson
+   measurements.
 5. Milestone 12: a Jackson-type bottom, reverberation from sloping bathymetry, time
    spreading, a high-frequency surface model with bubbles.
 6. Classification beyond the track: extent and shape, so a buoy is not a rock and a wave

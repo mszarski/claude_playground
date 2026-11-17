@@ -776,6 +776,32 @@ Limits: SBL does not separate arrivals in range, only in bearing at a range the 
 found; a line array's bearing is a cone, so a bottom-bounce arrival at a steep angle
 appears at a shifted bearing.
 
+## Stages ported from NumPy to C++
+
+Source: `tests/python/test_beamform_cpp.py`, `tests/python/test_sim_cpp.py`,
+`tests/cpp/test_beamform.cpp`, `tests/cpp/test_sim_paths.cpp`. Timings on four shared CPU
+cores with other jobs running: indicative.
+
+| Stage | C++ against NumPy | Time, C++ / NumPy |
+| --- | --- | --- |
+| Far-field beamformer (32 channels × 6000 samples, 81 bearings; rect, Hann, Hamming) | map within 2e-7 of its peak | 33 ms / 443 ms |
+| MVDR, same ping (default and non-default sub-bands, block, loading) | within 9e-7 of the peak | 280 ms / 405 ms |
+| MVDR against a jammer: target over the beam floor | 19.4 dB (conventional 5.5 dB), as in Python | |
+| Array calibration from five pings: gain, phase, element position | 5e-7 dB, 9e-6°, 5e-9 m; recovers injected errors within 0.02 dB, 1°, 0.3 mm | 4.7 ms / 12 ms |
+| Live chain per ping with `beamformer: farfield` / `mvdr` (C++ engine against Python engine) | same tracks, classes and positions | 0.17 s / 1.4 s; 0.63 s / 3.9 s |
+| Paths, 20,000 points: free field, image sources (constant and Rayleigh bottom, walls), sediment refraction | delays identical to 3e-16; amplitudes to 4e-15 | 50,000 points: 1.5–19 ms / 2.6–54 ms |
+| Pairing outbound and return paths (1.25 million paths) | bit-identical indices | 54 ms / 214 ms |
+| Reverberation, same random numbers, ten cases (line and planar arrays, decimated, passband, moving, beam patterns) | sample for sample within 3e-7 of the largest sample (single-precision FFT) | |
+| One ping of `fls_120k_transit` (128 channels, 767 sectors, two boundaries): reverberation / whole ping | whole ping within 3.5e-7 of the peak | 1.9–2.1 s / 6.4–7.6 s; 4.3–4.6 s / 8.7–9.9 s |
+
+MVDR gains least: its cost is one matrix product per block, and the build uses no
+instruction-set flags, so Eigen runs SSE2 where NumPy's BLAS uses AVX.
+
+Found while porting: the image-source provider dropped a vertical wall's reflection
+coefficient on paths that also met a Rayleigh bottom. Fixed in both implementations
+(`test_wall_coefficient_applies_to_bottom_bounce_paths_too`); no shipped scenario
+combines walls with that bottom, so no result in this file changes.
+
 ## Track classification
 
 Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery

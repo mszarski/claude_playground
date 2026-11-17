@@ -101,9 +101,11 @@ The long-range array's live chain exists twice, on purpose.
   offsets and whole reports are compared (`tests/python/test_live_cpp.py`), and
   `tests/cpp/test_live.cpp` tests the library without Python.
 
-Everywhere else the split is: kernels and file format in C++ (CUDA where listed above),
-the simulator's scene and propagation, SAS motion estimation glue, calibration and all
-tools in Python. Holoscan operators exist in both: Python wrappers of the stages
+Everywhere else the split is: kernels and file format in C++ (CUDA where listed above);
+far-field and MVDR beamforming, array calibration, the simulator's path geometry and its
+reverberation sum in C++ with the NumPy versions kept as references (D-61); the
+simulator's scene description, the Bellhop interface, noise, SAS motion estimation glue,
+simulator calibration and all tools in Python. Holoscan operators exist in both: Python wrappers of the stages
 (`holoscan_ops.py`) and C++ operators around the live library (`libs/holoscan_ops`,
 program `build/bin/sonar_live_holoscan`), built and run on a GPU machine with Holoscan 4.6.
 

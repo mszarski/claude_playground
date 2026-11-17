@@ -58,6 +58,9 @@ tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --scenario popoto_far_mov
 tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --export-template template.h5          # template + command for the C++ program
 build/bin/sonar_live --replay run/recording.h5 doa=sbl                                         # the same chain in C++, sparse Bayesian bearings
 build/bin/sonar_live --passive run/recording.h5 --band 4000 6000                               # passive bearing-time record
+build/bin/sonar_live --udp 5700 --template template.h5 --listen --band 4000 6000               # the same from the untriggered board stream
+build/bin/sonar_live_holoscan --replay run/recording.h5 backend=cuda                           # as C++ Holoscan operators (-DSONAR_BUILD_HOLOSCAN=ON)
+tools/live_benchmark.py run/recording.h5                                                       # per-ping time: host/CUDA, map/SBL
 tools/inspect_tap.py run/taps/ping0000 --stage prepare --plot ping.png                          # look at any stage's data
 tools/calibrate_sim.py fls --log dive.h5 --scenario fls_120k_transit                            # fit the simulator to a real log
 tools/gallery.py --backend host --quick                     # the same, thinned

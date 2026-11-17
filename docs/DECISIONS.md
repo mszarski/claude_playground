@@ -543,3 +543,15 @@ each long enough for one passive frame, and ignores transmit marks. A gap discar
 stretch it falls in. Stretches are recorded as ordinary records (start time 0, the time
 of the first sample in the transmit time field), so a listening run replays through
 `--passive` unchanged.
+
+### D-61 Ported stages keep their NumPy versions, and NumPy keeps the random numbers
+Far-field and MVDR beamforming, array calibration, the non-Bellhop path providers and the
+reverberation sum now have C++ implementations, used by default (`engine: cpp` in the live
+chain; `GPUSONAR_SIM_ENGINE=numpy` or `engine="numpy"` selects the old simulator code).
+The NumPy versions stay as the reference each port is tested against. The simulator's
+random numbers are still drawn by the NumPy generator, in the same order as before, and
+handed to C++: a scenario's seed gives the same ping to 3.5e-7 with either engine, and the
+generator ends in the same state. A counter-based generator on the device would be
+faster and would change every seeded result; not done. Reverberation's FFTs and its
+power stage (which calls Python strength and beam-pattern functions) remain on the CPU;
+the sum over azimuth sectors into every channel is the kernel with a CUDA build.
