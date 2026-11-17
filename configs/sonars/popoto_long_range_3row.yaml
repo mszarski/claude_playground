@@ -1,0 +1,19 @@
+# The long-range Popoto array as three rows of 32 hydrophones at unequal heights: the close
+# pair fixes which elevation lobe is the true one, the outer pair gives the accuracy.
+# 96 hydrophones on 12 boards of 8 inputs; channels run row by row from the lowest row up.
+# Geometry and numbers: docs/DESIGN.md Sec. 3.6, tools/popoto_elevation_study.py.
+base: popoto_long_range
+name: popoto_long_range_3row
+
+array:
+  layout_choice: three_rows
+  layouts:
+    three_rows:
+      layout: stacked_lines
+      rows:
+        - {up: -0.19, out: 0.0}
+        - {up: -0.05, out: 0.07}   # nearer the hull's widest point, so further out on a round hull
+        - {up: 0.19, out: 0.0}
+
+unconfirmed:
+  - array.layouts.three_rows.rows   # assumes a 0.53 m (21 in) hull; not confirmed

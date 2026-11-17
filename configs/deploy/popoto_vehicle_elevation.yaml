@@ -1,0 +1,46 @@
+# The Popoto long-range array with stacked rows (elevation and depth as well as bearing):
+#   tools/sonar_live.py configs/deploy/popoto_vehicle_elevation.yaml
+# The same file as popoto_vehicle.yaml except for the sonar (two rows; popoto_long_range_3row
+# for three) and the `chain.elevation` section. docs/DEPLOYMENT.md, "Stacked rows".
+
+source:
+  type: flank_udp
+  sonar: popoto_long_range_2row  # 64 hydrophones on 8 boards; popoto_long_range_3row: 96 on 12
+  host: 0.0.0.0
+  port: 5700
+  timeout: 30.0
+
+nav:                             # roll and pitch are now used: depth error = range x roll error
+  port: 5702                     # {"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}, NED metres, radians
+
+chain:
+  bearings_deg: [-60.0, 60.0, 0.5]
+  look: starboard
+  range_cell_m: 2.0
+  cfar: {pfa: 1.0e-5, guard_m: 100.0, train_m: 300.0}
+  min_snr_db: 9.0
+  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
+  classify:
+    min_speed: 1.0
+    multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
+  elevation:                     # leave the section out (or use a one-row sonar) for the chain as it was
+    sector_deg: [-30.0, 30.0, 0.5]   # elevation searched, vehicle frame, up positive
+    min_quality: 0.6             # below this no elevation is reported for a detection
+    ambiguity_db: 1.5            # a second lobe this close to the first: flagged, not used for depth
+    correct_bearing: true        # bearing_deg becomes the horizontal bearing (cone_bearing_deg keeps the old value)
+    depth: true                  # depth_m on detections and tracks
+    fold: true                   # bounce arrivals folded back into the water column
+    classify: true               # a track whose straight-line depth is outside the water is multipath
+    water_depth: null            # m; set it, or the fold and the bottom test use the surface only
+    roll_sigma_deg: 0.2          # the navigation's roll accuracy (unconfirmed): goes into every depth sigma
+  # dead_channels: [17]          # channel rows to leave out (a failed hydrophone); a whole board: its eight rows
+
+output:
+  recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5
+  report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl
+  report_udp: [127.0.0.1, 5701]
+  taps: {dir: /data/sonar/taps, pings: 2}
+
+unconfirmed:
+  - chain.elevation.roll_sigma_deg     # what the vehicle's attitude sensor delivers
+  - chain.elevation.water_depth        # from the vehicle's altimeter and depth sensor, or the chart

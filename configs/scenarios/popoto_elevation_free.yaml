@@ -1,0 +1,21 @@
+# Elevation against truth, free field: the two-row long-range array (64 hydrophones) rolled
+# 3 degrees, three targets near 1 km at known depths above, level with and below the vehicle,
+# in noise. No boundaries: the depths the chain reports must be the targets'.
+# Chain: configs/deploy/popoto_vehicle_elevation.yaml. Geometry is unconfirmed (see the sonar file).
+name: popoto_elevation_free
+sonar: popoto_long_range_2row
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [700.0, 1400.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+platform: {position: [0, 0, 60.0], rpy: [0.0524, 0, 0], velocity: [1.5, 0, 0]}     # roll 3 degrees
+pings: {count: 5, interval: 4.0}
+scene:
+  - {type: points, label: shallow, positions: [[-300.0, 900.0, 10.0]], target_strength_db: 10.0}
+  - {type: points, label: level,   positions: [[100.0, 1000.0, 60.0]], target_strength_db: 10.0}
+  - {type: points, label: deep,    positions: [[500.0, 1100.0, 160.0]], target_strength_db: 10.0}
+absorption: ainslie_mccolm
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+seed: 11

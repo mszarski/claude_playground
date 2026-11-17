@@ -1,0 +1,20 @@
+# The long-range Popoto array as two horizontal rows of 32 hydrophones at different heights on
+# the vehicle's flank: elevation (and from it depth) as well as bearing. An OPTION to
+# `popoto_long_range`; one row stays the default. Geometry and numbers: docs/DESIGN.md Sec. 3.6,
+# tools/popoto_elevation_study.py. 64 hydrophones on 8 boards of 8 inputs; channels run row by
+# row (0-31 the lower row, 32-63 the upper), so every board serves one row only.
+base: popoto_long_range
+name: popoto_long_range_2row
+
+array:
+  layout_choice: two_rows
+  layouts:
+    two_rows:
+      layout: stacked_lines
+      rows:                       # up: m towards the vehicle's top; out: m along the boresight
+        - {up: -0.19, out: 0.0}
+        - {up: 0.19, out: 0.0}
+
+unconfirmed:
+  - array.layouts.two_rows.rows   # 0.38 m between rows assumes a 0.53 m (21 in) hull; the hull, the fairing
+                                  # and where hydrophones can be mounted on it are not confirmed

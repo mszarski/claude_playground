@@ -3,6 +3,7 @@
 #include <pybind11/stl.h>
 
 #include "sonar/live/chain.hpp"
+#include "sonar/live/elevation.hpp"
 #include "sonar/live/udp_source.hpp"
 
 namespace py = pybind11;
@@ -142,8 +143,14 @@ void bind_live(py::module_& m) {
       "doa_passive",
       [](const PingRecord& record, double f_low, double f_high, std::int64_t n_fft, std::int64_t hop, std::int64_t n_average,
          double first_deg, double last_deg, double step_deg, const std::string& method, int max_iterations, double tolerance,
-         int max_sources, double dynamic_range_db, double min_snr_db, Backend backend, bool kernels) {
+         int max_sources, double dynamic_range_db, double min_snr_db, Backend backend, bool kernels, bool elevation,
+         double elevation_first_deg, double elevation_last_deg, double elevation_step_deg, const std::string& look) {
         live::PassiveOptions p;
+        p.elevation.enabled = elevation;
+        p.elevation.first_deg = elevation_first_deg;
+        p.elevation.last_deg = elevation_last_deg;
+        p.elevation.step_deg = elevation_step_deg;
+        p.starboard = look != "port";
         p.f_low = f_low;
         p.f_high = f_high;
         p.n_fft = n_fft;
@@ -169,6 +176,10 @@ void bind_live(py::module_& m) {
           py::list peaks;
           for (const auto& pk : f.peaks) peaks.append(py::make_tuple(pk.bearing, pk.power, pk.snr_db));
           d["peaks"] = peaks;
+          if (elevation) {
+            d["elevations"] = f.elevations;
+            d["elevation_quality"] = f.elevation_quality;
+          }
           out.append(d);
         }
         return py::make_tuple(out, bearings);
@@ -177,8 +188,33 @@ void bind_live(py::module_& m) {
       py::arg("n_average") = 8, py::arg("first_deg") = -80.0, py::arg("last_deg") = 80.0, py::arg("step_deg") = 0.5,
       py::arg("method") = "sbl", py::arg("max_iterations") = 60, py::arg("tolerance") = 1e-3, py::arg("max_sources") = 4,
       py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0, py::arg("backend") = Backend::Host,
-      py::arg("kernels") = true,
-      "Passive bearing-time record of one stretch of data: (frames, bearing grid in rad).");
+      py::arg("kernels") = true, py::arg("elevation") = false, py::arg("elevation_first_deg") = -30.0,
+      py::arg("elevation_last_deg") = 30.0, py::arg("elevation_step_deg") = 0.5, py::arg("look") = "starboard",
+      "Passive bearing-time record of one stretch of data: (frames, bearing grid in rad). With `elevation` and an array "
+      "of stacked rows every frame also has `elevations` (rad, level-referenced, up positive) and `elevation_quality`.");
+
+  m.def("live_find_rows", &live::find_rows, py::arg("record"), py::arg("tolerance") = 0.02, py::arg("min_elements") = 3,
+        "Channel rows of each line of the receive array (elevation.hpp).");
+  m.def(
+      "live_passive_elevation",
+      [](const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, double bearing, double f_low, double f_high,
+         std::int64_t n_fft, std::int64_t hop, std::int64_t first, std::int64_t n_blocks, double first_deg, double last_deg,
+         double step_deg, const std::string& look) {
+        const live::PassiveElevation e = live::passive_elevation(record, rows, bearing, f_low, f_high, n_fft, hop, first, n_blocks,
+                                                                 first_deg, last_deg, step_deg, look != "port");
+        return py::make_tuple(e.elevation, e.quality);
+      },
+      py::arg("record"), py::arg("rows"), py::arg("bearing"), py::arg("f_low"), py::arg("f_high"), py::arg("n_fft") = 1024,
+      py::arg("hop") = 512, py::arg("first") = 0, py::arg("n_blocks") = -1, py::arg("first_deg") = -30.0, py::arg("last_deg") = 30.0,
+      py::arg("step_deg") = 0.5, py::arg("look") = "starboard",
+      "Elevation (rad, array frame, up positive) and quality of a noise source at a cone bearing, from stacked rows.");
+  m.def(
+      "live_fold_depth",
+      [](double z, double water_depth, double surface_z) {
+        const auto f = live::fold_depth(z, water_depth, surface_z);
+        return py::make_tuple(f.first, f.second);
+      },
+      py::arg("z"), py::arg("water_depth"), py::arg("surface_z") = 0.0);
 
   py::class_<live::LiveChain>(m, "LiveChainCpp")
       .def(py::init([](const py::dict& kw) {
@@ -222,6 +258,35 @@ void bind_live(py::module_& m) {
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();
+        if (kw.contains("dead_channels")) o.dead_channels = kw["dead_channels"].cast<std::vector<std::int64_t>>();
+        if (kw.contains("elevation")) {
+          const py::dict e = kw["elevation"].cast<py::dict>();
+          live::ElevationOptions& eo = o.elevation;
+          eo.enabled = true;
+          auto num = [&](const char* k, double& v) {
+            if (e.contains(k)) v = e[k].cast<double>();
+          };
+          auto flag = [&](const char* k, bool& v) {
+            if (e.contains(k)) v = e[k].cast<bool>();
+          };
+          num("first_deg", eo.first_deg);
+          num("last_deg", eo.last_deg);
+          num("step_deg", eo.step_deg);
+          num("range_window_m", eo.range_window_m);
+          if (e.contains("max_detections")) eo.max_detections = e["max_detections"].cast<std::int64_t>();
+          num("min_quality", eo.min_quality);
+          num("ambiguity_db", eo.ambiguity_db);
+          flag("correct_bearing", eo.correct_bearing);
+          flag("depth", eo.depth);
+          flag("fold", eo.fold);
+          flag("classify", eo.classify);
+          num("classify_sigma", eo.classify_sigma);
+          num("water_depth", eo.water_depth);
+          num("surface_z", eo.surface_z);
+          num("roll_sigma", eo.roll_sigma);
+          num("depth_process_noise", o.tracker.depth_process_noise);
+          num("row_tolerance_m", eo.row_tolerance_m);
+        }
         if (kw.contains("sync")) {
           const py::dict r = kw["sync"].cast<py::dict>();
           o.sync = true;

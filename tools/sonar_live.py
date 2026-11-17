@@ -53,6 +53,14 @@ def export_template(cfg: dict, path: str) -> str:
     if "multipath_bearing" in o:
         o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
     o["multipath"] = int(o["multipath"])
+    if "dead_channels" in o:
+        o["dead_channels"] = ",".join(str(v) for v in o["dead_channels"])
+    el = o.pop("elevation", None)
+    if el is not None:
+        # Stacked rows: elevation=1 and one elevation_<key> per setting (docs/CONFIGURATION.md).
+        o["elevation"] = 1
+        el["roll_sigma_deg"] = float(np.degrees(el.pop("roll_sigma")))
+        o.update({f"elevation_{k}": (int(v) if isinstance(v, bool) else v) for k, v in el.items()})
     if sync:
         o["sync"] = 1
         o.update({f"sync_{k}": (int(v) if isinstance(v, bool) else v) for k, v in sync.items()})

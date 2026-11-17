@@ -8,6 +8,8 @@
       -> detect (cell-averaging CFAR, clustering)
       -> track in a world-fixed frame (ownship's motion removed)
       -> classify (mover / static / multipath / uncertain)
+      [with `elevation` and an array of stacked rows: elevation and depth of each detection,
+       bearing corrected for it, depth carried by the tracks (elevation.py)]
       -> report: one JSON object per ping, to a file and optionally a UDP port
 
 The same object runs on simulated pings, on a replayed recording and on the live stream,
@@ -43,6 +45,8 @@ DEFAULTS = {
             "max_gates": 24, "min_contrast_db": 8.0, "max_iterations": 20, "tolerance": 0.01},
     "tracker": {"range_sigma": 15.0, "bearing_sigma_deg": 1.0, "confirm_hits": 3, "max_misses": 2,
                 "initial_speed_sigma": 8.0, "process_noise": 0.05},
+    "elevation": None,                         # stacked rows: {} or {sector_deg: ..., ...} switches elevation and depth on (elevation.py)
+    "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": 60.0,
                  "multipath": {"max_excess_range": 800.0, "bearing_deg": 3.0, "velocity": 2.5}},
 }
@@ -78,6 +82,19 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
         m = c["multipath"]
         o.update(multipath_max_excess_range=m["max_excess_range"], multipath_bearing=float(np.radians(m["bearing_deg"])),
                  multipath_velocity=m["velocity"])
+    if cfg.get("dead_channels"):
+        o["dead_channels"] = [int(v) for v in cfg["dead_channels"]]
+    if cfg.get("elevation") is not None:
+        from .elevation import DEFAULTS as EL
+        e = _merge(EL, cfg["elevation"])
+        o["elevation"] = {"first_deg": float(e["sector_deg"][0]), "last_deg": float(e["sector_deg"][1]), "step_deg": float(e["sector_deg"][2]),
+                          "range_window_m": float(e["range_window_m"] or 0.0), "max_detections": int(e["max_detections"]),
+                          "min_quality": float(e["min_quality"]), "ambiguity_db": float(e["ambiguity_db"]),
+                          "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
+                          "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
+                          "water_depth": float(e["water_depth"] or 0.0), "surface_z": float(e["surface_z"]),
+                          "roll_sigma": float(np.radians(e["roll_sigma_deg"])), "depth_process_noise": float(e["depth_process_noise"]),
+                          "row_tolerance_m": float(e["row_tolerance_m"])}
     if reference is not None:
         o["sync"] = {k: (bool(reference[k]) if k == "dedicated" else float(reference[k]))
                      for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated") if k in reference}
@@ -173,9 +190,14 @@ class LiveChain:
                  report_udp: tuple | None = None, taps: dict | None = None, nav: NavListener | None = None):
         self.cfg = _merge(DEFAULTS, config)
         t = self.cfg["tracker"]
+        self._elevation = None
+        if self.cfg.get("elevation") is not None:
+            from .elevation import DEFAULTS as EL
+            self._elevation = _merge(EL, self.cfg["elevation"])
         self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=np.radians(t["bearing_sigma_deg"]),
                                       confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
-                                      initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"])
+                                      initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
+                                      depth_process_noise=(self._elevation or {}).get("depth_process_noise", 0.5))
         b = self.cfg["bearings_deg"]
         self.bearings = np.radians(np.arange(b[0], b[1] + 0.5 * b[2], b[2]))
         self._writer = core.RecordWriter(recording) if recording else None
@@ -250,10 +272,38 @@ class LiveChain:
                 record = sync.drop_reference_channels(record)   # those inputs carry no hydrophone
             if tap:
                 tap.records("sync", [record])
+        if cfg["dead_channels"]:
+            from . import sync
+            dead = {int(v) for v in cfg["dead_channels"]}
+            record = sync.select_channels(record, [r for r in range(record.samples.n_channels) if r not in dead])
         from . import recon
         recon.prepare([record], backend=self.backend)        # baseband and pulse compression (cuFFT on a GPU)
         if tap:
             tap.records("prepare", [record])
+        rows = subs = None
+        if self._elevation is not None:
+            from . import elevation
+            rows = elevation.find_rows(record, self._elevation["row_tolerance_m"])
+            if len(rows) < 2:
+                rows = None                    # one row: exactly the chain without the option
+            else:
+                subs = elevation.row_records(record, rows)
+        if rows is None:
+            fine, fine_ranges, k = self._fine_map(record)
+        else:
+            # Each row beamformed on its own, the rows' power added: a row's bearing response
+            # does not depend on the elevation the arrival comes from.
+            fine = None
+            for sub in subs:
+                f_, fine_ranges, k = self._fine_map(sub)
+                fine = f_ if fine is None else fine + f_
+        self._rows, self._subs = rows, subs
+        return self._after_map(record, fine, fine_ranges, k, index, tap, sync_facts, t_wall)
+
+    def _fine_map(self, record):
+        """Power over bearing x fine range for one line of hydrophones, the fine ranges and
+        the number of fine samples per range cell."""
+        cfg = self.cfg
         if cfg["beamformer"] == "backprojection":
             # Delay and sum by the backprojection kernel onto range x bearing: exact in the near
             # field too, and the same code on the host and on a GPU.
@@ -268,13 +318,17 @@ class LiveChain:
             fine_r = r0 + step * np.arange(int((r1 - r0) / step) // k * k)
             fan = flank.backprojection_map(record, fine_r, self.bearings, window=cfg["window"], interp="linear",
                                            backend=self.backend)
-            fine = (np.abs(fan.image) ** 2).T                 # [bearing, range]
-            fine_ranges = fine_r
+            return (np.abs(fan.image) ** 2).T, fine_r, k      # [bearing, range]
         else:
             bm = (flank.mvdr_beamform(record, self.bearings) if cfg["beamformer"] == "mvdr"
                   else flank.farfield_beamform(record, self.bearings, window=cfg["window"])).valid()
             fine, fine_ranges = np.abs(bm.data) ** 2, bm.ranges
             k = max(int(round(cfg["range_cell_m"] / (fine_ranges[1] - fine_ranges[0]))), 1)
+            return fine, fine_ranges, k
+
+    def _after_map(self, record, fine, fine_ranges, k, index, tap, sync_facts, t_wall):
+        cfg = self.cfg
+        rows, subs = self._rows, self._subs
         n = fine.shape[1] // k * k
         power = fine[:, :n].reshape(len(self.bearings), -1, k).mean(axis=2)
         ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
@@ -300,6 +354,25 @@ class LiveChain:
         rx = record.rx_positions()
         origin = rx.mean(axis=0)
         axis = rx[-1, :2] - rx[0, :2]
+        el_cfg = self._elevation if rows is not None else None
+        els = [None] * len(hits)
+        if el_cfg is not None:
+            # Stacked rows: the elevation of the strongest detections, from the whole array.
+            from . import elevation
+            frame = elevation.array_frame(record, rows, cfg["look"])
+            origin, axis = frame.origin, frame.along[:2]
+            mean, _ = detect._window_mean(np.asarray(power, dtype=float), guard, train)
+            order = sorted(range(len(hits)), key=lambda i: -hits[i].snr_db)[:int(el_cfg["max_detections"])]
+            background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
+                                     int(np.argmin(np.abs(ranges - hits[i].range)))]) for i in order]
+            window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
+            got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing) for i in order], background, frame,
+                                     el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),
+                                     range_cell=cfg["range_cell_m"], backend=self.backend)
+            for i, e in zip(order, got):
+                els[i] = e
+            water = el_cfg["water_depth"] or record.environment.water_depth
+            water = float(water) if water and np.isfinite(water) and water > 0.0 else None
         axis = axis / max(np.linalg.norm(axis), 1e-12)
         side = 1.0 if cfg["look"] == "starboard" else -1.0
         broadside = side * np.array([-axis[1], axis[0]])
@@ -307,29 +380,68 @@ class LiveChain:
             self._origin, self._t0 = origin.copy(), record.transmit.time_ns
         t = (record.transmit.time_ns - self._t0) * 1e-9
         local = []
-        for h in hits:
+        extra = [None] * len(hits)             # what elevation adds to each detection's report
+        for i, h in enumerate(hits):
             p = origin[:2] - self._origin[:2] + h.range * (np.sin(h.bearing) * axis + np.cos(h.bearing) * broadside)
+            depth = depth_sigma = float("nan")
+            e = els[i]
+            if el_cfg is not None:
+                extra[i] = {"elevation_deg": None}
+            if e is not None and e.valid:
+                u = np.asarray(e.world)
+                level = float(np.arcsin(np.clip(-u[2], -1.0, 1.0)))       # elevation above the horizontal, roll and pitch applied
+                extra[i] = {"elevation_deg": float(np.degrees(level)), "elevation_sigma_deg": float(np.degrees(e.sigma)),
+                            "elevation_quality": e.quality, "elevation_ambiguous": e.ambiguous}
+                if el_cfg["correct_bearing"]:
+                    # The line array gave the cone angle; with the elevation the horizontal bearing follows.
+                    p = origin[:2] - self._origin[:2] + e.range * u[:2]
+                    extra[i].update(cone_bearing_deg=float(np.degrees(h.bearing)),
+                                    bearing_deg=float(np.degrees(np.arctan2(u[:2] @ axis, u[:2] @ broadside))))
+                if el_cfg["depth"]:
+                    image = float(origin[2] + e.range * u[2])             # straight-line depth: outside the water for a bounce
+                    sigma_z = float(e.range * np.cos(level) * e.sigma)
+                    folded, path = (elevation.fold_depth(image, water, el_cfg["surface_z"]) if el_cfg["fold"]
+                                    else (image, "direct"))
+                    extra[i].update(depth_m=folded, depth_sigma_m=sigma_z, image_depth_m=image, path=path)
+                    if not e.ambiguous:
+                        depth, depth_sigma = image, sigma_z
             # The tracker's measurement is (range, bearing) about the frame origin, across then forward.
-            local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells))
+            local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma))
         tracks = self.tracker.update(t, local)
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
         mp = dict(c["multipath"], bearing=np.radians(c["multipath"]["bearing_deg"]), origin=(own[1], own[0])) if c.get("multipath") else None
         classes = classify.classify_tracks(tracks, min_speed=c["min_speed"], static_speed=c["static_speed"],
                                            max_fit_rms=c["max_fit_rms"], multipath=mp)
+        track_extra = {}
+        if el_cfg is not None and el_cfg["depth"]:
+            by_id = {tr.id: tr for tr in tracks}
+            for c_ in classes:
+                tr = by_id[c_.id]
+                if not np.isfinite(tr.depth):
+                    track_extra[c_.id] = {"depth_m": None}
+                    continue
+                sigma_z = float(np.sqrt(tr.depth_var))
+                folded, path = (elevation.fold_depth(tr.depth, water, el_cfg["surface_z"]) if el_cfg["fold"] else (tr.depth, "direct"))
+                track_extra[c_.id] = {"depth_m": folded, "depth_sigma_m": sigma_z, "path": path}
+                if el_cfg["classify"] and elevation.outside_water(tr.depth, sigma_z, water, el_cfg["surface_z"], el_cfg["classify_sigma"]):
+                    c_.kind = "multipath"      # its straight-line depth is above the surface or below the bottom: a bounce
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
             "sync": sync_facts,
-            "detections": [{"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db} for h in hits],
+            "detections": [dict({"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db}, **(x or {}))
+                           for h, x in zip(hits, extra)],
             "tracks": [{"id": c_.id, "kind": c_.kind, "parent": c_.parent,
                         # World coordinates: x north, y east, metres, in the frame the records use.
                         "x": float(c_.position[1] + self._origin[0]), "y": float(c_.position[0] + self._origin[1]),
                         "vx": c_.velocity[1], "vy": c_.velocity[0], "speed_m_s": c_.speed,
                         "range_m": float(np.hypot(c_.position[1] - own[0], c_.position[0] - own[1])),
-                        "mean_snr_db": c_.mean_snr_db, "seen": c_.seen} for c_ in classes],
+                        "mean_snr_db": c_.mean_snr_db, "seen": c_.seen, **track_extra.get(c_.id, {})} for c_ in classes],
             "processing_seconds": time.perf_counter() - t_wall,
         }
+        if el_cfg is not None:
+            report["rows"] = len(rows)
         if tap:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}

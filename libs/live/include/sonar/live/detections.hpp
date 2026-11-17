@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,8 @@ struct Detection {
   double bearing = 0.0;  ///< rad
   double snr_db = 0.0;   ///< strongest cell over its local background
   std::int64_t cells = 1;
+  double depth = std::numeric_limits<double>::quiet_NaN();        ///< m, straight-line depth from elevation (stacked rows); NaN: none
+  double depth_sigma = std::numeric_limits<double>::quiet_NaN();
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]
@@ -36,6 +39,8 @@ struct Track {
   bool confirmed = false;
   std::vector<HistoryPoint> history;
   std::vector<double> snr;  ///< SNR (dB) of each detection it took
+  double depth = std::numeric_limits<double>::quiet_NaN();  ///< m, from the detections that carried one
+  double depth_var = std::numeric_limits<double>::infinity();
 };
 
 struct TrackerOptions {
@@ -46,6 +51,7 @@ struct TrackerOptions {
   std::int64_t confirm_hits = 3;
   std::int64_t max_misses = 3;
   double initial_speed_sigma = 10.0;
+  double depth_process_noise = 0.5;  ///< m per sqrt(s): how fast a track's depth may wander
 };
 
 /// Nearest-neighbour Kalman tracker with a constant-velocity model in the horizontal plane.
