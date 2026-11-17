@@ -7,6 +7,7 @@
 #        GPUSONAR_TARBALL_REPO=<user>/<dataset> tools/gpu_job.sh    fetch the source first
 #        GPUSONAR_ORACLES=1 tools/gpu_job.sh    also build Bellhop and KRAKEN for the tests that need them
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
+#        GPUSONAR_HOLOSCAN_CPP=1 tools/gpu_job.sh  also install the Holoscan C++ package and build the C++ operators
 #        GPUSONAR_NVUS=1 tools/gpu_job.sh       also build the ultrasound reference's native module (no SDK)
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
 set -euo pipefail
@@ -19,7 +20,7 @@ python3 -m venv /opt/venv
 . /opt/venv/bin/activate
 pip install -q numpy scipy h5py pyyaml pytest pybind11 hdf5plugin huggingface_hub rasterio pyproj matplotlib
 # Holoscan SDK 4.x (CUDA 12 build) for the operator tests; they skip if this fails.
-pip install -q holoscan-cu12 || echo "holoscan not installed"
+pip install -q holoscan-cu12==4.6.0 || echo "holoscan not installed"
 ulimit -s 32768 || true
 if [ -n "${GPUSONAR_TARBALL_REPO:-}" ]; then
   hf download "$GPUSONAR_TARBALL_REPO" gpusonar.tar.gz --type dataset --local-dir /work > /dev/null
@@ -35,9 +36,15 @@ if [ "${GPUSONAR_CERES:-0}" = "1" ]; then
         -DCMAKE_INSTALL_PREFIX=/opt/ceres-nosuitesparse > /dev/null
   cmake --build /opt/ceres-build > /dev/null && cmake --install /opt/ceres-build > /dev/null
 fi
+holoscan_flag=""
+if [ "${GPUSONAR_HOLOSCAN_CPP:-0}" = "1" ]; then
+  # Headers and CMake files of the same SDK version as the Python wheel (the wheel has neither).
+  apt-get install -y -qq --no-install-recommends holoscan=4.6.0-1 'holoscan-cuda-12=4.6.0*' > /dev/null
+  holoscan_flag="-DSONAR_BUILD_HOLOSCAN=ON"
+fi
 nvcc --version | tail -1
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=ON \
-      -DPython3_EXECUTABLE="$(which python3)"
+      -DPython3_EXECUTABLE="$(which python3)" $holoscan_flag ${SONAR_CMAKE_ARGS:-}
 cmake --build build
 if [ "${GPUSONAR_ORACLES:-0}" = "1" ]; then
   # External GPL-3 propagation programs, run as separate processes (docs/OPEN_SOURCE.md).

@@ -66,6 +66,19 @@ add_executable(sonar_live_app apps/sonar_live.cpp)
 set_target_properties(sonar_live_app PROPERTIES OUTPUT_NAME sonar_live RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 target_link_libraries(sonar_live_app PRIVATE sonar::live sonar::io Threads::Threads sonar_warnings)
 
+# The same chain as C++ Holoscan operators and an application of them. Needs the Holoscan SDK's
+# C++ package (headers and CMake files; the Python wheel alone does not carry them).
+if(SONAR_BUILD_HOLOSCAN)
+  find_package(holoscan REQUIRED CONFIG PATHS "/opt/nvidia/holoscan")
+  add_library(sonar_holoscan_ops libs/holoscan_ops/src/operators.cpp)
+  add_library(sonar::holoscan_ops ALIAS sonar_holoscan_ops)
+  target_include_directories(sonar_holoscan_ops PUBLIC libs/holoscan_ops/include)
+  target_link_libraries(sonar_holoscan_ops PUBLIC sonar::live sonar::io holoscan::core Threads::Threads)
+  add_executable(sonar_live_holoscan apps/sonar_live_holoscan.cpp)
+  set_target_properties(sonar_live_holoscan PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+  target_link_libraries(sonar_live_holoscan PRIVATE sonar::holoscan_ops)
+endif()
+
 # Motion estimation needs Ceres Solver (BSD). Ceres can be built with SuiteSparse, which
 # is GPL; the Ubuntu package is. This project does not link copyleft code into the core
 # without the owner's sign-off, so such a Ceres is refused unless explicitly allowed.
