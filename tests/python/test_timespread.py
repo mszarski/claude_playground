@@ -248,7 +248,7 @@ def test_the_options_off_give_the_output_of_the_version_before_them():
     pts = np.array([[500.0, 40.0, 40.0], [300.0, -20.0, 10.0]])
     kw = dict(frequency=F, surface=boundary_parameters({"wind_speed": 6.0}, surface=True),
               bottom={"rms_height": 0.03, "mean_square_slope": 0.02, "rms_vertical_speed": 0.0},
-              surface_z=0.0, bottom_z=80.0, taps=4, seed=5, multi_bounce="sum")
+              surface_z=0.0, bottom_z=80.0, taps=4, seed=5, multi_bounce="sum", doppler_spectrum="lorentzian")
     p = TimeSpreadProvider(inner, **kw)
     p.set_ping(7.0, 1.5)
     e = p.eigenrays(SOURCE, pts)
@@ -259,7 +259,7 @@ def test_the_options_off_give_the_output_of_the_version_before_them():
     assert float(e.delay[e.valid].sum()) == pytest.approx(12.002601952374846, rel=1e-12)
     # Naming the defaults changes nothing, and the taps keep the specular directions.
     q = TimeSpreadProvider(inner, angle_spread=False, doppler=False, decay_time="rule_of_thumb",
-                           doppler_spectrum="lorentzian", doppler_lines=8, **kw)
+                           doppler_lines=8, **kw)
     q.set_ping(7.0, 1.5)
     same = q.eigenrays(SOURCE, pts)
     assert np.array_equal(same.amplitude, e.amplitude) and np.array_equal(same.delay, e.delay)
