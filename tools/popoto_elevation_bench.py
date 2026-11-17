@@ -7,9 +7,10 @@ what does the chain cost per ping with one, two and three rows?
            blocks through the C++ assembler (libs/live), fixed-size Sensor Bridge frames
            (sources/hsb.py), and the container file. Every transport must give the samples
            back within half a count of the 24-bit quantisation.
-  scenarios  the three stacked-row scenarios through the C++ chain: depth against truth in free
-           field with the vehicle rolled, in a shallow channel with bounces, and in the rehearsal
-           with boards on their own clocks.
+  scenarios  every stage's scenarios through the C++ chain: the test AUV's row; the static drop-in
+           array (two rows, three rows, free field, a passing target, listening); the face (two
+           rows in shallow water; three rows in free field with the vehicle rolled, in a shallow
+           channel with bounces, and in the rehearsal with boards on their own clocks).
   timing   the C++ chain (host) per ping on pings of the `popoto_12km` scenario's size (complex
            baseband at 8 kHz, 11.3-12.7 km, bearings -60 to 60 degrees in 0.5 degree steps),
            and at the boards' full rate on a short window, for one, two and three rows.
@@ -155,11 +156,61 @@ def scenario_check():
     out["testauv_1row"] = {"sync_residual_us": max(r["sync"]["worst_residual_us"] for r in reps),
                            "range_error_m": [d["range_m"] - float(np.linalg.norm(np.asarray(target) - own)) for d, own in rows],
                            "bearing_error_deg": [d["bearing_deg"] - float(np.degrees(np.arctan2(target[0] - own[0], target[1] - own[1]))) for d, own in rows]}
-    reps = run("popoto_testauv_trial_2row", chain_of("popoto_testauv_2row", water_depth=30.0))
-    target = [60.0, 294.0, 22.0]
-    rows = [near(r, target)[0] for r in reps]
-    out["testauv_2row"] = {"sync_residual_us": max(r["sync"]["worst_residual_us"] for r in reps), "true_depth_m": 22.0, "range_m": 300.0,
-                           "depth_m": [d.get("depth_m") for d in rows], "ambiguous": [bool(d.get("elevation_ambiguous")) for d in rows]}
+    # The static drop-in array: its two trials (raw samples, board clocks), free field, a passing target, listening.
+    from gpusonar.config import load_scenario_config
+    for key, scenario, deploy in (("static_2row", "popoto_static_trial_2row", "popoto_static_2row"),
+                                  ("static_3row", "popoto_static_trial_3row", "popoto_static_3row")):
+        sc_ = load_scenario_config(scenario)
+        target = sc_["scene"][0]["positions"][0]
+        reps = run(scenario, chain_of(deploy, water_depth=float(sc_["environment"]["water_depth"])))
+        rows = [near(r, target)[0] for r in reps]
+        own = np.asarray(reps[0]["ownship_xyz"])
+        out[key] = {"sync_residual_us": max(r["sync"]["worst_residual_us"] for r in reps), "true_depth_m": float(target[2]),
+                    "range_m": float(np.linalg.norm(np.asarray(target) - own)), "water_depth_m": float(sc_["environment"]["water_depth"]),
+                    "boards": len(reps[0]["sync"]["offsets_us"]),
+                    "depth_m": [d.get("depth_m") for d in rows], "depth_sigma_m": [d.get("depth_sigma_m") for d in rows],
+                    "ambiguous": [bool(d.get("elevation_ambiguous")) for d in rows], "path": [d.get("path") for d in rows]}
+    # The same target depth further out in that shallow water: the bounces arrive inside the pulse's range sidelobes.
+    sc_ = load_scenario_config("popoto_static_trial_3row")
+    sc_["scene"][0]["positions"] = [[60.0, 294.0, 22.0]]
+    sc_["sonar_overrides"]["receive"]["window"]["range"] = [100, 700]
+    with LiveChain(dict(chain_of("popoto_static_3row", water_depth=30.0), engine="cpp", backend="host")) as live:
+        reps = live.run(run_scenario(sc_).records)
+    rows = [near(r, [60.0, 294.0, 22.0])[0] for r in reps]
+    out["static_3row_300m_shallow"] = {"true_depth_m": 22.0, "range_m": 300.0, "water_depth_m": 30.0, "depth_m": [d.get("depth_m") for d in rows],
+                                       "path": [d.get("path") for d in rows]}
+    static = chain_of("popoto_static_3row", sync=False, gradient_sigma_per_s=0.0)
+    last = run("popoto_static_free", static)[-1]
+    truth = {tuple(o["positions"][0][:2]): float(o["positions"][0][2]) for o in load_scenario_config("popoto_static_free")["scene"]}
+    errors = []
+    for t in last["tracks"]:
+        (_, depth) = min(truth.items(), key=lambda kv: np.hypot(kv[0][0] - t["x"], kv[0][1] - t["y"]))
+        errors.append(t["depth_m"] - depth)
+    out["static_free"] = {"tracks": len(last["tracks"]), "true_depths_m": sorted(truth.values()), "depth_errors_m": errors,
+                          "depth_sigma_m": [t["depth_sigma_m"] for t in last["tracks"]], "tilt_deg": 2.0}
+    sc_ = load_scenario_config("popoto_static_passing")
+    mover = sc_["scene"][0]
+    last = run("popoto_static_passing", chain_of("popoto_static_3row", sync=False, water_depth=float(sc_["environment"]["water_depth"])))[-1]
+    movers = [t for t in last["tracks"] if t["kind"] == "mover"]
+    out["static_passing"] = {"true_speed_m_s": float(np.linalg.norm(mover["velocity"])), "true_depth_m": float(mover["positions"][0][2]),
+                             "pings": int(sc_["pings"]["count"]), "tracks": len(last["tracks"]), "kinds": sorted(t["kind"] for t in last["tracks"]),
+                             "mover_speed_m_s": [t["speed_m_s"] for t in movers], "mover_vx_m_s": [t["vx"] for t in movers],
+                             "mover_depth_m": [t.get("depth_m") for t in movers]}
+    # Listening: two noise sources heard by the three-row static array (sim/passive.py: free field, no ping).
+    from gpusonar.sim.passive import passive_record
+    sonar = SonarModel.load("popoto_static_3row", {"receive": {"kind": "baseband", "sample_rate": 8.0e3, "window": {"range": [0.0, 1500.0]}}})
+    pose = make_pose(position=(0.0, 0.0, 40.0), rpy=(np.radians(2.0), 0.0, 0.0))
+    sources = [[-200.0, 500.0, 10.0], [150.0, 450.0, 110.0]]
+    rec = passive_record(sonar, pose, [{"position": sources[0], "rms": 1.0}, {"position": sources[1], "rms": 0.7}], noise_rms=1.0,
+                         rng=np.random.default_rng(2))
+    frames, _ = core.doa_passive(rec, 4000.0, 6000.0, n_fft=256, hop=128, n_average=12, first_deg=-60.0, last_deg=60.0,
+                                 max_sources=2, min_snr_db=3.0, elevation=True, elevation_step_deg=0.25)
+    centre = rec.rx_positions().mean(axis=0)
+    true_el = [float(np.degrees(np.arcsin(-(np.asarray(q) - centre)[2] / np.linalg.norm(np.asarray(q) - centre)))) for q in sources]
+    got = [sorted(float(np.degrees(e)) for e in f["elevations"]) for f in frames if len(f["peaks"]) == 2]
+    out["static_passive"] = {"frames": len(frames), "frames_with_both": len(got), "true_elevation_deg": sorted(true_el),
+                             "worst_elevation_error_deg": float(max(max(abs(a - b) for a, b in zip(g, sorted(true_el))) for g in got)) if got else None,
+                             "source_rms_over_noise": [1.0, 0.7], "tilt_deg": 2.0}
     # Stage 3: two rows on the face, shallow water at 3 km, with and without the water-depth bound on the sector.
     bounded = run("popoto_face_2row_shallow", chain_of("popoto_face_2row", sync=False, water_depth=100.0))
     wide = chain_of("popoto_face_2row", sync=False, water_depth=100.0)
@@ -208,17 +259,28 @@ def main():
     sc = scenario_check()
     R["scenarios"] = sc
     fmt = lambda v: ", ".join("none" if x is None else f"{x:+.1f}" if abs(x) < 10 else f"{x:.0f}" for x in v)      # noqa: E731
-    a1, a2, f2, f, sh, re = sc["testauv_1row"], sc["testauv_2row"], sc["face_2row"], sc["free_field"], sc["shallow"], sc["rehearsal"]
-    print(f"  stage 1, popoto_testauv_trial_1row (500 m, 4 boards, rolling): sync {a1['sync_residual_us']:.2f} us; range errors {fmt(a1['range_error_m'])} m; "
+    a1, f2, f, sh, re = sc["testauv_1row"], sc["face_2row"], sc["free_field"], sc["shallow"], sc["rehearsal"]
+    print(f"  test AUV, popoto_testauv_trial_1row (500 m, 4 boards, rolling): sync {a1['sync_residual_us']:.2f} us; range errors {fmt(a1['range_error_m'])} m; "
           f"bearing errors {fmt(a1['bearing_error_deg'])} deg")
-    print(f"  stage 2, popoto_testauv_trial_2row (300 m, 8 boards, rolling, rows 0.30 m apart): sync {a2['sync_residual_us']:.2f} us; target at {a2['true_depth_m']:.0f} m read {fmt(a2['depth_m'])} m")
-    print(f"  stage 3, popoto_face_2row_shallow (3 km, 100 m of water, rows 1.8 m apart): target at {f2['true_depth_m']:.0f} m read {fmt(f2['depth_m'])} m "
+    for key in ("static_2row", "static_3row"):
+        a2 = sc[key]
+        print(f"  static array, popoto_static_trial_{key[-4:]} ({a2['range_m']:.0f} m, {a2['water_depth_m']:.0f} m of water, {a2['boards']} boards, tilted 2 deg): sync {a2['sync_residual_us']:.2f} us; "
+              f"target at {a2['true_depth_m']:.0f} m read {fmt(a2['depth_m'])} m (sigma {fmt(a2['depth_sigma_m'])} m); ambiguous {a2['ambiguous']}; path {a2['path']}")
+    a3 = sc["static_3row_300m_shallow"]
+    print(f"  static array, three rows, the target at {a3['true_depth_m']:.0f} m depth moved out to {a3['range_m']:.0f} m in {a3['water_depth_m']:.0f} m of water: read {fmt(a3['depth_m'])} m, path {a3['path']}")
+    sf, sp, sl_ = sc["static_free"], sc["static_passing"], sc["static_passive"]
+    print(f"  static array, popoto_static_free (targets at {sf['true_depths_m']} m): track depth errors {fmt(sf['depth_errors_m'])} m; sigma from the angle {fmt(sf['depth_sigma_m'])} m")
+    print(f"  static array, popoto_static_passing ({sp['true_speed_m_s']:.1f} m/s at {sp['true_depth_m']:.0f} m, {sp['pings']} pings): tracks {sp['kinds']}; mover speed {fmt(sp['mover_speed_m_s'])} m/s, "
+          f"along the array {fmt(sp['mover_vx_m_s'])} m/s, depth {fmt(sp['mover_depth_m'])} m")
+    print(f"  static array, listening (two noise sources, elevations {fmt(sl_['true_elevation_deg'])} deg): both found in {sl_['frames_with_both']} of {sl_['frames']} frames; "
+          f"worst elevation error {sl_['worst_elevation_error_deg']:.2f} deg")
+    print(f"  face, popoto_face_2row_shallow (3 km, 100 m of water, rows 1.5 m apart): target at {f2['true_depth_m']:.0f} m read {fmt(f2['depth_m'])} m "
           f"(elevation {fmt(f2['elevation_deg'])} against {f2['true_elevation_deg']:+.2f} deg); ambiguous {f2['ambiguous']}; without the water-depth bound "
           f"{f2['ambiguous_without_the_bound']} with {f2['candidates_without_the_bound']} candidates")
-    print(f"  stage 4, popoto_elevation_free (three rows, rolled {f['roll_deg']:.0f} deg, {f['pings']} pings): track depth errors {fmt(f['depth_errors_m'])} m; sigma from the angle {fmt(f['depth_sigma_m'])} m")
-    print(f"  stage 4, popoto_elevation_shallow (target at {sh['true_depth_m']:.0f} m, direct path {sh['true_elevation_deg']:+.2f} deg): depth {fmt(sh['depth_m'])} m; "
+    print(f"  face, popoto_elevation_free (three rows, rolled {f['roll_deg']:.0f} deg, {f['pings']} pings): track depth errors {fmt(f['depth_errors_m'])} m; sigma from the angle {fmt(f['depth_sigma_m'])} m")
+    print(f"  face, popoto_elevation_shallow (target at {sh['true_depth_m']:.0f} m, direct path {sh['true_elevation_deg']:+.2f} deg): depth {fmt(sh['depth_m'])} m; "
           f"elevation {fmt(sh['elevation_deg'])} deg; path {', '.join(sh['path'])}")
-    print(f"  stage 4, popoto_elevation_rehearsal ({re['boards']} boards, rolled {re['roll_deg']:.0f} deg and rolling {re['roll_rate_deg_s']} deg/s, {re['sound_speed']:.0f} m/s): sync "
+    print(f"  face, popoto_elevation_rehearsal ({re['boards']} boards, rolled {re['roll_deg']:.0f} deg and rolling {re['roll_rate_deg_s']} deg/s, {re['sound_speed']:.0f} m/s): sync "
           f"{re['worst_residual_us']:.2f} us; target at {re['deep_true_m']:.0f} m read {fmt(re['deep_depth_m'])} m (with the attitude of the transmit: {fmt(re['deep_depth_with_transmit_attitude_m'])} m); "
           f"target at {re['shallow_true_m']:.0f} m (direct and surface echoes merged) read {fmt(re['shallow_depth_m'])} m")
     print("STREAM: two pings at 102.4 kHz, real, 24 bit, 900-1000 m, through every transport")

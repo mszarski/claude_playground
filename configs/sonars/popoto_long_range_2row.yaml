@@ -3,16 +3,18 @@
 # `popoto_long_range`; one row stays the default. Numbers: docs/DESIGN.md Sec. 3,
 # tools/popoto_elevation_study.py. 64 hydrophones on 8 boards of 8 inputs, wired row by row
 # (channels 0-31 the lower row, 32-63 the upper), so every board serves one row.
-# Rows 1.8 m apart are 4.8 to 7.2 wavelengths apart: accurate (0.15 degrees at 20 dB), but the
-# response repeats every 9.6 degrees. Use where water depth and range confine arrivals to within
-# 4.8 degrees of level (chain.elevation.sector_from_depth), or prefer the three-row array.
+# Rows 1.5 m apart are 4 to 6 wavelengths apart: accurate (0.18 degrees at 20 dB), but the
+# response repeats every 11.5 degrees. Use where water depth and range confine arrivals to within
+# 5.8 degrees of level (chain.elevation.sector_from_depth), or prefer the three-row array.
 base: popoto_long_range
 name: popoto_long_range_2row
 
-platform:                        # the full vehicle (the owner: "a vertical straight face 2m high and 9m long")
-  name: full_face
-  span_m: 9.0
-  height_m: 2.0
+platform:                        # the full vehicle. The owner: "a vertical straight face 2m high and 9m long" (stated), then
+  name: full_face                # "Need way more margin. Projector etc, I think probably try like a 7m horizontal and the
+  span_m: 9.0                    # vertical spacing is maybe a 1.5" (working values): the rows keep inside 7 m of the length
+  height_m: 2.0                  # and the outer rows are 1.5 m apart; the rest is margin and room for the projector
+  usable_span_m: 7.0
+  row_baseline_m: 1.5
   mounting: flat vertical face
 
 array:
@@ -22,8 +24,16 @@ array:
       layout: stacked_lines
       # interleave: 4               # alternative wiring: four hydrophones of each row per board (they then share its clock)
       rows:                         # up: m above the centre of the face; out: m out from the face
-        - {up: -0.90, out: 0.0}
-        - {up: 0.90, out: 0.0}
+        - {up: -0.75, out: 0.0}
+        - {up: 0.75, out: 0.0}
+
+transmit:
+  lever_arm: [4.0, 0, 0]         # the projector ON the face, in the forward end margin at mid-height, 4 m from the array's
+                                 # centre: a placeholder (the owner: "Projector etc" needs room on the face; no position given)
 
 unconfirmed:
-  - array.layouts.two_rows.rows     # chosen by us within the owner's 2 m x 9 m face: 0.1 m kept free top and bottom
+  - platform.usable_span_m          # the owner's working value ("probably try like a 7m horizontal")
+  - platform.row_baseline_m         # the owner's working value ("maybe a 1.5")
+  - array.layouts.two_rows.rows     # the outer rows at the working baseline
+  - transmit                        # no projector chosen; its place on the face is a placeholder
+  - array.pitch

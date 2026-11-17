@@ -1,9 +1,9 @@
-# The two-row prototype with every board on its own clock, for rehearsals: 8 boards of eight inputs with clock
+# The two-row static array with every board on its own clock, for rehearsals: 8 boards of eight inputs with clock
 # offsets, drifts and jitter as the simulator's truth, and the shared synchronisation reference (one
 # electrical signal wired to every board and summed into its first input, above the acoustic band:
 # see popoto_4x8.yaml). The chain has to estimate the clocks.
-base: popoto_testauv_2row
-name: popoto_testauv_2row_clocks
+base: popoto_static_2row
+name: popoto_static_2row_clocks
 
 receive:
   boards:

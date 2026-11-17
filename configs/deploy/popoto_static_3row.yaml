@@ -1,0 +1,53 @@
+# Stage 3: the static drop-in array with three rows (elevation and depth; not under way).
+#   tools/sonar_live.py configs/deploy/popoto_static_3row.yaml
+# Stages: docs/DESIGN.md Sec. 3; how to run and what the vehicle must supply: docs/DEPLOYMENT.md.
+
+source:
+  type: flank_udp
+  sonar: popoto_static_3row_clocks
+  host: 0.0.0.0
+  port: 5700
+  timeout: 30.0
+
+nav:                             # the frame does not move: a fixed pose (north, east, down in m; roll, pitch, yaw in rad).
+  static: {x: 0.0, y: 0.0, z: 10.0, roll: 0.0, pitch: 0.0, yaw: 0.0}   # z: the depth it hangs at; yaw: where its length points
+  # port: 5702                   # instead, with a tilt and compass sensor on the frame: the same JSON datagrams as a vehicle's
+
+chain:
+  sync: {reference: {f_start: 38.0e3, f_stop: 48.0e3, duration: 4.0e-3, lead: 5.0e-3, tail: 10.0e-3}}   # the shared reference summed into each board's first input
+  bearings_deg: [-60.0, 60.0, 0.5]
+  look: starboard
+  range_cell_m: 2.0
+  cfar: {pfa: 1.0e-5, guard_m: 100.0, train_m: 300.0}
+  min_snr_db: 9.0
+  # sound_speed: 1500.0          # m/s at the vehicle, when navigation does not send it
+  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
+  classify:
+    min_speed: 1.0
+    multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
+  elevation:                     # leave the section out (or use a one-row sonar) for the chain as it was
+    sector_deg: [-30.0, 30.0, 0.25]  # elevation searched, vehicle frame, up positive: first, last, step
+    attitude_time: transmit      # a fixed pose has no history; with a tilt sensor's datagrams (nav.port): arrival
+    attitude_rate_sigma_deg_s: 0.5   # added per second an echo's arrival lies beyond the attitude samples (unconfirmed)
+    roll_sigma_deg: 1.0          # how well the frame's tilt is known: assumed plumb without a sensor (a placeholder): into every depth sigma
+    water_depth: null            # m; null: what navigation sends ("water_depth"), else unknown
+    water_depth_sigma_m: 5.0     # how well it is known (the owner: "some idea of water depth"; unconfirmed)
+    gradient_per_s: 0.017        # assumed mean sound-speed gradient: isothermal water (pressure alone). No long-range profile exists
+    gradient_sigma_per_s: 0.05   # how wrong that may be (0.017 isothermal to 0.1 across a thermocline; unconfirmed): into depth sigma
+    # ssp: {depth: [...], speed: [...]}   # a measured profile, if there ever is one: replaces the gradient
+  # dead_channels: [17]          # channel rows to leave out (a failed hydrophone); a whole board: its eight rows
+
+output:
+  recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5
+  report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl
+  report_udp: [127.0.0.1, 5701]
+  taps: {dir: /data/sonar/taps, pings: 2}
+
+unconfirmed:
+  - chain.sync                         # the reference generator and its wiring are hardware to build
+  - nav.static                         # the frame's depth and heading
+  - chain.elevation.roll_sigma_deg     # how plumb the frame hangs, or what its tilt sensor delivers
+  - chain.elevation.attitude_rate_sigma_deg_s
+  - chain.elevation.water_depth_sigma_m
+  - chain.elevation.gradient_per_s     # an assumption, not a measurement
+  - chain.elevation.gradient_sigma_per_s

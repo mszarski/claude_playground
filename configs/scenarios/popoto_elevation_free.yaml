@@ -1,4 +1,4 @@
-# Elevation against truth, free field: the three-row long-range array on the 9 m x 2 m face
+# Elevation against truth, free field: the three-row long-range array on the vehicle's face (outer rows 1.5 m apart)
 # (96 hydrophones) rolled 3 degrees, three targets near 1 km at known depths above, level with
 # and below the vehicle, in noise. No boundaries: the depths the chain reports must be the targets'.
 # Chain: configs/deploy/popoto_vehicle_elevation.yaml (without sync: these pings are at baseband).

@@ -520,19 +520,39 @@ def fmt(v, digits=1):
     return "—" if v is None else (f"{v:.{digits}f}" if isinstance(v, float) else str(v))
 
 
+STAGE_FILES = {   # sonar file -> (deployment file, simulated trials)
+    "popoto_testauv_1row": ("popoto_testauv_1row", "`popoto_testauv_trial_1row`"),
+    "popoto_static_2row": ("popoto_static_2row", "`popoto_static_trial_2row`"),
+    "popoto_static_3row": ("popoto_static_3row", "`popoto_static_trial_3row`, `popoto_static_free`, `popoto_static_passing`"),
+    "popoto_long_range_2row": ("popoto_face_2row", "`popoto_face_2row_shallow`"),
+    "popoto_long_range_3row": ("popoto_vehicle_elevation", "`popoto_elevation_free`, `_shallow`, `_rehearsal`"),
+}
+
+
 def stacked_rows(D) -> list:
     """Section 3's subsection on the Popoto long-range array as a staged build with stacked rows. Every number
     comes from tools/popoto_elevation_study.py (analysis) or tools/popoto_elevation_bench.py (the software on
-    simulated data), through their JSON files in docs/design/."""
+    simulated data), through their JSON files in docs/design/, or from the config files."""
     S = json.loads((ROOT / "docs" / "design" / "popoto_elevation_study.json").read_text())
     B = json.loads((ROOT / "docs" / "design" / "popoto_elevation_bench.json").read_text())
     lr = D["popoto_long_range"]
     two, three = S["chosen"]["two_rows"], S["chosen"]["three_rows"]
     up, mid, d = S["outer_row_m"], S["three_rows"]["best_middle_m"], S["baseline_m"]
+    f_lo, f_hi = S["band_hz"]
     acc, T, W3 = S["accuracy"], S["two_rows"], S["three_rows"]
     stages = S["stages"]
     sc = B["scenarios"]
     names = list(stages)
+    face2, face3 = (next(v for v in stages.values() if v["sonar"] == n) for n in ("popoto_long_range_2row", "popoto_long_range_3row"))
+    auv = next(v for v in stages.values() if v["sonar"] == "popoto_testauv_1row")
+    static3 = next(v for v in stages.values() if v["sonar"] == "popoto_static_3row")
+    face_cfg = load_sonar_config("popoto_long_range_3row")
+    static_cfg = load_sonar_config("popoto_static_3row")
+    TS = S["trade_space"]
+    keys = TS["keys"]
+    g2, g3 = (S["unchanged"]["detection_gain_db"][k]["rows_added_as_power_db"] for k in ("2", "3"))
+    margin2 = T["margin_db"]
+    se = S["sensitivity"]
 
     def km(v):
         return f"{v / 1e3:.1f}"
@@ -540,37 +560,49 @@ def stacked_rows(D) -> list:
     def lst(values, digits=0):
         return ", ".join("none" if v is None else f"{v:.{digits}f}" for v in values)
 
+    def trade_table():
+        out = ["| Channels | As | Beam | Map gain | Reach ship / small (km) | Elevation at 20 dB | Boards |\n| --- | --- | --- | --- | --- | --- | --- |"]
+        for label, v in TS["fixed_channels"].items():
+            out.append(f"| {v['channels']} | {label} | {v['beamwidth_deg']:.1f}° | {v['gain_isotropic_noise_db'] + v['rows_detection_gain_db']:.1f} dB | {km(v['reach_ship_m'])} / {km(v['reach_small_m'])} | "
+                       + (f"{v['elevation_sigma_deg_at_20_db']:.2f}° (repeat {v['highest_repeat_db']:.1f} dB)" if v["rows"] > 1 else "none") + f" | {v['boards']} |")
+        return out
+
+    plat = face_cfg["platform"]
     L = ["### The long-range Popoto array as a staged build: one row, then stacked rows (elevation and depth)\n"]
     L.append("One horizontal line of hydrophones measures one angle, the angle between an arrival and the line (the cone angle). It cannot tell an\n"
              "echo from above from one from below, reports the bearing of anything off the horizontal a little wrong, and knows nothing of depth.\n"
              "More lines at other heights measure the missing angle, in the active mode (the main one) and in the passive one.\n")
     L.append("**What the owner has said, and how it is read here.**\n\n"
              "| The owner's words | Read as | Where it is |\n| --- | --- | --- |\n"
-             "| \"I can have a vertical straight face 2m high and 9m long\" | the full vehicle offers a flat vertical face of 2 m × 9 m to mount on (confirmed) | `platform` in `popoto_long_range_2row/_3row.yaml` |\n"
-             "| \"Let's eval both two and three\" | two rows and three rows are both evaluated and both shipped | stages 3 and 4 below |\n"
+             f"| \"I can have a vertical straight face 2m high and 9m long\" | the full vehicle offers a flat vertical face of {plat['height_m']:g} m × {plat['span_m']:g} m (stated) | `platform` in `popoto_long_range_2row/_3row.yaml` |\n"
+             f"| \"Need way more margin. Projector etc, I think probably try like a 7m horizontal and the vertical spacing is maybe a 1.5\" | the rows keep inside {plat['usable_span_m']:g} m of the length and the outer rows are {plat['row_baseline_m']:g} m apart; the rest of the face is margin and room for the projector. Working values (\"probably\", \"maybe\"): both are parameters, and the cost of each is shown below | `platform.usable_span_m`, `row_baseline_m`; `--array-length`, `--baseline` of the study |\n"
+             "| \"Let's eval both two and three\" | two rows and three rows are both evaluated and both shipped, on the static array and on the face | the stages below |\n"
+             "| \"No space for second row on auv but static drop in array could have two or three rows. So let's consider both\" | the test AUV carries ONE row. Stacked rows go first on a static drop-in array: a frame lowered and left in place, with two or with three rows. The owner gave no dimensions for it: all parameters | stages 2 and 3; `popoto_static_*` |\n"
              "| \"Probably row by row\" | each board serves one row (default); four of each row per board stays an alternative | `array.interleave` |\n"
-             "| \"Sure make it configurable\" (roll accuracy and its time stamp) | roll accuracy, and whether attitude is taken at the ping or at each echo's arrival, are settings | `elevation.roll_sigma_deg`, `attitude_time` |\n"
-             "| \"We wont have a long range SVP but we can measure auv local speed of sound and we will have some idea of water depth\" | local sound speed and an approximate water depth come from the vehicle; the gradient along the path is unknown and is carried as an uncertainty | `sound_speed`, `water_depth`, `water_depth_sigma_m`, `gradient_sigma_per_s` |\n"
+             "| \"Sure make it configurable\" (roll accuracy and its time stamp); \"good in general, sprintnav IMU and dvl\" | the vehicle's navigation is a SPRINT-Nav (inertial navigation with a Doppler velocity log). Its roll accuracy, output rate and time stamp are NOT known here and are not guessed: they are settings, with the depth error against roll accuracy tabulated below so the datasheet figure can be dropped in | `elevation.roll_sigma_deg`, `attitude_time` |\n"
+             "| \"We wont have a long range SVP but we can measure auv local speed of sound and we will have some idea of water depth\"; of the isothermal assumption: \"Won't always we need to handle it\" | local sound speed and an approximate water depth come from the vehicle; the profile along the path is unknown, is not always isothermal, and is carried as an uncertainty unless something better is known | `sound_speed`, `water_depth`, `water_depth_sigma_m`, `gradient_per_s`, `gradient_sigma_per_s`, `ssp` |\n"
              "| \"the popoto at 9m x 2 is still for active as well right\" | yes: active pinging is the main mode on the face; listening is supported with the same rows | |\n"
-             "| \"to start w probably have two rows of 32 or maybe even one for early prototyping. Test auv will only have probably like 2-3 span we can attach and it much elevation\" | the first hardware is a prototype on a test AUV: one row of 32, or two rows of 32, over 2 to 3 m of hull, with not much height to spread rows over | stages 1 and 2 |\n"
-             "| \"Does our array need to be 64? We can add just need to understand what we get\" | the number of hydrophones is open; the trade space below says what each addition buys | *Trade space* |\n")
-    L.append("Not answered, and still open: the compute for the boards' full sample rate, and whether Popoto boards can be batched and how tightly they\n"
-             "synchronise. Not given: the test AUV's usable height, its projector and source level, the trial site's depths. These are parameters in the\n"
-             "config files, flagged `unconfirmed`; nothing below depends on a guess in code.\n")
+             "| \"Does our array need to be 64? We can add just need to understand what we get\" | the number of hydrophones is open; the trade space says what each addition buys | *Trade space* |\n"
+             "| (compute at the boards' full rate) \"Prepare both options\" | both decimating first and a GPU are to be prepared | *Data path and compute* |\n")
+    L.append("**Trade space in one table** (the face, rows within {:.0f} m, outer rows {:.2f} m apart, {:.0f}–{:.0f} kHz; noise-limited reach on the budget of Sec. 5; details further down):\n".format(
+        S["array_length_m"], d, f_lo / 1e3, f_hi / 1e3))
+    L.extend(trade_table())
+    L.append("\nFor a fixed number of channels the trade is bearing and range (one long row) against elevation (stacked rows).\n")
     L.append("**The stages.** One software path, both engines, takes every stage from its files alone; each stage has a sonar file, a deployment file\n"
-             "and a simulated trial that the tests run.\n")
+             "and simulated trials that the tests run.\n")
     L.append("| | " + " | ".join(f"Stage {n}" for n in names) + " |\n| --- |" + " --- |" * len(names))
 
     def row(label, fn):
         L.append(f"| {label} | " + " | ".join(fn(stages[n]) for n in names) + " |")
 
     row("Sonar file", lambda x: f"`{x['sonar']}`")
-    L.append("| Deployment file | `popoto_testauv_1row` | `popoto_testauv_2row` | `popoto_face_2row` | `popoto_vehicle_elevation` |")
-    L.append("| Simulated trial | `popoto_testauv_trial_1row` | `popoto_testauv_trial_2row` | `popoto_face_2row_shallow` | `popoto_elevation_free`, `_shallow`, `_rehearsal` |")
+    row("Deployment file", lambda x: f"`{STAGE_FILES[x['sonar']][0]}`")
+    row("Simulated trials", lambda x: STAGE_FILES[x["sonar"]][1])
     row("Mounting", lambda x: f"{x['platform'].get('mounting', '')}, {x['platform'].get('span_m', 0):g} m × {x['platform'].get('height_m', 0):g} m")
+    row("Under way", lambda x: "no: fixed pose" if x["platform"].get("static") else "yes")
     row("Hydrophones (rows × per row)", lambda x: f"{x['channels']} ({x['rows']} × {x['hydrophones_per_row']})")
     row("Capture boards of 8 inputs", lambda x: str(x["boards"]))
-    row("Row length, spacing", lambda x: f"{x['row_length_m']:.2f} m, {x['pitch_m'] * 100:.0f} cm ({x['pitch_wavelengths_at_6khz']:.2f} λ at 6 kHz)")
+    row("Row length, spacing", lambda x: f"{x['row_length_m']:.2f} m, {x['pitch_m'] * 100:.0f} cm ({x['pitch_wavelengths_at_6khz']:.2f} λ at {f_hi / 1e3:.0f} kHz)")
     row("Row heights about the centre (m)", lambda x: ", ".join(f"{h:+.2f}" for h in x["heights_m"]) if x["rows"] > 1 else "0")
     row("Beam at broadside", lambda x: f"{x['beamwidth_deg']:.1f}°")
     row("Row's gain against sea noise / against the boards' own noise (dB)", lambda x: f"{x['gain_isotropic_noise_db']:.1f} / {x['gain_uncorrelated_noise_db']:.1f}")
@@ -580,47 +612,87 @@ def stacked_rows(D) -> list:
     row("Highest repeat of the elevation response in the searched sector", lambda x: ("none" if x["highest_repeat_db"] <= -99 else f"{x['highest_repeat_db']:.1f} dB") if x["rows"] > 1 else "n/a")
     row("Raw data rate while receiving (Mbit/s)", lambda x: f"{x['data_rate_mbit_s']:.0f}")
     row("Cables: one per hydrophone + the sync reference to each board", lambda x: f"{x['channels']} + {x['boards']}")
-    L.append(f"\nReach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file ({stages[names[0]]['source_level_db']:.0f} dB, "
-             "**not chosen for the test AUV**); reverberation and the channel decide earlier or later.\n")
-    P, PS = S["prototype_span"], S["prototype_separation"]
+    L.append(f"\nReach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file ({auv['source_level_db']:.0f} dB, "
+             "**not chosen for the test AUV or the static array**); reverberation and the channel decide earlier or later.\n")
+    P, PS = S["prototype_span"], S["baseline_sweep"]
     low = P["3 m, a 185 dB projector"]
-    L.append("**Stage 1, one row on the test AUV: what it is for.** It proves the chain on real boards: capture, synchronisation of four boards, the stream,\n"
-             "recording, conditioning, beamforming, detection, tracking, classification, the report to the vehicle. Bearing and range are the full system's;\n"
-             "only the beam is wider. It is the 32-hydrophone array of `popoto_4x8` / `flank_32` (3 m) with the long-range band and waveform.\n\n"
+    a1 = sc["testauv_1row"]
+    L.append("**Stage 1, one row on the test AUV: what it is for.** It proves the chain on real boards and under way: capture, synchronisation of four boards, the\n"
+             "stream, recording, conditioning, beamforming, detection, tracking with ownship's motion taken out, classification, the report to the vehicle. Bearing\n"
+             "and range are the full system's; only the beam is wider. There is no room for a second row on the test AUV, so it shows no elevation.\n\n"
              "| Row of 32 over | Beam | Gain against sea noise | Reach, ship / small (km) |\n| --- | --- | --- | --- |")
     for key in ("2 m", "3 m", "4.8 m (the full row)"):
         L.append(f"| {key} | {P[key]['beamwidth_deg']:.1f}° | {P[key]['gain_isotropic_noise_db']:.1f} dB | {km(P[key]['reach_ship_m'])} / {km(P[key]['reach_small_m'])} |")
     L.append(f"\nCloser together than half a wavelength the hydrophones hear the same sea noise: 32 over 3 m gain {P['3 m']['gain_isotropic_noise_db']:.1f} dB, what 20 at half a wavelength would.\n"
              "The other twelve still count against the boards' own noise and against a dead channel, and they are the full system's count, boards and wiring.\n"
-             f"A higher band would suit the short row (0.09 m is half a wavelength at {S['prototype_half_wavelength_frequency_hz'] / 1e3:.1f} kHz) but would be another projector and another band than\n"
-             "the full face's, so the prototype keeps 4–6 kHz. Its pulse is 0.1 s: the array cannot listen while it transmits, a 1 s pulse hides everything\n"
-             f"inside 750 m and 0.1 s everything inside 75 m, at 10 dB less processing gain. With a 185 dB projector instead, the 3 m row reaches {km(low['reach_ship_m'])} / {km(low['reach_small_m'])} km.\n")
-    L.append("**Stage 2, a second row on the test AUV.** It proves the elevation chain: the row split, the elevation search, attitude and depth. The usable\n"
-             "height is not known, so the separation is a parameter:\n\n"
-             "| Rows apart | Elevation at 13 / 20 / 30 dB | No repeat within (6 kHz) | Depth at 300 m (30 dB) | Depth at 1 km (20 dB) |\n| --- | --- | --- | --- | --- |")
+             f"A higher band would suit the short row ({auv['pitch_m']:.2f} m is half a wavelength at {S['prototype_half_wavelength_frequency_hz'] / 1e3:.1f} kHz) but would be another projector and another band than\n"
+             f"the full face's, so the prototype keeps {f_lo / 1e3:.0f}–{f_hi / 1e3:.0f} kHz. Its pulse is {auv['pulse_s']:g} s: the array cannot listen while it transmits, a {face3['pulse_s']:g} s pulse hides everything\n"
+             f"inside {face3['blind_range_m']:.0f} m and {auv['pulse_s']:g} s everything inside {auv['blind_range_m']:.0f} m, at {10 * np.log10(face3['pulse_s'] / auv['pulse_s']):.0f} dB less processing gain. "
+             f"With a 185 dB projector instead, the 3 m row reaches {km(low['reach_ship_m'])} / {km(low['reach_small_m'])} km.\n"
+             f"Simulated trial (raw 102.4 kHz, four boards on their own clocks, the vehicle rolling 2°/s, 30 m of water): the boards synchronise to {a1['sync_residual_us']:.2f} µs and the\n"
+             f"target at 500 m is found within {max(abs(v) for v in a1['range_error_m']):.1f} m and {max(abs(v) for v in a1['bearing_error_deg']):.2f}°.\n")
+    sp = static_cfg["platform"]
+    s2, s3, s3far, sfree, spass, slis = (sc[k] for k in ("static_2row", "static_3row", "static_3row_300m_shallow", "static_free", "static_passing", "static_passive"))
+    L.append("**Stages 2 and 3, the static drop-in array: where stacked rows first go in the water.** A frame carrying two or three rows, lowered from the surface (or\n"
+             "stood on the bottom) and left in place. The owner gave no dimensions, depth or site; what is shipped is a set of parameters, flagged `unconfirmed`:\n"
+             f"rows of the test AUV's kind (32 over {sp['span_m']:g} m), the outer rows {static3['baseline_m']:.2f} m apart **as on the face**, so that what the frame rehearses is the\n"
+             f"face's own elevation behaviour (accuracy, repeats, candidates), hanging at {sp['depth_m']:g} m. What is different from a vehicle, and where it is set:\n\n"
+             "| | Static array | Where |\n| --- | --- | --- |\n"
+             "| Motion | none: no Doppler of its own, reverberation does not spread in Doppler, and everything that moves in the tracker's frame is a target | scenario `platform.velocity: [0, 0, 0]` |\n"
+             "| Pose | a fixed position, depth and heading typed in, or datagrams from a tilt and compass sensor on the frame | `nav.static` or `nav.port` in the deployment file |\n"
+             "| Tilt | a hanging frame's tilt is elevation error one for one, exactly as a vehicle's roll (table below). Without a sensor it is assumed plumb, with a stated uncertainty | `elevation.roll_sigma_deg` (1° shipped: a placeholder), `attitude_time: transmit` |\n"
+             "| Projector | on the frame or hung apart: its position relative to the array is in the sonar file and in every record, and the elevation search follows the true two-way path | `transmit.lever_arm` |\n"
+             "| Sound speed, water depth | measured once at deployment and typed in | `chain.sound_speed`, `elevation.water_depth` |\n"
+             "| Cable, power, where the compute sits | not decided: at the surface end of the cable, or in a housing on the frame | open; see the parts list when it exists |\n")
+    L.append("The frame's height is chosen from this curve (two rows; three rows have the accuracy of their outer pair):\n\n"
+             "| Rows apart | Elevation at 13 / 20 / 30 dB | No repeat within (at the top of the band) | Highest repeat inside ±30° | Depth at 300 m (30 dB) | Depth at 1 km (20 dB) | Per µs of clock error between rows |\n| --- | --- | --- | --- | --- | --- | --- |")
     for sep, v in PS.items():
-        L.append(f"| {sep} m | " + " / ".join(f"{x:.2f}°" for x in v["sigma_deg"].values()) + f" | ±{v['repeat_free_half_sector_deg_at_6khz']:.0f}° | {v['depth_sigma_m_at_300m_30db']:.1f} m | {v['depth_sigma_m_at_1km_20db']:.0f} m |")
-    L.append("\n0.30 m is shipped (a placeholder). Below about 0.15 m a second row gives the sign of the elevation and little more and is not worth its\n"
-             "four boards; from 0.3 m it gives depth to a few metres at trial ranges. What the prototype cannot show: the accuracy and the repeats of rows\n"
-             "many wavelengths apart, the full row's beam, and the range.\n")
-    a1, a2 = sc["testauv_1row"], sc["testauv_2row"]
-    L.append(f"Simulated trials (raw 102.4 kHz, boards on their own clocks, the vehicle rolling 2°/s, 30 m of water): stage 1 synchronises to {a1['sync_residual_us']:.2f} µs and finds the target\n"
-             f"at 500 m within {max(abs(v) for v in a1['range_error_m']):.1f} m and {max(abs(v) for v in a1['bearing_error_deg']):.2f}°; stage 2 reads a target at {a2['true_depth_m']:.0f} m depth, 300 m away, as {lst(a2['depth_m'])} m.\n")
-    L.append(f"**Stages 3 and 4, the full face.** Outer rows at {-up:+.2f} and {up:+.2f} m ({S['margin_m']:.1f} m kept free at the top and bottom of the 2 m: our choice, not confirmed),\n"
-             f"{d:.2f} m apart, which is {d * 4000 / 1500:.1f} to {d * 6000 / 1500:.1f} wavelengths. Accuracy is bought with separation and SNR, nothing else: for one arrival in noise\n"
+        L.append(f"| {sep} m | " + " / ".join(f"{x:.2f}°" for x in v["sigma_deg"].values()) + f" | ±{v['repeat_free_half_sector_deg_at_6khz']:.0f}° | "
+                 + ("none" if v["highest_repeat_db_in_sector"] <= -99 else f"{v['highest_repeat_db_in_sector']:.1f} dB")
+                 + f" | {v['depth_sigma_m_at_300m_30db']:.1f} m | {v['depth_sigma_m_at_1km_20db']:.0f} m | {v['clock_error_deg_per_us']:.2f}° |")
+    L.append("\nBelow about 0.15 m a second row gives the sign of the elevation and little more. Up to about a wavelength there is no repeat inside the searched\n"
+             "sector and two rows give one answer; wider, accuracy keeps improving in proportion and the repeats come in, which is what the third row is for.\n")
+    L.append("Simulated trials of the static array (C++ chain; the Python chain is held to it by the tests):\n\n| Scenario | Truth | Reported |\n| --- | --- | --- |\n"
+             f"| `popoto_static_trial_2row`: two rows, raw 102.4 kHz, {s2['boards']} boards on their own clocks, tilted 2°, {s2['water_depth_m']:.0f} m of water, target {s2['range_m'] / 1e3:.1f} km off | depth {s2['true_depth_m']:.0f} m | boards synchronised to {s2['sync_residual_us']:.2f} µs; depth {lst(s2['depth_m'])} m, one answer with the water-depth bound |\n"
+             f"| `popoto_static_trial_3row`: three rows, {s3['boards']} boards, tilted 2°, {s3['water_depth_m']:.0f} m of water, target {s3['range_m']:.0f} m off | depth {s3['true_depth_m']:.0f} m | {s3['sync_residual_us']:.2f} µs; depth {lst(s3['depth_m'], 1)} m |\n"
+             f"| the same with the target at {s3far['range_m']:.0f} m | depth {s3far['true_depth_m']:.0f} m | {lst(s3far['depth_m'], 1)} m, path `{s3far['path'][0]}`: in {s3far['water_depth_m']:.0f} m of water the bounces arrive inside the pulse's range sidelobes and pull the estimate |\n"
+             f"| `popoto_static_free`: three rows, free field, targets about 400 m off | depths {lst(sfree['true_depths_m'])} m | track depth errors {lst(sfree['depth_errors_m'], 1)} m |\n"
+             f"| `popoto_static_passing`: a target crossing at {spass['true_speed_m_s']:.0f} m/s, {spass['true_depth_m']:.0f} m deep, {spass['pings']} pings | one mover | tracks: {', '.join(spass['kinds'])}; mover at {lst(spass['mover_speed_m_s'], 1)} m/s, depth {lst(spass['mover_depth_m'], 1)} m |\n"
+             f"| listening: two noise sources (`sim/passive.py`), tilted {slis['tilt_deg']:.0f}° | elevations {lst(slis['true_elevation_deg'], 1)}° | both in {slis['frames_with_both']} of {slis['frames']} frames, elevation within {slis['worst_elevation_error_deg']:.2f}° |\n")
+    L.append(f"What the static array cannot show: the full row's beam and range, ownship's motion, and the vehicle's attitude sensor.\n")
+    BC = S["baseline_comparison"]
+    L.append(f"**Stages 4 and 5, the full face.** Outer rows at {-up:+.2f} and {up:+.2f} m, {d:.2f} m apart ({S['margin_m']:.2f} m free at the top and bottom of the {S['face_height_m']:g} m), which is\n"
+             f"{d * f_lo / 1500:.1f} to {d * f_hi / 1500:.1f} wavelengths. Accuracy is bought with separation and SNR, nothing else: for one arrival in noise\n"
              "σ(sin e) = 1 / (k √(2 ρ Σ(h − h̄)²)), ρ the SNR at one hydrophone after pulse compression, h the hydrophones' heights, k the band's RMS wavenumber.\n"
              f"The estimator reaches it (Monte Carlo over bound {acc[two]['monte_carlo_over_bound_at_20_db']:.2f}; on simulated pings within 30%).\n")
     L.append("| Rows | 13 dB | 20 dB | 30 dB |\n| --- | --- | --- | --- |")
     for name, v in acc.items():
         L.append(f"| {name} | " + " | ".join(f"{v['sigma_deg'][k]:.2f}°" for k in ("13.0", "20.0", "30.0")) + " |")
-    L.append(f"\n**Two rows repeat.** Rows {d:.2f} m apart cannot tell elevations λ/d apart: {T['repeat_spacing_deg'][0]:.1f}° at 4 kHz, {T['repeat_spacing_deg'][1]:.1f}° at 5 kHz, {T['repeat_spacing_deg'][2]:.1f}° at 6 kHz.\n"
-             "The band smears the repeats, but with true time delays over 4–6 kHz the m-th repeat is still at sinc²(m B / 2 f) of the true peak whatever the\n"
+    L.append("\nWhat the owner's margin costs (the earlier baseline against the working one):\n\n"
+             "| Outer rows apart | Elevation at 13 / 20 / 30 dB | Repeats every | Two rows give one answer beyond (100 m of water, one bounce) | Best middle row | Per µs between rows | Per mm a row stands out |\n| --- | --- | --- | --- | --- | --- | --- |")
+    for sep, v in BC.items():
+        L.append(f"| {sep} m | " + " / ".join(f"{x:.2f}°" for x in v["sigma_deg"].values()) + f" | {v['repeat_spacing_deg_at_5khz']:.1f}° | {km(v['two_rows_unambiguous_beyond_m_100m_water_one_bounce'])} km | "
+                 f"{v['best_middle_m']:+.2f} m ({v['best_middle_level_db']:.1f} dB) | {v['clock_error_deg_per_us']:.3f}° | {v['row_out_error_deg_per_mm']:.3f}° |")
+    LL = TS["length_limit"]
+    L.append(f"\nAccuracy and every mounting and clock tolerance scale with the baseline; the repeats move apart, which helps two rows a little. The length limit\n"
+             f"({LL['face_length_m']:g} → {LL['array_length_m']:g} m) does not touch the 32-hydrophone row ({face3['row_length_m']:.1f} m); it lowers what a filled row could hold from {LL['half_wavelength_count'][1]} to\n"
+             f"{LL['half_wavelength_count'][0]} hydrophones at half a wavelength ({LL['gain_db'][1]:.1f} → {LL['gain_db'][0]:.1f} dB, beam {LL['beam_deg'][1]:.1f}° → {LL['beam_deg'][0]:.1f}°, reach {LL['reach_ship_km'][1]:.1f} → {LL['reach_ship_km'][0]:.1f} km on a ship).\n")
+    pj = S["projector"]
+    L.append(f"**The projector on the face.** No position was given (\"Projector etc\" needs room). The sonar files put it in the forward end margin at mid-height,\n"
+             f"{pj['lever_arm_m'][0]:g} m from the array's centre: a placeholder, {pj['nearest_hydrophone_m']:.2f} to {pj['farthest_hydrophone_m']:.2f} m from the hydrophones. Two things follow, both from the files' own numbers:\n\n"
+             f"- **Its direct sound overloads the inputs.** {pj['direct_level_db_at_nearest']:.0f} dB re 1 µPa at the nearest hydrophone is {pj['direct_volts_at_adc']:.0f} V at the ADC with the file's sensitivity and gain,\n"
+             f"  {pj['over_full_scale_db']:.0f} dB over full scale ({pj['adc_full_scale_v']:.2f} V), for the whole pulse (to {pj['direct_sound_ends_s']:.3f} s after the ping). The plan clamps the preamp inputs and the software uses\n"
+             f"  nothing inside {pj['blind_range_m']:.0f} m. How quickly the inputs recover afterwards is **not known**, and the simulator models neither the direct sound nor the recovery.\n"
+             f"- **Its offset costs no accuracy.** Every record carries the projector's lever arm, and the beamformer and the elevation search hold the true path projector →\n"
+             f"  target → each hydrophone (tested with the projector off-centre). A row's far field begins at {pj['far_field_of_row_m']:.0f} m; the backprojection kernel is exact inside it too.\n")
+    L.append(f"**Two rows repeat.** Rows {d:.2f} m apart cannot tell elevations λ/d apart: {T['repeat_spacing_deg'][0]:.1f}° at {f_lo / 1e3:.0f} kHz, {T['repeat_spacing_deg'][1]:.1f}° at {(f_lo + f_hi) / 2e3:.0f} kHz, {T['repeat_spacing_deg'][2]:.1f}° at {f_hi / 1e3:.0f} kHz.\n"
+             f"The band smears the repeats, but with true time delays over {f_lo / 1e3:.0f}–{f_hi / 1e3:.0f} kHz the m-th repeat is still at sinc²(m B / 2 f) of the true peak whatever the\n"
              "separation: " + ", ".join(f"{v:.1f} dB" for v in T["repeat_level_db"]) + " for m = 1 to 4. How often the estimator lands on a repeat, in clean noise:\n")
     L.append("| Searching | 13 dB | 20 dB | 30 dB |\n| --- | --- | --- | --- |")
     for label, v in T["wrong_pick"].items():
         L.append(f"| two rows, {label} | " + " | ".join(f"{100 * x:.1f}%" for x in v.values()) + " |")
-    L.append(f"\nSo in clean noise the band does resolve two rows from 20 dB up. But the margin is 0.6 dB, and a range sidelobe of another arrival or a few degrees of\n"
-             "phase error between rows tips it. The chain therefore never trusts a repeat within 1 dB of the peak: with two rows on the face every detection is\n"
+    L.append(f"\nSo in clean noise the band does resolve two rows from 20 dB up. But the margin is {margin2:.1f} dB, and a range sidelobe of another arrival or a few degrees of\n"
+             "phase error between rows tips it. The chain therefore never trusts a repeat within 1 dB of the peak: with two rows this far apart every detection is\n"
              "flagged `elevation_ambiguous` and carries its candidates, unless something else decides:\n\n"
              f"- **Water depth and range.** Straight rays cannot arrive from steeper than atan(depth × (bounces + 1) / range). Where that is inside ±{T['unambiguous_half_sector_deg']:.1f}° (half a\n"
              "  repeat) there is one candidate; `elevation.sector_from_depth` searches only there. Two rows are unambiguous beyond (direct / one bounce / two):\n\n"
@@ -635,17 +707,16 @@ def stacked_rows(D) -> list:
              "| Middle row at (m) | " + " | ".join(k for k in list(srch)[::2]) + " |\n| --- |" + " --- |" * len(list(srch)[::2]) + "\n"
              "| Highest repeat (dB) | " + " | ".join(f"{srch[k]:.1f}" for k in list(srch)[::2]) + " |\n\n"
              f"Lowest at {mid:+.2f} m ({up + mid:.2f} m above the bottom row): {W3['best_level_db']:.1f} dB, against {W3['equal_level_db']:.1f} dB with equal spacing and {T['repeat_level_db'][0]:.1f} dB with two rows.\n"
-             "(On the 0.38 m span studied first, equal spacing was best; many wavelengths apart, unequal is.) Wrong picks searching ±30°, arrival at 2° / at 15°:\n")
+             "Wrong picks searching ±30°, arrival at 2° / at 15°:\n")
     snr_keys = list(next(iter(W3["wrong_pick"].values())))
     L.append("| Rows | " + " | ".join(f"{float(k):.0f} dB" for k in snr_keys) + " |\n| --- |" + " --- |" * len(snr_keys))
     for name, v in W3["wrong_pick"].items():
         L.append(f"| {name} | " + " | ".join(f"{100 * x[0]:.1f}% / {100 * x[1]:.1f}%" for x in v.values()) + " |")
-    L.append("\nThree rows are no more accurate than two (the outer rows set that); the third buys an answer instead of candidates, and 1.3 dB of detection.\n")
-    g2, g3 = S["unchanged"]["detection_gain_db"]["2"]["rows_added_as_power_db"], S["unchanged"]["detection_gain_db"]["3"]["rows_added_as_power_db"]
+    L.append(f"\nThree rows are no more accurate than two (the outer rows set that); the third buys an answer instead of candidates, and {g3 - g2:.1f} dB of detection.\n")
     t = B["timing_scenario_size"]
     f2 = sc["face_2row"]
-    L.append("**Two rows or three: side by side.**\n\n| | Two rows (stage 3) | Three rows (stage 4, recommended) |\n| --- | --- | --- |\n"
-             f"| Hydrophones, boards, cables | 64, 8, 64 + 8 | 96, 12, 96 + 12 |\n"
+    L.append("**Two rows or three: side by side** (the face; the static array's rows are at the same heights).\n\n| | Two rows | Three rows (recommended) |\n| --- | --- | --- |\n"
+             f"| Hydrophones, boards, cables | {face2['channels']}, {face2['boards']}, {face2['channels']} + {face2['boards']} | {face3['channels']}, {face3['boards']}, {face3['channels']} + {face3['boards']} |\n"
              f"| Elevation at 13 / 20 / 30 dB | " + " / ".join(f"{acc[two]['sigma_deg'][k]:.2f}°" for k in ("13.0", "20.0", "30.0")) + " | " + " / ".join(f"{acc[three]['sigma_deg'][k]:.2f}°" for k in ("13.0", "20.0", "30.0")) + " |\n"
              f"| Highest repeat | {T['repeat_level_db'][0]:.1f} dB: never trusted alone | {W3['best_level_db']:.1f} dB |\n"
              f"| Wrong pick at 13 dB, clean noise, ±30° | {100 * W3['wrong_pick'][two]['13.0'][0]:.0f}% | {100 * W3['wrong_pick'][three]['13.0'][0]:.1f}% |\n"
@@ -653,12 +724,12 @@ def stacked_rows(D) -> list:
              "| Deep water, short range | candidates only, until a track has a depth | works |\n"
              f"| Detection against one row | +{g2:.1f} dB | +{g3:.1f} dB |\n"
              "| A dead board | the row it serves loses 8 of 32; the estimate carries on | the same |\n"
-             "| A dead row | no elevation | two rows left: stage 3's behaviour |\n"
+             "| A dead row | no elevation | two rows left: the two-row behaviour |\n"
              f"| Processing per ping, scenario size, C++ on {B['cpu_threads']} shared CPU threads (one row: {t['1']['seconds_per_ping']:.2f} s) | {t['2']['seconds_per_ping']:.2f} s | {t['3']['seconds_per_ping']:.2f} s |\n"
-             f"| Raw data rate | {2 * lr['raw_data_rate_mbit_s']:.0f} Mbit/s | {3 * lr['raw_data_rate_mbit_s']:.0f} Mbit/s |\n"
+             f"| Raw data rate | {face2['data_rate_mbit_s']:.0f} Mbit/s | {face3['data_rate_mbit_s']:.0f} Mbit/s |\n"
              f"| Simulated check | `popoto_face_2row_shallow`: target at {f2['true_depth_m']:.0f} m, 3 km: read {lst(f2['depth_m'])} m with the water-depth bound; without it {f2['candidates_without_the_bound'][0]} candidates | free field, channel and rehearsal below |\n")
-    L.append("**Recommended: three rows** as the default of the option, with two rows a sound first step on the face (the middle row can be added later: its boards and\n"
-             "cables are separate) and the right choice only where the water is shallow against the ranges of interest. Both are shipped.\n")
+    L.append("**Recommended: three rows** as the default of the option, with two rows a sound first step (the middle row can be added later: its boards and\n"
+             "cables are separate) and the right choice only where the water is shallow against the ranges of interest. Both are shipped, for the frame and for the face.\n")
     ds, snr = S["depth_sigma_m"], S["link_snr_db"]
     RF = S["refraction_m"]
 
@@ -672,20 +743,24 @@ def stacked_rows(D) -> list:
         for g in (three, "2 rows, 0.38 m apart"):
             r_ = ds[f"{label}; {g}"]
             L.append(f"| {label}; {g} | {cell(r_['1000.0'])} | {cell(r_['6000.0'])} | {cell(r_['12000.0'])} |")
-    L.append("\n(SNR above 40 dB counted as 40 dB.) Rows 1.8 m apart are five times better than the 0.38 m of a small hull. But noise is no longer what limits depth:\n\n"
-             "| What | 1 km | 6 km | 12 km |\n| --- | --- | --- | --- |\n"
-             "| Roll known to 0.2° | " + " | ".join(f"{v:.1f} m" for v in S["sensitivity"]["roll_depth_error_m"]["0.2"]) + " |\n"
-             + "".join(f"| Mean sound-speed gradient along the path unknown by {k} /s" + (" (isothermal water: pressure alone)" if k == "0.017" else "") + " | "
+    L.append(f"\n(SNR above 40 dB counted as 40 dB.) Rows {d:.1f} m apart are {d / 0.38:.0f} times better than the 0.38 m of a small hull. But noise is no longer what limits depth.\n"
+             "**Roll (or a frame's tilt) is elevation error one for one**: drop the attitude sensor's datasheet figure into this table.\n\n"
+             "| Roll known to | Depth error at 1 km | 6 km | 12 km |\n| --- | --- | --- | --- |\n"
+             + "".join(f"| {a_}° | {v[0]:.1f} m | {v[1]:.1f} m | {v[2]:.0f} m |\n" for a_, v in se["roll_depth_error_m"].items())
+             + "\nAnd the path's bending:\n\n| Mean sound-speed gradient along the path unknown by | 1 km | 6 km | 12 km |\n| --- | --- | --- | --- |\n"
+             + "".join(f"| {k} /s" + (" (isothermal water: pressure alone)" if k == "0.017" else "") + " | "
                        + " | ".join(f"{RF[k][r]:.0f} m" for r in ("1000.0", "6000.0", "12000.0")) + " |\n" for k in RF))
     X = S["refraction_crossover_m"]
-    L.append("\n**No long-range sound-speed profile will exist.** The vehicle measures the sound speed where it is; that fixes the angle at the array exactly (and is\n"
-             "used for beamforming). It does not fix the path: a mean vertical gradient g curves the ray with radius c/g, range² × g / 2c from the straight line.\n"
-             f"Beyond {X['0.05']['20.0']:.0f} m (gradient known to 0.05 /s, 20 dB) or {X['0.017']['20.0']:.0f} m (known to 0.017 /s) the unknown gradient, not the measurement, limits depth.\n"
-             "So: the chain assumes a gradient (`elevation.gradient_per_s`; 0.017 /s, isothermal water, in the vehicle's file: an assumption) and follows the ray through\n"
-             "it; it adds range² × `gradient_sigma_per_s` / 2c to every reported depth sigma (0.05 /s by default, from the span between isothermal water and a thermocline\n"
-             "averaged over the column: unconfirmed); a track's sigma keeps that term however many pings it averages. **Depth is good to metres inside a kilometre and\n"
-             "to tens of metres at a few kilometres; beyond that the report still gives, reliably, the angle at the array, whether the echo comes from above or below, which\n"
-             "arrival of a group came first, and how a track's elevation changes.** A measured profile, if one ever exists, goes in `elevation.ssp` and removes the term.\n")
+    L.append("\n**No long-range sound-speed profile will exist, and the water will not always be isothermal.** The vehicle measures the sound speed where it is; that fixes\n"
+             "the angle at the array exactly (and is used for beamforming). It does not fix the path: a mean vertical gradient g curves the ray with radius c/g,\n"
+             f"range² × g / 2c from the straight line. Beyond {X['0.05']['20.0']:.0f} m (gradient known to 0.05 /s, 20 dB) or {X['0.017']['20.0']:.0f} m (known to 0.017 /s) the unknown gradient, not the\n"
+             "measurement, limits depth. What the chain does today: it assumes a gradient (`elevation.gradient_per_s`; 0.017 /s, isothermal water, in the vehicle's file:\n"
+             "an assumption) and follows the ray through it; it adds range² × `gradient_sigma_per_s` / 2c to every reported depth sigma (0.05 /s by default, from the span\n"
+             "between isothermal water and a thermocline averaged over the column: unconfirmed); a track's sigma keeps that term however many pings it averages; a\n"
+             "measured profile goes in `elevation.ssp` and replaces the assumption. **In open water depth is good to metres inside a kilometre and to tens of metres\n"
+             "at a few kilometres (a shallow channel adds its own error: below); beyond that the report still gives, reliably, the angle at the array, whether the echo comes from above or below, which arrival of a group came\n"
+             "first, and how a track's elevation changes.** Not built yet: a profile the vehicle accumulates from its own sound-speed and depth readings as it changes\n"
+             "depth, and named profile families (mixed layer over a thermocline); see *Open*.\n")
     cb = S["cone_bias_deg"]
     L.append("**Bearing.** A line reports sin(cone) = cos(elevation) × sin(bearing). With the elevation known the chain reports the horizontal bearing (`bearing_deg`;\n"
              "`cone_bearing_deg` keeps the old value). Error removed: " + "; ".join(f"{cb[e]['45.0']:.2f}° at {float(e):.0f}° elevation" for e in cb) + " (45° off broadside).\n")
@@ -694,63 +769,74 @@ def stacked_rows(D) -> list:
     L.append(f"**In a channel.** One target sends back several echoes. Range separates them (resolution {mp['range_resolution_m']:.3f} m) and elevation is measured on each; the direct one\n"
              "is first, and the chain takes the first arrival of each detection. Followed straight back, a surface echo points at the target's mirror image above the\n"
              "surface and a bottom echo at its image below the bottom: folded back both give the target's depth, and where the image lay says which path it was (`path`).\n"
-             f"The three rows' own beam in elevation is now {mp['elevation_beamwidth_deg']:.1f}° wide (40° on 0.38 m): direct and surface arrivals differ by more than that within "
+             f"The three rows' own beam in elevation is {mp['elevation_beamwidth_deg']:.1f}° wide: direct and surface arrivals differ by more than that within "
              + ", ".join(f"{v:.0f} m for an array or target at {k} m" for k, v in mp["direct_surface_resolved_in_elevation_within_m"].items()) + ",\n"
-             "so inside about a kilometre two arrivals in one range cell begin to separate in elevation; beyond it only range separates them. A target near the\n"
+             "so only at short range do two arrivals in one range cell separate in elevation; beyond it only range separates them. A target near the\n"
              f"surface merges with its own surface echo at every useful range (beyond {mp['direct_and_surface_merge_beyond_m']['4'] / 1e3:.1f} km at 4 m depth) and reads as a source at the surface.\n"
              f"The water depth the bottom fold needs is the vehicle's approximate one (`water_depth`, `water_depth_sigma_m`): its uncertainty goes, doubled, into the depth\n"
              "of bottom-bounce arrivals and into the test that marks a track below the bottom as multipath.\n")
-    L.append("Measured on simulated pings (C++ chain; the Python chain agrees to 0.02° and 0.3 m):\n\n| Scenario | Truth | Reported |\n| --- | --- | --- |\n"
+    L.append("Measured on simulated pings of the face (C++ chain; the Python chain agrees to 0.02° and 0.3 m):\n\n| Scenario | Truth | Reported |\n| --- | --- | --- |\n"
              f"| `popoto_elevation_free`: three rows, free field, rolled {f['roll_deg']:.0f}°, three targets near 1 km | depths 10, 60, 160 m | track depth errors {lst(f['depth_errors_m'], 1)} m |\n"
              f"| `popoto_elevation_shallow`: 100 m of water, bounces to second order, 1 km | depth {sh['true_depth_m']:.0f} m, direct path {sh['true_elevation_deg']:+.2f}° | {lst(sh['depth_m'])} m, {lst(sh['elevation_deg'], 1)}°, path {sh['path'][0]} |\n"
              f"| `popoto_elevation_rehearsal`: raw 102.4 kHz, {re['boards']} boards on their own clocks, rolled {re['roll_deg']:.0f}° and rolling {re['roll_rate_deg_s']}°/s, local sound speed {re['sound_speed']:.0f} m/s | targets at {re['deep_true_m']:.0f} m and {re['shallow_true_m']:.0f} m, 1 km | boards synchronised to {re['worst_residual_us']:.2f} µs; {lst(re['deep_depth_m'])} m "
              f"(with the attitude of the ping instead of the arrival: {lst(re['deep_depth_with_transmit_attitude_m'])} m); the shallow one {lst(re['shallow_depth_m'], 1)} m, merged with its surface echo |\n")
-    se = S["sensitivity"]
+    pull2 = max(abs(v - f2["true_depth_m"]) for v in f2["depth_m"])
+    pull3 = max(abs(v - sh["true_depth_m"]) for v in sh["depth_m"])
+    sc2 = load_scenario_config("popoto_face_2row_shallow")
+    one_leg = float(sc2["platform"]["position"][2]) * f2["true_depth_m"] / f2["range_m"]      # range excess of a surface bounce on one leg
+    L.append(f"**What a channel does to the depth, and the sigma does not say.** An echo that bounced once on one leg arrives just behind the direct echo ({one_leg:.1f} m in the\n"
+             f"two-row check, against a range resolution of {mp['range_resolution_m']:.3f} m) and from another elevation; it is not cleanly separated, and it pulls the angle. In the two-row check at 3 km the target at {f2['true_depth_m']:.0f} m reads\n"
+             f"{lst(f2['depth_m'])} m (up to {pull2:.0f} m off, {np.degrees(pull2 / f2['range_m']):.1f}°); in the three-row check at 1 km the one at {sh['true_depth_m']:.0f} m reads {lst(sh['depth_m'])} m ({pull3:.0f} m off); the static array at\n"
+             f"{s3far['range_m']:.0f} m in {s3far['water_depth_m']:.0f} m of water reads {lst(s3far['depth_m'])} m for {s3far['true_depth_m']:.0f} m. In free field the same chain is within a metre. The size of the pull depends on the\n"
+             "echoes' phases, so on the geometry to a fraction of a wavelength: with the projector 1.5 m below the array's centre instead of beside it, the two-row case read\n"
+             "48 to 53 m (the earlier run of this bench). The reported `depth_sigma_m` holds noise, roll and the gradient prior, **not this**: in shallow water at long\n"
+             "range treat depth as good to a few tenths of a degree of elevation, whatever the sigma says. Not modelled further here: a longer band or a window with\n"
+             "lower range sidelobes would separate the arrivals better.\n")
+    clock, need = se["board_clock_error_deg"], se["clock_us_for_deg"]
     L.append("**What the vehicle and the mounting must provide.**\n\n| Error source | Elevation error | Depth error at 1 / 6 / 12 km |\n| --- | --- | --- |")
-    for a_, v in se["roll_depth_error_m"].items():
-        L.append(f"| Roll known to {a_}° | {a_}° | {v[0]:.1f} / {v[1]:.0f} / {v[2]:.0f} m |")
     for label, key, unit in (("One row further out from the face than the other by", "out_offset_error_deg", " mm"),
                              ("Phase mismatch between rows of", "phase_mismatch_error_deg", "° of phase"),
                              ("Clock error between boards on different rows of", "board_clock_error_deg", " µs")):
         for a_, v in se[key].items():
             L.append(f"| {label} {a_}{unit} | {v:.3f}° | " + " / ".join(f"{r_ * np.radians(v):.1f}" for r_ in (1000.0, 6000.0, 12000.0)) + " m |")
-    L.append("\n- **Roll is now the first limit of the angle.** Everything that scales with the rows' separation shrank 4.7 times against a small hull; roll did not.\n"
-             "  `elevation.roll_sigma_deg` (0.2° assumed) goes into every sigma. **Attitude is taken at each echo's arrival** (`attitude_time: arrival`): an echo from\n"
-             "  12 km arrives 16 s after the ping, and the chain uses the navigation samples around that time (they are written into each record). Without samples it\n"
-             "  falls back to the ping's attitude and adds `attitude_rate_sigma_deg_s` × the time of flight. In the rehearsal above the difference is 50 m at 1 km.\n"
-             "- **Synchronisation.** Row by row (the owner's choice), boards of different rows must agree to about 1 µs (0.05°); the present tolerance of 8.3 µs is 0.4°.\n"
-             f"  The reference scheme reaches {re['worst_residual_us']:.2f} µs in simulation. Whether real boards do is the open question. `array.interleave: 4` (four of each row per board)\n"
-             "  removes the term for two rows and stays available.\n"
-             "- **Mounting and calibration.** 1 mm of one row standing out from the face is 0.03°. The existing calibration, run with sources at several depths\n"
-             "  (`planar=False`), recovers a row 5 mm out to 0.4 mm in simulation.\n"
+    transmit_bias = abs(re["deep_true_m"] - float(np.mean(re["deep_depth_with_transmit_attitude_m"])))
+    L.append(f"\n- **Roll is the first limit of the angle.** Everything that scales with the rows' separation shrank {d / 0.38:.1f} times against a small hull; roll did not.\n"
+             "  `elevation.roll_sigma_deg` (0.2° assumed for the vehicle: **to be replaced by the SPRINT-Nav's figure**) goes into every sigma. **Attitude is taken at each echo's\n"
+             f"  arrival** (`attitude_time: arrival`): an echo from 12 km arrives {2 * 12000 / 1500:.0f} s after the ping, and the chain uses the navigation samples around that time (they are\n"
+             "  written into each record). Without samples it falls back to the ping's attitude and adds `attitude_rate_sigma_deg_s` × the time of flight. In the rehearsal\n"
+             f"  above the difference is {transmit_bias:.0f} m at 1 km.\n"
+             f"- **Synchronisation: still open.** Row by row (the owner's choice), boards of different rows must agree to {need['0.05']:.2f} µs for 0.05° and {need['0.1']:.2f} µs for 0.1°\n"
+             f"  ({clock['1.0']:.3f}° per µs with rows {d:.2f} m apart); the present tolerance of 8.3 µs is {clock['8.3']:.1f}°. The reference scheme reaches {re['worst_residual_us']:.2f} µs in simulation.\n"
+             "  Whether real boards do is the open question. `array.interleave: 4` (four of each row per board) removes the term for two rows and stays available.\n"
+             f"- **Mounting and calibration.** 1 mm of one row standing out from the face is {se['out_offset_error_deg']['1.0']:.2f}°. The existing calibration, run with sources at several depths\n"
+             "  (`planar=False`), recovers a row 5 mm out to 0.4 mm in simulation (`tests/python/test_elevation.py`).\n"
              "- **Sound speed and water depth** from the vehicle: `sound_speed` and `water_depth` in the navigation datagrams, or as settings.\n")
-    TS = S["trade_space"]
     mg, ob = TS["marginal_32_to_64_per_row"], TS["one_by_64_vs_two_by_32"]
+    r64, fill = TS["per_row"][keys["row_64"]], TS["per_row"][keys["fills"]]
     L.append("### Trade space: how many hydrophones, and where\n")
-    L.append("The outline (9 m × 2 m face, 4–6 kHz, 197 dB, 1 s pulse; noise-limited reach on the budget of Sec. 5):\n\n"
-             "| Channels | As | Beam | Map gain | Reach ship / small (km) | Elevation at 20 dB | Boards |\n| --- | --- | --- | --- | --- | --- | --- |")
-    for label, v in TS["fixed_channels"].items():
-        L.append(f"| {v['channels']} | {label} | {v['beamwidth_deg']:.1f}° | {v['gain_isotropic_noise_db'] + v['rows_detection_gain_db']:.1f} dB | {km(v['reach_ship_m'])} / {km(v['reach_small_m'])} | "
-                 + (f"{v['elevation_sigma_deg_at_20_db']:.2f}° (repeat {v['highest_repeat_db']:.1f} dB)" if v["rows"] > 1 else "none") + f" | {v['boards']} |")
-    L.append(f"\n**Does it need to be 64?** For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. Sixty-four buy one of two things. As one row of 64 filling\n"
-             f"the face: {mg['gain_db']:.1f} dB, a beam of {mg['beam_deg'][1]:.1f}° instead of {mg['beam_deg'][0]:.1f}°, 3 dB less reverberation in the beam, noise-limited reach {mg['reach_ship_km'][0]:.1f} → {mg['reach_ship_km'][1]:.1f} km (ship) and\n"
-             f"{mg['reach_small_km'][0]:.1f} → {mg['reach_small_km'][1]:.1f} km (small target), no elevation. As two rows of 32: nearly the same gain in the map ({ob['map_gain_db'][1]:.1f} against {ob['map_gain_db'][0]:.1f} dB), the old beam,\n"
-             "and elevation, as candidates. Bearing and range against elevation is the trade for a fixed channel count; 96 as three rows make the elevation unambiguous.\n")
+    L.append(f"The outline again (the face, rows within {S['array_length_m']:g} m, outer rows {d:.2f} m apart, {f_lo / 1e3:.0f}–{f_hi / 1e3:.0f} kHz, {face3['source_level_db']:.0f} dB, {face3['pulse_s']:g} s pulse; noise-limited reach on the budget of Sec. 5):\n")
+    L.extend(trade_table())
+    L.append(f"\n**Does it need to be 64?** For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. Sixty-four buy one of two things. As one row of 64\n"
+             f"inside the {S['array_length_m']:g} m: {mg['gain_db']:.1f} dB, a beam of {mg['beam_deg'][1]:.1f}° instead of {mg['beam_deg'][0]:.1f}°, {r64['reverberation_margin_vs_32_at_half_wavelength_db']:.1f} dB less reverberation in the beam, noise-limited reach {mg['reach_ship_km'][0]:.1f} → {mg['reach_ship_km'][1]:.1f} km (ship) and\n"
+             f"{mg['reach_small_km'][0]:.1f} → {mg['reach_small_km'][1]:.1f} km (small target), no elevation; and since {fill['hydrophones_per_row']} hydrophones at half a wavelength already fill that length, 64 gain no more than {fill['hydrophones_per_row']} would.\n"
+             f"As two rows of 32: {ob['map_gain_db'][1]:.1f} dB in the map against {ob['map_gain_db'][0]:.1f} dB, the old beam, and elevation, as candidates. Bearing and range against elevation is the trade for a\n"
+             "fixed channel count; 96 as three rows make the elevation unambiguous.\n")
     L.append("| A row of | Length | Beam | Gain (sea noise) | Reach ship / small (km) | Reverberation in the beam against 32 | Boards a row |\n| --- | --- | --- | --- | --- | --- | --- |")
     for label, v in TS["per_row"].items():
         note = f" (repeats in bearing at {v['wideband_lobe_steered_30_deg_db']:.0f} dB when steered 30°)" if v["wideband_lobe_steered_30_deg_db"] > -12.5 else ""
         L.append(f"| {label}{note} | {v['row_length_m']:.2f} m | {v['beamwidth_deg']:.1f}° | {v['gain_isotropic_noise_db']:.1f} dB | {km(v['reach_ship_m'])} / {km(v['reach_small_m'])} | "
                  f"{-v['reverberation_margin_vs_32_at_half_wavelength_db']:+.1f} dB | {v['boards']} |")
-    L.append("\n- **Along the face.** Each doubling of a filled row is 3 dB against noise, half the beam and 3 dB less reverberation; in noise-limited range about a tenth.\n"
-             "  The knee is the face: 60 hydrophones at half a wavelength fill 9 m, and more in the same length buy nothing against sea noise. Sparser than half a\n"
-             "  wavelength gives the narrow beam for fewer hydrophones but full repeats in bearing when steered.\n"
-             "- **Up the face.** The second row buys elevation and 2.4 dB of detection; the third makes elevation unambiguous (+1.3 dB); a fourth adds half a decibel.\n"
+    g4 = TS["rows"]["4"]["rows_detection_gain_db"] - TS["rows"]["3"]["rows_detection_gain_db"]
+    L.append("\n- **Along the face.** Each doubling of a filled row is 3 dB against noise, half the beam and 3 dB less reverberation; in noise-limited range a few per cent.\n"
+             f"  The knee is the usable length: {LL['half_wavelength_count'][0]} hydrophones at half a wavelength fill {LL['array_length_m']:g} m, and more in the same length buy nothing against sea noise. Sparser\n"
+             "  than half a wavelength gives the narrow beam for fewer hydrophones but full repeats in bearing when steered.\n"
+             f"- **Up the face.** The second row buys elevation and {g2:.1f} dB of detection; the third makes elevation unambiguous (+{g3 - g2:.1f} dB); a fourth adds {g4:.1f} dB.\n"
              "  Accuracy is set by the outer rows' separation, not the count.\n"
              "- **Noise or reverberation.** More source level buys noise-limited range (6 dB is worth four times the hydrophones in a row) and nothing against\n"
              "  reverberation; a longer row buys both. Where reverberation limits (short and medium range in the scenarios), length is the only one that helps.\n"
              "- **Band.** Another band moves every row: spacing and row length scale with the wavelength, the reach with absorption and noise\n"
              "  (`tools/popoto_range_study.py`), and the rows' repeat spacing with it.\n"
-             "- **Cost** goes with the channel count: boards = channels / 8, one cable per hydrophone and one reference per board, 2.46 Mbit/s and "
+             f"- **Cost** goes with the channel count: boards = channels / 8, one cable per hydrophone and one reference per board, {lr['raw_data_rate_mbit_s'] / lr['elements']:.2f} Mbit/s and "
              f"{lr['samples_per_ping_per_channel'] * 4 / 1e6:.1f} MB per ping per\n  channel (to {lr['max_range_m'] / 1e3:.1f} km, as recorded now), compute in proportion (measured at 32, 64 and 96 channels).\n"
              "- **Passive.** Listening gains with the row's length like the active map, and the rows give each bearing an elevation; the repeats and the roll apply unchanged.\n")
     st = B["stream"]
@@ -759,17 +845,26 @@ def stacked_rows(D) -> list:
              f"({st['1']['udp_block_samples']}, {st['2']['udp_block_samples']} and {st['3']['udp_block_samples']} samples a datagram), the C++ and Python\nassemblers, Sensor Bridge frames ({st['2']['hsb_frame_bytes']:,} and {st['3']['hsb_frame_bytes']:,} bytes for 1600 samples at 64 and 96 channels), "
              "the container file and the chain carry them\nunchanged. The record format already stores every hydrophone's position and the attitude samples: no format change. "
              f"On pings of the `popoto_12km`\nscenario's size (baseband) the C++ chain takes {t['1']['seconds_per_ping']:.2f}, {t['2']['seconds_per_ping']:.2f} and {t['3']['seconds_per_ping']:.2f} s for one, two and three rows on {B['cpu_threads']} shared CPU threads, against "
-             f"{lr['min_ping_interval_s']:.1f} s between pings:\nreal time with room. The elevation search itself is the part that grew with the wide rows (a finer grid over ±30°): about "
-             f"{max(t['3']['seconds_per_ping'] - 3 * t['1']['seconds_per_ping'], 0.0):.1f} s of the three-row figure.\n"
-             + (f"**At the boards' full rate it is not real time on such a CPU**: one full-length ping (102.4 kHz real, 0.5 to 13 km) took {full['1']['seconds_per_ping']:.0f}, {full['2']['seconds_per_ping']:.0f} and "
-                f"{full['3']['seconds_per_ping']:.0f} s (measured with the\nearlier, closer rows; the map dominates and does not depend on the heights). The band is 2 kHz wide, so the samples carry 13 times "
-                "more than needed: converting to\nbaseband and decimating before the chain, or a GPU (the one-row map was 17 times faster on an L4, `RESULTS.md`; rows not yet run on one), closes "
-                "the gap. **Open: which.**\n" if full else ""))
+             f"{lr['min_ping_interval_s']:.1f} s between pings:\nreal time with room.\n"
+             + (f"(Timings are from an otherwise idle machine with the earlier row heights; the work does not depend on them.) **At the boards' full rate it is not real time on such a CPU**: one full-length ping (102.4 kHz real, 0.5 to 13 km) took {full['1']['seconds_per_ping']:.0f}, {full['2']['seconds_per_ping']:.0f} and "
+                f"{full['3']['seconds_per_ping']:.0f} s (measured with\nearlier row heights; the map dominates and does not depend on them). The band is {(f_hi - f_lo) / 1e3:.0f} kHz wide, so the samples carry {102.4e3 / (2 * (f_hi - f_lo)):.0f} times "
+                "more than needed. The owner: \"Prepare both options\":\nconverting to baseband and decimating before the chain, and a GPU. Neither is built into the receiver yet; the one-row map was 17 times faster on an L4\n"
+                "(`RESULTS.md`), rows have not been run on one. **GPU timing pending.**\n" if full else ""))
     L.append("**What carries over from stage to stage, and what changes.** Unchanged: the boards and their count per row, the synchronisation scheme, the stream and record\n"
-             "formats, the software and its settings, the report. Changed: the hydrophones' spacing and cabling (0.09 m on the test AUV, 0.15 m on the face), the rows'\n"
-             "heights, the projector and pulse, the compute (in proportion to the channels), and from stage 3 on the handling of candidates.\n")
+             f"formats, the software and its settings, the report. From the test AUV to the static array: the same rows ({auv['pitch_m']:.2f} m spacing), now two or three of them, no motion,\n"
+             f"a typed-in pose. From the static array to the face: the rows' heights carry over; the hydrophones' spacing and cabling change ({face3['pitch_m']:.2f} m), as do the projector\n"
+             "and pulse, the attitude source (the vehicle's navigation, at each echo's arrival) and the compute (in proportion to the channels).\n")
     L.append("**What stacked rows do not improve.** Bearing and range resolution; left/right (the face decides that); detection range, much; depth at long range without\n"
              "a profile.\n")
+    L.append("**Open.**\n\n"
+             "- The static array: its dimensions, the depth it hangs at, whether it has a tilt sensor, where its projector hangs, the trial site's depth and ranges.\n"
+             "- The SPRINT-Nav: attitude accuracy, output rate, time-stamp accuracy and message format (from its datasheet and interface document). The adapter from\n"
+             "  its messages to the navigation datagram is not written; DVL altitude plus depth as the water-depth source is not wired in.\n"
+             "- The projector: which, its source level, its place on the face, and how fast the inputs recover from its direct sound.\n"
+             f"- Board synchronisation between rows: {need['0.05']:.2f} µs for 0.05°. Not answered; whether Popoto boards can be batched at all is a question for Popoto.\n"
+             "- The sound-speed profile: a profile built from the vehicle's own readings, and profile families, are not built; today's chain has the gradient prior,\n"
+             "  the local sound speed and a supplied profile.\n"
+             "- Compute at the boards' full rate: both options (decimate first; GPU) are to be prepared; neither is in the receiver yet.\n")
     return L
 
 

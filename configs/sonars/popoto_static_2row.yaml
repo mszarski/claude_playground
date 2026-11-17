@@ -1,0 +1,40 @@
+# The static drop-in array: two rows of 32 hydrophones on a frame that is lowered and left in place
+# (the owner: "No space for second row on auv but static drop in array could have two or three rows.
+# So let's consider both"). It is where stacked rows are first put in the water: the test AUV carries one row.
+# The owner gave NO dimensions. Taken here, all parameters: rows of the test AUV's kind (32 over 3 m, 0.09 m
+# apart), the outer rows 1.5 m apart as on the vehicle's face, so that the face's elevation behaviour (accuracy,
+# repeats, candidates) is what the frame rehearses. The curve of accuracy against separation is in
+# docs/DESIGN.md Sec. 3 (tools/popoto_elevation_study.py, `baseline_sweep`): another frame is another `up`.
+# Not moving: no Doppler of its own, a fixed pose (`nav.static` in the deployment file) or a tilt sensor's.
+base: popoto_long_range
+name: popoto_static_2row
+
+platform:
+  name: static_array
+  span_m: 3.0                    # the frame's length: a placeholder (the owner gave no dimensions)
+  height_m: 1.6                  # the frame's height: a placeholder
+  mounting: frame lowered from the surface or standing on the bottom
+  static: true                   # not under way: the deployment file gives a fixed pose or a tilt sensor's
+  depth_m: 10.0                  # where the frame hangs: a placeholder
+
+array:
+  count: 32
+  pitch: 0.09                    # m: the test AUV's row
+  layout_choice: two_rows
+  layouts:
+    two_rows:
+      layout: stacked_lines
+      rows:                         # up: m above the frame's mid-height; out: m out from its plane
+        - {up: -0.75, out: 0.0}
+        - {up: 0.75, out: 0.0}
+
+transmit:
+  lever_arm: [0, 0, 1.0]         # the projector on the frame, 1 m below its mid-height: a placeholder (it may hang apart)
+  waveform:
+    duration: 0.1                # s: short-range trials (a 0.1 s pulse hides everything inside 75 m)
+
+unconfirmed:
+  - platform                     # every dimension of the frame, and its depth
+  - array.layouts.two_rows.rows
+  - array.pitch
+  - transmit                     # the projector, its place and its source level are not chosen
