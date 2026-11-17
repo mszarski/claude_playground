@@ -1093,3 +1093,64 @@ equation was unrecoverable):
     only its consequence (63) is usable.
 23. Doppler-spread rule (p. 101) divides by sin(grazing angle); see 3.6.
 24. (36): image-vector term `2|S_p - B_p| z_R`; re-derive before relying on it.
+
+---
+
+## 12. Angle and frequency spreading of bounce paths; several bounces [OURS]
+
+TR 0702 has time spreading and a slow (AR(1)) change of the tail; it has no angle spreading
+("not yet", p. 93), takes its frequency-spread width from TR 9407 (not read), and says its
+multi-bounce shape is wrong (p. 104). What follows is derived here, not transcribed; it is
+implemented in `sim/timespread.py` (options, all off by default) and tested in
+`tests/python/test_timespread.py`. The only things used from TR 0702 are the relations
+between a Gaussian spread and a coherence width, eqs. (89), (96), (103), and the remark that
+the ASIAEX surface Doppler spread was "less than 10 Hz" (p. 98), as a sanity bound.
+
+Model: the boundary is a set of tilted mirrors (facets) with Gaussian slopes, variance mss/2
+per axis; one bounce, r1 and r2 the path lengths before and after it, g the grazing angle,
+q = 1/r1 + 1/r2, (x, y) a facet's position from the specular point, x along the path.
+
+**12.1 Geometry.** To second order the path through (x, y) is longer by
+`c tau = (x^2 sin^2 g + y^2) q / 2`: ellipses of equal delay, 1/sin g longer along the path.
+With `(x sin g, y) = rho (cos psi, sin psi)`, `rho^2 = 2 c tau / q`: seen along the ray the
+ellipse is a circle. The facet reflects source to receiver if its slopes are
+`s_x = x sin(g) q / 2`, `s_y = y q / (2 sin g)`.
+
+**12.2 Angles.** The tap of excess delay tau leaves the source `rho / r1` from the specular
+ray and arrives `rho / r2` from it: `angle^2 = 2 c tau r2 / (r1 (r1 + r2))` at the source.
+Its place on the circle has density `exp(kappa cos 2 psi)`,
+`kappa = (c tau q / 4 mss)(1 / sin^2 g - 1)`. With Gaussian slopes the angles are Gaussian,
+variance `2 mss (r2 / (r1 + r2))^2` in the vertical plane and `sin^2 g` times that across it.
+By (103) the tail's coherence across an aperture is `exp(-d^2 / 2 sigma_d^2)`,
+`sigma_d = lambda / (2 pi sigma_S)`, sigma_S the rms spread of the direction cosine along
+the aperture: `sigma_v cos g` for a vertical line, `sigma_v sin g` for a horizontal line
+across the path. Limit: the turn must stay inside the grazing angle (the code stops a turn
+towards the horizontal at 0.9 of the ray's elevation); shadowing is not modelled.
+
+**12.3 Decay time.** The same slopes give `tau = 2 (s_x^2 + s_y^2 sin^2 g) / (c q)`, mean
+`T = mss (1 + sin^2 g) t1 t2 / (t1 + t2)`. TR 0702's rule of thumb is `2 mss t1 t2 / (t1 + t2)`:
+the same at normal incidence, twice as long at low grazing angles. The shape is not an
+exponential but `exp(-tau (a + b) / 4ab) I0(tau (a - b) / 4ab) / (2 sqrt(ab))`,
+`a = mss t1 t2 / (t1 + t2)`, `b = a sin^2 g`. (`decay_time: facet`; the default stays the rule.)
+
+**12.4 Frequency.** A boundary displaced by zeta changes the path by `-2 zeta sin g`: the
+field is `exp(i chi zeta(t))`, `chi = 2 k sin g`. For Gaussian zeta of rms height h and rms
+speed v the scattered part has correlation `exp(-Gamma^2)(exp(chi^2 C(t)) - 1)`, C the
+height correlation, so the second moment of its spectrum is exactly
+`sigma_nu^2 = (2 f v sin g / c)^2 / (1 - exp(-Gamma^2))`. Rough boundary: Gaussian spectrum
+of rms width `2 f v sin(g) / c` (the pdf of the facets' vertical speeds). Nearly flat:
+the wave spectrum, width `v / (2 pi h)`. This settles note 23: the width goes as sin g, not
+1/sin g. By (96) the coherence time is `1 / (2 pi sigma_nu)`. A bottom has v = 0. The
+sonar's own motion: with angle spreading each tap has its own direction, hence its own
+Doppler shift from the kernel, `f V . (u_tap - u_specular) / c`, rms about
+`2 f V sin(g) sqrt(mss / 2) r2 / ((r1 + r2) c)` for motion along the path - TR 0702's
+"speed of the reflection point x sqrt(mss)" within a factor `r2 / (sqrt(2) (r1 + r2))`.
+What the default process gives: one gain per tap per ping (ping-to-ping fading only, no
+spread within a ping). `doppler: true` makes each sinusoid of the process a ray with its
+own shift, so the same process runs through the ping.
+
+**12.5 Several bounces.** Each bounce: `c_i delta(tau) + (1 - c_i) h_i(tau)`. A path: the
+convolution. Tail energy `1 - prod c_i`, mean `sum (1 - c_i) T_i / (1 - prod c_i)`; two
+rough bounces of equal T give `tau exp(-tau / T) / T^2` (zero at the specular delay, peak
+at T), where one exponential of mean 2T is highest at once and has rms spread 2T instead of
+sqrt(2) T: the error TR 0702's author describes. (`multi_bounce: convolve`.)

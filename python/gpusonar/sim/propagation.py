@@ -23,12 +23,15 @@ GPUSONAR_SIM_ENGINE=numpy selects the NumPy code in this file (sim/engine.py).
 from __future__ import annotations
 
 import abc
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
 
 from .. import _gpusonar as core
 from . import engine as _engine
+
+_warned_doppler_fallback = False
 
 
 @dataclass
@@ -48,6 +51,9 @@ class EigenraySet:
     n_bottom: np.ndarray    # [S, K] int
     valid: np.ndarray       # [S, K] bool
     sound_speed: float
+    # [S, K] m/s, or None: rate of change of the ray's path length from a moving boundary
+    # (sim/timespread.py, `doppler`). The ray is then shifted in frequency by -f rate / c.
+    range_rate: np.ndarray | None = None
 
     @property
     def n_rays(self) -> int:
@@ -346,7 +352,17 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
     """
     out = provider.eigenrays(tx_position, points)
     back = provider.eigenrays(rx_reference, points)
-    if _engine.resolve(engine) == "cpp":
+    # Rays with a path-length rate (frequency spreading within a ping): the C++ pairing
+    # returns one velocity per scatterer, not per ray, so these are paired here in NumPy.
+    rates = [None if e.range_rate is None or not np.any(e.range_rate) else e.range_rate for e in (out, back)]
+    doppler = rates[0] is not None or rates[1] is not None
+    if doppler and _engine.resolve(engine) == "cpp":
+        global _warned_doppler_fallback
+        if not _warned_doppler_fallback:
+            _warned_doppler_fallback = True
+            warnings.warn("time_spread.doppler: eigenrays carry a range rate, which the C++ path pairing does not take; "
+                          "pairing them in NumPy (synthesis is unchanged)", RuntimeWarning, stacklevel=2)
+    if _engine.resolve(engine) == "cpp" and not doppler:
         weighted = lambert is not None and bool(np.any(lambert))
         moving = velocities is not None and bool(np.any(velocities))
         q, p, amp, vq = core.sim_two_way_paths(
@@ -396,4 +412,13 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
         vq = np.repeat(np.repeat(v[:, None, None, :], ko, axis=1), kb, axis=2).reshape(-1, 3)
         vp = vq.copy()
         vq, vp = vq[valid], vp[valid]
+    if doppler:
+        # A ray whose path lengthens at `range_rate`: its apparent position recedes at that
+        # speed along the ray, which the synthesis kernel turns into the frequency shift.
+        if vq is None:
+            vq, vp = np.zeros((int(valid.sum()), 3)), np.zeros((int(valid.sum()), 3))
+        if rates[0] is not None:
+            vq = vq + np.repeat((rates[0][..., None] * out.launch)[:, :, None, :], kb, axis=2).reshape(-1, 3)[valid]
+        if rates[1] is not None:
+            vp = vp + np.repeat((rates[1][..., None] * back.launch)[:, None, :, :], ko, axis=1).reshape(-1, 3)[valid]
     return q[valid], p[valid], amp[valid], vq, vp
