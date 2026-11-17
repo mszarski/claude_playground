@@ -787,3 +787,29 @@ def test_per_ray_doppler_reaches_the_record_through_the_cpp_pairing():
              and moving[i] > 0.3 * moving.max()]
     assert len(peaks) == 3
     assert np.allclose(peaks, [2.0 * shift, shift, 0.0], atol=0.3)
+
+
+def _cuda():
+    from gpusonar import core
+    return core.cuda_available()
+
+
+@pytest.mark.skipif(not _cuda(), reason="no CUDA device")
+def test_per_ray_doppler_on_the_cuda_kernel_matches_the_host():
+    """The Doppler lines ride in each path's two velocities, which the device kernel reads
+    from the same path struct as the host kernel: flank_sst_spread (every spreading option
+    on) gives the same record on both, to the order of the float32 additions."""
+    from gpusonar import core
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("flank_sst_spread")
+    cfg["pings"]["count"] = 1
+    cfg["time_spread"] = dict(cfg["time_spread"], taps=2, doppler_lines=2)
+    quiet = dict(cfg, reverberation=None, receiver={"adc": False}, sonar_overrides={"receive": {"window": {"range": [990, 1090]}}})
+    host = run_scenario(dict(quiet), backend=core.Backend.Host).records[0].samples.array
+    cuda = run_scenario(dict(quiet), backend=core.Backend.Cuda).records[0].samples.array
+    assert np.abs(host).max() > 0
+    assert np.allclose(cuda, host, atol=2e-6 * np.abs(host).max())
+    still = dict(quiet, time_spread=dict(quiet["time_spread"], doppler=False))
+    flat = run_scenario(still, backend=core.Backend.Cuda).records[0].samples.array
+    assert not np.allclose(cuda, flat, atol=1e-3 * np.abs(host).max())      # the range rates are in the device record
