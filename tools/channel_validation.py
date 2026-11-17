@@ -441,19 +441,19 @@ def figures(result: dict, directory: Path, prefix: str = "channel_validation") -
         d = site["_bins"][0][0]
         ms = (np.arange(ch.n_delay) - d) / ch.fs_delay * 1e3
         pm = (np.abs(ch.h[:, 0]) ** 2).mean(axis=0)
-        ax.plot(ms, db(pm / pm[d]), color="k", lw=1.1, label=what)
+        ax.plot(ms, db(pm / pm.sum()), color="k", lw=1.1, label=what)
         for key, color in (("A", "C0"), ("B", "C1")):
             mc = site["_model"][key]
             p = (np.abs(mc.h[:, 0]) ** 2).mean(axis=0)
             dm = int(round(mc.meta["lead"] * mc.fs_delay))
-            ax.plot((np.arange(mc.n_delay) - dm) / mc.fs_delay * 1e3, db(p / p[dm]), color=color, lw=0.9,
+            ax.plot((np.arange(mc.n_delay) - dm) / mc.fs_delay * 1e3, db(p / p.sum()), color=color, lw=0.9,
                     label=f"model {key} ({OPTIONS[key]['decay_time']}, {OPTIONS[key]['multi_bounce']})")
         for g in site["groups"]:
             if g["predicted_delay_ms"] < ms[-1] - 1:
-                ax.annotate(g["name"], (g["predicted_delay_ms"], 3.0), fontsize=7, rotation=45, ha="left")
+                ax.annotate(g["name"], (g["predicted_delay_ms"], -4.0), fontsize=7, rotation=45, ha="left")
         ax.set_xlim(-2.0, min(ms[-1], 18.0))
-        ax.set_ylim(-35.0, 12.0)
-        ax.set_ylabel("Power (dB re direct)")
+        ax.set_ylim(-42.0, 4.0)
+        ax.set_ylabel("Power per delay bin\n(dB re whole channel)")
         ax.set_title(f"{site['label']}: {site['range']:.0f} m, wind {site['wind_speed']:.1f} m/s"
                      + (" (fitted to the Doppler width of S here)" if "wind_fit" in site else " (not fitted here)") + "; top element", fontsize=9)
     axes[0, 0].legend(loc="upper right", fontsize=7)

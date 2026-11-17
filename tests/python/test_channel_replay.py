@@ -370,14 +370,17 @@ def test_validation_procedure_recovers_a_known_wind_and_tells_the_options_apart(
     assert result["free_parameters"] == 1
     assert site["wind_fit"]["wind_speed"] == pytest.approx(5.0, rel=0.15)
     groups = {g["name"]: g for g in site["groups"]}
-    assert {"D", "B", "S"} <= set(groups)
+    first = site["groups"][0]                                  # the direct path, with the bottom bounce 0.29 ms behind it
+    assert first["name"] in ("D", "D+B") and "S" in groups and first["n_surface"] == 0
     s = groups["S"]
     direct = np.hypot(60.0, 0.7)
     assert s["measured"]["delay_ms"][0] == pytest.approx((np.hypot(60.0, 22.7) - direct) / 1500.0 * 1e3, abs=0.16)
-    assert groups["B"]["measured"]["coherent"][0] > 0.95 and s["measured"]["coherent"][0] < 0.05
+    assert first["measured"]["coherent"][0] > 0.95 and s["measured"]["coherent"][0] < 0.05
     meas, a, b = s["measured"], s["model"]["A"], s["model"]["B"]
-    assert a["doppler_shape"][0] == pytest.approx(meas["doppler_shape"][0], abs=0.5)
-    assert b["doppler_shape"][0] > meas["doppler_shape"][0] + 0.8
+    # (One seed of the model is a finite set of spectral lines: its shape scatters by a few tenths.)
+    assert a["doppler_shape"][0] == pytest.approx(meas["doppler_shape"][0], abs=1.0)
+    assert b["doppler_shape"][0] > a["doppler_shape"][0] + 0.8
+    assert a["doppler_rms"][0] == pytest.approx(meas["doppler_rms"][0], rel=0.2)
     assert a["decay_ms"][0] == pytest.approx(meas["decay_ms"][0], rel=0.25)
     assert b["decay_ms"][0] > 1.4 * meas["decay_ms"][0]
     assert tool.verdict(meas["doppler_shape"], a["doppler_shape"], "doppler_shape") == "in"

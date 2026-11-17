@@ -1900,3 +1900,176 @@ rate per eigenray on each leg and returns a velocity for each end of each pair,
 velocity for each end of a path (`SynthPath::q_velocity`, `p_velocity`), on host and
 device, so nothing downstream changed. `flank_sst_spread` gives a bit-identical record
 through the C++ pairing and through the old NumPy one.
+
+## 20. Noise fitted to a recording, and time spreading against measured channels [OURS]
+
+Two additions that take their inputs from measurements instead of models. Sources opened for
+this section, and what was taken from each:
+
+- APL-UW TR 0702, Sec. 4.6.1 eqs. (23)-(26) and Sec. 4.6.2 (extracted text): the factor of the
+  cross-spectral matrix, the Gaussian synthesis, the window condition, and the argument that
+  heavy tails must be made in the time domain and filtered.
+- NoiseModels.jl (org-arl, MIT), `src/gaussian.jl`, read in full: the "mixing coefficients on
+  independent innovations" form. Its estimator (BFGS on lagged covariances) is not used.
+- alpha-SGNm (A. Mahmood, BSD 3-clause), `asgn.m` and README, read: the sub-Gaussian
+  construction (Gaussian vector times the root of a positive alpha/2-stable variate). Its
+  alpha-SGN(m) sampler and tables are not used.
+- Underwater Acoustic Channel Repository (UACR): the documentation site's file specification
+  and channel pages (MIT), the paper arXiv:2609.03207 (Li, Chitre, Cuji, Preisig, Singer,
+  Stojanovic, van Walree, 2026; Secs. II.D, IV), and data files from Zenodo
+  doi:10.5281/zenodo.21287414 (CC BY 4.0). Taken: the file layout, the innovations convention
+  (alpha-stable of scale 1/sqrt 2), the description of the SPACE'08 geometry and of the
+  estimator. The project's replay and noise code was not read.
+
+No coefficient in the code comes from memory of a paper: Kanter's formula for positive stable
+variates and the log-moment formulas are tested against their defining properties.
+
+**20.1 Noise model fitted to a recording** (`sim/noise_fit.py`, `tools/fit_noise.py`).
+The model is `x = B * eta`: white innovations through mixing filters whose transfer matrix
+satisfies `B B^H = S fs`, `S` the two-sided cross-spectral density matrix of the recording
+estimated by Welch (Hann, 50 % overlap). `B` is the per-frequency Cholesky factor, TR 0702
+eq. (23). For Gaussian noise the generator is TR 0702 eqs. (24)-(26) as printed (independent
+complex Gaussians per frequency and update, inverse transform, a window with
+`sum |w|^2 = 1`, here a sine window at 50 % overlap). For heavy tails the innovations are
+`sqrt(tau) g` with a texture `tau` (gamma: K-type; positive alpha/2-stable: symmetric
+alpha-stable), held for a fitted number of samples and common to the channels or not, and the
+filters are applied in the time domain: because `g` is white and independent of `tau`, the
+spectra and coherences are those of `B` whatever the tail.
+
+*Tail fit.* On the whitened recording `e = B^-1 x` (lines notched out):
+`var(log|e|)` is `pi^2/8` for a Gaussian, `pi^2/8 + trigamma(nu)/4` for the K family and
+`(pi^2/6)(1/alpha^2 + 1/2)` for the alpha-stable one. Derivation: `log|e| = log(tau)/2 + log|g|`;
+`log|g|` has variance `pi^2/8`; `log` of a gamma variate has variance `trigamma(nu)`; a
+positive stable variate of index `a` has `E S^p = Gamma(1 - p/a) / Gamma(1 - p)`, so its
+logarithm has variance `(pi^2/6)(1/a^2 - 1)`. Both families are fitted from that one number
+and the one whose predicted quantile ratio q99.95/q50 is nearer the measured one is kept;
+Gaussian when the excess over `pi^2/8` is inside four standard errors. The texture's hold time
+is `1 + 2 sum_k rho(k)` with `rho` the autocorrelation of `log e^2` over the texture's variance
+(`var(log e^2) - pi^2/2`); the cross-correlation between channels says whether it is common.
+
+*Estimator variance.* With `n_d` independent blocks: the coherence estimate where the truth is
+zero has `|gamma^|^2 ~ Beta(1, n_d - 1)`, a floor `E|gamma^| = sqrt(pi / (4 n_d))`; elsewhere
+its standard deviation is `(1 - |gamma|^2) / sqrt(2 n_d)`; the spectrum level has
+`4.34 / sqrt(n_d)` dB. Half-overlapped Hann blocks count as `K / (1 + 2 rho^2 (1 - 1/K))`,
+`rho = 1/6` (computed from the window). So a coherence standard deviation of 0.05 needs 200
+independent blocks: 3.4 s at 8 kHz with 256-sample blocks, about 1.1 s at 48 kHz with 512. The
+Cholesky factor is refused below `2 x channels` independent blocks. All three numbers are
+tested by Monte Carlo.
+
+*What is not fitted as noise.* Reference inputs are dropped (record container). Blocks whose
+power is more than 8 robust standard deviations above the channel's median are flagged; runs
+of 4 or more and blocks that recur at a fixed interval (pings, sync bursts) are excluded and
+listed; isolated ones are kept, since impulsive noise looks like that. Bins more than 3 dB (or
+six standard deviations) above the median-smoothed spectrum are taken out as lines, kept
+separately, and added back only on request.
+
+*Limits.* Stationarity over the recording is assumed, not tested. The block must be much
+longer than the transit time across the array (bias `(1 - transit/block)^2` on the coherence of
+a directional source; the report prints it). An alpha-stable variate has no variance, so the
+"spectrum level" of such a fit is the level of that record, not an expectation (tested: the
+exponent and the scale are recovered, the level is not meaningful). The whitened channels are
+mixtures of the physical sources when the channels are strongly coherent, so independent
+impulsive sources look more Gaussian after whitening than they are. With the tail families the
+generator is the filter form only; the frequency-domain synthesis is Gaussian by construction.
+
+*Another configuration.* Channel count must match, or `channels` picks a subset (exact).
+Any sample rate: the matrix is interpolated in Hz and factored again; frequencies the
+recording never covered are refused unless asked for (then: no noise there). A complex
+baseband output about a centre frequency is the band moved down with twice the power.
+
+*Checked on* synthetic fields with a known cross-spectral matrix (isotropic `sin(kd)/(kd)`
+plus a plane-wave interferer at 30 degrees, 8 hydrophones): fitted spectrum within 0.6 dB,
+coherence within 0.02 rms of the closed form; regenerated noise the same; beam power against
+bearing within 1 dB with the interferer at its bearing; array gain in isotropic noise within
+0.35 dB of `C^2 / sum sin(k d_ij)/(k d_ij)`; the Mitchell-McPherson ensemble average converging
+to the input as `1/sqrt(R)`. And on noise made, by the documented mixing equation, from two
+published site models of the UACR (60 s each): SPACE'08 (12 hydrophones, Gaussian): spectrum 0.05 dB rms
+in band, coherence error 0.009 rms against an estimator floor of 0.009; Singapore (3
+hydrophones, alpha = 1.7): fitted alpha 1.66.
+
+**20.2 Measured channels** (`sim/channel_replay.py`). A measured channel is a complex-baseband
+impulse response `h(t, tau)` per receiver, stored every 15 ms. `replay` passes a transmit
+signal through it (linear interpolation of `h` in time between snapshots, the tracked phase
+and, for `phi_hat`, its delay drift restored): a one-way propagation tier made of a
+measurement. It is a function, not an eigenray provider: a measured `h` has no rays, so it
+cannot feed the two-way echo synthesis. Files with a constant resampling factor are refused.
+
+The estimators, each tested on synthetic channels with known values:
+
+| Quantity | Estimator | Recovered to |
+| --- | --- | --- |
+| delay spread | slope of the log of the incoherent profile after the peak; first moment | 15 % (decay time 0.3 and 0.8 ms at 0.077 ms bins) |
+| coherent share | power of the time mean over the arrival, after dividing by the phase of the strongest arrival | 0.05 |
+| Doppler width, shape | Welch spectrum over time; rms over +-6 w50, half widths holding 50 % and 90 %; w90/w50 is 2.44 for a Gaussian, about 4 or more for a Lorentzian on this axis | 8 % (rms), 10-15 % (w50) |
+| coherence time | 1/e of the autocorrelation of the fluctuating part | 12 % (Gaussian), 20 % (Lorentzian) |
+| level statistics | scintillation index of the arrival's energy, floor removed; 1 - c^2 for a Rician arrival | 0.12 |
+| scattering function | Welch spectrum over time of every delay bin | marginals within 10-20 % |
+
+A stored channel is the output of an adaptive estimator, not the channel: for the files used
+here RLS with forgetting factor 0.995 updated every delay sample (arXiv:2609.03207 Sec. IV),
+which to first order is a one-pole low-pass of 10.4 Hz on every tap. The model is passed
+through that filter before comparison (`estimator_filter`); this is our approximation.
+
+**20.3 Our time spreading against SPACE'08** (`tools/channel_validation.py`,
+figures `docs/figures/channel_validation_*.png`). Data: UACR "Purple", 12.5 kHz, 6.5 kHz
+band, one moored source 4 m above the seabed in 15 m of water, moored arrays with the top
+element 3.3 m above the seabed at 60 m, 200 m and 1 km; five files of 53 s from two
+recordings (`purple_1, 3, 5` and `purple_6, 8`).
+
+*Not given by the dataset, hence assumed:* wind or sea state; sound speed (1500 m/s, no
+gradient); seabed (flat; a sand-like half-space, 1700 m/s, 1.9 g/cm^3); omnidirectional
+transducers; that the files of one recording are simultaneous; that the sea is described by
+one number through Pierson-Moskowitz (height, vertical speed) and Cox-Munk (slope).
+
+*One free parameter per recording*, the wind speed, fitted to one number: the rms Doppler
+width of the first surface arrival at 60 m (`2 f v sin(g) / c`). Result: 3.96 +- 0.87 m/s and
+3.70 +- 0.60 m/s (two sigma). Everything below is then a prediction; no option was tuned,
+both values of each were run. "In" means within twice the larger of the measurement's
+standard error (quarters of the record) and the model's record-to-record spread (seeds), plus
+one resolution cell. 18 surface-interacting arrivals, grazing angles 1.3 to 32 degrees:
+
+| Quantity | Model A: gaussian, facet, convolve | Model B: lorentzian, rule_of_thumb, sum |
+| --- | --- | --- |
+| Doppler rms width | 13 in, 3 out; median model/measured 1.06 | 4 in, 12 out; 1.60 |
+| Doppler shape w90/w50 (measured 2.0 to 3.1) | 15 in, 3 out; 0.99 | 7 in, 11 out; 1.61 |
+| tail decay time | 5 in, 12 out; 0.98 | 4 in, 10 out; 1.63 |
+| coherent share (arrival and tail) | 12 in, 6 out; 1.14 | (same) |
+| scintillation index | 3 in, 15 out; 0.46 | (same) |
+| level (re whole channel) | 4 in, 14 out | (with bubble loss: the same, it is under 0.3 dB at 4 m/s) |
+| arrival delay | 9 in, 9 out | (same) |
+
+*What the model gets right.* (1) The Doppler spectrum of a surface-scattered arrival is
+Gaussian, not Lorentzian: the measured spectra fall 30 dB by four standard deviations, where
+the AR(1) spectrum SST uses (our default) would be at -12 dB. (2) Its width, with the single
+fitted wind, across nine other arrivals per recording: one or two surface bounces, 60 m to
+1 km, widths from 0.47 to 2.2 Hz; `2 f v sin(g) / c / sqrt(1 - exp(-Gamma^2))`, numerators
+adding over bounces. (3) At 60 m (`Gamma^2` 8 to 21) the surface arrivals carry no coherent
+part (measured 0.002 to 0.014). (4) The decay time of the first surface arrival at 60 m in the
+first recording, 0.267 ms, is the facet value (0.261) and half the rule of thumb (0.554).
+
+*What it gets wrong.* (1) At low grazing angles it is too coherent: at 200 m (6.7 degrees)
+the surface arrival's coherent share is 0.14 and 0.21 measured against `exp(-Gamma^2)` =
+0.35 and 0.45; at 1 km likewise (the twice-reflected group: 0.43 against 0.77 through the
+estimators). Read as a height,
+the measured shares want an rms height 1.38 times the Pierson-Moskowitz value for the fitted
+wind, in both recordings: a sea with more height per unit of vertical speed than a fully
+developed wind sea (swell would do that; not known). A second parameter (`rms_height` given
+separately) would absorb it; it was not adjusted. (2) Delay spread: right on average (median
+0.98) but not arrival by arrival; in the second recording the same 60 m arrival decays in
+0.415 ms (facet 0.220, rule of thumb 0.525), and at 200 m, where `Gamma^2` is about 1, the
+facet tail is three times too long in one recording (0.26 measured, 0.79 model) and too short
+in the other (1.68 against 0.66). The facet picture is geometric optics; it has no reason to
+hold at `Gamma` near 1. (3) Level fluctuations: the measured scintillation index of the
+multi-bounce arrivals is 1.1 to 3.1, above the Rayleigh value of 1; the model's complex
+Gaussian taps give at most 1 (0.6 after the same windowing). Focusing by wave crests would do
+this; the model has nothing of the kind. (4) Levels of paths with a bottom bounce at 26 to 32
+degrees are 3 to 6 dB below the assumed half-space; the surface-only arrival is within 1 dB at
+60 m and 2 dB at 200 m. That is the assumed seabed, not the surface. (5) Surface arrivals come late: by 0.08 to
+0.15 ms at 60 m and 0.23 to 0.27 ms at 200 m, both what a surface about 1 m higher than the
+stated 15 m gives. Not corrected. (6) At 1 km the measured response has a tail of 15 ms that
+three bounces do not make; only the first arrivals were compared there.
+
+*Not tested by this dataset.* Bubble loss (0.1 to 0.3 dB at this wind); `multi_bounce`
+separately from the decay time (model B's `sum` with 24 taps leaves the taps resolved where
+the tail is long, an artefact visible in the profiles figure); angle spreading; anything at
+other frequencies or sea states; any two-way path.
