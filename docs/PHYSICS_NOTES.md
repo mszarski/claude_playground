@@ -1900,3 +1900,156 @@ rate per eigenray on each leg and returns a velocity for each end of each pair,
 velocity for each end of a path (`SynthPath::q_velocity`, `p_velocity`), on host and
 device, so nothing downstream changed. `flank_sst_spread` gives a bit-identical record
 through the C++ pairing and through the old NumPy one.
+
+---
+
+## 20. One-way sources, near-specular removal, non-Gaussian noise, bubble loss [OURS]
+
+### 20.1 One-way sources (`sources:`, `sim/sources.py`)
+
+SST's `Source` + `DirectSignal` (TR 0702 Secs. 7-8) and its radiated-noise signals (Sec. 4.6:
+Gaussian noise with a spectrum, harmonic families eq. 29, any pulse). A source has a
+trajectory (the target description of `sim/targets.py`) and one or more signals. Eigenrays
+are found from the array's reference point to the source and travelled backwards, exactly as
+the return leg of an echo, so every provider works, the time-spread wrapper with its taps,
+angle and Doppler spreading included. Each ray is an apparent source `p` with velocity `w`:
+the image's (vertical velocity mirrored once per bounce), corrected along the ray so that its
+range rate equals the source's speed along the ray where it leaves the source, plus the ray's
+own path-length rate.
+
+Doppler is time scaling, exact: the emission time `u` of the sound an element at
+`R + V t` receives at `t` solves `|p + w u - R - V t| = c (t - u)`, a quadratic with the root
+
+```
+s = t - u = (-A.w + sqrt((A.w)^2 + (c^2 - w^2) |A|^2)) / (c^2 - w^2),   A = p + w t - R - V t
+```
+
+and `du/dt` along a straight ray is TR 0702 eq. 63, `(1 - V_R.n/c) / (1 - V_S.n/c)`.
+
+What runs where. A pulsed signal (`type: waveform`, any waveform of the simulator) runs in
+the echo kernel unchanged, host or CUDA: the kernel's path is projector -> q -> p -> element,
+and a one-way path is that path with a null first leg. The projector is made omnidirectional
+and `q = tx + r0 (e - v/c)` rides with it (r0 = 1 m, e any unit vector, v the platform's
+velocity): the first leg is then exactly r0 long whatever the motion, `p` is the apparent
+source, the 1 m of delay and the emission time are taken out through the record's start time
+(with the mixer phase `2 pi f_c shift` for a baseband record), spreading over 1 m is 1, and
+absorption over 1 m is put back at the centre frequency (the residual across a band is
+alpha'(f) x 1 m, below 1e-4 dB). Continuous signals (noise, tonals, a file) run in a
+streaming synthesiser in NumPy: `s(t)` exactly at knots 4 ms apart per (ray, channel), linear
+between (error s'' h^2 / 8, about 1e-12 s); tones evaluated analytically at `u`; sampled
+signals read at `u` with the windowed-sinc interpolator of Sec. 15, as real samples or as a
+complex envelope about the record's carrier; absorption per frequency at each ray's mean
+range. There is no C++ or CUDA streaming synthesiser.
+
+Measured (tests/python/test_oneway_sources.py): kernel pulse against streamed tone with
+source and receiver both moving, inside the pulse: 5.5e-5 relative (float32); level against
+SL - 20 log r - alpha r: within 0.01 dB; image arrival times within one sample; tonal Doppler
+against eq. 63: within 0.02 Hz of about +100 Hz (first order is more than 0.3 Hz off); Lloyd's mirror over 28
+depths: within 1 % of `|exp(ikr1)/r1 - exp(ikr2)/r2|`; noise spectrum level at the hydrophone
+within 0.25 dB in the mean.
+
+A passive capture is a scenario with `pings.transmit: false`: the same record, of the
+length of the receive window, with no echoes, reverberation or transmit reference. The
+record schema is unchanged; `sonar_live --passive` and `core.doa_passive` read it.
+
+The ASIAEX example used a -20 dB relay 0.1 m from a projector on a lever arm to fake the
+one-way path; it now uses a source. Same 20 pings, relay / source: arrival time error
+0.20 / 0.19 us, level error 0.0025 / 0.0026 dB, tail decay 2.946 / 2.945 ms (surface) and
+7.693 / 7.694 ms (bottom), ping-to-ping std 1.876 / 1.881 dB (surface), Doppler width
+0.3105 / 0.3109 Hz. The relay's outbound multipath (55 dB down) is gone.
+
+### 20.2 Near-specular reverberation when time spreading is on (`exclude_specular`)
+
+TR 0702 (Sec. 12.1, 12.4) removes "the near-specular parts of the reverberation" when
+`doTimeSpread` is on and does not say how they are delimited (open question 13). Our
+partition comes from the facet model of Sec. 16: a boundary of rms height h with Gaussian
+slopes of total mean-square slope s2. Geometric optics on those facets gives the strength
+
+```
+lobe = |R|^2 / 4 (|q|^2 / q_z^2)^2 exp(-(q_x^2 + q_y^2) / (q_z^2 s2)) / (pi s2),   q = n_out - n_in
+```
+
+whose integral over scattered directions is `|R|^2 sin g_in` (all the incident energy; by
+quadrature to 1 %). The tail of a time-spread bounce holds `(1 - exp(-G^2))` of the
+flat-boundary energy, so the part of the strength it duplicates is
+`(1 - exp(-(k h q_z)^2)) lobe`; the reverberation item uses `max(strength - that, 0)`.
+
+Bookkeeping, source and receiver over the boundary (tests/python/test_reverb_specular.py):
+removed reverberation / tail energy = 0.999, 0.996, 0.992 at 49 degrees grazing for
+s2 = 0.005, 0.02, 0.045, and 1.09, 1.33, 1.65 at 9 degrees (the lobe is then as wide as the
+grazing angle; geometric optics sends more down range than the flat-boundary energy the
+tail conserves). With a strength made of that lobe on a Lambert floor: (coherent + tail) +
+reverberation with the removal = coherent + all scattering to 1 %; without it the excess is
+the tail energy exactly (over 1 dB of the total in the test's geometry). A strength with no
+lobe (Lambert) loses under 12 % of its own energy and under 1 % of the tail.
+
+When it applies. Reverberation is the sonar's pulse scattered once by a boundary. A tail
+duplicates it only when the same pulse also arrives one way over the bounce: a separate
+transmitter given as a source (the ASIAEX set-up) with a bistatic reverberation item.
+Tails on the bounce legs of target echoes are boundary-and-target scattering, which no
+reverberation item holds. So the key is opt-in, never automatic. Backscatter is untouched
+(2.7e-4 of Lambert -27 dB at 60 degrees, under 1e-10 to 50 degrees) except at normal
+incidence, where the lobe is the nadir return of a down-looking sonar: nothing else in the
+simulator carries that, so a monostatic item refuses the key with a warning.
+
+### 20.3 Non-Gaussian ambient noise
+
+TR 0702 Sec. 4.6.2: `KNoise` is white, single-channel, "a fresh, independent K-distributed
+random number for each sample", coloured afterwards by a filter (which, it notes, moves the
+result back towards Gaussian). `receiver.ambient_noise.statistics: {model: k, shape}` with
+no correlation time is that: kurtosis `3 / shape` for a white spectrum (tested to 6 % for shape 0.5, 2
+and 8), about 1/16 of it after a filter 1/16 of the band
+wide, and less after the mixing that gives an array its isotropic coherence. With
+`correlation_time` it is the compound form used for reverberation (Sec. 14.4): the Gaussian
+noise, spectrum and coherence included, times the square root of a unit-mean gamma variate
+held over cells that long. The spectrum is unchanged at resolutions coarser than
+1 / correlation_time; with `common: true` (default: a burst reaches every hydrophone) the
+coherence matrix is exactly the Gaussian one; with `common: false` it falls by
+`(Gamma(nu + 1/2) / Gamma(nu))^2 / nu`. An infinite shape is bit-identical to Gaussian.
+
+`{model: alpha_stable, alpha}`: independent symmetric alpha-stable samples by Chambers,
+Mallows and Stuck as printed in arlpy's `stable.rnd` (BSD). At alpha = 2 the formula is
+`2 c sqrt(w) sin(p)` identically, a Gaussian of variance 2 c^2. For alpha < 2 there is no
+variance: the configured spectrum sets the scale c = sigma / sqrt(2), sigma^2 the band power
+of the Gaussian noise of that spectrum. White in band, independent channels; no colouring.
+
+### 20.4 Bubble loss per surface bounce
+
+Adopted (owner's ruling): `apl_1994`, `1.26e-3 / sin(g) U^1.57 f_kHz^0.85` dB for U >= 6 m/s
+and the 6 m/s value times `exp(1.2 (U - 6))` below, read in arlpy 1.9.3
+(`uwa.bubble_surface_loss`, BSD) and in UnderwaterAcoustics.jl (`surface_reflection_coef`,
+MIT, which cites TR 9407 II-21). Neither states a range or a cap.
+
+Our own derivation (`hall_novarini`), re-checked. (1) Unit: the source's eq. 24 and Fig. 9
+give 4.7e7 bubbles/m^3 at the surface at 13 m/s, which needs n in m^-4; ours integrates to
+4.67e7. (2) Air fraction at 2 m: 0.76e-7 at 10.5 m/s against 1e-7 quoted from Walsh and
+Mulhearn in arXiv:physics/0006060 (and 0.15e-8 against 1e-8 at 6.2 m/s). (3) Radii: 33 to
+330 um for 100 to 10 kHz, inside 10 um to 1 mm. (4) Extinction: integrating the full
+damped response of every radius (Commander-Prosperetti as printed in arXiv:2410.14415
+eqs. 6-9; damping 0.052 / 0.074 / 0.105 at 10 / 30 / 100 kHz, of which radiation is 0.0136)
+gives 1.43 / 1.35 / 1.23 times the resonant approximation: 7 % from the resonance lying 2 to
+5 % below Minnaert, the rest from bubbles smaller than resonance absorbing through viscous
+and thermal damping (4 to 21 % of the total). So the derivation was not too high; if
+anything low. (5) Refraction: the layer is slow (1490.6 m/s at the surface at 10 m/s,
+30 kHz); Snell shortens the path by 9 % at 10 degrees and removes the need for the 2 degree
+floor (63 dB at 2 degrees instead of 107). (6) Saturation: an opaque layer returns what its
+bubbles scatter back, about `(w/2)(1 - m ln(1 + 1/m))` of the incident energy (single
+scattering in a half-space; w = 0.11 to 0.19 the scattering share of extinction,
+m = sin g): 13 to 15 dB down at 10 degrees. Models `hall_novarini_layer` (4 + 5) and
+`hall_novarini_screened` (+ 6, an upper bound: it counts all directions).
+
+Per bounce at 10 m/s, 10 degrees, dB:
+
+| kHz | hall_novarini | layer | screened | apl_1994 |
+|---|---|---|---|---|
+| 10 | 4.35 | 5.51 | 4.87 | 1.91 |
+| 30 | 21.6 | 26.5 | 13.1 | 4.86 |
+| 100 | 101.7 | 120.1 | 14.5 | 13.5 |
+
+The two laws cross near 6 to 8 m/s (ratio 0.4 to 2 from 3.5 to 100 kHz at 6 m/s) and part
+with wind (ours U^3 times a layer depth that grows with U; adopted U^1.57) and frequency
+(f^1.4 against f^0.85). What remains unexplained is a real disagreement between this
+population with linear bubble acoustics and a law fitted to sea measurements; the likely
+cause is patchiness (the mean of exp(-T) over patchy clouds is far above exp(-mean T)),
+which no opened source quantifies.
+

@@ -587,8 +587,10 @@ def asiaex_geometry(cfg: dict | None = None) -> dict:
     so = cfg["sonar_overrides"]
     wf = so["transmit"]["waveform"]
     rx = np.asarray(cfg["platform"]["position"], dtype=float)
-    tx = rx + np.asarray(so["transmit"]["lever_arm"], dtype=float)
-    relay = np.asarray(cfg["scene"][0]["positions"][0], dtype=float)
+    # The projector is a one-way source (`sources:`); `relay` keeps its name from when the
+    # path was made with a relay next to a projector: both are the source's position now.
+    tx = np.asarray(cfg["sources"][0]["origin"], dtype=float)
+    relay = tx.copy()
     return dict(c=float(cfg["environment"]["sound_speed"]), f0=float(wf["f_start"]), pulse=float(wf["duration"]),
                 alpha=float(wf.get("window_alpha", 0.0)), rx=rx, tx=tx, relay=relay,
                 depth=float(cfg["propagation"]["bottom_z"]), bottom=dict(cfg["propagation"]["bottom"]),
@@ -604,7 +606,7 @@ ASIAEX_PATHS = {"direct": "", "surface": "s", "bottom": "b", "surface-bottom": "
 
 
 def asiaex_eigenrays(g: dict) -> dict:
-    """The five eigenrays from the relay (the source of the return leg) to the receiver by
+    """The five eigenrays from the source to the receiver by
     TR 0702 eqs. (36)-(38) and (40): delay, slant range, grazing angle, loss factor
     |L_p| = (1 / R_p) x absorption x prod |beta| (our Rayleigh bottom coefficient, |beta| = 1
     at the surface), and the travel times before and after each bounce."""
@@ -670,7 +672,7 @@ def asiaex(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> dict:
     record = runs["flat"].records[0]
     fs, t0 = record.samples.sample_rate, record.samples.start_time
     c, f0, pulse = g["c"], g["f0"], g["pulse"]
-    lead = float(np.linalg.norm(g["relay"] - g["tx"])) / c                 # the 0.1 m transmit leg
+    lead = 0.0                                                             # a one-way source: emitted at the ping time
     first = lead + rays["direct"]["delay"]
     n = record.samples.n_samples
     ms = (t0 + np.arange(n) / fs - first) * 1e3                            # time after the first arrival, ms
@@ -683,7 +685,7 @@ def asiaex(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> dict:
         return np.abs(env(result)) ** 2
 
     amp1 = record.transmit.waveform.amplitude                             # at 1 m, record units
-    relay_gain = 10.0 ** (-20.0 / 20.0) / float(np.linalg.norm(g["relay"] - g["tx"]))     # (1 / 0.1 m) x 0.1 = 1
+    relay_gain = 1.0                                                      # a one-way source at the stated level
     ref = (amp1 * relay_gain * rays["direct"]["loss"]) ** 2
     at = lambda lo, hi: (ms >= lo) & (ms < hi)                             # noqa: E731
     p_ms = pulse * 1e3
@@ -1205,7 +1207,7 @@ def matrix(results: dict | None = None) -> list[dict]:
         mine + "test_echo_level_is_the_sonar_equation",
         m(C, lambda c: f"compressed echo level - (SL - 2 TL + TS): {c['echo_level']['free_field']['max_level_error_db']:.3f} dB (free field)"))
     row("Sec. 2.1, 2.4", "Four components (direct sources, noise, target echoes, reverberation) summed into the ping",
-        "echoes + reverberation + noise in `simulate_ping`; no one-way source (`DirectSignal`)",
+        "echoes + reverberation + one-way sources (`sources:`) + noise in `simulate_ping`",
         mine + "test_pursuit_surface_reverberation_dominates (the parts add)",
         m(P, lambda p: f"full - echoes - reverberation = noise at {p['noise']['psd_db_re_upa2_per_hz']:.1f} dB re uPa^2/Hz; "
                        f"the scenario's spectrum at the carrier: {p['noise']['scenario_spectrum_db']:.1f}"))
@@ -1268,8 +1270,10 @@ def matrix(results: dict | None = None) -> list[dict]:
                        f"{p['time_spreading']['surface_bounce_echo_db_re_direct']:.1f} dB re the direct one, arrives after it, and its level changes by "
                        f"{p['time_spreading']['surface_bounce_echo_change_db']:+.1f} dB (it becomes a random tail). None of the features "
                        f"checked depends on it: left out of the scenario file"))
-    row("Sec. 3", "Signal includes noise produced by the fleeing target", "-", "cannot be checked",
-        "Feature we lack: no one-way source (SST `DirectSignal`); ambient noise only")
+    row("Sec. 3", "Signal includes noise produced by the fleeing target", "`sources:` with `signal: {type: noise | tonals}`",
+        t + "test_oneway_sources.py::test_same_record_as_echoes_and_reverberation_and_default_unchanged",
+        "The feature exists and is tested (level, spectrum, Doppler); the Pursuit scenario file does not include a noisy target "
+        "(TR 0702 gives no level for it)")
     row("Sec. 3", "Five channels; inter-channel correlations are in the signal", "5 hydrophones, each with its pattern",
         mine + "test_pursuit_scenario_holds_what_tr0702_states", "5 channels generated; coherence across them is covered by "
         + t + "test_reverb_statistics.py::test_direction_spread_gives_the_coherence_length")
@@ -1297,11 +1301,12 @@ def matrix(results: dict | None = None) -> list[dict]:
     row("Sec. 4.6.1, eqs. (23)-(26)", "Gaussian noise with a given cross-spectral matrix (Mitchell-McPherson)",
         "`sim/noise.py`: spectrum and the coherence of an isotropic field", t + "test_noise.py; " + mine + "test_pursuit_surface_reverberation_dominates",
         m(P, lambda p: f"noise PSD at the carrier {p['noise']['psd_db_re_upa2_per_hz']:.1f} dB vs {p['noise']['scenario_spectrum_db']:.1f} dB asked for"))
-    row("Sec. 4.6.2, eq. (27)", "K-distributed white noise (`KNoise`)", "-", "cannot be checked",
-        "Feature we lack as noise; K statistics exist for reverberation (" + t + "test_reverb_statistics.py::test_k_distributed_intensity_moments)")
+    row("Sec. 4.6.2, eq. (27)", "K-distributed white noise (`KNoise`)", "`receiver.ambient_noise.statistics: {model: k, shape}`",
+        t + "test_noise_statistics.py::test_white_k_noise_as_in_tr0702_has_the_k_kurtosis_and_the_asked_level",
+        "Kurtosis 3 / shape for white noise, less after a filter, as TR 0702 says; a compound form with a correlation time is ours")
     row("Sec. 4.6.3-4.6.4, eqs. (29)-(30)", "Harmonic families; modulated tones with numerically integrated phase",
         "analytic CW / LFM / Gaussian pulses; sampled pulses", t + "test_sampled_waveform.py (LFM, HFM, stepped FM, codes)",
-        "Tonal sources (radiated noise) are not implemented: they need a one-way source")
+        "Harmonic families (eq. 29) are a signal of a one-way source: " + t + "test_oneway_sources.py::test_tonal_level_per_line_with_absorption_and_harmonic_family")
     # ---- Sec. 5 --------------------------------------------------------------------------------
     row("Sec. 5.2, eqs. (32)-(33)", "Delay across an array from the slowness vector, with a spherical-wavefront correction",
         "not used: arrival time solved per hydrophone", "-", "Not checked (not used)")
@@ -1349,7 +1354,7 @@ def matrix(results: dict | None = None) -> list[dict]:
         "No pattern is specified numerically in TR 0702; ours appears in the Pursuit hook (sidelobes) only")
     row("Sec. 8.1, eqs. (47)-(52)", "One-way source-to-receiver signal (`DirectSignal`)", "-",
         mine + "test_asiaex_arrival_times_and_levels_are_the_image_closed_forms",
-        "Feature we lack; a one-way path is made with a relay 0.1 m from the projector (sst_asiaex.yaml)")
+        "`sources:` (sim/sources.py): a radiating source heard one way; sst_asiaex.yaml uses it for the projector")
     row("Sec. 8.3, eq. (63)", "Doppler factor of a path from the velocities and slowness vectors",
         "exact arrival-time solve (echoes); first order (reverberation)",
         t + "test_reverb_bistatic.py::test_doppler_shift_is_the_closed_form_factor_to_first_order; " + mine + "test_pursuit_reverberation_hook_follows_the_closed_form",
