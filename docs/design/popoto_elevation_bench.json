@@ -16,7 +16,7 @@
       "hsb_frames_ok": true,
       "recording_bytes_per_ping": 14877644,
       "recording_ok": true,
-      "chain_seconds_per_ping_full_rate_short_window": 0.457578729,
+      "chain_seconds_per_ping_full_rate_short_window": 0.202964954,
       "chain_found_the_target": true
     },
     "2": {
@@ -34,7 +34,7 @@
       "hsb_frames_ok": true,
       "recording_bytes_per_ping": 29735848,
       "recording_ok": true,
-      "chain_seconds_per_ping_full_rate_short_window": 0.862401925,
+      "chain_seconds_per_ping_full_rate_short_window": 0.322416054,
       "chain_found_the_target": true
     },
     "3": {
@@ -52,45 +52,45 @@
       "hsb_frames_ok": true,
       "recording_bytes_per_ping": 44595224,
       "recording_ok": true,
-      "chain_seconds_per_ping_full_rate_short_window": 1.242857444,
+      "chain_seconds_per_ping_full_rate_short_window": 0.802565633,
       "chain_found_the_target": true
     }
   },
   "timing_scenario_size": {
     "1": {
-      "seconds_per_ping": 1.202729778,
+      "seconds_per_ping": 0.633844443,
       "all": [
-        1.164938878,
-        1.170995804,
-        1.230019885,
-        1.202729778
+        0.572287995,
+        0.633844443,
+        0.585802089,
+        0.648601667
       ],
       "detections": 13,
       "with_elevation": 0,
       "samples_per_channel": 22934
     },
     "2": {
-      "seconds_per_ping": 1.852078826,
+      "seconds_per_ping": 1.413447317,
       "all": [
-        1.779600339,
-        1.82186695,
-        1.87130759,
-        1.852078826
+        1.361269886,
+        1.413447317,
+        1.368897361,
+        1.747220122
       ],
       "detections": 13,
       "with_elevation": 13,
       "samples_per_channel": 22934
     },
     "3": {
-      "seconds_per_ping": 2.89911648,
+      "seconds_per_ping": 2.540337983,
       "all": [
-        2.613328462,
-        2.816376299,
-        2.91335309,
-        2.89911648
+        2.852217748,
+        2.537130049,
+        2.540337983,
+        2.59336352
       ],
-      "detections": 12,
-      "with_elevation": 12,
+      "detections": 15,
+      "with_elevation": 15,
       "samples_per_channel": 22934
     }
   },
@@ -130,17 +130,84 @@
     }
   },
   "scenarios": {
+    "testauv_1row": {
+      "sync_residual_us": 0.4380675316,
+      "range_error_m": [
+        0.8800694858251177,
+        0.42252771613505047,
+        0.6078692559765386,
+        0.7855270786440087
+      ],
+      "bearing_error_deg": [
+        -0.0009952950153575557,
+        -0.005191119191552573,
+        -0.0020169956379572085,
+        -0.009415377138292769
+      ]
+    },
+    "testauv_2row": {
+      "sync_residual_us": 0.5376331013,
+      "true_depth_m": 22.0,
+      "range_m": 300.0,
+      "depth_m": [
+        24.21037008,
+        21.72055309,
+        21.89673243,
+        24.75692652
+      ],
+      "ambiguous": [
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    "face_2row": {
+      "true_depth_m": 60.0,
+      "range_m": 3000.0,
+      "true_elevation_deg": -0.5735121716051271,
+      "depth_m": [
+        53.24923993,
+        49.50870518,
+        51.78109686,
+        47.91588262
+      ],
+      "elevation_deg": [
+        -0.4445517757,
+        -0.3731517561,
+        -0.4167509451,
+        -0.3429097174
+      ],
+      "ambiguous": [
+        false,
+        false,
+        false,
+        false
+      ],
+      "ambiguous_without_the_bound": [
+        true,
+        true,
+        true,
+        true
+      ],
+      "candidates_without_the_bound": [
+        6,
+        6,
+        6,
+        6
+      ]
+    },
     "free_field": {
       "tracks": 3,
       "depth_errors_m": [
-        -0.2569164379999993,
-        -0.08013183999999995,
-        -0.4125351000000137
+        -0.07267187499999928,
+        -0.03892419000000302,
+        -0.15657300000000873
       ],
       "depth_sigma_m": [
-        1.818332834,
-        1.88482088,
-        2.224422642
+        6.856836897,
+        7.448194682,
+        10.11945585
       ],
       "roll_deg": 3.0,
       "pings": 5
@@ -148,16 +215,16 @@
     "shallow": {
       "true_depth_m": 50.0,
       "depth_m": [
-        41.37966181,
-        40.18528665,
-        42.22146856,
-        41.40247453
+        49.21529004,
+        48.12279894,
+        48.86116944,
+        48.88797492
       ],
       "elevation_deg": [
-        -0.6519041958,
-        -0.583475777,
-        -0.700136167,
-        -0.6532145328
+        -1.094224378,
+        -1.031609098,
+        -1.07392914,
+        -1.075463994
       ],
       "true_elevation_deg": -1.1457628381751033,
       "path": [
@@ -169,24 +236,29 @@
     },
     "rehearsal": {
       "sync_ok": true,
-      "worst_residual_us": 0.4233423864,
+      "worst_residual_us": 0.4907695681,
       "deep_true_m": 60.0,
       "deep_depth_m": [
-        60.91553652,
-        60.17486381,
-        62.10520297,
-        63.39544156
+        60.59978214,
+        58.86059283,
+        58.82420395
+      ],
+      "deep_depth_with_transmit_attitude_m": [
+        11.85981278,
+        10.14434144,
+        10.14274863
       ],
       "shallow_true_m": 8.0,
       "shallow_depth_m": [
-        1.350953068,
-        0.687439289,
-        1.3299895,
-        0.8638093026
+        4.39179678,
+        2.198996422,
+        4.56907631
       ],
       "roll_deg": 4.0,
       "pitch_deg": 1.0,
-      "boards": 8
+      "roll_rate_deg_s": 1.5,
+      "boards": 12,
+      "sound_speed": 1490.0
     }
   }
 }

@@ -91,67 +91,81 @@ interval. From ping 4 on the report holds one mover (the ship, −5.8 m/s agains
    settings (`--replay`), and its background can be used to calibrate the simulator
    (`SIM_CALIBRATION.md`) so later rehearsals match the site.
 
-## Stacked rows: elevation and depth (optional)
+## The staged build: one row, then stacked rows (elevation and depth)
 
-With two or three rows of hydrophones at different heights (`popoto_long_range_2row`, 64
-hydrophones on 8 boards; `popoto_long_range_3row`, 96 on 12) the chain also reports each
-detection's elevation and depth. What the option can and cannot do, in numbers, and the
-choice between two rows and three: `DESIGN.md`, Sec. 3. One row needs none of this and is
-processed exactly as before.
+The array is built in stages, each run by the same programs from its own files. What each stage is for,
+its numbers, and the choice between two rows and three: `DESIGN.md`, Sec. 3.
+
+| Stage | Sonar file | Deployment file | Rehearsal ashore |
+| --- | --- | --- | --- |
+| 1: test AUV, one row of 32 over 3 m | `popoto_testauv_1row` | `configs/deploy/popoto_testauv_1row.yaml` | `--scenario popoto_testauv_trial_1row` |
+| 2: test AUV, two rows of 32, 0.30 m apart | `popoto_testauv_2row` | `configs/deploy/popoto_testauv_2row.yaml` | `--scenario popoto_testauv_trial_2row` |
+| 3: 2 m × 9 m face, two rows 1.8 m apart | `popoto_long_range_2row` | `configs/deploy/popoto_face_2row.yaml` | `popoto_face_2row_shallow` (baseband pings: see the tests) |
+| 4: 2 m × 9 m face, three rows (recommended) | `popoto_long_range_3row` | `configs/deploy/popoto_vehicle_elevation.yaml` | `configs/deploy/popoto_elevation_rehearsal.yaml --scenario popoto_elevation_rehearsal` |
 
 ```bash
-tools/sonar_live.py configs/deploy/popoto_vehicle_elevation.yaml                         # the boards, over UDP
-tools/sonar_live.py configs/deploy/popoto_vehicle_elevation.yaml --scenario popoto_elevation_free --out run/
-tools/sonar_live.py configs/deploy/popoto_elevation_rehearsal.yaml --scenario popoto_elevation_rehearsal --out run/
+tools/sonar_live.py configs/deploy/popoto_testauv_1row.yaml                          # the boards, over UDP
+tools/sonar_live.py configs/deploy/popoto_testauv_2row.yaml --scenario popoto_testauv_trial_2row --out run/
+tools/sonar_live.py configs/deploy/popoto_elevation_rehearsal.yaml --scenario popoto_elevation_rehearsal --out run/ --engine cpp
 tools/sonar_live.py configs/deploy/popoto_vehicle_elevation.yaml --export-template template.h5   # prints the C++ command
-build/bin/sonar_live --udp 5700 --template template.h5 --nav-port 5702 ... elevation=1 elevation_roll_sigma_deg=0.2
+build/bin/sonar_live --udp 5700 --template template.h5 --nav-port 5702 ... elevation=1 elevation_attitude_arrival=1
 ```
 
-The deployment file differs from the one-row file in two places: `source.sonar` names the
-stacked array, and `chain.elevation` is present (`CONFIGURATION.md` lists its keys). The
-rows are found from the hydrophone positions in each record; nothing else says how many
-there are. Per ping, with rows:
+The `*_clocks` sonar files (which the deployment files name) describe every board on its own clock with
+the shared synchronisation reference; the rehearsal scenarios are raw 102.4 kHz samples with clock offsets
+to 0.3 ms and drifts to 25 ppm, the vehicle rolled and rolling during the ping. For a 2 m span on the test
+AUV: `sonar_overrides: {array: {pitch: 0.0625}}`; for another row separation: the `rows` of the sonar file.
 
-- each row is beamformed over range × bearing on its own and the rows' maps are added
-  (a row's bearing response does not depend on elevation, so arrivals from above and
-  below are not lost);
-- at each detection (the strongest 32) the whole array is steered over elevation at that
-  range and bearing. The first arrival of the detection is taken: the direct path;
+A deployment file with rows differs from a one-row file in `source.sonar` and in having `chain.elevation`
+(`CONFIGURATION.md` lists its keys). The rows are found from the hydrophone positions in each record;
+nothing else says how many there are, and a one-row array is processed exactly as before. Per ping, with rows:
+
+- each row is beamformed over range × bearing on its own and the rows' maps are added;
+- at each detection (the strongest 32) the whole array is steered over elevation at that range and bearing,
+  and the first arrival of the detection is taken: the direct path;
 - the detection's line in the report gains
 
 | Field | Meaning |
 | --- | --- |
-| `elevation_deg`, `elevation_sigma_deg` | elevation above the horizontal (roll and pitch from navigation applied), and its one-sigma: the bound at the measured SNR plus `roll_sigma_deg`. `null`: none found |
+| `elevation_deg`, `elevation_sigma_deg` | elevation above the horizontal, with the vehicle's roll, pitch and yaw **as they were when the echo arrived** (`attitude_time: arrival`), and its one-sigma: the bound at the measured SNR, `roll_sigma_deg`, and the attitude's timing. `null`: none found |
 | `elevation_quality` | 1 for one clean arrival; lower when several arrivals share the range cell. Below `min_quality` no elevation is reported |
-| `elevation_ambiguous` | a second lobe within 1.5 dB (two rows, steep arrival): the elevation may be the wrong one and is not passed to the track |
+| `elevation_ambiguous`, `elevation_alternatives_deg` | rows several wavelengths apart repeat their response every few degrees. When another lobe is within 1 dB of the best, or the noise could swap them, the detection is flagged and the other candidates are listed. Two rows on the face: always, unless `sector_from_depth` bounds the search; three rows: at low SNR only |
 | `bearing_deg`, `cone_bearing_deg` | the horizontal bearing, corrected for the elevation, and what the line alone reported |
-| `depth_m`, `depth_sigma_m` | depth: own depth + range × sin(elevation), folded into the water column; with `elevation.ssp`, along the ray through that profile |
+| `depth_m` | depth: own depth + range × sin(elevation), folded into the water column; along the ray through `gradient_per_s` (or `ssp`) when given |
+| `depth_sigma_m`, `depth_refraction_sigma_m` | one sigma of the depth, and the part of it that is the unknown sound-speed gradient (range² × `gradient_sigma_per_s` / 2c) |
 | `image_depth_m`, `path` | the straight-line depth before folding, and what it says of the path: `direct`, `surface` (the image is above the surface), `bottom`, `multiple` |
 
-- each track gains `depth_m`, `depth_sigma_m` and `path` (a filter over its detections'
-  depths), and a track whose straight-line depth stays outside the water column by more
-  than two sigma is classified `multipath`.
+- each track gains `depth_m`, `depth_sigma_m` and `path`. A track takes its depth from unambiguous detections;
+  once it has one it picks, from an ambiguous detection, the candidate that fits. A track whose straight-line
+  depth stays outside the water column by more than two sigma is classified `multipath`.
 
-Each of these can be switched off on its own (`correct_bearing`, `depth`, `fold`,
-`classify`). Passive listening takes `elevation=1` too: every bearing in a frame then has
-an entry in `elevations_deg` and `elevation_quality`.
+Each use can be switched off on its own (`correct_bearing`, `depth`, `fold`, `classify`). Passive listening takes
+`elevation=1` too: every bearing in a frame then has an entry in `elevations_deg` and `elevation_quality`.
 
 What the vehicle must provide in addition to the list above:
 
 | | Why | State |
 | --- | --- | --- |
-| Roll and pitch in the navigation datagrams, accurate to 0.1–0.2° | depth error = range × roll error: 0.2° is 3.5 m at 1 km and 42 m at 12 km | The fields exist in the datagram; what the vehicle's attitude sensor delivers is unconfirmed. `elevation.roll_sigma_deg` must be set to it. Roll is applied as at the transmit time, not at each echo's arrival. |
-| Own depth (`z`) in the same datagrams, and where the surface is in that frame (`elevation.surface_z`) | reported depth is own depth plus the measured difference | as for one row |
-| Water depth (`elevation.water_depth`) | folding bottom bounces and recognising them | from the altimeter plus depth sensor, or the chart; without it only surface bounces are recognised |
-| A sound-speed profile (`elevation.ssp`) beyond a few kilometres | a straight ray is 51 m off at 3 km in merely isothermal water | from a CTD cast or a model; without it depths are straight-ray |
-| Boards synchronised to better than 1 µs between rows | 1 µs is 0.23° of elevation | 0.4 µs in simulation with the shared reference; or interleaved wiring (`array.interleave: 4`), which removes the term for two rows |
-| An in-water calibration with sources at several depths | a row 1 mm further out than drawn is 0.15° | `calibrate.estimate_channel_errors(..., planar=False)` |
+| Roll and pitch in the navigation datagrams at a few a second, accurate to 0.1–0.2° | depth error = range × roll error: 0.2° is 3.5 m at 1 km and 42 m at 12 km; with rows 1.8 m apart roll is the first limit of the angle | The owner: configurable. `elevation.roll_sigma_deg` is the accuracy; `attitude_time: arrival` uses the samples around each echo's arrival (an echo from 12 km arrives 16 s after the ping), `transmit` the ping's. The sensor's accuracy and rate are unconfirmed. |
+| Own depth (`z`), and where the surface is in that frame (`elevation.surface_z`) | reported depth is own depth plus the measured difference | as for one row |
+| Sound speed at the vehicle: `"sound_speed"` in the navigation datagrams, or `chain.sound_speed` | it sets the beamforming and the angle at the array | The owner: the AUV measures it. Without either, the sonar file's nominal 1500 m/s is used |
+| Water depth: `"water_depth"` in the datagrams, or `elevation.water_depth`, and how well it is known (`water_depth_sigma_m`) | folding bottom bounces, recognising them, and bounding the search for two rows | The owner: "some idea of water depth". 5 m assumed |
+| A sound-speed profile | none will exist. The chain assumes a mean gradient (`gradient_per_s`, isothermal water by default in the vehicle's file) and carries its uncertainty (`gradient_sigma_per_s`) into every depth sigma: 17 m at 1 km, 600 m at 6 km for 0.05 /s | depth beyond a few kilometres is limited by this, not by the array. `elevation.ssp` takes a measured profile if there ever is one |
+| Boards of different rows synchronised to about 1 µs | 1 µs is 0.05° with rows 1.8 m apart (0.3° with 0.30 m) | 0.5 µs in simulation with the shared reference; real boards unconfirmed |
+| An in-water calibration with sources at several depths | a row 1 mm further out from the face than drawn is 0.03° (0.2° with rows 0.30 m apart) | `calibrate.estimate_channel_errors(..., planar=False)` |
 | A failed hydrophone or board named in `chain.dead_channels` | so that it is left out, not summed | the chain does not detect dead channels by itself |
 
-First time in water with rows, after step 4 above: lower a source (or use the support
-boat's echo sounder) at a known depth at two or three bearings; check `depth_m` against
-it with the vehicle level and again rolled 5°. A depth error that changes sign with the
-side the source is on is a row offset; one that follows the roll is the attitude sensor.
+First time in water with rows, after step 4 above:
+
+1. Per row: with `chain.dead_channels` naming every channel of the other rows, each row alone must give the
+   same detections (range, bearing) as the others. A row that differs is miswired or misplaced.
+2. Row offsets: lower a source (or use the support boat's echo sounder) to three known depths at two or three
+   bearings; run the calibration with `planar=False`; store it with the sonar.
+3. Elevation: the same source again. `depth_m` against its depth with the vehicle level, and again rolled 5°.
+   A depth error that changes sign with the side the source is on is a row offset; one that follows the roll is
+   the attitude sensor or its time stamp (try `attitude_time: transmit` against `arrival`).
+4. Two rows on the face: check `elevation_alternatives_deg` on that source (candidates 9.6° apart) and that
+   `sector_from_depth` with the site's water depth leaves the right one.
 
 ## Listening without transmitting
 

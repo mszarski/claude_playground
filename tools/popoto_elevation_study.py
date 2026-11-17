@@ -186,8 +186,10 @@ def main():
         row = {str(s): wrong_fraction([-up, up], s, 2.0, rng, args.trials, sector) for s in snrs}
         R["two_rows"]["wrong_pick"][label] = row
         print(f"    {label:58s} " + ", ".join(f"{100 * v:5.1f}% at {float(s):.0f} dB" for s, v in row.items()))
-    print("  So the band does not make two rows unambiguous: the nearest repeats are 0.6 dB down and are picked a third to a half of the time.")
-    print(f"  What does: knowing that nothing can arrive from outside +-{half:.1f} deg. Straight rays in water of depth H reach the array within")
+    print("  In clean noise the band does separate the repeats from 20 dB up (the rows' echoes must line up to 0.1 ms, a fifth of the pulse's")
+    print("  resolution), and at 13 dB one pick in ten is wrong. But the margin is 0.6 dB: the range sidelobe of another arrival or a few degrees of")
+    print("  phase error between rows is enough to tip it. The chain therefore never trusts a repeat within 1 dB of the peak (elevation.ambiguity_db).")
+    print(f"  What makes two rows sound: knowing that nothing can arrive from outside +-{half:.1f} deg. Straight rays in water of depth H reach the array within")
     print("  atan(H (bounces + 1) / range) of level, so two rows are unambiguous beyond (direct path / one bounce / two bounces):")
     for depth in (30.0, 100.0, 300.0, 1000.0, 3000.0):
         row = [float(depth * (b + 1) / np.tan(np.radians(half))) for b in (0, 1, 2)]
@@ -364,13 +366,178 @@ def main():
     print("  same 32 does not work: more than half a wavelength apart they have full-height repeats in bearing when steered.")
     print("  Rows shifted along the face against each other change nothing for bearing (rows are added as power) or elevation.")
 
+    # --- stages -----------------------------------------------------------------------------------
+    def directivity_db(n, pitch, f=FC):
+        """Array gain of a line of n hydrophones against isotropic noise at broadside: N^2 / sum sinc(2 d_ij / lambda)."""
+        x = np.arange(n) * pitch
+        return float(10.0 * np.log10(n * n / np.sinc(2.0 * (x[:, None] - x[None, :]) * f / C).sum()))
+
+    def reach(n, pitch, rows, source_level, pulse, target_db, snr=13.0):
+        """Noise-limited range (m) at which the map's SNR falls to `snr`: the link budget of Sec. 5 with the row's
+        gain against isotropic noise and the rows' power maps added."""
+        noise = float(wenz_spectrum_db(np.array([FC]), 5.0, 0.5)[0])
+        gain = directivity_db(n, pitch) + (gain_rows[str(rows)] if rows > 1 else 0.0)
+        eq = SonarEquation(source_level, FC, F_HIGH - F_LOW, pulse, n, noise, target_strength_db=target_db, temperature=12.0, depth=50.0,
+                           absorption_model="ainslie_mccolm", array_gain_db=gain)
+        return float(eq.detection_range(snr)), eq
+
+    gain_rows = {str(n): float(base - needed_snr_db(n)) for n in (2, 3, 4)}
+    RATE_MBIT = 102.4e3 * 24 / 1e6                     # one channel at the boards' rate
+
+    def describe(label, n, pitch, heights, source_level, pulse, platform):
+        rows = len(heights)
+        channels = n * rows
+        di = directivity_db(n, pitch)
+        out = {"hydrophones_per_row": n, "rows": rows, "channels": channels, "boards": int(np.ceil(channels / 8)), "pitch_m": pitch,
+               "row_length_m": float(n * pitch), "pitch_wavelengths_at_6khz": float(pitch * F_HIGH / C), "heights_m": list(heights),
+               "baseline_m": float(max(heights) - min(heights)), "beamwidth_deg": float(np.degrees(0.886 * lam / (n * pitch))),
+               "gain_isotropic_noise_db": di, "gain_uncorrelated_noise_db": float(10 * np.log10(n)),
+               "rows_detection_gain_db": gain_rows[str(rows)] if rows > 1 else 0.0,
+               "reverberation_margin_vs_32_at_half_wavelength_db": float(10 * np.log10(n * pitch / 4.8)),
+               "source_level_db": source_level, "pulse_s": pulse, "blind_range_m": float(0.5 * C * pulse),
+               "data_rate_mbit_s": float(channels * RATE_MBIT), "cables": channels + int(np.ceil(channels / 8)), "platform": platform}
+        for key, ts in (("ship", 25.0), ("small", 5.0)):
+            out[f"reach_{key}_m"], eq = reach(n, pitch, rows, source_level, pulse, ts)
+            out[f"snr_{key}_db"] = {str(r): float(eq.snr(r)) - out["rows_detection_gain_db"] for r in (500.0, 1000.0, 3000.0, 6000.0, 12000.0)}   # one row
+        if rows > 1:
+            out["elevation_sigma_deg_at_20_db"] = sigma_deg(list(heights), 20.0)
+            sp = float(np.degrees(np.arcsin(min(C / (FC * out["baseline_m"]), 1.0))))
+            out["repeat_spacing_deg"] = sp if C / (FC * out["baseline_m"]) < 1.0 else None
+            out["highest_repeat_db"] = max(second_lobe_db(list(heights), a) for a in (0.0, 10.0, 20.0))
+            depth = {}
+            for r in (500.0, 1000.0, 3000.0, 6000.0, 12000.0):
+                row_snr = out["snr_ship_db"][str(r)]
+                if row_snr < 10.0:
+                    depth[str(r)] = None
+                    continue
+                noise_part = r * np.radians(sigma_deg(list(heights), min(row_snr, 40.0)))
+                depth[str(r)] = {"from_noise_m": float(noise_part), "roll_0p2_deg_m": float(r * np.radians(0.2)),
+                                 "gradient_0p05_m": float(r * r * 0.05 / (2 * C)),
+                                 "total_m": float(np.sqrt(noise_part**2 + (r * np.radians(0.2)) ** 2 + (r * r * 0.05 / (2 * C)) ** 2))}
+            out["depth_sigma_ship"] = depth
+        return out
+
+    long_range = SonarModel.load("popoto_long_range")
+    sl_full = float(long_range.waveform_config["source_level_db"])
+    R["stages"] = {}
+    stage_files = (("1: test AUV, 1 x 32", "popoto_testauv_1row"), ("2: test AUV, 2 x 32", "popoto_testauv_2row"),
+                   ("3: full face, 2 x 32", "popoto_long_range_2row"), ("4: full face, 3 x 32", "popoto_long_range_3row"))
+    print("\nSTAGES (each a shipped sonar file; SNR and reach from the link budget of Sec. 5: spherical spreading, noise only, 13 dB to detect).")
+    print("  Reach is where noise alone would stop detection; reverberation and the channel stop it earlier or later (the scenarios show which).")
+    for label, name in stage_files:
+        m = SonarModel.load(name)
+        heights = sorted(set(np.round(-m.positions[:, 2], 3)))
+        n = m.n_elements // len(heights)
+        st = describe(label, n, float(m.config["array"]["pitch"]), heights, float(m.waveform_config["source_level_db"]),
+                      float(m.waveform_config["duration"]), dict(m.config.get("platform", {})))
+        st["sonar"] = name
+        R["stages"][label] = st
+        line = (f"  {label:22s} {st['channels']:3d} hydrophones on {st['boards']:2d} boards, row {st['row_length_m']:.2f} m at {st['pitch_m']:.3f} m "
+                f"({st['pitch_wavelengths_at_6khz']:.2f} wavelengths at 6 kHz), beam {st['beamwidth_deg']:.1f} deg, gain {st['gain_isotropic_noise_db']:.1f} dB in sea noise "
+                f"({st['gain_uncorrelated_noise_db']:.1f} dB in the boards' own), pulse {st['pulse_s']:.1f} s (blind inside {st['blind_range_m']:.0f} m), "
+                f"reach {st['reach_ship_m'] / 1e3:.1f} km ship / {st['reach_small_m'] / 1e3:.1f} km small target, {st['data_rate_mbit_s']:.0f} Mbit/s")
+        print(line)
+        if st["rows"] > 1:
+            d_ = st["depth_sigma_ship"]
+            print(f"      rows {st['baseline_m']:.2f} m apart: elevation {st['elevation_sigma_deg_at_20_db']:.2f} deg at 20 dB; repeats "
+                  + ("none inside the sector" if st["highest_repeat_db"] <= -99 else f"{st['highest_repeat_db']:.1f} dB")
+                  + "; depth sigma on the ship, from noise / with roll 0.2 deg and gradient known to 0.05 /s: "
+                  + ", ".join(f"{float(r) / 1e3:g} km: " + ("-" if v is None else f"{v['from_noise_m']:.1f} / {v['total_m']:.0f} m") for r, v in d_.items()))
+    # The prototype's span and separation as parameters.
+    print("  The prototype's row over 2 m and over 3 m (32 hydrophones; same waveform as shipped), and the 0.15 m row for comparison:")
+    R["prototype_span"] = {}
+    proto = SonarModel.load("popoto_testauv_1row")
+    p_sl, p_pulse = float(proto.waveform_config["source_level_db"]), float(proto.waveform_config["duration"])
+    for label, n, pitch in (("2 m", 32, 0.0625), ("3 m", 32, 0.09), ("4.8 m (the full row)", 32, 0.15), ("3 m, 20 hydrophones at 0.15 m", 20, 0.15)):
+        st = describe(label, n, pitch, [0.0], p_sl, p_pulse, {})
+        R["prototype_span"][label] = st
+        print(f"    {label:30s} beam {st['beamwidth_deg']:.1f} deg, gain in sea noise {st['gain_isotropic_noise_db']:.1f} dB ({st['gain_uncorrelated_noise_db']:.1f} dB counted by hydrophones), "
+              f"reach {st['reach_ship_m'] / 1e3:.1f} / {st['reach_small_m'] / 1e3:.1f} km")
+    low = describe("3 m at 185 dB", 32, 0.09, [0.0], 185.0, p_pulse, {})
+    R["prototype_span"]["3 m, a 185 dB projector"] = low
+    print(f"    The projector for the test AUV is not chosen. With {p_sl:.0f} dB as above; with 185 dB the 3 m row reaches {low['reach_ship_m'] / 1e3:.1f} / {low['reach_small_m'] / 1e3:.1f} km; "
+          "each 12 dB less halves a noise-limited range of a few km.")
+    print("    Closer than half a wavelength the hydrophones hear the same sea noise: 32 over 3 m gain what 20 at 0.15 m gain. The extra")
+    print("    twelve still pay against the boards' own noise, against a dead channel, and they are the full system's count and wiring.")
+    half_wave_f = C / (2.0 * 0.09)
+    R["prototype_half_wavelength_frequency_hz"] = half_wave_f
+    print(f"    A 0.09 m pitch is half a wavelength at {half_wave_f / 1e3:.1f} kHz: a higher band would fill the short array, but it is another projector and")
+    print("    another band than the full face's; the prototype is there to prove this chain, so it keeps 4-6 kHz.")
+    print("  The prototype's second row, against its separation (usable height unknown):")
+    R["prototype_separation"] = {}
+    for sep in (0.10, 0.15, 0.20, 0.30, 0.40, 0.50):
+        h = [-sep / 2, sep / 2]
+        row = {"sigma_deg": {str(sn): sigma_deg(h, sn) for sn in snrs}, "repeat_free_half_sector_deg_at_6khz": float(np.degrees(el.unambiguous_elevation(sep, F_HIGH, C))),
+               "depth_sigma_m_at_300m_30db": float(300.0 * np.radians(sigma_deg(h, 30.0))), "depth_sigma_m_at_1km_20db": float(1000.0 * np.radians(sigma_deg(h, 20.0)))}
+        R["prototype_separation"][f"{sep:.2f}"] = row
+        print(f"    {sep:.2f} m: " + " / ".join(f"{v:.2f}" for v in row["sigma_deg"].values()) + f" deg at 13 / 20 / 30 dB; no repeat within +-{row['repeat_free_half_sector_deg_at_6khz']:.0f} deg; "
+              f"depth {row['depth_sigma_m_at_300m_30db']:.1f} m at 300 m (30 dB), {row['depth_sigma_m_at_1km_20db']:.0f} m at 1 km (20 dB)")
+    print("    Below about 0.15 m the second row is not worth its boards (3.6 deg at 20 dB: the sign of the elevation, little more).")
+    print("    0.30 m gives 0.9 deg at 20 dB and no repeat inside +-25 deg: enough to prove the elevation chain end to end.")
+
+    # --- trade space ------------------------------------------------------------------------------
+    print("\nTRADE SPACE on the 9 m x 2 m face, 4-6 kHz, 197 dB, 1 s pulse. Per row along the face; rows up the face.")
+    print("  What a row's length buys: beam (bearing resolution, and 10 log(length) less reverberation in the beam), gain against sea noise, reach.")
+    R["trade_space"] = {"per_row": {}, "fixed_channels": {}, "rows": {}}
+    print(f"    {'row':34s} length  beam   gain   reach ship/small   reverb margin   boards a row")
+    for label, n, pitch in (("16 at 0.15 m", 16, 0.15), ("24 at 0.15 m", 24, 0.15), ("32 at 0.15 m (today)", 32, 0.15), ("48 at 0.15 m", 48, 0.15),
+                            ("60 at 0.15 m (fills the face)", 60, 0.15), ("64 at 0.14 m (fills the face)", 64, 0.14), ("96 at 0.094 m (fills the face)", 96, 0.094),
+                            ("32 at 0.28 m (sparse, fills the face)", 32, 0.28)):
+        st = describe(label, n, pitch, [0.0], sl_full, 1.0, {})
+        rep_ = flank.ambiguity_report((np.arange(n) - (n - 1) / 2.0) * pitch, F_LOW, F_HIGH, C, steer_deg=30.0)
+        st["wideband_lobe_steered_30_deg_db"] = rep_["wideband_lobe_db"]
+        R["trade_space"]["per_row"][label] = st
+        print(f"    {label:34s} {st['row_length_m']:5.2f} m {st['beamwidth_deg']:4.1f} deg {st['gain_isotropic_noise_db']:5.1f} dB  {st['reach_ship_m'] / 1e3:5.1f} / {st['reach_small_m'] / 1e3:4.1f} km"
+              f"   {st['reverberation_margin_vs_32_at_half_wavelength_db']:+5.1f} dB        {int(np.ceil(n / 8)):2d}"
+              + (f"   (repeats in bearing: {rep_['wideband_lobe_db']:.0f} dB when steered 30 deg)" if rep_["wideband_lobe_db"] > -12.5 else ""))
+    t32, t64 = R["trade_space"]["per_row"]["32 at 0.15 m (today)"], R["trade_space"]["per_row"]["64 at 0.14 m (fills the face)"]
+    R["trade_space"]["marginal_32_to_64_per_row"] = {"gain_db": t64["gain_isotropic_noise_db"] - t32["gain_isotropic_noise_db"],
+                                                     "beam_deg": [t32["beamwidth_deg"], t64["beamwidth_deg"]],
+                                                     "reach_ship_km": [t32["reach_ship_m"] / 1e3, t64["reach_ship_m"] / 1e3],
+                                                     "reach_small_km": [t32["reach_small_m"] / 1e3, t64["reach_small_m"] / 1e3], "boards": 4}
+    mg = R["trade_space"]["marginal_32_to_64_per_row"]
+    print(f"  32 -> 64 a row: +{mg['gain_db']:.1f} dB, beam {mg['beam_deg'][0]:.1f} -> {mg['beam_deg'][1]:.1f} deg, noise-limited reach {mg['reach_ship_km'][0]:.1f} -> {mg['reach_ship_km'][1]:.1f} km (ship), "
+          f"{mg['reach_small_km'][0]:.1f} -> {mg['reach_small_km'][1]:.1f} km (small), 3 dB less reverberation in the beam; 4 more boards a row.")
+    print(f"  Each doubling of a filled row is 3 dB and half the beam; in noise-limited range that is {100 * (mg['reach_ship_km'][1] / mg['reach_ship_km'][0] - 1):.0f}% at 13 km (spreading and absorption take the rest).")
+    print("  Past the face's 9 m (60 at half a wavelength) more hydrophones in a row buy nothing against sea noise; sparser than half a wavelength")
+    print("  the same count gives the narrower beam but full repeats in bearing when steered.")
+    print("  What rows buy (32 a row, outer rows at the full height):")
+    for rows, heights in ((1, [0.0]), (2, [-up, up]), (3, three_h), (4, [-up, best, -best, up])):
+        st = describe(f"{rows} rows", 32, 0.15, heights, sl_full, 1.0, {})
+        R["trade_space"]["rows"][str(rows)] = st
+        print(f"    {rows} x 32: {st['channels']:3d} hydrophones, {st['boards']:2d} boards, reach {st['reach_ship_m'] / 1e3:.1f} / {st['reach_small_m'] / 1e3:.1f} km"
+              + ("" if rows == 1 else f", elevation {st['elevation_sigma_deg_at_20_db']:.2f} deg at 20 dB, highest repeat {st['highest_repeat_db']:.1f} dB"))
+    print("  A fourth row (here at the mirrored height) adds half a decibel of detection and nothing else; accuracy is set by the outer rows.")
+    print("  The same number of channels as one long row or as stacked rows of 32:")
+    fixed = {32: [("1 x 32 at 0.15 m", 32, 0.15, [0.0])],
+             64: [("1 x 64 at 0.14 m", 64, 0.14, [0.0]), ("2 x 32 at 0.15 m", 32, 0.15, [-up, up])],
+             96: [("1 x 96 at 0.094 m", 96, 0.094, [0.0]), ("2 x 48 at 0.15 m", 48, 0.15, [-up, up]), ("3 x 32 at 0.15 m", 32, 0.15, three_h)]}
+    for channels, options in fixed.items():
+        for label, n, pitch, heights in options:
+            st = describe(label, n, pitch, heights, sl_full, 1.0, {})
+            R["trade_space"]["fixed_channels"][label] = st
+            print(f"    {channels:2d} channels, {label:18s}: beam {st['beamwidth_deg']:.1f} deg, map gain {st['gain_isotropic_noise_db'] + st['rows_detection_gain_db']:.1f} dB, "
+                  f"reach {st['reach_ship_m'] / 1e3:.1f} / {st['reach_small_m'] / 1e3:.1f} km, "
+                  + (f"elevation {st['elevation_sigma_deg_at_20_db']:.2f} deg at 20 dB (repeat {st['highest_repeat_db']:.1f} dB)" if len(heights) > 1 else "no elevation"))
+    a, b = R["trade_space"]["fixed_channels"]["1 x 64 at 0.14 m"], R["trade_space"]["fixed_channels"]["2 x 32 at 0.15 m"]
+    R["trade_space"]["one_by_64_vs_two_by_32"] = {"map_gain_db": [a["gain_isotropic_noise_db"], b["gain_isotropic_noise_db"] + b["rows_detection_gain_db"]],
+                                                  "beam_deg": [a["beamwidth_deg"], b["beamwidth_deg"]], "reach_ship_km": [a["reach_ship_m"] / 1e3, b["reach_ship_m"] / 1e3]}
+    print(f"  64 channels: one row of 64 gives {a['gain_isotropic_noise_db'] - (b['gain_isotropic_noise_db'] + b['rows_detection_gain_db']):.1f} dB more in the map, half the beam and 3 dB less reverberation, "
+          f"and no elevation;\n  two rows of 32 give elevation to {b['elevation_sigma_deg_at_20_db']:.2f} deg at 20 dB (as candidates {spacing[1]:.1f} deg apart). Bearing and range against elevation: that is the trade.")
+    print("  Is 64 needed? For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. 64 are needed for whichever second thing is wanted:")
+    print("  elevation (2 x 32; 3 x 32 = 96 to make it unambiguous), or a narrower beam and 3 dB (1 x 64).")
+    print("  Another band moves every row of this table: pitch and row length scale with the wavelength (a face 9 m long holds 60 half-wavelengths")
+    print("  at 5 kHz, 120 at 10 kHz), absorption and noise change the reach (tools/popoto_range_study.py), and the rows' repeat spacing scales too.")
+    print("  Source level: each 6 dB is the same as 4 times the hydrophones in a row for noise-limited reach, and nothing against reverberation.")
+    print("  Compute, data rate and storage go with the channel count (measured for 32, 64, 96: tools/popoto_elevation_bench.py); boards = channels / 8.")
+
     # --- recommendation ---------------------------------------------------------------------------
     w2, w3 = R["three_rows"]["wrong_pick"][two], R["three_rows"]["wrong_pick"][three]
     R["recommended"] = {"two_rows_m": [-up, up], "three_rows_m": three_h, "default": "three_rows"}
-    print(f"\nRECOMMENDED: three rows at {-up:+.2f}, {best:+.2f}, {up:+.2f} m as the default of the option; two rows at {-up:+.2f}, {up:+.2f} m shipped beside it.")
-    print(f"  Same accuracy ({sigma_deg([-up, up], 20.0):.2f} deg against {sigma_deg(three_h, 20.0):.2f} deg at 20 dB). Two rows pick a wrong repeat {100 * w2['20.0'][0]:.0f}% of the time at 20 dB "
-          f"when searching 60 deg;\n  three rows {100 * w3['20.0'][0]:.1f}% ({100 * w3['13.0'][0]:.0f}% at 13 dB). Two rows are sound only where water depth and range confine the "
-          f"arrivals to +-{half:.1f} deg.")
+    print(f"\nRECOMMENDED for the full face: three rows at {-up:+.2f}, {best:+.2f}, {up:+.2f} m (96 hydrophones, 12 boards); two rows at {-up:+.2f}, {up:+.2f} m (64, 8) shipped beside it.")
+    print(f"  Same accuracy ({sigma_deg([-up, up], 20.0):.2f} deg at 20 dB). Searching 60 deg, two rows pick a wrong repeat {100 * w2['13.0'][0]:.0f}% of the time at 13 dB and {100 * w2['10.0'][0]:.0f}% at 10 dB "
+          f"in clean noise, on a margin of 0.6 dB that a channel does not respect;\n  three rows {100 * w3['13.0'][0]:.1f}% and {100 * w3['10.0'][0]:.1f}% on a margin of {-best_level:.1f} dB. "
+          f"Two rows are sound where water depth and range confine the arrivals to +-{half:.1f} deg, and as a first step: the third row can be added later.")
     if not args.no_write:
         path = ROOT / "docs" / "design" / "popoto_elevation_study.json"
         path.write_text(json.dumps(R, indent=2))

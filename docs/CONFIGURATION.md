@@ -58,6 +58,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | --- | --- |
 | `array.layout` | `uniform_line` (default), `line` (positions along one axis), `stacked_lines` (parallel rows at different heights) or `explicit` (x, y, z each) |
 | `array.rows` | for `stacked_lines`: one entry per row, `{up, out, along}` in metres (towards the vehicle's top; along the boresight, for a curved hull; along the axis), optionally its own `count`, `pitch` or `positions`. Channels run row by row |
+| `platform: {name, span_m, height_m, mounting}` | what the vehicle offers to mount on (the test AUV's hull, the 2 m × 9 m face): read by the studies, the diagrams and the tests, not by the processing |
 | `array.interleave` | for `stacked_lines`: take this many channels from each row in turn instead (4 with two rows and boards of eight: a board then holds the same stations of both rows and they share its clock) |
 | `array.count`, `array.pitch` | number of elements and spacing (m) of a uniform line |
 | `array.positions` | for `line`: metres along the axis; for `explicit`: `[x, y, z]` per element |
@@ -226,14 +227,19 @@ A `target`'s frame has x ahead, y to starboard, z down.
 | `cfar: {pfa, guard_m, train_m}`, `min_snr_db` | detector windows in metres; detections below this SNR are dropped |
 | `tracker: {range_sigma, bearing_sigma_deg, confirm_hits, max_misses, initial_speed_sigma, process_noise}` | the Kalman tracker |
 | `classify: {min_speed, static_speed, max_fit_rms, multipath: {max_excess_range, bearing_deg, velocity}}` | `gpusonar/classify.py`; `multipath: null` switches echo grouping off |
+| `sound_speed` | m/s at the vehicle, when the navigation datagrams do not carry `"sound_speed"`: replaces the record's value for every stage |
 | `dead_channels` | channel rows (after synchronisation and the removal of dedicated reference inputs) left out of every stage |
 | `elevation` | absent (default): the chain as it was. Present (even empty) with an array of stacked rows: elevation and depth (`gpusonar/elevation.py`, `DEPLOYMENT.md`). With a one-row array it changes nothing |
-| `elevation.sector_deg` | `[first, last, step]`: elevation searched, in the vehicle's frame, up positive (default −30 to 30 in 0.5° steps) |
+| `elevation.sector_deg` | `[first, last, step]`: elevation searched, in the vehicle's frame, up positive (default −30 to 30 in 0.25° steps) |
+| `elevation.sector_from_depth: {bounces, margin_deg}` | search only where water depth and range let an arrival come from (straight rays with this many boundary bounces, plus the margin); needs the water depth. What makes two rows several wavelengths apart unambiguous in shallow water |
 | `elevation.arrival`, `first_arrival_db`, `first_arrival_snr_db` | `first` (default): the earliest arrival of the detection that is within 8 dB of the strongest and 13 dB above the noise, the direct path; `strongest` |
 | `elevation.range_window_m`, `max_detections` | half-width of the range search about a detection (default 1.5 range cells; it always reaches back to the detection's leading edge); detections given an elevation per ping, strongest first (32) |
-| `elevation.min_quality`, `ambiguity_db` | no elevation below this quality (0.6); a second lobe within this of the first is flagged (1.5 dB) |
+| `elevation.min_quality` | no elevation below this quality (0.6) |
+| `elevation.ambiguity_db`, `ambiguity_sigma`, `alternatives_db` | a second lobe within `ambiguity_db` (1 dB) of the first is never trusted; one further down must lose by `ambiguity_sigma` (3) sigma of the noise. Otherwise the detection is flagged and the lobes within `alternatives_db` (6 dB) are listed as candidates for the track to choose among |
 | `elevation.correct_bearing`, `depth`, `fold`, `classify`, `classify_sigma` | switches: horizontal bearing instead of cone angle; depth on detections and tracks; folding into the water column; multipath from depth, at this many sigma (2) |
-| `elevation.water_depth`, `surface_z` | water depth (m; default: the record's, else unknown) and the surface's z in the navigation's frame |
+| `elevation.water_depth`, `water_depth_sigma_m`, `surface_z` | water depth (m; default: what navigation sends, else unknown), how well it is known (into the bottom test and bottom-bounce depths), and the surface's z in the navigation's frame |
+| `elevation.attitude_time`, `attitude_rate_sigma_deg_s` | `transmit` (default): attitude as the record's pose has it; `arrival`: as it was when each echo arrived, from the attitude samples in the record (written from navigation). Per second of gap to the nearest sample the sigma grows by the rate given |
+| `elevation.gradient_per_s`, `gradient_sigma_per_s` | an assumed mean vertical sound-speed gradient (1/s; 0.017 is isothermal water): `depth_m` then follows the ray through c(z) = local speed + g (z − own depth). And how well it is known (default 0.05): range² × this / 2c is added to every depth sigma |
 | `elevation.ssp: {depth: [...], speed: [...]}` | a sound-speed profile: `depth_m` is then found along the ray through it, not the straight line |
 | `elevation.roll_sigma_deg` | the navigation's roll accuracy; added to every elevation sigma |
 | `elevation.depth_process_noise`, `row_tolerance_m` | how fast a track's depth may wander (0.5 m per √s); hydrophones within this of one line are one row (0.02 m) |
@@ -243,8 +249,12 @@ The C++ program `build/bin/sonar_live` takes the same settings as `key=value` ar
 file. Passive listening adds `f_low`, `f_high`, `n_fft`, `hop`, `n_average`, `passive_method`
 (`DEPLOYMENT.md`). The elevation settings are `elevation=1` and `elevation_<key>=value`
 (`elevation_first_deg`, `elevation_last_deg`, `elevation_step_deg` for the sector;
-`elevation_first_arrival=0|1`; `elevation_ssp_depth` and `elevation_ssp_speed` as
-comma-separated lists; the others as in the table), and `dead_channels=5,40,41`. `strftime` fields in its `--recording` and `--report` paths are filled
+`elevation_first_arrival=0|1`; `elevation_sector_from_depth=0|1` with `elevation_sector_bounces`
+and `elevation_sector_margin_deg`; `elevation_attitude_arrival=0|1`; `elevation_use_gradient=0|1`
+with `elevation_gradient`, `elevation_gradient_sigma`; `elevation_water_depth_sigma`;
+`elevation_ssp_depth` and `elevation_ssp_speed` as comma-separated lists; the others as in the
+table), `sound_speed=1490` and `dead_channels=5,40,41`. Navigation datagrams may carry
+`"sound_speed"` and `"water_depth"`. `strftime` fields in its `--recording` and `--report` paths are filled
 with the start time.
 
 The simulator uses its C++ path and reverberation code by default; `GPUSONAR_SIM_ENGINE=numpy`

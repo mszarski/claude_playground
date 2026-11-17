@@ -25,7 +25,7 @@ chain:
     min_speed: 1.0
     multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
   elevation:                     # leave the section out (or use a one-row sonar) for the chain as it was
-    sector_deg: [-30.0, 30.0, 0.25]  # elevation searched, vehicle frame, up positive
+    sector_deg: [-30.0, 30.0, 0.25]  # elevation searched, vehicle frame, up positive: first, last, step
     sector_from_depth: {bounces: 1, margin_deg: 1.0}   # search only where water depth and range let an echo come from: what makes two rows unambiguous
     attitude_time: arrival       # roll, pitch, yaw as they were when each echo arrived (navigation's history); transmit: at the ping
     attitude_rate_sigma_deg_s: 0.5   # added per second an echo's arrival lies beyond the attitude samples (unconfirmed)
