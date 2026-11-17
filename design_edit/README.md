@@ -610,6 +610,21 @@ then compare with the truth. 345 outputs from five models on `test_novel_big`:
   remove false accepts (`promote_button` 100% → 0%, `add_border` 60% → 3%). Their cost: where teachers disagree with
   the reference, right answers lose reward (24%).
 
+**Rubric judge on `test_goal_big`, each row graded twice** (`judge_goal.py --repeats 2`; the two passes agree on
+98–99.8% of rows, so the judge's noise is about ±0.01):
+
+| model | rubric pass | 95% CI |
+|---|---|---|
+| Qwen zero-shot, no-think (hosted, this week) | 0.997 | [0.991, 1.000] |
+| Qwen SFT + RL (step 200) | 0.988 | [0.977, 0.997] |
+| Gemma SFT + RL (step 200) | 0.977 | [0.962, 0.989] |
+| Qwen SFT | 0.971 | [0.956, 0.984] |
+| Gemma SFT | 0.963 | [0.947, 0.979] |
+
+The rubric is near its ceiling: every model passes 96–100%, and only Qwen RL vs Qwen SFT (+0.017) is a significant
+gap among the fine-tunes. Strict exact match separates models much better (0.83 → 0.97) and should be the primary
+goal metric; the rubric is a sanity check that the strict misses are acceptable alternatives.
+
 **What this means for the next RL run**
 1. Use reward v2 with teacher references on goal prompts (`--reward-version 2`, a `refs` column).
 2. Select the checkpoint by held-out eval (every 50 steps), not the last step.
