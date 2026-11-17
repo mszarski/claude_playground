@@ -295,20 +295,21 @@ def _closing_tone(passes, v=12.0, r0=400.0, f0=8000.0):
     return x, rel_rms(exact[inner], x[inner]), float(np.angle(np.vdot(exact[inner], x[inner])))
 
 
-def test_arrival_passes_default_is_unchanged_and_more_passes_reach_the_closed_form():
-    """The analytic kernel stops the arrival-time solve after 3 passes outbound and 4 on
-    return. Each pass gains a factor v / c; what 3 passes leave outbound is about
+def test_arrival_passes_default_and_more_passes_reach_the_closed_form():
+    """The analytic kernel used to stop the arrival-time solve after 3 passes outbound and 4
+    on return. Each pass gains a factor v / c; what 3 passes leave outbound is about
     (R / c)(v / c)^3 = 0.14 us for 12 m/s at 400 m, a phase of 0.007 rad at 8 kHz. Measured
     against the closed form (relative rms, which for a pure phase error is the phase in rad):
 
-        passes (out, back)   (3, 4) default   (4, 4)    (4, 5)    (5, 5)    (8, 8)
+        passes (out, back)   (3, 4) earlier   (4, 4) default   (4, 5)    (5, 5)    (8, 8)
         error                6.9e-3           5.6e-5    5.6e-5    5e-7      1e-7 (float32)
 
-    The default is left as it was (existing records stay bit-identical); `arrival_passes`
-    sets it per call, and sampled pulses use (8, 8) like the NumPy reference."""
+    The default is (4, 4) (the owner's decision: under 1 % cost, removes the 0.007 rad offset);
+    `arrival_passes` sets it per call, and sampled pulses use (8, 8) like the NumPy reference."""
     default, e_default, ph_default = _closing_tone(None)
-    explicit, e34, _ = _closing_tone((3, 4))
+    explicit, e44, _ = _closing_tone((4, 4))
     np.testing.assert_array_equal(default, explicit)
+    e34 = _closing_tone((3, 4))[1]
     errors = {p: _closing_tone(p)[1] for p in ((4, 4), (4, 5), (5, 5), (8, 8))}
     print(f"arrival passes vs closed form, 12 m/s at 400 m, 8 kHz: (3, 4) {e34:.2e} (phase {ph_default:+.2e} rad), "
           + ", ".join(f"{p} {e:.2e}" for p, e in errors.items()))

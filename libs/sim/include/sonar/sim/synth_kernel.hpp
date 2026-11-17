@@ -12,7 +12,7 @@ namespace sonar::sim {
 /// Also returns the two leg lengths.
 SONAR_INLINE double arrival_time(const SynthElement& tx, const SynthElement& rx,
                                  const SynthPath& path, double c, double u, double& r_out,
-                                 double& r_back, const Vec3d& accel = Vec3d{}, int passes_out = 3,
+                                 double& r_back, const Vec3d& accel = Vec3d{}, int passes_out = 4,
                                  int passes_back = 4) {
   const Vec3d tx_pos = tx.position + tx.velocity * u + accel * (0.5 * u * u);
   // Time the wavefront meets the (slowly moving) outbound point.
