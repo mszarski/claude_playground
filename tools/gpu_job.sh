@@ -9,6 +9,8 @@
 #        GPUSONAR_CERES=1 tools/gpu_job.sh      also build Ceres, so motion estimation is built and tested
 #        GPUSONAR_HOLOSCAN_CPP=1 tools/gpu_job.sh  also install the Holoscan C++ package and build the C++ operators
 #        GPUSONAR_NVUS=1 tools/gpu_job.sh       also build the ultrasound reference's native module (no SDK)
+#        GPUSONAR_HSB=1 tools/gpu_job.sh        also build Holoscan Sensor Bridge 2.7.0 (emulator, Linux receiver, Python;
+#                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -37,6 +39,7 @@ if [ "${GPUSONAR_CERES:-0}" = "1" ]; then
   cmake --build /opt/ceres-build > /dev/null && cmake --install /opt/ceres-build > /dev/null
 fi
 holoscan_flag=""
+[ "${GPUSONAR_HSB:-0}" = "1" ] && GPUSONAR_HOLOSCAN_CPP=1
 if [ "${GPUSONAR_HOLOSCAN_CPP:-0}" = "1" ]; then
   # Headers and CMake files of the same SDK version as the Python wheel (the wheel has neither).
   apt-get install -y -qq --no-install-recommends holoscan=4.6.0-1 'holoscan-cuda-12=4.6.0*' > /dev/null
@@ -57,6 +60,11 @@ if [ "${GPUSONAR_NVUS:-0}" = "1" ]; then
   # The NVIDIA ultrasound reference's native module at the pinned commit with the
   # long-window patch, without its SDK: for the nvus_scanner source's tests.
   eval "$(tools/build_nvus_reference.sh /opt/nvus | tail -1)"
+fi
+if [ "${GPUSONAR_HSB:-0}" = "1" ]; then
+  # NVIDIA Holoscan Sensor Bridge, built natively (its own flow is a Docker build): the board
+  # emulator and the Linux receiver operator for the loopback test of sources/hsb.py.
+  hsb_env=$(tools/build_hsb.sh /opt/hsb | tail -1) && eval "$hsb_env" || echo "Sensor Bridge not built: its tests will skip"
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "benchmark" ]; then
   PYTHONPATH=python python3 tools/benchmark.py --backend cuda --scale "${GPUSONAR_SCALE:-2}" --pixel "${GPUSONAR_PIXEL:-0.05}" \

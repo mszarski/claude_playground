@@ -70,6 +70,15 @@ def export_template(cfg: dict, path: str) -> str:
     return " ".join(shlex.quote(c) for c in cmd)
 
 
+def ping_line(r: dict) -> str:
+    """One line for the terminal from a ping's report."""
+    kinds = {}
+    for t in r["tracks"]:
+        kinds[t["kind"]] = kinds.get(t["kind"], 0) + 1
+    return (f"ping {r['ping']:4d}  detections {len(r['detections']):3d}  tracks {json.dumps(kinds)}  "
+            f"{r['processing_seconds'] * 1e3:.0f} ms")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("config")
@@ -126,11 +135,7 @@ def main(argv=None):
         for record in source:
             r = chain.process(record)
             if not args.quiet:
-                kinds = {}
-                for t in r["tracks"]:
-                    kinds[t["kind"]] = kinds.get(t["kind"], 0) + 1
-                print(f"ping {r['ping']:4d}  detections {len(r['detections']):3d}  tracks {json.dumps(kinds)}  "
-                      f"{r['processing_seconds'] * 1e3:.0f} ms", flush=True)
+                print(ping_line(r), flush=True)
             if args.pings and chain.pings >= args.pings:
                 break
     if hasattr(source, "close"):
