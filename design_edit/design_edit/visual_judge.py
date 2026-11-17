@@ -43,11 +43,25 @@ def _img(png: bytes) -> dict:
     return {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(png).decode()}}
 
 
+CLOSEUP_NOTE = """
+
+Images 3 and 4 are 2x close-ups of the edited area, BEFORE and AFTER.
+Some correct edits are visually subtle (a slightly darker gray, a heavier font weight, a 1px border, spacing).
+For "fulfilled", rely on the change list above together with the close-ups: if the requested property changed in
+the requested direction, the request is fulfilled even when the full-page screenshots look almost identical."""
+
+
 def judge(before_png: bytes, after_png: bytes, request: str, patch: str, model: str,
-          token: str | None = None, base_url: str = ROUTER, retries: int = 4) -> dict | None:
+          token: str | None = None, base_url: str = ROUTER, retries: int = 4,
+          closeups: tuple[bytes, bytes] | None = None) -> dict | None:
     """Per-dimension verdicts plus 'reason', or None if the judge gave no parseable answer."""
     token = token or os.environ["HF_TOKEN"]
-    content = [{"type": "text", "text": PROMPT.format(request=request, patch=patch)}, _img(before_png), _img(after_png)]
+    text = PROMPT.format(request=request, patch=patch)
+    content = [{"type": "text", "text": text}, _img(before_png), _img(after_png)]
+    if closeups:
+        head, tail = text.rsplit("\n\nReply with only a JSON object", 1)
+        content = [{"type": "text", "text": head + CLOSEUP_NOTE + "\n\nReply with only a JSON object" + tail},
+                   _img(before_png), _img(after_png), _img(closeups[0]), _img(closeups[1])]
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": content}],
                        "max_tokens": 4000, "temperature": 0}).encode()
     for attempt in range(retries):

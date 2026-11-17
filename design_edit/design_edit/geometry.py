@@ -97,6 +97,20 @@ class Renderer:
     def new_issues(self, before: Node, after: Node) -> set[str]:
         return self.issues(after) - self.issues(before)
 
+    def crop(self, doc: Node, node_id: str, scale: int = 2) -> bytes | None:
+        """Close-up of one node (and its subtree) at ``scale``x, for judging subtle changes."""
+        if not hasattr(self, "_zoom"):
+            ctx = self._browser.new_context(viewport={"width": self.width, "height": 900}, device_scale_factor=scale)
+            self._zoom = ctx.new_page()
+        self._zoom.set_content(to_html(doc))
+        el = self._zoom.query_selector(f'[data-id="{node_id}"]')
+        if el is None:
+            return None
+        box = el.bounding_box()
+        if not box or box["width"] < 1 or box["height"] < 1:
+            return None
+        return el.screenshot(type="png")
+
     def screenshot(self, doc: Node) -> bytes:
         self._page.set_content(to_html(doc))
         el = self._page.query_selector(f'[data-id="{doc["id"]}"]')

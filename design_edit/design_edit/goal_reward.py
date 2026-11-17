@@ -6,7 +6,9 @@ version 1 (what the RL runs so far used):
 
 version 2 (closes blind spots as a class instead of one at a time):
     * the judge also gets a plain-language list of EVERY change, including ones a screenshot can't show
-      (removed properties, reordering, sub-pixel borders), so "minimal"/"fulfilled" are judged on full information;
+      (removed properties, reordering, sub-pixel borders), plus 2x close-ups of the edited area, and is told that
+      subtle-but-correct changes count. The v1 judge rejected most correct "darken", "bold" and "spread out"
+      edits as "nothing changed", which rewards conspicuous over-edits;
     * optional teacher references: answers from a stronger reasoning model for the same request. Half of the
       reward is the F1 between the prediction's changes and the closest reference, so *omitted* changes
       (e.g. skipping `unset stroke`) cost reward even though no screenshot shows them.
@@ -47,6 +49,39 @@ def describe_changes(before: Node, after: Node) -> str:
     return "\n".join(lines)
 
 
+def focus_node(before: Node, after: Node) -> str | None:
+    """The smallest node (present in both designs) that contains every change; None if that is the whole page."""
+    b_idx, a_idx = index_nodes(before), index_nodes(after)
+    touched = set()
+    for f in change_facts(before, after):
+        if f[0] in ("prop", "order", "parent"):
+            touched.add(f[1])
+        elif f[0] == "ins":
+            touched.add(f[1])
+        elif f[0] == "del":
+            parent = b_idx[f[1]][1]
+            if parent is not None:
+                touched.add(parent["id"])
+    touched = {t for t in touched if t in a_idx and t in b_idx}
+    if not touched:
+        return None
+
+    def chain(nid: str) -> list[str]:
+        out = [nid]
+        while a_idx[out[-1]][1] is not None:
+            out.append(a_idx[out[-1]][1]["id"])
+        return out  # node ... root
+
+    chains = [chain(t) for t in touched]
+    common = next((c for c in chains[0] if all(c in ch for ch in chains[1:])), None)
+    if common is None or common not in b_idx:
+        return None
+    # a lone leaf (e.g. one text) needs its container for context
+    if not a_idx[common][0]["children"] and a_idx[common][1] is not None:
+        common = a_idx[common][1]["id"]
+    return None if a_idx[common][1] is None or common not in b_idx else common
+
+
 def goal_reward(before_text: str, instruction: str, completion: str, *, judge_model: str, renderer,
                 free_changes: int = 3, version: int = 1, refs: list[str] | None = None) -> dict[str, Any]:
     out: dict[str, Any] = {"reward": 0.0, "valid": False, "verdict": None, "penalty": 0.0, "ref_f1": None,
@@ -72,7 +107,14 @@ def goal_reward(before_text: str, instruction: str, completion: str, *, judge_mo
     if version >= 2:
         patch_for_judge = (canon + "\n\nEvery change this patch makes, including ones the screenshots cannot show:\n"
                            + describe_changes(doc, after_doc))
-    v = visual_judge(renderer.screenshot(doc), renderer.screenshot(after_doc), instruction, patch_for_judge, judge_model)
+    closeups = None
+    if version >= 2:
+        fid = focus_node(doc, after_doc)
+        if fid:
+            c0, c1 = renderer.crop(doc, fid), renderer.crop(after_doc, fid)
+            closeups = (c0, c1) if c0 and c1 else None
+    v = visual_judge(renderer.screenshot(doc), renderer.screenshot(after_doc), instruction, patch_for_judge, judge_model,
+                     closeups=closeups)
     out["verdict"] = v
     if v is None:
         out["judge_reachable"] = False
