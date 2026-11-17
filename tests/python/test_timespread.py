@@ -100,8 +100,9 @@ def test_amplitudes_decorrelate_at_the_doppler_rate_and_are_frozen_without_motio
     width = 2.0 * F * v * np.sin(grazing) / C                           # Hz
     lag = 1.0 / (2.0 * np.pi * width)                                   # correlation exp(-1) here
 
-    def taps_at(t, seed, speed):
-        p = spread(inner, {"rms_height": 0.05, "mean_square_slope": 0.03, "rms_vertical_speed": speed}, seed=seed)
+    def taps_at(t, seed, speed, spectrum="lorentzian"):
+        p = spread(inner, {"rms_height": 0.05, "mean_square_slope": 0.03, "rms_vertical_speed": speed}, seed=seed,
+                   doppler_spectrum=spectrum)
         p.set_ping(t)
         return p.eigenrays(SOURCE, pts).amplitude[0, 2:].reshape(2, -1)[j]
 
@@ -111,6 +112,15 @@ def test_amplitudes_decorrelate_at_the_doppler_rate_and_are_frozen_without_motio
     rho = lambda x, y: abs(np.sum(x * np.conj(y))) / np.sqrt(np.sum(abs(x) ** 2) * np.sum(abs(y) ** 2))   # noqa: E731
     assert rho(a, b) == pytest.approx(np.exp(-1.0), abs=0.08)
     assert rho(a, far) < 0.12
+    # The default (Gaussian) spectrum has rms width `width / sqrt(1 - exp(-Gamma^2))`, so the
+    # correlation at lag t is exp(-(2 pi sigma t)^2 / 2): exp(-1/2) at 1 / (2 pi sigma).
+    gamma2 = (2.0 * (2.0 * np.pi * F / C) * 0.05 * np.sin(grazing)) ** 2
+    lag_g = np.sqrt(1.0 - np.exp(-gamma2)) / (2.0 * np.pi * width)
+    ag = np.array([taps_at(0.0, s, v, "gaussian") for s in range(300)])
+    bg = np.array([taps_at(lag_g, s, v, "gaussian") for s in range(300)])
+    assert rho(ag, bg) == pytest.approx(np.exp(-0.5), abs=0.08)
+    default = spread(inner, {"rms_height": 0.05, "mean_square_slope": 0.03, "rms_vertical_speed": v}, seed=3)
+    assert default.doppler_spectrum == "gaussian"
     assert np.array_equal(taps_at(0.0, 1, 0.0), taps_at(100.0, 1, 0.0))  # nothing moves: nothing changes
     # A moving sonar adds (speed x sqrt(mss)) to the boundary's rms speed.
     p = spread(inner, {"rms_height": 0.05, "mean_square_slope": 0.03, "rms_vertical_speed": 0.0}, seed=1)
