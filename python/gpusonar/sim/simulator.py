@@ -54,7 +54,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     """Simulate one transmit and return its record.
 
     `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
-    path pairing and of reverberation; a provider has its own `engine`.
+    path pairing, of reverberation and of echo synthesis for a sampled pulse (analytic pulses
+    have the C++ kernel only); a provider has its own `engine`.
     """
     env = resolve_environment(environment, depth=pose.position[2])
     record = sonar.make_record(pose, sequence=sequence, sub_sequence=sub_sequence,
@@ -109,14 +110,14 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             if vq is not None:
                 vq, vp = vq[keep], vp[keep]
         if record.transmit.waveform.type == core.WaveformType.Arbitrary:
-            # A sampled pulse: the NumPy synthesiser (sim/waveform.py). The C++/CUDA kernel
-            # evaluates analytic pulses only, so `backend` does not apply to this step.
+            # A sampled pulse: the same kernel reading the envelope table of sim/waveform.py
+            # (C++, host or CUDA), or the NumPy reference when that engine is selected.
             from . import waveform as sampled
-            sampled.note_numpy_fallback(record, backend, engine)
-            sampled.synthesize_into(record, sonar.sampled_waveform, q, p, amp, vq, vp,
-                                    absorption=absorption_table(sonar, env, absorption_model),
-                                    spreading=spreading,
-                                    platform_acceleration=tuple(float(a) for a in acceleration))
+            sampled.synthesize(record, sonar.sampled_waveform, q, p, amp, vq, vp,
+                               absorption=absorption_table(sonar, env, absorption_model),
+                               spreading=spreading,
+                               platform_acceleration=tuple(float(a) for a in acceleration),
+                               backend=backend, engine=engine)
         else:
             core.synthesize_into(record, q, p, amp, vq, vp,
                                  absorption=absorption_table(sonar, env, absorption_model),

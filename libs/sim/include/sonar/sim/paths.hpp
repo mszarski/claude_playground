@@ -147,6 +147,26 @@ std::int64_t two_way_paths(const EigenrayView& out, const EigenrayView& back, co
                            const double* velocities, const std::uint8_t* lambert, const double* normals,
                            double* q, double* p, std::complex<double>* amplitude, double* velocity);
 
+/// Path-length rates of the eigenrays (frequency spreading within a ping: a ray off a moving
+/// boundary lengthens at `range_rate` m/s). `out` [S, rays out] and `back` [S, rays back];
+/// either may be null (no rate on that leg).
+struct RangeRates {
+  const double* out = nullptr;
+  const double* back = nullptr;
+};
+
+/// The pairing with a velocity for each end of each pair, so that a ray can carry its own
+/// Doppler: q_velocity = scatterer velocity + out rate * outbound launch direction, and
+/// p_velocity = scatterer velocity + back rate * return launch direction (the apparent
+/// position recedes along the ray at the rate its path lengthens; the synthesis kernel
+/// turns that into the frequency shift). `velocities` may be null (rates only).
+/// q_velocity and p_velocity [.., 3] are both required. Otherwise as two_way_paths.
+std::int64_t two_way_paths_doppler(const EigenrayView& out, const EigenrayView& back, const Vec3d& tx_position,
+                                   const Vec3d& rx_reference, const std::complex<double>* amplitudes,
+                                   const double* velocities, const std::uint8_t* lambert, const double* normals,
+                                   const RangeRates& rates, double* q, double* p, std::complex<double>* amplitude,
+                                   double* q_velocity, double* p_velocity);
+
 /// True when any component of `velocities` [n_points, 3] is not zero (null: false).
 bool any_moving(const double* velocities, std::int64_t n_points);
 

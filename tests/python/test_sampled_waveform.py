@@ -541,25 +541,21 @@ def test_doppler_bank_finds_the_range_rate_of_a_sampled_pulse():
 
 # --- engines --------------------------------------------------------------------------------------
 
-def test_cpp_engine_request_falls_back_to_numpy_visibly(monkeypatch):
-    """The C++/CUDA synthesis kernel takes analytic pulses only. A sampled pulse is synthesised
-    in NumPy whatever engine is asked for; the record says so, and asking for the C++ engine
-    by name warns. The parts that are ported (path pairing, reverberation) still run in C++
-    and give the same record."""
+def test_both_engines_synthesise_a_sampled_pulse_and_the_record_says_when_numpy_did():
+    """The C++ kernel (host or CUDA) synthesises a sampled pulse by default; the NumPy reference
+    runs when selected, and then the record says so. tests/python/test_sampled_engine.py
+    compares the two on the cases of this file. Path pairing and reverberation follow
+    `engine` too."""
     wave = {"type": "sampled", "source": "hfm", "duration": 0.02, "window_alpha": 0.2}
     cfg = _scenario("image_source", wave, propagation=IMAGE, reverberation=[{"boundary_z": 100.0, "mu_db": -27.0}])
-    monkeypatch.setattr(wfm, "_warned", False)
-    with pytest.warns(RuntimeWarning, match="NumPy engine"):
-        a = run_scenario(cfg, engine="cpp").records[0]
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        b = run_scenario(cfg, engine="numpy").records[0]
-        c = run_scenario(cfg).records[0]
-    for r in (a, b, c):
-        assert json.loads(r.metadata.extra_json)["gpusonar"]["echo_synthesis"] == "numpy_sampled"
+        a = run_scenario(dict(cfg), engine="cpp").records[0]
+        b = run_scenario(dict(cfg), engine="numpy").records[0]
+    assert "echo_synthesis" not in json.loads(a.metadata.extra_json or "{}").get("gpusonar", {})
+    assert json.loads(b.metadata.extra_json)["gpusonar"]["echo_synthesis"] == "numpy_sampled"
     scale = np.abs(a.samples.array).max()
-    np.testing.assert_allclose(a.samples.array, b.samples.array, atol=2e-4 * scale)
-    np.testing.assert_array_equal(a.samples.array, c.samples.array)
+    np.testing.assert_allclose(a.samples.array, b.samples.array, atol=5e-6 * scale)
     # Analytic pulses are untouched: no note in the record.
     plain = run_scenario(_scenario("free_field", {})).records[0]
     assert "echo_synthesis" not in json.loads(plain.metadata.extra_json or "{}").get("gpusonar", {})

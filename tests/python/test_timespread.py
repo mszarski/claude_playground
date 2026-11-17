@@ -562,12 +562,16 @@ def test_the_scenario_with_every_option_runs_on_both_engines():
     cfg["time_spread"] = dict(cfg["time_spread"], taps=2, doppler_lines=2)                 # (a quicker run)
     quiet = dict(cfg, reverberation=None, receiver={"adc": False}, sonar_overrides={"receive": {"window": {"range": [990, 1090]}}})
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)                  # the announced NumPy pairing
+        warnings.simplefilter("error")                                   # the C++ pairing carries the range rates: no fallback
         a = run_scenario(quiet).records[0].samples.array
         b = run_scenario(quiet, engine="numpy").records[0].samples.array
     assert np.isfinite(a).all() and np.abs(a).max() > 0
+    # The paths of the two pairings are equal to rounding (test below), and one kernel
+    # synthesises both, so the records differ by float32 rounding of a few samples at most.
     assert np.allclose(a, b, atol=1e-6 * np.abs(a).max())
-    # Angle spreading alone needs no fallback: the C++ pairing carries the directions.
+    print(f"flank_sst_spread, C++ vs NumPy pairing: worst sample {np.abs(a - b).max() / np.abs(a).max():.1e} of the peak")
+    # The Doppler lines are in the record: without the range rates it differs.
+    # Angle spreading alone: the C++ pairing carries the directions.
     quiet["time_spread"] = dict(cfg["time_spread"], doppler=False)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -578,8 +582,8 @@ def test_the_scenario_with_every_option_runs_on_both_engines():
 
 def test_spread_rays_through_the_pairing_and_both_engines():
     """Angle spreading rides in the eigenrays' directions: the C++ and NumPy pairings give the
-    same paths. A range rate is paired in NumPy (with a warning) and becomes the velocity of
-    the path's apparent position along the ray."""
+    same paths. A range rate becomes the velocity of the path's apparent position along the
+    ray, on both engines (the C++ pairing carries it per ray; there is no fallback)."""
     import warnings
     from gpusonar.sim import propagation
     from gpusonar.sim.propagation import two_way_paths
@@ -596,11 +600,12 @@ def test_spread_rays_through_the_pairing_and_both_engines():
     q = tx + C * e.delay[0][keep][:, None] * e.launch[0][keep]           # apparent positions: along each tap's own direction
     assert np.allclose(a[0][::5], q, atol=1e-9)
     moving = spread(inner, ROUGH, taps=3, seed=4, doppler=True, doppler_lines=2)
-    propagation._warned_doppler_fallback = False
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
+    assert not hasattr(propagation, "_warned_doppler_fallback")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         q, p, w, vq, vp = two_way_paths(moving, tx, rx, pts, amp, engine="cpp")
-    assert any("NumPy" in str(c.message) for c in caught)
+    for x, y in zip((q, p, w, vq, vp), two_way_paths(moving, tx, rx, pts, amp, engine="numpy")):
+        assert x.shape == y.shape and np.allclose(x, y, rtol=1e-13, atol=1e-13)
     e, back = moving.eigenrays(tx, pts), moving.eigenrays(rx, pts)
     keep = e.valid[0]
     n = int(keep.sum())
@@ -655,3 +660,156 @@ def test_a_cw_ping_shows_the_lines_of_the_doppler_spread_tail():
     inside = abs(freq - f0) < 5.0
     assert np.sum(tone[near & inside] ** 2) > 0.9 * np.sum(tone[near] ** 2)
     assert np.sum(spectrum[near & inside] ** 2) < 0.6 * np.sum(spectrum[near] ** 2)
+
+
+def _random_rays(rng, s, k, c=1500.0):
+    """An eigenray set with nothing special about it: some rays invalid, some rates zero."""
+    from gpusonar.sim.propagation import EigenraySet
+    d = rng.normal(size=(s, k, 3))
+    d /= np.linalg.norm(d, axis=2, keepdims=True)
+    a = rng.normal(size=(s, k, 3))
+    a /= np.linalg.norm(a, axis=2, keepdims=True)
+    delay = rng.uniform(0.2, 0.9, (s, k))
+    return EigenraySet(delay=delay, amplitude=(rng.normal(size=(s, k)) + 1j * rng.normal(size=(s, k))) / (c * delay),
+                       launch=d, arrival=a, n_surface=np.zeros((s, k), int), n_bottom=np.zeros((s, k), int),
+                       valid=rng.uniform(size=(s, k)) > 0.2, sound_speed=c,
+                       range_rate=np.where(rng.uniform(size=(s, k)) > 0.3, rng.normal(0.0, 0.4, (s, k)), 0.0))
+
+
+class _Fixed:
+    """A provider that hands back prepared eigenray sets (transmitter first, then receiver)."""
+
+    def __init__(self, out, back):
+        self.sets = [out, back]
+
+    def eigenrays(self, source, points):
+        return self.sets.pop(0)
+
+
+@pytest.mark.parametrize("case", ["both legs", "out only", "back only", "moving scatterers", "lambert and normals"])
+def test_cpp_pairing_carries_per_ray_range_rates_like_numpy(case):
+    """The C++ pairing with per-ray range rates against the NumPy branch, on random rays
+    (different ray counts on the two legs, invalid rays, zero rates): each pair's ends get
+    v_q = v_scatterer + rate_out * launch_out and v_p = v_scatterer + rate_back * launch_back.
+    The same arithmetic in the same order, so equality is to the last bit or two."""
+    from gpusonar.sim.propagation import two_way_paths
+    rng = np.random.default_rng(11)
+    s, ko, kb = 7, 5, 3
+    out, back = _random_rays(rng, s, ko), _random_rays(rng, s, kb)
+    amp = rng.normal(size=s) + 1j * rng.normal(size=s)
+    amp[2] = 0.0                                                         # a scatterer that returns nothing
+    kw = {}
+    if case == "out only":
+        back.range_rate = None
+    if case == "back only":
+        out.range_rate = np.zeros((s, ko))                               # all zero counts as none
+    if case in ("moving scatterers", "lambert and normals"):
+        kw["velocities"] = rng.normal(0.0, 2.0, (s, 3))
+    if case == "lambert and normals":
+        kw["lambert"] = rng.uniform(size=s) > 0.5
+        n = rng.normal(size=(s, 3))
+        n[::2] = np.nan
+        kw["normals"] = n
+    tx, rx = np.array([0.0, 0.0, 30.0]), np.array([0.5, 0.0, 30.0])
+    pts = rng.normal(size=(s, 3)) * 100.0
+    copies = lambda: _Fixed(*(type(e)(**{f: getattr(e, f) for f in e.__dataclass_fields__}) for e in (out, back)))
+    a = two_way_paths(copies(), tx, rx, pts, amp, engine="cpp", **kw)
+    b = two_way_paths(copies(), tx, rx, pts, amp, engine="numpy", **kw)
+    assert len(a) == len(b) == 5 and len(a[0]) > 20
+    for x, y in zip(a, b):
+        assert x.shape == y.shape
+        np.testing.assert_allclose(x, y, rtol=1e-14, atol=1e-14)
+    q, p, w, vq, vp = a
+    # Independent of both: rebuild the velocities of the kept pairs from the definition.
+    v = kw.get("velocities", np.zeros((s, 3)))
+    w_all = amp[:, None, None] * (out.amplitude * 1500.0 * out.delay)[:, :, None] * (back.amplitude * 1500.0 * back.delay)[:, None, :]
+    keep = out.valid[:, :, None] & back.valid[:, None, :] & (w_all != 0)
+    if case == "lambert and normals":
+        keep = np.zeros_like(keep)                                       # (weights can zero a pair; skip the rebuild)
+    else:
+        r_out = np.zeros((s, ko)) if out.range_rate is None else out.range_rate
+        r_back = np.zeros((s, kb)) if back.range_rate is None else back.range_rate
+        vq_all = v[:, None, None, :] + (r_out[..., None] * out.launch)[:, :, None, :] + np.zeros((s, ko, kb, 3))
+        vp_all = v[:, None, None, :] + (r_back[..., None] * back.launch)[:, None, :, :] + np.zeros((s, ko, kb, 3))
+        np.testing.assert_allclose(vq, vq_all[keep], rtol=1e-14, atol=1e-14)
+        np.testing.assert_allclose(vp, vp_all[keep], rtol=1e-14, atol=1e-14)
+        assert not np.allclose(vq, vp)
+
+
+def test_per_ray_doppler_reaches_the_record_through_the_cpp_pairing():
+    """End to end on the C++ engine alone: a long tone through a moving surface comes back as
+    lines at f0 - f0 (rate_out + rate_back) / c for the pairs of rays, which are in the
+    paths' two velocities. Zeroing the rates (same rays, same amplitudes) leaves one line."""
+    import warnings
+    from gpusonar.sim.propagation import two_way_paths
+    from gpusonar import core
+    f0, c, dur = 8000.0, 1500.0, 0.5
+    sonar = SonarModel.load("flank_32", {
+        "transmit": {"waveform": {"type": "cw", "f_start": f0, "f_stop": f0, "duration": dur, "window_alpha": 1.0},
+                     "lever_arm": [0.0, 0.0, 0.0], "beamwidth_az": None, "beamwidth_el": None,
+                     "aperture_width": None, "aperture_height": None},
+        "array": {"count": 1, "beamwidth_az": None, "beamwidth_el": None, "element_width": None, "element_height": None},
+        "fov": None, "receive": {"window": {"range": [900.0, 1500.0]}, "kind": "baseband"}})
+    rng = np.random.default_rng(3)
+    out = _random_rays(rng, 1, 2)
+    out.launch[0] = [[0.0, 1.0, 0.0], [0.0, 0.8, -0.6]]
+    out.delay[0], out.valid[0] = [0.70, 0.72], True
+    out.amplitude[0] = 1.0 / (c * out.delay[0])
+    out.range_rate = np.array([[0.0, 0.9]])                              # 4.8 Hz on the bounce ray
+    back = type(out)(**{f: np.copy(getattr(out, f)) if f != "sound_speed" else c for f in out.__dataclass_fields__})
+    pose = make_pose()
+    rec0 = sonar.make_record(pose, environment={"sound_speed": c})
+    tx, rx = np.array(rec0.tx_position()), rec0.rx_positions().mean(axis=0)
+    spectra = {}
+    for label, rate in (("moving", out.range_rate), ("still", None)):
+        o, b = (type(out)(**{f: getattr(e, f) for f in e.__dataclass_fields__}) for e in (out, back))
+        o.range_rate = b.range_rate = rate
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            q, p, w, vq, vp = two_way_paths(_Fixed(o, b), tx, rx, np.zeros((1, 3)), np.array([1.0 + 0j]), engine="cpp")
+        assert (vq is None) == (rate is None)
+        rec = sonar.make_record(pose, environment={"sound_speed": c})
+        core.synthesize_into(rec, q, p, w, vq, vp, spreading=False, arrival_passes=(8, 8))
+        s = rec.samples
+        x = s.array[0]
+        n = 1 << 20
+        f = np.fft.fftfreq(n, 1.0 / s.sample_rate) + s.center_frequency - f0
+        spectrum = np.abs(np.fft.fft(x, n))
+        near = np.abs(f) < 15.0
+        order = np.argsort(f[near])
+        spectra[label] = (f[near][order], spectrum[near][order])
+    f, still = spectra["still"]
+    assert abs(f[np.argmax(still)]) < 0.3
+    f, moving = spectra["moving"]
+    shift = -f0 * 0.9 / c                                               # one leg on the bounce ray: -4.8 Hz
+    # Hann-weighted 0.5 s tone: lines 4 Hz wide between nulls, at 0, shift (two pairs) and 2 shift.
+    peaks = [f[i] for i in range(1, len(f) - 1) if moving[i] > moving[i - 1] and moving[i] >= moving[i + 1]
+             and moving[i] > 0.3 * moving.max()]
+    assert len(peaks) == 3
+    assert np.allclose(peaks, [2.0 * shift, shift, 0.0], atol=0.3)
+
+
+def _cuda():
+    from gpusonar import core
+    return core.cuda_available()
+
+
+@pytest.mark.skipif(not _cuda(), reason="no CUDA device")
+def test_per_ray_doppler_on_the_cuda_kernel_matches_the_host():
+    """The Doppler lines ride in each path's two velocities, which the device kernel reads
+    from the same path struct as the host kernel: flank_sst_spread (every spreading option
+    on) gives the same record on both, to the order of the float32 additions."""
+    from gpusonar import core
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("flank_sst_spread")
+    cfg["pings"]["count"] = 1
+    cfg["time_spread"] = dict(cfg["time_spread"], taps=2, doppler_lines=2)
+    quiet = dict(cfg, reverberation=None, receiver={"adc": False}, sonar_overrides={"receive": {"window": {"range": [990, 1090]}}})
+    host = run_scenario(dict(quiet), backend=core.Backend.Host).records[0].samples.array
+    cuda = run_scenario(dict(quiet), backend=core.Backend.Cuda).records[0].samples.array
+    assert np.abs(host).max() > 0
+    assert np.allclose(cuda, host, atol=2e-6 * np.abs(host).max())
+    still = dict(quiet, time_spread=dict(quiet["time_spread"], doppler=False))
+    flat = run_scenario(still, backend=core.Backend.Cuda).records[0].samples.array
+    assert not np.allclose(cuda, flat, atol=1e-3 * np.abs(host).max())      # the range rates are in the device record

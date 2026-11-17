@@ -1,8 +1,10 @@
 """Which implementation the simulator's ported parts run on.
 
 The eigenray providers without a ray tracer (propagation.py), the path pairing of
-`two_way_paths` and the per-ping generation of scattering-function reverberation
-(reverb.py) each exist twice: in NumPy, and in C++ (libs/sim: paths.cpp, reverb.cpp).
+`two_way_paths` (with per-ray range rates), the per-ping generation of
+scattering-function reverberation (reverb.py) and echo synthesis for a sampled transmit
+pulse (waveform.py) each exist twice: in NumPy, and in C++ (libs/sim: paths.cpp,
+reverb.cpp, synth_kernel.hpp). Echo synthesis for analytic pulses is C++ only.
 The C++ one is used when the extension module has it. To select the NumPy one, pass
 `engine="numpy"` to the provider or function, or set the environment variable
 `GPUSONAR_SIM_ENGINE=numpy` (read at each call).

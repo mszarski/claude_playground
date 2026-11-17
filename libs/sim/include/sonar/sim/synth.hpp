@@ -40,6 +40,31 @@ struct SynthPath {
 
 inline constexpr int kAbsorptionTableSize = 16;
 
+/// Most knot frequencies of the frequency-dependent gain of a sampled pulse.
+inline constexpr int kMaxEnvelopeBands = 33;
+
+/// The complex envelope b(u) of a sampled (arbitrary) pulse, on a grid fine enough to be
+/// read with a four-point cubic (python/gpusonar/sim/waveform.py builds it: windowed-sinc
+/// interpolation of the envelope's samples onto a grid `table_factor` times finer).
+/// The pulse is b(u) exp(2 pi i carrier u) for emission times 0 <= u <= duration.
+///
+/// For loss that depends on frequency the envelope is split into `n_bands` parts by
+/// triangular weights in frequency about `knot_frequency`; a gain g_i on part i is a gain
+/// piecewise linear in frequency through (knot_frequency[i], g_i). `data` holds, for each
+/// fine sample, the n_bands parts and then their sum, as (re, im) pairs:
+/// data[2 * (m * (n_bands + 1) + i)] is the real part of part i at fine sample m.
+/// Plain data: `data` is a host pointer for the host backend and is replaced by a device
+/// copy inside the CUDA backend.
+struct EnvelopeTable {
+  const double* data = nullptr;
+  std::int64_t n_fine = 0;  ///< fine samples
+  int n_bands = 0;          ///< 1 .. kMaxEnvelopeBands
+  double rate = 0.0;        ///< fine samples per second of emission time
+  double offset = 0.0;      ///< fine index of emission time 0
+  double carrier = 0.0;     ///< Hz
+  double knot_frequency[kMaxEnvelopeBands] = {};
+};
+
 struct SynthParams {
   WaveformParams waveform;
   double sound_speed = 1500.0;
@@ -57,10 +82,21 @@ struct SynthParams {
   double absorption_f_max = 0.0;
   double absorption_db_per_m[kAbsorptionTableSize] = {};
   SynthElement tx;
+  /// Passes of the fixed-point solves for the time sound meets the outbound point and the
+  /// receiver. Each pass gains a factor (speed / c); what is left after n passes is about
+  /// (R / c) (v / c)^n. The defaults are those the analytic pulses have always used.
+  int arrival_passes_out = 3;
+  int arrival_passes_back = 4;
+  /// Waveform type 3 (Arbitrary) only: the pulse's envelope.
+  EnvelopeTable envelope;
 };
 
+/// Pass count used for sampled pulses (the NumPy reference engine runs the same number).
+inline constexpr int kSampledArrivalPasses = 8;
+
 /// Add the echoes of `paths` into `out` ([channels, n_samples], interleaved complex
-/// when complex_baseband). `out` is accumulated into, not cleared.
+/// when complex_baseband). `out` is accumulated into, not cleared. A sampled pulse
+/// (waveform type 3) needs `params.envelope`, whose data must outlive the call.
 void synthesize(Backend backend, const SynthParams& params, const std::vector<SynthElement>& rx,
                 const std::vector<SynthPath>& paths, float* out);
 

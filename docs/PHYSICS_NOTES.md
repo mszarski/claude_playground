@@ -1779,3 +1779,84 @@ through a sampled pulse and the Doppler bank. `sst_sediment_reverb.yaml`: reverb
 `medium_sand` against `sigma(grazing) pi c T / R^3`, as scattering-function reverberation and as
 point scatterers; signal-to-reverberation after pulse compression against
 `TS - 10 log10(sigma pi c R / B)`, 3 dB per octave. Numbers: `docs/figures/sst_validation.md`.
+
+## 19. Sampled pulses and per-ray Doppler in the C++ engine; the arrival-time pass count
+
+This supersedes the "Engines: NumPy only" paragraph of Sec. 15 (echo synthesis) and the
+NumPy pairing fallback of Sec. 16 (`doppler`). Nothing here is from a source: it is a port
+of our own NumPy code, checked against it and against closed forms.
+
+**17.1 Sampled pulses in the kernel.** `synth_kernel.hpp` has a second pair function,
+`pair_sampled`, used when the waveform type is Arbitrary. It is the analytic pair function
+with the closed-form pulse replaced by a table read, and follows `sim/waveform.py
+synthesize_into` (now the reference engine) step by step:
+
+- the same three arrival times and emission-time quadratic `u(t)`;
+- the carrier phase `F u(t)` (less the mixer's phase) is exactly quadratic in the sample
+  index, so the kernel's phasor recurrence (re-seeded every 16 samples) has no truncation
+  error for it;
+- the envelope is read from the fine table of Sec. 15 (windowed sinc onto a grid
+  `table_factor` = 8 times finer, built once in NumPy by `SampledWaveform.kernel_table`)
+  with the same four-point cubic, clamped the same way;
+- loss that depends on frequency: the table holds the `gain_knots + 1` parts of the envelope
+  (triangular weights in frequency) and their sum. The gain is evaluated at each knot
+  frequency per (path, channel) exactly as before; each sample is
+  `sum_i g_i b_i(u)`. NumPy forms `sum_i g_i b_i` over the whole table for each
+  (path, channel) and then interpolates; the kernel interpolates and sums per sample. The
+  two are the same linear expression, so there is no modelling difference to bound, only
+  rounding. When the gain does not vary across the band (to 1e-12) the kernel multiplies the
+  summed envelope instead; NumPy decides that for a whole block of paths, the kernel per
+  pair, which again changes rounding only.
+
+The table is plain data handed to the kernel as a pointer in its parameter block
+(`sim::EnvelopeTable`); the CUDA driver uploads it and points the device copy of the
+parameters at the upload. Host and device run the same kernel body.
+
+Not ported: `table_factor: 0` (the windowed sinc at every output sample) and more than 32
+`gain_knots`; those waveforms run in NumPy with a warning and the `numpy_sampled` note. The
+note is no longer written when C++ ran.
+
+Measured, C++ against NumPy, relative rms of the record
+(`tests/python/test_sampled_engine.py -s`, 47 cases: every tier, real and baseband, beams
+and absorption, 0/3/8 knots, phase codes, HFM, stepped FM, 12 m/s closing, board clock
+errors, platform acceleration): 1.2e-9 to 4.9e-7, worst single sample 3.4e-7 of the peak.
+That is float32 rounding: the kernel adds each path into the float32 record as it goes,
+NumPy sums in double and rounds once (the largest figures are the cases with the most
+paths per sample). Independent of NumPy: a table of ones reproduces the analytic CW pulse
+exactly, a ramp envelope is read to 2e-12, and three weighted bands give the weighted sum
+of the knot gains (`tests/cpp/test_sim_synth.cpp`, `test_sampled_engine.py`).
+
+Time (4 shared cores under load from other jobs, 300 scatterers x 128 channels, fls_300k,
+1 ms pulse; best of 3): with beams and absorption 17.7 s NumPy -> 2.4 s C++ (analytic
+kernel 0.8 s); omnidirectional 2.8 s -> 0.54 s (analytic 0.32 s). The remaining factor
+of 3 over the analytic kernel with beams is the nine-band sum at every sample
+(36 complex table values against one closed-form envelope).
+
+**17.2 The pass count of the arrival-time solve.** The kernel finds when sound emitted at
+u meets the moving outbound point, then the moving receiver, by fixed-point passes
+`t <- u + r(t) / c`; each pass gains a factor v/c. It has always run 3 passes outbound and
+4 on return. The counts are now parameters (`SynthParams::arrival_passes_out/back`,
+`arrival_passes=(out, back)` in Python), default unchanged. For a target closing at 12 m/s
+from 400 m, 8 kHz CW, against the closed form (echo at `f (c + v)/(c - v)` from
+`2 R / (c + v)`), relative rms = phase error in rad:
+
+| passes (out, back) | (3, 4) default | (4, 4) | (4, 5) | (5, 5) | (8, 8) |
+|---|---|---|---|---|---|
+| error | 6.9e-3 | 5.5e-5 | 5.5e-5 | 4.4e-7 | 3.7e-8 (float32) |
+
+The default's error is the outbound residual `2 pi f (R/c)(v/c)^3` (6.9e-3 predicted); it
+grows with range, frequency and the cube of speed, and is a constant phase offset of the
+echo (the Doppler factor itself is right). One more outbound pass removes it to 5.5e-5.
+Sampled pulses use (8, 8), as the NumPy reference does. Analytic pulses keep (3, 4), so
+existing records are bit-identical (checked on 7 shipped scenarios against the previous
+build). Cost of the passes alone: 0.33 us (3, 4) to 1.2 us (8, 8) of core time per
+(path, channel) pair, against 40 us or more for a pair with a 1 ms pulse in the window:
+about 2 % at most, and not resolvable in whole-ping times on the loaded machine.
+
+**17.3 Per-ray range rates in the C++ pairing.** `sim::two_way_paths_doppler` takes a range
+rate per eigenray on each leg and returns a velocity for each end of each pair,
+`v_q = v_scatterer + rate_out * launch_out`, `v_p = v_scatterer + rate_back * launch_back`
+(the same arithmetic as the NumPy branch, in the same order). The kernel already had a
+velocity for each end of a path (`SynthPath::q_velocity`, `p_velocity`), on host and
+device, so nothing downstream changed. `flank_sst_spread` gives a bit-identical record
+through the C++ pairing and through the old NumPy one.
