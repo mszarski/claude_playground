@@ -189,7 +189,7 @@ def test_sediment_table(tmp_path):
     with pytest.warns(UserWarning, match="unconfirmed"):
         assert bottom.sediment("placeholder_sand") == SAND
     with pytest.raises(ValueError, match="unknown sediment"):
-        bottom.sediment("medium_sand")
+        bottom.sediment("clay")
     mine = tmp_path / "sediments.yaml"
     mine.write_text("site: {rho: 1.8, nu: 1.12, delta: 0.01, w2: 1.0e-5, gamma2: 3.0, sigma2: 0.001, status: confirmed, source: test}\n"
                     "half: {rho: 1.8, nu: 1.12}\n")
@@ -198,6 +198,43 @@ def test_sediment_table(tmp_path):
         assert bottom.sediment("site", mine)["nu"] == 1.12
     with pytest.raises(ValueError, match="lacks"):
         bottom.sediment("half", mine)
+
+
+def test_published_sediment_rows_and_their_unit_conversions():
+    """arXiv:1809.08459 Table 1 as printed (density kg/m3, sound speed m/s, attenuation dB/m at
+    20 kHz, spectral strength m^(4 - gamma), exponent, volume scattering strength dB/m),
+    converted to the model's six parameters by formulas written out again here."""
+    printed = {"medium_sand": (1845.0, 1767.0, 10.0, 1.410e-4, 3.25, -20.0),
+               "very_fine_silt": (1147.0, 1476.0, 1.4, 1.638e-5, 3.25, -28.6)}
+    for name, (density, speed, att, w2, g2, sv) in printed.items():
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")                              # confirmed rows do not warn
+            par = bottom.sediment(name)
+        assert par["rho"] == pytest.approx(density / 1000.0) and par["nu"] == pytest.approx(speed / 1500.0)
+        assert par["w2"] == w2 and par["gamma2"] == g2
+        # The loss parameter gives back the printed attenuation at 20 kHz: the amplitude decays as
+        # exp(-Im(k2) x), Im(k2) = k delta / nu, and 20 log10(e) dB per neper.
+        k = 2 * np.pi * 20e3 / 1500.0
+        assert 20 * np.log10(np.e) * k * par["delta"] / par["nu"] == pytest.approx(att, rel=1e-12)
+        # The volume term's cross section per unit volume, as the model forms it at 20 kHz, is the printed level.
+        sigma_vol = par["sigma2"] * (20 / np.log(10)) * k * par["delta"] / par["nu"]
+        assert 10 * np.log10(sigma_vol) == pytest.approx(sv, abs=1e-9)
+        bs = bottom.backscattering_strength_db(np.radians([10.0, 30.0]), 20e3, C, **par)
+        assert np.all((bs > -50.0) & (bs < -15.0))
+    sand, silt = bottom.sediment("medium_sand"), bottom.sediment("very_fine_silt")
+    assert sand["nu"] > 1.0 > silt["nu"] and sand["delta"] > silt["delta"]
+    g = np.radians(20.0)
+    assert bottom.roughness_strength(g, g, F, C, **sand) > 100 * bottom.roughness_strength(g, g, F, C, **silt)   # sand: roughness
+    assert bottom.volume_strength(g, g, F, C, **silt) > 100 * bottom.roughness_strength(g, g, F, C, **silt)      # silt: volume
+
+
+def test_spectral_strength_from_the_centimetre_form():
+    """W = beta (h K)^-gamma, h = 1 cm, beta in cm^4 (arXiv:physics/0607146 eq. (7)) against
+    W = w2 K^-gamma in metres: evaluate both at one wavenumber."""
+    beta, g2, k_per_m = 3.0e-3, 3.25, 700.0
+    w_cm4 = beta * (1.0 * k_per_m / 100.0) ** -g2                        # h K with K in 1/cm
+    assert bottom.w2_from_cm4(beta, g2) * k_per_m**-g2 == pytest.approx(w_cm4 * 1e-8, rel=1e-12)
+    assert bottom.w2_from_cm4(1.0, 4.0) == pytest.approx(1.0)            # gamma = 4: beta is dimensionless in both
 
 
 def test_scenario_item_takes_a_named_sediment_and_a_roughness_model():
