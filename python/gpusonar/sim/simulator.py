@@ -156,7 +156,9 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         # (the transmitter's and receiver's own positions and velocities, arrival elevation),
         # with it `n_elevation`, `azimuth_subsamples` and `strength_map: {range, offset_db,
         # azimuth_deg, origin}` (a boundary whose strength varies over it); `statistics:
-        # {model: k, shape, cell_time, cell_azimuth_deg}` (K-distributed reverberation).
+        # {model: k, shape, cell_time, cell_azimuth_deg}` (K-distributed reverberation);
+        # `band_taper` and `guard` (against leakage from the strong start of a long record
+        # into its weak end).
         extra = {}
         if item.get("geometry") is not None:
             extra["geometry"] = str(item["geometry"])
@@ -170,6 +172,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                 m["range"], m["offset_db"], m.get("azimuth_deg"), m.get("origin", (0.0, 0.0)))
         if item.get("statistics") is not None:
             extra["statistics"] = dict(item["statistics"])
+        if item.get("guard") is not None:
+            extra["guard"] = float(item["guard"])
+        if item.get("band_taper") is not None:
+            extra["band_taper"] = bool(item["band_taper"])
         reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,

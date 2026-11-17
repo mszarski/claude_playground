@@ -14,7 +14,8 @@ docs/PHYSICS_NOTES.md Sec. 5.3-5.4 and the section on this module at its end):
   |a_q|^2 |a_p|^2 x S(grazing in, grazing out, bistatic azimuth) x cell area x both beam
   patterns at two-way time T_q + T_p. Binning the cells by that time is the integral over
   SST's iso-time locus: for straight rays the cells of one time bin lie between two
-  ellipses with the platforms' ground points as foci (a circle when they coincide).
+  ellipses (the boundary plane cut by spheroids with the platforms as foci; circles when
+  the platforms coincide).
 * Each contribution also has an arrival direction at the receiver (azimuth of its sector,
   elevation of its ray there) and a Doppler shift,
 

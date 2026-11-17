@@ -225,6 +225,18 @@ def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
 SECTOR_RUN_BYTES = 64 << 20
 
 
+def taper_pulse(pulse: np.ndarray, n: int) -> np.ndarray:
+    """The pulse with its spectrum rolled off to zero at the Nyquist frequency: unchanged
+    below half of it, a raised cosine from there up. Returned as `n` samples of one period
+    (what precedes the pulse's first sample is at the end), so that its transform over `n`
+    points is the tapered spectrum exactly."""
+    if len(pulse) > n:
+        return pulse
+    f = np.abs(np.fft.fftfreq(n))                                  # cycles per sample, 0 .. 0.5
+    window = np.where(f <= 0.25, 1.0, 0.5 * (1.0 + np.cos(np.pi * (f - 0.25) / 0.25)))
+    return np.fft.ifft(np.fft.fft(pulse, n) * window)
+
+
 class CellTexture:
     """The texture of K-distributed reverberation: a gamma variate of unit mean and shape
     `shape` for each resolution cell, as the factor on the amplitude (its square root) of
@@ -379,7 +391,8 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
                       absorption_db_per_m: float = 0.0, max_range: float | None = None,
                       power_step: float | None = None, strength=None, engine: str | None = None,
                       backend=core.Backend.Host, geometry: str = "monostatic", n_elevation: int | None = None,
-                      strength_map=None, azimuth_subsamples: int = 1, statistics: dict | None = None) -> np.ndarray:
+                      strength_map=None, azimuth_subsamples: int = 1, statistics: dict | None = None,
+                      guard: float = 0.0, band_taper: bool = False) -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
@@ -400,6 +413,20 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     draws K-distributed reverberation with shape nu; a cell is by default 1 / bandwidth
     long and one nominal beamwidth (wavelength / array extent) wide. {"model": "rayleigh"}
     or None is the Gaussian default.
+
+    `band_taper` and `guard` deal with leakage along the record. The generator works in
+    frequency at a reduced rate: the delays to the hydrophones and the interpolation to the
+    record's rate are ideal (sinc) operations, whose response to one sample falls only as
+    1 / distance wherever the spectrum is not zero at the reduced rate's Nyquist frequency
+    (a CW pulse's sidelobes are about 28 dB down there). The strong start of a record
+    therefore leaks into its weak far end, forwards and, the series being periodic,
+    backwards round the period: visible when the power falls by more than about 50 dB
+    across the record, as it does over a long-range window. `band_taper=True` rolls the
+    pulse's spectrum off smoothly to zero between half the Nyquist frequency and Nyquist
+    (outside the band the rate was chosen for), which removes the 1 / distance tail, and
+    appends two pulse lengths of silence to the generated series to keep what is left of
+    the wrap-round out of the record; `guard` (seconds) sets that silence directly. The
+    defaults (off, 0) keep earlier results.
     """
     if geometry not in ("monostatic", "bistatic"):
         raise ValueError(f"unknown reverberation geometry {geometry!r}: use 'monostatic' or 'bistatic'")
@@ -479,7 +506,15 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     decim = max(int(fs // (4.0 * band)), 1)
     fs_low = fs / decim
     n_low = int(np.ceil(len(times) / decim))
+    if guard < 0.0:
+        raise ValueError("reverberation guard must not be negative")
+    if band_taper:
+        guard = max(guard, 2.0 * wf.duration)
+    if guard > 0.0:
+        n_low += int(np.ceil(guard * fs_low))                              # no power there: beyond the coarse grid
     pulse_low = baseband_pulse(wf, fs_low, fc) * wf.amplitude
+    if band_taper:
+        pulse_low = taper_pulse(pulse_low, n_low)
     start = int(round((s.start_time - times[0]) * fs))
     texture = None
     model = (statistics or {}).get("model", "rayleigh")

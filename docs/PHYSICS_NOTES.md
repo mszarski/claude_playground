@@ -1093,3 +1093,157 @@ equation was unrecoverable):
     only its consequence (63) is usable.
 23. Doppler-spread rule (p. 101) divides by sin(grazing angle); see 3.6.
 24. (36): image-vector term `2|S_p - B_p| z_R`; re-derive before relying on it.
+
+---
+
+## 12. Reverberation geometry and statistics as implemented
+
+What `sim/reverb.py` and `sim/reverb_bistatic.py` do, against Sec. 5 above. [OURS]
+throughout: the derivations here are ours; TR 0702 supplies eqs. (63), (68), (71), (89),
+(96), (103) and the structure of Sec. 11.2-11.3, nothing else.
+
+### 12.1 What the default (monostatic) generator models
+
+Established by reading the code and by tests (`tests/python/test_reverb_bistatic.py`):
+
+| Item | Modelled by default | How |
+|---|---|---|
+| Transmit beam pattern | yes | power pattern at each path's launch direction at the sonar, turned to the sector's azimuth |
+| Receive element pattern | yes, the first element's, for all | as above, on the return path (reciprocity) |
+| Ray elevation in the patterns | at the platform (launch), not at the boundary | verified with a surface-bounce path that leaves upwards and arrives at the bottom travelling down |
+| Scattering strength angles | grazing angles at the boundary of each leg | backscatter only (no bistatic azimuth) |
+| Receiver motion | Doppler `2 (v_h . u_az) f / c` per sector | horizontal velocity, as if every path were horizontal: no `cos(elevation)`, no vertical velocity |
+| Transmitter position and velocity | no | one provider call from the array centre serves both legs |
+| Arrival elevation in the steering | no | plane wave from the sector's azimuth in the horizontal plane |
+| Boundary | flat, uniform | |
+| Statistics | Gaussian | |
+
+So of the three limits in the old "Simulator limits" line, "stationary platform" and
+"omnidirectional projector" were out of date (D-43 lifted them), and "monostatic" was
+missing.
+
+Two properties of the default that the work turned up and that are left as they are (old
+results must not change):
+
+- `reverberation_power` puts each ring into its nearest time bin, which leaves a ripple
+  between neighbouring bins of the expected power (measured -1.4 to +1.7 dB on a 1 ms
+  grid). The mean over a few bins is right (0.006 dB).
+- The generator's delays and its interpolation to the record's rate are ideal (sinc)
+  operations at a reduced rate. Where the pulse's spectrum is not zero at that rate's
+  Nyquist frequency (CW: sidelobes about 28 dB down) one sample's response falls only as
+  1/distance, so the strong start of a record leaks into its weak far end, forwards and
+  (the series being periodic) backwards round the period. Negligible while the power
+  falls by less than about 50 dB across the record; measured on a 30 m - 3 km record
+  (100 dB): +7 dB over 50-75 % of the record, +25 dB over 90-97 %. `band_taper: true`
+  removes it (within 0.2 dB to the end of that record); see 12.5.
+
+### 12.2 Bistatic geometry (`geometry: bistatic`)
+
+The directional form of the scattering function, (129) with the receiver factored out as
+in (121): cells of the boundary are binned by two-way time and by arrival direction at
+the receiver.
+
+```
+cells:      polar grid about the receiver's ground point: azimuth sectors phi_m (width dphi)
+            x rings r_i (width dr = c dt / 4)
+per cell, receive eigenray p, transmit eigenray q:
+  T      = T_q + T_p
+  dP     = |a_q|^2 |a_p|^2 S(g_q, g_p, phi_b) B_s(u_Sq) B_r(u_Rp) r_i dr dphi
+  phi_b  = angle between the horizontal directions of the incident and scattered waves
+           (pi = backscatter, 0 = forward)
+  f_d    = f / c (V_S . u_Sq + V_R . u_Rp)
+  u_Sq, u_Rp = unit vectors along the rays leaving the transmitter / receiver towards the cell
+```
+
+`dP` is shared linearly between the two time bins next to `T`. Binning by `T` is the
+integral over SST's iso-time locus `A_knu` of (131): for straight rays the cells of one
+bin lie between two ellipses (the boundary plane cut by spheroids of constant
+`R_1 + R_2` whose foci are the two platforms; circles when the platforms coincide).
+Nothing in the code constructs the ellipse. `g` are the grazing angles at the boundary
+(the scatterer-end slowness vectors of (132); cf. inconsistency 18 in Sec. 11).
+
+Doppler: (71) with slowness vectors `S = -u / c` (gradient of the travel time with respect
+to the platform's position) is `Gamma = (1 + V_R . u_Rp / c) / (1 - V_S . u_Sq / c)`, and
+`f_d = (Gamma - 1) f` to first order in `v / c`. Scatterer Doppler `gamma` (72) is not
+modelled (the boundary is fixed in the world).
+
+Stratified-medium shortcut: with a flat boundary in a horizontally stratified medium the
+eigenrays of a leg depend only on the horizontal distance from its platform. The receive
+leg is one provider call along the rings; the transmit leg is one call along a table of
+distances half a ring apart, looked up by nearest entry with its delay corrected by
+`(d - d_table) x horizontal slowness` (exact to first order by Snell's law). Cost is
+independent of the number of sectors in provider calls and `sectors x rings x K_q x K_p`
+in arithmetic.
+
+Components: contributions are collected into (azimuth sector, bin of the receive ray's
+elevation at the receiver). A component has its power against time, the power-weighted
+mean of its `u_Rp` (its arrival direction, with elevation) and the power-weighted mean of
+its `f_d`. The generator draws one complex Gaussian sequence per component - the `g_s` of
+(127)-(128), with "typically one Doppler cell per direction" (Sec. 11.2.7) taken
+literally: Doppler is not binned separately. Within an elevation bin of 20 degrees (the
+default, 9 bins) the Doppler and the direction are those of the bin's mean ray; raise
+`n_elevation` close to the sonar if that matters. Components more than 120 dB below the
+strongest are dropped.
+
+The generator (NumPy and C++) then delays each component to each hydrophone by
+`offset . u / c` with the full 3-D `u`, and shifts it by its `f_d`, pulse included, as
+before.
+
+Limits that remain: flat boundary, stratified medium, eigenray pairs incoherent
+(`delta_pp' delta_qq'` of (76)), one Doppler per component and per ping (no range walk,
+the "short pulse" assumption of Sec. 11.2.1), the first receive element's pattern for
+all, no scatterer Doppler, and the sector must be narrow compared with the transmitter's
+height over the boundary where the transmitter is far from the receiver
+(`azimuth_subsamples`). Chapman-Harris is a backscatter fit and is used at the mean
+grazing angle whatever the bistatic azimuth.
+
+### 12.3 Range-varying boundary (`strength_map`)
+
+A factor on the scattering strength as a function of world position, applied per cell.
+The boundary itself stays flat (bathymetry would change the eigenrays). From a scenario:
+a table of dB against range, optionally azimuth, about a fixed origin.
+
+### 12.4 K-distributed reverberation (`statistics: {model: k, shape}`)
+
+TR 0702 says SST's point-scatterer and DDD methods can make K-distributed reverberation
+and gives no method (Sec. 8 above). Ours is the compound representation: each resolution
+cell's power is multiplied by a gamma variate `tau` of unit mean and shape `nu`, then the
+complex Gaussian speckle is drawn as usual. Intensity `I = tau x E` (E exponential):
+
+```
+E{tau^n} = prod_{k<n} (1 + k/nu)         (gamma, unit mean)
+E{I}     = mean power (unchanged)
+E{I^2} / E{I}^2 = 2 (1 + 1/nu)
+E{I^3} / E{I}^3 = 6 (1 + 1/nu)(1 + 2/nu)
+```
+
+(elementary moments; `nu -> infinity` is Rayleigh). A cell is `cell_time` long (default
+1 / pulse bandwidth) and one azimuth cell wide (default wavelength / array extent: about
+two of the generator's sectors); all components of one azimuth cell share the texture.
+A hydrophone or beam that sums N cells of equal power sees `2 (1 + 1/(N nu))`, so an
+omnidirectional hydrophone is close to Rayleigh and a beam is not: the statistics after
+beamforming come out of the array structure, as the levels do. `shape` has no default
+(a property of the seabed to be measured or assumed). What is not modelled: correlation
+of the texture between pings (each ping draws its own) and between neighbouring cells.
+
+### 12.5 Leakage along a long record (`band_taper`, `guard`)
+
+See 12.1. `band_taper` multiplies the pulse's spectrum by 1 below a quarter of the
+generation rate and a raised cosine from there to Nyquist (the rate is at least four times
+the pulse's band, so the band is untouched), which makes the spectrum continuous round
+Nyquist and the delay/interpolation responses fall fast; two pulse lengths of silence
+are generated after the record to keep the remaining wrap-round out. Both engines get
+the same tapered pulse.
+
+### 12.6 Property tests (Sec. 9 above)
+
+`tests/python/test_reverb_statistics.py`, on both engines:
+
+| Property | Set-up | Closed form | Measured |
+|---|---|---|---|
+| (89) | power Gaussian in two-way time, sigma_T = 20 ms | sigma_f = 7.958 Hz | 7.971 Hz |
+| (96) | sonar at 3 m/s, arrivals Gaussian in azimuth about broadside (0.1 rad), 10 kHz tone of 0.5 s (its own autocorrelation divided out) | sigma_t = 39.79 ms | 40.06 ms |
+| (103) | arrivals Gaussian in sin(theta), sigma = 0.08, 10 kHz | sigma_d = 0.2984 m | 0.2973 m |
+| replica-correlation gain | LFM, 20 ms, 0.5 / 1 / 2 / 4 kHz | 3.01 dB per octave | 2.73, 3.01, 3.13 dB |
+| K moments | nu = 0.5, 2, 10 | m2 = 6, 3, 2.2 | 6.01, 3.00, 2.19 |
+

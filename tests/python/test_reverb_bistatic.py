@@ -404,6 +404,23 @@ def test_bistatic_engines_match_sample_for_sample(name):
     assert out["cpp"][2] == out["numpy"][2]
 
 
+@pytest.mark.skipif(not core.cuda_available(), reason="no CUDA device")
+@pytest.mark.parametrize("name", list(ENGINE_CASES))
+def test_cuda_bistatic_reverberation_matches_the_host(name):
+    """Components reach the device as the same per-sector spectra and leads as azimuth
+    sectors do (the steering kernel is unchanged), so the device must agree with the host
+    as in test_sim_cpp.py."""
+    ping_kw, reverb_kw = ENGINE_CASES[name]
+    out = {}
+    for backend in (core.Backend.Host, core.Backend.Cuda):
+        rec = bistatic_ping(**ping_kw)
+        reverb.add_reverberation(rec, FreeFieldProvider(C), 0.0, MU_DB, np.random.default_rng(3), engine="cpp",
+                                 backend=backend, geometry="bistatic", **reverb_kw)
+        out[backend] = rec.samples.array
+    worst, rms = relative_difference(out[core.Backend.Cuda], out[core.Backend.Host])
+    assert worst < 1e-4 and rms < 1e-4, (worst, rms)
+
+
 def test_an_older_extension_falls_back_to_numpy_visibly(monkeypatch):
     """A build of the C++ generator without components must not be used silently."""
     monkeypatch.setattr(reverb, "cpp_has_components", lambda: False)
@@ -479,4 +496,3 @@ def test_strength_table_interpolates_in_range_and_azimuth():
     assert db(50.0, 0.0) == pytest.approx(0.0) and db(900.0, 0.0) == pytest.approx(10.0)   # held beyond the ends
     by_range = reverb_bistatic.table_strength_map([0.0, 10.0], [0.0, -10.0])
     assert 10 * np.log10(by_range(np.array(3.0), np.array(4.0))) == pytest.approx(-5.0)
-    assert core is not None
