@@ -89,8 +89,15 @@ def noise_statistics(cfg) -> dict | None:
     model = str(cfg.get("model", "gaussian")).lower()
     if model == "gaussian":
         return None
+    if model in ("alpha_stable", "sas"):
+        if "alpha" not in cfg:
+            raise ValueError("alpha-stable noise needs statistics.alpha (0.1 to 2; 2 is Gaussian)")
+        alpha = float(cfg["alpha"])
+        if not 0.1 <= alpha <= 2.0:
+            raise ValueError("statistics.alpha must be in the range 0.1 to 2")
+        return {"model": "alpha_stable", "alpha": alpha}
     if model != "k":
-        raise ValueError(f"unknown noise statistics {model!r}: use 'gaussian' or 'k'")
+        raise ValueError(f"unknown noise statistics {model!r}: use 'gaussian', 'k' or 'alpha_stable'")
     if "shape" not in cfg:
         raise ValueError("K-distributed noise needs statistics.shape")
     shape = float(cfg["shape"])
@@ -101,7 +108,49 @@ def noise_statistics(cfg) -> dict | None:
         raise ValueError("statistics.correlation_time must not be negative")
     if np.isinf(shape):
         return None
-    return {"shape": shape, "correlation_time": tau, "common": bool(cfg.get("common", True))}
+    return {"model": "k", "shape": shape, "correlation_time": tau, "common": bool(cfg.get("common", True))}
+
+
+def alpha_stable(alpha: float, scale, size, rng: np.random.Generator) -> np.ndarray:
+    """Independent symmetric alpha-stable numbers, characteristic function exp(-|scale t|^alpha),
+    by the method of Chambers, Mallows and Stuck (JASA 71, 1976; not opened):
+
+        x = scale (cos((1 - alpha) p) / w)^(1 / alpha - 1) sin(alpha p) / cos(p)^(1 / alpha)
+
+    p uniform on (-pi/2, pi/2), w exponential with unit mean. The formula was read in arlpy
+    1.9.3 (`arlpy.stable.rnd`, its symmetric branch; BSD 3-clause, Copyright (c) 2016 Mandar
+    Chitre), which cites that paper; this is our own code for it. At alpha = 2 it is
+    2 scale sqrt(w) sin(p) identically: a Gaussian of variance 2 scale^2 (the Box-Muller
+    form). At alpha = 1 it is scale tan(p), a Cauchy variate. For alpha < 2 the variance is
+    infinite (and for alpha <= 1 the mean absolute value too): `scale` is the only measure
+    of level."""
+    if not 0.1 <= alpha <= 2.0:
+        raise ValueError("alpha must be in the range 0.1 to 2")
+    p = (rng.uniform(size=size) - 0.5) * np.pi
+    w = -np.log(1.0 - rng.uniform(size=size))
+    return scale * (np.cos((1.0 - alpha) * p) / w) ** (1.0 / alpha - 1.0) * np.sin(alpha * p) / np.cos(p) ** (1.0 / alpha)
+
+
+def alpha_stable_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator, alpha: float,
+                       sensitivity_db: float = 0.0, n_channels: int = 1) -> np.ndarray:
+    """Impulsive ambient noise [channels, samples]: independent symmetric alpha-stable samples
+    (snapping shrimp are the usual example), white over the record's band and independent
+    between hydrophones.
+
+    Level. A stable law with alpha < 2 has no variance, so a spectrum level cannot be its
+    power density. The configured spectrum fixes the SCALE instead: scale = sigma / sqrt(2),
+    sigma^2 the power the Gaussian noise of that spectrum would have in the band 0 to
+    sample_rate / 2 (the integral of the spectrum). At alpha = 2 the result is then exactly
+    Gaussian noise of that power; for alpha < 2 it is the stable noise with the same scale
+    (the same core of the distribution, heavier tails), and any measured "level" grows with
+    the length of the record. The shape of the spectrum is not reproduced (white in band):
+    a colouring filter would change the distribution, and no model with memory was taken
+    from a source."""
+    f = np.fft.rfftfreq(n_samples, 1.0 / sample_rate)
+    psd = 10.0 ** ((np.asarray(spectrum_db(np.maximum(f, 1.0)), dtype=float) + sensitivity_db) / 10.0)
+    psd[0] = 0.0
+    sigma = np.sqrt(np.sum(psd) * sample_rate / n_samples)
+    return alpha_stable(alpha, sigma / np.sqrt(2.0), (int(n_channels), n_samples), rng).astype(np.float32)
 
 
 def gamma_texture(n_samples: int, sample_rate: float, shape: float, correlation_time: float,
@@ -127,8 +176,10 @@ def gamma_texture(n_samples: int, sample_rate: float, shape: float, correlation_
 def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator, statistics: dict | None,
             positions=None, sound_speed: float = 1500.0, sensitivity_db: float = 0.0,
             n_channels: int | None = None, n_bands: int = 96) -> np.ndarray:
-    """`gaussian_noise` with K statistics: `statistics` = {"model": "k", "shape": nu,
-    "correlation_time": seconds, "common": bool} (see `noise_statistics`). Two cases.
+    """`gaussian_noise` with other statistics. `statistics` = {"model": "alpha_stable", "alpha"}:
+    `alpha_stable_noise` (white in band, independent channels; read its note on level). Or
+    {"model": "k", "shape": nu, "correlation_time": seconds, "common": bool} (see
+    `noise_statistics`): K-distributed noise, in two cases.
 
     correlation_time > 0 (the compound model, as for reverberation): the Gaussian noise of
     `gaussian_noise`, spectrum and array coherence included, times `gamma_texture`. The mean
@@ -153,6 +204,9 @@ def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Gene
     kwargs = dict(positions=positions, sound_speed=sound_speed, sensitivity_db=sensitivity_db, n_channels=n_channels, n_bands=n_bands)
     if stats is None:
         return gaussian_noise(n_samples, sample_rate, spectrum_db, rng, **kwargs)
+    if stats["model"] == "alpha_stable":
+        channels = n_channels if positions is None else np.asarray(positions).shape[0]
+        return alpha_stable_noise(n_samples, sample_rate, spectrum_db, rng, stats["alpha"], sensitivity_db, channels)
     if stats["correlation_time"] > 0.0:
         x = gaussian_noise(n_samples, sample_rate, spectrum_db, rng, **kwargs)
         return x * gamma_texture(n_samples, sample_rate, stats["shape"], stats["correlation_time"], rng,

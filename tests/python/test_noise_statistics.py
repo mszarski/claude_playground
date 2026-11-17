@@ -153,3 +153,58 @@ def test_scenario_key():
     # isotropic coherence is a linear combination of channels and takes part of it back.
     assert 4.5 < kurtosis_ratio(spiky) < 9.5
     assert spiky.std() == pytest.approx(plain.std(), rel=0.03)
+
+
+# --- symmetric alpha-stable (impulsive) noise ----------------------------------------------------
+
+def test_alpha_stable_is_exactly_the_gaussian_form_at_alpha_2_and_cauchy_at_1():
+    """Chambers-Mallows-Stuck, symmetric case. At alpha = 2 the formula is 2 c sqrt(w) sin(p)
+    identically (Box-Muller: a Gaussian of variance 2 c^2); at alpha = 1 it is c tan(p)."""
+    c, n = 0.7, 200000
+    x = nz.alpha_stable(2.0, c, n, np.random.default_rng(8))
+    g = np.random.default_rng(8)
+    p = (g.uniform(size=n) - 0.5) * np.pi
+    w = -np.log(1.0 - g.uniform(size=n))
+    assert np.allclose(x, 2.0 * c * np.sqrt(w) * np.sin(p), rtol=1e-12, atol=1e-15)
+    assert x.var() == pytest.approx(2.0 * c * c, rel=0.02) and kurtosis_ratio(x) == pytest.approx(3.0, rel=0.05)
+    y = nz.alpha_stable(1.0, c, n, np.random.default_rng(8))
+    assert np.allclose(y, c * np.tan(p), rtol=1e-9)
+    # Quartiles of a stable law of scale c: +-c at alpha = 1 (Cauchy), +-0.6745 sqrt(2) c at alpha = 2.
+    assert np.percentile(y, 75) == pytest.approx(c, rel=0.03)
+    assert np.percentile(x, 75) == pytest.approx(0.6745 * np.sqrt(2.0) * c, rel=0.03)
+    # Stability: the sum of two independent variates is the same law with scale 2^(1/alpha) c.
+    for alpha in (1.2, 1.7):
+        z = nz.alpha_stable(alpha, c, n, np.random.default_rng(9)) + nz.alpha_stable(alpha, c, n, np.random.default_rng(10))
+        one = nz.alpha_stable(alpha, c, n, np.random.default_rng(11))
+        ratio = (np.percentile(z, 75) - np.percentile(z, 25)) / (np.percentile(one, 75) - np.percentile(one, 25))
+        assert ratio == pytest.approx(2.0 ** (1.0 / alpha), rel=0.03)
+    with pytest.raises(ValueError):
+        nz.alpha_stable(2.5, 1.0, 4, np.random.default_rng(0))
+
+
+def test_alpha_stable_noise_level_is_the_scale_and_arlpy_fits_it():
+    from gpusonar.sonar_equation import noise_rms_volts
+    n = 1 << 18
+    sigma = noise_rms_volts(50.0, -180.0, FS)
+    gauss = nz.k_noise(n, FS, FLAT, np.random.default_rng(1), {"model": "alpha_stable", "alpha": 2.0}, n_channels=2, sensitivity_db=-180.0)
+    assert gauss.std() == pytest.approx(sigma, rel=0.01)                 # alpha = 2: the Gaussian noise of that level
+    spiky = nz.k_noise(n, FS, FLAT, np.random.default_rng(1), {"model": "alpha_stable", "alpha": 1.5}, n_channels=2, sensitivity_db=-180.0)
+    assert spiky.std() > 3.0 * sigma and kurtosis_ratio(spiky) > 100.0   # no finite variance: the sample value is set by a few clicks
+    assert abs(np.corrcoef(np.sign(spiky[0]), np.sign(spiky[1]))[0, 1]) < 0.01
+    stable = pytest.importorskip("arlpy.stable")                         # optional oracle: arlpy's fractile fit
+    for alpha, x in ((2.0, gauss), (1.5, spiky)):
+        a_fit, c_fit, _ = stable.sstabfit(x[0].astype(float))
+        assert a_fit == pytest.approx(alpha, abs=0.07) and c_fit == pytest.approx(sigma / np.sqrt(2.0), rel=0.05)
+
+
+def test_alpha_stable_in_a_record():
+    raw = SonarModel.load("flank_32")
+    a = one_ping(raw, {"model": "alpha_stable", "alpha": 2.0})
+    assert a.std() == pytest.approx(one_ping(raw, None).std(), rel=0.02)
+    assert kurtosis_ratio(one_ping(raw, {"model": "alpha_stable", "alpha": 1.4})) > 50.0
+    base = SonarModel.load("sas_auv", {"receive": {"kind": "baseband", "sample_rate": 100e3, "window": {"range": [5.0, 245.0]}}})
+    g, s2 = one_ping(base, None), one_ping(base, {"model": "alpha_stable", "alpha": 2.0})
+    assert np.mean(np.abs(s2) ** 2) == pytest.approx(np.mean(np.abs(g) ** 2), rel=0.03)
+    heavy = one_ping(base, {"model": "alpha_stable", "alpha": 1.4})
+    assert np.median(np.abs(heavy.real)) == pytest.approx(np.median(np.abs(g.real)), rel=0.12)      # the same core
+    assert np.abs(heavy).max() > 20.0 * np.abs(g).max()                                              # heavier tails

@@ -50,12 +50,17 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
                   noise_spectrum=None, reverberation: list | None = None,
                   beam_floor_db: float | None = None, noise_statistics: dict | None = None,
+                  sources: list | None = None, transmit: bool = True,
                   backend=core.Backend.Host, engine: str | None = None) -> "core.PingRecord":
     """Simulate one transmit and return its record.
 
     `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
     path pairing, of reverberation and of echo synthesis for a sampled pulse (analytic pulses
     have the C++ kernel only); a provider has its own `engine`.
+
+    `sources` (sim/sources.py `build_sources`): radiating sources heard one way, added to
+    the same record. `transmit=False`: the sonar does not ping (a passive capture): no
+    echoes, no reverberation, no transmit reference; the record keeps its form.
     """
     env = resolve_environment(environment, depth=pose.position[2])
     record = sonar.make_record(pose, sequence=sequence, sub_sequence=sub_sequence,
@@ -76,7 +81,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         cal = record.calibration
         cal.position_offset = [tuple(p) for p in np.asarray(channel_errors["position"], dtype=float)]
         record.calibration = cal
-    if len(scene) > 0:
+    if transmit and len(scene) > 0:
         tx_position = np.array(record.tx_position())
         rx_reference = record.rx_positions().mean(axis=0)
         # Positions, amplitudes and velocities for this ping: aspect-dependent targets, glints
@@ -125,7 +130,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                  platform_acceleration=tuple(float(a) for a in acceleration))
     from .. import taps
     taps.sim_tap(record, "echoes")
-    for item in reverberation or []:
+    for item in (reverberation or []) if transmit else []:
         # Boundary reverberation by the scattering-function method (sim/reverb.py).
         from . import reverb
         w = sonar.waveform_config
@@ -221,8 +226,16 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"), backend=backend,
                                  engine=engine, **extra)
+    if sources:
+        # One-way sound of radiating sources (sim/sources.py), with the true clocks and
+        # element positions still in the record.
+        from . import sources as source_models
+        source_models.add_sources(record, sonar, sources, provider, environment=env, absorption_model=absorption_model,
+                                  scenario_time=scenario_time, rng=rng, backend=backend, engine=engine,
+                                  spreading=spreading, acceleration=acceleration)
     taps.sim_tap(record, "reverberation")
-    receiver.add_reference_signal(record, sonar, clocks)
+    if transmit:
+        receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)
     if channel_errors is not None:
         receiver.apply_channel_errors(record, channel_errors)
@@ -250,7 +263,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             ambient = (sigma / np.sqrt(2.0)) * (
                 g.standard_normal(samples.shape) + 1j * g.standard_normal(samples.shape)).astype(samples.dtype)
             stats = noise_models.noise_statistics(noise_statistics)
-            if stats is not None:
+            if stats is not None and stats["model"] == "alpha_stable":
+                # Impulsive noise: independent symmetric alpha-stable real and imaginary parts
+                # with the scale of the Gaussian parts they replace (identical at alpha = 2).
+                ambient = (noise_models.alpha_stable(stats["alpha"], sigma / 2.0, samples.shape, g)
+                           + 1j * noise_models.alpha_stable(stats["alpha"], sigma / 2.0, samples.shape, g)).astype(samples.dtype)
+            elif stats is not None:
                 # K-distributed noise (`ambient_noise.statistics`, sim/noise.py): the gamma
                 # texture on the complex envelope; white here, so no filter follows it.
                 slow = stats["correlation_time"] > 0.0
@@ -439,6 +457,12 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         provider = timespread.wrap(provider, spread, frequency=sonar.center_frequency)
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
     scene = build_scene(cfg.get("scene", []), rng)
+    sources = None
+    if cfg.get("sources"):
+        # Radiating sources (one-way signals): their own generator, so that adding a source
+        # does not change the scene or the noise drawn for the rest.
+        from . import sources as source_models
+        sources = source_models.build_sources(cfg["sources"], np.random.default_rng([int(cfg.get("seed", 0)), 0x50]))
 
     plat = cfg.get("platform", {})
     position = np.asarray(plat.get("position", [0.0, 0.0, 0.0]), dtype=float)
@@ -459,6 +483,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
+        sources=sources, transmit=bool(pings.get("transmit", True)),
         reverberation=cfg.get("reverberation"),
         beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"), engine=engine)
     motion = plat.get("motion")
