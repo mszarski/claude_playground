@@ -345,7 +345,7 @@ def test_cuda_and_host_kernels_agree_on_a_sampled_pulse(name, r0, kind, knots):
 @needs_cuda
 @pytest.mark.parametrize("label", ["image_source + time spread", "image_source + reverberation"])
 def test_cuda_and_host_agree_on_a_sampled_pulse_through_a_scenario(label):
-    cfg = _scenario("image_source", {"type": "sampled", "source": "mseq", "degree": 7, "duration": 0.02},
+    cfg = _scenario("image_source", {"type": "sampled", "source": "mseq", "degree": 7, "duration": 0.05},
                     **dict(TIERS[label]))
     host = run_scenario(dict(cfg), backend=core.Backend.Host).records[0]
     cuda = run_scenario(dict(cfg), backend=core.Backend.Cuda).records[0]
