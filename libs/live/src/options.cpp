@@ -19,7 +19,10 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_guard_m") c.cfar_guard_m = v;
   else if (key == "cfar_train_m") c.cfar_train_m = v;
   else if (key == "min_snr_db") c.min_snr_db = v;
+  else if (key == "beamformer") c.beamformer = value;
   else if (key == "doa") c.doa = value;
+  else if (key == "mvdr_subbands") c.mvdr.n_subbands = static_cast<std::int64_t>(v);
+  else if (key == "mvdr_loading") c.mvdr.loading = v;
   else if (key == "gate_fft") c.gate_fft = static_cast<std::int64_t>(v);
   else if (key == "sbl_grid_step_deg") c.sbl_grid_step_deg = v;
   else if (key == "sbl_max_iterations") c.sbl.max_iterations = p.sbl.max_iterations = static_cast<std::int32_t>(v);

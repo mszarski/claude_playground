@@ -10,7 +10,8 @@
 // Options are key=value pairs after the flags, or in a file given with --options, one per
 // line (# starts a comment):
 //   bearing_first_deg bearing_last_deg bearing_step_deg range_cell_m cfar_pfa cfar_guard_m
-//   cfar_train_m min_snr_db doa (map | sbl) gate_fft sbl_grid_step_deg sbl_max_sources
+//   cfar_train_m min_snr_db beamformer (backprojection | farfield | mvdr) doa (map | sbl)
+//   gate_fft sbl_grid_step_deg sbl_max_sources
 //   sbl_min_snr_db sbl_dynamic_range_db look (starboard | port) backend (host | cuda)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)

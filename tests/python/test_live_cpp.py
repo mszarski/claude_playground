@@ -249,7 +249,7 @@ def test_one_deployment_file_runs_either_engine(pings, tmp_path):
     stages = {p.name.split(".")[0].split("_", 1)[-1] for p in (tmp_path / "taps" / "ping0000").iterdir()}
     assert stages >= {"raw", "prepare", "beamform", "report"}
     with pytest.raises(ValueError, match="backprojection"):
-        LiveChain(dict(CHAIN, engine="cpp", beamformer="mvdr"))
+        LiveChain(dict(CHAIN, engine="cpp", beamformer="capon"))    # farfield and mvdr run in C++ too: test_beamform_cpp.py
 
 
 def test_python_chain_takes_sbl_bearings():

@@ -1,7 +1,7 @@
 // The long-range array chain, one ping at a time, in C++: the counterpart of
 // python/gpusonar/live.py and what the standalone executable apps/sonar_live runs.
 //
-//   condition -> range x bearing map (backprojection kernel) -> CFAR -> cluster
+//   condition -> range x bearing map (backprojection kernel, far-field or MVDR beamformer) -> CFAR -> cluster
 //     -> [SBL bearings at each detected range gate] -> track in a world-fixed frame
 //     -> classify -> report (JSON)
 //
@@ -15,6 +15,7 @@
 
 #include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
+#include "sonar/live/beamform.hpp"
 #include "sonar/live/detections.hpp"
 #include "sonar/live/doa.hpp"
 #include "sonar/live/sync.hpp"
@@ -24,6 +25,10 @@ namespace sonar::live {
 struct ChainOptions {
   double bearing_first_deg = -40.0, bearing_last_deg = 40.0, bearing_step_deg = 0.5;  ///< from broadside
   bool hann = true;            ///< Hann aperture weighting for the map
+  /// "backprojection": the kernel, exact in the near field too, host or CUDA.
+  /// "farfield": plane-wave delay and sum in the frequency domain (host). "mvdr": adaptive (host).
+  std::string beamformer = "backprojection";
+  MvdrOptions mvdr;
   bool starboard = true;       ///< which side of a line array the bearings are on
   double range_cell_m = 2.0;   ///< power is averaged into cells this long before detection
   double cfar_pfa = 1e-5, cfar_guard_m = 100.0, cfar_train_m = 300.0;

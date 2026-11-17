@@ -31,7 +31,7 @@ DEFAULTS = {
     "bearings_deg": [-40.0, 40.0, 0.5],        # first, last, step: from broadside
     "window": "hann",                          # aperture weighting
     "sync": None,                              # several boards: {sonar: popoto_4x7} or {reference: {...}}, see sync.py
-    "beamformer": "backprojection",            # the kernel (host or CUDA); or "farfield" / "mvdr" (NumPy, host)
+    "beamformer": "backprojection",            # the kernel (host or CUDA); or "farfield" / "mvdr" (host; C++ with engine: cpp)
     "backend": "auto",                         # "auto": CUDA when built and present, else host; "host"; "cuda"
     "look": "starboard",                       # which side of a line array the bearings are on
     "range_cell_m": 2.0,                       # power is averaged into cells this long before detection
@@ -59,13 +59,13 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     """The chain section of a deployment file as the options of the C++ chain (`core.LiveChainCpp`,
     and `key=value` arguments of build/bin/sonar_live). `cfg` is merged over the defaults first."""
     cfg = _merge(DEFAULTS, cfg)
-    if cfg["beamformer"] != "backprojection":
-        raise ValueError("the C++ chain beamforms by backprojection; set beamformer: backprojection or engine: python")
+    if cfg["beamformer"] not in ("backprojection", "farfield", "mvdr"):
+        raise ValueError(f"beamformer: {cfg['beamformer']!r} (backprojection, farfield or mvdr)")
     b, t, c, s = cfg["bearings_deg"], cfg["tracker"], cfg["classify"], cfg["sbl"]
     o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2], "range_cell_m": cfg["range_cell_m"],
          "cfar_pfa": cfg["cfar"]["pfa"], "cfar_guard_m": cfg["cfar"]["guard_m"], "cfar_train_m": cfg["cfar"]["train_m"],
          "min_snr_db": cfg["min_snr_db"], "hann": cfg["window"] == "hann", "starboard": cfg["look"] == "starboard",
-         "doa": cfg["doa"], "sbl_grid_step_deg": s["grid_step_deg"], "sbl_max_sources": int(s["max_sources"]),
+         "beamformer": cfg["beamformer"], "doa": cfg["doa"], "sbl_grid_step_deg": s["grid_step_deg"], "sbl_max_sources": int(s["max_sources"]),
          "sbl_min_snr_db": s["min_snr_db"], "sbl_dynamic_range_db": s["dynamic_range_db"],
          "sbl_max_gates": int(s["max_gates"]), "sbl_min_contrast_db": s["min_contrast_db"],
          "sbl_max_iterations": int(s["max_iterations"]), "sbl_tolerance": s["tolerance"],

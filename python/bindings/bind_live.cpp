@@ -220,6 +220,7 @@ void bind_live(py::module_& m) {
         if (kw.contains("hann")) o.hann = kw["hann"].cast<bool>();
         if (kw.contains("starboard")) o.starboard = kw["starboard"].cast<bool>();
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();
+        if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();
         if (kw.contains("sync")) {
           const py::dict r = kw["sync"].cast<py::dict>();
