@@ -1,0 +1,37 @@
+# A highlight target in the SST manner (sim/targets.py): five highlights along a 20 m body
+# that crosses ahead of a forward-looking sonar while turning, with a table of target strength
+# against aspect for the body as a whole, one highlight that answers late (a delay between
+# reception and re-emission) and a small position jitter. Ping by ping the strength follows
+# the table as the aspect changes; the highlights keep their places on the body.
+# The table is illustrative (a beam-aspect maximum, weaker bow and stern), not a measured target.
+name: fls_highlight_target_aspect
+sonar: fls_120k
+fidelity: free_field
+sonar_overrides:
+  receive: {window: {range: [60.0, 140.0]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+platform:
+  position: [0, 0, 10.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 8, interval: 2.0}
+scene:
+  - type: target
+    label: body
+    origin: [100.0, -15.0, 10.0]
+    velocity: [0.0, 2.0, 0.0]
+    heading_deg: 90.0
+    turn_rate_deg: -4.0
+    random_position: 0.05
+    aspect_table:
+      aspect_deg: [0, 30, 60, 90, 120, 150, 180]
+      ts_db: [-2.0, 0.0, 6.0, 15.0, 6.0, 1.0, -4.0]
+    highlights:
+      - {position: [-10.0, 0, 0], target_strength_db: -3.0}
+      - {position: [-5.0, 0, 0], target_strength_db: 0.0}
+      - {position: [0.0, 0, -2.0], target_strength_db: 3.0, delay: 0.004}
+      - {position: [5.0, 0, 0], target_strength_db: 0.0}
+      - {position: [10.0, 0, 0], target_strength_db: -3.0}
+absorption: francois_garrison
+receiver: {noise_rms: 0.0, adc: false}
+seed: 7

@@ -153,6 +153,19 @@ Every object may have `label`, and `velocity: [vx, vy, vz]` to move it.
 | `sea_surface` | a patch of the surface with waves, seen from below: facets whose tilt follows the waves, normals into the water. The wave shape travels through the facets at each train's deep-water speed; the speckle is new every ping | `x_range`, `y_range`, `density`, `mu_db`; `spectrum: {wind_speed, significant_height, direction_deg, spread_deg, components}` for an irregular wind sea and/or `waves: [{amplitude, wavelength, direction_deg, phase}]` for regular trains; `isotropic_db` (scattering that does not depend on tilt); `velocity` (surface drift); `frozen: true` (waves do not travel); `coherent: true` (keep one speckle) |
 | `pool` | walls and floor facing inwards | `x_range`, `y_range`, `z_range`, `density` |
 | `volume` | scatterers through a box | `min`, `max`, `count`, `rms_amplitude` |
+| `seafloor` with `model: fluid_sediment` | the same random scatterers, but each one's strength follows the bottom scattering model (`sim/bottom.py`: interface roughness plus sediment volume) at every ping's own grazing angles, instead of Lambert's law. Same mean level as a `reverberation` boundary of that model | `rho`, `nu`, `delta`, `w2`, `gamma2`, `sigma2` (all required; the keys of the `fluid_sediment` reverberation boundary), `offset_db`; not `lambert_mu_db` |
+| `target` | a rigid set of highlights and smooth shapes on a trajectory (`sim/targets.py`); amplitudes and glint positions are worked out at each ping from where the projector and receiver are | `origin`, `velocity`, `heading_deg`, `pitch_deg`, `roll_deg`, `turn_rate_deg`; `highlights`, `shapes`, `aspect_table`, `common_center`, `random_position`, `occlude` (below) |
+
+A `target`'s frame has x ahead, y to starboard, z down.
+
+| `target` key | Meaning |
+| --- | --- |
+| `highlights` | a list of `{position, target_strength_db` (or `amplitude`)`, delay, response, aspect_table}`: `delay` is seconds between reception and re-emission; `response: {frequency, magnitude_db, phase_deg}` is a complex frequency response, used as its value at the centre frequency plus its group delay there; `aspect_table` (as below) is added to that highlight's strength |
+| `aspect_table` | `{aspect_deg, ts_db}` and optionally `elevation_deg` (then `ts_db` is `[elevations][aspects]`): target strength in dB re 1 m² against the sonar's bearing in the target frame (0 = from ahead, 90 = starboard beam; a table ending at 180 is symmetric, one reaching 360 is periodic), interpolated linearly in dB. On the target it is the strength of the whole highlight set (their own strengths then only share it out) |
+| `shapes` | smooth rigid bodies that return specular glints (Kirchhoff approximation, `k a >> 1`): `{shape: sphere, centre, radius}`; `{shape: cylinder, start, end, radius, caps}`; `{shape: plate, origin, edge_u, edge_v, two_sided}`; `{shape: disc, centre, normal, radius}`. Each takes `reflection` (1 rigid, -1 pressure release) and, except the sphere, `resolved: true` with `spacing` (m, at most half a wavelength): a row or grid of coherent points instead of one highlight carrying the far-field pattern. Needed inside `L²/λ`, i.e. for imaging; a warning says so |
+| `common_center` | SST's `commonCenter`: every highlight takes the direction and spreading loss of the target's origin and keeps only its own arrival time |
+| `random_position` | RMS (m, per axis) of a Gaussian jitter of the highlight positions, drawn once |
+| `occlude` | the target's spheres and cylinders also cast shadows (targets that do not move) |
 
 ### Background
 

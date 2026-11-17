@@ -1,0 +1,38 @@
+# Forward-looking sonar over a seabed whose point scatterers follow the bottom scattering
+# model (interface roughness plus sediment volume, sim/bottom.py) at each ping's grazing
+# angles instead of Lambert's law, with two smooth rigid objects on it that return specular
+# glints (sim/targets.py): a sphere (TS = 10 log10(a^2 / 4) = -16.5 dB at any aspect, the
+# glint on its near side) and a cylinder lying across the line of sight (a glint line; one
+# ping sees the part of it about the foot of the perpendicular from the sonar).
+# Frame: the seafloor is z = 0, the sonar is 1 m above it (z = -1, z is down).
+# The sediment numbers are bottom.PLACEHOLDER_SAND: illustrative, not a measured sediment.
+name: fls_glints_on_sediment
+sonar: fls_300k
+fidelity: free_field
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 150.0e3, window: {range: [3.0, 10.5]}, tvg: null}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+platform:
+  position: [0, 0, -1.0]
+  rpy: [0, 0, 0]
+  velocity: [0, 0, 0]
+pings: {count: 1, interval: 0.5}
+scene:
+  - {type: seafloor, label: seafloor, x_range: [3.5, 10.0], y_range: [-2.5, 2.5], density: 250.0,
+     model: fluid_sediment, rho: 1.9, nu: 1.1, delta: 0.0147, w2: 2.0e-5, gamma2: 3.25, sigma2: 0.002}
+  - type: target
+    label: sphere
+    origin: [5.0, -1.0, -0.3]
+    occlude: true
+    shapes:
+      - {shape: sphere, radius: 0.3}
+  - type: target
+    label: cylinder
+    origin: [6.5, 0.8, -0.15]
+    heading_deg: 80.0                # the axis: 10 degrees off square to the line of sight
+    occlude: true
+    shapes:
+      - {shape: cylinder, start: [-0.6, 0, 0], end: [0.6, 0, 0], radius: 0.15, caps: true, resolved: true, spacing: 0.0025}
+absorption: none
+receiver: {noise_rms: 0.0, adc: false}
+seed: 3

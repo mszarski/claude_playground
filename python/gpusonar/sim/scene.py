@@ -9,7 +9,10 @@ from the sonar returns nothing. Occluders (spheres and axis-aligned boxes) block
 straight line between the sonar and any scatterer behind them, which is what puts an
 acoustic shadow behind an object. Both use straight lines from the sonar: with a
 multipath provider, boundary-reflected paths are shadowed as if they were direct.
-Specular highlights and diffraction are not modelled.
+Diffraction is not modelled. Specular highlights (the glint of a smooth sphere, cylinder or
+plate, which moves over the body with aspect), highlight targets with a strength that depends
+on aspect, and a seabed whose scatterers follow the bottom scattering model are per-ping
+modifiers (`Scene.modifiers`, `Scene.evaluate`); they are in sim/targets.py.
 """
 
 from __future__ import annotations
@@ -42,6 +45,11 @@ class Scene:
     # roughness, bubbles): (first index, count, rms amplitude, seed). Their complex
     # amplitudes are drawn afresh for every ping time.
     redrawn: list = field(default_factory=list)
+    # Scatterers whose position, amplitude or velocity depends on where the sonar is at each
+    # ping (aspect-dependent targets, specular glints, seabed scattering models):
+    # (first index, count, obj), obj.evaluate(targets.PingContext) -> (positions [n, 3],
+    # amplitudes [n], velocities [n, 3]) for that slice. See `evaluate`.
+    modifiers: list = field(default_factory=list)
 
     def __len__(self) -> int:
         return self.positions.shape[0]
@@ -143,6 +151,42 @@ class Scene:
             rng = np.random.default_rng([int(seed), int(round(t * 1e6))])
             amp[first:first + count] = rms * (rng.standard_normal(count) + 1j * rng.standard_normal(count)) / np.sqrt(2.0)
         return amp
+
+    def evaluate(self, t: float, tx_position=None, rx_position=None, frequency: float | None = None,
+                 sound_speed: float = 1500.0):
+        """Scatterer positions, amplitudes and velocities for a ping at scenario time t, for a
+        projector at `tx_position` and a receiver (array reference point) at `rx_position`.
+
+        Without modifiers this is (at_time(t), amplitudes_at(t), velocities). Modifiers then
+        replace their own scatterers' values from the ping's geometry; those that depend on
+        the wavelength need `frequency` (Hz; the ping's centre frequency) and `sound_speed`.
+        """
+        points, amplitudes, velocities = self.at_time(t), self.amplitudes_at(t), self.velocities
+        if not self.modifiers:
+            return points, amplitudes, velocities
+        if tx_position is None or rx_position is None:
+            raise ValueError("this scene has per-ping modifiers: evaluate() needs the projector and receiver positions")
+        from .targets import PingContext
+        amplitudes, velocities, normals = amplitudes.copy(), velocities.copy(), self.normals_at(t)
+        for first, count, obj in self.modifiers:
+            sl = slice(first, first + count)
+            ctx = PingContext(float(t), np.asarray(tx_position, dtype=float), np.asarray(rx_position, dtype=float),
+                              frequency, float(sound_speed), points[sl], amplitudes[sl], velocities[sl], normals[sl])
+            points[sl], amplitudes[sl], velocities[sl] = obj.evaluate(ctx)
+        return points, amplitudes, velocities
+
+    def add_target(self, target, label: str = "target", occlude: bool = False) -> "Scene":
+        """Add a `targets.HighlightTarget`: its highlights and glints become scatterers whose
+        positions and amplitudes are worked out at each ping. With `occlude` its spheres and
+        cylinders also cast shadows (targets that do not move only)."""
+        positions, amplitudes = target.nominal()
+        self.modifiers.append((len(self), len(positions), target))
+        self.add_points(positions, amplitudes, target.pose(0.0)[2], label)
+        if occlude:
+            if not target.is_static():
+                raise ValueError("target: occlude is for targets that do not move")
+            self.occluders.extend(target.occluders())
+        return self
 
     def normals_at(self, t: float) -> np.ndarray:
         """Surface normals at scenario time t."""
@@ -397,8 +441,25 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
             pts = polar_grid(item.get("origin", [0, 0, 0]), item["forward"], item["across"],
                              item["ranges"], item["bearings_deg"], item.get("depth_offset", 0.0))
             scene.add_points(pts, amp, vel, item.get("label", "polar_grid"), ts)
+        elif kind == "target":
+            from .targets import HighlightTarget
+            scene.add_target(HighlightTarget.from_config(item, rng), item.get("label", "target"),
+                             bool(item.get("occlude", False)))
         elif kind == "seafloor":
             mu = item.get("lambert_mu_db")
+            sediment = None
+            if item.get("model", "lambert") == "fluid_sediment":
+                # {model: fluid_sediment, rho, nu, delta, w2, gamma2, sigma2[, offset_db]}: the
+                # keys of a `reverberation` boundary of that model. Each scatterer's cross
+                # section per unit area follows sim/bottom.py at the ping's own angles
+                # (targets.SedimentScatterers) instead of Lambert's law.
+                from .targets import SedimentScatterers
+                if mu is not None:
+                    raise ValueError("a fluid_sediment seafloor takes its strength from the model, not lambert_mu_db")
+                sediment = SedimentScatterers.from_config(item)
+                mu = 0.0                                     # unit strength; the model scales it per ping
+            elif item.get("model", "lambert") != "lambert":
+                raise ValueError(f"unknown seafloor model {item['model']!r}")
             rms = (lambert_rms_amplitude(float(mu), float(item["density"])) if mu is not None
                    else float(item.get("rms_amplitude", 1.0)))
             pts, a = seafloor_patch(item["x_range"], item["y_range"], float(item["density"]),
@@ -413,6 +474,8 @@ def build_scene(items: list[dict], rng: np.random.Generator | None = None) -> Sc
                 gx, gy = gradient(pts[:, 0], pts[:, 1])
                 normals = np.column_stack([gx, gy, -np.ones(len(pts))])
                 normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+            if sediment is not None:
+                scene.modifiers.append((len(scene), len(pts), sediment))
             scene.add_points(pts, a, vel, item.get("label", "seafloor"), lambert=mu is not None, normals=normals)
         elif kind == "wire":
             scene.add_points(wire(item["start"], item["end"], float(item.get("spacing", 0.01))), amp, vel,
