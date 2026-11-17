@@ -199,6 +199,25 @@ TEST(PingAssembler, CutsTheStreamIntoPingsAndDropsOneThatLosesABlock) {
   EXPECT_EQ(assembler.bad_blocks, 1);
 }
 
+TEST(StreamAssembler, CutsAnUntriggeredStreamIntoChunksAndRestartsAfterAGap) {
+  StreamAssembler assembler(stream_template(), 40);
+  std::vector<PingRecord> out;
+  for (std::int64_t first = 0; first < 208; first += 16) {
+    if (first == 96) continue;                    // lost: inside the third chunk (samples 80..119)
+    const auto b = block(first, 16, 2, -1, 0U);
+    EXPECT_TRUE(assembler.feed(b.data(), b.size(), out));
+  }
+  // Chunks 0..39 and 40..79 complete; 80..95 is discarded at the gap; then 112..151 and 152..191.
+  ASSERT_EQ(out.size(), 4U);
+  EXPECT_EQ(assembler.dropped_chunks, 1);
+  EXPECT_EQ(assembler.lost_samples, 16);
+  EXPECT_FLOAT_EQ(out[1].samples.channel(0)[0], 40.0F * 10.0F - 300.0F);
+  EXPECT_FLOAT_EQ(out[2].samples.channel(1)[0], 112.0F * 10.0F + 1.0F - 300.0F);
+  EXPECT_EQ(out[2].transmit.time_ns, 1000 + 112 * 1000000);
+  EXPECT_EQ(out[3].samples.n_samples, 40);
+  EXPECT_DOUBLE_EQ(out[3].samples.start_time, 0.0);
+}
+
 TEST(Navigation, InterpolatesThePoseToTheTransmitTime) {
   live::Navigation nav;
   PingRecord rec;

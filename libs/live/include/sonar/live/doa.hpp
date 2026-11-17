@@ -54,6 +54,12 @@ struct DoaOptions {
   double dynamic_range_db = 20.0;  ///< peaks this far below the strongest are not reported
   double min_snr_db = 0.0;         ///< nor peaks whose array output is this little above the noise
   std::int32_t max_frequencies = 24;  ///< bins used, spread evenly over the frame's band; 0 = all of them
+  /// Where the iteration runs: the kernels of sbl_kernel.hpp on CPU threads or on a CUDA device.
+  /// `kernels = false` (host only) runs the Eigen reference instead: a full solve per frequency,
+  /// kept to check the kernels against; it is about half as fast.
+  Backend backend = Backend::Host;
+  int device = 0;
+  bool kernels = true;
 };
 
 struct DoaPeak {

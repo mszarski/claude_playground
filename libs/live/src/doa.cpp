@@ -2,14 +2,26 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <stdexcept>
 
 #include <Eigen/Dense>
 
 #include "sonar/core/parallel.hpp"
 #include "sonar/dsp/fft.hpp"
+#include "sonar/live/sbl_kernel.hpp"
 
 namespace sonar::live {
+
+#if SONAR_HAVE_CUDA
+struct SblCudaState;
+SblCudaState* sbl_cuda_open(std::int64_t n, std::int64_t m, std::int64_t n_f, std::int64_t n_l, const double* a, const double* y,
+                            int device);
+void sbl_cuda_step(SblCudaState* s, const double* gamma, const std::int32_t* active, std::int64_t n_active, const double* sigma2,
+                   double* num, double* den);
+void sbl_cuda_close(SblCudaState* s);
+#endif
+
 namespace {
 
 using Cd = std::complex<double>;
@@ -268,27 +280,83 @@ DoaResult sbl(const DoaFrame& frame, const std::vector<double>& u, double c, con
   }
   const double prune = std::pow(10.0, -(o.dynamic_range_db + 15.0) / 10.0);
   std::vector<Eigen::VectorXd> num(n_f), den(n_f);
+  // The kernel path (sbl_kernel.hpp): what a GPU runs, and the same code on the host when asked for.
+  const bool use_kernels = o.kernels || o.backend == Backend::Cuda;
+  std::vector<Cd> a_all, y_all;
+  std::vector<double> k_cov, k_z, k_num, k_den;
+  const double* a_flat = nullptr;
+  const double* y_flat = nullptr;
+#if SONAR_HAVE_CUDA
+  struct Closer {
+    void operator()(SblCudaState* s) const { sbl_cuda_close(s); }
+  };
+  std::unique_ptr<SblCudaState, Closer> device;
+#endif
+  if (use_kernels) {
+    if (n > kSblMaxChannels) throw std::invalid_argument("sbl: the kernel path takes at most 64 channels");
+    const auto per_a = static_cast<std::size_t>(n * m_grid), per_y = static_cast<std::size_t>(n * frame.n_snapshots);
+    a_all.resize(n_f * per_a);
+    y_all.resize(n_f * per_y);
+    for (std::size_t f = 0; f < n_f; ++f) {
+      std::copy(a[f].data(), a[f].data() + per_a, a_all.begin() + static_cast<std::ptrdiff_t>(f * per_a));   // column major: [M][N]
+      const auto y = snapshots_of(frame, pick[f]);
+      std::copy(y.data(), y.data() + per_y, y_all.begin() + static_cast<std::ptrdiff_t>(f * per_y));
+    }
+    a_flat = reinterpret_cast<const double*>(a_all.data());   // NOLINT: std::complex<double> is two doubles
+    y_flat = reinterpret_cast<const double*>(y_all.data());   // NOLINT
+    if (o.backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+      device.reset(sbl_cuda_open(n, m_grid, static_cast<std::int64_t>(n_f), frame.n_snapshots, a_flat, y_flat, o.device));
+#else
+      throw std::runtime_error("sbl: built without the CUDA backend");
+#endif
+    } else {
+      k_cov.resize(2 * n_f * static_cast<std::size_t>(n * n));
+      k_z.resize(2 * n_f * per_y);
+    }
+  }
   for (out.iterations = 1; out.iterations <= o.max_iterations; ++out.iterations) {
     const auto n_act = static_cast<Eigen::Index>(active.size());
     Eigen::VectorXd g_act(n_act);
     for (Eigen::Index k = 0; k < n_act; ++k) g_act[k] = gamma[active[static_cast<std::size_t>(k)]];
-    // Every frequency is independent given gamma.
-    parallel_for_host(static_cast<std::int64_t>(n_f), [&](std::int64_t fi) {
-      const auto f = static_cast<std::size_t>(fi);
-      const auto y = snapshots_of(frame, pick[f]);
-      Mat aa(n, n_act);
-      for (Eigen::Index k = 0; k < n_act; ++k) aa.col(k) = a[f].col(active[static_cast<std::size_t>(k)]);
-      Mat cov = (aa * g_act.asDiagonal()) * aa.adjoint();
-      cov.diagonal().array() += sigma2[f];
-      const Eigen::LLT<Mat> llt(cov);
-      const Mat b = llt.solve(aa);                                    // Sigma^-1 A
-      num[f] = (b.adjoint() * y).cwiseAbs2().rowwise().sum() / l;     // |y^H Sigma^-1 a|^2 per bearing
-      den[f] = (aa.conjugate().cwiseProduct(b)).colwise().sum().real().transpose();   // a^H Sigma^-1 a
-    });
     Eigen::VectorXd top = Eigen::VectorXd::Zero(n_act), bottom = Eigen::VectorXd::Zero(n_act);
-    for (std::size_t f = 0; f < n_f; ++f) {
-      top += num[f];
-      bottom += den[f];
+    if (use_kernels) {
+      std::vector<std::int32_t> act32(active.begin(), active.end());
+      k_num.assign(n_f * static_cast<std::size_t>(n_act), 0.0);
+      k_den.assign(n_f * static_cast<std::size_t>(n_act), 0.0);
+      const auto nf = static_cast<std::int64_t>(n_f);
+      if (o.backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+        sbl_cuda_step(device.get(), gamma.data(), act32.data(), n_act, sigma2.data(), k_num.data(), k_den.data());
+#endif
+      } else {
+        parallel_for_host(nf * n * n, SblCovKernel{a_flat, gamma.data(), act32.data(), sigma2.data(), k_cov.data(), n, m_grid, n_act});
+        parallel_for_host(nf, SblFactorKernel{k_cov.data(), y_flat, k_z.data(), n, frame.n_snapshots});
+        parallel_for_host(nf * n_act, SblUpdateKernel{a_flat, k_cov.data(), k_z.data(), act32.data(), k_num.data(), k_den.data(), n,
+                                                       m_grid, n_act, frame.n_snapshots});
+      }
+      for (std::size_t f = 0; f < n_f; ++f) {
+        top += Eigen::Map<const Eigen::VectorXd>(k_num.data() + f * static_cast<std::size_t>(n_act), n_act);
+        bottom += Eigen::Map<const Eigen::VectorXd>(k_den.data() + f * static_cast<std::size_t>(n_act), n_act);
+      }
+    } else {
+      // Every frequency is independent given gamma.
+      parallel_for_host(static_cast<std::int64_t>(n_f), [&](std::int64_t fi) {
+        const auto f = static_cast<std::size_t>(fi);
+        const auto y = snapshots_of(frame, pick[f]);
+        Mat aa(n, n_act);
+        for (Eigen::Index k = 0; k < n_act; ++k) aa.col(k) = a[f].col(active[static_cast<std::size_t>(k)]);
+        Mat cov = (aa * g_act.asDiagonal()) * aa.adjoint();
+        cov.diagonal().array() += sigma2[f];
+        const Eigen::LLT<Mat> llt(cov);
+        const Mat b = llt.solve(aa);                                    // Sigma^-1 A
+        num[f] = (b.adjoint() * y).cwiseAbs2().rowwise().sum() / l;     // |y^H Sigma^-1 a|^2 per bearing
+        den[f] = (aa.conjugate().cwiseProduct(b)).colwise().sum().real().transpose();   // a^H Sigma^-1 a
+      });
+      for (std::size_t f = 0; f < n_f; ++f) {
+        top += num[f];
+        bottom += den[f];
+      }
     }
     const Eigen::VectorXd next = g_act.cwiseProduct((top.cwiseQuotient(bottom.cwiseMax(1e-300))).cwiseSqrt());
     const double change = (next - g_act).cwiseAbs().sum() / std::max(g_act.cwiseAbs().sum(), 1e-300);

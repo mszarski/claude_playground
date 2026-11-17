@@ -1,6 +1,8 @@
 // sonar_live: the long-range array chain as a standalone C++ program (no Python at run time).
 //
 //   sonar_live --replay recording.h5 [--report out.jsonl] [options]
+//   sonar_live --udp PORT --template template.h5 --listen --band F_LOW F_HIGH [--recording out.h5]
+//                                                  passive bearings from the untriggered board stream
 //   sonar_live --udp PORT --template template.h5 [--nav-port PORT] [--recording out.h5]
 //              [--report out.jsonl] [--report-udp HOST:PORT] [--pings N] [options]
 //   sonar_live --passive recording.h5 --band F_LOW F_HIGH [--report out.jsonl] [options]
@@ -65,7 +67,8 @@ void set_option(live::ChainOptions& c, live::PassiveOptions& p, const std::strin
   else if (key == "sbl_min_snr_db") c.sbl.min_snr_db = p.sbl.min_snr_db = v;
   else if (key == "sbl_dynamic_range_db") c.sbl.dynamic_range_db = p.sbl.dynamic_range_db = v;
   else if (key == "look") c.starboard = value != "port";
-  else if (key == "backend") c.backend = value == "cuda" ? Backend::Cuda : Backend::Host;
+  else if (key == "backend") c.backend = p.sbl.backend = value == "cuda" ? Backend::Cuda : Backend::Host;
+  else if (key == "sbl_kernels") c.sbl.kernels = p.sbl.kernels = v != 0.0;
   else if (key == "tracker_range_sigma") c.tracker.range_sigma = v;
   else if (key == "tracker_bearing_sigma_deg") c.tracker.bearing_sigma = v * kDeg;
   else if (key == "tracker_confirm_hits") c.tracker.confirm_hits = static_cast<std::int64_t>(v);
@@ -106,6 +109,7 @@ int main(int argc, char** argv) {
   try {
     live::ChainOptions chain_options;
     live::PassiveOptions passive_options;
+    bool listen = false;
     std::string replay, passive, template_path, report_path, recording_path, report_host;
     int udp_port = -1, nav_port = -1, report_port = 0;
     std::int64_t max_pings = -1;
@@ -122,6 +126,7 @@ int main(int argc, char** argv) {
         passive_options.f_high = std::atof(next().c_str());
       } else if (a == "--udp") udp_port = std::atoi(next().c_str());
       else if (a == "--template") template_path = next();
+      else if (a == "--listen") listen = true;
       else if (a == "--nav-port") nav_port = std::atoi(next().c_str());
       else if (a == "--report") report_path = next();
       else if (a == "--recording") recording_path = next();
@@ -184,7 +189,12 @@ int main(int argc, char** argv) {
       }
     } else if (udp_port >= 0) {
       if (template_path.empty()) throw std::invalid_argument("--udp needs --template");
-      live::PingAssembler assembler(io::RecordReader(template_path).read(0));
+      const PingRecord template_record = io::RecordReader(template_path).read(0);
+      live::PingAssembler assembler(template_record);
+      // --listen: the stream is not cut on transmits; every stretch long enough for one passive
+      // frame is recorded and solved for bearings as it completes.
+      const std::int64_t chunk = passive_options.n_fft + (passive_options.n_average - 1) * passive_options.hop;
+      live::StreamAssembler stream(template_record, listen ? chunk : 1);
       live::UdpSocket blocks("0.0.0.0", udp_port);
       std::unique_ptr<live::UdpSocket> nav_socket;
       if (nav_port >= 0) nav_socket = std::make_unique<live::UdpSocket>("0.0.0.0", nav_port);
@@ -229,6 +239,20 @@ int main(int argc, char** argv) {
         }
         last = std::chrono::steady_clock::now();
         ready.clear();
+        if (listen) {
+          stream.feed(block.data(), block.size(), ready);
+          for (PingRecord& rec : ready) {
+            if (recorder) {
+              recorder->write(rec);
+              recorder->flush();
+            }
+            const std::string lines = live::passive_json(live::passive_bearings(rec, passive_options), rec.transmit.time_ns);
+            report << lines << std::flush;
+            if (out_socket) out_socket->send_to(report_host, report_port, lines);
+            ++done;
+          }
+          continue;
+        }
         assembler.feed(block.data(), block.size(), ready);
         for (PingRecord& rec : ready) {
           bool have_nav = true;
@@ -243,6 +267,12 @@ int main(int argc, char** argv) {
       stop = true;
       receiver.join();
       nav_thread.join();
+      if (listen) {
+        std::fprintf(stderr, "sonar_live: %lld frames, %lld dropped, %lld samples lost, %lld bad blocks\n", static_cast<long long>(done),
+                     static_cast<long long>(stream.dropped_chunks), static_cast<long long>(stream.lost_samples),
+                     static_cast<long long>(stream.bad_blocks));
+        return 0;
+      }
       std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld pings without navigation\n",
                    static_cast<long long>(done), static_cast<long long>(assembler.dropped_pings),
                    static_cast<long long>(assembler.lost_samples), static_cast<long long>(assembler.bad_blocks),

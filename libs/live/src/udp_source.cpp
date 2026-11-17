@@ -127,6 +127,65 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   return true;
 }
 
+StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples)
+    : template_(template_record), chunk_(chunk_samples) {
+  if (template_.samples.is_complex()) throw std::invalid_argument("StreamAssembler: the template must describe real ADC samples");
+  if (chunk_ < 1) throw std::invalid_argument("StreamAssembler: chunk_samples must be positive");
+  n_channels_ = template_.samples.n_channels;
+  const double full_scale = template_.metadata.adc_full_scale;
+  volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / 8388608.0;
+  template_.samples.data.clear();
+  buffer_.assign(static_cast<std::size_t>(n_channels_ * chunk_), 0.0F);
+}
+
+bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out) {
+  if (size < kHeader || std::memcmp(data, "GSFB", 4) != 0 || get<std::uint16_t>(data + 4) != 1) {
+    ++bad_blocks;
+    return false;
+  }
+  const auto ch = static_cast<std::int64_t>(get<std::uint16_t>(data + 6));
+  const auto n = static_cast<std::int64_t>(get<std::uint32_t>(data + 8));
+  const auto first = static_cast<std::int64_t>(get<std::uint64_t>(data + 12));
+  const auto start_ns = static_cast<std::int64_t>(get<std::uint64_t>(data + 36));
+  if (ch != n_channels_ || size != kHeader + static_cast<std::size_t>(n * ch * 3)) {
+    ++bad_blocks;
+    return false;
+  }
+  if (have_next_ && first != next_sample_) {
+    lost_samples += std::max<std::int64_t>(first - next_sample_, 0);
+    if (filled_ > 0) ++dropped_chunks;
+    filled_ = 0;
+  }
+  have_next_ = true;
+  next_sample_ = first + n;
+  const unsigned char* payload = data + kHeader;
+  for (std::int64_t i = 0; i < n; ++i) {
+    if (filled_ == 0) {
+      first_ = first + i;
+      start_ns_ = start_ns;
+    }
+    for (std::int64_t c = 0; c < ch; ++c) {
+      const unsigned char* q = payload + (i * ch + c) * 3;
+      std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
+      if (v & 0x800000) v -= 0x1000000;
+      buffer_[static_cast<std::size_t>(c * chunk_ + filled_)] = static_cast<float>(static_cast<double>(v) * volts_per_count_);
+    }
+    if (++filled_ == chunk_) {
+      PingRecord rec = template_;
+      rec.metadata.sequence = chunks++;
+      rec.samples.resize(n_channels_, chunk_, SampleKind::RealPassband);
+      rec.samples.start_time = 0.0;
+      rec.transmit.time_ns = start_ns_ + static_cast<std::int64_t>(std::llround(static_cast<double>(first_) / rec.samples.sample_rate * 1e9));
+      for (std::int64_t c = 0; c < n_channels_; ++c) {
+        std::copy_n(buffer_.data() + c * chunk_, chunk_, rec.samples.channel(c));
+      }
+      out.push_back(std::move(rec));
+      filled_ = 0;
+    }
+  }
+  return true;
+}
+
 UdpSocket::UdpSocket(const std::string& host, int port, double timeout_s) {
   fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
   if (fd_ < 0) throw std::runtime_error("UdpSocket: cannot create a socket");

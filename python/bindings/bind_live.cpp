@@ -35,8 +35,11 @@ py::dict doa_dict(const live::DoaResult& r) {
   return d;
 }
 
-live::DoaOptions doa_options(int max_iterations, double tolerance, int max_sources, double dynamic_range_db, double min_snr_db) {
+live::DoaOptions doa_options(int max_iterations, double tolerance, int max_sources, double dynamic_range_db, double min_snr_db,
+                             Backend backend = Backend::Host, bool kernels = true) {
   live::DoaOptions o;
+  o.backend = backend;
+  o.kernels = kernels;
   o.max_iterations = max_iterations;
   o.tolerance = tolerance;
   o.max_sources = max_sources;
@@ -118,8 +121,8 @@ void bind_live(py::module_& m) {
       "doa_gate",
       [](const PingRecord& record, double two_way_time, std::int64_t n_fft, const std::vector<double>& bearings,
          const std::string& method, int max_iterations, double tolerance, int max_sources, double dynamic_range_db,
-         double min_snr_db) {
-        const auto o = doa_options(max_iterations, tolerance, max_sources, dynamic_range_db, min_snr_db);
+         double min_snr_db, Backend backend, bool kernels) {
+        const auto o = doa_options(max_iterations, tolerance, max_sources, dynamic_range_db, min_snr_db, backend, kernels);
         const auto u = live::element_offsets(record);
         live::DoaResult r;
         {
@@ -132,13 +135,14 @@ void bind_live(py::module_& m) {
       },
       py::arg("record"), py::arg("two_way_time"), py::arg("n_fft"), py::arg("bearings"), py::arg("method") = "sbl",
       py::arg("max_iterations") = 60, py::arg("tolerance") = 1e-3, py::arg("max_sources") = 4,
-      py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0,
+      py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0, py::arg("backend") = Backend::Host,
+      py::arg("kernels") = true,
       "Bearings at one range gate of a conditioned record: SBL or the conventional beamformer on the same snapshots.");
   m.def(
       "doa_passive",
       [](const PingRecord& record, double f_low, double f_high, std::int64_t n_fft, std::int64_t hop, std::int64_t n_average,
          double first_deg, double last_deg, double step_deg, const std::string& method, int max_iterations, double tolerance,
-         int max_sources, double dynamic_range_db, double min_snr_db) {
+         int max_sources, double dynamic_range_db, double min_snr_db, Backend backend, bool kernels) {
         live::PassiveOptions p;
         p.f_low = f_low;
         p.f_high = f_high;
@@ -149,7 +153,7 @@ void bind_live(py::module_& m) {
         p.bearing_last_deg = last_deg;
         p.bearing_step_deg = step_deg;
         p.use_sbl = method == "sbl";
-        p.sbl = doa_options(max_iterations, tolerance, max_sources, dynamic_range_db, min_snr_db);
+        p.sbl = doa_options(max_iterations, tolerance, max_sources, dynamic_range_db, min_snr_db, backend, kernels);
         std::vector<live::PassiveFrame> frames;
         std::vector<double> bearings;
         {
@@ -172,7 +176,8 @@ void bind_live(py::module_& m) {
       py::arg("record"), py::arg("f_low") = 0.0, py::arg("f_high") = 0.0, py::arg("n_fft") = 1024, py::arg("hop") = 512,
       py::arg("n_average") = 8, py::arg("first_deg") = -80.0, py::arg("last_deg") = 80.0, py::arg("step_deg") = 0.5,
       py::arg("method") = "sbl", py::arg("max_iterations") = 60, py::arg("tolerance") = 1e-3, py::arg("max_sources") = 4,
-      py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0,
+      py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0, py::arg("backend") = Backend::Host,
+      py::arg("kernels") = true,
       "Passive bearing-time record of one stretch of data: (frames, bearing grid in rad).");
 
   py::class_<live::LiveChain>(m, "LiveChainCpp")
@@ -211,6 +216,7 @@ void bind_live(py::module_& m) {
         if (kw.contains("sbl_max_sources")) o.sbl.max_sources = kw["sbl_max_sources"].cast<std::int32_t>();
         if (kw.contains("gate_fft")) o.gate_fft = kw["gate_fft"].cast<std::int64_t>();
         if (kw.contains("multipath")) o.classify.multipath = kw["multipath"].cast<bool>();
+        if (kw.contains("sbl_kernels")) o.sbl.kernels = kw["sbl_kernels"].cast<bool>();
         if (kw.contains("hann")) o.hann = kw["hann"].cast<bool>();
         if (kw.contains("starboard")) o.starboard = kw["starboard"].cast<bool>();
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();

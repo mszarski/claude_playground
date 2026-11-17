@@ -181,3 +181,48 @@ def test_sbl_gate_is_fast_enough_for_a_few_gates_per_ping():
     per_gate = (time.perf_counter() - t) / 5
     print(f"[sbl] 32 channels, 321 bearings, one range gate: {per_gate * 1e3:.0f} ms")
     assert per_gate < 2.0
+
+
+# --- the kernel path (what a GPU runs) -------------------------------------------------------
+
+def _same(a, b, tol_deg=1e-6):
+    assert a.get("iterations") == b.get("iterations")
+    assert np.allclose(a["spectrum"], b["spectrum"], rtol=1e-5, atol=1e-9 * float(np.max(a["spectrum"])))
+    assert len(a["peaks"]) == len(b["peaks"])
+    for p, q in zip(a["peaks"], b["peaks"]):
+        assert abs(np.degrees(p[0] - q[0])) < tol_deg and p[1] == pytest.approx(q[1], rel=1e-6)
+    assert a["noise"] == pytest.approx(b["noise"], rel=1e-6)
+
+
+def test_kernel_path_gives_the_eigen_paths_answer():
+    """The three kernels of sbl_kernel.hpp (one triangular solve per bearing) against the Eigen
+    iteration (a full solve): same gammas, peaks, noise and iteration count."""
+    for bearings in ([2.0, 4.0], [0.0], [-11.0, -9.2]):
+        rec = active_ping(bearings)
+        _same(core.doa_gate(rec, 2 * R / C, 128, list(GRID), kernels=False), core.doa_gate(rec, 2 * R / C, 128, list(GRID), kernels=True))
+    rec = passive_record([(-20.0, 1.0), (-17.2, 0.7)], seconds=1.0)     # several snapshots per frequency
+    kw = dict(n_fft=256, hop=128, n_average=12, step_deg=0.25, dynamic_range_db=12.0, min_snr_db=3.0)
+    a, _ = core.doa_passive(rec, 4000.0, 6000.0, kernels=False, **kw)
+    b, _ = core.doa_passive(rec, 4000.0, 6000.0, kernels=True, **kw)
+    assert len(a) == len(b) >= 3
+    for x, y in zip(a, b):
+        _same(x, y)
+
+
+@pytest.mark.skipif(not core.cuda_available(), reason="no CUDA device")
+def test_cuda_sbl_gives_the_host_kernels_answer():
+    rec = active_ping([2.0, 4.0])
+    host = core.doa_gate(rec, 2 * R / C, 128, list(GRID), kernels=True)
+    dev = core.doa_gate(rec, 2 * R / C, 128, list(GRID), backend=core.Backend.Cuda)
+    _same(host, dev)
+    rec = passive_record([(-20.0, 1.0), (15.0, 0.5)], seconds=1.0)
+    kw = dict(n_fft=256, hop=128, n_average=12, min_snr_db=3.0)
+    a, _ = core.doa_passive(rec, 4000.0, 6000.0, kernels=True, **kw)
+    b, _ = core.doa_passive(rec, 4000.0, 6000.0, backend=core.Backend.Cuda, **kw)
+    for x, y in zip(a, b):
+        _same(x, y)
+    core.doa_gate(rec, 0.5, 128, list(GRID), backend=core.Backend.Cuda)     # warm
+    t = time.perf_counter()
+    for _ in range(5):
+        core.doa_gate(active_ping([2.0, 4.0]), 2 * R / C, 128, list(GRID), backend=core.Backend.Cuda)
+    print(f"[sbl cuda] one range gate including ping setup: {(time.perf_counter() - t) / 5 * 1e3:.0f} ms")

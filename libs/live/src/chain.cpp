@@ -214,12 +214,15 @@ Report LiveChain::process(PingRecord& record) {
         const DoaFrame frame = gate_frame(record, 2.0 * h.range / c, n_fft);
         // The conventional spectrum of the gate costs one pass; SBL is only worth running where
         // that spectrum stands clear of its own median, which a diffuse field's does not.
-        const DoaResult look = conventional(frame, u, c, sbl_grid, opt_.sbl);
+        DoaOptions solver = opt_.sbl;          // the solver runs where the rest of the chain does
+        solver.backend = opt_.backend;
+        solver.device = opt_.device;
+        const DoaResult look = conventional(frame, u, c, sbl_grid, solver);
         std::vector<float> sorted = look.spectrum;
         std::nth_element(sorted.begin(), sorted.begin() + static_cast<std::ptrdiff_t>(sorted.size() / 2), sorted.end());
         const double median = static_cast<double>(sorted[sorted.size() / 2]);
         const double peak = static_cast<double>(*std::max_element(look.spectrum.begin(), look.spectrum.end()));
-        if (median > 0.0 && 10.0 * std::log10(peak / median) >= opt_.sbl_min_contrast_db) peaks = sbl(frame, u, c, sbl_grid, opt_.sbl).peaks;
+        if (median > 0.0 && 10.0 * std::log10(peak / median) >= opt_.sbl_min_contrast_db) peaks = sbl(frame, u, c, sbl_grid, solver).peaks;
       }
       if (peaks.empty()) {
         for (std::size_t j : group) resolved.push_back(by_snr[j]);
