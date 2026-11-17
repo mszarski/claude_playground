@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "sonar/core/parallel.hpp"
 #include "sonar/detect/cfar.hpp"
 #include "sonar/dsp/baseband.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
@@ -108,6 +109,9 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
 
 LiveChain::LiveChain(const ChainOptions& options) : opt_(options), tracker_(options.tracker) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
+  if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
+    throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");
+  }
 }
 
 Report LiveChain::process(PingRecord& record) {
@@ -142,27 +146,54 @@ Report LiveChain::process(PingRecord& record) {
   const Waveform& w = record.transmit.waveform;
   const Samples& s = record.samples;
   const double band = std::abs(w.f_stop - w.f_start) > 0.0 ? std::abs(w.f_stop - w.f_start) : 1.0 / w.duration;
-  const double r0 = 0.5 * c * s.start_time;
-  const double r1 = 0.5 * c * (s.start_time + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
-  const auto k = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil(opt_.range_cell_m / (0.75 * c / (2.0 * band)))), 1);
-  const double step = opt_.range_cell_m / static_cast<double>(k);
-  const std::int64_t n_cells = static_cast<std::int64_t>((r1 - r0) / step) / k;
-  if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
-  std::vector<double> fine(static_cast<std::size_t>(n_cells * k));
-  for (std::size_t i = 0; i < fine.size(); ++i) fine[i] = r0 + step * static_cast<double>(i);
-  const std::vector<float> fine_power = range_bearing_power(record, fine, bearings, opt_.hann, opt_.backend, opt_.device);
   const auto n_b = static_cast<std::int64_t>(bearings.size());
-  last_power.assign(static_cast<std::size_t>(n_b * n_cells), 0.0F);
-  last_ranges.assign(static_cast<std::size_t>(n_cells), 0.0);
-  for (std::int64_t j = 0; j < n_cells; ++j) {
-    double r = 0.0;
-    for (std::int64_t q = 0; q < k; ++q) r += fine[static_cast<std::size_t>(j * k + q)];
-    last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
-    for (std::int64_t b = 0; b < n_b; ++b) {
-      double p = 0.0;
-      for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(fine_power[static_cast<std::size_t>(b * n_cells * k + j * k + q)]);
-      last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+  std::int64_t n_cells = 0;
+  if (opt_.beamformer == "backprojection") {
+    const double r0 = 0.5 * c * s.start_time;
+    const double r1 = 0.5 * c * (s.start_time + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
+    const auto k = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil(opt_.range_cell_m / (0.75 * c / (2.0 * band)))), 1);
+    const double step = opt_.range_cell_m / static_cast<double>(k);
+    n_cells = static_cast<std::int64_t>((r1 - r0) / step) / k;
+    if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
+    std::vector<double> fine(static_cast<std::size_t>(n_cells * k));
+    for (std::size_t i = 0; i < fine.size(); ++i) fine[i] = r0 + step * static_cast<double>(i);
+    const std::vector<float> fine_power = range_bearing_power(record, fine, bearings, opt_.hann, opt_.backend, opt_.device);
+    last_power.assign(static_cast<std::size_t>(n_b * n_cells), 0.0F);
+    last_ranges.assign(static_cast<std::size_t>(n_cells), 0.0);
+    for (std::int64_t j = 0; j < n_cells; ++j) {
+      double r = 0.0;
+      for (std::int64_t q = 0; q < k; ++q) r += fine[static_cast<std::size_t>(j * k + q)];
+      last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
+      for (std::int64_t b = 0; b < n_b; ++b) {
+        double p = 0.0;
+        for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(fine_power[static_cast<std::size_t>(b * n_cells * k + j * k + q)]);
+        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+      }
     }
+  } else {
+    // The far-field beamformers give every sample of the record: the part with a fully
+    // overlapped replica is averaged into range cells of whole samples.
+    const BeamMap map = opt_.beamformer == "mvdr" ? mvdr_beamform(record, bearings, opt_.mvdr)
+                                                  : farfield_beamform(record, bearings, opt_.hann ? "hann" : "rect");
+    const double sample_m = map.ranges[1] - map.ranges[0];
+    const auto k = std::max<std::int64_t>(std::llround(opt_.range_cell_m / sample_m), 1);
+    n_cells = std::min(map.n_valid, map.n_samples) / k;
+    if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
+    last_power.assign(static_cast<std::size_t>(n_b * n_cells), 0.0F);
+    last_ranges.assign(static_cast<std::size_t>(n_cells), 0.0);
+    for (std::int64_t j = 0; j < n_cells; ++j) {
+      double r = 0.0;
+      for (std::int64_t q = 0; q < k; ++q) r += map.ranges[static_cast<std::size_t>(j * k + q)];
+      last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
+    }
+    parallel_for_host(n_b, [&](std::int64_t b) {
+      const std::complex<float>* row = map.row(b);
+      for (std::int64_t j = 0; j < n_cells; ++j) {
+        double p = 0.0;
+        for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(std::norm(row[j * k + q]));
+        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+      }
+    });
   }
   const double cell = last_ranges[1] - last_ranges[0];
   detect::CfarOptions co;

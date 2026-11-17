@@ -8,7 +8,8 @@
 // Options are key=value pairs after the flags, or in a file given with --options, one per
 // line (# starts a comment):
 //   bearing_first_deg bearing_last_deg bearing_step_deg range_cell_m cfar_pfa cfar_guard_m
-//   cfar_train_m min_snr_db doa (map | sbl) gate_fft sbl_grid_step_deg sbl_max_sources
+//   cfar_train_m min_snr_db beamformer (backprojection | farfield | mvdr) doa (map | sbl)
+//   gate_fft sbl_grid_step_deg sbl_max_sources
 //   sbl_min_snr_db sbl_dynamic_range_db look (starboard | port) backend (host | cuda)
 //   tracker_range_sigma tracker_bearing_sigma_deg tracker_confirm_hits tracker_max_misses
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)
@@ -55,6 +56,7 @@ void set_option(live::ChainOptions& c, live::PassiveOptions& p, const std::strin
   else if (key == "cfar_train_m") c.cfar_train_m = v;
   else if (key == "min_snr_db") c.min_snr_db = v;
   else if (key == "doa") c.doa = value;
+  else if (key == "beamformer") c.beamformer = value;
   else if (key == "gate_fft") c.gate_fft = static_cast<std::int64_t>(v);
   else if (key == "sbl_grid_step_deg") c.sbl_grid_step_deg = v;
   else if (key == "sbl_max_iterations") c.sbl.max_iterations = p.sbl.max_iterations = static_cast<std::int32_t>(v);
