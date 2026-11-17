@@ -14,6 +14,10 @@ as an *apparent position*: the point at distance c * delay from the sonar along
 the ray's direction there. For the first two providers that is exact (it is the
 image position). For traced rays it reproduces the delay and arrival angle at the
 array, with the wavefront curvature of a point at the travel-time distance.
+
+The first two providers, the sediment provider and `two_way_paths` also exist in C++
+(libs/sim/src/paths.cpp), which is used by default; `engine="numpy"` or
+GPUSONAR_SIM_ENGINE=numpy selects the NumPy code in this file (sim/engine.py).
 """
 
 from __future__ import annotations
@@ -22,6 +26,9 @@ import abc
 from dataclasses import dataclass
 
 import numpy as np
+
+from .. import _gpusonar as core
+from . import engine as _engine
 
 
 @dataclass
@@ -65,6 +72,15 @@ class EigenrayProvider(abc.ABC):
         """Eigenrays from `source` [3] to each of `points` [S, 3] (NED, z down)."""
 
 
+def _cpp_points(engine, points):
+    """True when the C++ engine is selected and takes these field points ([S, 3])."""
+    return _engine.resolve(engine) == "cpp" and points.ndim == 2 and points.shape[1] == 3
+
+
+def _source3(source):
+    return tuple(float(x) for x in source)
+
+
 def _direct(source, points, c):
     d = points - source
     r = np.linalg.norm(d, axis=1)
@@ -74,12 +90,15 @@ def _direct(source, points, c):
 class FreeFieldProvider(EigenrayProvider):
     tier = "free_field"
 
-    def __init__(self, sound_speed: float):
+    def __init__(self, sound_speed: float, engine: str | None = None):
         self.sound_speed = float(sound_speed)
+        self.engine = engine
 
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
+        if _cpp_points(self.engine, points):
+            return EigenraySet(**core.sim_free_field_eigenrays(self.sound_speed, _source3(source), points))
         r, u = _direct(source, points, self.sound_speed)
         s = points.shape[0]
         return EigenraySet(
@@ -107,8 +126,10 @@ class ImageSourceProvider(EigenrayProvider):
     def __init__(self, sound_speed: float, surface_z: float | None = 0.0,
                  bottom_z: float | None = None, surface_coefficient: complex = -1.0,
                  bottom_coefficient: complex = 0.5, max_order: int = 2,
-                 walls: list[dict] | None = None, bottom: dict | None = None):
+                 walls: list[dict] | None = None, bottom: dict | None = None,
+                 engine: str | None = None):
         self.sound_speed = float(sound_speed)
+        self.engine = engine
         self.surface_z = surface_z
         self.bottom_z = bottom_z
         self.surface_coefficient = complex(surface_coefficient)
@@ -150,6 +171,15 @@ class ImageSourceProvider(EigenrayProvider):
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
+        if _cpp_points(self.engine, points) and all(int(w["axis"]) in (0, 1) for w in self.walls):
+            walls = [(int(w["axis"]), float(w["position"]), complex(w.get("coefficient", 0.8))) for w in self.walls]
+            return EigenraySet(**core.sim_image_source_eigenrays(
+                self.sound_speed, _source3(source), points,
+                surface_z=None if self.surface_z is None else float(self.surface_z),
+                bottom_z=None if self.bottom_z is None else float(self.bottom_z),
+                surface_coefficient=self.surface_coefficient, bottom_coefficient=self.bottom_coefficient,
+                max_order=self.max_order, walls=walls,
+                bottom=None if self.bottom is None else _fluid_bottom(**self.bottom)))
         c = self.sound_speed
         rays = []  # (image positions [S, 3], coefficient, ns, nb)
         for img_z, ns, nb in self._vertical_images(points[:, 2]):
@@ -189,7 +219,13 @@ class ImageSourceProvider(EigenrayProvider):
         return out
 
 
-def snell_crossing(source, points, c_water: float, c_sediment: float, interface_z: float):
+def _fluid_bottom(speed: float, density: float, attenuation: float = 0.0, water_density: float = 1.0):
+    """A sediment mapping as the tuple the C++ provider takes (the arguments of `rayleigh_reflection`)."""
+    return float(speed), float(density), float(attenuation), float(water_density)
+
+
+def snell_crossing(source, points, c_water: float, c_sediment: float, interface_z: float,
+                   engine: str | None = None):
     """Least-time paths from a source in the water to points below a flat interface.
 
     Returns (travel time [S], crossing points [S, 3]). Points above the interface get the
@@ -197,6 +233,8 @@ def snell_crossing(source, points, c_water: float, c_sediment: float, interface_
     """
     source = np.asarray(source, dtype=float)
     points = np.atleast_2d(np.asarray(points, dtype=float))
+    if _cpp_points(engine, points):
+        return core.sim_snell_crossing(_source3(source), points, float(c_water), float(c_sediment), float(interface_z))
     a = interface_z - source[2]
     b = points[:, 2] - interface_z
     h = points[:, :2] - source[:2]
@@ -229,8 +267,9 @@ class SedimentProvider(EigenrayProvider):
     tier = "image_source"
 
     def __init__(self, sound_speed: float, sediment_speed: float, interface_z: float,
-                 transmission: complex = 1.0):
+                 transmission: complex = 1.0, engine: str | None = None):
         self.sound_speed = float(sound_speed)
+        self.engine = engine
         self.sediment_speed = float(sediment_speed)
         self.interface_z = float(interface_z)
         self.transmission = complex(transmission)
@@ -238,7 +277,11 @@ class SedimentProvider(EigenrayProvider):
     def eigenrays(self, source, points) -> EigenraySet:
         source = np.asarray(source, dtype=float)
         points = np.atleast_2d(np.asarray(points, dtype=float))
-        t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z)
+        if _cpp_points(self.engine, points):
+            return EigenraySet(**core.sim_sediment_eigenrays(self.sound_speed, self.sediment_speed, self.interface_z,
+                                                             self.transmission, _source3(source), points))
+        t, cross = snell_crossing(source, points, self.sound_speed, self.sediment_speed, self.interface_z,
+                                  engine="numpy")
         launch = cross - source
         launch /= np.linalg.norm(launch, axis=1)[:, None]
         below = points[:, 2] > self.interface_z
@@ -290,15 +333,29 @@ def make_provider(tier: str, sound_speed: float, options: dict | None = None) ->
 
 
 def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points, amplitudes,
-                  velocities=None, lambert=None, normals=None):
+                  velocities=None, lambert=None, normals=None, engine: str | None = None):
     """Kernel paths for every (outbound eigenray, return eigenray) pair.
 
     Returns q [P, 3], p [P, 3], amplitude [P] and velocities ([P, 3] each or None).
     The return leg uses reciprocity: eigenrays from the receive reference point to the
     scatterer, travelled backwards.
+
+    The pairing runs in C++ for any provider's eigenrays (Bellhop's too) unless the NumPy
+    engine is selected.
     """
     out = provider.eigenrays(tx_position, points)
     back = provider.eigenrays(rx_reference, points)
+    if _engine.resolve(engine) == "cpp":
+        weighted = lambert is not None and bool(np.any(lambert))
+        moving = velocities is not None and bool(np.any(velocities))
+        q, p, amp, vq = core.sim_two_way_paths(
+            out.delay, out.amplitude, out.launch, out.arrival, out.valid, float(out.sound_speed),
+            back.delay, back.amplitude, back.launch, back.arrival, back.valid, float(back.sound_speed),
+            _source3(tx_position), _source3(rx_reference), np.asarray(amplitudes, dtype=complex),
+            velocities=np.asarray(velocities, dtype=float) if moving else None,
+            lambert=np.asarray(lambert, dtype=bool) if weighted else None,
+            normals=np.asarray(normals, dtype=float) if weighted and normals is not None else None)
+        return q, p, amp, vq, (None if vq is None else vq.copy())
     q_all = out.apparent_positions(tx_position)       # [S, Ko, 3]
     p_all = back.apparent_positions(rx_reference)     # [S, Kb, 3]
     a_out = out.excess_amplitude()

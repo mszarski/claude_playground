@@ -1,0 +1,357 @@
+// Bindings of the simulator parts ported from NumPy: the eigenray providers without a
+// ray tracer (sonar/sim/paths.hpp) and scattering-function reverberation
+// (sonar/sim/reverb.hpp). python/gpusonar/sim/engine.py chooses between these and the
+// NumPy implementations.
+#include <pybind11/complex.h>
+#include <pybind11/numpy.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+
+#include <cstring>
+
+#include "sonar/sim/paths.hpp"
+#include "sonar/sim/reverb.hpp"
+#include "vec_caster.hpp"
+
+namespace py = pybind11;
+using namespace sonar;  // NOLINT(google-build-using-namespace)
+
+namespace {
+
+using ArrD = py::array_t<double, py::array::c_style | py::array::forcecast>;
+using ArrC = py::array_t<std::complex<double>, py::array::c_style | py::array::forcecast>;
+using ArrB = py::array_t<bool, py::array::c_style | py::array::forcecast>;
+using cd = std::complex<double>;
+
+/// A vector as a NumPy array of element type `As` (the same size as T) without a copy:
+/// the array keeps the vector alive.
+template <typename T, typename As = T>
+py::array to_array(std::vector<T>&& v, const std::vector<py::ssize_t>& shape) {
+  static_assert(sizeof(T) == sizeof(As), "element types must have the same size");
+  auto* held = new std::vector<T>(std::move(v));
+  const py::capsule owner(held, [](void* ptr) { delete static_cast<std::vector<T>*>(ptr); });
+  return py::array(py::dtype::of<As>(), shape, held->data(), owner);
+}
+
+void require_points(const ArrD& a, const char* name) {
+  if (a.ndim() != 2 || a.shape(1) != 3) throw std::invalid_argument(std::string(name) + " must have shape [n, 3]");
+}
+
+/// The Python EigenraySet's fields, as a dict of arrays.
+py::dict set_dict(sim::EigenraySet&& e) {
+  const py::ssize_t s = e.n_points, k = e.n_rays;
+  py::dict d;
+  d["delay"] = to_array(std::move(e.delay), {s, k});
+  d["amplitude"] = to_array(std::move(e.amplitude), {s, k});
+  d["launch"] = to_array(std::move(e.launch), {s, k, 3});
+  d["arrival"] = to_array(std::move(e.arrival), {s, k, 3});
+  d["n_surface"] = to_array(std::move(e.n_surface), {s, k});
+  d["n_bottom"] = to_array(std::move(e.n_bottom), {s, k});
+  d["valid"] = to_array<std::uint8_t, bool>(std::move(e.valid), {s, k});  // 0 or 1 in every byte
+  d["sound_speed"] = e.sound_speed;
+  return d;
+}
+
+/// The fields two_way_paths reads, as a view of arrays [S, K] (directions [S, K, 3]).
+sim::EigenrayView set_view(const ArrD& delay, const ArrC& amplitude, const ArrD& launch, const ArrD& arrival,
+                           const ArrB& valid, double sound_speed) {
+  if (delay.ndim() != 2) throw std::invalid_argument("delay must have shape [points, rays]");
+  const py::ssize_t s = delay.shape(0), k = delay.shape(1);
+  const auto same = [&](const py::array& a) { return a.ndim() == 2 && a.shape(0) == s && a.shape(1) == k; };
+  const auto dirs = [&](const py::array& a) {
+    return a.ndim() == 3 && a.shape(0) == s && a.shape(1) == k && a.shape(2) == 3;
+  };
+  if (!same(amplitude) || !same(valid) || !dirs(launch) || !dirs(arrival)) {
+    throw std::invalid_argument("eigenray arrays must share the shape [points, rays]");
+  }
+  static_assert(sizeof(bool) == 1, "numpy bool arrays are read as bytes");
+  return {s,           k,              sound_speed,    delay.data(), amplitude.data(),
+          launch.data(), arrival.data(), reinterpret_cast<const std::uint8_t*>(valid.data())};
+}
+
+/// The first `n` rows of an array that was sized for more.
+template <typename T>
+py::array_t<T> first_rows(const py::array_t<T>& a, py::ssize_t n, py::ssize_t width) {
+  if (a.shape(0) == n) return a;
+  const std::vector<py::ssize_t> shape = width > 0 ? std::vector<py::ssize_t>{n, width} : std::vector<py::ssize_t>{n};
+  py::array_t<T> out(shape);
+  if (n > 0) std::memcpy(out.mutable_data(), a.data(), static_cast<std::size_t>(n * (width > 0 ? width : 1)) * sizeof(T));
+  return out;
+}
+
+}  // namespace
+
+void bind_simcpp(py::module_& m) {
+  m.def(
+      "sim_free_field_eigenrays",
+      [](double sound_speed, const Vec3d& source, const ArrD& points) {
+        require_points(points, "points");
+        sim::EigenraySet e;
+        {
+          py::gil_scoped_release release;
+          e = sim::free_field_eigenrays(sound_speed, source, points.data(), points.shape(0));
+        }
+        return set_dict(std::move(e));
+      },
+      py::arg("sound_speed"), py::arg("source"), py::arg("points"),
+      "Direct-path eigenrays from `source` to `points` [S, 3]: a dict of the EigenraySet fields.");
+
+  m.def(
+      "sim_image_source_eigenrays",
+      [](double sound_speed, const Vec3d& source, const ArrD& points, const py::object& surface_z,
+         const py::object& bottom_z, cd surface_coefficient, cd bottom_coefficient, int max_order,
+         const std::vector<std::tuple<int, double, cd>>& walls, const py::object& bottom) {
+        require_points(points, "points");
+        sim::ImageSourceConfig cfg;
+        cfg.sound_speed = sound_speed;
+        cfg.has_surface = !surface_z.is_none();
+        if (cfg.has_surface) cfg.surface_z = surface_z.cast<double>();
+        cfg.has_bottom = !bottom_z.is_none();
+        if (cfg.has_bottom) cfg.bottom_z = bottom_z.cast<double>();
+        cfg.surface_coefficient = surface_coefficient;
+        cfg.bottom_coefficient = bottom_coefficient;
+        cfg.max_order = max_order;
+        for (const auto& [axis, position, coefficient] : walls) cfg.walls.push_back({axis, position, coefficient});
+        cfg.has_fluid_bottom = !bottom.is_none();
+        if (cfg.has_fluid_bottom) {
+          // (speed, density, attenuation, water_density)
+          const auto t = bottom.cast<std::tuple<double, double, double, double>>();
+          cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
+        }
+        sim::EigenraySet e;
+        {
+          py::gil_scoped_release release;
+          e = sim::image_source_eigenrays(cfg, source, points.data(), points.shape(0));
+        }
+        return set_dict(std::move(e));
+      },
+      py::arg("sound_speed"), py::arg("source"), py::arg("points"), py::arg("surface_z") = 0.0,
+      py::arg("bottom_z") = py::none(), py::arg("surface_coefficient") = cd{-1.0, 0.0},
+      py::arg("bottom_coefficient") = cd{0.5, 0.0}, py::arg("max_order") = 2,
+      py::arg("walls") = std::vector<std::tuple<int, double, cd>>{}, py::arg("bottom") = py::none(),
+      "Image-source eigenrays (flat surface and bottom, optional walls [(axis, position, coefficient)] and a "
+      "fluid bottom (speed, density, attenuation, water_density)): a dict of the EigenraySet fields.");
+
+  m.def(
+      "sim_rayleigh_reflection",
+      [](const ArrD& grazing, double c_water, double speed, double density, double attenuation, double water_density) {
+        py::array_t<cd> out(std::vector<py::ssize_t>(grazing.shape(), grazing.shape() + grazing.ndim()));
+        const sim::FluidBottom b{speed, density, attenuation, water_density};
+        for (py::ssize_t i = 0; i < grazing.size(); ++i) {
+          out.mutable_data()[i] = sim::rayleigh_reflection(grazing.data()[i], c_water, b);
+        }
+        return out;
+      },
+      py::arg("grazing"), py::arg("c_water"), py::arg("speed"), py::arg("density"), py::arg("attenuation") = 0.0,
+      py::arg("water_density") = 1.0, "Rayleigh reflection coefficient of a fluid half-space at grazing angles (rad).");
+
+  m.def(
+      "sim_snell_crossing",
+      [](const Vec3d& source, const ArrD& points, double c_water, double c_sediment, double interface_z) {
+        require_points(points, "points");
+        const py::ssize_t s = points.shape(0);
+        py::array_t<double> time(s);
+        py::array_t<double> cross({s, py::ssize_t{3}});
+        {
+          py::gil_scoped_release release;
+          sim::snell_crossing(source, points.data(), s, c_water, c_sediment, interface_z, time.mutable_data(),
+                              cross.mutable_data());
+        }
+        return py::make_tuple(time, cross);
+      },
+      py::arg("source"), py::arg("points"), py::arg("c_water"), py::arg("c_sediment"), py::arg("interface_z"),
+      "Least-time paths through a flat water-sediment interface: (travel time [S], crossing points [S, 3]).");
+
+  m.def(
+      "sim_sediment_eigenrays",
+      [](double sound_speed, double sediment_speed, double interface_z, cd transmission, const Vec3d& source,
+         const ArrD& points) {
+        require_points(points, "points");
+        sim::EigenraySet e;
+        {
+          py::gil_scoped_release release;
+          e = sim::sediment_eigenrays({sound_speed, sediment_speed, interface_z, transmission}, source, points.data(),
+                                      points.shape(0));
+        }
+        return set_dict(std::move(e));
+      },
+      py::arg("sound_speed"), py::arg("sediment_speed"), py::arg("interface_z"), py::arg("transmission"),
+      py::arg("source"), py::arg("points"),
+      "One refracted eigenray per point below a flat sediment interface: a dict of the EigenraySet fields.");
+
+  m.def(
+      "sim_two_way_paths",
+      [](const ArrD& out_delay, const ArrC& out_amplitude, const ArrD& out_launch, const ArrD& out_arrival,
+         const ArrB& out_valid, double out_sound_speed, const ArrD& back_delay, const ArrC& back_amplitude,
+         const ArrD& back_launch, const ArrD& back_arrival, const ArrB& back_valid, double back_sound_speed,
+         const Vec3d& tx_position, const Vec3d& rx_reference, const ArrC& amplitudes, const py::object& velocities,
+         const py::object& lambert, const py::object& normals) {
+        const sim::EigenrayView out = set_view(out_delay, out_amplitude, out_launch, out_arrival, out_valid, out_sound_speed);
+        const sim::EigenrayView back =
+            set_view(back_delay, back_amplitude, back_launch, back_arrival, back_valid, back_sound_speed);
+        const py::ssize_t s = out.n_points;
+        if (back.n_points != s) throw std::invalid_argument("the two eigenray sets must cover the same points");
+        if (amplitudes.ndim() != 1 || amplitudes.shape(0) != s) throw std::invalid_argument("amplitudes must have shape [points]");
+        ArrD vel, nrm;
+        ArrB lam;
+        if (!velocities.is_none()) {
+          vel = ArrD::ensure(velocities);
+          if (!vel || vel.ndim() != 2 || vel.shape(0) != s || vel.shape(1) != 3) throw std::invalid_argument("velocities must have shape [points, 3]");
+        }
+        if (!lambert.is_none()) {
+          lam = ArrB::ensure(lambert);
+          if (!lam || lam.ndim() != 1 || lam.shape(0) != s) throw std::invalid_argument("lambert must have shape [points]");
+        }
+        if (!normals.is_none()) {
+          nrm = ArrD::ensure(normals);
+          if (!nrm || nrm.ndim() != 2 || nrm.shape(0) != s || nrm.shape(1) != 3) throw std::invalid_argument("normals must have shape [points, 3]");
+        }
+        const double* v_in = velocities.is_none() ? nullptr : vel.data();
+        const bool moving = sim::any_moving(v_in, s);
+        // Room for every pair; nearly all are kept.
+        const py::ssize_t room = s * out.n_rays * back.n_rays;
+        py::array_t<double> q({room, py::ssize_t{3}}), p({room, py::ssize_t{3}});
+        py::array_t<cd> amp(room);
+        py::array_t<double> v_out({moving ? room : py::ssize_t{0}, py::ssize_t{3}});
+        py::ssize_t n = 0;
+        {
+          py::gil_scoped_release release;
+          n = sim::two_way_paths(out, back, tx_position, rx_reference, amplitudes.data(), v_in,
+                                 lambert.is_none() ? nullptr : reinterpret_cast<const std::uint8_t*>(lam.data()),
+                                 normals.is_none() ? nullptr : nrm.data(), q.mutable_data(), p.mutable_data(),
+                                 amp.mutable_data(), moving ? v_out.mutable_data() : nullptr);
+        }
+        py::object v = py::none();
+        if (moving) v = first_rows(v_out, n, 3);
+        return py::make_tuple(first_rows(q, n, 3), first_rows(p, n, 3), first_rows(amp, n, 0), v);
+      },
+      py::arg("out_delay"), py::arg("out_amplitude"), py::arg("out_launch"), py::arg("out_arrival"), py::arg("out_valid"),
+      py::arg("out_sound_speed"), py::arg("back_delay"), py::arg("back_amplitude"), py::arg("back_launch"),
+      py::arg("back_arrival"), py::arg("back_valid"), py::arg("back_sound_speed"), py::arg("tx_position"),
+      py::arg("rx_reference"), py::arg("amplitudes"), py::arg("velocities") = py::none(), py::arg("lambert") = py::none(),
+      py::arg("normals") = py::none(),
+      "Kernel paths for every (outbound, return) eigenray pair: (q [P, 3], p [P, 3], amplitude [P], velocity [P, 3] or None).");
+
+  const auto reverb_params = [](double sample_rate, std::int64_t n_samples, double start_time, double time0,
+                                double center_frequency, double sound_speed, std::int64_t n_azimuth,
+                                std::int64_t decimation, std::int64_t n_low, const Vec3d& velocity, bool carrier,
+                                bool real_output) {
+    sim::ReverbParams p;
+    p.sample_rate = sample_rate;
+    p.n_samples = n_samples;
+    p.start_time = start_time;
+    p.time0 = time0;
+    p.center_frequency = center_frequency;
+    p.sound_speed = sound_speed;
+    p.n_azimuth = n_azimuth;
+    p.decimation = decimation;
+    p.n_low = n_low;
+    p.velocity = velocity;
+    p.carrier = carrier;
+    p.real_output = real_output;
+    return p;
+  };
+
+  const auto reverb_power = [](const ArrD& coarse, const ArrD& density) {
+    if (coarse.ndim() != 1 || density.ndim() != 2 || density.shape(1) != coarse.shape(0)) {
+      throw std::invalid_argument("density must have shape [rows, len(coarse)]");
+    }
+    return sim::ReverbPower{coarse.data(), coarse.shape(0), density.data(), density.shape(0)};
+  };
+
+  m.def(
+      "sim_reverb_active",
+      [reverb_params, reverb_power](const ArrD& coarse, const ArrD& density, double sample_rate, double time0,
+                                    std::int64_t n_azimuth, std::int64_t decimation, std::int64_t n_low) {
+        const sim::ReverbPower power = reverb_power(coarse, density);
+        const sim::ReverbParams p =
+            reverb_params(sample_rate, 0, 0.0, time0, 0.0, 1500.0, n_azimuth, decimation, n_low, Vec3d{}, false, false);
+        std::vector<std::uint8_t> active;
+        {
+          py::gil_scoped_release release;
+          active = sim::reverb_active_rows(p, power);
+        }
+        py::array_t<bool> out(static_cast<py::ssize_t>(active.size()));
+        for (std::size_t i = 0; i < active.size(); ++i) out.mutable_data()[i] = active[i] != 0;
+        return out;
+      },
+      py::arg("coarse"), py::arg("density"), py::arg("sample_rate"), py::arg("time0"), py::arg("n_azimuth"),
+      py::arg("decimation"), py::arg("n_low"),
+      "Which rows of a reverberation power density [rows, len(coarse)] give a sector any power at the reduced "
+      "rate: the sectors that take random numbers.");
+
+  m.def(
+      "sim_reverb_sigma",
+      [reverb_params, reverb_power](const ArrD& coarse, const ArrD& density, double sample_rate, double time0,
+                                    std::int64_t n_azimuth, std::int64_t decimation, std::int64_t n_low) {
+        const sim::ReverbPower power = reverb_power(coarse, density);
+        const sim::ReverbParams p =
+            reverb_params(sample_rate, 0, 0.0, time0, 0.0, 1500.0, n_azimuth, decimation, n_low, Vec3d{}, false, false);
+        std::vector<double> sigma;
+        {
+          py::gil_scoped_release release;
+          sigma = sim::reverb_sigma(p, power);
+        }
+        return to_array(std::move(sigma), {density.shape(0), static_cast<py::ssize_t>(n_low)});
+      },
+      py::arg("coarse"), py::arg("density"), py::arg("sample_rate"), py::arg("time0"), py::arg("n_azimuth"),
+      py::arg("decimation"), py::arg("n_low"),
+      "Standard deviation of each azimuth sector's reverberation sequence at the reduced rate, [rows, n_low].");
+
+  using ArrTotal = py::array_t<std::complex<float>, py::array::c_style>;
+  m.def(
+      "sim_reverb_accumulate",
+      [reverb_params, reverb_power](ArrTotal& total, const ArrD& coarse, const ArrD& density, std::int64_t first,
+                                    const ArrD& normals, const ArrC& pulse, const ArrD& offsets, double sample_rate,
+                                    double time0, double center_frequency, double sound_speed,
+                                    std::int64_t n_azimuth, std::int64_t decimation, const Vec3d& velocity,
+                                    Backend backend, int device) {
+        const sim::ReverbPower power = reverb_power(coarse, density);
+        require_points(offsets, "offsets");
+        const py::ssize_t n_channels = offsets.shape(0);
+        if (total.ndim() != 2 || total.shape(0) != n_channels || !total.writeable()) {
+          throw std::invalid_argument("total must be a writeable complex64 array [channels, n_low]");
+        }
+        const py::ssize_t n_low = total.shape(1);
+        if (normals.ndim() != 3 || normals.shape(1) != 2 || normals.shape(2) != n_low) {
+          throw std::invalid_argument("normals must have shape [sectors, 2, n_low]");
+        }
+        if (pulse.ndim() != 1) throw std::invalid_argument("pulse must be one-dimensional");
+        const sim::ReverbParams p = reverb_params(sample_rate, 0, 0.0, time0, center_frequency, sound_speed, n_azimuth,
+                                                  decimation, n_low, velocity, false, false);
+        auto* data = reinterpret_cast<float*>(total.mutable_data());
+        py::gil_scoped_release release;
+        sim::reverb_accumulate(backend, p, power, first, normals.data(), normals.shape(0), pulse.data(), pulse.shape(0),
+                               offsets.data(), n_channels, data, device);
+      },
+      py::arg("total").noconvert(), py::arg("coarse"), py::arg("density"), py::arg("first"), py::arg("normals"),
+      py::arg("pulse"), py::arg("offsets"), py::arg("sample_rate"), py::arg("time0"), py::arg("center_frequency"),
+      py::arg("sound_speed"), py::arg("n_azimuth"), py::arg("decimation"), py::arg("velocity") = Vec3d{},
+      py::arg("backend") = Backend::Host, py::arg("device") = 0,
+      "Add a run of azimuth sectors of scattering-function reverberation into `total` (complex64 [channels, n_low], "
+      "in place), from the power density [rows, len(coarse)]: `normals` [sectors, 2, n_low] are standard normal "
+      "deviates for the sectors with power starting at the `first`-th.");
+
+  m.def(
+      "sim_reverb_finish",
+      [reverb_params](const ArrTotal& total, double sample_rate, std::int64_t n_samples, double start_time,
+                      double time0, double center_frequency, std::int64_t decimation, bool carrier,
+                      bool real_output) -> py::array {
+        if (total.ndim() != 2) throw std::invalid_argument("total must have shape [channels, n_low]");
+        const py::ssize_t n_channels = total.shape(0);
+        const sim::ReverbParams p = reverb_params(sample_rate, n_samples, start_time, time0, center_frequency, 1500.0,
+                                                  1, decimation, total.shape(1), Vec3d{}, carrier, real_output);
+        const std::vector<py::ssize_t> shape{n_channels, static_cast<py::ssize_t>(n_samples)};
+        py::array out = real_output ? py::array(py::array_t<float>(shape)) : py::array(py::array_t<std::complex<float>>(shape));
+        auto* data = static_cast<float*>(out.mutable_data());
+        {
+          py::gil_scoped_release release;
+          sim::reverb_finish(p, reinterpret_cast<const float*>(total.data()), n_channels, data);
+        }
+        return out;
+      },
+      py::arg("total"), py::arg("sample_rate"), py::arg("n_samples"), py::arg("start_time"), py::arg("time0"),
+      py::arg("center_frequency"), py::arg("decimation"), py::arg("carrier") = false, py::arg("real_output") = false,
+      "The reverberation of every channel in the record's window from the accumulated spectrum: [channels, "
+      "n_samples] complex64, or float32 with real_output.");
+}

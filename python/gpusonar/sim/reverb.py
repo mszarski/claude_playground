@@ -29,6 +29,13 @@ when steering to the hydrophones (fine at the low grazing angles of long ranges)
 boundary is flat and uniform. Each ping draws new noise, so this method cannot support
 synthetic aperture processing; the point-scatterer method (scene.seafloor_patch) is the
 one for imaging modes.
+
+Steps 3 and 4 (the generation of the time series, most of the cost) also exist in C++
+(libs/sim/src/reverb.cpp, with a CUDA backend for the sum over sectors), which is used by
+default; `engine="numpy"` or GPUSONAR_SIM_ENGINE=numpy selects the NumPy code in this file
+(sim/engine.py). Random numbers come from the caller's NumPy generator on both engines,
+in the same order, so a seed gives the same reverberation whichever engine runs: the C++
+result differs from the NumPy one only by single-precision rounding.
 """
 
 from __future__ import annotations
@@ -36,6 +43,7 @@ from __future__ import annotations
 import numpy as np
 
 from .. import _gpusonar as core
+from . import engine as _engine
 from .propagation import EigenrayProvider
 
 
@@ -183,14 +191,110 @@ def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
     return int(max(72, np.ceil(4.0 * np.pi * extent / wavelength)))
 
 
+# Random numbers handed to the C++ generator in one call, bytes (a run of sectors).
+SECTOR_RUN_BYTES = 64 << 20
+
+
+def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n, start_time, time0, fc, c,
+                n_azimuth, decim, n_low, velocity, carrier, real, backend):
+    """The reverberation of every channel in the record's window, [channels, n], by the C++
+    generator. The random numbers are drawn here, in the order `_series_numpy` draws them
+    (for each sector with power: n_low for the real part, then n_low for the imaginary
+    part), in runs of sectors so that no more than SECTOR_RUN_BYTES of them are held at once."""
+    density = np.ascontiguousarray(density[:1] if same_in_azimuth else density, dtype=float)
+    coarse = np.ascontiguousarray(coarse, dtype=float)
+    # A sector without power draws nothing (as in `_series_numpy`).
+    active = core.sim_reverb_active(coarse, density, fs, time0, n_azimuth, decim, n_low)
+    n_active = (n_azimuth if active[0] else 0) if len(active) == 1 else int(active.sum())
+    offsets = np.ascontiguousarray(offsets, dtype=float)
+    pulse_low = np.ascontiguousarray(pulse_low, dtype=complex)
+    velocity = tuple(float(v) for v in velocity)
+    total = np.zeros((offsets.shape[0], n_low), dtype=np.complex64)
+    run = max(1, SECTOR_RUN_BYTES // (16 * n_low))
+    for first in range(0, n_active, run):
+        normals = rng.standard_normal((min(run, n_active - first), 2, n_low))
+        core.sim_reverb_accumulate(total, coarse, density, first, normals, pulse_low, offsets, fs, time0, fc, c,
+                                   n_azimuth, decim, velocity=velocity, backend=backend)
+    return core.sim_reverb_finish(total, fs, n, start_time, time0, fc, decim, carrier=carrier, real_output=real)
+
+
+def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,
+                  n_azimuth, decim, n_low, velocity, carrier, real):
+    """The reverberation of every channel in the record's window, [channels, n], in NumPy."""
+    fs_low = fs / decim
+    t_low = times[0] + np.arange(n_low) / fs_low
+    dphi = 2.0 * np.pi / n_azimuth
+    azimuths = (np.arange(n_azimuth) + 0.5) * dphi
+    f = np.fft.fftfreq(n_low, 1.0 / fs_low)
+    total = np.zeros((positions.shape[0], n_low), dtype=np.complex64)
+    offsets = positions - centre
+    w = (2.0 * np.pi * (f + fc)).astype(np.float32)
+    # The boundary is fixed in the world: a moving sonar sees each azimuth's reverberation
+    # shifted by the Doppler of its own speed towards that azimuth (two-way).
+    velocity = np.asarray(velocity, dtype=float)
+    # A uniform line array needs one complex exponential per sector, not one per channel.
+    along = offsets - offsets[0]
+    uniform = len(offsets) > 2 and np.allclose(along[1:], np.arange(1, len(offsets))[:, None] * along[1], atol=1e-9)
+    pulse_spectrum = np.fft.fft(pulse_low, n_low)
+    for m in range(n_azimuth):
+        sigma = np.sqrt(np.interp(t_low, coarse, density[m], left=0.0, right=0.0) / fs_low * dphi / 2.0)
+        if not sigma.any():
+            continue
+        u = np.array([np.cos(azimuths[m]), np.sin(azimuths[m]), 0.0])
+        b = sigma * (rng.standard_normal(n_low) + 1j * rng.standard_normal(n_low))
+        doppler = 2.0 * (velocity @ u) * fc / c
+        if doppler != 0.0:
+            # Every echo from this azimuth is the pulse shifted in frequency: shift the
+            # scatterer sequence and the pulse together.
+            b = b * np.exp(2j * np.pi * doppler * (t_low - t_low[0]))
+            shifted = pulse_low * np.exp(2j * np.pi * doppler * np.arange(len(pulse_low)) / fs_low)
+            spectrum = (np.fft.fft(b) * np.fft.fft(shifted, n_low)).astype(np.complex64)
+        else:
+            spectrum = (np.fft.fft(b) * pulse_spectrum).astype(np.complex64)
+        lead = ((offsets @ u) / c).astype(np.float32)        # [channels]
+        if uniform:
+            row = spectrum * np.exp(1j * (w * lead[0])).astype(np.complex64)
+            stride = np.exp(1j * (w * (lead[1] - lead[0]))).astype(np.complex64)
+            for ch in range(len(offsets)):
+                total[ch] += row
+                row = row * stride
+        else:
+            arg = lead[:, None] * w[None, :]
+            total += spectrum[None, :] * (np.cos(arg) + 1j * np.sin(arg))
+    # Band-limited interpolation to the record's rate: zero-pad the spectrum.
+    n_full = n_low * decim
+    if decim > 1:
+        padded = np.zeros((positions.shape[0], n_full), dtype=np.complex64)
+        half = n_low // 2
+        padded[:, :half] = total[:, :half]
+        padded[:, n_full - (n_low - half):] = total[:, half:]
+        series = np.fft.ifft(padded, axis=1) * decim
+    else:
+        series = np.fft.ifft(total, axis=1)
+    # Sample k of the convolution is at times[0] + k / fs; the record starts one pulse later.
+    start = int(round((start_time - times[0]) * fs))
+    out = series[:, start:start + n]
+    if carrier:
+        t_abs = start_time + np.arange(n) / fs
+        out = out * np.exp(2j * np.pi * fc * t_abs)[None, :]
+    if real:
+        out = np.real(out)
+    return out
+
+
 def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_db: float,
                       rng: np.random.Generator, n_azimuth: int | None = None,
                       absorption_db_per_m: float = 0.0, max_range: float | None = None,
-                      power_step: float | None = None, strength=None) -> np.ndarray:
+                      power_step: float | None = None, strength=None, engine: str | None = None,
+                      backend=core.Backend.Host) -> np.ndarray:
     """Add boundary reverberation to a raw record (complex baseband or real passband), in place.
 
     Returns the reverberation power per radian in each sample of the impulse response
     (for the processing log and for tests).
+
+    `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation that
+    generates the time series; `backend` is where the C++ one sums the sectors (host or
+    CUDA). `rng` is advanced identically by both.
     """
     s = record.samples
     wf = record.transmit.waveform
@@ -237,62 +341,15 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     decim = max(int(fs // (4.0 * band)), 1)
     fs_low = fs / decim
     n_low = int(np.ceil(len(times) / decim))
-    t_low = times[0] + np.arange(n_low) / fs_low
     pulse_low = baseband_pulse(wf, fs_low, fc) * wf.amplitude
-    f = np.fft.fftfreq(n_low, 1.0 / fs_low)
-    total = np.zeros((positions.shape[0], n_low), dtype=np.complex64)
-    offsets = positions - centre
-    w = (2.0 * np.pi * (f + fc)).astype(np.float32)
-    # The boundary is fixed in the world: a moving sonar sees each azimuth's reverberation
-    # shifted by the Doppler of its own speed towards that azimuth (two-way).
-    velocity = np.asarray(record.geometry.rx_pose.velocity, dtype=float)
-    # A uniform line array needs one complex exponential per sector, not one per channel.
-    along = offsets - offsets[0]
-    uniform = len(offsets) > 2 and np.allclose(along[1:], np.arange(1, len(offsets))[:, None] * along[1], atol=1e-9)
-    pulse_spectrum = np.fft.fft(pulse_low, n_low)
-    for m in range(n_azimuth):
-        sigma = np.sqrt(np.interp(t_low, coarse, density[m], left=0.0, right=0.0) / fs_low * dphi / 2.0)
-        if not sigma.any():
-            continue
-        u = np.array([np.cos(azimuths[m]), np.sin(azimuths[m]), 0.0])
-        b = sigma * (rng.standard_normal(n_low) + 1j * rng.standard_normal(n_low))
-        doppler = 2.0 * (velocity @ u) * fc / c
-        if doppler != 0.0:
-            # Every echo from this azimuth is the pulse shifted in frequency: shift the
-            # scatterer sequence and the pulse together.
-            b = b * np.exp(2j * np.pi * doppler * (t_low - t_low[0]))
-            shifted = pulse_low * np.exp(2j * np.pi * doppler * np.arange(len(pulse_low)) / fs_low)
-            spectrum = (np.fft.fft(b) * np.fft.fft(shifted, n_low)).astype(np.complex64)
-        else:
-            spectrum = (np.fft.fft(b) * pulse_spectrum).astype(np.complex64)
-        lead = ((offsets @ u) / c).astype(np.float32)        # [channels]
-        if uniform:
-            row = spectrum * np.exp(1j * (w * lead[0])).astype(np.complex64)
-            stride = np.exp(1j * (w * (lead[1] - lead[0]))).astype(np.complex64)
-            for ch in range(len(offsets)):
-                total[ch] += row
-                row = row * stride
-        else:
-            arg = lead[:, None] * w[None, :]
-            total += spectrum[None, :] * (np.cos(arg) + 1j * np.sin(arg))
-    # Band-limited interpolation to the record's rate: zero-pad the spectrum.
-    n_full = n_low * decim
-    if decim > 1:
-        padded = np.zeros((positions.shape[0], n_full), dtype=np.complex64)
-        half = n_low // 2
-        padded[:, :half] = total[:, :half]
-        padded[:, n_full - (n_low - half):] = total[:, half:]
-        series = np.fft.ifft(padded, axis=1) * decim
-    else:
-        series = np.fft.ifft(total, axis=1)
-    # Sample k of the convolution is at times[0] + k / fs; the record starts one pulse later.
     start = int(round((s.start_time - times[0]) * fs))
-    out = series[:, start:start + n]
-    if carrier:
-        t_abs = s.start_time + np.arange(n) / fs
-        out = out * np.exp(2j * np.pi * fc * t_abs)[None, :]
-    if real:
-        out = np.real(out)
+    if _engine.resolve(engine) == "cpp":
+        out = _series_cpp(rng, coarse, density, tx_gain is None and rx_gain is None, pulse_low, positions - centre,
+                          fs, n, s.start_time, times[0], fc, c, n_azimuth, decim, n_low,
+                          record.geometry.rx_pose.velocity, carrier, real, backend)
+    else:
+        out = _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, s.start_time, times, fc, c,
+                            n_azimuth, decim, n_low, record.geometry.rx_pose.velocity, carrier, real)
     x = s.array + out.astype(s.array.dtype)
     kind = s.kind
     s.array = x

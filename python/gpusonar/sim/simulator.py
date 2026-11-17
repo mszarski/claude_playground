@@ -50,8 +50,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
                   noise_spectrum=None, reverberation: list | None = None,
                   beam_floor_db: float | None = None,
-                  backend=core.Backend.Host) -> "core.PingRecord":
-    """Simulate one transmit and return its record."""
+                  backend=core.Backend.Host, engine: str | None = None) -> "core.PingRecord":
+    """Simulate one transmit and return its record.
+
+    `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
+    path pairing and of reverberation; a provider has its own `engine`.
+    """
     env = resolve_environment(environment, depth=pose.position[2])
     record = sonar.make_record(pose, sequence=sequence, sub_sequence=sub_sequence,
                                time_ns=time_ns, environment=env, tx_pose=tx_pose)
@@ -77,7 +81,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             amplitudes = np.where(seen, amplitudes, 0.0)
         q, p, amp, vq, vp = two_way_paths(provider, tx_position, rx_reference, points, amplitudes,
                                           scene.velocities, scene.lambert,
-                                          scene.normals_at(scenario_time) if len(scene.normals) == len(scene) else None)
+                                          scene.normals_at(scenario_time) if len(scene.normals) == len(scene) else None,
+                                          engine=engine)
         if beam_floor_db is not None and len(amp):
             # Skip paths that leave and return far down both beam patterns: with narrow
             # beams most scatterers contribute nothing measurable to most pings.
@@ -123,7 +128,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         reverb.add_reverberation(record, provider, float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
-                                 absorption_db_per_m=alpha, max_range=item.get("max_range"))
+                                 absorption_db_per_m=alpha, max_range=item.get("max_range"), backend=backend,
+                                 engine=engine)
     taps.sim_tap(record, "reverberation")
     receiver.add_reference_signal(record, sonar, clocks)
     _set_board_clocks(record, sonar, truth=False)
@@ -309,10 +315,12 @@ class ScenarioResult:
 
 
 def run_scenario(name_or_config, overrides: dict | None = None, output: str | None = None,
-                 backend=core.Backend.Host) -> ScenarioResult:
+                 backend=core.Backend.Host, engine: str | None = None) -> ScenarioResult:
     """Run a scenario (a name under configs/scenarios, a path, or a config dict).
 
     With `output`, records and ground truth are written to that container file.
+    `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
+    eigenray providers, the path pairing and reverberation.
     """
     if isinstance(name_or_config, dict):
         cfg = name_or_config
@@ -322,6 +330,8 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     env = resolve_environment(cfg.get("environment"))
     tier = cfg.get("fidelity", "free_field")
     provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
+    if engine is not None and hasattr(provider, "engine"):
+        provider.engine = engine
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
     scene = build_scene(cfg.get("scene", []), rng)
 
@@ -344,7 +354,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         reverberation=cfg.get("reverberation"),
-        beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"))
+        beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"), engine=engine)
     motion = plat.get("motion")
     raster = plat.get("raster")
     legs_cfg = plat.get("legs")
