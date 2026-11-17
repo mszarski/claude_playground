@@ -69,11 +69,125 @@ DEFAULTS = {
     "gradient_sigma_per_s": 0.05,       # how well that gradient is known: depth sigma gains range^2 x this / 2c
     "surface_z": 0.0,                   # z of the sea surface in the frame the navigation uses
     "ssp": None,                        # {depth: [m...], speed: [m/s...]}: depth_m by a ray traced through this profile
-                                        # instead of the straight line (which is wrong by s^2 g / 2c in a gradient g)
+                                        # instead of the straight line (which is wrong by s^2 g / 2c in a gradient g).
+                                        # Also a table [[depth, speed], ...], or {file: profile.csv} (two columns)
+    "profile": None,                    # the sound-speed ladder: {} or {ladder: [...], built: {...}, supplied: {...},
+                                        # family: {...}} (PROFILE_DEFAULTS below). None: as before
     "roll_sigma_deg": 0.0,              # the navigation's roll accuracy, added to the elevation sigma
     "depth_process_noise": 0.5,         # m per sqrt(s): how fast a track's depth may wander
     "row_tolerance_m": 0.02,            # elements within this of one line are one row
 }
+
+
+# The sound-speed ladder (libs/live environment.hpp explains it; the rungs are tried in this order
+# and the one used is named with every depth as `depth_profile_source`).
+PROFILE_DEFAULTS = {
+    "ladder": ["supplied", "built", "family", "local", "prior"],
+    "built": {                          # a profile the vehicle builds from its own (depth, sound speed) samples
+        "bin_m": 2.0,                   # samples are binned by depth
+        "sample_sigma_m_s": None,       # the sound-speed sensor's accuracy: no default, the built rung needs it (datasheet)
+        "age_sigma_m_s_per_hour": 0.5,  # a bin loses this much certainty per hour since it was sampled (placeholder, unconfirmed)
+        "distance_sigma_m_s_per_km": 0.5,   # and this per km from where it was sampled (placeholder, unconfirmed)
+        "max_age_s": None,              # bins older than this are not used
+        "max_distance_m": None,         # nor bins sampled further away than this
+        "min_span_m": 5.0,              # used once the sampled depths span this much
+        "extrapolation_sigma_per_s": None,  # outside the sampled depths sigma grows by this per metre; None: gradient_sigma_per_s
+        "file": None,                   # the bins are kept in this file, so a restart keeps the profile
+        "cast": None,                   # a cast to start from (a static array): text lines "depth speed"
+    },
+    "supplied": {"sigma_m_s": None},    # how well elevation.ssp holds along the path; None: no claim (the gradient prior)
+    "family": None,                     # an assumption: {kind: isothermal, gradient_per_s: ...} or {kind: mixed_layer,
+                                        # gradient_per_s, layer_depth_m, thermocline_gradient_per_s, thermocline_thickness_m};
+                                        # sigma_m_s: how well it holds (None: no claim). No parameter has a default
+}
+
+
+def normalise_ssp(ssp):
+    """`elevation.ssp` in any of its forms as {depth: [...], speed: [...]} (increasing depth), or None.
+    Forms: that dict; a table [[depth, speed], ...]; {file: path} or a path to a text file of two
+    columns (depth m, speed m/s; commas or blanks; lines that do not start with a number are skipped)."""
+    if not ssp:
+        return None
+    if isinstance(ssp, dict) and "file" not in ssp:
+        depth, speed = ssp["depth"], ssp["speed"]
+    else:
+        if isinstance(ssp, (str, dict)) or hasattr(ssp, "__fspath__"):
+            rows = []
+            with open(ssp["file"] if isinstance(ssp, dict) else ssp, encoding="utf-8") as f:
+                for line in f:
+                    parts = line.split("#")[0].replace(",", " ").replace(";", " ").split()
+                    try:
+                        rows.append((float(parts[0]), float(parts[1])))
+                    except (ValueError, IndexError):
+                        continue
+        else:
+            rows = [(float(r[0]), float(r[1])) for r in ssp]
+        rows.sort()
+        depth, speed = [r[0] for r in rows], [r[1] for r in rows]
+    depth, speed = [float(v) for v in depth], [float(v) for v in speed]
+    if len(depth) != len(speed) or len(depth) < 2 or np.any(np.diff(depth) <= 0.0):
+        raise ValueError("elevation.ssp: needs two or more (depth, speed) pairs at increasing depths")
+    return {"depth": depth, "speed": speed}
+
+
+def profile_options(profile: dict | None) -> dict | None:
+    """`elevation.profile` as the options of core.SoundSpeedLadder (and of the C++ chain)."""
+    if profile is None:
+        return None
+    unknown = set(profile) - set(PROFILE_DEFAULTS)
+    if unknown:
+        raise ValueError(f"elevation.profile: unknown key(s) {sorted(unknown)}")
+    b = dict(PROFILE_DEFAULTS["built"], **(profile.get("built") or {}))
+    s = dict(PROFILE_DEFAULTS["supplied"], **(profile.get("supplied") or {}))
+    out = {"ladder": [str(r) for r in profile.get("ladder", PROFILE_DEFAULTS["ladder"])], "bin_m": float(b["bin_m"]),
+           "sample_sigma": float(b["sample_sigma_m_s"] or 0.0), "age_sigma_per_hour": float(b["age_sigma_m_s_per_hour"]),
+           "distance_sigma_per_km": float(b["distance_sigma_m_s_per_km"]), "max_age_s": float(b["max_age_s"] or 0.0),
+           "max_distance_m": float(b["max_distance_m"] or 0.0), "min_span_m": float(b["min_span_m"]),
+           "extrapolation_sigma_per_s": float(b["extrapolation_sigma_per_s"] or 0.0), "supplied_sigma": float(s["sigma_m_s"] or 0.0)}
+    for key in ("file", "cast"):
+        if b[key]:
+            out[key] = str(b[key])
+    fam = profile.get("family")
+    if fam:
+        names = {"gradient_per_s": "family_gradient", "layer_depth_m": "layer_depth", "thermocline_gradient_per_s": "thermocline_gradient",
+                 "thermocline_thickness_m": "thermocline_thickness", "sigma_m_s": "family_sigma"}
+        unknown = set(fam) - set(names) - {"kind"}
+        if unknown:
+            raise ValueError(f"elevation.profile.family: unknown key(s) {sorted(unknown)}")
+        out["family"] = str(fam["kind"])
+        out.update({names[k]: float(v) for k, v in fam.items() if k in names and v is not None})
+    return out
+
+
+def tilted_profiles(own_depth: float, depth, speed, sigma, gradient_sigma: float):
+    """The two profiles a depth's refraction sigma is the half difference of: (knots, c + e, c - e)
+    with e(z) = sign(z - own depth) min(sigma(z), gradient_sigma |z - own depth|): the profile's
+    error taken as one tilt about the vehicle, where the sound speed is measured, and never
+    larger than the prior allows. NumPy counterpart of libs/live `tilted_profiles`."""
+    depth, speed, sigma = (np.asarray(v, dtype=float) for v in (depth, speed, sigma))
+    g = abs(float(gradient_sigma))
+    excess = lambda z: np.interp(z, depth, sigma) - g * np.abs(z - own_depth)      # noqa: E731
+    base = np.unique(np.append(depth, own_depth)) if depth[0] < own_depth < depth[-1] else depth
+    knots = [base[0]]
+    for a, b in zip(base[:-1], base[1:]):
+        ea, eb = excess(a), excess(b)
+        if (ea < 0.0) != (eb < 0.0) and ea != eb:      # both limits are straight between knots: where they cross
+            z = a + (b - a) * ea / (ea - eb)
+            if a < z < b:
+                knots.append(z)
+        knots.append(b)
+    knots = np.array(knots)
+    e = np.where(knots < own_depth, -1.0, 1.0) * np.minimum(np.interp(knots, depth, sigma), g * np.abs(knots - own_depth))
+    c = np.interp(knots, depth, speed)
+    return knots, c + e, c - e
+
+
+def profile_depth_sigma(receiver_depth: float, elevation: float, slant_range: float, depth, speed, sigma, gradient_sigma: float,
+                        water_depth: float | None = None) -> float:
+    """One sigma of `ray_depth` through a profile whose error at its knots is `sigma` (m/s)."""
+    knots, fast, slow = tilted_profiles(receiver_depth, depth, speed, sigma, gradient_sigma)
+    return 0.5 * abs(ray_depth(receiver_depth, elevation, slant_range, knots, fast, water_depth)
+                     - ray_depth(receiver_depth, elevation, slant_range, knots, slow, water_depth))
 
 
 # --- rows and frame -------------------------------------------------------------------------------

@@ -18,6 +18,12 @@ struct Reference {
   double tail = 10e-3;                   ///< s from the end of the second burst to the window's close
   bool dedicated = false;                ///< the reference inputs carry no hydrophone signal: drop them after
   double search_time = 2e-3;             ///< s either side of where a burst is expected
+  /// A burst whose correlation quality is below this, or that sits in clipped samples, is not used
+  /// (the projector's direct sound can saturate the inputs while the first burst is sent): the board is
+  /// then timed from its other burst alone, without a drift, and flagged; with neither it is left as it
+  /// is, flagged, and the ping is not ok. 0: every burst is used as found (as before).
+  double min_quality = 0.0;
+  double clip_level = 0.0;               ///< V: |sample| at or above 0.98 of this is clipped; 0: not checked
 };
 
 struct SyncResult {
@@ -27,12 +33,31 @@ struct SyncResult {
   std::vector<double> residual;   ///< s, misalignment measured again after resampling
   double tolerance = 0.0;         ///< s: a twentieth of a period at the top of the band
   bool ok = false;
+  std::vector<int> flagged;       ///< per board (Reference::min_quality): 0 both bursts, 1 one burst only, 2 none usable
 };
 
 /// Estimate every board's clock from the bursts, resample the boards onto the first one's
 /// timeline in place, measure what is left, and (for dedicated reference inputs) remove those
 /// channels. The record must hold raw real samples.
 SyncResult synchronise(PingRecord& record, const Reference& reference);
+
+/// The raw samples of every board's reference input around the two bursts, and nothing else:
+/// what a stage that decimates the rest (decimate.hpp) keeps to synchronise from. `length`
+/// samples from raw index `first_a` and from `first_b`; samples outside the window are zero.
+struct BurstWindows {
+  std::int64_t first_a = 0, first_b = 0, length = 0;
+  std::vector<std::vector<float>> a, b;   ///< [board][length]
+};
+/// Which samples to keep for a window of `n_samples` at `sample_rate` (a and b sized for `n_boards`, zero).
+BurstWindows burst_windows(const Reference& reference, double sample_rate, std::int64_t n_samples, std::size_t n_boards);
+/// The clocks from those stretches: the same estimate as synchronise() makes, and the same check
+/// (the stretches resampled by the estimate and measured again). `top_frequency` sets the tolerance.
+SyncResult estimate_from_bursts(const BurstWindows& windows, const Reference& reference, double sample_rate, std::int64_t n_samples,
+                                double top_frequency);
+
+/// Samples of every channel between record times t0 and t1 (s after the transmit) set to zero, with a
+/// raised-cosine return to full gain over `taper` s outside both ends. Real or complex samples.
+void blank_interval(PingRecord& record, double t0, double t1, double taper);
 
 /// The record without the given channel rows (samples, geometry, calibration, channel maps).
 void drop_channels(PingRecord& record, const std::vector<std::int64_t>& rows);

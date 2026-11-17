@@ -25,6 +25,21 @@
 //   elevation_water_depth elevation_surface_z elevation_roll_sigma_deg elevation_depth_process_noise
 //   elevation_ssp_depth elevation_ssp_speed (comma-separated lists) elevation_row_tolerance_m
 //   dead_channels (comma-separated channel rows)
+//   blanking of the projector's own sound: blanking (0 | 1) blanking_recovery_s blanking_taper_s
+//   blanking_mode (zero | ignore); sync_min_quality (a reference burst below it is not used, the board flagged)
+//   decimate first (docs/DEPLOYMENT.md): decimate (0 | 1) decimate_streaming (0 | 1: the receiver decimates as
+//   blocks arrive and the recording holds the decimated pings; 0: the raw ping is recorded, the chain decimates)
+//   decimate_f_low decimate_f_high decimate_band_margin decimate_output_rate decimate_oversample
+//   decimate_ripple_db decimate_stopband_db decimate_taps
+//   navigation: nav_water_depth_from_altitude (0 | 1) nav_dvl_offset_m nav_altitude_sigma_m nav_depth_sigma_m
+//   nav_hold_s nav_hold_sigma_m_per_s nav_hold_sigma_m_per_m nav_max_altitude_m nav_keep_s nav_profile_step_m
+//   sound-speed ladder: elevation_profile (0 | 1) elevation_profile_ladder (comma-separated rungs)
+//   elevation_profile_bin_m elevation_profile_sample_sigma elevation_profile_age_sigma_per_hour
+//   elevation_profile_distance_sigma_per_km elevation_profile_max_age_s elevation_profile_max_distance_m
+//   elevation_profile_min_span_m elevation_profile_extrapolation_sigma_per_s elevation_profile_file
+//   elevation_profile_cast elevation_profile_supplied_sigma elevation_profile_family (isothermal | mixed_layer)
+//   elevation_profile_family_gradient elevation_profile_layer_depth elevation_profile_thermocline_gradient
+//   elevation_profile_thermocline_thickness elevation_profile_family_sigma
 //
 // --template: a container file holding one ping record of the sonar (geometry, waveform,
 // receive window); write it with `tools/sonar_live.py CONFIG --export-template template.h5`.
@@ -110,7 +125,16 @@ int main(int argc, char** argv) {
     if (!passive.empty()) {
       io::RecordReader reader(passive);
       for (std::int64_t i = 0; i < reader.size() && (max_pings < 0 || i < max_pings); ++i) {
-        const PingRecord rec = reader.read(i);
+        PingRecord rec = reader.read(i);
+        if (chain_options.decimate.enabled) {
+          // Listening on the decimated stream: the band asked for, unless the options name another.
+          live::DecimateOptions d = chain_options.decimate;
+          if (d.f_low <= 0.0 && d.f_high <= 0.0) {
+            d.f_low = passive_options.f_low;
+            d.f_high = passive_options.f_high;
+          }
+          live::decimate_record(rec, d);
+        }
         report << live::passive_json(live::passive_bearings(rec, passive_options), rec.transmit.time_ns) << std::flush;
       }
       return 0;
@@ -121,7 +145,7 @@ int main(int argc, char** argv) {
     if (!recording_path.empty()) recorder = std::make_unique<io::RecordWriter>(recording_path);
     std::unique_ptr<live::UdpSocket> out_socket;
     if (!report_host.empty()) out_socket = std::make_unique<live::UdpSocket>("0.0.0.0", 0);
-    live::Navigation nav;
+    live::Navigation nav(chain_options.nav);
     std::int64_t done = 0, without_nav = 0;
     auto handle = [&](PingRecord& rec, bool use_nav) {
       if (use_nav && !nav.apply(rec)) ++without_nav;
@@ -144,14 +168,32 @@ int main(int argc, char** argv) {
     } else if (udp_port >= 0) {
       if (template_path.empty()) throw std::invalid_argument("--udp needs --template");
       const PingRecord template_record = io::RecordReader(template_path).read(0);
-      live::PingAssembler assembler(template_record);
+      // decimate=1 decimate_streaming=1: every ping is decimated as its blocks arrive, and synchronised at
+      // its end from the reference stretches kept aside; the recording then holds the decimated pings.
+      const bool streaming = chain_options.decimate.enabled && chain_options.decimate_streaming;
+      const live::BlankingOptions& blanking = chain_options.blanking;
+      live::DecimateOptions stream_decimate = chain_options.decimate;
+      if (blanking.enabled && blanking.zero) {       // blanked on the way into the filter
+        stream_decimate.blank_until_s = blanking.until(template_record);
+        stream_decimate.blank_taper_s = blanking.taper_s;
+      }
+      live::PingAssembler assembler(template_record, streaming ? &stream_decimate : nullptr,
+                                    chain_options.sync ? &chain_options.reference : nullptr);
+      live::DecimateOptions listen_decimate = chain_options.decimate;
+      if (listen_decimate.f_low <= 0.0 && listen_decimate.f_high <= 0.0) {
+        listen_decimate.f_low = passive_options.f_low;
+        listen_decimate.f_high = passive_options.f_high;
+      }
       // --listen: the stream is not cut on transmits; every stretch long enough for one passive
       // frame is recorded and solved for bearings as it completes.
       const std::int64_t chunk = passive_options.n_fft + (passive_options.n_average - 1) * passive_options.hop;
-      live::StreamAssembler stream(template_record, listen ? chunk : 1);
+      // (With decimate=1 the frame lengths n_fft and hop count decimated samples.)
+      live::StreamAssembler stream(template_record, listen ? chunk : 1, listen && listen_decimate.enabled ? &listen_decimate : nullptr);
       live::UdpSocket blocks("0.0.0.0", udp_port);
       std::unique_ptr<live::UdpSocket> nav_socket;
       if (nav_port >= 0) nav_socket = std::make_unique<live::UdpSocket>("0.0.0.0", nav_port);
+      // Listening on a platform that also pings: the same window, about every transmit the blocks mark.
+      if (blanking.enabled && blanking.zero) stream.set_blanking(blanking.until(template_record), blanking.taper_s);
       std::fprintf(stderr, "sonar_live: listening for blocks on UDP port %d\n", blocks.port());
       // One thread does nothing but drain the block socket, so that processing a ping (tens to
       // hundreds of milliseconds) cannot overflow the socket buffer; another takes navigation.

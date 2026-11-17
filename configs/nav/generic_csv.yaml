@@ -1,0 +1,30 @@
+# A generic line-oriented navigation stream, as an example of an adapter mapping
+# (python/gpusonar/navadapter.py; run with tools/nav_adapter.py). This is NOT the format of any
+# particular unit: it shows every conversion the adapter does, on a stream whose conventions
+# all differ from ours (east-north-up position, degrees, a compass heading with pitch positive
+# nose down, velocity in the vehicle's axes in mm/s, time in milliseconds on the unit's own
+# clock). configs/nav/generic_csv_example.csv is a few lines of it.
+name: generic_csv
+format: csv
+csv: {delimiter: ",", header: true}         # or columns: [t_ms, east_m, ...] for a stream without a header line
+time: {field: t_ms, unit: ms, offset_s: 0.0}   # offset_s: add the unit's epoch (and known latency) to reach Unix time
+position:
+  fields: [east_m, north_m, up_m]
+  frame: enu
+  depth: {field: depth_m, unit: m, positive: down}   # the pressure depth replaces the vertical position
+attitude:
+  kind: euler
+  fields: [roll_deg, pitch_deg, heading_deg]
+  unit: deg
+  order: zyx                                # heading, then pitch, then roll
+  signs: [1, -1, 1]                         # this stream's pitch is positive nose down
+  world: ned                                # heading clockwise from north
+  body: frd
+velocity: {fields: [fwd_mm_s, stbd_mm_s, down_mm_s], frame: body_frd, unit: mm/s}   # Doppler-log velocity over ground
+sound_speed: {field: sv_m_s, unit: m/s}
+altitude: {field: alt_m, unit: m, lock: {field: bottom_lock, equals: 1}, invalid: [0, -1]}
+sigma:
+  roll: {field: roll_sd_deg, unit: deg}
+  depth: {field: depth_sd_m, unit: m}
+  altitude: {field: alt_sd_m, unit: m}
+output: {rate_hz: 50.0}

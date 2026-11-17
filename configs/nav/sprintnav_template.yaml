@@ -1,0 +1,29 @@
+# TEMPLATE, NOT A WORKING MAPPING. The vehicle's inertial navigation unit with Doppler log
+# (the owner: "sprintnav IMU and dvl"). We hold neither its datasheet nor its interface
+# document, so every vendor-side entry below is a placeholder to be filled from them:
+# nothing here is the unit's real message format, field name, rate or accuracy.
+# Fill it in, delete the `unconfirmed` entries as each is checked against the unit, and run
+#   tools/nav_adapter.py configs/nav/<your file>.yaml --in-udp PORT --out-udp 127.0.0.1:5702
+# If the unit's output is binary or not one record per line, a small reader that yields one
+# dict of fields per record (and calls Mapping.convert) replaces the csv / json line parser.
+# What the adapter has to deliver, and what to read from the datasheet: docs/DEPLOYMENT.md.
+name: sprintnav_template
+format: csv                                  # unconfirmed: the unit's output format
+csv: {delimiter: ",", header: false, columns: [FILL_IN]}
+time: {field: FILL_IN, unit: s, offset_s: 0.0}     # unconfirmed: time base (UTC? since power-up?) and latency
+position: {fields: [FILL_IN, FILL_IN, FILL_IN], frame: ned, depth: {field: FILL_IN, unit: m, positive: down}}
+attitude: {kind: euler, fields: [FILL_IN, FILL_IN, FILL_IN], unit: deg, order: zyx, signs: [1, 1, 1], world: ned, body: frd}
+velocity: {fields: [FILL_IN, FILL_IN, FILL_IN], frame: body_frd, unit: m/s}
+sound_speed: {field: FILL_IN, unit: m/s}     # if the unit (or a separate sensor) reports it
+altitude: {field: FILL_IN, unit: m, lock: {field: FILL_IN, equals: 1}}
+sigma: {}                                    # the unit's own accuracy estimates, where it outputs them
+unconfirmed:
+  - format
+  - csv
+  - time
+  - position
+  - attitude
+  - velocity
+  - sound_speed
+  - altitude
+  - sigma
