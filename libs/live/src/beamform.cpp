@@ -8,9 +8,19 @@
 #include <Eigen/Dense>
 
 #include "sonar/core/parallel.hpp"
+#include "sonar/dsp/exec_host.hpp"
 #include "sonar/dsp/fft.hpp"
+#include "sonar/live/beamform_batched.hpp"
 
 namespace sonar::live {
+
+#if SONAR_HAVE_CUDA
+// beamform_cuda.cu: the batched formulation on the device.
+void farfield_cuda(const float* samples, const float* w, const double* tau, std::int64_t n, std::int64_t n_el,
+                   std::int64_t n_b, double df, double fc, float* out, int device);
+MvdrBatchedStatus mvdr_cuda(const MvdrBatchedInput& in, float* out, int device);
+#endif
+
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
@@ -147,15 +157,33 @@ BeamMap BeamMap::valid() const {
   return m;
 }
 
-BeamMap farfield_beamform(const PingRecord& record, const std::vector<double>& bearings, const std::string& window) {
+BeamMap farfield_beamform(const PingRecord& record, const std::vector<double>& bearings, const std::string& window,
+                          Backend backend, int device, bool batched) {
   require_conditioned(record, "farfield_beamform");
   const Samples& s = record.samples;
   const std::int64_t n = s.n_samples, n_el = s.n_channels;
   const std::vector<float> w = aperture_weights(record, window);
   const std::vector<double> tau = steering_delays(record, bearings);
-  const std::vector<Cf> x = spectra(s);
   const double df = s.sample_rate / static_cast<double>(n), fc = s.center_frequency;
   BeamMap out = empty_map(record, bearings);
+  (void)device;  // used by the CUDA backend only
+#if !SONAR_HAVE_CUDA
+  if (backend == Backend::Cuda) throw std::runtime_error("farfield_beamform: built without the CUDA backend");
+#endif
+  if (backend == Backend::Cuda || batched) {
+    auto* data = reinterpret_cast<float*>(out.data.data());
+    if (out.n_bearings == 0) return out;
+    if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+      farfield_cuda(s.data.data(), w.data(), tau.data(), n, n_el, out.n_bearings, df, fc, data, device);
+#endif
+    } else {
+      dsp::HostExec ex;
+      farfield_batched(ex, s.data.data(), w.data(), tau.data(), n, n_el, out.n_bearings, df, fc, data);
+    }
+    return out;
+  }
+  const std::vector<Cf> x = spectra(s);
   parallel_for_host(out.n_bearings, [&](std::int64_t b) {
     Cf* acc = out.data.data() + b * n;
     for (std::int64_t e = 0; e < n_el; ++e) {
@@ -180,8 +208,13 @@ BeamMap farfield_beamform(const PingRecord& record, const std::vector<double>& b
   return out;
 }
 
-BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& bearings, const MvdrOptions& o) {
+BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& bearings, const MvdrOptions& o, Backend backend,
+                      int device, bool batched) {
   require_conditioned(record, "mvdr_beamform");
+  (void)device;  // used by the CUDA backend only
+#if !SONAR_HAVE_CUDA
+  if (backend == Backend::Cuda) throw std::runtime_error("mvdr_beamform: built without the CUDA backend");
+#endif
   if (o.n_subbands < 1 || o.block < 1 || o.guard_blocks < 0 || !(o.loading >= 0.0)) {
     throw std::invalid_argument("mvdr_beamform: n_subbands and block must be positive, guard_blocks and loading not negative");
   }
@@ -202,8 +235,48 @@ BeamMap mvdr_beamform(const PingRecord& record, const std::vector<double>& beari
   auto edge = [&](std::int64_t k) { return k == o.n_subbands ? hi : lo + static_cast<double>(k) * edge_step; };
 
   const std::vector<double> tau = steering_delays(record, bearings);
-  const std::vector<Cf> x = spectra(s);
   BeamMap out = empty_map(record, bearings);
+  if ((backend == Backend::Cuda || batched) && n_b > 0) {
+    // The batched formulation: the bins of each sub-band are found here, by the same
+    // comparisons as below; the executor does the rest.
+    std::vector<std::int32_t> band(static_cast<std::size_t>(n), -1), sub;
+    std::vector<double> f_abs;
+    for (std::int64_t k = 0; k < o.n_subbands; ++k) {
+      bool any = false;
+      for (std::int64_t i = 0; i < n; ++i) {
+        const double f = static_cast<double>(signed_bin(i, n)) * bin_hz;
+        if (f >= edge(k) && f < edge(k + 1)) {
+          band[static_cast<std::size_t>(i)] = static_cast<std::int32_t>(k);
+          any = true;
+        }
+      }
+      if (any) {
+        sub.push_back(static_cast<std::int32_t>(k));
+        f_abs.push_back(fc + 0.5 * (edge(k) + edge(k + 1)));
+      }
+    }
+    if (sub.empty()) return out;
+    const MvdrBatchedInput in{s.data.data(), tau.data(), band.data(), sub.data(), f_abs.data(),
+                              n,             n_el,       n_b,         static_cast<std::int64_t>(sub.size()),
+                              o.block,       o.guard_blocks,          o.loading};
+    auto* data = reinterpret_cast<float*>(out.data.data());
+    MvdrBatchedStatus status = MvdrBatchedStatus::Ok;
+    if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+      status = mvdr_cuda(in, data, device);
+#endif
+    } else {
+      dsp::HostExec ex;
+      status = mvdr_batched(ex, in, data);
+    }
+    if (status == MvdrBatchedStatus::Singular) {
+      throw std::runtime_error("mvdr_beamform: singular covariance (no signal in the training data and no loading)");
+    }
+    if (status == MvdrBatchedStatus::Ok) return out;
+    // Not positive definite somewhere: the reference code below, which falls back to LU.
+    std::fill(out.data.begin(), out.data.end(), Cf{});
+  }
+  const std::vector<Cf> x = spectra(s);
   Eigen::Map<MatCf> out_map(out.data.data(), n_b, n);
   MatCf xk(n_el, n);                              // one sub-band of every channel, in time
   MatCd a(n_el, n_b);                             // steering vectors, one column per bearing

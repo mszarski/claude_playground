@@ -51,22 +51,26 @@ void bind_beamform(py::module_& m) {
       py::arg("record"), py::arg("bearings"), "Plane-wave delays p_n . u / c, [n_bearing, n_elements], s.");
   m.def(
       "farfield_beamform_cpp",
-      [](PingRecord& record, const std::vector<double>& bearings, const std::string& window) {
+      [](PingRecord& record, const std::vector<double>& bearings, const std::string& window, Backend backend, int device,
+         bool batched) {
         live::BeamMap map;
         {
           py::gil_scoped_release release;
-          live::prepare(record);
-          map = live::farfield_beamform(record, bearings, window);
+          live::prepare(record, backend, device);
+          map = live::farfield_beamform(record, bearings, window, backend, device, batched);
         }
         return beam_map_dict(map);
       },
-      py::arg("record"), py::arg("bearings"), py::arg("window") = "rect",
+      py::arg("record"), py::arg("bearings"), py::arg("window") = "rect", py::arg("backend") = Backend::Host,
+      py::arg("device") = 0, py::arg("batched") = false,
       "Conventional far-field beamformer (C++). Conditions the record in place; returns the fields of\n"
-      "gpusonar.flank.BeamMap as a dict: data [n_bearing, n_samples], bearings, times, ranges, n_valid.");
+      "gpusonar.flank.BeamMap as a dict: data [n_bearing, n_samples], bearings, times, ranges, n_valid.\n"
+      "On the CUDA backend the transforms and the steered sums run on the device; batched=True runs the\n"
+      "device's formulation on the host.");
   m.def(
       "mvdr_beamform_cpp",
       [](PingRecord& record, const std::vector<double>& bearings, std::int64_t n_subbands, double loading, std::int64_t block,
-         std::int64_t guard_blocks) {
+         std::int64_t guard_blocks, Backend backend, int device, bool batched) {
         live::MvdrOptions o;
         o.n_subbands = n_subbands;
         o.loading = loading;
@@ -75,15 +79,19 @@ void bind_beamform(py::module_& m) {
         live::BeamMap map;
         {
           py::gil_scoped_release release;
-          live::prepare(record);
-          map = live::mvdr_beamform(record, bearings, o);
+          live::prepare(record, backend, device);
+          map = live::mvdr_beamform(record, bearings, o, backend, device, batched);
         }
         return beam_map_dict(map);
       },
       py::arg("record"), py::arg("bearings"), py::arg("n_subbands") = 32, py::arg("loading") = 3e-2, py::arg("block") = 256,
-      py::arg("guard_blocks") = 1,
+      py::arg("guard_blocks") = 1, py::arg("backend") = Backend::Host, py::arg("device") = 0, py::arg("batched") = false,
       "Adaptive (MVDR) beamformer (C++). Conditions the record in place; returns the fields of\n"
-      "gpusonar.flank.BeamMap as a dict.");
+      "gpusonar.flank.BeamMap as a dict. On the CUDA backend the covariances, their Cholesky factors, the\n"
+      "solves and the application of the weights run on the device; batched=True runs the device's\n"
+      "formulation on the host.");
+  // The C++ beamformers take a backend (python/gpusonar/flank.py, live.py).
+  m.attr("BEAMFORM_BACKENDS") = true;
 
   m.def(
       "calibrate_channel_responses_cpp",

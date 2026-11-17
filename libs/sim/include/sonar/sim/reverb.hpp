@@ -14,8 +14,10 @@
 // implementation consumes them), so a ping is reproducible from the scenario seed on
 // either engine and the two engines can be compared sample for sample.
 //
-// What runs where: steps 1 and 3 are FFTs and run on the host on both backends
-// (sonar::dsp::fft). Step 2 runs on the host or on the CUDA device.
+// What runs where: on the host backend, steps 1 and 3 are FFTs on the CPU threads
+// (sonar::dsp::fft) and step 2 the steering kernel. On the CUDA backend the host only
+// scales the deviates by the standard deviation; the Doppler shifts, every transform, the
+// steering sum and step 3 run on the device in batches (reverb_batched.hpp).
 #pragma once
 
 #include <complex>
@@ -44,7 +46,15 @@ struct ReverbParams {
   Vec3d velocity;                 ///< of the sonar (world): Doppler of each sector, two-way (sector mode)
   bool carrier = false;           ///< put the series on the carrier (real or analytic records)
   bool real_output = false;       ///< keep the real part: `out` is then [channels, n_samples] floats
+  /// Run the batched formulation (reverb_batched.hpp, what the CUDA backend runs) on the
+  /// host as well: for tests of that formulation on a machine without a device.
+  bool batched = false;
 };
+
+/// Seconds in each step of the generator since the last reset (reverb_batched.hpp).
+struct ReverbProfile;
+ReverbProfile reverb_profile();
+void reverb_profile_reset();
 
 /// The reverberation power the sequences are drawn with: a density (power per radian of
 /// azimuth and per second) on a coarse time grid, for each sector or one for all.
@@ -86,18 +96,25 @@ bool reverb_uniform_line(const double* offsets, std::int64_t n_channels);
 ///
 /// `normals` holds, for `n_sectors` sectors with power starting at the `first`-th of them
 /// (in increasing order of azimuth), n_low deviates for the real part followed by n_low
-/// for the imaginary part: [n_sectors, 2, n_low]. `pulse` is the transmitted pulse at the
+/// for the imaginary part: [n_sectors, 2, n_low]. With `rows` [n_sectors] the caller names
+/// the sector (in component mode: the row of the density) of each of them instead, and
+/// `first` is not used: the sectors with power are then not searched for again in every call.
+///
+/// On the CUDA backend the whole of steps 1 and 2 runs on the device from the shaped
+/// deviates on (reverb_batched.hpp); the host backend keeps one transform per sector on
+/// its threads. `pulse` is the transmitted pulse at the
 /// reduced rate, complex baseband about center_frequency. `offsets` [n_channels, 3] are
 /// the element positions about the array centre (world).
 void reverb_accumulate(Backend backend, const ReverbParams& params, const ReverbPower& power, std::int64_t first,
                        const double* normals, std::int64_t n_sectors, const std::complex<double>* pulse,
                        std::int64_t n_pulse, const double* offsets, std::int64_t n_channels, float* total,
-                       int device = 0);
+                       int device = 0, const std::int64_t* rows = nullptr);
 
 /// Step 3: from `total` to the time series of every channel in the record's window,
 /// written to `out`: [n_channels, n_samples] interleaved complex, or real floats with
-/// real_output. Runs on the host.
-void reverb_finish(const ReverbParams& params, const float* total, std::int64_t n_channels, float* out);
+/// real_output. On the CUDA backend the transform, window and carrier run on the device.
+void reverb_finish(const ReverbParams& params, const float* total, std::int64_t n_channels, float* out,
+                   Backend backend = Backend::Host, int device = 0);
 
 /// All sectors at once: reverb_accumulate with `normals` [n_active, 2, n_low] for every
 /// sector with power, then reverb_finish.

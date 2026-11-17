@@ -1,25 +1,28 @@
-// CUDA backend of the reverberation steering kernel. Same kernel body as the host backend.
+// CUDA backend of scattering-function reverberation: the batched formulation of
+// reverb_batched.hpp on the device. The sequence of steps and the kernels are the ones the
+// host runs with HostExec (ReverbParams::batched), so there is nothing here but the executor.
 #include <cstdint>
 
-#include "sonar/core/parallel_cuda.hpp"
-#include "sonar/sim/reverb_kernel.hpp"
+#include "sonar/dsp/exec_cuda.hpp"
+#include "sonar/sim/reverb_batched.hpp"
 
 namespace sonar::sim {
 
-/// Add `n_sectors` sector spectra into `total` ([n_channels, n_low] interleaved complex,
-/// host memory, accumulated into). One element of work per frequency bin.
-void reverb_steer_cuda(const float* spectra, const float* lead, const float* omega, float* total,
-                       std::int64_t n_sectors, std::int64_t n_channels, std::int64_t n_low, bool uniform,
-                       int device) {
-  cuda_check(cudaSetDevice(device), "select device");
-  const DeviceBuffer<float> d_spectra(spectra, static_cast<std::size_t>(2 * n_sectors * n_low));
-  const DeviceBuffer<float> d_lead(lead, static_cast<std::size_t>(n_sectors * n_channels));
-  const DeviceBuffer<float> d_omega(omega, static_cast<std::size_t>(n_low));
-  const DeviceBuffer<float> d_total(total, static_cast<std::size_t>(2 * n_channels * n_low));
-  const ReverbSteerKernel k{d_spectra.data(), d_lead.data(), d_omega.data(), d_total.data(), n_sectors,
-                            n_channels,       n_low,         1,              uniform};
-  parallel_for_cuda(k.size(), k);
-  d_total.download(total);
+/// Add the components of one call into `total` ([n_channels, n_low] interleaved complex,
+/// host memory, accumulated into). `shape` fills the host arrays of each run of components.
+void reverb_accumulate_cuda(const ReverbBatchSetup& setup, std::int64_t n_components, ReverbShapeFn shape, void* context,
+                            float* total, ReverbProfile& profile, int device) {
+  dsp::CudaExec ex(device);
+  reverb_accumulate_batched(ex, setup, n_components, shape, context, total, profile);
+}
+
+/// The interpolation to the record's rate, the window and the carrier.
+void reverb_finish_cuda(const float* total, std::int64_t n_channels, std::int64_t n_low, std::int64_t n,
+                        std::int64_t decimation, std::int64_t start, double sample_rate, double start_time,
+                        double center_frequency, bool carrier, bool real_output, float* out, int device) {
+  dsp::CudaExec ex(device);
+  reverb_finish_batched(ex, total, n_channels, n_low, n, decimation, start, sample_rate, start_time, center_frequency,
+                        carrier, real_output, out);
 }
 
 }  // namespace sonar::sim

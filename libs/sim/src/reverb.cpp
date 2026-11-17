@@ -5,16 +5,28 @@
 #include <stdexcept>
 
 #include "sonar/core/parallel.hpp"
+#include "sonar/dsp/exec_host.hpp"
 #include "sonar/dsp/fft.hpp"
+#include "sonar/sim/reverb_batched.hpp"
 #include "sonar/sim/reverb_kernel.hpp"
 
 namespace sonar::sim {
 
 #if SONAR_HAVE_CUDA
-void reverb_steer_cuda(const float* spectra, const float* lead, const float* omega, float* total,
-                       std::int64_t n_sectors, std::int64_t n_channels, std::int64_t n_low, bool uniform,
-                       int device);
+// reverb_cuda.cu: the batched formulation on the device.
+void reverb_accumulate_cuda(const ReverbBatchSetup& setup, std::int64_t n_components, ReverbShapeFn shape, void* context,
+                            float* total, ReverbProfile& profile, int device);
+void reverb_finish_cuda(const float* total, std::int64_t n_channels, std::int64_t n_low, std::int64_t n,
+                        std::int64_t decimation, std::int64_t start, double sample_rate, double start_time,
+                        double center_frequency, bool carrier, bool real_output, float* out, int device);
 #endif
+
+namespace {
+ReverbProfile g_profile;
+}  // namespace
+
+ReverbProfile reverb_profile() { return g_profile; }
+void reverb_profile_reset() { g_profile = ReverbProfile{}; }
 
 namespace {
 
@@ -145,11 +157,12 @@ bool reverb_uniform_line(const double* offsets, std::int64_t n_channels) {
 void reverb_accumulate(Backend backend, const ReverbParams& params, const ReverbPower& power, std::int64_t first,
                        const double* normals, std::int64_t n_sectors, const std::complex<double>* pulse,
                        std::int64_t n_pulse, const double* offsets, std::int64_t n_channels, float* total,
-                       int device) {
+                       int device, const std::int64_t* rows) {
   check(params);
   check(power, params);
   if (n_channels < 1 || n_pulse < 1) throw std::invalid_argument("reverb: channels and a pulse are required");
   (void)device;  // used by the CUDA backend only
+  ++g_profile.calls;
 #if !SONAR_HAVE_CUDA
   if (backend == Backend::Cuda) throw std::runtime_error("reverb: built without the CUDA backend");
 #endif
@@ -157,10 +170,27 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
   const double fc = params.center_frequency, c = params.sound_speed;
   const double fs_low = params.sample_rate / static_cast<double>(params.decimation);
   const double dphi = kTwoPi / static_cast<double>(params.n_azimuth);
-  const std::vector<std::int64_t> sectors = active_sectors(params, power);
-  if (first < 0 || n_sectors < 0 || first + n_sectors > static_cast<std::int64_t>(sectors.size())) {
-    throw std::invalid_argument("reverb: normals must cover sectors with power only");
+  // The sector (or component) of each row of `normals`: given by the caller, or found here
+  // as the sectors with power from the `first`-th on. Finding them reads every row of the
+  // density, so a caller that adds the sectors over many calls passes them.
+  std::vector<std::int64_t> sectors;
+  if (rows != nullptr) {
+    if (n_sectors < 0) throw std::invalid_argument("reverb: normals must cover sectors with power only");
+    const std::int64_t limit = power.direction != nullptr ? power.n_rows : params.n_azimuth;
+    sectors.assign(rows, rows + n_sectors);
+    for (std::int64_t m : sectors) {
+      if (m < 0 || m >= limit) throw std::invalid_argument("reverb: rows must be sectors of the density");
+    }
+  } else {
+    ReverbStopwatch watch;
+    const std::vector<std::int64_t> all = active_sectors(params, power);
+    watch.lap(g_profile.active);
+    if (first < 0 || n_sectors < 0 || first + n_sectors > static_cast<std::int64_t>(all.size())) {
+      throw std::invalid_argument("reverb: normals must cover sectors with power only");
+    }
+    sectors.assign(all.begin() + first, all.begin() + first + n_sectors);
   }
+  first = 0;
   if (n_sectors == 0) return;
   const bool components = power.direction != nullptr;
   // With one density for all sectors, sigma is worked out once.
@@ -187,6 +217,73 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
   dsp::fft(pulse_spectrum, false);
 
   const bool uniform = reverb_uniform_line(offsets, n_channels);
+
+  // The Doppler shift and the channel leads of sector (or component) m.
+  const auto arrival = [&](std::int64_t m, double& doppler, float* lead_out) {
+    const double azimuth = (static_cast<double>(m) + 0.5) * dphi;
+    // The arrival direction: the sector's azimuth in the horizontal plane, or the
+    // component's own direction (which may have elevation).
+    const double ux = components ? power.direction[3 * m] : std::cos(azimuth);
+    const double uy = components ? power.direction[3 * m + 1] : std::sin(azimuth);
+    const double uz = components ? power.direction[3 * m + 2] : 0.0;
+    doppler = components ? power.doppler[m] : 2.0 * (params.velocity.x * ux + params.velocity.y * uy) * fc / c;
+    for (std::int64_t ch = 0; ch < n_channels; ++ch) {
+      const double* o = offsets + 3 * ch;
+      // Sector mode keeps the two-term sum of the NumPy code (uz is zero there).
+      lead_out[ch] = components ? static_cast<float>((o[0] * ux + o[1] * uy + o[2] * uz) / c)
+                                : static_cast<float>((o[0] * ux + o[1] * uy) / c);
+    }
+  };
+
+  if (backend == Backend::Cuda || params.batched) {
+    // The batched formulation (reverb_batched.hpp): the host shapes the deviates, the
+    // executor does the rest.
+    std::vector<float> pulse_low(static_cast<std::size_t>(2 * n_taps));
+    for (std::int64_t k = 0; k < n_taps; ++k) {
+      const cf v(pulse[k]);
+      pulse_low[2 * k] = v.real();
+      pulse_low[2 * k + 1] = v.imag();
+    }
+    const auto shape = [&](std::int64_t begin, std::int64_t count, float* shaped, float* lead_out, double* doppler) {
+      parallel_for_host(count, [&](std::int64_t j) {
+        const std::int64_t m = sectors[begin + j];
+        std::vector<double> own_sigma;
+        if (!shared) {
+          own_sigma.resize(static_cast<std::size_t>(n_low));
+          sigma_row(params, power, m, own_sigma.data());
+        }
+        const double* s = shared ? shared_sigma.data() : own_sigma.data();
+        const double* g_re = normals + (begin + j) * 2 * n_low;
+        const double* g_im = g_re + n_low;
+        float* b = shaped + 2 * j * n_low;
+        for (std::int64_t k = 0; k < n_low; ++k) {
+          b[2 * k] = static_cast<float>(s[k] * g_re[k]);
+          b[2 * k + 1] = static_cast<float>(s[k] * g_im[k]);
+        }
+        arrival(m, doppler[j], lead_out + j * n_channels);
+      });
+    };
+    using Shape = decltype(shape);
+    const ReverbShapeFn shape_fn = [](void* context, std::int64_t begin, std::int64_t count, float* shaped, float* lead_out,
+                                      double* doppler) {
+      (*static_cast<const Shape*>(context))(begin, count, shaped, lead_out, doppler);
+    };
+    void* context = const_cast<void*>(static_cast<const void*>(&shape));
+    const ReverbBatchSetup setup{omega.data(), pulse_low.data(), reinterpret_cast<const float*>(pulse_spectrum.data()),
+                                 n_low,        n_taps,           n_channels,
+                                 fs_low,       params.time0,     uniform};
+    if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+      reverb_accumulate_cuda(setup, n_sectors, shape_fn, context, total, g_profile, device);
+#endif
+    } else {
+      dsp::HostExec ex;
+      reverb_accumulate_batched(ex, setup, n_sectors, shape_fn, context, total, g_profile);
+    }
+    return;
+  }
+
+  ReverbStopwatch watch;
   const std::int64_t batch = std::max<std::int64_t>(1, kBatchBytes / (8 * n_low));
   std::vector<float> spectra;
   std::vector<float> lead;
@@ -198,12 +295,8 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
     // towards that azimuth, times the pulse (shifted alike), in frequency.
     parallel_for_host(count, [&](std::int64_t j) {
       const std::int64_t m = sectors[first + begin + j];
-      const double azimuth = (static_cast<double>(m) + 0.5) * dphi;
-      // The arrival direction: the sector's azimuth in the horizontal plane, or the
-      // component's own direction (which may have elevation).
-      const double ux = components ? power.direction[3 * m] : std::cos(azimuth);
-      const double uy = components ? power.direction[3 * m + 1] : std::sin(azimuth);
-      const double uz = components ? power.direction[3 * m + 2] : 0.0;
+      double doppler = 0.0;
+      arrival(m, doppler, lead.data() + j * n_channels);
       std::vector<double> own_sigma;
       if (!shared) {
         own_sigma.resize(static_cast<std::size_t>(n_low));
@@ -213,8 +306,6 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
       const double* g_re = normals + (begin + j) * 2 * n_low;
       const double* g_im = g_re + n_low;
       auto* b = reinterpret_cast<cf*>(spectra.data() + 2 * j * n_low);
-      const double doppler =
-          components ? power.doppler[m] : 2.0 * (params.velocity.x * ux + params.velocity.y * uy) * fc / c;
       if (doppler != 0.0) {
         const double rate = kTwoPi * doppler;
         std::vector<cf> shifted(static_cast<std::size_t>(n_low));
@@ -239,28 +330,19 @@ void reverb_accumulate(Backend backend, const ReverbParams& params, const Reverb
         dsp::fft(b, static_cast<std::size_t>(n_low), false);
         for (std::int64_t k = 0; k < n_low; ++k) b[k] *= pulse_spectrum[k];
       }
-      for (std::int64_t ch = 0; ch < n_channels; ++ch) {
-        const double* o = offsets + 3 * ch;
-        // Sector mode keeps the two-term sum of the NumPy code (uz is zero there).
-        lead[j * n_channels + ch] = components ? static_cast<float>((o[0] * ux + o[1] * uy + o[2] * uz) / c)
-                                               : static_cast<float>((o[0] * ux + o[1] * uy) / c);
-      }
     });
+    watch.lap(g_profile.transform);
     // Step 2: every sector into every channel with its plane-wave lead.
-    if (backend == Backend::Cuda) {
-#if SONAR_HAVE_CUDA
-      reverb_steer_cuda(spectra.data(), lead.data(), omega.data(), total, count, n_channels, n_low,
-                        uniform, device);
-#endif
-    } else {
-      const ReverbSteerKernel k{spectra.data(), lead.data(), omega.data(), total, count,
-                                n_channels,     n_low,       kReverbMaxBlock, uniform};
-      parallel_for_host(k.size(), k);
-    }
+    const ReverbSteerKernel k{spectra.data(), lead.data(), omega.data(), total, count,
+                              n_channels,     n_low,       kReverbMaxBlock, uniform};
+    parallel_for_host(k.size(), k);
+    watch.lap(g_profile.steer);
+    g_profile.components += count;
   }
 }
 
-void reverb_finish(const ReverbParams& params, const float* total, std::int64_t n_channels, float* out) {
+void reverb_finish(const ReverbParams& params, const float* total, std::int64_t n_channels, float* out, Backend backend,
+                   int device) {
   check(params);
   const std::int64_t n_low = params.n_low, n = params.n_samples;
   const double fs = params.sample_rate, fc = params.center_frequency;
@@ -270,6 +352,25 @@ void reverb_finish(const ReverbParams& params, const float* total, std::int64_t 
   const std::int64_t half = n_low / 2;
   // Sample k of the series is at time0 + k / fs; the record starts one pulse later.
   const auto start = static_cast<std::int64_t>(std::nearbyint((params.start_time - params.time0) * fs));
+  (void)device;  // used by the CUDA backend only
+#if !SONAR_HAVE_CUDA
+  if (backend == Backend::Cuda) throw std::runtime_error("reverb: built without the CUDA backend");
+#endif
+  ReverbStopwatch watch;
+  if (backend == Backend::Cuda || params.batched) {
+    if (backend == Backend::Cuda) {
+#if SONAR_HAVE_CUDA
+      reverb_finish_cuda(total, n_channels, n_low, n, params.decimation, start, fs, params.start_time, fc, params.carrier,
+                         params.real_output, out, device);
+#endif
+    } else {
+      dsp::HostExec ex;
+      reverb_finish_batched(ex, total, n_channels, n_low, n, params.decimation, start, fs, params.start_time, fc,
+                            params.carrier, params.real_output, out);
+    }
+    watch.lap(g_profile.finish);
+    return;
+  }
   const auto gain = static_cast<float>(params.decimation);
   const double carrier_rate = kTwoPi * fc;
   parallel_for_host(n_channels, [&](std::int64_t ch) {
@@ -298,6 +399,7 @@ void reverb_finish(const ReverbParams& params, const float* total, std::int64_t 
       out[2 * (ch * n + k) + 1] = v.imag();
     }
   });
+  watch.lap(g_profile.finish);
 }
 
 void reverb_series(Backend backend, const ReverbParams& params, const ReverbPower& power, const double* normals,
@@ -310,7 +412,7 @@ void reverb_series(Backend backend, const ReverbParams& params, const ReverbPowe
   std::vector<float> total(static_cast<std::size_t>(2 * n_channels * params.n_low), 0.0F);
   reverb_accumulate(backend, params, power, 0, normals, n_active, pulse, n_pulse, offsets, n_channels, total.data(),
                     device);
-  reverb_finish(params, total.data(), n_channels, out);
+  reverb_finish(params, total.data(), n_channels, out, backend, device);
 }
 
 }  // namespace sonar::sim
