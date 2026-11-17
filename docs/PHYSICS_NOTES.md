@@ -1402,3 +1402,135 @@ the same tapered pulse.
 | replica-correlation gain | LFM, 20 ms, 0.5 / 1 / 2 / 4 kHz | 3.01 dB per octave | 2.73, 3.01, 3.13 dB |
 | K moments | nu = 0.5, 2, 10 | m2 = 6, 3, 2.2 | 6.01, 3.00, 2.19 |
 
+## 15. Sampled transmit waveforms and the variable-delay resampler
+
+Code: `python/gpusonar/sim/waveform.py`, `libs/dsp/src/pulse_compression.cpp`
+(`build_arbitrary`). Tests: `tests/python/test_sampled_waveform.py`. Source for
+everything quoted from SST: TR 0702 Sec. 4.1 (eqs. 3-6), Sec. 4.3 (the script on
+p. 20-21), Sec. 4.5.1 (eqs. 14-19), Sec. 4.6.3 (eq. 29), Sec. 8.3 and 9.1 (eqs. 63, 68).
+
+### 12.1 What is carried where
+
+A sampled pulse is a complex envelope b about a carrier F on a uniform grid:
+`q(u) = A Re{ b(u) exp(2 pi i F u) }`, `0 <= u <= T` (TR 0702 eq. 4 without the
+sqrt(2): our envelopes have unit peak, and A is the record's `amplitude`).
+
+The record format already has what processing needs: `waveform_type = 3`
+(arbitrary), `replica` (real samples) and `replica_sample_rate`. We store the real
+passband pulse `Re{ b exp(2 pi i F u) }` there, sampled at 4 x the top of the band
+unless configured, with `f_start`, `f_stop` = the occupied band (their mean is F)
+and `duration` = T. Pulse compression recovers b from it (analytic signal, mixed
+down by F), resamples it at the record's rate with the hypothesis' time scale, and
+correlates as for the analytic pulses. Nothing was added to the record.
+
+Cost: the replica is stored with every ping (as float64 in the file). A 1 s pulse
+at 6-10 kHz is 40 001 samples; a 1 ms pulse at 270-330 kHz is 1 321.
+
+### 12.2 Echo synthesis
+
+Per (path, channel) the kernel's own steps are kept (Sec. 10, "Analytic-pulse
+synthesis vs SST"): exact arrival times of the start, middle and end of the pulse
+from the moving transmitter, scatterer and receiver; emission time u(t) as the
+quadratic through them. The closed-form pulse is replaced by
+
+```
+echo(t) = a g(f) b(u(t)) exp(2 pi i F u(t))          [x exp(-2 pi i f_mix t) for a baseband record]
+```
+
+with b interpolated between its samples. This is SST's `VarDelay` (14) with
+`T_c(t) = t - u(t)`, except that the delay comes from the exact solve at every
+output sample instead of linear interpolation of a slow delay track. Doppler is
+therefore a time scaling of envelope and carrier together, with range curvature
+across the pulse; the first-order factor (63)/(68) is reproduced (12.4) but not
+used.
+
+Interpolation is on the envelope, not on the passband signal, so the band
+occupancy `alpha` of (19) is `bandwidth / envelope rate` (0.125 by default) whatever
+the carrier. For speed it is done in two stages: the windowed sinc once, onto a
+table 8 times finer than the envelope's samples (`table_factor`), then a four-point
+cubic in that table at each output sample. (SST tabulates the coefficients on a grid
+512 times finer and takes the nearest, eq. 18; we tabulate the signal.) The measured
+errors in 12.4 are with both stages.
+
+Loss that depends on frequency (absorption, both beam patterns) cannot use an
+instantaneous frequency, which a sampled pulse does not have. It is applied in
+frequency: the envelope is split by triangular weights about `gain_knots + 1`
+frequencies across the band, and each part takes the gain at its frequency, i.e. the
+gain is piecewise linear in frequency. This is the first step towards SST's FIR
+filter per path (22); the split parts are cut to the pulse's own length, so a gain
+that changes fast across the band smears less than it should at the pulse's ends.
+
+Engines: NumPy only. The C++/CUDA kernel (`synth_kernel.hpp`, mirrored in the
+`.cu` file) evaluates closed-form pulses in a plain-data struct with no array
+argument; giving it a replica means a device buffer and a second kernel. A sampled
+pulse therefore always runs in NumPy for the echo step (path pairing and
+reverberation keep their C++ engine): the record's `extra_json` says
+`{"gpusonar": {"echo_synthesis": "numpy_sampled"}}` and asking for the CUDA backend
+or `engine="cpp"` warns once. Measured on 4 cores, 300 scatterers x 128 channels,
+1 ms pulse at 1.25 MHz (fls_300k): 18-22 s with beam patterns, 7 s omnidirectional,
+against 1.0-1.4 s for the analytic kernel. Scenes of 10^5 scatterers are out of
+reach until the kernel is ported.
+
+One difference from the analytic kernel, found by the closed-form Doppler test: the
+kernel's fixed-point solve for the arrival time stops after 3 passes on the outbound
+leg and 4 on the return leg, each pass gaining a factor v/c. The residual is
+`(R/c) (v/c)^3`: 0.14 us for a target closing at 12 m/s at 400 m, which is 0.007 rad
+at 8 kHz (measured 6.9e-3 relative error against the closed form with 3 passes,
+7e-8 with 8). The NumPy sampled path runs 8 passes. The analytic kernel was left
+as it is.
+
+### 12.3 The interpolator against TR 0702 eq. 19
+
+TR 0702 gives the rule `M >= 2.5 / (1 - alpha)` for the Hann-windowed sinc (17) and
+no error figure. Measured response of our implementation of (17) as a continuous
+filter (worst of: departure from 1 inside `alpha` x Nyquist; leakage of the spectral
+copies outside):
+
+| alpha | M at the rule | error at the rule | at half the rule | at twice the rule |
+| --- | --- | --- | --- | --- |
+| 0.5 | 6 (SST's default order 5) | -39.1 dB | -11.2 dB (M = 2) | -54.3 dB |
+| 0.8 | 14 | -33.6 dB | -13.1 dB (M = 6) | -54.6 dB |
+| 0.9 | 26 | -29.4 dB | -13.1 dB (M = 12) | -54.6 dB |
+
+So the rule marks where the transition band clears the signal, and buys 2-3 %
+amplitude error; the Hann window's error then falls slowly with M (its sidelobes
+decay as 1/f^3). We keep (17) as an option (`interp_window: hann`) and use a
+16-tap Kaiser window (shape 12, chosen by this measurement, not from a table) by
+default: -117 dB for alpha up to 0.5, where 16-tap Hann gives -62 dB.
+
+The `VarDelay` script (two tones at 220 and 440 Hz, 8 kHz real samples, delay
+1.00 ... 2.0 s over 5 s) is reproduced: the tones sit at `n f1 (1 - dT/dt)` in each
+second within 0.02 Hz, and the output equals `x(t - T(t))` within 5.1e-3 (M = 6,
+Hann), 2.3e-4 (M = 16, Hann), 1.5e-6 (M = 16, Kaiser).
+
+### 12.4 Measured accuracy
+
+- Sampled copy of a Tukey-tapered LFM against the analytic LFM (sas_auv,
+  omnidirectional, no absorption, moving sonar), relative rms difference of the
+  record against envelope samples per cycle of bandwidth: 1.25 -> 1.3e-2,
+  2 -> 1.9e-4, 4 -> 1.4e-5, 8 -> 2.4e-6, 16 -> 1.3e-6 (float32 floor). Same for
+  real and baseband records.
+- The same with rectangular edges: 1.5e-2 (2x), 5.6e-3 (8x), confined to the
+  pulse's ends. A pulse that switches on abruptly is not band-limited, so its
+  samples do not define it there; taper the pulse or accept the edge error.
+- With beam patterns and absorption (frequency-domain gain against gain at the
+  instantaneous frequency): 8.5e-4 (fls_300k, BT = 60), 4.8e-4 (flank_32, BT = 80).
+- Every tier (free field, image source with and without time spread and
+  reverberation, sediment, Bellhop eigenrays), real and baseband: 1.3e-4 to 3.8e-4.
+- Doppler: echo of a two-burst wideband pulse from a target (or sonar) closing at
+  12 m/s equals `b(Gamma (t - t0)) exp(2 pi i F Gamma (t - t0))` with Gamma from
+  (68) within 7e-8; a carrier-shift-only model is wrong by 0.88.
+- Phase codes at 7.5 kchip/s in a 15 kHz band: compressed peak at the two-way delay
+  within 1/50 chip and equal to the echo amplitude within 2 %; peak sidelobe
+  -21.9 dB (Barker 13; -22.3 dB for ideal chips) and -22.3 dB (127-chip
+  m-sequence; -23.0 dB for ideal chips). The difference is the band limit.
+
+### 12.5 Limits
+
+- Emission time is a quadratic through three exact arrival times, as in the
+  analytic kernel: exact for constant radial speed, second order in acceleration
+  and bearing change across the pulse.
+- A CW pulse (zero stated bandwidth) cannot be given as `sampled`; use `cw`.
+- The live C++ chain and the WAV sidecar reader do not build sampled pulses
+  themselves; they process a record that carries one.
+

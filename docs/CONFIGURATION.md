@@ -78,6 +78,16 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `transmit.waveform.f_start`, `f_stop`, `duration`, `window_alpha` | band (Hz), pulse length (s), edge taper |
 | `transmit.waveform.source_level_db` | dB re 1 µPa at 1 m; with `receive.sensitivity_db` it makes samples volts |
 | `transmit.waveform.amplitude` | echo amplitude of a 0 dB target at 1 m when the chain is uncalibrated |
+| `transmit.waveform.type: sampled` | a pulse given by samples (`gpusonar/sim/waveform.py`); `f_start`, `f_stop` are then the occupied band and are required. Echoes of a sampled pulse are synthesised by the NumPy engine |
+| `transmit.waveform.source` | for `sampled`: `lfm`, `hfm`, `stepped_fm` (with `steps`), `barker` (with `code`: its length), `mseq` (with `degree`, optional `taps`), `code` (with `code`: chip values, or `[re, im]` pairs), `samples` (inline list), `file` |
+| `transmit.waveform.file`, `dataset` | `.wav` (real passband), `.npy` or HDF5 dataset (real passband, or complex envelope) |
+| `transmit.waveform.samples`, `sample_rate`, `carrier` | inline samples (real passband, or `[re, im]` pairs of the envelope), their rate (Hz; a WAV file has its own), and the carrier removed from complex samples (default: the band centre) |
+| `transmit.waveform.rolloff` | phase codes: fraction of the band over which the chips' spectrum is rolled off to zero (0.25) |
+| `transmit.waveform.normalise` | `peak` (default: unit peak envelope, so `amplitude` keeps its meaning) or `none` |
+| `transmit.waveform.oversample` | envelope samples per cycle of bandwidth for built-in sources and the least for files (8) |
+| `transmit.waveform.interp_taps`, `interp_window`, `interp_beta` | interpolator: taps (16), `kaiser` (default, shape 12) or `hann` (TR 0702 eq. 17) |
+| `transmit.waveform.gain_knots` | frequency intervals across the band for frequency-dependent absorption and beam patterns (8; 0: at the band centre) |
+| `transmit.waveform.replica_sample_rate` | rate of the real replica stored in the record (default 4 × the top of the band) |
 
 ### `receive`
 

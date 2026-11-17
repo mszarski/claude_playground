@@ -19,6 +19,9 @@ _WAVEFORMS = {
     "cw": core.WaveformType.Cw,
     "lfm": core.WaveformType.Lfm,
     "gaussian": core.WaveformType.Gaussian,
+    # A sampled pulse (a file, a list of samples, or a built-in built from samples):
+    # sim/waveform.py. The record carries it as its real replica.
+    "sampled": core.WaveformType.Arbitrary,
 }
 _KINDS = {
     "real": core.SampleKind.RealPassband,
@@ -106,6 +109,7 @@ class SonarModel:
     channel_board: np.ndarray  # [N] board index of each element's channel
     boards: list[dict] = field(default_factory=list)
     nominal_sound_speed: float = 1500.0
+    sampled_waveform: object = None  # sim.waveform.SampledWaveform when transmit.waveform.type is `sampled`
 
     # --- construction -------------------------------------------------------
 
@@ -117,6 +121,14 @@ class SonarModel:
     def from_config(cls, cfg: dict) -> "SonarModel":
         cfg = apply_fov(cfg)
         tx_wf = cfg["transmit"]["waveform"]
+        sampled = None
+        if tx_wf.get("type") == "sampled":
+            # Build the pulse once; a file's or a list's duration is its length.
+            from .sim.waveform import build_waveform
+            sampled = build_waveform(tx_wf)
+            if tx_wf.get("duration") is None or tx_wf.get("source") in ("samples", "file"):
+                cfg = {**cfg, "transmit": {**cfg["transmit"], "waveform": {**tx_wf, "duration": sampled.duration}}}
+                tx_wf = cfg["transmit"]["waveform"]
         fc = 0.5 * (float(tx_wf["f_start"]) + float(tx_wf.get("f_stop", tx_wf["f_start"])))
         c = float(cfg.get("nominal_sound_speed", 1500.0))
         wavelength = c / fc
@@ -174,6 +186,7 @@ class SonarModel:
             channel_board=channel_board,
             boards=boards,
             nominal_sound_speed=c,
+            sampled_waveform=sampled,
         )
 
     # --- derived quantities -------------------------------------------------
@@ -265,6 +278,9 @@ class SonarModel:
         w.f_stop = float(wc.get("f_stop", wc["f_start"]))
         w.duration = float(wc["duration"])
         w.window_alpha = float(wc.get("window_alpha", 0.0))
+        if self.sampled_waveform is not None:
+            # Existing record fields: type Arbitrary, band, duration, the real replica and its rate.
+            self.sampled_waveform.to_record(w)
         w.source_level_db = float(wc["source_level_db"]) if wc.get("source_level_db") is not None else float("nan")
         w.amplitude = self.amplitude_at_1m()
         t = r.transmit

@@ -71,6 +71,10 @@ from .propagation import EigenrayProvider
 
 def baseband_pulse(waveform, sample_rate: float, center_frequency: float) -> np.ndarray:
     """The transmitted pulse as complex baseband samples (unit amplitude)."""
+    if waveform.type == core.WaveformType.Arbitrary:
+        # A sampled pulse: the envelope of the record's replica, resampled (sim/waveform.py).
+        from .waveform import SampledWaveform
+        return SampledWaveform.from_record(waveform).baseband(sample_rate, center_frequency)
     n = int(np.floor(waveform.duration * sample_rate)) + 1
     u = np.arange(n) / sample_rate
     t, f0, f1 = waveform.duration, waveform.f_start, waveform.f_stop
