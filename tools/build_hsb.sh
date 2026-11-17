@@ -23,7 +23,8 @@ export DEBIAN_FRONTEND=noninteractive
 if [ "${HSB_SKIP_APT:-0}" != "1" ]; then
   # What Sensor Bridge's docker/Dockerfile installs, less the display, RoCE and DOCA parts.
   apt-get install -y -qq --no-install-recommends git curl ca-certificates ninja-build pkgconf zlib1g-dev \
-      libfmt-dev libyaml-cpp-dev libcurlpp-dev libcurl4-openssl-dev libssl-dev libnuma-dev libelf-dev > /dev/null
+      libfmt-dev libyaml-cpp-dev libcurlpp-dev libcurl4-openssl-dev libssl-dev libnuma-dev libelf-dev \
+      libvulkan1 libegl1 > /dev/null        # the Python module links Holoscan's visualiser, so its libraries must load
   if ! dpkg -s libnvcomp5-dev-cuda-12 > /dev/null 2>&1; then
     # nvCOMP (its CRC operator is not optional in the build): NVIDIA's local apt repository.
     . /etc/os-release

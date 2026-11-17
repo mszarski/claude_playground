@@ -18,7 +18,8 @@ functions that use it (tools/build_hsb.sh builds it), and the operators exist on
 `holoscan` imports. Sensor Bridge is Apache-2.0 and is called, not copied.
 
 What the receiver operator gives the next operator (Sensor Bridge 2.7.0, read from its
-sources and confirmed by the loopback test): one message per frame holding a single tensor
+sources; the operators here are tested in the Holoscan runtime behind a stand-in that emits
+the same): one message per frame holding a single tensor
 named "" - uint8, one-dimensional, `bytes_written` long, in GPU memory, always at the same
 address (the next frame overwrites it, so it is copied to the host here before anything
 else) - and, as Holoscan metadata, among others `frame_number` (counted by the sender),
