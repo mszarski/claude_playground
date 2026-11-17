@@ -1331,23 +1331,22 @@ independent of the number of sectors in provider calls and `sectors x rings x K_
 in arithmetic.
 
 Components: contributions are collected into (azimuth sector, bin of the receive ray's
-elevation at the receiver). A component has its power against time, the power-weighted
-mean of its `u_Rp` (its arrival direction, with elevation) and the power-weighted mean of
-its `f_d`. The generator draws one complex Gaussian sequence per component - the `g_s` of
-(127)-(128), with "typically one Doppler cell per direction" (Sec. 11.2.7) taken
-literally: Doppler is not binned separately. Within an elevation bin of 20 degrees (the
-default, 9 bins) the Doppler and the direction are those of the bin's mean ray; raise
-`n_elevation` close to the sonar if that matters. Components more than 120 dB below the
-strongest are dropped.
+elevation at the receiver, bin of total Doppler shift) - see 15.5; the first version had
+no Doppler bin, which was a defect. A component has its power against time, the
+power-weighted mean of its `u_Rp` (its arrival direction, with elevation) and the
+power-weighted mean of its `f_d`. The generator draws one complex Gaussian sequence per
+component - the `g_s` of (127)-(128). Within an elevation bin of 20 degrees (the default,
+9 bins) the direction is that of the bin's mean ray; raise `n_elevation` close to the
+sonar if that matters. Components more than 120 dB below the strongest are dropped.
 
 The generator (NumPy and C++) then delays each component to each hydrophone by
 `offset . u / c` with the full 3-D `u`, and shifts it by its `f_d`, pulse included, as
 before.
 
 Limits that remain: flat boundary, stratified medium, eigenray pairs incoherent
-(`delta_pp' delta_qq'` of (76)), one Doppler per component and per ping (no range walk,
-the "short pulse" assumption of Sec. 11.2.1), the first receive element's pattern for
-all, no scatterer Doppler, and the sector must be narrow compared with the transmitter's
+(`delta_pp' delta_qq'` of (76)), one Doppler shift for the whole pulse of each echo (no
+range walk, the "short pulse" assumption of Sec. 11.2.1), the first receive element's
+pattern for all, and the sector must be narrow compared with the transmitter's
 height over the boundary where the transmitter is far from the receiver
 (`azimuth_subsamples`). Chapman-Harris is a backscatter fit and is used at the mean
 grazing angle whatever the bistatic azimuth.
@@ -1779,3 +1778,32 @@ through a sampled pulse and the Doppler bank. `sst_sediment_reverb.yaml`: reverb
 `medium_sand` against `sigma(grazing) pi c T / R^3`, as scattering-function reverberation and as
 point scatterers; signal-to-reverberation after pulse compression against
 `TS - 10 log10(sigma pi c R / B)`, 3 dB per octave. Numbers: `docs/figures/sst_validation.md`.
+
+### 15.5 Components are keyed by Doppler (a defect, found by the validation package, fixed)
+
+The first bistatic generator keyed a component by (azimuth sector, elevation bin of the
+receive ray) and gave it one shift: the power-weighted mean over every pair of eigenrays
+and every two-way time arriving from there. Two things were wrong with that. Pairs with
+different transmit legs but the same receive ray shared a shift, where (71) gives each pair
+pq its own; and the shift of one direction could not change along the record, so late,
+strong returns set the Doppler of early, weak ones (seen in the Pursuit example: the
+return by the bottom changed the spectrogram 0.4 s before it could arrive).
+
+The key now has a third part, a bin of the total Doppler shift `(Gamma_pq gamma - 1) f`:
+SST's "perception space" of travel time, total Doppler and direction (eq. 129, with its
+remark that typically few Doppler cells per direction are occupied). Bins span every shift
+the speeds allow (`f v / c` per platform, `2 f v / c` for scatterers, 5 % margin), are half
+the pulse's resolution wide (`0.5 / T`: within a pulse nothing finer can be told apart),
+and are at most `max_doppler_bins` (128) in number, widening if they would be more. A
+contribution goes to the component of its own shift whatever its paths and its time; the
+component's shift is the power-weighted mean of what fell into it, so it is within half a
+bin of every contribution. Only components that receive power exist (they are found as
+the cells are summed), so the count is a few per direction, not `bins x directions`. With
+nothing moving there is one bin and the components, and the realisations, are as before;
+with motion the realisations of the bistatic mode changed.
+
+The random-motion lines of 15.3 are applied to each component afterwards, as before.
+
+The shift itself is now the factor of (71) and (72), not its first-order form (the
+difference is `(v / c)^2 f` in size: 3.6 Hz at 20 m/s and 9.9 kHz).
+

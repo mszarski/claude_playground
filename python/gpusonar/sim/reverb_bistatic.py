@@ -23,11 +23,15 @@ docs/PHYSICS_NOTES.md Sec. 5.3-5.4 and the section on this module at its end):
 
   with u the unit vector along the ray leaving each platform towards the cell. This is
   the platform Doppler factor of TR 0702 eq. (71), Gamma_pq = (1 - V_R . S_Rp) /
-  (1 + V_S . S_Sq) with slowness vectors S = -u / c, to first order in v / c.
-* Contributions are collected into components: (azimuth sector, bin of arrival elevation).
-  A component carries its power against time, the power-weighted mean of its arrival
-  directions and the power-weighted mean of its Doppler shifts. The generator
-  (reverb.py, libs/sim/src/reverb.cpp) draws one Gaussian sequence per component.
+  (1 + V_S . S_Sq) with slowness vectors S = -u / c, to first order in v / c; the code
+  uses the factor itself (`doppler_factor`), f_d = (Gamma_pq - 1) f.
+* Contributions are collected into components: (azimuth sector, bin of arrival elevation,
+  bin of total Doppler shift), the cells of SST's "perception space" (eq. 129). A component
+  carries its power against time, the power-weighted mean of its arrival directions and
+  of its Doppler shifts. Because the shift is part of the key, pairs of eigenrays with
+  different shifts are never merged, even when they share a receive ray, and the shift of
+  the returns from one direction can change along the record. The generator (reverb.py,
+  libs/sim/src/reverb.cpp) draws one Gaussian sequence per component.
 
 The environment is taken as horizontally stratified with a flat boundary, as in the
 monostatic code: the eigenrays of a leg then depend only on the horizontal distance from
@@ -77,6 +81,153 @@ def doppler_shift(frequency: float, sound_speed: float, tx_velocity, tx_directio
     transmitter and the receiver towards the scatterer ([..., 3])."""
     return frequency / sound_speed * (np.asarray(tx_direction) @ np.asarray(tx_velocity, dtype=float)
                                       + np.asarray(rx_direction) @ np.asarray(rx_velocity, dtype=float))
+
+
+def doppler_factor(sound_speed: float, tx_along, rx_along, scatterer_in=None, scatterer_back=None):
+    """The total Doppler factor of an echo, exactly as TR 0702 eqs. (68), (71), (72) have it:
+
+        Gamma gamma = (1 + V_R . u_R / c) / (1 - V_S . u_S / c) x (1 - V_T . a_q / c) / (1 + V_T . a_p / c)
+
+    from the velocity components along the rays: `tx_along` = V_S . u_S and `rx_along` =
+    V_R . u_R (u the unit vectors along the rays leaving the platforms towards the
+    scatterer), `scatterer_in` = V_T . a_q and `scatterer_back` = V_T . a_p (a the rays'
+    directions of travel on arrival at the scatterer). The frequency shift is
+    (factor - 1) f."""
+    factor = (1.0 + np.asarray(rx_along) / sound_speed) / (1.0 - np.asarray(tx_along) / sound_speed)
+    if scatterer_in is not None:
+        factor = factor * (1.0 - np.asarray(scatterer_in) / sound_speed) / (1.0 + np.asarray(scatterer_back) / sound_speed)
+    return factor
+
+
+def doppler_bins(frequency: float, sound_speed: float, speeds, resolution: float | None, max_bins: int):
+    """Bins of total Doppler for the components (TR 0702 eq. 129): (lowest shift, bin width,
+    number of bins). They span every shift the given speeds allow (each platform f v / c
+    along its ray, scatterers 2 f v / c), no finer than `resolution` (half the pulse's own
+    1 / T: finer cannot be told apart within a pulse) and no more than `max_bins` of them.
+    One bin when nothing moves."""
+    tx_speed, rx_speed, scatterer_speed = (float(v) for v in speeds)
+    half = 1.05 * frequency / sound_speed * (tx_speed + rx_speed + 2.0 * scatterer_speed)
+    if half <= 0.0 or max_bins <= 1:
+        return 0.0, 1.0, 1
+    width = max(2.0 * half / max_bins, float(resolution or 0.0))
+    return -half, width, max(int(np.ceil(2.0 * half / width)), 1)
+
+
+class ComponentSum:
+    """Accumulates the contributions of cells into components.
+
+    A component is (azimuth sector, bin of arrival elevation at the receiver, bin of total
+    Doppler shift). Contributions with different Doppler shifts are therefore never given
+    one shift, whatever their paths and arrival times: two pairs of eigenrays that share a
+    receive ray but not a transmit ray fall into different components (unless their shifts
+    are within one bin, which a pulse cannot resolve), and so do the early and the late
+    returns of one direction when the shift changes along the record. Within a component
+    the direction and the shift are power-weighted means.
+
+    Only components that receive power are stored (most (direction, Doppler) cells are
+    empty: a direction has a few shifts, one per pair of paths)."""
+
+    def __init__(self, n_sectors: int, n_elevation: int, n_times: int, bins):
+        self.n_az, self.n_el, self.n_t = int(n_sectors), int(n_elevation), int(n_times)
+        self.f_lo, self.width, self.n_dop = bins
+        n_full = self.n_az * self.n_el * self.n_dop
+        self.slot = np.full(n_full, -1, dtype=np.int64)
+        if self.n_dop == 1:                                        # nothing moves: every (sector, elevation), in order
+            self.slot[:] = np.arange(n_full)
+            self.ids, capacity = list(range(n_full)), n_full
+        else:
+            self.ids, capacity = [], 1024
+        self._allocate(capacity)
+
+    def _allocate(self, capacity):
+        old = getattr(self, "capacity", 0)
+        grown = [np.zeros(capacity * self.n_t), np.zeros(capacity), np.zeros((capacity, 4)), np.zeros(capacity)]
+        if old:
+            grown[0][: old * self.n_t] = self.power
+            grown[1][:old], grown[2][:old], grown[3][:old] = self.weight, self.moment, self.variance
+        self.power, self.weight, self.moment, self.variance = grown
+        self.capacity = capacity
+
+    def add(self, base, shift, time_position, power, direction, variance=None):
+        """Contributions [N]: `base` = sector * n_elevation + elevation bin, `shift` their
+        Doppler shift (Hz), `time_position` their two-way time in bins from the first bin's
+        centre (shared linearly between the two neighbouring bins), `power`, `direction`
+        [N, 3] towards the arrival at the receiver, `variance` of the shift from random
+        scatterer motion (Hz^2) or None."""
+        n_t = self.n_t
+        i0 = np.floor(time_position).astype(np.int64)
+        frac = time_position - i0
+        ok = (power > 0.0) & np.isfinite(power)
+        lo, hi = ok & (i0 >= 0) & (i0 < n_t), ok & (i0 >= -1) & (i0 < n_t - 1)
+        w_lo, w_hi = np.where(lo, power * (1.0 - frac), 0.0), np.where(hi, power * frac, 0.0)
+        w = w_lo + w_hi
+        if self.n_dop == 1:
+            comp = base
+        else:
+            used = lo | hi
+            if not used.any():
+                return
+            base, shift, i0, w_lo, w_hi, w, lo, hi, direction = (v[used] for v in (base, shift, i0, w_lo, w_hi, w, lo, hi, direction))
+            if variance is not None:
+                variance = variance[used]
+            full = base * self.n_dop + np.clip(np.floor((shift - self.f_lo) / self.width).astype(np.int64), 0, self.n_dop - 1)
+            comp = self.slot[full]
+            if (comp < 0).any():
+                fresh = np.unique(full[comp < 0])
+                self.slot[fresh] = len(self.ids) + np.arange(len(fresh))
+                self.ids.extend(fresh.tolist())
+                if len(self.ids) > self.capacity:
+                    self._allocate(max(2 * self.capacity, len(self.ids)))
+                comp = self.slot[full]
+        size = self.capacity
+        self.power += np.bincount((comp * n_t + i0)[lo], weights=w_lo[lo], minlength=size * n_t)
+        self.power += np.bincount((comp * n_t + i0 + 1)[hi], weights=w_hi[hi], minlength=size * n_t)
+        self.weight += np.bincount(comp, weights=w, minlength=size)
+        if variance is not None:
+            self.variance += np.bincount(comp, weights=w * variance, minlength=size)
+        for axis in range(3):
+            self.moment[:, axis] += np.bincount(comp, weights=w * direction[:, axis], minlength=size)
+        self.moment[:, 3] += np.bincount(comp, weights=w * shift, minlength=size)
+
+    def result(self) -> dict:
+        """power [sectors, J, n_time], direction [sectors, J, 3], doppler, spread and
+        elevation_bin [sectors, J]: the components of each sector along the second axis, in
+        order of elevation bin then Doppler; J is the number of elevation bins when nothing
+        moves (the position is then the elevation bin), else the largest number of
+        components any sector has (the rest are empty, elevation_bin -1)."""
+        n = len(self.ids)
+        ids = np.asarray(self.ids, dtype=np.int64)
+        weight = self.weight[:n]
+        # A component more than 120 dB below the strongest is dropped: it would cost a sequence
+        # in the generator for nothing, and its mean direction is not defined in double precision.
+        has = weight > NEGLIGIBLE * weight.max(initial=0.0)
+        power = self.power[: n * self.n_t].reshape(n, self.n_t)
+        direction, doppler, spread = np.zeros((n, 3)), np.zeros(n), np.zeros(n)
+        mean = self.moment[:n][has, :3] / weight[has, None]
+        direction[has] = mean / np.linalg.norm(mean, axis=1, keepdims=True)
+        doppler[has] = self.moment[:n][has, 3] / weight[has]
+        spread[has] = np.sqrt(self.variance[:n][has] / weight[has])
+        sector, elevation = ids // (self.n_el * self.n_dop), (ids // self.n_dop) % self.n_el
+        if self.n_dop == 1:
+            place, width = elevation, self.n_el
+            keep = np.ones(n, dtype=bool)
+            power[~has] = 0.0
+        else:
+            keep = has
+            order = np.argsort(ids[keep], kind="stable")
+            kept = np.flatnonzero(keep)[order]
+            counts = np.bincount(sector[kept], minlength=self.n_az)
+            starts = np.concatenate([[0], np.cumsum(counts)[:-1]])
+            place = np.zeros(n, dtype=np.int64)
+            place[kept] = np.arange(len(kept)) - starts[sector[kept]]
+            width = max(int(counts.max(initial=0)), 1)
+        out = dict(power=np.zeros((self.n_az, width, self.n_t)), direction=np.zeros((self.n_az, width, 3)),
+                   doppler=np.zeros((self.n_az, width)), spread=np.zeros((self.n_az, width)),
+                   elevation_bin=np.full((self.n_az, width), -1, dtype=np.int64))
+        s, k = sector[keep], place[keep]
+        out["power"][s, k], out["direction"][s, k] = power[keep], direction[keep]
+        out["doppler"][s, k], out["spread"][s, k], out["elevation_bin"][s, k] = doppler[keep], spread[keep], elevation[keep]
+        return out
 
 
 def _leg(es, side):
@@ -145,7 +296,8 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
                       absorption_db_per_m: float = 0.0, max_range: float | None = None, min_range: float = 0.0,
                       ring_width: float | None = None, n_elevation: int = 1, strength_map=None,
                       subsamples: int = 1, scatterer_velocity=None, scatterer_rms_speed: float = 0.0,
-                      scatterer_rms_vertical_speed: float = 0.0) -> dict:
+                      scatterer_rms_vertical_speed: float = 0.0, doppler_resolution: float | None = None,
+                      max_doppler_bins: int = 128) -> dict:
     """Reverberation power per radian of receiver azimuth in each time bin, for unit source
     amplitude at 1 m, from a flat boundary at depth `boundary_z`, by arrival direction.
 
@@ -159,12 +311,16 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
     within each sector (more when the transmitter is far from the receiver and close to
     the boundary, where a sector is wide compared with the transmitter's height).
 
-    Returns a dict of
-      power      [M, E, n_time]  E = n_elevation bins of the ray's elevation at the receiver
-      direction  [M, E, 3]       unit vector from the receiver towards the arrival (power-weighted mean)
-      doppler    [M, E]          Hz at `frequency` (power-weighted mean)
-      spread     [M, E]          Hz: rms Doppler spread from random scatterer motion (power-weighted
+    Returns a dict of the components of each sector (`ComponentSum`: a component is a bin of
+    the ray's elevation at the receiver and a bin of total Doppler shift; `doppler_bins`
+    with `doppler_resolution`, `max_doppler_bins`), J along the second axis:
+      power          [M, J, n_time]
+      direction      [M, J, 3]   unit vector from the receiver towards the arrival (power-weighted mean)
+      doppler        [M, J]      Hz at `frequency`: (Gamma gamma - 1) f, exact (power-weighted mean)
+      spread         [M, J]      Hz: rms Doppler spread from random scatterer motion (power-weighted
                                  mean of the variance), zero without it
+      elevation_bin  [M, J]      -1 where there is no component
+    With nothing moving J = n_elevation and the position is the elevation bin.
 
     `scatterer_velocity` (world vector) is the scatterers' mean velocity and
     `scatterer_rms_speed`, `scatterer_rms_vertical_speed` their random motion
@@ -188,7 +344,7 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
     dr = ring_width or 0.25 * c * dt
     rings = np.arange(min_range + 0.5 * dr, r_max, dr)
     out = dict(power=np.zeros((n_az, n_el, n_t)), direction=np.zeros((n_az, n_el, 3)), doppler=np.zeros((n_az, n_el)),
-               spread=np.zeros((n_az, n_el)))
+               spread=np.zeros((n_az, n_el)), elevation_bin=np.full((n_az, n_el), -1, dtype=np.int64))
     if len(rings) == 0:
         return out
     side = 1.0 if boundary_z >= rx[2] else -1.0
@@ -217,11 +373,9 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
     # at the receiver: +1 straight down in NED).
     elevation = np.arcsin(np.clip(back["vertical"], -1.0, 1.0))
     e_bin = np.clip(np.floor((elevation + 0.5 * np.pi) / np.pi * n_el).astype(int), 0, n_el - 1)   # [rings, k_r]
-    n_comp = n_az * n_el
-    power = np.zeros(n_comp * n_t)
-    weight = np.zeros(n_comp)
-    moment = np.zeros((n_comp, 4))                                 # sum of power x (direction, Doppler)
-    variance = np.zeros(n_comp)                                    # sum of power x Doppler variance
+    v_s = np.asarray(scatterer_velocity, dtype=float) if moving else np.zeros(3)
+    total = ComponentSum(n_az, n_el, n_t, doppler_bins(frequency, c, (np.linalg.norm(vt), np.linalg.norm(vr), np.linalg.norm(v_s)),
+                                                       doppler_resolution, max_doppler_bins))
     per_chunk = max(1, CHUNK_CELLS // len(rings))
     for first in range(0, n_az, per_chunk):
         sectors = np.arange(first, min(first + per_chunk, n_az))
@@ -265,50 +419,21 @@ def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, tim
                         pw = pw * rx_gain(u_p)
                     if absorption_db_per_m:
                         pw = pw * 10.0 ** (-absorption_db_per_m * c * t / 10.0)
-                    # Shared between the two neighbouring time bins, linearly.
-                    pos = (t - times[0]) / dt
-                    i0 = np.floor(pos).astype(np.int64)
-                    frac = pos - i0
-                    ok = (pw > 0.0) & np.isfinite(pw)
-                    lo, hi = ok & (i0 >= 0) & (i0 < n_t), ok & (i0 >= -1) & (i0 < n_t - 1)
-                    comp = comp_base + e_bin[None, :, p]
-                    w_lo, w_hi = np.where(lo, pw * (1.0 - frac), 0.0), np.where(hi, pw * frac, 0.0)
-                    power += np.bincount((comp * n_t + i0)[lo], weights=w_lo[lo], minlength=n_comp * n_t)
-                    power += np.bincount((comp * n_t + i0 + 1)[hi], weights=w_hi[hi], minlength=n_comp * n_t)
-                    w = (w_lo + w_hi).ravel()
-                    flat = comp.ravel()
-                    weight += np.bincount(flat, weights=w, minlength=n_comp)
-                    f_d = (frequency / c) * (f_q + u_p @ vr)
+                    var = None
+                    along_in = along_back = None
                     if moving or random_motion:
                         ah_p = back["arrival_horizontal"][None, :, p]
                         a_p = np.stack([ah_p * cp, ah_p * sp,
                                         np.broadcast_to(back["arrival_vertical"][None, :, p], d.shape)], axis=-1)
                         if moving:
-                            f_d = f_d + scatterer_doppler(frequency, c, scatterer_velocity, a_q, a_p)
+                            along_in, along_back = a_q @ v_s, a_p @ v_s
                         if random_motion:
                             var = scatterer_doppler_variance(frequency, c, a_q, a_p, scatterer_rms_speed,
-                                                             scatterer_rms_vertical_speed)
-                            variance += np.bincount(flat, weights=w * var.ravel(), minlength=n_comp)
-                    for axis in range(3):
-                        moment[:, axis] += np.bincount(flat, weights=w * u_p[..., axis].ravel(), minlength=n_comp)
-                    moment[:, 3] += np.bincount(flat, weights=w * f_d.ravel(), minlength=n_comp)
-    # A component more than 120 dB below the strongest is dropped: it would cost a sequence
-    # in the generator for nothing, and its mean direction is not defined in double precision.
-    has = weight > NEGLIGIBLE * weight.max(initial=0.0)
-    power = power.reshape(n_comp, n_t)
-    power[~has] = 0.0
-    direction = np.zeros((n_comp, 3))
-    mean = moment[has, :3] / weight[has, None]
-    direction[has] = mean / np.linalg.norm(mean, axis=1, keepdims=True)
-    doppler = np.zeros(n_comp)
-    doppler[has] = moment[has, 3] / weight[has]
-    out["power"] = power.reshape(n_az, n_el, n_t)
-    out["direction"] = direction.reshape(n_az, n_el, 3)
-    out["doppler"] = doppler.reshape(n_az, n_el)
-    spread = np.zeros(n_comp)
-    spread[has] = np.sqrt(variance[has] / weight[has])
-    out["spread"] = spread.reshape(n_az, n_el)
-    return out
+                                                             scatterer_rms_vertical_speed).ravel()
+                    f_d = (doppler_factor(c, f_q, u_p @ vr, along_in, along_back) - 1.0) * frequency
+                    total.add(np.broadcast_to(comp_base + e_bin[None, :, p], d.shape).ravel(), f_d.ravel(),
+                              ((t - times[0]) / dt).ravel(), pw.ravel(), u_p.reshape(-1, 3), var)
+    return total.result()
 
 
 def table_strength_map(ranges, offset_db, azimuth_deg=None, origin=(0.0, 0.0)):

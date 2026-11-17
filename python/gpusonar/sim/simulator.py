@@ -189,6 +189,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             extra["geometry"] = str(item["geometry"])
         if item.get("n_elevation") is not None:
             extra["n_elevation"] = int(item["n_elevation"])
+        if item.get("max_doppler_bins") is not None:
+            extra["max_doppler_bins"] = int(item["max_doppler_bins"])
         if item.get("azimuth_subsamples") is not None:
             extra["azimuth_subsamples"] = int(item["azimuth_subsamples"])
         if item.get("strength_map") is not None:

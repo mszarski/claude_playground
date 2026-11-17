@@ -206,7 +206,7 @@ def test_series_centroid_and_width_in_the_three_cases(engine):
         # The expected power is not changed by the motion. (The realised energy of a single
         # speckle cell scatters too much to test here: measured over 300 draws the ratio
         # with and without motion is 1.03 +- 0.06.)
-        np.testing.assert_array_equal(power, power_still)
+        np.testing.assert_allclose(power, power_still, rtol=1e-9, atol=1e-12 * power_still.max())
 
 
 def test_zero_motion_changes_nothing_and_the_keys_are_checked():
