@@ -17,7 +17,9 @@ _spec.loader.exec_module(arch)
 
 def test_stages_listed_with_a_gpu_implementation_take_a_backend():
     with_cuda = {stage for _, stage, _, cuda, _, _ in arch.STAGES if cuda}
-    assert len(with_cuda) == 6
+    assert len(with_cuda) == 7                                                     # six kernels' stages, and the stacked rows' elevation on the backprojection kernel
+    from gpusonar import elevation
+    assert "backend" in inspect.signature(elevation.profile).parameters           # elevation steers with the backprojection kernel, host or CUDA
     assert "backend" in inspect.signature(__import__("gpusonar.sim.reverb", fromlist=["x"]).add_reverberation).parameters   # reverberation
     assert "backend" in gs.core.doa_gate.__doc__                                   # sparse Bayesian bearings
     assert "backend" in inspect.signature(recon.prepare).parameters                # conditioning
@@ -44,3 +46,22 @@ def test_documents_point_at_files_that_exist():
     for tool in ("sonar_live.py", "inspect_tap.py", "calibrate_sim.py", "architecture_diagrams.py"):
         assert (ROOT / "tools" / tool).exists()
     assert (ROOT / "configs" / "deploy" / "popoto_vehicle.yaml").exists()
+
+
+def test_live_chain_diagram_marks_gpu_stages_as_the_code_and_the_benchmark_have_them():
+    """LIVE_STAGES is what docs/architecture/live_chain.png is drawn from."""
+    import json
+    cuda = {key for key, _, _, on_gpu, _ in arch.LIVE_STAGES if on_gpu}
+    assert cuda == {"prepare", "map", "cfar", "sbl", "elevation"}
+    assert "backend" in inspect.signature(recon.prepare).parameters and "backend" in inspect.signature(detect.cfar).parameters
+    assert "backend" in gs.core.doa_gate.__doc__ and "backend" in gs.core.backproject.__doc__
+    # The benchmark the document quotes timed the chain with 1, 2 and 3 rows on both backends.
+    bench = json.loads((ROOT / "docs" / "benchmarks" / "gpu_benchmark_all_l4.json").read_text())
+    live = {c["sizes"]["rows"]: c for c in bench["cases"] if c["group"] == "live" and c["case"].endswith("engine cpp, doa map, backprojection")}
+    assert set(live) == {1, 2, 3} and all(c["cuda_s"] < c["host_s"] for c in live.values())
+    text = (ROOT / "docs" / "ARCHITECTURE.md").read_text()
+    for rows, digits in ((1, "0.010"), (2, "0.021"), (3, "0.031")):
+        assert f"{live[rows]['cuda_s']:.3f}" == digits and digits in text
+    for name in ("architecture/live_chain.png", "architecture/deployment_build.png"):
+        assert name in text and (ROOT / "docs" / name).exists()
+    assert [e for _, _, e, _, _ in arch.LIVE_STAGES].count("cpp") == 1              # doa: sbl runs the C++ engine

@@ -21,6 +21,7 @@ hardware:
     gain_db: 43.0
     input_full_scale_vpp: 0.037
     clock_tolerance_ppm: 25.0
+    row_module: row32_short
     wiring: row_by_row
     position_m: [0.0, 0.0, 0.0]
     cable_slack_m: 0.5
@@ -29,5 +30,6 @@ hardware:
   sound_speed: {rung: gradient_prior}
   water_depth: {source: navigation}
   compute: {option: decimate_first_cpu}
-unconfirmed: [platform.span_m, platform.height_m, receive.window, hardware.hydrophone.model, hardware.hydrophone.noise_db, hardware.hydrophone.band_hz, hardware.projector.model,
-  hardware.projector.amplifier, hardware.navigation.unit, hardware.navigation.rate_hz, hardware.navigation.timestamp_sigma_s, hardware.compute.unit]
+unconfirmed: [platform.span_m, platform.height_m, receive.window, hardware.hydrophone.model, hardware.hydrophone.noise_db, hardware.hydrophone.band_hz, hardware.boards.overload_damage_vpp,
+  hardware.boards.gain_switchable, hardware.projector.model, hardware.projector.amplifier, hardware.projector.blanking_after_s, hardware.navigation.unit, hardware.navigation.rate_hz,
+  hardware.navigation.timestamp_sigma_s, hardware.compute.unit]

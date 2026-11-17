@@ -20,16 +20,11 @@ platform:
   confirmed: [span_m, height_m]
 
 array:
+  module: row32_long            # the row design (count, pitch, hydrophone): configs/builds/modules/row32_long.yaml
   rows: 3
-  count: 32                      # hydrophones in each row
-  pitch_m: 0.15
   heights_m: [-0.75, -0.20, 0.75]   # m above the centre of the face, lowest row first (the owner: "the vertical spacing is maybe a 1.5")
   look: starboard
   wiring: row_by_row             # the owner: "Probably row by row": every board serves one row
-
-hydrophone:
-  model: null                    # not chosen. The plan: "ordinary passive hydrophones wired to the board's inputs"
-  sensitivity_db: -208.0         # dB re 1 V/uPa: an assumption (the figure the plan quotes for its AS-1 reference hydrophone)
 
 boards:
   model: Popoto PMM6081
@@ -70,6 +65,7 @@ projector:
   source_level_db: 197.0         # dB re 1 uPa at 1 m: the 12 km link budget (docs/DESIGN.md Sec. 5); not a part's figure
   band_hz: [4000.0, 6000.0]
   waveform: {type: lfm, duration_s: 1.0, window_alpha: 0.1}
+  blanking_after_s: null         # recovery of the inputs after the direct sound: NOT KNOWN (a bench measurement)
   position_m: [4.0, 0, 0]        # body frame [along, out, down] from the array's centre: a placeholder
 
 navigation:

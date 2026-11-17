@@ -128,6 +128,38 @@ holds no discrete arrival the map's detection is kept. The same solver on averag
 spectra of a recording gives passive bearing-time records (`sonar_live --passive`,
 `core.doa_passive`). `RESULTS.md` has the measurements, `DECISIONS.md` D-57 the reasons.
 
+## The long-range array's chain, stage by stage
+
+![The live chain with stacked rows, both engines, active and passive](architecture/live_chain.png)
+
+- **Row split.** Rows are found from the hydrophone positions in each record (`elevation.find_rows`,
+  `core.live_find_rows`); nothing else says how many there are. Each row is mapped on its own and
+  the rows' power maps are added: detection gains, bearing and range are one row's.
+- **Elevation with candidates.** At each detection the whole array is steered over elevation with
+  the backprojection kernel. Rows several wavelengths apart repeat; a repeat within 1 dB is never
+  trusted and the report then lists the candidates.
+- **Depth.** Attitude as it was when the echo arrived (the record's attitude samples), folding of
+  surface and bottom images into the water column, and a ray trace through the assumed gradient or
+  a supplied profile. The sigma holds noise, roll and the unknown gradient; it does not hold the
+  bias multipath adds in a shallow channel (`DESIGN.md` Sec. 3).
+- **What runs on a GPU** is drawn from `LIVE_STAGES` in `tools/architecture_diagrams.py` and checked
+  by `tests/python/test_architecture.py`: conditioning, the maps, CFAR, the elevation steering
+  (the same backprojection kernel) and the sparse Bayesian bearings. Measured on an L4 with
+  decimated pings of scenario size and the row heights before the 1.5 m change
+  (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes 0.010, 0.021 and 0.031 s a ping for
+  one, two and three rows of 32, against 0.15, 0.30 and 0.44 s on that machine's eight CPU threads.
+  Raw pings at the boards' full rate have not been run on a GPU.
+- **Passive** exists in the C++ library and program only.
+- **The sparse Bayesian kernels take at most 64 channels in one row** (`kSblMaxChannels`,
+  `libs/live/include/sonar/live/sbl_kernel.hpp`). More raise an error on the kernel path (a GPU, or
+  `kernels=True`); the Eigen host path has no limit. Stacked rows of 32 are unaffected.
+
+![Deployment view of a build](architecture/deployment_build.png)
+
+Hardware and timing diagrams of every build are drawn from its files by `tools/build_diagrams.py`
+(`design/build_*.png`); the parts list is `design/popoto_parts.md`; a build is generated from a
+spec sheet by `tools/build_from_spec.py` (`REFERENCE_DESIGN.md`).
+
 ## Calibrating the simulator to real data
 
 `SIM_CALIBRATION.md`. Separate from array calibration (`calibrate.py`), which estimates a
@@ -145,6 +177,6 @@ real array's channel errors.
 | `libs/live`, `apps/sonar_live.cpp` | C++20: the long-range array's live chain and the standalone program `build/bin/sonar_live` |
 | `libs/holoscan_ops`, `apps/sonar_live_holoscan.cpp` | the same chain as C++ Holoscan operators and an application (`-DSONAR_BUILD_HOLOSCAN=ON`) |
 | `python/gpusonar/` | bindings and everything else: `sim/`, `sources/`, `recon/`, `pipeline.py`, `live.py`, `taps.py`, `detect.py`, `classify.py`, `flank.py`, `motion.py`, `sync.py`, `calibrate.py`, `simcal.py`, `holoscan_ops.py` |
-| `configs/` | `sonars/`, `scenarios/`, `chains/`, `deploy/` |
-| `tools/` | `test.sh`, `gallery.py`, `sonar_live.py`, `inspect_tap.py`, `calibrate_sim.py`, `design_report.py`, `scenario_diagrams.py`, `architecture_diagrams.py`, `popoto_range_study.py`, `benchmark.py`, `gpu_job.sh` |
+| `configs/` | `sonars/`, `scenarios/`, `chains/`, `deploy/`, `builds/` (build specs and row modules) |
+| `tools/` | `test.sh`, `gallery.py`, `sonar_live.py`, `inspect_tap.py`, `calibrate_sim.py`, `design_report.py`, `scenario_diagrams.py`, `architecture_diagrams.py`, `build_diagrams.py`, `parts_list.py`, `build_from_spec.py`, `popoto_range_study.py`, `benchmark.py`, `gpu_job.sh` |
 | `tests/` | GoogleTest and pytest, one command: `tools/test.sh` |

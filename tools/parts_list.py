@@ -205,11 +205,11 @@ def parts(d: dict, timings: dict | None = None, static: bool | None = None) -> l
         "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file", (), "capacity and write rate of the volume; whether to store decimated pings instead")
     nav = hw.get("navigation") or {}
     if static:
-        add("navigation", "Frame attitude (tilt and compass sensor)", "0 or 1", "unconfirmed",
+        add("navigation", "Navigation and attitude; a static frame: tilt and compass sensor", "0 or 1", "unconfirmed",
             "without one the frame is taken as plumb and `elevation.roll_sigma_deg` states how plumb; with one, the same datagrams as a vehicle's. Tilt error is elevation error one for one",
             "`nav.static` / `nav.port`, `chain.elevation.roll_sigma_deg`; `sensitivity.roll_depth_error_m` of popoto_elevation_study.json", (), "whether the frame carries a sensor; how its depth and heading are measured")
     else:
-        add("navigation", f"Navigation and attitude ({nav.get('unit') or 'not named'})", 1, "chosen" if nav.get("unit") else "unconfirmed",
+        add("navigation", "Navigation and attitude; a static frame: tilt and compass sensor", 1, "chosen" if nav.get("unit") else "unconfirmed",
             "position, velocity, roll, pitch, yaw, time-stamped against the boards' time, through the ping and until its last echo "
             f"({d['window_s'][1]:.1f} s); roll accuracy goes one for one into elevation" + (" (0.2° is 3.5 m of depth at 1 km)" if el else " (one row: attitude only steers the report's frame)")
             + (f". {nav['unit']}: accuracy, output rate and time-stamp accuracy are from its datasheet — to be supplied" if nav.get("unit") else ""),
@@ -303,7 +303,8 @@ def markdown(columns: list[tuple[str, dict]], timings: dict | None = None, headi
     cpu, gpu = timings.get("cpu"), timings.get("gpu")
     caveats = []
     if cpu:
-        caveats.append(f"CPU figures: {cpu['what']}, {cpu['threads']} shared threads. {cpu['note']}")
+        caveats.append(f"CPU figures: {cpu['what']}, {cpu['threads']} shared threads, measured on the face's sonar files with 1, 2 and 3 rows of 32: the other stages have the same channel counts "
+                       f"and shorter windows, so these are upper figures for them. {cpu['note']}")
     if timings.get("cpu_full_rate"):
         caveats.append(f"Full rate: {timings['cpu_full_rate']['what']}.")
     if gpu:

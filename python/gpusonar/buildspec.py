@@ -51,6 +51,7 @@ SCHEMA = {
         "depth_m": ("num", "m", False, "static only: the depth the frame hangs or stands at", "trial plan", "static: must be given (it is the typed-in pose)"),
     },
     "array": {
+        "module": ("str", "", False, "a row module under configs/builds/modules: a named row design (count, pitch, hydrophone, boards a row) that several builds share; fields given here win", "the project's row design", "leave out and give count and pitch_m"),
         "rows": ("int", "", True, "number of horizontal rows (1: bearing only; 2 or more: elevation and depth)", "array drawing", "must be given"),
         "count": ("int", "", True, "hydrophones in each row", "array drawing", "must be given"),
         "pitch_m": ("num", "m", False, "spacing along a row (uniform rows)", "array drawing", "give positions_m instead, or half a wavelength at the top of the band"),
@@ -84,6 +85,8 @@ SCHEMA = {
         "clock_offset_max_s": ("num", "s", False, "largest start offset between boards the simulated boards are given", "how recording is started", "0.3 ms assumed"),
         "jitter_rms_s": ("num", "s", False, "sample-clock jitter of the simulated boards", "oscillator datasheet", "20 ns assumed"),
         "clocks": ("map", "", False, "the simulated boards' clock errors: {seed: n} draws them inside the tolerance; {explicit: [[offset_s, drift_ppm], ...]} gives them, first board first", "", "{seed: 1}"),
+        "overload_damage_vpp": ("num", "V peak-to-peak", False, "largest input the board survives", "the board's absolute maximum ratings", "leave out: an open question in the parts list"),
+        "gain_switchable": ("bool", "", False, "the input gain can be lowered during the transmit", "ICD / ask the maker", "leave out: unknown"),
         "shared_clock": ("bool", "", False, "true: all boards run from one sample clock (no synchronisation stage)", "ICD", "false: every board on its own clock"),
     },
     "sync": {
@@ -98,6 +101,7 @@ SCHEMA = {
         "band_hz": ("vec2", "Hz", True, "transmitted band", "datasheet: usable band; waveform design", "must be given"),
         "waveform": ("map", "", True, "{type: lfm | cw, duration_s, window_alpha}", "waveform design", "must be given"),
         "position_m": ("vec3", "m", True, "body frame [along, out, down] from the array's centre", "integration drawing", "must be given: a placeholder is allowed if flagged assumed"),
+        "blanking_after_s": ("num", "s", False, "how long after the end of the direct sound the inputs are still unusable (recovery from overload): the first usable range follows from it", "bench measurement of the boards", "leave out: unknown, and the validator says so when the direct sound overloads the inputs"),
     },
     "navigation": {
         "unit": ("str", "", False, "part name of the navigation / attitude source", "platform documentation", F),
@@ -200,7 +204,36 @@ def load(path) -> dict:
     if not p.exists():
         known = sorted(q.stem for q in (config_dir() / "builds").glob("*.yaml"))
         raise FileNotFoundError(f"no build spec {path!r}; known: {', '.join(known)}")
-    return load_yaml(p)
+    return resolve_module(load_yaml(p))
+
+
+def resolve_module(spec: dict) -> dict:
+    """Lay the spec over its row module (`array.module`): the module gives `array` and `hydrophone` fields (and
+    `confirmed` lists), the spec's own fields win. The module's name stays in the spec."""
+    name = (spec.get("array") or {}).get("module")
+    if not name:
+        return spec
+    path = config_dir() / "builds" / "modules" / f"{name}.yaml"
+    if not path.exists():
+        known = sorted(q.stem for q in (config_dir() / "builds" / "modules").glob("*.yaml"))
+        raise FileNotFoundError(f"no row module {name!r}; known: {', '.join(known)}")
+    module = load_yaml(path)
+    out = copy.deepcopy(spec)
+    for section in ("array", "hydrophone"):
+        mod, mine = module.get(section) or {}, spec.get(section) or {}
+        merged = {**mod, **mine}
+        confirmed = [k for k in (mod.get("confirmed") or []) if k not in mine or mine.get(k) == mod.get(k)] + [k for k in (mine.get("confirmed") or [])]
+        merged.pop("confirmed", None)
+        if confirmed:
+            merged["confirmed"] = sorted(set(confirmed))
+        if merged:
+            out[section] = merged
+    return out
+
+
+def modules() -> dict:
+    """The shipped row modules: {name: mapping}."""
+    return {q.stem: load_yaml(q) for q in sorted((config_dir() / "builds" / "modules").glob("*.yaml"))}
 
 
 def shipped() -> list[str]:
@@ -411,6 +444,13 @@ def validate(spec: dict) -> list[Issue]:
                                      f"{d['direct']['volts']:.1f} V at the ADC, {d['direct']['over_full_scale_db']:.0f} dB over full scale ({d['adc_full_scale_v']:.2f} V) for the whole pulse. "
                                      f"The inputs need protection and a known recovery time, or the projector more distance (full scale at {d['direct']['distance_for_full_scale_m']:.0f} m), "
                                      f"or a source level of {d['direct']['source_level_for_full_scale_db']:.0f} dB")
+    if d.get("reference_times_s") and d["direct"]["over_full_scale_db"] > 0.0:
+        gap = d["reference_times_s"][0] - d["direct"]["ends_s"]
+        rec = pj.get("blanking_after_s")
+        if rec is None or gap < float(rec):
+            warn("sync.reference", f"the first synchronisation burst starts {gap * 1e3:.1f} ms after the projector's direct sound ends at the farthest hydrophone, and that sound overloads the inputs: "
+                                   + ("how long they take to recover is not given (projector.blanking_after_s)" if rec is None else f"they take {float(rec) * 1e3:g} ms to recover")
+                                   + ". Open the window later (operation.range_m) or lengthen sync.reference.lead_s so the burst is clear of it")
     # operation and trial
     r0, r1 = op["range_m"]
     blind = 0.5 * c * pulse
@@ -585,11 +625,12 @@ def sonar_config(spec: dict) -> dict:
     hardware = {
         "hydrophone": {k: h.get(k) for k in ("model", "noise_db", "band_hz", "preamp_gain_db") if h.get(k) is not None},
         "boards": {"model": b.get("model"), "inputs": int(b["inputs"]), "gain_db": float(b.get("gain_db") or 0.0),
-                   **{k: b[k] for k in ("input_full_scale_vpp", "simultaneous", "clock_tolerance_ppm", "shared_clock") if b.get(k) is not None},
+                   **{k: b[k] for k in ("input_full_scale_vpp", "simultaneous", "clock_tolerance_ppm", "shared_clock", "overload_damage_vpp", "gain_switchable") if b.get(k) is not None},
+                   **({"row_module": a["module"]} if a.get("module") else {}),
                    "wiring": a.get("wiring", "row_by_row"),
                    "position_m": [float(x) for x in (a.get("board_position_m") or [0.0, 0.0, 0.0])], "cable_slack_m": float(a.get("cable_slack_m", 0.5))},
         "sync": {"scheme": scheme, "elevation_error_deg": float(get(spec, "sync", "elevation_error_deg", 0.05))},
-        "projector": {k: pj.get(k) for k in ("model", "amplifier") if pj.get(k) is not None},
+        "projector": {k: pj.get(k) for k in ("model", "amplifier", "blanking_after_s") if pj.get(k) is not None},
         "navigation": {k: v for k, v in (spec.get("navigation") or {}).items() if k in ("unit", "adapter", "rate_hz", "timestamp_sigma_s", "tilt_sensor") and v is not None},
         "sound_speed": {"rung": get(spec, "sound_speed", "rung", "gradient_prior")},
         "water_depth": {"source": get(spec, "water_depth", "source", "unknown")},
@@ -623,7 +664,7 @@ def sonar_config(spec: dict) -> dict:
     else:
         for key, target in tx_keys:
             _flag(spec, flags, "projector", key, target)
-    for section, keys in (("hydrophone", ("model", "noise_db", "band_hz")), ("boards", ("model",)), ("projector", ("model", "amplifier")),
+    for section, keys in (("hydrophone", ("model", "noise_db", "band_hz")), ("boards", ("model", "overload_damage_vpp", "gain_switchable")), ("projector", ("model", "amplifier", "blanking_after_s")),
                           ("navigation", ("unit", "rate_hz", "timestamp_sigma_s")), ("compute", ("unit",))):
         for key in keys:
             _flag(spec, flags, section, key, f"hardware.{section}.{key}")

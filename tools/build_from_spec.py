@@ -305,7 +305,7 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                         frames, _ = core.doa_passive(rec, f_lo, f_hi, n_fft=256, hop=128, n_average=12, first_deg=-60.0, last_deg=60.0, max_sources=2, min_snr_db=3.0, kernels=kernels)
                         good, worst = 0, 0.0
                         for f in frames:
-                            got = sorted(float(np.degrees(p["bearing"])) if abs(p["bearing"]) <= 3.2 else float(p["bearing"]) for p in f["peaks"])
+                            got = sorted(float(np.degrees(p[0])) for p in f["peaks"])
                             if len(got) == 2 and all(abs(a - b) <= 1.0 for a, b in zip(got, want)):
                                 good += 1
                                 worst = max(worst, max(abs(a - b) for a, b in zip(got, want)))
