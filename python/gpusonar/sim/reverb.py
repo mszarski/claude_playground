@@ -216,6 +216,12 @@ def element_power_pattern(element, rotation: np.ndarray, frequency_ratio: float 
     return gain
 
 
+def _pattern_key(element):
+    """What distinguishes one element's beam pattern from another's."""
+    widths = tuple(None if not np.isfinite(w) else round(float(w), 9) for w in (element.beamwidth_az, element.beamwidth_el))
+    return (tuple(round(float(v), 9) for v in element.boresight) if any(w is not None for w in widths) else None, widths)
+
+
 def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
     """Two sectors per beamwidth (lambda / extent) of the array, and at least 72."""
     extent = np.linalg.norm(positions.max(axis=0) - positions.min(axis=0))
@@ -496,6 +502,11 @@ def add_reverberation(record, provider: EigenrayProvider, boundary_z: float, mu_
     tx_rotation = np.asarray(core.rotation_ned(*record.geometry.tx_pose.rpy))
     tx_gain = element_power_pattern(record.geometry.tx, tx_rotation)
     rx_gain = element_power_pattern(record.geometry.rx[0], rotation)
+    if len({_pattern_key(e) for e in record.geometry.rx}) > 1:
+        # One sequence per direction is shared by all channels, with a delay each: a gain per
+        # channel and direction would have to enter the steering kernel (host and CUDA).
+        warnings.warn("reverberation: the receive elements have different beam patterns; the first element's "
+                      "pattern is used for all of them", RuntimeWarning, stacklevel=2)
     rx_velocity = np.asarray(record.geometry.rx_pose.velocity, dtype=float)
     tx_velocity = np.asarray(record.geometry.tx_pose.velocity, dtype=float)
     components = sector_of_row = None

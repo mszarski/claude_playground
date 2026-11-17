@@ -1402,3 +1402,123 @@ the same tapered pulse.
 | replica-correlation gain | LFM, 20 ms, 0.5 / 1 / 2 / 4 kHz | 3.01 dB per octave | 2.73, 3.01, 3.13 dB |
 | K moments | nu = 0.5, 2, 10 | m2 = 6, 3, 2.2 | 6.01, 3.00, 2.19 |
 
+---
+
+## 15. Reverberation: moving scatterers and a seabed with relief
+
+Additions to Sec. 14 (`sim/reverb_bistatic.py`, `sim/reverb_relief.py`, `sim/bathymetry.py`).
+[OURS] except where an equation of TR 0702 is cited.
+
+### 15.1 What TR 0702 says about scatterer Doppler
+
+Only this: the total Doppler of an echo is split into the platform factor `Gamma_pq` (71)
+and the scatterer factor `gamma` (72); every cell "is assumed to contain scatterers with a
+distribution of Doppler shifts due to scatterer motion" (for the bottom, a delta function at
+1; Sec. 10.1); `gamma` is "treated as an independent variable" and the scattering strength
+is a density in it (76); the scattering function is accumulated in bins of the total
+Doppler `gamma Gamma_pq` (129). No distribution of `gamma` is given for the surface or the
+volume (those are in the boundary models SST takes from TR 9407, which we do not have).
+Sec. 10.6.2 gives the consequence we test against: a Gaussian spread `sigma_gamma` gives a
+coherence time `1 / (2 pi f sigma_gamma)` (96).
+
+### 15.2 Mean velocity
+
+With `a_q`, `a_p` the unit vectors of travel, on arrival at the cell, of the transmit-leg
+ray and of the receive-leg ray traced from the receiver, the slowness vectors at the
+scatterer are `S_Tq = a_q / c`, `S_Tp = a_p / c` (gradients of each leg's travel time with
+respect to the scatterer's position), and (72) is
+
+```
+gamma = (1 - V_T . a_q / c) / (1 + V_T . a_p / c)  ~  1 - V_T . k / c,     k = a_q + a_p
+f_d(cell) = f / c (V_S . u_Sq + V_R . u_Rp)  -  f / c V_T . k
+```
+
+`|k| = 2` for backscatter; `k -> 0` in forward scatter (a scatterer moving along the
+bisector plane does not change the path length). `a` comes from the eigenrays' arrival
+vectors, so for a bounce path it is the direction at the cell, not at the platform.
+
+### 15.3 Random motion: the Doppler spread
+
+One scatterer with velocity `v` is shifted by `-f/c v . k`. For independent Gaussian
+velocity components the shift is Gaussian with
+
+```
+sigma_f^2 = (f / c)^2 ( sigma_iso^2 |k|^2 + sigma_w^2 k_z^2 )
+```
+
+`sigma_iso` per axis for scatterers moving in every direction (`rms_speed`), `sigma_w` for
+a boundary that heaves (`rms_vertical_speed`): for backscatter at grazing angle g,
+`2 f sigma_iso / c` and `2 f sigma_w sin(g) / c`. `wind_speed` sets `sigma_w` to the rms
+vertical speed of a fully developed sea (`acoustics.rms_surface_vertical_speed`, the second
+moment of the Pierson-Moskowitz spectrum; the same quantity `sim/timespread.py` uses for
+the forward bounce). Treating the heaving surface's scatterers as moving with the surface's
+vertical velocity, Gaussian, ignores the orbital (horizontal) part and the Bragg waves'
+own phase speed; the horizontal part can be put into `rms_speed`, a mean drift into
+`velocity`. Nothing is derived from the wind beyond `sigma_w`.
+
+Each component (direction) carries the power-weighted mean of `sigma_f^2` over its cells.
+The generator then splits the component into Doppler lines: offsets uniform over +-3
+`sigma_f`, Gaussian weights summing to 1, rescaled to the exact variance, spaced no wider
+than half the pulse's resolution `1 / T` (at most 41 lines; one line when
+`sigma_f T < 0.05`). Each line is an independent Gaussian sequence with its own shifted
+pulse - the bins in total Doppler of (129). Within a pulse length the lines are not
+resolvable, so the echo of a cell decorrelates as `exp(-2 pi^2 sigma_f^2 s^2)` (measured:
+39.4 ms against 39.8 ms from (96) at 0.3 m/s, 10 kHz). Mean power is unchanged (the
+weights sum to 1). Cost: the number of sequences multiplies by the number of lines.
+
+Ping to ping: this method draws new sequences every ping, so reverberation is already
+uncorrelated between pings - right whenever the ping interval is much longer than
+`1 / (2 pi sigma_f)` (always, with any surface motion), wrong for a still sonar over a
+still bottom (Sec. 14, unchanged).
+
+Platform pitch and heave in the component path: each platform's full velocity vector is
+projected on its own ray (elevation included), so heave is exact to first order (tested:
+2 f w / c straight down). Attitude rates (the velocity of an element from pitch rate times
+its lever arm) are not included: the array is given its centre's velocity.
+
+### 15.4 Relief
+
+`bathymetry` gives the bed's depth D(x, y) (NED, positive down). Per cell of the polar grid
+about the receiver's ground point:
+
+```
+R        = (x, y, D)
+n        = (D_x, D_y, -1) / sqrt(1 + |grad D|^2)          into the water
+dA       = r dr dphi sqrt(1 + |grad D|^2)                 the facet's area
+sin g_q  = -a_q . n,   sin g_p = -a_p . n                 <= 0: the facet is turned away, no return
+phi_b    = angle between a_q - (a_q.n) n  and  -a_p + (a_p.n) n     (pi = backscatter)
+T        = T_q(R) + T_p(R),   direction and Doppler from the rays to R itself
+```
+
+Eigenrays are asked for at the cell itself, so nothing is interpolated along range (the
+flat code's one-line-per-leg shortcut does not apply). Exactness:
+
+- direct and surface-reflected legs: exact for straight rays (the cell is a point in the
+  water, and its images in the surface are images);
+- legs with a bottom bounce before the cell: not image paths over relief. Left out by
+  default. What that costs was measured on a level bed (60 m of water, sonar 40 m above
+  the bed, bottom reflection 0.5, surface -1): 0.0 / 0.2 / 2.5 / 4.5 / 5.2 / 5.5 / 5.6 dB
+  in successive 40 ms from 60 ms, that is negligible to about two water depths of range
+  and 5-6 dB beyond five. `bottom_bounces: flat` keeps them with the earlier bounces off
+  the provider's flat bottom and the last incidence on the true facet (exact on a level
+  bed; elsewhere an approximation whose error is not bounded here);
+- with Bellhop the bathymetry goes to Bellhop: one run per azimuth sector with the depth
+  profile of that bearing (N x 2-D), all paths kept, blocking by relief done by the ray
+  trace. Transmitter and receiver must be over one ground point. No out-of-plane
+  reflection.
+
+Shadowing: a cell is hidden from a path's apparent origin (the platform, or its image in
+the surface) when nearer relief stands above the straight line to it. Computed from a
+horizon about each origin: along 4 x sectors (at least 720) bearings, the running minimum
+of (depth below the origin) / distance; a cell is visible when its own slope is not above
+that minimum at two steps nearer, plus 0.2 mrad. Straight rays only.
+
+A level bed given as bathymetry runs the flat code (bit-identical). A uniformly sloping
+plane is the flat problem seen from the perpendicular heights: the two codes agree to
+0.001 dB.
+
+Point-scatterer scenes take the same description (`seafloor` item): the bed's depth and
+normals, amplitudes scaled by `(1 + |grad D|^2)^(1/4)` because the points are drawn per
+horizontal area. The scene does not shadow its seabed with its own relief (only listed
+occluders shadow), so the two methods differ behind a ridge.
+

@@ -25,6 +25,11 @@ What the eigenrays over relief are:
   them as the provider gives them, that is with the earlier bounces off the provider's own
   flat bottom and only the last incidence on the true facet: right in the limit of a
   level bed, an approximation over gentle relief, not shadowed.
+* A provider that can trace rays over a depth profile of its own (`along_profile`: the
+  Bellhop provider) is used N x 2-D instead: one profile, and one run, per azimuth sector
+  along the radial from the platforms, with all its paths (bottom bounces and blocking by
+  the relief are then Bellhop's). Both platforms must be over the same ground point, since
+  a profile is laid out from the source. Out-of-plane reflection is not modelled.
 * Shadowing is tested along the straight line from each path's apparent origin (the
   platform, or its image in the surface) to the cell: exact for straight rays; for a
   refracting provider it is skipped for the paths whose apparent origin is not one point.
@@ -77,11 +82,25 @@ class Horizon:
         return slope <= clear + SHADOW_TOLERANCE
 
 
+def _gridded_eigenrays(provider, platform, pts):
+    """Eigenrays to bed cells from a provider that looks arrivals up on a depth grid (Bellhop):
+    asked for half a grid step above the bed so that the node used is in the water, with the
+    delay carried down to the bed along each arrival."""
+    dz = float(provider.depths[1] - provider.depths[0]) if len(provider.depths) > 1 else 0.0
+    es = provider.eigenrays(platform, pts - np.array([0.0, 0.0, 0.5 * dz]))
+    es.delay = es.delay + 0.5 * dz * es.arrival[:, :, 2] / es.sound_speed
+    return es
+
+
 def _leg(provider, platform, pts, normals, bathymetry, shadowing, horizon_args, cache, bottom_bounces):
     """One leg to the cells `pts` [N, 3]: for the usable paths, |amplitude|^2 (zero where the
     path does not light the facet), delay, sin(grazing) on the facet, the launch and arrival
     unit vectors."""
-    es = provider.eigenrays(platform, pts)
+    if getattr(provider, "relief_aware", False):
+        es = _gridded_eigenrays(provider, platform, pts)
+        shadowing, bottom_bounces = False, "flat"                  # the provider traced the relief
+    else:
+        es = provider.eigenrays(platform, pts)
     use = es.valid
     if bottom_bounces == "exclude":
         use = use & (es.n_bottom == 0)
@@ -159,6 +178,15 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
     moment = np.zeros((n_comp, 4))
     variance = np.zeros(n_comp)
     per_chunk = max(1, rb.CHUNK_CELLS // (4 * len(rings)))
+    fan = hasattr(provider, "along_profile")
+    if fan:
+        if separation > 1.0:
+            raise NotImplementedError("reverberation over relief with a ray-tracing provider is N x 2-D about one "
+                                      "ground point: the transmitter must be above or below the receiver")
+        per_chunk = 1                                              # one bearing, one depth profile, at a time
+        base_provider = provider
+        profile_step = float(min(getattr(provider, "ranges", [0.0, dr])[1] - getattr(provider, "ranges", [0.0, dr])[0], 10.0))
+        profile_ranges = np.arange(0.0, rings[-1] + 2.0 * profile_step, profile_step)
     for first in range(0, n_az, per_chunk):
         sectors = np.arange(first, min(first + per_chunk, n_az))
         for sub in range(subsamples):
@@ -166,6 +194,9 @@ def directional_power(provider: EigenrayProvider, tx, rx, bathymetry: Bathymetry
             x = (rx[0] + rings[None, :] * np.cos(phi)[:, None]).ravel()
             y = (rx[1] + rings[None, :] * np.sin(phi)[:, None]).ravel()
             pts = np.column_stack([x, y, bathymetry.depth(x, y)])
+            if fan:
+                along = bathymetry.depth(rx[0] + profile_ranges * np.cos(phi[0]), rx[1] + profile_ranges * np.sin(phi[0]))
+                provider = base_provider.along_profile(np.column_stack([profile_ranges, along]))
             normals = bathymetry.normal(x, y)
             cell = np.tile(rings * dr / subsamples, len(sectors)) * bathymetry.area_factor(x, y)
             if strength_map is not None:

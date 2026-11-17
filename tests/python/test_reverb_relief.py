@@ -10,8 +10,8 @@ with the facet's own angles and area; the point-scatterer seabed on the same bat
 import numpy as np
 import pytest
 
-from gpusonar.sim import (FreeFieldProvider, ImageSourceProvider, Scene, bathymetry, build_scene, make_pose, reverb,
-                          reverb_bistatic, reverb_relief, simulate_ping)
+from gpusonar.sim import (BellhopProvider, FreeFieldProvider, ImageSourceProvider, OceanEnvironment, Scene, bathymetry,
+                          build_scene, find_bellhop, make_pose, reverb, reverb_bistatic, reverb_relief, simulate_ping)
 from gpusonar.sim import engine as sim_engine
 from gpusonar.sonar import SonarModel
 
@@ -360,3 +360,76 @@ def test_scatterer_seabed_and_scattering_function_on_the_same_slope():
     ratio = 10 * np.log10(a[span].reshape(8, -1).mean(axis=1) / b[span].reshape(8, -1).mean(axis=1))
     assert np.abs(ratio).max() < 2.0, ratio
     assert abs(ratio.mean()) < 1.0, ratio
+
+
+# --- Bellhop over relief: N x 2-D --------------------------------------------------------------
+
+needs_bellhop = pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")
+
+
+def shallow_provider():
+    env = OceanEnvironment(depth=30.0, sound_speed=C, bottom_speed=1600.0, bottom_density=1.8, bottom_attenuation=0.5)
+    return BellhopProvider(env, F, max_range=420.0, range_step=5.0, depth_step=0.5, max_arrivals=16)
+
+
+@needs_bellhop
+def test_bellhop_over_a_level_bed_by_bearing_equals_the_flat_run():
+    """One Bellhop run per azimuth sector with that bearing's depth profile. Over a level
+    bed (given as a function, so the relief code runs) every bearing's profile is flat and
+    the result is the flat code's with the plain provider, bottom bounces included."""
+    provider = shallow_provider()
+    rx = np.array([0.0, 0.0, 5.0])
+    times = np.arange(0.04, 0.5, 2e-3)
+    flat = reverb_bistatic.directional_power(provider, rx, rx, 30.0, times, sectors(4), frequency=F, mu_db=MU_DB)
+    level = reverb_relief.directional_power(provider, rx, rx, bathymetry.make_bathymetry(lambda x, y: 30.0 + 0.0 * x),
+                                            times, sectors(4), frequency=F, mu_db=MU_DB)
+    a, b = level["power"].sum(axis=1), flat["power"].sum(axis=1)
+    for m in range(4):
+        assert np.abs(10 * np.log10(blocks(a[m], 20) / blocks(b[m], 20))).max() < 0.1
+    # The provider's bottom-bounce paths are in: more than the direct and surface paths alone.
+    direct = reverb_bistatic.directional_power(ImageSourceProvider(C, surface_z=0.0, bottom_z=None, max_order=1), rx, rx,
+                                               30.0, times, sectors(4), frequency=F, mu_db=MU_DB)["power"].sum(axis=1)
+    assert blocks(a[0], 20)[-1] > 1.5 * blocks(direct[0], 20)[-1]
+
+
+@needs_bellhop
+def test_bellhop_bank_on_one_bearing_changes_that_bearing_only():
+    """A bank in the north-east quadrant, shoaling from 30 m to 15 m around 200 m range: the
+    slope facing the sonar returns more, the bearings without the bank are untouched."""
+    def bank(x, y):
+        r = np.hypot(x, y)
+        return 30.0 - np.where((x > 0) & (y > 0), 15.0 * np.clip(1.0 - np.abs(r - 200.0) / 50.0, 0.0, 1.0), 0.0)
+
+    provider = shallow_provider()
+    rx = np.array([0.0, 0.0, 5.0])
+    times = np.arange(0.04, 0.5, 2e-3)
+    flat = reverb_bistatic.directional_power(provider, rx, rx, 30.0, times, sectors(4), frequency=F, mu_db=MU_DB)["power"].sum(axis=1)
+    got = reverb_relief.directional_power(provider, rx, rx, bathymetry.make_bathymetry(bank), times, sectors(4),
+                                          frequency=F, mu_db=MU_DB)["power"].sum(axis=1)
+    ratio = [10 * np.log10(blocks(got[m], 20) / blocks(flat[m], 20)) for m in range(4)]
+    for m in (1, 2, 3):
+        assert np.abs(ratio[m]).max() < 0.1
+    facing = (times[::20][: len(ratio[0])] > 2 * 150.0 / C - 0.02) & (times[::20][: len(ratio[0])] < 2 * 200.0 / C)
+    assert ratio[0][facing].max() > 3.0                                # the up-slope, 150 to 200 m
+    assert np.abs(ratio[0][:3]).max() < 0.1                            # before the bank
+    with pytest.raises(NotImplementedError, match="N x 2-D"):
+        reverb_relief.directional_power(provider, np.array([50.0, 0.0, 5.0]), rx, bathymetry.make_bathymetry(bank),
+                                        times, sectors(4), frequency=F, mu_db=MU_DB)
+
+
+def test_differing_element_patterns_are_reported():
+    """The generator shares one sequence per direction among the channels: one receive
+    pattern for all. A record whose elements differ says so."""
+    rec = ping()
+    geo = rec.geometry
+    rx = list(geo.rx)
+    rx[3].beamwidth_az = 0.5
+    geo.rx = rx
+    rec.geometry = geo
+    if len({reverb._pattern_key(e) for e in rec.geometry.rx}) > 1:
+        with pytest.warns(RuntimeWarning, match="different beam patterns"):
+            reverb.add_reverberation(rec, FF, 50.0, MU_DB, np.random.default_rng(0), n_azimuth=12)
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        reverb.add_reverberation(ping(), FF, 50.0, MU_DB, np.random.default_rng(0), n_azimuth=12)
