@@ -183,6 +183,17 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                 strength = lambda g_in, g_out, azimuth=np.pi, _b=base, _s=scale: _s * _b(g_in, g_out, azimuth)  # noqa: E731
             else:
                 strength = lambda g_in, g_out, _b=base, _s=scale: _s * _b(g_in, g_out)  # noqa: E731
+        # `exclude_specular: true` (or {mean_square_slope, rms_height, reflection}), bistatic items:
+        # take out of the strength the near-specular part that time spreading already carries
+        # as the tail of each bounce eigenray (sim/reverb_specular.py; TR 0702 Sec. 12.4).
+        if item.get("exclude_specular"):
+            from . import reverb_specular
+            part = reverb_specular.boundary_part(item, provider, fc, env.get("sound_speed", 1500.0))
+            if part is not None:
+                if strength is None:
+                    mu = 10.0 ** ((float(item.get("mu_db", -27.0)) + offset) / 10.0)
+                    strength = lambda g_in, g_out: mu * np.sin(g_in) * np.sin(g_out)   # noqa: E731
+                strength = reverb_specular.exclude(strength, part)
         # New keys, all optional (sim/reverb.py, sim/reverb_bistatic.py): `geometry: bistatic`
         # (the transmitter's and receiver's own positions and velocities, arrival elevation),
         # with it `n_elevation`, `azimuth_subsamples` and `strength_map: {range, offset_db,

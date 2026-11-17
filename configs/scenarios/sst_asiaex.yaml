@@ -15,11 +15,12 @@
 # 20.7, bottom-surface 30.6 ms). This is not a numerical reproduction of Figs. 3-5 and must
 # not be presented as one; the data in those figures (Dahl 2002) were not used.
 #
-# How a one-way path is made with a simulator of echoes: the receiver is the sonar's array;
-# the projector is 500 m away (its lever arm); a point "relay" of strength -20 dB stands 0.1 m
-# from the projector. The transmit leg is then 0.1 m long (its own surface and bottom paths
-# are 55 dB down and arrive after the window), and the product (1 / 0.1) x 0.1 = 1 leaves
-# the return leg alone: the record is the one-way sound of a source of the stated level.
+# The one-way path: the projector is a radiating source (`sources:`, gpusonar/sim/sources.py)
+# 500 m from the receiver, emitting the pulse of `transmit.waveform` at its source level at
+# each ping time; the receiving sonar does not transmit (`pings.transmit: false`). The record
+# is the one-way sound of that source (SST's DirectSignal). (Before one-way sources existed
+# this was made with a -20 dB relay 0.1 m from a projector on a 500 m lever arm; the two
+# agree: docs/PHYSICS_NOTES.md Sec. 20.)
 # Frame: z down, z = 0 the sea surface; the receiver is at the origin's x, y.
 name: sst_asiaex
 sonar: flank_32
@@ -28,7 +29,6 @@ sonar_overrides:
   name: sst_asiaex_receiver
   array: {count: 1, pitch: 0.094}             # TR 0702 shows one channel ("Ch 1"); omnidirectional
   transmit:
-    lever_arm: [500.0, 0.0, -20.0]            # projector 500 m away, 30 m deep
     waveform: {type: cw, f_start: 8000.0, f_stop: 8000.0, duration: 0.003, window_alpha: 0.1, source_level_db: 190.0}
   receive:
     sample_rate: 64000.0
@@ -44,15 +44,17 @@ time_spread:
   bottom: {rms_height: 0.012, mean_square_slope: 0.045}        # as printed in TR 0702
   taps: 12
 platform: {position: [0, 0, 50.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
-pings: {count: 20, interval: 5.0}
-scene:
-  - {type: points, label: relay, positions: [[500.0, 0.1, 30.0]], target_strength_db: -20.0}
+pings: {count: 20, interval: 5.0, transmit: false}
+scene: []
+sources:
+  - {label: projector, origin: [500.0, 0.0, 30.0], signal: {type: waveform}}   # 500 m away, 30 m deep; the waveform and level above
 absorption: francois_garrison
 receiver: {noise_rms: 0.0, adc: false}
 seed: 22
 unconfirmed:
   - platform                      # receiver depth
-  - sonar_overrides               # source depth and level, exact separation, pulse taper, sampling
+  - sonar_overrides               # source level, pulse taper, sampling
+  - sources                       # source depth, exact separation
   - propagation                   # water depth, sound speed, sediment for the reflection coefficient
   - pings.interval
   - time_spread.surface           # wind -> rms height, slope, vertical speed: our laws, not McDanielSurface
