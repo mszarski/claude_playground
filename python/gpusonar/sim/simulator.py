@@ -49,7 +49,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
                   noise_spectrum=None, reverberation: list | None = None,
-                  beam_floor_db: float | None = None, noise_statistics: dict | None = None,
+                  beam_floor_db: float | None = None, noise_statistics: dict | None = None, fitted_noise: dict | None = None,
                   sources: list | None = None, transmit: bool = True,
                   backend=core.Backend.Host, engine: str | None = None) -> "core.PingRecord":
     """Simulate one transmit and return its record.
@@ -291,6 +291,15 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             samples = samples + noise_models.k_noise(
                 samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
                 noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+    if fitted_noise:
+        # `receiver.ambient_noise: {model: fitted, file: ...}`: noise with the spectrum, the
+        # coherence between hydrophones and the tail of a recording (sim/noise_fit.py), in the
+        # recording's sample units (`gain_db` rescales). Added after synthesis on either engine.
+        from . import noise_fit
+        fc_noise = record.samples.center_frequency if np.iscomplexobj(samples) else 0.0
+        samples = samples + noise_fit.scenario_noise(
+            fitted_noise, samples.shape[1], record.samples.sample_rate, rng or np.random.default_rng(),
+            n_channels=samples.shape[0], center_frequency=fc_noise).astype(samples.dtype)
     taps.sim_tap(record, "noise", samples)
     samples = receiver.apply_hardware_tvg(record, samples)
     taps.sim_tap(record, "hardware_gain", samples)
@@ -308,7 +317,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
 def _noise_spectrum(cfg):
     """Spectrum callable from a scenario's `receiver.ambient_noise` mapping:
     {level_db: 45} for a flat spectrum, or {wind_speed: 5, shipping: 0.5} for the Wenz fit."""
-    if not cfg:
+    if not cfg or cfg.get("model") == "fitted":
         return None
     from . import noise as noise_models
     if "level_db" in cfg:
@@ -494,6 +503,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
+        fitted_noise=(rx_cfg.get("ambient_noise") if (rx_cfg.get("ambient_noise") or {}).get("model") == "fitted" else None),
         sources=sources, transmit=bool(pings.get("transmit", True)),
         reverberation=cfg.get("reverberation"),
         beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"), engine=engine)

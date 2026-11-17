@@ -578,3 +578,21 @@ def test_fit_finds_the_impulsive_tail_of_a_real_site():
     assert model.family == "sas" and model.tail_parameter == pytest.approx(alpha, abs=0.1)
     again = nf.fit(model.generate(int(10.0 * fs), np.random.default_rng(1)), fs, nfft=512)
     assert again.family == "sas" and again.tail_parameter == pytest.approx(alpha, abs=0.12)
+
+
+def test_fitted_noise_through_run_scenario(tmp_path, field):
+    """`receiver.ambient_noise: {model: fitted}` in a scenario: the record's noise has the
+    model's level (in the recording's units, times gain_db) on every hydrophone, and the
+    Wenz noise is not added as well."""
+    from gpusonar.sim.simulator import run_scenario
+    _, model = field
+    path = str(tmp_path / "m.h5")
+    model.save(path)
+    cfg = {"sonar": "popoto_8", "sonar_overrides": {"receive": {"kind": "real", "sample_rate": FS, "window": {"range": [200.0, 800.0]}}},
+           "scene": [], "platform": {"position": [0.0, 0.0, 10.0]}, "pings": {"count": 1},
+           "receiver": {"adc": False, "ambient_noise": {"model": "fitted", "file": path, "gain_db": 0.0, "allow_uncovered": True}}}
+    rec = run_scenario(cfg).records[0]
+    x = np.asarray(rec.samples.array, dtype=float)
+    assert x.shape[0] == 8
+    want = np.real(np.einsum("fcc->c", model.csd)) * FS / model.nfft
+    assert x.var(axis=1) == pytest.approx(want, rel=0.15)
