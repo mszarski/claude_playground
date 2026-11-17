@@ -149,8 +149,7 @@ EigenraySet image_source_eigenrays(const ImageSourceConfig& config, const Vec3d&
   const auto k = static_cast<std::int64_t>(series.size());
   const double c = config.sound_speed;
   // Constant coefficient of each ray. With a fluid bottom, a path that meets the bottom
-  // takes surface^ns * R(grazing)^nb instead (as the Python provider does, the wall's
-  // coefficient is not applied to such a path).
+  // takes surface^ns * R(grazing)^nb instead, times the wall's coefficient if it met one.
   std::vector<cd> coefficient(series.size());
   for (std::size_t j = 0; j < series.size(); ++j) {
     coefficient[j] = powu(config.surface_coefficient, series[j].n_surface) *
@@ -181,6 +180,7 @@ EigenraySet image_source_eigenrays(const ImageSourceConfig& config, const Vec3d&
         const double grazing = std::asin(clip01(std::abs(u.z)));
         coef = powu(config.surface_coefficient, ray.n_surface) *
                powu(rayleigh_reflection(grazing, c, config.fluid_bottom), ray.n_bottom);
+        if (ray.wall >= 0) coef = coef * config.walls[static_cast<std::size_t>(ray.wall)].coefficient;
       }
       out.amplitude[e] = divide(coef, r);
       const bool odd = ((ray.n_surface + ray.n_bottom) % 2) == 1;

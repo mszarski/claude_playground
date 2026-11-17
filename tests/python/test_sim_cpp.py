@@ -449,3 +449,19 @@ def test_cuda_scenario_matches_the_host():
     worst, rms = relative_difference(b.records[0].samples.array, a.records[0].samples.array)
     # Echo synthesis also runs on the device here (its own tolerance: tests/python/test_sim.py).
     assert worst < 1e-3 and rms < 1e-3, (worst, rms)
+
+
+@pytest.mark.parametrize("eng", ["cpp", "numpy"])
+def test_wall_coefficient_applies_to_bottom_bounce_paths_too(eng):
+    """A path that meets a fluid bottom and then a wall loses to both. (It used to keep the bottom's loss only.)"""
+    bottom = dict(speed=1650.0, density=1.9, attenuation=0.8)
+    pts = np.array([[150.0, 20.0, 12.0], [300.0, -40.0, 30.0]])
+    source = np.array([0.0, 0.0, 10.0])
+    kw = dict(surface_z=0.0, bottom_z=60.0, max_order=2, bottom=bottom, engine=eng)
+    full = ImageSourceProvider(C, walls=[dict(axis=1, position=200.0, coefficient=1.0)], **kw).eigenrays(source, pts)
+    lossy = ImageSourceProvider(C, walls=[dict(axis=1, position=200.0, coefficient=0.5)], **kw).eigenrays(source, pts)
+    ratio = np.abs(lossy.amplitude) / np.abs(full.amplitude)
+    # Every ray is either untouched by the wall (ratio 1) or halved, and some halved rays met the bottom.
+    assert np.all(np.isclose(ratio, 1.0) | np.isclose(ratio, 0.5))
+    assert np.any(np.isclose(ratio, 0.5) & (lossy.n_bottom > 0))
+    assert np.isclose(ratio, 0.5).sum() == np.isclose(ratio, 1.0).sum()                # one walled copy of each ray

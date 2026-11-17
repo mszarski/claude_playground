@@ -17,7 +17,8 @@ _spec.loader.exec_module(arch)
 
 def test_stages_listed_with_a_gpu_implementation_take_a_backend():
     with_cuda = {stage for _, stage, _, cuda, _, _ in arch.STAGES if cuda}
-    assert len(with_cuda) == 5
+    assert len(with_cuda) == 6
+    assert "backend" in inspect.signature(__import__("gpusonar.sim.reverb", fromlist=["x"]).add_reverberation).parameters   # reverberation
     assert "backend" in gs.core.doa_gate.__doc__                                   # sparse Bayesian bearings
     assert "backend" in inspect.signature(recon.prepare).parameters                # conditioning
     assert "backend" in inspect.signature(detect.cfar).parameters                  # CFAR

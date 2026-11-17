@@ -186,19 +186,20 @@ class ImageSourceProvider(EigenrayProvider):
             img = points.copy()
             img[:, 2] = img_z
             coef = self.surface_coefficient**ns * self.bottom_coefficient**nb
-            rays.append((img, coef, ns, nb))
+            rays.append((img, coef, ns, nb, 1.0))
             for wall in self.walls:
                 wimg = img.copy()
                 axis = int(wall["axis"])
                 wimg[:, axis] = 2.0 * float(wall["position"]) - wimg[:, axis]
-                rays.append((wimg, coef * complex(wall.get("coefficient", 0.8)), ns, nb))
+                wall_coef = complex(wall.get("coefficient", 0.8))
+                rays.append((wimg, coef * wall_coef, ns, nb, wall_coef))
         s, k = points.shape[0], len(rays)
         out = EigenraySet(
             delay=np.zeros((s, k)), amplitude=np.zeros((s, k), dtype=complex),
             launch=np.zeros((s, k, 3)), arrival=np.zeros((s, k, 3)),
             n_surface=np.zeros((s, k), dtype=int), n_bottom=np.zeros((s, k), dtype=int),
             valid=np.ones((s, k), dtype=bool), sound_speed=c)
-        for j, (img, coef, ns, nb) in enumerate(rays):
+        for j, (img, coef, ns, nb, wall_coef) in enumerate(rays):
             r, u = _direct(source, img, c)
             out.delay[:, j] = r / c
             if self.bottom is not None and nb > 0:
@@ -206,7 +207,7 @@ class ImageSourceProvider(EigenrayProvider):
                 # grazing angle: that of the straight line to the image.
                 grazing = np.arcsin(np.clip(np.abs(u[:, 2]), 0.0, 1.0))
                 coef = (self.surface_coefficient**ns
-                        * rayleigh_reflection(grazing, c, **self.bottom) ** nb)
+                        * rayleigh_reflection(grazing, c, **self.bottom) ** nb) * wall_coef
             out.amplitude[:, j] = coef / r
             out.launch[:, j] = u
             # Direction of travel at the real point: mirror the vertical component once per bounce.
