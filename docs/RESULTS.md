@@ -717,7 +717,7 @@ cores.
 | The Holoscan application fed by the emulated board over UDP with navigation | all pings, ownship position from navigation, mover and static tracks |
 | Sensor Bridge 2.7.0 built natively against Holoscan 4.6.0 on an L4 (`tools/build_hsb.sh`) | builds (272 targets, about 7.5 minutes) and imports, receiver operator and emulator included |
 | Frames-to-pings operator inside Holoscan behind a stand-in for Sensor Bridge's receiver, six pings as 502 frames of 153,728 bytes | reports equal to the direct chain's (processing time aside); no frame lost; with one frame withheld exactly one ping is dropped |
-| Loopback through Sensor Bridge's emulator and `LinuxReceiverOp` | NOT run: the emulator's raw socket is refused in Hugging Face containers ("Failed to create socket: Operation not permitted") |
+| Loopback through Sensor Bridge's emulator and `LinuxReceiverOp` | with the stock emulator: not run, its raw socket is refused in Hugging Face containers ("Failed to create socket: Operation not permitted"). With the opt-in UDP-socket patch it runs; see "Sensor Bridge loopback" below, including what has not yet passed |
 
 ## Bearings by sparse Bayesian learning
 
@@ -839,6 +839,568 @@ strength in dB at 5°, 10°, 20°, 30°, 45°, 60°:
 Lambert's law at −27 dB gives −48.2, −42.2, −36.3, −33.0, −30.0, −28.2 at the same angles:
 the two differ by up to 6 dB in shape across a swath, which is the point of having the model.
 These numbers describe the placeholder, not any seabed.
+
+## SST-equivalence additions: what the next eight sections are
+
+The eight sections from here to "Validation against TR 0702" were measured by the agents who
+did each piece of work, on their own branches, on the CPU. Each section gives its command.
+Three things apply to all of them:
+
+- The full CPU suite and a GPU job have **not** yet been run on the merged tree. Each
+  agent ran its own test files and the neighbouring ones; the counts are given per section.
+- Several commands are one-off measurement scripts kept in the session's scratch
+  directory, not in the repository. Where that is so the row says "one-off script" and
+  names the test that asserts the same thing.
+- Everything measured here is opt-in. Default outputs were checked bit-identical before
+  and after on both engines (six scenario hashes for the scene work, 16 arrays for the
+  reverberation work).
+
+## Targets, specular shapes and sediment scatterers (`sim/targets.py`)
+
+Source: `tests/python/test_scene_targets.py` (19 tests), `tests/python/test_scene_sediment.py`
+(5 tests); the numbers were printed by a one-off script (`measure.py`, run with
+`PYTHONPATH=python:tests/python`) and the same checks are asserted in those tests.
+Decisions D-64, D-65. Formulas from arXiv:1805.06945 unless marked ours.
+
+| Check | Result |
+| --- | --- |
+| Sphere strength | a²/4 at 20 random aspects, to 1e-12 dB |
+| Exact rigid sphere (partial-wave series, ours) against a²/4 | within 0.63 dB for ka ≥ 10; 0.23 dB for ka ≥ 20; 1.3 dB for ka ≥ 5; 2.4 dB for ka ≥ 2 |
+| Bistatic sphere glint | equal angles, coplanar, and the shortest path among 200,000 surface points |
+| Cylinder broadside (a = 0.1 m, L = 1 m, 100 kHz, ka = 42) | 5.2289 dB against 10 log10(aL²/2λ) = 5.2288 dB |
+| Cylinder nulls at kL sinθ = mπ | below 2e-3 of the peak |
+| Cylinder pattern against eq. (6) | 0.3% at 45° from broadside (the largest of the first eight angles checked), 1.7% at 60°; same for resolved and unresolved |
+| Glint line against eq. (1) by quadrature | amplitude and phase within the 1/ka stationary-phase error |
+| Large-plate mirror (3 m plate, 1 m away, 160,000 points) | sum / image = 0.99993 + 0.0063i |
+| FLS image of a 1.2 m cylinder at 6 m | peak at range 5.900 m (expected 5.900) and bearing −3.00° / +4.00° (expected −3 / +4); middle and far end more than 15 dB down |
+| FLS glint level | −9.05 dB against −8.31 dB for a line mirror |
+| SAS rail image of a 10 cm rod (`rail_cylinder_glint`) | line min/max 1.00 along the rod; off-rod / on-rod 0.002; line at y = 1.8704 m (expected 1.8706) |
+| Same rod turned 20° | image maximum −67 dB relative to parallel |
+| Sphere in `fls_glints_on_sediment` | image level within 0.5 dB of a²/4 against a 0 dB reference point |
+| Sediment field, 108,000 scatterers, 9 grazing bins 4.7°–68° | per-bin difference from `bottom.backscattering_strength_db` between −0.06 and +0.10 dB (1σ 0.03–0.09 dB per bin); whole field +0.033 dB (1σ 0.013 dB) |
+| Scatterer seabed against scattering-function reverberation, 12 range blocks | −1.16 to +0.35 dB, mean −0.25 dB |
+| Per-ping amplitudes on both engines (`test_both_engines_get_the_per_ping_amplitudes`) | records agree to rtol 1e-5, free-field and image-source providers |
+| Default scenes | sample hashes identical before and after for six scenarios on both engines |
+
+- The 0.7 dB shortfall of the FLS glint level is explained, not measured: an array focused
+  at range d is slightly out of focus on the reflection from a line mirror, whose
+  wavefront comes from 2d.
+- The sediment test asserts each bin within 4 standard errors and 0.25 dB and the whole
+  field within 0.06 dB; the observed whole-field value is 2.5σ on seed 0.
+- The six hashed scenarios: `seafloor_objects_fls`, `rail_points`, `pool_wires_l12_5d`,
+  `stripmap_points`, `fls_120k_rough_surface`, `rail_objects`. `popoto_far_mover` needs
+  Bellhop and did not run. `fls_120k_rough_surface` gives different hashes on the C++ and
+  NumPy engines both before and after this change; the difference is older and has not
+  been looked into (`STATUS.md`, open questions).
+- Tests at the time: 24 new passed; 101 existing in the files around the change passed,
+  3 skipped. The SAS rail test takes about 60 s.
+- Not confirmed: eq. (6)'s phase (D-65). Not carried: a target response's curvature
+  across the band; bounce paths use the direct path's aspect and angles (D-64).
+
+## Bottom and surface models from the open literature (`sim/bottom.py`, `sim/surface.py`)
+
+Source: `tools/boundary_models_study.py`, `tests/python/test_bottom_models.py`,
+`tests/python/test_surface_models.py`. Decisions D-66, D-67, D-68.
+
+Command: `PYTHONPATH=python python3 tools/boundary_models_study.py --frequency 10e3 30e3 100e3`
+
+Placeholder sand (illustrative, not a seabed), 100 kHz, roughness term of the
+backscattering strength in dB:
+
+| Grazing | 2° | 5° | 10° | 20° | 45° | 75° | 85° | 90° |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `perturbation` (default) | −63.5 | −48.6 | −39.0 | −32.8 | −33.4 | −20.8 | −5.7 | diverges |
+| `kirchhoff` | −40.1 | −40.1 | −39.9 | −39.2 | −35.2 | −20.6 | −5.5 | 3.6 |
+| `small_slope` | −63.5 | −48.6 | −39.0 | −32.7 | −33.3 | −20.4 | −5.5 | 3.6 |
+| `combined` | −55.2 | −46.7 | −38.8 | −32.8 | −33.3 | −19.9 | −3.5 | 3.0 |
+
+- Composite correction for this placeholder: +8.3 dB at 2°, +1.9 dB at 5°, with a
+  large-scale rms slope of 1.9°.
+- Hemisphere energy, ∫σ dΩ / (|V|² sin θᵢ), placeholder sand at 30/100/300 kHz and
+  20/40/70° incidence: 0.88–1.00 Kirchhoff, 0.87–1.03 small-slope, 0.81–1.03 combined.
+  One-off script, not in the repository; the tests bound it at 0.75–1.06.
+- Kirchhoff integral against direct quadrature: within 1e-3, and within 2e-3 of the
+  closed form for γ₂ = 3.
+- Our perturbation factor against Jackson's form as printed in arXiv:2009.12420: 1e-10.
+  This is the only check of ours against a published form; the Kirchhoff, small-slope and
+  composite expressions are our own derivations (D-66).
+
+Named sediments (arXiv:1809.08459 Table 1, attributed there to TR 9407; attenuation at
+20 kHz). As printed: medium sand 1845 kg/m³, 1767 m/s, 10.0 dB/m, 1.410e-4 m^(4−γ), 3.25,
+−20.0 dB/m; very fine silt 1147, 1476, 1.4, 1.638e-5, 3.25, −28.6. Converted with our
+assumed water reference of 1000 kg/m³ and 1500 m/s:
+
+| Sediment | rho | nu | delta | w2 | gamma2 | sigma2 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `medium_sand` | 1.845 | 1.178 | 0.01619 | 1.410e-4 | 3.25 | 0.00100 |
+| `very_fine_silt` | 1.147 | 0.984 | 0.001893 | 1.638e-5 | 3.25 | 0.000986 |
+
+Command: `PYTHONPATH=python python3 tools/boundary_models_study.py --frequency 20e3 100e3 --wind 10`
+
+Total backscattering strength in dB (roughness plus volume):
+
+| Sediment, frequency, model | 2° | 10° | 20° | 30° | 45° | 75° | 90° |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `medium_sand`, 20 kHz, default | −64.0 | −38.1 | −30.0 | −26.5 | −25.5 | −16.7 | diverges |
+| `medium_sand`, 20 kHz, `combined` | −50.1 | −37.1 | −29.9 | −26.9 | −25.4 | −14.6 | −1.7 |
+| `medium_sand`, 100 kHz, default | −59.2 | −33.3 | −25.3 | −22.1 | −22.5 | −11.8 | diverges |
+| `medium_sand`, 100 kHz, `combined` | −35.1 | −29.5 | −25.2 | −23.2 | −21.4 | −12.7 | −10.0 |
+| `very_fine_silt`, 20 kHz, default (volume-dominated) | −53.2 | −36.1 | −32.0 | −30.0 | −28.4 | −26.9 | diverges |
+| `very_fine_silt`, 100 kHz, `combined` | −53.2 | −36.1 | −31.9 | −30.0 | −28.4 | −26.6 | −10.8 |
+
+Medium sand is rough enough for the composite split to matter: at 100 kHz the large-scale
+rms slope is 8.9°, and the composite correction to the roughness term is +24 dB at 2° and
++4 dB at 10°. That low-angle level depends on `small_scale_kh = 0.5`, which is our choice.
+
+Surface bubble loss per bounce, `hall_novarini`, 10 m/s wind, 10° grazing, against
+`arlpy.uwa.bubble_surface_loss` (an optional comparison in the study tool only):
+
+| Frequency | Ours (dB) | arlpy (dB) | Ratio |
+| --- | --- | --- | --- |
+| 10 kHz | 4.4 | 1.9 | 2.3× |
+| 30 kHz | 21.6 | 4.9 | 4.4× |
+| 100 kHz | 101.7 | 13.5 | 7.5× |
+
+At 5 m/s the ratios are 1.2×, 2.4× and 4×. **The bubble law is weak above about 10 kHz**:
+it grows too fast with frequency and is an upper estimate there, not a prediction. The
+code warns above 10 kHz. No better-founded law could be read (D-68); a measured table per
+bounce is the recommended input.
+
+Empirical laws as printed in arXiv:2210.06535 (no validity range is given there):
+
+| Quantity | Result |
+| --- | --- |
+| Surface backscatter at 30 kHz, 10 m/s, 10° / 20°: `kraus_surface` | −30.0 / −26.9 dB |
+| The same: Chapman–Harris (existing) | −28.3 / −24.5 dB |
+| `searay_bottom`, 100 kHz, 20°: mud / sand / gravel / rock | −38.7 / −29.1 / −18.2 / −7.2 dB |
+
+Tests at the time: `PYTHONPATH=python python3 -m pytest tests/python/test_bottom.py
+tests/python/test_bottom_models.py tests/python/test_surface_models.py
+tests/python/test_timespread.py tests/python/test_reverberation.py
+tests/python/test_surface.py tests/python/test_volume.py tests/python/test_long_range.py
+tests/python/test_architecture.py -q`: 74 passed, 7 skipped (first round); the five
+bottom, surface, time-spread and sediment files after the sediment rows: 55 passed.
+
+## Bistatic reverberation, K statistics and TR 0702's coherence relations
+
+Source: `tests/python/test_reverb_bistatic.py`, `tests/python/test_reverb_statistics.py`,
+`tests/cpp/test_sim_paths.cpp`; numbers printed by a one-off script (`measure.py` in the
+reverberation work's scratch directory, `PYTHONPATH=python python3 measure.py`). NumPy and
+C++ gave the same figures wherever both were run. Decisions D-69, D-70, D-71.
+
+| Check | Result |
+| --- | --- |
+| Coincident platforms against monostatic power (10-bin blocks) | mean +0.006 dB, max 0.19 dB |
+| Bistatic power against an independent Cartesian-grid integral (transmitter 155 m from receiver) | −0.07 to +0.07 dB per 1 ms bin |
+| Reciprocity (swap transmitter and receiver; different grids) | 0.003 dB |
+| Patch level against μ sin g₁ sin g₂ A / (R₁² R₂²); patch arrival time against (R₁+R₂)/c | within 1%; within half a bin |
+| Bistatic point scatterers against the scattering function (24 channel-realisations each) | mean −0.22 dB, −0.85 to +0.68 dB |
+| Component Doppler against eq. (71), three patches (measured / closed form) | −95.29 / −95.29, +2.27 / +2.15, −35.62 / −35.38 Hz |
+| Series Doppler (spectral centroid, 50 ms tone) against eq. (71) | +128.1 / +130.0, +236.1 / +238.4, −22.8 / −21.5 Hz |
+| `fluid_sediment` at the bistatic azimuth against the model's own ratio | within 0.1% |
+| K second moment, shape 0.5 / 2 / 10 / 1e7 (closed form 6 / 3 / 2.2 / 2) | 6.014 / 3.000 / 2.194 / 2.004; mean power 1.002 / 1.000 / 0.999 |
+| K third moment, shape 2 / 10 (closed form 18 / 7.92) | 17.81 / 7.85 |
+| Sum of N azimuth cells | follows 2(1 + 1/(N·shape)) within the test's 5% |
+| TR 0702 eq. (89), coherence bandwidth | 7.971 Hz against 7.958 Hz |
+| TR 0702 eq. (96), coherence time (tone autocorrelation divided out) | 40.06 ms against 39.79 ms |
+| TR 0702 eq. (103), coherence length | 0.2973 m against 0.2984 m |
+| Replica-correlation gain, LFM 20 ms at 0.5 / 1 / 2 / 4 kHz (TR 0702 p. 70) | +2.73, +3.01, +3.13 dB per octave (8.87 dB over three; ideal 9.03) |
+| Engine agreement in the new modes | 5 bistatic cases plus texture and taper cases pass at the 5e-6 tolerance, generator state identical |
+
+The Doppler rows above are for single patches and a geometry without a bottom. With
+several eigenrays per leg the one-Doppler-per-component grouping is wrong: see "The
+defect the validation found" below.
+
+Leakage along a long record (D-71). A 30 m to 3 km CW record, 100 dB of level change,
+generated intensity over expected power, both engines:
+
+| Part of the record | 50–75% | 75–90% | 90–97% | 97–99.5% | last 0.5% |
+| --- | --- | --- | --- | --- | --- |
+| Default | +7 dB | +15 dB | +25 dB | +37 dB | +54 dB |
+| `band_taper: true` | 0.2 dB or less throughout | | | | |
+
+Found in the default generator and left as it is: `reverberation_power` puts each ring in
+its nearest time bin, giving −1.4 to +1.7 dB of ripple between neighbouring 1 ms bins (the
+mean over ten bins is right, 0.006 dB); and the default Doppler is 13% too large at 30°
+grazing because it has no cos(elevation).
+
+Tests at the time: `PYTHONPATH=python python3 -m pytest tests/python/test_reverb_bistatic.py
+tests/python/test_reverb_statistics.py -q`: 47 passed, 5 skipped (CUDA).
+`./build/tests/cpp/test_sim_paths`: 10 passed, including
+`Reverb.ComponentsHaveTheirOwnDirectionAndDoppler`. 15 reverberation-related Python files:
+205 passed, 28 skipped (CUDA, Bellhop). **Not run:** any CUDA build of this;
+`test_cuda_bistatic_reverberation_matches_the_host` (5 cases) and the CUDA tests of
+`test_sim_cpp.py` are waiting for a GPU job. Bistatic mode was not exercised with Bellhop.
+
+## Reverberation: moving scatterers and a seabed with relief
+
+Source: `tests/python/test_reverb_motion.py` (15 tests), `tests/python/test_reverb_relief.py`
+(20 tests); numbers from one-off scripts in the reverberation work's scratch directory
+(`PYTHONPATH=python python3 measure2.py`; `explore8.py` for the 300-seed energy check;
+`explore10.py` for the Bellhop comparison). The three series rows are printed by
+`pytest tests/python/test_reverb_motion.py -s -k three_cases`. Decisions D-72, D-73.
+
+| Check | Result |
+| --- | --- |
+| Scatterer Doppler of a patch against eq. (72), three patches (measured / closed form) | −25.16 / −25.14, −22.51 / −22.39, +16.68 / +16.70 Hz |
+| Spread of a patch against the closed form (isotropic 0.2 m/s) | 5.929 / 5.930, 6.942 / 6.941, 4.342 / 4.338 Hz |
+| Series, static platforms and moving scatterers | centroid +25.1 Hz (closed form +28.8), width 38.4 Hz (37.4) |
+| Series, moving platforms and static scatterers | centroid +237.4 Hz (+238.4), width 11.6 Hz (11.6, the pulse's own) |
+| Series, both | centroid +267.2 Hz (+267.5), width 36.7 Hz (37.4) |
+| Coherence time from scatterer spread, 0.3 m/s at 10 kHz | 39.36 ms against 39.79 ms from eq. (96) |
+| Mean power with motion | expected power array identical; realised energy ratio 1.03 ± 0.06 over 300 seeds |
+| Sloping plane against the flat code at perpendicular heights, three slopes, bistatic | within ±0.0012 dB; first return at the specular time |
+| Reciprocity over relief | 0.003 dB (plane), 0.005 dB (mound) |
+| Ridge shadow, three azimuths: dark interval measured / from geometry | 0.148–0.439 / 0.147–0.442 s, 0.194–0.577 / 0.193–0.580 s, 0.179–0.532 / 0.178–0.535 s |
+| Patch on a slope (level; time; direction; Doppler) | within 2%; half a bin; 0.02; 1 Hz |
+| Point-scatterer seabed against the scattering function on a 0.25 / −0.15 slope | mean −0.33 dB, −0.65 to −0.10 dB |
+| Bellhop N×2-D over a level bed against the flat run | within 0.02 dB per block |
+| Bellhop, a bank on one bearing | +4 to +5.5 dB on the facing slope; other bearings unchanged |
+| Heave over a nadir patch; horizontal speed at 30° grazing | 2fw/c within 1%; the cos(30°) factor |
+
+The three series cases gave the same figures on both engines. They use 48 seeds of a
+single speckle cell, hence the 3.7 Hz miss on the first centroid.
+
+Cost of leaving out legs with a bottom bounce (the default over relief), measured on a
+level bed: 60 m of water, sonar 40 m above the bed, bottom reflection 0.5, surface −1,
+successive 40 ms blocks from 0.06 s:
+
+| Block | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Shortfall | 0.0 dB | 0.17 dB | 2.5 dB | 4.5 dB | 5.2 dB | 5.5 dB | 5.6 dB | 5.6 dB |
+
+Tests at the time, with `GPUSONAR_BELLHOP` set: the ten reverberation-related files gave
+171 passed, 17 skipped (CUDA). The 30-minute suite (`test_realistic_scenes`,
+`test_simcal` and others) was not rerun. The Bellhop N×2-D path was tested only on a
+small 30 m case. No kernel or `.cu` file changed, but nothing here has run on a GPU.
+
+## `band_taper` on the shipped scenarios
+
+Source: one-off script (`PYTHONPATH=python GPUSONAR_BELLHOP=<path to bellhop.exe> python3
+taper_scenarios.py`). Scene emptied, one ping, 4 seeds. Generated intensity over expected
+power, relative to 25–50% of the record, over 50–75 / 75–90 / 90–97 / 97–100% of the
+record. D-71.
+
+| Scenario, item | Power max/end | Taper off (dB) | Taper on (dB) |
+| --- | --- | --- | --- |
+| `fls_120k_transit` bottom | 31.6 dB | +0.17 / +0.10 / +0.10 / +0.10 | +0.20 / +0.12 / +0.13 / +0.14 |
+| `fls_120k_transit` surface | 41.7 dB | +0.13 / +0.02 / −0.09 / −0.13 | +0.14 / +0.02 / −0.10 / −0.14 |
+| `fls_170k_transit` bottom | 57.3 dB | −1.50 / −1.62 / −1.35 / −1.07 | −1.51 / −1.65 / −1.37 / −1.10 |
+| `fls_170k_transit` surface | 45.8 dB | +1.06 / +1.24 / +1.25 / +1.25 | +1.09 / +1.26 / +1.28 / +1.29 |
+| `fls_330k_transit` bottom | 56.2 dB | +0.25 / −0.39 / +0.06 / +0.07 | +0.24 / −0.42 / +0.04 / +0.01 |
+| `fls_330k_transit` surface | 39.3 dB | −0.15 / +0.30 / +0.34 / +0.34 | −0.16 / +0.30 / +0.34 / +0.34 |
+| `popoto_trial_100m` bottom | 45.8 dB | −1.81 / −21.63 / −23.55 / −23.92 | −1.53 / −21.50 / −23.47 / −23.81 |
+
+- The taper changes nothing here beyond 0.06 dB on the FLS scenarios and 0.3 dB on
+  `popoto_trial_100m`: none of these shows leakage, and the default stays off.
+- The offsets of 1 to 1.5 dB on `fls_170k_transit` are the same with and without the
+  taper, so they are not leakage. **Their cause has not been investigated.**
+- The `popoto_trial_100m` figures are not leakage either: its pulse is 0.5 s, longer than
+  the 0.44 s record, so this short-pulse measure does not apply. Raw intensity varies by
+  about 31 dB across that record.
+- Other shipped scenarios were not measured. `flank_target_10km` has a narrow window
+  (9600–10400 m) and is unaffected by construction; a full-window `flank_32` record
+  (100 m to 10 km) would be affected.
+
+## Sampled transmit waveforms (`sim/waveform.py`)
+
+Source: `PYTHONPATH=python python3 -m pytest tests/python/test_sampled_waveform.py -q -s`
+(36 passed). Decisions D-74, D-75. Only TR 0702 was used as a source.
+
+Sampled LFM against the analytic LFM (`sas_auv`, Tukey 0.2, omnidirectional, no
+absorption, moving sonar; relative rms of the record; the same for real and baseband
+output):
+
+| Envelope samples per cycle of bandwidth | Error |
+| --- | --- |
+| 1.25 | 1.3e-2 |
+| 2 | 1.9e-4 |
+| 4 | 1.4e-5 |
+| 8 (default) | 2.4e-6 |
+| 16 | 1.3e-6 (float32 floor) |
+
+| Check | Result |
+| --- | --- |
+| Rectangular pulse edges (not band-limited) | 1.5e-2 at 2×, 5.6e-3 at 8×, confined to the pulse ends |
+| With beam patterns and absorption | 8.5e-4 (`fls_300k`), 4.8e-4 (`flank_32` cut to 20 ms) |
+| Every tier (free field, image source, image source with time spread, image source with reverberation, sediment, Bellhop eigenray), real and baseband | 1.3e-4 to 3.8e-4 |
+| Phase codes through `recon.prepare` (`popoto_8`, 7.5 kchip/s in a 15 kHz band): peak position and amplitude | within 1/50 chip of the two-way delay; within 2% of the echo amplitude |
+| Barker 13 peak sidelobe | −21.9 dB baseband, −21.7 dB real (ideal chips −22.3 dB) |
+| 127-chip m-sequence peak sidelobe | −22.3 dB (ideal chips −23.0 dB); the gap is the band limit |
+| C++ `pulse_compress` against the NumPy reference | 6e-7; 1.5e-6 with `doppler_scale` 1.004 |
+| Doppler, two-burst wideband pulse, target or sonar closing at 12 m/s: echo against b(Γ(t − t0)) on a carrier ΓF, Γ from TR 0702 eq. 68 | within 7e-8 |
+| The same against a carrier-shift-only model | wrong by 0.88 |
+| Burst spacing | gap/Γ within 2 µs |
+| `doppler_bank` on a 511-chip m-sequence | finds −6 m/s within 0.5 m/s |
+| NumPy sampled synthesis against the analytic kernel, 300 scatterers × 128 channels, `fls_300k`, 4 shared cores | 18–22 s with beams, 7 s omnidirectional, against 1.0–1.4 s |
+
+TR 0702's `VarDelay` script (parameters read from the text, p. 20–21 and eq. 29):
+
+| Check | Result |
+| --- | --- |
+| Tone frequencies | at n·f1·(1 − dT/dt) within 0.02 Hz in each second |
+| Output against x(t − T(t)): M = 6 Hann (SST's default order) / M = 16 Hann / M = 16 Kaiser | 5.1e-3 / 2.3e-4 / 1.5e-6 |
+
+TR 0702 eq. 19, the design rule for the Hann-windowed sinc interpolator (worst of
+passband error and image leakage). The TR gives no error figure; this is what the rule
+buys:
+
+| α | M at the rule | At the rule | At twice the rule | Well below the rule |
+| --- | --- | --- | --- | --- |
+| 0.5 | 6 | −39.1 dB | −54.3 dB | −11.2 dB (M = 2) |
+| 0.8 | 14 | −33.6 dB | −54.6 dB | −13.1 dB (M = 6) |
+| 0.9 | 26 | −29.4 dB | −54.6 dB | −13.1 dB (M = 12) |
+
+So the rule gives roughly 1–3% amplitude error. Our default interpolator (16-tap Kaiser,
+shape 12) measures −117 dB for α up to 0.5; a 16-tap Hann gives −62 dB.
+
+- Sampled-pulse echoes are synthesised in NumPy only; at the speed above, scenes of 10^5
+  scatterers are out of reach until the kernel port (in progress) lands.
+- Found outside this work: the analytic kernel's arrival-time solve stops after 3 passes
+  outbound and 4 on return. For a target closing at 12 m/s at 400 m the residual is
+  0.14 µs, or 0.007 rad at 8 kHz; measured 6.9e-3 against the closed form with 3 passes
+  and 7e-8 with 8. The kernel was left as it is.
+- Tests at the time: the new file 36 passed; eight existing files the change touches or
+  depends on (`test_sim`, `test_conditioning`, `test_record`, `test_sim_cpp`,
+  `test_pipeline`, `test_reverberation`, `test_timespread`, `test_design`) 165 passed,
+  17 skipped. The full Python suite was started and killed at a 30-minute limit on a
+  shared machine; C++ GoogleTest was not run.
+
+## Angle and frequency spreading of bounce paths (`time_spread` options)
+
+Source: `tests/python/test_timespread.py` (28 passed: 12 old, 16 new),
+`tools/timespread_study.py`. Decisions D-76, D-77. With the options off the eigenrays are
+identical to the previous version (field by field on 6 random two-boundary cases against
+the old file, plus a golden-sum test in the repository).
+
+| Check | Result |
+| --- | --- |
+| Doppler rms width against the closed form, at Γ² ≫ 1 and at Γ² ≈ 0.5 | within 3% |
+| Tone coherence against lag: exp(−t²/2σ_t²), σ_t = 1/(2πσ_ν) (TR 0702 eq. 96) | within 0.06 |
+| Line powers against the incoherent energy; mean power of the frozen tail | sum to 1e-9; within 10% |
+| End to end through the kernel: a 0.5 s CW ping | four lines at f0, f0+ν_out, f0+ν_back, f0+ν_out+ν_back within 0.3 Hz |
+| Tap geometry: following each tap's launch direction to the surface | reproduces its excess delay and arrival direction within 3% at small slopes (11% at mss 4e-4; the error scales as turn/grazing) |
+| rms angle spread against the closed forms | within 5–6% |
+| Tail coherence across vertical and horizontal apertures against exp(−d²/2σ_d²), σ_d = λ/(2πσ_S) (TR 0702 eq. 103), at 0.5, 1 and 1.5 σ_d | within 0.08 |
+| Two equal rough bounces, `multi_bounce: convolve`, against τ·exp(−τ/T) | within 0.004 per tap of 40 |
+| Partially coherent two-bounce case: energy and mean | to 1e-9 |
+| Facet decay time | agrees with a Monte Carlo of slopes (asserted in the test) |
+
+Command: `PYTHONPATH=python python3 tools/timespread_study.py --pings 16` (wind 6 m/s,
+8 kHz, target 1 km, 100 m of water; about 25 minutes on a loaded machine). Closed forms
+per eigenray:
+
+| Ray (surface, bottom bounces) | Grazing | Coherent | T rule | T facet | Doppler rms | Coh. time | In-plane | Across | L vert. | L horiz. |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1,0 | 4.57° | 0.35 | 10.57 ms | 5.32 ms | 0.41 Hz | 0.390 s | 9.30° | 0.74° | 0.18 m | 2.31 m |
+| 1,1 | 12.41° | 4.5e-4 | 8.08 ms | 4.23 ms | 0.89 Hz | 0.179 s | 3.38° | 0.73° | 0.52 m | 2.35 m |
+| 1,1 | 10.20° | 5.3e-3 | 6.34 ms | 3.27 ms | 0.73 Hz | 0.217 s | 12.40° | 2.20° | 0.14 m | 0.78 m |
+
+The Doppler widths, 0.41–0.89 Hz, are well under TR 0702's "less than 10 Hz" (p. 98),
+which is used as a bound only. The facet decay time is about half the TR 0702 rule at
+these grazing angles.
+
+Two-bounce tail (surface-bottom-surface ray, 24 taps):
+
+| `multi_bounce` | Energy in the first three mean delays | rms | Mean |
+| --- | --- | --- | --- |
+| `sum` (default) | 0.61 / 0.26 / 0.11 | 8.85 ms | 11.31 ms |
+| `convolve` | 0.57 / 0.34 / 0.08 | 7.40 ms | 11.31 ms |
+
+This table came from a separate rerun of the same function after the ray selection was
+fixed; the full tool was not rerun end to end afterwards.
+
+Pings (16 pings, 3 taps, strongest bounce arrival, 32-hydrophone horizontal line):
+
+| Case | Peak level re flat | Coherence end to end | Neighbours | Paths per ping |
+| --- | --- | --- | --- | --- |
+| Time spreading | −11.65 dB | 1.00 | 1.00 | 196 |
+| + `angle_spread` | −15.07 dB | 0.83 | 1.00 | 196 |
+| + `doppler` (gaussian) | −9.36 dB | 1.00 | 1.00 | 1024 |
+| + both | −14.10 dB | 0.74 | 1.00 | 1024 |
+
+The peak-level column is not a reliable comparison: 16 pings, 3 taps, one sample, and with
+an LFM a Doppler line also shifts in delay. Only the coherence columns mean something, and
+the end-to-end coherence was not checked against a closed form at ping level (the
+provider-level test above does that). Nothing here was compared with measured angle or
+Doppler spreads.
+
+## Validation against TR 0702 (`tools/sst_validation.py`)
+
+Source: `tests/python/test_sst_validation.py` (24 passed, 2 xfailed, in 92 s on the C++
+engine and 120 s with `GPUSONAR_SIM_ENGINE=numpy`); scenarios `sst_pursuit`, `sst_asiaex`,
+`sst_echo_level`, `sst_sediment_reverb`. Decision D-78.
+
+Command (matrix, numbers and figures, about 2 minutes):
+`PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
+
+**The full matrix is [`figures/sst_validation.md`](figures/sst_validation.md)**: 61 rows,
+section by section through TR 0702 (Sec. 2 to 12), each with what TR 0702 states, which
+feature of ours it exercises, the test that checks it, and the measured number or the
+reason it cannot be checked; then the readings chosen for the inconsistent passages
+(items 17–24 of `PHYSICS_NOTES.md` Sec. 11), each pinned by a test. Rows marked "feature
+report" quote a number from the sections above and were not re-measured. The numbers are
+also in `figures/sst_validation.json`.
+
+**Neither worked example is a numerical reproduction of TR 0702's figures.** The report
+does not print the parameters; ours are marked `unconfirmed` in the scenario files, and
+every comparison below is with a closed form for our geometry.
+
+### Pursuit (TR 0702 Sec. 3, Fig. 2; `sst_pursuit`)
+
+![sst_pursuit: spectrogram and level, with the closed-form curves](figures/sst_pursuit.png)
+
+One ping as written (7 s to run); reverberation-only runs averaged over 3 pings.
+
+| Feature TR 0702 names | Result |
+| --- | --- |
+| Reverberation hook (early return from overhead through sidelobes, late return from the main lobe) | ridge minus f(1 + 2v cos(angle)/c): median −1.2 Hz, max 12.5 Hz once settled (resolution cell 14.4 Hz); 97% of 178 segments inside a one-pulse-length bracket; shift 128 Hz before 0.7 s, 261 Hz after 4 s. Measured on the run without the bottom |
+| Bottom-bounce streak | onset 1.725 s against 2D/c = 1.700 s; on the eq. (71) track it is 14.1 dB above the no-bottom run |
+| Target echo | arrival 2.7900 s (closed form 2.7889); frequency 10133.73 Hz (eq. 68: 10133.73); record against eqs. (66)+(68) for the three highlights: 0.32% rms, level +0.009 dB |
+| Doppler separation of the echo | 25 Hz below the ridge; −5.6 dB re reverberation in the 9.6–10.2 kHz band (the level rises 0.6 dB); its spectrogram cell is 12.9 dB above the reverberation there |
+| Reverberation dominates | ridge PSD over noise PSD: median 25.4 dB; band level over noise: median 11.2 dB, above it in 95% of segments |
+| The parts add | full minus echoes minus reverberation is noise at 50.6 dB re µPa²/Hz, against 50.6 asked for |
+| First-order reverberation Doppler against exact eq. (71) | 3.6 Hz low at 20 m/s and 9.9 kHz (a documented limit; echoes use the exact factor) |
+
+Time spreading does not matter in this scene: the direct echo is unchanged (0.0); the echo
+with a surface-reflected leg is −5.5 dB re direct and changes by −0.7 dB. It is left out
+of the scenario file.
+
+### ASIAEX forward scatter (TR 0702 Sec. 12.2–12.6, Figs. 3–5; `sst_asiaex`)
+
+![sst_asiaex: no spreading, sum, convolve](figures/sst_asiaex.png)
+
+As printed in TR 0702: 8 kHz, 3 ms, 500 m, 20 pings, wind 3 m/s, bottom rms height 0.012
+and mean-square slope 0.045. Ours (`unconfirmed`): water 100 m, source 30 m, receiver
+50 m, c = 1500 m/s, ping interval 5 s, a medium-sand reflection coefficient,
+Pierson–Moskowitz and Cox–Munk wind laws. The one-way path is made with a −20 dB relay
+0.1 m from the projector (D-78).
+
+| Statement | Result |
+| --- | --- |
+| Arrival times, eqs. (36)–(37) | 0, 3.97, 9.20, 20.68, 30.57 ms; max error 0.20 µs |
+| Arrival levels, eq. (38) | max error 0.002 dB |
+| No time spread: identical, crisp | relative std over 20 pings 6e-16; 0.3–0.7 ms after a pulse: −39 to −43 dB re peak |
+| With time spread: variability (std of level over 20 pings) | direct 0.00, surface 1.88, bottom 0.97, surface-bottom 1.42, bottom-surface 3.33 dB |
+| With time spread: tails after the pulse | surface −6 dB, bottom −15 dB re peak |
+| Decay against the Sec. 12.4 rule | surface 2.95 ms fitted against 2.91 (200 pings); bottom 7.69 against 7.50 (40 realisations) |
+| Surface Doppler spread "less than 10 Hz" | 0.31 Hz AR(1) half-width (closed form 0.33); 0.59 Hz Gaussian rms (closed form 0.68); from 800 pings 50 ms apart |
+
+- The "less than 10 Hz" remark does not settle the sin g against 1/sin g question (D-76):
+  TR 0702's printed p. 101 rule gives 6.5 Hz for this geometry, also under 10 Hz. The
+  question is settled by the derivation, not by this number.
+- `multi_bounce: sum` does not show SST's stated defect with these parameters; it shows
+  the opposite sign. On the surface-bottom path the bottom is 93% coherent with the
+  longer decay, and `sum` gives all scattered energy the summed delay (8.2 ms mean
+  against 2.4 ms for `convolve`). Relative to `convolve`, `sum` is −2.3 dB right after the
+  pulse and +3.7 dB later (tail centroid 3.1 against 2.1 ms). In a variant with both
+  bounces fully rough and of equal decay, `sum` is +1.6 dB in the first half of the pulse
+  and −0.8 dB at 2–5 ms after it, which is the defect as TR 0702 words it. TR 0702 does
+  not say how SST combined bounces.
+
+### Closed forms through `run_scenario` and the processing chain
+
+| Check | Result |
+| --- | --- |
+| Echo level, free field (`sst_echo_level`) | compressed peak minus (SL − 2TL + TS): 0.004 dB |
+| Echo level, image medium | six groups of eigenray pairs: max 0.005 dB, 0.13 µs |
+| Moving highlight, sampled m-sequence, `doppler_bank` | range rate −6.00 m/s (true −6.0); eq. (68) scale equals the exact one to 1e-12; peak over sonar equation 1.003; synthesis ran as `numpy_sampled` |
+| `medium_sand` reverberation against σ(g)·πcT/R³ (`sst_sediment_reverb`) | mean +0.27 dB, −0.17 to +0.59 dB (12 blocks, grazing 8–42°, 48 ping-channels) |
+| Point scatterers, same sediment | against the integral: mean +0.04 dB; against scattering-function reverberation: mean −0.23 dB (−1.15 to +0.33) |
+| Signal-to-reverberation after pulse compression, 1 / 2 / 4 kHz | 27.39 / 30.68 / 33.38 dB against 27.44 / 30.45 / 33.46 closed form; max error 0.23 dB; +3.29 and +2.70 dB per octave |
+| Eqs. (36), (37), (40), (41) as printed, 7 bounce sequences of up to 3 bounces | agree with a leg-by-leg unfolding and the provider to 1e-16 |
+
+### The defect the validation found (open)
+
+Bistatic reverberation gives each component, an (azimuth sector, elevation of the receive
+ray) pair, one Doppler shift: the power-weighted mean over all transmit paths and times
+arriving from there. Pairs with different transmit legs that share a receive ray
+therefore share a shift, where eq. (71) gives each pair its own. Not fixed in the merged
+tree; a fix is in progress.
+
+| Evidence | Result |
+| --- | --- |
+| Mean Doppler from dead ahead against a direct integration with eq. (71) per pair | off by up to 34 Hz with one bottom bounce (1.7 Hz without a bottom) |
+| End to end: putting the bottom into the Pursuit scene | changes the spectrogram by +12.4 dB at 1.27 s and 10045 Hz, 0.4 s before any bottom path can arrive (1.7 s) |
+| In the component table | the 22.6° component sits in a beam null for the direct pair; its Doppler is 185.8 Hz with the bottom, 243.8 Hz without |
+| Above the streak | +4.5 dB at 40 Hz above the streak's track, where eq. (71) allows nothing |
+
+Pinned by two strict xfail tests,
+`test_reverberation_gives_each_eigenray_pair_its_own_doppler` and
+`test_bottom_paths_change_nothing_before_they_can_arrive`; the companion
+`test_doppler_comparison_is_sound_without_a_bottom` passes.
+
+### What could not be checked
+
+- No one-way source: target-radiated noise in Pursuit, tonals, SST's `DirectSignal`.
+- Not implemented: K-distributed noise; removal of near-specular reverberation when time
+  spreading is on; a near-specular surface scattering model. This rules out Figs. 3–4
+  panels 3–5.
+- Needs sources that could not be opened: the McDaniel wind laws and the 3 m/s against
+  4 m/s story; all Table 6 boundary classes (TR 9407).
+- No data or formulas in TR 0702: the ASIAEX measurements (figures only); the CASS/GSM
+  ray-identity heuristics.
+- Not used by us: eqs. (32)–(33); eq. (42) Thorp (0.78 against 0.68 dB/km
+  Francois–Garrison at 8 kHz, for scale); Sec. 11.3 in its Cholesky form.
+- Possible but not done: the Lloyd's-mirror correlation of eigenray pairs, end to end.
+- Not run: the full existing suite alongside the new file (only it and
+  `test_architecture.py`), and nothing on a GPU.
+
+## Sensor Bridge loopback (emulator to `LinuxReceiverOp` to the chain)
+
+Source: `tests/python/test_hsb.py`, `tools/sonar_live_hsb.py`, Hugging Face Jobs with
+`GPUSONAR_HSB=1`. The emulator is built with the opt-in UDP-socket patch (D-79), because
+those containers refuse raw sockets; the jobs printed `raw sockets not permitted: Sensor
+Bridge emulator patched to use a UDP socket`. Six simulated `flank_32` pings, 2 s apart,
+1 s lead, host backend chain.
+
+**State, plainly:** the transport and the report comparison were seen working in jobs.
+The loopback test as a whole
+(`test_loopback_through_sensor_bridge_gives_the_direct_chains_reports`) has **not yet
+passed in a job**. Its last two assertions were wrong in the test, not in the transport;
+they were corrected and the correction was checked locally without transport, but not
+re-run on a GPU (a GPU run is pending). The last job therefore still shows
+`1 failed, 7 passed`.
+
+| Job | Machine | Frame | Pace | Frames sent / used | Lost or damaged | Datagrams dropped | Pings |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `6afc5bf64643bac7ac62879d` | L4 | 1600 samples, 153,728 B | 1.0 | 502 / 497 | 5 lost | 76 | 6 |
+| `6afc69c94643bac7ac62961f` | L4 | 800, 76,928 B | 1.0 | 1003 / 1002 | 1 lost | 17 | 6 |
+| `6afc6c054643bac7ac6298d9` | L4 | 400, 38,528 B | 1.0 | 2006 / 2005 | 1 damaged | 13 | 6 |
+| `6afcb0ef4643bac7ac62d092` | T4 | 400 | 1.0 (1 run) | 2005 used | 1 lost (frame 748) | 19 | 6 |
+| same | T4 | 400 | 0.5 (3 runs) | 2006 / 2006 | 0 | 0 | 6 |
+| same | T4 | 400 | 0.25 (2 runs) | 2006 used | 0 | 0 | 6 |
+| `6afcb4cf884144d2f44f7d51` | T4 | 400 | 0.5 (3 runs) | 2006 / 2006 | 0 | 0 | 6 |
+| same | T4 | 400 | 1.0 (1 run) | 2005 used | 1 lost (frame 427) | 19 | 6 |
+
+- Report comparison: in every clean run, `largest differences from the direct chain:
+  {'track_m': 0.0, 'range_m': 0.0, 'bearing_deg': 0.0}`, with the same sequence numbers,
+  times, track ids and kinds, and detection counts. The clean runs are those at pace 0.5
+  or 0.25, across two T4 jobs.
+- **At real-time pace every run lost one burst** of 13 to 19 datagrams (76 with the
+  largest frame), which cost one frame (five with the largest). It fell between pings each
+  time, so all 6 pings still came out. **The reason is not established.** What is known:
+  the receiver's socket buffer is the system default (208 KB), which the container cannot
+  raise. A guess that the pinned receiver thread was the cause could not be tested (the
+  Python binding takes one core number and refuses a set).
+- Settings now: frame 400 samples (38,528 bytes; 160 frames/s at real time, 80 in the
+  test), receiver queue 256 frames, test pace 0.5 (`GPUSONAR_HSB_PACE` overrides).
+- Chain time per ping: about 450 ms for the first and 85–95 ms after on the L4; 643 ms
+  then about 130 ms on the T4.
+- Verified in jobs: transport statistics, report equality, the tool's two roles as
+  separate processes, stopping after N pings, the sender detecting the receiver's
+  disconnect and exiting 0. Enumeration (BOOTP) and the control plane are ordinary UDP
+  already and worked unpatched; the receiver logs `SIOCSARP operation failed: r=-1, e=1`
+  (it cannot seed the ARP table without NET_ADMIN) and carries on.
+- The two corrected assertions: the stream carries no navigation, so both tracks are
+  `mover` (the job output shows `{"mover": 2}`; the test had expected a `static` track);
+  and the recording is now compared with a copy of the records taken before the chain
+  conditions them in place.
+- Local: `19 passed, 4 skipped` for `test_hsb.py`, `test_flank_stream.py`, `test_live.py`.
+- Untested: the RoCE receiver; the unpatched emulator on a machine with CAP_NET_RAW;
+  `engine: cpp`, the CUDA chain backend, `serve --scenario`, navigation and the
+  idle-timeout stop through this path; frames larger than 400 samples at reduced pace; a
+  full `gpu_job.sh` run without `-k hsb`.
 
 ## Stages ported from NumPy to C++
 

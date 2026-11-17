@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (all 45 scenarios) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (46 of the 55 scenarios; the nine under "Scenarios for the SST-equivalence work" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -26,9 +26,11 @@ pictures, all made from its YAML file:
 - Tracks are classified from the track alone (`classify.py`): mover, static, line (sliding
   along a row of other tracks), multipath (an echo of a stronger track), uncertain.
 
-All of it is simulation. Scenes are clouds of point scatterers on object surfaces
-(`DECISIONS.md` D-41): they give highlights, shadows, layover and speckle, not specular
-glints, diffraction or resonances.
+All of it is simulation. The scenes in the table below are clouds of point scatterers on
+object surfaces (`DECISIONS.md` D-41): they give highlights, shadows, layover and speckle,
+not specular glints, diffraction or resonances. Specular shapes exist now (D-65) and are
+used only in the three target scenarios listed under "Scenarios for the SST-equivalence
+work".
 
 | Mode | Scenario | Sonar | Scene | Physics in the run | CPU time |
 | --- | --- | --- | --- | --- | --- |
@@ -578,6 +580,50 @@ Peak at 1000.1 m on the target's bearing, 30 dB over the map median, in multipat
 reverberation and ambient noise. `RESULTS.md` has the 100 m and 2000 m cases and the
 comparison with the spherical-spreading estimate.
 
+## Scenarios for the SST-equivalence work
+
+Nine scenarios were added with the simulator work that closes the gap to SST (APL-UW
+TR 0702; `DECISIONS.md` D-62 to D-78). They are test and validation set-ups, not gallery
+scenes: `tools/gallery.py` does not run them, so there is no result figure, animation or
+CPU time for them here, except the two validation figures below. They have no geometry
+diagram yet either: `tools/scenario_diagrams.py` has not been run since they were added
+(it draws every file in `configs/scenarios`; whether it handles the new item types,
+`type: target` and the `sst_asiaex` relay geometry, has not been tried).
+
+| Scenario | Sonar | Scene | Physics in the run | Checked by |
+| --- | --- | --- | --- | --- |
+| `rail_cylinder_glint` | `sas_rail` (2.72 MHz), 151 pings | a smooth rigid rod, 10 cm long and 2 cm across (ka = 115), parallel to the rail | specular glint by the Kirchhoff approximation, `resolved: true` because the rod is in its own near field (L²/λ = 18 m); each ping sees one glint, and the image shows the line | `test_scene_targets.py`: line at y = 1.8704 m (expected 1.8706), off-rod / on-rod 0.002; the rod turned 20° is −67 dB |
+| `fls_glints_on_sediment` | `fls_300k`, 1 ping, sonar 1 m above the bed | a seabed of point scatterers that follows the bottom scattering model at each ping's grazing angles; a smooth sphere (TS = 10 log10(a²/4) = −16.5 dB at any aspect) and a cylinder across the line of sight | glints from the two shapes; sediment numbers are `bottom.PLACEHOLDER_SAND`, illustrative | `test_scene_targets.py`: sphere image level within 0.5 dB of a²/4; `test_scene_sediment.py` for the seabed |
+| `fls_highlight_target_aspect` | `fls_120k`, 8 pings 2 s apart | a target in the SST manner: five highlights along a 20 m body that crosses ahead while turning, a table of strength against aspect, one highlight that answers late, a small position jitter | the strength follows the table ping by ping as the aspect changes. The table is illustrative, not a measured target | `test_scene_targets.py` |
+| `flank_sst_shallow` | `flank_32`, 4 pings 15 s apart | one target at 1 km in 100 m of isovelocity water | bounce paths time-spread by a wind-roughened surface; bottom reverberation from a rough fluid sediment; surface reverberation (Chapman–Harris); a volume-scattering layer. Sediment, volume strength and bubble loss are placeholders | `test_timespread.py`; added in the earlier part of the round (D-62, D-63) |
+| `flank_sst_spread` | `flank_32`, 4 pings 15 s apart | the same channel | every option beyond SST's time spreading: `angle_spread`, `doppler`, `decay_time: facet`, `multi_bounce: convolve`. Few taps and lines, because every bounce ray becomes 1 + taps × `doppler_lines` rays each way. Same placeholders | `test_timespread.py`, on both engines |
+| `sst_pursuit` | five `flank_32` hydrophones as a forward-looking sonar on a vehicle at 20 m/s; a 0.1 s tone at 9.9 kHz, 1 ping | TR 0702's "Pursuit" example (Sec. 3, Fig. 2) as far as the report describes it: a three-highlight target fleeing at 2.5 m/s, 2124 m ahead; vehicle at 350 m in 1275 m of water | surface reverberation (Chapman–Harris) with `geometry: bistatic` and `band_taper`, over image-source paths that include bottom-reflected legs (bottom coefficient 0.5); wind noise; the target echo. Speeds, depths, beams, pulse, wind and levels are **ours** (`unconfirmed`); the 230 dB source level only sets reverberation about 10 dB over noise. No target-radiated noise (no one-way source). 7 s to run | `test_sst_validation.py`, `tools/sst_validation.py`; figure below |
+| `sst_asiaex` | `flank_32` hydrophones as the receiver; projector 500 m away; a 3 ms pulse at 8 kHz, 20 pings 5 s apart | TR 0702's forward-scatter example (Sec. 12.2–12.6, Figs. 3–5): direct, surface, bottom, surface-bottom and bottom-surface arrivals inside 35 ms | time spreading with wind 3 m/s and the bottom rms height 0.012 and mean-square slope 0.045 that TR 0702 prints; the one-way path is made with a −20 dB relay 0.1 m from the projector. Water depth (100 m), source and receiver depths (30 m, 50 m), sound speed, ping interval, the sediment and the wind laws are **ours** (`unconfirmed`) | the same; figure below |
+| `sst_echo_level` | `flank_32` hydrophones, omnidirectional, 1 ping, 2 kHz of band | one highlight of known target strength; a flat surface (coefficient −1) and a flat bottom (0.5), one bounce at most per leg, so six groups of eigenray pairs arrive as six separate pulses | a geometry for a calculation, not a sonar: the compressed echo against the sonar equation and TR 0702 eqs. 36–38, 66, 68. The tool also runs it free-field, and with a sampled m-sequence pulse and a moving target | `test_sst_validation.py`: 0.004 dB free field; 0.005 dB and 0.13 µs in the image medium |
+| `sst_sediment_reverb` | `popoto_8` hydrophones, omnidirectional, 20 m above a flat bed; a 2 ms tone at 20 kHz, 6 pings | a bed of `medium_sand` (`configs/sediments.yaml`) | scattering-function reverberation, direct path only, no absorption, against σ(grazing)·πcT/R³. The tool also runs the same sediment as point scatterers, and LFM pulses of three bandwidths with a point target | `test_sst_validation.py`: mean +0.27 dB, −0.17 to +0.59 dB |
+
+The two worked examples are **not numerical reproductions of TR 0702's figures**: the
+report does not print the parameters, and the figures below are compared only with
+closed forms for our own geometry (`RESULTS.md`, "Validation against TR 0702").
+
+![sst_pursuit: spectrogram and level with the closed-form curves](figures/sst_pursuit.png)
+
+Pursuit: the reverberation ridge follows the closed form within 1.2 Hz in the median,
+the bottom-bounce streak starts at 1.725 s (2D/c = 1.700 s), and the target echo arrives
+at 2.7900 s at 10133.73 Hz, 25 Hz below the ridge. This scene is also where a defect in
+the bistatic reverberation's Doppler shows (`STATUS.md`, "Simulator limits so far"): with
+the bottom in, the spectrogram changes before any bottom path can arrive.
+
+![sst_asiaex: no time spreading, sum, convolve](figures/sst_asiaex.png)
+
+ASIAEX: arrivals at 0, 3.97, 9.20, 20.68 and 30.57 ms within 0.20 µs of the image
+equations; with time spreading the bounce arrivals grow tails (surface −6 dB, bottom
+−15 dB re peak after the pulse) and vary from ping to ping (surface 1.88 dB, bottom
+0.97 dB standard deviation over 20 pings).
+
+Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
+(about 2 minutes on the CPU).
+
 ## What no scenario has yet
 
 - Multipath in the pool scenes. Surface and floor bounces arrive well outside the probes'
@@ -589,5 +635,11 @@ comparison with the spherical-spreading estimate.
 - A range-dependent ocean (fronts, slopes) in the Popoto and flank scenes; the simulator
   can take bathymetry but no shipped scenario uses it with a moving target.
 - Fully developed speckle on large surfaces (scatterer counts are kept affordable).
-- Specular echoes, which dominate real returns from smooth pipes, plates and hulls.
+- Specular echoes in a realistic scene. Smooth spheres, cylinders, plates and discs can
+  now glint (`rail_cylinder_glint`, `fls_glints_on_sediment`), but no gallery scene uses
+  them, and hulls, pipelines and pool walls are still Lambert point clouds.
+- A seabed with relief under the scattering-function reverberation, moving scatterers,
+  K-distributed reverberation, or a sampled transmit pulse: the options exist and are
+  tested, and no shipped scenario turns them on (a sampled pulse appears only in the
+  validation tool's variant of `sst_echo_level`).
 - Classification: telling a boat from a boulder, or the ship from its multipath.

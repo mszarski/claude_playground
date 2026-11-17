@@ -16,21 +16,83 @@ Updated at the end of each milestone. Newest facts first within each section.
 | 8 Motion estimation | done on CPU, with gaps listed below | `tests/python/test_motion.py`: Ceres solve of Eq. 8 (Eq. 3–7 each tested), coarse and fine delays, two-pass unwrapping, end to end on a simulated collection. Numbers in `RESULTS.md`. |
 | 9 3D near-field imaging | done on CPU | `tests/python/test_volume.py`: Snell travel time against a least-time search, buried cylinder at the correct depth with refraction and 3.5 cm shallow without, slices and maximum intensity projections, bistatic culling unchanged image. Numbers in `RESULTS.md`. |
 | 10 Flank array | done on CPU, in Python and in C++ (`libs/live`), with gaps listed below | `tests/python/test_live_cpp.py`, `test_doa.py`, `tests/cpp/test_live.cpp`, `tests/python/test_flank.py`, `test_detect.py`, `test_calibration_sync.py`: far-field against backprojection, beam widths and ambiguity reports, sonar equation against simulation, MVDR, CFAR, clustering, tracking, calibration estimation, the `sync` stage. Numbers in `RESULTS.md`. |
-| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). The raw-frame adapter for the ultrasound reference, checked against the reference's decoder (`test_nvus_adapter.py`). The low-rate flank source on the host side: block format, ping assembler, UDP source and board emulator (`test_flank_stream.py`), and a Holoscan pipeline fed by the emulated board over UDP that detects its target, run on a T4 (`test_holoscan.py`). The ultrasound source driven through the reference's native runtime at the pinned commit, against its simulated hardware (`test_nvus_scanner.py`). The reference's compiler stopped at a 0.88 m window; the owner chose to patch it: `third_party/patches/` raises the limit to 3.5 m (host C++ only), `tools/build_nvus_reference.sh` builds the patched module on a CPU, and a 2.95 m window now runs through the reference's fast loop. Not done: the reference's SDK build (Sensor Bridge 2.7.0, Holoscan 4.4.0) and any hardware run (21 MB frames are untried there), the flank source behind the Sensor Bridge receiver and its emulator, C++ operators. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
-| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). The scattering-function reverberation method (`sim/reverb.py`, D-37): level within 2 dB of the analytic prediction and of the point-scatterer method, array coherence checked. Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise, all with bottom reverberation, and compared with the spherical estimate (`test_long_range.py`). Sea-surface backscatter (Chapman–Harris) and rough-surface reflection loss (`test_surface.py`, D-38). Rays against normal modes (KRAKEN) at 8 kHz: within 0.21 dB from 1 to 10 km (`test_kraken_crosscheck.py`); that check found the arrival cap of the first long-range scenarios too low, now fixed (D-39). Range-dependent bathymetry through Bellhop (a 2-D ridge; `test_propagation.py`). Not done: reverberation from sloping bathymetry, bubble absorption and the APL-UW high-frequency surface model, a Jackson-type bottom model, volume scattering, time spreading, the RAM cross-check, a 3-D seamount. |
+| 11 Holoscan integration | **partly** | Done: stages as Holoscan operators (`python/gpusonar/holoscan_ops.py`) and pipelines fed by the simulator and by file replay, including a real-time-paced replay, run on a T4 with Holoscan SDK 4.6.0 (`tests/python/test_holoscan.py`). The raw-frame adapter for the ultrasound reference, checked against the reference's decoder (`test_nvus_adapter.py`). The low-rate flank source on the host side: block format, ping assembler, UDP source and board emulator (`test_flank_stream.py`), and a Holoscan pipeline fed by the emulated board over UDP that detects its target, run on a T4 (`test_holoscan.py`). The ultrasound source driven through the reference's native runtime at the pinned commit, against its simulated hardware (`test_nvus_scanner.py`). The reference's compiler stopped at a 0.88 m window; the owner chose to patch it: `third_party/patches/` raises the limit to 3.5 m (host C++ only), `tools/build_nvus_reference.sh` builds the patched module on a CPU, and a 2.95 m window now runs through the reference's fast loop. The flank source behind Sensor Bridge's socket receiver and its board emulator: Sensor Bridge 2.7.0 builds against Holoscan 4.6.0, and with an opt-in patch that lets the emulator use an ordinary UDP socket (D-79) the loopback ran on T4 and L4 jobs with reports equal to the direct chain's at half real time; the loopback test's final assertions have not yet passed in a job, and real-time pace loses one burst per run (`RESULTS.md`, "Sensor Bridge loopback"). Holoscan operators in C++ (D-59). Not done: the reference's SDK build (Sensor Bridge 2.7.0, Holoscan 4.4.0) and any hardware run (21 MB frames are untried there), the RoCE receiver, the unpatched emulator on a machine that permits raw sockets. A first-hardware-run checklist draft is in `HOLOSCAN_NOTES.md`. |
+| 12 Realistic propagation and reverberation | **in progress** | Done: `PHYSICS_NOTES.md` (TR 0702); the Bellhop provider as an external process; Rayleigh bottom reflection; validation against Bellhop (`test_propagation.py`); point-scatterer bottom reverberation with Lambert's law, level within 2 dB of the analytic prediction, Rayleigh statistics (`test_reverberation.py`); ambient spectrum, array-coherent Gaussian noise, tones, K-distributed clutter (`test_noise.py`). The scattering-function reverberation method (`sim/reverb.py`, D-37): level within 2 dB of the analytic prediction and of the point-scatterer method, array coherence checked. Flank and Popoto scenarios re-run at the `eigenray` tier with array-coherent ambient noise, all with bottom reverberation, and compared with the spherical estimate (`test_long_range.py`). Sea-surface backscatter (Chapman–Harris) and rough-surface reflection loss (`test_surface.py`, D-38). Rays against normal modes (KRAKEN) at 8 kHz: within 0.21 dB from 1 to 10 km (`test_kraken_crosscheck.py`); that check found the arrival cap of the first long-range scenarios too low, now fixed (D-39). Range-dependent bathymetry through Bellhop (a 2-D ridge; `test_propagation.py`). The SST-equivalence work (D-62 to D-78): time spreading with angle and frequency spreading, volume layers, a fluid-sediment bottom with Kirchhoff, small-slope and composite regimes and two named sediments, bistatic reverberation with scatterer Doppler, K statistics and relief, highlight targets and specular shapes, sampled transmit pulses, and a validation against TR 0702 section by section (`test_sst_validation.py`, `docs/figures/sst_validation.md`). All of it is opt-in and was tested file by file on the CPU; the full suite and a GPU job have not yet been run on the merged tree. Open: a defect in the bistatic reverberation's Doppler (two strict xfail tests), NumPy fallbacks for two of the new paths, a bubble-loss law that is weak above 10 kHz. Not done: the APL-UW surface and bottom models as published (TR 9407 unread), a one-way source, the RAM cross-check, a 3-D seamount. |
 | 13 Performance | **partly** | Done: benchmark harness; timings on T4, L4, A10G, A100 and two A10Gs; power-law fit; real-time factors; sessions that keep samples on the device (D-40), which removed the per-call overhead (A10G SAS 0.83 s → 0.44 s) and brought two-GPU scaling to 1.7×, images bit-identical; a 2 cm SAS image that is compute-bound; baseband conversion and pulse compression on the device with cuFFT (35–48× faster than four CPU threads, D-42) (`RESULTS.md`, `docs/benchmarks/`). Not done: any DGX Spark or Jetson measurement; verified GFLOPS figures; handing conditioned samples to the backprojection session without a round trip through host memory; motion estimation is CPU. Jetson build notes in `docs/JETSON.md` are untested. |
 
 ## Since the last round (see the sections it points to)
 
-- **SST equivalence** (D-62, D-63; `RESULTS.md`): time spreading of boundary-bounce paths
-  (`time_spread`), volume-scattering layers (`model: volume`), a rough fluid sediment
-  bottom model (`model: fluid_sediment`) and a bubble-loss table are in and tested;
+This round closed most of the gap to SST (APL-UW TR 0702) in the simulator, and ran the
+Sensor Bridge loopback. Everything new in the simulator is opt-in: with the new keys
+absent, outputs were checked identical to before. Numbers and commands are in
+`RESULTS.md`; reasons in `DECISIONS.md` D-64 to D-79; derivations in `PHYSICS_NOTES.md`
+Sec. 12 to 18; keys in `CONFIGURATION.md`.
+
+**Not yet done on the merged tree: the full CPU suite and a GPU job.** Each piece was
+tested on its own branch with its own and neighbouring test files. Nothing below has run
+on a GPU except the Sensor Bridge loopback.
+
+- **Targets and specular echoes** (`sim/targets.py`, D-64, D-65): targets in the SST
+  manner (highlights on a trajectory, strength against aspect, a late-answering
+  highlight), and smooth rigid spheres, cylinders, plates and discs that return specular
+  glints by the Kirchhoff approximation, with a `resolved` mode for objects inside their
+  own near field. Seabeds of point scatterers can follow the bottom scattering model
+  instead of Lambert's law. Scenarios `rail_cylinder_glint`, `fls_glints_on_sediment`,
+  `fls_highlight_target_aspect`. Bounce paths use the direct path's aspect.
+- **Bottom and surface models** (D-66 to D-68): Kirchhoff, small-slope, composite and
+  combined roughness models beside the perturbation default; two named sediments
+  (`medium_sand`, `very_fine_silt`) read from an arXiv paper's table under the owner's
+  ruling; a wind-speed bubble-loss law and two empirical backscatter laws. TR 9407 is
+  still unread: the interpolation between regimes and the composite split are our own,
+  and the bubble law is 2.3 to 7.5 times arlpy's in dB at 10 m/s (weak above 10 kHz, an
+  upper estimate).
+- **Reverberation** (D-69 to D-73): a bistatic geometry with both platforms moving and
+  arrival elevation in the steering; K-distributed statistics; a boundary whose strength
+  varies with place; moving scatterers (mean velocity and Doppler spread); a seabed with
+  relief, with shadowing, and Bellhop run bearing by bearing. A taper against leakage
+  along long records exists and stays off by default: none of the four shipped scenarios
+  measured shows the leakage.
+- **Sampled transmit pulses** (D-74, D-75): LFM, HFM, stepped FM, Barker, m-sequences,
+  codes, inline samples or a file, carried in the record's existing replica fields (no
+  schema change) and pulse-compressed by the C++ matched filter. Echoes of a sampled pulse
+  are synthesised in NumPy only for now.
+- **Angle and frequency spreading of bounce paths** (D-76, D-77): each tap of a
+  time-spread tail gets its own direction and, within a ping, its own Doppler lines;
+  a facet-model decay time and convolved multi-bounce tails are offered beside the
+  defaults. Scenario `flank_sst_spread`. A finding: the Doppler width goes as the sine of
+  the grazing angle, not its inverse as TR 0702 p. 101 prints.
+- **Validation against TR 0702** (D-78; `docs/figures/sst_validation.md`): a 61-row matrix
+  through the report's sections, its two worked examples set up with our own parameters
+  (not reproductions of its figures), and closed forms through the whole simulator:
+  echo level against the sonar equation within 0.004 dB, `medium_sand` reverberation
+  +0.27 dB from the integral. Scenarios `sst_pursuit`, `sst_asiaex`, `sst_echo_level`,
+  `sst_sediment_reverb`.
+- **A defect the validation found, open:** bistatic reverberation gives one Doppler shift
+  per component (azimuth sector and receive-ray elevation), which is wrong for pairs of
+  different eigenrays that share a receive ray: up to 34 Hz with one bottom bounce in the
+  Pursuit scene, and the bottom changes the spectrogram before any bottom path can
+  arrive. Two strict xfail tests pin it; a fix is in progress.
+- **Sensor Bridge loopback** (D-79): simulator, Sensor Bridge's emulator, its
+  `LinuxReceiverOp`, our frames-to-pings operator and the chain, on T4 and L4 jobs. The
+  emulator needed an opt-in patch to send through an ordinary UDP socket where raw
+  sockets are refused. At half real time all 2006 frames arrive and the reports equal the
+  direct chain's exactly. Two things are not settled: the loopback test's final
+  assertions have not yet passed in a job (they were corrected after the last job; a GPU
+  run is pending), and at real-time pace every run loses one burst of datagrams, for a
+  reason not established.
+- **In progress, not in this tree:** a C++/CUDA port of the two NumPy fallbacks
+  (sampled-pulse synthesis; pairing of rays that carry a within-ping Doppler); the fix
+  for the reverberation Doppler defect; an elevation option for the Popoto array by
+  stacked rows (issue `sonar-k29`).
+
+Earlier in the round:
+
+- **SST equivalence, first part** (D-62, D-63; `RESULTS.md`): time spreading of
+  boundary-bounce paths (`time_spread`), volume-scattering layers (`model: volume`), a
+  rough fluid sediment bottom model (`model: fluid_sediment`) and a bubble-loss table;
   `flank_sst_shallow` uses all of them. The handbook SST takes its boundary models from
   (APL-UW TR 9407) is limited-distribution and was not read: the time-spreading split and
-  tail are open substitutes, the bottom model is derived here, and there is no wind law
-  for bubble loss and no table of named sediments. Not in yet: the Kirchhoff and
-  composite-roughness parts of the published bottom models, angle spreading, and the
-  bottom model for point-scatterer seabeds (they keep Lambert's law).
+  tail are open substitutes and the bottom model is derived here.
 - **The live chain in C++** (`libs/live`, `build/bin/sonar_live`; `ARCHITECTURE.md`,
   D-58): board stream to pings, navigation, synchronisation, clustering, tracking,
   classification and the report, as a library and a standalone program with no Python at
@@ -77,14 +139,21 @@ Updated at the end of each milestone. Newest facts first within each section.
    simulated input.
 2. The two vehicle adapters: board samples to WAV-with-sidecar or UDP blocks; the
    vehicle's navigation message to the JSON the chain reads.
-3. Milestone 11: the reference's SDK build with the long-window patch and a rig run; the
-   flank assembler behind the Sensor Bridge receiver and emulator (the C++ operators take
-   blocks from a plain UDP socket).
+3. Milestone 11: the reference's SDK build with the long-window patch and a rig run. For
+   the flank source behind Sensor Bridge: a job in which the corrected loopback test
+   passes, the cause of the burst lost at real-time pace, and the same path with the C++
+   engine, the CUDA backend and navigation (the C++ operators take blocks from a plain
+   UDP socket).
 4. Milestone 13: keep conditioned samples on the device for the backprojection session;
    reverberation's FFTs and random numbers on the device (its sum is); Spark and Jetson
    measurements.
-5. Milestone 12: a Jackson-type bottom, reverberation from sloping bathymetry, time
-   spreading, a high-frequency surface model with bubbles.
+5. Milestone 12, in this order: run the full CPU suite and a GPU job on the merged tree
+   (the CUDA tests of `test_sim_cpp.py`, `test_cuda_bistatic_reverberation_matches_the_host`,
+   the Sensor Bridge loopback test); land the fix for the reverberation Doppler defect and
+   turn its two xfail tests into passes; land the C++/CUDA port of sampled-pulse synthesis
+   and of the pairing of rays with a range rate. Then: a one-way source (target noise,
+   tonals), per-element receive patterns in reverberation, and a better-founded bubble law
+   and the published roughness interpolation if the papers can be supplied.
 6. Classification beyond the track: extent and shape, so a buoy is not a rock and a wave
    face is not a boat; range correction for bottom-bounce arrivals.
 7. A full survey scene with developed speckle (5.6 million scatterers: a GPU job).
@@ -107,8 +176,23 @@ Updated at the end of each milestone. Newest facts first within each section.
   operator pipelines run there, including one fed by the emulated flank board over UDP.
   It cannot be imported in the development container (its CUDA runtime is too old), so
   those tests skip locally.
+- **Sensor Bridge:** 2.7.0 built against Holoscan 4.6.0 on rented L4 and T4 machines; its
+  board emulator (with the opt-in UDP-socket patch, D-79) and socket receiver carried six
+  simulated pings to the chain there. Not run: the stock emulator with a raw socket, the
+  RoCE receiver, any Sensor Bridge hardware.
+- **This round's simulator work (D-64 to D-78): CPU only, and file by file.** Each piece
+  ran its own and neighbouring test files in the development container, on both engines
+  where both apply, with Bellhop set for the reverberation and waveform work. The full
+  CPU suite has not been run on the merged tree (one attempt on a branch was killed at a
+  30-minute limit on a shared machine), and no GPU job has run it. The reverberation
+  changes in C++ (`reverb.hpp`, `reverb.cpp`, the binding) were built and tested on the
+  host; no `.cu` file changed, and the CUDA build of them has not been compiled or run.
+  The extension must be rebuilt after the merge (`cmake --build build -j3 --target
+  _gpusonar`) for the C++ engine to run bistatic mode and the arbitrary-waveform matched
+  filter; an extension built without the bistatic change falls back to NumPy with a
+  warning.
 - **Not yet:** the brief's actual targets. Nothing has run on a DGX Spark, a Jetson, or
-  any aarch64 machine, and nothing has touched Sensor Bridge hardware or its emulator.
+  any aarch64 machine, and nothing has touched Sensor Bridge hardware.
 - Motion estimation has no GPU code; it runs on the CPU of whichever machine.
 
 ## Open questions for the project owner
@@ -141,6 +225,51 @@ Updated at the end of each milestone. Newest facts first within each section.
    TR 9407, put it in `docs/refs/`. PICMUS data itself is
    reachable through a Hugging Face mirror (`zeahub/picmus`, a converted layout); the
    published PICMUS reference numbers could not be fetched, so none are quoted yet.
+8. **Classic papers that could not be opened.** The surface bubble-loss law and the
+   published interpolation between the Kirchhoff and composite regimes are in papers on
+   pubs.aip.org, core.ac.uk and ieeexplore.ieee.org (Jackson, Winebrenner and Ishimaru
+   1986; Mourad and Jackson 1989; Williams and Jackson 1998; Hall 1989; Hamilton's
+   regressions). All three hosts refused automated access, and no arXiv paper found
+   prints them. If you can open them in a browser and paste the formulas, they slot in as
+   named models (`surface.BUBBLE_LOSS_MODELS`, `bottom.ROUGHNESS_MODELS`) without
+   restructuring. Until then the bubble law is an upper estimate above 10 kHz and the
+   composite split (`small_scale_kh = 0.5`) is our choice. Urick's table of simple
+   target shapes and Dahl's spreading measurements were not opened either.
+9. **The arlpy comparison.** `tools/boundary_models_study.py` prints a column from
+   `arlpy.uwa.bubble_surface_loss` (BSD; its docstring says "APL model (1994)"). The
+   formula was not read or copied and no value is stored. If that is too close to the
+   restricted handbook, say so and the oracle block comes out (D-68).
+10. **The two "confirmed" sediment rows** rest on a secondary table (arXiv:1809.08459,
+    which attributes it to TR 9407) and on two assumptions of ours: water at 1000 kg/m³
+    and 1500 m/s, and the reading of the volume strength's unit (D-67). Accept as they are?
+11. **`multi_bounce: convolve` as the default?** The default `sum` misbehaves where one
+    bounce is mostly coherent with a long decay (in the ASIAEX set-up: −2.3 dB right
+    after the pulse and +3.7 dB later, relative to `convolve`). The validation recommends
+    `convolve` whenever the two boundaries differ. Changing the default changes earlier
+    time-spreading results (D-77).
+12. **Passes of the analytic kernel's arrival-time solve.** It stops after 3 passes
+    outbound and 4 on return, leaving about (R/c)(v/c)³: 0.007 rad at 8 kHz for 12 m/s
+    closing at 400 m (6.9e-3 against the closed form with 3 passes, 7e-8 with 8). Raising
+    it touches the host kernel and the `.cu` file and changes results at that level
+    (D-75). Raise it?
+13. **Time-spread coherence cells at an edge.** The realisation key is
+    floor(position / coherence_length); a sonar exactly on a cell edge (x = 0) can put
+    projector and array in different cells, making the out-leg and back-leg tails
+    independent. Fixing it changes existing realisations (D-76). Fix it?
+14. **`fls_170k_transit` reverberation is 1 to 1.5 dB off its expected power** over the
+    second half of the record (bottom low, surface high), with and without the taper. Not
+    leakage; cause not investigated (`RESULTS.md`, "`band_taper` on the shipped scenarios").
+15. **`fls_120k_rough_surface` gives different sample hashes on the C++ and NumPy
+    engines.** Seen while checking that the targets work changed nothing; the difference
+    is older than that work. Whether it is only the single-precision difference D-61
+    allows between the engines or something larger has not been checked.
+16. **`band_taper` default.** Left off because none of the four shipped scenarios measured
+    needs it. Its author
+    recommends turning it on for any record whose reverberation falls by more than about
+    50 dB with a short pulse (D-71). Keep it opt-in?
+17. **The Pursuit and ASIAEX parameters** are ours, chosen to make the features TR 0702
+    describes appear (D-78). If you have the example scripts from the SST distribution,
+    the scenarios can carry the real values.
 
 ## Differences from the plan
 
@@ -258,9 +387,19 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   Surface points carry a normal and scatter by Lambert's law about it; spheres and boxes
   cast shadows (a sphere on the seafloor leaves the floor behind it more than 10 dB
   darker in the forward-looking image).
-- Not modelled: specular highlights (a smooth sphere or plate glint), diffraction into
-  shadows, shadows of boundary-reflected paths (they are treated as direct), rotated
-  boxes, meshes. Seafloor relief does not shadow itself.
+- Targets and specular shapes (`sim/targets.py`, `test_scene_targets.py`,
+  `test_scene_sediment.py`): highlight targets with strength against aspect, and smooth
+  rigid spheres, cylinders, plates and discs whose specular highlights (glints) are
+  modelled by the Kirchhoff approximation (it warns below ka = 10). A `seafloor` item
+  with `model: fluid_sediment` follows the bottom scattering model instead of Lambert's
+  law, and a seafloor can take a `bathymetry`.
+- Not modelled: specular echoes from the point-cloud objects (hulls, boxes, rocks and
+  pool walls stay Lambert surfaces; only the shapes above glint), creeping waves and
+  elastic resonances, reflections between shapes, diffraction into shadows, shadows of
+  boundary-reflected paths (they are treated as direct), shadows cast by plates,
+  occlusion of moving glint targets, rotated boxes, meshes. Seafloor relief does not
+  shadow itself in the scene (it does in the scattering-function reverberation). On
+  bounce paths a target or glint has the direct path's aspect.
 - Sonar configs beyond the brief's nine: `subbottom`, `popoto_4x7` (the plan's wiring),
   `fls_750k` (the plan's Phase 3 mid-range step; every value a placeholder).
 - Every mode has a realistic scenario run end to end, with figures and numbers in
@@ -269,12 +408,16 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   `seafloor_objects_fls`, `wreck_sas`, `minefield_sas`, `rail_objects`, `buried_objects`,
   `flank_patrol`, `popoto_trial_*`. Other scenarios: a point grid per sonar,
   `stripmap_points`, `rail_points`, `rail_position_errors`, `pool_wires_l12_5d`,
-  `buried_cylinder`, `flank_target_{1,5,10}km`.
+  `buried_cylinder`, `flank_target_{1,5,10}km`. Added this round, none in the gallery:
+  `rail_cylinder_glint`, `fls_glints_on_sediment`, `fls_highlight_target_aspect`,
+  `flank_sst_shallow`, `flank_sst_spread`, and the four validation scenarios `sst_*`
+  (`SCENARIOS.md`, "Scenarios for the SST-equivalence work").
 - Gaps in those scenes: no surface or floor multipath in the pool scenes; direct paths
   only to objects in the forward-looking sea scenes; range-independent oceans in the
   long-range ones; a wake that does not grow; no breaking waves or bubble layer; large
   surfaces have fewer scatterers than resolution cells except in `sas_minsas_speckle`; no
-  specular echoes.
+  specular echoes in any gallery scene (the shapes that glint are used only in the three
+  new target scenarios).
 - In `flank_patrol` the −3 dB small vehicle is not detected, and multipath splits the
   wreck into several tracks (5 confirmed tracks for 2 objects).
 
@@ -327,9 +470,63 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   that leaves out).
 - Tiers: `free_field`, `image_source`, `sediment` and `eigenray` (Bellhop as an external
   program; without it those scenarios and tests skip).
-- Arbitrary (sampled) transmit replicas cannot be synthesised yet; CW, LFM and Gaussian can.
-- The scattering-function reverberation assumes a stationary platform, an omnidirectional
-  projector and a flat uniform boundary (D-37).
+- Sampled transmit pulses are synthesised by the NumPy engine only; the C++/CUDA kernel
+  takes CW, LFM and Gaussian. Measured: 7 to 22 s against 1.0 to 1.4 s for 300 scatterers
+  on 128 channels, so large scenes with a sampled pulse are out of reach until the port
+  (in progress) lands. CW cannot be given as a sampled pulse.
+- Bounce rays with a within-ping Doppler (`time_spread.doppler`) are paired in NumPy,
+  with a warning; synthesis stays in C++. A port is in progress.
+- There is no one-way source: no target-radiated noise or tonals through the propagation
+  model (`sst_asiaex` makes a one-way path with a relay point).
+- The scattering-function reverberation assumes a flat boundary in a horizontally
+  stratified medium, incoherent eigenray pairs and one Doppler shift per arrival direction
+  per ping, and draws new noise every ping. By default it is also monostatic (the
+  transmitter is taken at the array centre and to move with it), shifts each azimuth by
+  the receiver's horizontal speed as if every path were horizontal, ignores arrival
+  elevation when steering to the hydrophones, takes the boundary as uniform and the
+  statistics as Gaussian; transmit and element beam patterns are applied at each path's
+  elevation at the sonar (D-37, D-43). `geometry: bistatic`, `strength_map` and
+  `statistics: {model: k}` lift the defaults in that sentence. Over a record whose
+  reverberation falls by more than about 50 dB the default generator leaks the strong
+  start into the far end; `band_taper: true` removes this (none of the four shipped
+  scenarios measured is affected; `sst_pursuit` turns the taper on).
+- With `geometry: bistatic`, two of the standing assumptions can also be lifted:
+  `scatterer_motion` gives the scatterers a mean velocity and a Doppler spread (D-72),
+  and `bathymetry` gives the boundary relief, with facet angles, shadowing and, with
+  Bellhop, a run per bearing (D-73).
+- Still missing or wrong in the reverberation:
+  - **A defect:** in bistatic mode, eigenray pairs with different transmit legs that share
+    a receive ray get one Doppler shift (the power-weighted mean) instead of one each.
+    It shows when a leg has several eigenrays (a reflecting bottom or surface) and the
+    platforms move: up to 34 Hz in the Pursuit validation scene. Two strict xfail tests
+    in `test_sst_validation.py` pin it; a fix is in progress.
+  - Reverberation Doppler is first order in v/c (3.6 Hz low at 20 m/s and 9.9 kHz);
+    echoes use the exact factor.
+  - The first receive element's pattern stands for all (a warning fires if elements
+    differ; no shipped sonar's do).
+  - Over relief, legs with a bottom bounce before the scattering cell are left out by
+    default (5 to 6 dB low beyond five water depths over a reflective level bed), or kept
+    as flat-bottom images with an unbounded error. Shadowing uses straight rays. With
+    Bellhop, transmitter and receiver must be over one ground point.
+  - No wind-driven surface drift, orbital wave motion or Bragg phase speed; no attitude
+    rates in the platform Doppler; the spread of platform Doppler inside one component is
+    collapsed to its mean.
+  - No ping-to-ping coherence: wrong for a still sonar over a still bottom.
+  - The K texture is independent between pings and between neighbouring cells. Its
+    `shape` has no default: there is no confirmed value for any seabed.
+  - Near-specular reverberation is not removed when time spreading is on, and there is
+    no near-specular surface scattering model.
+  - The default generator's nearest-bin ripple (−1.4 to +1.7 dB between neighbouring 1 ms
+    bins, right on average) is left as it is.
+  - Bistatic mode has not been exercised with Bellhop on a flat bed, and its cost grows
+    with sectors × rings × eigenrays of each leg.
+- Boundary models: the bubble-loss law (`hall_novarini`) is an upper estimate above about
+  10 kHz; the roughness interpolation and composite split are our own, not the published
+  ones; elastic and layered bottoms are not modelled; two sediments are named, no rock.
+- Time spreading: the default tail shape is a placeholder exponential and the default
+  two-bounce rule (`sum`) is known to be wrong where the two boundaries differ; angle and
+  frequency spreading use small-angle geometry, isotropic slopes and no shadowing, and
+  have not been compared with measurements.
 - `fls_300k` needed an analogue gain ramp to register a 300 m echo in 16 bits; the ramp in
   its config is a placeholder, flagged unconfirmed.
 

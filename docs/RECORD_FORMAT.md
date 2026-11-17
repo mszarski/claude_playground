@@ -76,8 +76,27 @@ Integer storage keeps raw ADC counts compact: 12-bit ultrasound samples as int16
 | `window_alpha` | float64 attr | Tukey taper fraction of the envelope, 0 = rectangular |
 | `source_level_db` | float64 attr | dB re 1 µPa at 1 m, NaN if unknown |
 | `amplitude` | float64 attr | peak amplitude at 1 m in the sample units |
-| `replica_sample_rate` | float64 attr | Hz, arbitrary waveform only |
-| `replica` | `[M]` | replica samples, arbitrary waveform only |
+| `replica_sample_rate` | float64 attr | Hz, arbitrary waveform only; must exceed twice the top of the band |
+| `replica` | `[M]` | arbitrary waveform only: real passband samples of the transmitted pulse divided by `amplitude`, sample 0 at emission time 0, carrier `(f_start + f_stop) / 2` |
+
+For an arbitrary (sampled) waveform, type 3, the existing fields mean the following. This
+is a statement of what the fields hold, not a schema change: no field was added, and the
+reader, writer and validator are as they were (`DECISIONS.md` D-74).
+
+- `replica` is the real passband pulse `Re{b(u) · exp(2πi·F·u)}`, that is, the
+  transmitted pressure at 1 m divided by `amplitude`, with `b` the complex envelope of
+  unit peak. Sample 0 is at emission time 0 and sample k at `k / replica_sample_rate`.
+- `f_start` and `f_stop` are the occupied band; their mean is the carrier `F`. `duration`
+  is the pulse length.
+- `replica_sample_rate` must exceed twice the top of the band. The simulator writes
+  4 × the top of the band unless `transmit.waveform.replica_sample_rate` says otherwise.
+- Processing rebuilds the envelope from the replica (analytic signal, mixed down by `F`),
+  so a record read back from a file pulse-compresses as the one in memory did.
+- The replica is stored with every ping as float64: a 1 s pulse at 6–10 kHz is 40,001
+  samples.
+- Records the simulator makes from a sampled pulse carry
+  `{"gpusonar": {"echo_synthesis": "numpy_sampled"}}` in `metadata/extra_json`, which
+  says the echoes were synthesised by the NumPy engine (D-75).
 
 **`geometry/`**
 
