@@ -1944,7 +1944,7 @@ range. There is no C++ or CUDA streaming synthesiser.
 Measured (tests/python/test_oneway_sources.py): kernel pulse against streamed tone with
 source and receiver both moving, inside the pulse: 5.5e-5 relative (float32); level against
 SL - 20 log r - alpha r: within 0.01 dB; image arrival times within one sample; tonal Doppler
-against eq. 63: within 0.02 Hz of +101 Hz (first order is 0.5 Hz off); Lloyd's mirror over 28
+against eq. 63: within 0.02 Hz of about +100 Hz (first order is more than 0.3 Hz off); Lloyd's mirror over 28
 depths: within 1 % of `|exp(ikr1)/r1 - exp(ikr2)/r2|`; noise spectrum level at the hydrophone
 within 0.25 dB in the mean.
 
@@ -1997,8 +1997,8 @@ simulator carries that, so a monostatic item refuses the key with a warning.
 TR 0702 Sec. 4.6.2: `KNoise` is white, single-channel, "a fresh, independent K-distributed
 random number for each sample", coloured afterwards by a filter (which, it notes, moves the
 result back towards Gaussian). `receiver.ambient_noise.statistics: {model: k, shape}` with
-no correlation time is that: kurtosis `3 / shape` for a white spectrum (measured 5.9 / 1.5 /
-0.37 for shape 0.5 / 2 / 8 within 6 %), about 1/16 of it after a filter 1/16 of the band
+no correlation time is that: kurtosis `3 / shape` for a white spectrum (tested to 6 % for shape 0.5, 2
+and 8), about 1/16 of it after a filter 1/16 of the band
 wide, and less after the mixing that gives an array its isotropic coherence. With
 `correlation_time` it is the compound form used for reverberation (Sec. 14.4): the Gaussian
 noise, spectrum and coherence included, times the square root of a unit-mean gamma variate
@@ -2031,7 +2031,7 @@ gives 1.43 / 1.35 / 1.23 times the resonant approximation: 7 % from the resonanc
 5 % below Minnaert, the rest from bubbles smaller than resonance absorbing through viscous
 and thermal damping (4 to 21 % of the total). So the derivation was not too high; if
 anything low. (5) Refraction: the layer is slow (1490.6 m/s at the surface at 10 m/s,
-30 kHz); Snell shortens the path by 8 % at 10 degrees and removes the need for the 2 degree
+30 kHz); Snell shortens the path by 9 % at 10 degrees and removes the need for the 2 degree
 floor (63 dB at 2 degrees instead of 107). (6) Saturation: an opaque layer returns what its
 bubbles scatter back, about `(w/2)(1 - m ln(1 + 1/m))` of the incident energy (single
 scattering in a half-space; w = 0.11 to 0.19 the scattering share of extinction,
