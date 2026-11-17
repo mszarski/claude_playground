@@ -1,29 +1,34 @@
-# Rehearsal ashore of the stacked-row option, boards on their own clocks:
+# Rehearsal ashore of the full stacked-row system (three rows, twelve boards on their own clocks):
 #   tools/sonar_live.py configs/deploy/popoto_elevation_rehearsal.yaml --scenario popoto_elevation_rehearsal --out DIR
-# popoto_vehicle_elevation.yaml plus board synchronisation and the scenario's water depth.
+# popoto_vehicle_elevation.yaml with the scenario's water (isovelocity, 100 m) in place of the vehicle's assumptions.
 
 source:
   type: flank_udp
-  sonar: popoto_long_range_2row_clocks
+  sonar: popoto_long_range_3row_clocks
   host: 0.0.0.0
   port: 5700
   timeout: 30.0
 
 chain:
-  sync: {sonar: popoto_long_range_2row_clocks}     # the shared reference the boards are lined up on
+  sync: {reference: {f_start: 38.0e3, f_stop: 48.0e3, duration: 4.0e-3, lead: 5.0e-3, tail: 10.0e-3}}   # the shared reference summed into each board's first input
   bearings_deg: [-60.0, 60.0, 0.5]
   look: starboard
   range_cell_m: 2.0
   cfar: {pfa: 1.0e-5, guard_m: 100.0, train_m: 300.0}
   min_snr_db: 9.0
-  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 3, max_misses: 2}
+  tracker: {range_sigma: 15.0, bearing_sigma_deg: 1.0, confirm_hits: 2, max_misses: 2}
   classify:
     min_speed: 1.0
     multipath: {max_excess_range: 800.0, bearing_deg: 3.0, velocity: 2.5}
   elevation:
-    sector_deg: [-30.0, 30.0, 0.5]
-    water_depth: 100.0
+    sector_deg: [-30.0, 30.0, 0.25]
+    attitude_time: arrival
+    attitude_rate_sigma_deg_s: 0.5
     roll_sigma_deg: 0.2
+    water_depth: 100.0
+    water_depth_sigma_m: 5.0
+    gradient_per_s: null         # the simulated water is isovelocity: straight rays
+    gradient_sigma_per_s: 0.0
 
 output:
   recording: /tmp/popoto_elevation_rehearsal.h5

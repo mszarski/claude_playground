@@ -209,6 +209,7 @@ Report LiveChain::process(PingRecord& record) {
     }
     drop_channels(record, opt_.dead_channels);
   }
+  if (opt_.sound_speed > 0.0) record.environment.sound_speed = opt_.sound_speed;
   prepare(record, opt_.backend, opt_.device);
 
   // Range grid: finer than the range resolution, then averaged into cells.
@@ -316,6 +317,8 @@ Report LiveChain::process(PingRecord& record) {
   const ElevationOptions& eo = opt_.elevation;
   std::vector<ElevationEstimate> els(hits.size());
   double water = eo.water_depth > 0.0 ? eo.water_depth : record.environment.water_depth;
+  const double sound = record.environment.sound_speed;
+  std::vector<double> profile_depth = eo.ssp_depth, profile_speed = eo.ssp_speed;   // depth along a ray instead of the straight line
   if (stacked) {
     // Stacked rows: the elevation of the strongest detections, from the whole array.
     const ElevationFrame ef = elevation_frame(record, rows, opt_.starboard);
@@ -345,6 +348,13 @@ Report LiveChain::process(PingRecord& record) {
                                                                   opt_.backend, opt_.device);
     for (std::size_t q = 0; q < order.size(); ++q) els[order[q]] = got[q];
     rep.rows = static_cast<std::int64_t>(rows.size());
+    if (profile_depth.empty() && eo.use_gradient) {
+      // c(z) = local speed + gradient (z - own depth), from the surface down.
+      const double own = f.origin.z - eo.surface_z;
+      const double bottom = std::max({std::isfinite(water) ? water : 0.0, own, 0.0}) + 10000.0;
+      profile_depth = {0.0, bottom};
+      profile_speed = {sound - eo.gradient * own, sound + eo.gradient * (bottom - own)};
+    }
   }
   const Vec3d axis = normalized(Vec3d{span.x, span.y, 0.0});
   const double side = opt_.starboard ? 1.0 : -1.0;
@@ -380,10 +390,13 @@ Report LiveChain::process(PingRecord& record) {
         d.cone_bearing_deg = h.bearing / kDeg;
         d.bearing_deg = std::atan2(u.x * axis.x + u.y * axis.y, u.x * broadside.x + u.y * broadside.y) / kDeg;
       }
+      if (e.ambiguous) {
+        for (const Vec3d& alt : e.alternatives) d.elevation_alternatives_deg.push_back(std::asin(std::clamp(-alt.z, -1.0, 1.0)) / kDeg);
+      }
       if (eo.depth) {
         d.has_depth = true;
         d.image_depth_m = f.origin.z + e.range * u.z;                // straight-line depth: outside the water for a bounce
-        d.depth_sigma_m = e.range * std::cos(level) * e.sigma;
+        const double sigma_z = e.range * std::cos(level) * e.sigma;  // from the angle: noise, roll, attitude timing
         if (eo.fold) {
           const auto folded = fold_depth(d.image_depth_m, water, eo.surface_z);
           d.depth_m = folded.first;
@@ -393,10 +406,17 @@ Report LiveChain::process(PingRecord& record) {
           d.path = "direct";
         }
         // Back along the ray through the profile, not the straight line.
-        if (!eo.ssp_depth.empty()) d.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, level, e.range, eo.ssp_depth, eo.ssp_speed, water);
-        if (!e.ambiguous) {
-          m.depth = d.image_depth_m;
-          m.depth_sigma = d.depth_sigma_m;
+        if (!profile_depth.empty()) d.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, level, e.range, profile_depth, profile_speed, water);
+        // What the angle cannot know: the gradient along the path, and the water depth a bottom bounce is folded about.
+        d.depth_refraction_sigma_m = refraction_sigma(e.range, sound, eo.gradient_sigma);
+        const double fold_sigma = (d.path == "bottom" || d.path == "multiple") ? 2.0 * eo.water_depth_sigma : 0.0;
+        d.depth_sigma_m = std::sqrt(sigma_z * sigma_z + d.depth_refraction_sigma_m * d.depth_refraction_sigma_m + fold_sigma * fold_sigma);
+        m.depth = d.image_depth_m;
+        m.depth_sigma = sigma_z;
+        if (e.ambiguous) {
+          // The track, if it has a depth already, takes the candidate that fits it.
+          m.depth_ambiguous = true;
+          for (const Vec3d& alt : e.alternatives) m.depth_alternatives.push_back(f.origin.z + e.range * alt.z);
         }
       }
     }
@@ -418,7 +438,8 @@ Report LiveChain::process(PingRecord& record) {
       for (const Track* tr : confirmed) {
         if (tr->id != tc.id || !std::isfinite(tr->depth)) continue;
         rt.has_depth = true;
-        rt.depth_sigma_m = std::sqrt(tr->depth_var);
+        const double slant = std::hypot(rt.range_m, tr->depth - f.origin.z);
+        const double bent = refraction_sigma(slant, sound, eo.gradient_sigma);
         if (eo.fold) {
           const auto folded = fold_depth(tr->depth, water, eo.surface_z);
           rt.depth_m = folded.first;
@@ -427,14 +448,19 @@ Report LiveChain::process(PingRecord& record) {
           rt.depth_m = tr->depth;
           rt.path = "direct";
         }
-        if (!eo.ssp_depth.empty()) {
+        const double fold_sigma = (rt.path == "bottom" || rt.path == "multiple") ? 2.0 * eo.water_depth_sigma : 0.0;
+        // The filter averages what differs from ping to ping; the bending of the ray does not.
+        rt.depth_sigma_m = std::sqrt(tr->depth_var + bent * bent + fold_sigma * fold_sigma);
+        if (!profile_depth.empty()) {
           // The track's straight-line depth as an arrival angle at its range, then along the ray.
-          const double slant = std::hypot(rt.range_m, tr->depth - f.origin.z);
-          rt.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, std::asin((f.origin.z - tr->depth) / slant), slant, eo.ssp_depth,
-                                                eo.ssp_speed, water);
+          rt.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, std::asin((f.origin.z - tr->depth) / slant), slant, profile_depth,
+                                                profile_speed, water);
         }
         // Its straight-line depth is above the surface or below the bottom: a bounce.
-        if (eo.classify && outside_water(tr->depth, rt.depth_sigma_m, water, eo.surface_z, eo.classify_sigma)) rt.kind = "multipath";
+        if (eo.classify && outside_water(tr->depth, std::hypot(std::sqrt(tr->depth_var), bent), water, eo.surface_z, eo.classify_sigma,
+                                         eo.water_depth_sigma)) {
+          rt.kind = "multipath";
+        }
       }
     }
     rep.tracks.push_back(rt);
@@ -460,9 +486,15 @@ std::string Report::json() const {
       } else {
         s << d.elevation_deg << ", \"elevation_sigma_deg\": " << d.elevation_sigma_deg << ", \"elevation_quality\": "
           << d.elevation_quality << ", \"elevation_ambiguous\": " << (d.elevation_ambiguous ? "true" : "false");
+        if (!d.elevation_alternatives_deg.empty()) {
+          s << ", \"elevation_alternatives_deg\": [";
+          for (std::size_t q = 0; q < d.elevation_alternatives_deg.size(); ++q) s << (q ? ", " : "") << d.elevation_alternatives_deg[q];
+          s << "]";
+        }
         if (d.bearing_corrected) s << ", \"cone_bearing_deg\": " << d.cone_bearing_deg;
         if (d.has_depth) {
-          s << ", \"depth_m\": " << d.depth_m << ", \"depth_sigma_m\": " << d.depth_sigma_m << ", \"image_depth_m\": "
+          s << ", \"depth_m\": " << d.depth_m << ", \"depth_sigma_m\": " << d.depth_sigma_m << ", \"depth_refraction_sigma_m\": "
+            << d.depth_refraction_sigma_m << ", \"image_depth_m\": "
             << d.image_depth_m << ", \"path\": \"" << d.path << "\"";
         }
       }

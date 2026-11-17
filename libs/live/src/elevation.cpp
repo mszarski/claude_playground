@@ -123,24 +123,53 @@ PingRecord row_record(const PingRecord& record, const std::vector<std::int64_t>&
   return out;
 }
 
-ElevationFrame elevation_frame(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, bool starboard) {
+ElevationFrame elevation_frame(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, bool starboard, const Vec3d& rpy) {
   ElevationFrame f;
+  const Mat3d rot = rotation_ned(rpy.x, rpy.y, rpy.z);
   std::vector<Vec3d> pos;
   for (const auto& row : rows) {
     for (std::int64_t i : row) {
       Vec3d lever = record.geometry.rx[static_cast<std::size_t>(i)].lever_arm;
-      if (static_cast<std::size_t>(i) < record.calibration.position_offset.size()) lever += record.calibration.position_offset[static_cast<std::size_t>(i)];
-      pos.push_back(world_position(record.geometry.rx_pose, lever));
+      if (record.calibration.position_offset.size() == record.geometry.rx.size()) lever += record.calibration.position_offset[static_cast<std::size_t>(i)];
+      pos.push_back(record.geometry.rx_pose.position + rot * lever);
     }
   }
   f.origin = Vec3d{0.0, 0.0, 0.0};
-  for (const Vec3d& p : pos) f.origin += p / static_cast<double>(pos.size());
-  f.along = world_direction(record.geometry.rx_pose, row_axis(record));
-  Vec3d up = world_direction(record.geometry.rx_pose, Vec3d{0.0, 0.0, -1.0});
+  for (const Vec3d& q : pos) f.origin += q / static_cast<double>(pos.size());
+  f.along = rot * row_axis(record);
+  const Vec3d up = rot * Vec3d{0.0, 0.0, -1.0};
   f.up = normalized(up - f.along * dot(f.along, up));
   f.look = cross(f.along, f.up) * (starboard ? 1.0 : -1.0);
-  for (const Vec3d& p : pos) f.heights.push_back(dot(p - f.origin, f.up));
+  for (const Vec3d& q : pos) f.heights.push_back(dot(q - f.origin, f.up));
   return f;
+}
+
+ElevationFrame elevation_frame(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, bool starboard) {
+  return elevation_frame(record, rows, starboard, record.geometry.rx_pose.rpy);
+}
+
+bool attitude_at(const PingRecord& record, double t, Vec3d& rpy, double& gap) {
+  const auto& ins = record.navigation.ins;
+  if (ins.empty()) return false;
+  std::size_t i = 0;
+  while (i < ins.size() && ins[i].t < t) ++i;            // numpy.searchsorted(times, t)
+  if (i == 0) {
+    rpy = ins.front().rpy;
+    gap = ins.front().t - t;
+  } else if (i == ins.size()) {
+    rpy = ins.back().rpy;
+    gap = t - ins.back().t;
+  } else {
+    const double w = (t - ins[i - 1].t) / std::max(ins[i].t - ins[i - 1].t, 1e-12);
+    auto turn = [&](double a, double b) { return a + w * std::atan2(std::sin(b - a), std::cos(b - a)); };   // the short way round
+    rpy = Vec3d{turn(ins[i - 1].rpy.x, ins[i].rpy.x), turn(ins[i - 1].rpy.y, ins[i].rpy.y), turn(ins[i - 1].rpy.z, ins[i].rpy.z)};
+    gap = 0.0;
+  }
+  return true;
+}
+
+double refraction_sigma(double slant_range, double sound_speed, double gradient_sigma) {
+  return slant_range * slant_range * std::abs(gradient_sigma) / (2.0 * sound_speed);
 }
 
 Vec3d arrival_direction(const ElevationFrame& frame, double sin_cone, double sin_elevation) {
@@ -192,7 +221,32 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
   for (double h : frame.heights) mean_h += h / static_cast<double>(frame.heights.size());
   for (double h : frame.heights) spread += (h - mean_h) * (h - mean_h);
   const double k_rms = rms_wavenumber(f_low, f_high, c);
-  const Vec3d tx = world_position(record.geometry.tx_pose, record.geometry.tx.lever_arm) - frame.origin;
+  const Vec3d tx_world = world_position(record.geometry.tx_pose, record.geometry.tx.lever_arm);
+  const bool starboard = dot(cross(frame.along, frame.up), frame.look) > 0.0;
+  const Pose& pose = record.geometry.rx_pose;
+  const bool turning = pose.rates.x != 0.0 || pose.rates.y != 0.0 || pose.rates.z != 0.0;
+  const double water = o.water_depth > 0.0 ? o.water_depth : record.environment.water_depth;
+  // The array as the record's pose has it when each echo arrives (the kernel turns it with the pose's
+  // rates), and as the attitude history says it then was: the angles are found in the first frame
+  // and turned into a world direction with the second.
+  std::vector<ElevationFrame> kf(hits.size(), frame), wf(hits.size(), frame);
+  std::vector<double> extra(hits.size(), 0.0);
+  for (std::size_t i = 0; i < hits.size(); ++i) {
+    const double t_arr = 2.0 * hits[i].range / c;
+    if (turning) kf[i] = elevation_frame(record, rows, starboard, pose.rpy + pose.rates * t_arr);
+    wf[i] = kf[i];
+    if (o.attitude_arrival) {
+      Vec3d rpy;
+      double gap = 0.0;
+      if (attitude_at(record, t_arr, rpy, gap)) {
+        wf[i] = elevation_frame(record, rows, starboard, rpy);
+        out[i].attitude_gap = gap;
+      } else {
+        out[i].attitude_gap = t_arr;                       // nothing but the pose at the transmit
+      }
+      extra[i] = o.attitude_rate_sigma * out[i].attitude_gap;
+    }
+  }
 
   // Points of constant two-way path (projector -> point -> array centre) along elevation: the
   // projector is not at the array's centre, and at constant range from the array the path
@@ -212,13 +266,15 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
     const double sb = std::sin(hits[static_cast<std::size_t>(i)].bearing);
     const std::int64_t n_half = n_lo[static_cast<std::size_t>(i)], n_r = n_half + n_hi + 1;
     for (std::int64_t e = 0; e < n_e; ++e) {
-      const Vec3d u = arrival_direction(frame, sb, std::sin(grid[static_cast<std::size_t>(e)]));
+      const ElevationFrame& kfi = kf[static_cast<std::size_t>(i)];
+      const Vec3d tx = tx_world - kfi.origin;
+      const Vec3d u = arrival_direction(kfi, sb, std::sin(grid[static_cast<std::size_t>(e)]));
       for (std::int64_t j = 0; j < n_r; ++j) {
         const double path = 2.0 * (hits[static_cast<std::size_t>(i)].range + dr * static_cast<double>(j - n_half));
         const double r = (path * path - dot(tx, tx)) / (2.0 * (path - dot(u, tx)));
         const auto at = static_cast<std::size_t>(first_point[static_cast<std::size_t>(i)] + e * n_r + j);
         rho[at] = r;
-        points[at] = frame.origin + u * r;
+        points[at] = kfi.origin + u * r;
       }
     }
   }
@@ -243,6 +299,27 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
       std::complex<double> sum{0.0, 0.0};
       for (std::int64_t k = 0; k < n_k; ++k) sum += std::complex<double>(z[static_cast<std::size_t>(k)][base + q]);
       p[q] = std::norm(sum);
+    }
+    const ElevationFrame& wfi = wf[static_cast<std::size_t>(i)];
+    const double sb = std::sin(hits[static_cast<std::size_t>(i)].bearing);
+    if (o.sector_from_depth && std::isfinite(water) && water > 0.0) {
+      // Straight rays with so many bounces cannot arrive from steeper than this: do not look there.
+      const double own = wfi.origin.z - o.surface_z, rng = hits[static_cast<std::size_t>(i)].range;
+      const double top = std::atan((own + o.sector_bounces * water) / rng) + o.sector_margin;
+      const double bottom = -std::atan((water - own + o.sector_bounces * water) / rng) - o.sector_margin;
+      std::vector<char> allowed(static_cast<std::size_t>(n_e), 0);
+      std::int64_t n_allowed = 0;
+      for (std::int64_t ee = 0; ee < n_e; ++ee) {
+        const double level = std::asin(std::clamp(-arrival_direction(wfi, sb, std::sin(grid[static_cast<std::size_t>(ee)])).z, -1.0, 1.0));
+        allowed[static_cast<std::size_t>(ee)] = level <= top && level >= bottom;
+        n_allowed += allowed[static_cast<std::size_t>(ee)];
+      }
+      if (n_allowed >= 3) {
+        for (std::int64_t ee = 0; ee < n_e; ++ee) {
+          if (allowed[static_cast<std::size_t>(ee)]) continue;
+          for (std::int64_t jj = 0; jj < n_r; ++jj) p[static_cast<std::size_t>(ee * n_r + jj)] = 0.0;
+        }
+      }
     }
     const double noise = backgrounds[static_cast<std::size_t>(i)] / noise_weight;   // at one hydrophone
     std::vector<double> over(static_cast<std::size_t>(n_r), 0.0);                    // best over elevation, at each range
@@ -270,10 +347,13 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
     }
     ElevationEstimate& el = out[static_cast<std::size_t>(i)];
     el.range = rho[base + static_cast<std::size_t>(e * n_r + j)];
-    const bool edge = e == 0 || e == n_e - 1;
-    const double frac = edge ? 0.0 : parabola(col(e - 1), col(e), col(e + 1));
-    const double angle = grid[static_cast<std::size_t>(e)] + frac * o.step_deg * kDeg;
-    // Second lobe: the highest point outside the main lobe (down to its first minima).
+    auto refined = [&](std::int64_t k) {             // sub-grid peak: a parabola through the three points about a maximum
+      if (k == 0 || k == n_e - 1) return grid[static_cast<std::size_t>(k)];
+      return grid[static_cast<std::size_t>(k)] + parabola(col(k - 1), col(k), col(k + 1)) * o.step_deg * kDeg;
+    };
+    const bool edge = e == 0 || e == n_e - 1 || col(std::max<std::int64_t>(e - 1, 0)) == 0.0 || col(std::min<std::int64_t>(e + 1, n_e - 1)) == 0.0;
+    const double angle = refined(e);
+    // The other lobes: maxima outside the main lobe (which runs down to its first minima).
     std::int64_t lo = e, hi = e;
     while (lo > 0 && col(lo - 1) < col(lo)) --lo;
     while (hi < n_e - 1 && col(hi + 1) < col(hi)) ++hi;
@@ -281,7 +361,20 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
     for (std::int64_t ee = 0; ee < n_e; ++ee) {
       if (ee < lo || ee > hi) second = std::max(second, col(ee));
     }
-    el.ambiguous = edge || second > col(e) * std::pow(10.0, -o.ambiguity_db / 10.0);
+    // Would noise swap the first and the second? Their difference in amplitude is (1 - g) of the peak,
+    // g the second's amplitude over the first's, and its noise sqrt(1 - g) of the sum's.
+    const double g = col(e) > 0.0 ? std::sqrt(second / col(e)) : 1.0;
+    const double margin_sigma = noise > 0.0 ? std::sqrt(col(e) / (n_total * noise) * std::max(1.0 - g, 0.0))
+                                            : std::numeric_limits<double>::infinity();
+    el.ambiguous = edge || second > col(e) * std::pow(10.0, -o.ambiguity_db / 10.0) || margin_sigma < o.ambiguity_sigma;
+    if (el.ambiguous) {
+      const double floor_alt = col(e) * std::pow(10.0, -o.alternatives_db / 10.0);
+      for (std::int64_t k = 1; k < n_e - 1; ++k) {
+        if ((k < lo || k > hi) && col(k) >= floor_alt && col(k) >= col(k - 1) && col(k) > col(k + 1)) {
+          el.alternatives.push_back(arrival_direction(wfi, sb, std::sin(refined(k))));
+        }
+      }
+    }
     const std::int64_t j0 = std::max<std::int64_t>(j - 1, 0), j1 = std::min<std::int64_t>(j + 2, n_r);
     double coherent = 0.0, incoherent = 0.0;
     for (std::int64_t jj = j0; jj < j1; ++jj) {
@@ -296,8 +389,9 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
     el.sin_elevation = std::sin(angle);
     const double sigma_sin = spread > 0.0 && snr > 0.0 ? 1.0 / (k_rms * std::sqrt(2.0 * snr * spread))
                                                         : std::numeric_limits<double>::infinity();
-    el.sigma = std::hypot(sigma_sin / std::max(std::cos(angle), 1e-6), o.roll_sigma);
-    el.world = arrival_direction(frame, std::sin(hits[static_cast<std::size_t>(i)].bearing), el.sin_elevation);
+    const double from_noise = sigma_sin / std::max(std::cos(angle), 1e-6), from_time = extra[static_cast<std::size_t>(i)];
+    el.sigma = std::sqrt(from_noise * from_noise + o.roll_sigma * o.roll_sigma + from_time * from_time);
+    el.world = arrival_direction(wfi, sb, el.sin_elevation);
     el.valid = el.quality >= o.min_quality && std::isfinite(el.sigma);
   }
   return out;
@@ -352,11 +446,11 @@ double ray_depth(double receiver_depth, double elevation, double slant_range, co
   return z;
 }
 
-bool outside_water(double z, double sigma, double water_depth, double surface_z, double n_sigma) {
+bool outside_water(double z, double sigma, double water_depth, double surface_z, double n_sigma, double water_depth_sigma) {
   if (!(std::isfinite(z) && std::isfinite(sigma))) return false;
   const double d = z - surface_z;
   if (d < -n_sigma * sigma) return true;
-  return std::isfinite(water_depth) && water_depth > 0.0 && d > water_depth + n_sigma * sigma;
+  return std::isfinite(water_depth) && water_depth > 0.0 && d > water_depth + n_sigma * std::hypot(sigma, water_depth_sigma);
 }
 
 PassiveElevation passive_elevation(const PingRecord& record, const std::vector<std::vector<std::int64_t>>& rows, double bearing,

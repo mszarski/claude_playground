@@ -1,4 +1,4 @@
-# Elevation in a shallow-water channel: the two-row long-range array at 30 m in 100 m of
+# Elevation in a shallow-water channel: the three-row long-range array at 30 m in 100 m of
 # isovelocity water over sand, a target at 50 m depth 1 km away. Image-source multipath to
 # second order: the echo arrives by the direct path first (from 1.2 degrees below level), then by
 # the surface (3 m later in range, from 4.6 degrees above) and by the bottom (7 m later, from
@@ -8,7 +8,7 @@
 # Chain: configs/deploy/popoto_vehicle_elevation.yaml with chain.elevation.water_depth: 100.
 # Bottom parameters are typical textbook values for sand, not measurements.
 name: popoto_elevation_shallow
-sonar: popoto_long_range_2row
+sonar: popoto_long_range_3row
 fidelity: image_source
 sonar_overrides:
   receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [700.0, 1300.0]}}

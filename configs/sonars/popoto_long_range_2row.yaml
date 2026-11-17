@@ -1,20 +1,29 @@
-# The long-range Popoto array as two horizontal rows of 32 hydrophones at different heights on
-# the vehicle's flank: elevation (and from it depth) as well as bearing. An OPTION to
-# `popoto_long_range`; one row stays the default. Geometry and numbers: docs/DESIGN.md Sec. 3.6,
-# tools/popoto_elevation_study.py. 64 hydrophones on 8 boards of 8 inputs; channels run row by
-# row (0-31 the lower row, 32-63 the upper), so every board serves one row only.
+# The long-range Popoto array as two horizontal rows of 32 hydrophones on the vehicle's flat
+# vertical face: elevation (and from it depth) as well as bearing. An OPTION to
+# `popoto_long_range`; one row stays the default. Numbers: docs/DESIGN.md Sec. 3,
+# tools/popoto_elevation_study.py. 64 hydrophones on 8 boards of 8 inputs, wired row by row
+# (channels 0-31 the lower row, 32-63 the upper), so every board serves one row.
+# Rows 1.8 m apart are 4.8 to 7.2 wavelengths apart: accurate (0.15 degrees at 20 dB), but the
+# response repeats every 9.6 degrees. Use where water depth and range confine arrivals to within
+# 4.8 degrees of level (chain.elevation.sector_from_depth), or prefer the three-row array.
 base: popoto_long_range
 name: popoto_long_range_2row
+
+platform:                        # the full vehicle (the owner: "a vertical straight face 2m high and 9m long")
+  name: full_face
+  span_m: 9.0
+  height_m: 2.0
+  mounting: flat vertical face
 
 array:
   layout_choice: two_rows
   layouts:
     two_rows:
       layout: stacked_lines
-      rows:                       # up: m towards the vehicle's top; out: m along the boresight
-        - {up: -0.19, out: 0.0}
-        - {up: 0.19, out: 0.0}
+      # interleave: 4               # alternative wiring: four hydrophones of each row per board (they then share its clock)
+      rows:                         # up: m above the centre of the face; out: m out from the face
+        - {up: -0.90, out: 0.0}
+        - {up: 0.90, out: 0.0}
 
 unconfirmed:
-  - array.layouts.two_rows.rows   # 0.38 m between rows assumes a 0.53 m (21 in) hull; the hull, the fairing
-                                  # and where hydrophones can be mounted on it are not confirmed
+  - array.layouts.two_rows.rows     # chosen by us within the owner's 2 m x 9 m face: 0.1 m kept free top and bottom

@@ -1,21 +1,27 @@
-# The long-range Popoto array as three rows of 32 hydrophones: with the rows 0.19 m apart (less
-# than a wavelength at 6 kHz) no second elevation lobe falls inside +-30 degrees, which two rows
-# 0.38 m apart cannot offer. Accuracy is that of the two-row array (the same top-to-bottom span).
-# 96 hydrophones on 12 boards of 8 inputs; channels run row by row from the lowest row up.
-# Geometry and numbers: docs/DESIGN.md Sec. 3, tools/popoto_elevation_study.py.
+# The long-range Popoto array as three rows of 32 hydrophones on the vehicle's flat vertical
+# face: the recommended form of the stacked-row option. The outer rows, 1.8 m apart, give the
+# accuracy (0.15 degrees at 20 dB); the middle row, 0.55 m above the lower one, tells their
+# repeats apart (the height that leaves the lowest repeat over 4-6 kHz: -4.1 dB, against -0.6 dB
+# with two rows). 96 hydrophones on 12 boards of 8 inputs, wired row by row from the lowest row up.
+# Numbers: docs/DESIGN.md Sec. 3, tools/popoto_elevation_study.py.
 base: popoto_long_range
 name: popoto_long_range_3row
+
+platform:                        # the full vehicle (the owner: "a vertical straight face 2m high and 9m long")
+  name: full_face
+  span_m: 9.0
+  height_m: 2.0
+  mounting: flat vertical face
 
 array:
   layout_choice: three_rows
   layouts:
     three_rows:
       layout: stacked_lines
-      rows:                       # up: m towards the vehicle's top; out: m along the boresight
-        - {up: -0.19, out: 0.0}
-        - {up: 0.0, out: 0.079}   # the hull's widest point: further out on a round 0.533 m hull
-        - {up: 0.19, out: 0.0}
+      rows:                         # up: m above the centre of the face; out: m out from the face
+        - {up: -0.90, out: 0.0}
+        - {up: -0.35, out: 0.0}
+        - {up: 0.90, out: 0.0}
 
 unconfirmed:
-  - array.layouts.three_rows.rows   # assumes a round 0.533 m (21 in) hull; the hull, the fairing and
-                                    # where hydrophones can be mounted on it are not confirmed
+  - array.layouts.three_rows.rows   # chosen by us within the owner's 2 m x 9 m face: 0.1 m kept free top and bottom

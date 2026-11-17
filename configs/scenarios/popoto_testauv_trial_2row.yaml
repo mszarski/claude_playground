@@ -1,0 +1,27 @@
+# Stage 2 trial: the two-row prototype on the test AUV against a target at 300 m, 12 m below it.
+#   tools/sonar_live.py configs/deploy/popoto_testauv_2row.yaml --scenario popoto_testauv_trial_2row --out DIR
+# Raw 102.4 kHz samples, every board on its own clock (the chain must synchronise them), the
+# vehicle rolled and pitched and still rolling during the ping (the record carries the attitude
+# samples navigation would send), 30 m of water over sand (image-source multipath), a target at
+# 300 m as in the Popoto trial scenarios (popoto_trial_*). Depths and bottom values are
+# placeholders for a trial site that is not chosen.
+name: popoto_testauv_trial_2row
+sonar: popoto_testauv_2row_clocks
+fidelity: image_source
+sonar_overrides:
+  receive: {window: {range: [100, 700]}}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 30.0}
+propagation:
+  surface_z: 0.0
+  bottom_z: 30.0
+  max_order: 1
+  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+platform: {position: [0, 0, 10.0], rpy: [0.0524, 0.0175, 0], velocity: [1.0, 0, 0], rates: [0.0349, 0, 0]}   # rolled 3 deg, rolling 2 deg/s
+pings: {count: 4, interval: 3.0}
+scene:
+  - {type: points, label: target, positions: [[60.0, 294.0, 22.0]], target_strength_db: 10.0}
+absorption: ainslie_mccolm
+receiver:
+  adc: false
+  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+seed: 22

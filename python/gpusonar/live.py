@@ -46,6 +46,7 @@ DEFAULTS = {
     "tracker": {"range_sigma": 15.0, "bearing_sigma_deg": 1.0, "confirm_hits": 3, "max_misses": 2,
                 "initial_speed_sigma": 8.0, "process_noise": 0.05},
     "elevation": None,                         # stacked rows: {} or {sector_deg: ..., ...} switches elevation and depth on (elevation.py)
+    "sound_speed": None,                       # m/s at the vehicle, when navigation does not send it: replaces the record's
     "dead_channels": [],                       # channel rows (after synchronisation) left out of every stage
     "classify": {"min_speed": 1.0, "static_speed": 1.0, "max_fit_rms": 60.0,
                  "multipath": {"max_excess_range": 800.0, "bearing_deg": 3.0, "velocity": 2.5}},
@@ -84,6 +85,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                  multipath_velocity=m["velocity"])
     if cfg.get("dead_channels"):
         o["dead_channels"] = [int(v) for v in cfg["dead_channels"]]
+    if cfg.get("sound_speed"):
+        o["sound_speed"] = float(cfg["sound_speed"])
     if cfg.get("elevation") is not None:
         from .elevation import DEFAULTS as EL
         e = _merge(EL, cfg["elevation"])
@@ -92,6 +95,15 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "first_arrival": e["arrival"] == "first", "first_arrival_db": float(e["first_arrival_db"]),
                           "first_arrival_snr_db": float(e["first_arrival_snr_db"]),
                           "min_quality": float(e["min_quality"]), "ambiguity_db": float(e["ambiguity_db"]),
+                          "ambiguity_sigma": float(e["ambiguity_sigma"]), "alternatives_db": float(e["alternatives_db"]),
+                          "sector_from_depth": e["sector_from_depth"] is not None,
+                          "sector_bounces": float((e["sector_from_depth"] or {}).get("bounces", 1)),
+                          "sector_margin": float(np.radians((e["sector_from_depth"] or {}).get("margin_deg", 1.0))),
+                          "water_depth_sigma": float(e["water_depth_sigma_m"]),
+                          "attitude_arrival": e["attitude_time"] == "arrival",
+                          "attitude_rate_sigma": float(np.radians(e["attitude_rate_sigma_deg_s"])),
+                          "use_gradient": e["gradient_per_s"] is not None, "gradient": float(e["gradient_per_s"] or 0.0),
+                          "gradient_sigma": float(e["gradient_sigma_per_s"]),
                           "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
                           "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
                           "water_depth": float(e["water_depth"] or 0.0), "surface_z": float(e["surface_z"]),
@@ -119,8 +131,8 @@ def sync_reference(cfg: dict) -> dict | None:
 class NavListener:
     """The vehicle's navigation, received as JSON datagrams
     {"time_ns": ..., "x": north m, "y": east m, "z": down m, "roll": rad, "pitch": rad, "yaw": rad,
-     "vx": ..., "vy": ..., "vz": ...}
-    on a UDP port. `at(time_ns)` gives the pose at a ping's transmit time, interpolated between
+     "vx": ..., "vy": ..., "vz": ..., "sound_speed": m/s at the vehicle, "water_depth": m}
+    on a UDP port (the last two are optional: when present they go into the record's environment). `at(time_ns)` gives the pose at a ping's transmit time, interpolated between
     the two fixes around it (held from the nearest one outside them). A fixed pose can be given
     instead for a bench or a moored array."""
 
@@ -151,6 +163,7 @@ class NavListener:
 
     def push(self, fix: dict) -> None:
         row = [float(fix.get(k, 0.0)) for k in ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz")]
+        row += [float(fix.get(k, "nan")) for k in ("sound_speed", "water_depth")]
         with self._lock:
             self._fixes.append((int(fix["time_ns"]), np.array(row)))
 
@@ -171,6 +184,20 @@ class NavListener:
             row[3:6] = fixes[i - 1][1][3:6] + w * np.angle(np.exp(1j * (fixes[i][1][3:6] - fixes[i - 1][1][3:6])))
         return row[0:3], row[3:6], row[6:9]
 
+    def extras(self, time_ns: int):
+        """(sound speed, water depth) of the fix nearest `time_ns`; NaN where navigation does not send one."""
+        with self._lock:
+            fixes = list(self._fixes)
+        if not fixes:
+            return float("nan"), float("nan")
+        row = min(fixes, key=lambda f: abs(f[0] - time_ns))[1]
+        return float(row[9]), float(row[10])
+
+    def history(self, first_ns: int, last_ns: int, margin_ns: int = 2_000_000_000):
+        """The fixes from `margin_ns` before `first_ns` to as long after `last_ns`: [(time_ns, row)]."""
+        with self._lock:
+            return [f for f in self._fixes if first_ns - margin_ns <= f[0] <= last_ns + margin_ns]
+
     def close(self) -> None:
         self._stop.set()
         if self.socket:
@@ -185,6 +212,31 @@ def apply_pose(record, position, rpy, velocity=(0.0, 0.0, 0.0)) -> None:
         pose.position, pose.rpy, pose.velocity = (tuple(float(v) for v in a) for a in (position, rpy, velocity))
         setattr(g, name, pose)
     record.geometry = g
+
+
+def apply_history(record, fixes) -> None:
+    """Put navigation fixes [(time_ns, row)] around a ping into the record as its attitude history
+    (navigation.ins, times in seconds after the transmit): what `elevation.attitude_time: arrival`
+    reads, and what a replay of the recording then has too."""
+    out = []
+    for time_ns, row in fixes:
+        a = core.InsSample()
+        a.t = (time_ns - record.transmit.time_ns) * 1e-9
+        a.position, a.rpy, a.velocity = (tuple(float(v) for v in row[k:k + 3]) for k in (0, 3, 6))
+        out.append(a)
+    nav = record.navigation
+    nav.ins = out
+    record.navigation = nav
+
+
+def apply_environment(record, sound_speed=float("nan"), water_depth=float("nan")) -> None:
+    """The vehicle's own sound speed and the water depth it reports, into the record."""
+    e = record.environment
+    if np.isfinite(sound_speed) and sound_speed > 0.0:
+        e.sound_speed = float(sound_speed)
+    if np.isfinite(water_depth) and water_depth > 0.0:
+        e.water_depth = float(water_depth)
+    record.environment = e
 
 
 class LiveChain:
@@ -243,6 +295,14 @@ class LiveChain:
                 self.pings_without_nav += 1    # processed where the record says it is; counted and reported
             else:
                 apply_pose(record, *fix)
+                apply_environment(record, *self.nav.extras(record.transmit.time_ns))
+                s_ = record.samples
+                window_ns = int((s_.start_time + s_.n_samples / s_.sample_rate) * 1e9)
+                history = self.nav.history(record.transmit.time_ns, record.transmit.time_ns + window_ns)
+                if len(history) > 1:           # a fixed pose has one fix and no history
+                    apply_history(record, history)
+        if self.cfg.get("sound_speed"):
+            apply_environment(record, sound_speed=float(self.cfg["sound_speed"]))
         if self._writer:
             self._writer.write(record)         # raw samples, with the pose, before anything else touches it
             self._writer.flush()
@@ -377,6 +437,12 @@ class LiveChain:
                 els[i] = e
             water = el_cfg["water_depth"] or record.environment.water_depth
             water = float(water) if water and np.isfinite(water) and water > 0.0 else None
+            sound = record.environment.sound_speed
+            profile = None                         # depth along a ray instead of the straight line
+            if el_cfg["ssp"]:
+                profile = (el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"])
+            elif el_cfg["gradient_per_s"] is not None:
+                profile = elevation.gradient_profile(origin[2] - el_cfg["surface_z"], sound, float(el_cfg["gradient_per_s"]), water)
         axis = axis / max(np.linalg.norm(axis), 1e-12)
         side = 1.0 if cfg["look"] == "starboard" else -1.0
         broadside = side * np.array([-axis[1], axis[0]])
@@ -388,6 +454,7 @@ class LiveChain:
         for i, h in enumerate(hits):
             p = origin[:2] - self._origin[:2] + h.range * (np.sin(h.bearing) * axis + np.cos(h.bearing) * broadside)
             depth = depth_sigma = float("nan")
+            alternatives = None
             e = els[i]
             if el_cfg is not None:
                 extra[i] = {"elevation_deg": None}
@@ -401,20 +468,28 @@ class LiveChain:
                     p = origin[:2] - self._origin[:2] + e.range * u[:2]
                     extra[i].update(cone_bearing_deg=float(np.degrees(h.bearing)),
                                     bearing_deg=float(np.degrees(np.arctan2(u[:2] @ axis, u[:2] @ broadside))))
+                if e.ambiguous and e.alternatives:
+                    extra[i]["elevation_alternatives_deg"] = [float(np.degrees(np.arcsin(np.clip(-w[2], -1.0, 1.0)))) for w in e.alternatives]
                 if el_cfg["depth"]:
                     image = float(origin[2] + e.range * u[2])             # straight-line depth: outside the water for a bounce
-                    sigma_z = float(e.range * np.cos(level) * e.sigma)
+                    sigma_z = float(e.range * np.cos(level) * e.sigma)    # from the angle: noise, roll, attitude timing
                     folded, path = (elevation.fold_depth(image, water, el_cfg["surface_z"]) if el_cfg["fold"]
                                     else (image, "direct"))
-                    if el_cfg["ssp"]:
+                    if profile is not None:
                         # Back along the ray through the profile, not the straight line.
-                        folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], level, e.range,
-                                                                           el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"], water)
-                    extra[i].update(depth_m=folded, depth_sigma_m=sigma_z, image_depth_m=image, path=path)
-                    if not e.ambiguous:
-                        depth, depth_sigma = image, sigma_z
+                        folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], level, e.range, profile[0], profile[1], water)
+                    # What the angle cannot know: the gradient along the path, and the water depth a bottom bounce is folded about.
+                    bent = elevation.refraction_sigma(e.range, sound, el_cfg["gradient_sigma_per_s"])
+                    fold_sigma = 2.0 * el_cfg["water_depth_sigma_m"] if path in ("bottom", "multiple") else 0.0
+                    extra[i].update(depth_m=folded, depth_sigma_m=float(np.sqrt(sigma_z**2 + bent**2 + fold_sigma**2)),
+                                    depth_refraction_sigma_m=bent, image_depth_m=image, path=path)
+                    depth, depth_sigma = image, sigma_z
+                    if e.ambiguous:
+                        # The track, if it has a depth already, takes the candidate that fits it.
+                        alternatives = [float(origin[2] + e.range * w[2]) for w in e.alternatives]
             # The tracker's measurement is (range, bearing) about the frame origin, across then forward.
-            local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma))
+            local.append(detect.Detection(float(np.hypot(*p)), float(np.arctan2(p[1], p[0])), h.snr_db, h.cells, depth, depth_sigma,
+                                          depth_alternatives=alternatives))
         tracks = self.tracker.update(t, local)
         c = cfg["classify"]
         own = origin[:2] - self._origin[:2]
@@ -429,15 +504,19 @@ class LiveChain:
                 if not np.isfinite(tr.depth):
                     track_extra[c_.id] = {"depth_m": None}
                     continue
-                sigma_z = float(np.sqrt(tr.depth_var))
+                slant = float(np.hypot(np.hypot(c_.position[1] - own[0], c_.position[0] - own[1]), tr.depth - origin[2]))
+                bent = elevation.refraction_sigma(slant, sound, el_cfg["gradient_sigma_per_s"])
                 folded, path = (elevation.fold_depth(tr.depth, water, el_cfg["surface_z"]) if el_cfg["fold"] else (tr.depth, "direct"))
-                if el_cfg["ssp"]:
+                fold_sigma = 2.0 * el_cfg["water_depth_sigma_m"] if path in ("bottom", "multiple") else 0.0
+                # The filter averages what differs from ping to ping; the bending of the ray does not.
+                sigma_z = float(np.sqrt(tr.depth_var + bent**2 + fold_sigma**2))
+                if profile is not None:
                     # The track's straight-line depth as an arrival angle at its range, then along the ray.
-                    slant = float(np.hypot(np.hypot(c_.position[1] - own[0], c_.position[0] - own[1]), tr.depth - origin[2]))
                     folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], float(np.arcsin((origin[2] - tr.depth) / slant)),
-                                                                       slant, el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"], water)
+                                                                       slant, profile[0], profile[1], water)
                 track_extra[c_.id] = {"depth_m": folded, "depth_sigma_m": sigma_z, "path": path}
-                if el_cfg["classify"] and elevation.outside_water(tr.depth, sigma_z, water, el_cfg["surface_z"], el_cfg["classify_sigma"]):
+                if el_cfg["classify"] and elevation.outside_water(tr.depth, float(np.hypot(np.sqrt(tr.depth_var), bent)), water, el_cfg["surface_z"],
+                                                                  el_cfg["classify_sigma"], el_cfg["water_depth_sigma_m"]):
                     c_.kind = "multipath"      # its straight-line depth is above the surface or below the bottom: a bounce
         report = {
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),

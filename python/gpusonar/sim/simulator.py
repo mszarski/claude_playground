@@ -441,6 +441,20 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     start_ns = int(pings.get("start_ns", 1_700_000_000_000_000_000))
     rx_cfg = cfg.get("receiver", {})
 
+    if cfg.get("passive"):
+        # Listening: no ping, broadband sources of their own (sim/passive.py). One record per "ping":
+        #   passive: {sources: [{position: [n, e, d], rms: ...}], noise_rms: 1.0, surface_z: 0.0 (optional mirror)}
+        from .passive import passive_record
+        pas = cfg["passive"]
+        records, truth_positions = [], []
+        for i in range(count):
+            pos = position + velocity * (i * interval)
+            records.append(passive_record(sonar, make_pose(pos, rpy, velocity), pas.get("sources", []),
+                                          noise_rms=float(pas.get("noise_rms", 1.0)), rng=rng, sound_speed=env["sound_speed"],
+                                          surface_z=pas.get("surface_z"), time_ns=start_ns + int(round(i * interval * 1e9))))
+            truth_positions.append(pos)
+        return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), None, np.arange(count) * interval)
+
     records, truth_positions = [], []
     n_sub = len(sonar.mux_groups)
     # A rail moves between pings and stands still during each one.
@@ -504,12 +518,25 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             positions = [position + velocity * (i * interval) for i in range(count)]
         for i, pos in enumerate(positions):
             t = i * interval
-            pose = make_pose(pos, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity)
+            # platform.rates (rad/s): the vehicle rolls, pitches and yaws during the ping, from `rpy` at each
+            # transmit. The echoes are made with the turning array; the record handed to a processor then
+            # holds what navigation would give it: the attitude at the transmit and samples of it over
+            # the receive window (navigation.ins, platform.attitude_rate_hz a second), not the rates.
+            rates = plat.get("rates")
+            pose = make_pose(pos, rpy, (0.0, 0.0, 0.0) if stop_and_go else velocity, rates or (0.0, 0.0, 0.0))
             truth_positions.append(pos)
             records.append(simulate_ping(
                 sonar, pose, scene, environment=env, sequence=i, sub_sequence=i % n_sub,
                 time_ns=start_ns + int(round(t * 1e9)), scenario_time=t, rng=rng, backend=backend,
                 **ping_kwargs))
+            if rates and any(float(v) != 0.0 for v in rates):
+                _add_true_ins(records[-1], np.zeros(3), float(plat.get("attitude_rate_hz", 10.0)))
+                g = records[-1].geometry
+                for name in ("tx_pose", "rx_pose"):
+                    q = getattr(g, name)
+                    q.rates = (0.0, 0.0, 0.0)
+                    setattr(g, name, q)
+                records[-1].geometry = g
 
     if output:
         opts = core.WriterOptions()

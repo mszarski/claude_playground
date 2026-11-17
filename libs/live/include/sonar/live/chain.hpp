@@ -54,6 +54,7 @@ struct ChainOptions {
   Reference reference;
   ElevationOptions elevation;  ///< stacked rows: elevation and depth (off by default)
   std::vector<std::int64_t> dead_channels;  ///< channel rows (after synchronisation) left out of every stage
+  double sound_speed = 0.0;    ///< m/s at the vehicle; > 0 replaces the record's (navigation's) value
   Backend backend = Backend::Host;
   int device = 0;
 };
@@ -64,6 +65,8 @@ struct ReportDetection {
   bool elevation_valid = false;                      ///< an elevation was found with enough quality
   double elevation_deg = 0.0, elevation_sigma_deg = 0.0, elevation_quality = 0.0;  ///< level-referenced, up positive
   bool elevation_ambiguous = false;
+  std::vector<double> elevation_alternatives_deg{};  ///< the other candidate lobes, when ambiguous
+  double depth_refraction_sigma_m = 0.0;             ///< the part of depth_sigma_m that is the unknown gradient
   bool bearing_corrected = false;
   double cone_bearing_deg = 0.0;                     ///< what the line array alone reported
   bool has_depth = false;

@@ -1,0 +1,17 @@
+# Listening with the three-row array: no ping, two broadband sources about 1 km away, one at
+# 20 m depth and one at 250 m, heard from 100 m with the vehicle rolled 3 degrees. One record of
+# 2 s per "ping".   build/bin/sonar_live --passive FILE --band 4000 6000 elevation=1 ...
+# `passive` is the simulator's listening key (sim/passive.py): free field, no propagation loss.
+name: popoto_passive_depth
+sonar: popoto_long_range_3row
+sonar_overrides:
+  receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [0.0, 750.0]}}      # 2 s of samples
+environment: {sound_speed: 1500.0}
+platform: {position: [0, 0, 100.0], rpy: [0.0524, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 2, interval: 3.0}
+passive:
+  noise_rms: 1.0
+  sources:
+    - {position: [-400.0, 900.0, 20.0], rms: 1.0}
+    - {position: [300.0, 800.0, 250.0], rms: 0.7}
+seed: 14

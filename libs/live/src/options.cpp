@@ -43,6 +43,18 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_first_arrival") c.elevation.first_arrival = v != 0.0;
   else if (key == "elevation_first_arrival_db") c.elevation.first_arrival_db = v;
   else if (key == "elevation_first_arrival_snr_db") c.elevation.first_arrival_snr_db = v;
+  else if (key == "sound_speed") c.sound_speed = v;
+  else if (key == "elevation_ambiguity_sigma") c.elevation.ambiguity_sigma = v;
+  else if (key == "elevation_alternatives_db") c.elevation.alternatives_db = v;
+  else if (key == "elevation_sector_from_depth") c.elevation.sector_from_depth = v != 0.0;
+  else if (key == "elevation_sector_bounces") c.elevation.sector_bounces = v;
+  else if (key == "elevation_sector_margin_deg") c.elevation.sector_margin = v * kDeg;
+  else if (key == "elevation_water_depth_sigma") c.elevation.water_depth_sigma = v;
+  else if (key == "elevation_attitude_arrival") c.elevation.attitude_arrival = v != 0.0;
+  else if (key == "elevation_attitude_rate_sigma_deg_s") c.elevation.attitude_rate_sigma = v * kDeg;
+  else if (key == "elevation_use_gradient") c.elevation.use_gradient = v != 0.0;
+  else if (key == "elevation_gradient") c.elevation.gradient = v;
+  else if (key == "elevation_gradient_sigma") c.elevation.gradient_sigma = v;
   else if (key == "elevation_min_quality") c.elevation.min_quality = p.elevation.min_quality = v;
   else if (key == "elevation_ambiguity_db") c.elevation.ambiguity_db = v;
   else if (key == "elevation_correct_bearing") c.elevation.correct_bearing = v != 0.0;

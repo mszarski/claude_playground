@@ -73,13 +73,15 @@ class Navigation {
  public:
   /// Parse one datagram; false if it has no time_ns.
   bool push(const std::string& json);
-  /// Put the pose at `record.transmit.time_ns` into the record. False before any fix has arrived.
+  /// Put the pose at `record.transmit.time_ns` into the record, with the fixes around its receive
+  /// window as its attitude history (navigation.ins) and, where the datagrams carry them, the
+  /// vehicle's sound speed and the water depth. False before any fix has arrived.
   bool apply(PingRecord& record) const;
 
  private:
   struct Fix {
     std::int64_t time_ns;
-    double v[9];
+    double v[11];  ///< position, rpy, velocity, then sound speed and water depth (NaN: not sent)
   };
   std::deque<Fix> fixes_;
 };

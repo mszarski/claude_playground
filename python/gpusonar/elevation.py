@@ -40,7 +40,9 @@ import numpy as np
 from . import _gpusonar as core
 
 DEFAULTS = {
-    "sector_deg": [-30.0, 30.0, 0.5],   # elevation searched, in the vehicle's frame: first, last, step (up positive)
+    "sector_deg": [-30.0, 30.0, 0.25],  # elevation searched, in the vehicle's frame: first, last, step (up positive)
+    "sector_from_depth": None,          # {bounces: 1, margin_deg: 1.0}: search only where water depth and range let an arrival
+                                        # come from (straight rays, this many boundary bounces); needs the water depth
     "range_window_m": None,             # half-width of the range search about a detection; None: 1.5 range cells
     "max_detections": 32,               # strongest detections given an elevation, per ping
     "arrival": "first",                 # "first": the earliest arrival in the range window that is within
@@ -48,13 +50,23 @@ DEFAULTS = {
     "first_arrival_snr_db": 13.0,       #   this far above the noise (the direct path arrives first);
                                         # "strongest": the strongest arrival
     "min_quality": 0.6,                 # below this (several arrivals in one cell, interference) no elevation is reported
-    "ambiguity_db": 1.5,                # a second lobe within this of the first: flagged, and not used for depth
+    "ambiguity_db": 1.0,                # a second lobe within this of the first is never trusted, and
+    "ambiguity_sigma": 3.0,             # one further down must lose to the first by this many sigma of the noise: else the
+                                        # detection is flagged ambiguous and its candidates go to the track, which picks
+    "alternatives_db": 6.0,             # lobes within this of the first are the candidates
     "correct_bearing": True,            # report and track the horizontal bearing, not the cone angle
     "depth": True,                      # report depth, and let tracks carry it
     "fold": True,                       # fold a depth outside the water column back in (needs the water depth)
     "classify": True,                   # a track whose depth lies outside the water column is multipath
     "classify_sigma": 2.0,              # ... by more than this many sigma
-    "water_depth": None,                # m; None: the record's environment.water_depth (0 or NaN: unknown)
+    "water_depth": None,                # m; None: the record's environment.water_depth (navigation's, else unknown)
+    "water_depth_sigma_m": 0.0,         # how well it is known: into the bottom test and the depth of bottom-bounce arrivals
+    "attitude_time": "transmit",        # "arrival": roll, pitch and yaw as they were when each echo arrived, from the attitude
+                                        # history in the record (navigation.ins); "transmit": as the record's pose has them
+    "attitude_rate_sigma_deg_s": 0.0,   # with "arrival": added uncertainty per second of gap to the nearest attitude sample
+    "gradient_per_s": None,             # assumed mean vertical sound-speed gradient (1/s; 0.017 = isothermal water): depth_m
+                                        # along the ray through c(z) = local speed + g (z - own depth). None: straight ray
+    "gradient_sigma_per_s": 0.05,       # how well that gradient is known: depth sigma gains range^2 x this / 2c
     "surface_z": 0.0,                   # z of the sea surface in the frame the navigation uses
     "ssp": None,                        # {depth: [m...], speed: [m/s...]}: depth_m by a ray traced through this profile
                                         # instead of the straight line (which is wrong by s^2 g / 2c in a gradient g)
@@ -113,20 +125,46 @@ class Frame:
     heights: np.ndarray    # [N] element positions along `up`, m about the origin (the elements used)
 
 
-def array_frame(record, rows, look: str = "starboard") -> Frame:
-    """The stacked array's own frame in the world, from the record's pose. Elevation is
-    measured from the (along, look) plane towards `up`: the vehicle's deck plane, so roll and
-    pitch are in it and the world direction that comes out is level-referenced."""
+def array_frame(record, rows, look: str = "starboard", rpy=None) -> Frame:
+    """The stacked array's own frame in the world, from the record's pose (or with another
+    attitude `rpy`). Elevation is measured from the (along, look) plane towards `up`: the
+    vehicle's deck plane, so roll and pitch are in it and the world direction that comes out
+    is level-referenced."""
     used = [i for r in rows for i in r]
-    pos = record.rx_positions()[used]
+    levers = _levers(record)
+    offsets = record.calibration.position_offset
+    if len(offsets) == len(levers):
+        body = (levers + np.asarray(offsets, dtype=float).reshape(-1, 3))[used]
+    else:
+        body = levers[used]
+    pose = record.geometry.rx_pose
+    rot = np.asarray(core.rotation_ned(*(pose.rpy if rpy is None else rpy)))
+    pos = np.asarray(pose.position) + body @ rot.T
     origin = pos.mean(axis=0)
-    rot = np.asarray(core.rotation_ned(*record.geometry.rx_pose.rpy))
-    along = rot @ row_axis(_levers(record))
+    along = rot @ row_axis(levers)
     up = rot @ np.array([0.0, 0.0, -1.0])
     up = up - along * (along @ up)
     up /= np.linalg.norm(up)
     side = 1.0 if look == "starboard" else -1.0
     return Frame(origin, along, up, side * np.cross(along, up), (pos - origin) @ up)
+
+
+def attitude_at(record, t: float):
+    """(rpy, gap) from the record's attitude history (navigation.ins: samples at seconds after
+    the transmit) at time `t`: interpolated between the samples around it (gap 0), or the
+    nearest sample and how far away in time it is. (None, None) without a history."""
+    ins = record.navigation.ins
+    if len(ins) == 0:
+        return None, None
+    times = np.array([a.t for a in ins])
+    rpy = np.array([a.rpy for a in ins])
+    i = int(np.searchsorted(times, t))
+    if i == 0:
+        return rpy[0], float(times[0] - t)
+    if i == len(times):
+        return rpy[-1], float(t - times[-1])
+    w = (t - times[i - 1]) / max(times[i] - times[i - 1], 1e-12)
+    return rpy[i - 1] + w * np.angle(np.exp(1j * (rpy[i] - rpy[i - 1]))), 0.0      # the short way round
 
 
 def tx_position(record) -> np.ndarray:
@@ -195,15 +233,18 @@ def fold_depth(z: float, water_depth: float | None, surface_z: float = 0.0) -> t
     return surface_z + folded, path
 
 
-def outside_water(z: float, sigma: float, water_depth: float | None, surface_z: float = 0.0, n_sigma: float = 2.0) -> bool:
+def outside_water(z: float, sigma: float, water_depth: float | None, surface_z: float = 0.0, n_sigma: float = 2.0,
+                  water_depth_sigma: float = 0.0) -> bool:
     """Whether a straight-line depth lies above the surface or below the bottom by more than
-    `n_sigma` standard deviations: an arrival that cannot have come straight from an object."""
+    `n_sigma` standard deviations (the bottom's own uncertainty included): an arrival that
+    cannot have come straight from an object."""
     if not (np.isfinite(z) and np.isfinite(sigma)):
         return False
     d = z - surface_z
     if d < -n_sigma * sigma:
         return True
-    return bool(water_depth and np.isfinite(water_depth) and water_depth > 0.0 and d > water_depth + n_sigma * sigma)
+    return bool(water_depth and np.isfinite(water_depth) and water_depth > 0.0
+                and d > water_depth + n_sigma * float(np.hypot(sigma, water_depth_sigma)))
 
 
 def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_depth, ssp_speed,
@@ -246,12 +287,14 @@ def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_d
 class Elevation:
     valid: bool = False            # an elevation was found with enough quality
     sin_elevation: float = float("nan")   # in the array's frame, up positive
-    sigma: float = float("nan")    # rad, one sigma of the elevation (Cramer-Rao at the measured SNR, plus roll)
+    sigma: float = float("nan")    # rad, one sigma of the elevation (Cramer-Rao at the measured SNR, plus roll and attitude timing)
     quality: float = 0.0           # coherent power over the rows' incoherent power, 0..1
-    ambiguous: bool = False        # a second lobe within the margin, or the peak at the sector's edge
+    ambiguous: bool = False        # another lobe could be the true one, or the peak is at the sector's edge
     snr_db: float = float("nan")   # signal-to-noise ratio at one hydrophone, dB (what the bound uses)
     range: float = float("nan")    # slant range of the peak, m
     world: tuple = (float("nan"),) * 3   # unit vector towards the arrival, world (north, east, down)
+    alternatives: tuple = ()       # unit vectors of the other candidate lobes, world
+    attitude_gap: float = 0.0      # s between the echo's arrival and the attitude used for it
 
 
 def row_records(record, rows):
@@ -293,8 +336,29 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
     coherent_gain = n_total**2 / (counts**2).sum()          # |sum of rows|^2 over sum of |row|^2, for one plane wave
     spread = float(((frame.heights - frame.heights.mean()) ** 2).sum())
     k_rms = rms_wavenumber(f_low, f_high, c)
-    tx = tx_position(record) - frame.origin
+    look = "starboard" if float(np.cross(frame.along, frame.up) @ frame.look) > 0.0 else "port"
+    pose = record.geometry.rx_pose
+    turning = bool(np.any(np.asarray(pose.rates) != 0.0))
+    arrival = cfg.get("attitude_time", "transmit") == "arrival"
+    prior = cfg.get("sector_from_depth")
+    water = cfg.get("water_depth") or record.environment.water_depth
+    water = float(water) if water and np.isfinite(water) and water > 0.0 else None
     for i, (rng, bearing, first) in enumerate(hits):
+        el = out[i]
+        # The array as the record's pose has it when this echo arrives (the kernel turns it with the
+        # pose's rates), and as the attitude history says it then was: the angles are found in the
+        # first frame and turned into a world direction with the second.
+        t_arr = 2.0 * rng / c
+        kf = array_frame(record, rows, look, np.asarray(pose.rpy) + np.asarray(pose.rates) * t_arr) if turning else frame
+        wf, extra = kf, 0.0
+        if arrival:
+            rpy, gap = attitude_at(record, t_arr)
+            if rpy is None:
+                el.attitude_gap = float(t_arr)                           # nothing but the pose at the transmit
+            else:
+                wf, el.attitude_gap = array_frame(record, rows, look, rpy), float(gap)
+            extra = np.radians(cfg.get("attitude_rate_sigma_deg_s", 0.0)) * el.attitude_gap
+        tx = tx_position(record) - kf.origin
         # The range searched: about the detection, and back to the leading edge of its cluster
         # (the direct arrival is the first), but no further than eight half-windows.
         lead = half
@@ -302,16 +366,24 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
             lead = min(max(rng - first + range_cell, half), 8.0 * half)
         offsets = dr * np.arange(-int(np.ceil(lead / dr)), n_hi + 1)
         sb = float(np.sin(bearing))
-        u = direction(frame, sb, se)                                        # [E, 3]
+        u = direction(kf, sb, se)                                           # [E, 3]
         # Points of constant two-way path (projector -> point -> array centre) along elevation: the
         # projector is not at the array's centre, and at constant range from the array the path
         # would change with elevation by far more than the rows' own differences.
         path = 2.0 * (rng + offsets)                                        # [R]
         rho = (path[None, :] ** 2 - tx @ tx) / (2.0 * (path[None, :] - (u @ tx)[:, None]))   # [E, R]
-        pts = frame.origin + rho[:, :, None] * u[:, None, :]                # [E, R, 3]
+        pts = kf.origin + rho[:, :, None] * u[:, None, :]                   # [E, R, 3]
         z = np.array([core.backproject([s], pts.reshape(-1, 3), interp="sinc", backend=backend).reshape(pts.shape[:2])
                       for s in subs])                                       # [K, E, R]
-        p = np.abs(z.sum(axis=0)) ** 2
+        p = np.abs(z.sum(axis=0)).astype(float) ** 2
+        if prior and water is not None:
+            # Straight rays with so many bounces cannot arrive from steeper than this: do not look there.
+            own = float(wf.origin[2] - cfg.get("surface_z", 0.0))
+            n_b, margin = float(prior.get("bounces", 1)), np.radians(prior.get("margin_deg", 1.0))
+            level = np.arcsin(np.clip(-direction(wf, sb, se)[:, 2], -1.0, 1.0))
+            allowed = (level <= np.arctan((own + n_b * water) / rng) + margin) & (level >= -np.arctan((water - own + n_b * water) / rng) - margin)
+            if allowed.sum() >= 3:
+                p[~allowed] = 0.0
         noise = backgrounds[i] / noise_weight                                # at one hydrophone
         best = p.max(axis=0)                                                 # over elevation, at each range
         j = int(np.argmax(best))
@@ -326,16 +398,18 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
                     break
         e = int(np.argmax(p[:, j]))
         col = p[:, j]
-        el = out[i]
         el.range = float(rho[e, j])
-        # Sub-grid peak: a parabola through the three points about the maximum.
-        frac = 0.0
-        edge = e == 0 or e == len(grid) - 1
-        if not edge:
-            den = col[e - 1] - 2.0 * col[e] + col[e + 1]
-            frac = float(0.5 * (col[e - 1] - col[e + 1]) / den) if den < 0.0 else 0.0
-        angle = grid[e] + frac * np.radians(step)
-        # Second lobe: the highest point outside the main lobe (down to its first minima).
+
+        def refined(k):
+            """Sub-grid peak: a parabola through the three points about a maximum."""
+            if k == 0 or k == len(grid) - 1:
+                return grid[k]
+            den = col[k - 1] - 2.0 * col[k] + col[k + 1]
+            return grid[k] + (float(0.5 * (col[k - 1] - col[k + 1]) / den) if den < 0.0 else 0.0) * np.radians(step)
+
+        edge = e == 0 or e == len(grid) - 1 or col[max(e - 1, 0)] == 0.0 or col[min(e + 1, len(grid) - 1)] == 0.0
+        angle = refined(e)
+        # The other lobes: maxima outside the main lobe (which runs down to its first minima).
         lo = e
         while lo > 0 and col[lo - 1] < col[lo]:
             lo -= 1
@@ -344,18 +418,43 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
             hi += 1
         rest = np.concatenate([col[:lo], col[hi + 1:]])
         second = float(rest.max()) if len(rest) else 0.0
-        el.ambiguous = bool(edge or second > col[e] * 10.0 ** (-cfg["ambiguity_db"] / 10.0))
+        # Would noise swap the first and the second? Their difference in amplitude is (1 - g) of the
+        # peak, g the second's amplitude over the first's, and its noise sqrt(1 - g) of the sum's.
+        g = np.sqrt(second / col[e]) if col[e] > 0.0 else 1.0
+        margin_sigma = np.sqrt(col[e] / (n_total * noise) * max(1.0 - g, 0.0)) if noise > 0.0 else float("inf")
+        el.ambiguous = bool(edge or second > col[e] * 10.0 ** (-cfg["ambiguity_db"] / 10.0) or margin_sigma < cfg.get("ambiguity_sigma", 3.0))
+        others = []
+        if el.ambiguous:
+            floor_alt = col[e] * 10.0 ** (-cfg.get("alternatives_db", 6.0) / 10.0)
+            for k in range(1, len(col) - 1):
+                if (k < lo or k > hi) and col[k] >= floor_alt and col[k] >= col[k - 1] and col[k] > col[k + 1]:
+                    others.append(tuple(float(v) for v in direction(wf, sb, float(np.sin(refined(k))))))
+        el.alternatives = tuple(others)
         j0, j1 = max(j - 1, 0), min(j + 2, p.shape[1])
         incoherent = float((np.abs(z[:, e, j0:j1]) ** 2).sum())
         el.quality = float(p[e, j0:j1].sum() / (coherent_gain * incoherent)) if incoherent > 0.0 else 0.0
-        rho = float(col[e]) / (n_total**2 * noise) if noise > 0.0 else float("inf")
-        el.snr_db = float(10.0 * np.log10(max(rho, 1e-30)))
+        snr = float(col[e]) / (n_total**2 * noise) if noise > 0.0 else float("inf")
+        el.snr_db = float(10.0 * np.log10(max(snr, 1e-30)))
         el.sin_elevation = float(np.sin(angle))
-        sigma_sin = 1.0 / (k_rms * np.sqrt(2.0 * rho * spread)) if spread > 0.0 and rho > 0.0 else float("inf")
-        el.sigma = float(np.hypot(sigma_sin / max(np.cos(angle), 1e-6), np.radians(cfg["roll_sigma_deg"])))
-        el.world = tuple(float(v) for v in direction(frame, sb, el.sin_elevation))
+        sigma_sin = 1.0 / (k_rms * np.sqrt(2.0 * snr * spread)) if spread > 0.0 and snr > 0.0 else float("inf")
+        el.sigma = float(np.sqrt((sigma_sin / max(np.cos(angle), 1e-6)) ** 2 + np.radians(cfg["roll_sigma_deg"]) ** 2 + extra**2))
+        el.world = tuple(float(v) for v in direction(wf, sb, el.sin_elevation))
         el.valid = bool(el.quality >= cfg["min_quality"] and np.isfinite(el.sigma))
     return out
+
+
+def refraction_sigma(slant_range: float, sound_speed: float, gradient_sigma: float) -> float:
+    """Depth uncertainty (m) from not knowing the mean vertical sound-speed gradient along the
+    path to within `gradient_sigma` (1/s): a gradient g curves the ray with radius c / g, which
+    after `slant_range` is range^2 g / 2c away from the straight line."""
+    return float(slant_range**2 * abs(gradient_sigma) / (2.0 * sound_speed))
+
+
+def gradient_profile(own_depth: float, sound_speed: float, gradient: float, water_depth: float | None):
+    """The two-knot profile c(z) = sound_speed + gradient (z - own_depth), from the surface to
+    the bottom (or 10 km): (depths, speeds) for `ray_depth`."""
+    bottom = max(float(water_depth or 0.0), own_depth, 0.0) + 10000.0
+    return [0.0, bottom], [sound_speed - gradient * own_depth, sound_speed + gradient * (bottom - own_depth)]
 
 
 def profile(record, subs, frame: Frame, bearing: float, ranges, sector_deg=(-30.0, 30.0, 0.5), backend=core.Backend.Host):
