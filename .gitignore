@@ -1,5 +1,6 @@
 *.png
 build*/
+!configs/builds/
 __pycache__/
 *.so
 *.h5

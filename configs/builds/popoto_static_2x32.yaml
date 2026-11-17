@@ -1,0 +1,109 @@
+# Build spec: Static drop-in array, two rows of 32.
+# One file says what the build IS, in spec-sheet terms; tools/build_from_spec.py makes the sonar, deployment and scenario
+# files, the diagrams, the parts list, the expected performance and the bring-up checklist from it.
+# Fields, units and what to do when a value is unknown: docs/REFERENCE_DESIGN.md.
+# A section's `confirmed` list names the fields that are measured, from a datasheet in hand, or stated by the owner;
+# every other value is an assumption and is carried as `unconfirmed` into the generated files.
+build: popoto_static_2x32
+title: "Static drop-in array, two rows of 32"
+stage: "2: static array, 2 x 32"
+base_sonar: popoto_long_range    # the generated sonar file extends this shipped one: only what differs is written
+names: {sonar: popoto_static_2row, deploy: popoto_static_2row}
+
+platform:
+  kind: static                   # a frame lowered and left in place. The owner gave NO dimensions: every value here is a placeholder
+  name: static_array
+  mounting: frame lowered from the surface or standing on the bottom
+  span_m: 3.0
+  height_m: 1.6
+  depth_m: 10.0                  # where the frame hangs
+
+array:
+  rows: 2
+  count: 32                      # hydrophones in each row
+  pitch_m: 0.09
+  heights_m: [-0.75, 0.75]   # m above the centre of the face, lowest row first (the owner: "the vertical spacing is maybe a 1.5")
+  look: starboard
+  wiring: row_by_row             # the owner: "Probably row by row": every board serves one row
+
+hydrophone:
+  model: null                    # not chosen. The plan: "ordinary passive hydrophones wired to the board's inputs"
+  sensitivity_db: -208.0         # dB re 1 V/uPa: an assumption (the figure the plan quotes for its AS-1 reference hydrophone)
+
+boards:
+  model: Popoto PMM6081
+  inputs: 8                      # the plan (PMM6081 ICD): "8 single-ended hydrophone inputs, 43 dB preamp, 37 mVpp full scale, 100 Hz high-pass"
+  gain_db: 43.0
+  input_full_scale_vpp: 0.037
+  adc_full_scale_v: 2.61         # 18.5 mV peak x 10^(43/20): what the records carry
+  highpass_hz: 100.0             # the ICD's value; 10 Hz has also been quoted
+  sample_rate_hz: 102400.0       # NOT in the plan ("ADC sample rate" is a question for Popoto): an assumption
+  adc_bits: 24                   # an assumption
+  clock_tolerance_ppm: 25.0      # assumptions: whether boards can be batched at all is a question for Popoto
+  clock_offset_max_s: 3.0e-4
+  jitter_rms_s: 2.0e-8
+  clocks: 
+    explicit:                    # [offset s, drift ppm] of each board, the first the reference: as typed in when these builds were first made
+      - [0.00e+00, 0]
+      - [-1.04e-04, 24.4]
+      - [-1.09e-04, 14.4]
+      - [2.22e-04, -5.4]
+      - [-3.70e-05, -6.4]
+      - [-2.36e-04, -1.1]
+      - [-1.55e-04, -12.1]
+      - [-1.89e-04, -15.3]
+  confirmed: [model, inputs, gain_db, input_full_scale_vpp]
+
+sync:
+  scheme: shared_reference       # one electrical burst wired to every board and summed into its first input, above the acoustic band
+  reference: {f_start_hz: 38.0e3, f_stop_hz: 48.0e3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
+  elevation_error_deg: 0.05      # the elevation error allowed from clock error between rows: sets the required agreement
+
+projector:
+  model: null                    # not chosen (the plan's PMT-28 covers 20-35 kHz only)
+  amplifier: null
+  source_level_db: 197.0         # dB re 1 uPa at 1 m: the 12 km link budget (docs/DESIGN.md Sec. 5); not a part's figure
+  band_hz: [4000.0, 6000.0]
+  waveform: {type: lfm, duration_s: 0.1, window_alpha: 0.1}
+  position_m: [0, 0, 1.0]        # body frame [along, out, down] from the array's centre: a placeholder
+
+navigation:
+  unit: null                     # no tilt sensor on the frame is specified: a typed-in pose, assumed plumb
+  roll_sigma_deg: 1.0            # how plumb the frame hangs: a placeholder
+  attitude_time: transmit
+  attitude_rate_sigma_deg_s: 0.5
+  static_pose: {x: 0.0, y: 0.0, z: 10.0, roll: 0.0, pitch: 0.0, yaw: 0.0}
+
+sound_speed:
+  nominal_m_s: 1500.0
+  rung: gradient_prior           # the owner: no long-range profile; the platform measures the local value (navigation datagram)
+  gradient_per_s: 0.017          # isothermal water: an assumption ("Won't always we need to handle it")
+  gradient_sigma_per_s: 0.05
+
+water_depth:
+  source: typed
+  sigma_m: 5.0                   # the owner: "some idea of water depth"
+
+network: {stream_port: 5700, nav_port: 5702, report_udp: [127.0.0.1, 5701]}
+
+storage:
+  recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5
+  report: /data/sonar/popoto_%Y%m%d_%H%M%S.jsonl
+  taps_dir: /data/sonar/taps
+  taps_pings: 2
+
+compute:
+  option: decimate_first_cpu     # the owner: "Prepare both options" (decimate first on a CPU; a GPU): the parts list shows both
+  unit: null                     # not chosen
+
+operation:
+  range_m: [null, 3000.0]       # the receive window; null: from the pulse's blind range. A choice made here, not the owner's
+
+trial:                           # the water the simulated trials are in: placeholders for a site that is not chosen
+  water_depth_m: 100.0
+  own_depth_m: 30.0
+  ranges_m: [400.0, 2600.0]      # two rows 1.5 m apart give one elevation only beyond 2.4 km in 100 m of water (one bounce)
+  target_depths_m: [12.0, 30.0, 60.0]
+  pulse_s: 1.0                   # the long-range scenarios use a 1 s pulse for the signal (0.1 s in the sonar file)
+  roll_deg: 2.0                  # the frame's tilt
+  seed: 22
