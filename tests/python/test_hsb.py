@@ -337,6 +337,7 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     assert stats["bad_frames"] == 0 and stats["lost_samples"] == 0
     # The same pings straight through the chain: framed and assembled here, no transport.
     direct_records = hsb.records_from_frames(hsb.frames_from_records(copies(pings), FRAME, lead_seconds=LEAD), "flank_32", OVERRIDES)
+    sent_samples = direct_records[0].samples.array.copy()            # the chain conditions records in place
     with LiveChain(CHAIN) as chain:
         direct = chain.run(direct_records)
     got = lines(tmp_path / "hsb.jsonl")
@@ -358,4 +359,4 @@ def test_loopback_through_sensor_bridge_gives_the_direct_chains_reports(pings, t
     assert [t["kind"] for t in got[-1]["tracks"]] == ["mover", "mover"]
     # What was recorded on the way in is what the board sent.
     raw = list(gs.sources.make_source({"type": "container", "path": str(tmp_path / "hsb.h5")}))
-    assert len(raw) == N and np.array_equal(raw[0].samples.array, direct_records[0].samples.array)
+    assert len(raw) == N and np.array_equal(raw[0].samples.array, sent_samples)
