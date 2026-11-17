@@ -51,7 +51,7 @@ def parse(argv=None):
     r.add_argument("--idle", type=float, default=15.0, help="seconds without a frame before stopping")
     r.add_argument("--report", help="JSON lines file, one report per ping")
     r.add_argument("--recording", help="container file of the raw pings")
-    r.add_argument("--queue", type=int, default=128, help="frames the receiver holds while the chain is busy")
+    r.add_argument("--queue", type=int, default=256, help="frames the receiver holds while the chain is busy")
     r.add_argument("--quiet", action="store_true")
     for p in (s, r):
         p.add_argument("--frame-samples", type=int, default=hsb.FRAME_SAMPLES, help="samples per frame, the same on both sides")

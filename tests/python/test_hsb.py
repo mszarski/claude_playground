@@ -19,7 +19,7 @@ from test_live import CHAIN, INTERVAL, N, OVERRIDES, copies, pings  # noqa: F401
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 TOOL = ROOT / "tools" / "sonar_live_hsb.py"
-FRAME = 800                        # samples per frame: 12.5 ms, 76,928 bytes
+FRAME = 400                        # samples per frame: 6.25 ms, 38,528 bytes
 LEAD = 1.0                         # s of stream before the first transmit
 
 
@@ -31,7 +31,7 @@ def assemble(frames, **options):
 def test_frames_are_all_one_size_and_hold_the_pings(pings):
     stream = hsb.FrameStream(pings, FRAME, lead_seconds=LEAD)
     frames = list(stream)
-    assert len(frames) == stream.n_frames and {len(f) for f in frames} == {hsb.frame_bytes(32, FRAME)} == {76928}
+    assert len(frames) == stream.n_frames and {len(f) for f in frames} == {hsb.frame_bytes(32, FRAME)} == {38528}
     assert len(frames[0]) % 128 == 0
     heads = [decode_block(f) for f in frames]
     assert [h["sample_index"] for h in heads] == [k * FRAME for k in range(len(frames))]      # continuous, tail padded
