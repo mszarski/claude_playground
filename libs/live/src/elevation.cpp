@@ -238,11 +238,13 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
     if (o.attitude_arrival) {
       Vec3d rpy;
       double gap = 0.0;
-      if (attitude_at(record, t_arr, rpy, gap)) {
+      // The compressed echo is the whole pulse, received from t_arr to t_arr + its length: its middle.
+      const double t_att = t_arr + 0.5 * w.duration;
+      if (attitude_at(record, t_att, rpy, gap)) {
         wf[i] = elevation_frame(record, rows, starboard, rpy);
         out[i].attitude_gap = gap;
       } else {
-        out[i].attitude_gap = t_arr;                       // nothing but the pose at the transmit
+        out[i].attitude_gap = t_att;                       // nothing but the pose at the transmit
       }
       extra[i] = o.attitude_rate_sigma * out[i].attitude_gap;
     }

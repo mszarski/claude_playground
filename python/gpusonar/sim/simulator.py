@@ -441,20 +441,6 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     start_ns = int(pings.get("start_ns", 1_700_000_000_000_000_000))
     rx_cfg = cfg.get("receiver", {})
 
-    if cfg.get("passive"):
-        # Listening: no ping, broadband sources of their own (sim/passive.py). One record per "ping":
-        #   passive: {sources: [{position: [n, e, d], rms: ...}], noise_rms: 1.0, surface_z: 0.0 (optional mirror)}
-        from .passive import passive_record
-        pas = cfg["passive"]
-        records, truth_positions = [], []
-        for i in range(count):
-            pos = position + velocity * (i * interval)
-            records.append(passive_record(sonar, make_pose(pos, rpy, velocity), pas.get("sources", []),
-                                          noise_rms=float(pas.get("noise_rms", 1.0)), rng=rng, sound_speed=env["sound_speed"],
-                                          surface_z=pas.get("surface_z"), time_ns=start_ns + int(round(i * interval * 1e9))))
-            truth_positions.append(pos)
-        return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), None, np.arange(count) * interval)
-
     records, truth_positions = [], []
     n_sub = len(sonar.mux_groups)
     # A rail moves between pings and stands still during each one.

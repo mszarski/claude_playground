@@ -1,6 +1,6 @@
 # Stage 1, the prototype on the test AUV: ONE row of 32 hydrophones over 3 m, the long-range
 # band (4-6 kHz) and boards. It is the 32-hydrophone array of `popoto_4x8` / `flank_32` (3 m,
-# 0.094 m pitch) with the long-range waveform: 0.31 of a wavelength apart at 5 kHz, so no
+# 0.094 m pitch) at 0.09 m with the long-range waveform: 0.30 of a wavelength apart at 5 kHz, so no
 # repeats in bearing at any steering, a beam 5 degrees wide instead of 3.2, the same array gain
 # in white noise. For a 2 m span: sonar_overrides {array: {pitch: 0.0625}}.
 # Stages and what each is for: docs/DESIGN.md Sec. 3; tools/popoto_elevation_study.py.
@@ -15,7 +15,7 @@ platform:                        # the test AUV the prototype goes on (the owner
 
 array:
   count: 32
-  pitch: 0.094                   # m: 32 hydrophones over 3 m
+  pitch: 0.09                    # m: 32 hydrophones over 2.9 m
 
 transmit:
   lever_arm: [0, 0, 0.3]         # the projector 0.3 m below the row: a placeholder

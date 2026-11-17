@@ -352,9 +352,11 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
         kf = array_frame(record, rows, look, np.asarray(pose.rpy) + np.asarray(pose.rates) * t_arr) if turning else frame
         wf, extra = kf, 0.0
         if arrival:
-            rpy, gap = attitude_at(record, t_arr)
+            # The compressed echo is the whole pulse, received from t_arr to t_arr + its length: its middle.
+            t_att = t_arr + 0.5 * w.duration
+            rpy, gap = attitude_at(record, t_att)
             if rpy is None:
-                el.attitude_gap = float(t_arr)                           # nothing but the pose at the transmit
+                el.attitude_gap = float(t_att)                           # nothing but the pose at the transmit
             else:
                 wf, el.attitude_gap = array_frame(record, rows, look, rpy), float(gap)
             extra = np.radians(cfg.get("attitude_rate_sigma_deg_s", 0.0)) * el.attitude_gap
