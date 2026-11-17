@@ -84,8 +84,9 @@ struct SynthParams {
   SynthElement tx;
   /// Passes of the fixed-point solves for the time sound meets the outbound point and the
   /// receiver. Each pass gains a factor (speed / c); what is left after n passes is about
-  /// (R / c) (v / c)^n. The defaults are those the analytic pulses have always used.
-  int arrival_passes_out = 3;
+  /// (R / c) (v / c)^n. Analytic pulses ran (3, 4) until the outbound residual was measured
+  /// (0.007 rad at 8 kHz for 12 m/s closing at 400 m); (4, 4) leaves 5.5e-5.
+  int arrival_passes_out = 4;
   int arrival_passes_back = 4;
   /// Waveform type 3 (Arbitrary) only: the pulse's envelope.
   EnvelopeTable envelope;

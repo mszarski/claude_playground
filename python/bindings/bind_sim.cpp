@@ -129,7 +129,7 @@ void bind_sim(py::module_& m) {
       "A sampled (Arbitrary) waveform also needs `envelope` = (table [n_fine, n_bands + 1] complex,\n"
       "fine samples per second, fine index of emission time 0, carrier Hz, knot frequencies [n_bands]):\n"
       "gpusonar.sim.waveform.SampledWaveform.kernel_table() builds it.\n"
-      "`arrival_passes` = (outbound, return) passes of the arrival-time solve; default (3, 4) for\n"
+      "`arrival_passes` = (outbound, return) passes of the arrival-time solve; default (4, 4) for\n"
       "analytic pulses and (8, 8) for sampled ones.");
   m.attr("MAX_ENVELOPE_BANDS") = sim::kMaxEnvelopeBands;
   m.attr("ABSORPTION_TABLE_SIZE") = sim::kAbsorptionTableSize;
