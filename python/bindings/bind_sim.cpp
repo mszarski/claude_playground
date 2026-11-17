@@ -67,7 +67,7 @@ void bind_sim(py::module_& m) {
       [](PingRecord& record, const ArrD& q, const ArrD& p, const ArrC& amplitude,
          const py::object& q_velocity, const py::object& p_velocity,
          const py::object& absorption, bool spreading, Backend backend,
-         const Vec3d& platform_acceleration) {
+         const Vec3d& platform_acceleration, const py::object& envelope, const py::object& arrival_passes) {
         const auto paths = make_paths(q, p, amplitude, q_velocity, p_velocity);
         sim::SynthParams params = sim::params_from_record(record);
         params.spreading = spreading;
@@ -84,6 +84,37 @@ void bind_sim(py::module_& m) {
           }
           for (int i = 0; i < sim::kAbsorptionTableSize; ++i) params.absorption_db_per_m[i] = table[i];
         }
+        // A sampled pulse: (table [n_fine, n_bands + 1] complex, rate, offset, carrier,
+        // knot frequencies [n_bands]); see sim::EnvelopeTable. The array is held to the end.
+        ArrC table;
+        const bool sampled = record.transmit.waveform.type == WaveformType::Arbitrary;
+        if (sampled) {
+          if (envelope.is_none()) {
+            throw std::invalid_argument("synthesize_into: a sampled (arbitrary) waveform needs `envelope`");
+          }
+          const auto t = envelope.cast<py::tuple>();
+          if (t.size() != 5) throw std::invalid_argument("envelope must be (table, rate, offset, carrier, knot_frequencies)");
+          table = ArrC::ensure(t[0]);
+          const auto knots = t[4].cast<std::vector<double>>();
+          if (!table || table.ndim() != 2 || knots.empty() || knots.size() > sim::kMaxEnvelopeBands ||
+              table.shape(1) != static_cast<py::ssize_t>(knots.size()) + 1) {
+            throw std::invalid_argument("envelope table must have shape [n_fine, len(knot_frequencies) + 1], with at most " +
+                                        std::to_string(sim::kMaxEnvelopeBands) + " knot frequencies");
+          }
+          params.envelope.data = reinterpret_cast<const double*>(table.data());
+          params.envelope.n_fine = table.shape(0);
+          params.envelope.n_bands = static_cast<int>(knots.size());
+          params.envelope.rate = t[1].cast<double>();
+          params.envelope.offset = t[2].cast<double>();
+          params.envelope.carrier = t[3].cast<double>();
+          for (std::size_t i = 0; i < knots.size(); ++i) params.envelope.knot_frequency[i] = knots[i];
+          params.arrival_passes_out = params.arrival_passes_back = sim::kSampledArrivalPasses;
+        }
+        if (!arrival_passes.is_none()) {
+          const auto n = arrival_passes.cast<std::pair<int, int>>();
+          params.arrival_passes_out = n.first;
+          params.arrival_passes_back = n.second;
+        }
         py::gil_scoped_release release;
         sim::synthesize_into(backend, record, paths, &params);
       },
@@ -91,8 +122,15 @@ void bind_sim(py::module_& m) {
       py::arg("q_velocity") = py::none(), py::arg("p_velocity") = py::none(),
       py::arg("absorption") = py::none(), py::arg("spreading") = true,
       py::arg("backend") = Backend::Host,
-      py::arg("platform_acceleration") = Vec3d{},
+      py::arg("platform_acceleration") = Vec3d{}, py::arg("envelope") = py::none(),
+      py::arg("arrival_passes") = py::none(),
       "Add the echoes of two-way paths into record.samples. The record supplies geometry,\n"
-      "waveform, sampling and board clocks; its samples must already be allocated.");
+      "waveform, sampling and board clocks; its samples must already be allocated.\n"
+      "A sampled (Arbitrary) waveform also needs `envelope` = (table [n_fine, n_bands + 1] complex,\n"
+      "fine samples per second, fine index of emission time 0, carrier Hz, knot frequencies [n_bands]):\n"
+      "gpusonar.sim.waveform.SampledWaveform.kernel_table() builds it.\n"
+      "`arrival_passes` = (outbound, return) passes of the arrival-time solve; default (3, 4) for\n"
+      "analytic pulses and (8, 8) for sampled ones.");
+  m.attr("MAX_ENVELOPE_BANDS") = sim::kMaxEnvelopeBands;
   m.attr("ABSORPTION_TABLE_SIZE") = sim::kAbsorptionTableSize;
 }

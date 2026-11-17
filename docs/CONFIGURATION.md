@@ -78,7 +78,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `transmit.waveform.f_start`, `f_stop`, `duration`, `window_alpha` | band (Hz), pulse length (s), edge taper |
 | `transmit.waveform.source_level_db` | dB re 1 µPa at 1 m; with `receive.sensitivity_db` it makes samples volts |
 | `transmit.waveform.amplitude` | echo amplitude of a 0 dB target at 1 m when the chain is uncalibrated |
-| `transmit.waveform.type: sampled` | a pulse given by samples (`gpusonar/sim/waveform.py`); `f_start`, `f_stop` are then the occupied band and are required. Echoes of a sampled pulse are synthesised by the NumPy engine |
+| `transmit.waveform.type: sampled` | a pulse given by samples (`gpusonar/sim/waveform.py`); `f_start`, `f_stop` are then the occupied band and are required. Echoes of a sampled pulse are synthesised by the C++ kernel (host or CUDA), or by the NumPy reference when that engine is selected; `table_factor: 0` or more than 32 `gain_knots` runs in NumPy, with a warning |
 | `transmit.waveform.source` | for `sampled`: `lfm`, `hfm`, `stepped_fm` (with `steps`), `barker` (with `code`: its length), `mseq` (with `degree`, optional `taps`), `code` (with `code`: chip values, or `[re, im]` pairs), `samples` (inline list), `file` |
 | `transmit.waveform.file`, `dataset` | `.wav` (real passband), `.npy` or HDF5 dataset (real passband, or complex envelope) |
 | `transmit.waveform.samples`, `sample_rate`, `carrier` | inline samples (real passband, or `[re, im]` pairs of the envelope), their rate (Hz; a WAV file has its own), and the carrier removed from complex samples (default: the band centre) |
@@ -136,7 +136,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `reverberation` item `{model: kraus_surface, boundary_z, wind_speed}` | empirical high-frequency surface backscattering strength (`sim/surface.py`) in place of Chapman-Harris. No validity range is stated in its source; warns below 10 kHz, held constant above 60 degrees |
 | `reverberation` item `{model: searay_bottom, boundary_z, bottom_type}` | empirical bottom backscattering strength by type: `mud`, `sand`, `gravel`, `rock` (or 1-4) |
 | `time_spread.angle_spread` | `true`: each tap of the tail leaves and arrives in the direction of the boundary facet that gives its delay, so an array sees the tail with reduced spatial coherence (`false`). Works on both engines |
-| `time_spread.doppler` | `true`: the tail varies during a ping (frequency spreading); each tap becomes `doppler_lines` rays with their own frequency shift (`false`: the tail changes only from ping to ping). The path pairing then runs in NumPy, with a warning; paths per scatterer grow by about `doppler_lines` squared |
+| `time_spread.doppler` | `true`: the tail varies during a ping (frequency spreading); each tap becomes `doppler_lines` rays with their own frequency shift (`false`: the tail changes only from ping to ping). Works on both engines (the C++ path pairing carries a range rate per ray); paths per scatterer grow by about `doppler_lines` squared |
 | `time_spread.doppler_spectrum` | `lorentzian` (SST's AR(1) process, half-width 2 f v sin(grazing) / c) or `gaussian` (rms width 2 f v sin(grazing) / c / sqrt(1 - coherent fraction), derived in `sim/timespread.py`). Also sets the ping-to-ping fading |
 | `time_spread.doppler_lines` | sinusoids the process of each tap is made of (8). Changing it changes the realisation |
 | `time_spread.decay_time` | `rule_of_thumb` (TR 0702: 2 mss t1 t2 / (t1 + t2), exponential) or `facet` (mss (1 + sin² grazing) t1 t2 / (t1 + t2) with the shape that Gaussian facet slopes give) |
@@ -230,5 +230,7 @@ with the start time.
 
 The simulator uses its C++ path and reverberation code by default; `GPUSONAR_SIM_ENGINE=numpy`
 (or `engine="numpy"` on `run_scenario`, `simulate_ping` and the providers) selects NumPy.
+For a sampled transmit pulse the same switch also selects the echo synthesiser (C++ kernel
+by default, NumPy reference); analytic pulses are synthesised by the C++ kernel only.
 
 Source types and how to tap, inspect and re-inject data: `ARCHITECTURE.md`.

@@ -23,15 +23,12 @@ GPUSONAR_SIM_ENGINE=numpy selects the NumPy code in this file (sim/engine.py).
 from __future__ import annotations
 
 import abc
-import warnings
 from dataclasses import dataclass
 
 import numpy as np
 
 from .. import _gpusonar as core
 from . import engine as _engine
-
-_warned_doppler_fallback = False
 
 
 @dataclass
@@ -352,26 +349,22 @@ def two_way_paths(provider: EigenrayProvider, tx_position, rx_reference, points,
     """
     out = provider.eigenrays(tx_position, points)
     back = provider.eigenrays(rx_reference, points)
-    # Rays with a path-length rate (frequency spreading within a ping): the C++ pairing
-    # returns one velocity per scatterer, not per ray, so these are paired here in NumPy.
+    # Rays with a path-length rate (frequency spreading within a ping) give each end of a
+    # pair its own velocity: the scatterer's plus the leg's rate along the ray.
     rates = [None if e.range_rate is None or not np.any(e.range_rate) else e.range_rate for e in (out, back)]
     doppler = rates[0] is not None or rates[1] is not None
-    if doppler and _engine.resolve(engine) == "cpp":
-        global _warned_doppler_fallback
-        if not _warned_doppler_fallback:
-            _warned_doppler_fallback = True
-            warnings.warn("time_spread.doppler: eigenrays carry a range rate, which the C++ path pairing does not take; "
-                          "pairing them in NumPy (synthesis is unchanged)", RuntimeWarning, stacklevel=2)
-    if _engine.resolve(engine) == "cpp" and not doppler:
+    if _engine.resolve(engine) == "cpp":
         weighted = lambert is not None and bool(np.any(lambert))
         moving = velocities is not None and bool(np.any(velocities))
-        q, p, amp, vq = core.sim_two_way_paths(
-            out.delay, out.amplitude, out.launch, out.arrival, out.valid, float(out.sound_speed),
-            back.delay, back.amplitude, back.launch, back.arrival, back.valid, float(back.sound_speed),
-            _source3(tx_position), _source3(rx_reference), np.asarray(amplitudes, dtype=complex),
-            velocities=np.asarray(velocities, dtype=float) if moving else None,
-            lambert=np.asarray(lambert, dtype=bool) if weighted else None,
-            normals=np.asarray(normals, dtype=float) if weighted and normals is not None else None)
+        args = (out.delay, out.amplitude, out.launch, out.arrival, out.valid, float(out.sound_speed),
+                back.delay, back.amplitude, back.launch, back.arrival, back.valid, float(back.sound_speed),
+                _source3(tx_position), _source3(rx_reference), np.asarray(amplitudes, dtype=complex))
+        kwargs = dict(velocities=np.asarray(velocities, dtype=float) if moving else None,
+                      lambert=np.asarray(lambert, dtype=bool) if weighted else None,
+                      normals=np.asarray(normals, dtype=float) if weighted and normals is not None else None)
+        if doppler:
+            return core.sim_two_way_paths(*args, **kwargs, out_range_rate=rates[0], back_range_rate=rates[1])
+        q, p, amp, vq = core.sim_two_way_paths(*args, **kwargs)
         return q, p, amp, vq, (None if vq is None else vq.copy())
     q_all = out.apparent_positions(tx_position)       # [S, Ko, 3]
     p_all = back.apparent_positions(rx_reference)     # [S, Kb, 3]

@@ -53,7 +53,11 @@ step by step, with the closed-form pulse replaced by interpolation of the envelo
   the envelope is split by triangular weights into bands about `gain_knots + 1` frequencies
   and each band takes its own gain, i.e. the gain is piecewise linear across the band.
 
-This engine is NumPy only. The C++/CUDA synthesis kernel takes analytic pulses only.
+Two engines do this. The C++ kernel (libs/sim synth_kernel.hpp, `pair_sampled`; host and CUDA
+through the same header) is the default: it takes the fine table of this module
+(`SampledWaveform.kernel_table`) and does the per-sample work. `synthesize_into` below is the
+NumPy reference, selected with `engine="numpy"` or GPUSONAR_SIM_ENGINE=numpy (sim/engine.py).
+The two differ only in rounding (tests/python/test_sampled_engine.py).
 
 Reference: R. P. Goddard, "The Sonar Simulation Toolset, Release 4.6: Science, Mathematics,
 and Algorithms", APL-UW TR 0702 (2008), Sec. 4.1 (eqs. 3-6), Sec. 4.5.1 (eqs. 14-19).
@@ -280,6 +284,7 @@ class SampledWaveform:
     _fine: np.ndarray | None = field(default=None, repr=False, compare=False)
     _fine_total: np.ndarray | None = field(default=None, repr=False, compare=False)
     _replica: np.ndarray | None = field(default=None, repr=False, compare=False)
+    _kernel: tuple | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self):
         self.envelope = np.ascontiguousarray(self.envelope, dtype=complex)
@@ -393,6 +398,25 @@ class SampledWaveform:
             pos = (np.arange(n * f + 2 * pad + 2) - pad) / f
             self._fine = np.array([interpolate(row, pos, self.taps, self.beta) for row in self.band_envelopes()])
         return self._fine
+
+    def kernel_table(self) -> tuple:
+        """The `envelope` argument of core.synthesize_into (sim::EnvelopeTable): the fine table
+        as [n_fine, K + 2] complex (for each fine sample the K + 1 bands, then their sum), fine
+        samples per second, the fine index of emission time 0, the carrier and the knot
+        frequencies. The C++ kernel reads it with the same cubic as `synthesis_values`."""
+        if self._kernel is None:
+            if self.table_factor < 1:
+                raise ValueError("sampled waveform: the C++ synthesis kernel needs table_factor >= 1")
+            knots = self.knot_frequencies()
+            limit = getattr(core, "MAX_ENVELOPE_BANDS", 33)
+            if len(knots) > limit:
+                raise ValueError(f"sampled waveform: gain_knots must be below {limit} for the C++ synthesis kernel")
+            fine = self.fine_bands()
+            total = fine.sum(axis=0) if len(fine) > 1 else fine[0]
+            table = np.ascontiguousarray(np.vstack([fine, total[None, :]]).T, dtype=complex)
+            self._kernel = (table, float(self.sample_rate * self.table_factor), float(self._FINE_PAD),
+                            float(self.carrier), [float(f) for f in knots])
+        return self._kernel
 
     def synthesis_values(self, gains: np.ndarray | None, u: np.ndarray) -> np.ndarray:
         """Envelope at emission times u [P, L]; with `gains` [P, K + 1] each band takes its
@@ -665,10 +689,11 @@ def _absorption(table, f: np.ndarray) -> np.ndarray:
 def synthesize_into(record: "core.PingRecord", waveform: SampledWaveform | None, q, p, amplitude,
                     q_velocity=None, p_velocity=None, *, absorption=None, spreading: bool = True,
                     platform_acceleration=(0.0, 0.0, 0.0), block: int = 1 << 21) -> None:
-    """Add the echoes of two-way paths into record.samples for a sampled transmit waveform.
+    """Add the echoes of two-way paths into record.samples for a sampled transmit waveform:
+    the NumPy reference engine. `synthesize` chooses between this and the C++ kernel.
 
-    Same arguments and geometry as `core.synthesize_into` (the analytic kernel). `waveform`
-    None takes the replica from the record.
+    Same arguments and geometry as `core.synthesize_into`. `waveform` None takes the replica
+    from the record.
     """
     if waveform is None:
         waveform = SampledWaveform.from_record(record.transmit.waveform)
@@ -806,27 +831,60 @@ def synthesize_into(record: "core.PingRecord", waveform: SampledWaveform | None,
     record.samples = s
 
 
+def kernel_supports(waveform: SampledWaveform) -> bool:
+    """Whether the C++ kernel can take this waveform: it reads a fine table (table_factor >= 1)
+    with at most core.MAX_ENVELOPE_BANDS knot frequencies."""
+    return (hasattr(core, "MAX_ENVELOPE_BANDS") and waveform.table_factor >= 1
+            and len(waveform.knot_frequencies()) <= core.MAX_ENVELOPE_BANDS)
+
+
 _warned = False
 
 
-def note_numpy_fallback(record: "core.PingRecord", backend, engine) -> None:
-    """Make the engine used for a sampled pulse visible: the record's extra_json says
-    {"gpusonar": {"echo_synthesis": "numpy_sampled"}}, and asking for the device backend or
-    the C++ engine by name warns once that this step ran in NumPy instead."""
+def synthesize(record: "core.PingRecord", waveform: SampledWaveform | None, q, p, amplitude,
+               q_velocity=None, p_velocity=None, *, absorption=None, spreading: bool = True,
+               platform_acceleration=(0.0, 0.0, 0.0), backend=None, engine: str | None = None) -> str:
+    """Add the echoes of two-way paths into record.samples for a sampled transmit waveform, on
+    the engine sim/engine.py selects: the C++ kernel (host or CUDA `backend`) or the NumPy
+    reference `synthesize_into`. Returns the engine that ran, "cpp" or "numpy".
+
+    The C++ kernel needs the fine table; a waveform built with `table_factor: 0` (direct
+    windowed-sinc evaluation at every sample) or with more knot frequencies than the kernel
+    holds runs in NumPy, with a warning and a note in the record's extra_json.
+    """
+    from . import engine as _engine
+    if waveform is None:
+        waveform = SampledWaveform.from_record(record.transmit.waveform)
+    backend = core.Backend.Host if backend is None else backend
+    if _engine.resolve(engine) == "cpp":
+        if kernel_supports(waveform):
+            core.synthesize_into(record, q, p, amplitude, q_velocity, p_velocity, absorption=absorption,
+                                 spreading=spreading, backend=backend,
+                                 platform_acceleration=tuple(float(a) for a in platform_acceleration),
+                                 envelope=waveform.kernel_table())
+            return "cpp"
+        global _warned
+        if not _warned:
+            import warnings
+            _warned = True
+            warnings.warn("sampled transmit waveform: this one cannot be given to the C++/CUDA synthesis kernel "
+                          "(table_factor 0, or too many gain_knots); its echoes are synthesised by the NumPy engine "
+                          "on the host", RuntimeWarning, stacklevel=3)
+    _note_numpy(record)
+    synthesize_into(record, waveform, q, p, amplitude, q_velocity, p_velocity, absorption=absorption,
+                    spreading=spreading, platform_acceleration=platform_acceleration)
+    return "numpy"
+
+
+def _note_numpy(record: "core.PingRecord") -> None:
+    """The record's extra_json says {"gpusonar": {"echo_synthesis": "numpy_sampled"}} when the
+    echoes of a sampled pulse came from the NumPy engine."""
     import json
-    global _warned
     extra = json.loads(record.metadata.extra_json or "{}")
     extra.setdefault("gpusonar", {})["echo_synthesis"] = "numpy_sampled"
     meta = record.metadata
     meta.extra_json = json.dumps(extra)
     record.metadata = meta
-    asked = backend == core.Backend.Cuda or (engine or os.environ.get("GPUSONAR_SIM_ENGINE") or "").lower() == "cpp"
-    if asked and not _warned:
-        import warnings
-        _warned = True
-        warnings.warn("sampled transmit waveform: echoes are synthesised by the NumPy engine on the host "
-                      "(the C++/CUDA synthesis kernel takes CW, LFM and Gaussian pulses only)",
-                      RuntimeWarning, stacklevel=3)
 
 
 # --- pulse compression (reference implementation) -------------------------------------------

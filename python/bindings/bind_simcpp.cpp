@@ -186,7 +186,8 @@ void bind_simcpp(py::module_& m) {
          const ArrB& out_valid, double out_sound_speed, const ArrD& back_delay, const ArrC& back_amplitude,
          const ArrD& back_launch, const ArrD& back_arrival, const ArrB& back_valid, double back_sound_speed,
          const Vec3d& tx_position, const Vec3d& rx_reference, const ArrC& amplitudes, const py::object& velocities,
-         const py::object& lambert, const py::object& normals) {
+         const py::object& lambert, const py::object& normals, const py::object& out_range_rate,
+         const py::object& back_range_rate) -> py::tuple {
         const sim::EigenrayView out = set_view(out_delay, out_amplitude, out_launch, out_arrival, out_valid, out_sound_speed);
         const sim::EigenrayView back =
             set_view(back_delay, back_amplitude, back_launch, back_arrival, back_valid, back_sound_speed);
@@ -213,6 +214,37 @@ void bind_simcpp(py::module_& m) {
         const py::ssize_t room = s * out.n_rays * back.n_rays;
         py::array_t<double> q({room, py::ssize_t{3}}), p({room, py::ssize_t{3}});
         py::array_t<cd> amp(room);
+        // Per-ray range rates (either leg): each pair gets a velocity for each of its ends.
+        if (!out_range_rate.is_none() || !back_range_rate.is_none()) {
+          ArrD rate_out, rate_back;
+          sim::RangeRates rates;
+          if (!out_range_rate.is_none()) {
+            rate_out = ArrD::ensure(out_range_rate);
+            if (!rate_out || rate_out.ndim() != 2 || rate_out.shape(0) != s || rate_out.shape(1) != out.n_rays) {
+              throw std::invalid_argument("out_range_rate must have the shape of out_delay");
+            }
+            rates.out = rate_out.data();
+          }
+          if (!back_range_rate.is_none()) {
+            rate_back = ArrD::ensure(back_range_rate);
+            if (!rate_back || rate_back.ndim() != 2 || rate_back.shape(0) != s || rate_back.shape(1) != back.n_rays) {
+              throw std::invalid_argument("back_range_rate must have the shape of back_delay");
+            }
+            rates.back = rate_back.data();
+          }
+          py::array_t<double> vq({room, py::ssize_t{3}}), vp({room, py::ssize_t{3}});
+          py::ssize_t n = 0;
+          {
+            py::gil_scoped_release release;
+            n = sim::two_way_paths_doppler(
+                out, back, tx_position, rx_reference, amplitudes.data(), moving ? v_in : nullptr,
+                lambert.is_none() ? nullptr : reinterpret_cast<const std::uint8_t*>(lam.data()),
+                normals.is_none() ? nullptr : nrm.data(), rates, q.mutable_data(), p.mutable_data(), amp.mutable_data(),
+                vq.mutable_data(), vp.mutable_data());
+          }
+          return py::make_tuple(first_rows(q, n, 3), first_rows(p, n, 3), first_rows(amp, n, 0), first_rows(vq, n, 3),
+                                first_rows(vp, n, 3));
+        }
         py::array_t<double> v_out({moving ? room : py::ssize_t{0}, py::ssize_t{3}});
         py::ssize_t n = 0;
         {
@@ -230,8 +262,12 @@ void bind_simcpp(py::module_& m) {
       py::arg("out_sound_speed"), py::arg("back_delay"), py::arg("back_amplitude"), py::arg("back_launch"),
       py::arg("back_arrival"), py::arg("back_valid"), py::arg("back_sound_speed"), py::arg("tx_position"),
       py::arg("rx_reference"), py::arg("amplitudes"), py::arg("velocities") = py::none(), py::arg("lambert") = py::none(),
-      py::arg("normals") = py::none(),
-      "Kernel paths for every (outbound, return) eigenray pair: (q [P, 3], p [P, 3], amplitude [P], velocity [P, 3] or None).");
+      py::arg("normals") = py::none(), py::arg("out_range_rate") = py::none(), py::arg("back_range_rate") = py::none(),
+      "Kernel paths for every (outbound, return) eigenray pair: (q [P, 3], p [P, 3], amplitude [P], velocity [P, 3] or None).\n"
+      "With `out_range_rate` [S, rays out] and/or `back_range_rate` [S, rays back] (path-length rates of the rays, m/s)\n"
+      "the result is (q, p, amplitude, q_velocity [P, 3], p_velocity [P, 3]): each end's velocity is the scatterer's\n"
+      "plus that leg's rate along its launch direction.");
+  m.attr("SIM_PATHS_RANGE_RATE") = true;
 
   const auto reverb_params = [](double sample_rate, std::int64_t n_samples, double start_time, double time0,
                                 double center_frequency, double sound_speed, std::int64_t n_azimuth,

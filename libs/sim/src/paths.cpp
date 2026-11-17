@@ -273,14 +273,25 @@ bool any_moving(const double* velocities, std::int64_t n_points) {
   return false;
 }
 
-std::int64_t two_way_paths(const EigenrayView& out, const EigenrayView& back, const Vec3d& tx_position,
-                           const Vec3d& rx_reference, const std::complex<double>* amplitudes,
-                           const double* velocities, const std::uint8_t* lambert, const double* normals,
-                           double* q, double* p, std::complex<double>* amplitude, double* velocity) {
+namespace {
+
+/// The pairing loop. Without rates: `velocity` (may be null) takes the scatterer's velocity.
+/// With `doppler`: q_velocity and p_velocity take it (zero when `velocities` is null) plus
+/// each leg's range rate along its launch direction.
+std::int64_t pair_paths(const EigenrayView& out, const EigenrayView& back, const Vec3d& tx_position,
+                        const Vec3d& rx_reference, const std::complex<double>* amplitudes,
+                        const double* velocities, const std::uint8_t* lambert, const double* normals,
+                        bool doppler, const RangeRates& rates, double* q, double* p,
+                        std::complex<double>* amplitude, double* velocity, double* p_velocity) {
   if (out.n_points != back.n_points) throw std::invalid_argument("two_way_paths: the two eigenray sets differ in size");
   const std::int64_t s = out.n_points, ko = out.n_rays, kb = back.n_rays;
   if (s > 0 && amplitudes == nullptr) throw std::invalid_argument("two_way_paths: amplitudes are required");
-  if (velocity != nullptr && velocities == nullptr) throw std::invalid_argument("two_way_paths: no velocities to copy");
+  if (!doppler && velocity != nullptr && velocities == nullptr) {
+    throw std::invalid_argument("two_way_paths: no velocities to copy");
+  }
+  if (doppler && (velocity == nullptr || p_velocity == nullptr)) {
+    throw std::invalid_argument("two_way_paths: room for both velocities is required");
+  }
   bool any_lambert = false;
   if (lambert != nullptr) {
     for (std::int64_t i = 0; i < s && !any_lambert; ++i) any_lambert = lambert[i] != 0;
@@ -318,7 +329,13 @@ std::int64_t two_way_paths(const EigenrayView& out, const EigenrayView& back, co
         for (int x = 0; x < 3; ++x) {
           q[3 * at + x] = tx_position[x] + r_out * out.launch[3 * eo + x];
           p[3 * at + x] = rx_reference[x] + r_back * back.launch[3 * eb + x];
-          if (velocity != nullptr) velocity[3 * at + x] = velocities[3 * i + x];
+          if (doppler) {
+            const double v = velocities != nullptr ? velocities[3 * i + x] : 0.0;
+            velocity[3 * at + x] = rates.out != nullptr ? v + rates.out[eo] * out.launch[3 * eo + x] : v;
+            p_velocity[3 * at + x] = rates.back != nullptr ? v + rates.back[eb] * back.launch[3 * eb + x] : v;
+          } else if (velocity != nullptr) {
+            velocity[3 * at + x] = velocities[3 * i + x];
+          }
         }
         amplitude[at] = value;
         ++at;
@@ -326,6 +343,25 @@ std::int64_t two_way_paths(const EigenrayView& out, const EigenrayView& back, co
     }
   }
   return at;
+}
+
+}  // namespace
+
+std::int64_t two_way_paths(const EigenrayView& out, const EigenrayView& back, const Vec3d& tx_position,
+                           const Vec3d& rx_reference, const std::complex<double>* amplitudes,
+                           const double* velocities, const std::uint8_t* lambert, const double* normals,
+                           double* q, double* p, std::complex<double>* amplitude, double* velocity) {
+  return pair_paths(out, back, tx_position, rx_reference, amplitudes, velocities, lambert, normals, false, RangeRates{},
+                    q, p, amplitude, velocity, nullptr);
+}
+
+std::int64_t two_way_paths_doppler(const EigenrayView& out, const EigenrayView& back, const Vec3d& tx_position,
+                                   const Vec3d& rx_reference, const std::complex<double>* amplitudes,
+                                   const double* velocities, const std::uint8_t* lambert, const double* normals,
+                                   const RangeRates& rates, double* q, double* p, std::complex<double>* amplitude,
+                                   double* q_velocity, double* p_velocity) {
+  return pair_paths(out, back, tx_position, rx_reference, amplitudes, velocities, lambert, normals, true, rates, q, p,
+                    amplitude, q_velocity, p_velocity);
 }
 
 TwoWayPaths two_way_paths(const EigenrayView& out, const EigenrayView& back, const Vec3d& tx_position,

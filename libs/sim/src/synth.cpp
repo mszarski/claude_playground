@@ -35,8 +35,19 @@ void synthesize(Backend backend, const SynthParams& params, const std::vector<Sy
   if (params.n_samples <= 0 || rx.empty() || paths.empty()) return;
   if (!(params.sample_rate > 0.0)) throw std::invalid_argument("synthesize: sample_rate must be positive");
   if (!(params.waveform.duration > 0.0)) throw std::invalid_argument("synthesize: pulse duration must be positive");
-  if (params.waveform.type < 0 || params.waveform.type > 2) {
-    throw std::invalid_argument("synthesize: only CW, LFM and Gaussian waveforms can be synthesised");
+  if (params.waveform.type < 0 || params.waveform.type > 3) {
+    throw std::invalid_argument("synthesize: unknown waveform type");
+  }
+  if (params.arrival_passes_out < 1 || params.arrival_passes_back < 1) {
+    throw std::invalid_argument("synthesize: arrival passes must be at least 1");
+  }
+  if (params.waveform.type == 3) {
+    const EnvelopeTable& t = params.envelope;
+    if (t.data == nullptr || t.n_fine < 4 || t.n_bands < 1 || t.n_bands > kMaxEnvelopeBands || !(t.rate > 0.0) ||
+        !(t.carrier > 0.0)) {
+      throw std::invalid_argument(
+          "synthesize: a sampled (arbitrary) waveform needs its envelope table (SynthParams::envelope)");
+    }
   }
   if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
