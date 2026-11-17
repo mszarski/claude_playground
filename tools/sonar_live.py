@@ -61,9 +61,9 @@ def export_template(cfg: dict, path: str) -> str:
     if (cfg.get("nav") or {}).get("port"):
         cmd += ["--nav-port", str(cfg["nav"]["port"])]
     if out.get("recording"):
-        cmd += ["--recording", time.strftime(out["recording"])]
+        cmd += ["--recording", out["recording"]]               # the program fills strftime fields itself
     if out.get("report"):
-        cmd += ["--report", time.strftime(out["report"])]
+        cmd += ["--report", out["report"]]
     if out.get("report_udp"):
         cmd += ["--report-udp", f"{out['report_udp'][0]}:{out['report_udp'][1]}"]
     cmd += [f"{k}={v:.10g}" if isinstance(v, float) else f"{k}={v}" for k, v in o.items()]

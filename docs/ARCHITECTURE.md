@@ -76,12 +76,12 @@ Diagrams are drawn by `tools/architecture_diagrams.py`.
   (`flank.backprojection_map`, the live chain's default), not the NumPy far-field
   beamformer: same detections, 11 times faster on a CPU (0.55 s against 6.1 s per ping at
   32 channels and 50,000 samples), and it runs on a GPU unchanged.
+- **Sparse Bayesian bearings** run as three kernels (`libs/live/include/sonar/live/sbl_kernel.hpp`)
+  on CPU threads or on the device, selected by the chain's `backend`. On an L4 the whole
+  chain takes 18 ms a ping with bearings from the map and 0.48 s with SBL (`RESULTS.md`).
 - **Not on a GPU, and why.** Clustering, tracking and classification handle tens of
   objects per ping. MVDR, whitening, median TVG, DRC, board synchronisation and motion
-  estimation are CPU code; none is the bottleneck of a chain that uses them. Sparse
-  Bayesian bearings are C++ on the CPU (Eigen, one thread per frequency): the systems are
-  32 × 32 and a range gate takes tens of milliseconds, so a CUDA build has not been
-  written. Reverberation generation is NumPy FFTs and is the largest CPU-only cost in the
+  estimation are CPU code; none is the bottleneck of a chain that uses them. Reverberation generation is NumPy FFTs and is the largest CPU-only cost in the
   simulator.
 - The CPU path is complete: everything runs without a GPU and gives the same results.
   `RESULTS.md` has the GPU timings and the comparison.
@@ -103,8 +103,9 @@ The long-range array's live chain exists twice, on purpose.
 
 Everywhere else the split is: kernels and file format in C++ (CUDA where listed above),
 the simulator's scene and propagation, SAS motion estimation glue, calibration and all
-tools in Python. Holoscan operators are Python wrappers (`holoscan_ops.py`); C++
-operators have not been written, because Holoscan cannot be built in this environment.
+tools in Python. Holoscan operators exist in both: Python wrappers of the stages
+(`holoscan_ops.py`) and C++ operators around the live library (`libs/holoscan_ops`,
+program `build/bin/sonar_live_holoscan`), built and run on a GPU machine with Holoscan 4.6.
 
 ### Bearings: the map, or sparse Bayesian learning
 
@@ -132,6 +133,7 @@ real array's channel errors.
 | --- | --- |
 | `libs/core`, `libs/dsp`, `libs/recon`, `libs/sim`, `libs/detect`, `libs/io` | C++20 / CUDA: record, conditioning, backprojection, synthesis, CFAR, container file |
 | `libs/live`, `apps/sonar_live.cpp` | C++20: the long-range array's live chain and the standalone program `build/bin/sonar_live` |
+| `libs/holoscan_ops`, `apps/sonar_live_holoscan.cpp` | the same chain as C++ Holoscan operators and an application (`-DSONAR_BUILD_HOLOSCAN=ON`) |
 | `python/gpusonar/` | bindings and everything else: `sim/`, `sources/`, `recon/`, `pipeline.py`, `live.py`, `taps.py`, `detect.py`, `classify.py`, `flank.py`, `motion.py`, `sync.py`, `calibrate.py`, `simcal.py`, `holoscan_ops.py` |
 | `configs/` | `sonars/`, `scenarios/`, `chains/`, `deploy/` |
 | `tools/` | `test.sh`, `gallery.py`, `sonar_live.py`, `inspect_tap.py`, `calibrate_sim.py`, `design_report.py`, `scenario_diagrams.py`, `architecture_diagrams.py`, `popoto_range_study.py`, `benchmark.py`, `gpu_job.sh` |

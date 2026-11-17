@@ -103,18 +103,38 @@ build/bin/sonar_live --passive recording.h5 --band 4000 6000 n_fft=256 hop=128 n
 One JSON line per frame: time, the bearings of the sources found, their powers and the
 noise level, in the units of the samples squared. Options: `passive_method=conventional`
 for the plain beamformer's bearing-time record, `sbl_min_snr_db`, `sbl_max_sources`, the
-bearing grid. This is a batch tool over a recording; a continuous passive stream from the
-boards (no transmit to cut pings on) is not wired into the UDP source.
+bearing grid.
+
+From the boards, without transmitting:
+
+```bash
+build/bin/sonar_live --udp 5700 --template template.h5 --listen --band 4000 6000 \
+    --recording listen.h5 --report listen.jsonl n_fft=4096 hop=2048 n_average=12
+```
+
+The stream is cut into stretches of one frame each (`n_fft + (n_average − 1) × hop`
+samples), recorded, and solved as they complete; a lost block discards its stretch.
+
+## As a Holoscan application
+
+```bash
+cmake -S . -B build -DSONAR_ENABLE_CUDA=ON -DSONAR_BUILD_HOLOSCAN=ON     # needs the Holoscan C++ package, CMake >= 3.30
+build/bin/sonar_live_holoscan --udp 5700 --template template.h5 --nav-port 5702 --report out.jsonl backend=cuda
+```
+
+Same flags, options and reports as `build/bin/sonar_live`. The operators are in
+`libs/holoscan_ops` (UDP or replay source → recorder → chain or passive bearings → report
+sink); `tools/gpu_job.sh` with `GPUSONAR_HOLOSCAN_CPP=1` shows the install on a clean
+Ubuntu 24.04 CUDA image. Run and compared with the standalone program on an L4
+(`RESULTS.md`).
 
 ## What is not there yet
 
-- Holoscan operators in C++. The Python wrappers exist (`holoscan_ops.py`); the C++ chain
-  is one call per ping (`LiveChain::process`) and is meant to be wrapped as one operator.
-- Sparse Bayesian bearings on a GPU (CPU only; see `ARCHITECTURE.md`).
+- The UDP source operator behind Holoscan Sensor Bridge's receiver, in place of a plain socket.
 
 - The two adapters named above (board forwarder, navigation).
-- A service wrapper. A systemd unit that runs the one command and restarts it is enough;
-  none is shipped because the vehicle's operating system is not known.
+- A service wrapper beyond the example unit `configs/deploy/sonar_live.service` (paths and
+  user are placeholders; the vehicle's operating system is not known).
 - Range correction for paths that arrive by the bottom (in deep water the simulated ship
   shows 300 m long in range, `SCENARIOS.md`).
 - Telling a moored object from a rock, or a ship from a whale: the classifier uses the

@@ -712,6 +712,9 @@ cores.
 | `popoto_12km`, six pings: detections per ping, track classes and ranges | identical in both chains (5, 7, 10, 11, 14, 7 detections; ten tracks) |
 | `popoto_12km`, processing per ping | C++ 0.42–0.51 s, Python 0.51–0.55 s (the kernels are shared; the ping interval is 19.9 s) |
 | The standalone program over UDP with navigation datagrams | all pings assembled, ownship position from navigation, mover and static tracks |
+| `sonar_live --listen`: an untriggered stream of real samples over UDP, two noise sources | every stretch recorded; both sources within 0.6° in at least 80% of frames |
+| The Holoscan application of C++ operators (`sonar_live_holoscan`, Holoscan 4.6.0, on an L4) against the standalone program on a replay | reports identical field for field (processing time aside); the recorder's copy equals the raw input |
+| The Holoscan application fed by the emulated board over UDP with navigation | all pings, ownship position from navigation, mover and static tracks |
 
 ## Bearings by sparse Bayesian learning
 
@@ -731,14 +734,47 @@ Simulated echoes and simulated noise sources; no real data.
 | Time for one active range gate (two-echo ping, 0.25° grid over ±40°) | 45 ms |
 | Time for one passive frame of 208 ms of data (0.5° grid) | about 170 ms |
 | `popoto_12km`, `doa: sbl`: bearings of the last ping's detections on the ship (0.0° to 0.54° of bearing wide) | spread 0.32°, against 1.09° from the map |
-| `popoto_12km`, `doa: sbl`: processing per ping | 1.6–3.7 s (up to 11 gates a ping; many arrivals per gate keep many bearings alive, so a gate costs several times the two-echo case); 3–7.7 s before the iteration cap was lowered from 60 to 20, with bearings unchanged to 0.02° |
+| `popoto_12km`, `doa: sbl`: processing per ping, four CPU cores here | 0.84–1.57 s with the kernels of `sbl_kernel.hpp` (one triangular solve per bearing); 1.7–3.9 s with the Eigen reference (a full solve), same bearings to 0.001°; 3–7.7 s before the iteration cap was lowered from 60 to 20, bearings unchanged to 0.02° |
+| The kernels against the Eigen reference (`test_kernel_path_gives_the_eigen_paths_answer`) | same iteration count, spectrum to 1e-5, peaks to 1e-6°, on active gates and multi-snapshot passive frames |
+
+### On a GPU (L4, Hugging Face Job, CUDA 12.6)
+
+Source: `tools/live_benchmark.py` on the six `popoto_12km` pings; `tests/python/test_doa.py`.
+The host rows are that machine's CPU (faster than the four cores used above).
+
+| Chain per ping (median of pings 2–6) | Host | CUDA |
+| --- | --- | --- |
+| `doa: map` | 0.303 s | 0.018 s |
+| `doa: sbl` | 1.21 s | 0.48 s |
+
+Detections of the last ping agree between host and CUDA in both modes (range within 0.5 m,
+bearing within 0.02°), and the CUDA solver gives the host kernels' spectrum, peaks and
+iteration count on an active gate and on passive frames. One gate on the device takes
+69 ms including building its frame. SBL gains 2.5 times, not the map's 17: each
+iteration is three small kernel launches plus host work (the noise estimate, the choice
+of bearings in play), and one frequency's 32 × 32 factorisation is serial in one thread.
+
+### Track classes against the simulated truth (`popoto_12km`, last ping)
+
+Source: `tools/popoto_truth_check.py`. Truth: the ship's direct echo is at 12,000 m; a
+track within 15 m of that should be a mover, a track further out is a later bottom- and
+surface-bounce arrival and should be multipath. The ship spans −6 to +114 m along track.
+
+| | `doa: map` | `doa: sbl` |
+| --- | --- | --- |
+| Tracks | 10 | 9 |
+| Class right | 8 | 7 |
+| What is wrong | one direct-range track called static (a young track, −1.6 m/s); one late arrival left "uncertain" and used as the parent of four others | two tracks 9 and 14 m behind the direct echo called multipath of it (they may be the second- and third-order bounces, 7 and 15 m of excess path by geometry: the 15 m line is not sharp) |
+| Multipath tracks attached to a direct-range track | 1 of 5 | 8 of 8 |
+| Tracks whose along-track position is on the ship | 6 of 10 | 9 of 9 (one 1.3 m past the bow) |
+
+So neither mode is wrong about what is moving; SBL places the arrivals on the ship in
+bearing and gives one source with its echoes, where the map gives three movers and a
+second group hanging off a mis-estimated track.
 
 Limits: SBL does not separate arrivals in range, only in bearing at a range the detector
 found; a line array's bearing is a cone, so a bottom-bounce arrival at a steep angle
-appears at a shifted bearing; with `doa: sbl` the classifier's choice of which track is
-the source and which its multipath differed from the map's on `popoto_12km` (one mover and
-eight multipath tracks against three movers), and neither has been compared with truth
-beyond the ship's speed.
+appears at a shifted bearing.
 
 ## Track classification
 

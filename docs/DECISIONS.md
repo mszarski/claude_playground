@@ -510,8 +510,11 @@ re-estimated from the residual.
   a coarse grid then a fine one around what survived, peaks closer than 0.2 beamwidths
   folded together, and SBL skipped on gates whose conventional spectrum has no peak 8 dB
   over its median. All are options (`doa.hpp`, `chain.hpp`).
-- Host only (Eigen, MPL2). A CUDA build would batch 32 × 32 solves; not written, because
-  a gate takes tens of milliseconds against a ping interval of many seconds.
+- The iteration is three kernels written once for the host and CUDA (`sbl_kernel.hpp`):
+  the model covariance per frequency, its Cholesky factor, and one triangular solve per
+  bearing in play. On the host this is 2.3 times faster than the first version (Eigen, a
+  full solve per bearing), which is kept as a reference the kernels are tested against.
+  The choice of bearings in play and the noise estimate stay on the host.
 
 ### D-58 The live chain is a C++ library with a standalone program
 `libs/live` holds every stage after the kernels: stream assembly, navigation, board
@@ -521,3 +524,22 @@ taps, the simulator and the tools hang off it, and because two implementations c
 tests catch errors in both. The deployment file stays the one place settings live:
 `tools/sonar_live.py --export-template` turns it into the C++ program's template record
 and command line. A YAML reader in C++ would have added a dependency for the same result.
+
+### D-59 Holoscan operators in C++ are shells around the live library
+`libs/holoscan_ops` has six operators (replay source, UDP source, recorder, chain, passive
+bearings, report sink) and `apps/sonar_live_holoscan.cpp` composes them. Each calls the
+same class the standalone program uses, and the tests require the two programs' reports
+to be identical. Messages are shared pointers to ping records and to report text, passed
+in process; nothing is converted to tensors, because no operator of the SDK needs to see
+inside a ping. The chain is one operator, not one per stage: the stages share a tracker
+and state, and splitting them would add copies without adding anything to schedule.
+Built against Holoscan 4.6.0 (the C++ package from NVIDIA's apt repository, which needs
+CMake 3.30 or newer); the Python wheel has no headers.
+
+### D-60 Listening is a second way to cut the same stream
+The boards send one continuous stream of blocks either way. For active pings the
+assembler cuts a window after each transmit mark; with `--listen` it cuts fixed stretches,
+each long enough for one passive frame, and ignores transmit marks. A gap discards the
+stretch it falls in. Stretches are recorded as ordinary records (start time 0, the time
+of the first sample in the transmit time field), so a listening run replays through
+`--passive` unchanged.

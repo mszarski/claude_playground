@@ -1,0 +1,19 @@
+# Example systemd unit for the long-range array chain. Paths, user and ports are placeholders:
+# adjust them to the vehicle. Generate the option list for a deployment file with
+#   tools/sonar_live.py configs/deploy/popoto_vehicle.yaml --export-template /etc/sonar/template.h5
+# and put its key=value pairs, one per line, in /etc/sonar/chain.options.
+[Unit]
+Description=Long-range array chain (gpusonar sonar_live)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=sonar
+ExecStart=/opt/gpusonar/bin/sonar_live --udp 5700 --template /etc/sonar/template.h5 --nav-port 5702 \
+    --recording /data/sonar/popoto_%%Y%%m%%d.h5 --report /data/sonar/popoto.jsonl \
+    --report-udp 127.0.0.1:5701 --options /etc/sonar/chain.options
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

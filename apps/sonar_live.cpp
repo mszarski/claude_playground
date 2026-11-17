@@ -28,6 +28,7 @@
 #include <mutex>
 #include <thread>
 #include <cstdlib>
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -42,6 +43,19 @@
 #include "sonar/live/udp_source.hpp"
 
 using namespace sonar;  // NOLINT(google-build-using-namespace)
+
+namespace {
+// strftime fields in an output path (%Y%m%d_%H%M%S), filled with the start time (UTC), so that
+// a restart never writes over an earlier run's recording.
+std::string stamped(const std::string& path) {
+  if (path.find('%') == std::string::npos) return path;
+  const std::time_t now = std::time(nullptr);
+  std::tm utc{};
+  gmtime_r(&now, &utc);
+  char out[1024];
+  return std::strftime(out, sizeof(out), path.c_str(), &utc) > 0 ? std::string(out) : path;
+}
+}  // namespace
 
 int main(int argc, char** argv) {
   try {
@@ -66,8 +80,8 @@ int main(int argc, char** argv) {
       else if (a == "--template") template_path = next();
       else if (a == "--listen") listen = true;
       else if (a == "--nav-port") nav_port = std::atoi(next().c_str());
-      else if (a == "--report") report_path = next();
-      else if (a == "--recording") recording_path = next();
+      else if (a == "--report") report_path = stamped(next());
+      else if (a == "--recording") recording_path = stamped(next());
       else if (a == "--report-udp") {
         const std::string hp = next();
         report_host = hp.substr(0, hp.find(':'));

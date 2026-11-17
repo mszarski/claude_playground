@@ -1,6 +1,7 @@
 """The C++ live library against the Python stages it replaces, and the standalone program."""
 
 import json
+import time
 import pathlib
 import subprocess
 
@@ -285,8 +286,10 @@ def test_exported_template_and_command_run_the_program(pings, tmp_path):
         w.write(r)
     w.close()
     options = [c for c in command if "=" in c]
-    out = subprocess.run([str(EXE), "--replay", str(tmp_path / "pings.h5"), *options], capture_output=True, text=True, timeout=300)
+    out = subprocess.run([str(EXE), "--replay", str(tmp_path / "pings.h5"), "--recording", str(tmp_path / "run_%Y.h5"), *options],
+                         capture_output=True, text=True, timeout=300)
     assert out.returncode == 0, out.stderr
+    assert (tmp_path / f"run_{time.gmtime().tm_year}.h5").exists()          # strftime fields in output paths are filled
     with LiveChain(CHAIN) as chain:
         want = chain.run(copies(pings))
     got = [json.loads(line) for line in out.stdout.splitlines()]
