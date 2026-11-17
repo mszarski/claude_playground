@@ -304,19 +304,20 @@ def spectrum_widths(nu: np.ndarray, s: np.ndarray, floor: float = 0.0, line_half
 
     hwhm     half width at half the maximum of the smoothed pedestal
     w50, w90 half widths holding 50 % and 90 % of the pedestal's power within the axis
-    rms      second-moment width within the axis
+    rms      second-moment width over |nu| <= 6 w50 (four standard deviations of a Gaussian),
+             with the floor subtracted without clipping: the far wings, where only the floor's
+             own fluctuation is left, would otherwise dominate a second moment
     shape    w90 / w50: 2.44 for a Gaussian, 6.31 for a Lorentzian on an unlimited axis
     A Gaussian of rms width s has hwhm 1.177 s, w50 0.674 s, w90 1.645 s; a Lorentzian of half
     width a has hwhm a, w50 a, w90 6.31 a (less on a limited axis)."""
     nu = np.asarray(nu, dtype=float)
-    p = np.maximum(np.asarray(s, dtype=float) - floor, 0.0)
+    signed = np.asarray(s, dtype=float) - floor
     keep = np.abs(nu) > line_half_width
     if line_half_width > 0.0:
         # Fill the line's bins with the level just outside it, so that the pedestal is whole.
-        edge = p[keep & (np.abs(nu) <= 2.0 * line_half_width + (nu[1] - nu[0]))]
-        p = np.where(keep, p, edge.mean() if len(edge) else 0.0)
-    else:
-        keep = np.ones(len(nu), dtype=bool)
+        edge = signed[keep & (np.abs(nu) <= 2.0 * line_half_width + (nu[1] - nu[0]))]
+        signed = np.where(keep, signed, edge.mean() if len(edge) else 0.0)
+    p = np.maximum(signed, 0.0)
     total = p.sum()
     if total <= 0.0:
         return {"hwhm": 0.0, "w50": 0.0, "w90": 0.0, "rms": 0.0, "shape": 0.0}
@@ -325,7 +326,8 @@ def spectrum_widths(nu: np.ndarray, s: np.ndarray, floor: float = 0.0, line_half
     a = np.abs(nu)[order]
     w50 = float(np.interp(0.5, cum, a))
     w90 = float(np.interp(0.9, cum, a))
-    rms = float(np.sqrt((p * nu**2).sum() / total))
+    core = np.abs(nu) <= max(6.0 * w50, 3.0 * (nu[1] - nu[0]))
+    rms = float(np.sqrt(max((signed[core] * nu[core] ** 2).sum(), 0.0) / max(signed[core].sum(), 1e-300)))
     # Half maximum of the folded spectrum, lightly smoothed.
     half = len(nu) // 2
     fold = 0.5 * (p[half:][: half] + p[: half + 1][::-1][: half])

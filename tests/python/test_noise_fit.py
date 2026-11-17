@@ -515,3 +515,66 @@ def test_fit_noise_tool(tmp_path, capsys):
     assert model.family == "k" and model.tail_parameter == pytest.approx(1.5, rel=0.3)
     assert model.texture_common and model.texture_time * FS == pytest.approx(hold, rel=0.35)
     assert len(model.tones) == 1
+
+
+# -- noise with the statistics of real sites ------------------------------------------------------------------
+# The Underwater Acoustic Channel Repository publishes, per site, mixing coefficients fitted to
+# recordings (not the recordings). Noise made from them by the documented equation
+#     n_i(n) = sum_j sum_k beta_ij(k) eta_j(n + k),  eta symmetric alpha-stable of scale 1/sqrt 2
+# (UACR file specification, "Noise file format") is the nearest thing to a real multichannel
+# recording that can be fetched: tools/fetch_channels.py <dir> --set noise, GPUSONAR_UACR_DIR=<dir>.
+
+_UACR = os.environ.get("GPUSONAR_UACR_DIR", "")
+
+
+def _uacr_noise(name, seconds, seed=0):
+    import h5py
+    path = os.path.join(_UACR, name)
+    if h5py.is_hdf5(path):
+        with h5py.File(path, "r") as f:
+            beta = np.transpose(f["beta"][()], (2, 1, 0))               # h5py shows MATLAB's [i, j, k] reversed
+            fs, alpha = float(np.ravel(f["Fs"][()])[0]), float(np.ravel(f["alpha"][()])[0])
+    else:
+        from scipy.io import loadmat
+        m = loadmat(path, squeeze_me=True)
+        beta, fs, alpha = np.asarray(m["beta"], dtype=float), float(m["Fs"]), float(m["alpha"])
+    rng = np.random.default_rng(seed)
+    n, lags = int(seconds * fs), beta.shape[2]
+    eta = rng.standard_normal((beta.shape[0], n + lags))
+    if alpha < 2.0:
+        eta = eta * np.sqrt(nf.texture("sas", alpha, eta.shape, rng))
+    x = np.zeros((beta.shape[0], n))
+    for k in range(lags):
+        x += beta[:, :, k] @ eta[:, k:k + n]
+    freq = np.fft.fftfreq(512, 1.0 / fs)
+    b = np.einsum("ijk,fk->fij", beta, np.exp(2j * np.pi * freq[:, None] * np.arange(lags)[None] / fs))
+    return x, fs, alpha, np.einsum("fij,fkj->fik", b, np.conj(b)) / fs
+
+
+@pytest.mark.skipif(not (_UACR and os.path.exists(os.path.join(_UACR, "purple_noise_5.mat"))),
+                    reason="UACR noise models not available (tools/fetch_channels.py --set noise, GPUSONAR_UACR_DIR)")
+def test_fit_recovers_a_real_sites_noise_model():
+    """SPACE'08, 12 hydrophones 12 cm apart, 9.2-15.8 kHz: the fit of 20 s of noise made from the
+    published coefficients returns their spectrum and coherence, and says it is Gaussian."""
+    x, fs, alpha, truth = _uacr_noise("purple_noise_5.mat", 20.0)
+    assert alpha == 2.0 and x.shape[0] == 12
+    model = nf.fit(x, fs, nfft=512)
+    d, dm = np.real(np.einsum("fcc->fc", truth)), np.real(np.einsum("fcc->fc", model.csd))
+    band = (d.mean(axis=1) > 0.1 * d.mean(axis=1).max()) & (np.abs(model.frequency) > 0)
+    assert np.sqrt(np.mean((10.0 * np.log10(dm[band] / d[band])) ** 2)) < 0.2
+    coh = truth / np.sqrt(d[:, :, None] * d[:, None, :])
+    assert np.sqrt(np.mean(np.abs(model.coherence()[band] - coh[band]) ** 2)) < 2.0 * model.report["coherence_floor"]
+    assert model.family == "gaussian" and not model.tones and model.report["excluded_fraction"] == 0.0
+
+
+@pytest.mark.skipif(not (_UACR and os.path.exists(os.path.join(_UACR, "red_noise.mat"))),
+                    reason="UACR noise models not available (tools/fetch_channels.py --set noise, GPUSONAR_UACR_DIR)")
+def test_fit_finds_the_impulsive_tail_of_a_real_site():
+    """Singapore (snapping shrimp), 3 hydrophones: the published model has alpha = 1.7; the fit of
+    noise made from it says alpha-stable with that exponent, and regenerated noise has it too."""
+    x, fs, alpha, _ = _uacr_noise("red_noise.mat", 20.0)
+    assert alpha == pytest.approx(1.7)
+    model = nf.fit(x, fs, nfft=512)
+    assert model.family == "sas" and model.tail_parameter == pytest.approx(alpha, abs=0.1)
+    again = nf.fit(model.generate(int(10.0 * fs), np.random.default_rng(1)), fs, nfft=512)
+    assert again.family == "sas" and again.tail_parameter == pytest.approx(alpha, abs=0.12)

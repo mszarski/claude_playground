@@ -346,3 +346,47 @@ def test_uacr_purple_60m_has_the_image_source_arrivals():
     assert bottom["coherent_fraction"] > 0.9 and bottom["scintillation_index"] < 0.05
     assert surface["coherent_fraction"] < 0.05 and surface["scintillation_index"] == pytest.approx(1.0, abs=0.35)
     assert 2.0 < surface["doppler"]["shape"] < 3.2             # a Gaussian-like Doppler spectrum, not a Lorentzian
+
+
+# -- the validation tool -------------------------------------------------------------------------------------
+
+def _tool():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("channel_validation", pathlib.Path(__file__).resolve().parents[2] / "tools" / "channel_validation.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    return tool
+
+
+def test_validation_procedure_recovers_a_known_wind_and_tells_the_options_apart(tmp_path):
+    """tools/channel_validation.py on a "measurement" made by the model itself (wind 5 m/s,
+    Gaussian Doppler spectrum, facet decay time): the one-parameter fit returns the wind, the
+    arrivals are found where the images are, model A (the truth) agrees on the Doppler shape and
+    the decay time, and model B (Lorentzian, rule of thumb) does not."""
+    tool = _tool()
+    ch, geo, rx = tool.synthetic_measured(1, 3, wind=5.0, n_time=1740)
+    result = tool.run([("synthetic_1", 0, ch, geo, rx)], seeds=2, log=lambda *_: None)
+    site = result["sites"][0]
+    assert result["free_parameters"] == 1
+    assert site["wind_fit"]["wind_speed"] == pytest.approx(5.0, rel=0.15)
+    groups = {g["name"]: g for g in site["groups"]}
+    assert {"D", "B", "S"} <= set(groups)
+    s = groups["S"]
+    direct = np.hypot(60.0, 0.7)
+    assert s["measured"]["delay_ms"][0] == pytest.approx((np.hypot(60.0, 22.7) - direct) / 1500.0 * 1e3, abs=0.16)
+    assert groups["B"]["measured"]["coherent"][0] > 0.95 and s["measured"]["coherent"][0] < 0.05
+    meas, a, b = s["measured"], s["model"]["A"], s["model"]["B"]
+    assert a["doppler_shape"][0] == pytest.approx(meas["doppler_shape"][0], abs=0.5)
+    assert b["doppler_shape"][0] > meas["doppler_shape"][0] + 0.8
+    assert a["decay_ms"][0] == pytest.approx(meas["decay_ms"][0], rel=0.25)
+    assert b["decay_ms"][0] > 1.4 * meas["decay_ms"][0]
+    assert tool.verdict(meas["doppler_shape"], a["doppler_shape"], "doppler_shape") == "in"
+    text = tool.markdown(result)
+    assert "| S | Doppler rms width (Hz) FIT |" in text and "closed forms" in text
+    paths = tool.figures(result, tmp_path, "t")
+    assert len(paths) == 3 and all(p.stat().st_size > 10_000 for p in paths)
+
+
+def test_validation_tool_says_what_is_missing_without_data(tmp_path, capsys):
+    assert _tool().main(["--data", str(tmp_path)]) == 2
+    assert "fetch_channels.py" in capsys.readouterr().out
