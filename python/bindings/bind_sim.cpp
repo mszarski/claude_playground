@@ -67,7 +67,8 @@ void bind_sim(py::module_& m) {
       [](PingRecord& record, const ArrD& q, const ArrD& p, const ArrC& amplitude,
          const py::object& q_velocity, const py::object& p_velocity,
          const py::object& absorption, bool spreading, Backend backend,
-         const Vec3d& platform_acceleration, const py::object& envelope, const py::object& arrival_passes) {
+         const Vec3d& platform_acceleration, const py::object& envelope, const py::object& arrival_passes,
+         const py::object& arrival_residual_limit) {
         const auto paths = make_paths(q, p, amplitude, q_velocity, p_velocity);
         sim::SynthParams params = sim::params_from_record(record);
         params.spreading = spreading;
@@ -110,11 +111,18 @@ void bind_sim(py::module_& m) {
           for (std::size_t i = 0; i < knots.size(); ++i) params.envelope.knot_frequency[i] = knots[i];
           params.arrival_passes_out = params.arrival_passes_back = sim::kSampledArrivalPasses;
         }
-        if (!arrival_passes.is_none()) {
+        if (!arrival_passes.is_none() && py::isinstance<py::str>(arrival_passes)) {
+          // "auto": the fewest passes that leave under 1e-4 rad for this call's speeds, window and band.
+          if (arrival_passes.cast<std::string>() != "auto") {
+            throw std::invalid_argument("arrival_passes must be (outbound, return) or \"auto\"");
+          }
+          sim::set_arrival_passes(params, sim::elements_from_record(record), paths, 1e-4);
+        } else if (!arrival_passes.is_none()) {
           const auto n = arrival_passes.cast<std::pair<int, int>>();
           params.arrival_passes_out = n.first;
           params.arrival_passes_back = n.second;
         }
+        if (!arrival_residual_limit.is_none()) params.arrival_residual_limit = arrival_residual_limit.cast<double>();
         py::gil_scoped_release release;
         sim::synthesize_into(backend, record, paths, &params);
       },
@@ -123,14 +131,26 @@ void bind_sim(py::module_& m) {
       py::arg("absorption") = py::none(), py::arg("spreading") = true,
       py::arg("backend") = Backend::Host,
       py::arg("platform_acceleration") = Vec3d{}, py::arg("envelope") = py::none(),
-      py::arg("arrival_passes") = py::none(),
+      py::arg("arrival_passes") = py::none(), py::arg("arrival_residual_limit") = py::none(),
       "Add the echoes of two-way paths into record.samples. The record supplies geometry,\n"
       "waveform, sampling and board clocks; its samples must already be allocated.\n"
       "A sampled (Arbitrary) waveform also needs `envelope` = (table [n_fine, n_bands + 1] complex,\n"
       "fine samples per second, fine index of emission time 0, carrier Hz, knot frequencies [n_bands]):\n"
       "gpusonar.sim.waveform.SampledWaveform.kernel_table() builds it.\n"
       "`arrival_passes` = (outbound, return) passes of the arrival-time solve; default (4, 4) for\n"
-      "analytic pulses and (8, 8) for sampled ones.");
+      "analytic pulses and (8, 8) for sampled ones; \"auto\" takes the fewest that leave under 1e-4 rad.\n"
+      "The call raises when the bound on the phase the passes leave, T_end (v / c)^n 2 pi f_top, exceeds\n"
+      "`arrival_residual_limit` (rad; default 0.05, 0 = no check), and when the pulse holds frequencies\n"
+      "outside the absorption table by enough to change a level by more than 0.1 dB.");
+  m.def("synth_arrival_residual_bound", &sim::arrival_residual_bound, py::arg("window_end"), py::arg("speed"),
+        py::arg("sound_speed"), py::arg("frequency"), py::arg("passes"),
+        "Upper bound (rad) on the phase one arrival-time solve leaves: window_end (speed / c)^passes 2 pi f.");
+  m.def("synth_arrival_passes_for", &sim::arrival_passes_for, py::arg("window_end"), py::arg("speed"),
+        py::arg("sound_speed"), py::arg("frequency"), py::arg("tolerance") = 1e-4,
+        "Fewest passes of the arrival-time solve that leave under `tolerance` radians.");
+  m.attr("SYNTH_ARRIVAL_PASSES") = std::make_pair(sim::SynthParams{}.arrival_passes_out,
+                                                  sim::SynthParams{}.arrival_passes_back);
+  m.attr("SYNTH_SAMPLED_ARRIVAL_PASSES") = sim::kSampledArrivalPasses;
   m.attr("MAX_ENVELOPE_BANDS") = sim::kMaxEnvelopeBands;
   m.attr("ABSORPTION_TABLE_SIZE") = sim::kAbsorptionTableSize;
 }

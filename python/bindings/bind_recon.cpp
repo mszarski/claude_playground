@@ -63,13 +63,26 @@ recon::BpOptions make_options(const std::string& interp, bool stop_and_hop, floa
   return o;
 }
 
-recon::BpInputs session_inputs(const py::list& pings, const py::object& weights, int trajectory_upsample) {
+/// `trajectory_allowance`: None = the kernel's fixed 2 cm; a number of metres; or "table" =
+/// from each ping's residual table (never less than the 2 cm).
+recon::BpInputs session_inputs(const py::list& pings, const py::object& weights, int trajectory_upsample,
+                               const py::object& trajectory_allowance = py::none()) {
   const auto ptrs = ping_list(pings);
   std::vector<std::vector<float>> w;
   const bool has_w = !weights.is_none();
   if (has_w) w = weights.cast<std::vector<std::vector<float>>>();
+  float allowance = recon::kTrajectoryAllowance;
+  if (py::isinstance<py::str>(trajectory_allowance)) {
+    if (trajectory_allowance.cast<std::string>() != "table") {
+      throw std::invalid_argument("trajectory_allowance must be None, a number of metres or \"table\"");
+    }
+    allowance = -1.0F;
+  } else if (!trajectory_allowance.is_none()) {
+    allowance = trajectory_allowance.cast<float>();
+    if (!(allowance >= 0.0F)) throw std::invalid_argument("trajectory_allowance must be >= 0 m");
+  }
   py::gil_scoped_release release;
-  return recon::make_inputs(ptrs, has_w ? &w : nullptr, trajectory_upsample);
+  return recon::make_inputs(ptrs, has_w ? &w : nullptr, trajectory_upsample, allowance);
 }
 
 py::object session_backproject(recon::BpSession& session, const ArrD& points, const std::string& interp,
@@ -127,20 +140,40 @@ void bind_recon(py::module_& m) {
   m.def(
       "to_baseband",
       [](PingRecord& record, double center_frequency, double bandwidth, double band_margin,
-         double oversample, double edge_taper, Backend backend, int device) {
+         double oversample, double edge_taper, Backend backend, int device, double cw_band_factor,
+         double max_range_rate, double doppler_allowance_hz) {
         dsp::BasebandOptions o;
         o.center_frequency = center_frequency;
         o.bandwidth = bandwidth;
         o.band_margin = band_margin;
         o.oversample = oversample;
         o.edge_taper = edge_taper;
+        o.cw_band_factor = cw_band_factor;
+        o.max_range_rate = max_range_rate;
+        o.doppler_allowance_hz = doppler_allowance_hz;
         py::gil_scoped_release release;
         dsp::to_baseband(record, o, backend, device);
       },
       py::arg("record"), py::arg("center_frequency") = 0.0, py::arg("bandwidth") = 0.0,
-      py::arg("band_margin") = 1.5, py::arg("oversample") = 2.0, py::arg("edge_taper") = 0.1,
+      py::arg("band_margin") = dsp::BasebandOptions{}.band_margin,
+      py::arg("oversample") = dsp::BasebandOptions{}.oversample,
+      py::arg("edge_taper") = dsp::BasebandOptions{}.edge_taper,
       py::arg("backend") = Backend::Host, py::arg("device") = 0,
-      "Convert record.samples in place to complex baseband at a reduced rate.");
+      py::arg("cw_band_factor") = dsp::BasebandOptions{}.cw_band_factor,
+      py::arg("max_range_rate") = 0.0, py::arg("doppler_allowance_hz") = 0.0,
+      "Convert record.samples in place to complex baseband at a reduced rate.\n"
+      "The band kept is `bandwidth`, or the transmit bandwidth times `band_margin`, or for a CW pulse\n"
+      "`cw_band_factor` / duration. None of these allows for Doppler: an echo closing at v m/s is shifted by\n"
+      "2 v f / c, which a long tone's band does not hold (1 m/s at 5 kHz is 6.7 Hz; a 1 s tone keeps 4 Hz).\n"
+      "`max_range_rate` (m/s, the largest two-way closing or opening speed) widens the band by\n"
+      "2 * (2 v f_top / c) for it, and `doppler_allowance_hz` by twice that many Hz (use it for a one-way\n"
+      "arrival: v f / c). Both default to 0: no allowance, as before.");
+  m.attr("BASEBAND_BAND_MARGIN") = dsp::BasebandOptions{}.band_margin;
+  m.attr("BASEBAND_CW_BAND_FACTOR") = dsp::BasebandOptions{}.cw_band_factor;
+  // The interpolator of a sampled pulse's envelope (pulse compression's replica), so that
+  // python/gpusonar/sim/waveform.py and this library cannot drift apart unnoticed (audit K-7).
+  m.attr("RESAMPLER_TAPS") = dsp::kResamplerTaps;
+  m.attr("RESAMPLER_KAISER_BETA") = dsp::kResamplerKaiserBeta;
 
   m.def("remove_dc", [](PingRecord& r) { dsp::remove_dc(r); }, "Remove each channel's mean.");
   m.def("apply_calibration", [](PingRecord& r) { dsp::apply_calibration(r); },
@@ -156,12 +189,27 @@ void bind_recon(py::module_& m) {
         o.reference_range = reference_range;
         o.max_gain_db = max_gain_db;
         o.undo_hardware_ramp = undo_hardware_ramp;
-        dsp::apply_tvg(r, o);
+        const dsp::TvgReport rep = dsp::apply_tvg(r, o);
+        py::dict d;
+        d["gain_first_db"] = rep.gain_first_db;
+        d["gain_last_db"] = rep.gain_last_db;
+        d["clamped_samples"] = rep.clamped_samples;
+        d["clamp_range"] = rep.clamp_range;
+        d["shortfall_db"] = rep.shortfall_db;
+        return d;
       },
-      py::arg("record"), py::arg("spreading_db_per_decade") = 40.0,
-      py::arg("absorption_db_per_m") = 0.0, py::arg("reference_range") = 1.0,
-      py::arg("max_gain_db") = 120.0, py::arg("undo_hardware_ramp") = true,
-      "Deterministic digital time-varying gain; makes up what the hardware ramp did not.");
+      py::arg("record"), py::arg("spreading_db_per_decade") = dsp::TvgOptions{}.spreading_db_per_decade,
+      py::arg("absorption_db_per_m") = dsp::TvgOptions{}.absorption_db_per_m,
+      py::arg("reference_range") = dsp::TvgOptions{}.reference_range,
+      py::arg("max_gain_db") = dsp::TvgOptions{}.max_gain_db,
+      py::arg("undo_hardware_ramp") = dsp::TvgOptions{}.undo_hardware_ramp,
+      "Deterministic digital time-varying gain; makes up what the hardware ramp did not.\n"
+      "Law: spreading_db_per_decade * log10(R / reference_range) + 2 * absorption_db_per_m * R dB at the\n"
+      "two-way range R = c t / 2, clamped at max_gain_db. The defaults are an echo's two-way spherical\n"
+      "spreading (40; a one-way arrival needs 20) and NO absorption (right at a few kHz, 50 dB short at\n"
+      "300 m and 330 kHz): gpusonar.recon.tvg_parameters derives both from a record. `absorption_db_per_m`\n"
+      "is one way. Returns a report: the law at the first and last sample, how many samples were cut at\n"
+      "max_gain_db, the range where the cut starts (NaN if none) and the shortfall at the last sample.");
   m.def(
       "whiten",
       [](const py::list& pings, double gamma, double smooth_hz, bool power_gain) {
@@ -234,16 +282,23 @@ void bind_recon(py::module_& m) {
       "Time-domain backprojection of conditioned pings onto points [n, 3].\n"
       "Returns the complex coherent sum per point. With cull_block > 0 and grid_shape\n"
       "(rows, cols), blocks of points outside a ping's beams are skipped for that ping;\n"
-      "pass a dict as `stats` to receive the block counts.";
+      "pass a dict as `stats` to receive the block counts.\n"
+      "`refraction` = (interface_z, sediment_speed): both are required, neither has a default.\n"
+      "`trajectory_allowance` (session-level: an argument of backproject() and of BackprojectSession)\n"
+      "is what the field-of-view pre-test allows for the platform straying from its first-order pose\n"
+      "within a ping: None = 0.02 m (BP_TRAJECTORY_ALLOWANCE), a number of metres, or \"table\" = the\n"
+      "largest residual of each ping's own trajectory table (at least 0.02 m). It matters only with\n"
+      "fov_factor > 0 and a trajectory table (position_lookup other than \"analytic\").";
   m.def(
       "backproject",
       [](const py::list& pings, const ArrD& points, const std::string& interp, bool stop_and_hop,
          float fov_factor, bool directivity_weight, int spreading, const py::object& weights,
          Backend backend, bool return_weight_sum, int cull_block, const py::object& grid_shape,
          const py::object& stats_out, const std::string& position_lookup,
-         int trajectory_upsample, const py::object& refraction, int device) -> py::object {
+         int trajectory_upsample, const py::object& refraction, int device,
+         const py::object& trajectory_allowance) -> py::object {
         const int upsample = position_lookup == "analytic" ? 0 : trajectory_upsample;
-        recon::BpSession session(session_inputs(pings, weights, upsample));
+        recon::BpSession session(session_inputs(pings, weights, upsample, trajectory_allowance));
         return session_backproject(session, points, interp, stop_and_hop, fov_factor, directivity_weight,
                                    spreading, backend, return_weight_sum, cull_block, grid_shape,
                                    stats_out, position_lookup, refraction, device);
@@ -255,15 +310,28 @@ void bind_recon(py::module_& m) {
       py::arg("return_weight_sum") = false, py::arg("cull_block") = 0,
       py::arg("grid_shape") = py::none(), py::arg("stats") = py::none(),
       py::arg("position_lookup") = "analytic", py::arg("trajectory_upsample") = 8,
-      py::arg("refraction") = py::none(), py::arg("device") = 0, bp_doc);
+      py::arg("refraction") = py::none(), py::arg("device") = 0,
+      py::arg("trajectory_allowance") = py::none(), bp_doc);
+  m.attr("BP_TRAJECTORY_ALLOWANCE") = recon::kTrajectoryAllowance;
 
   py::class_<recon::BpSession>(m, "BackprojectSession",
       "A collection prepared once and imaged many times (tiles, depth layers, several\n"
       "devices). On the CUDA backend the samples stay on the device between calls.")
-      .def(py::init([](const py::list& pings, const py::object& weights, int trajectory_upsample) {
-             return std::make_unique<recon::BpSession>(session_inputs(pings, weights, trajectory_upsample));
+      .def(py::init([](const py::list& pings, const py::object& weights, int trajectory_upsample,
+                       const py::object& trajectory_allowance) {
+             return std::make_unique<recon::BpSession>(
+                 session_inputs(pings, weights, trajectory_upsample, trajectory_allowance));
            }),
-           py::arg("pings"), py::arg("weights") = py::none(), py::arg("trajectory_upsample") = 0)
+           py::arg("pings"), py::arg("weights") = py::none(), py::arg("trajectory_upsample") = 0,
+           py::arg("trajectory_allowance") = py::none())
+      .def_property_readonly(
+          "trajectory_residual_max",
+          [](const recon::BpSession& s) {
+            float worst = 0.0F;
+            for (const recon::BpGroup& g : s.inputs().groups) worst = g.traj_residual_max > worst ? g.traj_residual_max : worst;
+            return worst;
+          },
+          "Largest distance (m) of any ping's tabulated trajectory from its first-order pose; 0 without tables.")
       .def_property_readonly("resident_bytes", &recon::BpSession::resident_bytes,
                              "Bytes this session holds on CUDA devices.")
       .def(

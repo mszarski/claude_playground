@@ -44,7 +44,9 @@ def image_volume(records, x, y, depths, *, interface_z: float | None = None,
     """Backproject onto horizontal layers at each of `depths`.
 
     With `interface_z` and `sediment_speed`, travel times below the interface follow the
-    refracted (Snell) path. Without them the medium is treated as water throughout.
+    refracted (Snell) path. Without them the medium is treated as water throughout. The two
+    go together and neither has a default (the sediment is a fact of the site): giving one
+    without the other is an error, not a silent water-only image.
     Ray culling (per layer, transmitter and receiver tested separately) is on when
     `cull_block` > 0 and a field of view is set.
     """
@@ -53,6 +55,8 @@ def image_volume(records, x, y, depths, *, interface_z: float | None = None,
     x, y, depths = (np.asarray(v, dtype=float) for v in (x, y, depths))
     X, Y = np.meshgrid(x, y, indexing="ij")
     refraction = None
+    if (interface_z is None) != (sediment_speed is None):
+        raise ValueError("image_volume: interface_z and sediment_speed go together (refraction needs both)")
     if interface_z is not None and sediment_speed is not None:
         refraction = (float(interface_z), float(sediment_speed))
     kw = {}

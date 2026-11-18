@@ -14,6 +14,29 @@ void baseband_cuda(const float* in, bool is_real, std::int64_t n_channels, std::
                    float gain, std::complex<float> rot, float* out, int device);
 #endif
 
+double baseband_band(const PingRecord& record, const BasebandOptions& opt) {
+  const Waveform& w = record.transmit.waveform;
+  if (opt.bandwidth > 0.0) return opt.bandwidth;
+  double band = w.bandwidth() * opt.band_margin;
+  if (!(band > 0.0)) {
+    // CW pulse: the band is set by the pulse length.
+    band = opt.cw_band_factor / w.duration;
+  }
+  if (opt.max_range_rate < 0.0 || opt.doppler_allowance_hz < 0.0) {
+    throw std::invalid_argument("to_baseband: max_range_rate and doppler_allowance_hz must not be negative");
+  }
+  if (opt.max_range_rate > 0.0) {
+    const double c = record.environment.sound_speed;
+    if (!(c > 0.0) || !std::isfinite(c)) {
+      throw std::invalid_argument("to_baseband: max_range_rate needs the record's sound speed");
+    }
+    const double f_top = w.f_stop > w.f_start ? w.f_stop : w.f_start;
+    band += 2.0 * (2.0 * opt.max_range_rate * f_top / c);
+  }
+  if (opt.doppler_allowance_hz > 0.0) band += 2.0 * opt.doppler_allowance_hz;
+  return band;
+}
+
 void to_baseband(PingRecord& record, const BasebandOptions& opt, Backend backend, int device) {
   Samples& s = record.samples;
   if (s.n_samples <= 0 || s.n_channels <= 0) return;
@@ -24,11 +47,7 @@ void to_baseband(PingRecord& record, const BasebandOptions& opt, Backend backend
   const double fs = s.sample_rate;
 
   const double fc_wanted = opt.center_frequency > 0.0 ? opt.center_frequency : w.center();
-  double band = opt.bandwidth > 0.0 ? opt.bandwidth : w.bandwidth() * opt.band_margin;
-  if (!(band > 0.0)) {
-    // CW pulse: the band is set by the pulse length.
-    band = 4.0 / w.duration;
-  }
+  const double band = baseband_band(record, opt);
   if (!(fc_wanted > 0.0)) throw std::invalid_argument("to_baseband: no carrier frequency");
 
   // Frequency of input bin k, accounting for the carrier already removed from baseband input.

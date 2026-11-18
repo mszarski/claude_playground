@@ -32,8 +32,31 @@ void bind_detect(py::module_& m) {
         if (return_ratio) return py::make_tuple(det, ratio);
         return std::move(det);
       },
-      py::arg("power"), py::arg("pfa") = 1e-4, py::arg("guard") = 4, py::arg("train") = 32,
+      py::arg("power"), py::arg("pfa") = detect::CfarOptions{}.pfa, py::arg("guard") = detect::CfarOptions{}.guard,
+      py::arg("train") = detect::CfarOptions{}.train,
       py::arg("backend") = Backend::Host, py::arg("return_ratio") = false, py::arg("device") = 0,
       "Cell-averaging CFAR along range on a power map [n_bearing, n_range]. Returns the\n"
-      "boolean detection map, and with return_ratio the power over its local background.");
+      "boolean detection map, and with return_ratio the power over its local background.\n"
+      "`guard` and `train` are CELLS of the map on each side; the defaults assume a cell is about one\n"
+      "range resolution cell. For a map sampled finer than the resolution use cfar_window(), or the\n"
+      "guard lies inside the target and it masks itself.");
+  m.def(
+      "cfar_window",
+      [](double range_step, double resolution, double guard_resolutions, double train_resolutions, double guard_m,
+         double train_m) {
+        const detect::CfarOptions o =
+            detect::cfar_window(range_step, resolution, {guard_resolutions, train_resolutions, guard_m, train_m});
+        return py::make_tuple(o.guard, o.train);
+      },
+      py::arg("range_step"), py::arg("resolution"),
+      py::arg("guard_resolutions") = detect::CfarWindow{}.guard_resolutions,
+      py::arg("train_resolutions") = detect::CfarWindow{}.train_resolutions, py::arg("guard_m") = 0.0,
+      py::arg("train_m") = 0.0,
+      "(guard, train) cells for a map stepping `range_step` metres in range, for a range resolution of\n"
+      "`resolution` metres (c / 2B). The window is `guard_resolutions` and `train_resolutions` resolution\n"
+      "cells on each side, or `guard_m` / `train_m` metres when those are > 0 (the guard is at least one\n"
+      "resolution cell). A map sampled at the resolution gets the defaults of cfar(): (4, 32).");
+  m.attr("CFAR_DEFAULT_PFA") = detect::CfarOptions{}.pfa;
+  m.attr("CFAR_DEFAULT_GUARD") = detect::CfarOptions{}.guard;
+  m.attr("CFAR_DEFAULT_TRAIN") = detect::CfarOptions{}.train;
 }

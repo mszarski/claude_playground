@@ -11,6 +11,18 @@ both read from the records. Delay estimation follows the paper's two-step scheme
 3. solve with coarse delays, unwrap the fine delays around that solution, solve again.
 
 The delay estimator is NumPy for now; the solver is C++ (Ceres).
+
+Units and conventions: metres, seconds, world frame north-east-down (z positive down).
+Delays are two-way, so a range extent of d metres is 2 d fs / c samples. `seafloor_z` is a
+z in the world frame; 0.0 is the seabed only for a scene whose origin is on the seabed.
+
+Window sizes can be given in samples (`window_samples`, `max_lag_samples`: the defaults,
+tuned for one sample rate and bandwidth) or in metres of range (`window_m`, `max_lag_m`),
+which are turned into samples from the record and so hold for another sonar
+(docs/HARDCODED_AUDIT.md R-3). `max_lag` bounds the change of two-way range between pings
+that can be measured: 12 samples is 9 mm at a prepared rate of 1 MHz and 0.9 m at 10 kHz.
+A window whose correlation peaks at the edge of the lag span is dropped; the result's log
+counts those, because many of them mean the span is too short, not the echoes incoherent.
 """
 
 from __future__ import annotations
@@ -26,8 +38,10 @@ from .recon.fls import prepare
 @dataclass
 class MotionOptions:
     n_windows: int = 8               # range windows per ping pair (k in Eq. 5)
-    window_samples: int = 256
-    max_lag_samples: int = 12
+    window_samples: int = 256        # correlation window, samples of the prepared record
+    max_lag_samples: int = 12        # largest delay searched, samples either way
+    window_m: float | None = None    # the window as metres of range; replaces window_samples
+    max_lag_m: float | None = None   # the largest change of range between pings, m; replaces max_lag_samples
     min_coherence: float = 0.5       # measurements below this are dropped
     lambda_smooth: float = 1.0       # lambda1 in Eq. 8
     lambda_dvl: float = 1.0          # lambda2 in Eq. 8
@@ -36,7 +50,8 @@ class MotionOptions:
     residual_scale_periods: float = 1.0 / 16.0   # residual scale as a fraction of a carrier period
     smooth_scale: float = 2e-3       # m/s
     dvl_scale: float = 5e-3          # m
-    seafloor_z: float = 0.0          # flat seafloor (the paper's default)
+    seafloor_z: float | str = 0.0    # flat seafloor (the paper's default: origin on the seabed), or
+                                     # "auto": from the records (DVL altitude, else water depth)
     bathymetry: object = None        # optional callable z(x, y) for a known seafloor
 
 
@@ -52,6 +67,8 @@ class MotionResult:
     n_rejected: int
     unwrap_corrections: int          # fine delays moved by a whole period in pass two
     log: list = field(default_factory=list)
+    windows: dict = field(default_factory=dict)   # what was used: window and lag in samples and metres,
+                                                  # seafloor_z, and how many windows peaked at the lag edge
 
 
 def phase_centre_shift(record_a, record_b) -> int:
@@ -107,10 +124,41 @@ def _ping_nav(records) -> list:
     return out
 
 
-def measure_delays(records, options: MotionOptions):
+def window_sizes(record, options: MotionOptions) -> tuple[int, int]:
+    """(window, max lag) in samples of this (prepared) record. Metres of range, when given,
+    become samples through the two-way delay: n = 2 d fs / c."""
+    per_m = 2.0 * record.samples.sample_rate / record.environment.sound_speed
+    window, lag = int(options.window_samples), int(options.max_lag_samples)
+    if options.window_m is not None:
+        window = max(2 * int(np.ceil(0.5 * float(options.window_m) * per_m)), 16)
+    if options.max_lag_m is not None:
+        lag = max(int(np.ceil(float(options.max_lag_m) * per_m)), 2)
+    if window < 4 or lag < 1:
+        raise ValueError("motion: the correlation window needs at least 4 samples and the lag span at least 1")
+    if window + 2 * lag >= record.samples.n_samples:
+        raise ValueError(f"motion: a window of {window} samples with {lag} of lag does not fit the record's "
+                         f"{record.samples.n_samples} samples")
+    return window, lag
+
+
+def resolve_seafloor_z(records, options: MotionOptions) -> float:
+    """`options.seafloor_z` as a number: itself, or "auto" from the records."""
+    if isinstance(options.seafloor_z, str):
+        if options.seafloor_z != "auto":
+            raise ValueError("motion: seafloor_z must be a z in metres or 'auto'")
+        from .recon.sas import seafloor_z
+        return seafloor_z(records)[0]
+    return float(options.seafloor_z)
+
+
+def measure_delays(records, options: MotionOptions, stats: dict | None = None):
     """Delay measurements between every consecutive ping pair. Returns a list of dicts with
-    the solver's DelayMeasurement (coarse delay filled in), the fine delay and coherence."""
-    out, rejected = [], 0
+    the solver's DelayMeasurement (coarse delay filled in), the fine delay and coherence.
+    `stats`, when given, receives the window and lag used (samples and metres) and the
+    number of windows dropped because the correlation peaked at the edge of the lag span."""
+    out, rejected, at_edge = [], 0, 0
+    floor_z = resolve_seafloor_z(records, options)
+    window, max_lag = window_sizes(records[0], options) if len(records) else (0, 0)
     for i in range(len(records) - 1):
         ra, rb = records[i], records[i + 1]
         shift = phase_centre_shift(ra, rb)
@@ -120,9 +168,9 @@ def measure_delays(records, options: MotionOptions):
         xa, xb = ra.samples.array, rb.samples.array
         fs, fc, t0 = ra.samples.sample_rate, ra.samples.center_frequency, ra.samples.start_time
         c = ra.environment.sound_speed
-        half = options.window_samples // 2
-        lo = half + options.max_lag_samples
-        hi = ra.samples.n_samples - half - options.max_lag_samples
+        half = window // 2
+        lo = half + max_lag
+        hi = ra.samples.n_samples - half - max_lag
         centres = np.linspace(lo, hi, options.n_windows).astype(int)
         pose = ra.geometry.rx_pose
         rot = core.rotation_ned(*pose.rpy)
@@ -136,9 +184,10 @@ def measure_delays(records, options: MotionOptions):
             pc = np.asarray(pose.position) + rot @ (0.5 * (tx_lever + lever_a))
             for centre in centres:
                 est = correlate_window(xa[k + shift], xb[k], int(centre), half,
-                                       options.max_lag_samples, fs, fc)
+                                       max_lag, fs, fc)
                 if est is None:
                     rejected += 1
+                    at_edge += 1
                     continue
                 coarse, fine, coh = est
                 if coh < options.min_coherence:
@@ -147,7 +196,7 @@ def measure_delays(records, options: MotionOptions):
                 t_ref = t0 + centre / fs
                 slant = 0.5 * c * t_ref
                 # Footprint: on the seafloor, at the ground range this slant range reaches.
-                z_floor = options.seafloor_z
+                z_floor = floor_z
                 ground = np.sqrt(max(slant**2 - (z_floor - pc[2]) ** 2, 0.0))
                 ps = np.array([pc[0], pc[1], z_floor]) + ground * look_h
                 if options.bathymetry is not None:
@@ -164,6 +213,10 @@ def measure_delays(records, options: MotionOptions):
                 m.delay = float(coarse)
                 m.weight = coh if options.weight_by_coherence else 1.0
                 out.append({"measurement": m, "coarse": coarse, "fine": fine, "coherence": coh, "fc": fc})
+    if stats is not None and len(records):
+        per_m = 2.0 * records[0].samples.sample_rate / records[0].environment.sound_speed
+        stats.update(window_samples=window, max_lag_samples=max_lag, window_m=window / per_m,
+                     max_lag_m=max_lag / per_m, seafloor_z=floor_z, rejected_at_lag_edge=at_edge)
     return out, rejected
 
 
@@ -180,11 +233,17 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
     prepare(records)
     pings = _ping_nav(records)
     # Origin on the seafloor below the first ping: its height is its DVL altitude.
+    floor_z = resolve_seafloor_z(records, options)
     if np.isfinite(pings[0].dvl_altitude):
-        pings[0].z = options.seafloor_z - pings[0].dvl_altitude
-    found, rejected = measure_delays(records, options)
+        pings[0].z = floor_z - pings[0].dvl_altitude
+    used: dict = {}
+    found, rejected = measure_delays(records, options, used)
     if not found:
-        raise RuntimeError("no usable delay measurements: do consecutive pings share phase centres?")
+        hint = ""
+        if used.get("rejected_at_lag_edge"):
+            hint = (f" {used['rejected_at_lag_edge']} windows peaked at the edge of the lag span "
+                    f"({used['max_lag_samples']} samples, {used['max_lag_m'] * 1e3:.1f} mm of range): raise max_lag_m")
+        raise RuntimeError("no usable delay measurements: do consecutive pings share phase centres?" + hint)
     fc = found[0]["fc"]
     so = core.MotionSolveOptions()
     so.sound_speed = records[0].environment.sound_speed
@@ -211,9 +270,15 @@ def estimate_motion(records, options: MotionOptions | None = None) -> MotionResu
         nav.y, nav.z = y, z
     fine = core.solve_motion(pings, measurements, so)
     n = len(records)
+    log = [f"pass 1 (coarse): {coarse.report}", f"pass 2 (fine): {fine.report}",
+           f"windows: {used['window_samples']} samples ({used['window_m']:.3f} m), lag +/-{used['max_lag_samples']} "
+           f"samples ({used['max_lag_m'] * 1e3:.1f} mm of range), seafloor z {used['seafloor_z']:.3f} m"]
+    if used["rejected_at_lag_edge"]:
+        log.append(f"{used['rejected_at_lag_edge']} of {len(found) + rejected} windows peaked at the edge of the lag "
+                   "span and were dropped: if this is most of the rejections, the motion between pings exceeds "
+                   "max_lag")
     return MotionResult(np.array(fine.y[:n]), np.array(fine.z[:n]), np.array(fine.vy), np.array(fine.vz),
-                        coarse, fine, len(found), rejected, corrections,
-                        [f"pass 1 (coarse): {coarse.report}", f"pass 2 (fine): {fine.report}"])
+                        coarse, fine, len(found), rejected, corrections, log, used)
 
 
 def apply_motion(records, result: MotionResult) -> None:

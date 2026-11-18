@@ -45,14 +45,19 @@ struct DelayMeasurement {
   double weight = 1.0;           ///< e.g. the correlation coefficient
 };
 
+/// The sound speed and the three scales have no default (docs/HARDCODED_AUDIT.md K-2, R-2):
+/// `solve` throws when one is not stated. The scales set where the Huber loss turns from
+/// quadratic to linear, so they belong to the sonar: the delay scale is a fraction of a
+/// carrier period (python/gpusonar/motion.py uses a sixteenth; the 1e-6 s this struct used
+/// to hold is that for a carrier of some hundreds of kHz and 1/200 of a period at 5 kHz).
 struct SolveOptions {
-  double sound_speed = 1500.0;
+  double sound_speed = kNaN;     ///< m/s; required
   double lambda_smooth = 1.0;    ///< lambda1
   double lambda_dvl = 1.0;       ///< lambda2
   bool huber = true;             ///< Eq. 3; false = squared loss
-  double residual_scale = 1e-6;  ///< s; residuals are divided by this before the loss
-  double smooth_scale = 1e-3;    ///< m/s; second differences of velocity are divided by this
-  double dvl_scale = 1e-2;       ///< m; altitude residuals are divided by this
+  double residual_scale = kNaN;  ///< s; residuals are divided by this before the loss; required
+  double smooth_scale = kNaN;    ///< m/s; second differences of velocity are divided by this; required
+  double dvl_scale = kNaN;       ///< m; altitude residuals are divided by this; required
   bool use_weights = true;
   int max_iterations = 100;
 };
