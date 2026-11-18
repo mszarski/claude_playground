@@ -1291,3 +1291,32 @@ Consequence for shipped material: none. No file under `configs/chains`, `configs
 or `configs/scenarios`, no tool and no gallery scenario has a `tvg` step (searched for
 `stage: tvg` and `apply_tvg`); the gallery applies its own display gain. A user chain with
 a bare `{stage: tvg}` changes by 2 alpha R dB at range R.
+
+### D-92 The culling pre-test allows for each ping's own trajectory residual
+
+Backprojection with a field-of-view limit rejects a (pixel, ping) pair early when the
+pixel cannot be in the beam, using the transmit-time geometry widened by what may change
+before the echo arrives. One of those terms was a typed 2 cm "trajectory residual
+allowance" (`HARDCODED_AUDIT.md` R-1). It is now, by default, the largest residual in the
+ping's own trajectory table and never less than 2 cm (`recon::make_inputs`,
+`trajectory_allowance = kTrajectoryAllowanceFromTable`; `None` or `table` in Python and
+chain files). `fixed` (or 0.02) is the behaviour before, and a number of metres is taken
+as given. The owner was shown the evidence and answered "Take your recommendations".
+Why it is safe as a default: the allowance only widens a pre-test that is followed by the
+exact per-element test, so it can add back pairs that test keeps and cannot add a wrong
+one; it is never smaller than before, so nothing kept before is lost. Evidence: a ping
+with a 1.3 m residual and a projector wider than the receive beam lost more than 20
+beam-edge pixels out of 701 under the fixed 2 cm that the exact test keeps
+(`tests/python/test_hardcoded_defaults.py`); the default now equals an allowance of 50 m
+on that case, pixel for pixel. With equal transmit and receive beams the transmit test
+cuts the same pixels and the 2 cm cost nothing.
+Consequence for shipped material: none. No shipped scenario carries INS samples (0 per
+ping in the eight SAS, rail and buried-object scenarios checked) and the gallery images
+with `position_lookup: analytic`, so no table exists and the allowance is the same 2 cm:
+`wreck_sas`, `minefield_sas`, `rail_objects` and `sas_minsas_survey` (the gallery
+scenarios that image with a field-of-view limit) give the same numbers to every digit
+before and after. The forward-looking scenarios set no field-of-view limit and do not run
+the pre-test.
+CUDA: the value travels in `BpGroup::traj_allowance`, which `make_inputs` fills on the
+host and the shared kernel header reads; no `.cu` file and no kernel line changed for
+this decision. Not compiled or run on a GPU here.

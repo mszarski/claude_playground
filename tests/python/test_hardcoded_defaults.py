@@ -343,12 +343,18 @@ def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_kee
         return core.backproject([rec], pts, interp="linear", fov_factor=1.13, position_lookup="software_table",
                                 return_weight_sum=True, **kw)[1]
 
-    # A gentle ping: the residual is under the fixed 2 cm, and the table-derived allowance is
-    # the fixed one, bit for bit.
+    # A gentle ping: the residual is under 2 cm, so the allowance from the table (the default
+    # since D-92) is the fixed 2 cm of before, bit for bit.
     gentle = ping((0.0, 1.0, 0.0))
     session = core.BackprojectSession([gentle], trajectory_upsample=8)
     assert 0.0 < session.trajectory_residual_max < core.BP_TRAJECTORY_ALLOWANCE
+    np.testing.assert_array_equal(image(gentle), image(gentle, trajectory_allowance="fixed"))
     np.testing.assert_array_equal(image(gentle, trajectory_allowance="table"), image(gentle))
+    # Without a table (analytic lookup, as every shipped scenario runs) nothing can differ.
+    for name in ("fixed", "table", None):
+        np.testing.assert_array_equal(
+            core.backproject([gentle], pts, interp="linear", fov_factor=1.13, trajectory_allowance=name),
+            core.backproject([gentle], pts, interp="linear", fov_factor=1.13))
 
     # A hard surge: by the 0.16 s arrival the platform is 1.3 m along track from its
     # first-order pose, so the beam's footprint has moved by that much. With an allowance
@@ -356,9 +362,11 @@ def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_kee
     hard = ping((100.0, 0.0, 0.0))
     assert core.BackprojectSession([hard], trajectory_upsample=8).trajectory_residual_max > 1.0
     exact = image(hard, trajectory_allowance=50.0)
-    fixed = image(hard)
-    table = image(hard, trajectory_allowance="table")
+    fixed = image(hard, trajectory_allowance="fixed")               # the behaviour before D-92, by name
+    np.testing.assert_array_equal(image(hard, trajectory_allowance=core.BP_TRAJECTORY_ALLOWANCE), fixed)
+    table = image(hard)                                             # the default
     np.testing.assert_array_equal(table, exact)
+    np.testing.assert_array_equal(image(hard, trajectory_allowance="table"), exact)
     lost = (exact > 0) & (fixed == 0)
     assert lost.sum() > 20                                          # the fixed 2 cm drops pixels the exact test keeps
     assert not ((fixed > 0) & (exact == 0)).any() and (exact == 0).any()      # and the wider one adds nothing false
