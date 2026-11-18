@@ -43,10 +43,16 @@ class ClockEstimate:
     flagged: np.ndarray | None = None   # [boards] with reference `min_quality`: 0 both bursts used, 1 one only, 2 none usable
 
 
-def alignment_tolerance(record) -> float:
-    """A twentieth of a period at the top of the band: 1.4 us at 35 kHz, 5 us at 10 kHz."""
+SEARCH_TIME = 2e-3      # s either side of where a reference burst is expected, unless the reference says `search_time`
+
+
+def alignment_tolerance(record, reference: dict | None = None) -> float:
+    """What the boards must agree within, s: the reference's `tolerance_us` when it gives one, else a
+    twentieth of a period at the top of the band (1.4 us at 35 kHz, 5 us at 10 kHz: enough to beamform
+    one row; stacked rows measuring elevation want less, docs/DEPLOYMENT.md)."""
     w = record.transmit.waveform
-    return 1.0 / (20.0 * max(w.f_start, w.f_stop))
+    given = float((reference or {}).get("tolerance_us") or 0.0)
+    return given * 1e-6 if given > 0.0 else 1.0 / (20.0 * max(w.f_start, w.f_stop))
 
 
 def _board_rows(record) -> list[list[int]]:
@@ -79,8 +85,11 @@ def _burst_position(x: np.ndarray, replica: np.ndarray, expected: int, search: i
     return lo + fine, float(quality)
 
 
-def estimate_clocks_reference(record, reference: dict, search_time: float = 2e-3) -> ClockEstimate:
-    """Offset and drift of every board from the shared reference bursts."""
+def estimate_clocks_reference(record, reference: dict, search_time: float | None = None) -> ClockEstimate:
+    """Offset and drift of every board from the shared reference bursts. Each burst is looked for within
+    `search_time` of where it is expected (the argument, else the reference's `search_time`, else 2 ms)."""
+    if search_time is None:
+        search_time = float(reference.get("search_time") or SEARCH_TIME)
     s = record.samples
     if s.is_complex():
         raise SyncError("the sync stage works on raw real samples, before baseband conversion")
@@ -154,7 +163,7 @@ def estimate_clocks_pps(record, nominal_pps_sample: float) -> ClockEstimate:
     return ClockEstimate(offsets - offsets[0], np.zeros(len(pps)), "pps", np.ones(len(pps)))
 
 
-def estimate_clocks_direct_path(record, search_time: float = 2e-3) -> ClockEstimate:
+def estimate_clocks_direct_path(record, search_time: float = SEARCH_TIME) -> ClockEstimate:
     """Offsets from the transmit pulse's direct arrival at each board's hydrophones.
 
     Needs a receive window that contains the direct arrival, and the projector and
@@ -290,7 +299,7 @@ def synchronise(record, reference: dict | None = None, method: str = "reference"
     the top of the band). If they do not, SyncError is raised and the record must not be
     beamformed across boards (`enforce=False` returns the report instead).
     """
-    tolerance = alignment_tolerance(record) if tolerance is None else tolerance
+    tolerance = alignment_tolerance(record, reference) if tolerance is None else tolerance
     if method == "reference":
         if reference is None:
             raise SyncError("the reference method needs the reference signal description")

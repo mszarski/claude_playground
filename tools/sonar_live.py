@@ -30,7 +30,7 @@ from gpusonar.live import LiveChain, NavListener  # noqa: E402
 from gpusonar.sources import make_source  # noqa: E402
 
 
-def export_template(cfg: dict, path: str) -> str:
+def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live") -> str:
     """Write one empty ping record of the configured sonar (array, waveform, receive window, ADC
     scale) and return the command that runs the same deployment file through build/bin/sonar_live."""
     import shlex
@@ -49,7 +49,9 @@ def export_template(cfg: dict, path: str) -> str:
     sync = o.pop("sync", None)
     o["look"] = "starboard" if o.pop("starboard") else "port"
     o["window"] = "hann" if o.pop("hann") else "none"
-    o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
+    # Sizes the deployment file leaves out are not on the command line either: the program derives them (derive.hpp).
+    if "tracker_bearing_sigma" in o:
+        o["tracker_bearing_sigma_deg"] = float(np.degrees(o.pop("tracker_bearing_sigma")))
     if "multipath_bearing" in o:
         o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
     o["multipath"] = int(o["multipath"])
@@ -72,6 +74,13 @@ def export_template(cfg: dict, path: str) -> str:
             profile["ladder"] = ",".join(profile["ladder"])
             o.update({f"elevation_profile_{k}": v for k, v in profile.items()})
         o.update({f"elevation_{k}": (int(v) if isinstance(v, bool) else v) for k, v in el.items()})
+    # The program around the chain: the board stream's word, socket and queue; when to give up; where to listen.
+    for key, option in (("sample_bytes", "stream_sample_bytes"), ("buffer_bytes", "stream_buffer_bytes"), ("queue_mb", "stream_queue_mb"),
+                        ("timeout", "idle_seconds"), ("host", "bind")):
+        if src.get(key) is not None:
+            o[option] = src[key]
+    if (cfg.get("output") or {}).get("report_udp_max_bytes") is not None:
+        o["report_udp_max_bytes"] = int(cfg["output"]["report_udp_max_bytes"])
     if sync:
         o["sync"] = 1
         o.update({f"sync_{k}": (int(v) if isinstance(v, bool) else v) for k, v in sync.items()})
@@ -93,11 +102,13 @@ def export_template(cfg: dict, path: str) -> str:
     if water.get("source") == "altitude":
         o["nav_water_depth_from_altitude"] = 1
         o.update({f"nav_{k}": v for k, v in dict(WATER_DEPTH_DEFAULTS, **water).items() if k != "source"})
-    for key in ("keep_s", "profile_step_m"):
+    for key in ("keep_s", "profile_step_m", "history_margin_s"):
         if nav.get(key) is not None:
             o[f"nav_{key}"] = nav[key]
     out = cfg.get("output") or {}
-    cmd = ["build/bin/sonar_live", "--udp", str(src.get("port", 5700)), "--template", path]
+    if src.get("port") is None:
+        raise ValueError("source.port: the deployment file must name the port the boards send to (no default)")
+    cmd = [program, "--udp", str(src["port"]), "--template", path]
     if (cfg.get("nav") or {}).get("port"):
         cmd += ["--nav-port", str(cfg["nav"]["port"])]
     if out.get("recording"):
@@ -137,12 +148,13 @@ def main(argv=None):
     ap.add_argument("--engine", choices=["python", "cpp"], help="override chain.engine")
     ap.add_argument("--export-template", metavar="FILE",
                     help="write the configured sonar's template record and print the equivalent build/bin/sonar_live command")
+    ap.add_argument("--program", default="build/bin/sonar_live", help="path of the C++ program in the printed command")
     args = ap.parse_args(argv)
     cfg = load_yaml(args.config)
     if args.engine:
         cfg["chain"] = dict(cfg.get("chain") or {}, engine=args.engine)
     if args.export_template:
-        print(export_template(cfg, args.export_template))
+        print(export_template(cfg, args.export_template, args.program))
         return 0
     out = dict(cfg.get("output") or {})
     stamp = time.strftime
@@ -172,22 +184,34 @@ def main(argv=None):
             src_cfg.update(sonar=sc["sonar"], sonar_overrides=sc.get("sonar_overrides"), host="127.0.0.1",
                            max_pings=len(records), timeout=10.0)
             source = make_source(src_cfg)
-            sender = FlankBoardEmulator(records, float(sc["pings"]["interval"])).send(source.port, pace=0.25)
+            sender = FlankBoardEmulator(records, float(sc["pings"]["interval"]),
+                                        sample_bytes=int(src_cfg.get("sample_bytes", 3))).send(source.port, pace=0.25)
         else:
             source = make_source(src_cfg)
     nav_cfg = cfg.get("nav") if not (args.scenario or args.replay or args.emulate) else None
     nav = NavListener.from_config(nav_cfg) if nav_cfg else None
     with LiveChain(cfg.get("chain"), nav=nav, recording=stamp(out["recording"]) if out.get("recording") else None,
                    report_path=stamp(out["report"]) if out.get("report") else None,
-                   report_udp=out.get("report_udp"), taps=out.get("taps")) as chain:
+                   report_udp=out.get("report_udp"), taps=out.get("taps"),
+                   **({"report_udp_max_bytes": int(out["report_udp_max_bytes"])} if out.get("report_udp_max_bytes") else {})) as chain:
         for record in source:
             r = chain.process(record)
+            if chain.pings == 1:
+                # What the first ping resolved of the sizes the configuration leaves to the sonar, and what to look at.
+                print(f"chain settings {json.dumps(chain.resolved)}", file=sys.stderr, flush=True)
             if not args.quiet:
                 print(ping_line(r), flush=True)
             if args.pings and chain.pings >= args.pings:
                 break
     if hasattr(source, "close"):
         source.close()
+    counters = {k: getattr(source, k) for k in ("dropped_blocks", "overrun_pings", "bad_blocks") if getattr(source, k, 0)}
+    if chain.reports_split:
+        counters["reports_split"] = chain.reports_split
+    if chain.sbl_fallbacks:
+        counters["sbl_fallbacks"] = chain.sbl_fallbacks
+    if counters:
+        print(f"sonar_live: {json.dumps(counters)}", file=sys.stderr, flush=True)
     if sender:
         sender.join(timeout=30.0)
     return 0

@@ -75,7 +75,9 @@ DEFAULTS = {
                                         # family: {...}} (PROFILE_DEFAULTS below). None: as before
     "roll_sigma_deg": 0.0,              # the navigation's roll accuracy, added to the elevation sigma
     "depth_process_noise": 0.5,         # m per sqrt(s): how fast a track's depth may wander
-    "row_tolerance_m": 0.02,            # elements within this of one line are one row
+    "row_tolerance_m": None,            # elements within this of one line are one row; None: derived (2 cm, or a quarter of
+                                        # the shortest wavelength when that is less: libs/live derive.hpp)
+    "min_row_elements": 3,              # a line of fewer hydrophones than this (dead boards) is not a row
 }
 
 

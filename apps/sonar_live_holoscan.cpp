@@ -13,14 +13,17 @@
 #include <holoscan/holoscan.hpp>
 
 #include "sonar/holoscan_ops/operators.hpp"
+#include "sonar/io/record_file.hpp"
+#include "sonar/live/chain.hpp"
 
 namespace ops = sonar::holoscan_ops;
 
 struct Settings {
-  std::string replay, template_path, recording, report, report_host, options;
+  std::string replay, template_path, recording, report, report_host, options, stream_options;
   int udp_port = -1, nav_port = 0, report_port = 0;
   bool listen = false;
-  int64_t max_pings = -1, chunk = 0;
+  int64_t max_pings = -1, chunk = 0, report_max_bytes = 65000;
+  double idle_seconds = 30.0;
 };
 
 class LiveApp : public holoscan::Application {
@@ -35,7 +38,8 @@ class LiveApp : public holoscan::Application {
     } else {
       source = make_operator<ops::UdpSourceOp>("boards", Arg("template_path", s_.template_path), Arg("port", s_.udp_port),
                                                Arg("nav_port", s_.nav_port), Arg("listen", s_.listen),
-                                               Arg("chunk_samples", s_.chunk), Arg("max_pings", s_.max_pings));
+                                               Arg("chunk_samples", s_.chunk), Arg("max_pings", s_.max_pings),
+                                               Arg("idle_seconds", s_.idle_seconds), Arg("options", s_.stream_options));
     }
     auto recorder = make_operator<ops::RecordSinkOp>("recorder", Arg("path", s_.recording));
     std::shared_ptr<holoscan::Operator> process;
@@ -45,7 +49,7 @@ class LiveApp : public holoscan::Application {
       process = make_operator<ops::LiveChainOp>("chain", Arg("options", s_.options));
     }
     auto sink = make_operator<ops::ReportSinkOp>("report", Arg("path", s_.report), Arg("udp_host", s_.report_host),
-                                                 Arg("udp_port", s_.report_port));
+                                                 Arg("udp_port", s_.report_port), Arg("max_bytes", s_.report_max_bytes));
     add_flow(source, recorder, {{"ping", "ping"}});
     add_flow(recorder, process, {{"ping_out", "ping"}});
     add_flow(process, sink, {{"report", "report"}});
@@ -87,7 +91,15 @@ int main(int argc, char** argv) {
       throw std::invalid_argument("give --replay FILE or --udp PORT --template FILE");
     }
     ops::apply_options(s.options, chain, passive);        // fail on a bad option before the pipeline starts
-    s.chunk = passive.n_fft + (passive.n_average - 1) * passive.hop;
+    // The stream's own settings go to the source operator; the frame length of a listening run follows from the
+    // passive options and, for block sizes left to be derived, from the sonar in the template.
+    s.idle_seconds = chain.stream.idle_seconds;
+    s.report_max_bytes = chain.stream.report_max_bytes;
+    s.stream_options = "stream_sample_bytes=" + std::to_string(chain.stream.sample_bytes) + " stream_buffer_bytes=" +
+                       std::to_string(chain.stream.buffer_bytes) + " stream_queue_mb=" + std::to_string(chain.stream.queue_mb) +
+                       " bind=" + chain.stream.bind + " nav_keep_s=" + std::to_string(chain.nav.keep_s) + " nav_history_margin_s=" +
+                       std::to_string(chain.nav.history_margin_s);
+    if (s.listen) s.chunk = sonar::live::passive_span(passive, sonar::io::RecordReader(s.template_path).read(0));
     auto app = holoscan::make_application<LiveApp>(s);
     app->run();
     return 0;

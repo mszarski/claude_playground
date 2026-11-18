@@ -56,7 +56,11 @@ constexpr Standing kStanding{};
 constexpr double kCellsPerResolution = 1.0;      ///< range cell >= this many range resolutions c / 2B
 constexpr double kGuardCells = 4.0;              ///< CFAR guard >= this many range resolutions
 constexpr double kTrainPerGuard = 3.0;           ///< CFAR training >= this many guard floors
-constexpr double kBeamwidthsPerSigma = 8.0;      ///< tracker bearing sigma >= beamwidth / this
+/// Tracker bearing sigma >= beamwidth / this. A centroid on a beam of width w at a signal-to-noise ratio s
+/// is good to about w / sqrt(2 s) (s as a power ratio): a sixteenth of a beam at 21 dB. Every array shipped
+/// today (beams of 1 to 14.5 degrees) stays under the standing 1 degree with it; a beam wider than 16 degrees
+/// does not.
+constexpr double kBeamwidthsPerSigma = 16.0;
 constexpr double kMultipathSigmas = 3.0;         ///< multipath bearing gate >= this many bearing-sigma floors
 constexpr double kFitRmsSigmas = 4.0;            ///< classifier's fit limit >= this many range-sigma floors
 constexpr double kRowToleranceWavelengths = 0.25;  ///< row tolerance <= this many wavelengths at the top of the band
