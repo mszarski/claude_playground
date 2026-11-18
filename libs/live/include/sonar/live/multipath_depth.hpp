@@ -61,10 +61,11 @@ struct MultipathOptions {
   double surface_coefficient = -1.0;   ///< flat-surface pressure reflection coefficient
   double surface_rms_height = 0.0;     ///< m: coherent reflection exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)
   double surface_loss_db = 0.0;        ///< further loss per surface bounce (bubbles)
-  double surface_min_amplitude = 0.25; ///< a surface path weaker than this re the direct one: no_surface_path
+  double surface_min_amplitude = 0.5;  ///< a one-leg surface echo weaker than this re the direct one: no_surface_path
   bool bottom = false;                 ///< a fluid bottom's Rayleigh reflection (with the water depth): the next three
   double bottom_speed = 0.0, bottom_density = 0.0, bottom_attenuation = 0.0;  ///< m/s, re water, dB per wavelength
-  std::int64_t bottom_order = 1;       ///< boundary reflections per leg with a bottom (1: d, s, b; 2: also sb, bs)
+  std::int64_t bottom_order = 2;       ///< boundary reflections per leg with a bottom (1: d, s, b; 2: also sb, bs)
+  double bottom_grazing_limit_deg = 45.0;  ///< water depth known, no bottom given: a bottom path shallower than this makes the depth ambiguous
   double water_depth = 0.0;            ///< m; 0: the record's environment.water_depth (navigation's, else unknown)
   double surface_z = 0.0;              ///< z of the sea surface in the navigation's frame
   double own_depth_sigma = 0.0;        ///< m: the navigation's depth accuracy
@@ -95,7 +96,8 @@ struct MultipathEstimate {
   std::string method = "none";         ///< "delay", "ripple", "track", "none"
   bool ambiguous = false;
   std::vector<double> alternatives;    ///< rival depths, m
-  std::string reason;                  ///< why there is no depth: merged, no_surface_path, single_arrival, window
+  std::string reason;                  ///< why there is no depth: merged, no_surface_path, single_arrival, window; with a depth:
+                                       ///< bottom_unmodelled, bottom_order (the pattern leaves out paths that may be there: ambiguous)
   double snr_db = kNaN;                ///< 10 log10 L_1
   std::vector<double> grid, envelope;  ///< the fringe envelope L(z) - L_1, for a track to add up
 };

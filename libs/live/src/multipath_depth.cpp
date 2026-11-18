@@ -179,6 +179,7 @@ bool set_multipath_option(MultipathOptions& o, const std::string& key, const std
   else if (k == "bottom_density") o.bottom_density = v;
   else if (k == "bottom_attenuation") o.bottom_attenuation = v;
   else if (k == "bottom_order") o.bottom_order = i;
+  else if (k == "bottom_grazing_limit_deg") o.bottom_grazing_limit_deg = v;
   else if (k == "water_depth") o.water_depth = v;
   else if (k == "surface_z") o.surface_z = v;
   else if (k == "own_depth_sigma") o.own_depth_sigma = v;
@@ -411,7 +412,7 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
     est.reason = "single_arrival";
     return est;
   }
-  if (strongest < o.surface_min_amplitude) {
+  if (amp.size() < 2 || std::abs(amp[1]) < o.surface_min_amplitude) {   // the one-leg surface echo (roughness at its grazing angle)
     est.reason = "no_surface_path";
     return est;
   }
@@ -424,6 +425,33 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
   est.ambiguous = !rivals.empty();
   if (rivals.size() > 4) rivals.resize(4);
   est.alternatives = rivals;
+  // Paths the pattern leaves out but the water may hold: the depth is then one explanation among others.
+  if (g.water_depth > 0.0 && !o.bottom) {
+    const double z_mid = 0.5 * (g.array_depth + g.projector_depth);
+    const double grazing = std::atan2(2.0 * g.water_depth - z_mid - est.depth, g.range) * 180.0 / kPi;
+    if (grazing < o.bottom_grazing_limit_deg) {
+      est.ambiguous = true;
+      est.reason = "bottom_unmodelled";
+    }
+  } else if (g.water_depth > 0.0 && o.bottom) {
+    MultipathOptions more = o;
+    more.bottom_order = o.bottom_order + 1;
+    std::vector<double> d2;
+    std::vector<cd> a2;
+    multipath_pattern(est.depth, t_det, g, more, d2, a2);
+    const auto legs = static_cast<std::size_t>(1 + 2 * more.bottom_order), had = static_cast<std::size_t>(1 + 2 * o.bottom_order);
+    double left_out = 0.0;      // the strongest two-way arrival with a leg of order + 1 (legs come as d, s.., b..)
+    for (std::size_t j = 0; j < legs; ++j) {
+      for (std::size_t k = 0; k < legs; ++k) {
+        const bool fresh = j == had / 2 + 1 || j == legs - 1 || k == had / 2 + 1 || k == legs - 1;
+        if (fresh && d2[j * legs + k] <= o.window_s) left_out = std::max(left_out, std::abs(a2[j * legs + k]));
+      }
+    }
+    if (left_out >= o.surface_min_amplitude) {
+      est.ambiguous = true;
+      est.reason = "bottom_order";
+    }
+  }
   return est;
 }
 
@@ -592,6 +620,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
         for (std::size_t k = 0; k < e.alternatives.size(); ++k) s << (k ? ", " : "") << e.alternatives[k];
         s << "]";
       }
+      if (!e.reason.empty()) s << ", \"multipath_note\": \"" << e.reason << "\"";
     } else {
       s << ", \"multipath_reason\": \"" << e.reason << "\"";
       if (is_track) s << ", \"multipath_pings\": " << e.arrivals;

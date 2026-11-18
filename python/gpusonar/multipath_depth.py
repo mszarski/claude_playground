@@ -39,6 +39,11 @@ When it cannot work, and what the report then says (`multipath_reason`):
     merged            target or sonar so shallow that tau B < `min_delay_bandwidth` at every depth it could be at: the
                       arrivals merge, the ripple period exceeds the band, and what is left is the surface cancellation
     no_surface_path   the surface reflects too little (`surface.loss_db`, e.g. bubbles at a high sea state, or roughness)
+    (with a depth, as `multipath_note`, and the ambiguity flag set:)
+    bottom_unmodelled the water depth is known, no `bottom` is configured, and a bottom-reflected path would arrive at a
+                      grazing angle below `bottom_grazing_limit_deg`: the surface-only pattern may be fitting bottom echoes
+    bottom_order      a path with one more boundary reflection than `bottom_order` would arrive inside the window with an
+                      amplitude above `surface.min_amplitude`: raise `bottom_order`
     single_arrival    the pattern is no better than one arrival (no surface echo seen, or too little SNR for it)
     window            the window around the detection does not hold enough samples (edge of the record)
 A target with several highlights along range is not multipath: its highlights are all of one sign and not at
@@ -70,9 +75,11 @@ DEFAULTS = {
     "surface": {"coefficient": -1.0, # flat-surface pressure reflection coefficient
                 "rms_height_m": 0.0, # rms surface height: coherent reflection exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)
                 "loss_db": 0.0,      # further loss per surface bounce (bubbles: the named law of sim/surface.py, evaluated by the user)
-                "min_amplitude": 0.25},   # a surface path weaker than this (re the direct one): no_surface_path
+                "min_amplitude": 0.5},    # a one-leg surface echo weaker than this (re the direct one): no_surface_path
     "bottom": None,                  # {speed, density, attenuation}: a fluid bottom's Rayleigh reflection, with the water depth
-    "bottom_order": 1,               # boundary reflections per leg when a bottom is given (1: d, s, b; 2: also sb, bs)
+    "bottom_order": 2,               # boundary reflections per leg when a bottom is given (1: d, s, b; 2: also sb, bs)
+    "bottom_grazing_limit_deg": 45.0,    # water depth known but no bottom given: a bottom path shallower than this makes the
+                                     # depth ambiguous (`multipath_note: bottom_unmodelled`)
     "water_depth": None,             # m; None: the record's environment.water_depth (navigation's, else unknown)
     "surface_z": 0.0,                # z of the sea surface in the navigation's frame
     "own_depth_sigma_m": 0.0,        # the navigation's depth accuracy
@@ -142,6 +149,7 @@ def cpp_options(cfg: dict | None) -> dict:
          "noise_cells": int(c["noise_cells"]), "min_gain": float(c["min_gain"]), "ambiguity_drop": float(c["ambiguity_drop"]),
          "max_detections": int(c["max_detections"]), "surface_coefficient": float(s["coefficient"]), "surface_rms_height": float(s["rms_height_m"]),
          "surface_loss_db": float(s["loss_db"]), "surface_min_amplitude": float(s["min_amplitude"]), "bottom_order": int(c["bottom_order"]),
+         "bottom_grazing_limit_deg": float(c["bottom_grazing_limit_deg"]),
          "water_depth": float(c["water_depth"] or 0.0), "surface_z": float(c["surface_z"]), "own_depth_sigma": float(c["own_depth_sigma_m"]),
          "model_sigma_fraction": float(c["model_sigma_fraction"]), "track_gate": float(t["gate_m"]), "track_step": float(t["step_m"]),
          "track_min_gain": float(t["min_gain"]), "track_memory_pings": float(t["memory_pings"] or 0.0),
@@ -441,7 +449,7 @@ def estimate(y, t_rel, n_noise: int, g: Geometry, cfg: dict) -> Estimate:
     if est.gain < float(cfg["min_gain"]):
         est.reason = "single_arrival"
         return est
-    if np.max(np.abs(amp[1:, 0])) < float(s["min_amplitude"]):
+    if abs(amp[1, 0]) < float(s["min_amplitude"]):            # the one-leg surface echo (roughness at its grazing angle)
         est.reason = "no_surface_path"
         return est
     cell = float(grid[1] - grid[0]) if len(grid) > 1 else 0.0
@@ -452,6 +460,20 @@ def estimate(y, t_rel, n_noise: int, g: Geometry, cfg: dict) -> Estimate:
     est.method = "delay" if float(surface_delay(est.depth, g)) * g.bandwidth >= 4.0 else "ripple"
     est.ambiguous = bool(rivals)
     est.alternatives = tuple(rivals[:4])
+    # Paths the pattern leaves out but the water may hold: the depth is then one explanation among others.
+    if g.water_depth and cfg["bottom"] is None:
+        z_mid = 0.5 * (g.array_depth + g.projector_depth)
+        if np.degrees(np.arctan2(2.0 * g.water_depth - z_mid - est.depth, g.range_m)) < float(cfg["bottom_grazing_limit_deg"]):
+            est.ambiguous, est.reason = True, "bottom_unmodelled"
+    elif g.water_depth:
+        more = dict(cfg, bottom_order=int(cfg["bottom_order"]) + 1)
+        d2, a2 = pattern(est.depth, 2.0 * g.range_m / g.sound_speed, g, more)
+        legs, had = 1 + 2 * more["bottom_order"], 1 + 2 * int(cfg["bottom_order"])
+        fresh = np.zeros(legs, dtype=bool)
+        fresh[[had // 2 + 1, legs - 1]] = True                    # legs come as d, s.., b..: the last of each run is the new order
+        new = (fresh[:, None] | fresh[None, :]).ravel() & (d2[:, 0] <= float(cfg["window_s"]))
+        if new.any() and np.abs(a2[new, 0]).max() >= float(s["min_amplitude"]):
+            est.ambiguous, est.reason = True, "bottom_order"
     return est
 
 
