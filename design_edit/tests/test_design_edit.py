@@ -146,3 +146,25 @@ def test_placement_violations():
     assert placement_violations("move Gamma above Alpha", before, moved) == []
     # siblings merely shifted by an insert elsewhere are not "placed"
     assert placement_violations("put Alpha above Beta. Also add a line at the end", before, ins(3)) == []
+
+
+def test_repair_outline_removes_leftover_stroke():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from repair_outline import repair_doc
+    from design_edit.schema import parse
+
+    before = parse('frame#n1 "Row" layout=row\n'
+                   '  frame#n2 "Primary" fill=#2563EB\n'
+                   '  frame#n3 "Secondary" fill=#FFFFFF stroke=#E5E7EB')
+    after = parse('frame#n1 "Row" layout=row\n'
+                  '  frame#n2 "Primary" fill=#2563EB\n'
+                  '  frame#n3 "Secondary" fill=#2563EB stroke=#E5E7EB')
+    assert repair_doc(before, after) == 1
+    assert "stroke" not in after["children"][1]["props"]
+    # an edit that only lightens the fill keeps its outline
+    light = parse('frame#n1 "Row" layout=row\n'
+                  '  frame#n2 "Primary" fill=#2563EB\n'
+                  '  frame#n3 "Secondary" fill=#F3F4F6 stroke=#E5E7EB')
+    assert repair_doc(before, light) == 0
