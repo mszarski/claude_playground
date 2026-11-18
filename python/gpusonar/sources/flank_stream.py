@@ -94,9 +94,16 @@ def decode_block(data: bytes) -> dict:
 
 
 class PingAssembler:
-    """Continuous blocks in, ping records out."""
+    """Continuous blocks in, ping records out.
 
-    def __init__(self, sonar: SonarModel, pose=None, sound_speed: float | None = None):
+    With `decimate` ({} for every default; keys in libs/live decimate.hpp and docs/CONFIGURATION.md)
+    each ping is band-selected and decimated to complex baseband as its blocks arrive, and with
+    `reference` (the shared reference signal of the sonar's boards) synchronised at its end from
+    the raw stretches kept around the two reference bursts: the records that come out are complex
+    baseband, and the full-rate ping is never held."""
+
+    def __init__(self, sonar: SonarModel, pose=None, sound_speed: float | None = None, decimate: dict | None = None,
+                 reference: dict | None = None):
         self.sonar = sonar
         self.pose = pose if pose is not None else core.Pose()
         self.sound_speed = float(sound_speed or sonar.config.get("nominal_sound_speed", 1500.0))
@@ -111,6 +118,11 @@ class PingAssembler:
         self.dropped_pings = 0
         self.lost_samples = 0
         self.overflow_blocks = 0
+        self._decimator = None
+        if decimate is not None:
+            from ..live import decimate_options
+            self._decimator = core.PingDecimator(template, decimate_options(decimate) or {}, reference)
+            self.decimation = self._decimator.plan()
         self._next_sample = None          # the sample index the next block should start at
         self._ping = None                 # the ping being filled: dict(tx, index, buffer, filled, ...)
         self._done_ping = None            # ping index already emitted or discarded
@@ -118,7 +130,9 @@ class PingAssembler:
     def _open(self, block: dict) -> None:
         self._ping = {"tx": block["tx_sample"], "index": block["ping_index"], "gain": block["gain_code"],
                       "start_ns": block["start_ns"], "overflow": False, "filled": 0,
-                      "buffer": np.zeros((self.window_length, self.n_channels), dtype=np.int32)}
+                      "buffer": None if self._decimator else np.zeros((self.window_length, self.n_channels), dtype=np.int32)}
+        if self._decimator:
+            self._decimator.open()
 
     def feed(self, data: bytes) -> list:
         """Take one block; return the ping records it completes (usually none or one)."""
@@ -161,7 +175,10 @@ class PingAssembler:
                     self._done_ping = p["index"]
                     self._ping = None
                     return out
-                p["buffer"][a - w0:b - w0] = block["counts"][a - first:b - first]
+                if self._decimator:                # filtered and decimated as it arrives
+                    self._decimator.feed((block["counts"][a - first:b - first] * self.volts_per_count).astype(np.float32))
+                else:
+                    p["buffer"][a - w0:b - w0] = block["counts"][a - first:b - first]
                 p["filled"] = b - w0
                 p["overflow"] |= bool(block["flags"] & FLAG_OVERFLOW)
             if p["filled"] == self.window_length:
@@ -174,14 +191,17 @@ class PingAssembler:
         t_tx_ns = p["start_ns"] + int(round(p["tx"] / self.sample_rate * 1e9))
         record = self.sonar.make_record(self.pose, sequence=int(p["index"]), time_ns=t_tx_ns,
                                         environment={"sound_speed": self.sound_speed})
-        s = record.samples
-        kind = s.kind
-        s.array = (p["buffer"].T * self.volts_per_count).astype(np.float32)
-        s.kind = kind
-        s.start_time = self.window_start / self.sample_rate
-        s.storage = core.StorageType.Int32
-        s.storage_scale = self.volts_per_count
-        record.samples = s
+        if self._decimator:
+            self._decimator.finish(record)         # complex baseband in place, boards synchronised
+        else:
+            s = record.samples
+            kind = s.kind
+            s.array = (p["buffer"].T * self.volts_per_count).astype(np.float32)
+            s.kind = kind
+            s.start_time = self.window_start / self.sample_rate
+            s.storage = core.StorageType.Int32
+            s.storage_scale = self.volts_per_count
+            record.samples = s
         m = record.metadata
         extra = json.loads(m.extra_json or "{}")
         extra["flank_stream"] = {"gain_code": int(p["gain"]), "adc_overflow": bool(p["overflow"]),
@@ -206,9 +226,12 @@ class FlankUdpSource(Source):
 
     def __init__(self, sonar: str = "flank_32", port: int = 0, host: str = "127.0.0.1",
                  sonar_overrides: dict | None = None, max_pings: int | None = None, timeout: float = 2.0,
-                 queue_pings: int = 8):
+                 queue_pings: int = 8, decimate: dict | None = None, reference: dict | None = None):
         import queue
-        self.assembler = PingAssembler(SonarModel.load(sonar, sonar_overrides))
+        model = SonarModel.load(sonar, sonar_overrides)
+        if decimate is not None and reference is None and len(model.boards) > 1:
+            reference = (decimate.get("reference") if isinstance(decimate, dict) else None) or model.config["receive"].get("reference")
+        self.assembler = PingAssembler(model, decimate=decimate, reference=reference)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8 << 20)
         self.socket.bind((host, port))
