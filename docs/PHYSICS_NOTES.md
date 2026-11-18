@@ -3393,3 +3393,157 @@ samples leave out, at most 0.1 dB except on the steep path in a wind sea (0.7 to
 both legs (the surface is met within the travel time to the target of that instant, which
 is taken as small against the wave period: at 12 km it is not, and there the option does
 nothing anyway). Linear phase within a ping. The source's own heave is not this option.
+
+## 27. Sound speed that changes with range [OURS]
+
+The eigenray tier had one sound-speed profile for the whole section. A live chain has one too: the
+cast taken at the vehicle. To test that chain against water it has not measured, the simulated
+water can now change along the path (`environment.profiles_by_range`, docs/CONFIGURATION.md
+"Water that changes with range"; `sim/bellhop.py`).
+
+### 27.1 What is modelled
+
+Profiles c_j(z) on one depth grid at ranges r_0 = 0 < r_1 < ... The field is Bellhop's own
+2-D option (SSP type `Q`): on each quadrilateral of the range-depth grid the speed is linear in
+depth along each of the two profiles and linear in range between them,
+
+    c(r, z) = (1 - s) c_j(z) + s c_j+1(z),     s = (r - r_j) / (r_j+1 - r_j),
+
+and Bellhop traces its rays through that with the range derivative in the ray equations. Nothing
+is approximated on our side: the provider writes the `.ssp` file (the number of profiles, their
+ranges in km, one row of speeds per depth of the `.env` profile; Acoustics Toolbox
+`doc/RangeDepSSPFile.htm`, reader `Bellhop/sspMod.f90` subroutine `Quad`) and reads arrivals as
+before. Bellhop stops where a ray leaves the ranges given and traces to its box on both sides of
+the source, so the first profile is repeated before the source and the last one beyond the box:
+the end profiles hold outside what was given. With one profile the `.env` is written exactly as
+before and no `.ssp` exists (the files and the first-ping records of four shipped Bellhop
+scenarios were compared before and after: identical).
+
+*What range is.* The provider reduces geometry to (horizontal range from the source of the call,
+depth) and uses one section on every bearing: that is how a bathymetry was already defined, and
+the water follows it. So `range_m` is horizontal distance from the sonar; the water is rings
+about the sonar. For one target on one bearing this is the vertical section through sonar and
+target, which is the honest 2-D statement. It is not a front lying across a map: two targets on
+different bearings see the same water at the same range, and the water moves with a moving
+vehicle (9 m over the four pings of the test-AUV scenario, against a front 100 m wide). The
+return leg is traced from the array's reference point and travelled backwards; rays in still
+water are reversible, so this stays exact, with the section centred on the array instead of the
+projector (about 1 m apart in the static builds).
+
+*The local profile* is the first one, at range 0. The record carries one sound speed, as it
+always has (no schema change): the local profile at the sonar's depth, which is what the vehicle
+would measure. Everything in the simulator that needs "the" sound speed without a path uses the
+local profile (the table in docs/CONFIGURATION.md lists each user): the conversion of an
+eigenray's delay to an apparent position, the boundary speeds of time spreading, the
+reverberation strength laws, noise coherence. Two of these are approximations worth knowing.
+Absorption is one water (temperature, salinity, pH) over a path length of delay times the local
+speed: the profiles carry speeds, not temperatures, and a speed 1.5 % off along half the path
+changes 1.7 dB of two-way absorption (2.6 km, 5 kHz) by 0.01 dB. The provider's rough-surface
+loss finds the surface grazing angle by Snell's law from the launch angle through the local
+profile, which does not hold where the speed changes along the ray; at grazing angles of a few
+degrees a 1 % change in speed is several degrees. The shipped scenarios therefore reflect the
+eigenrays from a flat surface. Tiers without a profile (image source, free field) use the one
+local speed everywhere and say, in a warning, that the change with range is not simulated.
+
+### 27.2 Checks against closed forms
+
+`tests/python/test_ssp_range.py`, with Bellhop as a separate program.
+
+*The same water given twice.* A thermocline given as one profile, and as two identical profiles
+1.5 km apart: the six strongest arrivals at nine receivers (20 to 90 m, 0.3 to 2.6 km) have the
+same reflections, delays within 0.6 microseconds and amplitudes within 0.3 %.
+
+*A constant gradient in range.* Two isovelocity profiles, 1480 m/s at the source and 1520 m/s at
+2 km: c = c_0 + g r with g = 0.02 /s, the same at every depth. In a medium with a constant
+gradient every ray is an arc of a circle whose centre lies where the speed would be zero (here
+the vertical line r = -c_0 / g), and the travel time between two points a distance d apart, with
+speeds c_a and c_b, is
+
+    t = acosh(1 + g^2 d^2 / (2 c_a c_b)) / g          (along the gradient: t = ln(c_b / c_a) / g).
+
+Bellhop's direct arrival agrees to 0.05 to 0.23 microseconds along the gradient and to 2 to 10
+microseconds off it (receivers 150 to 200 m above and below the source, 0.4 to 1.9 km), and its
+launch angle is that of the circle through the two points to 0.05 degrees. The formula was not
+taken on trust: the project's own layered ray tracer (`raytrace.py`, Sec. 25), given the same
+problem turned by 90 degrees (the gradient in depth, the two points one above the other and
+offset sideways), returns the same times to 0.1 microsecond. A straight line at the local speed,
+which is all a processor without this knowledge has, is 0.7 ms (0.4 km) to 16 ms (1.9 km) late.
+
+*A front.* 1500 m/s to 900 m, 1470 m/s from 1100 m, linear between; source and receiver at one
+depth, so the ray meets the front at right angles and does not bend:
+t = 900 / c_1 + 200 ln(c_1 / c_2) / (c_1 - c_2) + (r - 1100) / c_2. Bellhop agrees within 2
+microseconds at 0.6, 1.0 (inside the front), 2 and 3 km; the local speed alone would be 27 ms
+(41 m) early at 3 km. The provider's own correction from a grid node to a field point uses the
+speed at the point's range (1470 m/s there, not the local 1500).
+
+*A limit of Bellhop found on the way.* Bellhop interpolates the delay linearly between ray steps
+(a tenth of the water depth unless set). Where the speed changes along the ray the true delay is
+curved in range and linear interpolation is out by up to h^2 |dc/dr| / (8 c^2): with 60 m steps
+in the front above (0.15 /s) that is 30 microseconds, and 27.6 were seen (which is why the step
+is taken to be the cause; Bellhop's interpolation code was not read for this); with the 10 m steps of 100 m water
+and the shipped front (0.11 /s) it is 0.6 microseconds. Deep water with a sharp front would need
+the step set.
+
+### 27.3 A chain that knows only the local profile
+
+`tools/ssp_range_study.py`, `docs/figures/ssp_range_study.md` (commit 1b313d0). Three
+ILLUSTRATIVE scenarios (`configs/scenarios/ssp_*`), each simulated with its water as written and
+again with its local profile at every range (same seed, target, noise), four pings each, through
+the C++ chain of the build's deployment file as shipped and again with the local profile given
+to the elevation stage and multipath depth switched on. Four pings and one seed: these are
+observations, not rates.
+
+| Scenario | Quantity | water changes with range | local profile everywhere |
+| --- | --- | --- | --- |
+| Two-row static, front 1.2 to 1.4 km out (22 m/s slower at the surface, 6.4 m/s below 35 m), target 2.6 km, 60 m | detected; SNR | 4/4; 45.7 dB | 4/4; 45.5 dB |
+| | range of the first arrival, minus the straight-line distance | +21.5 m | +10.2 m |
+| | bearing error; track confirmed | -0.07 degrees; ping 3 | -0.08 degrees; ping 3 |
+| | elevation; depth as deployed; depth with the local profile (true 60 m; stated sigma 124 to 125 m) | -4.2 degrees; 12.8 m; 82.8 m | +3.7 degrees; 75.1 m; 81.0 m |
+| Three-row static, mixed layer 15 m at the array, 45 m at 3 km, target 2.6 km, 60 m | detected; SNR | 4/4; 42.6 dB | 4/4; 43.7 dB |
+| | range of the first arrival | +14.2 m | +10.2 m |
+| | bearing error; track on the target | +1.02 degrees on 3 pings of 4; none in 4 pings (a track 360 m short instead) | -0.06 degrees; ping 3 |
+| | elevation; depth as deployed; with the local profile (true 60 m; sigma 122 to 124 m) | -31.1 degrees; 19.3 m; 19.0 m | -5.4 degrees; 67.7 m; 56.6 m |
+| Test AUV, one row, front 200 to 300 m out, target 500 m, 15 m, water 30 m | detected; SNR | 4/4; 57.1 dB | 4/4; 51.5 dB |
+| | range of the first arrival; bearing error; track | +7.0 m; -0.18 degrees; ping 3 | +7.8 m; -0.32 degrees; ping 3 |
+| | depth from multipath timing (true 15 m) | 30.3 m on all 4 pings, sigma 3.5 m, note `bottom_unmodelled` | none (`single_arrival`) |
+
+What can be said from this:
+
+1. *Detection, and bearing where no elevation correction was applied, did not care.* Every ping
+   detected in both waters; SNR within 1.1 dB at 2.6 km (5.6 dB higher behind the front at 500 m,
+   where the arrivals that interfere are different ones); bearing changed by 0.01 degrees (two
+   rows, 2.6 km) and 0.14 degrees (one row, 500 m).
+2. *Range moved by what the sound did.* The first arrival came 11.3 m later behind the front and
+   4.0 m later under the deepening layer (0.43 % and 0.15 % of 2.6 km). Bellhop's own arrivals,
+   turned into range at the local speed, say +21.6 to +22.1 m against +10.8 m and +14.7 against
+   +10.7 m: the chain reports the delay it is given. Even in the local water the first arrival is
+   10 m long, because in this water (the array inside a downward-refracting thermocline) no ray
+   reaches the target without the bottom: the earliest paths have one bottom reflection. Part of
+   the front's 11 m is slower water and part is a different path (one surface and one bottom
+   reflection in place of one bottom reflection); the two were not separated.
+3. *Depth from stacked rows was already governed by which arrivals reach the array, and the change
+   of water reshuffled them.* With a correct local profile the two-row depth was 21 m out in the
+   local water and 23 m out behind the front; without it, 15 m and 47 m. All inside the stated one
+   sigma of 122 to 125 m, which is the gradient prior at this range and says the chain does not
+   claim to know. The strongest arrivals come in at 1.4 to 4.2 degrees above and below horizontal
+   in near-equal pairs, and their mix differs between the two waters.
+4. *The three-row chain took an elevation of -31 degrees under the deepening layer*, on all four
+   pings (one flagged ambiguous with an alternative at +2.0 degrees). The simulated sound has no
+   arrival steeper than 20.5 degrees (the twelve kept). The horizontal-bearing correction then moved the
+   bearing by +1.1 degrees on the three pings not flagged (the cone bearing itself was 0.08 degrees
+   out) and the track was placed at 2239 m, labelled multipath, so no track on the target was confirmed. In the local water the
+   same chain gave -5.4 degrees and a track at ping 3. Why -31 was preferred (a second lobe of
+   three rows is the obvious candidate) was NOT investigated here: the depth estimators are being
+   changed elsewhere, and this is one seed.
+5. *Multipath depth gave nothing at 2.6 km* in either water (`single_arrival`: with no direct
+   path the pattern it looks for is not there), and on the test AUV gave 30.3 m, the water depth,
+   for a target at 15 m, with a sigma of 3.5 m and its own note that a bottom path is not in its
+   model. The front changed whether it answered, not whether it was right: in this water it has
+   no direct arrival to stand on.
+
+*Limits.* Illustrative profiles; flat seabed; flat surface for the eigenrays; twelve arrivals
+kept per point, the weakest of them only 6 to 11 dB below the strongest, so later arrivals are
+left out in both waters; one target, one seed, four pings. The 2-D section is the same on every bearing
+and moves with the vehicle. No horizontal refraction (a ray crossing a front obliquely on a map
+bends sideways: bearing errors from that are not in an N x 2-D model at all). The water does not
+change in time. Absorption, the boundary models and the rough-surface loss use the local water.

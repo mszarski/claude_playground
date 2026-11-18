@@ -250,7 +250,7 @@ def test_travel_time_through_two_isovelocity_halves():
     for j, t in enumerate(expected):
         k = np.flatnonzero((arr.n_surface[0][j] == 0) & (arr.n_bottom[0][j] == 0))
         assert len(k) == 1 and arr.delay[0][j][k[0]] == pytest.approx(t, abs=2e-6)
-    assert 3000.0 / c1 - expected[3] < -0.025                                        # the local speed alone: 26 ms early
+    assert 3000.0 / c1 - expected[3] < -0.025                                        # the local speed alone: 27 ms early
     provider = BellhopProvider(env, 5000.0, max_range=3000.0, min_range=2000.0, range_step=100.0, depth_step=5.0, max_arrivals=3)
     rays = provider.eigenrays([0.0, 0.0, 50.0], [[2040.0, 0.0, 46.0]])             # its grid node: 2000 m, 47.5 m
     k = np.flatnonzero(rays.valid[0] & (rays.n_surface[0] == 0) & (rays.n_bottom[0] == 0))
