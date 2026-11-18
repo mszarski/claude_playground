@@ -340,8 +340,125 @@ def test_twelve_km_section_is_in_the_design_and_reads_its_numbers_from_the_tools
     text = "\n".join(plan.twelve_km())
     assert "### The 12 km design point" in text and "At 12 km you get" in text and "What would close" in text
     _, d, perf = plan.build("popoto_face_3x32")
-    assert f"{plan.map_snr(perf, 'ship'):.1f} dB" in text and f"{d['ping_interval_s']:.1f} s" in text
+    assert f"{plan.row_snr(perf, 'ship'):.1f} dB, {plan.margin(perf, 'ship'):+.1f} dB of margin, Pd {plan.pd_of(perf, 'ship'):.2f}" in text and f"{d['ping_interval_s']:.1f} s" in text
+    assert "13 dB at the map" not in text and "THRESHOLD IS NOT THE SHIPPED DETECTOR" not in text
+    assert f"| {perf['detection']['threshold_db']:.1f} dB | {plan.row_snr(perf, 'ship'):.1f} dB | {plan.margin(perf, 'ship'):+.1f} dB | {plan.pd_of(perf, 'ship'):.2f} |" in text     # needed, SNR, margin, Pd
+    # the plan's threshold paragraph: the chain's own figure, and the capitals warning of the typed 13 dB is gone
+    depth = "\n".join(plan.depth_and_targets())
+    assert f"{perf['detection']['threshold_db']:.1f} dB of each row" in depth and "THE BUDGET'S" not in depth and "13 dB at the map" not in depth
+    assert "unexplained" in depth                                            # the budget against the chain, term by term (surface_image_validation.json)
     study = json.loads((ROOT / "docs" / "design" / "popoto_elevation_study.json").read_text())
     assert f"{study['refraction_m']['0.05']['12000.0']:.0f} m" in text
     assert perf["row_snr_db"]["ship"]["12000.0"] == pytest.approx(study["link_snr_db"]["ship, +25 dB"]["12000.0"], abs=0.05)
     assert "### The 12 km design point" in (ROOT / "docs" / "DESIGN.md").read_text()
+
+
+# --- the link budget's threshold is the chain's own detector's ----------------------------------------------------------
+
+def test_the_budgets_threshold_is_the_deployed_detectors_and_no_gain_is_counted_twice():
+    """`buildspec.detection` asks gpusonar.live for the SNR of one row the build's chain needs; the budget's SNR is one
+    row's with the row's gain against isotropic noise and nothing for the rows; margin = SNR - threshold. Held against
+    independent calls of `live.budget_threshold_db` and `live.detection_probability` on a template made here."""
+    from gpusonar import core, live
+    from gpusonar.sonar import SonarModel
+    from gpusonar.sonar_equation import isotropic_noise_gain_db
+    assert not hasattr(bs, "BUDGET_THRESHOLD_DB") and not hasattr(bs, "DETECTOR_THRESHOLD_DB") and not hasattr(bs, "rows_detection_gain_db")
+    perf = {}
+    for name in bs.shipped():
+        spec = bs.load(name)
+        d = bs.derive(spec)
+        p = perf[name] = bs.performance(d)
+        det, rows = p["detection"], int(spec["array"]["rows"])
+        assert det["rows"] == rows and det["probability"] == bs.DESIGN_DETECTION_PROBABILITY == 0.5 and det["statistic"] == "multiscale"
+        chain = dict(bs.deploy_config(spec)["chain"])
+        chain.pop("sync", None)
+        template = bs.detector_template(bs.sonar_config(spec))
+        assert det["threshold_db"] == pytest.approx(live.budget_threshold_db(template, chain, pd=0.5), abs=1e-6), name     # rows: the chain's own count
+        assert det["threshold_high_db"] == pytest.approx(live.budget_threshold_db(template, chain, pd=0.9), abs=1e-6), name
+        assert det["threshold_one_row_db"] - det["threshold_db"] == pytest.approx(det["rows_gain_db"]) == pytest.approx(p["rows_detection_gain_db"])
+        assert (det["rows_gain_db"] == 0.0) == (rows == 1)
+        # the equation holds ONE row's gain and nothing for the rows; the threshold is what the margin and the reach are against
+        eq, gains = bs.budget(d, target_strength_db=25.0)
+        row = isotropic_noise_gain_db(np.arange(32) * d["pitch_m"], d["centre_hz"], d["sound_speed"])
+        assert eq.array_gain() == pytest.approx(row) == pytest.approx(p["gain_isotropic_noise_db"]) and gains["threshold_db"] == det["threshold_db"]
+        for r, snr in p["row_snr_db"]["ship"].items():
+            assert snr == pytest.approx(float(eq.snr(float(r)))) and p["margin_db"]["ship"][r] == pytest.approx(snr - det["threshold_db"])
+            assert p["detection_probability"]["ship"][r] == pytest.approx(live.detection_probability(snr, template, chain), abs=1e-9)
+        assert float(eq.snr(p["reach_ship_m"])) == pytest.approx(det["threshold_db"], abs=0.01)
+        assert float(eq.snr(p["reach_ship_high_m"])) == pytest.approx(det["threshold_high_db"], abs=0.01) and p["reach_ship_high_m"] < p["reach_ship_m"]
+        assert bs.detection_probability(d, det["threshold_db"]) == pytest.approx(0.5, abs=2e-3) and bs.detection_probability(d, det["threshold_high_db"]) == pytest.approx(0.9, abs=2e-3)
+    # the face: the same row SNR with one, two and three rows; the rows show in the threshold only
+    one, two, three = (perf[f"popoto_face_{k}x32"] for k in (1, 2, 3))
+    r = "12000.0"
+    assert one["row_snr_db"]["ship"][r] == pytest.approx(two["row_snr_db"]["ship"][r]) == pytest.approx(three["row_snr_db"]["ship"][r])
+    assert three["margin_db"]["ship"][r] - one["margin_db"]["ship"][r] == pytest.approx(three["rows_detection_gain_db"]) == pytest.approx(4.0, abs=0.2)
+    # the 12 km design point (the detector package's table: -1.0 / +1.6 / +3.0 dB and 0.24 / 0.89 / 0.99)
+    for p, margin, pd in ((one, -1.0, 0.24), (two, 1.6, 0.89), (three, 3.0, 0.99)):
+        assert p["margin_db"]["ship"][r] == pytest.approx(margin, abs=0.15) and p["detection_probability"]["ship"][r] == pytest.approx(pd, abs=0.03)
+    # the short row closer than half a wavelength: 12.9 dB against sea noise, not 10 log 32 (D-103's closed form)
+    assert perf["popoto_testauv_1x32"]["gain_isotropic_noise_db"] == pytest.approx(12.9, abs=0.1)
+    assert SonarModel.load("popoto_testauv_1row") and bs.directivity_db(32, 0.15, 5000.0) == pytest.approx(10 * np.log10(32), abs=1e-9)
+
+
+def test_the_detectors_template_does_not_need_the_full_rate_window():
+    """The template `detection` uses is complex baseband at four times the band; the thresholds are the full-rate record's."""
+    from gpusonar import core, live
+    from gpusonar.sonar import SonarModel
+    spec = bs.load("popoto_testauv_1x32")
+    cfg = bs.sonar_config(spec)
+    chain = dict(bs.deploy_config(spec)["chain"])
+    chain.pop("sync", None)
+    full = SonarModel.from_config(copy.deepcopy(cfg)).make_record(core.Pose(), environment={"sound_speed": 1500.0})       # real samples at 102.4 kHz
+    small = bs.detector_template(cfg)
+    assert small.samples.n_samples * 10 < full.samples.n_samples
+    for pd in (0.5, 0.9):
+        assert live.budget_threshold_db(small, chain, pd=pd) == pytest.approx(live.budget_threshold_db(full, chain, pd=pd), abs=1e-3)
+
+
+def test_the_design_detection_probability_is_a_field_of_the_spec():
+    spec = bs.load("popoto_face_3x32")
+    base = bs.performance(bs.derive(spec))
+    high = copy.deepcopy(spec)
+    high["operation"]["detection_probability"] = 0.9
+    assert not [i for i in bs.validate(high) if i.level == "error"]
+    d = bs.derive(high)
+    p = bs.performance(d)
+    assert d["detection_probability"] == 0.9 and p["detection"]["probability"] == 0.9
+    assert p["detection"]["threshold_db"] == pytest.approx(base["detection"]["threshold_high_db"], abs=1e-6)
+    assert p["reach_ship_m"] == pytest.approx(base["reach_ship_high_m"], rel=1e-6) and p["margin_db"]["ship"]["12000.0"] < base["margin_db"]["ship"]["12000.0"] - 1.0
+    assert bs.files(high) == bs.files(spec)                                # a planning figure: no generated sonar or deployment file moves
+    bad = copy.deepcopy(spec)
+    bad["operation"]["detection_probability"] = 1.5
+    assert any(i.where == "operation.detection_probability" and i.level == "error" for i in bs.validate(bad))
+    # the depth plan takes the same threshold and says so
+    from gpusonar import depthplan
+    env = depthplan.load_environments("illustrative")[0]
+    P = depthplan.plan(bs.derive(spec), env, bs.target_classes_of(spec), own_depths=[10.0, 225.0], ranges=[12000.0])
+    assert P["threshold_db"] == pytest.approx(base["detection"]["threshold_db"]) and P["detection"]["threshold_is_the_detectors"]
+    ship = P["classes"]["ship"]
+    assert ship["free_field_margin_db"] == pytest.approx(base["margin_db"]["ship"]["12000.0"] + ship["ts_db"][0] - 25.0, abs=1e-6)
+    assert 0.0 <= ship["recommended"]["detection_probability"] <= 1.0
+
+
+def test_array_gain_against_isotropic_noise_closed_forms():
+    """sonar_equation.isotropic_noise_gain_db against the two-hydrophone closed forms, the half-wavelength line and the
+    limit of coincident hydrophones; SonarEquation.from_sonar uses it (10 log N only at half a wavelength)."""
+    from gpusonar.sonar import SonarModel
+    from gpusonar.sonar_equation import SonarEquation, isotropic_noise_gain_db
+    c, f = 1500.0, 5000.0
+    lam = c / f
+    for d in (0.05 * lam, 0.25 * lam, 0.5 * lam, 0.8 * lam):
+        kd = 2 * np.pi * d / lam
+        s = np.sin(kd) / kd
+        assert isotropic_noise_gain_db([0.0, d], f, c) == pytest.approx(10 * np.log10(2.0 / (1.0 + s)), abs=1e-9)                      # broadside
+        along = isotropic_noise_gain_db(np.array([[0.0, 0.0, 0.0], [d, 0.0, 0.0]]), f, c, direction=[1.0, 0.0, 0.0])
+        assert along == pytest.approx(10 * np.log10(2.0 / (1.0 + s * np.cos(kd))), abs=1e-9)                                           # endfire
+    assert isotropic_noise_gain_db(np.arange(32) * 0.5 * lam, f, c) == pytest.approx(10 * np.log10(32), abs=1e-9)
+    assert isotropic_noise_gain_db(np.arange(32) * 1e-6, f, c) == pytest.approx(0.0, abs=1e-6)                                         # 32 hydrophones in one place hear one noise
+    hann = np.hanning(34)[1:-1]
+    assert isotropic_noise_gain_db(np.arange(32) * 0.5 * lam, f, c, weights=hann) == pytest.approx(10 * np.log10(hann.sum() ** 2 / (hann ** 2).sum()), abs=1e-9)
+    short, long_ = SonarModel.load("popoto_testauv_1row"), SonarModel.load("popoto_face_1row")
+    eq_s, eq_l = SonarEquation.from_sonar(short, 50.0), SonarEquation.from_sonar(long_, 50.0)
+    assert eq_l.array_gain() == pytest.approx(10 * np.log10(32), abs=1e-6) and eq_s.array_gain() == pytest.approx(bs.directivity_db(32, 0.09, 5000.0), abs=1e-9)
+    assert eq_l.array_gain() - eq_s.array_gain() == pytest.approx(2.2, abs=0.1)
+    assert SonarEquation.from_sonar(short, 50.0, array_gain_db=7.0).array_gain() == 7.0                                                # a given gain is kept

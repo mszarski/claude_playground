@@ -798,28 +798,38 @@ the old detector none. Not explained; `cfar.search_factor: 5` would bring it bac
 gain for the rows (it is in the threshold). For the shipped builds, with their own receive windows (a longer window is
 more cells to search: 0.5 dB between 1.4 km and 12 km of window):
 
-| Build | Rows | Window | One-row budget SNR for Pd 0.5 / 0.9 | The same with `buildspec.rows_detection_gain_db` added, as `performance` compares it with 13 dB |
+| Build | Rows | Window | One-row budget SNR for Pd 0.5 / 0.9 | What the rows are worth at the detector (one row's threshold less theirs) |
 | --- | --- | --- | --- | --- |
-| `popoto_face_1x32` | 1 | 0.75–12.7 km | 15.6 / 17.3 dB | 15.6 / 17.3 dB |
-| `popoto_face_2x32` | 2 | 0.75–12.7 km | 13.1 / 14.7 dB | 15.5 / 17.1 dB |
-| `popoto_face_3x32` | 3 | 0.75–12.7 km | 11.6 / 13.2 dB | 15.4 / 17.0 dB |
-| `popoto_static_2x32` | 2 | 75–3000 m | 12.8 / 14.5 dB | 15.2 / 16.9 dB |
-| `popoto_static_3x32` | 3 | 75–3000 m | 11.4 / 13.0 dB | 15.1 / 16.7 dB |
-| `popoto_testauv_1x32` | 1 | 75–2000 m | 15.2 / 16.8 dB | 15.2 / 16.8 dB |
+| `popoto_face_1x32` | 1 | 0.75–12.7 km | 15.6 / 17.3 dB | — |
+| `popoto_face_2x32` | 2 | 0.75–12.7 km | 13.1 / 14.7 dB | 2.6 dB |
+| `popoto_face_3x32` | 3 | 0.75–12.7 km | 11.6 / 13.2 dB | 4.0 dB |
+| `popoto_static_2x32` | 2 | 75–3000 m | 12.8 / 14.5 dB | 2.5 dB |
+| `popoto_static_3x32` | 3 | 75–3000 m | 11.4 / 13.0 dB | 4.0 dB |
+| `popoto_testauv_1x32` | 1 | 75–2000 m | 15.2 / 16.8 dB | — |
 
-So the 13 dB of the plan's range figures becomes 15.5 dB for a probability of one half (17 dB for nine in ten) with the
-rows' gain as the budget already counts it; with the detector until now it was 19.7 dB of one row's SNR whatever the
-number of rows. The reference ship (+25 dB, free field, `buildspec.budget`) at 12 km on the face builds, margin at Pd 0.5
-and the probability of detection on one ping:
+**The link budgets use exactly these figures.** `buildspec.detection(d)` computes them from the build's own template
+record and the chain settings of its deployment file, for the detection probability the spec names
+(`operation.detection_probability`, 0.5 unless given); `buildspec.performance`, `surface_term`, the depth planner
+(`gpusonar.depthplan`, `tools/popoto_depth_planner.py`), `tools/reference_plan.py`, `tools/popoto_range_study.py`,
+`tools/popoto_elevation_study.py` and `tools/projector_requirements.py` take their threshold from it. The budget's SNR
+is ONE row's and no row gain is added to it: the rows are in the threshold. The typed 13 dB they used before, with a
+closed-form row gain on top (2.4 and 3.7 dB), stood for 15.5 dB at a probability of one half (17 dB for nine in ten);
+with the detector until now it was 19.7 dB of one row's SNR whatever the number of rows. The reference ship (+25 dB,
+free field, `buildspec.budget`) at 12 km on the face builds, margin at Pd 0.5 and the probability of detection on one
+ping:
 
-| Rows | Budget's margin (13 dB) | `mean`: margin, Pd | `multiscale`: margin, Pd | Pd at 10 / 12 / 14 km, before → after |
+| Rows | The margin as it was quoted (13 dB) | `mean`: margin, Pd | `multiscale`, and the budget now: margin, Pd | Pd at 10 / 12 / 14 km, before → after |
 | --- | --- | --- | --- | --- |
 | 1 | +1.6 dB | −5.1 dB, 0.00 | −1.0 dB, 0.24 | 0.24 → 1.00 / 0.00 → 0.24 / 0.00 → 0.00 |
 | 2 | +4.0 dB | −5.0 dB, 0.00 | +1.6 dB, 0.89 | 0.17 → 1.00 / 0.00 → 0.89 / 0.00 → 0.05 |
 | 3 | +5.3 dB | −5.0 dB, 0.00 | +3.0 dB, 0.99 | 0.14 → 1.00 / 0.00 → 0.99 / 0.00 → 0.24 |
 
-A third difference is a matter of convention, not of the chain: a budget that takes the source level as a peak where
-the chain's pings carry rms (or the reverse) is another 3 dB.
+The source level is RMS in the budget and in the simulator alike (D-102), so no convention stands between them. What
+is left between the budget and the chain for a point echo in free field at 12 km, measured term by term
+(`tools/surface_image_validation.py --only-chain`, `through_chain.accounting` in
+`docs/design/surface_image_validation.json`): the aperture window and the echo's place between the map's samples,
+both inside the threshold above, and about half a decibel the budget leaves out (the sweep's taper with the
+absorption's slope across the band, the noise spectrum's slope across the band, the row's gain across the band).
 
 `cell_statistic: mean` (with `range_cell_m` and `cfar` as before) is the detector until now, line for line:
 `tests/python/test_detector.py` recomputes its detections from the map with the cell-averaging detector alone.

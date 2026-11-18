@@ -44,7 +44,7 @@ chosen in a config file, or arithmetic on those. Published figures used for comp
 | SAS-3 | Seabed with a shipwreck, a cable, rocks and a cube for calibration | `configs/scenarios/sas_minsas_survey.yaml: scene` | seabed, wreck_hull, wreck_deckhouse, wreck_mast, cable, rocks, calibration_cube | yes |
 | POP-1 | Popoto array with ownship moving and a big moving target many km away | `configs/scenarios/popoto_far_mover.yaml: platform.velocity, scene` | ownship 1.5 m/s; target at 6.1 km moving 6 m/s, +25 dB | yes |
 | POP-2 | The Popoto array scales to more elements | `configs/sonars/popoto_array.yaml: array.count, receive.board_size` | 8 hydrophones on 1 boards; 16 hydrophones on 2 boards; 32 hydrophones on 4 boards; 64 hydrophones on 8 boards | yes |
-| POP-3 | Frequency and source level that take the Popoto array to 12 km | `configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)` | 5 kHz, 197 dB, 32 hydrophones, 1 s pulse: 15 dB at 12 km with spherical spreading (study: 195 dB at 4.2 kHz for 13 dB) | yes |
+| POP-3 | Frequency and source level that take the Popoto array to 12 km | `configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)` | 5 kHz, 197 dB, 32 hydrophones a row, 1 s pulse: 14.6 dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of 0.5 on one ping: 1 row: needs 15.6 dB, margin -1.0 dB, detection probability 0.24; 2 rows: needs 13.1 dB, margin +1.5 dB, detection probability 0.89; 3 rows: needs 11.6 dB, margin +3.0 dB, detection probability 0.99 (study: 198 dB at 4.2 kHz for 15.6 dB in one row). Met by the recommended three rows; one row alone is 1.0 dB short | yes |
 | POP-4 | Popoto examples with different ocean characteristics, sound-speed profiles, bottom types and depths | `configs/scenarios/popoto_env_summer_mud_60m.yaml: propagation.environment (and the other popoto_env_* files)` | 4 environments: popoto_env_deep_silt_1000m, popoto_env_gravel_30m, popoto_env_summer_mud_60m, popoto_env_winter_sand_200m | yes |
 | FLS-X | More FLS examples: a realistic boat, clutter on the seabed, waves on the sea surface | `configs/scenarios/fls_120k_cluttered_seabed.yaml: scene (also fls_120k_rough_surface, fls_170k_traffic)` | fls_120k_cluttered_seabed: boat, cable, debris, rocks, seafloor; fls_120k_rough_surface: boat, points, sea_surface, sphere; fls_170k_traffic: boat | yes |
 | SAS-4 | More SAS examples with rocks | `configs/scenarios/sas_minsas_boulder_field.yaml: scene (also sas_minsas_rocky_ripples)` | sas_minsas_boulder_field: 45 rocks; sas_minsas_rocky_ripples: 47 rocks | yes |
@@ -95,12 +95,12 @@ rows stay inside, not a length to fill; ONE row design, the long module, serves 
 
 | Build | Rows × module | For | Beam | Reach, ship / small (km) | Elevation at 20 dB | Boards | Direct sound over full scale |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `popoto_testauv_1x32` | 1 × `testauv_short` | the chain on real boards and under way (the short row: the one exception) | 5.3° | 7.7 / 2.9 | none | 4 | +37 dB |
-| `popoto_static_2x32` | 2 × `long_4p8m` | the long row and stacked rows in the water for the first time | 3.2° | 9.4 / 3.7 | 0.18° (one of several possible angles: see below) | 8 | +38 dB |
-| `popoto_static_3x32` | 3 × `long_4p8m` | the recommended row arrangement, still off the vehicle | 3.2° | 9.9 / 3.9 | 0.18° | 12 | +38 dB |
-| `popoto_face_1x32` | 1 × `long_4p8m` | the face to start with: one long row | 3.2° | 12.8 / 5.3 | none | 4 | +22 dB |
-| `popoto_face_2x32` | 2 × `long_4p8m` | elevation on the vehicle where water is shallow against the range | 3.2° | 14.0 / 6.0 | 0.18° (one of several possible angles: see below) | 8 | +21 dB |
-| `popoto_face_3x32` | 3 × `long_4p8m` | the recommended end state | 3.2° | 14.7 / 6.4 | 0.18° | 12 | +22 dB |
+| `popoto_testauv_1x32` | 1 × `testauv_short` | the chain on real boards and under way (the short row: the one exception) | 5.3° | 7.0 / 2.6 | none | 4 | +37 dB |
+| `popoto_static_2x32` | 2 × `long_4p8m` | the long row and stacked rows in the water for the first time | 3.2° | 8.5 / 3.3 | 0.18° (one of several possible angles: see below) | 8 | +38 dB |
+| `popoto_static_3x32` | 3 × `long_4p8m` | the recommended row arrangement, still off the vehicle | 3.2° | 9.1 / 3.5 | 0.18° | 12 | +38 dB |
+| `popoto_face_1x32` | 1 × `long_4p8m` | the face to start with: one long row | 3.2° | 11.5 / 4.7 | none | 4 | +22 dB |
+| `popoto_face_2x32` | 2 × `long_4p8m` | elevation on the vehicle where water is shallow against the range | 3.2° | 12.8 / 5.3 | 0.18° (one of several possible angles: see below) | 8 | +21 dB |
+| `popoto_face_3x32` | 3 × `long_4p8m` | the recommended end state | 3.2° | 13.5 / 5.7 | 0.18° | 12 | +22 dB |
 
 (Two rows: with two rows 1.5 m apart the array cannot tell which of several elevation angles (about 11.5° apart) an echo came from, so it reports the list of possible angles instead of one; bearing, range and the track are unaffected; the list collapses to one angle when the water depth and the range rule the others out, when a track already has a depth, or with a third row.)
 
@@ -148,23 +148,23 @@ A row module is a named row: 32 hydrophones at one spacing, their harness, four 
 | `long_4p8m` | 32 at 15 cm | 4.65 m | `popoto_face_1x32`, `popoto_face_2x32`, `popoto_face_3x32`, `popoto_static_2x32`, `popoto_static_3x32` | 0.50 |
 | `testauv_short` | 32 at 9 cm | 2.79 m | `popoto_testauv_1x32` | 0.30 |
 
-**Why the test AUV's prototype reaches less: the short row against the long one**, each as one row with the face's projector and pulse (noise-limited; 13 dB at the map for detection), and the long row stacked:
+**Why the test AUV's prototype reaches less: the short row against the long one**, each as one row with the face's projector and pulse, and the long row stacked (noise-limited; "needed" is what the build's own detector needs of one row's SNR for a detection probability of 0.5 on one ping, `buildspec.detection`; Pd is the probability at the SNR the budget gives):
 
-| Row | Beam | Row's gain against sea noise | Map gain with the rows | Reach, ship / small (km) | SNR at 12 km, ship | Margin at 12 km | Source level for 13 dB at 12 km | or pulse at the shipped source level |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 × short (the test AUV's row) | 5.3° | 12.9 dB | 12.9 dB | 11.7 / 4.8 | 12.5 dB | -0.5 dB | 198 dB | 1.1 s |
-| 1 × long | 3.2° | 15.1 dB | 15.1 dB | 12.8 / 5.3 | 14.6 dB | +1.6 dB | 197 dB (as shipped) | 1.0 s |
-| 2 × long | 3.2° | 15.1 dB | 17.4 dB | 14.0 / 6.0 | 17.0 dB | +4.0 dB | 197 dB (as shipped) | 1.0 s |
-| 3 × long | 3.2° | 15.1 dB | 18.8 dB | 14.7 / 6.4 | 18.4 dB | +5.4 dB | 197 dB (as shipped) | 1.0 s |
+| Row | Beam | Row's gain against sea noise | Rows at the detector | Reach, ship / small (km) | One row's SNR at 12 km, ship | Needed | Margin at 12 km | Pd on one ping | Source level for a margin of 0 dB at 12 km | or pulse at the shipped source level |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 × short (the test AUV's row) | 5.3° | 12.9 dB | — | 10.6 / 4.2 | 12.5 dB | 15.6 dB | -3.1 dB | 0.03 | 200 dB | 2.0 s |
+| 1 × long | 3.2° | 15.1 dB | — | 11.5 / 4.7 | 14.6 dB | 15.6 dB | -1.0 dB | 0.24 | 198 dB | 1.3 s |
+| 2 × long | 3.2° | 15.1 dB | +2.6 dB | 12.8 / 5.3 | 14.6 dB | 13.1 dB | +1.5 dB | 0.89 | 197 dB (as shipped) | 1.0 s |
+| 3 × long | 3.2° | 15.1 dB | +4.0 dB | 13.5 / 5.7 | 14.6 dB | 11.6 dB | +3.0 dB | 0.99 | 197 dB (as shipped) | 1.0 s |
 
 - **Closer than half a wavelength the hydrophones share the sea's noise.** 32 at 9 cm gain 12.9 dB against sea noise, not the 15.1 dB
   that 32 give at half a wavelength; against the boards' own noise they still gain 15.1 dB. The beam is 5.3° against 3.2°, so it also takes in more reverberation.
-- **The short row costs 2.2 dB and 1.7 times the beam width.** At 12 km on the ship-sized target it has -0.5 dB of margin against +1.6 dB for the long row; where the margin is negative the table says what source level or pulse would restore it.
+- **The short row costs 2.2 dB and 1.7 times the beam width.** At 12 km on the ship-sized target it has -3.1 dB of margin against -1.0 dB for the long row; where the margin is negative the table says what source level or pulse would restore it.
 - **Static and face builds share everything in the module**: expected beam, gain and reach per row, the four-board harness, the calibration procedure. They differ in the platform: motion, the
   attitude source, the projector's place, cabling and where the compute sits.
 - On the test AUV itself the prototype also uses a 0.1 s pulse (10 dB less processing gain) for short-range trials; its own reach is in the plan's table above.
 
-Kept as trade-space rows only, not as builds (the owner: "Keep at 32"): 1 x 64 at 0.109 m: beam 2.2°, map gain 16.7 dB, reach 13.6 / 5.8 km; 1 x 96 at 0.073 m: beam 2.2°, map gain 16.7 dB, reach 13.6 / 5.8 km; 2 x 48 at 0.146 m: beam 2.2°, map gain 19.1 dB, reach 14.9 / 6.5 km (`trade_space.fixed_channels` of the study).
+Kept as trade-space rows only, not as builds (the owner: "Keep at 32"): 1 x 64 at 0.109 m: beam 2.2°, row gain 16.7 dB, reach 12.3 / 5.1 km; 1 x 96 at 0.073 m: beam 2.2°, row gain 16.7 dB, reach 12.3 / 5.1 km; 2 x 48 at 0.146 m: beam 2.2°, row gain 16.7 dB and +2.6 dB for the rows at the detector, reach 13.6 / 5.7 km (`trade_space.fixed_channels` of the study).
 
 ### The long-range Popoto array as a staged build: one row, then stacked rows (elevation and depth)
 
@@ -192,14 +192,14 @@ More lines at other heights measure the missing angle, in the active mode (the m
 
 **Trade space in one table** (the face, rows within 7 m, outer rows 1.50 m apart, 4–6 kHz; noise-limited reach on the budget of Sec. 5; details further down):
 
-| Channels | As | Beam | Map gain | Reach ship / small (km) | Elevation at 20 dB | Boards |
+| Channels | As | Beam | Row gain plus what the rows are worth at the detector | Reach ship / small (km) | Elevation at 20 dB | Boards |
 | --- | --- | --- | --- | --- | --- | --- |
-| 32 | 1 x 32 at 0.15 m | 3.2° | 15.1 dB | 12.8 / 5.3 | none | 4 |
-| 64 | 1 x 64 at 0.109 m | 2.2° | 16.7 dB | 13.6 / 5.8 | none | 8 |
-| 64 | 2 x 32 at 0.15 m | 3.2° | 17.4 dB | 14.0 / 6.0 | 0.18° (repeat -0.6 dB) | 8 |
-| 96 | 1 x 96 at 0.073 m | 2.2° | 16.7 dB | 13.6 / 5.8 | none | 12 |
-| 96 | 2 x 48 at 0.146 m | 2.2° | 19.1 dB | 14.9 / 6.5 | 0.18° (repeat -0.6 dB) | 12 |
-| 96 | 3 x 32 at 0.15 m | 3.2° | 18.8 dB | 14.7 / 6.4 | 0.18° (repeat -4.2 dB) | 12 |
+| 32 | 1 x 32 at 0.15 m | 3.2° | 15.1 dB | 11.5 / 4.7 | none | 4 |
+| 64 | 1 x 64 at 0.109 m | 2.2° | 16.7 dB | 12.3 / 5.1 | none | 8 |
+| 64 | 2 x 32 at 0.15 m | 3.2° | 17.6 dB | 12.8 / 5.3 | 0.18° (repeat -0.6 dB) | 8 |
+| 96 | 1 x 96 at 0.073 m | 2.2° | 16.7 dB | 12.3 / 5.1 | none | 12 |
+| 96 | 2 x 48 at 0.146 m | 2.2° | 19.3 dB | 13.6 / 5.7 | 0.18° (repeat -0.6 dB) | 12 |
+| 96 | 3 x 32 at 0.15 m | 3.2° | 19.1 dB | 13.5 / 5.7 | 0.18° (repeat -4.2 dB) | 12 |
 
 For a fixed number of channels the trade is bearing and range (one long row) against elevation (stacked rows).
 
@@ -220,13 +220,13 @@ and simulated trials that the tests run.
 | Beam at broadside | 5.3° | 3.2° | 3.2° | 3.2° | 3.2° | 3.2° |
 | Row's gain against sea noise / against the boards' own noise (dB) | 12.9 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 |
 | Pulse, and the range it hides | 0.1 s, 75 m | 0.1 s, 75 m | 0.1 s, 75 m | 1 s, 750 m | 1 s, 750 m | 1 s, 750 m |
-| Noise-limited reach, ship (+25 dB) / small target (+5 dB), km | 7.7 / 2.9 | 9.4 / 3.7 | 9.9 / 3.9 | 12.8 / 5.3 | 14.0 / 6.0 | 14.7 / 6.4 |
+| Noise-limited reach, ship (+25 dB) / small target (+5 dB), km | 7.0 / 2.6 | 8.5 / 3.3 | 9.1 / 3.5 | 11.5 / 4.7 | 12.8 / 5.3 | 13.5 / 5.7 |
 | Elevation, one sigma at 20 dB | none | 0.18° | 0.18° | none | 0.18° | 0.18° |
 | Highest repeat of the elevation response in the searched sector | n/a | -0.6 dB | -4.2 dB | n/a | -0.6 dB | -4.2 dB |
 | Raw data rate while receiving (Mbit/s) | 79 | 157 | 236 | 79 | 157 | 236 |
 | Cables: one per hydrophone + the sync reference to each board | 32 + 4 | 64 + 8 | 96 + 12 | 32 + 4 | 64 + 8 | 96 + 12 |
 
-Reach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file (197 dB, **not chosen for the test AUV or the static array**); reverberation and the channel decide earlier or later.
+Reach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file (197 dB, **not chosen for the test AUV or the static array**): where one row's SNR falls to what the chain's own detector needs for a detection probability of 0.5 on one ping with the stage's rows added (15.2, 12.8, 11.4, 15.6, 13.1, 11.6 dB for the six stages in turn; `gpusonar.buildspec.detection`). Reverberation and the channel decide earlier or later.
 
 **Stage 1, one row on the test AUV: what it is for.** It proves the chain on real boards and under way: capture, synchronisation of four boards, the
 stream, recording, conditioning, beamforming, detection, tracking with ownship's motion taken out, classification, the report to the vehicle. Bearing
@@ -234,15 +234,15 @@ and range are the full system's; only the beam is wider. There is no room for a 
 
 | Row of 32 over | Beam | Gain against sea noise | Reach, ship / small (km) |
 | --- | --- | --- | --- |
-| 2 m | 7.6° | 11.3 dB | 7.2 / 2.7 |
-| 3 m | 5.3° | 12.9 dB | 7.7 / 2.9 |
-| 4.8 m (the full row) | 3.2° | 15.1 dB | 8.5 / 3.3 |
+| 2 m | 7.6° | 11.3 dB | 6.5 / 2.4 |
+| 3 m | 5.3° | 12.9 dB | 7.0 / 2.6 |
+| 4.8 m (the full row) | 3.2° | 15.1 dB | 7.7 / 2.9 |
 
 Closer together than half a wavelength the hydrophones hear the same sea noise: 32 over 3 m gain 12.9 dB, what 20 at half a wavelength would.
 The other twelve still count against the boards' own noise and against a dead channel, and they are the full system's count, boards and wiring.
 A higher band would suit the short row (0.09 m is half a wavelength at 8.3 kHz) but would be another projector and another band than
 the full face's, so the prototype keeps 4–6 kHz. Its pulse is 0.1 s: the array cannot listen while it transmits, a 1 s pulse hides everything
-inside 750 m and 0.1 s everything inside 75 m, at 10 dB less processing gain. With a 185 dB projector instead, the 3 m row reaches 4.4 / 1.5 km.
+inside 750 m and 0.1 s everything inside 75 m, at 10 dB less processing gain. With a 185 dB projector instead, the 3 m row reaches 3.9 / 1.4 km.
 Simulated trial (raw 102.4 kHz, four boards on their own clocks, the vehicle rolling 2°/s, 30 m of water): the boards synchronise to 0.44 µs and the
 target at 500 m is found within 0.9 m and 0.01°.
 
@@ -318,7 +318,7 @@ What the owner's margin costs (the earlier baseline against the working one):
 
 Accuracy and every mounting and clock tolerance scale with the baseline; the repeats move apart, which helps two rows a little. The length limit
 (9 → 7 m) does not touch the 32-hydrophone row (4.8 m); it lowers what a filled row could hold from 60 to
-46 hydrophones at half a wavelength (17.8 → 16.6 dB, beam 1.7° → 2.2°, reach 14.2 → 13.6 km on a ship).
+46 hydrophones at half a wavelength (17.8 → 16.6 dB, beam 1.7° → 2.2°, reach 12.8 → 12.2 km on a ship).
 
 **The projector on the face.** No position was given ("Projector etc" needs room). The sonar files put it in the forward end margin at mid-height,
 4 m from the array's centre: a placeholder, 1.69 to 6.37 m from the hydrophones. Two things follow, both from the files' own numbers:
@@ -370,7 +370,7 @@ Wrong picks searching ±30°, arrival at 2° / at 15°:
 | 3 rows at -0.75, +0.00, +0.75 m (equal) | 2.8% / 1.3% | 0.2% / 0.2% | 0.0% / 0.0% | 0.0% / 0.0% |
 | 2 rows, 1.50 m apart | 27.3% / 25.6% | 10.0% / 10.4% | 0.1% / 0.0% | 0.0% / 0.0% |
 
-Three rows are no more accurate than two (the outer rows set that); the third buys one elevation angle instead of a list of possible ones, and 1.3 dB of detection.
+Three rows are no more accurate than two (the outer rows set that); the third buys one elevation angle instead of a list of possible ones, and 1.5 dB of detection.
 
 **Two rows or three: side by side** (the face; the static array's rows are at the same heights).
 
@@ -382,7 +382,7 @@ Three rows are no more accurate than two (the outer rows set that); the third bu
 | Wrong pick at 13 dB, clean noise, ±30° | 10% | 0.0% |
 | One answer without help | where water depth and range bound the arrivals to ±5.8° (100 m of water: beyond 2.0 km with one bounce) | everywhere above about 10 dB a row |
 | Deep water, short range | a list of possible angles, not one (bearing, range and the track are unaffected), until a track has a depth | works |
-| Detection against one row | +2.4 dB | +3.7 dB |
+| Detection against one row | +2.6 dB | +4.0 dB |
 | A dead board | the row it serves loses 8 of 32; the estimate carries on | the same |
 | A dead row | no elevation | two rows left: the two-row behaviour |
 | Processing per ping, scenario size, C++ on 4 shared CPU threads (one row: 0.63 s) | 1.41 s | 2.54 s |
@@ -492,41 +492,41 @@ lower range sidelobes would separate the arrivals better.
 
 The outline again (the face, rows within 7 m, outer rows 1.50 m apart, 4–6 kHz, 197 dB, 1 s pulse; noise-limited reach on the budget of Sec. 5):
 
-| Channels | As | Beam | Map gain | Reach ship / small (km) | Elevation at 20 dB | Boards |
+| Channels | As | Beam | Row gain plus what the rows are worth at the detector | Reach ship / small (km) | Elevation at 20 dB | Boards |
 | --- | --- | --- | --- | --- | --- | --- |
-| 32 | 1 x 32 at 0.15 m | 3.2° | 15.1 dB | 12.8 / 5.3 | none | 4 |
-| 64 | 1 x 64 at 0.109 m | 2.2° | 16.7 dB | 13.6 / 5.8 | none | 8 |
-| 64 | 2 x 32 at 0.15 m | 3.2° | 17.4 dB | 14.0 / 6.0 | 0.18° (repeat -0.6 dB) | 8 |
-| 96 | 1 x 96 at 0.073 m | 2.2° | 16.7 dB | 13.6 / 5.8 | none | 12 |
-| 96 | 2 x 48 at 0.146 m | 2.2° | 19.1 dB | 14.9 / 6.5 | 0.18° (repeat -0.6 dB) | 12 |
-| 96 | 3 x 32 at 0.15 m | 3.2° | 18.8 dB | 14.7 / 6.4 | 0.18° (repeat -4.2 dB) | 12 |
+| 32 | 1 x 32 at 0.15 m | 3.2° | 15.1 dB | 11.5 / 4.7 | none | 4 |
+| 64 | 1 x 64 at 0.109 m | 2.2° | 16.7 dB | 12.3 / 5.1 | none | 8 |
+| 64 | 2 x 32 at 0.15 m | 3.2° | 17.6 dB | 12.8 / 5.3 | 0.18° (repeat -0.6 dB) | 8 |
+| 96 | 1 x 96 at 0.073 m | 2.2° | 16.7 dB | 12.3 / 5.1 | none | 12 |
+| 96 | 2 x 48 at 0.146 m | 2.2° | 19.3 dB | 13.6 / 5.7 | 0.18° (repeat -0.6 dB) | 12 |
+| 96 | 3 x 32 at 0.15 m | 3.2° | 19.1 dB | 13.5 / 5.7 | 0.18° (repeat -4.2 dB) | 12 |
 
 **Does it need to be 64?** For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. Sixty-four buy one of two things. As one row of 64
-inside the 7 m: 1.6 dB, a beam of 2.2° instead of 3.2°, 1.6 dB less reverberation in the beam, noise-limited reach 12.8 → 13.6 km (ship) and
-5.3 → 5.8 km (small target), no elevation; and since 46 hydrophones at half a wavelength already fill that length, 64 gain no more than 46 would.
-As two rows of 32: 17.4 dB in the map against 16.7 dB, the old beam, and elevation as a list of possible angles (two rows cannot tell which of several an echo came from; the list becomes one angle where water depth and range rule the others out). Bearing and range against elevation is the trade for a
+inside the 7 m: 1.6 dB, a beam of 2.2° instead of 3.2°, 1.6 dB less reverberation in the beam, noise-limited reach 11.5 → 12.3 km (ship) and
+4.7 → 5.1 km (small target), no elevation; and since 46 hydrophones at half a wavelength already fill that length, 64 gain no more than 46 would.
+As two rows of 32: worth 17.6 dB (the row's gain plus what two rows are worth at the detector) against 16.7 dB, the old beam, and elevation as a list of possible angles (two rows cannot tell which of several an echo came from; the list becomes one angle where water depth and range rule the others out). Bearing and range against elevation is the trade for a
 fixed channel count; 96 as three rows make the elevation unambiguous.
 
 | A row of | Length | Beam | Gain (sea noise) | Reach ship / small (km) | Reverberation in the beam against 32 | Boards a row |
 | --- | --- | --- | --- | --- | --- | --- |
-| 16 at 0.15 m | 2.40 m | 6.3° | 12.0 dB | 11.4 / 4.6 | +3.0 dB | 2 |
-| 24 at 0.15 m | 3.60 m | 4.2° | 13.8 dB | 12.2 / 5.0 | +1.2 dB | 3 |
-| 32 at 0.15 m (today) | 4.80 m | 3.2° | 15.1 dB | 12.8 / 5.3 | -0.0 dB | 4 |
-| 46 at 0.15 m (fills the 7 m) | 6.90 m | 2.2° | 16.6 dB | 13.6 / 5.8 | -1.6 dB | 6 |
-| 48 at 0.146 m (fills the 7 m) | 7.00 m | 2.2° | 16.7 dB | 13.6 / 5.8 | -1.6 dB | 6 |
-| 64 at 0.109 m (fills the 7 m) | 7.00 m | 2.2° | 16.7 dB | 13.6 / 5.8 | -1.6 dB | 8 |
-| 96 at 0.073 m (fills the 7 m) | 7.00 m | 2.2° | 16.7 dB | 13.6 / 5.8 | -1.6 dB | 12 |
-| 32 at 0.219 m (sparse, fills the 7 m) (repeats in bearing at -11 dB when steered 30°) | 7.00 m | 2.2° | 16.7 dB | 13.6 / 5.8 | -1.6 dB | 4 |
-| 60 at 0.15 m (the whole 9 m, no margin) | 9.00 m | 1.7° | 17.8 dB | 14.2 / 6.1 | -2.7 dB | 8 |
+| 16 at 0.15 m | 2.40 m | 6.3° | 12.0 dB | 10.2 / 4.1 | +3.0 dB | 2 |
+| 24 at 0.15 m | 3.60 m | 4.2° | 13.8 dB | 11.0 / 4.4 | +1.2 dB | 3 |
+| 32 at 0.15 m (today) | 4.80 m | 3.2° | 15.1 dB | 11.5 / 4.7 | -0.0 dB | 4 |
+| 46 at 0.15 m (fills the 7 m) | 6.90 m | 2.2° | 16.6 dB | 12.2 / 5.1 | -1.6 dB | 6 |
+| 48 at 0.146 m (fills the 7 m) | 7.00 m | 2.2° | 16.7 dB | 12.3 / 5.1 | -1.6 dB | 6 |
+| 64 at 0.109 m (fills the 7 m) | 7.00 m | 2.2° | 16.7 dB | 12.3 / 5.1 | -1.6 dB | 8 |
+| 96 at 0.073 m (fills the 7 m) | 7.00 m | 2.2° | 16.7 dB | 12.3 / 5.1 | -1.6 dB | 12 |
+| 32 at 0.219 m (sparse, fills the 7 m) (repeats in bearing at -11 dB when steered 30°) | 7.00 m | 2.2° | 16.7 dB | 12.2 / 5.1 | -1.6 dB | 4 |
+| 60 at 0.15 m (the whole 9 m, no margin) | 9.00 m | 1.7° | 17.8 dB | 12.8 / 5.3 | -2.7 dB | 8 |
 
 - **Along the face.** Each doubling of a filled row is 3 dB against noise, half the beam and 3 dB less reverberation; in noise-limited range a few per cent.
   The knee is the usable length: 46 hydrophones at half a wavelength fill 7 m, and more in the same length buy nothing against sea noise. Sparser
   than half a wavelength gives the narrow beam for fewer hydrophones but full repeats in bearing when steered.
-- **Up the face.** The second row buys elevation and 2.4 dB of detection; the third makes elevation unambiguous (+1.3 dB); a fourth adds 0.9 dB.
+- **Up the face.** The second row buys elevation and 2.6 dB of detection; the third makes elevation unambiguous (+1.5 dB); a fourth adds 0.9 dB.
   Accuracy is set by the outer rows' separation, not the count.
 - **Noise or reverberation.** More source level buys noise-limited range (6 dB is worth four times the hydrophones in a row) and nothing against
   reverberation; a longer row buys both. Where reverberation limits (short and medium range in the scenarios), length is the only one that helps.
-- **Own depth, and the surface.** None of the reach figures here contains the surface-reflected path. Against a target near the surface in water that does not duct, own depth is worth more than any row: the ship class at 12 km, margin over 13 dB, 1 row: -44 dB at 10 m, +7.6 dB at 225 m; 2 rows: -42 dB at 10 m, +10.0 dB at 225 m; 3 rows: -41 dB at 10 m, +11.3 dB at 225 m (*Surface interference, own depth, and target classes*; every target figure assumed).
+- **Own depth, and the surface.** None of the reach figures here contains the surface-reflected path. Against a target near the surface in water that does not duct, own depth is worth more than any row: the ship class at 12 km, margin over what each build's own detector needs, 1 row: -47 dB at 10 m, +4.9 dB at 225 m; 2 rows: -45 dB at 10 m, +7.5 dB at 225 m; 3 rows: -43 dB at 10 m, +9.0 dB at 225 m (*Surface interference, own depth, and target classes*; every target figure assumed).
 - **Band.** Another band moves every row: spacing and row length scale with the wavelength, the reach with absorption and noise
   (`tools/popoto_range_study.py`), and the rows' repeat spacing with it.
 - **Cost** goes with the channel count: boards = channels / 8, one cable per hydrophone and one reference per board, 2.46 Mbit/s and 7.3 MB per ping per
@@ -633,61 +633,63 @@ The owner, on the finding that a ship at 4 m is lost at 12 km with the array at 
 - **Bubbles, by the `apl_1994` law, remove the surface path in a high wind** (5 dB a bounce at 0.07° and 9.8 m/s): the null fills and the lobe's gain goes with it (last column). That law grows without limit towards grazing and its sources state no range of validity; a target inside the bubble layer is not modelled. Treat that column as a bound, not a prediction.
 - **A deep target is spared.** Over own depths of 5–300 m the peak factor ranges over -46 to +12 dB for a target at 4 m; -11 to +12 dB for a target at 30 m; -1 to +11 dB for a target at 100 m; +1 to +8 dB for a target at 300 m: once the two paths differ by more than the pulse resolves, the direct-then-surface and surface-then-direct echoes arrive together and add (+6 dB), whatever the depth.
 
-**Checked.** Against the simulator's image-source paths through `run_scenario` on both engines (echo with the surface over echo without, own depth 10–600 m, target 4, 30, 150 m, at 12 and 3 km): within 0.9 dB at the peak and 1.1 dB in energy, the largest differences in the nulls, where the sweep's taper matters. Through the C++ chain with noise (a strong point at 4 m, 12 km): the detector's SNR against own depth follows the model within 1.3 dB over -15 to +12 dB. Against Bellhop, one way at 12 km: surface image only: energy within 0.6 dB, two-way peak within 1.2 dB; 100 m of isovelocity water over sand: energy within 0.0 dB, two-way peak within 0.1 dB (the largest in the 10 m / 4 m null, where the arrivals file's digits limit Bellhop). The projector's depth counts in a null: 1.5 m below the array (the one-row file) is 1.2 dB there (`tools/surface_image_validation.py`).
+**Checked.** Against the simulator's image-source paths through `run_scenario` on both engines (echo with the surface over echo without, own depth 10–600 m, target 4, 30, 150 m, at 12 and 3 km): within 0.9 dB at the peak and 1.1 dB in energy, the largest differences in the nulls, where the sweep's taper matters. Through the C++ chain with noise (a strong point at 4 m, 12 km): the detector's SNR against own depth follows the model within 1.4 dB over -15 to +12 dB. Against Bellhop, one way at 12 km: surface image only: energy within 0.6 dB, two-way peak within 1.2 dB; 100 m of isovelocity water over sand: energy within 0.0 dB, two-way peak within 0.1 dB (the largest in the 10 m / 4 m null, where the arrivals file's digits limit Bellhop). The projector's depth counts in a null: 1.5 m below the array (the one-row file) is 1.2 dB there (`tools/surface_image_validation.py`).
 
-> **THE BUDGET'S 13 dB THRESHOLD IS NOT THE SHIPPED DETECTOR'S.** Measured, same target, free field (`tools/surface_image_validation.py`): the chain's `snr_db` reads 41.4 dB where the budget says 44.6 dB, 3.2 dB less. For a detection probability of 0.5 the detector needs about 15.5 dB on the budget's footing (17 dB for 0.9; `buildspec.DETECTOR_THRESHOLD_DB`, from `live.budget_threshold_db`): 2.5 dB more than the 13 dB used below. **Every margin below is therefore optimistic by about 2.5 dB** until the budget tools take the detector's own threshold and quote detection probabilities (`live.detection_probability`); that step is open. Source levels are RMS in the simulator and in the budget alike (D-102).
+**The budget's threshold is the chain's own.** Every margin below is one row's SNR over what the build's detector, as its deployment file sets it, needs for a detection probability of 0.5 on one ping (`buildspec.detection`, from `live.budget_threshold_db`): 15.6 dB for one row on the face, 11.6 dB of each row with three added (17.3 and 13.2 dB for 0.9). No threshold and no row gain is typed. Source levels are RMS in the simulator and in the budget alike (D-102).
+
+**The budget against the chain, measured.** Same target, free field, one row, 12 pings (`tools/surface_image_validation.py`): the chain's `snr_db` reads 41.4 dB where the budget says 44.6 dB, 3.2 dB less. Term by term: the aperture window -1.76 dB and this echo's place between the map's samples -1.06 dB (both already inside the detector's threshold, which holds the mean over places, -0.51 dB); and three things the budget leaves out, -0.45 dB together: the sweep's taper with the absorption's slope across the band -0.26 dB, the noise spectrum's slope across the band -0.13 dB, the row's gain across the band -0.06 dB. Sum -3.27 dB; unexplained +0.04 dB. **So the margins below are optimistic by about 0.5 dB for this pulse at this range**, and by nothing else that was found.
 
 **Which water is which.** *Non-ducting*: the direct path and the surface image only. It applies where the bottom returns little towards the target: water deep against the range (the bounce meets the bottom above its critical angle), a soft bottom (silt, clay, mud), or sound bent down onto such a bottom. *Ducted*: shallow against the range over sand or gravel, where many bounces arrive nearly whole; the image series (isovelocity) or Bellhop (with a profile) then replaces the two-path factor and is worth tens of decibels more than spherical spreading. The planner computes whichever the environment describes and says which it used.
 
-**The depth plan** (`tools/popoto_depth_planner.py`; three rows on the face, 12 km; margin over 13 dB at the map, at the LOW end of each class's assumed target strength, worst over the class's depths; own depths 5 m to the platform's limit, 500 m (the owner: "Depth no further than 500m"), and no closer to the bottom than the clearance, a placeholder):
+**The depth plan** (`tools/popoto_depth_planner.py`; three rows on the face, 12 km; margin of one row's SNR over what the build's detector needs, at the LOW end of each class's assumed target strength, worst over the class's depths; own depths 5 m to the platform's limit, 500 m (the owner: "Depth no further than 500m"), and no closer to the bottom than the clearance, a placeholder):
 
-| Water | Class | Free-field margin | At 10 m | Best own depth | Margin there | Own depths that hold it | Reach there |
+| Water | Class | Free-field margin (Pd) | At 10 m | Best own depth | Margin there (Pd) | Own depths that hold it | Reach there |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Non-ducting: no bottom return, isovelocity, 5 m/s wind | ship (+25 dB, 2–6 m) | +5.4 dB | -41 dB | 225 m | +11.3 dB | 110–280 m, 335–345 m, 385–395 m, 500 m | 12.7 km |
-| Non-ducting: no bottom return, isovelocity, 5 m/s wind | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -21 dB | 280 m | -9.1 dB | none | 8.0 km |
-| Non-ducting: no bottom return, isovelocity, 5 m/s wind | large_submerged (+25 dB, 30–300 m) | +5.4 dB | -1 dB | 245 m | +10.9 dB | 65–500 m | 12.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -4.5 dB | -14 dB | 225 m | -3.7 dB | none | 8.4 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -24.5 dB | -30 dB | 480 m | -24.6 dB | none | 3.7 km |
-| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -4.5 dB | -9 dB | 395 m | -4.6 dB | none | 9.7 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +5.4 dB | +18 dB | 5 m | +25.2 dB | 5–89 m | 12.7 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -2 dB | 65 m | -0.7 dB | none | 11.1 km |
-| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +5.4 dB | +18 dB | 65 m | +19.3 dB | 5–89 m | 12.7 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | — | 55 m | +12.8 dB | 5–455 m | 12.7 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | — | 55 m | -3.5 dB | none | 4.1 km |
-| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | — | 80 m | +13.1 dB | 5–480 m | 12.7 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | +21 dB | 5 m | +34.5 dB | 5–189 m | 12.7 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -13 dB | 101 m | -5.8 dB | none | 8.0 km |
-| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | +7 dB | 101 m | +14.2 dB | 5–189 m | 12.7 km |
-| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | -94 dB | 5 m | -93.6 dB | none | 2.6 km |
-| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -114 dB | 5 m | -113.6 dB | none | 1.0 km |
-| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | -94 dB | 41 m | -2.2 dB | none | 8.8 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | +21 dB | 5 m | +34.2 dB | 5–189 m | 12.7 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -13 dB | 85 m | -7.1 dB | none | 8.0 km |
-| profile ladder: isothermal; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | +7 dB | 85 m | +12.9 dB | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | +21 dB | 5 m | +36.1 dB | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -12 dB | 189 m (the deepest searched) | -4.9 dB | none | 7.2 km |
-| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | +8 dB | 189 m (the deepest searched) | +16.4 dB | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | +21 dB | 5 m | +34.8 dB | 5–189 m | 12.7 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -10 dB | 149 m | -8.0 dB | none | 7.2 km |
-| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | +10 dB | 149 m | +13.0 dB | 5–189 m | 12.7 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +5.4 dB | +17 dB | 141 m | +23.0 dB | 5–189 m | 12.7 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -14.6 dB | -9 dB | 133 m | -4.1 dB | none | 10.4 km |
-| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +5.4 dB | +11 dB | 5 m | +16.5 dB | 5–189 m | 12.7 km |
+| Non-ducting: no bottom return, isovelocity, 5 m/s wind | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | -43 dB | 225 m | +9.0 dB (1.00) | 125–265 m | 12.7 km |
+| Non-ducting: no bottom return, isovelocity, 5 m/s wind | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -24 dB | 280 m | -11.5 dB (0.00) | none | 7.0 km |
+| Non-ducting: no bottom return, isovelocity, 5 m/s wind | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | -3 dB | 245 m | +8.6 dB (1.00) | 65–500 m | 12.7 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | ship (+25 dB, 2–6 m) | -6.8 dB (0.00) | -16 dB | 225 m | -6.0 dB (0.00) | none | 7.7 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | xl_auv (+5 dB, 20–200 m) | -26.8 dB (0.00) | -32 dB | 480 m | -27.0 dB (0.00) | none | 3.3 km |
+| Non-ducting, sea state 5 (9.8 m/s wind), bubble loss by the apl_1994 law | large_submerged (+25 dB, 30–300 m) | -6.8 dB (0.00) | -11 dB | 395 m | -6.9 dB (0.00) | none | 8.7 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +16 dB | 5 m | +22.8 dB (1.00) | 5–89 m | 12.7 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -4 dB | 65 m | -3.1 dB (0.02) | none | 9.6 km |
+| Ducted: 100 m of isovelocity water over sand (the popoto_12km scenario's) | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +16 dB | 65 m | +16.9 dB (1.00) | 5–89 m | 12.7 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | — | 55 m | +10.5 dB (1.00) | 5–405 m | 12.7 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | — | 55 m | -5.9 dB (0.00) | none | 3.3 km |
+| 1000 m over silt with a thermocline (the popoto_env_deep_silt_1000m scenario's profile), Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | — | 80 m | +10.8 dB (1.00) | 5–405 m | 12.0 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +18 dB | 5 m | +32.2 dB (1.00) | 5–189 m | 12.7 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -16 dB | 101 m | -8.1 dB (0.00) | none | 7.2 km |
+| 200 m over sand, isothermal (sound speed rising with depth: the popoto_env_winter_sand_200m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +4 dB | 101 m | +11.9 dB (1.00) | 5–189 m | 12.7 km |
+| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | -96 dB | 5 m | -96.0 dB (0.00) | none | 1.8 km |
+| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -116 dB | 5 m | -116.0 dB (0.00) | none | 1.0 km |
+| 60 m over mud, summer thermocline (the popoto_env_summer_mud_60m scenario's), Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | -96 dB | 41 m | -4.6 dB (0.00) | none | 7.2 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +19 dB | 5 m | +31.9 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -15 dB | 85 m | -9.5 dB (0.00) | none | 7.2 km |
+| profile ladder: isothermal; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +5 dB | 85 m | +10.5 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +18 dB | 5 m | +33.8 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -14 dB | 189 m (the deepest searched) | -7.3 dB (0.00) | none | 7.2 km |
+| profile ladder: mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +6 dB | 189 m (the deepest searched) | +14.1 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +19 dB | 5 m | +32.5 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -12 dB | 149 m | -10.4 dB (0.00) | none | 6.5 km |
+| profile ladder: mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m); 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +8 dB | 149 m | +10.6 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | ship (+25 dB, 2–6 m) | +3.0 dB (0.99) | +14 dB | 141 m | +20.6 dB (1.00) | 5–189 m | 12.7 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | xl_auv (+5 dB, 20–200 m) | -17.0 dB (0.00) | -12 dB | 133 m | -6.5 dB (0.00) | none | 6.5 km |
+| profile ladder: no mixed layer: -0.05 /s from the surface to 100 m; 200 m over sand, Bellhop | large_submerged (+25 dB, 30–300 m) | +3.0 dB (0.99) | +8 dB | 5 m | +14.2 dB (1.00) | 5–189 m | 12.7 km |
 
 ![Detection margin against range and own depth](design/popoto_depth_planner.png)
 
 Every best depth in the table is inside the platform's limit (30 of 30): the search goes no deeper. Where it says *the deepest searched*, the limit or the bottom clearance is what stopped it and a deeper array would do better. The limit is also the depth rating the parts list asks of every wet part.
 
 
-- **A ship in non-ducting water wants the array deep.** Best at 225 m (+11.3 dB); held anywhere in 110–280 m, 335–345 m, 385–395 m, 500 m; within 3 dB of the best over 185–240 m. At 10 m it is -41 dB and the reach is 4.0 km; the shallowest depth that holds it at 12 km is 110 m.
-- **One depth for the ship and a deep submerged target:** 110–280 m, 335–345 m, 385–395 m, 500 m; best 225 m (+10.4 dB for the weaker).
-- **Depth diversity.** Pinging at more than one depth (or as the vehicle changes depth) fills what one depth leaves: at the ship's target strength, every target depth from 1 to 500 m at 12 km is held by 225 m (100%); the best single depth covers 100%. For weaker targets and other waters: the JSON's `depth_diversity`.
-- **The small submerged class is not reached at 12 km at its low figure** (+5 dB: -9.1 dB at best, reach 8.0 km); at broadside (+22 dB assumed) add 17 dB.
+- **A ship in non-ducting water wants the array deep.** Best at 225 m (+9.0 dB); held anywhere in 125–265 m; within 3 dB of the best over 185–240 m. At 10 m it is -43 dB and the reach is 4.0 km; the shallowest depth that holds it at 12 km is 125 m.
+- **One depth for the ship and a deep submerged target:** 125–265 m; best 225 m (+8.0 dB for the weaker).
+- **Depth diversity.** Pinging at more than one depth (or as the vehicle changes depth) fills what one depth leaves: at the ship's target strength, every target depth from 1 to 500 m at 12 km is held by 250 m (98%), then 35 m (100%); the best single depth covers 98%. For weaker targets and other waters: the JSON's `depth_diversity`.
+- **The small submerged class is not reached at 12 km at its low figure** (+5 dB: -11.5 dB at best, reach 7.0 km); at broadside (+22 dB assumed) add 17 dB.
 - **What depth costs.** The nulls move with the target's depth: the table's last column of the planner (`target_depths_not_held_m`) lists the target depths a chosen own depth leaves uncovered; the bottom limits own depth in shallow water (clearance is a parameter); and with a real profile the answer changes (the profile rows above: the same classes through Bellhop). **The plan rests on the water it is given**: isovelocity unless a profile is supplied, and every shipped water is illustrative.
 
-Rows only move the margin: 1x32: ship best +7.6 dB at 225 m; 2x32: ship best +10.0 dB at 225 m; 3x32: ship best +11.3 dB at 225 m (non-ducting water).
+Rows only move the margin: 1x32: ship best +4.9 dB at 225 m; 2x32: ship best +7.5 dB at 225 m; 3x32: ship best +9.0 dB at 225 m (non-ducting water).
 
-**The static array's hanging depth is the same choice.** At the end of each build's own receive window, non-ducting water / 100 m over sand, the ship class: `popoto_testauv_1x32` (2.0 km): 38 m (+32 dB) / 33 m (+36 dB); `popoto_static_2x32` (3.0 km): 56 m (+30 dB) / 49 m (+33 dB); `popoto_static_3x32` (3.0 km): 56 m (+31 dB) / 49 m (+35 dB). Their specs hang or run them at 10 m, 10 m, 10 m today (placeholders).
+**The static array's hanging depth is the same choice.** At the end of each build's own receive window, non-ducting water / 100 m over sand, the ship class: `popoto_testauv_1x32` (2.0 km): 38 m (+30 dB) / 33 m (+34 dB); `popoto_static_2x32` (3.0 km): 56 m (+28 dB) / 49 m (+31 dB); `popoto_static_3x32` (3.0 km): 56 m (+29 dB) / 49 m (+32 dB). Their specs hang or run them at 10 m, 10 m, 10 m today (placeholders).
 
 **Target classes** (`targets:` in a build spec). The owner wants large subsurface movers as well as ships. Three classes are shipped as examples, each marked `assumed`:
 
@@ -715,98 +717,104 @@ No measured target strength of a ship, an unmanned vehicle or a submarine is cit
 | ship at 12 km, non-ducting water, array at 10 m | 1 | 0 of 6 | — | — | no track | | | |  | 0 |
 | ship at 12 km, non-ducting water, array at 10 m | 2 | 0 of 6 | — | — | no track | | | |  | 0 |
 | ship at 12 km, non-ducting water, array at 10 m | 3 | 0 of 6 | — | — | no track | | | |  | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 1 | 4 of 6 | 12.0 dB | 5 | mover | +2.0 m/s | -0.3° | none | — | 0 |
-| ship at 12 km, non-ducting water, array at the planned depth | 2 | 5 of 6 | 11.7 dB | 4 | mover | +0.7 m/s | -0.7° | none | — | 5 |
-| ship at 12 km, non-ducting water, array at the planned depth | 3 | 4 of 6 | 11.9 dB | 5 | mover | +2.5 m/s | -0.4° | 238 ± 2552 m (4 m) | yes | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 14.2 dB | 3 | mover | +0.3 m/s | -0.7° | none | — | 0 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 14.9 dB | 3 | mover | -0.0 m/s | -0.3° | none | — | 6 |
-| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 14.6 dB | 3 | mover | +0.0 m/s | -0.5° | 237 ± 2502 m (150 m) | yes | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 25.7 dB | 3 | mover | -0.3 m/s | -0.2° | none | — | 0 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 27.1 dB | 3 | mover | -0.1 m/s | -0.3° | none | — | 6 |
-| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 26.7 dB | 3 | mover | -0.2 m/s | -0.3° | 80 ± 628 m (150 m) | yes | 0 |
-| rigid cylinder 100 m x 10 m crossing broadside at 6 km, non-ducting water | 3 | 3 of 6 | 19.1 dB | 4 | uncertain | -5.8 m/s | +2.2° | 153 ± 652 m (150 m) | yes | 0 |
-| submerged mover (60 m deep) at 12 km, 100 m over sand, Bellhop, array at 30 m | 3 | 0 of 6 | — | 3 | mover | -0.3 m/s | +0.1° | 2 ± 2505 m (60 m) | yes | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 1 | 6 of 6 | 18.0 dB | 3 | mover | +0.3 m/s | -0.3° | none | — | 0 |
+| ship at 12 km, non-ducting water, array at the planned depth | 2 | 6 of 6 | 18.2 dB | 3 | mover | +0.4 m/s | -0.3° | none | — | 6 |
+| ship at 12 km, non-ducting water, array at the planned depth | 3 | 6 of 6 | 18.2 dB | 3 | mover | +0.2 m/s | -0.6° | 239 ± 2502 m (4 m) | yes | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 22.2 dB | 3 | mover | -0.3 m/s | -0.2° | none | — | 0 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 22.1 dB | 3 | mover | -0.1 m/s | -0.2° | none | — | 5 |
+| submerged mover at 12 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 22.4 dB | 3 | mover | -0.1 m/s | -0.4° | 227 ± 2502 m (150 m) | yes | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 1 | 6 of 6 | 32.6 dB | 3 | mover | -0.0 m/s | -0.4° | none | — | 0 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 2 | 6 of 6 | 33.2 dB | 3 | mover | -0.3 m/s | -0.2° | none | — | 6 |
+| submerged mover at 6 km, non-ducting water, array at the depth that holds both | 3 | 6 of 6 | 33.3 dB | 3 | mover | -0.2 m/s | +0.0° | 74 ± 628 m (150 m) | yes | 0 |
+| rigid cylinder 100 m x 10 m crossing broadside at 6 km, non-ducting water | 3 | 6 of 6 | 22.7 dB | 3 | mover | -1.7 m/s | -0.3° | 49 ± 627 m (150 m) | yes | 0 |
+| submerged mover (60 m deep) at 12 km, 100 m over sand, Bellhop, array at 30 m | 3 | 6 of 6 | 31.7 dB | 3 | mover | -0.3 m/s | +1.3° | 15 ± 2524 m (60 m) | yes | 0 |
 
 Not run: the submerged mover in 100 m over sand with Bellhop, rows 1 and 2 (minutes each); the cylinder, rows 1 and 2.
 
-(Detections are counted within 20 m of the straight-line range to the target; in the ducted case the strongest arrivals come later than that, so the count can read 0 while the track on the target exists. With two rows the generated deployment file keeps each detection at the row's own range and bearing (`elevation.correct_bearing: false`): placed with a wrongly picked elevation angle, detections jumped by up to a kilometre at 12 km and the track broke.)
+(A detection is counted as the target's when the ranges it covers reach the straight-line range to the target within 20 m: the chain's detector reports one detection for a group of arrivals, at their energy-weighted mean range. With two rows the generated deployment file keeps each detection at the row's own range and bearing (`elevation.correct_bearing: false`): placed with a wrongly picked elevation angle, detections jumped by up to a kilometre at 12 km and the track broke.)
 
-The ship is lost with the array at 10 m and held at the planned depth; the submerged mover is tracked and classed as a mover at 6 and 12 km with nothing known of the sound-speed profile; the depth it reports then carries a sigma of kilometres at 12 km, which is the honest figure. The cylinder is seen only on the pings where it is abeam: aspect, not range, decides it.
+The ship is lost with the array at 10 m and held at the planned depth; the submerged mover is tracked and classed as a mover at 6 and 12 km with nothing known of the sound-speed profile; the depth it reports then carries a sigma of kilometres at 12 km, which is the honest figure. The cylinder is detected on all 6 pings (median 22.7 dB) as it crosses broadside; off that aspect its echo falls by tens of decibels (the cylinder table above), and aspect, not range, decides it.
 
 ### The 12 km design point
 
 The owner: "What does it look like for popoto at 12km though. Need that design". This section is self-contained: what the system that detects at 12 km is, and what it can and cannot tell you there.
 The targets are the two the study uses: a **ship-sized target of +25 dB** and a **small target of +5 dB**. Everything is for the full face (4–6 kHz, a 1 s sweep, 197 dB re 1 µPa at 1 m, rows of the long module, outer rows 1.5 m apart).
 
-**At 12 km you get** (noise-limited budget; ship-sized target; one sigma):
+**At 12 km you get** (noise-limited budget; ship-sized target; one sigma; detection: one row's SNR, its margin over what that build's own detector needs for a detection probability of 0.5 on one ping, and the probability the detector gives at that SNR):
 
 | Rows | Detection, ship (+25 dB) | Detection, small (+5 dB) | Bearing | Elevation | Depth with a measured profile | Depth without one |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 × 32 | yes: 14.6 dB, +1.6 dB of margin | no: -5.4 dB, 18 dB short | ±0.26° = ±54 m across (beam 3.2°, 665 m) | none | none | none |
-| 2 × 32 | yes: 17.0 dB, +4.0 dB of margin | no: -3.0 dB, 16 dB short | ±0.20° = ±41 m across (beam 3.2°, 665 m) | ±0.34° from noise, as a list of possible angles 11.5° apart unless water depth rules the others out (bearing, range and the track do not depend on it) | ±82 m (noise, roll to 0.2°, clocks to 0.49 µs) | not in metres: ±2400 m from a gradient unknown by 0.05 /s |
-| 3 × 32 | yes: 18.4 dB, +5.4 dB of margin | no: -1.6 dB, 15 dB short | ±0.17° = ±35 m across (beam 3.2°, 665 m) | ±0.33° from noise, one answer | ±81 m (noise, roll to 0.2°, clocks to 0.49 µs) | not in metres: ±2400 m from a gradient unknown by 0.05 /s |
+| 1 × 32 | on some pings: 14.6 dB, -1.0 dB of margin, Pd 0.24 | no: -5.4 dB, 21 dB short | ±0.26° = ±54 m across (beam 3.2°, 665 m) | none | none | none |
+| 2 × 32 | on most pings: 14.6 dB, +1.5 dB of margin, Pd 0.89 | no: -5.4 dB, 18 dB short | ±0.19° = ±40 m across (beam 3.2°, 665 m) | ±0.34° from noise, as a list of possible angles 11.5° apart unless water depth rules the others out (bearing, range and the track do not depend on it) | ±82 m (noise, roll to 0.2°, clocks to 0.49 µs) | not in metres: ±2400 m from a gradient unknown by 0.05 /s |
+| 3 × 32 | yes: 14.6 dB, +3.0 dB of margin, Pd 0.99 | no: -5.4 dB, 17 dB short | ±0.16° = ±34 m across (beam 3.2°, 665 m) | ±0.33° from noise, one answer | ±81 m (noise, roll to 0.2°, clocks to 0.49 µs) | not in metres: ±2400 m from a gradient unknown by 0.05 /s |
 
 For that to hold: a projector that delivers the source level in this band (none is chosen); hydrophones and inputs whose own noise is below the sea's (parts list); the inputs recovered from the direct sound
 well inside the 750 m blind range; noise, not reverberation, limiting at 12 km (below); for elevation, boards of different rows synchronised to 0.87 µs and the roll known as stated;
 for depth in metres, a sound-speed profile along the path. Spreading at least as kind as spherical (in shallow water it is kinder: below).
 
-**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, 13 dB at the map for detection, target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute).
+**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, an RMS source level, a steady point echo; detection: probability 0.5 on one ping by the chain's own detector as deployed, which needs 11.6 dB of one row's SNR with 3 rows added (13.2 dB for 0.9); target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute).
 
-| Face option | Beam | Row gain (sea noise) | Map gain | SNR at 12 km, ship | margin | SNR at 12 km, small | short by | Reached at: ship / small (km) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 × 32 long | 3.2° | 15.1 dB | 15.1 dB | 14.6 dB | +1.6 dB | -5.4 dB | 18.4 dB | 12.8 / 5.3 |
-| 2 × 32 long | 3.2° | 15.1 dB | 17.4 dB | 17.0 dB | +4.0 dB | -3.0 dB | 16.0 dB | 14.0 / 6.0 |
-| 3 × 32 long | 3.2° | 15.1 dB | 18.8 dB | 18.4 dB | +5.4 dB | -1.6 dB | 14.6 dB | 14.7 / 6.4 |
-| 1 × 32 short (the test AUV's row, for comparison) | 5.3° | 12.9 dB | 12.9 dB | 12.5 dB | -0.5 dB | -7.5 dB | 20.5 dB | 11.7 / 4.8 |
-| 1 × 46 (fills 7 m) | 2.2° | 16.6 dB | 16.6 dB | 16.2 dB | +3.2 dB | -3.8 dB | 16.8 dB | 13.6 / 5.8 |
-| 1 × 64 in 7 m | 2.2° | 16.7 dB | 16.7 dB | 16.3 dB | +3.3 dB | -3.7 dB | 16.7 dB | 13.6 / 5.8 |
-| 2 × 48 in 7 m | 2.2° | 16.7 dB | 19.1 dB | 18.7 dB | +5.7 dB | -1.3 dB | 14.3 dB | 14.9 / 6.5 |
+SNRs are one row's. *Needed* is what that option's own detector needs of it for a detection probability of 0.5 on one ping, its rows added (`buildspec.detection`, from the chain's settings in the build's deployment file; for 0.9 add 1.6 dB). It holds the aperture window (1.8 dB), where the echo falls between the map's samples (0.5 dB), the false-alarm budget (0.001 a ping over this window) and the rows; the budget holds the pulse's matched-filter gain and one row's gain against sea noise. Nothing is in both.
 
-**What would close the 15 dB for the small target at 12 km** (three rows; each alone):
+| Face option | Beam | Row gain (sea noise) | Needed | One row's SNR at 12 km, ship | margin | Pd | at 0.9 | One row's SNR at 12 km, small | short by | Reached at: ship / small (km) | the same at Pd 0.9 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 × 32 long | 3.2° | 15.1 dB | 15.6 dB | 14.6 dB | -1.0 dB | 0.24 | -2.6 dB | -5.4 dB | 21.0 dB | 11.5 / 4.7 | 10.8 / 4.3 |
+| 2 × 32 long | 3.2° | 15.1 dB | 13.1 dB | 14.6 dB | +1.5 dB | 0.89 | -0.1 dB | -5.4 dB | 18.5 dB | 12.8 / 5.3 | 12.0 / 4.9 |
+| 3 × 32 long | 3.2° | 15.1 dB | 11.6 dB | 14.6 dB | +3.0 dB | 0.99 | +1.4 dB | -5.4 dB | 17.0 dB | 13.5 / 5.7 | 12.7 / 5.3 |
+| 1 × 32 short (the test AUV's row, for comparison) | 5.3° | 12.9 dB | 15.6 dB | 12.5 dB | -3.1 dB | 0.03 | -4.7 dB | -7.5 dB | 23.1 dB | 10.6 / 4.2 | 9.9 / 3.9 |
+| 1 × 46 (fills 7 m) | 2.2° | 16.6 dB | 15.7 dB | 16.2 dB | +0.5 dB | 0.65 | -1.1 dB | -3.8 dB | 19.5 dB | 12.2 / 5.1 | 11.5 / 4.7 |
+| 1 × 64 in 7 m | 2.2° | 16.7 dB | 15.7 dB | 16.3 dB | +0.6 dB | 0.66 | -1.0 dB | -3.7 dB | 19.4 dB | 12.3 / 5.1 | 11.5 / 4.7 |
+| 2 × 48 in 7 m | 2.2° | 16.7 dB | 13.2 dB | 16.3 dB | +3.1 dB | 1.00 | +1.5 dB | -3.7 dB | 16.9 dB | 13.6 / 5.7 | 12.7 / 5.3 |
+
+**What would close the 17 dB for the small target at 12 km** (three rows; each alone):
 
 | Lever | To close it | What one step gives |
 | --- | --- | --- |
-| Source level | 212 dB re 1 µPa at 1 m | dB for dB |
-| Pulse length (same level) | 29 s, blind inside 22 km | 3 dB per doubling; the blind range doubles with it |
-| Hydrophones in a row | 933 at half a wavelength, 140 m long | 3 dB per doubling of a filled row; the 7 m zone holds 46: +1.6 dB (and the owner keeps 32) |
-| Rows | not reachable | 2 rows +2.4 dB, 3 rows +3.7 dB, 4 rows +4.6 dB over one |
-| Lower noise | 37 dB re 1 µPa²/Hz | a calm sea is 40 dB: 11 dB; the platform's own noise is not in the budget at all |
-| Come closer | 6.4 km | about 2.7 dB per km between 6 and 12 km |
+| Source level | 214 dB re 1 µPa at 1 m | dB for dB |
+| Pulse length (same level) | 50 s, blind inside 38 km | 3 dB per doubling; the blind range doubles with it |
+| Hydrophones in a row | 1603 at half a wavelength, 240 m long | 3 dB per doubling of a filled row; the 7 m zone holds 46: +1.6 dB (and the owner keeps 32) |
+| Rows | not reachable | 2 rows +2.6 dB, 3 rows +4.0 dB, 4 rows +4.9 dB over one |
+| Lower noise | 34 dB re 1 µPa²/Hz | a calm sea is 40 dB: 11 dB; the platform's own noise is not in the budget at all |
+| Come closer | 5.7 km | about 2.7 dB per km between 6 and 12 km |
 
-The small target at 12 km is not a matter of one lever: it is reached at 6.4 km. **These are noise-limited figures with spherical spreading, the cautious case for loss.**
+The small target at 12 km is not a matter of one lever: it is reached at 5.7 km. **These are noise-limited figures with spherical spreading, the cautious case for loss.**
 In shallow water sound is ducted: Bellhop for 100 m of isovelocity water over sand gives 14 dB less loss each way at 4 kHz (70.4 against 84.6 dB; `popoto_range_study.json`), which more than covers the small target's shortfall in that water, and at those levels reverberation, not noise, decides.
 
 **Through the chain, with reverberation** (`tools/popoto_12km_study.py`: the ship of `popoto_12km`, five points of +18 dB crossing at 6 m/s at 12 km, six pings; C++ chain with each row count's deployment file; SNR is over the local background the detector measures):
 
 | Water | Rows | Ship detected on | Median SNR | Track confirmed at ping | Track on the ship | Later arrivals tracked / classed multipath | Other tracks |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 3 of 6 pings | 13.5 dB | 5 | uncertain at 3.4 m/s | 0 / 0 | 1 uncertain |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 1 of 6 pings | 11.9 dB | — | none | 0 / 0 |  |
-| the same without reverberation (noise only) | 1 | 4 of 6 pings | 12.5 dB | 4 | uncertain at 3.2 m/s | 0 / 0 | 1 uncertain |
-| the same without reverberation (noise only) | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| the same without reverberation (noise only) | 3 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 15.4 dB | 3 | mover at 5.4 m/s, mover at 5.9 m/s, mover at 6.1 m/s, static at 2.1 m/s | 6 / 5 | 3 mover, 5 multipath, 1 static, 1 uncertain |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 16.6 dB | 3 | multipath at 6.0 m/s, multipath at 6.3 m/s, uncertain at 4.6 m/s, uncertain at 6.5 m/s | 1 / 1 | 3 multipath, 2 uncertain |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 17.1 dB | 3 | mover at 5.7 m/s, mover at 5.8 m/s, multipath at 5.9 m/s, multipath at 6.0 m/s, multipath at 7.1 m/s | 1 / 1 | 2 mover, 4 multipath, 1 uncertain |
-| popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 1 / 0 | 1 mover |
-| popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 1 / 0 | 1 mover |
-| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 27.4 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
-| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 28.1 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 6 of 6 pings | 17.8 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 7.0 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 6 of 6 pings | 14.2 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 1 | 6 of 6 pings | 16.4 dB | 3 | mover at 6.3 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 3 | 6 of 6 pings | 14.4 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 24.0 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 23.5 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
+| popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
+| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 33.9 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
+| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 35.0 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover, 1 uncertain |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 19.4 dB | 3 | mover at 6.1 m/s, multipath at 5.8 m/s, mover at 7.5 m/s | 4 / 3 | 2 mover, 4 multipath, 1 uncertain |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 24.7 dB | 3 | mover at 5.9 m/s, multipath at 6.3 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 32.9 dB | 3 | mover at 6.0 m/s, multipath at 6.1 m/s, multipath at 6.9 m/s | 0 / 0 | 1 mover, 2 multipath |
 
-Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 13.5 dB against 12.5 dB; 2 rows: not detected against not detected; 3 rows: 11.9 dB against not detected. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
+A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 18 to 126 m, its first arrival is within 6 m of the ship and its range reads 13 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
 
-**A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do, which is why the ship is detected on few or no pings there, and marginally enough that the projector's place on the face decides it. Bellhop's field for the same water holds the ship on every ping. Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, or on the array's depth, not on the array's size.** The surface term is now in the planner's budget and own depth is planned (*Surface interference, own depth, and target classes* above): in non-ducting water the ship is lost with the array at this depth and held with it deep.
 
-Not run: 3 rows: the four popoto_env_* environments; 2 rows: popoto_env_winter_sand_200m (the run was stopped: each Bellhop case takes 1 to 10 minutes here).
+Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 17.8 dB against 16.4 dB; 2 rows: 14.9 dB against 14.9 dB; 3 rows: 14.2 dB against 14.4 dB. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
+
+**A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do: there the ship is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 17.8 / 14.9 / 14.2 dB over the local background). In Bellhop's field for the same water it is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 24.0 / 22.4 / 23.5 dB over the local background). Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, or on the array's depth, not on the array's size.** The surface term is now in the planner's budget and own depth is planned (*Surface interference, own depth, and target classes* above): in non-ducting water the ship is lost with the array at this depth and held with it deep.
+
+Not run: 3 rows: popoto_env_deep_silt_1000m, popoto_env_gravel_30m, popoto_env_summer_mud_60m, popoto_env_winter_sand_200m (each Bellhop case takes 1 to 10 minutes here).
 
 The environments differ by far more than the row count does: the row count buys two to four decibels, the water tens. A downward-refracting profile over a soft bottom can leave nothing at 12 km whatever the array.
 
 **Bearing at 12 km.** The beam is 3.2° wide: 665 m across at 12 km, so two targets closer than that in bearing and in the same range cell are one. A single target's bearing is good to
-±0.17° (±35 m across) at the 18 dB available on the ship (the bound for a row of this length, at broadside; steered to 45° it is 1.4 times that). The cone-angle correction is
+±0.16° (±34 m across) at the 15 dB a row has on the ship, the three rows counted as the 4 dB they are worth at the detector (the bound for a row of this length, at broadside; steered to 45° it is 1.4 times that). The cone-angle correction is
 negligible there: an arrival within 0.5° of level (100 m of water) moves the bearing by less than 0.03° at 45° off broadside.
 
 **Elevation and depth at 12 km** (rows 1.5 m apart; the SNR is the one the budget gives at 12 km, not a nominal 20 dB):
@@ -835,7 +843,7 @@ which arrival of a group came first; how a track's elevation changes over pings.
 
 **What a dive adds (optional).** Only "depth in metres with a small sigma at several kilometres" needs a profile covering the water between vehicle and target. The stage-2 study (`docs/design/popoto_stage2.json`, illustrative profiles): median depth error at 6 km by rung: prior / local (straight line): 80.4 m; family: isothermal (assumed): 43.0 m; built: sampled 10 m about its own depth: 51.9 m; built: dived through the whole column: 0.3 m; supplied: the true profile: 0.1 m; family: mixed layer, right parameters: 0.1 m; family: mixed layer, layer 25% too deep: 45.8 m. So a dive through the water column before a search, and again when the water changes, is a step in the operating checklist marked optional; for the static array, a cast at deployment. The depth planner says which it used: isovelocity water unless the environment carries a profile.
 
-**Tracking at 12 km.** 3.3 pings a minute on target (one every 17.9 s for the full window). The shipped tracker confirms on 3 detections (`tracker.confirm_hits`), so a track exists 54 s after the first detection at the earliest, 36 s if counted from it; a mover's class needs its speed, which at 0.17° of bearing accuracy (35 m across) takes several pings more for a crossing target. Measured: the table above gives the ping at which the track on the ship was confirmed in each water and how the later (bounced) arrivals were classed.
+**Tracking at 12 km.** 3.3 pings a minute on target (one every 17.9 s for the full window). The shipped tracker confirms on 3 detections (`tracker.confirm_hits`), so a track exists 54 s after the first detection at the earliest, 36 s if counted from it; a mover's class needs its speed, which at 0.16° of bearing accuracy (34 m across) takes several pings more for a crossing target. Measured: the table above gives the ping at which the track on the ship was confirmed in each water and how the later (bounced) arrivals were classed.
 
 **Hardware for the 12 km point** (details and the plan's own words: *Parts list*).
 
@@ -846,7 +854,7 @@ which arrival of a group came first; how a track's elevation changes over pings.
 - **Compute: the plan** (the owner's decision on the stage-2 timings). Over the full window the decimate-first stage on a CPU takes 13.1 / 22.9 / 44.2 s a ping for 1 / 2 / 3 rows against 17.9 s between pings: **one row may run on a CPU; two or three rows need a GPU** (`compute.option` defaults to `gpu` for stacked rows and the validator warns of a CPU option slower than the ping interval). **The full-window GPU figure is still unmeasured**: the L4 numbers below are for scenario-size decimated pings.
 - **Compute, both options, measured:** on decimated pings of the `popoto_12km` scenario's size the C++ chain takes 0.63 / 1.41 / 2.54 s a ping for 1 / 2 / 3 rows on 4 shared CPU threads, and 0.010 / 0.021 / 0.031 s on an NVIDIA L4 (15 times its own host's 8 threads for one row; the tree before the 1.5 m row heights). A full-length raw ping at the boards' rate took 15 / 24 / 38 s on the CPU: not real time against 17.9 s without decimating first. Decimate-first timings: `docs/design/popoto_stage2.json`.
 
-**What the earlier builds reach instead** (noise-limited, ship / small): `popoto_testauv_1x32`: 7.7 / 2.9 km; `popoto_static_2x32`: 9.4 / 3.7 km; `popoto_static_3x32`: 9.9 / 3.9 km. They use a 0.1 s pulse (10 dB less processing gain than 1 s) for short-range trials; the static array with the face's 1 s pulse has the face's reach. No projector is chosen for them either.
+**What the earlier builds reach instead** (noise-limited, ship / small): `popoto_testauv_1x32`: 7.0 / 2.6 km; `popoto_static_2x32`: 8.5 / 3.3 km; `popoto_static_3x32`: 9.1 / 3.5 km. They use a 0.1 s pulse (10 dB less processing gain than 1 s) for short-range trials; the static array with the face's 1 s pulse has the face's reach. No projector is chosen for them either.
 
 Scenarios and files for this point: `popoto_12km` (one row), `popoto_12km_2row` with `configs/deploy/popoto_face_2row.yaml`, `popoto_12km_3row` with `configs/deploy/popoto_vehicle_elevation.yaml`; `tests/python/test_buildspec.py` runs the stacked-row ones through both engines (image-source paths always; Bellhop when present).
 
@@ -950,12 +958,14 @@ absorption and the four-term ambient-noise fit at 5 m/s wind (`gpusonar.sonar_eq
 | Absorption (dB/km) | 41.3 | 52.9 | 83.7 | 79.5 | 0.6 | 0.3 |
 | Noise spectrum level (dB re 1 µPa²/Hz) | 28.9 | 30.3 | 35.4 | 35.4 | 47.9 | 51.5 |
 | Target strength assumed (dB) | 5 | 5 | 5 | -73 | 25 | 25 |
-| Array gain (dB) | 21.1 | 21.1 | 21.1 | 32.3 | 15.1 | 15.1 |
+| Array gain (dB) | 20.9 | 20.9 | 20.9 | 32.3 | 15.1 | 15.1 |
 | Pulse-compression gain, 10 log10(BT) (dB) | 23.0 | 26.0 | 24.8 | 23.0 | 36.0 | 33.0 |
-| **SNR at full range (dB)** | 63.3 | 35.0 | 31.4 | -7.8 | 15.4 | 13.4 |
-| Range at which SNR falls to 13 dB (m) | 724 | 608 | 384 | 123 | 7439 | 12915 |
+| **SNR at full range (dB)** | 63.1 | 34.8 | 31.2 | -7.8 | 15.4 | 13.4 |
+| Range at which SNR falls to 13 dB (m) | 722 | 607 | 383 | 123 | 7443 | 12915 |
 
 Target assumed: `fls_120k`: small boat hull; `fls_170k`: small boat hull; `fls_330k`: small boat hull; `sas_minsas120`: one resolution cell of seabed (2.1 cm x 1.9 cm) at -27 dB Lambert and 15 degrees grazing; array gain includes the pings of the synthetic aperture at full range; `popoto_array`: ship-sized target; `popoto_long_range`: ship-sized target.
+
+The 13 dB of the last row and of the figure is a reference line (visible above noise), not a detector's threshold. The array gain is the array's gain against isotropic noise (`sonar_equation.isotropic_noise_gain_db`: 10 log N at half a wavelength, less for hydrophones closer together). What the long-range array's own detector needs, its margins and its detection probabilities are in *The 12 km design point*.
 
 - **SAS:** with a 215 dB source a single cell of seabed stays 13 dB above noise out to 123 m, not the 200 m of the receive window (-8 dB there). Objects are much stronger than one cell of sand. The array gain is evaluated at full range and is smaller closer in, so the curve is optimistic at short range.
 - **170 kHz:** specified to 450 m after the first budget showed 14 dB at 600 m.
@@ -964,23 +974,23 @@ Target assumed: `fls_120k`: small boat hull; `fls_170k`: small boat hull; `fls_3
 
 ![Source level needed for 12 km against frequency](design/popoto_range_study.png)
 
-From `tools/popoto_range_study.py`: target +25 dB, 1 s pulse, 13 dB at the beamformer output, ambient noise at 5 m/s wind, spherical spreading plus absorption.
+From `tools/popoto_range_study.py`: target +25 dB, 1 s pulse, 15.6 dB at one row's beamformer output (what the chain's detector needs of one row on `popoto_face_1x32` for a detection probability of 0.5 on one ping; 17.3 dB for 0.9; stacked rows need less of each row), ambient noise at 5 m/s wind, spherical spreading plus absorption.
 
-- **The present band cannot do it.** At 27.5 kHz absorption alone costs about 136 dB over the 24 km round trip; 12 km would need 319 dB. With 8 hydrophones at 190 dB that band reaches about 2.8 km on this budget.
+- **The present band cannot do it.** At 27.5 kHz absorption alone costs about 136 dB over the 24 km round trip; 12 km would need 322 dB. With 8 hydrophones at 190 dB that band reaches about 2.7 km on this budget.
 - **The frequency has to come down to 4 to 6 kHz.** Below that, ambient noise rises and a half-wavelength array of a
   given count gets long; above it, absorption takes over.
 
 | Array (half-wavelength spacing) | Best frequency | Array length | Source level for 12 km | Acoustic power, omnidirectional projector |
 | --- | --- | --- | --- | --- |
-| 8 hydrophones | 4.2 kHz | 1.4 m | 201 dB | 1088 W |
-| 16 hydrophones | 4.2 kHz | 2.9 m | 198 dB | 544 W |
-| 32 hydrophones | 4.2 kHz | 5.8 m | 195 dB | 272 W |
-| 64 hydrophones | 4.2 kHz | 11.5 m | 192 dB | 136 W |
-| 1.5 m aperture (11 hydrophones) | 5.5 kHz | 1.5 m | 200 dB | 897 W |
-| 3.0 m aperture (22 hydrophones) | 5.5 kHz | 3.0 m | 197 dB | 449 W |
-| 6.0 m aperture (44 hydrophones) | 5.5 kHz | 6.0 m | 194 dB | 224 W |
+| 8 hydrophones | 4.2 kHz | 1.4 m | 204 dB | 2002 W |
+| 16 hydrophones | 4.2 kHz | 2.9 m | 201 dB | 1001 W |
+| 32 hydrophones | 4.2 kHz | 5.8 m | 198 dB | 501 W |
+| 64 hydrophones | 4.2 kHz | 11.5 m | 195 dB | 250 W |
+| 1.5 m aperture (11 hydrophones) | 5.5 kHz | 1.5 m | 203 dB | 1651 W |
+| 3.0 m aperture (22 hydrophones) | 5.5 kHz | 3.0 m | 200 dB | 825 W |
+| 6.0 m aperture (44 hydrophones) | 5.5 kHz | 6.0 m | 197 dB | 413 W |
 
-- **Chosen (`popoto_long_range`):** 32 hydrophones at 15 cm (4.8 m), 4 to 6 kHz, 1 s, 197 dB: 15 dB at 12 km on this budget. Acoustic power is 10^((SL - 170.8 - DI) / 10) W; a projector with directivity needs less, and electrical power is
+- **Chosen (`popoto_long_range`):** 32 hydrophones at 15 cm (4.8 m), 4 to 6 kHz, 1 s, 197 dB: 14.6 dB in one row at 12 km (the build's budget, `gpusonar.buildspec`: Ainslie-McColm absorption; 14.9 dB with Sec. 5's Francois-Garrison). It was sized when the budget's threshold was a typed 13 dB (13 dB plus 2 dB). Against what the chain's own detector needs for a detection probability of 0.5 on one ping: one row need 15.6 dB and have -1.0 dB of margin (detection probability 0.24); two rows need 13.1 dB and have +1.5 dB of margin (detection probability 0.89); three rows need 11.6 dB and have +3.0 dB of margin (detection probability 0.99) (*The 12 km design point*). Acoustic power is 10^((SL - 170.8 - DI) / 10) W; a projector with directivity needs less, and electrical power is
   higher by the transducer's efficiency (not known until a projector is chosen). Doubling the hydrophones saves 3 dB;
   doubling the pulse length saves 3 dB.
 - **Spherical spreading is the cautious case.** In shallow water sound is trapped between surface and bottom:
@@ -988,10 +998,10 @@ From `tools/popoto_range_study.py`: target +25 dB, 1 s pulse, 13 dB at the beamf
 
 | Frequency | One-way loss, Bellhop | One-way loss, spherical | Source level for 12 km (noise only) |
 | --- | --- | --- | --- |
-| 2 kHz | 69.0 dB | 83.1 dB | 175 dB |
-| 4 kHz | 70.4 dB | 84.6 dB | 170 dB |
-| 8 kHz | 75.1 dB | 89.3 dB | 171 dB |
-| 12 kHz | 82.6 dB | 96.8 dB | 181 dB |
+| 2 kHz | 69.0 dB | 83.1 dB | 177 dB |
+| 4 kHz | 70.4 dB | 84.6 dB | 172 dB |
+| 8 kHz | 75.1 dB | 89.3 dB | 174 dB |
+| 12 kHz | 82.6 dB | 96.8 dB | 184 dB |
 
   That is 14 dB less loss each way, but it holds only for that depth, bottom and profile, and at those levels
   reverberation, not noise, decides detection. The `popoto_env_*` scenarios (`SCENARIOS.md`) show how much the

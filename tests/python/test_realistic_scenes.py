@@ -175,8 +175,13 @@ def test_fls_170k_separates_closing_crossing_and_anchored_boats():
     t = quick("fls_170k_traffic")["targets"]
     assert t["boat_closing"]["tracked"] and t["boat_closing"]["track_velocity_xy"][0] < -4.5
     assert t["boat_crossing"]["tracked"] and t["boat_crossing"]["track_velocity_xy"][1] > 3.0
-    # 0.10 m/s before source levels became RMS (D-102); the 3 dB more echo lets more of the hull through the detector in
-    # this thinned form and the short track reads 1.9 m/s. The full scene (tools/gallery.py) gives 0.18 m/s (0.16 before).
+    # 0.10 m/s before D-102 (source levels RMS: 3 dB more echo) and D-103 (baseband noise with its spectrum and coherence);
+    # 1.9 m/s with either of them, and with both. The hull is two clusters 4.2 m apart (two detections, two tracks) joined by
+    # weak cells; with a little more echo over the noise those cells cross the CFAR threshold on the second of the four pings,
+    # the two clusters are ONE detection at their centroid there, one track takes it, the other coasts, and on the next ping
+    # the tracks have each other's cluster: 4.2 m in 2.25 s. Not sidelobes or multipath: a merged detection and a
+    # nearest-neighbour association on four pings. The full scene (tools/gallery.py, eight pings) gives 0.18 m/s (0.16 before).
+    # The limit stays until the gallery's FLS detections are merged within what its tracker resolves (as the chain does, D-95).
     assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 2.5
 
 

@@ -540,9 +540,37 @@
   ],
   "through_chain": {
     "target_strength_db": 55.0,
-    "chain_snr_free_field_db": 41.44663838666667,
+    "chain_snr_free_field_db": 41.401835378333324,
+    "chain_snr_free_field_pings": 12,
+    "chain_snr_free_field_std_db": 0.12467514620502879,
     "budget_snr_free_field_db": 44.638625575748215,
-    "chain_minus_budget_db": -3.1919871890815443,
+    "chain_minus_budget_db": -3.2367901974148907,
+    "accounting": {
+      "terms_db": {
+        "sweep_taper_db": -0.2802872360024354,
+        "taper_and_absorption_slope_db": -0.26339582847510135,
+        "absorption_slope_across_band_db": 0.016891407527334035,
+        "noise_across_band_db": -0.13049927725745647,
+        "row_gain_across_band_db": -0.059477648063436916,
+        "aperture_window_db": -1.7609125905568124,
+        "between_samples_here_db": -1.058990478515625
+      },
+      "budget_leaves_out": [
+        "taper_and_absorption_slope_db",
+        "noise_across_band_db",
+        "row_gain_across_band_db"
+      ],
+      "budget_leaves_out_db": -0.45337275379599473,
+      "in_the_detectors_threshold": [
+        "aperture_window_db",
+        "between_samples_here_db"
+      ],
+      "between_samples_mean_over_places_db": -0.5143902473409057,
+      "explained_db": -3.273275822868432,
+      "chain_minus_budget_db": -3.2367901974148907,
+      "unexplained_db": 0.03648562545354128,
+      "note": "the detector's threshold (buildspec.detection) holds the window and the MEAN loss between samples; this target's place costs -0.54 dB more than the mean"
+    },
     "rows": [
       {
         "own_depth_m": 10.0,
@@ -558,7 +586,7 @@
         "target_depth_m": 4.0,
         "range_m": 12000.0,
         "chain_snr_db": 27.34830489,
-        "chain_factor_db": -14.098333496666669,
+        "chain_factor_db": -14.053530488333323,
         "model_peak_db": -14.72971725450689,
         "model_energy_db": -14.50386294400319
       },
@@ -567,7 +595,7 @@
         "target_depth_m": 4.0,
         "range_m": 12000.0,
         "chain_snr_db": 42.55675565,
-        "chain_factor_db": 1.1101172633333292,
+        "chain_factor_db": 1.1549202716666755,
         "model_peak_db": 0.1725186816979759,
         "model_energy_db": 0.4009123579451019
       },
@@ -576,7 +604,7 @@
         "target_depth_m": 4.0,
         "range_m": 12000.0,
         "chain_snr_db": 51.63282411,
-        "chain_factor_db": 10.186185723333331,
+        "chain_factor_db": 10.230988731666677,
         "model_peak_db": 9.505301043209304,
         "model_energy_db": 9.588940576927502
       },
@@ -585,7 +613,7 @@
         "target_depth_m": 4.0,
         "range_m": 12000.0,
         "chain_snr_db": 53.15229685,
-        "chain_factor_db": 11.705658463333329,
+        "chain_factor_db": 11.750461471666675,
         "model_peak_db": 11.718978605890314,
         "model_energy_db": 11.755741912097157
       },
@@ -594,7 +622,7 @@
         "target_depth_m": 4.0,
         "range_m": 12000.0,
         "chain_snr_db": 51.9359052,
-        "chain_factor_db": 10.48926681333333,
+        "chain_factor_db": 10.534069821666677,
         "model_peak_db": 9.157886330199684,
         "model_energy_db": 9.483068132325535
       },
@@ -603,7 +631,7 @@
         "target_depth_m": 4.0,
         "range_m": 12000.0,
         "chain_snr_db": 34.92841516,
-        "chain_factor_db": -6.51822322666667,
+        "chain_factor_db": -6.473420218333324,
         "model_peak_db": -6.203617522828501,
         "model_energy_db": -3.763452307881872
       }

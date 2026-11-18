@@ -60,7 +60,6 @@ sys.path.insert(0, str(ROOT / "python"))
 from gpusonar import buildspec  # noqa: E402
 
 RHO, G, P_ATM, P_VAPOUR = 1025.0, 9.81, 101325.0, 1700.0      # sea water kg/m3; m/s2; Pa; Pa (about 15 C)
-DETECTION_DB = 13.0                                           # at the map: the threshold buildspec.performance uses
 
 
 # --- power and energy ----------------------------------------------------------------------------------
@@ -133,19 +132,22 @@ def resonance_band_loss(f_lo: float, f_hi: float, edge_db: float) -> dict:
 # --- the build -----------------------------------------------------------------------------------------
 
 def link_table(d: dict, levels, rows=(1, 2, 3), ranges=(6000.0, 12000.0)) -> list[dict]:
-    """SNR at the map and reach for each source level and row count: buildspec.performance on the build's
+    """SNR of one row, what the build's detector needs of it with that many rows added (buildspec.detection), the margin,
+    the detection probability and the reach, for each source level and row count: buildspec.performance on the build's
     own derived numbers with the level and the number of rows replaced."""
     out = []
     for k in rows:
         for sl in levels:
             dd = dict(d)
-            dd.update({"source_level_db": float(sl), "rows": int(k), "elevation": None})
+            dd.update({"source_level_db": float(sl), "rows": int(k), "rows_added": int(k), "elevation": None})
             p = buildspec.performance(dd, ranges=ranges)
-            g = p["rows_detection_gain_db"]
-            row = {"rows": k, "source_level_db": float(sl), "reach_ship_m": p["reach_ship_m"], "reach_small_m": p["reach_small_m"]}
+            row = {"rows": k, "source_level_db": float(sl), "reach_ship_m": p["reach_ship_m"], "reach_small_m": p["reach_small_m"],
+                   "threshold_db": p["detection"]["threshold_db"], "detection_probability_design": p["detection"]["probability"]}
             for r in ranges:
                 for key in ("ship", "small"):
-                    row[f"snr_{key}_{r / 1e3:g}km_db"] = p["row_snr_db"][key][str(r)] + g
+                    row[f"snr_{key}_{r / 1e3:g}km_db"] = p["row_snr_db"][key][str(r)]                 # one row's
+                    row[f"margin_{key}_{r / 1e3:g}km_db"] = p["margin_db"][key][str(r)]
+                    row[f"pd_{key}_{r / 1e3:g}km"] = p["detection_probability"][key][str(r)]
             out.append(row)
     return out
 
@@ -266,12 +268,13 @@ def report(q: dict, depths, areas):
     print(f"Source level in the file {q['source_level_db']:g} dB re 1 µPa at 1 m (rms), band {q['band_hz'][0] / 1e3:g}–{q['band_hz'][1] / 1e3:g} kHz "
           f"({100 * q['fractional_bandwidth']:.0f}% of the centre), pulse {q['pulse_s']:g} s every {q['ping_interval_s']:.1f} s "
           f"(duty {100 * q['duty']:.1f}%, {q['pings_per_hour']:.0f} pings an hour).\n")
-    print("**What a source level buys** (SNR at the map; detection at 13 dB; ship +25 dB, small +5 dB):\n")
+    print(f"**What a source level buys** (SNR of one row; *needed*: what the build's own detector needs of it for a detection probability of {q['link'][0]['detection_probability_design']:g} on one ping "
+          "with that many rows added; ship +25 dB, small +5 dB):\n")
     rr = [f"{r / 1e3:g}km" for r in q["link_ranges_m"]]
     far = rr[-1]
-    table(["Rows", "Source level (dB)"] + [f"Ship at {x[:-2]} km (dB)" for x in rr] + [f"margin at {far[:-2]} km (dB)"] + [f"Small at {x[:-2]} km (dB)" for x in rr]
+    table(["Rows", "Source level (dB)", "Needed (dB)"] + [f"Ship at {x[:-2]} km (dB)" for x in rr] + [f"margin at {far[:-2]} km (dB)", f"Pd at {far[:-2]} km"] + [f"Small at {x[:-2]} km (dB)" for x in rr]
           + ["Reach ship / small (km)"],
-          [[r["rows"], f"{r['source_level_db']:g}"] + [f"{r[f'snr_ship_{x}_db']:.1f}" for x in rr] + [f"{r[f'snr_ship_{far}_db'] - DETECTION_DB:+.1f}"]
+          [[r["rows"], f"{r['source_level_db']:g}", f"{r['threshold_db']:.1f}"] + [f"{r[f'snr_ship_{x}_db']:.1f}" for x in rr] + [f"{r[f'margin_ship_{far}_db']:+.1f}", f"{r[f'pd_ship_{far}']:.2f}"]
            + [f"{r[f'snr_small_{x}_db']:.1f}" for x in rr] + [f"{r['reach_ship_m'] / 1e3:.1f} / {r['reach_small_m'] / 1e3:.1f}"] for r in q["link"]])
     print("**Power and energy** (omnidirectional; amplifier 85% efficient; at the build's pulse and interval):\n")
     rows = []

@@ -161,12 +161,15 @@ def _cover(held: np.ndarray, own: np.ndarray, most: int = 6) -> list:
 def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, own_depths=None, ranges=None, threshold_db: float | None = None,
          statistic: str = "peak_db", all_target_depths=None, cache: dict | None = None, keep_grid: bool = True) -> dict:
     """The depth plan of a build (`d`: buildspec.derive / describe) in one environment for resolved target classes
-    (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest."""
+    (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest.
+    A margin is over `threshold_db` of ONE row's SNR: by default what the build's own detector needs for the build's design
+    detection probability with its rows added (buildspec.detection); the budget itself holds no row gain."""
     from . import buildspec as bs
-    threshold_db = bs.BUDGET_THRESHOLD_DB if threshold_db is None else float(threshold_db)
     env, ranged = _local_water(env)
     wind = wind_of(env)
     eq, gains = bs.budget(d, wind)
+    det = bs.detection(d)
+    threshold_db = det["threshold_db"] if threshold_db is None else float(threshold_db)
     f_lo, f_hi = d["band_hz"]
     max_depth = (d.get("platform") or {}).get("max_depth_m")
     own = own_depth_grid(env, max_depth=max_depth) if own_depths is None else np.asarray(own_depths, dtype=float)
@@ -189,12 +192,15 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
         fac = {k: (np.maximum(v, NO_PATH_DB) if isinstance(v, np.ndarray) else v) for k, v in fac.items()}
         if cache is not None:
             cache[key] = fac
-    free = np.asarray(eq.snr(rr)) - threshold_db                                  # margin of a 0 dB target in free field, rows included
+    free = np.asarray(eq.snr(rr)) - threshold_db                                  # margin of a 0 dB target in free field: one row's SNR over the detector's need
     f3 = fac[statistic]
     out = {"build": d.get("build") or d.get("name"), "rows": d["rows"], "environment": {k: v for k, v in env.items()}, "wind_speed_m_s": wind, "rms_wave_height_m": surface_of(env).height(),
            "platform_max_depth_m": max_depth, "bottom_clearance_m": float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)) if env.get("water_depth_m") is not None else None,
            "profile_rests_on": (LOCAL_PROFILE_NOTE if ranged else "the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
-           "method": fac["method"], "statistic": statistic, "threshold_db": threshold_db, "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
+           "method": fac["method"], "statistic": statistic, "threshold_db": threshold_db,
+           "detection": {**{k: det[k] for k in ("probability", "threshold_db", "threshold_one_row_db", "threshold_high_db", "probability_high", "rows", "rows_gain_db", "statistic")},
+                         "threshold_is_the_detectors": bool(abs(threshold_db - det["threshold_db"]) < 1e-9)},
+           "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
            "projector_below_array_m": float(d["projector_m"][2]), "gains": gains, "own_depths_m": own.tolist(), "ranges_m": rr.tolist(), "target_depths_m": zt.tolist(),
            "free_field_margin_0db_target_db": free.tolist(), "classes": {}}
     held_by = {}
@@ -215,10 +221,12 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
         all_d = f3[best, :, i_r] + free[i_r] + ts_lo                                 # every target depth, at the recommended own depth
         entry = {"ts_db": [ts_lo, ts_hi], "ts_status": c.get("status"), "depth_m": [lo, hi], "target_depths_used_m": zt[sel].tolist(),
                  "free_field_margin_db": float(free[i_r] + ts_lo), "margin_high_ts_db": float(ts_hi - ts_lo),
+                 "free_field_detection_probability": float(bs.detection_probability(d, float(free[i_r] + ts_lo + threshold_db))),
                  "margin_worst_db": worst.tolist(), "margin_at_range_worst_db": at.tolist(), "margin_at_range_depth_mean_db": mean[:, i_r].tolist(),
                  "factor_at_range_worst_db": (at - free[i_r] - ts_lo).tolist(),
                  "recommended": {"own_depth_m": float(own[best]), "inside_platform_limit": (None if not max_depth else bool(own[best] <= max_depth)),
                                  "at_the_deepest_searched": bool(best == len(own) - 1), "margin_db": float(at[best]), "factor_db": float(at[best] - free[i_r] - ts_lo),
+                                 "detection_probability": float(bs.detection_probability(d, float(at[best] + threshold_db))),
                                  "held_band_m": _intervals(own, at >= 0.0), "within_3db_band_m": _intervals(own, at >= at[best] - 3.0),
                                  "reach_m": float(reach[best]), "nearer_gaps": bool(gaps[best]),
                                  "target_depths_not_held_m": _intervals(zt, all_d < 0.0)},
@@ -247,16 +255,16 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     return out
 
 
-def elevation_for(d: dict, snr_map_db: float, range_m: float) -> dict | None:
-    """What stacked rows add for a target detected with `snr_map_db` at the summed map: the elevation sigma from noise
-    (the bound of gpusonar.elevation for this build's rows) and the depth sigma it is at `range_m`. None for one row."""
+def elevation_for(d: dict, row_snr_db: float, range_m: float) -> dict | None:
+    """What stacked rows add for a target whose SNR in ONE row is `row_snr_db` (a plan's margin plus its threshold): the
+    elevation sigma from noise (the bound of gpusonar.elevation for this build's rows) and the depth sigma it is at
+    `range_m`. None for one row."""
     el = d.get("elevation")
     if not el:
         return None
-    from . import buildspec as bs
     from . import elevation as elev
     n = d["per_row"][0]
-    row_snr = snr_map_db - bs.rows_detection_gain_db(d["rows"])
+    row_snr = float(row_snr_db)
     if row_snr < 10.0:
         return {"row_snr_db": float(row_snr), "sigma_deg": None, "depth_sigma_m": None}
     sig = float(elev.sin_elevation_sigma(np.repeat(el["heights_m"], n), 10.0 ** (min(row_snr, 40.0) / 10.0) / n, d["band_hz"][0], d["band_hz"][1], d["sound_speed"]))

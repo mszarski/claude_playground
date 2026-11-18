@@ -33,13 +33,18 @@ class SonarEquation:
     salinity: float = 35.0
     depth: float = 0.0
     absorption_model: str = "francois_garrison"
-    array_gain_db: float | None = None  # default: 10 log10(N), uncorrelated noise
+    array_gain_db: float | None = None  # default: 10 log10(N), uncorrelated noise (from_sonar: against isotropic sea noise)
 
     @classmethod
     def from_sonar(cls, sonar: SonarModel, noise_spectrum_db: float, **kw) -> "SonarEquation":
+        """The equation of a sonar file. The array gain, unless given, is the array's gain against ISOTROPIC noise at the
+        centre frequency (`isotropic_noise_gain_db`: the noise the simulator draws, D-103), which is 10 log10(N) at half a
+        wavelength of pitch and less for hydrophones closer than that."""
         w = sonar.waveform_config
         if sonar.source_level_db_rms is None:
             raise ValueError(f"sonar {sonar.name!r} has no source level; the chain is uncalibrated")
+        if kw.get("array_gain_db") is None:
+            kw["array_gain_db"] = isotropic_noise_gain_db(sonar.positions, sonar.center_frequency, sonar.nominal_sound_speed, sonar.boresight)
         return cls(float(sonar.source_level_db_rms), sonar.center_frequency, sonar.bandwidth,
                    float(w["duration"]), sonar.n_elements, noise_spectrum_db, **kw)
 
@@ -84,6 +89,30 @@ class SonarEquation:
     def table(self, ranges) -> list[dict]:
         return [{"range_m": float(r), "tl_db": float(self.transmission_loss(r)),
                  "echo_level_db": float(self.echo_level(r)), "snr_db": float(self.snr(r))} for r in ranges]
+
+
+def isotropic_noise_gain_db(positions, frequency: float, sound_speed: float = acoustics.NOMINAL_SOUND_SPEED, direction=None, weights=None) -> float:
+    """Gain of an array of omnidirectional hydrophones at `positions` ([N, 3] or [N] along a line, m) against isotropic
+    noise, summed in phase for a plane wave from `direction` (default: no steering, which is broadside of a line or a
+    plane): |sum w|^2 / sum_ij w_i w_j* sinc(2 d_ij / lambda), the closed form the simulator's noise is held to (D-103).
+    `weights`: an aperture window (default: none). Above 4096 hydrophones: 10 log10(N) (the sum is N^2 terms)."""
+    x = np.asarray(positions, dtype=float)
+    if x.ndim == 1:
+        x = np.stack([x, np.zeros_like(x), np.zeros_like(x)], axis=1)
+    n = len(x)
+    w = np.ones(n, dtype=complex) if weights is None else np.asarray(weights, dtype=complex)
+    if n > 4096:
+        return float(10.0 * np.log10(np.abs(w.sum()) ** 2 / np.sum(np.abs(w) ** 2)))
+    k = 2.0 * np.pi * frequency / sound_speed
+    if direction is not None:
+        u = np.asarray(direction, dtype=float)
+        w = w * np.exp(-1j * k * (x @ (u / np.linalg.norm(u))))            # the weights that bring a wave from u into phase
+        signal = np.abs(np.sum(w * np.exp(1j * k * (x @ (u / np.linalg.norm(u)))))) ** 2
+    else:
+        signal = np.abs(w.sum()) ** 2
+    d = np.linalg.norm(x[:, None, :] - x[None, :, :], axis=2)
+    noise = float(np.real(np.conj(w) @ (np.sinc(2.0 * d * frequency / sound_speed) @ w)))
+    return float(10.0 * np.log10(signal / noise))
 
 
 def noise_rms_volts(noise_spectrum_db: float, sensitivity_db: float, sample_rate: float,

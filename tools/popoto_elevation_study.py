@@ -351,17 +351,23 @@ def main():
           + ", ".join(f"{float(a)} deg: {v:.2f} us" for a, v in R["sensitivity"]["clock_us_for_deg"].items()))
 
     # --- detection --------------------------------------------------------------------------------
-    from scipy import optimize, stats
+    # What a detection needs is asked of the chain's own detector (gpusonar.buildspec.detection, from gpusonar.live): the SNR of
+    # ONE row for the design detection probability, with the rows' maps added in power. No threshold and no row gain is typed here.
+    from gpusonar import buildspec as bs
 
-    def needed_snr_db(rows, pfa=1e-5, pd=0.5):
-        thr = stats.chi2.isf(pfa, 2 * rows)
-        return 10.0 * np.log10(optimize.brentq(lambda s: stats.ncx2.sf(thr, 2 * rows, 2.0 * rows * s) - pd, 1e-3, 1e3))
+    face_window = SonarModel.load("popoto_long_range_3row").config["receive"]["window"]["range"]      # the face's receive window: the detector's thresholds follow from it
 
-    base = needed_snr_db(1)
-    gain = {str(n): {"coherent_db": float(10 * np.log10(n)), "rows_added_as_power_db": float(base - needed_snr_db(n))} for n in (2, 3)}
+    def detector(n, pitch, rows, pulse, window=None):
+        return bs.detection_for_row(n, pitch, rows, pulse, face_window if window is None else window)
+
+    face = {r: detector(32, 0.15, r, 1.0) for r in (1, 2, 3, 4)}
+    gain = {str(n): {"coherent_db": float(10 * np.log10(n)), "rows_added_as_power_db": float(face[n]["rows_gain_db"])} for n in (2, 3)}
     R["unchanged"] = {"detection_gain_db": gain}
+    R["detection"] = {"probability": face[1]["probability"], "probability_high": face[1]["probability_high"], "statistic": face[1]["statistic"],
+                      "one_row_snr_needed_db": {str(r): face[r]["threshold_db"] for r in face}, "one_row_snr_needed_high_db": {str(r): face[r]["threshold_high_db"] for r in face},
+                      "what": "the SNR of one row the chain's detector needs on the face (32 at 0.15 m, 1 s pulse, the long-range window), rows added in power: gpusonar.buildspec.detection"}
     print("\nUNCHANGED OR NEARLY: detection (rows' power maps added: " + ", ".join(f"{v['rows_added_as_power_db']:.1f} dB with {n} rows" for n, v in gain.items())
-          + " against one row at the same false-alarm rate);")
+          + f" against one row at the chain's detector, which needs {face[1]['threshold_db']:.1f} dB of one row's SNR for a detection probability of {face[1]['probability']:g});")
     print("  bearing and range resolution; left/right (the face decides that, as the hull did).")
 
     # --- the face's length ------------------------------------------------------------------------
@@ -390,33 +396,33 @@ def main():
         x = np.arange(n) * pitch
         return float(10.0 * np.log10(n * n / np.sinc(2.0 * (x[:, None] - x[None, :]) * f / C).sum()))
 
-    def reach(n, pitch, rows, source_level, pulse, target_db, snr=13.0):
-        """Noise-limited range (m) at which the map's SNR falls to `snr`: the link budget of Sec. 5 with the row's
-        gain against isotropic noise and the rows' power maps added."""
+    def reach(n, pitch, rows, source_level, pulse, target_db, det):
+        """Noise-limited range (m) at which ONE row's SNR falls to what the detector needs (`det`, with the rows added):
+        the link budget of Sec. 5 with the row's gain against isotropic noise. The rows are in the threshold, not in the gain."""
         noise = float(wenz_spectrum_db(np.array([FC]), 5.0, 0.5)[0])
-        gain = directivity_db(n, pitch) + (gain_rows[str(rows)] if rows > 1 else 0.0)
         eq = SonarEquation(source_level, FC, F_HIGH - F_LOW, pulse, n, noise, target_strength_db=target_db, temperature=12.0, depth=50.0,
-                           absorption_model="ainslie_mccolm", array_gain_db=gain)
-        return float(eq.detection_range(snr)), eq
+                           absorption_model="ainslie_mccolm", array_gain_db=directivity_db(n, pitch))
+        return float(eq.detection_range(det["threshold_db"])), eq
 
-    gain_rows = {str(n): float(base - needed_snr_db(n)) for n in (2, 3, 4)}
     RATE_MBIT = 102.4e3 * 24 / 1e6                     # one channel at the boards' rate
 
-    def describe(label, n, pitch, heights, source_level, pulse, platform):
+    def describe(label, n, pitch, heights, source_level, pulse, platform, window=None, det=None):
         rows = len(heights)
         channels = n * rows
         di = directivity_db(n, pitch)
+        det = det or detector(n, pitch, rows, pulse, window)
         out = {"hydrophones_per_row": n, "rows": rows, "channels": channels, "boards": int(np.ceil(channels / 8)), "pitch_m": pitch,
                "row_length_m": float(n * pitch), "pitch_wavelengths_at_6khz": float(pitch * F_HIGH / C), "heights_m": list(heights),
                "baseline_m": float(max(heights) - min(heights)), "beamwidth_deg": float(np.degrees(0.886 * lam / (n * pitch))),
                "gain_isotropic_noise_db": di, "gain_uncorrelated_noise_db": float(10 * np.log10(n)),
-               "rows_detection_gain_db": gain_rows[str(rows)] if rows > 1 else 0.0,
+               "rows_detection_gain_db": det["rows_gain_db"], "detection_threshold_db": det["threshold_db"], "detection_threshold_high_db": det["threshold_high_db"],
+               "detection_probability": det["probability"],
                "reverberation_margin_vs_32_at_half_wavelength_db": float(10 * np.log10(n * pitch / 4.8)),
                "source_level_db": source_level, "pulse_s": pulse, "blind_range_m": float(0.5 * C * pulse),
                "data_rate_mbit_s": float(channels * RATE_MBIT), "cables": channels + int(np.ceil(channels / 8)), "platform": platform}
         for key, ts in (("ship", 25.0), ("small", 5.0)):
-            out[f"reach_{key}_m"], eq = reach(n, pitch, rows, source_level, pulse, ts)
-            out[f"snr_{key}_db"] = {str(r): float(eq.snr(r)) - out["rows_detection_gain_db"] for r in (500.0, 1000.0, 3000.0, 6000.0, 12000.0)}   # one row
+            out[f"reach_{key}_m"], eq = reach(n, pitch, rows, source_level, pulse, ts, det)
+            out[f"snr_{key}_db"] = {str(r): float(eq.snr(r)) for r in (500.0, 1000.0, 3000.0, 6000.0, 12000.0)}   # one row
         if rows > 1:
             out["elevation_sigma_deg_at_20_db"] = sigma_deg(list(heights), 20.0)
             sp = float(np.degrees(np.arcsin(min(C / (FC * out["baseline_m"]), 1.0))))
@@ -442,14 +448,14 @@ def main():
                    ("3: static array, 3 x 32", "popoto_static_3row"),
                    ("4: full face, 1 x 32", "popoto_face_1row"),
                    ("5: full face, 2 x 32", "popoto_long_range_2row"), ("6: full face, 3 x 32", "popoto_long_range_3row"))
-    print("\nSTAGES (each a shipped sonar file; SNR and reach from the link budget of Sec. 5: spherical spreading, noise only, 13 dB to detect).")
+    print("\nSTAGES (each a shipped sonar file; SNR and reach from the link budget of Sec. 5: spherical spreading, noise only; detected where one row's SNR is what the chain's detector needs).")
     print("  Reach is where noise alone would stop detection; reverberation and the channel stop it earlier or later (the scenarios show which).")
     for label, name in stage_files:
         m = SonarModel.load(name)
         heights = sorted(set(np.round(-m.positions[:, 2], 3)))
         n = m.n_elements // len(heights)
         st = describe(label, n, float(m.config["array"]["pitch"]), heights, float(m.source_level_db_rms),
-                      float(m.waveform_config["duration"]), dict(m.config.get("platform", {})))
+                      float(m.waveform_config["duration"]), dict(m.config.get("platform", {})), det=bs.detection(bs.describe_shipped(name)))    # the file's own array and window
         st["sonar"] = name
         R["stages"][label] = st
         line = (f"  {label:22s} {st['channels']:3d} hydrophones on {st['boards']:2d} boards, row {st['row_length_m']:.2f} m at {st['pitch_m']:.3f} m "
@@ -468,12 +474,13 @@ def main():
     R["prototype_span"] = {}
     proto = SonarModel.load("popoto_testauv_1row")
     p_sl, p_pulse = float(proto.source_level_db_rms), float(proto.waveform_config["duration"])
+    p_window = proto.config["receive"]["window"]["range"]
     for label, n, pitch in (("2 m", 32, 0.0625), ("3 m", 32, 0.09), ("4.8 m (the full row)", 32, 0.15), ("3 m, 20 hydrophones at 0.15 m", 20, 0.15)):
-        st = describe(label, n, pitch, [0.0], p_sl, p_pulse, {})
+        st = describe(label, n, pitch, [0.0], p_sl, p_pulse, {}, window=p_window)
         R["prototype_span"][label] = st
         print(f"    {label:30s} beam {st['beamwidth_deg']:.1f} deg, gain in sea noise {st['gain_isotropic_noise_db']:.1f} dB ({st['gain_uncorrelated_noise_db']:.1f} dB counted by hydrophones), "
               f"reach {st['reach_ship_m'] / 1e3:.1f} / {st['reach_small_m'] / 1e3:.1f} km")
-    low = describe("3 m at 185 dB", 32, 0.09, [0.0], 185.0, p_pulse, {})
+    low = describe("3 m at 185 dB", 32, 0.09, [0.0], 185.0, p_pulse, {}, window=p_window)
     R["prototype_span"]["3 m, a 185 dB projector"] = low
     print(f"    The projector for the test AUV is not chosen. With {p_sl:.0f} dB as above; with 185 dB the 3 m row reaches {low['reach_ship_m'] / 1e3:.1f} / {low['reach_small_m'] / 1e3:.1f} km; "
           "each 12 dB less halves a noise-limited range of a few km.")
@@ -544,7 +551,7 @@ def main():
         R["trade_space"]["rows"][str(rows)] = st
         print(f"    {rows} x 32: {st['channels']:3d} hydrophones, {st['boards']:2d} boards, reach {st['reach_ship_m'] / 1e3:.1f} / {st['reach_small_m'] / 1e3:.1f} km"
               + ("" if rows == 1 else f", elevation {st['elevation_sigma_deg_at_20_db']:.2f} deg at 20 dB, highest repeat {st['highest_repeat_db']:.1f} dB"))
-    print("  A fourth row (here at the mirrored height) adds half a decibel of detection and nothing else; accuracy is set by the outer rows.")
+    print(f"  A fourth row (here at the mirrored height) adds {face[4]['rows_gain_db'] - face[3]['rows_gain_db']:.1f} dB of detection and nothing else; accuracy is set by the outer rows.")
     print("  The same number of channels as one long row or as stacked rows of 32:")
     fixed = {32: [("1 x 32 at 0.15 m", 32, 0.15, [0.0])],
              64: [(f"1 x 64 at {L_ / 64:.3f} m", 64, L_ / 64, [0.0]), ("2 x 32 at 0.15 m", 32, 0.15, [-up, up])],
@@ -553,7 +560,7 @@ def main():
         for label, n, pitch, heights in options:
             st = describe(label, n, pitch, heights, sl_full, 1.0, {})
             R["trade_space"]["fixed_channels"][label] = st
-            print(f"    {channels:2d} channels, {label:18s}: beam {st['beamwidth_deg']:.1f} deg, map gain {st['gain_isotropic_noise_db'] + st['rows_detection_gain_db']:.1f} dB, "
+            print(f"    {channels:2d} channels, {label:18s}: beam {st['beamwidth_deg']:.1f} deg, row gain {st['gain_isotropic_noise_db']:.1f} dB + {st['rows_detection_gain_db']:.1f} dB for the rows at the detector, "
                   f"reach {st['reach_ship_m'] / 1e3:.1f} / {st['reach_small_m'] / 1e3:.1f} km, "
                   + (f"elevation {st['elevation_sigma_deg_at_20_db']:.2f} deg at 20 dB (repeat {st['highest_repeat_db']:.1f} dB)" if len(heights) > 1 else "no elevation"))
     a, b = R["trade_space"]["fixed_channels"][f"1 x 64 at {L_ / 64:.3f} m"], R["trade_space"]["fixed_channels"]["2 x 32 at 0.15 m"]

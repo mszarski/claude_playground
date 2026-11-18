@@ -159,6 +159,8 @@ SCHEMA = {
         "coverage": ("map", "", False, "{environment: one of the build's `environments` by name, or an environment mapping}: the deployment file gets `chain.coverage` (what the sonar can see "
                      "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default", "the site the build is deployed at",
                      "leave it out: no coverage picture"),
+        "detection_probability": ("num", "", False, "the probability of detecting a steady point echo on one ping that the link budget's thresholds, margins and reaches are stated for "
+                                  "(the threshold follows from the chain's detector for it: buildspec.detection)", "requirement", "0.5 (buildspec.DESIGN_DETECTION_PROBABILITY)"),
     },
     "trial": {
         "water_depth_m": ("num", "m", True, "water depth of the simulated trial", "trial plan", "must be given"),
@@ -194,17 +196,16 @@ DEFAULT_CHAIN = {"bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard"}
 # What a deployment file's `chain.multipath_depth` holds wherever a build switches it on (`operation.chain.multipath_depth`;
 # the build's own keys are laid over these). No shipped build switches it on.
 MULTIPATH_DEPTH_DEPLOYED = {"rays": True, "withhold_flagged": True}
-# The detection threshold of the link budget (dB of SNR after the matched filter and the array): ONE value, read here
-# by `performance`, `surface_term`, the depth planner and the plan. It is the budget's historical 13 dB, NOT the shipped
-# detector's figure: see DETECTOR_THRESHOLD_DB. Replacing it by `live.budget_threshold_db(record, chain, pd=..., rows=...)`
-# on the one-row SNR (without `rows_detection_gain_db`, which the detector accounts for itself) is the open step.
-BUDGET_THRESHOLD_DB = 13.0
-# The design detection probability the budget's "threshold" language stands for, and what the chain's detector
-# (cell_statistic: multiscale, D-93 to D-99) needs for it on the budget's footing (one-row SNR with the budget's row
-# gain added back): the detector package's tabulated figures for the shipped builds (15.1 to 15.6 dB at 0.5, 16.7 to
-# 17.3 dB at 0.9; `live.budget_threshold_db` gives the figure for a record and a chain).
+# The link budget has NO typed detection threshold. Its SNR is that of ONE row (peak signal over mean noise after the
+# matched filter and an unweighted row beamformer, RMS source level); what that SNR must be for a detection is asked of
+# the chain's own detector for the build's deployed settings: `detection(d)` (gpusonar.live.budget_threshold_db and
+# detection_probability). The detector's figure already holds the aperture window's loss, where the echo falls between
+# the map's samples, the false-alarm budget per ping over the build's own window, and the rows added in power; so the
+# budget adds no row gain of its own. What is stated instead of a threshold is the detection probability on one ping
+# that "detected" stands for: a build's `operation.detection_probability`, by default this.
 DESIGN_DETECTION_PROBABILITY = 0.5
-DETECTOR_THRESHOLD_DB = {0.5: 15.5, 0.9: 17.0}
+# The second probability every table quotes beside the design one (a threshold for "nine pings in ten").
+HIGH_DETECTION_PROBABILITY = 0.9
 DEFAULT_REFERENCE = {"f_start_hz": 38.0e3, "f_stop_hz": 48.0e3, "duration_s": 4.0e-3, "level_v": 2.0e-3, "lead_s": 5.0e-3, "tail_s": 10.0e-3}
 C_ASSUMED_BOTTOM = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}
 
@@ -505,6 +506,9 @@ def validate(spec: dict) -> list[Issue]:
                                    + ("how long they take to recover is not given (projector.blanking_after_s)" if rec is None else f"they take {float(rec) * 1e3:g} ms to recover")
                                    + ". Open the window later (operation.range_m) or lengthen sync.reference.lead_s so the burst is clear of it")
     # operation and trial
+    pd_design = op.get("detection_probability")
+    if pd_design is not None and not 0.0 < float(pd_design) < 1.0:
+        err("operation.detection_probability", f"{pd_design}: a probability between 0 and 1 (the detection probability on one ping the budget's margins are stated for)")
     r0, r1 = op["range_m"]
     blind = 0.5 * c * pulse
     if r1 is None or (r0 is not None and float(r0) >= float(r1)):
@@ -1131,7 +1135,9 @@ def derive(spec: dict) -> dict:
     """Everything that is arithmetic on the spec: geometry, wiring, rates, timing, storage, the projector's
     direct sound, the synchronisation tolerance, the elevation response. Read by the validator, the diagrams,
     the parts list and the plan text."""
-    return describe(sonar_config(spec), clocks_config(spec) if needs_sync(spec) else None, deploy_config(spec))
+    d = describe(sonar_config(spec), clocks_config(spec) if needs_sync(spec) else None, deploy_config(spec))
+    d["detection_probability"] = float(get(spec, "operation", "detection_probability", DESIGN_DETECTION_PROBABILITY))
+    return d
 
 
 def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict | None = None) -> dict:
@@ -1234,6 +1240,8 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
         "reference": ref, "sync_scheme": (hw.get("sync") or {}).get("scheme", "shared_reference" if ref else "none"),
         "alignment_tolerance_us": 1e6 / (20.0 * f_hi),             # sync.alignment_tolerance: a twentieth of a period at the top of the band (clean beams)
         "elevation": el, "deploy": deploy_cfg,
+        # for `detection`: the resolved sonar file (the detector's thresholds follow from its array, pulse and window) and the design probability
+        "sonar_config": cfg, "detection_probability": DESIGN_DETECTION_PROBABILITY,
         "beamwidth_deg": float(np.degrees(0.886 * lam / (per_row[0] * pitch))) if pitch else None,
         "far_field_m": 2.0 * (per_row[0] * pitch) ** 2 / lam,
         "unconfirmed": list(cfg.get("unconfirmed", [])) + [f for f in (clocks_cfg or {}).get("unconfirmed", [])],
@@ -1294,61 +1302,179 @@ def second_lobe_db(heights, true_deg, f_lo, f_hi, c=acoustics.NOMINAL_SOUND_SPEE
 
 
 def directivity_db(n: int, pitch: float, f: float, c: float = acoustics.NOMINAL_SOUND_SPEED) -> float:
-    """Array gain of a line of n hydrophones against isotropic noise at broadside: N^2 / sum sinc(2 d_ij / lambda)."""
-    x = np.arange(n) * pitch
-    return float(10.0 * np.log10(n * n / np.sinc(2.0 * (x[:, None] - x[None, :]) * f / c).sum()))
+    """Array gain of a line of n hydrophones against isotropic noise at broadside: N^2 / sum sinc(2 d_ij / lambda)
+    (sonar_equation.isotropic_noise_gain_db, which SonarEquation.from_sonar uses for any array)."""
+    from .sonar_equation import isotropic_noise_gain_db
+    return isotropic_noise_gain_db(np.arange(n) * pitch, f, c)
 
 
-def rows_detection_gain_db(rows: int, pfa: float = 1e-5, pd: float = 0.5) -> float:
-    """What adding the power maps of `rows` rows gains over one row at the same false-alarm rate."""
-    if rows <= 1:
-        return 0.0
-    from scipy import optimize, stats
+# --- what the chain's detector needs of the budget's SNR -------------------------------------------------
 
-    def needed(k):
-        thr = stats.chi2.isf(pfa, 2 * k)
-        return 10.0 * np.log10(optimize.brentq(lambda s: stats.ncx2.sf(thr, 2 * k, 2.0 * k * s) - pd, 1e-3, 1e3))
+_DETECTION_CACHE: dict = {}
+_TEMPLATE_CACHE: dict = {}          # the last two templates (a three-row face's is 100 MB of zeros)
 
-    return float(needed(1) - needed(rows))
+
+def detector_template(sonar_cfg: dict):
+    """An empty record of a sonar for the detector's arithmetic in gpusonar.live (`budget_threshold_db`,
+    `detection_probability`, `detector_plan`): its array, pulse, band and receive window, as complex baseband at four
+    times the band so that a full-rate window is not allocated. The detector's thresholds do not depend on the rate the
+    record was sampled at (the map is laid from the band and the window): tests/python/test_buildspec.py holds this
+    template to the full-rate one."""
+    from . import core
+    from .sonar import SonarModel
+    key = json.dumps({k: sonar_cfg.get(k) for k in ("array", "transmit", "nominal_sound_speed")} | {"window": sonar_cfg["receive"]["window"]}, sort_keys=True, default=str)
+    if key in _TEMPLATE_CACHE:
+        return _TEMPLATE_CACHE[key]
+    cfg = copy.deepcopy(sonar_cfg)
+    w = cfg["transmit"]["waveform"]
+    band = abs(float(w.get("f_stop", w["f_start"])) - float(w["f_start"])) or 1.0 / float(w["duration"])
+    cfg["receive"] = {**cfg["receive"], "kind": "baseband", "sample_rate": 4.0 * band}
+    for key in ("reference", "clock_errors", "highpass_corner_hz"):
+        cfg["receive"].pop(key, None)
+    model = SonarModel.from_config(cfg)
+    while len(_TEMPLATE_CACHE) >= 2:
+        _TEMPLATE_CACHE.pop(next(iter(_TEMPLATE_CACHE)))
+    _TEMPLATE_CACHE[key] = record = model.make_record(core.Pose(), environment={"sound_speed": model.nominal_sound_speed})
+    return record
+
+
+def deployed_chain(d: dict) -> dict:
+    """The chain settings the detector's figures are computed for: the build's deployment file's (`d["deploy"]["chain"]`),
+    else what `chain_config` gives a build with nothing changed. Synchronisation is left out (it does not touch the detector)."""
+    chain = copy.deepcopy(((d.get("deploy") or {}).get("chain")) or DEFAULT_CHAIN)
+    chain.pop("sync", None)
+    return chain
+
+
+def _rows_added(d: dict, chain: dict) -> int:
+    """Rows whose maps the deployed chain adds in power: it does so only when it is told to estimate elevation
+    (live._rows_of); a build's `chain_config` says so for two rows or more."""
+    if d.get("rows_added") is not None:                      # a what-if (tools/projector_requirements.py: the same build with fewer or more rows)
+        return int(d["rows_added"])
+    return int(d["rows"]) if (d.get("deploy") is None or chain.get("elevation") is not None) else 1
+
+
+def detection(d: dict, pd: float | None = None, rows: int | None = None) -> dict:
+    """What the chain's detector, as this build deploys it, needs of the link budget (`budget`, `performance`): the SNR of
+    ONE row at which a steady point echo is detected on one ping with probability `pd` (default: the build's design
+    value, `operation.detection_probability`), with `rows` rows' maps added in power (default: the build's rows).
+
+    Computed by gpusonar.live.budget_threshold_db on the build's own template record and chain settings: nothing is typed.
+    Returns {"probability", "threshold_db" (the build's rows), "threshold_one_row_db", "rows", "rows_gain_db" (what the
+    rows are worth AT THIS DETECTOR: one row's threshold less theirs), "threshold_high_db" and "probability_high" (the same
+    for HIGH_DETECTION_PROBABILITY), "statistic", "false_alarms_per_ping", "window_loss_db", "straddle_loss_db",
+    "sample_threshold_db" (the reported snr_db a detection needs), "includes", "leaves_out"}.
+
+    No gain is counted twice: the budget's SNR holds the pulse's matched-filter gain (10 log10 T against the noise
+    spectrum level) and ONE row's gain against isotropic sea noise, unweighted; this threshold holds the aperture window,
+    the straddling of the map's samples, the false-alarm budget and the rows' combination. Neither holds the other's."""
+    from . import live
+    pd = float(d.get("detection_probability", DESIGN_DETECTION_PROBABILITY) if pd is None else pd)
+    if not 0.0 < pd < 1.0:
+        raise ValueError(f"detection probability: {pd} (between 0 and 1)")
+    chain = deployed_chain(d)
+    rows = _rows_added(d, chain) if rows is None else int(rows)
+    cfg = d["sonar_config"]
+    key = json.dumps([cfg.get("array"), cfg["transmit"], cfg["receive"]["window"], cfg.get("nominal_sound_speed"), chain, pd, rows], sort_keys=True, default=str)
+    if key in _DETECTION_CACHE:
+        return copy.deepcopy(_DETECTION_CACHE[key])
+    record = detector_template(cfg)
+    n = d["per_row"][0]
+    full = live._merge(live.DEFAULTS, chain)
+
+    def need(p, r):
+        return float(live.budget_threshold_db(record, chain, pd=p, rows=r, row_elements=n))
+
+    one, mine = need(pd, 1), need(pd, rows)
+    statistic = full["cell_statistic"]
+    loss = live.snr_loss_db(record, float(live._map_geometry(record, full)["cell"]), full["window"], statistic, n)
+    out = {"probability": pd, "threshold_db": mine, "threshold_one_row_db": one, "rows": rows, "rows_gain_db": one - mine,
+           "probability_high": HIGH_DETECTION_PROBABILITY, "threshold_high_db": need(HIGH_DETECTION_PROBABILITY, rows),
+           "statistic": statistic, "false_alarms_per_ping": float(full["cfar"]["false_alarms_per_ping"]) if statistic == "multiscale" else None,
+           "window_loss_db": loss["window_db"], "straddle_loss_db": loss["cell_db"],
+           "sample_threshold_db": float(live.detection_threshold_db(chain, record=record, rows=rows)) if statistic == "multiscale" else None,
+           "includes": "the aperture window's loss, where the echo falls between the map's samples, the detector's thresholds for its false-alarm budget over this build's window, "
+                       "the rows' maps added in power",
+           "leaves_out": "an echo that fluctuates from ping to ping, an echo longer than the range resolution, reverberation, the sweep's taper, noise shared between rows"}
+    _DETECTION_CACHE[key] = out
+    return copy.deepcopy(out)
+
+
+def detection_for_row(n: int, pitch: float, rows: int = 1, pulse_s: float | None = None, window_m=None, base_sonar: str = "popoto_long_range", pd: float | None = None) -> dict:
+    """`detection` for a row that is not a build: `n` hydrophones `pitch` m apart, `rows` of them added in power, with the
+    band of `base_sonar`, its pulse and receive window unless given, and the chain's default settings. For trade studies
+    (tools/popoto_elevation_study.py), so that a hypothetical row is held to the same detector as a build."""
+    from .sonar import SonarModel
+    cfg = copy.deepcopy(SonarModel.load(base_sonar).config)
+    cfg["array"] = {"layout": "uniform_line", "count": int(n), "pitch": float(pitch), "axis": [1, 0, 0], "boresight": [0, 1, 0]}
+    for key in ("boards", "board_size", "clock_errors", "reference"):
+        cfg["receive"].pop(key, None)
+    if pulse_s is not None:
+        cfg["transmit"]["waveform"]["duration"] = float(pulse_s)
+    if window_m is not None:
+        cfg["receive"]["window"] = {"range": [float(window_m[0]), float(window_m[1])]}
+    d = {"rows": int(rows), "per_row": [int(n)], "sonar_config": cfg, "deploy": None}
+    return detection(d, pd, rows)
+
+
+def detection_probability(d: dict, row_snr_db, rows: int | None = None):
+    """The probability that the build's chain detects, on one ping, a steady point echo whose link-budget SNR of one row
+    is `row_snr_db` (a number or an array): gpusonar.live.detection_probability on the build's template and chain."""
+    from . import live
+    chain = deployed_chain(d)
+    rows = _rows_added(d, chain) if rows is None else int(rows)
+    return live.detection_probability(row_snr_db, detector_template(d["sonar_config"]), chain, rows=rows, row_elements=d["per_row"][0])
 
 
 def budget(d: dict, wind: float = 5.0, target_strength_db: float = 0.0):
-    """(SonarEquation, gains) of a build: the link budget of docs/DESIGN.md Sec. 5 for the summed map of its rows
-    (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at `wind` m/s, the row's gain
-    against isotropic noise plus the rows' detection gain). `eq.snr(r)` is the free-field SNR at the map."""
+    """(SonarEquation, gains) of a build: the link budget of docs/DESIGN.md Sec. 5 for ONE of its rows (spherical
+    spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at `wind` m/s, the row's gain against isotropic
+    noise, an RMS source level). `eq.snr(r)` is the free-field SNR of one row: peak signal over mean noise after the
+    matched filter and an unweighted row beamformer. `gains["threshold_db"]` is what the build's detector needs of it
+    (`detection`): margin = eq.snr(r) - gains["threshold_db"]. No row gain is in the equation: the rows are in the threshold."""
     from .sim.noise import wenz_spectrum_db
     from .sonar_equation import SonarEquation
     c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
-    n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
+    n, pitch = d["per_row"][0], d["pitch_m"]
     noise = float(wenz_spectrum_db(np.array([fc]), wind, 0.5)[0])
-    di, g_rows = directivity_db(n, pitch, fc, c), rows_detection_gain_db(rows)
+    di = directivity_db(n, pitch, fc, c)
+    det = detection(d)
     eq = SonarEquation(d["source_level_db"], fc, f_hi - f_lo, d["pulse_s"], n, noise, target_strength_db=target_strength_db, temperature=12.0, depth=50.0,
-                       absorption_model="ainslie_mccolm", array_gain_db=di + g_rows)
-    return eq, {"noise_spectrum_db": noise, "gain_isotropic_noise_db": di, "rows_detection_gain_db": g_rows, "wind_speed_m_s": float(wind)}
+                       absorption_model="ainslie_mccolm", array_gain_db=di)
+    return eq, {"noise_spectrum_db": noise, "gain_isotropic_noise_db": di, "rows_detection_gain_db": det["rows_gain_db"], "wind_speed_m_s": float(wind),
+                "threshold_db": det["threshold_db"], "detection_probability": det["probability"]}
 
 
 def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0), roll_sigma_deg: float | None = None,
                 gradient_sigma: float | None = None, environment: dict | None = None, own_depth_m: float | None = None, classes: list | None = None) -> dict:
     """Expected performance of a build from its derived numbers `d` (describe / derive): the link budget of
     docs/DESIGN.md Sec. 5 (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at
-    `wind` m/s) with the row's gain against isotropic noise, and the elevation bounds of the stacked rows.
-    The same arithmetic as tools/popoto_elevation_study.py, for any geometry and band
-    (tests/python/test_buildspec.py holds the two together on the shipped stages)."""
+    `wind` m/s) with the row's gain against isotropic noise, held against what the build's own detector needs
+    (`detection`): thresholds, margins, detection probabilities and reaches; and the elevation bounds of the stacked rows.
+    `row_snr_db` is the SNR of one row; `margin_db` = row_snr_db - detection.threshold_db;
+    `rows_detection_gain_db` is what the rows are worth at the detector (already inside the threshold: add it to nothing)."""
     c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
     n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
     _, g = budget(d, wind)
-    noise, di, g_rows = g["noise_spectrum_db"], g["gain_isotropic_noise_db"], g["rows_detection_gain_db"]
-    out = {"assumptions": f"spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at {wind:g} m/s wind, 13 dB at the map for detection, "
+    det = detection(d)
+    noise, di = g["noise_spectrum_db"], g["gain_isotropic_noise_db"]
+    thr = det["threshold_db"]
+    out = {"assumptions": f"spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at {wind:g} m/s wind, an RMS source level, a steady point echo; detection: "
+                          f"probability {det['probability']:g} on one ping by the chain's own detector as deployed, which needs {thr:.1f} dB of one row's SNR"
+                          + (f" with {det['rows']} rows added" if det["rows"] > 1 else "") + f" ({det['threshold_high_db']:.1f} dB for {det['probability_high']:g}); "
                           "target strengths +25 dB (ship) and +5 dB (small)",
            "noise_spectrum_db": noise, "beamwidth_deg": d["beamwidth_deg"], "gain_isotropic_noise_db": di, "gain_uncorrelated_noise_db": float(10 * np.log10(n)),
-           "rows_detection_gain_db": g_rows, "range_resolution_m": c / (2.0 * (f_hi - f_lo)), "blind_range_m": d["blind_range_m"],
+           "rows_detection_gain_db": det["rows_gain_db"], "detection": det, "range_resolution_m": c / (2.0 * (f_hi - f_lo)), "blind_range_m": d["blind_range_m"],
            "grating_lobe_free_steering_deg": float(np.degrees(np.arcsin(min(c / f_hi / pitch - 1.0, 1.0)))) if c / f_hi / pitch > 1.0 else 0.0}
-    snr = {}
+    snr, margin, prob = {}, {}, {}
     for key, ts in (("ship", 25.0), ("small", 5.0)):
         eq, _ = budget(d, wind, ts)
-        out[f"reach_{key}_m"] = float(eq.detection_range(BUDGET_THRESHOLD_DB))
-        snr[key] = {str(r): float(eq.snr(r)) - g_rows for r in ranges}
-    out["row_snr_db"] = snr
+        out[f"reach_{key}_m"] = float(eq.detection_range(thr))
+        out[f"reach_{key}_high_m"] = float(eq.detection_range(det["threshold_high_db"]))
+        snr[key] = {str(r): float(eq.snr(r)) for r in ranges}
+        margin[key] = {k: v - thr for k, v in snr[key].items()}
+        prob[key] = dict(zip(snr[key], np.atleast_1d(detection_probability(d, np.array(list(snr[key].values())), det["rows"])).tolist()))
+    out["row_snr_db"], out["margin_db"], out["detection_probability"] = snr, margin, prob
     el = d["elevation"]
     if el:
         from . import elevation as elev
@@ -1376,15 +1502,16 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
 
 
 def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, classes: list | None = None, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0),
-                 threshold_db: float = BUDGET_THRESHOLD_DB) -> dict:
+                 threshold_db: float | None = None) -> dict:
     """What the free-field figures of `performance` leave out, for one environment (depthplan.ENVIRONMENT_FIELDS) and one
     own depth (default: the shallowest allowed): the two-way propagation factor of gpusonar.lloyd (surface image, roughness,
     bubble loss, the band; the bottom's images when the environment has one) at each range, and the SNR and margin with it.
     `classes` (resolved target classes): one entry each, worst over the class's depths, at the low end of its target
-    strength. Without classes: the reference ship (+25 dB) at 4 m, the popoto_12km scenario's."""
+    strength. SNRs are one row's; `threshold_db` (default: the build's detector's, `detection`) is what the margin is over. Without classes: the reference ship (+25 dB) at 4 m, the popoto_12km scenario's."""
     from . import depthplan
     own = float(depthplan.own_depth_grid(environment, max_depth=(d.get("platform") or {}).get("max_depth_m"))[0] if own_depth_m is None else own_depth_m)
-    eq, _ = budget(d, depthplan.wind_of(environment))
+    eq, gains = budget(d, depthplan.wind_of(environment))
+    threshold_db = gains["threshold_db"] if threshold_db is None else float(threshold_db)       # of one row's SNR, the build's detector's (`detection`)
     rr = np.asarray([r for r in ranges if r > d["blind_range_m"]], dtype=float)
     f_lo, f_hi = d["band_hz"]
     items = [dict(c) for c in (classes or [])] or [{"name": "ship", "ts_db": [25.0, 25.0], "depth_m": [4.0, 4.0]}]
