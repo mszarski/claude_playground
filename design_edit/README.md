@@ -681,6 +681,27 @@ then re-uploaded the base model's cached snapshot, which overwrote them with the
 "different" models gave identical outputs on all 1,050 rows. The script now copies only named processor files, checks
 that the merge changed weights, and fails if the pushed weights hash the same as the base.
 
+### Round 8: repairing the teacher's left-over outlines
+
+171 teacher rows in the v7 mix fill an outlined button but leave its grey outline on
+(`set n10 fill=#DC2626; set n11 color=#FFFFFF`). `scripts/repair_outline.py` removes the outline where the design's
+other filled buttons have none, and regenerates the label with `diff` (`design-edits-v8`; 18 RL reference sets were
+repaired too). Gemma SFT retrained on it, same settings:
+
+| Model | seen types (500) | paraphrased (490) | goal requests (450) | unseen types v2 (1,050) | unseen, without `promote_button` (900) |
+|---|---|---|---|---|---|
+| Gemma SFT v7 | 0.958 | 0.900 | 0.967 | 0.700 | 0.801 |
+| v7 RL step 150 | 0.956 | 0.898 | 0.969 | 0.752 | 0.798 |
+| Gemma SFT v8 (repaired) | 0.936 | 0.869 | 0.918 | 0.833 | 0.820 |
+
+- **`promote_button` went from 0.09 to 0.91, but it is no longer an unseen type.** The repaired rows are requests like
+  "make the Choose Free button match the Choose Team button", which is the promote edit. The leak filter missed them in
+  v7 as well; there they taught the wrong answer. Use the last column for unseen-type comparisons from v7 on.
+- **The other three sets moved by 2 to 5 points with only 3% of rows changed.** The lost rows are unrelated to outlines
+  (`disable_button` answers that also set a stroke, two-part requests with one part dropped). The likeliest
+  explanation is run-to-run variance between SFT trainings, which has not been measured: every SFT number in this README
+  is a single run. The bootstrap intervals cover test-set sampling only, not training variance.
+
 ## All goal-rubric numbers, re-graded with the *minimal* criterion
 
 Every saved `test_goal` output re-judged with the current rubric (gpt-oss-120b, minimal-aware). Earlier tables in
