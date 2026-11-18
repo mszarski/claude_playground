@@ -13,7 +13,7 @@ import pytest
 import gpusonar as gs
 from gpusonar import acoustics, motion, pipeline, recon
 from gpusonar.config import config_dir, load_yaml
-from gpusonar.sim import Scene, make_pose, run_scenario, simulate_ping
+from gpusonar.sim import Scene, make_pose, simulate_collection, simulate_ping
 from gpusonar.sim import sources as src
 from gpusonar.sim import waveform as wf_mod
 from gpusonar.sonar import SonarModel
@@ -248,7 +248,7 @@ def test_cfar_window_in_resolution_cells_keeps_a_finely_sampled_target():
 
 def test_baseband_default_is_unchanged_and_the_allowance_widens_a_tone():
     def tone():
-        sonar = SonarModel.load("flank_32", {"array": {"count": 1}, "receive": {"window": {"start": 0.0, "samples": 32000}},
+        sonar = SonarModel.load("flank_32", {"array": {"count": 1}, "receive": {"window": {"range": [0.0, 375.0]}},
                                             "transmit": {"waveform": {"type": "cw", "f_start": 8000.0, "f_stop": 8000.0,
                                                                       "duration": 0.25}}})
         rec = sonar.make_record(make_pose(), environment={"sound_speed": C})
@@ -275,9 +275,13 @@ def test_baseband_default_is_unchanged_and_the_allowance_widens_a_tone():
 def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_keeps():
     TILT = np.radians(20.0)
     target = 120.0 * np.array([0.0, np.cos(TILT), np.sin(TILT)])
+    # A projector wider than the receive elements, so that the receive beam alone decides
+    # the edge. (With equal beams the transmit test, exact at the transmit instant, cuts
+    # the same pixels the pre-test would lose, and the 2 cm cost nothing.)
     sonar = SonarModel.load("sas_auv", {
         "receive": {"window": {"range": [115.0, 125.0]}},
-        "transmit": {"waveform": {"type": "gaussian", "f_start": 180e3, "f_stop": 220e3, "duration": 1.0e-4,
+        "transmit": {"beamwidth_az": 1.4, "aperture_width": None,
+                     "waveform": {"type": "gaussian", "f_start": 180e3, "f_stop": 220e3, "duration": 1.0e-4,
                                   "window_alpha": 0.0}}})
 
     def ping(acceleration):
@@ -287,12 +291,14 @@ def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_kee
         recon.prepare([rec])
         return rec
 
-    # Pixels along track through the edge of the beam (about +-2.6 m at 120 m for this array).
-    x = np.linspace(-6.0, 6.0, 961)
+    # Pixels along track across the edge of the processed beam: 1.13 x 0.166 rad / 2 is 11.3 m at 120 m.
+    x = np.linspace(8.0, 15.0, 701)
     pts = np.column_stack([x, np.full_like(x, target[1]), np.full_like(x, target[2])])
 
     def image(rec, **kw):
-        return core.backproject([rec], pts, interp="linear", fov_factor=1.13, position_lookup="software_table", **kw)
+        """The sum of the weights that contributed at each pixel: zero where the ping was rejected."""
+        return core.backproject([rec], pts, interp="linear", fov_factor=1.13, position_lookup="software_table",
+                                return_weight_sum=True, **kw)[1]
 
     # A gentle ping: the residual is under the fixed 2 cm, and the table-derived allowance is
     # the fixed one, bit for bit.
@@ -310,8 +316,9 @@ def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_kee
     fixed = image(hard)
     table = image(hard, trajectory_allowance="table")
     np.testing.assert_array_equal(table, exact)
-    lost = (np.abs(exact) > 0) & (fixed == 0)
+    lost = (exact > 0) & (fixed == 0)
     assert lost.sum() > 20                                          # the fixed 2 cm drops pixels the exact test keeps
+    assert not ((fixed > 0) & (exact == 0)).any() and (exact == 0).any()      # and the wider one adds nothing false
     with pytest.raises(ValueError, match="trajectory_allowance"):
         image(hard, trajectory_allowance="guess")
 
@@ -340,9 +347,16 @@ def test_motion_windows_in_metres_follow_the_record():
 
 @pytest.fixture(scope="module")
 def stripmap():
-    result = run_scenario("stripmap_points")
-    recon.prepare(result.records)
-    return result.records
+    """A short straight collection with a DVL: one point on the seabed, origin on the seabed."""
+    sonar = SonarModel.load("sas_auv", {
+        "receive": {"kind": "baseband", "sample_rate": 100e3, "window": {"range": [38.0, 48.0]}},
+        "transmit": {"waveform": {"type": "gaussian", "f_start": 180e3, "f_stop": 220e3, "duration": 1e-4,
+                                  "window_alpha": 0.0}}})
+    col = simulate_collection(sonar, Scene().add_points([[4.8, 41.2, 0.0]]), n_pings=40, interval=0.2, speed=1.2,
+                              environment={"sound_speed": C}, absorption_model="none", adc=False,
+                              rng=np.random.default_rng(1))
+    recon.prepare(col.records)
+    return col.records
 
 
 def lowered(records, dz):
@@ -391,6 +405,9 @@ def test_seafloor_from_water_depth_or_an_error():
 
 
 def test_pipeline_passes_only_the_keys_it_is_given(monkeypatch, stripmap):
+    import inspect
+    sig = inspect.signature(recon.sas_image).parameters             # the real functions, before they are replaced
+    grid = inspect.signature(recon.stripmap_grid).parameters
     seen = {}
 
     def fake_grid(records, ground_range, pixel, **kw):
@@ -412,10 +429,7 @@ def test_pipeline_passes_only_the_keys_it_is_given(monkeypatch, stripmap):
     assert seen["grid"] == {"plane_z": "seafloor"} and seen["image"]["fov_factor"] == 1.6
     assert seen["image"]["trajectory_allowance"] == "table"
     # The defaults the pipeline used to type are the defaults of the functions it calls.
-    import inspect
-    sig = inspect.signature(recon.sas_image).parameters
     assert (sig["interp"].default, sig["fov_factor"].default, sig["cull_block"].default) == ("sinc", 1.13, 16)
-    grid = inspect.signature(recon.stripmap_grid).parameters
     assert (grid["plane_z"].default, grid["full_support"].default) == (0.0, True)
 
 
@@ -439,7 +453,7 @@ def test_a_fast_close_pass_warns_and_auto_refines():
                                                                   "duration": 0.004, "window_alpha": 0.0,
                                                                   "source_level_db": 190.0}},
                                         "receive": {"kind": "real", "sample_rate": 64000.0,
-                                                    "window": {"start": 0.0, "samples": 6400}}})
+                                                    "window": {"range": [0.0, 75.0]}}})          # 0.1 s
     env = {"sound_speed": C, "temperature": 12.0, "salinity": 35.0}
 
     def listen(stream=None, speed=40.0):
