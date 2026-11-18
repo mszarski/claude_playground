@@ -2272,8 +2272,8 @@ rule_of_thumb, sum.
 2. **Doppler width proportional to frequency: supported, inside one band only.** Upper against
    lower half of 9.2-15.8 kHz: ratio 1.185 +- 0.017 (standard error, 21 arrivals) against 1.216
    for proportionality and 1 for none. At 200 m, where Gamma^2 is about 1, the model's
-   own factor 1 / sqrt(1 - exp(-Gamma^2)) lowers the expected ratio to 1.09; measured 1.05 and
-   1.03 there. Across carriers it is **not testable**: no second site has both geometry and a
+   own factor 1 / sqrt(1 - exp(-Gamma^2)) lowers the expected ratio to 1.09 in the calm
+   recordings; measured 1.05 and 1.03 there (1.20 in the rough one, where Gamma is large). Across carriers it is **not testable**: no second site has both geometry and a
    fast tracker.
 3. **Doppler spectrum Gaussian: supported**, and not only at Purple. Shape w90/w50: Purple
    median 2.53 (1.76-3.08, n = 27); Red at 25 kHz 2.3-2.5; Yellow 2.34; Blue 1.77 (Gaussian
@@ -2282,7 +2282,7 @@ rule_of_thumb, sum.
 4. **Coherent share exp(-Gamma^2): the form is supported, the Pierson-Moskowitz height is
    contradicted.** In the two calm recordings the shares at 200 m want 1.36 times the height of
    the wind law (scatter 1.06, n = 6), and it holds within the band (lower half more coherent
-   than upper in 7 of 9 arrivals at 200 m). But the excess is not a constant: read as heights,
+   than upper in 8 of 9 arrivals at 200 m). But the excess is not a constant: read as heights,
    the 200 m surface arrival gives 0.116, 0.102 and 0.144 m in the three recordings where the
    wind law gives 0.084, 0.073 and 0.447 m. The measured height hardly changes while the
    Doppler width (vertical speed) more than doubles: a fetch-limited or swell-carrying sea, not
