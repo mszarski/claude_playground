@@ -1,6 +1,8 @@
-"""The named sediments (configs/sediments.yaml): every row loads, the reflection-only rows from
-UnderwaterAcoustics.jl serve the reflection coefficient and are refused by the scattering
-models, and the two complete rows agree with that table."""
+"""The named sediments (configs/sediments.yaml): every row loads, density, speed and loss are
+those of UnderwaterAcoustics.jl (with one corrected typing error), the two rows that are not
+fluids (rock, pebbles) serve the reflection coefficient and are refused by the scattering
+models, and the two rows from arXiv:1809.08459 agree with that table. The scattering
+parameters of the other rows are checked in test_sediment_literature.py."""
 
 import cmath
 import math
@@ -28,8 +30,12 @@ JULIA_TABLE = {
     "sandy_clay": (1173.38, 1504.93, 0.00242), "very_fine_silt": (1173.38, 1503.09, 0.00194),
     "silty_clay": (1172.36, 1501.11, 0.00163), "clay": (1171.34, 1497.44, 0.00148),
 }
-FULL_ROWS = ("medium_sand", "very_fine_silt")
-REFLECTION_ONLY = sorted(set(JULIA_TABLE) - set(FULL_ROWS))
+FULL_ROWS = ("medium_sand", "very_fine_silt")          # rows whose rho, nu, delta come from arXiv:1809.08459
+JULIA_ROWS = sorted(set(JULIA_TABLE) - set(FULL_ROWS))  # rows whose rho, nu, delta come from UnderwaterAcoustics.jl
+REFLECTION_ONLY = ["pebbles", "rock"]                  # not fluid sediments: no w2, gamma2, sigma2
+# The one place the file departs from the Julia table: its line for SandyGravel prints 2073.50 m/s
+# (ratio 1.3570); three other prints of the row give 1.337 (the entry's note), which is carried.
+SANDY_GRAVEL_SPEED = 1.337 * 1528.0
 
 
 def quiet(fn, *args, **kw):
@@ -46,27 +52,27 @@ def test_every_row_loads_and_the_table_is_complete():
         assert set(par) == {"rho", "nu", "delta"} and all(math.isfinite(v) and v > 0 for v in par.values())
         assert bottom.is_reflection_only(name) == (name in REFLECTION_ONLY) == bool(entry.get("reflection_only", False))
         assert "source" in entry and "status" in entry
-    for name in REFLECTION_ONLY:
+    for name in JULIA_ROWS:
         rho, c, delta = JULIA_TABLE[name]
+        c = SANDY_GRAVEL_SPEED if name == "sandy_gravel" else c
         par = quiet(bottom.sediment_reflection, name)
         assert par["rho"] == pytest.approx(rho / 1023.0, rel=1e-12)
-        assert par["nu"] == pytest.approx(c / 1528.0, rel=1e-12)
+        assert par["nu"] == pytest.approx(c / 1528.0, rel=3e-6)
         assert par["delta"] == delta
         assert "stdlib.jl" in table[name]["source"] and "TR 9407" in table[name]["source"]
 
 
-def test_confirmed_rows_do_not_warn_and_the_uncertain_field_does():
-    for name in REFLECTION_ONLY:
-        if name == "sandy_gravel":
-            continue
+def test_confirmed_rows_do_not_warn_and_the_corrected_speed_is_documented():
+    for name in JULIA_ROWS:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             bottom.sediment_reflection(name)
-    with pytest.warns(UserWarning, match=r"sandy_gravel.*\['nu'\]"):
-        par = bottom.sediment_reflection("sandy_gravel")
+    par = bottom.sediment_reflection("sandy_gravel")
     entry = bottom.sediment_table()["sandy_gravel"]
-    assert entry["unconfirmed_fields"] == ["nu"] and "1.3370" in entry["note"] and "1.3570" in entry["note"]
-    assert par["nu"] == pytest.approx(1.3570, abs=5e-5)           # the table's value is the one carried
+    # The Julia table's 1.3570 was a typing error: both values and the three sources are in the note.
+    assert "unconfirmed_fields" not in entry and "1.3370" in entry["note"] and "1.3570" in entry["note"]
+    assert "Cintron" in entry["note"] and "Snellen" in entry["note"]
+    assert par["nu"] == pytest.approx(1.3370, abs=5e-6)
 
 
 def test_one_convention_the_two_sources_give_the_same_ratios():
@@ -123,31 +129,37 @@ def test_reflection_loss_orders_the_sediments_as_expected():
 
 
 def test_scattering_models_refuse_reflection_only_rows():
-    with pytest.raises(ValueError, match=r"fine_sand.*reflection-only.*\['w2', 'gamma2', 'sigma2'\]"):
-        bottom.sediment("fine_sand")
+    with pytest.raises(ValueError, match=r"rock.*reflection-only.*\['w2', 'gamma2', 'sigma2'\].*Lambert"):
+        bottom.sediment("rock")
     # The scenario item may supply what the table lacks.
-    got = bottom.sediment("fine_sand", supplied={"w2": 1e-5, "gamma2": 3.0, "sigma2": 1e-3})
+    got = bottom.sediment("rock", supplied={"w2": 1e-5, "gamma2": 3.0, "sigma2": 1e-3})
     assert set(got) == {"rho", "nu", "delta"}
     with pytest.raises(ValueError, match=r"reflection-only.*\['sigma2'\]"):
-        bottom.sediment("fine_sand", supplied={"w2": 1e-5, "gamma2": 3.0})
+        bottom.sediment("rock", supplied={"w2": 1e-5, "gamma2": 3.0})
     seafloor = {"type": "seafloor", "x_range": [2.0, 6.0], "y_range": [-1.0, 1.0], "density": 20.0,
-                "model": "fluid_sediment", "sediment": "fine_sand"}
+                "model": "fluid_sediment", "sediment": "rock"}
     with pytest.raises(ValueError, match="reflection-only"):
         build_scene([seafloor], np.random.default_rng(0))
     scene = build_scene([dict(seafloor, w2=1e-5, gamma2=3.0, sigma2=1e-3)], np.random.default_rng(0))
     params = scene.modifiers[0][2].params
-    assert params["rho"] == pytest.approx(1484.37 / 1023.0) and params["w2"] == 1e-5
-    # A complete row needs nothing more, by name.
-    scene = build_scene([dict(seafloor, sediment="medium_sand")], np.random.default_rng(0))
-    assert scene.modifiers[0][2].params == bottom.sediment("medium_sand")
+    assert params["rho"] == pytest.approx(2557.50 / 1023.0) and params["w2"] == 1e-5
+    # A complete row needs nothing more, by name: the rows from the arXiv paper and the rows
+    # whose scattering parameters follow the grain size.
+    for name in ("medium_sand", "fine_sand", "clay"):
+        scene = build_scene([dict(seafloor, sediment=name)], np.random.default_rng(0))
+        assert scene.modifiers[0][2].params == bottom.sediment(name)
+    # An item's own key still wins over the table's.
+    scene = build_scene([dict(seafloor, sediment="fine_sand", sigma2=5e-4)], np.random.default_rng(0))
+    assert scene.modifiers[0][2].params["sigma2"] == 5e-4
+    assert scene.modifiers[0][2].params["w2"] == bottom.sediment("fine_sand")["w2"]
 
 
 def test_reverberation_item_refuses_a_reflection_only_row():
     from gpusonar.sim import run_scenario
     from gpusonar.config import load_scenario_config
     cfg = load_scenario_config("point_grid_fls_300k")
-    cfg["reverberation"] = [{"model": "fluid_sediment", "boundary_z": 20.0, "sediment": "clay"}]
-    with pytest.raises(ValueError, match=r"clay.*reflection-only.*w2"):
+    cfg["reverberation"] = [{"model": "fluid_sediment", "boundary_z": 20.0, "sediment": "pebbles"}]
+    with pytest.raises(ValueError, match=r"pebbles.*reflection-only.*w2"):
         run_scenario(cfg)
 
 

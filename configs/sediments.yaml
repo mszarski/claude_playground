@@ -24,37 +24,68 @@
 # other for 1023 kg/m3 and 1528 m/s: the ratio is what both took from their source
 # (tests/python/test_sediment_table.py checks this).
 #
-# Reflection-only entries (`reflection_only: true`, a `reflection:` block): density, sound speed
-# and loss parameter only, read from UnderwaterAcoustics.jl. They serve the flat-interface
-# reflection coefficient (image-source `bottom: {sediment: name}`, Bellhop
-# `environment: {sediment: name}`, bottom.sediment_reflection). They have no roughness or volume
-# parameters, so the scattering models refuse them unless the scenario item gives w2, gamma2
-# and sigma2 itself. `unconfirmed_fields` lists parameters of an otherwise confirmed entry
-# that could not be settled; a warning is raised when one is used.
+# Rows read from UnderwaterAcoustics.jl carry density, sound speed and loss in a `reflection:`
+# block (kg/m3, m/s, loss parameter, with the reference water the source states). They serve the
+# flat-interface reflection coefficient (image-source `bottom: {sediment: name}`, Bellhop
+# `environment: {sediment: name}`, bottom.sediment_reflection). A `scattering:` block beside it
+# gives the three scattering parameters in the units of their source: `w2_cm4` (spectral
+# strength in cm^4 with a 1 cm reference length, converted by bottom.w2_from_cm4), `gamma2`,
+# `sigma2`. `provenance:` says, parameter by parameter, where each number comes from.
+# `unconfirmed_fields` lists parameters of an otherwise confirmed entry that could not be
+# settled; a warning is raised when one is used.
 #
-# `grain_size_phi: [low, high]` is the mean grain size range (phi = -log2 of the diameter in mm)
-# that Lurton, Lamarche et al., "Backscatter measurements by seafloor-mapping sonars: Guidelines
-# and Recommendations" (GeoHab Backscatter Working Group, 2015; CC BY 4.0;
-# doi:10.5281/zenodo.10089261), Table 2-1, gives for that sediment name. That table ("Adapted
-# from APL 1994 ... nominal values for c1 and rho1 (1500 m/s and 1000 kg/m3)") prints density,
-# velocity and absorption in dB per wavelength for nine classes, clay to coarse sand, and is a
-# second open source for those nine rows: it agrees with the entries here to its printed digits
-# (tests/python/test_sediment_table.py), with one exception noted at coarse_silt. It has no
-# roughness or volume parameters either.
+# Where the scattering parameters come from (2026-11-18; docs/REFERENCES.md has the register).
+# APL-UW TR 9407 (limited distribution) was not read; each item below is printed in an open
+# document that attributes it to the handbook.
 #
-# Still missing for every reflection-only row: w2, gamma2, sigma2. No open source that could be
-# reached gives them, or a regression against grain size that would (docs/ORG_ARL_SURVEY.md,
-# section 10, lists what was searched and what could not be opened). They are not filled with
-# guesses. tools/fit_sediment.py fits them to measured backscattering strength and writes a
-# row with `status: fitted (...)`.
+# - Sediment name -> mean grain size (phi = -log2 of the diameter in mm): Cintron, "Environmental
+#   impact on mine hunting in the Yellow Sea using the CASS/GRAB model", MS thesis, Naval
+#   Postgraduate School, 2001 (public release; https://hdl.handle.net/10945/10842), Table 1
+#   "APL/UW TR9407 Geo-acoustic parameters associated with bulk grain size index": 23 rows from
+#   "Rough Rock" to "Clay" with the grain size index, density ratio, sound speed ratio and loss
+#   parameter. Its ratios agree with the rows here to the printed digits
+#   (tests/python/test_sediment_literature.py).
+# - Spectral strength: Snellen, Eleftherakis, Amiri-Simkooei, Koomans and Simons, J. Acoust.
+#   Soc. Am. 134, 959-970 (2013), eq. (5) (author copy, TU Delft repository,
+#   uuid:118445fc-6696-4fe2-abae-53272b80db43): w2 = 0.00207 h^2 cm^4,
+#   h = (2.03846 - 0.26923 Mz) / (1 + 0.076923 Mz) for -1 <= Mz < 5 and h = 0.5 for 5 <= Mz <= 9,
+#   for the spectrum W(K) = w2 (h0 K)^-gamma, h0 = 1 cm. Snellen, Siemes and Simons, J. Acoust.
+#   Soc. Am. 129, 2878-2888 (2011), Table II (TU Delft repository,
+#   uuid:b635a0a8-2ca1-44ae-8fbc-0866b3304827) tabulates the same quantity at whole phi from -1
+#   to 9 (0.0129 ... 0.0005 cm^4); the regression reproduces it to the printed digits, and it
+#   reproduces the two rows of arXiv:1809.08459 (printed in m^(4 - gamma)) within 0.3 %, which
+#   also checks the unit conversion.
+# - Spectral exponent: 3.25 for every sediment (Snellen et al. 2011, Sec. II.A: "a value of 3.25
+#   for the exponent of the bottom relief spectrum is found to work well for many types of
+#   sediments", citing the handbook).
+# - Volume parameter (volume scattering cross section / attenuation in dB/m): 0.002 for
+#   -1 <= Mz < 5.5 and 0.001 for 5.5 <= Mz <= 9 (Snellen et al. 2013, text after eq. (5); Snellen
+#   et al. 2011, Table II). It is the least certain of the three: the GeoHab report says it "has
+#   to be adjusted empirically", and Snellen et al. (2013) found values half the rule at 300 kHz.
+#   The row `medium_sand` (from arXiv:1809.08459) holds 0.001 where this rule gives 0.002: see
+#   its note.
+# - Rock and pebbles are not fluid sediments. The open literature describes rock by Lambert's
+#   law fitted to measurements, or by an elastic small-slope model with measured roughness; the
+#   handbook's own curves for rock exceed the largest Lambert law energy conservation allows
+#   (Olson, Lyons and Saebo, arXiv:1601.06078, introduction). These two rows stay `reflection_only`
+#   and carry an `empirical_backscatter:` block instead (bottom.empirical_backscatter): a Lambert
+#   parameter with the range of the published values. The fluid-sediment scattering models
+#   still refuse them.
 #
-# APL-UW TR 9407 (limited distribution) holds the usual table from clay to rough rock; it was
-# not read. The two complete rows below were read from an arXiv paper whose authors attribute
-# them to TR 9407. No other complete row was found on arXiv:
+# `grain_size_phi: [low, high]` is the mean grain size range that Lurton, Lamarche et al.,
+# "Backscatter measurements by seafloor-mapping sonars: Guidelines and Recommendations" (GeoHab
+# Backscatter Working Group, 2015; CC BY 4.0; doi:10.5281/zenodo.10089261), Table 2-1, gives for
+# that sediment name; `mean_grain_size_phi` (Cintron's table) is its midpoint in eight of the nine
+# rows that have both (clay: 9 phi for "above 8"). That table ("Adapted from APL 1994 ... nominal values for c1 and rho1
+# (1500 m/s and 1000 kg/m3)") is a further open source for density, velocity and absorption of
+# those nine rows and agrees with the entries here to its printed digits
+# (tests/python/test_sediment_table.py), with one exception noted at coarse_silt.
+#
+# Other things looked at and not used as rows:
 # - Olson, Lyons and Saebo, arXiv:1601.06078, Table II gives "generic rock" as an elastic solid
-#   only (compressional speed 3600 m/s, shear speed 1900 m/s, density 2500 kg/m3, loss
-#   parameters 0.0018 and 0.085; attributed there to TR 9407 Table IV.2), with no roughness or
-#   volume parameters for it. That is not a fluid-sediment row, so it is not an entry.
+#   (compressional speed 3600 m/s, shear speed 1900 m/s, density 2500 kg/m3, loss parameters
+#   0.0018 and 0.085; attributed there to TR 9407 Table IV.2), with no roughness or volume
+#   parameters for it.
 # - Tables of sound speed, density and attenuation alone (arXiv:1611.00608 Table 1,
 #   arXiv:2003.11156 Tables 1-2) lack the roughness and volume parameters.
 
@@ -70,6 +101,20 @@ medium_sand:
     volume_strength_db: -20.0
     water_density: 1000.0
     water_sound_speed: 1500.0
+  mean_grain_size_phi: 1.5
+  provenance:
+    rho_nu_delta: "tabulated (arXiv:1809.08459 Table 1; the same ratios in UnderwaterAcoustics.jl and Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sand or Medium Sand", bulk grain size index 1.5)'
+    w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.406e-4 at 1.5 phi)"
+    gamma2: "tabulated (arXiv:1809.08459 Table 1)"
+    sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength); differs from the grain-size rule, see note"
+  note: >-
+    Volume parameter: the paper's -20.0 dB/m with 10.0 dB/m of attenuation is sigma2 = 0.0010.
+    The grain-size rule printed by Snellen et al. (2011, Table II; 2013) gives 0.002 for every
+    sediment coarser than 5.5 phi, which would be -17.0 dB/m here. The very fine silt row of the
+    same paper does agree with the rule (0.00099 against 0.001). Nothing read decides which is
+    the handbook's value for medium sand; the paper's number is kept (changing it would raise
+    the volume term by 3 dB) and the difference is listed for the owner in docs/REFERENCES.md.
   status: confirmed
   source: >-
     Brown, Johnson and Brownstead, "Simulation and testing results for a sub-bottom imaging
@@ -97,6 +142,13 @@ very_fine_silt:
     volume_strength_db: -28.6
     water_density: 1000.0
     water_sound_speed: 1500.0
+  mean_grain_size_phi: 7.5
+  provenance:
+    rho_nu_delta: "tabulated (arXiv:1809.08459 Table 1; the same ratios in UnderwaterAcoustics.jl and Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Very Fine Silt", bulk grain size index 7.5)'
+    w2: "tabulated (arXiv:1809.08459 Table 1; the regression of Snellen et al. 2013, eq. (5), gives 1.6365e-5 at 7.5 phi)"
+    gamma2: "tabulated (arXiv:1809.08459 Table 1)"
+    sigma2: "tabulated (arXiv:1809.08459 Table 1, as a volume scattering strength, 0.00099; the grain-size rule gives 0.001)"
   status: confirmed
   source: >-
     Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1, column "Very Fine Silt" (values
@@ -124,7 +176,7 @@ placeholder_sand:
     and 100 kHz.
 
 
-# --- Reflection-only entries --------------------------------------------------------------
+# --- Entries read from UnderwaterAcoustics.jl (density, sound speed, loss) --------------------
 # Read from UnderwaterAcoustics.jl (org-arl, MIT licence), src/stdlib.jl lines 113-136, commit
 # 7b9c47e (2026-11-12), whose comment reads "seabeds from APL-UW TR 9407 (1994), IV-6 Table 2;
 # ratios evaluated wrt reference rho=1023, c=1528". Each line there is
@@ -142,6 +194,22 @@ rock:
     water_density: 1023.0
     water_sound_speed: 1528.0
   reflection_only: true
+  empirical_backscatter:
+    model: lambert
+    mu_db: -16.0
+    mu_db_range: [-23.0, -10.0]
+    basis: >-
+      Lambert's law, strength = mu sin^2(grazing), fitted to measurements on rock: mu = -13 dB
+      (two sites) and -18 dB (two sites) on glacially plucked, very rough rock at 100 kHz (Olson,
+      Lyons and Saebo, arXiv:1601.06078, results and conclusion); average -23 dB (-24 to -22 dB
+      with the measured bottom slope) on granodiorite outcrops at 200 kHz, 10 to 65 degrees
+      (Gruber, MS thesis, Naval Postgraduate School, 2019, https://hdl.handle.net/10945/64176);
+      about -13 dB at 45 degrees from 80 to 450 kHz with a calibrated echosounder (Fezzani,
+      Berger, Le Bouffant and Lurton, Front. Remote Sens. 2025, doi:10.3389/frsen.2025.1574996,
+      Sec. 3.3), which is mu = -10 dB. Smooth, glacially abraded rock is lower and not
+      Lambertian: -33 to -26 dB at 20 degrees (arXiv:1601.06078). mu_db is the middle of the
+      published range, our choice of a representative value; give the site's own where known.
+      Energy conservation limits mu to 10 log10(1 / pi) = -5 dB.
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:115, "Rock"; attributed there to APL-UW
@@ -155,6 +223,20 @@ pebbles:
     water_density: 1023.0
     water_sound_speed: 1528.0
   reflection_only: true
+  empirical_backscatter:
+    model: lambert
+    mu_db: -9.0
+    mu_db_range: [-10.0, -8.0]
+    valid_from_hz: 150.0e3
+    basis: >-
+      Lambert's law with the level of the one open statement found: "coarse sediments, such as
+      maerl, pebbles, and boulders, can exhibit backscatter levels exceeding those of rock at
+      high frequencies (> 200 kHz), reaching values between -13 dB and -11 dB" at 45 degrees
+      (Fezzani et al. 2025, doi:10.3389/frsen.2025.1574996, Sec. 3.4, comparing with Weber and
+      Ward 2015 and Trzcinska et al. 2021, neither opened), i.e. mu = -10 to -8 dB. One angle
+      and a narrative statement, not a measured curve: unconfirmed below about 150 kHz and
+      away from 45 degrees.
+  unconfirmed_fields: [empirical_backscatter]
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:116, "Pebbles"; attributed there to APL-UW
@@ -163,20 +245,31 @@ pebbles:
 sandy_gravel:
   reflection:
     density: 2549.32
-    sound_speed: 2073.50
+    sound_speed: 2042.94
     delta: 0.01705
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: -1.0
+  scattering:
+    w2_cm4: 0.0129375
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sandy Gravel", bulk grain size index -1)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0129 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
-  unconfirmed_fields: [nu]
   note: >-
-    The sound speed is uncertain. The table line gives 2073.50 m/s, a ratio of 1.3570. Two
-    tests in the same repository use the ratio 1.3370 with this entry's density ratio 2.492
-    and loss 0.01705 (test/test_pekeris.jl:229, FluidBoundary(2.492 * 1023, 1.3370 * 1528,
-    0.01705); test/test_basic.jl:57). One of the two is a typing error and nothing read
-    here decides which; both keep the column monotonic. The table's value is carried.
-    With 1.3370 the speed would be 2042.94 m/s for water of 1528 m/s.
+    Sound speed corrected. UnderwaterAcoustics.jl's table line prints 2073.50 m/s (a ratio of
+    1.3570), but three other prints of the same row give 1.337: two tests in that repository
+    (test/test_pekeris.jl:229, FluidBoundary(2.492 * 1023, 1.3370 * 1528, 0.01705);
+    test/test_basic.jl:57), Snellen, Siemes and Simons (2011), Table II (Mz = -1: 2.492, 1.337,
+    0.0171) and Cintron (2001), Table 1 ("Sandy Gravel", 2.492, 1.337, 0.01705). The table line is
+    taken as a typing error and 1.337 x 1528 = 2042.94 m/s is carried.
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:117, "SandyGravel"; attributed there to APL-UW
     TR 9407 (1994), IV-6 Table 2.
@@ -188,7 +281,19 @@ very_coarse_sand:
     delta: 0.01667
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: -0.5
+  scattering:
+    w2_cm4: 0.0105727
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Very Coarse Sand", bulk grain size index -0.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:118, "VeryCoarseSand"; attributed there to APL-UW
@@ -201,7 +306,19 @@ muddy_sandy_gravel:
     delta: 0.0163
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 0.0
+  scattering:
+    w2_cm4: 0.00860151
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Muddy Sandy Gravel", bulk grain size index 0)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0086 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:119, "MuddySandyGravel"; attributed there to APL-UW
@@ -215,7 +332,19 @@ coarse_sand:
     delta: 0.01638
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 0.5
+  scattering:
+    w2_cm4: 0.00695749
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Coarse Sand", bulk grain size index 0.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:120, "CoarseSand"; attributed there to APL-UW
@@ -228,7 +357,19 @@ gravelly_muddy_sand:
     delta: 0.01645
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 1.0
+  scattering:
+    w2_cm4: 0.00558688
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Gravelly Muddy Sand", bulk grain size index 1)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0056 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:121, "GravellyMuddySand"; attributed there to APL-UW
@@ -241,7 +382,19 @@ muddy_gravel:
     delta: 0.0161
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 2.0
+  scattering:
+    w2_cm4: 0.0034983
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Muddy Gravel", bulk grain size index 2)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0035 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:123, "MuddyGravel"; attributed there to APL-UW
@@ -255,7 +408,19 @@ fine_sand:
     delta: 0.01602
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 2.5
+  scattering:
+    w2_cm4: 0.00271459
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Silty Sand or Fine Sand", bulk grain size index 2.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:124, "FineSand"; attributed there to APL-UW
@@ -268,7 +433,19 @@ muddy_sand:
     delta: 0.01728
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 3.0
+  scattering:
+    w2_cm4: 0.00207
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Muddy Sand", bulk grain size index 3)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0021 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:125, "MuddySand"; attributed there to APL-UW
@@ -282,7 +459,19 @@ very_fine_sand:
     delta: 0.01875
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 3.5
+  scattering:
+    w2_cm4: 0.00154395
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Very Fine Sand", bulk grain size index 3.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:126, "VeryFineSand"; attributed there to APL-UW
@@ -295,7 +484,19 @@ clayey_sand:
     delta: 0.02019
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 4.0
+  scattering:
+    w2_cm4: 0.00111917
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Clayey Sand", bulk grain size index 4)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0011 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:127, "ClayeySand"; attributed there to APL-UW
@@ -314,7 +515,19 @@ coarse_silt:
     delta: 0.02158
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 4.5
+  scattering:
+    w2_cm4: 0.000781112
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Coarse Silt", bulk grain size index 4.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:128, "CoarseSilt"; attributed there to APL-UW
@@ -327,7 +540,19 @@ sandy_silt:
     delta: 0.01261
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 5.0
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.002
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sandy Silt", bulk grain size index 5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.002 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:129, "SandySilt"; attributed there to APL-UW
@@ -341,7 +566,19 @@ medium_silt:
     delta: 0.00676
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 5.5
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Medium Silt", bulk grain size index 5.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:130, "MediumSilt"; attributed there to APL-UW
@@ -354,7 +591,19 @@ sandy_mud:
     delta: 0.00386
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 6.0
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Silt", bulk grain size index 6)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:131, "SandyMud"; attributed there to APL-UW
@@ -368,7 +617,19 @@ fine_silt:
     delta: 0.00306
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 6.5
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Fine Silt", bulk grain size index 6.5)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4).
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:132, "FineSilt"; attributed there to APL-UW
@@ -381,7 +642,19 @@ sandy_clay:
     delta: 0.00242
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 7.0
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Sandy Clay", bulk grain size index 7)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:133, "SandyClay"; attributed there to APL-UW
@@ -394,7 +667,19 @@ silty_clay:
     delta: 0.00163
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 8.0
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Silty Clay", bulk grain size index 8)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:135, "SiltyClay"; attributed there to APL-UW
@@ -408,7 +693,19 @@ clay:
     delta: 0.00148
     water_density: 1023.0
     water_sound_speed: 1528.0
-  reflection_only: true
+  mean_grain_size_phi: 9.0
+  scattering:
+    w2_cm4: 0.0005175
+    gamma2: 3.25
+    sigma2: 0.001
+  provenance:
+    rho_nu_delta: "tabulated (UnderwaterAcoustics.jl; the same ratios are printed in Cintron 2001, Table 1)"
+    mean_grain_size_phi: 'tabulated (Cintron 2001, Table 1, row "Clay", bulk grain size index 9)'
+    w2: >-
+      regression against grain size (Snellen et al. 2013, eq. (5), spectral strength in cm^4 with a
+      1 cm reference length; converted by bottom.w2_from_cm4). Snellen et al. (2011) Table II prints 0.0005 cm^4 and 0.001 for this grain size.
+    gamma2: "single value for all sediments (Snellen, Siemes and Simons 2011, Sec. II.A, citing the handbook)"
+    sigma2: "step in grain size (Snellen et al. 2013, text after eq. (5); 0.002 below 5.5 phi, 0.001 from 5.5 phi)"
   status: confirmed
   source: >-
     UnderwaterAcoustics.jl (MIT), src/stdlib.jl:136, "Clay"; attributed there to APL-UW

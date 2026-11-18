@@ -213,6 +213,22 @@ def mean_square_slope(wind_speed: float) -> float:
     return 0.003 + 0.00512 * max(float(wind_speed), 0.0)
 
 
+def mean_square_slope_components(wind_speed: float) -> tuple[float, float]:
+    """(upwind, crosswind) mean-square slopes of the clean sea surface, Cox and Munk (1954) as
+    printed in Guerin, Capelle and Hartmann, "Revisiting the Cox and Munk wave-slope statistics
+    using IASI observations of the sea surface", arXiv:2210.05456v2, eq. (12):
+
+        m_u = 3.16e-3 U,    m_c = 3e-3 + 1.92e-3 U,
+
+    U in m/s at a mast height of 12.5 m, for 1 to 14 m/s. Their sum, 0.003 + 0.00508 U, is 0.8 %
+    below the separate regression of the total that `mean_square_slope` carries (0.00512 U,
+    not printed in the opened source; the two published fits differ by that much). The
+    surface is steeper along the wind than across it by a factor 1.2 to 1.5 over that range;
+    the time-spreading model takes the slopes as isotropic."""
+    u = max(float(wind_speed), 0.0)
+    return 3.16e-3 * u, 3.0e-3 + 1.92e-3 * u
+
+
 def rms_surface_vertical_speed(wind_speed: float) -> float:
     """RMS vertical speed in m/s of the surface of a fully developed sea: the square root of the
     second moment of the Pierson-Moskowitz frequency spectrum
