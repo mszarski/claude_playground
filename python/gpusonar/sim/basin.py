@@ -32,7 +32,7 @@ tools/basin_reverberation_fit.py):
   with no target: the transmitted pulse convolved with a diffuse kernel of the same law whose
   energy is 10^(own_ping_db / 10) times that of the pulse at 1 m. THE MEASUREMENT DOES NOT GIVE
   THIS NUMBER: it was made between a source and hydrophones 274 m and 1 km apart, not at the
-  source. In those terms the late field was -43 dB (274 m) and -60 dB (1020 m) re the source's
+  source. In those terms the late field was -43 dB (274 m) and -61 dB (1020 m) re the source's
   energy at 1 m (tools/basin_reverberation_fit.py); a sonar listening to its own ping is at
   range zero. Give a value only as a what-if.
 - Diffuse means: a sum of `directions` plane waves, each with its own independent kernel, from
@@ -77,7 +77,7 @@ Limits (stated, not hidden):
 Scenario key (no default; absent: nothing is added and the record is bit-identical):
 
     basin_reverberation:
-      energy_db: -4.3        # one-way tail energy re the modelled arrivals, dB
+      energy_db: -4.2        # one-way tail energy re the modelled arrivals, dB
       onset_s: 0.010
       decay_s: 0.145         # law: exponential (the only one)
       coherence_m: isotropic # or a length in m, with bearing_deg
@@ -99,8 +99,8 @@ from .. import _gpusonar as core
 # exponential fitted to the energy still to come, from 10 ms to -30 dB. `own_ping_equivalent_db`
 # is the tail's energy re the source's at 1 m AT THAT RANGE (stated source level 183 dB), not at the source.
 MEASURED = {
-    "smartocean_274m": {"energy_db": -4.3, "onset_s": 0.010, "decay_s": 0.145, "repeatable": 0.7, "own_ping_equivalent_db": -43.0},
-    "smartocean_1020m": {"energy_db": 0.2, "onset_s": 0.010, "decay_s": 0.160, "repeatable": 0.45, "own_ping_equivalent_db": -60.0},
+    "smartocean_274m": {"energy_db": -4.2, "onset_s": 0.010, "decay_s": 0.145, "repeatable": 0.7, "own_ping_equivalent_db": -43.1},
+    "smartocean_1020m": {"energy_db": 0.2, "onset_s": 0.010, "decay_s": 0.160, "repeatable": 0.45, "own_ping_equivalent_db": -61.1},
 }
 MEASURED_LABEL = "one fjord, one night, 4-8 kHz (SFI Smart Ocean dataset, doi:10.21227/3aa6-4k33, CC BY 4.0)"
 _REQUIRED = ("energy_db", "onset_s", "decay_s", "coherence_m", "repeatable")
