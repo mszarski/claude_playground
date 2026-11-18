@@ -367,3 +367,46 @@ def test_raw_records_with_board_clocks_get_a_real_tail_of_the_right_energy():
     assert last["diffuse_energy"] / last["echo_energy"] == pytest.approx(e + e * e, rel=0.08)
     # The synchronisation burst on the boards' first inputs is electrical: it has no tail (it is added after).
     assert np.isfinite(with_tail).all() and (np.abs(with_tail - plain) ** 2).sum() > 0.0
+
+
+# --- the rehearsal scenarios -------------------------------------------------------------------------
+
+FJORD = (("fjord_testauv_trial_1row", 1000.0, "smartocean_274m"), ("fjord_static_trial_2row", 3000.0, "smartocean_1020m"), ("fjord_static_trial_3row", 500.0, "smartocean_274m"))
+
+
+def test_illustrative_profile_has_the_shape_of_the_casts_and_the_scenarios_carry_it():
+    from gpusonar.config import load_scenario_config
+    z, c = basin.stratified_profile(90.0, step=5.0)
+    assert c[0] == pytest.approx(1480.5) and z[np.argmax(c)] == 19.0 and c.max() == pytest.approx(1495.0)
+    assert float(np.interp(54.0, z, c)) == pytest.approx(1492.0) and np.all(np.diff(c[z <= 19.0]) > 0) and np.all(np.diff(c[(z >= 19.0) & (z <= 54.0)]) < 0)
+    assert np.diff(c[z >= 54.0]) / np.diff(z[z >= 54.0]) == pytest.approx(0.017, abs=1e-6)          # below the casts: the pressure gradient (an assumption)
+    section = np.array(basin.basin_section(3000.0, step=100.0))
+    assert section[0, 1] == 50.0 and section[:, 1].max() <= 90.0 and section[:, 1].min() >= 50.0
+    assert section[7, 1] == pytest.approx(53.0) and section[3, 1] > 80.0          # a basin, then a sill
+    for name, length, measured in FJORD:
+        cfg = load_scenario_config(name)
+        env = cfg["propagation"]["environment"]
+        assert np.allclose(env["ssp_depth"], z) and np.allclose(env["ssp_speed"], np.round(c, 1))
+        assert np.allclose(env["bathymetry"], basin.basin_section(length, step=100.0))
+        b = cfg["basin_reverberation"]
+        m = basin.MEASURED[measured]
+        assert all(b[k] == m[k] for k in ("energy_db", "onset_s", "decay_s", "repeatable")) and "own_ping_db" not in b
+        basin.BasinReverberation(b)
+
+
+def test_fjord_scenario_runs_through_bellhop_and_gains_the_tail():
+    import copy
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim.bellhop import find_bellhop
+    if find_bellhop() is None:
+        pytest.skip("Bellhop is not installed (GPUSONAR_BELLHOP)")
+    cfg = load_scenario_config("fjord_static_trial_3row")
+    cfg["pings"] = dict(cfg["pings"], count=1)
+    cfg["receiver"] = {"adc": False}
+    cfg["sonar"] = "popoto_static_3row"                                    # ideal clocks: only the water is under test
+    with_tail = arrays(run_scenario(copy.deepcopy(cfg)))[0]
+    plain = arrays(run_scenario({k: v for k, v in copy.deepcopy(cfg).items() if k != "basin_reverberation"}))[0]
+    e = 10.0 ** (cfg["basin_reverberation"]["energy_db"] / 10.0)
+    ratio = (np.abs(with_tail - plain) ** 2).sum() / (np.abs(plain) ** 2).sum()
+    # The window ends 0.33 s after the echo: most of the tail (decay 0.145 s) is in it.
+    assert 0.6 * (2.0 * e + e * e) < ratio < 1.15 * (2.0 * e + e * e)
