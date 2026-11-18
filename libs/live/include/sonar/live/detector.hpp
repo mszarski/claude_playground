@@ -63,16 +63,40 @@ struct DetectorOptions {
   /// The bearing sidelobes of a real array do not fall below what its gain and phase errors leave: the envelope's
   /// floor, dB below the peak. -40 dB is errors of about 5 % across 32 hydrophones (an assumption, not a measurement).
   double sidelobe_floor_db = -40.0;
-  /// How many independent tests one range resolution x one beamwidth of the map counts as. The map is sampled finer
-  /// than both and its largest sample is searched for: measured on noise maps (tests/python/test_detector.py).
-  double search_factor = 2.5;
+  /// NaN (default): the number of independent tests follows the threshold and the rows, with the measured constants
+  /// of kSearchSample / kSearchMean below. A number: every test counts that many per range resolution (or cell) and
+  /// beamwidth, whatever the threshold and the rows (2.5 is the detector as it was before the table).
+  double search_factor = kDerive;
 };
+
+/// How many separate false detections a map of noise gives: the measured part.
+///
+/// The map is sampled finer than a range resolution and a beamwidth, the largest sample is searched for, and flagged
+/// cells are grouped, so the number of independent tests is not the number of cells. Above a threshold x (over the
+/// mean noise power) on a statistic that is a sum of a = rows x looks unit exponentials over a, u = a x:
+///   the single sample     separate maxima of a field smooth in range and in bearing: their number over the
+///                         exceedance probability grows as u (the region above the threshold about a maximum of
+///                         height h has area pi (h - u) / (u sqrt|L|), L the field's roughness; PHYSICS_NOTES Sec. 29.3)
+///                             tests = kSearchSample[rows] x beams x extent / resolution x u
+///   a mean over cells     independent from cell to cell in range and smooth in bearing only: upcrossings along
+///                         bearing over the exceedance probability (Rice), sqrt(u) x the hazard of the statistic
+///                             tests = kSearchMean[rows] x beams x extent / length x sqrt(u) x (-d ln P(> x) / dx) / a
+/// The constants are MEASURED: tools/detector_search_factor.py, 400 noise-only pings of the long-range array for each
+/// of one, two and three rows (0.8 km window, bearings -60 to 60 degrees every 0.5, 2 m cells of 8 samples, Hann
+/// aperture), each test alone at 3, 1, 0.3 and 0.1 false detections a ping, 1203 to 2204 detections per entry (2.4 to
+/// 2.9 % each). With the growth above they do not depend on the budget within those errors (the single sample: 0.176 to
+/// 0.211 over all twelve entries), and the rows are in u: a flat factor of 2.5 read 0.86, 1.16 and 1.24 of the budget
+/// for one, two and three rows at these budgets, and more as the budget tightens. More than three rows: the three-row
+/// value (not measured). Another map (bearing step, samples per cell, window) needs the tool run again.
+inline constexpr double kSearchSample[3] = {0.191, 0.208, 0.192};
+inline constexpr double kSearchMean[3] = {0.515, 0.532, 0.598};
 
 struct DetectorScale {
   std::int64_t cells = 0;       ///< 0: the strongest sample of the cell; m >= 1: the mean of m cells about it
   double length_m = 0.0;        ///< what is integrated, m (the range resolution for the sample)
   double looks = 1.0;           ///< independent looks of one row's statistic (variance-equivalent)
-  double tests = 0.0;           ///< independent tests of this length in the map
+  double tests = 0.0;           ///< independent tests of this length in the map, at this test's threshold
+  double search = 0.0;          ///< the constant they were counted with (kSearchSample / kSearchMean, or the option's)
   double pfa = 0.0;             ///< false-alarm probability per test
   double factor = 0.0;          ///< threshold over the true mean noise power
   std::vector<double> weights;  ///< the statistic's weights (statistic.hpp)
@@ -102,8 +126,11 @@ struct DetectorPlan {
   double threshold(std::size_t s, double count) const;
 };
 
-/// The amplitude correlation of the compressed pulse between map samples `step` metres apart, lags 0..n-1:
-/// sinc(lag step / resolution) for a swept pulse (flat band), a triangle of the pulse's length for one that is not.
+/// The amplitude correlation of matched-filtered white noise between map samples `step` metres apart, lags 0..n-1:
+/// the autocorrelation of the replica the chain compresses with (the pulse with its taper), which is the transform of
+/// that replica's own power spectrum. For a flat band it would be sinc(lag step / resolution) and for an untapered
+/// tone the triangle of its length; a taper narrows the band and so lowers the looks a cell mean holds (a 10 % Tukey
+/// taper on a sweep: 5.47 looks in a 2 m cell at 4 to 6 kHz where the sinc gives 5.80, and 5.42 measured on the map).
 std::vector<double> sample_correlation(const Waveform& waveform, double sound_speed, double step, std::int64_t n);
 
 /// The detector's plan for a map of `n_cells` range cells of `samples_per_cell` samples `step` apart and the

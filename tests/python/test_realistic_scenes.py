@@ -181,8 +181,24 @@ def test_fls_170k_separates_closing_crossing_and_anchored_boats():
     # the two clusters are ONE detection at their centroid there, one track takes it, the other coasts, and on the next ping
     # the tracks have each other's cluster: 4.2 m in 2.25 s. Not sidelobes or multipath: a merged detection and a
     # nearest-neighbour association on four pings. The full scene (tools/gallery.py, eight pings) gives 0.18 m/s (0.16 before).
-    # The limit stays until the gallery's FLS detections are merged within what its tracker resolves (as the chain does, D-95).
+    # Merging the detections within what the tracker resolves, as the chain does (D-95), cures this scene (next test) and
+    # is measured to harm others (tools/gallery.py, FLS_MERGE): it is off, and the limit stays.
     assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 2.5
+
+
+def test_merging_fls_detections_as_the_chain_does_holds_the_anchored_boat_still(monkeypatch):
+    """The fix proposed for the swap above, behind `gallery.FLS_MERGE`: flagged cells within the tracker's range sigma
+    (1.5 m: three 0.48 m cells and the next) and half the beam's half-power width (0.73 degrees, from the chain's own
+    plan for this array) are one detection, grouped by the multiscale detector's own rule (`detect.group_flagged`). The
+    hull is then one detection on every ping, one track, and reads 0.29 m/s where it read 1.92 m/s. The limit is the
+    0.6 m/s the test had before D-102."""
+    monkeypatch.setattr(gallery, "FLS_MERGE", True)
+    m = quick("fls_170k_traffic")
+    t = m["targets"]
+    assert t["boat_at_anchor"]["tracked"] and t["boat_at_anchor"]["track_speed_m_s"] < 0.6
+    assert t["boat_closing"]["tracked"] and t["boat_closing"]["track_velocity_xy"][0] < -4.5
+    assert t["boat_crossing"]["tracked"] and t["boat_crossing"]["track_velocity_xy"][1] > 3.0
+    assert max(m["detections_per_ping"]) <= 6 and m["confirmed_tracks"] <= 5         # 9 to 15 detections and 10 tracks without
 
 
 @pytest.mark.skipif(find_bellhop() is None, reason="Bellhop not installed (GPUSONAR_BELLHOP)")

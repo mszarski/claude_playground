@@ -1,7 +1,7 @@
 {
  "ssp_front_static_trial_2row": {
   "changes with range": {
-   "simulate_seconds": 30.4,
+   "simulate_seconds": 27.3,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -279,7 +279,7 @@
    }
   },
   "local everywhere": {
-   "simulate_seconds": 28.0,
+   "simulate_seconds": 28.3,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -428,15 +428,15 @@
       "true_elevation_deg": -0.6609834743239804,
       "other_detections": 0,
       "snr_db": 45.59575705,
-      "range_error_m": 39.300492155359734,
-      "bearing_error_deg": -0.08619250756473829,
+      "range_error_m": 39.29932815535949,
+      "bearing_error_deg": -0.08617794756473884,
       "first_range_error_m": 10.213709155359538,
       "cone_bearing_error_deg": null,
-      "elevation_deg": 3.648968318,
-      "elevation_sigma_deg": 1.000266366,
+      "elevation_deg": 3.648995626,
+      "elevation_sigma_deg": 1.000265049,
       "elevation_ambiguous": true,
-      "depth_m": 75.14427868,
-      "depth_sigma_m": 124.1428787,
+      "depth_m": 75.14305497,
+      "depth_sigma_m": 124.1427539,
       "path": "multiple"
      },
      {
@@ -516,15 +516,15 @@
       "true_elevation_deg": -0.6609834743239804,
       "other_detections": 0,
       "snr_db": 45.59575705,
-      "range_error_m": 39.300492155359734,
-      "bearing_error_deg": -0.08619250756473829,
+      "range_error_m": 39.29932815535949,
+      "bearing_error_deg": -0.08617794756473884,
       "first_range_error_m": 10.213709155359538,
       "cone_bearing_error_deg": null,
-      "elevation_deg": 3.648968318,
-      "elevation_sigma_deg": 1.000266366,
+      "elevation_deg": 3.648995626,
+      "elevation_sigma_deg": 1.000265049,
       "elevation_ambiguous": true,
-      "depth_m": 81.05807173,
-      "depth_sigma_m": 124.1428787,
+      "depth_m": 81.05742929,
+      "depth_sigma_m": 124.1427539,
       "path": "multiple",
       "depth_multipath_m": null,
       "multipath_reason": "merged"
@@ -559,7 +559,7 @@
  },
  "ssp_thermocline_static_trial_3row": {
   "changes with range": {
-   "simulate_seconds": 48.2,
+   "simulate_seconds": 39.6,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -837,7 +837,7 @@
    }
   },
   "local everywhere": {
-   "simulate_seconds": 46.6,
+   "simulate_seconds": 39.8,
    "record_sound_speed_m_s": 1488.75,
    "eigenrays": [
     {
@@ -1117,7 +1117,7 @@
  },
  "ssp_front_testauv_trial_1row": {
   "changes with range": {
-   "simulate_seconds": 3.1,
+   "simulate_seconds": 2.7,
    "record_sound_speed_m_s": 1497.5,
    "eigenrays": [
     {
@@ -1293,7 +1293,7 @@
       "first_range_error_m": 7.1001225858250905,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      },
      {
       "detected": true,
@@ -1308,7 +1308,7 @@
       "first_range_error_m": 7.062128116135057,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      },
      {
       "detected": true,
@@ -1323,7 +1323,7 @@
       "first_range_error_m": 7.007087355976523,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      },
      {
       "detected": true,
@@ -1338,7 +1338,7 @@
       "first_range_error_m": 5.93492887864403,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      }
     ],
     "track_confirmed_at_ping": 3,
@@ -1347,7 +1347,7 @@
    }
   },
   "local everywhere": {
-   "simulate_seconds": 3.6,
+   "simulate_seconds": 2.6,
    "record_sound_speed_m_s": 1497.5,
    "eigenrays": [
     {
@@ -1523,7 +1523,7 @@
       "first_range_error_m": 8.85012258582509,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      },
      {
       "detected": true,
@@ -1538,7 +1538,7 @@
       "first_range_error_m": 7.812128116135057,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      },
      {
       "detected": true,
@@ -1553,7 +1553,7 @@
       "first_range_error_m": 7.757087355976523,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      },
      {
       "detected": true,
@@ -1568,7 +1568,7 @@
       "first_range_error_m": 7.68492887864403,
       "cone_bearing_error_deg": null,
       "depth_multipath_m": null,
-      "multipath_reason": "window"
+      "multipath_reason": "unresolvable"
      }
     ],
     "track_confirmed_at_ping": 3,

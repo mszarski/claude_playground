@@ -18,10 +18,11 @@ file, one variant at a time:
     fjord as shipped      the scenario file as it is: late tail, noise of a 1.9 m/s wind, K-distributed (shape 3.5)
     + machinery noise     as shipped with 63 dB re 1 uPa^2/Hz, flat (what the hydrophone by the research station read)
 
-Scored on every ping: the target's detection (the strongest from 30 m before to 60 m behind where it is, within 2
-degrees: in this water the strongest arrival is often a later one) and its SNR over the chain's local background; the
-other detections, split into those behind the target on its bearing (within 3 degrees, 60 to 400 m later: the tail
-and later arrivals) and the rest; the ping at which a track on the target is confirmed and the tracks that are not on
+Scored on every ping: the target's detection (the strongest whose ranges, first arrival to the end of what it spans,
+reach from 30 m before to 60 m behind where the target is, within 2 degrees: the detector reports an echo and the tail
+behind it as ONE detection at their energy-weighted range, which lies tens of metres behind the target) and its SNR
+over the chain's local background; the other detections, split into those behind the target on its bearing (within 3
+degrees, up to 400 m later: later arrivals) and the rest; the ping at which a track on the target is confirmed and the tracks that are not on
 it. For the fjord as shipped and the own-ping what-if the same records also go through the chain with settings one
 would try against reverberation (`SETTINGS`): a higher detection threshold, a short CFAR window, both. With stacked rows also the elevation and depth of the target's detection, with the
 deployment file's sound-speed assumption (a gradient prior about the local value) and with the profile given to the
@@ -57,18 +58,39 @@ SETTINGS = {"min_snr_db 15": {"min_snr_db": 15.0},
             "min_snr_db 15, confirm on 4 of 4": {"min_snr_db": 15.0, "tracker": {"confirm_hits": 4}}}
 
 
+# Three variants keep the open-water rehearsal's noise in the fjord's water, so that one thing changes at a time. That
+# noise names a wind and a shipping level the fjord's environment does not have: the scenario loader refuses such a
+# contradiction unless it is named with its reason (python/gpusonar/environment.py, `environment_overrides`).
+OPEN_NOISE_REASON = ("the open-water rehearsal's noise is kept in this variant of the fjord scenario, so that only the water, the seabed and the late tail "
+                     "change against the open-water run (tools/fjord_rehearsal.py); the fjord's own calm-night noise comes with the variant 'fjord as shipped'")
+
+
+def with_open_noise(cfg: dict, build: dict) -> dict:
+    """The fjord scenario with the open-water rehearsal's ambient noise in place of its own, the contradiction with
+    the fjord's environment named: every value of that noise the environment also gives, and gives differently."""
+    from gpusonar import environment
+    noise = copy.deepcopy(load_scenario_config(build["open"])["receiver"]["ambient_noise"])
+    cfg["receiver"]["ambient_noise"] = noise
+    site = environment.resolve(cfg["environment"])                  # the fjord's site: `wind_speed`, `shipping`
+    named = dict(cfg.get("environment_overrides") or {})
+    for key in ("wind_speed", "shipping"):
+        if key in noise and site.get(key) is not None and float(noise[key]) != float(site[key]):
+            named[f"receiver.ambient_noise.{key}"] = OPEN_NOISE_REASON
+    cfg["environment_overrides"] = named
+    return cfg
+
+
 def variant(build: dict, name: str) -> dict:
     if name == "open water":
         return load_scenario_config(build["open"])
     cfg = load_scenario_config(build["fjord"])
-    open_noise = load_scenario_config(build["open"])["receiver"]["ambient_noise"]
     if name == "profile, section":
         cfg.pop("basin_reverberation")
-        cfg["receiver"]["ambient_noise"] = open_noise
+        with_open_noise(cfg, build)
     elif name == "+ late tail":
-        cfg["receiver"]["ambient_noise"] = open_noise
+        with_open_noise(cfg, build)
     elif name == "+ own ping, what-if":
-        cfg["receiver"]["ambient_noise"] = open_noise
+        with_open_noise(cfg, build)
         cfg["basin_reverberation"] = dict(cfg["basin_reverberation"], own_ping_db=OWN_PING_DB)
     elif name == "+ machinery noise":
         cfg["receiver"]["ambient_noise"] = {"level_db": 63.0}
@@ -97,6 +119,17 @@ def at_range(cfg: dict, range_m: float) -> dict:
     return cfg
 
 
+def _span(d: dict) -> tuple:
+    """The ranges a detection covers (as tools/popoto_12km_study.py). The chain's detector (cell_statistic: multiscale)
+    reports ONE detection for a group of arrivals: `range_m` is its energy-weighted mean, `first_range_m` its first arrival
+    and `extent_m` what it spans; a detection without those fields is a point. With the basin's tail behind the echo the
+    mean lies tens of metres behind the target (63 m for the two-row static array at 2.6 km), so a window about `range_m`
+    alone scored a 44 dB detection of the target as "behind" it."""
+    ext = float(d.get("extent_m") or 0.0)
+    lo = float(d["first_range_m"]) if d.get("first_range_m") is not None else float(d["range_m"]) - 0.5 * ext
+    return lo, max(lo + ext, float(d["range_m"]))
+
+
 def score(cfg: dict, reports: list, rows: int) -> dict:
     target = cfg["scene"][0]
     pos0 = np.asarray(target["positions"][0], dtype=float)
@@ -107,18 +140,22 @@ def score(cfg: dict, reports: list, rows: int) -> dict:
         rng = float(np.linalg.norm(pos0 - own))
         brg = float(np.degrees(np.arctan2(pos0[0] - own[0], pos0[1] - own[1])))
         dets = [d for d in rep["detections"] if d.get("snr_db") is not None]
-        near = [d for d in dets if -30.0 <= d["range_m"] - rng <= 60.0 and abs(d["bearing_deg"] - brg) <= 2.0]
+        # The target's: a detection whose ranges (first arrival to the end of what it spans) reach from 30 m before the
+        # target to 60 m behind it, within 2 degrees.
+        near = [d for d in dets if _span(d)[0] <= rng + 60.0 and _span(d)[1] >= rng - 30.0 and abs(d["bearing_deg"] - brg) <= 2.0]
         best = max(near, key=lambda d: d["snr_db"]) if near else None
         behind = [d for d in dets if d not in near and abs(d["bearing_deg"] - brg) <= 3.0 and rng - 30.0 < d["range_m"] <= rng + 400.0]
         other = [d for d in dets if d not in near and d not in behind]
-        tracks_on = [t for t in rep["tracks"] if -40.0 <= t["range_m"] - rng <= 70.0 and abs(t.get("bearing_deg", brg) - brg) <= 3.0]
+        reach = max([_span(d)[1] for d in near], default=rng)        # how far behind the target its own detection extends on this ping
+        tracks_on = [t for t in rep["tracks"] if -40.0 <= t["range_m"] - rng <= max(70.0, reach - rng + 30.0) and abs(t.get("bearing_deg", brg) - brg) <= 3.0]
         if tracks_on and confirmed_at is None:
             confirmed_at = k + 1
         row = {"detected": best is not None, "snr_db": best["snr_db"] if best else None, "range_error_m": (best["range_m"] - rng) if best else None,
+               "first_range_error_m": (_span(best)[0] - rng) if best else None, "extent_m": best.get("extent_m") if best else None,
                "bearing_error_deg": (best["bearing_deg"] - brg) if best else None, "detections": len(dets), "behind_target": len(behind), "elsewhere": len(other),
                "behind_max_snr_db": max((d["snr_db"] for d in behind), default=None), "elsewhere_max_snr_db": max((d["snr_db"] for d in other), default=None),
                "tracks": len(rep["tracks"]), "tracks_off_target": len(rep["tracks"]) - len(tracks_on), "true_range_m": rng, "true_bearing_deg": brg,
-               "all": [[round(d["range_m"], 1), round(d["bearing_deg"], 2), round(d["snr_db"], 1)] for d in dets]}
+               "all": [[round(d["range_m"], 1), round(d["bearing_deg"], 2), round(d["snr_db"], 1), round(_span(d)[0], 1), round(_span(d)[1], 1)] for d in dets]}
         if best is not None and rows > 1:
             row.update(elevation_deg=best.get("elevation_deg"), elevation_sigma_deg=best.get("elevation_sigma_deg"), elevation_ambiguous=best.get("elevation_ambiguous"),
                        candidates=len(best.get("elevation_alternatives_deg") or []) + (best.get("elevation_deg") is not None),
@@ -206,7 +243,9 @@ def markdown(res: dict, commit: str = "") -> str:
     lines = ["# A trial in fjord-type water against the open-water rehearsal", "",
              f"Made by `tools/fjord_rehearsal.py`{(' at commit ' + commit) if commit else ''}: each variant simulated (C++ synthesis, Bellhop for the fjord's water) and passed through the "
              "C++ chain of the build's deployment file as shipped. Four pings each. SNR: the target's detection over the chain's local background, median of the pings it was "
-             "detected on (the strongest from 30 m before to 60 m behind it). Other detections per ping: behind the target on its bearing (within 3 degrees, 60 to 400 m later) / anywhere else. The fjord's profile, section and seabed are "
+             "detected on (the strongest whose ranges, from its first arrival to the end of what it spans, reach from 30 m before the target to 60 m behind it: the detector reports the echo and "
+             "the tail behind it as one detection at their energy-weighted range). Range error: that range / its first arrival, against the target's. Other detections per ping: behind the target "
+             "on its bearing (within 3 degrees, up to 400 m later) / anywhere else. The fjord's profile, section and seabed are "
              "ILLUSTRATIVE (modelled on one site); the late tail's numbers are one fjord, one night, 4-8 kHz; the own-ping level is a what-if that nothing measured.", ""]
     for b, rows in res.items():
         build = BUILDS[b]
@@ -214,7 +253,7 @@ def markdown(res: dict, commit: str = "") -> str:
         pos, own = cfg["scene"][0]["positions"][0], cfg["platform"]["position"]
         lines += [f"## {build['title']} (`{build['open']}` against `{build['fjord']}`)", "",
                   f"Target of {cfg['scene'][0]['target_strength_db']:g} dB at {np.hypot(pos[0] - own[0], pos[1] - own[1]):.0f} m, {pos[2]:g} m deep; array at {own[2]:g} m.", "",
-                  "| Variant | detected, pings | SNR, dB | range error, m | other detections per ping: behind / elsewhere | strongest behind / elsewhere, dB | track on the target confirmed at ping | tracks not on the target (last ping) |",
+                  "| Variant | detected, pings | SNR, dB | range error, m: detection / its first arrival | other detections per ping: behind / elsewhere | strongest behind / elsewhere, dB | track on the target confirmed at ping | tracks not on the target (last ping) |",
                   "| --- | --- | --- | --- | --- | --- | --- | --- |"]
         for key, m in rows.items():
             if "error" in m:
@@ -222,9 +261,10 @@ def markdown(res: dict, commit: str = "") -> str:
                 continue
             d = m["as deployed"]
             err = [r["range_error_m"] for r in d["per_ping"] if r["detected"]]
+            first = [r["first_range_error_m"] for r in d["per_ping"] if r["detected"] and r.get("first_range_error_m") is not None]
             mx = lambda k: max((r[k] for r in d["per_ping"] if r[k] is not None), default=None)   # noqa: E731
             f = lambda v: "-" if v is None else f"{v:.1f}"                                         # noqa: E731
-            lines.append(f"| {key} | {d['pings_detected']}/{d['pings']} | {_snr(d)} | {('%+.1f' % np.median(err)) if err else '-'} | "
+            lines.append(f"| {key} | {d['pings_detected']}/{d['pings']} | {_snr(d)} | {('%+.1f' % np.median(err)) if err else '-'} / {('%+.1f' % np.median(first)) if first else '-'} | "
                          f"{d['behind_target_per_ping']:.1f} / {d['elsewhere_per_ping']:.1f} | {f(mx('behind_max_snr_db'))} / {f(mx('elsewhere_max_snr_db'))} | "
                          f"{d['track_confirmed_at_ping'] or 'none'} | {d['tracks_off_target_last_ping']} |")
         tried = [(key, name, m[name]) for key, m in rows.items() for name in SETTINGS if name in m]

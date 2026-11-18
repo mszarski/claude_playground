@@ -410,3 +410,68 @@ def test_fjord_scenario_runs_through_bellhop_and_gains_the_tail():
     ratio = (np.abs(with_tail - plain) ** 2).sum() / (np.abs(plain) ** 2).sum()
     # The window ends 0.33 s after the echo: most of the tail (decay 0.145 s) is in it.
     assert 0.6 * (2.0 * e + e * e) < ratio < 1.15 * (2.0 * e + e * e)
+
+
+def test_every_variant_of_the_fjord_rehearsal_tool_loads_and_names_what_it_overrides():
+    """tools/fjord_rehearsal.py puts the open-water rehearsal's noise (wind 5 m/s, shipping 0.5) into the fjord scenario
+    for three of its six variants. The fjord's environment has a wind of 1.9 m/s and no shipping, and the scenario loader
+    refuses a typed value that contradicts the environment unless it is named with its reason: the tool failed on those
+    three. It names them; without the names the loader still refuses."""
+    import importlib.util
+    import pathlib
+    import warnings
+    from gpusonar import environment
+    path = pathlib.Path(__file__).resolve().parents[2] / "tools" / "fjord_rehearsal.py"
+    spec = importlib.util.spec_from_file_location("fjord_rehearsal", path)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    copied = ("profile, section", "+ late tail", "+ own ping, what-if")
+    for build in tool.BUILDS.values():
+        for name in tool.VARIANTS:
+            cfg = tool.variant(build, name)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")                      # a name that overrides nothing is a warning: none here
+                out = environment.expand_scenario(dict(cfg))
+            noise = out["receiver"]["ambient_noise"]
+            named = {k: v for k, v in (cfg.get("environment_overrides") or {}).items() if k.startswith("receiver.ambient_noise.")}
+            if name in copied:
+                assert (noise["wind_speed"], noise["shipping"]) == (5.0, 0.5) and "statistics" not in noise      # the open-water run's noise
+                assert set(named) == {"receiver.ambient_noise.wind_speed", "receiver.ambient_noise.shipping"}
+                assert all("open-water rehearsal's noise" in reason for reason in named.values())
+                bare = dict(cfg, environment_overrides={k: v for k, v in cfg["environment_overrides"].items() if k not in named})
+                with pytest.raises(environment.EnvironmentError, match="receiver.ambient_noise.wind_speed: 5.0 here, 1.9"):
+                    environment.expand_scenario(bare)
+            else:
+                assert not named
+            if name == "fjord as shipped":
+                assert (noise["wind_speed"], noise["shipping"], noise["statistics"]["model"]) == (1.9, 0.0, "k")
+
+
+def test_the_fjord_rehearsal_scores_a_detection_by_the_ranges_it_covers():
+    """The chain's detector reports an echo and the basin's tail behind it as ONE detection at their energy-weighted
+    range. For the two-row static array at 2.6 km that range is 63 m behind the target: a window of 30 m before to 60 m
+    behind about the detection's range scored a 44 dB detection of the target as "behind" it and the target as not
+    detected on four pings of four. The detection's first arrival and extent decide; a detection that begins 100 m behind
+    the target is still not the target's."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[2] / "tools" / "fjord_rehearsal.py"
+    spec = importlib.util.spec_from_file_location("fjord_rehearsal", path)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    cfg = {"scene": [{"positions": [[300.0, 2583.0, 20.0]]}]}                      # 2600.5 m from the origin, 6.62 degrees
+    rng, brg = float(np.hypot(300.0, 2583.0)), float(np.degrees(np.arctan2(300.0, 2583.0)))
+
+    def report(dets, tracks=()):
+        return {"ownship_xyz": [0.0, 0.0, 20.0], "detections": dets, "tracks": list(tracks)}
+
+    merged = {"range_m": rng + 63.3, "bearing_deg": brg - 0.17, "snr_db": 44.4, "first_range_m": rng + 1.5, "extent_m": 118.0}
+    later = {"range_m": rng + 160.0, "bearing_deg": brg, "snr_db": 20.0, "first_range_m": rng + 100.0, "extent_m": 90.0}
+    point = {"range_m": rng + 75.0, "bearing_deg": brg, "snr_db": 15.0}            # no extent: a point, 75 m behind
+    away = {"range_m": rng + 20.0, "bearing_deg": brg + 40.0, "snr_db": 30.0, "first_range_m": rng + 19.0, "extent_m": 2.0}
+    out = tool.score(cfg, [report([merged, later, point, away], [{"range_m": rng + 63.0, "bearing_deg": brg}]), report([later, away])], rows=1)
+    first, second = out["per_ping"]
+    assert first["detected"] and first["snr_db"] == 44.4 and first["range_error_m"] == pytest.approx(63.3) and first["first_range_error_m"] == pytest.approx(1.5)
+    assert (first["behind_target"], first["elsewhere"]) == (2, 1) and first["tracks_off_target"] == 0      # the track at the merged detection's range is the target's
+    assert not second["detected"] and (second["behind_target"], second["elsewhere"]) == (1, 1)
+    assert out["pings_detected"] == 1 and out["track_confirmed_at_ping"] == 1

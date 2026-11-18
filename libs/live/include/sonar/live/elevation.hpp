@@ -78,6 +78,11 @@ struct ElevationOptions {
   /// arcs layer by layer, the same rays the multipath depth and the coverage picture use). false: the stepped Snell
   /// ray of ray_depth below, as before (the two agree to about 2 m; outputs stay as they were).
   bool ray_arcs = false;
+  /// Opt-in: the depth sigma says so when echoes the rows cannot tell apart share the range resolution cell
+  /// (multipath_depth_limit below): `depth_sigma_m` gains the term, and the report names it. Paths of at most
+  /// `multipath_sigma_bounces` boundary reflections a leg, target depths to `multipath_sigma_max_depth` or the bottom.
+  bool multipath_sigma = false;
+  double multipath_sigma_bounces = 2.0, multipath_sigma_max_depth = 500.0;
   /// The sound-speed ladder (environment.hpp): which profile the depth is traced through, how its
   /// uncertainty reaches depth_sigma_m, and the rung named with every depth. Off: as before.
   ProfileOptions profile;
@@ -156,6 +161,49 @@ double ray_depth(double receiver_depth, double elevation, double slant_range, co
 /// Whether a straight-line depth lies outside the water column by more than n_sigma sigma.
 bool outside_water(double z, double sigma, double water_depth, double surface_z = 0.0, double n_sigma = 2.0,
                    double water_depth_sigma = 0.0);
+
+/// What unresolved boundary echoes do to a depth from stacked rows (opt-in, elevation.multipath_sigma).
+///
+/// A target's echo comes back by every pair of paths (out by i, back by k): direct, surface, bottom. Echo (i, k) and its
+/// mirror (k, i) have the same length exactly, so they add as pressures and the rows read the MEAN of the two paths'
+/// elevations: direct with surface reads the sea surface, direct with bottom reads the sea bed, whatever the target's
+/// depth. Echoes closer in range than the range resolution form one clump (one maximum along range). The elevation
+/// stage takes the earliest clump within `first_arrival_db` of the strongest (expected power, echoes of different
+/// length adding as power). What the rows read at an echo g of it is g's elevation, pulled by every other echo h by
+///     s_g^2 = sum_h (a_h / a_g)^2 E2(x_gh) d_gh^2 / 2      (the mean square over their relative phase),
+/// E2 the compressed pulse's power x range-resolution cells away (a flat band's sinc^2 with its lobes averaged:
+/// 1 / (2 pi^2 x^2), at most 1) and d the difference of the two elevations, at most `aperture_resolution` / (2 pi)
+/// (the most a second wave can turn the phase across the rows' height, lambda / (2 pi D) in sine).
+///
+/// How well a target depth z can give the reading: W(z) = exp(-(reading - elevation_g)^2 / 2 (sigma_angle^2 + s_g^2)),
+/// by the echo of the clump that does it best. Which echo of a clump the rows read turns on phases nobody knows, so
+/// every echo of it counts fully; and nothing is known of the target, so every depth the water allows is tried (rays
+/// through the held profile, RayFan) and counts by W alone. The depth's variance is the mean of (z - reported depth)^2
+/// under W. The same mean with the first path alone and resolved is what the angle's own sigma already holds; `extra`
+/// is the difference in quadrature: zero where one resolved echo is all there is, range x s_g where the others are
+/// weak, and the spread of the water column where the rows read a boundary. No depth with W above
+/// exp(-explain_sigma^2 / 2): not `explained`, and nothing is claimed (the reading is not an echo of this picture).
+/// Boundaries are perfect mirrors here (no loss is known to this stage); without a water depth there is no bottom.
+struct MultipathLimit {
+  bool explained = false;
+  bool limited = false;          ///< the multipath term is the larger part of the depth sigma
+  double depth_sigma = 0.0;      ///< m: the angle's own with the term
+  double extra = 0.0;            ///< m: the term alone (in quadrature)
+  std::int64_t echoes = 0;       ///< echoes in the clump read, at the depth that gives the reading best
+  double depth_lo = 0.0, depth_hi = 0.0;   ///< m below the surface: the shallowest and the deepest depth that can give the reading (within explain_sigma)
+  bool bottom = false;           ///< the profile has a bottom (else: surface reflections only, depths to max_depth)
+  double deepest = 0.0;          ///< m: the deepest target depth considered
+};
+MultipathLimit multipath_depth_limit(const std::vector<double>& ssp_depth, const std::vector<double>& ssp_speed, double water_depth,
+                                     double own_depth, double slant_range, double elevation, double sigma_angle, double reported_depth,
+                                     double range_resolution, double aperture_resolution, bool first_arrival, double first_arrival_db,
+                                     double explain_sigma, int max_bounces, double max_depth);
+
+/// The members a detection's report line gains from it (JSON, no braces): `depth_unresolved_sigma_m` (the term, m; null:
+/// the reading is no echo of this picture and nothing is claimed), `depth_multipath_limited`, `depth_unresolved_echoes`,
+/// `depth_unresolved_span_m` (the shallowest and deepest depth that can give the reading) and, without a water depth,
+/// `depth_unresolved_assumed` saying what was assumed in its place.
+std::string multipath_limit_members(const MultipathLimit& limit);
 
 struct PassiveElevation {
   double elevation = 0.0;  ///< rad, array frame, up positive

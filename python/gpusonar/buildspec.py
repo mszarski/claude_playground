@@ -845,6 +845,7 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
         if rows == 2:
             el["sector_from_depth"] = {"bounces": 1, "margin_deg": 1.0}
         el["sector_from_rays"] = {}                         # every stacked-row build (the owner): a far lobe of the rows is not taken for an arrival
+        el["multipath_sigma"] = {}                          # every stacked-row build: the depth sigma says when echoes the rows cannot tell apart share the range cell
         el["attitude_time"] = get(spec, "navigation", "attitude_time", "arrival" if (not static or nav_tilt) else "transmit")
         el["attitude_rate_sigma_deg_s"] = float(get(spec, "navigation", "attitude_rate_sigma_deg_s", 0.5))
         el["roll_sigma_deg"] = float(get(spec, "navigation", "roll_sigma_deg", 1.0 if static else 0.2))

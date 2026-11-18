@@ -275,6 +275,8 @@ std::vector<double> multipath_depth_grid(const MultipathGeometry& g, const Multi
     const double z_lo = h * first, z_top = h * (last + 1);
     const std::int64_t per = std::max<std::int64_t>(o.fringe_points, 1);
     const double step = 1.0 / (g.f_centre * slope) / static_cast<double>(per);
+    // Whole fringes (the envelope over a fringe needs them): the last ones may lie past the deepest depth the paths
+    // exist at (the sea bed in shallow water), where the pattern is one arrival and there is no delay.
     const std::int64_t count = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil((z_top - z_lo) / step / static_cast<double>(per))) * per, per);
     std::vector<double> out(static_cast<std::size_t>(count));
     for (std::int64_t i = 0; i < count; ++i) out[static_cast<std::size_t>(i)] = z_lo + step * (static_cast<double>(i) + 0.5);
@@ -366,8 +368,21 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
     return est;
   }
   if (g.rays) {
+    // The band searched ends where the paths do (the grid is whole fringes and may run past the sea bed).
+    double last = depths.front();
+    for (double z : depths) {
+      if (std::isfinite(multipath_surface_delay(z, g))) last = z;
+    }
     est.searched_lo = depths.front();
-    est.searched_hi = depths.back();
+    est.searched_hi = last;
+    // A band thinner than the depth change that moves the surface echo by one resolution cell: the delay cannot tell two
+    // depths inside it apart, so a depth found there would say nothing the band's own ends do not. In shallow water this
+    // is the whole answer: only a target in that sliver above the sea bed has a surface echo `min_delay_bandwidth` / B
+    // behind its direct one, and for every shallower target the two merge.
+    if (last - depths.front() < envelope_lobe(depths.front(), g)) {
+      est.reason = "unresolvable";
+      return est;
+    }
   }
   bool any = false;
   for (std::int64_t k = 0; k < std::min(n, n_noise) && !any; ++k) any = std::abs(y[k]) > 0.0;
@@ -597,9 +612,21 @@ MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& ori
   if (used != nullptr) *used = g;
   const std::vector<double> depths = multipath_depth_grid(g, o);
   if (depths.empty()) return g.rays ? multipath_estimate(nullptr, 0, 0.0, 0.0, 0, g, o) : est;   // rays: says which path is missing
+  if (g.rays) {
+    const MultipathEstimate early = multipath_estimate(nullptr, 0, 0.0, 0.0, 0, g, o);            // the band is too thin to hold a depth: no window is needed to say so
+    if (early.reason == "unresolvable") return early;
+  }
   double t_first = 0.0, dt = 0.0;
   std::int64_t n = 0, n_noise = 0;
-  multipath_window_times(g, o, multipath_surface_delay(depths.back(), g), t_first, dt, n, n_noise);
+  // The longest surface delay among the depths searched. Through rays a depth in a gap between sheets, or past the sea
+  // bed (the grid is whole fringes), has none: taking the last depth's sized the window with NaN, and the stage answered
+  // "window" for every detection in water shallower than the searched band's rounded-up end.
+  double spread = 0.0;
+  for (double z : depths) {
+    const double tau = multipath_surface_delay(z, g);
+    if (std::isfinite(tau)) spread = std::max(spread, tau);
+  }
+  multipath_window_times(g, o, spread, t_first, dt, n, n_noise);
   const Samples& s = record.samples;
   const double t_det = 2.0 * g.range / g.sound_speed;
   est.reason = "window";

@@ -80,9 +80,9 @@ def test_thresholds_against_the_chi_square_closed_form_and_band_limited_noise(te
         for pfa in (1e-3, 1e-6, 1e-9):
             want = stats.gamma.isf(pfa, rows) / rows
             assert core.weighted_exponential_threshold([1.0], rows, pfa) == pytest.approx(want, rel=1e-9)
-    # The mean of the 8 samples of a 2 m cell (a quarter of a metre apart, 0.375 m resolution) and of four cells.
-    corr = core.live_sample_correlation(template, 0.25, 32)
-    assert corr[:3] == pytest.approx(np.sinc(np.arange(3) * 0.25 / 0.375))
+    # The mean of the 8 samples of a 2 m cell (a quarter of a metre apart, 0.375 m resolution) and of four cells, in noise
+    # of a flat band: its samples correlate by the sinc.
+    corr = np.sinc(np.arange(32) * 0.25 / 0.375).tolist()
     rng = np.random.default_rng(3)
     power = np.abs(band_noise(rng, 1500, 4096, 0.25 / 0.375)) ** 2
     assert power.mean() == pytest.approx(1.0, abs=0.01)
@@ -109,15 +109,79 @@ def test_thresholds_against_the_chi_square_closed_form_and_band_limited_noise(te
     assert -np.log(1e-5) * core.training_correction(1e-5, 300) == pytest.approx(factor)
 
 
+def test_noise_through_the_matched_filter_correlates_as_the_replica_and_a_cell_mean_holds_its_looks(template):
+    """White noise through the matched filter has the replica's power spectrum, so its samples correlate by the replica's
+    autocorrelation: for the long-range sweep under its 10 % Tukey taper that is narrower in band than the flat band's
+    sinc, and the mean of a 2 m cell holds 5.48 looks where the sinc gives 5.80 (the plan assumed the sinc; the chain's
+    map measured 5.42). The replica is built here in NumPy, not taken from the library; then noise is put through it
+    and the variance of the cell means is counted."""
+    from scipy.signal import fftconvolve
+    from scipy.signal.windows import tukey
+    w = template.transmit.waveform
+    band, c, step = abs(w.f_stop - w.f_start), template.environment.sound_speed, 0.25
+    assert (w.duration, band, w.window_alpha) == (1.0, 2000.0, 0.1)
+    fs = 3.0 * c / (2.0 * step)                                   # three replica samples per map sample: 9 kHz
+    t = (np.arange(int(round(w.duration * fs))) + 0.5) / fs
+    replica = tukey(len(t), w.window_alpha) * np.exp(1j * np.pi * band / w.duration * (t - 0.5 * w.duration) ** 2)
+    auto = np.array([np.vdot(replica[:len(replica) - 3 * d], replica[3 * d:]).real for d in range(32)]) / np.vdot(replica, replica).real
+    corr = np.asarray(core.live_sample_correlation(template, step, 32))
+    assert corr == pytest.approx(auto, abs=2e-3)
+    sinc = np.sinc(np.arange(32) * step / 0.375)
+    assert abs(corr[1] - sinc[1]) > 0.01 and corr[1] > sinc[1]    # a narrower band: neighbouring samples are more alike
+    looks = core.equivalent_looks(core.mean_power_weights(corr.tolist(), 8))
+    assert looks == pytest.approx(5.48, abs=0.03) and core.equivalent_looks(core.mean_power_weights(sinc.tolist(), 8)) == pytest.approx(5.80, abs=0.03)
+    untapered = template.copy()
+    untapered.transmit.waveform.window_alpha = 0.0                # without the taper the sweep's band is flat: the sinc's looks
+    flat = core.equivalent_looks(core.mean_power_weights(core.live_sample_correlation(untapered, step, 32), 8))
+    assert flat == pytest.approx(5.80, abs=0.05)
+    rng = np.random.default_rng(5)
+    n = 3 * 8 * 6000                                              # 6000 cells of 8 map samples a trial
+    stat = []
+    for _ in range(4):
+        z = (rng.standard_normal(n + len(replica)) + 1j * rng.standard_normal(n + len(replica))) / np.sqrt(2.0)
+        y = fftconvolve(z, np.conj(replica[::-1]), mode="valid")[:n:3]          # the matched filter, at the map's samples
+        power = np.abs(y) ** 2
+        stat.append((power / power.mean()).reshape(-1, 8).mean(axis=1))
+    stat = np.concatenate(stat)
+    assert 1.0 / stat.var() == pytest.approx(looks, rel=0.04)     # 24000 cell means: 1 % of statistical error on the variance
+    assert abs(1.0 / stat.var() - 5.80) > 0.15
+    assert live.detector_plan(template, {"bearings_deg": [-60.0, 60.0, 0.5]})["scales"][1]["looks"] == pytest.approx(looks)
+
+
 def test_the_plan_states_its_tests_and_keeps_the_budget_between_them(template):
     plan = live.detector_plan(template, {"bearings_deg": [-60.0, 60.0, 0.5]})
     sample, cell = plan["scales"]
     assert (sample["cells"], cell["cells"]) == (0, 1) and plan["samples_per_cell"] == 8 and plan["cell_m"] == 2.0
     assert sample["tests"] * sample["pfa"] + cell["tests"] * cell["pfa"] == pytest.approx(1e-3)
     assert sample["factor"] == pytest.approx(-np.log(sample["pfa"]))
-    assert cell["looks"] == pytest.approx(5.8, abs=0.1) and plan["merge_cells"] == 7
-    assert live.detection_threshold_db({"cell_statistic": "multiscale"}, record=template) == pytest.approx(12.8, abs=0.3)
-    assert live.detection_threshold_db({"cell_statistic": "multiscale"}, record=template, rows=3) == pytest.approx(9.3, abs=0.3)
+    assert cell["looks"] == pytest.approx(5.48, abs=0.05) and plan["merge_cells"] == 7
+    assert live.detection_threshold_db({"cell_statistic": "multiscale"}, record=template) == pytest.approx(12.9, abs=0.3)
+    assert live.detection_threshold_db({"cell_statistic": "multiscale"}, record=template, rows=3) == pytest.approx(9.4, abs=0.3)
+    # How the tests are counted (detector.hpp): places = beams x extent / resolution (or / cell); the sample's tests grow
+    # as u = rows x threshold, the cell mean's as sqrt(u) x the statistic's hazard, u = rows x looks x threshold; the
+    # constants are the measured ones for the number of rows.
+    extent = plan["cell_m"] * 399                                  # the 0.8 km window in whole 2 m cells
+    for rows, c_sample, c_mean in ((1, 0.191, 0.515), (2, 0.208, 0.532), (3, 0.192, 0.598), (4, 0.192, 0.598)):
+        p = live.detector_plan(template, {"bearings_deg": [-60.0, 60.0, 0.5]}, rows=rows)
+        sm, cl = p["scales"]
+        assert (sm["search"], cl["search"]) == (c_sample, c_mean)                       # four rows: the three-row values (not measured)
+        assert sm["tests"] == pytest.approx(c_sample * p["beams"] * extent / p["resolution_m"] * rows * sm["factor"], rel=1e-9)
+        x, a = cl["factor"], rows * cl["looks"]
+        h = 1e-4 * x
+        hazard = (np.log(core.weighted_exponential_tail(cl["weights"], rows, x - h)) - np.log(core.weighted_exponential_tail(cl["weights"], rows, x + h))) / (2 * h * a)
+        assert cl["tests"] == pytest.approx(c_mean * p["beams"] * extent / p["cell_m"] * np.sqrt(a * x) * hazard, rel=1e-6)
+        assert 0.4 < hazard < 1.0
+        for sc in (sm, cl):                                         # each test's threshold is where tail x tests is its share
+            assert core.weighted_exponential_tail(sc["weights"], rows, sc["factor"]) * sc["tests"] == pytest.approx(0.5e-3, rel=1e-6)
+            assert sc["pfa"] == pytest.approx(core.weighted_exponential_tail(sc["weights"], rows, sc["factor"]))
+    # A typed factor is the detector as it was: that many tests per place whatever the threshold and the rows.
+    for rows in (1, 3):
+        old = live.detector_plan(template, {"bearings_deg": [-60.0, 60.0, 0.5], "cfar": {"search_factor": 2.5}}, rows=rows)
+        new = live.detector_plan(template, {"bearings_deg": [-60.0, 60.0, 0.5]}, rows=rows)
+        assert old["scales"][0]["tests"] == pytest.approx(2.5 * old["beams"] * extent / old["resolution_m"]) and old["scales"][0]["search"] == 2.5
+        assert old["scales"][1]["tests"] == pytest.approx(2.5 * old["beams"] * extent / old["cell_m"])
+        moved = [10.0 * np.log10(n_["factor"] / o_["factor"]) for n_, o_ in zip(new["scales"], old["scales"])]
+        assert 0.05 < moved[0] < 0.2 and abs(moved[1]) < 0.1        # the sample's threshold rises by about a tenth of a decibel
     with pytest.raises(ValueError):
         live.detection_threshold_db({"cell_statistic": "multiscale"})                 # it follows from the map: no record, no number
     longer = live.detector_plan(template, {"cfar": {"integrate_cells": [1, 4, 16], "false_alarms_per_ping": 1e-2}})
@@ -171,7 +235,26 @@ def test_noise_only_pings_keep_the_false_alarm_budget_and_give_nothing_at_the_de
     args = seen["args"]
     default_plan = live.detector_plan(rec, base)
     assert len(plain(*args[:-1], default_plan)[0]) == 0
-    assert args[-1]["scales"][0]["pfa"] == pytest.approx(3e3 * default_plan["scales"][0]["pfa"])
+    assert args[-1]["scales"][0]["pfa"] * args[-1]["scales"][0]["tests"] == pytest.approx(3e3 * default_plan["scales"][0]["pfa"] * default_plan["scales"][0]["tests"])
+    assert args[-1]["scales"][0]["pfa"] > 1e3 * default_plan["scales"][0]["pfa"]       # fewer tests are counted at the lower threshold
+
+
+def test_one_row_and_three_rows_keep_the_same_false_alarm_budget():
+    """tools/detector_search_factor.py --verify, short: 40 noise-only pings of one row and of three rows through the
+    chain's own map and the detector as shipped, at a budget of 3 false detections a ping (120 expected each, 9 % of
+    statistical error). The tool's 300 pings a row count read 0.96 and 0.87 of the budget (0.03); with the one flat factor
+    the detector had, three rows read 1.4 times what one row did. Here: both between 0.65 and 1.25 of the budget, and
+    three rows no more than 1.25 times one row."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[2] / "tools" / "detector_search_factor.py"
+    spec = importlib.util.spec_from_file_location("detector_search_factor", path)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    got = tool.verify([1, 3], 40, [3.0], 9000, log=lambda *_: None)
+    one, three = got["1"]["3.0"], got["3"]["3.0"]
+    assert 0.65 < one["ratio"] < 1.25 and 0.65 < three["ratio"] < 1.25, (one, three)
+    assert three["found"] < 1.25 * one["found"]
 
 
 # --- a point echo ----------------------------------------------------------------------------------------------------

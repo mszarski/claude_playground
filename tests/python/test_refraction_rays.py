@@ -289,6 +289,40 @@ def test_a_flagged_depth_can_be_withheld():
     assert (clean["valid"] and abs(clean["depth"] - 70.0) < 1.0) or clean["reason"] == "bottom_order"   # with the bottom in the pattern: the depth, or the other note
 
 
+def test_shallow_water_through_rays_says_unresolvable_and_which_depths_it_could_have_measured():
+    """The test AUV's trial geometry: 10 m deep in 30 m of water, a target at 15 m, 500 m away, 4 to 6 kHz. The surface
+    echo is `min_delay_bandwidth` / B = 1.5 ms behind the direct one only from 3 r c / (4 B z_own) = 28.2 m down, and the
+    sea bed is at 30 m: the band is 1.8 m thick, and the depth change that moves the surface echo by one resolution cell
+    is a third of 28.2 m. No depth can be told from another inside it, and a target at 15 m has merged echoes. The stage
+    answered `window` (the grid's whole fringes ran past the sea bed, where the surface delay is NaN, and that sized the
+    window); it now says `unresolvable` and the band. In 60 m of water at the same range the band is wide enough and the
+    stage goes on to the fit; the flat pattern (no rays) is as it was."""
+    own, target, rng, water = 10.0, 15.0, 500.0, 30.0
+    slant = float(np.hypot(rng, target - own))
+    shallowest = 3.0 * slant * 1500.0 / (4.0 * 2000.0 * own)
+    assert shallowest == pytest.approx(28.1, abs=0.1)
+    geom = dict(mp.geometry_dict(T.GEOM), range_m=slant, array_depth=own, projector_depth=own, water_depth=water, profile=ISO)
+    grid = np.asarray(core.live_multipath_depth_grid(geom, RAYS))
+    info = core.live_multipath_rays(geom, RAYS, [float(z) for z in grid])
+    assert grid[0] == pytest.approx(shallowest, abs=0.5) and grid[-1] > water and np.isnan(info[-1]["surface_delay"])     # whole fringes: the last depths are under the sea bed
+    cfg = T.scenario(own, target, rng, ts=10.0, bottom_z=water)
+    rec, origin = T.prepared(cfg)
+    from gpusonar.elevation import tx_position
+    both = float(origin[2] + tx_position(rec)[2])                                    # the projector hangs a little below the array: 3 r c / (2 B (z_array + z_projector))
+    shallowest = 3.0 * (slant + 1.0) * 1500.0 / (2.0 * 2000.0 * both)
+    assert 25.0 < shallowest < 28.2
+    for extra in ({}, {"withhold_flagged": True}, {"bottom": T.SAND}):
+        got = core.live_multipath_detection(rec, tuple(origin), 0.0, slant + 1.0, dict(mp.cpp_options(dict(T.KNOWN, water_depth=water, **extra)), rays=1), profile=ISO)
+        assert not got["valid"] and got["reason"] == "unresolvable" and np.isnan(got["depth"]) and np.isnan(got["candidate"]), extra
+        lo, hi = got["searched"]
+        assert lo == pytest.approx(shallowest, abs=0.5) and lo < hi <= water and hi - lo < shallowest / 3.0
+        assert got["grid"].size == 0                                                 # nothing for a track to add up
+    flat = core.live_multipath_detection(rec, tuple(origin), 0.0, slant + 1.0, mp.cpp_options(dict(T.KNOWN, water_depth=water)))
+    assert flat["reason"] != "unresolvable"                                          # without rays: as before
+    deep = core.live_multipath_detection(rec, tuple(origin), 0.0, slant + 1.0, dict(mp.cpp_options(dict(T.KNOWN, water_depth=60.0)), rays=1), profile=ISO)
+    assert deep["reason"] not in ("unresolvable", "window") and deep["searched"][1] - deep["searched"][0] > shallowest / 3.0
+
+
 def test_rays_say_where_sound_can_arrive_from():
     """ray_arrives: in 100 m of water at 2.6 km nothing arrives from 31 degrees below the horizontal with two bounces or
     fewer, and the few degrees about the horizontal do; without a known bottom the steep ray is excluded by depth."""

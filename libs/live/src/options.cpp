@@ -152,6 +152,9 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_sector_rays_bounces") c.elevation.sector_rays_bounces = v;
   else if (key == "elevation_sector_rays_margin_deg") c.elevation.sector_rays_margin = v * kDeg;
   else if (key == "elevation_sector_rays_max_depth") c.elevation.sector_rays_max_depth = v;
+  else if (key == "elevation_multipath_sigma") c.elevation.multipath_sigma = v != 0.0;
+  else if (key == "elevation_multipath_sigma_bounces") c.elevation.multipath_sigma_bounces = v;
+  else if (key == "elevation_multipath_sigma_max_depth") c.elevation.multipath_sigma_max_depth = v;
   else if (key == "elevation_profile_ensemble") c.elevation.profile.ensemble = v != 0.0;
   else if (key == "elevation_profile_ensemble_sigma_members") c.elevation.profile.ensemble_sigma_members = v != 0.0;
   else if (key == "elevation_profile_file") c.elevation.profile.file = value;

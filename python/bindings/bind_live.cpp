@@ -553,6 +553,7 @@ void bind_live(py::module_& m) {
           d["length_m"] = s.length_m;
           d["looks"] = s.looks;
           d["tests"] = s.tests;
+          d["search"] = s.search;
           d["pfa"] = s.pfa;
           d["factor"] = s.factor;
           d["weights"] = s.weights;
@@ -728,6 +729,9 @@ void bind_live(py::module_& m) {
           num("sector_rays_bounces", eo.sector_rays_bounces);
           num("sector_rays_margin", eo.sector_rays_margin);
           num("sector_rays_max_depth", eo.sector_rays_max_depth);
+          flag("multipath_sigma", eo.multipath_sigma);
+          num("multipath_sigma_bounces", eo.multipath_sigma_bounces);
+          num("multipath_sigma_max_depth", eo.multipath_sigma_max_depth);
           num("gradient", eo.gradient);
           num("gradient_sigma", eo.gradient_sigma);
           num("ambiguity_db", eo.ambiguity_db);

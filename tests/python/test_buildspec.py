@@ -392,8 +392,10 @@ def test_the_budgets_threshold_is_the_deployed_detectors_and_no_gain_is_counted_
     r = "12000.0"
     assert one["row_snr_db"]["ship"][r] == pytest.approx(two["row_snr_db"]["ship"][r]) == pytest.approx(three["row_snr_db"]["ship"][r])
     assert three["margin_db"]["ship"][r] - one["margin_db"]["ship"][r] == pytest.approx(three["rows_detection_gain_db"]) == pytest.approx(4.0, abs=0.2)
-    # the 12 km design point (the detector package's table: -1.0 / +1.6 / +3.0 dB and 0.24 / 0.89 / 0.99)
-    for p, margin, pd in ((one, -1.0, 0.24), (two, 1.6, 0.89), (three, 3.0, 0.99)):
+    # the 12 km design point: -1.1 / +1.4 / +2.9 dB and 0.22 / 0.87 / 0.99. It was -1.0 / +1.5 / +3.0 and 0.24 / 0.89 / 0.99 while
+    # the detector counted its tests with one flat factor: counted as measured (libs/live detector.hpp, kSearchSample) the
+    # thresholds are 0.12 to 0.15 dB higher.
+    for p, margin, pd in ((one, -1.1, 0.22), (two, 1.4, 0.87), (three, 2.9, 0.99)):
         assert p["margin_db"]["ship"][r] == pytest.approx(margin, abs=0.15) and p["detection_probability"]["ship"][r] == pytest.approx(pd, abs=0.03)
     # the short row closer than half a wavelength: 12.9 dB against sea noise, not 10 log 32 (D-103's closed form)
     assert perf["popoto_testauv_1x32"]["gain_isotropic_noise_db"] == pytest.approx(12.9, abs=0.1)
