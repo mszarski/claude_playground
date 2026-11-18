@@ -164,6 +164,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             from . import surface as surface_model
             strength = (surface_model.kraus_surface_strength(float(item["wind_speed"]), fc) if item["model"] == "kraus_surface"
                         else surface_model.searay_bottom_strength(fc, item["bottom_type"]))
+        elif item.get("model") == "bubble_layer_surface":
+            # {model: bubble_layer_surface, wind_speed, extinction: apl_1994 | hall_novarini}: the
+            # bubble-layer and facet terms of the published high-frequency surface model (sim/surface.py).
+            from . import surface as surface_model
+            strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env.get("sound_speed", 1500.0),
+                                                                   item.get("extinction", "apl_1994"))
         elif item.get("model") == "fluid_sediment":
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
             # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.

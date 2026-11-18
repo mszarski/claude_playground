@@ -67,6 +67,58 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_roll_sigma_deg") c.elevation.roll_sigma = v * kDeg;
   else if (key == "elevation_depth_process_noise") c.tracker.depth_process_noise = v;
   else if (key == "elevation_row_tolerance_m") c.elevation.row_tolerance_m = p.elevation.row_tolerance_m = v;
+  else if (key == "blanking") c.blanking.enabled = v != 0.0;
+  else if (key == "blanking_recovery_s") c.blanking.recovery_s = v;
+  else if (key == "blanking_taper_s") c.blanking.taper_s = v;
+  else if (key == "blanking_mode") c.blanking.zero = value != "ignore";
+  else if (key == "sync_min_quality") c.reference.min_quality = v;
+  else if (key == "decimate") c.decimate.enabled = v != 0.0;
+  else if (key == "decimate_streaming") c.decimate_streaming = v != 0.0;
+  else if (key == "decimate_f_low") c.decimate.f_low = v;
+  else if (key == "decimate_f_high") c.decimate.f_high = v;
+  else if (key == "decimate_band_margin") c.decimate.band_margin = v;
+  else if (key == "decimate_output_rate") c.decimate.output_rate = v;
+  else if (key == "decimate_oversample") c.decimate.oversample = v;
+  else if (key == "decimate_ripple_db") c.decimate.ripple_db = v;
+  else if (key == "decimate_stopband_db") c.decimate.stopband_db = v;
+  else if (key == "decimate_taps") c.decimate.taps = static_cast<std::int64_t>(v);
+  else if (key == "nav_water_depth_from_altitude") c.nav.water_depth.from_altitude = v != 0.0;
+  else if (key == "nav_dvl_offset_m") c.nav.water_depth.dvl_offset_m = v;
+  else if (key == "nav_altitude_sigma_m") c.nav.water_depth.altitude_sigma_m = v;
+  else if (key == "nav_depth_sigma_m") c.nav.water_depth.depth_sigma_m = v;
+  else if (key == "nav_hold_s") c.nav.water_depth.hold_s = v;
+  else if (key == "nav_hold_sigma_m_per_s") c.nav.water_depth.hold_sigma_m_per_s = v;
+  else if (key == "nav_hold_sigma_m_per_m") c.nav.water_depth.hold_sigma_m_per_m = v;
+  else if (key == "nav_max_altitude_m") c.nav.water_depth.max_altitude_m = v;
+  else if (key == "nav_keep_s") c.nav.keep_s = v;
+  else if (key == "nav_profile_step_m") c.nav.profile_step_m = v;
+  else if (key == "elevation_profile") c.elevation.profile.enabled = v != 0.0;
+  else if (key == "elevation_profile_bin_m") c.elevation.profile.bin_m = v;
+  else if (key == "elevation_profile_sample_sigma") c.elevation.profile.sample_sigma = v;
+  else if (key == "elevation_profile_age_sigma_per_hour") c.elevation.profile.age_sigma_per_hour = v;
+  else if (key == "elevation_profile_distance_sigma_per_km") c.elevation.profile.distance_sigma_per_km = v;
+  else if (key == "elevation_profile_max_age_s") c.elevation.profile.max_age_s = v;
+  else if (key == "elevation_profile_max_distance_m") c.elevation.profile.max_distance_m = v;
+  else if (key == "elevation_profile_min_span_m") c.elevation.profile.min_span_m = v;
+  else if (key == "elevation_profile_extrapolation_sigma_per_s") c.elevation.profile.extrapolation_sigma_per_s = v;
+  else if (key == "elevation_profile_file") c.elevation.profile.file = value;
+  else if (key == "elevation_profile_cast") c.elevation.profile.cast = value;
+  else if (key == "elevation_profile_supplied_sigma") c.elevation.profile.supplied_sigma = v;
+  else if (key == "elevation_profile_family") c.elevation.profile.family = value;
+  else if (key == "elevation_profile_family_gradient") c.elevation.profile.family_gradient = v;
+  else if (key == "elevation_profile_layer_depth") c.elevation.profile.layer_depth = v;
+  else if (key == "elevation_profile_thermocline_gradient") c.elevation.profile.thermocline_gradient = v;
+  else if (key == "elevation_profile_thermocline_thickness") c.elevation.profile.thermocline_thickness = v;
+  else if (key == "elevation_profile_family_sigma") c.elevation.profile.family_sigma = v;
+  else if (key == "elevation_profile_ladder") {
+    c.elevation.profile.ladder.clear();
+    std::size_t at = 0;
+    while (at < value.size()) {
+      const std::size_t comma = std::min(value.find(',', at), value.size());
+      if (comma > at) c.elevation.profile.ladder.push_back(value.substr(at, comma - at));
+      at = comma + 1;
+    }
+  }
   else if (key == "dead_channels" || key == "elevation_ssp_depth" || key == "elevation_ssp_speed") {
     // Comma-separated lists.
     std::vector<double> list;

@@ -40,6 +40,7 @@ class ClockEstimate:
     drift_ppm: np.ndarray    # [boards], relative to the first board
     method: str
     quality: np.ndarray      # [boards] correlation peak quality, 0..1 (1 = clean)
+    flagged: np.ndarray | None = None   # [boards] with reference `min_quality`: 0 both bursts used, 1 one only, 2 none usable
 
 
 def alignment_tolerance(record) -> float:
@@ -92,22 +93,52 @@ def estimate_clocks_reference(record, reference: dict, search_time: float = 2e-3
     f_centre = 0.5 * (reference["f_start"] + reference["f_stop"])
     search = int(search_time * fs)
     offsets, drifts, quality = [], [], []
+    # A burst below `min_quality`, or sitting in clipped samples (the projector's direct sound can saturate the
+    # inputs while the first burst is sent), is not used: the board is timed from its other burst alone, without
+    # a drift, and flagged; with neither it is left as it is. Off by default (every burst used as found).
+    min_quality = float(reference.get("min_quality") or 0.0)
+    full_scale = record.metadata.adc_full_scale
+    clip = float(reference.get("clip_level") or (full_scale if min_quality > 0.0 and np.isfinite(full_scale) else 0.0))
+    flagged = []
     for board in record.metadata.boards:
         row = board.reference_channel
         if row < 0:
             raise SyncError("a board has no reference channel; use another sync method")
-        n_a, q_a = _burst_position(x[row], replica, int((t_a - s.start_time) * fs), search, fs, f_centre)
-        n_b, q_b = _burst_position(x[row], replica, int((t_b - s.start_time) * fs), search, fs, f_centre)
-        if n_a is None or n_b is None:
+        e_a, e_b = int((t_a - s.start_time) * fs), int((t_b - s.start_time) * fs)
+        n_a, q_a = _burst_position(x[row], replica, e_a, search, fs, f_centre)
+        n_b, q_b = _burst_position(x[row], replica, e_b, search, fs, f_centre)
+        if min_quality > 0.0 or clip > 0.0:
+            def usable(n_hat, q, expected):
+                seg = np.abs(x[row][max(expected, 0):expected + n_rep])
+                railed = clip > 0.0 and len(seg) and np.count_nonzero(seg >= 0.98 * clip) * 50 > len(seg)
+                return n_hat is not None and q >= min_quality and not railed
+            ok_a, ok_b = usable(n_a, q_a, e_a), usable(n_b, q_b, e_b)
+            if not (ok_a and ok_b):
+                flagged.append(1 if ok_a or ok_b else 2)
+                offsets.append(((t_a - s.start_time) - n_a / fs) if ok_a else ((t_b - s.start_time) - n_b / fs) if ok_b else 0.0)
+                drifts.append(0.0)
+                quality.append(q_a if ok_a else q_b if ok_b else 0.0)
+                continue
+        elif n_a is None or n_b is None:
             raise SyncError("reference burst not found on a board; widen search_time or check wiring")
+        flagged.append(0)
         # n = (t - start - offset) * fs * (1 + drift)
         drift = (n_b - n_a) / ((t_b - t_a) * fs) - 1.0
         offset = (t_a - s.start_time) - n_a / (fs * (1.0 + drift))
         offsets.append(offset)
         drifts.append(drift * 1e6)
         quality.append(min(q_a, q_b))
-    offsets, drifts = np.array(offsets), np.array(drifts)
-    return ClockEstimate(offsets - offsets[0], drifts - drifts[0], "reference", np.array(quality))
+    offsets, drifts, flagged = np.array(offsets), np.array(drifts), np.array(flagged)
+    if not flagged.any():
+        return ClockEstimate(offsets - offsets[0], drifts - drifts[0], "reference", np.array(quality),
+                             flagged if (min_quality > 0.0 or clip > 0.0) else None)
+    # Relative to the first board that could be timed; boards that could not be are left as they are.
+    timed = flagged != 2
+    if timed.any():
+        first = int(np.argmax(timed))
+        offsets[timed] -= offsets[first]
+        drifts[timed] -= drifts[first]
+    return ClockEstimate(offsets, drifts, "reference", np.array(quality), flagged)
 
 
 def estimate_clocks_pps(record, nominal_pps_sample: float) -> ClockEstimate:
@@ -277,11 +308,14 @@ def synchronise(record, reference: dict | None = None, method: str = "reference"
         after = estimate_clocks_reference(record, reference)
         span = record.samples.n_samples / record.samples.sample_rate
         residual = np.abs(after.offset) + np.abs(after.drift_ppm) * 1e-6 * span
+        if est.flagged is not None and est.flagged.any():
+            # A board timed from one burst has no drift to check: what is left of its offset is the residual.
+            residual = np.where(est.flagged == 0, residual, np.abs(after.offset))
     elif method == "direct_path":
         residual = np.abs(estimate_clocks_direct_path(record).offset)
     else:
         residual = np.zeros(len(est.offset))      # nothing independent to check against
-    ok = bool(np.all(residual <= tolerance))
+    ok = bool(np.all(residual <= tolerance)) and not (est.flagged is not None and est.flagged.any())     # one burst: no drift, not ok
     report = SyncReport(est, residual, tolerance, ok)
     if enforce and not ok:
         worst = residual.max()

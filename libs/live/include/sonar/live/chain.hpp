@@ -20,6 +20,7 @@
 #include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 #include "sonar/live/beamform.hpp"
+#include "sonar/live/decimate.hpp"
 #include "sonar/live/detections.hpp"
 #include "sonar/live/doa.hpp"
 #include "sonar/live/elevation.hpp"
@@ -27,6 +28,17 @@
 #include "sonar/live/tonal.hpp"
 
 namespace sonar::live {
+
+/// The projector's own sound reaches the hydrophones far above their full scale: for the length of
+/// the pulse, and for as long after as the inputs take to recover, the samples mean nothing.
+struct BlankingOptions {
+  bool enabled = false;
+  double recovery_s = 0.0;   ///< the inputs' recovery after the pulse ends (hardware; unconfirmed until measured)
+  double taper_s = 0.0;      ///< raised-cosine return to full gain after the blanked stretch
+  bool zero = true;          ///< zero the samples before conditioning (mode zero); false (ignore): leave them, only do not detect there
+  /// Samples are blanked from the transmit to this long after it; echoes from nearer than min_range are not reported.
+  double until(const PingRecord& record) const { return record.transmit.waveform.duration + recovery_s; }
+};
 
 struct ChainOptions {
   double bearing_first_deg = -40.0, bearing_last_deg = 40.0, bearing_step_deg = 0.5;  ///< from broadside
@@ -56,6 +68,13 @@ struct ChainOptions {
   ElevationOptions elevation;  ///< stacked rows: elevation and depth (off by default)
   std::vector<std::int64_t> dead_channels;  ///< channel rows (after synchronisation) left out of every stage
   double sound_speed = 0.0;    ///< m/s at the vehicle; > 0 replaces the record's (navigation's) value
+  BlankingOptions blanking;    ///< off: nothing is blanked, as before
+  /// Decimate first (decimate.hpp): a raw record is band-selected, decimated to complex baseband and
+  /// (with `sync`) its boards synchronised from the reference bursts, before anything else.
+  DecimateOptions decimate;
+  // For the program around the chain (apps/sonar_live), not the chain itself:
+  bool decimate_streaming = false;  ///< the receiver decimates as blocks arrive and the recording holds the decimated ping
+  NavOptions nav;                   ///< the navigation receiver's settings
   Backend backend = Backend::Host;
   int device = 0;
 };
@@ -73,6 +92,7 @@ struct ReportDetection {
   bool has_depth = false;
   double depth_m = 0.0, depth_sigma_m = 0.0, image_depth_m = 0.0;
   std::string path{};
+  std::string profile_source{};                      ///< the rung of the sound-speed ladder this depth came by (ladder on)
 };
 struct ReportTrack {
   std::int64_t id, parent;
@@ -81,17 +101,24 @@ struct ReportTrack {
   bool depth_reported = false, has_depth = false;    ///< stacked rows with depth on; the track has taken a depth
   double depth_m = 0.0, depth_sigma_m = 0.0;
   std::string path{};
+  std::string profile_source{};
 };
 struct Report {
   std::int64_t ping = 0, sequence = 0, time_ns = 0;
   Vec3d ownship;
   std::vector<ReportDetection> detections;
   std::vector<ReportTrack> tracks;
+  double blanking_min_range_m = -1.0;   ///< >= 0: blanking is on; nothing nearer than this is reported
+  bool blanking_zero = true;
+  std::vector<std::int64_t> sync_flagged;  ///< boards timed from one burst (their number) or not at all (-number - 1)
   bool synced = false, sync_ok = false;
   double sync_worst_residual_us = 0.0;
   std::vector<double> sync_offsets_us, sync_drift_ppm;
   double processing_seconds = 0.0;
   std::int64_t rows = 0;     ///< > 0: the array's rows, and elevation fields are in the report
+  std::string profile_rung{};  ///< the sound-speed ladder's rung this ping (ladder on), with what a built profile holds
+  std::int64_t profile_bins = 0;
+  double profile_lo = 0.0, profile_hi = 0.0;
   std::string json() const;  ///< one line, the same fields as the Python chain's report
 };
 
@@ -108,6 +135,7 @@ class LiveChain {
   /// Process one ping (conditioned in place). The record's pose is taken as the vehicle's.
   Report process(PingRecord& record);
   const ChainOptions& options() const { return opt_; }
+  SoundSpeedLadder& ladder() { return ladder_; }
   // The last ping's map, for display and taps.
   std::vector<float> last_power;
   std::vector<double> last_ranges, bearings;
@@ -115,6 +143,7 @@ class LiveChain {
  private:
   ChainOptions opt_;
   Tracker tracker_;
+  SoundSpeedLadder ladder_;
   std::int64_t pings_ = 0;
   bool have_origin_ = false;
   Vec3d origin_;

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
@@ -26,7 +27,8 @@ T get(const unsigned char* p) {
 
 }  // namespace
 
-PingAssembler::PingAssembler(const PingRecord& template_record) : template_(template_record) {
+PingAssembler::PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate, const Reference* reference)
+    : template_(template_record) {
   const Samples& s = template_.samples;
   if (s.is_complex()) throw std::invalid_argument("PingAssembler: the template must describe real ADC samples");
   window_start_ = static_cast<std::int64_t>(std::llround(s.start_time * s.sample_rate));
@@ -35,6 +37,7 @@ PingAssembler::PingAssembler(const PingRecord& template_record) : template_(temp
   const double full_scale = template_.metadata.adc_full_scale;
   volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / 8388608.0;
   template_.samples.data.clear();
+  if (decimate != nullptr && decimate->enabled) decimator_ = std::make_shared<PingDecimator>(template_, *decimate, reference);
 }
 
 bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vector<PingRecord>& out) {
@@ -82,7 +85,8 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
       index_ = ping_index;
       start_ns_ = start_ns;
       filled_ = 0;
-      buffer_.assign(static_cast<std::size_t>(window_length_ * n_channels_), 0);
+      if (decimator_) decimator_->open();
+      else buffer_.assign(static_cast<std::size_t>(window_length_ * n_channels_), 0);
     }
   }
   if (!open_) return true;
@@ -97,20 +101,31 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
       return true;
     }
     const unsigned char* payload = data + kHeader;
+    if (decimator_) rows_.resize(static_cast<std::size_t>((b - a) * ch));
     for (std::int64_t i = a; i < b; ++i) {
       for (std::int64_t c = 0; c < ch; ++c) {
         const unsigned char* q = payload + ((i - first) * ch + c) * 3;
         std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
         if (v & 0x800000) v -= 0x1000000;        // sign-extend 24 bits
-        buffer_[static_cast<std::size_t>((i - w0) * ch + c)] = v;
+        if (decimator_) rows_[static_cast<std::size_t>((i - a) * ch + c)] = static_cast<float>(static_cast<double>(v) * volts_per_count_);
+        else buffer_[static_cast<std::size_t>((i - w0) * ch + c)] = v;
       }
     }
+    if (decimator_) decimator_->feed(rows_.data(), b - a);    // filtered and decimated as it arrives: the raw ping is never held
     filled_ = b - w0;
   }
   if (filled_ == window_length_) {
     PingRecord rec = template_;
     rec.metadata.sequence = index_;
     rec.transmit.time_ns = start_ns_ + static_cast<std::int64_t>(std::llround(static_cast<double>(tx_) / rec.samples.sample_rate * 1e9));
+    if (decimator_) {
+      decimator_->finish(rec);
+      out.push_back(std::move(rec));
+      done_ping_ = index_;
+      have_done_ = true;
+      open_ = false;
+      return true;
+    }
     rec.samples.resize(n_channels_, window_length_, SampleKind::RealPassband);
     rec.samples.start_time = static_cast<double>(window_start_) / rec.samples.sample_rate;
     for (std::int64_t c = 0; c < n_channels_; ++c) {
@@ -127,7 +142,7 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   return true;
 }
 
-StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples)
+StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples, const DecimateOptions* decimate)
     : template_(template_record), chunk_(chunk_samples) {
   if (template_.samples.is_complex()) throw std::invalid_argument("StreamAssembler: the template must describe real ADC samples");
   if (chunk_ < 1) throw std::invalid_argument("StreamAssembler: chunk_samples must be positive");
@@ -135,6 +150,13 @@ StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t
   const double full_scale = template_.metadata.adc_full_scale;
   volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / 8388608.0;
   template_.samples.data.clear();
+  if (decimate != nullptr && decimate->enabled) {
+    plan_ = plan_decimation(template_, *decimate);
+    decimator_ = std::make_shared<StreamDecimator>(plan_, n_channels_);
+    decimator_->open(0.0);
+    pending_.assign(static_cast<std::size_t>(n_channels_), {});
+    return;
+  }
   buffer_.assign(static_cast<std::size_t>(n_channels_ * chunk_), 0.0F);
 }
 
@@ -156,9 +178,59 @@ bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vec
     if (filled_ > 0) ++dropped_chunks;
     filled_ = 0;
   }
+  // Gain of sample i of this block: zero from the last transmit the block marks until the blanking ends.
+  const auto tx = get<std::int64_t>(data + 20);
+  const double raw_fs = decimator_ ? plan_.input_rate : template_.samples.sample_rate;
+  auto gain = [&](std::int64_t i) {
+    if (!(blank_until_ > 0.0) || tx < 0 || first + i < tx) return 1.0;
+    const double out = static_cast<double>(first + i - tx) / raw_fs - blank_until_;
+    if (out >= blank_taper_) return 1.0;
+    ++blanked_samples;
+    return out <= 0.0 ? 0.0 : 0.5 - 0.5 * std::cos(3.14159265358979323846 * out / blank_taper_);
+  };
+  if (decimator_ && (!have_next_ || first != next_sample_)) {
+    // The start, or a gap: the filter starts again and what was waiting is dropped.
+    if (have_next_ && !pending_[0].empty()) ++dropped_chunks;
+    decimator_->open(0.0);
+    for (auto& v : pending_) v.clear();
+    stretch_first_ = first;
+    emitted_ = 0;
+    start_ns_ = start_ns;
+  }
   have_next_ = true;
   next_sample_ = first + n;
   const unsigned char* payload = data + kHeader;
+  if (decimator_) {
+    rows_.resize(static_cast<std::size_t>(n * ch));
+    for (std::int64_t i = 0; i < n * ch; ++i) {
+      const unsigned char* q = payload + i * 3;
+      std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
+      if (v & 0x800000) v -= 0x1000000;
+      rows_[static_cast<std::size_t>(i)] = static_cast<float>(static_cast<double>(v) * volts_per_count_ * gain(i / ch));
+    }
+    decimator_->feed(rows_.data(), n, pending_);
+    while (static_cast<std::int64_t>(pending_[0].size()) >= chunk_) {
+      PingRecord rec = template_;
+      rec.metadata.sequence = chunks++;
+      const double raw_rate = rec.samples.sample_rate;
+      rec.samples.resize(n_channels_, chunk_, SampleKind::ComplexBaseband);
+      rec.samples.start_time = 0.0;
+      rec.samples.center_frequency = plan_.carrier;
+      rec.samples.sample_rate = plan_.output_rate;
+      rec.samples.storage = StorageType::Float32;
+      rec.samples.storage_scale = 1.0;
+      rec.transmit.time_ns = start_ns_ + static_cast<std::int64_t>(std::llround(
+          static_cast<double>(stretch_first_ + emitted_ * chunk_ * plan_.factor) / raw_rate * 1e9));
+      for (std::int64_t c = 0; c < n_channels_; ++c) {
+        auto& v = pending_[static_cast<std::size_t>(c)];
+        std::copy_n(v.begin(), chunk_, rec.samples.channel_complex(c));
+        v.erase(v.begin(), v.begin() + chunk_);
+      }
+      ++emitted_;
+      out.push_back(std::move(rec));
+    }
+    return true;
+  }
   for (std::int64_t i = 0; i < n; ++i) {
     if (filled_ == 0) {
       first_ = first + i;
@@ -168,7 +240,7 @@ bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vec
       const unsigned char* q = payload + (i * ch + c) * 3;
       std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
       if (v & 0x800000) v -= 0x1000000;
-      buffer_[static_cast<std::size_t>(c * chunk_ + filled_)] = static_cast<float>(static_cast<double>(v) * volts_per_count_);
+      buffer_[static_cast<std::size_t>(c * chunk_ + filled_)] = static_cast<float>(static_cast<double>(v) * volts_per_count_ * (blank_until_ > 0.0 ? gain(i) : 1.0));
     }
     if (++filled_ == chunk_) {
       PingRecord rec = template_;
@@ -234,7 +306,11 @@ bool Navigation::push(const std::string& json) {
     if (at == std::string::npos) return false;
     const auto colon = json.find(':', at + k.size());
     if (colon == std::string::npos) return false;
-    value = std::strtod(json.c_str() + colon + 1, nullptr);
+    const char* begin = json.c_str() + colon + 1;
+    char* end = nullptr;
+    const double v = std::strtod(begin, &end);
+    if (end == begin) return false;               // null, true, false: not a number
+    value = v;
     return true;
   };
   Fix fix{};
@@ -242,24 +318,37 @@ bool Navigation::push(const std::string& json) {
   const auto at = json.find(k);
   if (at == std::string::npos) return false;
   fix.time_ns = std::strtoll(json.c_str() + json.find(':', at) + 1, nullptr, 10);
-  const char* keys[9] = {"x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"};
-  for (int i = 0; i < 9; ++i) find(keys[i], fix.v[i]);
-  fix.v[9] = fix.v[10] = std::nan("");
-  find("sound_speed", fix.v[9]);
-  find("water_depth", fix.v[10]);
+  const char* keys[kFields] = {"x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_speed", "water_depth", "altitude",
+                               "bottom_lock", "roll_sigma", "pitch_sigma", "yaw_sigma", "position_sigma", "velocity_sigma",
+                               "depth_sigma", "altitude_sigma", "water_depth_sigma", "sound_speed_sigma"};
+  for (int i = 0; i < kFields; ++i) {
+    fix.v[i] = i < 9 ? 0.0 : std::nan("");
+    find(keys[i], fix.v[i]);
+  }
+  if (json.find("\"bottom_lock\": true") != std::string::npos || json.find("\"bottom_lock\":true") != std::string::npos) fix.v[kLock] = 1.0;
+  if (json.find("\"bottom_lock\": false") != std::string::npos || json.find("\"bottom_lock\":false") != std::string::npos) fix.v[kLock] = 0.0;
+  const bool lock = std::isnan(fix.v[kLock]) ? true : fix.v[kLock] != 0.0;
+  fix.water = water_.update(fix.time_ns, fix.v[0], fix.v[1], fix.v[2] - opt_.surface_z, fix.v[kAltitude], lock, fix.v[kAltitudeSigma],
+                            fix.v[kDepthSigma]);
   fixes_.push_back(fix);
-  if (fixes_.size() > 600) fixes_.pop_front();
+  const auto keep_ns = static_cast<std::int64_t>(opt_.keep_s * 1e9);
+  while (fixes_.size() > 1 && (fixes_.front().time_ns < fix.time_ns - keep_ns || fixes_.size() > 200000)) fixes_.pop_front();
+  if (std::isfinite(fix.v[kSoundSpeed]) && fix.v[kSoundSpeed] > 0.0 &&
+      (samples_.empty() || std::abs(fix.v[2] - samples_.back().z) >= opt_.profile_step_m)) {
+    samples_.push_back({fix.time_ns, fix.v[0], fix.v[1], fix.v[2], fix.v[kSoundSpeed]});
+    if (samples_.size() > 2000) samples_.pop_front();
+  }
   return true;
 }
 
-bool Navigation::apply(PingRecord& record) const {
+bool Navigation::apply(PingRecord& record) {
   if (fixes_.empty()) return false;
   const std::int64_t t = record.transmit.time_ns;
   double v[9] = {};
   std::size_t i = 0;
   while (i < fixes_.size() && fixes_[i].time_ns < t) ++i;
   if (i == 0 || i == fixes_.size()) {
-    // A fix holds eleven values (pose, velocity, then sound speed and water depth); the pose is the first nine.
+    // The pose is the first nine of a fix's values (kFields in all): only those are copied.
     std::copy_n(std::begin(fixes_[std::min(i, fixes_.size() - 1)].v), 9, v);
   } else {
     const Fix& a = fixes_[i - 1];
@@ -278,11 +367,35 @@ bool Navigation::apply(PingRecord& record) const {
   for (const Fix& fx : fixes_) {
     if (std::llabs(fx.time_ns - t) < std::llabs(nearest->time_ns - t)) nearest = &fx;
   }
-  if (std::isfinite(nearest->v[9]) && nearest->v[9] > 0.0) record.environment.sound_speed = nearest->v[9];
-  if (std::isfinite(nearest->v[10]) && nearest->v[10] > 0.0) record.environment.water_depth = nearest->v[10];
+  const double* nv = nearest->v;
+  std::string facts;
+  auto fact = [&](const char* key, double value) {
+    char text[64];
+    std::snprintf(text, sizeof(text), "%s\"%s\": %.10g", facts.empty() ? "" : ", ", key, value);
+    facts += text;
+  };
+  const bool measured = std::isfinite(nv[kSoundSpeed]) && nv[kSoundSpeed] > 0.0;
+  if (measured) record.environment.sound_speed = nv[kSoundSpeed];
+  if (measured) fact("sound_speed_measured", 1.0);
+  if (std::isfinite(nv[kWaterDepth]) && nv[kWaterDepth] > 0.0) {
+    record.environment.water_depth = nv[kWaterDepth];
+    if (std::isfinite(nv[kWaterDepthSigma])) fact("water_depth_sigma_m", nv[kWaterDepthSigma]);
+  } else if (std::isfinite(nearest->water.depth)) {
+    // From the Doppler log's altitude and the vehicle's depth (held when bottom lock is lost).
+    record.environment.water_depth = nearest->water.depth;
+    fact("water_depth_sigma_m", nearest->water.sigma);
+    fact("water_depth_held_s", nearest->water.held ? nearest->water.held_s : 0.0);
+  }
+  const char* names[] = {"roll_sigma", "pitch_sigma", "yaw_sigma", "position_sigma", "velocity_sigma", "depth_sigma", "altitude_sigma",
+                         nullptr, "sound_speed_sigma"};
+  for (int q = kRollSigma; q < kFields; ++q) {
+    if (names[q - kRollSigma] != nullptr && std::isfinite(nv[q])) fact(names[q - kRollSigma], nv[q]);
+  }
   const Samples& s = record.samples;
   const auto window_ns = static_cast<std::int64_t>((s.start_time + static_cast<double>(s.n_samples) / s.sample_rate) * 1e9);
   std::vector<InsSample> history;
+  std::vector<DvlSample> dvl;
+  std::vector<DepthSample> depth;
   for (const Fix& fx : fixes_) {
     if (fx.time_ns < t - 2000000000LL || fx.time_ns > t + window_ns + 2000000000LL) continue;
     InsSample a{};
@@ -291,8 +404,33 @@ bool Navigation::apply(PingRecord& record) const {
     a.rpy = {fx.v[3], fx.v[4], fx.v[5]};
     a.velocity = {fx.v[6], fx.v[7], fx.v[8]};
     history.push_back(a);
+    depth.push_back({a.t, fx.v[2] - opt_.surface_z});
+    if (std::isfinite(fx.v[kAltitude]) || !std::isnan(fx.v[kLock])) {
+      // Velocity over ground in the vehicle's own axes, and the altitude (NaN without bottom lock).
+      Pose p{};
+      p.rpy = a.rpy;
+      const bool lock = (std::isnan(fx.v[kLock]) || fx.v[kLock] != 0.0) && std::isfinite(fx.v[kAltitude]) && fx.v[kAltitude] > 0.0;
+      dvl.push_back({a.t, {dot(a.velocity, world_direction(p, {1.0, 0.0, 0.0})), dot(a.velocity, world_direction(p, {0.0, 1.0, 0.0})),
+                           dot(a.velocity, world_direction(p, {0.0, 0.0, 1.0}))}, lock ? fx.v[kAltitude] : std::nan("")});
+    }
   }
-  if (history.size() > 1) record.navigation.ins = std::move(history);   // a fixed pose has one fix and no history
+  if (history.size() > 1) {            // a fixed pose has one fix and no history
+    record.navigation.ins = std::move(history);
+    record.navigation.depth = std::move(depth);
+    if (!dvl.empty()) record.navigation.dvl = std::move(dvl);
+  }
+  if (!samples_.empty()) {
+    std::string rows = "[";
+    for (const Sample& q : samples_) {
+      char text[160];
+      std::snprintf(text, sizeof(text), "%s[%.6f, %.3f, %.3f, %.3f, %.4f]", rows.size() > 1 ? ", " : "", static_cast<double>(q.time_ns - t) * 1e-9,
+                    q.x, q.y, q.z, q.speed);
+      rows += text;
+    }
+    facts += std::string(facts.empty() ? "" : ", ") + "\"sound_speed_samples\": " + rows + "]";
+    samples_.clear();
+  }
+  if (!facts.empty()) extra_set(record.metadata.extra_json, "nav", "{" + facts + "}");
   return true;
 }
 
