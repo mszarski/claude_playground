@@ -11,10 +11,12 @@ build-spec fields each choice would set.
   repository's own link budget (`gpusonar.buildspec.performance`) and direct-sound arithmetic
   (`buildspec.describe`). Every table marked *tool* below is that tool's output, pasted by a script, not retyped.
   Full output for all six builds: `docs/design/projector_requirements.json`.
-- **Manufacturer data sheets were opened for four makers** (Neptune Sonar, GeoSpectrum, Massa, Benthowave) after
-  the owner allowed their hosts; Teledyne, Exail and BTech were reachable and list nothing for 4–6 kHz at this
-  level; six further hosts redirect to addresses that are still refused, and one maker's catalogue sits on a host
-  that is not allowed (Sec. 6). Sec. 3 gives every candidate's
+- **Manufacturer data sheets were opened for four projector makers** (Neptune Sonar, GeoSpectrum, Massa,
+  Benthowave) and, in a third pass, for the amplifier makers Instruments Inc. and AE Techron and for Sensor
+  Technology, Lubell and Ocean Ears; Teledyne, Exail and BTech were reachable and list nothing for 4–6 kHz at
+  this level. Three things are still out of reach (Sec. 6): the ITC catalogue (`www.gavialitc.com`), Ultra's
+  maritime catalogue (`umaritime.com`), and Instruments Inc.'s specification tables, which are images served
+  from `images.squarespace-cdn.com`. Sec. 3 gives every candidate's
   figures with the sheet and page they came from. Curves were read by eye off the sheets' plots: TVR to about
   ±1 dB, admittance and impedance to about ±15 %, beam patterns to about ±2 dB. No product figure in this
   document comes from memory.
@@ -688,14 +690,20 @@ for the wet area measured off the sheet's drawing, with no directivity index add
 
 | Maker (host) | Read | Result for 4–6 kHz |
 | --- | --- | --- |
-| Neptune Sonar (`www.neptune-sonar.co.uk`) | the projector listing and all 17 projector pages; data-sheet PDFs of T335, T296, T170, T160, T420, T444 | **T335: 198.5 dB flat across 4–6 kHz at 400 V rms and 10 % duty; directional; 600 m.** T170 ring: 192.5–197.5 dB at 750 V and 10 % (minimum 10 m), unlimited depth. T296: 195–199.5 dB, 27 kg. T160 ring and T420: lower. A 2022 catalogue PDF is linked from every page; it was not opened (the per-model sheets are its pages) |
+| Neptune Sonar (`www.neptune-sonar.co.uk`) | the projector listing and all 17 projector pages; data-sheet PDFs of T335, T296, T170, T160, T420, T444 | **T335: 198.5 dB flat across 4–6 kHz at 400 V rms and 10 % duty; directional; 600 m.** T170 ring: 192.5–197.5 dB at 750 V and 10 % (minimum 10 m), unlimited depth. T296: 195–199.5 dB, 27 kg. T160 ring and T420: lower. The 2022 catalogue PDF (132 pages) was opened in the third pass: its projector pages are the per-model sheets; it adds the PA1 amplifier and the MB1 matching transformer (Sec. 3.6) and no further 4–6 kHz projector |
 | GeoSpectrum (`geospectrum.ca`) | transducer category; ring, bender, sphere, communications and C-BASS pages; sheets of M27-450, M27-650, M21-070-5000 | **M27-450 ring: 189.6–191.6 dB at 600 V rms; 6000 m; cavitation depth 30 m at 193 dB.** A 0.6 kg bender resonant at 5 kHz (190 dB maximum, 700 m, sharp). The maker states rings and ring-based sources "from 500 Hz to 20 kHz and source levels from 190 to 220 dB" to order, and that ring elements "can be combined together to produce custom high-power underwater sources". An amplifier (M620-110) is named on the sphere page; no page for it was found |
-| Massa (`www.massa.com`) | oceanographic and military pages; TR-1075, TR-1055, TR-1077A sheets; two capability PDFs | **TR-1075A / D / H: 197–202 dB across 4–6 kHz at 600–1000 W and 30 % duty** (volts inferred from watts); 600 m; about 9 m and 30 m minimum depth at 200 and 600 W; "easily assembled into arrays". TR-1077A is the deep (>6000 m) version at 22.7 kg |
+| Massa (`www.massa.com`) | oceanographic and military pages; TR-1075, TR-1055, TR-1077A sheets; two capability PDFs | **TR-1075A / D / H: 197–202 dB across 4–6 kHz at 600–1000 W and 30 % duty** (volts inferred from watts); 600 m; about 9 m and 30 m minimum depth at 200 and 600 W; "easily assembled into arrays". TR-1077A is the deep (>6000 m) version at 22.7 kg: its curve reads 150 dB re 1 µPa/V at 4 kHz, 143.5 dB at 5 kHz, a dip to 139.5 dB at 5.3 kHz and 141 dB at 6 kHz, with no power rating on the sheet: **not better than the TR-1075** for this band |
 | Benthowave (`www.benthowave.com`) | product index; ring, low-frequency, directional, sphere, amplifier and matching pages; sheets BII7590, BII7530, BII5060, BII5100, BII5110, BII5160 (BII7620, BII5120, BII6000 downloaded, not read in full) | rings BII7594 / BII7596: 169–187 dB with 7–13 dB of ripple across the band; rated 500 m and 300 m; the maker says the series "is not designed for underwater acoustic detection". Low-frequency series: 150 m. **Amplifiers with full sheets** (Sec. 3.6) |
 | Teledyne Marine (`www.teledynemarine.com`) | sonar, hydrophones-and-transducers and sound-sources listings | no projector listed for 4–6 kHz: TC1037 starts at 6 kHz; the rest are hydrophones, echo-sounder transducers and a 200–300 Hz tomography source |
 | Exail (`www.exail.com`) | home page and its product-range links | no component transducers among the product ranges linked; nothing read for this band |
 | BTech Acoustics (`www.btechacoustics.com`) | products and specialty pages; two model pages | modem transducers and custom work; the model pages carry no figures in their text (embedded files); no listed multimode or 4–6 kHz projector found |
-| Gavial (`www.gavial.com`) | home page | a holding-company page; the transducer catalogue is on another host (Sec. 6) |
+| Gavial (`www.gavial.com`) | home page | a holding-company page; the ITC catalogue is on `gavialitc.com`, which redirects to `www.gavialitc.com` (refused) |
+| Sensor Technology (`sensortechcanada.com`) | product index and the ten transducer pages | the only unit in the band is the **SX05** (resonances 1.3 and 5.5 kHz, 125 dB re 1 µPa/V, omnidirectional, **depth rating 151 m: fails 500 m**); the rest are 11.5–200 kHz spheres and rings (SX30: the 20–40 kHz ring of [A3]). No larger free-flooded ring is listed. Spec sheets sit behind the site's download manager and were not requested |
+| Ultra (`www.cobhamultra.com`) | home page | a corporate page; the maritime products are on `umaritime.com` (not allowed) |
+| Lubell Labs (`www.lubell.com`) | LL9162, LL964, LL1424HP, LL916 pages | underwater loudspeakers, 200 Hz–20 kHz: LL9162 "186 dB at 1 kHz and 190 dB at 10 kHz with 50 Vrms", depth 1–18 m, 17 lb; LL916 180 dB at 1 kHz, 1–18 m; LL964 180 dB at 1 kHz, to 15 m; LL1424HP 196 dB at 600 Hz, 200 Hz–9 kHz, to 12 m. **Shallow-water prototype sources only; all fail 500 m by a factor 25 or more** |
+| Ocean Ears (`oceanears.com`) | DRS-8 page | flexural-disc speaker, 150 Hz–18 kHz, 400 W transformer, 2.0 kg, "130 feet / 40 meters"; no level stated. Prototype only |
+| Instruments Inc. (`instrumentsinc.com`) | products and specification pages (text) | amplifiers, Sec. 3.6 |
+| AE Techron (`aetechron.com`) | linear and switch-mode listings; 7224 and 8500-series sheets | amplifiers, Sec. 3.6 |
 
 ### 3.5 Prototype sources (test AUV and static frame: 170–185 dB, 0.1 s, 4–6 kHz)
 
@@ -716,36 +724,104 @@ Cavitation is no issue at these levels at any depth for the rings and pistons (t
 195 dB at 5 m); the bender's limit at 5 m is 182.6 dB on its maker's statement. **The prototype does not need a
 different product: the option-A or option-C unit, driven at 15–300 V by a small amplifier, is the prototype
 source**, and it removes one integration step later. The 0.6 kg bender is the fallback if the test AUV cannot
-carry 5–11 kg. Underwater loudspeakers could not be read (their hosts redirect to refused addresses, Sec. 6).
+carry 5–11 kg. Underwater loudspeakers were read in the third pass (Sec. 3.4): 180–190 dB class, 12–40 m maximum depth. They
+would serve a quay or pool test of the receive chain; they add nothing the candidates above do not do at
+15–300 V, and they cannot go on the vehicle.
 
 ### 3.6 Power amplifiers
 
-Read: Benthowave's amplifier page and the sheets BII5060, BII5100, BII5110, BII5160
-(`https://www.benthowave.com/products/Specs/BII5060DataSheet.pdf` and siblings). The two other amplifier makers'
-hosts redirect to refused addresses (Sec. 6).
+Read in the third pass: Instruments Inc. (`https://instrumentsinc.com/amplifier-and-sensor-specs`: the text of
+the page; **its specification tables are images on `images.squarespace-cdn.com`, a host that is not allowed, so
+output voltages, weights and the small S27 / S40 and OUT-27 / OUT-40 units' figures were not read**); AE Techron
+(the 7224 and 8500-series data sheets); Neptune's catalogue (the PA1 amplifier and MB1 matching transformer,
+pp. F1 and F5–F6, which are not on its web listing); Benthowave (BII5060-series, BII5160, BII5100, BII5110,
+BII6000 sheets). *Tool:*
 
-| Amplifier | Kind | Output | Band | Supply | Size, mass | Idle | Note from the sheet |
+| Amplifier | Kind | Rating | Band | Supply the sheet assumes | Size, mass | Mute or gating | Form |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| BII5060 series | linear, arbitrary waveform | 315 W rms at +48 V DC (158 W versions) | 0.1–70 kHz (−3 dB) | up to +60 V DC; 14.2 A at maximum power (7.1 A versions) | boards of 0.2–0.4 kg; enclosed versions 1.5–2.2 kg, about 254 × 148 × 94 mm | 59–104 mA | output voltage "≤ 2·Vs − 16" V peak-to-peak, so a step-up transformer (their BII6000) is needed for hundreds of volts; efficiency into a tuned load 64 % at 48 V, times cos θ into an untuned one |
-| BII5160 | linear, for low-frequency transducers, with step-up | 208 W rms | 100 Hz–20 kHz | up to +60 V DC | portable case 0.28 × 0.26 × 0.18 m, 5.0–5.2 kg | 59 mA active, 24 mA shut down | output up to "(2·Vs − 10)·14.5" V peak-to-peak: 441 V rms at 48 V |
-| BII5100 | switching (square or pulse input) | 309 W at +56 V, 261 W at +48 V | 1–500 kHz | +10.5 to +56 V DC | 0.16 kg board; 0.8–1 kg enclosed, 181 × 110 × 75 mm | 13 mA | 91 % efficient at 48 V; "the transducer should be tuned ... as resistive load"; not for arbitrary waveforms |
-| BII5110 | switching, small | 108 or 216 W | 1 kHz–10 MHz | +30 V DC | 25 g to 0.7 kg | 1–2 mA | tuned loads only; duty ≤ 25–50 % |
+| Instruments Inc. L2 | linear class AB, with output transformer (taps) | 650 VA for a 1 s burst at 10 % duty; 260 VA continuous; into any power factor | 400 Hz-40 kHz pulsed, to 100 kHz continuous | single-phase AC mains | 19 in rack, 3U, or bench; mass not in the text | not stated | rack or bench |
+| Instruments Inc. L6 | linear class AB, with output transformer (taps) | 2000 VA for a 1 s burst at 10 % duty; 800 VA continuous; into any power factor | 120 Hz-25 kHz pulsed, to 70 kHz continuous | single-phase AC mains | 19 in rack, 8U; mass not in the text | not stated | rack or bench |
+| Neptune PA1 | class D, differential output | up to 300 W; output 150 V rms / 2 A absolute maximum; pulse and duty not stated | 5 Hz-250 kHz | 80-260 V AC | 2U 19 in rack or hard case; mass not stated | mute input (manual switch or contact closure) that 'shuts down all class D switching'; 'complete silence when receiving' | rack or hard case |
+| Benthowave BII5062 | linear, arbitrary waveform; needs a step-up transformer (BII6014) | 315 W rms at +48 V DC; 20 A peak output; continuous signals allowed | 135 Hz-40 kHz (-3 dB) | DC, up to +60 V; 14.2 A at maximum power | board 140 x 95 x 47 mm, 0.4 kg | stand-by logic input; output enable time 3 us; 104 mA quiescent | board; 'Not waterproof. Always use the device in Dry Air' |
+| Benthowave BII5160 | linear, with step-up, for low-frequency transducers | 208 W rms; output up to (2 Vs - 10) x 14.5 V peak-to-peak (441 V rms at 48 V) | 100 Hz-20 kHz | DC, up to +60 V | portable case 0.28 x 0.26 x 0.18 m, 5.0-5.2 kg | shut-down state (24 mA against 59 mA active) | portable case |
+| AE Techron 7224 | linear, DC-coupled, four-quadrant | 900 W rms to 20 kHz; 158 V peak; 'stable when driving highly capacitive loads' | DC-300 kHz small signal; rated power to 40 kHz | single-phase 120 V AC, 20 A (230 V model) | 2U 19 in, 3.5 x 19 x 22.75 in, 20.9 kg; forced air 180 CFM | remote 'Force to Standby'; voltage and current monitors; residual noise 0.3 mV (10 Hz-80 kHz) | rack or bench |
+| AE Techron 8504 | switch-mode, DC-50 kHz | 4 kW; 0-260 V rms; 80 A rms; 'up to 5X rated power when driving reactive loads' | DC-50 kHz | AC mains (230 V 10 A to 60 V 60 A input options listed) | 5.25 x 19 x 25.3 in, 38.1 kg; internal fans | not read | rack |
 
-Against the candidates (requirement from Sec. 3.2):
+What matters for this sonar, unit by unit:
 
-- **T335 at 197 dB**: 335 V rms, 247–337 W real and 253–368 VA across the band. That is just beyond one 315 W
-  linear unit at the band edges, on a load that is not resistive there (the sheet's susceptance is −2 mS at
-  4 kHz against 2.6 mS of conductance). **At 194 dB it needs 124–169 W: inside one BII5060 or one BII5160**, and
-  the BII5160's 441 V rms covers the voltage. A T335 on one BII5160 at its 208 W gives about 195 dB.
-- **TR-1075A at 197 dB**: 168–237 V rms and 264–592 VA: a 600 VA amplifier; its 100 Ω class impedance suits a
-  low-voltage stage with a modest step-up.
-- **A pair of T170 at 191 dB each**: 355–631 V rms and, per ring, 151–279 W real but 232–768 VA untuned (the
-  rings are capacitive: 68 nF): tuning inductors are needed, then about 300 W per ring.
-- **Prototype**: any of the above at 1–30 W.
-- So the amplifier for the full level is **0.4–0.6 kVA at 250–350 V rms (pistons) or two channels of about
-  300 W at up to 630 V rms (ring pair)**; no sheet read offers that in one unit, two BII5060-class units do,
-  and the makers whose pages could not be reached remain to be checked. Standby draw of the units read is
-  1–5 W, small against the 16–30 Wh per hour of transmitting.
+- **Reactive loads and 1 s pulses.** Instruments Inc. states its L-series ratings as volt-amperes "into any
+  power factor load" and as "1 second output burst repeated at a duty cycle of 10 %": that is this build's
+  pulse, and the only amplifier rating read that names it. Its continuous rating (260 VA for the L2) is what a
+  2–4 s pulse would have to live within. AE Techron: "stable when driving highly capacitive loads" (7224), "up to
+  5X rated power when driving reactive loads" (8500). Benthowave: efficiency "times cos θ" into an untuned
+  transducer, so a linear stage on a capacitive ring wastes most of its supply power unless the ring is tuned.
+  Neptune's PA1 gives no pulse, duty or reactive-load rating.
+- **Linear or switching.** L-series, BII5060/5160 and the 7224 are linear (any waveform: sweep, HFM, codes).
+  The PA1 and the 8500 series are class D with analogue input (any waveform within their band). The BII5100 /
+  BII5110 take square or pulse inputs only and tuned loads only: not for a shaped sweep.
+- **Supply.** Only Benthowave's units run from a DC bus (up to +60 V; 14.2 A at full power for the BII5062).
+  The L2 / L6, the PA1 (80–260 V AC) and AE Techron's are mains units for a bench, a quay or a ship. Instruments
+  Inc. lists OUT-27 / OUT-40 output boards that take "an external DC power supply"; their figures are in the
+  unread tables.
+- **Form.** None is a pressure-housing unit. The BII5062 is a 0.4 kg board, "Not waterproof. Always use the
+  device in Dry Air": it would go in the vehicle's dry housing with its heat path designed in (at 64 % it turns
+  150–280 W into heat during the pulse, 8–16 W on average). The others are rack or case units of 5–38 kg with
+  forced air.
+- **Muting between pings**, which the receivers need: the PA1 has a mute input that "shuts down all class D
+  switching" for "complete silence when receiving"; the BII5062 has a stand-by logic input with a 3 µs output
+  enable time; the 7224 has a remote "force to standby" and 0.3 mV of residual noise; nothing is stated in
+  Instruments Inc.'s text. No sheet gives the turn-off transient or the residual noise in 4–6 kHz at the output
+  with a transformer and a transducer attached: a bench measurement.
+- **Transformer and tuning.** Every pairing but the low-voltage ones needs a step-up: Neptune's MB1 ("custom
+  wound to the transducer and impedance that you specify", 4 / 8 / 50 / 100 Ω, power "up to absolute maximum of
+  the specified transducer"); Benthowave's BII6014 (100 Hz–30 kHz; up to 280 W continuous, more in pulses by a
+  chart that was not read off); Instruments Inc.'s own tapped output transformer. The T335 and TR-1075 carry
+  their tuning inside; the rings need an inductor each (68 nF: about 15 mH at 5 kHz).
+
+*Tool* (the level each pairing reaches; where an amplifier runs out of watts or volt-amperes the level drops by
+10 log₁₀ of the ratio):
+
+| Projector | Amplifier | Level at 4 / 5 / 6 kHz (dB) | Volts at the projector | Volt-amperes each | Step-up transformer needed | From the supply in the pulse | Per hour of pinging |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Neptune T335 | Instruments Inc. L2 | 197.0 / 197.0 / 197.0 | 335 / 335 / 335 V | 368 / 253 / 355 VA | yes | not stated | — |
+| Neptune T335 | Instruments Inc. L6 | 197.0 / 197.0 / 197.0 | 335 / 335 / 335 V | 368 / 253 / 355 VA | yes | not stated | — |
+| Neptune T335 | Neptune PA1 | 196.1 / 197.0 / 196.3 | 302 / 335 / 308 V | 300 / 253 / 300 VA | yes | not stated | — |
+| Neptune T335 | Benthowave BII5062 | 197.0 / 197.0 / 196.7 | 335 / 335 / 324 V | 368 / 253 / 332 VA | yes | 575 / 396 / 519 W | 22–32 Wh |
+| Neptune T335 | Benthowave BII5160 | 195.5 / 196.3 / 194.9 | 283 / 307 / 263 V | 262 / 213 / 219 VA | no | 410 / 333 / 343 W | 19–23 Wh |
+| Neptune T335 | AE Techron 7224 | 197.0 / 197.0 / 197.0 | 335 / 335 / 335 V | 368 / 253 / 355 VA | yes | not stated | — |
+| Neptune T335 | AE Techron 8504 | 197.0 / 197.0 / 197.0 | 335 / 335 / 335 V | 368 / 253 / 355 VA | yes | 343 / 290 / 396 W | 16–22 Wh |
+| Massa TR-1075A | Instruments Inc. L2 | 197.0 / 197.0 / 197.0 | 168 / 224 / 237 V | 332 / 264 / 592 VA | yes | not stated | — |
+| Massa TR-1075A | Instruments Inc. L6 | 197.0 / 197.0 / 197.0 | 168 / 224 / 237 V | 332 / 264 / 592 VA | yes | not stated | — |
+| Massa TR-1075A | Neptune PA1 | 196.6 / 197.0 / 194.0 | 160 / 224 / 169 V | 300 / 264 / 300 VA | yes | not stated | — |
+| Massa TR-1075A | Benthowave BII5062 | 196.8 / 197.0 / 194.3 | 164 / 224 / 173 V | 315 / 264 / 315 VA | yes | 492 / 412 / 492 W | 23–27 Wh |
+| Massa TR-1075A | Benthowave BII5160 | 195.0 / 196.0 / 192.5 | 133 / 199 / 141 V | 208 / 208 / 208 VA | no | 325 / 325 / 325 W | 18–18 Wh |
+| Massa TR-1075A | AE Techron 7224 | 197.0 / 197.0 / 197.0 | 168 / 224 / 237 V | 332 / 264 / 592 VA | yes | not stated | — |
+| Massa TR-1075A | AE Techron 8504 | 197.0 / 197.0 / 197.0 | 168 / 224 / 237 V | 332 / 264 / 592 VA | no | 390 / 310 / 696 W | 17–39 Wh |
+| 2 x Neptune T170 (one amplifier each) | Instruments Inc. L2 | 196.3 / 197.0 / 197.0 | 580 / 398 / 355 V | 650 / 314 / 232 VA | yes | not stated | — |
+| 2 x Neptune T170 (one amplifier each) | Instruments Inc. L6 | 197.0 / 197.0 / 197.0 | 631 / 398 / 355 V | 769 / 314 / 232 VA | yes | not stated | — |
+| 2 x Neptune T170 (one amplifier each) | Neptune PA1 | 192.9 / 196.8 / 197.0 | 394 / 389 / 355 V | 300 / 300 / 232 VA | yes | not stated | — |
+| 2 x Neptune T170 (one amplifier each) | Benthowave BII5062 | 197.0 / 197.0 / 197.0 | 631 / 398 / 355 V | 769 / 314 / 232 VA | yes | 2403 / 982 / 725 W | 40–134 Wh |
+| 2 x Neptune T170 (one amplifier each) | Benthowave BII5160 | 195.8 / 197.0 / 197.0 | 545 / 398 / 355 V | 574 / 314 / 232 VA | yes | 1793 / 982 / 725 W | 40–100 Wh |
+| 2 x Neptune T170 (one amplifier each) | AE Techron 7224 | 197.0 / 197.0 / 197.0 | 631 / 398 / 355 V | 769 / 314 / 232 VA | yes | not stated | — |
+| 2 x Neptune T170 (one amplifier each) | AE Techron 8504 | 197.0 / 197.0 / 197.0 | 631 / 398 / 355 V | 769 / 314 / 232 VA | yes | 656 / 410 / 355 W | 20–37 Wh |
+
+Reading it:
+
+- **T335**: the L2 covers it with almost a factor two of volt-amperes in hand; the BII5062 reaches 196.7–197 dB
+  from a 48 V bus at 400–575 W of supply power in the pulse (22–32 Wh per hour); the PA1 reaches 196.1–197 dB
+  with an MB1 transformer; the BII5160 reaches 194.9–196.3 dB with no extra transformer.
+- **TR-1075A**: the same amplifiers; at 6 kHz it needs 592 VA, so the 300 W-class units drop to 194 dB there and
+  the L2 is the unit that holds 197 dB across the band. Its real power is not known (phase not on the sheet), so
+  its supply figures are upper limits.
+- **Two T170 rings**: untuned, a ring needs 769 VA at 4 kHz, beyond one L2 and ruinous for a linear stage on a
+  battery (the table's 2.4 kW is the power factor of 0.36 at work). With a tuning inductor per ring the real
+  power is 151–279 W per ring and a BII5062 each carries it at about 240–440 W of supply power per ring; the
+  tuned figures are not on any sheet and are the first thing to ask Neptune.
+- **Prototype pairing (about 200 W): the BII5160** (5 kg case, 24–60 V DC, 441 V rms at 48 V) with any of the
+  shortlisted projectors; it also carries a T335 to 195 dB.
+- **For the vehicle no amplifier read does the whole job as delivered**: the BII5062 fits electrically and by
+  its DC supply but is a bare board for dry air at its limit on the T335; the Instruments Inc. boards that
+  might fit better are in tables that could not be read.
 
 ### 3.7 Figures from reports and theses (first pass, kept for the technology they document)
 
@@ -761,14 +837,11 @@ Against the candidates (requirement from Sec. 3.2):
 
 | Maker | Why unread | What to look for |
 | --- | --- | --- |
-| Gavial ITC | catalogue on `gavialitc.com`, not allowed | ring, sphere and flextensional projectors for 3–8 kHz |
-| Sensor Technology | `www.sensortechcanada.com` redirects to `sensortechcanada.com`, not allowed | larger SX-series free-flooded rings |
-| Ultra | `www.ultra.group` redirects to `www.cobhamultra.com`, not allowed | the free-flooded ring data sheet |
-| Lubell Labs; Ocean Engineering Enterprise | redirect to `www.lubell.com`; to `oceanears.com`, not allowed | underwater loudspeakers for the prototype |
-| Instruments Inc.; AE Techron | redirect to `instrumentsinc.com`; to `aetechron.com`, not allowed | 0.5–1 kVA sonar amplifiers on a DC bus |
-| Neptune Sonar | not opened | the 2022 catalogue PDF (accessories, arrays of T335); "T400" and array-mounting accessories |
+| Gavial ITC | `gavialitc.com` redirects to `www.gavialitc.com`, not allowed | ring, sphere and flextensional projectors for 3–8 kHz |
+| Ultra Maritime | products on `umaritime.com`, not allowed | the free-flooded ring data sheet |
+| Instruments Inc. | specification tables are images on `images.squarespace-cdn.com`, not allowed | output voltages, weights and supply of the L2 / L6; the S27-1, S40-1 and the DC-supplied OUT-27 / OUT-40 boards |
+| Sensor Technology | spec sheets behind a download manager; not requested | whether larger rings exist to order (none is listed) |
 | GeoSpectrum | not found on the site | the M620-110 amplifier; custom ring sources for 197–200 dB |
-| Massa | not read | the TR-1077A curves; a TR-1075 TVR in arrays |
 | Kongsberg, Thales, Atlas Elektronik, L3Harris, Applied Physical Sciences | hosts not allowed or not tried | system-level transducers; the flexural-disc line array |
 
 ## 4. Recommendation: a decision table
@@ -789,6 +862,27 @@ Against the candidates (requirement from Sec. 3.2):
 | Risk | pulse length at rated drive not on the sheets; piston response against depth not on the sheets; cavitation depth of the T335 not stated; Massa's volts inferred from watts | Doppler loss and the larger bank; blind range; a ring's duty rating between 10 % and 100 % is not given | mutual coupling of two close rings (each sees the other's field; the makers say rings "can be combined" but give no array data); narrower sector; more wet connections; cavity-mode detuning by the mounting | little |
 | What the sheets leave unknown | Sec. 5, per unit | the same | the same, plus array data | the same |
 
+**Complete transmit chains proposed** (every figure from the sheets and tools above; "unknown" means not on any
+sheet read):
+
+| | **(a) Test-AUV prototype, now** | **(b1) 12 km point, piston** | **(b2) 12 km point, ring pair** |
+| --- | --- | --- | --- |
+| Projector | one Neptune T335 (or one T170 if 11 kg is too much; or the 0.6 kg GeoSpectrum M21-070-5000 for 175 dB) | one Neptune T335 facing out from the face (alternative: Massa TR-1075A) | two Neptune T170, in phase, 0.15 m apart, axes along the face |
+| Amplifier and matching | Benthowave BII5160 (208 W, 24–60 V DC, 5 kg case, 441 V rms at 48 V); no extra transformer; the T335's tuning is internal | vehicle: Benthowave BII5062 on the 48 V bus with a BII6014-class step-up to 335 V rms; bench, quay or static frame: Instruments Inc. L2, or Neptune PA1 with an MB1 transformer | one BII5062 with a step-up to 631 V rms and one tuning inductor (about 15 mH) per ring; bench: one Instruments Inc. L6 for both |
+| Level across 4 / 5 / 6 kHz | 175–185 dB at 27–84 V rms; up to 195.5 / 196.3 / 194.9 dB at the amplifier's limit | 197.0 / 197.0 / 196.7 dB (BII5062); 197 dB flat (L2); 196.1 / 197.0 / 196.3 dB (PA1) | 197 dB on the axis of the pair (191 dB per ring at 631 / 398 / 355 V rms) |
+| Pulse | 0.1 s every 2.8 s; the 2–4 s HFM of option B can be tried on the same hardware | 1 s every 17.9 s (5.6 %); the T335 is rated 400 V at 10 % | the same; each ring is rated 750 V at 10 % |
+| Direct sound left at the array (rms convention) | at 175 dB: +15 dB at 0.30 m, 0 dB at 1.7 m | about +12.6 dB at the face placeholder (22.1 dB less the 9.5 dB the sheet shows at 90° at the worst frequency) | about +5 to +14 dB (two nulls that do not simply add in the near field) |
+| Cavitation depth | none at these levels | not on the T335's sheet (assume about 20 m; TR-1075A: 17 m by Massa's statement) | from the surface at 191 dB per ring (the sheet: 750 V from 10 m) |
+| Supply power | under 45 W in the pulse at 185 dB; 1–2 Wh per hour plus 3 W idle | 400–575 W in the pulse from 48 V (8–12 A), **22–32 Wh per hour**, plus 5 W idle | about 240–440 W per ring once tuned (computed from the sheet's conductance at 64 %): 27–49 Wh per hour for the pair; untuned it is not practical on a battery |
+| Mass | 11.4 kg in air / 6.7 kg in water (T335) + 5 kg amplifier case in the dry | 11.4 / 6.7 kg + under 2 kg of boards and transformer in the dry housing | 2 × 4.7 kg in air / 2 × 2.6 kg in water with cable + two boards, two transformers, two inductors |
+| Depth rating against 500 m | 600 m (T335), unlimited (T170), 700 m (bender) | 600 m: passes by 1.2 | unlimited: passes |
+| Transmit sector | as the unit | about ±45° at −3 dB (the sheet's "conical", 5 kHz) | about ±30° (the pair) within ±45° (each ring's figure of eight) |
+| Unknowns to put to the makers | T335: response at 4 and 6 kHz to the side; BII5160: output noise when idle | Neptune: longest pulse at 335–400 V, cavitation depth, TVR and impedance at 500 m, rms convention, array data; Benthowave: BII5062 into the T335's admittance at 4 and 6 kHz (susceptance −2 and +1 mS), transformer for 335 V at 0.4 kVA, heat in a sealed housing, turn-off transient | Neptune: tuned impedance and tuning inductor, duty between 10 % and 100 %, mutual coupling of two rings 0.15 m apart, mounting clearance for the bores; Benthowave: step-up to 631 V rms |
+
+**Is there a better single unit or a better pair than this shortlist after the third pass? No.** The makers
+added (Sensor Technology, Lubell, Ocean Ears) have nothing rated to 500 m in the band; Massa's deep TR-1077A is
+less flat than the TR-1075; Neptune's catalogue adds no projector. ITC's and Ultra's catalogues remain unread.
+
 **How to choose, with the data sheets in hand.**
 
 1. **A single listed unit does meet 197 dB rms across 4–6 kHz at 5.6 % duty according to its own sheet**: the
@@ -799,7 +893,7 @@ Against the candidates (requirement from Sec. 3.2):
    vehicle team wants the type whose response does not depend on depth and half the mass, the pair of T170
    rings (option C) reaches the same level at the same duty rating, is free of cavitation from the surface at
    191 dB per ring, and puts two nulls towards the rows.
-3. **Do D first, with the unit of A or C.** A T335 or a T170 at tens to a few hundred volts on a 200 W
+3. **Do D first, with the unit of A or C: chain (a).** A T335 or a T170 at tens to a few hundred volts on a 200 W
    amplifier is the prototype source; the same hardware then runs option B (a 2–4 s HFM at 191–194 dB) before
    the full-level amplifier exists. One BII5160-class amplifier with a T335 gives about 195 dB: two rows
    already close the 12 km budget at 194 dB (+1.0 dB of margin).
@@ -852,7 +946,10 @@ depth 5–500 m (500 m is the vehicle's maximum, owner-stated), on a battery-pow
 | Neptune T170 | duty between 10 % (750 V) and 100 % (250 V) and the longest pulse; cavitation depth below 750 V (only "minimum 10 m" at the maximum); horizontal pattern of a pair; mounting clearances for the bore; tuning inductor; ring weight without the cable; a matched pair's TVR tolerance |
 | GeoSpectrum M27-450 | duty and pulse length at 600 V rms; weight in water; cavitation depth at levels below 193 dB; rms or peak; data for two or three rings combined, which the maker offers as custom sources |
 | GeoSpectrum M21-070-5000 | duty and pulse length; **TVR and resonance against depth to 500 m** (a bender); efficiency; array data |
-| Benthowave amplifiers | the BII5060's behaviour into a load that is reactive at the band edges; a transformer for 335–630 V rms at 0.3–0.6 kVA; pressure-housing suitability; conducted noise while idle |
+| Benthowave amplifiers | the BII5062's behaviour into a load that is reactive at the band edges; a transformer for 335–630 V rms at 0.3–0.6 kVA and its pulse rating for 1 s at 5.6 %; heat in a sealed dry housing; turn-off transient and output noise in 4–6 kHz while in stand-by |
+| Instruments Inc. | everything in its tables: output voltage taps, mass and supply of the L2 / L6; the DC-supplied OUT-27 / OUT-40 boards and the S27-1 / S40-1 (power, band, supply voltage, size); a mute or gate input; rating for 2–4 s bursts |
+| Neptune PA1 / MB1 | pulse length and duty at 300 W; behaviour into the T335's admittance; a DC-supply version; mass; an MB1 wound for the T335 at 335–400 V rms |
+| AE Techron | bench use only: a step-up transformer for the 7224 (112 V rms) to 335 V |
 
 ## 6. What could not be verified, and hosts that were refused
 
@@ -863,23 +960,21 @@ cavitation limit were not opened (the relation is derived here and is now checke
 cavitation depths, Sec. 3.3); the transducer-family statements marked *(not verified here)* in Sec. 2; the
 baffle option.
 
-**Hosts allowed by the owner for the second pass and what happened** (one request each; a redirect to a host
-that is not allowed was not followed further):
+**Hosts allowed by the owner for the second and third passes and what happened** (one request each; a redirect
+or an asset on a host that is not allowed was not followed):
 
 | Host allowed | Result |
 | --- | --- |
 | `www.neptune-sonar.co.uk`, `geospectrum.ca`, `www.massa.com`, `www.benthowave.com` | read; data sheets served from the same hosts |
 | `www.teledynemarine.com`, `www.exail.com`, `www.btechacoustics.com` | read; nothing for this band |
-| `www.gavial.com` | read; its transducer catalogue is on **`gavialitc.com`** (refused: not on the list) |
-| `www.sensortechcanada.com` | redirects to **`sensortechcanada.com`** (refused) |
-| `www.ultra.group` | redirects to **`www.cobhamultra.com`** (refused) |
-| `lubell.com` | redirects to **`www.lubell.com`** (refused) |
-| `www.oceanears.com` | redirects to **`oceanears.com`** (refused) |
-| `www.instrumentsinc.com` | redirects to **`instrumentsinc.com`** (refused) |
-| `www.aetechron.com` | redirects to **`aetechron.com`** (refused) |
+| `sensortechcanada.com`, `www.lubell.com`, `oceanears.com`, `aetechron.com` | read in the third pass |
+| `instrumentsinc.com` | page text read; **its specification tables are images on `images.squarespace-cdn.com`** (not allowed) |
+| `gavialitc.com` | redirects to **`www.gavialitc.com`** (refused) |
+| `www.cobhamultra.com` | a corporate page; the maritime catalogue is on **`umaritime.com`** (not allowed) |
 
-To finish Sec. 3.8, allow the seven hosts in bold. No data sheet read sat behind a form or a login; Neptune's
-pages carry a "Request Quote" button and GeoSpectrum's an enquiry cart, neither of which was used.
+To finish Sec. 3.8, allow the three hosts in bold. No data sheet read sat behind a login; Sensor Technology's
+spec sheets are offered through a download manager and were not requested; Neptune's pages carry a "Request
+Quote" button, GeoSpectrum's an enquiry cart and Instruments Inc.'s a quote form, none of which was used.
 
 **Hosts refused in the first pass and still not allowed** (what was wanted from each):
 
@@ -922,6 +1017,18 @@ committed):
   `.../poweramplifier.html`; PDFs `https://www.benthowave.com/products/Specs/BII7590Datasheet.pdf`,
   `.../BII7530Datasheet.pdf`, `.../BII5060DataSheet.pdf`, `.../BII5100DataSheet.pdf`, `.../BII5110DataSheet.pdf`,
   `.../BII5160Datasheet.pdf`.
+- Neptune Sonar catalogue: `https://www.neptune-sonar.co.uk/pdf/2022_neptune_sonar_catalogue.pdf` (pp. F1, F5–F6).
+- Instruments Inc.: `https://instrumentsinc.com/linear-switching-amplifiers-and-sensors`,
+  `https://instrumentsinc.com/amplifier-and-sensor-specs`.
+- AE Techron: `https://aetechron.com/linear-amplifiers/`, `https://aetechron.com/product/7224/`,
+  `https://aetechron.com/product/8500-series/`; PDFs
+  `https://aetechron.com/wp-content/uploads/2024/08/7224-Datasheet-05-27-2026.pdf`,
+  `https://aetechron.com/wp-content/uploads/2024/08/8500-Series-Datasheet-06-02-2026.pdf`.
+- Sensor Technology: `https://sensortechcanada.com/products/` and its ten transducer pages (SX05 at
+  `https://sensortechcanada.com/2021/07/14/sx05/`).
+- Lubell Labs: `https://www.lubell.com/products/ll9162/`, `.../ll1424hp-2/` and the LL916 and LL964 pages.
+  Ocean Ears: `https://oceanears.com/products/underwater-speaker-drs-8/`.
+- Massa TR-1077A: `https://www.massa.com/wp-content/uploads/2019/06/TR-1077A-Specification-190612.pdf` (p. 1 curves).
 - Teledyne Marine: `https://www.teledynemarine.com/products/product-line/hydrophones-and-transducers`,
   `.../product-line/sonar/singlebeam-and-transducers`, `.../product-line/acoustic-sound-sources`.
 - BTech Acoustics: `https://www.btechacoustics.com/products`, `.../products/specialty-products`.
