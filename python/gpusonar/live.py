@@ -423,6 +423,10 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "attitude_rate_sigma": float(np.radians(e["attitude_rate_sigma_deg_s"])),
                           "use_gradient": e["gradient_per_s"] is not None, "gradient": float(e["gradient_per_s"] or 0.0),
                           "ray_arcs": e["ray_method"] == "arcs",
+                          "sector_from_rays": e["sector_from_rays"] is not None,
+                          "sector_rays_bounces": float((e["sector_from_rays"] or {}).get("bounces", 2)),
+                          "sector_rays_margin": float(np.radians((e["sector_from_rays"] or {}).get("margin_deg", 1.0))),
+                          "sector_rays_max_depth": float((e["sector_from_rays"] or {}).get("max_depth_m", 500.0)),
                           "gradient_sigma": float(e["gradient_sigma_per_s"]),
                           "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
                           "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
@@ -1091,6 +1095,22 @@ class LiveChain:
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
                                      int(np.argmin(np.abs(ranges - hits[i].range)))]) / looks for i in order]
             window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
+            if el_cfg["sector_from_rays"] is not None:
+                # hook (opt-in): the elevations sound can arrive from, by rays through the water held this ping (as the C++ chain)
+                from .elevation import profile_options as _po
+                own_ = float(origin[2] - el_cfg["surface_z"])
+                water_ = el_cfg["water_depth"] or record.environment.water_depth
+                water_ = float(water_) if water_ and np.isfinite(water_) and water_ > 0.0 else float("nan")
+                ssp_ = el_cfg["ssp"] or {"depth": [], "speed": []}
+                if self._ladder is not None and el_cfg["depth"]:
+                    measured = self._ladder.absorb(record, el_cfg["surface_z"]) or bool(cfg.get("sound_speed"))
+                    ladder = self._ladder.evaluate(int(record.transmit.time_ns), float(origin[0]), float(origin[1]), own_, float(record.environment.sound_speed),
+                                                   bool(measured), water_, ssp_["depth"], ssp_["speed"], float(el_cfg["gradient_per_s"] or 0.0),
+                                                   float(el_cfg["gradient_sigma_per_s"]))
+                through = core.live_water_profile(_po(el_cfg["profile"]) if el_cfg["profile"] is not None else None, ladder, ssp_["depth"], ssp_["speed"],
+                                                  el_cfg["gradient_per_s"] is not None, float(el_cfg["gradient_per_s"] or 0.0), float(el_cfg["gradient_sigma_per_s"]),
+                                                  own_, float(record.environment.sound_speed), water_)
+                el_cfg = dict(el_cfg, _sector_profile=(through["depth"], through["speed"]))
             got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing, hits[i].first_range) for i in order], background, frame,
                                      el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),
                                      range_cell=cfg["range_cell_m"], backend=self.backend)
@@ -1101,7 +1121,10 @@ class LiveChain:
             sound = record.environment.sound_speed
             profile = None                         # depth along a ray instead of the straight line
             own_depth = float(origin[2] - el_cfg["surface_z"])
-            if self._ladder is not None and el_cfg["depth"]:
+            if ladder is not None:
+                if ladder["depth"]:                # climbed already, for the rays' sector
+                    profile = (ladder["depth"], ladder["speed"])
+            elif self._ladder is not None and el_cfg["depth"]:
                 # The best rung this ping: fed from the record, so a replay climbs the ladder the same way.
                 measured = self._ladder.absorb(record, el_cfg["surface_z"]) or bool(cfg.get("sound_speed"))
                 ssp = el_cfg["ssp"] or {"depth": [], "speed": []}

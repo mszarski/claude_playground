@@ -81,6 +81,11 @@ struct MultipathOptions {
   double track_min_gain = 12.0;        ///< the accumulated gain a track's depth needs
   double track_memory_pings = 0.0;     ///< 0: all pings count alike; n: older ones fade with exp(-1 / n) per ping
   double consistency_sigma = 3.0;      ///< with a stacked-row depth: combined when they agree within this many sigma
+  /// Opt-in: a depth that carries a note (bottom_unmodelled, bottom_order, shadow: the pattern may be fitting paths it
+  /// does not model) is not reported as a depth. Its small fit sigma says nothing about which explanation is true.
+  /// The detection then has depth null, the note as its reason and the fitted value as `multipath_candidate_m`; it adds
+  /// nothing to a track's depth.
+  bool withhold_flagged = false;
   /// Rays (opt-in). The predicted pattern (delays, amplitudes, which paths exist) comes from rays traced through the
   /// profile the chain hands over each ping (the sound-speed ladder's; raytrace.hpp) instead of straight lines and
   /// flat images. `gradient` is then not used: the profile carries it. Depths where no direct or no once-surface-
@@ -135,6 +140,7 @@ struct MultipathEstimate {
   std::string profile_source;          ///< the rung the rays went through
   double searched_lo = kNaN, searched_hi = kNaN;   ///< m: the depths searched (where a direct and a surface path exist and resolve)
   std::vector<double> ensemble;        ///< the depth through each member of the profile ensemble, m (empty: none)
+  double candidate = kNaN;             ///< m: the fitted depth that was withheld (withhold_flagged)
   double shadow_lo = kNaN, shadow_hi = kNaN;       ///< m: the shallowest and deepest depth the direct path does not reach at this range
   std::vector<double> grid, envelope;  ///< the fringe envelope L(z) - L_1, for a track to add up
 };

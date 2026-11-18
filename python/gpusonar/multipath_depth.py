@@ -105,6 +105,8 @@ DEFAULTS = {
     # sound-speed ladder holds (chain.elevation.profile; libs/live raytrace.hpp) instead of straight lines and flat images.
     # gradient_per_s is then not used. Depths with no direct or no surface-reflected path are not searched; when there is
     # none, `multipath_reason` is no_direct_path or no_surface_path and no depth is given.
+    "withhold_flagged": False,       # true: a depth that carries a note (bottom_unmodelled, bottom_order, shadow) is not given:
+                                     # depth null, the note as multipath_reason, the fitted value as multipath_candidate_m
     "rays": False,
     "ray_fan": 1200,                 # rays per fan (one fan per leg and detection, read at two ranges)
     "ray_surface_order": 2,          # surface reflections per leg in the pattern when no bottom is given
@@ -181,6 +183,8 @@ def cpp_options(cfg: dict | None) -> dict:
     if c["bottom"] is not None:
         b = c["bottom"]
         o.update(bottom=1, bottom_speed=float(b["speed"]), bottom_density=float(b["density"]), bottom_attenuation=float(b.get("attenuation", 0.0)))
+    if c["withhold_flagged"]:
+        o["withhold_flagged"] = 1
     if c["rays"]:
         o.update(rays=1, ray_fan=int(c["ray_fan"]), ray_surface_order=int(c["ray_surface_order"]), ray_min_amplitude=float(c["ray_min_amplitude"]))
     if s.get("bubble_model"):

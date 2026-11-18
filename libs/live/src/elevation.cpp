@@ -8,6 +8,7 @@
 
 #include "sonar/core/parallel.hpp"
 #include "sonar/dsp/fft.hpp"
+#include "sonar/live/raytrace.hpp"
 #include "sonar/recon/backproject.hpp"
 
 namespace sonar::live {
@@ -314,6 +315,32 @@ std::vector<ElevationEstimate> estimate_elevation(const PingRecord& record, cons
       for (std::int64_t ee = 0; ee < n_e; ++ee) {
         const double level = std::asin(std::clamp(-arrival_direction(wfi, sb, std::sin(grid[static_cast<std::size_t>(ee)])).z, -1.0, 1.0));
         allowed[static_cast<std::size_t>(ee)] = level <= top && level >= bottom;
+        n_allowed += allowed[static_cast<std::size_t>(ee)];
+      }
+      if (n_allowed >= 3) {
+        for (std::int64_t ee = 0; ee < n_e; ++ee) {
+          if (allowed[static_cast<std::size_t>(ee)]) continue;
+          for (std::int64_t jj = 0; jj < n_r; ++jj) p[static_cast<std::size_t>(ee * n_r + jj)] = 0.0;
+        }
+      }
+    }
+    if (o.sector_from_rays && !o.sector_ray_depth.empty()) {
+      // Rays traced back through the profile: where no sound can come from with so few bounces, do not look.
+      const RayProfile prof(o.sector_ray_depth, o.sector_ray_speed, water);
+      const double own = wfi.origin.z - o.surface_z, rng = hits[static_cast<std::size_t>(i)].range;
+      const double deepest = prof.has_bottom ? std::min(prof.bottom, std::max(o.sector_rays_max_depth, own)) : std::max(o.sector_rays_max_depth, own);
+      std::vector<char> can(static_cast<std::size_t>(n_e), 0);
+      for (std::int64_t ee = 0; ee < n_e; ++ee) {
+        const double level = std::asin(std::clamp(-arrival_direction(wfi, sb, std::sin(grid[static_cast<std::size_t>(ee)])).z, -1.0, 1.0));
+        can[static_cast<std::size_t>(ee)] = ray_arrives(prof, own, level, rng, static_cast<int>(o.sector_rays_bounces), deepest);
+      }
+      const auto reach = static_cast<std::int64_t>(std::ceil(o.sector_rays_margin / (o.step_deg * kDeg)));
+      std::vector<char> allowed(static_cast<std::size_t>(n_e), 0);
+      std::int64_t n_allowed = 0;
+      for (std::int64_t ee = 0; ee < n_e; ++ee) {
+        for (std::int64_t q = std::max<std::int64_t>(ee - reach, 0); q <= std::min<std::int64_t>(ee + reach, n_e - 1) && !allowed[static_cast<std::size_t>(ee)]; ++q) {
+          allowed[static_cast<std::size_t>(ee)] = can[static_cast<std::size_t>(q)];
+        }
         n_allowed += allowed[static_cast<std::size_t>(ee)];
       }
       if (n_allowed >= 3) {

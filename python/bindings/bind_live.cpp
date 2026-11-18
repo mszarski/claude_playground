@@ -724,6 +724,10 @@ void bind_live(py::module_& m) {
           num("attitude_rate_sigma", eo.attitude_rate_sigma);
           flag("use_gradient", eo.use_gradient);
           flag("ray_arcs", eo.ray_arcs);
+          flag("sector_from_rays", eo.sector_from_rays);
+          num("sector_rays_bounces", eo.sector_rays_bounces);
+          num("sector_rays_margin", eo.sector_rays_margin);
+          num("sector_rays_max_depth", eo.sector_rays_max_depth);
           num("gradient", eo.gradient);
           num("gradient_sigma", eo.gradient_sigma);
           num("ambiguity_db", eo.ambiguity_db);

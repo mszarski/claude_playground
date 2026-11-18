@@ -97,6 +97,7 @@ py::dict estimate_dict(const live::MultipathEstimate& e) {
   d["searched"] = py::make_tuple(e.searched_lo, e.searched_hi);
   d["ensemble"] = e.ensemble;
   d["shadow"] = py::make_tuple(e.shadow_lo, e.shadow_hi);
+  d["candidate"] = e.candidate;
   d["grid"] = py::array_t<double>(static_cast<py::ssize_t>(e.grid.size()), e.grid.data());
   d["envelope"] = py::array_t<double>(static_cast<py::ssize_t>(e.envelope.size()), e.envelope.data());
   return d;
@@ -212,6 +213,15 @@ void bind_refraction(py::module_& m) {
         return ray_dict(live::ray_trace(live::RayProfile(depth, speed, water_depth), z0, launch, r_end));
       },
       "The ray leaving depth z0 at grazing angle launch (rad, positive down), at horizontal range r_end (raytrace.hpp).");
+  m.def(
+      "ray_arrives",
+      [](const std::vector<double>& depth, const std::vector<double>& speed, double water_depth, double receiver_depth, double elevation, double slant_range,
+         int max_bounces, double max_depth) {
+        const live::RayProfile prof(depth, speed, water_depth);
+        const double deepest = prof.has_bottom ? std::min(prof.bottom, std::max(max_depth, receiver_depth)) : std::max(max_depth, receiver_depth);
+        return live::ray_arrives(prof, receiver_depth, elevation, slant_range, max_bounces, deepest);
+      },
+      "Whether sound can arrive from an elevation (rad, up positive) with so few boundary reflections from no deeper than max_depth (raytrace.hpp).");
   m.def("ray_depth_arcs", &live::ray_depth_arcs, py::arg("receiver_depth"), py::arg("elevation"), py::arg("slant_range"), py::arg("ssp_depth"),
         py::arg("ssp_speed"), py::arg("water_depth") = 0.0, "Depth an arrival started at, back along the ray in closed-form arcs (raytrace.hpp).");
   m.def(

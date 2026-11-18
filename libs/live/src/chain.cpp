@@ -493,6 +493,21 @@ Report LiveChain::process(PingRecord& record) {
       }
       at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
     }
+    auto climb = [&]() {
+      // The best rung of the sound-speed ladder this ping: fed from the record, so a replay climbs it the same way.
+      laddered = true;
+      const bool measured = ladder_.absorb(record, eo.surface_z) || opt_.sound_speed > 0.0;
+      ladder = ladder_.evaluate(record.transmit.time_ns, f.origin.x, f.origin.y, f.origin.z - eo.surface_z, sound, measured, water,
+                                eo.ssp_depth, eo.ssp_speed, eo.use_gradient ? eo.gradient : 0.0, eo.gradient_sigma);
+    };
+    if (eo.sector_from_rays) {
+      // hook (opt-in): the elevations sound can arrive from, by rays through the water held this ping
+      if (eo.profile.enabled && eo.depth) climb();
+      const MultipathProfile through = water_profile(eo.profile, laddered ? &ladder : nullptr, eo.ssp_depth, eo.ssp_speed, eo.use_gradient, eo.gradient,
+                                                     eo.gradient_sigma, f.origin.z - eo.surface_z, sound, water);
+      eo.sector_ray_depth = through.depth;
+      eo.sector_ray_speed = through.speed;
+    }
     double noise_weight = 0.0;
     for (const auto& r : rows) noise_weight += weight_power(static_cast<std::int64_t>(r.size()), opt_.hann && opt_.beamformer != "mvdr");
     const std::vector<ElevationEstimate> got = estimate_elevation(record, rows, at, background, ef, eo, noise_weight, opt_.range_cell_m,
@@ -500,11 +515,7 @@ Report LiveChain::process(PingRecord& record) {
     for (std::size_t q = 0; q < order.size(); ++q) els[order[q]] = got[q];
     rep.rows = static_cast<std::int64_t>(rows.size());
     if (eo.profile.enabled && eo.depth) {
-      // The best rung of the sound-speed ladder this ping: fed from the record, so a replay climbs it the same way.
-      laddered = true;
-      const bool measured = ladder_.absorb(record, eo.surface_z) || opt_.sound_speed > 0.0;
-      ladder = ladder_.evaluate(record.transmit.time_ns, f.origin.x, f.origin.y, f.origin.z - eo.surface_z, sound, measured, water,
-                                eo.ssp_depth, eo.ssp_speed, eo.use_gradient ? eo.gradient : 0.0, eo.gradient_sigma);
+      if (!laddered) climb();
       profile_depth = ladder.depth;
       profile_speed = ladder.speed;
       rep.profile_rung = ladder.rung;

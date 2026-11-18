@@ -43,6 +43,11 @@ DEFAULTS = {
     "sector_deg": [-30.0, 30.0, 0.25],  # elevation searched, in the vehicle's frame: first, last, step (up positive)
     "sector_from_depth": None,          # {bounces: 1, margin_deg: 1.0}: search only where water depth and range let an arrival
                                         # come from (straight rays, this many boundary bounces); needs the water depth
+    "sector_from_rays": None,           # {bounces: 2, margin_deg: 1.0, max_depth_m: 500}: search only the elevations sound can
+                                        # arrive from, by rays traced back through the water the chain holds this ping (the
+                                        # ladder's profile, ssp, the assumed gradient, else isovelocity) with at most so many
+                                        # boundary reflections, from no deeper than max_depth_m (or the bottom). Needs no
+                                        # water depth. Keeps a far lobe of unequally spaced rows from being taken for the echo
     "range_window_m": None,             # half-width of the range search about a detection; None: 1.5 range cells
     "max_detections": 32,               # strongest detections given an elevation, per ping
     "arrival": "first",                 # "first": the earliest arrival in the range window that is within
@@ -528,6 +533,18 @@ def estimate(record, rows, subs, hits, backgrounds, frame: Frame, cfg: dict, *, 
             n_b, margin = float(prior.get("bounces", 1)), np.radians(prior.get("margin_deg", 1.0))
             level = np.arcsin(np.clip(-direction(wf, sb, se)[:, 2], -1.0, 1.0))
             allowed = (level <= np.arctan((own + n_b * water) / rng) + margin) & (level >= -np.arctan((water - own + n_b * water) / rng) - margin)
+            if allowed.sum() >= 3:
+                p[~allowed] = 0.0
+        by_rays = cfg.get("sector_from_rays")
+        if by_rays is not None and cfg.get("_sector_profile") is not None:
+            # Rays traced back through the profile: where no sound can come from with so few bounces, do not look.
+            zs, cs = cfg["_sector_profile"]
+            own = float(wf.origin[2] - cfg.get("surface_z", 0.0))
+            level = np.arcsin(np.clip(-direction(wf, sb, se)[:, 2], -1.0, 1.0))
+            can = np.array([core.ray_arrives(zs, cs, water or 0.0, own, float(a), float(rng), int(by_rays.get("bounces", 2)), float(by_rays.get("max_depth_m", 500.0)))
+                            for a in level])
+            reach = int(np.ceil(float(by_rays.get("margin_deg", 1.0)) / float(cfg["sector_deg"][2])))
+            allowed = np.array([can[max(k - reach, 0):k + reach + 1].any() for k in range(len(can))])
             if allowed.sum() >= 3:
                 p[~allowed] = 0.0
         noise = backgrounds[i] / noise_weight                                # at one hydrophone

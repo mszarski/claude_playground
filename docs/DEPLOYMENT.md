@@ -529,6 +529,13 @@ waters, the measurement itself taken as exact; `docs/design/refraction_depth_stu
   ensemble's profiles. Much wider than the sigma means the sigma's single tilt does not describe what is not known.
   The span is only as wide as the configured gradients and extents make it; it is not a bound.
 
+- **Stacked rows with unequal spacing: set `elevation.sector_from_rays: {}`.** Their far lobes are only a few dB down
+  (4 dB for the three-row static array); where several arrivals share a range cell one can win outright, unflagged, and its
+  bearing correction moves the detection by a degree (`ssp_thermocline_static_trial_3row`: -31 degrees on every ping, no
+  track). The key limits the search to elevations a ray with two bounces or fewer can arrive from.
+- **Shallow water without `multipath_depth.bottom`: set `withhold_flagged: true`**, or read `multipath_note` before the
+  depth. A flagged depth's sigma is the fit's and is small even when the fit is to the bottom's echoes.
+
 ### The coverage picture (`chain.coverage`)
 
 One member of the report line says what the sonar can see from where it is (keys: docs/CONFIGURATION.md):

@@ -66,6 +66,14 @@ struct ElevationOptions {
   /// shortest wavelength when that is less).
   double row_tolerance_m = std::numeric_limits<double>::quiet_NaN();
   std::int64_t min_row_elements = 3;  ///< a line of fewer elements than this is not a row
+  /// Opt-in: search only the elevations from which sound can arrive at all, by rays traced back through the water the
+  /// chain holds this ping (the ladder's profile, elevation.ssp, the assumed gradient, else isovelocity): at most
+  /// `sector_rays_bounces` boundary reflections, from no deeper than `sector_rays_max_depth` (or the bottom), widened by
+  /// `sector_rays_margin`. An array of unequally spaced rows has far lobes only a few dB down; where several arrivals
+  /// share a range cell one of them can stand above the true ones, and at 30 degrees its bearing correction is a degree.
+  bool sector_from_rays = false;
+  double sector_rays_bounces = 2.0, sector_rays_margin = 0.017453292519943295, sector_rays_max_depth = 500.0;
+  std::vector<double> sector_ray_depth, sector_ray_speed;   ///< the profile, set by the chain each ping
   /// "arcs" (opt-in): depth_m and its refraction sigma by the chain's one ray calculation (raytrace.hpp: closed-form
   /// arcs layer by layer, the same rays the multipath depth and the coverage picture use). false: the stepped Snell
   /// ray of ray_depth below, as before (the two agree to about 2 m; outputs stay as they were).

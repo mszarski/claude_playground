@@ -262,3 +262,61 @@ def test_with_sbl_bearings_the_stage_still_gives_the_depth():
         reps = chain.run([r.copy() for r in records])
     depths = [d["depth_multipath_m"] for rep in reps for d in rep["detections"] if d.get("depth_multipath_m") is not None]
     assert depths and min(abs(z - 150.0) for z in depths) < 2.0, [d for rep in reps for d in rep["detections"]]
+
+
+# --- findings from the range-dependent waters (tools/ssp_range_study.py) ---------------------------------------------------
+
+def test_a_flagged_depth_can_be_withheld():
+    """100 m of water over sand, a target at 70 m, 2 km, no bottom in the pattern: the stage fits the bottom's echoes,
+    gives a depth near the bottom with a small sigma and the note bottom_unmodelled. With withhold_flagged it gives no
+    depth: the note becomes the reason and the fitted value is kept as a candidate."""
+    cfg = T.scenario(50.0, 70.0, 2000.0, ts=0.0, bottom_z=100.0)
+    slant = float(np.hypot(2000.0, 20.0)) + 1.0
+    rec, origin = T.prepared(cfg)
+    shown = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, mp.cpp_options(dict(T.KNOWN, water_depth=100.0)))
+    held = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, mp.cpp_options(dict(T.KNOWN, water_depth=100.0, withhold_flagged=True)))
+    assert shown["valid"] and shown["reason"] == "bottom_unmodelled" and abs(shown["depth"] - 70.0) > 5.0 * shown["sigma"]     # confidently wrong, flagged
+    assert not held["valid"] and held["reason"] == "bottom_unmodelled" and np.isnan(held["depth"]) and held["candidate"] == pytest.approx(shown["depth"])
+    assert held["grid"].size == 0                                                    # nothing for a track to add up
+    clean = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, mp.cpp_options(dict(T.KNOWN, water_depth=100.0, bottom=T.SAND, withhold_flagged=True)))
+    assert (clean["valid"] and abs(clean["depth"] - 70.0) < 1.0) or clean["reason"] == "bottom_order"   # with the bottom in the pattern: the depth, or the other note
+
+
+def test_rays_say_where_sound_can_arrive_from():
+    """ray_arrives: in 100 m of water at 2.6 km nothing arrives from 31 degrees below the horizontal with two bounces or
+    fewer, and the few degrees about the horizontal do; without a known bottom the steep ray is excluded by depth."""
+    d, c = [0.0, 15.0, 35.0, 100.0], [1500.0, 1500.0, 1485.0, 1486.1]
+    assert not core.ray_arrives(d, c, 100.0, 30.0, np.radians(-31.0), 2633.0, 2, 500.0)
+    assert core.ray_arrives(d, c, 100.0, 30.0, np.radians(1.8), 2633.0, 2, 500.0)
+    assert core.ray_arrives(d, c, 100.0, 30.0, np.radians(-31.0), 2633.0, 40, 500.0)          # with enough bounces anything arrives
+    assert not core.ray_arrives([0.0, 1.0], [1500.0, 1500.0], 0.0, 30.0, np.radians(-31.0), 2633.0, 2, 500.0)
+    assert core.ray_arrives([0.0, 1.0], [1500.0, 1500.0], 0.0, 30.0, np.radians(-5.0), 2633.0, 2, 500.0)
+
+
+@pytest.mark.skipif(not os.environ.get("GPUSONAR_BELLHOP"), reason="Bellhop not available (GPUSONAR_BELLHOP)")
+def test_three_rows_far_lobe_in_a_deepening_thermocline_is_kept_out_by_the_rays_sector():
+    """configs/scenarios/ssp_thermocline_static_trial_3row (target at 2.6 km, 60 m deep; no arrival steeper than about 20
+    degrees): the three unequally spaced rows of the static array have far lobes a few dB down, several arrivals share
+    the range cell, and the chain as deployed takes a lobe 31 degrees below the horizontal on every ping, unflagged on
+    most; its bearing correction moves the detection by a degree and no track confirms. With elevation.sector_from_rays
+    the search is limited to where sound can come from, on both engines: the elevation is the arrival's, the bearing
+    stays, and the target is tracked."""
+    from gpusonar.config import load_scenario_config, load_yaml
+    records = run_scenario(load_scenario_config("ssp_thermocline_static_trial_3row")).records
+    deploy = load_yaml(str(Path(__file__).resolve().parents[2] / "configs" / "deploy" / "popoto_static_3row.yaml"))["chain"]
+    with LiveChain(dict(copy.deepcopy(deploy), engine="cpp", backend="host")) as chain:
+        shipped = chain.run([r.copy() for r in records])
+    assert all(abs(rep["detections"][0]["elevation_deg"]) > 25.0 for rep in shipped)                 # the finding, as deployed
+    assert not any(t["kind"] != "multipath" for rep in shipped for t in rep["tracks"])
+    got = {}
+    for engine in ("cpp", "python"):
+        cfg = copy.deepcopy(deploy)
+        cfg["elevation"] = dict(cfg["elevation"], sector_from_rays={})
+        with LiveChain(dict(cfg, engine=engine, backend="host")) as chain:
+            got[engine] = chain.run([r.copy() for r in records])
+        for rep in got[engine]:
+            d = max(rep["detections"], key=lambda x: x["snr_db"])
+            assert abs(d["elevation_deg"]) < 8.0 and d["bearing_deg"] == pytest.approx(shipped[0]["detections"][0]["cone_bearing_deg"], abs=0.3), (engine, d)
+        assert any(abs(t["range_m"] - 2613.0) < 40.0 and t["kind"] != "multipath" for t in got[engine][-1]["tracks"]), engine
+    for a, b in zip(got["cpp"], got["python"]):
+        assert max(a["detections"], key=lambda x: x["snr_db"])["elevation_deg"] == pytest.approx(max(b["detections"], key=lambda x: x["snr_db"])["elevation_deg"], abs=0.3)

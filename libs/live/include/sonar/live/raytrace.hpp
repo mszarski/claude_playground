@@ -80,6 +80,12 @@ RayEnd ray_trace(const RayProfile& profile, double z0, double launch, double r_e
 double ray_depth_arcs(double receiver_depth, double elevation, double slant_range, const std::vector<double>& ssp_depth,
                       const std::vector<double>& ssp_speed, double water_depth = 0.0);
 
+/// Whether sound can arrive at `receiver_depth` from elevation `elevation` (rad, UP positive) after a slant range
+/// `slant_range` with at most `max_bounces` boundary reflections, from a depth no greater than `max_depth` (m; the water
+/// depth when the profile has a bottom above it): the ray traced back from the receiver for the straight path's
+/// horizontal distance. What the stacked rows' elevation search may be limited to (elevation.sector_from_rays).
+bool ray_arrives(const RayProfile& profile, double receiver_depth, double elevation, double slant_range, int max_bounces, double max_depth);
+
 /// Plane-wave pressure reflection coefficient of a fluid half-space (Rayleigh), as sim/propagation.py:
 /// R = (m sin g - sqrt(n^2 - cos^2 g)) / (m sin g + sqrt(n^2 - cos^2 g)), m = rho_b / rho_w, n = c_w / c_b,
 /// attenuation (dB per wavelength) as an imaginary part of c_b.

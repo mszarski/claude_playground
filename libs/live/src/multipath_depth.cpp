@@ -186,6 +186,7 @@ bool set_multipath_option(MultipathOptions& o, const std::string& key, const std
   else if (k == "track_memory_pings") o.track_memory_pings = v;
   else if (k == "consistency_sigma") o.consistency_sigma = v;
   else if (k == "rays") o.rays = v != 0.0;
+  else if (k == "withhold_flagged") o.withhold_flagged = v != 0.0;
   else if (k == "ray_fan") o.ray_fan = i;
   else if (k == "ray_surface_order") o.ray_surface_order = i;
   else if (k == "ray_min_amplitude") o.ray_min_amplitude = v;
@@ -543,6 +544,14 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
       est.reason = "bottom_order";
     }
   }
+  if (o.withhold_flagged && !est.reason.empty()) {
+    est.candidate = est.depth;
+    est.valid = false;
+    est.depth = est.sigma = kNaN;
+    est.method = "none";
+    est.grid.clear();
+    est.envelope.clear();
+  }
   return est;
 }
 
@@ -759,6 +768,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
       }
     } else {
       s << ", \"multipath_reason\": \"" << e.reason << "\"";
+      if (std::isfinite(e.candidate)) s << ", \"multipath_candidate_m\": " << e.candidate;
       if (is_track) s << ", \"multipath_pings\": " << e.arrivals;
     }
     if (!e.profile_source.empty()) s << ", \"multipath_profile_source\": \"" << e.profile_source << "\"";

@@ -162,6 +162,11 @@ double ray_depth_arcs(double receiver_depth, double elevation, double slant_rang
   return ray_trace(prof, receiver_depth, -elevation, 0.5 * (lo + hi)).z;
 }
 
+bool ray_arrives(const RayProfile& profile, double receiver_depth, double elevation, double slant_range, int max_bounces, double max_depth) {
+  const RayEnd end = RayStepper(profile, receiver_depth, -elevation).to(std::max(slant_range * std::cos(elevation), 1.0), max_bounces);
+  return end.ok && end.n_surface + end.n_bottom <= max_bounces && end.z <= max_depth;
+}
+
 cd rayleigh_reflection(double grazing, double c_water, double speed, double density, double attenuation) {
   const double delta = attenuation / (40.0 * kPi * std::log10(std::exp(1.0)));
   const cd c_b = speed / cd(1.0, delta);
