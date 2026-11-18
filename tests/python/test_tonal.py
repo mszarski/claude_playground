@@ -736,6 +736,7 @@ def test_program_listening_to_a_board_stream_gives_the_batch_results(tmp_path):
         _, err = proc.communicate(timeout=300.0)
     finally:
         proc.kill()
+    assert proc.returncode == 0, f"the program ended abnormally ({proc.returncode}): {err.strip()[-400:]}"   # a crash is not lost data
     frames = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
     if "0 dropped, 0 samples lost" not in err or len(frames) < n_frames:
         pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")

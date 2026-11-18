@@ -259,7 +259,8 @@ bool Navigation::apply(PingRecord& record) const {
   std::size_t i = 0;
   while (i < fixes_.size() && fixes_[i].time_ns < t) ++i;
   if (i == 0 || i == fixes_.size()) {
-    std::copy(std::begin(fixes_[std::min(i, fixes_.size() - 1)].v), std::end(fixes_[std::min(i, fixes_.size() - 1)].v), v);
+    // A fix holds eleven values (pose, velocity, then sound speed and water depth); the pose is the first nine.
+    std::copy_n(std::begin(fixes_[std::min(i, fixes_.size() - 1)].v), 9, v);
   } else {
     const Fix& a = fixes_[i - 1];
     const Fix& b = fixes_[i];
