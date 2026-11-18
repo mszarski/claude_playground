@@ -554,9 +554,9 @@ What can be had back, measured on the shipped stage scenarios and the 12 km stan
 
 | Change | Point echo, free field | On the scenarios | Cost |
 | --- | --- | --- | --- |
-| `cell_statistic: peak` (the cell holds its largest sample; the background is then the mean of such maxima, 4.3 dB above the mean noise for 8 samples) | +2.8 dB | −0.9 to +3.1 dB on the strongest detection; same detections and tracks, except that the 12 km mover was still `uncertain` after four pings where it was `mover` | none in compute |
-| `range_cell_m` at 0.75 of the resolution (one sample per cell, no averaging) | +7.2 dB | +3.4 to +6.3 dB on the strongest detection, but 5 to 16 detections where there was 1 (range sidelobes of the compressed pulse and the target's own highlights become detections of their own), 4 to 8 tracks where there was 1, and the 12 km mover `uncertain` | tracks fragment |
-| `window: rect` | +1.8 dB | 20 to 50 detections per ping where there were 1 to 3 (bearing sidelobes) | false tracks |
+| `cell_statistic: peak` (the cell holds its largest sample; the background is then the mean of such maxima, 4.3 dB above the mean noise for 8 samples) | +2.8 dB | −0.9 to +3.1 dB on the strongest detection; detections and tracks nearly as before (one more weak track on the three-row trial), but the 12 km mover was still `uncertain` after four pings where it was `mover` | none in compute |
+| `range_cell_m` at 0.75 of the resolution (one sample per cell, no averaging) | +7.2 dB | +3.4 to +6.3 dB on the strongest detection, but 2 to 17 detections a ping where there were 1 to 3 (range sidelobes of the compressed pulse and the target's own highlights become detections of their own), several tracks where there was one, and the 12 km mover `uncertain` | tracks fragment |
+| `window: rect` | +1.8 dB | not run alone; with the small cell above, 15 to 52 detections a ping (bearing sidelobes as well) | false tracks |
 
 Neither is the default: the 2 m cell of mean power also merges an echo's range sidelobes and highlights into one
 detection, which is what the tracker needs, and the measured gain of `peak` on echoes that are not points is small.
