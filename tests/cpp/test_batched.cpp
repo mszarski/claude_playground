@@ -42,6 +42,7 @@ PingRecord noisy_record(std::int64_t n_samples = 1500) {
   for (std::int64_t e = 0; e < n_el; ++e) {
     Element el;
     el.lever_arm = Vec3d{(static_cast<double>(e) - 0.5 * static_cast<double>(n_el - 1)) * pitch, 0.0, 0.0};
+    el.boresight = Vec3d{0.0, 1.0, 0.0};  // stated: a record has no default look direction
     r.geometry.rx.push_back(el);
   }
   set_default_channel_tables(r);
