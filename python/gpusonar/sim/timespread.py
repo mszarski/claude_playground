@@ -137,6 +137,57 @@ across it).
    explicit `rms_height` (m) replaces the wind law's (the slope and the vertical speed stay
    the wind's unless given too); `height_scale` multiplies whichever height is in force, for
    when only a ratio is known. Default 1.
+
+7. How far the taps reach (`tail_quantile`). By default the taps span three mean excess delays,
+   whatever the shape. The facet shape of (2) is long-tailed at low grazing angles: it falls as
+   exp(-tau / 2a) / sqrt(tau), an e-fold of twice its mean, and 8.3 % of its energy lies beyond
+   three means (5 % for an exponential). That energy is not lost (the taps are normalised) but
+   it is put too early. With `tail_quantile` = q the taps span the delay within which a share q
+   of the response's energy arrives: the q-quantile of the gamma distribution with the tail's
+   mean and variance (for one facet bounce mean a + b and variance 2 (a^2 + b^2): exact for
+   b -> 0, where the shape is a chi-square of one degree of freedom, and for a = b, the
+   exponential; in between the covered share is within 0.006 of q, tested). For one rough
+   bounce each tap then carries the exact energy of its interval of delay (the shape
+   integrated over it, the last one with everything later) at that interval's own mean delay,
+   so energy and mean excess delay are the shape's own with no rescaling. Several bounces:
+   the same grid rule as before on the longer span. Not given: three means, the earlier taps
+   bit for bit. Cost: the taps are that much farther apart, so the same spacing needs
+   q-quantile / 3 means times as many (2.2 times at q = 0.99 for a low-angle facet bounce).
+
+8. Slow wander of the coherent arrival (`coherent_phase`; class `CoherentPhase`). Above, the
+   coherent part of a surface bounce is perfectly steady. Measured at Gamma^2 = 0.03 it is not:
+   its phase wanders slowly (PHYSICS_NOTES Sec. 21.6: variance 0.0084 rad^2, 0.36 Hz rms, a line
+   near 0.2 Hz) while the tail behind it fluctuates faster. The long waves of the surface move
+   the whole reflecting patch up and down: a change of path length -2 zeta sin g, zeta their
+   displacement (towards the water) at the specular point. With `coherent_phase` the surface's
+   height is split: a large-scale part of rms height h_L (`rms_height`, or `share` of the
+   surface's mean-square height) made of `waves` sinusoids zeta = sum A_n cos(psi_n),
+   psi_n = 2 pi f_n t - K_n . x + theta_n, with frequencies from the stated spectrum
+   (`period_s`: a line at 1 / period of relative rms width `relative_width`; or
+   `spectrum: {frequency_hz, density}`), deep-water wavenumbers K = (2 pi f)^2 / 9.81 and the
+   direction of travel `direction_deg` (+- `spread_deg`); and the rest, which scatters as
+   before (its coherent factor, its tail and the tail's Doppler width now use the rest's
+   height sqrt(h^2 - h_L^2) and the surface's `rms_vertical_speed`, which is thereby the
+   tail's own rate). First-order theory of reflection from a slightly sinusoidal mirror (the
+   Fresnel integral over the delay ellipses of this docstring's geometry; derived for this
+   module, not from a paper) gives each wave's effect on the reflection as the factor
+       1 + i z_n cos(psi_n) exp(i Theta_n),   z_n = 2 k A_n sin g,
+       Theta_n = rho K_n^2 (cos^2(a_n) / sin^2 g + sin^2(a_n)) / (2 k),   rho = r1 r2 / (r1 + r2),
+   a_n the angle between the wave's direction and the path. Theta is the phase by which the
+   wave's first diffraction orders lag the specular reflection. Small Theta (the Fresnel zone
+   is smaller than the wave): a pure change of path length, which is applied AS ONE: the ray's
+   delay moves by -(2 sin g / c) sum A_n cos(Theta_n) cos(psi_n) and it gets the matching rate
+   of change of path length, so the phase is proportional to frequency across the band,
+   continuous through a ping (linear in time within it) and from ping to ping. The part
+   z_n sin(Theta_n) cos(psi_n) is a change of amplitude (focusing by the wave's curvature;
+   `focusing: false` leaves it out), applied at the centre frequency with the mean energy kept.
+   Waves with Theta_n above `fresnel_limit` (default 1 rad) are left with the scattering part:
+   their diffraction orders are separate, later arrivals, which is what the tail is. At long
+   range and low grazing angles that is every wave: the Fresnel zone spans many crests, the
+   coherent arrival does not wander, and this option changes nothing there. That limit is ours.
+   The source's own heave is indistinguishable from this in one hydrophone's data and is
+   not modelled here (a moving source or platform is: give it a velocity). `legs: 1` for
+   one-way sources (the time within a ping at which the surface is met differs).
 """
 from __future__ import annotations
 
@@ -224,6 +275,40 @@ def facet_delay_density(tau, a, b):
         return np.exp(-tau / (2.0 * a)) * _i0e(tau * (a - b) / (4.0 * a * b)) / (2.0 * np.sqrt(a * b))
 
 
+def tail_span(mean, variance, quantile: float):
+    """Delay within which a share `quantile` of a tail's energy arrives: the quantile of the
+    gamma distribution of that mean and variance (shape mean^2 / variance)."""
+    from scipy.special import gammaincinv
+    mean, variance = np.asarray(mean, dtype=float), np.asarray(variance, dtype=float)
+    ok = (mean > 0.0) & (variance > 0.0)
+    shape = np.where(ok, mean**2 / np.where(ok, variance, 1.0), 1.0)
+    return np.where(ok, gammaincinv(shape, float(quantile)) * np.where(ok, variance, 0.0) / np.where(ok, mean, 1.0), 0.0)
+
+
+_GAUSS = np.polynomial.legendre.leggauss(12)
+
+
+def facet_intervals(edges, a, b):
+    """Energy and mean delay of the facet response in each interval of delay between consecutive
+    `edges` [..., J + 1] (the first 0), the last interval taking everything later: (weight
+    [..., J] summing to 1, delay [..., J]). Gauss-Legendre in sqrt(tau), which removes the
+    shape's 1 / sqrt(tau) at the origin."""
+    edges = np.asarray(edges, dtype=float)
+    a, b = np.asarray(a, dtype=float)[..., None, None], np.asarray(b, dtype=float)[..., None, None]
+    lo, hi = np.sqrt(edges[..., :-1, None]), np.sqrt(edges[..., 1:, None])
+    x, w = _GAUSS
+    u = 0.5 * (hi + lo) + 0.5 * (hi - lo) * x                                          # [..., J, 12]
+    f = facet_delay_density(u * u, a, b) * 2.0 * u * (0.5 * (hi - lo) * w)
+    weight, moment = f.sum(axis=-1), (f * u * u).sum(axis=-1)
+    mean_all = (a + b)[..., 0, 0]
+    # The last interval runs to infinity: what is left of the energy and of the first moment.
+    rest = np.maximum(1.0 - weight[..., :-1].sum(axis=-1), 1e-300)
+    rest_moment = np.maximum(mean_all - moment[..., :-1].sum(axis=-1), rest * edges[..., -2])
+    weight = np.concatenate([weight[..., :-1], rest[..., None]], axis=-1)
+    moment = np.concatenate([moment[..., :-1], rest_moment[..., None]], axis=-1)
+    return weight, moment / np.maximum(weight, 1e-300)
+
+
 def iso_delay_angle(kappa, u, v, n_grid: int = 129):
     """Where on its circle of equal delay a tap's facet lies: the angle psi (0: along the path,
     towards the far end; pi/2: across it) drawn from the density exp(kappa cos 2 psi) by
@@ -271,6 +356,87 @@ def _turn(direction, angle, psi, sign: float):
     return out / np.linalg.norm(out, axis=-1, keepdims=True)
 
 
+class CoherentPhase:
+    """The large-scale part of the surface and what it does to a coherent reflection (module
+    docstring, 8). cfg: {rms_height | share, period_s | spectrum, direction_deg} and optional
+    relative_width (0.1), spread_deg (0), waves (16), fresnel_limit (1.0), focusing (true),
+    span_s (0: the pulse length, so that the phase is right at mid-pulse), legs (2: echoes; 1:
+    one-way sources), seed."""
+
+    GRAVITY = 9.81
+    _KEYS = {"rms_height", "share", "period_s", "spectrum", "direction_deg", "relative_width", "spread_deg", "waves", "fresnel_limit",
+             "focusing", "span_s", "legs", "seed"}
+
+    def __init__(self, cfg: dict, *, frequency: float, seed: int = 0):
+        unknown = set(cfg) - self._KEYS
+        if unknown:
+            raise ValueError(f"time_spread: coherent_phase: unknown keys {sorted(unknown)}")
+        if ("rms_height" in cfg) == ("share" in cfg):
+            raise ValueError("time_spread: coherent_phase needs rms_height (m) or share (of the surface's mean-square height), one of them")
+        if ("period_s" in cfg) == ("spectrum" in cfg):
+            raise ValueError("time_spread: coherent_phase needs period_s or spectrum: {frequency_hz, density}, one of them")
+        if "direction_deg" not in cfg:
+            raise ValueError("time_spread: coherent_phase needs direction_deg (where the long waves travel to, from +x towards +y)")
+        from scipy.special import ndtri
+        self.frequency = float(frequency)
+        self.rms_height = None if "rms_height" not in cfg else float(cfg["rms_height"])
+        self.share = None if "share" not in cfg else float(cfg["share"])
+        if self.share is not None and not 0.0 <= self.share <= 1.0:
+            raise ValueError("time_spread: coherent_phase.share is between 0 and 1")
+        n = int(cfg.get("waves", 16))
+        self.fresnel_limit = float(cfg.get("fresnel_limit", 1.0))
+        self.focusing = bool(cfg.get("focusing", True))
+        self.span, self.legs = float(cfg.get("span_s", 0.0)), int(cfg.get("legs", 2))
+        if self.legs not in (1, 2):
+            raise ValueError("time_spread: coherent_phase.legs is 2 (echoes) or 1 (one-way sources)")
+        with np.errstate(over="ignore"):
+            key = _mix(np.uint64(int(cfg.get("seed", seed))) * _M3 ^ np.uint64(0xC0FFEE) ^ (np.arange(n, dtype=np.uint64) + np.uint64(1)) * _M1)
+        q = (np.arange(n) + 0.5) / n
+        if "period_s" in cfg:
+            f0 = 1.0 / float(cfg["period_s"])
+            f = f0 * np.maximum(1.0 + float(cfg.get("relative_width", 0.1)) * ndtri(q), 0.05)
+        else:
+            sp = cfg["spectrum"]
+            fx, d = np.asarray(sp["frequency_hz"], dtype=float), np.maximum(np.asarray(sp["density"], dtype=float), 0.0)
+            fine = np.linspace(fx[0], fx[-1], 4096)
+            cdf = np.cumsum(np.interp(fine, fx, d))
+            f = np.interp(q, cdf / cdf[-1], fine)
+        self.wave_frequency = f                                                        # Hz, [N]
+        self.wavenumber = (2.0 * np.pi * f) ** 2 / self.GRAVITY                        # rad/m, deep water
+        heading = np.radians(float(cfg["direction_deg"])) + np.radians(float(cfg.get("spread_deg", 0.0))) * ndtri(np.clip(_uniform(key, 21), 1e-9, 1 - 1e-9))
+        self.direction = np.stack([np.cos(heading), np.sin(heading)], axis=1)          # [N, 2]
+        self.theta = 2.0 * np.pi * _uniform(key, 22)
+        self.weight = np.full(n, 1.0 / n)                                              # share of the large-scale mean-square height per wave
+
+    def height2(self, surface_rms_height: float) -> float:
+        """Mean-square height of the large-scale part, m^2 (never more than the surface's)."""
+        h2 = self.share * surface_rms_height**2 if self.rms_height is None else self.rms_height**2
+        if h2 > surface_rms_height**2 * (1.0 + 1e-9):
+            raise ValueError("time_spread: coherent_phase.rms_height is larger than the surface's rms_height")
+        return float(min(h2, surface_rms_height**2))
+
+    def modulation(self, t, xy, path_direction, sin_g, rho, sound_speed: float, surface_rms_height: float) -> dict:
+        """What the long waves do to a coherent reflection at time t (s) whose specular point is at
+        xy [..., 2], on a path of horizontal direction path_direction [..., 2] (unit), grazing
+        angle arcsin(sin_g), rho = r1 r2 / (r1 + r2) (m). Returns the change of delay `delay` (s)
+        and its rate `delay_rate` (s/s), the relative change of amplitude `amplitude` (zero
+        mean) with its variance `amplitude_variance`, and `height2`, the mean-square height of
+        the waves that took part (m^2); all of t's shape."""
+        t, sin_g, rho = np.asarray(t, dtype=float)[..., None], np.asarray(sin_g, dtype=float)[..., None], np.asarray(rho, dtype=float)[..., None]
+        k = 2.0 * np.pi * self.frequency / float(sound_speed)
+        amp = np.sqrt(2.0 * self.weight * self.height2(surface_rms_height))             # [N]
+        cos2 = np.clip((np.asarray(path_direction, dtype=float)[..., None, :] * self.direction).sum(axis=-1) ** 2, 0.0, 1.0)     # [..., N]
+        fresnel = rho * self.wavenumber**2 * (cos2 / np.maximum(sin_g, 1e-6) ** 2 + (1.0 - cos2)) / (2.0 * k)
+        keep = fresnel < self.fresnel_limit
+        psi = 2.0 * np.pi * self.wave_frequency * t - (np.asarray(xy, dtype=float)[..., None, :] * (self.wavenumber[:, None] * self.direction)).sum(axis=-1) + self.theta
+        part = np.where(keep, amp * np.cos(fresnel), 0.0)
+        z = 2.0 * k * sin_g * np.where(keep, amp * np.sin(fresnel), 0.0) * (1.0 if self.focusing else 0.0)
+        return {"delay": -(2.0 * sin_g[..., 0] / sound_speed) * (part * np.cos(psi)).sum(axis=-1),
+                "delay_rate": (2.0 * sin_g[..., 0] / sound_speed) * (part * 2.0 * np.pi * self.wave_frequency * np.sin(psi)).sum(axis=-1),
+                "amplitude": -(z * np.cos(psi)).sum(axis=-1), "amplitude_variance": 0.5 * (z**2).sum(axis=-1),
+                "height2": np.where(keep, 0.5 * amp**2, 0.0).sum(axis=-1)}
+
+
 class TimeSpreadProvider(EigenrayProvider):
     """An eigenray provider with time-spread bounce paths (see the module docstring).
 
@@ -293,7 +459,13 @@ class TimeSpreadProvider(EigenrayProvider):
                  surface_sound_speed: float | None = None, bottom_sound_speed: float | None = None,
                  incoherent: bool = True, angle_spread: bool = False, decay_time: str = "facet",
                  doppler: bool = False, doppler_spectrum: str = "gaussian", doppler_lines: int = 8,
-                 multi_bounce: str = "convolve", tap_shape=None, texture_rate: float = 0.25):
+                 multi_bounce: str = "convolve", tap_shape=None, texture_rate: float = 0.25,
+                 tail_quantile: float | None = None, coherent_phase: dict | None = None):
+        # How far the taps reach (module docstring, 7): None = three mean excess delays, as always.
+        self.tail_quantile = None if tail_quantile is None else float(tail_quantile)
+        if self.tail_quantile is not None and not 0.5 <= self.tail_quantile < 1.0:
+            raise ValueError("time_spread: tail_quantile is a share of the energy, 0.5 to below 1")
+        self.coherent_phase = None if not coherent_phase else CoherentPhase(coherent_phase, frequency=float(frequency), seed=int(seed))
         # K-type level fluctuation of the scattered part (module docstring, 5): None = Gaussian taps.
         self.tap_shape = None
         if isinstance(tap_shape, dict):
@@ -393,6 +565,7 @@ class TimeSpreadProvider(EigenrayProvider):
         own2 = np.zeros((s, k))                # the same without the sonar's motion: the boundary's own speed
         facet = self.decay_time == "facet"
         slots = []                             # the rough bounces of each ray, in path order
+        wander = {"delay": np.zeros((s, k)), "rate": np.zeros((s, k)), "gain": np.ones((s, k))}    # of the coherent arrival (coherent_phase)
         for i in range(frac.shape[-1]):
             for surface, par, c_b in ((True, self.surface, self.c_surface), (False, self.bottom, self.c_bottom)):
                 if par is None:
@@ -403,7 +576,24 @@ class TimeSpreadProvider(EigenrayProvider):
                 # Grazing angle at the boundary from the launch angle by Snell's law.
                 cos_g = np.clip(cos_launch * ((c_b or c) / c), 0.0, 1.0)
                 grazing = np.arccos(cos_g)
-                r = acoustics.rough_coherent_reflection(grazing, par["rms_height"], self.frequency, c_b or c)
+                height = par["rms_height"]
+                if surface and self.coherent_phase is not None:
+                    # The long waves heave the coherent reflection (module docstring, 8); the rest of the height scatters.
+                    horizontal = points[:, None, :2] - source[None, None, :2]
+                    span = np.linalg.norm(horizontal, axis=-1, keepdims=True)
+                    f_here = np.where(here, frac[..., i], 0.5)
+                    when = self.time + self.coherent_phase.span / 2.0 + (base.delay if self.coherent_phase.legs == 2 else 0.0)
+                    mod = self.coherent_phase.modulation(when, source[None, None, :2] + f_here[..., None] * horizontal,
+                                                         horizontal / np.maximum(span, 1e-9), np.sin(grazing),
+                                                         (c_b or c) * f_here * (1.0 - f_here) * base.delay, c_b or c, par["rms_height"])
+                    wander["delay"] += np.where(here, mod["delay"], 0.0)
+                    wander["rate"] += np.where(here, mod["delay_rate"], 0.0)
+                    wander["gain"] *= np.where(here, (1.0 + mod["amplitude"]) / np.sqrt(1.0 + mod["amplitude_variance"]), 1.0)
+                    height = np.sqrt(np.maximum(par["rms_height"] ** 2 - mod["height2"], 0.0))
+                if np.ndim(height) == 0:
+                    r = acoustics.rough_coherent_reflection(grazing, height, self.frequency, c_b or c)
+                else:                                   # the same factor, exp(-Gamma^2 / 2), for a height that differs from ray to ray
+                    r = np.exp(-0.5 * (4.0 * np.pi * self.frequency / (c_b or c) * height * np.sin(grazing)) ** 2)
                 coherent2 = np.where(here, coherent2 * r**2, coherent2)
                 if "bubble_loss" in par:
                     loss_db = np.interp(grazing, *par["bubble_loss"])
@@ -435,7 +625,15 @@ class TimeSpreadProvider(EigenrayProvider):
             mean_excess = np.where(many, scattered / np.maximum(1.0 - coherent2, 1e-300), mean_excess)
         # Taps: equally spaced from one spacing after the specular delay, exponential mean intensity.
         j = np.arange(1, self.taps + 1)
-        spacing = np.maximum(3.0 * mean_excess / self.taps, self.min_spacing)             # [S, K]
+        if self.tail_quantile is None:
+            spacing = np.maximum(3.0 * mean_excess / self.taps, self.min_spacing)         # [S, K]
+        else:
+            # The span that holds that share of the energy (module docstring, 7): all bounces scattering.
+            m_all = sum(slot["mean"] for slot in slots)
+            v_all = sum((2.0 * (slot["along"] ** 2 + slot["across"] ** 2)) if facet else slot["mean"] ** 2 for slot in slots)
+            if self.multi_bounce == "sum":
+                v_all = np.where(n_rough >= 2, m_all**2, v_all)
+            spacing = np.maximum(tail_span(m_all, v_all, self.tail_quantile) / self.taps, self.min_spacing)
         tau = spacing[..., None] * j                                                       # [S, K, J]
         decay = np.maximum(mean_excess, 1e-12)[..., None]
         weight = np.exp(-tau / decay)
@@ -453,6 +651,16 @@ class TimeSpreadProvider(EigenrayProvider):
         mean_tau = (weight * tau).sum(axis=-1, keepdims=True)
         scale = np.where(spacing[..., None] > self.min_spacing, decay / np.maximum(mean_tau, 1e-30), 1.0)
         tau = np.where(mean_excess[..., None] > 0.0, tau * scale, 0.0)
+        if self.tail_quantile is not None:
+            # One rough bounce: each tap is its interval of delay, exactly (the exponential is the facet shape with a = b).
+            one = (n_rough == 1) & (mean_excess > 0.0) & (spacing > self.min_spacing)
+            if one.any():
+                a_one = sum(slot["along"] for slot in slots) if facet else 0.5 * mean_excess
+                b_one = sum(slot["across"] for slot in slots) if facet else 0.5 * mean_excess
+                edges = np.where(one, spacing, 1.0)[..., None] * np.arange(0, self.taps + 1)
+                w_exact, t_exact = facet_intervals(edges, np.where(one, a_one, 1.0), np.where(one, b_one, 1.0))
+                weight = np.where(one[..., None], w_exact, weight)
+                tau = np.where(one[..., None], t_exact, tau)
         gaussian = self.doppler_spectrum == "gaussian"
         # The rms width of the scattered part's spectrum, as a speed (module docstring, 3).
         speed_sin = np.sqrt(speed2 / np.maximum(1.0 - coherent2, 1e-12)) if gaussian else np.sqrt(speed2)
@@ -488,9 +696,21 @@ class TimeSpreadProvider(EigenrayProvider):
         def widen(a, extra):
             return np.concatenate([a, extra.reshape(s, -1, *a.shape[2:])], axis=1)
 
+        coherent_delay, coherent_gain = base.delay, 1.0
+        if self.coherent_phase is not None:
+            # The delay moves with the surface; within the ping it goes on at its rate. The kernel takes the rate from the
+            # time the sound meets the scatterer (echoes) or leaves the source (one-way): the delay is set so that it is
+            # right at mid-pulse.
+            met = self.coherent_phase.span / 2.0 + (base.delay if self.coherent_phase.legs == 2 else 0.0)
+            coherent_delay = base.delay + np.where(bounces, wander["delay"] - wander["rate"] * met, 0.0)
+            coherent_gain = np.where(bounces, wander["gain"], 1.0)
+            rate = np.where(bounces, c * wander["rate"], 0.0)
+            n_extra = tap_delay.reshape(s, -1).shape[1]
+            range_rate = np.concatenate([rate, np.zeros((s, n_extra))], axis=1) if range_rate is None else range_rate + np.concatenate([rate, np.zeros((s, n_extra))], axis=1)
+
         return EigenraySet(
-            delay=widen(base.delay, tap_delay),
-            amplitude=widen(np.where(bounces, total * np.sqrt(coherent2), base.amplitude), tap_amp),
+            delay=widen(coherent_delay, tap_delay),
+            amplitude=widen(np.where(bounces, total * np.sqrt(coherent2), base.amplitude) * coherent_gain, tap_amp),
             launch=widen(base.launch, tap_launch), arrival=widen(base.arrival, tap_arrival),
             n_surface=widen(base.n_surface, tap_ns), n_bottom=widen(base.n_bottom, tap_nb),
             valid=widen(base.valid, tap_valid), sound_speed=c, range_rate=range_rate)
@@ -624,7 +844,8 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
     """Wrap a provider according to a scenario's `time_spread` section:
     {surface: {wind_speed | rms_height, mean_square_slope, rms_vertical_speed}, bottom: {...},
      taps, min_spacing, coherence_length, seed, incoherent,
-     angle_spread, decay_time, doppler, doppler_spectrum, doppler_lines, multi_bounce, tap_shape, texture_rate};
+     angle_spread, decay_time, doppler, doppler_spectrum, doppler_lines, multi_bounce, tap_shape, texture_rate,
+     tail_quantile, coherent_phase: {...}};
     the surface section also takes `rms_height` beside `wind_speed`, and `height_scale`."""
     surface = boundary_parameters(cfg.get("surface"), surface=True, frequency=float(cfg.get("frequency", frequency)))
     bottom = boundary_parameters(cfg.get("bottom"), surface=False)
@@ -653,4 +874,5 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
                               doppler_spectrum=str(cfg.get("doppler_spectrum", "gaussian")),
                               doppler_lines=int(cfg.get("doppler_lines", 8)),
                               multi_bounce=str(cfg.get("multi_bounce", "convolve")),
-                              tap_shape=cfg.get("tap_shape"), texture_rate=float(cfg.get("texture_rate", 0.25)))
+                              tap_shape=cfg.get("tap_shape"), texture_rate=float(cfg.get("texture_rate", 0.25)),
+                              tail_quantile=cfg.get("tail_quantile"), coherent_phase=cfg.get("coherent_phase"))

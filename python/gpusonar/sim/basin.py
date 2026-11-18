@@ -455,3 +455,41 @@ def attach(provider, cfg: dict | None, seed: int = 0):
     if cfg:
         provider.basin = BasinReverberation(cfg, seed)
     return provider
+
+
+# -- an illustrative stratified profile and section for rehearsals ---------------------------------------
+
+def stratified_profile(depth: float, *, surface_speed: float = 1480.5, maximum_speed: float = 1495.0, maximum_depth: float = 19.0,
+                       deep_speed: float = 1492.0, deep_depth: float = 54.0, deeper_gradient: float = 0.017, step: float = 2.0):
+    """(depths, speeds) of a sound-speed profile with a maximum below a fresher, colder surface
+    layer: ILLUSTRATIVE, of the shape of the two casts of the SFI Smart Ocean dataset (a Norwegian
+    fjord in November: 1480-1481 m/s at the surface, a maximum of 1494.7-1495.4 m/s at 19 m,
+    1491-1493 m/s at 54 m; PHYSICS_NOTES Sec. 21.6). It is not those casts: five numbers and
+    two smooth pieces. From the surface to the maximum a parabola with no gradient at the
+    maximum; from there a straight line to `deep_speed` at `deep_depth`; below that (where no
+    cast went) the pressure gradient of water of one temperature, `deeper_gradient` (1/s): an
+    assumption. Knots every `step` m and at the named depths."""
+    z = np.unique(np.concatenate([np.arange(0.0, depth, step), [maximum_depth, min(deep_depth, depth), depth]]))
+    z = z[z <= depth]
+    upper = maximum_speed - (maximum_speed - surface_speed) * (1.0 - z / maximum_depth) ** 2
+    middle = maximum_speed + (deep_speed - maximum_speed) * (z - maximum_depth) / (deep_depth - maximum_depth)
+    lower = deep_speed + deeper_gradient * (z - deep_depth)
+    return z, np.where(z <= maximum_depth, upper, np.where(z <= deep_depth, middle, lower))
+
+
+def basin_section(length: float, *, shore_depth: float = 50.0, basins=(86.0, 77.0, 90.0), sills=(53.0, 60.0), period: float = 700.0,
+                  step: float = 50.0) -> list:
+    """[[range_m, depth_m], ...] of a seabed with basins and sills along the line of sight:
+    ILLUSTRATIVE, of the kind charted at the same site (47 m at the platform, falling to 86 m,
+    rising to a sill at 53 m, falling to 77 m within a kilometre). Raised-cosine basins of the
+    depths `basins`, `period` m apart, between sills of the depths `sills`, starting at
+    `shore_depth` under the sonar; repeated as far as `length`."""
+    r = np.arange(0.0, length + step, step)
+    i = np.floor(r / period).astype(int)
+    left = np.where(i == 0, shore_depth, np.take(sills, (i - 1) % len(sills)))
+    right = np.take(sills, i % len(sills))
+    deep = np.take(basins, i % len(basins))
+    x = r / period - i
+    rim = left + (right - left) * x
+    d = rim + (deep - rim) * np.sin(np.pi * x) ** 2
+    return [[float(a), round(float(b), 1)] for a, b in zip(r, d)]
