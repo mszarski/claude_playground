@@ -41,7 +41,7 @@ gamma <= 1 is the ratio of the mean to the largest intensity over the radiating 
 uniformly pulsating surface). For a sphere of radius a this is SL_c = 20 log10(p_c a / sqrt 2).
 
 Usage: tools/projector_requirements.py [build ...] [--levels 190 194 197 200 203] [--ranges 6000 12000]
-       [--depths 5 10 30 100 200] [--areas 0.01 0.03 0.1 0.3] [--no-json]
+       [--depths 5 10 30 100 200 500] [--areas 0.01 0.03 0.1 0.3] [--no-json]
 CPU only; pure Python apart from gpusonar.buildspec.
 """
 
@@ -328,7 +328,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("builds", nargs="*", help="build names or spec files (default: every shipped build)")
     ap.add_argument("--levels", type=float, nargs="+", default=[190.0, 194.0, 197.0, 200.0, 203.0])
-    ap.add_argument("--depths", type=float, nargs="+", default=[5.0, 10.0, 30.0, 100.0, 200.0])
+    ap.add_argument("--depths", type=float, nargs="+", default=[5.0, 10.0, 30.0, 100.0, 200.0, 500.0])
     ap.add_argument("--areas", type=float, nargs="+", default=[0.01, 0.03, 0.1, 0.3])
     ap.add_argument("--ranges", type=float, nargs="+", default=[6000.0, 12000.0], help="ranges (m) of the link table")
     ap.add_argument("--no-json", action="store_true")
