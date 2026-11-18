@@ -144,11 +144,12 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
   while (half < n_u && pattern[static_cast<std::size_t>(half)] >= 0.5) ++half;
   p.merge_u = p.u_step * static_cast<double>(half);
   for (std::size_t b = 1; b < bearings.size(); ++b) p.merge_u = std::max(p.merge_u, std::abs(std::sin(bearings[b]) - std::sin(bearings[b - 1])));
-  // The detection itself is the part of the beam within the margin of its peak (and the cells next to it in range):
-  // the envelope is 1 there. Beyond, it is the beam's own skirt and then its sidelobe peaks (the largest value from
-  // here to one beamwidth further out, so that the nulls between sidelobes are bridged), never below the floor.
-  std::int64_t main = 1;
-  while (main < n_u && pattern[static_cast<std::size_t>(main)] >= 1.0 / p.margin) ++main;
+  // The detection itself is the half-power part of the beam (and the cells next to it in range): the envelope is 1
+  // there. Beyond, it is the beam's own skirt and then its sidelobe peaks (the largest value from here to one
+  // beamwidth further out, so that the nulls between sidelobes are bridged), never below the floor. Two echoes at one
+  // range are therefore two detections when their half-power beams are further apart than merge_u: more than one and
+  // a half half-power beamwidths between them.
+  const std::int64_t main = half;
   const auto lobe = std::max<std::int64_t>(std::llround(facts.beamwidth / p.u_step), 1);
   const double floor = std::pow(10.0, options.sidelobe_floor_db / 10.0);
   p.bearing_envelope.assign(pattern.size(), 1.0);

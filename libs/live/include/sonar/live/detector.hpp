@@ -64,7 +64,7 @@ struct DetectorOptions {
   double sidelobe_floor_db = -40.0;
   /// How many independent tests one range resolution x one beamwidth of the map counts as. The map is sampled finer
   /// than both and its largest sample is searched for: measured on noise maps (tests/python/test_detector.py).
-  double search_factor = 2.0;
+  double search_factor = 2.5;
 };
 
 struct DetectorScale {

@@ -55,8 +55,11 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     if "multipath_bearing" in o:
         o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
     o["multipath"] = int(o["multipath"])
-    if o.pop("cell_peak", False):
-        o["cell_statistic"] = "peak"
+    # How a range cell is tested, always said: the program's own default is not assumed.
+    multiscale = o.pop("cell_multiscale", False)
+    o["cell_statistic"] = "peak" if o.pop("cell_peak", False) else ("multiscale" if multiscale else "mean")
+    if "cfar_integrate_cells" in o:
+        o["cfar_integrate_cells"] = ",".join(str(v) for v in o["cfar_integrate_cells"])
     if "dead_channels" in o:
         o["dead_channels"] = ",".join(str(v) for v in o["dead_channels"])
     el = o.pop("elevation", None)
