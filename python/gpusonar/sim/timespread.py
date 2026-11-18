@@ -114,6 +114,28 @@ across it).
    mean  sum (1 - c_i) T_i / (1 - prod c_i)  (before: sum T_i). Two fully rough bounces give
    tau exp(-tau / T): nothing right after the specular delay, most at T, a longer tail. The
    convolution is done on the tap grid.
+
+5. Level fluctuations stronger than Rayleigh (`tap_shape`). The taps above are complex Gaussian:
+   the intensity of a fully scattered arrival has a scintillation index of 1 and no more.
+   Measured steep surface bounces show 1.1 to 4.8 (tools/channel_validation.py, SPACE'08 at
+   60 m, 21 to 32 degrees grazing; docs/PHYSICS_NOTES.md Sec. 21.4), which a few strong
+   focusing facets would give. With `tap_shape` = nu the scattered part of each ray is
+   multiplied by sqrt(tau), tau a gamma variate of shape nu and mean 1 that is common to the
+   ray's taps and changes in time at `texture_rate` times the tail's Doppler width. A tap's
+   intensity is then K distributed: mean unchanged, second moment (1 + 1/nu) times the
+   Gaussian one, scintillation index 1 + 2/nu (tested against these). `tap_shape` may be a
+   table {grazing_deg: [...], shape: [...]} (interpolated in the launch grazing angle; large
+   values mean Gaussian). Not given, or infinite: no texture, and the output is bit-identical
+   to what it was. The coherent arrival is not touched. With `doppler` the texture is that of
+   the ping time and does not change within the ping. This is a description of data, not a
+   derivation: the shape is a free parameter.
+
+6. Surface height apart from the wind (`surface.rms_height`, `surface.height_scale`). The
+   wind law gives a fully developed sea. A real one need not be: the same measurements want
+   1.4 times the height for the vertical speed at 4 m/s and a third of it at 9 m/s. An
+   explicit `rms_height` (m) replaces the wind law's (the slope and the vertical speed stay
+   the wind's unless given too); `height_scale` multiplies whichever height is in force, for
+   when only a ratio is known. Default 1.
 """
 from __future__ import annotations
 
@@ -157,6 +179,10 @@ def boundary_parameters(cfg: dict | None, *, surface: bool, frequency: float | N
     for key in out:
         if key in cfg:
             out[key] = float(cfg[key])
+    if "height_scale" in cfg:                 # the height relative to the wind law (or to the given one)
+        if float(cfg["height_scale"]) < 0.0:
+            raise ValueError("time_spread: height_scale must not be negative")
+        out["rms_height"] *= float(cfg["height_scale"])
     # Energy absorbed by near-surface bubbles at each bounce: a number in dB, a table
     # {grazing_deg: [...], loss_db: [...]}, or a wind-speed law {model: hall_novarini} built from
     # open sources (sim/surface.py; the APL-UW law is in a handbook that was not available).
@@ -266,7 +292,16 @@ class TimeSpreadProvider(EigenrayProvider):
                  surface_sound_speed: float | None = None, bottom_sound_speed: float | None = None,
                  incoherent: bool = True, angle_spread: bool = False, decay_time: str = "rule_of_thumb",
                  doppler: bool = False, doppler_spectrum: str = "gaussian", doppler_lines: int = 8,
-                 multi_bounce: str = "convolve"):
+                 multi_bounce: str = "convolve", tap_shape=None, texture_rate: float = 0.25):
+        # K-type level fluctuation of the scattered part (module docstring, 5): None = Gaussian taps.
+        self.tap_shape = None
+        if isinstance(tap_shape, dict):
+            self.tap_shape = (np.radians(np.asarray(tap_shape["grazing_deg"], dtype=float)), np.asarray(tap_shape["shape"], dtype=float))
+        elif tap_shape is not None and np.isfinite(float(tap_shape)):
+            self.tap_shape = (np.array([0.0, np.pi / 2]), np.array([float(tap_shape), float(tap_shape)]))
+        if self.tap_shape is not None and np.any(self.tap_shape[1] <= 0.0):
+            raise ValueError("time_spread: tap_shape must be positive")
+        self.texture_rate = float(texture_rate)
         self.angle_spread, self.doppler = bool(angle_spread), bool(doppler)
         self.decay_time, self.doppler_spectrum, self.multi_bounce = str(decay_time), str(doppler_spectrum), str(multi_bounce)
         self.doppler_lines = int(doppler_lines)
@@ -422,6 +457,11 @@ class TimeSpreadProvider(EigenrayProvider):
         speed_sin = np.sqrt(speed2 / np.maximum(1.0 - coherent2, 1e-12)) if gaussian else np.sqrt(speed2)
         g, nu, phase, tap_key = self._process(source, points, base, speed_sin)             # g: [S, K, J] complex, unit variance
         tap_amp = np.sqrt(incoherent[..., None] * weight) * g
+        texture = None
+        if self.tap_shape is not None:
+            width = 2.0 * self.frequency * speed_sin / c
+            texture = np.sqrt(self._texture(source, points, base, np.arccos(cos_launch), width))     # [S, K]
+            tap_amp = tap_amp * texture[..., None]
         rep = lambda a: np.repeat(a[:, :, None], self.taps, axis=2)                        # noqa: E731
         tap_delay = base.delay[..., None] + tau
         tap_launch, tap_arrival = rep(base.launch), rep(base.arrival)
@@ -435,6 +475,8 @@ class TimeSpreadProvider(EigenrayProvider):
             m = self.doppler_lines
             line = lambda a: np.repeat(a[:, :, :, None], m, axis=3)                        # noqa: E731
             tap_amp = np.sqrt(incoherent[..., None] * weight)[..., None] * np.exp(1j * phase) / np.sqrt(m)
+            if texture is not None:
+                tap_amp = tap_amp * texture[..., None, None]
             # With angle spreading the sonar's motion acts through each tap's direction instead.
             own = np.sqrt(own2 / np.where(speed2 > 0.0, speed2, 1.0)) if self.angle_spread else np.ones((s, k))
             tap_rate = -c * nu * own[..., None, None] / self.frequency
@@ -520,6 +562,32 @@ class TimeSpreadProvider(EigenrayProvider):
             out.append(_turn(np.repeat(direction[:, :, None], self.taps, axis=2), angle, psi, sign))
         return out[0], out[1]
 
+    def _texture(self, source, points, base: EigenraySet, grazing: np.ndarray, width: np.ndarray) -> np.ndarray:
+        """Gamma-distributed intensity factor [S, K] of mean 1 and shape `tap_shape` per ray at the
+        current ping time (module docstring, 5): a Gaussian process z(t) = sum_m (a_m cos + b_m sin)
+        (2 pi f_m t) / sqrt(M), a, b standard normal and f_m normal of rms `texture_rate` x width,
+        all hashed from (seed, place, ray), mapped through its distribution function onto the
+        gamma quantiles. Exactly gamma over the ensemble of rays at any time."""
+        from scipy.special import gammaincinv, ndtr
+        n_terms = 4
+        cell = np.floor(points / max(self.coherence_length, 1e-6)).astype(np.int64)
+        src = np.floor(source / max(self.coherence_length, 1e-6)).astype(np.int64)
+        with np.errstate(over="ignore"):
+            key = np.uint64(self.seed) * _M3 ^ np.uint64(0x7E57A11CE)
+            for axis in range(3):
+                key = _mix(key ^ cell[:, axis].astype(np.uint64) * _M1 ^ np.uint64(src[axis]) * _M2)
+            ray = (base.n_surface.astype(np.uint64) * np.uint64(64) + base.n_bottom.astype(np.uint64)) * np.uint64(2) \
+                + (base.launch[..., 2] < 0.0).astype(np.uint64)
+            key = _mix(key[:, None] ^ ray * _M2)                                           # [S, K]
+            key = _mix(key[..., None] ^ (np.arange(n_terms, dtype=np.uint64) + np.uint64(1)) * _M1)   # [S, K, M]
+        normal = lambda s1, s2: np.sqrt(-2.0 * np.log(_uniform(key, s1))) * np.cos(2.0 * np.pi * _uniform(key, s2))  # noqa: E731
+        a, b, f = normal(11, 12), normal(13, 14), normal(15, 16) * self.texture_rate * width[..., None]
+        arg = 2.0 * np.pi * f * self.time
+        z = (a * np.cos(arg) + b * np.sin(arg)).sum(axis=-1) / np.sqrt(n_terms)
+        shape = np.interp(grazing, *self.tap_shape)
+        u = np.clip(ndtr(z), 1e-12, 1.0 - 1e-12)
+        return gammaincinv(shape, u) / shape
+
     def _process(self, source, points, base: EigenraySet, speed_sin: np.ndarray):
         """Unit-variance complex amplitudes [S, K, J] at the current ping time, and their parts:
         each is a sum of sinusoids in time of frequencies nu [S, K, J, M] (Hz) and phases
@@ -555,7 +623,8 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
     """Wrap a provider according to a scenario's `time_spread` section:
     {surface: {wind_speed | rms_height, mean_square_slope, rms_vertical_speed}, bottom: {...},
      taps, min_spacing, coherence_length, seed, incoherent,
-     angle_spread, decay_time, doppler, doppler_spectrum, doppler_lines, multi_bounce}."""
+     angle_spread, decay_time, doppler, doppler_spectrum, doppler_lines, multi_bounce, tap_shape, texture_rate};
+    the surface section also takes `rms_height` beside `wind_speed`, and `height_scale`."""
     surface = boundary_parameters(cfg.get("surface"), surface=True, frequency=float(cfg.get("frequency", frequency)))
     bottom = boundary_parameters(cfg.get("bottom"), surface=False)
     surface_z = getattr(provider, "surface_z", 0.0)
@@ -582,4 +651,5 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
                               doppler=bool(cfg.get("doppler", False)),
                               doppler_spectrum=str(cfg.get("doppler_spectrum", "gaussian")),
                               doppler_lines=int(cfg.get("doppler_lines", 8)),
-                              multi_bounce=str(cfg.get("multi_bounce", "convolve")))
+                              multi_bounce=str(cfg.get("multi_bounce", "convolve")),
+                              tap_shape=cfg.get("tap_shape"), texture_rate=float(cfg.get("texture_rate", 0.25)))

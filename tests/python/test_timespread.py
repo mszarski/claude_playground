@@ -823,3 +823,101 @@ def test_per_ray_doppler_on_the_cuda_kernel_matches_the_host():
     still = dict(quiet, time_spread=dict(quiet["time_spread"], doppler=False))
     flat = run_scenario(still, backend=core.Backend.Cuda).records[0].samples.array
     assert not np.allclose(cuda, flat, atol=1e-3 * np.abs(host).max())      # the range rates are in the device record
+
+
+# -- level fluctuations beyond Rayleigh, and the surface height apart from the wind -------------------
+
+def _one_bounce(**options):
+    from gpusonar.sim import ImageSourceProvider
+    from gpusonar.sim.timespread import wrap
+    inner = ImageSourceProvider(1500.0, surface_z=0.0, bottom_z=None, max_order=1)
+    cfg = dict({"surface": {"wind_speed": 6.0}, "taps": 4, "coherence_length": 1e-3, "seed": 3, "doppler_lines": 64}, **options)
+    return wrap(inner, cfg, frequency=12500.0)
+
+
+def _line_of_points(n, range_m=60.0):
+    p = np.zeros((n, 3))
+    p[:, 0], p[:, 1], p[:, 2] = range_m, np.arange(n) * 2e-3, 11.0        # a new cell each, the same geometry to 2 %
+    return p
+
+
+def test_tap_shape_absent_or_infinite_changes_nothing():
+    pts = _line_of_points(50)
+    base = _one_bounce().eigenrays([0.0, 0.0, 11.0], pts)
+    for shape in (None, float("inf")):
+        same = _one_bounce(tap_shape=shape).eigenrays([0.0, 0.0, 11.0], pts)
+        assert np.array_equal(same.amplitude, base.amplitude) and np.array_equal(same.delay, base.delay)
+
+
+@pytest.mark.parametrize("shape", [0.7, 2.0, 6.0])
+def test_tap_shape_gives_k_distributed_tap_intensity(shape):
+    """The texture is a gamma variate of mean 1 and variance 1 / nu, common to a ray's taps: the
+    mean tap intensity is unchanged, its second moment is (1 + 1/nu) times the Gaussian one, and
+    the scintillation index is (1 + 1/nu)(2 - 1/M) - 1 for taps made of M sinusoids (1 + 2/nu as
+    M grows). The direct path and the coherent arrival are untouched."""
+    pts = _line_of_points(6000)
+    plain = _one_bounce().eigenrays([0.0, 0.0, 11.0], pts)
+    tex = _one_bounce(tap_shape=shape).eigenrays([0.0, 0.0, 11.0], pts)
+    n_base = 2                                                # direct, surface (coherent part); then 4 taps per ray
+    assert np.array_equal(tex.amplitude[:, :n_base], plain.amplitude[:, :n_base])
+    i0, i1 = np.abs(plain.amplitude[:, -4:]) ** 2, np.abs(tex.amplitude[:, -4:]) ** 2          # the surface ray's four taps
+    tau = i1 / i0
+    assert np.allclose(tau, tau[:, :1], rtol=1e-9)             # one texture per ray
+    tau = tau[:, 0]
+    assert tau.mean() == pytest.approx(1.0, abs=4.0 / np.sqrt(shape * len(tau)))
+    assert tau.var() == pytest.approx(1.0 / shape, rel=0.12)
+    assert np.mean(tau**2) == pytest.approx(1.0 + 1.0 / shape, rel=0.08)
+    si = lambda x: x.var(axis=0) / x.mean(axis=0) ** 2  # noqa: E731
+    assert si(i0).mean() == pytest.approx(1.0 - 1.0 / 64, abs=0.06)
+    assert si(i1).mean() == pytest.approx((1.0 + 1.0 / shape) * (2.0 - 1.0 / 64) - 1.0, rel=0.12)
+    assert i1.mean() == pytest.approx(i0.mean(), rel=0.06)
+
+
+def test_tap_texture_changes_slowly_in_time_and_follows_a_grazing_table():
+    pts = _line_of_points(3000)
+    plain = _one_bounce()
+
+    def tau_at(t, p):
+        p.set_ping(t)
+        plain.set_ping(t)
+        return (np.abs(p.eigenrays([0.0, 0.0, 11.0], pts).amplitude[:, -1]) / np.abs(plain.eigenrays([0.0, 0.0, 11.0], pts).amplitude[:, -1])) ** 2
+
+    prov = _one_bounce(tap_shape=1.0, texture_rate=0.25)
+    g = np.arctan2(22.0, 60.0)
+    width = 2.0 * 12500.0 * acoustics.rms_surface_vertical_speed(6.0) * np.sin(g) / 1500.0      # Hz; the texture's is a quarter of it
+    t0 = tau_at(0.0, prov)
+    assert np.corrcoef(t0, tau_at(0.02 / width, prov))[0, 1] > 0.95
+    assert abs(np.corrcoef(t0, tau_at(40.0 / width, prov))[0, 1]) < 0.15
+    # A table: Gaussian where the table says so (here the bounce is at 20 degrees), textured where steep.
+    steep = _one_bounce(tap_shape={"grazing_deg": [0.0, 10.0, 20.1], "shape": [1e6, 1e6, 0.5]})
+    assert tau_at(0.0, steep).var() == pytest.approx(2.0, rel=0.35)
+    gentle = _one_bounce(tap_shape={"grazing_deg": [0.0, 30.0, 60.0], "shape": [1e6, 1e6, 0.5]})
+    assert tau_at(0.0, gentle).var() < 1e-4
+    with pytest.raises(ValueError, match="tap_shape"):
+        _one_bounce(tap_shape=-1.0)
+
+
+def test_rms_height_apart_from_the_wind_and_height_scale():
+    """`rms_height` beside `wind_speed` replaces the wind law's height and leaves its slope and
+    vertical speed; `height_scale` multiplies the height in force. The coherent reflection
+    follows: exp(-Gamma^2 / 2) in amplitude with Gamma = 2 k h sin(grazing)."""
+    from gpusonar.sim.timespread import boundary_parameters
+    wind = boundary_parameters({"wind_speed": 4.0}, surface=True)
+    given = boundary_parameters({"wind_speed": 4.0, "rms_height": 0.12}, surface=True)
+    scaled = boundary_parameters({"wind_speed": 4.0, "height_scale": 1.4}, surface=True)
+    both = boundary_parameters({"wind_speed": 4.0, "rms_height": 0.1, "height_scale": 0.5}, surface=True)
+    assert wind["rms_height"] == pytest.approx(acoustics.rms_wave_height(4.0))
+    assert given["rms_height"] == 0.12 and scaled["rms_height"] == pytest.approx(1.4 * wind["rms_height"]) and both["rms_height"] == pytest.approx(0.05)
+    for other in (given, scaled, both):
+        assert other["mean_square_slope"] == wind["mean_square_slope"] and other["rms_vertical_speed"] == wind["rms_vertical_speed"]
+    assert boundary_parameters({"wind_speed": 4.0, "height_scale": 1.0}, surface=True) == wind
+    with pytest.raises(ValueError, match="height_scale"):
+        boundary_parameters({"wind_speed": 4.0, "height_scale": -1.0}, surface=True)
+    pts = _line_of_points(1, range_m=400.0)
+    g = np.arctan2(22.0, 400.0)
+    flat = _one_bounce(surface=None).eigenrays([0.0, 0.0, 11.0], pts)
+    for cfg, h in (({"wind_speed": 4.0}, wind["rms_height"]), ({"wind_speed": 4.0, "height_scale": 1.4}, 1.4 * wind["rms_height"]),
+                   ({"wind_speed": 4.0, "rms_height": 0.03}, 0.03)):
+        rays = _one_bounce(surface=cfg).eigenrays([0.0, 0.0, 11.0], pts)
+        gamma = 2.0 * (2.0 * np.pi * 12500.0 / 1500.0) * h * np.sin(g)
+        assert abs(rays.amplitude[0, 1]) / abs(flat.amplitude[0, 1]) == pytest.approx(np.exp(-0.5 * gamma**2), rel=1e-6)

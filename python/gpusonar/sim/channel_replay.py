@@ -157,6 +157,32 @@ def load_uacr(path: str, receivers=None) -> TimeVaryingChannel:
                               meta=meta, name=str(meta.get("codename") or os.path.splitext(os.path.basename(path))[0]))
 
 
+def load_watermark(path: str) -> TimeVaryingChannel:
+    """Read one channel file of the Watermark benchmark (FFI; van Walree et al., IEEE J. Ocean.
+    Eng. 42, 2017): MAT v5 with `h` [time, delay] complex baseband, `fs_t`, `fs_tau`, `fc` and
+    `V0`, the velocity (m/s) whose Doppler shift the sounder removed. A correlative sounding:
+    one matched-filter snapshot per probe period, no tracking filter; one receiver per file."""
+    from scipy.io import loadmat
+    m = loadmat(str(path), squeeze_me=True)
+    h = np.asarray(m["h"], dtype=np.complex128)
+    return TimeVaryingChannel(h=h[:, None, :], fs_time=float(m["fs_t"]), fs_delay=float(m["fs_tau"]), fc=float(m["fc"]),
+                              meta={"V0": float(m["V0"]), "sounder": "correlative"}, name=os.path.splitext(os.path.basename(str(path)))[0])
+
+
+def wave_frequency(coherent_share, doppler_rms):
+    """rms frequency of the surface (Hz) that an arrival's coherent share c and the rms Doppler
+    width s of its scattered part imply together: s sqrt((1 - c) / ln(1 / c)).
+
+    For a boundary of Gaussian height h and vertical speed v, with chi = 2 k sin(grazing) per
+    bounce, sim/timespread.py has c = exp(-(chi h)^2) and s = (chi v / 2 pi) / sqrt(1 - c);
+    eliminating chi leaves v / (2 pi h), the same for every arrival off that surface whatever
+    its grazing angle, its number of bounces or the frequency. NaN where c is not in (0, 1)."""
+    c = np.asarray(coherent_share, dtype=float)
+    ok = (c > 0.0) & (c < 1.0)
+    cc = np.where(ok, c, 0.5)
+    return np.where(ok, np.asarray(doppler_rms, dtype=float) * np.sqrt((1.0 - cc) / np.log(1.0 / cc)), np.nan)
+
+
 # =================================================================================================
 # Replay
 # =================================================================================================
