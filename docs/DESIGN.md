@@ -785,31 +785,33 @@ In shallow water sound is ducted: Bellhop for 100 m of isovelocity water over sa
 | Water | Rows | Ship detected on | Median SNR | Track confirmed at ping | Track on the ship | Later arrivals tracked / classed multipath | Other tracks |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 6 of 6 pings | 17.8 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 7.0 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 7.3 m/s | 0 / 0 | 1 mover |
 | popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 6 of 6 pings | 14.2 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
-| the same without reverberation (noise only) | 1 | 6 of 6 pings | 16.4 dB | 3 | mover at 6.3 m/s | 0 / 0 | 1 mover |
+| the same without reverberation (noise only) | 1 | 6 of 6 pings | 16.4 dB | 3 | mover at 6.4 m/s | 0 / 0 | 1 mover |
 | the same without reverberation (noise only) | 2 | 6 of 6 pings | 14.9 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
 | the same without reverberation (noise only) | 3 | 6 of 6 pings | 14.4 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
 | popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 24.0 dB | 3 | mover at 6.2 m/s | 0 / 0 | 1 mover |
-| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.1 m/s | 0 / 0 | 1 mover |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 22.4 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
 | popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 23.5 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
+| popoto_env_deep_silt_1000m at 12 km, Bellhop | 3 | 0 of 6 pings | — | — | none | 2 / 1 | 1 mover, 1 multipath |
 | popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 33.9 dB | 3 | mover at 5.8 m/s | 0 / 0 | 1 mover |
 | popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 35.0 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover, 1 uncertain |
+| popoto_env_gravel_30m at 12 km, Bellhop | 3 | 6 of 6 pings | 35.1 dB | 3 | mover at 5.9 m/s | 0 / 0 | 1 mover, 3 uncertain |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 24.7 dB | 3 | mover at 5.9 m/s, multipath at 6.3 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
-| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 32.9 dB | 3 | mover at 6.0 m/s, multipath at 6.1 m/s, multipath at 6.9 m/s | 0 / 0 | 1 mover, 2 multipath |
+| popoto_env_summer_mud_60m at 12 km, Bellhop | 3 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 24.7 dB | 3 | mover at 5.9 m/s, multipath at 6.2 m/s | 2 / 1 | 1 mover, 2 multipath, 1 uncertain |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 2 | 6 of 6 pings | 32.9 dB | 3 | mover at 6.0 m/s, multipath at 6.5 m/s, multipath at 6.9 m/s | 0 / 0 | 1 mover, 2 multipath |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 3 | 6 of 6 pings | 33.9 dB | 3 | mover at 6.0 m/s, uncertain at 1.6 m/s | 1 / 1 | 1 mover, 1 multipath, 1 uncertain |
 
-A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 18 to 126 m, its first arrival is within 6 m of the ship and its range reads 13 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
+A detection is a group of arrivals, not one arrival (the chain's detector merges what the tracker cannot keep apart): its range is the energy-weighted mean of the group. In Bellhop's fields the ship's detection spans 16 to 126 m, its first arrival is within 6 m of the ship and its range reads 6 m (median) behind it; the study counts a detection as the ship's when the ranges it covers reach the ship, and no later arrival is tracked on its own.
 
 
 Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 17.8 dB against 16.4 dB; 2 rows: 14.9 dB against 14.9 dB; 3 rows: 14.2 dB against 14.4 dB. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
 
 **A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do: there the ship is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 17.8 / 14.9 / 14.2 dB over the local background). In Bellhop's field for the same water it is detected on 6 / 6 / 6 of 6 pings with 1 / 2 / 3 rows (median SNR 24.0 / 22.4 / 23.5 dB over the local background). Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, or on the array's depth, not on the array's size.** The surface term is now in the planner's budget and own depth is planned (*Surface interference, own depth, and target classes* above): in non-ducting water the ship is lost with the array at this depth and held with it deep.
-
-Not run: 3 rows: popoto_env_deep_silt_1000m, popoto_env_gravel_30m, popoto_env_summer_mud_60m, popoto_env_winter_sand_200m (each Bellhop case takes 1 to 10 minutes here).
 
 The environments differ by far more than the row count does: the row count buys two to four decibels, the water tens. A downward-refracting profile over a soft bottom can leave nothing at 12 km whatever the array.
 
