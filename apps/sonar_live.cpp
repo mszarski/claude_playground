@@ -17,6 +17,7 @@
 //   classify_min_speed classify_max_fit_rms multipath (0 | 1)
 //   sync (0 | 1) sync_f_start sync_f_stop sync_duration sync_lead sync_tail sync_dedicated (0 | 1)
 //   passive: n_fft hop n_average passive_method (sbl | conventional)
+//   passive tonal analysis (Goertzel lines, DEMON): tonal=1 and tonal_... (docs/CONFIGURATION.md, gpusonar/tonal.py)
 //   stacked rows (elevation and depth; active and passive): elevation (0 | 1) elevation_first_deg
 //   elevation_last_deg elevation_step_deg elevation_first_arrival (0 | 1) elevation_first_arrival_db
 //   elevation_first_arrival_snr_db elevation_range_window_m elevation_max_detections
@@ -107,11 +108,21 @@ int main(int argc, char** argv) {
     if (!report_path.empty()) report_file.open(report_path);
     std::ostream& report = report_path.empty() ? std::cout : report_file;
 
+    // Passive report lines of one stretch of data; with tonal=1 the Goertzel lines and DEMON results too (tonal.hpp).
+    std::unique_ptr<live::TonalAnalyzer> tonal;
+    if (passive_options.tonal.enabled) {
+      tonal = std::make_unique<live::TonalAnalyzer>(passive_options.tonal, passive_options.f_low, passive_options.f_high);
+    }
+    auto passive_lines = [&](const PingRecord& rec) {
+      const auto frames = live::passive_bearings(rec, passive_options);
+      if (!tonal) return live::passive_json(frames, rec.transmit.time_ns);
+      return live::passive_tonal_json(rec, frames, passive_options.n_fft + (passive_options.n_average - 1) * passive_options.hop, *tonal);
+    };
     if (!passive.empty()) {
       io::RecordReader reader(passive);
       for (std::int64_t i = 0; i < reader.size() && (max_pings < 0 || i < max_pings); ++i) {
         const PingRecord rec = reader.read(i);
-        report << live::passive_json(live::passive_bearings(rec, passive_options), rec.transmit.time_ns) << std::flush;
+        report << passive_lines(rec) << std::flush;
       }
       return 0;
     }
@@ -200,7 +211,7 @@ int main(int argc, char** argv) {
               recorder->write(rec);
               recorder->flush();
             }
-            const std::string lines = live::passive_json(live::passive_bearings(rec, passive_options), rec.transmit.time_ns);
+            const std::string lines = passive_lines(rec);
             report << lines << std::flush;
             if (out_socket) out_socket->send_to(report_host, report_port, lines);
             ++done;
