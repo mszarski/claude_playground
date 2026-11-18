@@ -23,10 +23,12 @@ GPU result after the six fixes (commit `5d91ba6`, same L4 job, 2026-11-18): 1490
 One timing moved and is not explained: the C++ live chain on the device takes 0.0155, 0.0275 and 0.0380 s a ping for one, two and three rows, against 0.0095, 0.0209 and 0.0307 s on commit `3383429`; the host times are unchanged (0.148, 0.307, 0.455 s). The chain file gained the ray-limited elevation search and coverage between the two runs; which step costs the 6 to 7 ms has not been measured. The design documents still quote the earlier figures from `gpu_benchmark_all_l4.json`.
 
 - **Generated files known to be out of date with the tree** (see "Open and known
-  wrong"): `docs/figures/gallery.json` with the numbers `SCENARIOS.md` quotes from it
-  (item 16); and, by the 0.11 to 0.15 dB the detector's thresholds moved (D-134),
+  wrong"): by the 0.11 to 0.15 dB the detector's thresholds moved (D-134),
   `docs/design/popoto_depth_planner.json` and `.png`, `docs/figures/fjord_depth_plan.md`
   and the depth sections of `DESIGN.md` that read the planner file (item 37).
+  `docs/figures/gallery.json` and its figures, stale at the last status, were regenerated
+  by a full-size CUDA run on an NVIDIA L4 (commit `4530dc4`) and `SCENARIOS.md` quotes
+  the new numbers; what got worse in it is item 16.
   `docs/figures/fjord_rehearsal.md` and `docs/design/popoto_12km.json`, stale at the last
   status, were regenerated with the shipped deployment files (commits `506e959` and
   `1efa598`; items 5 and 18).
@@ -309,16 +311,30 @@ Grouped; within a group the most consequential first.
     from 16 to 0 and false movers rise from 4 to 7, and in `fls_120k_rough_surface` the
     boat under way reads 8.08 m/s (true 5.0) and becomes `uncertain`. On or off is the
     owner's call.
-16. **`docs/figures/gallery.json` and the numbers `SCENARIOS.md` quotes from it predate
-    D-102, D-103 and the default changes.** A comparison of 18 scenarios found eight
-    identical and the four MINSAS scenes equal to the printed digits, and six FLS scenes
-    changed: in `fls_330k_transit` the anchored boat is now tracked (tracks 2 becomes 4,
-    pinnacle error 79 m becomes 31 m); in `fls_170k_transit` and `fls_120k_transit` a
-    `static` track becomes `uncertain`; `fls_170k_traffic` 11 tracks become 13;
-    `fls_120k_cluttered_seabed` 65 become 64; `fls_120k_rough_surface` 57 become 56. That
-    comparison was itself made before the detector merge. The six FLS scenes were run
-    again at head for D-135 and gave the same track counts (7, 4, 4, 13, 64, 56);
-    `gallery.json` was not regenerated.
+16. **The regenerated `docs/figures/gallery.json` (commit `4530dc4`, a full-size CUDA run
+    on an NVIDIA L4, after D-102, D-103, the detector rework and D-133 to D-136) has
+    results that are worse than, or different in kind from, the file before it.** None
+    was examined for its cause; all are open. `SCENARIOS.md` quotes the new numbers.
+    - **`popoto_12km`: the ship is classified `uncertain`** (4.3 ± 1.0 m/s, true 6.0; it
+      was `mover`). Confirmed tracks 11 become 8, multipath tracks 8 become 3, and 3
+      tracks are `uncertain` where none was.
+    - `popoto_far_mover`: confirmed tracks 6 become 2 and multipath tracks 4 become 1;
+      the last three pings give 1, 1 and 2 detections. The ship is still a mover.
+    - **`fls_170k_transit`: the anchored boat is `uncertain`** (0.18 ± 0.17 m/s; it was
+      `static`). In `fls_120k_transit` one unnamed `static` track became `uncertain`.
+    - `fls_330k_transit`: the anchored boat is now tracked (1.7 m; tracks 2 become 4). The
+      pinnacle is still not tracked.
+    - `fls_170k_traffic`: 11 tracks become 13 for three boats; movers not on a moving
+      object 3 become 2. `fls_120k_cluttered_seabed` 65 become 64 and still has 4 such
+      movers; `fls_120k_rough_surface` 57 become 56 and has 7 (was 8).
+    - `popoto_env_deep_silt_1000m`: one track is now a mover not on a moving object (there
+      was none); the ship is still not tracked at its true position.
+    - Peak over the map median in the Popoto scenes rose 1 to 3 dB at 6 km, 12 km and in
+      winter over sand, under 1 dB in summer over mud (still not detected), did not move
+      over gravel, and fell about 1 dB in deep water over silt.
+    - The six FLS scenes equal the "head" column measured for D-135. The pool, harbour,
+      seafloor, SAS, rail and buried-object numbers did not change. The CPU times in
+      `SCENARIOS.md` are from the earlier CPU run and were not measured again.
 17. **Not done in the detector:** a Taylor aperture window (computed for 32 elements: 0.69
     dB of loss at -30 dB sidelobes against the Hann window's 1.76 dB, so 1.1 dB to gain;
     it needs changes in `flank.py` and the elevation estimate); replica weighting
@@ -523,8 +539,9 @@ the arrival-time solve runs (4, 4) passes (D-83).
 ## What is next
 
 1. Fill the full-suite line above: the whole CPU suite and a GPU job on the final tree,
-   then regenerate the gallery, `docs/design/popoto_depth_planner.json` and
-   `docs/figures/fjord_depth_plan.md` (open items 16 and 37).
+   then regenerate `docs/design/popoto_depth_planner.json` and
+   `docs/figures/fjord_depth_plan.md` (open item 37). The gallery is regenerated (commit
+   `4530dc4`); what got worse in it is open item 16.
 2. The owner's answers on rows, band, converter, projector and site (questions 1 to 12).
 3. Real data: a first Popoto recording through `tools/sonar_live.py`, a cast and one
    sounding of a pinger at the trial site, a first FLS log or SAS image through
@@ -669,15 +686,15 @@ From reading the reference code (`HOLOSCAN_NOTES.md` section 1 has file and line
   - At 330 kHz one cell of sea surface at 250 m is below the noise floor, and with strong
     surface reverberation at 10 m/s wind nothing was detected, the boat included. The
     rough-sea example was moved to 120 kHz, where the waves show.
-  - In the cluttered scene 65 tracks are classified 5 mover (one is the boat), 30 static,
-    15 line, 15 uncertain; under the rough sea 57 tracks are 9 mover (one is the boat),
+  - In the cluttered scene 64 tracks are classified 5 mover (one is the boat), 31 static,
+    16 line, 12 uncertain; under the rough sea 56 tracks are 8 mover (one is the boat),
     39 uncertain. A buoy, a rock and a steady wave face still look alike.
-  - In deep water the ship's echo arrives about 300 m late in range, consistent with a
+  - In deep water the ship's echo arrives about 310 m late in range, consistent with a
     bottom path; ranges are not corrected for propagation.
-  - At 330 kHz the anchored boat in `fls_330k_transit` is not tracked: it peaks at 12 dB
-    at 277 m, under the 13 dB detection limit, against 22 dB for the boat at 238 m.
-    That is the committed gallery run; with source levels as RMS (D-102) a later run
-    tracked it (open item 16).
+  - At 330 kHz the anchored boat in `fls_330k_transit` was not tracked in the earlier
+    gallery run: it peaked at 12 dB at 277 m, under the 13 dB detection limit, against
+    22 dB for the boat at 238 m. With source levels as RMS (D-102) the regenerated
+    gallery tracks it, 1.7 m from its centre (open item 16).
 - What the design numbers say that needs a decision: the SAS at 215 dB keeps one cell of
   sand 13 dB above noise to about 117 m, not 200 m; a 197 dB source at 5 kHz is a large
   projector and amplifier for a small vehicle.

@@ -696,6 +696,11 @@ classes under the rough sea).
 The more of a scene is explicit scatterers, the more the GPU gives. Scenes whose
 background is statistical reverberation are held back by its CPU generator.
 
+This table is from the earlier pair of runs. The gallery was run again on an L4 at commit
+`4530dc4`, a later tree; `docs/figures/gallery.json` is from that run and gives 95, 18,
+18, 11 and 7 s for these five scenarios, in the table's order. The CPU column was not
+measured again on that tree, and the rough sea now gives 56 tracks, not 57.
+
 ## Long-range live chain
 
 Source: `tests/python/test_live.py`, `tools/sonar_live.py --scenario popoto_far_mover`.
@@ -1618,23 +1623,31 @@ combines walls with that bottom, so no result in this file changes.
 ## Track classification
 
 Source: `tests/python/test_classify.py` (synthetic tracks) and the gallery
-(`docs/figures/gallery.json`).
+(`docs/figures/gallery.json`, the full-size CUDA run on an NVIDIA L4 at commit `4530dc4`).
 
 | Scene | Confirmed tracks | Mover | Static | Line | Multipath | Uncertain | Movers not on a moving object |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `fls_120k_transit` | 7 | 1 | 6 | 0 | — | 0 | 0 |
-| `fls_170k_transit` | 4 | 1 | 3 | 0 | — | 0 | 0 |
-| `fls_330k_transit` | 2 | 1 | 1 | 0 | — | 0 | 0 |
-| `fls_120k_cluttered_seabed` | 65 | 5 | 30 | 15 | — | 15 | 4 |
-| `fls_120k_rough_surface` | 57 | 9 | 1 | 8 | — | 39 | 8 |
-| `fls_170k_traffic` | 11 | 5 | 2 | 1 | — | 3 | 3 |
-| `popoto_far_mover` | 6 | 1 | 1 | — | 4 | 0 | 0 |
-| `popoto_12km` | 11 | 3 | 0 | — | 8 | 0 | 0 (two extra movers lie within 200 m of the ship) |
+| `fls_120k_transit` | 7 | 1 | 5 | 0 | — | 1 | 0 |
+| `fls_170k_transit` | 4 | 1 | 2 | 0 | — | 1 | 0 |
+| `fls_330k_transit` | 4 | 1 | 2 | 0 | — | 1 | 0 |
+| `fls_120k_cluttered_seabed` | 64 | 5 | 31 | 16 | — | 12 | 4 |
+| `fls_120k_rough_surface` | 56 | 8 | 1 | 8 | — | 39 | 7 |
+| `fls_170k_traffic` | 13 | 5 | 4 | 1 | — | 3 | 2 |
+| `popoto_far_mover` | 2 | 1 | 0 | — | 1 | 0 | 0 |
+| `popoto_12km` | 8 | 2 | 0 | — | 3 | 3 | 0 (the ship's own track is `uncertain`; the two movers count as on the ship) |
 | `popoto_env_winter_sand_200m` | 5 | 1 | 0 | — | 3 | 1 | 0 |
 | `popoto_env_gravel_30m` | 1 | 1 | 0 | — | 0 | 0 | 0 |
+| `popoto_env_deep_silt_1000m` | 3 | 1 | 0 | — | 1 | 1 | 1 (the ship is not tracked at its true position) |
 
-Every true mover that was tracked is classified mover; every tracked static object is
-static. Twenty tracks of pure position noise (1 m) give no movers.
+Two named objects are not in their true class. The ship in `popoto_12km` is `uncertain`
+(4.3 ± 1.0 m/s, true 6.0) and the anchored boat in `fls_170k_transit` is `uncertain`
+(0.18 ± 0.17 m/s). In the file before `4530dc4`, a CPU run from a much older tree, both
+were right (mover, static); the cause was not examined (`STATUS.md`, open item 16). Every
+other true mover that was tracked is classified mover and every other tracked static
+object is static. In that older file the counts were 7, 4, 2, 65, 57 and 11 tracks for
+the FLS scenes and 6 and 11 for `popoto_far_mover` and `popoto_12km`, whose multipath
+tracks fell from 4 to 1 and from 8 to 3. Twenty tracks of pure position noise (1 m) give
+no movers.
 
 ## Simulator calibration against a log with hidden settings
 
@@ -2575,6 +2588,9 @@ distances, 1.9 m in range and 0.73°.
 | `fls_170k_traffic` | 11 / 13 / 8 | anchored boat 0.16 / 0.18 / 0.18 m/s; false movers 3 / 2 / 0 |
 | `fls_120k_cluttered_seabed` | 65 / 64 / 36 | line tracks 15 / 16 / 0; false movers 4 / 4 / 7; anchored boat 0.02 / 0.03 / 0.32 m/s |
 | `fls_120k_rough_surface` | 57 / 56 / 52 | boat under way 4.72 / 4.72 / 8.08 m/s (true 5.0), mover / mover / uncertain |
+
+The `gallery.json` column is the file before its regeneration at commit `4530dc4`. The
+regenerated file equals the "head" column in every cell of this table.
 
 In the thinned `fls_170k_traffic` test the merge takes the anchored boat from 1.92 to
 0.29 m/s. The thinned `fls_120k_transit` test fails with it (pinnacle 1.6 m/s against a

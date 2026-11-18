@@ -153,8 +153,10 @@ measured channels), `tools/basin_reverberation_fit.py`, `tools/fit_noise.py`,
 
 The host backend uses every core (OpenMP). Per-scenario times on four cores are in
 `docs/SCENARIOS.md`; all 26 gallery scenarios take about an hour in total, the 120 kHz transit 77 s and the
-flank patrol eleven minutes (72 before the kernel rework). Those times and the gallery's
-numbers were measured before the latest changes of levels, noise and defaults.
+flank patrol eleven minutes (72 before the kernel rework). Those times were measured
+before the latest changes of levels, noise and defaults. The gallery's numbers are from a
+later full-size run with the CUDA backend on an NVIDIA L4 (commit `4530dc4`), which took
+465 s for the 26 scenarios.
 
 Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto_*`,
 `fjord_*`, `ssp_*`) and their tests are skipped; everything else runs.
