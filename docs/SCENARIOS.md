@@ -677,11 +677,17 @@ SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, the three
 
 Since `DECISIONS.md` D-100 a scenario states its water once, in an `environment` block
 that may name a site in `configs/environments/`; a typed value that contradicts the site
-is an error unless named under `environment_overrides`. Three kinds of inconsistency were
-kept as they were and are named in the files (D-101): 47 scenarios type a sound speed that
-disagrees with their temperature, 9 Bellhop scenarios reflect eigenrays from a flat
-surface in a windy sea, and 21 simulate a bottom the record does not mention. Most shallow
-scenarios also state a bounce order far below what the energy rule of D-105 would keep
+is an error unless named under `environment_overrides`. Two kinds of inconsistency are
+kept as they were and are named in the files (D-101): 9 Bellhop scenarios reflect eigenrays
+from a flat surface in a windy sea, and 21 simulate a bottom the record does not mention.
+The third is resolved: of the 47 scenarios that typed a sound speed disagreeing with their
+temperature, 44 now take the speed the water gives (1496.8 m/s at 12 deg C and 35 PSU,
+1489.8 at 10 deg C, 1482.4 in the fresh-water tank at 20 deg C) and three keep theirs on
+purpose, each saying why in its file (`popoto_elevation_rehearsal`, `sst_pursuit`,
+`sst_asiaex`). **Numbers quoted in this file for those 44 scenarios were measured at the
+nominal speed and have not been measured again.** The trial, 12 km and `popoto_env_*`
+scenarios no longer state a bounce order or an arrival count (the energy rule of D-105
+decides); the other shallow scenarios still state one far below what that rule would keep
 (`STATUS.md`, open item 22).
 
 ### Point targets, for measuring resolution

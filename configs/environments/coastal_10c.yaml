@@ -1,9 +1,7 @@
-# Sea water at 10 deg C and 35 PSU with a nominal 1500 m/s (the MINSAS scenes and the SST echo-level case). ILLUSTRATIVE.
+# Sea water at 10 deg C and 35 PSU (the MINSAS scenes and the SST echo-level case). ILLUSTRATIVE.
+# No sound speed is typed: it follows from the temperature and salinity (Mackenzie: 1489.8 m/s).
 name: coastal_10c
-title: "Sea water, 10 deg C, 35 PSU, nominal 1500 m/s"
-sound_speed_m_s: 1500.0
+title: "Sea water, 10 deg C, 35 PSU"
 temperature_c: 10.0
 salinity_psu: 35.0
 illustrative: true
-overrides:
-  sound_speed_m_s: "nominal 1500 m/s typed beside 10 deg C / 35 PSU (which give 1489.8 m/s); kept so shipped records do not change"

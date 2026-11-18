@@ -352,10 +352,14 @@ What every other user of "the" sound speed does when the profile varies with ran
 | `fidelity: image_source`, `free_field`, `sediment` | the environment's one sound speed everywhere, with a warning that the change with range is NOT simulated | these tiers have no profile at all |
 | The depth planner (`gpusonar.depthplan`) | the local profile at every range; the plan's `method` and `profile_rests_on` say so | the planner is range independent |
 
-Shipped environments (`configs/environments/`, all illustrative): `coastal_12c` (12 deg C, 35 PSU, nominal
-1500 m/s), `coastal_12c_sand` and `coastal_12c_bellhop_sand` (the two illustrative sands of the shipped scenarios,
-kept apart by name), `shelf_100m_sand_12c` (the build layer's `shelf_100m_sand` with that water: the 12 km site),
-`coastal_10c`, `pool_20c_fresh`, `tank_20c_1480`.
+Shipped environments (`configs/environments/`, all illustrative): `coastal_12c` (12 deg C, 35 PSU; no sound speed
+typed, so 1496.8 m/s from the water), `coastal_12c_sand` and `coastal_12c_bellhop_sand` (the two illustrative sands of
+the shipped scenarios, kept apart by name), `shelf_100m_sand_12c` (the build layer's `shelf_100m_sand` with that water:
+the 12 km site), `coastal_10c` (1489.8 m/s), `pool_20c_fresh` (1482.4 m/s). None types a sound speed beside its
+temperature any more: 44 scenarios that had a nominal 1500 (or 1480) m/s take the water's. Three scenarios still type
+one on purpose and say why under their environment's `overrides`: `popoto_elevation_rehearsal` (1490 m/s, the local
+speed the rehearsal is about), `sst_pursuit` and `sst_asiaex` (1500 m/s, the speed those reproductions of TR 0702 were
+laid out with). `tank_20c_1480` is gone (the rail scenarios use `pool_20c_fresh`).
 
 Scenarios with water that changes with range (`configs/scenarios/ssp_*`, all illustrative; `tools/ssp_range_study.py` runs each against its own local profile everywhere,
 `docs/figures/ssp_range_study.md`): `ssp_front_static_trial_2row` (a front 1.2 to 1.4 km from the two-row static array, target at 2.6 km),

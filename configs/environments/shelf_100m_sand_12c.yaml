@@ -1,12 +1,10 @@
 # The 12 km design site: the build layer's `shelf_100m_sand` (configs/builds/environments/illustrative.yaml: 100 m of
 # isovelocity water over sand, 5 m/s wind) with the water of coastal_12c, so that the planner and the popoto_12km
 # scenarios read ONE description of the site. ILLUSTRATIVE.
+# No sound speed is typed: it follows from the temperature and salinity (Mackenzie: 1496.8 m/s).
 name: shelf_100m_sand_12c
 title: "100 m shelf over sand, 12 deg C, 5 m/s wind"
 base: shelf_100m_sand
-sound_speed_m_s: 1500.0
 temperature_c: 12.0
 salinity_psu: 35.0
 shipping: 0.5
-overrides:
-  sound_speed_m_s: "nominal 1500 m/s typed beside 12 deg C / 35 PSU (which give 1496.8 m/s); kept so shipped records do not change"

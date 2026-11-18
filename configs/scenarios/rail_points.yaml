@@ -4,7 +4,7 @@ sonar: sas_rail
 fidelity: free_field
 sonar_overrides:
   receive: {window: {range: [1.9, 2.1]}}
-environment: {base: tank_20c_1480, absorption: none}
+environment: {base: pool_20c_fresh, absorption: none}
 platform:
   position: [0, 0, -0.684]         # the boresight (20 degrees down) meets z = 0 at 1.88 m ground range
   rpy: [0, 0, 0]

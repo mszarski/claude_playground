@@ -12,7 +12,15 @@ sonar: popoto_long_range_3row_clocks
 fidelity: image_source
 sonar_overrides:
   receive: {window: {range: [850.0, 1150.0]}}
-environment: {base: coastal_12c_sand, sound_speed_m_s: 1490.0, water_depth_m: 100.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
+environment:
+  base: coastal_12c_sand
+  sound_speed_m_s: 1490.0
+  water_depth_m: 100.0
+  wind_speed_m_s: 5.0
+  shipping: 0.5
+  absorption: ainslie_mccolm
+  overrides:
+    sound_speed_m_s: "1490 m/s is this rehearsal's point: a local sound speed that is NOT the nominal 1500 m/s the deployment file would assume, carried by the record; the base's 12 deg C / 35 PSU (1496.8 m/s) only feed absorption"
 propagation:
   surface_z: 0.0
   max_order: 1

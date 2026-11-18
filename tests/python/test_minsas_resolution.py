@@ -87,7 +87,10 @@ def test_weighting_for_display_trades_range_width_for_sidelobes():
     assert out["none"][1] > -30.0 and out["hamming"][1] < -38.0             # range sidelobes beyond 10 cm
     for window in out:
         assert out[window][2] == pytest.approx(0.020, abs=0.002)            # along track unchanged
-        assert out[window][3] < -33.0                                       # against -23 dB with the default aperture
+        # change D (the MINSAS scenes take the sound speed of their 10 deg C water, 1489.8 m/s, not a typed 1500): the
+        # along-track sidelobes read -32.8 dB unweighted and -34.3 dB weighted; at 1500 m/s they read -34.8 and -34.9
+        # (the limit was -33).
+        assert out[window][3] < -32.5                                       # against -23 dB with the default aperture
 
 
 @pytest.mark.parametrize("count, width, limit", [(48, 0.022, (-200.0, -50.0)), (32, 0.030, (-46.0, -38.0))])

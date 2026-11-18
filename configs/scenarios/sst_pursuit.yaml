@@ -54,7 +54,7 @@ environment:
   absorption: francois_garrison
   water_depth_known: false
   overrides:
-    sound_speed_m_s: "nominal 1500 m/s typed beside 8 deg C / 35 PSU (which give 1482.4 m/s); kept so shipped records do not change"
+    sound_speed_m_s: "1500 m/s is the speed this reproduction of TR 0702 Fig. 2 was laid out with: the depths and the range place the features the text names at 0.47 s, 1.7 s and 2.8 s (comments above), and the window is 0.5 to 5 s. 8 deg C / 35 PSU (1482.4 m/s) only feed absorption"
 propagation:
   surface_z: 0.0
   max_order: 2

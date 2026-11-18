@@ -1,13 +1,11 @@
 # Coastal sea water at 12 deg C and 35 PSU: the water most shipped scenarios use. ILLUSTRATIVE: no site was measured.
 # No wind, depth or bottom: a scenario adds those (environment: {base: coastal_12c, water_depth_m: 60.0, ...}).
+# No sound speed is typed: it follows from the temperature and salinity (Mackenzie: 1496.8 m/s), so geometry,
+# wavelengths and absorption are those of one water. (A nominal 1500 m/s stood here until the owner's decision on
+# D-101; a scenario that means a particular speed types it and names it under its environment's `overrides`.)
 # Fields: gpusonar/environment.py (FIELDS), docs/CONFIGURATION.md "Environment".
 name: coastal_12c
-title: "Sea water, 12 deg C, 35 PSU, nominal 1500 m/s"
-sound_speed_m_s: 1500.0
+title: "Sea water, 12 deg C, 35 PSU"
 temperature_c: 12.0
 salinity_psu: 35.0
 illustrative: true
-overrides:
-  # An inconsistency kept on purpose so that the shipped records do not change (audit P-3): Mackenzie gives
-  # 1496.8 m/s for this water. Geometry and wavelengths use 1500; absorption uses 12 deg C and 35 PSU.
-  sound_speed_m_s: "nominal 1500 m/s typed beside 12 deg C / 35 PSU (which give 1496.8 m/s); kept so shipped records do not change"

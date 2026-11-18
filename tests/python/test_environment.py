@@ -72,7 +72,9 @@ BASE = {"name": "t", "sonar": "flank_32", "fidelity": "image_source",
         "sonar_overrides": {"receive": {"window": {"range": [150.0, 260.0]}}},
         "platform": {"position": [0, 0, 20.0]}, "pings": {"count": 1},
         "scene": [{"type": "points", "positions": [[0.0, 200.0, 30.0]], "target_strength_db": 10.0}], "seed": 3}
-SPELLED = {**BASE, "environment": {"sound_speed": 1500.0, "temperature": 12.0, "salinity": 35.0},
+# Change D (sound speed follows temperature): `coastal_12c` no longer types 1500 m/s beside 12 deg C, so the spelled-out
+# copy does not either; both get the water's own speed (Mackenzie: 1496.8 m/s).
+SPELLED = {**BASE, "environment": {"temperature": 12.0, "salinity": 35.0},
            "propagation": {"bottom_z": 60.0, "max_order": 1, "bottom": {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}},
            "reverberation": [{"boundary_z": 60.0, "mu_db": -27.0}, {"boundary_z": 0.0, "model": "chapman_harris", "wind_speed": 7.0}],
            "absorption": "ainslie_mccolm", "receiver": {"adc": False, "ambient_noise": {"wind_speed": 7.0, "shipping": 0.3}}}
@@ -87,7 +89,9 @@ def test_the_single_description_gives_the_same_record(engine):
     a = run_scenario(SPELLED, engine=engine).records[0]
     b = run_scenario(ONCE, engine=engine).records[0]
     assert np.array_equal(a.samples.array, b.samples.array) and np.abs(a.samples.array).max() > 0
-    assert a.environment.sound_speed == b.environment.sound_speed == 1500.0 and a.environment.temperature == b.environment.temperature == 12.0
+    water = acoustics.sound_speed(12.0, 35.0, 0.0)                                         # change D: the water's speed, not a typed 1500
+    assert a.environment.sound_speed == b.environment.sound_speed == pytest.approx(water) and water == pytest.approx(1496.82, abs=0.01)
+    assert a.environment.temperature == b.environment.temperature == 12.0
     assert np.isnan(a.environment.water_depth) and np.isnan(b.environment.water_depth)       # the vehicle is not told
     known = run_scenario({**ONCE, "environment": {**ONCE["environment"], "water_depth_known": True}}, engine=engine).records[0]
     assert known.environment.water_depth == 60.0 and np.array_equal(known.samples.array, a.samples.array)
@@ -133,7 +137,8 @@ def test_the_ray_tracers_frequency_follows_the_sonar():
     out = environment.apply_to_scenario(cfg, environment.resolve(cfg["environment"], strict=True), sonar)
     prop = out["propagation"]
     assert prop["frequency"] == sonar.center_frequency == 8000.0 and prop["wind_speed"] == 5.0
-    assert prop["environment"] == {"depth": 100.0, "sound_speed": 1500.0, "bottom_speed": 1650.0, "bottom_density": 1.9, "bottom_attenuation": 0.8}
+    # change D: the 12 km site no longer types 1500 m/s; the ocean Bellhop is given has the water's speed
+    assert prop["environment"] == {"depth": 100.0, "sound_speed": acoustics.sound_speed(12.0, 35.0, 0.0), "bottom_speed": 1650.0, "bottom_density": 1.9, "bottom_attenuation": 0.8}
     assert prop["max_range"] == pytest.approx(1.1 * (260.0 + 0.5 * 1500.0 * sonar.waveform_config["duration"]), rel=0.01)
     low = SonarModel.load("flank_32", {"transmit": {"waveform": {"f_start": 4000.0, "f_stop": 6000.0}}})
     assert environment.apply_to_scenario(cfg, environment.resolve(cfg["environment"], strict=True), low)["propagation"]["frequency"] == 5000.0
