@@ -524,9 +524,26 @@ STAGE_FILES = {   # sonar file -> (deployment file, simulated trials)
     "popoto_testauv_1row": ("popoto_testauv_1row", "`popoto_testauv_trial_1row`"),
     "popoto_static_2row": ("popoto_static_2row", "`popoto_static_trial_2row`"),
     "popoto_static_3row": ("popoto_static_3row", "`popoto_static_trial_3row`, `popoto_static_free`, `popoto_static_passing`"),
-    "popoto_long_range_2row": ("popoto_face_2row", "`popoto_face_2row_shallow`"),
-    "popoto_long_range_3row": ("popoto_vehicle_elevation", "`popoto_elevation_free`, `_shallow`, `_rehearsal`"),
+    "popoto_face_1row": ("popoto_face_1row", "`popoto_12km` (the same row as `popoto_long_range`)"),
+    "popoto_long_range_2row": ("popoto_face_2row", "`popoto_face_2row_shallow`, `popoto_12km_2row`"),
+    "popoto_long_range_3row": ("popoto_vehicle_elevation", "`popoto_elevation_free`, `_shallow`, `_rehearsal`, `popoto_12km_3row`"),
 }
+
+
+def _compute_options_text() -> str:
+    """The two compute options with the measured figures there are (docs/benchmarks, docs/design)."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    from gpusonar import buildspec
+    t = buildspec.measured_timings()
+    gpu = t.get("gpu")
+    out = ""
+    if gpu:
+        h = gpu["header"]
+        out += (f"Measured on an {h['gpus'][0]} (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes {gpu['seconds']['1']:.3f}, {gpu['seconds']['2']:.3f} and {gpu['seconds']['3']:.3f} s a ping for one, two and three rows "
+                f"against {gpu['host_seconds']['1']:.2f}, {gpu['host_seconds']['2']:.2f} and {gpu['host_seconds']['3']:.2f} s on that machine's {h['host_threads']} CPU threads ({gpu['host_seconds']['1'] / gpu['seconds']['1']:.0f} times for one row), on pings of scenario size "
+                f"({gpu['samples']:,} baseband samples a channel) and with the row heights before the 1.5 m change. Raw pings at the boards' full rate have not been run on a GPU. ")
+    out += ("Decimate-first timings: `design/popoto_stage2.json`." if t.get("stage2") else "The decimate-first stage is being built separately: **its timing is pending** (`design/popoto_stage2.json` does not exist yet).")
+    return out
 
 
 def stacked_rows(D) -> list:
@@ -583,7 +600,10 @@ def stacked_rows(D) -> list:
              "| \"We wont have a long range SVP but we can measure auv local speed of sound and we will have some idea of water depth\"; of the isothermal assumption: \"Won't always we need to handle it\" | local sound speed and an approximate water depth come from the vehicle; the profile along the path is unknown, is not always isothermal, and is carried as an uncertainty unless something better is known | `sound_speed`, `water_depth`, `water_depth_sigma_m`, `gradient_per_s`, `gradient_sigma_per_s`, `ssp` |\n"
              "| \"the popoto at 9m x 2 is still for active as well right\" | yes: active pinging is the main mode on the face; listening is supported with the same rows | |\n"
              "| \"Does our array need to be 64? We can add just need to understand what we get\" | the number of hydrophones is open; the trade space says what each addition buys | *Trade space* |\n"
-             "| (compute at the boards' full rate) \"Prepare both options\" | both decimating first and a GPU are to be prepared | *Data path and compute* |\n")
+             "| (compute at the boards' full rate) \"Prepare both options\" | both decimating first and a GPU are to be prepared | *Data path and compute* |\n"
+             "| \"Keep at 32, can start with a smaller array in the 7m zone. Probably makes sense to keep the one design for auv and static right? Except for elevation.\" then \"Yes treat auv special case and have static array the longer row.\" | 32 hydrophones a row, fixed. The 7 m is a zone, not a length to fill. ONE row design, the long module (32 at 0.15 m, 4.8 m), for the static array and the face; the test AUV's short row is the one exception. \"A smaller array\" on the face is fewer rows of that module: one, then two, then three | *Row modules*; `array.module` in `configs/builds/` |\n"
+             "| \"What can we do about the projector? Just blank?\" | an options analysis of the projector's direct sound | *The projector's direct sound* |\n"
+             "| \"What does it look like for popoto at 12km though. Need that design\" | the 12 km design point in one place | *The 12 km design point* |\n")
     L.append("**Trade space in one table** (the face, rows within {:.0f} m, outer rows {:.2f} m apart, {:.0f}–{:.0f} kHz; noise-limited reach on the budget of Sec. 5; details further down):\n".format(
         S["array_length_m"], d, f_lo / 1e3, f_hi / 1e3))
     L.extend(trade_table())
@@ -634,16 +654,17 @@ def stacked_rows(D) -> list:
     sp = static_cfg["platform"]
     s2, s3, s3far, sfree, spass, slis = (sc[k] for k in ("static_2row", "static_3row", "static_3row_300m_shallow", "static_free", "static_passing", "static_passive"))
     L.append("**Stages 2 and 3, the static drop-in array: where stacked rows first go in the water.** A frame carrying two or three rows, lowered from the surface (or\n"
-             "stood on the bottom) and left in place. The owner gave no dimensions, depth or site; what is shipped is a set of parameters, flagged `unconfirmed`:\n"
-             f"rows of the test AUV's kind (32 over {sp['span_m']:g} m), the outer rows {static3['baseline_m']:.2f} m apart **as on the face**, so that what the frame rehearses is the\n"
-             f"face's own elevation behaviour (accuracy, repeats, candidates), hanging at {sp['depth_m']:g} m. What is different from a vehicle, and where it is set:\n\n"
+             "stood on the bottom) and left in place. The owner: \"have static array the longer row\": its rows are the face's own row module (32 over\n"
+             f"{static3['row_length_m']:.1f} m), the outer rows {static3['baseline_m']:.2f} m apart **as on the face**, so the frame is the face's array without the vehicle: the same beam, reach, elevation\n"
+             f"behaviour, boards and harness. The frame's size follows ({sp['span_m']:g} m × {sp['height_m']:g} m with the margins in the spec, parameters); its hanging depth ({sp['depth_m']:g} m here), tilt sensing, projector position\n"
+             "and cabling are open and flagged `unconfirmed`. What is different from a vehicle, and where it is set:\n\n"
              "| | Static array | Where |\n| --- | --- | --- |\n"
              "| Motion | none: no Doppler of its own, reverberation does not spread in Doppler, and everything that moves in the tracker's frame is a target | scenario `platform.velocity: [0, 0, 0]` |\n"
              "| Pose | a fixed position, depth and heading typed in, or datagrams from a tilt and compass sensor on the frame | `nav.static` or `nav.port` in the deployment file |\n"
              "| Tilt | a hanging frame's tilt is elevation error one for one, exactly as a vehicle's roll (table below). Without a sensor it is assumed plumb, with a stated uncertainty | `elevation.roll_sigma_deg` (1° shipped: a placeholder), `attitude_time: transmit` |\n"
              "| Projector | on the frame or hung apart: its position relative to the array is in the sonar file and in every record, and the elevation search follows the true two-way path | `transmit.lever_arm` |\n"
              "| Sound speed, water depth | measured once at deployment and typed in | `chain.sound_speed`, `elevation.water_depth` |\n"
-             "| Cable, power, where the compute sits | not decided: at the surface end of the cable, or in a housing on the frame | open; see the parts list when it exists |\n")
+             "| Cable, power, where the compute sits | not decided: at the surface end of the cable, or in a housing on the frame | open; *Parts list* |\n")
     L.append("The frame's height is chosen from this curve (two rows; three rows have the accuracy of their outer pair):\n\n"
              "| Rows apart | Elevation at 13 / 20 / 30 dB | No repeat within (at the top of the band) | Highest repeat inside ±30° | Depth at 300 m (30 dB) | Depth at 1 km (20 dB) | Per µs of clock error between rows |\n| --- | --- | --- | --- | --- | --- | --- |")
     for sep, v in PS.items():
@@ -659,7 +680,7 @@ def stacked_rows(D) -> list:
              f"| `popoto_static_free`: three rows, free field, targets about 400 m off | depths {lst(sfree['true_depths_m'])} m | track depth errors {lst(sfree['depth_errors_m'], 1)} m |\n"
              f"| `popoto_static_passing`: a target crossing at {spass['true_speed_m_s']:.0f} m/s, {spass['true_depth_m']:.0f} m deep, {spass['pings']} pings | one mover | tracks: {', '.join(spass['kinds'])}; mover at {lst(spass['mover_speed_m_s'], 1)} m/s, depth {lst(spass['mover_depth_m'], 1)} m |\n"
              f"| listening: two noise sources (`sim/passive.py`), tilted {slis['tilt_deg']:.0f}° | elevations {lst(slis['true_elevation_deg'], 1)}° | both in {slis['frames_with_both']} of {slis['frames']} frames, elevation within {slis['worst_elevation_error_deg']:.2f}° |\n")
-    L.append(f"What the static array cannot show: the full row's beam and range, ownship's motion, and the vehicle's attitude sensor.\n")
+    L.append("What the static array cannot show: ownship's motion and the vehicle's attitude sensor. With the long row it does show the full row's beam and reach.\n")
     BC = S["baseline_comparison"]
     L.append(f"**Stages 4 and 5, the full face.** Outer rows at {-up:+.2f} and {up:+.2f} m, {d:.2f} m apart ({S['margin_m']:.2f} m free at the top and bottom of the {S['face_height_m']:g} m), which is\n"
              f"{d * f_lo / 1500:.1f} to {d * f_hi / 1500:.1f} wavelengths. Accuracy is bought with separation and SNR, nothing else: for one arrival in noise\n"
@@ -789,7 +810,7 @@ def stacked_rows(D) -> list:
              f"{lst(f2['depth_m'])} m (up to {pull2:.0f} m off, {np.degrees(pull2 / f2['range_m']):.1f}°); in the three-row check at 1 km the one at {sh['true_depth_m']:.0f} m reads {lst(sh['depth_m'])} m ({pull3:.0f} m off); the static array at\n"
              f"{s3far['range_m']:.0f} m in {s3far['water_depth_m']:.0f} m of water reads {lst(s3far['depth_m'])} m for {s3far['true_depth_m']:.0f} m. In free field the same chain is within a metre. The size of the pull depends on the\n"
              "echoes' phases, so on the geometry to a fraction of a wavelength: with the projector 1.5 m below the array's centre instead of beside it, the two-row case read\n"
-             "48 to 53 m (the earlier run of this bench). The reported `depth_sigma_m` holds noise, roll and the gradient prior, **not this**: in shallow water at long\n"
+             "closer to the truth (an earlier run of this bench, not kept in its file). The reported `depth_sigma_m` holds noise, roll and the gradient prior, **not this**: in shallow water at long\n"
              "range treat depth as good to a few tenths of a degree of elevation, whatever the sigma says. Not modelled further here: a longer band or a window with\n"
              "lower range sidelobes would separate the arrivals better.\n")
     clock, need = se["board_clock_error_deg"], se["clock_us_for_deg"]
@@ -806,10 +827,10 @@ def stacked_rows(D) -> list:
              "  written into each record). Without samples it falls back to the ping's attitude and adds `attitude_rate_sigma_deg_s` × the time of flight. In the rehearsal\n"
              f"  above the difference is {transmit_bias:.0f} m at 1 km.\n"
              f"- **Synchronisation: still open.** Row by row (the owner's choice), boards of different rows must agree to {need['0.05']:.2f} µs for 0.05° and {need['0.1']:.2f} µs for 0.1°\n"
-             f"  ({clock['1.0']:.3f}° per µs with rows {d:.2f} m apart); the present tolerance of 8.3 µs is {clock['8.3']:.1f}°. The reference scheme reaches {re['worst_residual_us']:.2f} µs in simulation.\n"
+             f"  ({clock['1.0']:.3f}° per µs with rows {d:.2f} m apart); the tolerance one row needs for clean beams, {1e6 / (20 * f_hi):.1f} µs (a twentieth of a period at the top of the band, `sync.alignment_tolerance`), would be {clock['1.0'] * 1e6 / (20 * f_hi):.1f}°. The reference scheme reaches {re['worst_residual_us']:.2f} µs in simulation.\n"
              "  Whether real boards do is the open question. `array.interleave: 4` (four of each row per board) removes the term for two rows and stays available.\n"
              f"- **Mounting and calibration.** 1 mm of one row standing out from the face is {se['out_offset_error_deg']['1.0']:.2f}°. The existing calibration, run with sources at several depths\n"
-             "  (`planar=False`), recovers a row 5 mm out to 0.4 mm in simulation (`tests/python/test_elevation.py`).\n"
+             "  (`planar=False`), recovers a row's offset in simulation (`tests/python/test_elevation.py` holds the figures).\n"
              "- **Sound speed and water depth** from the vehicle: `sound_speed` and `water_depth` in the navigation datagrams, or as settings.\n")
     mg, ob = TS["marginal_32_to_64_per_row"], TS["one_by_64_vs_two_by_32"]
     r64, fill = TS["per_row"][keys["row_64"]], TS["per_row"][keys["fills"]]
@@ -848,23 +869,24 @@ def stacked_rows(D) -> list:
              f"{lr['min_ping_interval_s']:.1f} s between pings:\nreal time with room.\n"
              + (f"(Timings are from an otherwise idle machine with the earlier row heights; the work does not depend on them.) **At the boards' full rate it is not real time on such a CPU**: one full-length ping (102.4 kHz real, 0.5 to 13 km) took {full['1']['seconds_per_ping']:.0f}, {full['2']['seconds_per_ping']:.0f} and "
                 f"{full['3']['seconds_per_ping']:.0f} s (measured with\nearlier row heights; the map dominates and does not depend on them). The band is {(f_hi - f_lo) / 1e3:.0f} kHz wide, so the samples carry {102.4e3 / (2 * (f_hi - f_lo)):.0f} times "
-                "more than needed. The owner: \"Prepare both options\":\nconverting to baseband and decimating before the chain, and a GPU. Neither is built into the receiver yet; the one-row map was 17 times faster on an L4\n"
-                "(`RESULTS.md`), rows have not been run on one. **GPU timing pending.**\n" if full else ""))
+                "more than needed. The owner: \"Prepare both options\":\nconverting to baseband and decimating before the chain, and a GPU. "
+                + _compute_options_text() + "\n" if full else ""))
     L.append("**What carries over from stage to stage, and what changes.** Unchanged: the boards and their count per row, the synchronisation scheme, the stream and record\n"
-             f"formats, the software and its settings, the report. From the test AUV to the static array: the same rows ({auv['pitch_m']:.2f} m spacing), now two or three of them, no motion,\n"
-             f"a typed-in pose. From the static array to the face: the rows' heights carry over; the hydrophones' spacing and cabling change ({face3['pitch_m']:.2f} m), as do the projector\n"
-             "and pulse, the attitude source (the vehicle's navigation, at each echo's arrival) and the compute (in proportion to the channels).\n")
+             f"formats, the software and its settings, the report. From the test AUV to the static array: the row changes from the short module ({auv['pitch_m']:.2f} m spacing) to the long one ({face3['pitch_m']:.2f} m),\n"
+             "two or three of them, no motion, a typed-in pose. From the static array to the face: the row module, its harness, the rows' heights and the boards carry over unchanged; the platform changes: motion,\n"
+             "the attitude source (the vehicle's navigation, at each echo's arrival), the projector's place and pulse, cabling, and where the compute sits.\n")
     L.append("**What stacked rows do not improve.** Bearing and range resolution; left/right (the face decides that); detection range, much; depth at long range without\n"
              "a profile.\n")
     L.append("**Open.**\n\n"
-             "- The static array: its dimensions, the depth it hangs at, whether it has a tilt sensor, where its projector hangs, the trial site's depth and ranges.\n"
+             "- The static array: the depth it hangs at, whether it has a tilt sensor, where its projector hangs, its cabling, the margins of its frame, the trial site's depth and ranges.\n"
              "- The SPRINT-Nav: attitude accuracy, output rate, time-stamp accuracy and message format (from its datasheet and interface document). The adapter from\n"
              "  its messages to the navigation datagram is not written; DVL altitude plus depth as the water-depth source is not wired in.\n"
-             "- The projector: which, its source level, its place on the face, and how fast the inputs recover from its direct sound.\n"
+             "- The projector: which, its source level, its place on the face, and how fast the inputs recover from its direct sound (*The projector's direct sound*).\n"
              f"- Board synchronisation between rows: {need['0.05']:.2f} µs for 0.05°. Not answered; whether Popoto boards can be batched at all is a question for Popoto.\n"
              "- The sound-speed profile: a profile built from the vehicle's own readings, and profile families, are not built; today's chain has the gradient prior,\n"
              "  the local sound speed and a supplied profile.\n"
-             "- Compute at the boards' full rate: both options (decimate first; GPU) are to be prepared; neither is in the receiver yet.\n")
+             "- Compute at the boards' full rate: both options (decimate first; GPU) are to be prepared; neither has been timed at the full rate on the hardware that would be used.\n"
+             "- The parts list's open questions (`design/popoto_parts.md`).\n")
     return L
 
 
@@ -924,7 +946,14 @@ def write_report(D, reqs, out_md):
              "the MINSAS 120; the 330 kHz centre frequency is the owner's figure; element count, pitch and element sizes are choices made here.\n")
     L.append("The Popoto array is shown as its scenario uses it (32 hydrophones, 6–10 kHz). `array.count` sets the size; "
              "boards of eight inputs follow.\n")
+    sys.path.insert(0, str(ROOT / "tools"))
+    import reference_plan
+    L.extend(reference_plan.staged_plan())
+    L.extend(reference_plan.row_modules())
     L.extend(stacked_rows(D))
+    L.extend(reference_plan.projector_options())
+    L.extend(reference_plan.twelve_km())
+    L.extend(reference_plan.parts_section())
     L.append("## 4. Timing and data\n")
     L.append("| Quantity | " + " | ".join(f"`{n}`" for n in DESIGN_SONARS) + " | How it is derived |\n| --- |" + " --- |" * (len(DESIGN_SONARS) + 1))
     for label, key, dig, how in [("Full range (m)", "max_range_m", 0, "config: `receive.window.range` (scenario window for the Popoto array)"),

@@ -1,0 +1,86 @@
+# Build spec: a deliberately different build, to show that the reference design is not tied to one sonar.
+# Two rows of 24 hydrophones on a small static frame, 9-13 kHz, capture boards of SIX inputs sampling at 64 kHz,
+# rows closer together than a wavelength (no repeats in elevation). Every part and number here is made up for the
+# example and marked as such: nothing is `confirmed`.
+#   tools/build_from_spec.py docs/examples/reference_design/example_static_2x24.yaml --validate
+#   tools/build_from_spec.py docs/examples/reference_design/example_static_2x24.yaml --out out/example --self-test
+# The steps: docs/REFERENCE_DESIGN.md. tests/python/test_buildspec.py takes this file through all of them.
+build: example_static_2x24
+title: "Example: static frame, two rows of 24, 9-13 kHz"
+
+platform:
+  kind: static
+  name: example_frame
+  mounting: a small frame hung from a pontoon
+  span_m: 2.0
+  height_m: 0.5
+  usable_span_m: 1.6
+  depth_m: 15.0
+
+array:
+  rows: 2
+  count: 24
+  pitch_m: 0.06                  # 0.52 of a wavelength at 13 kHz
+  heights_m: [-0.06, 0.06]       # 0.12 m apart: less than a wavelength, so one elevation, coarsely
+  look: starboard
+  wiring: row_by_row
+  board_position_m: [0.0, -0.2, 0.0]
+  cable_slack_m: 0.3
+
+hydrophone:
+  sensitivity_db: -190.0         # dB re 1 V/uPa (made up)
+  band_hz: [2000.0, 30000.0]
+
+boards:
+  inputs: 6
+  sample_rate_hz: 64000.0
+  adc_bits: 24
+  gain_db: 20.0
+  adc_full_scale_v: 2.0
+  clock_tolerance_ppm: 20.0
+  clock_offset_max_s: 2.0e-4
+  clocks: {seed: 7}
+
+sync:
+  scheme: shared_reference
+  reference: {f_start_hz: 20.0e3, f_stop_hz: 28.0e3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
+
+projector:
+  source_level_db: 185.0
+  band_hz: [9000.0, 13000.0]
+  waveform: {type: lfm, duration_s: 0.05, window_alpha: 0.1}
+  position_m: [0.0, 0.0, 2.0]    # hung 2 m below the frame
+
+navigation:
+  roll_sigma_deg: 0.5
+  static_pose: {x: 0.0, y: 0.0, z: 15.0, roll: 0.0, pitch: 0.0, yaw: 0.0}
+
+sound_speed:
+  nominal_m_s: 1500.0
+  rung: typed
+  value_m_s: 1500.0
+  gradient_per_s: 0.017
+  gradient_sigma_per_s: 0.05
+
+water_depth:
+  source: typed
+  value_m: 40.0
+  sigma_m: 2.0
+
+network: {stream_port: 5800, report_udp: [127.0.0.1, 5801]}
+
+compute:
+  option: cpu
+  engine: cpp                    # tools/sonar_live.py runs the C++ chain for this build
+
+operation:
+  range_m: [null, 600.0]
+  bearings_deg: [-50.0, 50.0, 0.5]
+
+trial:
+  water_depth_m: 40.0
+  own_depth_m: 15.0
+  ranges_m: [200.0, 400.0]
+  target_depths_m: [8.0, 15.0, 28.0]
+  roll_deg: 2.0
+  seed: 5
