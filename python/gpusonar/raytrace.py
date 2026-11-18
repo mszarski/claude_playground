@@ -125,6 +125,8 @@ def trace(profile: Profile, z0: float, launch: float, r_end: float, max_steps: i
             if r + dr >= r_end:
                 s_e = s - p * g * (r_end - r)
                 z_end = z_lo + (np.sqrt(max(1.0 - s_e * s_e, 0.0)) / p - c_lo) / g
+                if path is not None and s * s_e < 0.0:   # it turned on the way
+                    path.append((r + s / (p * g), z_lo + (1.0 / p - c_lo) / g, t + np.arctanh(s) / g))
                 return Ray(float(z_end), t + (np.arctanh(s) - np.arctanh(s_e)) / g, float(s_e), ns, nb, turns + int(s * s_e < 0.0))
             if not reach:
                 turns += 1
@@ -191,17 +193,27 @@ def eigenrays(profile: Profile, z_source: float, z_receiver: float, range_m: flo
     def key(q: Ray):
         return (q.n_surface, q.n_bottom, q.turns, q.s > 0.0)
 
-    for i in range(len(angles) - 1):
-        a, b = rays[i], rays[i + 1]
-        if not (a.ok and b.ok) or key(a) != key(b) or (a.z - z_receiver) * (b.z - z_receiver) > 0.0:
-            continue
-        if a.n_surface + a.n_bottom > max_bounces or (a.n_bottom and bottom is None):
-            continue
-        lo, hi, f_lo = angles[i], angles[i + 1], a.z - z_receiver
+    def close(a_lo, ray_lo, a_hi, ray_hi, level):
+        """Eigenrays with launch angles between two rays of the fan. Where the two have different histories (one has
+        reflected or turned and the other not) the interval is halved until its parts have one history each."""
+        if not (ray_lo.ok and ray_hi.ok):
+            return
+        if key(ray_lo) != key(ray_hi):
+            if level < 30:
+                mid = 0.5 * (a_lo + a_hi)
+                ray_mid = trace(profile, z_source, mid, range_m)
+                close(a_lo, ray_lo, mid, ray_mid, level + 1)
+                close(mid, ray_mid, a_hi, ray_hi, level + 1)
+            return
+        if (ray_lo.z - z_receiver) * (ray_hi.z - z_receiver) > 0.0:
+            return
+        if ray_lo.n_surface + ray_lo.n_bottom > max_bounces or (ray_lo.n_bottom and bottom is None):
+            return
+        lo, hi, f_lo = a_lo, a_hi, ray_lo.z - z_receiver
         for _ in range(50):
             mid = 0.5 * (lo + hi)
             q = trace(profile, z_source, mid, range_m)
-            if not q.ok or key(q) != key(a):
+            if not q.ok or key(q) != key(ray_lo):
                 break
             if (q.z - z_receiver) * f_lo > 0.0:
                 lo = mid
@@ -209,10 +221,10 @@ def eigenrays(profile: Profile, z_source: float, z_receiver: float, range_m: flo
                 hi = mid
         launch = 0.5 * (lo + hi)
         q = trace(profile, z_source, launch, range_m)
-        if not q.ok or key(q) != key(a) or abs(q.z - z_receiver) > 0.05:
-            continue
-        # geometric spreading from the neighbouring rays of the fan
-        dz_dth = abs(b.z - a.z) / (angles[i + 1] - angles[i])
+        if not q.ok or key(q) != key(ray_lo) or abs(q.z - z_receiver) > 0.05:
+            return
+        # geometric spreading from the two rays that bracket it
+        dz_dth = abs(ray_hi.z - ray_lo.z) / (a_hi - a_lo)
         cos_r = max(np.sqrt(max(1.0 - q.s * q.s, 0.0)), 1e-6)
         slant = float(np.hypot(range_m, z_receiver - z_source))
         intensity = np.cos(launch) / (range_m * max(dz_dth, 1e-12) * cos_r)
@@ -220,10 +232,12 @@ def eigenrays(profile: Profile, z_source: float, z_receiver: float, range_m: flo
         amp = np.sqrt(min(intensity, (caustic_clip / slant) ** 2) * c_r / c_s)
         coeff = complex(surface_coefficient) ** q.n_surface
         if q.n_bottom:
-            p = np.cos(launch) / c_s
             c_b = float(profile.speed[-1])
-            coeff *= _rayleigh(float(np.arccos(min(p * c_b, 1.0))), c_b, bottom) ** q.n_bottom
+            coeff *= _rayleigh(float(np.arccos(min(np.cos(launch) / c_s * c_b, 1.0))), c_b, bottom) ** q.n_bottom
         out.append(Eigenray(float(launch), float(np.arcsin(np.clip(q.s, -1.0, 1.0))), q.time, amp * coeff, q.n_surface, q.n_bottom, q.turns, bool(caustic)))
+
+    for i in range(len(angles) - 1):
+        close(angles[i], rays[i], angles[i + 1], rays[i + 1], 0)
     out.sort(key=lambda e: e.time)
     # the same ray found in two neighbouring brackets
     kept = []

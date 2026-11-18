@@ -577,7 +577,7 @@ MultipathEstimate MultipathDepth::track(std::int64_t id) const {
   est.reason.clear();
   est.valid = true;
   est.depth = grid[b];
-  est.sigma = std::sqrt(sigma * sigma + opt_.track_step * opt_.track_step / 12.0 + sum.model * sum.model);
+  est.sigma = std::sqrt(sigma * sigma + opt_.track_step * opt_.track_step / 4.0 + sum.model * sum.model);   // half a cell
   est.ambiguous = !rivals.empty();
   if (rivals.size() > 4) rivals.resize(4);
   est.alternatives = rivals;

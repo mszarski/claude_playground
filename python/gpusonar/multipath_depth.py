@@ -556,7 +556,7 @@ class TrackDepth:
             est.reason = "single_arrival"
             return est
         est.valid, est.depth = True, float(self.grid[b])
-        est.sigma = float(np.sqrt(sigma**2 + self.step**2 / 12.0 + self.model**2))
+        est.sigma = float(np.sqrt(sigma**2 + self.step**2 / 4.0 + self.model**2))    # half a cell: the fringe is not resolved along a track
         est.ambiguous, est.alternatives = bool(rivals), tuple(rivals[:4])
         est.method = "track"
         return est
