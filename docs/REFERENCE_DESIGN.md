@@ -133,7 +133,7 @@ This table is printed by `tools/build_from_spec.py --fields` after the spec's ow
 | `environments[].bubble_model` | — | no | wind law for the loss at each surface bounce: apl_1994 (sim/surface.py), or null for none | — | null: no bubble loss |
 | `environments[].sound_speed_m_s` | m/s | no | sound speed of isovelocity water | CTD | 1500 |
 | `environments[].profile` | — | no | {depth_m: [...], speed_m_s: [...]}: a sound-speed profile. The factor then comes from Bellhop (GPUSONAR_BELLHOP) and needs water_depth_m | SVP cast / climatology | leave it out: isovelocity |
-| `environments[].own_depth_limits_m` | m | no | depths the platform may operate at (a static frame: depths it can be hung at) | the platform's rating and the operating rules | [5, 300]: placeholders, flagged |
+| `environments[].own_depth_limits_m` | m | no | depths the platform may operate at in this water (a static frame: depths it can be hung at); never deeper than the build's platform.max_depth_m | the operating rules | 5 m to the build's platform.max_depth_m (300 m when that is not given: a placeholder, flagged) |
 | `environments[].bottom_clearance_m` | m | no | how close to the bottom the platform may come | operating rules | 10: a placeholder, flagged |
 | `environments[].illustrative` | — | no | true: nobody measured this environment; it is an example | — | true |
 | `environments[].note` | — | no | where the values come from, in words | — | leave it out |
@@ -164,6 +164,7 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `platform.usable_span_m` | m | no | length the rows may take (the rest is margin, fairing, projector) | integration notes | defaults to span_m |
 | `platform.usable_height_m` | m | no | height the rows may take | integration notes | defaults to height_m |
 | `platform.depth_m` | m | no | static only: the depth the frame hangs or stands at | trial plan | static: must be given (it is the typed-in pose) |
+| `platform.max_depth_m` | m | no | deepest the platform operates: the depth planner searches own depths no deeper, and it is the depth rating required of hydrophones, cables, connectors, housings and the projector | the platform's depth rating / the owner | leave it out: the planner then uses each environment's limits (300 m when it has none: a placeholder) and the parts list has no rating |
 | `array.module` | — | no | a row module under configs/builds/modules: a named row design (count, pitch, hydrophone, boards a row) that several builds share; fields given here win | the project's row design | leave out and give count and pitch_m |
 | `array.rows` | — | yes | number of horizontal rows (1: bearing only; 2 or more: elevation and depth) | array drawing | must be given |
 | `array.count` | — | yes | hydrophones in each row | array drawing | must be given |

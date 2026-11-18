@@ -817,6 +817,13 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
         el: dict = {"sector_deg": [-30.0, 30.0, 0.25]}
         if rows == 2:
             el["sector_from_depth"] = {"bounces": 1, "margin_deg": 1.0}
+            # Two rows cannot tell which of several elevation angles an echo came from. The chain (live.py, `correct_bearing`) places a
+            # detection at range x the horizontal part of the PICKED angle's direction, also when the pick is flagged ambiguous: a wrong
+            # pick of 25 degrees moves the detection 1.1 km in at 12 km and the track breaks (measured: tools/popoto_12km_study.py --classes).
+            # So with two rows the position stays the row's own (range and cone bearing), as one row gives it; the cone correction it gives
+            # up is under 0.01 degree within a few degrees of level. Drop this line when the chain applies the correction only to
+            # unambiguous elevations.
+            el["correct_bearing"] = False
         el["attitude_time"] = get(spec, "navigation", "attitude_time", "arrival" if (not static or nav_tilt) else "transmit")
         el["attitude_rate_sigma_deg_s"] = float(get(spec, "navigation", "attitude_rate_sigma_deg_s", 0.5))
         el["roll_sigma_deg"] = float(get(spec, "navigation", "roll_sigma_deg", 1.0 if static else 0.2))

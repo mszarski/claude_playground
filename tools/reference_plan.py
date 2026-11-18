@@ -447,7 +447,7 @@ def depth_and_targets() -> list:
     r10 = ph["roughness"][0]
     hk = [k for k in r10 if k.startswith("coherent_reflection_rms_")]
     deep = {t["target_depth_m"]: t for t in ph["by_target_depth"]}
-    L.append(f"\n- **Own depth is worth tens of decibels against a near-surface target.** At 10 m the echo is {rows[10.0]['flat']['peak_db']:.0f} dB down; it crosses the free-field value at {lobe['zero_db_m']:.0f} m and peaks, "
+    L.append(f"\n- **Own depth is worth tens of decibels against a near-surface target.** At 10 m the echo is {-rows[10.0]['flat']['peak_db']:.0f} dB down; it crosses the free-field value at {lobe['zero_db_m']:.0f} m and peaks, "
              f"{rows[min(rows, key=lambda z: abs(z - lobe['peak_m']))]['flat']['peak_db']:+.1f} dB, at {lobe['peak_m']:.0f} m.\n"
              f"- **The band fills the nulls between lobes, not the one at the surface.** At the first null below the peak ({lobe['first_null_m']:.0f} m) a single frequency gives {null['narrowband_db']:.0f} dB; the 4–6 kHz sweep gives "
              f"{null['peak_db']:+.1f} dB at the peak and {null['energy_db']:+.1f} dB in energy. Close to the surface the three figures agree: a wider band does not help a shallow array see a shallow target. Beyond a depth product of about "
@@ -495,6 +495,8 @@ def depth_and_targets() -> list:
             ten = next((v for k, v in c["at_own_depth"].items() if 9.0 <= float(k) <= 13.0), None)
             L.append(f"| {pl['environment'].get('title', env_name)} | {cname} ({c['ts_db'][0]:+.0f} dB, {c['depth_m'][0]:g}–{c['depth_m'][1]:g} m) | {c['free_field_margin_db']:+.1f} dB | "
                      + (f"{ten['margin_db']:+.0f} dB" if ten else "—") + f" | {r['own_depth_m']:g} m" + (" (the deepest searched)" if r["at_the_deepest_searched"] else "") + f" | {r['margin_db']:+.1f} dB | {_bands(r['held_band_m'])} | {_km(r['reach_m'])} km |")
+    if (DESIGN / "popoto_depth_planner.png").exists():
+        L.append("\n![Detection margin against range and own depth](design/popoto_depth_planner.png)")
     inside = [c["recommended"]["inside_platform_limit"] for pl in b3.values() if "classes" in pl for c in pl["classes"].values() if "recommended" in c]
     L.append(f"\nEvery best depth in the table is inside the platform's limit ({sum(1 for x in inside if x)} of {len(inside)}): the search goes no deeper. Where it says *the deepest searched*, the limit or the bottom clearance is what stopped it "
              "and a deeper array would do better. The limit is also the depth rating the parts list asks of every wet part.\n")
@@ -562,6 +564,9 @@ def depth_and_targets() -> list:
                             if t else "no track | | | | ") + f" | {v['pings_with_several_possible_elevations']} |")
         if C.get("not_run"):
             L.append("\nNot run: " + "; ".join(C["not_run"]) + ".")
+        L.append("\n(Detections are counted within 20 m of the straight-line range to the target; in the ducted case the strongest arrivals come later than that, so the count can read 0 while the track on the target exists. "
+                 "With two rows the generated deployment file keeps each detection at the row's own range and bearing (`elevation.correct_bearing: false`): placed with a wrongly picked elevation angle, detections jumped by up to a kilometre "
+                 "at 12 km and the track broke.)")
         L.append("\nThe ship is lost with the array at 10 m and held at the planned depth; the submerged mover is tracked and classed as a mover at 6 and 12 km with nothing known of the sound-speed profile; the depth it reports then carries a sigma of "
                  "kilometres at 12 km, which is the honest figure. The cylinder is seen only on the pings where it is abeam: aspect, not range, decides it.\n")
     return L

@@ -2689,7 +2689,7 @@ through roughness. The rms height is an input of its own (Sec. 21: measured heig
 the wind law).
 
 *Bubbles.* The `apl_1994` law goes as `1 / sin(grazing)` (floored at 2 degrees by `sim/surface.py`)
-and gives about 11 dB a bounce at 9.8 m/s: it removes the surface path, so the null fills and the
+and gives about 5 dB a bounce at 9.8 m/s with that floor (11 dB without it at 1 degree): it weakens the surface path, so the null fills and the
 lobe's gain is lost. No validity range is stated by its sources; a target inside the bubble layer
 is not modelled. A bound, not a prediction.
 
