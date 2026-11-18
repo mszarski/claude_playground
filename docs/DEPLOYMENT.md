@@ -525,6 +525,50 @@ On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock em
 should run unpatched; that is untested. So is the RoCE receiver, which needs real network
 cards.
 
+## Keys a new sonar must review
+
+Bringing up another array, band, board or platform is a matter of files: a sonar file (`configs/sonars`), a deployment
+file (`configs/deploy`) and, for the C++ program, the options `tools/sonar_live.py CONFIG --export-template` prints.
+Nothing below is fixed in code any more. Run one ping first and read the line the programs print once,
+`chain settings {...}`: it lists what the chain derived from the sonar, which values the file gave (`given`), which the
+sonar's floor decided instead of the standing value (`scaled`), and `warnings`.
+
+**From the sonar file, nothing to type.** Channel count, rows, pitch, band, pulse, sample rate, receive window, ADC
+scale and the boards come from the sonar file through the record. The chain derives from them: range cell, CFAR guard
+and training, tracker sigmas, the multipath bearing gate, the classifier's fit limit, the row tolerance and the passive
+block length (`CONFIGURATION.md`, "Sizes the chain derives"). For an array like the ones shipped (kilometres of range,
+2 kHz of band or more, a beam under 16°) these are the numbers used so far. Check them when the line says `scaled`.
+
+**Review for every new sonar** (deployment file → `sonar_live` option):
+
+| Key | Why |
+| --- | --- |
+| `source.sonar`, `source.port`, `nav.port`, `output.report_udp` | required or site-specific; there is no default sonar and no default port in code |
+| `source.sample_bytes` → `stream_sample_bytes` | the boards' sample word (3 bytes). The block header does not say it; a wrong value is a counted bad block, never wrong samples |
+| `source.buffer_bytes` → `stream_buffer_bytes` | derived from the data rate; read the granted size at start-up and raise `net.core.rmem_max` if a warning says it is smaller |
+| `source.queue_mb` → `stream_queue_mb` | 1024 MB of waiting blocks: seconds of stream = this / (channels × rate × bytes). A chain slower than real time fills it; the summary then counts dropped blocks |
+| `source.timeout` → `idle_seconds` | longer than the longest silence of the stream (a board that sends only inside its receive window is silent for the rest of the ping interval); 0 for a service that must never end by itself |
+| `source.host` → `bind` | the sonar network's interface, when the computer has several |
+| `chain.bearings_deg` | the sector is a requirement; the step should be at most half a beamwidth (a warning says when it is not) |
+| `chain.cfar.guard_m`, `train_m` | the standing 100 m and 300 m are for echoes spread by a waveguide at kilometres; a warning says when the receive window is shorter than both sides of them. A short-range sonar should set them |
+| `chain.classify.multipath.max_excess_range` (800 m), `velocity` | the site: the longest extra path a bounce can have at the water depth and range worked |
+| `chain.classify.min_speed`, `static_speed`, `chain.tracker.process_noise`, `initial_speed_sigma`, `confirm_hits`, `max_misses` | the targets and the ping interval, not the sonar |
+| `chain.min_snr_db`, `chain.cfar.pfa` | the false-alarm rate wanted |
+| `chain.sync.reference`, `search_time`, `tolerance_us`, `min_quality` | several boards: the reference burst above the band, how far apart the boards can start (2 ms), how well they must agree (a twentieth of a period; tighter for rows) |
+| `chain.elevation.*` (sector, `min_row_elements`, `water_depth`, sigmas, gradient) | stacked rows only; the row tolerance is derived |
+| `chain.doa: sbl` on a row of more than 64 hydrophones | runs on the host reference (about half the speed); every report line then says `"sbl_fallback": true` |
+| `chain.blanking.recovery_s`, `chain.decimate.*` | hardware recovery time (to be measured); the decimation follows the band and rate by itself |
+| passive `f_low`, `f_high`, bearing sector, `n_average` | what is listened for; `n_fft` and `hop` are derived |
+| `output.report_udp_max_bytes` | 65000: lower it if the receiving side's buffer is smaller |
+
+**Wire formats are contracts.** The block stream (`sources/flank_stream.py`: `GSFB`, version 1, 128-byte header) and the
+report line are unchanged. Two things were added in ways an existing peer does not notice: the sample word length is a
+parameter set alike on both ends (the header has no field for it; adding one is a format change that has not been
+made), and a report line too long for one datagram is sent as several complete lines with `"part": [k, n]` (a reader
+that parses each datagram as JSON sees reports of the same ping with fewer detections; one that knows the field joins
+them). The Holoscan report sink sees text, not lists: it groups whole lines into datagrams and refuses, counts and
+reports a single line that is too long, where `build/bin/sonar_live` splits it.
+
 ## What is not there yet
 
 

@@ -302,6 +302,57 @@ table), `sound_speed=1490` and `dead_channels=5,40,41`. Navigation datagrams may
 `"sound_speed"` and `"water_depth"`. `strftime` fields in its `--recording` and `--report` paths are filled
 with the start time.
 
+### Sizes the chain derives, and the keys of the programs around it
+
+Settings whose right value follows from the sonar are **not typed anywhere**: left out of a deployment file they are
+derived from the first ping's record (its waveform, its array and its sound speed) by one function, `libs/live`
+`derive.hpp`, which both engines call. Each is the larger of a *standing value* (the number typed until now, tuned on
+kilometre-range arrays with a band of 2 kHz or more) and a *floor* that follows from the sonar; a key in the file
+always wins. Every shipped flank sonar gets exactly the standing values (`tests/python/test_hardcoded.py`). What was
+resolved is printed once on stderr (`chain settings {...}`) and is `LiveChain.resolved` in Python, with the lists
+`given` (set in the file), `scaled` (the floor decided) and `warnings`.
+
+| Key | Left out, it is | Floor from the sonar |
+| --- | --- | --- |
+| `range_cell_m` | 2 m | one range resolution, c / 2B (B: the swept band, or 1 / pulse length for a pulse that does not sweep) |
+| `cfar.guard_m` | 100 m | 4 range resolutions |
+| `cfar.train_m` | 300 m | 12 range resolutions (three guard floors) |
+| `tracker.range_sigma` | 15 m | one range resolution |
+| `tracker.bearing_sigma_deg` | 1° | a sixteenth of the beamwidth (wavelength at the band centre over one row's length) |
+| `classify.multipath.bearing_deg` | 3° | three of the bearing-sigma floors |
+| `classify.max_fit_rms` | 60 m | four range resolutions |
+| `elevation.row_tolerance_m`, `passive.tonal.row_tolerance_m` | 0.02 m | an upper limit instead: a quarter of the shortest wavelength when that is less (rows are at least half of one apart) |
+| passive `n_fft`, `hop` | 1024, half of `n_fft` | the next power of two above two transit times of sound across one row, at the record's sample rate |
+
+Not derived, because they are choices about targets, false alarms and the site, not properties of the sonar: `cfar.pfa`,
+`min_snr_db`, `tracker.confirm_hits`, `max_misses`, `initial_speed_sigma`, `process_noise`, `classify.min_speed`,
+`static_speed`, `multipath.max_excess_range`, `multipath.velocity`, `bearings_deg`, the elevation sector. Their defaults are
+in `ChainOptions` (`libs/live` `chain.hpp`) and `live.DEFAULTS`, which agree.
+
+Keys added so that nothing about one sonar, board or network is fixed in code:
+
+| Key (deployment file) | `sonar_live` option | Meaning (default) |
+| --- | --- | --- |
+| `source.sonar` | (the template) | required: `flank_udp` has no default sonar |
+| `source.port` | `--udp PORT` | required when the C++ command is exported: no default port in code |
+| `source.host` | `bind` | the address the block and navigation sockets listen on (`0.0.0.0`) |
+| `source.timeout` | `idle_seconds` | the run ends after this long without a ping (Python) or a block (C++); 0: never. (C++ default 30 s; was fixed) |
+| `source.sample_bytes` | `stream_sample_bytes` | bytes of one sample in a block: 2, 3 or 4, a signed little-endian integer with full scale 2^(8 bytes − 1) counts (3). The block header does not carry it: sender and receiver are set alike |
+| `source.buffer_bytes` | `stream_buffer_bytes` | the socket receive buffer asked of the system (the larger of 8 MB and half a second of the stream: channels × sample rate × `sample_bytes`). What was granted is printed, with a warning when it is less (`net.core.rmem_max`) |
+| `source.queue_mb` | `stream_queue_mb` | blocks waiting for the chain may hold this much (1024 MB; 0: no bound). Beyond it arriving blocks are dropped and counted in the closing summary (`blocks dropped at the full queue`, `dropped_blocks`); the queue had no bound |
+| `source.queue_pings` | — | Python: finished pings waiting for the chain (8); the oldest is dropped and counted (`overrun_pings`) |
+| `output.report_udp_max_bytes` | `report_udp_max_bytes` | a report line longer than this (65000) goes out as several datagrams, each a complete report line of the same ping with a share of the detections and tracks and `"part": [k, n]`; it was cut at 65000 bytes. `gpusonar.live.join_report_parts` puts them together |
+| `chain.sync.search_time` | `sync_search_time` | seconds either side of where a reference burst is expected (0.002): boards that start further apart need more |
+| `chain.sync.tolerance_us` | `sync_tolerance_us` | what the boards must agree within after resampling, microseconds (a twentieth of a period at the top of the transmit band: 8.3 µs at 6 kHz; rows measuring elevation want less) |
+| `chain.elevation.min_row_elements` | `elevation_min_row_elements` | a line of fewer hydrophones than this is not a row (3) |
+| `nav.history_margin_s` | `nav_history_margin_s` | a ping's attitude history reaches this far before its transmit and after its window (2 s) |
+
+Report fields added (only present when the thing happened, so an existing reader sees the lines it always saw):
+`"sbl_fallback": true` (active and passive: SBL was asked for on more channels than its kernels take,
+`core.SBL_KERNEL_MAX_CHANNELS` = 64, and ran on the host reference instead of failing); `"rows_as_snapshots": n`
+(passive on stacked rows without `elevation`: bearings are cone angles solved from the n rows as snapshots of one
+line); `"part": [k, n]` (a report split over datagrams).
+
 ### `passive.tonal` (optional): Goertzel lines and DEMON when listening
 
 Off unless given; without it the passive report lines are what they were, byte for byte.
