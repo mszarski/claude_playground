@@ -55,6 +55,7 @@ def options(**kw):
     o = core.MotionSolveOptions()
     o.sound_speed = C
     o.residual_scale = 1.0 / (16 * FC)
+    o.smooth_scale, o.dvl_scale = 1e-3, 1e-2       # stated: the solver has no default scales
     for k, v in kw.items():
         setattr(o, k, v)
     return o
