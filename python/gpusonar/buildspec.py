@@ -189,13 +189,16 @@ ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
 # it derives or defaults them from the sonar (libs/live derive.hpp, gpusonar.live), and a second copy here would drift.
 DEFAULT_CHAIN = {"bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard"}
 # The detection threshold of the link budget (dB of SNR after the matched filter and the array): ONE value, read here
-# by `performance`, `surface_term` and the planner. It is the budget's, not a measurement of the shipped detector:
-# see CHAIN_REALISED_SHORTFALL_DB. When the detector work lands it is to be set from the chain (live.budget_threshold_db).
+# by `performance`, `surface_term`, the depth planner and the plan. It is the budget's historical 13 dB, NOT the shipped
+# detector's figure: see DETECTOR_THRESHOLD_DB. Replacing it by `live.budget_threshold_db(record, chain, pd=..., rows=...)`
+# on the one-row SNR (without `rows_detection_gain_db`, which the detector accounts for itself) is the open step.
 BUDGET_THRESHOLD_DB = 13.0
-# What the chain as shipped was measured to realise below the budget's SNR for a point echo in free field
-# (tools/popoto_12km_study.py; chain report, "SNR accounting"): detector 35.2 dB against a budget of 44.6 dB.
-# Of it 7.7 dB is cell averaging and 1.8 dB the aperture window. Detector work is in progress; a plan prints this.
-CHAIN_REALISED_SHORTFALL_DB = {"total": 9.4, "cell_averaging": 7.7, "aperture_window": 1.8, "status": "detector work in progress"}
+# The design detection probability the budget's "threshold" language stands for, and what the chain's detector
+# (cell_statistic: multiscale, D-93 to D-99) needs for it on the budget's footing (one-row SNR with the budget's row
+# gain added back): the detector package's tabulated figures for the shipped builds (15.1 to 15.6 dB at 0.5, 16.7 to
+# 17.3 dB at 0.9; `live.budget_threshold_db` gives the figure for a record and a chain).
+DESIGN_DETECTION_PROBABILITY = 0.5
+DETECTOR_THRESHOLD_DB = {0.5: 15.5, 0.9: 17.0}
 DEFAULT_REFERENCE = {"f_start_hz": 38.0e3, "f_stop_hz": 48.0e3, "duration_s": 4.0e-3, "level_v": 2.0e-3, "lead_s": 5.0e-3, "tail_s": 10.0e-3}
 C_ASSUMED_BOTTOM = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}
 

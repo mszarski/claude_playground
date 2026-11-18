@@ -472,16 +472,15 @@ def depth_and_targets() -> list:
                     + " (the largest in the 10 m / 4 m null, where the arrivals file's digits limit Bellhop)." if V.get("bellhop") else " Bellhop was not available for the check.")
                  + f" The projector's depth counts in a null: 1.5 m below the array (the one-row file) is {20 * np.log10(11.5 / 10):.1f} dB there (`tools/surface_image_validation.py`).\n")
         if ch.get("chain_minus_budget_db") is not None:
-            from gpusonar import live
-            short, floor = bs.CHAIN_REALISED_SHORTFALL_DB, float(live.DEFAULTS["min_snr_db"])
             gap = -ch["chain_minus_budget_db"]
-            L.append(f"> **THE CHAIN AS SHIPPED REALISES {gap:.1f} dB LESS THAN THIS BUDGET for a point echo.** Measured, same target, free field "
-                     f"(`tools/surface_image_validation.py`): the chain's detector reports {ch['chain_snr_free_field_db']:.1f} dB where the budget says {ch['budget_snr_free_field_db']:.1f} dB. "
-                     f"The chain agent's accounting on its own tree put it at {short['total']:g} dB, of which {short['cell_averaging']:g} dB is the range cell's averaging and {short['aperture_window']:g} dB the aperture window "
-                     f"(`buildspec.CHAIN_REALISED_SHORTFALL_DB`). With the chain's own floor ({floor:g} dB) a target needs {floor + gap - bs.BUDGET_THRESHOLD_DB:.1f} dB more than the budget's "
-                     f"{bs.BUDGET_THRESHOLD_DB:g} dB (`buildspec.BUDGET_THRESHOLD_DB`, one value) to be detected by today's detector, which would make the 12 km margins below negative. "
-                     f"**Status: {short['status']}.** The threshold is deliberately not changed until that lands. Source levels are RMS in the simulator and in the budget alike (D-102): "
-                     "the 3 dB that convention once explained is no longer part of the gap. **Margins below are the budget's.**\n")
+            need = bs.DETECTOR_THRESHOLD_DB
+            L.append(f"> **THE BUDGET'S {bs.BUDGET_THRESHOLD_DB:g} dB THRESHOLD IS NOT THE SHIPPED DETECTOR'S.** Measured, same target, free field "
+                     f"(`tools/surface_image_validation.py`): the chain's `snr_db` reads {ch['chain_snr_free_field_db']:.1f} dB where the budget says {ch['budget_snr_free_field_db']:.1f} dB, "
+                     f"{gap:.1f} dB less. For a detection probability of {bs.DESIGN_DETECTION_PROBABILITY:g} the detector needs about {need[0.5]:g} dB on the budget's footing "
+                     f"({need[0.9]:g} dB for 0.9; `buildspec.DETECTOR_THRESHOLD_DB`, from `live.budget_threshold_db`): {need[0.5] - bs.BUDGET_THRESHOLD_DB:.1f} dB more than the "
+                     f"{bs.BUDGET_THRESHOLD_DB:g} dB used below. **Every margin below is therefore optimistic by about {need[0.5] - bs.BUDGET_THRESHOLD_DB:.1f} dB** until the budget tools "
+                     "take the detector's own threshold and quote detection probabilities (`live.detection_probability`); that step is open. Source levels are RMS in the simulator and "
+                     "in the budget alike (D-102).\n")
     # the plans
     face = P["builds"]
     b3 = face["popoto_face_3x32"]["plans"]
