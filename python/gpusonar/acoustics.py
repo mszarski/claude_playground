@@ -64,15 +64,43 @@ def absorption_ainslie_mccolm(frequency, temperature=10.0, salinity=35.0, depth=
     return (boric + mgso4 + water) / 1e3
 
 
+YARDS_PER_KM = 1000.0 / 0.9144
+THORP_MAX_FREQUENCY = 100.0e3           # Hz, warn above: see `absorption_thorp`
+
+
+def absorption_thorp(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0):
+    """Absorption in dB/m at `frequency` (Hz) by the two-term Thorp expression that SST uses:
+
+        a [dB/kyd] = 0.1 f^2 / (1 + f^2) + 40 f^2 / (4100 + f^2),   f in kHz
+
+    (Goddard, APL-UW TR 0702, eq. (42): "the expression in [Urick 1983] page 108", with "the
+    last two terms ... omitted, to match the implementation in CASS"; our notes give its stated
+    validity as 4 deg C and about 1 km depth). It has no temperature, salinity, depth or pH
+    dependence: those arguments are accepted and ignored. Here for like-for-like comparison
+    with SST runs; Francois-Garrison remains the default.
+
+    A low-frequency formula: without the omitted pure-water term it levels off at 40.1 dB/kyd
+    (43.9 dB/km). Against Francois-Garrison at 10 deg C it gives 0.27 vs 0.24 dB/km at 4 kHz,
+    1.15 vs 0.96 at 10 kHz, 31 vs 34 at 100 kHz and 44 vs 222 at 750 kHz, so a warning is
+    raised above `THORP_MAX_FREQUENCY` (our limit, not the source's)."""
+    if np.max(frequency) > THORP_MAX_FREQUENCY:
+        import warnings
+        warnings.warn(f"absorption_thorp: above {THORP_MAX_FREQUENCY / 1e3:.0f} kHz the two-term Thorp expression lacks the "
+                      "pure-water term and is far too low; use francois_garrison", stacklevel=2)
+    f2 = (np.asarray(frequency, dtype=float) / 1e3) ** 2
+    return (0.1 * f2 / (1.0 + f2) + 40.0 * f2 / (4100.0 + f2)) * YARDS_PER_KM / 1e6   # dB/kyd -> dB/km -> dB/m
+
+
 _MODELS = {
     "francois_garrison": absorption_francois_garrison,
     "ainslie_mccolm": absorption_ainslie_mccolm,
+    "thorp": absorption_thorp,
 }
 
 
 def absorption(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0,
                model: str = "francois_garrison"):
-    """Absorption in dB/m. `model` is `francois_garrison`, `ainslie_mccolm` or `none`."""
+    """Absorption in dB/m. `model` is `francois_garrison`, `ainslie_mccolm`, `thorp` or `none`."""
     if model == "none":
         return np.zeros_like(np.asarray(frequency, dtype=float))
     try:
@@ -82,7 +110,77 @@ def absorption(frequency, temperature=10.0, salinity=35.0, depth=0.0, ph=8.0,
     return fn(frequency, temperature, salinity, depth, ph)
 
 
+def water_density(temperature: float = 10.0, salinity: float = 35.0) -> float:
+    """Density of sea water in kg/m3 at atmospheric pressure, from temperature (deg C) and
+    salinity (PSU): the one-atmosphere polynomial
+
+        rho = A(t) + S (B(t) + C(t) sqrt(S) + D S)
+
+    with the coefficients printed in arlpy (BSD 3-clause), arlpy/uwa.py:101-121, and again in
+    UnderwaterAcoustics.jl (MIT), src/basic.jl:111-121, both of which attribute it to
+    "Fofonoff (1985 - IES 80)". Neither has a pressure term, so neither has this: it is the
+    density near the surface. Their documented value: 1022.7 kg/m3 at 27 deg C and 35 ppt."""
+    t, s = float(temperature), float(salinity)
+    a = 999.842594 + t * (6.793952e-02 + t * (-9.095290e-03 + t * (1.001685e-04 + t * (-1.120083e-06 + t * 6.536332e-09))))
+    b = 0.824493 + t * (-4.0899e-03 + t * (7.6438e-05 + t * (-8.2467e-07 + t * 5.3875e-09)))
+    c = -5.72466e-03 + t * (1.0227e-04 - t * 1.6546e-06)
+    return a + s * (b + c * np.sqrt(s) + 4.8314e-04 * s)
+
+
+def bubbly_sound_speed(void_fraction, sound_speed: float = 1500.0, gas_sound_speed: float = 340.0,
+                       density_ratio: float = 1000.0):
+    """Sound speed (m/s) of water holding a volume fraction `void_fraction` of gas bubbles, at
+    frequencies well below the bubbles' resonance (the mixture then has the mean density and
+    the mean compressibility of its parts: Wood's equation). `density_ratio` is water density /
+    gas density. Written as in arlpy (BSD 3-clause), arlpy/uwa.py:215-231 (`bubble_soundspeed`,
+    "based on Wood (1964) or Buckingham (1997)"; the same expression is in UnderwaterAcoustics.jl,
+    src/basic.jl:30-33):
+
+        c_mix = c / sqrt( (g (c / c_gas)^2 m + (1 - g) / m) (g / m + (1 - g) m) ),  m = sqrt(density_ratio)
+
+    which is 1 / sqrt(mean density x mean compressibility) with the water density divided out
+    (a test checks that identity). g = 0 gives c, g = 1 gives c_gas, and in between the speed
+    falls far below both: about 2 c_gas / m near g = 1/2."""
+    g = np.asarray(void_fraction, dtype=float)
+    c, m = float(sound_speed), np.sqrt(float(density_ratio))
+    out = c / np.sqrt((g * (c / float(gas_sound_speed)) ** 2 * m + (1.0 - g) / m) * (g / m + (1.0 - g) * m))
+    return float(out) if out.ndim == 0 else out
+
+
 # --- sea surface ---------------------------------------------------------------------------------
+
+SEA_STATE_WIND_SPEED = (0.8, 2.6, 4.4, 6.9, 9.8, 12.6, 19.3, 26.5, 30.6, 32.9)
+"""Wind speed in m/s for sea states 0 to 9, as printed in UnderwaterAcoustics.jl (MIT),
+src/stdlib.jl:411-422 (`SeaState0` ... `SeaState9`), whose comment reads "WMO sea states from
+APL-UW TR 9407 (1994), II-4 Table 2 (median windspeed)". TR 9407 was not read."""
+
+
+def sea_state_wind_speed(sea_state) -> float:
+    """Median wind speed (m/s) of a sea state 0 to 9 (`SEA_STATE_WIND_SPEED`). Whole states only:
+    the source tabulates ten values and gives no rule between them."""
+    n = float(sea_state)
+    if n != int(n) or not 0 <= int(n) <= 9:
+        raise ValueError(f"sea_state must be a whole number from 0 to 9, not {sea_state!r}")
+    return SEA_STATE_WIND_SPEED[int(n)]
+
+
+def resolve_sea_state(config, _where: str = "scenario"):
+    """A copy of a scenario configuration in which every mapping that has `sea_state` has
+    `wind_speed` instead (`sea_state_wind_speed`), at any depth. So `sea_state` is accepted
+    wherever `wind_speed` is. Giving both in one mapping is an error unless they agree."""
+    if isinstance(config, list):
+        return [resolve_sea_state(v, f"{_where}[{i}]") for i, v in enumerate(config)]
+    if not isinstance(config, dict):
+        return config
+    out = {k: resolve_sea_state(v, f"{_where}.{k}") for k, v in config.items() if k != "sea_state"}
+    if "sea_state" in config:
+        wind = sea_state_wind_speed(config["sea_state"])
+        if "wind_speed" in config and abs(float(config["wind_speed"]) - wind) > 1e-9:
+            raise ValueError(f"{_where}: sea_state {config['sea_state']} means a wind speed of {wind} m/s, but "
+                             f"wind_speed is {config['wind_speed']}; give one of them")
+        out["wind_speed"] = wind
+    return out
+
 
 KNOTS_PER_MS = 1.943844
 

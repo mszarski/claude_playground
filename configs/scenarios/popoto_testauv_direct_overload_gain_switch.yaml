@@ -1,0 +1,11 @@
+# popoto_testauv_direct_overload with the mitigation to compare: the gain is held 40 dB down while
+# the projector transmits (until the pulse and its first boundary returns have passed) and ramps
+# back over 5 ms. Nothing clips, so the slow recovery never starts and the 150 m target is seen.
+# The switch is written into the record's existing gain-ramp fields (a processor may undo it).
+# ILLUSTRATIVE values, not a board's.
+base: popoto_testauv_direct_overload
+name: popoto_testauv_direct_overload_gain_switch
+sonar_overrides:
+  receive:
+    overload:
+      gain_switch: {gain_db: -40.0, until: 0.13, ramp: 0.005}

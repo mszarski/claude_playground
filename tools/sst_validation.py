@@ -647,7 +647,7 @@ def asiaex_runs(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> d
         sum_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "sum"}}),
         convolve_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "convolve"}}),
         surface_many=_quiet_run(ASIAEX, {**surface_only, "pings": {"count": int(many)}}),
-        surface_fast=_quiet_run(ASIAEX, {**surface_only, **fast}),
+        surface_fast=_quiet_run(ASIAEX, {**surface_only, **fast, "time_spread": {"doppler_spectrum": "lorentzian"}}),
         surface_fast_gaussian=_quiet_run(ASIAEX, {**surface_only, **fast, "time_spread": {"doppler_spectrum": "gaussian"}}),
         rough_sum=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "sum"}}),
         rough_convolve=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "convolve"}}),

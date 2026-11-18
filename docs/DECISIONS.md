@@ -1115,3 +1115,17 @@ already right. With (4, 4) the error is 5.5e-5 for under 1 % of a (path, channel
 cost. The owner chose to switch ("Switch the echo kernel"). Consequence: records of scenes
 with motion differ from earlier ones at the 1e-3 level or below; static scenes are
 unchanged. `arrival_passes=(3, 4)` reproduces the old kernel; sampled pulses keep (8, 8).
+
+### D-84 Surface Doppler spreading defaults to the Gaussian spectrum
+
+`time_spread.doppler_spectrum` now defaults to `gaussian`; `lorentzian` (SST's AR(1) process)
+stays selectable. Reason: in the first comparison with measured channels (Underwater Acoustic
+Channel Repository, SPACE'08 site, 12.5 kHz; one fitted parameter per recording, the wind)
+the measured Doppler spectra of surface arrivals have the Gaussian shape (width ratio
+w90/w50 of 2.0 to 3.1; a Gaussian has 2.44) and the derived rms width; the Gaussian option
+is inside the measured spread for 13 of 18 arrivals in width and 15 of 18 in shape, the
+Lorentzian for 4 and 7. One site and one frequency: evidence, not proof; the comparison is
+being extended to the repository's other sites. The owner chose to switch ("Yes change to
+Gaussian"). Consequence: realisations of runs with time spreading change (the spectrum also
+sets the ping-to-ping fading). The decay-time rule is not changed: the same data do not
+settle it.
