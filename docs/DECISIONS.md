@@ -1247,3 +1247,18 @@ did: all 21 Lambert boundaries in `configs/scenarios` give `mu_db` (-27.0 in 18 
 by choice of their authors, unchanged). `tools/design_report.py` and `DESIGN.md` state
 "-27 dB Lambert" as an assumed seabed for the SAS cell: an explicit assumption, not this
 default, left as it is.
+
+### D-90 `medium_sand` keeps its source's volume parameter
+
+`configs/sediments.yaml`, `medium_sand`: `sigma2` stays 0.001, the value its source
+tabulates for that sediment (arXiv:1809.08459, Table 1: -20.0 dB/m volume scattering
+strength at 10.0 dB/m of attenuation). The grain-size rule (Snellen et al. 2011, Table II;
+2013) gives 0.002 for everything coarser than 5.5 phi, and the same arXiv table agrees
+with the rule for very fine silt, so the difference is real and known; nothing read says
+which number the handbook holds for medium sand. The owner was shown the choice and
+answered "Take your recommendations": the recommendation was to keep the tabulated value,
+because a value printed for the sediment itself in a cited source outranks a general
+rule. No number changes. Cost of the choice: the row sits 0 to 2.5 dB below its
+neighbours' trend (most at 6 kHz and 45 degrees). The row's provenance and note now say
+so; `sigma2: 0.002` beside the name gives the rule's value. Limit: literature only, one
+print; a second print of the table would settle it (`REFERENCES.md` wanted list).
