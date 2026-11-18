@@ -197,3 +197,68 @@ def test_two_rows_arcs_and_ensemble_on_both_engines():
             assert ("depth_ensemble_m" in x) == ("depth_ensemble_m" in y)
             if "depth_ensemble_m" in x:
                 assert x["depth_ensemble_m"] == pytest.approx(y["depth_ensemble_m"], abs=0.5)
+
+
+# --- leftovers: the bubble law by name, the standalone program, SBL bearings -----------------------------------------------
+
+def test_bubble_loss_comes_from_the_named_law():
+    """`surface.bubble_model` evaluates sim/surface.py's law (wind speed and frequency given) into a loss against grazing
+    angle for the pattern, flat or through rays."""
+    from gpusonar.sim import surface as surface_model
+    o = mp.cpp_options({"surface": {"bubble_model": "apl_1994", "wind_speed_m_s": 9.8, "frequency_hz": 5000.0}})
+    grazing, loss = surface_model.bubble_loss_table("apl_1994", 9.8, 5000.0, 1500.0)
+    assert np.allclose(o["surface_loss_grazing"], grazing) and np.allclose(o["surface_loss_table_db"][5:], loss[5:])
+    with pytest.raises(ValueError):
+        mp.cpp_options({"surface": {"bubble_model": "apl_1994"}})
+    g = mp.geometry_dict(T.GEOM)
+    calm = core.live_multipath_pattern(150.0, 16.0, g, mp.cpp_options({}))[1]
+    rough = core.live_multipath_pattern(150.0, 16.0, g, o)[1]
+    at = float(np.interp(np.arcsin(375.0 / 12000.0), o["surface_loss_grazing"], o["surface_loss_table_db"]))
+    assert at > 0.0 and abs(rough[1]) == pytest.approx(abs(calm[1]) * 10.0 ** (-at / 20.0), rel=0.02)
+    rays = core.live_multipath_pattern(150.0, 16.0, dict(g, profile=ISO), dict(o, rays=1))[1]
+    assert np.allclose(rays, rough, atol=5e-3)
+
+
+EXE = Path(__file__).resolve().parents[2] / "build" / "bin" / "sonar_live"
+
+
+@pytest.mark.skipif(not EXE.exists(), reason="build/bin/sonar_live not built")
+def test_the_program_takes_the_new_keys(tmp_path):
+    """build/bin/sonar_live replays a recording with multipath_depth_rays, the ladder and coverage given as key=value: it
+    ends with return code 0 and prints what the Python-wrapped C++ engine prints."""
+    import json
+    import subprocess
+
+    from gpusonar import buildspec as bs
+    from gpusonar import coverage
+    d = bs.derive(bs.load("popoto_face_1x32"))
+    cov = {"classes": [{"name": "sub", "ts_db": 15.0, "depth_m": [100.0, 200.0]}], "budget": coverage.budget_of(d, 5.0)}
+    records = run_scenario(T.chain_scenario(6000.0, 15.0, pings=2)).records
+    cfg = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "engine": "cpp", "multipath_depth": {"rays": True}, "coverage": cov,
+           "elevation": {"ssp": {"depth": [0.0, 2000.0], "speed": [1500.0, 1500.0]}, "profile": {"supplied": {"sigma_m_s": 0.1}}}}
+    with LiveChain(cfg, recording=str(tmp_path / "rec.h5")) as chain:
+        want = chain.run([r.copy() for r in records])
+    snr, pd = coverage.pd_table(records[0], {k: v for k, v in cfg.items() if k != "engine"})
+    flat = coverage.cpp_options(cov)
+    args = ["bearing_first_deg=-60", "bearing_last_deg=60", "bearing_step_deg=0.5", "multipath_depth=1", "multipath_depth_rays=1",
+            "elevation_ssp_depth=0,2000", "elevation_ssp_speed=1500,1500", "elevation_profile=1", "elevation_profile_supplied_sigma=0.1", "coverage=1",
+            "coverage_pd_snr_db=" + ",".join(repr(v) for v in snr), "coverage_pd_value=" + ",".join(repr(v) for v in pd)]
+    args += [f"coverage_{k}={v}" for k, v in flat.items()]
+    out = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), "--report", str(tmp_path / "rep.jsonl"), *args], capture_output=True, text=True, timeout=600)
+    assert out.returncode == 0, out.stderr[-2000:]
+    got = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
+    assert len(got) == len(want) == 2
+    for a, b in zip(got, want):
+        assert a["coverage"] == b["coverage"] and a["profile"] == b["profile"] == {"rung": "supplied"}
+        assert a["detections"][0]["depth_multipath_m"] == pytest.approx(b["detections"][0]["depth_multipath_m"], abs=1e-6)
+        assert a["detections"][0]["multipath_profile_source"] == "supplied"
+
+
+def test_with_sbl_bearings_the_stage_still_gives_the_depth():
+    """doa: sbl replaces the map's bearings by SBL's at each range gate (the C++ chain runs it for either engine): the
+    detection of the target still carries the depth through the rays."""
+    records = run_scenario(T.chain_scenario(6000.0, 15.0, pings=2)).records
+    with LiveChain({"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "doa": "sbl", "multipath_depth": {"rays": True}}) as chain:
+        reps = chain.run([r.copy() for r in records])
+    depths = [d["depth_multipath_m"] for rep in reps for d in rep["detections"] if d.get("depth_multipath_m") is not None]
+    assert depths and min(abs(z - 150.0) for z in depths) < 2.0, [d for rep in reps for d in rep["detections"]]

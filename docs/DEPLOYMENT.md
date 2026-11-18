@@ -491,6 +491,74 @@ candidates are 12° apart, kilometres in depth, and the multipath depth is known
 **Cost.** 20 to 45 ms per examined detection at 6 to 12 km, 80 ms at 3 km, 0.2 s at 1 km with the search to 500 m (one
 core); 0.50 against 0.54 s per ping on the 12 km test window with one detection.
 
+### Rays through the profile the vehicle holds (`multipath_depth.rays`, `elevation.ray_method: arcs`)
+
+Both depths can come from one ray calculation through whatever the sound-speed ladder holds this ping. Switch it on
+with the ladder:
+
+```yaml
+chain:
+  elevation:
+    ray_method: arcs
+    profile:
+      built: {sample_sigma_m_s: <the sound-speed sensor's accuracy>}
+      ensemble: {gradients_per_s: [<the gradients the unsampled water may have>], extent_m: [<how far they may run>]}
+  multipath_depth: {rays: true, surface: {rms_height_m: <rms wave height>}}
+  coverage: {classes: [...], budget: {...}}     # tools/coverage_map.py --build <build> --chain-config prints this block
+```
+
+**Where each depth comes from and how far to trust it** (numbers: `tools/refraction_depth_study.py`, illustrative
+waters, the measurement itself taken as exact; `docs/design/refraction_depth_study.json`):
+
+| What the vehicle knows (rung) | One row, `depth_multipath_m` | Stacked rows, `depth_m` |
+| --- | --- | --- |
+| a cast, or its own profile from a dive through the water between it and the target (`supplied`, `built` over the column) | the true depth; sigma under 1 m at 1 km, a few metres at 3 to 6 km | the true depth; sigma 1 m at 1 km, 10 to 20 m at 3 to 12 km |
+| its own sound speed only (`local`, `prior`), or a profile from a few metres about its depth | median error 3 m at 1 km, 18 m at 3 km, 30 to 50 m at 6 km, with a sigma that says so (6, 60, 300 m) | median error 6 to 9 m at 1 km, 40 to 50 m at 3 km, 160 m at 6 km, 800 m at 12 km (sigma 15, 130 to 150, 400, 1500 m) |
+| an assumed family | as good as the assumption: exact when it is the water's, tens of metres off when it is not | the same |
+
+- A depth beyond a kilometre or two is a measurement only with a profile that covers the water between vehicle and
+  target. **Dive through the column before a search** (or load a cast); without it treat long-range depths as indications
+  and read the sigma, the ensemble's span and the rung (`depth_profile_source`, `multipath_profile_source`).
+- `multipath_reason: no_direct_path` / `no_surface_path`: the profile says no such path reaches that range from the
+  vehicle's depth, so there is no multipath depth to give. In the study's waters with the vehicle at 50 m in 200 m, or at
+  225 m in 1000 m, a direct path existed in 10 of 10 cases at 1 km, 5 of 10 at 3 km, 3 of 10 at 6 km and 2 of 10 at 12 km,
+  and a direct with a surface path in none at 12 km. The flat pattern used to fit whatever arrived there.
+- `multipath_note: shadow` with `multipath_shadow_m`: the depth fits, but part of the column is not reached by the
+  direct path at that range; a target there could give the same echo by other paths. Treat the depth as one explanation.
+- `depth_ensemble_m`, `depth_multipath_ensemble_m`: where the depth would lie if the unsampled water were any of the
+  ensemble's profiles. Much wider than the sigma means the sigma's single tilt does not describe what is not known.
+  The span is only as wide as the configured gradients and extents make it; it is not a bound.
+
+### The coverage picture (`chain.coverage`)
+
+One member of the report line says what the sonar can see from where it is (keys: docs/CONFIGURATION.md):
+
+```
+"coverage": {"own_depth_m": 225, "water_depth_m": 1000, "profile": "built", "pd": 0.5, "age_pings": 3,
+  "ranges_m": [750, 1767, ..., 12700],
+  "classes": [{"name": "xl_auv", "max_range_m": 4893, "pd": [1, 1, 1, 1, 0.4, 0, ...], "direct_to_m": 11683,
+               "blind_m": [[2530, 3040, 20, 65]], "max_range_ensemble_m": [3643, 4922], "recommended_max_range_m": 6142}, ...],
+  "recommend": {"own_depth_m": 60, "gain_m": 1249}}
+```
+
+- **An empty sector or a blind one?** `pd` at the range in question (`gpusonar.coverage.could_have_seen(report["coverage"], range_m)`):
+  near 1, a target of that class there would have been reported, so the sector is empty; near 0, the sonar could not
+  have seen it from this depth, whatever the bearing.
+- `max_range_m` is for the worst of the class's depths; `blind_m` lists what is not seen nearer than that (range band,
+  depth band); `direct_to_m` is where the direct path stops reaching every depth of the class.
+- `recommend`: change depth when `gain_m` is worth the transit. It looks at detection range only, within
+  `own_depth_limits_m` and the bottom clearance.
+- `profile` is the rung all of it rests on, and `max_range_ensemble_m` how far the range moves over the profiles the water
+  may also be. On `prior`, `local` or `none` the picture is that of isovelocity water (or the assumed gradient).
+- In shallow water give the bottom (`coverage.bottom`) and make sure the water depth arrives (navigation's altitude, or
+  `elevation.water_depth`): without them the picture is the deep-water one. On the popoto_12km scenario (sonar at 10 m,
+  100 m of water over sand, ship at 12 km detected at 20 to 23 dB) the picture without the bottom said the ship could not
+  be seen; with it, probability 1.
+- Before a mission: `tools/coverage_map.py --build <build> --environment <name> --own-depth <m> [--profile built:LO-HI]
+  [--figure out.png]` draws the same numbers against range and target depth.
+- It costs time only when it is refreshed: 0.03 s in deep water without a bottom, 0.3 to 0.8 s with a bottom or an
+  ensemble (one core, ten own depths tried).
+
 ## Listening without transmitting
 
 The array is for active pings; the same backend also gives passive bearings from any

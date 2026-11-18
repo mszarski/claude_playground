@@ -3070,3 +3070,57 @@ the circle of a constant-gradient ray to 1e-10 and its time to 1e-12; a thermocl
 Runge-Kutta to 2 cm and 2 µs; Bellhop's arrival times to 20 µs and amplitudes to 1.5 dB away from caustics;
 `elevation.ray_depth` (small Snell steps) to 2 m.
 
+### 25.6 One ray calculation for both depths, the coverage picture and the ensemble [OURS]
+
+**The fan.** The chain's ray code (`libs/live` `raytrace.hpp`, the C++ counterpart of Sec. 25.5's reference, equal to it
+to rounding) shoots one fan of rays from the sonar's depth and reads it at the ranges wanted. At a fixed range the rays
+with one reflection history end on one sheet of the wavefront, on which the travel time's gradient is the slowness
+vector:
+
+    dt/dz = s / c        (s: sine of the ray's angle at its end, down positive)
+    dt/dr = p            (p = cos(theta) / c, the ray's Snell constant)
+
+So an arrival at any depth between two neighbouring rays follows from a cubic Hermite polynomial in z through the two
+rays' times with these slopes, and an arrival at a range between two readings of the fan from the same in r. In
+isovelocity water the times are the image solution's to nanoseconds and the amplitudes 1/R to 0.2% (test); in the
+study's refracting waters they are the bisected eigenrays' to 0.1 microsecond. Where neighbours differ in history the
+launch angle between them is halved until each part has one history, so a sheet reaches the boundary it ends on (a
+shallow target far away sits between the last direct ray and the first reflected one). Amplitude is the ray tube's,
+I = cos(theta_0) / (r |dz/dtheta_0| cos(theta_r)), clipped at a caustic.
+
+**The multipath pattern through rays.** For a candidate depth z and the detection's two-way time, the horizontal range
+is the one at which the direct path's two-way time is the detection's (Newton, dt/dr = p_tx + p_rx); the legs' arrivals
+there give the pattern: delay (t_tx,j - t_tx,0) + (t_rx,k - t_rx,0), amplitude a_tx,j a_rx,k / (a_tx,0 a_rx,0), with
+the surface's coefficient, roughness and bubble loss at each ray's own grazing angle at the surface (Snell:
+cos(g) = p c(0)) and the bottom's Rayleigh coefficient at its angle there. A change of the two-way time within the
+search moves each delay by (p_j - p_0) dr, exactly to first order. A depth with no direct or no once-surface-reflected
+path on either leg has no pattern and is not searched.
+
+**What the profile does not know.** The rung's claim is one tilt about the vehicle (Sec. 22, environment.hpp):
+c(z) +- min(sigma(z), sigma_g |z - z_own|). The depth sigma is the sensitivity to it: the depth at which the tilted
+profiles give the same both-ways surface delay, a twentieth of the tilt each way, scaled back. With nothing known this
+reproduces the first-order rule of Sec. 25.4, z r^2 sigma_g / (2 c (z_own + z)), within 12% from 3 km (test).
+
+**The ensemble.** A single tilt cannot stand for a thermocline the vehicle has not seen. The ensemble continues the
+unsampled water with each configured gradient over each configured extent, every pairing above and below, and reports
+the span of the answers. It is a set of hypotheses, not a distribution: the span has no probability attached and covers
+the truth only as far as the hypotheses do.
+
+**The coverage statistic.** At a target position the two-way arrivals (all pairs of the legs' arrivals) go through the
+compressed pulse, a sinc of the band B:
+
+    P(t) = | sum_pairs' a_j a_k exp(-i 2 pi fc tau_jk) sinc(B (t - tau_jk)) |^2  +  sum_rest |a_j a_k|^2 sinc^2(B (t - tau_jk))
+
+The first sum is over pairs whose two legs are each the direct or the once-surface-reflected path: their interference
+is the Lloyd mirror and is deterministic. Everything that touched the bottom, or the surface twice, and the part of a
+surface reflection that roughness removes from the coherent path (1 - exp(-Gamma^2)), has no phase one could predict
+at a wavelength of 0.3 m and adds as power. The factor on the free-field echo is max_t P(t) (R_tx R_rx)^2. In isovelocity
+water with a flat surface this is `lloyd.py`'s `peak_db` (within 0.13 dB over 4 to 300 m targets and 1 to 13 km; test);
+with a rough surface it lies between `peak_db`, which leaves the scattered energy out, and `energy_db`, which counts all
+of it whenever it arrives. In a duct it is far below `energy_db` (the many bottom paths are resolved from one another
+by the pulse and a peak detector sees the strongest group, not their sum). SNR = SL - 2 TL + TS - (N0 + 10 log B)
++ 10 log(B T) + AG + factor with spherical TL and absorption on the straight path, and the detection probability is the
+chain's own (`live.detection_probability`) at that SNR.
+
+Not in it: range dependence of the water or the bottom, a rough bottom, the caustic phase, leakage into shadows
+(diffraction), reverberation as a limit on detection (the table is for noise), the target's aspect.
