@@ -39,6 +39,8 @@ receive:
 
 unconfirmed:
   - array                     # custom array not yet designed in detail
+  - transmit                  # no projector chosen: position, beam, band and pulse are design values
   - receive.sample_rate
   - receive.adc_bits
+  - receive.adc_full_scale
   - receive.tvg

@@ -35,5 +35,7 @@ receive:
 
 unconfirmed:
   - array
-  - transmit.waveform         # band anywhere in 100-300 kHz
+  - transmit                  # no projector chosen; band anywhere in 100-300 kHz
   - receive.sample_rate
+  - receive.adc_bits
+  - receive.adc_full_scale

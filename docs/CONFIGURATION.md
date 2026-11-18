@@ -223,6 +223,7 @@ A `target`'s frame has x ahead, y to starboard, z down.
 | `receiver.ambient_noise.statistics` | non-Gaussian ambient noise (`sim/noise.py`). `{model: k, shape, correlation_time, common}`: K-distributed; without `correlation_time` TR 0702's KNoise (a K variate per sample and channel, then the spectrum filter: kurtosis 3/shape for a white spectrum only); with it a unit-mean gamma texture held over cells that long on the Gaussian noise (spectrum and array coherence kept), shared by all hydrophones unless `common: false`. `{model: alpha_stable, alpha}`: impulsive symmetric alpha-stable samples, white in band, independent channels; for alpha < 2 there is no variance and the configured level sets the scale (that of the Gaussian noise of the same spectrum; identical to it at alpha = 2). Default (no key, `model: gaussian`, infinite `shape`): unchanged |
 | `receiver.ambient_noise: {model: fitted, file, gain_db, channels, include_tones, allow_uncovered}` | noise generated from a model fitted to a multichannel recording by `tools/fit_noise.py` (`sim/noise_fit.py`): its spectrum, the coherence between hydrophones and its tail. Levels are in the recording's sample units; `gain_db` (0) rescales. The model's channel count must match the sonar's, or `channels` picks a subset; frequencies the recording did not cover are refused unless `allow_uncovered` (zero noise there); `include_tones` (false) adds back the lines the fit removed |
 | `sources` | radiating sources heard one way (`sim/sources.py`): a list of `{label, origin (or position), velocity, heading_deg, turn_rate_deg, signal}`; `signal` is one mapping or a list. `{type: noise, level_db, slope_db_per_octave, reference_frequency, band}` or `{type: noise, spectrum: {frequency, level_db}}` (dB re 1 uPa^2/Hz at 1 m); `{type: tonals, lines: [{frequency, level_db, phase_deg}], family: {fundamental, harmonics: [[n, 20 log A_n, phase_deg]]}}` (rms source level for a line; TR 0702 eq. 29 for a family); `{type: waveform, waveform: {...}, source_level_db, times | repeat: {first, interval, count} | ping_offset}` (any transmit waveform; default the sonar's, emitted with each ping); `{type: file, path, dataset, sample_rate, level_db | scale, start, loop}`. Levels use `receive.sensitivity_db + gain_db` as ambient noise does. Pulses run in the C++/CUDA kernel, the rest in a NumPy streaming synthesiser |
+| `sources[].stream: {knot_interval, oversample}` | the streaming synthesiser of continuous one-way signals (`noise`, `tonals`, `file`): the retarded time is solved exactly every `knot_interval` seconds (0.004) and the delay read linearly between, which is off by h² v_t² / (8 r c) seconds for a source passing at range r with speed v_t across the line of sight; `knot_interval: auto` halves the spacing until that is under 0.01 rad at the top of the band, and a fixed spacing that leaves more than 0.1 rad warns. `oversample` (2): the emission-time series is held at this multiple of the record's rate |
 | `pings.transmit: false` | a passive capture: no echoes, reverberation or transmit reference; the record keeps its form and length (the receive window) |
 | `reverberation` item `exclude_specular: true` (or `{mean_square_slope, rms_height, reflection}`) | `geometry: bistatic` items only: take out of the scattering strength the near-specular part that `time_spread` already carries as the tail of each bounce (`sim/reverb_specular.py`). Use it when the transmitter's pulse also arrives one way over that boundary (a `sources:` entry for a separate transmitter). `true` reads the slopes and height from `time_spread` and the reflection coefficient from the provider. Refused with a warning on a monostatic item |
 | `receiver.noise_rms`, `receiver.adc` | white noise at the ADC; whether to quantise |
@@ -235,6 +236,53 @@ A `target`'s frame has x ahead, y to starboard, z down.
 | `configs/chains/<name>.yaml` | `pipeline.run` | `source: {type, ...}`, `steps: [{stage, ...}]`, `backend`, `output: {geotiff, log, debug_dir, taps: {dir, stages}}` |
 | `configs/deploy/<name>.yaml` | `tools/sonar_live.py` | `source`, `nav: {port, host}` or `nav: {static: {...}}`, `chain`, `output: {recording, report, report_udp, taps: {dir, pings}}` |
 | `configs/nav/<name>.yaml` | `tools/nav_adapter.py` | a mapping from a vendor's navigation stream to the chain's datagrams: `format`, `csv`, `time`, `position`, `attitude`, `velocity`, `sound_speed`, `altitude`, `water_depth`, `sigma`, `output` (`python/gpusonar/navadapter.py`; `generic_csv.yaml` is a worked example, `sprintnav_template.yaml` a template with every vendor-side entry unconfirmed) |
+
+### Steps of a chain file: keys derived from the record, and where the defaults live
+
+A step passes on only the keys its config gives; every other parameter takes the default of the function it
+calls (`recon.sas_image`, `recon.fan_image`, `recon.stripmap_grid`, `motion.MotionOptions`), stated there once.
+Keys added by the audit of hard-coded assumptions (`HARDCODED_AUDIT.md`); each default reproduces the earlier behaviour:
+
+| Key | Meaning |
+| --- | --- |
+| `{stage: tvg}`: `spreading` | `two_way` (40 dB per decade: an echo; the default), `one_way` (20: a passive or transponder arrival), `auto` (two-way when the record has a transmit pulse) or a number. The older `spreading_db_per_decade` still works |
+| `{stage: tvg}`: `absorption` | `none` (default: 0 dB/m, right at a few kHz), `record` (Francois-Garrison at the record's centre frequency for the temperature and salinity the record states; an error if it states none) or a number of dB/m **one way** (the law doubles it). At 330 kHz and 12 °C it is 0.083 dB/m: the default law is 50 dB short at 300 m. With `record`: `temperature`, `salinity`, `depth`, `ph` (8.0), `model`, `frequency` override what the record gives. The older `absorption_db_per_m` still works |
+| `{stage: tvg}`: `max_gain_db`, `reference_range`, `undo_hardware_ramp` | the clamp (120 dB), the range of 0 dB (1 m), whether the recorded analogue ramp is divided out first (true). The step's log entry gives `clamped_samples`, `clamp_range_m` and `shortfall_db`: where the law was cut at the clamp and by how much at the last sample |
+| `{stage: sas_image}`: `plane_z` | z (m, down) of the imaging plane, or `seafloor`: from the records (each ping's z plus its DVL altitude; without a DVL, `environment.water_depth` with the surface at z = 0; an error with neither). Default 0.0, which is the seabed only for a scenario whose origin is on the seabed. The log entry gives `plane_z` and the `seafloor_z_from_records` |
+| `{stage: sas_image}`: `fov_factor`, `cull_block`, `interp`, `directivity_weight`, `replica_window`, `position_lookup`, `full_support`, `beamwidth_az` | passed to `recon.sas_image` / `recon.stripmap_grid` when given (their defaults: 1.13, 16, `sinc`, false, `none`, `analytic`, true, the element's) |
+| `{stage: sas_image}`: `trajectory_allowance` | with a trajectory table (`position_lookup: software_table` or `texture`) and `fov_factor > 0`: how far the platform may stray from its first-order pose within a ping before the kernel's field-of-view pre-test rejects a pixel. Absent: 0.02 m (the fixed value). `table`: the largest residual in each ping's own table, at least 0.02 m (for long pings and turning platforms). A number: metres |
+| `{stage: fan_image}`: `fov_factor`, `directivity_weight`, `stop_and_hop`, `replica_window` | passed to `recon.fan_image` when given, beside `interp` and `window` |
+| `{stage: motion}`: `window_m`, `max_lag_m` | the correlation window and the largest change of range between pings, in metres of range; turned into samples from the record (n = 2 d fs / c). They replace `window_samples` (256) and `max_lag_samples` (12), which fit one sample rate. The log counts the windows dropped because the correlation peaked at the edge of the lag span |
+| `{stage: motion}`: `seafloor_z` | z of the flat seabed (0.0), or `auto`: from the records, as `plane_z: seafloor` |
+| `{stage: volume}`: `interface_z`, `sediment_speed` | refraction at the sediment: both or neither; neither has a default |
+
+Function arguments with the same meaning, for code that does not go through a chain file:
+
+| Argument | Meaning |
+| --- | --- |
+| `core.to_baseband(..., max_range_rate, doppler_allowance_hz, cw_band_factor)` (also through `recon.prepare`) | the band kept for a CW pulse is `cw_band_factor` / duration (4) and for a sweep the bandwidth × `band_margin`; neither allows for Doppler. `max_range_rate` (m/s, two-way closing or opening speed) widens the band on both sides by 2 v f / c; `doppler_allowance_hz` by that many Hz (a one-way arrival: v f / c). Default 0: a 1 s tone at 5 kHz keeps 4 Hz and loses an echo closing at 1 m/s (6.7 Hz) |
+| `core.cfar_window(range_step, resolution, guard_resolutions, train_resolutions, guard_m, train_m)` | guard and training cells for `core.cfar` from a window stated in range-resolution cells (4 and 32) or metres, for a map that steps `range_step` metres. `core.cfar`'s own `guard` and `train` are cells and assume one cell per resolution cell |
+| `core.backproject(..., trajectory_allowance)`, `core.BackprojectSession(..., trajectory_allowance)` | as the chain key above (`None`, metres or `"table"`); `session.trajectory_residual_max` is the largest residual tabulated |
+| `core.synthesize_into(..., arrival_passes, arrival_residual_limit)` | passes of the arrival-time solve: `(4, 4)` (default; 8 for sampled pulses), a pair, or `"auto"` (fewest that leave under 1e-4 rad). The call raises when the bound T_end (v / c)^n 2π f_top on what the passes leave exceeds `arrival_residual_limit` (0.05 rad; 0: no check) |
+| `core.sim_image_source_eigenrays(..., max_order, bottom_coefficient, bottom)` | `max_order` is required and a bottom needs `bottom_coefficient` or `bottom`: the C++ library has no default bounce count, reflection coefficient or sediment. `core.sim_image_series_truncation(...)` gives the strongest ray the bounce limit leaves out, relative to the direct path |
+| `recon.tvg_parameters(record, spreading=, absorption=, ...)`, `recon.record_absorption(record)`, `recon.seafloor_z(records)` | what the chain keys above call |
+
+Fixed capacities of the C++ library, and what happens at each:
+
+| Limit | Value | At the limit |
+| --- | --- | --- |
+| knot frequencies of a sampled pulse's gain (`core.MAX_ENVELOPE_BANDS`) | 33 | error |
+| absorption table over the transmit band (`core.ABSORPTION_TABLE_SIZE`) | 16 points | a frequency outside the table is read at its nearest end; the synthesis raises when that would change a level by more than 0.1 dB over the longest path in the record's window |
+| amplitude knots along a swept pulse | 16 | beam patterns and loss are linear in frequency between knots; not checked (a pattern null crossing a wide band is under-sampled) |
+| arrival-time passes | (4, 4), 8 for sampled pulses | raises above `arrival_residual_limit`; `"auto"` derives the count |
+| bounces of an image-source path (`max_order`) | no default in C++ (the Python provider's is 2) | paths with more bounces are not computed; `sim_image_series_truncation` measures what is left out (0.9 of the direct path at 12 km in 100 m over a bottom of 0.9 with two bounces) |
+| trajectory residual allowed by the culling pre-test | 0.02 m | pixels at the beam edge are dropped for a ping that strays further; `trajectory_allowance: table` removes the limit |
+| time-varying gain | 120 dB | the law is flat beyond the range where it reaches the clamp; reported by the step |
+| interpolator of a sampled pulse's envelope (`core.RESAMPLER_TAPS`, `core.RESAMPLER_KAISER_BETA`) | 16 taps, Kaiser 12 | the C++ and NumPy engines must use the same two numbers; a test compares them |
+
+A record states its sound speed and its elements' boresights: `core.PingRecord()` holds NaN for both, validation rejects
+a record that still does, and the imaging, gain and synthesis entry points raise. The motion solver's
+`MotionSolveOptions` likewise has no default sound speed or residual scales (`motion.py` derives them from the carrier).
 
 `nav` and `source` keys added for an inertial unit with a Doppler log and for decimating in the receiver (anything left out keeps its default):
 

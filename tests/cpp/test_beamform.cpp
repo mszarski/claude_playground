@@ -39,6 +39,7 @@ PingRecord empty_record() {
   for (std::int64_t e = 0; e < kElements; ++e) {
     Element el;
     el.lever_arm = Vec3d{(static_cast<double>(e) - 0.5 * (kElements - 1)) * kPitch, 0.0, 0.0};
+    el.boresight = Vec3d{0.0, 1.0, 0.0};  // stated: a record has no default look direction
     r.geometry.rx.push_back(el);
   }
   set_default_channel_tables(r);

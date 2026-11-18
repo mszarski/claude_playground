@@ -17,3 +17,11 @@ receive:
 
 rail:
   step: 0.0005                   # m between pings
+
+# Added to the base file's list (p4_2v): how the probe is mounted on the rail and how the
+# rail steps are choices of this set-up, not measurements.
+unconfirmed:
+  - array.axis
+  - array.boresight
+  - transmit.boresight
+  - rail.step
