@@ -14,7 +14,9 @@
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
 #        GPUSONAR_JOB=benchall tools/gpu_job.sh  run tools/gpu_benchmark_all.py: every stage with a CUDA backend, host
 #                                               against CUDA (GPUSONAR_ORACLES=1 for the Bellhop scenarios; GPUSONAR_SCALE,
-#                                               GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5")
+#                                               GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
+#                                               GPUSONAR_BENCHALL_PYTEST="<-k expression>" runs those tests first;
+#                                               GPUSONAR_UPLOAD_PATH: folder in the upload dataset, default benchall)
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
@@ -94,11 +96,15 @@ if [ "${GPUSONAR_JOB:-tests}" = "benchall" ]; then
   # the table goes to the log, and with the JSON to GPUSONAR_UPLOAD_REPO (a Hugging Face dataset) when it is set.
   mkdir -p /work/benchall
   status=0
+  if [ -n "${GPUSONAR_BENCHALL_PYTEST:-}" ]; then
+    # A narrow test selection first (its prints shown), e.g. GPUSONAR_BENCHALL_PYTEST="batched or reverb".
+    PYTHONPATH=python python3 -m pytest -q -s -rs tests/python -k "$GPUSONAR_BENCHALL_PYTEST" || echo "PRETEST_EXIT $?"
+  fi
   PYTHONPATH=python python3 tools/gpu_benchmark_all.py --backend cuda --scale "${GPUSONAR_SCALE:-1}" --out /work/benchall/gpu_benchmark_all.md \
       --json /work/benchall/gpu_benchmark_all.json ${GPUSONAR_BENCHALL_ARGS:-} || status=$?
   [ -f /work/benchall/gpu_benchmark_all.md ] && cat /work/benchall/gpu_benchmark_all.md
   if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ] && [ -f /work/benchall/gpu_benchmark_all.md ]; then
-    hf upload "$GPUSONAR_UPLOAD_REPO" /work/benchall benchall --type dataset > /dev/null
+    hf upload "$GPUSONAR_UPLOAD_REPO" /work/benchall "${GPUSONAR_UPLOAD_PATH:-benchall}" --type dataset > /dev/null
   fi
   exit "$status"
 fi

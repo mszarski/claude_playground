@@ -149,3 +149,147 @@ def test_scenario_reverberation_items_for_the_empirical_laws():
     assert ratios.min() <= rock / mud <= ratios.max()
     with pytest.raises(ValueError, match="unknown reverberation model"):
         power({"model": "apl_surface"})
+
+
+# --- The empirical laws against the bubble layer's saturation level (D-87) --------------------------
+
+def test_saturation_level_and_where_the_empirical_laws_cross_it():
+    """The level is eq. (11), delta_r sin(t) / (8 pi delta): the limit of the bubble term for an
+    opaque layer. The crossing frequencies are the table in sim/surface.py and CONFIGURATION."""
+    from gpusonar import acoustics
+    t = np.radians(10.0)
+    for f, want in ((12e3, -27.9), (30e3, -29.3), (68e3, -30.4)):
+        level = float(surface.bubble_saturation_db(t, f))
+        assert level == pytest.approx(want, abs=0.05)
+        assert level == pytest.approx(10 * np.log10(0.0136 * np.sin(t) / (8 * np.pi * 2.55e-2 * (f / 1e3) ** (1 / 3))), abs=1e-12)
+        # the bubble term itself, with a very thick layer (hall_novarini at 40 m/s is opaque)
+    thick = 10 * np.log10(surface.bubble_backscatter(t, 15.0, 68e3))
+    assert thick == pytest.approx(float(surface.bubble_saturation_db(t, 68e3)), abs=1.0)
+    table = {"chapman_harris": {3.0: 416, 5.0: 127, 6.0: 84, 8.0: 43, 10.0: 26, 15.0: 10},
+             "kraus_surface": {3.0: None, 5.0: 511, 6.0: 223, 8.0: 74, 10.0: 36, 15.0: 12}}
+    for model, row in table.items():
+        for wind, khz in row.items():
+            f = surface.saturation_crossing_frequency(model, wind)
+            if khz is None:
+                assert f is None
+                continue
+            assert f / 1e3 == pytest.approx(khz, abs=0.6)
+            assert surface.excess_over_saturation_db(model, wind, 0.98 * f) < 0.0 < surface.excess_over_saturation_db(model, wind, 1.02 * f)
+            assert surface.excess_over_saturation_db(model, wind, 3.0 * f) > 0.0          # and it stays above
+    # The case quoted in REFERENCES: 68 kHz, 15 m/s, 10 degrees: -19.1 dB against -30.4 dB.
+    assert float(acoustics.chapman_harris_db(t, 15.0, 68e3)) == pytest.approx(-19.1, abs=0.05)
+    assert surface.excess_over_saturation_db("chapman_harris", 15.0, 68e3) == pytest.approx(11.4, abs=0.1)
+
+
+def test_empirical_surface_strength_is_the_law_unchanged_warns_once_and_caps_on_request():
+    import warnings
+    from gpusonar.sim import reverb
+    g_in, g_out = np.radians([[3.0, 10.0, 25.0, 50.0]]), np.radians([[5.0], [20.0]])
+    # Below the crossing: the law, bit for bit, and no warning.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        quiet = surface.empirical_surface_strength("chapman_harris", 5.0, 8e3)
+        assert np.array_equal(quiet(g_in, g_out), reverb.chapman_harris_strength(5.0, 8e3)(g_in, g_out))
+        kraus = surface.empirical_surface_strength("kraus_surface", 5.0, 100e3)
+        assert np.array_equal(kraus(g_in, g_out), surface.kraus_surface_strength(5.0, 100e3)(g_in, g_out))
+        # 15 m/s crosses at 10 kHz, below the band the bubble model was compared with data in: no warning under 12 kHz.
+        surface.empirical_surface_strength("chapman_harris", 15.0, 11e3)
+    # Above it: still the law, with one warning per law for the process.
+    surface._warned_above_saturation.clear()
+    with pytest.warns(UserWarning, match="above the level a saturated bubble layer returns") as caught:
+        loud = surface.empirical_surface_strength("chapman_harris", 5.0, 170e3)
+    assert "no model here is validated" in str(caught[0].message) and "cap: bubble_saturation" in str(caught[0].message)
+    assert np.array_equal(loud(g_in, g_out), reverb.chapman_harris_strength(5.0, 170e3)(g_in, g_out))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        surface.empirical_surface_strength("chapman_harris", 5.0, 330e3)                  # once
+    with pytest.warns(UserWarning, match="bubble_layer_surface. is the model compared with data"):
+        surface.empirical_surface_strength("kraus_surface", 10.0, 50e3)                   # the other law, inside 12-70 kHz
+    # The cap: the smaller of the law and the saturation level at the mean angle; no warning.
+    surface._warned_above_saturation.clear()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        capped = surface.empirical_surface_strength("chapman_harris", 5.0, 330e3, cap="bubble_saturation")
+    mean = 0.5 * (g_in + g_out)
+    law = reverb.chapman_harris_strength(5.0, 330e3)(g_in, g_out)
+    level = 10 ** (surface.bubble_saturation_db(mean, 330e3) / 10)
+    assert np.allclose(capped(g_in, g_out), np.minimum(law, level), rtol=1e-12)
+    assert np.any(law > level) and np.all(capped(g_in, g_out) <= level * (1 + 1e-12))
+    low = surface.empirical_surface_strength("chapman_harris", 5.0, 8e3, cap="bubble_saturation")
+    assert np.array_equal(low(g_in, g_out), quiet(g_in, g_out))                           # nothing to cap at 8 kHz
+    with pytest.raises(ValueError, match="unknown cap"):
+        surface.empirical_surface_strength("chapman_harris", 5.0, 8e3, cap="lambert")
+
+
+def test_scenario_item_cap_and_warning():
+    import warnings
+    from test_reverberation import HEIGHT, empty_baseband_ping
+    from gpusonar.sim import Scene, make_pose, simulate_ping
+    sonar, rec0 = empty_baseband_ping()
+    fc = rec0.samples.center_frequency
+
+    def power(item):
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                            reverberation=[dict(item, boundary_z=0.0)], rng=np.random.default_rng(2))
+        return float((np.abs(rec.samples.array) ** 2).mean())
+    wind = 15.0
+    assert surface.excess_over_saturation_db("chapman_harris", wind, fc) > 3.0            # this sonar and wind: well above
+    surface._warned_above_saturation.clear()
+    with pytest.warns(UserWarning, match="saturated bubble layer"):
+        plain = power({"model": "chapman_harris", "wind_speed": wind})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        capped = power({"model": "chapman_harris", "wind_speed": wind, "cap": "bubble_saturation"})
+    g = np.radians(np.linspace(3.0, 60.0, 200))
+    from gpusonar import acoustics
+    drop = np.minimum(surface.bubble_saturation_db(g, fc) - acoustics.chapman_harris_db(g, wind, fc), 0.0)
+    assert 10 ** (drop.min() / 10) <= capped / plain <= 10 ** (drop.max() / 10) and capped < plain
+
+
+# --- The rock type law against the Lambert energy bound, and the measured value by name (D-88) -----
+
+def test_searay_rock_exceeds_the_lambert_bound_warns_once_and_is_unchanged():
+    import warnings
+    from gpusonar.sim import bottom
+    g = np.radians(20.0)
+    bound = bottom.lambert_backscatter_db(g, bottom.LAMBERT_MAX_MU_DB)                    # -14.3 dB: all power, diffusely
+    assert float(surface.searay_bottom_db(g, 100e3, "rock")) == pytest.approx(-7.2, abs=0.05) and bound == pytest.approx(-14.3, abs=0.05)
+    for f in (6e3, 100e3, 300e3):                                                         # the rock law has no frequency dependence
+        excess, angle = surface.searay_excess_over_lambert_bound_db(f, "rock")
+        assert excess == pytest.approx(7.5, abs=0.1) and np.degrees(angle) == pytest.approx(25.0)
+        assert all(surface.searay_excess_over_lambert_bound_db(f, bt)[0] < 0.0 for bt in ("mud", "sand", "gravel"))
+    surface._warned_above_lambert_bound.clear()
+    with pytest.warns(UserWarning, match="sediment: rock") as caught:
+        fn = surface.searay_bottom_strength(100e3, "rock")
+    assert "7.5 dB above the largest Lambert" in str(caught[0].message)
+    assert fn(g, g) == pytest.approx(10 ** (surface.searay_bottom_db(g, 100e3, "rock") / 10), rel=1e-12)   # the law itself is as printed
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        surface.searay_bottom_strength(100e3, "rock")                                     # once
+        surface.searay_bottom_strength(100e3, "sand")                                     # below the bound: silent
+
+
+def test_reverberation_item_with_a_named_rock_is_lamberts_law_at_the_tabulated_value():
+    """{boundary_z, sediment: rock}: mu = -16 dB from configs/sediments.yaml (measured range -23 to -10)."""
+    from test_reverberation import HEIGHT, empty_baseband_ping
+    from gpusonar.sim import Scene, bottom, make_pose, simulate_ping
+    sonar, _ = empty_baseband_ping()
+
+    def ping(item):
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
+                            reverberation=[dict(item, boundary_z=0.0)], rng=np.random.default_rng(2))
+        return rec.samples.array.copy()
+    law = bottom.empirical_backscatter("rock")
+    assert law["mu_db"] == -16.0 and law["mu_db_range"] == [-23.0, -10.0] and law["mu_db"] < bottom.LAMBERT_MAX_MU_DB
+    assert bottom.named_lambert_mu_db("rock") == -16.0
+    named = ping({"sediment": "rock"})
+    assert np.array_equal(named, ping({"mu_db": -16.0})) and np.array_equal(named, ping({"model": "lambert", "sediment": "rock"}))
+    assert np.array_equal(ping({"sediment": "rock", "mu_db": -13.0}), ping({"mu_db": -13.0}))          # the item's own value wins
+    # Against the type law at the angles of this record: 10 to 18 dB lower.
+    surface._warned_above_lambert_bound.add("rock")
+    ratio = (np.abs(named) ** 2).mean() / (np.abs(ping({"model": "searay_bottom", "bottom_type": "rock"})) ** 2).mean()
+    g = np.radians(np.linspace(3.0, 60.0, 200))
+    change = bottom.lambert_backscatter_db(g, -16.0) - surface.searay_bottom_db(g, sonar.center_frequency, "rock")
+    assert 10 ** (change.min() / 10) <= ratio <= 10 ** (change.max() / 10) and change.max() < -10.0
+    with pytest.raises(ValueError, match="fluid sediment and has no Lambert parameter"):
+        ping({"sediment": "medium_sand"})

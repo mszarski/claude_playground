@@ -95,8 +95,9 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
   } else {
     // The far-field beamformers give every sample of the record: the part with a fully
     // overlapped replica is averaged into range cells of whole samples.
-    const BeamMap map = opt_.beamformer == "mvdr" ? mvdr_beamform(record, bearings, opt_.mvdr)
-                                                  : farfield_beamform(record, bearings, opt_.hann ? "hann" : "rect");
+    const BeamMap map = opt_.beamformer == "mvdr"
+                            ? mvdr_beamform(record, bearings, opt_.mvdr, opt_.backend, opt_.device)
+                            : farfield_beamform(record, bearings, opt_.hann ? "hann" : "rect", opt_.backend, opt_.device);
     const double sample_m = map.ranges[1] - map.ranges[0];
     const auto k = std::max<std::int64_t>(std::llround(opt_.range_cell_m / sample_m), 1);
     cell_samples = k;

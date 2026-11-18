@@ -802,8 +802,8 @@ class LiveChain:
                                            backend=self.backend)
             return (np.abs(fan.image) ** 2).T, fine_r, k      # [bearing, range]
         else:
-            bm = (flank.mvdr_beamform(record, self.bearings) if cfg["beamformer"] == "mvdr"
-                  else flank.farfield_beamform(record, self.bearings, window=cfg["window"])).valid()
+            bm = (flank.mvdr_beamform(record, self.bearings, backend=self.backend) if cfg["beamformer"] == "mvdr"
+                  else flank.farfield_beamform(record, self.bearings, window=cfg["window"], backend=self.backend)).valid()
             fine, fine_ranges = np.abs(bm.data) ** 2, bm.ranges
             k = max(int(round(cfg["range_cell_m"] / (fine_ranges[1] - fine_ranges[0]))), 1)
             return fine, fine_ranges, k

@@ -150,7 +150,12 @@ def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: fl
     per unit area and solid angle) at grazing angles `grazing_deg` and frequencies `frequency`
     (Hz, one per value or a single number). `sigma_db`: the measurement's standard error in
     dB (a number or one per value); without it the rms residual is used for the uncertainties.
-    Several starts are tried and the best kept, because the dB misfit has local minima."""
+    Several starts are tried and the best kept, because the dB misfit has local minima.
+    `roughness_model` is named here and recorded in the result: "perturbation" unless given,
+    which is NOT the forward model's default since D-86 (small_slope). Below about 60 degrees
+    the two agree to a few tenths of a dB; with a free exponent the small-slope table would be
+    rebuilt at every step (minutes instead of seconds), so it is for data nearer the specular
+    direction, by request."""
     g = np.radians(np.asarray(grazing_deg, dtype=float).ravel())
     y = np.asarray(strength_db, dtype=float).ravel()
     f = np.broadcast_to(np.asarray(frequency, dtype=float).ravel(), g.shape).copy()

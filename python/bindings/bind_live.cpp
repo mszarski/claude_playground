@@ -371,13 +371,21 @@ void bind_live(py::module_& m) {
           r = method == "sbl" ? live::sbl(frame, u, record.environment.sound_speed, bearings, o)
                               : live::conventional(frame, u, record.environment.sound_speed, bearings, o);
         }
-        return doa_dict(r);
+        py::dict d = doa_dict(r);
+        // Where the spectrum was computed. Only SBL has a device path: the conventional
+        // beamformer is a few small matrix products per gate and runs on the host whatever
+        // backend is asked for.
+        d["backend"] = method == "sbl" && backend == Backend::Cuda ? "cuda" : "host";
+        return d;
       },
       py::arg("record"), py::arg("two_way_time"), py::arg("n_fft"), py::arg("bearings"), py::arg("method") = "sbl",
       py::arg("max_iterations") = 60, py::arg("tolerance") = 1e-3, py::arg("max_sources") = 4,
       py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0, py::arg("backend") = Backend::Host,
       py::arg("kernels") = true,
-      "Bearings at one range gate of a conditioned record: SBL or the conventional beamformer on the same snapshots.");
+      "Bearings at one range gate of a conditioned record: SBL or the conventional beamformer on the same snapshots.\n"
+      "`backend` chooses where SBL iterates. method=\"conventional\" has no device path and runs on the host\n"
+      "whatever the backend; the result's \"backend\" entry (\"host\" or \"cuda\") says where the spectrum was computed.");
+  m.attr("DOA_GATE_CUDA_METHODS") = py::make_tuple("sbl");
   m.def(
       "doa_passive",
       [](const PingRecord& record, double f_low, double f_high, std::int64_t n_fft, std::int64_t hop, std::int64_t n_average,

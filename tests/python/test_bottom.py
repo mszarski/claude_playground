@@ -8,6 +8,9 @@ C, F = 1500.0, 100e3
 K = 2 * np.pi * F / C
 SAND = bottom.PLACEHOLDER_SAND
 ROUGH = dict(w2=SAND["w2"], gamma2=SAND["gamma2"])
+# The closed forms below (Bragg scattering, the rigid limit, f^(4 - gamma2), linearity in w2) are
+# those of first-order perturbation theory, the default until D-86: the tests name it.
+PERTURBATION = dict(roughness_model="perturbation")
 G = np.radians(np.array([5.0, 10.0, 20.0, 35.0, 50.0]))
 
 
@@ -16,17 +19,17 @@ def spectrum(q):
 
 
 def test_pressure_release_limit_is_the_classical_bragg_result():
-    got = bottom.roughness_strength(G, G, F, C, rho=1e-9, nu=1.0, delta=0.0, **ROUGH)
+    got = bottom.roughness_strength(G, G, F, C, rho=1e-9, nu=1.0, delta=0.0, **ROUGH, **PERTURBATION)
     assert np.allclose(got, 4 * K**4 * np.sin(G) ** 4 * spectrum(2 * K * np.cos(G)), rtol=1e-6)
     # Bistatic, in the plane of incidence and out of it.
     ti, ts, phi = np.radians(20.0), np.radians(40.0), np.radians(70.0)
     q = K * np.sqrt(np.cos(ti) ** 2 + np.cos(ts) ** 2 - 2 * np.cos(ti) * np.cos(ts) * np.cos(phi))
-    got = bottom.roughness_strength(ti, ts, F, C, rho=1e-9, nu=1.0, delta=0.0, azimuth=phi, **ROUGH)
+    got = bottom.roughness_strength(ti, ts, F, C, rho=1e-9, nu=1.0, delta=0.0, azimuth=phi, **ROUGH, **PERTURBATION)
     assert got == pytest.approx(4 * K**4 * np.sin(ti) ** 2 * np.sin(ts) ** 2 * spectrum(q), rel=1e-6)
 
 
 def test_rigid_limit():
-    got = bottom.roughness_strength(G, G, F, C, rho=1e9, nu=1.0, delta=0.0, **ROUGH)
+    got = bottom.roughness_strength(G, G, F, C, rho=1e9, nu=1.0, delta=0.0, **ROUGH, **PERTURBATION)
     assert np.allclose(got, 4 * K**4 * (1 + np.cos(G) ** 2) ** 2 * spectrum(2 * K * np.cos(G)), rtol=1e-6)
 
 
@@ -66,8 +69,8 @@ def test_volume_term_is_the_depth_integral_of_what_it_says():
 def test_frequency_dependence_of_the_roughness_term():
     """sigma_r ~ k^4 W(2 k cos) ~ f^(4 - gamma2) at a fixed angle (lossless sediment)."""
     p = dict(SAND, delta=0.0)
-    a = bottom.roughness_strength(G, G, 50e3, C, **p)
-    b = bottom.roughness_strength(G, G, 200e3, C, **p)
+    a = bottom.roughness_strength(G, G, 50e3, C, **p, **PERTURBATION)
+    b = bottom.roughness_strength(G, G, 200e3, C, **p, **PERTURBATION)
     assert np.allclose(b / a, 4.0 ** (4.0 - SAND["gamma2"]), rtol=1e-9)
 
 
@@ -106,7 +109,10 @@ def test_scenario_reverberation_item_uses_the_model():
                             reverberation=[item], rng=np.random.default_rng(2))
         return float((np.abs(rec.samples.array) ** 2).mean())
     assert power() > 0.0
-    assert power(w2=4 * SAND["w2"], sigma2=0.0) / power(sigma2=0.0) == pytest.approx(4.0, rel=1e-6)   # roughness term is linear in w2
+    assert (power(w2=4 * SAND["w2"], sigma2=0.0, **PERTURBATION) / power(sigma2=0.0, **PERTURBATION)
+            == pytest.approx(4.0, rel=1e-6))                                                           # perturbation: linear in w2
+    assert power() == power(roughness_model="small_slope")                                             # the default (D-86)
+    assert power() == pytest.approx(power(**PERTURBATION), rel=0.02) and power() != power(**PERTURBATION)   # 24 to 60 degrees here
     with pytest.raises(ValueError, match="needs"):
         simulate_ping(sonar, make_pose(position=(0.0, 0.0, HEIGHT)), Scene(), environment={"sound_speed": C}, adc=False,
                       reverberation=[{"model": "fluid_sediment", "boundary_z": 0.0, "rho": 1.9}])

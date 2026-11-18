@@ -65,7 +65,7 @@ import warnings
 
 from .. import _gpusonar as core
 from . import engine as _engine
-from . import reverb_bistatic, reverb_relief
+from . import parallel_normal, reverb_bistatic, reverb_relief
 from .bathymetry import make_bathymetry
 from .propagation import EigenrayProvider
 
@@ -235,6 +235,16 @@ def default_azimuth_count(positions: np.ndarray, wavelength: float) -> int:
 # Random numbers handed to the C++ generator in one call, bytes (a run of sectors).
 SECTOR_RUN_BYTES = 64 << 20
 
+# The C++ generator has two formulations of the same sums: one transform per sector on the
+# CPU threads (the host backend), and whole runs of sectors at once (what the CUDA backend
+# runs: libs/sim/include/sonar/sim/reverb_batched.hpp). True runs the second on the host as
+# well, which is how it is tested without a device; it is not faster there.
+BATCHED_ON_HOST = False
+
+# Draw the C++ generator's normal deviates on several threads (sim/parallel_normal.py). The
+# numbers and the generator's state are NumPy's own either way; False is the plain call.
+PARALLEL_DRAWS = True
+
 
 def taper_pulse(pulse: np.ndarray, n: int) -> np.ndarray:
     """The pulse with its spectrum rolled off to zero at the Nyquist frequency: unchanged
@@ -283,7 +293,12 @@ class CellTexture:
 
 def cpp_has_components() -> bool:
     """True when the built extension's reverberation generator takes components (a
-    direction and a Doppler shift per row); an older build has azimuth sectors only."""
+    direction and a Doppler shift per row); an older build has azimuth sectors only.
+    The extension says so itself (`core.SIM_REVERB_COMPONENTS`); an extension built before
+    that attribute existed is recognised by its docstring, as before."""
+    flag = getattr(core, "SIM_REVERB_COMPONENTS", None)
+    if flag is not None:
+        return bool(flag)
     return "direction" in (getattr(core.sim_reverb_accumulate, "__doc__", "") or "")
 
 
@@ -315,14 +330,38 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
     velocity = tuple(float(v) for v in velocity)
     total = np.zeros((offsets.shape[0], n_low), dtype=np.complex64)
     run = max(1, SECTOR_RUN_BYTES // (16 * n_low))
+    # The extension is told which sector each run of deviates belongs to, so it does not look
+    # for the sectors with power again in every call; and it interpolates to the record's rate
+    # on the backend (older builds: neither).
+    named = bool(getattr(core, "SIM_REVERB_ROWS", False))
+    rows = np.ascontiguousarray(rows, dtype=np.int64)
+    resident = bool(getattr(core, "SIM_REVERB_BATCHED", False)) and (BATCHED_ON_HOST or backend == core.Backend.Cuda)
+    normals = None
     for first in range(0, n_active, run):
-        normals = rng.standard_normal((min(run, n_active - first), 2, n_low))
+        count = min(run, n_active - first)
+        if normals is None or normals.shape[0] != count:
+            normals = np.empty((count, 2, n_low))
+        # The same deviates as rng.standard_normal(shape), into the same array every run, and
+        # drawn on the CPU threads (parallel_normal: bit for bit NumPy's numbers and state).
+        if PARALLEL_DRAWS:
+            parallel_normal.standard_normal(rng, normals)
+        else:
+            rng.standard_normal(out=normals)
         if texture is not None:
-            for k in range(normals.shape[0]):
+            for k in range(count):
                 normals[k] *= texture(rows[first + k])[None, :]
+        if named:
+            extra["rows"] = rows[first:first + count]
+        if BATCHED_ON_HOST:
+            extra["batched"] = True
+        if resident:
+            # The accumulated spectrum stays on the backend between the runs: to it with the
+            # first, back with the last.
+            extra["total_from_host"], extra["total_to_host"] = first == 0, first + count >= n_active
         core.sim_reverb_accumulate(total, coarse, density, first, normals, pulse_low, offsets, fs, time0, fc, c,
                                    n_azimuth, decim, velocity=velocity, backend=backend, **extra)
-    return core.sim_reverb_finish(total, fs, n, start_time, time0, fc, decim, carrier=carrier, real_output=real)
+    finish = dict(backend=backend, batched=BATCHED_ON_HOST) if getattr(core, "SIM_REVERB_BATCHED", False) else {}
+    return core.sim_reverb_finish(total, fs, n, start_time, time0, fc, decim, carrier=carrier, real_output=real, **finish)
 
 
 def _series_numpy(rng, coarse, density, pulse_low, positions, centre, fs, n, start_time, times, fc, c,

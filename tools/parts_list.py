@@ -205,7 +205,7 @@ def parts(d: dict, timings: dict | None = None, static: bool | None = None) -> l
         "which computer; neither option has been timed at the boards' full rate on the hardware that would be used")
     add("storage", "Storage", 1, "specified, not chosen",
         f"{_size(d['record_bytes_per_ping'])} a ping as recorded ({d['samples_per_ping']:,} samples × {d['channels']} channels × 4 bytes, window {d['window_m'][0]:g}–{d['window_m'][1]:g} m), "
-        f"{_size(d['record_bytes_per_hour'])} an hour at {d['pings_per_hour']:.0f} pings; listening continuously {_size(d['stream_bytes_per_hour_continuous'])} an hour",
+        f"{_size(d['record_bytes_per_hour_chosen'])} an hour at {d['pings_per_hour']:.0f} pings recorded {d['recording_mode']} (the spec's `storage.record`; raw {_size(d['record_bytes_per_hour'])}, decimated by {d['decimation_factor']} {_size(d['record_bytes_per_hour_decimated'])}); listening continuously {_size(d['stream_bytes_per_hour_continuous'])} an hour",
         "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file", (), "capacity and write rate of the volume; whether to store decimated pings instead")
     nav = hw.get("navigation") or {}
     if static:
@@ -227,6 +227,12 @@ def parts(d: dict, timings: dict | None = None, static: bool | None = None) -> l
         (f"rows in one plane: 1 mm of one row standing out is {el['deg_per_mm_out']:.3f}° of elevation; " if el else "")
         + f"hydrophone positions along a row to a small fraction of {d['wavelength_m'] * 100:.0f} cm (a wavelength), or calibrated; clear of the projector's near field and of machinery",
         "`array` (positions), `platform`; `sensitivity.out_offset_error_deg` of popoto_elevation_study.json", QUOTES["mounting"] if popoto else (), "the mechanical design is not started")
+    rating = (d.get("platform") or {}).get("max_depth_m")
+    add("depth_rating", "Depth rating of everything in the water", "hydrophones, cables, connectors, housings, projector", "specified, not chosen" if rating else "unconfirmed",
+        (f"rated for {rating:g} m of sea water (the platform's deepest operating depth), about {1025.0 * 9.81 * rating / 1e5 + 1.0:.0f} bar absolute; with whatever margin the builder's practice asks on top. "
+         "Hydrophone sensitivity and the projector's source level must hold at that depth" if rating else
+         "the deepest the array will be used is not given (`platform.max_depth_m`): for a frame, the deepest it will be hung; no rating can be stated"),
+        "`platform.max_depth_m` of the spec", (), "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)")
     add("power", "Power", "to be supplied", "unconfirmed",
         f"consumers: {d['n_boards']} boards, the reference generator, the amplifier (pulsed: {d['pulse_s']:g} s every {d['ping_interval_s']:.1f} s at most), the compute unit, the network. No draw is known for any of them",
         "—", (), "every figure")
@@ -291,7 +297,8 @@ def markdown(columns: list[tuple[str, dict]], timings: dict | None = None, headi
     row("Data rate: a board / all", lambda d: f"{_mbit(d['rate_board_bit_s'])} / {_mbit(d['rate_total_bit_s'])}")
     row("Receive window (stated in the sonar file)", lambda d: f"{d['window_m'][0]:g}–{d['window_m'][1]:g} m")
     row("Shortest ping interval", lambda d: f"{d['ping_interval_s']:.2f} s")
-    row("Recording: a ping / an hour", lambda d: f"{_size(d['record_bytes_per_ping'])} / {_size(d['record_bytes_per_hour'])}")
+    row("Recording: a ping / an hour (raw)", lambda d: f"{_size(d['record_bytes_per_ping'])} / {_size(d['record_bytes_per_hour'])}")
+    row("Recording as chosen (`storage.record`), an hour", lambda d: f"{d['recording_mode']}: {_size(d['record_bytes_per_hour_chosen'])} (decimated: {_size(d['record_bytes_per_hour_decimated'])})")
     row("Cables: shortest–longest, total (boards assumed at the array's centre)", lambda d: f"{d['cables']['shortest_m']:.1f}–{d['cables']['longest_m']:.1f} m, {d['cables']['total_m']:.0f} m")
     row("Projector to the nearest hydrophone", lambda d: f"{d['direct']['nearest_m']:.2f} m")
     row("Direct sound there, against the inputs' full scale", lambda d: f"{d['direct']['level_db']:.0f} dB re 1 µPa: {d['direct']['over_full_scale_db']:+.0f} dB")

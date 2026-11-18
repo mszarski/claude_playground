@@ -140,3 +140,28 @@ def test_scatterer_seabed_agrees_with_scattering_function_reverberation():
     ratio = 10 * np.log10(a[blocks].reshape(12, -1).mean(axis=1) / b[blocks].reshape(12, -1).mean(axis=1))
     assert np.abs(ratio).max() < 2.0, ratio
     assert abs(ratio.mean()) < 1.0, ratio
+
+
+def test_sediment_seafloor_takes_a_roughness_model_and_defaults_to_small_slope():
+    """D-86: the seabed scatterers use the model's default (small_slope); `roughness_model:
+    perturbation` gives the amplitudes of before, at any angle the field has."""
+    from gpusonar.sim import bottom
+    item = dict({"type": "seafloor", "x_range": [0.2, 6.0], "y_range": [-2.0, 2.0], "density": 20.0, "model": "fluid_sediment"}, **SAND)
+    sonar = np.array([0.0, 0.0, -3.0])                                  # grazing from 27 to 86 degrees
+
+    def amplitudes(**extra):
+        scene = build_scene([dict(item, **extra)], np.random.default_rng(4))
+        pts, amp, _ = scene.evaluate(0.0, sonar, sonar, frequency=F, sound_speed=C)
+        return pts, amp
+    pts, default = amplitudes()
+    _, named = amplitudes(roughness_model="small_slope")
+    _, old = amplitudes(roughness_model="perturbation")
+    assert np.array_equal(default, named) and not np.array_equal(default, old)
+    d = pts - sonar
+    g = np.arcsin(np.abs(d[:, 2]) / np.linalg.norm(d, axis=1))
+    for amp, model in ((default, "small_slope"), (old, "perturbation")):
+        want = bottom.strength(g, g, F, C, roughness_model=model, **SAND)
+        ratio = np.abs(amp) ** 2 / np.abs(old) ** 2
+        assert np.allclose(ratio, want / bottom.strength(g, g, F, C, roughness_model="perturbation", **SAND), rtol=1e-6)
+    with pytest.raises(ValueError, match="roughness_model"):
+        amplitudes(roughness_model="lambert")

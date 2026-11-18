@@ -15,18 +15,20 @@ def doppler_scale(range_rate: float, sound_speed: float) -> float:
     return (sound_speed - range_rate) / (sound_speed + range_rate)
 
 
-def doppler_bank(record: "core.PingRecord", range_rates, window: str = "none"):
+def doppler_bank(record: "core.PingRecord", range_rates, window: str = "none", backend=None):
     """Doppler-tolerant pulse compression for long pulses on moving platforms or targets.
 
     Compresses a baseband record once per range-rate hypothesis (m/s, positive opening)
     and keeps, for the whole record, the hypothesis with the highest compressed peak.
     Returns (compressed record, best range rate, peak per hypothesis).
+    `backend` (core.Backend) is where each compression runs; the host when not given.
     """
+    where = {} if backend is None else {"backend": backend}
     c = record.environment.sound_speed
     best, best_peak, peaks = None, -1.0, []
     for v in range_rates:
         trial = record.copy()
-        core.pulse_compress(trial, window=window, doppler_scale=doppler_scale(float(v), c))
+        core.pulse_compress(trial, window=window, doppler_scale=doppler_scale(float(v), c), **where)
         peak = float(np.abs(trial.samples.array).max())
         peaks.append(peak)
         if peak > best_peak:

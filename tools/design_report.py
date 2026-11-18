@@ -546,6 +546,21 @@ def _compute_options_text() -> str:
     return out
 
 
+def _surface_line() -> str:
+    """One line for the trade space from the depth plan (docs/design/popoto_depth_planner.json)."""
+    path = ROOT / "docs" / "design" / "popoto_depth_planner.json"
+    if not path.exists():
+        return "pending (`tools/popoto_depth_planner.py --shipped`).\n"
+    P = json.loads(path.read_text())
+    out = []
+    for name in ("popoto_face_1x32", "popoto_face_2x32", "popoto_face_3x32"):
+        pl = P["builds"].get(name, {}).get("plans", {}).get("deep_no_bottom_return", {})
+        if "classes" in pl:
+            c = pl["classes"]["ship"]
+            out.append(f"{pl['rows']} row{'s' if pl['rows'] > 1 else ''}: {c['at_own_depth']['10']['margin_db']:+.0f} dB at 10 m, {c['recommended']['margin_db']:+.1f} dB at {c['recommended']['own_depth_m']:g} m")
+    return ("the ship class at 12 km, margin over 13 dB, " + "; ".join(out) + " (*Surface interference, own depth, and target classes*; every target figure assumed).\n") if out else "not planned.\n"
+
+
 def stacked_rows(D) -> list:
     """Section 3's subsection on the Popoto long-range array as a staged build with stacked rows. Every number
     comes from tools/popoto_elevation_study.py (analysis) or tools/popoto_elevation_bench.py (the software on
@@ -733,7 +748,7 @@ def stacked_rows(D) -> list:
     L.append("| Rows | " + " | ".join(f"{float(k):.0f} dB" for k in snr_keys) + " |\n| --- |" + " --- |" * len(snr_keys))
     for name, v in W3["wrong_pick"].items():
         L.append(f"| {name} | " + " | ".join(f"{100 * x[0]:.1f}% / {100 * x[1]:.1f}%" for x in v.values()) + " |")
-    L.append(f"\nThree rows are no more accurate than two (the outer rows set that); the third buys an answer instead of candidates, and {g3 - g2:.1f} dB of detection.\n")
+    L.append(f"\nThree rows are no more accurate than two (the outer rows set that); the third buys one elevation angle instead of a list of possible ones, and {g3 - g2:.1f} dB of detection.\n")
     t = B["timing_scenario_size"]
     f2 = sc["face_2row"]
     L.append("**Two rows or three: side by side** (the face; the static array's rows are at the same heights).\n\n| | Two rows | Three rows (recommended) |\n| --- | --- | --- |\n"
@@ -742,7 +757,7 @@ def stacked_rows(D) -> list:
              f"| Highest repeat | {T['repeat_level_db'][0]:.1f} dB: never trusted alone | {W3['best_level_db']:.1f} dB |\n"
              f"| Wrong pick at 13 dB, clean noise, ±30° | {100 * W3['wrong_pick'][two]['13.0'][0]:.0f}% | {100 * W3['wrong_pick'][three]['13.0'][0]:.1f}% |\n"
              f"| One answer without help | where water depth and range bound the arrivals to ±{T['unambiguous_half_sector_deg']:.1f}° (100 m of water: beyond {T['sector_ranges_m']['100.0'][1] / 1e3:.1f} km with one bounce) | everywhere above about 10 dB a row |\n"
-             "| Deep water, short range | candidates only, until a track has a depth | works |\n"
+             "| Deep water, short range | a list of possible angles, not one (bearing, range and the track are unaffected), until a track has a depth | works |\n"
              f"| Detection against one row | +{g2:.1f} dB | +{g3:.1f} dB |\n"
              "| A dead board | the row it serves loses 8 of 32; the estimate carries on | the same |\n"
              "| A dead row | no elevation | two rows left: the two-row behaviour |\n"
@@ -840,7 +855,7 @@ def stacked_rows(D) -> list:
     L.append(f"\n**Does it need to be 64?** For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. Sixty-four buy one of two things. As one row of 64\n"
              f"inside the {S['array_length_m']:g} m: {mg['gain_db']:.1f} dB, a beam of {mg['beam_deg'][1]:.1f}° instead of {mg['beam_deg'][0]:.1f}°, {r64['reverberation_margin_vs_32_at_half_wavelength_db']:.1f} dB less reverberation in the beam, noise-limited reach {mg['reach_ship_km'][0]:.1f} → {mg['reach_ship_km'][1]:.1f} km (ship) and\n"
              f"{mg['reach_small_km'][0]:.1f} → {mg['reach_small_km'][1]:.1f} km (small target), no elevation; and since {fill['hydrophones_per_row']} hydrophones at half a wavelength already fill that length, 64 gain no more than {fill['hydrophones_per_row']} would.\n"
-             f"As two rows of 32: {ob['map_gain_db'][1]:.1f} dB in the map against {ob['map_gain_db'][0]:.1f} dB, the old beam, and elevation, as candidates. Bearing and range against elevation is the trade for a\n"
+             f"As two rows of 32: {ob['map_gain_db'][1]:.1f} dB in the map against {ob['map_gain_db'][0]:.1f} dB, the old beam, and elevation as a list of possible angles (two rows cannot tell which of several an echo came from; the list becomes one angle where water depth and range rule the others out). Bearing and range against elevation is the trade for a\n"
              "fixed channel count; 96 as three rows make the elevation unambiguous.\n")
     L.append("| A row of | Length | Beam | Gain (sea noise) | Reach ship / small (km) | Reverberation in the beam against 32 | Boards a row |\n| --- | --- | --- | --- | --- | --- | --- |")
     for label, v in TS["per_row"].items():
@@ -855,6 +870,8 @@ def stacked_rows(D) -> list:
              "  Accuracy is set by the outer rows' separation, not the count.\n"
              "- **Noise or reverberation.** More source level buys noise-limited range (6 dB is worth four times the hydrophones in a row) and nothing against\n"
              "  reverberation; a longer row buys both. Where reverberation limits (short and medium range in the scenarios), length is the only one that helps.\n"
+             "- **Own depth, and the surface.** None of the reach figures here contains the surface-reflected path. Against a target near the surface in water that does not duct, own depth is worth more than any row: "
+             + _surface_line() +
              "- **Band.** Another band moves every row: spacing and row length scale with the wavelength, the reach with absorption and noise\n"
              "  (`tools/popoto_range_study.py`), and the rows' repeat spacing with it.\n"
              f"- **Cost** goes with the channel count: boards = channels / 8, one cable per hydrophone and one reference per board, {lr['raw_data_rate_mbit_s'] / lr['elements']:.2f} Mbit/s and "
@@ -952,6 +969,7 @@ def write_report(D, reqs, out_md):
     L.extend(reference_plan.row_modules())
     L.extend(stacked_rows(D))
     L.extend(reference_plan.projector_options())
+    L.extend(reference_plan.depth_and_targets())
     L.extend(reference_plan.twelve_km())
     L.extend(reference_plan.parts_section())
     L.append("## 4. Timing and data\n")
@@ -1015,6 +1033,11 @@ def write_report(D, reqs, out_md):
         L.append("\n  That is 14 dB less loss each way, but it holds only for that depth, bottom and profile, and at those levels\n"
                  "  reverberation, not noise, decides detection. The `popoto_env_*` scenarios (`SCENARIOS.md`) show how much the\n"
                  "  environment moves the answer: a downward-refracting summer profile over mud loses far more than spherical spreading.\n")
+    if study.get("surface"):
+        sf = study["surface"]
+        L.append(f"- **The surface-reflected path is not in the curves above.** For a target at {sf['target_depth_m']:g} m and {sf['range_m'] / 1e3:g} km it changes the source level needed by "
+                 + ", ".join(f"{-r['peak_db']:+.0f} dB with the array at {r['own_depth_m']:g} m" for r in sf["by_own_depth"])
+                 + f" (flat surface, the whole band; `gpusonar.lloyd`). In ducting water the bottom's bounces replace this term. Source levels here and in every build spec are rms levels ({sf['source_level_convention'].split(':')[0]}).\n")
     L.append("- The boards sample at 102.4 kHz and need no change for this band; the hydrophones, the projector and its power\n"
              "  amplifier do. None is chosen; the values are in `configs/sonars/popoto_long_range.yaml` under `unconfirmed`.\n")
     L.append("- These are noise-limited figures. Reverberation, which the scenarios include, usually sets the limit at short\n"

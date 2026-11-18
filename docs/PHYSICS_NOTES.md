@@ -2324,6 +2324,80 @@ sound-speed profiles) are on hosts this session may not reach (`ffi.no`,
 `ieee-dataport.org`): licence and contents not verified. A search of Zenodo found no other
 measured underwater channel set, and none above 30 kHz.
 
+**21.5 Watermark, Smart Ocean, and two opt-in additions tried against Purple**
+(`tools/channel_watermark.py`, `tools/channel_validation.py --sites all`; tables
+`docs/figures/channel_validation_watermark.md`, `channel_validation_purple.md`,
+`channel_validation_sites.md`).
+
+*SFI Smart Ocean dataset* (van Walree, Otnes, Tomasi, Henriksen, Danre, Bergh, IEEE DataPort
+2025, doi:10.21227/3aa6-4k33, CC BY 4.0; the dataset page was read). Raw hydrophone
+recordings of probe and communication signals in three bands (4-8, 9-14, 24-32 kHz), two
+hydrophones, an enclosed fjord, overnight; two sound-speed profiles, a photograph of the sea
+surface, bathymetry; 15 GB. It is what the question needs (raw data, so the tracking
+bandwidth would be ours to choose; three carriers; profiles), but the files are served only
+to logged-in users. Not downloaded. The page states no wind or wave height.
+
+*Watermark* (FFI; van Walree, Socheleau, Otnes, Jenserud, IEEE J. Ocean. Eng. 42, 2017, read
+as hal-01630274; BCH1 report hal-01404491, read). A 770 MB zip served openly as "free
+download"; no licence text in it. Five channels of correlative soundings (no tracking
+filter). Stated: range, water depth, deployment (bottom-mounted, suspended, towed), band,
+month. Not stated: wind, sea state, sound-speed profile, seabed, the units' heights above the
+seabed. (The user manual is on a host that was not reachable.) So no arrival gets a grazing
+angle and nothing was fitted; what was tested needs neither:
+
+| Channel | Scattered arrivals: Doppler shape w90/w50 | Fully scattered: scintillation index, median (10-90 %) | Upper / lower band width ratio (frequency ratio) |
+| --- | --- | --- | --- |
+| NOF1, Oslofjord, 14 kHz, 59 soundings | 2.50 (1.79-3.48) | 0.74 (0.66-0.82), n = 12 | 1.112 +- 0.042 (1.240) |
+| NCS1, Norwegian shelf, 14 kHz, 60 soundings | 2.48 (2.14-2.86) | 0.92 (0.72-1.24), n = 718; 8 % above 1.3 | 1.158 +- 0.003 (1.240) |
+| BCH1, Brest harbour, 35 kHz, one sounding on 4 hydrophones | 2.94 (2.57-3.53) | 0.13 (0.04-0.48), n = 7 | 1.011 +- 0.004 (1.113) |
+
+A further test without geometry: the model ties an arrival's coherent share c to the rms
+width s of its scattered part, s sqrt((1 - c) / ln(1/c)) = v / (2 pi h) for every arrival off
+one surface (`channel_replay.wave_frequency`; our own model keeps it, tested). At NOF1 the
+width does rise as the share falls (rank correlation -0.43 within a sounding) and the
+implied wave frequency is 0.82 Hz, but dividing the widths by the predicted factor does not
+reduce their scatter (a factor 1.34 against 1.37). At BCH1 the correlation has the wrong sign
+(+0.67; 23 arrivals of one sounding). Soundings of 33 s may be too short for this; on
+synthetic soundings five times longer the tool finds the relation.
+
+*What the new data settle.* (1) Gaussian Doppler spectra: confirmed at two more sites with an
+estimator that has no tracking filter. (2) Scintillation above 1: not general. 718 fully
+scattered arrivals at NCS1 have a median of 0.92; complex Gaussian taps are right there, and
+the 1.1 to 4.8 of Purple at 60 m belongs to steep, short bounces. (3) Width growing with
+frequency inside a band: confirmed at NCS1 beyond doubt as a trend (1.158 +- 0.003 against 1),
+but it is less than proportional (1.240); not seen at 35 kHz in the one BCH1 sounding.
+(4) Proportionality across carriers and the wave-height excess: NOT settled. Both need a
+known sea state or a known geometry at a second carrier, and no open dataset gives either;
+Smart Ocean, behind a login, has the geometry and three carriers but, as far as its page
+says, no wind.
+
+*Purple, all nine files, one command.* The 1 km files now use images up to 12 bounces, which
+gives the long tail (within about 5 dB of the measured profile to 10 ms, and up to 8 dB too
+strong after: the assumed seabed reflects too well). With dozens of merged paths per group the
+per-arrival rows at 1 km are not to be relied on; the closed-form comparison is unaffected
+(Doppler width, measured over closed form: median 0.96, scatter a factor 1.18, n = 45).
+
+*Two additions, tried as extra option sets* (defaults unchanged; `time_spread.tap_shape`,
+`surface.rms_height` / `height_scale`, docstring of sim/timespread.py items 5 and 6). More
+knobs fitting better is not validation; what counts is the rows nothing was fitted to.
+
+- D = A with the rms height fitted per recording to the coherent share of the first surface
+  arrival at 200 m (two fitted numbers: wind, height; heights 0.116, 0.102, 0.145 m against
+  the wind law's 0.084, 0.073, 0.447 m). Predicted, not fitted: the coherent shares of the
+  other arrivals. At 200 m, SB+BS: measured 0.042, 0.118, 0.041; D 0.035, 0.061, 0.017; A
+  0.206, 0.344, 0.014. Over the 60 m and 200 m files: coherent share in / out 20 / 0 with D
+  against 19 / 4 with A; Doppler widths unchanged (16 / 4 against 17 / 3). The gap closes
+  with one extra number per recording, and that number is a physical one that could be
+  measured.
+- E = D with `tap_shape` fitted per recording to the scintillation index of the first
+  surface arrival at 60 m (three fitted numbers; shapes 8.5, 1.3, 0.37). Predicted: the
+  scintillation of the other arrivals. At 60 m it carries over (in / out 7 / 2 against 1 / 11
+  with A; e.g. second recording SB, BS, BSB measured 1.85, 1.31, 1.68, E 1.86, 1.27, 1.70).
+  At 200 m in the rough recording it does not: measured 0.89, 0.83, 0.81, E 5.7, 3.4, 2.2. A
+  single shape per sea is wrong; it has to depend on grazing angle (the option takes a
+  table), and the fitted shapes differ by a factor 20 between recordings. A description of
+  the steep arrivals, not a model of them.
+
 ## 22. The projector's direct sound and a receiver that overloads [OURS]
 
 Not from TR 0702: SST's receiver is linear. This section is our own model, written for the
@@ -2658,3 +2732,55 @@ cell needs Abraham and Lyons (2002), which is on the wanted list.
   relaxation frequencies (0.769 and 41.372 kHz). Stated validity ranges of both formulas
   were not read.
 - Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.
+
+## 24. The surface image in a link budget; own depth as a lever [OURS]
+
+`python/gpusonar/lloyd.py`, `depthplan.py`, `target_classes.py`; `tools/popoto_depth_planner.py`,
+`tools/surface_image_validation.py`. No source beyond the repository's own functions: the image
+construction is derived in the module's docstring, the roughness factor is
+`acoustics.rough_coherent_reflection`, the bubble law `sim.surface` `apl_1994`, the bottom
+`sim.propagation.rayleigh_reflection`, the cylinder `sim.targets`.
+
+*The factor.* One way, re the direct path: `H(f) = 1 + mu (R_d / R_s) exp(-i k (R_s - R_d))`,
+`mu = -exp(-Gamma^2 / 2) 10^(-L_b / 20)`, plus a scattered power
+`S = (1 - exp(-Gamma^2)) 10^(-L_b / 10) (R_d / R_s)^2` with no fixed phase. Two way, monostatic:
+transfer function `H^2` (`H_tx H_rx` when the projector is not at the array's depth), mean
+intensity `(|H|^2 + S)^2` because the surface has changed in the two-way travel time. Three
+figures are reported: single frequency; energy over the band; peak of the compressed coherent
+echo (the one a detection budget uses). With a bottom the sum runs over the layer's images.
+
+*What the band does.* Nulls at `z1 z2 = n lambda R / 2`. The n = 0 null (the surface) is the same
+at every frequency: a wide band does not fill it. The n-th null's phase spreads by
+`2 pi n B / fc` over the band: at n = 1 with 4 to 6 kHz the energy is -3.7 dB and the peak -6.2 dB
+where one frequency gives a null. Beyond `z1 z2 = lambda R fc / (2 B)` the pattern is gone: the
+paths are resolved, the direct-surface and surface-direct echoes coincide (+6 dB peak), and the
+energy is 1 + 4 + 1 (7.8 dB).
+
+*Roughness at long range.* The grazing angle of the surface path is `(z1 + z2) / R`: 0.07 degrees
+for 10 m and 4 m at 12 km, 1.1 degrees for 225 m. `Gamma = 2 k h sin(grazing)` is then small for any
+plausible height: the surface is a mirror, and sea state enters through noise and bubbles, not
+through roughness. The rms height is an input of its own (Sec. 21: measured heights did not follow
+the wind law).
+
+*Bubbles.* The `apl_1994` law goes as `1 / sin(grazing)` (floored at 2 degrees by `sim/surface.py`)
+and gives about 5 dB a bounce at 9.8 m/s with that floor (11 dB without it at 1 degree): it weakens the surface path, so the null fills and the
+lobe's gain is lost. No validity range is stated by its sources; a target inside the bubble layer
+is not modelled. A bound, not a prediction.
+
+*Measured* (`docs/design/surface_image_validation.json`): simulator image-source paths, both
+engines, own depth 10 to 600 m, target 4 / 30 / 150 m, 12 and 3 km: within 0.8 dB (peak) and
+1.1 dB (energy), largest in the nulls (the sweep's taper; the model's band is flat). Through the
+C++ chain with noise: within 0.6 dB from -15 to +12 dB. Bellhop, one way at 12 km: surface image
+only, energy within 0.6 dB (0.1 dB except in the 10 m / 4 m null, where the arrivals file's digits
+limit Bellhop); 100 m over sand, the image series within 0.1 dB in energy and 0.2 dB in two-way
+peak. The projector 1.5 m below the array (popoto_long_range) is 1.2 dB in a null.
+
+*A finding on the way.* For the same target in free field the chain's detector reports 12.2 dB
+less than the link budget's SNR. A 0.5 m range cell recovers 3.3 dB, a rectangular aperture
+window 1.9 dB, both 5.1 dB; the simulator takes a source level as a peak pressure where the
+budget is an energy equation (3 dB, by inspection, HARDCODED_AUDIT P-5); about 4 dB is not
+explained.
+
+*Not modelled.* Refraction in the closed form (Bellhop when the environment has a profile), the
+scattered energy's spread in delay and angle (so `peak_db` leaves it out), a rough bottom, the
+vertical offsets of stacked rows (the array is one depth), reverberation (margins are noise-limited).

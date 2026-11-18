@@ -106,6 +106,35 @@ SETS = {
 }
 
 
+# The Watermark benchmark (FFI): "Free download" at https://www.ffi.no/en/research/watermark ; the archive
+# carries no licence text. Cite van Walree, Socheleau, Otnes, Jenserud, IEEE J. Ocean. Eng. 42 (2017) 1007-1018.
+# MD5 as downloaded on 2026-11-18 (FFI publishes none).
+WATERMARK = ("https://www.ffi.no/en/research/watermark/_/attachment/download/"
+             "cc46828f-0078-46a1-bf77-8cee63b50056:f3b02654a06b2405fa042a5d0a05ce1b77305e40/WatermarkV1.zip",
+             770323858, "cd3478cb142a2f56a0feec407e7f3e05")
+
+
+def fetch_watermark(out: pathlib.Path) -> int:
+    """Download WatermarkV1.zip and unpack its channel files (NOF1, NCS1, BCH1, KAU1, KAU2) under `out`/Watermark."""
+    import zipfile
+    url, size, digest = WATERMARK
+    dst = out / "WatermarkV1.zip"
+    if not (dst.exists() and dst.stat().st_size == size and md5(dst) == digest):
+        print(f"fetching WatermarkV1.zip ({size / 1e6:.0f} MB)")
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (research client)"})
+        with urllib.request.urlopen(req) as r, open(dst, "wb") as f:
+            for block in iter(lambda: r.read(1 << 22), b""):
+                f.write(block)
+        if md5(dst) != digest:
+            print(f"WatermarkV1.zip: MD5 {md5(dst)} is not the recorded {digest}")
+            return 1
+    with zipfile.ZipFile(dst) as z:
+        names = [n for n in z.namelist() if n.endswith(".mat") or n.endswith("readme.txt")]
+        z.extractall(out, members=names)
+    print(f"unpacked {len(names)} files under {out / 'Watermark'}")
+    return 0
+
+
 def md5(path: pathlib.Path) -> str:
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -115,17 +144,24 @@ def md5(path: pathlib.Path) -> str:
 
 
 def main(argv=None) -> int:
+    import socket
+    socket.setdefaulttimeout(120.0)           # a stalled connection fails instead of hanging; run again to resume from scratch
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("directory", nargs="?")
     ap.add_argument("--set", default="validation", choices=sorted(SETS))
     ap.add_argument("--files", default=None, help="comma-separated file names instead of a set")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--watermark", action="store_true", help="the Watermark benchmark from www.ffi.no instead of the UACR files")
     args = ap.parse_args(argv)
     if args.list or not args.directory:
         for name, (size, digest) in FILES.items():
             print(f"{name:22s} {size / 1e6:9.1f} MB  md5 {digest}")
         print("sets:", {k: len(v) for k, v in SETS.items()})
         return 0 if args.list else 2
+    if args.watermark:
+        out = pathlib.Path(args.directory)
+        out.mkdir(parents=True, exist_ok=True)
+        return fetch_watermark(out)
     names = args.files.split(",") if args.files else SETS[args.set]
     out = pathlib.Path(args.directory)
     out.mkdir(parents=True, exist_ok=True)

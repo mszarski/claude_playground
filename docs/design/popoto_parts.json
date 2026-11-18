@@ -218,7 +218,7 @@
       "item": "Storage",
       "qty": 1,
       "status": "specified, not chosen",
-      "requirement": "35 MB a ping as recorded (273,067 samples × 32 channels × 4 bytes, window 75–2000 m), 45.48 GB an hour at 1301 pings; listening continuously 35.39 GB an hour",
+      "requirement": "35 MB a ping as recorded (273,067 samples × 32 channels × 4 bytes, window 75–2000 m), 45.48 GB an hour at 1301 pings recorded raw (the spec's `storage.record`; raw 45.48 GB, decimated by 17 5.35 GB); listening continuously 35.39 GB an hour",
       "fixed_by": "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file",
       "plan": [],
       "open": "capacity and write rate of the volume; whether to store decimated pings instead"
@@ -257,6 +257,16 @@
         }
       ],
       "open": "the mechanical design is not started"
+    },
+    {
+      "key": "depth_rating",
+      "item": "Depth rating of everything in the water",
+      "qty": "hydrophones, cables, connectors, housings, projector",
+      "status": "unconfirmed",
+      "requirement": "the deepest the array will be used is not given (`platform.max_depth_m`): for a frame, the deepest it will be hung; no rating can be stated",
+      "fixed_by": "`platform.max_depth_m` of the spec",
+      "plan": [],
+      "open": "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)"
     },
     {
       "key": "power",
@@ -498,7 +508,7 @@
       "item": "Storage",
       "qty": 1,
       "status": "specified, not chosen",
-      "requirement": "105 MB a ping as recorded (409,600 samples × 64 channels × 4 bytes, window 75–3000 m), 92.07 GB an hour at 878 pings; listening continuously 70.78 GB an hour",
+      "requirement": "105 MB a ping as recorded (409,600 samples × 64 channels × 4 bytes, window 75–3000 m), 92.07 GB an hour at 878 pings recorded raw (the spec's `storage.record`; raw 92.07 GB, decimated by 17 10.83 GB); listening continuously 70.78 GB an hour",
       "fixed_by": "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file",
       "plan": [],
       "open": "capacity and write rate of the volume; whether to store decimated pings instead"
@@ -537,6 +547,16 @@
         }
       ],
       "open": "the mechanical design is not started"
+    },
+    {
+      "key": "depth_rating",
+      "item": "Depth rating of everything in the water",
+      "qty": "hydrophones, cables, connectors, housings, projector",
+      "status": "unconfirmed",
+      "requirement": "the deepest the array will be used is not given (`platform.max_depth_m`): for a frame, the deepest it will be hung; no rating can be stated",
+      "fixed_by": "`platform.max_depth_m` of the spec",
+      "plan": [],
+      "open": "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)"
     },
     {
       "key": "power",
@@ -778,7 +798,7 @@
       "item": "Storage",
       "qty": 1,
       "status": "specified, not chosen",
-      "requirement": "157 MB a ping as recorded (409,600 samples × 96 channels × 4 bytes, window 75–3000 m), 138.11 GB an hour at 878 pings; listening continuously 106.17 GB an hour",
+      "requirement": "157 MB a ping as recorded (409,600 samples × 96 channels × 4 bytes, window 75–3000 m), 138.11 GB an hour at 878 pings recorded raw (the spec's `storage.record`; raw 138.11 GB, decimated by 17 16.25 GB); listening continuously 106.17 GB an hour",
       "fixed_by": "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file",
       "plan": [],
       "open": "capacity and write rate of the volume; whether to store decimated pings instead"
@@ -817,6 +837,16 @@
         }
       ],
       "open": "the mechanical design is not started"
+    },
+    {
+      "key": "depth_rating",
+      "item": "Depth rating of everything in the water",
+      "qty": "hydrophones, cables, connectors, housings, projector",
+      "status": "unconfirmed",
+      "requirement": "the deepest the array will be used is not given (`platform.max_depth_m`): for a frame, the deepest it will be hung; no rating can be stated",
+      "fixed_by": "`platform.max_depth_m` of the spec",
+      "plan": [],
+      "open": "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)"
     },
     {
       "key": "power",
@@ -1058,7 +1088,7 @@
       "item": "Storage",
       "qty": 1,
       "status": "specified, not chosen",
-      "requirement": "222 MB a ping as recorded (1,733,974 samples × 32 channels × 4 bytes, window 750–12700 m), 44.55 GB an hour at 201 pings; listening continuously 35.39 GB an hour",
+      "requirement": "222 MB a ping as recorded (1,733,974 samples × 32 channels × 4 bytes, window 750–12700 m), 44.55 GB an hour at 201 pings recorded raw (the spec's `storage.record`; raw 44.55 GB, decimated by 17 5.24 GB); listening continuously 35.39 GB an hour",
       "fixed_by": "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file",
       "plan": [],
       "open": "capacity and write rate of the volume; whether to store decimated pings instead"
@@ -1097,6 +1127,16 @@
         }
       ],
       "open": "the mechanical design is not started"
+    },
+    {
+      "key": "depth_rating",
+      "item": "Depth rating of everything in the water",
+      "qty": "hydrophones, cables, connectors, housings, projector",
+      "status": "specified, not chosen",
+      "requirement": "rated for 500 m of sea water (the platform's deepest operating depth), about 51 bar absolute; with whatever margin the builder's practice asks on top. Hydrophone sensitivity and the projector's source level must hold at that depth",
+      "fixed_by": "`platform.max_depth_m` of the spec",
+      "plan": [],
+      "open": "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)"
     },
     {
       "key": "power",
@@ -1338,7 +1378,7 @@
       "item": "Storage",
       "qty": 1,
       "status": "specified, not chosen",
-      "requirement": "444 MB a ping as recorded (1,733,974 samples × 64 channels × 4 bytes, window 750–12700 m), 89.11 GB an hour at 201 pings; listening continuously 70.78 GB an hour",
+      "requirement": "444 MB a ping as recorded (1,733,974 samples × 64 channels × 4 bytes, window 750–12700 m), 89.11 GB an hour at 201 pings recorded raw (the spec's `storage.record`; raw 89.11 GB, decimated by 17 10.48 GB); listening continuously 70.78 GB an hour",
       "fixed_by": "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file",
       "plan": [],
       "open": "capacity and write rate of the volume; whether to store decimated pings instead"
@@ -1377,6 +1417,16 @@
         }
       ],
       "open": "the mechanical design is not started"
+    },
+    {
+      "key": "depth_rating",
+      "item": "Depth rating of everything in the water",
+      "qty": "hydrophones, cables, connectors, housings, projector",
+      "status": "specified, not chosen",
+      "requirement": "rated for 500 m of sea water (the platform's deepest operating depth), about 51 bar absolute; with whatever margin the builder's practice asks on top. Hydrophone sensitivity and the projector's source level must hold at that depth",
+      "fixed_by": "`platform.max_depth_m` of the spec",
+      "plan": [],
+      "open": "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)"
     },
     {
       "key": "power",
@@ -1618,7 +1668,7 @@
       "item": "Storage",
       "qty": 1,
       "status": "specified, not chosen",
-      "requirement": "666 MB a ping as recorded (1,733,974 samples × 96 channels × 4 bytes, window 750–12700 m), 133.66 GB an hour at 201 pings; listening continuously 106.17 GB an hour",
+      "requirement": "666 MB a ping as recorded (1,733,974 samples × 96 channels × 4 bytes, window 750–12700 m), 133.66 GB an hour at 201 pings recorded raw (the spec's `storage.record`; raw 133.66 GB, decimated by 17 15.73 GB); listening continuously 106.17 GB an hour",
       "fixed_by": "`receive.window`, `receive.sample_rate`; `output.recording` of the deployment file",
       "plan": [],
       "open": "capacity and write rate of the volume; whether to store decimated pings instead"
@@ -1657,6 +1707,16 @@
         }
       ],
       "open": "the mechanical design is not started"
+    },
+    {
+      "key": "depth_rating",
+      "item": "Depth rating of everything in the water",
+      "qty": "hydrophones, cables, connectors, housings, projector",
+      "status": "specified, not chosen",
+      "requirement": "rated for 500 m of sea water (the platform's deepest operating depth), about 51 bar absolute; with whatever margin the builder's practice asks on top. Hydrophone sensitivity and the projector's source level must hold at that depth",
+      "fixed_by": "`platform.max_depth_m` of the spec",
+      "plan": [],
+      "open": "sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface)"
     },
     {
       "key": "power",
