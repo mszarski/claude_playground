@@ -199,21 +199,27 @@ def strip(report):
 
 def test_both_engines_print_the_same_member_and_nothing_else_changes():
     records = run_scenario(T.chain_scenario(6000.0, 15.0, pings=3)).records
+    # Changed with the owner's decision that the water depth and the bottom are required inputs of `chain.coverage`: this
+    # test gave neither (CFG), which a chain now refuses. The site here: 1000 m over sand; the records carry no water depth.
+    SITED = dict(CFG, water_depth_m=1000.0, bottom=SAND)
     base = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host"}
     got = {}
     for engine in ("cpp", "python"):
         with LiveChain(dict(base, engine=engine)) as chain:
             plain = chain.run([r.copy() for r in records])
-        with LiveChain(dict(base, engine=engine, coverage=CFG)) as chain:
+        with pytest.raises(ValueError, match="coverage.water_depth_m and coverage.bottom"):
+            LiveChain(dict(base, engine=engine, coverage=CFG))                       # a chain's coverage needs its site
+        with LiveChain(dict(base, engine=engine, coverage=SITED)) as chain:
             got[engine] = chain.run([r.copy() for r in records])
         for a, b in zip(plain, got[engine]):
             assert "coverage" not in a and strip(a) == strip(b), engine              # detections and tracks bit for bit
         assert [r["coverage"]["age_pings"] for r in got[engine]] == [0, 1, 2]        # made once: nothing moved
         c = got[engine][0]["coverage"]
+        assert c["water_depth_m"] == 1000.0 and c["water_depth_from"] == "site"       # the configured depth: the ping carried none
         assert c["own_depth_m"] == pytest.approx(225.0, abs=0.5) and c["profile"] == "none" and [k["name"] for k in c["classes"]] == [k["name"] for k in CLASSES]
         assert c["ranges_m"][0] >= 5500 and c["ranges_m"][-1] <= 6500                # the ping's own window
     assert [r["coverage"] for r in got["cpp"]] == [r["coverage"] for r in got["python"]]
-    o = live.cpp_chain_options(dict(base, coverage=CFG))
+    o = live.cpp_chain_options(dict(base, coverage=SITED))
     assert o["coverage"]["classes"].startswith("ship:25.0:2.0:6.0;") and "coverage" not in live.cpp_chain_options(base)
     with pytest.raises(ValueError):
         coverage.options({"threshold_db": 13.0})                                     # there is no typed threshold to give

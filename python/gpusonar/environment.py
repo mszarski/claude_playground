@@ -424,6 +424,24 @@ def wind_speed(env: dict, default: float | None = None):
     return default
 
 
+def coverage_site(env: dict, where: str = "environment") -> dict:
+    """What the live chain's coverage picture (`chain.coverage`; gpusonar.coverage.of_build) takes from a site:
+    {water_depth_m, bottom, wind_speed_m_s}. Nothing is defaulted: a site that does not state its water depth, its bottom
+    or its wind (`wind_speed_m_s` or `sea_state`) is refused, by name. `bottom` comes back as the chain takes it:
+    {sediment: name} or {speed, density, attenuation}."""
+    env = normalise(env, where, strict=False)
+    wind = wind_speed(env)
+    missing = [key for key, value in (("water_depth_m", env.get("water_depth_m")), ("bottom", env.get("bottom")), ("wind_speed_m_s (or sea_state)", wind)) if value is None]
+    if missing:
+        raise EnvironmentError(f"{where}: the coverage picture needs the site's water depth, bottom and wind, and this environment does not give {', '.join(missing)}. "
+                               "They are facts of the site and have no default: without the water depth and the bottom the picture is the deep-water one, in which nothing returns "
+                               "from the bottom, and it says that targets the chain detects cannot be seen")
+    if not _num(env["water_depth_m"]) or float(env["water_depth_m"]) <= 0.0:
+        raise EnvironmentError(f"{where}.water_depth_m: {env['water_depth_m']!r}; a positive number of metres")
+    bottom = {"sediment": env["bottom"]} if isinstance(env["bottom"], str) else {k: float(v) for k, v in dict(env["bottom"]).items()}
+    return {"water_depth_m": float(env["water_depth_m"]), "bottom": bottom, "wind_speed_m_s": float(wind)}
+
+
 def resolve(env, depth: float = 0.0, strict: bool = False, where: str = "environment") -> dict:
     """The environment the simulator works with, from what a scenario or a caller gave (a name, a mapping under
     either spelling, or an already resolved mapping): the keys the simulator has always used (`sound_speed`, and

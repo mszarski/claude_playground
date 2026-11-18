@@ -83,6 +83,7 @@ def chain_block(spec: dict, env: dict, pd: float) -> dict:
         block["surface"].update(bubble_model=surf.bubble_model, wind_speed_m_s=float(surf.wind_speed), frequency_hz=float(d["centre_hz"]))
     if env.get("bottom") is not None and env.get("water_depth_m") is not None:
         block["bottom"] = {"sediment": env["bottom"]} if isinstance(env["bottom"], str) else dict(env["bottom"])
+        block["water_depth_m"] = float(env["water_depth_m"])        # a chain needs both (gpusonar.coverage.chain_options); a water without them is for this tool only
     limit = (d.get("platform") or {}).get("max_depth_m")
     lim = env.get("own_depth_limits_m") or [depthplan.DEFAULT_LIMITS[0], float(limit or depthplan.DEFAULT_LIMITS[1])]
     block["own_depth_limits_m"] = [float(lim[0]), float(min(lim[1], limit) if limit else lim[1])]

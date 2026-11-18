@@ -90,6 +90,11 @@ compute:
 
 operation:
   range_m: [null, 12700.0]       # the receive window; null: from the pulse's blind range. A choice made here, not the owner's
+  # The coverage picture on the report line (chain.coverage), on for the face builds (the owner). It needs a SITE: water depth,
+  # bottom and wind have no default anywhere, and the generator refuses a site that lacks one. No site is chosen: this is the
+  # illustrative shelf of the 12 km design point, and the deployment file flags it unconfirmed. Name the real site's
+  # environment here (or write it inline: {environment: {name, water_depth_m, bottom, wind_speed_m_s}}) before a deployment.
+  coverage: {environment: shelf_100m_sand}
 
 trial:                           # the water the simulated trials are in: placeholders for a site that is not chosen
   water_depth_m: 100.0

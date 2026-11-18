@@ -19,6 +19,23 @@ chain:                           # gpusonar/live.py; anything left out keeps its
   look: starboard
   # range cell, CFAR windows, SNR floor, tracker and classifier sizes: the chain derives or defaults them from the sonar
   # (libs/live derive.hpp; `LiveChain.resolved` and the report say what was used). Write one here only to change it.
+  coverage:                      # what the sonar can see from where it is, on every report line (docs/DEPLOYMENT.md, "The coverage picture")
+    # The SITE: water depth and bottom are required (the chain does not start without them) and have no default. No site is
+    # chosen: these are the illustrative shelf of the 12 km design point
+    # (configs/builds/environments/illustrative.yaml, shelf_100m_sand). Put the real site's in before a deployment.
+    water_depth_m: 100.0         # used on a ping that carries no water depth (elevation.water_depth and navigation come first)
+    bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+    surface: {rms_height_m: 0.134}                     # the wind law's height at 5 m/s
+    # The classes and one row's link budget at 5 m/s of wind, as the generator writes them for the face builds
+    # (tools/coverage_map.py --build popoto_face_1x32 --environment shelf_100m_sand --chain-config prints the block).
+    # Every target strength and depth is an assumed placeholder (configs/builds/targets/reference_classes.yaml).
+    classes:
+      - {name: ship, ts_db: 25.0, depth_m: [2.0, 6.0]}
+      - {name: xl_auv, ts_db: 5.0, depth_m: [20.0, 200.0]}
+      - {name: large_submerged, ts_db: 25.0, depth_m: [30.0, 300.0]}
+    budget: {source_level_db: 197.0, noise_spectrum_db: 51.46, array_gain_db: 15.05, absorption_db_per_km: 0.32}
+    own_depth_limits_m: [5.0, 500.0]
+    bottom_clearance_m: 10.0
 
 output:
   recording: /data/sonar/popoto_%Y%m%d_%H%M%S.h5     # every raw ping, before processing

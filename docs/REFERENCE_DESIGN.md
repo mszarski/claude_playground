@@ -242,6 +242,7 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `operation.range_m` | m | yes | [first, last] range the receive window covers; first null: the blind range of the pulse | requirement | must be given |
 | `operation.bearings_deg` | deg | no | [first, last, step] from broadside | requirement | [-60, 60, 0.5] |
 | `operation.chain` | — | no | settings of the chain laid over the defaults (docs/CONFIGURATION.md) | — | the defaults |
+| `operation.coverage` | — | no | {environment: one of the build's `environments` by name, or an environment mapping}: the deployment file gets `chain.coverage` (what the sonar can see from where it is) for that site. The site must state its water depth, bottom and wind: none has a default | the site the build is deployed at | leave it out: no coverage picture |
 | `trial.water_depth_m` | m | yes | water depth of the simulated trial | trial plan | must be given |
 | `trial.own_depth_m` | m | yes | depth of the array in the trial | trial plan | must be given |
 | `trial.ranges_m` | m | yes | target ranges: the first for the free-field truth check, the last for the shallow-water one | trial plan | must be given, beyond the pulse's blind range |

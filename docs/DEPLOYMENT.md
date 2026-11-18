@@ -203,6 +203,19 @@ spec, then `tools/build_from_spec.py --write-shipped`. `REFERENCE_DESIGN.md` is 
   checklist with that build's tolerances), `COMMANDS.txt` (simulate, emulate, run, the C++ program with
   `chain.options`, listening with `listen.options`), the diagrams and `parts.md`; `--self-test` runs the
   simulated trials through both engines against their truth.
+- **What the generated deployment files switch on** (the owner's decisions; `buildspec.chain_config`, tests in
+  `tests/python/test_deployment_defaults.py`):
+  - every build of two or more rows: `elevation.sector_from_rays: {}` (the elevation search is limited to where a ray
+    with two bounces or fewer can arrive from). The hand-written `popoto_elevation_rehearsal` has it too;
+  - a build that switches depth from multipath timing on (`operation.chain.multipath_depth`): `rays: true` and
+    `withhold_flagged: true`. No shipped build has it on (it is off on all six);
+  - a build whose spec names a site (`operation.coverage: {environment: ...}`): `chain.coverage`, with that site's water
+    depth and bottom, the spec's target classes and `buildspec.budget`'s levels at the site's wind. The three face builds
+    have it, and the hand-written `popoto_vehicle` and `popoto_elevation_rehearsal`; the static builds and the test AUV do
+    not. **Water depth, bottom and wind are required of the site and have no default**: the generator stops on a site
+    that lacks one, and a chain given `coverage` without `water_depth_m` or `bottom` does not start. No site is chosen:
+    the shipped files carry the illustrative `shelf_100m_sand` (100 m over sand, 5 m/s), flagged `unconfirmed`. **Put the
+    real site in before a deployment** (the spec's `operation.coverage.environment`, then `--write-shipped`).
 - **Parts:** `design/popoto_parts.md` (generated; quantities per stage, what the design asks of each part,
   what fixes it, the plan's own words, where the plan and the files disagree).
 
@@ -503,8 +516,8 @@ chain:
     profile:
       built: {sample_sigma_m_s: <the sound-speed sensor's accuracy>}
       ensemble: {gradients_per_s: [<the gradients the unsampled water may have>], extent_m: [<how far they may run>]}
-  multipath_depth: {rays: true, surface: {rms_height_m: <rms wave height>}}
-  coverage: {classes: [...], budget: {...}}     # tools/coverage_map.py --build <build> --chain-config prints this block
+  multipath_depth: {rays: true, withhold_flagged: true, surface: {rms_height_m: <rms wave height>}}
+  coverage: {water_depth_m: <the site's>, bottom: {...}, classes: [...], budget: {...}}     # REQUIRED: water_depth_m, bottom. Generated from the spec's site (operation.coverage)
 ```
 
 **Where each depth comes from and how far to trust it** (numbers: `tools/refraction_depth_study.py`, illustrative
@@ -529,12 +542,13 @@ waters, the measurement itself taken as exact; `docs/design/refraction_depth_stu
   ensemble's profiles. Much wider than the sigma means the sigma's single tilt does not describe what is not known.
   The span is only as wide as the configured gradients and extents make it; it is not a bound.
 
-- **Stacked rows with unequal spacing: set `elevation.sector_from_rays: {}`.** Their far lobes are only a few dB down
+- **Stacked rows: `elevation.sector_from_rays: {}` is on in every shipped stacked-row deployment file** (two and three
+  rows, generated and hand-written). The reason is the rows with unequal spacing: their far lobes are only a few dB down
   (4 dB for the three-row static array); where several arrivals share a range cell one can win outright, unflagged, and its
   bearing correction moves the detection by a degree (`ssp_thermocline_static_trial_3row`: -31 degrees on every ping, no
   track). The key limits the search to elevations a ray with two bounces or fewer can arrive from.
-- **Shallow water without `multipath_depth.bottom`: set `withhold_flagged: true`**, or read `multipath_note` before the
-  depth. A flagged depth's sigma is the fit's and is small even when the fit is to the bottom's echoes.
+- **Shallow water without `multipath_depth.bottom`: `withhold_flagged: true`** (what the generator writes, with
+  `rays: true`, for a build that switches `multipath_depth` on), or read `multipath_note` before the depth. A flagged depth's sigma is the fit's and is small even when the fit is to the bottom's echoes.
 
 ### The coverage picture (`chain.coverage`)
 
@@ -557,10 +571,14 @@ One member of the report line says what the sonar can see from where it is (keys
   `own_depth_limits_m` and the bottom clearance.
 - `profile` is the rung all of it rests on, and `max_range_ensemble_m` how far the range moves over the profiles the water
   may also be. On `prior`, `local` or `none` the picture is that of isovelocity water (or the assumed gradient).
-- In shallow water give the bottom (`coverage.bottom`) and make sure the water depth arrives (navigation's altitude, or
-  `elevation.water_depth`): without them the picture is the deep-water one. On the popoto_12km scenario (sonar at 10 m,
-  100 m of water over sand, ship at 12 km detected at 20 to 23 dB) the picture without the bottom said the ship could not
-  be seen; with it, probability 1.
+- **The water depth and the bottom are required** (`coverage.water_depth_m`, `coverage.bottom`): a chain given
+  `coverage` without either does not start, and says which is missing. They have no default because without them the
+  picture is the deep-water one: on the popoto_12km scenario (sonar at 10 m, 100 m of water over sand, ship at 12 km
+  detected at 20 to 23 dB, the record without a water depth) it said the ship could not be seen; with them, probability 1.
+  `water_depth_m` is the site's depth and is used on a ping that carries none (`"water_depth_from": "site"` in the member);
+  navigation's altitude or `elevation.water_depth` comes first when it is there.
+- It is on in the shipped face and vehicle deployment files, for an ILLUSTRATIVE site (100 m over sand): replace the site
+  before a deployment (see "From a build spec").
 - Before a mission: `tools/coverage_map.py --build <build> --environment <name> --own-depth <m> [--profile built:LO-HI]
   [--figure out.png]` draws the same numbers against range and target depth.
 - It costs time only when it is refreshed: 0.03 s in deep water without a bottom, 0.3 to 0.8 s with a bottom or an

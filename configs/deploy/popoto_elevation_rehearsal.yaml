@@ -18,6 +18,7 @@ chain:
   tracker: {confirm_hits: 2}        # the one size that is not the chain's default (3)
   elevation:
     sector_deg: [-30.0, 30.0, 0.25]
+    sector_from_rays: {}         # search only the elevations a ray with two bounces or fewer can arrive from (as every stacked-row file)
     attitude_time: arrival
     attitude_rate_sigma_deg_s: 0.5
     roll_sigma_deg: 0.2
@@ -25,6 +26,22 @@ chain:
     water_depth_sigma_m: 5.0
     gradient_per_s: null         # the simulated water is isovelocity: straight rays
     gradient_sigma_per_s: 0.0
+  coverage:                      # what the sonar can see from where it is, on every report line (docs/DEPLOYMENT.md, "The coverage picture")
+    # The SITE: water depth and bottom are required (the chain does not start without them) and have no default. No site is
+    # chosen: these are the rehearsal scenario's water (100 m over its sand). Put the real site's in before a deployment.
+    water_depth_m: 100.0         # used on a ping that carries no water depth (elevation.water_depth and navigation come first)
+    bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+    surface: {rms_height_m: 0.134}                     # the wind law's height at 5 m/s
+    # The classes and one row's link budget at 5 m/s of wind, as the generator writes them for the face builds
+    # (tools/coverage_map.py --build popoto_face_3x32 --environment shelf_100m_sand --chain-config prints the block).
+    # Every target strength and depth is an assumed placeholder (configs/builds/targets/reference_classes.yaml).
+    classes:
+      - {name: ship, ts_db: 25.0, depth_m: [2.0, 6.0]}
+      - {name: xl_auv, ts_db: 5.0, depth_m: [20.0, 200.0]}
+      - {name: large_submerged, ts_db: 25.0, depth_m: [30.0, 300.0]}
+    budget: {source_level_db: 197.0, noise_spectrum_db: 51.46, array_gain_db: 15.05, absorption_db_per_km: 0.32}
+    own_depth_limits_m: [5.0, 500.0]
+    bottom_clearance_m: 10.0
 
 output:
   recording: /tmp/popoto_elevation_rehearsal.h5

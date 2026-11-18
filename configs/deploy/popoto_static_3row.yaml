@@ -13,6 +13,7 @@ chain:
   look: starboard
   elevation:
     sector_deg: [-30.0, 30.0, 0.25]
+    sector_from_rays: {}
     attitude_time: transmit
     attitude_rate_sigma_deg_s: 0.5
     roll_sigma_deg: 1.0

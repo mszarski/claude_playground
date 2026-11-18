@@ -16,7 +16,8 @@ anything about the water beyond the record's one sound speed (the local value at
     as deployed            the deployment file's chain, unchanged
     local profile, multipath depth
                            the same chain with the LOCAL profile given to the elevation stage (`chain.elevation.ssp`; builds with
-                           stacked rows) and depth from multipath timing switched on with its defaults (`chain.multipath_depth: {}`)
+                           stacked rows) and depth from multipath timing switched on as a generated deployment file holds it
+                           (`chain.multipath_depth: {rays: true, withhold_flagged: true}`, buildspec.MULTIPATH_DEPTH_DEPLOYED)
 
 Scored on every ping, as tools/fjord_rehearsal.py scores: the target's detection is the strongest from 30 m before to 60 m
 behind where the target is, within 2 degrees. Reported: detection and SNR, range error of that detection (its strongest
@@ -128,7 +129,8 @@ def run_one(name: str, which: str, engine: str = "cpp") -> dict:
            "eigenrays": eigenray_table(result.config, result.records[0])}
     chain = load_yaml(ROOT / "configs" / "deploy" / f"{info['deploy']}.yaml")["chain"]
     told = copy.deepcopy(chain)
-    told["multipath_depth"] = {}
+    from gpusonar.buildspec import MULTIPATH_DEPTH_DEPLOYED
+    told["multipath_depth"] = dict(MULTIPATH_DEPTH_DEPLOYED)      # as deployed wherever it is on: through rays, no flagged depth reported
     if info["rows"] > 1:
         ocean = result.config["propagation"]["environment"]                      # ssp_depth, ssp_speed: the LOCAL profile in both waters
         told["elevation"] = dict(told["elevation"], ssp={"depth": [float(v) for v in ocean["ssp_depth"]], "speed": [float(v) for v in ocean["ssp_speed"]]})
@@ -168,7 +170,7 @@ def markdown(res: dict, commit: str = "") -> str:
              f"Made by `tools/ssp_range_study.py`{(' at commit ' + commit) if commit else ''}. Each scenario is simulated twice (C++ synthesis; Bellhop's eigenrays): with its water as "
              "written (`environment.profiles_by_range`: Bellhop's 2-D sound-speed field) and with the profile at the sonar at every range. Same seed, target and noise. The records "
              "go through the C++ chain of the build's deployment file as shipped, and again with the local profile given to the elevation stage (stacked rows) and depth from "
-             "multipath timing switched on with its defaults. The chain is never told that the water changes. Four pings each: a look at what happens, not statistics. "
+             "multipath timing switched on as a generated deployment file holds it (`rays: true`, `withhold_flagged: true`: a depth with a note is not reported, its note is the reason). The chain is never told that the water changes. Four pings each: a look at what happens, not statistics. "
              "The profiles are ILLUSTRATIVE: nobody measured them. Range is horizontal distance from the sonar and the section is the same on every bearing.", "",
              "Numbers are the median of the pings the target was detected on; in square brackets every ping. Range error: the detection's range minus the straight-line distance to the "
              "target, for the detection's strongest sample / for its first arrival. Elevation: positive up; `straight` is the straight line to the target, which is not where the "

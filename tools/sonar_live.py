@@ -42,7 +42,8 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     sonar = SonarModel.load(src["sonar"], src.get("sonar_overrides"))
     env = {"sound_speed": float(src["sound_speed"])} if src.get("sound_speed") else None
     writer = core.RecordWriter(path)
-    writer.write(sonar.make_record(core.Pose(), environment=env))
+    template = sonar.make_record(core.Pose(), environment=env)
+    writer.write(template)
     writer.close()
     chain = cfg.get("chain") or {}
     o = cpp_chain_options(chain, sync_reference(chain))
@@ -68,6 +69,7 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
         o["elevation"] = 1
         el["roll_sigma_deg"] = float(np.degrees(el.pop("roll_sigma")))
         el["sector_margin_deg"] = float(np.degrees(el.pop("sector_margin")))
+        el["sector_rays_margin_deg"] = float(np.degrees(el.pop("sector_rays_margin")))
         el["attitude_rate_sigma_deg_s"] = float(np.degrees(el.pop("attitude_rate_sigma")))
         for key in ("ssp_depth", "ssp_speed"):
             values = el.pop(key)
@@ -79,6 +81,8 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
             profile["ladder"] = ",".join(profile["ladder"])
             o.update({f"elevation_profile_{k}": v for k, v in profile.items()})
         o.update({f"elevation_{k}": (int(v) if isinstance(v, bool) else v) for k, v in el.items()})
+    from gpusonar.live import program_stage_options
+    program_stage_options(o, template, chain)             # multipath_depth, coverage (with its detection-probability table)
     # The program around the chain: the board stream's word, socket and queue; when to give up; where to listen.
     for key, option in (("sample_bytes", "stream_sample_bytes"), ("buffer_bytes", "stream_buffer_bytes"), ("queue_mb", "stream_queue_mb"),
                         ("timeout", "idle_seconds"), ("host", "bind")):

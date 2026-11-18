@@ -232,7 +232,10 @@ def test_the_program_takes_the_new_keys(tmp_path):
     from gpusonar import buildspec as bs
     from gpusonar import coverage
     d = bs.derive(bs.load("popoto_face_1x32"))
-    cov = {"classes": [{"name": "sub", "ts_db": 15.0, "depth_m": [100.0, 200.0]}], "budget": coverage.budget_of(d, 5.0)}
+    # water_depth_m and bottom: added with the owner's decision that a chain's coverage picture needs its site (a chain
+    # without them no longer starts; the last lines check that of the program).
+    cov = {"classes": [{"name": "sub", "ts_db": 15.0, "depth_m": [100.0, 200.0]}], "budget": coverage.budget_of(d, 5.0), "water_depth_m": 1000.0,
+           "bottom": {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}}
     records = run_scenario(T.chain_scenario(6000.0, 15.0, pings=2)).records
     cfg = {"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "engine": "cpp", "multipath_depth": {"rays": True}, "coverage": cov,
            "elevation": {"ssp": {"depth": [0.0, 2000.0], "speed": [1500.0, 1500.0]}, "profile": {"supplied": {"sigma_m_s": 0.1}}}}
@@ -252,6 +255,10 @@ def test_the_program_takes_the_new_keys(tmp_path):
         assert a["coverage"] == b["coverage"] and a["profile"] == b["profile"] == {"rung": "supplied"}
         assert a["detections"][0]["depth_multipath_m"] == pytest.approx(b["detections"][0]["depth_multipath_m"], abs=1e-6)
         assert a["detections"][0]["multipath_profile_source"] == "supplied"
+        assert a["coverage"]["water_depth_m"] == 1000.0 and a["coverage"]["water_depth_from"] == "site"
+    refused = subprocess.run([str(EXE), "--replay", str(tmp_path / "rec.h5"), "--report", str(tmp_path / "rep2.jsonl"), *[x for x in args if not x.startswith("coverage_water_depth=")]],
+                             capture_output=True, text=True, timeout=600)
+    assert refused.returncode != 0 and "coverage needs the site's water depth and bottom" in refused.stderr and "coverage_water_depth" in refused.stderr
 
 
 def test_with_sbl_bearings_the_stage_still_gives_the_depth():

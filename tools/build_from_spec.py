@@ -76,7 +76,13 @@ def generate(spec: dict, out: Path, template: bool = False, diagrams: bool = Tru
     deploy = bs.deploy_config(spec)
     config.add_config_dir(out / "configs")
     try:
-        opts = _options(deploy["chain"])
+        table_record = None
+        if deploy["chain"].get("coverage") is not None:     # the coverage picture's detection-probability table needs the sonar's (empty) ping
+            from gpusonar.sim import make_pose
+            from gpusonar.sonar import SonarModel
+            table_record = SonarModel.load(deploy["source"]["sonar"]).make_record(make_pose())
+        opts = _options(deploy["chain"], table_record)
+        del table_record
         (out / "chain.options").write_text("".join(f"{k}={v}\n" for k, v in opts.items()))
         lo = bs.listen_options(spec)
         (out / "listen.options").write_text("".join(f"{k}={v:g}\n" if isinstance(v, float) else f"{k}={v}\n" for k, v in lo.items()))
@@ -119,10 +125,11 @@ def generate(spec: dict, out: Path, template: bool = False, diagrams: bool = Tru
     return written
 
 
-def _options(chain: dict) -> dict:
-    """The chain section as the key=value settings of build/bin/sonar_live (the same mapping `--export-template` prints)."""
-    from gpusonar.live import cpp_chain_options, sync_reference
-    o = cpp_chain_options(chain, sync_reference(chain))
+def _options(chain: dict, record=None) -> dict:
+    """The chain section as the key=value settings of build/bin/sonar_live (the same mapping `--export-template` prints).
+    `record`: the sonar's template, for the coverage picture's detection-probability table."""
+    from gpusonar.live import cpp_chain_options, program_stage_options, sync_reference
+    o = program_stage_options(cpp_chain_options(chain, sync_reference(chain)), record, chain)
     sync = o.pop("sync", None)
     o["look"] = "starboard" if o.pop("starboard") else "port"
     o["window"] = "hann" if o.pop("hann") else "none"
@@ -141,6 +148,7 @@ def _options(chain: dict) -> dict:
         o["elevation"] = 1
         el["roll_sigma_deg"] = float(np.degrees(el.pop("roll_sigma")))
         el["sector_margin_deg"] = float(np.degrees(el.pop("sector_margin")))
+        el["sector_rays_margin_deg"] = float(np.degrees(el.pop("sector_rays_margin")))
         el["attitude_rate_sigma_deg_s"] = float(np.degrees(el.pop("attitude_rate_sigma")))
         for key in ("ssp_depth", "ssp_speed"):
             values = el.pop(key)

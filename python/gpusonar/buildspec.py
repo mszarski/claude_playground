@@ -156,6 +156,9 @@ SCHEMA = {
         "range_m": ("vec2", "m", True, "[first, last] range the receive window covers; first null: the blind range of the pulse", "requirement", "must be given"),
         "bearings_deg": ("list", "deg", False, "[first, last, step] from broadside", "requirement", "[-60, 60, 0.5]"),
         "chain": ("map", "", False, "settings of the chain laid over the defaults (docs/CONFIGURATION.md)", "", "the defaults"),
+        "coverage": ("map", "", False, "{environment: one of the build's `environments` by name, or an environment mapping}: the deployment file gets `chain.coverage` (what the sonar can see "
+                     "from where it is) for that site. The site must state its water depth, bottom and wind: none has a default", "the site the build is deployed at",
+                     "leave it out: no coverage picture"),
     },
     "trial": {
         "water_depth_m": ("num", "m", True, "water depth of the simulated trial", "trial plan", "must be given"),
@@ -188,6 +191,9 @@ ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
 # Only what a build decides. The range cell, CFAR windows, SNR floor, tracker and classifier sizes are the chain's own:
 # it derives or defaults them from the sonar (libs/live derive.hpp, gpusonar.live), and a second copy here would drift.
 DEFAULT_CHAIN = {"bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard"}
+# What a deployment file's `chain.multipath_depth` holds wherever a build switches it on (`operation.chain.multipath_depth`;
+# the build's own keys are laid over these). No shipped build switches it on.
+MULTIPATH_DEPTH_DEPLOYED = {"rays": True, "withhold_flagged": True}
 # The detection threshold of the link budget (dB of SNR after the matched filter and the array): ONE value, read here
 # by `performance`, `surface_term`, the depth planner and the plan. It is the budget's historical 13 dB, NOT the shipped
 # detector's figure: see DETECTOR_THRESHOLD_DB. Replacing it by `live.budget_threshold_db(record, chain, pd=..., rows=...)`
@@ -342,6 +348,12 @@ def validate(spec: dict) -> list[Issue]:
             continue
         for where, msg in find_problems(items):
             err(where, msg)
+    if get(spec, "operation", "coverage") is not None and not any(i.level == "error" for i in out):
+        from . import coverage                              # the generator's own refusal (chain_config), said here so that --validate reports it
+        try:
+            coverage.of_build(spec, spec["operation"]["coverage"])
+        except ValueError as exc:
+            err("operation.coverage", str(exc))
     if any(i.level == "error" for i in out):
         return out
 
@@ -828,6 +840,7 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
         el: dict = {"sector_deg": [-30.0, 30.0, 0.25]}
         if rows == 2:
             el["sector_from_depth"] = {"bounces": 1, "margin_deg": 1.0}
+        el["sector_from_rays"] = {}                         # every stacked-row build (the owner): a far lobe of the rows is not taken for an arrival
         el["attitude_time"] = get(spec, "navigation", "attitude_time", "arrival" if (not static or nav_tilt) else "transmit")
         el["attitude_rate_sigma_deg_s"] = float(get(spec, "navigation", "attitude_rate_sigma_deg_s", 0.5))
         el["roll_sigma_deg"] = float(get(spec, "navigation", "roll_sigma_deg", 1.0 if static else 0.2))
@@ -840,7 +853,13 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
             el["gradient_per_s"] = float(get(spec, "sound_speed", "gradient_per_s", 0.017))
         el["gradient_sigma_per_s"] = float(get(spec, "sound_speed", "gradient_sigma_per_s", 0.05))
         chain["elevation"] = el
-    return deep_merge(chain, get(spec, "operation", "chain", {}) or {})
+    if get(spec, "operation", "coverage") is not None:
+        from . import coverage
+        chain["coverage"] = coverage.of_build(spec, spec["operation"]["coverage"])     # raises when the site lacks water depth, bottom or wind
+    chain = deep_merge(chain, get(spec, "operation", "chain", {}) or {})
+    if chain.get("multipath_depth") is not None:            # wherever it is on (the owner): through rays, and no flagged depth reported
+        chain["multipath_depth"] = {**MULTIPATH_DEPTH_DEPLOYED, **chain["multipath_depth"]}
+    return chain
 
 
 def _idle_seconds(spec: dict) -> float:
@@ -886,6 +905,15 @@ def deploy_config(spec: dict) -> dict:
                                      ("sound_speed", "gradient_sigma_per_s", "chain.elevation.gradient_sigma_per_s")):
             if target.split(".")[-1] in cfg["chain"]["elevation"] and cfg["chain"]["elevation"][target.split(".")[-1]] is not None:
                 _flag(spec, flags, section, key, target)
+    if get(spec, "operation", "coverage") is not None:     # the site, the classes and the levels: flagged unless somebody vouches for them
+        site = spec["operation"]["coverage"]["environment"]
+        env = next(e for e in environments_of(spec) if e["name"] == site) if isinstance(site, str) else site
+        if env.get("illustrative", True):
+            flags += ["chain.coverage.water_depth_m", "chain.coverage.bottom", "chain.coverage.surface"]
+        if any(c.get("status") != "confirmed" for c in target_classes_of(spec, resolve=False)):
+            flags.append("chain.coverage.classes")
+        if env.get("illustrative", True) or status(spec, "projector", "source_level_db_rms") != "confirmed":
+            flags.append("chain.coverage.budget")
     cfg["unconfirmed"] = flags
     return cfg
 

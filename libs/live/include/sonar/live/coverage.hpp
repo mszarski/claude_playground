@@ -78,10 +78,18 @@ struct CoverageOptions {
   std::vector<double> surface_loss_grazing, surface_loss_table_db;   ///< a bubble law's loss against grazing angle (rad, dB)
   bool bottom = false;                 ///< a fluid bottom's Rayleigh reflection (a named sediment's, resolved by the configuration)
   double bottom_speed = 0.0, bottom_density = 0.0, bottom_attenuation = 0.0;
+  /// m: the site's water depth, used on a ping that carries none (what the ping carries comes first). No default.
+  /// A chain with the coverage picture enabled needs this and `bottom`: LiveChain refuses to start without them
+  /// (coverage_site_missing). The class itself still takes a water without a bottom (tools: deep water, said by the caller).
+  double water_depth = kNaN;
   std::int64_t ray_fan = 720, max_bounces = 3, max_arrivals = 6;
   double null_db = -10.0;              ///< a surface-image null: the factor below this where the direct path exists
   double surface_z = 0.0;
 };
+
+/// What a chain's coverage picture must be told about its site and was not: "" when the water depth and the bottom are
+/// both given, else the words of the error (LiveChain's constructor throws them; gpusonar.coverage.chain_options says the same).
+std::string coverage_site_missing(const CoverageOptions& o);
 
 /// One option by name, as `coverage_<member>=value` (`coverage=1`: enabled; classes as "name:ts:lo:hi;name:ts:lo:hi").
 bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::string& value);

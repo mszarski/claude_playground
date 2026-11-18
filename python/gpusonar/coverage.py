@@ -12,6 +12,13 @@ same C++ class (libs/live coverage.hpp, which says how each number is made), so 
 
 Configuration (`chain.coverage`; a key the C++ options do not have is an error):
 
+    water_depth_m:     REQUIRED in a chain, no default: the site's water depth, m. Used on a ping for which neither
+                       `elevation.water_depth` nor navigation gives one (what a ping carries comes first)
+    bottom:            REQUIRED in a chain, no default: {sediment: name in configs/sediments.yaml} or {speed, density,
+                       attenuation}. Without the two the picture is the deep-water one, in which nothing comes back from the
+                       bottom: in 100 m over sand it said a ship at 12 km could not be seen while the chain detected it.
+                       A chain given `coverage` without them does not start (`chain_options`); a build takes them from
+                       its site (`of_build`: the spec's `operation.coverage.environment`)
     classes:           [{name, ts_db, depth_m: [shallowest, deepest]}, ...]   target classes (a build's: buildspec.target_classes_of)
     budget:            {source_level_db, noise_spectrum_db, array_gain_db, absorption_db_per_km}   no defaults (budget_of)
     pd:                0.5      the detection probability the ranges are stated for
@@ -22,8 +29,8 @@ Configuration (`chain.coverage`; a key the C++ options do not have is an error):
     own_depth_limits_m: [5, 500], bottom_clearance_m: 10, n_own: 10
     refresh:           {depth_m: 5, water_depth_m: 10, speed_m_s: 0.5}   recomputed when one of these has changed by so much
     surface:           {coefficient: -1, rms_height_m: 0, loss_db: 0, bubble_model: null, wind_speed_m_s: null, frequency_hz: null}
-    bottom:            null     {sediment: name in configs/sediments.yaml} or {speed, density, attenuation}; null: the bottom
-                                returns nothing (rays that reach it are dropped)
+                                (`field` and `summary`, the tools' entry points, still take a water without a bottom: rays that
+                                reach it are dropped. That is a statement about deep water, made by the caller)
     rays:              {fan: 720, max_bounces: 3, max_arrivals: 6}
     null_db:           -10      a surface-image null: the two-way factor below this where the direct path exists
 
@@ -50,6 +57,7 @@ DEFAULTS = {
     "refresh": {"depth_m": 5.0, "water_depth_m": 10.0, "speed_m_s": 0.5},
     "surface": {"coefficient": -1.0, "rms_height_m": 0.0, "loss_db": 0.0, "bubble_model": None, "wind_speed_m_s": None, "frequency_hz": None},
     "bottom": None,
+    "water_depth_m": None,
     "rays": {"fan": 720, "max_bounces": 3, "max_arrivals": 6},
     "null_db": -10.0,
     "surface_z": 0.0,
@@ -119,6 +127,10 @@ def cpp_options(cfg: dict | None, sound_speed: float = 1500.0) -> dict:
     for key, value in b.items():
         if value is not None:
             o[key] = float(value)
+    if c["water_depth_m"] is not None:
+        if not (isinstance(c["water_depth_m"], (int, float)) and not isinstance(c["water_depth_m"], bool) and float(c["water_depth_m"]) > 0.0):
+            raise ValueError(f"coverage.water_depth_m: {c['water_depth_m']!r}; it is the site's water depth in metres, a positive number")
+        o["water_depth"] = float(c["water_depth_m"])
     if c["range_m"] is not None:
         o.update(range_first=float(c["range_m"][0]), range_last=float(c["range_m"][1]))
     table = bubble_table(s, sound_speed)
@@ -128,6 +140,62 @@ def cpp_options(cfg: dict | None, sound_speed: float = 1500.0) -> dict:
     if half is not None:
         o.update(bottom=1, bottom_speed=float(half["speed"]), bottom_density=float(half["density"]), bottom_attenuation=float(half.get("attenuation", 0.0)))
     return o
+
+
+def missing_site(cfg: dict | None) -> list:
+    """The site facts `chain.coverage` must state and does not: of `water_depth_m`, `bottom`."""
+    c = cfg or {}
+    return [key for key in ("water_depth_m", "bottom") if c.get(key) is None]
+
+
+def chain_options(cfg: dict | None, sound_speed: float = 1500.0) -> dict:
+    """`cpp_options` for a chain (gpusonar.live, both engines): the same, after refusing a `chain.coverage` that does not
+    state the site's water depth and bottom. Neither has a default: they are facts of the site."""
+    missing = missing_site(cfg)
+    if missing:
+        raise ValueError("chain.coverage needs the site's water depth and bottom, and " + " and ".join(f"coverage.{k}" for k in missing) + (" is" if len(missing) == 1 else " are")
+                         + " not given. Give coverage.water_depth_m (metres) and coverage.bottom ({sediment: name in configs/sediments.yaml} or {speed, density, attenuation}); "
+                         "neither has a default. Without them the picture would be the deep-water one, in which nothing returns from the bottom, and it would say that targets the "
+                         "chain detects cannot be seen. A generated deployment file takes them from the build spec's site (operation.coverage.environment)")
+    return cpp_options(cfg, sound_speed)
+
+
+def of_build(spec: dict, site: dict) -> dict:
+    """`chain.coverage` of a build's deployment file (buildspec.chain_config). `site`: the spec's `operation.coverage`,
+    {environment: the name of one of the spec's `environments`, or an environment mapping (gpusonar.environment.FIELDS)}.
+    Water depth, bottom and wind are the site's, none defaulted (environment.coverage_site raises naming what is missing);
+    the classes are the spec's targets, the levels `buildspec.budget`'s at the site's wind, the surface's rms height the
+    site's (its `rms_wave_height_m`, else the wind law's, as the depth planner has it)."""
+    from . import buildspec, depthplan, environment
+    where = "operation.coverage"
+    if not isinstance(site, dict) or set(site) != {"environment"}:
+        raise ValueError(f"{where}: give {{environment: <one of the build's environments, or an environment mapping>}}; got {site!r}")
+    env = site["environment"]
+    if isinstance(env, str):
+        known = buildspec.environments_of(spec)
+        env = next((e for e in known if e["name"] == site["environment"]), None)
+        if env is None:
+            raise ValueError(f"{where}.environment: {site['environment']!r} is not one of the build's environments ({', '.join(e['name'] for e in known) or 'it has none'})")
+    else:
+        env = environment.normalise(env, f"{where}.environment")
+    facts = environment.coverage_site(env, f"{where}.environment" + (f" ({env['name']})" if env.get("name") else ""))
+    d = buildspec.describe(buildspec.sonar_config(spec))                    # without the deployment file: this is part of it
+    classes = classes_of(buildspec.target_classes_of(spec, range_m=float(d["window_m"][1])))
+    if not classes:
+        raise ValueError(f"{where}: the build has no target classes (`targets:`); the coverage picture is stated per class")
+    surf = depthplan.surface_of(env)
+    block = {"classes": classes, "budget": {k: round(v, 2) for k, v in budget_of(d, facts["wind_speed_m_s"]).items()},       # a file is read by people: 0.01 dB
+             "water_depth_m": facts["water_depth_m"], "bottom": facts["bottom"], "surface": {"rms_height_m": round(float(surf.height()), 3)}}
+    if surf.bubble_model:
+        block["surface"].update(bubble_model=surf.bubble_model, wind_speed_m_s=float(surf.wind_speed), frequency_hz=float(d["centre_hz"]))
+    limit = (spec.get("platform") or {}).get("max_depth_m")
+    lim = env.get("own_depth_limits_m")
+    if lim is not None or limit is not None:
+        lo, hi = (float(v) for v in (lim or [DEFAULTS["own_depth_limits_m"][0], limit]))
+        block["own_depth_limits_m"] = [lo, float(min(hi, float(limit))) if limit is not None else hi]
+    if env.get("bottom_clearance_m") is not None:
+        block["bottom_clearance_m"] = float(env["bottom_clearance_m"])
+    return block
 
 
 def pd_table(record, chain_cfg: dict | None = None, fluctuation: str | None = None, rows: int | None = None):
@@ -141,9 +209,9 @@ def pd_table(record, chain_cfg: dict | None = None, fluctuation: str | None = No
     return [float(v) for v in PD_SNR_DB], [float(min(max(v, 0.0), 1.0)) for v in np.atleast_1d(pd)]
 
 
-def budget_of(d: dict, wind_speed: float = 5.0) -> dict:
+def budget_of(d: dict, wind_speed: float) -> dict:
     """The `budget:` block of a build (`d`: buildspec.derive or describe), from buildspec.budget: its source level, the
-    ambient noise spectrum at `wind_speed` m/s, one row's gain against that noise, and its absorption."""
+    ambient noise spectrum at `wind_speed` m/s (the site's: no default), one row's gain against that noise, and its absorption."""
     from . import buildspec
     eq, gains = buildspec.budget(d, wind_speed)
     return {"source_level_db": float(eq.source_level_db), "noise_spectrum_db": float(gains["noise_spectrum_db"]),

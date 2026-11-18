@@ -402,7 +402,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
         from .multipath_depth import cpp_options as multipath_options
         o["multipath_depth"] = multipath_options(cfg["multipath_depth"])
     if cfg.get("coverage") is not None:                 # hook: the coverage picture (coverage.py)
-        from .coverage import cpp_options as coverage_options
+        from .coverage import chain_options as coverage_options       # refuses a coverage without the site's water depth and bottom
         o["coverage"] = dict(coverage_options(cfg["coverage"]), surface_z=float((cfg.get("elevation") or {}).get("surface_z", 0.0)))
     if cfg.get("elevation") is not None:
         from .elevation import DEFAULTS as EL
@@ -476,6 +476,29 @@ def sync_reference(cfg: dict) -> dict | None:
     # and tolerance_us (what the boards must agree within; default a twentieth of a period at the top of the band).
     extra = {k: float(sc[k]) for k in ("min_quality", "search_time", "tolerance_us") if sc.get(k) is not None}
     return dict(ref, **extra) if extra else ref
+
+
+def program_stage_options(o: dict, record=None, chain_cfg: dict | None = None) -> dict:
+    """The opt-in stages of `cpp_chain_options` (`multipath_depth`, `coverage`: flat mappings) as key=value settings of
+    build/bin/sonar_live, in place: `<stage>=1` and `<stage>_<name>=value`, lists comma-separated. With `record` (a ping
+    or the sonar's template) and the chain's configuration the coverage picture's detection-probability table goes in
+    too (`coverage_pd_snr_db`, `coverage_pd_value`: the program cannot make it); without it the program's report says
+    that the table is missing."""
+    def text(v):
+        if isinstance(v, (list, tuple)):
+            return ",".join(f"{float(x):.10g}" for x in v)
+        return int(v) if isinstance(v, bool) else v
+    for stage in ("multipath_depth", "coverage"):
+        flat = o.pop(stage, None)
+        if flat is None:
+            continue
+        o[stage] = 1
+        o.update({f"{stage}_{k}": text(v) for k, v in flat.items()})
+        if stage == "coverage" and record is not None:
+            from .coverage import pd_table
+            snr, pd = pd_table(record, {k: v for k, v in (chain_cfg or {}).items() if k != "engine"})
+            o.update(coverage_pd_snr_db=text(snr), coverage_pd_value=text(pd))
+    return o
 
 
 NAV_FIELDS = ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_speed", "water_depth", "altitude", "bottom_lock",
@@ -804,7 +827,7 @@ class LiveChain:
         self._coverage = None                  # hook: the coverage picture, Python engine (the C++ engine runs it itself)
         self._coverage_table = self.cfg.get("coverage") is None     # the detection-probability table is made at the first ping
         if self.cfg.get("coverage") is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
-            from .coverage import cpp_options as coverage_options
+            from .coverage import chain_options as coverage_options
             self._coverage = core.Coverage(dict(coverage_options(self.cfg["coverage"]), surface_z=float((self.cfg.get("elevation") or {}).get("surface_z", 0.0))))
         if self._elevation is not None and self._elevation["ray_method"] not in ("steps", "arcs"):
             raise ValueError(f"elevation.ray_method: {self._elevation['ray_method']!r} (steps or arcs)")

@@ -221,6 +221,15 @@ MultipathProfile water_profile(const ProfileOptions& po, const LadderProfile* la
   return w;
 }
 
+std::string coverage_site_missing(const CoverageOptions& o) {
+  const bool depth = std::isfinite(o.water_depth) && o.water_depth > 0.0;
+  if (depth && o.bottom) return "";
+  return std::string("coverage needs the site's water depth and bottom, and ") + (depth ? "" : "coverage_water_depth (metres)") + (!depth && !o.bottom ? " and " : "") +
+         (o.bottom ? "" : "coverage_bottom=1 with coverage_bottom_speed, coverage_bottom_density, coverage_bottom_attenuation") + (!depth && !o.bottom ? " are" : " is") +
+         " not given. Neither has a default: without them the picture would be the deep-water one, in which nothing returns from the bottom, and it would say "
+         "that targets the chain detects cannot be seen";
+}
+
 bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::string& value) {
   const std::string prefix = "coverage";
   if (key.compare(0, prefix.size(), prefix) != 0) return false;
@@ -271,6 +280,7 @@ bool set_coverage_option(CoverageOptions& o, const std::string& key, const std::
   else if (k == "bottom_speed") o.bottom_speed = v;
   else if (k == "bottom_density") o.bottom_density = v;
   else if (k == "bottom_attenuation") o.bottom_attenuation = v;
+  else if (k == "water_depth") o.water_depth = v;
   else if (k == "ray_fan") o.ray_fan = i;
   else if (k == "max_bounces") o.max_bounces = i;
   else if (k == "max_arrivals") o.max_arrivals = i;
@@ -403,7 +413,9 @@ const std::string& Coverage::update(const PingRecord& record, const Vec3d& origi
 
 const std::string& Coverage::update(const CoverageSonar& sonar, double range_first, double range_last, double array_depth, double projector_depth,
                                     double water_depth, const MultipathProfile& water) {
-  const double water_now = std::isfinite(water_depth) && water_depth > 0.0 ? water_depth : 0.0;
+  // The water depth of this ping (elevation.water_depth, navigation), else the site's (`water_depth`), else unknown.
+  const bool from_site = !(std::isfinite(water_depth) && water_depth > 0.0) && std::isfinite(opt_.water_depth) && opt_.water_depth > 0.0;
+  const double water_now = from_site ? opt_.water_depth : std::isfinite(water_depth) && water_depth > 0.0 ? water_depth : 0.0;
   bool same = have_ && water.rung == rung_ && std::abs(array_depth - own_) < opt_.refresh_depth && std::abs(water_now - water_) < opt_.refresh_water_depth &&
               (water_now > 0.0) == (water_ > 0.0);
   // The profile then and now, each at the other's knots (a built profile gains knots as the vehicle samples).
@@ -499,6 +511,7 @@ const std::string& Coverage::update(const CoverageSonar& sonar, double range_fir
   auto metres = [](double v) { return std::llround(v); };
   s << "\"coverage\": {\"own_depth_m\": " << std::round(array_depth * 10.0) / 10.0 << ", \"water_depth_m\": ";
   if (water_now > 0.0) s << std::round(water_now * 10.0) / 10.0; else s << "null";
+  if (from_site) s << ", \"water_depth_from\": \"site\"";      // the configured depth of the site: this ping carried none
   s << ", \"profile\": \"" << (water.rung.empty() ? "none" : water.rung) << "\", \"pd\": " << opt_.pd << ", \"age_pings\": 0, \"ranges_m\": [";
   for (std::size_t i = 0; i < shown.size(); ++i) s << (i ? ", " : "") << metres(ranges_[shown[i]]);
   s << "], \"classes\": [";
