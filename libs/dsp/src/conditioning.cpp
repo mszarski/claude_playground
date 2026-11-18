@@ -106,11 +106,22 @@ void apply_calibration(PingRecord& record) {
   std::fill(cal.delay.begin(), cal.delay.end(), 0.0);
 }
 
-void apply_tvg(PingRecord& record, const TvgOptions& opt) {
+TvgReport apply_tvg(PingRecord& record, const TvgOptions& opt) {
   Samples& s = record.samples;
   Metadata& m = record.metadata;
   const double c = record.environment.sound_speed;
+  if (!(c > 0.0) || !std::isfinite(c)) {
+    throw std::invalid_argument("apply_tvg: the record has no sound speed (environment.sound_speed)");
+  }
+  if (!(opt.absorption_db_per_m >= 0.0) || !std::isfinite(opt.absorption_db_per_m)) {
+    throw std::invalid_argument("apply_tvg: absorption_db_per_m must be a finite value >= 0 (dB/m, one way)");
+  }
+  if (!std::isfinite(opt.spreading_db_per_decade) || !(opt.reference_range > 0.0) || !std::isfinite(opt.max_gain_db)) {
+    throw std::invalid_argument("apply_tvg: spreading and max_gain_db must be finite and reference_range positive");
+  }
+  if (!(s.sample_rate > 0.0)) throw std::invalid_argument("apply_tvg: the record has no sample rate");
   const auto n = static_cast<std::size_t>(s.n_samples);
+  TvgReport report;
   std::vector<float> gain(n);
   for (std::size_t i = 0; i < n; ++i) {
     const double t = s.start_time + static_cast<double>(i) / s.sample_rate;
@@ -119,7 +130,14 @@ void apply_tvg(PingRecord& record, const TvgOptions& opt) {
                     ? opt.spreading_db_per_decade * std::log10(range / opt.reference_range)
                     : 0.0;
     db += 2.0 * opt.absorption_db_per_m * range;
+    if (db > opt.max_gain_db) {
+      if (report.clamped_samples == 0) report.clamp_range = range;
+      ++report.clamped_samples;
+      if (i + 1 == n) report.shortfall_db = db - opt.max_gain_db;
+    }
     db = std::min(db, opt.max_gain_db);
+    if (i == 0) report.gain_first_db = db;
+    if (i + 1 == n) report.gain_last_db = db;
     if (opt.undo_hardware_ramp && !m.tvg_time.empty()) {
       // Piecewise-linear analogue ramp, held flat outside its knots.
       const auto& tt = m.tvg_time;
@@ -150,6 +168,7 @@ void apply_tvg(PingRecord& record, const TvgOptions& opt) {
     m.tvg_time.clear();
     m.tvg_gain_db.clear();
   }
+  return report;
 }
 
 std::vector<float> whiten(const std::vector<PingRecord*>& records, const WhitenOptions& opt) {

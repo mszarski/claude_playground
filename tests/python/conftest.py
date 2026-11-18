@@ -25,9 +25,16 @@ def make_record(channels=4, samples=128, complex_data=True, seed=0):
     for i in range(channels):
         e = gs.core.Element()
         e.lever_arm = (0.094 * i, 0.0, 0.0)
+        e.boresight = (0.0, 1.0, 0.0)          # no default: a record states where its elements look
         elements.append(e)
     geo.rx = elements
+    tx = geo.tx
+    tx.boresight = (0.0, 1.0, 0.0)
+    geo.tx = tx
     r.geometry = geo
+    env = r.environment
+    env.sound_speed = 1500.0                   # no default either
+    r.environment = env
     r.set_default_channel_tables()
     meta = r.metadata
     meta.array_id = "test"

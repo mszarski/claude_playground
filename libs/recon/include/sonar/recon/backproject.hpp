@@ -3,6 +3,13 @@
 // Input is a list of records (transmit position, receive position, time series)
 // grouped by ping, and a list of output points. Output is the coherent sum per
 // point. See DECISIONS.md D-01 (equation), D-05 (interpolation), D-06 (precision).
+//
+// Units and conventions: SI; world frame north-east-down (z positive down), element
+// vectors in the body frame; beamwidths are full widths at half maximum in radians;
+// delays are two-way through a transmitter and a receiver that may differ (bistatic).
+// The output keeps the units of the input samples: no level convention enters here.
+// The sound speed of each ping and the sediment speed of a refracting interface have no
+// default; `make_inputs` and `backproject` throw when one is not stated.
 #pragma once
 
 #include <complex>
@@ -46,7 +53,7 @@ struct BpGroup {
   float aperture = 0.0F;           ///< largest element offset from the reference point, m
   float speed = 0.0F;              ///< |rx_vel|, m/s
   float turn_rate = 0.0F;          ///< |rx_rates|, rad/s
-  double sound_speed = 1500.0;
+  double sound_speed = kNaN;    ///< m/s; from the record, which must state it
   double start_time = 0.0;      ///< time of sample 0 after transmit
   double sample_rate = 0.0;
   double carrier = 0.0;         ///< Hz removed from the samples; 0 for analytic input
@@ -59,6 +66,11 @@ struct BpGroup {
   std::int32_t traj_count = 0;     ///< entries; 0 = no table
   double traj_t0 = 0.0;            ///< time of entry 0 after transmit, s
   double traj_dt = 1.0;            ///< spacing, s
+  /// How far the platform may be from its first-order pose during this ping, m: what the
+  /// cheap field-of-view pre-test of the kernel adds to the reach of the array before it
+  /// rejects a (point, ping) pair. Set by make_inputs (see BpInputs::kTrajectoryAllowance).
+  float traj_allowance = 0.02F;
+  float traj_residual_max = 0.0F;  ///< largest norm in this ping's residual table, m; 0 without a table
   // Transmit beam, for the field-of-view test and directivity weighting.
   Vec3f tx_boresight, tx_az, tx_el;
   float tx_bw_az = 0.0F, tx_bw_el = 0.0F;  ///< NaN = omnidirectional
@@ -84,7 +96,7 @@ struct BpOptions {
   /// speed above the interface and at sediment_speed below it, along the Snell path.
   bool refraction = false;
   double interface_z = 0.0;      ///< m, NED (z down)
-  double sediment_speed = 1700.0;  ///< m/s
+  double sediment_speed = kNaN;  ///< m/s; no default: required when `refraction` is set
   /// Ray culling (ASASIN Sec. II-C, DECISIONS.md D-09). The output points must form a
   /// grid of grid_rows x grid_cols in row-major order. Blocks of cull_block x cull_block
   /// points whose corners all lie outside a ping's transmit or receive beam are skipped
@@ -101,6 +113,13 @@ struct BpStats {
   std::int64_t ping_blocks_kept = 0;   ///< those the kernel actually visited
 };
 
+/// The allowance for the trajectory residual in the kernel's field-of-view pre-test, m.
+/// 2 cm is what the kernel has always added: enough for the millimetres to centimetres a
+/// short ping strays from its first-order pose, not for a long ping or a turning platform
+/// with a navigation table (docs/HARDCODED_AUDIT.md R-1), where pairs the exact test would
+/// keep are then rejected at the beam edges.
+inline constexpr float kTrajectoryAllowance = 0.02F;
+
 /// Everything the kernel needs, in flat arrays.
 struct BpInputs {
   std::vector<BpGroup> groups;
@@ -114,9 +133,14 @@ struct BpInputs {
 /// `trajectory_upsample` > 0 builds each ping's residual table from its INS samples,
 /// upsampled by that factor with cubic interpolation (the paper upsamples before
 /// loading the texture).
+/// `trajectory_allowance` (m) is the allowance for the trajectory residual in the kernel's
+/// field-of-view pre-test: a value >= 0 is used for every ping (the default is the 2 cm
+/// the kernel has always used); a negative value takes it from each ping's own residual
+/// table, max(kTrajectoryAllowance, largest residual in the table), which never rejects a
+/// pair the fixed 2 cm keeps and stops rejecting pairs of a ping that strays further.
 BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
                      const std::vector<std::vector<float>>* weights = nullptr,
-                     int trajectory_upsample = 0);
+                     int trajectory_upsample = 0, float trajectory_allowance = kTrajectoryAllowance);
 
 /// Coherent sum at each output point, added into `image` (size points.size()).
 /// `weight_sum`, when not null, receives the sum of weights that contributed per point.

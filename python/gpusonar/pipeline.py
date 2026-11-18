@@ -23,6 +23,17 @@ so a run can be repeated exactly.
 
 and `source: {type: scenario, name: ..., sim_taps: dir/}` also saves the samples after
 each stage inside the simulator.
+
+A step passes on only the keys it is given: the default of every other parameter is the
+default of the function it calls (recon.sas_image, recon.fan_image, ...), stated there once
+(docs/HARDCODED_AUDIT.md R-5). Keys that are derived from the records instead of typed:
+
+    - {stage: tvg, spreading: auto, absorption: record}    # recon.tvg_parameters; numbers also work
+    - {stage: sas_image, ..., plane_z: seafloor}           # from the DVL altitude or the water depth
+    - {stage: motion, seafloor_z: auto, max_lag_m: 0.01}   # windows in metres of range
+
+The log of a `tvg` step says where the gain law was cut at `max_gain_db`, and that of a
+`sas_image` step the plane used and the seabed the records imply.
 """
 
 from __future__ import annotations
@@ -110,9 +121,37 @@ def _stage(name, params, state: RunResult, backend):
             core.apply_calibration(rec)
         return {}
     if name == "tvg":
+        # `spreading` and `absorption` (names or numbers) are resolved per record; the older
+        # `spreading_db_per_decade` and `absorption_db_per_m` keys pass through unchanged.
+        derive = {k: params[k] for k in ("spreading", "absorption", "frequency", "temperature", "salinity", "depth",
+                                         "ph", "model") if k in params}
+        plain = {k: v for k, v in params.items() if k not in derive}
+        facts = {}
         for rec in r:
-            core.apply_tvg(rec, **params)
-        return {}
+            kw = dict(plain)
+            if derive:
+                if "spreading" in derive and "spreading_db_per_decade" in plain:
+                    raise ValueError("tvg: give `spreading` or `spreading_db_per_decade`, not both")
+                if "absorption" in derive and "absorption_db_per_m" in plain:
+                    raise ValueError("tvg: give `absorption` or `absorption_db_per_m`, not both")
+                from .recon.gain import tvg_parameters
+                d = dict(derive)
+                if "spreading" not in d and "spreading_db_per_decade" in plain:
+                    d["spreading"] = plain["spreading_db_per_decade"]
+                if "absorption" not in d and "absorption_db_per_m" in plain:
+                    d["absorption"] = plain["absorption_db_per_m"]
+                for key in ("reference_range", "max_gain_db", "undo_hardware_ramp"):
+                    if key in plain:
+                        d[key] = plain[key]
+                kw = tvg_parameters(rec, **d)
+            report = core.apply_tvg(rec, **kw)
+            if not facts:
+                facts = {"spreading_db_per_decade": kw.get("spreading_db_per_decade", 40.0),
+                         "absorption_db_per_m": kw.get("absorption_db_per_m", 0.0),
+                         "gain_last_db": report["gain_last_db"], "clamped_samples": report["clamped_samples"],
+                         "clamp_range_m": report["clamp_range"] if report["clamped_samples"] else None,
+                         "shortfall_db": report["shortfall_db"]}
+        return facts
     if name == "whiten":
         gain = core.whiten(r, **params)
         state.products["whiten_gain"] = gain
@@ -127,22 +166,29 @@ def _stage(name, params, state: RunResult, backend):
         motion.apply_motion(r, result)
         state.products["motion_y"], state.products["motion_z"] = result.y, result.z
         return {"measurements": result.n_measurements, "rejected": result.n_rejected,
-                "unwrap_corrections": result.unwrap_corrections, "solver": result.log}
+                "unwrap_corrections": result.unwrap_corrections, "solver": result.log, **result.windows}
     if name == "sas_image":
+        # Only what the config gives is passed on: every default lives in recon.sas.
         grid = recon.stripmap_grid(r, params["ground_range"], params["pixel"],
-                                   plane_z=params.get("plane_z", 0.0),
-                                   full_support=params.get("full_support", True))
+                                   **{k: params[k] for k in ("plane_z", "full_support", "beamwidth_az") if k in params})
         stats = {}
         state.points = grid.points
-        state.image = recon.sas_image(r, grid.points, interp=params.get("interp", "sinc"),
-                                      fov_factor=params.get("fov_factor", 1.13),
-                                      cull_block=params.get("cull_block", 16), stats=stats, backend=backend)
-        return {"shape": list(state.image.shape), **stats}
+        image_keys = ("interp", "fov_factor", "cull_block", "directivity_weight", "replica_window", "position_lookup",
+                      "trajectory_allowance")
+        state.image = recon.sas_image(r, grid.points, stats=stats, backend=backend,
+                                      **{k: params[k] for k in image_keys if k in params})
+        # The plane used, and the seabed the records themselves imply (None: they do not say).
+        try:
+            implied, source = recon.seafloor_z(r)
+        except ValueError:
+            implied, source = None, None
+        return {"shape": list(state.image.shape), "plane_z": float(grid.z), "seafloor_z_from_records": implied,
+                "seafloor_z_source": source, **stats}
     if name == "fan_image":
         ranges = np.linspace(*params["ranges"])
         bearings = np.radians(np.linspace(*params["bearings_deg"]))
-        fan = recon.fan_image(r, ranges, bearings, interp=params.get("interp", "sinc"),
-                              window=params.get("window", "rect"), backend=backend)
+        fan_keys = ("interp", "window", "fov_factor", "directivity_weight", "stop_and_hop", "replica_window")
+        fan = recon.fan_image(r, ranges, bearings, backend=backend, **{k: params[k] for k in fan_keys if k in params})
         state.image, state.points = fan.image, fan.points
         return {"shape": list(fan.image.shape)}
     if name == "volume":

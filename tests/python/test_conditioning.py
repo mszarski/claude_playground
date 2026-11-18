@@ -34,6 +34,9 @@ def noise_record(n_channels=64, n_samples=8192, fs=20e3, fc=8e3, seed=0, band=(6
     geo = r.geometry
     geo.rx = [core.Element() for _ in range(n_channels)]
     r.geometry = geo
+    env = r.environment
+    env.sound_speed = 1500.0               # the record states it: there is no default
+    r.environment = env
     r.set_default_channel_tables()
     return r
 

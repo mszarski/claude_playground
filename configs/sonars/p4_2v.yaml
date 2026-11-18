@@ -34,4 +34,6 @@ receive:
 unconfirmed:
   - array.element_width
   - array.element_height
+  - transmit.waveform        # probe bandwidth at 2.72 MHz not measured (as for l12_5d)
   - transmit.beamwidth_az
+  - receive.adc_full_scale   # uncalibrated chain: 1.0 is a unit, not a voltage

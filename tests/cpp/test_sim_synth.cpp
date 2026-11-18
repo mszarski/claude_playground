@@ -223,6 +223,7 @@ TEST(Synth, CudaAndHostAgreeOnASampledPulse) {
 
 TEST(Paths, TwoWayPathsCarryARangeRatePerRay) {
   sim::ImageSourceConfig cfg;  // direct and surface image
+  cfg.sound_speed = kC;
   cfg.max_order = 1;
   const Vec3d tx{0.0, 0.0, 10.0}, rx{0.0, 1.0, 10.0};
   const std::vector<double> points{30.0, 0.0, 20.0, 50.0, 5.0, 15.0};

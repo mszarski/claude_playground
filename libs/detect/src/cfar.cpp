@@ -18,6 +18,25 @@ double cfar_threshold_factor(double pfa, std::int32_t n_train) {
   return n * (std::pow(pfa, -1.0 / n) - 1.0);
 }
 
+CfarOptions cfar_window(double range_step, double resolution, const CfarWindow& window, double pfa) {
+  if (!(range_step > 0.0) || !(resolution > 0.0) || !std::isfinite(range_step) || !std::isfinite(resolution)) {
+    throw std::invalid_argument("cfar_window: range_step and resolution must be positive (metres)");
+  }
+  if (window.guard_resolutions < 0.0 || window.train_resolutions <= 0.0 || window.guard_m < 0.0 || window.train_m < 0.0) {
+    throw std::invalid_argument("cfar_window: guard >= 0 and train > 0");
+  }
+  double guard_m = window.guard_resolutions * resolution;
+  if (window.guard_m > 0.0) guard_m = window.guard_m > resolution ? window.guard_m : resolution;
+  const double train_m = window.train_m > 0.0 ? window.train_m : window.train_resolutions * resolution;
+  // A hair under the next integer still counts as that many cells (0.1 / 0.025 is 4, not 5).
+  const auto cells = [&](double metres) { return static_cast<std::int32_t>(std::ceil(metres / range_step - 1e-9)); };
+  CfarOptions o;
+  o.pfa = pfa;
+  o.guard = cells(guard_m);
+  o.train = cells(train_m) < 1 ? 1 : cells(train_m);
+  return o;
+}
+
 void cfar(Backend backend, const float* power, std::int64_t n_rows, std::int64_t n_cols,
           const CfarOptions& options, unsigned char* detections, float* ratio, int device) {
   if (options.guard < 0 || options.train < 1) throw std::invalid_argument("cfar: guard >= 0 and train >= 1");

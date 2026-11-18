@@ -11,11 +11,13 @@ from .. import _gpusonar as core
 
 def make_session(records, kw: dict):
     """A `core.BackprojectSession` for `records`, taking the session-level keyword
-    arguments (`weights`, `trajectory_upsample`) out of `kw`."""
+    arguments (`weights`, `trajectory_upsample`, `trajectory_allowance`) out of `kw`."""
     upsample = kw.pop("trajectory_upsample", 8)
     if kw.get("position_lookup", "analytic") == "analytic":
         upsample = 0
-    return core.BackprojectSession(records, weights=kw.pop("weights", None), trajectory_upsample=upsample)
+    allowance = kw.pop("trajectory_allowance", None)
+    extra = {} if allowance is None else {"trajectory_allowance": allowance}
+    return core.BackprojectSession(records, weights=kw.pop("weights", None), trajectory_upsample=upsample, **extra)
 
 
 def backproject_tiles(records, points: np.ndarray, devices=None, **kw) -> np.ndarray:
