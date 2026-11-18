@@ -2539,6 +2539,25 @@ attributes to the receiver platform. R1: 62.9 dB, slope +0.8, lines (3.7, 7.3 kH
 Gaussian: the research station's machinery, 19 dB above the sea. Coherence between the two
 hydrophones (1.2 km apart): 0.007, the estimator's floor.
 
+*How much the decay rule matters for the long-range array* (`tools/decay_time_sensitivity.py`,
+`docs/figures/decay_time_sensitivity.md`; the long-range scenarios ship without time
+spreading, so it was added: the scenario's 5 m/s wind, each rule, two seeds of the taps;
+one row of 32 hydrophones through the C++ chain). Detection SNR of the ship, rule of thumb
+minus facet: -0.1 dB (12 km, image-source paths, 6 pings), -0.2 dB (12 km, Bellhop), -0.4 dB
+(3 km over gravel, 30 m), -0.3 dB (8 km over sand, 200 m); the two seeds of one rule differ
+by 0.1 to 0.9 dB. Time spreading against none: -0.4 to +0.4 dB. Track confirmation: the same
+ping under both rules in the Bellhop cases (the third of three). In the image-source 12 km case detection is at
+threshold (13.5 dB, 3 pings of 6 without spreading): there 0.1 dB decides whether a ping is
+detected, and the facet runs lose one detection and the track that the rule-of-thumb runs
+keep, with the same SNR on the pings both detect. That is the margin of the design point,
+not a property of a rule. Without noise or detector, the echo's strongest sample changes by
+-0.08 +- 0.30 dB between the rules at 1 km (flank array, 6 m/s) and by 0.00 dB at 12 km
+(grazing angles under a degree: the surface is a mirror for either rule). The Bellhop cases
+were run with the 12 strongest arrivals, 3 taps and 3 pings in every variant (with 40
+arrivals and 6 taps one run takes over an hour here); 4 km over mud in summer is not
+detected in any variant. The rule is worth a few tenths of a dB: less than the seed, far
+less than the profile or the seabed.
+
 *What the other two bands would add.* The same surface within minutes at 11.5 and 28 kHz:
 Gamma^2 3.7 and 22 times larger (0.1 and 0.7 at R1), so the coherent share against
 frequency squared is a test with no free number once the height is fixed here, the Doppler

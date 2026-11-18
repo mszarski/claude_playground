@@ -63,14 +63,18 @@ def summary(m: dict) -> dict:
             "track_confirmed_at_ping": m["track_confirmed_at_ping"], "simulate_seconds": m["simulate_seconds"]}
 
 
-def run(cases: list, seeds: int, pings: int | None, store: Path, log=print) -> dict:
+def run(cases: list, seeds: int, pings: int | None, store: Path, log=print, options=None, max_arrivals: int | None = None, taps: int | None = None) -> dict:
     import popoto_12km_study as study
     res = json.loads(store.read_text()) if store.exists() else {}
     for case in cases:
         cfg = scenario(case, pings)
+        if max_arrivals and "max_arrivals" in (cfg.get("propagation") or {}):
+            # Fewer Bellhop arrivals (the strongest), in all variants alike: with time spreading every ray becomes
+            # 1 + taps rays and the two-way cost grows with the square.
+            cfg["propagation"]["max_arrivals"] = int(max_arrivals)
         wind = wind_of(cfg)
         # every seed for the two rules; the multi-bounce rule with the first seed only (it is a second question)
-        todo = [("as shipped", None, None)] + [(name, opt, s) for name, opt in OPTIONS.items() for s in range(seeds if "sum" not in name else 1)]
+        todo = [("as shipped", None, None)] + [(name, opt, s) for name, opt in OPTIONS.items() if options is None or name in options for s in range(seeds if "sum" not in name else 1)]
         for name, opt, seed in todo:
             key = name if seed is None else f"{name} / seed {seed}"
             if key in res.get(case, {}):
@@ -78,6 +82,8 @@ def run(cases: list, seeds: int, pings: int | None, store: Path, log=print) -> d
             c = copy.deepcopy(cfg)
             if opt is not None:
                 c["time_spread"] = dict({"surface": {"wind_speed": wind}, "seed": 1000 + seed}, **opt)
+                if taps:
+                    c["time_spread"]["taps"] = int(taps)
             m = summary(study.measure(c, 1))
             m["wind_speed"] = wind
             res.setdefault(case, {})[key] = m
@@ -135,10 +141,10 @@ def echo_levels(pings: int = 24, log=print) -> dict:
 
 def markdown(res: dict) -> str:
     lines = ["# Detection with the long-range array: how much the decay-time rule matters", "",
-             "Made by `tools/decay_time_sensitivity.py`: each scenario as shipped (no time spreading) and with a wind-roughened surface under each rule. One row of 32 hydrophones, "
-             "C++ chain, the scenario's own pings. SNR: the ship's detection over the local background, median over the pings it was detected on; "
+             "Made by `tools/decay_time_sensitivity.py`: each scenario without time spreading and with a wind-roughened surface under each rule. One row of 32 hydrophones, "
+             "C++ chain; pings, Bellhop arrivals kept and taps as named in the first column (the same in every variant of a row). SNR: the ship's detection over the local background, median over the pings it was detected on; "
              "in brackets each seed of the scattered taps.", "",
-             "| Scenario | wind, m/s | as shipped | facet | rule of thumb | facet, multi_bounce sum | rule of thumb minus facet, dB | spread between seeds, dB |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+             "| Scenario | wind, m/s | no time spreading | facet | rule of thumb | facet, multi_bounce sum | rule of thumb minus facet, dB | spread between seeds, dB |", "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for case, rows in res.items():
         if case.startswith("_"):
             continue
@@ -176,14 +182,18 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cases", default=",".join(CASES))
     ap.add_argument("--seeds", type=int, default=2)
+    ap.add_argument("--options", default=None, help="semicolon-separated subset of: " + "; ".join(OPTIONS))
     ap.add_argument("--pings", type=int, default=None)
+    ap.add_argument("--max-arrivals", type=int, default=None, help="Bellhop arrivals kept per path (all variants); default: the scenario's")
+    ap.add_argument("--taps", type=int, default=None, help="scattered taps per bounce ray (default: the model's 6)")
     ap.add_argument("--json", default=str(ROOT / "docs" / "figures" / "decay_time_sensitivity.json"))
     ap.add_argument("--out", default=None)
     ap.add_argument("--report-only", action="store_true")
     ap.add_argument("--echo-pings", type=int, default=0, help="also the noise-free echo levels of `echo_levels`, over this many pings")
     args = ap.parse_args(argv)
     store = Path(args.json)
-    res = json.loads(store.read_text()) if args.report_only else run([c for c in args.cases.split(",") if c], args.seeds, args.pings, store)
+    res = json.loads(store.read_text()) if args.report_only else run([c for c in args.cases.split(",") if c], args.seeds, args.pings, store, options=args.options.split(";") if args.options else None,
+                                                                         max_arrivals=args.max_arrivals, taps=args.taps)
     if args.echo_pings and "_echo_levels" not in res:
         res["_echo_levels"] = echo_levels(args.echo_pings)
         store.write_text(json.dumps(res, indent=1))
