@@ -66,10 +66,36 @@ def export_template(cfg: dict, path: str) -> str:
             values = el.pop(key)
             if values:
                 el[key] = ",".join(f"{v:.10g}" for v in values)
+        profile = el.pop("profile", None)
+        if profile is not None:
+            o["elevation_profile"] = 1
+            profile["ladder"] = ",".join(profile["ladder"])
+            o.update({f"elevation_profile_{k}": v for k, v in profile.items()})
         o.update({f"elevation_{k}": (int(v) if isinstance(v, bool) else v) for k, v in el.items()})
     if sync:
         o["sync"] = 1
         o.update({f"sync_{k}": (int(v) if isinstance(v, bool) else v) for k, v in sync.items()})
+    # Decimate first: in the receiver (source.decimate: the recording holds decimated pings) or in the chain
+    # (chain.decimate: the recording holds raw pings).
+    from gpusonar.live import WATER_DEPTH_DEFAULTS, decimate_options
+    blanking = o.pop("blanking", None)
+    if blanking is not None:
+        o["blanking"] = 1
+        o.update({f"blanking_{k}": v for k, v in blanking.items()})
+    dec = o.pop("decimate", None)
+    streaming = decimate_options(src.get("decimate"))
+    if streaming is not None or dec is not None:
+        o["decimate"] = 1
+        o["decimate_streaming"] = int(streaming is not None)
+        o.update({f"decimate_{k}": v for k, v in (streaming if streaming is not None else dec).items()})
+    nav = cfg.get("nav") or {}
+    water = nav.get("water_depth") or {}
+    if water.get("source") == "altitude":
+        o["nav_water_depth_from_altitude"] = 1
+        o.update({f"nav_{k}": v for k, v in dict(WATER_DEPTH_DEFAULTS, **water).items() if k != "source"})
+    for key in ("keep_s", "profile_step_m"):
+        if nav.get(key) is not None:
+            o[f"nav_{key}"] = nav[key]
     out = cfg.get("output") or {}
     cmd = ["build/bin/sonar_live", "--udp", str(src.get("port", 5700)), "--template", path]
     if (cfg.get("nav") or {}).get("port"):
@@ -81,6 +107,11 @@ def export_template(cfg: dict, path: str) -> str:
     if out.get("report_udp"):
         cmd += ["--report-udp", f"{out['report_udp'][0]}:{out['report_udp'][1]}"]
     cmd += [f"{k}={v:.10g}" if isinstance(v, float) else f"{k}={v}" for k, v in o.items()]
+    passive = cfg.get("passive") or {}
+    if passive.get("tonal") is not None:
+        # Goertzel lines and DEMON when listening (--listen or --passive): tonal=1 and one tonal_<key> per setting.
+        from gpusonar.tonal import cpp_options
+        cmd += [f"{k}={v}" for k, v in cpp_options(passive["tonal"], passive.get("f_low", 0.0), passive.get("f_high", 0.0)).items()]
     return " ".join(shlex.quote(c) for c in cmd)
 
 
@@ -129,6 +160,9 @@ def main(argv=None):
         src_cfg = dict(cfg["source"])
         if args.port is not None:
             src_cfg["port"] = args.port
+        if src_cfg.get("decimate") is not None and (cfg.get("chain") or {}).get("sync"):
+            from gpusonar.live import sync_reference
+            src_cfg["reference"] = sync_reference(cfg["chain"])    # the receiver synchronises the boards as it decimates
         if args.emulate:
             from gpusonar.config import load_scenario_config
             from gpusonar.sim import run_scenario
@@ -142,7 +176,7 @@ def main(argv=None):
         else:
             source = make_source(src_cfg)
     nav_cfg = cfg.get("nav") if not (args.scenario or args.replay or args.emulate) else None
-    nav = NavListener(port=nav_cfg.get("port"), host=nav_cfg.get("host", "0.0.0.0"), static=nav_cfg.get("static")) if nav_cfg else None
+    nav = NavListener.from_config(nav_cfg) if nav_cfg else None
     with LiveChain(cfg.get("chain"), nav=nav, recording=stamp(out["recording"]) if out.get("recording") else None,
                    report_path=stamp(out["report"]) if out.get("report") else None,
                    report_udp=out.get("report_udp"), taps=out.get("taps")) as chain:

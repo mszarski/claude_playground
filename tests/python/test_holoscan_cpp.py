@@ -68,6 +68,7 @@ def test_holoscan_takes_blocks_over_udp_with_navigation(pings, tmp_path):
         _, err = proc.communicate(timeout=180.0)
     finally:
         proc.kill()
+    assert proc.returncode == 0, f"the program ended abnormally ({proc.returncode}): {err.strip()[-400:]}"   # a crash is not lost data
     reports = lines(tmp_path / "rep.jsonl")
     if "0 dropped, 0 samples lost" not in err or len(reports) < N:
         pytest.skip(f"the loopback dropped data: {[ln for ln in err.splitlines() if 'UdpSourceOp' in ln]}")

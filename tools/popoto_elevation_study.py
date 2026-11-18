@@ -440,7 +440,8 @@ def main():
     R["stages"] = {}
     stage_files = (("1: test AUV, 1 x 32", "popoto_testauv_1row"), ("2: static array, 2 x 32", "popoto_static_2row"),
                    ("3: static array, 3 x 32", "popoto_static_3row"),
-                   ("4: full face, 2 x 32", "popoto_long_range_2row"), ("5: full face, 3 x 32", "popoto_long_range_3row"))
+                   ("4: full face, 1 x 32", "popoto_face_1row"),
+                   ("5: full face, 2 x 32", "popoto_long_range_2row"), ("6: full face, 3 x 32", "popoto_long_range_3row"))
     print("\nSTAGES (each a shipped sonar file; SNR and reach from the link budget of Sec. 5: spherical spreading, noise only, 13 dB to detect).")
     print("  Reach is where noise alone would stop detection; reverberation and the channel stop it earlier or later (the scenarios show which).")
     for label, name in stage_files:

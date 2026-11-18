@@ -85,6 +85,85 @@ SAS-specific (`sas_minsas120`): along-track resolution 2.1 cm (half the 4.2 cm t
 
 The Popoto array is shown as its scenario uses it (32 hydrophones, 6–10 kHz). `array.count` sets the size; boards of eight inputs follow.
 
+### The staged plan in one place
+
+Six builds, one software path, one spec file each (`configs/builds/`); the sonar and deployment files of each are generated from its spec
+(`tools/build_from_spec.py`; `REFERENCE_DESIGN.md` is the guide). The owner: "Keep at 32, can start with a smaller array in the 7m zone. Probably makes sense to keep the one
+design for auv and static right? Except for elevation." and then: "Yes treat auv special case and have static array the longer row." So: **32 hydrophones a row is fixed; the 7 m is a zone the
+rows stay inside, not a length to fill; ONE row design, the long module, serves the static array and the face; the test AUV's short row exists only because of that vehicle's span; and the face
+"can start with a smaller array" by carrying fewer rows of the same module: one, then two, then three.**
+
+| Build | Rows × module | For | Beam | Reach, ship / small (km) | Elevation at 20 dB | Boards | Direct sound over full scale |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `popoto_testauv_1x32` | 1 × `testauv_short` | the chain on real boards and under way (the short row: the one exception) | 5.3° | 7.7 / 2.9 | none | 4 | +34 dB |
+| `popoto_static_2x32` | 2 × `long_4p8m` | the long row and stacked rows in the water for the first time | 3.2° | 9.4 / 3.7 | 0.18° (candidates) | 8 | +35 dB |
+| `popoto_static_3x32` | 3 × `long_4p8m` | the recommended row arrangement, still off the vehicle | 3.2° | 9.9 / 3.9 | 0.18° | 12 | +35 dB |
+| `popoto_face_1x32` | 1 × `long_4p8m` | the face to start with: one long row | 3.2° | 12.8 / 5.3 | none | 4 | +19 dB |
+| `popoto_face_2x32` | 2 × `long_4p8m` | elevation on the vehicle where water is shallow against the range | 3.2° | 14.0 / 6.0 | 0.18° (candidates) | 8 | +18 dB |
+| `popoto_face_3x32` | 3 × `long_4p8m` | the recommended end state | 3.2° | 14.7 / 6.4 | 0.18° | 12 | +19 dB |
+
+(Reach: noise-limited, the link budget of Sec. 5, 197 dB source level in every file: **no projector is chosen for any build**. The static builds use a 0.1 s pulse for short-range trials and the face 1 s: that, not the row, is the difference in their reach.)
+
+**What each build demonstrates, and what it cannot.**
+
+- `popoto_testauv_1x32`: capture and synchronisation of four boards, the stream, recording, bearing, range, tracks with ownship's motion taken out, the report to the vehicle.
+- `popoto_static_2x32`: the row module the face will carry, its beam and reach; elevation as candidates and one elevation where water depth bounds it; row calibration; eight boards synchronised between rows.
+- `popoto_static_3x32`: one elevation and a depth; a passing target tracked with its depth; listening with elevations.
+- `popoto_face_1x32`: the row on the vehicle with the vehicle's navigation and the projector in its place (what the direct sound does); the 12 km detection.
+- `popoto_face_2x32`: attitude at each echo's arrival; candidates and the water-depth bound under way.
+- `popoto_face_3x32`: everything, at range.
+
+**What carries over.** The boards and their count per row (4 of 8 inputs), the synchronisation scheme, the stream and record formats, the software and its
+settings, the report, and from the static array on the row module itself with its harness. What changes between builds is in the spec and nowhere else: the number of rows and their heights,
+the platform (pose typed in or from navigation), the pulse (0.1 s on the short-range builds, 1 s on the face), the projector's place, the receive window
+(75–2000 m against 750–12700 m: each sonar file now states its own).
+
+**Bring-up, every build** (the generator writes the list for a build, with its numbers, into `BUILD.md`): simulated self-tests → the rehearsal sent as board blocks over UDP → boards on the bench
+(stream, channel map, synchronisation residual against the build's tolerance) → projector at low level in water (clipping and recovery of the nearest inputs) → a known target (range, bearing,
+SNR against the budget) → with rows: each row alone, row offsets from a source at known depths, depth against truth level and tilted → every measured value back into the spec.
+
+**What the platform must supply.**
+
+| | Test AUV | Static frame | Face |
+| --- | --- | --- | --- |
+| Pose and attitude | navigation datagrams (unit not named) | a typed-in pose, assumed plumb to 1° (a placeholder), or a tilt and compass sensor | SPRINT-Nav (the owner); accuracy, rate and time stamp from its datasheet — to be supplied |
+| Sound speed at the array | in the datagram or typed | measured once, typed | in the datagram (the owner: the AUV measures it) |
+| Water depth | not needed for one row | typed (two rows need it to choose among candidates) | in the datagram, to about 5 m (assumed) |
+| Mounting | 3 m of hull (2–3 m by the owner's words) | a frame 5.4 m × 1.6 m (the long row plus margins: parameters) | 7 m of the 9 m × 2 m face, rows 1.5 m apart |
+| Power, network, storage | to be supplied: see the parts list | the same, down a cable or in a housing | the same |
+
+**Expected accuracy, plainly.** Bearing and range are the row's: a beam of the width in the table and a range cell of 0.375 m before windowing. Elevation is bought with the rows' separation and SNR. Depth is elevation times range, and beyond a few hundred metres
+it is limited by the sound-speed profile nobody will have, not by the array (table in *The 12 km design point*). In a shallow channel a bounce arriving inside the pulse's range sidelobes
+pulls the elevation by tenths of a degree, and **no reported sigma contains that**.
+
+### Row modules: one row design, and the test AUV's exception
+
+A row module is a named row: 32 hydrophones at one spacing, their harness, four boards. A build names its module and says how many are stacked (`array.module`, `array.rows`,
+`array.heights_m`). Two are shipped (`configs/builds/modules/`); the owner's decision: "treat auv special case and have static array the longer row".
+
+| Module | Hydrophones, spacing | Length | Used by | Spacing in wavelengths at the band centre |
+| --- | --- | --- | --- | --- |
+| `long_4p8m` | 32 at 15 cm | 4.65 m | `popoto_face_1x32`, `popoto_face_2x32`, `popoto_face_3x32`, `popoto_static_2x32`, `popoto_static_3x32` | 0.50 |
+| `testauv_short` | 32 at 9 cm | 2.79 m | `popoto_testauv_1x32` | 0.30 |
+
+**Why the test AUV's prototype reaches less: the short row against the long one**, each as one row with the face's projector and pulse (noise-limited; 13 dB at the map for detection), and the long row stacked:
+
+| Row | Beam | Row's gain against sea noise | Map gain with the rows | Reach, ship / small (km) | SNR at 12 km, ship | Margin at 12 km | Source level for 13 dB at 12 km | or pulse at the shipped source level |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 × short (the test AUV's row) | 5.3° | 12.9 dB | 12.9 dB | 11.7 / 4.8 | 12.5 dB | -0.5 dB | 198 dB | 1.1 s |
+| 1 × long | 3.2° | 15.1 dB | 15.1 dB | 12.8 / 5.3 | 14.6 dB | +1.6 dB | 197 dB (as shipped) | 1.0 s |
+| 2 × long | 3.2° | 15.1 dB | 17.4 dB | 14.0 / 6.0 | 17.0 dB | +4.0 dB | 197 dB (as shipped) | 1.0 s |
+| 3 × long | 3.2° | 15.1 dB | 18.8 dB | 14.7 / 6.4 | 18.4 dB | +5.4 dB | 197 dB (as shipped) | 1.0 s |
+
+- **Closer than half a wavelength the hydrophones share the sea's noise.** 32 at 9 cm gain 12.9 dB against sea noise, not the 15.1 dB
+  that 32 give at half a wavelength; against the boards' own noise they still gain 15.1 dB. The beam is 5.3° against 3.2°, so it also takes in more reverberation.
+- **The short row costs 2.2 dB and 1.7 times the beam width.** At 12 km on the ship-sized target it has -0.5 dB of margin against +1.6 dB for the long row; where the margin is negative the table says what source level or pulse would restore it.
+- **Static and face builds share everything in the module**: expected beam, gain and reach per row, the four-board harness, the calibration procedure. They differ in the platform: motion, the
+  attitude source, the projector's place, cabling and where the compute sits.
+- On the test AUV itself the prototype also uses a 0.1 s pulse (10 dB less processing gain) for short-range trials; its own reach is in the plan's table above.
+
+Kept as trade-space rows only, not as builds (the owner: "Keep at 32"): 1 x 64 at 0.109 m: beam 2.2°, map gain 16.7 dB, reach 13.6 / 5.8 km; 1 x 96 at 0.073 m: beam 2.2°, map gain 16.7 dB, reach 13.6 / 5.8 km; 2 x 48 at 0.146 m: beam 2.2°, map gain 19.1 dB, reach 14.9 / 6.5 km (`trade_space.fixed_channels` of the study).
+
 ### The long-range Popoto array as a staged build: one row, then stacked rows (elevation and depth)
 
 One horizontal line of hydrophones measures one angle, the angle between an arrival and the line (the cone angle). It cannot tell an
@@ -105,6 +184,9 @@ More lines at other heights measure the missing angle, in the active mode (the m
 | "the popoto at 9m x 2 is still for active as well right" | yes: active pinging is the main mode on the face; listening is supported with the same rows | |
 | "Does our array need to be 64? We can add just need to understand what we get" | the number of hydrophones is open; the trade space says what each addition buys | *Trade space* |
 | (compute at the boards' full rate) "Prepare both options" | both decimating first and a GPU are to be prepared | *Data path and compute* |
+| "Keep at 32, can start with a smaller array in the 7m zone. Probably makes sense to keep the one design for auv and static right? Except for elevation." then "Yes treat auv special case and have static array the longer row." | 32 hydrophones a row, fixed. The 7 m is a zone, not a length to fill. ONE row design, the long module (32 at 0.15 m, 4.8 m), for the static array and the face; the test AUV's short row is the one exception. "A smaller array" on the face is fewer rows of that module: one, then two, then three | *Row modules*; `array.module` in `configs/builds/` |
+| "What can we do about the projector? Just blank?" | an options analysis of the projector's direct sound | *The projector's direct sound* |
+| "What does it look like for popoto at 12km though. Need that design" | the 12 km design point in one place | *The 12 km design point* |
 
 **Trade space in one table** (the face, rows within 7 m, outer rows 1.50 m apart, 4–6 kHz; noise-limited reach on the budget of Sec. 5; details further down):
 
@@ -122,25 +204,25 @@ For a fixed number of channels the trade is bearing and range (one long row) aga
 **The stages.** One software path, both engines, takes every stage from its files alone; each stage has a sonar file, a deployment file
 and simulated trials that the tests run.
 
-| | Stage 1: test AUV, 1 x 32 | Stage 2: static array, 2 x 32 | Stage 3: static array, 3 x 32 | Stage 4: full face, 2 x 32 | Stage 5: full face, 3 x 32 |
-| --- | --- | --- | --- | --- | --- |
-| Sonar file | `popoto_testauv_1row` | `popoto_static_2row` | `popoto_static_3row` | `popoto_long_range_2row` | `popoto_long_range_3row` |
-| Deployment file | `popoto_testauv_1row` | `popoto_static_2row` | `popoto_static_3row` | `popoto_face_2row` | `popoto_vehicle_elevation` |
-| Simulated trials | `popoto_testauv_trial_1row` | `popoto_static_trial_2row` | `popoto_static_trial_3row`, `popoto_static_free`, `popoto_static_passing` | `popoto_face_2row_shallow` | `popoto_elevation_free`, `_shallow`, `_rehearsal` |
-| Mounting | hull, 3 m × 0.4 m | frame lowered from the surface or standing on the bottom, 3 m × 1.6 m | frame lowered from the surface or standing on the bottom, 3 m × 1.6 m | flat vertical face, 9 m × 2 m | flat vertical face, 9 m × 2 m |
-| Under way | yes | no: fixed pose | no: fixed pose | yes | yes |
-| Hydrophones (rows × per row) | 32 (1 × 32) | 64 (2 × 32) | 96 (3 × 32) | 64 (2 × 32) | 96 (3 × 32) |
-| Capture boards of 8 inputs | 4 | 8 | 12 | 8 | 12 |
-| Row length, spacing | 2.88 m, 9 cm (0.36 λ at 6 kHz) | 2.88 m, 9 cm (0.36 λ at 6 kHz) | 2.88 m, 9 cm (0.36 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) |
-| Row heights about the centre (m) | 0 | -0.75, +0.75 | -0.75, -0.20, +0.75 | -0.75, +0.75 | -0.75, -0.20, +0.75 |
-| Beam at broadside | 5.3° | 5.3° | 5.3° | 3.2° | 3.2° |
-| Row's gain against sea noise / against the boards' own noise (dB) | 12.9 / 15.1 | 12.9 / 15.1 | 12.9 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 |
-| Pulse, and the range it hides | 0.1 s, 75 m | 0.1 s, 75 m | 0.1 s, 75 m | 1 s, 750 m | 1 s, 750 m |
-| Noise-limited reach, ship (+25 dB) / small target (+5 dB), km | 7.7 / 2.9 | 8.5 / 3.3 | 9.0 / 3.5 | 14.0 / 6.0 | 14.7 / 6.4 |
-| Elevation, one sigma at 20 dB | none | 0.18° | 0.18° | 0.18° | 0.18° |
-| Highest repeat of the elevation response in the searched sector | n/a | -0.6 dB | -4.2 dB | -0.6 dB | -4.2 dB |
-| Raw data rate while receiving (Mbit/s) | 79 | 157 | 236 | 157 | 236 |
-| Cables: one per hydrophone + the sync reference to each board | 32 + 4 | 64 + 8 | 96 + 12 | 64 + 8 | 96 + 12 |
+| | Stage 1: test AUV, 1 x 32 | Stage 2: static array, 2 x 32 | Stage 3: static array, 3 x 32 | Stage 4: full face, 1 x 32 | Stage 5: full face, 2 x 32 | Stage 6: full face, 3 x 32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Sonar file | `popoto_testauv_1row` | `popoto_static_2row` | `popoto_static_3row` | `popoto_face_1row` | `popoto_long_range_2row` | `popoto_long_range_3row` |
+| Deployment file | `popoto_testauv_1row` | `popoto_static_2row` | `popoto_static_3row` | `popoto_face_1row` | `popoto_face_2row` | `popoto_vehicle_elevation` |
+| Simulated trials | `popoto_testauv_trial_1row` | `popoto_static_trial_2row` | `popoto_static_trial_3row`, `popoto_static_free`, `popoto_static_passing` | `popoto_12km` (the same row as `popoto_long_range`) | `popoto_face_2row_shallow`, `popoto_12km_2row` | `popoto_elevation_free`, `_shallow`, `_rehearsal`, `popoto_12km_3row` |
+| Mounting | hull, 3 m × 0.4 m | frame lowered from the surface or standing on the bottom, 5.4 m × 1.6 m | frame lowered from the surface or standing on the bottom, 5.4 m × 1.6 m | flat vertical face, 9 m × 2 m | flat vertical face, 9 m × 2 m | flat vertical face, 9 m × 2 m |
+| Under way | yes | no: fixed pose | no: fixed pose | yes | yes | yes |
+| Hydrophones (rows × per row) | 32 (1 × 32) | 64 (2 × 32) | 96 (3 × 32) | 32 (1 × 32) | 64 (2 × 32) | 96 (3 × 32) |
+| Capture boards of 8 inputs | 4 | 8 | 12 | 4 | 8 | 12 |
+| Row length, spacing | 2.88 m, 9 cm (0.36 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) | 4.80 m, 15 cm (0.60 λ at 6 kHz) |
+| Row heights about the centre (m) | 0 | -0.75, +0.75 | -0.75, -0.20, +0.75 | 0 | -0.75, +0.75 | -0.75, -0.20, +0.75 |
+| Beam at broadside | 5.3° | 3.2° | 3.2° | 3.2° | 3.2° | 3.2° |
+| Row's gain against sea noise / against the boards' own noise (dB) | 12.9 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 | 15.1 / 15.1 |
+| Pulse, and the range it hides | 0.1 s, 75 m | 0.1 s, 75 m | 0.1 s, 75 m | 1 s, 750 m | 1 s, 750 m | 1 s, 750 m |
+| Noise-limited reach, ship (+25 dB) / small target (+5 dB), km | 7.7 / 2.9 | 9.4 / 3.7 | 9.9 / 3.9 | 12.8 / 5.3 | 14.0 / 6.0 | 14.7 / 6.4 |
+| Elevation, one sigma at 20 dB | none | 0.18° | 0.18° | none | 0.18° | 0.18° |
+| Highest repeat of the elevation response in the searched sector | n/a | -0.6 dB | -4.2 dB | n/a | -0.6 dB | -4.2 dB |
+| Raw data rate while receiving (Mbit/s) | 79 | 157 | 236 | 79 | 157 | 236 |
+| Cables: one per hydrophone + the sync reference to each board | 32 + 4 | 64 + 8 | 96 + 12 | 32 + 4 | 64 + 8 | 96 + 12 |
 
 Reach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file (197 dB, **not chosen for the test AUV or the static array**); reverberation and the channel decide earlier or later.
 
@@ -163,9 +245,10 @@ Simulated trial (raw 102.4 kHz, four boards on their own clocks, the vehicle rol
 target at 500 m is found within 0.9 m and 0.01°.
 
 **Stages 2 and 3, the static drop-in array: where stacked rows first go in the water.** A frame carrying two or three rows, lowered from the surface (or
-stood on the bottom) and left in place. The owner gave no dimensions, depth or site; what is shipped is a set of parameters, flagged `unconfirmed`:
-rows of the test AUV's kind (32 over 3 m), the outer rows 1.50 m apart **as on the face**, so that what the frame rehearses is the
-face's own elevation behaviour (accuracy, repeats, candidates), hanging at 10 m. What is different from a vehicle, and where it is set:
+stood on the bottom) and left in place. The owner: "have static array the longer row": its rows are the face's own row module (32 over
+4.8 m), the outer rows 1.50 m apart **as on the face**, so the frame is the face's array without the vehicle: the same beam, reach, elevation
+behaviour, boards and harness. The frame's size follows (5.4 m × 1.6 m with the margins in the spec, parameters); its hanging depth (10 m here), tilt sensing, projector position
+and cabling are open and flagged `unconfirmed`. What is different from a vehicle, and where it is set:
 
 | | Static array | Where |
 | --- | --- | --- |
@@ -174,7 +257,7 @@ face's own elevation behaviour (accuracy, repeats, candidates), hanging at 10 m.
 | Tilt | a hanging frame's tilt is elevation error one for one, exactly as a vehicle's roll (table below). Without a sensor it is assumed plumb, with a stated uncertainty | `elevation.roll_sigma_deg` (1° shipped: a placeholder), `attitude_time: transmit` |
 | Projector | on the frame or hung apart: its position relative to the array is in the sonar file and in every record, and the elevation search follows the true two-way path | `transmit.lever_arm` |
 | Sound speed, water depth | measured once at deployment and typed in | `chain.sound_speed`, `elevation.water_depth` |
-| Cable, power, where the compute sits | not decided: at the surface end of the cable, or in a housing on the frame | open; see the parts list when it exists |
+| Cable, power, where the compute sits | not decided: at the surface end of the cable, or in a housing on the frame | open; *Parts list* |
 
 The frame's height is chosen from this curve (two rows; three rows have the accuracy of their outer pair):
 
@@ -199,14 +282,14 @@ Simulated trials of the static array (C++ chain; the Python chain is held to it 
 
 | Scenario | Truth | Reported |
 | --- | --- | --- |
-| `popoto_static_trial_2row`: two rows, raw 102.4 kHz, 8 boards on their own clocks, tilted 2°, 100 m of water, target 2.6 km off | depth 60 m | boards synchronised to 0.49 µs; depth 59, 56, 56, 58 m, one answer with the water-depth bound |
+| `popoto_static_trial_2row`: two rows, raw 102.4 kHz, 8 boards on their own clocks, tilted 2°, 100 m of water, target 2.6 km off | depth 60 m | boards synchronised to 0.49 µs; depth 56, 52, 56, 58 m, one answer with the water-depth bound |
 | `popoto_static_trial_3row`: three rows, 12 boards, tilted 2°, 30 m of water, target 150 m off | depth 18 m | 0.40 µs; depth 17.4, 17.4, 17.4, 17.4 m |
 | the same with the target at 300 m | depth 22 m | 27.7, 27.7, 27.7, 27.7 m, path `bottom`: in 30 m of water the bounces arrive inside the pulse's range sidelobes and pull the estimate |
-| `popoto_static_free`: three rows, free field, targets about 400 m off | depths 10, 40, 90 m | track depth errors 0.0, 0.0, 0.0 m |
+| `popoto_static_free`: three rows, free field, targets about 400 m off | depths 10, 40, 90 m | track depth errors -0.0, 0.0, 0.0 m |
 | `popoto_static_passing`: a target crossing at 3 m/s, 20 m deep, 8 pings | one mover | tracks: mover; mover at 3.0 m/s, depth 22.1 m |
 | listening: two noise sources (`sim/passive.py`), tilted 2° | elevations -8.4, 3.2° | both in 10 of 10 frames, elevation within 0.05° |
 
-What the static array cannot show: the full row's beam and range, ownship's motion, and the vehicle's attitude sensor.
+What the static array cannot show: ownship's motion and the vehicle's attitude sensor. With the long row it does show the full row's beam and reach.
 
 **Stages 4 and 5, the full face.** Outer rows at -0.75 and +0.75 m, 1.50 m apart (0.25 m free at the top and bottom of the 2 m), which is
 4.0 to 6.0 wavelengths. Accuracy is bought with separation and SNR, nothing else: for one arrival in noise
@@ -375,7 +458,7 @@ two-row check, against a range resolution of 0.375 m) and from another elevation
 34, 26, 34, 34 m (up to 34 m off, 0.6°); in the three-row check at 1 km the one at 50 m reads 44, 44, 44, 44 m (6 m off); the static array at
 300 m in 30 m of water reads 28, 28, 28, 28 m for 22 m. In free field the same chain is within a metre. The size of the pull depends on the
 echoes' phases, so on the geometry to a fraction of a wavelength: with the projector 1.5 m below the array's centre instead of beside it, the two-row case read
-48 to 53 m (the earlier run of this bench). The reported `depth_sigma_m` holds noise, roll and the gradient prior, **not this**: in shallow water at long
+closer to the truth (an earlier run of this bench, not kept in its file). The reported `depth_sigma_m` holds noise, roll and the gradient prior, **not this**: in shallow water at long
 range treat depth as good to a few tenths of a degree of elevation, whatever the sigma says. Not modelled further here: a longer band or a window with
 lower range sidelobes would separate the arrivals better.
 
@@ -397,10 +480,10 @@ lower range sidelobes would separate the arrivals better.
   written into each record). Without samples it falls back to the ping's attitude and adds `attitude_rate_sigma_deg_s` × the time of flight. In the rehearsal
   above the difference is 48 m at 1 km.
 - **Synchronisation: still open.** Row by row (the owner's choice), boards of different rows must agree to 0.87 µs for 0.05° and 1.75 µs for 0.1°
-  (0.057° per µs with rows 1.50 m apart); the present tolerance of 8.3 µs is 0.5°. The reference scheme reaches 0.49 µs in simulation.
+  (0.057° per µs with rows 1.50 m apart); the tolerance one row needs for clean beams, 8.3 µs (a twentieth of a period at the top of the band, `sync.alignment_tolerance`), would be 0.5°. The reference scheme reaches 0.49 µs in simulation.
   Whether real boards do is the open question. `array.interleave: 4` (four of each row per board) removes the term for two rows and stays available.
 - **Mounting and calibration.** 1 mm of one row standing out from the face is 0.04°. The existing calibration, run with sources at several depths
-  (`planar=False`), recovers a row 5 mm out to 0.4 mm in simulation (`tests/python/test_elevation.py`).
+  (`planar=False`), recovers a row's offset in simulation (`tests/python/test_elevation.py` holds the figures).
 - **Sound speed and water depth** from the vehicle: `sound_speed` and `water_depth` in the navigation datagrams, or as settings.
 
 ### Trade space: how many hydrophones, and where
@@ -454,27 +537,257 @@ scenario's size (baseband) the C++ chain takes 0.63, 1.41 and 2.54 s for one, tw
 real time with room.
 (Timings are from an otherwise idle machine with the earlier row heights; the work does not depend on them.) **At the boards' full rate it is not real time on such a CPU**: one full-length ping (102.4 kHz real, 0.5 to 13 km) took 15, 24 and 38 s (measured with
 earlier row heights; the map dominates and does not depend on them). The band is 2 kHz wide, so the samples carry 26 times more than needed. The owner: "Prepare both options":
-converting to baseband and decimating before the chain, and a GPU. Neither is built into the receiver yet; the one-row map was 17 times faster on an L4
-(`RESULTS.md`), rows have not been run on one. **GPU timing pending.**
+converting to baseband and decimating before the chain, and a GPU. Measured on an NVIDIA L4 (`benchmarks/gpu_benchmark_all_l4.md`): the C++ chain takes 0.010, 0.021 and 0.031 s a ping for one, two and three rows against 0.15, 0.30 and 0.44 s on that machine's 8 CPU threads (15 times for one row), on pings of scenario size (15,467 baseband samples a channel) and with the row heights before the 1.5 m change. Raw pings at the boards' full rate have not been run on a GPU. Decimate-first timings: `design/popoto_stage2.json`.
 
 **What carries over from stage to stage, and what changes.** Unchanged: the boards and their count per row, the synchronisation scheme, the stream and record
-formats, the software and its settings, the report. From the test AUV to the static array: the same rows (0.09 m spacing), now two or three of them, no motion,
-a typed-in pose. From the static array to the face: the rows' heights carry over; the hydrophones' spacing and cabling change (0.15 m), as do the projector
-and pulse, the attitude source (the vehicle's navigation, at each echo's arrival) and the compute (in proportion to the channels).
+formats, the software and its settings, the report. From the test AUV to the static array: the row changes from the short module (0.09 m spacing) to the long one (0.15 m),
+two or three of them, no motion, a typed-in pose. From the static array to the face: the row module, its harness, the rows' heights and the boards carry over unchanged; the platform changes: motion,
+the attitude source (the vehicle's navigation, at each echo's arrival), the projector's place and pulse, cabling, and where the compute sits.
 
 **What stacked rows do not improve.** Bearing and range resolution; left/right (the face decides that); detection range, much; depth at long range without
 a profile.
 
 **Open.**
 
-- The static array: its dimensions, the depth it hangs at, whether it has a tilt sensor, where its projector hangs, the trial site's depth and ranges.
+- The static array: the depth it hangs at, whether it has a tilt sensor, where its projector hangs, its cabling, the margins of its frame, the trial site's depth and ranges.
 - The SPRINT-Nav: attitude accuracy, output rate, time-stamp accuracy and message format (from its datasheet and interface document). The adapter from
   its messages to the navigation datagram is not written; DVL altitude plus depth as the water-depth source is not wired in.
-- The projector: which, its source level, its place on the face, and how fast the inputs recover from its direct sound.
+- The projector: which, its source level, its place on the face, and how fast the inputs recover from its direct sound (*The projector's direct sound*).
 - Board synchronisation between rows: 0.87 µs for 0.05°. Not answered; whether Popoto boards can be batched at all is a question for Popoto.
 - The sound-speed profile: a profile built from the vehicle's own readings, and profile families, are not built; today's chain has the gradient prior,
   the local sound speed and a supplied profile.
-- Compute at the boards' full rate: both options (decimate first; GPU) are to be prepared; neither is in the receiver yet.
+- Compute at the boards' full rate: both options (decimate first; GPU) are to be prepared; neither has been timed at the full rate on the hardware that would be used.
+- The parts list's open questions (`design/popoto_parts.md`).
+
+### The projector's direct sound: "Just blank?"
+
+The owner: "What can we do about the projector? Just blank?" Blanking, meaning the chain ignores samples taken during the transmit, is necessary and is not enough. Numbers first, all from the
+build files (`gpusonar.buildspec.describe`: source level − 20 log₁₀(distance to the nearest hydrophone), through the files' sensitivity and gain):
+
+| Build | Projector to nearest hydrophone | Direct level there | At the ADC | Over full scale | Direct sound ends | First sync burst after that | Distance for full scale | Source level for full scale |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `popoto_testauv_1x32` | 0.30 m | 207 dB re 1 µPa | 131 V | **+34 dB** | 0.101 s | 4.0 ms | 15 m | 163 dB |
+| `popoto_static_2x32` | 0.26 m | 209 dB re 1 µPa | 153 V | **+35 dB** | 0.102 s | 3.1 ms | 15 m | 162 dB |
+| `popoto_static_3x32` | 0.26 m | 209 dB re 1 µPa | 153 V | **+35 dB** | 0.102 s | 3.1 ms | 15 m | 162 dB |
+| `popoto_face_1x32` | 1.68 m | 193 dB re 1 µPa | 24 V | **+19 dB** | 1.004 s | 0.8 ms | 15 m | 178 dB |
+| `popoto_face_2x32` | 1.84 m | 192 dB re 1 µPa | 22 V | **+18 dB** | 1.004 s | 0.8 ms | 15 m | 179 dB |
+| `popoto_face_3x32` | 1.69 m | 192 dB re 1 µPa | 24 V | **+19 dB** | 1.004 s | 0.8 ms | 15 m | 178 dB |
+
+The files' gain and full scale ARE the plan's figures for the capture board ("43 dB preamp, 37 mVpp full scale": 43 dB and 18.5 mV peak at the input, 2.61 V after the gain), so the computation with the plan's
+figures is the same computation: full scale is 173 dB re 1 µPa at the hydrophone. What is NOT the plan's is the hydrophone sensitivity (-208 dB re 1 V/µPa, a placeholder): a hydrophone
+10 dB less sensitive would overload 10 dB less and need 10 dB more signal everywhere else. Every projector position in the files is a placeholder.
+
+**What blanking does and does not do.** With a 1 s pulse nothing inside 750 m is usable whatever the inputs do, because echoes from there arrive during the transmit. So the samples lost to
+blanking cost nothing by themselves. What matters is (a) that the inputs are not damaged; (b) how long after the pulse ends they take to recover, because that time adds to the blind range
+(7.5 m per 10 ms); (c) that the synchronisation bursts and any calibration signal do not fall inside the transmit or the recovery. On (c) the shipped timing is a finding: the first burst is
+0.8 ms after the direct sound ends at the farthest hydrophone on the face. The build validator now warns of it.
+
+**Every hydrophone is overloaded, not only the nearest.** On the face (three rows) 96 of 96 are, from +7.6 dB at the farthest (6.37 m) to +19.1 dB at the nearest; the direct sound falls to full scale only 15.3 m from the projector, so **no position on a 9 m face avoids it**: at least
+19.1 dB of gain reduction during the transmit is needed, or inputs that are built to be overloaded. The first usable range is 753 m with an input that has no memory (76 m with the 0.1 s pulse), plus 0.75 m per millisecond of recovery. These are peak levels (add 3 dB if a source level is an rms figure) and the water path only: hull-borne and electrical coupling from the amplifier are not modelled and could exceed it.
+
+The simulator now models this (`transmit.direct_path`, `receive.overload`; `tools/direct_sound_study.py`): its per-hydrophone figures for the face are +7.6 to +19.1 dB over full scale, 96 of 96 overloaded, full scale at 15.3 m (`design/direct_sound_study.json`; the same closed form as here, checked against the simulated samples). Its recovery parameter sets are illustrative: no board has been measured. Blanking alone suffices only if the front end has no memory; a gain switch of more than the overload removes the problem at its source.
+
+| Option | What it buys | What it costs or needs | Known? |
+| --- | --- | --- | --- |
+| Ignore window in the chain (blanking) | discards the samples of the transmit and of the recovery; `chain.blanking` | nothing; it protects nothing | yes |
+| Input clamp or limiter (protection) | survival at +19 dB over full scale (24 V equivalent at the ADC, 0.17 V at the input) | a recovery time after the clamp releases: **unknown** | the plan says of its own integrated design "preamp inputs are clamped"; for the PMM6081 it gives no damage threshold and no clamp: unknown |
+| Switchable or time-varying input gain | 19 dB less gain during the transmit removes the overload; a ramp afterwards is a TVG (the record format carries one) | the board must offer it | unknown: the plan lists "other gain options" among its questions for Popoto |
+| Move the projector | 6 dB per doubling of distance: ×2 (3.4 m): +13 dB, ×4 (6.7 m): +7 dB, ×8 (13.5 m): +1 dB; full scale at 15 m | room on the platform; beyond the face it means a pole, or below or behind the hull; the direct sound then ends later (0.67 ms per metre) | geometry: yes |
+| A projector with a null towards the array, or a baffle | must deliver 19 dB towards the nearest hydrophone to reach full scale, more for margin | a directional source or a structure at 4–6 kHz (a wavelength is 30 cm); no product is assumed | unknown |
+| Lower source level, longer pulse, same energy | each 3 dB less level is twice the pulse: −3 dB: 2 s, blind inside 1.5 km, −6 dB: 4 s, blind inside 3.0 km, −10 dB: 10 s, blind inside 7.5 km. The 12 km budget is unchanged (it depends on energy); full scale would need −19 dB, a 82 s pulse: not a way out by itself | blind range and ping interval grow with the pulse | yes |
+| Schedule the sync bursts clear of the transmit | the bursts survive | `sync.reference.lead_s` in the spec (after the recovery time), or open the window later | yes, once the recovery time is |
+
+**Position and the multipath depth bias.** The projector's place also moves the bias a shallow channel puts on depth: with the projector beside the rows in the end margin the two-row check at 3 km reads 26–34 m for a target at 60 m (`popoto_elevation_bench.json`); an earlier run with it 1.5 m below the array's centre read closer to the truth. Below the array was better on that count; it is one geometry, not a rule.
+
+**Recommended combination.** (1) Protection first: a clamp or limiter at every input, or confirmation from the board's documentation that the inputs survive the level in the table. (2) The projector as far
+from the nearest hydrophone as the platform allows; every doubling is 6 dB less to recover from. (3) An ignore window in the chain from the trigger to the end of the direct sound plus the measured
+recovery. (4) The first sync burst after that window. (5) Lower gain during the transmit if the board offers it. Not recommended as the fix: a longer, weaker pulse.
+
+**To measure on the bench before hardware is frozen.** Recovery time of an input against overload level (0, +10, +20, +30 dB over full scale, a burst as long as the pulse); the damage threshold from the
+board's documentation or its maker; whether the reference burst summed into an input survives next to an overloaded hydrophone signal. The spec carries the results: `projector.blanking_after_s`,
+`boards.overload_damage_vpp`, `boards.gain_switchable` (all unknown today). Also on the bench: coupling from the amplifier into the inputs through the hull and the wiring, with the projector out of the water. The simulator's receiver has an overload and recovery model (`receive.overload`, with `transmit.direct_path`): a measured recovery time can be tried on the short-range scenarios (`popoto_testauv_direct_overload*`) before hardware is frozen.
+
+### The 12 km design point
+
+The owner: "What does it look like for popoto at 12km though. Need that design". This section is self-contained: what the system that detects at 12 km is, and what it can and cannot tell you there.
+The targets are the two the study uses: a **ship-sized target of +25 dB** and a **small target of +5 dB**. Everything is for the full face (4–6 kHz, a 1 s sweep, 197 dB re 1 µPa at 1 m, rows of the long module, outer rows 1.5 m apart).
+
+**At 12 km you get** (noise-limited budget; ship-sized target; one sigma):
+
+| Rows | Detection, ship (+25 dB) | Detection, small (+5 dB) | Bearing | Elevation | Depth with a measured profile | Depth without one |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 × 32 | yes: 14.6 dB, +1.6 dB of margin | no: -5.4 dB, 18 dB short | ±0.26° = ±54 m across (beam 3.2°, 665 m) | none | none | none |
+| 2 × 32 | yes: 17.0 dB, +4.0 dB of margin | no: -3.0 dB, 16 dB short | ±0.20° = ±41 m across (beam 3.2°, 665 m) | ±0.34° from noise, as candidates 11.5° apart unless water depth bounds them | ±82 m (noise, roll to 0.2°, clocks to 0.49 µs) | not in metres: ±2400 m from a gradient unknown by 0.05 /s |
+| 3 × 32 | yes: 18.4 dB, +5.4 dB of margin | no: -1.6 dB, 15 dB short | ±0.17° = ±35 m across (beam 3.2°, 665 m) | ±0.33° from noise, one answer | ±81 m (noise, roll to 0.2°, clocks to 0.49 µs) | not in metres: ±2400 m from a gradient unknown by 0.05 /s |
+
+For that to hold: a projector that delivers the source level in this band (none is chosen); hydrophones and inputs whose own noise is below the sea's (parts list); the inputs recovered from the direct sound
+well inside the 750 m blind range; noise, not reverberation, limiting at 12 km (below); for elevation, boards of different rows synchronised to 0.87 µs and the roll known as stated;
+for depth in metres, a sound-speed profile along the path. Spreading at least as kind as spherical (in shallow water it is kinder: below).
+
+**Link budget at 12 km.** spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at 5 m/s wind, 13 dB at the map for detection, target strengths +25 dB (ship) and +5 dB (small); noise spectrum level 51.5 dB re 1 µPa²/Hz at 5 kHz. Blind inside 750 m (the pulse); a ping every 17.9 s for the 750–12700 m window (3.3 a minute).
+
+| Face option | Beam | Row gain (sea noise) | Map gain | SNR at 12 km, ship | margin | SNR at 12 km, small | short by | Reached at: ship / small (km) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 × 32 long | 3.2° | 15.1 dB | 15.1 dB | 14.6 dB | +1.6 dB | -5.4 dB | 18.4 dB | 12.8 / 5.3 |
+| 2 × 32 long | 3.2° | 15.1 dB | 17.4 dB | 17.0 dB | +4.0 dB | -3.0 dB | 16.0 dB | 14.0 / 6.0 |
+| 3 × 32 long | 3.2° | 15.1 dB | 18.8 dB | 18.4 dB | +5.4 dB | -1.6 dB | 14.6 dB | 14.7 / 6.4 |
+| 1 × 32 short (the test AUV's row, for comparison) | 5.3° | 12.9 dB | 12.9 dB | 12.5 dB | -0.5 dB | -7.5 dB | 20.5 dB | 11.7 / 4.8 |
+| 1 × 46 (fills 7 m) | 2.2° | 16.6 dB | 16.6 dB | 16.2 dB | +3.2 dB | -3.8 dB | 16.8 dB | 13.6 / 5.8 |
+| 1 × 64 in 7 m | 2.2° | 16.7 dB | 16.7 dB | 16.3 dB | +3.3 dB | -3.7 dB | 16.7 dB | 13.6 / 5.8 |
+| 2 × 48 in 7 m | 2.2° | 16.7 dB | 19.1 dB | 18.7 dB | +5.7 dB | -1.3 dB | 14.3 dB | 14.9 / 6.5 |
+
+**What would close the 15 dB for the small target at 12 km** (three rows; each alone):
+
+| Lever | To close it | What one step gives |
+| --- | --- | --- |
+| Source level | 212 dB re 1 µPa at 1 m | dB for dB |
+| Pulse length (same level) | 29 s, blind inside 22 km | 3 dB per doubling; the blind range doubles with it |
+| Hydrophones in a row | 933 at half a wavelength, 140 m long | 3 dB per doubling of a filled row; the 7 m zone holds 46: +1.6 dB (and the owner keeps 32) |
+| Rows | not reachable | 2 rows +2.4 dB, 3 rows +3.7 dB, 4 rows +4.6 dB over one |
+| Lower noise | 37 dB re 1 µPa²/Hz | a calm sea is 40 dB: 11 dB; the platform's own noise is not in the budget at all |
+| Come closer | 6.4 km | about 2.7 dB per km between 6 and 12 km |
+
+The small target at 12 km is not a matter of one lever: it is reached at 6.4 km. **These are noise-limited figures with spherical spreading, the cautious case for loss.**
+In shallow water sound is ducted: Bellhop for 100 m of isovelocity water over sand gives 14 dB less loss each way at 4 kHz (70.4 against 84.6 dB; `popoto_range_study.json`), which more than covers the small target's shortfall in that water, and at those levels reverberation, not noise, decides.
+
+**Through the chain, with reverberation** (`tools/popoto_12km_study.py`: the ship of `popoto_12km`, five points of +18 dB crossing at 6 m/s at 12 km, six pings; C++ chain with each row count's deployment file; SNR is over the local background the detector measures):
+
+| Water | Rows | Ship detected on | Median SNR | Track confirmed at ping | Track on the ship | Later arrivals tracked / classed multipath | Other tracks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 3 of 6 pings | 13.5 dB | 5 | uncertain at 3.4 m/s | 0 / 0 | 1 uncertain |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 3 | 1 of 6 pings | 11.9 dB | — | none | 0 / 0 |  |
+| the same without reverberation (noise only) | 1 | 4 of 6 pings | 12.5 dB | 4 | uncertain at 3.2 m/s | 0 / 0 | 1 uncertain |
+| the same without reverberation (noise only) | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| the same without reverberation (noise only) | 3 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 15.4 dB | 3 | mover at 5.4 m/s, mover at 5.9 m/s, mover at 6.1 m/s, static at 2.1 m/s | 6 / 5 | 3 mover, 5 multipath, 1 static, 1 uncertain |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 16.6 dB | 3 | multipath at 6.0 m/s, multipath at 6.3 m/s, uncertain at 4.6 m/s, uncertain at 6.5 m/s | 1 / 1 | 3 multipath, 2 uncertain |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 3 | 6 of 6 pings | 17.1 dB | 3 | mover at 5.7 m/s, mover at 5.8 m/s, multipath at 5.9 m/s, multipath at 6.0 m/s, multipath at 7.1 m/s | 1 / 1 | 2 mover, 4 multipath, 1 uncertain |
+| popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 1 / 0 | 1 mover |
+| popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 1 / 0 | 1 mover |
+| popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 27.4 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 28.1 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_env_summer_mud_60m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_env_summer_mud_60m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 19.4 dB | 3 | mover at 6.1 m/s, multipath at 5.8 m/s, mover at 7.5 m/s | 4 / 3 | 2 mover, 4 multipath, 1 uncertain |
+
+Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 13.5 dB against 12.5 dB; 2 rows: not detected against not detected; 3 rows: 11.9 dB against not detected. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
+
+**A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do, which is why the ship is detected on few or no pings there, and marginally enough that the projector's place on the face decides it. Bellhop's field for the same water holds the ship on every ping. Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, not on the array.**
+
+Not run: 3 rows: the four popoto_env_* environments; 2 rows: popoto_env_winter_sand_200m (the run was stopped: each Bellhop case takes 1 to 10 minutes here).
+
+The environments differ by far more than the row count does: the row count buys two to four decibels, the water tens. A downward-refracting profile over a soft bottom can leave nothing at 12 km whatever the array.
+
+**Bearing at 12 km.** The beam is 3.2° wide: 665 m across at 12 km, so two targets closer than that in bearing and in the same range cell are one. A single target's bearing is good to
+±0.17° (±35 m across) at the 18 dB available on the ship (the bound for a row of this length, at broadside; steered to 45° it is 1.4 times that). The cone-angle correction is
+negligible there: an arrival within 0.5° of level (100 m of water) moves the bearing by less than 0.03° at 45° off broadside.
+
+**Elevation and depth at 12 km** (rows 1.5 m apart; the SNR is the one the budget gives at 12 km, not a nominal 20 dB):
+
+| | Ship (+25 dB) | Small (+5 dB) |
+| --- | --- | --- |
+| SNR of one row at 12 km | 14.6 dB | -5.4 dB: not detected |
+| Elevation sigma from noise, 2 rows / 3 rows | 0.34° / 0.33° | — |
+| Depth from noise | 70 m / 70 m | — |
+| Depth from roll known to 0.02° / 0.05° / 0.1° / 0.2° / 0.5° / 1.0° | 4 / 10 / 21 / 42 / 105 / 209 m | the same |
+| Depth from clock error between rows: the budget (0.87 µs) / reached in simulation (0.49 µs) / the within-row tolerance (8.3 µs) | 10 / 6 / 100 m | the same |
+| Depth from the profile: mean gradient unknown by 0.017 /s (isothermal water against none) | 816 m | the same |
+| Depth from the profile: mean gradient unknown by 0.05 /s | 2400 m | the same |
+| Depth from the profile: mean gradient unknown by 0.1 /s | 4800 m | the same |
+| Depth from the profile, by rung of the profile ladder | see `docs/design/popoto_stage2.json` | |
+
+**Two rows against three at that SNR.** At 15 dB a row (the study's nearest tabulated SNR below it: 13 dB), in clean noise searching ±30°: three rows pick a wrong lobe 0.0% of the time, two rows 10%. Two rows' repeats are 11.5° apart and only 0.6 dB down, so the chain reports candidates unless water depth and range bound the arrivals: at 12 km in 100 m of water every arrival is within 1.0° of level (one bounce), well inside the ±4.8° that leaves one candidate. **So at 12 km in shallow water two rows are not ambiguous; they are in deep water.**
+Multipath is the other limit: at 12 km in 100 m of water the direct, surface and bottom echoes are within a fraction of a range cell and of the rows' elevation beam of each other, they merge, and the elevation read is of the
+mixture. The shallow-water checks at 1–3 km already show a pull of tenths of a degree that no sigma contains; at 12 km a tenth of a degree is 21 m.
+
+**What is knowable at 12 km, honestly.** The angle of arrival at the array to about 0.3° from noise on the ship-sized target, plus the roll accuracy (0.2° assumed); whether the energy comes from above or below level;
+which arrival of a group came first; how a track's elevation changes over pings. **Depth in metres only with a sound-speed profile along the path**: without one the gradient prior alone is worth
+2400 m at 12 km, more than any water depth, and the report says so in `depth_refraction_sigma_m`.
+
+**Tracking at 12 km.** 3.3 pings a minute on target (one every 17.9 s for the full window). The shipped tracker confirms on 3 detections (`tracker.confirm_hits`), so a track exists 54 s after the first detection at the earliest, 36 s if counted from it; a mover's class needs its speed, which at 0.17° of bearing accuracy (35 m across) takes several pings more for a crossing target. Measured: the table above gives the ping at which the track on the ship was confirmed in each water and how the later (bounced) arrivals were classed.
+
+**Hardware for the 12 km point** (details and the plan's own words: *Parts list*).
+
+- **Projector:** 197 dB re 1 µPa at 1 m over 4–6 kHz for 1 s every 17.9 s (duty 5.6%); 417 W acoustic from an omnidirectional source. **None is chosen**; the plan's transducer covers 20–35 kHz.
+- **Direct sound:** 192 dB re 1 µPa at the nearest hydrophone, 19 dB over the inputs' full scale at the placeholder position: *The projector's direct sound* above.
+- **Hydrophones, boards, synchronisation:** 96 hydrophones on 12 boards (three rows), 64 on 8 (two); rows agree to 0.87 µs for 0.05°.
+- **Data:** 236 Mbit/s while receiving (three rows); 1,733,974 samples a channel and 666 MB a ping for the 750–12700 m window, 134 GB an hour as recorded now (raw, 4 bytes a sample).
+- **Compute, both options, measured:** on decimated pings of the `popoto_12km` scenario's size the C++ chain takes 0.63 / 1.41 / 2.54 s a ping for 1 / 2 / 3 rows on 4 shared CPU threads, and 0.010 / 0.021 / 0.031 s on an NVIDIA L4 (15 times its own host's 8 threads for one row; the tree before the 1.5 m row heights). A full-length raw ping at the boards' rate took 15 / 24 / 38 s on the CPU: not real time against 17.9 s without decimating first. Decimate-first timings: `docs/design/popoto_stage2.json`.
+
+**What the earlier builds reach instead** (noise-limited, ship / small): `popoto_testauv_1x32`: 7.7 / 2.9 km; `popoto_static_2x32`: 9.4 / 3.7 km; `popoto_static_3x32`: 9.9 / 3.9 km. They use a 0.1 s pulse (10 dB less processing gain than 1 s) for short-range trials; the static array with the face's 1 s pulse has the face's reach. No projector is chosen for them either.
+
+Scenarios and files for this point: `popoto_12km` (one row), `popoto_12km_2row` with `configs/deploy/popoto_face_2row.yaml`, `popoto_12km_3row` with `configs/deploy/popoto_vehicle_elevation.yaml`; `tests/python/test_buildspec.py` runs the stacked-row ones through both engines (image-source paths always; Bellhop when present).
+
+### Parts list
+
+Generated from the stage files (`tools/parts_list.py`; the full table with every requirement, what fixes it and the plan's own words: `design/popoto_parts.md`). Status: `chosen` = named in the owner's plan or by the owner;
+`specified, not chosen` = the design says what it must do; `unconfirmed` = needed, not yet specifiable. No part number, price, weight or power draw is invented.
+
+#### Quantities and status
+
+| Item | Status | 1: test AUV, 1 x 32 (short row) | 2: static array, 2 x 32 | 3: static array, 3 x 32 | 4: full face, 1 x 32 | 5: full face, 2 x 32 | 6: full face, 3 x 32 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Array hydrophones | specified, not chosen | 32 | 64 | 96 | 32 | 64 | 96 |
+| Reference hydrophones (calibration) | chosen | 2 | 2 | 2 | 2 | 2 | 2 |
+| Capture boards (Popoto PMM6081) | chosen | 4 | 8 | 12 | 4 | 8 | 12 |
+| Input protection, blanking and recovery | unconfirmed | 32 inputs | 64 inputs | 96 inputs | 32 inputs | 64 inputs | 96 inputs |
+| Projector | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Power amplifier and matching | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Synchronisation reference generator and distribution | specified, not chosen | 1 generator, 4 lines | 1 generator, 8 lines | 1 generator, 12 lines | 1 generator, 4 lines | 1 generator, 8 lines | 1 generator, 12 lines |
+| Hydrophone cables | specified, not chosen | 32 | 64 | 96 | 32 | 64 | 96 |
+| Network: boards to the compute unit | specified, not chosen | 4 board ports + 1 | 8 board ports + 1 | 12 board ports + 1 | 4 board ports + 1 | 8 board ports + 1 | 12 board ports + 1 |
+| Compute unit | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Storage | specified, not chosen | 1 | 1 | 1 | 1 | 1 | 1 |
+| Navigation and attitude; a static frame: tilt and compass sensor | chosen / unconfirmed | 1 | 0 or 1 | 0 or 1 | 1 | 1 | 1 |
+| Sound speed at the array, and water depth | unconfirmed | from the platform | from the platform | from the platform | from the platform | from the platform | from the platform |
+| Mounting: face or frame, fairing | unconfirmed | 1 | 1 | 1 | 1 | 1 | 1 |
+| Power | unconfirmed | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied |
+| Spares and failure tolerance | specified, not chosen | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones |
+
+#### Numbers that size the parts
+
+| | 1: test AUV, 1 x 32 (short row) | 2: static array, 2 x 32 | 3: static array, 3 x 32 | 4: full face, 1 x 32 | 5: full face, 2 x 32 | 6: full face, 3 x 32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Hydrophones, boards | 32, 4 | 64, 8 | 96, 12 | 32, 4 | 64, 8 | 96, 12 |
+| Data rate: a board / all | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s |
+| Receive window (stated in the sonar file) | 75–2000 m | 75–3000 m | 75–3000 m | 750–12700 m | 750–12700 m | 750–12700 m |
+| Shortest ping interval | 2.77 s | 4.10 s | 4.10 s | 17.93 s | 17.93 s | 17.93 s |
+| Recording: a ping / an hour | 35 MB / 45.48 GB | 105 MB / 92.07 GB | 157 MB / 138.11 GB | 222 MB / 44.55 GB | 444 MB / 89.11 GB | 666 MB / 133.66 GB |
+| Cables: shortest–longest, total (boards assumed at the array's centre) | 0.5–1.9 m, 39 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m | 0.6–2.8 m, 54 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m |
+| Projector to the nearest hydrophone | 0.30 m | 0.26 m | 0.26 m | 1.68 m | 1.84 m | 1.69 m |
+| Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +34 dB | 209 dB re 1 µPa: +35 dB | 209 dB re 1 µPa: +35 dB | 193 dB re 1 µPa: +19 dB | 192 dB re 1 µPa: +18 dB | 192 dB re 1 µPa: +19 dB |
+| Direct sound ends | 0.101 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) |
+| Source level that just reaches full scale | 163 dB | 162 dB | 162 dB | 178 dB | 179 dB | 178 dB |
+| Hydrophones overloaded; at the farthest | 32 of 32; +21 dB | 64 of 64; +14 dB | 96 of 96; +14 dB | 32 of 32; +8 dB | 64 of 64; +8 dB | 96 of 96; +8 dB |
+| Gain reduction needed during the transmit | 34 dB | 35 dB | 35 dB | 19 dB | 18 dB | 19 dB |
+| First usable range, input with no memory (+ per ms of recovery) | 76 m (+0.75 m) | 76 m (+0.75 m) | 76 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) |
+| Clock agreement between rows (0.05° of elevation) | one row: n/a | 0.87 µs | 0.87 µs | one row: n/a | 0.87 µs | 0.87 µs |
+| Clock agreement within a row (clean beams) | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs |
+| Compute, option A (CPU, decimated pings of scenario size) | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads |
+| Compute, CPU at the boards' full rate, no decimation | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads | 15.5 s a ping on 4 shared CPU threads | 23.5 s a ping on 4 shared CPU threads | 37.7 s a ping on 4 shared CPU threads |
+| Compute, option A with the decimate-first stage | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json | see popoto_stage2.json |
+| Compute, option B (GPU, same decimated pings) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.010 s a ping on an NVIDIA L4 against 0.145 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.021 s a ping on an NVIDIA L4 against 0.295 s on its host (AMD EPYC 7R13 Processor, 8 threads) | 0.031 s a ping on an NVIDIA L4 against 0.443 s on its host (AMD EPYC 7R13 Processor, 8 threads) |
+
+CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, decimated), 4 shared threads, measured on the face's sonar files with 1, 2 and 3 rows of 32: the other stages have the same channel counts and shorter windows, so these are upper figures for them. timing_scenario_size, timing_full_length and the stream check's chain time: measured with the earlier row heights (outer rows 1.8 m apart) on an otherwise idle machine; the *_under_load values: this run, with the machine shared with other jobs (load average about 15 on 4 threads) Full rate: C++ chain, one full-length ping at the boards' rate (raw, 0.5 to 13 km), earlier row heights. GPU figures: C++ chain, bearings from the map, backprojection; median seconds per ping after the first; NVIDIA L4 on AMD EPYC 7R13 Processor (8 threads), 2026-11-17 21:54:16 UTC, 15,467 samples a channel (scenario size, baseband), the tree before the row heights changed to 1.5 m; raw full-rate pings have not been run on a GPU. Decimate-first: docs/design/popoto_stage2.json: decimation.timing.host.1.channels = 32; decimation.timing.host.1.boards = 4; decimation.timing.host.1.board_clocks = 0; decimation.timing.host.1.samples_per_channel = 1.81e+06; decimation.timing.host.1.sample_rate_hz = 1.02e+05; decimation.timing.host.1.simulate_seconds = 1.67; decimation.timing.host.1.chain_full_rate.seconds = 13.3; decimation.timing.host.1.chain_full_rate.detections = 4; decimation.timing.host.1.chain_full_rate.strongest.range_m = 6.04e+03; decimation.timing.host.1.chain_full_rate.strongest.bearing_deg = 7.04; decimation.timing.host.1.chain_full_rate.strongest.snr_db = 80.6; decimation.timing.host.1.chain_decimate_first.seconds = 13.1.
+
+**Where the plan and the files disagree** (findings, not changes):
+
+- **Band.** The plan: "the board is specified for 10–100 kHz" and asks Popoto only about 6–10 kHz. The files use the inputs at 4–6 kHz, below both. The files do not flag the band as unconfirmed on the receive side (only `transmit`).
+- **Full scale.** The plan's "37 mVpp full scale" with the "43 dB preamp" is read in the files as 18.5 mV peak at the input, 2.61 V at the ADC (18.5 mV × 10^(43/20) = 2.613 V, written 2.61). With -208 dB re 1 V/µPa that is a full-scale pressure of 173 dB re 1 µPa at the hydrophone. Consistent, on the reading that 37 mVpp is at the connector; the plan does not say where it is referred to.
+- **Sample rate and word length.** The files assume 102.4 kHz and 24 bits. The plan gives neither for the PMM6081 ("ADC sample rate" is one of its questions for Popoto). Both are flagged `unconfirmed`.
+- **Synchronisation wiring.** The plan's best method gives the reference "one input on every board (leaving 7 hydrophones per board, 28 in all)". The stage files sum the reference into the first hydrophone input above the acoustic band and keep 8 hydrophones a board (32 a row on 4 boards); `popoto_4x7` is the plan's wiring. Summing needs a circuit the plan does not describe; with 7 a board a row of 32 needs 5 boards.
+- **How many boards.** The plan: "When to stop: past two boards, the custom 32-channel ADC board in Phase 6 is cheaper and removes the problem with one shared clock." The stages use 4, 8 and 12 Popoto boards.
+- **Synchronisation accuracy.** The plan asks "about 1.5 µs at 35 kHz, or 5 µs at 10 kHz, for clean beams"; stacked rows 1.5 m apart ask 0.87 µs between rows for 0.05° of elevation, tighter than either.
+- **Hydrophones.** The plan's −208 dBV re 1 µPa is the AS-1 reference hydrophone's figure; the files use it as the sensitivity of every array hydrophone. The plan's integrated array has a preamp and band-pass filter at each element "driving differential pairs"; the PMM6081's inputs are "single-ended" with their own 43 dB preamp, and the files assume passive hydrophones straight into them.
+- **Projector.** The plan's Popoto transmit chain (PMT-28, "20–35 kHz", "190 dB") cannot serve this band; the files assume 197 dB at 4–6 kHz from a projector nobody has chosen, against the plan's "underwater speaker" first and "free-flooded ring or flextensional projector with a 1–2 kW amplifier" second.
+- **Streaming.** The files take the boards' samples as UDP blocks in real time. The plan documents recording to .wav files ("recordstart writes .wav files") and says the trial "doesn't prove ... live streaming". The `wav_watch` source covers the file route.
+
+![hardware, three rows on the face](design/build_face_3x32_hardware.png)
+
+![one ping, three rows on the face](design/build_face_3x32_timing.png)
+
+The same two diagrams for every stage: `design/build_<stage>_hardware.png`, `_timing.png` (`tools/build_diagrams.py`).
 
 ## 4. Timing and data
 

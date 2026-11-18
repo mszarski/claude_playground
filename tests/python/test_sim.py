@@ -53,7 +53,9 @@ def test_every_named_sonar_is_shipped():
                                          # three rows), and their board-clock variants
                                          "popoto_testauv_1row", "popoto_testauv_1row_clocks",
                                          "popoto_static_2row", "popoto_static_3row", "popoto_static_2row_clocks",
-                                         "popoto_static_3row_clocks"}
+                                         "popoto_static_3row_clocks",
+                                         # the face with one row of the long module: generated from configs/builds/popoto_face_1x32.yaml
+                                         "popoto_face_1row", "popoto_face_1row_clocks"}
 
 
 @pytest.mark.parametrize("name", ALL_SONARS)
