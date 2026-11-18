@@ -1459,6 +1459,84 @@
           }
         }
       }
+    },
+    "timing": {
+      "host": {
+        "1": {
+          "channels": 32,
+          "boards": 4,
+          "board_clocks": false,
+          "samples_per_channel": 1809067,
+          "sample_rate_hz": 102400.0,
+          "window_m": [
+            500.0,
+            13000.0
+          ],
+          "simulate_seconds": 1.8807718710013432,
+          "load_average_before": [
+            15.45703125,
+            17.6240234375,
+            18.87158203125
+          ],
+          "backend": "host",
+          "chain_full_rate": {
+            "seconds": 20.70708561,
+            "detections": 4,
+            "strongest": {
+              "range_m": 6044.891749,
+              "bearing_deg": 7.035056228,
+              "snr_db": 80.62697841
+            }
+          },
+          "chain_decimate_first": {
+            "seconds": 18.23010695,
+            "detections": 3,
+            "strongest": {
+              "range_m": 6044.891775,
+              "bearing_deg": 7.03458683,
+              "snr_db": 80.62315024
+            }
+          },
+          "chain_decimate_first_factor_25": {
+            "seconds": 13.57884502,
+            "detections": 1,
+            "strongest": {
+              "range_m": 6044.893205,
+              "bearing_deg": 7.066243807,
+              "snr_db": 80.67260639
+            }
+          },
+          "stage_whole_ping_seconds": 0.6904918979998911,
+          "chain_on_decimated_records": {
+            "seconds": 11.00731056,
+            "detections": 3,
+            "strongest": {
+              "range_m": 6044.891775,
+              "bearing_deg": 7.03458683,
+              "snr_db": 80.62315024
+            }
+          },
+          "factor": 17,
+          "output_rate_hz": 6023.529411764706,
+          "taps": 171,
+          "latency_ms": 0.830078125,
+          "decimated_samples_per_channel": 106416,
+          "raw_bytes_in_memory": 231560576,
+          "decimated_bytes_in_memory": 27242496,
+          "stage_streaming_seconds_per_second_of_stream": 0.02906368800177006,
+          "stage_streaming_block_samples": 128,
+          "recording_raw_bytes": 231587712,
+          "recording_raw_write_seconds": 0.06319637400156353,
+          "recording_decimated_bytes": 27269632,
+          "recording_decimated_write_seconds": 0.020147267998254392,
+          "load_average_after": [
+            15.001953125,
+            17.1611328125,
+            18.63134765625
+          ]
+        },
+        "cpu_threads": 4
+      }
     }
   },
   "blanking": {

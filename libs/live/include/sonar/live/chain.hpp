@@ -25,6 +25,7 @@
 #include "sonar/live/doa.hpp"
 #include "sonar/live/elevation.hpp"
 #include "sonar/live/sync.hpp"
+#include "sonar/live/tonal.hpp"
 
 namespace sonar::live {
 
@@ -156,6 +157,7 @@ struct PassiveOptions {
   bool use_sbl = true;                ///< false: conventional beam power
   DoaOptions sbl;
   ElevationOptions elevation;         ///< stacked rows: an elevation with every bearing
+  TonalOptions tonal;                 ///< Goertzel lines and DEMON (tonal.hpp); off unless tonal.enabled
   bool starboard = true;
 };
 

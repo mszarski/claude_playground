@@ -165,6 +165,7 @@ def test_program_takes_blocks_over_udp_with_navigation(pings, tmp_path):
         _, err = proc.communicate(timeout=120.0)
     finally:
         proc.kill()
+    assert proc.returncode == 0, f"sonar_live ended abnormally ({proc.returncode}): {err.strip()[-400:]}"   # a crash is not lost data
     reports = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
     if "0 dropped, 0 samples lost" not in err or len(reports) < N:
         pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")
@@ -360,6 +361,7 @@ def test_program_listens_to_an_untriggered_board_stream(tmp_path):
         _, err = proc.communicate(timeout=120.0)
     finally:
         proc.kill()
+    assert proc.returncode == 0, f"sonar_live ended abnormally ({proc.returncode}): {err.strip()[-400:]}"   # a crash is not lost data
     frames = [json.loads(line) for line in (tmp_path / "rep.jsonl").read_text().splitlines()]
     if "0 dropped, 0 samples lost" not in err or len(frames) < n_frames:
         pytest.skip(f"the loopback dropped data: {err.strip().splitlines()[-1] if err.strip() else 'no summary'}")

@@ -98,9 +98,11 @@ across it).
    For a rough boundary (Gamma >> 1) the spectrum is Gaussian with that rms width; for a
    nearly flat one it is the wave spectrum itself and the width tends to v / (2 pi h), the
    rms wave frequency. Over several bounces the numerators add and the denominator is one
-   minus the product of the coherent factors. `doppler_spectrum="gaussian"` draws the
-   sinusoids' frequencies from a Gaussian of that rms width; the default "lorentzian" is the
-   AR(1) spectrum SST uses (half-width 2 f v sin(g) / c; it has no rms width). A bottom has
+   minus the product of the coherent factors. `doppler_spectrum="gaussian"` (the default)
+   draws the sinusoids' frequencies from a Gaussian of that rms width; "lorentzian" is the
+   AR(1) spectrum SST uses (half-width 2 f v sin(g) / c; it has no rms width). Measured
+   channels support the Gaussian (PHYSICS_NOTES Sec. 21: 15 of 18 surface arrivals at one
+   site against 7 of 18 for the Lorentzian), which is why it is the default. A bottom has
    v = 0: its only spread is that of the sonar's motion. With `angle_spread` the sonar's
    motion is left to the taps' directions and only the boundary's own speed sets the
    frequencies within a ping.
@@ -254,7 +256,7 @@ class TimeSpreadProvider(EigenrayProvider):
     angle_spread: each tap leaves and arrives in its own direction (module docstring, 1).
     decay_time: "rule_of_thumb" (TR 0702's) or "facet" (2).
     doppler: the tail varies during a ping; each tap is then `doppler_lines` rays, each with a
-    `range_rate` (3). doppler_spectrum: "lorentzian" or "gaussian".
+    `range_rate` (3). doppler_spectrum: "gaussian" (default) or "lorentzian".
     multi_bounce: "convolve" (default) or "sum" (4).
     """
 
@@ -263,7 +265,7 @@ class TimeSpreadProvider(EigenrayProvider):
                  taps: int = 6, min_spacing: float = 0.0, coherence_length: float = 10.0, seed: int = 0,
                  surface_sound_speed: float | None = None, bottom_sound_speed: float | None = None,
                  incoherent: bool = True, angle_spread: bool = False, decay_time: str = "rule_of_thumb",
-                 doppler: bool = False, doppler_spectrum: str = "lorentzian", doppler_lines: int = 8,
+                 doppler: bool = False, doppler_spectrum: str = "gaussian", doppler_lines: int = 8,
                  multi_bounce: str = "convolve"):
         self.angle_spread, self.doppler = bool(angle_spread), bool(doppler)
         self.decay_time, self.doppler_spectrum, self.multi_bounce = str(decay_time), str(doppler_spectrum), str(multi_bounce)
@@ -578,6 +580,6 @@ def wrap(provider: EigenrayProvider, cfg: dict, *, frequency: float) -> Eigenray
                               angle_spread=bool(cfg.get("angle_spread", False)),
                               decay_time=str(cfg.get("decay_time", "rule_of_thumb")),
                               doppler=bool(cfg.get("doppler", False)),
-                              doppler_spectrum=str(cfg.get("doppler_spectrum", "lorentzian")),
+                              doppler_spectrum=str(cfg.get("doppler_spectrum", "gaussian")),
                               doppler_lines=int(cfg.get("doppler_lines", 8)),
                               multi_bounce=str(cfg.get("multi_bounce", "convolve")))

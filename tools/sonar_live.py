@@ -107,6 +107,11 @@ def export_template(cfg: dict, path: str) -> str:
     if out.get("report_udp"):
         cmd += ["--report-udp", f"{out['report_udp'][0]}:{out['report_udp'][1]}"]
     cmd += [f"{k}={v:.10g}" if isinstance(v, float) else f"{k}={v}" for k, v in o.items()]
+    passive = cfg.get("passive") or {}
+    if passive.get("tonal") is not None:
+        # Goertzel lines and DEMON when listening (--listen or --passive): tonal=1 and one tonal_<key> per setting.
+        from gpusonar.tonal import cpp_options
+        cmd += [f"{k}={v}" for k, v in cpp_options(passive["tonal"], passive.get("f_low", 0.0), passive.get("f_high", 0.0)).items()]
     return " ".join(shlex.quote(c) for c in cmd)
 
 

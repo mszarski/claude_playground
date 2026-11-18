@@ -348,6 +348,7 @@ bool Navigation::apply(PingRecord& record) {
   std::size_t i = 0;
   while (i < fixes_.size() && fixes_[i].time_ns < t) ++i;
   if (i == 0 || i == fixes_.size()) {
+    // The pose is the first nine of a fix's values (kFields in all): only those are copied.
     std::copy_n(std::begin(fixes_[std::min(i, fixes_.size() - 1)].v), 9, v);
   } else {
     const Fix& a = fixes_[i - 1];

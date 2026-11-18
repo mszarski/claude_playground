@@ -49,9 +49,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
                   noise_spectrum=None, reverberation: list | None = None,
-                  beam_floor_db: float | None = None, noise_statistics: dict | None = None,
+                  beam_floor_db: float | None = None, noise_statistics: dict | None = None, fitted_noise: dict | None = None,
                   sources: list | None = None, transmit: bool = True,
-                  backend=core.Backend.Host, engine: str | None = None) -> "core.PingRecord":
+                  backend=core.Backend.Host, engine: str | None = None,
+                  front_end_truth=None) -> "core.PingRecord":
     """Simulate one transmit and return its record.
 
     `engine` ("cpp" or "numpy"; default: sim/engine.py) chooses the implementation of the
@@ -61,6 +62,17 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     `sources` (sim/sources.py `build_sources`): radiating sources heard one way, added to
     the same record. `transmit=False`: the sonar does not ping (a passive capture): no
     echoes, no reverberation, no transmit reference; the record keeps its form.
+
+    Two keys of the sonar, both absent by default (the record is then what it always was):
+    `transmit.direct_path` adds the pulse as the array hears it straight from the projector
+    (sim/sources.py `direct_arrival`); `receive.overload` passes the samples through a
+    front end that clips and recovers (sim/receiver.py `apply_front_end`), over the time from
+    the transmit to the opening of the window as well (direct arrival only, at full fidelity;
+    no echoes, reverberation or noise there), so that the window starts in the state the
+    transmit left. `front_end_truth`: a dict, or a list that gets one dict per ping, filled
+    with what the model did (per-channel overload figures; with the key "arrays" set true in
+    a dict passed in, also the flags, gain and offset of every sample, and "direct", the
+    direct arrival alone).
     """
     env = resolve_environment(environment, depth=pose.position[2])
     record = sonar.make_record(pose, sequence=sequence, sub_sequence=sub_sequence,
@@ -76,6 +88,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
     clocks = _set_board_clocks(record, sonar, truth=True, rng=rng)
     if clock_truth is not None:
         clock_truth.update(clocks)
+    direct_cfg = overload_cfg = None
+    if sonar.config["transmit"].get("direct_path") or sonar.config["receive"].get("overload") is not None:
+        from . import sources as source_models
+        direct_cfg = source_models.direct_path_config(sonar) if transmit else None
+        overload_cfg = receiver.overload_config(sonar)
+        receiver.report_gain_switch(record, overload_cfg)
     if channel_errors is not None and channel_errors.get("position") is not None:
         # True element position errors drive synthesis; the processor is not told.
         cal = record.calibration
@@ -155,7 +173,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             from . import bottom as bottom_model
             keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
             if "sediment" in item:
-                item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file")), **item)
+                item = dict(bottom_model.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
             missing = [k for k in keys if k not in item]
             if missing:
                 raise ValueError(f"fluid_sediment reverberation needs {missing}")
@@ -244,6 +262,40 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         source_models.add_sources(record, sonar, sources, provider, environment=env, absorption_model=absorption_model,
                                   scenario_time=scenario_time, rng=rng, backend=backend, engine=engine,
                                   spreading=spreading, acceleration=acceleration)
+    pre_window = None
+    truth = None
+    if front_end_truth is not None and (direct_cfg is not None or overload_cfg is not None):
+        truth = front_end_truth if isinstance(front_end_truth, dict) else {}
+        if truth is not front_end_truth:
+            front_end_truth.append(truth)
+    if direct_cfg is not None:
+        # The projector heard directly: a one-way source at its own position, with the true
+        # clocks and element positions still in the record.
+        direct_kwargs = dict(environment=env, absorption_model=absorption_model, scenario_time=scenario_time,
+                             backend=backend, engine=engine, spreading=spreading, acceleration=acceleration)
+        direct = source_models.direct_arrival(record, sonar, provider, direct_cfg, **direct_kwargs)
+        s = record.samples
+        if direct is not None:
+            kind = s.kind
+            s.array = s.array + direct.astype(s.array.dtype)
+            s.kind = kind
+            record.samples = s
+            taps.sim_tap(record, "direct_arrival", direct)
+        if truth is not None and truth.get("arrays"):
+            truth["direct"] = direct
+        n_pre = int(np.ceil(s.start_time * s.sample_rate - 1e-9))
+        if overload_cfg is not None and n_pre > 0:
+            # From the transmit to the opening of the window, on the same sample clock.
+            pre_window = source_models.direct_arrival(record, sonar, provider, direct_cfg, **direct_kwargs,
+                                                      window=(s.start_time - n_pre / s.sample_rate, n_pre))
+            if pre_window is None:
+                pre_window = np.zeros((s.n_channels, n_pre))
+            pre_window = receiver.apply_channel_factors(np.asarray(pre_window, dtype=float), channel_errors)
+            ref = sonar.config["receive"].get("reference")
+            if ref and ref.get("dedicated"):
+                for channel in ref["channels"]:           # a reference input has no hydrophone on it
+                    if channel in record.metadata.channel_element:
+                        pre_window[record.metadata.channel_element.index(channel)] = 0.0
     taps.sim_tap(record, "reverberation")
     if transmit:
         receiver.add_reference_signal(record, sonar, clocks)
@@ -291,8 +343,22 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             samples = samples + noise_models.k_noise(
                 samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
                 noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+    if fitted_noise:
+        # `receiver.ambient_noise: {model: fitted, file: ...}`: noise with the spectrum, the
+        # coherence between hydrophones and the tail of a recording (sim/noise_fit.py), in the
+        # recording's sample units (`gain_db` rescales). Added after synthesis on either engine.
+        from . import noise_fit
+        fc_noise = record.samples.center_frequency if np.iscomplexobj(samples) else 0.0
+        samples = samples + noise_fit.scenario_noise(
+            fitted_noise, samples.shape[1], record.samples.sample_rate, rng or np.random.default_rng(),
+            n_channels=samples.shape[0], center_frequency=fc_noise).astype(samples.dtype)
     taps.sim_tap(record, "noise", samples)
-    samples = receiver.apply_hardware_tvg(record, samples)
+    if overload_cfg is not None:
+        # The front end with limits (the record's gain ramp is applied inside it).
+        samples = receiver.apply_front_end(record, samples, overload_cfg, pre=pre_window, truth=truth,
+                                           arrays=bool(truth is not None and truth.get("arrays")))
+    else:
+        samples = receiver.apply_hardware_tvg(record, samples)
     taps.sim_tap(record, "hardware_gain", samples)
     if adc:
         samples = receiver.apply_adc(record, samples)
@@ -308,7 +374,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
 def _noise_spectrum(cfg):
     """Spectrum callable from a scenario's `receiver.ambient_noise` mapping:
     {level_db: 45} for a flat spectrum, or {wind_speed: 5, shipping: 0.5} for the Wenz fit."""
-    if not cfg:
+    if not cfg or cfg.get("model") == "fitted":
         return None
     from . import noise as noise_models
     if "level_db" in cfg:
@@ -439,6 +505,7 @@ class ScenarioResult:
     scene: Scene
     config: dict
     true_positions: np.ndarray = None      # [n_pings, 3] platform position at each transmit
+    front_end: list = None                 # per ping, what the overload model did (receive.overload / transmit.direct_path), or None
     legs: list = None                      # survey leg index of each record (platform.legs), or None
     times: np.ndarray = None               # [n_pings] scenario time of each transmit, s
 
@@ -455,6 +522,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         cfg = name_or_config
     else:
         cfg = load_scenario_config(name_or_config, overrides)
+    cfg = acoustics.resolve_sea_state(cfg)     # `sea_state: 0..9` wherever `wind_speed` is accepted
     sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
     env = resolve_environment(cfg.get("environment"))
     tier = cfg.get("fidelity", "free_field")
@@ -494,9 +562,14 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
+        fitted_noise=(rx_cfg.get("ambient_noise") if (rx_cfg.get("ambient_noise") or {}).get("model") == "fitted" else None),
         sources=sources, transmit=bool(pings.get("transmit", True)),
         reverberation=cfg.get("reverberation"),
         beam_floor_db=(cfg.get("synthesis") or {}).get("beam_floor_db"), engine=engine)
+    front_end = None
+    if sonar.config["transmit"].get("direct_path") or sonar.config["receive"].get("overload") is not None:
+        front_end = []                     # the truth about overload: beside the records, never in them
+        ping_kwargs["front_end_truth"] = front_end
     motion = plat.get("motion")
     raster = plat.get("raster")
     legs_cfg = plat.get("legs")
@@ -587,5 +660,5 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             w.write_truth_text("labels", json.dumps(scene.labels))
     if ping_times is None:
         ping_times = [i * interval for i in range(len(records))]
-    return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), leg_of_record,
-                          np.asarray(ping_times, dtype=float))
+    return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), legs=leg_of_record,
+                          times=np.asarray(ping_times, dtype=float), front_end=front_end)
