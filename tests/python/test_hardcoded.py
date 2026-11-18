@@ -277,13 +277,13 @@ def test_the_chain_sends_a_long_report_as_parts_over_udp(other_pings):
     for engine in ("python", "cpp"):
         # A threshold low enough for hundreds of detections, and a datagram limit they do not fit.
         with LiveChain({"bearings_deg": [-40.0, 40.0, 1.0], "engine": engine, "backend": "host", "min_snr_db": -50.0,
-                        "cfar": {"pfa": 0.2}}, report_udp=("127.0.0.1", rx.getsockname()[1]), report_udp_max_bytes=2000) as chain:
+                        "cfar": {"pfa": 0.2}}, report_udp=("127.0.0.1", rx.getsockname()[1]), report_udp_max_bytes=1000) as chain:
             report = chain.process(other_pings[0].copy())
-        assert len(json.dumps(report)) > 4000 and chain.reports_split == 1, engine
+        assert len(json.dumps(report)) > 2000 and chain.reports_split == 1, engine
         parts = [json.loads(rx.recv(65535))]
         while len(parts) < parts[0]["part"][1]:
             data = rx.recv(65535)
-            assert len(data) <= 2000
+            assert len(data) <= 1000
             parts.append(json.loads(data))                         # each one parses: nothing was cut
         assert join_report_parts(parts) == json.loads(json.dumps(report)), engine
     rx.close()
@@ -304,7 +304,7 @@ def test_blocks_of_any_word_length_on_both_ends_and_both_assemblers(sample_bytes
     assert np.array_equal(back["counts"], counts) and back["sample_index"] == 5
     with pytest.raises(flank_stream.BlockError):
         flank_stream.encode_block(np.array([[full]]), 0, sample_bytes=sample_bytes)
-    emulator = FlankBoardEmulator([rec], 1.0, sample_bytes=sample_bytes)
+    emulator = FlankBoardEmulator([rec], 3.0, sample_bytes=sample_bytes)
     assert emulator.block_samples == flank_stream.block_samples_for(32, sample_bytes) == 128 * 3 // sample_bytes
     py_asm = PingAssembler(sonar, sample_bytes=sample_bytes)
     cpp_asm = core.PingAssemblerCpp(sonar.make_record(core.Pose()), sample_bytes=sample_bytes)
@@ -332,11 +332,12 @@ def test_blocks_are_sized_from_the_channel_count_and_the_buffer_from_the_data_ra
     three = SonarModel.load("popoto_static_3row").make_record(core.Pose())
     assert core.live_stream_buffer_bytes(three) == flank_stream.stream_buffer_bytes(96, 102400.0)
     assert core.live_stream_bytes_per_second(three, 3) == 96 * 102400 * 3
-    # A block that cannot go in a datagram is refused when the emulator is made, not when it is sent.
+    # A block that cannot go in a datagram is refused before anything is sent (it used to fail in the sending thread, unseen).
     rec = SonarModel.load("popoto_static_3row", {"receive": {"window": {"range": [100.0, 101.0]}}}).make_record(core.Pose())
-    assert FlankBoardEmulator([rec], 1.0).block_samples == 42
+    assert FlankBoardEmulator([rec], 3.0).block_samples == 42
     with pytest.raises(ValueError, match="does not fit a UDP datagram"):
-        FlankBoardEmulator([rec], 1.0, block_samples=512)
+        FlankBoardEmulator([rec], 3.0, block_samples=512).send(9)
+    assert len(next(FlankBoardEmulator([rec], 3.0, block_samples=512).blocks())) == 128 + 512 * 96 * 3     # handed over directly: any size
 
 
 def test_the_udp_source_names_its_sonar_reports_its_buffer_and_bounds_its_queue():
@@ -384,9 +385,9 @@ def test_sync_tolerance_and_search_time_are_keys():
 def test_boards_further_apart_than_the_default_search_need_the_key():
     """Four boards whose clocks start up to 3 ms apart: the default 2 ms search does not find the bursts, 5 ms does."""
     from test_calibration_sync import four_board_ping
-    sonar, rec, truth, ref = four_board_ping()
-    from gpusonar.sim.simulator import _set_board_clocks  # noqa: F401  (the fixture's own clocks are small; shift the samples)
-    s = rec.samples
+    sonar, rec, _, truth = four_board_ping()
+    ref = sonar.config["receive"]["reference"]
+    s = rec.samples                                                # the fixture's own clocks are close; shift one board's samples
     x = s.array.copy()
     shift = int(3e-3 * s.sample_rate)
     rows = [r for r, b in enumerate(rec.metadata.channel_board) if b == 2]
@@ -502,7 +503,7 @@ def test_program_block_queue_is_bounded_and_counts_what_it_drops(tmp_path):
     proc = subprocess.Popen([str(EXE), "--udp", str(port), "--template", _template(tmp_path, over), "stream_queue_mb=0.02", "idle_seconds=3",
                              "bind=127.0.0.1", "bearing_step_deg=1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     time.sleep(1.0)
-    FlankBoardEmulator(recs, 1.0).send(port, pace=0.0).join(timeout=120.0)
+    FlankBoardEmulator(recs, 3.0).send(port, pace=0.0).join(timeout=120.0)
     _, err = proc.communicate(timeout=300)
     assert proc.returncode == 0, f"sonar_live ended abnormally ({proc.returncode}): {err.strip()[-400:]}"   # a crash is not lost data
     last = err.strip().splitlines()[-1]

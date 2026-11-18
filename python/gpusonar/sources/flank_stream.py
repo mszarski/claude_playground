@@ -284,7 +284,7 @@ class FlankUdpSource(Source):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.stream_bytes_per_second = self.assembler.n_channels * self.assembler.sample_rate * int(sample_bytes)
         self.buffer_asked = stream_buffer_bytes(self.assembler.n_channels, self.assembler.sample_rate, int(sample_bytes), buffer_bytes)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.buffer_asked)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, min(self.buffer_asked, 0x7fffffff))
         got = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
         self.buffer_granted = got // 2 if sys.platform.startswith("linux") else got    # Linux reports twice what is usable
         if self.buffer_granted < self.buffer_asked:
@@ -376,9 +376,7 @@ class FlankBoardEmulator:
         self.sample_bytes = int(sample_bytes)
         # Blocks sized from the channel count, so that any array's block fits a datagram (128 samples for 32 channels).
         self.block_samples = int(block_samples) if block_samples else block_samples_for(first.n_channels, self.sample_bytes)
-        if HEADER_BYTES + self.block_samples * first.n_channels * self.sample_bytes > MAX_DATAGRAM:
-            raise ValueError(f"a block of {self.block_samples} samples of {first.n_channels} channels does not fit a UDP datagram: "
-                             f"at most {(MAX_DATAGRAM - HEADER_BYTES) // (first.n_channels * self.sample_bytes)}")
+        self.n_channels = first.n_channels
         self.period = int(round(ping_interval * self.sample_rate))
         self.window_start = int(round(first.start_time * self.sample_rate))
         full_scale = self.records[0].metadata.adc_full_scale
@@ -408,6 +406,10 @@ class FlankBoardEmulator:
         """Send every block to a UDP port from a background thread. `drop` lists block
         numbers to leave out; `pace` > 0 sleeps to that fraction of real time."""
         drop = set(drop)
+        # Blocks of any size can be handed to an assembler (the Sensor Bridge carries 6400 samples); over UDP one must fit a datagram.
+        if HEADER_BYTES + self.block_samples * self.n_channels * self.sample_bytes > MAX_DATAGRAM:
+            raise ValueError(f"a block of {self.block_samples} samples of {self.n_channels} channels does not fit a UDP datagram: "
+                             f"at most {(MAX_DATAGRAM - HEADER_BYTES) // (self.n_channels * self.sample_bytes)} (leave block_samples out)")
 
         def run():
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
