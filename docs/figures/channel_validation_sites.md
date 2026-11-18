@@ -20,26 +20,31 @@ Fitted per Purple recording (one number each, the wind speed, from the Doppler w
 
 ## 2. Dependencies across the Purple arrivals
 
-26 surface arrivals that were not used for a fit (grazing 1.3 to 41.5 degrees, one to two surface bounces).
+47 surface arrivals that were not used for a fit (grazing 1.3 to 41.5 degrees, one to two surface bounces).
 
 | Ingredient | Measured / predicted | |
 | --- | --- | --- |
-| Doppler rms width: 2 f v sin(g) sqrt(bounces) / c / sqrt(1 - exp(-Gamma^2)) | median 0.89, scatter x1.13 (n=24) | closed form, fitted wind |
-| ... grazing under 12 deg | median 0.88, scatter x1.10 (n=13) | |
+| Doppler rms width: 2 f v sin(g) sqrt(bounces) / c / sqrt(1 - exp(-Gamma^2)) | median 0.96, scatter x1.18 (n=45) | closed form, fitted wind |
+| ... grazing under 12 deg | median 0.97, scatter x1.18 (n=34) | |
 | ... grazing over 12 deg | median 0.90, scatter x1.15 (n=11) | |
-| ... 1 surface bounce(s) | median 0.91, scatter x1.13 (n=20) | |
-| ... 2 surface bounce(s) | median 0.82, scatter x1.06 (n=4) | |
-| coherent share exp(-Gamma^2): rms height that the measured share implies / Pierson-Moskowitz height | median 1.40, scatter x1.28 (n=10) | arrivals with a measurable coherent part |
+| ... 1 surface bounce(s) | median 0.92, scatter x1.16 (n=21) | |
+| ... 2 surface bounce(s) | median 0.85, scatter x1.19 (n=5) | |
+| coherent share exp(-Gamma^2): rms height that the measured share implies / Pierson-Moskowitz height | median 1.30, scatter x1.41 (n=20) | arrivals with a measurable coherent part |
 | ... at 200 m | median 1.36, scatter x1.06 (n=6) | |
-| ... at 1000 m | median 1.85, scatter x1.32 (n=4) | |
-| decay time, facet rule (model A through the estimators) | median 0.99, scatter x5.05 (n=23) | |
-| decay time, rule of thumb (model C) | median 0.47, scatter x2.98 (n=19) | |
-| ... grazing under 12 deg (Gamma^2 of order 1): facet; rule of thumb | median 0.59, scatter x7.25 (n=10) | median 0.28, scatter x2.29 (n=6) |
-| ... grazing over 12 deg (Gamma^2 over 7): facet; rule of thumb | median 1.28, scatter x2.11 (n=13) | median 0.75, scatter x3.00 (n=13) |
+| ... at 1000 m | median 1.28, scatter x1.51 (n=14) | |
+| decay time, facet rule (model A through the estimators) | median 1.72, scatter x3.20 (n=36) | |
+| decay time, rule of thumb (model C) | median 0.78, scatter x4.43 (n=27) | |
+| ... grazing under 12 deg (Gamma^2 of order 1): facet; rule of thumb | median 2.52, scatter x3.70 (n=23) | median 1.20, scatter x5.90 (n=14) |
+| ... grazing over 12 deg (Gamma^2 over 7): facet; rule of thumb | median 1.26, scatter x2.12 (n=13) | median 0.76, scatter x2.65 (n=13) |
 | scintillation index, fully rough arrivals with 1 bounce(s) in all | measured median 1.43, range 0.87 to 4.81 (n=4) | model 0.68; K shape for the median: 4.6 |
 | scintillation index, fully rough arrivals with 2 bounce(s) in all | measured median 1.31, range 0.83 to 3.07 (n=7) | model 0.61; K shape for the median: 6.5 |
-| scintillation index, fully rough arrivals with 3 bounce(s) in all | measured median 1.72, range 0.81 to 3.07 (n=6) | model 0.63; K shape for the median: 2.8 |
-| Doppler shape w90/w50 (Gaussian 2.44; Lorentzian about 4 on this axis) | median 2.53, range 1.76 to 3.08 (n=27) | |
+| scintillation index, fully rough arrivals with 3 bounce(s) in all | measured median 1.68, range 0.75 to 3.07 (n=7) | model 0.66; K shape for the median: 3.0 |
+| scintillation index, fully rough arrivals with 5 bounce(s) in all | measured median 0.76, range 0.76 to 0.76 (n=1) | model 1.01; K shape for the median: none needed |
+| scintillation index, fully rough arrivals with 7 bounce(s) in all | measured median 0.78, range 0.71 to 0.85 (n=2) | model 1.84; K shape for the median: none needed |
+| scintillation index, fully rough arrivals with 8 bounce(s) in all | measured median 0.66, range 0.66 to 0.66 (n=1) | model 1.40; K shape for the median: none needed |
+| scintillation index, fully rough arrivals with 9 bounce(s) in all | measured median 0.76, range 0.69 to 0.85 (n=3) | model 5.39; K shape for the median: none needed |
+| scintillation index, fully rough arrivals with 11 bounce(s) in all | measured median 1.02, range 1.02 to 1.02 (n=1) | model 1.59; K shape for the median: none needed |
+| Doppler shape w90/w50 (Gaussian 2.44; Lorentzian about 4 on this axis) | median 2.67, range 1.76 to 3.08 (n=48) | |
 
 ## 3. Scaling with frequency inside the band (Purple)
 
