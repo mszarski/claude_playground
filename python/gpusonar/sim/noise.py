@@ -5,7 +5,13 @@ Ambient spectrum: the widely used four-term empirical fit to the Wenz curves (tu
 shipping, wind, thermal), as given by Coates (1990) and repeated in the underwater
 communications literature. The coefficients were checked against two independent
 copies of the formulas (the ns-3 UAN noise model and arXiv:1801.03641); the original
-book was not consulted. Levels are spectrum levels in dB re 1 uPa^2/Hz.
+book was not consulted. Levels are spectrum levels in dB re 1 uPa^2/Hz. A third open
+print, read 2026-11-18: Hurt, "Effect of wind noise on undersea acoustic network performance
+and design", MS thesis, Naval Postgraduate School (2005), https://hdl.handle.net/10945/1936,
+eqs. (2.7)-(2.9) (wind, attributed there to Wenz 1962; thermal and shipping, attributed to
+Urick 1983) and its appendix listing (turbulence 17 - 30 log10 f): the same constants, f in
+kHz, wind speed in m/s, shipping density 0 to 1 (tests/python/test_literature_models.py).
+Its eq. (2.7) prints "7.5 w" where its own listing has 7.5 w^0.5; the square root is right.
 """
 
 from __future__ import annotations
@@ -45,6 +51,45 @@ def isotropic_coherence(positions, frequency: float, sound_speed: float = 1500.0
     p = np.asarray(positions, dtype=float)
     d = np.linalg.norm(p[:, None, :] - p[None, :, :], axis=2)
     return np.sinc(2.0 * frequency * d / sound_speed)
+
+
+def surface_noise_coherence(positions, frequency: float, sound_speed: float = 1500.0, nodes: int = 96) -> np.ndarray:
+    """Coherence matrix (complex, Hermitian) of noise made at the sea surface, between
+    omnidirectional sensors in deep, uniform water: the Cron-Sherman model. Not used by the
+    noise generator (which takes the isotropic matrix); provided for comparison and for a
+    caller that builds its own.
+
+    The model: sound arrives from above only, with power per unit solid angle proportional to
+    cos(t), t the angle of the arrival from the vertical (a sheet of surface dipoles, no
+    attenuation, no bottom, azimuthal symmetry). For two sensors a distance d apart, the line
+    between them at angle g from the vertical (positions with z positive down, the second
+    sensor deeper when g = 0),
+
+        Gamma = 2 integral_0^1 u exp(i k d u cos g) J0(k d sin g sqrt(1 - u^2)) du,   u = cos t
+
+    (our evaluation, by Gauss-Legendre quadrature). For a vertical pair it is the closed form
+    printed as eq. (4) of Shajahan, Barclay and Lin, "Mapping of surface-generated noise
+    coherence", Front. Mar. Sci. 9:1016702 (2022; CC BY; after Cron and Sherman 1962 and
+    Buckingham 2013),
+
+        Gamma = 2 [sin x / x + (cos x - 1) / x^2] + 2 i [sin x / x^2 - cos x / x],   x = k d,
+
+    whose real part first crosses zero at d = 0.371 wavelengths (tan(x / 2) = x), before the
+    half wavelength of the isotropic sin(x) / x (their eq. (3)), and whose imaginary part is the
+    up-down asymmetry; for a horizontal pair it is 2 J1(x) / x (first zero at 0.61 wavelengths).
+    The same paper shows the model failing in shallow or range-dependent water (the first zero
+    crossing moves by up to 30 %), where the bottom returns sound from below."""
+    from scipy.special import j0
+    p = np.asarray(positions, dtype=float)
+    sep = p[None, :, :] - p[:, None, :]                     # from sensor i to sensor j
+    d = np.linalg.norm(sep, axis=2)
+    k = 2.0 * np.pi * float(frequency) / float(sound_speed)
+    along = k * sep[:, :, 2]                                 # k d cos g
+    across = k * np.sqrt(np.maximum(d**2 - sep[:, :, 2] ** 2, 0.0))
+    x, w = np.polynomial.legendre.leggauss(int(nodes))
+    u, w = 0.5 * (x + 1.0), 0.5 * w                         # nodes on 0..1
+    kernel = np.exp(1j * along[:, :, None] * u) * j0(across[:, :, None] * np.sqrt(1.0 - u * u))
+    return 2.0 * np.sum(w * u * kernel, axis=2)
 
 
 def gaussian_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator,

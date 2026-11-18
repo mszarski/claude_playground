@@ -345,3 +345,104 @@ def searay_bottom_db(grazing, frequency: float, bottom_type):
 
 def searay_bottom_strength(frequency: float, bottom_type):
     return lambda g_in, g_out: 10.0 ** (searay_bottom_db(0.5 * (g_in + g_out), frequency, bottom_type) / 10.0)
+
+
+# --- Surface backscattering from the bubble layer and from wave facets (model `bubble_layer`) -----
+#
+# Opened: Gallaudet, "Shallow water acoustic backscatter and reverberation measurements using a
+# 68-kHz cylindrical array", dissertation (2001), public release, https://hdl.handle.net/10945/11015,
+# Ch. IV Sec. II.C, pp. 124-125, eqs. (7)-(12), which summarises the APL-UW surface model (the
+# handbook, his ref. 59, was not read) and attributes the bubble term to Crowther (1980) and
+# McDaniel and Gorman (1982) as modified by McDaniel (1993). Backscattering strength is
+# 10 log10(sigma_r + sigma_b), roughness plus bubbles:
+#
+#   sigma_b = delta_r sin(t) / (8 pi delta) (1 + 8 b exp(-2 b) - exp(-4 b)),   b = beta_I / sin(t)   (10)
+#       delta = 2.55e-2 f^(1/3) the total damping constant, delta_r = 0.0136 the re-radiation
+#       damping constant at resonance, t the grazing angle, beta_I "the depth-integrated
+#       extinction cross section per unit volume due to scattering and absorption";
+#       saturation, b >> 1:  sigma_b = delta_r sin(t) / (8 pi delta)                              (11)
+#       sparse layer, b << 1: sigma_b = 1.5 delta_r beta_I / (pi delta)                           (12)
+#   sigma_f = sec^4(ti) / (4 pi s^2) exp(-tan^2(ti) / s^2),  ti = 90 deg - t                       (8)
+#       near-specular scattering from wave facets (the high-frequency limit of the Kirchhoff
+#       approximation for Gaussian, isotropic slopes of mean square s^2), for t above about 70 deg.
+#
+# The source says the model "agrees well with data collected during winds of 3-15 m/s and for
+# frequencies of 12-70 kHz, with an estimated uncertainty of +-5 dB for wind speeds < 8 m/s".
+#
+# What the source does not print, and what is used here instead (ours, stated per item):
+#   - the unit of f in delta. kHz is used: it gives delta = 0.08 at 30 kHz and 0.10 at 68 kHz,
+#     the size of the damping of a resonant bubble (the damping of eqs. (7)-(9) above gives
+#     0.07 to 0.12 for 10 to 100 kHz: tested), where Hz would give more than 0.5.
+#   - the empirical law for beta_I against wind speed and frequency. beta_I is the optical depth
+#     of one vertical crossing of the layer, so a surface bounce loses 2 beta_I / sin(t) nepers
+#     of intensity: exactly what the bubble loss laws of this module give. It is taken from one
+#     of them (`extinction`): "apl_1994" (default; beta_I = loss in dB x sin(t) ln(10) / 20, which
+#     for that law does not depend on t) or "hall_novarini" (`bubble_layer_depth_integral`).
+#   - the small-scale roughness term sigma_sc = G(U10) tan^4(t) (their eq. (9); G is "an empirical
+#     function" not printed) and the bubble extinction applied to the roughness terms. They are
+#     left out: between about 30 and 70 degrees, where the source says sigma_sc is fitted, this
+#     model is therefore a lower bound; below about 30 degrees bubbles dominate at these
+#     frequencies and winds, and above about 70 degrees the facets do.
+#   - delta_r = 0.0136 is k a at resonance for a bubble near the surface (2 pi f a_R / c with
+#     Minnaert's a_R f = 3.26 m Hz gives 0.01366: tested), so it is not a free constant.
+BUBBLE_RERADIATION_DAMPING = 0.0136
+
+
+def bubble_damping_constant(frequency: float) -> float:
+    """Total damping constant of a resonant bubble, 2.55e-2 f^(1/3) with f in kHz (comment above)."""
+    return 2.55e-2 * (float(frequency) / 1e3) ** (1.0 / 3.0)
+
+
+def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+                               extinction: str = "apl_1994") -> float:
+    """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from a
+    bubble loss law of this module: "apl_1994" or "hall_novarini"."""
+    if extinction == "apl_1994":
+        t = np.radians(30.0)                              # the law is exactly 1 / sin(t): any angle gives the same
+        return float(apl_1994_bubble_loss_db(t, wind_speed, frequency)) * math.sin(t) * math.log(10.0) / 20.0
+    if extinction == "hall_novarini":
+        return bubble_layer_depth_integral(frequency, wind_speed, sound_speed)
+    raise ValueError(f"unknown extinction {extinction!r}; 'apl_1994' or 'hall_novarini'")
+
+
+def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+                       extinction: str = "apl_1994"):
+    """Backscattering cross section per unit area and solid angle of the near-surface bubble
+    layer, eq. (10) of the comment above, at grazing angles in radians."""
+    t = np.maximum(np.asarray(grazing, dtype=float), MIN_GRAZING)
+    b = bubble_layer_optical_depth(wind_speed, frequency, sound_speed, extinction) / np.sin(t)
+    level = BUBBLE_RERADIATION_DAMPING * np.sin(t) / (8.0 * np.pi * bubble_damping_constant(frequency))
+    # 1 + 8 b exp(-2 b) - exp(-4 b), written so that small b keeps its leading term 12 b.
+    return level * (8.0 * b * np.exp(-2.0 * b) - np.expm1(-4.0 * b))
+
+
+def facet_backscatter(grazing, wind_speed: float):
+    """Near-specular backscattering cross section of the wave facets, eq. (8) of the comment
+    above, with the Cox-Munk mean square slope of `acoustics.mean_square_slope`."""
+    from ..acoustics import mean_square_slope
+    s2 = mean_square_slope(wind_speed)
+    t = np.clip(np.asarray(grazing, dtype=float), 1e-6, 0.5 * np.pi)
+    tan_i = 1.0 / np.tan(t)                               # tangent of the angle of incidence
+    with np.errstate(over="ignore", under="ignore"):
+        return (1.0 + tan_i**2) ** 2 / (4.0 * np.pi * s2) * np.exp(-(tan_i**2) / s2)
+
+
+def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+                            extinction: str = "apl_1994"):
+    """Sea-surface backscattering strength, dB, from the bubble layer plus the wave facets
+    (model `bubble_layer`; comment above): the two terms of the published high-frequency model
+    whose formulas could be read. Stated range of the published model: 12 to 70 kHz, 3 to
+    15 m/s; a warning is raised outside it."""
+    if not 12e3 <= float(frequency) <= 70e3 or not 3.0 <= float(wind_speed) <= 15.0:
+        warnings.warn(f"bubble_layer_surface_db: {frequency / 1e3:g} kHz, {wind_speed:g} m/s is outside the range the "
+                      "published model was compared with data in (12-70 kHz, 3-15 m/s)", stacklevel=2)
+    total = bubble_backscatter(grazing, wind_speed, frequency, sound_speed, extinction) + facet_backscatter(grazing, wind_speed)
+    return 10.0 * np.log10(np.maximum(total, 1e-300))
+
+
+def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+                                  extinction: str = "apl_1994"):
+    """`bubble_layer_surface_db` as the function of (grazing in, grazing out) the reverberation
+    code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""
+    return lambda g_in, g_out: 10.0 ** (bubble_layer_surface_db(0.5 * (g_in + g_out), wind_speed, frequency,
+                                                               sound_speed, extinction) / 10.0)
