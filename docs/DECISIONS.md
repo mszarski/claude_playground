@@ -1592,3 +1592,451 @@ out, +0.8 dB); `popoto_env_gravel_30m` 34 % (cap, 13.6 % left out, +2.4 dB);
 would keep fewer arrivals than they state. So the shipped shallow-water Popoto records
 under-state the multipath by 4 to 12 dB of incoherent level: the owner decides scenario
 by scenario whether to drop `max_order` there.
+
+### D-106 Late reverberation of a basin: an exponential tail only; what `energy_db` and `own_ping_db` mean
+
+`basin_reverberation` (`sim/basin.py`) adds a late, diffuse tail behind each arrival. Only
+one law is implemented, an exponential, with all five keys required and no defaults
+(`energy_db`, `onset_s`, `decay_s`, `coherence_m`, `repeatable`).
+
+- **Why only the exponential.** The law was fitted to the energy still to come against
+  delay at the two hydrophones of the one measured data set in the long-range band (SFI
+  Smart Ocean, 4 to 8 kHz, one fjord, one night; `docs/figures/basin_reverberation_fit.md`).
+  The exponential fits to 0.5 to 0.8 dB rms (1.3 to 2.1 dB at worst) with the same decay at
+  274 m and at 1020 m (0.145 to 0.162 s, 27 to 30 dB per second). A power law (three
+  numbers) and two exponentials (four) fit the 274 m curve better (0.18 and 0.17 dB rms)
+  but with an exponent of 11 to 14, which is an exponential with slight curvature, and at
+  1020 m both converge to the exponential. Two more numbers for 0.4 dB at one hydrophone
+  were not worth it.
+- **`energy_db` is relative to the modelled arrivals, not a level of the basin.** The late
+  field fell 18 dB from 274 m to 1 km where spreading alone gives 11 dB, so one basin level
+  does not describe both hydrophones. The fitted values are -4.2 dB at 274 m and +0.2 dB
+  at 1020 m; a scenario states which it uses.
+- **`own_ping_db` has no default and is labelled a what-if.** It adds the basin's answer to
+  the ping itself. The data were taken 274 m and 1 km from a source, not at one, so they do
+  not give this level. Nothing in the repository measures it.
+- **Assumed, not measured:** the tail's coherence across the array (the two hydrophones
+  were 1.2 km apart), its elevation spread, and that an echo's tail is two one-way legs
+  (2E + E² for a one-way share E).
+
+Tests: `tests/python/test_basin.py`. Limits: an arrival before the window opens leaves no
+tail; the projector's direct sound and the boundary reverberation of `reverb.py` get none;
+the tail has no Doppler.
+
+### D-107 The reach of a facet tail is a stated share of its energy, opt-in
+
+`time_spread.tail_quantile` (default absent: taps span three mean decay times, as before).
+With it the taps span the stated quantile of the tail's energy, computed from the shape's
+own mean and variance; for one rough bounce each tap is an exact interval of delay, so
+energy and mean excess delay are exact to 1e-9 without rescaling. Reason: against the
+measured tail of the one clean surface bounce in the Smart Ocean data the shipped rule read
+1.34, 2.05 and 0.46 times the measurement in three fits (the tail was cut too early for the
+long window); with `tail_quantile: 0.99` the ratios are 0.74, 0.52 and 0.60, an error of
+one kind that a single factor on the unmeasured surface slope would remove
+(`docs/figures/facet_tail_smartocean.md`). Why opt-in: the reach grows 2.1 to 2.2 times, so
+keeping the tap spacing needs 13 taps for six and four times the ray pairs between two
+bounce rays; with `taps` unchanged there is no cost but coarser taps. Proposed and not
+applied: `tail_quantile: 0.99` with `taps: 12` as the default.
+
+### D-108 The coherent surface arrival wanders in phase; the Fresnel limit of 1 rad is ours
+
+`time_spread.coherent_phase` splits the surface's height into long waves that heave the
+reflecting patch and the rest, which scatters as before. The heave is applied as a change
+of the coherent ray's delay and its rate, so the phase is proportional to frequency and
+continuous within a ping and from ping to ping; energy is unchanged to 1e-9. Each wave's
+effect turns from phase into amplitude with the angle
+Θ = ρK²(cos²a/sin²g + sin²a)/2k (range along the path, wavenumber of the wave, its
+direction, grazing angle); waves with Θ above `fresnel_limit` are left to the scattering
+part, because their diffraction orders arrive as separate later arrivals. **The limit of
+1 rad and the expression for Θ are our derivation, not from a paper**; they are tested
+against closed forms (`tests/python/test_coherent_phase.py`), not against data. What
+supports the model: phase variance 0.010 rad² with the measured 0.8 cm height against
+0.0084 measured (a consistency check, since the height was read from the same arrival),
+and the half-band estimator reads 1.42 on the model against 1.57 ± 0.07 measured. Not
+verified: `legs: 1` (one-way sources) through the kernel. Phase is linear within a ping;
+the curvature left out is computed separately in `tools/coherent_phase_study.py`.
+
+### D-109 Depth from multipath timing: a pattern fit on the beam samples, one C++ stage
+
+`chain.multipath_depth` (opt-in; `libs/live` `multipath_depth.cpp`, NumPy reference
+`python/gpusonar/multipath_depth.py`) estimates a target's depth from the delays between
+its direct and surface-reflected echoes.
+
+- **A pattern fit, not arrival picking.** The detector merges arrivals that are close
+  (D-95), so there are no separate arrivals to pick. For each candidate depth the whole
+  two-way pattern (direct-direct, direct-surface, surface-direct, surface-surface) is
+  correlated with the compressed beam samples; one statistic covers resolved and
+  overlapping echoes.
+- **A minimum delay × bandwidth of 3.** Below it the tilt of absorption across the band or
+  a tapered replica fits the pattern as well as a second arrival does: a single 31 dB echo
+  passed in a third of pings when 1 was allowed.
+- **Carrier fringes within a ping, the envelope along a track.** Depth and surface move by
+  more than a fringe between pings, so pings are combined on the envelope only.
+- **One C++ stage for both chain engines**, writing its own report members, so the fields
+  cannot diverge between engines.
+- **The gradient prior goes into the depth's sigma**, and is treated as one error shared
+  with the stacked-row depth when the two are fused. The surface echo's delay is not
+  independent of the profile: a mean gradient g stretches it by about
+  1 + r²g/(2c(z_own + z_target)).
+- **A bottom that is not modelled is flagged (`bottom_unmodelled`), not guessed.**
+
+Tests: `tests/python/test_multipath_depth.py`, `test_raytrace.py`. Numbers:
+`RESULTS.md`, "Depth from multipath timing".
+
+### D-110 Water that changes with range is Bellhop's own 2-D field, measured from the sonar
+
+`environment.profiles_by_range` gives sound-speed profiles on one depth grid at ranges from
+the sonar. They go to Bellhop as its SSP option `Q` with a `.ssp` file; nothing is
+approximated on our side. Range is horizontal distance from the source of each eigenray
+call, the same on every bearing, because that is how the provider's bathymetry section was
+already defined and a second convention would be worse than a limited one. The cost: the
+water is rings about the sonar and moves with the vehicle; a front lying across a map, and
+horizontal refraction, are not modelled. The first profile must be at range 0 and is the
+local profile. No value is filled in: differing depth grids, a grid that does not reach the
+bottom, or ranges that do not increase are errors. Beyond the last range the last profile
+holds, as a bathymetry's last depth does. With one profile the Bellhop input and the
+records are byte-identical to before. Tests: `tests/python/test_ssp_range.py` (closed forms
+for a constant range gradient and a front). The file format was read from the Acoustics
+Toolbox documentation and reader (GPL; read for the input format only, nothing copied, run
+as a separate process as before).
+
+### D-111 The record carries the local sound speed; everything without a path uses the local profile
+
+The record schema is unchanged: one sound speed, the local profile at the sonar's depth,
+which is what the vehicle would measure. Apparent positions of eigenrays, the boundary
+speeds of time spreading, the reverberation strength laws, noise coherence and absorption
+use the local water. The provider's delay correction from a grid node to a field point uses
+the speed at the point's own range. Tiers without a profile (`image_source`, `free_field`)
+use the one local speed and warn that the change with range is not simulated. The depth
+planner plans with the local profile and says so in its output. The provider's
+rough-surface loss takes the surface grazing angle by Snell's law from the launch angle
+through the local profile, which is not valid in range-dependent water; the three shipped
+`ssp_*` scenarios therefore reflect eigenrays from a flat surface until that is replaced.
+
+### D-112 One ray calculation for both depth estimators, as a fan; the stepped ray stays the default
+
+`libs/live` `raytrace.hpp` traces closed-form arcs through a layered profile and reads one
+fan of rays at the ranges wanted; arrivals at any depth come from cubic Hermite
+interpolation along the wavefront (dt/dz = s/c, dt/dr = p), and where neighbouring rays
+differ in reflection history the launch angle is bisected. Reason: the multipath estimator
+needs the arrival pattern at thousands of candidate depths, and one fan gives all of them
+with times good to nanoseconds in isovelocity water. The elevation stage can use the same
+code (`elevation.ray_method: arcs`), but **the stepped ray remains its default**, because
+unifying outright would move existing depths by up to 2 m. Multipath depth through rays is
+`multipath_depth.rays: true`. Tests: `test_raytrace_cpp.py`, `test_refraction_rays.py`
+(against an independent midpoint integration and against Bellhop).
+
+### D-113 A depth is not searched where no direct and surface path exist; the reason is stated
+
+With rays, a candidate depth that has no direct or no once-surface-reflected path on
+either leg has no pattern and is not searched; a detection with no such depth reports
+`no_direct_path` or `no_surface_path` instead of a depth. Reason: the flat-boundary pattern
+fitted 384 m with a 1500 m sigma at 12 km in a water where no surface path exists. A depth
+found while part of the column is in shadow is flagged (`multipath_note: shadow`, with the
+ambiguity flag and the shadowed interval), because a target there is heard by other paths.
+`multipath_depth.withhold_flagged: true` turns any flagged depth into no depth, with the
+note as the reason and the fitted value kept as `multipath_candidate_m`.
+
+### D-114 The coverage picture: its statistic, detection from a table, no budget defaults
+
+`chain.coverage` (one C++ class for both engines; `python/gpusonar/coverage.py`,
+`tools/coverage_map.py`) reports, per target class, the greatest range of detection, the
+detection probability at listed ranges, where the direct path ends, blind intervals and
+nulls, and the own depth that would gain most.
+
+- **Statistic.** The direct and once-surface-reflected paths add as pressures (their
+  interference is deterministic); everything that touched the bottom, or the surface
+  twice, and what roughness removes from the coherent path add as power; all through the
+  compressed pulse, peak over delay. This equals `lloyd.py`'s peak figure in open water
+  (0.13 dB at most) and is cautious in ducts, where bottom paths are limited to three
+  bounces.
+- **Detection from a table** made at the first ping by `live.detection_probability`. No
+  threshold is typed, and the C++ needs no chi-square code.
+- **The budget numbers have no defaults in the chain.** Levels come from
+  `buildspec.budget`; the member says `error` when anything is missing.
+
+Not in it: change of the water or bottom with range, a rough bottom, caustic phase,
+diffraction into shadows, reverberation as a limit on detection, the target's aspect.
+
+### D-115 The profile ensemble is a set of hypotheses with a least and a greatest answer
+
+`elevation.profile.ensemble: {gradients_per_s, extent_m, sigma_members}` continues the
+unsampled water with each configured gradient over each configured extent and reports the
+span of the answers (`depth_ensemble_m`, `depth_multipath_ensemble_m`,
+`max_range_ensemble_m`). No probability is claimed, and there are no defaults for the
+gradients and extents: they are statements about a site. Reason: a single tilt about the
+vehicle cannot stand for a thermocline the vehicle has not seen. **It does not solve the
+problem it was built for:** at 3 km the span contained the truth in no more cases than two
+sigma did (`RESULTS.md`, "Depth by rung").
+
+### D-116 The elevation search is limited to where rays can arrive from
+
+`elevation.sector_from_rays: {bounces, margin_deg, max_depth_m}`: each elevation of the
+search sector is traced back through the profile the chain holds and searched only if a
+ray arrives from it. Reason: the three-row static array (rows at -0.75, -0.2, +0.75 m) has
+far lobes only 4.2 dB down; in the deepening-thermocline scenario several arrivals shared
+a range cell and a lobe at -31 degrees beat the true arrivals on every ping, the bearing
+correction moved the detection by 1.1 degrees and no track was confirmed. The alternative,
+a prior on the lobe, would need a water depth; this removes what cannot arrive and needs
+none. `sector_from_depth` with the water depth given also fixes that case; raising
+`ambiguity_db` only flags it.
+
+### D-117 The link budget's threshold is the chain's own detector's
+
+The budgets used a typed 13 dB at the summed map with a closed-form row gain on top. The
+shipped detector needs 15.2 to 15.6 dB of one row's SNR for a detection probability of 0.5
+on one ping, so every margin was 2.1 to 2.7 dB kind. The budget now states one row's SNR
+and asks the detector what it needs (`buildspec.detection`, from
+`live.budget_threshold_db` on the build's template record and deployment settings). The
+probability is a spec field, `operation.detection_probability`, default 0.5; 0.9 is quoted
+beside it. Rejected: a new typed number (it would drift again), and keeping a row gain in
+the budget (the detector's figure already has the rows, so it would count twice).
+Consequences: one long row at 197 dB has -1.0 dB at 12 km (detection probability 0.24),
+two rows +1.5 dB (0.89), three +3.0 dB (0.99); 32 hydrophones in one row need 198 dB, not
+195 dB. Measured against the chain, the budget is still 0.45 dB kind at 12 km (sweep taper
+with the absorption slope 0.26 dB, noise slope 0.13 dB, row gain across the band 0.06 dB);
+these are stated and not added. `SonarEquation.from_sonar` now takes the array's gain
+against isotropic noise, which closes the limit noted in D-103. The general table of
+`DESIGN.md` Sec. 5 for the imaging sonars keeps a 13 dB line, now named
+`REFERENCE_SNR_DB` and described as a reference line, not a detector's threshold.
+Tests: `test_buildspec.py`, `test_design.py`, `test_lloyd.py`.
+
+### D-118 Stacked-row deployment files search only where rays can arrive from (owner approved)
+
+The owner approved the three deployment defaults D-118 to D-120 ("Sure I accept your
+recommendation"). `elevation.sector_from_rays: {}` is written by the generator for every
+build of two or more rows and is in the hand-written rehearsal file. Reason: D-116's case.
+With the key the three-row static array in the deepening thermocline reads +1.6 to +2.0
+degrees, bearing error -0.08 degrees, and tracks from ping 3, where it read -31 degrees
+and tracked nothing. Fjord, front and rehearsal cases are unchanged to the printed digits;
+per-ping time is unchanged. **Known cost:** at 12 km (`popoto_12km`, Bellhop) more pings
+are flagged elevation-ambiguous (two rows 3 of 6 becomes 5 of 6, three rows 1 of 6 becomes
+3 of 6) and the two-row track depth moved from 2.1 m to 34.5 m for a target at 4 m; the
+stated depth sigma there is about 2600 m in both states, so neither depth carries
+information. **It does not fix** the two-row face self-test (`STATUS.md`, open items).
+
+### D-119 Multipath depth is deployed through rays, with flagged depths withheld (owner approved)
+
+Any build that enables `multipath_depth` gets `rays: true, withhold_flagged: true`
+(`buildspec.MULTIPATH_DEPTH_DEPLOYED`), with the spec's own keys laid over. No shipped
+build enables it, so this lives in the generator only. Reason: the flat pattern returned
+the water depth (30.3 ± 3.5 m) for a 15 m target in 30 m of water, a wrong depth with a
+small sigma. Consequence: in that case no depth is reported at all (reason `window`); why
+the ray mode answers `window` in 30 m of water has not been investigated.
+
+### D-120 Coverage is on for the face and vehicle files; water depth and bottom are required (owner approved)
+
+A build spec names its site (`operation.coverage.environment`); the generator takes water
+depth, bottom and wind from it and refuses a site lacking any. A chain given `coverage`
+without `water_depth_m` or `bottom` does not start, in Python or in C++
+(`coverage_site_missing`). Reason: without them the picture is the deep-water one, and it
+said a ship that the chain detects at 12 km in 100 m over sand could not be seen.
+`water_depth_m` is a fallback for pings that carry no depth; what the ping carries wins
+(the report says `water_depth_from: site` when the fallback was used). The shipped site is
+illustrative (`shelf_100m_sand`: 100 m over sand, 5 m/s wind) and flagged `unconfirmed`:
+the real site must replace it before a deployment. Coverage is on in the three face specs
+and the hand-written `popoto_vehicle` and `popoto_elevation_rehearsal` files; the test AUV
+and the static builds have none (no listed environment is 30 m deep). Cost: about 0.6 s on
+the first ping, then nothing until it refreshes. Tests: `test_deployment_defaults.py`,
+`test_coverage.py`.
+
+### D-121 Addendum to D-102 and D-103: the loosened limit in the thinned `fls_170k_traffic` test
+
+After source levels became RMS and the baseband noise took its spectrum, the anchored
+boat's track speed in the thinned test form of `fls_170k_traffic` read 1.9 m/s where it had
+read 0.10 m/s, and the test's limit was loosened from 0.6 to 2.5 m/s. The cause is not a
+level effect alone: the 9 m hull gives two clusters 4.2 m apart and so two tracks; on the
+second of four pings the weak cells between them cross the threshold and the two become
+one detection at their centroid; on the third ping the two tracks hold each other's
+cluster, and 4.2 m in 2.25 s reads 1.9 m/s. Either change alone (the 3 dB of level, or the
+new noise) tips the cells between the clusters over the threshold. A fix is proposed and
+**not applied**: merge detections closer than the tracker can keep apart before tracking
+in `run_fls_transit`, as the long-range chain does (D-95). It changes detection and track
+counts in every FLS scene and needs the full gallery re-run against `gallery.json`. The
+loosened limit stands until then and is the owner's call.
+
+## Choices made between D-82 and D-105 that were recorded only in hand-back reports
+
+These were made while D-83 to D-105 were being written and reached the code and the
+other documents, but not this file. They are recorded here from the reports of the work
+packages, in the order of the work. Where a later decision changed one, that is said.
+
+### D-122 Device stages are templates over an executor; reverberation and beamforming on the device
+
+- Device stages that are sequences of whole-array steps (the batched reverberation, the
+  far-field and MVDR beamformers) are templates over an executor
+  (`sonar/dsp/exec_host.hpp`, `exec_cuda.hpp`), so the device formulation is tested on the
+  host; the reference host code stays untouched and bit-identical.
+- Reverberation on CUDA runs from the random deviates on; NumPy still draws them (D-61),
+  now on threads by aligning jump-ahead chunks on the true sequence, bit for bit.
+- MVDR on the device accumulates covariances in double precision (the reference uses
+  single); a covariance that is not positive definite sends the whole call to the host.
+
+### D-123 One-way sources, near-specular removal, noise statistics, the bubble-loss law
+
+- **One-way sources (`sources:`).** Pulses use the echo kernel through a constant 1 m
+  first leg that moves with the source: exact, no C++ change, CUDA for free. Continuous
+  signals (noise, tonals, files) use a NumPy streamer on both engines. A passive capture
+  is `pings.transmit: false`. The relay point that stood in for a one-way source in
+  `sst_asiaex` (D-78) is retired.
+- **`exclude_specular` is opt-in and bistatic only.** Double counting exists only when the
+  transmitter's pulse is also a one-way source over time-spread bounces.
+- **Noise statistics.** K-distributed noise per sample as TR 0702 has it, and as a compound
+  texture with a correlation time, common across hydrophones by default because that
+  preserves the coherence matrix. Alpha-stable noise is white, its level defined by scale.
+- **Bubble loss.** `apl_1994` is adopted on the owner's ruling as the recommended law
+  (the formulation as arlpy and UnderwaterAcoustics.jl implement it, with their
+  attribution); the `hall_novarini` laws are kept as physical models and the difference is
+  recorded as model disagreement.
+
+### D-124 Noise fitted to a recording; validation against measured channels
+
+- **Fitted noise** uses the closed-form spectral factor of the Welch cross-spectral matrix
+  rather than an optimiser, so the estimator's variance is known. Heavy tails are a
+  texture on white innovations filtered in the time domain, so spectra and coherence do
+  not depend on the tail. Signals are excluded by rule (long or periodic events, lines).
+- **Channel validation** fits one free parameter (the wind) to one measured number per
+  recording and tunes no option; the comparison is made through identical estimators. The
+  data sets state no sea state, so every sea parameter is an assumption.
+
+### D-125 The projector's direct sound and receiver overload in the simulator
+
+- The direct sound is a one-way source at the projector's true position, so near-field
+  geometry per hydrophone, clocks, sampled waveforms and both engines come from the tested
+  kernel path. An omnidirectional projector is the pessimistic choice until a baffle
+  pattern is measured.
+- The overload model is behavioural and has **no hardware defaults**: two limiting stages
+  separated by the coupling capacitor, because which stage clips first depends on where
+  the gain sits and the capacitor is what turns a clipped burst into a long offset.
+- The front end is run from the transmit instant, not from the opening of the window.
+- Truth about overload stays out of the record; a reported gain switch uses the existing
+  gain-ramp fields. The schema is unchanged.
+
+### D-126 The surface image in the link budget, own depth, target classes
+
+- The surface-reflected path is a factor on the free-field budget that depends on both
+  depths, range, band, roughness and bubbles, not a fixed number of dB; detection uses the
+  peak of the compressed coherent echo (`lloyd.py`).
+- The rms wave height is its own input; the wind law is only its default.
+- The depth planner recommends on the worst margin over a target class's depths at the low
+  end of its target strength.
+- Target classes and environments are planning inputs. They change no generated sonar or
+  deployment file; each is marked assumed or illustrative, and the validator warns until
+  confirmed. Every target strength in the repository is a placeholder.
+- The platform's depth limit is 500 m (the owner); recording raw samples and a GPU for
+  stacked rows are the defaults in the build specs (the owner's decisions).
+
+### D-127 Build specs, row modules and the staged Popoto builds
+
+- Stage configurations are generated from build specs; hand edits to generated files are
+  not kept. One source per build, checked by a test (`--check-shipped`).
+- `unconfirmed` flags accumulate through `base:`; only `confirmed` removes one.
+- A row module is a concept of the spec: the long row for the static array and the face,
+  the test AUV's short row the exception; "a smaller array" on the face means fewer rows.
+- The static array's rows sit at the face's heights (outer rows ±0.75 m, middle row at
+  -0.20 m, the lowest wideband repeat for the 1.5 m baseline). This supersedes the first
+  study's ±0.90 m and -0.35 m, which were for another geometry. No frame dimensions were
+  given; matching the face makes the frame a rehearsal of the face.
+- A static frame without a tilt sensor carries `roll_sigma_deg: 1.0`, a placeholder that
+  makes the reported sigma own up to an unknown tilt.
+- The projector is placed on the face at [4.0, 0, 0], a placeholder.
+- The receive window is stated per sonar file from the pulse's blind range.
+- Self-test tolerances: 3 m in range in free field, 6 m with boundaries; 0.7 degrees of
+  elevation with boundaries. The `popoto_face_2x32` rehearsal self-test is left failing
+  rather than tuned (`STATUS.md`, open items).
+- The prototype keeps 4 to 6 kHz with a 0.1 s pulse: the same band and chain as the full
+  face; a 1 s pulse would hide everything inside 750 m.
+
+### D-128 Stacked rows: how elevation is estimated and reported
+
+- A repeat of the elevation pattern within 1 dB of the best is never trusted, and further
+  repeats are weighed against noise. With two rows the chain therefore reports a list of
+  possible elevations (the rows 1.5 m apart repeat every 11.5 degrees) unless water depth
+  rules the others out.
+- The possible elevations go to the track; tracks do not start on a guess.
+- An ambiguous elevation never moves a detection: the bearing correction is applied only
+  to unambiguous elevations.
+- Attitude is taken at the middle of the received pulse.
+- Refraction is a sigma term kept out of the track filter: it is systematic, so averaging
+  pings must not shrink it.
+
+### D-129 Stage 2 of the Popoto chain: decimation, the sound-speed ladder, blanking, navigation
+
+- The synchronisation reference lies above the acoustic band, so when the chain decimates
+  first only the stretches holding the two reference bursts are kept raw and the
+  correction is applied at baseband. The default decimation factor is 17; 25 costs 0.2
+  degrees of bearing.
+- The sound-speed ladder (`elevation.profile`: supplied, built, family, local, prior) keeps
+  its state in the record's existing fields and `extra_json`, so a replay equals the live
+  run with no schema change.
+- The profile's error is treated as one tilt about the vehicle, capped by the gradient
+  prior, with the depth sigma as the linear sensitivity to it. The first form (the spread
+  of two fully tilted rays) under-reported once rays bounced (167 m of error against a 5 m
+  sigma) and was replaced.
+- There is no default for the sound-speed sensor's accuracy: it is a datasheet number, and
+  the `built` rung refuses to work without it.
+- A board timed from one reference burst is flagged and the ping is not `ok`: its drift is
+  unknown.
+- Blanking crops the map rather than zeroing it: zeros would bias the CFAR's training.
+
+### D-130 Passive tonal analysis (Goertzel lines and DEMON)
+
+- Tonal analysis is a separate stream analyser hooked into the passive report, not part of
+  the passive bearing estimate: it needs its own time scale (1 s blocks, 8 s segments
+  against 0.26 s frames) and state across stretches. Frames without a result are
+  byte-identical to before.
+- A Goertzel line on beams is a Goertzel filter on each hydrophone followed by narrowband
+  phase steering. Frequency comes from a two-bin Hann interpolation in one pass (1.7 to
+  1.8 times the Cramér-Rao bound measured); phase is reported at the middle of the block.
+- The DEMON envelope is the band power of short Hann blocks in the frequency domain, where
+  steering is cheap. Rows are steered separately and their powers added. A line is
+  attributed to the bearing where it is strongest.
+- The threshold follows from a false-alarm rate (default 1e-6, because one result has
+  about 50,000 cells). Shaft rate is the highest fundamental explaining at least 0.9 of
+  the best score; the blade count is a heuristic and flagged as one.
+- There is no CUDA path. The formulation was read from arlpy and SignalAnalysis.jl and
+  re-implemented (`OPEN_SOURCE.md`).
+
+### D-131 Hard-coded assumptions: what a forgotten value does
+
+Following `docs/HARDCODED_AUDIT.md`:
+
+- Facts with no physical default (sound speed, boresight, reflection coefficients,
+  sediment, bounce count, solver scales) are NaN or unset in the C++ structs and rejected
+  at entry points. A forgotten value is an error, not a silent 1500 m/s or 6 dB a bounce.
+- Fixed capacities either raise or report (absorption table coverage, arrival passes, gain
+  clamp, image-series cut). A caller who states arrival passes gets an error; default
+  passes are raised with a warning.
+- Sizes the chain derives from the sonar are a standing value with a floor from the sonar
+  (`libs/live` `derive.hpp`).
+- A report too long for a datagram is split into complete lines, each marked
+  `"part": [k, n]`.
+- The sample word length of the board stream stays configuration until a change of the
+  block header is approved (an open question for the owner).
+- A track is called multipath only against a track already classed as an object.
+- The chain's 2 m range cell of mean power, kept at the time of this audit, was
+  superseded by the multiscale detector (D-93).
+
+### D-132 Sediment table and literature models
+
+- Reflection-only sediment rows use values printed in an open MIT package
+  (UnderwaterAcoustics.jl) with that package's attribution to TR 9407; the handbook itself
+  stays unread. Rows keep the source's units and reference water and the loader forms the
+  ratios. Backscatter models refuse rows without roughness and volume parameters rather
+  than borrow them from another sediment.
+- Scattering parameters are the published grain-size defaults, applied at the grain size
+  an open thesis table gives each name: class defaults, not site values, each parameter
+  with its provenance. `medium_sand` keeps its source's volume parameter (D-90).
+- Rock and pebbles get a Lambert parameter from measurements, not a forced fluid fit
+  (D-88). The sandy-gravel sound speed is corrected on three independent prints against
+  one.
+- `sea_state` is resolved once in `run_scenario`; whole states only; a conflict with
+  `wind_speed` is an error. Thorp absorption is TR 0702's two-term form and warns above
+  100 kHz.
+- The bubble-layer surface backscatter model takes its optical depth from our loss laws
+  and omits the small-scale roughness term, because those two pieces of the published
+  model are not printed anywhere open; it is documented as a lower bound between 30 and 70
+  degrees (D-87).
+- `small_scale_kh = 0.5` is now cited to a published criterion rather than "our choice".
+- No default was changed on literature evidence alone; the candidates are in
+  `REFERENCES.md` Sec. 11 for the owner.
