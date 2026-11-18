@@ -215,7 +215,7 @@ def test_clocks_from_the_kept_stretches_are_the_full_rate_estimate_and_the_baseb
         sync.synchronise(d, reference)
 
 
-def strong(report, floor=25.0):
+def strong(report, floor=30.0):   # well clear of the detector's threshold: a sidelobe at 25 dB in one path can be 24.9 in the other
     return sorted((d for d in report["detections"] if d["snr_db"] is not None and d["snr_db"] > floor), key=lambda d: -d["snr_db"])
 
 
@@ -242,8 +242,8 @@ def assert_same_results(full, dec, n_boards):
             for key in ("path", "elevation_ambiguous"):
                 assert db.get(key) == da.get(key)
             compared += 1
-        ta = sorted((t for t in a["tracks"] if t["mean_snr_db"] > 25.0), key=lambda t: t["range_m"])
-        tb = sorted((t for t in b["tracks"] if t["mean_snr_db"] > 25.0), key=lambda t: t["range_m"])
+        ta = sorted((t for t in a["tracks"] if t["mean_snr_db"] > 30.0), key=lambda t: t["range_m"])
+        tb = sorted((t for t in b["tracks"] if t["mean_snr_db"] > 30.0), key=lambda t: t["range_m"])
         assert [t["kind"] for t in ta] == [t["kind"] for t in tb]
         for x, y in zip(ta, tb):
             assert np.hypot(x["x"] - y["x"], x["y"] - y["y"]) < max(1.0, 1e-3 * x["range_m"])     # 0.06 degrees of bearing
