@@ -1262,3 +1262,32 @@ rule. No number changes. Cost of the choice: the row sits 0 to 2.5 dB below its
 neighbours' trend (most at 6 kHz and 45 degrees). The row's provenance and note now say
 so; `sigma2: 0.002` beside the name gives the rule's value. Limit: literature only, one
 print; a second print of the table would settle it (`REFERENCES.md` wanted list).
+
+### D-91 The gain step derives absorption from the record by default
+
+`{stage: tvg}` of a chain file and `recon.tvg_parameters` now take absorption from the
+record unless told otherwise: Francois-Garrison at the record's centre frequency for the
+temperature and salinity in `record.environment` (`absorption: auto`, the default). The
+law was `40 log10 R` with no absorption, which is right at a few kHz and silently wrong
+for the imaging sonars (`HARDCODED_AUDIT.md` K-4). The owner was shown the numbers and
+answered "Take your recommendations". Evidence, at the far end of each sonar's receive
+window in sea water at 12 deg C and 35 PSU: the old law was short by 51.4 dB for `fls_330k`
+(307 m, 0.084 dB/m), 49.2 dB for `fls_170k` (465 m), 46.6 dB for `fls_300k`, 25.4 dB for
+`fls_120k`, 21.9 dB for `fls_750k` (50 m), 34.1 dB for `sas_minsas120` (204 m), 17.8 dB
+for `sas_auv`, and 0.0 dB for the 20 kHz sub-bottom sonar.
+A record that states no temperature and salinity (every record made before this) does not
+fail: it gets no absorption and one `RuntimeWarning` per process that names the missing
+fields. `absorption: record` asks for the derivation by name and raises on such a record;
+`absorption: none` is the old law exactly (a test compares the samples with the bare C++
+call); a number is dB/m one way.
+What did not change: `core.apply_tvg` itself (C++ and binding) still defaults to no
+absorption, because the library has no model of the water; the Holoscan `PrepareOp`, whose
+gain is off unless `tvg_db_per_decade` is given, calls it directly and keeps the old law.
+The 120 dB clamp stays as it is (a hardware question of its own): with absorption in the
+law it is reached inside the window of `fls_120k` (273 m), `fls_170k` (237 m), `fls_300k`
+(188 m), `fls_330k` and `sas_minsas120` (179 m), and the step's log entry says where and by
+how much.
+Consequence for shipped material: none. No file under `configs/chains`, `configs/deploy`
+or `configs/scenarios`, no tool and no gallery scenario has a `tvg` step (searched for
+`stage: tvg` and `apply_tvg`); the gallery applies its own display gain. A user chain with
+a bare `{stage: tvg}` changes by 2 alpha R dB at range R.
