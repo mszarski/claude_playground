@@ -62,7 +62,7 @@ def main(argv=None) -> int:
         plans = {}
         for env in envs:
             try:
-                plans[env["name"]] = depthplan.plan(d, env, classes, range_of_interest=range_m, ranges=ranges, threshold_db=13.0, statistic="peak_db", cache={}, keep_grid=True)
+                plans[env["name"]] = depthplan.plan(d, env, classes, range_of_interest=range_m, ranges=ranges, statistic="peak_db", cache={}, keep_grid=True)
             except Exception as err:                                           # noqa: BLE001
                 plans[env["name"]] = {"skipped": f"{type(err).__name__}: {err}", "environment": env}
         lines += [f"## {build}, target of {ts:g} dB between 5 and 40 m at {range_m:g} m", ""]

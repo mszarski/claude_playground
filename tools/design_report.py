@@ -61,6 +61,11 @@ TARGET_NOTE = {"fls_120k": "small boat hull", "fls_170k": "small boat hull", "fl
                                 "array gain includes the pings of the synthetic aperture at full range",
                "popoto_array": "ship-sized target", "popoto_long_range": "ship-sized target"}
 WIND = 5.0
+# The reference line of Sec. 5's general budgets (imaging sonars: one cell of seabed against noise; the 27.5 kHz array):
+# a conventional figure for "visible above noise", NOT a detection threshold: no detector of the suite is behind it.
+# The long-range array's detection is not judged by it: its thresholds, margins and detection probabilities come from
+# the chain's own detector (gpusonar.buildspec.detection) and are in the Popoto sections.
+REFERENCE_SNR_DB = 13.0
 
 
 def sonar_for(name: str) -> SonarModel:
@@ -126,7 +131,7 @@ def derive(name: str) -> dict:
         "noise_spectrum_db": noise, "target_strength_db": TARGET_STRENGTH_DB[name],
         "array_gain_db": float(eq.array_gain()), "processing_gain_db": float(eq.processing_gain()),
         "snr_at_max_range_db": float(eq.snr(r_max)),
-        "range_for_13_db_m": float(eq.detection_range(13.0)),
+        "range_for_13_db_m": float(eq.detection_range(REFERENCE_SNR_DB)),
         "boards": len(s.boards),
     }
     if s.mode == "sas":
@@ -157,7 +162,7 @@ def requirements(D: dict) -> list:
             f"{d['centre_frequency_khz']:.0f} kHz", abs(d["centre_frequency_khz"] - f) < 0.5)
         add(f"FLS-{tag}-2", f"Range {rng:.0f} m", f"configs/sonars/{name}.yaml: receive.window.range",
             f"{d['max_range_m']:.0f} m; SNR there {d['snr_at_max_range_db']:.0f} dB (link budget)",
-            abs(d["max_range_m"] - rng) < 0.5 and d["snr_at_max_range_db"] > 13.0)
+            abs(d["max_range_m"] - rng) < 0.5 and d["snr_at_max_range_db"] > REFERENCE_SNR_DB)
         add(f"FLS-{tag}-3", "120 degrees horizontal field of view", f"configs/sonars/{name}.yaml: fov.horizontal_deg",
             f"{d['element_fov_az_deg']:.0f} degrees; no grating lobe within +/-{d['grating_lobe_free_steering_deg']:.0f} degrees",
             abs(d["element_fov_az_deg"] - 120.0) < 0.5 and d["grating_lobe_free_steering_deg"] >= 60.0)
@@ -208,12 +213,17 @@ def requirements(D: dict) -> list:
     d = D["popoto_long_range"]
     study = json.loads((ROOT / "docs" / "design" / "popoto_range_study.json").read_text())
     best = study["fixed_count"][str(d["elements"])]
+    from gpusonar import buildspec as bs
+    face = {n: bs.performance(bs.derive(bs.load(n))) for n in ("popoto_face_1x32", "popoto_face_2x32", "popoto_face_3x32")}
+    at12 = "; ".join(f"{p['detection']['rows']} row{'s' if p['detection']['rows'] > 1 else ''}: needs {p['detection']['threshold_db']:.1f} dB, margin {p['margin_db']['ship']['12000.0']:+.1f} dB, "
+                     f"detection probability {p['detection_probability']['ship']['12000.0']:.2f}" for p in face.values())
     add("POP-3", "Frequency and source level that take the Popoto array to 12 km",
         "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)",
-        f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones, {d['pulse_ms'] / 1e3:.0f} s pulse: "
-        f"{d['_eq'].snr(12000.0):.0f} dB at 12 km with spherical spreading (study: {best['source_level_db']:.0f} dB at "
-        f"{best['best_frequency_hz'] / 1e3:.1f} kHz for 13 dB)",
-        d["_eq"].snr(12000.0) >= 13.0 and d["max_range_m"] >= 12000.0)
+        f"{d['centre_frequency_khz']:.0f} kHz, {d['source_level_db']:.0f} dB, {d['elements']} hydrophones a row, {d['pulse_ms'] / 1e3:.0f} s pulse: "
+        f"{face['popoto_face_1x32']['row_snr_db']['ship']['12000.0']:.1f} dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of "
+        f"{face['popoto_face_1x32']['detection']['probability']:g} on one ping: {at12} (study: {best['source_level_db']:.0f} dB at "
+        f"{best['best_frequency_hz'] / 1e3:.1f} kHz for {study['snr_db']:.1f} dB in one row). Met by the recommended three rows; one row alone is {-face['popoto_face_1x32']['margin_db']['ship']['12000.0']:.1f} dB short",
+        face["popoto_face_3x32"]["margin_db"]["ship"]["12000.0"] >= 0.0 and d["max_range_m"] >= 12000.0)
     envs = sorted(n for n in list_configs("scenarios") if n.startswith("popoto_env_"))
     seen = set()
     for n in envs:
@@ -380,8 +390,8 @@ def draw_link_budgets(D, path):
                             (d["max_range_m"], d["snr_at_max_range_db"]), textcoords="offset points", xytext=(8, 8), fontsize=8)
             ax.set_xlabel("range (m)")
         ax.set_xscale("log")
-        ax.axhline(13.0, color=MUTED, lw=0.9, ls="--")
-        ax.text(ax.get_xlim()[0] * 1.05, 14.0, "13 dB", color=MUTED, fontsize=8)
+        ax.axhline(REFERENCE_SNR_DB, color=MUTED, lw=0.9, ls="--")
+        ax.text(ax.get_xlim()[0] * 1.05, REFERENCE_SNR_DB + 1.0, f"{REFERENCE_SNR_DB:g} dB (reference line, not a detector's threshold)", color=MUTED, fontsize=8)
         ax.set_ylabel("output SNR (dB)")
         ax.set_title(title, loc="left", fontsize=10)
         ax.set_ylim(-20, 90)
@@ -546,6 +556,18 @@ def _compute_options_text() -> str:
     return out
 
 
+def _face_12km():
+    """(design detection probability, 'one row ... ; two rows ...; three rows ...', one row's SNR) for the ship at 12 km on the face builds."""
+    from gpusonar import buildspec as bs
+    words = {1: "one row", 2: "two rows", 3: "three rows"}
+    out, pd, snr = [], None, None
+    for n in (1, 2, 3):
+        p = bs.performance(bs.derive(bs.load(f"popoto_face_{n}x32")))
+        pd, snr = p["detection"]["probability"], p["row_snr_db"]["ship"]["12000.0"]
+        out.append(f"{words[n]} need {p['detection']['threshold_db']:.1f} dB and have {p['margin_db']['ship']['12000.0']:+.1f} dB of margin (detection probability {p['detection_probability']['ship']['12000.0']:.2f})")
+    return pd, "; ".join(out), snr
+
+
 def _surface_line() -> str:
     """One line for the trade space from the depth plan (docs/design/popoto_depth_planner.json)."""
     path = ROOT / "docs" / "design" / "popoto_depth_planner.json"
@@ -558,7 +580,7 @@ def _surface_line() -> str:
         if "classes" in pl:
             c = pl["classes"]["ship"]
             out.append(f"{pl['rows']} row{'s' if pl['rows'] > 1 else ''}: {c['at_own_depth']['10']['margin_db']:+.0f} dB at 10 m, {c['recommended']['margin_db']:+.1f} dB at {c['recommended']['own_depth_m']:g} m")
-    return ("the ship class at 12 km, margin over 13 dB, " + "; ".join(out) + " (*Surface interference, own depth, and target classes*; every target figure assumed).\n") if out else "not planned.\n"
+    return ("the ship class at 12 km, margin over what each build's own detector needs, " + "; ".join(out) + " (*Surface interference, own depth, and target classes*; every target figure assumed).\n") if out else "not planned.\n"
 
 
 def stacked_rows(D) -> list:
@@ -593,7 +615,7 @@ def stacked_rows(D) -> list:
         return ", ".join("none" if v is None else f"{v:.{digits}f}" for v in values)
 
     def trade_table():
-        out = ["| Channels | As | Beam | Map gain | Reach ship / small (km) | Elevation at 20 dB | Boards |\n| --- | --- | --- | --- | --- | --- | --- |"]
+        out = ["| Channels | As | Beam | Row gain plus what the rows are worth at the detector | Reach ship / small (km) | Elevation at 20 dB | Boards |\n| --- | --- | --- | --- | --- | --- | --- |"]
         for label, v in TS["fixed_channels"].items():
             out.append(f"| {v['channels']} | {label} | {v['beamwidth_deg']:.1f}° | {v['gain_isotropic_noise_db'] + v['rows_detection_gain_db']:.1f} dB | {km(v['reach_ship_m'])} / {km(v['reach_small_m'])} | "
                        + (f"{v['elevation_sigma_deg_at_20_db']:.2f}° (repeat {v['highest_repeat_db']:.1f} dB)" if v["rows"] > 1 else "none") + f" | {v['boards']} |")
@@ -648,7 +670,9 @@ def stacked_rows(D) -> list:
     row("Raw data rate while receiving (Mbit/s)", lambda x: f"{x['data_rate_mbit_s']:.0f}")
     row("Cables: one per hydrophone + the sync reference to each board", lambda x: f"{x['channels']} + {x['boards']}")
     L.append(f"\nReach is where noise alone would end detection on the link budget of Sec. 5 with the source level in the file ({auv['source_level_db']:.0f} dB, "
-             "**not chosen for the test AUV or the static array**); reverberation and the channel decide earlier or later.\n")
+             "**not chosen for the test AUV or the static array**): where one row's SNR falls to what the chain's own detector needs for a detection probability of "
+             f"{face3['detection_probability']:g} on one ping with the stage's rows added (" + ", ".join(f"{v['detection_threshold_db']:.1f}" for v in stages.values())
+             + " dB for the six stages in turn; `gpusonar.buildspec.detection`). Reverberation and the channel decide earlier or later.\n")
     P, PS = S["prototype_span"], S["baseline_sweep"]
     low = P["3 m, a 185 dB projector"]
     a1 = sc["testauv_1row"]
@@ -855,7 +879,7 @@ def stacked_rows(D) -> list:
     L.append(f"\n**Does it need to be 64?** For bearing, range and tracks, no: one row of 32 is the design of Sec. 5. Sixty-four buy one of two things. As one row of 64\n"
              f"inside the {S['array_length_m']:g} m: {mg['gain_db']:.1f} dB, a beam of {mg['beam_deg'][1]:.1f}° instead of {mg['beam_deg'][0]:.1f}°, {r64['reverberation_margin_vs_32_at_half_wavelength_db']:.1f} dB less reverberation in the beam, noise-limited reach {mg['reach_ship_km'][0]:.1f} → {mg['reach_ship_km'][1]:.1f} km (ship) and\n"
              f"{mg['reach_small_km'][0]:.1f} → {mg['reach_small_km'][1]:.1f} km (small target), no elevation; and since {fill['hydrophones_per_row']} hydrophones at half a wavelength already fill that length, 64 gain no more than {fill['hydrophones_per_row']} would.\n"
-             f"As two rows of 32: {ob['map_gain_db'][1]:.1f} dB in the map against {ob['map_gain_db'][0]:.1f} dB, the old beam, and elevation as a list of possible angles (two rows cannot tell which of several an echo came from; the list becomes one angle where water depth and range rule the others out). Bearing and range against elevation is the trade for a\n"
+             f"As two rows of 32: worth {ob['map_gain_db'][1]:.1f} dB (the row's gain plus what two rows are worth at the detector) against {ob['map_gain_db'][0]:.1f} dB, the old beam, and elevation as a list of possible angles (two rows cannot tell which of several an echo came from; the list becomes one angle where water depth and range rule the others out). Bearing and range against elevation is the trade for a\n"
              "fixed channel count; 96 as three rows make the elevation unambiguous.\n")
     L.append("| A row of | Length | Beam | Gain (sea noise) | Reach ship / small (km) | Reverberation in the beam against 32 | Boards a row |\n| --- | --- | --- | --- | --- | --- | --- |")
     for label, v in TS["per_row"].items():
@@ -992,9 +1016,12 @@ def write_report(D, reqs, out_md):
     for label, key, dig in [("Source level (dB re 1 µPa at 1 m)", "source_level_db", 0), ("Absorption (dB/km)", "absorption_db_per_km", 1),
                             ("Noise spectrum level (dB re 1 µPa²/Hz)", "noise_spectrum_db", 1), ("Target strength assumed (dB)", "target_strength_db", 0),
                             ("Array gain (dB)", "array_gain_db", 1), ("Pulse-compression gain, 10 log10(BT) (dB)", "processing_gain_db", 1),
-                            ("**SNR at full range (dB)**", "snr_at_max_range_db", 1), ("Range at which SNR falls to 13 dB (m)", "range_for_13_db_m", 0)]:
+                            ("**SNR at full range (dB)**", "snr_at_max_range_db", 1), (f"Range at which SNR falls to {REFERENCE_SNR_DB:g} dB (m)", "range_for_13_db_m", 0)]:
         L.append(f"| {label} | " + " | ".join(fmt(float(D[n][key]), dig) for n in DESIGN_SONARS) + " |")
     L.append("\nTarget assumed: " + "; ".join(f"`{n}`: {TARGET_NOTE[n]}" for n in DESIGN_SONARS) + ".\n")
+    L.append(f"The {REFERENCE_SNR_DB:g} dB of the last row and of the figure is a reference line (visible above noise), not a detector's threshold. The array gain is the array's gain against isotropic noise "
+             "(`sonar_equation.isotropic_noise_gain_db`: 10 log N at half a wavelength, less for hydrophones closer together). What the long-range array's own detector needs, its margins and its detection "
+             "probabilities are in *The 12 km design point*.\n")
     d = D["sas_minsas120"]
     L.append(f"- **SAS:** with a {d['source_level_db']:.0f} dB source a single cell of seabed stays 13 dB above noise out to "
              f"{d['range_for_13_db_m']:.0f} m, not the {d['max_range_m']:.0f} m of the receive window "
@@ -1006,7 +1033,7 @@ def write_report(D, reqs, out_md):
     L.append("### Popoto array to 12 km: which frequency and how much power\n")
     L.append("![Source level needed for 12 km against frequency](design/popoto_range_study.png)\n")
     L.append(f"From `tools/popoto_range_study.py`: target +{study['target_strength_db']:.0f} dB, {study['pulse_s']:.0f} s pulse, "
-             f"{study['snr_db']:.0f} dB at the beamformer output, ambient noise at 5 m/s wind, spherical spreading plus absorption.\n")
+             f"{study['snr_db']:.1f} dB at one row's beamformer output ({study.get('snr_is', 'given')}), ambient noise at 5 m/s wind, spherical spreading plus absorption.\n")
     L.append(f"- **The present band cannot do it.** At {cur['frequency_hz'] / 1e3:.1f} kHz absorption alone costs about "
              f"{float(acoustics.absorption(cur['frequency_hz'], 12.0, 35.0, 50.0, model='ainslie_mccolm')) * 24000.0:.0f} dB over the 24 km round trip; 12 km would need "
              f"{cur['source_level_needed_at_range_db']:.0f} dB. With {cur['hydrophones']} hydrophones at {cur['source_level_db']:.0f} dB "
@@ -1020,7 +1047,10 @@ def write_report(D, reqs, out_md):
         L.append(f"| {float(a):.1f} m aperture ({v['hydrophones']} hydrophones) | {v['best_frequency_hz'] / 1e3:.1f} kHz | {float(a):.1f} m | {v['source_level_db']:.0f} dB | {v['acoustic_power_w_omni']:.0f} W |")
     L.append(f"\n- **Chosen (`popoto_long_range`):** {lr['elements']} hydrophones at {lr['pitch_mm'] / 10:.0f} cm ({lr['array_length_m']:.1f} m), "
              f"{lr['centre_frequency_khz'] - lr['bandwidth_khz'] / 2:.0f} to {lr['centre_frequency_khz'] + lr['bandwidth_khz'] / 2:.0f} kHz, "
-             f"{lr['pulse_ms'] / 1e3:.0f} s, {lr['source_level_db']:.0f} dB: {lr['_eq'].snr(12000.0):.0f} dB at 12 km on this budget. "
+             f"{lr['pulse_ms'] / 1e3:.0f} s, {lr['source_level_db']:.0f} dB: {_face_12km()[2]:.1f} dB in one row at 12 km (the build's budget, `gpusonar.buildspec`: Ainslie-McColm absorption; "
+             f"{lr['_eq'].snr(12000.0):.1f} dB with Sec. 5's Francois-Garrison). It was sized when the budget's threshold was a typed 13 dB "
+             "(13 dB plus 2 dB). Against what the chain's own detector needs for a detection probability of "
+             f"{_face_12km()[0]:g} on one ping: " + _face_12km()[1] + " (*The 12 km design point*). "
              "Acoustic power is 10^((SL - 170.8 - DI) / 10) W; a projector with directivity needs less, and electrical power is\n"
              "  higher by the transducer's efficiency (not known until a projector is chosen). Doubling the hydrophones saves 3 dB;\n"
              "  doubling the pulse length saves 3 dB.\n"

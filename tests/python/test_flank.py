@@ -201,7 +201,10 @@ def test_detection_range_follows_from_the_snr_curve():
     assert 1.05 * r < louder.detection_range(13.0) < 1.78 * r
     # Bookkeeping identities.
     assert eq.processing_gain() == pytest.approx(10 * np.log10(4000.0 * 1.0))
-    assert eq.array_gain() == pytest.approx(10 * np.log10(32))
+    from gpusonar.sonar_equation import isotropic_noise_gain_db
+    # from_sonar: the array's gain against isotropic noise (the simulator's, D-103): 10 log N within 0.02 dB at this pitch
+    assert eq.array_gain() == pytest.approx(isotropic_noise_gain_db(sonar.positions, sonar.center_frequency, sonar.nominal_sound_speed, sonar.boresight))
+    assert eq.array_gain() == pytest.approx(10 * np.log10(32), abs=0.02)
     assert eq.table([1000.0])[0]["tl_db"] == pytest.approx(60.0 + eq.absorption_db_per_m() * 1000.0)
     with pytest.raises(ValueError, match="uncalibrated"):
         SonarEquation.from_sonar(SonarModel.load("l12_5d"), NOISE_SPECTRUM)

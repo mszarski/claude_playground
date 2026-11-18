@@ -56,6 +56,12 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    two classes at once, the reach there, the target depths one depth leaves uncovered and how many depths cover all of them; `--out PREFIX` writes the table's
    JSON and a figure. An environment or a target can also be given on the command line (`--water-depth 80 --bottom medium_sand --sea-state 3 --rms-height 0.15
    --ts 10 --target-depth 20 60 --range 2500`). The free-field figures of `performance.json` do not contain the surface-reflected path; the planner's do.
+   **What "detected" means in every one of these numbers.** No detection threshold is typed anywhere. The budget states the SNR of ONE row (peak signal over mean
+   noise after the matched filter and an unweighted row beamformer; RMS source level). What that SNR must be is asked of the chain's own detector with the
+   settings of the build's deployment file (`gpusonar.buildspec.detection`, from `gpusonar.live.budget_threshold_db`), for the detection probability on one ping
+   the spec names in `operation.detection_probability` (0.5 unless given). The detector's figure already holds the aperture window, where an echo falls between
+   the map's samples, the false-alarm budget over the build's own receive window and the rows added in power, so the budget adds no row gain. `performance.json`
+   and `BUILD.md` give the threshold, the same for a probability of 0.9, and for each range the margin and the probability the detector gives at that SNR.
    Source levels are rms levels everywhere (`projector.source_level_db_rms`).
 5. **Rehearse ashore with the emulated stream.** Command 2 of `DIR/COMMANDS.txt`: the rehearsal's pings are
    sent as board blocks over UDP to the deployment file's own port and come out as a recording, a report and
@@ -242,6 +248,7 @@ This table is printed by `tools/build_from_spec.py --fields`.
 | `operation.range_m` | m | yes | [first, last] range the receive window covers; first null: the blind range of the pulse | requirement | must be given |
 | `operation.bearings_deg` | deg | no | [first, last, step] from broadside | requirement | [-60, 60, 0.5] |
 | `operation.chain` | — | no | settings of the chain laid over the defaults (docs/CONFIGURATION.md) | — | the defaults |
+| `operation.detection_probability` | — | no | the probability of detecting a steady point echo on one ping that the link budget's thresholds, margins and reaches are stated for (the threshold follows from the chain's detector for it: buildspec.detection) | requirement | 0.5 (buildspec.DESIGN_DETECTION_PROBABILITY) |
 | `trial.water_depth_m` | m | yes | water depth of the simulated trial | trial plan | must be given |
 | `trial.own_depth_m` | m | yes | depth of the array in the trial | trial plan | must be given |
 | `trial.ranges_m` | m | yes | target ranges: the first for the free-field truth check, the last for the shallow-water one | trial plan | must be given, beyond the pulse's blind range |

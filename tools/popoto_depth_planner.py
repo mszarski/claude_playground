@@ -16,13 +16,14 @@ depths cover every target depth (pinging at two depths, or as the vehicle change
 that holds two classes at once. For a static array "own depth" is the hanging depth. `--out PREFIX` writes PREFIX.json
 and PREFIX.png.
 
-margin = free-field budget (buildspec.budget: spherical spreading, absorption, ambient noise at the environment's wind,
-the row's gain, the rows' detection gain) + target strength (the class's LOW end) + two-way propagation factor
-(gpusonar.lloyd: surface image with roughness and bubble loss across the band; with a bottom, the layer's image series;
-with a profile, Bellhop) - threshold (13 dB at the map). Source levels are RMS levels (the owner: specs give rms,
-`projector.source_level_db_rms`); the budget is an energy equation, which is the rms usage. Until the simulator follows (it takes the
-number as a peak pressure: docs/HARDCODED_AUDIT.md P-5) a simulated echo carries 3 dB less than this budget
-assumes. The propagation factor is a ratio and has no such convention. Own depths are searched down to platform.max_depth_m.
+margin = free-field budget of ONE row (buildspec.budget: spherical spreading, absorption, ambient noise at the
+environment's wind, the row's gain against sea noise) + target strength (the class's LOW end) + two-way propagation
+factor (gpusonar.lloyd: surface image with roughness and bubble loss across the band; with a bottom, the layer's image
+series; with a profile, Bellhop) - threshold. The threshold is not typed: it is what the build's own detector, as
+deployed, needs of one row's SNR for the build's design detection probability with its rows added
+(buildspec.detection, from gpusonar.live.budget_threshold_db); `--threshold` replaces it for a what-if. Source levels are
+RMS levels in the budget and in the simulator alike (`projector.source_level_db_rms`, D-102). The propagation factor is
+a ratio and has no such convention. Own depths are searched down to platform.max_depth_m.
 """
 import argparse
 import copy
@@ -43,8 +44,8 @@ from gpusonar.sim.bellhop import find_bellhop  # noqa: E402
 
 BLUE, ORANGE, AQUA, YELLOW, VIOLET = "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#8b5fd6"
 INK, MUTED, SURFACE, GRID = "#0b0b0b", "#52514e", "#fcfcfb", "#d9d8d2"
-SOURCE_LEVEL_CONVENTION = ("source levels are rms (the owner's decision; the usual datasheet convention): the budget puts the build's source level into an energy equation, which is the rms usage. "
-                           "Until the simulator is changed to the same convention (HARDCODED_AUDIT P-5: it takes the number as a peak pressure) a simulated echo has 3 dB less power than the budget. The propagation factor is a ratio")
+SOURCE_LEVEL_CONVENTION = ("source levels are rms (the owner's decision; the usual datasheet convention) in the budget and in the simulator alike (D-102): the budget puts the build's source level "
+                           "into an energy equation, which is the rms usage. The propagation factor is a ratio")
 FACE = ["popoto_face_1x32", "popoto_face_2x32", "popoto_face_3x32"]
 STATIC = ["popoto_testauv_1x32", "popoto_static_2x32", "popoto_static_3x32"]
 
@@ -81,15 +82,18 @@ def text(P: dict) -> str:
     env = P["environment"]
     L = [f"Build {P['build']} ({P['rows']} row{'s' if P['rows'] > 1 else ''}); environment {env.get('name')}: {env.get('title', '')}",
          f"  {P['method']}; wind {P['wind_speed_m_s']:g} m/s, rms wave height {P['rms_wave_height_m']:.2f} m" + (f", bubble loss {env['bubble_model']}" if env.get("bubble_model") else "")
-         + f"; own depths {P['own_depths_m'][0]:g}-{P['own_depths_m'][-1]:g} m; range of interest {km(P['range_of_interest_m'])} km; threshold {P['threshold_db']:g} dB",
-         "", "| Class | TS used (dB) | Depths (m) | Free-field margin | Best own depth | Margin there | Own depths that hold it | Within 3 dB of best | Reach there (km) | Target depths not held there |",
+         + f"; own depths {P['own_depths_m'][0]:g}-{P['own_depths_m'][-1]:g} m; range of interest {km(P['range_of_interest_m'])} km",
+         f"  threshold {P['threshold_db']:.1f} dB of one row's SNR: " + (f"what this build's detector ({P['detection']['statistic']}) needs for a detection probability of {P['detection']['probability']:g} on one ping"
+                                                                    + (f" with its {P['detection']['rows']} rows added" if P['detection']['rows'] > 1 else "") + f" ({P['detection']['threshold_high_db']:.1f} dB for {P['detection']['probability_high']:g})"
+                                                                    if P["detection"]["threshold_is_the_detectors"] else "given on the command line, not the detector's"),
+         "", "| Class | TS used (dB) | Depths (m) | Free-field margin (Pd) | Best own depth | Margin there (Pd) | Own depths that hold it | Within 3 dB of best | Reach there (km) | Target depths not held there |",
          "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
     for name, c in P["classes"].items():
         if "skipped" in c:
             L.append(f"| {name} | | | {c['skipped']} | | | | | | |")
             continue
         r = c["recommended"]
-        L.append(f"| {name} | {c['ts_db'][0]:+.0f} ({c['ts_status']}) | {c['depth_m'][0]:g}-{c['depth_m'][1]:g} | {c['free_field_margin_db']:+.1f} dB | {r['own_depth_m']:g} m | {r['margin_db']:+.1f} dB | "
+        L.append(f"| {name} | {c['ts_db'][0]:+.0f} ({c['ts_status']}) | {c['depth_m'][0]:g}-{c['depth_m'][1]:g} | {c['free_field_margin_db']:+.1f} dB ({c['free_field_detection_probability']:.2f}) | {r['own_depth_m']:g} m | {r['margin_db']:+.1f} dB ({r['detection_probability']:.2f}) | "
                  f"{bands(r['held_band_m'])} | {bands(r['within_3db_band_m'])} | {km(r['reach_m'])}" + (" (gaps nearer)" if r["nearer_gaps"] else "") + f" | {bands(r['target_depths_not_held_m'])} |")
     L.append("")
     if P.get("platform_max_depth_m"):
@@ -225,7 +229,7 @@ def run(spec_or_d, envs, classes, range_m, threshold, statistic, cache, log=prin
             if "skipped" in c:
                 continue
             r = c["recommended"]
-            e = depthplan.elevation_for(d, r["margin_db"] + threshold, P["range_of_interest_m"])
+            e = depthplan.elevation_for(d, r["margin_db"] + P["threshold_db"], P["range_of_interest_m"])
             if e:
                 c["elevation_at_recommended"] = e
         out[env["name"]] = P
@@ -234,7 +238,8 @@ def run(spec_or_d, envs, classes, range_m, threshold, statistic, cache, log=prin
 
 def shipped(args) -> int:
     dest = ROOT / "docs" / "design"
-    R = {"what": "tools/popoto_depth_planner.py --shipped", "source_level_convention": SOURCE_LEVEL_CONVENTION, "bellhop": find_bellhop() is not None, "threshold_db": args.threshold,
+    R = {"what": "tools/popoto_depth_planner.py --shipped", "source_level_convention": SOURCE_LEVEL_CONVENTION, "bellhop": find_bellhop() is not None,
+         "threshold_db": args.threshold if args.threshold is not None else "per build: what its own detector needs of one row's SNR (buildspec.detection); each plan states its value",
          "statistic": args.statistic, "builds": {}, "not_run": []}
     spec3 = bs.load("popoto_face_3x32")
     classes = bs.target_classes_of(spec3, range_m=12000.0)
@@ -259,7 +264,8 @@ def shipped(args) -> int:
         R["builds"][build] = {"range_of_interest_m": 12000.0, "plans": {n: slim(P) for n, P in plans.items()}}
         (dest / "popoto_depth_planner.json").write_text(json.dumps(R, indent=1, default=float) + "\n")
     if figs and not args.no_figure:
-        figure(figs, dest / "popoto_depth_planner.png", "popoto_face_3x32: detection margin (dB over 13 dB at the map), worst over each class's depths, against range and own depth")
+        figure(figs, dest / "popoto_depth_planner.png", f"popoto_face_3x32: detection margin (dB over the {figs[0]['threshold_db']:.1f} dB of one row's SNR its detector needs for a detection probability of {figs[0]['detection']['probability']:g}), "
+               "worst over each class's depths, against range and own depth")
     # static and test-AUV builds: the hanging (or running) depth, at the end of their own receive window, where there is no profile to trace
     for build in STATIC:
         spec = bs.load(build)
@@ -295,7 +301,8 @@ def main(argv=None):
     ap.add_argument("--ts", type=float, help="with --target-depth: a target given here (dB re 1 m)")
     ap.add_argument("--target-depth", type=float, nargs=2, metavar=("SHALLOWEST", "DEEPEST"))
     ap.add_argument("--range", type=float, default=12000.0, help="range of interest, m")
-    ap.add_argument("--threshold", type=float, default=bs.BUDGET_THRESHOLD_DB, help="SNR at the map for detection, dB (default: buildspec.BUDGET_THRESHOLD_DB)")
+    ap.add_argument("--threshold", type=float, default=None, help="SNR of one row for detection, dB (default: what the build's own detector needs for its design detection probability, "
+                                                                 "buildspec.detection)")
     ap.add_argument("--statistic", default="peak_db", choices=("peak_db", "energy_db", "narrowband_db"), help="which two-way figure of gpusonar.lloyd the margin uses")
     ap.add_argument("--out", help="prefix: writes PREFIX.json and PREFIX.png")
     ap.add_argument("--shipped", action="store_true", help="the shipped builds, into docs/design/")
@@ -349,7 +356,7 @@ def main(argv=None):
         out.with_suffix(".json").write_text(json.dumps({"source_level_convention": SOURCE_LEVEL_CONVENTION, "classes": classes, "plans": {n: slim(P) for n, P in plans.items()}}, indent=1, default=float) + "\n")
         good = [P for P in plans.values() if "skipped" not in P]
         if good and not args.no_figure:
-            figure(good, out.with_suffix(".png"), f"{good[0]['build']}: detection margin (dB over {args.threshold:g} dB), worst over each class's depths")
+            figure(good, out.with_suffix(".png"), f"{good[0]['build']}: detection margin (dB over {good[0]['threshold_db']:.1f} dB of one row's SNR), worst over each class's depths")
     return 0
 
 

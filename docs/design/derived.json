@@ -31,10 +31,10 @@
       "absorption_db_per_km": 41.28657612230543,
       "noise_spectrum_db": 28.92726760690874,
       "target_strength_db": 5.0,
-      "array_gain_db": 21.072099696478684,
+      "array_gain_db": 20.895507172652977,
       "processing_gain_db": 23.010299956639813,
-      "snr_at_max_range_db": 63.288036227400184,
-      "range_for_13_db_m": 723.7403362942798,
+      "snr_at_max_range_db": 63.11144370357447,
+      "range_for_13_db_m": 722.0837995112795,
       "boards": 1
     },
     "fls_170k": {
@@ -68,10 +68,10 @@
       "absorption_db_per_km": 52.92856763773355,
       "noise_spectrum_db": 30.321570495430947,
       "target_strength_db": 5.0,
-      "array_gain_db": 21.072099696478684,
+      "array_gain_db": 20.85926653423178,
       "processing_gain_db": 26.020599913279625,
-      "snr_at_max_range_db": 34.9966177327136,
-      "range_for_13_db_m": 608.3239640173756,
+      "snr_at_max_range_db": 34.78378457046669,
+      "range_for_13_db_m": 606.7409863247298,
       "boards": 1
     },
     "fls_330k": {
@@ -105,10 +105,10 @@
       "absorption_db_per_km": 83.65336247299646,
       "noise_spectrum_db": 35.42472284215154,
       "target_strength_db": 5.0,
-      "array_gain_db": 21.072099696478684,
+      "array_gain_db": 20.93138404910573,
       "processing_gain_db": 24.771212547196626,
-      "snr_at_max_range_db": 31.370509181742758,
-      "range_for_13_db_m": 384.1333668165602,
+      "snr_at_max_range_db": 31.229793534369804,
+      "range_for_13_db_m": 383.47139060210606,
       "boards": 1
     },
     "sas_minsas120": {
@@ -184,10 +184,10 @@
       "absorption_db_per_km": 0.6269584941847398,
       "noise_spectrum_db": 47.8618796124464,
       "target_strength_db": 25.0,
-      "array_gain_db": 15.051499783199061,
+      "array_gain_db": 15.063063395452305,
       "processing_gain_db": 36.020599913279625,
-      "snr_at_max_range_db": 15.362628141590745,
-      "range_for_13_db_m": 7439.320232605047,
+      "snr_at_max_range_db": 15.37419175384399,
+      "range_for_13_db_m": 7442.542603818952,
       "boards": 4
     },
     "popoto_long_range": {
@@ -221,9 +221,9 @@
       "absorption_db_per_km": 0.3156425141413955,
       "noise_spectrum_db": 51.45545609876641,
       "target_strength_db": 25.0,
-      "array_gain_db": 15.051499783199061,
+      "array_gain_db": 15.05149978319906,
       "processing_gain_db": 33.01029995663981,
-      "snr_at_max_range_db": 13.426574987002907,
+      "snr_at_max_range_db": 13.426574987002905,
       "range_for_13_db_m": 12914.605909867167,
       "boards": 4
     }
@@ -373,7 +373,7 @@
       "id": "POP-3",
       "requirement": "Frequency and source level that take the Popoto array to 12 km",
       "set_in": "configs/sonars/popoto_long_range.yaml: transmit.waveform, array (sized by tools/popoto_range_study.py)",
-      "value": "5 kHz, 197 dB, 32 hydrophones, 1 s pulse: 15 dB at 12 km with spherical spreading (study: 195 dB at 4.2 kHz for 13 dB)",
+      "value": "5 kHz, 197 dB, 32 hydrophones a row, 1 s pulse: 14.6 dB in one row at 12 km with spherical spreading, against what the chain's own detector needs of one row for a detection probability of 0.5 on one ping: 1 row: needs 15.6 dB, margin -1.0 dB, detection probability 0.24; 2 rows: needs 13.1 dB, margin +1.5 dB, detection probability 0.89; 3 rows: needs 11.6 dB, margin +3.0 dB, detection probability 0.99 (study: 198 dB at 4.2 kHz for 15.6 dB in one row). Met by the recommended three rows; one row alone is 1.0 dB short",
       "met": true
     },
     {

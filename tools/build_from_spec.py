@@ -164,7 +164,7 @@ def _plain(d: dict):
         if isinstance(v, (list, tuple)):
             return [conv(x) for x in v]
         return v
-    return conv({k: v for k, v in d.items() if k not in ("positions", "row_of", "channel_board")})
+    return conv({k: v for k, v in d.items() if k not in ("positions", "row_of", "channel_board", "sonar_config")})
 
 
 def build_md(spec: dict, d: dict, perf: dict, warnings: list, out: Path) -> str:
@@ -185,8 +185,12 @@ def build_md(spec: dict, d: dict, perf: dict, warnings: list, out: Path) -> str:
          "\n## Expected performance\n", f"Assumptions: {perf['assumptions']}.\n", "| | |\n| --- | --- |",
          f"| Beam at broadside | {perf['beamwidth_deg']:.1f}° |",
          f"| Row's gain against sea noise / against the boards' own noise | {perf['gain_isotropic_noise_db']:.1f} / {perf['gain_uncorrelated_noise_db']:.1f} dB |",
-         f"| Rows added as power | +{perf['rows_detection_gain_db']:.1f} dB of detection |",
-         f"| Noise-limited reach, ship (+25 dB) / small (+5 dB) | {perf['reach_ship_m'] / 1e3:.1f} / {perf['reach_small_m'] / 1e3:.1f} km |",
+         f"| One row's SNR the chain's detector needs, as deployed | {perf['detection']['threshold_db']:.1f} dB for a detection probability of {perf['detection']['probability']:g} on one ping, "
+         f"{perf['detection']['threshold_high_db']:.1f} dB for {perf['detection']['probability_high']:g}" + (f" (the {d['rows']} rows added as power are in it: worth {perf['rows_detection_gain_db']:.1f} dB over one row)" if d["rows"] > 1 else "") + " |",
+         f"| Noise-limited reach, ship (+25 dB) / small (+5 dB) | {perf['reach_ship_m'] / 1e3:.1f} / {perf['reach_small_m'] / 1e3:.1f} km at a detection probability of {perf['detection']['probability']:g}; "
+         f"{perf['reach_ship_high_m'] / 1e3:.1f} / {perf['reach_small_high_m'] / 1e3:.1f} km at {perf['detection']['probability_high']:g} |",
+         "| One row's SNR, margin and detection probability, ship | " + "; ".join(f"{float(r) / 1e3:g} km: {perf['row_snr_db']['ship'][r]:.1f} dB, {perf['margin_db']['ship'][r]:+.1f} dB, {perf['detection_probability']['ship'][r]:.2f}"
+                                                                                  for r in perf["row_snr_db"]["ship"] if float(r) > d["blind_range_m"]) + " |",
          f"| Range resolution | {perf['range_resolution_m']:.3f} m before windowing |",
          f"| Steering with no grating lobe | ±{perf['grating_lobe_free_steering_deg']:.0f}° |"]
     if el:

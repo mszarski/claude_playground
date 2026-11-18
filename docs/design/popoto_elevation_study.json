@@ -276,30 +276,30 @@
   "link_snr_db": {
     "ship, +25 dB": {
       "1000.0": 64.94686299553437,
-      "6000.0": 30.57490953569723,
-      "12000.0": 14.63862557574822
+      "6000.0": 30.574909535697227,
+      "12000.0": 14.638625575748218
     },
     "small target, +5 dB": {
       "1000.0": 44.946862995534374,
-      "6000.0": 10.574909535697229,
-      "12000.0": -5.36137442425178
+      "6000.0": 10.574909535697227,
+      "12000.0": -5.361374424251782
     }
   },
   "depth_sigma_m": {
     "ship, +25 dB; 2 rows, 1.50 m apart": {
       "1000.0": 0.3162088078680915,
-      "6000.0": 5.615387571761765,
-      "12000.0": 70.34349302157625
+      "6000.0": 5.61538757176177,
+      "12000.0": 70.34349302157626
     },
     "ship, +25 dB; 3 rows at -0.75, -0.20, +0.75 m": {
       "1000.0": 0.3125264836639331,
-      "6000.0": 5.549995093574205,
-      "12000.0": 69.52432688668964
+      "6000.0": 5.549995093574207,
+      "12000.0": 69.52432688668965
     },
     "ship, +25 dB; 2 rows, 0.38 m apart": {
       "1000.0": 1.2481926626372035,
-      "6000.0": 22.16600357274381,
-      "12000.0": 277.6716829799062
+      "6000.0": 22.166003572743826,
+      "12000.0": 277.6716829799063
     },
     "small target, +5 dB; 2 rows, 1.50 m apart": {
       "1000.0": 0.3162088078680915,
@@ -622,13 +622,31 @@
     "detection_gain_db": {
       "2": {
         "coherent_db": 3.010299956639812,
-        "rows_added_as_power_db": 2.380518038324267
+        "rows_added_as_power_db": 2.560038755655375
       },
       "3": {
         "coherent_db": 4.771212547196624,
-        "rows_added_as_power_db": 3.715181789907186
+        "rows_added_as_power_db": 4.012389617500009
       }
     }
+  },
+  "detection": {
+    "probability": 0.5,
+    "probability_high": 0.9,
+    "statistic": "multiscale",
+    "one_row_snr_needed_db": {
+      "1": 15.64867404852064,
+      "2": 13.088635292865265,
+      "3": 11.63628443102063,
+      "4": 10.772271995229627
+    },
+    "one_row_snr_needed_high_db": {
+      "1": 17.252545956471515,
+      "2": 14.699665170526313,
+      "3": 13.239887029087612,
+      "4": 12.332316766020599
+    },
+    "what": "the SNR of one row the chain's detector needs on the face (32 at 0.15 m, 1 s pulse, the long-range window), rows added in power: gpusonar.buildspec.detection"
   },
   "face_length": {
     "as now": {
@@ -689,6 +707,9 @@
       "gain_isotropic_noise_db": 12.863922161721122,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.162260846282429,
+      "detection_threshold_high_db": 16.848595628910314,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": -2.218487496163564,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -702,7 +723,7 @@
         "height_m": 0.4,
         "mounting": "hull"
       },
-      "reach_ship_m": 7682.854825331126,
+      "reach_ship_m": 6967.487166463039,
       "snr_ship_db": {
         "500.0": 65.12507554506482,
         "1000.0": 52.75928537405643,
@@ -710,7 +731,7 @@
         "6000.0": 18.38733191421929,
         "12000.0": 2.4510479542702814
       },
-      "reach_small_m": 2904.509882050465,
+      "reach_small_m": 2594.4671766984047,
       "snr_small_db": {
         "500.0": 45.12507554506482,
         "1000.0": 32.75928537405643,
@@ -736,7 +757,10 @@
       "beamwidth_deg": 3.172753790536934,
       "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
-      "rows_detection_gain_db": 2.380518038324267,
+      "rows_detection_gain_db": 2.5437615153278976,
+      "detection_threshold_db": 12.815633866932238,
+      "detection_threshold_high_db": 14.4704274888803,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -754,21 +778,21 @@
         "static": true,
         "depth_m": 10.0
       },
-      "reach_ship_m": 9379.653498961372,
+      "reach_ship_m": 8531.838492697847,
       "snr_ship_db": {
-        "500.0": 67.31265316654274,
+        "500.0": 67.31265316654276,
         "1000.0": 54.94686299553437,
         "3000.0": 34.56365142895128,
         "6000.0": 20.574909535697223,
-        "12000.0": 4.638625575748216
+        "12000.0": 4.638625575748215
       },
-      "reach_small_m": 3671.379854148251,
+      "reach_small_m": 3282.7162535525845,
       "snr_small_db": {
         "500.0": 47.31265316654275,
         "1000.0": 34.94686299553437,
-        "3000.0": 14.563651428951284,
-        "6000.0": 0.5749095356972251,
-        "12000.0": -15.361374424251784
+        "3000.0": 14.563651428951282,
+        "6000.0": 0.5749095356972234,
+        "12000.0": -15.361374424251785
       },
       "elevation_sigma_deg_at_20_db": 0.18117430135704787,
       "repeat_spacing_deg": 11.536959032815489,
@@ -819,7 +843,10 @@
       "beamwidth_deg": 3.172753790536934,
       "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
-      "rows_detection_gain_db": 3.715181789907186,
+      "rows_detection_gain_db": 3.9860354027192795,
+      "detection_threshold_db": 11.373359979540856,
+      "detection_threshold_high_db": 13.0169312169449,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -837,21 +864,21 @@
         "static": true,
         "depth_m": 10.0
       },
-      "reach_ship_m": 9924.535958352139,
+      "reach_ship_m": 9081.830125067054,
       "snr_ship_db": {
-        "500.0": 67.31265316654274,
+        "500.0": 67.31265316654276,
         "1000.0": 54.94686299553437,
         "3000.0": 34.56365142895128,
         "6000.0": 20.574909535697223,
-        "12000.0": 4.638625575748213
+        "12000.0": 4.638625575748215
       },
-      "reach_small_m": 3926.89293306351,
+      "reach_small_m": 3533.6077933323495,
       "snr_small_db": {
         "500.0": 47.31265316654275,
         "1000.0": 34.94686299553437,
-        "3000.0": 14.56365142895128,
-        "6000.0": 0.5749095356972216,
-        "12000.0": -15.361374424251787
+        "3000.0": 14.563651428951282,
+        "6000.0": 0.5749095356972234,
+        "12000.0": -15.361374424251785
       },
       "elevation_sigma_deg_at_20_db": 0.17906448500007635,
       "repeat_spacing_deg": 11.536959032815489,
@@ -901,6 +928,9 @@
       "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.64867404852064,
+      "detection_threshold_high_db": 17.252545956471515,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 1.0,
@@ -916,7 +946,7 @@
         "max_depth_m": 500.0,
         "mounting": "flat vertical face"
       },
-      "reach_ship_m": 12799.069019588129,
+      "reach_ship_m": 11524.965144327422,
       "snr_ship_db": {
         "500.0": 77.31265316654276,
         "1000.0": 64.94686299553436,
@@ -924,7 +954,7 @@
         "6000.0": 30.574909535697223,
         "12000.0": 14.638625575748215
       },
-      "reach_small_m": 5347.119849555807,
+      "reach_small_m": 4702.832767250454,
       "snr_small_db": {
         "500.0": 57.31265316654275,
         "1000.0": 44.94686299553437,
@@ -950,7 +980,10 @@
       "beamwidth_deg": 3.172753790536934,
       "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
-      "rows_detection_gain_db": 2.380518038324267,
+      "rows_detection_gain_db": 2.560038755655375,
+      "detection_threshold_db": 13.088635292865265,
+      "detection_threshold_high_db": 14.699665170526313,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 1.0,
@@ -967,21 +1000,21 @@
         "row_baseline_m": 1.5,
         "mounting": "flat vertical face"
       },
-      "reach_ship_m": 14022.715869053436,
+      "reach_ship_m": 12754.945397608475,
       "snr_ship_db": {
-        "500.0": 77.31265316654274,
-        "1000.0": 64.94686299553437,
+        "500.0": 77.31265316654276,
+        "1000.0": 64.94686299553436,
         "3000.0": 44.56365142895128,
         "6000.0": 30.574909535697223,
-        "12000.0": 14.638625575748216
+        "12000.0": 14.638625575748215
       },
-      "reach_small_m": 5987.435584699753,
+      "reach_small_m": 5324.421407027084,
       "snr_small_db": {
         "500.0": 57.31265316654275,
         "1000.0": 44.94686299553437,
         "3000.0": 24.56365142895128,
-        "6000.0": 10.574909535697225,
-        "12000.0": -5.361374424251784
+        "6000.0": 10.574909535697223,
+        "12000.0": -5.361374424251785
       },
       "elevation_sigma_deg_at_20_db": 0.18117430135704787,
       "repeat_spacing_deg": 11.536959032815489,
@@ -1012,7 +1045,7 @@
           "total_m": 600.3916902007172
         },
         "12000.0": {
-          "from_noise_m": 70.34349302157626,
+          "from_noise_m": 70.34349302157628,
           "roll_0p2_deg_m": 41.88790204786391,
           "gradient_0p05_m": 2400.0,
           "total_m": 2401.396011354322
@@ -1037,7 +1070,10 @@
       "beamwidth_deg": 3.172753790536934,
       "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
-      "rows_detection_gain_db": 3.715181789907186,
+      "rows_detection_gain_db": 4.012389617500009,
+      "detection_threshold_db": 11.63628443102063,
+      "detection_threshold_high_db": 13.239887029087612,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 1.0,
@@ -1054,21 +1090,21 @@
         "row_baseline_m": 1.5,
         "mounting": "flat vertical face"
       },
-      "reach_ship_m": 14741.314664365045,
+      "reach_ship_m": 13490.946762762085,
       "snr_ship_db": {
-        "500.0": 77.31265316654274,
+        "500.0": 77.31265316654276,
         "1000.0": 64.94686299553436,
         "3000.0": 44.56365142895128,
         "6000.0": 30.574909535697223,
-        "12000.0": 14.638625575748213
+        "12000.0": 14.638625575748215
       },
-      "reach_small_m": 6373.07117167306,
+      "reach_small_m": 5706.6128479663175,
       "snr_small_db": {
         "500.0": 57.31265316654275,
         "1000.0": 44.94686299553437,
         "3000.0": 24.56365142895128,
-        "6000.0": 10.574909535697222,
-        "12000.0": -5.361374424251787
+        "6000.0": 10.574909535697223,
+        "12000.0": -5.361374424251785
       },
       "elevation_sigma_deg_at_20_db": 0.17906448500007635,
       "repeat_spacing_deg": 11.536959032815489,
@@ -1099,7 +1135,7 @@
           "total_m": 600.3910821539837
         },
         "12000.0": {
-          "from_noise_m": 69.52432688668972,
+          "from_noise_m": 69.5243268866897,
           "roll_0p2_deg_m": 41.88790204786391,
           "gradient_0p05_m": 2400.0,
           "total_m": 2401.37215532433
@@ -1125,6 +1161,9 @@
       "gain_isotropic_noise_db": 11.304499085300268,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.085917166745704,
+      "detection_threshold_high_db": 16.785547544976758,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": -3.80211241711606,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -1132,7 +1171,7 @@
       "data_rate_mbit_s": 78.6432,
       "cables": 36,
       "platform": {},
-      "reach_ship_m": 7161.42703288152,
+      "reach_ship_m": 6508.107316767758,
       "snr_ship_db": {
         "500.0": 63.56565246864396,
         "1000.0": 51.199862297635576,
@@ -1140,7 +1179,7 @@
         "6000.0": 16.827908837798436,
         "12000.0": 0.8916248778494271
       },
-      "reach_small_m": 2677.735746471094,
+      "reach_small_m": 2399.5743566434135,
       "snr_small_db": {
         "500.0": 43.56565246864396,
         "1000.0": 31.19986229763558,
@@ -1165,6 +1204,9 @@
       "gain_isotropic_noise_db": 12.863922161721122,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.162260846282429,
+      "detection_threshold_high_db": 16.848595628910314,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": -2.218487496163564,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -1172,7 +1214,7 @@
       "data_rate_mbit_s": 78.6432,
       "cables": 36,
       "platform": {},
-      "reach_ship_m": 7682.854825331126,
+      "reach_ship_m": 6967.487166463039,
       "snr_ship_db": {
         "500.0": 65.12507554506482,
         "1000.0": 52.75928537405643,
@@ -1180,7 +1222,7 @@
         "6000.0": 18.38733191421929,
         "12000.0": 2.4510479542702814
       },
-      "reach_small_m": 2904.509882050465,
+      "reach_small_m": 2594.4671766984047,
       "snr_small_db": {
         "500.0": 45.12507554506482,
         "1000.0": 32.75928537405643,
@@ -1205,6 +1247,9 @@
       "gain_isotropic_noise_db": 15.051499783199056,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.269487917806082,
+      "detection_threshold_high_db": 16.93709400218359,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -1212,7 +1257,7 @@
       "data_rate_mbit_s": 78.6432,
       "cables": 36,
       "platform": {},
-      "reach_ship_m": 8463.390064564568,
+      "reach_ship_m": 7654.749804897005,
       "snr_ship_db": {
         "500.0": 67.31265316654276,
         "1000.0": 54.94686299553437,
@@ -1220,7 +1265,7 @@
         "6000.0": 20.574909535697223,
         "12000.0": 4.638625575748215
       },
-      "reach_small_m": 3251.814162255175,
+      "reach_small_m": 2892.179341834158,
       "snr_small_db": {
         "500.0": 47.31265316654275,
         "1000.0": 34.94686299553437,
@@ -1245,6 +1290,9 @@
       "gain_isotropic_noise_db": 13.01029995663981,
       "gain_uncorrelated_noise_db": 13.010299956639813,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.17083117032054,
+      "detection_threshold_high_db": 16.85568116066475,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": -2.041199826559248,
       "source_level_db": 197.0,
       "pulse_s": 0.1,
@@ -1252,7 +1300,7 @@
       "data_rate_mbit_s": 49.151999999999994,
       "cables": 23,
       "platform": {},
-      "reach_ship_m": 7733.279453978137,
+      "reach_ship_m": 7011.450349427859,
       "snr_ship_db": {
         "500.0": 65.27145333998351,
         "1000.0": 52.905663168975124,
@@ -1260,7 +1308,7 @@
         "6000.0": 18.53370970913798,
         "12000.0": 2.59742574918897
       },
-      "reach_small_m": 2926.6633146763306,
+      "reach_small_m": 2613.291510462503,
       "snr_small_db": {
         "500.0": 45.27145333998351,
         "1000.0": 32.905663168975124,
@@ -1285,6 +1333,9 @@
       "gain_isotropic_noise_db": 12.863922161721122,
       "gain_uncorrelated_noise_db": 15.051499783199061,
       "rows_detection_gain_db": 0.0,
+      "detection_threshold_db": 15.162260846282429,
+      "detection_threshold_high_db": 16.848595628910314,
+      "detection_probability": 0.5,
       "reverberation_margin_vs_32_at_half_wavelength_db": -2.218487496163564,
       "source_level_db": 185.0,
       "pulse_s": 0.1,
@@ -1292,7 +1343,7 @@
       "data_rate_mbit_s": 78.6432,
       "cables": 36,
       "platform": {},
-      "reach_ship_m": 4359.693264692846,
+      "reach_ship_m": 3914.09418137043,
       "snr_ship_db": {
         "500.0": 53.12507554506482,
         "1000.0": 40.75928537405643,
@@ -1300,7 +1351,7 @@
         "6000.0": 6.38733191421929,
         "12000.0": -9.548952045729719
       },
-      "reach_small_m": 1532.2978667279951,
+      "reach_small_m": 1361.6223071066286,
       "snr_small_db": {
         "500.0": 33.12507554506482,
         "1000.0": 20.759285374056432,
@@ -1474,6 +1525,9 @@
         "gain_isotropic_noise_db": 12.041199826559247,
         "gain_uncorrelated_noise_db": 12.041199826559248,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.515667235580956,
+        "detection_threshold_high_db": 17.141699354059174,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": -3.010299956639812,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1481,7 +1535,7 @@
         "data_rate_mbit_s": 39.3216,
         "cables": 18,
         "platform": {},
-        "reach_ship_m": 11358.126174336327,
+        "reach_ship_m": 10244.463432760447,
         "snr_ship_db": {
           "500.0": 74.30235320990295,
           "1000.0": 61.93656303889456,
@@ -1489,7 +1543,7 @@
           "6000.0": 27.564609579057414,
           "12000.0": 11.628325619108406
         },
-        "reach_small_m": 4620.192760027,
+        "reach_small_m": 4078.9837509922913,
         "snr_small_db": {
           "500.0": 54.30235320990295,
           "1000.0": 41.93656303889456,
@@ -1515,6 +1569,9 @@
         "gain_isotropic_noise_db": 13.802112417116057,
         "gain_uncorrelated_noise_db": 13.80211241711606,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.593430364232187,
+        "detection_threshold_high_db": 17.206583644303777,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": -1.2493873660829995,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1522,7 +1579,7 @@
         "data_rate_mbit_s": 58.9824,
         "cables": 27,
         "platform": {},
-        "reach_ship_m": 12186.623460798515,
+        "reach_ship_m": 10980.505713640005,
         "snr_ship_db": {
           "500.0": 76.06326580045976,
           "1000.0": 63.69747562945137,
@@ -1530,7 +1587,7 @@
           "6000.0": 29.325522169614224,
           "12000.0": 13.389238209665216
         },
-        "reach_small_m": 5034.524960826264,
+        "reach_small_m": 4434.641862495338,
         "snr_small_db": {
           "500.0": 56.06326580045975,
           "1000.0": 43.69747562945137,
@@ -1556,6 +1613,9 @@
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.64867404852064,
+        "detection_threshold_high_db": 17.252545956471515,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1563,7 +1623,7 @@
         "data_rate_mbit_s": 78.6432,
         "cables": 36,
         "platform": {},
-        "reach_ship_m": 12799.069019588129,
+        "reach_ship_m": 11524.965144327422,
         "snr_ship_db": {
           "500.0": 77.31265316654276,
           "1000.0": 64.94686299553436,
@@ -1571,7 +1631,7 @@
           "6000.0": 30.574909535697223,
           "12000.0": 14.638625575748215
         },
-        "reach_small_m": 5347.119849555807,
+        "reach_small_m": 4702.832767250454,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
@@ -1597,6 +1657,9 @@
         "gain_isotropic_noise_db": 16.62757831681574,
         "gain_uncorrelated_noise_db": 16.62757831681574,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.7181344093253,
+        "detection_threshold_high_db": 17.31050983903621,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.576078533616681,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1604,7 +1667,7 @@
         "data_rate_mbit_s": 113.04959999999998,
         "cables": 52,
         "platform": {},
-        "reach_ship_m": 13600.886859966968,
+        "reach_ship_m": 12238.433414710396,
         "snr_ship_db": {
           "500.0": 78.88873170015944,
           "1000.0": 66.52294152915105,
@@ -1612,7 +1675,7 @@
           "6000.0": 32.15098806931391,
           "12000.0": 16.2147041093649
         },
-        "reach_small_m": 5764.351041817779,
+        "reach_small_m": 5060.762564507095,
         "snr_small_db": {
           "500.0": 58.88873170015944,
           "1000.0": 46.522941529151055,
@@ -1638,6 +1701,9 @@
         "gain_isotropic_noise_db": 16.691585895234844,
         "gain_uncorrelated_noise_db": 16.812412373755873,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.720879747311137,
+        "detection_threshold_high_db": 17.312800534831364,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1645,7 +1711,7 @@
         "data_rate_mbit_s": 117.9648,
         "cables": 54,
         "platform": {},
-        "reach_ship_m": 13634.139704658688,
+        "reach_ship_m": 12268.072954347796,
         "snr_ship_db": {
           "500.0": 78.95273927857855,
           "1000.0": 66.58694910757015,
@@ -1653,7 +1719,7 @@
           "6000.0": 32.21499564773301,
           "12000.0": 16.278711687784003
         },
-        "reach_small_m": 5781.847704147554,
+        "reach_small_m": 5075.789844988607,
         "snr_small_db": {
           "500.0": 58.95273927857854,
           "1000.0": 46.586949107570156,
@@ -1679,6 +1745,9 @@
         "gain_isotropic_noise_db": 16.70004293423808,
         "gain_uncorrelated_noise_db": 18.06179973983887,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.720879747311137,
+        "detection_threshold_high_db": 17.312800534831364,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1686,7 +1755,7 @@
         "data_rate_mbit_s": 157.2864,
         "cables": 72,
         "platform": {},
-        "reach_ship_m": 13638.537281231853,
+        "reach_ship_m": 12272.168452664777,
         "snr_ship_db": {
           "500.0": 78.96119631758178,
           "1000.0": 66.5954061465734,
@@ -1694,7 +1763,7 @@
           "6000.0": 32.22345268673625,
           "12000.0": 16.28716872678724
         },
-        "reach_small_m": 5784.16272415375,
+        "reach_small_m": 5077.867252288396,
         "snr_small_db": {
           "500.0": 58.96119631758178,
           "1000.0": 46.595406146573396,
@@ -1720,6 +1789,9 @@
         "gain_isotropic_noise_db": 16.705273509084936,
         "gain_uncorrelated_noise_db": 19.822712330395685,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.720879747311137,
+        "detection_threshold_high_db": 17.312800534831364,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1727,7 +1799,7 @@
         "data_rate_mbit_s": 235.9296,
         "cables": 108,
         "platform": {},
-        "reach_ship_m": 13641.257598577233,
+        "reach_ship_m": 12274.701937214244,
         "snr_ship_db": {
           "500.0": 78.96642689242863,
           "1000.0": 66.60063672142024,
@@ -1735,7 +1807,7 @@
           "6000.0": 32.2286832615831,
           "12000.0": 16.292399301634095
         },
-        "reach_small_m": 5785.594917057764,
+        "reach_small_m": 5079.152460855418,
         "snr_small_db": {
           "500.0": 58.96642689242863,
           "1000.0": 46.600636721420244,
@@ -1761,6 +1833,9 @@
         "gain_isotropic_noise_db": 16.653354182286762,
         "gain_uncorrelated_noise_db": 15.051499783199061,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.720879747311137,
+        "detection_threshold_high_db": 17.312800534831364,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1768,7 +1843,7 @@
         "data_rate_mbit_s": 78.6432,
         "cables": 36,
         "platform": {},
-        "reach_ship_m": 13614.271315459098,
+        "reach_ship_m": 12249.570141480313,
         "snr_ship_db": {
           "500.0": 78.91450756563046,
           "1000.0": 66.54871739462207,
@@ -1776,7 +1851,7 @@
           "6000.0": 32.17676393478493,
           "12000.0": 16.24047997483592
         },
-        "reach_small_m": 5771.391705985795,
+        "reach_small_m": 5066.407428447705,
         "snr_small_db": {
           "500.0": 58.91450756563046,
           "1000.0": 46.548717394622074,
@@ -1802,6 +1877,9 @@
         "gain_isotropic_noise_db": 17.781512503836435,
         "gain_uncorrelated_noise_db": 17.781512503836435,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.76869218214467,
+        "detection_threshold_high_db": 17.35267884173285,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 2.7300127206373763,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1809,7 +1887,7 @@
         "data_rate_mbit_s": 147.456,
         "cables": 68,
         "platform": {},
-        "reach_ship_m": 14208.629993185394,
+        "reach_ship_m": 12779.801276081998,
         "snr_ship_db": {
           "500.0": 80.04266588718014,
           "1000.0": 67.67687571617175,
@@ -1817,7 +1895,7 @@
           "6000.0": 33.304922256334606,
           "12000.0": 17.368638296385594
         },
-        "reach_small_m": 6086.532280207137,
+        "reach_small_m": 5337.204599359017,
         "snr_small_db": {
           "500.0": 60.042665887180135,
           "1000.0": 47.67687571617175,
@@ -1845,6 +1923,9 @@
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.64867404852064,
+        "detection_threshold_high_db": 17.252545956471515,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1852,7 +1933,7 @@
         "data_rate_mbit_s": 78.6432,
         "cables": 36,
         "platform": {},
-        "reach_ship_m": 12799.069019588129,
+        "reach_ship_m": 11524.965144327422,
         "snr_ship_db": {
           "500.0": 77.31265316654276,
           "1000.0": 64.94686299553436,
@@ -1860,7 +1941,7 @@
           "6000.0": 30.574909535697223,
           "12000.0": 14.638625575748215
         },
-        "reach_small_m": 5347.119849555807,
+        "reach_small_m": 4702.832767250454,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
@@ -1885,6 +1966,9 @@
         "gain_isotropic_noise_db": 16.70004293423808,
         "gain_uncorrelated_noise_db": 18.06179973983887,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.720879747311137,
+        "detection_threshold_high_db": 17.312800534831364,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1892,7 +1976,7 @@
         "data_rate_mbit_s": 157.2864,
         "cables": 72,
         "platform": {},
-        "reach_ship_m": 13638.537281231853,
+        "reach_ship_m": 12272.168452664777,
         "snr_ship_db": {
           "500.0": 78.96119631758178,
           "1000.0": 66.5954061465734,
@@ -1900,7 +1984,7 @@
           "6000.0": 32.22345268673625,
           "12000.0": 16.28716872678724
         },
-        "reach_small_m": 5784.16272415375,
+        "reach_small_m": 5077.867252288396,
         "snr_small_db": {
           "500.0": 58.96119631758178,
           "1000.0": 46.595406146573396,
@@ -1925,7 +2009,10 @@
         "beamwidth_deg": 3.172753790536934,
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
-        "rows_detection_gain_db": 2.380518038324267,
+        "rows_detection_gain_db": 2.560038755655375,
+        "detection_threshold_db": 13.088635292865265,
+        "detection_threshold_high_db": 14.699665170526313,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -1933,21 +2020,21 @@
         "data_rate_mbit_s": 157.2864,
         "cables": 72,
         "platform": {},
-        "reach_ship_m": 14022.715869053436,
+        "reach_ship_m": 12754.945397608475,
         "snr_ship_db": {
-          "500.0": 77.31265316654274,
-          "1000.0": 64.94686299553437,
+          "500.0": 77.31265316654276,
+          "1000.0": 64.94686299553436,
           "3000.0": 44.56365142895128,
           "6000.0": 30.574909535697223,
-          "12000.0": 14.638625575748216
+          "12000.0": 14.638625575748215
         },
-        "reach_small_m": 5987.435584699753,
+        "reach_small_m": 5324.421407027084,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
           "3000.0": 24.56365142895128,
-          "6000.0": 10.574909535697225,
-          "12000.0": -5.361374424251784
+          "6000.0": 10.574909535697223,
+          "12000.0": -5.361374424251785
         },
         "elevation_sigma_deg_at_20_db": 0.18117430135704787,
         "repeat_spacing_deg": 11.536959032815489,
@@ -1978,7 +2065,7 @@
             "total_m": 600.3916902007172
           },
           "12000.0": {
-            "from_noise_m": 70.34349302157626,
+            "from_noise_m": 70.34349302157628,
             "roll_0p2_deg_m": 41.88790204786391,
             "gradient_0p05_m": 2400.0,
             "total_m": 2401.396011354322
@@ -2001,6 +2088,9 @@
         "gain_isotropic_noise_db": 16.705273509084936,
         "gain_uncorrelated_noise_db": 19.822712330395685,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.720879747311137,
+        "detection_threshold_high_db": 17.312800534831364,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2008,7 +2098,7 @@
         "data_rate_mbit_s": 235.9296,
         "cables": 108,
         "platform": {},
-        "reach_ship_m": 13641.257598577233,
+        "reach_ship_m": 12274.701937214244,
         "snr_ship_db": {
           "500.0": 78.96642689242863,
           "1000.0": 66.60063672142024,
@@ -2016,7 +2106,7 @@
           "6000.0": 32.2286832615831,
           "12000.0": 16.292399301634095
         },
-        "reach_small_m": 5785.594917057764,
+        "reach_small_m": 5079.152460855418,
         "snr_small_db": {
           "500.0": 58.96642689242863,
           "1000.0": 46.600636721420244,
@@ -2041,7 +2131,10 @@
         "beamwidth_deg": 2.1756025992253254,
         "gain_isotropic_noise_db": 16.691585895234844,
         "gain_uncorrelated_noise_db": 16.812412373755873,
-        "rows_detection_gain_db": 2.380518038324267,
+        "rows_detection_gain_db": 2.5639278073603364,
+        "detection_threshold_db": 13.156951939950801,
+        "detection_threshold_high_db": 14.757201467592024,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 1.6385680263866966,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2049,21 +2142,21 @@
         "data_rate_mbit_s": 235.9296,
         "cables": 108,
         "platform": {},
-        "reach_ship_m": 14909.039878510472,
+        "reach_ship_m": 13552.69675560127,
         "snr_ship_db": {
-          "500.0": 78.95273927857853,
-          "1000.0": 66.58694910757016,
+          "500.0": 78.95273927857855,
+          "1000.0": 66.58694910757015,
           "3000.0": 46.20373754098707,
           "6000.0": 32.21499564773301,
           "12000.0": 16.278711687784003
         },
-        "reach_small_m": 6464.086899424055,
+        "reach_small_m": 5739.022004861208,
         "snr_small_db": {
           "500.0": 58.95273927857854,
           "1000.0": 46.586949107570156,
           "3000.0": 26.20373754098707,
-          "6000.0": 12.214995647733014,
-          "12000.0": -3.7212883122159948
+          "6000.0": 12.214995647733012,
+          "12000.0": -3.7212883122159965
         },
         "elevation_sigma_deg_at_20_db": 0.18117430135704787,
         "repeat_spacing_deg": 11.536959032815489,
@@ -2118,7 +2211,10 @@
         "beamwidth_deg": 3.172753790536934,
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
-        "rows_detection_gain_db": 3.715181789907186,
+        "rows_detection_gain_db": 4.012389617500009,
+        "detection_threshold_db": 11.63628443102063,
+        "detection_threshold_high_db": 13.239887029087612,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2126,21 +2222,21 @@
         "data_rate_mbit_s": 235.9296,
         "cables": 108,
         "platform": {},
-        "reach_ship_m": 14741.314664365045,
+        "reach_ship_m": 13490.946762762085,
         "snr_ship_db": {
-          "500.0": 77.31265316654274,
+          "500.0": 77.31265316654276,
           "1000.0": 64.94686299553436,
           "3000.0": 44.56365142895128,
           "6000.0": 30.574909535697223,
-          "12000.0": 14.638625575748213
+          "12000.0": 14.638625575748215
         },
-        "reach_small_m": 6373.07117167306,
+        "reach_small_m": 5706.6128479663175,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
           "3000.0": 24.56365142895128,
-          "6000.0": 10.574909535697222,
-          "12000.0": -5.361374424251787
+          "6000.0": 10.574909535697223,
+          "12000.0": -5.361374424251785
         },
         "elevation_sigma_deg_at_20_db": 0.17906448500007635,
         "repeat_spacing_deg": 11.536959032815489,
@@ -2171,7 +2267,7 @@
             "total_m": 600.3910821539837
           },
           "12000.0": {
-            "from_noise_m": 69.52432688668972,
+            "from_noise_m": 69.5243268866897,
             "roll_0p2_deg_m": 41.88790204786391,
             "gradient_0p05_m": 2400.0,
             "total_m": 2401.37215532433
@@ -2196,6 +2292,9 @@
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
         "rows_detection_gain_db": 0.0,
+        "detection_threshold_db": 15.64867404852064,
+        "detection_threshold_high_db": 17.252545956471515,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2203,7 +2302,7 @@
         "data_rate_mbit_s": 78.6432,
         "cables": 36,
         "platform": {},
-        "reach_ship_m": 12799.069019588129,
+        "reach_ship_m": 11524.965144327422,
         "snr_ship_db": {
           "500.0": 77.31265316654276,
           "1000.0": 64.94686299553436,
@@ -2211,7 +2310,7 @@
           "6000.0": 30.574909535697223,
           "12000.0": 14.638625575748215
         },
-        "reach_small_m": 5347.119849555807,
+        "reach_small_m": 4702.832767250454,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
@@ -2236,7 +2335,10 @@
         "beamwidth_deg": 3.172753790536934,
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
-        "rows_detection_gain_db": 2.380518038324267,
+        "rows_detection_gain_db": 2.560038755655375,
+        "detection_threshold_db": 13.088635292865265,
+        "detection_threshold_high_db": 14.699665170526313,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2244,21 +2346,21 @@
         "data_rate_mbit_s": 157.2864,
         "cables": 72,
         "platform": {},
-        "reach_ship_m": 14022.715869053436,
+        "reach_ship_m": 12754.945397608475,
         "snr_ship_db": {
-          "500.0": 77.31265316654274,
-          "1000.0": 64.94686299553437,
+          "500.0": 77.31265316654276,
+          "1000.0": 64.94686299553436,
           "3000.0": 44.56365142895128,
           "6000.0": 30.574909535697223,
-          "12000.0": 14.638625575748216
+          "12000.0": 14.638625575748215
         },
-        "reach_small_m": 5987.435584699753,
+        "reach_small_m": 5324.421407027084,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
           "3000.0": 24.56365142895128,
-          "6000.0": 10.574909535697225,
-          "12000.0": -5.361374424251784
+          "6000.0": 10.574909535697223,
+          "12000.0": -5.361374424251785
         },
         "elevation_sigma_deg_at_20_db": 0.18117430135704787,
         "repeat_spacing_deg": 11.536959032815489,
@@ -2289,7 +2391,7 @@
             "total_m": 600.3916902007172
           },
           "12000.0": {
-            "from_noise_m": 70.34349302157626,
+            "from_noise_m": 70.34349302157628,
             "roll_0p2_deg_m": 41.88790204786391,
             "gradient_0p05_m": 2400.0,
             "total_m": 2401.396011354322
@@ -2313,7 +2415,10 @@
         "beamwidth_deg": 3.172753790536934,
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
-        "rows_detection_gain_db": 3.715181789907186,
+        "rows_detection_gain_db": 4.012389617500009,
+        "detection_threshold_db": 11.63628443102063,
+        "detection_threshold_high_db": 13.239887029087612,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2321,21 +2426,21 @@
         "data_rate_mbit_s": 235.9296,
         "cables": 108,
         "platform": {},
-        "reach_ship_m": 14741.314664365045,
+        "reach_ship_m": 13490.946762762085,
         "snr_ship_db": {
-          "500.0": 77.31265316654274,
+          "500.0": 77.31265316654276,
           "1000.0": 64.94686299553436,
           "3000.0": 44.56365142895128,
           "6000.0": 30.574909535697223,
-          "12000.0": 14.638625575748213
+          "12000.0": 14.638625575748215
         },
-        "reach_small_m": 6373.07117167306,
+        "reach_small_m": 5706.6128479663175,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
           "3000.0": 24.56365142895128,
-          "6000.0": 10.574909535697222,
-          "12000.0": -5.361374424251787
+          "6000.0": 10.574909535697223,
+          "12000.0": -5.361374424251785
         },
         "elevation_sigma_deg_at_20_db": 0.17906448500007635,
         "repeat_spacing_deg": 11.536959032815489,
@@ -2366,7 +2471,7 @@
             "total_m": 600.3910821539837
           },
           "12000.0": {
-            "from_noise_m": 69.52432688668972,
+            "from_noise_m": 69.5243268866897,
             "roll_0p2_deg_m": 41.88790204786391,
             "gradient_0p05_m": 2400.0,
             "total_m": 2401.37215532433
@@ -2391,7 +2496,10 @@
         "beamwidth_deg": 3.172753790536934,
         "gain_isotropic_noise_db": 15.051499783199056,
         "gain_uncorrelated_noise_db": 15.051499783199061,
-        "rows_detection_gain_db": 4.634507413362347,
+        "rows_detection_gain_db": 4.876402053291013,
+        "detection_threshold_db": 10.772271995229627,
+        "detection_threshold_high_db": 12.332316766020599,
+        "detection_probability": 0.5,
         "reverberation_margin_vs_32_at_half_wavelength_db": 0.0,
         "source_level_db": 197.0,
         "pulse_s": 1.0,
@@ -2399,21 +2507,21 @@
         "data_rate_mbit_s": 314.5728,
         "cables": 144,
         "platform": {},
-        "reach_ship_m": 15249.86123548173,
+        "reach_ship_m": 13941.942690902268,
         "snr_ship_db": {
           "500.0": 77.31265316654276,
-          "1000.0": 64.94686299553437,
+          "1000.0": 64.94686299553436,
           "3000.0": 44.56365142895128,
-          "6000.0": 30.574909535697227,
+          "6000.0": 30.574909535697223,
           "12000.0": 14.638625575748215
         },
-        "reach_small_m": 6650.194302046272,
+        "reach_small_m": 5944.529071372001,
         "snr_small_db": {
           "500.0": 57.31265316654275,
           "1000.0": 44.94686299553437,
           "3000.0": 24.56365142895128,
           "6000.0": 10.574909535697223,
-          "12000.0": -5.361374424251786
+          "12000.0": -5.361374424251785
         },
         "elevation_sigma_deg_at_20_db": 0.17505694012902512,
         "repeat_spacing_deg": 11.536959032815489,
@@ -2438,7 +2546,7 @@
             "total_m": 150.36789025367577
           },
           "6000.0": {
-            "from_noise_m": 5.425783671238822,
+            "from_noise_m": 5.4257836712388245,
             "roll_0p2_deg_m": 20.943951023931955,
             "gradient_0p05_m": 600.0,
             "total_m": 600.3899467953639
@@ -2475,8 +2583,8 @@
         1.6921353549530311
       ],
       "reach_ship_km": [
-        13.600886859966968,
-        14.208629993185394
+        12.238433414710396,
+        12.779801276081999
       ]
     },
     "marginal_32_to_64_per_row": {
@@ -2486,27 +2594,27 @@
         2.1756025992253254
       ],
       "reach_ship_km": [
-        12.79906901958813,
-        13.638537281231853
+        11.524965144327421,
+        12.272168452664777
       ],
       "reach_small_km": [
-        5.347119849555807,
-        5.78416272415375
+        4.702832767250454,
+        5.077867252288396
       ],
       "boards": 4
     },
     "one_by_64_vs_two_by_32": {
       "map_gain_db": [
         16.70004293423808,
-        17.432017821523324
+        17.611538538854433
       ],
       "beam_deg": [
         2.1756025992253254,
         3.172753790536934
       ],
       "reach_ship_km": [
-        13.638537281231853,
-        14.022715869053435
+        12.272168452664777,
+        12.754945397608475
       ]
     }
   },
