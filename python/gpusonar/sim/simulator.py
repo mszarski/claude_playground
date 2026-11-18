@@ -156,14 +156,16 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         alpha = float(acoustics.absorption(fc, env.get("temperature", 10.0), env.get("salinity", 35.0),
                                            env.get("depth", 0.0), env.get("ph", 8.0), absorption_model))
         strength = None
-        if item.get("model", "lambert") == "chapman_harris":
-            strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
-        elif item.get("model") in ("kraus_surface", "searay_bottom"):
-            # Empirical high-frequency laws (sim/surface.py): {model: kraus_surface, wind_speed}
-            # for the surface, {model: searay_bottom, bottom_type: mud|sand|gravel|rock} for the bottom.
+        if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
+            # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
+            # bubble_saturation]}. Without `cap` the law is unchanged and a warning is given once
+            # where it lies above the bubble layer's saturation level (sim/surface.py, D-87).
             from . import surface as surface_model
-            strength = (surface_model.kraus_surface_strength(float(item["wind_speed"]), fc) if item["model"] == "kraus_surface"
-                        else surface_model.searay_bottom_strength(fc, item["bottom_type"]))
+            strength = surface_model.empirical_surface_strength(item["model"], float(item["wind_speed"]), fc, item.get("cap"))
+        elif item.get("model") == "searay_bottom":
+            # Empirical bottom law by type (sim/surface.py): {model: searay_bottom, bottom_type: mud|sand|gravel|rock}.
+            from . import surface as surface_model
+            strength = surface_model.searay_bottom_strength(fc, item["bottom_type"])
         elif item.get("model") == "bubble_layer_surface":
             # {model: bubble_layer_surface, wind_speed, extinction: apl_1994 | hall_novarini}: the
             # bubble-layer and facet terms of the published high-frequency surface model (sim/surface.py).

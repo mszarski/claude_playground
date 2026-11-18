@@ -1165,8 +1165,8 @@ comparison is for one-dimensional surfaces and backscatter; no data of ours deci
 the two. The owner was shown the recommendation and answered "Take your recommendations".
 Consequence, measured on the shipped cases: below 60 degrees of grazing the backscattering
 strength changes by 0.0 to +0.3 dB; at 75 degrees by +0.0 to +0.6 dB; at 85 degrees by
-+0.3, -4.4 and -3.3 dB (placeholder sand at 8 kHz, medium sand at 20 kHz, placeholder
-sand at 300 kHz), and at 90 degrees it is finite (+17, -3, -2 dB) where the perturbation
++0.3, -2.8 and -3.3 dB (placeholder sand at 8 kHz, medium sand at 20 kHz, placeholder
+sand at 300 kHz), and at 90 degrees it is finite (+17, -1, -2 dB) where the perturbation
 result is not. In records: `sst_sediment_reverb` +0.07 dB (grazing 8 to 53 degrees),
 `fls_glints_on_sediment` unchanged to 0.00 dB (difference -82 dB re the record); in
 `flank_sst_shallow` and `flank_sst_spread` the first 0.2 s of the record, where the long
@@ -1182,3 +1182,30 @@ rebuilt at every step; `--roughness-model small_slope` is there for data above 6
 model named, the perturbation result is used and a warning says so. Sediment seafloors now
 pass `roughness_model` and `small_scale_kh` on, so the earlier amplitudes stay selectable
 there too (they were not before, because there was nothing to select).
+
+### D-87 Surface backscatter: the bubble-layer model in its band, a warning and an opt-in cap outside it
+
+In 12 to 70 kHz and 3 to 15 m/s, `bubble_layer_surface` is the model to use: it is the only
+one here whose source states a comparison with data (+-5 dB; Gallaudet 2001, pp. 124-125,
+`PHYSICS_NOTES.md` Sec. 23.3). The owner was shown the recommendation and answered "Take
+your recommendations". What that changes:
+- No code default: a reverberation item without `model` is a Lambert boundary, so every
+  surface item names its law. There was nothing to flip.
+- No shipped scenario was switched, because none has a surface item in that band: the
+  surface items are at 5 to 9.9 kHz (flank, long-range Popoto, `sst_pursuit`) and at 120 to
+  330 kHz (FLS); the `popoto_8` trials at 27.5 kHz have no surface item. Switching the ones
+  outside the band would be an extrapolation of the bubble model, so they keep their law.
+- `chapman_harris` and `kraus_surface` are unchanged and now warn, once per law, when used
+  at 12 kHz or above where they exceed the level a saturated bubble layer returns
+  (delta_r sin t / (8 pi delta)) at 10 degrees of grazing. Computed crossing frequencies
+  for 3 / 5 / 6 / 8 / 10 / 15 m/s: Chapman-Harris 416 / 127 / 84 / 43 / 26 / 10 kHz; Kraus
+  never / 511 / 223 / 74 / 36 / 12 kHz. Shipped scenarios that now warn (records
+  unchanged): `fls_170k_traffic`, `fls_170k_transit` (+1.8 dB above the level),
+  `fls_330k_transit` (+5.9 dB). `fls_120k_*` is 0.4 dB below it.
+- `cap: bubble_saturation` on such an item (opt-in) takes the smaller of the law and that
+  level.
+Limits: literature only. The level is the thick-layer limit of the bubble term, not its
+maximum (the term itself peaks 3.7 dB above it at an optical depth of 0.6 along the ray,
+e.g. -25.4 dB against -29.1 dB at 27.5 kHz, 10 m/s, 10 degrees), and it says nothing about
+facets near normal incidence. Above 70 kHz nothing that could be opened validates any of
+the three models; the warning says so.
