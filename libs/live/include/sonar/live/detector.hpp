@@ -108,10 +108,13 @@ std::vector<double> sample_correlation(const Waveform& waveform, double sound_sp
 
 /// The detector's plan for a map of `n_cells` range cells of `samples_per_cell` samples `step` apart and the
 /// bearings given, `rows` maps added in power, a background of `train_cells` cells either side. `hann`: the
-/// aperture window of the map. `record` gives the band, the pulse and the array.
+/// aperture window of the map. `record` gives the band, the pulse and the array. `lines`: the channels of each line
+/// whose map is added (stacked rows); empty: every channel, one line. The bearing sidelobe envelope is that of the
+/// hydrophones the record has, where they are: a dead board leaves a gap in a row and sidelobes the envelope must know.
 DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, const DetectorOptions& options,
                            std::int64_t n_cells, std::int64_t samples_per_cell, double step, const std::vector<double>& bearings,
-                           std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, double merge_m);
+                           std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, double merge_m,
+                           const std::vector<std::vector<std::int64_t>>& lines = {});
 
 /// The detector's background of every cell of `cell_mean` [n_bearing][n_cells]: the mean of the `train` cells either
 /// side beyond `guard`, moved along the background's slope where that window is not balanced (see the top of this

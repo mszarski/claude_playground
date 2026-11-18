@@ -52,7 +52,8 @@ std::string DetectorPlan::json() const {
 
 DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, const DetectorOptions& options, std::int64_t n_cells,
                            std::int64_t samples_per_cell, double step, const std::vector<double>& bearings, std::int64_t rows,
-                           std::int64_t guard_cells, std::int64_t train_cells, bool hann, double merge_m) {
+                           std::int64_t guard_cells, std::int64_t train_cells, bool hann, double merge_m,
+                           const std::vector<std::vector<std::int64_t>>& lines) {
   if (n_cells < 1 || samples_per_cell < 1 || !(step > 0.0) || bearings.empty() || rows < 1 || train_cells < 1) {
     throw std::invalid_argument("plan_detector: an empty map");
   }
@@ -108,35 +109,52 @@ DetectorPlan plan_detector(const PingRecord& record, const SonarFacts& facts, co
     const double x = static_cast<double>(d - 1) * p.cell_m / p.resolution_m;
     p.range_envelope[static_cast<std::size_t>(d)] = x < 1.0 ? 1.0 : (swept ? std::min(1.0, 1.0 / (kPi * kPi * x * x)) : 1e-12);
   }
-  // Bearing sidelobes of one row with the map's aperture window, averaged over the band (which fills the nulls).
-  const std::int64_t n_el = std::max<std::int64_t>(facts.row_elements, 1);
-  const double pitch = facts.aperture / static_cast<double>(n_el);
-  std::vector<double> weight(static_cast<std::size_t>(n_el), 1.0), x_el(static_cast<std::size_t>(n_el));
-  double w_sum = 0.0;
-  for (std::int64_t i = 0; i < n_el; ++i) {
-    x_el[static_cast<std::size_t>(i)] = (static_cast<double>(i) - 0.5 * static_cast<double>(n_el - 1)) * pitch;
-    if (hann) {
-      const double cw = std::cos(kPi * x_el[static_cast<std::size_t>(i)] / facts.aperture);
-      weight[static_cast<std::size_t>(i)] = cw * cw;
-    }
-    w_sum += weight[static_cast<std::size_t>(i)];
+  // Bearing sidelobes: the pattern of each line of hydrophones as the record has them (a dead board is a gap), with the
+  // map's aperture window laid as the map lays it, averaged over the band (which fills the nulls) and over the lines
+  // (their maps are added in power).
+  std::vector<std::vector<std::int64_t>> use = lines;
+  if (use.empty()) {
+    use.emplace_back();
+    for (std::int64_t i = 0; i < static_cast<std::int64_t>(record.geometry.rx.size()); ++i) use[0].push_back(i);
   }
   const std::int64_t n_u = 2048;
   p.u_step = 2.0 / static_cast<double>(n_u);
   std::vector<double> pattern(static_cast<std::size_t>(n_u + 1), 0.0);
   const int n_f = 9;
-  for (std::int64_t iu = 0; iu <= n_u; ++iu) {
-    const double u = p.u_step * static_cast<double>(iu);
-    double acc = 0.0;
-    for (int q = 0; q < n_f; ++q) {
-      const double f = facts.f_low + (facts.f_high - facts.f_low) * (static_cast<double>(q) + 0.5) / n_f;
-      std::complex<double> z(0.0, 0.0);
-      for (std::int64_t i = 0; i < n_el; ++i) {
-        z += weight[static_cast<std::size_t>(i)] * std::polar(1.0, 2.0 * kPi * f / c * x_el[static_cast<std::size_t>(i)] * u);
-      }
-      acc += std::norm(z) / (w_sum * w_sum);
+  for (const std::vector<std::int64_t>& line : use) {
+    const auto n_el = line.size();
+    if (n_el == 0) throw std::invalid_argument("plan_detector: an empty line of hydrophones");
+    const auto at = [&](std::size_t i) { return record.geometry.rx.at(static_cast<std::size_t>(line[i])).lever_arm; };
+    Vec3d centre{0.0, 0.0, 0.0};
+    for (std::size_t i = 0; i < n_el; ++i) centre = centre + at(i) / static_cast<double>(n_el);
+    const Vec3d end = at(n_el - 1) - at(0);
+    const Vec3d axis = n_el > 1 && dot(end, end) > 0.0 ? normalized(end) : Vec3d{1.0, 0.0, 0.0};
+    std::vector<double> x_el(n_el), weight(n_el, 1.0);
+    double lo = 1e300, hi = -1e300, w_sum = 0.0;
+    for (std::size_t i = 0; i < n_el; ++i) {
+      x_el[i] = dot(at(i) - centre, axis);
+      lo = std::min(lo, x_el[i]);
+      hi = std::max(hi, x_el[i]);
     }
-    pattern[static_cast<std::size_t>(iu)] = acc / n_f;
+    const double span = hi - lo, pitch = span / static_cast<double>(std::max<std::size_t>(n_el - 1, 1));
+    for (std::size_t i = 0; i < n_el; ++i) {
+      if (hann && span > 0.0) {
+        const double cw = std::cos(kPi * x_el[i] / (span + pitch));
+        weight[i] = cw * cw;
+      }
+      w_sum += weight[i];
+    }
+    for (std::int64_t iu = 0; iu <= n_u; ++iu) {
+      const double u = p.u_step * static_cast<double>(iu);
+      double acc = 0.0;
+      for (int q = 0; q < n_f; ++q) {
+        const double f = facts.f_low + (facts.f_high - facts.f_low) * (static_cast<double>(q) + 0.5) / n_f;
+        std::complex<double> z(0.0, 0.0);
+        for (std::size_t i = 0; i < n_el; ++i) z += weight[i] * std::polar(1.0, 2.0 * kPi * f / c * x_el[i] * u);
+        acc += std::norm(z) / (w_sum * w_sum);
+      }
+      pattern[static_cast<std::size_t>(iu)] += acc / n_f / static_cast<double>(use.size());
+    }
   }
   // Cells closer in bearing than half the half-power beamwidth are one echo's beam (a weak echo's beam can be flagged in
   // two pieces); never less than one step of the bearing grid, so touching cells always belong together.
@@ -319,6 +337,7 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
   const std::int64_t reach = plan.merge_cells + 1;
   std::vector<double> row_energy(static_cast<std::size_t>(n_b), 0.0);
   std::vector<std::int64_t> rows_touched;
+  std::vector<std::pair<std::int64_t, double>> profile;                // (sample along range, power over background) of a group
   std::vector<Detection> out;
   std::vector<unsigned char> seen(n, 0);
   std::vector<std::int64_t> stack;
@@ -326,6 +345,7 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
     if (!flag[static_cast<std::size_t>(start)] || seen[static_cast<std::size_t>(start)]) continue;
     double w_sum = 0.0, r_sum = 0.0, best = 0.0, nearest = 1e300, farthest = -1e300;
     rows_touched.clear();
+    profile.clear();
     std::int64_t cells = 0;
     stack.assign(1, start);
     seen[static_cast<std::size_t>(start)] = 1;
@@ -340,6 +360,7 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
         w_sum += w;
         r_sum += w * fine_ranges[static_cast<std::size_t>(fine_offset + col * k + s)];
         row_energy[static_cast<std::size_t>(row)] += w;
+        profile.emplace_back(col * k + s, w / std::max(static_cast<double>(background[static_cast<std::size_t>(i)]), 1e-300));
       }
       nearest = std::min(nearest, cell_ranges[static_cast<std::size_t>(col)]);
       farthest = std::max(farthest, cell_ranges[static_cast<std::size_t>(col)]);
@@ -380,6 +401,25 @@ std::vector<Detection> multiscale_detect(const float* fine, std::int64_t fine_st
     Detection d{r_sum / w_sum, bw_sum > 0.0 ? b_sum / bw_sum : plain_b / plain_sum, 10.0 * std::log10(best), cells};
     d.first_range = nearest;
     d.extent = farthest - nearest + plan.cell_m;
+    // Its arrivals: along range, the strongest sample over the group's bearings; the local peaks of that above the
+    // single-sample threshold (a run of samples the group does not hold ends a peak), the 8 strongest, nearest first.
+    std::sort(profile.begin(), profile.end());
+    std::vector<std::pair<std::int64_t, double>> line;
+    for (const auto& q : profile) {
+      if (!line.empty() && line.back().first == q.first) line.back().second = std::max(line.back().second, q.second);
+      else line.push_back(q);
+    }
+    std::vector<std::pair<double, std::int64_t>> peaks;                // (ratio, sample)
+    for (std::size_t q = 0; q < line.size(); ++q) {
+      const bool left = q > 0 && line[q - 1].first == line[q].first - 1, right = q + 1 < line.size() && line[q + 1].first == line[q].first + 1;
+      if (line[q].second <= plan.scales[0].factor) continue;
+      if ((left && line[q - 1].second >= line[q].second) || (right && line[q + 1].second > line[q].second)) continue;
+      peaks.emplace_back(line[q].second, line[q].first);
+    }
+    std::sort(peaks.begin(), peaks.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    if (peaks.size() > 8) peaks.resize(8);
+    std::sort(peaks.begin(), peaks.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+    for (const auto& q : peaks) d.arrivals.push_back({fine_ranges[static_cast<std::size_t>(fine_offset + q.second)], 10.0 * std::log10(q.first)});
     out.push_back(d);
   }
   return out;

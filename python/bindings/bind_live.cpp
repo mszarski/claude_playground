@@ -506,7 +506,10 @@ void bind_live(py::module_& m) {
         const live::SonarFacts facts = live::sonar_facts(record, live::row_tolerance(record, tolerance), min_elements);
         double merge_m = 0.0;
         number(kw, "merge_m", merge_m);
-        const live::DetectorPlan p = live::plan_detector(record, facts, o, n_cells, samples_per_cell, step, bearings, rows, guard_cells, train_cells, hann, merge_m);
+        // The lines whose maps are added: the array's rows when the chain stacks them (rows > 1), else every channel as one.
+        std::vector<std::vector<std::int64_t>> lines;
+        if (rows > 1) lines = live::find_rows(record, live::row_tolerance(record, tolerance), min_elements);
+        const live::DetectorPlan p = live::plan_detector(record, facts, o, n_cells, samples_per_cell, step, bearings, rows, guard_cells, train_cells, hann, merge_m, lines);
         py::dict out;
         py::list scales;
         for (const live::DetectorScale& s : p.scales) {
@@ -556,6 +559,17 @@ void bind_live(py::module_& m) {
       py::arg("cell_mean"), py::arg("guard"), py::arg("train"),
       "The multiscale detector's background of each cell (libs/live detector.hpp) and, per range cell, the number of independent "
       "training cells it is worth: the C++ reference the NumPy one (detect.background) is tested against.");
+  m.def(
+      "live_beam_samples",
+      [](const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann, Backend backend) {
+        const std::vector<std::complex<float>> z = live::beam_samples(record, ranges, bearing, hann, backend);
+        py::array_t<std::complex<float>> out(static_cast<py::ssize_t>(z.size()));
+        std::memcpy(out.mutable_data(), z.data(), z.size() * sizeof(std::complex<float>));
+        return out;
+      },
+      py::arg("record"), py::arg("ranges"), py::arg("bearing"), py::arg("hann") = true, py::arg("backend") = Backend::Host,
+      "The compressed, beamformed complex samples of a prepared record at `ranges` (m) along one bearing (rad): what the chain's map is the "
+      "squared magnitude of (libs/live chain.hpp, beam_samples). For the arrival structure inside a detection: its first_range_m, extent_m, bearing.");
   m.def("live_sample_correlation", [](const PingRecord& record, double step, std::int64_t n) {
           return live::sample_correlation(record.transmit.waveform, record.environment.sound_speed, step, n);
         }, py::arg("record"), py::arg("step"), py::arg("n"),

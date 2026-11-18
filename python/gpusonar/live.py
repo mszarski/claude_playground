@@ -1185,7 +1185,8 @@ class LiveChain:
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
             "sync": sync_facts,
             "detections": [dict({"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db},
-                                **({"extent_m": h.extent} if np.isfinite(h.extent) else {}), **(x or {}))
+                                **({"extent_m": h.extent, "first_range_m": h.first_range} if np.isfinite(h.extent) else {}),
+                                **({"arrivals": [list(a) for a in h.arrivals]} if h.arrivals and len(h.arrivals) > 1 else {}), **(x or {}))
                            for h, x in zip(hits, extra)],
             "tracks": [{"id": c_.id, "kind": c_.kind, "parent": c_.parent,
                         # World coordinates: x north, y east, metres, in the frame the records use.

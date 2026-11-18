@@ -565,12 +565,25 @@ nothing: the threshold on the mean stayed where it was, so two or three rows det
   sample and 7.3 dB for a cell's mean on one row of the 1.4 km window at 12 km; 10.6 dB for a sample with two rows
   added, 9.3 dB (and 4.8 dB for the mean) with three. `cfar.pfa` belongs to `mean` and `peak` only.
 - **One echo, one detection.** A flagged cell that a stronger cell's sidelobes explain is dropped: the compressed pulse's
-  along range (1/(π x)² for a swept pulse), the aperture window's along bearing (the row's own pattern over the band, not
-  below `cfar.sidelobe_floor_db`, −40 dB), with a margin of `cfar.sidelobe_margin_db` (10 dB). Flagged cells are then
+  along range (1/(π x)² for a swept pulse), the aperture window's along bearing (the pattern of the hydrophones the
+  record has, over the band: a dead board's gap raises it; not below `cfar.sidelobe_floor_db`, −40 dB), with a margin
+  of `cfar.sidelobe_margin_db` (10 dB). A cell inside a stronger echo's own core (its half-power beam, the next range
+  cell) is never dropped. Flagged cells are then
   grouped when they are no further apart in range than `cfar.merge_m` (default: the tracker's range sigma, 15 m) and no
   further apart in bearing than half the beam's half-power width (2.6° for a 32-hydrophone row at 5 kHz); touching cells
-  always are. So a target's highlights and the arrivals of one multipath group are one detection, with its strongest
-  sample as `snr_db`, the energy-weighted position of its samples and `extent_m`, the range it spans.
+  always are. So a target's highlights and the arrivals of one multipath group are one detection. It reports its
+  strongest sample as `snr_db`; its range, the energy-weighted mean of its samples; its bearing, the mean of its beams
+  weighted by their energy above half the strongest one's (within 0.06° of truth on `popoto_elevation_free`, as before;
+  from ping to ping it scatters by 0.02° where the old centroid scattered by 0.01°); and `extent_m`, the range it spans.
+- **What a detection holds of its echo.** `first_range_m` and `extent_m` (it covers the range cells from the one centred
+  on `first_range_m` over `extent_m`), and, when there are two or more, `arrivals`: `[range_m, snr_db]` of each local
+  peak along range inside it that stands above the single-sample threshold (the strongest sample over its bearings;
+  at most the 8 strongest, nearest first). A submerged target's direct echo and its echoes by the surface are ONE
+  detection and one track, with those arrivals inside it (`tests/python/test_detector.py`: a target at 150 m seen from
+  225 m at 6 and 12 km, arrivals 2.8 to 11 m apart). The merge window: flagged cells up to 16 m apart in range (21 ms of
+  two-way delay) are joined, so arrivals up to 16 m apart are always in one detection and arrivals more than 20 m apart
+  never. The complex samples behind them, at any range sampling over the detection's window at its bearing:
+  `beam_samples` (`libs/live` `chain.hpp`; `core.live_beam_samples` in Python), one row at a time.
 - **What is resolved.** Two echoes are two detections when they are more than 20 m apart in range (the merge distance
   and a cell either side), or more than one and a half half-power beamwidths apart in bearing (7.9°). A weaker echo
   less than 10 dB above a stronger one's sidelobe envelope at its place is not told apart from those sidelobes: on
@@ -621,9 +634,8 @@ thousand pings) is 2.3 dB above the 10.7 dB that was typed for a statistic it di
 Integration over range IS right for an extended echo: 1.3 dB at 5 m, 3.3 dB at 20 m, 4.8 dB at 100 m. The longer means
 are nevertheless an option (`cfar.integrate_cells: [1, 4, 16]`), not the default: their thresholds are 4.0 and 2.1 dB
 over the background, which a strong, long echo's bearing sidelobes (measured −28 dB on `flank_patrol`) and any error of
-the background reach. On `flank_patrol` they gave 9 to 14 detections a ping against 3 targets before the background's
-slope was handled, and a row of weak detections at the bearings beside the submarine's echo after. Use them in noise
-that is known to be flat.
+the background reach. On `flank_patrol` they give 3 to 6 detections a ping and a fourth, `uncertain` track against
+3 targets (9 to 14 a ping before the background's slope was handled). Use them in noise that is known to be flat.
 
 **Measured on the shipped scenarios** (both engines give the same lines; before → after; detections per ping, strongest
 `snr_db`, tracks at the last ping):
@@ -644,7 +656,9 @@ that is known to be flat.
 
 On noise alone (the 12 km window, 220 pings of one row): no detection from either detector. At budgets large enough to
 count the new one keeps its budget: 3.3, 1.3, 0.35 and 0.12 false detections a ping at budgets of 3, 1, 0.3 and 0.1.
-With three rows it reported one false detection in 30 pings at the default budget, where 0.03 to 0.05 was expected.
+With three rows the detector runs about twice over its budget (3.8, 1.7, 0.47, 0.22, 0.05 and 0.033 a ping at budgets
+of 3, 1, 0.3, 0.1, 0.03 and 0.01, on 30 and 60 pings) and reported one false detection in 90 pings at the default budget;
+the old detector none. Not explained; `cfar.search_factor: 5` would bring it back for 0.15 dB.
 
 **For a range prediction.** Use `live.detection_probability(snr_of_one_row, record, chain, rows=...)`, or
 `live.budget_threshold_db(record, chain, pd=0.5, rows=...)` as the threshold on the SNR of ONE row, without a separate
@@ -683,8 +697,8 @@ range sidelobes, Hann 1.5 dB and 1.53 times for −31 dB (unweighted: −13.3 dB
 only −28 and −27 dB, so a rule that picks the window would weight nothing below a product of about 100. The chain
 does not weight: the sidelobe envelope removes a strong echo's range sidelobes at no loss, at the price of the
 masking stated above, and a weighted replica would need its own sample correlation and envelope in the detector's
-plan; a Taylor aperture window (about 1 dB of the
-Hann window's 1.76 dB back at the same first sidelobe); training cells that leave out other detections (a second echo
+plan; a Taylor aperture window (computed for 32 hydrophones: 0.69 dB of loss at −30 dB sidelobes against the Hann
+window's 1.76 dB at −31.5 dB, so 1.1 dB back; it needs the window in `flank.py` and in the elevation estimate); training cells that leave out other detections (a second echo
 100 to 400 m from a strong one is still desensitised by it, as before).
 
 Related report fields: with stacked rows a detection whose elevation is ambiguous carries `"bearing_corrected": false`:

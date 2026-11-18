@@ -341,3 +341,64 @@ def test_both_engines_give_the_same_detections_with_stacked_rows_and_the_program
     o = live.cpp_chain_options({"cell_statistic": "multiscale", "cfar": {"false_alarms_per_ping": 0.01, "integrate_cells": [1, 4], "merge_m": 8.0}})
     assert o["cell_multiscale"] is True and o["cfar_false_alarms_per_ping"] == 0.01 and o["cfar_integrate_cells"] == [1, 4] and o["cfar_merge_m"] == 8.0
     assert live.cpp_chain_options({"cell_statistic": "mean"})["cell_multiscale"] is False
+
+
+@pytest.mark.parametrize("range_m, ts_db", [(6000.0, 15.0), (12000.0, 36.0)])
+def test_a_submerged_target_with_a_resolved_surface_echo_is_one_detection_and_one_track(range_m, ts_db):
+    """A target at 150 m seen from 225 m, the surface above (image-source paths, no bottom): its echo arrives by the
+    direct path and, 2 x 225 x 150 / range later in path, by the surface (5.6 m at 12 km, 11 m at 6 km; in range half of
+    that for one leg by the surface, all of it for both). It is one target: one detection on every ping and one track,
+    on both engines, with the arrivals listed inside the detection for whoever needs their delays. (The two paths with
+    one leg by the surface add: that arrival is 6 dB above the direct one, which the levels here keep above the threshold.)"""
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    cfg = load_scenario_config("popoto_12km")
+    cfg.pop("truth", None)
+    cfg.pop("reverberation", None)
+    cfg["fidelity"] = "image_source"
+    cfg["propagation"] = {"surface_z": 0.0, "bottom_z": None, "max_order": 1}
+    cfg["sonar_overrides"]["receive"]["window"] = {"range": [range_m - 500.0, range_m + 500.0]}
+    cfg["platform"] = {"position": [0.0, 0.0, 225.0], "rpy": [0.0, 0.0, 0.0], "velocity": [0.0, 0.0, 0.0]}
+    cfg["pings"] = {"count": 4, "interval": 18.0}
+    cfg["scene"] = [{"type": "points", "label": "submerged", "positions": [[300.0, range_m, 150.0]], "target_strength_db": ts_db}]
+    records = run_scenario(cfg).records
+    slant = float(np.hypot(np.hypot(300.0, range_m), 75.0))
+    later = 2.0 * 225.0 * 150.0 / range_m                     # extra path of a leg by the surface, m
+    got = {}
+    for engine in ("cpp", "python"):
+        with LiveChain({"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "engine": engine}) as chain:
+            reps = got[engine] = chain.run([r.copy() for r in records])
+            assert chain.detector["merge_cells"] == 7          # cells up to 16 m apart in range are one detection
+        for rep in reps:
+            assert len(rep["detections"]) == 1, (engine, rep["detections"])
+            d = rep["detections"][0]
+            assert d["first_range_m"] - 1.0 <= slant + 0.5 and slant + later <= d["first_range_m"] + d["extent_m"] + 1.0, (engine, d)
+            # The direct echo and the echoes by the surface are inside it, apart by the surface's delay.
+            assert len(d["arrivals"]) >= 2, (engine, d)
+            ranges = np.array([a[0] for a in d["arrivals"]])
+            assert np.abs(ranges - slant).min() < 0.5, (engine, d)
+            assert min(np.abs(ranges - slant - 0.5 * later).min(), np.abs(ranges - slant - later).min()) < 0.5, (engine, d)
+        assert len(reps[-1]["tracks"]) == 1 and {t["id"] for r in reps for t in r["tracks"]} == {reps[-1]["tracks"][0]["id"]}, engine
+    for a, b in zip(got["cpp"], got["python"]):
+        assert len(a["detections"][0]["arrivals"]) == len(b["detections"][0]["arrivals"])
+        assert np.allclose(a["detections"][0]["arrivals"], b["detections"][0]["arrivals"], atol=0.05)
+
+
+def test_beam_samples_are_what_the_map_is_the_power_of(sonar):
+    """The complex samples behind a detection (libs/live chain.hpp `beam_samples`, `core.live_beam_samples`): over its
+    range window at its bearing their strongest squared magnitude over the background is its `snr_db`, at its range."""
+    rec = ping(sonar, [at(1300.0, 6.0)], 0.0, 91)
+    with LiveChain({"backend": "host", "engine": "cpp"}) as chain:
+        d = chain.process(rec)["detections"][0]               # the record is left prepared (baseband, compressed)
+        power, ranges, _ = chain._cpp.last_map()
+    grid = np.radians(np.arange(-40.0, 40.25, 0.5))
+    bearing = grid[int(np.argmin(np.abs(grid - np.radians(d["bearing_deg"]))))]
+    window = d["first_range_m"] - 1.0 + 0.25 * np.arange(int(d["extent_m"] / 0.25) + 8)
+    z = core.live_beam_samples(rec, [float(r) for r in window], float(bearing))
+    assert z.dtype == np.complex64 and len(z) == len(window)
+    peak = int(np.argmax(np.abs(z)))
+    assert abs(window[peak] - d["range_m"]) < 0.5
+    background = np.median(np.asarray(power))                 # the map's cell means in noise: their median is near their mean
+    assert 10.0 * np.log10(np.abs(z[peak]) ** 2 / background) == pytest.approx(d["snr_db"], abs=1.0)
+    same = flank.backprojection_map(rec, window, np.array([bearing]), window="hann", interp="linear", backend=core.Backend.Host).image.ravel()
+    assert np.allclose(z, same, rtol=1e-4, atol=1e-6 * np.abs(same).max())

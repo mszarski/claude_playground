@@ -158,8 +158,27 @@ void prepare(PingRecord& record, Backend backend, int device) {
   }
 }
 
+namespace {
+std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, const std::vector<double>& ranges,
+                                                     const std::vector<double>& bearings, bool hann, Backend backend, int device);
+}  // namespace
+
 std::vector<float> range_bearing_power(const PingRecord& record, const std::vector<double>& ranges,
                                        const std::vector<double>& bearings, bool hann, Backend backend, int device) {
+  const std::vector<std::complex<float>> image = range_bearing_image(record, ranges, bearings, hann, backend, device);
+  std::vector<float> power(image.size());
+  for (std::size_t i = 0; i < power.size(); ++i) power[i] = std::norm(image[i]);
+  return power;
+}
+
+std::vector<std::complex<float>> beam_samples(const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann,
+                                              Backend backend, int device) {
+  return range_bearing_image(record, ranges, {bearing}, hann, backend, device);
+}
+
+namespace {
+std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, const std::vector<double>& ranges,
+                                                     const std::vector<double>& bearings, bool hann, Backend backend, int device) {
   const Frame f = array_frame(record);
   const auto n = f.positions.size();
   std::vector<std::vector<float>> weights(1, std::vector<float>(n, 1.0F));
@@ -191,10 +210,9 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
   o.device = device;
   std::vector<std::complex<float>> image(points.size());
   recon::backproject(backend, inputs, points, o, image.data());
-  std::vector<float> power(points.size());
-  for (std::size_t i = 0; i < power.size(); ++i) power[i] = std::norm(image[i]);
-  return power;
+  return image;
 }
+}  // namespace
 
 LiveChain::LiveChain(const ChainOptions& options) : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
@@ -336,7 +354,7 @@ Report LiveChain::process(PingRecord& record) {
     if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows) {
       plan_ = plan_detector(record, defaults_.facts, opt_.detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
                             n_rows, co.guard, co.train, opt_.hann && opt_.beamformer != "mvdr",
-                            is_given(opt_.detector.merge_m) ? opt_.detector.merge_m : opt_.tracker.range_sigma);
+                            is_given(opt_.detector.merge_m) ? opt_.detector.merge_m : opt_.tracker.range_sigma, rows);
       planned_ = true;
       plan_cells_ = n_cells;
       plan_train_ = co.train;
@@ -521,7 +539,11 @@ Report LiveChain::process(PingRecord& record) {
     double px = f.origin.x - origin_.x + h.range * (sb * axis.x + cb * broadside.x);
     double py = f.origin.y - origin_.y + h.range * (sb * axis.y + cb * broadside.y);
     ReportDetection d{h.range, h.bearing / kDeg, h.snr_db};
-    if (std::isfinite(h.extent)) d.extent_m = h.extent;
+    if (std::isfinite(h.extent)) {
+      d.extent_m = h.extent;
+      d.first_range_m = h.first_range;
+      d.arrivals = h.arrivals;
+    }
     Detection m{0.0, 0.0, h.snr_db, h.cells};
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
@@ -638,7 +660,14 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
     const auto& d = detections[i];
     s << (i > det_first ? ", " : "") << "{\"range_m\": " << d.range_m << ", \"bearing_deg\": " << d.bearing_deg << ", \"snr_db\": ";
     num(s, d.snr_db);
-    if (d.extent_m >= 0.0) s << ", \"extent_m\": " << d.extent_m;
+    if (d.extent_m >= 0.0) {
+      s << ", \"extent_m\": " << d.extent_m << ", \"first_range_m\": " << d.first_range_m;
+      if (d.arrivals.size() > 1) {
+        s << ", \"arrivals\": [";
+        for (std::size_t q = 0; q < d.arrivals.size(); ++q) s << (q ? ", " : "") << "[" << d.arrivals[q].range << ", " << d.arrivals[q].snr_db << "]";
+        s << "]";
+      }
+    }
     if (rows > 0) {
       s << ", \"elevation_deg\": ";
       if (!d.elevation_valid) {

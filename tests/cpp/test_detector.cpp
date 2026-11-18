@@ -186,6 +186,19 @@ TEST(Detector, PlanFollowsTheBudgetTheRowsAndTheLength) {
   ASSERT_EQ(with.plan.scales.size(), 4U);
   EXPECT_LT(with.plan.scales[3].factor, with.plan.scales[2].factor);
   EXPECT_LT(with.plan.scales[2].factor, with.plan.scales[1].factor);
+  // The envelope is that of the hydrophones the record has: a dead board (8 of 32 gone from the middle) leaves sidelobes
+  // near -12 dB where the whole row's are below -31 dB, and the plan knows it.
+  PingRecord gap = row_record();
+  gap.geometry.rx.erase(gap.geometry.rx.begin() + 12, gap.geometry.rx.begin() + 20);
+  const std::vector<double> bearings(one.bearings);
+  const DetectorPlan holed = plan_detector(gap, sonar_facts(row_record()), {}, one.n_cells, one.k, 0.25, bearings, 1, one.guard, one.train, true, 15.0);
+  double whole = 0.0, with_gap = 0.0;
+  for (std::size_t i = static_cast<std::size_t>(0.15 / one.plan.u_step); i < static_cast<std::size_t>(0.5 / one.plan.u_step); ++i) {
+    whole = std::max(whole, one.plan.bearing_envelope[i]);
+    with_gap = std::max(with_gap, holed.bearing_envelope[i]);
+  }
+  EXPECT_LT(whole, 1e-3);
+  EXPECT_GT(with_gap, 2e-2);
 }
 
 TEST(Detector, NoiseAloneGivesNothingAndAPointEchoIsOneDetectionAtItsSampleRatio) {
@@ -227,6 +240,10 @@ TEST(Detector, SidelobesOfAStrongEchoAreNotDetectionsAndASecondEchoAboveThemIs) 
   EXPECT_NEAR(hits[0].snr_db, 60.0, 0.5);
   EXPECT_NEAR(hits[0].range, m.fine_ranges[static_cast<std::size_t>(s0)], 0.5);
   EXPECT_LE(hits[0].extent, 6.0);                                    // the cell and its neighbours, not the sidelobes
+  // Its bearing: the whole half-power beam is kept, both sides (no cell of it is put down to another's sidelobes), and
+  // the weights fall to nothing at its ends: within a twentieth of a degree on a half-degree grid.
+  EXPECT_NEAR(hits[0].bearing, m.bearings[static_cast<std::size_t>(b0)], 0.05 * kPi / 180.0);
+  EXPECT_GE(hits[0].cells, 9);
   // A second echo 60 m further and 20 degrees off, 35 dB down (25 dB): well above the first one's sidelobes there. Found.
   m.add(b0 + 40, s0 + 240, static_cast<float>(p0 * 10.0 / 3.16e4));
   hits = m.detect();

@@ -13,6 +13,7 @@
 // record for a downstream tracker.
 #pragma once
 
+#include <complex>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -110,6 +111,8 @@ struct ChainOptions {
 struct ReportDetection {
   double range_m, bearing_deg, snr_db;
   double extent_m = -1.0;                            ///< >= 0: the cluster's extent in range (multiscale detector)
+  double first_range_m = 0.0;                        ///< where that extent begins: the detection covers [first_range_m - cell / 2, + extent_m]
+  std::vector<Arrival> arrivals{};                   ///< its arrivals along range (detections.hpp); reported when there are two or more
   // With stacked rows (Report::rows > 0):
   bool elevation_valid = false;                      ///< an elevation was found with enough quality
   double elevation_deg = 0.0, elevation_sigma_deg = 0.0, elevation_quality = 0.0;  ///< level-referenced, up positive
@@ -172,6 +175,16 @@ void prepare(PingRecord& record, Backend backend = Backend::Host, int device = 0
 /// Range x bearing power [n_bearing][n_range] by the backprojection kernel, row major.
 std::vector<float> range_bearing_power(const PingRecord& record, const std::vector<double>& ranges,
                                        const std::vector<double>& bearings, bool hann, Backend backend, int device = 0);
+
+/// The compressed, beamformed COMPLEX samples of one line of hydrophones at `ranges` (m, any spacing; the map's own
+/// is a quarter of a metre for 4-6 kHz) along one bearing (rad from broadside, the map's convention): what the map's
+/// power is the squared magnitude of. For a module that needs the arrival structure inside a detection (the delay and
+/// phase between a direct and a surface echo): take the detection's `first_range` and `extent` (or its `arrivals`) and
+/// its bearing, and ask for the samples over that window. `record` must be prepared (`prepare`; LiveChain::process
+/// leaves it so); with stacked rows pass one row's record (`row_record`) per call: the chain adds the rows in POWER,
+/// and their complex sum is not the map. The phase is that of the backprojection kernel (range from the line's centre).
+std::vector<std::complex<float>> beam_samples(const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann,
+                                              Backend backend = Backend::Host, int device = 0);
 
 class LiveChain {
  public:

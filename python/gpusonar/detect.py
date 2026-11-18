@@ -73,6 +73,8 @@ class Detection:
     depth_alternatives: list | None = None   # None: `depth` is the depth. A list: the elevation was ambiguous and these are
                                              # the other candidates' depths; a track with a depth takes the one that fits
     extent: float = float("nan")        # m in range the cluster spans (the multiscale detector); NaN: not reported
+    arrivals: list | None = None        # [(range m, snr dB)], nearest first: the local peaks along range inside the detection
+                                        # (the multiscale detector; libs/live detections.hpp), at most the 8 strongest
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -222,9 +224,23 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             soft = np.maximum(energy - max(0.5 * energy.max(), energy[0], energy[-1]), 0.0)
             if soft.sum() <= 0.0:
                 soft = energy
+            # Its arrivals: along range, the strongest sample over the group's bearings; the local peaks of that above the
+            # single-sample threshold (a run of samples the group does not hold ends a peak), the 8 strongest, nearest first.
+            sample = (ir[:, None] * k + np.arange(k)[None, :]).ravel()
+            over = (w / np.maximum(background_map[ib, ir].astype(float), 1e-300)[:, None]).ravel()
+            idx = np.unique(sample)
+            line = np.full(len(idx), 0.0)
+            np.maximum.at(line, np.searchsorted(idx, sample), over)
+            left = np.concatenate([[False], idx[1:] == idx[:-1] + 1])
+            right = np.concatenate([idx[:-1] == idx[1:] - 1, [False]])
+            prev, nxt = np.concatenate([[0.0], line[:-1]]), np.concatenate([line[1:], [0.0]])
+            is_peak = (line > scales[0]["factor"]) & ~(left & (prev >= line)) & ~(right & (nxt > line))
+            top = np.flatnonzero(is_peak)
+            top = np.sort(top[np.argsort(-line[top], kind="stable")][:8])
+            arrivals = [(float(fine_ranges[idx[q]]), float(10 * np.log10(line[q]))) for q in top]
             out.append(Detection(float((w * r).sum() / w.sum()), float((soft * bearings[rows_]).sum() / soft.sum()),
                                  float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
-                                 extent=far - near + float(plan["cell_m"])))
+                                 extent=far - near + float(plan["cell_m"]), arrivals=arrivals))
     return out, background_map
 
 
