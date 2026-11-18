@@ -47,7 +47,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                   rng: np.random.Generator | None = None, tx_pose: "core.Pose | None" = None,
                   acceleration=(0.0, 0.0, 0.0), ins_rate: float = 0.0,
                   channel_errors: dict | None = None, clock_truth: dict | None = None,
-                  noise_spectrum=None, reverberation: list | None = None,
+                  noise_spectrum=None, noise_options: dict | None = None, reverberation: list | None = None,
                   beam_floor_db: float | None = None, noise_statistics: dict | None = None, fitted_noise: dict | None = None,
                   sources: list | None = None, transmit: bool = True,
                   backend=core.Backend.Host, engine: str | None = None,
@@ -333,18 +333,43 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         from . import noise as noise_models
         rx_cfg = sonar.config["receive"]
         sens = float(rx_cfg.get("sensitivity_db") or 0.0) + float(rx_cfg.get("gain_db", 0.0))
-        if np.iscomplexobj(samples):
-            # A baseband record covers a band `sample_rate` wide about the carrier: white
-            # noise at the spectrum level of the centre frequency, independent between
-            # channels (true of an isotropic field at half-wavelength spacing). The complex
-            # envelope carries twice the power of the real signal in that band.
+        # `receiver.ambient_noise`: `coherence: isotropic` (default) | `surface` | `independent` between hydrophones,
+        # `spectrum: shaped` (default: the configured spectrum across the record's band) | `flat` (its level at the
+        # centre frequency). Real-passband and baseband records follow the same two choices (D-94).
+        opts = noise_options or {}
+        coherence = str(opts.get("coherence", noise_models.DEFAULT_COHERENCE))
+        shape = str(opts.get("spectrum", "shaped"))
+        if coherence not in noise_models.COHERENCE_MODELS or shape not in ("shaped", "flat"):
+            raise ValueError(f"receiver.ambient_noise: coherence is one of {', '.join(noise_models.COHERENCE_MODELS)} and spectrum is shaped or flat "
+                             f"(got {coherence!r}, {shape!r})")
+        stats = noise_models.noise_statistics(noise_statistics)
+        # White, sample-by-sample statistics (alpha-stable; K with no correlation time) keep their own generator: a
+        # colouring or mixing filter would change the distribution they are asked for.
+        white_statistics = stats is not None and (stats["model"] == "alpha_stable" or not stats["correlation_time"] > 0.0)
+        if np.iscomplexobj(samples) and not white_statistics and not (coherence == "independent" and shape == "flat"):
+            # A baseband record covers a band `sample_rate` wide about the carrier: the configured spectrum across
+            # that band, and between hydrophones the coherence the real-passband path gives (sim/noise.py
+            # `baseband_gaussian_noise`). Closely spaced hydrophones then share noise, as they do at sea.
+            fc_bb = record.samples.center_frequency
+            spectrum = noise_models.flat_spectrum(noise_spectrum, fc_bb) if shape == "flat" else noise_spectrum
+            g = rng or np.random.default_rng()
+            ambient = noise_models.baseband_gaussian_noise(samples.shape[1], record.samples.sample_rate, fc_bb, spectrum, g,
+                                                           positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens, coherence=coherence)
+            if stats is not None:                       # K with a correlation time: the texture on the Gaussian field
+                ambient = ambient * noise_models.gamma_texture(samples.shape[1], record.samples.sample_rate, stats["shape"], stats["correlation_time"],
+                                                               g, samples.shape[0], stats["common"]).astype(np.float32)
+            samples = samples + ambient.astype(samples.dtype)
+        elif np.iscomplexobj(samples):
+            # `coherence: independent, spectrum: flat` (what every baseband record had before D-94), and the white
+            # statistics: white noise at the spectrum level of the centre frequency, independent between channels
+            # (true of an isotropic field at half-wavelength spacing only). The complex envelope carries twice
+            # the power of the real signal in that band.
             fs_bb = record.samples.sample_rate
             level = float(np.asarray(noise_spectrum(np.array([record.samples.center_frequency])))[0])
             sigma = np.sqrt(2.0 * 10.0 ** (level / 10.0) * fs_bb) * 10.0 ** (sens / 20.0)
             g = rng or np.random.default_rng()
             ambient = (sigma / np.sqrt(2.0)) * (
                 g.standard_normal(samples.shape) + 1j * g.standard_normal(samples.shape)).astype(samples.dtype)
-            stats = noise_models.noise_statistics(noise_statistics)
             if stats is not None and stats["model"] == "alpha_stable":
                 # Impulsive noise: independent symmetric alpha-stable real and imaginary parts
                 # with the scale of the Gaussian parts they replace (identical at alpha = 2).
@@ -359,9 +384,10 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                     stats["common"] if slow else False).astype(np.float32)
             samples = samples + ambient
         else:
+            spectrum = noise_models.flat_spectrum(noise_spectrum, sonar.center_frequency) if shape == "flat" else noise_spectrum
             samples = samples + noise_models.k_noise(
-                samples.shape[1], record.samples.sample_rate, noise_spectrum, rng or np.random.default_rng(),
-                noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens)
+                samples.shape[1], record.samples.sample_rate, spectrum, rng or np.random.default_rng(),
+                noise_statistics, positions=record.rx_positions(), sound_speed=c, sensitivity_db=sens, coherence=coherence)
     if fitted_noise:
         # `receiver.ambient_noise: {model: fitted, file: ...}`: noise with the spectrum, the
         # coherence between hydrophones and the tail of a recording (sim/noise_fit.py), in the
@@ -586,6 +612,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
+        noise_options={k: v for k, v in (rx_cfg.get("ambient_noise") or {}).items() if k in ("coherence", "spectrum")},
         fitted_noise=(rx_cfg.get("ambient_noise") if (rx_cfg.get("ambient_noise") or {}).get("model") == "fitted" else None),
         sources=sources, transmit=bool(pings.get("transmit", True)),
         reverberation=cfg.get("reverberation"),
