@@ -71,11 +71,10 @@ def main(argv=None) -> int:
             if "skipped" in P:
                 continue
             c = P["classes"]["trial_target"]
-            own, worst, mean = np.asarray(P.get("own_depths_m", [])), c.get("factor_at_range_worst_db"), c.get("margin_at_range_depth_mean_db")
+            own, worst = np.asarray(P.get("own_depths_m", [])), c.get("factor_at_range_worst_db")
             if worst is not None and len(own):
-                free = np.asarray(c["margin_at_range_worst_db"]) - np.asarray(worst)
-                lines += ["Two-way propagation factor re free field at the range, by own depth: worst over the target's depths (mean over them), dB: "
-                          + "; ".join(f"{z:.0f} m: {w:+.1f} ({m - f:+.1f})" for z, w, m, f in zip(own, worst, mean, free)), ""]
+                lines += ["Two-way propagation factor re free field at the range, worst over the target's depths, by own depth, dB: "
+                          + "; ".join(f"{z:.0f} m: {w:+.1f}" for z, w in zip(own, worst)), ""]
     text = "\n".join(lines) + "\n"
     if args.out:
         Path(args.out).write_text(text)
