@@ -113,12 +113,16 @@ struct BpStats {
   std::int64_t ping_blocks_kept = 0;   ///< those the kernel actually visited
 };
 
-/// The allowance for the trajectory residual in the kernel's field-of-view pre-test, m.
-/// 2 cm is what the kernel has always added: enough for the millimetres to centimetres a
-/// short ping strays from its first-order pose, not for a long ping or a turning platform
-/// with a navigation table (docs/HARDCODED_AUDIT.md R-1), where pairs the exact test would
-/// keep are then rejected at the beam edges.
+/// The least allowance for the trajectory residual in the kernel's field-of-view pre-test, m.
+/// 2 cm is what the kernel always added, and all it added until DECISIONS.md D-92: enough
+/// for the millimetres to centimetres a short ping strays from its first-order pose, not
+/// for a long ping or a turning platform with a navigation table
+/// (docs/HARDCODED_AUDIT.md R-1), where pairs the exact test would keep were then rejected
+/// at the beam edges. It is now the floor of the allowance taken from each ping's table.
 inline constexpr float kTrajectoryAllowance = 0.02F;
+/// `trajectory_allowance` value of make_inputs that takes the allowance from each ping's
+/// own residual table (the default).
+inline constexpr float kTrajectoryAllowanceFromTable = -1.0F;
 
 /// Everything the kernel needs, in flat arrays.
 struct BpInputs {
@@ -134,13 +138,16 @@ struct BpInputs {
 /// upsampled by that factor with cubic interpolation (the paper upsamples before
 /// loading the texture).
 /// `trajectory_allowance` (m) is the allowance for the trajectory residual in the kernel's
-/// field-of-view pre-test: a value >= 0 is used for every ping (the default is the 2 cm
-/// the kernel has always used); a negative value takes it from each ping's own residual
-/// table, max(kTrajectoryAllowance, largest residual in the table), which never rejects a
-/// pair the fixed 2 cm keeps and stops rejecting pairs of a ping that strays further.
+/// field-of-view pre-test. The default, kTrajectoryAllowanceFromTable (any negative value),
+/// takes it from each ping's own residual table: max(kTrajectoryAllowance, largest residual
+/// in the table). That never rejects a pair the fixed 2 cm keeps, stops rejecting pairs of
+/// a ping that strays further, and is the 2 cm itself for a ping without a table. A value
+/// >= 0 is used for every ping as given (kTrajectoryAllowance: the behaviour before D-92).
+/// The value reaches the kernel, host or CUDA, in BpGroup::traj_allowance.
 BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
                      const std::vector<std::vector<float>>* weights = nullptr,
-                     int trajectory_upsample = 0, float trajectory_allowance = kTrajectoryAllowance);
+                     int trajectory_upsample = 0,
+                     float trajectory_allowance = kTrajectoryAllowanceFromTable);
 
 /// Coherent sum at each output point, added into `image` (size points.size()).
 /// `weight_sum`, when not null, receives the sum of weights that contributed per point.

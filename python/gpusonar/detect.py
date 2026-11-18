@@ -72,6 +72,9 @@ class Detection:
     first_range: float = float("nan")   # m, the nearest cell of the cluster (its leading edge)
     depth_alternatives: list | None = None   # None: `depth` is the depth. A list: the elevation was ambiguous and these are
                                              # the other candidates' depths; a track with a depth takes the one that fits
+    extent: float = float("nan")        # m in range the cluster spans (the multiscale detector); NaN: not reported
+    arrivals: list | None = None        # [(range m, snr dB)], nearest first: the local peaks along range inside the detection
+                                        # (the multiscale detector; libs/live detections.hpp), at most the 8 strongest
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -95,6 +98,150 @@ def cluster(detections: np.ndarray, power: np.ndarray, ranges, bearings, guard: 
                              float((w * bearings[ib]).sum() / w.sum()),
                              float(10 * np.log10(snr[ib, ir].max())), int(len(ib)), first_range=float(ranges[ir].min())))
     return out
+
+
+# --- the detector at the range resolution (cell_statistic: multiscale) ------------------------------
+#
+# libs/live detector.hpp says what it is and why; the plan (integration lengths, their thresholds, the sidelobe
+# envelopes) comes from there (`core.live_detector_plan`), so both engines test against the same numbers. This is
+# the NumPy application of it; tests/python/test_detector.py holds it to the C++ one.
+
+def background(cell_mean: np.ndarray, guard: int, train: int) -> tuple[np.ndarray, np.ndarray]:
+    """The multiscale detector's background of every cell of `cell_mean` [n_bearing, n_cells], and per range cell the
+    number of independent training cells it is worth. The mean of the `train` cells either side beyond `guard`; where
+    that window is not balanced (the ends of the map) the mean is moved along the background's slope, taken between the
+    medians of the first (last) two training lengths of the same bearing (libs/live detector.hpp says why)."""
+    power = np.asarray(cell_mean, dtype=float)
+    n = power.shape[-1]
+    mean, _ = _window_mean(power, guard, train)
+    j = np.arange(n)
+    n_lo = np.clip(j - guard, 0, n) - np.clip(j - guard - train, 0, n)
+    n_hi = np.clip(j + guard + 1 + train, 0, n) - np.clip(j + guard + 1, 0, n)
+    count = np.maximum(n_lo + n_hi, 1).astype(float)
+    sloped = n >= 2 * train and train >= 8
+    offset = (n_hi * (guard + 0.5 * (n_hi + 1.0)) - n_lo * (guard + 0.5 * (n_lo + 1.0))) / count if sloped else np.zeros(n)
+    r = np.abs(offset) / train
+    worth = 1.0 / (1.0 / count + (np.pi * r * r + 2.0 * r) / train)
+    if sloped:
+        med = [np.median(power[..., a:a + train], axis=-1) for a in (0, train, n - 2 * train, n - train)]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            near = np.where((med[0] > 0) & (med[1] > 0), np.log(med[0] / med[1]) / train, 0.0)
+            far = np.where((med[2] > 0) & (med[3] > 0), np.log(med[2] / med[3]) / train, 0.0)
+        slope = np.where(offset[None, :] > 0.0, near[..., None], far[..., None])
+        mean = mean * np.exp(np.clip(slope * offset[None, :], -2.3, 2.3))
+    return mean, worth
+
+
+def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges, bearings, guard: int, train: int,
+               plan: dict) -> tuple[list[Detection], np.ndarray]:
+    """Detections on a map `fine` [n_bearing, n_cells * k] (power, k samples per range cell) with `cell_mean`
+    [n_bearing, n_cells] its cell means, and the background of each cell. A cell is flagged when its strongest
+    sample, its mean, or the mean of several cells about it exceeds that statistic's threshold over the background
+    (the mean of `train` cells either side beyond `guard`); flagged cells a stronger cell's sidelobes explain are
+    dropped; touching cells are one detection at the energy-weighted position of their samples, with the strongest
+    sample over the background as its snr_db and the range it spans as its extent."""
+    from . import _gpusonar as core
+    k = int(plan["samples_per_cell"])
+    n_b, n_c = cell_mean.shape
+    fine_ranges, cell_ranges, bearings = np.asarray(fine_ranges, dtype=float), np.asarray(cell_ranges, dtype=float), np.asarray(bearings, dtype=float)
+    cells = np.asarray(fine)[:, :n_c * k].reshape(n_b, n_c, k)
+    mean, count = background(cell_mean, guard, train)
+    floor = np.maximum(mean, 1e-300)
+    peak = cells.max(axis=2).astype(float)
+    scales = plan["scales"]
+    looks = float(plan["train_looks_per_cell"])
+    correction = {float(c): [core.training_correction(s["pfa"], float(c) * looks) for s in scales] for c in np.unique(count)}
+    thr = np.array([[s["factor"] * correction[float(c)][i] for c in count] for i, s in enumerate(scales)])      # [scale, cell]
+    flag = peak > thr[0][None, :] * floor
+    csum = np.concatenate([np.zeros((n_b, 1)), np.cumsum(np.asarray(cell_mean, dtype=float), axis=1)], axis=1)
+    j = np.arange(n_c)
+    for i, s in enumerate(scales[1:], start=1):
+        m = int(s["cells"])
+        a = j - (m - 1) // 2
+        ok = (a >= 0) & (a + m <= n_c)
+        stat = (csum[:, a[ok] + m] - csum[:, a[ok]]) / m
+        flag[:, ok] |= stat > thr[i][None, ok] * floor[:, ok]
+    background_map = mean.astype(np.float32)
+
+    # Cells that a stronger cell's sidelobes explain are dropped, strongest source first.
+    fb, fj = np.nonzero(flag)
+    if len(fb):
+        fp = peak[fb, fj]
+        alive = np.ones(len(fb), dtype=bool)
+        # A cell inside the core of a stronger source (its half-power beam, the next range cell) is that source's own:
+        # not dropped by another source's sidelobe rule (it is still a source itself: a second arrival has its own sidelobes).
+        owned = np.zeros(len(fb), dtype=bool)
+        sin_b = np.sin(bearings)
+        env_b, env_r = np.asarray(plan["bearing_envelope"]), np.asarray(plan["range_envelope"])
+        is_source = np.flatnonzero(fp >= plan["source_ratio"] * background_map[fb, fj].astype(float))
+        for q in is_source[np.argsort(-fp[is_source], kind="stable")]:
+            if not alive[q]:
+                continue
+            du = np.abs(sin_b[fb] - sin_b[fb[q]])
+            e_b = env_b[np.minimum(np.floor(du / plan["u_step"] + 0.5).astype(int), len(env_b) - 1)]
+            # Off the source's bearing its energy is spread in range by the array's own length: that many cells are let off.
+            smear = np.floor(0.25 * plan["aperture_m"] * du / plan["cell_m"] + 0.5).astype(int)      # whole cells, to the nearest
+            e_r = env_r[np.minimum(np.maximum(np.abs(fj - fj[q]) - smear, 0), n_c)]
+            weaker = alive & (fp < fp[q])
+            core = (e_r >= 1.0) & (e_b >= 1.0)
+            owned |= weaker & core
+            alive &= ~(weaker & ~core & ~owned & (fp <= plan["margin"] * e_r * e_b * fp[q]))
+        flag = np.zeros_like(flag)
+        flag[fb[alive], fj[alive]] = True
+        fb, fj = fb[alive], fj[alive]
+
+    # One detection per group of flagged cells that belong together: no further apart than merge_cells + 1 in range and
+    # merge_u in sin(bearing) (touching cells always are). Groups in the order of their first cell, by bearing then range.
+    out = []
+    if len(fb):
+        from scipy.sparse import coo_matrix
+        from scipy.sparse.csgraph import connected_components
+        from scipy.spatial import cKDTree
+        sin_b = np.sin(bearings)
+        reach = int(plan["merge_cells"]) + 1
+        # Within 1 in the largest-coordinate distance of these: within merge_u and within `reach` cells.
+        pts = np.stack([sin_b[fb] / (plan["merge_u"] + 1e-12), fj / (reach + 1e-9)], axis=1)
+        pairs = cKDTree(pts).query_pairs(1.0, p=np.inf, output_type="ndarray")
+        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(fb), len(fb)))
+        _, member = connected_components(graph, directed=False)
+        ratio = peak / np.maximum(background_map.astype(float), 1e-300)
+        first = {}
+        for i, g in enumerate(member):
+            first.setdefault(int(g), i)
+        for g in sorted(first, key=first.get):
+            ib, ir = fb[member == g], fj[member == g]
+            w = cells[ib, ir, :].astype(float)                                   # [cell, sample]
+            r = fine_ranges[(ir[:, None] * k + np.arange(k)[None, :])]
+            near, far = float(cell_ranges[ir].min()), float(cell_ranges[ir].max())
+            # Range: the energy-weighted mean of the group's samples. Bearing: the mean over its bearings weighted by what
+            # each holds, over all its range cells, above half the strongest one's energy (the group ends at the beam's
+            # half-power points on the bearing grid; a plain energy-weighted mean over a beam cut there is pulled towards
+            # the grid, and weights that fall to nothing at the cut are not).
+            rows_ = np.unique(ib)
+            energy = np.array([w[ib == b_].sum() for b_ in rows_])
+            # The level: half the strongest, or what the outermost bearings hold when that is more (a beam wider than the
+            # modelled one is cut above its half-power points). Nothing above it (one or two bearings): the plain mean.
+            soft = np.maximum(energy - max(0.5 * energy.max(), energy[0], energy[-1]), 0.0)
+            if soft.sum() <= 0.0:
+                soft = energy
+            # Its arrivals: along range, the strongest sample over the group's bearings; the local peaks of that above the
+            # single-sample threshold (a run of samples the group does not hold ends a peak), the 8 strongest, nearest first.
+            sample = (ir[:, None] * k + np.arange(k)[None, :]).ravel()
+            over = (w / np.maximum(background_map[ib, ir].astype(float), 1e-300)[:, None]).ravel()
+            idx = np.unique(sample)
+            line = np.full(len(idx), 0.0)
+            np.maximum.at(line, np.searchsorted(idx, sample), over)
+            left = np.concatenate([[False], idx[1:] == idx[:-1] + 1])
+            right = np.concatenate([idx[:-1] == idx[1:] - 1, [False]])
+            prev, nxt = np.concatenate([[0.0], line[:-1]]), np.concatenate([line[1:], [0.0]])
+            is_peak = (line > scales[0]["factor"]) & ~(left & (prev >= line)) & ~(right & (nxt > line))
+            top = np.flatnonzero(is_peak)
+            top = np.sort(top[np.argsort(-line[top], kind="stable")][:8])
+            arrivals = [(float(fine_ranges[idx[q]]), float(10 * np.log10(line[q]))) for q in top]
+            out.append(Detection(float((w * r).sum() / w.sum()), float((soft * bearings[rows_]).sum() / soft.sum()),
+                                 float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
+                                 extent=far - near + float(plan["cell_m"]), arrivals=arrivals))
+    return out, background_map
 
 
 # --- tracking -------------------------------------------------------------------------------------

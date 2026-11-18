@@ -28,7 +28,8 @@ A step passes on only the keys it is given: the default of every other parameter
 default of the function it calls (recon.sas_image, recon.fan_image, ...), stated there once
 (docs/HARDCODED_AUDIT.md R-5). Keys that are derived from the records instead of typed:
 
-    - {stage: tvg, spreading: auto, absorption: record}    # recon.tvg_parameters; numbers also work
+    - {stage: tvg}                                         # absorption from the record (the default)
+    - {stage: tvg, spreading: auto, absorption: none}      # recon.tvg_parameters; numbers also work
     - {stage: sas_image, ..., plane_z: seafloor}           # from the DVL altitude or the water depth
     - {stage: motion, seafloor_z: auto, max_lag_m: 0.01}   # windows in metres of range
 
@@ -127,23 +128,21 @@ def _stage(name, params, state: RunResult, backend):
                                          "ph", "model") if k in params}
         plain = {k: v for k, v in params.items() if k not in derive}
         facts = {}
+        if "spreading" in derive and "spreading_db_per_decade" in plain:
+            raise ValueError("tvg: give `spreading` or `spreading_db_per_decade`, not both")
+        if "absorption" in derive and "absorption_db_per_m" in plain:
+            raise ValueError("tvg: give `absorption` or `absorption_db_per_m`, not both")
+        from .recon.gain import tvg_parameters
+        # Every tvg step goes through recon.tvg_parameters, whose default absorption is "auto":
+        # derived from the record (DECISIONS.md D-91). `absorption: none` is the law before that.
+        d = dict(derive)
+        if "spreading_db_per_decade" in plain:
+            d["spreading"] = plain.pop("spreading_db_per_decade")
+        if "absorption_db_per_m" in plain:
+            d["absorption"] = plain.pop("absorption_db_per_m")
+        d.update(plain)
         for rec in r:
-            kw = dict(plain)
-            if derive:
-                if "spreading" in derive and "spreading_db_per_decade" in plain:
-                    raise ValueError("tvg: give `spreading` or `spreading_db_per_decade`, not both")
-                if "absorption" in derive and "absorption_db_per_m" in plain:
-                    raise ValueError("tvg: give `absorption` or `absorption_db_per_m`, not both")
-                from .recon.gain import tvg_parameters
-                d = dict(derive)
-                if "spreading" not in d and "spreading_db_per_decade" in plain:
-                    d["spreading"] = plain["spreading_db_per_decade"]
-                if "absorption" not in d and "absorption_db_per_m" in plain:
-                    d["absorption"] = plain["absorption_db_per_m"]
-                for key in ("reference_range", "max_gain_db", "undo_hardware_ramp"):
-                    if key in plain:
-                        d[key] = plain[key]
-                kw = tvg_parameters(rec, **d)
+            kw = tvg_parameters(rec, **d)
             report = core.apply_tvg(rec, **kw)
             if not facts:
                 facts = {"spreading_db_per_decade": kw.get("spreading_db_per_decade", 40.0),

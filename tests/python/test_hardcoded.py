@@ -277,7 +277,7 @@ def test_the_chain_sends_a_long_report_as_parts_over_udp(other_pings):
     for engine in ("python", "cpp"):
         # A threshold low enough for hundreds of detections, and a datagram limit they do not fit.
         with LiveChain({"bearings_deg": [-40.0, 40.0, 1.0], "engine": engine, "backend": "host", "min_snr_db": -50.0,
-                        "cfar": {"pfa": 0.2}}, report_udp=("127.0.0.1", rx.getsockname()[1]), report_udp_max_bytes=1000) as chain:
+                        "cell_statistic": "mean", "cfar": {"pfa": 0.2}}, report_udp=("127.0.0.1", rx.getsockname()[1]), report_udp_max_bytes=1000) as chain:
             report = chain.process(other_pings[0].copy())
         assert len(json.dumps(report)) > 2000 and chain.reports_split == 1, engine
         parts = [json.loads(rx.recv(65535))]
@@ -552,7 +552,7 @@ def test_an_ambiguous_elevation_does_not_move_the_detection_and_the_mover_keeps_
             assert abs(d["range_m"] - 12000.0) < 30.0, engine
             assert d["bearing_deg"] == pytest.approx(np.degrees(np.arctan2(800.0 - 7.5 * 19.9 * i, 12000.0)), abs=2.0), engine
             picks.append(d["elevation_deg"])
-        assert max(picks) - min(picks) > 8.0, engine                     # the pick really does jump (by 10.9 deg with the noise of D-94; 40 deg with the earlier draw)
+        assert max(picks) - min(picks) > 8.0, engine                     # the pick really does jump (by 10.9 deg with the noise of D-103; 40 deg with the earlier draw)
         # One track, there from the third ping, at the ship, a mover by the last ping: no depth was needed for it.
         assert [len(r["tracks"]) for r in reps] == [0, 0, 1, 1, 1, 1], engine
         last = reps[-1]["tracks"][0]
@@ -603,7 +603,8 @@ def test_snr_db_against_the_beam_output_snr_of_a_link_budget_is_what_the_helper_
     12 dB under the budget, the rest being the source level's peak-or-rms convention), 6.6 dB with `cell_statistic: peak`."""
     from gpusonar import flank
     sonar = SonarModel.load("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1500.0]}}})
-    cases = {"mean": {}, "peak": {"cell_statistic": "peak"}, "rect": {"window": "rect"}, "half metre": {"range_cell_m": 0.5}}
+    was = {"cell_statistic": "mean"}             # the detector this accounting is of; the default since is `multiscale` (test_detector.py)
+    cases = {"mean": was, "peak": {"cell_statistic": "peak"}, "rect": dict(was, window="rect"), "half metre": dict(was, range_cell_m=0.5)}
     read = {k: [] for k in cases}
     ideal = []
     for trial in range(3):
@@ -640,8 +641,8 @@ def test_snr_db_against_the_beam_output_snr_of_a_link_budget_is_what_the_helper_
     assert mean["samples_per_cell"] == 8 and mean["window_db"] == pytest.approx(1.76, abs=0.02) and mean["cell_db"] == pytest.approx(7.7, abs=0.15)
     assert live.snr_loss_db(template, 2.0, cell_statistic="peak")["total_db"] == pytest.approx(6.6, abs=0.15)
     # In a budget's units the chain as shipped reports a point echo from 20 dB, not 13; with the peak statistic from 17.
-    assert live.detection_threshold_db() == pytest.approx(10.7, abs=0.05)
-    assert live.budget_threshold_db(template) == pytest.approx(20.1, abs=0.2)
+    assert live.detection_threshold_db(was) == pytest.approx(10.7, abs=0.05)
+    assert live.budget_threshold_db(template, was) == pytest.approx(20.1, abs=0.2)
     assert live.budget_threshold_db(template, {"cell_statistic": "peak"}) == pytest.approx(17.3, abs=0.2)
     with pytest.raises(ValueError):
         LiveChain({"cell_statistic": "median"})

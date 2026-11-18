@@ -1,5 +1,5 @@
 """Ambient noise in baseband records: the configured spectrum across the band and the coherence between hydrophones
-that the real-passband path has (sim/noise.py `baseband_gaussian_noise`; D-94). Closed forms: the power 2 S fs of a
+that the real-passband path has (sim/noise.py `baseband_gaussian_noise`; D-103). Closed forms: the power 2 S fs of a
 complex envelope, sin(kd)/(kd) of an isotropic field, the Cron-Sherman vertical pair, and the gain of a line array
 against that noise, N^2 / sum(Gamma)."""
 

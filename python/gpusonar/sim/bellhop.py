@@ -242,9 +242,9 @@ class BellhopProvider(EigenrayProvider):
                  range_step: float | None = None, depth_step: float | None = None,
                  max_arrivals: int | None = None, n_beams: int = 0, angles=(-80.0, 80.0),
                  min_range: float = 1.0, wind_speed: float = 0.0, arrival_floor_db: float = 20.0, max_arrivals_cap: int = 64):
-        # Arrivals kept per field point: `max_arrivals` (the strongest) when given. Left out (D-96): every arrival
+        # Arrivals kept per field point: `max_arrivals` (the strongest) when given. Left out (D-105): every arrival
         # within `arrival_floor_db` of the point's strongest, up to `max_arrivals_cap`; when the cap cuts off arrivals
-        # above the floor a warning says how much energy was dropped, once, and `truncation` holds it (before D-96 the
+        # above the floor a warning says how much energy was dropped, once, and `truncation` holds it (before D-105 the
         # default was the strongest eight, silently). `dropped_energy` is the largest fraction of a point's
         # arrival energy left out so far, whichever rule cut it.
         self.arrival_floor_db = float(arrival_floor_db)

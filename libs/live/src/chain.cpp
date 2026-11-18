@@ -11,6 +11,7 @@
 
 #include "sonar/core/parallel.hpp"
 #include "sonar/detect/cfar.hpp"
+#include "sonar/live/detector.hpp"
 #include "sonar/dsp/baseband.hpp"
 #include "sonar/dsp/pulse_compression.hpp"
 #include "sonar/recon/backproject.hpp"
@@ -58,8 +59,10 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
 namespace {
 
 // Cell-averaged power over bearing x range for one line of hydrophones, by the beamformer chosen.
+// `fine_out` (when not null) receives the map before the averaging, [n_bearing][n_cells * cell_samples], and its ranges.
 void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, const PingRecord& record,
-              std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells, std::int64_t& cell_samples) {
+              std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells, std::int64_t& cell_samples,
+              std::vector<float>* fine_out = nullptr, std::vector<double>* fine_ranges_out = nullptr) {
   const double c = record.environment.sound_speed;
   const Waveform& w = record.transmit.waveform;
   const Samples& s = record.samples;
@@ -92,6 +95,10 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
         last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(opt_.cell_peak ? top : p / static_cast<double>(k));
       }
     }
+    if (fine_out != nullptr) {
+      *fine_out = fine_power;
+      *fine_ranges_out = fine;
+    }
   } else {
     // The far-field beamformers give every sample of the record: the part with a fully
     // overlapped replica is averaged into range cells of whole samples.
@@ -110,12 +117,17 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
       for (std::int64_t q = 0; q < k; ++q) r += map.ranges[static_cast<std::size_t>(j * k + q)];
       last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
     }
+    if (fine_out != nullptr) {
+      fine_out->assign(static_cast<std::size_t>(n_b * n_cells * k), 0.0F);
+      fine_ranges_out->assign(map.ranges.begin(), map.ranges.begin() + n_cells * k);
+    }
     parallel_for_host(n_b, [&](std::int64_t b) {
       const std::complex<float>* row = map.row(b);
       for (std::int64_t j = 0; j < n_cells; ++j) {
         double p = 0.0, top = 0.0;
         for (std::int64_t q = 0; q < k; ++q) {
           const auto v = static_cast<double>(std::norm(row[j * k + q]));
+          if (fine_out != nullptr) (*fine_out)[static_cast<std::size_t>(b * n_cells * k + j * k + q)] = static_cast<float>(v);
           p += v;
           top = std::max(top, v);
         }
@@ -146,8 +158,27 @@ void prepare(PingRecord& record, Backend backend, int device) {
   }
 }
 
+namespace {
+std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, const std::vector<double>& ranges,
+                                                     const std::vector<double>& bearings, bool hann, Backend backend, int device);
+}  // namespace
+
 std::vector<float> range_bearing_power(const PingRecord& record, const std::vector<double>& ranges,
                                        const std::vector<double>& bearings, bool hann, Backend backend, int device) {
+  const std::vector<std::complex<float>> image = range_bearing_image(record, ranges, bearings, hann, backend, device);
+  std::vector<float> power(image.size());
+  for (std::size_t i = 0; i < power.size(); ++i) power[i] = std::norm(image[i]);
+  return power;
+}
+
+std::vector<std::complex<float>> beam_samples(const PingRecord& record, const std::vector<double>& ranges, double bearing, bool hann,
+                                              Backend backend, int device) {
+  return range_bearing_image(record, ranges, {bearing}, hann, backend, device);
+}
+
+namespace {
+std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, const std::vector<double>& ranges,
+                                                     const std::vector<double>& bearings, bool hann, Backend backend, int device) {
   const Frame f = array_frame(record);
   const auto n = f.positions.size();
   std::vector<std::vector<float>> weights(1, std::vector<float>(n, 1.0F));
@@ -179,10 +210,9 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
   o.device = device;
   std::vector<std::complex<float>> image(points.size());
   recon::backproject(backend, inputs, points, o, image.data());
-  std::vector<float> power(points.size());
-  for (std::size_t i = 0; i < power.size(); ++i) power[i] = std::norm(image[i]);
-  return power;
+  return image;
 }
+}  // namespace
 
 LiveChain::LiveChain(const ChainOptions& options) : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
@@ -268,20 +298,28 @@ Report LiveChain::process(PingRecord& record) {
     if (rows.size() < 2) rows.clear();           // one row: exactly the chain without the option
   }
   const bool stacked = !rows.empty();
+  const bool multiscale = opt_.cell_multiscale;
+  if (multiscale && opt_.cell_peak) throw std::invalid_argument("LiveChain: cell_statistic is one of mean, peak, multiscale");
   if (!stacked) {
-    line_map(opt_, bearings, record, last_power, last_ranges, n_cells, cell_samples_);
+    line_map(opt_, bearings, record, last_power, last_ranges, n_cells, cell_samples_, multiscale ? &fine_ : nullptr, &fine_ranges_);
   } else {
     // Each row beamformed on its own, the rows' power added: a row's bearing response does not
     // depend on the elevation the arrival comes from.
-    std::vector<float> row_power;
+    std::vector<float> row_power, row_fine;
     for (std::size_t k = 0; k < rows.size(); ++k) {
       const PingRecord sub = row_record(record, rows[k]);
-      line_map(opt_, bearings, sub, k == 0 ? last_power : row_power, last_ranges, n_cells, cell_samples_);
+      line_map(opt_, bearings, sub, k == 0 ? last_power : row_power, last_ranges, n_cells, cell_samples_,
+               multiscale ? (k == 0 ? &fine_ : &row_fine) : nullptr, &fine_ranges_);
       if (k > 0) {
         for (std::size_t i = 0; i < last_power.size(); ++i) last_power[i] += row_power[i];
+        if (multiscale) {
+          for (std::size_t i = 0; i < fine_.size(); ++i) fine_[i] += row_fine[i];
+        }
       }
     }
   }
+  const std::int64_t fine_stride = n_cells * cell_samples_;      // before any blanked cells are dropped
+  std::int64_t fine_offset = 0;
   if (bl.enabled) {
     // The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
     rep.blanking_min_range_m = 0.5 * c * blank_edge;
@@ -296,18 +334,42 @@ Report LiveChain::process(PingRecord& record) {
       last_power = std::move(kept);
       last_ranges.erase(last_ranges.begin(), last_ranges.begin() + skip);
       n_cells -= skip;
+      fine_offset = skip * cell_samples_;
     }
   }
   const double cell = last_ranges[1] - last_ranges[0];
-  detect::CfarOptions co;
-  co.pfa = opt_.cfar_pfa;
-  co.guard = std::max<std::int32_t>(static_cast<std::int32_t>(std::lround(opt_.cfar_guard_m / cell)), 1);
-  co.train = std::max<std::int32_t>(static_cast<std::int32_t>(std::lround(opt_.cfar_train_m / cell)), 1);
-  std::vector<unsigned char> det(last_power.size());
-  std::vector<float> ratio(last_power.size());
-  detect::cfar(opt_.backend, last_power.data(), n_b, n_cells, co, det.data(), ratio.data(), opt_.device);
+  // The window in cells of this map, by the library's one conversion (detect::cfar_window: rounded up, the guard at
+  // least one range resolution): the Python engine calls the same function.
+  detect::CfarWindow window;
+  window.guard_m = opt_.cfar_guard_m;
+  window.train_m = opt_.cfar_train_m;
+  const detect::CfarOptions co = detect::cfar_window(cell, c / (2.0 * band), window, opt_.cfar_pfa);
+  std::vector<unsigned char> det;
+  std::vector<float> ratio;
+  std::vector<Detection> found;
+  if (multiscale) {
+    // Each cell on its strongest sample, its mean and the means of several cells, against the thresholds of those
+    // statistics; sidelobes of a stronger cell dropped; touching cells one detection (detector.hpp).
+    const auto n_rows = static_cast<std::int64_t>(stacked ? rows.size() : 1);
+    if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows) {
+      plan_ = plan_detector(record, defaults_.facts, opt_.detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
+                            n_rows, co.guard, co.train, opt_.hann && opt_.beamformer != "mvdr",
+                            is_given(opt_.detector.merge_m) ? opt_.detector.merge_m : opt_.tracker.range_sigma, rows);
+      planned_ = true;
+      plan_cells_ = n_cells;
+      plan_train_ = co.train;
+      plan_rows_ = n_rows;
+    }
+    found = multiscale_detect(fine_.data(), fine_stride, fine_offset, last_power.data(), n_b, n_cells, fine_ranges_, last_ranges, bearings,
+                              co.guard, co.train, plan_, background_);
+  } else {
+    det.resize(last_power.size());
+    ratio.resize(last_power.size());
+    detect::cfar(opt_.backend, last_power.data(), n_b, n_cells, co, det.data(), ratio.data(), opt_.device);
+    found = cluster(det.data(), last_power.data(), ratio.data(), n_b, n_cells, last_ranges, bearings);
+  }
   std::vector<Detection> hits;
-  for (const Detection& h : cluster(det.data(), last_power.data(), ratio.data(), n_b, n_cells, last_ranges, bearings)) {
+  for (const Detection& h : found) {
     // A reference summed into hydrophone inputs leaves its bursts in the data near both ends of
     // the window: no detections are taken there.
     if (burst_lo >= 0.0 && (h.range <= burst_lo || h.range >= burst_hi)) continue;
@@ -421,7 +483,11 @@ Report LiveChain::process(PingRecord& record) {
         looks = 0.0;
         for (std::int64_t q = 1; q <= cell_samples_; ++q) looks += 1.0 / static_cast<double>(q);
       }
-      background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) / looks : 0.0);
+      if (multiscale) {
+        background.push_back(static_cast<double>(background_[cell_at]));
+      } else {
+        background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) / looks : 0.0);
+      }
       at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
     }
     double noise_weight = 0.0;
@@ -473,6 +539,11 @@ Report LiveChain::process(PingRecord& record) {
     double px = f.origin.x - origin_.x + h.range * (sb * axis.x + cb * broadside.x);
     double py = f.origin.y - origin_.y + h.range * (sb * axis.y + cb * broadside.y);
     ReportDetection d{h.range, h.bearing / kDeg, h.snr_db};
+    if (std::isfinite(h.extent)) {
+      d.extent_m = h.extent;
+      d.first_range_m = h.first_range;
+      d.arrivals = h.arrivals;
+    }
     Detection m{0.0, 0.0, h.snr_db, h.cells};
     const ElevationEstimate& e = els[i];
     if (stacked && e.valid) {
@@ -589,6 +660,14 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
     const auto& d = detections[i];
     s << (i > det_first ? ", " : "") << "{\"range_m\": " << d.range_m << ", \"bearing_deg\": " << d.bearing_deg << ", \"snr_db\": ";
     num(s, d.snr_db);
+    if (d.extent_m >= 0.0) {
+      s << ", \"extent_m\": " << d.extent_m << ", \"first_range_m\": " << d.first_range_m;
+      if (d.arrivals.size() > 1) {
+        s << ", \"arrivals\": [";
+        for (std::size_t q = 0; q < d.arrivals.size(); ++q) s << (q ? ", " : "") << "[" << d.arrivals[q].range << ", " << d.arrivals[q].snr_db << "]";
+        s << "]";
+      }
+    }
     if (rows > 0) {
       s << ", \"elevation_deg\": ";
       if (!d.elevation_valid) {

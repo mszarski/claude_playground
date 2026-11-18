@@ -1,6 +1,6 @@
 """Two defaults that were silently wrong (audit S-1, S-3/M-2): a bottom now needs a description (no made-up reflection
 coefficient), and the number of bounces or arrivals left to the provider follows an energy criterion with a cap that
-is reported when it cuts (D-95, D-96)."""
+is reported when it cuts (D-104, D-105)."""
 
 import warnings
 

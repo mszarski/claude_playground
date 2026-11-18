@@ -430,7 +430,7 @@ def _stream_test(spec: dict) -> dict:
 
     def same(got):
         # half a count, plus what single precision cannot hold at the record's largest sample (the earlier fixed 0.001 count
-        # was less than that once levels rose 3 dB: D-93)
+        # was less than that once levels rose 3 dB: D-102)
         slack = 0.501 * lsb + 2.0 * float(np.spacing(np.float32(max(np.abs(w.samples.array).max() for w in recs))))
         return bool(len(got) == len(recs) and all(g.samples.array.shape == w.samples.array.shape and np.abs(g.samples.array - w.samples.array).max() <= slack for g, w in zip(got, recs)))
 

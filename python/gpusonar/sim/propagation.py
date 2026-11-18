@@ -123,9 +123,9 @@ class ImageSourceProvider(EigenrayProvider):
     The bottom has NO default: a bottom needs a description, either `bottom` (a fluid half-space {speed, density,
     attenuation} or {sediment: name}: the Rayleigh coefficient at each ray's grazing angle; a scenario's
     environment supplies it) or an explicit constant `bottom_coefficient`. A `bottom_z` with neither is an error
-    (before D-95 it silently reflected 0.5 at every angle); a wall likewise needs its `coefficient`.
+    (before D-104 it silently reflected 0.5 at every angle); a wall likewise needs its `coefficient`.
 
-    Bounces: `max_order` when given. Left out, the series is cut by energy (D-96): orders are kept while some field
+    Bounces: `max_order` when given. Left out, the series is cut by energy (D-105): orders are kept while some field
     point has an arrival within `arrival_floor_db` (20 dB) of its strongest, up to `max_order_cap` (8). When the cap
     cuts off an order that is still above the floor, a warning says by how much, once per provider, and
     `truncation` holds it; `order_used` is the order of the last call.

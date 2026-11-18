@@ -335,7 +335,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         sens = float(rx_cfg.get("sensitivity_db") or 0.0) + float(rx_cfg.get("gain_db", 0.0))
         # `receiver.ambient_noise`: `coherence: isotropic` (default) | `surface` | `independent` between hydrophones,
         # `spectrum: shaped` (default: the configured spectrum across the record's band) | `flat` (its level at the
-        # centre frequency). Real-passband and baseband records follow the same two choices (D-94).
+        # centre frequency). Real-passband and baseband records follow the same two choices (D-103).
         opts = noise_options or {}
         coherence = str(opts.get("coherence", noise_models.DEFAULT_COHERENCE))
         shape = str(opts.get("spectrum", "shaped"))
@@ -360,7 +360,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                                                g, samples.shape[0], stats["common"]).astype(np.float32)
             samples = samples + ambient.astype(samples.dtype)
         elif np.iscomplexobj(samples):
-            # `coherence: independent, spectrum: flat` (what every baseband record had before D-94), and the white
+            # `coherence: independent, spectrum: flat` (what every baseband record had before D-103), and the white
             # statistics: white noise at the spectrum level of the centre frequency, independent between channels
             # (true of an isotropic field at half-wavelength spacing only). The complex envelope carries twice
             # the power of the real signal in that band.

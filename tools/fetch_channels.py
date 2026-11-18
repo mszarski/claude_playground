@@ -135,6 +135,35 @@ def fetch_watermark(out: pathlib.Path) -> int:
     return 0
 
 
+# SFI Smart Ocean dataset (SODAC): IEEE DataPort doi:10.21227/3aa6-4k33, CC BY 4.0, served to logged-in
+# users only. This script never contacts IEEE DataPort: the files come from a Hugging Face dataset
+# repository the owner has put their own download in (private; `hf auth login` first), and only when
+# `--from-hf <owner/dataset>` is given. Nothing of it may be committed or uploaded anywhere else.
+SMARTOCEAN = {"small": ["TX-waveforms.zip", "CTD.csv"], "lf": ["TX-waveforms.zip", "CTD.csv", "RX-LF.zip"],
+              "bathymetry": ["Basisdata_46_Vestland_25832_Dybdedata_FGDB.zip"]}
+
+
+def fetch_smartocean(out: pathlib.Path, repo: str | None, which: str = "lf", folder: str = "smartocean") -> int:
+    """The SODAC files tools/channel_smartocean.py reads, into `out` (RX-LF.zip is 6.6 GB: check the disk)."""
+    if not repo:
+        print("Smart Ocean files are fetched only with --from-hf <owner/dataset> (a private copy of the owner's download);\n"
+              "otherwise download them from IEEE DataPort (doi:10.21227/3aa6-4k33, login needed) into", out)
+        return 2
+    import shutil
+    from huggingface_hub import hf_hub_download
+    for name in SMARTOCEAN[which]:
+        dst = out / name
+        if dst.exists():
+            print(f"have {dst}")
+            continue
+        free = shutil.disk_usage(out).free
+        print(f"fetching {folder}/{name} from {repo} ({free / 1e9:.1f} GB free)")
+        got = hf_hub_download(repo, f"{folder}/{name}", repo_type="dataset", local_dir=str(out / ".hf"))
+        shutil.move(got, dst)
+    shutil.rmtree(out / ".hf", ignore_errors=True)
+    return 0
+
+
 def md5(path: pathlib.Path) -> str:
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -152,7 +181,15 @@ def main(argv=None) -> int:
     ap.add_argument("--files", default=None, help="comma-separated file names instead of a set")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--watermark", action="store_true", help="the Watermark benchmark from www.ffi.no instead of the UACR files")
+    ap.add_argument("--smartocean", nargs="?", const="lf", choices=sorted(SMARTOCEAN),
+                    help="the SFI Smart Ocean files (default: transmit waveforms, CTD, 4-8 kHz receptions); needs --from-hf")
+    ap.add_argument("--from-hf", default=None, metavar="OWNER/DATASET",
+                    help="Hugging Face dataset repository holding the owner's copy of the Smart Ocean files under smartocean/")
     args = ap.parse_args(argv)
+    if args.smartocean and args.directory:
+        out = pathlib.Path(args.directory)
+        out.mkdir(parents=True, exist_ok=True)
+        return fetch_smartocean(out, args.from_hf, args.smartocean)
     if args.list or not args.directory:
         for name, (size, digest) in FILES.items():
             print(f"{name:22s} {size / 1e6:9.1f} MB  md5 {digest}")

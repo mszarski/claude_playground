@@ -135,8 +135,9 @@ def sas_image(records, points: np.ndarray, *, interp: str = "sinc", fov_factor: 
     `trajectory_allowance` matters with a trajectory table (`position_lookup` other than
     "analytic") and a field-of-view limit: it is how far the kernel's pre-test lets the
     platform stray from its first-order pose within a ping before it rejects a pixel. None
-    is the kernel's fixed 0.02 m; "table" takes it from each ping's own table (at least
-    0.02 m), which is what a long ping or a turning platform needs; a number is metres.
+    or "table" (the default, DECISIONS.md D-92) takes it from each ping's own table, at
+    least 0.02 m, which is what a long ping or a turning platform needs; "fixed" is 0.02 m
+    for every ping, the behaviour before; a number is metres.
     """
     records = list(records)
     prepare(records, compress=compress, window=replica_window, backend=backend)

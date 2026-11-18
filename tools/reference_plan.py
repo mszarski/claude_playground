@@ -480,7 +480,7 @@ def depth_and_targets() -> list:
                      f"The chain agent's accounting on its own tree put it at {short['total']:g} dB, of which {short['cell_averaging']:g} dB is the range cell's averaging and {short['aperture_window']:g} dB the aperture window "
                      f"(`buildspec.CHAIN_REALISED_SHORTFALL_DB`). With the chain's own floor ({floor:g} dB) a target needs {floor + gap - bs.BUDGET_THRESHOLD_DB:.1f} dB more than the budget's "
                      f"{bs.BUDGET_THRESHOLD_DB:g} dB (`buildspec.BUDGET_THRESHOLD_DB`, one value) to be detected by today's detector, which would make the 12 km margins below negative. "
-                     f"**Status: {short['status']}.** The threshold is deliberately not changed until that lands. Source levels are RMS in the simulator and in the budget alike (D-93): "
+                     f"**Status: {short['status']}.** The threshold is deliberately not changed until that lands. Source levels are RMS in the simulator and in the budget alike (D-102): "
                      "the 3 dB that convention once explained is no longer part of the gap. **Margins below are the budget's.**\n")
     # the plans
     face = P["builds"]

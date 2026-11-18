@@ -187,11 +187,16 @@ def test_absorption_from_the_record_is_the_audits_number_and_50_db_at_300_m():
     alpha = recon.record_absorption(rec, depth=0.0)
     assert alpha == pytest.approx(0.083, abs=0.002)                 # dB/m at 330 kHz, 12 deg C (audit K-4)
     assert alpha == pytest.approx(float(acoustics.absorption(330e3, 12.0, 35.0, 0.0)))
-    default = recon.tvg_parameters(rec)
-    assert default == {"spreading_db_per_decade": 40.0, "absorption_db_per_m": 0.0, "reference_range": 1.0,
-                       "max_gain_db": 120.0, "undo_hardware_ramp": True}         # today's law, unchanged
-    derived = recon.tvg_parameters(rec, absorption="record", max_gain_db=400.0, depth=0.0)
-    short = recon.gain_law_db(300.0, **derived) - recon.gain_law_db(300.0, **default)
+    # The law before D-91, by its name: no absorption.
+    old = recon.tvg_parameters(rec, absorption="none")
+    assert old == {"spreading_db_per_decade": 40.0, "absorption_db_per_m": 0.0, "reference_range": 1.0,
+                   "max_gain_db": 120.0, "undo_hardware_ramp": True}
+    # The default now derives it from the record (D-91); the clamp is as it was.
+    default = recon.tvg_parameters(rec, depth=0.0)
+    assert default == dict(old, absorption_db_per_m=alpha)
+    assert recon.tvg_parameters(rec, absorption="record", depth=0.0) == default
+    derived = recon.tvg_parameters(rec, max_gain_db=400.0, depth=0.0)
+    short = recon.gain_law_db(300.0, **derived) - recon.gain_law_db(300.0, **old)
     assert short == pytest.approx(2 * alpha * 300.0) and 48.0 < short < 52.0
 
     # The kernel applies exactly that law, and reports the default clamp instead of hiding it.
@@ -201,14 +206,33 @@ def test_absorption_from_the_record_is_the_audits_number_and_50_db_at_300_m():
     np.testing.assert_allclose(20 * np.log10(np.abs(a.samples.array[0])), recon.gain_law_db(0.5 * C * t, **derived), atol=2e-3)
     assert report["clamped_samples"] == 0 and np.isnan(report["clamp_range"])
     b = blank("fls_330k", env, {"receive": {"tvg": None}})
-    cut = core.apply_tvg(b, **recon.tvg_parameters(b, absorption="record", depth=0.0))
+    cut = core.apply_tvg(b, **recon.tvg_parameters(b, depth=0.0))
     assert cut["clamped_samples"] > 0 and 100.0 < cut["clamp_range"] < 200.0 and cut["shortfall_db"] > 20.0
+    # `absorption: none` is the old law to the bit: the same samples as the bare C++ call.
+    c, d = (blank("fls_330k", env, {"receive": {"tvg": None}}) for _ in range(2))
+    core.apply_tvg(c, **old)
+    core.apply_tvg(d)
+    np.testing.assert_array_equal(c.samples.array, d.samples.array)
 
 
 def test_tvg_derivation_refuses_to_assume_the_water_and_knows_one_way_spreading():
     rec = blank("fls_330k", {"sound_speed": C})                     # no temperature, no salinity
     with pytest.raises(ValueError, match="no temperature and salinity"):
-        recon.tvg_parameters(rec, absorption="record")
+        recon.tvg_parameters(rec, absorption="record")              # asked for by name: an error
+    # By default such a record (one made before D-91) still processes: no absorption, and one
+    # warning per process that names the missing fields.
+    from gpusonar.recon import gain
+    gain._warned_no_water = False
+    with pytest.warns(RuntimeWarning, match="no `temperature` and no `salinity`"):
+        assert recon.tvg_parameters(rec)["absorption_db_per_m"] == 0.0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert recon.tvg_parameters(rec)["absorption_db_per_m"] == 0.0             # the second time is silent
+        assert recon.tvg_parameters(rec, absorption="none")["absorption_db_per_m"] == 0.0
+        # Water given beside the record stands in for what it lacks.
+        assert recon.tvg_parameters(rec, temperature=5.0, salinity=35.0)["absorption_db_per_m"] > 0.06
+    with pytest.raises(ValueError, match="apply only with"):
+        recon.tvg_parameters(rec, absorption="none", temperature=5.0)
     assert recon.tvg_parameters(rec, absorption="record", temperature=5.0, salinity=35.0)["absorption_db_per_m"] > 0.06
     assert recon.tvg_parameters(rec, spreading="one_way")["spreading_db_per_decade"] == 20.0
     assert recon.tvg_parameters(rec, spreading="auto")["spreading_db_per_decade"] == 40.0
@@ -224,16 +248,25 @@ def test_tvg_derivation_refuses_to_assume_the_water_and_knows_one_way_spreading(
 def test_pipeline_tvg_step_derives_and_logs(tmp_path):
     cfg = load_yaml(config_dir() / "chains" / "stripmap_points.yaml")
     cfg["source"]["overrides"] = {"pings": {"count": 2}}
-    cfg["steps"] = [{"stage": "prepare"}, {"stage": "tvg", "spreading": "two_way", "absorption": "record"}]
+    cfg["steps"] = [{"stage": "prepare"}, {"stage": "tvg"}]         # a bare step: absorption from the record (D-91)
     cfg["output"] = {}
     result = pipeline.run(cfg, backend=core.Backend.Host)
     entry = [e for e in result.log if e.get("stage") == "tvg"][0]
-    assert entry["absorption_db_per_m"] == pytest.approx(float(acoustics.absorption(200e3, 12.0, 35.0, 0.0)), rel=0.02)
+    alpha = float(acoustics.absorption(200e3, 12.0, 35.0, 0.0))
+    assert entry["absorption_db_per_m"] == pytest.approx(alpha, rel=0.02)
     assert entry["spreading_db_per_decade"] == 40.0 and entry["clamped_samples"] == 0
-    # The same step without the new keys is the old call.
-    cfg["steps"][1] = {"stage": "tvg"}
-    plain = [e for e in pipeline.run(cfg, backend=core.Backend.Host).log if e.get("stage") == "tvg"][0]
-    assert plain["absorption_db_per_m"] == 0.0
+    explicit = dict(cfg, steps=[{"stage": "prepare"}, {"stage": "tvg", "spreading": "two_way", "absorption": "record"}])
+    named = pipeline.run(explicit, backend=core.Backend.Host)
+    np.testing.assert_array_equal(named.records[0].samples.array, result.records[0].samples.array)
+    # The law before D-91, pinned by its name; the older numeric key means the same.
+    for step in ({"stage": "tvg", "absorption": "none"}, {"stage": "tvg", "absorption_db_per_m": 0.0}):
+        old = pipeline.run(dict(cfg, steps=[{"stage": "prepare"}, step]), backend=core.Backend.Host)
+        plain = [e for e in old.log if e.get("stage") == "tvg"][0]
+        assert plain["absorption_db_per_m"] == 0.0
+        # 52 m is the far end of this window: the old law is 2 alpha R lower there.
+        last = lambda run: float(np.abs(run.records[0].samples.array[0, -1]))        # noqa: E731
+        assert plain["gain_last_db"] == pytest.approx(entry["gain_last_db"] - 2 * entry["absorption_db_per_m"] * 52.0, abs=0.3)
+        assert last(old) <= last(result)
 
 
 # --- K-5: CFAR windows ------------------------------------------------------------------------
@@ -310,12 +343,18 @@ def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_kee
         return core.backproject([rec], pts, interp="linear", fov_factor=1.13, position_lookup="software_table",
                                 return_weight_sum=True, **kw)[1]
 
-    # A gentle ping: the residual is under the fixed 2 cm, and the table-derived allowance is
-    # the fixed one, bit for bit.
+    # A gentle ping: the residual is under 2 cm, so the allowance from the table (the default
+    # since D-92) is the fixed 2 cm of before, bit for bit.
     gentle = ping((0.0, 1.0, 0.0))
     session = core.BackprojectSession([gentle], trajectory_upsample=8)
     assert 0.0 < session.trajectory_residual_max < core.BP_TRAJECTORY_ALLOWANCE
+    np.testing.assert_array_equal(image(gentle), image(gentle, trajectory_allowance="fixed"))
     np.testing.assert_array_equal(image(gentle, trajectory_allowance="table"), image(gentle))
+    # Without a table (analytic lookup, as every shipped scenario runs) nothing can differ.
+    for name in ("fixed", "table", None):
+        np.testing.assert_array_equal(
+            core.backproject([gentle], pts, interp="linear", fov_factor=1.13, trajectory_allowance=name),
+            core.backproject([gentle], pts, interp="linear", fov_factor=1.13))
 
     # A hard surge: by the 0.16 s arrival the platform is 1.3 m along track from its
     # first-order pose, so the beam's footprint has moved by that much. With an allowance
@@ -323,9 +362,11 @@ def test_trajectory_allowance_from_the_table_never_loses_what_the_exact_test_kee
     hard = ping((100.0, 0.0, 0.0))
     assert core.BackprojectSession([hard], trajectory_upsample=8).trajectory_residual_max > 1.0
     exact = image(hard, trajectory_allowance=50.0)
-    fixed = image(hard)
-    table = image(hard, trajectory_allowance="table")
+    fixed = image(hard, trajectory_allowance="fixed")               # the behaviour before D-92, by name
+    np.testing.assert_array_equal(image(hard, trajectory_allowance=core.BP_TRAJECTORY_ALLOWANCE), fixed)
+    table = image(hard)                                             # the default
     np.testing.assert_array_equal(table, exact)
+    np.testing.assert_array_equal(image(hard, trajectory_allowance="table"), exact)
     lost = (exact > 0) & (fixed == 0)
     assert lost.sum() > 20                                          # the fixed 2 cm drops pixels the exact test keeps
     assert not ((fixed > 0) & (exact == 0)).any() and (exact == 0).any()      # and the wider one adds nothing false

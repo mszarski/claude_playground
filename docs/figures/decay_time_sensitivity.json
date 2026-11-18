@@ -1,0 +1,377 @@
+{
+ "popoto_12km, image-source paths (6 pings, 6 taps)": {
+  "as shipped": {
+   "pings": 6,
+   "pings_detected": 3,
+   "median_snr_db": 13.52607567,
+   "snr_db": [
+    10.71913813,
+    13.52607567,
+    13.69713885
+   ],
+   "track_confirmed_at_ping": 5,
+   "simulate_seconds": 11.8,
+   "wind_speed": 5.0
+  },
+  "facet / seed 0": {
+   "pings": 6,
+   "pings_detected": 2,
+   "median_snr_db": 13.5053415,
+   "snr_db": [
+    13.38452983,
+    13.62615317
+   ],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 31.5,
+   "wind_speed": 5.0
+  },
+  "facet / seed 1": {
+   "pings": 6,
+   "pings_detected": 2,
+   "median_snr_db": 13.571711595,
+   "snr_db": [
+    13.47527025,
+    13.66815294
+   ],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 30.7,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 0": {
+   "pings": 6,
+   "pings_detected": 3,
+   "median_snr_db": 13.48369366,
+   "snr_db": [
+    10.82084863,
+    13.48369366,
+    13.64919064
+   ],
+   "track_confirmed_at_ping": 5,
+   "simulate_seconds": 31.6,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 1": {
+   "pings": 6,
+   "pings_detected": 3,
+   "median_snr_db": 13.4892411,
+   "snr_db": [
+    10.77397739,
+    13.4892411,
+    13.65587675
+   ],
+   "track_confirmed_at_ping": 5,
+   "simulate_seconds": 32.1,
+   "wind_speed": 5.0
+  },
+  "facet, sum / seed 0": {
+   "pings": 6,
+   "pings_detected": 2,
+   "median_snr_db": 13.5053415,
+   "snr_db": [
+    13.38452983,
+    13.62615317
+   ],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 30.9,
+   "wind_speed": 5.0
+  },
+  "facet, sum / seed 1": {
+   "pings": 6,
+   "pings_detected": 2,
+   "median_snr_db": 13.571711595,
+   "snr_db": [
+    13.47527025,
+    13.66815294
+   ],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 30.8,
+   "wind_speed": 5.0
+  }
+ },
+ "popoto_12km, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps)": {
+  "as shipped": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 15.13964283,
+   "snr_db": [
+    15.75839268,
+    15.13964283,
+    13.35961155
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 30.4,
+   "wind_speed": 5.0
+  },
+  "facet / seed 0": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 15.03101743,
+   "snr_db": [
+    15.35048579,
+    15.03101743,
+    13.12928207
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 81.4,
+   "wind_speed": 5.0
+  },
+  "facet / seed 1": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 14.96619613,
+   "snr_db": [
+    15.94722534,
+    14.96619613,
+    13.13845353
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 81.7,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 0": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 14.86194525,
+   "snr_db": [
+    15.3686109,
+    14.86194525,
+    13.05076385
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 81.9,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 1": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 14.67172861,
+   "snr_db": [
+    15.48967244,
+    14.67172861,
+    13.06868797
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 74.8,
+   "wind_speed": 5.0
+  }
+ },
+ "popoto_env_gravel_30m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps)": {
+  "as shipped": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 32.54301432,
+   "snr_db": [
+    32.106329,
+    32.63466967,
+    32.54301432
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 14.6,
+   "wind_speed": 5.0
+  },
+  "facet / seed 0": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 33.12185107,
+   "snr_db": [
+    33.05107329,
+    33.12185107,
+    33.9583367
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 62.8,
+   "wind_speed": 5.0
+  },
+  "facet / seed 1": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 32.38069208,
+   "snr_db": [
+    31.82769655,
+    32.73731692,
+    32.38069208
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 74.0,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 0": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 32.3610906,
+   "snr_db": [
+    31.92804559,
+    32.62451988,
+    32.3610906
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 71.9,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 1": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 32.35053029,
+   "snr_db": [
+    31.62253355,
+    32.35053029,
+    33.43498889
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 73.3,
+   "wind_speed": 5.0
+  }
+ },
+ "popoto_env_summer_mud_60m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps)": {
+  "as shipped": {
+   "pings": 3,
+   "pings_detected": 0,
+   "median_snr_db": null,
+   "snr_db": [],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 12.4,
+   "wind_speed": 5.0
+  },
+  "facet / seed 0": {
+   "pings": 3,
+   "pings_detected": 0,
+   "median_snr_db": null,
+   "snr_db": [],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 74.0,
+   "wind_speed": 5.0
+  },
+  "facet / seed 1": {
+   "pings": 3,
+   "pings_detected": 0,
+   "median_snr_db": null,
+   "snr_db": [],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 74.8,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 0": {
+   "pings": 3,
+   "pings_detected": 0,
+   "median_snr_db": null,
+   "snr_db": [],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 76.2,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 1": {
+   "pings": 3,
+   "pings_detected": 0,
+   "median_snr_db": null,
+   "snr_db": [],
+   "track_confirmed_at_ping": null,
+   "simulate_seconds": 73.6,
+   "wind_speed": 5.0
+  }
+ },
+ "popoto_env_winter_sand_200m, Bellhop (3 pings, 12 strongest arrivals in every variant, 3 taps)": {
+  "as shipped": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 22.92545627,
+   "snr_db": [
+    22.80831879,
+    22.92545627,
+    24.73468259
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 13.2,
+   "wind_speed": 5.0
+  },
+  "facet / seed 0": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 22.86377674,
+   "snr_db": [
+    22.58430122,
+    22.86377674,
+    24.11594482
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 69.0,
+   "wind_speed": 5.0
+  },
+  "facet / seed 1": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 23.75444888,
+   "snr_db": [
+    22.57384296,
+    23.75444888,
+    25.52876697
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 61.0,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 0": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 23.23531658,
+   "snr_db": [
+    23.23531658,
+    22.19110167,
+    24.62232753
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 61.3,
+   "wind_speed": 5.0
+  },
+  "rule_of_thumb / seed 1": {
+   "pings": 3,
+   "pings_detected": 3,
+   "median_snr_db": 22.81931913,
+   "snr_db": [
+    22.49984164,
+    22.81931913,
+    24.63480428
+   ],
+   "track_confirmed_at_ping": 3,
+   "simulate_seconds": 75.2,
+   "wind_speed": 5.0
+  }
+ },
+ "_echo_levels": {
+  "flank_sst_shallow geometry (1 km)": {
+   "wind_speed": 6.0,
+   "pings": 24,
+   "facet": {
+    "peak_db": 0.1523246169090271,
+    "peak_median_db": -0.022264614701271057,
+    "peak_std_db": 1.0234087705612183,
+    "energy_db": 0.7174986600875854
+   },
+   "rule_of_thumb": {
+    "peak_db": 0.06920014321804047,
+    "peak_median_db": -0.5950179100036621,
+    "peak_std_db": 1.0391324758529663,
+    "energy_db": 0.6464413404464722
+   },
+   "difference_db": -0.08312447369098663,
+   "standard_error_db": 0.29771083663752346
+  },
+  "popoto_12km geometry (12 km)": {
+   "wind_speed": 5.0,
+   "pings": 24,
+   "facet": {
+    "peak_db": -0.03819707781076431,
+    "peak_median_db": -0.03832869976758957,
+    "peak_std_db": 0.010878460481762886,
+    "energy_db": -0.00452541233971715
+   },
+   "rule_of_thumb": {
+    "peak_db": -0.03943378105759621,
+    "peak_median_db": -0.03922520577907562,
+    "peak_std_db": 0.004206705838441849,
+    "energy_db": -0.0068937246687710285
+   },
+   "difference_db": -0.001236703246831894,
+   "standard_error_db": 0.0023808023548135475
+  }
+ }
+}

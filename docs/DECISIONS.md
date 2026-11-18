@@ -1263,7 +1263,177 @@ neighbours' trend (most at 6 kHz and 45 degrees). The row's provenance and note 
 so; `sigma2: 0.002` beside the name gives the rule's value. Limit: literature only, one
 print; a second print of the table would settle it (`REFERENCES.md` wanted list).
 
-### D-91 One environment per site, one schema for scenarios and build specs
+### D-91 The gain step derives absorption from the record by default
+
+`{stage: tvg}` of a chain file and `recon.tvg_parameters` now take absorption from the
+record unless told otherwise: Francois-Garrison at the record's centre frequency for the
+temperature and salinity in `record.environment` (`absorption: auto`, the default). The
+law was `40 log10 R` with no absorption, which is right at a few kHz and silently wrong
+for the imaging sonars (`HARDCODED_AUDIT.md` K-4). The owner was shown the numbers and
+answered "Take your recommendations". Evidence, at the far end of each sonar's receive
+window in sea water at 12 deg C and 35 PSU: the old law was short by 51.4 dB for `fls_330k`
+(307 m, 0.084 dB/m), 49.2 dB for `fls_170k` (465 m), 46.6 dB for `fls_300k`, 25.4 dB for
+`fls_120k`, 21.9 dB for `fls_750k` (50 m), 34.1 dB for `sas_minsas120` (204 m), 17.8 dB
+for `sas_auv`, and 0.0 dB for the 20 kHz sub-bottom sonar.
+A record that states no temperature and salinity (every record made before this) does not
+fail: it gets no absorption and one `RuntimeWarning` per process that names the missing
+fields. `absorption: record` asks for the derivation by name and raises on such a record;
+`absorption: none` is the old law exactly (a test compares the samples with the bare C++
+call); a number is dB/m one way.
+What did not change: `core.apply_tvg` itself (C++ and binding) still defaults to no
+absorption, because the library has no model of the water; the Holoscan `PrepareOp`, whose
+gain is off unless `tvg_db_per_decade` is given, calls it directly and keeps the old law.
+The 120 dB clamp stays as it is (a hardware question of its own): with absorption in the
+law it is reached inside the window of `fls_120k` (273 m), `fls_170k` (237 m), `fls_300k`
+(188 m), `fls_330k` and `sas_minsas120` (179 m), and the step's log entry says where and by
+how much.
+Consequence for shipped material: none. No file under `configs/chains`, `configs/deploy`
+or `configs/scenarios`, no tool and no gallery scenario has a `tvg` step (searched for
+`stage: tvg` and `apply_tvg`); the gallery applies its own display gain. A user chain with
+a bare `{stage: tvg}` changes by 2 alpha R dB at range R.
+
+### D-92 The culling pre-test allows for each ping's own trajectory residual
+
+Backprojection with a field-of-view limit rejects a (pixel, ping) pair early when the
+pixel cannot be in the beam, using the transmit-time geometry widened by what may change
+before the echo arrives. One of those terms was a typed 2 cm "trajectory residual
+allowance" (`HARDCODED_AUDIT.md` R-1). It is now, by default, the largest residual in the
+ping's own trajectory table and never less than 2 cm (`recon::make_inputs`,
+`trajectory_allowance = kTrajectoryAllowanceFromTable`; `None` or `table` in Python and
+chain files). `fixed` (or 0.02) is the behaviour before, and a number of metres is taken
+as given. The owner was shown the evidence and answered "Take your recommendations".
+Why it is safe as a default: the allowance only widens a pre-test that is followed by the
+exact per-element test, so it can add back pairs that test keeps and cannot add a wrong
+one; it is never smaller than before, so nothing kept before is lost. Evidence: a ping
+with a 1.3 m residual and a projector wider than the receive beam lost more than 20
+beam-edge pixels out of 701 under the fixed 2 cm that the exact test keeps
+(`tests/python/test_hardcoded_defaults.py`); the default now equals an allowance of 50 m
+on that case, pixel for pixel. With equal transmit and receive beams the transmit test
+cuts the same pixels and the 2 cm cost nothing.
+Consequence for shipped material: none. No shipped scenario carries INS samples (0 per
+ping in the eight SAS, rail and buried-object scenarios checked) and the gallery images
+with `position_lookup: analytic`, so no table exists and the allowance is the same 2 cm:
+`wreck_sas`, `minefield_sas`, `rail_objects` and `sas_minsas_survey` (the gallery
+scenarios that image with a field-of-view limit) give the same numbers to every digit
+before and after. The forward-looking scenarios set no field-of-view limit and do not run
+the pre-test.
+CUDA: the value travels in `BpGroup::traj_allowance`, which `make_inputs` fills on the
+host and the shared kernel header reads; no `.cu` file and no kernel line changed for
+this decision. Not compiled or run on a GPU here.
+
+### D-93 The chain detects at the range resolution: `cell_statistic: multiscale` is the default
+
+The live chain's detector (`libs/live` `detector.hpp`, `gpusonar.detect.multiscale`) tests every
+range cell on its strongest sample and on its mean, each against the threshold of its own
+statistic; `cell_statistic: mean` is the detector until now, line for line.
+Why: the old detector applied the cell-averaging threshold for ONE exponential sample
+(10.7 dB at 1e-5) to the mean of the 8 correlated samples of a 2 m cell. That mean exceeds
+10.7 dB in noise about once in 1e21 cells, so the typed false-alarm probability was never
+the one obtained; a point echo lost 7.7 dB in the same mean; and rows added in power gained
+nothing, because the threshold on the mean did not move. Measured through the C++ chain on
+simulated pings: a probability of detection of one half needed 19.7 dB of link-budget SNR
+with one row and still 19.7 dB with three; the new detector needs 15.1 / 12.6 / 11.2 dB with
+one / two / three rows (`live.budget_threshold_db`; closed form held to 50 pings a level).
+Made the default because it passed every acceptance point on the eleven cached scenarios on
+both engines: detections per ping equal to the true targets, the same number of tracks as
+truth (the old detector had one extra track on `popoto_static_trial_3row` and
+`flank_patrol`), every class at least as good (the 12 km stand-in is a `mover` from ping 3
+with one, two and three rows; before it was `uncertain` with one row and not tracked with
+two or three), no detection on 220 noise-only pings from either detector. Consequence:
+every report line of a chain that does not say `cell_statistic` changes (`snr_db` 3 to 9 dB
+higher, `extent_m` added to detections); `DEPLOYMENT.md`, "What `snr_db` is", lists before
+and after per scenario. Limits: Gaussian noise is assumed for the thresholds; the scenario
+set has no non-Rayleigh reverberation; the 12 km cases are the image-source stand-in.
+
+### D-94 The detector's false-alarm budget is stated per ping; its thresholds follow from the map
+
+`cfar.false_alarms_per_ping` (0.001) is shared between the tests and the map's independent
+cells (beams across the sector x range resolutions along the window x 2.5 for searching an
+oversampled map); the thresholds are the inverse tails of the statistics
+(`libs/detect` `statistic.hpp`: Erlang for a sample of rows added in power, a weighted sum of
+exponentials for a mean of correlated samples, by the saddlepoint formula), times the
+cell-averaging correction for a background estimated from a finite window. `cfar.pfa` stays
+the key of `mean` and `peak` only. Why per ping: a per-cell probability means nothing until
+the number of cells is known, and the old 1e-5 was neither applied nor wanted (1e-5 a cell
+is one false detection a ping on this map). Why 0.001: at a 20 s ping that is one false
+detection in five and a half hours, and a track needs three in a gate; a decade costs
+0.45 dB of threshold. The factor 2.5 is measured, not derived: on 60 + 160 noise pings of
+the 12 km window, budgets of 3, 1, 0.3, 0.1, 0.03 and 0.01 a ping gave 3.3, 1.3, 0.35,
+0.12, 0.044 and 0.006 with a factor of 2.0 to 2.5. Three rows ran 1.3 to 3 times over
+their budget on 30 and 60 pings (0.22, 0.05, 0.033 a ping at 0.1, 0.03, 0.01) and gave one
+false detection in 90 pings at the default budget: about a factor of two, not explained and
+not corrected (the factor is one number for all row counts).
+
+### D-95 One echo is one detection: sidelobes by their envelope, merging within what the tracker resolves
+
+Before grouping, a flagged cell no more than 10 dB (`cfar.sidelobe_margin_db`) above a
+stronger cell's sidelobe envelope is dropped: 1 / (pi x)^2 along range for a swept pulse, the
+row's own Hann pattern averaged over the band along bearing, not below -40 dB
+(`cfar.sidelobe_floor_db`), computed from the hydrophones the record has (a dead board's gap
+raises it). A cell inside a stronger source's own core (its half-power beam, the next range
+cell) is that detection's and is never dropped. Flagged cells are then one detection when they are within
+`cfar.merge_m` in range (default: the tracker's range sigma, 15 m) and within half the
+beam's half-power width in bearing. Why not a weighted replica: measured with the library's
+pulse compression, Hamming costs 1.1 dB and widens the pulse 1.41 times for -36 dB
+sidelobes, Hann 1.5 dB and 1.53 times for -31 dB; the envelope removes a 62 to 74 dB echo's
+sidelobes at no loss. The price is stated: a weaker echo less than 10 dB above the stronger
+one's sidelobe envelope is not reported (34 dB down at 20 m on the same bearing). Why merge
+at the tracker's sigma: two detections nearer than that cannot be told apart by the tracker
+anyway, and without it the arrivals of one multipath group (Bellhop, `flank_patrol`: three
+groups 11 and 15 m apart for the small vehicle) became three tracks. Stated resolution: two
+echoes are two detections beyond 20 m in range or one and a half half-power beamwidths in
+bearing (`tests/python/test_detector.py`, `tests/cpp/test_detector.cpp`). The -40 dB floor
+is an assumption about the array's gain and phase errors, not a measurement.
+
+### D-96 The detector's background follows the slope where its window is one-sided
+
+Near either end of the map the training cells all lie on one side, and reverberation falls
+with range: the plain mean read 1.7 dB low at the near end of `flank_patrol`, which with a
+threshold matched to the statistic was a row of false detections (9 to 14 a ping against 3
+targets). The mean is moved by exp(slope x offset of the training cells' centroid), the
+slope taken between the medians of the first (last) two training lengths of the same
+bearing; the estimate's larger variance goes into the threshold. Medians, so that a target
+in one of the two lengths does not turn the slope. Balanced windows are untouched. Only the
+multiscale detector does this; `mean` and `peak` are as they were.
+
+### D-97 Integration beyond the range cell is an option, not the default
+
+The means of 4 and 16 cells (`cfar.integrate_cells: [1, 4, 16]`) gain 1.3, 3.3 and 4.8 dB
+on echoes 5, 20 and 100 m long (Monte Carlo of the statistic, total energy at Pd one half)
+and cost a point echo 0.2 dB. They are off by default because their thresholds are 4.0 and
+2.1 dB over the background, which any error of the background reaches: on `flank_patrol`
+they give 3 to 6 detections a ping and a fourth, `uncertain` track against 3 targets (the
+bearings beside the submarine's 36 m echo, whose bearing sidelobes, measured at -28 dB, add
+up over 32 m; 9 to 14 a ping before D-96). A target's highlights and
+multipath arrivals are joined by the merge of D-95 instead, which costs nothing in
+threshold. Limit: an echo spread evenly over tens of metres with no sample or cell standing
+out is detected 3 to 5 dB later than it could be.
+
+### D-98 Both engines take the CFAR window in cells from `detect::cfar_window`
+
+`cfar.guard_m` and `train_m` are turned into cells by the library's one function (rounded
+up, the guard at least one range resolution) in the C++ chain and in the Python one, in
+place of each engine's own round-to-nearest. A window that is a whole number of cells does
+not move: the eleven cached scenarios (2 m cells, 100 m and 300 m) gave identical report
+lines on both engines before the detector changed. A window that is not moves up by a cell
+(100 m over a 3.7 m cell: 28 cells, was 27).
+
+### D-99 Left as they are in the detector package, with the measurement behind each
+
+The Hann aperture window: it is 1.76 dB of the 2.6 dB the detector stands above the best
+this architecture can do for a point echo; a Taylor window (computed for 32 hydrophones:
+0.69 dB of loss at -30 dB sidelobes with nbar 4, against Hann's 1.76 dB at -31.5 dB) would
+give 1.1 dB back, and needs the window in `flank.py`, the elevation estimate's noise weight
+and the detector's envelope. The tracker's range sigma (15 m) and bearing sigma (1 degree):
+the strongest detection of a
+still target scatters by 1.1 m and 0.4 degrees or less from ping to ping on the five static
+scenarios, the same before and after, so the data would support smaller ones; but the
+sigmas also set the gate against a manoeuvre, the merge distance of D-95 and the
+classifier's fit limit, and the scenarios hold no manoeuvring target to set them against.
+Not derived from the cell and SNR. Training cells still include
+other detections: an echo 100 to 400 m from a strong one is desensitised by it, as before.
+
+### D-100 One environment per site, one schema for scenarios and build specs
 
 The owner: "Remove hardcoded assumptions where we can" (audit G-1, G-2, M-1, P-1, P-2, P-3, P-9).
 A scenario typed its site in up to eight places and the ray tracer's frequency beside the
@@ -1302,12 +1472,12 @@ and Bellhop's frequency is the sonar's band centre. Choices made:
 Every shipped scenario was converted with records unchanged (evidence in the report: the
 explicit configuration of all 69 is equal before and after; record hashes on both engines).
 Inconsistencies found were NOT resolved: each is kept through a commented override and
-listed for the owner (D-92). Not reached by the environment: positions typed in `scene` and
+listed for the owner (D-101). Not reached by the environment: positions typed in `scene` and
 `platform`, the `sediment` tier's `sediment_speed`/`interface_z`, a scene surface's own
 `spectrum`. Limit: `max_range` of the ray grid defaults to 1.1 x the window's far edge
 when left out; the shipped scenarios keep theirs.
 
-### D-92 Inconsistent scenarios are kept as they were, each named
+### D-101 Inconsistent scenarios are kept as they were, each named
 
 Converting the scenarios showed four kinds of inconsistency. None was fixed, because fixing
 any changes records and each is the owner's call:
@@ -1333,7 +1503,7 @@ speed), give the rays the site's wind through `time_spread` rather than the cohe
 alone, tell the vehicle the depth where a real one would know it, and pick one sand from
 `configs/sediments.yaml` by name.
 
-### D-93 Source levels are RMS; the square root of two is applied in one place
+### D-102 Source levels are RMS; the square root of two is applied in one place
 
 The owner's decision (audit P-5). A configured source level is dB re 1 uPa at 1 m RMS,
 under a key that says so: `transmit.waveform.source_level_db_rms` (the build spec already
@@ -1357,7 +1527,7 @@ aperture window, measured by the chain's owner at 7.7 and 1.8 dB). The shipped
 `popoto_testauv_direct_overload_gain_switch` scenario keeps its -40 dB switch and now has
 2.8 dB of headroom instead of 5.8 dB.
 
-### D-94 Baseband noise has the spectrum and the array's coherence
+### D-103 Baseband noise has the spectrum and the array's coherence
 
 The owner's decision (audit P-8, P-6). A baseband record's ambient noise was white at the
 centre frequency's level and independent between hydrophones, so a row closer than half a
@@ -1383,7 +1553,7 @@ Limit: `buildspec.directivity_db` already used the closed form in the budgets, s
 budgets do not move; `sonar_equation.SonarEquation.from_sonar` still takes 10 log N unless
 it is given the gain.
 
-### D-95 A bottom needs a description; no reflection coefficient is assumed
+### D-104 A bottom needs a description; no reflection coefficient is assumed
 
 The owner approved changing the default (audit S-1). An image-source bottom with nothing
 said about it reflected 0.5 at every grazing angle: a made-up number, 6 dB a bounce where a
@@ -1396,7 +1566,7 @@ C++ structs lost the same defaults in the core batch. No shipped scenario relied
 default: `sst_echo_level` and `sst_pursuit` state `bottom_coefficient: 0.5` (SST's own
 runs used a constant; kept and listed for the owner).
 
-### D-96 Bounces and arrivals are kept by energy, with a cap that speaks
+### D-105 Bounces and arrivals are kept by energy, with a cap that speaks
 
 The owner approved changing the default (audit S-3, M-2). Multipath was cut at two bounces
 (image source) or the strongest eight arrivals (Bellhop), silently. Left to the provider,
