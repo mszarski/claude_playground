@@ -119,6 +119,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 FORMAT_VERSION = 1
 _EULER = 0.5772156649015329
 _VAR_LOG_NORMAL = np.pi**2 / 8.0          # variance of log|g|, g standard normal (= trigamma(1/2) / 4)
@@ -664,7 +666,7 @@ def _classify_events(flag: np.ndarray, seg_of: np.ndarray, event_blocks: int):
 
 def fit(recording, sample_rate: float | None = None, *, nfft: int = 1024, smooth: int = 1,
         transient_threshold: float | None = 8.0, event_blocks: int = 4, tone_threshold_db: float | None = None,
-        tail: str = "auto", tail_samples: int = 1 << 20, positions=None, sound_speed: float = 1500.0) -> NoiseModel:
+        tail: str = "auto", tail_samples: int = 1 << 20, positions=None, sound_speed: float = NOMINAL_SOUND_SPEED) -> NoiseModel:
     """Fit a `NoiseModel` to a recording: a `Recording`, or an array [channels, samples] with
     `sample_rate`. See the module docstring for the method and what is excluded.
 

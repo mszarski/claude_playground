@@ -72,6 +72,7 @@ import numpy as np
 
 from .. import _gpusonar as core
 from .. import acoustics
+from .. import environment as site
 from . import waveform as wf_mod
 from .targets import HighlightTarget
 
@@ -531,8 +532,7 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
     lo, hi = (fc - 0.5 * fs, fc + 0.5 * fs) if baseband else (0.0, 0.5 * fs)
 
     def env_abs(f):
-        return np.asarray(acoustics.absorption(np.maximum(np.asarray(f, dtype=float), 1.0), env.get("temperature", 10.0), env.get("salinity", 35.0),
-                                               env.get("depth", 0.0), env.get("ph", 8.0), absorption_model), dtype=float) * np.ones(np.shape(f))
+        return np.asarray(acoustics.absorption(np.maximum(np.asarray(f, dtype=float), 1.0), *site.water(env), absorption_model), dtype=float) * np.ones(np.shape(f))
 
     rx_ref = np.asarray(record.rx_positions(), dtype=float).mean(axis=0)
     added = None

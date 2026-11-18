@@ -2,7 +2,7 @@
 name: point_grid_flank_32
 sonar: flank_32
 fidelity: free_field
-environment: {temperature: 10.0, salinity: 35.0}
+environment: {temperature_c: 10.0, salinity_psu: 35.0}
 platform:
   position: [0, 0, 30.0]
   rpy: [0, 0, 0]

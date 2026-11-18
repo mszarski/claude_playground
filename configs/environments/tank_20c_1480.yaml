@@ -1,0 +1,7 @@
+# The rail tank: fresh water at 20 deg C with a typed sound speed of 1480 m/s (the rail sonar's nominal value).
+name: tank_20c_1480
+title: "Fresh water, 20 deg C, 1480 m/s typed"
+base: pool_20c_fresh
+sound_speed_m_s: 1480.0
+overrides:
+  sound_speed_m_s: "1480 m/s typed beside 20 deg C fresh water (which gives 1482.3 m/s); kept so shipped records do not change"

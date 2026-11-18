@@ -9,6 +9,7 @@ import numpy as np
 
 from .. import _gpusonar as core
 from .. import acoustics
+from .. import environment as site
 from ..config import dump_yaml, load_scenario_config
 from ..sonar import SonarModel, resolve_environment
 from . import receiver
@@ -34,9 +35,7 @@ def absorption_table(sonar: SonarModel, env: dict, model: str):
     if hi <= lo:
         hi = lo * 1.0001
     f = np.linspace(lo, hi, core.ABSORPTION_TABLE_SIZE)
-    table = acoustics.absorption(
-        f, env.get("temperature", 10.0), env.get("salinity", 35.0), env.get("depth", 0.0),
-        env.get("ph", 8.0), model)
+    table = acoustics.absorption(f, *site.water(env), model)
     return lo, hi, [float(x) for x in np.broadcast_to(table, f.shape)]
 
 
@@ -153,8 +152,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         from . import reverb
         w = sonar.waveform_config
         fc = 0.5 * (float(w["f_start"]) + float(w.get("f_stop", w["f_start"])))
-        alpha = float(acoustics.absorption(fc, env.get("temperature", 10.0), env.get("salinity", 35.0),
-                                           env.get("depth", 0.0), env.get("ph", 8.0), absorption_model))
+        alpha = float(acoustics.absorption(fc, *site.water(env), absorption_model))
         strength = None
         if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
             # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
@@ -170,7 +168,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # {model: bubble_layer_surface, wind_speed, extinction: apl_1994 | hall_novarini}: the
             # bubble-layer and facet terms of the published high-frequency surface model (sim/surface.py).
             from . import surface as surface_model
-            strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env.get("sound_speed", 1500.0),
+            strength = surface_model.bubble_layer_surface_strength(float(item["wind_speed"]), fc, env["sound_speed"],
                                                                    item.get("extinction", "apl_1994"))
         elif item.get("model") == "fluid_sediment":
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
@@ -190,9 +188,9 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             if item.get("geometry", "monostatic") == "bistatic":
                 # The model at the true bistatic azimuth of each cell (pi is backscatter).
                 strength = lambda g_in, g_out, azimuth=np.pi, _p={**{k: float(item[k]) for k in keys}, **extra}: bottom_model.strength(  # noqa: E731
-                    g_in, g_out, fc, env.get("sound_speed", 1500.0), azimuth=azimuth, **_p)
+                    g_in, g_out, fc, env["sound_speed"], azimuth=azimuth, **_p)
             else:
-                strength = bottom_model.reverberation_strength(fc, env.get("sound_speed", 1500.0), **{k: float(item[k]) for k in keys}, **extra)
+                strength = bottom_model.reverberation_strength(fc, env["sound_speed"], **{k: float(item[k]) for k in keys}, **extra)
         elif item.get("model") == "volume":
             # {model: volume, layer: [top, bottom], sv_db}: a layer of scatterers in the water
             # (fish, plankton, bubbles), as a sheet at its centre depth.
@@ -226,7 +224,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         # as the tail of each bounce eigenray (sim/reverb_specular.py; TR 0702 Sec. 12.4).
         if item.get("exclude_specular"):
             from . import reverb_specular
-            part = reverb_specular.boundary_part(item, provider, fc, env.get("sound_speed", 1500.0))
+            part = reverb_specular.boundary_part(item, provider, fc, env["sound_speed"])
             if part is not None:
                 if strength is None:
                     mu = 10.0 ** ((float(item["mu_db"]) + offset) / 10.0)        # a Lambert item: mu_db is set above
@@ -401,8 +399,8 @@ def _noise_spectrum(cfg):
     if "level_db" in cfg:
         level = float(cfg["level_db"])
         return lambda f: np.full_like(np.asarray(f, dtype=float), level)
-    return lambda f: noise_models.wenz_spectrum_db(f, float(cfg.get("wind_speed", 5.0)),
-                                                    float(cfg.get("shipping", 0.5)))
+    return lambda f: noise_models.wenz_spectrum_db(f, float(cfg.get("wind_speed", site.DEFAULT_WIND_SPEED_M_S)),
+                                                    float(cfg.get("shipping", site.DEFAULT_SHIPPING)))
 
 
 def _add_true_ins(record, accel: np.ndarray, rate: float) -> None:
@@ -542,10 +540,15 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     if isinstance(name_or_config, dict):
         cfg = name_or_config
     else:
-        cfg = load_scenario_config(name_or_config, overrides)
+        cfg = load_scenario_config(name_or_config, overrides, expand=False)
+    typed = cfg                                  # what the scenario says: this is what a written file records
     cfg = acoustics.resolve_sea_state(cfg)     # `sea_state: 0..9` wherever `wind_speed` is accepted
     sonar = SonarModel.load(cfg["sonar"], cfg.get("sonar_overrides"))
-    env = resolve_environment(cfg.get("environment"))
+    # One environment per site (gpusonar/environment.py): inline, a name under configs/environments, or
+    # {base: name, ...}. Propagation, time spreading, reverberation, ambient noise and absorption take their
+    # site values from it; a typed value that contradicts it is an error unless `environment_overrides` names it.
+    env = site.resolve(cfg.get("environment"), strict=True)
+    cfg = site.apply_to_scenario(cfg, env, sonar)
     tier = cfg.get("fidelity", "free_field")
     provider = make_provider(tier, env["sound_speed"], cfg.get("propagation"))
     if engine is not None and hasattr(provider, "engine"):
@@ -579,7 +582,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
     # A rail moves between pings and stands still during each one.
     stop_and_go = bool(plat.get("stop_and_go", False))
     ping_kwargs = dict(
-        provider=provider, absorption_model=cfg.get("absorption", "francois_garrison"),
+        provider=provider, absorption_model=cfg.get("absorption", site.DEFAULT_ABSORPTION),
         noise_rms=float(rx_cfg.get("noise_rms", 0.0)), adc=bool(rx_cfg.get("adc", True)),
         noise_spectrum=_noise_spectrum(rx_cfg.get("ambient_noise")),
         noise_statistics=(rx_cfg.get("ambient_noise") or {}).get("statistics"),
@@ -666,7 +669,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
 
     if output:
         opts = core.WriterOptions()
-        opts.config_yaml = dump_yaml(cfg)
+        opts.config_yaml = dump_yaml(typed)
         opts.compression_level = int(cfg.get("compression_level", 1))
         with core.RecordWriter(str(output), opts) as w:
             for r in records:
@@ -681,5 +684,7 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
             w.write_truth_text("labels", json.dumps(scene.labels))
     if ping_times is None:
         ping_times = [i * interval for i in range(len(records))]
+    # The result's config: the scenario with its site values filled in and the environment resolved.
+    cfg = {**cfg, "environment": env}
     return ScenarioResult(records, scene, cfg, np.asarray(truth_positions, dtype=float), legs=leg_of_record,
                           times=np.asarray(ping_times, dtype=float), front_end=front_end)

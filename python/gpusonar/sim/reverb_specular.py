@@ -65,6 +65,8 @@ import warnings
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 
 def facet_lobe(grazing_in, grazing_out, azimuth, mean_square_slope: float):
     """Geometric-optics scattering strength of a perfectly reflecting boundary with Gaussian
@@ -81,7 +83,7 @@ def facet_lobe(grazing_in, grazing_out, azimuth, mean_square_slope: float):
     return lobe, qz, np.arcsin(np.clip(0.5 * np.sqrt(q2), 0.0, 1.0))
 
 
-def specular_part(mean_square_slope: float, rms_height: float, frequency: float, sound_speed: float = 1500.0,
+def specular_part(mean_square_slope: float, rms_height: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
                   reflection=1.0):
     """The strength (g_in, g_out, azimuth) that time spreading carries as the incoherent tail
     of a bounce: (1 - exp(-(k h q_z)^2)) |R|^2 x `facet_lobe`. `reflection`: |R| as a number or

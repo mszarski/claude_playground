@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 from .. import _gpusonar as core
 
 
 def passive_record(sonar, pose, sources, *, noise_rms: float = 1.0, rng: np.random.Generator | None = None,
-                   sound_speed: float = 1500.0, surface_z: float | None = None, time_ns: int = 0):
+                   sound_speed: float = NOMINAL_SOUND_SPEED, surface_z: float | None = None, time_ns: int = 0):
     """A record of `sonar` at `pose` holding noise only. `sources` is a list of
     {"position": [north, east, down] m, "rms": amplitude at the array's centre}; the record's
     length is the sonar's receive window. Works for raw real and for complex baseband sampling."""

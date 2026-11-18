@@ -17,6 +17,7 @@ import yaml
 from scipy.io import wavfile
 
 from .. import _gpusonar as core
+from ..acoustics import NOMINAL_SOUND_SPEED
 from .base import Source, register
 
 _WAVEFORMS = {
@@ -224,7 +225,7 @@ class WavSource(Source):
 
         env_cfg = cfg.get("environment", {}) or {}
         env = r.environment
-        env.sound_speed = float(env_cfg.get("sound_speed", 1500.0))
+        env.sound_speed = float(env_cfg.get("sound_speed", NOMINAL_SOUND_SPEED))
         env.temperature = float(env_cfg.get("temperature", float("nan")))
         env.salinity = float(env_cfg.get("salinity", float("nan")))
         env.water_depth = float(env_cfg.get("water_depth", float("nan")))

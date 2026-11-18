@@ -11,7 +11,7 @@ sonar: fls_300k
 fidelity: free_field
 sonar_overrides:
   receive: {kind: baseband, sample_rate: 150.0e3, window: {range: [3.0, 10.5]}, tvg: null}
-environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+environment: {base: coastal_12c, absorption: none}
 platform:
   position: [0, 0, -1.0]
   rpy: [0, 0, 0]
@@ -33,6 +33,5 @@ scene:
     occlude: true
     shapes:
       - {shape: cylinder, start: [-0.6, 0, 0], end: [0.6, 0, 0], radius: 0.15, caps: true, resolved: true, spacing: 0.0025}
-absorption: none
 receiver: {noise_rms: 0.0, adc: false}
 seed: 3

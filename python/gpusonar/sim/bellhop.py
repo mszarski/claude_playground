@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 from .. import acoustics
 from .propagation import EigenrayProvider, EigenraySet
 
@@ -54,7 +56,7 @@ class OceanEnvironment:
     bottom_density: float = 1.8                    # g/cm^3
     bottom_attenuation: float = 0.5                # dB per wavelength
     surface: str = "vacuum"                        # pressure release
-    sound_speed: float = 1500.0                    # used when no profile is given
+    sound_speed: float = NOMINAL_SOUND_SPEED                    # used when no profile is given
     bathymetry: list = None                        # [[range_m, depth_m], ...] from the source, or None
     sediment: str = None                           # a name in configs/sediments.yaml in place of the three bottom_* numbers
     sediment_file: str = None                      # another table for `sediment`
@@ -97,7 +99,7 @@ class OceanEnvironment:
 
 
 def munk_profile(depth: float = 5000.0, n: int = 51, axis_depth: float = 1300.0,
-                 axis_speed: float = 1500.0, epsilon: float = 0.00737):
+                 axis_speed: float = NOMINAL_SOUND_SPEED, epsilon: float = 0.00737):
     """The canonical Munk deep-water sound-speed profile."""
     z = np.linspace(0.0, depth, n)
     zt = 2.0 * (z - axis_depth) / 1300.0

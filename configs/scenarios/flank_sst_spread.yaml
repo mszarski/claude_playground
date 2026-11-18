@@ -11,14 +11,12 @@ sonar: flank_32
 fidelity: image_source
 sonar_overrides:
   receive: {window: {range: [700, 1300]}}
-environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+environment: {base: coastal_12c_sand, water_depth_m: 100.0, wind_speed_m_s: 6.0, shipping: 0.5, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
   surface_z: 0.0
-  bottom_z: 100.0
   max_order: 2
-  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
 time_spread:
-  surface: {wind_speed: 6.0, bubble_loss_db: 0.5}     # unconfirmed: bubble loss per bounce
+  surface: {bubble_loss_db: 0.5}     # unconfirmed: bubble loss per bounce
   taps: 3
   angle_spread: true
   decay_time: facet
@@ -31,10 +29,9 @@ pings: {count: 4, interval: 15.0}
 scene:
   - {type: points, label: target, positions: [[0.0, 1000.0, 50.0]], target_strength_db: 10.0}
 reverberation:
-  - {model: fluid_sediment, boundary_z: 100.0, rho: 1.9, nu: 1.1, delta: 0.0147, w2: 2.0e-5, gamma2: 3.25, sigma2: 0.002}   # unconfirmed
-  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 6.0}
-absorption: ainslie_mccolm
+  - {model: fluid_sediment, rho: 1.9, nu: 1.1, delta: 0.0147, w2: 2.0e-5, gamma2: 3.25, sigma2: 0.002}   # unconfirmed
+  - {model: chapman_harris}
 receiver:
   adc: false
-  ambient_noise: {wind_speed: 6.0, shipping: 0.5}
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
 seed: 7

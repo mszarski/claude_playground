@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 
 def wenz_spectrum_db(frequency, wind_speed: float = 5.0, shipping: float = 0.5,
                      components: bool = False):
@@ -45,7 +47,7 @@ def self_noise_spectrum_db(frequency, broadband_db: float = -300.0, slope_db_per
     return broadband_db + slope_db_per_octave * np.log2(f / reference_frequency)
 
 
-def isotropic_coherence(positions, frequency: float, sound_speed: float = 1500.0) -> np.ndarray:
+def isotropic_coherence(positions, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED) -> np.ndarray:
     """Coherence matrix of 3-D isotropic noise between omnidirectional sensors:
     sin(k d) / (k d), with d the separation."""
     p = np.asarray(positions, dtype=float)
@@ -53,7 +55,7 @@ def isotropic_coherence(positions, frequency: float, sound_speed: float = 1500.0
     return np.sinc(2.0 * frequency * d / sound_speed)
 
 
-def surface_noise_coherence(positions, frequency: float, sound_speed: float = 1500.0, nodes: int = 96) -> np.ndarray:
+def surface_noise_coherence(positions, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, nodes: int = 96) -> np.ndarray:
     """Coherence matrix (complex, Hermitian) of noise made at the sea surface, between
     omnidirectional sensors in deep, uniform water: the Cron-Sherman model. Not used by the
     noise generator (which takes the isotropic matrix); provided for comparison and for a
@@ -93,7 +95,7 @@ def surface_noise_coherence(positions, frequency: float, sound_speed: float = 15
 
 
 def gaussian_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator,
-                   positions=None, sound_speed: float = 1500.0, sensitivity_db: float = 0.0,
+                   positions=None, sound_speed: float = NOMINAL_SOUND_SPEED, sensitivity_db: float = 0.0,
                    n_channels: int | None = None, n_bands: int = 96) -> np.ndarray:
     """Real Gaussian noise [channels, samples] with one-sided power spectral density
     `spectrum_db(f)` (dB re 1 uPa^2/Hz, converted to sample units by `sensitivity_db`).
@@ -219,7 +221,7 @@ def gamma_texture(n_samples: int, sample_rate: float, shape: float, correlation_
 
 
 def k_noise(n_samples: int, sample_rate: float, spectrum_db, rng: np.random.Generator, statistics: dict | None,
-            positions=None, sound_speed: float = 1500.0, sensitivity_db: float = 0.0,
+            positions=None, sound_speed: float = NOMINAL_SOUND_SPEED, sensitivity_db: float = 0.0,
             n_channels: int | None = None, n_bands: int = 96) -> np.ndarray:
     """`gaussian_noise` with other statistics. `statistics` = {"model": "alpha_stable", "alpha"}:
     `alpha_stable_noise` (white in band, independent channels; read its note on level). Or

@@ -92,10 +92,10 @@ class Surface:
             warnings.simplefilter("ignore")
             return np.asarray(fn(g, self.wind_speed, float(frequency), self._c), dtype=float)
 
-    _c: float = field(default=1500.0, repr=False)
+    _c: float = field(default=acoustics.NOMINAL_SOUND_SPEED, repr=False)
 
     @classmethod
-    def from_config(cls, cfg: dict | None, sound_speed: float = 1500.0) -> "Surface":
+    def from_config(cls, cfg: dict | None, sound_speed: float = acoustics.NOMINAL_SOUND_SPEED) -> "Surface":
         """{wind_speed | sea_state, rms_height, bubble_model} -> Surface. `sea_state` (0 to 9) means its median wind speed."""
         cfg = dict(cfg or {})
         if "sea_state" in cfg:
@@ -123,7 +123,7 @@ class Layer:
 
     depth: float | None = None
     bottom: dict | None = None
-    sound_speed: float = 1500.0
+    sound_speed: float = acoustics.NOMINAL_SOUND_SPEED
     max_order: int = 0                       # 0: chosen from the geometry (every image inside `max_grazing_deg`)
     max_grazing_deg: float = 45.0
     absorption_db_per_m: float = 0.0         # applied to each image's extra path length only (the budget carries the direct path's)
@@ -248,7 +248,7 @@ def depth_average(values_db, axis: int = -1):
     return 10.0 * np.log10(np.mean(10.0 ** (np.asarray(values_db, dtype=float) / 10.0), axis=axis))
 
 
-def lloyd_two_way_db(frequency: float, own_depth, target_depth, range_m, sound_speed: float = 1500.0):
+def lloyd_two_way_db(frequency: float, own_depth, target_depth, range_m, sound_speed: float = acoustics.NOMINAL_SOUND_SPEED):
     """The textbook single-frequency figure for a flat surface and R >> depths: 2 x 20 log10 |2 sin(2 pi z1 z2 / (lambda R))|.
     An independent closed form the tests hold `two_way` to."""
     lam = float(sound_speed) / float(frequency)
@@ -256,7 +256,7 @@ def lloyd_two_way_db(frequency: float, own_depth, target_depth, range_m, sound_s
     return 40.0 * np.log10(np.maximum(np.abs(2.0 * np.sin(x)), 1e-15))
 
 
-def first_lobe_own_depth(frequency: float, target_depth: float, range_m: float, sound_speed: float = 1500.0) -> dict:
+def first_lobe_own_depth(frequency: float, target_depth: float, range_m: float, sound_speed: float = acoustics.NOMINAL_SOUND_SPEED) -> dict:
     """Own depths of the first Lloyd lobe for a target at `target_depth` and horizontal range `range_m`, flat surface, one
     frequency: the peak (z1 z2 = lambda R / 4: +12 dB two way), where the factor crosses 0 dB on the way up
     (lambda R / 12) and the first null below the surface (lambda R / 2)."""
@@ -267,8 +267,8 @@ def first_lobe_own_depth(frequency: float, target_depth: float, range_m: float, 
 
 # --- Bellhop: the same figures from its arrivals, for a sound-speed profile -----------------------------------------------
 
-def bellhop_transfer(arrivals, i_depth: int, i_range: int, frequencies, surface: Surface = FLAT, speed_at_source: float = 1500.0,
-                     speed_at_surface: float = 1500.0):
+def bellhop_transfer(arrivals, i_depth: int, i_range: int, frequencies, surface: Surface = FLAT, speed_at_source: float = acoustics.NOMINAL_SOUND_SPEED,
+                     speed_at_surface: float = acoustics.NOMINAL_SOUND_SPEED):
     """(H, S) as `one_way` returns them, from one receiver of a Bellhop arrivals set (sim.bellhop.run_bellhop): each
     arrival's amplitude (computed at the run's frequency) with its delay's phase at every frequency of the band,
     relative to spherical spreading over the slant range. Bellhop's surface is flat; the rough surface's coherent

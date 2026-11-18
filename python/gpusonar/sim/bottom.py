@@ -142,6 +142,8 @@ import functools
 import math
 
 import numpy as np
+
+from ..acoustics import NOMINAL_SOUND_SPEED
 from scipy.interpolate import CubicSpline
 from scipy.special import hankel1
 
@@ -548,7 +550,7 @@ def strength(grazing_in, grazing_out, frequency: float, sound_speed: float, azim
             + volume_strength(grazing_in, grazing_out, frequency, sound_speed, **params))
 
 
-def backscattering_strength_db(grazing, frequency: float, sound_speed: float = 1500.0, **params):
+def backscattering_strength_db(grazing, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, **params):
     return 10.0 * np.log10(np.maximum(strength(grazing, grazing, frequency, sound_speed, **params), 1e-300))
 
 
@@ -558,7 +560,7 @@ def reverberation_strength(frequency: float, sound_speed: float, **params):
     return lambda g_in, g_out: strength(g_in, g_out, frequency, sound_speed, **params)
 
 
-def equivalent_lambert_mu_db(grazing: float, frequency: float, sound_speed: float = 1500.0, **params) -> float:
+def equivalent_lambert_mu_db(grazing: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, **params) -> float:
     """The Lambert parameter that gives this model's backscattering strength at one grazing
     angle: for scenes whose seabed is point scatterers with Lambert's law (set their `mu_db`
     to this at the middle of the swath)."""
@@ -729,7 +731,7 @@ def named_lambert_mu_db(name: str, path=None) -> float:
     return float(empirical_backscatter(name, path)["mu_db"])
 
 
-def named_backscattering_strength_db(name: str, grazing, frequency: float, sound_speed: float = 1500.0, path=None,
+def named_backscattering_strength_db(name: str, grazing, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, path=None,
                                      **model):
     """Backscattering strength in dB of a named table entry: the fluid-sediment model for a
     sediment (extra keywords such as `roughness_model` are passed on), the entry's empirical

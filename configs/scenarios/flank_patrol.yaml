@@ -11,14 +11,13 @@ sonar: flank_32
 fidelity: eigenray
 sonar_overrides:
   receive: {window: {range: [1800, 4200]}}
-environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0}
+environment: {base: coastal_12c_bellhop_sand, water_depth_m: 100.0, wind_speed_m_s: 5.0, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
-  environment: {depth: 100.0, sound_speed: 1500.0, bottom_speed: 1600.0, bottom_density: 1.8, bottom_attenuation: 0.5}
-  frequency: 8000.0
   max_range: 4500
   range_step: 20.0
   depth_step: 2.0
   max_arrivals: 32
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
 platform: {position: [0, 0, 30.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
 pings: {count: 6, interval: 12.0}
 scene:
@@ -31,10 +30,11 @@ scene:
   - {type: points, label: small_vehicle, positions: [[900.0, 2000.0, 40.0]], target_strength_db: -3.0, velocity: [0.82, 1.82, 0.0]}
   - {type: points, label: wreck, positions: [[1500.0, 3270.0, 98.0]], target_strength_db: 12.0}
 reverberation:
-  - {boundary_z: 100.0, mu_db: -27.0}
-  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 5.0}
-absorption: ainslie_mccolm
+  - {mu_db: -27.0}
+  - {model: chapman_harris}
 receiver:
   adc: false
   ambient_noise: {level_db: 45.0}
 seed: 17
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as before, so that the record does not change"

@@ -9,7 +9,7 @@ sonar: l12_5d
 fidelity: free_field
 sonar_overrides:
   receive: {window: {range: [0.4, 2.2]}}
-environment: {temperature: 20.0, salinity: 0.0}
+environment: pool_20c_fresh
 platform:
   position: [0, 0, 0.5]            # probe face 0.5 m below the surface
   rpy: [0, 0, 0]

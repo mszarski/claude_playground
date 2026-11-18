@@ -10,14 +10,13 @@ sonar: popoto_long_range
 fidelity: eigenray
 sonar_overrides:
   receive: {kind: baseband, sample_rate: 8.0e3, window: {range: [3300.0, 4700.0]}}
-environment: {sound_speed: 1522.0, temperature: 12.0, salinity: 35.0}
+environment: {base: summer_60m_mud_profile, temperature_c: 12.0, salinity_psu: 35.0, shipping: 0.5, absorption: ainslie_mccolm, water_depth_known: false}
 propagation:
-  environment: {depth: 60.0, ssp_depth: [0.0, 15.0, 30.0, 60.0], ssp_speed: [1522.0, 1520.0, 1492.0, 1490.0], bottom_speed: 1500.0, bottom_density: 1.5, bottom_attenuation: 0.2}
-  frequency: 5000.0
   max_range: 5200.0
   range_step: 40.0
   depth_step: 1.5
   max_arrivals: 40
+  wind_speed: 0.0          # a flat surface for the eigenrays: see environment_overrides
 platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [1.5, 0, 0]}
 pings: {count: 6, interval: 9.3}
 scene:
@@ -27,10 +26,11 @@ scene:
     target_strength_db: 18.0
     velocity: [-6.0, 0.0, 0.0]
 reverberation:
-  - {boundary_z: 60.0, mu_db: -35.0}
-  - {boundary_z: 0.0, model: chapman_harris, wind_speed: 5.0}
-absorption: ainslie_mccolm
+  - {mu_db: -35.0}
+  - {model: chapman_harris}
 receiver:
   adc: false
-  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
 seed: 51
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a FLAT surface although the site has wind (surface reverberation and noise use it); as before, so that the record does not change"

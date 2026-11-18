@@ -43,6 +43,8 @@ import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
+
+from ..acoustics import NOMINAL_SOUND_SPEED
 from scipy.optimize import least_squares
 
 from . import bottom
@@ -142,7 +144,7 @@ def _unpack(x, keys, held: dict) -> dict:
     return out
 
 
-def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: float, sound_speed: float = 1500.0,
+def fit(grazing_deg, frequency, strength_db, *, rho: float, nu: float, delta: float, sound_speed: float = NOMINAL_SOUND_SPEED,
         sigma_db=None, fit_geoacoustic: bool = False, roughness_model: str = "perturbation", start: dict | None = None,
         n_starts: int = 12, seed: int = 0) -> SedimentFit:
     """Fit w2, gamma2 and sigma2 (and rho, nu, delta with `fit_geoacoustic`) to measured

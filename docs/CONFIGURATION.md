@@ -169,7 +169,8 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `time_spread.doppler_lines` | sinusoids the process of each tap is made of (8). Changing it changes the realisation |
 | `time_spread.decay_time` | `facet` (default since D-85: mss (1 + sin² grazing) t1 t2 / (t1 + t2) with the shape that Gaussian facet slopes give; measured-over-model median 0.99 at the one site with measured channels, scatter a factor 5 per arrival) or `rule_of_thumb` (TR 0702: 2 mss t1 t2 / (t1 + t2), exponential; the default before D-85, about twice too long at that site; name it to reproduce TR 0702 or earlier records) |
 | `time_spread.multi_bounce` | `convolve` (default: the convolution of the bounces' tails; a bounce delays the tail only when it scatters) or `sum` (the earlier rule: one exponential whose mean is the sum of the bounces' means; wrong when the bounces differ) |
-| `environment` | `sound_speed`, `temperature`, `salinity`, `water_depth` |
+| `environment` | the site, described once: see "Environment: one description per site" below. Inline, the name of an environment under `configs/environments/`, or `{base: <name>, ...}` |
+| `environment_overrides` | `{<dotted key>: "<reason>"}`: values typed in a block that deliberately differ from the environment (see below). Anything else that differs is an error |
 | `absorption` | `francois_garrison` (default), `ainslie_mccolm`, `thorp` (the two-term expression SST uses, TR 0702 eq. (42); no temperature, salinity or depth dependence; for like-for-like comparisons at low frequency: it warns above 100 kHz, where it lacks the pure-water term) or `none` |
 | `seed` | random seed of the scene, noise and reverberation |
 
@@ -233,6 +234,78 @@ A `target`'s frame has x ahead, y to starboard, z down.
 | `reverberation` item `exclude_specular: true` (or `{mean_square_slope, rms_height, reflection}`) | `geometry: bistatic` items only: take out of the scattering strength the near-specular part that `time_spread` already carries as the tail of each bounce (`sim/reverb_specular.py`). Use it when the transmitter's pulse also arrives one way over that boundary (a `sources:` entry for a separate transmitter). `true` reads the slopes and height from `time_spread` and the reflection coefficient from the provider. Refused with a warning on a monostatic item |
 | `receiver.noise_rms`, `receiver.adc` | white noise at the ADC; whether to quantise |
 | `synthesis.beam_floor_db` | skip paths this far down both beam patterns (speeds up narrow-beam scenes) |
+
+## Environment: one description per site
+
+A scenario describes its site ONCE, under `environment`, and every part of the simulator that needs a site value
+reads it from there (`python/gpusonar/environment.py`). The same schema serves the build layer's `environments:`
+lists (`configs/builds/environments/`, `gpusonar.depthplan`): one loader, one validator, one set of field names.
+This is the simulated site, the truth the sound is made in. What a running sonar knows of the water is the live
+chain's (`elevation.profile`, `libs/live/environment.hpp`) and is not set here.
+
+```yaml
+environment: {base: coastal_12c_sand, water_depth_m: 60.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: francois_garrison}
+```
+
+`environment` is a mapping, the name of an environment, or `{base: <name>, ...}` (the named one with some fields
+changed). Names: a file `configs/environments/<name>.yaml` (one mapping, which may itself have a `base`), or an entry
+of a list file (`environments: [...]`) there or under `configs/builds/environments/`.
+
+| Field | Unit | Meaning | Left out |
+| --- | --- | --- | --- |
+| `water_depth_m` | m | water depth | no bottom anywhere |
+| `bottom` | | a name in `configs/sediments.yaml`, or `{speed (m/s), density (ratio to water), attenuation (dB per wavelength)}`. Needs `water_depth_m` | the bottom reflects nothing unless a block gives its own |
+| `wind_speed_m_s` or `sea_state` | m/s at 10 m; 0 to 9 | the sea surface: ambient noise, surface reverberation laws, time spreading, Bellhop's surface loss, bubble laws | no wind is given to anything; a Wenz noise spectrum then uses 5 m/s (`environment.DEFAULT_WIND_SPEED_M_S`) |
+| `rms_wave_height_m` | m | rms surface displacement (significant height / 4), an input of its own: measured heights did not follow the wind law (`docs/PHYSICS_NOTES.md` Sec. 21). Given to `time_spread.surface.rms_height` | the Pierson-Moskowitz height of the wind |
+| `sound_speed_m_s` | m/s | sound speed of isovelocity water; beside a profile, the speed at the sonar (what a record carries) | the profile at `reference_depth_m`; else Mackenzie/Marczak from `temperature_c`, `salinity_psu`; else 1500 (`acoustics.NOMINAL_SOUND_SPEED`, the one definition) |
+| `profile` | | `{depth_m: [...], speed_m_s: [...]}`, or a family: `{family: munk[, axis_depth_m, axis_speed_m_s, points]}`, `{family: linear, surface_speed_m_s, gradient_per_s}`. Used by the `eigenray` tier | isovelocity |
+| `temperature_c`, `salinity_psu`, `ph`, `reference_depth_m` | deg C, PSU, -, m | the water for absorption and for the sound-speed formula | 10, 35, 8, 0 (`environment.DEFAULT_*`; the resolved environment lists which were defaulted under `defaulted`) |
+| `absorption` | | `francois_garrison`, `ainslie_mccolm`, `thorp`, `none` (the scenario key `absorption` is still read; both given and different is an error) | `francois_garrison` |
+| `shipping` | 0 to 1 | shipping activity of the ambient-noise spectrum | 0.5 |
+| `bubble_model` | | wind law for the loss per surface bounce (build layer's planner) | none |
+| `water_depth_known` | bool | `false`: the vehicle is not told the depth (the record's `environment.water_depth` stays unset; a processor then has it from navigation or not at all) | `true` |
+| `frame_origin_lla` | deg, deg, m | written into records | |
+| `overrides` | | `{field: "reason"}`: a field stated on purpose although another implies a different value (a nominal `sound_speed_m_s` beside a temperature: geometry then uses the first, absorption the second). Without it that case warns | |
+| `name`, `title`, `note`, `illustrative`, `own_depth_limits_m`, `bottom_clearance_m` | | labels, and the build layer's planning fields (`docs/REFERENCE_DESIGN.md`) | |
+
+The older spellings `sound_speed`, `water_depth`, `temperature`, `salinity`, `wind_speed`, `depth` are the same
+fields (`environment.ALIASES`); one field under two spellings with different values is an error.
+
+**Who takes what** (`environment.apply_to_scenario`; a key typed in the block is kept and checked):
+
+| Block | Takes from the environment |
+| --- | --- |
+| `propagation`, `image_source` | `bottom_z` = water depth; `bottom` = the bottom (unless `bottom_coefficient` is given) |
+| `propagation`, `eigenray` | `environment: {depth, ssp_depth, ssp_speed or sound_speed, bottom_speed, bottom_density, bottom_attenuation or sediment}`; `frequency` = the sonar's band centre (it follows `sonar` and `sonar_overrides`); `wind_speed`; `max_range` = 1.1 x the far edge of the receive window |
+| `time_spread.surface` | `wind_speed` when the section gives no roughness of its own (`surface: true` is enough), `rms_height` = `rms_wave_height_m` |
+| each `reverberation` item | `boundary_z`: 0 for the surface laws (`chapman_harris`, `kraus_surface`, `bubble_layer_surface`), the water depth for the others (`boundary: surface` puts a Lambert item on the surface); `wind_speed` for the surface laws; `sediment` for `fluid_sediment` when the bottom is a name |
+| `receiver.ambient_noise` | `{model: wenz}` (or `true`): `wind_speed`, `shipping`. `{level_db: ...}` is a flat spectrum and takes nothing |
+| `absorption`, and every absorption calculation | the model, and the water (temperature, salinity, depth, pH) |
+| the record | `sound_speed`; `temperature`, `salinity`; `water_depth` unless `water_depth_known: false` |
+
+**A typed value that contradicts the environment is an error**, naming the key, unless the scenario lists it:
+
+```yaml
+environment_overrides:
+  propagation.wind_speed: "the eigenrays reflect from a flat surface although the site has wind; ..."
+```
+
+Keys are dotted paths (`propagation.frequency`, `propagation.environment.depth`, `reverberation[1].wind_speed`,
+`time_spread.surface.wind_speed`, `receiver.ambient_noise.wind_speed`, `absorption`). An entry that no longer
+differs gives a warning, so the list cannot go stale.
+
+`config.load_scenario_config(name, overrides)` returns the scenario EXPANDED: the environment resolved (with
+`sound_speed`, `temperature`, `water_depth`, `site_water_depth`, `wind_speed`, ...) and every block holding the
+values it took, so code that reads `cfg["environment"]["sound_speed"]` or `cfg["propagation"]["bottom_z"]` finds
+them. To change the site of a loaded scenario pass the change as an override
+(`{"environment": {"water_depth_m": 45.0}}`); `expand=False` gives the file as written. What the environment does
+NOT reach: positions typed in `scene` and `platform` (a seabed object at `z: 60`), the `sediment` tier's
+`sediment_speed` and `interface_z`, and a scene surface's own `spectrum`.
+
+Shipped environments (`configs/environments/`, all illustrative): `coastal_12c` (12 deg C, 35 PSU, nominal
+1500 m/s), `coastal_12c_sand` and `coastal_12c_bellhop_sand` (the two illustrative sands of the shipped scenarios,
+kept apart by name), `shelf_100m_sand_12c` (the build layer's `shelf_100m_sand` with that water: the 12 km site),
+`coastal_10c`, `pool_20c_fresh`, `tank_20c_1480`.
 
 ## Processing chains and deployment files
 

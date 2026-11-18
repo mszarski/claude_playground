@@ -141,7 +141,7 @@ class SonarModel:
     mux_groups: list[list[int]]  # element indices captured by each transmit of a scan
     channel_board: np.ndarray  # [N] board index of each element's channel
     boards: list[dict] = field(default_factory=list)
-    nominal_sound_speed: float = 1500.0
+    nominal_sound_speed: float = acoustics.NOMINAL_SOUND_SPEED
     sampled_waveform: object = None  # sim.waveform.SampledWaveform when transmit.waveform.type is `sampled`
 
     # --- construction -------------------------------------------------------
@@ -163,7 +163,7 @@ class SonarModel:
                 cfg = {**cfg, "transmit": {**cfg["transmit"], "waveform": {**tx_wf, "duration": sampled.duration}}}
                 tx_wf = cfg["transmit"]["waveform"]
         fc = 0.5 * (float(tx_wf["f_start"]) + float(tx_wf.get("f_stop", tx_wf["f_start"])))
-        c = float(cfg.get("nominal_sound_speed", 1500.0))
+        c = float(cfg.get("nominal_sound_speed", acoustics.NOMINAL_SOUND_SPEED))
         wavelength = c / fc
         arr = cfg["array"]
         if "layouts" in arr:
@@ -388,12 +388,8 @@ class SonarModel:
 
 
 def resolve_environment(env: dict | None, depth: float = 0.0) -> dict:
-    """Fill in sound speed from temperature and salinity when it is not given."""
-    env = dict(env or {})
-    if env.get("sound_speed") is None:
-        if env.get("temperature") is None:
-            env["sound_speed"] = 1500.0
-        else:
-            env["sound_speed"] = acoustics.sound_speed(
-                env["temperature"], env.get("salinity", 35.0), env.get("depth", depth))
-    return env
+    """The environment the simulator works with (gpusonar/environment.py `resolve`): sound speed filled in from
+    temperature and salinity, a profile, or `acoustics.NOMINAL_SOUND_SPEED`; `env` may be a mapping, the name
+    of an environment, or None."""
+    from . import environment
+    return environment.resolve(env, depth)

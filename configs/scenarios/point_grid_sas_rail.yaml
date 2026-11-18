@@ -2,7 +2,7 @@
 name: point_grid_sas_rail
 sonar: sas_rail
 fidelity: free_field
-environment: {temperature: 20.0, salinity: 0.0}
+environment: pool_20c_fresh
 platform:
   position: [0, 0, 0.5]
   rpy: [0, 0, 0]

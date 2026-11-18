@@ -24,19 +24,16 @@ sonar_overrides:
     window: {range: [40, 450]}
     overload:                            # ILLUSTRATIVE values, not a board's
       adc: {dead_time: 0.25, dead_output: zero, recovery_tau: 0.02}
-environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 30.0}
+environment: {base: coastal_12c_sand, water_depth_m: 30.0, wind_speed_m_s: 5.0, shipping: 0.5, absorption: ainslie_mccolm}
 propagation:
   surface_z: 0.0
-  bottom_z: 30.0
   max_order: 1
-  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
 platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
 pings: {count: 2, interval: 3.0}
 scene:
   - {type: points, label: close, positions: [[20.0, 148.0, 12.0]], target_strength_db: 10.0}
   - {type: points, label: far, positions: [[-40.0, 347.0, 14.0]], target_strength_db: 10.0}
-absorption: ainslie_mccolm
 receiver:
   adc: true
-  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+  ambient_noise: {model: wenz}        # wind and shipping: the environment's
 seed: 31

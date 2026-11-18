@@ -93,6 +93,8 @@ import warnings
 
 import numpy as np
 
+from ..acoustics import NOMINAL_SOUND_SPEED
+
 from ..acoustics import KNOTS_PER_MS
 
 R_MIN, R_MAX = 10.0e-6, 1.0e-3          # m, radii covered by the Hall-Novarini population
@@ -124,14 +126,14 @@ def resonant_radius(frequency: float, depth=0.0):
     return np.sqrt(3.0 * AIR_GAMMA * pressure / WATER_DENSITY) / (2.0 * np.pi * float(frequency))
 
 
-def bubble_extinction(frequency: float, depth, wind_speed: float, sound_speed: float = 1500.0):
+def bubble_extinction(frequency: float, depth, wind_speed: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Extinction coefficient of the bubble layer, 1/m of intensity, at `depth`."""
     k = 2.0 * np.pi * float(frequency) / float(sound_speed)
     a = resonant_radius(frequency, depth)
     return 2.0 * np.pi**2 * a**2 * hall_novarini_density(a, depth, wind_speed) / k
 
 
-def bubble_layer_depth_integral(frequency: float, wind_speed: float, sound_speed: float = 1500.0) -> float:
+def bubble_layer_depth_integral(frequency: float, wind_speed: float, sound_speed: float = NOMINAL_SOUND_SPEED) -> float:
     """Integral of the extinction coefficient over depth (one vertical crossing, nepers of intensity)."""
     u = max(float(wind_speed), 0.0)
     scale = 0.4 if u <= 7.5 else 0.4 + 0.115 * (u - 7.5)
@@ -139,7 +141,7 @@ def bubble_layer_depth_integral(frequency: float, wind_speed: float, sound_speed
     return float(np.trapezoid(bubble_extinction(frequency, z, u, sound_speed), z))
 
 
-def bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+def bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Energy lost to near-surface bubbles at one surface bounce, dB (positive), at grazing
     angles in radians. Hall-Novarini population with resonant extinction (module docstring)."""
     a0 = float(resonant_radius(frequency, 0.0))
@@ -176,7 +178,7 @@ def bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: fl
 WATER_VISCOSITY, SURFACE_TENSION, AIR_DIFFUSIVITY = 1.0e-3, 72.8e-3, 18.46e-6
 
 
-def bubble_oscillator(radius, frequency: float, depth=0.0, sound_speed: float = 1500.0):
+def bubble_oscillator(radius, frequency: float, depth=0.0, sound_speed: float = NOMINAL_SOUND_SPEED):
     """(w0^2, b): squared natural angular frequency and damping coefficient (1/s) of an air
     bubble of `radius` (m) at `depth` (m) driven at `frequency` (Hz); eqs. (7)-(9) above."""
     a = np.asarray(radius, dtype=float)
@@ -191,7 +193,7 @@ def bubble_oscillator(radius, frequency: float, depth=0.0, sound_speed: float = 
     return w0_sq, b
 
 
-def bubble_layer_medium(frequency: float, depth, wind_speed: float, sound_speed: float = 1500.0, n_radius: int = 1600):
+def bubble_layer_medium(frequency: float, depth, wind_speed: float, sound_speed: float = NOMINAL_SOUND_SPEED, n_radius: int = 1600):
     """The Hall-Novarini layer as an effective medium at `depth` (array, m): a dict with
     `extinction` and `scattering` (1/m of intensity) and `phase_speed` (m/s).
 
@@ -219,7 +221,7 @@ def _layer_profile(frequency: float, wind_speed: float, sound_speed: float, n_de
     return z, bubble_layer_medium(frequency, z, u, sound_speed)
 
 
-def bubble_layer_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0, screened: bool = False):
+def bubble_layer_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED, screened: bool = False):
     """Loss in dB at one surface bounce through the Hall-Novarini layer treated as an
     effective medium (model `hall_novarini_layer`; with `screened`, `hall_novarini_screened`).
 
@@ -261,12 +263,12 @@ def bubble_layer_loss_db(grazing, wind_speed: float, frequency: float, sound_spe
     return out.reshape(g.shape) if g.ndim else float(out[0])
 
 
-def bubble_screened_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+def bubble_screened_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """`bubble_layer_loss_db` with the scattered return of an opaque layer (model `hall_novarini_screened`)."""
     return bubble_layer_loss_db(grazing, wind_speed, frequency, sound_speed, screened=True)
 
 
-def apl_1994_bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+def apl_1994_bubble_loss_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """Surface bubble loss per bounce, dB, by the empirical law the owner adopted (model
     `apl_1994`, the recommended one):
 
@@ -301,7 +303,7 @@ BUBBLE_LOSS_MODELS = {"hall_novarini": bubble_loss_db, "hall_novarini_layer": bu
                       "hall_novarini_screened": bubble_screened_loss_db, "apl_1994": apl_1994_bubble_loss_db}
 
 
-def bubble_loss_table(model: str, wind_speed: float, frequency: float, sound_speed: float = 1500.0):
+def bubble_loss_table(model: str, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED):
     """(grazing angles in radians, loss in dB) for a named wind-speed law, for interpolation."""
     try:
         fn = BUBBLE_LOSS_MODELS[model]
@@ -426,7 +428,7 @@ def bubble_damping_constant(frequency: float) -> float:
     return 2.55e-2 * (float(frequency) / 1e3) ** (1.0 / 3.0)
 
 
-def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
                                extinction: str = "apl_1994") -> float:
     """beta_I: nepers of intensity lost in one vertical crossing of the bubble layer, from a
     bubble loss law of this module: "apl_1994" or "hall_novarini"."""
@@ -438,7 +440,7 @@ def bubble_layer_optical_depth(wind_speed: float, frequency: float, sound_speed:
     raise ValueError(f"unknown extinction {extinction!r}; 'apl_1994' or 'hall_novarini'")
 
 
-def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+def bubble_backscatter(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
                        extinction: str = "apl_1994"):
     """Backscattering cross section per unit area and solid angle of the near-surface bubble
     layer, eq. (10) of the comment above, at grazing angles in radians."""
@@ -460,7 +462,7 @@ def facet_backscatter(grazing, wind_speed: float):
         return (1.0 + tan_i**2) ** 2 / (4.0 * np.pi * s2) * np.exp(-(tan_i**2) / s2)
 
 
-def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
                             extinction: str = "apl_1994"):
     """Sea-surface backscattering strength, dB, from the bubble layer plus the wave facets
     (model `bubble_layer`; comment above): the two terms of the published high-frequency model
@@ -473,7 +475,7 @@ def bubble_layer_surface_db(grazing, wind_speed: float, frequency: float, sound_
     return 10.0 * np.log10(np.maximum(total, 1e-300))
 
 
-def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = 1500.0,
+def bubble_layer_surface_strength(wind_speed: float, frequency: float, sound_speed: float = NOMINAL_SOUND_SPEED,
                                   extinction: str = "apl_1994"):
     """`bubble_layer_surface_db` as the function of (grazing in, grazing out) the reverberation
     code takes. A backscattering model: for a path pair it is evaluated at the mean angle."""

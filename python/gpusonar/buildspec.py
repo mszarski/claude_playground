@@ -31,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import acoustics
 from .config import config_dir, deep_merge, load_sonar_config, load_yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -338,7 +339,7 @@ def validate(spec: dict) -> list[Issue]:
 
     # --- consistency: only reached when every field is of its kind ---
     p, a, h, b, pj, op, tr = (spec[k] for k in ("platform", "array", "hydrophone", "boards", "projector", "operation", "trial"))
-    c = float(get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     rows, count = a["rows"], a["count"]
     if rows < 1 or count < 2:
         err("array.rows", "at least one row of at least two hydrophones")
@@ -576,7 +577,7 @@ def target_classes_of(spec: dict, resolve: bool = True, range_m: float = 12000.0
     if not resolve or not classes:
         return classes
     f_lo, f_hi = (float(x) for x in spec["projector"]["band_hz"])
-    return target_classes.resolve(classes, f_lo, f_hi, range_m, float(get(spec, "sound_speed", "nominal_m_s", 1500.0)))
+    return target_classes.resolve(classes, f_lo, f_hi, range_m, float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED)))
 
 
 def environments_of(spec: dict) -> list:
@@ -634,7 +635,7 @@ def adc_full_scale(spec: dict) -> float:
 
 
 def window_range(spec: dict) -> list[float]:
-    c = float(get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     r0, r1 = spec["operation"]["range_m"]
     blind = 0.5 * c * float(spec["projector"]["waveform"]["duration_s"])
     return [float(blind if r0 is None else r0), float(r1)]
@@ -652,7 +653,7 @@ def sonar_config(spec: dict) -> dict:
     `hardware` block that the diagrams and the parts list read. `emit` writes it against a base."""
     p, a, h, b, pj = (spec[k] for k in ("platform", "array", "hydrophone", "boards", "projector"))
     rows, count = int(a["rows"]), int(a["count"])
-    c = float(get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     starboard = a.get("look", "starboard") == "starboard"
     arr: dict = {"axis": [1, 0, 0], "boresight": [0, 1 if starboard else -1, 0]}
     row_keys = {"count": count}
@@ -903,7 +904,7 @@ def scenario_configs(spec: dict) -> dict:
     rows = int(a["rows"])
     static = p["kind"] == "static"
     sonar = names(spec)["sonar"]
-    c = float(tr.get("sound_speed_m_s") or get(spec, "sound_speed", "nominal_m_s", 1500.0))
+    c = float(tr.get("sound_speed_m_s") or get(spec, "sound_speed", "nominal_m_s", acoustics.NOMINAL_SOUND_SPEED))
     f_lo, f_hi = (float(x) for x in pj["band_hz"])
     band = f_hi - f_lo
     base_rate = 4.0 * band                                       # complex samples: twice the bandwidth, twice over
@@ -1224,7 +1225,7 @@ def describe_shipped(sonar_name: str, deploy_name: str | None = None) -> dict:
 
 # --- expected performance -----------------------------------------------------------------------------
 
-def elevation_pattern(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30.0, 0.1), n_f=64):
+def elevation_pattern(heights, true_deg, f_lo, f_hi, c=acoustics.NOMINAL_SOUND_SPEED, sector=(-30.0, 30.0, 0.1), n_f=64):
     """Noise-free response of rows at `heights` steered over elevation with true time delays over the band
     (power, 1 at the arrival): the estimator's ambiguity function (tools/popoto_elevation_study.py: pattern)."""
     h = np.asarray(heights, dtype=float)
@@ -1235,7 +1236,7 @@ def elevation_pattern(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30
     return np.degrees(grid), p / (len(h) * n_f) ** 2
 
 
-def second_lobe_db(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30.0, 0.1)) -> float:
+def second_lobe_db(heights, true_deg, f_lo, f_hi, c=acoustics.NOMINAL_SOUND_SPEED, sector=(-30.0, 30.0, 0.1)) -> float:
     """Highest point of that response outside the main lobe, inside the sector, dB (-99: none)."""
     _, p = elevation_pattern(heights, true_deg, f_lo, f_hi, c, sector)
     e = int(np.argmax(p))
@@ -1249,7 +1250,7 @@ def second_lobe_db(heights, true_deg, f_lo, f_hi, c=1500.0, sector=(-30.0, 30.0,
     return float(max(10.0 * np.log10(max(rest.max(), 1e-30)), -99.0)) if len(rest) else -99.0
 
 
-def directivity_db(n: int, pitch: float, f: float, c: float = 1500.0) -> float:
+def directivity_db(n: int, pitch: float, f: float, c: float = acoustics.NOMINAL_SOUND_SPEED) -> float:
     """Array gain of a line of n hydrophones against isotropic noise at broadside: N^2 / sum sinc(2 d_ij / lambda)."""
     x = np.arange(n) * pitch
     return float(10.0 * np.log10(n * n / np.sinc(2.0 * (x[:, None] - x[None, :]) * f / c).sum()))

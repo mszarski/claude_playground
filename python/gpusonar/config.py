@@ -146,9 +146,18 @@ def load_sonar_config(name_or_path, overrides: dict | None = None) -> dict:
     return deep_merge(cfg, overrides) if overrides else cfg
 
 
-def load_scenario_config(name_or_path, overrides: dict | None = None) -> dict:
+def load_scenario_config(name_or_path, overrides: dict | None = None, expand: bool = True) -> dict:
+    """Resolved scenario config: a name under configs/scenarios or a path, plus overrides. With `expand` (default) the
+    scenario's one environment (gpusonar/environment.py) is resolved and its site values are written into the blocks
+    that use them (propagation, time_spread, reverberation, receiver.ambient_noise, absorption), so a reader finds
+    `cfg["environment"]["sound_speed"]` or `cfg["propagation"]["bottom_z"]` whatever the file names or leaves to the
+    environment. `expand=False`: the file as written."""
     cfg = _load_with_base("scenarios", name_or_path)
-    return deep_merge(cfg, overrides) if overrides else cfg
+    cfg = deep_merge(cfg, overrides) if overrides else cfg
+    if expand:
+        from . import environment
+        cfg = environment.expand_scenario(cfg)
+    return cfg
 
 
 def list_configs(kind: str) -> list[str]:
