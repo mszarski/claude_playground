@@ -48,10 +48,11 @@ DEFAULTS = {
     "range_cell_m": None,                      # power is averaged into cells this long before detection
     "cfar": {"pfa": 1e-5, "guard_m": None, "train_m": None,      # pfa: per cell, for cell_statistic mean and peak
              # cell_statistic multiscale (libs/live detector.hpp): the false-alarm budget is per ping, shared between the
-             # integration lengths (None: 1, 4 and 16 range cells, beside the single sample) and the map's independent cells;
-             # a flagged cell within sidelobe_margin_db of a stronger cell's sidelobe envelope is put down to it.
+             # integration lengths (None: the range cell, beside the single sample; [1, 4, 16] adds 4 and 16 cells) and the
+             # map's independent cells; a flagged cell within sidelobe_margin_db of a stronger cell's sidelobe envelope is
+             # put down to it; flagged cells of one bearing within merge_m in range (None: tracker.range_sigma) are one detection.
              "false_alarms_per_ping": 1e-3, "integrate_cells": None, "sidelobe_margin_db": 10.0, "sidelobe_floor_db": -40.0,
-             "search_factor": 2.0},
+             "search_factor": 2.0, "merge_m": None},
     "min_snr_db": 9.0,
     "cell_statistic": "mean",                  # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
                                                # "multiscale": on its strongest sample, its mean and the means of several cells, each
@@ -294,6 +295,8 @@ def detector_options(cfg: dict) -> dict:
          "sidelobe_floor_db": float(f["sidelobe_floor_db"]), "search_factor": float(f["search_factor"])}
     if f.get("integrate_cells") is not None:
         o["integrate_cells"] = [int(v) for v in f["integrate_cells"]]
+    if f.get("merge_m") is not None:
+        o["merge_m"] = float(f["merge_m"])
     return o
 
 
@@ -866,6 +869,7 @@ class LiveChain:
             key = (power.shape[1], k, train, n_rows)
             if self._plan_key != key:
                 o = detector_options(cfg)
+                o.setdefault("merge_m", float(cfg["tracker"]["range_sigma"]))
                 o["row_tolerance_m"] = self._row_tolerance
                 if self._elevation is not None:
                     o["min_row_elements"] = int(self._elevation["min_row_elements"])

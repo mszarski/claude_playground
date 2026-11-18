@@ -335,7 +335,8 @@ Report LiveChain::process(PingRecord& record) {
     const auto n_rows = static_cast<std::int64_t>(stacked ? rows.size() : 1);
     if (!planned_ || plan_cells_ != n_cells || plan_train_ != co.train || plan_rows_ != n_rows) {
       plan_ = plan_detector(record, defaults_.facts, opt_.detector, n_cells, cell_samples_, cell / static_cast<double>(cell_samples_), bearings,
-                            n_rows, co.guard, co.train, opt_.hann && opt_.beamformer != "mvdr");
+                            n_rows, co.guard, co.train, opt_.hann && opt_.beamformer != "mvdr",
+                            is_given(opt_.detector.merge_m) ? opt_.detector.merge_m : opt_.tracker.range_sigma);
       planned_ = true;
       plan_cells_ = n_cells;
       plan_train_ = co.train;

@@ -104,6 +104,32 @@ def cluster(detections: np.ndarray, power: np.ndarray, ranges, bearings, guard: 
 # envelopes) comes from there (`core.live_detector_plan`), so both engines test against the same numbers. This is
 # the NumPy application of it; tests/python/test_detector.py holds it to the C++ one.
 
+def background(cell_mean: np.ndarray, guard: int, train: int) -> tuple[np.ndarray, np.ndarray]:
+    """The multiscale detector's background of every cell of `cell_mean` [n_bearing, n_cells], and per range cell the
+    number of independent training cells it is worth. The mean of the `train` cells either side beyond `guard`; where
+    that window is not balanced (the ends of the map) the mean is moved along the background's slope, taken between the
+    medians of the first (last) two training lengths of the same bearing (libs/live detector.hpp says why)."""
+    power = np.asarray(cell_mean, dtype=float)
+    n = power.shape[-1]
+    mean, _ = _window_mean(power, guard, train)
+    j = np.arange(n)
+    n_lo = np.clip(j - guard, 0, n) - np.clip(j - guard - train, 0, n)
+    n_hi = np.clip(j + guard + 1 + train, 0, n) - np.clip(j + guard + 1, 0, n)
+    count = np.maximum(n_lo + n_hi, 1).astype(float)
+    sloped = n >= 2 * train and train >= 8
+    offset = (n_hi * (guard + 0.5 * (n_hi + 1.0)) - n_lo * (guard + 0.5 * (n_lo + 1.0))) / count if sloped else np.zeros(n)
+    r = np.abs(offset) / train
+    worth = 1.0 / (1.0 / count + (np.pi * r * r + 2.0 * r) / train)
+    if sloped:
+        med = [np.median(power[..., a:a + train], axis=-1) for a in (0, train, n - 2 * train, n - train)]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            near = np.where((med[0] > 0) & (med[1] > 0), np.log(med[0] / med[1]) / train, 0.0)
+            far = np.where((med[2] > 0) & (med[3] > 0), np.log(med[2] / med[3]) / train, 0.0)
+        slope = np.where(offset[None, :] > 0.0, near[..., None], far[..., None])
+        mean = mean * np.exp(np.clip(slope * offset[None, :], -2.3, 2.3))
+    return mean, worth
+
+
 def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges, bearings, guard: int, train: int,
                plan: dict) -> tuple[list[Detection], np.ndarray]:
     """Detections on a map `fine` [n_bearing, n_cells * k] (power, k samples per range cell) with `cell_mean`
@@ -117,14 +143,13 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
     n_b, n_c = cell_mean.shape
     fine_ranges, cell_ranges, bearings = np.asarray(fine_ranges, dtype=float), np.asarray(cell_ranges, dtype=float), np.asarray(bearings, dtype=float)
     cells = np.asarray(fine)[:, :n_c * k].reshape(n_b, n_c, k)
-    mean, count = _window_mean(np.asarray(cell_mean, dtype=float), guard, train)
-    count = np.broadcast_to(count, (n_c,))
+    mean, count = background(cell_mean, guard, train)
     floor = np.maximum(mean, 1e-300)
     peak = cells.max(axis=2).astype(float)
     scales = plan["scales"]
     looks = float(plan["train_looks_per_cell"])
-    correction = {int(c): [core.training_correction(s["pfa"], float(c) * looks) for s in scales] for c in np.unique(count)}
-    thr = np.array([[s["factor"] * correction[int(c)][i] for c in count] for i, s in enumerate(scales)])      # [scale, cell]
+    correction = {float(c): [core.training_correction(s["pfa"], float(c) * looks) for s in scales] for c in np.unique(count)}
+    thr = np.array([[s["factor"] * correction[float(c)][i] for c in count] for i, s in enumerate(scales)])      # [scale, cell]
     flag = peak > thr[0][None, :] * floor
     csum = np.concatenate([np.zeros((n_b, 1)), np.cumsum(np.asarray(cell_mean, dtype=float), axis=1)], axis=1)
     j = np.arange(n_c)
@@ -134,7 +159,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
         ok = (a >= 0) & (a + m <= n_c)
         stat = (csum[:, a[ok] + m] - csum[:, a[ok]]) / m
         flag[:, ok] |= stat > thr[i][None, ok] * floor[:, ok]
-    background = mean.astype(np.float32)
+    background_map = mean.astype(np.float32)
 
     # Cells that a stronger cell's sidelobes explain are dropped, strongest source first.
     fb, fj = np.nonzero(flag)
@@ -143,7 +168,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
         alive = np.ones(len(fb), dtype=bool)
         sin_b = np.sin(bearings)
         env_b, env_r = np.asarray(plan["bearing_envelope"]), np.asarray(plan["range_envelope"])
-        is_source = np.flatnonzero(fp >= plan["source_ratio"] * background[fb, fj].astype(float))
+        is_source = np.flatnonzero(fp >= plan["source_ratio"] * background_map[fb, fj].astype(float))
         for q in is_source[np.argsort(-fp[is_source], kind="stable")]:
             if not alive[q]:
                 continue
@@ -155,10 +180,17 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
             alive &= ~((fp < fp[q]) & ~((e_r >= 1.0) & (e_b >= 1.0)) & (fp <= plan["margin"] * e_r * e_b * fp[q]))
         flag = np.zeros_like(flag)
         flag[fb[alive], fj[alive]] = True
+        # Flagged cells of one bearing no further apart than the tracker can tell apart are joined.
+        gap = int(plan["merge_cells"])
+        if gap > 0:
+            fb, fj = fb[alive], fj[alive]                                    # raster order: by bearing, then range
+            close = (fb[1:] == fb[:-1]) & (fj[1:] - fj[:-1] > 1) & (fj[1:] - fj[:-1] - 1 <= gap)
+            for q in np.flatnonzero(close):
+                flag[fb[q], fj[q] + 1:fj[q + 1]] = True
 
     labels, n = ndimage.label(flag, structure=np.ones((3, 3), dtype=int))
     out = []
-    ratio = peak / np.maximum(background.astype(float), 1e-300)
+    ratio = peak / np.maximum(background_map.astype(float), 1e-300)
     for label, where in enumerate(ndimage.find_objects(labels), start=1):
         ib, ir = np.nonzero(labels[where] == label)
         ib, ir = ib + where[0].start, ir + where[1].start
@@ -168,7 +200,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
         out.append(Detection(float((w * r).sum() / w.sum()), float((w.sum(axis=1) * bearings[ib]).sum() / w.sum()),
                              float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
                              extent=far - near + float(plan["cell_m"])))
-    return out, background
+    return out, background_map
 
 
 # --- tracking -------------------------------------------------------------------------------------

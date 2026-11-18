@@ -504,7 +504,9 @@ void bind_live(py::module_& m) {
         std::int64_t min_elements = 3;
         if (kw.contains("min_row_elements") && !kw["min_row_elements"].is_none()) min_elements = kw["min_row_elements"].cast<std::int64_t>();
         const live::SonarFacts facts = live::sonar_facts(record, live::row_tolerance(record, tolerance), min_elements);
-        const live::DetectorPlan p = live::plan_detector(record, facts, o, n_cells, samples_per_cell, step, bearings, rows, guard_cells, train_cells, hann);
+        double merge_m = 0.0;
+        number(kw, "merge_m", merge_m);
+        const live::DetectorPlan p = live::plan_detector(record, facts, o, n_cells, samples_per_cell, step, bearings, rows, guard_cells, train_cells, hann, merge_m);
         py::dict out;
         py::list scales;
         for (const live::DetectorScale& s : p.scales) {
@@ -528,6 +530,7 @@ void bind_live(py::module_& m) {
         out["train_looks_per_cell"] = p.train_looks_per_cell;
         out["margin"] = p.margin;
         out["aperture_m"] = p.aperture_m;
+        out["merge_cells"] = p.merge_cells;
         out["range_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.range_envelope.size()), p.range_envelope.data());
         out["bearing_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.bearing_envelope.size()), p.bearing_envelope.data());
         out["u_step"] = p.u_step;
@@ -539,6 +542,19 @@ void bind_live(py::module_& m) {
       py::arg("guard_cells") = 50, py::arg("train_cells") = 150, py::arg("hann") = true, py::arg("options") = py::dict(),
       "The multiscale detector's plan (libs/live detector.hpp) for a map of n_cells range cells of samples_per_cell samples `step` m apart: "
       "integration lengths, their looks, tests, false-alarm probabilities and thresholds, and the sidelobe envelopes. The C++ chain uses the same function.");
+  m.def(
+      "live_detector_background",
+      [](const py::array_t<float, py::array::c_style | py::array::forcecast>& cell_mean, std::int64_t guard, std::int64_t train) {
+        if (cell_mean.ndim() != 2) throw std::invalid_argument("cell_mean must be [n_bearing, n_cells]");
+        std::vector<double> level, worth;
+        live::detector_background(cell_mean.data(), cell_mean.shape(0), cell_mean.shape(1), guard, train, level, worth);
+        py::array_t<double> out({cell_mean.shape(0), cell_mean.shape(1)});
+        std::memcpy(out.mutable_data(), level.data(), level.size() * sizeof(double));
+        return py::make_tuple(out, py::array_t<double>(static_cast<py::ssize_t>(worth.size()), worth.data()));
+      },
+      py::arg("cell_mean"), py::arg("guard"), py::arg("train"),
+      "The multiscale detector's background of each cell (libs/live detector.hpp) and, per range cell, the number of independent "
+      "training cells it is worth: the C++ reference the NumPy one (detect.background) is tested against.");
   m.def("live_sample_correlation", [](const PingRecord& record, double step, std::int64_t n) {
           return live::sample_correlation(record.transmit.waveform, record.environment.sound_speed, step, n);
         }, py::arg("record"), py::arg("step"), py::arg("n"),
@@ -623,6 +639,7 @@ void bind_live(py::module_& m) {
         get("cfar_sidelobe_margin_db", o.detector.sidelobe_margin_db);
         get("cfar_sidelobe_floor_db", o.detector.sidelobe_floor_db);
         get("cfar_search_factor", o.detector.search_factor);
+        get("cfar_merge_m", o.detector.merge_m);
         if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();

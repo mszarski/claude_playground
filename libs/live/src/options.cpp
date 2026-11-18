@@ -29,6 +29,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_sidelobe_margin_db") c.detector.sidelobe_margin_db = v;
   else if (key == "cfar_sidelobe_floor_db") c.detector.sidelobe_floor_db = v;
   else if (key == "cfar_search_factor") c.detector.search_factor = v;
+  else if (key == "cfar_merge_m") c.detector.merge_m = v;
   else if (key == "cfar_integrate_cells") {
     // Lengths in range cells, separated by commas or colons: 1,4,16
     c.detector.integrate_cells.clear();
