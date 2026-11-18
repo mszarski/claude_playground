@@ -19,10 +19,10 @@ and PREFIX.png.
 margin = free-field budget (buildspec.budget: spherical spreading, absorption, ambient noise at the environment's wind,
 the row's gain, the rows' detection gain) + target strength (the class's LOW end) + two-way propagation factor
 (gpusonar.lloyd: surface image with roughness and bubble loss across the band; with a bottom, the layer's image series;
-with a profile, Bellhop) - threshold (13 dB at the map). Source level: the budget takes the sonar file's
-`source_level_db` as it stands, in an energy equation, exactly as docs/DESIGN.md Sec. 5 does; the simulator takes the
-same number as a PEAK pressure (docs/HARDCODED_AUDIT.md P-5), so a simulated echo carries 3 dB less than this budget
-assumes. The propagation factor is a ratio and has no such convention.
+with a profile, Bellhop) - threshold (13 dB at the map). Source levels are RMS levels (the owner: specs give rms,
+`projector.source_level_db_rms`); the budget is an energy equation, which is the rms usage. Until the simulator follows (it takes the
+number as a peak pressure: docs/HARDCODED_AUDIT.md P-5) a simulated echo carries 3 dB less than this budget
+assumes. The propagation factor is a ratio and has no such convention. Own depths are searched down to platform.max_depth_m.
 """
 import argparse
 import copy
@@ -216,15 +216,15 @@ def run(spec_or_d, envs, classes, range_m, threshold, statistic, cache, log=prin
             continue
         try:
             P = depthplan.plan(d, env, classes, range_of_interest=range_m, threshold_db=threshold, statistic=statistic, cache=cache, keep_grid=keep_grid)
-        except ValueError as exc:
-            out[env["name"]] = {"skipped": str(exc), "environment": env}
-            log(f"{env['name']}: skipped ({exc})")
+        except Exception as exc:  # noqa: BLE001  (Bellhop can fail on one water; the others are still planned)
+            out[env["name"]] = {"skipped": f"{type(exc).__name__}: {exc}", "environment": env}
+            log(f"{env['name']}: skipped ({type(exc).__name__}: {exc})")
             continue
+        log(f"planned {d.get('build') or d.get('name')} in {env['name']}")
         for name, c in P["classes"].items():
             if "skipped" in c:
                 continue
             r = c["recommended"]
-            ts = c["ts_db"][0]
             e = depthplan.elevation_for(d, r["margin_db"] + threshold, P["range_of_interest_m"])
             if e:
                 c["elevation_at_recommended"] = e

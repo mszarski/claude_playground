@@ -22,6 +22,7 @@ Status words: `chosen` (named in the owner's plan, `docs/plan/GPU-FLS-Phased-Pla
 | Navigation and attitude; a static frame: tilt and compass sensor | chosen / unconfirmed | 1 | 0 or 1 | 0 or 1 | 1 | 1 | 1 |
 | Sound speed at the array, and water depth | unconfirmed | from the platform | from the platform | from the platform | from the platform | from the platform | from the platform |
 | Mounting: face or frame, fairing | unconfirmed | 1 | 1 | 1 | 1 | 1 | 1 |
+| Depth rating of everything in the water | specified, not chosen / unconfirmed | hydrophones, cables, connectors, housings, projector | hydrophones, cables, connectors, housings, projector | hydrophones, cables, connectors, housings, projector | hydrophones, cables, connectors, housings, projector | hydrophones, cables, connectors, housings, projector | hydrophones, cables, connectors, housings, projector |
 | Power | unconfirmed | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied | to be supplied |
 | Spares and failure tolerance | specified, not chosen | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones | proposed: 1 board, 8 hydrophones |
 
@@ -33,7 +34,8 @@ Status words: `chosen` (named in the owner's plan, `docs/plan/GPU-FLS-Phased-Pla
 | Data rate: a board / all | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s | 19.7 Mbit/s / 78.6 Mbit/s | 19.7 Mbit/s / 157.3 Mbit/s | 19.7 Mbit/s / 235.9 Mbit/s |
 | Receive window (stated in the sonar file) | 75–2000 m | 75–3000 m | 75–3000 m | 750–12700 m | 750–12700 m | 750–12700 m |
 | Shortest ping interval | 2.77 s | 4.10 s | 4.10 s | 17.93 s | 17.93 s | 17.93 s |
-| Recording: a ping / an hour | 35 MB / 45.48 GB | 105 MB / 92.07 GB | 157 MB / 138.11 GB | 222 MB / 44.55 GB | 444 MB / 89.11 GB | 666 MB / 133.66 GB |
+| Recording: a ping / an hour (raw) | 35 MB / 45.48 GB | 105 MB / 92.07 GB | 157 MB / 138.11 GB | 222 MB / 44.55 GB | 444 MB / 89.11 GB | 666 MB / 133.66 GB |
+| Recording as chosen (`storage.record`), an hour | raw: 45.48 GB (decimated: 5.35 GB) | raw: 92.07 GB (decimated: 10.83 GB) | raw: 138.11 GB (decimated: 16.25 GB) | raw: 44.55 GB (decimated: 5.24 GB) | raw: 89.11 GB (decimated: 10.48 GB) | raw: 133.66 GB (decimated: 15.73 GB) |
 | Cables: shortest–longest, total (boards assumed at the array's centre) | 0.5–1.9 m, 39 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m | 0.6–2.8 m, 54 m | 1.3–3.6 m, 157 m | 0.8–3.6 m, 218 m |
 | Projector to the nearest hydrophone | 0.30 m | 0.26 m | 0.26 m | 1.68 m | 1.84 m | 1.69 m |
 | Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +34 dB | 209 dB re 1 µPa: +35 dB | 209 dB re 1 µPa: +35 dB | 193 dB re 1 µPa: +19 dB | 192 dB re 1 µPa: +18 dB | 192 dB re 1 µPa: +19 dB |
@@ -139,7 +141,7 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Open: which computer; neither option has been timed at the boards' full rate on the hardware that would be used.
 
 **Storage** — specified, not chosen.
-- Requirement (6: full face, 3 x 32): 666 MB a ping as recorded (1,733,974 samples × 96 channels × 4 bytes, window 750–12700 m), 133.66 GB an hour at 201 pings; listening continuously 106.17 GB an hour.
+- Requirement (6: full face, 3 x 32): 666 MB a ping as recorded (1,733,974 samples × 96 channels × 4 bytes, window 750–12700 m), 133.66 GB an hour at 201 pings recorded raw (the spec's `storage.record`; raw 133.66 GB, decimated by 17 15.73 GB); listening continuously 106.17 GB an hour.
 - Fixed by: `receive.window`, `receive.sample_rate`; `output.recording` of the deployment file.
 - Open: capacity and write rate of the volume; whether to store decimated pings instead.
 
@@ -158,6 +160,11 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Fixed by: `array` (positions), `platform`; `sensitivity.out_offset_error_deg` of popoto_elevation_study.json.
 - The plan (p. 12, Hardware design, item 6): "The array sits in a faired strip decoupled from the hull, away from thrusters; flow and machinery noise set the real noise floor."
 - Open: the mechanical design is not started.
+
+**Depth rating of everything in the water** — specified, not chosen.
+- Requirement (6: full face, 3 x 32): rated for 500 m of sea water (the platform's deepest operating depth), about 51 bar absolute; with whatever margin the builder's practice asks on top. Hydrophone sensitivity and the projector's source level must hold at that depth.
+- Fixed by: `platform.max_depth_m` of the spec.
+- Open: sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface).
 
 **Power** — unconfirmed.
 - Requirement (6: full face, 3 x 32): consumers: 12 boards, the reference generator, the amplifier (pulsed: 1 s every 17.9 s at most), the compute unit, the network. No draw is known for any of them.
@@ -197,6 +204,7 @@ CPU figures: C++ chain, pings of the popoto_12km scenario's size (baseband, deci
 - Navigation and attitude; a static frame: tilt and compass sensor: the unit's figures and message format; the adapter from its messages to the navigation datagram.
 - Sound speed at the array, and water depth: which sensors; DVL altitude plus depth as the water-depth source.
 - Mounting: face or frame, fairing: the mechanical design is not started.
+- Depth rating of everything in the water: sensitivity and source level against depth for the parts chosen; cavitation is not the limit at depth (it is near the surface).
 - Power: every figure.
 - Spares and failure tolerance: spares policy.
 - Navigation and attitude; a static frame: tilt and compass sensor: whether the frame carries a sensor; how its depth and heading are measured.

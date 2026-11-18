@@ -183,7 +183,10 @@ def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, range
             ocean = OceanEnvironment(depth=float(env["water_depth_m"]), ssp_depth=np.asarray(prof["depth_m"], dtype=float), ssp_speed=np.asarray(prof["speed_m_s"], dtype=float), **kw)
         f = lloyd.band(f_lo, f_hi, 257)
         for j, z in enumerate(zt):                                              # reciprocity: the source at the target's depth
-            arr = run_bellhop(ocean, 0.5 * (f_lo + f_hi), float(z), own, rr, angles=(-30.0, 30.0))
+            try:
+                arr = run_bellhop(ocean, 0.5 * (f_lo + f_hi), float(z), own, rr, angles=(-30.0, 30.0))
+            except StopIteration:
+                raise RuntimeError(f"Bellhop's arrivals file was cut short (source at {z:g} m in environment {env.get('name')!r})") from None
             for i in range(own.size):
                 for m in range(rr.size):
                     h, s = lloyd.bellhop_transfer(arr, i, m, f, surface, ocean.speed_at(float(z)), ocean.speed_at(0.0))
