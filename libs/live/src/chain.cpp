@@ -184,7 +184,8 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
   return power;
 }
 
-LiveChain::LiveChain(const ChainOptions& options) : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile) {
+LiveChain::LiveChain(const ChainOptions& options)
+    : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile), multipath_(options.multipath_depth) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
     throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");
@@ -572,6 +573,23 @@ Report LiveChain::process(PingRecord& record) {
     }
     rep.tracks.push_back(rt);
   }
+  // --- hook: depth from multipath timing (multipath_depth.hpp), opt-in; adds report members only ---
+  if (opt_.multipath_depth.enabled) {
+    std::vector<MultipathHit> mh(hits.size());
+    for (std::size_t i = 0; i < hits.size(); ++i) {
+      const double sb = std::sin(hits[i].bearing), cb = std::cos(hits[i].bearing);
+      const ReportDetection& d = rep.detections[i];
+      mh[i] = {hits[i].range, Vec3d{sb * axis.x + cb * broadside.x, sb * axis.y + cb * broadside.y, 0.0}, local[i].range * std::sin(local[i].bearing),
+               local[i].range * std::cos(local[i].bearing), hits[i].snr_db, d.has_depth, d.depth_m - eo.surface_z, d.depth_sigma_m, {}};
+      for (double z : local[i].depth_alternatives) mh[i].depth_alternatives.push_back(fold_depth(z, water, eo.surface_z).first - eo.surface_z);
+    }
+    std::vector<MultipathTrack> mt;
+    for (const ReportTrack& t : rep.tracks) mt.push_back({t.id, t.y - origin_.y, t.x - origin_.x, t.has_depth, t.depth_m - eo.surface_z, t.depth_sigma_m});
+    const MultipathReport mr = multipath_.process(record, f.origin, mh, mt, opt_.backend, opt_.device);
+    for (std::size_t i = 0; i < mh.size(); ++i) rep.detections[i].extra = mr.detections[i];
+    for (std::size_t i = 0; i < mt.size(); ++i) rep.tracks[i].extra = mr.tracks[i];
+  }
+  // --- end hook ---
   rep.ownship = f.origin;
   rep.processing_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
   return rep;
@@ -611,6 +629,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
         }
       }
     }
+    if (!d.extra.empty()) s << ", " << d.extra;
     s << "}";
   }
   s << "], \"tracks\": [";
@@ -628,6 +647,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
       else s << t.depth_m << ", \"depth_sigma_m\": " << t.depth_sigma_m << ", \"path\": \"" << t.path << "\"";
       if (t.has_depth && !t.profile_source.empty()) s << ", \"depth_profile_source\": \"" << t.profile_source << "\"";
     }
+    if (!t.extra.empty()) s << ", " << t.extra;
     s << "}";
   }
   s << "], \"sync\": ";
@@ -656,6 +676,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
     s << "}";
   }
   if (sbl_fallback) s << ", \"sbl_fallback\": true";
+  if (!extra.empty()) s << ", " << extra;
   s << ", \"processing_seconds\": " << processing_seconds;
   if (parts > 0) s << ", \"part\": [" << part << ", " << parts << "]";
   s << "}";

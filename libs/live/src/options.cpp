@@ -181,6 +181,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "n_average") p.n_average = static_cast<std::int64_t>(v);
   else if (key == "passive_method") p.use_sbl = value != "conventional";
   else if (set_tonal_option(p.tonal, key, value)) {}                 // tonal...: Goertzel lines and DEMON (tonal.hpp)
+  else if (set_multipath_option(c.multipath_depth, key, value)) {}   // multipath_depth...: depth from multipath timing (multipath_depth.hpp)
   else throw std::invalid_argument("unknown option " + key);
 }
 
