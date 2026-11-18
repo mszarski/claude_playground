@@ -3016,7 +3016,8 @@ about 15 dB (22% of pings at 11.9 dB, 82% at 14.7 dB, all at 17.6 dB, 12 km); a 
 
 - **Too shallow (surface cancellation).** For (τ_p + τ_a) B < about 3 the pattern is a smooth weighting of the band,
   and so is an absorption tilt (6 dB across 4-6 kHz over 24 km), a tapered replica or a target's own response: a Hann-
-  weighted single echo fits the pattern 33% better than a flat one for τB up to 2.5 and no better from 3 on (computed;
+  weighted single echo is fitted by the pattern 33% of its energy better than by one flat arrival for τB up to 2, 24% at
+  2.5, and worse from 3 on (computed;
   with τB ≥ 1 a 31 dB single echo passed as multipath in a third of pings). The search therefore starts at
   z_t = 3 r c / (4 B z_own): 30 m at 12 km from 225 m, 135 m from 50 m, 2.5 m at 1 km from 225 m. A ship at 2 to 6 m is
   never measurable at long range, and a sonar at 10 m measures nothing at 12 km (`merged`).
@@ -3044,7 +3045,8 @@ fraction: the multipath depth is less sensitive to the gradient than the elevati
 the factor z_t / (z_own + z_t). The stage takes an assumed gradient out by this rule (120.1 m and 122.1 m for 120 m at
 1 and 3 km, 141 m at 6 km where the first order no longer holds) and puts what is not known of it,
 z_t r² σ_g / (2 c (z_own + z_t)), into the sigma. Through the stage-2 thermoclines the question is often moot: from
-50 m there is no direct path to either target beyond 1 km in three of the four profiles, and in the deep profile
+50 m, in the three profiles with a thermocline, there is no direct path to either target at 6 and 12 km, and at 3 km
+in five of the six cases; and in the deep profile
 (vehicle at 225 m) the flat depth of a 150 m target is −0.2%, −2.4%, −13.5% off at 1, 3, 6 km and there is no
 surface-reflected path at 12 km. The right pattern in such water is the ray code's eigenrays through the ladder's
 profile; that is not built into the stage.

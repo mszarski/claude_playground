@@ -466,7 +466,7 @@ at the vehicle's own depth leaves the gradient prior in every depth, and at 12 k
 | Estimate | Needs | Its own error (isovelocity or a known profile) | What an unknown gradient σ_g adds |
 | --- | --- | --- | --- |
 | elevation (`depth_m`) | two or more rows; with two, several candidates | r σ_θ: 0.41° at 13 dB, 0.18° at 20 dB is 7 / 3 m at 1 km and 85 / 38 m at 12 km (`docs/design/popoto_elevation_study.json`) | r² σ_g / 2c: 17 m at 1 km, 2400 m at 12 km for 0.05 /s |
-| multipath timing (`depth_multipath_m`) | one row; a surface echo; a target deeper than 3 r c / (4 B z_own) | 0.02 to 0.1 m rms at 1 to 6 km, 0.1 to 2.8 m rms at 12 km (worst 9 m near the threshold: one delay cell); a track of 6 pings 0.25 to 1.25 m (`docs/design/multipath_depth_study.json`) | z_t r² σ_g / (2 c (z_own + z_t)): 7 m at 1 km, 960 m at 12 km for 225 m and 150 m |
+| multipath timing (`depth_multipath_m`) | one row; a surface echo; a target deeper than 3 r c / (4 B z_own) | 0.02 to 0.7 m rms at 1 to 6 km, 0.1 to 2.8 m rms at 12 km (worst 9 m near the threshold: one delay cell), strongest arrival at 17 or 26 dB; a track of 6 pings 0.25 to 1.25 m (`docs/design/multipath_depth_study.json`) | z_t r² σ_g / (2 c (z_own + z_t)): 7 m at 1 km, 960 m at 12 km for 225 m and 150 m |
 
 So the multipath depth is not free of the profile: the same gradient that bends the ray under the elevation estimate
 stretches the surface echo's delay, by the smaller factor z_t / (z_own + z_t). What it is free of is the angle: no rows,
