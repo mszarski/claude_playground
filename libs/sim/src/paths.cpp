@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 #include "sonar/core/parallel.hpp"
 
@@ -61,6 +62,14 @@ void check_points(const double* points, std::int64_t n_points) {
   if (n_points < 0 || (n_points > 0 && points == nullptr)) throw std::invalid_argument("paths: bad field points");
 }
 
+void check_speed(double c, const char* what) {
+  if (!(c > 0.0) || !std::isfinite(c)) {
+    throw std::invalid_argument(std::string(what) + " must be stated (positive and finite, m/s); there is no default");
+  }
+}
+
+bool stated(std::complex<double> v) { return std::isfinite(v.real()) && std::isfinite(v.imag()); }
+
 }  // namespace
 
 void EigenraySet::resize(std::int64_t points, std::int64_t rays) {
@@ -79,6 +88,7 @@ void EigenraySet::resize(std::int64_t points, std::int64_t rays) {
 EigenraySet free_field_eigenrays(double sound_speed, const Vec3d& source, const double* points,
                                  std::int64_t n_points) {
   check_points(points, n_points);
+  check_speed(sound_speed, "free_field: sound_speed");
   EigenraySet out;
   out.sound_speed = sound_speed;
   out.resize(n_points, 1);
@@ -139,12 +149,77 @@ std::complex<double> rayleigh_reflection(double grazing, double c_water, const F
   return divide(ms - root, ms + root);
 }
 
+void check_config(const ImageSourceConfig& config) {
+  check_speed(config.sound_speed, "image_source: sound_speed");
+  if (config.max_order < 0) {
+    throw std::invalid_argument(
+        "image_source: max_order (bounces along one path) must be stated; there is no default. Paths with "
+        "more bounces are not computed: image_series_truncation gives what a choice leaves out");
+  }
+  for (const Wall& w : config.walls) {
+    if (w.axis != 0 && w.axis != 1) throw std::invalid_argument("image_source: wall axis must be 0 or 1");
+    if (!stated(w.coefficient)) {
+      throw std::invalid_argument("image_source: a wall needs its reflection coefficient; there is no default");
+    }
+  }
+  if (config.has_surface && !stated(config.surface_coefficient)) {
+    throw std::invalid_argument("image_source: surface_coefficient is not a number");
+  }
+  if (config.has_bottom && config.max_order > 0) {
+    if (config.has_fluid_bottom) {
+      const FluidBottom& b = config.fluid_bottom;
+      if (!(b.speed > 0.0) || !(b.density > 0.0) || !(b.water_density > 0.0) || !std::isfinite(b.speed) ||
+          !std::isfinite(b.density) || !std::isfinite(b.attenuation) || b.attenuation < 0.0) {
+        throw std::invalid_argument(
+            "image_source: a fluid bottom needs its speed (m/s) and density (ratio to water_density), and an "
+            "attenuation >= 0 dB per wavelength; there is no default sediment");
+      }
+    } else if (!stated(config.bottom_coefficient)) {
+      throw std::invalid_argument(
+          "image_source: a bottom needs a reflection coefficient or a fluid sediment; there is no default");
+    }
+  }
+}
+
+double image_series_truncation(const ImageSourceConfig& config, double source_z, double receiver_z,
+                               double range) {
+  check_config(config);
+  const double direct = std::sqrt(range * range + (receiver_z - source_z) * (receiver_z - source_z));
+  if (!(direct > 0.0)) throw std::invalid_argument("image_series_truncation: source and receiver coincide");
+  const int next = config.max_order + 1;
+  double worst = 0.0;
+  for (const bool surface_first : {true, false}) {
+    if ((surface_first && !config.has_surface) || (!surface_first && !config.has_bottom)) continue;
+    // The ray of this series with `next` bounces, if the series reaches that far.
+    double z = receiver_z;
+    std::int64_t ns = 0, nb = 0;
+    bool next_surface = surface_first, ended = false;
+    for (int order = 0; order < next; ++order) {
+      if ((next_surface && !config.has_surface) || (!next_surface && !config.has_bottom)) {
+        ended = true;
+        break;
+      }
+      z = 2.0 * (next_surface ? config.surface_z : config.bottom_z) - z;
+      ++(next_surface ? ns : nb);
+      next_surface = !next_surface;
+    }
+    if (ended) continue;
+    const double dz = z - source_z;
+    const double r = std::sqrt(range * range + dz * dz);
+    cd bottom = config.bottom_coefficient;
+    if (config.has_fluid_bottom && nb > 0) {
+      bottom = rayleigh_reflection(std::asin(clip01(std::abs(dz) / r)), config.sound_speed, config.fluid_bottom);
+    }
+    const double a = std::abs(powu(config.surface_coefficient, ns) * (nb > 0 ? powu(bottom, nb) : cd{1.0, 0.0})) / r;
+    worst = std::max(worst, a * direct);
+  }
+  return worst;
+}
+
 EigenraySet image_source_eigenrays(const ImageSourceConfig& config, const Vec3d& source,
                                    const double* points, std::int64_t n_points) {
   check_points(points, n_points);
-  for (const Wall& w : config.walls) {
-    if (w.axis != 0 && w.axis != 1) throw std::invalid_argument("image_source: wall axis must be 0 or 1");
-  }
+  check_config(config);
   const std::vector<ImageRay> series = image_series(config);
   const auto k = static_cast<std::int64_t>(series.size());
   const double c = config.sound_speed;
@@ -235,6 +310,8 @@ void snell_crossing(const Vec3d& source, const double* points, std::int64_t n_po
 EigenraySet sediment_eigenrays(const SedimentConfig& config, const Vec3d& source, const double* points,
                                std::int64_t n_points) {
   check_points(points, n_points);
+  check_speed(config.sound_speed, "sediment: sound_speed");
+  check_speed(config.sediment_speed, "sediment: sediment_speed");
   EigenraySet out;
   out.sound_speed = config.sound_speed;
   out.resize(n_points, 1);
@@ -284,6 +361,8 @@ std::int64_t pair_paths(const EigenrayView& out, const EigenrayView& back, const
                         bool doppler, const RangeRates& rates, double* q, double* p,
                         std::complex<double>* amplitude, double* velocity, double* p_velocity) {
   if (out.n_points != back.n_points) throw std::invalid_argument("two_way_paths: the two eigenray sets differ in size");
+  check_speed(out.sound_speed, "two_way_paths: the outbound set's sound_speed");
+  check_speed(back.sound_speed, "two_way_paths: the return set's sound_speed");
   const std::int64_t s = out.n_points, ko = out.n_rays, kb = back.n_rays;
   if (s > 0 && amplitudes == nullptr) throw std::invalid_argument("two_way_paths: amplitudes are required");
   if (!doppler && velocity != nullptr && velocities == nullptr) {

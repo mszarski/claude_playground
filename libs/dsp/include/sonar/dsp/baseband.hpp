@@ -12,7 +12,24 @@ struct BasebandOptions {
   double band_margin = 1.5;       ///< used when bandwidth == 0
   double oversample = 2.0;        ///< output rate / kept bandwidth
   double edge_taper = 0.1;        ///< fraction of the kept band tapered at each edge (raised cosine)
+  /// A CW pulse has no swept bandwidth: the band kept is cw_band_factor / duration (4: the
+  /// main lobe of the gated tone's spectrum and its first sidelobes).
+  double cw_band_factor = 4.0;
+  /// Doppler allowance (docs/HARDCODED_AUDIT.md K-6). The band derived from the waveform
+  /// assumes echoes at the transmitted frequency. `max_range_rate` is the largest two-way
+  /// range rate to be kept, m/s (closing or opening): the band is widened on both sides by
+  /// the shift 2 v f_top / c it causes, with c the record's sound speed and f_top the top
+  /// of the transmit band. `doppler_allowance_hz` widens it on both sides by that many Hz
+  /// directly (a one-way arrival is shifted by v f / c). Both add; 0 = no allowance, which
+  /// is right for a stationary scene and silently filters out a mover on a long tone.
+  /// Neither applies when `bandwidth` is given: that band is taken as stated.
+  double max_range_rate = 0.0;
+  double doppler_allowance_hz = 0.0;
 };
+
+/// The band (Hz) `to_baseband` keeps for a record with these options, before it is rounded
+/// to FFT bins. Throws when the allowance needs a sound speed the record does not have.
+double baseband_band(const PingRecord& record, const BasebandOptions& options);
 
 /// Convert record.samples in place to complex baseband at a reduced rate.
 ///

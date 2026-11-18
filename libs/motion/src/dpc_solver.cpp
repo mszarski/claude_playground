@@ -108,6 +108,13 @@ Solution solve(const std::vector<PingNav>& pings, const std::vector<DelayMeasure
                const SolveOptions& opt) {
   const std::size_t n = pings.size();
   if (n < 3) throw std::invalid_argument("motion::solve needs at least three pings");
+  const auto stated = [](double v) { return v > 0.0 && std::isfinite(v); };
+  if (!stated(opt.sound_speed)) throw std::invalid_argument("motion::solve: sound_speed must be stated; there is no default");
+  if (!stated(opt.residual_scale) || !stated(opt.smooth_scale) || !stated(opt.dvl_scale)) {
+    throw std::invalid_argument(
+        "motion::solve: residual_scale (s), smooth_scale (m/s) and dvl_scale (m) must be stated; they depend on "
+        "the carrier and the platform and have no default (python/gpusonar/motion.py derives them)");
+  }
   for (std::size_t i = 1; i < n; ++i) {
     if (!(pings[i].time > pings[i - 1].time)) {
       throw std::invalid_argument("motion::solve: ping times must increase");

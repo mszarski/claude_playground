@@ -76,6 +76,7 @@ TEST(Paths, ImagePathLengthsInASurfaceAndBottomWaveguide) {
 
 TEST(Paths, ImageSeriesWithoutABottomStopsAtTheSurface) {
   sim::ImageSourceConfig cfg;  // surface only
+  cfg.sound_speed = kC;
   cfg.max_order = 3;
   EXPECT_EQ(sim::image_series(cfg).size(), 2U);
   cfg.walls.push_back({1, 50.0, {0.8, 0.0}});
@@ -131,6 +132,7 @@ TEST(Paths, SnellCrossingObeysSnellsLaw) {
 
 TEST(Paths, TwoWayPathsPairEveryOutboundAndReturnRay) {
   sim::ImageSourceConfig cfg;  // direct and surface image
+  cfg.sound_speed = kC;
   cfg.max_order = 1;
   const Vec3d tx{0.0, 0.0, 10.0}, rx{0.0, 1.0, 10.0};
   const std::vector<double> points{30.0, 0.0, 20.0, 50.0, 5.0, 15.0};

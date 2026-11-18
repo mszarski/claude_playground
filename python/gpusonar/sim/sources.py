@@ -66,6 +66,7 @@ mean path length to the array.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -77,8 +78,19 @@ from .targets import HighlightTarget
 
 SIGNAL_TYPES = ("noise", "tonals", "waveform", "file")
 KERNEL_LEG = 1.0                # m: the constant first leg of the kernel's path for a one-way pulse
+# The streaming synthesiser solves the retarded time exactly every KNOT_INTERVAL seconds of
+# the record and interpolates the delay linearly between those knots. With straight-line
+# motion the delay's curvature is v_t^2 / (r c) (v_t the speed across the line of sight, r
+# the range), so the interpolation is off by at most  h^2 v_t^2 / (8 r c)  seconds: at
+# h = 4 ms that is 0.008 rad for 10 m/s at 10 m and 100 kHz, and 0.17 rad for 20 m/s at
+# 2 m. Both numbers are defaults of a source's `stream:` block ({knot_interval, oversample});
+# `knot_interval: auto` halves the spacing until the measured error is under
+# KNOT_PHASE_TOLERANCE, and a fixed spacing that leaves more than KNOT_PHASE_LIMIT warns
+# (docs/HARDCODED_AUDIT.md M-9).
 KNOT_INTERVAL = 4e-3            # s: spacing of the exact retarded-time solutions in the streaming synthesiser
 STREAM_OVERSAMPLE = 2.0         # emission-time series are held at this multiple of the record's rate
+KNOT_PHASE_TOLERANCE = 0.01     # rad: what `knot_interval: auto` refines to
+KNOT_PHASE_LIMIT = 0.1          # rad: a fixed spacing that leaves more than this warns
 
 
 @dataclass
@@ -87,6 +99,7 @@ class Source:
     track: HighlightTarget
     signals: list
     state: dict = field(default_factory=dict)
+    stream: dict = field(default_factory=dict)   # {knot_interval: seconds or "auto", oversample}: see KNOT_INTERVAL
 
     def at(self, t: float):
         """(position [3], velocity [3]) at scenario time t."""
@@ -119,8 +132,23 @@ def build_sources(cfg, rng: np.random.Generator | None = None) -> list:
             if kind == "tonals":
                 sig["_lines"] = _tonal_lines(sig, rng)
             prepared.append(sig)
-        out.append(Source(str(item.get("label", f"source_{i}")), track, prepared))
+        stream = dict(item.get("stream") or {})
+        unknown = set(stream) - {"knot_interval", "oversample"}
+        if unknown:
+            raise ValueError(f"source `stream`: unknown keys {sorted(unknown)} (knot_interval, oversample)")
+        if "oversample" in stream and not float(stream["oversample"]) >= 1.0:
+            raise ValueError("source `stream.oversample` must be at least 1")
+        out.append(Source(str(item.get("label", f"source_{i}")), track, prepared, stream=stream))
     return out
+
+
+def knot_phase_error(delay_knots: np.ndarray, frequency: float) -> float:
+    """Largest phase error (rad) of reading delays [..., J] linearly between their knots, at
+    `frequency`: a parabola through three knots departs from the chord by an eighth of the
+    second difference."""
+    if delay_knots.shape[-1] < 3:
+        return 0.0
+    return float(2.0 * np.pi * frequency * np.max(np.abs(np.diff(delay_knots, 2, axis=-1))) / 8.0)
 
 
 def _tonal_lines(sig: dict, rng) -> list:
@@ -292,12 +320,16 @@ def _file_series(sig: dict, state: dict, carrier: float, lo: float, hi: float, s
 
 def _stream(record, paths, env_abs, c: float, *, tones=(), series=None, series_rate: float = 0.0,
             series_first: float = 0.0, series_carrier: float = 0.0, time_zero: float = 0.0,
-            interp=(wf_mod.DEFAULT_TAPS, wf_mod.DEFAULT_BETA), spreading: bool = True) -> np.ndarray:
+            interp=(wf_mod.DEFAULT_TAPS, wf_mod.DEFAULT_BETA), spreading: bool = True,
+            knot_interval=None, f_top: float | None = None) -> np.ndarray:
     """One-way arrivals of a continuous signal for every (ray, channel), [C, N] in the
     record's sample kind. `tones`: [(frequency, peak amplitude in sample units, phase)],
     evaluated at scenario time `time_zero` + emission time. `series`: emission-time samples
     (real, or a complex envelope about `series_carrier`), sample m at record time
-    `series_first` + m / `series_rate`. `env_abs(f)` gives absorption in dB/m."""
+    `series_first` + m / `series_rate`. `env_abs(f)` gives absorption in dB/m.
+    `knot_interval`: seconds between exact retarded-time solutions (None: KNOT_INTERVAL), or
+    "auto" to halve it until linear interpolation of the delay is good to
+    KNOT_PHASE_TOLERANCE at `f_top` (Hz; None: the top of the record's band)."""
     p_all, amp_all, w_all = paths
     s = record.samples
     baseband = s.kind == core.SampleKind.ComplexBaseband
@@ -310,10 +342,29 @@ def _stream(record, paths, env_abs, c: float, *, tones=(), series=None, series_r
     directional = any(e.beamwidth_az == e.beamwidth_az or e.beamwidth_el == e.beamwidth_el for e in elements)
     out = np.zeros((n_ch, n), dtype=complex if baseband else float)
     idx = np.arange(n, dtype=float)
-    n_knots = max(int(np.ceil(n / fs / KNOT_INTERVAL)) + 1, 2)
-    knots = np.linspace(0.0, n - 1.0, n_knots)
     t_true = lambda k: start + offset[:, None] + k[None, :] / (fs * (1.0 + drift[:, None]))       # noqa: E731
-    t_knots = t_true(knots)                                                                       # [C, J]
+    auto = isinstance(knot_interval, str)
+    if auto and knot_interval != "auto":
+        raise ValueError("stream.knot_interval must be seconds or 'auto'")
+    interval = KNOT_INTERVAL if (knot_interval is None or auto) else float(knot_interval)
+    if not interval > 0.0:
+        raise ValueError("stream.knot_interval must be positive")
+    if f_top is None:
+        f_top = (fc + 0.5 * fs) if baseband else 0.5 * fs
+    for _ in range(12):
+        n_knots = max(int(np.ceil(n / fs / interval)) + 1, 2)
+        knots = np.linspace(0.0, n - 1.0, n_knots)
+        t_knots = t_true(knots)                                                                   # [C, J]
+        worst = max((knot_phase_error(retarded_delay(p_all[k], w_all[k], rx_p, rx_v, t_knots, c)[0], f_top)
+                     for k in range(len(p_all))), default=0.0)
+        if not auto or worst <= KNOT_PHASE_TOLERANCE or n_knots >= n:
+            break
+        interval *= 0.5
+    if worst > KNOT_PHASE_LIMIT:
+        warnings.warn(f"one-way source: reading the delay linearly between knots {interval * 1e3:.3g} ms apart leaves "
+                      f"up to {worst:.2g} rad at {f_top:.0f} Hz for this geometry (a fast pass close to the array); "
+                      "set the source's `stream: {knot_interval: auto}` or a shorter interval", RuntimeWarning,
+                      stacklevel=2)
     t_nominal = start + idx / fs
     spectrum = None
     if series is not None:
@@ -560,14 +611,17 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
             carrier = fc if baseband else (0.25 * fs if analytic else 0.0)
             if kind == "tonals":
                 tones = [(f, a * 10.0 ** (sens / 20.0), ph) for f, a, ph in sig["_lines"]]
+                in_band = [f for f, _, _ in tones if lo < f < hi]
+                stream_kw = dict(knot_interval=source.stream.get("knot_interval"), f_top=max(in_band) if in_band else hi)
                 if analytic and not baseband:
-                    part = _stream_analytic_tones(record, paths, env_abs, c, tones, scenario_time, spreading)
+                    part = _stream_analytic_tones(record, paths, env_abs, c, tones, scenario_time, spreading, **stream_kw)
                 else:
-                    part = _stream(record, paths, env_abs, c, tones=tones, time_zero=scenario_time, spreading=spreading)
+                    part = _stream(record, paths, env_abs, c, tones=tones, time_zero=scenario_time, spreading=spreading,
+                                   **stream_kw)
                 added = part if added is None else added + part
                 continue
             else:
-                rate = STREAM_OVERSAMPLE * fs
+                rate = float(source.stream.get("oversample", STREAM_OVERSAMPLE)) * fs
                 if kind == "noise":
                     m = int(np.ceil((u_last - u_first) * rate)) + 1
                     series = _noise_series(m, rate, _noise_psd(sig), carrier, lo, hi, sens, rng)
@@ -593,7 +647,8 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
                         cyc = carrier * t0
                         series = series * np.exp(-2j * np.pi * (cyc - np.floor(cyc)))
                 part = _stream(record, paths, env_abs, c, series=series, series_rate=rate, series_first=first,
-                               series_carrier=carrier, spreading=spreading)
+                               series_carrier=carrier, spreading=spreading,
+                               knot_interval=source.stream.get("knot_interval"), f_top=hi)
             added = part if added is None else added + part
     if added is not None:
         s = record.samples
@@ -603,7 +658,7 @@ def add_sources(record, sonar, sources, provider, *, environment: dict, absorpti
         record.samples = s
 
 
-def _stream_analytic_tones(record, paths, env_abs, c, tones, time_zero, spreading):
+def _stream_analytic_tones(record, paths, env_abs, c, tones, time_zero, spreading, **stream_kw):
     """Tones into a real record when ray amplitudes are complex: each ray's phase is added
     to the tone's phase (the exact effect of a frequency-independent reflection phase)."""
     p, amp, w = paths
@@ -612,7 +667,7 @@ def _stream_analytic_tones(record, paths, env_abs, c, tones, time_zero, spreadin
         phase = float(np.angle(amp[k]))
         shifted = [(f, a, ph + phase) for f, a, ph in tones]
         part = _stream(record, (p[k:k + 1], np.array([abs(amp[k])]), w[k:k + 1]), env_abs, c, tones=shifted,
-                       time_zero=time_zero, spreading=spreading)
+                       time_zero=time_zero, spreading=spreading, **stream_kw)
         out = part if out is None else out + part
     return out
 

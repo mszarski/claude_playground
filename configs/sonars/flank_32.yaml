@@ -34,5 +34,6 @@ receive:
   window: {range: [100.0, 10000.0]}   # 13.3 s round trip at 10 km
 
 unconfirmed:
+  - array                        # 32 elements at 0.094 m: a flank array nobody has designed (audit G-10)
+  - transmit                     # no projector chosen: band, pulse and source level are placeholders
   - receive                      # flank capture board not yet designed
-  - transmit.lever_arm

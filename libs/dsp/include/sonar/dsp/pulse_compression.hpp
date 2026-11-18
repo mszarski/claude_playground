@@ -8,6 +8,14 @@ namespace sonar::dsp {
 
 enum class ReplicaWindow : std::int32_t { None = 0, Hann = 1, Hamming = 2 };
 
+/// The interpolator that reads a sampled (arbitrary) pulse's envelope between its samples:
+/// a sinc with a Kaiser window of this many taps and this shape. The NumPy engine
+/// (python/gpusonar/sim/waveform.py, DEFAULT_TAPS and DEFAULT_BETA) must use the same two
+/// numbers or the engines stop agreeing; they are exported through the bindings
+/// (RESAMPLER_TAPS, RESAMPLER_KAISER_BETA) and a test holds the two files together.
+inline constexpr int kResamplerTaps = 16;
+inline constexpr double kResamplerKaiserBeta = 12.0;
+
 struct PulseCompressionOptions {
   /// Amplitude taper applied to the replica over the pulse, for range sidelobe control
   /// (a mismatched filter: lower sidelobes, wider main lobe, slightly lower gain).

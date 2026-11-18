@@ -1,6 +1,9 @@
 #include "sonar/sim/synth.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
+#include <string>
 
 #include "sonar/core/parallel.hpp"
 #include "sonar/sim/synth_kernel.hpp"
@@ -28,12 +31,100 @@ SynthElement make_element(const Pose& pose, const Element& e, const Vec3d& extra
   return s;
 }
 
+/// Highest frequency the pulse holds, Hz.
+double top_frequency(const SynthParams& p) {
+  double f = std::max(p.waveform.f_start, p.waveform.f_stop);
+  if (p.waveform.type == 3) {
+    for (int i = 0; i < p.envelope.n_bands; ++i) f = std::max(f, p.envelope.knot_frequency[i]);
+    f = std::max(f, p.envelope.carrier);
+  }
+  return std::max(f, p.center_frequency);
+}
+
+double window_end(const SynthParams& p) {
+  return std::max(p.start_time + static_cast<double>(p.n_samples) / p.sample_rate, 0.0);
+}
+
 }  // namespace
+
+double arrival_residual_bound(double window_end, double speed, double sound_speed, double frequency, int passes) {
+  if (!(speed > 0.0)) return 0.0;
+  const double pi2 = 6.283185307179586476925;
+  return window_end * std::pow(speed / sound_speed, passes) * pi2 * frequency;
+}
+
+int arrival_passes_for(double window_end, double speed, double sound_speed, double frequency, double tolerance) {
+  if (!(tolerance > 0.0)) throw std::invalid_argument("arrival_passes_for: tolerance must be positive");
+  if (!(speed < sound_speed)) throw std::invalid_argument("arrival_passes_for: the speed must be below the sound speed");
+  for (int n = 1; n < 64; ++n) {
+    if (arrival_residual_bound(window_end, speed, sound_speed, frequency, n) <= tolerance) return n;
+  }
+  return 64;
+}
+
+namespace {
+
+/// Largest speeds that enter the two solves: {outbound points, receivers}.
+ArrivalResidual solve_speeds(const SynthParams& params, const std::vector<SynthElement>& rx,
+                             const std::vector<SynthPath>& paths) {
+  double v_out = 0.0, v_back = 0.0;
+  for (const SynthPath& p : paths) v_out = std::max(v_out, norm(p.q_velocity));
+  const double v_acc = norm(params.platform_acceleration) * window_end(params);
+  for (const SynthElement& e : rx) v_back = std::max(v_back, norm(e.velocity) + v_acc);
+  return {v_out, v_back};
+}
+
+}  // namespace
+
+ArrivalResidual arrival_residual(const SynthParams& params, const std::vector<SynthElement>& rx,
+                                 const std::vector<SynthPath>& paths) {
+  const ArrivalResidual v = solve_speeds(params, rx, paths);
+  const double t_end = window_end(params), f = top_frequency(params);
+  return {arrival_residual_bound(t_end, v.out, params.sound_speed, f, params.arrival_passes_out),
+          arrival_residual_bound(t_end, v.back, params.sound_speed, f, params.arrival_passes_back)};
+}
+
+void set_arrival_passes(SynthParams& params, const std::vector<SynthElement>& rx,
+                        const std::vector<SynthPath>& paths, double tolerance) {
+  const ArrivalResidual v = solve_speeds(params, rx, paths);
+  const double t_end = window_end(params), f = top_frequency(params);
+  params.arrival_passes_out = arrival_passes_for(t_end, v.out, params.sound_speed, f, tolerance);
+  params.arrival_passes_back = arrival_passes_for(t_end, v.back, params.sound_speed, f, tolerance);
+}
+
+double absorption_clamp_error_db(const SynthParams& p) {
+  const double span = p.absorption_f_max - p.absorption_f_min;
+  if (!(span > 0.0)) return 0.0;  // one value for every frequency: nothing is clamped
+  const double step = span / (kAbsorptionTableSize - 1);
+  const double slope_lo = (p.absorption_db_per_m[1] - p.absorption_db_per_m[0]) / step;
+  const double slope_hi =
+      (p.absorption_db_per_m[kAbsorptionTableSize - 1] - p.absorption_db_per_m[kAbsorptionTableSize - 2]) / step;
+  double worst = 0.0;  // dB/m
+  const auto read = [&](double f) {
+    if (f < p.absorption_f_min) worst = std::max(worst, std::abs(slope_lo) * (p.absorption_f_min - f));
+    if (f > p.absorption_f_max) worst = std::max(worst, std::abs(slope_hi) * (f - p.absorption_f_max));
+  };
+  const WaveformParams& w = p.waveform;
+  if (w.type == 3) {
+    for (int i = 0; i < p.envelope.n_bands; ++i) read(p.envelope.knot_frequency[i]);
+  } else if (w.type == 0) {
+    read(w.f_start);
+  } else if (w.type == 1) {
+    read(w.f_start);
+    read(w.f_stop);
+  } else {
+    read(0.5 * (w.f_start + w.f_stop));
+  }
+  return worst * p.sound_speed * window_end(p);  // the longest two-way path the window holds
+}
 
 void synthesize(Backend backend, const SynthParams& params, const std::vector<SynthElement>& rx,
                 const std::vector<SynthPath>& paths, float* out) {
   if (params.n_samples <= 0 || rx.empty() || paths.empty()) return;
   if (!(params.sample_rate > 0.0)) throw std::invalid_argument("synthesize: sample_rate must be positive");
+  if (!(params.sound_speed > 0.0) || !std::isfinite(params.sound_speed)) {
+    throw std::invalid_argument("synthesize: sound_speed must be stated (positive and finite); there is no default");
+  }
   if (!(params.waveform.duration > 0.0)) throw std::invalid_argument("synthesize: pulse duration must be positive");
   if (params.waveform.type < 0 || params.waveform.type > 3) {
     throw std::invalid_argument("synthesize: unknown waveform type");
@@ -47,6 +138,29 @@ void synthesize(Backend backend, const SynthParams& params, const std::vector<Sy
         !(t.carrier > 0.0)) {
       throw std::invalid_argument(
           "synthesize: a sampled (arbitrary) waveform needs its envelope table (SynthParams::envelope)");
+    }
+  }
+  // Both limits are checked here, on the host, for either backend: the kernel is unchanged.
+  if (params.absorption_clamp_limit_db > 0.0) {
+    const double err = absorption_clamp_error_db(params);
+    if (err > params.absorption_clamp_limit_db) {
+      throw std::invalid_argument(
+          "synthesize: the pulse holds frequencies outside the absorption table [" +
+          std::to_string(params.absorption_f_min) + ", " + std::to_string(params.absorption_f_max) +
+          "] Hz; reading the table at its end would change a level by up to " + std::to_string(err) +
+          " dB over the longest path in the window. Tabulate absorption over the whole band of the pulse "
+          "(or raise absorption_clamp_limit_db)");
+    }
+  }
+  if (params.arrival_residual_limit > 0.0) {
+    const ArrivalResidual left = arrival_residual(params, rx, paths);
+    if (!(left.out <= params.arrival_residual_limit) || !(left.back <= params.arrival_residual_limit)) {
+      throw std::invalid_argument(
+          "synthesize: the arrival-time solve may leave " + std::to_string(std::max(left.out, left.back)) +
+          " rad of phase with (" + std::to_string(params.arrival_passes_out) + ", " +
+          std::to_string(params.arrival_passes_back) + ") passes at these speeds, window and frequency (limit " +
+          std::to_string(params.arrival_residual_limit) +
+          " rad). Raise arrival_passes (arrival_passes_for gives the count; \"auto\" in the Python binding)");
     }
   }
   if (backend == Backend::Cuda) {

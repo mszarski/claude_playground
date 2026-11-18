@@ -47,3 +47,4 @@ unconfirmed:
   - array.element_height
   - transmit.waveform        # probe bandwidth at 5 MHz not measured
   - transmit.beamwidth_az
+  - receive.adc_full_scale   # uncalibrated chain: 1.0 is a unit, not a voltage

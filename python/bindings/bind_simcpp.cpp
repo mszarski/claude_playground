@@ -71,6 +71,39 @@ sim::EigenrayView set_view(const ArrD& delay, const ArrC& amplitude, const ArrD&
           launch.data(), arrival.data(), reinterpret_cast<const std::uint8_t*>(valid.data())};
 }
 
+/// The three reverberation entry points below that take no sound speed (which rows are
+/// active, the sector standard deviations, the final transform) never read it, but the
+/// shared parameter check in libs/sim/src/reverb.cpp demands a positive value. This is that
+/// placeholder, named so that it cannot be mistaken for a physical default (audit S-4): an
+/// entry point that starts to use the sound speed must take it from its caller instead.
+constexpr double kSoundSpeedNotUsed = 1500.0;
+
+/// An image-source configuration from the binding's arguments. Nothing is defaulted here
+/// that the C++ struct does not default (audit S-1, S-3): a bottom without a coefficient
+/// or a sediment, and a missing max_order, are errors raised by sim::check_config.
+sim::ImageSourceConfig image_config(double sound_speed, const py::object& surface_z, const py::object& bottom_z,
+                                    cd surface_coefficient, const py::object& bottom_coefficient,
+                                    const py::object& max_order,
+                                    const std::vector<std::tuple<int, double, cd>>& walls, const py::object& bottom) {
+  sim::ImageSourceConfig cfg;
+  cfg.sound_speed = sound_speed;
+  cfg.has_surface = !surface_z.is_none();
+  if (cfg.has_surface) cfg.surface_z = surface_z.cast<double>();
+  cfg.has_bottom = !bottom_z.is_none();
+  if (cfg.has_bottom) cfg.bottom_z = bottom_z.cast<double>();
+  cfg.surface_coefficient = surface_coefficient;
+  if (!bottom_coefficient.is_none()) cfg.bottom_coefficient = bottom_coefficient.cast<cd>();
+  if (!max_order.is_none()) cfg.max_order = max_order.cast<int>();
+  for (const auto& [axis, position, coefficient] : walls) cfg.walls.push_back({axis, position, coefficient});
+  cfg.has_fluid_bottom = !bottom.is_none();
+  if (cfg.has_fluid_bottom) {
+    // (speed, density, attenuation, water_density)
+    const auto t = bottom.cast<std::tuple<double, double, double, double>>();
+    cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
+  }
+  return cfg;
+}
+
 /// The first `n` rows of an array that was sized for more.
 template <typename T>
 py::array_t<T> first_rows(const py::array_t<T>& a, py::ssize_t n, py::ssize_t width) {
@@ -101,25 +134,12 @@ void bind_simcpp(py::module_& m) {
   m.def(
       "sim_image_source_eigenrays",
       [](double sound_speed, const Vec3d& source, const ArrD& points, const py::object& surface_z,
-         const py::object& bottom_z, cd surface_coefficient, cd bottom_coefficient, int max_order,
-         const std::vector<std::tuple<int, double, cd>>& walls, const py::object& bottom) {
+         const py::object& bottom_z, cd surface_coefficient, const py::object& bottom_coefficient,
+         const py::object& max_order, const std::vector<std::tuple<int, double, cd>>& walls,
+         const py::object& bottom) {
         require_points(points, "points");
-        sim::ImageSourceConfig cfg;
-        cfg.sound_speed = sound_speed;
-        cfg.has_surface = !surface_z.is_none();
-        if (cfg.has_surface) cfg.surface_z = surface_z.cast<double>();
-        cfg.has_bottom = !bottom_z.is_none();
-        if (cfg.has_bottom) cfg.bottom_z = bottom_z.cast<double>();
-        cfg.surface_coefficient = surface_coefficient;
-        cfg.bottom_coefficient = bottom_coefficient;
-        cfg.max_order = max_order;
-        for (const auto& [axis, position, coefficient] : walls) cfg.walls.push_back({axis, position, coefficient});
-        cfg.has_fluid_bottom = !bottom.is_none();
-        if (cfg.has_fluid_bottom) {
-          // (speed, density, attenuation, water_density)
-          const auto t = bottom.cast<std::tuple<double, double, double, double>>();
-          cfg.fluid_bottom = {std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t)};
-        }
+        const sim::ImageSourceConfig cfg = image_config(sound_speed, surface_z, bottom_z, surface_coefficient,
+                                                        bottom_coefficient, max_order, walls, bottom);
         sim::EigenraySet e;
         {
           py::gil_scoped_release release;
@@ -129,10 +149,31 @@ void bind_simcpp(py::module_& m) {
       },
       py::arg("sound_speed"), py::arg("source"), py::arg("points"), py::arg("surface_z") = 0.0,
       py::arg("bottom_z") = py::none(), py::arg("surface_coefficient") = cd{-1.0, 0.0},
-      py::arg("bottom_coefficient") = cd{0.5, 0.0}, py::arg("max_order") = 2,
+      py::arg("bottom_coefficient") = py::none(), py::arg("max_order") = py::none(),
       py::arg("walls") = std::vector<std::tuple<int, double, cd>>{}, py::arg("bottom") = py::none(),
       "Image-source eigenrays (flat surface and bottom, optional walls [(axis, position, coefficient)] and a "
-      "fluid bottom (speed, density, attenuation, water_density)): a dict of the EigenraySet fields.");
+      "fluid bottom (speed, density, attenuation, water_density)): a dict of the EigenraySet fields.\n"
+      "`max_order` (bounces along one path) is required, and a bottom needs `bottom_coefficient` or `bottom`:\n"
+      "neither has a default. Paths with more than `max_order` bounces are not computed\n"
+      "(sim_image_series_truncation gives what that leaves out).");
+
+  m.def(
+      "sim_image_series_truncation",
+      [](double sound_speed, double source_z, double receiver_z, double range, const py::object& surface_z,
+         const py::object& bottom_z, cd surface_coefficient, const py::object& bottom_coefficient,
+         const py::object& max_order, const py::object& bottom) {
+        return sim::image_series_truncation(
+            image_config(sound_speed, surface_z, bottom_z, surface_coefficient, bottom_coefficient, max_order, {},
+                         bottom),
+            source_z, receiver_z, range);
+      },
+      py::arg("sound_speed"), py::arg("source_z"), py::arg("receiver_z"), py::arg("range"),
+      py::arg("surface_z") = 0.0, py::arg("bottom_z") = py::none(),
+      py::arg("surface_coefficient") = cd{-1.0, 0.0}, py::arg("bottom_coefficient") = py::none(),
+      py::arg("max_order") = py::none(), py::arg("bottom") = py::none(),
+      "What cutting the image series at `max_order` leaves out: the largest amplitude among the rays with\n"
+      "max_order + 1 bounces between depths `source_z` and `receiver_z` a horizontal `range` apart, relative\n"
+      "to the direct path's (0 when the series has ended).");
 
   m.def(
       "sim_rayleigh_reflection",
@@ -322,7 +363,8 @@ void bind_simcpp(py::module_& m) {
         // select component mode (the rows need not match n_azimuth).
         if (components) power.direction = power.doppler = density.data();
         const sim::ReverbParams p =
-            reverb_params(sample_rate, 0, 0.0, time0, 0.0, 1500.0, n_azimuth, decimation, n_low, Vec3d{}, false, false);
+            reverb_params(sample_rate, 0, 0.0, time0, 0.0, kSoundSpeedNotUsed, n_azimuth, decimation, n_low, Vec3d{},
+                          false, false);
         std::vector<std::uint8_t> active;
         {
           py::gil_scoped_release release;
@@ -343,7 +385,8 @@ void bind_simcpp(py::module_& m) {
                                     std::int64_t n_azimuth, std::int64_t decimation, std::int64_t n_low) {
         const sim::ReverbPower power = reverb_power(coarse, density, std::nullopt, std::nullopt);
         const sim::ReverbParams p =
-            reverb_params(sample_rate, 0, 0.0, time0, 0.0, 1500.0, n_azimuth, decimation, n_low, Vec3d{}, false, false);
+            reverb_params(sample_rate, 0, 0.0, time0, 0.0, kSoundSpeedNotUsed, n_azimuth, decimation, n_low, Vec3d{},
+                          false, false);
         std::vector<double> sigma;
         {
           py::gil_scoped_release release;
@@ -445,8 +488,9 @@ void bind_simcpp(py::module_& m) {
                       bool real_output, Backend backend, int device, bool batched) -> py::array {
         if (total.ndim() != 2) throw std::invalid_argument("total must have shape [channels, n_low]");
         const py::ssize_t n_channels = total.shape(0);
-        sim::ReverbParams p = reverb_params(sample_rate, n_samples, start_time, time0, center_frequency, 1500.0,
-                                            1, decimation, total.shape(1), Vec3d{}, carrier, real_output);
+        sim::ReverbParams p = reverb_params(sample_rate, n_samples, start_time, time0, center_frequency,
+                                            kSoundSpeedNotUsed, 1, decimation, total.shape(1), Vec3d{}, carrier,
+                                            real_output);
         p.batched = batched;
         const std::vector<py::ssize_t> shape{n_channels, static_cast<py::ssize_t>(n_samples)};
         py::array out = real_output ? py::array(py::array_t<float>(shape)) : py::array(py::array_t<std::complex<float>>(shape));

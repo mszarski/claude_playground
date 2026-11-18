@@ -201,6 +201,11 @@ SONAR_INLINE bool in_field_of_view_margin(const Vec3f& boresight, const Vec3f& a
   return true;
 }
 
+/// Added to the pre-test's angular margin, rad: it covers float32 rounding of the direction
+/// (about 1e-7) with a wide berth, and is not an allowance for motion (those are explicit:
+/// array extent, speed, turn rate and BpGroup::traj_allowance).
+inline constexpr float kFovRoundingMargin = 1e-3F;
+
 /// Number of blocks along a grid dimension of n points.
 SONAR_INLINE std::int64_t block_count(std::int64_t n, std::int64_t block) {
   return (n + block - 1) / block;
@@ -358,10 +363,10 @@ struct BpKernel {
       const Vec3f wb = Vec3f(g.rot0.transposed() * w0);
       const float dist = norm(wb);
       const float flight = 2.0F * dist / static_cast<float>(g.sound_speed);
-      const float reach = g.aperture + g.speed * flight + 0.02F;  // + trajectory residual allowance
+      const float reach = g.aperture + g.speed * flight + g.traj_allowance;  // + trajectory residual allowance
       if (dist > reach) {
         const float ratio = reach / dist;
-        const float margin = std::asin(ratio < 1.0F ? ratio : 1.0F) + g.turn_rate * flight + 1e-3F;
+        const float margin = std::asin(ratio < 1.0F ? ratio : 1.0F) + g.turn_rate * flight + kFovRoundingMargin;
         const BpRecord& e0 = records[g.first_record];  // elements of a ping share their pattern
         if (!in_field_of_view_margin(e0.boresight, e0.az, e0.el, e0.bw_az, e0.bw_el, wb / dist,
                                      opt.fov_factor, margin)) {

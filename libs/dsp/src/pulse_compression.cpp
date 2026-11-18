@@ -70,10 +70,11 @@ std::vector<std::complex<double>> replica_envelope(const Waveform& w) {
 }
 
 /// Band-limited interpolation of uniform samples at fractional index `pos`: a sinc with a
-/// 16-tap Kaiser window (shape 12), samples outside the array counting as zero.
+/// Kaiser window (kResamplerTaps taps, shape kResamplerKaiserBeta), samples outside the
+/// array counting as zero.
 std::complex<double> interpolate(const std::vector<std::complex<double>>& x, double pos, double i0_beta) {
-  constexpr int kTaps = 16;
-  constexpr double kBeta = 12.0;
+  constexpr int kTaps = kResamplerTaps;
+  constexpr double kBeta = kResamplerKaiserBeta;
   const double pi = 3.14159265358979323846;
   const double n0 = std::floor(pos);
   const double frac = pos - n0;
@@ -99,7 +100,7 @@ void build_arbitrary(const Waveform& waveform, double fs, double fc, const Pulse
   const double pi2 = 6.283185307179586476925;
   const std::vector<std::complex<double>> env = replica_envelope(waveform);
   const double eta = opt.doppler_scale;
-  const double i0_beta = bessel_i0(12.0);
+  const double i0_beta = bessel_i0(kResamplerKaiserBeta);
   const auto n = static_cast<std::size_t>(std::floor(waveform.duration / eta * fs)) + 1;
   echo.resize(n);
   filter.resize(n);

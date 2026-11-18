@@ -23,6 +23,13 @@ std::size_t bp_resident_bytes(const BpResident* resident);
 
 namespace {
 
+void check_options(const BpOptions& o) {
+  if (o.refraction && (!(o.sediment_speed > 0.0) || !std::isfinite(o.sediment_speed) || !std::isfinite(o.interface_z))) {
+    throw std::invalid_argument(
+        "backproject: refraction needs the sediment's sound speed and the interface depth; there is no default");
+  }
+}
+
 bool culling_enabled(const BpOptions& o, std::size_t n_points) {
   if (o.cull_block <= 0) return false;
   if (!(o.fov_factor > 0.0F)) {
@@ -100,14 +107,18 @@ void append_trajectory(const PingRecord& p, int upsample, BpGroup& g, std::vecto
   g.traj_t0 = ins.front().t;
   g.traj_dt = dt / upsample;
   for (std::size_t k = 0; k < n_out; ++k) {
-    table.push_back(Vec3f(cubic(residual, static_cast<double>(k) / upsample)));
+    const Vec3f r(cubic(residual, static_cast<double>(k) / upsample));
+    const float size = norm(r);
+    if (size > g.traj_residual_max) g.traj_residual_max = size;
+    table.push_back(r);
   }
 }
 
 }  // namespace
 
 BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
-                     const std::vector<std::vector<float>>* weights, int trajectory_upsample) {
+                     const std::vector<std::vector<float>>* weights, int trajectory_upsample,
+                     float trajectory_allowance) {
   BpInputs in;
   std::size_t total_samples = 0, total_records = 0;
   for (const PingRecord* p : pings) {
@@ -121,6 +132,9 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
     }
     if (static_cast<std::int64_t>(p->geometry.rx.size()) != p->samples.n_channels) {
       throw std::invalid_argument("backproject: one receive element per channel is required");
+    }
+    if (!(p->environment.sound_speed > 0.0) || !std::isfinite(p->environment.sound_speed)) {
+      throw std::invalid_argument("backproject: a ping has no sound speed (environment.sound_speed)");
     }
     total_samples += static_cast<std::size_t>(p->samples.n_channels * p->samples.n_samples);
     total_records += static_cast<std::size_t>(p->samples.n_channels);
@@ -180,6 +194,12 @@ BpInputs make_inputs(const std::vector<const PingRecord*>& pings,
     g.tx_bw_az = static_cast<float>(p.geometry.tx.beamwidth_az);
     g.tx_bw_el = static_cast<float>(p.geometry.tx.beamwidth_el);
     append_trajectory(p, trajectory_upsample, g, in.trajectory);
+    if (!std::isfinite(trajectory_allowance)) {
+      throw std::invalid_argument("backproject: trajectory_allowance must be a number (negative: from the table)");
+    }
+    g.traj_allowance = trajectory_allowance >= 0.0F
+                           ? trajectory_allowance
+                           : (g.traj_residual_max > kTrajectoryAllowance ? g.traj_residual_max : kTrajectoryAllowance);
     in.groups.push_back(g);
 
     if (weights != nullptr && (*weights)[ip].size() != n) {
@@ -248,6 +268,7 @@ void backproject(Backend backend, const BpInputs& inputs, const std::vector<Vec3
                  const BpOptions& options, std::complex<float>* image, float* weight_sum,
                  BpStats* stats) {
   if (points.empty() || inputs.groups.empty()) return;
+  check_options(options);
   const std::vector<float> table = make_sinc_table();
   if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
@@ -280,6 +301,7 @@ std::size_t BpSession::resident_bytes() const {
 void BpSession::backproject(Backend backend, const std::vector<Vec3d>& points, const BpOptions& options,
                             std::complex<float>* image, float* weight_sum, BpStats* stats) {
   if (points.empty() || inputs_.groups.empty()) return;
+  check_options(options);
   if (backend == Backend::Cuda) {
 #if SONAR_HAVE_CUDA
     const BpResident* resident = nullptr;

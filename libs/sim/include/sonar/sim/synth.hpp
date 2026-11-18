@@ -1,5 +1,24 @@
 // Echo synthesis: the simulator's forward model (ASASIN Eq. 1 generalised to
 // bistatic, moving, multipath geometry). See DECISIONS.md A-05.
+//
+// Units and conventions: SI, world frame north-east-down. `WaveformParams::amplitude` is
+// the PEAK amplitude at 1 m in the record's sample units (the convention of
+// record.hpp; this file never sees a level in dB, so the peak-or-rms reading of a
+// source level is settled before it). Absorption is dB/m, one way, applied over the whole
+// path length. Signal sign exp(+i w t).
+//
+// Fixed capacities, and what happens at each (docs/HARDCODED_AUDIT.md S-5 to S-7):
+//  - kMaxEnvelopeBands knot frequencies for a sampled pulse: more is an error.
+//  - kAbsorptionTableSize points of absorption over [absorption_f_min, absorption_f_max]:
+//    a frequency outside is read at the nearest end. `synthesize` throws when that clamp
+//    would change a level by more than `absorption_clamp_limit_db` over the longest path
+//    in the record's window (absorption_clamp_error_db below is the measure).
+//  - 16 amplitude knots along a swept pulse (synth_kernel.hpp, kKnots): beam patterns and
+//    loss are interpolated linearly in frequency between them. Not checked: a pattern null
+//    that crosses a wide band is under-sampled (small; stated in CONFIGURATION.md).
+//  - arrival_passes_out / arrival_passes_back passes of the arrival-time solve: what is
+//    left is bounded by arrival_residual below; `synthesize` throws when the bound exceeds
+//    `arrival_residual_limit`, and `arrival_passes_for` gives the count a case needs.
 #pragma once
 
 #include <cstdint>
@@ -67,7 +86,7 @@ struct EnvelopeTable {
 
 struct SynthParams {
   WaveformParams waveform;
-  double sound_speed = 1500.0;
+  double sound_speed = kNaN;  ///< m/s; no default: `synthesize` rejects a value that is not stated
   double sample_rate = 0.0;  ///< nominal, Hz
   double start_time = 0.0;   ///< nominal time of sample 0 after transmit, s
   std::int64_t n_samples = 0;
@@ -88,12 +107,49 @@ struct SynthParams {
   /// (0.007 rad at 8 kHz for 12 m/s closing at 400 m); (4, 4) leaves 5.5e-5.
   int arrival_passes_out = 4;
   int arrival_passes_back = 4;
+  /// `synthesize` throws when the bound on the phase left by the passes above
+  /// (arrival_residual) exceeds this, in radians. 0 or less: no check.
+  double arrival_residual_limit = 0.05;
+  /// `synthesize` throws when reading the absorption table outside its band would change a
+  /// level by more than this (dB) over the longest path in the window. 0 or less: no check.
+  double absorption_clamp_limit_db = 0.1;
   /// Waveform type 3 (Arbitrary) only: the pulse's envelope.
   EnvelopeTable envelope;
 };
 
 /// Pass count used for sampled pulses (the NumPy reference engine runs the same number).
 inline constexpr int kSampledArrivalPasses = 8;
+
+/// Upper bound on the phase error (rad) the arrival-time solves leave: {outbound, return}.
+/// Each pass of a solve gains a factor (speed / c) and the first guess is off by at most
+/// the leg's travel time, which is at most the end of the record's window, so what is left
+/// after n passes is at most  T_end (v / c)^n 2 pi f_top,  with T_end the time of the last
+/// sample, v the largest speed that enters the solve (the outbound points' for the first
+/// leg; the receivers', with the platform acceleration over T_end, for the second) and
+/// f_top the highest frequency of the pulse.
+struct ArrivalResidual {
+  double out = 0.0;
+  double back = 0.0;
+};
+ArrivalResidual arrival_residual(const SynthParams& params, const std::vector<SynthElement>& rx,
+                                 const std::vector<SynthPath>& paths);
+
+/// The same bound from its four numbers, for one leg and `passes` passes.
+double arrival_residual_bound(double window_end, double speed, double sound_speed, double frequency, int passes);
+
+/// Fewest passes (1 to 64) that bring the bound above under `tolerance` radians.
+int arrival_passes_for(double window_end, double speed, double sound_speed, double frequency, double tolerance);
+
+/// Set both pass counts of `params` to the fewest that leave under `tolerance` radians for
+/// these receivers and paths.
+void set_arrival_passes(SynthParams& params, const std::vector<SynthElement>& rx,
+                        const std::vector<SynthPath>& paths, double tolerance);
+
+/// Largest change of level (dB) that reading the absorption table at its nearest end, for
+/// the frequencies of this pulse that lie outside [absorption_f_min, absorption_f_max],
+/// causes over the longest path in the window, against the table continued linearly. 0 when
+/// every frequency the kernel reads is inside the table, or the table is flat.
+double absorption_clamp_error_db(const SynthParams& params);
 
 /// Add the echoes of `paths` into `out` ([channels, n_samples], interleaved complex
 /// when complex_baseband). `out` is accumulated into, not cleared. A sampled pulse

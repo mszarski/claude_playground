@@ -41,5 +41,8 @@ receive:
 
 unconfirmed:
   - array                        # element count, pitch and sizes are design values, not built
-  - transmit.waveform.source_level_db
+  - transmit.lever_arm           # no projector placed
+  - transmit.waveform            # the centre frequency is the owner's requirement; the band, the pulse and
+                                 # the source level are design values (docs/DESIGN.md)
+  - fov.tilt_up_deg              # a mounting choice
   - receive                      # front end not chosen

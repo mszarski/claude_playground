@@ -2,15 +2,32 @@
 // surface and bottom, and refraction into a sediment half-space. The C++ counterpart of
 // python/gpusonar/sim/propagation.py, with the same arithmetic in the same order.
 // Host only: a provider call is a few operations per scatterer and per path.
+//
+// Units and conventions: SI, world frame north-east-down (z positive down), angles at a
+// boundary are GRAZING angles in radians, sediment attenuation is dB per wavelength,
+// sediment density is a ratio to `water_density`. Amplitudes are pressure ratios for unit
+// pressure at 1 m (no level convention enters here).
+//
+// Nothing here has a physical default (docs/HARDCODED_AUDIT.md K-2, S-1, S-2, S-3): the
+// sound speeds, the boundary reflection coefficients, the sediment and the number of
+// bounces are NaN / unset until the caller states them, and the entry points throw
+// std::invalid_argument for a configuration that still holds an unset value it would use.
+// Limits: the image series is cut at `max_order` bounces and nothing beyond it is
+// computed; `image_series_truncation` gives the size of what the cut leaves out so that
+// the caller can report it.
 #pragma once
 
 #include <complex>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include "sonar/core/vec.hpp"
 
 namespace sonar::sim {
+
+/// "Not stated": the value of every field that has no physical default.
+inline constexpr double kUnset = std::numeric_limits<double>::quiet_NaN();
 
 /// Eigenrays from one source to S field points, K rays each. Arrays are row-major
 /// [S, K] (directions [S, K, 3]). `amplitude` is the complex pressure at the field point
@@ -18,7 +35,7 @@ namespace sonar::sim {
 struct EigenraySet {
   std::int64_t n_points = 0;
   std::int64_t n_rays = 0;
-  double sound_speed = 1500.0;
+  double sound_speed = kUnset;                  ///< m/s; set by the provider
   std::vector<double> delay;                    ///< s
   std::vector<std::complex<double>> amplitude;
   std::vector<double> launch;                   ///< unit vector leaving the source
@@ -36,7 +53,7 @@ struct EigenraySet {
 struct EigenrayView {
   std::int64_t n_points = 0;
   std::int64_t n_rays = 0;
-  double sound_speed = 1500.0;
+  double sound_speed = kUnset;                      ///< m/s
   const double* delay = nullptr;                    ///< [S, K]
   const std::complex<double>* amplitude = nullptr;  ///< [S, K]
   const double* launch = nullptr;                   ///< [S, K, 3]
@@ -54,26 +71,31 @@ EigenraySet free_field_eigenrays(double sound_speed, const Vec3d& source, const 
 struct Wall {
   int axis = 0;
   double position = 0.0;
-  std::complex<double> coefficient{0.8, 0.0};
+  std::complex<double> coefficient{kUnset, 0.0};  ///< pressure reflection coefficient; no default
 };
 
 /// A fluid sediment half-space for the Rayleigh reflection coefficient.
 struct FluidBottom {
-  double speed = 1600.0;          ///< m/s
-  double density = 1.8;           ///< in the units of water_density
-  double attenuation = 0.0;       ///< dB per wavelength
-  double water_density = 1.0;
+  double speed = kUnset;          ///< m/s; no default (a sediment is a fact of the site)
+  double density = kUnset;        ///< in the units of water_density; no default
+  double attenuation = 0.0;       ///< dB per wavelength; 0 = lossless
+  double water_density = 1.0;     ///< 1 = `density` is a ratio to water
 };
 
 struct ImageSourceConfig {
-  double sound_speed = 1500.0;
+  double sound_speed = kUnset;    ///< m/s; no default
   bool has_surface = true;
   double surface_z = 0.0;
   bool has_bottom = false;
   double bottom_z = 0.0;
-  std::complex<double> surface_coefficient{-1.0, 0.0};
-  std::complex<double> bottom_coefficient{0.5, 0.0};
-  int max_order = 2;              ///< bounces in total along one path
+  std::complex<double> surface_coefficient{-1.0, 0.0};  ///< pressure release: physics, not a site
+  /// Used for a bottom bounce when `has_fluid_bottom` is false. No default: a bottom
+  /// without a stated coefficient or sediment is an error, not a made-up 6 dB a bounce.
+  std::complex<double> bottom_coefficient{kUnset, 0.0};
+  /// Bounces in total along one path. No default (-1): the caller decides how many carry
+  /// the field at its range and depth. Paths with more bounces are NOT computed; see
+  /// image_series_truncation for what that leaves out.
+  int max_order = -1;
   std::vector<Wall> walls;        ///< first order only, on top of the vertical series
   bool has_fluid_bottom = false;  ///< each bottom bounce uses the Rayleigh coefficient
   FluidBottom fluid_bottom;
@@ -95,6 +117,20 @@ std::vector<ImageRay> image_series(const ImageSourceConfig& config);
 EigenraySet image_source_eigenrays(const ImageSourceConfig& config, const Vec3d& source,
                                    const double* points, std::int64_t n_points);
 
+/// Throws std::invalid_argument naming the first field of `config` that the image series
+/// would use and that is not stated (sound speed, max_order, a bottom or wall coefficient,
+/// the sediment of a fluid bottom).
+void check_config(const ImageSourceConfig& config);
+
+/// What cutting the image series at `config.max_order` leaves out, for a source and a
+/// receiver at depths `source_z` and `receiver_z` a horizontal distance `range` apart:
+/// the largest amplitude among the rays with max_order + 1 bounces (the first order not
+/// computed), relative to the direct path's. A caller reports it (or raises the order)
+/// instead of dropping the rays silently. 0 when the series has ended anyway (a single
+/// boundary). Bottom bounces use the configuration's coefficient or its Rayleigh value.
+double image_series_truncation(const ImageSourceConfig& config, double source_z, double receiver_z,
+                               double range);
+
 /// Plane-wave pressure reflection coefficient of a fluid half-space at a grazing angle
 /// (radians): R = (m sin g - sqrt(n^2 - cos^2 g)) / (m sin g + sqrt(n^2 - cos^2 g)),
 /// m = rho_b / rho_w, n = c_w / c_b, attenuation as an imaginary part of c_b.
@@ -107,8 +143,8 @@ void snell_crossing(const Vec3d& source, const double* points, std::int64_t n_po
                     double c_sediment, double interface_z, double* time, double* crossing);
 
 struct SedimentConfig {
-  double sound_speed = 1500.0;
-  double sediment_speed = 1700.0;
+  double sound_speed = kUnset;     ///< m/s in the water; no default
+  double sediment_speed = kUnset;  ///< m/s; no default
   double interface_z = 0.0;
   std::complex<double> transmission{1.0, 0.0};
 };

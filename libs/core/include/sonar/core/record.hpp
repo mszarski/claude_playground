@@ -5,6 +5,19 @@
 // Units are SI: metres, seconds, radians, hertz, pascals. Frames are NED.
 // Times inside a record are seconds relative to the transmit instant unless a
 // field name ends in _ns (integer nanoseconds since the Unix epoch, UTC).
+//
+// Conventions a consumer may rely on (docs/HARDCODED_AUDIT.md section 4):
+//  - World frame: north, east, down. Body frame: x ahead, y to starboard, z down;
+//    attitude is roll, pitch, yaw.
+//  - Levels: `Waveform::source_level_db` and `Waveform::amplitude` are PEAK values (the
+//    amplitude of the sinusoid, not its rms). Whether a datasheet figure entered in a
+//    sonar config is peak or rms is settled where the config is read (sonar.py), not here.
+//  - Signal sign: exp(+i w t); a baseband record has had `center_frequency` removed.
+//  - Sample times are seconds after transmit; ranges derived from them are two-way
+//    (range = c t / 2) unless a stage says otherwise.
+//  - Facts that have no physical default are NaN until a source sets them: the sound
+//    speed and the element boresights. libs/io validation and the entry points of the
+//    kernels reject a record that still holds them (audit K-2, K-3).
 #pragma once
 
 #include <complex>
@@ -107,7 +120,9 @@ struct Pose {
 /// One transducer element on a body.
 struct Element {
   Vec3d lever_arm;                 ///< body frame, m
-  Vec3d boresight{0.0, 1.0, 0.0};  ///< body-frame unit vector of the main response axis
+  /// Body-frame unit vector of the main response axis. No default (NaN): a record built
+  /// without one fails validation instead of silently looking to starboard.
+  Vec3d boresight{kNaN, kNaN, kNaN};
   double beamwidth_az = kNaN;      ///< FWHM, rad; NaN = omnidirectional
   double beamwidth_el = kNaN;      ///< FWHM, rad; NaN = omnidirectional
 };
@@ -116,7 +131,7 @@ struct Transmit {
   Waveform waveform;
   std::int64_t time_ns = 0;  ///< transmit instant, ns since Unix epoch (UTC)
   TransmitKind kind = TransmitKind::Point;
-  Vec3d direction{0.0, 1.0, 0.0};  ///< body-frame unit vector, PlaneWave only
+  Vec3d direction{kNaN, kNaN, kNaN};  ///< body-frame unit vector, PlaneWave only; no default
 };
 
 struct Geometry {
@@ -166,7 +181,7 @@ struct Calibration {
 };
 
 struct Environment {
-  double sound_speed = 1500.0;  ///< m/s at the sonar
+  double sound_speed = kNaN;    ///< m/s at the sonar; no default: the source must state it
   double temperature = kNaN;    ///< deg C
   double salinity = kNaN;       ///< PSU
   double water_depth = kNaN;    ///< m
