@@ -315,7 +315,7 @@ def synchronise(record, reference: dict | None = None, method: str = "reference"
         residual = np.abs(estimate_clocks_direct_path(record).offset)
     else:
         residual = np.zeros(len(est.offset))      # nothing independent to check against
-    ok = bool(np.all(residual <= tolerance)) and not (est.flagged is not None and np.any(est.flagged == 2))
+    ok = bool(np.all(residual <= tolerance)) and not (est.flagged is not None and est.flagged.any())     # one burst: no drift, not ok
     report = SyncReport(est, residual, tolerance, ok)
     if enforce and not ok:
         worst = residual.max()

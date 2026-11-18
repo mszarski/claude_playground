@@ -278,7 +278,7 @@ SyncResult estimate_from_bursts(const BurstWindows& w, const Reference& r, doubl
   for (std::size_t b = 0; b < off2.size(); ++b) {
     // A board timed from one burst has no drift to check: what is left of its offset is the residual.
     out.residual.push_back(out.flagged[b] == 0 ? std::abs(off2[b]) + std::abs(drift2[b]) * 1e-6 * span : std::abs(off2[b]));
-    out.ok = out.ok && out.flagged[b] != 2 && out.residual.back() <= out.tolerance;
+    out.ok = out.ok && out.flagged[b] == 0 && out.residual.back() <= out.tolerance;   // a board timed from one burst has no drift: not ok, but usable
   }
   return out;
 }
@@ -357,7 +357,7 @@ SyncResult synchronise(PingRecord& record, const Reference& reference) {
   for (std::size_t b = 0; b < off2.size(); ++b) {
     // A board timed from one burst has no drift to check: what is left of its offset is the residual.
     out.residual.push_back(out.flagged[b] == 0 ? std::abs(off2[b]) + std::abs(drift2[b]) * 1e-6 * span : std::abs(off2[b]));
-    out.ok = out.ok && out.flagged[b] != 2 && out.residual.back() <= out.tolerance;
+    out.ok = out.ok && out.flagged[b] == 0 && out.residual.back() <= out.tolerance;   // a board timed from one burst has no drift: not ok, but usable
     record.metadata.boards[b].clock_offset = out.offset[b];
     record.metadata.boards[b].clock_drift_ppm = out.drift_ppm[b];
     record.metadata.boards[b].synchronised = 1;

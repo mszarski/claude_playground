@@ -184,10 +184,15 @@ def tilted_profiles(own_depth: float, depth, speed, sigma, gradient_sigma: float
 
 def profile_depth_sigma(receiver_depth: float, elevation: float, slant_range: float, depth, speed, sigma, gradient_sigma: float,
                         water_depth: float | None = None) -> float:
-    """One sigma of `ray_depth` through a profile whose error at its knots is `sigma` (m/s)."""
+    """One sigma of `ray_depth` through a profile whose error at its knots is `sigma` (m/s): the
+    sensitivity of the depth to the tilt of `tilted_profiles`, measured with a twentieth of it each
+    way and scaled back up (linear, and not folded at the boundaries: a sigma beyond the water depth
+    says the depth is not known)."""
     knots, fast, slow = tilted_profiles(receiver_depth, depth, speed, sigma, gradient_sigma)
-    return 0.5 * abs(ray_depth(receiver_depth, elevation, slant_range, knots, fast, water_depth)
-                     - ray_depth(receiver_depth, elevation, slant_range, knots, slow, water_depth))
+    mid, half = 0.5 * (fast + slow), 0.5 * (fast - slow)
+    eps = 0.05
+    return 0.5 * abs(ray_depth(receiver_depth, elevation, slant_range, knots, mid + eps * half, water_depth)
+                     - ray_depth(receiver_depth, elevation, slant_range, knots, mid - eps * half, water_depth)) / eps
 
 
 # --- rows and frame -------------------------------------------------------------------------------

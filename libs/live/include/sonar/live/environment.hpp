@@ -20,9 +20,12 @@
 // vehicle, where the sound speed is measured: c(z) +- sign(z - own depth) e(z), with
 //     e(z) = min(sigma(z), gradient_sigma |z - own depth|)
 // sigma(z) being what the rung claims and gradient_sigma the prior that holds when nothing is
-// known. The depth sigma is half the difference of the depths traced through the two tilted
-// profiles. With sigma(z) infinite this is the prior alone, range^2 gradient_sigma / 2c for a
-// near-horizontal ray, which is what the chain reports on the lower rungs.
+// known. The depth sigma is the sensitivity of the traced depth to that tilt: half the difference
+// of the depths through profiles tilted a twentieth of e(z) each way, times twenty. It is a
+// linear measure and is not folded at the surface and bottom, so, like the prior's own rule, it
+// can exceed the water depth: the depth is then not known. With sigma(z) infinite this is the
+// prior alone, range^2 gradient_sigma / 2c for a near-horizontal ray, which is what the chain
+// reports on the lower rungs.
 //
 // Everything a ping needs travels in the record (no schema change): the samples since the last
 // ping and the uncertainties navigation sent go into metadata.extra_json under "nav", so a

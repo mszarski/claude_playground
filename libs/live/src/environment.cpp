@@ -13,6 +13,7 @@ namespace sonar::live {
 namespace {
 
 constexpr double kNoClaim = 1e9;   // a sigma no rung claims: the prior decides
+constexpr double kTiltFraction = 0.05;   // the part of the profile's error the sensitivity is measured with
 
 // Where the value after "key": starts and ends in `extra`; false when the key is not there.
 bool value_span(const std::string& extra, const std::string& key, std::size_t& key_at, std::size_t& first, std::size_t& last) {
@@ -219,9 +220,6 @@ LadderProfile SoundSpeedLadder::evaluate(std::int64_t time_ns, double x, double 
       return out;
     }
     if (rung == "built") {
-      if (!(opt_.sample_sigma > 0.0)) {
-        throw std::invalid_argument("elevation.profile.built.sample_sigma_m_s is not set: the sound-speed sensor's accuracy has no default");
-      }
       std::vector<double> d, c, s;
       for (const Bin& b : bins_) {
         double age = 0.0, far = 0.0;
@@ -237,6 +235,9 @@ LadderProfile SoundSpeedLadder::evaluate(std::int64_t time_ns, double x, double 
                               std::pow(opt_.distance_sigma_per_km * far / 1000.0, 2)));
       }
       if (d.size() < 2 || d.back() - d.front() < opt_.min_span_m) continue;
+      if (!(opt_.sample_sigma > 0.0)) {
+        throw std::invalid_argument("elevation.profile.built.sample_sigma_m_s is not set: the sound-speed sensor's accuracy has no default");
+      }
       out.rung = rung;
       out.span_lo = d.front();
       out.span_hi = d.back();
@@ -348,8 +349,14 @@ double profile_depth_sigma(double receiver_depth, double elevation, double slant
                            const std::vector<double>& speed, const std::vector<double>& sigma, double gradient_sigma, double water_depth) {
   std::vector<double> knots, fast, slow;
   tilted_profiles(receiver_depth, depth, speed, sigma, gradient_sigma, knots, fast, slow);
+  // A twentieth of the tilt each way, scaled back up: the sensitivity, not the spread of two folded rays.
+  for (std::size_t i = 0; i < knots.size(); ++i) {
+    const double mid = 0.5 * (fast[i] + slow[i]), half = 0.5 * (fast[i] - slow[i]);
+    fast[i] = mid + kTiltFraction * half;
+    slow[i] = mid - kTiltFraction * half;
+  }
   return 0.5 * std::abs(ray_depth(receiver_depth, elevation, slant_range, knots, fast, water_depth) -
-                        ray_depth(receiver_depth, elevation, slant_range, knots, slow, water_depth));
+                        ray_depth(receiver_depth, elevation, slant_range, knots, slow, water_depth)) / kTiltFraction;
 }
 
 }  // namespace sonar::live
