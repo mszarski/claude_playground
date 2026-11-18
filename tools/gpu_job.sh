@@ -12,6 +12,7 @@
 #        GPUSONAR_HSB=1 tools/gpu_job.sh        also build Holoscan Sensor Bridge 2.7.0 (emulator, Linux receiver, Python;
 #                                               implies GPUSONAR_HOLOSCAN_CPP=1) for tests/python/test_hsb.py
 #        GPUSONAR_JOB=gallery tools/gpu_job.sh  run tools/gallery.py (set GPUSONAR_ORACLES=1 and GPUSONAR_CERES=1 too)
+#        GPUSONAR_JOB=elevbench tools/gpu_job.sh  run tools/popoto_elevation_bench.py --full-rate --backend cuda
 #        GPUSONAR_JOB=benchall tools/gpu_job.sh  run tools/gpu_benchmark_all.py: every stage with a CUDA backend, host
 #                                               against CUDA (GPUSONAR_ORACLES=1 for the Bellhop scenarios; GPUSONAR_SCALE,
 #                                               GPUSONAR_BENCHALL_ARGS e.g. "--only live,imaging --repeats 5";
@@ -90,6 +91,17 @@ if [ "${GPUSONAR_JOB:-tests}" = "gallery" ]; then
     hf upload "$GPUSONAR_UPLOAD_REPO" /work/gallery gallery --type dataset > /dev/null
   fi
   exit 0
+fi
+if [ "${GPUSONAR_JOB:-tests}" = "elevbench" ]; then
+  # One full-length ping at the boards' rate per row count through the C++ chain on the device
+  # (tools/popoto_elevation_bench.py --full-rate); the updated popoto_stage2.json is uploaded when a repo is set.
+  status=0
+  PYTHONPATH=python python3 tools/popoto_elevation_bench.py --full-rate --backend cuda ${GPUSONAR_ELEVBENCH_ARGS:-} || status=$?
+  if [ -n "${GPUSONAR_UPLOAD_REPO:-}" ]; then
+    mkdir -p /work/elevbench && cp docs/design/popoto_stage2.json /work/elevbench/ && \
+      hf upload "$GPUSONAR_UPLOAD_REPO" /work/elevbench "${GPUSONAR_UPLOAD_PATH:-elevbench}" --type dataset > /dev/null
+  fi
+  exit "$status"
 fi
 if [ "${GPUSONAR_JOB:-tests}" = "benchall" ]; then
   # Every stage with a CUDA backend timed on the host and on the device (tools/gpu_benchmark_all.py):
