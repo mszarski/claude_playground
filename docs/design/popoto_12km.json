@@ -732,6 +732,128 @@
           "tracks": 0,
           "classified_multipath": 0
         }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 567.0,
+        "chain_seconds_per_ping": 3.6452845694984717,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 26.80705903,
+            "detections": 1,
+            "range_error_m": 0.07777973754855338,
+            "bearing_error_deg": -0.2607100684001815,
+            "elevation_deg": 0.5557933484,
+            "elevation_sigma_deg": 8.270926952,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 3.801203653,
+            "depth_sigma_m": 2967.99368,
+            "true_elevation_deg": 0.019056174050518616,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 28.65186924,
+            "detections": 1,
+            "range_error_m": 1.1613626688067598,
+            "bearing_error_deg": -0.1910929314584191,
+            "elevation_deg": 0.8764348853,
+            "elevation_sigma_deg": 8.265248043,
+            "ambiguous": true,
+            "candidates": 1,
+            "depth_m": 12.80918746,
+            "depth_sigma_m": 2964.895828,
+            "true_elevation_deg": 0.01907045316721138,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 27.45834684,
+            "detections": 1,
+            "range_error_m": 1.4580315829043684,
+            "bearing_error_deg": -0.2242602050202933,
+            "elevation_deg": -0.04269459652,
+            "elevation_sigma_deg": 8.26089398,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 7.96269715,
+            "depth_sigma_m": 2961.876286,
+            "true_elevation_deg": 0.019081817174577548,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 31.36315146,
+            "detections": 1,
+            "range_error_m": 2.6905514752052113,
+            "bearing_error_deg": -0.20465524733039064,
+            "elevation_deg": -0.1493873101,
+            "elevation_sigma_deg": 8.257941655,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 7.844333593,
+            "depth_sigma_m": 2960.082731,
+            "true_elevation_deg": 0.019090250355544708,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 30.37593923,
+            "detections": 1,
+            "range_error_m": 3.2648071722433087,
+            "bearing_error_deg": -0.21950189615237825,
+            "elevation_deg": 0.4777159943,
+            "elevation_sigma_deg": 8.256069701,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 2.619786451,
+            "depth_sigma_m": 2958.558209,
+            "true_elevation_deg": 0.01909574101422004,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 27.22293412,
+            "detections": 1,
+            "range_error_m": 3.5908989992112765,
+            "bearing_error_deg": -0.5172833491870202,
+            "elevation_deg": 0.1091132961,
+            "elevation_sigma_deg": 8.255233876,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 7.863743768,
+            "depth_sigma_m": 2958.321763,
+            "true_elevation_deg": 0.019098281520841663,
+            "true_depth_m": 4.0
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 28.05510804,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 6.015363703,
+            "vx": -6.015158159,
+            "depth_m": 8.81964602
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
       }
     },
     "popoto_env_summer_mud_60m at 12 km, Bellhop": {
@@ -741,6 +863,71 @@
         "ping_interval_s": 19.9,
         "simulate_seconds": 35.9,
         "chain_seconds_per_ping": 3.8678234754988807,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 20.4,
+        "chain_seconds_per_ping": 4.467724138001358,
         "per_ping": [
           {
             "detected": false,

@@ -150,9 +150,14 @@ spectra of a recording gives passive bearing-time records (`sonar_live --passive
   one, two and three rows of 32, against 0.15, 0.30 and 0.44 s on that machine's eight CPU threads.
   Raw pings at the boards' full rate have not been run on a GPU.
 - **Passive** exists in the C++ library and program only.
-- **The sparse Bayesian kernels take at most 64 channels in one row** (`kSblMaxChannels`,
-  `libs/live/include/sonar/live/sbl_kernel.hpp`). More raise an error on the kernel path (a GPU, or
-  `kernels=True`); the Eigen host path has no limit. Stacked rows of 32 are unaffected.
+- **The sparse Bayesian kernels take at most 64 channels** (`kSblMaxChannels`,
+  `libs/live/include/sonar/live/sbl_kernel.hpp`), and there is no fallback: more raise
+  `sbl: the kernel path takes at most 64 channels`. Checked here: the active chain with `doa: sbl`
+  solves on one row, so rows of 32 are unaffected at any row count, and a single row of 72 or 96
+  fails on the host backend too. Passive bearings with stacked rows need the elevation option
+  (`elevation=1`; the generated `listen.options` set it): they then solve on rows and three rows
+  of 32 pass on both paths. Without it all 96 channels are taken as one line: the kernel path
+  (a GPU backend, or `kernels=True`) raises the error and the Eigen path returns wrong bearings.
 
 ![Deployment view of a build](architecture/deployment_build.png)
 

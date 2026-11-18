@@ -190,7 +190,7 @@ LIVE_STAGES = [
     ("map", "range x bearing map\nper row, powers added", "both", True, "backprojection kernel"),
     ("cfar", "CFAR on the\nsummed map", "both", True, "kernel, host or CUDA"),
     ("cluster", "cluster to\ndetections", "both", False, "tens of objects"),
-    ("sbl", "doa: sbl  bearings\nat each range gate", "cpp", True, "<= 64 channels a row"),
+    ("sbl", "doa: sbl  bearings\nat each range gate", "cpp", True, "<= 64 channels in a row"),
     ("elevation", "elevation: steer all rows\nat each detection;\ncandidates if repeats", "both", True, "backprojection kernel"),
     ("depth", "depth: attitude at arrival,\nfold, ray trace; sigma from\nnoise, roll, refraction", "both", False, "sound speed, water depth"),
     ("track", "tracker\n(range, bearing, depth)", "both", False, "ownship motion removed"),
@@ -239,7 +239,8 @@ def draw_live_chain(path):
         if i:
             arrow(ax, (x - 0.25, 2.07), (x, 2.07))
     ax.text(0.2, 1.25, "Passive runs in the C++ library only (the Python chain has no listen mode; `gpusonar.elevation.passive_elevation` is the NumPy reference of the elevation step).\n"
-            "The sparse Bayesian kernels take at most 64 channels in one row and refuse more with an error; with stacked rows the solver works on the first row.", fontsize=7.6, color=MUTED, va="top")
+            "The sparse Bayesian kernels take at most 64 channels in one line and refuse more with an error (no fallback). Active, and passive with elevation=1: the solver works on one row.\n"
+            "Passive WITHOUT elevation=1 on stacked rows takes all channels as one line: wrong bearings, and above 64 channels an error on the kernel path.", fontsize=7.6, color=MUTED, va="top")
     fig.savefig(path, dpi=115, bbox_inches="tight")
     plt.close(fig)
 

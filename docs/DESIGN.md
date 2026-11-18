@@ -582,6 +582,11 @@ blanking cost nothing by themselves. What matters is (a) that the inputs are not
 (7.5 m per 10 ms); (c) that the synchronisation bursts and any calibration signal do not fall inside the transmit or the recovery. On (c) the shipped timing is a finding: the first burst is
 0.8 ms after the direct sound ends at the farthest hydrophone on the face. The build validator now warns of it.
 
+**Every hydrophone is overloaded, not only the nearest.** On the face (three rows) 96 of 96 are, from +7.6 dB at the farthest (6.37 m) to +19.1 dB at the nearest; the direct sound falls to full scale only 15.3 m from the projector, so **no position on a 9 m face avoids it**: at least
+19.1 dB of gain reduction during the transmit is needed, or inputs that are built to be overloaded. The first usable range is 753 m with an input that has no memory (76 m with the 0.1 s pulse), plus 0.75 m per millisecond of recovery. These are peak levels (add 3 dB if a source level is an rms figure) and the water path only: hull-borne and electrical coupling from the amplifier are not modelled and could exceed it.
+
+The simulator now models this (`transmit.direct_path`, `receive.overload`; `tools/direct_sound_study.py`): its per-hydrophone figures for the face are +7.6 to +19.1 dB over full scale, 96 of 96 overloaded, full scale at 15.3 m (`design/direct_sound_study.json`; the same closed form as here, checked against the simulated samples). Its recovery parameter sets are illustrative: no board has been measured. Blanking alone suffices only if the front end has no memory; a gain switch of more than the overload removes the problem at its source.
+
 | Option | What it buys | What it costs or needs | Known? |
 | --- | --- | --- | --- |
 | Ignore window in the chain (blanking) | discards the samples of the transmit and of the recovery; the chain today starts at the receive window (`receive.window`, from the blind range); a configurable blanking window is being added to the chain separately | nothing; it protects nothing | yes |
@@ -600,7 +605,7 @@ recovery. (4) The first sync burst after that window. (5) Lower gain during the 
 
 **To measure on the bench before hardware is frozen.** Recovery time of an input against overload level (0, +10, +20, +30 dB over full scale, a burst as long as the pulse); the damage threshold from the
 board's documentation or its maker; whether the reference burst summed into an input survives next to an overloaded hydrophone signal. The spec carries the results: `projector.blanking_after_s`,
-`boards.overload_damage_vpp`, `boards.gain_switchable` (all unknown today). An input-overload and recovery model for the simulator's receiver (`receive.overload` in a sonar file) is being added separately; it is the way to try a recovery time against the short-range scenarios. It is not in this tree, so nothing here simulates the direct sound.
+`boards.overload_damage_vpp`, `boards.gain_switchable` (all unknown today). Also on the bench: coupling from the amplifier into the inputs through the hull and the wiring, with the projector out of the water. The simulator's receiver has an overload and recovery model (`receive.overload`, with `transmit.direct_path`): a measured recovery time can be tried on the short-range scenarios (`popoto_testauv_direct_overload*`) before hardware is frozen.
 
 ### The 12 km design point
 
@@ -650,13 +655,20 @@ In shallow water sound is ducted: Bellhop for 100 m of isovelocity water over sa
 | Water | Rows | Ship detected on | Median SNR | Track confirmed at ping | Track on the ship | Later arrivals tracked / classed multipath | Other tracks |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | popoto_12km: 100 m isovelocity over sand, image-source paths | 1 | 3 of 6 pings | 13.5 dB | 5 | uncertain at 3.4 m/s | 0 / 0 | 1 uncertain |
+| popoto_12km: 100 m isovelocity over sand, image-source paths | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | the same without reverberation (noise only) | 1 | 4 of 6 pings | 12.5 dB | 4 | uncertain at 3.2 m/s | 0 / 0 | 1 uncertain |
+| the same without reverberation (noise only) | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
 | popoto_12km: 100 m isovelocity over sand, Bellhop | 1 | 6 of 6 pings | 15.4 dB | 3 | mover at 5.4 m/s, mover at 5.9 m/s, mover at 6.1 m/s, static at 2.1 m/s | 6 / 5 | 3 mover, 5 multipath, 1 static, 1 uncertain |
+| popoto_12km: 100 m isovelocity over sand, Bellhop | 2 | 6 of 6 pings | 16.6 dB | 3 | multipath at 6.0 m/s, multipath at 6.3 m/s, uncertain at 4.6 m/s, uncertain at 6.5 m/s | 1 / 1 | 3 multipath, 2 uncertain |
 | popoto_env_deep_silt_1000m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 1 / 0 | 1 mover |
+| popoto_env_deep_silt_1000m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 1 / 0 | 1 mover |
 | popoto_env_gravel_30m at 12 km, Bellhop | 1 | 6 of 6 pings | 27.4 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
+| popoto_env_gravel_30m at 12 km, Bellhop | 2 | 6 of 6 pings | 28.1 dB | 3 | mover at 6.0 m/s | 0 / 0 | 1 mover |
 | popoto_env_summer_mud_60m at 12 km, Bellhop | 1 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_env_summer_mud_60m at 12 km, Bellhop | 2 | 0 of 6 pings | — | — | none | 0 / 0 |  |
+| popoto_env_winter_sand_200m at 12 km, Bellhop | 1 | 6 of 6 pings | 19.4 dB | 3 | mover at 6.1 m/s, multipath at 5.8 m/s, mover at 7.5 m/s | 4 / 3 | 2 mover, 4 multipath, 1 uncertain |
 
-Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 13.5 dB against 12.5 dB. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
+Where reverberation rather than noise decides: in the image-source case the ship's SNR with and without the scenario's bottom and surface reverberation is 1 row: 13.5 dB against 12.5 dB; 2 rows: not detected against not detected. The image-source paths spread spherically with two bounces and carry far less energy to 12 km than Bellhop's ducted field, so they sit near the noise-limited budget; the Bellhop rows are the shallow-water case.
 
 **A target near the surface is the hard case for straight rays.** The scenario's ship is at 4 m and the array at 10 m: at 12 km the direct path and the surface-reflected one (reflection −1) differ by 6.7 mm, a small fraction of the 30 cm wavelength, and nearly cancel: 20 log₁₀(2 sin(2π z₁ z₂ / λR)) = -17 dB on each leg against the budget's free-field loss, before the bottom's bounces put energy back. The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do, which is why the ship is detected on few or no pings there, and marginally enough that the projector's place on the face decides it. Bellhop's field for the same water holds the ship on every ping. Which is right for a given day is the environment's to say: **the 12 km detection of a shallow target rests on the water ducting sound, not on the array.**
 
@@ -742,6 +754,9 @@ Generated from the stage files (`tools/parts_list.py`; the full table with every
 | Direct sound there, against the inputs' full scale | 207 dB re 1 µPa: +34 dB | 209 dB re 1 µPa: +35 dB | 209 dB re 1 µPa: +35 dB | 193 dB re 1 µPa: +19 dB | 192 dB re 1 µPa: +18 dB | 192 dB re 1 µPa: +19 dB |
 | Direct sound ends | 0.101 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 0.102 s (blind inside 75 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) | 1.004 s (blind inside 750 m) |
 | Source level that just reaches full scale | 163 dB | 162 dB | 162 dB | 178 dB | 179 dB | 178 dB |
+| Hydrophones overloaded; at the farthest | 32 of 32; +21 dB | 64 of 64; +14 dB | 96 of 96; +14 dB | 32 of 32; +8 dB | 64 of 64; +8 dB | 96 of 96; +8 dB |
+| Gain reduction needed during the transmit | 34 dB | 35 dB | 35 dB | 19 dB | 18 dB | 19 dB |
+| First usable range, input with no memory (+ per ms of recovery) | 76 m (+0.75 m) | 76 m (+0.75 m) | 76 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) | 753 m (+0.75 m) |
 | Clock agreement between rows (0.05° of elevation) | one row: n/a | 0.87 µs | 0.87 µs | one row: n/a | 0.87 µs | 0.87 µs |
 | Clock agreement within a row (clean beams) | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs | 8.3 µs |
 | Compute, option A (CPU, decimated pings of scenario size) | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads | 0.63 s a ping on 4 shared CPU threads | 1.41 s a ping on 4 shared CPU threads | 2.54 s a ping on 4 shared CPU threads |

@@ -7,6 +7,7 @@ For each row count (sonars popoto_long_range, popoto_long_range_2row, popoto_lon
 the `popoto_12km` scenario is put at 12 km in
 
     popoto_12km (100 m of isovelocity water over sand)    with Bellhop, and with image-source paths (runs anywhere)
+                                                           (--merge adds to the file; --no-envs leaves the environments out)
     the same without reverberation                         image-source: what reverberation costs at 12 km
     each popoto_env_* environment, the ship moved to 12 km with Bellhop (needs GPUSONAR_BELLHOP)
 
@@ -129,11 +130,19 @@ def main(argv=None):
     ap.add_argument("--quick", action="store_true", help="image-source cases only")
     ap.add_argument("--rows", default="1,2,3")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--merge", action="store_true", help="keep the cases already in the file and add or replace the ones run now")
+    ap.add_argument("--no-envs", action="store_true", help="leave out the popoto_env_* environments (each takes minutes with Bellhop)")
     args = ap.parse_args(argv)
     have = find_bellhop() is not None
     out_path = ROOT / "docs" / "design" / "popoto_12km.json"
     R = {"bellhop": bool(have and not args.quick), "ship": "five points of +18 dB over 120 m at 4 m depth, crossing at 6 m/s (the popoto_12km scenario's)", "cases": {}}
-    envs = sorted(n for n in list_configs("scenarios") if n.startswith("popoto_env_"))
+    if args.merge and out_path.exists():
+        R["cases"] = json.loads(out_path.read_text())["cases"]
+        R["bellhop"] = bool(have)
+    R["not_run"] = []
+    envs = [] if args.no_envs else sorted(n for n in list_configs("scenarios") if n.startswith("popoto_env_"))
+    if args.no_envs:
+        R["not_run"].append(f"rows {args.rows}: the popoto_env_* environments (left out with --no-envs)")
     for rows in (int(x) for x in args.rows.split(",")):
         base = load_scenario_config(SCENARIO[rows])
         cases = [("popoto_12km: 100 m isovelocity over sand, image-source paths", image_source(base))]

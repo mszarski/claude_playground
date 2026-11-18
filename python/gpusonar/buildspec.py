@@ -495,9 +495,12 @@ def validate(spec: dict) -> list[Issue]:
         err("sound_speed.value_m_s", "rung is typed but no value is given")
     if get(spec, "sound_speed", "rung") == "profile" and get(spec, "sound_speed", "profile") is None:
         err("sound_speed.profile", "rung is profile but no profile is given")
-    if rows == 1 and count > 64:
-        warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing kernels (doa: sbl on a GPU, or with kernels) take at most 64 channels and refuse more with an error; "
+    if count > 64:
+        warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing solver of the active chain (doa: sbl) takes at most 64 channels in a row and raises an error for more, on the CPU too; "
                             "bearings from the map (doa: map, the default) are unaffected")
+    if rows * count > 64:
+        warn("array.rows", f"{rows * count} channels in {rows} rows: passive listening must run with the elevation option (elevation=1, as the generated listen.options has it), which solves on rows. "
+                           "Without it every channel is taken as one line: the bearings are wrong for stacked rows and the sparse Bayesian kernels (a GPU backend, or kernels=True) raise an error above 64 channels")
     return out
 
 

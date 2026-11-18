@@ -324,6 +324,8 @@ def twelve_km() -> list:
                  "The noise-limited budget above does not contain this (it is the cautious case for spreading, not for the surface image); the image-source rows of the table do, which is why the ship is detected on few or no pings there, "
                  "and marginally enough that the projector's place on the face decides it. Bellhop's field for the same water holds the ship on every ping. Which is right for a given day is the environment's to say: "
                  "**the 12 km detection of a shallow target rests on the water ducting sound, not on the array.**\n")
+        if K.get("not_run"):
+            L.append("Not run: " + "; ".join(K["not_run"]) + ".\n")
         L.append("The environments differ by far more than the row count does: the row count buys two to four decibels, the water tens. A downward-refracting profile over a soft bottom can leave nothing at 12 km whatever the array.\n")
     else:
         L.append("\n**Through the chain, with reverberation: pending** (`tools/popoto_12km_study.py` writes `docs/design/popoto_12km.json`; it has not been run in this tree).\n")

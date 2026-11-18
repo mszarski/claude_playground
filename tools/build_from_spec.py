@@ -46,10 +46,10 @@ from gpusonar import config  # noqa: E402
 KINDS = ("free", "shallow", "rehearsal", "passing", "passive", "stream")
 CRITERIA = {
     "free": "every target: range within 3 m, bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate",
-    "shallow": "the target: range within 3 m, bearing within 1 deg; rows: depth within 3 m + range x sin(0.7 deg) (the multipath allowance) when the report gives one elevation, else the truth among the candidates",
-    "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; range within 3 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
+    "shallow": "the target: range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing within 1 deg; rows: depth within 3 m + range x sin(0.7 deg) (the multipath allowance) when the report gives one elevation, else the truth among the candidates",
+    "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; range within 6 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
     "passing": "at least one track of kind mover, speed within 1 m/s of the truth, in both engines",
-    "passive": "both sources within 1 deg of their bearings in at least 80% of the frames, with and without the kernels",
+    "passive": "both sources within 1 deg of their bearings in at least 80% of the frames, on the Eigen path and on the kernel path (a row of more than 64: the kernels refuse, skipped and said so)",
     "stream": "both assemblers and the UDP loopback return every sample within half a count; no sample lost",
 }
 
@@ -250,14 +250,14 @@ def _nearest(report, target):
     return (min(near or hits, key=lambda x: abs(x["range_m"] - rng))), own, rng
 
 
-def _check_target(report, target, rows, allowance_deg, look_sign=1.0):
+def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tolerance=3.0):
     """Errors of the detection nearest one target, and whether they pass."""
     det, own, rng = _nearest(report, target)
     if det is None:
         return {"found": False, "ok": False}
     bearing = float(np.degrees(np.arctan2(target[0] - own[0], look_sign * (target[1] - own[1]))))
     out = {"found": True, "range_error_m": det["range_m"] - rng, "bearing_error_deg": det["bearing_deg"] - bearing, "snr_db": det["snr_db"]}
-    ok = abs(out["range_error_m"]) <= 3.0 and abs(out["bearing_error_deg"]) <= 1.0
+    ok = abs(out["range_error_m"]) <= range_tolerance and abs(out["bearing_error_deg"]) <= 1.0
     if rows > 1:
         true_el = float(np.degrees(np.arcsin((own[2] - target[2]) / rng)))
         out["true_depth_m"], out["true_elevation_deg"] = float(target[2]), true_el
@@ -304,10 +304,15 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                     res["true_bearings_deg"] = want
                     ok = True
                     for label, kernels in (("eigen", False), ("kernels", True)):
-                        if kernels and rec.samples.n_channels > 64 and rows == 1:
-                            res[label] = {"skipped": "more than 64 channels in one row: the kernel path refuses them"}
-                            continue
-                        frames, _ = core.doa_passive(rec, f_lo, f_hi, n_fft=256, hop=128, n_average=12, first_deg=-60.0, last_deg=60.0, max_sources=2, min_snr_db=3.0, kernels=kernels)
+                        try:
+                            # With stacked rows the elevation option must be on: the rows are then handled as rows (as `elevation=1` in listen.options).
+                            frames, _ = core.doa_passive(rec, f_lo, f_hi, n_fft=256, hop=128, n_average=12, first_deg=-60.0, last_deg=60.0, max_sources=2, min_snr_db=3.0, kernels=kernels,
+                                                         **({"elevation": True, "elevation_step_deg": 0.25} if rows > 1 else {}))
+                        except ValueError as exc:
+                            if kernels and "at most 64" in str(exc):
+                                res[label] = {"skipped": f"{rec.samples.n_channels} channels: {exc} (the Eigen path has no limit)"}
+                                continue
+                            raise
                         good, worst = 0, 0.0
                         for f in frames:
                             got = sorted(float(np.degrees(p[0])) for p in f["peaks"])
@@ -340,7 +345,8 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                             e["ok"] = bool(movers) and any(abs(t["speed_m_s"] - truth["speed_m_s"]) <= 1.0 for t in movers)
                         else:
                             allowance = 0.7 if kind in ("shallow", "rehearsal") else 0.0
-                            e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") else 1, allowance, sign) for t in truth["targets"]]
+                            # With boundaries a detection is a cluster of the direct echo and its first bounces, a few metres deep.
+                            e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") else 1, allowance, sign, range_tolerance=6.0 if allowance else 3.0) for t in truth["targets"]]
                             e["ok"] = all(t["ok"] for t in e["targets"])
                             if truth.get("sync"):
                                 e["sync_ok"], e["sync_worst_residual_us"] = bool(last["sync"]["ok"]), float(last["sync"]["worst_residual_us"])

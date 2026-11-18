@@ -40,8 +40,8 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    | Self-test | What is simulated | Pass |
    | --- | --- | --- |
    | `free` | free field, three targets above, level with and below the array | range within 3 m, bearing within 1°; three or more rows: depth within 3 m + 0.3% of range; two rows that repeat: the true elevation among the candidates |
-   | `shallow` | surface and bottom echoes, the far range | range, bearing; depth within 3 m + range × sin 0.7° (the multipath allowance) |
-   | `rehearsal` | raw samples at the boards' rate, every board on its own clock, the platform's attitude (rolling, or a tilted frame) | the boards synchronise under 1 µs; range, bearing, depth |
+   | `shallow` | surface and bottom echoes, the far range | range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing; depth within 3 m + range × sin 0.7° (the multipath allowance) |
+   | `rehearsal` | raw samples at the boards' rate, every board on its own clock, the platform's attitude (rolling, or a tilted frame) | the boards synchronise under 1 µs; range within 6 m, bearing, depth |
    | `passing` | a target crossing at 3 m/s | one mover, speed within 1 m/s |
    | `passive` | two radiating sources, the sonar silent (`sources:`, `pings.transmit: false`) | both bearings within 1° in 80% of frames |
    | `stream` | pings as board blocks at the build's channel count | both assemblers and UDP loopback return every sample |
@@ -78,7 +78,8 @@ pinging with detection, tracking and (with two or more rows) elevation and depth
    in a shallow channel is in no reported sigma. Depth beyond a few hundred metres needs a sound-speed profile
    nobody is assumed to have. Curved arrays, towed arrays, more than one projector, directional hydrophones,
    boards whose samples are not 24-bit, and a `port` look direction have not been run through the self-tests.
-   The sparse Bayesian bearing kernels take at most 64 channels in one row. Chain thresholds (`cfar`, `tracker`,
+   The sparse Bayesian bearing kernels take at most 64 channels and raise an error for more (64 in a row; passive
+   listening with stacked rows must run with `elevation=1`, as the generated `listen.options` do). Chain thresholds (`cfar`, `tracker`,
    `classify`) are the long-range array's defaults unless `operation.chain` changes them. Processing time is
    measured only for one, two and three rows of 32.
 

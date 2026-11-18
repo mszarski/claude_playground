@@ -184,6 +184,11 @@ def test_derived_numbers_are_arithmetic_on_the_files():
     # Cables: each run along the face, then up or down, to the assumed board position, plus the slack.
     pos = d["positions"]
     assert d["cables"]["total_m"] == pytest.approx(np.abs(pos).sum() + 0.5 * 96) and d["cables"]["longest_m"] == pytest.approx(np.abs(pos).sum(axis=1).max() + 0.5)
+    # The simulator's direct-sound study (tools/direct_sound_study.py) is separate code: per-hydrophone overload must agree.
+    ds = json.loads((ROOT / "docs" / "design" / "direct_sound_study.json").read_text())["popoto_long_range_3row"]["summary"]
+    assert d["direct"]["over_full_scale_db"] == pytest.approx(ds["overload_db_nearest"], abs=1e-6) and d["direct"]["over_full_scale_farthest_db"] == pytest.approx(ds["overload_db_farthest"], abs=1e-6)
+    assert d["direct"]["hydrophones_overloaded"] == ds["hydrophones_overloaded"] == 96 and d["direct"]["distance_for_full_scale_m"] == pytest.approx(ds["distance_for_no_overload_m"], rel=1e-6)
+    assert d["direct"]["gain_reduction_needed_db"] == pytest.approx(ds["gain_reduction_for_no_overload_db"]) and d["direct"]["min_range_memoryless_m"] == pytest.approx(753.2, abs=0.1)
     one = bs.describe_shipped("popoto_testauv_1row", "popoto_testauv_1row")
     assert one["elevation"] is None and one["n_boards"] == 4 and one["blind_range_m"] == 75.0
 
