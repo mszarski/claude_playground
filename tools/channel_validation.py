@@ -70,6 +70,7 @@ ASSUMED = {"sound_speed": 1500.0, "bottom": {"speed": 1700.0, "density": 1.9, "a
 OPTIONS = {
     "A": {"doppler_spectrum": "gaussian", "decay_time": "facet", "multi_bounce": "convolve"},
     "B": {"doppler_spectrum": "lorentzian", "decay_time": "rule_of_thumb", "multi_bounce": "sum"},
+    "C": {"doppler_spectrum": "gaussian", "decay_time": "rule_of_thumb", "multi_bounce": "convolve"},   # the suite's defaults
 }
 METRICS = ["delay_ms", "level_db", "coherent", "coherent_arrival", "scintillation", "doppler_rms", "doppler_w50", "doppler_w90",
            "doppler_shape", "coherence_time_ms", "decay_ms", "mean_excess_ms"]
@@ -281,7 +282,7 @@ def run(sites: list, seeds: int = 3, log=print) -> dict:
     """sites: [(label, recording, channel, geo, rx)]. The first site of each recording must be the
     60 m one: its first surface arrival fixes the wind."""
     c = ASSUMED["sound_speed"]
-    out = {"stated": STATED, "assumed": ASSUMED, "free_parameters": 1, "sites": []}
+    out = {"stated": STATED, "assumed": ASSUMED, "free_parameters": 1, "sites": []}   # one per recording
     wind = {}
     for label, recording, ch, geo, rx in sites:
         groups = arrival_groups(geo, rx, STATED["symbol_rate"], window=(ch.n_delay - 60) / ch.fs_delay)
@@ -299,7 +300,7 @@ def run(sites: list, seeds: int = 3, log=print) -> dict:
         site["surface"] = {"rms_height": acoustics.rms_wave_height(u), "mean_square_slope": acoustics.mean_square_slope(u),
                            "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u)}
         sims = {}
-        for key, opts, bub in (("A", OPTIONS["A"], False), ("B", OPTIONS["B"], False), ("A+bubbles", OPTIONS["A"], True)):
+        for key, opts, bub in (("A", OPTIONS["A"], False), ("C", OPTIONS["C"], False), ("B", OPTIONS["B"], False), ("A+bubbles", OPTIONS["A"], True)):
             runs = []
             for seed in range(1 if bub else seeds):                     # bubbles change levels only: one seed
                 mc = simulate(geo, rx, wind=u, options=opts, seed=seed, like=ch, floor=meas["_floor"], direct_level=meas["_direct_level"],
@@ -346,25 +347,26 @@ def fmt(pair, digits=2) -> str:
 
 ROWS = [  # metric, heading, which model runs to show, digits
     ("delay_ms", "delay after direct (ms)", ("A",), 3),
-    ("level_db", "level re whole channel (dB)", ("A", "A+bubbles"), 1),
-    ("coherent_arrival", "coherent share, arrival and tail", ("A",), 3),
-    ("coherent", "coherent share, at the peak", ("A",), 3),
-    ("scintillation", "scintillation index", ("A",), 2),
+    ("level_db", "level re whole channel (dB)", ("A",), 1),
+    ("level_db", "the same with bubble loss", ("A+bubbles",), 1),
+    ("coherent_arrival", "coherent share, arrival and tail", ("A", "C"), 3),
+    ("coherent", "coherent share, at the peak", ("A", "C"), 3),
+    ("scintillation", "scintillation index", ("A", "C"), 2),
     ("doppler_rms", "Doppler rms width (Hz)", ("A", "B"), 2),
     ("doppler_w50", "Doppler 50 % half width (Hz)", ("A", "B"), 2),
     ("doppler_shape", "Doppler shape w90/w50", ("A", "B"), 2),
     ("coherence_time_ms", "coherence time (ms)", ("A", "B"), 0),
-    ("decay_ms", "tail decay time (ms)", ("A", "B"), 3),
-    ("mean_excess_ms", "tail mean excess delay (ms)", ("A", "B"), 3),
+    ("decay_ms", "tail decay time (ms)", ("A", "C", "B"), 3),
+    ("mean_excess_ms", "tail mean excess delay (ms)", ("A", "C", "B"), 3),
 ]
 
 
 def markdown(result: dict) -> str:
     lines = ["# Time spreading against measured channels (UACR Purple, SPACE'08)", "",
-             "Model A: Doppler spectrum gaussian, decay time facet, multi-bounce convolve. Model B: lorentzian, rule_of_thumb, sum.",
-             "One free parameter per recording (wind speed), fitted to the row marked FIT; every other row is a prediction.",
-             "+- on the measured column: standard error from the four quarters of the record; on the model columns: spread of one record",
-             "from seed to seed. `in`/`OUT`: within twice the larger of the two, plus the resolution of the measurement.", ""]
+             "A: gaussian Doppler spectrum, facet decay time, bounces convolved. C: gaussian, rule_of_thumb, convolve (the suite's defaults).",
+             "B: lorentzian, rule_of_thumb, sum (SST-style). One free parameter per recording (wind speed), fitted to the row marked FIT;",
+             "every other row is a prediction. +- on the measured column: standard error from the four quarters of the record; on the model",
+             "columns: spread of one record from seed to seed. `in`/`OUT`: within twice the larger of the two, plus the resolution.", ""]
     for site in result["sites"]:
         s = site["surface"]
         lines += [f"## {site['label']}: {site['range']:.0f} m, wind {site['wind_speed']:.2f} m/s"
@@ -372,7 +374,7 @@ def markdown(result: dict) -> str:
                   f"rms height {s['rms_height']:.3f} m, mean-square slope {s['mean_square_slope']:.4f}, rms vertical speed {s['rms_vertical_speed']:.3f} m/s; "
                   f"estimator bandwidth {site['estimator_bandwidth_hz']:.1f} Hz; floor {site['floor_db_re_direct']:.1f} dB per delay bin re the whole channel; "
                   f"{site['receivers']} receivers, {site['duration_s']:.0f} s", "",
-                  "| arrival | quantity | measured | model A | | model B / other | |", "| --- | --- | --- | --- | --- | --- | --- |"]
+                  "| arrival | quantity | measured | A | | C | | B | |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
         for g in site["groups"]:
             if not np.isfinite(g["measured"]["level_db"][0]) or g["measured"]["level_db"][0] < site["floor_db_re_direct"] + 8.0:
                 continue
@@ -380,15 +382,18 @@ def markdown(result: dict) -> str:
                 if g["n_surface"] == 0 and metric not in ("delay_ms", "level_db", "coherent", "scintillation"):
                     continue
                 meas = g["measured"][metric]
-                a = g["model"]["A"][metric]
-                other = runs[1] if len(runs) > 1 else None
-                b = g["model"][other][metric] if other else (float("nan"), float("nan"))
                 tag = " FIT" if ("wind_fit" in site and g["name"] == "S" and metric == "doppler_rms") else ""
-                lines.append(f"| {g['name']} | {heading}{tag} | {fmt(meas, digits)} | {fmt(a, digits)} | {'fit' if tag else verdict(meas, a, metric)} | "
-                             f"{(('bubbles: ' if other == 'A+bubbles' else '') + fmt(b, digits)) if other else ''} | {verdict(meas, b, metric) if other else ''} |")
+                cells = []
+                for slot in ("A", "C", "B"):
+                    key = "A+bubbles" if (slot == "A" and runs == ("A+bubbles",)) else slot
+                    if key in runs and key in g["model"]:
+                        cells += [fmt(g["model"][key][metric], digits), "fit" if (tag and slot == "A") else verdict(meas, g["model"][key][metric], metric)]
+                    else:
+                        cells += ["", ""]
+                lines.append(f"| {g['name']} | {heading}{tag} | {fmt(meas, digits)} | " + " | ".join(cells) + " |")
             cf = g["closed_form"]
             if cf:
-                lines.append(f"| {g['name']} | closed forms | | grazing {cf['grazing_deg']:.1f} deg, Gamma^2 {cf['rayleigh_gamma2']:.2f}, coherent {cf['coherent']:.3f}, "
+                lines.append(f"| {g['name']} | closed forms | | grazing {cf['grazing_deg']:.1f} deg, Gamma^2 {cf['rayleigh_gamma2']:.2f}, coherent {cf['coherent']:.3f} | | "
                              f"Doppler rms {cf['doppler_gaussian_rms']:.2f} Hz | | Lorentzian half width {cf['doppler_lorentzian_half_width']:.2f} Hz | |")
         lines.append("")
     return "\n".join(lines)
@@ -405,14 +410,14 @@ def summary(result: dict) -> dict:
                 for g in site["groups"]:
                     if g["n_surface"] == 0 or not np.isfinite(g["measured"]["level_db"][0]) or g["measured"]["level_db"][0] < site["floor_db_re_direct"] + 8.0:
                         continue
-                    if "wind_fit" in site and g["name"] == "S" and metric == "doppler_rms":
+                    if ("wind_fit" in site and g["name"] == "S" and metric == "doppler_rms") or key not in g["model"]:
                         continue
                     v = verdict(g["measured"][metric], g["model"][key][metric], metric)
                     n_in += v == "in"
                     n_out += v == "OUT"
                     if v != "-" and g["measured"][metric][0] != 0:
                         ratios.append(g["model"][key][metric][0] / g["measured"][metric][0])
-            out[f"{metric}:{key}"] = {"in": n_in, "out": n_out, "median_model_over_measured": float(np.median(ratios)) if ratios else float("nan")}
+            out[f"{metric}:{key}:{heading}" if key == "A+bubbles" else f"{metric}:{key}"] = {"in": n_in, "out": n_out, "median_model_over_measured": float(np.median(ratios)) if ratios else float("nan")}
     return out
 
 
@@ -523,6 +528,8 @@ def main(argv=None) -> int:
     ap.add_argument("--seeds", type=int, default=4)
     ap.add_argument("--receivers", type=int, default=8)
     ap.add_argument("--snapshots", type=int, default=3476, help="--synthetic only: length of the synthetic record")
+    ap.add_argument("--sites", default="purple", choices=["purple", "all"],
+                    help="all: after the Purple comparison, every other site and the cross-arrival tests (tools/channel_sites.py)")
     ap.add_argument("--recordings", default="0,1,2", help="which of the three Purple recordings (files 1-5, 6-10, 11-15) to use")
     args = ap.parse_args(argv)
     sites = []
@@ -560,6 +567,17 @@ def main(argv=None) -> int:
         Path(args.out).write_text(text + "\n")
     if args.json:
         Path(args.json).write_text(json.dumps(strip(result), indent=1))
+    if args.sites == "all" and not args.synthetic:
+        import tempfile
+        import channel_sites
+        with tempfile.TemporaryDirectory() as tmp:
+            numbers = args.json or str(Path(tmp) / "purple.json")
+            if not args.json:
+                Path(numbers).write_text(json.dumps(strip(result), indent=1))
+            extra = ["--data", str(args.data), "--purple-json", numbers]
+            if args.figures:
+                extra += ["--figures", args.figures, "--out", str(Path(args.figures) / "channel_validation_sites.md")]
+            return channel_sites.main(extra)
     return 0
 
 
