@@ -8,6 +8,13 @@ through the GPUSONAR_BELLHOP environment variable or as `bellhop.exe` on PATH.
 A call per scatterer would be far too slow, so arrivals are computed once per source
 depth on a range-depth grid and looked up; within a grid cell the delay is corrected to
 first order with the arrival angle (a plane wave at the field point).
+
+The water may change with range (`OceanEnvironment.ssp_range`, `ssp_speed_by_range`): profiles on one depth
+grid at several ranges from the source, handed to Bellhop as its own 2-D sound-speed field (SSP option 'Q',
+a `.ssp` file beside the `.env`; format from the Acoustics Toolbox's doc/RangeDepSSPFile.htm and the reader in
+Bellhop/sspMod.f90, subroutine Quad: the number of profiles, their ranges in km, then one row per depth of the
+`.env` profile with one speed per range). Bellhop interpolates linearly in depth and in range between them.
+Without those two fields nothing here changes: the same `.env`, no `.ssp`.
 """
 
 from __future__ import annotations
@@ -47,6 +54,14 @@ class OceanEnvironment:
     With bathymetry the model is 2-D: the same depth profile is used on every bearing
     from every source, so it describes a ridge or slope seen along one line, not a
     3-D seamount.
+
+    The water may change with range the same way: `ssp_range` (m from the source, the first 0, increasing) and
+    `ssp_speed_by_range` ([n_range][n_depth] m/s on the one depth grid `ssp_depth`, which starts at 0 and reaches
+    the water depth). The first profile is the LOCAL one, the water at the source (the sonar): `ssp_speed`, when
+    given too, must equal it, and `profile()` and `speed_at(depth)` return it. Between two ranges the speed is
+    linear in range (Bellhop's quadrilateral interpolation); beyond the last range the last profile holds, as a
+    bathymetry's last depth does. Like the bathymetry this is one section used on every bearing from every
+    source: water that changes with distance from the sonar, not a front lying across a map.
     """
 
     depth: float                                   # water depth, m (the deepest point with bathymetry)
@@ -61,8 +76,12 @@ class OceanEnvironment:
     sediment: str = None                           # a name in configs/sediments.yaml in place of the three bottom_* numbers
     sediment_file: str = None                      # another table for `sediment`
     sediment_name: str = field(default=None, init=False)   # the name `sediment` was resolved from
+    ssp_range: list = None                         # [range_m, ...] from the source, the first 0: the water changes with range
+    ssp_speed_by_range: list = None                # [n_range][n_depth] m/s on `ssp_depth`; row 0 is the local profile
 
     def __post_init__(self):
+        if self.ssp_range is not None or self.ssp_speed_by_range is not None:
+            self._check_sections()
         if self.sediment is None:
             return
         # The table holds ratios: speed = ratio x the water sound speed at the bottom; Bellhop's
@@ -75,6 +94,46 @@ class OceanEnvironment:
         self.bottom_speed, self.bottom_density, self.bottom_attenuation = half["speed"], half["density"], half["attenuation"]
         # The numbers now stand for the name, so that dataclasses.replace (along_profile) keeps them.
         self.sediment_name, self.sediment = self.sediment, None
+
+    def _check_sections(self) -> None:
+        """The range-dependent water holds together (ValueError otherwise); `ssp_speed` becomes the local profile."""
+        what = "OceanEnvironment: a sound speed that changes with range"
+        if self.ssp_range is None or self.ssp_speed_by_range is None or self.ssp_depth is None:
+            raise ValueError(f"{what} needs `ssp_range`, `ssp_speed_by_range` and the depth grid `ssp_depth`, all three")
+        r, z = np.asarray(self.ssp_range, dtype=float), np.asarray(self.ssp_depth, dtype=float)
+        try:
+            c = np.asarray(self.ssp_speed_by_range, dtype=float)
+        except ValueError:
+            c = np.zeros(0)                                   # rows of different lengths
+        if r.ndim != 1 or len(r) < 2:
+            raise ValueError(f"{what} needs profiles at two ranges or more (one profile is `ssp_depth`, `ssp_speed`)")
+        if r[0] != 0.0 or np.any(np.diff(r) <= 0.0) or not np.all(np.isfinite(r)):
+            raise ValueError(f"{what}: `ssp_range` must start at 0 (the profile at the source) and increase; it is {r.tolist()}")
+        if c.ndim != 2 or c.shape != (len(r), len(z)):
+            raise ValueError(f"{what}: `ssp_speed_by_range` must hold one profile per range, each with one speed per depth of `ssp_depth` "
+                             f"({len(r)} x {len(z)}); every profile is on the same depth grid")
+        if z.ndim != 1 or len(z) < 2 or z[0] != 0.0 or np.any(np.diff(z) <= 0.0):
+            raise ValueError(f"{what}: `ssp_depth` must start at 0 (the surface) and increase")
+        if z[-1] < self.depth - 1e-6:
+            raise ValueError(f"{what}: the profiles end at {z[-1]:g} m and the water is {self.depth:g} m deep (the deepest point with a "
+                             "bathymetry); they must reach the bottom, nothing is extended")
+        if not np.all(np.isfinite(c)) or np.any(c <= 0.0):
+            raise ValueError(f"{what}: every speed must be a positive number")
+        if self.ssp_speed is not None and not np.array_equal(np.asarray(self.ssp_speed, dtype=float), c[0]):
+            raise ValueError(f"{what}: `ssp_speed` is the local profile and must equal the first of `ssp_speed_by_range` (or be left out)")
+        self.ssp_speed = c[0].copy()
+
+    def section(self):
+        """(ranges [R] m, depths [Z] m, speeds [R, Z] m/s) of the range-dependent water, the depth grid cut at the
+        water depth (the speed there by the same linear interpolation Bellhop uses), or None."""
+        if self.ssp_range is None:
+            return None
+        r, z, c = np.asarray(self.ssp_range, dtype=float), np.asarray(self.ssp_depth, dtype=float), np.asarray(self.ssp_speed_by_range, dtype=float)
+        if z[-1] > self.depth + 1e-6:
+            keep = z < self.depth - 1e-9
+            at_bottom = np.array([np.interp(self.depth, z, row) for row in c])
+            z, c = np.r_[z[keep], self.depth], np.column_stack([c[:, keep], at_bottom])
+        return r, z, c
 
     def depth_at(self, range_m):
         """Water depth at a horizontal range from the source."""
@@ -93,7 +152,15 @@ class OceanEnvironment:
             z, c = np.r_[z, self.depth], np.r_[c, c[-1]]
         return z, c
 
-    def speed_at(self, depth: float) -> float:
+    def speed_at(self, depth: float, range_m: float | None = None) -> float:
+        """Sound speed at a depth: of the local profile, or, with `range_m` in water that changes with range, at that
+        range from the source (linear in depth within each profile, then linear in range; the end profiles hold
+        outside the ranges given: what Bellhop traces through)."""
+        if range_m is not None and self.ssp_range is not None:
+            r, z, c = self.section()
+            j = int(np.clip(np.searchsorted(r, range_m, side="right") - 1, 0, len(r) - 2))
+            w = float(np.clip((range_m - r[j]) / (r[j + 1] - r[j]), 0.0, 1.0))
+            return float((1.0 - w) * np.interp(depth, z, c[j]) + w * np.interp(depth, z, c[j + 1]))
         z, c = self.profile()
         return float(np.interp(depth, z, c))
 
@@ -110,7 +177,23 @@ def write_env(path: str, env: OceanEnvironment, frequency: float, source_depth: 
               receiver_depths, receiver_ranges, run_type: str = "A", n_beams: int = 0,
               angles=(-80.0, 80.0), title: str = "gpusonar") -> None:
     z, c = env.profile()
-    lines = [f"'{title}'", f"{frequency:.6f}", "1", "'CVW'", f"{len(z)}  0.0  {env.depth:.4f}"]
+    ssp_option = "CVW"
+    if env.ssp_range is not None:
+        # Water that changes with range: Bellhop's 2-D field ('Q'). The `.env` keeps the local profile on the shared
+        # depth grid (Bellhop takes the depths from it); the `.ssp` file holds one row per depth with one speed per
+        # profile range (km). Bellhop stops with an error where a ray leaves the ranges given, and traces to its box
+        # (the last line of the `.env`) on either side of the source, so the first profile is repeated before the
+        # source and the last one beyond the box: the end profiles hold outside what was given.
+        env._check_sections()
+        sr, z, cm = env.section()
+        c = cm[0]
+        ssp_option = "QVW"
+        edge = max(1.05 * float(np.max(receiver_ranges)) + 100.0, sr[-1]) + 1000.0      # beyond the box
+        cols = np.column_stack([cm[0], cm.T, cm[-1]])                                    # [n_depth, n_range + 2]
+        with open(os.path.splitext(path)[0] + ".ssp", "w", encoding="ascii") as f:
+            f.write(f"{len(sr) + 2}\n" + " ".join(f"{v / 1000.0:.6f}" for v in np.r_[-edge, sr, edge]) + "\n"
+                    + "".join(" ".join(f"{v:.4f}" for v in row) + "\n" for row in cols))
+    lines = [f"'{title}'", f"{frequency:.6f}", "1", f"'{ssp_option}'", f"{len(z)}  0.0  {env.depth:.4f}"]
     lines += [f"  {zi:.4f}  {ci:.4f}  /" for zi, ci in zip(z, c)]
     if env.bathymetry is not None:
         b = np.asarray(env.bathymetry, dtype=float)
@@ -231,9 +314,17 @@ def run_bellhop(env: OceanEnvironment, frequency: float, source_depth: float, re
 class BellhopProvider(EigenrayProvider):
     """Eigenrays from cached Bellhop arrivals.
 
-    Geometry is reduced to (horizontal range, depth): the environment is range independent
-    and the same in every direction. Depth is the NED z coordinate measured from the sea
-    surface (z = 0 is the surface).
+    Geometry is reduced to (horizontal range, depth): the environment is the same in every direction
+    from the source of each call (the sonar: its projector, or the array's reference point for the return leg
+    and for sources heard one way). It is range independent unless the ocean has a `bathymetry` or a sound
+    speed by range (`ssp_range`): both are then functions of the horizontal distance from that source, on every
+    bearing. Depth is the NED z coordinate measured from the sea surface (z = 0 is the surface).
+
+    In water that changes with range, what this class works out for itself uses: the LOCAL profile (range 0) for
+    the speed at the source (`EigenraySet.sound_speed`, which turns a delay into an apparent position) and for the
+    surface grazing angle of the rough-surface loss (Snell's law from the launch angle, exact only where the
+    speed does not change along the ray: an approximation when `wind_speed` > 0); the speed at the field point's
+    own range and depth for the first-order delay correction from the grid node to the point.
     """
 
     tier = "eigenray"
@@ -348,7 +439,7 @@ class BellhopProvider(EigenrayProvider):
             n = len(order)
             la, aa = arr.launch_angle[iz[i]][ir[i]][order], arr.arrival_angle[iz[i]][ir[i]][order]
             # First-order delay correction from the grid node to the actual point.
-            c_pt = self.env.speed_at(points[i, 2])
+            c_pt = self.env.speed_at(points[i, 2]) if self.env.ssp_range is None else self.env.speed_at(points[i, 2], rng[i])
             dr = rng[i] - self.ranges[ir[i]]
             dz = points[i, 2] - self.depths[iz[i]]
             out.delay[i, :n] = arr.delay[iz[i]][ir[i]][order] + (dr * np.cos(aa) + dz * np.sin(aa)) / c_pt

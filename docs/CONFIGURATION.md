@@ -133,7 +133,7 @@ An explicit `beamwidth_az` / `beamwidth_el` under `array` or `transmit` wins ove
 | `fidelity` | `free_field`, `image_source` (flat surface and bottom, walls), `sediment` (refraction into the bed), `eigenray` (Bellhop, external) |
 | `propagation` (`image_source`): the bottom | `bottom_z` and `bottom` come from the environment. A bottom with no description (no environment `bottom`, no `propagation.bottom`, no explicit `bottom_coefficient`) is an ERROR: no reflection coefficient is assumed (before D-104: 0.5 at every angle). `bottom_coefficient: 0.5` still gives a constant; a wall needs its `coefficient` |
 | `propagation.max_order` (`image_source`), `propagation.max_arrivals` (`eigenray`) | how many bounces / arrivals per point are kept. Given: honoured. Left out (D-105): by energy: bounce orders (arrivals) are kept while one lies within `arrival_floor_db` (20 dB) of the point's strongest, up to `max_order_cap` (8) / `max_arrivals_cap` (64). When the cap cuts something above the floor a `RuntimeWarning` says how much (once per provider; `provider.truncation`); `order_used` / `arrivals_used` and (Bellhop) `dropped_energy` say what was done. Before D-105: two bounces, the strongest eight arrivals, silently |
-| `propagation` | options of that tier (boundary depths, bottom properties, bounce order, Bellhop grid, arrivals kept, wind). For `eigenray`: `environment: {depth, ssp_depth, ssp_speed, bottom_speed, bottom_density, bottom_attenuation, bathymetry}` is the ocean (sound-speed profile, bottom type, depth) |
+| `propagation` | options of that tier (boundary depths, bottom properties, bounce order, Bellhop grid, arrivals kept, wind). For `eigenray`: `environment: {depth, ssp_depth, ssp_speed, bottom_speed, bottom_density, bottom_attenuation, bathymetry, ssp_range, ssp_speed_by_range}` is the ocean (sound-speed profile, bottom type, depth; `bathymetry` and the last two make the bed and the water functions of range from the sonar: "Water that changes with range" below) |
 | `time_spread` | time spreading of bounce paths (`sim/timespread.py`, D-62): `surface: {wind_speed}` or `{rms_height, mean_square_slope, rms_vertical_speed}`, `bottom: {rms_height, mean_square_slope}`, `taps` (6), `coherence_length` (10 m), `min_spacing`, `incoherent: false` for coherent loss only. Absent: bounce paths are fully coherent |
 | `reverberation` item `{model: volume, layer: [top, bottom], sv_db}` | a volume-scattering layer (fish, plankton, bubbles) as SST's sheet at the layer's centre: strength per unit area = volume strength × thickness |
 | `reverberation` item `{model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}` | bottom scattering from interface roughness and sediment volume (`sim/bottom.py`, D-63) in place of Lambert's law. All six are needed; none has a default |
@@ -267,6 +267,7 @@ of a list file (`environments: [...]`) there or under `configs/builds/environmen
 | `rms_wave_height_m` | m | rms surface displacement (significant height / 4), an input of its own: measured heights did not follow the wind law (`docs/PHYSICS_NOTES.md` Sec. 21). Given to `time_spread.surface.rms_height` | the Pierson-Moskowitz height of the wind |
 | `sound_speed_m_s` | m/s | sound speed of isovelocity water; beside a profile, the speed at the sonar (what a record carries) | the profile at `reference_depth_m`; else Mackenzie/Marczak from `temperature_c`, `salinity_psu`; else 1500 (`acoustics.NOMINAL_SOUND_SPEED`, the one definition) |
 | `profile` | | `{depth_m: [...], speed_m_s: [...]}`, or a family: `{family: munk[, axis_depth_m, axis_speed_m_s, points]}`, `{family: linear, surface_speed_m_s, gradient_per_s}`. Used by the `eigenray` tier | isovelocity |
+| `profiles_by_range` | | `[{range_m, depth_m: [...], speed_m_s: [...]}, ...]` in place of `profile`: water that changes with range (see "Water that changes with range" below). No value is assumed: two profiles or more, the first at `range_m: 0`, ranges increasing, every profile on the same depth grid from 0 to the bottom or deeper. Used by the `eigenray` tier | the same water at every range |
 | `temperature_c`, `salinity_psu`, `ph`, `reference_depth_m` | deg C, PSU, -, m | the water for absorption and for the sound-speed formula | 10, 35, 8, 0 (`environment.DEFAULT_*`; the resolved environment lists which were defaulted under `defaulted`) |
 | `absorption` | | `francois_garrison`, `ainslie_mccolm`, `thorp`, `none` (a scenario's own `absorption` key wins: the model is a choice of formula, the water it is evaluated in is the site's) | `francois_garrison` |
 | `shipping` | 0 to 1 | shipping activity of the ambient-noise spectrum | 0.5 |
@@ -284,7 +285,7 @@ fields (`environment.ALIASES`); one field under two spellings with different val
 | Block | Takes from the environment |
 | --- | --- |
 | `propagation`, `image_source` | `bottom_z` = water depth; `bottom` = the bottom (unless `bottom_coefficient` is given) |
-| `propagation`, `eigenray` | `environment: {depth, ssp_depth, ssp_speed or sound_speed, bottom_speed, bottom_density, bottom_attenuation or sediment}`; `frequency` = the sonar's band centre (it follows `sonar` and `sonar_overrides`); `wind_speed`; `max_range` = 1.1 x the far edge of the receive window |
+| `propagation`, `eigenray` | `environment: {depth, ssp_depth, ssp_speed or sound_speed, bottom_speed, bottom_density, bottom_attenuation or sediment}`, and with `profiles_by_range` also `ssp_range`, `ssp_speed_by_range` (`ssp_speed` is then the local profile); `frequency` = the sonar's band centre (it follows `sonar` and `sonar_overrides`); `wind_speed`; `max_range` = 1.1 x the far edge of the receive window |
 | `time_spread.surface` | `wind_speed` when the section gives no roughness of its own (`surface: true` is enough), `rms_height` = `rms_wave_height_m` |
 | each `reverberation` item | `boundary_z`: 0 for the surface laws (`chapman_harris`, `kraus_surface`, `bubble_layer_surface`), the water depth for the others (`boundary: surface` puts a Lambert item on the surface); `wind_speed` for the surface laws; `sediment` for `fluid_sediment` when the bottom is a name |
 | `receiver.ambient_noise` | `{model: wenz}` (or `true`): `wind_speed`, `shipping`. `{level_db: ...}` is a flat spectrum and takes nothing |
@@ -312,10 +313,54 @@ them. To change the site of a loaded scenario pass the change as an override
 NOT reach: positions typed in `scene` and `platform` (a seabed object at `z: 60`), the `sediment` tier's
 `sediment_speed` and `interface_z`, and a scene surface's own `spectrum`.
 
+### Water that changes with range
+
+```yaml
+environment:
+  water_depth_m: 100.0
+  profiles_by_range:                    # range_m: horizontal distance from the sonar, m
+    - {range_m: 0.0,    depth_m: [0, 15, 35, 100], speed_m_s: [1500.0, 1500.0, 1485.0, 1486.1]}     # the LOCAL profile
+    - {range_m: 1200.0, depth_m: [0, 15, 35, 100], speed_m_s: [1500.0, 1500.0, 1485.0, 1486.1]}
+    - {range_m: 1400.0, depth_m: [0, 15, 35, 100], speed_m_s: [1478.0, 1478.3, 1478.6, 1479.7]}
+  sound_speed_m_s: 1488.75              # the local profile at the sonar's depth: what the record carries
+```
+
+`profiles_by_range` gives the `eigenray` tier a sound speed that depends on range as well as depth (a front, other water
+beyond a sill, a thermocline that deepens). It goes to Bellhop as Bellhop's own 2-D field (SSP option `Q`, a `.ssp`
+file beside the `.env`; `sim/bellhop.py`), so the rays bend, speed up and slow down in it; nothing of it is
+approximated on this side.
+
+| What | Rule |
+| --- | --- |
+| What range is | The horizontal distance from the sonar, whatever the bearing: the provider's 2-D section starts at the source of each eigenray call (the projector, the array's reference point) and is the same in every direction, exactly as `propagation.environment.bathymetry` is. The water is therefore rings about the sonar, not a front lying across a map, and it moves with a moving vehicle. A target at 2.6 km on any bearing is behind a front at 1.3 km |
+| The local profile | The first profile, at `range_m: 0`: the water at the sonar, the one a cast from the vehicle gives. `environment.profile` in the resolved environment, `ssp_depth` and `ssp_speed` of the ocean, and every "the sound speed" below are this one |
+| Between and beyond | Between two profiles the speed at each depth is linear in range (Bellhop's quadrilateral interpolation; linear in depth between grid depths). Two profiles with the same speeds make a stretch of unchanged water; the width of a front is the distance between the two profiles either side of it. Beyond the last range the last profile holds (as a bathymetry's last depth does) |
+| Errors (no value is filled in) | fewer than two profiles; first range not 0; ranges not increasing; a profile on another depth grid than the first; a grid that does not start at 0 or does not reach `water_depth_m` (and, with a bathymetry or reverberation over relief, the deepest point of the bed); depths and speeds of different lengths; a speed outside 1300 to 1700 m/s; a key other than `range_m`, `depth_m`, `speed_m_s`; `profile` beside it; `sound_speed_m_s` outside the local profile |
+| With `base` | a child's `profile` or `profiles_by_range` replaces the parent's water, whichever of the two the parent used |
+
+What every other user of "the" sound speed does when the profile varies with range:
+
+| User | Uses | Why, and what it costs |
+| --- | --- | --- |
+| The record (`environment.sound_speed`), and with it the chain | `sound_speed_m_s`; left out, the local profile at `reference_depth_m`. Set it to the local profile at the sonar's depth | what the vehicle would measure. The record's fields are unchanged: one speed, no profile. A chain is told nothing else unless its own configuration is (`chain.elevation.ssp`) |
+| Apparent positions of the eigenrays (delay x speed along the launch direction) | the local profile at the source's depth | the kernel works with straight lines at one speed; delay and angle at the array are Bellhop's and are kept exactly |
+| Delay correction from a Bellhop grid node to the field point | the speed at the point's own range and depth | first order in the offset from the node |
+| Absorption | the environment's one water (`temperature_c`, `salinity_psu`, `reference_depth_m`, `ph`), over the path length taken as delay x the local speed | the profiles carry speeds, not temperatures; a 1 % error in path length is 1 % of the absorption in dB (0.02 dB of the 1.7 dB two-way at 2.6 km and 5 kHz) |
+| Rough-surface loss of the eigenrays (`propagation.wind_speed` > 0) | the surface grazing angle by Snell's law from the launch angle through the LOCAL profile | not valid where the speed changes along the ray: at grazing angles of a few degrees a 1 % change of speed moves the angle by degrees. The shipped scenarios reflect the eigenrays from a flat surface (`propagation.wind_speed: 0` with its override) for that reason |
+| `time_spread` (speeds at the surface and the bottom), reverberation strength laws, `reverb_specular`, the basin tail, noise coherence, `sediment` named bottoms (speed ratio x the bottom-water speed) | the local values | these are properties of a boundary patch or of the array's own water; the patch's water is up to 1.5 % off in the shipped scenarios |
+| Reverberation's paths, one-way sources, the direct arrival | Bellhop through the 2-D field (they ask the same provider) | |
+| `fidelity: image_source`, `free_field`, `sediment` | the environment's one sound speed everywhere, with a warning that the change with range is NOT simulated | these tiers have no profile at all |
+| The depth planner (`gpusonar.depthplan`) | the local profile at every range; the plan's `method` and `profile_rests_on` say so | the planner is range independent |
+
 Shipped environments (`configs/environments/`, all illustrative): `coastal_12c` (12 deg C, 35 PSU, nominal
 1500 m/s), `coastal_12c_sand` and `coastal_12c_bellhop_sand` (the two illustrative sands of the shipped scenarios,
 kept apart by name), `shelf_100m_sand_12c` (the build layer's `shelf_100m_sand` with that water: the 12 km site),
 `coastal_10c`, `pool_20c_fresh`, `tank_20c_1480`.
+
+Scenarios with water that changes with range (`configs/scenarios/ssp_*`, all illustrative; `tools/ssp_range_study.py` runs each against its own local profile everywhere,
+`docs/figures/ssp_range_study.md`): `ssp_front_static_trial_2row` (a front 1.2 to 1.4 km from the two-row static array, target at 2.6 km),
+`ssp_thermocline_static_trial_3row` (the mixed layer 15 m thick at the three-row static array and 45 m at 3 km), `ssp_front_testauv_trial_1row`
+(a front 200 to 300 m from the test AUV, target at 500 m).
 
 ## Units and conventions
 

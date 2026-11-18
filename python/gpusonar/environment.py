@@ -67,6 +67,9 @@ FIELDS = {
     "bubble_model": ("str", "", False, "wind law for the loss at each surface bounce: apl_1994 (sim/surface.py), or null for none", "", "null: no bubble loss"),
     "sound_speed_m_s": ("num", "m/s", False, "sound speed of isovelocity water", "CTD", "1500"),
     "profile": ("map", "", False, "{depth_m: [...], speed_m_s: [...]}: a sound-speed profile. The factor then comes from Bellhop (GPUSONAR_BELLHOP) and needs water_depth_m", "SVP cast / climatology", "leave it out: isovelocity"),
+    "profiles_by_range": ("list of maps", "", False, "[{range_m, depth_m: [...], speed_m_s: [...]}, ...] in place of `profile`: water that changes with horizontal distance from the sonar, the same on every "
+                          "bearing (Bellhop's 2-D sound-speed field). The first is at range_m 0: the LOCAL profile, the one the vehicle measures; ranges increase; every profile is on the same "
+                          "depth grid, from 0 to the bottom or deeper. Linear in range between two profiles; the last holds beyond its range", "SVP casts along the line / an ocean model", "leave it out: the same water everywhere"),
     "temperature_c": ("num", "deg C", False, "water temperature: absorption, and the sound speed when none is given", "CTD", "10 for absorption (flagged in `defaulted`)"),
     "salinity_psu": ("num", "PSU", False, "salinity: absorption, sound speed; under 5 is fresh water", "CTD", "35"),
     "ph": ("num", "", False, "acidity, for the boric-acid term of absorption", "climatology", "8"),
@@ -84,7 +87,7 @@ FIELDS = {
     "base": ("str", "", False, "the named environment this one changes (scenario layer)", "", "leave it out"),
 }
 # What a scenario may say beyond the table's words (docs/CONFIGURATION.md, "Environment"): `name` is optional inline;
-# `sound_speed_m_s` left out is the profile at reference_depth_m, else Mackenzie/Marczak from temperature_c and
+# `sound_speed_m_s` left out is the profile (the local one of `profiles_by_range`) at reference_depth_m, else Mackenzie/Marczak from temperature_c and
 # salinity_psu, else acoustics.NOMINAL_SOUND_SPEED, and beside a profile it is the speed at the sonar (what a record
 # carries); `profile` may be a named family: {family: munk[, axis_depth_m, axis_speed_m_s, points]} or
 # {family: linear, surface_speed_m_s, gradient_per_s}.
@@ -199,6 +202,12 @@ def _with_base(env: dict, _seen=()) -> dict:
         out.pop("wind_speed_m_s", None)
     if "profile" in env and "sound_speed_m_s" not in env:
         out.pop("sound_speed_m_s", None)
+    if "profiles_by_range" in env:                               # the child's water replaces the parent's, however the parent wrote it
+        if "sound_speed_m_s" not in env:
+            out.pop("sound_speed_m_s", None)
+        out.pop("profile", None)
+    elif "profile" in env:
+        out.pop("profiles_by_range", None)
     overrides = {**(parent.get("overrides") or {}), **(env.get("overrides") or {})}
     out.update(env)
     if overrides:
@@ -315,6 +324,8 @@ def problems(envs, named: bool = True) -> list:
                     out.append((f"{where}.profile", "give {depth_m: [...], speed_m_s: [...]} of equal length, depths increasing, or {family: munk | linear, ...}"))
             if depth is None:
                 out.append((f"{where}.profile", "a sound-speed profile needs water_depth_m (Bellhop needs a bottom)"))
+        if e.get("profiles_by_range") is not None:
+            out += [(f"{where}.profiles_by_range", m) for m in _profiles_by_range_problems(e["profiles_by_range"], depth, prof is not None)]
         for key in ("sound_speed_m_s", "temperature_c", "ph", "shipping"):
             if e.get(key) is not None and not _num(e[key]):
                 out.append((f"{where}.{key}", f"is {e[key]!r}; a number"))
@@ -327,11 +338,64 @@ def problems(envs, named: bool = True) -> list:
     return out
 
 
+def _profiles_by_range_problems(sections, depth, beside_profile: bool) -> list:
+    """What is wrong with a `profiles_by_range` value (messages; empty: nothing)."""
+    form = "give [{range_m, depth_m: [...], speed_m_s: [...]}, ...]: two profiles or more, the first at range_m 0, ranges increasing, all on one depth grid"
+    if beside_profile:
+        return ["give `profile` (the same water everywhere) or `profiles_by_range` (water that changes with range), not both"]
+    if not (isinstance(sections, list) and len(sections) >= 2 and all(isinstance(s, dict) for s in sections)):
+        return [form]
+    out = []
+    for i, s in enumerate(sections):
+        extra = sorted(set(s) - {"range_m", "depth_m", "speed_m_s"})
+        if extra:
+            out.append(f"profile {i}: unknown keys {extra} (range_m, depth_m, speed_m_s)")
+        z, c = s.get("depth_m"), s.get("speed_m_s")
+        if not (_num(s.get("range_m")) and isinstance(z, list) and isinstance(c, list) and len(z) >= 2 and all(_num(v) for v in z) and all(_num(v) for v in c)):
+            out.append(f"profile {i}: {form}")
+        elif len(z) != len(c):
+            out.append(f"profile {i}: {len(z)} depths and {len(c)} speeds")
+        elif any(not 1300.0 <= v <= 1700.0 for v in c):
+            out.append(f"profile {i}: a speed outside 1300 to 1700 m/s is not a speed of sound in water")
+    if out:
+        return out
+    ranges = [float(s["range_m"]) for s in sections]
+    grid = sections[0]["depth_m"]
+    if ranges[0] != 0.0:
+        out.append(f"the first profile is at range_m {ranges[0]:g}; it must be at 0: the local profile, the water at the sonar (nothing is extended towards the sonar)")
+    if any(b <= a for a, b in zip(ranges, ranges[1:])):
+        out.append(f"ranges must increase; they are {ranges}")
+    if grid[0] != 0 or any(b <= a for a, b in zip(grid, grid[1:])):
+        out.append("depth_m must start at 0 (the surface) and increase")
+    for i, s in enumerate(sections[1:], 1):
+        if not _same(s["depth_m"], grid):
+            out.append(f"profile {i} (range_m {ranges[i]:g}) is on another depth grid than profile 0: all profiles must give their speeds at the same depths (Bellhop's 2-D field has one grid)")
+    if depth is None:
+        out.append("sound-speed profiles need water_depth_m (Bellhop needs a bottom)")
+    elif grid[-1] < depth - 1e-9:
+        out.append(f"the profiles end at {grid[-1]:g} m and water_depth_m is {depth:g}: they must reach the bottom (nothing is extended)")
+    return out
+
+
 # --- derived quantities -------------------------------------------------------------------------------
+
+def profile_sections(env: dict):
+    """(range [m], depth [m], speed [n_range][n_depth] m/s) of an environment whose water changes with range
+    (`profiles_by_range`), or None."""
+    sections = env.get("profiles_by_range")
+    if sections is None:
+        return None
+    return ([float(s["range_m"]) for s in sections], [float(v) for v in sections[0]["depth_m"]],
+            [[float(v) for v in s["speed_m_s"]] for s in sections])
+
 
 def profile_arrays(env: dict):
     """(depth [m], speed [m/s]) of the environment's sound-speed profile, or None for isovelocity water. A named
-    family is sampled down to the water depth."""
+    family is sampled down to the water depth. In water that changes with range (`profiles_by_range`) this is the
+    LOCAL profile: the one at the sonar, the first of the list."""
+    if env.get("profile") is None and env.get("profiles_by_range") is not None:
+        _, z, c = profile_sections(env)
+        return z, c[0]
     prof = env.get("profile")
     if prof is None:
         return None
@@ -365,9 +429,10 @@ def resolve(env, depth: float = 0.0, strict: bool = False, where: str = "environ
     either spelling, or an already resolved mapping): the keys the simulator has always used (`sound_speed`, and
     `temperature`, `salinity`, `depth`, `ph`, `water_depth`, `frame_origin_lla` when given) plus the site
     (`site_water_depth`, `wind_speed`, `rms_wave_height`, `bottom`, `profile`, `bubble_model`, `absorption`, `shipping`, `name`), and
-    `defaulted`: the names of the values nobody gave.
+    `defaulted`: the names of the values nobody gave. Water that changes with range (`profiles_by_range`): `profile`
+    is the local profile (range 0) and `profile_by_range` = {range, speed} holds all of them on its depth grid.
 
-    Sound speed: the one given; else the profile at the reference depth; else Mackenzie/Marczak from the temperature,
+    Sound speed: the one given; else the profile (the local one) at the reference depth; else Mackenzie/Marczak from the temperature,
     salinity and reference depth (or `depth`, the caller's); else `acoustics.NOMINAL_SOUND_SPEED`."""
     if isinstance(env, dict) and env.get("_resolved"):
         return dict(env)
@@ -390,6 +455,9 @@ def resolve(env, depth: float = 0.0, strict: bool = False, where: str = "environ
     prof = profile_arrays(e)
     if prof is not None:
         out["profile"] = {"depth": prof[0], "speed": prof[1]}
+    sections = profile_sections(e)
+    if sections is not None:
+        out["profile_by_range"] = {"range": sections[0], "speed": sections[2]}
     if e.get("water_depth_m") is not None:
         # `water_depth` is what the simulated vehicle is told (a record carries it; processors read it); the site's own
         # depth, which propagation and reverberation use, is `site_water_depth`. They differ only when
@@ -498,6 +566,13 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
     bottom = env.get("bottom")
     tier = cfg.get("fidelity", "free_field")
     surface_z = 0.0
+    if env.get("profile_by_range") is not None and tier != "eigenray":
+        # Only the eigenray tier (Bellhop) traces through a profile. The other tiers have one sound speed, the
+        # environment's (the speed at the sonar), as they do beside a single `profile`; here that leaves out what the
+        # scenario was written to show, so it is said.
+        warnings.warn(f"scenario {cfg.get('name', '')!r}: the environment's water changes with range (profiles_by_range) and fidelity is {tier!r}, which has one "
+                      f"sound speed: {env['sound_speed']:g} m/s (the speed at the sonar) is used everywhere and the change with range is NOT simulated. "
+                      "Use fidelity: eigenray (Bellhop)", stacklevel=3)
 
     # Absorption model: the environment's unless the scenario names one. A model is a choice of formula, not a
     # property of the site (the water it is evaluated in is: temperature, salinity, depth, pH), so a scenario's own
@@ -527,6 +602,9 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
         if env.get("profile") is not None:
             site.take(ocean, "ssp_depth", env["profile"]["depth"], f"{where}.ssp_depth", "environment.profile")
             site.take(ocean, "ssp_speed", env["profile"]["speed"], f"{where}.ssp_speed", "environment.profile")
+            if env.get("profile_by_range") is not None:
+                site.take(ocean, "ssp_range", env["profile_by_range"]["range"], f"{where}.ssp_range", "environment.profiles_by_range")
+                site.take(ocean, "ssp_speed_by_range", env["profile_by_range"]["speed"], f"{where}.ssp_speed_by_range", "environment.profiles_by_range")
         else:
             if ocean.get("ssp_speed") is not None:
                 # a profile typed here beside the environment's one speed: that speed is the one at the sonar, and must be a speed of the profile

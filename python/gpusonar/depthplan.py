@@ -28,6 +28,16 @@ ENVIRONMENT_FIELDS = {k: environment.FIELDS[k] for k in environment.PLANNING_FIE
 NO_PATH_DB = -99.0                    # the factor is cut off here: below it there is no path to speak of (a shadow zone)
 DEFAULT_LIMITS = [5.0, 300.0]
 DEFAULT_CLEARANCE = 10.0
+LOCAL_PROFILE_NOTE = "the environment's water changes with range (profiles_by_range): planned with the LOCAL profile (range 0) at every range, as a vehicle that has only its own cast would"
+
+
+def _local_water(env: dict) -> tuple:
+    """(env, ranged): the planner is range independent. An environment whose water changes with range (`profiles_by_range`)
+    is planned with its local profile at every range; `ranged` says that this was done (it goes into the plan's words)."""
+    if env.get("profile") is None and env.get("profiles_by_range") is not None:
+        z, c = environment.profile_arrays(env)
+        return {**env, "profile": {"depth_m": z, "speed_m_s": c}}, True
+    return env, False
 
 
 def load_environments(value) -> list:
@@ -77,6 +87,7 @@ def own_depth_grid(env: dict, n: int = 100, max_depth: float | None = None) -> n
 def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, ranges, projector_below_m: float = 0.0, absorption_db_per_m: float = 0.0) -> dict:
     """The two-way factor (lloyd.summarise's figures, dB) on [own depth, target depth, range], and how it was computed."""
     own, zt, rr = (np.asarray(x, dtype=float) for x in (own_depths, target_depths, ranges))
+    env, ranged = _local_water(env)
     surface = surface_of(env)
     keys = ("peak_db", "energy_db", "narrowband_db")
     out = {k: np.zeros((own.size, zt.size, rr.size)) for k in keys}
@@ -102,7 +113,7 @@ def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, range
                     res = lloyd.summarise(h, s)
                     for k in keys:
                         out[k][i, j, m] = float(res[k])
-        return {**out, "method": "Bellhop arrivals over the profile (flat bottom, range-independent); the projector taken at the array's depth"}
+        return {**out, "method": "Bellhop arrivals over the profile (flat bottom, range-independent); the projector taken at the array's depth" + (f"; {LOCAL_PROFILE_NOTE}" if ranged else "")}
     layer = layer_of(env, absorption_db_per_m)
     ducted = layer.depth is not None
     f = lloyd.band(f_lo, f_hi, 513 if ducted else 129)
@@ -153,6 +164,7 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     (target_classes.resolve). Margins are at the LOW end of each class's target strength; `margin_high_ts_db` adds the rest."""
     from . import buildspec as bs
     threshold_db = bs.BUDGET_THRESHOLD_DB if threshold_db is None else float(threshold_db)
+    env, ranged = _local_water(env)
     wind = wind_of(env)
     eq, gains = bs.budget(d, wind)
     f_lo, f_hi = d["band_hz"]
@@ -181,7 +193,7 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     f3 = fac[statistic]
     out = {"build": d.get("build") or d.get("name"), "rows": d["rows"], "environment": {k: v for k, v in env.items()}, "wind_speed_m_s": wind, "rms_wave_height_m": surface_of(env).height(),
            "platform_max_depth_m": max_depth, "bottom_clearance_m": float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)) if env.get("water_depth_m") is not None else None,
-           "profile_rests_on": ("the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
+           "profile_rests_on": (LOCAL_PROFILE_NOTE if ranged else "the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
            "method": fac["method"], "statistic": statistic, "threshold_db": threshold_db, "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
            "projector_below_array_m": float(d["projector_m"][2]), "gains": gains, "own_depths_m": own.tolist(), "ranges_m": rr.tolist(), "target_depths_m": zt.tolist(),
            "free_field_margin_0db_target_db": free.tolist(), "classes": {}}
