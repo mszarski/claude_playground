@@ -28,6 +28,27 @@ Probes (found in the recordings by correlation; one cycle every 10 min, 80 cycle
   LFM-225, P-PRBS  period 225 / 227.3 ms, 16 s       -> 4.4 Hz snapshots              (cycles 1-13)
 All soundings: band 5 kHz about 6 kHz with a raised-cosine weight (half-power width 0.29 ms,
 first sidelobe -31 dB). No tracker: `sim/channel_sounding.py`.
+
+    tools/channel_smartocean.py bathymetry --gdb <unpacked .gdb> --out <dir>/bathymetry.json     (once; needs pyogrio)
+
+What `analyse` does, and what is stated, assumed and fitted in each part:
+
+  arrivals     the measured profile against straight rays and Bellhop (isovelocity, each cast) over
+               the charted seabed. Stated: geometry, casts. Assumed: the seabed half-space, a 1.5 m
+               tripod at R1, that the casts hold along the paths. Fitted: nothing.
+  surface      the surface reflection at R1 against the direct arrival, snapshot by snapshot:
+               coherent share, phase and amplitude variance, spectrum, half-band ratio, the
+               fluctuating profile behind it and its tail (`channel_sounding.tail_decay`), the
+               spectra at the peak and behind it. Then our model with a surface fitted to the
+               tail (two numbers: rms height from the tail's energy, rms vertical speed from its
+               frequency; the slope is NOT fitted: Cox-Munk for the wind whose Pierson-Moskowitz
+               height that is), passed through the same soundings and fits, under each decay rule.
+  spread       energy against delay to 3 s, both ranges. Nothing assumed or fitted.
+  levels       absolute level of the first arrival (94 Pa per full scale, stated) against the
+               stated source levels, Bellhop and spherical spreading.
+  noise        the stretch before each cycle's first transmission: spectrum level and slope in
+               4-8 kHz, tail statistics, `noise_fit.fit`, coherence between the hydrophones; the
+               wind speed whose Wenz-type curve (sim/noise.py) has the same level (one fitted number).
 """
 from __future__ import annotations
 
@@ -246,22 +267,49 @@ def pair_statistics(ch: cr.TimeVaryingChannel, rx: str, floor_bins: slice | None
     nu_d, s_peak = spec(slice(b2, b2 + 1))
     out["delay_spectra"] = (nu_d, s_peak, spec(slice(b2 + n_a, b2 + n_b + 1))[1], spec(fb)[1])
     # Lower and upper half of the band: a change of path length gives a phase proportional to frequency.
+    out["phase_var_lower"], out["phase_var_upper"] = half_band_phase_variances(h, b1, b2, t, ch.fs_time, ch.fs_delay)
+    out["phase_var_slow"], out["amplitude_var_slow"] = slow_variance(ph, ch.fs_time), slow_variance(amp - amp.mean(), ch.fs_time)
+    p1s = np.unwrap(np.angle(h[:, b1]))
+    out["first_phase"] = p1s - np.polyval(np.polyfit(t, p1s, 1), t)
+    return out
+
+
+def half_band_phase_variances(h: np.ndarray, b1: int, b2: int, t: np.ndarray, fs_time: float, fs_delay: float) -> tuple[float, float]:
+    """Slow phase variance of arrival b2 against arrival b1 in the lower and the upper half of the
+    band: each arrival's nine bins (raised-cosine taper) are transformed along delay and the bins
+    400 to 2000 Hz below and above the centre are summed. The taper smears the spectrum, so the
+    two halves are closer in effective frequency than their nominal centres:
+    `half_band_ratio_for_path_change` gives what a pure change of path length reads."""
     half = {}
     for name, b in (("1", b1), ("2", b2)):
         seg = h[:, b - 4:b + 5] * np.hanning(11)[1:-1][None, :]
         hf = np.fft.fft(seg, 64, axis=1)
-        f = np.fft.fftfreq(64, 1.0 / ch.fs_delay)
+        f = np.fft.fftfreq(64, 1.0 / fs_delay)
         half[name] = (hf[:, (f < -400.0) & (f > -2000.0)].sum(axis=1), hf[:, (f > 400.0) & (f < 2000.0)].sum(axis=1))
     var = []
     for i in (0, 1):
         zz = half["2"][i] / half["1"][i]
         p = np.unwrap(np.angle(zz))
-        var.append(slow_variance(p - np.polyval(np.polyfit(t, p, 1), t), ch.fs_time))
-    out["phase_var_lower"], out["phase_var_upper"] = var
-    out["phase_var_slow"], out["amplitude_var_slow"] = slow_variance(ph, ch.fs_time), slow_variance(amp - amp.mean(), ch.fs_time)
-    p1s = np.unwrap(np.angle(h[:, b1]))
-    out["first_phase"] = p1s - np.polyval(np.polyfit(t, p1s, 1), t)
-    return out
+        var.append(slow_variance(p - np.polyval(np.polyfit(t, p, 1), t), fs_time))
+    return var[0], var[1]
+
+
+def half_band_ratio_for_path_change(fs_delay: float = FS, spacing: float = 4.4e-3) -> float:
+    """Upper over lower half-band phase variance that `half_band_phase_variances` reads for an
+    arrival whose path length changes (phase proportional to frequency), computed by passing such
+    an arrival through the same estimator. (Frequency squared of the nominal half-band centres
+    would be 1.92; the estimator's own smearing makes it less.)"""
+    k = 256
+    t = np.arange(400) / 4.0
+    f = np.fft.fftfreq(k, 1.0 / fs_delay)
+    win = cs.band_window(k, fs_delay, BAND, "hann")
+    dtau = 0.05 * np.sqrt(2.0) * np.sin(2.0 * np.pi * 0.25 * t) / (2.0 * np.pi * FC)
+    b1 = 40
+    b2 = b1 + int(round(spacing * fs_delay))
+    hf = np.exp(-2j * np.pi * (f[None, :] + FC) * (b1 / fs_delay)) + np.exp(-2j * np.pi * (f[None, :] + FC) * (b2 / fs_delay + dtau[:, None]))
+    h = np.fft.ifft(hf * win[None, :], axis=1)
+    lo, up = half_band_phase_variances(h, b1, b2, t, 4.0, fs_delay)
+    return up / lo
 
 
 def slow_variance(x: np.ndarray, fs_time: float, edge: float = 1.0) -> float:
@@ -504,7 +552,8 @@ def derive(res: dict, data: Path | None) -> dict:
     wgt = 0.5 * (1.0 + np.cos(2.0 * np.pi * f / BAND))
     off = float((f * wgt).sum() / wgt.sum())
     out["band_centres_hz"] = [FC - off, FC + off]
-    out["band_ratio_expected"] = ((FC + off) / (FC - off)) ** 2
+    out["band_ratio_nominal"] = ((FC + off) / (FC - off)) ** 2
+    out["band_ratio_expected"] = {"chirp4": half_band_ratio_for_path_change(FS), "chirp40": half_band_ratio_for_path_change(FS), "prbs": half_band_ratio_for_path_change(FS / 2)}
 
     # ---- travel time between the receivers (both recorders' clocks taken as one) ---------------------------
     dt = [res[("R2", c)]["first_arrival_time_s"] - res[("R1", c)]["first_arrival_time_s"] for c in cycles if ("R1", c) in res and ("R2", c) in res]
@@ -539,21 +588,12 @@ def derive(res: dict, data: Path | None) -> dict:
                "rms_height_from_coherent_m": h_coh, "rms_height_from_phase_m": h_phase, "rms_frequency_hz": f_wave,
                "rms_vertical_speed_m_s": float(2.0 * np.pi * f_wave * h_coh),
                "source_heave_equivalent_m": float(np.sqrt(max(gamma2, 0.0)) / (k_top * (np.sin(grazing) + np.sin(np.radians(abs(surf[1]["launch_deg"])) if surf else 0.08))))}
-    # The wind whose Pierson-Moskowitz height is the fitted one, and what that wind's laws say of the rest.
-    u = float(np.sqrt(h_coh * 9.81 / (0.25 * 0.21)))
-    surface["equivalent_wind_m_s"] = u
-    surface["wind_law"] = {"mean_square_slope": acoustics.mean_square_slope(u), "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u),
-                           "rms_frequency_hz": acoustics.rms_surface_vertical_speed(u) / (2.0 * np.pi * max(acoustics.rms_wave_height(u), 1e-9))}
-    # Slope of a single long wave of the measured height and frequency (deep-water dispersion): (h K)^2, K = (2 pi f)^2 / g.
-    surface["swell_mean_square_slope"] = float((h_coh * (2.0 * np.pi * f_wave) ** 2 / 9.81) ** 2)
-    # Decay times of the two rules for the R1 surface bounce: t1, t2 from the straight unfolding of the path.
+    # t1 t2 / (t1 + t2) of the R1 surface bounce, from the straight unfolding of the path.
     st = prop["R1"]["straight"]
     t1 = st["surface"] * STATED["source_depth"] / (STATED["source_depth"] + STATED["R1"]["depth"])
     t2 = st["surface"] - t1
     t12 = t1 * t2 / (t1 + t2)
     surface["t12_ms"] = t12 * 1e3
-    for label, mss in (("wind_law", surface["wind_law"]["mean_square_slope"]), ("swell", surface["swell_mean_square_slope"])):
-        surface["decay_ms_" + label] = {"facet": mss * (1.0 + np.sin(grazing) ** 2) * t12 * 1e3, "rule_of_thumb": 2.0 * mss * t12 * 1e3}
     # The stacked fluctuating profile behind the surface arrival, and the tail fit with the pulse taken out.
     for rx, which in (("R1", "profile2"), ("R1", "profile1"), ("R2", "profile2"), ("R2", "profile1")):
         stack = np.array([p for p in get(rx, "chirp4", which) if p is not None])
@@ -607,20 +647,31 @@ def derive(res: dict, data: Path | None) -> dict:
                 fold = s[nu > 0][: (nu < 0).sum() - 1] + s[nu < 0][::-1][: (nu > 0).sum()][: len(s[nu > 0][: (nu < 0).sum() - 1])]
                 out[rx].setdefault("mean_spectrum", {})[snd] = {"nu": nu.tolist(), "s": s.tolist(), "floor": fl, "widths": {k: float(v) for k, v in w.items()},
                                                                  "peak_hz": float(nu[nu > 0][int(np.argmax(fold))])}
-    # What the simulator's tail would look like in that profile: (1 - c) / c of the steady peak, spread by each rule.
-    lag = np.arange(0, 37) / FS
-    fine = np.arange(0, 37 * 8) / (8 * FS)
-    pulse = theoretical_pulse()
-    model = {}
-    a = surface["wind_law"]["mean_square_slope"] * t12
-    dens = {"facet": timespread.facet_delay_density(fine, a, a * np.sin(grazing) ** 2), "rule_of_thumb": np.exp(-fine / (2.0 * a)) / (2.0 * a)}
-    for label, d in dens.items():
-        d = d / d.sum()
-        binned = d.reshape(37, 8).sum(axis=1)
-        conv = np.convolve(pulse / pulse.sum(), binned)[: len(pulse)] * pulse.sum()
-        model[label] = ((1.0 - coh) / coh * conv).tolist()
-    model["mirror"] = ((1.0 - coh) / coh * pulse).tolist()
-    surface["model_profiles"] = model
+    # ---- two kinds of fluctuation behind the one coherent share ------------------------------------------------
+    # The fluctuating energy around the arrival (0.5 ms before to 0.9 ms behind) is split by the fit into a part with
+    # the steady profile's own shape (unspread: a mirror that heaves, or the sender) and a tail. Each is read as a
+    # height through Gamma^2 = energy share; each has its own frequency (spectra at the peak and behind it).
+    p2 = out["R1"]["profile2"]
+    ef = p2["fluctuating_over_steady_energy"]
+    q = p2["fits"]["exponential_0.9ms"]["tail_share"]
+    ds4 = out["R1"].get("delay_spectra", {}).get("chirp4", {})
+    surface["coherent_arrival_and_tail"] = float(1.0 / (1.0 + ef))
+    f_long, f_short = float(ds4.get("peak_rms_hz", f_wave)), float(ds4.get("tail_rms_hz", f_wave))
+    h_long, h_short = float(np.sqrt((1.0 - q) * ef) / chi), float(np.sqrt(q * ef) / chi)
+    surface["unspread"] = {"energy_share": float((1.0 - q) * ef), "rms_height_m": h_long, "rms_frequency_hz": f_long,
+                           "mean_square_slope_single_wave": float((h_long * (2.0 * np.pi * f_long) ** 2 / 9.81) ** 2)}
+    surface["tail"] = {"energy_share": float(q * ef), "rms_height_m": h_short, "rms_frequency_hz": f_short, "rms_vertical_speed_m_s": float(2.0 * np.pi * f_short * h_short)}
+    # The wind whose Pierson-Moskowitz height (acoustics.rms_wave_height) is the tail's, and what that wind's laws say of the rest.
+    u = float(np.sqrt(h_short * 9.81 / (0.25 * 0.21)))
+    surface["equivalent_wind_m_s"] = u
+    mss = acoustics.mean_square_slope(u)
+    surface["wind_law"] = {"mean_square_slope": mss, "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u),
+                           "rms_frequency_hz": acoustics.rms_surface_vertical_speed(u) / (2.0 * np.pi * max(acoustics.rms_wave_height(u), 1e-9))}
+    surface["decay_ms_wind_law"] = {"facet": mss * (1.0 + np.sin(grazing) ** 2) * t12 * 1e3, "rule_of_thumb": 2.0 * mss * t12 * 1e3}
+    surface["implied_mean_square_slope"] = {name: {"facet": f["decay_time_s"] / ((1.0 + np.sin(grazing) ** 2) * t12), "rule_of_thumb": f["decay_time_s"] / (2.0 * t12)}
+                                            for name, f in p2["fits"].items() if "pulse_only" not in name}
+    surface["model"] = model_through_estimators(surface, prop["R1"]["range_m"], c_src)
+    out["surface"] = surface
     out["surface"] = surface
 
     # ---- do the two receivers see the same fluctuation? (a moving source would be common to both) ---------
@@ -817,14 +868,17 @@ def figures(out: dict, res: dict, directory: Path, prefix: str = "channel_valida
     t = (np.arange(len(p2["mean"])) - 12) / FS * 1e3
     ax.plot(t, 10 * np.log10(np.maximum(p2["steady"], 1e-9)), color="0.5", lw=0.9, label="steady part")
     ax.plot(t, 10 * np.log10(np.maximum(p2["mean"], 1e-9)), color="k", lw=1.2, label=f"fluctuating part, {p2['n']} cycles")
-    mp = sf["model_profiles"]
-    for name, col in (("mirror", "C2"), ("facet", "C0"), ("rule_of_thumb", "C3")):
-        ax.plot(t, 10 * np.log10(np.maximum(mp[name], 1e-9)), color=col, lw=0.9, ls="--", label={"mirror": "model: no tail", "facet": "model: facet", "rule_of_thumb": "model: rule of thumb"}[name])
+    ax.plot(t, 10 * np.log10(np.maximum(sf["unspread"]["energy_share"] / max(p2["fluctuating_over_steady_energy"], 1e-12) * np.array(p2["steady"])
+                                        * np.sum(np.maximum(p2["mean"], 0.0)[6:24]) / np.sum(np.array(p2["steady"])[6:24]), 1e-9)),
+            color="C2", lw=0.9, ls=":", label="unspread part of the fit")
+    for name, col in (("facet", "C0"), ("rule_of_thumb", "C3")):
+        ax.plot(t, 10 * np.log10(np.maximum(sf["model"][name]["profile"], 1e-9)), color=col, lw=1.0, ls="--",
+                label=f"our model through the same soundings: {name.replace('_', ' ')}")
     ax.set_xlim(-1, 3)
     ax.set_ylim(-45, 3)
     ax.set_xlabel("Delay after the surface reflection (ms)")
     ax.set_ylabel("dB re its steady peak")
-    ax.set_title(f"Behind the surface reflection (model: 1 - c = {1 - sf['coherent']:.3f} of it, spread with\nthe Cox-Munk slope of a {sf['equivalent_wind_m_s']:.1f} m/s wind; fitted: the height)", fontsize=9)
+    ax.set_title(f"Behind the surface reflection (model: height and speed fitted to the\ntail, slope by Cox-Munk for the {sf['equivalent_wind_m_s']:.1f} m/s wind of that height)", fontsize=9)
     ax.legend(fontsize=7)
     ax = axes[1, 0]
     ds = out["R1"].get("delay_spectra", {}).get("chirp4")
@@ -954,14 +1008,18 @@ def markdown(out: dict) -> str:
                                       ("relative amplitude variance (same)", "amplitude_var_slow", 3, 1.0), ("scintillation index of the arrival's energy", "si2", 3, 1.0),
                                       ("rms width of the fluctuation's spectrum, Hz", "doppler_rms", 3, 1.0), ("shape w90/w50 (Gaussian 2.44)", "doppler_shape", 3, 1.0)):
         lines.append(f"| {label} | " + " | ".join(fmt(out["R1"][s][key], digits, scale) for s in ("chirp4", "prbs", "chirp40")) + " |")
-    lines.append("| phase variance, upper over lower half band (frequency squared: %.2f) | " % out["band_ratio_expected"]
-                 + " | ".join(f"{out['R1'][s]['band_ratio']['value']:.2f} +- {out['R1'][s]['band_ratio']['se']:.2f}" if "band_ratio" in out["R1"][s] else "-" for s in ("chirp4", "prbs", "chirp40")) + " |")
-    lines += ["", f"Read as a surface (two fitted numbers): rms height {sf['rms_height_from_coherent_m'] * 100:.2f} cm from the coherent share at {sf['grazing_deg']:.1f} degrees "
-              f"(Gamma^2 = {sf['gamma2']:.4f}), rms frequency {sf['rms_frequency_hz']:.2f} Hz, hence rms vertical speed {sf['rms_vertical_speed_m_s'] * 100:.1f} cm/s. "
-              f"The sender hangs from a floating platform: {sf['source_heave_equivalent_m'] * 100:.1f} cm rms of heave would do the same to this arrival.", "",
-              f"A Pierson-Moskowitz sea of that height is a {sf['equivalent_wind_m_s']:.1f} m/s wind; its laws give an rms frequency of {sf['wind_law']['rms_frequency_hz']:.2f} Hz "
-              f"(measured {sf['rms_frequency_hz']:.2f}) and a mean-square slope of {sf['wind_law']['mean_square_slope']:.4f}; a single wave of the measured height and frequency has "
-              f"{sf['swell_mean_square_slope']:.1e}.", ""]
+    lines.append("| phase variance, upper over lower half band; in brackets what this estimator reads for a pure change of path length (1 for none) | "
+                 + " | ".join(f"{out['R1'][s]['band_ratio']['value']:.2f} +- {out['R1'][s]['band_ratio']['se']:.2f} ({out['band_ratio_expected'][s]:.2f})" if "band_ratio" in out["R1"][s] else "-"
+                              for s in ("chirp4", "prbs", "chirp40")) + " |")
+    un, tl = sf["unspread"], sf["tail"]
+    lines += ["", f"Coherent share of the arrival and its tail together (0.5 ms before to 0.9 ms behind): {sf['coherent_arrival_and_tail']:.4f}. The fit below splits the fluctuating energy in two:", "",
+              "| Part | share of the arrival's energy | rms frequency, Hz | as an rms surface height at %.1f degrees, cm |" % sf["grazing_deg"], "| --- | --- | --- | --- |",
+              f"| unspread (the steady profile's own shape) | {un['energy_share']:.4f} | {un['rms_frequency_hz']:.2f} | {un['rms_height_m'] * 100:.2f} |",
+              f"| tail | {tl['energy_share']:.4f} | {tl['rms_frequency_hz']:.2f} | {tl['rms_height_m'] * 100:.2f} |", "",
+              f"The sender hangs from a floating platform: {sf['source_heave_equivalent_m'] * 100:.1f} cm rms of heave would do to the peak what the unspread part does. "
+              f"A single wave of the unspread part's height and frequency has a mean-square slope of {un['mean_square_slope_single_wave']:.1e}: no tail from it under either rule.", "",
+              f"A Pierson-Moskowitz sea of the tail's height is a {sf['equivalent_wind_m_s']:.1f} m/s wind; that wind's laws give an rms frequency of {sf['wind_law']['rms_frequency_hz']:.2f} Hz "
+              f"(measured behind the arrival: {tl['rms_frequency_hz']:.2f}) and a Cox-Munk mean-square slope of {sf['wind_law']['mean_square_slope']:.4f}.", ""]
     p2 = out["R1"]["profile2"]
     lines += ["### The tail behind it", "",
               f"Fluctuating intensity around the arrival, mean of {p2['n']} cycles, fitted as (steady profile) x a + (pulse convolved with a tail of mean excess delay T) x b:", "",
@@ -974,8 +1032,18 @@ def markdown(out: dict) -> str:
     q = p2["quarters"]
     lines += ["", "Four quarters of the cycles, 0.9 ms window: exponential T = " + ", ".join(f"{x['decay_time_s'] * 1e3:.2f}" for x in q["exponential"]) + " ms; facet shape T = "
               + ", ".join(f"{x['decay_time_s'] * 1e3:.2f}" for x in q["facet_shape"]) + " ms.", "",
-              f"The two rules for this bounce (t1 t2 / (t1 + t2) = {sf['t12_ms']:.1f} ms), with the Cox-Munk slope of the {sf['equivalent_wind_m_s']:.1f} m/s wind above: facet "
-              f"{sf['decay_ms_wind_law']['facet']:.2f} ms, rule of thumb {sf['decay_ms_wind_law']['rule_of_thumb']:.2f} ms. The slope is not measured.", ""]
+              f"The two rules for this bounce (t1 t2 / (t1 + t2) = {sf['t12_ms']:.1f} ms) with that slope: facet {sf['decay_ms_wind_law']['facet']:.2f} ms, rule of thumb "
+              f"{sf['decay_ms_wind_law']['rule_of_thumb']:.2f} ms. Our model with that surface (height and vertical speed of the tail part: two fitted numbers; slope from the wind law), "
+              "sampled like the soundings and passed through the same fit:", "",
+              "| | T read with an exponential, 0.9 ms window | with the facet shape, 0.9 ms | with an exponential, 3 ms | mean excess delay put in |", "| --- | --- | --- | --- | --- |"]
+    for rule in ("facet", "rule_of_thumb"):
+        m = sf["model"][rule]
+        lines.append(f"| model, {rule.replace('_', ' ')} | {m['exponential_0.9ms']['decay_time_s'] * 1e3:.2f} | {m['facet_shape_0.9ms']['decay_time_s'] * 1e3:.2f} | {m['exponential_3ms']['decay_time_s'] * 1e3:.2f} | {m['closed_form_ms']:.2f} |")
+    f = p2["fits"]
+    lines.append(f"| measured | {f['exponential_0.9ms']['decay_time_s'] * 1e3:.2f} | {f['facet_shape_0.9ms']['decay_time_s'] * 1e3:.2f} | {f['exponential_3ms']['decay_time_s'] * 1e3:.2f} | |")
+    ims = sf["implied_mean_square_slope"]
+    lines += ["", "Read the other way, the measured T is a mean-square slope of " + "; ".join(
+        f"{v['facet']:.4f} (facet) or {v['rule_of_thumb']:.4f} (rule of thumb) from the {k.replace('_', ' ')} fit" for k, v in ims.items() if k in ("exponential_0.9ms", "exponential_3ms")) + ".", ""]
     ds = out["R1"].get("delay_spectra", {})
     if ds:
         lines += ["| Fluctuation over time (floor removed) | rms frequency at the peak, Hz | 0.4-0.9 ms behind, Hz | share above 0.5 Hz at the peak | behind |", "| --- | --- | --- | --- | --- |"]
@@ -1046,6 +1114,78 @@ def levels(out: dict) -> dict:
     return lv
 
 
+def model_through_estimators(surface: dict, range_m: float, sound_speed: float, n_time: int = 1600, seed: int = 3) -> dict:
+    """Our time spreading for the R1 geometry (direct and surface-reflected straight rays; surface
+    of the rms height and vertical speed fitted to the tail, slope of the equivalent wind's Cox-Munk law),
+    sampled like the 4 Hz soundings and passed through the same estimators, for each decay rule:
+    what the tail fit reads when the model is the truth."""
+    from gpusonar.sim import timespread
+    from gpusonar.sim.propagation import ImageSourceProvider
+    grid = np.geomspace(0.02e-3, 4e-3, 90)
+    sin2 = float(np.sin(np.radians(surface["grazing_deg"])) ** 2)
+
+    def facet_shape(lag, t):
+        a = t / (1.0 + sin2)
+        return timespread.facet_delay_density(lag, a, a * sin2)
+    out = {}
+    for rule in ("facet", "rule_of_thumb"):
+        cfg = {"surface": {"rms_height": surface["tail"]["rms_height_m"], "mean_square_slope": surface["wind_law"]["mean_square_slope"],
+                           "rms_vertical_speed": surface["tail"]["rms_vertical_speed_m_s"]},
+               "decay_time": rule, "taps": 24, "doppler_lines": 48, "seed": seed}
+        prov = timespread.wrap(ImageSourceProvider(sound_speed, surface_z=0.0, bottom_z=None, max_order=1), cfg, frequency=FC)
+        k = 256
+        ch = cr.model_channel(prov, [0.0, 0.0, STATED["source_depth"]], np.array([[range_m, 0.0, STATED["R1"]["depth"]]]), n_time=n_time, fs_time=4.0, fs_delay=FS,
+                              n_delay=k, fc=FC, bandwidth=FS, lead=LEAD)
+        h = np.fft.ifft(np.fft.fft(ch.h[:, 0, :], axis=1) * cs.band_window(k, FS, BAND, "hann")[None, :], axis=1)
+        rng = np.random.default_rng(seed)
+        h = h + 10.0 ** (-38.0 / 20.0) * np.abs(h).max() / np.sqrt(2.0) * (rng.standard_normal(h.shape) + 1j * rng.standard_normal(h.shape))   # the soundings' floor
+        st = pair_statistics(as_channel(h, 4.0), "R1")
+        y, steady, pulse = np.maximum(st["profile2"], 0.0), st["steady2"], theoretical_pulse()
+        fit_e = cs.tail_decay(y[6:24], pulse[6:24], FS, steady=steady[6:24], decay_grid=grid)
+        fit_f = cs.tail_decay(y[6:24], pulse[6:24], FS, steady=steady[6:24], decay_grid=grid, density=facet_shape)
+        fit_e3 = cs.tail_decay(y[6:], pulse[6:], FS, steady=steady[6:], decay_grid=grid)
+        out[rule] = {"coherent": st["coherent"], "phase_var": st["phase_var_slow"], "amplitude_var": st["amplitude_var_slow"], "doppler_rms": st["doppler"]["rms"],
+                     "exponential_0.9ms": fit_e, "facet_shape_0.9ms": fit_f, "exponential_3ms": fit_e3, "profile": y.tolist(),
+                     "closed_form_ms": surface["decay_ms_wind_law"][rule]}
+    return out
+
+
+def stage_bathymetry(args) -> int:
+    """bathymetry.json (depth every 10 m along the lines from the sender to R1 and R2) from the
+    dataset's file geodatabase, unpacked at `args.gdb`. Needs pyogrio, pyproj, shapely and scipy
+    (not dependencies of the suite: use a virtual environment). Layers read: dybdekurve (depth
+    contours), dybdepunkt and grunne (soundings), kystkontur (coastline, depth 0)."""
+    import pyproj
+    import shapely
+    from pyogrio.raw import read
+    from scipy.interpolate import griddata
+    tr = pyproj.Transformer.from_crs(4326, 25832, always_xy=True)
+    xy = {k: tr.transform(v[1], v[0]) for k, v in cs.SODAC_POSITIONS.items()}
+    xs, ys = [v[0] for v in xy.values()], [v[1] for v in xy.values()]
+    bbox = (min(xs) - 400, min(ys) - 400, max(xs) + 400, max(ys) + 400)
+    pts = []
+    for layer in ("dybdekurve", "dybdepunkt", "grunne", "kystkontur"):
+        meta, _, geom, fields = read(args.gdb, layer=layer, bbox=bbox)
+        names = list(meta["fields"])
+        for i in range(len(geom) if geom is not None else 0):
+            depth = 0.0 if layer == "kystkontur" else float(fields[names.index("dybde")][i])
+            if np.isfinite(depth):
+                pts += [(p[0], p[1], depth) for p in shapely.get_coordinates(shapely.from_wkb(geom[i]))]
+    pts = np.array(pts)
+    out = {"source": "Kartverket Sjokart - Dybdedata (the dataset's Basisdata_46_Vestland_25832_Dybdedata_FGDB): contours, soundings and coastline within 400 m "
+                     "of the instruments, linear interpolation every 10 m along the lines from the sender to each hydrophone"}
+    for rx in ("R1", "R2"):
+        a, b = np.array(xy["TX"]), np.array(xy[rx])
+        length = float(np.hypot(*(b - a)))
+        s = np.linspace(-30.0, length + 30.0, int((length + 60.0) / 10.0) + 1)
+        d = griddata(pts[:, :2], pts[:, 2], a[None] + (s[:, None] / length) * (b - a)[None], method="linear")
+        out[rx] = {"range": s.tolist(), "depth": [None if not np.isfinite(v) else round(float(v), 1) for v in d], "length": length}
+        print(rx, f"{length:.1f} m; depth at the sender {np.interp(0.0, s, d):.1f} m, at the hydrophone {np.interp(length, s, d):.1f} m")
+    Path(args.out).write_text(json.dumps(out))
+    print("wrote", args.out)
+    return 0
+
+
 def stage_analyse(args) -> int:
     cache = Path(args.cache)
     res = collect(cache)
@@ -1078,7 +1218,13 @@ def main(argv=None) -> int:
     a.add_argument("--figures", default=None)
     a.add_argument("--out", default=None)
     a.set_defaults(func=stage_analyse)
+    a = sub.add_parser("bathymetry", help="the unpacked depth geodatabase -> bathymetry.json (needs pyogrio, pyproj, shapely)")
+    a.add_argument("--gdb", required=True, help="the .gdb directory")
+    a.add_argument("--out", required=True)
+    a.set_defaults(func=stage_bathymetry)
     args = ap.parse_args(argv)
+    if args.stage == "bathymetry":
+        return args.func(args)
     if data_dir() is None and not (Path(args.cache) / "bb" / "meta.json").exists():
         print("GPUSONAR_SMARTOCEAN is not set to a directory with the dataset (and the cache has no recordings)", file=sys.stderr)
         return 2

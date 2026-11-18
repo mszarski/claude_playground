@@ -237,9 +237,136 @@ def test_load_ctd_splits_casts_and_skips_air(tmp_path):
     assert casts[1]["speed"][0] - c["speed"][0] == pytest.approx(2.0, abs=0.01)
 
 
-# -- the dataset itself (skipped without it) -----------------------------------------------------------
+def test_tail_decay_tells_the_facet_shape_from_an_exponential():
+    """The facet density at a low grazing angle (a sharp start and a long tail) is recovered with
+    its own shape, and fits worse as an exponential of any mean."""
+    from gpusonar.sim import timespread
+    k, os_ = 60, 8
+    win = cs.band_window(128, FS, BAND, "hann")
+    pulse = (np.abs(np.fft.ifft(win * np.exp(-2j * np.pi * np.fft.fftfreq(128) * 12))) ** 2)[:k]
+    sin2 = np.sin(np.radians(13.0)) ** 2
+    t_true = 0.6e-3
+
+    def facet(lag, t):
+        a = t / (1.0 + sin2)
+        return timespread.facet_delay_density(lag, a, a * sin2)
+    fine = (np.arange(k * os_) + 0.5) / (os_ * FS)
+    dens = facet(fine, t_true).reshape(k, os_).sum(axis=1)
+    y = 0.4 * pulse / pulse.sum() + 0.6 * np.convolve(pulse / pulse.sum(), dens / dens.sum())[:k]
+    grid = np.geomspace(0.05e-3, 3e-3, 60)
+    as_facet = cs.tail_decay(y, pulse, FS, decay_grid=grid, density=facet)
+    as_exp = cs.tail_decay(y, pulse, FS, decay_grid=grid)
+    assert as_facet["decay_time_s"] == pytest.approx(t_true, rel=0.1)
+    assert as_facet["tail_share"] == pytest.approx(0.6, abs=0.05)
+    assert as_facet["misfit"] < 0.2 * as_exp["misfit"]
+
+
+def test_tail_decay_steady_term_absorbs_modulated_echoes():
+    """An arrival followed by a weaker echo, both modulated alike (a heaving mirror): the
+    fluctuating profile is the steady profile times a constant. Fitted with the pulse alone it
+    looks like a tail; with the steady profile as the unspread term it does not."""
+    k = 60
+    win = cs.band_window(128, FS, BAND, "hann")
+    f = np.fft.fftfreq(128)
+    pulse = (np.abs(np.fft.ifft(win * np.exp(-2j * np.pi * f * 12))) ** 2)[:k]
+    steady = (np.abs(np.fft.ifft(win * (np.exp(-2j * np.pi * f * 12) + 0.4 * np.exp(-2j * np.pi * f * 18.5)))) ** 2)[:k]
+    y = 0.02 * steady + 1e-7
+    grid = np.geomspace(0.05e-3, 3e-3, 60)
+    alone = cs.tail_decay(y, pulse, FS, decay_grid=grid)
+    with_steady = cs.tail_decay(y, pulse, FS, decay_grid=grid, steady=steady)
+    assert alone["resolved"] and alone["tail_share"] > 0.1
+    assert with_steady["tail_share"] < 0.02
+
+
+# -- the SODAC tool's own estimators ------------------------------------------------------------------------
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+
+
+def test_tool_slow_variance_removes_the_white_part():
+    import channel_smartocean as tool
+    rng = np.random.default_rng(0)
+    t = np.arange(4000) / 4.0
+    x = 0.1 * np.sqrt(2) * np.sin(2 * np.pi * 0.3 * t) + 0.2 * rng.standard_normal(len(t))
+    assert tool.slow_variance(x, 4.0) == pytest.approx(0.01, rel=0.15)        # plain variance would be 0.05
+    assert np.var(x) > 0.04
+
+
+def test_tool_schroeder_times_of_an_exponential_decay():
+    import channel_smartocean as tool
+    n = 36000
+    t = (np.arange(n) - tool.LEAD_BINS) / tool.FS
+    p = np.where(t >= 0, np.exp(-t / 0.1), 0.0) + 1e-9
+    got = tool.schroeder(p)
+    assert got["t10"] == pytest.approx(0.1 * np.log(10), rel=0.03)
+    assert got["t20"] == pytest.approx(0.1 * np.log(100), rel=0.03)
+    assert got["rms_spread_s"] == pytest.approx(0.1, rel=0.03)
+    assert got["first_10ms_share"] == pytest.approx(1 - np.exp(-0.1), rel=0.05)
+
+
+def test_tool_noise_statistics_level_and_tail_of_white_gaussian_noise():
+    import channel_smartocean as tool
+    rng = np.random.default_rng(1)
+    # A real pressure of one-sided density N0 Pa^2/Hz over the band has the complex envelope of variance 2 N0 fs.
+    n0 = 3e-9
+    x = np.sqrt(n0 * tool.FS) * (rng.standard_normal(60000) + 1j * rng.standard_normal(60000))
+    got = tool.noise_statistics(x)
+    band = (got["frequency"] > 4000) & (got["frequency"] < 8000)
+    assert 10 * np.log10(got["psd"][band].mean() / n0) == pytest.approx(0.0, abs=0.3)
+    assert got["var_log"] == pytest.approx(np.pi ** 2 / 24, abs=0.03)
+    assert got["q_ratio"] == pytest.approx(np.sqrt(np.log(2000) / np.log(2)), rel=0.08)
+
+
+def test_tool_pair_statistics_on_a_known_pair():
+    """Two arrivals 4.4 ms apart; the second has a slow phase modulation of known variance (a
+    heaving mirror) and a scattered tail. Recovered: the spacing, the level, the phase variance,
+    the coherent share, the frequency-squared ratio of the half bands, and no amplitude variance
+    beyond the tail's."""
+    import channel_smartocean as tool
+    rng = np.random.default_rng(2)
+    n_t, k = 1600, 720
+    t = np.arange(n_t) / 4.0
+    f = np.fft.fftfreq(k, 1 / tool.FS)
+    win = cs.band_window(k, tool.FS, tool.BAND, "hann")
+    zeta = 0.02 * np.sqrt(2) * np.sin(2 * np.pi * 0.25 * t + 0.3)                   # s of path change, in units giving 0.1 rad rms at fc
+    dtau = 0.1 * np.sqrt(2) * np.sin(2 * np.pi * 0.25 * t + 0.3) / (2 * np.pi * tool.FC)
+    d1, d2 = 60 / tool.FS, 60 / tool.FS + 4.4e-3
+    hf = np.exp(-2j * np.pi * (f[None, :] + tool.FC) * d1) * np.ones((n_t, 1))
+    hf = hf + 0.8 * np.exp(-2j * np.pi * (f[None, :] + tool.FC) * (d2 + dtau[:, None]))
+    h = np.fft.ifft(hf * win[None, :], axis=1)
+    h += 1e-3 * (rng.standard_normal(h.shape) + 1j * rng.standard_normal(h.shape))
+    got = tool.pair_statistics(tool.as_channel(h, 4.0), "R1")
+    assert got["delay_ms"] == pytest.approx(4.4, abs=0.02)
+    assert got["level2_db"] == pytest.approx(20 * np.log10(0.8), abs=0.2)
+    assert got["phase_var_slow"] == pytest.approx(0.01, rel=0.1)
+    assert got["amplitude_var_slow"] < 0.001
+    assert got["coherent"] == pytest.approx(np.exp(-0.01), abs=0.003)
+    assert got["doppler"]["rms"] == pytest.approx(0.25, abs=0.05)
+    # Half bands: a path-length change reads more in the upper half, by the estimator's own
+    # calibration (less than the nominal frequency-squared 1.92 because the delay taper smears the
+    # spectrum); a modulation that is the same phase at every frequency reads 1.
+    want = tool.half_band_ratio_for_path_change(tool.FS)
+    assert 1.2 < want < 1.92
+    assert got["phase_var_upper"] / got["phase_var_lower"] == pytest.approx(want, rel=0.05)
+    flat = np.exp(-2j * np.pi * (f[None, :] + tool.FC) * d1) * np.ones((n_t, 1)) \
+        + 0.8 * np.exp(-2j * np.pi * (f[None, :] + tool.FC) * d2) * np.exp(-2j * np.pi * tool.FC * dtau)[:, None]
+    got_flat = tool.pair_statistics(tool.as_channel(np.fft.ifft(flat * win[None, :], axis=1), 4.0), "R1")
+    assert got_flat["phase_var_upper"] / got_flat["phase_var_lower"] == pytest.approx(1.0, abs=0.02)
+    del zeta
+
+
+def test_tool_straight_rays_and_pulse():
+    import channel_smartocean as tool
+    s = tool.straight_rays("R1", 273.5, 1494.6)
+    assert s["difference_ms"] == pytest.approx((np.hypot(273.5, 63.0) - np.hypot(273.5, 23.0)) / 1494.6 * 1e3)
+    assert s["grazing_deg"] == pytest.approx(np.degrees(np.arctan2(63.0, 273.5)))
+    p = tool.theoretical_pulse()
+    assert np.argmax(p) == 12 and p[12] == 1.0
+    half = np.flatnonzero(p > 0.5)
+    assert (half[-1] - half[0] + 1) / tool.FS == pytest.approx(1.44 / tool.BAND, abs=1.5 / tool.FS)
+
+
+# -- the dataset itself (skipped without it) -----------------------------------------------------------
 
 
 def _dataset():
