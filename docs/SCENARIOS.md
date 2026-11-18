@@ -498,19 +498,22 @@ attached to it as later arrivals; one is called static.
 ![popoto_12km animation](figures/popoto_12km.gif)
 
 **What frequency and power reach 12 km.** `tools/popoto_range_study.py` and `DESIGN.md`
-section 5: with spherical spreading, a +25 dB target, a 1 s pulse and 13 dB at the
-beamformer output,
+section 5: with spherical spreading, a +25 dB target, a 1 s pulse and 15.6 dB in one row at the
+beamformer output (what the chain's own detector needs of one row for a detection probability of
+0.5 on one ping, `buildspec.detection`; 17.3 dB for 0.9; the figure was a typed 13 dB before),
 
-- the present 27.5 kHz band cannot do it (about 320 dB would be needed; absorption alone
-  is about 136 dB over the round trip), and on the same budget reaches about 2.8 km;
+- the present 27.5 kHz band cannot do it (about 322 dB would be needed; absorption alone
+  is about 136 dB over the round trip), and on the same budget reaches about 2.7 km;
 - the best frequency is **4 to 6 kHz**;
-- there, 32 hydrophones at half-wavelength spacing need **195 dB re 1 µPa at 1 m**, about
-  270 W of acoustic power from an omnidirectional projector; 16 need 198 dB (540 W),
-  64 need 192 dB (140 W).
+- there, 32 hydrophones at half-wavelength spacing need **198 dB re 1 µPa at 1 m**, about
+  501 W of acoustic power from an omnidirectional projector; 16 need 201 dB (1001 W),
+  64 need 195 dB (250 W).
 
-`popoto_long_range` is that design with 2 dB in hand: 32 hydrophones at 15 cm (4.8 m),
+`popoto_long_range` was sized on the typed 13 dB with 2 dB in hand: 32 hydrophones at 15 cm (4.8 m),
 4–6 kHz, 1 s, 197 dB (about 420 W acoustic if omnidirectional; electrical power depends on
-a projector not yet chosen). In this scenario, 100 m of isovelocity water over sand:
+a projector not yet chosen). Against the detector's own figure one row has -1.0 dB of margin at 12 km
+in free field (detection probability 0.24 on one ping), two rows +1.5 dB (0.89), three
++3.0 dB (0.99). In this scenario, 100 m of isovelocity water over sand:
 
 | Quantity | Result |
 | --- | --- |

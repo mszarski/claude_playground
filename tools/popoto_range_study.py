@@ -2,7 +2,9 @@
 """Which frequency and source level take the Popoto-board array to a given range?
 
 For a ship-sized target at `--range` (default 12 km) this works out, against frequency,
-the source level that leaves `--snr` dB (default 13) at the beamformer output:
+the source level that leaves `--snr` dB at the beamformer output of one row. The default is not
+typed: it is what the chain's own detector needs of one row's SNR on the shipped one-row face
+build for that build's design detection probability (gpusonar.buildspec.detection):
 
     SL = SNR + 2 TL - TS + NL - AG - 10 log10(T)
 
@@ -75,13 +77,21 @@ def main():
     ap.add_argument("--range", type=float, default=12000.0)
     ap.add_argument("--ts", type=float, default=25.0)
     ap.add_argument("--pulse", type=float, default=1.0)
-    ap.add_argument("--snr", type=float, default=13.0)
+    ap.add_argument("--snr", type=float, default=None, help="SNR of one row needed, dB (default: what the detector of --build needs for its design detection probability)")
+    ap.add_argument("--build", default="popoto_face_1x32", help="the build whose detector sets the default --snr")
     ap.add_argument("--depth", type=float, default=100.0)
     ap.add_argument("--aperture", type=float, default=3.0)
     ap.add_argument("--target-depth", type=float, default=4.0, help="m: the popoto_12km scenario's ship (an assumed figure)")
     args = ap.parse_args()
     f = np.geomspace(1e3, 40e3, 120)
-    out = {"range_m": args.range, "target_strength_db": args.ts, "pulse_s": args.pulse, "snr_db": args.snr,
+    snr_is = "given on the command line"
+    if args.snr is None:
+        from gpusonar import buildspec as bs
+        det = bs.detection(bs.derive(bs.load(args.build)))
+        args.snr = det["threshold_db"]
+        snr_is = (f"what the chain's detector needs of one row on `{args.build}` for a detection probability of {det['probability']:g} on one ping; {det['threshold_high_db']:.1f} dB for "
+                  f"{det['probability_high']:g}; stacked rows need less of each row")
+    out = {"range_m": args.range, "target_strength_db": args.ts, "pulse_s": args.pulse, "snr_db": args.snr, "snr_is": snr_is,
            "fixed_count": {}, "fixed_aperture": {}, "bellhop": []}
     plt.rcParams.update({"figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
                          "axes.edgecolor": MUTED, "axes.labelcolor": INK, "text.color": INK, "xtick.color": MUTED,
@@ -99,7 +109,7 @@ def main():
         a1.plot(f[i] / 1e3, sl[i], "o", color=col, ms=8, mec=SURFACE, mew=2)
         a1.annotate(f"{sl[i]:.0f} dB at {f[i] / 1e3:.1f} kHz\n({n * C / (2 * f[i]):.1f} m long)", (f[i] / 1e3, sl[i]),
                     textcoords="offset points", xytext=(6, -22), fontsize=8)
-    a1.set_title(f"Fixed hydrophone count, half-wavelength spacing: source level for {args.snr:.0f} dB at "
+    a1.set_title(f"Fixed hydrophone count, half-wavelength spacing: source level for {args.snr:.1f} dB in one row at "
                  f"{args.range / 1e3:.0f} km", loc="left", fontsize=10)
     for length, col in zip((1.5, 3.0, 6.0), (BLUE, ORANGE, AQUA)):
         n = np.maximum(np.floor(2 * length * f / C), 1.0)

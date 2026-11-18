@@ -138,8 +138,19 @@ def chain_for(rows: int, depth: float) -> dict:
     return chain
 
 
+def _span(d: dict) -> tuple:
+    """The ranges a detection covers. The chain's detector (cell_statistic: multiscale) reports ONE detection for a group of
+    arrivals: `range_m` is its energy-weighted mean, `first_range_m` its first arrival and `extent_m` what it spans; a detection
+    without those fields is a point."""
+    ext = float(d.get("extent_m") or 0.0)
+    lo = float(d["first_range_m"]) if d.get("first_range_m") is not None else float(d["range_m"]) - 0.5 * ext
+    return lo, max(lo + ext, float(d["range_m"]))
+
+
 def measure(cfg: dict, rows: int, engine: str = "cpp") -> dict:
-    """Simulate, run the chain, score the ship."""
+    """Simulate, run the chain, score the ship. A detection is the ship's when the ranges it covers (`_span`) reach the ship's
+    own to within 20 m: with many bounced arrivals merged into one detection its mean range lies behind the ship by a share of
+    its extent. A track is the ship's within 30 m of the ship or of the ranges its detection covers on that ping."""
     t0 = time.time()
     records = run_scenario(copy.deepcopy(cfg)).records
     t_sim = time.time() - t0
@@ -158,14 +169,16 @@ def measure(cfg: dict, rows: int, engine: str = "cpp") -> dict:
         pos = pos0 + vel * interval * k
         rng = np.linalg.norm(pos - own, axis=1)
         brg = np.degrees(np.arctan2(pos[:, 0] - own[0], pos[:, 1] - own[1]))
-        near = [d for d in rep["detections"] if d["snr_db"] is not None and rng.min() - 20.0 <= d["range_m"] <= rng.max() + 20.0
+        near = [d for d in rep["detections"] if d["snr_db"] is not None and _span(d)[0] <= rng.max() + 20.0 and _span(d)[1] >= rng.min() - 20.0
                 and brg.min() - 1.5 <= d["bearing_deg"] <= brg.max() + 1.5]
         best = max(near, key=lambda d: d["snr_db"]) if near else None
-        tracks = [t for t in rep["tracks"] if rng.min() - 30.0 <= t["range_m"] <= rng.max() + 30.0]
+        reach = max([_span(d)[1] for d in near], default=float(rng.max()))            # how far behind the ship its own detection extends on this ping
+        tracks = [t for t in rep["tracks"] if rng.min() - 30.0 <= t["range_m"] <= max(rng.max(), reach) + 30.0]
         if tracks and confirmed_at is None:
             confirmed_at = k + 1
         row = {"detected": best is not None, "snr_db": best["snr_db"] if best else None, "detections": len(rep["detections"]),
-               "range_error_m": (best["range_m"] - float(rng.mean())) if best else None, "bearing_error_deg": (best["bearing_deg"] - float(brg.mean())) if best else None}
+               "range_error_m": (best["range_m"] - float(rng.mean())) if best else None, "bearing_error_deg": (best["bearing_deg"] - float(brg.mean())) if best else None,
+               "first_range_error_m": (_span(best)[0] - float(rng.min())) if best else None, "extent_m": best.get("extent_m") if best else None}
         if best and rows > 1:
             row.update(elevation_deg=best.get("elevation_deg"), elevation_sigma_deg=best.get("elevation_sigma_deg"), ambiguous=best.get("elevation_ambiguous"),
                        candidates=len(best.get("elevation_alternatives_deg") or []) + (best.get("elevation_deg") is not None), depth_m=best.get("depth_m"),
@@ -175,7 +188,8 @@ def measure(cfg: dict, rows: int, engine: str = "cpp") -> dict:
     own = np.asarray(last["ownship_xyz"])
     pos = pos0 + vel * interval * (len(reports) - 1)
     rng = np.linalg.norm(pos - own, axis=1)
-    on = [t for t in last["tracks"] if rng.min() - 30.0 <= t["range_m"] <= rng.max() + 30.0]
+    far = max(float(rng.max()), reach)                                                 # the last ping's: the ship's own detection ends here
+    on = [t for t in last["tracks"] if rng.min() - 30.0 <= t["range_m"] <= far + 30.0]
     out["pings_detected"] = sum(1 for r in out["per_ping"] if r["detected"])
     out["median_snr_db"] = float(np.median([r["snr_db"] for r in out["per_ping"] if r["detected"]])) if out["pings_detected"] else None
     out["track_confirmed_at_ping"] = confirmed_at
@@ -194,7 +208,7 @@ def measure(cfg: dict, rows: int, engine: str = "cpp") -> dict:
     out["pings_with_several_possible_elevations"] = sum(1 for r in out["per_ping"] if r.get("detected") and (r.get("candidates") or 0) > 1)
     out["depth_profile_sources"] = sorted({str(d.get("depth_profile_source")) for rep in reports for d in rep["detections"] if d.get("depth_profile_source") is not None})
     out["track_kinds"] = {k: sum(1 for t in last["tracks"] if t["kind"] == k) for k in sorted({t["kind"] for t in last["tracks"]})}
-    later = [t for t in last["tracks"] if t["range_m"] > rng.max() + 30.0]
+    later = [t for t in last["tracks"] if t["range_m"] > far + 30.0]
     out["later_arrivals"] = {"tracks": len(later), "classified_multipath": sum(1 for t in later if t["kind"] == "multipath")}
     return out
 
@@ -272,6 +286,16 @@ def main(argv=None):
                   f"track at ping {res['track_confirmed_at_ping']}, on ship {[t['kind'] for t in res['track_on_ship']]}, kinds {res['track_kinds']}") + f"  ({time.time() - t0:.0f} s)", flush=True)
             if not args.no_write:
                 out_path.write_text(json.dumps(R, indent=2, default=float) + "\n")
+    # say which row counts an environment was not run with (a --merge run of some rows leaves the others out)
+    missing = {}
+    for label, by in R["cases"].items():
+        for r in ("1", "2", "3"):
+            if r not in by:
+                missing.setdefault(r, []).append(label.split(" at 12 km")[0])
+    for r, labels in sorted(missing.items()):
+        R["not_run"].append(f"{r} row{'s' if r != '1' else ''}: " + ", ".join(labels) + " (each Bellhop case takes 1 to 10 minutes here)")
+    if not args.no_write:
+        out_path.write_text(json.dumps(R, indent=2, default=float) + "\n")
     return 0
 
 

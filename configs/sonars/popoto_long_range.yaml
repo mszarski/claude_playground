@@ -15,7 +15,7 @@ transmit:
     f_start: 4.0e3
     f_stop: 6.0e3
     duration: 1.0
-    source_level_db_rms: 197.0       # dB re 1 uPa at 1 m, RMS: 13 dB at 12 km with spherical spreading, plus 2 dB (docs/DESIGN.md)
+    source_level_db_rms: 197.0       # dB re 1 uPa at 1 m, RMS: sized as 13 dB in one row at 12 km with spherical spreading, plus 2 dB. What the chain's detector needs of that SNR is not typed: docs/DESIGN.md, the 12 km design point
 
 unconfirmed:
   - transmit                     # no projector chosen; 197 dB at 5 kHz is a large, heavy source

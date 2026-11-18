@@ -52,11 +52,15 @@ def test_derived_numbers_follow_from_the_configs(built):
     assert sas["along_track_resolution_cm"] == pytest.approx(2.1)
     assert sas["range_resolution_cm"] == pytest.approx(1.875)
     assert sas["max_advance_per_ping_m"] == pytest.approx(0.544, abs=1e-4)
-    assert D["popoto_array"]["array_gain_db"] == pytest.approx(10 * np.log10(32))
+    assert D["popoto_array"]["array_gain_db"] == pytest.approx(10 * np.log10(32), abs=0.02)        # against isotropic noise: 10 log N within 0.02 dB at this pitch
     far = D["popoto_long_range"]
     assert far["centre_frequency_khz"] == pytest.approx(5.0) and far["elements"] == 32
     assert far["pitch_in_wavelengths_at_top_of_band"] <= 0.61               # 0.15 m at 6 kHz
-    assert far["_eq"].snr(12000.0) >= 13.0 > D["popoto_array"]["_eq"].snr(12000.0)
+    # 12 km: one row's SNR against what the chain's own detector needs of it (no typed threshold); the 27.5 kHz array is nowhere near
+    from gpusonar import buildspec as bs
+    need = {n: bs.detection(bs.derive(bs.load(f"popoto_face_{n}x32")))["threshold_db"] for n in (1, 3)}
+    assert need[3] < far["_eq"].snr(12000.0) < need[1] and D["popoto_array"]["_eq"].snr(12000.0) < 0.0
+    assert far["array_gain_db"] == pytest.approx(bs.directivity_db(32, 0.15, 5000.0), abs=1e-9)        # from_sonar: the array's gain against isotropic noise
 
 
 def test_twelve_km_study_matches_the_sonar_equation():

@@ -241,10 +241,12 @@ def test_performance_is_unchanged_without_an_environment_and_gains_the_surface_t
     assert {k: v for k, v in with_env.items() if k != "surface"} == plain
     ship = with_env["surface"]["classes"]["ship"]
     r = "12000.0"
-    assert ship["snr_free_field_db"][r] == pytest.approx(plain["row_snr_db"]["ship"][r] + plain["rows_detection_gain_db"])
+    assert ship["snr_free_field_db"][r] == pytest.approx(plain["row_snr_db"]["ship"][r])              # one row's SNR: the rows are in the threshold, not in the SNR
     want = float(lloyd.two_way(F_LO, F_HI, 10.0, 4.0, 12000.0, depthplan.surface_of(env), projector_below_m=d["projector_m"][2])["peak_db"])
     assert ship["factor_db"][r] == pytest.approx(want, abs=1e-3) and ship["factor_db"][r] < -30.0
-    assert ship["margin_db"][r] == pytest.approx(ship["snr_free_field_db"][r] + want - 13.0, abs=1e-3)
+    need = plain["detection"]["threshold_db"]                                                            # the build's own detector's, not a typed 13 dB
+    assert with_env["surface"]["threshold_db"] == pytest.approx(need) and need == pytest.approx(15.6, abs=0.3)
+    assert ship["margin_db"][r] == pytest.approx(ship["snr_free_field_db"][r] + want - need, abs=1e-3)
     eq, gains = bs.budget(d)
     assert float(eq.snr(12000.0)) + 25.0 == pytest.approx(ship["snr_free_field_db"][r]) and gains["wind_speed_m_s"] == 5.0
 
@@ -274,8 +276,11 @@ def test_plan_recommends_the_first_lobe_for_the_ship_and_shows_the_loss_at_ten_m
     i = int(np.argmin(np.abs(own - rec["own_depth_m"])))
     zt = np.array(ship["target_depths_used_m"])
     eq, _ = bs.budget(d)
-    want = float(lloyd.two_way(F_LO, F_HI, own[i], zt, 12000.0, depthplan.surface_of(env), n_f=129)["peak_db"].min()) + float(eq.snr(12000.0)) + 25.0 - 13.0
+    want = float(lloyd.two_way(F_LO, F_HI, own[i], zt, 12000.0, depthplan.surface_of(env), n_f=129)["peak_db"].min()) + float(eq.snr(12000.0)) + 25.0 - P["threshold_db"]
     assert at[i] == pytest.approx(want, abs=1e-3)
+    # the threshold is the three-row face's own detector's (11.6 dB of one row's SNR for a detection probability of 0.5), not a typed 13 dB at a summed map
+    assert P["threshold_db"] == pytest.approx(bs.detection(d)["threshold_db"]) == pytest.approx(11.6, abs=0.3) and P["detection"]["rows"] == 3
+    assert rec["detection_probability"] > 0.99 and ship["free_field_detection_probability"] == pytest.approx(0.99, abs=0.02)
 
 
 def test_plan_deep_targets_are_spared_the_nulls_and_two_classes_share_a_band(deep_plan):

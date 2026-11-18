@@ -110,6 +110,67 @@ def rough(engine: str) -> list:
     return rows
 
 
+def budget_gap(zo: float, zt: float, rng: float, ts: float, chain: dict, d: dict, budget_db: float, chain_db: float) -> dict:
+    """Why the chain's `snr_db` for a point in free field reads below the link budget's SNR of one row, term by term (dB,
+    negative: the chain has less). Closed forms from the budget's own models, and two measurements on simulated pings
+    that carry no detector: the noise-free echo on the chain's own map, and noise alone through an unweighted and a
+    windowed beamformer. `unexplained_db` is what is left of chain - budget after the terms.
+
+    Terms the BUDGET leaves out (the simulator has them): the sweep's taper and the absorption's slope across the band, the
+    noise spectrum's slope across the band, the row's gain against isotropic noise across the band. Terms the DETECTOR'S
+    threshold already holds (buildspec.detection): the aperture window, where the echo falls between the map's samples
+    (here the value for THIS target's place on the map; the threshold holds the mean over places)."""
+    from gpusonar import acoustics, core, flank, live, recon
+    from gpusonar.sim.noise import wenz_spectrum_db
+    from gpusonar.sonar_equation import isotropic_noise_gain_db
+    db = lambda x: float(10.0 * np.log10(x))                                           # noqa: E731
+    pulse, n, pitch, c = d["pulse_s"], d["per_row"][0], d["pitch_m"], d["sound_speed"]
+    w_cfg = d["sonar_config"]["transmit"]["waveform"]
+    alpha = float(w_cfg.get("window_alpha", 0.0))
+    slant = float(np.hypot(rng, zo - zt))
+    # the sweep's taper (a Tukey window) and the absorption frequency by frequency, through a replica that has the taper
+    t = (np.arange(4000) + 0.5) / 4000.0
+    taper = np.ones_like(t)
+    if alpha > 0:
+        edge = t < alpha / 2
+        taper[edge] = 0.5 * (1 - np.cos(2 * np.pi * t[edge] / alpha))
+        taper[::-1][edge] = taper[edge]
+    f = F_LO + (F_HI - F_LO) * t
+    a = np.array([float(acoustics.absorption(x, 12.0, 35.0, 50.0, model="ainslie_mccolm")) for x in f])
+    a0 = float(acoustics.absorption(0.5 * (F_LO + F_HI), 12.0, 35.0, 50.0, model="ainslie_mccolm"))
+    amp = taper * 10.0 ** (-(a - a0) * 2.0 * slant / 20.0)
+    terms = {"sweep_taper_db": db(np.mean(taper ** 2)),
+             "taper_and_absorption_slope_db": db(np.mean(amp * taper) ** 2 / np.mean(taper ** 2))}
+    terms["absorption_slope_across_band_db"] = terms["taper_and_absorption_slope_db"] - terms["sweep_taper_db"]
+    band = np.linspace(F_LO, F_HI, 81)
+    wind = 5.0
+    terms["noise_across_band_db"] = -(db(np.mean(10.0 ** (wenz_spectrum_db(band, wind, 0.5) / 10.0))) - float(wenz_spectrum_db(np.array([0.5 * (F_LO + F_HI)]), wind, 0.5)[0]))
+    pos = np.arange(n) * pitch
+    centre = isotropic_noise_gain_db(pos, 0.5 * (F_LO + F_HI), c)
+    terms["row_gain_across_band_db"] = db(1.0 / np.mean([10.0 ** (-isotropic_noise_gain_db(pos, x, c) / 10.0) for x in band])) - centre
+    full = live._merge(live.DEFAULTS, chain)
+    terms["aperture_window_db"] = -db(live._window_loss(n, full["window"]))
+    # where this echo falls between the map's samples: the noise-free ping on the chain's own grid against a fine one
+    quiet = run_scenario(copy.deepcopy(scenario(zo, zt, rng, False, noise=False, ts=ts))).records[0]
+    recon.prepare([quiet], backend=core.Backend.Host)
+    g = live._map_geometry(quiet, full)
+    r0 = 0.5 * quiet.environment.sound_speed * quiet.samples.start_time
+    grid = r0 + g["step"] * np.arange(int(800.0 / g["step"]))
+    near = grid[np.abs(grid - slant) < 3.0]
+    on_grid = np.abs(flank.backprojection_map(quiet, near, np.radians([-0.5, 0.0, 0.5]), window=full["window"], interp="linear", backend=core.Backend.Host).image) ** 2
+    fine = np.abs(flank.backprojection_map(quiet, slant + np.arange(-2.0, 2.0, 0.005), np.radians([0.0]), window=full["window"], interp="linear", backend=core.Backend.Host).image) ** 2
+    terms["between_samples_here_db"] = db(on_grid.max() / fine.max())
+    mean_straddle = -live.snr_loss_db(quiet, g["cell"], full["window"], full["cell_statistic"], n)["cell_db"]
+    leaves_out = ("taper_and_absorption_slope_db", "noise_across_band_db", "row_gain_across_band_db")
+    in_threshold = ("aperture_window_db", "between_samples_here_db")
+    total = sum(terms[k] for k in leaves_out + in_threshold)
+    return {"terms_db": terms, "budget_leaves_out": list(leaves_out), "budget_leaves_out_db": sum(terms[k] for k in leaves_out),
+            "in_the_detectors_threshold": list(in_threshold), "between_samples_mean_over_places_db": mean_straddle,
+            "explained_db": total, "chain_minus_budget_db": chain_db - budget_db, "unexplained_db": (chain_db - budget_db) - total,
+            "note": "the detector's threshold (buildspec.detection) holds the window and the MEAN loss between samples; this target's place costs "
+                    f"{terms['between_samples_here_db'] - mean_straddle:+.2f} dB more than the mean"}
+
+
 def through_chain(owns, zt=4.0, rng=12000.0, ts=55.0) -> dict:
     """SNR the C++ chain reports for a point at 12 km against own depth, with ambient noise at 5 m/s wind, less the SNR of the
     same point without a surface. The point is `ts` dB strong so that it is detected at every depth, nulls included; the
@@ -126,9 +187,10 @@ def through_chain(owns, zt=4.0, rng=12000.0, ts=55.0) -> dict:
         near = [d for d in rep["detections"] if d["snr_db"] is not None and abs(d["range_m"] - rng) < 30.0 and abs(d["bearing_deg"]) < 1.5]
         return max((d["snr_db"] for d in near), default=None)
 
-    free = [snr(scenario(100.0, zt, rng, False, noise=True, ts=ts, seed=s)) for s in (3, 4, 5)]
+    free = [snr(scenario(100.0, zt, rng, False, noise=True, ts=ts, seed=s)) for s in range(3, 15)]
     free_db = float(np.mean([x for x in free if x is not None])) if any(x is not None for x in free) else None
-    perf = bs.performance(bs.describe_shipped("popoto_long_range", "popoto_vehicle"), ranges=(rng,))
+    d = bs.describe_shipped("popoto_long_range", "popoto_vehicle")
+    perf = bs.performance(d, ranges=(rng,))
     budget = perf["row_snr_db"]["ship"][str(rng)] - 25.0 + ts
     rows = []
     for zo in owns:
@@ -137,8 +199,9 @@ def through_chain(owns, zt=4.0, rng=12000.0, ts=55.0) -> dict:
         rows.append({"own_depth_m": zo, "target_depth_m": zt, "range_m": rng, "chain_snr_db": got,
                      "chain_factor_db": None if got is None or free_db is None else got - free_db, "model_peak_db": float(m["peak_db"]), "model_energy_db": float(m["energy_db"])})
         print("  ", rows[-1], flush=True)
-    out = {"target_strength_db": ts, "chain_snr_free_field_db": free_db, "budget_snr_free_field_db": float(budget),
-           "chain_minus_budget_db": None if free_db is None else free_db - float(budget), "rows": rows}
+    out = {"target_strength_db": ts, "chain_snr_free_field_db": free_db, "chain_snr_free_field_pings": len(free), "chain_snr_free_field_std_db": float(np.std([x for x in free if x is not None])),
+           "budget_snr_free_field_db": float(budget), "chain_minus_budget_db": None if free_db is None else free_db - float(budget),
+           "accounting": None if free_db is None else budget_gap(100.0, zt, rng, ts, chain, d, float(budget), free_db), "rows": rows}
     print("  ", {k: v for k, v in out.items() if k != "rows"}, flush=True)
     return out
 
@@ -177,7 +240,16 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--quick", action="store_true")
     ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--only-chain", action="store_true", help="redo the through-the-chain part only and replace it in the existing JSON")
     args = ap.parse_args(argv)
+    if args.only_chain:
+        path = ROOT / "docs" / "design" / "surface_image_validation.json"
+        R = json.loads(path.read_text())
+        R["through_chain"] = through_chain([10.0, 30.0, 75.0, 150.0, 225.0, 300.0, 450.0])
+        print(json.dumps(R["through_chain"]["accounting"], indent=1))
+        if not args.no_write:
+            path.write_text(json.dumps(R, indent=2, default=float) + "\n")
+        return 0
     engines = ("cpp", "numpy")
     owns = [10.0, 75.0, 225.0, 450.0] if args.quick else [10.0, 30.0, 75.0, 150.0, 225.0, 300.0, 450.0, 600.0]
     R = {"band_hz": [F_LO, F_HI], "what": __doc__.split("\n\n")[0]}
