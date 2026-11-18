@@ -419,7 +419,7 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
   est.depth = at[b];
   const double msig = model_sigma(est.depth, g, o);
   est.sigma = std::sqrt(sigma * sigma + cell * cell / 12.0 + msig * msig);
-  est.method = multipath_surface_delay(est.depth, g) * g.bandwidth >= 2.0 ? "delay" : "ripple";
+  est.method = multipath_surface_delay(est.depth, g) * g.bandwidth >= 4.0 ? "delay" : "ripple";
   est.ambiguous = !rivals.empty();
   if (rivals.size() > 4) rivals.resize(4);
   est.alternatives = rivals;

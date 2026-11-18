@@ -47,7 +47,7 @@ namespace sonar::live {
 struct MultipathOptions {
   bool enabled = false;
   double max_depth = 500.0;            ///< m: deepest target depth searched (less when the water is shallower)
-  double min_delay_bandwidth = 1.0;    ///< shallowest depth searched: where (tau_tx + tau_rx) x bandwidth is this
+  double min_delay_bandwidth = 3.0;    ///< shallowest depth searched: where (tau_tx + tau_rx) x bandwidth is this
   double window_s = 0.25;              ///< longest two-way multipath spread searched
   double range_slack = 4.0;            ///< m: the detection's range may be this far from any one of the target's arrivals
   std::int64_t oversample = 8;         ///< samples of the beam window per 1 / bandwidth

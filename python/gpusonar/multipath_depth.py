@@ -57,7 +57,7 @@ from .lloyd import _images
 
 DEFAULTS = {
     "max_depth_m": 500.0,            # deepest target depth searched (less when the water is shallower)
-    "min_delay_bandwidth": 1.0,      # shallowest depth searched: where (tau_tx + tau_rx) x bandwidth is this
+    "min_delay_bandwidth": 3.0,      # shallowest depth searched: where (tau_tx + tau_rx) x bandwidth is this
     "window_s": 0.25,                # longest two-way multipath spread searched (depths that spread more are not searched)
     "range_slack_m": 4.0,            # the detection's range may be this far from any one of the target's arrivals
     "oversample": 8,                 # samples of the beam window per 1 / bandwidth
@@ -443,7 +443,7 @@ def estimate(y, t_rel, n_noise: int, g: Geometry, cfg: dict) -> Estimate:
     est.depth = float(at[b])
     est.sigma = float(np.sqrt(sigma**2 + cell**2 / 12.0 + model_sigma(est.depth, g, cfg) ** 2))
     # resolved: each leg's surface echo stands 1 / B clear of the direct one
-    est.method = "delay" if float(surface_delay(est.depth, g)) * g.bandwidth >= 2.0 else "ripple"
+    est.method = "delay" if float(surface_delay(est.depth, g)) * g.bandwidth >= 4.0 else "ripple"
     est.ambiguous = bool(rivals)
     est.alternatives = tuple(rivals[:4])
     return est
