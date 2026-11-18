@@ -65,7 +65,7 @@ import warnings
 
 from .. import _gpusonar as core
 from . import engine as _engine
-from . import reverb_bistatic, reverb_relief
+from . import parallel_normal, reverb_bistatic, reverb_relief
 from .bathymetry import make_bathymetry
 from .propagation import EigenrayProvider
 
@@ -241,6 +241,10 @@ SECTOR_RUN_BYTES = 64 << 20
 # well, which is how it is tested without a device; it is not faster there.
 BATCHED_ON_HOST = False
 
+# Draw the C++ generator's normal deviates on several threads (sim/parallel_normal.py). The
+# numbers and the generator's state are NumPy's own either way; False is the plain call.
+PARALLEL_DRAWS = True
+
 
 def taper_pulse(pulse: np.ndarray, n: int) -> np.ndarray:
     """The pulse with its spectrum rolled off to zero at the Nyquist frequency: unchanged
@@ -336,7 +340,12 @@ def _series_cpp(rng, coarse, density, same_in_azimuth, pulse_low, offsets, fs, n
         count = min(run, n_active - first)
         if normals is None or normals.shape[0] != count:
             normals = np.empty((count, 2, n_low))
-        rng.standard_normal(out=normals)        # the same deviates as rng.standard_normal(shape), without a new array
+        # The same deviates as rng.standard_normal(shape), into the same array every run, and
+        # drawn on the CPU threads (parallel_normal: bit for bit NumPy's numbers and state).
+        if PARALLEL_DRAWS:
+            parallel_normal.standard_normal(rng, normals)
+        else:
+            rng.standard_normal(out=normals)
         if texture is not None:
             for k in range(count):
                 normals[k] *= texture(rows[first + k])[None, :]

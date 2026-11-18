@@ -259,6 +259,19 @@ def test_doppler_bank_takes_a_backend(jammed, monkeypatch):
     assert np.array_equal(a[0].samples.array, b[0].samples.array) and a[1] == b[1] and np.array_equal(a[2], b[2])
 
 
+def test_doa_gate_says_where_it_ran(jammed):
+    """Only SBL has a device path; the conventional beamformer runs on the host whatever the backend."""
+    t = float(jammed.samples.start_time + 0.5 * jammed.samples.n_samples / jammed.samples.sample_rate)
+    grid = [float(b) for b in BEARINGS]
+    assert core.DOA_GATE_CUDA_METHODS == ("sbl",)
+    assert core.doa_gate(jammed, t, 128, grid, method="conventional")["backend"] == "host"
+    assert core.doa_gate(jammed, t, 128, grid, method="sbl")["backend"] == "host"
+    if core.cuda_available():
+        a = core.doa_gate(jammed, t, 128, grid, method="conventional", backend=core.Backend.Cuda)
+        assert a["backend"] == "host"
+        assert core.doa_gate(jammed, t, 128, grid, method="sbl", backend=core.Backend.Cuda)["backend"] == "cuda"
+
+
 # --- CUDA ----------------------------------------------------------------------------------
 
 @needs_cuda
@@ -324,3 +337,50 @@ def test_cuda_mvdr_without_loading_is_the_reference(jammed):
     ref = beam_map(core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS), **kw))
     got = beam_map(core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS), backend=core.Backend.Cuda, **kw))
     assert worst(got.data, ref.data) < 1e-3
+
+
+@needs_cuda
+@pytest.mark.parametrize("n_low,n_rows,n_channels", [(11201, 3000, 5), (44801, 400, 32)])
+def test_cuda_reverb_kernel_timing(n_low, n_rows, n_channels):
+    """Realistic sizes (the low-rate lengths of sst_pursuit and of the flank scenarios, neither a
+    product of small primes): the device against the host threads, with where the time goes."""
+    p = reverb_inputs(n_low=n_low, n_rows=n_rows, n_channels=n_channels)
+    rows = np.flatnonzero(p["density"].any(axis=1))
+    run = max(1, (64 << 20) // (16 * n_low))
+    out, seconds, profile = {}, {}, {}
+    for backend in (core.Backend.Cuda, core.Backend.Host, core.Backend.Cuda):       # the first device run warms up
+        total = np.zeros((n_channels, n_low), dtype=np.complex64)
+        core.sim_reverb_profile(reset=True)
+        t = 0.0
+        for first in range(0, len(rows), run):
+            sel = rows[first:first + run]
+            normals = np.random.default_rng(first).standard_normal((len(sel), 2, n_low))
+            t0 = time.perf_counter()
+            core.sim_reverb_accumulate(total, p["coarse"], p["density"], first, normals, p["pulse"], p["offsets"], p["fs"],
+                                       p["time0"], p["fc"], p["c"], p["n_azimuth"], p["decim"], direction=p["direction"],
+                                       doppler=p["doppler"], rows=sel, backend=backend)
+            t += time.perf_counter() - t0
+        out[backend], seconds[backend], profile[backend] = total, t, core.sim_reverb_profile(reset=True)
+    host, cuda = out[core.Backend.Host], out[core.Backend.Cuda]
+    rms = float(np.sqrt((np.abs(cuda - host) ** 2).mean() / (np.abs(host) ** 2).mean()))
+    print(f"[reverb cuda] kernel, {len(rows)} components x {n_low} samples x {n_channels} channels: host "
+          f"{seconds[core.Backend.Host]:.3f} s, cuda {seconds[core.Backend.Cuda]:.3f} s "
+          f"({seconds[core.Backend.Host] / seconds[core.Backend.Cuda]:.1f}x), rel. rms {rms:.2e}")
+    for backend in (core.Backend.Host, core.Backend.Cuda):
+        print("    " + str(backend) + ": " + ", ".join(f"{k} {v:.3f}" for k, v in profile[backend].items() if isinstance(v, float) and v > 0))
+    assert rms < 1e-4
+
+
+def test_threaded_draws_timing():
+    """Not a test of speed (machines differ): prints what the threads give on this one."""
+    from gpusonar.sim import parallel_normal as pn
+    out = np.empty(8 << 20)
+    rng = np.random.default_rng(0)
+    pn.standard_normal(rng, out)                           # warm: thread pool, measured mean
+    t0 = time.perf_counter()
+    rng.standard_normal(out=out)
+    t1 = time.perf_counter()
+    pn.standard_normal(rng, out)
+    t2 = time.perf_counter()
+    print(f"[normal] 8 388 608 deviates: plain {(t1 - t0) * 1e3:.0f} ms, on {pn.threads_available()} threads {(t2 - t1) * 1e3:.0f} ms; {pn.stats}")
+    assert pn.stats["not_lined_up"] == 0

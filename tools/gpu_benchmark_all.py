@@ -13,8 +13,9 @@ Groups (`--only a,b`):
   synthesis     the echo synthesis kernel (`core.synthesize_into`): the calls a scenario makes
                 are captured once and replayed on each backend, so path geometry is not timed
   reverb        the reverberation generator (`sim/reverb.py: add_reverberation`), replayed the
-                same way; the whole generator, and inside it the steering/summation kernel
-                (`core.sim_reverb_accumulate`, the only part with a CUDA build)
+                same way; the whole generator, and inside it the kernel (transforms, Doppler
+                shifts, steering and summation: `core.sim_reverb_accumulate`) and the
+                interpolation to the record's rate (`core.sim_reverb_finish`)
   scenarios     whole scenarios through `run_scenario(..., backend=...)`, with the time spent
                 in each stage (which of them the device runs, which stay on the host)
   imaging       backprojection: the datasets of tools/benchmark.py (sas, fls, flank)
@@ -23,7 +24,8 @@ Groups (`--only a,b`):
   detect        CFAR; sparse Bayesian bearings (`core.doa_gate`, `core.doa_passive`)
   live          the long-range chain per ping: Python and C++ engines, bearings from the map
                 and by SBL, backprojection / far-field / MVDR beamformers, one row and (when
-                the stacked-row sonar configs and the elevation chain exist) two and three
+                the stacked-row sonar configs and the elevation chain exist) two and three;
+                and the far-field and MVDR beamformers alone on one ping
   hostonly      stages with no CUDA build, with their host time
 
 All calls into the library are synchronous (results come back as host arrays), so there is no
@@ -157,8 +159,8 @@ S_RSETUP = "reverberation set-up (grids, pulse, patterns)"
 S_NOISE = "ambient noise with a spectrum (real passband)"
 S_RX = "receiver (reference, gain, ADC)"
 S_OTHER = "other (records, baseband noise draws, bookkeeping)"
-CUDA_STAGES = (S_SYNTH, S_RKERNEL)
-HOST_STAGES = (S_PAIR, S_EIGEN, S_BELLHOP, S_SPREAD, S_SCENE, S_BUILD, S_RPOWER, S_RDRAW, S_RFINISH, S_RSETUP,
+CUDA_STAGES = (S_SYNTH, S_RKERNEL, S_RFINISH)
+HOST_STAGES = (S_PAIR, S_EIGEN, S_BELLHOP, S_SPREAD, S_SCENE, S_BUILD, S_RPOWER, S_RDRAW, S_RSETUP,
                S_NOISE, S_RX, S_OTHER)
 
 
@@ -663,11 +665,17 @@ def group_reverb(b):
             def prep(backend):
                 return [(r.copy(), copy.deepcopy(rng)) for r, _, _, _, rng, _, _ in calls]
 
+            profiles = {}
+
             def run(state, backend):
                 out = []
+                if hasattr(core, "sim_reverb_profile"):
+                    core.sim_reverb_profile(reset=True)
                 for (rec, rng), (_, provider, z, mu, _, a, k) in zip(state, calls):
                     generator(rec, provider, z, mu, rng, *a, **dict(k, backend=backend))
                     out.append(rec)
+                if hasattr(core, "sim_reverb_profile"):
+                    profiles["cuda" if backend == CUDA else "host"] = core.sim_reverb_profile(reset=True)
                 return out
 
             def sizes(out, row):
@@ -686,19 +694,56 @@ def group_reverb(b):
             hs, cs = row.get("host_stages") or {}, row.get("cuda_stages") or {}
             if row["host_s"] is not None and S_RKERNEL not in hs:
                 row["note"] += "; the C++ kernel was NOT called: the NumPy generator ran (GPUSONAR_SIM_ENGINE, or a build whose C++ generator lacks components)"
-            kernel = {"group": b.group, "case": name + ": kernel", "what": "steering/summation kernel (core.sim_reverb_accumulate) inside the run above",
+            def steps(label, keys):
+                # Where the time of the last run went inside the C++ generator (core.sim_reverb_profile).
+                prof = profiles.get(label)
+                if not prof:
+                    return ""
+                return f"{label} steps: " + ", ".join(f"{k} {fmt_time(prof[k])} s" for k in keys if prof.get(k, 0.0) > 0.0)
+            detail = "; ".join(t for t in (steps("host", ("transform", "steer", "active")),
+                                           steps("cuda", ("shape", "upload", "shift", "transform", "pulse", "product", "steer", "download"))) if t)
+            kernel = {"group": b.group, "case": name + ": kernel", "what": "transforms, Doppler shifts, steering and summation (core.sim_reverb_accumulate) inside the run above",
                       "sizes": row["sizes"], "host_s": hs.get(S_RKERNEL), "cuda_s": cs.get(S_RKERNEL), "speedup": None,
-                      "agreement": row["agreement"], "note": "agreement is the whole generator's (same random numbers on both)",
+                      "agreement": row["agreement"], "note": "agreement is the whole generator's (same random numbers on both)" + ("; " + detail if detail else ""),
                       "host_error": row["host_error"], "cuda_error": row["cuda_error"], "host_runs": [], "cuda_runs": []}
             if kernel["host_s"] and kernel["cuda_s"]:
                 kernel["speedup"] = kernel["host_s"] / kernel["cuda_s"]
             b.cases.append(kernel)
+            finish = {"group": b.group, "case": name + ": interpolation", "what": "interpolation to the record's rate, window, carrier (core.sim_reverb_finish) inside the run above",
+                      "sizes": row["sizes"], "host_s": hs.get(S_RFINISH), "cuda_s": cs.get(S_RFINISH), "speedup": None,
+                      "agreement": row["agreement"], "note": "agreement is the whole generator's",
+                      "host_error": row["host_error"], "cuda_error": row["cuda_error"], "host_runs": [], "cuda_runs": []}
+            if finish["host_s"] and finish["cuda_s"]:
+                finish["speedup"] = finish["host_s"] / finish["cuda_s"]
+            b.cases.append(finish)
             if row["host_s"] is not None:
-                rest = row["host_s"] - hs.get(S_RKERNEL, 0.0)
-                parts = ", ".join(f"{label.split(' (')[0]} {fmt_time(hs[label])} s" for label in (S_RPOWER, S_RDRAW, S_RFINISH) if label in hs)
-                b.host_row("reverberation, " + name + ": everything but the kernel", "power computation, random draws, texture, interpolation (NumPy / C++ on the host)",
+                rest = row["host_s"] - hs.get(S_RKERNEL, 0.0) - hs.get(S_RFINISH, 0.0)
+                parts = ", ".join(f"{label.split(' (')[0]} {fmt_time(hs[label])} s" for label in (S_RPOWER, S_RDRAW) if label in hs)
+                if cs:
+                    parts += "; in the CUDA run: " + ", ".join(f"{label.split(' (')[0]} {fmt_time(cs[label])} s" for label in (S_RPOWER, S_RDRAW) if label in cs)
+                b.host_row("reverberation, " + name + ": power and random draws", "power computation, random draws, texture (NumPy on the host on both backends)",
                            row["sizes"], rest, note=parts)
-                log(f"    kernel: host {fmt_time(kernel['host_s'])} s, cuda {cuda_cell(kernel)}; the rest on the host {fmt_time(rest)} s ({parts})")
+                log(f"    kernel: host {fmt_time(kernel['host_s'])} s, cuda {cuda_cell(kernel)}; interpolation: host {fmt_time(finish['host_s'])} s, "
+                    f"cuda {cuda_cell(finish)}; the rest on the host {fmt_time(rest)} s ({parts})")
+                if detail:
+                    log("    " + detail)
+            if row["host_s"] is not None and getattr(core, "SIM_REVERB_ROWS", False) and not q:
+                # The host kernel as it was called before `rows`: the sectors with power searched for in every call.
+                state = prep(HOST)
+                timer.reset()
+                core.SIM_REVERB_ROWS = False
+                try:
+                    run(state, HOST)
+                finally:
+                    core.SIM_REVERB_ROWS = True
+                before = timer.snapshot()
+                seconds = (before[0] if isinstance(before, tuple) else before).get(S_RKERNEL)
+                prof = profiles.get("host") or {}
+                if seconds:
+                    b.host_row("reverberation, " + name + ": kernel without `rows`",
+                               "the host kernel called as before: every call searches the density for the sectors with power", row["sizes"],
+                               seconds, note=f"one run; of which the search {fmt_time(prof.get('active', 0.0))} s; with `rows` {fmt_time(kernel['host_s'])} s")
+                    log(f"    host kernel without rows: {fmt_time(seconds)} s (search {fmt_time(prof.get('active', 0.0))} s)")
         b.guard(name, build)
 
 
@@ -756,7 +801,7 @@ def group_scenarios(b):
                     if backend == "host":
                         on_device = sum(stages.get(k, 0.0) for k in CUDA_STAGES)
                         row["note"] = (row["note"] + "; " if row["note"] else "") + \
-                            f"{100.0 * on_device / max(total, 1e-12):.0f} % of the host time is in the two kernels with a CUDA build"
+                            f"{100.0 * on_device / max(total, 1e-12):.0f} % of the host time is in the stages with a CUDA build"
                         for k, v in stages.items():
                             totals[k] = totals.get(k, 0.0) + v
         b.guard(name, build)
@@ -862,23 +907,14 @@ def group_conditioning(b):
             raise RuntimeError("the record does not carry a sampled waveform")
         based = conditioning("flank, sampled m-sequence", "arbitrary-waveform matched filter (replica from the record's samples)", raw)
         rates = np.linspace(-8.0, 8.0, 5 if q else 17)
-        from gpusonar.processing import doppler_bank, doppler_scale
-        c = based[0].environment.sound_speed
+        from gpusonar.processing import doppler_bank
 
         def bank(recs, be):
-            out = []
-            for v in rates:
-                trial = recs[0].copy()
-                core.pulse_compress(trial, doppler_scale=doppler_scale(float(v), c), backend=be)
-                out.append(trial)
-            return out
+            best, _, peaks = doppler_bank(recs[0], rates, backend=be)
+            return [best, np.asarray(peaks, dtype=np.float32)]
         sizes = {"hypotheses": len(rates), "channels": int(based[0].samples.n_channels), "samples": int(based[0].samples.n_samples)}
-        b.case("Doppler bank, sampled m-sequence", "pulse_compress once per range-rate hypothesis (what processing.doppler_bank does), on the backend",
-               sizes, bank, lambda be: [based[0]], note="processing.doppler_bank itself passes no backend: see the host-only table")
-        b.group, saved = "hostonly", b.group
-        b.host_case("processing.doppler_bank", "the shipped Doppler bank (calls pulse_compress on the host backend only)", sizes,
-                    lambda _: doppler_bank(based[0], rates))
-        b.group = saved
+        b.case("Doppler bank, sampled m-sequence", "processing.doppler_bank: pulse_compress once per range-rate hypothesis, on the backend",
+               sizes, bank, lambda be: [based[0]], note="agreement: the best hypothesis's record and the peak of every hypothesis")
     b.guard("flank, sampled m-sequence", sampled)
 
 
@@ -940,8 +976,8 @@ def group_detect(b):
         b.case("doa_gate (sbl)", "bearings at range gates of a conditioned ping: sparse Bayesian learning", sizes,
                lambda _, be: gates("sbl", be), note="SBL options of the live chain (iterations, tolerance, sources)")
         b.group, saved = "hostonly", b.group
-        b.host_case("doa_gate (conventional)", "the conventional beamformer on the same snapshots: takes a backend argument but has no CUDA kernel",
-                    sizes, lambda _: gates("conventional", HOST))
+        b.host_case("doa_gate (conventional)", "the conventional beamformer on the same snapshots: a few small matrix products per gate, on the host "
+                    "whatever the backend (the result's \"backend\" entry says so)", sizes, lambda _: gates("conventional", HOST))
         b.group = saved
     b.guard("doa_gate", sbl)
 
@@ -958,10 +994,39 @@ def group_detect(b):
     b.guard("doa_passive", passive)
 
 
+def beamformer_cases(b):
+    """The far-field beamformers alone, on one conditioned ping of each array (1, 2, 3 rows of 32)."""
+    from gpusonar import flank
+    q = b.quick
+    sonars = list_configs("sonars")
+    for rows, sonar in ((1, "popoto_long_range"), (2, "popoto_long_range_2row"), (3, "popoto_long_range_3row")):
+        if sonar not in sonars or (q and rows > 1):
+            continue
+
+        def build(rows=rows, sonar=sonar):
+            rec = live_pings(sonar, 1, live_window(b))[0]
+            recon.prepare([rec])
+            if q:
+                samples = rec.samples                    # the quick run: the first 4096 samples of the ping
+                kind = samples.kind
+                samples.array = np.ascontiguousarray(samples.array[:, :4096])
+                samples.kind = kind
+                rec.samples = samples
+            bearings = np.radians(np.arange(-60.0, 60.25, 2.0 if q else 0.5))
+            sizes = {"rows": rows, "channels": int(rec.samples.n_channels), "samples": int(rec.samples.n_samples), "bearings": len(bearings)}
+            label = f"{rows} row{'s' if rows > 1 else ''} ({sizes['channels']} channels at once)"
+            b.case(f"flank.farfield_beamform, {label}", "far-field delay and sum of one conditioned ping (C++; the device: transforms and steered sums)",
+                   sizes, lambda r, be: flank.farfield_beamform(r, bearings, window="hann", backend=be).data, lambda be: rec.copy())
+            b.case(f"flank.mvdr_beamform, {label}", "sub-band MVDR of one conditioned ping (C++; the device: covariances, Cholesky, solves, weights applied)",
+                   sizes, lambda r, be: flank.mvdr_beamform(r, bearings, backend=be).data, lambda be: rec.copy())
+        b.guard(f"beamformers, {rows} row(s)", build)
+
+
 def group_live(b):
     from gpusonar.live import LiveChain
     q = b.quick
     sonars = list_configs("sonars")
+    beamformer_cases(b)
     deploy = ROOT / "configs" / "deploy"
     rows_sonar = {1: "popoto_long_range", 2: "popoto_long_range_2row", 3: "popoto_long_range_3row"}
     n_pings = 2 if q else max(int(round(5 * min(b.scale, 4.0))), 3)
@@ -975,6 +1040,9 @@ def group_live(b):
             b.skip(f"{rows} row(s)", f"no chain config {chain_file.name}")
             continue
         chain = load_yaml(chain_file).get("chain") or {}
+        # The chain's sync stage lines the boards up on a reference summed into the raw samples by
+        # hardware; the simulated pings carry none, so the stage is left out here.
+        chain.pop("sync", None)
         if rows > 1 and chain.get("elevation") is None:
             b.skip(f"{rows} row(s)", f"{chain_file.name} has no chain.elevation")
             continue
@@ -1017,7 +1085,7 @@ def group_live(b):
 
             note = "the first ping of each run is the warm-up; agreement: power map of the last ping"
             if engine == "python" and beamformer != "backprojection":
-                note += "; this beamformer is NumPy on the host in the Python engine (conditioning and CFAR use the backend)"
+                note += "; the Python engine calls the C++ beamformer on the backend (flank.py)"
             if doa == "sbl":
                 note += "; doa sbl always runs the C++ chain"
             row = b.case(name, what, sizes, run, lambda be: [r.copy() for r in records], compare=compare, note=note, keep=True,
@@ -1042,10 +1110,10 @@ def group_hostonly(b):
             rec.samples = samples
         bearings = np.radians(np.arange(-60.0, 60.25, 2.0 if q else 0.5))
         sizes = {"channels": int(rec.samples.n_channels), "samples": int(rec.samples.n_samples), "bearings": len(bearings)}
-        b.host_case("flank.farfield_beamform", "far-field delay-and-sum in NumPy (the Python chain's `beamformer: farfield`)", sizes,
-                    lambda _: flank.farfield_beamform(rec, bearings, window="hann"))
-        b.host_case("flank.mvdr_beamform", "sub-band MVDR in NumPy (the Python chain's `beamformer: mvdr`)", sizes,
-                    lambda _: flank.mvdr_beamform(rec, bearings))
+        b.host_case("flank.farfield_beamform, engine numpy", "far-field delay-and-sum in NumPy: the reference of the C++ beamformer (group live), "
+                    "no longer what the Python chain runs", sizes, lambda _: flank.farfield_beamform(rec, bearings, window="hann", engine="numpy"))
+        b.host_case("flank.mvdr_beamform, engine numpy", "sub-band MVDR in NumPy: the reference of the C++ beamformer (group live), no longer what "
+                    "the Python chain runs", sizes, lambda _: flank.mvdr_beamform(rec, bearings, engine="numpy"))
     b.guard("beamformers", beamformers)
 
     def noise():
