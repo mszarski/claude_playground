@@ -73,7 +73,7 @@ interval. From ping 4 on the report holds one mover (the ship, −5.8 m/s agains
 | Board synchronisation | a reference signal wired to every board (`configs/sonars/popoto_4x7.yaml`: a dedicated input per board, the plan's scheme; `popoto_4x8`: summed into a hydrophone input) | Tested in simulation with 300 µs offsets and 25 ppm drifts. The reference generator and its wiring are hardware to build. |
 | Navigation | UDP JSON: `{"time_ns", "x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz"}`, north-east-down metres and radians, any rate; optionally `sound_speed`, `altitude`, `bottom_lock`, `water_depth` and one-sigma fields (Stage 2 below); interpolated to each ping's transmit time | `tools/nav_adapter.py` converts a vendor stream by a mapping in YAML (a generic CSV / JSON example is shipped). The mapping for the vehicle's own unit is **a template only**: its interface document and datasheet have not been seen. Without navigation, pings are processed where the record says they are and counted in `pings_without_nav`. |
 | Clock | transmit times and navigation times on one clock | Assumed. A difference shows up as tracks that move with ownship. |
-| Results | UDP JSON, one datagram per ping, and a `.jsonl` file | Field names in `live.py`. Datagrams are cut at 65 kB (hundreds of tracks). |
+| Results | UDP JSON, one datagram per ping, and a `.jsonl` file | Field names in `live.py`. A report too long for one datagram goes out as several complete lines, each with `"part": [k, n]` (an open wire-format question for the owner, `STATUS.md`). |
 | Compute | any Linux computer with Python 3 and the built library; a GPU is optional | Not measured on a Jetson. At the boards' full 102.4 kHz real sampling the conditioning step is heavier than in the simulated runs, which start at baseband. |
 
 ## First time on the real hardware
@@ -584,6 +584,48 @@ One member of the report line says what the sonar can see from where it is (keys
 - It costs time only when it is refreshed: 0.03 s in deep water without a bottom, 0.3 to 0.8 s with a bottom or an
   ensemble (one core, ten own depths tried).
 
+## A trial in a fjord or a harbour: what to expect and how to configure
+
+From the rehearsal in fjord-type water (`tools/fjord_rehearsal.py`, `docs/figures/fjord_rehearsal.md`,
+`PHYSICS_NOTES.md` Sec. 26, `RESULTS.md`). The rehearsal's profile, seabed section and seabed are illustrative, its
+late reverberation is fitted to one fjord on one night at 4 to 8 kHz, and it is four pings and one seed per case: read
+the numbers as what kind of thing to expect, not as predictions for another site. Enclosed water differs from the
+open-water rehearsal in one main way: sound keeps arriving for about a second after every strong arrival (27 to 30 dB
+of decay per second in the measured fjord).
+
+1. **Range.** The reported range is that of the strongest arrival, which can be a bottom bounce 20 to 40 m behind the
+   target, with 2 to 6 more detections following on its bearing. Check range against a transponder or a surveyed
+   target, not against the first ping.
+2. **SNR.** A strong echo reads 22 to 30 dB, not the 40 to 70 dB of open water: the echo's own reverberation fills the
+   detector's background window and caps the reading. That is the water, not a fault of the array.
+3. **Clutter.** With the tail there were 20 to 47 detections per ping at other bearings and 16 to 32 false tracks at
+   short range with the 0.1 s pulse; none above 15 dB. Use `chain.min_snr_db: 15` (the deployed value is 9): it left
+   0.5 detections per ping and no false track, with the target's SNR unchanged.
+4. **A long pulse or a weak target.** Use a short CFAR window instead, `chain.cfar: {guard_m: 30, train_m: 100}`. It
+   costs 3 to 6 dB of reported SNR, but at 2.6 km with the 1 s pulse it kept all four pings (12.4 dB) where
+   `min_snr_db: 15` lost two.
+5. **Measure the ping's own reverberation first, and set the blanking from it.** Nothing in the repository measures
+   it. Ping with no target and plot level against time; expect a fall of 27 to 30 dB per second if the water is like
+   the measured fjord. Set `chain.blanking` to the time at which it has fallen below the expected echo, and plan the
+   first targets beyond it. In the rehearsal's what-if a 10 dB target was undetectable out to 1 km with one row
+   whatever the chain settings, and unaffected at 2 km.
+6. **Depth from stacked rows needs a profile.** Cast one and give it as `chain.elevation.ssp`. Without it the
+   three-row depth at 150 m was 3 to 4 m off (21.3 to 21.8 m for a target at 18.0 m, with a stated sigma of 2.6 m);
+   with it, 18.0 to 18.6 m. With two rows at kilometres there is no usable depth in either case.
+7. **Hanging depth.** Hang the array above the shallowest ground between it and the target (a 53 m sill removed the
+   direct path to a target at 60 m in the rehearsal), and on or above the sound-speed maximum rather than far below
+   it. Own depth is otherwise worth at most 3 to 4 dB at these ranges (`tools/fjord_depth_plan.py`).
+8. **Noise near infrastructure.** Record a minute of it and fit it (`tools/fit_noise.py`, then
+   `receiver.ambient_noise: {model: fitted, file: ...}` in the rehearsal scenario) rather than use the wind curve. The
+   measured site read 63 against 44 dB re 1 µPa²/Hz at its two hydrophones, and the quieter one had heavy-tailed
+   clicks. Under the louder noise the tail's clutter is hidden and the target kept 24 dB.
+
+Rehearse with `configs/scenarios/fjord_*_trial_*.yaml`, replacing the profile, the section and the tail's three
+numbers by the site's as soon as a cast, a chart and one sounding of a pinger exist
+(`tools/basin_reverberation_fit.py` shows the fit). `tools/fjord_rehearsal.py` fails on three of its six variants at
+the present head (`STATUS.md`, open item 18); the committed table is from before the deployment-default change, which
+was measured not to move any fjord figure.
+
 ## Listening without transmitting
 
 The array is for active pings; the same backend also gives passive bearings from any
@@ -897,12 +939,11 @@ reports a single line that is too long, where `build/bin/sonar_live` splits it.
 
 ## What is not there yet
 
-- **Refraction in operation, the rest.** The coverage summary (`chain.coverage`: where the sonar can and cannot detect
-  at its present depth, the depth that would gain most) and the profile ensemble (`elevation.profile.ensemble`) are not
-  built. The ray code they need exists in Python only (`raytrace.py`); the multipath depth uses flat boundaries and a
-  mean-gradient correction, not rays through the ladder's profile.
-
-
+- **Refraction in operation: what is still missing.** The coverage picture, the profile ensemble and rays through the
+  ladder's profile are built (sections above). Not there: rays through water that changes with range; reverberation as
+  a limit in the coverage picture; a depth sigma for two rows that owns up to unresolved boundary echoes (the
+  `popoto_face_2x32` rehearsal self-test fails on it); a multipath depth for the test AUV in 30 m of water (the ray
+  mode answers `window`). `STATUS.md`, "Open and known wrong", has the list.
 - The board forwarder. The navigation adapter exists (`tools/nav_adapter.py`), but the mapping for the
   vehicle's own unit is a template: its interface document has not been seen.
 - A service wrapper beyond the example unit `configs/deploy/sonar_live.service` (paths and

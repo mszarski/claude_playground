@@ -22,6 +22,43 @@ documents the on-disk container. The in-memory struct is `sonar::PingRecord` in
   `_ns` are integer nanoseconds since the Unix epoch, UTC.
 - "Unknown" for an optional float is NaN. An absent dataset means an empty table.
 
+## Conventions whose wording changed (no schema change)
+
+The schema is still 1.0.0: no field was added, removed or retyped by anything below, and
+the reader, writer and validator are as they were. These notes say what existing fields
+hold now that the configuration and the simulator have been made more exact. They were
+checked against `libs/core/include/sonar/core/record.hpp`.
+
+- **`transmit/source_level_db` and `transmit/amplitude` are peak values.** The header says
+  so: they describe the amplitude of the sinusoid, not its rms. **Configurations state
+  source levels as RMS** (`transmit.waveform.source_level_db_rms`; the older key
+  `source_level_db` is accepted with a `FutureWarning` and read as RMS; `DECISIONS.md`
+  D-102). When a record is made from a configuration, the stored `source_level_db` is the
+  configured RMS level plus 3.01 dB (`make_record` in `python/gpusonar/sonar.py`), and
+  `sonar.record_source_level_db_rms(record)` converts back. So a record made from a
+  197 dB RMS configuration carries 200.01. A reader that takes the stored number for an
+  RMS level in a sonar equation is 3 dB optimistic. Records written before D-102 hold the
+  configured number unchanged, which the simulator then treated as a peak level.
+- **`environment/sound_speed` is the sound speed at the sonar.** Where the simulated water
+  has a profile, or a profile that changes with range (D-110, D-111), the record carries
+  the local profile's value at the sonar's depth, which is what a vehicle would measure.
+  It is not a mean over the path. `profile_depth` and `profile_speed`, when present, are
+  the local profile too; the record has no field for water that changes with range.
+- **`environment/temperature` and `salinity` may be NaN.** The gain step's default since
+  D-91 derives absorption from them; a record without them gets no absorption and a
+  warning, and `absorption: record` raises.
+- **`environment/water_depth` may be NaN although the simulation had a bottom.** 21
+  shipped scenarios simulate a bottom the record does not mention (D-101); the chain reads
+  the record's depth for elevation, so those were kept as they were.
+- **`metadata/extra_json` carries more than before**, still as a free-form JSON object:
+  under `nav`, the navigation unit's one-sigma figures and its (depth, sound speed)
+  samples, so that a replay reproduces the live run's sound-speed ladder (D-129).
+- **`metadata/tvg_time` and `tvg_gain_db`** also hold a reported gain switch during
+  transmit when the simulator's overload model is asked to report one (D-125). The
+  simulator's truth about overload is never written into the record.
+- A sampled transmit pulse is carried in the existing replica fields, as described under
+  the transmit table below (D-74).
+
 ## Versioning
 
 - Root attributes `schema_version_major`, `_minor`, `_patch`.
@@ -74,7 +111,7 @@ Integer storage keeps raw ADC counts compact: 12-bit ultrasound samples as int16
 | `f_start`, `f_stop` | float64 attr | Hz; equal for CW; a Gaussian pulse is centred on their mean and `f_stop − f_start` is its −6 dB bandwidth |
 | `duration` | float64 attr | s |
 | `window_alpha` | float64 attr | Tukey taper fraction of the envelope, 0 = rectangular |
-| `source_level_db` | float64 attr | dB re 1 µPa at 1 m, NaN if unknown |
+| `source_level_db` | float64 attr | dB re 1 µPa at 1 m, **peak** (the level of the pulse's peak pressure; 3.01 dB above the RMS level a configuration states), NaN if unknown |
 | `amplitude` | float64 attr | peak amplitude at 1 m in the sample units |
 | `replica_sample_rate` | float64 attr | Hz, arbitrary waveform only; must exceed twice the top of the band |
 | `replica` | `[M]` | arbitrary waveform only: real passband samples of the transmitted pulse divided by `amplitude`, sample 0 at emission time 0, carrier `(f_start + f_stop) / 2` |
@@ -135,7 +172,7 @@ paper's kinematic model and is what the backprojection kernel evaluates.
 
 | Name | Meaning |
 | --- | --- |
-| `sound_speed` | m/s at the sonar |
+| `sound_speed` | m/s at the sonar (the local value; see "Conventions whose wording changed") |
 | `temperature`, `salinity`, `water_depth` | °C, PSU, m; NaN if unknown |
 | `profile_depth`, `profile_speed` | optional sound-speed profile, depth strictly increasing |
 

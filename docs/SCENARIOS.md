@@ -6,7 +6,7 @@ pictures, all made from its YAML file:
 
 | What | Where | Made by |
 | --- | --- | --- |
-| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (49 of the 58 scenario files; the nine under "Scenarios for the SST-equivalence work" have none yet) | `tools/scenario_diagrams.py` |
+| Geometry diagram: plan and side view; for Bellhop scenarios the sound-speed profile and transmission loss | `docs/scenarios/<name>.png` (55 of the 75 scenario files; the twenty named under "Every scenario file" have none yet) | `tools/scenario_diagrams.py` |
 | Result figure: the image, detections, tracks | `docs/figures/<name>.png` | `tools/gallery.py` |
 | Animation | `docs/figures/<name>.gif` | `tools/gallery.py` |
 
@@ -18,6 +18,18 @@ pictures, all made from its YAML file:
   `tools/gallery.py --backend cuda`.
 - Numbers below are from the full-size CPU run in `docs/figures/gallery.json`. Where a
   scenario also ran earlier on an NVIDIA A10G, the numbers agreed to the digits shown.
+- **That run predates several changes that move these numbers** and the gallery has not
+  been rerun: source levels are now RMS (echoes 3 dB up against the same noise,
+  `DECISIONS.md` D-102), baseband noise has its spectrum and coherence (D-103), the
+  long-range chain has a new detector (D-93), and several simulator defaults changed (D-83
+  to D-90). A comparison of 18 scenarios found the pool, harbour, seafloor, wreck,
+  minefield, rail and buried-object scenes identical and the MINSAS scenes equal to the
+  printed digits; the six FLS scenes with noise and a source level changed in track counts
+  and classes (`STATUS.md`, open item 16). The long-range numbers below
+  (`popoto_*`, `flank_patrol`) are from the old detector unless a sentence says otherwise.
+- The scenes above are the gallery. Every file in `configs/scenarios`, including the
+  trial, fjord and range-dependent scenarios that are not in the gallery, is listed in
+  "Every scenario file" near the end.
 - **CPU times** are wall-clock on a 4-core x86_64 container with nothing else running. The
   host backend uses all four cores (OpenMP). An earlier version of this table was measured
   with several jobs sharing the machine and before the synthesis kernel was reworked
@@ -585,11 +597,6 @@ comparison with the spherical-spreading estimate.
 
 ## Scenarios for the SST-equivalence work
 
-(Three further scenario files, `popoto_elevation_free`, `popoto_elevation_shallow` and
-`popoto_elevation_rehearsal`, belong to the stacked-row option of the Popoto array, which
-is being re-evaluated for a different mounting geometry (`STATUS.md`); they are not
-described here yet.)
-
 Nine scenarios were added with the simulator work that closes the gap to SST (APL-UW
 TR 0702; `DECISIONS.md` D-62 to D-78). They are test and validation set-ups, not gallery
 scenes: `tools/gallery.py` does not run them, so there is no result figure, animation or
@@ -635,6 +642,175 @@ equations; with time spreading the bounce arrivals grow tails (surface −6 dB, 
 Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/sst_validation.md --json docs/figures/sst_validation.json --figures docs/figures`
 (about 2 minutes on the CPU).
 
+## Every scenario file
+
+All 75 files in `configs/scenarios`, one line each. "Gallery" means `tools/gallery.py` runs
+it and the sections above show its figure and numbers. A scenario marked "needs Bellhop"
+runs at the `eigenray` tier and is skipped, with its tests, when `GPUSONAR_BELLHOP` is not
+set. Twenty files have no geometry diagram in `docs/scenarios/` yet: the nine of the
+SST-equivalence work, `popoto_12km_2row`, `popoto_12km_3row`, the three
+`popoto_testauv_direct_overload*`, the three `fjord_*` and the three `ssp_*`
+(`tools/scenario_diagrams.py` has not been run since they were added).
+
+Since `DECISIONS.md` D-100 a scenario states its water once, in an `environment` block
+that may name a site in `configs/environments/`; a typed value that contradicts the site
+is an error unless named under `environment_overrides`. Three kinds of inconsistency were
+kept as they were and are named in the files (D-101): 47 scenarios type a sound speed that
+disagrees with their temperature, 9 Bellhop scenarios reflect eigenrays from a flat
+surface in a windy sea, and 21 simulate a bottom the record does not mention. Most shallow
+scenarios also state a bounce order far below what the energy rule of D-105 would keep
+(`STATUS.md`, open item 22).
+
+### Point targets, for measuring resolution
+
+| Scenario | What it is |
+| --- | --- |
+| `point_grid_l12_5d` | Point grid for the L12-5 probe (5 MHz), pool water; two pings, one per multiplexer half. |
+| `point_grid_p4_2v` | Point grid for the P4-2v phased array (2.7 MHz), pool water. |
+| `point_grid_fls_300k` | Point grid for the 300 kHz, 128-element forward-looking sonar. |
+| `point_grid_fls_750k` | Point grid for the 750 kHz sonar (the plan's Phase 3; every value a placeholder), 5 to 45 m. |
+| `point_grid_sas_auv` | Point grid for the 200 kHz SAS array. |
+| `point_grid_sas_rail` | Point grid for the P4-2v on the rail, pool water. |
+| `point_grid_flank_32` | Point grid for the 32-hydrophone flank array. |
+| `point_grid_popoto_8` | Point grid for eight Popoto hydrophones at 27.5 kHz. |
+| `point_grid_popoto_8_low` | The same in the board's low band. |
+| `point_grid_popoto_4x8` | Point grid for four Popoto boards of eight (32 hydrophones). |
+| `pool_wires_l12_5d` | Thin wires on a frame at 0.5, 1 and 2 m: beam width and range resolution of the L12-5 probe. |
+| `stripmap_points` | Stripmap SAS with known navigation past three point targets, 90 pings. |
+| `rail_points` | Rail SAS past point targets with the P4-2v stepped along a motorised rail. |
+| `rail_position_errors` | `rail_points` with the carriage a fraction of a millimetre off its commanded position. |
+
+### Forward-looking sonar
+
+| Scenario | What it is |
+| --- | --- |
+| `pool_fls_l12_5d` | Gallery. Phase 1 pool: far wall, side wall, cinder block, pipe, rope, wires. |
+| `pool_fls_p4_2v` | Gallery. Phase 2 pool or dock, 5 to 10 m: wall, steps, ladder, lane floats. |
+| `harbour_fls_750k` | Gallery. Phase 3 harbour: sandy floor, quay wall, six pilings, mooring block, rocks. |
+| `seafloor_objects_fls` | Gallery. A sphere, a box and rocks on a flat seafloor, with shadows. |
+| `fls_120k_transit` | Gallery. The 120 kHz design under way at 2 m/s: boat under way, boat at anchor, buoy, pinnacle; reverberation with ownship Doppler; 10 pings. |
+| `fls_170k_transit` | Gallery. The same objects with the 170 kHz design out to 450 m. |
+| `fls_330k_transit` | Gallery. The same with the 330 kHz design out to 300 m. |
+| `fls_120k_cluttered_seabed` | Gallery. Boat with keel, propeller and wake over sand, boulders, debris and a pipeline. |
+| `fls_120k_rough_surface` | Gallery. A wind sea of wave facets at 10 m/s, boat with wake, kayak, buoy. |
+| `fls_170k_traffic` | Gallery. Three boats: closing, crossing, at anchor. Its thinned test form carries the loosened anchored-boat limit (D-121). |
+| `fls_glints_on_sediment` | A smooth sphere and cylinder that glint, on a seabed whose scatterers follow the bottom scattering model. |
+| `fls_highlight_target_aspect` | A five-highlight target crossing ahead while turning, strength against aspect from an illustrative table. |
+
+### Synthetic aperture sonar and buried objects
+
+| Scenario | What it is |
+| --- | --- |
+| `wreck_sas` | Gallery. Stripmap past a 3 m box with sway and heave that navigation does not report; motion estimation. |
+| `minefield_sas` | Gallery. Rippled sand, two 2 m cylinders, a sphere, rocks; unknown motion. |
+| `sas_minsas_survey` | Gallery. The MINSAS-class design, two opposite legs over a wreck, a cable, rocks and a calibration cube. |
+| `sas_minsas_boulder_field` | Gallery. 45 boulders of 15 to 90 cm radius on sand. |
+| `sas_minsas_rocky_ripples` | Gallery. Rippled sand, a rock outcrop, stones, a cable. |
+| `sas_minsas_speckle` | Gallery. A seabed of 5000 scatterers per square metre (2.6 per resolution cell). |
+| `rail_objects` | Gallery. Rail SAS in the pool: ball, pipe, brick, pebbles on the floor. |
+| `rail_cylinder_glint` | A smooth rigid rod parallel to the rail, a specular target seen as one glint per ping. |
+| `buried_cylinder` | 3D near-field imaging of one cylinder 0.3 m below a flat sediment interface, with refraction. |
+| `buried_objects` | Gallery. A buried cylinder and sphere under a rough interface with sediment clutter. |
+
+### Flank array (32 hydrophones, 6 to 10 kHz)
+
+| Scenario | What it is |
+| --- | --- |
+| `flank_target_1km`, `flank_target_5km`, `flank_target_10km` | One target in noise in shallow water at each range; the link-budget cases. Needs Bellhop. |
+| `flank_patrol` | Gallery. Six pings 12 s apart in 100 m of water: a 56 m target crossing near 3 km, a small vehicle near 2.2 km, a wreck. Needs Bellhop. |
+| `flank_sst_shallow` | A target at 1 km in 100 m of water with time-spread bounce paths, sediment and surface reverberation and a volume layer; placeholders throughout. |
+| `flank_sst_spread` | The same channel with angle spreading, Doppler spreading within the pulse and convolved multi-bounce tails. |
+
+### Validation against TR 0702
+
+| Scenario | What it is |
+| --- | --- |
+| `sst_pursuit` | The report's "Pursuit" example as far as it is described: a vehicle at 20 m/s chasing a three-highlight target; our own parameters. |
+| `sst_asiaex` | The report's forward-scatter example: a 3 ms pulse at 8 kHz over about 500 m, now by a one-way source (`sources:`), no longer a relay point. |
+| `sst_echo_level` | One highlight of known strength with one bounce per leg: the compressed echo against the sonar equation. States `bottom_coefficient: 0.5`. |
+| `sst_sediment_reverb` | Bottom reverberation from `medium_sand` against the integral of its scattering strength. |
+
+### Popoto boards at 27.5 kHz, and the first long-range design
+
+| Scenario | What it is |
+| --- | --- |
+| `popoto_trial_100m`, `popoto_trial_1000m`, `popoto_trial_2000m` | Eight hydrophones, 190 dB, a +10 dB target at each range in shallow water. Needs Bellhop. `popoto_trial_1000m` is in the gallery. |
+| `popoto_far_mover` | Gallery. 32 hydrophones in the 6 to 10 kHz band against a ship-sized mover at 6 km, ownship at 1.5 m/s. Needs Bellhop. |
+
+### The 12 km design (`popoto_long_range`: 4 to 6 kHz, 197 dB, 32 hydrophones a row)
+
+| Scenario | What it is |
+| --- | --- |
+| `popoto_12km` | Gallery. A ship-sized mover (+25 dB, a placeholder) at 12 km in 100 m of isovelocity water over sand; one row. Needs Bellhop. States 40 arrivals (9.7 % of arrival energy left out). |
+| `popoto_12km_2row` | The same with two stacked rows on the face (outer rows 1.5 m apart); the ship 4 m deep. Needs Bellhop. |
+| `popoto_12km_3row` | The same with three rows. Needs Bellhop. |
+| `popoto_env_winter_sand_200m` | Gallery. The same ship at 8 km in winter water over sand (a surface duct). Needs Bellhop. |
+| `popoto_env_summer_mud_60m` | Gallery. At 4 km under a summer thermocline over mud: not detected. Needs Bellhop. |
+| `popoto_env_gravel_30m` | Gallery. At 3 km in 30 m over gravel. Needs Bellhop. States 40 arrivals (34 % left out). |
+| `popoto_env_deep_silt_1000m` | Gallery. At 10 km in 1000 m over silt. Needs Bellhop. |
+
+### Stacked rows: elevation and depth
+
+| Scenario | What it is |
+| --- | --- |
+| `popoto_elevation_free` | Three rows on the face, rolled 3 degrees, three targets near 1 km above, level with and below the vehicle, free field: the reported depths must be the targets'. |
+| `popoto_elevation_shallow` | Three rows at 30 m in 100 m of water over sand, a target at 50 m depth 1 km away; image-source multipath to second order. |
+| `popoto_elevation_rehearsal` | The full stacked-row system as it would run: raw 102.4 kHz samples on twelve boards with their own clocks, the vehicle rolled and rolling, a deep and a shallow target near 1 km. Chain: `configs/deploy/popoto_elevation_rehearsal.yaml`. |
+| `popoto_face_2row_shallow` | Two rows on the face, 100 m over sand, a target at 60 m depth 3 km away. This is the geometry in which two rows cannot separate direct, surface and bottom echoes (`STATUS.md`, open item 6). |
+
+### The staged builds: trials in open water
+
+Each is the rehearsal of one build's trial and is run through that build's deployment
+file: `tools/sonar_live.py configs/deploy/<file>.yaml --scenario <name> --out DIR`. Raw
+samples at 102.4 kHz with every board on its own clock. Image-source multipath with one
+bounce stated.
+
+| Scenario | What it is |
+| --- | --- |
+| `popoto_testauv_trial_1row` | Stage 1: the one-row prototype on the test AUV at 10 m in 30 m of water, a +10 dB target at 500 m, 15 m deep. |
+| `popoto_static_trial_2row` | Stage 2: the two-row static frame against a target 2.6 km away, 30 m below it. |
+| `popoto_static_trial_3row` | Stage 3: the three-row static frame against a target at 150 m, 8 m below it. |
+| `popoto_static_free` | The three-row static frame in free field, three targets about 400 m off at known depths. |
+| `popoto_static_passing` | A target passing the three-row frame 400 m off at 3 m/s, eight pings, 30 m of water over sand. |
+
+### The projector's direct sound and receiver overload (D-125)
+
+| Scenario | What it is |
+| --- | --- |
+| `popoto_testauv_direct_overload` | The one-row prototype with a 0.1 s pulse, targets at 150 m and 350 m, and a front end that overloads on the projector's direct sound and recovers slowly. No hardware value in it is measured. |
+| `popoto_testauv_direct_overload_fast` | The same with a front end that is dead for 5 ms after it last clipped and recovers with a 2 ms time constant. |
+| `popoto_testauv_direct_overload_gain_switch` | The same with the gain held 40 dB down while the projector transmits; nothing clips. Headroom 2.8 dB since source levels are RMS. |
+
+### Trials in fjord-type water (D-106; `tools/fjord_rehearsal.py`)
+
+The profile (a sound-speed maximum of 1495 m/s at 19 m), the section of basins and sills
+and the seabed are **illustrative**, modelled on one site; the late tail's numbers are one
+fjord, one night, 4 to 8 kHz; K-distributed noise (shape 3.5) at a 1.9 m/s wind level. All
+need Bellhop and keep twelve arrivals.
+
+| Scenario | What it is |
+| --- | --- |
+| `fjord_testauv_trial_1row` | `popoto_testauv_trial_1row` in the fjord's water: target at 500 m. |
+| `fjord_static_trial_2row` | The two-row static frame against a target 2.6 km away; a 53 m sill blocks the direct path. |
+| `fjord_static_trial_3row` | The three-row static frame against a target at 150 m. |
+
+### Water that changes with range (D-110; `tools/ssp_range_study.py`)
+
+The profiles are **illustrative**; nobody measured them. Range is horizontal distance from
+the sonar, the same on every bearing. All need Bellhop, keep twelve arrivals and reflect
+eigenrays from a flat surface.
+
+| Scenario | What it is |
+| --- | --- |
+| `ssp_front_static_trial_2row` | The two-row static frame against a target at 2.6 km, 60 m deep, with a front 1.2 to 1.4 km out. |
+| `ssp_thermocline_static_trial_3row` | The three-row static frame against the same target under a mixed layer that deepens from 15 m at the array to 45 m at 3 km. The case behind `elevation.sector_from_rays` (D-116). |
+| `ssp_front_testauv_trial_1row` | The one-row prototype against a target at 500 m, 15 m deep, in 30 m of water, with a front 200 to 300 m out. |
+
+Results for the last five groups are tables, not figures: `RESULTS.md` ("Deployment
+defaults: before and after", "Water that changes with range", "A trial in fjord-type water
+against the open-water rehearsal"), `docs/figures/fjord_rehearsal.md`,
+`docs/figures/ssp_range_study.md`, and `docs/design/direct_sound_study.json`.
+
 ## What no scenario has yet
 
 - Multipath in the pool scenes. Surface and floor bounces arrive well outside the probes'
@@ -643,8 +819,9 @@ Made by: `PYTHONPATH=python python3 tools/sst_validation.py --out docs/figures/s
 - Surface or bottom bounce paths to the objects in the forward-looking sea scenes (direct
   paths only; reverberation is statistical).
 - Waves that move as waves do, breaking, or a bubble layer; a wake that grows.
-- A range-dependent ocean (fronts, slopes) in the Popoto and flank scenes; the simulator
-  can take bathymetry but no shipped scenario uses it with a moving target.
+- A range-dependent ocean in a gallery scene. Three trial scenarios have a sound speed
+  that changes with range (`ssp_*`) and three a seabed section with sills (`fjord_*`),
+  all illustrative and all as rings about the sonar; none has a front lying across a map.
 - Fully developed speckle on large surfaces (scatterer counts are kept affordable).
 - Specular echoes in a realistic scene. Smooth spheres, cylinders, plates and discs can
   now glint (`rail_cylinder_glint`, `fls_glints_on_sediment`), but no gallery scene uses
