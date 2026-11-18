@@ -1,4 +1,811 @@
 {
+  "pool_fls_l12_5d": {
+    "scatterers": 139592,
+    "hidden_fraction": 0.42766061092326213,
+    "object_over_median_db": {
+      "far_wall": 30.976279580845222,
+      "side_wall": 13.127324730741892,
+      "cinder_block": 42.62243968891359,
+      "pipe": 48.026804786419234,
+      "rope": 3.7893356478643048,
+      "wire_1m": 77.48983807252746,
+      "wire_2m": 66.80688741632521
+    },
+    "dynamic_range_db": 78.24273154539058,
+    "seconds": 3.3,
+    "animation": "pool_fls_l12_5d.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "pool_fls_p4_2v": {
+    "scatterers": 182303,
+    "hidden_fraction": 0.6586836201269315,
+    "object_over_median_db": {
+      "far_wall": 48.37537876087409,
+      "step_1": 34.27586528894707,
+      "step_2": 41.214355738580444,
+      "step_3": 39.50054079354815,
+      "ladder_rail_a": 55.42025186031316,
+      "ladder_rail_b": 55.845353328630736,
+      "ladder_rung_1": 52.32511299187795,
+      "ladder_rung_2": 52.48913994734349,
+      "ladder_rung_3": 52.21372643471261,
+      "float_1": 45.67233252358087,
+      "float_2": 47.72012713146705,
+      "float_3": 48.68569930734171
+    },
+    "dynamic_range_db": 63.20606365902185,
+    "seconds": 1.8,
+    "animation": "pool_fls_p4_2v.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "seafloor_objects_fls": {
+    "scatterers": 17947,
+    "hidden_fraction": 0.4027414052487881,
+    "object_over_median_db": {
+      "seafloor": 28.21232679373898,
+      "sphere": 43.4327971129094,
+      "box": 44.22306026867419,
+      "rocks": 35.29473997805145
+    },
+    "dynamic_range_db": 59.26283278236876,
+    "seconds": 0.3,
+    "animation": "seafloor_objects_fls.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "harbour_fls_750k": {
+    "scatterers": 120224,
+    "hidden_fraction": 0.21460773223316476,
+    "object_over_median_db": {
+      "seafloor": 35.719014431012056,
+      "quay_wall": 55.809964925490014,
+      "piling_1": 56.46237018233093,
+      "piling_2": 58.45478170524305,
+      "piling_3": 57.76259895683593,
+      "piling_4": 55.848311657323826,
+      "piling_5": 56.8419555384309,
+      "piling_6": 56.915160946335526,
+      "mooring_block": 38.06330507341833,
+      "rocks": 34.330514010555135
+    },
+    "dynamic_range_db": 69.56764869467355,
+    "seconds": 1.7,
+    "animation": "harbour_fls_750k.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "fls_120k_transit": {
+    "pings": 10,
+    "scatterers": 1691,
+    "detections_per_ping": [
+      5,
+      6,
+      5,
+      5,
+      6,
+      10,
+      8,
+      6,
+      8,
+      8
+    ],
+    "confirmed_tracks": 7,
+    "targets": {
+      "boat_under_way": {
+        "tracked": true,
+        "position_error_m": 0.9185941218123901,
+        "true_velocity_xy": [
+          0.0,
+          -4.0
+        ],
+        "track_velocity_xy": [
+          0.021730276623061196,
+          -3.765680220393402
+        ],
+        "track_speed_m_s": 3.7657429183607602
+      },
+      "boat_at_anchor": {
+        "tracked": true,
+        "position_error_m": 0.9832353472416578,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.03245879514265858,
+          -0.0199971928214411
+        ],
+        "track_speed_m_s": 0.03812428494871702
+      },
+      "mooring_buoy": {
+        "tracked": true,
+        "position_error_m": 0.6784874291581428,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          0.007931411728841164,
+          -0.13431212448584623
+        ],
+        "track_speed_m_s": 0.1345461039046239
+      },
+      "pinnacle": {
+        "tracked": true,
+        "position_error_m": 3.8941454584203345,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          0.3884660247181293,
+          0.35604322246187814
+        ],
+        "track_speed_m_s": 0.5269465140043577
+      }
+    },
+    "classification": {
+      "counts": {
+        "mover": 1,
+        "static": 5,
+        "line": 0,
+        "multipath": 0,
+        "uncertain": 1
+      },
+      "targets": {
+        "boat_under_way": {
+          "kind": "mover",
+          "speed_m_s": 3.8348428914817467,
+          "speed_sigma_m_s": 0.026880486956832025,
+          "truly_moving": true
+        },
+        "boat_at_anchor": {
+          "kind": "static",
+          "speed_m_s": 0.01593055250921104,
+          "speed_sigma_m_s": 0.02485970891443299,
+          "truly_moving": false
+        },
+        "mooring_buoy": {
+          "kind": "static",
+          "speed_m_s": 0.06026968983469836,
+          "speed_sigma_m_s": 0.016172749184855274,
+          "truly_moving": false
+        },
+        "pinnacle": {
+          "kind": "static",
+          "speed_m_s": 0.8956087131610823,
+          "speed_sigma_m_s": 0.2760936749489575,
+          "truly_moving": false
+        }
+      },
+      "movers_not_on_a_moving_object": 0
+    },
+    "seconds": 10.7,
+    "animation": "fls_120k_transit.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "fls_170k_transit": {
+    "pings": 10,
+    "scatterers": 1790,
+    "detections_per_ping": [
+      3,
+      3,
+      3,
+      5,
+      3,
+      4,
+      4,
+      3,
+      3,
+      4
+    ],
+    "confirmed_tracks": 4,
+    "targets": {
+      "boat_under_way": {
+        "tracked": true,
+        "position_error_m": 1.8597812899280275,
+        "true_velocity_xy": [
+          0.0,
+          -4.0
+        ],
+        "track_velocity_xy": [
+          0.0001048399014944414,
+          -4.204779739529223
+        ],
+        "track_speed_m_s": 4.204779740836236
+      },
+      "boat_at_anchor": {
+        "tracked": true,
+        "position_error_m": 1.7840422332206216,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.13236278972846788,
+          -0.04363101249540591
+        ],
+        "track_speed_m_s": 0.1393684804971227
+      },
+      "mooring_buoy": {
+        "tracked": true,
+        "position_error_m": 0.1599279211792665,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.01246421501034452,
+          0.044565598473470885
+        ],
+        "track_speed_m_s": 0.04627579521869644
+      },
+      "pinnacle": {
+        "tracked": false,
+        "position_error_m": 89.98810045392702,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.01246421501034452,
+          0.044565598473470885
+        ]
+      }
+    },
+    "classification": {
+      "counts": {
+        "mover": 1,
+        "static": 2,
+        "line": 0,
+        "multipath": 0,
+        "uncertain": 1
+      },
+      "targets": {
+        "boat_under_way": {
+          "kind": "mover",
+          "speed_m_s": 4.276857356014709,
+          "speed_sigma_m_s": 0.025853787601798368,
+          "truly_moving": true
+        },
+        "boat_at_anchor": {
+          "kind": "uncertain",
+          "speed_m_s": 0.17692560393750553,
+          "speed_sigma_m_s": 0.16771975231960085,
+          "truly_moving": false
+        },
+        "mooring_buoy": {
+          "kind": "static",
+          "speed_m_s": 0.07180506147132924,
+          "speed_sigma_m_s": 0.012049303753205343,
+          "truly_moving": false
+        }
+      },
+      "movers_not_on_a_moving_object": 0
+    },
+    "seconds": 18.2,
+    "animation": "fls_170k_transit.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "fls_330k_transit": {
+    "pings": 10,
+    "scatterers": 1678,
+    "detections_per_ping": [
+      3,
+      3,
+      3,
+      3,
+      4,
+      3,
+      4,
+      4,
+      4,
+      3
+    ],
+    "confirmed_tracks": 4,
+    "targets": {
+      "boat_under_way": {
+        "tracked": true,
+        "position_error_m": 1.1727584144794552,
+        "true_velocity_xy": [
+          0.0,
+          -4.0
+        ],
+        "track_velocity_xy": [
+          0.020705221704313322,
+          -3.9449546201034202
+        ],
+        "track_speed_m_s": 3.945008955741564
+      },
+      "boat_at_anchor": {
+        "tracked": true,
+        "position_error_m": 1.6811120003465208,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          0.05643382003704392,
+          -0.004705304307858593
+        ],
+        "track_speed_m_s": 0.05662963828776423
+      },
+      "mooring_buoy": {
+        "tracked": true,
+        "position_error_m": 0.46519606197848423,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          0.015684330039759425,
+          -0.08662177386828204
+        ],
+        "track_speed_m_s": 0.0880302784096693
+      },
+      "pinnacle": {
+        "tracked": false,
+        "position_error_m": 30.95037374695002,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          0.05643382003704392,
+          -0.004705304307858593
+        ]
+      }
+    },
+    "classification": {
+      "counts": {
+        "mover": 1,
+        "static": 2,
+        "line": 0,
+        "multipath": 0,
+        "uncertain": 1
+      },
+      "targets": {
+        "boat_under_way": {
+          "kind": "mover",
+          "speed_m_s": 4.012144506890609,
+          "speed_sigma_m_s": 0.020608200235191724,
+          "truly_moving": true
+        },
+        "boat_at_anchor": {
+          "kind": "static",
+          "speed_m_s": 0.17725312275046126,
+          "speed_sigma_m_s": 0.11937041963081467,
+          "truly_moving": false
+        },
+        "mooring_buoy": {
+          "kind": "static",
+          "speed_m_s": 0.0161427298471593,
+          "speed_sigma_m_s": 0.023090067339662283,
+          "truly_moving": false
+        }
+      },
+      "movers_not_on_a_moving_object": 0
+    },
+    "seconds": 14.9,
+    "animation": "fls_330k_transit.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "fls_120k_cluttered_seabed": {
+    "pings": 8,
+    "scatterers": 7882,
+    "detections_per_ping": [
+      59,
+      64,
+      61,
+      59,
+      63,
+      66,
+      61,
+      56
+    ],
+    "confirmed_tracks": 64,
+    "targets": {
+      "boat_under_way": {
+        "tracked": true,
+        "position_error_m": 0.42229577022115067,
+        "true_velocity_xy": [
+          1.71,
+          -4.7
+        ],
+        "track_velocity_xy": [
+          1.543347160732966,
+          -5.3128695043121175
+        ],
+        "track_speed_m_s": 5.532495172017071
+      },
+      "boat_at_anchor": {
+        "tracked": true,
+        "position_error_m": 0.851902919364784,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.00550402983441742,
+          0.025670583139589115
+        ],
+        "track_speed_m_s": 0.0262540127055792
+      }
+    },
+    "classification": {
+      "counts": {
+        "mover": 5,
+        "static": 31,
+        "line": 16,
+        "multipath": 0,
+        "uncertain": 12
+      },
+      "targets": {
+        "boat_under_way": {
+          "kind": "mover",
+          "speed_m_s": 5.743551070904926,
+          "speed_sigma_m_s": 0.22784942986497558,
+          "truly_moving": true
+        },
+        "boat_at_anchor": {
+          "kind": "static",
+          "speed_m_s": 0.028177175862538647,
+          "speed_sigma_m_s": 0.022999223679221838,
+          "truly_moving": false
+        }
+      },
+      "movers_not_on_a_moving_object": 4
+    },
+    "seconds": 7.3,
+    "animation": "fls_120k_cluttered_seabed.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "fls_120k_rough_surface": {
+    "pings": 8,
+    "scatterers": 77106,
+    "detections_per_ping": [
+      47,
+      50,
+      59,
+      52,
+      48,
+      52,
+      44,
+      45
+    ],
+    "confirmed_tracks": 56,
+    "targets": {
+      "boat_under_way": {
+        "tracked": true,
+        "position_error_m": 0.7645231454629837,
+        "true_velocity_xy": [
+          0.87,
+          4.92
+        ],
+        "track_velocity_xy": [
+          0.7580316052997021,
+          4.6596403000828115
+        ],
+        "track_speed_m_s": 4.7208960633325825
+      },
+      "kayak": {
+        "tracked": false,
+        "position_error_m": 42.18598559304577,
+        "true_velocity_xy": [
+          -1.2,
+          0.5
+        ],
+        "track_velocity_xy": [
+          4.009550321660468,
+          -5.402051416863143
+        ]
+      },
+      "mooring_buoy": {
+        "tracked": false,
+        "position_error_m": 86.55742697830439,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          2.0952424346096237,
+          8.088144108429765
+        ]
+      }
+    },
+    "classification": {
+      "counts": {
+        "mover": 8,
+        "static": 1,
+        "line": 8,
+        "multipath": 0,
+        "uncertain": 39
+      },
+      "targets": {
+        "boat_under_way": {
+          "kind": "mover",
+          "speed_m_s": 4.8746395474750805,
+          "speed_sigma_m_s": 0.14380258937481863,
+          "truly_moving": true
+        }
+      },
+      "movers_not_on_a_moving_object": 7
+    },
+    "seconds": 18.1,
+    "animation": "fls_120k_rough_surface.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "fls_170k_traffic": {
+    "pings": 8,
+    "scatterers": 1596,
+    "detections_per_ping": [
+      10,
+      8,
+      11,
+      10,
+      16,
+      13,
+      12,
+      11
+    ],
+    "confirmed_tracks": 13,
+    "targets": {
+      "boat_closing": {
+        "tracked": true,
+        "position_error_m": 3.0712185207384626,
+        "true_velocity_xy": [
+          -5.98,
+          0.52
+        ],
+        "track_velocity_xy": [
+          -5.940810520083145,
+          0.5006171290091634
+        ],
+        "track_speed_m_s": 5.961866079122203
+      },
+      "boat_crossing": {
+        "tracked": true,
+        "position_error_m": 0.6966767027476151,
+        "true_velocity_xy": [
+          0.35,
+          3.98
+        ],
+        "track_velocity_xy": [
+          0.3640661430606802,
+          4.2221830679828045
+        ],
+        "track_speed_m_s": 4.237850164421079
+      },
+      "boat_at_anchor": {
+        "tracked": true,
+        "position_error_m": 1.6716539824167882,
+        "true_velocity_xy": [
+          0.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -0.12939895688501424,
+          0.12349812760649716
+        ],
+        "track_speed_m_s": 0.17887391527341384
+      }
+    },
+    "classification": {
+      "counts": {
+        "mover": 5,
+        "static": 4,
+        "line": 1,
+        "multipath": 0,
+        "uncertain": 3
+      },
+      "targets": {
+        "boat_closing": {
+          "kind": "mover",
+          "speed_m_s": 6.027111114978477,
+          "speed_sigma_m_s": 0.02587002262601364,
+          "truly_moving": true
+        },
+        "boat_crossing": {
+          "kind": "mover",
+          "speed_m_s": 4.462224420238151,
+          "speed_sigma_m_s": 0.1557686761533406,
+          "truly_moving": true
+        },
+        "boat_at_anchor": {
+          "kind": "static",
+          "speed_m_s": 0.09976144628564616,
+          "speed_sigma_m_s": 0.03239020806442274,
+          "truly_moving": false
+        }
+      },
+      "movers_not_on_a_moving_object": 2
+    },
+    "seconds": 14.8,
+    "animation": "fls_170k_traffic.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "wreck_sas": {
+    "scatterers": 9180,
+    "pings": 80,
+    "sway_error_rms_wavelengths": 0.08929452635171765,
+    "heave_error_rms_wavelengths": 0.09776406579149417,
+    "sharpness": {
+      "Navigation only": 69.1473159790039,
+      "Estimated motion": 272.3188171386719,
+      "True motion": 278.8213195800781
+    },
+    "object_over_median_db": {
+      "seafloor": 25.24079132080078,
+      "wreck": 29.21200942993164
+    },
+    "seconds": 2.0,
+    "animation": "wreck_sas.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "minefield_sas": {
+    "scatterers": 14870,
+    "pings": 80,
+    "sway_error_rms_wavelengths": 0.08047419748117912,
+    "heave_error_rms_wavelengths": 0.08705972274154808,
+    "sharpness": {
+      "Navigation only": 219.533447265625,
+      "Estimated motion": 320.85406494140625,
+      "True motion": 319.0669860839844
+    },
+    "object_over_median_db": {
+      "seafloor": 21.929931640625,
+      "cylinder_across": 20.04178237915039,
+      "cylinder_along": 22.922508239746094,
+      "sphere": 22.76915740966797,
+      "rocks": 22.130901336669922
+    },
+    "seconds": 4.3,
+    "animation": "minefield_sas.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "sas_minsas_survey": {
+    "pings": 160,
+    "scatterers": 21367,
+    "pixel_m": 0.02,
+    "legs": {
+      "leg_1": {
+        "sonar_side": "y below",
+        "covered_fraction": 1.0,
+        "object_over_median_db": {
+          "seabed": 46.66603088378906,
+          "wreck_hull": 39.5704231262207,
+          "wreck_deckhouse": 30.64902114868164,
+          "wreck_mast": 1.3158475160598755,
+          "cable": 54.28929138183594,
+          "rocks": 44.59598922729492,
+          "calibration_cube": 52.551536560058594
+        },
+        "far_strip_over_near_strip_db": -38.31039047241211
+      },
+      "leg_2": {
+        "sonar_side": "y above",
+        "covered_fraction": 1.0,
+        "object_over_median_db": {
+          "seabed": 46.76845169067383,
+          "wreck_hull": 38.06822967529297,
+          "wreck_deckhouse": 28.833391189575195,
+          "wreck_mast": 3.2919681072235107,
+          "cable": 48.365840911865234,
+          "rocks": 49.52193832397461,
+          "calibration_cube": 49.839393615722656
+        },
+        "far_strip_over_near_strip_db": -41.45854568481445
+      }
+    },
+    "seconds": 16.7,
+    "full_resolution_image": "sas_minsas_survey_leg1_full.png",
+    "animation": "sas_minsas_survey.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "sas_minsas_boulder_field": {
+    "pings": 64,
+    "scatterers": 27620,
+    "pixel_m": 0.02,
+    "legs": {
+      "leg_1": {
+        "sonar_side": "y below",
+        "covered_fraction": 1.0,
+        "object_over_median_db": {
+          "sand": 42.05379867553711,
+          "boulders": 46.08613967895508
+        }
+      }
+    },
+    "seconds": 17.5,
+    "full_resolution_image": "sas_minsas_boulder_field_leg1_full.png",
+    "animation": "sas_minsas_boulder_field.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "sas_minsas_rocky_ripples": {
+    "pings": 64,
+    "scatterers": 31992,
+    "pixel_m": 0.02,
+    "legs": {
+      "leg_1": {
+        "sonar_side": "y below",
+        "covered_fraction": 1.0,
+        "object_over_median_db": {
+          "rippled_sand": 42.810279846191406,
+          "outcrop": 42.81006622314453,
+          "stones": 44.27466583251953,
+          "cable": 47.24707794189453
+        }
+      }
+    },
+    "seconds": 20.8,
+    "full_resolution_image": "sas_minsas_rocky_ripples_leg1_full.png",
+    "animation": "sas_minsas_rocky_ripples.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "sas_minsas_speckle": {
+    "pings": 44,
+    "scatterers": 445567,
+    "pixel_m": 0.02,
+    "legs": {
+      "leg_1": {
+        "sonar_side": "y below",
+        "covered_fraction": 1.0,
+        "object_over_median_db": {
+          "seabed": 14.246416091918945,
+          "calibration_cube": 29.733266830444336,
+          "cable": 21.490821838378906,
+          "rocks": 24.345457077026367,
+          "pipe": 27.263195037841797
+        },
+        "speckle_contrast": 1.2115477323532104,
+        "bare_seabed_mean_over_median_db": 2.766019821166992,
+        "ghost": {
+          "calibration_cube": {
+            "object_over_bare_seabed_db": 26.967247009277344,
+            "at_copy_over_bare_seabed_db": 2.0743865966796875
+          },
+          "cable": {
+            "object_over_bare_seabed_db": 18.724803924560547,
+            "at_copy_over_bare_seabed_db": 0.29045891761779785
+          }
+        }
+      }
+    },
+    "seconds": 95.4,
+    "full_resolution_image": "sas_minsas_speckle_leg1_full.png",
+    "animation": "sas_minsas_speckle.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "rail_objects": {
+    "scatterers": 22942,
+    "pings": 151,
+    "object_over_median_db": {
+      "floor": 28.07946014404297,
+      "ball": 29.738826751708984,
+      "pipe": 31.727094650268555,
+      "brick": 30.093812942504883,
+      "pebbles": 27.708614349365234
+    },
+    "sharpness": 145.6090850830078,
+    "seconds": 16.6,
+    "animation": "rail_objects.gif",
+    "backend": "cuda",
+    "quick": false
+  },
   "buried_objects": {
     "scatterers": 4964,
     "pings": 625,
@@ -12,17 +819,17 @@
       "refraction_on": 0.13999999999999999,
       "refraction_off": 0.12999999999999998
     },
-    "cylinder_over_clutter_db": 21.117115020751953,
-    "seconds": 108.8,
+    "cylinder_over_clutter_db": 21.117116928100586,
+    "seconds": 20.0,
     "animation": "buried_objects.gif",
-    "backend": "host",
+    "backend": "cuda",
     "quick": false
   },
   "flank_patrol": {
     "pings": 6,
     "detections_per_ping": [
       5,
-      6,
+      7,
       5,
       7,
       6,
@@ -32,832 +839,152 @@
     "targets": {
       "submarine": {
         "tracked": true,
-        "position_error_m": 30.499405557686085,
+        "position_error_m": 30.477553948687664,
         "true_velocity": [
           3.0,
           0.0
         ],
         "track_velocity": [
-          3.050161453308892,
-          -0.46877512023063717
+          3.0447120365622515,
+          -0.4748636253871351
         ]
       },
       "small_vehicle": {
         "tracked": false,
-        "position_error_m": 1289.2548166210318,
+        "position_error_m": 1289.2396792862019,
         "true_velocity": [
           0.82,
           1.82
         ],
         "track_velocity": [
-          0.025553904903486146,
-          -0.007541731709544367
+          0.0359802838824681,
+          -0.011648522717554993
         ]
       },
       "wreck": {
         "tracked": true,
-        "position_error_m": 6.240194768171804,
+        "position_error_m": 5.799073546769029,
         "true_velocity": [
           0.0,
           0.0
         ],
         "track_velocity": [
-          0.025553904903486146,
-          -0.007541731709544367
+          0.0359802838824681,
+          -0.011648522717554993
         ]
       }
     },
-    "seconds": 651.5,
+    "seconds": 48.3,
     "animation": "flank_patrol.gif",
-    "backend": "host",
+    "backend": "cuda",
     "quick": false
   },
-  "fls_120k_cluttered_seabed": {
-    "pings": 8,
-    "scatterers": 7882,
+  "popoto_far_mover": {
+    "pings": 6,
+    "hydrophones": 32,
     "detections_per_ping": [
-      60,
-      64,
-      61,
-      58,
-      64,
-      66,
-      61,
-      56
-    ],
-    "confirmed_tracks": 65,
-    "targets": {
-      "boat_under_way": {
-        "tracked": true,
-        "position_error_m": 0.4234373413603116,
-        "true_velocity_xy": [
-          1.71,
-          -4.7
-        ],
-        "track_velocity_xy": [
-          1.543297131810871,
-          -5.3128566759987175
-        ],
-        "track_speed_m_s": 5.532468897044049
-      },
-      "boat_at_anchor": {
-        "tracked": true,
-        "position_error_m": 0.8587212152324,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          6.255709658702666e-05,
-          0.022284486873945436
-        ],
-        "track_speed_m_s": 0.022284574679032575
-      }
-    },
-    "classification": {
-      "counts": {
-        "mover": 5,
-        "static": 30,
-        "line": 15,
-        "multipath": 0,
-        "uncertain": 15
-      },
-      "targets": {
-        "boat_under_way": {
-          "kind": "mover",
-          "speed_m_s": 5.742955127759845,
-          "speed_sigma_m_s": 0.2277816985434088,
-          "truly_moving": true
-        },
-        "boat_at_anchor": {
-          "kind": "static",
-          "speed_m_s": 0.02993661421136987,
-          "speed_sigma_m_s": 0.022596029026632165,
-          "truly_moving": false
-        }
-      },
-      "movers_not_on_a_moving_object": 4
-    },
-    "seconds": 53.7,
-    "animation": "fls_120k_cluttered_seabed.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "fls_120k_rough_surface": {
-    "pings": 8,
-    "scatterers": 77106,
-    "detections_per_ping": [
-      46,
-      51,
-      59,
-      52,
-      48,
-      51,
-      45,
-      45
-    ],
-    "confirmed_tracks": 57,
-    "targets": {
-      "boat_under_way": {
-        "tracked": true,
-        "position_error_m": 0.7624881548364889,
-        "true_velocity_xy": [
-          0.87,
-          4.92
-        ],
-        "track_velocity_xy": [
-          0.7584023523376663,
-          4.661503826603036
-        ],
-        "track_speed_m_s": 4.722794940865637
-      },
-      "kayak": {
-        "tracked": false,
-        "position_error_m": 42.18675928868579,
-        "true_velocity_xy": [
-          -1.2,
-          0.5
-        ],
-        "track_velocity_xy": [
-          4.0095750233337,
-          -5.402557432526922
-        ]
-      },
-      "mooring_buoy": {
-        "tracked": false,
-        "position_error_m": 86.57069314230164,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          2.101970285405499,
-          8.082159473936597
-        ]
-      }
-    },
-    "classification": {
-      "counts": {
-        "mover": 9,
-        "static": 1,
-        "line": 8,
-        "multipath": 0,
-        "uncertain": 39
-      },
-      "targets": {
-        "boat_under_way": {
-          "kind": "mover",
-          "speed_m_s": 4.877152438120258,
-          "speed_sigma_m_s": 0.14384689995664773,
-          "truly_moving": true
-        }
-      },
-      "movers_not_on_a_moving_object": 8
-    },
-    "seconds": 139.9,
-    "animation": "fls_120k_rough_surface.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "fls_120k_transit": {
-    "pings": 10,
-    "scatterers": 1691,
-    "detections_per_ping": [
-      5,
-      6,
-      6,
-      5,
-      6,
-      10,
-      8,
-      6,
-      8,
-      8
-    ],
-    "confirmed_tracks": 7,
-    "targets": {
-      "boat_under_way": {
-        "tracked": true,
-        "position_error_m": 0.9182424634585755,
-        "true_velocity_xy": [
-          0.0,
-          -4.0
-        ],
-        "track_velocity_xy": [
-          0.021826780129220184,
-          -3.7651052256795965
-        ],
-        "track_speed_m_s": 3.7651684914184935
-      },
-      "boat_at_anchor": {
-        "tracked": true,
-        "position_error_m": 0.9827504169669893,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          -0.030792482518031954,
-          -0.018341839946934106
-        ],
-        "track_speed_m_s": 0.03584131794817611
-      },
-      "mooring_buoy": {
-        "tracked": true,
-        "position_error_m": 0.6793062329344406,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          0.008108525264116304,
-          -0.1345793792915217
-        ],
-        "track_speed_m_s": 0.13482343087330953
-      },
-      "pinnacle": {
-        "tracked": true,
-        "position_error_m": 3.8612753371624127,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          0.40363421814217515,
-          0.4710245721513391
-        ],
-        "track_speed_m_s": 0.6203101882329494
-      }
-    },
-    "classification": {
-      "counts": {
-        "mover": 1,
-        "static": 6,
-        "line": 0,
-        "multipath": 0,
-        "uncertain": 0
-      },
-      "targets": {
-        "boat_under_way": {
-          "kind": "mover",
-          "speed_m_s": 3.8337491736108893,
-          "speed_sigma_m_s": 0.027026543664474233,
-          "truly_moving": true
-        },
-        "boat_at_anchor": {
-          "kind": "static",
-          "speed_m_s": 0.012236956365570865,
-          "speed_sigma_m_s": 0.02601036060362862,
-          "truly_moving": false
-        },
-        "mooring_buoy": {
-          "kind": "static",
-          "speed_m_s": 0.060759324222307724,
-          "speed_sigma_m_s": 0.016130946608488354,
-          "truly_moving": false
-        },
-        "pinnacle": {
-          "kind": "static",
-          "speed_m_s": 0.9389667399101215,
-          "speed_sigma_m_s": 0.2847055507919692,
-          "truly_moving": false
-        }
-      },
-      "movers_not_on_a_moving_object": 0
-    },
-    "seconds": 76.6,
-    "animation": "fls_120k_transit.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "fls_170k_traffic": {
-    "pings": 8,
-    "scatterers": 1596,
-    "detections_per_ping": [
-      9,
-      7,
-      11,
-      9,
-      11,
-      11,
-      10,
-      9
-    ],
-    "confirmed_tracks": 11,
-    "targets": {
-      "boat_closing": {
-        "tracked": true,
-        "position_error_m": 3.080449924155387,
-        "true_velocity_xy": [
-          -5.98,
-          0.52
-        ],
-        "track_velocity_xy": [
-          -5.940935787555966,
-          0.5071924323014757
-        ],
-        "track_speed_m_s": 5.962546619964251
-      },
-      "boat_crossing": {
-        "tracked": true,
-        "position_error_m": 1.0372728567237024,
-        "true_velocity_xy": [
-          0.35,
-          3.98
-        ],
-        "track_velocity_xy": [
-          0.37558750324763085,
-          4.25961542872024
-        ],
-        "track_speed_m_s": 4.276141902835698
-      },
-      "boat_at_anchor": {
-        "tracked": true,
-        "position_error_m": 1.6678700673358458,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          -0.1238985368448315,
-          0.10807111121191386
-        ],
-        "track_speed_m_s": 0.16440867529077632
-      }
-    },
-    "classification": {
-      "counts": {
-        "mover": 5,
-        "static": 2,
-        "line": 1,
-        "multipath": 0,
-        "uncertain": 3
-      },
-      "targets": {
-        "boat_closing": {
-          "kind": "mover",
-          "speed_m_s": 6.024172742603955,
-          "speed_sigma_m_s": 0.02190405824493818,
-          "truly_moving": true
-        },
-        "boat_crossing": {
-          "kind": "mover",
-          "speed_m_s": 4.38516424463785,
-          "speed_sigma_m_s": 0.10685943070327611,
-          "truly_moving": true
-        },
-        "boat_at_anchor": {
-          "kind": "static",
-          "speed_m_s": 0.07762684876698206,
-          "speed_sigma_m_s": 0.03355706073791796,
-          "truly_moving": false
-        }
-      },
-      "movers_not_on_a_moving_object": 3
-    },
-    "seconds": 141.3,
-    "animation": "fls_170k_traffic.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "fls_170k_transit": {
-    "pings": 10,
-    "scatterers": 1790,
-    "detections_per_ping": [
-      4,
-      4,
       4,
       3,
       3,
-      4,
-      4,
-      5,
-      5,
-      4
-    ],
-    "confirmed_tracks": 4,
-    "targets": {
-      "boat_under_way": {
-        "tracked": true,
-        "position_error_m": 1.8366144709833148,
-        "true_velocity_xy": [
-          0.0,
-          -4.0
-        ],
-        "track_velocity_xy": [
-          -0.0013690198649951744,
-          -4.1849885191894405
-        ],
-        "track_speed_m_s": 4.184988743110645
-      },
-      "boat_at_anchor": {
-        "tracked": true,
-        "position_error_m": 1.7558075575602932,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          0.00659681238374981,
-          0.025152274055676164
-        ],
-        "track_speed_m_s": 0.026002977210277962
-      },
-      "mooring_buoy": {
-        "tracked": true,
-        "position_error_m": 0.18154688023114934,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          -0.010904896518790862,
-          0.033466102447496635
-        ],
-        "track_speed_m_s": 0.03519796558200314
-      },
-      "pinnacle": {
-        "tracked": false,
-        "position_error_m": 89.95920480638712,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          -0.010904896518790862,
-          0.033466102447496635
-        ]
-      }
-    },
-    "classification": {
-      "counts": {
-        "mover": 1,
-        "static": 3,
-        "line": 0,
-        "multipath": 0,
-        "uncertain": 0
-      },
-      "targets": {
-        "boat_under_way": {
-          "kind": "mover",
-          "speed_m_s": 4.2535268900244105,
-          "speed_sigma_m_s": 0.02513169848961528,
-          "truly_moving": true
-        },
-        "boat_at_anchor": {
-          "kind": "static",
-          "speed_m_s": 0.0612060049107784,
-          "speed_sigma_m_s": 0.03282941934909874,
-          "truly_moving": false
-        },
-        "mooring_buoy": {
-          "kind": "static",
-          "speed_m_s": 0.05451593207780634,
-          "speed_sigma_m_s": 0.006559366904389637,
-          "truly_moving": false
-        }
-      },
-      "movers_not_on_a_moving_object": 0
-    },
-    "seconds": 198.4,
-    "animation": "fls_170k_transit.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "fls_330k_transit": {
-    "pings": 10,
-    "scatterers": 1678,
-    "detections_per_ping": [
-      2,
-      2,
-      2,
-      2,
-      3,
-      2,
-      2,
-      3,
-      2,
+      1,
+      1,
       2
     ],
     "confirmed_tracks": 2,
     "targets": {
-      "boat_under_way": {
+      "ship": {
         "tracked": true,
-        "position_error_m": 1.1438732234848161,
+        "position_error_m": 42.50720543836745,
         "true_velocity_xy": [
-          0.0,
-          -4.0
-        ],
-        "track_velocity_xy": [
-          0.01802357599928319,
-          -3.9309899884608233
-        ],
-        "track_speed_m_s": 3.931031307261623
-      },
-      "boat_at_anchor": {
-        "tracked": false,
-        "position_error_m": 109.06034232841218,
-        "true_velocity_xy": [
-          0.0,
+          -6.0,
           0.0
         ],
         "track_velocity_xy": [
-          0.01802357599928319,
-          -3.9309899884608233
-        ]
-      },
-      "mooring_buoy": {
-        "tracked": true,
-        "position_error_m": 0.45792323426515236,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          0.011148020708672478,
-          -0.08701384675251882
-        ],
-        "track_speed_m_s": 0.08772506991956074
-      },
-      "pinnacle": {
-        "tracked": false,
-        "position_error_m": 78.93486767322416,
-        "true_velocity_xy": [
-          0.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          0.01802357599928319,
-          -3.9309899884608233
+          -5.595854135629088,
+          -0.21805483838405626
         ]
       }
+    },
+    "peak_over_median_db_by_hydrophone_count": {
+      "8": 21.975736618041992,
+      "16": 25.473325729370117,
+      "32": 28.501235961914062
     },
     "classification": {
       "counts": {
         "mover": 1,
-        "static": 1,
+        "static": 0,
         "line": 0,
-        "multipath": 0,
+        "multipath": 1,
         "uncertain": 0
       },
       "targets": {
-        "boat_under_way": {
+        "ship": {
           "kind": "mover",
-          "speed_m_s": 4.006322837379718,
-          "speed_sigma_m_s": 0.024801115255134884,
+          "speed_m_s": 5.926258667840843,
+          "speed_sigma_m_s": 0.14609130617674418,
           "truly_moving": true
-        },
-        "mooring_buoy": {
-          "kind": "static",
-          "speed_m_s": 0.02137277120561972,
-          "speed_sigma_m_s": 0.022277015548187003,
-          "truly_moving": false
         }
       },
       "movers_not_on_a_moving_object": 0
     },
-    "seconds": 169.2,
-    "animation": "fls_330k_transit.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "harbour_fls_750k": {
-    "scatterers": 120224,
-    "hidden_fraction": 0.21460773223316476,
-    "object_over_median_db": {
-      "seafloor": 35.719011112576915,
-      "quay_wall": 55.80996167656715,
-      "piling_1": 56.46236697309975,
-      "piling_2": 58.45477841231515,
-      "piling_3": 57.76259525942031,
-      "piling_4": 55.84830810699554,
-      "piling_5": 56.84195253915775,
-      "piling_6": 56.9151579408559,
-      "mooring_block": 38.063301855049325,
-      "rocks": 34.330510614351184
-    },
-    "dynamic_range_db": 69.56764599325659,
-    "seconds": 14.3,
-    "animation": "harbour_fls_750k.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "minefield_sas": {
-    "scatterers": 14870,
-    "pings": 80,
-    "sway_error_rms_wavelengths": 0.08047424183613304,
-    "heave_error_rms_wavelengths": 0.08705977911128138,
-    "sharpness": {
-      "Navigation only": 219.53341674804688,
-      "Estimated motion": 320.8540344238281,
-      "True motion": 319.06689453125
-    },
-    "object_over_median_db": {
-      "seafloor": 21.929912567138672,
-      "cylinder_across": 20.041767120361328,
-      "cylinder_along": 22.922489166259766,
-      "sphere": 22.76913833618164,
-      "rocks": 22.13088607788086
-    },
-    "seconds": 56.0,
-    "animation": "minefield_sas.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "pool_fls_l12_5d": {
-    "scatterers": 139592,
-    "hidden_fraction": 0.42766061092326213,
-    "object_over_median_db": {
-      "far_wall": 30.97626699258738,
-      "side_wall": 13.127312735628161,
-      "cinder_block": 42.62242065085126,
-      "pipe": 48.02679189737744,
-      "rope": 3.7892936083757984,
-      "wire_1m": 77.48982678133484,
-      "wire_2m": 66.80687346980086
-    },
-    "dynamic_range_db": 78.24272023158704,
-    "seconds": 15.1,
-    "animation": "pool_fls_l12_5d.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "pool_fls_p4_2v": {
-    "scatterers": 182303,
-    "hidden_fraction": 0.6586836201269315,
-    "object_over_median_db": {
-      "far_wall": 48.37537281417343,
-      "step_1": 34.275861163259236,
-      "step_2": 41.21435181430001,
-      "step_3": 39.50053725226989,
-      "ladder_rail_a": 55.420246744085816,
-      "ladder_rail_b": 55.845348614810206,
-      "ladder_rung_1": 52.325108915835784,
-      "ladder_rung_2": 52.48913581976882,
-      "ladder_rung_3": 52.21372216131958,
-      "float_1": 45.6723272607165,
-      "float_2": 47.72012224820674,
-      "float_3": 48.685693774858294
-    },
-    "dynamic_range_db": 63.206059623644094,
-    "seconds": 11.2,
-    "animation": "pool_fls_p4_2v.gif",
-    "backend": "host",
+    "seconds": 26.5,
+    "animation": "popoto_far_mover.gif",
+    "backend": "cuda",
     "quick": false
   },
   "popoto_12km": {
     "pings": 6,
     "hydrophones": 32,
     "detections_per_ping": [
-      7,
-      6,
-      12,
+      3,
+      3,
+      5,
+      8,
       11,
-      14,
-      8
+      13
     ],
-    "confirmed_tracks": 11,
+    "confirmed_tracks": 8,
     "targets": {
       "ship": {
         "tracked": true,
-        "position_error_m": 15.985862662275682,
+        "position_error_m": 19.658405226470933,
         "true_velocity_xy": [
           -6.0,
           0.0
         ],
         "track_velocity_xy": [
-          -4.030358713460812,
-          -0.6445306406764472
+          -3.480877541293795,
+          -0.2185419355648246
         ]
       }
     },
     "peak_over_median_db_by_hydrophone_count": {
-      "8": 17.228168487548828,
-      "16": 20.306427001953125,
-      "32": 23.567678451538086
+      "8": 20.151884078979492,
+      "16": 23.263813018798828,
+      "32": 26.08769416809082
     },
     "classification": {
       "counts": {
-        "mover": 3,
+        "mover": 2,
         "static": 0,
         "line": 0,
-        "multipath": 8,
-        "uncertain": 0
+        "multipath": 3,
+        "uncertain": 3
       },
       "targets": {
         "ship": {
-          "kind": "mover",
-          "speed_m_s": 5.193676678434534,
-          "speed_sigma_m_s": 0.3684661595343769,
+          "kind": "uncertain",
+          "speed_m_s": 4.3462391806346465,
+          "speed_sigma_m_s": 1.0481117260574184,
           "truly_moving": true
         }
       },
       "movers_not_on_a_moving_object": 0
     },
-    "seconds": 149.5,
+    "seconds": 33.6,
     "animation": "popoto_12km.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "popoto_env_deep_silt_1000m": {
-    "pings": 6,
-    "hydrophones": 32,
-    "detections_per_ping": [
-      3,
-      1,
-      2,
-      3,
-      3,
-      1
-    ],
-    "confirmed_tracks": 3,
-    "targets": {
-      "ship": {
-        "tracked": false,
-        "position_error_m": 301.55604138381443,
-        "true_velocity_xy": [
-          -6.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          -5.6291151661873595,
-          -0.24233213537623371
-        ]
-      }
-    },
-    "peak_over_median_db_by_hydrophone_count": {
-      "8": 11.743616104125977,
-      "16": 11.65375804901123,
-      "32": 12.701417922973633
-    },
-    "classification": {
-      "counts": {
-        "mover": 0,
-        "static": 0,
-        "line": 0,
-        "multipath": 2,
-        "uncertain": 1
-      },
-      "targets": {},
-      "movers_not_on_a_moving_object": 0
-    },
-    "seconds": 59.4,
-    "animation": "popoto_env_deep_silt_1000m.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "popoto_env_gravel_30m": {
-    "pings": 6,
-    "hydrophones": 32,
-    "detections_per_ping": [
-      1,
-      1,
-      1,
-      1,
-      2,
-      1
-    ],
-    "confirmed_tracks": 1,
-    "targets": {
-      "ship": {
-        "tracked": true,
-        "position_error_m": 23.661152584020815,
-        "true_velocity_xy": [
-          -6.0,
-          0.0
-        ],
-        "track_velocity_xy": [
-          -5.691069827471052,
-          -0.010564867608063244
-        ]
-      }
-    },
-    "peak_over_median_db_by_hydrophone_count": {
-      "8": 28.89583396911621,
-      "16": 31.889516830444336,
-      "32": 34.65777587890625
-    },
-    "classification": {
-      "counts": {
-        "mover": 1,
-        "static": 0,
-        "line": 0,
-        "multipath": 0,
-        "uncertain": 0
-      },
-      "targets": {
-        "ship": {
-          "kind": "mover",
-          "speed_m_s": 5.876414229792257,
-          "speed_sigma_m_s": 0.1735422302993564,
-          "truly_moving": true
-        }
-      },
-      "movers_not_on_a_moving_object": 0
-    },
-    "seconds": 126.8,
-    "animation": "popoto_env_gravel_30m.gif",
-    "backend": "host",
+    "backend": "cuda",
     "quick": false
   },
   "popoto_env_summer_mud_60m": {
@@ -878,9 +1005,9 @@
       }
     },
     "peak_over_median_db_by_hydrophone_count": {
-      "8": 10.462331771850586,
-      "16": 11.300003051757812,
-      "32": 12.291232109069824
+      "8": 11.026208877563477,
+      "16": 12.031682968139648,
+      "32": 12.370742797851562
     },
     "classification": {
       "counts": {
@@ -893,41 +1020,41 @@
       "targets": {},
       "movers_not_on_a_moving_object": 0
     },
-    "seconds": 51.7,
+    "seconds": 11.4,
     "animation": "popoto_env_summer_mud_60m.gif",
-    "backend": "host",
+    "backend": "cuda",
     "quick": false
   },
   "popoto_env_winter_sand_200m": {
     "pings": 6,
     "hydrophones": 32,
     "detections_per_ping": [
+      6,
       4,
       4,
-      3,
       5,
-      7,
+      6,
       8
     ],
     "confirmed_tracks": 5,
     "targets": {
       "ship": {
         "tracked": true,
-        "position_error_m": 32.63525572582121,
+        "position_error_m": 30.903057690536894,
         "true_velocity_xy": [
           -6.0,
           0.0
         ],
         "track_velocity_xy": [
-          -5.647214712684692,
-          -0.005667519142087551
+          -5.612898285590701,
+          -0.006709804969280541
         ]
       }
     },
     "peak_over_median_db_by_hydrophone_count": {
-      "8": 22.945640563964844,
-      "16": 25.93389892578125,
-      "32": 28.79073715209961
+      "8": 24.00778579711914,
+      "16": 27.20045280456543,
+      "32": 30.397655487060547
     },
     "classification": {
       "counts": {
@@ -940,247 +1067,127 @@
       "targets": {
         "ship": {
           "kind": "mover",
-          "speed_m_s": 6.027785932017664,
-          "speed_sigma_m_s": 0.1812521802000038,
+          "speed_m_s": 5.946594157020462,
+          "speed_sigma_m_s": 0.2049252223969089,
           "truly_moving": true
         }
       },
       "movers_not_on_a_moving_object": 0
     },
-    "seconds": 128.2,
+    "seconds": 22.2,
     "animation": "popoto_env_winter_sand_200m.gif",
-    "backend": "host",
+    "backend": "cuda",
     "quick": false
   },
-  "popoto_far_mover": {
+  "popoto_env_gravel_30m": {
     "pings": 6,
     "hydrophones": 32,
     "detections_per_ping": [
-      4,
-      3,
-      7,
-      7,
-      5,
-      6
+      1,
+      1,
+      1,
+      1,
+      2,
+      1
     ],
-    "confirmed_tracks": 6,
+    "confirmed_tracks": 1,
     "targets": {
       "ship": {
         "tracked": true,
-        "position_error_m": 41.2466608792617,
+        "position_error_m": 23.733522624593814,
         "true_velocity_xy": [
           -6.0,
           0.0
         ],
         "track_velocity_xy": [
-          -5.691207746646127,
-          0.10280842928365211
+          -5.692594748030005,
+          -0.010597776444679984
         ]
       }
     },
     "peak_over_median_db_by_hydrophone_count": {
-      "8": 20.648935317993164,
-      "16": 23.70362091064453,
-      "32": 26.292993545532227
+      "8": 28.914344787597656,
+      "16": 31.89788055419922,
+      "32": 34.6703987121582
     },
     "classification": {
       "counts": {
         "mover": 1,
-        "static": 1,
+        "static": 0,
         "line": 0,
-        "multipath": 4,
+        "multipath": 0,
         "uncertain": 0
       },
       "targets": {
         "ship": {
           "kind": "mover",
-          "speed_m_s": 5.980844180745725,
-          "speed_sigma_m_s": 0.15019284992630658,
+          "speed_m_s": 5.879186969721138,
+          "speed_sigma_m_s": 0.1735311147480375,
           "truly_moving": true
         }
       },
       "movers_not_on_a_moving_object": 0
     },
-    "seconds": 218.6,
-    "animation": "popoto_far_mover.gif",
-    "backend": "host",
+    "seconds": 19.0,
+    "animation": "popoto_env_gravel_30m.gif",
+    "backend": "cuda",
+    "quick": false
+  },
+  "popoto_env_deep_silt_1000m": {
+    "pings": 6,
+    "hydrophones": 32,
+    "detections_per_ping": [
+      2,
+      2,
+      3,
+      3,
+      3,
+      2
+    ],
+    "confirmed_tracks": 3,
+    "targets": {
+      "ship": {
+        "tracked": false,
+        "position_error_m": 311.2105511515834,
+        "true_velocity_xy": [
+          -6.0,
+          0.0
+        ],
+        "track_velocity_xy": [
+          -6.095779429543197,
+          0.016992843387765404
+        ]
+      }
+    },
+    "peak_over_median_db_by_hydrophone_count": {
+      "8": 10.610719680786133,
+      "16": 11.114106178283691,
+      "32": 11.777892112731934
+    },
+    "classification": {
+      "counts": {
+        "mover": 1,
+        "static": 0,
+        "line": 0,
+        "multipath": 1,
+        "uncertain": 1
+      },
+      "targets": {},
+      "movers_not_on_a_moving_object": 1
+    },
+    "seconds": 17.2,
+    "animation": "popoto_env_deep_silt_1000m.gif",
+    "backend": "cuda",
     "quick": false
   },
   "popoto_trial_1000m": {
     "peak_range_m": 1000.1214365178889,
     "peak_bearing_deg": 0.0,
     "true_range_m": 1000.0,
-    "peak_over_median_db": 30.04810333251953,
-    "seconds": 11.3,
+    "peak_over_median_db": 30.240558624267578,
+    "seconds": 2.4,
     "animation": "popoto_trial_1000m.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "rail_objects": {
-    "scatterers": 22942,
-    "pings": 151,
-    "object_over_median_db": {
-      "floor": 28.0794620513916,
-      "ball": 29.73883056640625,
-      "pipe": 31.727100372314453,
-      "brick": 30.09381866455078,
-      "pebbles": 27.708616256713867
-    },
-    "sharpness": 145.6090545654297,
-    "seconds": 197.6,
-    "animation": "rail_objects.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "sas_minsas_boulder_field": {
-    "pings": 64,
-    "scatterers": 27620,
-    "pixel_m": 0.02,
-    "legs": {
-      "leg_1": {
-        "sonar_side": "y below",
-        "covered_fraction": 1.0,
-        "object_over_median_db": {
-          "sand": 42.05378723144531,
-          "boulders": 46.08612060546875
-        }
-      }
-    },
-    "seconds": 98.4,
-    "full_resolution_image": "sas_minsas_boulder_field_leg1_full.png",
-    "animation": "sas_minsas_boulder_field.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "sas_minsas_rocky_ripples": {
-    "pings": 64,
-    "scatterers": 31992,
-    "pixel_m": 0.02,
-    "legs": {
-      "leg_1": {
-        "sonar_side": "y below",
-        "covered_fraction": 1.0,
-        "object_over_median_db": {
-          "rippled_sand": 42.810279846191406,
-          "outcrop": 42.81007385253906,
-          "stones": 44.27466583251953,
-          "cable": 47.24707794189453
-        }
-      }
-    },
-    "seconds": 104.6,
-    "full_resolution_image": "sas_minsas_rocky_ripples_leg1_full.png",
-    "animation": "sas_minsas_rocky_ripples.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "sas_minsas_speckle": {
-    "pings": 44,
-    "scatterers": 445567,
-    "pixel_m": 0.02,
-    "legs": {
-      "leg_1": {
-        "sonar_side": "y below",
-        "covered_fraction": 1.0,
-        "object_over_median_db": {
-          "seabed": 14.246444702148438,
-          "calibration_cube": 29.73329734802246,
-          "cable": 21.4908504486084,
-          "rocks": 24.34548568725586,
-          "pipe": 27.26322364807129
-        },
-        "speckle_contrast": 1.211547613143921,
-        "bare_seabed_mean_over_median_db": 2.7660470008850098,
-        "ghost": {
-          "calibration_cube": {
-            "object_over_bare_seabed_db": 26.967248916625977,
-            "at_copy_over_bare_seabed_db": 2.074385643005371
-          },
-          "cable": {
-            "object_over_bare_seabed_db": 18.724802017211914,
-            "at_copy_over_bare_seabed_db": 0.29046085476875305
-          }
-        }
-      }
-    },
-    "seconds": 817.5,
-    "full_resolution_image": "sas_minsas_speckle_leg1_full.png",
-    "animation": "sas_minsas_speckle.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "sas_minsas_survey": {
-    "pings": 160,
-    "scatterers": 21367,
-    "pixel_m": 0.02,
-    "legs": {
-      "leg_1": {
-        "sonar_side": "y below",
-        "covered_fraction": 1.0,
-        "object_over_median_db": {
-          "seabed": 46.66607666015625,
-          "wreck_hull": 39.57046890258789,
-          "wreck_deckhouse": 30.649066925048828,
-          "wreck_mast": 1.3158355951309204,
-          "cable": 54.289337158203125,
-          "rocks": 44.596038818359375,
-          "calibration_cube": 52.551578521728516
-        },
-        "far_strip_over_near_strip_db": -38.310394287109375
-      },
-      "leg_2": {
-        "sonar_side": "y above",
-        "covered_fraction": 1.0,
-        "object_over_median_db": {
-          "seabed": 46.768550872802734,
-          "wreck_hull": 38.068328857421875,
-          "wreck_deckhouse": 28.833486557006836,
-          "wreck_mast": 3.292067050933838,
-          "cable": 48.36594009399414,
-          "rocks": 49.52203369140625,
-          "calibration_cube": 49.83948516845703
-        },
-        "far_strip_over_near_strip_db": -41.45854568481445
-      }
-    },
-    "seconds": 177.1,
-    "full_resolution_image": "sas_minsas_survey_leg1_full.png",
-    "animation": "sas_minsas_survey.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "seafloor_objects_fls": {
-    "scatterers": 17947,
-    "hidden_fraction": 0.4027414052487881,
-    "object_over_median_db": {
-      "seafloor": 28.212372948839356,
-      "sphere": 43.43284356902839,
-      "box": 44.223106733815214,
-      "rocks": 35.294786427656895
-    },
-    "dynamic_range_db": 59.262878858968115,
-    "seconds": 4.7,
-    "animation": "seafloor_objects_fls.gif",
-    "backend": "host",
-    "quick": false
-  },
-  "wreck_sas": {
-    "scatterers": 9180,
-    "pings": 80,
-    "sway_error_rms_wavelengths": 0.08929445305776114,
-    "heave_error_rms_wavelengths": 0.09776407361570098,
-    "sharpness": {
-      "Navigation only": 69.14730834960938,
-      "Estimated motion": 272.31884765625,
-      "True motion": 278.8212890625
-    },
-    "object_over_median_db": {
-      "seafloor": 25.240779876708984,
-      "wreck": 29.211997985839844
-    },
-    "seconds": 42.2,
-    "animation": "wreck_sas.gif",
-    "backend": "host",
+    "backend": "cuda",
     "quick": false
   }
 }

@@ -138,7 +138,7 @@ def test_two_rows_at_three_kilometres_say_that_they_read_a_boundary(tmp_path):
     for a, b in zip(after["python"], after["cpp"]):                          # one function, two engines
         da, db = gen._nearest(a, target)[0], gen._nearest(b, target)[0]
         for key in ("depth_sigma_m", "depth_unresolved_sigma_m", "depth_unresolved_echoes", "depth_multipath_limited"):
-            assert da[key] == pytest.approx(db[key], rel=1e-5), key
+            assert da[key] == pytest.approx(db[key], rel=1e-4), key        # 1e-4: on a CUDA build the two engines hand the function elevations that differ in single precision
         assert da["depth_unresolved_span_m"] == pytest.approx(db["depth_unresolved_span_m"])
     # a track's depth: the same boundary ping after ping is not averaged away
     tracks = [t for t in after["cpp"][-1]["tracks"] if t.get("depth_m") is not None]

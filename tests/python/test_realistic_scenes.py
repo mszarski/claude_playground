@@ -282,7 +282,8 @@ def test_documented_full_size_classes():
     assert c["targets"]["boat_under_way"]["kind"] == "mover" and c["targets"]["boat_at_anchor"]["kind"] == "static"
     assert c["counts"]["mover"] <= 6 and c["counts"]["static"] + c["counts"]["line"] >= 40
     c = g["popoto_far_mover"]["classification"]
-    assert c["counts"]["mover"] == 1 and c["counts"]["multipath"] >= 3
+    # one multipath track since the detector rework (was four): it reports far fewer detections off the ship
+    assert c["counts"]["mover"] == 1 and c["counts"]["multipath"] >= 1 and c["targets"]["ship"]["kind"] == "mover"
     assert g["sas_minsas_speckle"]["legs"]["leg_1"]["speckle_contrast"] < 1.4
 
 
