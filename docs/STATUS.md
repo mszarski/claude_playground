@@ -12,7 +12,7 @@ values or placeholders, flagged `unconfirmed` in the files that hold them.
 
 ## State of verification of this tree
 
-Full-suite result on <commit>: TO BE FILLED BY COORDINATOR
+Full-suite result on 110d7e2 (CPU build, `tools/test.sh` with Bellhop set, 2026-11-18): GoogleTest 135 of 135 passed; pytest 1408 passed, 88 skipped, 2 failed. Both failures were in the tests, not the code, and are fixed in the following commit (re-run singly, passing): `test_environment.py::test_sound_speed_comes_from_one_rule` depended on test order (the warning it expects is given once per process), and `test_hardcoded.py::test_an_ambiguous_elevation_...` rested on the deployment file without the ray-limited elevation search of D-118. The whole suite has not been re-run after those two fixes, and nothing since commit 3383429 has been run on a GPU.
 
 Until that line is filled, what stands is this:
 

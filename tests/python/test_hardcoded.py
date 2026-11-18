@@ -539,6 +539,8 @@ def test_an_ambiguous_elevation_does_not_move_the_detection_and_the_mover_keeps_
     chain = load_yaml(ROOT / "configs" / "deploy" / "popoto_face_2row.yaml")["chain"]
     chain.pop("sync", None)
     chain["elevation"] = dict(chain["elevation"], correct_bearing=True, water_depth=None)
+    chain["elevation"].pop("sector_from_rays", None)                     # the shipped file now limits the search by rays (D-118), which removes some of the
+                                                                         # ambiguity this test is about: it is taken out so the rule for an ambiguous pick is still tested
     got = {}
     for engine in ("python", "cpp"):
         with LiveChain(dict(chain, engine=engine, backend="host")) as c:

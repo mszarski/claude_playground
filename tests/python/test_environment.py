@@ -48,6 +48,7 @@ def test_sound_speed_comes_from_one_rule():
     assert environment.resolve({"water_depth_m": 100.0, "profile": prof, "reference_depth_m": 50.0})["sound_speed"] == pytest.approx(1485.0)
     assert resolve_environment({"temperature": 12.0}, depth=40.0)["sound_speed"] == pytest.approx(acoustics.sound_speed(12.0, 35.0, 40.0))
     # a typed speed beside a temperature that implies another: a warning, unless it is named as deliberate
+    environment._TOLD.clear()                               # the warning is given once per process for one water: another test may have had it
     with pytest.warns(UserWarning, match="geometry uses the first"):
         environment.resolve({"sound_speed_m_s": 1500.0, "temperature_c": 12.0}, strict=True)
     with warnings.catch_warnings():
