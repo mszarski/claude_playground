@@ -2226,3 +2226,132 @@ three bounces do not make; only the first arrivals were compared there.
 separately from the decay time (model B's `sum` with 24 taps leaves the taps resolved where
 the tail is long, an artefact visible in the profiles figure); angle spreading; anything at
 other frequencies or sea states; any two-way path.
+
+## 22. The projector's direct sound and a receiver that overloads [OURS]
+
+Not from TR 0702: SST's receiver is linear. This section is our own model, written for the
+long-range array, whose projector sits beside the hydrophones. It is behavioural: it says
+what a front end of a given description does, and makes no claim about any board. Code:
+`sim/sources.py` (`direct_arrival`), `sim/receiver.py` (`apply_front_end`),
+`tools/direct_sound_study.py`, `tests/python/test_direct_overload.py`.
+
+### 22.1 Direct arrival (`transmit.direct_path`)
+
+The pulse reaches hydrophone i straight from the projector, a distance `r_i` away:
+
+    p_i(t) = (A_1m / r_i) 10^(-alpha r_i / 20) s(t - r_i / c),     A_1m = 10^((SL + sensitivity + gain) / 20)
+
+`r_i` is each element's own distance (the projector is in the array's near field: on the
+three-row face `r_i` runs from 1.69 m to 6.37 m, an 11.5 dB spread of level and 3.1 ms of
+delay, nothing like a plane wave). It is the one-way source of Sec. 20 placed at the
+projector's true position, moving with the vehicle (so no Doppler), emitting the sonar's own
+waveform at the transmit instant; the same kernel as the echoes computes it, so element
+patterns, absorption, board clocks, element position errors and sampled waveforms come with
+it. The provider's other eigenrays between projector and array are included: with flat
+boundaries the images of the projector in the surface and the bottom, at their own
+distances, with the boundary's reflection coefficient. `{boundaries: false}` leaves them out.
+
+A projector with a beam pattern: the one-way path treats the source as omnidirectional, so
+the pattern is applied afterwards, per ray and per element, at the band centre, in the
+direction the ray leaves the projector towards that element (the line from the apparent
+source to the element, mirrored in the horizontal once per bounce). Exact for straight rays
+and flat horizontal boundaries. A projector on a face with a half-space pattern facing out
+has zero response in the plane of the face; real baffles leak and diffract, which is not
+modelled: without a measured pattern, omnidirectional (the Popoto files) is the pessimistic
+choice.
+
+What runs where: analytic pulses, the C++ kernel (host or CUDA) on both engines; sampled
+pulses, C++ or NumPy by engine; the eigenrays by the provider's engine.
+
+Level convention: `A_1m` is the PEAK of the pulse in volts at the ADC, as everywhere in the
+simulator. If a projector's source level is quoted rms, its pulse peaks 3 dB higher.
+
+### 22.2 Overload and recovery (`receive.overload`)
+
+Signals are in the record's units: volts at the ADC with all of `receive.gain_db` applied. A
+limit `L` volts at the output of an input stage with `G_pre` of the total `G` dB is the
+ADC-referred limit `L 10^((G - G_pre) / 20)`. The chain:
+
+    x -> gain switch a(t) -> input stage (limit, dead time, gain recovery)
+      -> coupling capacitor (one-pole high-pass) -> receive.tvg ramp -> ADC (limit, dead time, gain recovery)
+
+**A limiting stage.** Input `u`, rails `-L_n`, `+L_p`, dead time `T_d`, recovery constant
+`tau_g`; `tau` the time since the stage last clipped (the channel's own, or the latest on
+its board when the stage is shared):
+
+    u >= L_p or u <= -L_n :  y = the rail
+    0 < tau <= T_d        :  y = the rail last hit (or 0)
+    tau > T_d             :  y = g u,   g = 1 - exp(-(tau - T_d) / tau_g)
+
+Whether a sample clips is decided on the input alone, so the stage has no feedback and the
+curves are closed forms: the gain is within `x` dB of nominal `T_d + tau_g ln(1 / (1 - 10^(-x/20)))`
+after the last clipped sample (2.22 `tau_g` for 1 dB).
+
+Which stage clips first follows from where the gain is: with all the gain ahead of the
+input stage's output, that stage clips first if its swing is below the ADC's full scale; with
+gain behind it (and behind the capacitor) the ADC clips first.
+
+**The coupling capacitor.** `v_C' = (y_1 - v_C) / tau_c`, `tau_c = 1 / (2 pi f_c)`; output
+`y_2 = y_1 - v_C`. The capacitor follows the mean of what the input stage delivers:
+
+- an unclipped or symmetrically clipped burst has zero mean and leaves no charge (only a
+  ripple of order `L f_c / f`);
+- a burst whose clipped output has mean `m` for a time `T` leaves `v_C = m (1 - exp(-T / tau_c))`.
+  For a sine of amplitude `A` between unequal rails,
+  `m = [h(L_p) - h(L_n)] / (2 pi)`, `h(L) = 2 A (1 - cos th) + L (pi - 2 th)`, `th = asin(L / A)`,
+  which tends to `(L_p - L_n) / 2` when the burst is far over both rails (a square wave);
+  a rail held through a dead time is a mean `L` for `T_d`;
+- afterwards the output is the signal minus `v_C exp(-t / tau_c)`: an offset decaying with
+  the corner's time constant (1.6 ms at 100 Hz, 16 ms at 10 Hz). Multiplied by the gain
+  behind the capacitor it can exceed the ADC's full scale `F`; the ADC then sits on its rail for
+  `tau_c ln(|v_C| / F)` and nothing is received.
+
+The offset itself is far below the band and a matched filter rejects it; what it costs is
+the time on the rail and the headroom until it has decayed. In samples the filter is the
+bilinear transform with the corner pre-warped (unit gain in the band to 2e-4 at 5 kHz).
+
+**Gain switching.** `a(t)`: `gain_db` until `until`, then linear in dB to 0 over `ramp`. It
+acts ahead of the input stage, so a reduction larger than the overload removes the clipping
+and with it every recovery effect; what it costs is the gain (and so the ADC's noise floor
+relative to the signal) while it lasts. The record's existing ramp fields report it.
+
+**State before the window.** A receive window usually opens after the pulse, but the front
+end's state at that moment was set by the pulse. The model therefore runs from the transmit:
+the direct arrival is synthesised for the interval before the window on the same sample
+clock (same kernel, full fidelity), passed through the model, and discarded. Echoes,
+reverberation and noise in that interval are not simulated: they are tens of dB below any
+limit and change no state.
+
+### 22.3 What it gives for the Popoto files (as configured; several inputs unconfirmed)
+
+`tools/direct_sound_study.py` -> `docs/design/direct_sound_study.json`. With SL 197 dB,
+sensitivity -208 dB re 1 V/uPa, 43 dB gain, 2.61 V full scale (all flagged unconfirmed in
+the sonar files, as is every projector position): the direct sound is at full scale 15.3 m
+from the projector. On the three-row face (projector 4 m from the centre) every hydrophone
+is overloaded, by 19.1 dB at 1.69 m down to 7.6 dB at 6.37 m; on the static frame by 16.7 to
+35.6 dB; on the test AUV by 20.6 to 34.0 dB. A front end that only clips costs nothing
+beyond the pulse itself (minimum range `c (T + r / c) / 2`: 78 m and 753 m for 0.1 s and
+1 s on the face). Each second of recovery adds 750 m.
+
+### 22.4 Limits
+
+- Behavioural, not a circuit: one dead time and one time constant per stage, a hard limiter
+  with no soft knee, no slew limit, no thermal tail, no latch-up, no protection-diode
+  conduction at the input (which can charge an input capacitor through a different time
+  constant than it discharges: here the charging and the decay share `tau_c`), no
+  intermodulation beyond what a hard limiter makes.
+- A sigma-delta converter driven past full scale may go unstable and take its own time to
+  come back; that is the ADC stage's `dead_time`, a parameter, not a model of the modulator.
+- Clipping makes harmonics above half the sample rate; the limiter works on the samples, so
+  those alias instead of being removed by an anti-alias filter that in a real board sits
+  between the stages. They are out of the processing band either way.
+- The decision "clipped" ignores the stage's own recovering gain (a stage at gain 0.3 clips
+  at the same input as at gain 1).
+- Real (passband) records only: a complex envelope cannot be clipped.
+- Before the window only the direct arrival is simulated. A strong echo or boundary return
+  before the window that overloads by itself is not seen (none does in the Popoto cases:
+  the first surface return at 10 m depth is 26 dB below the direct sound at 1 m).
+- Hull-borne (structural) paths from the projector to the hydrophones, and electrical
+  crosstalk from the power amplifier, are not modelled; either can exceed the water path.
+- No parameter of the Popoto board's overload behaviour is known to us. Dead times, time
+  constants, rails and the gain split in the scenarios, tests and study are illustrative.

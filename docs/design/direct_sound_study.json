@@ -1,0 +1,10115 @@
+{
+ "popoto_long_range_3row": {
+  "sonar": "popoto_long_range_3row",
+  "source_level_db": 197.0,
+  "sensitivity_db": -208.0,
+  "gain_db": 43.0,
+  "adc_full_scale_v": 2.61,
+  "projector_lever_arm": [
+   4.0,
+   0.0,
+   0.0
+  ],
+  "sound_speed": 1500.0,
+  "level_convention": "source_level_db + sensitivity_db + gain_db is the PEAK voltage at the ADC (the simulator's convention); an rms source level adds 3 dB to every overload figure",
+  "unconfirmed_in_sonar_file": [
+   "platform.usable_span_m",
+   "platform.row_baseline_m",
+   "array.layouts.three_rows.rows",
+   "transmit",
+   "array.pitch"
+  ],
+  "hydrophones": [
+   {
+    "index": 0,
+    "position": [
+     -2.325,
+     0.0,
+     0.75
+    ],
+    "distance_m": 6.3693,
+    "direct_level_db_re_upa": 180.92,
+    "peak_volts_at_adc": 6.25,
+    "overload_db_re_adc": 7.59
+   },
+   {
+    "index": 1,
+    "position": [
+     -2.175,
+     0.0,
+     0.75
+    ],
+    "distance_m": 6.2204,
+    "direct_level_db_re_upa": 181.12,
+    "peak_volts_at_adc": 6.4,
+    "overload_db_re_adc": 7.79
+   },
+   {
+    "index": 2,
+    "position": [
+     -2.025,
+     0.0,
+     0.75
+    ],
+    "distance_m": 6.0715,
+    "direct_level_db_re_upa": 181.33,
+    "peak_volts_at_adc": 6.557,
+    "overload_db_re_adc": 8.0
+   },
+   {
+    "index": 3,
+    "position": [
+     -1.875,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.9227,
+    "direct_level_db_re_upa": 181.55,
+    "peak_volts_at_adc": 6.722,
+    "overload_db_re_adc": 8.22
+   },
+   {
+    "index": 4,
+    "position": [
+     -1.725,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.7739,
+    "direct_level_db_re_upa": 181.77,
+    "peak_volts_at_adc": 6.895,
+    "overload_db_re_adc": 8.44
+   },
+   {
+    "index": 5,
+    "position": [
+     -1.575,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.6252,
+    "direct_level_db_re_upa": 182.0,
+    "peak_volts_at_adc": 7.077,
+    "overload_db_re_adc": 8.66
+   },
+   {
+    "index": 6,
+    "position": [
+     -1.425,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.4766,
+    "direct_level_db_re_upa": 182.23,
+    "peak_volts_at_adc": 7.269,
+    "overload_db_re_adc": 8.9
+   },
+   {
+    "index": 7,
+    "position": [
+     -1.275,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.3281,
+    "direct_level_db_re_upa": 182.47,
+    "peak_volts_at_adc": 7.472,
+    "overload_db_re_adc": 9.14
+   },
+   {
+    "index": 8,
+    "position": [
+     -1.125,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.1796,
+    "direct_level_db_re_upa": 182.71,
+    "peak_volts_at_adc": 7.686,
+    "overload_db_re_adc": 9.38
+   },
+   {
+    "index": 9,
+    "position": [
+     -0.975,
+     0.0,
+     0.75
+    ],
+    "distance_m": 5.0312,
+    "direct_level_db_re_upa": 182.97,
+    "peak_volts_at_adc": 7.913,
+    "overload_db_re_adc": 9.63
+   },
+   {
+    "index": 10,
+    "position": [
+     -0.825,
+     0.0,
+     0.75
+    ],
+    "distance_m": 4.8829,
+    "direct_level_db_re_upa": 183.23,
+    "peak_volts_at_adc": 8.153,
+    "overload_db_re_adc": 9.89
+   },
+   {
+    "index": 11,
+    "position": [
+     -0.675,
+     0.0,
+     0.75
+    ],
+    "distance_m": 4.7348,
+    "direct_level_db_re_upa": 183.49,
+    "peak_volts_at_adc": 8.408,
+    "overload_db_re_adc": 10.16
+   },
+   {
+    "index": 12,
+    "position": [
+     -0.525,
+     0.0,
+     0.75
+    ],
+    "distance_m": 4.5867,
+    "direct_level_db_re_upa": 183.77,
+    "peak_volts_at_adc": 8.68,
+    "overload_db_re_adc": 10.44
+   },
+   {
+    "index": 13,
+    "position": [
+     -0.375,
+     0.0,
+     0.75
+    ],
+    "distance_m": 4.4388,
+    "direct_level_db_re_upa": 184.05,
+    "peak_volts_at_adc": 8.969,
+    "overload_db_re_adc": 10.72
+   },
+   {
+    "index": 14,
+    "position": [
+     -0.225,
+     0.0,
+     0.75
+    ],
+    "distance_m": 4.2911,
+    "direct_level_db_re_upa": 184.35,
+    "peak_volts_at_adc": 9.278,
+    "overload_db_re_adc": 11.02
+   },
+   {
+    "index": 15,
+    "position": [
+     -0.075,
+     0.0,
+     0.75
+    ],
+    "distance_m": 4.1434,
+    "direct_level_db_re_upa": 184.65,
+    "peak_volts_at_adc": 9.608,
+    "overload_db_re_adc": 11.32
+   },
+   {
+    "index": 16,
+    "position": [
+     0.075,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.996,
+    "direct_level_db_re_upa": 184.97,
+    "peak_volts_at_adc": 9.963,
+    "overload_db_re_adc": 11.63
+   },
+   {
+    "index": 17,
+    "position": [
+     0.225,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.8488,
+    "direct_level_db_re_upa": 185.29,
+    "peak_volts_at_adc": 10.344,
+    "overload_db_re_adc": 11.96
+   },
+   {
+    "index": 18,
+    "position": [
+     0.375,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.7018,
+    "direct_level_db_re_upa": 185.63,
+    "peak_volts_at_adc": 10.754,
+    "overload_db_re_adc": 12.3
+   },
+   {
+    "index": 19,
+    "position": [
+     0.525,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.555,
+    "direct_level_db_re_upa": 185.98,
+    "peak_volts_at_adc": 11.198,
+    "overload_db_re_adc": 12.65
+   },
+   {
+    "index": 20,
+    "position": [
+     0.675,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.4085,
+    "direct_level_db_re_upa": 186.35,
+    "peak_volts_at_adc": 11.68,
+    "overload_db_re_adc": 13.02
+   },
+   {
+    "index": 21,
+    "position": [
+     0.825,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.2624,
+    "direct_level_db_re_upa": 186.73,
+    "peak_volts_at_adc": 12.203,
+    "overload_db_re_adc": 13.4
+   },
+   {
+    "index": 22,
+    "position": [
+     0.975,
+     0.0,
+     0.75
+    ],
+    "distance_m": 3.1166,
+    "direct_level_db_re_upa": 187.13,
+    "peak_volts_at_adc": 12.774,
+    "overload_db_re_adc": 13.79
+   },
+   {
+    "index": 23,
+    "position": [
+     1.125,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.9712,
+    "direct_level_db_re_upa": 187.54,
+    "peak_volts_at_adc": 13.399,
+    "overload_db_re_adc": 14.21
+   },
+   {
+    "index": 24,
+    "position": [
+     1.275,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.8263,
+    "direct_level_db_re_upa": 187.98,
+    "peak_volts_at_adc": 14.086,
+    "overload_db_re_adc": 14.64
+   },
+   {
+    "index": 25,
+    "position": [
+     1.425,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.682,
+    "direct_level_db_re_upa": 188.43,
+    "peak_volts_at_adc": 14.844,
+    "overload_db_re_adc": 15.1
+   },
+   {
+    "index": 26,
+    "position": [
+     1.575,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.5383,
+    "direct_level_db_re_upa": 188.91,
+    "peak_volts_at_adc": 15.684,
+    "overload_db_re_adc": 15.58
+   },
+   {
+    "index": 27,
+    "position": [
+     1.725,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.3954,
+    "direct_level_db_re_upa": 189.41,
+    "peak_volts_at_adc": 16.619,
+    "overload_db_re_adc": 16.08
+   },
+   {
+    "index": 28,
+    "position": [
+     1.875,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.2535,
+    "direct_level_db_re_upa": 189.94,
+    "peak_volts_at_adc": 17.666,
+    "overload_db_re_adc": 16.61
+   },
+   {
+    "index": 29,
+    "position": [
+     2.025,
+     0.0,
+     0.75
+    ],
+    "distance_m": 2.1126,
+    "direct_level_db_re_upa": 190.5,
+    "peak_volts_at_adc": 18.844,
+    "overload_db_re_adc": 17.17
+   },
+   {
+    "index": 30,
+    "position": [
+     2.175,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.9731,
+    "direct_level_db_re_upa": 191.1,
+    "peak_volts_at_adc": 20.177,
+    "overload_db_re_adc": 17.76
+   },
+   {
+    "index": 31,
+    "position": [
+     2.325,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.8352,
+    "direct_level_db_re_upa": 191.73,
+    "peak_volts_at_adc": 21.692,
+    "overload_db_re_adc": 18.39
+   },
+   {
+    "index": 32,
+    "position": [
+     -2.325,
+     0.0,
+     0.2
+    ],
+    "distance_m": 6.3282,
+    "direct_level_db_re_upa": 180.97,
+    "peak_volts_at_adc": 6.291,
+    "overload_db_re_adc": 7.64
+   },
+   {
+    "index": 33,
+    "position": [
+     -2.175,
+     0.0,
+     0.2
+    ],
+    "distance_m": 6.1782,
+    "direct_level_db_re_upa": 181.18,
+    "peak_volts_at_adc": 6.444,
+    "overload_db_re_adc": 7.85
+   },
+   {
+    "index": 34,
+    "position": [
+     -2.025,
+     0.0,
+     0.2
+    ],
+    "distance_m": 6.0283,
+    "direct_level_db_re_upa": 181.4,
+    "peak_volts_at_adc": 6.604,
+    "overload_db_re_adc": 8.06
+   },
+   {
+    "index": 35,
+    "position": [
+     -1.875,
+     0.0,
+     0.2
+    ],
+    "distance_m": 5.8784,
+    "direct_level_db_re_upa": 181.61,
+    "peak_volts_at_adc": 6.772,
+    "overload_db_re_adc": 8.28
+   },
+   {
+    "index": 36,
+    "position": [
+     -1.725,
+     0.0,
+     0.2
+    ],
+    "distance_m": 5.7285,
+    "direct_level_db_re_upa": 181.84,
+    "peak_volts_at_adc": 6.95,
+    "overload_db_re_adc": 8.51
+   },
+   {
+    "index": 37,
+    "position": [
+     -1.575,
+     0.0,
+     0.2
+    ],
+    "distance_m": 5.5786,
+    "direct_level_db_re_upa": 182.07,
+    "peak_volts_at_adc": 7.136,
+    "overload_db_re_adc": 8.74
+   },
+   {
+    "index": 38,
+    "position": [
+     -1.425,
+     0.0,
+     0.2
+    ],
+    "distance_m": 5.4287,
+    "direct_level_db_re_upa": 182.31,
+    "peak_volts_at_adc": 7.333,
+    "overload_db_re_adc": 8.97
+   },
+   {
+    "index": 39,
+    "position": [
+     -1.275,
+     0.0,
+     0.2
+    ],
+    "distance_m": 5.2788,
+    "direct_level_db_re_upa": 182.55,
+    "peak_volts_at_adc": 7.542,
+    "overload_db_re_adc": 9.22
+   },
+   {
+    "index": 40,
+    "position": [
+     -1.125,
+     0.0,
+     0.2
+    ],
+    "distance_m": 5.1289,
+    "direct_level_db_re_upa": 182.8,
+    "peak_volts_at_adc": 7.762,
+    "overload_db_re_adc": 9.47
+   },
+   {
+    "index": 41,
+    "position": [
+     -0.975,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.979,
+    "direct_level_db_re_upa": 183.06,
+    "peak_volts_at_adc": 7.996,
+    "overload_db_re_adc": 9.72
+   },
+   {
+    "index": 42,
+    "position": [
+     -0.825,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.8291,
+    "direct_level_db_re_upa": 183.32,
+    "peak_volts_at_adc": 8.244,
+    "overload_db_re_adc": 9.99
+   },
+   {
+    "index": 43,
+    "position": [
+     -0.675,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.6793,
+    "direct_level_db_re_upa": 183.6,
+    "peak_volts_at_adc": 8.508,
+    "overload_db_re_adc": 10.26
+   },
+   {
+    "index": 44,
+    "position": [
+     -0.525,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.5294,
+    "direct_level_db_re_upa": 183.88,
+    "peak_volts_at_adc": 8.789,
+    "overload_db_re_adc": 10.55
+   },
+   {
+    "index": 45,
+    "position": [
+     -0.375,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.3796,
+    "direct_level_db_re_upa": 184.17,
+    "peak_volts_at_adc": 9.09,
+    "overload_db_re_adc": 10.84
+   },
+   {
+    "index": 46,
+    "position": [
+     -0.225,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.2297,
+    "direct_level_db_re_upa": 184.47,
+    "peak_volts_at_adc": 9.412,
+    "overload_db_re_adc": 11.14
+   },
+   {
+    "index": 47,
+    "position": [
+     -0.075,
+     0.0,
+     0.2
+    ],
+    "distance_m": 4.0799,
+    "direct_level_db_re_upa": 184.79,
+    "peak_volts_at_adc": 9.758,
+    "overload_db_re_adc": 11.45
+   },
+   {
+    "index": 48,
+    "position": [
+     0.075,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.9301,
+    "direct_level_db_re_upa": 185.11,
+    "peak_volts_at_adc": 10.13,
+    "overload_db_re_adc": 11.78
+   },
+   {
+    "index": 49,
+    "position": [
+     0.225,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.7803,
+    "direct_level_db_re_upa": 185.45,
+    "peak_volts_at_adc": 10.531,
+    "overload_db_re_adc": 12.12
+   },
+   {
+    "index": 50,
+    "position": [
+     0.375,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.6305,
+    "direct_level_db_re_upa": 185.8,
+    "peak_volts_at_adc": 10.966,
+    "overload_db_re_adc": 12.47
+   },
+   {
+    "index": 51,
+    "position": [
+     0.525,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.4808,
+    "direct_level_db_re_upa": 186.17,
+    "peak_volts_at_adc": 11.437,
+    "overload_db_re_adc": 12.83
+   },
+   {
+    "index": 52,
+    "position": [
+     0.675,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.331,
+    "direct_level_db_re_upa": 186.55,
+    "peak_volts_at_adc": 11.952,
+    "overload_db_re_adc": 13.22
+   },
+   {
+    "index": 53,
+    "position": [
+     0.825,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.1813,
+    "direct_level_db_re_upa": 186.95,
+    "peak_volts_at_adc": 12.514,
+    "overload_db_re_adc": 13.62
+   },
+   {
+    "index": 54,
+    "position": [
+     0.975,
+     0.0,
+     0.2
+    ],
+    "distance_m": 3.0316,
+    "direct_level_db_re_upa": 187.37,
+    "peak_volts_at_adc": 13.132,
+    "overload_db_re_adc": 14.03
+   },
+   {
+    "index": 55,
+    "position": [
+     1.125,
+     0.0,
+     0.2
+    ],
+    "distance_m": 2.8819,
+    "direct_level_db_re_upa": 187.81,
+    "peak_volts_at_adc": 13.814,
+    "overload_db_re_adc": 14.47
+   },
+   {
+    "index": 56,
+    "position": [
+     1.275,
+     0.0,
+     0.2
+    ],
+    "distance_m": 2.7323,
+    "direct_level_db_re_upa": 188.27,
+    "peak_volts_at_adc": 14.57,
+    "overload_db_re_adc": 14.94
+   },
+   {
+    "index": 57,
+    "position": [
+     1.425,
+     0.0,
+     0.2
+    ],
+    "distance_m": 2.5828,
+    "direct_level_db_re_upa": 188.76,
+    "peak_volts_at_adc": 15.414,
+    "overload_db_re_adc": 15.43
+   },
+   {
+    "index": 58,
+    "position": [
+     1.575,
+     0.0,
+     0.2
+    ],
+    "distance_m": 2.4332,
+    "direct_level_db_re_upa": 189.28,
+    "peak_volts_at_adc": 16.361,
+    "overload_db_re_adc": 15.94
+   },
+   {
+    "index": 59,
+    "position": [
+     1.725,
+     0.0,
+     0.2
+    ],
+    "distance_m": 2.2838,
+    "direct_level_db_re_upa": 189.83,
+    "peak_volts_at_adc": 17.432,
+    "overload_db_re_adc": 16.49
+   },
+   {
+    "index": 60,
+    "position": [
+     1.875,
+     0.0,
+     0.2
+    ],
+    "distance_m": 2.1344,
+    "direct_level_db_re_upa": 190.41,
+    "peak_volts_at_adc": 18.652,
+    "overload_db_re_adc": 17.08
+   },
+   {
+    "index": 61,
+    "position": [
+     2.025,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.9851,
+    "direct_level_db_re_upa": 191.04,
+    "peak_volts_at_adc": 20.055,
+    "overload_db_re_adc": 17.71
+   },
+   {
+    "index": 62,
+    "position": [
+     2.175,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.8359,
+    "direct_level_db_re_upa": 191.72,
+    "peak_volts_at_adc": 21.684,
+    "overload_db_re_adc": 18.39
+   },
+   {
+    "index": 63,
+    "position": [
+     2.325,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.6869,
+    "direct_level_db_re_upa": 192.46,
+    "peak_volts_at_adc": 23.6,
+    "overload_db_re_adc": 19.13
+   },
+   {
+    "index": 64,
+    "position": [
+     -2.325,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 6.3693,
+    "direct_level_db_re_upa": 180.92,
+    "peak_volts_at_adc": 6.25,
+    "overload_db_re_adc": 7.59
+   },
+   {
+    "index": 65,
+    "position": [
+     -2.175,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 6.2204,
+    "direct_level_db_re_upa": 181.12,
+    "peak_volts_at_adc": 6.4,
+    "overload_db_re_adc": 7.79
+   },
+   {
+    "index": 66,
+    "position": [
+     -2.025,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 6.0715,
+    "direct_level_db_re_upa": 181.33,
+    "peak_volts_at_adc": 6.557,
+    "overload_db_re_adc": 8.0
+   },
+   {
+    "index": 67,
+    "position": [
+     -1.875,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.9227,
+    "direct_level_db_re_upa": 181.55,
+    "peak_volts_at_adc": 6.722,
+    "overload_db_re_adc": 8.22
+   },
+   {
+    "index": 68,
+    "position": [
+     -1.725,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.7739,
+    "direct_level_db_re_upa": 181.77,
+    "peak_volts_at_adc": 6.895,
+    "overload_db_re_adc": 8.44
+   },
+   {
+    "index": 69,
+    "position": [
+     -1.575,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.6252,
+    "direct_level_db_re_upa": 182.0,
+    "peak_volts_at_adc": 7.077,
+    "overload_db_re_adc": 8.66
+   },
+   {
+    "index": 70,
+    "position": [
+     -1.425,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.4766,
+    "direct_level_db_re_upa": 182.23,
+    "peak_volts_at_adc": 7.269,
+    "overload_db_re_adc": 8.9
+   },
+   {
+    "index": 71,
+    "position": [
+     -1.275,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.3281,
+    "direct_level_db_re_upa": 182.47,
+    "peak_volts_at_adc": 7.472,
+    "overload_db_re_adc": 9.14
+   },
+   {
+    "index": 72,
+    "position": [
+     -1.125,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.1796,
+    "direct_level_db_re_upa": 182.71,
+    "peak_volts_at_adc": 7.686,
+    "overload_db_re_adc": 9.38
+   },
+   {
+    "index": 73,
+    "position": [
+     -0.975,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 5.0312,
+    "direct_level_db_re_upa": 182.97,
+    "peak_volts_at_adc": 7.913,
+    "overload_db_re_adc": 9.63
+   },
+   {
+    "index": 74,
+    "position": [
+     -0.825,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 4.8829,
+    "direct_level_db_re_upa": 183.23,
+    "peak_volts_at_adc": 8.153,
+    "overload_db_re_adc": 9.89
+   },
+   {
+    "index": 75,
+    "position": [
+     -0.675,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 4.7348,
+    "direct_level_db_re_upa": 183.49,
+    "peak_volts_at_adc": 8.408,
+    "overload_db_re_adc": 10.16
+   },
+   {
+    "index": 76,
+    "position": [
+     -0.525,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 4.5867,
+    "direct_level_db_re_upa": 183.77,
+    "peak_volts_at_adc": 8.68,
+    "overload_db_re_adc": 10.44
+   },
+   {
+    "index": 77,
+    "position": [
+     -0.375,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 4.4388,
+    "direct_level_db_re_upa": 184.05,
+    "peak_volts_at_adc": 8.969,
+    "overload_db_re_adc": 10.72
+   },
+   {
+    "index": 78,
+    "position": [
+     -0.225,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 4.2911,
+    "direct_level_db_re_upa": 184.35,
+    "peak_volts_at_adc": 9.278,
+    "overload_db_re_adc": 11.02
+   },
+   {
+    "index": 79,
+    "position": [
+     -0.075,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 4.1434,
+    "direct_level_db_re_upa": 184.65,
+    "peak_volts_at_adc": 9.608,
+    "overload_db_re_adc": 11.32
+   },
+   {
+    "index": 80,
+    "position": [
+     0.075,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.996,
+    "direct_level_db_re_upa": 184.97,
+    "peak_volts_at_adc": 9.963,
+    "overload_db_re_adc": 11.63
+   },
+   {
+    "index": 81,
+    "position": [
+     0.225,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.8488,
+    "direct_level_db_re_upa": 185.29,
+    "peak_volts_at_adc": 10.344,
+    "overload_db_re_adc": 11.96
+   },
+   {
+    "index": 82,
+    "position": [
+     0.375,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.7018,
+    "direct_level_db_re_upa": 185.63,
+    "peak_volts_at_adc": 10.754,
+    "overload_db_re_adc": 12.3
+   },
+   {
+    "index": 83,
+    "position": [
+     0.525,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.555,
+    "direct_level_db_re_upa": 185.98,
+    "peak_volts_at_adc": 11.198,
+    "overload_db_re_adc": 12.65
+   },
+   {
+    "index": 84,
+    "position": [
+     0.675,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.4085,
+    "direct_level_db_re_upa": 186.35,
+    "peak_volts_at_adc": 11.68,
+    "overload_db_re_adc": 13.02
+   },
+   {
+    "index": 85,
+    "position": [
+     0.825,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.2624,
+    "direct_level_db_re_upa": 186.73,
+    "peak_volts_at_adc": 12.203,
+    "overload_db_re_adc": 13.4
+   },
+   {
+    "index": 86,
+    "position": [
+     0.975,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 3.1166,
+    "direct_level_db_re_upa": 187.13,
+    "peak_volts_at_adc": 12.774,
+    "overload_db_re_adc": 13.79
+   },
+   {
+    "index": 87,
+    "position": [
+     1.125,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.9712,
+    "direct_level_db_re_upa": 187.54,
+    "peak_volts_at_adc": 13.399,
+    "overload_db_re_adc": 14.21
+   },
+   {
+    "index": 88,
+    "position": [
+     1.275,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.8263,
+    "direct_level_db_re_upa": 187.98,
+    "peak_volts_at_adc": 14.086,
+    "overload_db_re_adc": 14.64
+   },
+   {
+    "index": 89,
+    "position": [
+     1.425,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.682,
+    "direct_level_db_re_upa": 188.43,
+    "peak_volts_at_adc": 14.844,
+    "overload_db_re_adc": 15.1
+   },
+   {
+    "index": 90,
+    "position": [
+     1.575,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.5383,
+    "direct_level_db_re_upa": 188.91,
+    "peak_volts_at_adc": 15.684,
+    "overload_db_re_adc": 15.58
+   },
+   {
+    "index": 91,
+    "position": [
+     1.725,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.3954,
+    "direct_level_db_re_upa": 189.41,
+    "peak_volts_at_adc": 16.619,
+    "overload_db_re_adc": 16.08
+   },
+   {
+    "index": 92,
+    "position": [
+     1.875,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.2535,
+    "direct_level_db_re_upa": 189.94,
+    "peak_volts_at_adc": 17.666,
+    "overload_db_re_adc": 16.61
+   },
+   {
+    "index": 93,
+    "position": [
+     2.025,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.1126,
+    "direct_level_db_re_upa": 190.5,
+    "peak_volts_at_adc": 18.844,
+    "overload_db_re_adc": 17.17
+   },
+   {
+    "index": 94,
+    "position": [
+     2.175,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9731,
+    "direct_level_db_re_upa": 191.1,
+    "peak_volts_at_adc": 20.177,
+    "overload_db_re_adc": 17.76
+   },
+   {
+    "index": 95,
+    "position": [
+     2.325,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8352,
+    "direct_level_db_re_upa": 191.73,
+    "peak_volts_at_adc": 21.692,
+    "overload_db_re_adc": 18.39
+   }
+  ],
+  "summary": {
+   "nearest_m": 1.6868980407837342,
+   "farthest_m": 6.369311187247801,
+   "overload_db_nearest": 19.125413176711724,
+   "overload_db_farthest": 7.585340496174174,
+   "hydrophones_overloaded": 96,
+   "hydrophones": 96,
+   "gain_reduction_for_no_overload_db": 19.125413176711724,
+   "distance_for_no_overload_m": 15.253148297068867
+  },
+  "projector_distance": [
+   {
+    "distance_m": 0.3,
+    "direct_level_db_re_upa": 207.46,
+    "overload_db_re_adc": 34.12
+   },
+   {
+    "distance_m": 0.5,
+    "direct_level_db_re_upa": 203.02,
+    "overload_db_re_adc": 29.69
+   },
+   {
+    "distance_m": 1.0,
+    "direct_level_db_re_upa": 197.0,
+    "overload_db_re_adc": 23.67
+   },
+   {
+    "distance_m": 1.69,
+    "direct_level_db_re_upa": 192.44,
+    "overload_db_re_adc": 19.11
+   },
+   {
+    "distance_m": 2.0,
+    "direct_level_db_re_upa": 190.98,
+    "overload_db_re_adc": 17.65
+   },
+   {
+    "distance_m": 3.0,
+    "direct_level_db_re_upa": 187.46,
+    "overload_db_re_adc": 14.12
+   },
+   {
+    "distance_m": 5.0,
+    "direct_level_db_re_upa": 183.02,
+    "overload_db_re_adc": 9.69
+   },
+   {
+    "distance_m": 7.0,
+    "direct_level_db_re_upa": 180.1,
+    "overload_db_re_adc": 6.77
+   },
+   {
+    "distance_m": 10.0,
+    "direct_level_db_re_upa": 177.0,
+    "overload_db_re_adc": 3.67
+   },
+   {
+    "distance_m": 15.0,
+    "direct_level_db_re_upa": 173.48,
+    "overload_db_re_adc": 0.15
+   },
+   {
+    "distance_m": 20.0,
+    "direct_level_db_re_upa": 170.98,
+    "overload_db_re_adc": -2.35
+   },
+   {
+    "distance_m": 30.0,
+    "direct_level_db_re_upa": 167.46,
+    "overload_db_re_adc": -5.88
+   }
+  ],
+  "tolerance": {
+   "gain_db": 1.0,
+   "offset_db_re_adc_full_scale": -40.0
+  },
+  "recovery_sets_are": "ILLUSTRATIVE: no board has been measured",
+  "recovery_note": "recovery_after_pulse_s counts from the nominal end of the direct pulse at each hydrophone (pulse + distance / c); closed_form_recovery_s counts from the last clipped sample, which the pulse's edge taper (window_alpha) puts before the nominal end, the earlier the less a hydrophone is overloaded",
+  "recovery": {
+   "0.1": [
+    {
+     "set": "clip_only",
+     "overload": {},
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10424620745816521,
+      "best": 0.10112459869385583,
+      "median": 0.10269197288733992
+     },
+     "minimum_range_m": {
+      "worst": 78.1846555936239,
+      "best": 75.84344902039187,
+      "median": 77.01897966550493
+     },
+     "closed_form_recovery_s": 0.0
+    },
+    {
+     "set": "dead_1ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10424620745816521,
+      "best": 0.10112459869385583,
+      "median": 0.10269197288733992
+     },
+     "minimum_range_m": {
+      "worst": 78.1846555936239,
+      "best": 75.84344902039187,
+      "median": 77.01897966550493
+     },
+     "closed_form_recovery_s": 0.001
+    },
+    {
+     "set": "tau_1ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0011410263061441689,
+      "best": 0.0,
+      "median": 0.0004707565325897528,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       6e-05,
+       6e-05,
+       0.00014,
+       0.00014,
+       0.00014,
+       0.00022,
+       0.00022,
+       0.00022,
+       0.00031,
+       0.00031,
+       0.00039,
+       0.00039,
+       0.00047,
+       0.00047,
+       0.00048,
+       0.00056,
+       0.00056,
+       0.00064,
+       0.00065,
+       0.00073,
+       0.00072,
+       0.00073,
+       0.00081,
+       0.00082,
+       0.00089,
+       0.0009,
+       0.00097,
+       0.00098,
+       0.00106,
+       0.0,
+       0.0,
+       5e-05,
+       6e-05,
+       6e-05,
+       0.00014,
+       0.00014,
+       0.00022,
+       0.00022,
+       0.00023,
+       0.00031,
+       0.00031,
+       0.00039,
+       0.00039,
+       0.00039,
+       0.00047,
+       0.00048,
+       0.00056,
+       0.00056,
+       0.00064,
+       0.00064,
+       0.00064,
+       0.00072,
+       0.00073,
+       0.00081,
+       0.00081,
+       0.00089,
+       0.0009,
+       0.00098,
+       0.00098,
+       0.00106,
+       0.00114,
+       0.0,
+       0.0,
+       0.0,
+       6e-05,
+       6e-05,
+       0.00014,
+       0.00014,
+       0.00014,
+       0.00022,
+       0.00022,
+       0.00022,
+       0.00031,
+       0.00031,
+       0.00039,
+       0.00039,
+       0.00047,
+       0.00047,
+       0.00048,
+       0.00056,
+       0.00056,
+       0.00064,
+       0.00065,
+       0.00073,
+       0.00072,
+       0.00073,
+       0.00081,
+       0.00082,
+       0.00089,
+       0.0009,
+       0.00097,
+       0.00098,
+       0.00106
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10424620745816521,
+      "best": 0.102265625,
+      "median": 0.1031640625
+     },
+     "minimum_range_m": {
+      "worst": 78.1846555936239,
+      "best": 76.69921875,
+      "median": 77.373046875
+     },
+     "closed_form_recovery_s": 0.002218712235567753
+    },
+    {
+     "set": "dead_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.008924229431144182,
+      "best": 0.007745980041834799,
+      "median": 0.008253959657589752,
+      "per_channel": [
+       0.00775,
+       0.00776,
+       0.00776,
+       0.00784,
+       0.00784,
+       0.00792,
+       0.00792,
+       0.00792,
+       0.008,
+       0.008,
+       0.008,
+       0.00809,
+       0.00809,
+       0.00817,
+       0.00817,
+       0.00825,
+       0.00825,
+       0.00826,
+       0.00834,
+       0.00834,
+       0.00842,
+       0.00843,
+       0.00851,
+       0.00851,
+       0.00852,
+       0.00859,
+       0.0086,
+       0.00868,
+       0.00868,
+       0.00876,
+       0.00876,
+       0.00884,
+       0.00775,
+       0.00776,
+       0.00784,
+       0.00784,
+       0.00784,
+       0.00792,
+       0.00792,
+       0.008,
+       0.00801,
+       0.00801,
+       0.00809,
+       0.00809,
+       0.00817,
+       0.00817,
+       0.00818,
+       0.00826,
+       0.00826,
+       0.00834,
+       0.00834,
+       0.00842,
+       0.00842,
+       0.00843,
+       0.00851,
+       0.00851,
+       0.00859,
+       0.00859,
+       0.00867,
+       0.00868,
+       0.00876,
+       0.00876,
+       0.00884,
+       0.00892,
+       0.00775,
+       0.00776,
+       0.00776,
+       0.00784,
+       0.00784,
+       0.00792,
+       0.00792,
+       0.00792,
+       0.008,
+       0.008,
+       0.008,
+       0.00809,
+       0.00809,
+       0.00817,
+       0.00817,
+       0.00825,
+       0.00825,
+       0.00826,
+       0.00834,
+       0.00834,
+       0.00842,
+       0.00843,
+       0.00851,
+       0.00851,
+       0.00852,
+       0.00859,
+       0.0086,
+       0.00868,
+       0.00868,
+       0.00876,
+       0.00876,
+       0.00884
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.1119921875,
+      "best": 0.11004882812500001,
+      "median": 0.110947265625
+     },
+     "minimum_range_m": {
+      "worst": 83.994140625,
+      "best": 82.53662109375001,
+      "median": 83.21044921875
+     },
+     "closed_form_recovery_s": 0.01
+    },
+    {
+     "set": "tau_10ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.02110196380614418,
+      "best": 0.019923714416834798,
+      "median": 0.020431694032589764,
+      "per_channel": [
+       0.01992,
+       0.01994,
+       0.01994,
+       0.02002,
+       0.02002,
+       0.0201,
+       0.0201,
+       0.0201,
+       0.02018,
+       0.02018,
+       0.02018,
+       0.02027,
+       0.02027,
+       0.02035,
+       0.02035,
+       0.02043,
+       0.02043,
+       0.02044,
+       0.02052,
+       0.02052,
+       0.0206,
+       0.02061,
+       0.02069,
+       0.02069,
+       0.02069,
+       0.02077,
+       0.02078,
+       0.02085,
+       0.02086,
+       0.02094,
+       0.02094,
+       0.02102,
+       0.01993,
+       0.01993,
+       0.02001,
+       0.02002,
+       0.02002,
+       0.0201,
+       0.0201,
+       0.02018,
+       0.02018,
+       0.02019,
+       0.02027,
+       0.02027,
+       0.02035,
+       0.02035,
+       0.02035,
+       0.02043,
+       0.02044,
+       0.02052,
+       0.02052,
+       0.0206,
+       0.0206,
+       0.0206,
+       0.02068,
+       0.02069,
+       0.02077,
+       0.02077,
+       0.02085,
+       0.02086,
+       0.02094,
+       0.02094,
+       0.02102,
+       0.0211,
+       0.01992,
+       0.01994,
+       0.01994,
+       0.02002,
+       0.02002,
+       0.0201,
+       0.0201,
+       0.0201,
+       0.02018,
+       0.02018,
+       0.02018,
+       0.02027,
+       0.02027,
+       0.02035,
+       0.02035,
+       0.02043,
+       0.02043,
+       0.02044,
+       0.02052,
+       0.02052,
+       0.0206,
+       0.02061,
+       0.02069,
+       0.02069,
+       0.02069,
+       0.02077,
+       0.02078,
+       0.02085,
+       0.02086,
+       0.02094,
+       0.02094,
+       0.02102
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.124169921875,
+      "best": 0.12222656250000001,
+      "median": 0.12312500000000001
+     },
+     "minimum_range_m": {
+      "worst": 93.12744140625,
+      "best": 91.66992187500001,
+      "median": 92.34375
+     },
+     "closed_form_recovery_s": 0.02218712235567753
+    },
+    {
+     "set": "dead_100ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.09892422943114416,
+      "best": 0.0977459800418348,
+      "median": 0.09825395965758973,
+      "per_channel": [
+       0.09775,
+       0.09776,
+       0.09776,
+       0.09784,
+       0.09784,
+       0.09792,
+       0.09792,
+       0.09792,
+       0.098,
+       0.098,
+       0.098,
+       0.09809,
+       0.09809,
+       0.09817,
+       0.09817,
+       0.09825,
+       0.09825,
+       0.09826,
+       0.09834,
+       0.09834,
+       0.09842,
+       0.09843,
+       0.09851,
+       0.09851,
+       0.09852,
+       0.09859,
+       0.0986,
+       0.09868,
+       0.09868,
+       0.09876,
+       0.09876,
+       0.09884,
+       0.09775,
+       0.09776,
+       0.09784,
+       0.09784,
+       0.09784,
+       0.09792,
+       0.09792,
+       0.098,
+       0.09801,
+       0.09801,
+       0.09809,
+       0.09809,
+       0.09817,
+       0.09817,
+       0.09818,
+       0.09826,
+       0.09826,
+       0.09834,
+       0.09834,
+       0.09842,
+       0.09842,
+       0.09843,
+       0.09851,
+       0.09851,
+       0.09859,
+       0.09859,
+       0.09867,
+       0.09868,
+       0.09876,
+       0.09876,
+       0.09884,
+       0.09892,
+       0.09775,
+       0.09776,
+       0.09776,
+       0.09784,
+       0.09784,
+       0.09792,
+       0.09792,
+       0.09792,
+       0.098,
+       0.098,
+       0.098,
+       0.09809,
+       0.09809,
+       0.09817,
+       0.09817,
+       0.09825,
+       0.09825,
+       0.09826,
+       0.09834,
+       0.09834,
+       0.09842,
+       0.09843,
+       0.09851,
+       0.09851,
+       0.09852,
+       0.09859,
+       0.0986,
+       0.09868,
+       0.09868,
+       0.09876,
+       0.09876,
+       0.09884
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.2019921875,
+      "best": 0.200048828125,
+      "median": 0.20094726562499998
+     },
+     "minimum_range_m": {
+      "worst": 151.494140625,
+      "best": 150.03662109375,
+      "median": 150.71044921875
+     },
+     "closed_form_recovery_s": 0.1
+    },
+    {
+     "set": "tau_100ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.22078946380614417,
+      "best": 0.2196112144168348,
+      "median": 0.22011919403258973,
+      "per_channel": [
+       0.21961,
+       0.21962,
+       0.21962,
+       0.2197,
+       0.21971,
+       0.21979,
+       0.21979,
+       0.21979,
+       0.21987,
+       0.21987,
+       0.21987,
+       0.21996,
+       0.21996,
+       0.22004,
+       0.22004,
+       0.22012,
+       0.22012,
+       0.22013,
+       0.22021,
+       0.22021,
+       0.22029,
+       0.2203,
+       0.22037,
+       0.22037,
+       0.22038,
+       0.22046,
+       0.22047,
+       0.22054,
+       0.22055,
+       0.22062,
+       0.22063,
+       0.22071,
+       0.21962,
+       0.21962,
+       0.2197,
+       0.2197,
+       0.21971,
+       0.21979,
+       0.21979,
+       0.21987,
+       0.21987,
+       0.21987,
+       0.21995,
+       0.21996,
+       0.22004,
+       0.22004,
+       0.22004,
+       0.22012,
+       0.22012,
+       0.2202,
+       0.22021,
+       0.22029,
+       0.22029,
+       0.22029,
+       0.22037,
+       0.22037,
+       0.22045,
+       0.22046,
+       0.22054,
+       0.22055,
+       0.22063,
+       0.22063,
+       0.22071,
+       0.22079,
+       0.21961,
+       0.21962,
+       0.21962,
+       0.2197,
+       0.21971,
+       0.21979,
+       0.21979,
+       0.21979,
+       0.21987,
+       0.21987,
+       0.21987,
+       0.21996,
+       0.21996,
+       0.22004,
+       0.22004,
+       0.22012,
+       0.22012,
+       0.22013,
+       0.22021,
+       0.22021,
+       0.22029,
+       0.2203,
+       0.22037,
+       0.22037,
+       0.22038,
+       0.22046,
+       0.22047,
+       0.22054,
+       0.22055,
+       0.22062,
+       0.22063,
+       0.22071
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.323857421875,
+      "best": 0.3219140625,
+      "median": 0.32281249999999995
+     },
+     "minimum_range_m": {
+      "worst": 242.89306640625,
+      "best": 241.435546875,
+      "median": 242.10937499999997
+     },
+     "closed_form_recovery_s": 0.2218712235567753
+    },
+    {
+     "set": "dead_10ms_tau_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01,
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.124974448051063,
+      "best": 7.583785517937001,
+      "median": 11.543442389911428
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.031101963806144148,
+      "best": 0.02992371441683478,
+      "median": 0.030431694032589746,
+      "per_channel": [
+       0.02992,
+       0.02994,
+       0.02994,
+       0.03002,
+       0.03002,
+       0.0301,
+       0.0301,
+       0.0301,
+       0.03018,
+       0.03018,
+       0.03018,
+       0.03027,
+       0.03027,
+       0.03035,
+       0.03035,
+       0.03043,
+       0.03043,
+       0.03044,
+       0.03052,
+       0.03052,
+       0.0306,
+       0.03061,
+       0.03069,
+       0.03069,
+       0.03069,
+       0.03077,
+       0.03078,
+       0.03085,
+       0.03086,
+       0.03094,
+       0.03094,
+       0.03102,
+       0.02993,
+       0.02993,
+       0.03001,
+       0.03002,
+       0.03002,
+       0.0301,
+       0.0301,
+       0.03018,
+       0.03018,
+       0.03019,
+       0.03027,
+       0.03027,
+       0.03035,
+       0.03035,
+       0.03035,
+       0.03043,
+       0.03044,
+       0.03052,
+       0.03052,
+       0.0306,
+       0.0306,
+       0.0306,
+       0.03068,
+       0.03069,
+       0.03077,
+       0.03077,
+       0.03085,
+       0.03086,
+       0.03094,
+       0.03094,
+       0.03102,
+       0.0311,
+       0.02992,
+       0.02994,
+       0.02994,
+       0.03002,
+       0.03002,
+       0.0301,
+       0.0301,
+       0.0301,
+       0.03018,
+       0.03018,
+       0.03018,
+       0.03027,
+       0.03027,
+       0.03035,
+       0.03035,
+       0.03043,
+       0.03043,
+       0.03044,
+       0.03052,
+       0.03052,
+       0.0306,
+       0.03061,
+       0.03069,
+       0.03069,
+       0.03069,
+       0.03077,
+       0.03078,
+       0.03085,
+       0.03086,
+       0.03094,
+       0.03094,
+       0.03102
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.134169921875,
+      "best": 0.13222656249999998,
+      "median": 0.133125
+     },
+     "minimum_range_m": {
+      "worst": 100.62744140624999,
+      "best": 99.16992187499999,
+      "median": 99.84375
+     },
+     "closed_form_recovery_s": 0.03218712235567753
+    },
+    {
+     "set": "coupling_100hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 100.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.30895203945844,
+      "best": 7.581570309484086,
+      "median": 11.541480142395187
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0042562606811441805,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.00027,
+       0.0008,
+       0.00128,
+       0.00174,
+       0.00215,
+       0.00255,
+       0.00292,
+       0.0033,
+       0.00365,
+       0.00395,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1e-05,
+       0.00059,
+       0.00111,
+       0.00158,
+       0.00202,
+       0.00244,
+       0.00284,
+       0.00324,
+       0.00362,
+       0.00395,
+       0.00426,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.00027,
+       0.0008,
+       0.00128,
+       0.00174,
+       0.00215,
+       0.00255,
+       0.00292,
+       0.0033,
+       0.00365,
+       0.00395
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10538085937500001,
+      "best": 0.10212890625,
+      "median": 0.1034088524014652
+     },
+     "minimum_range_m": {
+      "worst": 79.03564453125001,
+      "best": 76.5966796875,
+      "median": 77.5566393010989
+     },
+     "closed_form_recovery_s": 0.0083640026836111
+    },
+    {
+     "set": "coupling_10hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 10.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.63836026444219,
+      "best": 7.583787037500189,
+      "median": 11.543422742509357
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.07094571380614416,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0086,
+       0.01967,
+       0.0275,
+       0.0337,
+       0.03898,
+       0.04358,
+       0.04767,
+       0.05142,
+       0.05491,
+       0.05821,
+       0.06131,
+       0.06432,
+       0.06717,
+       0.06923,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.00053,
+       0.01451,
+       0.02392,
+       0.03096,
+       0.0368,
+       0.04177,
+       0.04615,
+       0.05016,
+       0.05385,
+       0.05732,
+       0.06066,
+       0.06384,
+       0.06694,
+       0.06922,
+       0.07095,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0086,
+       0.01967,
+       0.0275,
+       0.0337,
+       0.03898,
+       0.04358,
+       0.04767,
+       0.05142,
+       0.05491,
+       0.05821,
+       0.06131,
+       0.06432,
+       0.06717,
+       0.06923
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.1720703125,
+      "best": 0.10256585484996933,
+      "median": 0.10408324635580539
+     },
+     "minimum_range_m": {
+      "worst": 129.052734375,
+      "best": 76.924391137477,
+      "median": 78.06243476685404
+     },
+     "closed_form_recovery_s": 0.08361027777595517
+    },
+    {
+     "set": "gain_switch",
+     "overload": {
+      "gain_switch": {
+       "gain_db": -26.0,
+       "until": 0.10524620745816521,
+       "ramp": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": -6.875025551948937,
+      "best": -18.416214482063,
+      "median": -14.456557610088572
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10424620745816521,
+      "best": 0.10112459869385583,
+      "median": 0.10269197288733992
+     },
+     "minimum_range_m": {
+      "worst": 78.1846555936239,
+      "best": 75.84344902039187,
+      "median": 77.01897966550493
+     },
+     "closed_form_recovery_s": 0.0
+    }
+   ],
+   "1": [
+    {
+     "set": "clip_only",
+     "overload": {},
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0042462074581653,
+      "best": 1.0011245986938557,
+      "median": 1.00269197288734
+     },
+     "minimum_range_m": {
+      "worst": 753.1846555936239,
+      "best": 750.8434490203917,
+      "median": 752.018979665505
+     },
+     "closed_form_recovery_s": 0.0
+    },
+    {
+     "set": "dead_1ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0042462074581653,
+      "best": 1.0011245986938557,
+      "median": 1.00269197288734
+     },
+     "minimum_range_m": {
+      "worst": 753.1846555936239,
+      "best": 750.8434490203917,
+      "median": 752.018979665505
+     },
+     "closed_form_recovery_s": 0.001
+    },
+    {
+     "set": "tau_1ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0042462074581653,
+      "best": 1.0011245986938557,
+      "median": 1.00269197288734
+     },
+     "minimum_range_m": {
+      "worst": 753.1846555936239,
+      "best": 750.8434490203917,
+      "median": 752.018979665505
+     },
+     "closed_form_recovery_s": 0.002218712235567753
+    },
+    {
+     "set": "dead_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0042462074581653,
+      "best": 1.0011245986938557,
+      "median": 1.00269197288734
+     },
+     "minimum_range_m": {
+      "worst": 753.1846555936239,
+      "best": 750.8434490203917,
+      "median": 752.018979665505
+     },
+     "closed_form_recovery_s": 0.01
+    },
+    {
+     "set": "tau_10ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.011336338806144264,
+      "best": 0.0,
+      "median": 0.004847089612660005,
+      "per_channel": [
+       0.0,
+       2e-05,
+       0.00036,
+       0.00061,
+       0.00095,
+       0.00137,
+       0.0017,
+       0.00196,
+       0.00229,
+       0.00262,
+       0.00288,
+       0.00321,
+       0.00363,
+       0.00396,
+       0.00439,
+       0.00455,
+       0.00497,
+       0.00531,
+       0.00573,
+       0.00606,
+       0.00648,
+       0.00673,
+       0.00715,
+       0.00757,
+       0.00799,
+       0.00832,
+       0.00874,
+       0.00908,
+       0.00949,
+       0.01,
+       0.01041,
+       0.01075,
+       0.0,
+       0.00011,
+       0.00044,
+       0.00078,
+       0.00111,
+       0.00145,
+       0.0017,
+       0.00204,
+       0.00237,
+       0.00271,
+       0.00313,
+       0.00346,
+       0.0038,
+       0.00413,
+       0.00439,
+       0.00472,
+       0.00522,
+       0.00556,
+       0.00589,
+       0.00631,
+       0.00665,
+       0.00698,
+       0.0074,
+       0.00774,
+       0.00824,
+       0.00866,
+       0.00899,
+       0.00949,
+       0.00991,
+       0.01041,
+       0.01084,
+       0.01134,
+       0.0,
+       2e-05,
+       0.00036,
+       0.00061,
+       0.00095,
+       0.00137,
+       0.0017,
+       0.00196,
+       0.00229,
+       0.00262,
+       0.00288,
+       0.00321,
+       0.00363,
+       0.00396,
+       0.00439,
+       0.00455,
+       0.00497,
+       0.00531,
+       0.00573,
+       0.00606,
+       0.00648,
+       0.00673,
+       0.00715,
+       0.00757,
+       0.00799,
+       0.00832,
+       0.00874,
+       0.00908,
+       0.00949,
+       0.01,
+       0.01041,
+       0.01075
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0124609375,
+      "best": 1.004169921875,
+      "median": 1.0075390624999998
+     },
+     "minimum_range_m": {
+      "worst": 759.345703125,
+      "best": 753.12744140625,
+      "median": 755.654296875
+     },
+     "closed_form_recovery_s": 0.02218712235567753
+    },
+    {
+     "set": "dead_100ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.08915860443114432,
+      "best": 0.07751160504183474,
+      "median": 0.08266935523766006,
+      "per_channel": [
+       0.07751,
+       0.07785,
+       0.07818,
+       0.07843,
+       0.07877,
+       0.07919,
+       0.07952,
+       0.07978,
+       0.08011,
+       0.08044,
+       0.0807,
+       0.08103,
+       0.08145,
+       0.08179,
+       0.08221,
+       0.08237,
+       0.08279,
+       0.08313,
+       0.08355,
+       0.08388,
+       0.0843,
+       0.08455,
+       0.08497,
+       0.08539,
+       0.08581,
+       0.08614,
+       0.08656,
+       0.0869,
+       0.08732,
+       0.08782,
+       0.08824,
+       0.08857,
+       0.07768,
+       0.07793,
+       0.07827,
+       0.0786,
+       0.07893,
+       0.07927,
+       0.07953,
+       0.07986,
+       0.08019,
+       0.08053,
+       0.08095,
+       0.08128,
+       0.08162,
+       0.08195,
+       0.08221,
+       0.08254,
+       0.08304,
+       0.08338,
+       0.08371,
+       0.08413,
+       0.08447,
+       0.0848,
+       0.08523,
+       0.08556,
+       0.08606,
+       0.08648,
+       0.08682,
+       0.08732,
+       0.08774,
+       0.08824,
+       0.08866,
+       0.08916,
+       0.07751,
+       0.07785,
+       0.07818,
+       0.07843,
+       0.07877,
+       0.07919,
+       0.07952,
+       0.07978,
+       0.08011,
+       0.08044,
+       0.0807,
+       0.08103,
+       0.08145,
+       0.08179,
+       0.08221,
+       0.08237,
+       0.08279,
+       0.08313,
+       0.08355,
+       0.08388,
+       0.0843,
+       0.08455,
+       0.08497,
+       0.08539,
+       0.08581,
+       0.08614,
+       0.08656,
+       0.0869,
+       0.08732,
+       0.08782,
+       0.08824,
+       0.08857
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.090283203125,
+      "best": 1.0817578125,
+      "median": 1.0853613281249999
+     },
+     "minimum_range_m": {
+      "worst": 817.71240234375,
+      "best": 811.318359375,
+      "median": 814.02099609375
+     },
+     "closed_form_recovery_s": 0.1
+    },
+    {
+     "set": "tau_100ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.21102383880614428,
+      "best": 0.1993768394168347,
+      "median": 0.20453458961266002,
+      "per_channel": [
+       0.19938,
+       0.19971,
+       0.20004,
+       0.2003,
+       0.20063,
+       0.20105,
+       0.20139,
+       0.20164,
+       0.20198,
+       0.20231,
+       0.20257,
+       0.2029,
+       0.20332,
+       0.20365,
+       0.20407,
+       0.20424,
+       0.20466,
+       0.20499,
+       0.20541,
+       0.20575,
+       0.20617,
+       0.20642,
+       0.20684,
+       0.20726,
+       0.20768,
+       0.20801,
+       0.20842,
+       0.20876,
+       0.20918,
+       0.20969,
+       0.2101,
+       0.21044,
+       0.19954,
+       0.1998,
+       0.20013,
+       0.20047,
+       0.2008,
+       0.20113,
+       0.20139,
+       0.20172,
+       0.20206,
+       0.20239,
+       0.20282,
+       0.20315,
+       0.20348,
+       0.20382,
+       0.20407,
+       0.20441,
+       0.20491,
+       0.20524,
+       0.20558,
+       0.206,
+       0.20633,
+       0.20667,
+       0.20709,
+       0.20742,
+       0.20792,
+       0.20835,
+       0.20868,
+       0.20918,
+       0.2096,
+       0.2101,
+       0.21052,
+       0.21102,
+       0.19938,
+       0.19971,
+       0.20004,
+       0.2003,
+       0.20063,
+       0.20105,
+       0.20139,
+       0.20164,
+       0.20198,
+       0.20231,
+       0.20257,
+       0.2029,
+       0.20332,
+       0.20365,
+       0.20407,
+       0.20424,
+       0.20466,
+       0.20499,
+       0.20541,
+       0.20575,
+       0.20617,
+       0.20642,
+       0.20684,
+       0.20726,
+       0.20768,
+       0.20801,
+       0.20842,
+       0.20876,
+       0.20918,
+       0.20969,
+       0.2101,
+       0.21044
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.2121484375,
+      "best": 1.203623046875,
+      "median": 1.2072265624999998
+     },
+     "minimum_range_m": {
+      "worst": 909.111328125,
+      "best": 902.71728515625,
+      "median": 905.419921875
+     },
+     "closed_form_recovery_s": 0.2218712235567753
+    },
+    {
+     "set": "dead_10ms_tau_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01,
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 19.125060095187884,
+      "best": 7.583801424101107,
+      "median": 11.543459178080171
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.021336338806144273,
+      "best": 0.009689339416834697,
+      "median": 0.014847089612660014,
+      "per_channel": [
+       0.00969,
+       0.01002,
+       0.01036,
+       0.01061,
+       0.01095,
+       0.01137,
+       0.0117,
+       0.01196,
+       0.01229,
+       0.01262,
+       0.01288,
+       0.01321,
+       0.01363,
+       0.01396,
+       0.01439,
+       0.01455,
+       0.01497,
+       0.01531,
+       0.01573,
+       0.01606,
+       0.01648,
+       0.01673,
+       0.01715,
+       0.01757,
+       0.01799,
+       0.01832,
+       0.01874,
+       0.01908,
+       0.01949,
+       0.02,
+       0.02041,
+       0.02075,
+       0.00985,
+       0.01011,
+       0.01044,
+       0.01078,
+       0.01111,
+       0.01145,
+       0.0117,
+       0.01204,
+       0.01237,
+       0.01271,
+       0.01313,
+       0.01346,
+       0.0138,
+       0.01413,
+       0.01439,
+       0.01472,
+       0.01522,
+       0.01556,
+       0.01589,
+       0.01631,
+       0.01665,
+       0.01698,
+       0.0174,
+       0.01774,
+       0.01824,
+       0.01866,
+       0.01899,
+       0.01949,
+       0.01991,
+       0.02041,
+       0.02084,
+       0.02134,
+       0.00969,
+       0.01002,
+       0.01036,
+       0.01061,
+       0.01095,
+       0.01137,
+       0.0117,
+       0.01196,
+       0.01229,
+       0.01262,
+       0.01288,
+       0.01321,
+       0.01363,
+       0.01396,
+       0.01439,
+       0.01455,
+       0.01497,
+       0.01531,
+       0.01573,
+       0.01606,
+       0.01648,
+       0.01673,
+       0.01715,
+       0.01757,
+       0.01799,
+       0.01832,
+       0.01874,
+       0.01908,
+       0.01949,
+       0.02,
+       0.02041,
+       0.02075
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0224609375,
+      "best": 1.013935546875,
+      "median": 1.0175390625
+     },
+     "minimum_range_m": {
+      "worst": 766.845703125,
+      "best": 760.45166015625,
+      "median": 763.154296875
+     },
+     "closed_form_recovery_s": 0.03218712235567753
+    },
+    {
+     "set": "coupling_100hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 100.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 16.785661412469224,
+      "best": 7.581564890291096,
+      "median": 11.541472256948786
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0042462074581653,
+      "best": 1.0011245986938557,
+      "median": 1.00269197288734
+     },
+     "minimum_range_m": {
+      "worst": 753.1846555936239,
+      "best": 750.8434490203917,
+      "median": 752.018979665505
+     },
+     "closed_form_recovery_s": 0.0083640026836111
+    },
+    {
+     "set": "coupling_10hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 10.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.366708663708252,
+      "best": 7.583772591869434,
+      "median": 11.543443664847668
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.04247891693114436,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.00258,
+       0.00794,
+       0.0128,
+       0.01729,
+       0.02148,
+       0.02544,
+       0.02924,
+       0.03291,
+       0.03645,
+       0.03952,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.00578,
+       0.01099,
+       0.01576,
+       0.02021,
+       0.02441,
+       0.02844,
+       0.03235,
+       0.03617,
+       0.03951,
+       0.04248,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.00258,
+       0.00794,
+       0.0128,
+       0.01729,
+       0.02148,
+       0.02544,
+       0.02924,
+       0.03291,
+       0.03645,
+       0.03952
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.043603515625,
+      "best": 1.0021208619840893,
+      "median": 1.0036850614102593
+     },
+     "minimum_range_m": {
+      "worst": 782.7026367187501,
+      "best": 751.590646488067,
+      "median": 752.7637960576944
+     },
+     "closed_form_recovery_s": 0.083640026836111
+    },
+    {
+     "set": "gain_switch",
+     "overload": {
+      "gain_switch": {
+       "gain_db": -26.0,
+       "until": 1.0052462074581652,
+       "ramp": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": -6.874939904812117,
+      "best": -18.416198575898893,
+      "median": -14.45654082191983
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0042462074581653,
+      "best": 1.0011245986938557,
+      "median": 1.00269197288734
+     },
+     "minimum_range_m": {
+      "worst": 753.1846555936239,
+      "best": 750.8434490203917,
+      "median": 752.018979665505
+     },
+     "closed_form_recovery_s": 0.0
+    }
+   ]
+  },
+  "simulated_minus_closed_form_db": {
+   "max_abs": 0.001539072073066805,
+   "pulse_s": 1.0
+  }
+ },
+ "popoto_static_3row": {
+  "sonar": "popoto_static_3row",
+  "source_level_db": 197.0,
+  "sensitivity_db": -208.0,
+  "gain_db": 43.0,
+  "adc_full_scale_v": 2.61,
+  "projector_lever_arm": [
+   0.0,
+   0.0,
+   1.0
+  ],
+  "sound_speed": 1500.0,
+  "level_convention": "source_level_db + sensitivity_db + gain_db is the PEAK voltage at the ADC (the simulator's convention); an rms source level adds 3 dB to every overload figure",
+  "unconfirmed_in_sonar_file": [
+   "platform",
+   "array.layouts.three_rows.rows",
+   "array.pitch",
+   "transmit"
+  ],
+  "hydrophones": [
+   {
+    "index": 0,
+    "position": [
+     -1.395,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.4172,
+    "direct_level_db_re_upa": 193.97,
+    "peak_volts_at_adc": 28.091,
+    "overload_db_re_adc": 20.64
+   },
+   {
+    "index": 1,
+    "position": [
+     -1.305,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.3287,
+    "direct_level_db_re_upa": 194.53,
+    "peak_volts_at_adc": 29.961,
+    "overload_db_re_adc": 21.2
+   },
+   {
+    "index": 2,
+    "position": [
+     -1.215,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.2405,
+    "direct_level_db_re_upa": 195.13,
+    "peak_volts_at_adc": 32.094,
+    "overload_db_re_adc": 21.8
+   },
+   {
+    "index": 3,
+    "position": [
+     -1.125,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.1524,
+    "direct_level_db_re_upa": 195.77,
+    "peak_volts_at_adc": 34.545,
+    "overload_db_re_adc": 22.43
+   },
+   {
+    "index": 4,
+    "position": [
+     -1.035,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.0648,
+    "direct_level_db_re_upa": 196.45,
+    "peak_volts_at_adc": 37.389,
+    "overload_db_re_adc": 23.12
+   },
+   {
+    "index": 5,
+    "position": [
+     -0.945,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.9775,
+    "direct_level_db_re_upa": 197.2,
+    "peak_volts_at_adc": 40.727,
+    "overload_db_re_adc": 23.86
+   },
+   {
+    "index": 6,
+    "position": [
+     -0.855,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.8908,
+    "direct_level_db_re_upa": 198.0,
+    "peak_volts_at_adc": 44.691,
+    "overload_db_re_adc": 24.67
+   },
+   {
+    "index": 7,
+    "position": [
+     -0.765,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.8048,
+    "direct_level_db_re_upa": 198.89,
+    "peak_volts_at_adc": 49.466,
+    "overload_db_re_adc": 25.55
+   },
+   {
+    "index": 8,
+    "position": [
+     -0.675,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.7198,
+    "direct_level_db_re_upa": 199.86,
+    "peak_volts_at_adc": 55.307,
+    "overload_db_re_adc": 26.52
+   },
+   {
+    "index": 9,
+    "position": [
+     -0.585,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.6362,
+    "direct_level_db_re_upa": 200.93,
+    "peak_volts_at_adc": 62.578,
+    "overload_db_re_adc": 27.6
+   },
+   {
+    "index": 10,
+    "position": [
+     -0.495,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.5545,
+    "direct_level_db_re_upa": 202.12,
+    "peak_volts_at_adc": 71.789,
+    "overload_db_re_adc": 28.79
+   },
+   {
+    "index": 11,
+    "position": [
+     -0.405,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.4759,
+    "direct_level_db_re_upa": 203.45,
+    "peak_volts_at_adc": 83.645,
+    "overload_db_re_adc": 30.12
+   },
+   {
+    "index": 12,
+    "position": [
+     -0.315,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.4022,
+    "direct_level_db_re_upa": 204.91,
+    "peak_volts_at_adc": 98.995,
+    "overload_db_re_adc": 31.58
+   },
+   {
+    "index": 13,
+    "position": [
+     -0.225,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.3363,
+    "direct_level_db_re_upa": 206.46,
+    "peak_volts_at_adc": 118.364,
+    "overload_db_re_adc": 33.13
+   },
+   {
+    "index": 14,
+    "position": [
+     -0.135,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.2841,
+    "direct_level_db_re_upa": 207.93,
+    "peak_volts_at_adc": 140.119,
+    "overload_db_re_adc": 34.6
+   },
+   {
+    "index": 15,
+    "position": [
+     -0.045,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.254,
+    "direct_level_db_re_upa": 208.9,
+    "peak_volts_at_adc": 156.724,
+    "overload_db_re_adc": 35.57
+   },
+   {
+    "index": 16,
+    "position": [
+     0.045,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.254,
+    "direct_level_db_re_upa": 208.9,
+    "peak_volts_at_adc": 156.724,
+    "overload_db_re_adc": 35.57
+   },
+   {
+    "index": 17,
+    "position": [
+     0.135,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.2841,
+    "direct_level_db_re_upa": 207.93,
+    "peak_volts_at_adc": 140.119,
+    "overload_db_re_adc": 34.6
+   },
+   {
+    "index": 18,
+    "position": [
+     0.225,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.3363,
+    "direct_level_db_re_upa": 206.46,
+    "peak_volts_at_adc": 118.364,
+    "overload_db_re_adc": 33.13
+   },
+   {
+    "index": 19,
+    "position": [
+     0.315,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.4022,
+    "direct_level_db_re_upa": 204.91,
+    "peak_volts_at_adc": 98.995,
+    "overload_db_re_adc": 31.58
+   },
+   {
+    "index": 20,
+    "position": [
+     0.405,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.4759,
+    "direct_level_db_re_upa": 203.45,
+    "peak_volts_at_adc": 83.645,
+    "overload_db_re_adc": 30.12
+   },
+   {
+    "index": 21,
+    "position": [
+     0.495,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.5545,
+    "direct_level_db_re_upa": 202.12,
+    "peak_volts_at_adc": 71.789,
+    "overload_db_re_adc": 28.79
+   },
+   {
+    "index": 22,
+    "position": [
+     0.585,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.6362,
+    "direct_level_db_re_upa": 200.93,
+    "peak_volts_at_adc": 62.578,
+    "overload_db_re_adc": 27.6
+   },
+   {
+    "index": 23,
+    "position": [
+     0.675,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.7198,
+    "direct_level_db_re_upa": 199.86,
+    "peak_volts_at_adc": 55.307,
+    "overload_db_re_adc": 26.52
+   },
+   {
+    "index": 24,
+    "position": [
+     0.765,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.8048,
+    "direct_level_db_re_upa": 198.89,
+    "peak_volts_at_adc": 49.466,
+    "overload_db_re_adc": 25.55
+   },
+   {
+    "index": 25,
+    "position": [
+     0.855,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.8908,
+    "direct_level_db_re_upa": 198.0,
+    "peak_volts_at_adc": 44.691,
+    "overload_db_re_adc": 24.67
+   },
+   {
+    "index": 26,
+    "position": [
+     0.945,
+     0.0,
+     0.75
+    ],
+    "distance_m": 0.9775,
+    "direct_level_db_re_upa": 197.2,
+    "peak_volts_at_adc": 40.727,
+    "overload_db_re_adc": 23.86
+   },
+   {
+    "index": 27,
+    "position": [
+     1.035,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.0648,
+    "direct_level_db_re_upa": 196.45,
+    "peak_volts_at_adc": 37.389,
+    "overload_db_re_adc": 23.12
+   },
+   {
+    "index": 28,
+    "position": [
+     1.125,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.1524,
+    "direct_level_db_re_upa": 195.77,
+    "peak_volts_at_adc": 34.545,
+    "overload_db_re_adc": 22.43
+   },
+   {
+    "index": 29,
+    "position": [
+     1.215,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.2405,
+    "direct_level_db_re_upa": 195.13,
+    "peak_volts_at_adc": 32.094,
+    "overload_db_re_adc": 21.8
+   },
+   {
+    "index": 30,
+    "position": [
+     1.305,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.3287,
+    "direct_level_db_re_upa": 194.53,
+    "peak_volts_at_adc": 29.961,
+    "overload_db_re_adc": 21.2
+   },
+   {
+    "index": 31,
+    "position": [
+     1.395,
+     0.0,
+     0.75
+    ],
+    "distance_m": 1.4172,
+    "direct_level_db_re_upa": 193.97,
+    "peak_volts_at_adc": 28.091,
+    "overload_db_re_adc": 20.64
+   },
+   {
+    "index": 32,
+    "position": [
+     -1.395,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.6081,
+    "direct_level_db_re_upa": 192.87,
+    "peak_volts_at_adc": 24.756,
+    "overload_db_re_adc": 19.54
+   },
+   {
+    "index": 33,
+    "position": [
+     -1.305,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.5307,
+    "direct_level_db_re_upa": 193.3,
+    "peak_volts_at_adc": 26.008,
+    "overload_db_re_adc": 19.97
+   },
+   {
+    "index": 34,
+    "position": [
+     -1.215,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.4547,
+    "direct_level_db_re_upa": 193.74,
+    "peak_volts_at_adc": 27.366,
+    "overload_db_re_adc": 20.41
+   },
+   {
+    "index": 35,
+    "position": [
+     -1.125,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.3804,
+    "direct_level_db_re_upa": 194.2,
+    "peak_volts_at_adc": 28.839,
+    "overload_db_re_adc": 20.87
+   },
+   {
+    "index": 36,
+    "position": [
+     -1.035,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.3081,
+    "direct_level_db_re_upa": 194.67,
+    "peak_volts_at_adc": 30.433,
+    "overload_db_re_adc": 21.33
+   },
+   {
+    "index": 37,
+    "position": [
+     -0.945,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.2382,
+    "direct_level_db_re_upa": 195.14,
+    "peak_volts_at_adc": 32.153,
+    "overload_db_re_adc": 21.81
+   },
+   {
+    "index": 38,
+    "position": [
+     -0.855,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.1709,
+    "direct_level_db_re_upa": 195.63,
+    "peak_volts_at_adc": 34.0,
+    "overload_db_re_adc": 22.3
+   },
+   {
+    "index": 39,
+    "position": [
+     -0.765,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.1069,
+    "direct_level_db_re_upa": 196.12,
+    "peak_volts_at_adc": 35.966,
+    "overload_db_re_adc": 22.79
+   },
+   {
+    "index": 40,
+    "position": [
+     -0.675,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.0467,
+    "direct_level_db_re_upa": 196.6,
+    "peak_volts_at_adc": 38.034,
+    "overload_db_re_adc": 23.27
+   },
+   {
+    "index": 41,
+    "position": [
+     -0.585,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.9911,
+    "direct_level_db_re_upa": 197.08,
+    "peak_volts_at_adc": 40.169,
+    "overload_db_re_adc": 23.75
+   },
+   {
+    "index": 42,
+    "position": [
+     -0.495,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.9408,
+    "direct_level_db_re_upa": 197.53,
+    "peak_volts_at_adc": 42.318,
+    "overload_db_re_adc": 24.2
+   },
+   {
+    "index": 43,
+    "position": [
+     -0.405,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8967,
+    "direct_level_db_re_upa": 197.95,
+    "peak_volts_at_adc": 44.398,
+    "overload_db_re_adc": 24.61
+   },
+   {
+    "index": 44,
+    "position": [
+     -0.315,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8598,
+    "direct_level_db_re_upa": 198.31,
+    "peak_volts_at_adc": 46.303,
+    "overload_db_re_adc": 24.98
+   },
+   {
+    "index": 45,
+    "position": [
+     -0.225,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.831,
+    "direct_level_db_re_upa": 198.61,
+    "peak_volts_at_adc": 47.905,
+    "overload_db_re_adc": 25.27
+   },
+   {
+    "index": 46,
+    "position": [
+     -0.135,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8113,
+    "direct_level_db_re_upa": 198.82,
+    "peak_volts_at_adc": 49.07,
+    "overload_db_re_adc": 25.48
+   },
+   {
+    "index": 47,
+    "position": [
+     -0.045,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8013,
+    "direct_level_db_re_upa": 198.92,
+    "peak_volts_at_adc": 49.685,
+    "overload_db_re_adc": 25.59
+   },
+   {
+    "index": 48,
+    "position": [
+     0.045,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8013,
+    "direct_level_db_re_upa": 198.92,
+    "peak_volts_at_adc": 49.685,
+    "overload_db_re_adc": 25.59
+   },
+   {
+    "index": 49,
+    "position": [
+     0.135,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8113,
+    "direct_level_db_re_upa": 198.82,
+    "peak_volts_at_adc": 49.07,
+    "overload_db_re_adc": 25.48
+   },
+   {
+    "index": 50,
+    "position": [
+     0.225,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.831,
+    "direct_level_db_re_upa": 198.61,
+    "peak_volts_at_adc": 47.905,
+    "overload_db_re_adc": 25.27
+   },
+   {
+    "index": 51,
+    "position": [
+     0.315,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8598,
+    "direct_level_db_re_upa": 198.31,
+    "peak_volts_at_adc": 46.303,
+    "overload_db_re_adc": 24.98
+   },
+   {
+    "index": 52,
+    "position": [
+     0.405,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.8967,
+    "direct_level_db_re_upa": 197.95,
+    "peak_volts_at_adc": 44.398,
+    "overload_db_re_adc": 24.61
+   },
+   {
+    "index": 53,
+    "position": [
+     0.495,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.9408,
+    "direct_level_db_re_upa": 197.53,
+    "peak_volts_at_adc": 42.318,
+    "overload_db_re_adc": 24.2
+   },
+   {
+    "index": 54,
+    "position": [
+     0.585,
+     0.0,
+     0.2
+    ],
+    "distance_m": 0.9911,
+    "direct_level_db_re_upa": 197.08,
+    "peak_volts_at_adc": 40.169,
+    "overload_db_re_adc": 23.75
+   },
+   {
+    "index": 55,
+    "position": [
+     0.675,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.0467,
+    "direct_level_db_re_upa": 196.6,
+    "peak_volts_at_adc": 38.034,
+    "overload_db_re_adc": 23.27
+   },
+   {
+    "index": 56,
+    "position": [
+     0.765,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.1069,
+    "direct_level_db_re_upa": 196.12,
+    "peak_volts_at_adc": 35.966,
+    "overload_db_re_adc": 22.79
+   },
+   {
+    "index": 57,
+    "position": [
+     0.855,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.1709,
+    "direct_level_db_re_upa": 195.63,
+    "peak_volts_at_adc": 34.0,
+    "overload_db_re_adc": 22.3
+   },
+   {
+    "index": 58,
+    "position": [
+     0.945,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.2382,
+    "direct_level_db_re_upa": 195.14,
+    "peak_volts_at_adc": 32.153,
+    "overload_db_re_adc": 21.81
+   },
+   {
+    "index": 59,
+    "position": [
+     1.035,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.3081,
+    "direct_level_db_re_upa": 194.67,
+    "peak_volts_at_adc": 30.433,
+    "overload_db_re_adc": 21.33
+   },
+   {
+    "index": 60,
+    "position": [
+     1.125,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.3804,
+    "direct_level_db_re_upa": 194.2,
+    "peak_volts_at_adc": 28.839,
+    "overload_db_re_adc": 20.87
+   },
+   {
+    "index": 61,
+    "position": [
+     1.215,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.4547,
+    "direct_level_db_re_upa": 193.74,
+    "peak_volts_at_adc": 27.366,
+    "overload_db_re_adc": 20.41
+   },
+   {
+    "index": 62,
+    "position": [
+     1.305,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.5307,
+    "direct_level_db_re_upa": 193.3,
+    "peak_volts_at_adc": 26.008,
+    "overload_db_re_adc": 19.97
+   },
+   {
+    "index": 63,
+    "position": [
+     1.395,
+     0.0,
+     0.2
+    ],
+    "distance_m": 1.6081,
+    "direct_level_db_re_upa": 192.87,
+    "peak_volts_at_adc": 24.756,
+    "overload_db_re_adc": 19.54
+   },
+   {
+    "index": 64,
+    "position": [
+     -1.395,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.238,
+    "direct_level_db_re_upa": 190.0,
+    "peak_volts_at_adc": 17.789,
+    "overload_db_re_adc": 16.67
+   },
+   {
+    "index": 65,
+    "position": [
+     -1.305,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.183,
+    "direct_level_db_re_upa": 190.22,
+    "peak_volts_at_adc": 18.237,
+    "overload_db_re_adc": 16.89
+   },
+   {
+    "index": 66,
+    "position": [
+     -1.215,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.1304,
+    "direct_level_db_re_upa": 190.43,
+    "peak_volts_at_adc": 18.687,
+    "overload_db_re_adc": 17.1
+   },
+   {
+    "index": 67,
+    "position": [
+     -1.125,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.0804,
+    "direct_level_db_re_upa": 190.64,
+    "peak_volts_at_adc": 19.136,
+    "overload_db_re_adc": 17.3
+   },
+   {
+    "index": 68,
+    "position": [
+     -1.035,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.0332,
+    "direct_level_db_re_upa": 190.84,
+    "peak_volts_at_adc": 19.581,
+    "overload_db_re_adc": 17.5
+   },
+   {
+    "index": 69,
+    "position": [
+     -0.945,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9889,
+    "direct_level_db_re_upa": 191.03,
+    "peak_volts_at_adc": 20.017,
+    "overload_db_re_adc": 17.7
+   },
+   {
+    "index": 70,
+    "position": [
+     -0.855,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9477,
+    "direct_level_db_re_upa": 191.21,
+    "peak_volts_at_adc": 20.44,
+    "overload_db_re_adc": 17.88
+   },
+   {
+    "index": 71,
+    "position": [
+     -0.765,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9099,
+    "direct_level_db_re_upa": 191.38,
+    "peak_volts_at_adc": 20.844,
+    "overload_db_re_adc": 18.05
+   },
+   {
+    "index": 72,
+    "position": [
+     -0.675,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8757,
+    "direct_level_db_re_upa": 191.54,
+    "peak_volts_at_adc": 21.225,
+    "overload_db_re_adc": 18.2
+   },
+   {
+    "index": 73,
+    "position": [
+     -0.585,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8452,
+    "direct_level_db_re_upa": 191.68,
+    "peak_volts_at_adc": 21.575,
+    "overload_db_re_adc": 18.35
+   },
+   {
+    "index": 74,
+    "position": [
+     -0.495,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8187,
+    "direct_level_db_re_upa": 191.8,
+    "peak_volts_at_adc": 21.89,
+    "overload_db_re_adc": 18.47
+   },
+   {
+    "index": 75,
+    "position": [
+     -0.405,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7963,
+    "direct_level_db_re_upa": 191.91,
+    "peak_volts_at_adc": 22.163,
+    "overload_db_re_adc": 18.58
+   },
+   {
+    "index": 76,
+    "position": [
+     -0.315,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7781,
+    "direct_level_db_re_upa": 192.0,
+    "peak_volts_at_adc": 22.389,
+    "overload_db_re_adc": 18.67
+   },
+   {
+    "index": 77,
+    "position": [
+     -0.225,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7644,
+    "direct_level_db_re_upa": 192.07,
+    "peak_volts_at_adc": 22.563,
+    "overload_db_re_adc": 18.74
+   },
+   {
+    "index": 78,
+    "position": [
+     -0.135,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7552,
+    "direct_level_db_re_upa": 192.11,
+    "peak_volts_at_adc": 22.682,
+    "overload_db_re_adc": 18.78
+   },
+   {
+    "index": 79,
+    "position": [
+     -0.045,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7506,
+    "direct_level_db_re_upa": 192.14,
+    "peak_volts_at_adc": 22.741,
+    "overload_db_re_adc": 18.8
+   },
+   {
+    "index": 80,
+    "position": [
+     0.045,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7506,
+    "direct_level_db_re_upa": 192.14,
+    "peak_volts_at_adc": 22.741,
+    "overload_db_re_adc": 18.8
+   },
+   {
+    "index": 81,
+    "position": [
+     0.135,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7552,
+    "direct_level_db_re_upa": 192.11,
+    "peak_volts_at_adc": 22.682,
+    "overload_db_re_adc": 18.78
+   },
+   {
+    "index": 82,
+    "position": [
+     0.225,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7644,
+    "direct_level_db_re_upa": 192.07,
+    "peak_volts_at_adc": 22.563,
+    "overload_db_re_adc": 18.74
+   },
+   {
+    "index": 83,
+    "position": [
+     0.315,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7781,
+    "direct_level_db_re_upa": 192.0,
+    "peak_volts_at_adc": 22.389,
+    "overload_db_re_adc": 18.67
+   },
+   {
+    "index": 84,
+    "position": [
+     0.405,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.7963,
+    "direct_level_db_re_upa": 191.91,
+    "peak_volts_at_adc": 22.163,
+    "overload_db_re_adc": 18.58
+   },
+   {
+    "index": 85,
+    "position": [
+     0.495,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8187,
+    "direct_level_db_re_upa": 191.8,
+    "peak_volts_at_adc": 21.89,
+    "overload_db_re_adc": 18.47
+   },
+   {
+    "index": 86,
+    "position": [
+     0.585,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8452,
+    "direct_level_db_re_upa": 191.68,
+    "peak_volts_at_adc": 21.575,
+    "overload_db_re_adc": 18.35
+   },
+   {
+    "index": 87,
+    "position": [
+     0.675,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.8757,
+    "direct_level_db_re_upa": 191.54,
+    "peak_volts_at_adc": 21.225,
+    "overload_db_re_adc": 18.2
+   },
+   {
+    "index": 88,
+    "position": [
+     0.765,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9099,
+    "direct_level_db_re_upa": 191.38,
+    "peak_volts_at_adc": 20.844,
+    "overload_db_re_adc": 18.05
+   },
+   {
+    "index": 89,
+    "position": [
+     0.855,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9477,
+    "direct_level_db_re_upa": 191.21,
+    "peak_volts_at_adc": 20.44,
+    "overload_db_re_adc": 17.88
+   },
+   {
+    "index": 90,
+    "position": [
+     0.945,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 1.9889,
+    "direct_level_db_re_upa": 191.03,
+    "peak_volts_at_adc": 20.017,
+    "overload_db_re_adc": 17.7
+   },
+   {
+    "index": 91,
+    "position": [
+     1.035,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.0332,
+    "direct_level_db_re_upa": 190.84,
+    "peak_volts_at_adc": 19.581,
+    "overload_db_re_adc": 17.5
+   },
+   {
+    "index": 92,
+    "position": [
+     1.125,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.0804,
+    "direct_level_db_re_upa": 190.64,
+    "peak_volts_at_adc": 19.136,
+    "overload_db_re_adc": 17.3
+   },
+   {
+    "index": 93,
+    "position": [
+     1.215,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.1304,
+    "direct_level_db_re_upa": 190.43,
+    "peak_volts_at_adc": 18.687,
+    "overload_db_re_adc": 17.1
+   },
+   {
+    "index": 94,
+    "position": [
+     1.305,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.183,
+    "direct_level_db_re_upa": 190.22,
+    "peak_volts_at_adc": 18.237,
+    "overload_db_re_adc": 16.89
+   },
+   {
+    "index": 95,
+    "position": [
+     1.395,
+     0.0,
+     -0.75
+    ],
+    "distance_m": 2.238,
+    "direct_level_db_re_upa": 190.0,
+    "peak_volts_at_adc": 17.789,
+    "overload_db_re_adc": 16.67
+   }
+  ],
+  "summary": {
+   "nearest_m": 0.25401771591761074,
+   "farthest_m": 2.237973413604371,
+   "overload_db_nearest": 35.56990972107533,
+   "overload_db_farthest": 16.670091394316266,
+   "hydrophones_overloaded": 96,
+   "hydrophones": 96,
+   "gain_reduction_for_no_overload_db": 35.56990972107533,
+   "distance_for_no_overload_m": 15.253148297068867
+  },
+  "projector_distance": [
+   {
+    "distance_m": 0.3,
+    "direct_level_db_re_upa": 207.46,
+    "overload_db_re_adc": 34.12
+   },
+   {
+    "distance_m": 0.5,
+    "direct_level_db_re_upa": 203.02,
+    "overload_db_re_adc": 29.69
+   },
+   {
+    "distance_m": 1.0,
+    "direct_level_db_re_upa": 197.0,
+    "overload_db_re_adc": 23.67
+   },
+   {
+    "distance_m": 1.69,
+    "direct_level_db_re_upa": 192.44,
+    "overload_db_re_adc": 19.11
+   },
+   {
+    "distance_m": 2.0,
+    "direct_level_db_re_upa": 190.98,
+    "overload_db_re_adc": 17.65
+   },
+   {
+    "distance_m": 3.0,
+    "direct_level_db_re_upa": 187.46,
+    "overload_db_re_adc": 14.12
+   },
+   {
+    "distance_m": 5.0,
+    "direct_level_db_re_upa": 183.02,
+    "overload_db_re_adc": 9.69
+   },
+   {
+    "distance_m": 7.0,
+    "direct_level_db_re_upa": 180.1,
+    "overload_db_re_adc": 6.77
+   },
+   {
+    "distance_m": 10.0,
+    "direct_level_db_re_upa": 177.0,
+    "overload_db_re_adc": 3.67
+   },
+   {
+    "distance_m": 15.0,
+    "direct_level_db_re_upa": 173.48,
+    "overload_db_re_adc": 0.15
+   },
+   {
+    "distance_m": 20.0,
+    "direct_level_db_re_upa": 170.98,
+    "overload_db_re_adc": -2.35
+   },
+   {
+    "distance_m": 30.0,
+    "direct_level_db_re_upa": 167.46,
+    "overload_db_re_adc": -5.88
+   }
+  ],
+  "tolerance": {
+   "gain_db": 1.0,
+   "offset_db_re_adc_full_scale": -40.0
+  },
+  "recovery_sets_are": "ILLUSTRATIVE: no board has been measured",
+  "recovery_note": "recovery_after_pulse_s counts from the nominal end of the direct pulse at each hydrophone (pulse + distance / c); closed_form_recovery_s counts from the last clipped sample, which the pulse's edge taper (window_alpha) puts before the nominal end, the earlier the less a hydrophone is overloaded",
+  "recovery": {
+   "0.1": [
+    {
+     "set": "clip_only",
+     "overload": {},
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10149198227573625,
+      "best": 0.10016934514394508,
+      "median": 0.10082620247124884
+     },
+     "minimum_range_m": {
+      "worst": 76.11898670680219,
+      "best": 75.12700885795881,
+      "median": 75.61965185343664
+     },
+     "closed_form_recovery_s": 0.0
+    },
+    {
+     "set": "dead_1ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0005826079810549167,
+      "best": 0.0,
+      "median": 1.3641278751169716e-05,
+      "per_channel": [
+       0.0,
+       1e-05,
+       1e-05,
+       9e-05,
+       9e-05,
+       0.00017,
+       0.00018,
+       0.00025,
+       0.00026,
+       0.00034,
+       0.00034,
+       0.00042,
+       0.00044,
+       0.00051,
+       0.00051,
+       0.00058,
+       0.00058,
+       0.00051,
+       0.00051,
+       0.00044,
+       0.00042,
+       0.00034,
+       0.00034,
+       0.00026,
+       0.00025,
+       0.00018,
+       0.00017,
+       9e-05,
+       9e-05,
+       1e-05,
+       1e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       1e-05,
+       1e-05,
+       1e-05,
+       9e-05,
+       9e-05,
+       9e-05,
+       0.00017,
+       0.00017,
+       0.00017,
+       0.00018,
+       0.00018,
+       0.00025,
+       0.00026,
+       0.00026,
+       0.00025,
+       0.00018,
+       0.00018,
+       0.00017,
+       0.00017,
+       0.00017,
+       9e-05,
+       9e-05,
+       9e-05,
+       1e-05,
+       1e-05,
+       1e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10149198227573625,
+      "best": 0.100703125,
+      "median": 0.1008642578125
+     },
+     "minimum_range_m": {
+      "worst": 76.11898670680219,
+      "best": 75.52734375,
+      "median": 75.648193359375
+     },
+     "closed_form_recovery_s": 0.001
+    },
+    {
+     "set": "tau_1ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0018033111060549167,
+      "best": 0.0009005958492637606,
+      "median": 0.0012343444037511697,
+      "per_channel": [
+       0.00122,
+       0.00123,
+       0.00123,
+       0.00131,
+       0.00131,
+       0.00139,
+       0.0014,
+       0.00148,
+       0.00148,
+       0.00156,
+       0.00156,
+       0.00165,
+       0.00166,
+       0.00173,
+       0.00173,
+       0.0018,
+       0.0018,
+       0.00173,
+       0.00173,
+       0.00166,
+       0.00165,
+       0.00156,
+       0.00156,
+       0.00148,
+       0.00148,
+       0.0014,
+       0.00139,
+       0.00131,
+       0.00131,
+       0.00123,
+       0.00123,
+       0.00122,
+       0.00114,
+       0.00115,
+       0.00115,
+       0.00123,
+       0.00123,
+       0.00124,
+       0.00131,
+       0.00131,
+       0.00131,
+       0.00139,
+       0.00139,
+       0.00139,
+       0.0014,
+       0.0014,
+       0.00147,
+       0.00148,
+       0.00148,
+       0.00147,
+       0.0014,
+       0.0014,
+       0.00139,
+       0.00139,
+       0.00139,
+       0.00131,
+       0.00131,
+       0.00131,
+       0.00124,
+       0.00123,
+       0.00123,
+       0.00115,
+       0.00115,
+       0.00114,
+       0.0009,
+       0.00098,
+       0.00097,
+       0.00098,
+       0.00098,
+       0.00098,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00107,
+       0.00106,
+       0.00106,
+       0.00107,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00106,
+       0.00098,
+       0.00098,
+       0.00098,
+       0.00097,
+       0.00098,
+       0.0009
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.102431640625,
+      "best": 0.101923828125,
+      "median": 0.1020849609375
+     },
+     "minimum_range_m": {
+      "worst": 76.82373046875,
+      "best": 76.44287109375,
+      "median": 76.563720703125
+     },
+     "closed_form_recovery_s": 0.002218712235567753
+    },
+    {
+     "set": "dead_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.009586514231054916,
+      "best": 0.00868379897426376,
+      "median": 0.009017547528751169,
+      "per_channel": [
+       0.00901,
+       0.00902,
+       0.00902,
+       0.00909,
+       0.00909,
+       0.00917,
+       0.00918,
+       0.00926,
+       0.00927,
+       0.00934,
+       0.00935,
+       0.00943,
+       0.00944,
+       0.00951,
+       0.00952,
+       0.00959,
+       0.00959,
+       0.00952,
+       0.00951,
+       0.00944,
+       0.00943,
+       0.00935,
+       0.00934,
+       0.00927,
+       0.00926,
+       0.00918,
+       0.00917,
+       0.00909,
+       0.00909,
+       0.00902,
+       0.00902,
+       0.00901,
+       0.00893,
+       0.00893,
+       0.00893,
+       0.00901,
+       0.00901,
+       0.00902,
+       0.00909,
+       0.0091,
+       0.0091,
+       0.00917,
+       0.00918,
+       0.00918,
+       0.00918,
+       0.00918,
+       0.00925,
+       0.00926,
+       0.00926,
+       0.00925,
+       0.00918,
+       0.00918,
+       0.00918,
+       0.00918,
+       0.00917,
+       0.0091,
+       0.0091,
+       0.00909,
+       0.00902,
+       0.00901,
+       0.00901,
+       0.00893,
+       0.00893,
+       0.00893,
+       0.00868,
+       0.00876,
+       0.00876,
+       0.00876,
+       0.00876,
+       0.00876,
+       0.00884,
+       0.00884,
+       0.00885,
+       0.00885,
+       0.00885,
+       0.00884,
+       0.00884,
+       0.00884,
+       0.00885,
+       0.00884,
+       0.00884,
+       0.00885,
+       0.00884,
+       0.00884,
+       0.00884,
+       0.00885,
+       0.00885,
+       0.00885,
+       0.00884,
+       0.00884,
+       0.00876,
+       0.00876,
+       0.00876,
+       0.00876,
+       0.00876,
+       0.00868
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.11021484375,
+      "best": 0.10970703125,
+      "median": 0.1098681640625
+     },
+     "minimum_range_m": {
+      "worst": 82.6611328125,
+      "best": 82.2802734375,
+      "median": 82.401123046875
+     },
+     "closed_form_recovery_s": 0.01
+    },
+    {
+     "set": "tau_10ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.021764248606054915,
+      "best": 0.02086153334926376,
+      "median": 0.021195281903751167,
+      "per_channel": [
+       0.02118,
+       0.02119,
+       0.02119,
+       0.02127,
+       0.02127,
+       0.02135,
+       0.02136,
+       0.02144,
+       0.02144,
+       0.02152,
+       0.02152,
+       0.02161,
+       0.02162,
+       0.02169,
+       0.0217,
+       0.02176,
+       0.02176,
+       0.0217,
+       0.02169,
+       0.02162,
+       0.02161,
+       0.02152,
+       0.02152,
+       0.02144,
+       0.02144,
+       0.02136,
+       0.02135,
+       0.02127,
+       0.02127,
+       0.02119,
+       0.02119,
+       0.02118,
+       0.02111,
+       0.02111,
+       0.02111,
+       0.02119,
+       0.02119,
+       0.0212,
+       0.02127,
+       0.02127,
+       0.02127,
+       0.02135,
+       0.02136,
+       0.02136,
+       0.02136,
+       0.02136,
+       0.02143,
+       0.02144,
+       0.02144,
+       0.02143,
+       0.02136,
+       0.02136,
+       0.02136,
+       0.02136,
+       0.02135,
+       0.02127,
+       0.02127,
+       0.02127,
+       0.0212,
+       0.02119,
+       0.02119,
+       0.02111,
+       0.02111,
+       0.02111,
+       0.02086,
+       0.02094,
+       0.02093,
+       0.02094,
+       0.02094,
+       0.02094,
+       0.02102,
+       0.02102,
+       0.02102,
+       0.02103,
+       0.02102,
+       0.02102,
+       0.02102,
+       0.02102,
+       0.02103,
+       0.02102,
+       0.02102,
+       0.02103,
+       0.02102,
+       0.02102,
+       0.02102,
+       0.02102,
+       0.02103,
+       0.02102,
+       0.02102,
+       0.02102,
+       0.02094,
+       0.02094,
+       0.02094,
+       0.02093,
+       0.02094,
+       0.02086
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.122392578125,
+      "best": 0.121884765625,
+      "median": 0.1220458984375
+     },
+     "minimum_range_m": {
+      "worst": 91.79443359375,
+      "best": 91.41357421875,
+      "median": 91.534423828125
+     },
+     "closed_form_recovery_s": 0.02218712235567753
+    },
+    {
+     "set": "dead_100ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0995865142310549,
+      "best": 0.09868379897426374,
+      "median": 0.09901754752875115,
+      "per_channel": [
+       0.09901,
+       0.09902,
+       0.09902,
+       0.09909,
+       0.09909,
+       0.09917,
+       0.09918,
+       0.09926,
+       0.09927,
+       0.09934,
+       0.09935,
+       0.09943,
+       0.09944,
+       0.09951,
+       0.09952,
+       0.09959,
+       0.09959,
+       0.09952,
+       0.09951,
+       0.09944,
+       0.09943,
+       0.09935,
+       0.09934,
+       0.09927,
+       0.09926,
+       0.09918,
+       0.09917,
+       0.09909,
+       0.09909,
+       0.09902,
+       0.09902,
+       0.09901,
+       0.09893,
+       0.09893,
+       0.09893,
+       0.09901,
+       0.09901,
+       0.09902,
+       0.09909,
+       0.0991,
+       0.0991,
+       0.09917,
+       0.09918,
+       0.09918,
+       0.09918,
+       0.09918,
+       0.09925,
+       0.09926,
+       0.09926,
+       0.09925,
+       0.09918,
+       0.09918,
+       0.09918,
+       0.09918,
+       0.09917,
+       0.0991,
+       0.0991,
+       0.09909,
+       0.09902,
+       0.09901,
+       0.09901,
+       0.09893,
+       0.09893,
+       0.09893,
+       0.09868,
+       0.09876,
+       0.09876,
+       0.09876,
+       0.09876,
+       0.09876,
+       0.09884,
+       0.09884,
+       0.09885,
+       0.09885,
+       0.09885,
+       0.09884,
+       0.09884,
+       0.09884,
+       0.09885,
+       0.09884,
+       0.09884,
+       0.09885,
+       0.09884,
+       0.09884,
+       0.09884,
+       0.09885,
+       0.09885,
+       0.09885,
+       0.09884,
+       0.09884,
+       0.09876,
+       0.09876,
+       0.09876,
+       0.09876,
+       0.09876,
+       0.09868
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.20021484374999998,
+      "best": 0.19970703125,
+      "median": 0.1998681640625
+     },
+     "minimum_range_m": {
+      "worst": 150.1611328125,
+      "best": 149.7802734375,
+      "median": 149.901123046875
+     },
+     "closed_form_recovery_s": 0.1
+    },
+    {
+     "set": "tau_100ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.22145174860605488,
+      "best": 0.22054903334926373,
+      "median": 0.22088278190375116,
+      "per_channel": [
+       0.22087,
+       0.22088,
+       0.22088,
+       0.22096,
+       0.22096,
+       0.22104,
+       0.22105,
+       0.22112,
+       0.22113,
+       0.22121,
+       0.22121,
+       0.22129,
+       0.2213,
+       0.22138,
+       0.22138,
+       0.22145,
+       0.22145,
+       0.22138,
+       0.22138,
+       0.2213,
+       0.22129,
+       0.22121,
+       0.22121,
+       0.22113,
+       0.22112,
+       0.22105,
+       0.22104,
+       0.22096,
+       0.22096,
+       0.22088,
+       0.22088,
+       0.22087,
+       0.22079,
+       0.2208,
+       0.2208,
+       0.22088,
+       0.22088,
+       0.22088,
+       0.22096,
+       0.22096,
+       0.22096,
+       0.22104,
+       0.22104,
+       0.22104,
+       0.22105,
+       0.22105,
+       0.22112,
+       0.22113,
+       0.22113,
+       0.22112,
+       0.22105,
+       0.22105,
+       0.22104,
+       0.22104,
+       0.22104,
+       0.22096,
+       0.22096,
+       0.22096,
+       0.22088,
+       0.22088,
+       0.22088,
+       0.2208,
+       0.2208,
+       0.22079,
+       0.22055,
+       0.22062,
+       0.22062,
+       0.22062,
+       0.22063,
+       0.22063,
+       0.2207,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.22071,
+       0.2207,
+       0.22063,
+       0.22063,
+       0.22062,
+       0.22062,
+       0.22062,
+       0.22055
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.322080078125,
+      "best": 0.32157226562499996,
+      "median": 0.3217333984375
+     },
+     "minimum_range_m": {
+      "worst": 241.56005859375,
+      "best": 241.17919921874997,
+      "median": 241.300048828125
+     },
+     "closed_form_recovery_s": 0.2218712235567753
+    },
+    {
+     "set": "dead_10ms_tau_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01,
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.56991516991639,
+      "best": 16.669565606009805,
+      "median": 21.803369119490434
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.03176424860605491,
+      "best": 0.030861533349263753,
+      "median": 0.031195281903751162,
+      "per_channel": [
+       0.03118,
+       0.03119,
+       0.03119,
+       0.03127,
+       0.03127,
+       0.03135,
+       0.03136,
+       0.03144,
+       0.03144,
+       0.03152,
+       0.03152,
+       0.03161,
+       0.03162,
+       0.03169,
+       0.0317,
+       0.03176,
+       0.03176,
+       0.0317,
+       0.03169,
+       0.03162,
+       0.03161,
+       0.03152,
+       0.03152,
+       0.03144,
+       0.03144,
+       0.03136,
+       0.03135,
+       0.03127,
+       0.03127,
+       0.03119,
+       0.03119,
+       0.03118,
+       0.03111,
+       0.03111,
+       0.03111,
+       0.03119,
+       0.03119,
+       0.0312,
+       0.03127,
+       0.03127,
+       0.03127,
+       0.03135,
+       0.03136,
+       0.03136,
+       0.03136,
+       0.03136,
+       0.03143,
+       0.03144,
+       0.03144,
+       0.03143,
+       0.03136,
+       0.03136,
+       0.03136,
+       0.03136,
+       0.03135,
+       0.03127,
+       0.03127,
+       0.03127,
+       0.0312,
+       0.03119,
+       0.03119,
+       0.03111,
+       0.03111,
+       0.03111,
+       0.03086,
+       0.03094,
+       0.03093,
+       0.03094,
+       0.03094,
+       0.03094,
+       0.03102,
+       0.03102,
+       0.03102,
+       0.03103,
+       0.03102,
+       0.03102,
+       0.03102,
+       0.03102,
+       0.03103,
+       0.03102,
+       0.03102,
+       0.03103,
+       0.03102,
+       0.03102,
+       0.03102,
+       0.03102,
+       0.03103,
+       0.03102,
+       0.03102,
+       0.03102,
+       0.03094,
+       0.03094,
+       0.03094,
+       0.03093,
+       0.03094,
+       0.03086
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.132392578125,
+      "best": 0.13188476562499998,
+      "median": 0.13204589843749998
+     },
+     "minimum_range_m": {
+      "worst": 99.29443359375,
+      "best": 98.91357421874999,
+      "median": 99.034423828125
+     },
+     "closed_form_recovery_s": 0.03218712235567753
+    },
+    {
+     "set": "coupling_100hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 100.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.604923413545873,
+      "best": 16.188977195606316,
+      "median": 17.435227267030967
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.006959561106054918,
+      "best": 0.00296114272426376,
+      "median": 0.005052703778751166,
+      "per_channel": [
+       0.00474,
+       0.0049,
+       0.00505,
+       0.00521,
+       0.00534,
+       0.0055,
+       0.00565,
+       0.0058,
+       0.00596,
+       0.00611,
+       0.00626,
+       0.00643,
+       0.00659,
+       0.00675,
+       0.00687,
+       0.00696,
+       0.00696,
+       0.00687,
+       0.00675,
+       0.00659,
+       0.00643,
+       0.00626,
+       0.00611,
+       0.00596,
+       0.0058,
+       0.00565,
+       0.0055,
+       0.00534,
+       0.00521,
+       0.00505,
+       0.0049,
+       0.00474,
+       0.0044,
+       0.00455,
+       0.00468,
+       0.00481,
+       0.00493,
+       0.00505,
+       0.00517,
+       0.00528,
+       0.00539,
+       0.00547,
+       0.00556,
+       0.00564,
+       0.00571,
+       0.00575,
+       0.00579,
+       0.0058,
+       0.0058,
+       0.00579,
+       0.00575,
+       0.00571,
+       0.00564,
+       0.00556,
+       0.00547,
+       0.00539,
+       0.00528,
+       0.00517,
+       0.00505,
+       0.00493,
+       0.00481,
+       0.00468,
+       0.00455,
+       0.0044,
+       0.00296,
+       0.00311,
+       0.00325,
+       0.00338,
+       0.0035,
+       0.00362,
+       0.00371,
+       0.0038,
+       0.00387,
+       0.00394,
+       0.00398,
+       0.00404,
+       0.00408,
+       0.00411,
+       0.00412,
+       0.00414,
+       0.00414,
+       0.00412,
+       0.00411,
+       0.00408,
+       0.00404,
+       0.00398,
+       0.00394,
+       0.00387,
+       0.0038,
+       0.00371,
+       0.00362,
+       0.0035,
+       0.00338,
+       0.00325,
+       0.00311,
+       0.00296
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10712890625,
+      "best": 0.10445312500000001,
+      "median": 0.10587890625
+     },
+     "minimum_range_m": {
+      "worst": 80.3466796875,
+      "best": 78.33984375,
+      "median": 79.4091796875
+     },
+     "closed_form_recovery_s": 0.0083640026836111
+    },
+    {
+     "set": "coupling_10hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 10.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.678644454900777,
+      "best": 16.555505946301853,
+      "median": 17.657199817033842
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.08126620173105491,
+      "best": 0.061642783349263736,
+      "median": 0.07485739127875116,
+      "per_channel": [
+       0.07347,
+       0.07417,
+       0.07485,
+       0.0755,
+       0.07612,
+       0.07669,
+       0.07727,
+       0.07781,
+       0.07838,
+       0.07883,
+       0.07938,
+       0.07982,
+       0.0803,
+       0.08066,
+       0.08107,
+       0.08127,
+       0.08127,
+       0.08107,
+       0.08066,
+       0.0803,
+       0.07982,
+       0.07938,
+       0.07883,
+       0.07838,
+       0.07781,
+       0.07727,
+       0.07669,
+       0.07612,
+       0.0755,
+       0.07485,
+       0.07417,
+       0.07347,
+       0.07174,
+       0.07249,
+       0.07314,
+       0.07376,
+       0.07433,
+       0.07487,
+       0.07536,
+       0.07581,
+       0.07624,
+       0.0766,
+       0.07693,
+       0.07723,
+       0.07746,
+       0.07764,
+       0.07775,
+       0.07783,
+       0.07783,
+       0.07775,
+       0.07764,
+       0.07746,
+       0.07723,
+       0.07693,
+       0.0766,
+       0.07624,
+       0.07581,
+       0.07536,
+       0.07487,
+       0.07433,
+       0.07376,
+       0.07314,
+       0.07249,
+       0.07174,
+       0.06164,
+       0.06283,
+       0.06392,
+       0.065,
+       0.06597,
+       0.06689,
+       0.06763,
+       0.0682,
+       0.06869,
+       0.0691,
+       0.06943,
+       0.0697,
+       0.06993,
+       0.07009,
+       0.0702,
+       0.07025,
+       0.07025,
+       0.0702,
+       0.07009,
+       0.06993,
+       0.0697,
+       0.06943,
+       0.0691,
+       0.06869,
+       0.0682,
+       0.06763,
+       0.06689,
+       0.06597,
+       0.065,
+       0.06392,
+       0.06283,
+       0.06164
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.181435546875,
+      "best": 0.16313476562499998,
+      "median": 0.17568359374999998
+     },
+     "minimum_range_m": {
+      "worst": 136.07666015625,
+      "best": 122.35107421874999,
+      "median": 131.7626953125
+     },
+     "closed_form_recovery_s": 0.08361027777595517
+    },
+    {
+     "set": "gain_switch",
+     "overload": {
+      "gain_switch": {
+       "gain_db": -42.0,
+       "until": 0.10249198227573625,
+       "ramp": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": -6.430084830083608,
+      "best": -25.330434393990195,
+      "median": -20.196630880509566
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10149198227573625,
+      "best": 0.10016934514394508,
+      "median": 0.10082620247124884
+     },
+     "minimum_range_m": {
+      "worst": 76.11898670680219,
+      "best": 75.12700885795881,
+      "median": 75.61965185343664
+     },
+     "closed_form_recovery_s": 0.0
+    }
+   ],
+   "1": [
+    {
+     "set": "clip_only",
+     "overload": {},
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0014919822757362,
+      "best": 1.000169345143945,
+      "median": 1.0008262024712489
+     },
+     "minimum_range_m": {
+      "worst": 751.1189867068022,
+      "best": 750.1270088579588,
+      "median": 750.6196518534366
+     },
+     "closed_form_recovery_s": 0.0
+    },
+    {
+     "set": "dead_1ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0014919822757362,
+      "best": 1.000169345143945,
+      "median": 1.0008262024712489
+     },
+     "minimum_range_m": {
+      "worst": 751.1189867068022,
+      "best": 750.1270088579588,
+      "median": 750.6196518534366
+     },
+     "closed_form_recovery_s": 0.001
+    },
+    {
+     "set": "tau_1ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0014919822757362,
+      "best": 1.000169345143945,
+      "median": 1.0008262024712489
+     },
+     "minimum_range_m": {
+      "worst": 751.1189867068022,
+      "best": 750.1270088579588,
+      "median": 750.6196518534366
+     },
+     "closed_form_recovery_s": 0.002218712235567753
+    },
+    {
+     "set": "dead_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.005836514231055023,
+      "best": 0.0,
+      "median": 0.0007460631537510309,
+      "per_channel": [
+       8e-05,
+       0.00041,
+       0.00075,
+       0.00108,
+       0.0015,
+       0.00183,
+       0.00217,
+       0.0025,
+       0.00292,
+       0.00334,
+       0.00384,
+       0.00425,
+       0.00475,
+       0.00525,
+       0.00559,
+       0.00584,
+       0.00584,
+       0.00559,
+       0.00525,
+       0.00475,
+       0.00425,
+       0.00384,
+       0.00334,
+       0.00292,
+       0.0025,
+       0.00217,
+       0.00183,
+       0.0015,
+       0.00108,
+       0.00075,
+       0.00041,
+       8e-05,
+       0.0,
+       0.0,
+       0.0,
+       0.00024,
+       0.0005,
+       0.00075,
+       0.001,
+       0.00124,
+       0.0015,
+       0.00175,
+       0.002,
+       0.00217,
+       0.00234,
+       0.00241,
+       0.00258,
+       0.00258,
+       0.00258,
+       0.00258,
+       0.00241,
+       0.00234,
+       0.00217,
+       0.002,
+       0.00175,
+       0.0015,
+       0.00124,
+       0.001,
+       0.00075,
+       0.0005,
+       0.00024,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.006005859375,
+      "best": 1.0009698167066228,
+      "median": 1.001572265625
+     },
+     "minimum_range_m": {
+      "worst": 754.5043945312501,
+      "best": 750.7273625299671,
+      "median": 751.1791992187499
+     },
+     "closed_form_recovery_s": 0.01
+    },
+    {
+     "set": "tau_10ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.018014248606054828,
+      "best": 0.009660361474263857,
+      "median": 0.012923797528751058,
+      "per_channel": [
+       0.01226,
+       0.01259,
+       0.01292,
+       0.01326,
+       0.01367,
+       0.01401,
+       0.01435,
+       0.01468,
+       0.0151,
+       0.01551,
+       0.01602,
+       0.01643,
+       0.01693,
+       0.01743,
+       0.01777,
+       0.01801,
+       0.01801,
+       0.01777,
+       0.01743,
+       0.01693,
+       0.01643,
+       0.01602,
+       0.01551,
+       0.0151,
+       0.01468,
+       0.01435,
+       0.01401,
+       0.01367,
+       0.01326,
+       0.01292,
+       0.01259,
+       0.01226,
+       0.01158,
+       0.01192,
+       0.01209,
+       0.01242,
+       0.01267,
+       0.01292,
+       0.01317,
+       0.01342,
+       0.01368,
+       0.01393,
+       0.01418,
+       0.01434,
+       0.01451,
+       0.01459,
+       0.01476,
+       0.01476,
+       0.01476,
+       0.01476,
+       0.01459,
+       0.01451,
+       0.01434,
+       0.01418,
+       0.01393,
+       0.01368,
+       0.01342,
+       0.01317,
+       0.01292,
+       0.01267,
+       0.01242,
+       0.01209,
+       0.01192,
+       0.01158,
+       0.00966,
+       0.00975,
+       0.00983,
+       0.01008,
+       0.01025,
+       0.01033,
+       0.0105,
+       0.01058,
+       0.01075,
+       0.01083,
+       0.01092,
+       0.011,
+       0.011,
+       0.011,
+       0.01109,
+       0.01117,
+       0.01117,
+       0.01109,
+       0.011,
+       0.011,
+       0.011,
+       0.01092,
+       0.01083,
+       0.01075,
+       0.01058,
+       0.0105,
+       0.01033,
+       0.01025,
+       0.01008,
+       0.00983,
+       0.00975,
+       0.00966
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.01818359375,
+      "best": 1.01115234375,
+      "median": 1.01375
+     },
+     "minimum_range_m": {
+      "worst": 763.6376953124999,
+      "best": 758.3642578125,
+      "median": 760.3125
+     },
+     "closed_form_recovery_s": 0.02218712235567753
+    },
+    {
+     "set": "dead_100ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.09583651423105488,
+      "best": 0.08748262709926369,
+      "median": 0.09074606315375111,
+      "per_channel": [
+       0.09008,
+       0.09041,
+       0.09075,
+       0.09108,
+       0.0915,
+       0.09183,
+       0.09217,
+       0.0925,
+       0.09292,
+       0.09334,
+       0.09384,
+       0.09425,
+       0.09475,
+       0.09525,
+       0.09559,
+       0.09584,
+       0.09584,
+       0.09559,
+       0.09525,
+       0.09475,
+       0.09425,
+       0.09384,
+       0.09334,
+       0.09292,
+       0.0925,
+       0.09217,
+       0.09183,
+       0.0915,
+       0.09108,
+       0.09075,
+       0.09041,
+       0.09008,
+       0.08941,
+       0.08974,
+       0.08991,
+       0.09024,
+       0.0905,
+       0.09075,
+       0.091,
+       0.09124,
+       0.0915,
+       0.09175,
+       0.092,
+       0.09217,
+       0.09234,
+       0.09241,
+       0.09258,
+       0.09258,
+       0.09258,
+       0.09258,
+       0.09241,
+       0.09234,
+       0.09217,
+       0.092,
+       0.09175,
+       0.0915,
+       0.09124,
+       0.091,
+       0.09075,
+       0.0905,
+       0.09024,
+       0.08991,
+       0.08974,
+       0.08941,
+       0.08748,
+       0.08757,
+       0.08765,
+       0.0879,
+       0.08807,
+       0.08816,
+       0.08832,
+       0.0884,
+       0.08857,
+       0.08865,
+       0.08874,
+       0.08882,
+       0.08882,
+       0.08882,
+       0.08891,
+       0.08899,
+       0.08899,
+       0.08891,
+       0.08882,
+       0.08882,
+       0.08882,
+       0.08874,
+       0.08865,
+       0.08857,
+       0.0884,
+       0.08832,
+       0.08816,
+       0.08807,
+       0.0879,
+       0.08765,
+       0.08757,
+       0.08748
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.096005859375,
+      "best": 1.088974609375,
+      "median": 1.091572265625
+     },
+     "minimum_range_m": {
+      "worst": 822.00439453125,
+      "best": 816.7309570312499,
+      "median": 818.67919921875
+     },
+     "closed_form_recovery_s": 0.1
+    },
+    {
+     "set": "tau_100ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.21770174860605485,
+      "best": 0.20934786147426387,
+      "median": 0.21261129752875108,
+      "per_channel": [
+       0.21195,
+       0.21228,
+       0.21261,
+       0.21294,
+       0.21336,
+       0.21369,
+       0.21404,
+       0.21437,
+       0.21478,
+       0.2152,
+       0.2157,
+       0.21612,
+       0.21662,
+       0.21712,
+       0.21746,
+       0.2177,
+       0.2177,
+       0.21746,
+       0.21712,
+       0.21662,
+       0.21612,
+       0.2157,
+       0.2152,
+       0.21478,
+       0.21437,
+       0.21404,
+       0.21369,
+       0.21336,
+       0.21294,
+       0.21261,
+       0.21228,
+       0.21195,
+       0.21127,
+       0.21161,
+       0.21177,
+       0.21211,
+       0.21236,
+       0.21261,
+       0.21286,
+       0.21311,
+       0.21336,
+       0.21362,
+       0.21387,
+       0.21403,
+       0.2142,
+       0.21428,
+       0.21445,
+       0.21445,
+       0.21445,
+       0.21445,
+       0.21428,
+       0.2142,
+       0.21403,
+       0.21387,
+       0.21362,
+       0.21336,
+       0.21311,
+       0.21286,
+       0.21261,
+       0.21236,
+       0.21211,
+       0.21177,
+       0.21161,
+       0.21127,
+       0.20935,
+       0.20943,
+       0.20952,
+       0.20977,
+       0.20993,
+       0.21002,
+       0.21019,
+       0.21027,
+       0.21044,
+       0.21052,
+       0.2106,
+       0.21069,
+       0.21069,
+       0.21069,
+       0.21077,
+       0.21085,
+       0.21085,
+       0.21077,
+       0.21069,
+       0.21069,
+       0.21069,
+       0.2106,
+       0.21052,
+       0.21044,
+       0.21027,
+       0.21019,
+       0.21002,
+       0.20993,
+       0.20977,
+       0.20952,
+       0.20943,
+       0.20935
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.21787109375,
+      "best": 1.21083984375,
+      "median": 1.2134375
+     },
+     "minimum_range_m": {
+      "worst": 913.4033203124999,
+      "best": 908.1298828125001,
+      "median": 910.078125
+     },
+     "closed_form_recovery_s": 0.2218712235567753
+    },
+    {
+     "set": "dead_10ms_tau_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01,
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 35.569917706909585,
+      "best": 16.66959168453222,
+      "median": 21.80339335806938
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.028014248606054837,
+      "best": 0.019660361474263865,
+      "median": 0.022923797528751066,
+      "per_channel": [
+       0.02226,
+       0.02259,
+       0.02292,
+       0.02326,
+       0.02367,
+       0.02401,
+       0.02435,
+       0.02468,
+       0.0251,
+       0.02551,
+       0.02602,
+       0.02643,
+       0.02693,
+       0.02743,
+       0.02777,
+       0.02801,
+       0.02801,
+       0.02777,
+       0.02743,
+       0.02693,
+       0.02643,
+       0.02602,
+       0.02551,
+       0.0251,
+       0.02468,
+       0.02435,
+       0.02401,
+       0.02367,
+       0.02326,
+       0.02292,
+       0.02259,
+       0.02226,
+       0.02158,
+       0.02192,
+       0.02209,
+       0.02242,
+       0.02267,
+       0.02292,
+       0.02317,
+       0.02342,
+       0.02368,
+       0.02393,
+       0.02418,
+       0.02434,
+       0.02451,
+       0.02459,
+       0.02476,
+       0.02476,
+       0.02476,
+       0.02476,
+       0.02459,
+       0.02451,
+       0.02434,
+       0.02418,
+       0.02393,
+       0.02368,
+       0.02342,
+       0.02317,
+       0.02292,
+       0.02267,
+       0.02242,
+       0.02209,
+       0.02192,
+       0.02158,
+       0.01966,
+       0.01975,
+       0.01983,
+       0.02008,
+       0.02025,
+       0.02033,
+       0.0205,
+       0.02058,
+       0.02075,
+       0.02083,
+       0.02092,
+       0.021,
+       0.021,
+       0.021,
+       0.02109,
+       0.02117,
+       0.02117,
+       0.02109,
+       0.021,
+       0.021,
+       0.021,
+       0.02092,
+       0.02083,
+       0.02075,
+       0.02058,
+       0.0205,
+       0.02033,
+       0.02025,
+       0.02008,
+       0.01983,
+       0.01975,
+       0.01966
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.02818359375,
+      "best": 1.02115234375,
+      "median": 1.02375
+     },
+     "minimum_range_m": {
+      "worst": 771.1376953124999,
+      "best": 765.8642578125001,
+      "median": 767.8125
+     },
+     "closed_form_recovery_s": 0.03218712235567753
+    },
+    {
+     "set": "coupling_100hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 100.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.148412068919132,
+      "best": 15.863864719382821,
+      "median": 16.879826080454382
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0014919822757362,
+      "best": 1.000169345143945,
+      "median": 1.0008262024712489
+     },
+     "minimum_range_m": {
+      "worst": 751.1189867068022,
+      "best": 750.1270088579588,
+      "median": 750.6196518534366
+     },
+     "closed_form_recovery_s": 0.0083640026836111
+    },
+    {
+     "set": "coupling_10hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 10.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.603208530484217,
+      "best": 16.21902175320756,
+      "median": 17.46608441469408
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.06947909235605487,
+      "best": 0.029650595849263883,
+      "median": 0.0504726256537511,
+      "per_channel": [
+       0.0474,
+       0.04894,
+       0.05045,
+       0.05196,
+       0.05345,
+       0.05494,
+       0.05645,
+       0.05796,
+       0.05949,
+       0.06105,
+       0.06263,
+       0.06422,
+       0.06584,
+       0.06736,
+       0.06867,
+       0.06948,
+       0.06948,
+       0.06867,
+       0.06736,
+       0.06584,
+       0.06422,
+       0.06263,
+       0.06105,
+       0.05949,
+       0.05796,
+       0.05645,
+       0.05494,
+       0.05345,
+       0.05196,
+       0.05045,
+       0.04894,
+       0.0474,
+       0.04397,
+       0.04538,
+       0.04674,
+       0.04804,
+       0.04929,
+       0.05049,
+       0.05164,
+       0.05273,
+       0.05376,
+       0.05471,
+       0.05557,
+       0.05635,
+       0.05699,
+       0.05749,
+       0.05784,
+       0.05802,
+       0.05802,
+       0.05784,
+       0.05749,
+       0.05699,
+       0.05635,
+       0.05557,
+       0.05471,
+       0.05376,
+       0.05273,
+       0.05164,
+       0.05049,
+       0.04929,
+       0.04804,
+       0.04674,
+       0.04538,
+       0.04397,
+       0.02965,
+       0.03108,
+       0.03245,
+       0.03373,
+       0.03494,
+       0.03607,
+       0.03705,
+       0.03791,
+       0.03866,
+       0.03932,
+       0.03986,
+       0.04033,
+       0.04069,
+       0.04096,
+       0.04114,
+       0.04124,
+       0.04124,
+       0.04114,
+       0.04096,
+       0.04069,
+       0.04033,
+       0.03986,
+       0.03932,
+       0.03866,
+       0.03791,
+       0.03705,
+       0.03607,
+       0.03494,
+       0.03373,
+       0.03245,
+       0.03108,
+       0.02965
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0696484375,
+      "best": 1.031142578125,
+      "median": 1.051298828125
+     },
+     "minimum_range_m": {
+      "worst": 802.236328125,
+      "best": 773.3569335937501,
+      "median": 788.47412109375
+     },
+     "closed_form_recovery_s": 0.083640026836111
+    },
+    {
+     "set": "gain_switch",
+     "overload": {
+      "gain_switch": {
+       "gain_db": -42.0,
+       "until": 1.002491982275736,
+       "ramp": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": -6.4300822930904165,
+      "best": -25.33040831546778,
+      "median": -20.19660664193062
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.0014919822757362,
+      "best": 1.000169345143945,
+      "median": 1.0008262024712489
+     },
+     "minimum_range_m": {
+      "worst": 751.1189867068022,
+      "best": 750.1270088579588,
+      "median": 750.6196518534366
+     },
+     "closed_form_recovery_s": 0.0
+    }
+   ]
+  },
+  "simulated_minus_closed_form_db": {
+   "max_abs": 0.0004997097840444553,
+   "pulse_s": 1.0
+  }
+ },
+ "popoto_testauv_1row": {
+  "sonar": "popoto_testauv_1row",
+  "source_level_db": 197.0,
+  "sensitivity_db": -208.0,
+  "gain_db": 43.0,
+  "adc_full_scale_v": 2.61,
+  "projector_lever_arm": [
+   0.0,
+   0.0,
+   0.3
+  ],
+  "sound_speed": 1500.0,
+  "level_convention": "source_level_db + sensitivity_db + gain_db is the PEAK voltage at the ADC (the simulator's convention); an rms source level adds 3 dB to every overload figure",
+  "unconfirmed_in_sonar_file": [
+   "platform.span_m",
+   "platform.height_m",
+   "transmit",
+   "array.pitch"
+  ],
+  "hydrophones": [
+   {
+    "index": 0,
+    "position": [
+     -1.395,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.4269,
+    "direct_level_db_re_upa": 193.91,
+    "peak_volts_at_adc": 27.9,
+    "overload_db_re_adc": 20.58
+   },
+   {
+    "index": 1,
+    "position": [
+     -1.305,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.339,
+    "direct_level_db_re_upa": 194.46,
+    "peak_volts_at_adc": 29.731,
+    "overload_db_re_adc": 21.13
+   },
+   {
+    "index": 2,
+    "position": [
+     -1.215,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.2515,
+    "direct_level_db_re_upa": 195.05,
+    "peak_volts_at_adc": 31.811,
+    "overload_db_re_adc": 21.72
+   },
+   {
+    "index": 3,
+    "position": [
+     -1.125,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.1643,
+    "direct_level_db_re_upa": 195.68,
+    "peak_volts_at_adc": 34.192,
+    "overload_db_re_adc": 22.35
+   },
+   {
+    "index": 4,
+    "position": [
+     -1.035,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.0776,
+    "direct_level_db_re_upa": 196.35,
+    "peak_volts_at_adc": 36.944,
+    "overload_db_re_adc": 23.02
+   },
+   {
+    "index": 5,
+    "position": [
+     -0.945,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.9915,
+    "direct_level_db_re_upa": 197.07,
+    "peak_volts_at_adc": 40.153,
+    "overload_db_re_adc": 23.74
+   },
+   {
+    "index": 6,
+    "position": [
+     -0.855,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.9061,
+    "direct_level_db_re_upa": 197.86,
+    "peak_volts_at_adc": 43.936,
+    "overload_db_re_adc": 24.52
+   },
+   {
+    "index": 7,
+    "position": [
+     -0.765,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.8217,
+    "direct_level_db_re_upa": 198.71,
+    "peak_volts_at_adc": 48.448,
+    "overload_db_re_adc": 25.37
+   },
+   {
+    "index": 8,
+    "position": [
+     -0.675,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.7387,
+    "direct_level_db_re_upa": 199.63,
+    "peak_volts_at_adc": 53.896,
+    "overload_db_re_adc": 26.3
+   },
+   {
+    "index": 9,
+    "position": [
+     -0.585,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.6574,
+    "direct_level_db_re_upa": 200.64,
+    "peak_volts_at_adc": 60.554,
+    "overload_db_re_adc": 27.31
+   },
+   {
+    "index": 10,
+    "position": [
+     -0.495,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.5788,
+    "direct_level_db_re_upa": 201.75,
+    "peak_volts_at_adc": 68.78,
+    "overload_db_re_adc": 28.42
+   },
+   {
+    "index": 11,
+    "position": [
+     -0.405,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.504,
+    "direct_level_db_re_upa": 202.95,
+    "peak_volts_at_adc": 78.988,
+    "overload_db_re_adc": 29.62
+   },
+   {
+    "index": 12,
+    "position": [
+     -0.315,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.435,
+    "direct_level_db_re_upa": 204.23,
+    "peak_volts_at_adc": 91.519,
+    "overload_db_re_adc": 30.9
+   },
+   {
+    "index": 13,
+    "position": [
+     -0.225,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.375,
+    "direct_level_db_re_upa": 205.52,
+    "peak_volts_at_adc": 106.162,
+    "overload_db_re_adc": 32.19
+   },
+   {
+    "index": 14,
+    "position": [
+     -0.135,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.329,
+    "direct_level_db_re_upa": 206.66,
+    "peak_volts_at_adc": 121.014,
+    "overload_db_re_adc": 33.32
+   },
+   {
+    "index": 15,
+    "position": [
+     -0.045,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.3034,
+    "direct_level_db_re_upa": 207.36,
+    "peak_volts_at_adc": 131.234,
+    "overload_db_re_adc": 34.03
+   },
+   {
+    "index": 16,
+    "position": [
+     0.045,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.3034,
+    "direct_level_db_re_upa": 207.36,
+    "peak_volts_at_adc": 131.234,
+    "overload_db_re_adc": 34.03
+   },
+   {
+    "index": 17,
+    "position": [
+     0.135,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.329,
+    "direct_level_db_re_upa": 206.66,
+    "peak_volts_at_adc": 121.014,
+    "overload_db_re_adc": 33.32
+   },
+   {
+    "index": 18,
+    "position": [
+     0.225,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.375,
+    "direct_level_db_re_upa": 205.52,
+    "peak_volts_at_adc": 106.162,
+    "overload_db_re_adc": 32.19
+   },
+   {
+    "index": 19,
+    "position": [
+     0.315,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.435,
+    "direct_level_db_re_upa": 204.23,
+    "peak_volts_at_adc": 91.519,
+    "overload_db_re_adc": 30.9
+   },
+   {
+    "index": 20,
+    "position": [
+     0.405,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.504,
+    "direct_level_db_re_upa": 202.95,
+    "peak_volts_at_adc": 78.988,
+    "overload_db_re_adc": 29.62
+   },
+   {
+    "index": 21,
+    "position": [
+     0.495,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.5788,
+    "direct_level_db_re_upa": 201.75,
+    "peak_volts_at_adc": 68.78,
+    "overload_db_re_adc": 28.42
+   },
+   {
+    "index": 22,
+    "position": [
+     0.585,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.6574,
+    "direct_level_db_re_upa": 200.64,
+    "peak_volts_at_adc": 60.554,
+    "overload_db_re_adc": 27.31
+   },
+   {
+    "index": 23,
+    "position": [
+     0.675,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.7387,
+    "direct_level_db_re_upa": 199.63,
+    "peak_volts_at_adc": 53.896,
+    "overload_db_re_adc": 26.3
+   },
+   {
+    "index": 24,
+    "position": [
+     0.765,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.8217,
+    "direct_level_db_re_upa": 198.71,
+    "peak_volts_at_adc": 48.448,
+    "overload_db_re_adc": 25.37
+   },
+   {
+    "index": 25,
+    "position": [
+     0.855,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.9061,
+    "direct_level_db_re_upa": 197.86,
+    "peak_volts_at_adc": 43.936,
+    "overload_db_re_adc": 24.52
+   },
+   {
+    "index": 26,
+    "position": [
+     0.945,
+     0.0,
+     0.0
+    ],
+    "distance_m": 0.9915,
+    "direct_level_db_re_upa": 197.07,
+    "peak_volts_at_adc": 40.153,
+    "overload_db_re_adc": 23.74
+   },
+   {
+    "index": 27,
+    "position": [
+     1.035,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.0776,
+    "direct_level_db_re_upa": 196.35,
+    "peak_volts_at_adc": 36.944,
+    "overload_db_re_adc": 23.02
+   },
+   {
+    "index": 28,
+    "position": [
+     1.125,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.1643,
+    "direct_level_db_re_upa": 195.68,
+    "peak_volts_at_adc": 34.192,
+    "overload_db_re_adc": 22.35
+   },
+   {
+    "index": 29,
+    "position": [
+     1.215,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.2515,
+    "direct_level_db_re_upa": 195.05,
+    "peak_volts_at_adc": 31.811,
+    "overload_db_re_adc": 21.72
+   },
+   {
+    "index": 30,
+    "position": [
+     1.305,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.339,
+    "direct_level_db_re_upa": 194.46,
+    "peak_volts_at_adc": 29.731,
+    "overload_db_re_adc": 21.13
+   },
+   {
+    "index": 31,
+    "position": [
+     1.395,
+     0.0,
+     0.0
+    ],
+    "distance_m": 1.4269,
+    "direct_level_db_re_upa": 193.91,
+    "peak_volts_at_adc": 27.9,
+    "overload_db_re_adc": 20.58
+   }
+  ],
+  "summary": {
+   "nearest_m": 0.30335622624235026,
+   "farthest_m": 1.4268934788553769,
+   "overload_db_nearest": 34.02813159204734,
+   "overload_db_farthest": 20.57935878998898,
+   "hydrophones_overloaded": 32,
+   "hydrophones": 32,
+   "gain_reduction_for_no_overload_db": 34.02813159204734,
+   "distance_for_no_overload_m": 15.253148297068867
+  },
+  "projector_distance": [
+   {
+    "distance_m": 0.3,
+    "direct_level_db_re_upa": 207.46,
+    "overload_db_re_adc": 34.12
+   },
+   {
+    "distance_m": 0.5,
+    "direct_level_db_re_upa": 203.02,
+    "overload_db_re_adc": 29.69
+   },
+   {
+    "distance_m": 1.0,
+    "direct_level_db_re_upa": 197.0,
+    "overload_db_re_adc": 23.67
+   },
+   {
+    "distance_m": 1.69,
+    "direct_level_db_re_upa": 192.44,
+    "overload_db_re_adc": 19.11
+   },
+   {
+    "distance_m": 2.0,
+    "direct_level_db_re_upa": 190.98,
+    "overload_db_re_adc": 17.65
+   },
+   {
+    "distance_m": 3.0,
+    "direct_level_db_re_upa": 187.46,
+    "overload_db_re_adc": 14.12
+   },
+   {
+    "distance_m": 5.0,
+    "direct_level_db_re_upa": 183.02,
+    "overload_db_re_adc": 9.69
+   },
+   {
+    "distance_m": 7.0,
+    "direct_level_db_re_upa": 180.1,
+    "overload_db_re_adc": 6.77
+   },
+   {
+    "distance_m": 10.0,
+    "direct_level_db_re_upa": 177.0,
+    "overload_db_re_adc": 3.67
+   },
+   {
+    "distance_m": 15.0,
+    "direct_level_db_re_upa": 173.48,
+    "overload_db_re_adc": 0.15
+   },
+   {
+    "distance_m": 20.0,
+    "direct_level_db_re_upa": 170.98,
+    "overload_db_re_adc": -2.35
+   },
+   {
+    "distance_m": 30.0,
+    "direct_level_db_re_upa": 167.46,
+    "overload_db_re_adc": -5.88
+   }
+  ],
+  "tolerance": {
+   "gain_db": 1.0,
+   "offset_db_re_adc_full_scale": -40.0
+  },
+  "recovery_sets_are": "ILLUSTRATIVE: no board has been measured",
+  "recovery_note": "recovery_after_pulse_s counts from the nominal end of the direct pulse at each hydrophone (pulse + distance / c); closed_form_recovery_s counts from the last clipped sample, which the pulse's edge taper (window_alpha) puts before the nominal end, the earlier the less a hydrophone is overloaded",
+  "recovery": {
+   "0.1": [
+    {
+     "set": "clip_only",
+     "overload": {},
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10095126231923693,
+      "best": 0.10020223748416157,
+      "median": 0.10052012836354096
+     },
+     "minimum_range_m": {
+      "worst": 75.7134467394277,
+      "best": 75.15167811312118,
+      "median": 75.39009627265571
+     },
+     "closed_form_recovery_s": 0.0
+    },
+    {
+     "set": "dead_1ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0005131047530053806,
+      "best": 5.744943741128883e-06,
+      "median": 0.00025623882395904574,
+      "per_channel": [
+       1e-05,
+       1e-05,
+       2e-05,
+       9e-05,
+       9e-05,
+       0.00017,
+       0.00018,
+       0.00025,
+       0.00026,
+       0.00033,
+       0.00035,
+       0.00042,
+       0.00043,
+       0.0005,
+       0.00051,
+       0.00051,
+       0.00051,
+       0.00051,
+       0.0005,
+       0.00043,
+       0.00042,
+       0.00035,
+       0.00033,
+       0.00026,
+       0.00025,
+       0.00018,
+       0.00017,
+       9e-05,
+       9e-05,
+       2e-05,
+       1e-05,
+       1e-05
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10095703125000001,
+      "best": 0.10071289062500001,
+      "median": 0.10077636718750001
+     },
+     "minimum_range_m": {
+      "worst": 75.7177734375,
+      "best": 75.53466796875,
+      "median": 75.582275390625
+     },
+     "closed_form_recovery_s": 0.001
+    },
+    {
+     "set": "tau_1ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0017338078780053806,
+      "best": 0.0012264480687411289,
+      "median": 0.0014769419489590457,
+      "per_channel": [
+       0.00123,
+       0.00123,
+       0.00124,
+       0.00131,
+       0.00131,
+       0.00139,
+       0.0014,
+       0.00147,
+       0.00148,
+       0.00155,
+       0.00157,
+       0.00164,
+       0.00165,
+       0.00172,
+       0.00173,
+       0.00173,
+       0.00173,
+       0.00173,
+       0.00172,
+       0.00165,
+       0.00164,
+       0.00157,
+       0.00155,
+       0.00148,
+       0.00147,
+       0.0014,
+       0.00139,
+       0.00131,
+       0.00131,
+       0.00124,
+       0.00123,
+       0.00123
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10217773437500001,
+      "best": 0.10193359375000001,
+      "median": 0.10199707031250001
+     },
+     "minimum_range_m": {
+      "worst": 76.63330078125,
+      "best": 76.4501953125,
+      "median": 76.497802734375
+     },
+     "closed_form_recovery_s": 0.002218712235567753
+    },
+    {
+     "set": "dead_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.00951701100300538,
+      "best": 0.009009651193741128,
+      "median": 0.009260145073959052,
+      "per_channel": [
+       0.00901,
+       0.00901,
+       0.00902,
+       0.0091,
+       0.0091,
+       0.00917,
+       0.00918,
+       0.00926,
+       0.00926,
+       0.00934,
+       0.00935,
+       0.00942,
+       0.00944,
+       0.00951,
+       0.00952,
+       0.00951,
+       0.00951,
+       0.00952,
+       0.00951,
+       0.00944,
+       0.00942,
+       0.00935,
+       0.00934,
+       0.00926,
+       0.00926,
+       0.00918,
+       0.00917,
+       0.0091,
+       0.0091,
+       0.00902,
+       0.00901,
+       0.00901
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10996093750000001,
+      "best": 0.10971679687500001,
+      "median": 0.1097802734375
+     },
+     "minimum_range_m": {
+      "worst": 82.470703125,
+      "best": 82.28759765625,
+      "median": 82.335205078125
+     },
+     "closed_form_recovery_s": 0.01
+    },
+    {
+     "set": "tau_10ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.02169474537800538,
+      "best": 0.021187385568741127,
+      "median": 0.02143787944895905,
+      "per_channel": [
+       0.02119,
+       0.02119,
+       0.0212,
+       0.02127,
+       0.02127,
+       0.02135,
+       0.02136,
+       0.02143,
+       0.02144,
+       0.02151,
+       0.02153,
+       0.0216,
+       0.02161,
+       0.02168,
+       0.02169,
+       0.02169,
+       0.02169,
+       0.02169,
+       0.02168,
+       0.02161,
+       0.0216,
+       0.02153,
+       0.02151,
+       0.02144,
+       0.02143,
+       0.02136,
+       0.02135,
+       0.02127,
+       0.02127,
+       0.0212,
+       0.02119,
+       0.02119
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.12213867187500001,
+      "best": 0.12189453125000001,
+      "median": 0.1219580078125
+     },
+     "minimum_range_m": {
+      "worst": 91.60400390625,
+      "best": 91.4208984375,
+      "median": 91.468505859375
+     },
+     "closed_form_recovery_s": 0.02218712235567753
+    },
+    {
+     "set": "dead_100ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.09951701100300538,
+      "best": 0.09900965119374111,
+      "median": 0.09926014507395903,
+      "per_channel": [
+       0.09901,
+       0.09901,
+       0.09902,
+       0.0991,
+       0.0991,
+       0.09917,
+       0.09918,
+       0.09926,
+       0.09926,
+       0.09934,
+       0.09935,
+       0.09942,
+       0.09944,
+       0.09951,
+       0.09952,
+       0.09951,
+       0.09951,
+       0.09952,
+       0.09951,
+       0.09944,
+       0.09942,
+       0.09935,
+       0.09934,
+       0.09926,
+       0.09926,
+       0.09918,
+       0.09917,
+       0.0991,
+       0.0991,
+       0.09902,
+       0.09901,
+       0.09901
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.1999609375,
+      "best": 0.199716796875,
+      "median": 0.1997802734375
+     },
+     "minimum_range_m": {
+      "worst": 149.970703125,
+      "best": 149.78759765625,
+      "median": 149.835205078125
+     },
+     "closed_form_recovery_s": 0.1
+    },
+    {
+     "set": "tau_100ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.22138224537800538,
+      "best": 0.22087488556874113,
+      "median": 0.22112537944895905,
+      "per_channel": [
+       0.22087,
+       0.22087,
+       0.22088,
+       0.22096,
+       0.22096,
+       0.22104,
+       0.22105,
+       0.22112,
+       0.22113,
+       0.2212,
+       0.22122,
+       0.22129,
+       0.2213,
+       0.22137,
+       0.22138,
+       0.22138,
+       0.22138,
+       0.22138,
+       0.22137,
+       0.2213,
+       0.22129,
+       0.22122,
+       0.2212,
+       0.22113,
+       0.22112,
+       0.22105,
+       0.22104,
+       0.22096,
+       0.22096,
+       0.22088,
+       0.22087,
+       0.22087
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.321826171875,
+      "best": 0.32158203125,
+      "median": 0.3216455078125
+     },
+     "minimum_range_m": {
+      "worst": 241.36962890625,
+      "best": 241.1865234375,
+      "median": 241.234130859375
+     },
+     "closed_form_recovery_s": 0.2218712235567753
+    },
+    {
+     "set": "dead_10ms_tau_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01,
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.028106651503656,
+      "best": 20.579038651964026,
+      "median": 25.835333828467284
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.03169474537800536,
+      "best": 0.03118738556874112,
+      "median": 0.03143787944895903,
+      "per_channel": [
+       0.03119,
+       0.03119,
+       0.0312,
+       0.03127,
+       0.03127,
+       0.03135,
+       0.03136,
+       0.03143,
+       0.03144,
+       0.03151,
+       0.03153,
+       0.0316,
+       0.03161,
+       0.03168,
+       0.03169,
+       0.03169,
+       0.03169,
+       0.03169,
+       0.03168,
+       0.03161,
+       0.0316,
+       0.03153,
+       0.03151,
+       0.03144,
+       0.03143,
+       0.03136,
+       0.03135,
+       0.03127,
+       0.03127,
+       0.0312,
+       0.03119,
+       0.03119
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.132138671875,
+      "best": 0.13189453125,
+      "median": 0.1319580078125
+     },
+     "minimum_range_m": {
+      "worst": 99.10400390625,
+      "best": 98.9208984375,
+      "median": 98.968505859375
+     },
+     "closed_form_recovery_s": 0.03218712235567753
+    },
+    {
+     "set": "coupling_100hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 100.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.59666935568714,
+      "best": 17.396604487436488,
+      "median": 17.52285938091802
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.006829012515838437,
+      "best": 0.004722565805763079,
+      "median": 0.0058421763239590516,
+      "per_channel": [
+       0.00472,
+       0.00488,
+       0.00503,
+       0.00518,
+       0.00533,
+       0.00547,
+       0.00563,
+       0.00577,
+       0.00591,
+       0.00608,
+       0.00623,
+       0.00637,
+       0.00651,
+       0.00664,
+       0.00675,
+       0.00683,
+       0.00683,
+       0.00675,
+       0.00664,
+       0.00651,
+       0.00637,
+       0.00623,
+       0.00608,
+       0.00591,
+       0.00577,
+       0.00563,
+       0.00547,
+       0.00533,
+       0.00518,
+       0.00503,
+       0.00488,
+       0.00472
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10703125000000001,
+      "best": 0.10567382812500001,
+      "median": 0.1063623046875
+     },
+     "minimum_range_m": {
+      "worst": 80.2734375,
+      "best": 79.25537109375,
+      "median": 79.771728515625
+     },
+     "closed_form_recovery_s": 0.0083640026836111
+    },
+    {
+     "set": "coupling_10hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 10.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.676959867382966,
+      "best": 17.64880171006453,
+      "median": 17.66931118753662
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.08093057501583842,
+      "best": 0.07338467518076305,
+      "median": 0.07795643413645903,
+      "per_channel": [
+       0.07338,
+       0.0741,
+       0.07477,
+       0.07542,
+       0.07602,
+       0.07659,
+       0.07716,
+       0.07772,
+       0.07819,
+       0.07876,
+       0.07917,
+       0.07966,
+       0.08007,
+       0.08048,
+       0.08079,
+       0.08093,
+       0.08093,
+       0.08079,
+       0.08048,
+       0.08007,
+       0.07966,
+       0.07917,
+       0.07876,
+       0.07819,
+       0.07772,
+       0.07716,
+       0.07659,
+       0.07602,
+       0.07542,
+       0.07477,
+       0.0741,
+       0.07338
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.1811328125,
+      "best": 0.17433593749999998,
+      "median": 0.1784765625
+     },
+     "minimum_range_m": {
+      "worst": 135.849609375,
+      "best": 130.751953125,
+      "median": 133.857421875
+     },
+     "closed_form_recovery_s": 0.08361027777595517
+    },
+    {
+     "set": "gain_switch",
+     "overload": {
+      "gain_switch": {
+       "gain_db": -41.0,
+       "until": 0.10195126231923693,
+       "ramp": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": -6.97189334849634,
+      "best": -20.42096134803597,
+      "median": -15.164666171532712
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 0.10095126231923693,
+      "best": 0.10020223748416157,
+      "median": 0.10052012836354096
+     },
+     "minimum_range_m": {
+      "worst": 75.7134467394277,
+      "best": 75.15167811312118,
+      "median": 75.39009627265571
+     },
+     "closed_form_recovery_s": 0.0
+    }
+   ],
+   "1": [
+    {
+     "set": "clip_only",
+     "overload": {},
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.000951262319237,
+      "best": 1.0002022374841615,
+      "median": 1.000520128363541
+     },
+     "minimum_range_m": {
+      "worst": 750.7134467394277,
+      "best": 750.1516781131211,
+      "median": 750.3900962726557
+     },
+     "closed_form_recovery_s": 0.0
+    },
+    {
+     "set": "dead_1ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.000951262319237,
+      "best": 1.0002022374841615,
+      "median": 1.000520128363541
+     },
+     "minimum_range_m": {
+      "worst": 750.7134467394277,
+      "best": 750.1516781131211,
+      "median": 750.3900962726557
+     },
+     "closed_form_recovery_s": 0.001
+    },
+    {
+     "set": "tau_1ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.000951262319237,
+      "best": 1.0002022374841615,
+      "median": 1.000520128363541
+     },
+     "minimum_range_m": {
+      "worst": 750.7134467394277,
+      "best": 750.1516781131211,
+      "median": 750.3900962726557
+     },
+     "closed_form_recovery_s": 0.002218712235567753
+    },
+    {
+     "set": "dead_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0054227625158385084,
+      "best": 7.412830576303264e-05,
+      "median": 0.0027074106989589675,
+      "per_channel": [
+       7e-05,
+       0.00033,
+       0.00066,
+       0.00108,
+       0.00133,
+       0.00175,
+       0.00208,
+       0.0025,
+       0.00292,
+       0.00325,
+       0.00375,
+       0.00409,
+       0.0045,
+       0.00493,
+       0.00526,
+       0.00542,
+       0.00542,
+       0.00526,
+       0.00493,
+       0.0045,
+       0.00409,
+       0.00375,
+       0.00325,
+       0.00292,
+       0.0025,
+       0.00208,
+       0.00175,
+       0.00133,
+       0.00108,
+       0.00066,
+       0.00033,
+       7e-05
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.005625,
+      "best": 1.001025390625,
+      "median": 1.0032275390624998
+     },
+     "minimum_range_m": {
+      "worst": 754.21875,
+      "best": 750.76904296875,
+      "median": 752.420654296875
+     },
+     "closed_form_recovery_s": 0.01
+    },
+    {
+     "set": "tau_10ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.017600496890838535,
+      "best": 0.01225186268076306,
+      "median": 0.014885145073958994,
+      "per_channel": [
+       0.01225,
+       0.01251,
+       0.01284,
+       0.01326,
+       0.01351,
+       0.01393,
+       0.01426,
+       0.01468,
+       0.01509,
+       0.01543,
+       0.01593,
+       0.01627,
+       0.01668,
+       0.0171,
+       0.01744,
+       0.0176,
+       0.0176,
+       0.01744,
+       0.0171,
+       0.01668,
+       0.01627,
+       0.01593,
+       0.01543,
+       0.01509,
+       0.01468,
+       0.01426,
+       0.01393,
+       0.01351,
+       0.01326,
+       0.01284,
+       0.01251,
+       0.01225
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.017802734375,
+      "best": 1.013203125,
+      "median": 1.0154052734375
+     },
+     "minimum_range_m": {
+      "worst": 763.35205078125,
+      "best": 759.90234375,
+      "median": 761.553955078125
+     },
+     "closed_form_recovery_s": 0.02218712235567753
+    },
+    {
+     "set": "dead_100ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.09542276251583859,
+      "best": 0.09007412830576311,
+      "median": 0.09270741069895905,
+      "per_channel": [
+       0.09007,
+       0.09033,
+       0.09066,
+       0.09108,
+       0.09133,
+       0.09175,
+       0.09208,
+       0.0925,
+       0.09292,
+       0.09325,
+       0.09375,
+       0.09409,
+       0.0945,
+       0.09493,
+       0.09526,
+       0.09542,
+       0.09542,
+       0.09526,
+       0.09493,
+       0.0945,
+       0.09409,
+       0.09375,
+       0.09325,
+       0.09292,
+       0.0925,
+       0.09208,
+       0.09175,
+       0.09133,
+       0.09108,
+       0.09066,
+       0.09033,
+       0.09007
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.095625,
+      "best": 1.091025390625,
+      "median": 1.0932275390625001
+     },
+     "minimum_range_m": {
+      "worst": 821.71875,
+      "best": 818.26904296875,
+      "median": 819.920654296875
+     },
+     "closed_form_recovery_s": 0.1
+    },
+    {
+     "set": "tau_100ms",
+     "overload": {
+      "adc": {
+       "recovery_tau": 0.1
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.21728799689083855,
+      "best": 0.21193936268076308,
+      "median": 0.214572645073959,
+      "per_channel": [
+       0.21194,
+       0.21219,
+       0.21253,
+       0.21294,
+       0.2132,
+       0.21362,
+       0.21395,
+       0.21436,
+       0.21478,
+       0.21512,
+       0.21562,
+       0.21595,
+       0.21637,
+       0.21679,
+       0.21712,
+       0.21729,
+       0.21729,
+       0.21712,
+       0.21679,
+       0.21637,
+       0.21595,
+       0.21562,
+       0.21512,
+       0.21478,
+       0.21436,
+       0.21395,
+       0.21362,
+       0.2132,
+       0.21294,
+       0.21253,
+       0.21219,
+       0.21194
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.217490234375,
+      "best": 1.212890625,
+      "median": 1.2150927734375
+     },
+     "minimum_range_m": {
+      "worst": 913.11767578125,
+      "best": 909.66796875,
+      "median": 911.319580078125
+     },
+     "closed_form_recovery_s": 0.2218712235567753
+    },
+    {
+     "set": "dead_10ms_tau_10ms",
+     "overload": {
+      "adc": {
+       "dead_time": 0.01,
+       "recovery_tau": 0.01
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 34.02812684995289,
+      "best": 20.579067155088815,
+      "median": 25.835345969920482
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.027600496890838544,
+      "best": 0.022251862680763068,
+      "median": 0.024885145073959003,
+      "per_channel": [
+       0.02225,
+       0.02251,
+       0.02284,
+       0.02326,
+       0.02351,
+       0.02393,
+       0.02426,
+       0.02468,
+       0.02509,
+       0.02543,
+       0.02593,
+       0.02627,
+       0.02668,
+       0.0271,
+       0.02744,
+       0.0276,
+       0.0276,
+       0.02744,
+       0.0271,
+       0.02668,
+       0.02627,
+       0.02593,
+       0.02543,
+       0.02509,
+       0.02468,
+       0.02426,
+       0.02393,
+       0.02351,
+       0.02326,
+       0.02284,
+       0.02251,
+       0.02225
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.027802734375,
+      "best": 1.023203125,
+      "median": 1.0254052734374999
+     },
+     "minimum_range_m": {
+      "worst": 770.85205078125,
+      "best": 767.40234375,
+      "median": 769.053955078125
+     },
+     "closed_form_recovery_s": 0.03218712235567753
+    },
+    {
+     "set": "coupling_100hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 100.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.12151364698254,
+      "best": 16.82818852144774,
+      "median": 16.956112322600617
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.000951262319237,
+      "best": 1.0002022374841615,
+      "median": 1.000520128363541
+     },
+     "minimum_range_m": {
+      "worst": 750.7134467394277,
+      "best": 750.1516781131211,
+      "median": 750.3900962726557
+     },
+     "closed_form_recovery_s": 0.0083640026836111
+    },
+    {
+     "set": "coupling_10hz_unequal_rails",
+     "overload": {
+      "preamp": {
+       "gain_db": 23.0,
+       "limit_v": [
+        1.0,
+        2.0
+       ]
+      },
+      "highpass_corner_hz": 10.0
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": 17.59252560329225,
+      "best": 17.430759472871667,
+      "median": 17.529138144228487
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0681766687658385,
+      "best": 0.047222565805763006,
+      "median": 0.058405652886458936,
+      "per_channel": [
+       0.04722,
+       0.04876,
+       0.05027,
+       0.05175,
+       0.05323,
+       0.0547,
+       0.05618,
+       0.05766,
+       0.05916,
+       0.06065,
+       0.06215,
+       0.06365,
+       0.06511,
+       0.06645,
+       0.06754,
+       0.06818,
+       0.06818,
+       0.06754,
+       0.06645,
+       0.06511,
+       0.06365,
+       0.06215,
+       0.06065,
+       0.05916,
+       0.05766,
+       0.05618,
+       0.0547,
+       0.05323,
+       0.05175,
+       0.05027,
+       0.04876,
+       0.04722
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.06837890625,
+      "best": 1.048173828125,
+      "median": 1.05892578125
+     },
+     "minimum_range_m": {
+      "worst": 801.2841796875,
+      "best": 786.13037109375,
+      "median": 794.1943359375
+     },
+     "closed_form_recovery_s": 0.083640026836111
+    },
+    {
+     "set": "gain_switch",
+     "overload": {
+      "gain_switch": {
+       "gain_db": -41.0,
+       "until": 1.0019512623192368,
+       "ramp": 0.001
+      }
+     },
+     "illustrative": true,
+     "peak_db_re_adc": {
+      "worst": -6.971873150047107,
+      "best": -20.42093284491118,
+      "median": -15.164654030079515
+     },
+     "recovery_after_pulse_s": {
+      "worst": 0.0,
+      "best": 0.0,
+      "median": 0.0,
+      "per_channel": [
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "clean_after_transmit_s": {
+      "worst": 1.000951262319237,
+      "best": 1.0002022374841615,
+      "median": 1.000520128363541
+     },
+     "minimum_range_m": {
+      "worst": 750.7134467394277,
+      "best": 750.1516781131211,
+      "median": 750.3900962726557
+     },
+     "closed_form_recovery_s": 0.0
+    }
+   ]
+  },
+  "simulated_minus_closed_form_db": {
+   "max_abs": 0.0002916349001651497,
+   "pulse_s": 1.0
+  }
+ }
+}

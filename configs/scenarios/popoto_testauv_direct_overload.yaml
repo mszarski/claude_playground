@@ -1,0 +1,42 @@
+# The projector's direct sound and a front end that overloads: the one-row prototype on the test
+# AUV, 0.1 s pulse, a close target at 150 m and a second one at 350 m.
+#   python tools/direct_sound_study.py popoto_testauv_1row          (levels, recovery times, minimum range)
+#   tests/python/test_direct_overload.py                            (this scenario through the live chain)
+# The projector is 0.3 m below the row (a placeholder in the sonar file): its direct sound reaches the
+# hydrophones 21 to 34 dB above the ADC full scale the sonar file assumes, for the whole pulse. The
+# window opens at 40 m, inside the pulse, so the record starts with clipped samples, as a real
+# system would deliver them; the transmit itself (before the window) is simulated for the state.
+#
+# EVERY value under `receive.overload` is ILLUSTRATIVE: no board has been measured. Here the ADC
+# stage stays dead for 0.25 s after it last clipped and its gain then returns with a 20 ms time
+# constant: a deliberately slow front end. The echo of the 150 m target (0.2 to 0.3 s) falls inside
+# that interval and is lost; the 350 m target is seen. The two variants restore it:
+#   popoto_testauv_direct_overload_gain_switch   low gain while transmitting (no overload at all)
+#   popoto_testauv_direct_overload_fast          the same front end recovering in milliseconds
+# A chain that blanks the transmit (chain.blanking, when it exists) can be run on all three.
+name: popoto_testauv_direct_overload
+sonar: popoto_testauv_1row
+fidelity: image_source
+sonar_overrides:
+  transmit:
+    direct_path: true                    # the projector heard directly, and off the surface and the bottom
+  receive:
+    window: {range: [40, 450]}
+    overload:                            # ILLUSTRATIVE values, not a board's
+      adc: {dead_time: 0.25, dead_output: zero, recovery_tau: 0.02}
+environment: {sound_speed: 1500.0, temperature: 12.0, salinity: 35.0, water_depth: 30.0}
+propagation:
+  surface_z: 0.0
+  bottom_z: 30.0
+  max_order: 1
+  bottom: {speed: 1650.0, density: 1.9, attenuation: 0.8}
+platform: {position: [0, 0, 10.0], rpy: [0, 0, 0], velocity: [0, 0, 0]}
+pings: {count: 2, interval: 3.0}
+scene:
+  - {type: points, label: close, positions: [[20.0, 148.0, 12.0]], target_strength_db: 10.0}
+  - {type: points, label: far, positions: [[-40.0, 347.0, 14.0]], target_strength_db: 10.0}
+absorption: ainslie_mccolm
+receiver:
+  adc: true
+  ambient_noise: {wind_speed: 5.0, shipping: 0.5}
+seed: 31
