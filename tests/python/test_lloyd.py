@@ -217,7 +217,8 @@ def test_build_spec_validates_targets_and_environments_and_they_change_no_genera
     assert "targets.ship" in warned and "environments.deep_no_bottom_return" in warned      # placeholders are said to be placeholders
     bare = copy.deepcopy(spec)
     bare.pop("targets"), bare.pop("environments")
-    assert bs.files(bare) == bs.files(spec)
+    with_, without = bs.files(spec), bs.files(bare)               # only the submerged-mover trial is added; no sonar or deployment file changes
+    assert {k: v for k, v in with_.items() if "submerged" not in k} == without and [k for k in with_ if k not in without] == ["scenarios/popoto_face_3x32_submerged.yaml"]
     broken = copy.deepcopy(spec)
     broken["targets"] = [{"name": "t", "depth_m": [1.0, 2.0]}]
     broken["environments"] = "no_such_file"
@@ -262,10 +263,13 @@ def test_plan_recommends_the_first_lobe_for_the_ship_and_shows_the_loss_at_ten_m
     rec = ship["recommended"]
     # worst over hull depths 2 to 6 m: the best own depth lies between the first-lobe peaks for 6 m and for 2 m, and the factor is positive
     lo, hi = (lloyd.first_lobe_own_depth(5000.0, z, 12000.0)["peak_m"] for z in (6.0, 2.0))
-    assert lo <= rec["own_depth_m"] <= min(hi, 300.0) and rec["factor_db"] > 3.0 and rec["margin_db"] == pytest.approx(ship["free_field_margin_db"] + rec["factor_db"])
+    assert lo <= rec["own_depth_m"] <= hi and rec["factor_db"] > 3.0 and rec["margin_db"] == pytest.approx(ship["free_field_margin_db"] + rec["factor_db"])
     assert ship["at_own_depth"]["10"]["margin_db"] < -30.0 and rec["margin_db"] > 0.0          # lost at 10 m, held at depth
-    (band_lo, band_hi), = rec["held_band_m"]
+    band_lo, band_hi = rec["held_band_m"][0]                       # the first lobe; deeper lobes hold it again
     assert 80.0 < band_lo < rec["own_depth_m"] < band_hi and ship["shallowest_own_depth_held_m"] == band_lo
+    assert P["platform_max_depth_m"] == 500.0 and P["own_depths_m"][-1] == 500.0 and rec["inside_platform_limit"] is True      # the owner: "Depth no further than 500m"
+    assert depthplan.own_depth_grid({"name": "e", "own_depth_limits_m": [5.0, 800.0]}, max_depth=500.0)[-1] == 500.0
+    assert depthplan.own_depth_grid({"name": "e", "water_depth_m": 100.0}, max_depth=500.0)[-1] == 90.0 and depthplan.own_depth_grid({"name": "e"})[-1] == 300.0
     own, at = np.asarray(P["own_depths_m"]), np.asarray(ship["margin_at_range_worst_db"])
     i = int(np.argmin(np.abs(own - rec["own_depth_m"])))
     zt = np.array(ship["target_depths_used_m"])

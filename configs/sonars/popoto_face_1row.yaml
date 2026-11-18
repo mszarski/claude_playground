@@ -6,7 +6,7 @@
 base: popoto_long_range
 name: popoto_face_1row
 build: popoto_face_1x32
-platform: {name: full_face, kind: vehicle, span_m: 9.0, height_m: 2.0, usable_span_m: 7.0, mounting: flat vertical face}
+platform: {name: full_face, kind: vehicle, span_m: 9.0, height_m: 2.0, usable_span_m: 7.0, max_depth_m: 500.0, mounting: flat vertical face}
 array: {layout: uniform_line}
 transmit:
   lever_arm: [4, 0, 0]

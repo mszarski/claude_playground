@@ -72,7 +72,7 @@ def ladder_environments() -> list:
         z, c = np.r_[z[keep], water], np.r_[c[keep], np.interp(water, z, c)]
         out.append({"name": f"ladder_{i + 1}", "title": f"profile ladder: {name}; {water:g} m over sand, Bellhop", "water_depth_m": water,
                     "bottom": dict(bs.C_ASSUMED_BOTTOM), "profile": {"depth_m": [float(x) for x in z], "speed_m_s": [float(x) for x in c]},
-                    "wind_speed_m_s": 5.0, "own_depth_limits_m": list(depthplan.DEFAULT_LIMITS), "bottom_clearance_m": depthplan.DEFAULT_CLEARANCE,
+                    "wind_speed_m_s": 5.0, "bottom_clearance_m": depthplan.DEFAULT_CLEARANCE,
                     "note": "the profile of tools/popoto_stage2_study.py PROFILES: illustrative, defined by parameters, not data"})
     return out
 
@@ -92,6 +92,11 @@ def text(P: dict) -> str:
         L.append(f"| {name} | {c['ts_db'][0]:+.0f} ({c['ts_status']}) | {c['depth_m'][0]:g}-{c['depth_m'][1]:g} | {c['free_field_margin_db']:+.1f} dB | {r['own_depth_m']:g} m | {r['margin_db']:+.1f} dB | "
                  f"{bands(r['held_band_m'])} | {bands(r['within_3db_band_m'])} | {km(r['reach_m'])}" + (" (gaps nearer)" if r["nearer_gaps"] else "") + f" | {bands(r['target_depths_not_held_m'])} |")
     L.append("")
+    if P.get("platform_max_depth_m"):
+        L.append(f"  Platform limit {P['platform_max_depth_m']:g} m" + (f", bottom clearance {P['bottom_clearance_m']:g} m" if P.get("bottom_clearance_m") is not None else "") + ": every best depth above is inside it"
+                 + ("; where the best is the deepest searched, the limit (or the bottom) is what stops it: " + ", ".join(n for n, c in P["classes"].items() if "recommended" in c and c["recommended"]["at_the_deepest_searched"])
+                    if any("recommended" in c and c["recommended"]["at_the_deepest_searched"] for c in P["classes"].values()) else "") + ".")
+    L.append(f"  Rests on: {P['profile_rests_on']}.")
     for name, c in P["classes"].items():
         if "skipped" in c:
             continue

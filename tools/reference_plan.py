@@ -482,7 +482,7 @@ def depth_and_targets() -> list:
              "angle), a soft bottom (silt, clay, mud), or sound bent down onto such a bottom. *Ducted*: shallow against the range over sand or gravel, where many bounces arrive nearly whole; the image series (isovelocity) or Bellhop (with a profile) "
              "then replaces the two-path factor and is worth tens of decibels more than spherical spreading. The planner computes whichever the environment describes and says which it used.\n")
     L.append("**The depth plan** (`tools/popoto_depth_planner.py`; three rows on the face, 12 km; margin over 13 dB at the map, at the LOW end of each class's assumed target strength, worst over the class's depths; own depths "
-             f"{P['environments'][0].get('own_depth_limits_m', [5, 300])[0]:g}–{P['environments'][0].get('own_depth_limits_m', [5, 300])[1]:g} m, a placeholder):\n")
+             f"{b3[next(iter(b3))]['own_depths_m'][0]:g} m to the platform's limit, {b3[next(iter(b3))]['platform_max_depth_m']:g} m (the owner: \"Depth no further than 500m\"), and no closer to the bottom than the clearance, a placeholder):\n")
     L.append("| Water | Class | Free-field margin | At 10 m | Best own depth | Margin there | Own depths that hold it | Reach there |\n| --- | --- | --- | --- | --- | --- | --- | --- |")
     for env_name, pl in b3.items():
         if "skipped" in pl:
@@ -494,7 +494,10 @@ def depth_and_targets() -> list:
             r = c["recommended"]
             ten = next((v for k, v in c["at_own_depth"].items() if 9.0 <= float(k) <= 13.0), None)
             L.append(f"| {pl['environment'].get('title', env_name)} | {cname} ({c['ts_db'][0]:+.0f} dB, {c['depth_m'][0]:g}–{c['depth_m'][1]:g} m) | {c['free_field_margin_db']:+.1f} dB | "
-                     + (f"{ten['margin_db']:+.0f} dB" if ten else "—") + f" | {r['own_depth_m']:g} m | {r['margin_db']:+.1f} dB | {_bands(r['held_band_m'])} | {_km(r['reach_m'])} km |")
+                     + (f"{ten['margin_db']:+.0f} dB" if ten else "—") + f" | {r['own_depth_m']:g} m" + (" (the deepest searched)" if r["at_the_deepest_searched"] else "") + f" | {r['margin_db']:+.1f} dB | {_bands(r['held_band_m'])} | {_km(r['reach_m'])} km |")
+    inside = [c["recommended"]["inside_platform_limit"] for pl in b3.values() if "classes" in pl for c in pl["classes"].values() if "recommended" in c]
+    L.append(f"\nEvery best depth in the table is inside the platform's limit ({sum(1 for x in inside if x)} of {len(inside)}): the search goes no deeper. Where it says *the deepest searched*, the limit or the bottom clearance is what stopped it "
+             "and a deeper array would do better. The limit is also the depth rating the parts list asks of every wet part.\n")
     deep_pl = b3.get("deep_no_bottom_return", {})
     if "classes" in deep_pl:
         ship, both = deep_pl["classes"]["ship"], deep_pl["together"].get("ship + large_submerged")

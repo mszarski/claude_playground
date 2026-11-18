@@ -12,12 +12,13 @@ names: {sonar: popoto_long_range_3row, deploy: popoto_vehicle_elevation}
 
 platform:
   kind: vehicle
+  max_depth_m: 500.0             # the owner: "Depth no further than 500m": the planner searches no deeper; the depth rating every wet part needs
   name: full_face
   mounting: flat vertical face
   span_m: 9.0                    # the owner: "a vertical straight face 2m high and 9m long" (stated)
   height_m: 2.0
   usable_span_m: 7.0             # the owner: "Need way more margin. Projector etc, I think probably try like a 7m horizontal" (a working value)
-  confirmed: [span_m, height_m]
+  confirmed: [span_m, height_m, max_depth_m]
 
 array:
   module: long_4p8m             # the row design (count, pitch, hydrophone): configs/builds/modules/long_4p8m.yaml

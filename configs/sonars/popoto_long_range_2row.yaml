@@ -6,7 +6,7 @@
 base: popoto_long_range
 name: popoto_long_range_2row
 build: popoto_face_2x32
-platform: {name: full_face, kind: vehicle, span_m: 9.0, height_m: 2.0, usable_span_m: 7.0, row_baseline_m: 1.5, mounting: flat vertical face}
+platform: {name: full_face, kind: vehicle, span_m: 9.0, height_m: 2.0, usable_span_m: 7.0, max_depth_m: 500.0, row_baseline_m: 1.5, mounting: flat vertical face}
 array:
   layout_choice: two_rows
   layouts:

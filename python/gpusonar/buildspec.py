@@ -49,6 +49,8 @@ SCHEMA = {
         "usable_span_m": ("num", "m", False, "length the rows may take (the rest is margin, fairing, projector)", "integration notes", "defaults to span_m"),
         "usable_height_m": ("num", "m", False, "height the rows may take", "integration notes", "defaults to height_m"),
         "depth_m": ("num", "m", False, "static only: the depth the frame hangs or stands at", "trial plan", "static: must be given (it is the typed-in pose)"),
+        "max_depth_m": ("num", "m", False, "deepest the platform operates: the depth planner searches own depths no deeper, and it is the depth rating required of hydrophones, cables, connectors, housings and the projector",
+                        "the platform's depth rating / the owner", "leave it out: the planner then uses each environment's limits (300 m when it has none: a placeholder) and the parts list has no rating"),
     },
     "array": {
         "module": ("str", "", False, "a row module under configs/builds/modules: a named row design (count, pitch, hydrophone, boards a row) that several builds share; fields given here win", "the project's row design", "leave out and give count and pitch_m"),
@@ -489,6 +491,13 @@ def validate(spec: dict) -> list[Issue]:
         return out
     if r0 is not None and float(r0) < blind - 1e-6:
         warn("operation.range_m", f"the window opens at {float(r0):g} m but the array cannot listen while it transmits: nothing inside {blind:g} m ({pulse:g} s pulse) is usable")
+    if p.get("max_depth_m") is not None:
+        if float(p["max_depth_m"]) <= 0:
+            err("platform.max_depth_m", "a depth in metres below the surface")
+        elif p.get("depth_m") is not None and float(p["depth_m"]) > float(p["max_depth_m"]):
+            err("platform.depth_m", f"the frame hangs at {p['depth_m']:g} m, deeper than the platform's limit ({p['max_depth_m']:g} m)")
+        elif float(tr["own_depth_m"]) > float(p["max_depth_m"]):
+            err("trial.own_depth_m", f"the trial runs the array at {tr['own_depth_m']:g} m, deeper than the platform's limit ({p['max_depth_m']:g} m)")
     if p["kind"] == "static":
         if p.get("depth_m") is None and get(spec, "navigation", "static_pose") is None and not get(spec, "navigation", "tilt_sensor", False):
             err("platform.depth_m", "a static platform needs the depth it hangs at (or navigation.static_pose, or a tilt sensor)")
@@ -540,7 +549,7 @@ def validate(spec: dict) -> list[Issue]:
     for env in environments_of(spec):
         if env.get("illustrative", True):
             warn(f"environments.{env['name']}", "an illustrative environment, not a measured one: the planned depths hold for it only")
-        if env.get("own_depth_limits_m") is None:
+        if env.get("own_depth_limits_m") is None and p.get("max_depth_m") is None:
             warn(f"environments.{env['name']}.own_depth_limits_m", "no operating depth limits given: the planner uses 5 to 300 m, a placeholder")
         if p["kind"] == "static" and p.get("depth_m") is not None and env.get("water_depth_m") is not None and float(p["depth_m"]) >= float(env["water_depth_m"]):
             warn(f"environments.{env['name']}.water_depth_m", f"the frame hangs at {p['depth_m']:g} m, below this environment's bottom ({env['water_depth_m']:g} m)")
@@ -679,7 +688,7 @@ def sonar_config(spec: dict) -> dict:
     else:
         receive["boards"] = [{"first": x["first"], "count": x["count"]} for x in boards]
     platform = {"name": p.get("name", spec["build"]), "kind": p["kind"], "span_m": float(p["span_m"]), "height_m": float(p["height_m"])}
-    for key in ("usable_span_m", "usable_height_m"):
+    for key in ("usable_span_m", "usable_height_m", "max_depth_m"):
         if p.get(key) is not None:
             platform[key] = float(p[key])
     if rows > 1:
@@ -711,7 +720,7 @@ def sonar_config(spec: dict) -> dict:
         hardware["sync"]["reference_level_v"] = float(ref["level_v"])
     hardware = {k: v for k, v in hardware.items() if v}
     flags: list[str] = []
-    for key in ("span_m", "height_m", "usable_span_m", "usable_height_m", "depth_m"):
+    for key in ("span_m", "height_m", "usable_span_m", "usable_height_m", "depth_m", "max_depth_m"):
         if p.get(key) is not None:
             _flag(spec, flags, "platform", key, f"platform.{key}")
     _flag(spec, flags, "array", "pitch_m" if a.get("pitch_m") is not None else "positions_m", "array.pitch")
@@ -1323,7 +1332,7 @@ def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, c
     `classes` (resolved target classes): one entry each, worst over the class's depths, at the low end of its target
     strength. Without classes: the reference ship (+25 dB) at 4 m, the popoto_12km scenario's."""
     from . import depthplan
-    own = float(depthplan.own_depth_grid(environment)[0] if own_depth_m is None else own_depth_m)
+    own = float(depthplan.own_depth_grid(environment, max_depth=(d.get("platform") or {}).get("max_depth_m"))[0] if own_depth_m is None else own_depth_m)
     eq, _ = budget(d, depthplan.wind_of(environment))
     rr = np.asarray([r for r in ranges if r > d["blind_range_m"]], dtype=float)
     f_lo, f_hi = d["band_hz"]

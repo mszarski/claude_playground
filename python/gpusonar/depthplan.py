@@ -36,7 +36,8 @@ ENVIRONMENT_FIELDS = {
     "bubble_model": ("str", "", False, "wind law for the loss at each surface bounce: apl_1994 (sim/surface.py), or null for none", "", "null: no bubble loss"),
     "sound_speed_m_s": ("num", "m/s", False, "sound speed of isovelocity water", "CTD", "1500"),
     "profile": ("map", "", False, "{depth_m: [...], speed_m_s: [...]}: a sound-speed profile. The factor then comes from Bellhop (GPUSONAR_BELLHOP) and needs water_depth_m", "SVP cast / climatology", "leave it out: isovelocity"),
-    "own_depth_limits_m": ("[shallowest, deepest]", "m", False, "depths the platform may operate at (a static frame: depths it can be hung at)", "the platform's rating and the operating rules", "[5, 300]: placeholders, flagged"),
+    "own_depth_limits_m": ("[shallowest, deepest]", "m", False, "depths the platform may operate at in this water (a static frame: depths it can be hung at); never deeper than the build's platform.max_depth_m", "the operating rules",
+                           "5 m to the build's platform.max_depth_m (300 m when that is not given: a placeholder, flagged)"),
     "bottom_clearance_m": ("num", "m", False, "how close to the bottom the platform may come", "operating rules", "10: a placeholder, flagged"),
     "illustrative": ("bool", "", False, "true: nobody measured this environment; it is an example", "", "true"),
     "note": ("str", "", False, "where the values come from, in words", "", "leave it out"),
@@ -149,14 +150,19 @@ def layer_of(env: dict, absorption_db_per_m: float = 0.0) -> lloyd.Layer:
                        max_grazing_deg=30.0, absorption_db_per_m=absorption_db_per_m)
 
 
-def own_depth_grid(env: dict, n: int = 60) -> np.ndarray:
-    lo, hi = (float(x) for x in (env.get("own_depth_limits_m") or DEFAULT_LIMITS))
+def own_depth_grid(env: dict, n: int = 100, max_depth: float | None = None) -> np.ndarray:
+    """Own depths the plan searches: the environment's limits when it states them, else from 5 m to the platform's deepest (`max_depth`, a build's
+    `platform.max_depth_m`) or 300 m when neither is known; never deeper than the platform's limit, nor closer to the bottom than the clearance."""
+    lim = env.get("own_depth_limits_m")
+    lo, hi = (float(x) for x in (lim or [DEFAULT_LIMITS[0], max_depth if max_depth else DEFAULT_LIMITS[1]]))
+    if max_depth:
+        hi = min(hi, float(max_depth))
     if env.get("water_depth_m") is not None:
         hi = min(hi, float(env["water_depth_m"]) - float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)))
     if hi <= lo:
         raise ValueError(f"environment {env.get('name')!r}: no operating depth between the shallowest allowed ({lo:g} m) and the bottom clearance")
     step = max(np.ceil((hi - lo) / (n - 1)), 1.0)
-    return np.arange(lo, hi + 1e-9, step)
+    return np.unique(np.r_[np.arange(lo, hi + 1e-9, step), hi])
 
 
 def factor(env: dict, f_lo: float, f_hi: float, own_depths, target_depths, ranges, projector_below_m: float = 0.0, absorption_db_per_m: float = 0.0) -> dict:
@@ -237,7 +243,8 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     wind = wind_of(env)
     eq, gains = bs.budget(d, wind)
     f_lo, f_hi = d["band_hz"]
-    own = own_depth_grid(env) if own_depths is None else np.asarray(own_depths, dtype=float)
+    max_depth = (d.get("platform") or {}).get("max_depth_m")
+    own = own_depth_grid(env, max_depth=max_depth) if own_depths is None else np.asarray(own_depths, dtype=float)
     heavy = env.get("profile") is not None or (env.get("water_depth_m") is not None and env.get("bottom") is not None)      # many paths: a coarser grid
     if own_depths is None and heavy and own.size > 24:
         own = own[::int(np.ceil(own.size / 24))]
@@ -260,6 +267,8 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
     free = np.asarray(eq.snr(rr)) - threshold_db                                  # margin of a 0 dB target in free field, rows included
     f3 = fac[statistic]
     out = {"build": d.get("build") or d.get("name"), "rows": d["rows"], "environment": {k: v for k, v in env.items()}, "wind_speed_m_s": wind, "rms_wave_height_m": surface_of(env).height(),
+           "platform_max_depth_m": max_depth, "bottom_clearance_m": float(env.get("bottom_clearance_m", DEFAULT_CLEARANCE)) if env.get("water_depth_m") is not None else None,
+           "profile_rests_on": ("the sound-speed profile supplied with the environment" if env.get("profile") is not None else "isovelocity water: no profile was supplied (the bottom rung: nothing known of the profile)"),
            "method": fac["method"], "statistic": statistic, "threshold_db": threshold_db, "range_of_interest_m": float(rr[i_r]), "band_hz": [f_lo, f_hi],
            "projector_below_array_m": float(d["projector_m"][2]), "gains": gains, "own_depths_m": own.tolist(), "ranges_m": rr.tolist(), "target_depths_m": zt.tolist(),
            "free_field_margin_0db_target_db": free.tolist(), "classes": {}}
@@ -283,7 +292,8 @@ def plan(d: dict, env: dict, classes: list, range_of_interest: float = 12000.0, 
                  "free_field_margin_db": float(free[i_r] + ts_lo), "margin_high_ts_db": float(ts_hi - ts_lo),
                  "margin_worst_db": worst.tolist(), "margin_at_range_worst_db": at.tolist(), "margin_at_range_depth_mean_db": mean[:, i_r].tolist(),
                  "factor_at_range_worst_db": (at - free[i_r] - ts_lo).tolist(),
-                 "recommended": {"own_depth_m": float(own[best]), "margin_db": float(at[best]), "factor_db": float(at[best] - free[i_r] - ts_lo),
+                 "recommended": {"own_depth_m": float(own[best]), "inside_platform_limit": (None if not max_depth else bool(own[best] <= max_depth)),
+                                 "at_the_deepest_searched": bool(best == len(own) - 1), "margin_db": float(at[best]), "factor_db": float(at[best] - free[i_r] - ts_lo),
                                  "held_band_m": _intervals(own, at >= 0.0), "within_3db_band_m": _intervals(own, at >= at[best] - 3.0),
                                  "reach_m": float(reach[best]), "nearer_gaps": bool(gaps[best]),
                                  "target_depths_not_held_m": _intervals(zt, all_d < 0.0)},
