@@ -148,6 +148,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
                                  platform_acceleration=tuple(float(a) for a in acceleration))
     from .. import taps
     taps.sim_tap(record, "echoes")
+    if transmit and getattr(provider, "basin", None) is not None:      # `basin_reverberation` (sim/basin.py): the echoes' late tail
+        provider.basin.after_echoes(record, sonar, provider, scenario_time, environment=env, absorption_model=absorption_model, backend=backend, engine=engine)
     for item in (reverberation or []) if transmit else []:
         # Boundary reverberation by the scattering-function method (sim/reverb.py).
         from . import reverb
@@ -555,6 +557,9 @@ def run_scenario(name_or_config, overrides: dict | None = None, output: str | No
         spread = dict(cfg["time_spread"])
         spread.setdefault("seed", int(cfg.get("seed", 0)))
         provider = timespread.wrap(provider, spread, frequency=sonar.center_frequency)
+    if cfg.get("basin_reverberation"):
+        from . import basin
+        provider = basin.attach(provider, cfg["basin_reverberation"], seed=int(cfg.get("seed", 0)))
     rng = np.random.default_rng(int(cfg.get("seed", 0)))
     scene = build_scene(cfg.get("scene", []), rng)
     sources = None
