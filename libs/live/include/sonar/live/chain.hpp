@@ -23,6 +23,7 @@
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/derive.hpp"
 #include "sonar/live/detections.hpp"
+#include "sonar/live/detector.hpp"
 #include "sonar/live/doa.hpp"
 #include "sonar/live/elevation.hpp"
 #include "sonar/live/sync.hpp"
@@ -70,6 +71,11 @@ struct ChainOptions {
   /// of them; the background is then the mean of such maxima, about the k-th harmonic number above the
   /// mean noise power. docs/DEPLOYMENT.md, "What snr_db is".
   bool cell_peak = false;
+  /// "multiscale" (detector.hpp): each cell is tested on its strongest sample, on its mean and on the mean of several
+  /// cells, each against the threshold of its own statistic at `detector.false_alarms_per_ping`; `cfar_pfa` and
+  /// `cell_peak` are then not used. false with cell_peak false: "mean", the detector as it was.
+  bool cell_multiscale = false;
+  DetectorOptions detector;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.
@@ -102,6 +108,7 @@ struct ChainOptions {
 
 struct ReportDetection {
   double range_m, bearing_deg, snr_db;
+  double extent_m = -1.0;                            ///< >= 0: the cluster's extent in range (multiscale detector)
   // With stacked rows (Report::rows > 0):
   bool elevation_valid = false;                      ///< an elevation was found with enough quality
   double elevation_deg = 0.0, elevation_sigma_deg = 0.0, elevation_quality = 0.0;  ///< level-referenced, up positive
@@ -174,6 +181,9 @@ class LiveChain {
   const ChainOptions& options() const { return opt_; }
   /// What the first ping's record resolved (derive.hpp); an empty JSON object before it.
   std::string resolved_json() const { return resolved_ ? defaults_.json() : "{}"; }
+  /// The multiscale detector's plan for the last map (detector.hpp): lengths, looks, thresholds; "{}" when it is not in use.
+  std::string detector_json() const { return planned_ ? plan_.json() : "{}"; }
+  const DetectorPlan& detector_plan() const { return plan_; }
   bool resolved() const { return resolved_; }
   SoundSpeedLadder& ladder() { return ladder_; }
   // The last ping's map, for display and taps.
@@ -188,6 +198,12 @@ class LiveChain {
   SoundSpeedLadder ladder_;
   std::int64_t pings_ = 0;
   std::int64_t cell_samples_ = 1;   ///< fine samples per range cell in the last map
+  std::vector<float> fine_;         ///< the map before it is averaged into cells (multiscale detector), rows added
+  std::vector<double> fine_ranges_;
+  std::vector<float> background_;   ///< the detector's background of each cell (multiscale detector)
+  DetectorPlan plan_;
+  bool planned_ = false;
+  std::int64_t plan_cells_ = 0, plan_train_ = 0, plan_rows_ = 0;
   bool have_origin_ = false;
   Vec3d origin_;
   std::int64_t t0_ns_ = 0;

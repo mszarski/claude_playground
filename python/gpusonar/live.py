@@ -46,10 +46,17 @@ DEFAULTS = {
     # multipath gate, 60 m fit limit for a kilometre-range array of 2 kHz band or more; more for a narrower band or a
     # wider beam). A number given in the configuration wins. `LiveChain.resolved` says what was used.
     "range_cell_m": None,                      # power is averaged into cells this long before detection
-    "cfar": {"pfa": 1e-5, "guard_m": None, "train_m": None},
+    "cfar": {"pfa": 1e-5, "guard_m": None, "train_m": None,      # pfa: per cell, for cell_statistic mean and peak
+             # cell_statistic multiscale (libs/live detector.hpp): the false-alarm budget is per ping, shared between the
+             # integration lengths (None: 1, 4 and 16 range cells, beside the single sample) and the map's independent cells;
+             # a flagged cell within sidelobe_margin_db of a stronger cell's sidelobe envelope is put down to it.
+             "false_alarms_per_ping": 1e-3, "integrate_cells": None, "sidelobe_margin_db": 10.0, "sidelobe_floor_db": -40.0,
+             "search_factor": 2.0},
     "min_snr_db": 9.0,
-    "cell_statistic": "mean",                  # what a range cell holds of the finer map: "mean" power (as always) or its "peak"
-                                               # sample (docs/DEPLOYMENT.md, "What snr_db is": about 3 dB more for a point echo)
+    "cell_statistic": "mean",                  # how a range cell of the finer map is tested (docs/DEPLOYMENT.md, "What snr_db is"):
+                                               # "multiscale": on its strongest sample, its mean and the means of several cells, each
+                                               # against the threshold of its own statistic; "mean": its mean power against the
+                                               # one-sample threshold (the detector until now); "peak": its strongest sample likewise
     "engine": "python",                        # "cpp": libs/live does every stage after recording (what build/bin/sonar_live runs)
     "doa": "map",                              # "sbl": sparse Bayesian bearings at each detected range (engine cpp)
     "sbl": {"grid_step_deg": 0.25, "max_sources": 6, "min_snr_db": 6.0, "dynamic_range_db": 20.0,
@@ -204,8 +211,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     cfg = _merge(DEFAULTS, cfg)
     if cfg["beamformer"] not in ("backprojection", "farfield", "mvdr"):
         raise ValueError(f"beamformer: {cfg['beamformer']!r} (backprojection, farfield or mvdr)")
-    if cfg["cell_statistic"] not in ("mean", "peak"):
-        raise ValueError(f"cell_statistic: {cfg['cell_statistic']!r} (mean or peak)")
+    if cfg["cell_statistic"] not in CELL_STATISTICS:
+        raise ValueError(f"cell_statistic: {cfg['cell_statistic']!r} (mean, peak or multiscale)")
     b, t, c, s = cfg["bearings_deg"], cfg["tracker"], cfg["classify"], cfg["sbl"]
     o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2],
          "cfar_pfa": cfg["cfar"]["pfa"],
@@ -220,6 +227,9 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "multipath": bool(c.get("multipath"))}
     if cfg["cell_statistic"] == "peak":
         o["cell_peak"] = True
+    if cfg["cell_statistic"] == "multiscale":
+        o["cell_multiscale"] = True
+        o.update({"cfar_" + k: v for k, v in detector_options(cfg).items()})
     # The sizes that follow from the sonar go to the C++ chain only when the configuration gives them: left out,
     # it derives them from the first ping (libs/live derive.hpp).
     given = _given(cfg)
@@ -271,6 +281,19 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
         o["sync"] = {k: (bool(reference[k]) if k == "dedicated" else float(reference[k]))
                      for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated", "min_quality", "search_time", "tolerance_us",
                                "clip_level") if reference.get(k) is not None}
+    return o
+
+
+CELL_STATISTICS = ("mean", "peak", "multiscale")
+
+
+def detector_options(cfg: dict) -> dict:
+    """The multiscale detector's options from a (merged) chain configuration, as libs/live DetectorOptions names them."""
+    f = cfg["cfar"]
+    o = {"false_alarms_per_ping": float(f["false_alarms_per_ping"]), "sidelobe_margin_db": float(f["sidelobe_margin_db"]),
+         "sidelobe_floor_db": float(f["sidelobe_floor_db"]), "search_factor": float(f["search_factor"])}
+    if f.get("integrate_cells") is not None:
+        o["integrate_cells"] = [int(v) for v in f["integrate_cells"]]
     return o
 
 
@@ -622,8 +645,10 @@ class LiveChain:
         self.boards_out_of_sync = 0
         want = self.cfg["backend"]
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
-        if self.cfg["cell_statistic"] not in ("mean", "peak"):
-            raise ValueError(f"cell_statistic: {self.cfg['cell_statistic']!r} (mean or peak)")
+        if self.cfg["cell_statistic"] not in CELL_STATISTICS:
+            raise ValueError(f"cell_statistic: {self.cfg['cell_statistic']!r} (mean, peak or multiscale)")
+        self.detector = None                   # the multiscale detector's plan for the last map (libs/live detector.hpp)
+        self._plan_key = None
         if self.cfg["doa"] not in ("map", "sbl"):
             raise ValueError(f"doa: {self.cfg['doa']!r} (map or sbl)")
         if self.cfg["engine"] not in ("python", "cpp"):
@@ -672,6 +697,8 @@ class LiveChain:
             report = json.loads(self._cpp.process(record))
             if self.resolved is None:
                 self.resolved = json.loads(self._cpp.resolved())
+            if cfg["cell_statistic"] == "multiscale":
+                self.detector = json.loads(self._cpp.detector())
             self.sbl_fallbacks += bool(report.get("sbl_fallback"))
             report.update(ping=index, pings_without_nav=self.pings_without_nav,
                           processing_seconds=time.perf_counter() - t_wall)
@@ -774,6 +801,7 @@ class LiveChain:
         if self._elevation is not None:
             self._elevation["row_tolerance_m"] = float(d["row_tolerance_m"])
         t = cfg["tracker"]
+        self._row_tolerance = float(d["row_tolerance_m"])
         self._bearing_sigma = float(d["tracker_bearing_sigma"])      # rad, as derived: no trip through degrees
         self._multipath_bearing = float(d["multipath_bearing"])
         self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=self._bearing_sigma,
@@ -817,14 +845,37 @@ class LiveChain:
         power = cells.max(axis=2) if peak else cells.mean(axis=2)
         looks = float(np.sum(1.0 / np.arange(1, k + 1))) if peak else 1.0     # mean of the largest of k noise samples over their mean
         ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
+        multi = cfg["cell_statistic"] == "multiscale"
+        fine, fine_ranges = fine[:, :n], np.asarray(fine_ranges)[:n]
         if self._blank_range is not None:
             # The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
             skip = min(int(np.count_nonzero(ranges < self._blank_range)), max(len(ranges) - 3, 0))
             power, ranges = power[:, skip:], ranges[skip:]
+            fine, fine_ranges = fine[:, skip * k:], fine_ranges[skip * k:]
         cell = ranges[1] - ranges[0]
-        guard, train = (max(int(round(cfg["cfar"][key] / cell)), 1) for key in ("guard_m", "train_m"))
-        hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
-        hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
+        # The window in cells of this map, by the library's one conversion (libs/detect cfar_window: rounded up, the
+        # guard at least one range resolution): the C++ chain calls the same function.
+        w_ = record.transmit.waveform
+        resolution = record.environment.sound_speed / (2.0 * (abs(w_.f_stop - w_.f_start) or 1.0 / w_.duration))
+        guard, train = core.cfar_window(float(cell), float(resolution), guard_m=float(cfg["cfar"]["guard_m"]), train_m=float(cfg["cfar"]["train_m"]))
+        background_map = None
+        if multi:
+            # Each cell on its strongest sample, its mean and the means of several cells, against the thresholds of those
+            # statistics; sidelobes of a stronger cell dropped; touching cells one detection (libs/live detector.hpp).
+            n_rows = len(rows) if rows is not None else 1
+            key = (power.shape[1], k, train, n_rows)
+            if self._plan_key != key:
+                o = detector_options(cfg)
+                o["row_tolerance_m"] = self._row_tolerance
+                if self._elevation is not None:
+                    o["min_row_elements"] = int(self._elevation["min_row_elements"])
+                self._plan = core.live_detector_plan(record, power.shape[1], k, float(cell) / k, [float(v) for v in self.bearings], n_rows,
+                                                     int(guard), int(train), cfg["window"] == "hann" and cfg["beamformer"] != "mvdr", o)
+                self._plan_key, self.detector = key, json.loads(self._plan["json"])
+            hits, background_map = detect.multiscale(fine, power, fine_ranges, ranges, self.bearings, guard, train, self._plan)
+        else:
+            hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
+            hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
         hits = [h for h in hits if h.snr_db > cfg["min_snr_db"] and (self._blank_range is None or h.range >= self._blank_range)]
         if self._reference is not None and not self._reference.get("dedicated"):
             # A reference summed into hydrophone inputs leaves its two bursts in the data, one just
@@ -856,7 +907,7 @@ class LiveChain:
             from . import elevation
             frame = elevation.array_frame(record, rows, cfg["look"])
             origin, axis = frame.origin, frame.along[:2]
-            mean, _ = detect._window_mean(np.asarray(power, dtype=float), guard, train)
+            mean = background_map if multi else detect._window_mean(np.asarray(power, dtype=float), guard, train)[0]
             order = sorted(range(len(hits)), key=lambda i: -hits[i].snr_db)[:int(el_cfg["max_detections"])]
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
                                      int(np.argmin(np.abs(ranges - hits[i].range)))]) / looks for i in order]
@@ -979,7 +1030,8 @@ class LiveChain:
             "ping": index, "sequence": int(record.metadata.sequence), "time_ns": int(record.transmit.time_ns),
             "ownship_xyz": [float(v) for v in origin], "pings_without_nav": self.pings_without_nav,
             "sync": sync_facts,
-            "detections": [dict({"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db}, **(x or {}))
+            "detections": [dict({"range_m": h.range, "bearing_deg": float(np.degrees(h.bearing)), "snr_db": h.snr_db},
+                                **({"extent_m": h.extent} if np.isfinite(h.extent) else {}), **(x or {}))
                            for h, x in zip(hits, extra)],
             "tracks": [{"id": c_.id, "kind": c_.kind, "parent": c_.parent,
                         # World coordinates: x north, y east, metres, in the frame the records use.

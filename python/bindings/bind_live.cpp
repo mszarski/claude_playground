@@ -489,6 +489,60 @@ void bind_live(py::module_& m) {
       py::arg("record"), py::arg("given") = py::dict(),
       "The chain settings left to be derived, resolved from this record's band, pulse and array (libs/live derive.hpp): "
       "values in the units of the C++ options (angles in rad), and `json`, the line the programs print.");
+  m.def(
+      "live_detector_plan",
+      [](const PingRecord& record, std::int64_t n_cells, std::int64_t samples_per_cell, double step, const std::vector<double>& bearings,
+         std::int64_t rows, std::int64_t guard_cells, std::int64_t train_cells, bool hann, const py::dict& kw) {
+        live::DetectorOptions o;
+        number(kw, "false_alarms_per_ping", o.false_alarms_per_ping);
+        number(kw, "sidelobe_margin_db", o.sidelobe_margin_db);
+        number(kw, "sidelobe_floor_db", o.sidelobe_floor_db);
+        number(kw, "search_factor", o.search_factor);
+        if (kw.contains("integrate_cells") && !kw["integrate_cells"].is_none()) o.integrate_cells = kw["integrate_cells"].cast<std::vector<std::int64_t>>();
+        double tolerance = live::kDerive;
+        number(kw, "row_tolerance_m", tolerance);
+        std::int64_t min_elements = 3;
+        if (kw.contains("min_row_elements") && !kw["min_row_elements"].is_none()) min_elements = kw["min_row_elements"].cast<std::int64_t>();
+        const live::SonarFacts facts = live::sonar_facts(record, live::row_tolerance(record, tolerance), min_elements);
+        const live::DetectorPlan p = live::plan_detector(record, facts, o, n_cells, samples_per_cell, step, bearings, rows, guard_cells, train_cells, hann);
+        py::dict out;
+        py::list scales;
+        for (const live::DetectorScale& s : p.scales) {
+          py::dict d;
+          d["cells"] = s.cells;
+          d["length_m"] = s.length_m;
+          d["looks"] = s.looks;
+          d["tests"] = s.tests;
+          d["pfa"] = s.pfa;
+          d["factor"] = s.factor;
+          d["weights"] = s.weights;
+          scales.append(d);
+        }
+        out["scales"] = scales;
+        out["rows"] = p.rows;
+        out["samples_per_cell"] = p.samples_per_cell;
+        out["cell_m"] = p.cell_m;
+        out["step_m"] = p.step_m;
+        out["resolution_m"] = p.resolution_m;
+        out["beams"] = p.beams;
+        out["train_looks_per_cell"] = p.train_looks_per_cell;
+        out["margin"] = p.margin;
+        out["aperture_m"] = p.aperture_m;
+        out["range_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.range_envelope.size()), p.range_envelope.data());
+        out["bearing_envelope"] = py::array_t<double>(static_cast<py::ssize_t>(p.bearing_envelope.size()), p.bearing_envelope.data());
+        out["u_step"] = p.u_step;
+        out["source_ratio"] = p.source_ratio;
+        out["json"] = p.json();
+        return out;
+      },
+      py::arg("record"), py::arg("n_cells"), py::arg("samples_per_cell"), py::arg("step"), py::arg("bearings"), py::arg("rows") = 1,
+      py::arg("guard_cells") = 50, py::arg("train_cells") = 150, py::arg("hann") = true, py::arg("options") = py::dict(),
+      "The multiscale detector's plan (libs/live detector.hpp) for a map of n_cells range cells of samples_per_cell samples `step` m apart: "
+      "integration lengths, their looks, tests, false-alarm probabilities and thresholds, and the sidelobe envelopes. The C++ chain uses the same function.");
+  m.def("live_sample_correlation", [](const PingRecord& record, double step, std::int64_t n) {
+          return live::sample_correlation(record.transmit.waveform, record.environment.sound_speed, step, n);
+        }, py::arg("record"), py::arg("step"), py::arg("n"),
+        "Amplitude correlation of the compressed pulse between map samples `step` m apart, lags 0..n-1.");
   m.def("live_row_tolerance", &live::row_tolerance, py::arg("record"), py::arg("given") = live::kDerive,
         "Elements within this of one line are one row: `given`, or 2 cm, or a quarter of the shortest wavelength when less.");
   m.def("live_sync_tolerance", &live::sync_tolerance, py::arg("given_us"), py::arg("top_frequency"),
@@ -564,6 +618,12 @@ void bind_live(py::module_& m) {
         if (kw.contains("starboard")) o.starboard = kw["starboard"].cast<bool>();
         if (kw.contains("doa")) o.doa = kw["doa"].cast<std::string>();
         if (kw.contains("cell_peak")) o.cell_peak = kw["cell_peak"].cast<bool>();
+        if (kw.contains("cell_multiscale")) o.cell_multiscale = kw["cell_multiscale"].cast<bool>();
+        get("cfar_false_alarms_per_ping", o.detector.false_alarms_per_ping);
+        get("cfar_sidelobe_margin_db", o.detector.sidelobe_margin_db);
+        get("cfar_sidelobe_floor_db", o.detector.sidelobe_floor_db);
+        get("cfar_search_factor", o.detector.search_factor);
+        if (kw.contains("cfar_integrate_cells")) o.detector.integrate_cells = kw["cfar_integrate_cells"].cast<std::vector<std::int64_t>>();
         if (kw.contains("beamformer")) o.beamformer = kw["beamformer"].cast<std::string>();
         if (kw.contains("backend")) o.backend = kw["backend"].cast<Backend>();
         get("sound_speed", o.sound_speed);
@@ -640,6 +700,8 @@ void bind_live(py::module_& m) {
              return json;
            },
            "Process one ping (conditioned in place); returns the report as a JSON line.")
+      .def("detector", &live::LiveChain::detector_json,
+           "The multiscale detector's plan for the last map (detector.hpp), as a JSON line; '{}' when it is not in use.")
       .def("resolved", &live::LiveChain::resolved_json,
            "The settings the first ping resolved (derive.hpp), as a JSON line; '{}' before it.")
       .def("last_map", [](const live::LiveChain& c) {

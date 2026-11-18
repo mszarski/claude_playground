@@ -72,6 +72,7 @@ class Detection:
     first_range: float = float("nan")   # m, the nearest cell of the cluster (its leading edge)
     depth_alternatives: list | None = None   # None: `depth` is the depth. A list: the elevation was ambiguous and these are
                                              # the other candidates' depths; a track with a depth takes the one that fits
+    extent: float = float("nan")        # m in range the cluster spans (the multiscale detector); NaN: not reported
 
     def xy(self) -> np.ndarray:
         """(across, forward) position in the array's horizontal frame."""
@@ -95,6 +96,79 @@ def cluster(detections: np.ndarray, power: np.ndarray, ranges, bearings, guard: 
                              float((w * bearings[ib]).sum() / w.sum()),
                              float(10 * np.log10(snr[ib, ir].max())), int(len(ib)), first_range=float(ranges[ir].min())))
     return out
+
+
+# --- the detector at the range resolution (cell_statistic: multiscale) ------------------------------
+#
+# libs/live detector.hpp says what it is and why; the plan (integration lengths, their thresholds, the sidelobe
+# envelopes) comes from there (`core.live_detector_plan`), so both engines test against the same numbers. This is
+# the NumPy application of it; tests/python/test_detector.py holds it to the C++ one.
+
+def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges, bearings, guard: int, train: int,
+               plan: dict) -> tuple[list[Detection], np.ndarray]:
+    """Detections on a map `fine` [n_bearing, n_cells * k] (power, k samples per range cell) with `cell_mean`
+    [n_bearing, n_cells] its cell means, and the background of each cell. A cell is flagged when its strongest
+    sample, its mean, or the mean of several cells about it exceeds that statistic's threshold over the background
+    (the mean of `train` cells either side beyond `guard`); flagged cells a stronger cell's sidelobes explain are
+    dropped; touching cells are one detection at the energy-weighted position of their samples, with the strongest
+    sample over the background as its snr_db and the range it spans as its extent."""
+    from . import _gpusonar as core
+    k = int(plan["samples_per_cell"])
+    n_b, n_c = cell_mean.shape
+    fine_ranges, cell_ranges, bearings = np.asarray(fine_ranges, dtype=float), np.asarray(cell_ranges, dtype=float), np.asarray(bearings, dtype=float)
+    cells = np.asarray(fine)[:, :n_c * k].reshape(n_b, n_c, k)
+    mean, count = _window_mean(np.asarray(cell_mean, dtype=float), guard, train)
+    count = np.broadcast_to(count, (n_c,))
+    floor = np.maximum(mean, 1e-300)
+    peak = cells.max(axis=2).astype(float)
+    scales = plan["scales"]
+    looks = float(plan["train_looks_per_cell"])
+    correction = {int(c): [core.training_correction(s["pfa"], float(c) * looks) for s in scales] for c in np.unique(count)}
+    thr = np.array([[s["factor"] * correction[int(c)][i] for c in count] for i, s in enumerate(scales)])      # [scale, cell]
+    flag = peak > thr[0][None, :] * floor
+    csum = np.concatenate([np.zeros((n_b, 1)), np.cumsum(np.asarray(cell_mean, dtype=float), axis=1)], axis=1)
+    j = np.arange(n_c)
+    for i, s in enumerate(scales[1:], start=1):
+        m = int(s["cells"])
+        a = j - (m - 1) // 2
+        ok = (a >= 0) & (a + m <= n_c)
+        stat = (csum[:, a[ok] + m] - csum[:, a[ok]]) / m
+        flag[:, ok] |= stat > thr[i][None, ok] * floor[:, ok]
+    background = mean.astype(np.float32)
+
+    # Cells that a stronger cell's sidelobes explain are dropped, strongest source first.
+    fb, fj = np.nonzero(flag)
+    if len(fb):
+        fp = peak[fb, fj]
+        alive = np.ones(len(fb), dtype=bool)
+        sin_b = np.sin(bearings)
+        env_b, env_r = np.asarray(plan["bearing_envelope"]), np.asarray(plan["range_envelope"])
+        is_source = np.flatnonzero(fp >= plan["source_ratio"] * background[fb, fj].astype(float))
+        for q in is_source[np.argsort(-fp[is_source], kind="stable")]:
+            if not alive[q]:
+                continue
+            du = np.abs(sin_b[fb] - sin_b[fb[q]])
+            e_b = env_b[np.minimum(np.floor(du / plan["u_step"] + 0.5).astype(int), len(env_b) - 1)]
+            # Off the source's bearing its energy is spread in range by the array's own length: that many cells are let off.
+            smear = np.ceil(0.25 * plan["aperture_m"] * du / plan["cell_m"] - 1e-9).astype(int)
+            e_r = env_r[np.minimum(np.maximum(np.abs(fj - fj[q]) - smear, 0), n_c)]
+            alive &= ~((fp < fp[q]) & ~((e_r >= 1.0) & (e_b >= 1.0)) & (fp <= plan["margin"] * e_r * e_b * fp[q]))
+        flag = np.zeros_like(flag)
+        flag[fb[alive], fj[alive]] = True
+
+    labels, n = ndimage.label(flag, structure=np.ones((3, 3), dtype=int))
+    out = []
+    ratio = peak / np.maximum(background.astype(float), 1e-300)
+    for label, where in enumerate(ndimage.find_objects(labels), start=1):
+        ib, ir = np.nonzero(labels[where] == label)
+        ib, ir = ib + where[0].start, ir + where[1].start
+        w = cells[ib, ir, :].astype(float)                                   # [cell, sample]
+        r = fine_ranges[(ir[:, None] * k + np.arange(k)[None, :])]
+        near, far = float(cell_ranges[ir].min()), float(cell_ranges[ir].max())
+        out.append(Detection(float((w * r).sum() / w.sum()), float((w.sum(axis=1) * bearings[ib]).sum() / w.sum()),
+                             float(10 * np.log10(ratio[ib, ir].max())), int(len(ib)), first_range=near,
+                             extent=far - near + float(plan["cell_m"])))
+    return out, background
 
 
 # --- tracking -------------------------------------------------------------------------------------

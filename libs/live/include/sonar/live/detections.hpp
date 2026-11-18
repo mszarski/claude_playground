@@ -22,6 +22,7 @@ struct Detection {
   /// has a depth takes the one that fits it; a track without one waits.
   bool depth_ambiguous = false;
   std::vector<double> depth_alternatives{};
+  double extent = std::numeric_limits<double>::quiet_NaN();       ///< m in range the cluster spans (the multiscale detector); NaN: not reported
 };
 
 /// Group touching detection cells (8-connected) of a map [n_rows (bearing), n_cols (range)]

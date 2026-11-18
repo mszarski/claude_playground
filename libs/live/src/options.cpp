@@ -21,8 +21,24 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_train_m") c.cfar_train_m = v;
   else if (key == "min_snr_db") c.min_snr_db = v;
   else if (key == "cell_statistic") {
-    if (value != "mean" && value != "peak") throw std::invalid_argument("cell_statistic: mean or peak");
+    if (value != "mean" && value != "peak" && value != "multiscale") throw std::invalid_argument("cell_statistic: mean, peak or multiscale");
     c.cell_peak = value == "peak";
+    c.cell_multiscale = value == "multiscale";
+  }
+  else if (key == "cfar_false_alarms_per_ping") c.detector.false_alarms_per_ping = v;
+  else if (key == "cfar_sidelobe_margin_db") c.detector.sidelobe_margin_db = v;
+  else if (key == "cfar_sidelobe_floor_db") c.detector.sidelobe_floor_db = v;
+  else if (key == "cfar_search_factor") c.detector.search_factor = v;
+  else if (key == "cfar_integrate_cells") {
+    // Lengths in range cells, separated by commas or colons: 1,4,16
+    c.detector.integrate_cells.clear();
+    std::size_t at = 0;
+    while (at < value.size()) {
+      const std::size_t end = value.find_first_of(",:", at);
+      c.detector.integrate_cells.push_back(std::atoll(value.substr(at, end - at).c_str()));
+      if (end == std::string::npos) break;
+      at = end + 1;
+    }
   }
   else if (key == "beamformer") c.beamformer = value;
   else if (key == "doa") c.doa = value;
