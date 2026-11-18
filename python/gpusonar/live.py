@@ -427,6 +427,9 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "sector_rays_bounces": float((e["sector_from_rays"] or {}).get("bounces", 2)),
                           "sector_rays_margin": float(np.radians((e["sector_from_rays"] or {}).get("margin_deg", 1.0))),
                           "sector_rays_max_depth": float((e["sector_from_rays"] or {}).get("max_depth_m", 500.0)),
+                          "multipath_sigma": e["multipath_sigma"] is not None,
+                          "multipath_sigma_bounces": float((e["multipath_sigma"] or {}).get("bounces", 2)),
+                          "multipath_sigma_max_depth": float((e["multipath_sigma"] or {}).get("max_depth_m", 500.0)),
                           "gradient_sigma": float(e["gradient_sigma_per_s"]),
                           "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
                           "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
@@ -1103,6 +1106,7 @@ class LiveChain:
         el_cfg = self._elevation if rows is not None else None
         els = [None] * len(hits)
         ladder = None                          # the rung of the sound-speed ladder this ping (elevation.profile)
+        limit_water = None                     # the water the multipath term of the depth sigma is worked out in (elevation.multipath_sigma)
         if el_cfg is not None:
             # What navigation said about its own numbers for this ping (absent: the configuration's).
             said = nav_facts(record)
@@ -1118,8 +1122,9 @@ class LiveChain:
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
                                      int(np.argmin(np.abs(ranges - hits[i].range)))]) / looks for i in order]
             window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
-            if el_cfg["sector_from_rays"] is not None:
-                # hook (opt-in): the elevations sound can arrive from, by rays through the water held this ping (as the C++ chain)
+            if el_cfg["sector_from_rays"] is not None or (el_cfg["multipath_sigma"] is not None and el_cfg["depth"]):
+                # hook (opt-in): the elevations sound can arrive from, and the echoes that share a range cell, by rays through
+                # the water held this ping (as the C++ chain)
                 from .elevation import profile_options as _po
                 own_ = float(origin[2] - el_cfg["surface_z"])
                 water_ = el_cfg["water_depth"] or record.environment.water_depth
@@ -1133,7 +1138,9 @@ class LiveChain:
                 through = core.live_water_profile(_po(el_cfg["profile"]) if el_cfg["profile"] is not None else None, ladder, ssp_["depth"], ssp_["speed"],
                                                   el_cfg["gradient_per_s"] is not None, float(el_cfg["gradient_per_s"] or 0.0), float(el_cfg["gradient_sigma_per_s"]),
                                                   own_, float(record.environment.sound_speed), water_)
-                el_cfg = dict(el_cfg, _sector_profile=(through["depth"], through["speed"]))
+                limit_water = (through["depth"], through["speed"])
+                if el_cfg["sector_from_rays"] is not None:
+                    el_cfg = dict(el_cfg, _sector_profile=(through["depth"], through["speed"]))
             got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing, hits[i].first_range) for i in order], background, frame,
                                      el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),
                                      range_cell=cfg["range_cell_m"], backend=self.backend)
@@ -1205,6 +1212,22 @@ class LiveChain:
                                                      el_cfg["gradient_sigma_per_s"], water)
             return elevation.refraction_sigma(rng, sound, el_cfg["gradient_sigma_per_s"])
 
+        def multipath_term(level, rng, sigma, depth_m):
+            """What echoes sharing the range cell add to a depth read at `level` with the angle's own sigma (rad): the
+            term in metres and the report's members (elevation.multipath_sigma; the C++ chain's own function)."""
+            if el_cfg is None or el_cfg["multipath_sigma"] is None or limit_water is None or not limit_water[0]:
+                return 0.0, {}
+            wf = record.transmit.waveform
+            f_lo, f_hi = min(wf.f_start, wf.f_stop), max(wf.f_start, wf.f_stop)
+            band = f_hi - f_lo if f_hi > f_lo else 1.0 / wf.duration
+            tall = float(np.max(frame.heights) - np.min(frame.heights))
+            lim = core.elevation_multipath_limit(
+                limit_water[0], limit_water[1], water or 0.0, own_depth, rng, level, sigma, float(depth_m - el_cfg["surface_z"]), 0.5 * sound / band,
+                sound / (0.5 * (f_lo + f_hi)) / tall if tall > 0.0 else 2.0, el_cfg["arrival"] == "first", float(el_cfg["first_arrival_db"]),
+                float(el_cfg.get("ambiguity_sigma", 3.0)), int(el_cfg["multipath_sigma"].get("bounces", 2)),
+                float(el_cfg["multipath_sigma"].get("max_depth_m", 500.0)))
+            return float(lim["extra"]), json.loads("{" + lim["members"] + "}")
+
         if self._origin is None:
             self._origin, self._t0 = origin.copy(), record.transmit.time_ns
         t = (record.transmit.time_ns - self._t0) * 1e-9
@@ -1252,6 +1275,12 @@ class LiveChain:
                         extra[i]["depth_profile_source"] = ladder["rung"]
                     extra[i].update(ensemble_span(level, e.range, folded))
                     depth, depth_sigma = image, sigma_z
+                    more, members = multipath_term(level, float(e.range), float(e.sigma), folded)
+                    if members:
+                        # What the rows cannot know: which of the echoes sharing the range cell they read. It is the same
+                        # boundary ping after ping, so the track's filter is not given it to average (the track's sigma gains it).
+                        extra[i].update(members)
+                        extra[i]["depth_sigma_m"] = float(np.sqrt(sigma_z**2 + bent**2 + fold_sigma**2 + more**2))
                     if e.ambiguous:
                         # The track, if it has a depth already, takes the candidate that fits it.
                         alternatives = [float(origin[2] + e.range * w[2]) for w in e.alternatives]
@@ -1284,6 +1313,12 @@ class LiveChain:
                                                                        slant, profile[0], profile[1], water, method=el_cfg["ray_method"])
                 track_extra[c_.id] = {"depth_m": folded, "depth_sigma_m": sigma_z, "path": path}
                 track_extra[c_.id].update(ensemble_span(float(np.arcsin(np.clip((origin[2] - tr.depth) / slant, -1.0, 1.0))), slant, folded))
+                level_ = float(np.arcsin(np.clip((origin[2] - tr.depth) / slant, -1.0, 1.0)))
+                more, members = multipath_term(level_, slant, float(np.sqrt(tr.depth_var) / (slant * max(np.cos(level_), 1e-6))), folded)
+                if members:
+                    # The same boundary echoes ping after ping: what they add is not averaged away by the filter.
+                    track_extra[c_.id].update(members)
+                    track_extra[c_.id]["depth_sigma_m"] = float(np.hypot(sigma_z, more))
                 if ladder is not None:
                     track_extra[c_.id]["depth_profile_source"] = ladder["rung"]
                 if el_cfg["classify"] and elevation.outside_water(tr.depth, float(np.hypot(np.sqrt(tr.depth_var), bent)), water, el_cfg["surface_z"],

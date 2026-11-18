@@ -3604,3 +3604,76 @@ chain's own (`live.detection_probability`) at that SNR.
 
 Not in it: range dependence of the water or the bottom, a rough bottom, the caustic phase, leakage into shadows
 (diffraction), reverberation as a limit on detection (the table is for noise), the target's aspect.
+
+## 29. Echoes that share a range cell, false alarms counted against rows, and other repairs [OURS]
+
+### 29.1 What stacked rows read when boundary echoes share the range cell
+
+**The observation.** The two-row face (rows 1.5 m apart, 4 to 6 kHz, range resolution c / 2B = 0.375 m) 30 m deep in
+100 m of water, a target at 3 km. For the target at 60 m the reported depth was 98, 97 and 11 m on three pings with a
+stated sigma of 11 to 15 m. Moving the target through the column (`popoto_face_2x32` rehearsal scenario, three pings
+each, C++ chain) shows what the rows read:
+
+| target depth, m | elevation read, degrees | depth reported, m |
+| --- | --- | --- |
+| 10 | +0.49 to +0.57 | 0 to 4 |
+| 25 | +0.36 to +0.42 | 8 to 11 |
+| 45 | +0.37 to +0.53 | 2 to 11 |
+| 60 | -1.43 to -1.38 | 95 to 98 |
+| 80 | -1.33 to -1.21 | 93 to 100 |
+| 95 | -1.49 to -1.41 | 92 to 96 |
+
+The reading is the sea surface (atan(30 / 3000) = +0.57 degrees) or the sea bed (-atan(70 / 3000) = -1.34 degrees),
+and says only in which part of the column the target is.
+
+**Why.** The echo returns by every pair of one-way paths: out by path i, back by path k. With a direct path D, a
+surface path S and a bottom path B there are nine. Echo (i, k) and its mirror (k, i) have the same length exactly and
+the same reflection coefficients, so they add as pressures whatever the wavelength: twice the pressure of either. One
+of the two arrives at the array from path i's elevation and the other from path k's; at height h on the array their
+sum is
+
+    exp(i k h sin(e_i)) + exp(i k h sin(e_k)) = 2 cos(k h (sin(e_i) - sin(e_k)) / 2) exp(i k h (sin(e_i) + sin(e_k)) / 2)
+
+so rows whose aperture cannot separate the two read the MEAN of the two elevations. For D with S that mean is
+((z_own - z) + (z_own + z)) / 2r = z_own / r, the elevation of the sea surface above the target: it does not
+contain the target's depth z at all. For D with B it is -(H - z_own) / r, the sea bed. These two
+pairs are 6 dB above the direct echo each, and where they fall in one resolution cell with each other (their ranges
+after the direct echo are z_own z / r and (H - z_own)(H - z) / r) their clump is up to 12 dB above it, so the stage's
+rule "the earliest arrival within 8 dB of the strongest" passes the direct echo by and lands on a boundary.
+
+**What the chain now says** (`elevation.multipath_sigma`, `libs/live` `multipath_depth_limit`). For every target depth
+z the water allows, the chain's ray fan (Sec. 28) through the profile it holds gives the one-way paths and from them
+the echoes: range, pressure (2 a_i a_k for a pair, a_i^2 for i = k), elevation (the mean). Echoes closer than c / 2B
+are one clump; the clump read is the earliest whose expected power is within `first_arrival_db` of the strongest's.
+At an echo g of that clump the rows read g's elevation pulled by every other echo h:
+
+    s_g^2 = sum_h (a_h / a_g)^2  E2(x_gh)  d_gh^2 / 2
+
+E2(x) = min(1, 1 / (2 pi^2 x^2)) is the compressed pulse's power x cells away (a flat band's sinc^2, its lobes
+averaged); d is the difference of the elevations, at most lambda / (2 pi D), which is the most a second wave can turn
+the phase across a height D; the half is the mean over the relative phase. How well depth z can give the reading e is
+
+    W(z) = max over the clump's echoes g of exp(-(e - e_g)^2 / 2 (sigma_e^2 + s_g^2))
+
+Every echo of the clump counts fully (which one wins turns on phases nobody knows) and every depth counts by W alone
+(nothing is known of the target). The depth's variance is the W-weighted mean of (z - z_reported)^2; the same mean
+with the first path alone and resolved is what the angle's sigma already holds, and the difference is the new term,
+`depth_unresolved_sigma_m`. Limits: one resolved echo gives W a Gaussian of the angle's own width and the term is
+range x s_g, the pull of the far echoes (checked against the closed form to 5 %: 0.7 m at 3 km for a target 60 m below
+a sonar at 200 m, the surface pair 46 cells away); a reading at a boundary gives W = 1 over every depth whose clump
+holds that pair and the term is the spread of that part of the column. `depth_multipath_limited` is true where the
+term is the larger part of the sigma. No depth with W above exp(-9 / 2): the reading is not an echo of this picture
+(a far lobe, a path of more bounces) and nothing is claimed.
+
+**How honest it is.** Over the 18 pings of the table, sigma with the term is 19 to 48 m and the largest error is
+1.53 sigma (before, on the rehearsal's three pings: 2.5 to 4.5 sigma). At 1 km with two rows (targets at 10, 30, 60, 90 m, 12 pings) the errors are
+0.4 to 6.3 m against sigmas of 3.9 to 38 m, at most 0.59 sigma: the term is too wide there by a factor of three to
+five for the targets at 10 and 30 m, because depths whose clump holds a mixed surface-and-bottom pair can also give
+those readings in the picture. With three rows at 1 km and the target at 60 m the term is 1.8 m and the depth sigma
+3.9 m (error 1.1 to 1.6 m). The term is in a track's sigma as well and is not given to the track's filter: the
+boundary read is the same one ping after ping.
+
+**Not in it.** Boundary losses (both are perfect mirrors: a soft bottom or a rough surface weakens the pairs and the
+term is then too wide); the projector's offset from the array; echoes of more than `bounces` reflections a leg; any
+correction of the depth itself (a reading at a boundary carries no depth to correct). Without a water depth there is
+no bottom in the picture and the report says so (`depth_unresolved_assumed`).

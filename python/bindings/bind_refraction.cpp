@@ -7,6 +7,7 @@
 #include <pybind11/stl.h>
 
 #include "sonar/live/coverage.hpp"
+#include "sonar/live/elevation.hpp"
 #include "sonar/live/multipath_depth.hpp"
 #include "sonar/live/raytrace.hpp"
 #include "vec_caster.hpp"
@@ -222,6 +223,31 @@ void bind_refraction(py::module_& m) {
         return live::ray_arrives(prof, receiver_depth, elevation, slant_range, max_bounces, deepest);
       },
       "Whether sound can arrive from an elevation (rad, up positive) with so few boundary reflections from no deeper than max_depth (raytrace.hpp).");
+  m.def(
+      "elevation_multipath_limit",
+      [](const std::vector<double>& depth, const std::vector<double>& speed, double water_depth, double own_depth, double slant_range, double elevation,
+         double sigma_angle, double reported_depth, double range_resolution, double aperture_resolution, bool first_arrival, double first_arrival_db,
+         double explain_sigma, int max_bounces, double max_depth) {
+        const live::MultipathLimit lim = live::multipath_depth_limit(depth, speed, water_depth, own_depth, slant_range, elevation, sigma_angle,
+                                                                     reported_depth, range_resolution, aperture_resolution, first_arrival,
+                                                                     first_arrival_db, explain_sigma, max_bounces, max_depth);
+        py::dict d;
+        d["explained"] = lim.explained;
+        d["limited"] = lim.limited;
+        d["depth_sigma"] = lim.depth_sigma;
+        d["extra"] = lim.extra;
+        d["echoes"] = lim.echoes;
+        d["depth_lo"] = lim.depth_lo;
+        d["depth_hi"] = lim.depth_hi;
+        d["bottom"] = lim.bottom;
+        d["deepest"] = lim.deepest;
+        d["members"] = live::multipath_limit_members(lim);
+        return d;
+      },
+      py::arg("depth"), py::arg("speed"), py::arg("water_depth"), py::arg("own_depth"), py::arg("slant_range"), py::arg("elevation"), py::arg("sigma_angle"),
+      py::arg("reported_depth"), py::arg("range_resolution"), py::arg("aperture_resolution"), py::arg("first_arrival") = true,
+      py::arg("first_arrival_db") = 8.0, py::arg("explain_sigma") = 3.0, py::arg("max_bounces") = 2, py::arg("max_depth") = 500.0,
+      "What echoes sharing a range cell do to a depth from stacked rows (elevation.hpp multipath_depth_limit); `members`: the report's JSON members.");
   m.def("ray_depth_arcs", &live::ray_depth_arcs, py::arg("receiver_depth"), py::arg("elevation"), py::arg("slant_range"), py::arg("ssp_depth"),
         py::arg("ssp_speed"), py::arg("water_depth") = 0.0, "Depth an arrival started at, back along the ray in closed-form arcs (raytrace.hpp).");
   m.def(

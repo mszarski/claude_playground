@@ -48,6 +48,12 @@ DEFAULTS = {
                                         # ladder's profile, ssp, the assumed gradient, else isovelocity) with at most so many
                                         # boundary reflections, from no deeper than max_depth_m (or the bottom). Needs no
                                         # water depth. Keeps a far lobe of unequally spaced rows from being taken for the echo
+    "multipath_sigma": None,            # {bounces: 2, max_depth_m: 500}: the depth sigma says so when echoes the rows cannot
+                                        # tell apart share the range resolution cell (direct, surface, bottom: the rows then
+                                        # read a boundary, or a mix). depth_sigma_m gains depth_unresolved_sigma_m, and
+                                        # depth_multipath_limited says when that is the larger part. By rays through the
+                                        # water held this ping; without a water depth there is no bottom echo in it and
+                                        # depth_unresolved_assumed says so (libs/live elevation.hpp, multipath_depth_limit)
     "range_window_m": None,             # half-width of the range search about a detection; None: 1.5 range cells
     "max_detections": 32,               # strongest detections given an elevation, per ping
     "arrival": "first",                 # "first": the earliest arrival in the range window that is within

@@ -399,6 +399,41 @@ ChainOptions small_chain() {
 
 std::string without_time(const std::string& json) { return json.substr(0, json.find("\"processing_seconds\"")); }
 
+TEST(Depth, SaysWhenEchoesTheRowsCannotSeparateShareTheRangeCell) {
+  // 4 to 6 kHz, rows 1.5 m apart, 30 m deep in 100 m of isovelocity water (tests/python/test_multipath_sigma.py has the rest).
+  const double c = 1500.0, resolution = 0.5 * c / 2000.0, aperture = (c / 5000.0) / 1.5, sigma = 0.2 * 3.14159265358979323846 / 180.0;
+  const std::vector<double> depth{0.0, 5000.0}, speed{c, c};
+  // At 3 km a reading at the sea bed's elevation comes from any target below about 57 m: the bottom pair and its mirror add.
+  const live::MultipathLimit far = live::multipath_depth_limit(depth, speed, 100.0, 30.0, 3000.0, -std::atan2(70.0, 3000.0), sigma, 99.0, resolution,
+                                                               aperture, true, 8.0, 3.0, 2, 500.0);
+  EXPECT_TRUE(far.explained);
+  EXPECT_TRUE(far.limited);
+  EXPECT_TRUE(far.bottom);
+  EXPECT_GT(far.extra, 15.0);
+  EXPECT_LT(far.extra, 30.0);
+  EXPECT_LT(far.depth_lo, 60.0);
+  EXPECT_NEAR(far.depth_hi, 100.0, 1e-9);
+  EXPECT_NE(live::multipath_limit_members(far).find("\"depth_multipath_limited\": true"), std::string::npos);
+  // At 300 m every echo has its own range cell.
+  const live::MultipathLimit near = live::multipath_depth_limit(depth, speed, 100.0, 30.0, 300.0, std::asin(-30.0 / 300.0), sigma, 60.0, resolution,
+                                                                aperture, true, 8.0, 3.0, 2, 500.0);
+  EXPECT_TRUE(near.explained);
+  EXPECT_FALSE(near.limited);
+  EXPECT_EQ(near.echoes, 1);
+  EXPECT_LT(near.extra, 0.3);
+  EXPECT_NEAR(near.depth_sigma, std::hypot(300.0 * std::cos(std::asin(0.1)) * sigma, near.extra), 1e-9);
+  // No water depth: no bottom in the picture, and the report says so.
+  const live::MultipathLimit open = live::multipath_depth_limit(depth, speed, 0.0, 30.0, 1000.0, std::asin(-30.0 / 1000.0), sigma, 60.0, resolution,
+                                                                aperture, true, 8.0, 3.0, 2, 500.0);
+  EXPECT_FALSE(open.bottom);
+  EXPECT_NE(live::multipath_limit_members(open).find("\"depth_unresolved_assumed\": \"water depth unknown"), std::string::npos);
+  // A reading no path of two bounces gives: nothing is claimed.
+  const live::MultipathLimit none = live::multipath_depth_limit(depth, speed, 100.0, 30.0, 3000.0, 0.17, sigma, 20.0, resolution, aperture, true, 8.0, 3.0,
+                                                                2, 500.0);
+  EXPECT_FALSE(none.explained);
+  EXPECT_EQ(none.extra, 0.0);
+}
+
 TEST(Chain, ReportsElevationAndDepthWithRowsAndIsUnchangedWithOne) {
   const Vec3d target{80.0, 520.0, 95.0};
   // Two rows: every detection has an elevation; the strongest is the target, at its depth.

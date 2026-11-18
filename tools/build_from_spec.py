@@ -22,7 +22,7 @@ To use the generated files without copying them: GPUSONAR_CONFIG_PATH=DIR/config
 
 Self-tests (each simulated trial through the Python chain and the C++ chain, host backend):
     free       range and bearing of every target; with rows, its depth (two rows: the true elevation among the candidates)
-    shallow    the same with surface and bottom echoes; depth within the multipath allowance
+    shallow    the same with surface and bottom echoes; on every ping the true depth within two of the stated sigma, and the sigma saying something
     rehearsal  raw samples at the boards' rate, every board on its own clock: the boards synchronise; range, bearing, depth
     passing    one mover, its speed
     passive    the radiating sources' bearings, the sonar silent
@@ -45,8 +45,11 @@ from gpusonar import config  # noqa: E402
 
 KINDS = ("free", "shallow", "rehearsal", "passing", "submerged", "passive", "stream")
 CRITERIA = {
-    "free": "every target: range within 3 m, bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate",
-    "shallow": "the target: range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing within 1 deg; rows: depth within 3 m + range x sin(0.7 deg) (the multipath allowance) when the report gives one elevation, else the truth among the candidates",
+    "free": "every target: range within 3 m, bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate; "
+            "rows, on every ping: the true depth within two of the depth's stated sigma, and the multipath term of that sigma no more than 3 m + 0.3% of range (nothing shares the range cell in free field)",
+    "shallow": "the target: range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing within 1 deg; rows, on every ping: the true depth within two of the depth's stated sigma "
+               "(an ambiguous elevation: the truth within that of a listed candidate, or within 0.5 deg), and the sigma's multipath term no wider than the distance from the reported depth to the farther end of the water column. "
+               "Where direct, surface and bottom echoes share the range cell the rows read a boundary and the depth cannot be right: what is checked is that the report says so",
     "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; range within 6 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
     "passing": "at least one track of kind mover, speed within 1 m/s of the truth, in both engines",
     "submerged": "a submerged mover of the spec's first submerged target class, with NO sound-speed profile and no water depth given to the chain (the deployment file's gradient prior only): "
@@ -303,6 +306,44 @@ def _check_target(report, target, rows, allowance_deg, look_sign=1.0, range_tole
     return out
 
 
+DEPTH_SIGMAS = 2.0      # a depth is honest when the truth lies within this many of its own stated sigma
+
+
+def _check_depth(report, target, water_depth, look_sign=1.0) -> dict | None:
+    """Whether one ping's depth of a target is HONEST: the truth within DEPTH_SIGMAS of the sigma the chain states for it
+    (an ambiguous elevation: one of its candidates within that), and the sigma's multipath term (`depth_unresolved_sigma_m`)
+    not so wide that it says nothing. With boundaries (`water_depth`) the term may not exceed the distance from the
+    reported depth to the farther end of the water column; without them nothing can share the range cell, so it must
+    stay inside the free-field allowance of 3 m + 0.3 % of the range. None: the ping has no detection of the target."""
+    det, own, rng = _nearest(report, target)
+    if det is None or abs(det["range_m"] - rng) > 8.0:
+        return None
+    true_el = float(np.degrees(np.arcsin((own[2] - target[2]) / rng)))
+    out = {"true_depth_m": float(target[2]), "depth_m": det.get("depth_m"), "depth_sigma_m": det.get("depth_sigma_m"), "elevation_deg": det.get("elevation_deg"),
+           "ambiguous": bool(det.get("elevation_ambiguous")), "multipath_sigma_m": det.get("depth_unresolved_sigma_m"),
+           "multipath_limited": det.get("depth_multipath_limited")}
+    if det.get("depth_m") is None or not det.get("depth_sigma_m"):
+        out["honest"] = False
+        return out
+    sigma = float(det["depth_sigma_m"])
+    if out["ambiguous"]:
+        cands = [e for e in [det.get("elevation_deg")] + list(det.get("elevation_alternatives_deg") or []) if e is not None]
+        out["candidate_error_deg"] = min(abs(e - true_el) for e in cands)
+        sigma_deg = float(np.degrees(sigma / (rng * max(np.cos(np.radians(det["elevation_deg"])), 1e-6))))
+        within = out["candidate_error_deg"] <= max(0.5, DEPTH_SIGMAS * sigma_deg)
+    else:
+        out["depth_error_m"] = float(det["depth_m"] - target[2])
+        out["depth_error_sigmas"] = abs(out["depth_error_m"]) / sigma
+        within = out["depth_error_sigmas"] <= DEPTH_SIGMAS
+    # The multipath term is what must not run away (the rest of the sigma is the angle's own: noise, roll, and how long
+    # ago the attitude was known, which a scenario without an attitude history makes large by itself).
+    out["multipath_limit_m"] = float(max(det["depth_m"], water_depth - det["depth_m"])) if water_depth else 3.0 + 0.003 * rng
+    tight = (out["multipath_sigma_m"] or 0.0) <= out["multipath_limit_m"]
+    out["sigma_says_something"] = bool(tight)
+    out["honest"] = bool(within and tight)
+    return out
+
+
 def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log=print) -> dict:
     """Run the build's simulated trials through the chain and check them against their truth."""
     from gpusonar import core
@@ -402,10 +443,20 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                             e["mover_speed_m_s"] = [t["speed_m_s"] for t in movers]
                             e["ok"] = bool(movers) and any(abs(t["speed_m_s"] - truth["speed_m_s"]) <= 1.0 for t in movers)
                         else:
-                            allowance = 0.7 if kind in ("shallow", "rehearsal") else 0.0
-                            # With boundaries a detection is a cluster of the direct echo and its first bounces, a few metres deep.
-                            e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") else 1, allowance, sign, range_tolerance=6.0 if allowance else 3.0) for t in truth["targets"]]
+                            bounded = kind in ("shallow", "rehearsal")
+                            # With boundaries a detection is a cluster of the direct echo and its first bounces, a few metres deep. Range and bearing
+                            # are checked here and, in free field, the depth against the truth to 3 m + 0.3 % of the range.
+                            e["targets"] = [_check_target(last, t, rows if truth.get("check_depth") and not bounded else 1, 0.0, sign, range_tolerance=6.0 if bounded else 3.0)
+                                            for t in truth["targets"]]
                             e["ok"] = all(t["ok"] for t in e["targets"])
+                            if truth.get("check_depth") and rows > 1:
+                                # Every ping, not the last alone: the truth within two of the depth's own stated sigma, and that sigma saying something.
+                                # (Where direct, surface and bottom echoes share the range cell the rows read a boundary: the depth cannot be right, and
+                                # what is checked is that the chain says so. A fixed allowance in degrees was here before; it passed or failed by luck.)
+                                e["depth_pings"] = [[_check_depth(r, t, truth.get("water_depth"), sign) for r in reports] for t in truth["targets"]]
+                                seen = [[c for c in per if c is not None] for per in e["depth_pings"]]
+                                e["depth_honest"] = all(per and all(c["honest"] for c in per) for per in seen)
+                                e["ok"] = e["ok"] and e["depth_honest"]
                             if truth.get("sync"):
                                 e["sync_ok"], e["sync_worst_residual_us"] = bool(last["sync"]["ok"]), float(last["sync"]["worst_residual_us"])
                                 e["ok"] = e["ok"] and e["sync_ok"] and e["sync_worst_residual_us"] < 1.0

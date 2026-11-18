@@ -207,6 +207,9 @@ spec, then `tools/build_from_spec.py --write-shipped`. `REFERENCE_DESIGN.md` is 
   `tests/python/test_deployment_defaults.py`):
   - every build of two or more rows: `elevation.sector_from_rays: {}` (the elevation search is limited to where a ray
     with two bounces or fewer can arrive from). The hand-written `popoto_elevation_rehearsal` has it too;
+  - every build of two or more rows: `elevation.multipath_sigma: {}` (the depth's sigma grows, and
+    `depth_multipath_limited` says so, where direct, surface and bottom echoes share the range cell and the rows read a
+    boundary instead of the target). The hand-written `popoto_elevation_rehearsal` has it too;
   - a build that switches depth from multipath timing on (`operation.chain.multipath_depth`): `rays: true` and
     `withhold_flagged: true`. No shipped build has it on (it is off on all six);
   - a build whose spec names a site (`operation.coverage: {environment: ...}`): `chain.coverage`, with that site's water
@@ -547,6 +550,14 @@ waters, the measurement itself taken as exact; `docs/design/refraction_depth_stu
   (4 dB for the three-row static array); where several arrivals share a range cell one can win outright, unflagged, and its
   bearing correction moves the detection by a degree (`ssp_thermocline_static_trial_3row`: -31 degrees on every ping, no
   track). The key limits the search to elevations a ray with two bounces or fewer can arrive from.
+- **Stacked rows: read `depth_multipath_limited` before a depth.** With `elevation.multipath_sigma: {}` (on in every
+  shipped stacked-row file) a detection's and a track's depth carry `depth_unresolved_sigma_m` inside `depth_sigma_m`.
+  Where the flag is true the rows are reading the surface or the sea bed, not the target: in 100 m of water at 3 km from
+  30 m the two-row face reads 0 to 11 m or 93 to 99 m for a target anywhere between 10 and 95 m, and states 19 to 48 m
+  of sigma for it (the generator's `rehearsal` self-test, and the sweep in `PHYSICS_NOTES.md` Sec. 29). At 1 km with
+  three rows the same target is resolved and the term is under 2 m. `depth_unresolved_span_m` gives the depths that
+  could have given the reading. Without a water depth the chain has no bottom in this picture and says so in
+  `depth_unresolved_assumed`: give it one (`elevation.water_depth`, or navigation) wherever the bottom is within reach.
 - **Shallow water without `multipath_depth.bottom`: `withhold_flagged: true`** (what the generator writes, with
   `rays: true`, for a build that switches `multipath_depth` on), or read `multipath_note` before the depth. A flagged depth's sigma is the fit's and is small even when the fit is to the bottom's echoes.
 

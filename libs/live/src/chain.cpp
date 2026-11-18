@@ -460,6 +460,8 @@ Report LiveChain::process(PingRecord& record) {
   bool laddered = false;
   const double sound = record.environment.sound_speed;
   std::vector<double> profile_depth = eo.ssp_depth, profile_speed = eo.ssp_speed;   // depth along a ray instead of the straight line
+  std::vector<double> limit_depth, limit_speed;   // the water the multipath term of the depth sigma is worked out in (elevation.multipath_sigma)
+  double limit_range_resolution = 0.0, limit_aperture = 0.0;
   if (stacked) {
     // Stacked rows: the elevation of the strongest detections, from the whole array.
     const ElevationFrame ef = elevation_frame(record, rows, opt_.starboard);
@@ -501,13 +503,27 @@ Report LiveChain::process(PingRecord& record) {
       ladder = ladder_.evaluate(record.transmit.time_ns, f.origin.x, f.origin.y, f.origin.z - eo.surface_z, sound, measured, water,
                                 eo.ssp_depth, eo.ssp_speed, eo.use_gradient ? eo.gradient : 0.0, eo.gradient_sigma);
     };
-    if (eo.sector_from_rays) {
-      // hook (opt-in): the elevations sound can arrive from, by rays through the water held this ping
+    if (eo.sector_from_rays || (eo.multipath_sigma && eo.depth)) {
+      // hook (opt-in): the elevations sound can arrive from, and the echoes that share a range cell, by rays through
+      // the water held this ping
       if (eo.profile.enabled && eo.depth) climb();
       const MultipathProfile through = water_profile(eo.profile, laddered ? &ladder : nullptr, eo.ssp_depth, eo.ssp_speed, eo.use_gradient, eo.gradient,
                                                      eo.gradient_sigma, f.origin.z - eo.surface_z, sound, water);
-      eo.sector_ray_depth = through.depth;
-      eo.sector_ray_speed = through.speed;
+      limit_depth = through.depth;
+      limit_speed = through.speed;
+      if (eo.sector_from_rays) {
+        eo.sector_ray_depth = through.depth;
+        eo.sector_ray_speed = through.speed;
+      }
+    }
+    {
+      // What the rows cannot separate: the range resolution of the pulse, and the lobe width of the rows' height.
+      const Waveform& w = record.transmit.waveform;
+      const double f_lo = std::min(w.f_start, w.f_stop), f_hi = std::max(w.f_start, w.f_stop);
+      const double band = f_hi > f_lo ? f_hi - f_lo : 1.0 / w.duration;
+      const auto [h_lo, h_hi] = std::minmax_element(ef.heights.begin(), ef.heights.end());
+      limit_range_resolution = 0.5 * sound / band;
+      limit_aperture = *h_hi > *h_lo ? sound / (0.5 * (f_lo + f_hi)) / (*h_hi - *h_lo) : 2.0;
     }
     double noise_weight = 0.0;
     for (const auto& r : rows) noise_weight += weight_power(static_cast<std::int64_t>(r.size()), opt_.hann && opt_.beamformer != "mvdr");
@@ -585,6 +601,17 @@ Report LiveChain::process(PingRecord& record) {
                ? profile_depth_sigma(f.origin.z - eo.surface_z, level, range, ladder.depth, ladder.speed, ladder.sigma, eo.gradient_sigma, water, eo.ray_arcs)
                : refraction_sigma(range, sound, eo.gradient_sigma);
   };
+  // What echoes sharing the range cell add to a depth read at `level` with the angle's own sigma `sigma` (rad): the
+  // term in metres, and its members appended to the report's extra ones (elevation.multipath_sigma; 0 when off).
+  auto multipath_term = [&](double level, double range, double sigma, double depth_m, std::string& extra) {
+    if (!eo.multipath_sigma || limit_depth.empty()) return 0.0;
+    const MultipathLimit lim = multipath_depth_limit(limit_depth, limit_speed, water, f.origin.z - eo.surface_z, range, level, sigma, depth_m - eo.surface_z,
+                                                     limit_range_resolution, limit_aperture, eo.first_arrival, eo.first_arrival_db, eo.ambiguity_sigma,
+                                                     static_cast<int>(eo.multipath_sigma_bounces), eo.multipath_sigma_max_depth);
+    const std::string members = multipath_limit_members(lim);
+    extra = extra.empty() ? members : extra + ", " + members;
+    return lim.extra;
+  };
   std::vector<Detection> local;
   for (std::size_t i = 0; i < hits.size(); ++i) {
     const Detection& h = hits[i];
@@ -641,7 +668,11 @@ Report LiveChain::process(PingRecord& record) {
         d.depth_refraction_sigma_m = bend(level, e.range);
         if (laddered) d.profile_source = ladder.rung;
         const double fold_sigma = (d.path == "bottom" || d.path == "multiple") ? 2.0 * eo.water_depth_sigma : 0.0;
-        d.depth_sigma_m = std::sqrt(sigma_z * sigma_z + d.depth_refraction_sigma_m * d.depth_refraction_sigma_m + fold_sigma * fold_sigma);
+        // What the rows cannot know: which of the echoes sharing the range cell they read (opt-in). It is the same
+        // boundary ping after ping, so the track's filter is not given it to average: the track's own sigma gains it below.
+        const double multipath_sigma = multipath_term(level, e.range, e.sigma, d.depth_m, d.extra);
+        d.depth_sigma_m = std::sqrt(sigma_z * sigma_z + d.depth_refraction_sigma_m * d.depth_refraction_sigma_m + fold_sigma * fold_sigma +
+                                    multipath_sigma * multipath_sigma);
         m.depth = d.image_depth_m;
         m.depth_sigma = sigma_z;
         if (e.ambiguous) {
@@ -688,6 +719,12 @@ Report LiveChain::process(PingRecord& record) {
           rt.depth_m = eo.surface_z + back_trace(std::asin((f.origin.z - tr->depth) / slant), slant);
         }
         rt.extra = ensemble_span(std::asin(std::clamp((f.origin.z - tr->depth) / slant, -1.0, 1.0)), slant, rt.depth_m);
+        {
+          // The same boundary echoes ping after ping: what they add is not averaged away by the filter.
+          const double level = std::asin(std::clamp((f.origin.z - tr->depth) / slant, -1.0, 1.0));
+          const double more = multipath_term(level, slant, std::sqrt(tr->depth_var) / (slant * std::max(std::cos(level), 1e-6)), rt.depth_m, rt.extra);
+          rt.depth_sigma_m = std::hypot(rt.depth_sigma_m, more);
+        }
         // Its straight-line depth is above the surface or below the bottom: a bounce.
         if (eo.classify && outside_water(tr->depth, std::hypot(std::sqrt(tr->depth_var), bent), water, eo.surface_z, eo.classify_sigma,
                                          eo.water_depth_sigma)) {

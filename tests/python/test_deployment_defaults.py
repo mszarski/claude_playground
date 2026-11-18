@@ -55,6 +55,7 @@ def test_every_stacked_row_deployment_file_searches_only_where_rays_arrive_from(
         if bs.describe_shipped(cfg["source"]["sonar"])["rows"] > 1:
             stacked.add(name)
             assert cfg["chain"]["elevation"]["sector_from_rays"] == {}, name      # {}: two bounces, a degree of margin, to 500 m
+            assert cfg["chain"]["elevation"]["multipath_sigma"] == {}, name       # {}: two bounces a leg, target depths to 500 m or the bottom
         else:
             assert "elevation" not in cfg["chain"], name
     assert stacked == STACKED
@@ -65,6 +66,7 @@ def test_every_stacked_row_deployment_file_searches_only_where_rays_arrive_from(
         if el is not None:
             o = live.cpp_chain_options(bs.chain_config(spec))["elevation"]
             assert o["sector_from_rays"] is True and o["sector_from_depth"] == (spec["array"]["rows"] == 2)   # two rows keep the water-depth bound beside it
+            assert el["multipath_sigma"] == {} and o["multipath_sigma"] is True
 
 
 def test_multipath_depth_is_deployed_through_rays_and_withholds_flagged_depths():
@@ -203,6 +205,7 @@ def test_the_programs_options_carry_the_new_settings():
     gen = tool("build_from_spec")
     o = gen._options(bs.chain_config(bs.load("popoto_static_3x32")))
     assert o["elevation_sector_from_rays"] == 1 and float(o["elevation_sector_rays_margin_deg"]) == pytest.approx(1.0) and "elevation_sector_rays_margin" not in o
+    assert o["elevation_multipath_sigma"] == 1 and float(o["elevation_multipath_sigma_bounces"]) == 2.0 and float(o["elevation_multipath_sigma_max_depth"]) == 500.0
     assert "coverage" not in o and "multipath_depth" not in o
     spec = bs.load("popoto_face_1x32")
     spec["operation"]["chain"] = {"multipath_depth": {}}
