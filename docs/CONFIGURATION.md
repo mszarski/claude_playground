@@ -342,6 +342,7 @@ Keys added so that nothing about one sonar, board or network is fixed in code:
 | `source.queue_mb` | `stream_queue_mb` | blocks waiting for the chain may hold this much (1024 MB; 0: no bound). Beyond it arriving blocks are dropped and counted in the closing summary (`blocks dropped at the full queue`, `dropped_blocks`); the queue had no bound |
 | `source.queue_pings` | — | Python: finished pings waiting for the chain (8); the oldest is dropped and counted (`overrun_pings`) |
 | `output.report_udp_max_bytes` | `report_udp_max_bytes` | a report line longer than this (65000) goes out as several datagrams, each a complete report line of the same ping with a share of the detections and tracks and `"part": [k, n]`; it was cut at 65000 bytes. `gpusonar.live.join_report_parts` puts them together |
+| `chain.cell_statistic` | `cell_statistic` | what a range cell holds of the finer map it is made from: `mean` power (default, as always) or its `peak` sample. Changes what `snr_db` means: `DEPLOYMENT.md`, "What `snr_db` is" |
 | `chain.sync.search_time` | `sync_search_time` | seconds either side of where a reference burst is expected (0.002): boards that start further apart need more |
 | `chain.sync.tolerance_us` | `sync_tolerance_us` | what the boards must agree within after resampling, microseconds (a twentieth of a period at the top of the transmit band: 8.3 µs at 6 kHz; rows measuring elevation want less) |
 | `chain.elevation.min_row_elements` | `elevation_min_row_elements` | a line of fewer hydrophones than this is not a row (3) |
@@ -351,7 +352,9 @@ Report fields added (only present when the thing happened, so an existing reader
 `"sbl_fallback": true` (active and passive: SBL was asked for on more channels than its kernels take,
 `core.SBL_KERNEL_MAX_CHANNELS` = 64, and ran on the host reference instead of failing); `"rows_as_snapshots": n`
 (passive on stacked rows without `elevation`: bearings are cone angles solved from the n rows as snapshots of one
-line); `"part": [k, n]` (a report split over datagrams).
+line); `"part": [k, n]` (a report split over datagrams); `"bearing_corrected": false` on a detection (stacked rows,
+`elevation.correct_bearing` on, the elevation ambiguous: bearing and range are the row's own, where they used to be
+placed by whichever candidate elevation was picked).
 
 ### `passive.tonal` (optional): Goertzel lines and DEMON when listening
 

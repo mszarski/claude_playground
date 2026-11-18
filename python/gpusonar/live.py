@@ -48,6 +48,8 @@ DEFAULTS = {
     "range_cell_m": None,                      # power is averaged into cells this long before detection
     "cfar": {"pfa": 1e-5, "guard_m": None, "train_m": None},
     "min_snr_db": 9.0,
+    "cell_statistic": "mean",                  # what a range cell holds of the finer map: "mean" power (as always) or its "peak"
+                                               # sample (docs/DEPLOYMENT.md, "What snr_db is": about 3 dB more for a point echo)
     "engine": "python",                        # "cpp": libs/live does every stage after recording (what build/bin/sonar_live runs)
     "doa": "map",                              # "sbl": sparse Bayesian bearings at each detected range (engine cpp)
     "sbl": {"grid_step_deg": 0.25, "max_sources": 6, "min_snr_db": 6.0, "dynamic_range_db": 20.0,
@@ -109,6 +111,75 @@ def split_report(report: dict, max_bytes: int = REPORT_UDP_MAX_BYTES) -> list[st
     return out
 
 
+# --- what snr_db is, and how it relates to a link budget ---------------------------------------------------------------
+#
+# A detection's `snr_db` is 10 log10 of (the power of the strongest range cell of its cluster) over (the detector's
+# background for that cell: the mean of the cells `cfar.train_m` either side along range, beyond `cfar.guard_m`), on the
+# beamformed, pulse-compressed map. A link budget (gpusonar.sonar_equation, buildspec.performance) states the peak
+# signal power over the mean noise power at the output of an unweighted beamformer. The chain's number is lower by
+#   window    the aperture weighting's loss against uncorrelated noise, N sum(w^2) / (sum w)^2: 1.76 dB for Hann;
+#   cell      what the range cell does to an echo one range resolution long. "mean": its power is averaged with the
+#             other samples of the cell (7.6 dB for a 2 m cell at 2 kHz of band). "peak": the largest sample is taken
+#             (0.4 dB of straddling), but the background is then the mean of the largest of k noise samples, the k-th
+#             harmonic number above the mean noise power (4.3 dB for k = 8).
+# An echo spread over the cell in range (a long target, multipath) loses less under "mean" than this figure, which is
+# for a point; and the budget's source level convention (peak or rms) is a separate 3 dB the budget must state.
+
+def snr_loss_db(record, range_cell_m: float, window: str = "hann", cell_statistic: str = "mean", row_elements: int | None = None) -> dict:
+    """What the chain's `snr_db` reads below a link budget's SNR (peak signal over mean noise at an unweighted
+    beamformer's output) for a point echo, dB: {"window_db", "cell_db", "total_db", "samples_per_cell"}.
+    `record` gives the band and the sound speed; `row_elements` the hydrophones of one row (default: all of them).
+    The cell figure is the mean over where the echo falls among the cell's samples (tests/python/test_hardcoded.py
+    holds it to the chain's own numbers within 1 dB)."""
+    w = record.transmit.waveform
+    c = record.environment.sound_speed
+    band = abs(w.f_stop - w.f_start) or 1.0 / w.duration
+    resolution = c / (2.0 * band)
+    n = int(row_elements or record.samples.n_channels)
+    if window == "hann":
+        # As the map lays it: across the aperture, reaching zero half a pitch beyond its ends.
+        u = (np.arange(n) - 0.5 * (n - 1)) / n
+        weights = np.cos(np.pi * u) ** 2
+    else:
+        weights = np.ones(n)
+    window_db = float(10.0 * np.log10(n * np.sum(weights**2) / np.sum(weights) ** 2))
+    k = max(int(np.ceil(range_cell_m / (0.75 * resolution))), 1)
+    step = range_cell_m / k
+    # The compressed pulse of a flat band about its peak, sampled every `step`, the echo anywhere within one cell.
+    offsets = (np.arange(400) + 0.5) / 400.0 * range_cell_m
+    samples = step * np.arange(-3 * k, 4 * k)[None, :] - offsets[:, None]
+    response = np.sinc(samples / resolution) ** 2                    # [where the echo is, fine sample]
+    cells = response.reshape(len(offsets), 7, k)
+    if cell_statistic == "peak":
+        signal = cells.max(axis=2).max(axis=1)
+        background = float(np.sum(1.0 / np.arange(1, k + 1)))        # mean of the largest of k independent noise powers
+    else:
+        signal = cells.mean(axis=2).max(axis=1)
+        background = 1.0
+    cell_db = float(-10.0 * np.log10(np.mean(signal) / background))
+    return {"window_db": window_db, "cell_db": cell_db, "total_db": window_db + cell_db, "samples_per_cell": k}
+
+
+def detection_threshold_db(cfg: dict | None = None, train_cells: int = 300) -> float:
+    """The `snr_db` a cell needs to be reported: the larger of `min_snr_db` and the detector's own threshold over its
+    background (cell-averaging CFAR at `cfar.pfa` with `train_cells` training cells: 10.7 dB at 1e-5)."""
+    cfg = _merge(DEFAULTS, cfg)
+    return float(max(cfg["min_snr_db"], 10.0 * np.log10(detect.cfar_threshold_factor(cfg["cfar"]["pfa"], int(train_cells)))))
+
+
+def budget_threshold_db(record, cfg: dict | None = None, range_cell_m: float | None = None, row_elements: int | None = None) -> float:
+    """The link-budget SNR (peak signal over mean noise at an unweighted beamformer's output, source level as the
+    record's) at which the chain as configured reports a point echo: detection_threshold_db + snr_loss_db. What a
+    range prediction should use as its detection threshold in place of a typed 13 dB. `range_cell_m`: the cell the
+    chain resolved (default: the configuration's, else the derivation's for this record)."""
+    cfg = _merge(DEFAULTS, cfg)
+    if range_cell_m is None:
+        range_cell_m = cfg["range_cell_m"] or core.live_derive(record, {})["range_cell_m"]
+    train = cfg["cfar"]["train_m"] or core.live_derive(record, {})["cfar_train_m"]
+    loss = snr_loss_db(record, float(range_cell_m), cfg["window"], cfg["cell_statistic"], row_elements)
+    return detection_threshold_db(cfg, int(round(2.0 * train / range_cell_m))) + loss["total_db"]
+
+
 def join_report_parts(parts: list[dict]) -> dict:
     """The report the parts of one ping were split from (any order; all n must be there)."""
     parts = sorted(parts, key=lambda p: p["part"][0])
@@ -133,6 +204,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     cfg = _merge(DEFAULTS, cfg)
     if cfg["beamformer"] not in ("backprojection", "farfield", "mvdr"):
         raise ValueError(f"beamformer: {cfg['beamformer']!r} (backprojection, farfield or mvdr)")
+    if cfg["cell_statistic"] not in ("mean", "peak"):
+        raise ValueError(f"cell_statistic: {cfg['cell_statistic']!r} (mean or peak)")
     b, t, c, s = cfg["bearings_deg"], cfg["tracker"], cfg["classify"], cfg["sbl"]
     o = {"bearing_first_deg": b[0], "bearing_last_deg": b[1], "bearing_step_deg": b[2],
          "cfar_pfa": cfg["cfar"]["pfa"],
@@ -145,6 +218,8 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
          "tracker_initial_speed_sigma": t["initial_speed_sigma"], "tracker_process_noise": t["process_noise"],
          "classify_min_speed": c["min_speed"], "classify_static_speed": c["static_speed"],
          "multipath": bool(c.get("multipath"))}
+    if cfg["cell_statistic"] == "peak":
+        o["cell_peak"] = True
     # The sizes that follow from the sonar go to the C++ chain only when the configuration gives them: left out,
     # it derives them from the first ping (libs/live derive.hpp).
     given = _given(cfg)
@@ -547,6 +622,8 @@ class LiveChain:
         self.boards_out_of_sync = 0
         want = self.cfg["backend"]
         self.backend = core.Backend.Cuda if want == "cuda" or (want == "auto" and core.cuda_available()) else core.Backend.Host
+        if self.cfg["cell_statistic"] not in ("mean", "peak"):
+            raise ValueError(f"cell_statistic: {self.cfg['cell_statistic']!r} (mean or peak)")
         if self.cfg["doa"] not in ("map", "sbl"):
             raise ValueError(f"doa: {self.cfg['doa']!r} (map or sbl)")
         if self.cfg["engine"] not in ("python", "cpp"):
@@ -735,7 +812,10 @@ class LiveChain:
         cfg = self.cfg
         rows, subs = self._rows, self._subs
         n = fine.shape[1] // k * k
-        power = fine[:, :n].reshape(len(self.bearings), -1, k).mean(axis=2)
+        peak = cfg["cell_statistic"] == "peak"
+        cells = fine[:, :n].reshape(len(self.bearings), -1, k)
+        power = cells.max(axis=2) if peak else cells.mean(axis=2)
+        looks = float(np.sum(1.0 / np.arange(1, k + 1))) if peak else 1.0     # mean of the largest of k noise samples over their mean
         ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
         if self._blank_range is not None:
             # The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
@@ -779,7 +859,7 @@ class LiveChain:
             mean, _ = detect._window_mean(np.asarray(power, dtype=float), guard, train)
             order = sorted(range(len(hits)), key=lambda i: -hits[i].snr_db)[:int(el_cfg["max_detections"])]
             background = [float(mean[int(np.argmin(np.abs(self.bearings - hits[i].bearing))),
-                                     int(np.argmin(np.abs(ranges - hits[i].range)))]) for i in order]
+                                     int(np.argmin(np.abs(ranges - hits[i].range)))]) / looks for i in order]
             window = "rect" if cfg["beamformer"] == "mvdr" else cfg["window"]
             got = elevation.estimate(record, rows, subs, [(hits[i].range, hits[i].bearing, hits[i].first_range) for i in order], background, frame,
                                      el_cfg, noise_weight=sum(elevation.weight_power(len(r), window) for r in rows),

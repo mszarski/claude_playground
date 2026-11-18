@@ -525,6 +525,52 @@ On a machine or container with CAP_NET_RAW (plain Docker grants it) the stock em
 should run unpatched; that is untested. So is the RoCE receiver, which needs real network
 cards.
 
+## What `snr_db` is, and how it relates to the link budget
+
+A detection's `snr_db` is 10 log10 of **the power of the strongest range cell of its cluster over the detector's
+background for that cell**, on the beamformed, pulse-compressed range × bearing map. The background is the mean power
+of the cells `cfar.train_m` either side of it along range, beyond `cfar.guard_m`. A cell is reported when that ratio
+exceeds both the detector's own factor for `cfar.pfa` (10.7 dB at 10⁻⁵) and `min_snr_db` (9 dB).
+A track's `mean_snr_db` is the mean of that over the detections it took.
+
+A link budget (`gpusonar.sonar_equation`, `buildspec.performance`, `tools/popoto_range_study.py`) states something
+else: the **peak signal power over the mean noise power at the output of an unweighted beamformer**. For a point echo
+the chain reads lower by two things, both measured (`tests/python/test_hardcoded.py`, a free-field point target
+against the beam output computed separately) and both given by `gpusonar.live.snr_loss_db(record, range_cell_m,
+window, cell_statistic)`:
+
+| Part | Size, as shipped (4–6 kHz, 2 m cell, Hann) | Why |
+| --- | --- | --- |
+| aperture window | 1.76 dB | Hann weighting against noise that is uncorrelated between hydrophones: N Σw² / (Σw)². `window: rect` has none, and −13 dB sidelobes instead of −31 dB |
+| range cell | 7.7 dB (measured 7.6) | the map is computed every 0.25 m and the cell holds the **mean** power of its 8 samples; an echo one range resolution long (0.375 m) fills about one and a half of them |
+| total | 9.4 dB (measured 9.4) | |
+
+So the chain as shipped reports a point echo from **20.1 dB** of budget SNR (`live.budget_threshold_db`), not from the
+13 dB the plan's range figures use. A third difference is a matter of convention, not of the chain: a budget that
+takes the source level as a peak where the chain's pings carry rms (or the reverse) is another 3 dB. Together these are
+the 12 dB by which the detector was found to read under the budget for the same target; nothing is left unexplained.
+
+What can be had back, measured on the shipped stage scenarios and the 12 km stand-in (four pings each, C++ engine):
+
+| Change | Point echo, free field | On the scenarios | Cost |
+| --- | --- | --- | --- |
+| `cell_statistic: peak` (the cell holds its largest sample; the background is then the mean of such maxima, 4.3 dB above the mean noise for 8 samples) | +2.8 dB | −0.9 to +3.1 dB on the strongest detection; same detections and tracks, except that the 12 km mover was still `uncertain` after four pings where it was `mover` | none in compute |
+| `range_cell_m` at 0.75 of the resolution (one sample per cell, no averaging) | +7.2 dB | +3.4 to +6.3 dB on the strongest detection, but 5 to 16 detections where there was 1 (range sidelobes of the compressed pulse and the target's own highlights become detections of their own), 4 to 8 tracks where there was 1, and the 12 km mover `uncertain` | tracks fragment |
+| `window: rect` | +1.8 dB | 20 to 50 detections per ping where there were 1 to 3 (bearing sidelobes) | false tracks |
+
+Neither is the default: the 2 m cell of mean power also merges an echo's range sidelobes and highlights into one
+detection, which is what the tracker needs, and the measured gain of `peak` on echoes that are not points is small.
+Getting the 7 dB back without the fragmentation needs work in the detector itself (a weighted replica to bring the
+range sidelobes down, detections merged over the guard width, and a threshold matched to the cell's statistic); it is
+not done. Until then a range prediction should use the chain's threshold in the budget's units
+(`live.budget_threshold_db`), and state the target's source-level convention.
+
+Related report fields: with stacked rows a detection whose elevation is ambiguous carries `"bearing_corrected": false`:
+its `bearing_deg` and `range_m` are the row's own (cone angle and slant range), not corrected by an elevation that is
+one of several candidates. A track never waits for a depth, a sound-speed profile or an unambiguous elevation: those
+add `depth_m` to a track that exists without them. A track is called `multipath` only of a track that is itself
+classed `mover`, `static` or `line`.
+
 ## Keys a new sonar must review
 
 Bringing up another array, band, board or platform is a matter of files: a sonar file (`configs/sonars`), a deployment

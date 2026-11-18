@@ -55,6 +55,8 @@ def export_template(cfg: dict, path: str, program: str = "build/bin/sonar_live")
     if "multipath_bearing" in o:
         o["multipath_bearing_deg"] = float(np.degrees(o.pop("multipath_bearing")))
     o["multipath"] = int(o["multipath"])
+    if o.pop("cell_peak", False):
+        o["cell_statistic"] = "peak"
     if "dead_channels" in o:
         o["dead_channels"] = ",".join(str(v) for v in o["dead_channels"])
     el = o.pop("elevation", None)

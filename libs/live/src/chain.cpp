@@ -59,7 +59,7 @@ namespace {
 
 // Cell-averaged power over bearing x range for one line of hydrophones, by the beamformer chosen.
 void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, const PingRecord& record,
-              std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells) {
+              std::vector<float>& last_power, std::vector<double>& last_ranges, std::int64_t& n_cells, std::int64_t& cell_samples) {
   const double c = record.environment.sound_speed;
   const Waveform& w = record.transmit.waveform;
   const Samples& s = record.samples;
@@ -70,6 +70,7 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
     const double r1 = 0.5 * c * (s.start_time + static_cast<double>(s.n_samples - 1) / s.sample_rate - w.duration);
     const auto k = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil(opt_.range_cell_m / (0.75 * c / (2.0 * band)))), 1);
     const double step = opt_.range_cell_m / static_cast<double>(k);
+    cell_samples = k;
     n_cells = static_cast<std::int64_t>((r1 - r0) / step) / k;
     if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
     std::vector<double> fine(static_cast<std::size_t>(n_cells * k));
@@ -82,9 +83,13 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
       for (std::int64_t q = 0; q < k; ++q) r += fine[static_cast<std::size_t>(j * k + q)];
       last_ranges[static_cast<std::size_t>(j)] = r / static_cast<double>(k);
       for (std::int64_t b = 0; b < n_b; ++b) {
-        double p = 0.0;
-        for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(fine_power[static_cast<std::size_t>(b * n_cells * k + j * k + q)]);
-        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+        double p = 0.0, top = 0.0;
+        for (std::int64_t q = 0; q < k; ++q) {
+          const auto v = static_cast<double>(fine_power[static_cast<std::size_t>(b * n_cells * k + j * k + q)]);
+          p += v;
+          top = std::max(top, v);
+        }
+        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(opt_.cell_peak ? top : p / static_cast<double>(k));
       }
     }
   } else {
@@ -94,6 +99,7 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
                                                   : farfield_beamform(record, bearings, opt_.hann ? "hann" : "rect");
     const double sample_m = map.ranges[1] - map.ranges[0];
     const auto k = std::max<std::int64_t>(std::llround(opt_.range_cell_m / sample_m), 1);
+    cell_samples = k;
     n_cells = std::min(map.n_valid, map.n_samples) / k;
     if (n_cells < 3) throw std::invalid_argument("LiveChain: the receive window is shorter than three range cells");
     last_power.assign(static_cast<std::size_t>(n_b * n_cells), 0.0F);
@@ -106,9 +112,13 @@ void line_map(const ChainOptions& opt_, const std::vector<double>& bearings, con
     parallel_for_host(n_b, [&](std::int64_t b) {
       const std::complex<float>* row = map.row(b);
       for (std::int64_t j = 0; j < n_cells; ++j) {
-        double p = 0.0;
-        for (std::int64_t q = 0; q < k; ++q) p += static_cast<double>(std::norm(row[j * k + q]));
-        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(p / static_cast<double>(k));
+        double p = 0.0, top = 0.0;
+        for (std::int64_t q = 0; q < k; ++q) {
+          const auto v = static_cast<double>(std::norm(row[j * k + q]));
+          p += v;
+          top = std::max(top, v);
+        }
+        last_power[static_cast<std::size_t>(b * n_cells + j)] = static_cast<float>(opt_.cell_peak ? top : p / static_cast<double>(k));
       }
     });
   }
@@ -258,14 +268,14 @@ Report LiveChain::process(PingRecord& record) {
   }
   const bool stacked = !rows.empty();
   if (!stacked) {
-    line_map(opt_, bearings, record, last_power, last_ranges, n_cells);
+    line_map(opt_, bearings, record, last_power, last_ranges, n_cells, cell_samples_);
   } else {
     // Each row beamformed on its own, the rows' power added: a row's bearing response does not
     // depend on the elevation the arrival comes from.
     std::vector<float> row_power;
     for (std::size_t k = 0; k < rows.size(); ++k) {
       const PingRecord sub = row_record(record, rows[k]);
-      line_map(opt_, bearings, sub, k == 0 ? last_power : row_power, last_ranges, n_cells);
+      line_map(opt_, bearings, sub, k == 0 ? last_power : row_power, last_ranges, n_cells, cell_samples_);
       if (k > 0) {
         for (std::size_t i = 0; i < last_power.size(); ++i) last_power[i] += row_power[i];
       }
@@ -403,7 +413,14 @@ Report LiveChain::process(PingRecord& record) {
         if (std::abs(last_ranges[static_cast<std::size_t>(q)] - hits[i].range) < std::abs(last_ranges[static_cast<std::size_t>(ir)] - hits[i].range)) ir = q;
       }
       const auto cell_at = static_cast<std::size_t>(ib * n_cells + ir);
-      background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) : 0.0);
+      // The mean noise power of the map: with cells holding their largest sample the detector's background is the
+      // mean of such maxima, the k-th harmonic number above it.
+      double looks = 1.0;
+      if (opt_.cell_peak) {
+        looks = 0.0;
+        for (std::int64_t q = 1; q <= cell_samples_; ++q) looks += 1.0 / static_cast<double>(q);
+      }
+      background.push_back(ratio[cell_at] > 0.0F ? static_cast<double>(last_power[cell_at]) / static_cast<double>(ratio[cell_at]) / looks : 0.0);
       at.push_back({hits[i].range, hits[i].bearing, hits[i].first_range});
     }
     double noise_weight = 0.0;

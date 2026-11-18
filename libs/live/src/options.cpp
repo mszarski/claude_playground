@@ -20,6 +20,10 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "cfar_guard_m") c.cfar_guard_m = v;
   else if (key == "cfar_train_m") c.cfar_train_m = v;
   else if (key == "min_snr_db") c.min_snr_db = v;
+  else if (key == "cell_statistic") {
+    if (value != "mean" && value != "peak") throw std::invalid_argument("cell_statistic: mean or peak");
+    c.cell_peak = value == "peak";
+  }
   else if (key == "beamformer") c.beamformer = value;
   else if (key == "doa") c.doa = value;
   else if (key == "mvdr_subbands") c.mvdr.n_subbands = static_cast<std::int64_t>(v);

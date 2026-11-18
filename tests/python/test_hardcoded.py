@@ -509,3 +509,139 @@ def test_program_block_queue_is_bounded_and_counts_what_it_drops(tmp_path):
     last = err.strip().splitlines()[-1]
     dropped = int(last.split(" blocks dropped at the full queue")[0].split(", ")[-1])
     assert dropped > 0, last
+
+
+# --- tracks do not depend on depth, an elevation pick or an unproven neighbour -------------------------------------------
+
+def _twelve_km_two_rows(pings=6):
+    """popoto_12km_2row by straight rays (runs anywhere), the ship's points 4 dB up, no reverberation: at this level and
+    without a water depth the two rows' elevation is ambiguous on every ping, and its pick changes from ping to ping."""
+    import importlib.util
+    from gpusonar.config import load_scenario_config
+    from gpusonar.sim import run_scenario
+    spec_ = importlib.util.spec_from_file_location("popoto_12km_study", ROOT / "tools" / "popoto_12km_study.py")
+    study = importlib.util.module_from_spec(spec_)
+    spec_.loader.exec_module(study)
+    cfg = load_scenario_config("popoto_12km_2row")
+    cfg.pop("truth", None)
+    cfg = study.image_source(cfg)
+    cfg.pop("reverberation", None)
+    cfg["scene"][0]["target_strength_db"] += 4.0
+    cfg["pings"]["count"] = pings
+    return run_scenario(cfg).records
+
+
+def test_an_ambiguous_elevation_does_not_move_the_detection_and_the_mover_keeps_one_track():
+    """Two rows, a mover at 12 km, the elevation pick jumping between +10, -12 and -30 degrees: placed by the pick, the
+    detection moved by hundreds of metres from ping to ping, the track appeared two pings late 300 m off and stayed
+    `uncertain`. Now the correction is applied only to an unambiguous elevation, and the report says when it was not."""
+    recs = _twelve_km_two_rows()
+    chain = load_yaml(ROOT / "configs" / "deploy" / "popoto_face_2row.yaml")["chain"]
+    chain.pop("sync", None)
+    chain["elevation"] = dict(chain["elevation"], correct_bearing=True, water_depth=None)
+    got = {}
+    for engine in ("python", "cpp"):
+        with LiveChain(dict(chain, engine=engine, backend="host")) as c:
+            reps = got[engine] = c.run([r.copy() for r in recs])
+        picks = []
+        for i, rep in enumerate(reps):
+            assert len(rep["detections"]) == 1, engine
+            d = rep["detections"][0]
+            assert d["elevation_ambiguous"] is True and d["bearing_corrected"] is False and "cone_bearing_deg" not in d, engine
+            # Where the ship is: 12 km off, crossing at 6 m/s against the vehicle's 1.5 m/s, 19.9 s a ping.
+            assert abs(d["range_m"] - 12000.0) < 30.0, engine
+            assert d["bearing_deg"] == pytest.approx(np.degrees(np.arctan2(800.0 - 7.5 * 19.9 * i, 12000.0)), abs=2.0), engine
+            picks.append(d["elevation_deg"])
+        assert max(picks) - min(picks) > 15.0, engine                    # the pick really does jump
+        # One track, there from the third ping, at the ship, a mover by the last ping: no depth was needed for it.
+        assert [len(r["tracks"]) for r in reps] == [0, 0, 1, 1, 1, 1], engine
+        last = reps[-1]["tracks"][0]
+        assert last["kind"] == "mover" and abs(last["range_m"] - 12000.0) < 60.0 and 3.0 < last["speed_m_s"] < 8.0, engine
+        assert last.get("depth_m") is None, engine                       # ambiguous throughout: no depth, and the track all the same
+        assert {t["id"] for r in reps for t in r["tracks"]} == {last["id"]}, engine
+    for a, b in zip(got["python"], got["cpp"]):
+        assert a["detections"][0]["bearing_deg"] == pytest.approx(b["detections"][0]["bearing_deg"], abs=0.05)
+        assert [t["kind"] for t in a["tracks"]] == [t["kind"] for t in b["tracks"]]
+
+
+def test_a_track_is_called_multipath_only_of_a_track_classed_as_an_object():
+    """A weaker track 40 m behind a stronger one on its bearing, with its velocity. When the stronger is a clean mover the
+    weaker is its echo. When the stronger is itself `uncertain` (seen on too few pings to be classed) the weaker is
+    not explained away by it: it keeps its own class. Both engines."""
+    from gpusonar import classify, detect
+
+    def run(late):
+        opts = dict(process_noise=0.3, range_sigma=6.0, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0)
+        py_tracker, cpp_tracker = detect.Tracker(**opts), core.LiveTracker(**opts)
+        for i in range(8):
+            t = 2.0 * i
+            dets = [(1040.0 + 3.0 * t, 0.2, 15.0, 2)]
+            if not late or i >= 5:                 # the stronger one seen on the last three pings only: too short to class
+                dets.insert(0, (1000.0 + 3.0 * t, 0.2, 30.0, 2))
+            a = py_tracker.update(t, [detect.Detection(*d) for d in dets])
+            cpp_tracker.update(t, dets)
+        kw = dict(min_speed=1.0, static_speed=1.0, max_fit_rms=3.0)
+        mp = {"max_excess_range": 800.0, "bearing": np.radians(3.0), "velocity": 2.5, "origin": (0.0, 0.0)}
+        want = classify.classify_tracks(a, multipath=mp, **kw)
+        got = cpp_tracker.classify(multipath=True, max_excess_range=800.0, multipath_bearing=np.radians(3.0), multipath_velocity=2.5, **kw)
+        assert [(c.kind, c.parent) for c in want] == [(c["kind"], c["parent"]) for c in got]
+        return sorted(want, key=lambda c: -c.mean_snr_db)
+
+    strong, weak = run(late=False)
+    assert (strong.kind, weak.kind, weak.parent) == ("mover", "multipath", strong.id)
+    strong, weak = run(late=True)
+    assert strong.kind == "uncertain" and weak.kind == "mover" and weak.parent is None
+
+
+# --- what snr_db is ---------------------------------------------------------------------------------------------------------
+
+def test_snr_db_against_the_beam_output_snr_of_a_link_budget_is_what_the_helper_says():
+    """A point target in free field. The reference is what a link budget states: the peak of the noiseless, unweighted
+    beam output at the target over the mean noise power of the same beamformer. The chain's `snr_db` is below it by
+    the aperture window's loss and by what the range cell does to an echo one resolution long: 9.4 dB with the
+    2 m cell of mean power and the Hann window (1.8 + 7.7; this was the "unexplained" part of the chain reading
+    12 dB under the budget, the rest being the source level's peak-or-rms convention), 6.6 dB with `cell_statistic: peak`."""
+    from gpusonar import flank
+    sonar = SonarModel.load("popoto_long_range", {"receive": {"kind": "baseband", "sample_rate": 8000.0, "window": {"range": [900.0, 1500.0]}}})
+    cases = {"mean": {}, "peak": {"cell_statistic": "peak"}, "rect": {"window": "rect"}, "half metre": {"range_cell_m": 0.5}}
+    read = {k: [] for k in cases}
+    ideal = []
+    for trial in range(3):
+        rng = np.random.default_rng(100 + trial)
+        r_t, b_t = 1200.0 + rng.uniform(-3.0, 3.0), np.radians(rng.uniform(-10.0, 10.0))
+        scene = Scene().add_points([[r_t * np.sin(b_t), r_t * np.cos(b_t), 0.0]], target_strength_db=0.0)
+        kw = dict(environment={"sound_speed": 1500.0}, adc=False, absorption_model="none")
+        rec = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), scene, noise_rms=2e-4, rng=rng, **kw)
+        quiet = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), scene, noise_rms=0.0, rng=rng, **kw)
+        only = simulate_ping(sonar, make_pose(position=(0.0, 0.0, 0.0)), Scene().add_points([[0.0, 1200.0, 0.0]], target_strength_db=-300.0),
+                             noise_rms=2e-4, rng=rng, **kw)
+        recon.prepare([quiet, only], backend=core.Backend.Host)
+        peak = np.abs(flank.backprojection_map(quiet, r_t + np.arange(-2.0, 2.0, 0.01), np.array([b_t]), window="rect", interp="linear",
+                                               backend=core.Backend.Host).image) ** 2
+        noise = np.abs(flank.backprojection_map(only, np.arange(1000.0, 1400.0, 0.3), np.radians(np.arange(-30.0, 30.0, 2.0)), window="rect",
+                                                interp="linear", backend=core.Backend.Host).image) ** 2
+        ideal.append(10.0 * np.log10(peak.max() / noise.mean()))
+        for name, cfg in cases.items():
+            for engine in (("cpp", "python") if name in ("mean", "peak") and trial == 0 else ("cpp",)):
+                with LiveChain(dict(cfg, bearings_deg=[-40.0, 40.0, 0.5], backend="host", engine=engine)) as chain:
+                    rep = chain.process(rec.copy())
+                best = max(rep["detections"], key=lambda d: d["snr_db"])
+                assert abs(best["range_m"] - r_t) < 2.5
+                if engine == "cpp":
+                    read[name].append(best["snr_db"])
+                else:
+                    assert best["snr_db"] == pytest.approx(read[name][-1], abs=0.05)     # the engines read the same
+    template = sonar.make_record(core.Pose(), environment={"sound_speed": 1500.0})
+    for name, cfg in cases.items():
+        loss = live.snr_loss_db(template, cfg.get("range_cell_m", 2.0), cfg.get("window", "hann"), cfg.get("cell_statistic", "mean"))
+        measured = float(np.mean(ideal) - np.mean(read[name]))
+        assert measured == pytest.approx(loss["total_db"], abs=1.0), (name, measured, loss)
+    mean = live.snr_loss_db(template, 2.0)
+    assert mean["samples_per_cell"] == 8 and mean["window_db"] == pytest.approx(1.76, abs=0.02) and mean["cell_db"] == pytest.approx(7.7, abs=0.15)
+    assert live.snr_loss_db(template, 2.0, cell_statistic="peak")["total_db"] == pytest.approx(6.6, abs=0.15)
+    # In a budget's units the chain as shipped reports a point echo from 20 dB, not 13; with the peak statistic from 17.
+    assert live.detection_threshold_db() == pytest.approx(10.7, abs=0.05)
+    assert live.budget_threshold_db(template) == pytest.approx(20.1, abs=0.2)
+    assert live.budget_threshold_db(template, {"cell_statistic": "peak"}) == pytest.approx(17.3, abs=0.2)
+    with pytest.raises(ValueError):
+        LiveChain({"cell_statistic": "median"})

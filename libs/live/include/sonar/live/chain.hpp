@@ -64,6 +64,12 @@ struct ChainOptions {
   // Sizes that follow from the sonar are left to be derived from the first record (derive.hpp); a number here wins.
   double range_cell_m = kDerive;   ///< power is averaged into cells this long before detection
   double cfar_pfa = 1e-5, cfar_guard_m = kDerive, cfar_train_m = kDerive;
+  /// What a range cell holds of the finer map it is made from (samples no more than 0.75 of a range
+  /// resolution apart). false ("mean", as always): their mean power; an echo one resolution long in a
+  /// cell of k samples then reads about 10 log10(k x 0.75) dB below its peak. true ("peak"): the largest
+  /// of them; the background is then the mean of such maxima, about the k-th harmonic number above the
+  /// mean noise power. docs/DEPLOYMENT.md, "What snr_db is".
+  bool cell_peak = false;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.
@@ -181,6 +187,7 @@ class LiveChain {
   Tracker tracker_;
   SoundSpeedLadder ladder_;
   std::int64_t pings_ = 0;
+  std::int64_t cell_samples_ = 1;   ///< fine samples per range cell in the last map
   bool have_origin_ = false;
   Vec3d origin_;
   std::int64_t t0_ns_ = 0;
