@@ -44,6 +44,8 @@ STAGES = [
     ("Detection", "CFAR", "C++ kernel", "same kernel, CUDA", "detect.cfar(backend=)", ""),
     ("Detection", "Sparse Bayesian bearings (active gates, passive)", "C++ kernels, OpenMP", "same kernels, CUDA",
      "core.doa_gate(backend=), core.doa_passive, doa: sbl", "2.5x on an L4"),
+    ("Detection", "Stacked rows: per-row maps, elevation at each detection", "C++ (libs/live) and NumPy on the backprojection kernel", "same kernel, CUDA",
+     "chain: {elevation: {...}}", "no kernel of its own; depth, fold and ray trace are CPU"),
     ("Detection", "Clustering, tracking, classification", "C++ (libs/live) and NumPy", None, "live chain; detect, classify",
      "tens of objects per ping: nothing to accelerate"),
     ("Live chain", "Board stream to pings, navigation, report", "C++", None, "build/bin/sonar_live",
@@ -178,6 +180,102 @@ def draw_deployment(path):
     plt.close(fig)
 
 
+# The live chain, stage by stage: (key, label, where it runs, CUDA-capable?, note). CUDA-capable is what the code shows
+# (the stage takes the chain's `backend`) and what docs/benchmarks/gpu_benchmark_all_l4.md timed; test_architecture.py checks it.
+LIVE_STAGES = [
+    ("record", "record raw ping\n(.h5, with pose)", "both", False, "before any processing"),
+    ("sync", "synchronise boards\n(reference bursts)", "both", False, "per-board offset, drift"),
+    ("prepare", "baseband,\npulse compression", "both", True, "cuFFT on the device"),
+    ("rows", "split into rows\n(from positions)", "both", False, "one row: skipped"),
+    ("map", "range x bearing map\nper row, powers added", "both", True, "backprojection kernel"),
+    ("cfar", "CFAR on the\nsummed map", "both", True, "kernel, host or CUDA"),
+    ("cluster", "cluster to\ndetections", "both", False, "tens of objects"),
+    ("sbl", "doa: sbl  bearings\nat each range gate", "cpp", True, "<= 64 channels in a row"),
+    ("elevation", "elevation: steer all rows\nat each detection;\ncandidates if repeats", "both", True, "backprojection kernel"),
+    ("depth", "depth: attitude at arrival,\nfold, ray trace; sigma from\nnoise, roll, refraction", "both", False, "sound speed, water depth"),
+    ("track", "tracker\n(range, bearing, depth)", "both", False, "ownship motion removed"),
+    ("classify", "classify: mover, static,\nmultipath", "both", False, ""),
+    ("report", "report: JSON line\n(file, UDP)", "both", False, ""),
+]
+
+
+def draw_live_chain(path):
+    """The long-range array's chain with stacked rows: both engines, active and passive, GPU-capable stages marked."""
+    from gpusonar import live
+    fig, ax = canvas(15.5, 8.6)
+    ax.text(0.2, 8.3, "Active: one ping at a time (gpusonar/live.py LiveChain; libs/live Chain; build/bin/sonar_live)", color=MUTED, fontsize=10)
+    box(ax, (0.2, 7.0), 1.9, 0.9, "board blocks (UDP)\nor recording / simulator", color=AQUA, fs=7.8)
+    box(ax, (0.2, 5.75), 1.9, 0.9, "navigation: pose, attitude\nsamples, sound speed,\nwater depth (UDP JSON)", color=GRID, text_color=INK, fs=7.2)
+    decimate = "decimate" in live.DEFAULTS or "decimate_first" in live.DEFAULTS
+    x0, w, h, gap = 2.5, 1.72, 0.95, 0.14
+    pos = {}
+    for i, (key, label, engines, cuda, note) in enumerate(LIVE_STAGES):
+        row, col = divmod(i, 7)
+        x, y = x0 + col * (w + gap), 7.0 - row * 2.05
+        pos[key] = (x, y)
+        colour = AQUA if cuda else (BLUE if key not in ("record", "report") else INK)
+        box(ax, (x, y), w, h, label, color=colour, fs=7.3)
+        ax.text(x + w / 2, y - 0.16, note + (" | C++ engine only" if engines == "cpp" else ""), ha="center", fontsize=6.6, color=MUTED)
+        if col:
+            arrow(ax, (x - gap, y + h / 2), (x, y + h / 2))
+    arrow(ax, (2.1, 7.45), (2.5, 7.45))
+    ax.text(pos["cluster"][0] + w / 2, 6.45, "continues below", ha="center", fontsize=7, color=MUTED)
+    ax.text(pos["sbl"][0] - 0.12, pos["sbl"][1] + h / 2, ">", ha="center", va="center", fontsize=9, color=MUTED)
+    ax.text(0.2, 5.6, "navigation is written into each\nrecord (pose, attitude samples,\nenvironment); the depth stage\nreads it from the record", fontsize=6.8, color=MUTED, va="top")
+    state = "in this tree (chain key present)" if decimate else "not in this tree: being added separately (stage 2)"
+    ax.text(pos["prepare"][0], 8.02, f"decimate first (to twice the band before the chain): {state}", fontsize=7, color=VIOLET)
+    # legend and engines
+    box(ax, (0.2, 3.45), 1.2, 0.4, "CPU stage", color=BLUE, fs=7.5)
+    box(ax, (1.5, 3.45), 1.7, 0.4, "host or CUDA kernel", color=AQUA, fs=7.5)
+    ax.text(3.4, 3.65, "The same stages exist twice and are held together by tests: `engine: python` (NumPy on the C++ kernels, a tap after every stage) and `engine: cpp` (libs/live, what build/bin/sonar_live runs).\n"
+            "GPU-capable = the stage takes the chain's `backend` and was timed host against CUDA in docs/benchmarks/gpu_benchmark_all_l4.md (live chain, 1 / 2 / 3 rows).", fontsize=7.6, color=MUTED, va="center")
+    ax.plot([0.2, 15.3], [3.2, 3.2], color=GRID, lw=0.8)
+    ax.text(0.2, 2.9, "Passive: no transmission (build/bin/sonar_live --listen / --passive; core.doa_passive)", color=MUTED, fontsize=10)
+    passive = [("board stream cut into\nstretches of one frame", AQUA, False), ("record the stretch", INK, False), ("spectra per channel,\naveraged over snapshots", BLUE, False),
+               ("bearings: sparse Bayesian\nkernels (or conventional)", AQUA, True), ("elevation of each bearing\n(stacked rows)", BLUE, False), ("frame: bearings, powers,\nnoise, elevations (JSON)", INK, False)]
+    for i, (label, colour, _) in enumerate(passive):
+        x = 0.2 + i * 2.55
+        box(ax, (x, 1.6), 2.3, 0.95, label, color=colour, fs=7.5)
+        if i:
+            arrow(ax, (x - 0.25, 2.07), (x, 2.07))
+    ax.text(0.2, 1.25, "Passive runs in the C++ library only (the Python chain has no listen mode; `gpusonar.elevation.passive_elevation` is the NumPy reference of the elevation step).\n"
+            "The sparse Bayesian kernels take at most 64 channels in one line and refuse more with an error (no fallback). Active, and passive with elevation=1: the solver works on one row.\n"
+            "Passive WITHOUT elevation=1 on stacked rows takes all channels as one line: wrong bearings, and above 64 channels an error on the kernel path.", fontsize=7.6, color=MUTED, va="top")
+    fig.savefig(path, dpi=115, bbox_inches="tight")
+    plt.close(fig)
+
+
+def draw_build_deployment(path, sonar="popoto_long_range_3row", deploy="popoto_vehicle_elevation"):
+    """Deployment view of one build, from its files: programs, ports, files, service, configs."""
+    from gpusonar import buildspec
+    d = buildspec.describe_shipped(sonar, deploy)
+    dep = d["deploy"]
+    src, out, nav = dep["source"], dep["output"], dep.get("nav") or {}
+    fig, ax = canvas(15.5, 6.4)
+    ax.text(0.2, 6.1, f"Deployment view: {sonar} with configs/deploy/{deploy}.yaml", color=MUTED, fontsize=10)
+    box(ax, (0.2, 4.4), 2.6, 1.1, f"{d['n_boards']} capture boards\n{d['channels']} channels, {d['sample_rate_hz'] / 1e3:g} kHz\n{d['rate_total_bit_s'] / 1e6:.0f} Mbit/s", color=YELLOW, text_color=INK, fs=8)
+    box(ax, (0.2, 2.9), 2.6, 1.0, "navigation unit\n" + ("typed-in pose (nav.static)" if "static" in nav else f"JSON datagrams, UDP {nav.get('port')}"), color=GRID, text_color=INK, fs=8)
+    box(ax, (0.2, 1.4), 2.6, 1.0, "vehicle computer / operator\n" + (f"report lines, UDP {out['report_udp'][0]}:{out['report_udp'][1]}" if out.get("report_udp") else "report file"), color=GRID, text_color=INK, fs=8)
+    box(ax, (4.0, 3.5), 4.2, 2.0, "tools/sonar_live.py DEPLOY.yaml   (Python, either engine)\nor\nbuild/bin/sonar_live --udp PORT --template T.h5 --options chain.options\n(C++, no Python at run time; systemd unit configs/deploy/sonar_live.service)", color=BLUE, fs=7.6)
+    arrow(ax, (2.8, 4.95), (4.0, 4.8))
+    ax.text(3.4, 5.1, f"UDP {src['port']}", fontsize=7.5, color=MUTED, ha="center")
+    arrow(ax, (2.8, 3.4), (4.0, 4.0))
+    arrow(ax, (4.0, 3.7), (2.8, 1.9))
+    box(ax, (4.0, 1.4), 4.2, 1.5, "also the same program:\n--scenario NAME (simulator)  --replay FILE (a recording)\n--emulate NAME (simulated pings as board blocks over UDP)\n--listen / --passive (C++ program: passive bearings)", color=VIOLET, fs=7.6)
+    files = [("configs/sonars/" + src["sonar"] + ".yaml", "array, transmit, sampling, window, board clocks"), ("configs/deploy/" + deploy + ".yaml", "source, nav, chain, output"),
+             ("template.h5 + chain.options", "the same two files for the C++ program (--export-template)"), (out.get("recording", "-"), "every raw ping with its pose"),
+             (out.get("report", "-"), "one JSON line a ping"), ((out.get("taps") or {}).get("dir", "-"), f"every stage of the first {(out.get('taps') or {}).get('pings', 0)} pings"),
+             ("configs/builds/<build>.yaml", "the spec all of the above is generated from (tools/build_from_spec.py)")]
+    ax.text(9.0, 5.55, "Files", color=MUTED, fontsize=10)
+    for i, (name, what) in enumerate(files):
+        y = 5.0 - i * 0.62
+        box(ax, (9.0, y), 3.9, 0.48, name, color=INK if i in (3, 4, 5) else AQUA, fs=7.2)
+        ax.text(13.0, y + 0.24, what, fontsize=7.3, color=MUTED, va="center")
+    ax.text(0.2, 0.75, "Yellow: capture hardware. Grey: platform interfaces. Black: written at run time. Ports and paths are read from the deployment file; nothing here is typed in.", color=MUTED, fontsize=8.5)
+    fig.savefig(path, dpi=115, bbox_inches="tight")
+    plt.close(fig)
+
+
 def draw_simcal(path):
     fig, ax = canvas(15.5, 5.2)
     box(ax, (0.2, 3.6), 2.6, 1.0, "real FLS log\nping records (absolute)\nor beamformed frames (relative)", color=INK, fs=8)
@@ -211,6 +309,8 @@ def main():
     draw_backends(out / "backends.png")
     draw_deployment(out / "deployment.png")
     draw_simcal(out / "sim_calibration.png")
+    draw_live_chain(out / "live_chain.png")
+    draw_build_deployment(out / "deployment_build.png")
     print("wrote", sorted(p.name for p in out.iterdir()))
 
 

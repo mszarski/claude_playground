@@ -33,6 +33,10 @@ DEFAULTS = {
     "bearings_deg": [-40.0, 40.0, 0.5],        # first, last, step: from broadside
     "window": "hann",                          # aperture weighting
     "sync": None,                              # several boards: {sonar: popoto_4x7} or {reference: {...}}, see sync.py
+    "blanking": None,                          # {recovery_s, taper_s, mode: zero | ignore}: the projector's own sound overloads the
+                                               # inputs for the pulse and their recovery after it: blank that, report no nearer
+    "decimate": None,                          # {} or {output_rate: ..., ...}: band-select and decimate a raw ping to complex
+                                               # baseband first, boards synchronised in the same stage (libs/live decimate.hpp)
     "beamformer": "backprojection",            # the kernel (host or CUDA); or "farfield" / "mvdr" (host; C++ with engine: cpp)
     "backend": "auto",                         # "auto": CUDA when built and present, else host; "host"; "cuda"
     "look": "starboard",                       # which side of a line array the bearings are on
@@ -87,9 +91,15 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
         o["dead_channels"] = [int(v) for v in cfg["dead_channels"]]
     if cfg.get("sound_speed"):
         o["sound_speed"] = float(cfg["sound_speed"])
+    if decimate_options(cfg.get("decimate")) is not None:
+        o["decimate"] = decimate_options(cfg["decimate"])
+    if cfg.get("blanking") is not None:
+        o["blanking"] = blanking_options(cfg["blanking"])
     if cfg.get("elevation") is not None:
         from .elevation import DEFAULTS as EL
+        from .elevation import normalise_ssp, profile_options
         e = _merge(EL, cfg["elevation"])
+        e["ssp"] = normalise_ssp(e["ssp"])
         o["elevation"] = {"first_deg": float(e["sector_deg"][0]), "last_deg": float(e["sector_deg"][1]), "step_deg": float(e["sector_deg"][2]),
                           "range_window_m": float(e["range_window_m"] or 0.0), "max_detections": int(e["max_detections"]),
                           "first_arrival": e["arrival"] == "first", "first_arrival_db": float(e["first_arrival_db"]),
@@ -111,9 +121,11 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "ssp_speed": [float(v) for v in (e["ssp"] or {}).get("speed", [])],
                           "roll_sigma": float(np.radians(e["roll_sigma_deg"])), "depth_process_noise": float(e["depth_process_noise"]),
                           "row_tolerance_m": float(e["row_tolerance_m"])}
+        if e["profile"] is not None:
+            o["elevation"]["profile"] = profile_options(e["profile"])
     if reference is not None:
         o["sync"] = {k: (bool(reference[k]) if k == "dedicated" else float(reference[k]))
-                     for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated") if k in reference}
+                     for k in ("f_start", "f_stop", "duration", "lead", "tail", "dedicated", "min_quality") if reference.get(k) is not None}
     return o
 
 
@@ -123,26 +135,69 @@ def sync_reference(cfg: dict) -> dict | None:
     if not sc:
         return None
     if "reference" in sc:
-        return sc["reference"]
-    from .sonar import SonarModel
-    return SonarModel.load(sc["sonar"], sc.get("sonar_overrides")).config["receive"]["reference"]
+        ref = sc["reference"]
+    else:
+        from .sonar import SonarModel
+        ref = SonarModel.load(sc["sonar"], sc.get("sonar_overrides")).config["receive"]["reference"]
+    # min_quality (beside `reference` or `sonar`): a burst below it, or clipped, is not used and its board is flagged.
+    return dict(ref, min_quality=float(sc["min_quality"])) if sc.get("min_quality") is not None else ref
+
+
+NAV_FIELDS = ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz", "sound_speed", "water_depth", "altitude", "bottom_lock",
+              "roll_sigma", "pitch_sigma", "yaw_sigma", "position_sigma", "velocity_sigma", "depth_sigma", "altitude_sigma",
+              "water_depth_sigma", "sound_speed_sigma")
+_F = {k: i for i, k in enumerate(NAV_FIELDS)}
+WATER_DEPTH_DEFAULTS = {            # nav.water_depth in a deployment file
+    "source": "datagram",           # "altitude": vehicle depth + the Doppler log's altitude above the bottom
+    "dvl_offset_m": 0.0,            # the log's transducer below the navigation reference point, m
+    "altitude_sigma_m": 0.0,        # used when a fix carries no "altitude_sigma" (datasheet; unconfirmed)
+    "depth_sigma_m": 0.0,           # used when a fix carries no "depth_sigma" (datasheet; unconfirmed)
+    "hold_s": 60.0,                 # without bottom lock the last value is held this long, then the depth is unknown
+    "hold_sigma_m_per_s": 0.0,      # its sigma grows by this per second held
+    "hold_sigma_m_per_m": 0.05,     # and by this per metre travelled (a bottom slope not ruled out; an assumption)
+    "max_altitude_m": 0.0,          # an altitude above this is not believed (0: no limit)
+}
 
 
 class NavListener:
-    """The vehicle's navigation, received as JSON datagrams
-    {"time_ns": ..., "x": north m, "y": east m, "z": down m, "roll": rad, "pitch": rad, "yaw": rad,
-     "vx": ..., "vy": ..., "vz": ..., "sound_speed": m/s at the vehicle, "water_depth": m}
-    on a UDP port (the last two are optional: when present they go into the record's environment). `at(time_ns)` gives the pose at a ping's transmit time, interpolated between
-    the two fixes around it (held from the nearest one outside them). A fixed pose can be given
-    instead for a bench or a moored array."""
+    """The vehicle's navigation, received as JSON datagrams on a UDP port, one fix each:
+        {"time_ns": ..., "x": north m, "y": east m, "z": down m, "roll": rad, "pitch": rad, "yaw": rad,
+         "vx": ..., "vy": ..., "vz": ...}                                   (velocity over ground, m/s)
+    and, where the vehicle has them (an inertial unit with a Doppler log does; all optional):
+        "sound_speed" (m/s at the vehicle), "altitude" (m above the bottom), "bottom_lock" (0 | 1; absent:
+        locked when the altitude is a positive number), "water_depth" (m, when the vehicle works it out itself),
+        and one-sigma uncertainties "roll_sigma", "pitch_sigma", "yaw_sigma" (rad), "position_sigma" (m),
+        "velocity_sigma" (m/s), "depth_sigma", "altitude_sigma", "water_depth_sigma" (m), "sound_speed_sigma" (m/s).
+    tools/nav_adapter.py turns a vendor's stream into these. `at(time_ns)` gives the pose at a ping's
+    transmit time, interpolated between the two fixes around it (held from the nearest one outside
+    them). A fixed pose can be given instead for a bench or a moored array.
 
-    def __init__(self, port: int | None = None, host: str = "0.0.0.0", static: dict | None = None, keep: int = 600):
+    `water_depth` (WATER_DEPTH_DEFAULTS): with source "altitude" the water depth is the vehicle's depth
+    plus the log's altitude, with its uncertainty, held with a growing uncertainty when bottom lock is
+    lost. Fixes are kept for `keep_s` seconds: a ping is processed after its receive window has closed,
+    and the attitude history of that window must still be there. The C++ counterpart is libs/live
+    `Navigation`."""
+
+    def __init__(self, port: int | None = None, host: str = "0.0.0.0", static: dict | None = None, keep: int | None = None,
+                 water_depth: dict | None = None, keep_s: float = 120.0, surface_z: float = 0.0, profile_step_m: float = 0.5):
         import collections
         import threading
-        self._fixes = collections.deque(maxlen=keep)
+        self._fixes = collections.deque(maxlen=keep or 200000)
+        self._samples = collections.deque(maxlen=2000)       # (time_ns, x, y, z, sound speed) for the profile, since the last ping
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self.socket = None
+        self.keep_ns = int(keep_s * 1e9)
+        self.surface_z = float(surface_z)
+        self.profile_step_m = float(profile_step_m)
+        self._water = None
+        if water_depth and water_depth.get("source", "datagram") == "altitude":
+            unknown = set(water_depth) - set(WATER_DEPTH_DEFAULTS)
+            if unknown:
+                raise ValueError(f"nav.water_depth: unknown key(s) {sorted(unknown)}")
+            w = dict(WATER_DEPTH_DEFAULTS, **water_depth)
+            w.pop("source")
+            self._water = core.WaterDepthTracker(dict(w, from_altitude=True))
         if static is not None:
             self.push(dict(static, time_ns=0))
         if port is not None:
@@ -152,20 +207,38 @@ class NavListener:
             self.port = self.socket.getsockname()[1]
             threading.Thread(target=self._listen, daemon=True).start()
 
+    @classmethod
+    def from_config(cls, nav: dict) -> "NavListener":
+        """From the `nav` section of a deployment file."""
+        keys = ("port", "host", "static", "water_depth", "keep_s", "surface_z", "profile_step_m")
+        return cls(**{k: nav[k] for k in keys if nav.get(k) is not None})
+
     def _listen(self) -> None:
         while not self._stop.is_set():
             try:
                 self.push(json.loads(self.socket.recv(4096)))
             except socket.timeout:
                 continue
-            except (OSError, ValueError, KeyError):
+            except (OSError, ValueError, KeyError, TypeError):
                 continue                       # a bad datagram is dropped, not fatal
 
     def push(self, fix: dict) -> None:
-        row = [float(fix.get(k, 0.0)) for k in ("x", "y", "z", "roll", "pitch", "yaw", "vx", "vy", "vz")]
-        row += [float(fix.get(k, "nan")) for k in ("sound_speed", "water_depth")]
+        def number(key, default):
+            v = fix.get(key)
+            return default if v is None else float(v)
+        row = np.array([number(k, 0.0 if i < 9 else float("nan")) for i, k in enumerate(NAV_FIELDS)] + [float("nan")] * 4)
+        time_ns = int(fix["time_ns"])
+        if self._water is not None:
+            lock = True if np.isnan(row[_F["bottom_lock"]]) else bool(row[_F["bottom_lock"]])
+            row[len(NAV_FIELDS):] = self._water.update(time_ns, row[0], row[1], row[2] - self.surface_z, row[_F["altitude"]], lock,
+                                                       row[_F["altitude_sigma"]], row[_F["depth_sigma"]])
         with self._lock:
-            self._fixes.append((int(fix["time_ns"]), np.array(row)))
+            self._fixes.append((time_ns, row))
+            while len(self._fixes) > 1 and self._fixes[0][0] < time_ns - self.keep_ns:
+                self._fixes.popleft()
+            c = row[_F["sound_speed"]]
+            if np.isfinite(c) and c > 0.0 and (not self._samples or abs(row[2] - self._samples[-1][3]) >= self.profile_step_m):
+                self._samples.append((time_ns, row[0], row[1], row[2], c))
 
     def at(self, time_ns: int):
         """(position [3], rpy [3], velocity [3]) at `time_ns`, or None before any fix has arrived."""
@@ -184,14 +257,51 @@ class NavListener:
             row[3:6] = fixes[i - 1][1][3:6] + w * np.angle(np.exp(1j * (fixes[i][1][3:6] - fixes[i - 1][1][3:6])))
         return row[0:3], row[3:6], row[6:9]
 
-    def extras(self, time_ns: int):
-        """(sound speed, water depth) of the fix nearest `time_ns`; NaN where navigation does not send one."""
+    def _nearest(self, time_ns: int):
         with self._lock:
             fixes = list(self._fixes)
-        if not fixes:
+        return min(fixes, key=lambda f: abs(f[0] - time_ns))[1] if fixes else None
+
+    def extras(self, time_ns: int):
+        """(sound speed, water depth) of the fix nearest `time_ns`; NaN where navigation does not send one
+        (the water depth is the one sent, else the one from altitude + depth when that is configured)."""
+        row = self._nearest(time_ns)
+        if row is None:
             return float("nan"), float("nan")
-        row = min(fixes, key=lambda f: abs(f[0] - time_ns))[1]
-        return float(row[9]), float(row[10])
+        water = row[_F["water_depth"]]
+        if not (np.isfinite(water) and water > 0.0):
+            water = row[len(NAV_FIELDS)]
+        return float(row[_F["sound_speed"]]), float(water)
+
+    def facts(self, time_ns: int) -> dict:
+        """What goes into a ping's record under metadata.extra_json "nav": the uncertainties the nearest fix
+        carried, whether the sound speed is a measurement, how the water depth was got, and the
+        (seconds after the transmit, x, y, z, sound speed) samples taken since the last ping (they are handed
+        out once)."""
+        row = self._nearest(time_ns)
+        out = {}
+        if row is None:
+            return out
+        if np.isfinite(row[_F["sound_speed"]]) and row[_F["sound_speed"]] > 0.0:
+            out["sound_speed_measured"] = 1
+        water = row[_F["water_depth"]]
+        if np.isfinite(water) and water > 0.0:
+            if np.isfinite(row[_F["water_depth_sigma"]]):
+                out["water_depth_sigma_m"] = float(row[_F["water_depth_sigma"]])
+        elif np.isfinite(row[len(NAV_FIELDS)]):
+            out["water_depth_sigma_m"] = float(row[len(NAV_FIELDS) + 1])
+            out["water_depth_held_s"] = float(row[len(NAV_FIELDS) + 3]) if row[len(NAV_FIELDS) + 2] else 0.0
+        for key in ("roll_sigma", "pitch_sigma", "yaw_sigma", "position_sigma", "velocity_sigma", "depth_sigma", "altitude_sigma",
+                    "sound_speed_sigma"):
+            if np.isfinite(row[_F[key]]):
+                out[key] = float(row[_F[key]])
+        with self._lock:
+            samples = list(self._samples)
+            self._samples.clear()
+        if samples:
+            out["sound_speed_samples"] = [[round((t - time_ns) * 1e-9, 6), round(x, 3), round(y, 3), round(z, 3), round(c, 4)]
+                                          for t, x, y, z, c in samples]
+        return out
 
     def history(self, first_ns: int, last_ns: int, margin_ns: int = 2_000_000_000):
         """The fixes from `margin_ns` before `first_ns` to as long after `last_ns`: [(time_ns, row)]."""
@@ -214,19 +324,104 @@ def apply_pose(record, position, rpy, velocity=(0.0, 0.0, 0.0)) -> None:
     record.geometry = g
 
 
-def apply_history(record, fixes) -> None:
+def apply_history(record, fixes, surface_z: float = 0.0) -> None:
     """Put navigation fixes [(time_ns, row)] around a ping into the record as its attitude history
     (navigation.ins, times in seconds after the transmit): what `elevation.attitude_time: arrival`
-    reads, and what a replay of the recording then has too."""
-    out = []
+    reads, and what a replay of the recording then has too. Fixes that carry them also leave the
+    vehicle's depth (navigation.depth) and the Doppler log's altitude and velocity over ground in the
+    vehicle's axes (navigation.dvl; altitude NaN without bottom lock)."""
+    out, depth, dvl = [], [], []
     for time_ns, row in fixes:
         a = core.InsSample()
         a.t = (time_ns - record.transmit.time_ns) * 1e-9
         a.position, a.rpy, a.velocity = (tuple(float(v) for v in row[k:k + 3]) for k in (0, 3, 6))
         out.append(a)
+        if len(row) <= 11:
+            continue
+        d = core.DepthSample()
+        d.t, d.depth = a.t, float(row[2] - surface_z)
+        depth.append(d)
+        altitude, lock = row[_F["altitude"]], row[_F["bottom_lock"]]
+        if np.isfinite(altitude) or not np.isnan(lock):
+            q = core.DvlSample()
+            q.t = a.t
+            q.velocity_body = tuple(float(v) for v in np.asarray(core.rotation_ned(*a.rpy)).T @ row[6:9])
+            q.altitude = float(altitude) if (np.isnan(lock) or lock != 0.0) and np.isfinite(altitude) and altitude > 0.0 else float("nan")
+            dvl.append(q)
     nav = record.navigation
     nav.ins = out
+    if depth:
+        nav.depth = depth
+    if dvl:
+        nav.dvl = dvl
     record.navigation = nav
+
+
+def apply_nav_facts(record, facts: dict) -> None:
+    """What navigation said about its own numbers for this ping, into the record (metadata.extra_json "nav")."""
+    if not facts:
+        return
+    m = record.metadata
+    extra = json.loads(m.extra_json or "{}")
+    extra["nav"] = facts
+    m.extra_json = json.dumps(extra)
+    record.metadata = m
+
+
+def nav_facts(record) -> dict:
+    try:
+        return json.loads(record.metadata.extra_json or "{}").get("nav") or {}
+    except ValueError:
+        return {}
+
+
+def decimated_sync(record) -> dict | None:
+    """The clock facts a record carries when the decimate-first stage has synchronised its boards."""
+    try:
+        d = json.loads(record.metadata.extra_json or "{}").get("decimated") or {}
+    except ValueError:
+        return None
+    boards = record.metadata.boards
+    if "sync_residual_us" not in d or not boards or not all(b.synchronised for b in boards):
+        return None
+    out = {"ok": bool(d["sync_ok"]), "worst_residual_us": float(d["sync_residual_us"]),
+           "offsets_us": [float(b.clock_offset * 1e6) for b in boards], "drift_ppm": [float(b.clock_drift_ppm) for b in boards]}
+    flagged = _flag_list((d.get("sync_flagged") or [[]])[0])
+    if flagged:
+        out["flagged"] = flagged
+    return out
+
+
+def blanking_options(blanking) -> dict | None:
+    """`chain.blanking` checked: {recovery_s, taper_s, mode}."""
+    if blanking is None or blanking is False:
+        return None
+    b = dict({"recovery_s": 0.0, "taper_s": 0.0, "mode": "zero"}, **({} if blanking is True else blanking))
+    if set(b) - {"recovery_s", "taper_s", "mode"} or b["mode"] not in ("zero", "ignore"):
+        raise ValueError("blanking: {recovery_s, taper_s, mode: zero | ignore}")
+    return {"recovery_s": float(b["recovery_s"]), "taper_s": float(b["taper_s"]), "mode": b["mode"]}
+
+
+def _flag_list(flagged) -> list:
+    """Boards timed from one reference burst (their number) or not at all (-number - 1), as the report lists them."""
+    return [int(b) if f == 1 else -int(b) - 1 for b, f in enumerate(flagged) if f]
+
+
+DECIMATE_KEYS = ("f_low", "f_high", "band_margin", "output_rate", "oversample", "ripple_db", "stopband_db", "taps")
+
+
+def decimate_options(decimate) -> dict | None:
+    """`decimate` of a deployment file ({} or True: every default) as the options of the stage (libs/live decimate.hpp)."""
+    if decimate is None or decimate is False:
+        return None
+    d = {} if decimate is True else dict(decimate)
+    if d.pop("enabled", True) is False:
+        return None
+    d.pop("reference", None)
+    unknown = set(d) - set(DECIMATE_KEYS) - {"blank_until_s", "blank_taper_s"}
+    if unknown:
+        raise ValueError(f"decimate: unknown key(s) {sorted(unknown)}")
+    return {k: v for k, v in d.items() if v is not None}
 
 
 def apply_environment(record, sound_speed=float("nan"), water_depth=float("nan")) -> None:
@@ -247,9 +442,17 @@ class LiveChain:
         self.cfg = _merge(DEFAULTS, config)
         t = self.cfg["tracker"]
         self._elevation = None
+        self._ladder = None                    # the sound-speed ladder (elevation.profile), Python engine
+        self._decimate = decimate_options(self.cfg.get("decimate"))
+        self._blanking = blanking_options(self.cfg.get("blanking"))
+        self._blank_range = None               # m: nothing nearer is reported (blanking on), this ping
         if self.cfg.get("elevation") is not None:
             from .elevation import DEFAULTS as EL
+            from .elevation import normalise_ssp, profile_options
             self._elevation = _merge(EL, self.cfg["elevation"])
+            self._elevation["ssp"] = normalise_ssp(self._elevation["ssp"])
+            if self._elevation["profile"] is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
+                self._ladder = core.SoundSpeedLadder(profile_options(self._elevation["profile"]))
         self.tracker = detect.Tracker(range_sigma=t["range_sigma"], bearing_sigma=np.radians(t["bearing_sigma_deg"]),
                                       confirm_hits=t["confirm_hits"], max_misses=t["max_misses"],
                                       initial_speed_sigma=t["initial_speed_sigma"], process_noise=t["process_noise"],
@@ -296,11 +499,12 @@ class LiveChain:
             else:
                 apply_pose(record, *fix)
                 apply_environment(record, *self.nav.extras(record.transmit.time_ns))
+                apply_nav_facts(record, self.nav.facts(record.transmit.time_ns))
                 s_ = record.samples
                 window_ns = int((s_.start_time + s_.n_samples / s_.sample_rate) * 1e9)
                 history = self.nav.history(record.transmit.time_ns, record.transmit.time_ns + window_ns)
                 if len(history) > 1:           # a fixed pose has one fix and no history
-                    apply_history(record, history)
+                    apply_history(record, history, self.nav.surface_z)
         if self.cfg.get("sound_speed"):
             apply_environment(record, sound_speed=float(self.cfg["sound_speed"]))
         if self._writer:
@@ -323,19 +527,45 @@ class LiveChain:
             self.last = {"power": power, "ranges": ranges, "hits": report["detections"], "classes": report["tracks"]}
             return self._emit(report)
         sync_facts = None
-        if self._reference is not None:
+        bl = self._blanking
+        blank_until = record.transmit.waveform.duration + bl["recovery_s"] if bl else 0.0
+        if self._decimate is not None and not record.samples.is_complex():
+            # Decimate first: band, baseband and board clocks in one early stage (the recording above holds the raw ping).
+            # Blanking is done inside it: after the reference is read, before the filter.
+            blank = {"blank_until_s": blank_until, "blank_taper_s": bl["taper_s"]} if bl and bl["mode"] == "zero" else {}
+            core.live_decimate_record(record, dict(self._decimate, **blank), self._reference)
+        if self._reference is not None and decimated_sync(record) is not None:
+            sync_facts = decimated_sync(record)                 # the decimating stage has synchronised the boards already
+            if not sync_facts["ok"]:
+                self.boards_out_of_sync += 1
+            if tap:
+                tap.records("sync", [record])
+        elif self._reference is not None:
             # Boards run on their own clocks: line them up on the shared reference and drop its inputs.
             from . import sync
             rep_ = sync.synchronise(record, self._reference, enforce=False)
             sync_facts = {"ok": rep_.ok, "worst_residual_us": float(rep_.residual.max() * 1e6),
                           "offsets_us": [float(v * 1e6) for v in rep_.estimate.offset],
                           "drift_ppm": [float(v) for v in rep_.estimate.drift_ppm]}
+            if rep_.estimate.flagged is not None and rep_.estimate.flagged.any():
+                sync_facts["flagged"] = _flag_list(rep_.estimate.flagged)
             if not rep_.ok:
                 self.boards_out_of_sync += 1   # reported; this ping's detections are still passed on, flagged
             if self._reference.get("dedicated"):
                 record = sync.drop_reference_channels(record)   # those inputs carry no hydrophone
             if tap:
                 tap.records("sync", [record])
+        self._blank_range = None
+        if bl:
+            # A record the decimating stage blanked says so; its filter spreads the edge by its own delay.
+            try:
+                note = json.loads(record.metadata.extra_json or "{}").get("decimated") or {}
+            except ValueError:
+                note = {}
+            if bl["mode"] == "zero" and not note.get("blanked_s"):
+                core.live_blank_interval(record, -1e300, blank_until, bl["taper_s"])
+            ring = float(note.get("delay_s", 0.0)) if record.samples.is_complex() else 0.0
+            self._blank_range = 0.5 * record.environment.sound_speed * (blank_until + bl["taper_s"] + ring)
         if cfg["dead_channels"]:
             from . import sync
             dead = {int(v) for v in cfg["dead_channels"]}
@@ -396,11 +626,15 @@ class LiveChain:
         n = fine.shape[1] // k * k
         power = fine[:, :n].reshape(len(self.bearings), -1, k).mean(axis=2)
         ranges = fine_ranges[:n].reshape(-1, k).mean(axis=1)
+        if self._blank_range is not None:
+            # The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
+            skip = min(int(np.count_nonzero(ranges < self._blank_range)), max(len(ranges) - 3, 0))
+            power, ranges = power[:, skip:], ranges[skip:]
         cell = ranges[1] - ranges[0]
         guard, train = (max(int(round(cfg["cfar"][key] / cell)), 1) for key in ("guard_m", "train_m"))
         hit_map = detect.cfar(power, pfa=cfg["cfar"]["pfa"], guard=guard, train=train, backend=self.backend)
         hits = detect.cluster(hit_map, power, ranges, self.bearings, guard=guard, train=train)
-        hits = [h for h in hits if h.snr_db > cfg["min_snr_db"]]
+        hits = [h for h in hits if h.snr_db > cfg["min_snr_db"] and (self._blank_range is None or h.range >= self._blank_range)]
         if self._reference is not None and not self._reference.get("dedicated"):
             # A reference summed into hydrophone inputs leaves its two bursts in the data, one just
             # after the window opens and one just before it closes: no detections are taken there.
@@ -420,7 +654,13 @@ class LiveChain:
         axis = rx[-1, :2] - rx[0, :2]
         el_cfg = self._elevation if rows is not None else None
         els = [None] * len(hits)
+        ladder = None                          # the rung of the sound-speed ladder this ping (elevation.profile)
         if el_cfg is not None:
+            # What navigation said about its own numbers for this ping (absent: the configuration's).
+            said = nav_facts(record)
+            el_cfg = dict(el_cfg, roll_sigma_deg=max(el_cfg["roll_sigma_deg"], float(np.degrees(said.get("roll_sigma", 0.0)))))
+            if not el_cfg["water_depth"]:
+                el_cfg["water_depth_sigma_m"] = float(np.hypot(el_cfg["water_depth_sigma_m"], said.get("water_depth_sigma_m", 0.0)))
             # Stacked rows: the elevation of the strongest detections, from the whole array.
             from . import elevation
             frame = elevation.array_frame(record, rows, cfg["look"])
@@ -439,13 +679,30 @@ class LiveChain:
             water = float(water) if water and np.isfinite(water) and water > 0.0 else None
             sound = record.environment.sound_speed
             profile = None                         # depth along a ray instead of the straight line
-            if el_cfg["ssp"]:
+            own_depth = float(origin[2] - el_cfg["surface_z"])
+            if self._ladder is not None and el_cfg["depth"]:
+                # The best rung this ping: fed from the record, so a replay climbs the ladder the same way.
+                measured = self._ladder.absorb(record, el_cfg["surface_z"]) or bool(cfg.get("sound_speed"))
+                ssp = el_cfg["ssp"] or {"depth": [], "speed": []}
+                ladder = self._ladder.evaluate(int(record.transmit.time_ns), float(origin[0]), float(origin[1]), own_depth, float(sound), bool(measured),
+                                               water if water is not None else float("nan"), ssp["depth"], ssp["speed"],
+                                               float(el_cfg["gradient_per_s"] or 0.0), float(el_cfg["gradient_sigma_per_s"]))
+                if ladder["depth"]:
+                    profile = (ladder["depth"], ladder["speed"])
+            elif el_cfg["ssp"]:
                 profile = (el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"])
-            elif el_cfg["gradient_per_s"] is not None:
+            if profile is None and el_cfg["gradient_per_s"] is not None:
                 profile = elevation.gradient_profile(origin[2] - el_cfg["surface_z"], sound, float(el_cfg["gradient_per_s"]), water)
         axis = axis / max(np.linalg.norm(axis), 1e-12)
         side = 1.0 if cfg["look"] == "starboard" else -1.0
         broadside = side * np.array([-axis[1], axis[0]])
+        def bend(level, rng):
+            """What the angle cannot know: how the ray bent on the way. The prior alone, or what the profile's rung claims."""
+            if ladder is not None and ladder["depth"]:
+                return elevation.profile_depth_sigma(own_depth, level, rng, ladder["depth"], ladder["speed"], ladder["sigma"],
+                                                     el_cfg["gradient_sigma_per_s"], water)
+            return elevation.refraction_sigma(rng, sound, el_cfg["gradient_sigma_per_s"])
+
         if self._origin is None:
             self._origin, self._t0 = origin.copy(), record.transmit.time_ns
         t = (record.transmit.time_ns - self._t0) * 1e-9
@@ -479,10 +736,12 @@ class LiveChain:
                         # Back along the ray through the profile, not the straight line.
                         folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], level, e.range, profile[0], profile[1], water)
                     # What the angle cannot know: the gradient along the path, and the water depth a bottom bounce is folded about.
-                    bent = elevation.refraction_sigma(e.range, sound, el_cfg["gradient_sigma_per_s"])
+                    bent = bend(level, e.range)
                     fold_sigma = 2.0 * el_cfg["water_depth_sigma_m"] if path in ("bottom", "multiple") else 0.0
                     extra[i].update(depth_m=folded, depth_sigma_m=float(np.sqrt(sigma_z**2 + bent**2 + fold_sigma**2)),
                                     depth_refraction_sigma_m=bent, image_depth_m=image, path=path)
+                    if ladder is not None:
+                        extra[i]["depth_profile_source"] = ladder["rung"]
                     depth, depth_sigma = image, sigma_z
                     if e.ambiguous:
                         # The track, if it has a depth already, takes the candidate that fits it.
@@ -505,7 +764,7 @@ class LiveChain:
                     track_extra[c_.id] = {"depth_m": None}
                     continue
                 slant = float(np.hypot(np.hypot(c_.position[1] - own[0], c_.position[0] - own[1]), tr.depth - origin[2]))
-                bent = elevation.refraction_sigma(slant, sound, el_cfg["gradient_sigma_per_s"])
+                bent = bend(float(np.arcsin(np.clip((origin[2] - tr.depth) / slant, -1.0, 1.0))), slant)
                 folded, path = (elevation.fold_depth(tr.depth, water, el_cfg["surface_z"]) if el_cfg["fold"] else (tr.depth, "direct"))
                 fold_sigma = 2.0 * el_cfg["water_depth_sigma_m"] if path in ("bottom", "multiple") else 0.0
                 # The filter averages what differs from ping to ping; the bending of the ray does not.
@@ -515,6 +774,8 @@ class LiveChain:
                     folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], float(np.arcsin((origin[2] - tr.depth) / slant)),
                                                                        slant, profile[0], profile[1], water)
                 track_extra[c_.id] = {"depth_m": folded, "depth_sigma_m": sigma_z, "path": path}
+                if ladder is not None:
+                    track_extra[c_.id]["depth_profile_source"] = ladder["rung"]
                 if el_cfg["classify"] and elevation.outside_water(tr.depth, float(np.hypot(np.sqrt(tr.depth_var), bent)), water, el_cfg["surface_z"],
                                                                   el_cfg["classify_sigma"], el_cfg["water_depth_sigma_m"]):
                     c_.kind = "multipath"      # its straight-line depth is above the surface or below the bottom: a bounce
@@ -532,8 +793,14 @@ class LiveChain:
                         "mean_snr_db": c_.mean_snr_db, "seen": c_.seen, **track_extra.get(c_.id, {})} for c_ in classes],
             "processing_seconds": time.perf_counter() - t_wall,
         }
+        if self._blank_range is not None:
+            report["blanking"] = {"min_range_m": float(self._blank_range), "mode": self._blanking["mode"]}
         if el_cfg is not None:
             report["rows"] = len(rows)
+        if ladder is not None:
+            report["profile"] = {"rung": ladder["rung"]}
+            if ladder["bins"] > 0:
+                report["profile"].update(bins=int(ladder["bins"]), span_m=[ladder["span_lo"], ladder["span_hi"]])
         if tap:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}

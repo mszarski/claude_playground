@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import dataclasses
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -55,6 +56,23 @@ class OceanEnvironment:
     surface: str = "vacuum"                        # pressure release
     sound_speed: float = 1500.0                    # used when no profile is given
     bathymetry: list = None                        # [[range_m, depth_m], ...] from the source, or None
+    sediment: str = None                           # a name in configs/sediments.yaml in place of the three bottom_* numbers
+    sediment_file: str = None                      # another table for `sediment`
+    sediment_name: str = field(default=None, init=False)   # the name `sediment` was resolved from
+
+    def __post_init__(self):
+        if self.sediment is None:
+            return
+        # The table holds ratios: speed = ratio x the water sound speed at the bottom; Bellhop's
+        # water density is 1 g/cm^3, so the density ratio is the number it takes.
+        defaults = {f.name: f.default for f in dataclasses.fields(self) if f.name.startswith("bottom_")}
+        if any(getattr(self, k) != v for k, v in defaults.items()):
+            raise ValueError("OceanEnvironment: give `sediment` or the bottom_* numbers, not both")
+        from . import bottom
+        half = bottom.fluid_halfspace(self.sediment, self.speed_at(self.depth), self.sediment_file)
+        self.bottom_speed, self.bottom_density, self.bottom_attenuation = half["speed"], half["density"], half["attenuation"]
+        # The numbers now stand for the name, so that dataclasses.replace (along_profile) keeps them.
+        self.sediment_name, self.sediment = self.sediment, None
 
     def depth_at(self, range_m):
         """Water depth at a horizontal range from the source."""

@@ -172,7 +172,7 @@ std::vector<float> range_bearing_power(const PingRecord& record, const std::vect
   return power;
 }
 
-LiveChain::LiveChain(const ChainOptions& options) : opt_(options), tracker_(options.tracker) {
+LiveChain::LiveChain(const ChainOptions& options) : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
     throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");
@@ -186,11 +186,27 @@ Report LiveChain::process(PingRecord& record) {
   rep.sequence = record.metadata.sequence;
   rep.time_ns = record.transmit.time_ns;
   double burst_lo = -1.0, burst_hi = -1.0;       // ranges the reference bursts occupy, when they stay in the data
+  // Decimate first: band, baseband and board clocks in one early stage (decimate.hpp).
+  const BlankingOptions& bl = opt_.blanking;
+  const double blank_until = bl.enabled ? bl.until(record) : 0.0;
+  if (opt_.decimate.enabled && !record.samples.is_complex()) {
+    DecimateOptions d = opt_.decimate;
+    if (bl.enabled && bl.zero) {            // blanked inside the stage: after the reference is read, before the filter
+      d.blank_until_s = blank_until;
+      d.blank_taper_s = bl.taper_s;
+    }
+    decimate_record(record, d, opt_.sync ? &opt_.reference : nullptr);
+  }
   if (opt_.sync) {
-    // Boards run on their own clocks: line them up before anything is summed across them.
-    const SyncResult r = synchronise(record, opt_.reference);
+    // Boards run on their own clocks: line them up before anything is summed across them
+    // (a record the decimating stage has already synchronised says so, and what it found).
+    SyncResult r;
+    if (!decimated_sync_facts(record, r)) r = synchronise(record, opt_.reference);
     rep.synced = true;
     rep.sync_ok = r.ok;
+    for (std::size_t b = 0; b < r.flagged.size(); ++b) {
+      if (r.flagged[b] != 0) rep.sync_flagged.push_back(r.flagged[b] == 1 ? static_cast<std::int64_t>(b) : -static_cast<std::int64_t>(b) - 1);
+    }
     for (std::size_t b = 0; b < r.offset.size(); ++b) {
       rep.sync_offsets_us.push_back(r.offset[b] * 1e6);
       rep.sync_drift_ppm.push_back(r.drift_ppm[b]);
@@ -203,6 +219,14 @@ Report LiveChain::process(PingRecord& record) {
       burst_lo = 0.5 * cs * (raw.start_time + opt_.reference.lead + opt_.reference.duration);
       burst_hi = 0.5 * cs * (t_close - opt_.reference.tail - pulse - opt_.reference.duration);
     }
+  }
+  double blank_edge = 0.0;       // s after the transmit: echoes that begin before this are not whole
+  if (bl.enabled) {
+    // A record the decimating stage blanked says so; its filter spreads the edge by its own delay.
+    const std::string& note = record.metadata.extra_json;
+    const double done = extra_number(note, "blanked_s", 0.0), ring = record.samples.is_complex() ? extra_number(note, "delay_s", 0.0) : 0.0;
+    if (bl.zero && !(done > 0.0)) blank_interval(record, -1e300, blank_until, bl.taper_s);
+    blank_edge = blank_until + bl.taper_s + ring;
   }
   if (!opt_.dead_channels.empty()) {
     for (std::int64_t r : opt_.dead_channels) {
@@ -240,6 +264,22 @@ Report LiveChain::process(PingRecord& record) {
       }
     }
   }
+  if (bl.enabled) {
+    // The map starts where whole echoes do: the detector neither reports nearer nor trains on the blanked cells.
+    rep.blanking_min_range_m = 0.5 * c * blank_edge;
+    rep.blanking_zero = bl.zero;
+    std::int64_t skip = 0;
+    while (skip < n_cells - 3 && last_ranges[static_cast<std::size_t>(skip)] < rep.blanking_min_range_m) ++skip;
+    if (skip > 0) {
+      std::vector<float> kept(static_cast<std::size_t>(n_b * (n_cells - skip)));
+      for (std::int64_t b = 0; b < n_b; ++b) {
+        std::copy_n(last_power.begin() + b * n_cells + skip, n_cells - skip, kept.begin() + b * (n_cells - skip));
+      }
+      last_power = std::move(kept);
+      last_ranges.erase(last_ranges.begin(), last_ranges.begin() + skip);
+      n_cells -= skip;
+    }
+  }
   const double cell = last_ranges[1] - last_ranges[0];
   detect::CfarOptions co;
   co.pfa = opt_.cfar_pfa;
@@ -253,6 +293,7 @@ Report LiveChain::process(PingRecord& record) {
     // A reference summed into hydrophone inputs leaves its bursts in the data near both ends of
     // the window: no detections are taken there.
     if (burst_lo >= 0.0 && (h.range <= burst_lo || h.range >= burst_hi)) continue;
+    if (bl.enabled && h.range < rep.blanking_min_range_m) continue;
     if (h.snr_db > opt_.min_snr_db) hits.push_back(h);
   }
 
@@ -315,9 +356,15 @@ Report LiveChain::process(PingRecord& record) {
   // World position of each detection, from the array's own position and heading in the record.
   Frame f = array_frame(record);
   Vec3d span = f.positions.back() - f.positions.front();
-  const ElevationOptions& eo = opt_.elevation;
+  ElevationOptions eo = opt_.elevation;
   std::vector<ElevationEstimate> els(hits.size());
   double water = eo.water_depth > 0.0 ? eo.water_depth : record.environment.water_depth;
+  // What navigation said about its own numbers for this ping (metadata.extra_json "nav"; absent: the options).
+  const std::string& said = record.metadata.extra_json;
+  if (!(eo.water_depth > 0.0)) eo.water_depth_sigma = std::hypot(eo.water_depth_sigma, extra_number(said, "water_depth_sigma_m", 0.0));
+  eo.roll_sigma = std::max(eo.roll_sigma, extra_number(said, "roll_sigma", 0.0));
+  LadderProfile ladder;
+  bool laddered = false;
   const double sound = record.environment.sound_speed;
   std::vector<double> profile_depth = eo.ssp_depth, profile_speed = eo.ssp_speed;   // depth along a ray instead of the straight line
   if (stacked) {
@@ -349,6 +396,19 @@ Report LiveChain::process(PingRecord& record) {
                                                                   opt_.backend, opt_.device);
     for (std::size_t q = 0; q < order.size(); ++q) els[order[q]] = got[q];
     rep.rows = static_cast<std::int64_t>(rows.size());
+    if (eo.profile.enabled && eo.depth) {
+      // The best rung of the sound-speed ladder this ping: fed from the record, so a replay climbs it the same way.
+      laddered = true;
+      const bool measured = ladder_.absorb(record, eo.surface_z) || opt_.sound_speed > 0.0;
+      ladder = ladder_.evaluate(record.transmit.time_ns, f.origin.x, f.origin.y, f.origin.z - eo.surface_z, sound, measured, water,
+                                eo.ssp_depth, eo.ssp_speed, eo.use_gradient ? eo.gradient : 0.0, eo.gradient_sigma);
+      profile_depth = ladder.depth;
+      profile_speed = ladder.speed;
+      rep.profile_rung = ladder.rung;
+      rep.profile_bins = ladder.bins;
+      rep.profile_lo = ladder.span_lo;
+      rep.profile_hi = ladder.span_hi;
+    }
     if (profile_depth.empty() && eo.use_gradient) {
       // c(z) = local speed + gradient (z - own depth), from the surface down.
       const double own = f.origin.z - eo.surface_z;
@@ -366,6 +426,12 @@ Report LiveChain::process(PingRecord& record) {
     have_origin_ = true;
   }
   const double t = static_cast<double>(record.transmit.time_ns - t0_ns_) * 1e-9;
+  // What the angle cannot know: how the ray bent on the way. The prior alone, or what the profile's rung claims.
+  auto bend = [&](double level, double range) {
+    return laddered && !ladder.depth.empty()
+               ? profile_depth_sigma(f.origin.z - eo.surface_z, level, range, ladder.depth, ladder.speed, ladder.sigma, eo.gradient_sigma, water)
+               : refraction_sigma(range, sound, eo.gradient_sigma);
+  };
   std::vector<Detection> local;
   for (std::size_t i = 0; i < hits.size(); ++i) {
     const Detection& h = hits[i];
@@ -409,7 +475,8 @@ Report LiveChain::process(PingRecord& record) {
         // Back along the ray through the profile, not the straight line.
         if (!profile_depth.empty()) d.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, level, e.range, profile_depth, profile_speed, water);
         // What the angle cannot know: the gradient along the path, and the water depth a bottom bounce is folded about.
-        d.depth_refraction_sigma_m = refraction_sigma(e.range, sound, eo.gradient_sigma);
+        d.depth_refraction_sigma_m = bend(level, e.range);
+        if (laddered) d.profile_source = ladder.rung;
         const double fold_sigma = (d.path == "bottom" || d.path == "multiple") ? 2.0 * eo.water_depth_sigma : 0.0;
         d.depth_sigma_m = std::sqrt(sigma_z * sigma_z + d.depth_refraction_sigma_m * d.depth_refraction_sigma_m + fold_sigma * fold_sigma);
         m.depth = d.image_depth_m;
@@ -440,7 +507,8 @@ Report LiveChain::process(PingRecord& record) {
         if (tr->id != tc.id || !std::isfinite(tr->depth)) continue;
         rt.has_depth = true;
         const double slant = std::hypot(rt.range_m, tr->depth - f.origin.z);
-        const double bent = refraction_sigma(slant, sound, eo.gradient_sigma);
+        const double bent = bend(std::asin(std::clamp((f.origin.z - tr->depth) / slant, -1.0, 1.0)), slant);
+        if (laddered) rt.profile_source = ladder.rung;
         if (eo.fold) {
           const auto folded = fold_depth(tr->depth, water, eo.surface_z);
           rt.depth_m = folded.first;
@@ -497,6 +565,7 @@ std::string Report::json() const {
           s << ", \"depth_m\": " << d.depth_m << ", \"depth_sigma_m\": " << d.depth_sigma_m << ", \"depth_refraction_sigma_m\": "
             << d.depth_refraction_sigma_m << ", \"image_depth_m\": "
             << d.image_depth_m << ", \"path\": \"" << d.path << "\"";
+          if (!d.profile_source.empty()) s << ", \"depth_profile_source\": \"" << d.profile_source << "\"";
         }
       }
     }
@@ -515,6 +584,7 @@ std::string Report::json() const {
       s << ", \"depth_m\": ";
       if (!t.has_depth) s << "null";
       else s << t.depth_m << ", \"depth_sigma_m\": " << t.depth_sigma_m << ", \"path\": \"" << t.path << "\"";
+      if (t.has_depth && !t.profile_source.empty()) s << ", \"depth_profile_source\": \"" << t.profile_source << "\"";
     }
     s << "}";
   }
@@ -526,9 +596,23 @@ std::string Report::json() const {
     for (std::size_t i = 0; i < sync_offsets_us.size(); ++i) s << (i ? ", " : "") << sync_offsets_us[i];
     s << "], \"drift_ppm\": [";
     for (std::size_t i = 0; i < sync_drift_ppm.size(); ++i) s << (i ? ", " : "") << sync_drift_ppm[i];
-    s << "]}";
+    s << "]";
+    if (!sync_flagged.empty()) {
+      s << ", \"flagged\": [";
+      for (std::size_t i = 0; i < sync_flagged.size(); ++i) s << (i ? ", " : "") << sync_flagged[i];
+      s << "]";
+    }
+    s << "}";
+  }
+  if (blanking_min_range_m >= 0.0) {
+    s << ", \"blanking\": {\"min_range_m\": " << blanking_min_range_m << ", \"mode\": \"" << (blanking_zero ? "zero" : "ignore") << "\"}";
   }
   if (rows > 0) s << ", \"rows\": " << rows;
+  if (!profile_rung.empty()) {
+    s << ", \"profile\": {\"rung\": \"" << profile_rung << "\"";
+    if (profile_bins > 0) s << ", \"bins\": " << profile_bins << ", \"span_m\": [" << profile_lo << ", " << profile_hi << "]";
+    s << "}";
+  }
   s << ", \"processing_seconds\": " << processing_seconds << "}";
   return s.str();
 }

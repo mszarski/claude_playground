@@ -141,6 +141,12 @@ class ImageSourceProvider(EigenrayProvider):
         # Fluid sediment half-space {speed, density (g/cm^3), attenuation (dB/wavelength)}:
         # when given, each bottom bounce uses the Rayleigh reflection coefficient at the
         # ray's grazing angle instead of the constant `bottom_coefficient`.
+        # {sediment: <name in configs/sediments.yaml>[, sediment_file]} gives the three numbers
+        # from the table (speed = its ratio x this provider's sound speed); keys given beside it win.
+        if bottom is not None and "sediment" in bottom:
+            from . import bottom as bottom_model
+            rest = {k: v for k, v in bottom.items() if k not in ("sediment", "sediment_file")}
+            bottom = dict(bottom_model.fluid_halfspace(bottom["sediment"], self.sound_speed, bottom.get("sediment_file")), **rest)
         self.bottom = bottom
         # Vertical walls: {"axis": 0 or 1, "position": metres, "coefficient": complex}.
         # Walls are applied to first order only, on top of the vertical image series.

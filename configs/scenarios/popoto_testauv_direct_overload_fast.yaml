@@ -1,0 +1,10 @@
+# popoto_testauv_direct_overload with a front end that recovers quickly: dead for 5 ms after it
+# last clipped, gain back with a 2 ms time constant. The channels are still clipped for the whole
+# pulse (the record shows it), but they are back before the 150 m echo arrives.
+# ILLUSTRATIVE values, not a board's.
+base: popoto_testauv_direct_overload
+name: popoto_testauv_direct_overload_fast
+sonar_overrides:
+  receive:
+    overload:
+      adc: {dead_time: 0.005, dead_output: zero, recovery_tau: 0.002}

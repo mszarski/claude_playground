@@ -1,0 +1,1372 @@
+{
+  "bellhop": true,
+  "ship": "five points of +18 dB over 120 m at 4 m depth, crossing at 6 m/s (the popoto_12km scenario's)",
+  "cases": {
+    "popoto_12km: 100 m isovelocity over sand, image-source paths": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 29.8,
+        "chain_seconds_per_ping": 1.9402212924978812,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": true,
+            "snr_db": 10.71913813,
+            "detections": 1,
+            "range_error_m": 0.324008981586303,
+            "bearing_error_deg": 0.10693627297970654
+          },
+          {
+            "detected": true,
+            "snr_db": 13.52607567,
+            "detections": 1,
+            "range_error_m": -0.37029149406771467,
+            "bearing_error_deg": -0.43910996733039065
+          },
+          {
+            "detected": true,
+            "snr_db": 13.69713885,
+            "detections": 1,
+            "range_error_m": 1.0816139634007413,
+            "bearing_error_deg": 0.49666435344762183
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 3,
+        "median_snr_db": 13.52607567,
+        "track_confirmed_at_ping": 5,
+        "track_on_ship": [
+          {
+            "kind": "uncertain",
+            "speed_m_s": 3.379239618,
+            "vx": -3.379048597,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "uncertain": 1
+        },
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 131.8,
+        "chain_seconds_per_ping": 6.538023493496439,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "3": {
+        "rows": 3,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 81.7,
+        "chain_seconds_per_ping": 2.4157550325035118,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": true,
+            "snr_db": 11.86335035,
+            "detections": 1,
+            "range_error_m": 1.081580449888861,
+            "bearing_error_deg": 0.5154495354476218,
+            "elevation_deg": -0.791425049,
+            "elevation_sigma_deg": 8.259060673,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 18.48378866,
+            "depth_sigma_m": 2959.207685,
+            "true_elevation_deg": 0.028961872493138318,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 1,
+        "median_snr_db": 11.86335035,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "the same without reverberation (noise only)": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 4.4,
+        "chain_seconds_per_ping": 1.7557469454986858,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 11.33865966,
+            "detections": 1,
+            "range_error_m": -5.838101744904634,
+            "bearing_error_deg": -0.8167384534001814
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": true,
+            "snr_db": 11.37621139,
+            "detections": 1,
+            "range_error_m": 0.324008981586303,
+            "bearing_error_deg": -0.1390284700202935
+          },
+          {
+            "detected": true,
+            "snr_db": 13.67609706,
+            "detections": 1,
+            "range_error_m": -0.2212914940682822,
+            "bearing_error_deg": -0.32462672433039064
+          },
+          {
+            "detected": true,
+            "snr_db": 13.96662338,
+            "detections": 1,
+            "range_error_m": 1.0816139634007413,
+            "bearing_error_deg": 0.44142121344762164
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 4,
+        "median_snr_db": 12.526154224999999,
+        "track_confirmed_at_ping": 4,
+        "track_on_ship": [
+          {
+            "kind": "uncertain",
+            "speed_m_s": 3.20418067,
+            "vx": -3.203484692,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "uncertain": 1
+        },
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 13.4,
+        "chain_seconds_per_ping": 6.661682410995127,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "3": {
+        "rows": 3,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 10.0,
+        "chain_seconds_per_ping": 4.702845866500866,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "popoto_12km: 100 m isovelocity over sand, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 360.8,
+        "chain_seconds_per_ping": 1.7496092750043317,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 14.23039268,
+            "detections": 5,
+            "range_error_m": 4.764198255095835,
+            "bearing_error_deg": -0.26316167040018135
+          },
+          {
+            "detected": true,
+            "snr_db": 16.65414208,
+            "detections": 7,
+            "range_error_m": 18.74451056332873,
+            "bearing_error_deg": -0.24472718245841918
+          },
+          {
+            "detected": true,
+            "snr_db": 14.06955619,
+            "detections": 10,
+            "range_error_m": 8.891578981585553,
+            "bearing_error_deg": -0.39828131702029346
+          },
+          {
+            "detected": true,
+            "snr_db": 16.9313024,
+            "detections": 11,
+            "range_error_m": 6.417078505932295,
+            "bearing_error_deg": -0.23686154233039058
+          },
+          {
+            "detected": true,
+            "snr_db": 17.14252732,
+            "detections": 14,
+            "range_error_m": 0.6576639634004096,
+            "bearing_error_deg": -0.1270927959523782
+          },
+          {
+            "detected": true,
+            "snr_db": 11.84099683,
+            "detections": 7,
+            "range_error_m": 15.66934567952012,
+            "bearing_error_deg": -0.5246504521870202
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 15.44226738,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 5.429165093,
+            "vx": -5.426234946,
+            "depth_m": null
+          },
+          {
+            "kind": "mover",
+            "speed_m_s": 5.879673506,
+            "vx": -5.878983002,
+            "depth_m": null
+          },
+          {
+            "kind": "mover",
+            "speed_m_s": 6.063694125,
+            "vx": -6.035845934,
+            "depth_m": null
+          },
+          {
+            "kind": "static",
+            "speed_m_s": 2.071024636,
+            "vx": -1.580401434,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 3,
+          "multipath": 5,
+          "static": 1,
+          "uncertain": 1
+        },
+        "later_arrivals": {
+          "tracks": 6,
+          "classified_multipath": 5
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 875.5,
+        "chain_seconds_per_ping": 4.307742272496398,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 16.71029453,
+            "detections": 4,
+            "range_error_m": 14.101898255095875,
+            "bearing_error_deg": -0.21125436440018142,
+            "elevation_deg": -1.625311646,
+            "elevation_sigma_deg": 8.283228267,
+            "ambiguous": true,
+            "candidates": 1,
+            "depth_m": 27.32982056,
+            "depth_sigma_m": 2971.891827,
+            "true_elevation_deg": 0.028584259758304458,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 16.56834492,
+            "detections": 4,
+            "range_error_m": 14.55973056332914,
+            "bearing_error_deg": -0.2595635534584191,
+            "elevation_deg": 1.112412831,
+            "elevation_sigma_deg": 8.282300729,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 23.54739408,
+            "depth_sigma_m": 2968.100137,
+            "true_elevation_deg": 0.028605678430379824,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 16.43589822,
+            "detections": 3,
+            "range_error_m": 15.187078981585728,
+            "bearing_error_deg": -0.16934693802029344,
+            "elevation_deg": 0.3363020493,
+            "elevation_sigma_deg": 8.27421605,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 4.020437467,
+            "depth_sigma_m": 2963.663503,
+            "true_elevation_deg": 0.02862272443906715,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 17.90874764,
+            "detections": 7,
+            "range_error_m": 6.79752850593286,
+            "bearing_error_deg": -0.22818299433039058,
+            "elevation_deg": -1.012997953,
+            "elevation_sigma_deg": 8.265203577,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 5.056935577,
+            "depth_sigma_m": 2963.264291,
+            "true_elevation_deg": 0.028635374208763307,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 19.60467526,
+            "detections": 10,
+            "range_error_m": 7.406053963401064,
+            "bearing_error_deg": -0.12426760375237822,
+            "elevation_deg": -1.593608478,
+            "elevation_sigma_deg": 8.260200191,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 29.91872582,
+            "depth_sigma_m": 2961.629861,
+            "true_elevation_deg": 0.028643610195633114,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 15.40708069,
+            "detections": 5,
+            "range_error_m": 8.678125679520235,
+            "bearing_error_deg": -0.2912633609970202,
+            "elevation_deg": null,
+            "elevation_sigma_deg": null,
+            "ambiguous": null,
+            "candidates": 0,
+            "depth_m": null,
+            "depth_sigma_m": null,
+            "true_elevation_deg": 0.02864742095503637,
+            "true_depth_m": 4.0
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 16.639319725,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "multipath",
+            "speed_m_s": 5.976490393,
+            "vx": -5.921218426,
+            "depth_m": 17.495086
+          },
+          {
+            "kind": "multipath",
+            "speed_m_s": 6.266790118,
+            "vx": -6.247845271,
+            "depth_m": 15.92571217
+          },
+          {
+            "kind": "uncertain",
+            "speed_m_s": 4.626802368,
+            "vx": -4.611757485,
+            "depth_m": 18.45528238
+          },
+          {
+            "kind": "uncertain",
+            "speed_m_s": 6.473556684,
+            "vx": -6.427485358,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "multipath": 3,
+          "uncertain": 2
+        },
+        "later_arrivals": {
+          "tracks": 1,
+          "classified_multipath": 1
+        }
+      },
+      "3": {
+        "rows": 3,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 560.0,
+        "chain_seconds_per_ping": 6.180105208997702,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 17.25194742,
+            "detections": 5,
+            "range_error_m": 14.536184811022395,
+            "bearing_error_deg": -0.2523140064001814,
+            "elevation_deg": -1.348508237,
+            "elevation_sigma_deg": 8.282611313,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 34.43699743,
+            "depth_sigma_m": 2971.967005,
+            "true_elevation_deg": 0.02890186260680748,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 16.98962251,
+            "detections": 4,
+            "range_error_m": 14.820157094194656,
+            "bearing_error_deg": -0.2781808684584193,
+            "elevation_deg": 0.1167575873,
+            "elevation_sigma_deg": 8.27598544,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 1.852915531,
+            "depth_sigma_m": 2968.602155,
+            "true_elevation_deg": 0.028923519264019485,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 16.62982401,
+            "detections": 4,
+            "range_error_m": 15.052065492511247,
+            "bearing_error_deg": -0.19059255302029365,
+            "elevation_deg": 0.3694067073,
+            "elevation_sigma_deg": 8.27425772,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 6.242997725,
+            "depth_sigma_m": 2963.686245,
+            "true_elevation_deg": 0.028940754672716756,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 18.15509864,
+            "detections": 8,
+            "range_error_m": 15.14336500205718,
+            "bearing_error_deg": -0.2257839103303907,
+            "elevation_deg": 0.106210081,
+            "elevation_sigma_deg": 8.269691991,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 1.97539121,
+            "depth_sigma_m": 2963.916706,
+            "true_elevation_deg": 0.028953544995345217,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 20.21393988,
+            "detections": 10,
+            "range_error_m": 7.403690449888018,
+            "bearing_error_deg": -0.13278502105237822,
+            "elevation_deg": -0.08418989761,
+            "elevation_sigma_deg": 8.259327297,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 1.961287207,
+            "depth_sigma_m": 2962.125306,
+            "true_elevation_deg": 0.028961872493138318,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 15.69244685,
+            "detections": 7,
+            "range_error_m": 8.678092161550012,
+            "bearing_error_deg": -0.12586003998702022,
+            "elevation_deg": -2.627381333,
+            "elevation_sigma_deg": 8.267013596,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 72.70739815,
+            "depth_sigma_m": 2961.417622,
+            "true_elevation_deg": 0.028965725594293317,
+            "true_depth_m": 4.0
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 17.120784965,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 5.661832541,
+            "vx": -5.661295807,
+            "depth_m": 49.45258773
+          },
+          {
+            "kind": "mover",
+            "speed_m_s": 5.79233677,
+            "vx": -5.78556937,
+            "depth_m": 35.76123138
+          },
+          {
+            "kind": "multipath",
+            "speed_m_s": 5.910046745,
+            "vx": -5.909445839,
+            "depth_m": 76.90386663
+          },
+          {
+            "kind": "multipath",
+            "speed_m_s": 6.02969254,
+            "vx": -5.999270887,
+            "depth_m": 40.80805196
+          },
+          {
+            "kind": "multipath",
+            "speed_m_s": 7.092657225,
+            "vx": -7.021193193,
+            "depth_m": 52.99004337
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 2,
+          "multipath": 4,
+          "uncertain": 1
+        },
+        "later_arrivals": {
+          "tracks": 1,
+          "classified_multipath": 1
+        }
+      }
+    },
+    "popoto_env_deep_silt_1000m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 84.3,
+        "chain_seconds_per_ping": 2.0274389540027187,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 2,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 2,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 1,
+          "classified_multipath": 0
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 129.1,
+        "chain_seconds_per_ping": 3.8073458965009195,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 2,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 2,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 1,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 1,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "popoto_env_gravel_30m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 623.9,
+        "chain_seconds_per_ping": 4.229767968998203,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 26.16450961,
+            "detections": 1,
+            "range_error_m": -0.7416602624507505,
+            "bearing_error_deg": -0.23252434740018169
+          },
+          {
+            "detected": true,
+            "snr_db": 27.78145109,
+            "detections": 1,
+            "range_error_m": 0.07633266880657175,
+            "bearing_error_deg": -0.23200837045841904
+          },
+          {
+            "detected": true,
+            "snr_db": 27.04858981,
+            "detections": 1,
+            "range_error_m": 1.0156215829047142,
+            "bearing_error_deg": -0.27116413602029343
+          },
+          {
+            "detected": true,
+            "snr_db": 31.7802505,
+            "detections": 1,
+            "range_error_m": 2.000201475206268,
+            "bearing_error_deg": -0.18880535933039067
+          },
+          {
+            "detected": true,
+            "snr_db": 29.4815752,
+            "detections": 1,
+            "range_error_m": 2.557917172242014,
+            "bearing_error_deg": -0.19727012305237823
+          },
+          {
+            "detected": true,
+            "snr_db": 26.48700927,
+            "detections": 1,
+            "range_error_m": 3.2232189992118947,
+            "bearing_error_deg": -0.4395544824870202
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 27.41502045,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 5.978938654,
+            "vx": -5.978921857,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 567.0,
+        "chain_seconds_per_ping": 3.6452845694984717,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 26.80705903,
+            "detections": 1,
+            "range_error_m": 0.07777973754855338,
+            "bearing_error_deg": -0.2607100684001815,
+            "elevation_deg": 0.5557933484,
+            "elevation_sigma_deg": 8.270926952,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 3.801203653,
+            "depth_sigma_m": 2967.99368,
+            "true_elevation_deg": 0.019056174050518616,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 28.65186924,
+            "detections": 1,
+            "range_error_m": 1.1613626688067598,
+            "bearing_error_deg": -0.1910929314584191,
+            "elevation_deg": 0.8764348853,
+            "elevation_sigma_deg": 8.265248043,
+            "ambiguous": true,
+            "candidates": 1,
+            "depth_m": 12.80918746,
+            "depth_sigma_m": 2964.895828,
+            "true_elevation_deg": 0.01907045316721138,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 27.45834684,
+            "detections": 1,
+            "range_error_m": 1.4580315829043684,
+            "bearing_error_deg": -0.2242602050202933,
+            "elevation_deg": -0.04269459652,
+            "elevation_sigma_deg": 8.26089398,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 7.96269715,
+            "depth_sigma_m": 2961.876286,
+            "true_elevation_deg": 0.019081817174577548,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 31.36315146,
+            "detections": 1,
+            "range_error_m": 2.6905514752052113,
+            "bearing_error_deg": -0.20465524733039064,
+            "elevation_deg": -0.1493873101,
+            "elevation_sigma_deg": 8.257941655,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 7.844333593,
+            "depth_sigma_m": 2960.082731,
+            "true_elevation_deg": 0.019090250355544708,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 30.37593923,
+            "detections": 1,
+            "range_error_m": 3.2648071722433087,
+            "bearing_error_deg": -0.21950189615237825,
+            "elevation_deg": 0.4777159943,
+            "elevation_sigma_deg": 8.256069701,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 2.619786451,
+            "depth_sigma_m": 2958.558209,
+            "true_elevation_deg": 0.01909574101422004,
+            "true_depth_m": 4.0
+          },
+          {
+            "detected": true,
+            "snr_db": 27.22293412,
+            "detections": 1,
+            "range_error_m": 3.5908989992112765,
+            "bearing_error_deg": -0.5172833491870202,
+            "elevation_deg": 0.1091132961,
+            "elevation_sigma_deg": 8.255233876,
+            "ambiguous": false,
+            "candidates": 1,
+            "depth_m": 7.863743768,
+            "depth_sigma_m": 2958.321763,
+            "true_elevation_deg": 0.019098281520841663,
+            "true_depth_m": 4.0
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 28.05510804,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 6.015363703,
+            "vx": -6.015158159,
+            "depth_m": 8.81964602
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 1
+        },
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "popoto_env_summer_mud_60m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 35.9,
+        "chain_seconds_per_ping": 3.8678234754988807,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      },
+      "2": {
+        "rows": 2,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 20.4,
+        "chain_seconds_per_ping": 4.467724138001358,
+        "per_ping": [
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          },
+          {
+            "detected": false,
+            "snr_db": null,
+            "detections": 0,
+            "range_error_m": null,
+            "bearing_error_deg": null
+          }
+        ],
+        "pings_detected": 0,
+        "median_snr_db": null,
+        "track_confirmed_at_ping": null,
+        "track_on_ship": [],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {},
+        "later_arrivals": {
+          "tracks": 0,
+          "classified_multipath": 0
+        }
+      }
+    },
+    "popoto_env_winter_sand_200m at 12 km, Bellhop": {
+      "1": {
+        "rows": 1,
+        "pings": 6,
+        "ping_interval_s": 19.9,
+        "simulate_seconds": 469.1,
+        "chain_seconds_per_ping": 2.9775967619971198,
+        "per_ping": [
+          {
+            "detected": true,
+            "snr_db": 15.18181066,
+            "detections": 6,
+            "range_error_m": -3.63852174490421,
+            "bearing_error_deg": -0.2336008114001813
+          },
+          {
+            "detected": true,
+            "snr_db": 19.02555372,
+            "detections": 4,
+            "range_error_m": -2.279379436671661,
+            "bearing_error_deg": -0.17064105045841904
+          },
+          {
+            "detected": true,
+            "snr_db": 18.58128824,
+            "detections": 5,
+            "range_error_m": -1.9564910184144537,
+            "bearing_error_deg": -0.17184637502029343
+          },
+          {
+            "detected": true,
+            "snr_db": 20.03562729,
+            "detections": 7,
+            "range_error_m": -1.360361494067547,
+            "bearing_error_deg": -0.19867808433039058
+          },
+          {
+            "detected": true,
+            "snr_db": 22.64441913,
+            "detections": 7,
+            "range_error_m": -0.3538060365990532,
+            "bearing_error_deg": -0.15670759475237828
+          },
+          {
+            "detected": true,
+            "snr_db": 19.7747981,
+            "detections": 7,
+            "range_error_m": 0.4305456795209466,
+            "bearing_error_deg": -0.5978414173870202
+          }
+        ],
+        "pings_detected": 6,
+        "median_snr_db": 19.40017591,
+        "track_confirmed_at_ping": 3,
+        "track_on_ship": [
+          {
+            "kind": "mover",
+            "speed_m_s": 6.073385983,
+            "vx": -6.073373459,
+            "depth_m": null
+          },
+          {
+            "kind": "multipath",
+            "speed_m_s": 5.810040833,
+            "vx": -5.810027987,
+            "depth_m": null
+          },
+          {
+            "kind": "mover",
+            "speed_m_s": 7.461669802,
+            "vx": -7.447132709,
+            "depth_m": null
+          }
+        ],
+        "true_velocity_m_s": [
+          -6.0,
+          0.0,
+          0.0
+        ],
+        "track_kinds": {
+          "mover": 2,
+          "multipath": 4,
+          "uncertain": 1
+        },
+        "later_arrivals": {
+          "tracks": 4,
+          "classified_multipath": 3
+        }
+      }
+    }
+  },
+  "not_run": [
+    "3 rows: the four popoto_env_* environments",
+    "2 rows: popoto_env_winter_sand_200m (the run was stopped: each Bellhop case takes 1 to 10 minutes here)"
+  ]
+}

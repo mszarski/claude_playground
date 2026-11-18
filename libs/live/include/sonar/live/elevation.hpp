@@ -20,6 +20,7 @@
 
 #include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
+#include "sonar/live/environment.hpp"
 
 namespace sonar::live {
 
@@ -61,6 +62,9 @@ struct ElevationOptions {
   std::vector<double> ssp_depth, ssp_speed;
   double roll_sigma = 0.0;         ///< rad: the navigation's roll accuracy, added to the elevation sigma
   double row_tolerance_m = 0.02;   ///< elements within this of one line are one row
+  /// The sound-speed ladder (environment.hpp): which profile the depth is traced through, how its
+  /// uncertainty reaches depth_sigma_m, and the rung named with every depth. Off: as before.
+  ProfileOptions profile;
 };
 
 /// Channel rows of each line of the receive array, in channel order (see find_rows in elevation.py).

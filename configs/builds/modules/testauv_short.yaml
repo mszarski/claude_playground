@@ -1,0 +1,11 @@
+# Row module: 32 hydrophones over 2.88 m. The one exception to the long row, and only because of the test AUV's span
+# (the owner: "probably like 2-3 span we can attach"; "Yes treat auv special case"). Same count, boards and harness layout
+# as long_4p8m at a closer spacing: 0.30 of a wavelength at 5 kHz, so less gain against sea noise than 32 suggests.
+name: testauv_short
+array:
+  count: 32                      # the owner: "Keep at 32"
+  pitch_m: 0.09
+  confirmed: [count]
+hydrophone:
+  model: null
+  sensitivity_db: -208.0         # dB re 1 V/uPa: an assumption

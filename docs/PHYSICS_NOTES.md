@@ -2053,3 +2053,608 @@ population with linear bubble acoustics and a law fitted to sea measurements; th
 cause is patchiness (the mean of exp(-T) over patchy clouds is far above exp(-mean T)),
 which no opened source quantifies.
 
+
+## 21. Noise fitted to a recording, and time spreading against measured channels [OURS]
+
+Two additions that take their inputs from measurements instead of models. Sources opened for
+this section, and what was taken from each:
+
+- APL-UW TR 0702, Sec. 4.6.1 eqs. (23)-(26) and Sec. 4.6.2 (extracted text): the factor of the
+  cross-spectral matrix, the Gaussian synthesis, the window condition, and the argument that
+  heavy tails must be made in the time domain and filtered.
+- NoiseModels.jl (org-arl, MIT), `src/gaussian.jl`, read in full: the "mixing coefficients on
+  independent innovations" form. Its estimator (BFGS on lagged covariances) is not used.
+- alpha-SGNm (A. Mahmood, BSD 3-clause), `asgn.m` and README, read: the sub-Gaussian
+  construction (Gaussian vector times the root of a positive alpha/2-stable variate). Its
+  alpha-SGN(m) sampler and tables are not used.
+- Underwater Acoustic Channel Repository (UACR): the documentation site's file specification
+  and channel pages (MIT), the paper arXiv:2609.03207 (Li, Chitre, Cuji, Preisig, Singer,
+  Stojanovic, van Walree, 2026; Secs. II.D, IV), and data files from Zenodo
+  doi:10.5281/zenodo.21287414 (CC BY 4.0). Taken: the file layout, the innovations convention
+  (alpha-stable of scale 1/sqrt 2), the description of the SPACE'08 geometry and of the
+  estimator. The project's replay and noise code was not read.
+
+No coefficient in the code comes from memory of a paper: Kanter's formula for positive stable
+variates and the log-moment formulas are tested against their defining properties.
+
+**21.1 Noise model fitted to a recording** (`sim/noise_fit.py`, `tools/fit_noise.py`).
+The model is `x = B * eta`: white innovations through mixing filters whose transfer matrix
+satisfies `B B^H = S fs`, `S` the two-sided cross-spectral density matrix of the recording
+estimated by Welch (Hann, 50 % overlap). `B` is the per-frequency Cholesky factor, TR 0702
+eq. (23). For Gaussian noise the generator is TR 0702 eqs. (24)-(26) as printed (independent
+complex Gaussians per frequency and update, inverse transform, a window with
+`sum |w|^2 = 1`, here a sine window at 50 % overlap). For heavy tails the innovations are
+`sqrt(tau) g` with a texture `tau` (gamma: K-type; positive alpha/2-stable: symmetric
+alpha-stable), held for a fitted number of samples and common to the channels or not, and the
+filters are applied in the time domain: because `g` is white and independent of `tau`, the
+spectra and coherences are those of `B` whatever the tail.
+
+*Tail fit.* On the whitened recording `e = B^-1 x` (lines notched out):
+`var(log|e|)` is `pi^2/8` for a Gaussian, `pi^2/8 + trigamma(nu)/4` for the K family and
+`(pi^2/6)(1/alpha^2 + 1/2)` for the alpha-stable one. Derivation: `log|e| = log(tau)/2 + log|g|`;
+`log|g|` has variance `pi^2/8`; `log` of a gamma variate has variance `trigamma(nu)`; a
+positive stable variate of index `a` has `E S^p = Gamma(1 - p/a) / Gamma(1 - p)`, so its
+logarithm has variance `(pi^2/6)(1/a^2 - 1)`. Both families are fitted from that one number
+and the one whose predicted quantile ratio q99.95/q50 is nearer the measured one is kept;
+Gaussian when the excess over `pi^2/8` is inside four standard errors. The texture's hold time
+is `1 + 2 sum_k rho(k)` with `rho` the autocorrelation of `log e^2` over the texture's variance
+(`var(log e^2) - pi^2/2`); the cross-correlation between channels says whether it is common.
+
+*Estimator variance.* With `n_d` independent blocks: the coherence estimate where the truth is
+zero has `|gamma^|^2 ~ Beta(1, n_d - 1)`, a floor `E|gamma^| = sqrt(pi / (4 n_d))`; elsewhere
+its standard deviation is `(1 - |gamma|^2) / sqrt(2 n_d)`; the spectrum level has
+`4.34 / sqrt(n_d)` dB. Half-overlapped Hann blocks count as `K / (1 + 2 rho^2 (1 - 1/K))`,
+`rho = 1/6` (computed from the window). So a coherence standard deviation of 0.05 needs 200
+independent blocks: 3.4 s at 8 kHz with 256-sample blocks, about 1.1 s at 48 kHz with 512. The
+Cholesky factor is refused below `2 x channels` independent blocks. All three numbers are
+tested by Monte Carlo.
+
+*What is not fitted as noise.* Reference inputs are dropped (record container). Blocks whose
+power is more than 8 robust standard deviations above the channel's median are flagged; runs
+of 4 or more and blocks that recur at a fixed interval (pings, sync bursts) are excluded and
+listed; isolated ones are kept, since impulsive noise looks like that. Bins more than 3 dB (or
+six standard deviations) above the median-smoothed spectrum are taken out as lines, kept
+separately, and added back only on request.
+
+*Limits.* Stationarity over the recording is assumed, not tested. The block must be much
+longer than the transit time across the array (bias `(1 - transit/block)^2` on the coherence of
+a directional source; the report prints it). An alpha-stable variate has no variance, so the
+"spectrum level" of such a fit is the level of that record, not an expectation (tested: the
+exponent and the scale are recovered, the level is not meaningful). The whitened channels are
+mixtures of the physical sources when the channels are strongly coherent, so independent
+impulsive sources look more Gaussian after whitening than they are. With the tail families the
+generator is the filter form only; the frequency-domain synthesis is Gaussian by construction.
+
+*Another configuration.* Channel count must match, or `channels` picks a subset (exact).
+Any sample rate: the matrix is interpolated in Hz and factored again; frequencies the
+recording never covered are refused unless asked for (then: no noise there). A complex
+baseband output about a centre frequency is the band moved down with twice the power.
+
+*Checked on* synthetic fields with a known cross-spectral matrix (isotropic `sin(kd)/(kd)`
+plus a plane-wave interferer at 30 degrees, 8 hydrophones): fitted spectrum within 0.6 dB,
+coherence within 0.02 rms of the closed form; regenerated noise the same; beam power against
+bearing within 1 dB with the interferer at its bearing; array gain in isotropic noise within
+0.35 dB of `C^2 / sum sin(k d_ij)/(k d_ij)`; the Mitchell-McPherson ensemble average converging
+to the input as `1/sqrt(R)`. And on noise made, by the documented mixing equation, from two
+published site models of the UACR (60 s each): SPACE'08 (12 hydrophones, Gaussian): spectrum 0.05 dB rms
+in band, coherence error 0.009 rms against an estimator floor of 0.009; Singapore (3
+hydrophones, alpha = 1.7): fitted alpha 1.66.
+
+**21.2 Measured channels** (`sim/channel_replay.py`). A measured channel is a complex-baseband
+impulse response `h(t, tau)` per receiver, stored every 15 ms. `replay` passes a transmit
+signal through it (linear interpolation of `h` in time between snapshots, the tracked phase
+and, for `phi_hat`, its delay drift restored): a one-way propagation tier made of a
+measurement. It is a function, not an eigenray provider: a measured `h` has no rays, so it
+cannot feed the two-way echo synthesis. Files with a constant resampling factor are refused.
+
+The estimators, each tested on synthetic channels with known values:
+
+| Quantity | Estimator | Recovered to |
+| --- | --- | --- |
+| delay spread | slope of the log of the incoherent profile after the peak; first moment | 15 % (decay time 0.3 and 0.8 ms at 0.077 ms bins) |
+| coherent share | power of the time mean over the arrival, after dividing by the phase of the strongest arrival | 0.05 |
+| Doppler width, shape | Welch spectrum over time; rms over +-6 w50, half widths holding 50 % and 90 %; w90/w50 is 2.44 for a Gaussian, about 4 or more for a Lorentzian on this axis | 8 % (rms), 10-15 % (w50) |
+| coherence time | 1/e of the autocorrelation of the fluctuating part | 12 % (Gaussian), 20 % (Lorentzian) |
+| level statistics | scintillation index of the arrival's energy, floor removed; 1 - c^2 for a Rician arrival | 0.12 |
+| scattering function | Welch spectrum over time of every delay bin | marginals within 10-20 % |
+
+A stored channel is the output of an adaptive estimator, not the channel: for the files used
+here RLS with forgetting factor 0.995 updated every delay sample (arXiv:2609.03207 Sec. IV),
+which to first order is a one-pole low-pass of 10.4 Hz on every tap. The model is passed
+through that filter before comparison (`estimator_filter`); this is our approximation.
+
+**21.3 Our time spreading against SPACE'08** (`tools/channel_validation.py`,
+figures `docs/figures/channel_validation_*.png`). Data: UACR "Purple", 12.5 kHz, 6.5 kHz
+band, one moored source 4 m above the seabed in 15 m of water, moored arrays with the top
+element 3.3 m above the seabed at 60 m, 200 m and 1 km; five files of 53 s from two
+recordings (`purple_1, 3, 5` and `purple_6, 8`).
+
+*Not given by the dataset, hence assumed:* wind or sea state; sound speed (1500 m/s, no
+gradient); seabed (flat; a sand-like half-space, 1700 m/s, 1.9 g/cm^3); omnidirectional
+transducers; that the files of one recording are simultaneous; that the sea is described by
+one number through Pierson-Moskowitz (height, vertical speed) and Cox-Munk (slope).
+
+*One free parameter per recording*, the wind speed, fitted to one number: the rms Doppler
+width of the first surface arrival at 60 m (`2 f v sin(g) / c`). Result: 3.96 +- 0.87 m/s and
+3.70 +- 0.60 m/s (two sigma). Everything below is then a prediction; no option was tuned,
+both values of each were run. "In" means within twice the larger of the measurement's
+standard error (quarters of the record) and the model's record-to-record spread (seeds), plus
+one resolution cell. 18 surface-interacting arrivals, grazing angles 1.3 to 32 degrees:
+
+| Quantity | Model A: gaussian, facet, convolve | Model B: lorentzian, rule_of_thumb, sum |
+| --- | --- | --- |
+| Doppler rms width | 13 in, 3 out; median model/measured 1.06 | 4 in, 12 out; 1.60 |
+| Doppler shape w90/w50 (measured 2.0 to 3.1) | 15 in, 3 out; 0.99 | 7 in, 11 out; 1.61 |
+| tail decay time | 5 in, 12 out; 0.98 | 4 in, 10 out; 1.63 |
+| coherent share (arrival and tail) | 12 in, 6 out; 1.14 | (same) |
+| scintillation index | 3 in, 15 out; 0.46 | (same) |
+| level (re whole channel) | 4 in, 14 out | (with bubble loss: the same, it is under 0.3 dB at 4 m/s) |
+| arrival delay | 9 in, 9 out | (same) |
+
+*What the model gets right.* (1) The Doppler spectrum of a surface-scattered arrival is
+Gaussian, not Lorentzian: the measured spectra fall 30 dB by four standard deviations, where
+the AR(1) spectrum SST uses (our default) would be at -12 dB. (2) Its width, with the single
+fitted wind, across nine other arrivals per recording: one or two surface bounces, 60 m to
+1 km, widths from 0.47 to 2.2 Hz; `2 f v sin(g) / c / sqrt(1 - exp(-Gamma^2))`, numerators
+adding over bounces. (3) At 60 m (`Gamma^2` 8 to 21) the surface arrivals carry no coherent
+part (measured 0.002 to 0.014). (4) The decay time of the first surface arrival at 60 m in the
+first recording, 0.267 ms, is the facet value (0.261) and half the rule of thumb (0.554).
+
+*What it gets wrong.* (1) At low grazing angles it is too coherent: at 200 m (6.7 degrees)
+the surface arrival's coherent share is 0.14 and 0.21 measured against `exp(-Gamma^2)` =
+0.35 and 0.45; at 1 km likewise (the twice-reflected group: 0.43 against 0.77 through the
+estimators). Read as a height,
+the measured shares want an rms height 1.38 times the Pierson-Moskowitz value for the fitted
+wind, in both recordings: a sea with more height per unit of vertical speed than a fully
+developed wind sea (swell would do that; not known). A second parameter (`rms_height` given
+separately) would absorb it; it was not adjusted. (2) Delay spread: right on average (median
+0.98) but not arrival by arrival; in the second recording the same 60 m arrival decays in
+0.415 ms (facet 0.220, rule of thumb 0.525), and at 200 m, where `Gamma^2` is about 1, the
+facet tail is three times too long in one recording (0.26 measured, 0.79 model) and too short
+in the other (1.68 against 0.66). The facet picture is geometric optics; it has no reason to
+hold at `Gamma` near 1. (3) Level fluctuations: the measured scintillation index of the
+multi-bounce arrivals is 1.1 to 3.1, above the Rayleigh value of 1; the model's complex
+Gaussian taps give at most 1 (0.6 after the same windowing). Focusing by wave crests would do
+this; the model has nothing of the kind. (4) Levels of paths with a bottom bounce at 26 to 32
+degrees are 3 to 6 dB below the assumed half-space; the surface-only arrival is within 1 dB at
+60 m and 2 dB at 200 m. That is the assumed seabed, not the surface. (5) Surface arrivals come late: by 0.08 to
+0.15 ms at 60 m and 0.23 to 0.27 ms at 200 m, both what a surface about 1 m higher than the
+stated 15 m gives. Not corrected. (6) At 1 km the measured response has a tail of 15 ms that
+three bounces do not make; only the first arrivals were compared there.
+
+*Not tested by this dataset.* Bubble loss (0.1 to 0.3 dB at this wind); `multi_bounce`
+separately from the decay time (model B's `sum` with 24 taps leaves the taps resolved where
+the tail is long, an artefact visible in the profiles figure); angle spreading; anything at
+other frequencies or sea states; any two-way path.
+
+**21.4 Every site of the repository, and the model's dependencies** (`tools/channel_sites.py`,
+`tools/channel_validation.py --sites all`; tables `docs/figures/channel_validation_purple.md`
+and `channel_validation_sites.md`, figure `channel_validation_dependencies.png`). Section 21.3
+used five Purple files; this is all eight that matter (three recordings) and the other sites.
+
+*What the other sites allow.* The full comparison needs the geometry of each file, arrivals
+that straight rays can name, and an estimator fast enough to follow the surface. No site
+states wind, sea state, a sound-speed profile or a seabed (the paper's Sec. II and the site
+pages were searched), so there is no case with nothing fitted, no Bellhop run with a stated
+profile, and no test of a named sediment.
+
+| Site | Carrier | Verdict | Reason |
+| --- | --- | --- | --- |
+| Purple, SPACE'08 | 12.5 kHz | full protocol | geometry per file, resolved arrivals, RLS tracker 10.4 Hz |
+| Green, Norwegian fjord | 6 kHz | nothing | geometry stated, but LMS with 3600 taps and step 1/14400 follows about 0.05 Hz (our estimate; the input power is not given) and snapshots are 4.5 Hz apart: every arrival comes out steady (scintillation 0.00) |
+| Black, Mariana Trench | 18 kHz | nothing | 7 ms delay window; the surface reflection above the array is 8 ms after the direct path |
+| Red, Singapore | 25 kHz | model-free only | range (100-400 m) and depth (8-20 m) not given per file |
+| Yellow, KAM'11 | 13 kHz | model-free only | arrivals are not where straight rays put them (not isovelocity), no profile given |
+| Blue, MACE'10 | 13 kHz | model-free only | towed source: range, depth and speed not given per file |
+| Pink, Japan | 6 kHz | not run | 14 km, no profile, no bathymetry; not downloaded (1.5 GB a file) |
+| Brown, ATOC | 75 Hz | not applicable | 3250 km of deep refracted paths |
+
+*Purple, three recordings.* One number fitted per recording, as before: wind 3.96, 3.70 and
+9.14 m/s (two sigma 0.87, 0.60, 1.91). The third recording is a different sea, which is what
+makes the following a test. 27 surface arrivals, grazing 1.3 to 41.5 degrees. A: gaussian,
+facet, convolve; C: gaussian, rule_of_thumb, convolve (the suite's defaults); B: lorentzian,
+rule_of_thumb, sum.
+
+| Quantity | A | C | B |
+| --- | --- | --- | --- |
+| Doppler rms width (in / out, median model/measured) | 20 / 4, 1.05 | as A | 6 / 18, 1.54 |
+| Doppler shape | 23 / 4, 0.97 | as A | 13 / 14, 1.55 |
+| tail decay time | 10 / 13, 1.02 | 7 / 12, 2.13 | 8 / 11, 1.93 |
+| coherent share (arrival and tail) | 19 / 8 | 19 / 8 | |
+| scintillation index | 5 / 22, 0.37 | 6 / 21, 0.38 | |
+
+*Verdict per ingredient* (measured over closed form, across the arrivals not used for a fit):
+
+1. **Doppler width proportional to sin(grazing) and to the square root of the number of surface
+   bounces: supported.** Median 0.89, scatter a factor 1.13 (n = 24), from 0.4 to 5 Hz, the
+   same below and above 12 degrees (0.88, 0.90) and in the rough recording. Two-bounce
+   arrivals 0.82 (n = 4).
+2. **Doppler width proportional to frequency: supported, inside one band only.** Upper against
+   lower half of 9.2-15.8 kHz: ratio 1.185 +- 0.017 (standard error, 21 arrivals) against 1.216
+   for proportionality and 1 for none. At 200 m, where Gamma^2 is about 1, the model's
+   own factor 1 / sqrt(1 - exp(-Gamma^2)) lowers the expected ratio to 1.09 in the calm
+   recordings; measured 1.05 and 1.03 there (1.20 in the rough one, where Gamma is large). Across carriers it is **not testable**: no second site has both geometry and a
+   fast tracker.
+3. **Doppler spectrum Gaussian: supported**, and not only at Purple. Shape w90/w50: Purple
+   median 2.53 (1.76-3.08, n = 27); Red at 25 kHz 2.3-2.5; Yellow 2.34; Blue 1.77 (Gaussian
+   2.44, Lorentzian about 4 on these axes). The other three are unidentified arrivals through
+   slower trackers.
+4. **Coherent share exp(-Gamma^2): the form is supported, the Pierson-Moskowitz height is
+   contradicted.** In the two calm recordings the shares at 200 m want 1.36 times the height of
+   the wind law (scatter 1.06, n = 6), and it holds within the band (lower half more coherent
+   than upper in 8 of 9 arrivals at 200 m). But the excess is not a constant: read as heights,
+   the 200 m surface arrival gives 0.116, 0.102 and 0.144 m in the three recordings where the
+   wind law gives 0.084, 0.073 and 0.447 m. The measured height hardly changes while the
+   Doppler width (vertical speed) more than doubles: a fetch-limited or swell-carrying sea, not
+   a fully developed one. The height has to be an input of its own.
+5. **Decay time: neither rule is supported in detail; the rule of thumb is too long.**
+   Measured over model: facet median 0.99 with a scatter of a factor 5; rule of thumb 0.47
+   with a factor 3. Above 12 degrees (Gamma^2 over 7): facet 1.28, rule of thumb 0.75. Below
+   (Gamma^2 of order 1): facet 0.59, rule of thumb 0.28.
+6. **Complex Gaussian taps: contradicted at steep angles.** Scintillation index of fully rough
+   arrivals: median 1.43 (one bounce, n = 4), 1.31 (two, n = 7), 1.72 (three, n = 6), up to 4.8
+   in the rough recording; the model gives 0.6 after the same windowing and cannot exceed 1.
+   It grows with grazing angle, not with the number of bounces: at 7-10 degrees it is 0.5-0.9.
+   Not general: Red 0.6-0.7, Yellow 0.21, Blue 0.25 (low grazing angles, as far as can be
+   told). A K-distributed tap intensity (gamma texture of shape nu on each tap, scintillation
+   1 + 2 / nu) would need nu of about 3 to 7 for the medians and 0.5 for the extreme.
+7. **Bubble loss: weakly indicated, not testable.** From 4 to 9 m/s the first surface arrival
+   at 60 m falls from -9.5 and -11.1 dB to -17.4 dB re the whole channel; the model falls by 2 dB
+   without bubbles and 3.3 dB with the Hall-Novarini law (which is outside its stated range at
+   12.5 kHz). One arrival in one recording, and levels carry a few dB of normalisation.
+8. **Multi-bounce rule, angle spreading, refraction, sediments: not testable** with these data.
+
+*Two things from 21.3 that are now explained.* The 15 ms tail at 1 km is higher-order bounces,
+not missing physics: flat images up to 12 bounces put -5.2, -5.6 and -9.0 dB of the channel's
+energy in 1-3, 3-8 and 8-18 ms, against -6.3, -7.4 and -10.9 dB measured (three bounces: -13.9
+dB and nothing). The late surface arrivals fit a surface 0.3 to 0.6 m (60 m) and 0.8 to 1.5 m
+(200 m) above the stated 15 m, growing from the first recording to the third at both ranges;
+a tide would do that, but the two ranges do not agree on the amount.
+
+*What the data ask of the model* (nothing was changed; for the owner to decide):
+`doppler_spectrum: gaussian` as default (already decided); `decay_time: facet` in place of
+`rule_of_thumb` (Purple only, three recordings); the surface's `rms_height` given separately
+from `wind_speed` whenever a height is known (`{wind_speed, rms_height}` already works: an
+explicit value overrides the wind law); an opt-in non-Gaussian tap amplitude for steep
+bounces (one site: not implemented).
+
+*Other datasets.* Watermark (FFI; van Walree et al., IEEE JOE 42, 2017) and the SFI Smart
+Ocean dataset (IEEE DataPort, the origin of Green, which per a search result includes
+sound-speed profiles) are on hosts this session may not reach (`ffi.no`,
+`ieee-dataport.org`): licence and contents not verified. A search of Zenodo found no other
+measured underwater channel set, and none above 30 kHz.
+
+## 22. The projector's direct sound and a receiver that overloads [OURS]
+
+Not from TR 0702: SST's receiver is linear. This section is our own model, written for the
+long-range array, whose projector sits beside the hydrophones. It is behavioural: it says
+what a front end of a given description does, and makes no claim about any board. Code:
+`sim/sources.py` (`direct_arrival`), `sim/receiver.py` (`apply_front_end`),
+`tools/direct_sound_study.py`, `tests/python/test_direct_overload.py`.
+
+### 22.1 Direct arrival (`transmit.direct_path`)
+
+The pulse reaches hydrophone i straight from the projector, a distance `r_i` away:
+
+    p_i(t) = (A_1m / r_i) 10^(-alpha r_i / 20) s(t - r_i / c),     A_1m = 10^((SL + sensitivity + gain) / 20)
+
+`r_i` is each element's own distance (the projector is in the array's near field: on the
+three-row face `r_i` runs from 1.69 m to 6.37 m, an 11.5 dB spread of level and 3.1 ms of
+delay, nothing like a plane wave). It is the one-way source of Sec. 20 placed at the
+projector's true position, moving with the vehicle (so no Doppler), emitting the sonar's own
+waveform at the transmit instant; the same kernel as the echoes computes it, so element
+patterns, absorption, board clocks, element position errors and sampled waveforms come with
+it. The provider's other eigenrays between projector and array are included: with flat
+boundaries the images of the projector in the surface and the bottom, at their own
+distances, with the boundary's reflection coefficient. `{boundaries: false}` leaves them out.
+
+A projector with a beam pattern: the one-way path treats the source as omnidirectional, so
+the pattern is applied afterwards, per ray and per element, at the band centre, in the
+direction the ray leaves the projector towards that element (the line from the apparent
+source to the element, mirrored in the horizontal once per bounce). Exact for straight rays
+and flat horizontal boundaries. A projector on a face with a half-space pattern facing out
+has zero response in the plane of the face; real baffles leak and diffract, which is not
+modelled: without a measured pattern, omnidirectional (the Popoto files) is the pessimistic
+choice.
+
+What runs where: analytic pulses, the C++ kernel (host or CUDA) on both engines; sampled
+pulses, C++ or NumPy by engine; the eigenrays by the provider's engine.
+
+Level convention: `A_1m` is the PEAK of the pulse in volts at the ADC, as everywhere in the
+simulator. If a projector's source level is quoted rms, its pulse peaks 3 dB higher.
+
+### 22.2 Overload and recovery (`receive.overload`)
+
+Signals are in the record's units: volts at the ADC with all of `receive.gain_db` applied. A
+limit `L` volts at the output of an input stage with `G_pre` of the total `G` dB is the
+ADC-referred limit `L 10^((G - G_pre) / 20)`. The chain:
+
+    x -> gain switch a(t) -> input stage (limit, dead time, gain recovery)
+      -> coupling capacitor (one-pole high-pass) -> receive.tvg ramp -> ADC (limit, dead time, gain recovery)
+
+**A limiting stage.** Input `u`, rails `-L_n`, `+L_p`, dead time `T_d`, recovery constant
+`tau_g`; `tau` the time since the stage last clipped (the channel's own, or the latest on
+its board when the stage is shared):
+
+    u >= L_p or u <= -L_n :  y = the rail
+    0 < tau <= T_d        :  y = the rail last hit (or 0)
+    tau > T_d             :  y = g u,   g = 1 - exp(-(tau - T_d) / tau_g)
+
+Whether a sample clips is decided on the input alone, so the stage has no feedback and the
+curves are closed forms: the gain is within `x` dB of nominal `T_d + tau_g ln(1 / (1 - 10^(-x/20)))`
+after the last clipped sample (2.22 `tau_g` for 1 dB).
+
+Which stage clips first follows from where the gain is: with all the gain ahead of the
+input stage's output, that stage clips first if its swing is below the ADC's full scale; with
+gain behind it (and behind the capacitor) the ADC clips first.
+
+**The coupling capacitor.** `v_C' = (y_1 - v_C) / tau_c`, `tau_c = 1 / (2 pi f_c)`; output
+`y_2 = y_1 - v_C`. The capacitor follows the mean of what the input stage delivers:
+
+- an unclipped or symmetrically clipped burst has zero mean and leaves no charge (only a
+  ripple of order `L f_c / f`);
+- a burst whose clipped output has mean `m` for a time `T` leaves `v_C = m (1 - exp(-T / tau_c))`.
+  For a sine of amplitude `A` between unequal rails,
+  `m = [h(L_p) - h(L_n)] / (2 pi)`, `h(L) = 2 A (1 - cos th) + L (pi - 2 th)`, `th = asin(L / A)`,
+  which tends to `(L_p - L_n) / 2` when the burst is far over both rails (a square wave);
+  a rail held through a dead time is a mean `L` for `T_d`;
+- afterwards the output is the signal minus `v_C exp(-t / tau_c)`: an offset decaying with
+  the corner's time constant (1.6 ms at 100 Hz, 16 ms at 10 Hz). Multiplied by the gain
+  behind the capacitor it can exceed the ADC's full scale `F`; the ADC then sits on its rail for
+  `tau_c ln(|v_C| / F)` and nothing is received.
+
+The offset itself is far below the band and a matched filter rejects it; what it costs is
+the time on the rail and the headroom until it has decayed. In samples the filter is the
+bilinear transform with the corner pre-warped (unit gain in the band to 2e-4 at 5 kHz).
+
+**Gain switching.** `a(t)`: `gain_db` until `until`, then linear in dB to 0 over `ramp`. It
+acts ahead of the input stage, so a reduction larger than the overload removes the clipping
+and with it every recovery effect; what it costs is the gain (and so the ADC's noise floor
+relative to the signal) while it lasts. The record's existing ramp fields report it.
+
+**State before the window.** A receive window usually opens after the pulse, but the front
+end's state at that moment was set by the pulse. The model therefore runs from the transmit:
+the direct arrival is synthesised for the interval before the window on the same sample
+clock (same kernel, full fidelity), passed through the model, and discarded. Echoes,
+reverberation and noise in that interval are not simulated: they are tens of dB below any
+limit and change no state.
+
+### 22.3 What it gives for the Popoto files (as configured; several inputs unconfirmed)
+
+`tools/direct_sound_study.py` -> `docs/design/direct_sound_study.json`. With SL 197 dB,
+sensitivity -208 dB re 1 V/uPa, 43 dB gain, 2.61 V full scale (all flagged unconfirmed in
+the sonar files, as is every projector position): the direct sound is at full scale 15.3 m
+from the projector. On the three-row face (projector 4 m from the centre) every hydrophone
+is overloaded, by 19.1 dB at 1.69 m down to 7.6 dB at 6.37 m; on the static frame by 16.7 to
+35.6 dB; on the test AUV by 20.6 to 34.0 dB. A front end that only clips costs nothing
+beyond the pulse itself (minimum range `c (T + r / c) / 2`: 78 m and 753 m for 0.1 s and
+1 s on the face). Each second of recovery adds 750 m.
+
+### 22.4 Limits
+
+- Behavioural, not a circuit: one dead time and one time constant per stage, a hard limiter
+  with no soft knee, no slew limit, no thermal tail, no latch-up, no protection-diode
+  conduction at the input (which can charge an input capacitor through a different time
+  constant than it discharges: here the charging and the decay share `tau_c`), no
+  intermodulation beyond what a hard limiter makes.
+- A sigma-delta converter driven past full scale may go unstable and take its own time to
+  come back; that is the ADC stage's `dead_time`, a parameter, not a model of the modulator.
+- Clipping makes harmonics above half the sample rate; the limiter works on the samples, so
+  those alias instead of being removed by an anti-alias filter that in a real board sits
+  between the stages. They are out of the processing band either way.
+- The decision "clipped" ignores the stage's own recovering gain (a stage at gain 0.3 clips
+  at the same input as at gain 1).
+- Real (passband) records only: a complex envelope cannot be clipped.
+- Before the window only the direct arrival is simulated. A strong echo or boundary return
+  before the window that overloads by itself is not seen (none does in the Popoto cases:
+  the first surface return at 10 m depth is 26 dB below the direct sound at 1 m).
+- Hull-borne (structural) paths from the projector to the hydrophones, and electrical
+  crosstalk from the power amplifier, are not modelled; either can exceed the water path.
+- No parameter of the Popoto board's overload behaviour is known to us. Dead times, time
+  constants, rails and the gain split in the scenarios, tests and study are illustrative.
+
+---
+
+## 23. What the open literature confirms, contradicts or refines (2026-11 search) [OURS]
+
+Register of sources, access and the list of documents still wanted: `docs/REFERENCES.md`.
+Code: `sim/bottom.py`, `sim/surface.py`, `acoustics.py`, `sim/noise.py`,
+`configs/sediments.yaml`; tests `tests/python/test_sediment_literature.py`,
+`test_literature_models.py`. Everything added is opt-in; one table value was corrected
+(22.1). TR 9407 was not read; "the published model" below means what open documents print
+and attribute to it. `sim/timespread.py` was not changed (findings only, 22.4).
+
+### 23.1 Sediments: the table is complete
+
+Three open documents close the gap of Sec. 13 and of `ORG_ARL_SURVEY.md` Sec. 10:
+
+- names to mean grain size: Cintron (2001), Table 1 (the CASS/GRAB table, 23 rows);
+- roughness: `w2 = 0.00207 h^2` cm^4, `h = (2.03846 - 0.26923 Mz) / (1 + 0.076923 Mz)` for
+  `-1 <= Mz < 5`, `h = 0.5` for `5 <= Mz <= 9` (Snellen et al. 2013, eq. (5)); exponent 3.25
+  for all (Snellen et al. 2011);
+- volume: `sigma2 = 0.002` below 5.5 phi, `0.001` from 5.5 phi (both papers).
+
+Conversions, each tested. Spectral strength: the papers' spectrum is `W = (h0 K)^-gamma w2`
+with `h0` = 1 cm and `w2` in cm^4, two-dimensional and isotropic, so
+`w2 [m^(4-gamma)] = w2 [cm^4] 10^(2 gamma - 8)` (`bottom.w2_from_cm4`); the regression then
+lands on the two values that arXiv:1809.08459 prints in metres (1.410e-4 and 1.638e-5) within
+0.3 %. Volume parameter: the published volume cross section
+`5 delta sigma2 |1 - R^2|^2 sin^2(t) / (nu ln10 |P|^2 Im P)` (Snellen et al. 2013, eq. (3)) is
+our `volume_strength` to 1e-10 (the identity is `(1 - R) / (1 + R) = P / (rho sin t)`), so
+`sigma2` is the volume cross section per unit volume over the attenuation in dB/m, as we
+had it. Loss: `delta` is the ratio of imaginary to real wavenumber in every source.
+
+Rock and pebbles are not fluids, and the literature does not fit the fluid model to them:
+the published model uses an "empirical expression" for gravel and rock (not printed anywhere
+open), and measurements on rock are summarised by Lambert's law, `mu sin^2(t)`: `mu` = -13 and
+-18 dB (arXiv:1601.06078, 100 kHz), -23 dB (Gruber 2019, 200 kHz), -10 dB (from -13 dB at 45
+degrees, Fezzani et al. 2025). The table carries -16 dB with that range for `rock` and -9 dB,
+flagged unconfirmed, for `pebbles`. The handbook's own rock curves (-8 dB at 20 degrees) are
+above the largest Lambert law energy conservation allows (-5 dB): so is our type law
+`searay_bottom` for rock (-7.2 dB at 20 degrees).
+
+Family table, default model, dB at 10 / 20 / 45 degrees
+(`PYTHONPATH=python python3 tools/boundary_models_study.py --family-only`):
+
+| Sediment (phi) | 6 kHz | 100 kHz | 300 kHz |
+|---|---|---|---|
+| rock (Lambert -16) | -31.2 / -25.3 / -19.0 | same | same |
+| pebbles (Lambert -9) | -24.2 / -18.3 / -12.0 | same | same |
+| sandy_gravel (-1) | -34.9 / -27.6 / -22.0 | -26.0 / -18.7 / -14.4 | -22.5 / -15.2 / -10.9 |
+| coarse_sand (0.5) | -37.8 / -30.3 / -23.7 | -29.4 / -21.9 / -18.4 | -25.9 / -18.4 / -15.3 |
+| medium_sand (1.5) | -41.2 / -33.1 / -26.7 | -33.3 / -25.3 / -22.5 | -29.9 / -21.8 / -19.7 |
+| fine_sand (2.5) | -39.9 / -30.4 / -24.4 | -36.7 / -27.7 / -23.6 | -34.3 / -25.5 / -22.7 |
+| very_fine_sand (3.5) | -35.7 / -27.1 / -24.6 | -35.1 / -26.8 / -24.5 | -34.4 / -26.4 / -24.2 |
+| coarse_silt (4.5) | -32.0 / -27.9 / -25.0 | -32.0 / -27.8 / -25.0 | -31.9 / -27.8 / -24.9 |
+| medium_silt (5.5) | -35.7 / -31.7 / -28.3 | -35.6 / -31.7 / -28.3 | -35.6 / -31.7 / -28.3 |
+| clay (9) | -36.4 / -32.0 / -28.4 | -36.4 / -32.0 / -28.4 | -36.3 / -32.0 / -28.4 |
+| type law sand / mud | -43.7 / -42.9 / -42.3; -44.2 flat | -33.7 / -29.1 / -27.1; -40.3 / -38.7 / -38.0 | -26.4 / -21.6 / -19.5; -31.0 / -28.6 / -27.6 |
+| type law gravel | -34.8 / -27.9 / -24.9 | -25.4 / -18.2 / -15.2 | -21.7 / -14.4 / -11.4 |
+
+Reading, honestly:
+
+- At 100 and 300 kHz the family is ordered: the level falls 9 to 10 dB from sandy gravel to
+  fine sand (roughness scattering), then the silts and clays sit on a plateau that the volume
+  term sets, with a 3 dB step down at 5.5 phi where `sigma2` halves. Sandy gravel agrees with
+  the type law for gravel within 1 dB, the sands with the type law for sand within 5 dB.
+- At 6 kHz the order is not monotonic: the sands at 10 to 20 degrees are below the silts
+  (-41 against -32 dB at 10 degrees), because below their critical angle little sound enters
+  a sand and its roughness term has fallen as `f^0.75`, while a silt lets the sound in and
+  scatters it from the volume at a level that does not depend on frequency. That is what the
+  published defaults say; the published model's stated range is 10 to 100 kHz (Gallaudet
+  2001), so 6 kHz is an extrapolation. The type laws for sand and mud are 10 dB or more below
+  the sand and silt rows at 6 kHz (the gravel law agrees with sandy gravel there); they state
+  no range either. Nothing opened measures bottom backscatter at 4 to 10 kHz.
+- `medium_sand` is the one kink: 2 dB below its neighbours at 6 kHz and 45 degrees, because
+  its source gives `sigma2` = 0.001 where the rule gives 0.002 (REFERENCES Sec. 11).
+- Against measurements at 45 degrees (Fezzani et al. 2025, calibrated, 35 to 440 kHz): medium
+  sand about -25 dB and flat above 70 kHz, ours -22.5 (100 kHz) and -19.7 dB (300 kHz), so 2.5
+  to 5.5 dB high and rising where the data are flat; sandy mud and muddy very fine sand about
+  -22 dB, ours -28.3 (`sandy_mud`) and -24.5 dB (`very_fine_sand`), so 2.5 to 6 dB low.
+  Snellen et al. (2013) found at 300 kHz fitted `w2` twice and `sigma2` half the defaults;
+  Gallaudet fitted `sigma2` = 0.003 and exponent 3.00 on a silty clay at 68 kHz. Class
+  defaults are good to about +-3 to 6 dB; above 100 kHz they overstate sand.
+
+### 23.2 Bottom scattering models
+
+| Ours | Published | Verdict |
+|---|---|---|
+| perturbation factor | Jackson's form (arXiv:2009.12420) | equal (1e-10), as before |
+| volume term | Snellen et al. 2013, eq. (3) | equal (1e-10); the published model adds slope and shadowing corrections to it that we do not have |
+| `composite`: tilted perturbation result averaged over large-scale slopes | Olson and Lyons, arXiv:2106.05909, eq. (44), after McDaniel and Gorman (1983) | same structure; their conditions: k x small-scale rms height < 1, grazing above about twice the large-scale rms slope angle |
+| split at k x rms height = 0.5 (`small_scale_kh`) | Fonseca et al. 2025, eq. (6), after Novarini and Caruthers (1994): Rayleigh parameter of the small scale = 1, i.e. `4 k^2 zeta^2 = 1` | the same number (tested with both integrals) |
+| `small_slope` | lowest-order small-slope approximation; validity in Olson (2026) | form as before; now with limits: k h up to order 1 (pressure release), about 2 to 3 (sand), about 11 (mud), rms slope 10 to 60 degrees by exponent |
+| `combined` (small-slope averaged over large-scale slopes) | the published model switches: Kirchhoff from 40 to 90 degrees grazing, composite below 40, "appropriate interpolation" (Siemes et al. 2009) | not comparable formula to formula: the interpolation is not printed anywhere open. Olson (2026) notes the composite model "has largely been superseded by the SSA" |
+
+Recommendation: none needed for the formulas. A default change is the owner's: `small_slope`
+is what the current literature uses and it is valid wherever `perturbation` is.
+
+### 23.3 Sea surface
+
+*Backscatter.* The published high-frequency model is `10 log10(sigma_r + sigma_b)`, roughness
+plus bubbles (Gallaudet 2001, pp. 124-125, summarising the handbook and McDaniel 1993):
+`sigma_b = delta_r sin(t) / (8 pi delta) (1 + 8 b e^-2b - e^-4b)`, `b = beta_I / sin(t)`,
+`delta = 2.55e-2 f^(1/3)`, `delta_r = 0.0136`, and a facet term near the normal. It says the
+model agrees with data for 12 to 70 kHz and 3 to 15 m/s within +-5 dB below 8 m/s. Two things
+follow that we did not have:
+
+- a ceiling. Once the layer is opaque the level is `delta_r sin(t) / (8 pi delta)`, whatever
+  the wind ("saturation ... verified by several experiments"): -27.9, -29.3 and -30.4 dB at
+  10 degrees for 12, 30 and 68 kHz, at most 3.7 dB more on the way there. The empirical
+  laws in the tree have no ceiling: at 68 kHz, 15 m/s and 10 degrees Chapman-Harris gives
+  -19.1 dB and the Kraus law -23.0 dB, 7 to 11 dB above it. At 30 kHz and 10 m/s the three
+  agree within 5 dB (-25.5, -28.3, -30.0 dB at 10 degrees).
+- a consistency check of two sources. The module's bubble dynamics (Commander-Prosperetti,
+  from arXiv:2410.14415) gives a total damping constant at resonance of 0.0544, 0.0797,
+  0.1051, 0.1187 at 10, 30, 68, 100 kHz; the printed `2.55e-2 f^(1/3)` with f in kHz gives
+  0.0549, 0.0792, 0.1041, 0.1184. And `delta_r` is `k a` at resonance: 0.01358 from
+  Minnaert's radius. So the unit the source does not print is kHz, and neither constant is free.
+
+Implemented as `surface.bubble_layer_surface_db` (scenario `model: bubble_layer_surface`),
+with the optical depth `beta_I` taken from one of our loss laws (`extinction: apl_1994` or
+`hall_novarini`), because the handbook's law for it is not printed anywhere open; without the
+small-scale roughness term (its empirical function is not printed), so between about 30 and
+70 degrees it is a lower bound.
+
+*Bubble loss per bounce: is there data to arbitrate between `apl_1994` and our population
+model?* Not in anything we could open. The one measurement paper found by title (attenuation
+from near-surface bubbles, 1 to 20 kHz, J. Acoust. Soc. Am. 2008) sits behind a challenge
+page. The backscatter model cannot arbitrate either: at 10 m/s and above both loss laws put
+the layer near saturation, and at 5 m/s they differ by 3.6 dB (30 kHz) and 4.5 dB (68 kHz) in
+predicted backscatter at 30 degrees, inside the model's stated +-5 dB. Patchiness: no opened source
+quantifies it. The adopted law stays.
+
+*Forward loss, coherent reflection.* `exp(-Gamma^2 / 2)` is the Gaussian-height result;
+no opened document gives measured coherent loss against the Rayleigh parameter (22.4).
+
+*Wave statistics.* Pierson-Moskowitz: `S = a g^2 / w^5 exp(-b (g / (U w))^4)`, a = 8.1e-3,
+b = 0.74, U at 19.5 m (Ead 2004, eq. (5.1)): our vertical speed is its second moment exactly;
+our rms height uses significant height 0.21 U^2 / g where the constants give 0.2092 (0.4 %).
+Cox-Munk: upwind 3.16e-3 U, crosswind 3e-3 + 1.92e-3 U at 12.5 m, 1 to 14 m/s
+(arXiv:2210.05456, eq. (12)); the sum is 0.8 % below our total 0.003 + 0.00512 U. Added:
+`acoustics.mean_square_slope_components`. The sea is steeper along the wind than across it
+by 1.2 to 1.5; the time-spreading model takes it isotropic. Chapman-Harris's formula and
+range could not be confirmed (no open copy).
+
+### 23.4 Time, angle and Doppler spreading of forward scatter
+
+The papers that measure this (Dahl 1996, 1999, 2001, 2004; Preisig and Deane 2004) could not
+be opened: publisher challenge pages, no open copies listed. What was found:
+
+- Doppler width against steepness. Dessalermos (2005) tabulates the Doppler spread of each
+  resolved path at ten ranges (8 to 16 kHz probes, 30 m of water): it grows with a path's
+  excess delay at every range, e.g. 0.89, 1.10, 2.00, 2.56, 2.85 Hz at 2300 m and 0.66,
+  1.30, 2.06 Hz at 4350 m. Later paths are steeper and have more surface bounces. That is
+  the behaviour of `2 f v sin(g) / c` with bounces adding, and the opposite of a width that
+  goes as `1 / sin(g)` (TR 0702 p. 101), under which the first, most grazing arrivals would
+  be the widest. The wind is not stated there, so it is a trend, not a test; the magnitudes
+  (0.7 to 2.9 Hz at 12 kHz) are those of Sec. 21 (0.5 to 2.2 Hz at 12.5 kHz in 4 m/s).
+- Model too coherent at low grazing (implied rms height 1.38 x Pierson-Moskowitz): the
+  Pierson-Moskowitz constants are confirmed, so the factor is not a slip in our numbers. The
+  spectrum is for a fully developed wind sea; swell adds height without vertical speed in
+  proportion. No opened measurement of coherent reflection against the Rayleigh parameter.
+- Scintillation index above 1 on multi-bounce arrivals: not addressed by anything opened
+  for forward scatter. (For backscatter the literature does report indices above 1 that grow
+  as the resolution cell shrinks and the grazing angle falls, 22.5; it is a different
+  mechanism.)
+- Facet decay time against the rule of thumb: nothing opened.
+
+Recommendation: none from the literature beyond what Sec. 21 already proposes; the wanted
+list names the pages that would settle each point.
+
+### 23.5 Reverberation statistics
+
+No published default for the K shape exists to adopt, and the literature says why. The
+shape "is related to the effective number of scatterers within a resolution cell" (Abraham
+and Lyons 2002, as quoted in arXiv:1901.08023), and the scintillation index of roughness
+backscatter "increases as resolution increases, grazing angle decreases, and spectral
+strength increases" (arXiv:2106.05909; 100 and 10 kHz). At 100 kHz and 3 cm resolution every
+seabed type measured, rock, gravel, sand and mud, has an index well above 1, falling towards
+1 as the resolution is reduced without reaching it (Lehman 2022); on rock a single K
+distribution fails and mixtures are needed (arXiv:1901.08023). So `statistics.shape` must
+stay a required input, tied to the sonar's cell; a rule from the number of scatterers per
+cell needs Abraham and Lyons (2002), which is on the wanted list.
+
+### 23.6 Targets, noise, medium
+
+- Targets: no open copy of Urick's table of simple forms was found; the cylinder's obliquity
+  factor stays `cos` as the Kirchhoff integral of arXiv:1805.06945 gives it. Wanted.
+- Ambient noise spectrum: a third open print of the four-term fit (Hurt 2005, eqs.
+  (2.7)-(2.9) and listing), with its attributions: wind to Wenz (1962), thermal and shipping
+  to Urick (1983). Constants identical to ours. Its eq. (2.7) prints `7.5 w` where its own
+  listing has `7.5 w^0.5`. Coates (1990), named in our docstring, was not opened.
+- Spatial coherence: isotropic `sin(kd) / kd` confirmed as printed (Shajahan et al. 2022, eq.
+  (3)). For surface-generated noise the Cron-Sherman model (their eq. (4), vertical pair:
+  `2 [sin x / x + (cos x - 1) / x^2] + 2i [sin x / x^2 - cos x / x]`) is added as
+  `noise.surface_noise_coherence` (any geometry, by quadrature; equal to the closed form to
+  1e-10). Its real part first vanishes at 0.371 wavelengths against 0.5 for isotropic noise;
+  the same paper shows it failing in shallow, range-dependent water (first zero off by up to
+  30 %). The noise generator still uses the isotropic matrix.
+- Impulsive noise: nothing new opened (alpha = 1.7 for the Singapore site model stays the
+  only number, from the UACR).
+- Absorption: our Francois-Garrison is within 0.6 % of 21 values tabulated for Arctic
+  profiles (Col 2010, Table 1: 0.1, 1 and 10 kHz, surface to 3500 m, pH 7.63 to 7.95), and
+  our Ainslie-McColm form is the one printed there (eq. (2.3)) and reproduces its two quoted
+  relaxation frequencies (0.769 and 41.372 kHz). Stated validity ranges of both formulas
+  were not read.
+- Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.

@@ -288,6 +288,10 @@ marked uncertain (1.337 or 1.357) until a second source is found.
 
 ## 3. Recommended adoptions, ranked
 
+Status (2026-11-17): items 1, 3, 5, 9, 10 and 11 are adopted in commit `cadc7ca`; see
+section 8 for what each became. Items 2 and 4 are with other work packages; 6 to 8 wait for
+the owner.
+
 Effort is for implementation with tests in this repository. All are re-implementations from
 the stated formula or table with attribution, not code copies.
 
@@ -408,3 +412,246 @@ model (Cron-Sherman or isotropic); no fluid-solid or layered reflection coeffici
 own; no sound-speed equation other than Mackenzie; no absorption formula other than
 Francois-Garrison (plus Thorp inside the GPL port); no roughness spectrum or sediment volume
 parameters for the named seabeds; no stated validity range for the bubble law.
+
+## 8. Adoption record
+
+Commit `cadc7ca`. Everything is opt-in; scenarios that do not use a new key give the records
+they gave before.
+
+| Item | What was adopted | Where | Source as cited in the code |
+|---|---|---|---|
+| 1 | 20 reflection-only seabeds (density, sound speed, loss parameter with the source's reference water 1023 kg/m3, 1528 m/s; the loader forms ratios). By name for bottom reflection: image-source `bottom: {sediment}`, Bellhop `environment: {sediment}`, `bottom.sediment_reflection`, `bottom.fluid_halfspace`. The scattering models refuse them unless the item supplies `w2`, `gamma2`, `sigma2`. `sandy_gravel` carries the table's speed with `unconfirmed_fields: [nu]` and a note giving both values. The two complete rows keep their arXiv numbers; their stated assumption (ratios formed with 1000 kg/m3 and 1500 m/s) is now recorded as supported by this table | `configs/sediments.yaml`, `sim/bottom.py`, `sim/propagation.py`, `sim/bellhop.py`, `sim/targets.py`, one argument in `sim/simulator.py`, `tools/boundary_models_study.py`, `tests/python/test_sediment_table.py` | UnderwaterAcoustics.jl (MIT), `src/stdlib.jl:113-136`, which attributes the table to APL-UW TR 9407 IV-6 Table 2 |
+| 3 | `acoustics.SEA_STATE_WIND_SPEED`, `sea_state_wind_speed`, `resolve_sea_state`; `run_scenario` rewrites `sea_state` to `wind_speed` in every mapping of the scenario before anything reads it | `acoustics.py`, one line in `sim/simulator.py` | UnderwaterAcoustics.jl `src/stdlib.jl:411-422`, which attributes it to TR 9407 II-4 Table 2 |
+| 5 | `acoustics.water_density(temperature, salinity)`, one atmosphere (the source has no pressure term). Not wired into any default | `acoustics.py` | arlpy (BSD) `uwa.py:101-121` and UnderwaterAcoustics.jl `src/basic.jl:111-121`, both citing "Fofonoff (1985 - IES 80)" |
+| 9 | `absorption(model="thorp")`, the two-term form SST uses; warns above 100 kHz | `acoustics.py` | APL-UW TR 0702 eq. (42) (not the GPL file where the survey first saw a Thorp formula, and not the four-term form of Jensen et al.) |
+| 10 | Section 9 below: data only, no code | this document | UnderwaterAcoustics.jl `src/basic.jl:43-54`, `src/stdlib.jl:236-252` |
+| 11 | `acoustics.bubbly_sound_speed(void_fraction, ...)` | `acoustics.py` | arlpy `uwa.py:215-231`, citing Wood (1964) and Buckingham (1997) |
+
+A correction to section 2.3.1: it says the ratios are "independent of the reference pair". More
+exactly, the arXiv paper's kg/m3 and m/s reproduce the Julia table's ratios only when divided
+by 1000 kg/m3 and 1500 m/s (1845 / 1000 = 1.845 = 1887.44 / 1023; 1767 / 1500 = 1.178,
+1800.29 / 1528 = 1.1782). Divided by 1023 and 1528 they would be 1.803 and 1.156. So the
+paper's authors formed their physical values from the ratios with 1000 and 1500, which is
+what the earlier work assumed.
+
+Thorp, measured: 0.780 dB/km at 8 kHz (0.683 for Francois-Garrison at 4 degC and 1000 m, the
+pair our TR 0702 validation quotes as 0.78 and 0.68). The two-term form is 0.273 / 1.150 /
+31.1 / 43.5 dB/km at 4 / 10 / 100 / 750 kHz against Francois-Garrison's 0.245 / 0.963 / 33.6 /
+222.4 at 10 degC, so it is a low-frequency model only.
+
+## 9. Elastic seabed parameters (data only; no code here uses them)
+
+Recorded so that the values are at hand if an elastic reflection coefficient is written.
+Read in UnderwaterAcoustics.jl (MIT); the attributions are that package's. Hamilton's paper
+was not opened, so nothing here is checked against it, and the validity of the regression
+(sediment type, depth below the sea floor, frequency) is not stated in the package.
+
+Shear speed c_s (m/s) from compressional speed c (m/s), `src/basic.jl:43-54`, "a regression
+relationship from Hamilton (1980)":
+
+| Range of c | c_s |
+|---|---|
+| below 1512 | not valid (the function raises an error) |
+| 1512 to 1555 | 3.884 c - 5757 |
+| 1555 to 1650 | 1.137 c - 1485 |
+| 1650 to 2150 | 991 - 1.136 c + 0.00047 c^2 |
+| above 2150 | 0.78 c - 962 |
+
+The table's sediments down to sandy silt (c = 1527.85 m/s, which gives c_s = 177 m/s by the
+first branch) are in the valid range; medium silt (1510.43 m/s) and finer are below 1512 and
+the package defines no elastic versions of them. Hand values: fine sand (1691.95) 414 m/s;
+medium sand (1800.29) 469 m/s; rock (3820) 2018 m/s.
+
+Shear attenuation, `src/stdlib.jl:236-252`, "shear absorption based on values recommended in
+Hamilton (1980)", in dB/m/kHz, with the material named in the line's comment:
+
+| Value | Seabeds | Comment there |
+|---|---|---|
+| 0.07 | Rock, Pebbles | basalt |
+| 13.2 | SandyGravel, VeryCoarseSand, CoarseSand, MediumSand, FineSand, VeryFineSand | diluvial sand |
+| 4.8 | MuddySandyGravel, GravellyMuddySand, MuddyGravel, MuddySand, ClayeySand | diluvial sand & clay |
+| 13.4 | CoarseSilt, SandySilt | alluvial silt |
+
+Conversion used there (`src/utils.jl:232-235`): dB/m/kHz times the wave's own speed / 1000
+gives dB per wavelength, and that divided by 40 pi / ln 10 gives the dimensionless loss
+parameter.
+
+## 10. The backscatter parameters that are still missing, and how to get them
+
+Question from the owner: which backscatter parameters are missing and how can they be found;
+then: use literature to complete every sediment. This section records what was searched, what
+was found, and what was not. Nothing was filled in without a source.
+
+### 10.1 What is missing
+
+The scattering model (`sim/bottom.py`) needs six numbers per sediment. Three (density ratio,
+speed ratio, loss) set the reflection coefficient; three more set the scattered level:
+
+| Parameter | Meaning | Have it for |
+|---|---|---|
+| `w2` | roughness spectral strength, m^(4 - gamma2) | medium sand, very fine silt |
+| `gamma2` | roughness spectral exponent | medium sand, very fine silt |
+| `sigma2` | volume scattering cross section per unit volume / attenuation in dB/m | medium sand, very fine silt |
+| shear speed and shear loss | for rock and gravel, which are not fluids | data only (section 9); no elastic model here |
+
+### 10.2 What was searched (2026-11-17)
+
+Reachable from this session: arxiv.org, github.com, zenodo.org, huggingface.co. Not reachable
+(name resolution refused by the session's network policy, or a browser challenge):
+www.mdpi.com, jcaa.caa-aca.ca, repository.tudelft.nl, www.ioa.org.uk, core.ac.uk,
+discloseweb.webhosting.rug.nl, apl.uw.edu, pubs.aip.org, ieeexplore.ieee.org. DTIC was not
+tried, to stay clear of the handbook.
+
+| Source opened | Licence | What it gives | What it does not |
+|---|---|---|---|
+| Lurton, Lamarche et al., "Backscatter measurements by seafloor-mapping sonars: Guidelines and Recommendations", GeoHab BSWG 2015, doi:10.5281/zenodo.10089261, Table 2-1 and section 2.5 | CC BY 4.0 | Density, velocity, absorption (dB per wavelength) and grain size range (phi) for nine classes, clay to coarse sand, "adapted from APL 1994 ... nominal values for c1 and rho1 (1500 m/s and 1000 kg/m3)". Agrees with the Julia table to the printed digits, except coarse silt's speed (1523 m/s against 1.0179 x 1500 = 1527). Its footnote: in the handbook's model "the volume contribution finally depends upon a volume parameter which has to be adjusted empirically" and "the rough seafloors (gravels, pebbles and rocks) are modeled using heuristic fits issued from experimental records, instead of theoretical formulas" | No w2, gamma2, sigma2; its model curves are figures only |
+| Bentrem, Sample, Kalcic and Duncan, arXiv:physics/0607146, Tables II and III, section III.A | arXiv | The search ranges used in an inversion: gamma between 2.4 and 3.9, volume parameter between 0.00 and 0.02, spectral strength "within factor of 2 of APL-UW parameterization"; rho, nu, delta "parameterize[d] ... according to phi values" after Mourad and Jackson and the handbook | The parameterisation itself is not printed |
+| Brown, Johnson and Brownstead, arXiv:1809.08459, Table 1 | arXiv | The two complete rows already in the table | Nothing new |
+| Olson, Lyons and Saebo, arXiv:1601.06078, Tables II, III and text | arXiv | Rock: measured scattering strength at 100 kHz and 20 degrees grazing, -33 to -26 dB (glacially abraded, smooth) and -30 to -20 dB (plucked, very rough); earlier measurements on rock -15 to -22 dB; "the APL-UW measurement from 'rough rock' ... approximately -8 dB at the same angle"; measured roughness spectra (abraded: 4.847e-8 m^(4 - gamma2), gamma2 = 2.73, in cycles/m; plucked: gamma2 = 4.36, outside the model's range); elastic parameters of the site's rock and "generic rock" | One angle's range, not a curve; elastic, not fluid |
+| Olson and Jackson, arXiv:2009.12420, Tables I, II | arXiv | Example layered bottoms for a numerical study (one-dimensional roughness) | Not named sediments; not two-dimensional spectra |
+| Olson and Lyons, arXiv:2106.05909 | arXiv | Example spectral strengths for a simulation study | Chosen for the study, not sediment classes |
+| arXiv:2003.11156, arXiv:2311.08337, arXiv:1901.08023; Zenodo 1274941 (Berkson and Matthews 1984, large-scale roughness), Zenodo 1278330 | various | Nothing usable | - |
+| GitHub, Hugging Face | - | No implementation of the model with its grain-size relations was found by search | - |
+
+Result: no open source that could be reached prints w2, gamma2 or sigma2 for any further named
+sediment, a regression of them against grain size, or a measured backscattering curve for a
+sediment class as numbers. The relations are known to exist in the literature this session
+could not open: search results (not opened) describe papers in Canadian Acoustics, J. Mar.
+Sci. Eng. (MDPI, open access) and TU Delft's repository as using "APL-UW methods" to get the
+parameters from mean grain size, and Jackson and Richardson, *High-Frequency Seafloor
+Acoustics* (2007) is the textbook.
+
+### 10.3 Provenance of every parameter after this work
+
+`J` = UnderwaterAcoustics.jl (MIT) `src/stdlib.jl:113-136`, attributed there to TR 9407 IV-6
+Table 2. `G` = also in the GeoHab report's Table 2-1 (CC BY). `B` = arXiv:1809.08459 Table 1,
+attributed there to TR 9407.
+
+| Sediment | rho, nu, delta | grain size (phi) | w2 | gamma2 | sigma2 | Complete |
+|---|---|---|---|---|---|---|
+| rock | J | - | absent | absent | absent | no (and needs an elastic model) |
+| pebbles | J | - | absent | absent | absent | no |
+| sandy_gravel | J (nu unconfirmed: 1.3570 or 1.3370) | - | absent | absent | absent | no |
+| very_coarse_sand | J | - | absent | absent | absent | no |
+| muddy_sandy_gravel | J | - | absent | absent | absent | no |
+| coarse_sand | J, G | 0 to 1 (G) | absent | absent | absent | no |
+| gravelly_muddy_sand | J | - | absent | absent | absent | no |
+| medium_sand | B, J, G | 1 to 2 (G) | B | B | B | yes |
+| muddy_gravel | J | - | absent | absent | absent | no |
+| fine_sand | J, G | 2 to 3 (G) | absent | absent | absent | no |
+| muddy_sand | J | - | absent | absent | absent | no |
+| very_fine_sand | J, G | 3 to 4 (G) | absent | absent | absent | no |
+| clayey_sand | J | - | absent | absent | absent | no |
+| coarse_silt | J, G (speed differs by 0.26 %) | 4 to 5 (G) | absent | absent | absent | no |
+| sandy_silt | J | - | absent | absent | absent | no |
+| medium_silt | J, G | 5 to 6 (G) | absent | absent | absent | no |
+| sandy_mud | J | - | absent | absent | absent | no |
+| fine_silt | J, G | 6 to 7 (G) | absent | absent | absent | no |
+| sandy_clay | J | - | absent | absent | absent | no |
+| very_fine_silt | B, J, G | 7 to 8 (G) | B | B | B | yes |
+| silty_clay | J | - | absent | absent | absent | no |
+| clay | J, G | above 8 (G) | absent | absent | absent | no |
+
+Having the grain size for nine classes means that one opened regression (w2, sigma2 against
+phi) would complete seven of them at once.
+
+### 10.4 The two complete rows, for a sanity check of the family
+
+Backscattering strength in dB from `bottom.backscattering_strength_db` (default perturbation
+model; the `combined` model in brackets where it differs by more than 0.2 dB), and the
+empirical type law already in the tree (`surface.searay_bottom_db`, from arXiv:2210.06535).
+
+| Frequency | Row or law | 10 deg | 20 deg | 45 deg |
+|---|---|---|---|---|
+| 6 kHz | medium_sand | -41.2 | -33.1 | -26.7 |
+| 6 kHz | very_fine_silt | -36.1 | -32.0 | -28.4 |
+| 6 kHz | searay mud / sand / gravel / rock | -44.2 / -43.7 / -34.8 / -16.9 | -44.2 / -42.9 / -27.9 / -7.2 | -44.2 / -42.3 / -24.9 / -3.2 |
+| 100 kHz | medium_sand | -33.3 (-29.5) | -25.3 | -22.5 (-21.4) |
+| 100 kHz | very_fine_silt | -36.1 | -31.9 | -28.4 |
+| 100 kHz | searay mud / sand / gravel / rock | -40.3 / -33.7 / -25.4 / -16.9 | -38.7 / -29.1 / -18.2 / -7.2 | -38.0 / -27.1 / -15.2 / -3.2 |
+| 300 kHz | medium_sand | -29.9 (-24.0) | -21.8 | -19.7 (-18.4) |
+| 300 kHz | very_fine_silt | -36.0 | -31.9 | -28.4 |
+| 300 kHz | searay mud / sand / gravel / rock | -31.0 / -26.4 / -21.7 / -16.9 | -28.6 / -21.6 / -14.4 / -7.2 | -27.6 / -19.5 / -11.4 / -3.2 |
+
+Reading. Sand: the model and the type law agree within 4 dB at 100 and 300 kHz and 20 to 45
+degrees (-25.3 against -29.1; -21.8 against -21.6), and disagree by about 10 dB at 6 kHz,
+where the type law is outside any stated range (its source states none). Silt against "mud":
+the model row does not change with frequency (volume scattering with a loss per wavelength),
+the type law rises 13 dB from 6 to 300 kHz; they cross near 200 kHz. At 6 kHz the model puts
+very fine silt above medium sand at 10 degrees: with these two rows the silt is a volume
+scatterer and the sand a roughness scatterer whose level falls as f^(4 - gamma2) = f^0.75.
+Two rows cannot show a trend from clay to gravel; that needs the missing parameters. One
+outside number supports the type law for rock: arXiv:1601.06078 quotes the handbook's 'rough
+rock' measurement as "approximately -8 dB" at 20 degrees, and `searay_bottom_db` gives -7.2.
+
+### 10.5 The rock measurement as a check
+
+`tools/boundary_models_study.py` prints the fluid model for the table's `rock` with the
+abraded surface's measured roughness (converted from cycles/m: w2 = phi2 (2 pi)^(gamma2 - 2)
+= 1.85e-7; the normalisation of the paper's spectrum is assumed) and no volume term: -39.3 dB
+at 20 degrees and 100 kHz, against -33 to -26 dB measured ("most of the points are clustered
+at the lower end"). The fluid model is 6 dB below the measured range. The paper's agreement is
+with an elastic small-slope model after calibrating the sonar on one of the rocks, so this is
+not a failure of the roughness term so much as a reminder that rock is not a fluid; it is
+recorded as a comparison, not used as a test.
+
+### 10.6 The fitting tool
+
+`tools/fit_sediment.py` (library: `python/gpusonar/sim/sediment_fit.py`, tests:
+`tests/python/test_sediment_fit.py`) fits w2, gamma2 and sigma2 to backscattering strength
+against grazing angle and frequency, holding rho, nu, delta from a named row (the
+reflection-only ones serve) or fitting them on request. It reports one-sigma uncertainties,
+lists the parameters the data cannot fix with the reason, and prints a row for
+`configs/sediments.yaml` with `status: fitted (<data source>)`; unconstrained parameters go
+into `unconfirmed_fields`, so using the row warns about them.
+
+    PYTHONPATH=python python3 tools/fit_sediment.py --data site.csv --sediment fine_sand \
+        --name my_site --source "survey 2026-11, FLS 300 kHz, calibrated" --out row.yaml --plot fit.png
+
+Measured on synthetic curves from our own model with 0.5 dB noise (the tests):
+
+| Data | Result |
+|---|---|
+| medium sand, 5 to 55 degrees, 20 and 200 kHz | all three recovered; one sigma: w2 a factor 1.18, gamma2 0.024, sigma2 a factor 1.10; errors within 4 sigma in four noise realisations |
+| very fine silt, 8 to 44 degrees, 100 kHz | sigma2 within 25 %; w2 and gamma2 flagged unconstrained (the data are volume scattering) |
+| medium sand, 5 to 25 degrees, 300 kHz only | all three flagged: one frequency at low angles fixes only w2 (2k)^(-gamma2) (recovered within 15 %), and the volume term is not seen |
+
+What coverage fixes what: sigma2 from wherever volume scattering dominates (soft sediments;
+low frequencies on sand); the roughness level w2 (2k)^(-gamma2) from one frequency; w2 and
+gamma2 separately from two well separated frequencies (level as f^(4 - gamma2)) or from
+angles near the specular direction with the `small_slope` or `combined` roughness model.
+
+Getting a calibrated curve from this suite's own FLS or SAS data. Scattering strength is
+SS = RL - SL + 2 TL - 10 log10(A), with RL the received level in dB re 1 uPa, SL the source
+level, TL the one-way loss and A the insonified area of the resolution cell. From a record:
+
+| Needed | In the ping record | Otherwise |
+|---|---|---|
+| source level | `source_level_db` (NaN if unknown) | must be measured |
+| receive chain: hydrophone sensitivity | no | the sonar configuration (`sensitivity_db`), must be the real one |
+| fixed gain and gain ramp (TVG) | `hardware_gain_db`, `tvg_time`, `tvg_gain_db` | - |
+| per-channel gain, phase, delay | `calibration/` | `calibrate.py` |
+| converter scale | `adc_full_scale`, `adc_bits` | - |
+| transmit and receive beam patterns at the cell's angles | no | the sonar configuration's element patterns; for an absolute level they must be measured patterns |
+| spreading and absorption | `environment/` sound speed, temperature, salinity | `acoustics.absorption` |
+| insonified area: range resolution x beam footprint (FLS) or the image's resolution cell (SAS), and the grazing angle | geometry from the pose and the water depth (`dvl` altitude) | local slope from bathymetry if the bed is not flat |
+| processing gains (pulse compression, beamforming, any image normalisation) | no | must be undone or computed for the processing used |
+
+`simcal.calibrate_fls` already does the level bookkeeping in the other direction (it fits how
+many dB each boundary's strength must move for the simulator to reproduce a log's range
+profile, absolute when the record's gains, source level and sensitivity are the true ones).
+A practical route to a curve is therefore: run `calibrate_sim.py fls` in absolute mode with a
+Lambert bottom over several range bins, or bin the conditioned, beamformed intensity by
+grazing angle and apply the sonar equation above; then give the binned SS against angle (and
+each frequency band available: the FLS sonars span 120 to 750 kHz between them) to
+`fit_sediment.py`. Exported, flattened or 8-bit imagery gives relative levels only: the shape
+against angle can still constrain gamma2 weakly, but w2 and sigma2 need the absolute level.
+
+### 10.7 Realistic ways to get each missing parameter
+
+| Missing | For | Ways, in order of effort |
+|---|---|---|
+| w2, gamma2, sigma2 | the 20 reflection-only rows | (1) Allow the session to reach one open paper that prints the grain-size relations (www.mdpi.com, jcaa.caa-aca.ca or repository.tudelft.nl), or the owner supplies Jackson and Richardson (2007) or such a paper: with the grain size ranges now in the table, one regression completes the nine classes that have a phi range, and the rest by the grain size of their names. (2) A grab sample and a grain-size analysis of the survey site, then the same regression. (3) Fit to the owner's own calibrated FLS/SAS data with `fit_sediment.py` (needs two frequencies or near-specular angles for w2 and gamma2 separately). (4) Roughness directly: stereo photogrammetry or a laser profile of the bed gives w2 and gamma2 (as arXiv:1601.06078 did for rock); sigma2 still needs acoustics |
+| sigma2 specifically | all | The GeoHab report notes it "has to be adjusted empirically" even in the handbook's model: expect to fit it, not to look it up |
+| sandy_gravel sound speed | one row | a second source for the table |
+| shear parameters and an elastic model | rock, pebbles, gravels | section 9 has the regression and attenuations; an elastic reflection and scattering model would be new work. Until then use the type law (`searay_bottom`, "rock"/"gravel") for these, which matches the one measured number found (-8 dB at 20 degrees for rough rock) |

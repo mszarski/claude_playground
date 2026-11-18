@@ -752,6 +752,10 @@ class SedimentScatterers:
 
     @classmethod
     def from_config(cls, item: dict) -> "SedimentScatterers":
+        if "sediment" in item:
+            # A name in configs/sediments.yaml (or `sediment_file`); the item's own values win.
+            from . import bottom
+            item = dict(bottom.sediment(item["sediment"], item.get("sediment_file"), supplied=item), **item)
         missing = [k for k in SEDIMENT_KEYS if k not in item]
         if missing:
             raise ValueError(f"a fluid_sediment seafloor needs {missing}")

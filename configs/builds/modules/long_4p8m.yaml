@@ -1,0 +1,12 @@
+# Row module: 32 hydrophones over 4.8 m, half a wavelength apart at 5 kHz. THE row design: the static drop-in array and the
+# vehicle's face both use it (the owner: "Yes treat auv special case and have static array the longer row"; "Keep at 32").
+# One module = 32 hydrophones, their cable harness, and four boards of eight inputs. Builds name it with `array.module`
+# and say how many are stacked. What it buys over the test AUV's short row: docs/DESIGN.md Sec. 3, "Row modules".
+name: long_4p8m
+array:
+  count: 32                      # the owner: "Keep at 32"
+  pitch_m: 0.15                  # m: half a wavelength at 5 kHz (tools/popoto_range_study.py)
+  confirmed: [count]
+hydrophone:
+  model: null                    # not chosen. The plan: "ordinary passive hydrophones wired to the board's inputs"
+  sensitivity_db: -208.0         # dB re 1 V/uPa: an assumption (the figure the plan quotes for its AS-1 reference hydrophone)

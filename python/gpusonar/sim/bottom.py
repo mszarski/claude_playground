@@ -10,7 +10,11 @@ wavelength) below about one. Opt-in alternatives (`roughness_model=`, see "Other
 below) add the Kirchhoff approximation near the specular direction, the small-slope
 approximation that joins the two, and the composite-roughness (large-scale slope) average at
 small grazing angles. Named sediments are in `configs/sediments.yaml` (`sediment()` reads it):
-two rows read from an arXiv paper that attributes them to the handbook, and the placeholder.
+the handbook's sediment classes from sandy gravel to clay, every parameter read from an open
+document that attributes it to the handbook (the file's header and `provenance:` entries say
+which), and the placeholder. The scattering parameters follow the mean grain size
+(`grain_size_scattering`); rock and pebbles are not fluids and carry an empirical Lambert law
+instead (`empirical_backscatter`).
 
 Parameters (dimensionless unless noted), as in the published models:
   rho     sediment density / water density
@@ -89,9 +93,35 @@ Gaussian slope of variance s^2 = pi w2 Kc^(4 - gamma2) / (4 - gamma2) per axis. 
 components (u, v) along and across the incident horizontal direction, the local grazing
 angles are ti + atan(u) and ts - atan(u cos phi + v sin phi); the cross section is the
 average over (u, v) of the perturbation one with the small-scale spectrum (zero below Kc),
-and zero where a local angle is negative (shadowed facet). `small_scale_kh` = 0.5 is our
-choice, not a published value. It describes Bragg scattering only: towards the specular
+and zero where a local angle is negative (shadowed facet). `small_scale_kh` = 0.5 was our
+choice when this was written; a published criterion has since been read and is the same
+number: Fonseca, Lurton, Fezzani and Roche, "A simplified semi-empirical model for
+multifrequency seafloor backscattering angular response (ESAB)", Front. Remote Sens. (2025),
+doi:10.3389/frsen.2025.1619218, eqs. (6)-(8), "following Novarini and Caruthers (1994), the
+cut-off spatial frequency corresponds to the condition that the Rayleigh parameter ... for
+microroughness equals unity", g^2 = 4 k^2 zeta_mu^2 = 1, i.e. k x rms height = 0.5, with
+zeta_mu^2 = 2 pi integral_Kc^inf W K dK and the facet slope variance 2 pi integral_0^Kc W K^3 dK
+(both axes together: twice the per-axis s^2 above). Olson and Lyons (arXiv:2106.05909,
+Sec. VIII, eq. (44), after McDaniel and Gorman 1983) write the composite model as this same
+average of the tilted small-scale perturbation result over the large-scale slope density and
+give its conditions: k x small-scale rms height below one, grazing angles above about twice
+the large-scale rms slope angle, shadowing below it. The handbook's own split and its
+interpolation between the Kirchhoff and composite results were not found in an open
+document. The composite result describes Bragg scattering only: towards the specular
 direction, where Q falls below Kc, it goes to zero and the Kirchhoff term is the right one.
+
+Validity of the lowest-order small-slope result (`small_slope`), from a comparison with
+boundary-element solutions for power-law roughness (Olson, "Validity criteria for the small
+slope approximation for backscattering of sound from rough surfaces with a power-law
+roughness spectrum", J. Acoust. Soc. Am. 160, 1918-1935, 2026, CC BY,
+https://hdl.handle.net/10945/76181; one-dimensional surfaces, backscatter, 1 dB criterion):
+for a pressure-release surface the largest valid k x rms height is of order one (0.1 to 2)
+whatever the spectral exponent; for a sand-like fluid it is about 1.9 times that (0.6 to 3),
+for a mud-like fluid larger still (up to about 11); the largest valid rms slope lies between
+about 10 and 60 degrees depending on the exponent. At small grazing angles "PT is accurate
+whenever SSA(2) is accurate", and the paper notes that the composite model "has largely
+been superseded by the SSA" for the mean level. The next term of the small-slope series
+helps for a pressure-release surface and not for fluid sediments.
 
 "combined": the small-slope cross section (full spectrum) averaged over the same large-scale
 slopes. This is Kirchhoff in the specular direction, perturbation theory at intermediate
@@ -156,25 +186,95 @@ def sediment_table(path=None) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def sediment(name: str, path=None) -> dict:
-    """The six parameters of a named sediment from `configs/sediments.yaml` (or `path`). An
-    entry gives them directly, or gives `physical:` values that `parameters_from_physical`
-    converts. An entry whose `status` is not "confirmed" raises a warning: its numbers are not
-    from a source."""
-    import warnings
+REFLECTION_KEYS = ("rho", "nu", "delta")
+DB_PER_WAVELENGTH = 40.0 * math.pi / math.log(10.0)
+"""dB per wavelength for a loss parameter delta of one: a = delta 40 pi / ln 10 (the same
+conversion as in `propagation.rayleigh_reflection`; UnderwaterAcoustics.jl (MIT), src/basic.jl:171-179,
+prints it and attributes it to APL-UW TR 9407, IV-9 equation (4))."""
+
+
+def _entry(name: str, path=None) -> dict:
+    """A table entry with its ratios worked out. `physical:` gives all six parameters in
+    physical units; `reflection:` gives density (kg/m3), sound_speed (m/s) and the loss
+    parameter delta with the water density and sound speed the source's ratios refer to."""
     table = sediment_table(path)
     if name not in table:
         raise ValueError(f"unknown sediment {name!r}; the table has {sorted(table)}")
     entry = table[name]
     if "physical" in entry:
         entry = dict(parameters_from_physical(**{k: float(v) for k, v in entry["physical"].items()}), **entry)
-    missing = [k for k in SEDIMENT_KEYS if k not in entry]
+    if "reflection" in entry:
+        r = {k: float(v) for k, v in entry["reflection"].items()}
+        entry = dict({"rho": r["density"] / r["water_density"], "nu": r["sound_speed"] / r["water_sound_speed"],
+                      "delta": r["delta"]}, **entry)
+    if "scattering" in entry:
+        # The three scattering parameters in the units of their source: spectral strength in
+        # cm^4 with a 1 cm reference length (`w2_cm4`), or already in m^(4 - gamma2) (`w2`).
+        sc = {k: float(v) for k, v in entry["scattering"].items()}
+        w2 = w2_from_cm4(sc["w2_cm4"], sc["gamma2"]) if "w2_cm4" in sc else sc["w2"]
+        entry = dict({"w2": w2, "gamma2": sc["gamma2"], "sigma2": sc["sigma2"]}, **entry)
+    return entry
+
+
+def _warn_status(name: str, entry: dict, keys) -> None:
+    import warnings
+    # "confirmed": read from a cited source. "fitted (...)": fitted to measurements by
+    # tools/fit_sediment.py; what the data left open is in `unconfirmed_fields`.
+    if entry.get("status") != "confirmed" and not str(entry.get("status", "")).startswith("fitted"):
+        warnings.warn(f"sediment {name!r} is {entry.get('status', 'unconfirmed')}: its parameters are not from a "
+                      "measured or published source", stacklevel=3)
+    doubtful = [k for k in entry.get("unconfirmed_fields", []) if k in keys]
+    if doubtful:
+        warnings.warn(f"sediment {name!r}: {doubtful} could not be confirmed (see the entry's note in the sediment "
+                      "table)", stacklevel=3)
+
+
+def is_reflection_only(name: str, path=None) -> bool:
+    """True for an entry that carries density, speed and loss but no roughness or volume parameters."""
+    entry = _entry(name, path)
+    return any(k not in entry for k in SEDIMENT_KEYS) and all(k in entry for k in REFLECTION_KEYS)
+
+
+def sediment(name: str, path=None, supplied=None) -> dict:
+    """The six parameters of a named sediment from `configs/sediments.yaml` (or `path`). An
+    entry gives them directly, or gives `physical:` values that `parameters_from_physical`
+    converts. An entry whose `status` is not "confirmed" raises a warning: its numbers are not
+    from a source.
+
+    Entries marked `reflection_only` carry the density ratio, speed ratio and loss parameter
+    only. They are enough for the reflection coefficient (`sediment_reflection`) and not for
+    the scattering strength: asking for one here is an error naming the missing parameters,
+    unless `supplied` (the scenario item) gives them, in which case what the table has is returned."""
+    entry = _entry(name, path)
+    missing = [k for k in SEDIMENT_KEYS if k not in entry and k not in (supplied or {})]
+    if missing:
+        what = ("is reflection-only (density, sound speed and loss; usable for bottom reflection): for a "
+                "scattering strength give" if entry.get("reflection_only") else "lacks")
+        hint = (" (it is not a fluid sediment: the table gives an empirical Lambert law for it, "
+                "bottom.empirical_backscatter)" if "empirical_backscatter" in entry else "")
+        raise ValueError(f"sediment {name!r} {what} {missing}{hint}")
+    _warn_status(name, entry, SEDIMENT_KEYS)
+    return {k: float(entry[k]) for k in SEDIMENT_KEYS if k in entry}
+
+
+def sediment_reflection(name: str, path=None) -> dict:
+    """{rho, nu, delta} of a named sediment: all that the flat-interface reflection coefficient
+    needs. Works for every entry, the reflection-only ones included."""
+    entry = _entry(name, path)
+    missing = [k for k in REFLECTION_KEYS if k not in entry]
     if missing:
         raise ValueError(f"sediment {name!r} lacks {missing}")
-    if entry.get("status") != "confirmed":
-        warnings.warn(f"sediment {name!r} is {entry.get('status', 'unconfirmed')}: its parameters are not from a "
-                      "measured or published source", stacklevel=2)
-    return {k: float(entry[k]) for k in SEDIMENT_KEYS}
+    _warn_status(name, entry, REFLECTION_KEYS)
+    return {k: float(entry[k]) for k in REFLECTION_KEYS}
+
+
+def fluid_halfspace(name: str, water_sound_speed: float, path=None) -> dict:
+    """A named sediment as the fluid half-space the eigenray providers take:
+    {speed (m/s), density (relative to the water), attenuation (dB per wavelength)}, with
+    speed = nu x the water sound speed given here (the table holds ratios)."""
+    par = sediment_reflection(name, path)
+    return {"speed": par["nu"] * float(water_sound_speed), "density": par["rho"],
+            "attenuation": par["delta"] * DB_PER_WAVELENGTH}
 
 
 def _vertical(k2, horizontal):
@@ -435,3 +535,136 @@ def equivalent_lambert_mu_db(grazing: float, frequency: float, sound_speed: floa
     angle: for scenes whose seabed is point scatterers with Lambert's law (set their `mu_db`
     to this at the middle of the swath)."""
     return float(backscattering_strength_db(grazing, frequency, sound_speed, **params) - 20.0 * np.log10(np.sin(grazing)))
+
+
+# --- Scattering parameters from the mean grain size -------------------------------------------
+#
+# The handbook's default roughness and volume parameters as functions of the mean grain size
+# Mz (phi units, Mz = -log2 of the diameter in mm), as printed in two open papers that
+# attribute them to it (their Ref. 19, APL-UW TR 9407; the handbook was not read):
+#
+#   Snellen, Eleftherakis, Amiri-Simkooei, Koomans and Simons, "An inter-comparison of sediment
+#   classification methods based on multi-beam echo-sounder backscatter and sediment natural
+#   radioactivity data", J. Acoust. Soc. Am. 134 (2), 959-970 (2013), eq. (5) and the text
+#   after it (author copy: https://repository.tudelft.nl/record/uuid:118445fc-6696-4fe2-abae-53272b80db43):
+#
+#       w2 = 0.00207 h^2  [cm^4],   h = (2.03846 - 0.26923 Mz) / (1 + 0.076923 Mz)   -1 <= Mz < 5
+#                                   h = 0.5                                           5 <= Mz <= 9
+#       sigma2 = 0.002 for -1 <= Mz < 5.5,   0.001 for 5.5 <= Mz < 9
+#
+#     with the relief spectrum W(K) = (h0 K)^(-gamma) w2, h0 = 1 cm (their Sec. III.B), which is
+#     the convention of `w2_from_cm4`.
+#   Snellen, Siemes and Simons, "Model-based sediment classification using single-beam
+#   echosounder signals", J. Acoust. Soc. Am. 129 (5), 2878-2888 (2011), Sec. II.A and Table II
+#   (https://repository.tudelft.nl/record/uuid:b635a0a8-2ca1-44ae-8fbc-0866b3304827): "a value of
+#   3.25 for the exponent of the bottom relief spectrum ... is found to work well for many types
+#   of sediments", and the table of rho, nu, delta, sigma2 and w2 (cm^4) at Mz = -1, 0, ..., 9
+#   that `GRAIN_SIZE_W2_TABLE_CM4` repeats (sigma2 = 0.001 at Mz = 9 is from that table).
+#
+# These are defaults, not measurements of a site: both papers stress that fitted values of w2
+# and sigma2 "often deviate significantly" from them (2013, Sec. III.B), and the 2013 paper's
+# inversions at 300 kHz found sigma2 about half the rule for Mz < 5.5.
+GRAIN_SIZE_GAMMA2 = 3.25
+GRAIN_SIZE_W2_TABLE_CM4 = {-1.0: 0.0129, 0.0: 0.0086, 1.0: 0.0056, 2.0: 0.0035, 3.0: 0.0021, 4.0: 0.0011,
+                           5.0: 0.0005, 6.0: 0.0005, 7.0: 0.0005, 8.0: 0.0005, 9.0: 0.0005}
+"""Snellen, Siemes and Simons (2011), Table II, column w2 (cm^4), typed as printed (four decimals)."""
+
+
+def _check_grain_size(phi: float) -> float:
+    phi = float(phi)
+    if not -1.0 <= phi <= 9.0:
+        raise ValueError(f"mean grain size {phi} phi is outside the range of the published relations (-1 to 9 phi)")
+    return phi
+
+
+def grain_size_w2_cm4(phi: float) -> float:
+    """Roughness spectral strength in cm^4 (1 cm reference length) for a mean grain size in phi
+    units: Snellen et al. (2013), eq. (5) (comment above)."""
+    phi = _check_grain_size(phi)
+    h = (2.03846 - 0.26923 * phi) / (1.0 + 0.076923 * phi) if phi < 5.0 else 0.5
+    return 0.00207 * h * h
+
+
+def grain_size_sigma2(phi: float) -> float:
+    """Volume parameter for a mean grain size in phi units: 0.002 below 5.5 phi, 0.001 from
+    5.5 phi (Snellen et al. 2013, text after eq. (5))."""
+    return 0.002 if _check_grain_size(phi) < 5.5 else 0.001
+
+
+def grain_size_scattering(phi: float) -> dict:
+    """{w2 (m^(4 - gamma2)), gamma2, sigma2} for a mean grain size in phi units."""
+    return {"w2": w2_from_cm4(grain_size_w2_cm4(phi), GRAIN_SIZE_GAMMA2), "gamma2": GRAIN_SIZE_GAMMA2,
+            "sigma2": grain_size_sigma2(phi)}
+
+
+GRAIN_SIZE_TABLE = (
+    (-1.0, 2.492, 1.337, 0.01705), (-0.5, 2.401, 1.3067, 0.01667), (0.0, 2.314, 1.2778, 0.01630),
+    (0.5, 2.231, 1.2503, 0.01638), (1.0, 2.151, 1.2241, 0.01645), (1.5, 1.845, 1.1782, 0.01624),
+    (2.0, 1.615, 1.1396, 0.01610), (2.5, 1.451, 1.1073, 0.01602), (3.0, 1.339, 1.0800, 0.01728),
+    (3.5, 1.268, 1.0568, 0.01875), (4.0, 1.224, 1.0364, 0.02019), (4.5, 1.195, 1.0179, 0.02158),
+    (5.0, 1.169, 0.9999, 0.01261), (5.5, 1.149, 0.9885, 0.00676), (6.0, 1.149, 0.9873, 0.00386),
+    (6.5, 1.148, 0.9861, 0.00306), (7.0, 1.147, 0.9849, 0.00242), (7.5, 1.147, 0.9837, 0.00194),
+    (8.0, 1.146, 0.9824, 0.00163), (9.0, 1.145, 0.9800, 0.00148))
+"""(bulk grain size index in phi, density ratio, sound speed ratio, loss parameter) as printed in
+Cintron, "Environmental impact on mine hunting in the Yellow Sea using the CASS/GRAB model", MS
+thesis, Naval Postgraduate School (2001), https://hdl.handle.net/10945/10842, Table 1 ("APL/UW
+TR9407 Geo-acoustic parameters associated with bulk grain size index used by the CASS/GRAB
+model ... From NAVOCEANO 1999"), rows "Sandy Gravel" (-1) to "Clay" (9). Its three coarser rows
+(Rough Rock, Rock, "Gravel, Cobble or Pebble": density ratio 2.5, speed ratio 2.5, 2.5 and 1.8,
+loss 0.0137, with index values -9, -7 and -3 that are labels, not grain sizes) are not fluids
+and are not here."""
+
+
+def sediment_from_grain_size(phi: float) -> dict:
+    """The six parameters for a mean grain size in phi units (-1 to 9), for a site whose grain
+    size is known and that is not one of the named classes.
+
+    rho, nu and delta are interpolated linearly between the tabulated classes of
+    `GRAIN_SIZE_TABLE` (every half phi). The interpolation is ours: the handbook's own
+    regressions of these three against grain size were not found in an open document, and the
+    table shows they are piecewise (the density ratio drops from 2.151 to 1.615 between 1 and
+    2 phi), so between two classes the result is a guess good to the difference of its
+    neighbours. w2, gamma2 and sigma2 are `grain_size_scattering`."""
+    phi = _check_grain_size(phi)
+    table = np.array(GRAIN_SIZE_TABLE)
+    out = {key: float(np.interp(phi, table[:, 0], table[:, i])) for i, key in ((1, "rho"), (2, "nu"), (3, "delta"))}
+    return dict(out, **grain_size_scattering(phi))
+
+
+# --- Rock and other bottoms that are not fluid sediments: an empirical law ------------------------
+
+LAMBERT_MAX_MU_DB = -10.0 * math.log10(math.pi)
+"""The largest Lambert parameter energy conservation allows, 10 log10(1 / pi) = -4.97 dB: a
+surface that scatters all the incident power with the Lambert pattern (Olson, Lyons and Saebo,
+arXiv:1601.06078, introduction; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti))."""
+
+
+def lambert_backscatter_db(grazing, mu_db: float):
+    """Lambert's law for backscatter, 10 log10(mu sin^2(grazing)) (written as sigma = mu sin^2(theta)
+    in Olson, Lyons and Saebo, arXiv:1601.06078, where the Lambert fits are reported)."""
+    return float(mu_db) + 20.0 * np.log10(np.maximum(np.sin(np.asarray(grazing, dtype=float)), 1e-300))
+
+
+def empirical_backscatter(name: str, path=None) -> dict:
+    """The empirical backscattering law of a table entry that is not a fluid sediment (rock,
+    pebbles): {"model": "lambert", "mu_db", "mu_db_range", ...} as written in the table, whose
+    `basis` field cites the measurements. Warns when the entry marks it unconfirmed."""
+    entry = _entry(name, path)
+    if "empirical_backscatter" not in entry:
+        raise ValueError(f"sediment {name!r} has no empirical backscattering law; its fluid-sediment parameters "
+                         "are bottom.sediment(name)")
+    _warn_status(name, entry, ("empirical_backscatter",))
+    law = dict(entry["empirical_backscatter"])
+    if law.get("model") != "lambert":
+        raise ValueError(f"sediment {name!r}: unknown empirical model {law.get('model')!r}")
+    return law
+
+
+def named_backscattering_strength_db(name: str, grazing, frequency: float, sound_speed: float = 1500.0, path=None,
+                                     **model):
+    """Backscattering strength in dB of a named table entry: the fluid-sediment model for a
+    sediment (extra keywords such as `roughness_model` are passed on), the entry's empirical
+    Lambert law for rock and pebbles (which has no frequency dependence)."""
+    if "empirical_backscatter" in _entry(name, path):
+        return lambert_backscatter_db(grazing, empirical_backscatter(name, path)["mu_db"])
+    return backscattering_strength_db(grazing, frequency, sound_speed, **dict(sediment(name, path), **model))
