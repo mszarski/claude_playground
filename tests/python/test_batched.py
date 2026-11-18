@@ -384,3 +384,20 @@ def test_threaded_draws_timing():
     t2 = time.perf_counter()
     print(f"[normal] 8 388 608 deviates: plain {(t1 - t0) * 1e3:.0f} ms, on {pn.threads_available()} threads {(t2 - t1) * 1e3:.0f} ms; {pn.stats}")
     assert pn.stats["not_lined_up"] == 0
+
+
+# --- reverberation power -------------------------------------------------------------------
+
+def test_component_scatter_is_the_full_length_bincount_to_the_last_bit():
+    from gpusonar.sim.reverb_bistatic import ComponentSum
+    rng = np.random.default_rng(6)
+    table = ComponentSum(4, 3, 50, (-10.0, 1.0, 20))
+    table.power[:] = rng.uniform(0.0, 1e-3, len(table.power))
+    want = table.power.copy()
+    for _ in range(4):
+        cells = rng.integers(0, len(want), 5000)
+        weights = rng.uniform(0.0, 1.0, 5000) * 10.0 ** rng.uniform(-12, 0, 5000)
+        want += np.bincount(cells, weights=weights, minlength=len(want))
+        table._scatter(cells, weights)
+    table._scatter(np.zeros(0, dtype=np.int64), np.zeros(0))
+    assert np.array_equal(table.power, want)
