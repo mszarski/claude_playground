@@ -206,6 +206,12 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # of a table entry that is not a fluid sediment (configs/sediments.yaml, D-88).
             from . import bottom as bottom_model
             item = dict(item, mu_db=bottom_model.named_lambert_mu_db(item["sediment"], item.get("sediment_file")))
+        elif "mu_db" not in item:
+            # A Lambert boundary with nothing said about its strength: -29 dB, the low-frequency
+            # deep-water value (bottom.DEFAULT_LAMBERT_MU_DB, D-89; -27 dB before); warns once at
+            # 10 kHz and above.
+            from . import bottom as bottom_model
+            item = dict(item, mu_db=bottom_model.default_lambert_mu_db(fc))
         # `offset_db` moves the boundary's strength up or down whatever its model: what
         # calibration against a real log adjusts (gpusonar/simcal.py).
         offset = float(item.get("offset_db", 0.0))
@@ -223,7 +229,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             part = reverb_specular.boundary_part(item, provider, fc, env.get("sound_speed", 1500.0))
             if part is not None:
                 if strength is None:
-                    mu = 10.0 ** ((float(item.get("mu_db", -27.0)) + offset) / 10.0)
+                    mu = 10.0 ** ((float(item["mu_db"]) + offset) / 10.0)        # a Lambert item: mu_db is set above
                     strength = lambda g_in, g_out: mu * np.sin(g_in) * np.sin(g_out)   # noqa: E731
                 strength = reverb_specular.exclude(strength, part)
         # New keys, all optional (sim/reverb.py, sim/reverb_bistatic.py): `geometry: bistatic`
@@ -264,7 +270,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             extra["bottom_bounces"] = str(item["bottom_bounces"])
         if item.get("scatterer_motion") is not None:
             extra["scatterer_motion"] = dict(item["scatterer_motion"])
-        reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
+        reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]),
+                                 float(item.get("mu_db", -29.0)) + offset,     # used for Lambert items only (set above); others pass `strength`
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"), backend=backend,

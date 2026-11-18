@@ -291,7 +291,7 @@ def doppler_lines(spread: float, pulse_length: float, max_lines: int = 41):
 
 
 def directional_power(provider: EigenrayProvider, tx, rx, boundary_z: float, times: np.ndarray,
-                      azimuths: np.ndarray, *, frequency: float, mu_db: float = -27.0, strength=None,
+                      azimuths: np.ndarray, *, frequency: float, mu_db: float = -29.0, strength=None,   # bottom.DEFAULT_LAMBERT_MU_DB (D-89)
                       tx_velocity=(0.0, 0.0, 0.0), rx_velocity=(0.0, 0.0, 0.0), tx_gain=None, rx_gain=None,
                       absorption_db_per_m: float = 0.0, max_range: float | None = None, min_range: float = 0.0,
                       ring_width: float | None = None, n_elevation: int = 1, strength_map=None,

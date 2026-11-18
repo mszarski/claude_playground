@@ -1228,3 +1228,22 @@ uses `searay_bottom` at all (the scene items of type `rocks` are objects with th
 `mu_db`, not this law). For anyone who moves, the level falls by 14.3 / 18.1 / 15.8 dB at
 10 / 20 / 45 degrees. Limits: literature only; -16 dB is a representative value inside a
 13 dB range of site fits, and smooth abraded rock is lower and not Lambertian.
+
+### D-89 The default Lambert parameter is -29 dB, and says what it is
+
+A reverberation boundary that gives neither `mu_db` nor a model nor a sediment now gets
+-29 dB (`bottom.DEFAULT_LAMBERT_MU_DB`); it was -27 dB, written from memory as "the
+Mackenzie value". The one open print found says -29 dB: Muggleworth, MS thesis, Naval
+Postgraduate School 1994, hdl 10945/28529, p. 34, quoting Mackenzie (1961) for deep water
+at 530 and 1030 Hz and 20 to 60 degrees. The owner was shown the recommendation and
+answered "Take your recommendations". Limits: one secondary print; Mackenzie's paper was
+not opened; and either number is a low-frequency deep-water value, not one for a sonar at
+tens or hundreds of kHz (measured sands at 45 degrees and 100 kHz and above are near
+-25 dB, mu about -22 dB). So the definition cites the print and says to name a sediment
+instead, and the bare default warns once when used at 10 kHz or above. Same default in
+`reverb_bistatic.directional_power` and `reverb_relief.directional_power`.
+Consequence: a boundary that relied on the default is 2.0 dB lower. No shipped scenario
+did: all 21 Lambert boundaries in `configs/scenarios` give `mu_db` (-27.0 in 18 of them,
+by choice of their authors, unchanged). `tools/design_report.py` and `DESIGN.md` state
+"-27 dB Lambert" as an assumed seabed for the SAS cell: an explicit assumption, not this
+default, left as it is.

@@ -667,6 +667,36 @@ surface that scatters all the incident power with the Lambert pattern (Olson, Ly
 arXiv:1601.06078, introduction; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti))."""
 
 
+DEFAULT_LAMBERT_MU_DB = -29.0
+"""The Lambert parameter of a reverberation boundary that gives neither `mu_db` nor a model nor a
+sediment (D-89; -27 dB before, written from memory as "the Mackenzie value"). The one open print
+found: Muggleworth, "Shallow water reverberation measurement and prediction", MS thesis, Naval
+Postgraduate School (1994), https://hdl.handle.net/10945/28529, p. 34: "In 1961, K. V. Mackenzie
+reported success using Lambert's law with mu_dB = -29 dB to model bottom backscattering in deep
+water at 530 and 1030 Hz", for 20 to 60 degrees of grazing (Mackenzie's paper itself was not
+opened). It is a low-frequency, deep-water value: at sonar frequencies name a sediment
+(`{model: fluid_sediment, sediment: ...}`, `{sediment: rock}`) or give the site's `mu_db`;
+measured sands at 45 degrees and 100 kHz and above are near -25 dB, i.e. mu about -22 dB.
+`default_lambert_mu_db` warns once when the bare default is used at 10 kHz or above."""
+
+DEFAULT_LAMBERT_WARN_FREQUENCY = 10e3
+_warned_default_lambert = False
+
+
+def default_lambert_mu_db(frequency: float | None = None) -> float:
+    """`DEFAULT_LAMBERT_MU_DB`, with one warning per process when `frequency` (Hz) is 10 kHz or
+    above: the value is a deep-water one from about 1 kHz."""
+    global _warned_default_lambert
+    if frequency is not None and float(frequency) >= DEFAULT_LAMBERT_WARN_FREQUENCY and not _warned_default_lambert:
+        _warned_default_lambert = True
+        import warnings
+        warnings.warn(f"reverberation boundary without mu_db at {float(frequency) / 1e3:g} kHz: the default Lambert parameter "
+                      f"{DEFAULT_LAMBERT_MU_DB:g} dB is a deep-water value measured at 0.5 and 1 kHz (Mackenzie 1961 as quoted by "
+                      "Muggleworth 1994); name a sediment ({model: fluid_sediment, sediment: ...} or {sediment: rock}) or give "
+                      "the site's mu_db. This warning is given once.", stacklevel=2)
+    return DEFAULT_LAMBERT_MU_DB
+
+
 def lambert_backscatter_db(grazing, mu_db: float):
     """Lambert's law for backscatter, 10 log10(mu sin^2(grazing)) (written as sigma = mu sin^2(theta)
     in Olson, Lyons and Saebo, arXiv:1601.06078, where the Lambert fits are reported)."""
