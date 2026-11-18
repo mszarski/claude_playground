@@ -13,7 +13,8 @@ build-spec fields each choice would set.
   Full output for all six builds: `docs/design/projector_requirements.json`.
 - **Manufacturer data sheets were opened for four makers** (Neptune Sonar, GeoSpectrum, Massa, Benthowave) after
   the owner allowed their hosts; Teledyne, Exail and BTech were reachable and list nothing for 4–6 kHz at this
-  level; six further hosts redirect to addresses that are still refused (Sec. 6). Sec. 3 gives every candidate's
+  level; six further hosts redirect to addresses that are still refused, and one maker's catalogue sits on a host
+  that is not allowed (Sec. 6). Sec. 3 gives every candidate's
   figures with the sheet and page they came from. Curves were read by eye off the sheets' plots: TVR to about
   ±1 dB, admittance and impedance to about ±15 %, beam patterns to about ±2 dB. No product figure in this
   document comes from memory.
@@ -779,9 +780,9 @@ Against the candidates (requirement from Sec. 3.2):
 | Depth rating against the owner's 500 m | 600 m (T335, TR-1075): passes with a factor 1.2; response change with depth not on the sheets | as A; T170 unlimited | T170 unlimited, M27-450 6000 m: pass, and the type whose response does not change with depth | as the unit chosen |
 | Link budget (noise-limited, ship at 12 km, 1 / 2 / 3 rows) | +1.6 / +4.0 / +5.4 dB of margin on the piston's axis; 3 dB less at about ±45° (sheet: "conical 90°" at 5 kHz, 80° for the Massa) | the same (same energy), if the Doppler processing holds its loss under 1 dB | the same at broadside; the pair along the face narrows the sector to about ±30° at −3 dB, and each ring's own figure-of-eight to ±45° | 2.0–4.4 km on the ship, 0.7–1.5 km on the small target with one short row |
 | Blind range | 750 m | 1.5 km (2 s) or 3 km (4 s) | 750 m | 75 m |
-| Direct sound left (nearest hydrophone, rms convention, face placeholder) | about +12.6 dB with the T335 facing out (its sheet: −9.5 to −14 dB at 90°); +22 dB with the TR-1075 until its side response is known | 3 or 6 dB less than A | about +5 to +14 dB: the rings' axial null (−8.5 dB at the worst hydrophone) and the pair's null (−8.4 dB at the worst frequency) do not simply add in the near field; not computed jointly | at 175 dB: +15 dB at 0.30 m with an omnidirectional unit, about +5 dB with the T335 or a ring's null; 0 dB or better at 1.7 m |
+| Direct sound left (nearest hydrophone, rms convention, face placeholder) | about +12.6 dB with the T335 facing out (its sheet: −9.5 to −14 dB at 90°); +22 dB with the TR-1075 until its side response is known | 3 or 6 dB less than A | about +5 to +14 dB: the rings' axial null (−8.5 dB at the worst hydrophone) and the pair's null (−8.4 dB at the worst frequency) do not simply add in the near field; not computed jointly | at 175 dB: +15 dB at 0.30 m, 0 dB at 1.7 m, before any help from the unit's pattern |
 | Cavitation (makers' statements) | 17–18 m for the TR-1075 at 197 dB; not stated for the T335 (assume about 20 m); **not usable at full level on the static frame at 10 m** | TR-1075A: 194 dB from about 10 m, 191 dB from about 4 m | each T170 at 191 dB: from the surface (its limit is 195 dB at 5 m); each M27-450 at 191 dB: from about 22 m | none |
-| Power | T335: 247–337 W into the transducer (from its conductance), about 290–400 W from an 85 % amplifier, **16–22 Wh per hour**; TR-1075A: up to 592 VA | half or a quarter of A in the pulse; about the same per hour | two rings: 151–279 W each real, 430 W together at 5 kHz; tuning inductors needed | 1–30 W |
+| Power | T335: 247–337 W into the transducer (from its conductance), about 290–400 W from an 85 % amplifier, **16–22 Wh per hour**; TR-1075A: up to 592 VA | half or a quarter of A in the pulse; about the same per hour | two rings: 151–279 W each real (300–560 W together); tuning inductors needed | 1–30 W |
 | Drive voltage | 335 V rms (T335); 168–237 V rms (TR-1075A) | 119–237 V rms | 355–631 V rms per ring | 13–320 V rms |
 | Size and mass | T335: 183 mm square × 257 mm, 11.4 kg in air, 6.7 kg in water; TR-1075: 184 mm square × about 220 mm, 11.3 kg in air | as A, or one ring of 4.7 kg | two rings 191 mm across × 85 mm, 4.7 kg each in air and 2.6 kg in water with cable, on a 0.15 m spacing bar | as the unit chosen; 0.6 kg for the bender |
 | Redundancy | none | none | 6 dB less with one ring out | — |
