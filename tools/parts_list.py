@@ -157,9 +157,13 @@ def parts(d: dict, timings: dict | None = None, static: bool | None = None) -> l
         ("sample rate, word length and simultaneous sampling are assumptions; the band is below the 10–100 kHz the plan says the board is specified for; "
          "whether boards can be batched; the plan advises against more than two" if popoto else "see the spec's unconfirmed list"))
     add("input_protection", "Input protection, blanking and recovery", f"{d['channels']} inputs", "unconfirmed",
-        direct + (". The inputs must survive it and recover before the first range of interest; the recovery time is not known and the simulator models neither the direct sound nor the recovery. "
-                  f"Three ways out, none chosen: clamp and accept the recovery; move the projector (full scale at {dr['distance_for_full_scale_m']:.0f} m from the nearest hydrophone); "
-                  f"or lower the source level while close (full scale at {dr['source_level_for_full_scale_db']:.0f} dB)" if over > 0 else ". Inside the inputs' range"),
+        direct + (f"; {dr['hydrophones_overloaded']} of {d['channels']} hydrophones overloaded, {dr['over_full_scale_farthest_db']:+.0f} dB at the farthest ({dr['farthest_m']:.2f} m). "
+                  f"Required: **{dr['gain_reduction_needed_db']:.0f} dB of gain reduction during the transmit** (or inputs that survive the overload); and a recovery time: the first usable range is "
+                  f"{dr['min_range_memoryless_m']:.0f} m with an input that has no memory, plus {dr['range_per_ms_of_recovery_m']:.2f} m per millisecond of recovery, so for a first range of "
+                  f"{dr['min_range_memoryless_m'] + 50.0:.0f} m the inputs must be back within {50.0 / dr['range_per_ms_of_recovery_m']:.0f} ms. No board has been measured. The direct sound falls to full scale only "
+                  f"{dr['distance_for_full_scale_m']:.0f} m from the projector, so no position on the platform avoids it; a source level of {dr['source_level_for_full_scale_db']:.0f} dB would. "
+                  "Peak levels (3 dB more if the source level is an rms figure). Not in these numbers: hull-borne and electrical coupling from the amplifier, which could exceed the water path: a bench item. "
+                  "Simulated with `transmit.direct_path` and `receive.overload` (`tools/direct_sound_study.py`, `design/direct_sound_study.json`)" if over > 0 else ". Inside the inputs' range"),
         "`transmit.lever_arm`, `transmit.waveform.source_level_db`, `receive.adc_full_scale`; `projector` of popoto_elevation_study.json", QUOTES["blanking"] if popoto else (),
         "recovery time of the inputs after overload; whether the clamp the plan describes exists on these boards")
     add("projector", "Projector" + (f" ({hw['projector']['model']})" if (hw.get("projector") or {}).get("model") else ""), 1, "specified, not chosen" if not (hw.get("projector") or {}).get("model") else "chosen",
@@ -293,6 +297,9 @@ def markdown(columns: list[tuple[str, dict]], timings: dict | None = None, headi
     row("Direct sound there, against the inputs' full scale", lambda d: f"{d['direct']['level_db']:.0f} dB re 1 µPa: {d['direct']['over_full_scale_db']:+.0f} dB")
     row("Direct sound ends", lambda d: f"{d['direct']['ends_s']:.3f} s (blind inside {d['blind_range_m']:g} m)")
     row("Source level that just reaches full scale", lambda d: f"{d['direct']['source_level_for_full_scale_db']:.0f} dB")
+    row("Hydrophones overloaded; at the farthest", lambda d: f"{d['direct']['hydrophones_overloaded']} of {d['channels']}; {d['direct']['over_full_scale_farthest_db']:+.0f} dB")
+    row("Gain reduction needed during the transmit", lambda d: f"{d['direct']['gain_reduction_needed_db']:.0f} dB")
+    row("First usable range, input with no memory (+ per ms of recovery)", lambda d: f"{d['direct']['min_range_memoryless_m']:.0f} m (+{d['direct']['range_per_ms_of_recovery_m']:.2f} m)")
     row("Clock agreement between rows (0.05° of elevation)", lambda d: f"{d['elevation']['clock_us_for_error']:.2f} µs" if d["elevation"] else "one row: n/a")
     row("Clock agreement within a row (clean beams)", lambda d: f"{d['alignment_tolerance_us']:.1f} µs")
     tts = [timing_text(d, timings) for _, d in columns]

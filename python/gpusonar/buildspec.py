@@ -440,10 +440,14 @@ def validate(spec: dict) -> list[Issue]:
     if d["direct"]["nearest_m"] < 0.05:
         err("projector.position_m", "the projector is on top of a hydrophone")
     elif d["direct"]["over_full_scale_db"] > 0.0:
-        warn("projector.position_m", f"the projector's direct sound is {d['direct']['level_db']:.0f} dB re 1 uPa at the nearest hydrophone ({d['direct']['nearest_m']:.2f} m away): "
-                                     f"{d['direct']['volts']:.1f} V at the ADC, {d['direct']['over_full_scale_db']:.0f} dB over full scale ({d['adc_full_scale_v']:.2f} V) for the whole pulse. "
-                                     f"The inputs need protection and a known recovery time, or the projector more distance (full scale at {d['direct']['distance_for_full_scale_m']:.0f} m), "
-                                     f"or a source level of {d['direct']['source_level_for_full_scale_db']:.0f} dB")
+        dr = d["direct"]
+        warn("projector.position_m", f"the projector's direct sound is {dr['level_db']:.0f} dB re 1 uPa at the nearest hydrophone ({dr['nearest_m']:.2f} m away): "
+                                     f"{dr['volts']:.1f} V at the ADC, {dr['over_full_scale_db']:.0f} dB over full scale ({d['adc_full_scale_v']:.2f} V) for the whole pulse; "
+                                     f"{dr['hydrophones_overloaded']} of {d['channels']} hydrophones are overloaded ({dr['over_full_scale_farthest_db']:+.0f} dB at the farthest, {dr['farthest_m']:.2f} m). "
+                                     f"Needed: {dr['gain_reduction_needed_db']:.0f} dB less gain during the transmit, or the projector {dr['distance_for_full_scale_m']:.0f} m from every hydrophone, "
+                                     f"or a source level of {dr['source_level_for_full_scale_db']:.0f} dB; and protection and a known recovery time: the first usable range is "
+                                     f"{dr['min_range_memoryless_m']:.0f} m with an input that has no memory, plus {dr['range_per_ms_of_recovery_m']:.2f} m per millisecond of recovery "
+                                     "(peak levels; 3 dB more if the source level is an rms figure)")
     if d.get("reference_times_s") and d["direct"]["over_full_scale_db"] > 0.0:
         gap = d["reference_times_s"][0] - d["direct"]["ends_s"]
         rec = pj.get("blanking_after_s")
@@ -1012,6 +1016,7 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
     level = sl - 20.0 * np.log10(dist.min())
     volts = 10.0 ** ((level + sens + gain) / 20.0)
     over = 20.0 * np.log10(volts / full_scale)
+    over_each = sl - 20.0 * np.log10(dist) + sens + gain - 20.0 * np.log10(full_scale)          # every hydrophone, dB re ADC full scale
     r0, r1 = (float(x) for x in rx["window"]["range"])
     t_open, t_close = 2.0 * r0 / c, 2.0 * r1 / c + pulse
     n_samples = int(np.ceil((t_close - t_open) * fs))
@@ -1049,6 +1054,11 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
         "projector_m": tx.tolist(),
         "direct": {"nearest_m": float(dist.min()), "farthest_m": float(dist.max()), "level_db": float(level), "volts": float(volts), "over_full_scale_db": float(over),
                    "starts_s": float(dist.min() / c), "ends_s": float(pulse + dist.max() / c),
+                   "over_full_scale_farthest_db": float(over_each.min()), "hydrophones_overloaded": int((over_each > 0.0).sum()),
+                   "gain_reduction_needed_db": float(max(over_each.max(), 0.0)), "over_full_scale_each_db": over_each,
+                   # With a front end that has no memory the first usable echo ends after the direct sound has passed the farthest
+                   # hydrophone; every millisecond of recovery after that adds c / 2 x 1 ms of range.
+                   "min_range_memoryless_m": float(0.5 * c * (pulse + dist.max() / c)), "range_per_ms_of_recovery_m": float(0.5 * c * 1e-3),
                    "source_level_for_full_scale_db": float(sl - over), "distance_for_full_scale_m": float(dist.min() * 10.0 ** (over / 20.0))},
         "blind_range_m": 0.5 * c * pulse, "window_m": [r0, r1], "window_s": [t_open, t_close], "samples_per_ping": n_samples, "ping_interval_s": interval,
         "pings_per_hour": 3600.0 / interval,

@@ -242,7 +242,12 @@ def _nearest(report, target):
     if not hits:
         return None, own, rng
     near = [x for x in hits if abs(x["range_m"] - rng) < 8.0]
-    return (max(near, key=lambda x: x["snr_db"]) if near else min(hits, key=lambda x: abs(x["range_m"] - rng))), own, rng
+    if near:
+        # Several arrivals of one target (surface and bottom bounces) can lie within a few metres: the direct one is the
+        # nearest to the true range among those within 10 dB of the strongest.
+        top = max(x["snr_db"] for x in near)
+        near = [x for x in near if x["snr_db"] >= top - 10.0]
+    return (min(near or hits, key=lambda x: abs(x["range_m"] - rng))), own, rng
 
 
 def _check_target(report, target, rows, allowance_deg, look_sign=1.0):

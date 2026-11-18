@@ -182,7 +182,18 @@ def projector_options() -> list:
              f"{(d['reference_times_s'][0] - dr['ends_s']) * 1e3:.1f} ms after the direct sound ends at the farthest hydrophone on the face. The build validator now warns of it.\n")
     blank_key = next((k for k in live.DEFAULTS if "blank" in k), None)
     from gpusonar.sim import receiver
-    overload_model = "overload" in (receiver.__doc__ or "") or any("overload" in n for n in dir(receiver))
+    overload_model = hasattr(receiver, "overload_config")
+    L.append(f"**Every hydrophone is overloaded, not only the nearest.** On the face (three rows) {dr['hydrophones_overloaded']} of {d['channels']} are, from {dr['over_full_scale_farthest_db']:+.1f} dB at the farthest ({dr['farthest_m']:.2f} m) to "
+             f"{dr['over_full_scale_db']:+.1f} dB at the nearest; the direct sound falls to full scale only {dr['distance_for_full_scale_m']:.1f} m from the projector, so **no position on a {d['platform']['span_m']:g} m face avoids it**: at least\n"
+             f"{dr['gain_reduction_needed_db']:.1f} dB of gain reduction during the transmit is needed, or inputs that are built to be overloaded. The first usable range is {dr['min_range_memoryless_m']:.0f} m with an input that has no memory "
+             f"({ds['popoto_testauv_1x32']['direct']['min_range_memoryless_m']:.0f} m with the 0.1 s pulse), plus {dr['range_per_ms_of_recovery_m']:.2f} m per millisecond of recovery. These are peak levels (add 3 dB if a source level is an rms figure) and the water path only: "
+             "hull-borne and electrical coupling from the amplifier are not modelled and could exceed it.\n")
+    DS = _json("direct_sound_study.json")
+    if DS and "popoto_long_range_3row" in DS:
+        sm = DS["popoto_long_range_3row"]["summary"]
+        L.append(f"The simulator now models this (`transmit.direct_path`, `receive.overload`; `tools/direct_sound_study.py`): its per-hydrophone figures for the face are {sm['overload_db_farthest']:+.1f} to {sm['overload_db_nearest']:+.1f} dB over full scale, "
+                 f"{sm['hydrophones_overloaded']} of {sm['hydrophones']} overloaded, full scale at {sm['distance_for_no_overload_m']:.1f} m (`design/direct_sound_study.json`; the same closed form as here, checked against the simulated samples). "
+                 "Its recovery parameter sets are illustrative: no board has been measured. Blanking alone suffices only if the front end has no memory; a gain switch of more than the overload removes the problem at its source.\n")
     L.append("| Option | What it buys | What it costs or needs | Known? |\n| --- | --- | --- | --- |")
     step = [(k, 20.0 * np.log10(k)) for k in (2.0, 4.0, 8.0)]
     L.append("| Ignore window in the chain (blanking) | discards the samples of the transmit and of the recovery; " + (f"`chain.{blank_key}`" if blank_key else "the chain today starts at the receive window "
@@ -210,7 +221,9 @@ def projector_options() -> list:
     L.append("**To measure on the bench before hardware is frozen.** Recovery time of an input against overload level (0, +10, +20, +30 dB over full scale, a burst as long as the pulse); the damage threshold from the\n"
              "board's documentation or its maker; whether the reference burst summed into an input survives next to an overloaded hydrophone signal. The spec carries the results: `projector.blanking_after_s`,\n"
              "`boards.overload_damage_vpp`, `boards.gain_switchable` (all unknown today). "
-             + ("The simulator's receiver has an overload and recovery model (`receive.overload`): the chosen recovery time can be tried on the short-range scenarios.\n" if overload_model else
+             + ("Also on the bench: coupling from the amplifier into the inputs through the hull and the wiring, with the projector out of the water. "
+                "The simulator's receiver has an overload and recovery model (`receive.overload`, with `transmit.direct_path`): a measured recovery time can be tried on the short-range scenarios "
+                "(`popoto_testauv_direct_overload*`) before hardware is frozen.\n" if overload_model else
                 "An input-overload and recovery model for the simulator's receiver (`receive.overload` in a sonar file) is being added separately; it is the way to try a recovery time against the short-range scenarios. "
                 "It is not in this tree, so nothing here simulates the direct sound.\n"))
     return L
