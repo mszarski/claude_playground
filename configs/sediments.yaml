@@ -67,7 +67,7 @@
 # - Rock and pebbles are not fluid sediments. The open literature describes rock by Lambert's
 #   law fitted to measurements, or by an elastic small-slope model with measured roughness; the
 #   handbook's own curves for rock exceed the largest Lambert law energy conservation allows
-#   (Olson, Lyons and Saebo, arXiv:1601.06078, Sec. I). These two rows stay `reflection_only`
+#   (Olson, Lyons and Saebo, arXiv:1601.06078, introduction). These two rows stay `reflection_only`
 #   and carry an `empirical_backscatter:` block instead (bottom.empirical_backscatter): a Lambert
 #   parameter with the range of the published values. The fluid-sediment scattering models
 #   still refuse them.
@@ -75,8 +75,8 @@
 # `grain_size_phi: [low, high]` is the mean grain size range that Lurton, Lamarche et al.,
 # "Backscatter measurements by seafloor-mapping sonars: Guidelines and Recommendations" (GeoHab
 # Backscatter Working Group, 2015; CC BY 4.0; doi:10.5281/zenodo.10089261), Table 2-1, gives for
-# that sediment name; `mean_grain_size_phi` (Cintron's table) is its midpoint in each of the nine
-# rows that have both. That table ("Adapted from APL 1994 ... nominal values for c1 and rho1
+# that sediment name; `mean_grain_size_phi` (Cintron's table) is its midpoint in eight of the nine
+# rows that have both (clay: 9 phi for "above 8"). That table ("Adapted from APL 1994 ... nominal values for c1 and rho1
 # (1500 m/s and 1000 kg/m3)") is a further open source for density, velocity and absorption of
 # those nine rows and agrees with the entries here to its printed digits
 # (tests/python/test_sediment_table.py), with one exception noted at coarse_silt.
@@ -201,7 +201,7 @@ rock:
     basis: >-
       Lambert's law, strength = mu sin^2(grazing), fitted to measurements on rock: mu = -13 dB
       (two sites) and -18 dB (two sites) on glacially plucked, very rough rock at 100 kHz (Olson,
-      Lyons and Saebo, arXiv:1601.06078, Sec. V and conclusion); average -23 dB (-24 to -22 dB
+      Lyons and Saebo, arXiv:1601.06078, results and conclusion); average -23 dB (-24 to -22 dB
       with the measured bottom slope) on granodiorite outcrops at 200 kHz, 10 to 65 degrees
       (Gruber, MS thesis, Naval Postgraduate School, 2019, https://hdl.handle.net/10945/64176);
       about -13 dB at 45 degrees from 80 to 450 kHz with a calibrated echosounder (Fezzani,

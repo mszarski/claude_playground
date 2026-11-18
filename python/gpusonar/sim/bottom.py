@@ -636,12 +636,12 @@ def sediment_from_grain_size(phi: float) -> dict:
 LAMBERT_MAX_MU_DB = -10.0 * math.log10(math.pi)
 """The largest Lambert parameter energy conservation allows, 10 log10(1 / pi) = -4.97 dB: a
 surface that scatters all the incident power with the Lambert pattern (Olson, Lyons and Saebo,
-arXiv:1601.06078, Sec. I; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti))."""
+arXiv:1601.06078, introduction; the integral of mu sin(ti) sin(ts) over the hemisphere is pi mu sin(ti))."""
 
 
 def lambert_backscatter_db(grazing, mu_db: float):
     """Lambert's law for backscatter, 10 log10(mu sin^2(grazing)) (written as sigma = mu sin^2(theta)
-    in Olson, Lyons and Saebo, arXiv:1601.06078, Sec. V)."""
+    in Olson, Lyons and Saebo, arXiv:1601.06078, where the Lambert fits are reported)."""
     return float(mu_db) + 20.0 * np.log10(np.maximum(np.sin(np.asarray(grazing, dtype=float)), 1e-300))
 
 
