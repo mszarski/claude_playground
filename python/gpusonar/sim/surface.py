@@ -351,7 +351,7 @@ def searay_bottom_strength(frequency: float, bottom_type):
 #
 # Opened: Gallaudet, "Shallow water acoustic backscatter and reverberation measurements using a
 # 68-kHz cylindrical array", dissertation (2001), public release, https://hdl.handle.net/10945/11015,
-# Ch. IV Sec. II.C, pp. 124-125, eqs. (7)-(12), which summarises the APL-UW surface model (the
+# pp. 124-125, eqs. (7)-(12), which summarises the APL-UW surface model (the
 # handbook, his ref. 59, was not read) and attributes the bubble term to Crowther (1980) and
 # McDaniel and Gorman (1982) as modified by McDaniel (1993). Backscattering strength is
 # 10 log10(sigma_r + sigma_b), roughness plus bubbles:

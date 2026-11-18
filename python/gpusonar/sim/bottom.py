@@ -93,9 +93,35 @@ Gaussian slope of variance s^2 = pi w2 Kc^(4 - gamma2) / (4 - gamma2) per axis. 
 components (u, v) along and across the incident horizontal direction, the local grazing
 angles are ti + atan(u) and ts - atan(u cos phi + v sin phi); the cross section is the
 average over (u, v) of the perturbation one with the small-scale spectrum (zero below Kc),
-and zero where a local angle is negative (shadowed facet). `small_scale_kh` = 0.5 is our
-choice, not a published value. It describes Bragg scattering only: towards the specular
+and zero where a local angle is negative (shadowed facet). `small_scale_kh` = 0.5 was our
+choice when this was written; a published criterion has since been read and is the same
+number: Fonseca, Lurton, Fezzani and Roche, "A simplified semi-empirical model for
+multifrequency seafloor backscattering angular response (ESAB)", Front. Remote Sens. (2025),
+doi:10.3389/frsen.2025.1619218, eqs. (6)-(8), "following Novarini and Caruthers (1994), the
+cut-off spatial frequency corresponds to the condition that the Rayleigh parameter ... for
+microroughness equals unity", g^2 = 4 k^2 zeta_mu^2 = 1, i.e. k x rms height = 0.5, with
+zeta_mu^2 = 2 pi integral_Kc^inf W K dK and the facet slope variance 2 pi integral_0^Kc W K^3 dK
+(both axes together: twice the per-axis s^2 above). Olson and Lyons (arXiv:2106.05909,
+Sec. VIII, eq. (44), after McDaniel and Gorman 1983) write the composite model as this same
+average of the tilted small-scale perturbation result over the large-scale slope density and
+give its conditions: k x small-scale rms height below one, grazing angles above about twice
+the large-scale rms slope angle, shadowing below it. The handbook's own split and its
+interpolation between the Kirchhoff and composite results were not found in an open
+document. The composite result describes Bragg scattering only: towards the specular
 direction, where Q falls below Kc, it goes to zero and the Kirchhoff term is the right one.
+
+Validity of the lowest-order small-slope result (`small_slope`), from a comparison with
+boundary-element solutions for power-law roughness (Olson, "Validity criteria for the small
+slope approximation for backscattering of sound from rough surfaces with a power-law
+roughness spectrum", J. Acoust. Soc. Am. 160, 1918-1935, 2026, CC BY,
+https://hdl.handle.net/10945/76181; one-dimensional surfaces, backscatter, 1 dB criterion):
+for a pressure-release surface the largest valid k x rms height is of order one (0.1 to 2)
+whatever the spectral exponent; for a sand-like fluid it is about 1.9 times that (0.6 to 3),
+for a mud-like fluid larger still (up to about 11); the largest valid rms slope lies between
+about 10 and 60 degrees depending on the exponent. At small grazing angles "PT is accurate
+whenever SSA(2) is accurate", and the paper notes that the composite model "has largely
+been superseded by the SSA" for the mean level. The next term of the small-slope series
+helps for a pressure-release surface and not for fluid sediments.
 
 "combined": the small-slope cross section (full spectrum) averaged over the same large-scale
 slopes. This is Kirchhoff in the specular direction, perturbation theory at intermediate

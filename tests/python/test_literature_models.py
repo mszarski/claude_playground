@@ -3,8 +3,8 @@ and the models added from them: the bubble-layer surface backscattering model, t
 slope components, the Francois-Garrison absorption against a published table, the ambient
 noise fit against a third print.
 
-  [G01] Gallaudet, dissertation (2001), https://hdl.handle.net/10945/11015, Ch. IV eqs. (7)-(12).
-  [H10] "Fine-scale variability in temperature, salinity, and pH in the upper-ocean and the effects
+  [G01] Gallaudet, dissertation (2001), https://hdl.handle.net/10945/11015, pp. 124-125, eqs. (7)-(12).
+  [H10] Col, "Fine-scale variability in temperature, salinity, and pH in the upper-ocean and the effects
         on acoustic transmission loss in the Western Arctic Ocean", MS thesis, Naval Postgraduate
         School (2010), https://hdl.handle.net/10945/5385, Tables 1-2, eq. (2.3).
   [H05] Hurt, MS thesis, Naval Postgraduate School (2005), https://hdl.handle.net/10945/1936.

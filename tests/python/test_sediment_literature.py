@@ -204,3 +204,23 @@ def test_rock_and_pebbles_carry_a_lambert_law_inside_the_published_range():
         bottom.empirical_backscatter("fine_sand")
     for name in ("rock", "pebbles"):
         assert bottom.is_reflection_only(name)
+
+
+def test_composite_split_is_the_published_rayleigh_parameter_criterion():
+    """Fonseca, Lurton, Fezzani and Roche (2025), eqs. (6)-(8): the cut-off wavenumber is where
+    the Rayleigh parameter of the roughness above it is one, 4 k^2 zeta^2 = 1, with
+    zeta^2 = 2 pi integral_Kc^inf W K dK, and the facet slope variance is
+    2 pi integral_0^Kc W K^3 dK. The default `small_scale_kh` = 0.5 is that criterion, and
+    `large_scale_slope` returns that slope variance per axis (half of it)."""
+    for name, f in (("medium_sand", 100e3), ("coarse_sand", 30e3), ("fine_sand", 300e3)):
+        par = bottom.sediment(name)
+        k = 2.0 * np.pi * f / 1500.0
+        slope, kc = bottom.large_scale_slope(f, 1500.0, **par)
+        big_k = np.geomspace(kc, kc * 1e7, 400001)
+        zeta2 = 2.0 * np.pi * np.trapezoid(par["w2"] * big_k ** (1.0 - par["gamma2"]), big_k)
+        assert 4.0 * k * k * zeta2 == pytest.approx(1.0, rel=2e-3), name
+        small_k = np.geomspace(kc * 1e-12, kc, 400001)        # the integrand goes as K^(3 - gamma2): integrable at 0
+        slope2_total = 2.0 * np.pi * np.trapezoid(par["w2"] * small_k ** (3.0 - par["gamma2"]), small_k)
+        assert 2.0 * slope**2 == pytest.approx(slope2_total, rel=2e-3), name
+        # Olson and Lyons (arXiv:2106.05909, Sec. VIII) require k x small-scale rms height below one.
+        assert k * math.sqrt(zeta2) == pytest.approx(0.5, rel=1e-3) and k * math.sqrt(zeta2) < 1.0

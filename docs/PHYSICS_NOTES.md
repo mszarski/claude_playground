@@ -2226,3 +2226,209 @@ three bounces do not make; only the first arrivals were compared there.
 separately from the decay time (model B's `sum` with 24 taps leaves the taps resolved where
 the tail is long, an artefact visible in the profiles figure); angle spreading; anything at
 other frequencies or sea states; any two-way path.
+
+---
+
+## 22. What the open literature confirms, contradicts or refines (2026-11 search) [OURS]
+
+Register of sources, access and the list of documents still wanted: `docs/REFERENCES.md`.
+Code: `sim/bottom.py`, `sim/surface.py`, `acoustics.py`, `sim/noise.py`,
+`configs/sediments.yaml`; tests `tests/python/test_sediment_literature.py`,
+`test_literature_models.py`. Everything added is opt-in; one table value was corrected
+(22.1). TR 9407 was not read; "the published model" below means what open documents print
+and attribute to it. `sim/timespread.py` was not changed (findings only, 22.4).
+
+### 22.1 Sediments: the table is complete
+
+Three open documents close the gap of Sec. 13 and of `ORG_ARL_SURVEY.md` Sec. 10:
+
+- names to mean grain size: Cintron (2001), Table 1 (the CASS/GRAB table, 23 rows);
+- roughness: `w2 = 0.00207 h^2` cm^4, `h = (2.03846 - 0.26923 Mz) / (1 + 0.076923 Mz)` for
+  `-1 <= Mz < 5`, `h = 0.5` for `5 <= Mz <= 9` (Snellen et al. 2013, eq. (5)); exponent 3.25
+  for all (Snellen et al. 2011);
+- volume: `sigma2 = 0.002` below 5.5 phi, `0.001` from 5.5 phi (both papers).
+
+Conversions, each tested. Spectral strength: the papers' spectrum is `W = (h0 K)^-gamma w2`
+with `h0` = 1 cm and `w2` in cm^4, two-dimensional and isotropic, so
+`w2 [m^(4-gamma)] = w2 [cm^4] 10^(2 gamma - 8)` (`bottom.w2_from_cm4`); the regression then
+lands on the two values that arXiv:1809.08459 prints in metres (1.410e-4 and 1.638e-5) within
+0.3 %. Volume parameter: the published volume cross section
+`5 delta sigma2 |1 - R^2|^2 sin^2(t) / (nu ln10 |P|^2 Im P)` (Snellen et al. 2013, eq. (3)) is
+our `volume_strength` to 1e-10 (the identity is `(1 - R) / (1 + R) = P / (rho sin t)`), so
+`sigma2` is the volume cross section per unit volume over the attenuation in dB/m, as we
+had it. Loss: `delta` is the ratio of imaginary to real wavenumber in every source.
+
+Rock and pebbles are not fluids, and the literature does not fit the fluid model to them:
+the published model uses an "empirical expression" for gravel and rock (not printed anywhere
+open), and measurements on rock are summarised by Lambert's law, `mu sin^2(t)`: `mu` = -13 and
+-18 dB (arXiv:1601.06078, 100 kHz), -23 dB (Gruber 2019, 200 kHz), -10 dB (from -13 dB at 45
+degrees, Fezzani et al. 2025). The table carries -16 dB with that range for `rock` and -9 dB,
+flagged unconfirmed, for `pebbles`. The handbook's own rock curves (-8 dB at 20 degrees) are
+above the largest Lambert law energy conservation allows (-5 dB): so is our type law
+`searay_bottom` for rock (-7.2 dB at 20 degrees).
+
+Family table, default model, dB at 10 / 20 / 45 degrees
+(`PYTHONPATH=python python3 tools/boundary_models_study.py --family-only`):
+
+| Sediment (phi) | 6 kHz | 100 kHz | 300 kHz |
+|---|---|---|---|
+| rock (Lambert -16) | -31.2 / -25.3 / -19.0 | same | same |
+| pebbles (Lambert -9) | -24.2 / -18.3 / -12.0 | same | same |
+| sandy_gravel (-1) | -34.9 / -27.6 / -22.0 | -26.0 / -18.7 / -14.4 | -22.5 / -15.2 / -10.9 |
+| coarse_sand (0.5) | -37.8 / -30.3 / -23.7 | -29.4 / -21.9 / -18.4 | -25.9 / -18.4 / -15.3 |
+| medium_sand (1.5) | -41.2 / -33.1 / -26.7 | -33.3 / -25.3 / -22.5 | -29.9 / -21.8 / -19.7 |
+| fine_sand (2.5) | -39.9 / -30.4 / -24.4 | -36.7 / -27.7 / -23.6 | -34.3 / -25.5 / -22.7 |
+| very_fine_sand (3.5) | -35.7 / -27.1 / -24.6 | -35.1 / -26.8 / -24.5 | -34.4 / -26.4 / -24.2 |
+| coarse_silt (4.5) | -32.0 / -27.9 / -25.0 | -32.0 / -27.8 / -25.0 | -31.9 / -27.8 / -24.9 |
+| medium_silt (5.5) | -35.7 / -31.7 / -28.3 | -35.6 / -31.7 / -28.3 | -35.6 / -31.7 / -28.3 |
+| clay (9) | -36.4 / -32.0 / -28.4 | -36.4 / -32.0 / -28.4 | -36.3 / -32.0 / -28.4 |
+| type law sand / mud | -43.7 / -42.9 / -42.3; -44.2 flat | -33.7 / -29.1 / -27.1; -40.3 / -38.7 / -38.0 | -26.4 / -21.6 / -19.5; -31.0 / -28.6 / -27.6 |
+| type law gravel | -34.8 / -27.9 / -24.9 | -25.4 / -18.2 / -15.2 | -21.7 / -14.4 / -11.4 |
+
+Reading, honestly:
+
+- At 100 and 300 kHz the family is ordered: the level falls 9 to 10 dB from sandy gravel to
+  fine sand (roughness scattering), then the silts and clays sit on a plateau that the volume
+  term sets, with a 3 dB step down at 5.5 phi where `sigma2` halves. Sandy gravel agrees with
+  the type law for gravel within 1 dB, the sands with the type law for sand within 5 dB.
+- At 6 kHz the order is not monotonic: the sands at 10 to 20 degrees are below the silts
+  (-41 against -32 dB at 10 degrees), because below their critical angle little sound enters
+  a sand and its roughness term has fallen as `f^0.75`, while a silt lets the sound in and
+  scatters it from the volume at a level that does not depend on frequency. That is what the
+  published defaults say; the published model's stated range is 10 to 100 kHz (Gallaudet
+  2001), so 6 kHz is an extrapolation. The type laws for sand and mud are 10 dB or more below
+  the sand and silt rows at 6 kHz (the gravel law agrees with sandy gravel there); they state
+  no range either. Nothing opened measures bottom backscatter at 4 to 10 kHz.
+- `medium_sand` is the one kink: 2 dB below its neighbours at 6 kHz and 45 degrees, because
+  its source gives `sigma2` = 0.001 where the rule gives 0.002 (REFERENCES Sec. 11).
+- Against measurements at 45 degrees (Fezzani et al. 2025, calibrated, 35 to 440 kHz): medium
+  sand about -25 dB and flat above 70 kHz, ours -22.5 (100 kHz) and -19.7 dB (300 kHz), so 2.5
+  to 5.5 dB high and rising where the data are flat; sandy mud and muddy very fine sand about
+  -22 dB, ours -28.3 (`sandy_mud`) and -24.5 dB (`very_fine_sand`), so 2.5 to 6 dB low.
+  Snellen et al. (2013) found at 300 kHz fitted `w2` twice and `sigma2` half the defaults;
+  Gallaudet fitted `sigma2` = 0.003 and exponent 3.00 on a silty clay at 68 kHz. Class
+  defaults are good to about +-3 to 6 dB; above 100 kHz they overstate sand.
+
+### 22.2 Bottom scattering models
+
+| Ours | Published | Verdict |
+|---|---|---|
+| perturbation factor | Jackson's form (arXiv:2009.12420) | equal (1e-10), as before |
+| volume term | Snellen et al. 2013, eq. (3) | equal (1e-10); the published model adds slope and shadowing corrections to it that we do not have |
+| `composite`: tilted perturbation result averaged over large-scale slopes | Olson and Lyons, arXiv:2106.05909, eq. (44), after McDaniel and Gorman (1983) | same structure; their conditions: k x small-scale rms height < 1, grazing above about twice the large-scale rms slope angle |
+| split at k x rms height = 0.5 (`small_scale_kh`) | Fonseca et al. 2025, eq. (6), after Novarini and Caruthers (1994): Rayleigh parameter of the small scale = 1, i.e. `4 k^2 zeta^2 = 1` | the same number (tested with both integrals) |
+| `small_slope` | lowest-order small-slope approximation; validity in Olson (2026) | form as before; now with limits: k h up to order 1 (pressure release), about 2 to 3 (sand), about 11 (mud), rms slope 10 to 60 degrees by exponent |
+| `combined` (small-slope averaged over large-scale slopes) | the published model switches: Kirchhoff from 40 to 90 degrees grazing, composite below 40, "appropriate interpolation" (Siemes et al. 2009) | not comparable formula to formula: the interpolation is not printed anywhere open. Olson (2026) notes the composite model "has largely been superseded by the SSA" |
+
+Recommendation: none needed for the formulas. A default change is the owner's: `small_slope`
+is what the current literature uses and it is valid wherever `perturbation` is.
+
+### 22.3 Sea surface
+
+*Backscatter.* The published high-frequency model is `10 log10(sigma_r + sigma_b)`, roughness
+plus bubbles (Gallaudet 2001, pp. 124-125, summarising the handbook and McDaniel 1993):
+`sigma_b = delta_r sin(t) / (8 pi delta) (1 + 8 b e^-2b - e^-4b)`, `b = beta_I / sin(t)`,
+`delta = 2.55e-2 f^(1/3)`, `delta_r = 0.0136`, and a facet term near the normal. It says the
+model agrees with data for 12 to 70 kHz and 3 to 15 m/s within +-5 dB below 8 m/s. Two things
+follow that we did not have:
+
+- a ceiling. Once the layer is opaque the level is `delta_r sin(t) / (8 pi delta)`, whatever
+  the wind ("saturation ... verified by several experiments"): -27.9, -29.3 and -30.4 dB at
+  10 degrees for 12, 30 and 68 kHz, at most 3.7 dB more on the way there. The empirical
+  laws in the tree have no ceiling: at 68 kHz, 15 m/s and 10 degrees Chapman-Harris gives
+  -19.1 dB and the Kraus law -23.0 dB, 7 to 11 dB above it. At 30 kHz and 10 m/s the three
+  agree within 5 dB (-25.5, -28.3, -30.0 dB at 10 degrees).
+- a consistency check of two sources. The module's bubble dynamics (Commander-Prosperetti,
+  from arXiv:2410.14415) gives a total damping constant at resonance of 0.0544, 0.0797,
+  0.1051, 0.1187 at 10, 30, 68, 100 kHz; the printed `2.55e-2 f^(1/3)` with f in kHz gives
+  0.0549, 0.0792, 0.1041, 0.1184. And `delta_r` is `k a` at resonance: 0.01358 from
+  Minnaert's radius. So the unit the source does not print is kHz, and neither constant is free.
+
+Implemented as `surface.bubble_layer_surface_db` (scenario `model: bubble_layer_surface`),
+with the optical depth `beta_I` taken from one of our loss laws (`extinction: apl_1994` or
+`hall_novarini`), because the handbook's law for it is not printed anywhere open; without the
+small-scale roughness term (its empirical function is not printed), so between about 30 and
+70 degrees it is a lower bound.
+
+*Bubble loss per bounce: is there data to arbitrate between `apl_1994` and our population
+model?* Not in anything we could open. The one measurement paper found by title (attenuation
+from near-surface bubbles, 1 to 20 kHz, J. Acoust. Soc. Am. 2008) sits behind a challenge
+page. The backscatter model cannot arbitrate either: at 10 m/s and above both loss laws put
+the layer near saturation, and at 5 m/s they differ by 3.6 dB (30 kHz) and 4.5 dB (68 kHz) in
+predicted backscatter at 30 degrees, inside the model's stated +-5 dB. Patchiness: no opened source
+quantifies it. The adopted law stays.
+
+*Forward loss, coherent reflection.* `exp(-Gamma^2 / 2)` is the Gaussian-height result;
+no opened document gives measured coherent loss against the Rayleigh parameter (22.4).
+
+*Wave statistics.* Pierson-Moskowitz: `S = a g^2 / w^5 exp(-b (g / (U w))^4)`, a = 8.1e-3,
+b = 0.74, U at 19.5 m (Ead 2004, eq. (5.1)): our vertical speed is its second moment exactly;
+our rms height uses significant height 0.21 U^2 / g where the constants give 0.2092 (0.4 %).
+Cox-Munk: upwind 3.16e-3 U, crosswind 3e-3 + 1.92e-3 U at 12.5 m, 1 to 14 m/s
+(arXiv:2210.05456, eq. (12)); the sum is 0.8 % below our total 0.003 + 0.00512 U. Added:
+`acoustics.mean_square_slope_components`. The sea is steeper along the wind than across it
+by 1.2 to 1.5; the time-spreading model takes it isotropic. Chapman-Harris's formula and
+range could not be confirmed (no open copy).
+
+### 22.4 Time, angle and Doppler spreading of forward scatter
+
+The papers that measure this (Dahl 1996, 1999, 2001, 2004; Preisig and Deane 2004) could not
+be opened: publisher challenge pages, no open copies listed. What was found:
+
+- Doppler width against steepness. Dessalermos (2005) tabulates the Doppler spread of each
+  resolved path at ten ranges (8 to 16 kHz probes, 30 m of water): it grows with a path's
+  excess delay at every range, e.g. 0.89, 1.10, 2.00, 2.56, 2.85 Hz at 2300 m and 0.66,
+  1.30, 2.06 Hz at 4350 m. Later paths are steeper and have more surface bounces. That is
+  the behaviour of `2 f v sin(g) / c` with bounces adding, and the opposite of a width that
+  goes as `1 / sin(g)` (TR 0702 p. 101), under which the first, most grazing arrivals would
+  be the widest. The wind is not stated there, so it is a trend, not a test; the magnitudes
+  (0.7 to 2.9 Hz at 12 kHz) are those of Sec. 21 (0.5 to 2.2 Hz at 12.5 kHz in 4 m/s).
+- Model too coherent at low grazing (implied rms height 1.38 x Pierson-Moskowitz): the
+  Pierson-Moskowitz constants are confirmed, so the factor is not a slip in our numbers. The
+  spectrum is for a fully developed wind sea; swell adds height without vertical speed in
+  proportion. No opened measurement of coherent reflection against the Rayleigh parameter.
+- Scintillation index above 1 on multi-bounce arrivals: not addressed by anything opened
+  for forward scatter. (For backscatter the literature does report indices above 1 that grow
+  as the resolution cell shrinks and the grazing angle falls, 22.5; it is a different
+  mechanism.)
+- Facet decay time against the rule of thumb: nothing opened.
+
+Recommendation: none from the literature beyond what Sec. 21 already proposes; the wanted
+list names the pages that would settle each point.
+
+### 22.5 Reverberation statistics
+
+No published default for the K shape exists to adopt, and the literature says why. The
+shape "is related to the effective number of scatterers within a resolution cell" (Abraham
+and Lyons 2002, as quoted in arXiv:1901.08023), and the scintillation index of roughness
+backscatter "increases as resolution increases, grazing angle decreases, and spectral
+strength increases" (arXiv:2106.05909; 100 and 10 kHz). At 100 kHz and 3 cm resolution every
+seabed type measured, rock, gravel, sand and mud, has an index well above 1, falling towards
+1 as the resolution is reduced without reaching it (Lehman 2022); on rock a single K
+distribution fails and mixtures are needed (arXiv:1901.08023). So `statistics.shape` must
+stay a required input, tied to the sonar's cell; a rule from the number of scatterers per
+cell needs Abraham and Lyons (2002), which is on the wanted list.
+
+### 22.6 Targets, noise, medium
+
+- Targets: no open copy of Urick's table of simple forms was found; the cylinder's obliquity
+  factor stays `cos` as the Kirchhoff integral of arXiv:1805.06945 gives it. Wanted.
+- Ambient noise spectrum: a third open print of the four-term fit (Hurt 2005, eqs.
+  (2.7)-(2.9) and listing), with its attributions: wind to Wenz (1962), thermal and shipping
+  to Urick (1983). Constants identical to ours. Its eq. (2.7) prints `7.5 w` where its own
+  listing has `7.5 w^0.5`. Coates (1990), named in our docstring, was not opened.
+- Spatial coherence: isotropic `sin(kd) / kd` confirmed as printed (Shajahan et al. 2022, eq.
+  (3)). For surface-generated noise the Cron-Sherman model (their eq. (4), vertical pair:
+  `2 [sin x / x + (cos x - 1) / x^2] + 2i [sin x / x^2 - cos x / x]`) is added as
+  `noise.surface_noise_coherence` (any geometry, by quadrature; equal to the closed form to
+  1e-10). Its real part first vanishes at 0.371 wavelengths against 0.5 for isotropic noise;
+  the same paper shows it failing in shallow, range-dependent water (first zero off by up to
+  30 %). The noise generator still uses the isotropic matrix.
+- Impulsive noise: nothing new opened (alpha = 1.7 for the Singapore site model stays the
+  only number, from the UACR).
+- Absorption: our Francois-Garrison is within 0.6 % of 21 values tabulated for Arctic
+  profiles (Col 2010, Table 1: 0.1, 1 and 10 kHz, surface to 3500 m, pH 7.63 to 7.95), and
+  our Ainslie-McColm form is the one printed there (eq. (2.3)) and reproduces its two quoted
+  relaxation frequencies (0.769 and 41.372 kHz). Stated validity ranges of both formulas
+  were not read.
+- Sound speed (Mackenzie, Marczak), Hamilton's regressions: not opened; unchanged.
