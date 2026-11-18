@@ -3,6 +3,10 @@
 Each layer is one call of the shared backprojection kernel on a horizontal grid at one
 depth, optionally with refraction at the sediment-water interface. Slices and maximum
 intensity projections are the 2D views of the volume.
+
+Units and conventions: metres, world frame north-east-down; `depths` and `interface_z` are
+z values (positive down) in the scenario's frame, not depths below the sea surface unless
+the frame's origin is at the surface. The sediment's sound speed has no default.
 """
 
 from __future__ import annotations

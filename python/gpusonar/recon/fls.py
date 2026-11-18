@@ -2,6 +2,14 @@
 
 The work is done by the shared backprojection kernel. This module builds the polar
 grid in front of the array, chooses aperture weights and reports grating lobes.
+
+Units and conventions: ranges are one-way metres from the mean position of the receive
+elements; bearings are radians from the element boresight, positive towards increasing
+element index; points are in the world frame (north, east, down). Images keep the units of
+the samples (no source level enters here). `prepare` converts to complex baseband with the
+band the transmit waveform states; it makes no allowance for Doppler unless
+`max_range_rate` or `doppler_allowance_hz` is passed through to `core.to_baseband`
+(docs/HARDCODED_AUDIT.md K-6): a long tone and a moving target need it.
 """
 
 from __future__ import annotations
