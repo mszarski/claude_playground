@@ -43,6 +43,11 @@ When it cannot work, and what the report then says (`multipath_reason`):
     merged            target or sonar so shallow that tau B < `min_delay_bandwidth` at every depth it could be at: the
                       arrivals merge, the ripple period exceeds the band, and what is left is the surface cancellation
     no_surface_path   the surface reflects too little (`surface.loss_db`, e.g. bubbles at a high sea state, or roughness)
+    unresolvable      (through rays) the depths at which the surface echo separates and both paths exist are a band thinner
+                      than the depth change that moves the surface echo by one range resolution cell (a third of the
+                      shallowest resolvable depth, 3 r c / (4 B z_own)): in shallow water, a sliver above the sea bed. No
+                      depth can be told from another inside it, and every shallower target's echoes merge.
+                      `multipath_searched_m` gives the band
     (with a depth, as `multipath_note`, and the ambiguity flag set:)
     bottom_unmodelled the water depth is known, no `bottom` is configured, and a bottom-reflected path would arrive at a
                       grazing angle below `bottom_grazing_limit_deg`: the surface-only pattern may be fitting bottom echoes
