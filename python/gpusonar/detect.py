@@ -81,11 +81,44 @@ class Detection:
         return self.range * np.array([np.sin(self.bearing), np.cos(self.bearing)])
 
 
+def group_flagged(rows, cols, bearings, merge_cells: int, merge_u: float) -> np.ndarray:
+    """Which flagged cells (bearing index `rows`, range-cell index `cols`) are one detection: the group number of each.
+    Two cells belong together when they are no further apart than `merge_cells` + 1 cells in range and `merge_u` in
+    sin(bearing), and groups are closed under that (libs/live detector.hpp, DECISIONS D-95: within what the tracker can
+    tell apart in range and half the beam's half-power width in bearing; `merge_cells` and `merge_u` come from the
+    detector's plan, `live.detector_plan` / `core.live_detector_plan`). `merge_u` is never taken below one step of the
+    bearing grid, so touching cells always belong together. The one grouping rule of the multiscale detector and of
+    `cluster(..., merge=...)`."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+    rows, cols = np.asarray(rows), np.asarray(cols)
+    sin_b = np.sin(np.asarray(bearings, dtype=float))
+    if len(sin_b) > 1:
+        merge_u = max(float(merge_u), float(np.abs(np.diff(sin_b)).max()))
+    reach = int(merge_cells) + 1
+    # Within 1 in the largest-coordinate distance of these: within merge_u and within `reach` cells.
+    pts = np.stack([sin_b[rows] / (merge_u + 1e-12), cols / (reach + 1e-9)], axis=1)
+    pairs = cKDTree(pts).query_pairs(1.0, p=np.inf, output_type="ndarray")
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(rows), len(rows)))
+    return connected_components(graph, directed=False)[1]
+
+
 def cluster(detections: np.ndarray, power: np.ndarray, ranges, bearings, guard: int = 4,
-            train: int = 32) -> list[Detection]:
+            train: int = 32, merge: tuple | None = None) -> list[Detection]:
     """Group touching detection cells and report one detection per group at its
-    power-weighted centroid."""
-    labels, n = ndimage.label(detections, structure=np.ones((3, 3), dtype=int))
+    power-weighted centroid. `merge` = (merge_cells, merge_u): cells no further apart than that in range and in
+    sin(bearing) are one group as well (`group_flagged`: the multiscale detector's rule, so that the pieces of one
+    object that a tracker could not keep apart are one detection)."""
+    if merge is None:
+        labels, n = ndimage.label(detections, structure=np.ones((3, 3), dtype=int))
+    else:
+        fb, fj = np.nonzero(detections)
+        labels, n = np.zeros(np.shape(detections), dtype=int), 0
+        if len(fb):
+            member = group_flagged(fb, fj, bearings, int(merge[0]), float(merge[1]))
+            labels[fb, fj] = member + 1
+            n = int(member.max()) + 1
     if n == 0:
         return []
     snr = normalise(power, guard, train)
@@ -194,16 +227,7 @@ def multiscale(fine: np.ndarray, cell_mean: np.ndarray, fine_ranges, cell_ranges
     # merge_u in sin(bearing) (touching cells always are). Groups in the order of their first cell, by bearing then range.
     out = []
     if len(fb):
-        from scipy.sparse import coo_matrix
-        from scipy.sparse.csgraph import connected_components
-        from scipy.spatial import cKDTree
-        sin_b = np.sin(bearings)
-        reach = int(plan["merge_cells"]) + 1
-        # Within 1 in the largest-coordinate distance of these: within merge_u and within `reach` cells.
-        pts = np.stack([sin_b[fb] / (plan["merge_u"] + 1e-12), fj / (reach + 1e-9)], axis=1)
-        pairs = cKDTree(pts).query_pairs(1.0, p=np.inf, output_type="ndarray")
-        graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(fb), len(fb)))
-        _, member = connected_components(graph, directed=False)
+        member = group_flagged(fb, fj, bearings, int(plan["merge_cells"]), float(plan["merge_u"]))
         ratio = peak / np.maximum(background_map.astype(float), 1e-300)
         first = {}
         for i, g in enumerate(member):

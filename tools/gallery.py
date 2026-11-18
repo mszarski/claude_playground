@@ -568,6 +568,32 @@ FLS_TRANSIT = {
 }
 
 
+# The transit scenes' tracker (`world_tracks`), and what its detections are merged by before it sees them.
+FLS_TRACKER = dict(range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3, max_misses=2, initial_speed_sigma=6.0, process_noise=0.3)
+# Merging is OFF. It was the fix proposed for the anchored boat's track swap (D-121) and it does cure that: the thinned
+# `fls_170k_traffic` reads 0.29 m/s for the boat with it, 1.92 m/s without. But measured on the six full transit scenes
+# (CPU, one simulation each, detections and tracks both ways) it is not a gain overall: flagged cells within 1.9 m in
+# range and 0.73 degrees chain together through anything dense. `fls_120k_rough_surface`: the boat under way joins its
+# wake and the waves, its speed reads 8.1 m/s (4.7 without; true 5.0) and it is no longer classed a mover.
+# `fls_120k_cluttered_seabed`: 60 detections a ping become 32, the pipeline's 16 `line` tracks become none, movers that
+# are not on a moving object go from 4 to 7. The thinned `fls_120k_transit` reads 1.6 m/s for the pinnacle (limit 1.2).
+# The long-range chain merges because its targets are smaller than what its tracker resolves; these scenes image
+# objects larger than that, and their highlights are what the classes are told apart by. Set True to repeat the comparison.
+FLS_MERGE = False
+
+
+def fls_merge(record, n_cells, samples_per_cell, step, bearings, guard, train):
+    """(merge_cells, merge_u) for the transit scenes' detections: the live chain's own rule (DECISIONS D-95) from its
+    own plan (`core.live_detector_plan`, libs/live detector.hpp) for this array and map: flagged cells within the
+    tracker's range sigma in range and half the beam's half-power width in bearing are one detection. A hull whose
+    highlights make two clusters a few metres apart is then one detection on every ping, not two on some and one on
+    others: two tracks on one hull swap clusters when a ping joins them, and read a speed (the anchored boat of
+    `fls_170k_traffic`: 4.2 m in 2.25 s, 1.9 m/s)."""
+    plan = gs.core.live_detector_plan(record, int(n_cells), int(samples_per_cell), float(step), [float(b) for b in bearings], 1, int(guard), int(train), True,
+                                      {"merge_m": float(FLS_TRACKER["range_sigma"])})
+    return int(plan["merge_cells"]), float(plan["merge_u"])
+
+
 def run_fls_transit(name, cfg, backend, quick):
     p = dict(FLS_TRANSIT[name])
     if quick:                                             # half the range sampling, same cell size
@@ -580,6 +606,7 @@ def run_fls_transit(name, cfg, backend, quick):
     cell_m = p["cell"] * p["r"][2]
     guard, train = int(round(p["guard_m"] / cell_m)), int(round(p["train_m"] / cell_m))
     per_ping, first, polar = [], None, []
+    merge = fls_merge(result.records[0], len(ranges) // p["cell"], p["cell"], p["r"][2], bearings, guard, train) if FLS_MERGE else None
     for rec in result.records:
         origin = rec.rx_positions().mean(axis=0)
         img = recon.fan_image([rec], ranges, bearings, interp="linear", window="hann", backend=backend)
@@ -588,15 +615,14 @@ def run_fls_transit(name, cfg, backend, quick):
         power = fine.reshape(-1, p["cell"], fine.shape[1]).mean(axis=1).T
         r_cells = ranges.reshape(-1, p["cell"]).mean(axis=1)
         hits = detect.cluster(detect.cfar(power, pfa=1e-7, guard=guard, train=train), power, r_cells, bearings,
-                              guard=guard, train=train)
+                              guard=guard, train=train, merge=merge)
         hits = [h for h in hits if h.snr_db > 13.0 and h.cells >= 2]
         per_ping.append([(origin[0] + h.range * np.cos(h.bearing), origin[1] + h.range * np.sin(h.bearing), h.snr_db)
                          for h in hits])
         if first is None:
             first = (r_cells, power, origin)
         polar.append((display(power.T * r_cells[:, None] ** 3), origin))
-    tracks = world_tracks(per_ping, result.times, range_sigma=1.5, bearing_sigma=np.radians(0.4), confirm_hits=3,
-                          max_misses=2, initial_speed_sigma=6.0, process_noise=0.3)
+    tracks = world_tracks(per_ping, result.times, **FLS_TRACKER)
     truth = scene_truth(cfg)
     t_last = float(result.times[-1])
     metrics = {"pings": len(result.records), "scatterers": len(result.scene),

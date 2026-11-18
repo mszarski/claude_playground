@@ -224,3 +224,32 @@ def test_cfar_kernel_on_the_gpu_is_identical():
     gpu, gpu_ratio = gs.core.cfar(power, pfa=1e-5, return_ratio=True, backend=gs.core.Backend.Cuda)
     np.testing.assert_array_equal(gpu, host)
     np.testing.assert_array_equal(gpu_ratio, host_ratio)
+
+
+def test_flagged_cells_are_grouped_by_the_detectors_rule_and_cluster_merges_only_when_asked():
+    """`detect.group_flagged`: two flagged cells are one detection when no further apart than merge_cells + 1 cells in
+    range and merge_u in sin(bearing); groups are closed under that; touching cells always belong together. The
+    multiscale detector groups by it (tests/python/test_detector.py holds that to the C++ one); `detect.cluster` does so
+    only with `merge=`, and is the touching-cells grouping it always was without."""
+    bearings = np.radians(np.arange(-10.0, 10.01, 0.5))
+    step = float(np.abs(np.diff(np.sin(bearings))).max())
+    rows, cols = np.array([5, 5, 5, 5, 9, 20, 21]), np.array([10, 13, 17, 30, 13, 40, 41])
+    def groups(merge_cells, merge_u):
+        g = detect.group_flagged(rows, cols, bearings, merge_cells, merge_u)
+        return [sorted(np.flatnonzero(g == k).tolist()) for k in sorted(set(g.tolist()), key=lambda k: np.flatnonzero(g == k)[0])]
+    assert groups(0, 0.0) == [[0], [1], [2], [3], [4], [5, 6]]                      # only the touching pair (a diagonal)
+    assert groups(2, 0.0) == [[0, 1], [2], [3], [4], [5, 6]]                        # 3 cells apart: within 2 + 1; 4 apart: not
+    assert groups(3, 0.0) == [[0, 1, 2], [3], [4], [5, 6]]                          # ... closed under the rule: 10-13-17
+    assert groups(3, 4.2 * step) == [[0, 1, 2, 4], [3], [5, 6]]                     # four bearing steps away at the same range
+    assert groups(3, 3.8 * step) == [[0, 1, 2], [3], [4], [5, 6]]
+    ranges = 100.0 + 0.5 * np.arange(60)
+    power = np.ones((len(bearings), len(ranges)))
+    mask = np.zeros(power.shape, dtype=bool)
+    mask[rows, cols] = True
+    power[mask] = 100.0
+    plain = detect.cluster(mask, power, ranges, bearings, guard=2, train=8)
+    assert [h.cells for h in plain] == [1, 1, 1, 1, 1, 2]
+    merged = detect.cluster(mask, power, ranges, bearings, guard=2, train=8, merge=(3, 0.0))
+    assert sorted(h.cells for h in merged) == [1, 1, 2, 3]
+    three = max(merged, key=lambda h: h.cells)
+    assert three.range == pytest.approx(float(ranges[[10, 13, 17]].mean())) and three.first_range == pytest.approx(float(ranges[10]))
