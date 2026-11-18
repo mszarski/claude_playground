@@ -257,6 +257,45 @@ table), `sound_speed=1490` and `dead_channels=5,40,41`. Navigation datagrams may
 `"sound_speed"` and `"water_depth"`. `strftime` fields in its `--recording` and `--report` paths are filled
 with the start time.
 
+### `passive.tonal` (optional): Goertzel lines and DEMON when listening
+
+Off unless given; without it the passive report lines are what they were, byte for byte.
+In a deployment file it is the `tonal` key of a `passive` section (beside `f_low`, `f_high`,
+`n_fft`, `hop`, `n_average`); `gpusonar.tonal.TonalAnalyzer` takes the same dictionary, and
+`gpusonar.tonal.cpp_options` (and `tools/sonar_live.py --export-template`) turns it into the
+program's arguments: `tonal=1` and one `tonal_<key>=value` per setting below
+(`tonal_goertzel_block_s=0.5`, `tonal_demon_pfa=1e-6`; lists comma-separated:
+`tonal_goertzel_lines=300,450`; `bearings_deg` as `tonal_bearing_first_deg`, `_last_deg`,
+`_step_deg`; `goertzel.track` as `tonal_goertzel_track=0|1` with `tonal_goertzel_alpha`, `_beta`,
+`_max_misses`, `_max_shift_hz`; `demon.band` as `tonal_demon_f_low`, `tonal_demon_f_high`;
+`shaft_hz` and `blades` as `tonal_demon_shaft_min_hz`, `_max_hz`, `tonal_demon_blades_min`,
+`_max`; `tonal_demon=1` switches DEMON on, giving lines switches Goertzel on).
+The method and what each number in the report means: `gpusonar/tonal.py`, `DEPLOYMENT.md`.
+
+| Key | Meaning (default) |
+|---|---|
+| `bearings_deg` | first, last, step of the beams lines and modulation are looked for on (`[-80, 80, 1]`) |
+| `window` | aperture weighting of each row of hydrophones: `hann` (default) or `rect` |
+| `row_tolerance_m` | hydrophones within this of one line are one row (0.02 m). Rows are steered separately and their powers added, so stacked arrays need no elevation |
+| `attach_deg` | a line or source within this of a passive bearing of the same frame is reported with that bearing's index as `peak` (3°); otherwise `peak` is -1 |
+| `goertzel.lines` | the frequencies to watch, Hz absolute (required for Goertzel; there is no search for unknown lines) |
+| `goertzel.on` | `beams` (default): the array steered over `bearings_deg`, the line reported at the bearing it is strongest at; `hydrophones`: channel powers added, no bearing |
+| `goertzel.block_s`, `hop_s` | seconds of data per estimate (1.0): the bins are 1 / `block_s` apart and the bin's noise bandwidth is 1.5 / `block_s`; seconds between estimates (default: `block_s`) |
+| `goertzel.search_bins`, `guard_bins`, `noise_bins` | the line is looked for this many bins either side of where it is expected (4); bins skipped (3) before the bins the noise is taken from, each side (8). The bank is 2 × (sum) + 3 filters per line |
+| `goertzel.min_snr_db` | a line is detected, reported and tracked above this signal to noise in its bin (10 dB) |
+| `goertzel.track` | `{alpha, beta, max_misses, max_shift_hz}`: alpha-beta filter on the line's frequency from block to block (0.5, 0.1), the search centred on its prediction; after `max_misses` (3) blocks without the line the search returns to the nominal frequency; a track further than `max_shift_hz` from nominal is dropped (0: no limit). `null`: the search stays on the nominal frequency |
+| `demon.band` | `[f_low, f_high]` Hz absolute, the band whose envelope is analysed (default: the passive band, else the transmit band) |
+| `demon.envelope` | `square` (default): the band's power in each block; `hilbert`: its square root (the RMS of the analytic signal over the block) |
+| `demon.envelope_rate_hz`, `window_hops` | sample rate of the envelope (100 Hz: modulation up to 50 Hz, lines looked for up to 0.8 of that); each envelope sample is from a block `window_hops` (2) envelope samples long, Hann weighted. The block should be long against the travel time across the array (see `DEPLOYMENT.md`) |
+| `demon.segment_s`, `segment_overlap`, `n_average`, `min_segments` | seconds of envelope per spectrum (8: modulation bins 0.125 Hz apart), the fraction shared with the next (0.5), how many of the latest spectra are averaged (8) and how many must be there before a result is given (4) |
+| `demon.f_min_hz`, `f_max_hz` | modulation lines are looked for between these (1 Hz; 0.8 of half the envelope rate) |
+| `demon.background_bins`, `guard_bins`, `clip` | the background of a bin is the mean of this many bins each side (16), skipping `guard_bins` (2), taken twice: the second time without the bins more than `clip` (3) times the first estimate |
+| `demon.pfa` | false-alarm probability per bearing and modulation bin; the line threshold follows from it, the number of spectra averaged and the number of background bins (1e-6; a result of 161 bearings × 313 modulation bins has 50 000 cells). Measured on noise alone: 1.0e-3 to 1.5e-3 for 1e-3 asked for, about 1e-4 for 1e-4; at 1e-6 more than asked for (three false single lines in four minutes of 61 bearings), none of them forming a shaft rate |
+| `demon.max_lines`, `max_sources`, `min_separation_deg` | lines kept per source (12), sources reported (4); lines closer in bearing than `min_separation_deg` (4°) are one source, and a line is reported only at the bearing it is strongest at within that distance |
+| `demon.shaft_hz`, `max_harmonic`, `harmonic_tolerance_bins`, `score_fraction` | shaft rates considered (`[0.5, 30]` Hz), the highest harmonic of it a line may be (12), how far (in modulation bins, 1.0) a line may lie from a harmonic, and the fraction of the best explanation's score the highest candidate rate must reach to be taken (0.9) |
+| `demon.blades` | blade counts considered (`[2, 9]`): the harmonic number of the strongest line of the set, when it is in this range |
+| `demon.gram` | put the DEMONgram (dB above the background over bearing × modulation frequency, 0.1 dB steps) in every DEMON result of the report (`false`: it is large; `TonalAnalyzer.gram` and `core.TonalAnalyzerCpp.gram()` always hold the latest) |
+
 The simulator uses its C++ path and reverberation code by default; `GPUSONAR_SIM_ENGINE=numpy`
 (or `engine="numpy"` on `run_scenario`, `simulate_ping` and the providers) selects NumPy.
 For a sampled transmit pulse the same switch also selects the echo synthesiser (C++ kernel
