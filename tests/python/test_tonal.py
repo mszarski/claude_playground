@@ -198,7 +198,7 @@ def test_frequency_estimate_is_within_a_small_factor_of_the_cramer_rao_bound():
     """One steered beam (the tone from broadside, the same on every hydrophone), 300 noise draws, the
     line anywhere between two bins. The interpolated Hann bin is not the maximum-likelihood
     estimator (the window gives away some of the block's ends), so it sits above the bound: by a
-    factor under two, and the error has no bias to speak of."""
+    factor of 1.7 to 1.8 at both signal-to-noise ratios, and the error has no bias to speak of."""
     rec, arr = tone_record(seconds=0.5)
     n = arr.n
     cfg = {"window": "rect", "bearings_deg": [0.0, 0.0, 1.0],
@@ -208,7 +208,7 @@ def test_frequency_estimate_is_within_a_small_factor_of_the_cramer_rao_bound():
         snr = amplitude**2 * arr.channels                            # of the beam, per sample (noise variance 1 per hydrophone)
         errors = []
         for _ in range(300):
-            f0 = 4700.0 + rng.uniform(-1.0, 1.0)                     # bins are 2 Hz apart
+            f0 = 4700.0 + rng.uniform(-1.0, 1.0)                     # bins are 1.43 Hz apart
             fill(rec, arr.tone(f0, amplitude, 0.0, rng.uniform(0, 2 * np.pi)) + arr.noise(rng))
             errors.append(tonal.TonalAnalyzer(cfg).push(rec)[0]["lines"][0]["frequency_hz"] - f0)
         bound = tonal.crb_frequency(snr, n, arr.fs)
@@ -364,10 +364,11 @@ def test_demon_recovers_shaft_rate_and_blade_count(snr_db, envelope):
         share = 0.278 / (0.278 + 1.5 / 32)
         assert got[5]["modulation"] == pytest.approx(2 * 0.4 * share / 1.11, rel=0.1)
         assert got[1]["modulation"] == pytest.approx(2 * 0.15 * share / 1.11, rel=0.2)
-        # and the line's level above the background is what the range study's expression says (tonal.demon_snr_db):
-        # the source 10 log10(0.278) dB against unit noise, 2 kHz of band, 4 s segments
-        model = tonal.demon_snr_db(10 * np.log10(0.278), 10 * np.log10(32 / 1.5), 0.4 / 1.11, 2000.0, 4.0)
-        assert got[5]["snr_db"] == pytest.approx(model, abs=1.5), (got[5]["snr_db"], model)
+    if envelope == "square" and snr_db == -12.0:
+        # The line's level above the background is what the range study's expression says (tonal.demon_snr_db):
+        # the source's power 10^-1.2 x 1.11 against unit noise, 2 kHz of band, 4 s segments: 24.0 dB (23.4 here).
+        model = tonal.demon_snr_db(-12.0 + 10 * np.log10(1.11), 10 * np.log10(32 / 1.5), 0.4 / 1.11, 2000.0, 4.0)
+        assert got[5]["snr_db"] == pytest.approx(model, abs=1.2), (got[5]["snr_db"], model)
     f = tonal.features(src)
     assert f["demon_blades"] == 5.0 and f["demon_shaft_hz"] == src["shaft_hz"] and f["demon_lines"] == len(src["lines"])
 
