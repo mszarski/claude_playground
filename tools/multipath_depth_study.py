@@ -11,6 +11,7 @@
    both chain engines run (libs/live multipath_depth.hpp).
 2. The same geometry's limits in closed form: the shallowest target depth the band resolves, 3 r c / (4 B z_own), and
    one delay-resolution cell in depth, r c / (4 B z_own), for own depths 50, 110, 225 and 450 m.
+   With them what an unknown mean gradient leaves of the depth (the first-order rule), for two gradient sigmas.
 3. The dependence on the sound-speed profile, with our ray code (gpusonar/raytrace.py): through the four illustrative
    stage-2 profiles (200 m of water, vehicle at 50 m, targets at 20 and 120 m; tools/popoto_stage2_study.py) and through
    one deep illustrative profile (vehicle at 225 m, targets at 40 and 150 m), the true one-way delay of the
@@ -67,12 +68,15 @@ def one(own, target, rng, ts, seed, options, stage=None, track=1):
     d = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, options)
     d["seconds"] = time.perf_counter() - t0
     if stage is not None:
-        stage.add(track, d, mp.geometry_dict(mp.geometry(rec, origin, slant, mp.options({}))))
+        stage.add(track, d, mp.geometry_dict(mp.geometry(rec, origin, slant, mp.options(KNOWN))))
     return d
 
 
+KNOWN = {"gradient_sigma_per_s": 0.0}      # sections 1 and 2: isovelocity water taken as known, so the sigma is the fit's own
+
+
 def accuracy(n: int) -> list:
-    options = mp.cpp_options({})
+    options = mp.cpp_options(KNOWN)
     rows = []
     for name, target in TARGETS.items():
         for rng in RANGES:
@@ -118,7 +122,11 @@ def limits() -> list:
             rows.append({"own_depth_m": own, "range_m": rng, "shallowest_target_m": float(grid[0]) if len(grid) else None,
                          "closed_form_m": float(cfg["min_delay_bandwidth"]) * rng * SOUND / (4.0 * BAND * own),
                          "delay_cell_in_depth_m": rng * SOUND / (4.0 * BAND * own),
-                         "fringe_in_depth_m": rng * SOUND / (4.0 * 5000.0 * own)})
+                         "fringe_in_depth_m": rng * SOUND / (4.0 * 5000.0 * own),
+                         # what an unknown mean gradient leaves, with the elevation depth's prior (0.05 /s, a placeholder) and with 0.005 /s
+                         "refraction_sigma_m": {f"target {int(z)} m, gradient sigma {sg} /s": mp.refraction(z, g, mp.options({"gradient_sigma_per_s": sg}))[1]
+                                                for z in (40.0, 150.0) for sg in (0.05, 0.005)},
+                         "elevation_refraction_sigma_m": {f"gradient sigma {sg} /s": rng**2 * sg / (2.0 * SOUND) for sg in (0.05, 0.005)}})
     return rows
 
 
@@ -162,6 +170,9 @@ def profile_dependence() -> list:
                     flat = (np.hypot(rng, target + own) - np.hypot(rng, target - own)) / c_own
                     z_flat = raytrace.flat_depth_from_delay(tau, own, rng, c_own)
                     row.update(delay_ms=1e3 * tau, flat_delay_ms=1e3 * flat, flat_formula_depth_m=z_flat, bias_m=z_flat - target, bias_fraction=(z_flat - target) / target)
+                    if name == "isothermal":      # one gradient throughout: the first-order rule, and the depth with it taken out
+                        row["first_order_delay_fraction"] = rng**2 * 0.017 / (2.0 * c_own * (own + target))
+                        row["corrected_depth_m"] = mp.refraction(z_flat, g, mp.options({"gradient_per_s": 0.017}))[0]
                 else:
                     row["note"] = "no direct path" if not direct else "no surface-reflected path"
                 rows.append(row)

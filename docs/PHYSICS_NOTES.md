@@ -2950,3 +2950,121 @@ explained.
 *Not modelled.* Refraction in the closed form (Bellhop when the environment has a profile), the
 scattered energy's spread in delay and angle (so `peak_db` leaves it out), a rough bottom, the
 vertical offsets of stacked rows (the array is one depth), reverberation (margins are noise-limited).
+
+## 25. Depth from multipath timing; rays in a layered profile [OURS]
+
+Nothing in this section is taken from a source: the derivations are ours, checked against closed forms, an independent
+Runge-Kutta integration, the simulator's image paths, and Bellhop run as a separate program (`tests/python/test_raytrace.py`,
+`tests/python/test_multipath_depth.py`). Numbers are from `tools/multipath_depth_study.py` → `docs/design/multipath_depth_study.json`.
+
+### 25.1 The two-way arrival set
+
+Flat surface, straight rays, horizontal range r, target at depth z_t, the array at z_a and the projector at z_p
+(a vertical lever arm; 1.5 m on the face). One way, from a point at depth z:
+
+    R_d(z) = sqrt(r² + (z_t − z)²)        direct
+    R_s(z) = sqrt(r² + (z_t + z)²)        by the surface (the image of the target at −z_t)
+    τ(z)   = (R_s − R_d) / c  ≈  2 z z_t / (r c)            (exact form used; the approximation is good to 0.2% at 12 km)
+
+The echo travels every outbound path with every return path, so there are four arrivals:
+
+| Paths (out, back) | Delay after the first | Amplitude re the first |
+| --- | --- | --- |
+| direct, direct | 0 | 1 |
+| direct, surface | τ(z_a) | μ_a R_d / R_s |
+| surface, direct | τ(z_p) | μ_p R_d / R_s |
+| surface, surface | τ(z_p) + τ(z_a) | μ_p μ_a (R_d / R_s)² |
+
+μ = −ρ_c 10^(−L/20) is the surface's coefficient: −1 for a flat pressure-release surface (the echo is inverted),
+ρ_c = exp(−Γ²/2), Γ = 2 k h sin(grazing) for rms height h, L a bubble loss in dB. With z_p = z_a the middle two
+coincide and the echo is the triplet +1, −2, +1 at 0, τ, 2τ: the one-leg arrival is 6 dB above the direct one. At
+12 km from 225 m to 150 m, τ = 3.75 ms; the 1.5 m lever arm splits the middle pair by 2 × 1.5 × z_t / (r c) = 25 µs,
+an eighth of a carrier cycle, which the pattern carries. In shallow water each leg also has the bottom's images
+(reflection coefficient: Rayleigh, at each image's grazing angle), and the two-way set is the product of the two legs'.
+
+In the frequency domain the echo's transfer function is H(f) = Σ a_k exp(−i 2π f τ_k) = (1 + μ e^(−i2πfτ))² for the
+triplet, |H|² = 16 sin⁴(π f τ): the Lloyd-mirror ripple of the echo's spectrum, period 1/τ = c r / (2 z_own z_t).
+
+### 25.2 The estimator
+
+The compressed output of the beam at the detection, y(t) (baseband, band B about f_c, noise power σ² per sample), is
+A Σ_k a_k e^(−i2πf_cτ_k) χ(t − t_0 − τ_k) + noise, χ(τ) = sinc(Bτ) for a flat band. For a candidate depth z the
+generalised likelihood ratio over the unknown complex amplitude A and the time t_0 of the direct arrival is
+
+    T(z, t_0) = |Σ_k conj(a_k) e^(+i2πf_cτ_k) y(t_0 + τ_k)|² / Σ_jk a_j conj(a_k) e^(−i2πf_c(τ_j − τ_k)) sinc(B(τ_j − τ_k))
+    L(z) = max over t_0 of T / σ²,            L_1 = |y|²_peak / σ²   (one arrival)
+
+a rake over the predicted arrivals, normalised by the pattern's energy. It is one statistic for resolved arrivals and
+for overlapping ones (where it matches the spectral ripple). σ² is the median of |y|² over 128 cells ahead of the
+earliest possible arrival, over ln 2. The search over t_0 is anchored: the echo's strongest sample is one of the
+pattern's strong arrivals, so only the alignments that put one there are tried (13 values of t_0 per strong arrival).
+
+*Fringes.* L(z) oscillates with the carrier phase of the surface-surface arrival: one fringe per
+Δz = r c / (2 f_c (z_a + z_p)) (4 m at 12 km from 225 m, 0.33 m at 1 km). The envelope of the fringes has the width of
+one delay cell, r c / (2 B (z_a + z_p)) = f_c / B fringes (10 m at 12 km). Within a ping the fringe is real and gives
+the fine depth; the Cramér-Rao bound for the pattern (Fisher information of s(f; z, t_0) with A projected out) is
+centimetres at 25 dB, and the measured scatter is within the depth grid of it. Along a track the fringe envelope is
+summed over pings (target depth and surface move by more than a fringe between pings). Sigma is the spread of exp(L)
+over depth, so neighbouring fringes and envelope sidelobes widen it: near the threshold the error is at times a whole
+delay cell (9 m at 12 km) and the sigma covers 94% within two sigma there.
+
+*Decision.* A depth needs L(z) − L_1 ≥ 12. For the resolved triplet the pattern holds 6 units of energy against 4 in its
+strongest arrival, so the gain is a third of the echo's total SNR: single-ping depth needs the strongest arrival at
+about 15 dB (22% of pings at 11.9 dB, 82% at 14.7 dB, all at 17.6 dB, 12 km); a track of 8 pings at 11 dB gets it.
+
+### 25.3 When it cannot work
+
+- **Too shallow (surface cancellation).** For (τ_p + τ_a) B < about 3 the pattern is a smooth weighting of the band,
+  and so is an absorption tilt (6 dB across 4-6 kHz over 24 km), a tapered replica or a target's own response: a Hann-
+  weighted single echo fits the pattern 33% better than a flat one for τB up to 2.5 and no better from 3 on (computed;
+  with τB ≥ 1 a 31 dB single echo passed as multipath in a third of pings). The search therefore starts at
+  z_t = 3 r c / (4 B z_own): 30 m at 12 km from 225 m, 135 m from 50 m, 2.5 m at 1 km from 225 m. A ship at 2 to 6 m is
+  never measurable at long range, and a sonar at 10 m measures nothing at 12 km (`merged`).
+- **No surface path.** Bubbles at a high sea state (a loss per bounce), or roughness at steep grazing: at 1 km from
+  225 m (21°) a 0.3 m rms surface leaves exp(−Γ²/2) ≈ 0, at 12 km (1.8°) it is a mirror. Told the roughness, the stage
+  says `no_surface_path`; taken for flat, one of two pings at 3 km gave 76 m for 150 m with a sigma of 0.3 m.
+- **Shallow water without the bottom in the pattern.** The surface-only pattern locked onto bottom echoes (99.7 m for
+  70 m in 100 m of water); with the bottom's images, 70.1 m. Flagged when the water depth is known.
+- **Extended targets.** Five highlights of one sign over 20 to 100 m of range, no surface: never taken for multipath
+  (gain −14 to −193); under a surface the depth came out right. Highlights that happen to lie at 0, τ, 2τ with signs
+  +, −, + would pass; a rigid body does not make them.
+- **Refraction** (next).
+
+### 25.4 Refraction: the delay is not profile-free
+
+A constant gradient g makes every ray an arc of radius c / (g cos θ). To first order this is straight rays under a
+surface that curves away by d_1 d_2 g / (2c) between points d_1 and d_2 from the reflection point, which raises both
+effective depths; with d_1 d_2 = r² z_own z_t / (z_own + z_t)²,
+
+    τ_refracted / τ_flat − 1 ≈ r² g / (2 c (z_own + z_t)).
+
+Against the ray code in isothermal water (g = 0.017 /s), vehicle at 50 m, target at 120 m: 3.4% at 1 km (rule 3.3%),
+32% at 3 km (30%), 143% at 6 km (120%); target at 20 m: 8.3%, 82%, 374%. The flat formula's depth is wrong by that
+fraction: the multipath depth is less sensitive to the gradient than the elevation depth (r² g / 2c in metres) only by
+the factor z_t / (z_own + z_t). The stage takes an assumed gradient out by this rule (120.1 m and 122.1 m for 120 m at
+1 and 3 km, 141 m at 6 km where the first order no longer holds) and puts what is not known of it,
+z_t r² σ_g / (2 c (z_own + z_t)), into the sigma. Through the stage-2 thermoclines the question is often moot: from
+50 m there is no direct path to either target beyond 1 km in three of the four profiles, and in the deep profile
+(vehicle at 225 m) the flat depth of a 150 m target is −0.2%, −2.4%, −13.5% off at 1, 3, 6 km and there is no
+surface-reflected path at 12 km. The right pattern in such water is the ray code's eigenrays through the ladder's
+profile; that is not built into the stage.
+
+### 25.5 Rays in a piecewise-linear profile
+
+`python/gpusonar/raytrace.py`. In a layer with dc/dz = g, with s the sine of the grazing angle (positive going down)
+and p = cos θ / c the Snell constant: from d(cos θ) = p g dz and dz = tan θ dr,
+
+    ds/dr = −p g          (s is linear in range, through a turning point as well)
+    c = sqrt(1 − s²) / p  (so z = z_1 + (c − c_1) / g)
+    dt = dr / (c cos θ) = −ds / (g (1 − s²)),        t_b − t_a = (atanh s_a − atanh s_b) / g
+
+and a ray is stepped from layer boundary to layer boundary in closed form, mirrored at the surface and bottom.
+Eigenrays: a fan of launch angles, brackets of the receiver depth between neighbours with the same history of
+reflections and turns (intervals whose ends differ in history are halved until they do not), bisection. Amplitude:
+the power in cos θ_0 dθ_0 dφ crosses the area r dφ |∂z/∂θ_0| dθ_0 cos θ_r, so I/I_1m = cos θ_0 / (r |∂z/∂θ_0| cos θ_r)
+(1/R² in isovelocity water); at a caustic the amplitude is clipped at ten times spherical and marked, and no caustic
+phase is applied. Checked: isovelocity image times to 0.2 µs and amplitudes to 0.2%; the Lloyd pattern to 0.05 dB;
+the circle of a constant-gradient ray to 1e-10 and its time to 1e-12; a thermocline with turns and bounces against
+Runge-Kutta to 2 cm and 2 µs; Bellhop's arrival times to 20 µs and amplitudes to 1.5 dB away from caustics;
+`elevation.ray_depth` (small Snell steps) to 2 m.
+

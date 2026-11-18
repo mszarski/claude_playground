@@ -1,0 +1,1205 @@
+{
+ "sonar": "popoto_long_range (one row of 32, 4-6 kHz, 1 s sweep), projector 1.5 m below the array",
+ "options": {
+  "max_depth_m": 500.0,
+  "min_delay_bandwidth": 3.0,
+  "window_s": 0.25,
+  "range_slack_m": 4.0,
+  "oversample": 8,
+  "fringe_points": 8,
+  "noise_cells": 128,
+  "min_gain": 12.0,
+  "ambiguity_drop": 3.0,
+  "max_detections": 16,
+  "min_snr_db": null,
+  "surface": {
+   "coefficient": -1.0,
+   "rms_height_m": 0.0,
+   "loss_db": 0.0,
+   "min_amplitude": 0.5
+  },
+  "bottom": null,
+  "bottom_order": 2,
+  "bottom_grazing_limit_deg": 45.0,
+  "water_depth": null,
+  "surface_z": 0.0,
+  "own_depth_sigma_m": 0.0,
+  "model_sigma_fraction": 0.0,
+  "gradient_per_s": null,
+  "gradient_sigma_per_s": null,
+  "track": {
+   "gate_m": 60.0,
+   "step_m": 0.5,
+   "min_gain": 12.0,
+   "memory_pings": null
+  },
+  "fuse": {
+   "consistency_sigma": 3.0
+  }
+ },
+ "noise": "ambient, wind 5 m/s, shipping 0.5",
+ "surface": "flat (image source)",
+ "accuracy": [
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 1000.0,
+   "strongest_arrival_snr_db": 17.2642673895445,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.2185768930012273,
+   "rms_error_m": 0.01645538513181325,
+   "median_abs_error_m": 0.013699561101873314,
+   "worst_error_m": 0.02803587697292187,
+   "median_sigma_m": 0.09638386562933624,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 0.26793627890520716
+   }
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 1000.0,
+   "strongest_arrival_snr_db": 26.207108131024537,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.22939973500069755,
+   "rms_error_m": 0.013699561101873314,
+   "median_abs_error_m": 0.013699561101873314,
+   "worst_error_m": 0.013699561101873314,
+   "median_sigma_m": 0.09638386562889546,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 3000.0,
+   "strongest_arrival_snr_db": 17.72336188248992,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.0790180784988479,
+   "rms_error_m": 0.02429829401733325,
+   "median_abs_error_m": 0.016517104107919067,
+   "worst_error_m": 0.10819491593224484,
+   "median_sigma_m": 0.28801410894406754,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 0.38137881739813045
+   }
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 3000.0,
+   "strongest_arrival_snr_db": 26.662740765795487,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.07896206100122072,
+   "rms_error_m": 0.016517104107919064,
+   "median_abs_error_m": 0.016517104107919067,
+   "worst_error_m": 0.016517104107919067,
+   "median_sigma_m": 0.2880100733654928,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 6000.0,
+   "strongest_arrival_snr_db": 17.15443378832294,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.04036959999939427,
+   "rms_error_m": 0.08196827052001789,
+   "median_abs_error_m": 0.016345293418908113,
+   "worst_error_m": 0.2656225874292204,
+   "median_sigma_m": 0.5757652169813632,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 0.6276216240553472
+   }
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 6000.0,
+   "strongest_arrival_snr_db": 26.008035568000597,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.04014395050035091,
+   "rms_error_m": 0.016345293418908113,
+   "median_abs_error_m": 0.016345293418908113,
+   "worst_error_m": 0.016345293418908113,
+   "median_sigma_m": 0.5756812511988483,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 12000.0,
+   "strongest_arrival_snr_db": 16.260986550635486,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.02393541299898061,
+   "rms_error_m": 2.794272030204454,
+   "median_abs_error_m": 0.12590086662203248,
+   "worst_error_m": 8.845965180782542,
+   "median_sigma_m": 1.811126482457155,
+   "within_two_sigma": 0.9444444444444444,
+   "ambiguous": 0.05555555555555555,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 1.25,
+    "worst_error_m": 1.25,
+    "median_sigma_m": 1.2241746405263907
+   }
+  },
+  {
+   "target": "deep, 150 m",
+   "target_depth_m": 150.0,
+   "own_depth_m": 225.0,
+   "range_m": 12000.0,
+   "strongest_arrival_snr_db": 25.332383819291767,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.02577139549975982,
+   "rms_error_m": 0.12590086662203248,
+   "median_abs_error_m": 0.12590086662203248,
+   "worst_error_m": 0.12590086662203248,
+   "median_sigma_m": 1.1510909505782938,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 1000.0,
+   "strongest_arrival_snr_db": 17.542179968372366,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.2264950080007111,
+   "rms_error_m": 0.02018787599689082,
+   "median_abs_error_m": 0.017190075042520903,
+   "worst_error_m": 0.02513272074134676,
+   "median_sigma_m": 0.09774031015468221,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 0.26842721216213056
+   }
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 1000.0,
+   "strongest_arrival_snr_db": 26.57175074521065,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.22923083000023325,
+   "rms_error_m": 0.01948172022541273,
+   "median_abs_error_m": 0.017190075042520903,
+   "worst_error_m": 0.02513272074134676,
+   "median_sigma_m": 0.09774031015468217,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 3000.0,
+   "strongest_arrival_snr_db": 17.62663229412974,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.08333979100098077,
+   "rms_error_m": 0.34413077585805835,
+   "median_abs_error_m": 0.03897123821003845,
+   "worst_error_m": 2.037526093531966,
+   "median_sigma_m": 0.2888585136644499,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 0.3817237836102996
+   }
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 3000.0,
+   "strongest_arrival_snr_db": 26.557053007875904,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.08356608900066931,
+   "rms_error_m": 0.04100878116635906,
+   "median_abs_error_m": 0.03897123821003845,
+   "worst_error_m": 0.08593844024758113,
+   "median_sigma_m": 0.2884665459275863,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 6000.0,
+   "strongest_arrival_snr_db": 17.12869656480457,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.043559425001149066,
+   "rms_error_m": 0.6882932139006308,
+   "median_abs_error_m": 0.0623104799333305,
+   "worst_error_m": 4.05233005882819,
+   "median_sigma_m": 0.583392218744398,
+   "within_two_sigma": 0.9722222222222222,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 0.6278311995895889
+   }
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 6000.0,
+   "strongest_arrival_snr_db": 25.990782318708202,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.04314890800014837,
+   "rms_error_m": 0.08567014244571179,
+   "median_abs_error_m": 0.0623104799333305,
+   "worst_error_m": 0.18706574374759555,
+   "median_sigma_m": 0.5759097194867056,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 12000.0,
+   "strongest_arrival_snr_db": 16.480361447126718,
+   "pings": 36,
+   "depth_given": 0.9722222222222222,
+   "seconds_per_detection": 0.023378001000310178,
+   "rms_error_m": 0.24499105137061702,
+   "median_abs_error_m": 0.21897288950945892,
+   "worst_error_m": 0.27951359290563715,
+   "median_sigma_m": 1.1779383358090836,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0,
+   "track_of_6_pings": {
+    "tracks": 6,
+    "depth_given": 1.0,
+    "rms_error_m": 0.25,
+    "worst_error_m": 0.25,
+    "median_sigma_m": 1.1856130095774118
+   }
+  },
+  {
+   "target": "shallow, 40 m",
+   "target_depth_m": 40.0,
+   "own_depth_m": 225.0,
+   "range_m": 12000.0,
+   "strongest_arrival_snr_db": 25.337719443509965,
+   "pings": 36,
+   "depth_given": 1.0,
+   "seconds_per_detection": 0.02379373899930215,
+   "rms_error_m": 0.22650014945788344,
+   "median_abs_error_m": 0.21897288950945892,
+   "worst_error_m": 0.27951359290563715,
+   "median_sigma_m": 1.1512052192389775,
+   "within_two_sigma": 1.0,
+   "ambiguous": 0.0
+  }
+ ],
+ "limits": [
+  {
+   "own_depth_m": 50.0,
+   "range_m": 1000.0,
+   "shallowest_target_m": 11.468856580035132,
+   "closed_form_m": 11.25,
+   "delay_cell_in_depth_m": 3.75,
+   "fringe_in_depth_m": 1.5,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 7.4074074074074066,
+    "target 40 m, gradient sigma 0.005 /s": 0.7407407407407406,
+    "target 150 m, gradient sigma 0.05 /s": 12.5,
+    "target 150 m, gradient sigma 0.005 /s": 1.25
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 16.666666666666668,
+    "gradient sigma 0.005 /s": 1.6666666666666667
+   }
+  },
+  {
+   "own_depth_m": 50.0,
+   "range_m": 3000.0,
+   "shallowest_target_m": 34.156355839470336,
+   "closed_form_m": 33.75,
+   "delay_cell_in_depth_m": 11.25,
+   "fringe_in_depth_m": 4.5,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 66.66666666666667,
+    "target 40 m, gradient sigma 0.005 /s": 6.666666666666667,
+    "target 150 m, gradient sigma 0.05 /s": 112.5,
+    "target 150 m, gradient sigma 0.005 /s": 11.25
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 150.0,
+    "gradient sigma 0.005 /s": 15.0
+   }
+  },
+  {
+   "own_depth_m": 50.0,
+   "range_m": 6000.0,
+   "shallowest_target_m": 68.1876056541757,
+   "closed_form_m": 67.5,
+   "delay_cell_in_depth_m": 22.5,
+   "fringe_in_depth_m": 9.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 266.6666666666667,
+    "target 40 m, gradient sigma 0.005 /s": 26.666666666666668,
+    "target 150 m, gradient sigma 0.05 /s": 450.0,
+    "target 150 m, gradient sigma 0.005 /s": 45.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 600.0,
+    "gradient sigma 0.005 /s": 60.0
+   }
+  },
+  {
+   "own_depth_m": 50.0,
+   "range_m": 12000.0,
+   "shallowest_target_m": 136.25010556124633,
+   "closed_form_m": 135.0,
+   "delay_cell_in_depth_m": 45.0,
+   "fringe_in_depth_m": 18.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 1066.6666666666667,
+    "target 40 m, gradient sigma 0.005 /s": 106.66666666666667,
+    "target 150 m, gradient sigma 0.05 /s": 1800.0,
+    "target 150 m, gradient sigma 0.005 /s": 180.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 2400.0,
+    "gradient sigma 0.005 /s": 240.0
+   }
+  },
+  {
+   "own_depth_m": 110.0,
+   "range_m": 1000.0,
+   "shallowest_target_m": 5.167661656166642,
+   "closed_form_m": 5.113636363636363,
+   "delay_cell_in_depth_m": 1.7045454545454546,
+   "fringe_in_depth_m": 0.6818181818181818,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 4.444444444444444,
+    "target 40 m, gradient sigma 0.005 /s": 0.44444444444444436,
+    "target 150 m, gradient sigma 0.05 /s": 9.615384615384615,
+    "target 150 m, gradient sigma 0.005 /s": 0.9615384615384616
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 16.666666666666668,
+    "gradient sigma 0.005 /s": 1.6666666666666667
+   }
+  },
+  {
+   "own_depth_m": 110.0,
+   "range_m": 3000.0,
+   "shallowest_target_m": 15.50288894694126,
+   "closed_form_m": 15.340909090909092,
+   "delay_cell_in_depth_m": 5.113636363636363,
+   "fringe_in_depth_m": 2.0454545454545454,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 40.0,
+    "target 40 m, gradient sigma 0.005 /s": 4.0,
+    "target 150 m, gradient sigma 0.05 /s": 86.53846153846153,
+    "target 150 m, gradient sigma 0.005 /s": 8.653846153846153
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 150.0,
+    "gradient sigma 0.005 /s": 15.0
+   }
+  },
+  {
+   "own_depth_m": 110.0,
+   "range_m": 6000.0,
+   "shallowest_target_m": 31.0057298605309,
+   "closed_form_m": 30.681818181818183,
+   "delay_cell_in_depth_m": 10.227272727272727,
+   "fringe_in_depth_m": 4.090909090909091,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 160.0,
+    "target 40 m, gradient sigma 0.005 /s": 16.0,
+    "target 150 m, gradient sigma 0.05 /s": 346.15384615384613,
+    "target 150 m, gradient sigma 0.005 /s": 34.61538461538461
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 600.0,
+    "gradient sigma 0.005 /s": 60.0
+   }
+  },
+  {
+   "own_depth_m": 110.0,
+   "range_m": 12000.0,
+   "shallowest_target_m": 61.886411583388615,
+   "closed_form_m": 61.36363636363637,
+   "delay_cell_in_depth_m": 20.454545454545453,
+   "fringe_in_depth_m": 8.181818181818182,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 640.0,
+    "target 40 m, gradient sigma 0.005 /s": 64.0,
+    "target 150 m, gradient sigma 0.05 /s": 1384.6153846153845,
+    "target 150 m, gradient sigma 0.005 /s": 138.46153846153845
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 2400.0,
+    "gradient sigma 0.005 /s": 240.0
+   }
+  },
+  {
+   "own_depth_m": 225.0,
+   "range_m": 1000.0,
+   "shallowest_target_m": 2.6458579281577297,
+   "closed_form_m": 2.5,
+   "delay_cell_in_depth_m": 0.8333333333333334,
+   "fringe_in_depth_m": 0.3333333333333333,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 2.5157232704402515,
+    "target 40 m, gradient sigma 0.005 /s": 0.2515723270440251,
+    "target 150 m, gradient sigma 0.05 /s": 6.666666666666667,
+    "target 150 m, gradient sigma 0.005 /s": 0.6666666666666666
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 16.666666666666668,
+    "gradient sigma 0.005 /s": 1.6666666666666667
+   }
+  },
+  {
+   "own_depth_m": 225.0,
+   "range_m": 3000.0,
+   "shallowest_target_m": 7.687523823583316,
+   "closed_form_m": 7.5,
+   "delay_cell_in_depth_m": 2.5,
+   "fringe_in_depth_m": 1.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 22.641509433962263,
+    "target 40 m, gradient sigma 0.005 /s": 2.2641509433962264,
+    "target 150 m, gradient sigma 0.05 /s": 60.0,
+    "target 150 m, gradient sigma 0.005 /s": 6.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 150.0,
+    "gradient sigma 0.005 /s": 15.0
+   }
+  },
+  {
+   "own_depth_m": 225.0,
+   "range_m": 6000.0,
+   "shallowest_target_m": 15.250023630578818,
+   "closed_form_m": 15.0,
+   "delay_cell_in_depth_m": 5.0,
+   "fringe_in_depth_m": 2.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 90.56603773584905,
+    "target 40 m, gradient sigma 0.005 /s": 9.056603773584905,
+    "target 150 m, gradient sigma 0.05 /s": 240.0,
+    "target 150 m, gradient sigma 0.005 /s": 24.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 600.0,
+    "gradient sigma 0.005 /s": 60.0
+   }
+  },
+  {
+   "own_depth_m": 225.0,
+   "range_m": 12000.0,
+   "shallowest_target_m": 30.37502353403,
+   "closed_form_m": 30.0,
+   "delay_cell_in_depth_m": 10.0,
+   "fringe_in_depth_m": 4.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 362.2641509433962,
+    "target 40 m, gradient sigma 0.005 /s": 36.22641509433962,
+    "target 150 m, gradient sigma 0.05 /s": 960.0,
+    "target 150 m, gradient sigma 0.005 /s": 96.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 2400.0,
+    "gradient sigma 0.005 /s": 240.0
+   }
+  },
+  {
+   "own_depth_m": 450.0,
+   "range_m": 1000.0,
+   "shallowest_target_m": 1.3854295492597775,
+   "closed_form_m": 1.25,
+   "delay_cell_in_depth_m": 0.4166666666666667,
+   "fringe_in_depth_m": 0.16666666666666666,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 1.3605442176870748,
+    "target 40 m, gradient sigma 0.005 /s": 0.13605442176870747,
+    "target 150 m, gradient sigma 0.05 /s": 4.166666666666667,
+    "target 150 m, gradient sigma 0.005 /s": 0.4166666666666667
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 16.666666666666668,
+    "gradient sigma 0.005 /s": 1.6666666666666667
+   }
+  },
+  {
+   "own_depth_m": 450.0,
+   "range_m": 3000.0,
+   "shallowest_target_m": 3.9062621070272963,
+   "closed_form_m": 3.75,
+   "delay_cell_in_depth_m": 1.25,
+   "fringe_in_depth_m": 0.5,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 12.244897959183673,
+    "target 40 m, gradient sigma 0.005 /s": 1.2244897959183674,
+    "target 150 m, gradient sigma 0.05 /s": 37.5,
+    "target 150 m, gradient sigma 0.005 /s": 3.75
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 150.0,
+    "gradient sigma 0.005 /s": 15.0
+   }
+  },
+  {
+   "own_depth_m": 450.0,
+   "range_m": 6000.0,
+   "shallowest_target_m": 7.687511912925858,
+   "closed_form_m": 7.5,
+   "delay_cell_in_depth_m": 2.5,
+   "fringe_in_depth_m": 1.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 48.97959183673469,
+    "target 40 m, gradient sigma 0.005 /s": 4.8979591836734695,
+    "target 150 m, gradient sigma 0.05 /s": 150.0,
+    "target 150 m, gradient sigma 0.005 /s": 15.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 600.0,
+    "gradient sigma 0.005 /s": 60.0
+   }
+  },
+  {
+   "own_depth_m": 450.0,
+   "range_m": 12000.0,
+   "shallowest_target_m": 15.250011815845887,
+   "closed_form_m": 15.0,
+   "delay_cell_in_depth_m": 5.0,
+   "fringe_in_depth_m": 2.0,
+   "refraction_sigma_m": {
+    "target 40 m, gradient sigma 0.05 /s": 195.91836734693877,
+    "target 40 m, gradient sigma 0.005 /s": 19.591836734693878,
+    "target 150 m, gradient sigma 0.05 /s": 600.0,
+    "target 150 m, gradient sigma 0.005 /s": 60.0
+   },
+   "elevation_refraction_sigma_m": {
+    "gradient sigma 0.05 /s": 2400.0,
+    "gradient sigma 0.005 /s": 240.0
+   }
+  }
+ ],
+ "profile_dependence": [
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 1.4407709078056996,
+   "flat_delay_ms": 1.330650821257126,
+   "flat_formula_depth_m": 21.6558740549767,
+   "bias_m": 1.6558740549766995,
+   "bias_fraction": 0.08279370274883498,
+   "first_order_delay_fraction": 0.08090653391649494,
+   "corrected_depth_m": 20.0356823317023
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 3000.0,
+   "band_resolves_it": false,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 0.8086972340783927,
+   "flat_delay_ms": 0.4441211908724774,
+   "flat_formula_depth_m": 36.41973612138223,
+   "bias_m": 16.41973612138223,
+   "bias_fraction": 0.8209868060691115,
+   "first_order_delay_fraction": 0.7281588052484544,
+   "corrected_depth_m": 21.22858053818019
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 6000.0,
+   "band_resolves_it": false,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 1.0524259193567254,
+   "flat_delay_ms": 0.2220874226913492,
+   "flat_formula_depth_m": 94.78712136032655,
+   "bias_m": 74.78712136032655,
+   "bias_fraction": 3.7393560680163276,
+   "first_order_delay_fraction": 2.9126352209938178,
+   "corrected_depth_m": 25.652788456485965
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 2,
+   "note": "no direct path"
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 8.197705556580615,
+   "flat_delay_ms": 7.928890000969078,
+   "flat_formula_depth_m": 124.1297373019855,
+   "bias_m": 4.1297373019855,
+   "bias_fraction": 0.03441447751654583,
+   "first_order_delay_fraction": 0.033314455142086155,
+   "corrected_depth_m": 120.13072279887243
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 3000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 3.508723573450112,
+   "flat_delay_ms": 2.6626582336582363,
+   "flat_formula_depth_m": 158.22345359881876,
+   "bias_m": 38.223453598818764,
+   "bias_fraction": 0.3185287799901564,
+   "first_order_delay_fraction": 0.2998300962787754,
+   "corrected_depth_m": 122.06401003746399
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 6000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 3.2304961872400284,
+   "flat_delay_ms": 1.332265548535594,
+   "flat_formula_depth_m": 291.2620380121796,
+   "bias_m": 171.26203801217957,
+   "bias_fraction": 1.4271836501014965,
+   "first_order_delay_fraction": 1.1993203851151015,
+   "corrected_depth_m": 140.80501219113853
+  },
+  {
+   "profile": "isothermal",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 1.249741570990448,
+   "flat_delay_ms": 1.3336186637042537,
+   "flat_formula_depth_m": 18.741658403269675,
+   "bias_m": -1.2583415967303253,
+   "bias_fraction": -0.06291707983651626
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 3000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 6000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 6.747012018334608,
+   "flat_delay_ms": 7.946574352060714,
+   "flat_formula_depth_m": 101.68245426853693,
+   "bias_m": -18.31754573146307,
+   "bias_fraction": -0.15264621442885892
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 3000.0,
+   "band_resolves_it": true,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 6000.0,
+   "band_resolves_it": true,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 30 m over a strong thermocline (-0.15 /s for 40 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 1.4407709078045894,
+   "flat_delay_ms": 1.330650821257126,
+   "flat_formula_depth_m": 21.655874054959867,
+   "bias_m": 1.6558740549598667,
+   "bias_fraction": 0.08279370274799333
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 3000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 6000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 7.622410012653957,
+   "flat_delay_ms": 7.928890000969078,
+   "flat_formula_depth_m": 115.2989601800779,
+   "bias_m": -4.7010398199221015,
+   "bias_fraction": -0.03917533183268418
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 3000.0,
+   "band_resolves_it": true,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 6000.0,
+   "band_resolves_it": true,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "mixed layer 50 m over a weak thermocline (-0.05 /s for 60 m)",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 1.0307977948676994,
+   "flat_delay_ms": 1.33356790386257,
+   "flat_formula_depth_m": 15.458008996867541,
+   "bias_m": -4.541991003132459,
+   "bias_fraction": -0.22709955015662295
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 3000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 6000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 20.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 7.214230960357781,
+   "flat_delay_ms": 7.946271891644541,
+   "flat_formula_depth_m": 108.80821027967065,
+   "bias_m": -11.191789720329353,
+   "bias_fraction": -0.09326491433607795
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 3000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 0.8171301248509621,
+   "flat_delay_ms": 2.6684953728186875,
+   "flat_formula_depth_m": 36.71906032011263,
+   "bias_m": -83.28093967988737,
+   "bias_fraction": -0.694007830665728
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 6000.0,
+   "band_resolves_it": true,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "no mixed layer: -0.05 /s from the surface to 100 m",
+   "water_depth_m": 200.0,
+   "own_depth_m": 50.0,
+   "target_depth_m": 120.0,
+   "range_m": 12000.0,
+   "band_resolves_it": false,
+   "direct_paths": 0,
+   "surface_paths": 0,
+   "note": "no direct path"
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 40.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 11.146798551481929,
+   "flat_delay_ms": 11.721149920179018,
+   "flat_formula_depth_m": 38.03731292189488,
+   "bias_m": -1.9626870781051196,
+   "bias_fraction": -0.04906717695262799
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 40.0,
+   "range_m": 3000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 2.1783279969191938,
+   "flat_delay_ms": 3.9960525009910715,
+   "flat_formula_depth_m": 21.803451638792964,
+   "bias_m": -18.196548361207036,
+   "bias_fraction": -0.4549137090301759
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 40.0,
+   "range_m": 6000.0,
+   "band_resolves_it": true,
+   "direct_paths": 0,
+   "surface_paths": 1,
+   "note": "no direct path"
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 40.0,
+   "range_m": 12000.0,
+   "band_resolves_it": true,
+   "direct_paths": 2,
+   "surface_paths": 0,
+   "note": "no surface-reflected path"
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 150.0,
+   "range_m": 1000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 43.44324332212057,
+   "flat_delay_ms": 43.5441538114962,
+   "flat_formula_depth_m": 149.64531074488178,
+   "bias_m": -0.3546892551182168,
+   "bias_fraction": -0.0023645950341214454
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 150.0,
+   "range_m": 3000.0,
+   "band_resolves_it": true,
+   "direct_paths": 1,
+   "surface_paths": 1,
+   "delay_ms": 14.615617697637528,
+   "flat_delay_ms": 14.968023839088717,
+   "flat_formula_depth_m": 146.45998606284064,
+   "bias_m": -3.540013937159358,
+   "bias_fraction": -0.023600092914395722
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 150.0,
+   "range_m": 6000.0,
+   "band_resolves_it": true,
+   "direct_paths": 2,
+   "surface_paths": 1,
+   "delay_ms": 6.495544920269047,
+   "flat_delay_ms": 7.506685400973486,
+   "flat_formula_depth_m": 129.78503936007405,
+   "bias_m": -20.21496063992595,
+   "bias_fraction": -0.13476640426617298
+  },
+  {
+   "profile": "deep water: mixed layer 30 m, strong thermocline, pressure gradient to 1000 m",
+   "water_depth_m": 1000.0,
+   "own_depth_m": 225.0,
+   "target_depth_m": 150.0,
+   "range_m": 12000.0,
+   "band_resolves_it": true,
+   "direct_paths": 2,
+   "surface_paths": 0,
+   "note": "no surface-reflected path"
+  }
+ ],
+ "stacked_rows": {
+  "angle_sigma_deg_by_snr_db": {
+   "13.0": 0.40559873821337356,
+   "20.0": 0.18117430135704787,
+   "30.0": 0.057292344577800615
+  },
+  "depth_sigma_from_angle_m": {
+   "1000 m": {
+    "13.0": 7.079033423757911,
+    "20.0": 3.162088078680916,
+    "30.0": 0.9999400490697413
+   },
+   "3000 m": {
+    "13.0": 21.237100271273736,
+    "20.0": 9.486264236042748,
+    "30.0": 2.9998201472092236
+   },
+   "6000 m": {
+    "13.0": 42.47420054254747,
+    "20.0": 18.972528472085497,
+    "30.0": 5.999640294418447
+   },
+   "12000 m": {
+    "13.0": 84.94840108509494,
+    "20.0": 37.94505694417099,
+    "30.0": 11.999280588836895
+   }
+  },
+  "two_row_candidate_spacing_m_per_km": 201.3579207903308,
+  "source": "docs/design/popoto_elevation_study.json (accuracy, 2 rows 1.5 m apart; the same figures for 3 rows over 1.5 m)",
+  "ladder": "docs/design/popoto_stage2.json, profile_ladder.summary: median / worst depth error of each rung at these ranges (refraction, on top of the angle's sigma)"
+ },
+ "command": "PYTHONPATH=python python3 tools/multipath_depth_study.py"
+}
