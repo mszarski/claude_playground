@@ -1,5 +1,9 @@
 # Open-source survey for the GPU sonar suite
 
+Later additions: section 3.12 (sources of the SST-equivalence work, D-62 to D-79) and
+section 3.13 (everything used since D-82: org-arl formulations, Bellhop as an external
+process for new purposes, the three measured channel data sets, the literature search).
+
 Status: first-hand verification pass, 2026-11-16, from an x86_64 Ubuntu 24.04 container
 (no GPU, Python 3.13.18, gcc 13.3, cmake 3.28.3, restricted network).
 Every role below is **PROPOSED** — the project owner finalises.
@@ -282,6 +286,90 @@ when `HSB_UDP_PATCH=1`; the patched emulator behaves as stock unless
 `HSB_EMULATOR_UDP_SOCKET=1` is set when it runs. The patch file's header states what it
 changes and why. The licence of release 2.7.0 itself was not re-read for this note; the
 Apache-2.0 statement is the survey's, at HEAD.
+
+### 3.13 Sources used since decision D-82: code read, data used, documents opened
+
+Added 2026-11-18. As in 3.12, nothing in this list is linked, vendored or installed as a
+dependency of the core. Where a licence was not read by us or is not stated in the
+repository's own documents and work-package reports, the entry says "licence not recorded
+— to check" instead of a guess. Physics sources (papers, theses, the tables and equations
+taken from them) are registered in `docs/REFERENCES.md`; the org-arl repositories are
+surveyed file by file in `docs/ORG_ARL_SURVEY.md`. This section is about licences and how
+each thing is used.
+
+**Open-source code whose formulation was read and re-implemented (no code copied).**
+
+| Project | Licence (as read) | What was taken, and where it lives | How it is used at run time |
+|---|---|---|---|
+| arlpy (`github.com/org-arl/arlpy`, commit `2627a8c`, installed 1.9.3) | BSD 3-clause (LICENSE; file headers say "Simplified BSD") | `uwa.bubble_surface_loss`: the formula of the `apl_1994` bubble-loss law, adopted on the owner's ruling (`sim/surface.py`; `DECISIONS.md` D-123), with the docstring's own attribution ("computed based on APL model (1994)"). `signal.goertzel`: the second-order recurrence and its output convention (`gpusonar/tonal.py`, `libs/live` tonal; D-130). Sea-water density at one atmosphere and Wood's equation (`REFERENCES.md` Sec. 7) | not imported by the core. An optional oracle in `tools/boundary_models_study.py`, `tests/python/test_tonal.py` and the medium-model tests, skipped when absent |
+| UnderwaterAcoustics.jl (org-arl, v0.9.0, commit `7b9c47e`) | MIT (`LICENSE.txt`) | the 22-row seabed table it attributes to TR 9407 (density, sound speed, loss parameter), used for the reflection-only sediment rows with that attribution (`configs/sediments.yaml`; D-132); the same bubble-loss law with its more exact attribution; the sea state to wind speed table; the sea-water density equation; Hamilton's shear regression as data only | none. Julia could not be run here: "their" numbers in the survey are hand evaluations of their printed formulas |
+| SignalAnalysis.jl (org-arl, commit `1aa1bd5`) | MIT (`LICENSE.txt`) | `goertzel` and `demon` in `src/dsp.jl`: the same recurrence; the structure of the DEMON estimator (envelope reduced to a per-block figure, a 1 Hz high-pass) (D-130) | none |
+| NoiseModels.jl, AlphaStableDistributions.jl (org-arl) | MIT | read for what an alpha-stable and a fitted-covariance noise generator need; our fitted noise uses a closed-form spectral factor instead of their optimiser, and alpha-sub-Gaussian noise with memory is not implemented (D-124) | none |
+| AcousticsToolbox.jl, AcousticRayTracers.jl, DataDrivenAcoustics.jl, VirtualAcousticOcean.jl, AdaptiveEstimators.jl, UnetUtils.jl, ARLToolkit.jl, unet-doc, unet-contrib, fjage and related (org-arl) | MIT, except `src/bellhopjl/` and `src/krakenjl/` of AcousticsToolbox.jl, which are GPL-3.0-or-later; unet-contrib BSD 3-clause | surveyed only (`ORG_ARL_SURVEY.md`); nothing taken. The GPL directories were not read | none |
+| UACR toolboxes (`github.com/uwa-channels`: Python `uwa_channels`, MATLAB twin) | MIT (LICENSE read; commits in the survey) | README, citation file and user-guide pages read; code not read. Our reader of the channel files is `sim/channel_replay.py`, written from the data format | none |
+| `ahmd-mahm/alpha-SGNm` (MATLAB) | BSD 3-clause (LICENSE read) | file list only; nothing taken | none |
+
+The owner's ruling that makes the handbook-attributed values usable: a value printed in an
+open (MIT or BSD) file or an open paper, with that file's attribution to APL-UW TR 9407,
+may be used with the attribution; the handbook itself stays unread and was not downloaded.
+This is a practical reading of the licences, not legal advice (`ORG_ARL_SURVEY.md` Sec. 5).
+
+**The Acoustics Toolbox (Bellhop, KRAKEN): a separate process only.**
+`github.com/oalib-acoustics/Acoustics-Toolbox`, GPL-3.0 (row in 2c, build in 3.6). Since
+D-82 it is used for three more things, all through the same boundary: our code writes
+Bellhop's input files, runs `bellhop.exe` as an external program
+(`GPUSONAR_BELLHOP`), and reads its output files. Nothing of it is linked, vendored, or
+ported.
+
+- Range-dependent sound speed (D-110): Bellhop's SSP option `Q` and its `.ssp` file. The
+  **file format** was read from the toolbox's documentation page
+  (`doc/RangeDepSSPFile.htm`) and from the reader that parses it (`Bellhop/sspMod.f90`,
+  subroutine `Quad`), to write a file it accepts. No code was copied or translated; what
+  our provider contains is a writer for that format. Reading GPL source to learn an input
+  format is noted here so the owner can object.
+- A test oracle for the chain's own ray code (`libs/live` `raytrace.hpp`,
+  `python/gpusonar/raytrace.py`), which is our derivation from closed-form arcs in a
+  layered profile (`PHYSICS_NOTES.md` Secs. 25, 28); the reports of that work state that
+  no Bellhop code was read or copied for it.
+- A test oracle for the surface-image factor (`lloyd.py`) and the coverage picture.
+
+A cause of a delay error inside a sharp front (interpolation of delay between ray steps)
+is inferred from Bellhop's output, not read from its code (`STATUS.md`, open item 26).
+
+**Measured data: fetched at test time, never committed; only derived tables and figures
+are in the repository.**
+
+| Data set | Licence | What is used | What the repository holds |
+|---|---|---|---|
+| Underwater Acoustic Channel Repository (UACR) v1.0, Zenodo doi:10.5281/zenodo.21287414 (cite arXiv:2609.03207 with it) | CC BY 4.0 | measured time-varying channels: the 12.5 kHz "Purple" site (nine files) and the repository's other sites, for the time-spreading validation (`PHYSICS_NOTES.md` Sec. 21) | `tools/fetch_channels.py` with an MD5 table; `docs/figures/channel_validation_{purple,sites}.md` and four `channel_validation_*.png` figures derived from the data, attributed in the legend. Tests that need the files skip without `GPUSONAR_UACR_DIR` |
+| Watermark benchmark channels (FFI), a 770 MB archive served as a free download from `www.ffi.no` | **licence not recorded — to check.** The archive carries no licence text, and its user manual could not be reached. Nothing is redistributed | three of its five channels (NOF1, NCS1, BCH1), for tests that need no geometry: Doppler shape, scintillation, width against frequency inside a band | `tools/fetch_channels.py --watermark` with a recorded MD5; `tools/channel_watermark.py`; `docs/figures/channel_validation_watermark.md` and `.png` (derived). The two papers read for what the set states are hal-01630274 and hal-01404491; their licences are not recorded — to check |
+| SFI Smart Ocean dataset (van Walree, Otnes, Tomasi, Henriksen, Danre, Bergh; IEEE DataPort 2025, doi:10.21227/3aa6-4k33) | CC BY 4.0 | the 4 to 8 kHz receptions (160 recordings at two hydrophones), the transmit waveforms, two sound-speed casts and the depth chart, supplied to the session after a login (IEEE DataPort serves the files only to logged-in users): soundings, the basin reverberation fit (D-106), the facet tail and coherent-phase comparisons (D-107, D-108), the noise levels | `tools/channel_smartocean.py`, `tools/basin_reverberation_fit.py`; `docs/figures/channel_validation_smartocean*.{md,png}`, `basin_reverberation_fit.{md,png}`, `facet_tail_smartocean.md` (derived, with the attribution in each file's first lines). Two fitted parameter sets are in `sim/basin.py` (`MEASURED`), labelled "one fjord, one night, 4-8 kHz". The descriptor article was read as the open copy hal-05793814; its licence is not recorded — to check |
+
+The plain-language statement on a derived table: these are our analyses of the authors'
+recordings, published under CC BY 4.0 with attribution; the numbers are ours, not figures
+the authors report, except where a row says "stated by the dataset".
+
+**Documents opened in the 2026-11 literature search** are registered one by one in
+`REFERENCES.md` (access, what was taken, status), with the licence or terms as each host
+stated them. In summary: US Government theses and reports from calhoun.nps.edu (public
+domain, as the register records them); author copies of journal and conference papers
+from repository.tudelft.nl (licence not recorded per paper — to check); arXiv papers (the
+arXiv licence chosen by each author; not recorded per paper — to check); Frontiers
+articles and the GeoHab backscatter report (CC BY 4.0, as the register records them). The
+documents themselves are outside the repository; only cited numbers and formulas are in
+it. Hosts that refused access are listed in `REFERENCES.md` Sec. 9; nothing was done to
+get around any of them. APL-UW TR 9407 was not downloaded or read.
+
+**Manufacturers' data sheets** for projectors and amplifiers
+(`docs/design/projector_selection.md`, `projector_candidates.json`): figures are quoted
+from the makers' public data sheets as named in that document. The terms under which each
+sheet is published are not recorded — to check before the document is circulated outside
+the project.
+
+**No new software dependency** was added since D-82. The ray code, the detector's
+statistics, the coverage picture, tonal analysis, noise fitting and the environment loader
+are written here. Eigen became a private build dependency of `libs/detect` as well (it was
+already required; MPL-2.0, header only, row in 2f).
 
 ## 4. ASASIN coverage map
 
