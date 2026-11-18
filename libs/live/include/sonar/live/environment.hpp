@@ -91,6 +91,7 @@ struct NavOptions {
                                   ///< and its attitude history must still be there (was 600 fixes, whatever their rate)
   double surface_z = 0.0;         ///< z of the sea surface in the navigation's frame: depth = z - surface_z
   double profile_step_m = 0.5;    ///< a (depth, sound speed) sample is kept for the profile every time the depth has changed by this
+  double history_margin_s = 2.0;  ///< a ping's attitude history is the fixes from this long before its transmit to this long after its window
 };
 
 // --- the sound-speed ladder ----------------------------------------------------------------------

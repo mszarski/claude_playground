@@ -73,6 +73,9 @@ struct DoaResult {
   std::vector<DoaPeak> peaks;   ///< strongest first
   double noise = 0.0;           ///< mean noise power per element and snapshot
   std::int32_t iterations = 0;
+  /// The kernel path was asked for with more channels than it takes (kSblMaxChannels): this result is
+  /// from the host reference (Eigen), on the host even when the backend asked for was CUDA.
+  bool fallback = false;
 };
 
 /// SBL over a grid of bearings (rad, from broadside towards increasing element offset).

@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "sonar/dsp/fft.hpp"
+#include "sonar/live/derive.hpp"
 
 namespace sonar::live {
 namespace {
@@ -273,7 +274,7 @@ SyncResult estimate_from_bursts(const BurstWindows& w, const Reference& r, doubl
   std::vector<int> f2;
   clocks(&out.offset, &out.drift_ppm, off2, drift2, q2, f2);
   const double span = static_cast<double>(n_samples) / fs;
-  out.tolerance = 1.0 / (20.0 * top_frequency);
+  out.tolerance = sync_tolerance(r.tolerance_us, top_frequency);
   out.ok = true;
   for (std::size_t b = 0; b < off2.size(); ++b) {
     // A board timed from one burst has no drift to check: what is left of its offset is the residual.
@@ -352,7 +353,7 @@ SyncResult synchronise(PingRecord& record, const Reference& reference) {
   estimate(record, ref, off2, drift2, q2, &f2);
   const double span = static_cast<double>(s.n_samples) / s.sample_rate;
   const Waveform& w = record.transmit.waveform;
-  out.tolerance = 1.0 / (20.0 * std::max(w.f_start, w.f_stop));
+  out.tolerance = sync_tolerance(reference.tolerance_us, std::max(w.f_start, w.f_stop));
   out.ok = true;
   for (std::size_t b = 0; b < off2.size(); ++b) {
     // A board timed from one burst has no drift to check: what is left of its offset is the residual.

@@ -21,6 +21,7 @@
 #include "sonar/core/record.hpp"
 #include "sonar/live/beamform.hpp"
 #include "sonar/live/decimate.hpp"
+#include "sonar/live/derive.hpp"
 #include "sonar/live/detections.hpp"
 #include "sonar/live/doa.hpp"
 #include "sonar/live/elevation.hpp"
@@ -40,6 +41,18 @@ struct BlankingOptions {
   double until(const PingRecord& record) const { return record.transmit.waveform.duration + recovery_s; }
 };
 
+/// The program around the chain (apps/sonar_live, the Holoscan source): the board stream and the report datagrams.
+struct StreamOptions {
+  /// Bytes of one sample in a block: a signed little-endian integer, full scale 2^(8 bytes - 1) counts.
+  /// The block header does not carry it, so sender and receiver are configured alike (2, 3 or 4).
+  int sample_bytes = 3;
+  std::int64_t buffer_bytes = 0;      ///< receive buffer asked of the system; 0: the larger of 8 MB and half a second of the stream
+  double queue_mb = 1024.0;           ///< blocks waiting for the chain may hold this much; beyond it arriving blocks are dropped and counted (0: no bound)
+  double idle_seconds = 30.0;         ///< the program ends when no block has arrived for this long (0: never)
+  std::string bind = "0.0.0.0";       ///< the address the block and navigation sockets listen on
+  std::int64_t report_max_bytes = 65000;  ///< a report line longer than this goes out as several datagrams (Report::datagrams)
+};
+
 struct ChainOptions {
   double bearing_first_deg = -40.0, bearing_last_deg = 40.0, bearing_step_deg = 0.5;  ///< from broadside
   bool hann = true;            ///< Hann aperture weighting for the map
@@ -48,8 +61,9 @@ struct ChainOptions {
   std::string beamformer = "backprojection";
   MvdrOptions mvdr;
   bool starboard = true;       ///< which side of a line array the bearings are on
-  double range_cell_m = 2.0;   ///< power is averaged into cells this long before detection
-  double cfar_pfa = 1e-5, cfar_guard_m = 100.0, cfar_train_m = 300.0;
+  // Sizes that follow from the sonar are left to be derived from the first record (derive.hpp); a number here wins.
+  double range_cell_m = kDerive;   ///< power is averaged into cells this long before detection
+  double cfar_pfa = 1e-5, cfar_guard_m = kDerive, cfar_train_m = kDerive;
   double min_snr_db = 9.0;
   /// "map": bearings are the centroids of the detection clusters on the beamformed map.
   /// "sbl": the map finds the ranges; SBL then resolves the bearings at each range gate.
@@ -61,8 +75,8 @@ struct ChainOptions {
   // Bearings on a gate move by a few hundredths of a degree after 15 iterations (RESULTS.md),
   // so the active chain stops at 20: iterations, tolerance, sources, dynamic range, SNR, frequencies.
   DoaOptions sbl{20, 1e-2, 6, 20.0, 6.0, 24};
-  TrackerOptions tracker{0.05, 15.0, 0.017453292519943295, 4.0, 3, 2, 8.0};
-  ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, 60.0, false, 40.0, 2.0, true, 800.0, 0.05235987755982988, 2.5, 0.0, 0.0};
+  TrackerOptions tracker{0.05, kDerive, kDerive, 4.0, 3, 2, 8.0};      // range and bearing sigma: derived
+  ClassifyOptions classify{1.0, 1.0, 5.0, 0.7, 4, kDerive, false, 40.0, 2.0, true, 800.0, kDerive, 2.5, 0.0, 0.0};   // fit limit, multipath bearing: derived
   bool sync = false;           ///< several capture boards: synchronise on the shared reference first
   Reference reference;
   ElevationOptions elevation;  ///< stacked rows: elevation and depth (off by default)
@@ -75,6 +89,7 @@ struct ChainOptions {
   // For the program around the chain (apps/sonar_live), not the chain itself:
   bool decimate_streaming = false;  ///< the receiver decimates as blocks arrive and the recording holds the decimated ping
   NavOptions nav;                   ///< the navigation receiver's settings
+  StreamOptions stream;             ///< the board stream, its socket and queue, and the report datagrams
   Backend backend = Backend::Host;
   int device = 0;
 };
@@ -115,12 +130,26 @@ struct Report {
   double sync_worst_residual_us = 0.0;
   std::vector<double> sync_offsets_us, sync_drift_ppm;
   double processing_seconds = 0.0;
+  bool sbl_fallback = false;  ///< SBL was asked for on more channels than its kernels take and ran on the host reference instead
   std::int64_t rows = 0;     ///< > 0: the array's rows, and elevation fields are in the report
   std::string profile_rung{};  ///< the sound-speed ladder's rung this ping (ladder on), with what a built profile holds
   std::int64_t profile_bins = 0;
   double profile_lo = 0.0, profile_hi = 0.0;
   std::string json() const;  ///< one line, the same fields as the Python chain's report
+  /// The line as UDP datagrams of at most `max_bytes`: the line itself when it fits. Otherwise several
+  /// lines, each a complete report of this ping holding a share of the detections and tracks and a
+  /// field "part": [k, n] (k from 1): a reader that knows nothing of parts parses each as a report with
+  /// fewer detections; one that does joins the lists of the n parts with the same "ping".
+  std::vector<std::string> datagrams(std::size_t max_bytes) const;
+
+ private:
+  std::string json_part(std::size_t det_first, std::size_t det_last, std::size_t track_first, std::size_t track_last,
+                        std::size_t part, std::size_t parts) const;
 };
+
+/// Text of several lines as datagrams of at most `max_bytes`, whole lines in each (a single line longer
+/// than that is put alone in one, which UdpSocket::send_to then refuses and reports).
+std::vector<std::string> line_datagrams(const std::string& lines, std::size_t max_bytes);
 
 /// Complex baseband and pulse compression, in place, once (the record remembers).
 void prepare(PingRecord& record, Backend backend = Backend::Host, int device = 0);
@@ -134,7 +163,11 @@ class LiveChain {
   explicit LiveChain(const ChainOptions& options = {});
   /// Process one ping (conditioned in place). The record's pose is taken as the vehicle's.
   Report process(PingRecord& record);
+  /// The options; after the first ping with every derived setting filled in.
   const ChainOptions& options() const { return opt_; }
+  /// What the first ping's record resolved (derive.hpp); an empty JSON object before it.
+  std::string resolved_json() const { return resolved_ ? defaults_.json() : "{}"; }
+  bool resolved() const { return resolved_; }
   SoundSpeedLadder& ladder() { return ladder_; }
   // The last ping's map, for display and taps.
   std::vector<float> last_power;
@@ -142,6 +175,8 @@ class LiveChain {
 
  private:
   ChainOptions opt_;
+  ChainDefaults defaults_;
+  bool resolved_ = false;
   Tracker tracker_;
   SoundSpeedLadder ladder_;
   std::int64_t pings_ = 0;
@@ -152,7 +187,7 @@ class LiveChain {
 
 struct PassiveOptions {
   double f_low = 0.0, f_high = 0.0;   ///< Hz, absolute; both 0 = the record's transmit band
-  std::int64_t n_fft = 1024, hop = 512, n_average = 8;
+  std::int64_t n_fft = 0, hop = 0, n_average = 8;   ///< n_fft 0: derived (1024, or two array transits); hop 0: half of n_fft
   double bearing_first_deg = -80.0, bearing_last_deg = 80.0, bearing_step_deg = 0.5;
   bool use_sbl = true;                ///< false: conventional beam power
   DoaOptions sbl;
@@ -168,7 +203,12 @@ struct PassiveFrame {
   double noise = 0.0;
   std::vector<double> elevations;     ///< rad, level-referenced, up positive: one per peak (stacked rows), else empty
   std::vector<double> elevation_quality;
+  bool sbl_fallback = false;          ///< more channels than the SBL kernels take: solved on the host reference
+  std::int64_t rows_as_snapshots = 0; ///< > 0: stacked rows without the elevation option: bearings from this many rows as snapshots
 };
+
+/// The length of a passive frame in samples: n_fft + (n_average - 1) hop, with the derived sizes.
+std::int64_t passive_span(const PassiveOptions& options, const PingRecord& record);
 
 /// Bearing-time record of one stretch of data: a frame every (n_fft + (n_average - 1) hop) samples.
 std::vector<PassiveFrame> passive_bearings(const PingRecord& record, const PassiveOptions& options,

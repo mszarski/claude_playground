@@ -27,15 +27,20 @@ T get(const unsigned char* p) {
 
 }  // namespace
 
-PingAssembler::PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate, const Reference* reference)
-    : template_(template_record) {
+double block_full_scale(std::int64_t bytes) {
+  if (bytes != 2 && bytes != 3 && bytes != 4) throw std::invalid_argument("stream: sample_bytes must be 2, 3 or 4");
+  return std::ldexp(1.0, static_cast<int>(8 * bytes - 1));
+}
+
+PingAssembler::PingAssembler(const PingRecord& template_record, const DecimateOptions* decimate, const Reference* reference, int sample_bytes)
+    : template_(template_record), sample_bytes_(sample_bytes) {
   const Samples& s = template_.samples;
   if (s.is_complex()) throw std::invalid_argument("PingAssembler: the template must describe real ADC samples");
   window_start_ = static_cast<std::int64_t>(std::llround(s.start_time * s.sample_rate));
   window_length_ = s.n_samples;
   n_channels_ = s.n_channels;
   const double full_scale = template_.metadata.adc_full_scale;
-  volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / 8388608.0;
+  volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / block_full_scale(sample_bytes_);
   template_.samples.data.clear();
   if (decimate != nullptr && decimate->enabled) decimator_ = std::make_shared<PingDecimator>(template_, *decimate, reference);
 }
@@ -52,7 +57,7 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   const auto ping_index = static_cast<std::int64_t>(get<std::uint32_t>(data + 28));
   const auto flags = get<std::uint16_t>(data + 34);
   const auto start_ns = static_cast<std::int64_t>(get<std::uint64_t>(data + 36));
-  if (ch != n_channels_ || size != kHeader + static_cast<std::size_t>(n * ch * 3)) {
+  if (ch != n_channels_ || size != kHeader + static_cast<std::size_t>(n * ch * sample_bytes_)) {
     ++bad_blocks;
     return false;
   }
@@ -104,9 +109,7 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
     if (decimator_) rows_.resize(static_cast<std::size_t>((b - a) * ch));
     for (std::int64_t i = a; i < b; ++i) {
       for (std::int64_t c = 0; c < ch; ++c) {
-        const unsigned char* q = payload + ((i - first) * ch + c) * 3;
-        std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
-        if (v & 0x800000) v -= 0x1000000;        // sign-extend 24 bits
+        const std::int32_t v = block_sample(payload + ((i - first) * ch + c) * sample_bytes_, sample_bytes_);
         if (decimator_) rows_[static_cast<std::size_t>((i - a) * ch + c)] = static_cast<float>(static_cast<double>(v) * volts_per_count_);
         else buffer_[static_cast<std::size_t>((i - w0) * ch + c)] = v;
       }
@@ -142,13 +145,14 @@ bool PingAssembler::feed(const unsigned char* data, std::size_t size, std::vecto
   return true;
 }
 
-StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples, const DecimateOptions* decimate)
-    : template_(template_record), chunk_(chunk_samples) {
+StreamAssembler::StreamAssembler(const PingRecord& template_record, std::int64_t chunk_samples, const DecimateOptions* decimate,
+                                 int sample_bytes)
+    : template_(template_record), chunk_(chunk_samples), sample_bytes_(sample_bytes) {
   if (template_.samples.is_complex()) throw std::invalid_argument("StreamAssembler: the template must describe real ADC samples");
   if (chunk_ < 1) throw std::invalid_argument("StreamAssembler: chunk_samples must be positive");
   n_channels_ = template_.samples.n_channels;
   const double full_scale = template_.metadata.adc_full_scale;
-  volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / 8388608.0;
+  volts_per_count_ = (std::isfinite(full_scale) ? full_scale : 1.0) / block_full_scale(sample_bytes_);
   template_.samples.data.clear();
   if (decimate != nullptr && decimate->enabled) {
     plan_ = plan_decimation(template_, *decimate);
@@ -169,7 +173,7 @@ bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vec
   const auto n = static_cast<std::int64_t>(get<std::uint32_t>(data + 8));
   const auto first = static_cast<std::int64_t>(get<std::uint64_t>(data + 12));
   const auto start_ns = static_cast<std::int64_t>(get<std::uint64_t>(data + 36));
-  if (ch != n_channels_ || size != kHeader + static_cast<std::size_t>(n * ch * 3)) {
+  if (ch != n_channels_ || size != kHeader + static_cast<std::size_t>(n * ch * sample_bytes_)) {
     ++bad_blocks;
     return false;
   }
@@ -203,9 +207,7 @@ bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vec
   if (decimator_) {
     rows_.resize(static_cast<std::size_t>(n * ch));
     for (std::int64_t i = 0; i < n * ch; ++i) {
-      const unsigned char* q = payload + i * 3;
-      std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
-      if (v & 0x800000) v -= 0x1000000;
+      const std::int32_t v = block_sample(payload + i * sample_bytes_, sample_bytes_);
       rows_[static_cast<std::size_t>(i)] = static_cast<float>(static_cast<double>(v) * volts_per_count_ * gain(i / ch));
     }
     decimator_->feed(rows_.data(), n, pending_);
@@ -237,9 +239,7 @@ bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vec
       start_ns_ = start_ns;
     }
     for (std::int64_t c = 0; c < ch; ++c) {
-      const unsigned char* q = payload + (i * ch + c) * 3;
-      std::int32_t v = static_cast<std::int32_t>(q[0]) | (static_cast<std::int32_t>(q[1]) << 8) | (static_cast<std::int32_t>(q[2]) << 16);
-      if (v & 0x800000) v -= 0x1000000;
+      const std::int32_t v = block_sample(payload + (i * ch + c) * sample_bytes_, sample_bytes_);
       buffer_[static_cast<std::size_t>(c * chunk_ + filled_)] = static_cast<float>(static_cast<double>(v) * volts_per_count_ * (blank_until_ > 0.0 ? gain(i) : 1.0));
     }
     if (++filled_ == chunk_) {
@@ -258,11 +258,21 @@ bool StreamAssembler::feed(const unsigned char* data, std::size_t size, std::vec
   return true;
 }
 
-UdpSocket::UdpSocket(const std::string& host, int port, double timeout_s) {
+UdpSocket::UdpSocket(const std::string& host, int port, double timeout_s, std::int64_t buffer_bytes) {
   fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
   if (fd_ < 0) throw std::runtime_error("UdpSocket: cannot create a socket");
-  int size = 8 << 20;
+  asked_ = buffer_bytes > 0 ? buffer_bytes : (8 << 20);
+  int size = static_cast<int>(std::min<std::int64_t>(asked_, 0x7fffffff));
   ::setsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &size, sizeof(size));
+  int got = 0;
+  socklen_t got_len = sizeof(got);
+  if (::getsockopt(fd_, SOL_SOCKET, SO_RCVBUF, &got, &got_len) == 0) {
+#ifdef __linux__
+    granted_ = got / 2;        // Linux doubles the value for its own bookkeeping and reports the doubled one
+#else
+    granted_ = got;
+#endif
+  }
   timeval tv{};
   tv.tv_sec = static_cast<time_t>(timeout_s);
   tv.tv_usec = static_cast<suseconds_t>((timeout_s - std::floor(timeout_s)) * 1e6);
@@ -291,12 +301,17 @@ std::size_t UdpSocket::receive(std::vector<unsigned char>& buffer) {
   return buffer.size();
 }
 
-void UdpSocket::send_to(const std::string& host, int port, const std::string& text) {
+bool UdpSocket::send_to(const std::string& host, int port, const std::string& text) {
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
   addr.sin_port = htons(static_cast<std::uint16_t>(port));
-  if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) return;
-  ::sendto(fd_, text.data(), std::min<std::size_t>(text.size(), 65000), 0, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+  // A text too long for a datagram is not sent at all: half a JSON line is worse than none (Report::datagrams splits one).
+  if (text.size() > kMaxDatagram || ::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+    ++refused;
+    return false;
+  }
+  ::sendto(fd_, text.data(), text.size(), 0, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));   // nobody listening is not an error
+  return true;
 }
 
 bool Navigation::push(const std::string& json) {
@@ -397,7 +412,8 @@ bool Navigation::apply(PingRecord& record) {
   std::vector<DvlSample> dvl;
   std::vector<DepthSample> depth;
   for (const Fix& fx : fixes_) {
-    if (fx.time_ns < t - 2000000000LL || fx.time_ns > t + window_ns + 2000000000LL) continue;
+    const auto margin_ns = static_cast<std::int64_t>(opt_.history_margin_s * 1e9);
+    if (fx.time_ns < t - margin_ns || fx.time_ns > t + window_ns + margin_ns) continue;
     InsSample a{};
     a.t = static_cast<double>(fx.time_ns - t) * 1e-9;
     a.position = {fx.v[0], fx.v[1], fx.v[2]};

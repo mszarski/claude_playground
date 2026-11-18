@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -61,7 +62,10 @@ struct ElevationOptions {
   /// A sound-speed profile (m, m/s): depth_m then comes from a ray traced through it, not the straight line.
   std::vector<double> ssp_depth, ssp_speed;
   double roll_sigma = 0.0;         ///< rad: the navigation's roll accuracy, added to the elevation sigma
-  double row_tolerance_m = 0.02;   ///< elements within this of one line are one row
+  /// Elements within this of one line are one row. NaN: derived (derive.hpp: 2 cm, or a quarter of the
+  /// shortest wavelength when that is less).
+  double row_tolerance_m = std::numeric_limits<double>::quiet_NaN();
+  std::int64_t min_row_elements = 3;  ///< a line of fewer elements than this is not a row
   /// The sound-speed ladder (environment.hpp): which profile the depth is traced through, how its
   /// uncertainty reaches depth_sigma_m, and the rung named with every depth. Off: as before.
   ProfileOptions profile;

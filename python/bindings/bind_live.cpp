@@ -6,6 +6,7 @@
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/environment.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/sbl_kernel.hpp"
 #include "sonar/live/udp_source.hpp"
 
 namespace py = pybind11;
@@ -35,6 +36,7 @@ py::dict doa_dict(const live::DoaResult& r) {
   d["peaks"] = peaks;
   d["noise"] = r.noise;
   d["iterations"] = r.iterations;
+  d["fallback"] = r.fallback;      // more channels than the SBL kernels take: solved by the host reference
   return d;
 }
 
@@ -83,6 +85,9 @@ live::Reference reference_options(const py::dict& r) {
   o.tail = r["tail"].cast<double>();
   if (r.contains("dedicated")) o.dedicated = r["dedicated"].cast<bool>();
   if (r.contains("min_quality") && !r["min_quality"].is_none()) o.min_quality = r["min_quality"].cast<double>();
+  number(r, "search_time", o.search_time);
+  number(r, "tolerance_us", o.tolerance_us);
+  number(r, "clip_level", o.clip_level);
   return o;
 }
 
@@ -105,6 +110,7 @@ live::NavOptions nav_options(const py::dict& d) {
   number(d, "keep_s", o.keep_s);
   number(d, "surface_z", o.surface_z);
   number(d, "profile_step_m", o.profile_step_m);
+  number(d, "history_margin_s", o.history_margin_s);
   return o;
 }
 
@@ -413,18 +419,75 @@ void bind_live(py::module_& m) {
             d["elevations"] = f.elevations;
             d["elevation_quality"] = f.elevation_quality;
           }
+          if (f.rows_as_snapshots > 0) d["rows_as_snapshots"] = f.rows_as_snapshots;
+          if (f.sbl_fallback) d["sbl_fallback"] = true;
           out.append(d);
         }
         return py::make_tuple(out, bearings);
       },
-      py::arg("record"), py::arg("f_low") = 0.0, py::arg("f_high") = 0.0, py::arg("n_fft") = 1024, py::arg("hop") = 512,
+      py::arg("record"), py::arg("f_low") = 0.0, py::arg("f_high") = 0.0, py::arg("n_fft") = 0, py::arg("hop") = 0,
       py::arg("n_average") = 8, py::arg("first_deg") = -80.0, py::arg("last_deg") = 80.0, py::arg("step_deg") = 0.5,
       py::arg("method") = "sbl", py::arg("max_iterations") = 60, py::arg("tolerance") = 1e-3, py::arg("max_sources") = 4,
       py::arg("dynamic_range_db") = 20.0, py::arg("min_snr_db") = 0.0, py::arg("backend") = Backend::Host,
       py::arg("kernels") = true, py::arg("elevation") = false, py::arg("elevation_first_deg") = -30.0,
       py::arg("elevation_last_deg") = 30.0, py::arg("elevation_step_deg") = 0.5, py::arg("look") = "starboard",
       "Passive bearing-time record of one stretch of data: (frames, bearing grid in rad). With `elevation` and an array "
-      "of stacked rows every frame also has `elevations` (rad, level-referenced, up positive) and `elevation_quality`.");
+      "of stacked rows every frame also has `elevations` (rad, level-referenced, up positive) and `elevation_quality`. "
+      "n_fft 0: derived from the array and the sample rate (live_passive_sizes); hop 0: half of n_fft. Stacked rows "
+      "without `elevation`: bearings from the rows as snapshots, the frame says `rows_as_snapshots`.");
+  m.def(
+      "live_passive_sizes",
+      [](const PingRecord& record, std::int64_t n_fft, std::int64_t hop, std::int64_t n_average) {
+        live::PassiveOptions p;
+        p.n_fft = n_fft;
+        p.hop = hop;
+        p.n_average = n_average;
+        live::resolve(p, record);
+        return py::make_tuple(p.n_fft, p.hop, p.n_fft + (p.n_average - 1) * p.hop);
+      },
+      py::arg("record"), py::arg("n_fft") = 0, py::arg("hop") = 0, py::arg("n_average") = 8,
+      "(n_fft, hop, samples per frame) of the passive chain for this record, with sizes given as 0 derived (derive.hpp).");
+  m.attr("SBL_KERNEL_MAX_CHANNELS") = live::kSblMaxChannels;
+  m.def(
+      "live_derive",
+      [](const PingRecord& record, const py::dict& given) {
+        // The chain's derived settings for this record: `given` holds the ones the configuration set (the C++ option names).
+        live::ChainOptions o;
+        number(given, "range_cell_m", o.range_cell_m);
+        number(given, "cfar_guard_m", o.cfar_guard_m);
+        number(given, "cfar_train_m", o.cfar_train_m);
+        number(given, "tracker_range_sigma", o.tracker.range_sigma);
+        number(given, "tracker_bearing_sigma", o.tracker.bearing_sigma);
+        number(given, "multipath_bearing", o.classify.multipath_bearing);
+        number(given, "classify_max_fit_rms", o.classify.max_fit_rms);
+        number(given, "row_tolerance_m", o.elevation.row_tolerance_m);
+        number(given, "bearing_step_deg", o.bearing_step_deg);
+        if (given.contains("min_row_elements") && !given["min_row_elements"].is_none()) {
+          o.elevation.min_row_elements = given["min_row_elements"].cast<std::int64_t>();
+        }
+        const live::ChainDefaults d = live::resolve(o, record);
+        py::dict out;
+        out["range_cell_m"] = d.range_cell_m;
+        out["cfar_guard_m"] = d.cfar_guard_m;
+        out["cfar_train_m"] = d.cfar_train_m;
+        out["tracker_range_sigma"] = d.tracker_range_sigma;
+        out["tracker_bearing_sigma"] = d.tracker_bearing_sigma;
+        out["multipath_bearing"] = d.multipath_bearing;
+        out["classify_max_fit_rms"] = d.classify_max_fit_rms;
+        out["row_tolerance_m"] = d.row_tolerance_m;
+        out["json"] = d.json();
+        return out;
+      },
+      py::arg("record"), py::arg("given") = py::dict(),
+      "The chain settings left to be derived, resolved from this record's band, pulse and array (libs/live derive.hpp): "
+      "values in the units of the C++ options (angles in rad), and `json`, the line the programs print.");
+  m.def("live_row_tolerance", &live::row_tolerance, py::arg("record"), py::arg("given") = live::kDerive,
+        "Elements within this of one line are one row: `given`, or 2 cm, or a quarter of the shortest wavelength when less.");
+  m.def("live_sync_tolerance", &live::sync_tolerance, py::arg("given_us"), py::arg("top_frequency"),
+        "What two boards must agree within, s: given_us microseconds if positive, else a twentieth of a period.");
+  m.def("live_stream_buffer_bytes", &live::stream_buffer_bytes, py::arg("template_record"), py::arg("sample_bytes") = 3, py::arg("given") = 0,
+        "The receive buffer to ask for: `given` if positive, else the larger of 8 MB and half a second of the board stream.");
+  m.def("live_stream_bytes_per_second", &live::stream_bytes_per_second, py::arg("template_record"), py::arg("sample_bytes") = 3);
 
   m.def("live_find_rows", &live::find_rows, py::arg("record"), py::arg("tolerance") = 0.02, py::arg("min_elements") = 3,
         "Channel rows of each line of the receive array (elevation.hpp).");
@@ -537,6 +600,7 @@ void bind_live(py::module_& m) {
           num("roll_sigma", eo.roll_sigma);
           num("depth_process_noise", o.tracker.depth_process_noise);
           num("row_tolerance_m", eo.row_tolerance_m);
+          if (e.contains("min_row_elements") && !e["min_row_elements"].is_none()) eo.min_row_elements = e["min_row_elements"].cast<std::int64_t>();
           if (e.contains("ssp_depth")) eo.ssp_depth = e["ssp_depth"].cast<std::vector<double>>();
           if (e.contains("ssp_speed")) eo.ssp_speed = e["ssp_speed"].cast<std::vector<double>>();
           if (eo.ssp_depth.size() != eo.ssp_speed.size()) throw std::invalid_argument("elevation.ssp: depth and speed must be as long as each other");
@@ -553,10 +617,6 @@ void bind_live(py::module_& m) {
         if (kw.contains("sync")) {
           const py::dict r = kw["sync"].cast<py::dict>();
           o.sync = true;
-          o.reference.f_start = r["f_start"].cast<double>();
-          o.reference.f_stop = r["f_stop"].cast<double>();
-          o.reference.duration = r["duration"].cast<double>();
-          o.reference.lead = r["lead"].cast<double>();
           o.reference = reference_options(r);
         }
         return live::LiveChain(o);
@@ -571,6 +631,8 @@ void bind_live(py::module_& m) {
              return json;
            },
            "Process one ping (conditioned in place); returns the report as a JSON line.")
+      .def("resolved", &live::LiveChain::resolved_json,
+           "The settings the first ping resolved (derive.hpp), as a JSON line; '{}' before it.")
       .def("last_map", [](const live::LiveChain& c) {
         py::array_t<float> power({static_cast<py::ssize_t>(c.bearings.size()), static_cast<py::ssize_t>(c.last_ranges.size())});
         std::copy(c.last_power.begin(), c.last_power.end(), power.mutable_data());
@@ -578,14 +640,14 @@ void bind_live(py::module_& m) {
       });
 
   py::class_<live::PingAssembler>(m, "PingAssemblerCpp")
-      .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference) {
-             if (decimate.is_none()) return live::PingAssembler(t);
+      .def(py::init([](const PingRecord& t, const py::object& decimate, const py::object& reference, int sample_bytes) {
+             if (decimate.is_none()) return live::PingAssembler(t, nullptr, nullptr, sample_bytes);
              const live::DecimateOptions o = decimate_options(decimate.cast<py::dict>());
-             if (reference.is_none()) return live::PingAssembler(t, &o);
+             if (reference.is_none()) return live::PingAssembler(t, &o, nullptr, sample_bytes);
              const live::Reference ref = reference_options(reference.cast<py::dict>());
-             return live::PingAssembler(t, &o, &ref);
+             return live::PingAssembler(t, &o, &ref, sample_bytes);
            }),
-           py::arg("template_record"), py::arg("decimate") = py::none(), py::arg("reference") = py::none())
+           py::arg("template_record"), py::arg("decimate") = py::none(), py::arg("reference") = py::none(), py::arg("sample_bytes") = 3)
       .def("feed",
            [](live::PingAssembler& a, const py::bytes& block) {
              const std::string data = block;

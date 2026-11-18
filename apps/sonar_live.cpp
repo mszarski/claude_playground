@@ -41,6 +41,14 @@
 //   elevation_profile_cast elevation_profile_supplied_sigma elevation_profile_family (isothermal | mixed_layer)
 //   elevation_profile_family_gradient elevation_profile_layer_depth elevation_profile_thermocline_gradient
 //   elevation_profile_thermocline_thickness elevation_profile_family_sigma
+//   the program itself (docs/DEPLOYMENT.md, "Keys a new sonar must review"): bind (address the sockets listen on)
+//   idle_seconds (end after this long without a block; 0: never) stream_sample_bytes (2 | 3 | 4: the boards' word)
+//   stream_buffer_bytes (socket buffer; 0: from the data rate) stream_queue_mb (blocks waiting for the chain; 0: no bound)
+//   report_udp_max_bytes (a longer report line goes out as several datagrams, each a complete line with "part": [k, n])
+//   sync_search_time sync_tolerance_us elevation_min_row_elements nav_history_margin_s
+// range_cell_m, cfar_guard_m, cfar_train_m, tracker_range_sigma, tracker_bearing_sigma_deg, multipath_bearing_deg,
+// classify_max_fit_rms, elevation_row_tolerance_m, n_fft and hop are derived from the sonar when not given
+// (libs/live derive.hpp); what was resolved is printed once on stderr.
 //
 // --template: a container file holding one ping record of the sonar (geometry, waveform,
 // receive window); write it with `tools/sonar_live.py CONFIG --export-template template.h5`.
@@ -77,8 +85,13 @@ std::string stamped(const std::string& path) {
   const std::time_t now = std::time(nullptr);
   std::tm utc{};
   gmtime_r(&now, &utc);
-  char out[1024];
-  return std::strftime(out, sizeof(out), path.c_str(), &utc) > 0 ? std::string(out) : path;
+  // Room for every field to grow; a path that still does not fit is an error, never the unstamped path
+  // (which a restart would write over).
+  std::vector<char> out(2 * path.size() + 256);
+  if (std::strftime(out.data(), out.size(), path.c_str(), &utc) == 0) {
+    throw std::invalid_argument("output path too long to stamp with the start time: " + path);
+  }
+  return std::string(out.data());
 }
 }  // namespace
 
@@ -131,7 +144,7 @@ int main(int argc, char** argv) {
     auto passive_lines = [&](const PingRecord& rec) {
       const auto frames = live::passive_bearings(rec, passive_options);
       if (!tonal) return live::passive_json(frames, rec.transmit.time_ns);
-      return live::passive_tonal_json(rec, frames, passive_options.n_fft + (passive_options.n_average - 1) * passive_options.hop, *tonal);
+      return live::passive_tonal_json(rec, frames, live::passive_span(passive_options, rec), *tonal);
     };
     if (!passive.empty()) {
       io::RecordReader reader(passive);
@@ -155,18 +168,27 @@ int main(int argc, char** argv) {
     std::unique_ptr<io::RecordWriter> recorder;
     if (!recording_path.empty()) recorder = std::make_unique<io::RecordWriter>(recording_path);
     std::unique_ptr<live::UdpSocket> out_socket;
+    const live::StreamOptions& stream_options = chain_options.stream;
     if (!report_host.empty()) out_socket = std::make_unique<live::UdpSocket>("0.0.0.0", 0);
     live::Navigation nav(chain_options.nav);
-    std::int64_t done = 0, without_nav = 0;
+    std::int64_t done = 0, without_nav = 0, split_reports = 0;
+    // A report too long for one datagram goes out as several complete lines ("part": [k, n]); never cut.
+    auto send_report = [&](const std::vector<std::string>& datagrams) {
+      if (!out_socket) return;
+      if (datagrams.size() > 1) ++split_reports;
+      for (const std::string& d : datagrams) out_socket->send_to(report_host, report_port, d);
+    };
+    const auto report_bytes = static_cast<std::size_t>(std::max<std::int64_t>(stream_options.report_max_bytes, 1));
     auto handle = [&](PingRecord& rec, bool use_nav) {
       if (use_nav && !nav.apply(rec)) ++without_nav;
       if (recorder) {
         recorder->write(rec);        // raw samples, with the pose, before anything else touches them
         recorder->flush();
       }
-      const std::string line = chain.process(rec).json();
-      report << line << "\n" << std::flush;
-      if (out_socket) out_socket->send_to(report_host, report_port, line);
+      const live::Report rep = chain.process(rec);
+      report << rep.json() << "\n" << std::flush;
+      if (out_socket) send_report(rep.datagrams(report_bytes));
+      if (done == 0) std::fprintf(stderr, "sonar_live: chain settings %s\n", chain.resolved_json().c_str());
       ++done;
     };
 
@@ -189,7 +211,7 @@ int main(int argc, char** argv) {
         stream_decimate.blank_taper_s = blanking.taper_s;
       }
       live::PingAssembler assembler(template_record, streaming ? &stream_decimate : nullptr,
-                                    chain_options.sync ? &chain_options.reference : nullptr);
+                                    chain_options.sync ? &chain_options.reference : nullptr, stream_options.sample_bytes);
       live::DecimateOptions listen_decimate = chain_options.decimate;
       if (listen_decimate.f_low <= 0.0 && listen_decimate.f_high <= 0.0) {
         listen_decimate.f_low = passive_options.f_low;
@@ -197,12 +219,29 @@ int main(int argc, char** argv) {
       }
       // --listen: the stream is not cut on transmits; every stretch long enough for one passive
       // frame is recorded and solved for bearings as it completes.
-      const std::int64_t chunk = passive_options.n_fft + (passive_options.n_average - 1) * passive_options.hop;
       // (With decimate=1 the frame lengths n_fft and hop count decimated samples.)
-      live::StreamAssembler stream(template_record, listen ? chunk : 1, listen && listen_decimate.enabled ? &listen_decimate : nullptr);
-      live::UdpSocket blocks("0.0.0.0", udp_port);
+      std::int64_t chunk = 1;
+      if (listen) {
+        PingRecord as_listened = template_record;       // the stretches' sample rate decides a derived block length
+        if (listen_decimate.enabled) as_listened.samples.sample_rate = live::plan_decimation(template_record, listen_decimate).output_rate;
+        live::resolve(passive_options, as_listened);    // fixed for the run: every stretch is cut to it
+        chunk = passive_options.n_fft + (passive_options.n_average - 1) * passive_options.hop;
+      }
+      live::StreamAssembler stream(template_record, chunk, listen && listen_decimate.enabled ? &listen_decimate : nullptr,
+                                   stream_options.sample_bytes);
+      // The socket buffer follows the stream's data rate; what the system granted is said, and a shortfall warned of.
+      const double rate = live::stream_bytes_per_second(template_record, stream_options.sample_bytes);
+      const std::int64_t want = live::stream_buffer_bytes(template_record, stream_options.sample_bytes, stream_options.buffer_bytes);
+      live::UdpSocket blocks(stream_options.bind, udp_port, 0.2, want);
+      std::fprintf(stderr, "sonar_live: stream %.1f MB/s; socket buffer asked %lld bytes, granted %lld (%.2f s of stream)\n", rate / 1e6,
+                   static_cast<long long>(blocks.buffer_asked()), static_cast<long long>(blocks.buffer_granted()),
+                   rate > 0.0 ? static_cast<double>(blocks.buffer_granted()) / rate : 0.0);
+      if (blocks.buffer_granted() < blocks.buffer_asked()) {
+        std::fprintf(stderr, "sonar_live: WARNING the system granted a smaller socket buffer than asked: raise net.core.rmem_max to %lld "
+                             "or blocks may be lost while a ping is processed\n", static_cast<long long>(blocks.buffer_asked()));
+      }
       std::unique_ptr<live::UdpSocket> nav_socket;
-      if (nav_port >= 0) nav_socket = std::make_unique<live::UdpSocket>("0.0.0.0", nav_port);
+      if (nav_port >= 0) nav_socket = std::make_unique<live::UdpSocket>(stream_options.bind, nav_port);
       // Listening on a platform that also pings: the same window, about every transmit the blocks mark.
       if (blanking.enabled && blanking.zero) stream.set_blanking(blanking.until(template_record), blanking.taper_s);
       std::fprintf(stderr, "sonar_live: listening for blocks on UDP port %d\n", blocks.port());
@@ -211,6 +250,12 @@ int main(int argc, char** argv) {
       std::mutex mutex;
       std::condition_variable ready_cv;
       std::deque<std::vector<unsigned char>> queue;
+      // The queue is bounded: when the chain falls behind for longer than it holds, arriving blocks are
+      // dropped and counted (the assembler then sees a gap and drops the ping it falls in) instead of
+      // memory growing until the process is killed.
+      const auto queue_limit = static_cast<std::size_t>(stream_options.queue_mb * 1024.0 * 1024.0);
+      std::size_t queued_bytes = 0;
+      std::int64_t queue_dropped = 0;
       std::atomic<bool> stop{false};
       std::thread receiver([&] {
         std::vector<unsigned char> buffer;
@@ -218,6 +263,11 @@ int main(int argc, char** argv) {
           if (blocks.receive(buffer) == 0) continue;
           {
             const std::lock_guard<std::mutex> lock(mutex);
+            if (queue_limit > 0 && queued_bytes + buffer.size() > queue_limit) {
+              ++queue_dropped;
+              continue;
+            }
+            queued_bytes += buffer.size();
             queue.push_back(buffer);
           }
           ready_cv.notify_one();
@@ -238,11 +288,14 @@ int main(int argc, char** argv) {
         {
           std::unique_lock<std::mutex> lock(mutex);
           if (!ready_cv.wait_for(lock, std::chrono::milliseconds(200), [&] { return !queue.empty(); })) {
-            if (std::chrono::steady_clock::now() - last > std::chrono::seconds(30)) break;   // the stream has ended
+            // idle_seconds without a block: the stream has ended (0: wait for ever).
+            if (stream_options.idle_seconds > 0.0 &&
+                std::chrono::steady_clock::now() - last > std::chrono::duration<double>(stream_options.idle_seconds)) break;
             continue;
           }
           block = std::move(queue.front());
           queue.pop_front();
+          queued_bytes -= block.size();
         }
         last = std::chrono::steady_clock::now();
         ready.clear();
@@ -255,7 +308,7 @@ int main(int argc, char** argv) {
             }
             const std::string lines = passive_lines(rec);
             report << lines << std::flush;
-            if (out_socket) out_socket->send_to(report_host, report_port, lines);
+            send_report(live::line_datagrams(lines, report_bytes));
             ++done;
           }
           continue;
@@ -275,15 +328,19 @@ int main(int argc, char** argv) {
       receiver.join();
       nav_thread.join();
       if (listen) {
-        std::fprintf(stderr, "sonar_live: %lld frames, %lld dropped, %lld samples lost, %lld bad blocks\n", static_cast<long long>(done),
+        std::fprintf(stderr, "sonar_live: %lld frames, %lld dropped, %lld samples lost, %lld bad blocks, %lld blocks dropped at the full queue, "
+                             "%lld reports split, %lld report datagrams refused\n", static_cast<long long>(done),
                      static_cast<long long>(stream.dropped_chunks), static_cast<long long>(stream.lost_samples),
-                     static_cast<long long>(stream.bad_blocks));
+                     static_cast<long long>(stream.bad_blocks), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
+                     static_cast<long long>(out_socket ? out_socket->refused : 0));
         return 0;
       }
-      std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld pings without navigation\n",
+      std::fprintf(stderr, "sonar_live: %lld pings, %lld dropped, %lld samples lost, %lld bad blocks, %lld pings without navigation, "
+                           "%lld blocks dropped at the full queue, %lld reports split, %lld report datagrams refused\n",
                    static_cast<long long>(done), static_cast<long long>(assembler.dropped_pings),
                    static_cast<long long>(assembler.lost_samples), static_cast<long long>(assembler.bad_blocks),
-                   static_cast<long long>(without_nav));
+                   static_cast<long long>(without_nav), static_cast<long long>(queue_dropped), static_cast<long long>(split_reports),
+                   static_cast<long long>(out_socket ? out_socket->refused : 0));
     } else {
       throw std::invalid_argument("give --replay FILE, --udp PORT --template FILE, or --passive FILE");
     }

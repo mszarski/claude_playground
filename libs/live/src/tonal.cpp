@@ -392,7 +392,7 @@ void TonalAnalyzer::setup(const PingRecord& record) {
   carrier_ = is_complex_ ? s.center_frequency : 0.0;
   c_ = record.environment.sound_speed;
   n_channels_ = s.n_channels;
-  rows_ = find_rows(record, opt_.row_tolerance_m);
+  rows_ = find_rows(record, row_tolerance(record, opt_.row_tolerance_m));
   if (rows_.empty()) {
     rows_.emplace_back();
     for (std::int64_t i = 0; i < n_channels_; ++i) rows_[0].push_back(i);
