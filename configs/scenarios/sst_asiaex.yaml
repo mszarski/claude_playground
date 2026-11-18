@@ -38,7 +38,7 @@ environment:
   temperature_c: 15.0
   salinity_psu: 34.0
   water_depth_m: 100.0
-  bottom: {speed: 1767.0, density: 1.845, attenuation: 0.88}
+  bottom: {speed: 1767.0, density: 1.845, attenuation: 0.88}   # medium sand of configs/sediments.yaml; SST used "FineSand"
   wind_speed_m_s: 3.0                  # the wind SST used for Fig. 4
   absorption: francois_garrison
   water_depth_known: false
@@ -47,7 +47,6 @@ environment:
 propagation:
   surface_z: 0.0
   max_order: 2
-  bottom: {speed: 1767.0, density: 1.845, attenuation: 0.88}   # medium sand of configs/sediments.yaml; SST used "FineSand"
 time_spread:
   surface: true          # the environment's wind
   bottom: {rms_height: 0.012, mean_square_slope: 0.045}        # as printed in TR 0702

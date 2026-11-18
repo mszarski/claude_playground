@@ -99,6 +99,9 @@ SURFACE_REVERB_MODELS = ("chapman_harris", "kraus_surface", "bubble_layer_surfac
 BOTTOM_REVERB_MODELS = ("lambert", "searay_bottom", "fluid_sediment")
 
 
+_TOLD: set = set()
+
+
 class EnvironmentError(ValueError):       # noqa: A001 (a ValueError: existing callers catch that)
     """An environment, or a scenario's use of one, that does not hold together."""
 
@@ -407,7 +410,9 @@ def resolve(env, depth: float = 0.0, strict: bool = False, where: str = "environ
     elif strict:
         if e.get("temperature_c") is not None and prof is None:
             implied = acoustics.sound_speed(e["temperature_c"], e.get("salinity_psu", DEFAULT_SALINITY_PSU), e.get("reference_depth_m", depth))
-            if abs(float(c) - implied) > SOUND_SPEED_TOLERANCE_M_S and "sound_speed_m_s" not in overrides:
+            seen = (float(c), float(e["temperature_c"]), float(e.get("salinity_psu", DEFAULT_SALINITY_PSU)))
+            if abs(float(c) - implied) > SOUND_SPEED_TOLERANCE_M_S and "sound_speed_m_s" not in overrides and seen not in _TOLD:
+                _TOLD.add(seen)                        # once per process for one water
                 warnings.warn(f"{where}: sound_speed_m_s {float(c):g} beside temperature_c {e['temperature_c']:g} and salinity_psu "
                               f"{e.get('salinity_psu', DEFAULT_SALINITY_PSU):g}, which give {implied:.1f} m/s: geometry uses the first, absorption the "
                               "second. Leave one out, or name sound_speed_m_s under the environment's `overrides` with the reason", stacklevel=3)
@@ -492,12 +497,11 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
     tier = cfg.get("fidelity", "free_field")
     surface_z = 0.0
 
-    # absorption model
-    if env.get("absorption") is not None:
-        if cfg.get("absorption") is None:
-            cfg["absorption"] = env["absorption"]
-        elif cfg["absorption"] != env["absorption"]:
-            site.differs("absorption", f"{cfg['absorption']!r} here, {env['absorption']!r} from environment.absorption")
+    # Absorption model: the environment's unless the scenario names one. A model is a choice of formula, not a
+    # property of the site (the water it is evaluated in is: temperature, salinity, depth, pH), so a scenario's own
+    # `absorption` simply wins: comparisons run one site under several models.
+    if env.get("absorption") is not None and cfg.get("absorption") is None:
+        cfg["absorption"] = env["absorption"]
 
     # propagation
     if tier == "image_source":
@@ -597,8 +601,10 @@ def apply_to_scenario(cfg: dict, env: dict, sonar=None) -> dict:
         noise = {"model": "wenz"}
     if isinstance(noise, dict) and noise and noise.get("model", "wenz") == "wenz" and "level_db" not in noise:
         noise = dict(noise)
-        site.take(noise, "wind_speed", wind if wind is not None else DEFAULT_WIND_SPEED_M_S, "receiver.ambient_noise.wind_speed", "environment.wind_speed_m_s")
-        site.take(noise, "shipping", env.get("shipping", DEFAULT_SHIPPING), "receiver.ambient_noise.shipping", "environment.shipping")
+        site.take(noise, "wind_speed", wind, "receiver.ambient_noise.wind_speed", "environment.wind_speed_m_s")
+        site.take(noise, "shipping", env.get("shipping"), "receiver.ambient_noise.shipping", "environment.shipping")
+        noise.setdefault("wind_speed", DEFAULT_WIND_SPEED_M_S)          # nobody said: the one stated default
+        noise.setdefault("shipping", DEFAULT_SHIPPING)
     if noise is not rx.get("ambient_noise"):
         cfg["receiver"] = {**rx, "ambient_noise": noise}
 

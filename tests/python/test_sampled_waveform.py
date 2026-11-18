@@ -326,7 +326,7 @@ def _scenario(tier, waveform, **extra):
         "sonar_overrides": {"array": {"count": 4},        # four hydrophones keep the NumPy runs short
                             "transmit": {"waveform": {"duration": 0.02, "window_alpha": 0.2, **waveform}},
                             "receive": {"window": {"range": [250.0, 420.0]}, "kind": extra.pop("kind", "baseband")}},
-        "environment": {"sound_speed": C, "temperature": 12.0, "salinity": 35.0},
+        "environment": {"sound_speed": C, "temperature": 12.0, "salinity": 35.0, "overrides": {"sound_speed_m_s": "a nominal speed for the test geometry"}},
         "platform": {"position": [0.0, 0.0, 30.0], "velocity": [2.0, 0.0, 0.0]},
         "pings": {"count": 1},
         "scene": [{"type": "points", "positions": [[5.0, 300.0, 50.0]], "velocity": [0.0, -3.0, 0.0],

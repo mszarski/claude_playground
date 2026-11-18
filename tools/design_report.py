@@ -218,7 +218,7 @@ def requirements(D: dict) -> list:
     seen = set()
     for n in envs:
         e = load_scenario_config(n)["propagation"]["environment"]
-        seen.add((e["depth"], e["bottom_speed"], tuple(e["ssp_speed"])))
+        seen.add((e["depth"], e["bottom_speed"], tuple(e.get("ssp_speed") or [e["sound_speed"]])))
     add("POP-4", "Popoto examples with different ocean characteristics, sound-speed profiles, bottom types and depths",
         "configs/scenarios/popoto_env_summer_mud_60m.yaml: propagation.environment (and the other popoto_env_* files)", f"{len(envs)} environments: " + ", ".join(envs),
         len(envs) >= 4 and len(seen) == len(envs))

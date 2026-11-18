@@ -118,10 +118,10 @@ def test_blocks_take_their_site_values_and_contradictions_are_errors():
     for block, key in (({"propagation": {"max_order": 1, "bottom_z": 70.0}}, "propagation.bottom_z"),
                        ({"propagation": {"max_order": 1, "bottom": {"speed": 1700.0, "density": 1.9, "attenuation": 0.8}}}, "propagation.bottom"),
                        ({"receiver": {"ambient_noise": {"wind_speed": 3.0}}}, "receiver.ambient_noise.wind_speed"),
-                       ({"absorption": "thorp"}, "absorption"),
                        ({"time_spread": {"surface": {"wind_speed": 9.0}}}, "time_spread.surface.wind_speed")):
         with pytest.raises(ValueError, match=key.replace("[", r"\[").replace(".", r"\.")):
             environment.apply_to_scenario({**ONCE, **block}, env, sonar)
+    assert environment.apply_to_scenario({**ONCE, "absorption": "thorp"}, env, sonar)["absorption"] == "thorp"       # a model, not a site value
     spread = environment.apply_to_scenario({**ONCE, "time_spread": {"surface": True, "taps": 3}}, environment.resolve({**ONCE["environment"], "rms_wave_height_m": 0.4}, strict=True), sonar)
     assert spread["time_spread"]["surface"] == {"wind_speed": 7.0, "rms_height": 0.4}
 

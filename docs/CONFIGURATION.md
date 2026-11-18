@@ -261,7 +261,7 @@ of a list file (`environments: [...]`) there or under `configs/builds/environmen
 | `sound_speed_m_s` | m/s | sound speed of isovelocity water; beside a profile, the speed at the sonar (what a record carries) | the profile at `reference_depth_m`; else Mackenzie/Marczak from `temperature_c`, `salinity_psu`; else 1500 (`acoustics.NOMINAL_SOUND_SPEED`, the one definition) |
 | `profile` | | `{depth_m: [...], speed_m_s: [...]}`, or a family: `{family: munk[, axis_depth_m, axis_speed_m_s, points]}`, `{family: linear, surface_speed_m_s, gradient_per_s}`. Used by the `eigenray` tier | isovelocity |
 | `temperature_c`, `salinity_psu`, `ph`, `reference_depth_m` | deg C, PSU, -, m | the water for absorption and for the sound-speed formula | 10, 35, 8, 0 (`environment.DEFAULT_*`; the resolved environment lists which were defaulted under `defaulted`) |
-| `absorption` | | `francois_garrison`, `ainslie_mccolm`, `thorp`, `none` (the scenario key `absorption` is still read; both given and different is an error) | `francois_garrison` |
+| `absorption` | | `francois_garrison`, `ainslie_mccolm`, `thorp`, `none` (a scenario's own `absorption` key wins: the model is a choice of formula, the water it is evaluated in is the site's) | `francois_garrison` |
 | `shipping` | 0 to 1 | shipping activity of the ambient-noise spectrum | 0.5 |
 | `bubble_model` | | wind law for the loss per surface bounce (build layer's planner) | none |
 | `water_depth_known` | bool | `false`: the vehicle is not told the depth (the record's `environment.water_depth` stays unset; a processor then has it from navigation or not at all) | `true` |
@@ -292,7 +292,7 @@ environment_overrides:
 ```
 
 Keys are dotted paths (`propagation.frequency`, `propagation.environment.depth`, `reverberation[1].wind_speed`,
-`time_spread.surface.wind_speed`, `receiver.ambient_noise.wind_speed`, `absorption`). An entry that no longer
+`time_spread.surface.wind_speed`, `receiver.ambient_noise.wind_speed`). An entry that no longer
 differs gives a warning, so the list cannot go stale.
 
 `config.load_scenario_config(name, overrides)` returns the scenario EXPANDED: the environment resolved (with
