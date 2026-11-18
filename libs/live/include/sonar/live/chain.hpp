@@ -21,6 +21,7 @@
 #include "sonar/core/platform.hpp"
 #include "sonar/core/record.hpp"
 #include "sonar/live/beamform.hpp"
+#include "sonar/live/coverage.hpp"
 #include "sonar/live/decimate.hpp"
 #include "sonar/live/derive.hpp"
 #include "sonar/live/detections.hpp"
@@ -106,6 +107,7 @@ struct ChainOptions {
   NavOptions nav;                   ///< the navigation receiver's settings
   StreamOptions stream;             ///< the board stream, its socket and queue, and the report datagrams
   MultipathOptions multipath_depth;  ///< depth from multipath timing (multipath_depth.hpp); off by default
+  CoverageOptions coverage;          ///< the coverage picture in the report line (coverage.hpp); off by default
   Backend backend = Backend::Host;
   int device = 0;
 };
@@ -205,6 +207,7 @@ class LiveChain {
   const DetectorPlan& detector_plan() const { return plan_; }
   bool resolved() const { return resolved_; }
   SoundSpeedLadder& ladder() { return ladder_; }
+  Coverage& coverage() { return coverage_; }
   // The last ping's map, for display and taps.
   std::vector<float> last_power;
   std::vector<double> last_ranges, bearings;
@@ -216,6 +219,7 @@ class LiveChain {
   Tracker tracker_;
   SoundSpeedLadder ladder_;
   MultipathDepth multipath_;
+  Coverage coverage_;
   std::int64_t pings_ = 0;
   std::int64_t cell_samples_ = 1;   ///< fine samples per range cell in the last map
   std::vector<float> fine_;         ///< the map before it is averaged into cells (multiscale detector), rows added

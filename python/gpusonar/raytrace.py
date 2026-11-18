@@ -147,8 +147,16 @@ def trace(profile: Profile, z0: float, launch: float, r_end: float, max_steps: i
 
 def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_depth, ssp_speed, water_depth: float = 0.0) -> float:
     """Depth at which an arrival seen at `elevation` (rad, UP positive) at `receiver_depth` started, back along the ray for
-    the one-way travel time slant_range / c(receiver): the question `elevation.ray_depth` answers by small Snell steps,
-    here in closed form layer by layer (bisection on range for the travel time)."""
+    the one-way travel time slant_range / c(receiver). A thin call to the chain's own (libs/live `ray_depth_arcs`, what
+    `elevation.ray_method: arcs` uses): one implementation. `ray_depth_reference` below is the same calculation with this
+    module's Python `trace`, which a test holds it to."""
+    from . import _gpusonar as core
+    return float(core.ray_depth_arcs(float(receiver_depth), float(elevation), float(slant_range), [float(v) for v in ssp_depth],
+                                     [float(v) for v in ssp_speed], float(water_depth or 0.0)))
+
+
+def ray_depth_reference(receiver_depth: float, elevation: float, slant_range: float, ssp_depth, ssp_speed, water_depth: float = 0.0) -> float:
+    """`ray_depth` in Python: closed form layer by layer, bisection on range for the travel time."""
     prof = Profile(ssp_depth, ssp_speed, water_depth or None)
     t_want = slant_range / float(prof.c(receiver_depth))
     lo, hi = 0.0, slant_range * 1.2 + 1.0

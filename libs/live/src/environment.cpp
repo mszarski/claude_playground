@@ -1,5 +1,7 @@
 #include "sonar/live/environment.hpp"
 
+#include "sonar/live/raytrace.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -346,7 +348,8 @@ void tilted_profiles(double own, const std::vector<double>& depth, const std::ve
 }
 
 double profile_depth_sigma(double receiver_depth, double elevation, double slant_range, const std::vector<double>& depth,
-                           const std::vector<double>& speed, const std::vector<double>& sigma, double gradient_sigma, double water_depth) {
+                           const std::vector<double>& speed, const std::vector<double>& sigma, double gradient_sigma, double water_depth,
+                           bool arcs) {
   std::vector<double> knots, fast, slow;
   tilted_profiles(receiver_depth, depth, speed, sigma, gradient_sigma, knots, fast, slow);
   // A twentieth of the tilt each way, scaled back up: the sensitivity, not the spread of two folded rays.
@@ -355,8 +358,76 @@ double profile_depth_sigma(double receiver_depth, double elevation, double slant
     fast[i] = mid + kTiltFraction * half;
     slow[i] = mid - kTiltFraction * half;
   }
+  if (arcs) {   // the chain's one ray calculation (raytrace.hpp)
+    return 0.5 * std::abs(ray_depth_arcs(receiver_depth, elevation, slant_range, knots, fast, water_depth) -
+                          ray_depth_arcs(receiver_depth, elevation, slant_range, knots, slow, water_depth)) / kTiltFraction;
+  }
   return 0.5 * std::abs(ray_depth(receiver_depth, elevation, slant_range, knots, fast, water_depth) -
                         ray_depth(receiver_depth, elevation, slant_range, knots, slow, water_depth)) / kTiltFraction;
+}
+
+void profile_ensemble(const ProfileOptions& o, const LadderProfile& ladder, double own, double sound, double gradient, double gradient_sigma,
+                      double water, std::vector<double>& knots, std::vector<std::vector<double>>& speeds) {
+  knots.clear();
+  speeds.clear();
+  const bool have_water = std::isfinite(water) && water > 0.0;
+  // The rung's own profile, and the depths it has sampled (everything, for a supplied or an assumed one; nothing below).
+  std::vector<double> d = ladder.depth, c = ladder.speed, s = ladder.sigma;
+  double lo = 0.0, hi = 1e300;
+  if (d.empty()) {
+    const double bottom = std::max({have_water ? water : 0.0, own, 0.0}) + 10000.0;
+    d = {0.0, bottom};
+    c = {sound - gradient * own, sound + gradient * (bottom - own)};
+    lo = hi = own;
+  } else if (std::isfinite(ladder.span_lo) && std::isfinite(ladder.span_hi)) {
+    lo = ladder.span_lo;
+    hi = ladder.span_hi;
+  }
+  if (s.size() != d.size()) s.assign(d.size(), kNoClaim);
+  auto interp = [&](const std::vector<double>& y, double z) {
+    if (z <= d.front()) return y.front();
+    if (z >= d.back()) return y.back();
+    const auto k = static_cast<std::size_t>(std::upper_bound(d.begin(), d.end(), z) - d.begin());
+    return y[k - 1] + (z - d[k - 1]) / (d[k] - d[k - 1]) * (y[k] - y[k - 1]);
+  };
+  const double extent = std::max(o.ensemble_extent, 0.0);
+  std::vector<double> all = d;
+  for (double z : {own, lo, hi, lo - extent, hi + extent}) {
+    if (z > d.front() && z < d.back()) all.push_back(z);
+  }
+  std::sort(all.begin(), all.end());
+  all.erase(std::unique(all.begin(), all.end(), [](double a, double b) { return std::abs(a - b) < 1e-6; }), all.end());
+  knots = all;
+  auto member = [&](double tilt, double g_above, double g_below) {
+    std::vector<double> out(knots.size());
+    for (std::size_t i = 0; i < knots.size(); ++i) {
+      const double z = knots[i];
+      // what the rung claims of its own profile, as one tilt about the vehicle, never more than the prior allows
+      const double zc = std::clamp(z, lo, hi);
+      const double e = (zc < own ? -1.0 : 1.0) * std::min(interp(s, zc), std::abs(gradient_sigma) * std::abs(zc - own));
+      double v = interp(c, z) + tilt * e;
+      if (z < lo) v -= (g_above - gradient) * std::min(lo - z, extent);       // dc/dz = g_above there
+      if (z > hi) v += (g_below - gradient) * std::min(z - hi, extent);
+      out[i] = v;
+    }
+    return out;
+  };
+  speeds.push_back(member(0.0, gradient, gradient));
+  const bool outside = lo > d.front() + 1e-6 || hi < d.back() - 1e-6;
+  if (outside && extent > 0.0) {
+    for (double ga : o.ensemble_gradients) {
+      for (double gb : o.ensemble_gradients) {
+        if (ga == gradient && gb == gradient) continue;
+        if (!(lo > d.front() + 1e-6) && ga != o.ensemble_gradients.front()) continue;   // nothing above: one pass
+        if (!(hi < d.back() - 1e-6) && gb != o.ensemble_gradients.front()) continue;
+        speeds.push_back(member(0.0, ga, gb));
+      }
+    }
+  }
+  if (o.ensemble_sigma_members && lo < hi) {
+    speeds.push_back(member(1.0, gradient, gradient));
+    speeds.push_back(member(-1.0, gradient, gradient));
+  }
 }
 
 }  // namespace sonar::live

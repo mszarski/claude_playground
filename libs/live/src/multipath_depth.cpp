@@ -12,6 +12,7 @@
 
 #include "sonar/live/chain.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/raytrace.hpp"
 
 namespace sonar::live {
 namespace {
@@ -26,17 +27,8 @@ double sinc(double x) {
   return std::abs(a) < 1e-12 ? 1.0 : std::sin(a) / a;
 }
 
-// Plane-wave pressure reflection coefficient of a fluid half-space (Rayleigh), as sim/propagation.py:
-// R = (m sin g - sqrt(n^2 - cos^2 g)) / (m sin g + sqrt(n^2 - cos^2 g)), m = rho_b / rho_w, n = c_w / c_b,
-// attenuation (dB per wavelength) as an imaginary part of c_b.
 cd rayleigh(double grazing, double c_water, double speed, double density, double attenuation) {
-  const double delta = attenuation / (40.0 * kPi * std::log10(std::exp(1.0)));
-  const cd c_b = speed / cd(1.0, delta);
-  const cd n = c_water / c_b;
-  cd root = std::sqrt(n * n - std::cos(grazing) * std::cos(grazing));
-  if (root.imag() < 0.0) root = -root;
-  const double ms = density * std::sin(grazing);
-  return (ms - root) / (ms + root);
+  return rayleigh_reflection(grazing, c_water, speed, density, attenuation);   // raytrace.hpp: one implementation
 }
 
 struct Image {
@@ -83,7 +75,8 @@ void one_way(double z_own, double z_target, double r_h, const MultipathGeometry&
       const double sin_g = std::clamp(std::abs(z_own - im.z) / r_j, 0.0, 1.0);
       if (im.ns > 0) {
         const double gamma = 2.0 * k * o.surface_rms_height * sin_g;
-        const double mu = o.surface_coefficient * std::pow(10.0, -o.surface_loss_db / 20.0) * std::exp(-0.5 * gamma * gamma);
+        const double loss_db = o.surface_loss_grazing.empty() ? o.surface_loss_db : multipath_surface_loss_db(o, std::asin(sin_g));
+        const double mu = o.surface_coefficient * std::pow(10.0, -loss_db / 20.0) * std::exp(-0.5 * gamma * gamma);
         a *= std::pow(mu, im.ns);
       }
       if (im.nb > 0) a *= std::pow(rayleigh(std::asin(sin_g), g.sound_speed, o.bottom_speed, o.bottom_density, o.bottom_attenuation), im.nb);
@@ -113,6 +106,7 @@ double slack_s(const MultipathGeometry& g, const MultipathOptions& o) {
 double envelope_lobe(double z, const MultipathGeometry& g) {
   const double d = std::max(0.01 * z, 0.05);
   const double slope = (multipath_surface_delay(z + d, g) - multipath_surface_delay(z - d, g)) / (2.0 * d);
+  if (!std::isfinite(slope)) return std::max(0.02 * z, 0.1);   // rays: the edge of where the paths exist
   return 1.0 / (g.bandwidth * std::max(slope, 1e-12));
 }
 
@@ -191,6 +185,21 @@ bool set_multipath_option(MultipathOptions& o, const std::string& key, const std
   else if (k == "track_min_gain") o.track_min_gain = v;
   else if (k == "track_memory_pings") o.track_memory_pings = v;
   else if (k == "consistency_sigma") o.consistency_sigma = v;
+  else if (k == "rays") o.rays = v != 0.0;
+  else if (k == "ray_fan") o.ray_fan = i;
+  else if (k == "ray_surface_order") o.ray_surface_order = i;
+  else if (k == "ray_min_amplitude") o.ray_min_amplitude = v;
+  else if (k == "ray_sigma_fan_fraction") o.ray_sigma_fan_fraction = v;
+  else if (k == "surface_loss_grazing" || k == "surface_loss_table_db") {
+    std::vector<double> list;                          // comma-separated (brackets and blanks allowed)
+    std::string text = value;
+    for (char& ch : text) {
+      if (ch == '[' || ch == ']' || ch == ',') ch = ' ';
+    }
+    std::istringstream in(text);
+    for (double x; in >> x;) list.push_back(x);
+    (k == "surface_loss_grazing" ? o.surface_loss_grazing : o.surface_loss_table_db) = list;
+  }
   else return false;
   return true;
 }
@@ -206,6 +215,14 @@ void multipath_refraction(double flat_depth, const MultipathGeometry& g, const M
 
 void multipath_pattern(double z, double t0, const MultipathGeometry& g, const MultipathOptions& o, std::vector<double>& delay,
                        std::vector<cd>& amp) {
+  if (g.rays) {
+    // No direct or no surface path at this depth: one arrival, which no data fits better than L_1.
+    if (!multipath_ray_pattern(*g.rays, z, t0, delay, amp)) {
+      delay.assign(1, 0.0);
+      amp.assign(1, cd(1.0, 0.0));
+    }
+    return;
+  }
   const double z_mid = 0.5 * (g.array_depth + g.projector_depth);
   const double half = 0.5 * g.sound_speed * t0;
   const double r_h = std::sqrt(std::max(half * half - (z - z_mid) * (z - z_mid), 1.0));
@@ -224,6 +241,7 @@ void multipath_pattern(double z, double t0, const MultipathGeometry& g, const Mu
 }
 
 double multipath_surface_delay(double z, const MultipathGeometry& g) {
+  if (g.rays) return multipath_ray_surface_delay(*g.rays, z);
   const double z_mid = 0.5 * (g.array_depth + g.projector_depth);
   const double r2 = std::max(g.range * g.range - (z - z_mid) * (z - z_mid), 1.0);
   double sum = 0.0;
@@ -235,6 +253,32 @@ std::vector<double> multipath_depth_grid(const MultipathGeometry& g, const Multi
   double z_hi = o.max_depth;
   if (g.water_depth > 0.0) z_hi = std::min(z_hi, g.water_depth);
   z_hi = std::min(z_hi, 0.5 * (g.array_depth + g.projector_depth) + 0.95 * g.range);
+  if (g.rays) {
+    // Through the rays: only depths with a direct and a surface path on both legs have a delay; the grid runs from the
+    // shallowest to the deepest of those that resolve, and the pattern says "one arrival" at the gaps in between.
+    const int n = 1025;
+    const double h = z_hi / n;
+    std::vector<double> tau(static_cast<std::size_t>(n));
+    for (int i = 0; i < n; ++i) tau[static_cast<std::size_t>(i)] = multipath_surface_delay(h * (i + 0.5), g);
+    int first = -1, last = -1;
+    double slope = 0.0;
+    for (int i = 0; i < n; ++i) {
+      const auto u = static_cast<std::size_t>(i);
+      if (!(tau[u] * g.bandwidth >= o.min_delay_bandwidth && tau[u] <= o.window_s)) continue;
+      if (first < 0) first = i;
+      last = i;
+      if (i > 0 && std::isfinite(tau[u - 1])) slope = std::max(slope, (tau[u] - tau[u - 1]) / h);
+      if (i + 1 < n && std::isfinite(tau[u + 1])) slope = std::max(slope, (tau[u + 1] - tau[u]) / h);
+    }
+    if (first < 0 || !(slope > 0.0)) return {};
+    const double z_lo = h * first, z_top = h * (last + 1);
+    const std::int64_t per = std::max<std::int64_t>(o.fringe_points, 1);
+    const double step = 1.0 / (g.f_centre * slope) / static_cast<double>(per);
+    const std::int64_t count = std::max<std::int64_t>(static_cast<std::int64_t>(std::ceil((z_top - z_lo) / step / static_cast<double>(per))) * per, per);
+    std::vector<double> out(static_cast<std::size_t>(count));
+    for (std::int64_t i = 0; i < count; ++i) out[static_cast<std::size_t>(i)] = z_lo + step * (static_cast<double>(i) + 0.5);
+    return out;
+  }
   const int n_probe = 4001;
   std::vector<double> probe(n_probe), tau(n_probe);
   for (int i = 0; i < n_probe; ++i) {
@@ -307,9 +351,22 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
     return est;
   }
   const std::vector<double> depths = multipath_depth_grid(g, o);
+  if (g.rays) est.profile_source = multipath_ray_profile(*g.rays).rung;
   if (depths.empty()) {
     est.reason = "merged";
+    if (g.rays) {
+      // Which path the water does not hold, anywhere a target could be at this range.
+      int seen = 0;
+      const double top = multipath_ray_z_hi(*g.rays);
+      for (int i = 0; i < 257; ++i) seen |= multipath_ray_paths(*g.rays, top * (i + 0.5) / 257.0);
+      if (!(seen & 1)) est.reason = "no_direct_path";
+      else if (!(seen & 2)) est.reason = "no_surface_path";
+    }
     return est;
+  }
+  if (g.rays) {
+    est.searched_lo = depths.front();
+    est.searched_hi = depths.back();
   }
   bool any = false;
   for (std::int64_t k = 0; k < std::min(n, n_noise) && !any; ++k) any = std::abs(y[k]) > 0.0;
@@ -431,7 +488,14 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
   est.valid = true;
   est.method = multipath_surface_delay(at[b], g) * g.bandwidth >= 4.0 ? "delay" : "ripple";
   const double flat_depth = at[b];
-  multipath_refraction(flat_depth, g, o, est.depth, est.refraction_sigma);
+  if (g.rays) {
+    // The pattern was the profile's own: the depth stands, and what the rung does not know goes through the rays.
+    est.depth = flat_depth;
+    est.refraction_sigma = multipath_ray_sigma(*g.rays, flat_depth);
+    est.ensemble = multipath_ray_ensemble(*g.rays, flat_depth);
+  } else {
+    multipath_refraction(flat_depth, g, o, est.depth, est.refraction_sigma);
+  }
   const double msig = model_sigma(est.depth, g, o);
   est.sigma = std::sqrt(sigma * sigma + cell * cell / 12.0 + msig * msig + est.refraction_sigma * est.refraction_sigma);
   est.ambiguous = !rivals.empty();
@@ -445,7 +509,7 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
       est.ambiguous = true;
       est.reason = "bottom_unmodelled";
     }
-  } else if (g.water_depth > 0.0 && o.bottom) {
+  } else if (g.water_depth > 0.0 && o.bottom && !g.rays) {
     MultipathOptions more = o;
     more.bottom_order = o.bottom_order + 1;
     std::vector<double> d2;
@@ -489,13 +553,26 @@ MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& orig
 
 MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& origin, double bearing, double range, const MultipathOptions& o,
                                       double first_range, double extent, const std::vector<std::vector<std::int64_t>>& rows, Backend backend,
-                                      int device) {
+                                      int device, const MultipathProfile* profile, MultipathGeometry* used) {
   MultipathEstimate est;
-  const MultipathGeometry g = multipath_geometry(record, origin, range, o, first_range, extent);
+  MultipathGeometry g = multipath_geometry(record, origin, range, o, first_range, extent);
   est.reason = "merged";
   if (!(g.array_depth > 0.0) || !(g.projector_depth > 0.0)) return est;
+  if (o.rays) {
+    MultipathProfile water;
+    if (profile != nullptr && !profile->depth.empty()) {
+      water = *profile;
+    } else {                                           // nothing known: isovelocity at the vehicle's sound speed, the prior as its error
+      water.depth = {0.0, 1.0};
+      water.speed = {g.sound_speed, g.sound_speed};
+      water.gradient_sigma = profile != nullptr && profile->gradient_sigma > 0.0 ? profile->gradient_sigma : o.gradient_sigma;
+      water.rung = profile != nullptr && !profile->rung.empty() ? profile->rung : "prior";
+    }
+    g.rays = multipath_rays(water, g, o);
+  }
+  if (used != nullptr) *used = g;
   const std::vector<double> depths = multipath_depth_grid(g, o);
-  if (depths.empty()) return est;
+  if (depths.empty()) return g.rays ? multipath_estimate(nullptr, 0, 0.0, 0.0, 0, g, o) : est;   // rays: says which path is missing
   double t_first = 0.0, dt = 0.0;
   std::int64_t n = 0, n_noise = 0;
   multipath_window_times(g, o, multipath_surface_delay(depths.back(), g), t_first, dt, n, n_noise);
@@ -594,7 +671,14 @@ MultipathEstimate MultipathDepth::track(std::int64_t id) const {
   if (est.gain < opt_.track_min_gain) return est;
   est.reason.clear();
   est.valid = true;
-  multipath_refraction(grid[b], sum.geometry, opt_, est.depth, est.refraction_sigma);
+  if (sum.geometry.rays) {
+    est.depth = grid[b];
+    est.refraction_sigma = multipath_ray_sigma(*sum.geometry.rays, grid[b]);
+    est.ensemble = multipath_ray_ensemble(*sum.geometry.rays, grid[b]);
+    est.profile_source = multipath_ray_profile(*sum.geometry.rays).rung;
+  } else {
+    multipath_refraction(grid[b], sum.geometry, opt_, est.depth, est.refraction_sigma);
+  }
   const double msig = model_sigma(est.depth, sum.geometry, opt_);
   // half a cell of the track's grid, and the ping's own fringe cell (the envelope has no finer structure); the gradient's
   // part does not average down over pings
@@ -624,6 +708,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
   if (static_cast<std::int64_t>(order.size()) > opt_.max_detections) order.resize(static_cast<std::size_t>(std::max<std::int64_t>(opt_.max_detections, 0)));
   std::vector<MultipathEstimate> ests(hits.size());
   std::vector<char> done(hits.size(), 0);
+  std::vector<MultipathGeometry> used(hits.size());
   auto fused = [&](std::ostringstream& s, const MultipathEstimate& e, bool has, double depth, double depth_sigma, double depth_refraction,
                    const std::vector<double>& alts, bool select) {
     if (!e.valid || !has || !(depth_sigma > 0.0)) return;
@@ -643,16 +728,32 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
         s << "]";
       }
       if (!e.reason.empty()) s << ", \"multipath_note\": \"" << e.reason << "\"";
+      if (!e.ensemble.empty()) {
+        // The same delay through every member of the profile ensemble: where the depth may lie.
+        double lo = e.depth, hi = e.depth;
+        bool all = true;
+        for (double z : e.ensemble) {
+          all = all && std::isfinite(z);
+          if (std::isfinite(z)) {
+            lo = std::min(lo, z);
+            hi = std::max(hi, z);
+          }
+        }
+        s << ", \"depth_multipath_ensemble_m\": [" << lo << ", " << hi << "]";
+        if (!all) s << ", \"depth_multipath_ensemble_complete\": false";   // a member has no such path
+      }
     } else {
       s << ", \"multipath_reason\": \"" << e.reason << "\"";
       if (is_track) s << ", \"multipath_pings\": " << e.arrivals;
     }
+    if (!e.profile_source.empty()) s << ", \"multipath_profile_source\": \"" << e.profile_source << "\"";
+    if (std::isfinite(e.searched_lo)) s << ", \"multipath_searched_m\": [" << e.searched_lo << ", " << e.searched_hi << "]";
     s << ", \"multipath_gain\": ";
     num(s, e.gain);
   };
   for (std::size_t i : order) {
     const MultipathHit& h = hits[i];
-    ests[i] = multipath_detection(record, origin, h.bearing, h.range, opt_, h.first_range, h.extent, rows, backend, device);
+    ests[i] = multipath_detection(record, origin, h.bearing, h.range, opt_, h.first_range, h.extent, rows, backend, device, &profile_, &used[i]);
     done[i] = 1;
     std::ostringstream s;
     s << std::setprecision(10);
@@ -675,7 +776,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
     }
     if (pick >= 0) {
       const auto u = static_cast<std::size_t>(pick);
-      add(t.id, ests[u], multipath_geometry(record, origin, hits[u].range, opt_, hits[u].first_range, hits[u].extent));
+      add(t.id, ests[u], used[u]);
     }
     const auto it = sums_.find(t.id);
     if (it != sums_.end()) it->second.last_ping = pings_;

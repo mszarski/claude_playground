@@ -78,7 +78,10 @@ DEFAULTS = {
     "min_snr_db": None,              # detections weaker than this are not examined (None: all)
     "surface": {"coefficient": -1.0, # flat-surface pressure reflection coefficient
                 "rms_height_m": 0.0, # rms surface height: coherent reflection exp(-Gamma^2 / 2), Gamma = 2 k h sin(grazing)
-                "loss_db": 0.0,      # further loss per surface bounce (bubbles: the named law of sim/surface.py, evaluated by the user)
+                "loss_db": 0.0,      # further loss per surface bounce, dB
+                "bubble_model": None,     # a named law of sim/surface.py (apl_1994, ...): its loss against grazing angle is added,
+                "wind_speed_m_s": None,   #   evaluated at this wind speed and
+                "frequency_hz": None,     #   this frequency (the band centre); both are needed with bubble_model
                 "min_amplitude": 0.5},    # a one-leg surface echo weaker than this (re the direct one): no_surface_path
     "bottom": None,                  # {speed, density, attenuation}: a fluid bottom's Rayleigh reflection, with the water depth
     "bottom_order": 2,               # boundary reflections per leg when a bottom is given (1: d, s, b; 2: also sb, bs)
@@ -98,6 +101,14 @@ DEFAULTS = {
               "min_gain": 12.0,      # the accumulated gain a track's depth needs
               "memory_pings": None}, # None: all pings count alike; n: older ones fade with exp(-1 / n) per ping
     "fuse": {"consistency_sigma": 3.0},   # with a stacked-row depth: combined when they agree within this many sigma
+    # Rays (opt-in): the predicted pattern (delays, amplitudes, which paths exist) from rays traced through the profile the
+    # sound-speed ladder holds (chain.elevation.profile; libs/live raytrace.hpp) instead of straight lines and flat images.
+    # gradient_per_s is then not used. Depths with no direct or no surface-reflected path are not searched; when there is
+    # none, `multipath_reason` is no_direct_path or no_surface_path and no depth is given.
+    "rays": False,
+    "ray_fan": 1200,                 # rays per fan (one fan per leg and detection, read at two ranges)
+    "ray_surface_order": 2,          # surface reflections per leg in the pattern when no bottom is given
+    "ray_min_amplitude": 0.02,       # arrivals of a leg weaker than this re its direct one are left out
 }
 
 
@@ -170,6 +181,12 @@ def cpp_options(cfg: dict | None) -> dict:
     if c["bottom"] is not None:
         b = c["bottom"]
         o.update(bottom=1, bottom_speed=float(b["speed"]), bottom_density=float(b["density"]), bottom_attenuation=float(b.get("attenuation", 0.0)))
+    if c["rays"]:
+        o.update(rays=1, ray_fan=int(c["ray_fan"]), ray_surface_order=int(c["ray_surface_order"]), ray_min_amplitude=float(c["ray_min_amplitude"]))
+    if s.get("bubble_model"):
+        from .coverage import bubble_table
+        grazing, loss = bubble_table(s)                 # the named law, evaluated here (sim/surface.py, read only)
+        o.update(surface_loss_grazing=grazing, surface_loss_table_db=loss)
     return o
 
 
@@ -208,7 +225,7 @@ class ChainStage:
         self.seconds = 0.0
 
     def annotate(self, record, report: dict, origin, hits, local, frame_origin, rows=None, surface_z: float = 0.0, water=None,
-                 backend=None) -> None:
+                 backend=None, profile=None) -> None:
         """`hits`: the engine's detections (range, cone bearing, first_range, extent); `local`: what it gave the tracker (range,
         bearing about the frame origin, depth alternatives). Adds members to report["detections"] and report["tracks"]."""
         import json
@@ -234,6 +251,8 @@ class ChainStage:
                 item.update(depth=float(t["depth_m"]) - surface_z, depth_sigma=float(t["depth_sigma_m"]))
             mt.append(item)
         kw = {} if backend is None else {"backend": backend}
+        if self.cfg["rays"] and profile is not None:
+            self._stage.set_profile(profile)             # the water this ping's rays go through (the ladder's)
         dets, tracks, self.seconds = self._stage.process(record, tuple(float(v) for v in origin), mh, mt, [list(map(int, r)) for r in (rows or [])], **kw)
         for d, text in zip(report["detections"], dets):
             if text:

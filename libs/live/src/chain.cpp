@@ -1,5 +1,7 @@
 #include "sonar/live/chain.hpp"
 
+#include "sonar/live/raytrace.hpp"
+
 #include <utility>
 
 #include <algorithm>
@@ -215,7 +217,7 @@ std::vector<std::complex<float>> range_bearing_image(const PingRecord& record, c
 }  // namespace
 
 LiveChain::LiveChain(const ChainOptions& options)
-    : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile), multipath_(options.multipath_depth) {
+    : opt_(options), tracker_(options.tracker), ladder_(options.elevation.profile), multipath_(options.multipath_depth), coverage_(options.coverage) {
   bearings = grid(opt_.bearing_first_deg, opt_.bearing_last_deg, opt_.bearing_step_deg);
   if (opt_.beamformer != "backprojection" && opt_.beamformer != "farfield" && opt_.beamformer != "mvdr") {
     throw std::invalid_argument("LiveChain: beamformer '" + opt_.beamformer + "' (backprojection, farfield or mvdr)");
@@ -518,6 +520,44 @@ Report LiveChain::process(PingRecord& record) {
       profile_speed = {sound - eo.gradient * own, sound + eo.gradient * (bottom - own)};
     }
   }
+  // --- hook: the water this ping's rays go through (raytrace.hpp), opt-in: the multipath depth with `rays`, the
+  // coverage picture, and the profile ensemble. One row has no elevation, but it has a ladder all the same.
+  const bool want_rays = (opt_.multipath_depth.enabled && opt_.multipath_depth.rays) || opt_.coverage.enabled;
+  MultipathProfile rays_water;
+  if (want_rays || (stacked && eo.depth && eo.profile.ensemble)) {
+    if (!laddered && eo.profile.enabled && want_rays) {
+      laddered = true;
+      const bool measured = ladder_.absorb(record, eo.surface_z) || opt_.sound_speed > 0.0;
+      ladder = ladder_.evaluate(record.transmit.time_ns, f.origin.x, f.origin.y, f.origin.z - eo.surface_z, sound, measured, water, eo.ssp_depth,
+                                eo.ssp_speed, eo.use_gradient ? eo.gradient : 0.0, eo.gradient_sigma);
+      rep.profile_rung = ladder.rung;
+      rep.profile_bins = ladder.bins;
+      rep.profile_lo = ladder.span_lo;
+      rep.profile_hi = ladder.span_hi;
+    }
+    rays_water = water_profile(eo.profile, laddered ? &ladder : nullptr, eo.ssp_depth, eo.ssp_speed, eo.use_gradient, eo.gradient, eo.gradient_sigma,
+                               f.origin.z - eo.surface_z, sound, water);
+  }
+  // The stacked rows' depth back along a ray: the stepped ray as before, or (elevation.ray_arcs) the chain's one ray calculation.
+  auto back_trace = [&](double level, double range) {
+    const double own = f.origin.z - eo.surface_z;
+    return eo.ray_arcs ? ray_depth_arcs(own, level, range, profile_depth, profile_speed, water) : ray_depth(own, level, range, profile_depth, profile_speed, water);
+  };
+  // The same arrival through every member of the profile ensemble: where the depth may lie.
+  auto ensemble_span = [&](double level, double range, double depth_m) {
+    std::string out;
+    if (rays_water.ensemble.empty()) return out;
+    double lo = depth_m, hi = depth_m;
+    for (const std::vector<double>& speeds : rays_water.ensemble) {
+      const double z = eo.surface_z + ray_depth_arcs(f.origin.z - eo.surface_z, level, range, rays_water.depth, speeds, water);
+      lo = std::min(lo, z);
+      hi = std::max(hi, z);
+    }
+    std::ostringstream text;
+    text << std::setprecision(10) << "\"depth_ensemble_m\": [" << lo << ", " << hi << "]";
+    return text.str();
+  };
+  // --- end hook ---
   const Vec3d axis = normalized(Vec3d{span.x, span.y, 0.0});
   const double side = opt_.starboard ? 1.0 : -1.0;
   const Vec3d broadside{-side * axis.y, side * axis.x, 0.0};
@@ -530,7 +570,7 @@ Report LiveChain::process(PingRecord& record) {
   // What the angle cannot know: how the ray bent on the way. The prior alone, or what the profile's rung claims.
   auto bend = [&](double level, double range) {
     return laddered && !ladder.depth.empty()
-               ? profile_depth_sigma(f.origin.z - eo.surface_z, level, range, ladder.depth, ladder.speed, ladder.sigma, eo.gradient_sigma, water)
+               ? profile_depth_sigma(f.origin.z - eo.surface_z, level, range, ladder.depth, ladder.speed, ladder.sigma, eo.gradient_sigma, water, eo.ray_arcs)
                : refraction_sigma(range, sound, eo.gradient_sigma);
   };
   std::vector<Detection> local;
@@ -583,7 +623,8 @@ Report LiveChain::process(PingRecord& record) {
           d.path = "direct";
         }
         // Back along the ray through the profile, not the straight line.
-        if (!profile_depth.empty()) d.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, level, e.range, profile_depth, profile_speed, water);
+        if (!profile_depth.empty()) d.depth_m = eo.surface_z + back_trace(level, e.range);
+        d.extra = ensemble_span(level, e.range, d.depth_m);
         // What the angle cannot know: the gradient along the path, and the water depth a bottom bounce is folded about.
         d.depth_refraction_sigma_m = bend(level, e.range);
         if (laddered) d.profile_source = ladder.rung;
@@ -632,9 +673,9 @@ Report LiveChain::process(PingRecord& record) {
         rt.depth_sigma_m = std::sqrt(tr->depth_var + bent * bent + fold_sigma * fold_sigma);
         if (!profile_depth.empty()) {
           // The track's straight-line depth as an arrival angle at its range, then along the ray.
-          rt.depth_m = eo.surface_z + ray_depth(f.origin.z - eo.surface_z, std::asin((f.origin.z - tr->depth) / slant), slant, profile_depth,
-                                                profile_speed, water);
+          rt.depth_m = eo.surface_z + back_trace(std::asin((f.origin.z - tr->depth) / slant), slant);
         }
+        rt.extra = ensemble_span(std::asin(std::clamp((f.origin.z - tr->depth) / slant, -1.0, 1.0)), slant, rt.depth_m);
         // Its straight-line depth is above the surface or below the bottom: a bounce.
         if (eo.classify && outside_water(tr->depth, std::hypot(std::sqrt(tr->depth_var), bent), water, eo.surface_z, eo.classify_sigma,
                                          eo.water_depth_sigma)) {
@@ -655,10 +696,17 @@ Report LiveChain::process(PingRecord& record) {
     }
     std::vector<MultipathTrack> mt;
     for (const ReportTrack& t : rep.tracks) mt.push_back({t.id, t.y - origin_.y, t.x - origin_.x, t.has_depth, t.depth_m - eo.surface_z, t.depth_sigma_m});
+    if (opt_.multipath_depth.rays) multipath_.set_profile(rays_water);
     const MultipathReport mr = multipath_.process(record, f.origin, mh, mt, rows, opt_.backend, opt_.device);
-    for (std::size_t i = 0; i < mh.size(); ++i) rep.detections[i].extra = mr.detections[i];
-    for (std::size_t i = 0; i < mt.size(); ++i) rep.tracks[i].extra = mr.tracks[i];
+    auto add = [](std::string& extra, const std::string& more) {
+      if (!more.empty()) extra = extra.empty() ? more : extra + ", " + more;
+    };
+    for (std::size_t i = 0; i < mh.size(); ++i) add(rep.detections[i].extra, mr.detections[i]);
+    for (std::size_t i = 0; i < mt.size(); ++i) add(rep.tracks[i].extra, mr.tracks[i]);
   }
+  // --- end hook ---
+  // --- hook: the coverage picture (coverage.hpp), opt-in; one member of the report line, refreshed when something changed ---
+  if (opt_.coverage.enabled) rep.extra = coverage_.update(record, f.origin, water, rays_water);
   // --- end hook ---
   rep.ownship = f.origin;
   rep.processing_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();

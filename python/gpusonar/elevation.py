@@ -71,6 +71,9 @@ DEFAULTS = {
     "ssp": None,                        # {depth: [m...], speed: [m/s...]}: depth_m by a ray traced through this profile
                                         # instead of the straight line (which is wrong by s^2 g / 2c in a gradient g).
                                         # Also a table [[depth, speed], ...], or {file: profile.csv} (two columns)
+    "ray_method": "steps",              # how depth_m is traced back through a profile: "steps" (Snell's law in small steps, as
+                                        # always) or "arcs" (closed-form arcs layer by layer: the chain's one ray calculation,
+                                        # libs/live raytrace.hpp, shared with multipath_depth.rays and chain.coverage)
     "profile": None,                    # the sound-speed ladder: {} or {ladder: [...], built: {...}, supplied: {...},
                                         # family: {...}} (PROFILE_DEFAULTS below). None: as before
     "roll_sigma_deg": 0.0,              # the navigation's roll accuracy, added to the elevation sigma
@@ -98,6 +101,12 @@ PROFILE_DEFAULTS = {
         "cast": None,                   # a cast to start from (a static array): text lines "depth speed"
     },
     "supplied": {"sigma_m_s": None},    # how well elevation.ssp holds along the path; None: no claim (the gradient prior)
+    "ensemble": None,                   # {gradients_per_s: [...], extent_m: ..., sigma_members: true}: where the vehicle has not
+                                        # sampled the water, depths (and the coverage picture) are also evaluated through a small
+                                        # set of profiles: the unsampled water continued with each of these gradients for extent_m
+                                        # (every pairing above and below), and the sampled part moved by its sigma each way.
+                                        # The spread is reported (depth_ensemble_m, depth_multipath_ensemble_m,
+                                        # max_range_ensemble_m). gradients_per_s and extent_m have no default
     "family": None,                     # an assumption: {kind: isothermal, gradient_per_s: ...} or {kind: mixed_layer,
                                         # gradient_per_s, layer_depth_m, thermocline_gradient_per_s, thermocline_thickness_m};
                                         # sigma_m_s: how well it holds (None: no claim). No parameter has a default
@@ -149,6 +158,13 @@ def profile_options(profile: dict | None) -> dict | None:
     for key in ("file", "cast"):
         if b[key]:
             out[key] = str(b[key])
+    ens = profile.get("ensemble")
+    if ens is not None:
+        unknown = set(ens) - {"gradients_per_s", "extent_m", "sigma_members"}
+        if unknown or ens.get("gradients_per_s") is None or ens.get("extent_m") is None:
+            raise ValueError("elevation.profile.ensemble: needs gradients_per_s (a list) and extent_m; sigma_members is the only other key")
+        out.update(ensemble=True, ensemble_gradients=[float(v) for v in ens["gradients_per_s"]], ensemble_extent=float(ens["extent_m"]),
+                   ensemble_sigma_members=bool(ens.get("sigma_members", True)))
     fam = profile.get("family")
     if fam:
         names = {"gradient_per_s": "family_gradient", "layer_depth_m": "layer_depth", "thermocline_gradient_per_s": "thermocline_gradient",
@@ -369,7 +385,7 @@ def outside_water(z: float, sigma: float, water_depth: float | None, surface_z: 
 
 
 def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_depth, ssp_speed,
-              water_depth: float | None = None, step: float | None = None) -> float:
+              water_depth: float | None = None, step: float | None = None, method: str = "steps") -> float:
     """Depth at which an arrival seen at `elevation` (rad, up positive, level-referenced) at
     `receiver_depth` started, back along the ray for the one-way travel time slant_range / c
     (c: the sound speed at the receiver) through a sound-speed profile, linear between its
@@ -377,6 +393,11 @@ def ray_depth(receiver_depth: float, elevation: float, slant_range: float, ssp_d
     range, between 0.5 and 10 m); the ray turns where it would have to enter water too fast
     for it, and is mirrored at the surface (depth 0) and, with `water_depth`, at the bottom.
     In constant sound speed this is the straight line, folded."""
+    if method == "arcs":                # closed-form arcs: the chain's one ray calculation (raytrace.py, libs/live raytrace.hpp)
+        from .raytrace import ray_depth as arcs
+        return arcs(receiver_depth, elevation, slant_range, ssp_depth, ssp_speed, water_depth or 0.0)
+    if method != "steps":
+        raise ValueError(f"ray_method: {method!r} (steps or arcs)")
     zs, cs = np.asarray(ssp_depth, dtype=float), np.asarray(ssp_speed, dtype=float)
     if step is None:
         step = min(max(slant_range / 2000.0, 0.5), 10.0)

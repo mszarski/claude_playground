@@ -120,6 +120,16 @@ struct ProfileOptions {
   double thermocline_gradient = kNaN;  ///< 1/s (negative: slower with depth): mixed_layer
   double thermocline_thickness = kNaN; ///< m: mixed_layer
   double family_sigma = 0.0;         ///< m/s: how well the family holds (0: no claim, the prior)
+  /// Ensemble (opt-in, elevation.profile.ensemble): where the vehicle has not sampled the water a single profile with a
+  /// linear sigma understates what is not known (a thermocline is not a tilt). A small, deterministic set of profiles
+  /// consistent with what is known is traced instead and the spread reported: the sampled part moved by its stated
+  /// sigma, and the water outside it continued with each of `ensemble_gradients` (1/s, in place of the assumed
+  /// gradient) for `ensemble_extent` metres, parallel to the rung's own profile beyond. No default for either: they
+  /// say what water is thought possible here.
+  bool ensemble = false;
+  std::vector<double> ensemble_gradients;  ///< 1/s: the gradients the unsampled water may have (two or more spanning the range)
+  double ensemble_extent = 0.0;            ///< m: how far beyond the sampled depths such a gradient may run
+  bool ensemble_sigma_members = true;      ///< two more members: the rung's profile tilted by its sigma each way
 };
 
 struct LadderProfile {
@@ -167,7 +177,12 @@ class SoundSpeedLadder {
 /// top of this file): half the difference between the two tilted profiles' depths.
 double profile_depth_sigma(double receiver_depth, double elevation, double slant_range, const std::vector<double>& depth,
                            const std::vector<double>& speed, const std::vector<double>& sigma, double gradient_sigma,
-                           double water_depth = 0.0);
+                           double water_depth = 0.0, bool arcs = false);
+/// The profiles of the ensemble (ProfileOptions) for a rung's profile: common knots and each member's speeds. Member 0
+/// is the rung's own profile. A rung that holds nothing (local, prior) is taken as the assumed gradient through
+/// (own_depth, sound_speed), sampled nowhere. `gradient`: the assumed gradient the rung continued with.
+void profile_ensemble(const ProfileOptions& options, const LadderProfile& ladder, double own_depth, double sound_speed, double gradient,
+                      double gradient_sigma, double water_depth, std::vector<double>& knots, std::vector<std::vector<double>>& speeds);
 /// The two tilted profiles themselves, on the knots they need (for the Python engine and tests).
 void tilted_profiles(double receiver_depth, const std::vector<double>& depth, const std::vector<double>& speed, const std::vector<double>& sigma,
                      double gradient_sigma, std::vector<double>& knots, std::vector<double>& fast, std::vector<double>& slow);

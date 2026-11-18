@@ -66,6 +66,10 @@ struct ElevationOptions {
   /// shortest wavelength when that is less).
   double row_tolerance_m = std::numeric_limits<double>::quiet_NaN();
   std::int64_t min_row_elements = 3;  ///< a line of fewer elements than this is not a row
+  /// "arcs" (opt-in): depth_m and its refraction sigma by the chain's one ray calculation (raytrace.hpp: closed-form
+  /// arcs layer by layer, the same rays the multipath depth and the coverage picture use). false: the stepped Snell
+  /// ray of ray_depth below, as before (the two agree to about 2 m; outputs stay as they were).
+  bool ray_arcs = false;
   /// The sound-speed ladder (environment.hpp): which profile the depth is traced through, how its
   /// uncertainty reaches depth_sigma_m, and the rung named with every depth. Off: as before.
   ProfileOptions profile;

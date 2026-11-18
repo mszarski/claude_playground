@@ -147,6 +147,10 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_profile_max_distance_m") c.elevation.profile.max_distance_m = v;
   else if (key == "elevation_profile_min_span_m") c.elevation.profile.min_span_m = v;
   else if (key == "elevation_profile_extrapolation_sigma_per_s") c.elevation.profile.extrapolation_sigma_per_s = v;
+  else if (key == "elevation_ray_arcs") c.elevation.ray_arcs = v != 0.0;
+  else if (key == "elevation_profile_ensemble") c.elevation.profile.ensemble = v != 0.0;
+  else if (key == "elevation_profile_ensemble_extent") c.elevation.profile.ensemble_extent = v;
+  else if (key == "elevation_profile_ensemble_sigma_members") c.elevation.profile.ensemble_sigma_members = v != 0.0;
   else if (key == "elevation_profile_file") c.elevation.profile.file = value;
   else if (key == "elevation_profile_cast") c.elevation.profile.cast = value;
   else if (key == "elevation_profile_supplied_sigma") c.elevation.profile.supplied_sigma = v;
@@ -165,7 +169,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
       at = comma + 1;
     }
   }
-  else if (key == "dead_channels" || key == "elevation_ssp_depth" || key == "elevation_ssp_speed") {
+  else if (key == "dead_channels" || key == "elevation_ssp_depth" || key == "elevation_ssp_speed" || key == "elevation_profile_ensemble_gradients") {
     // Comma-separated lists.
     std::vector<double> list;
     std::size_t at = 0;
@@ -174,7 +178,8 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
       if (comma > at) list.push_back(std::atof(value.substr(at, comma - at).c_str()));
       at = comma + 1;
     }
-    if (key == "elevation_ssp_depth") c.elevation.ssp_depth = list;
+    if (key == "elevation_profile_ensemble_gradients") c.elevation.profile.ensemble_gradients = list;
+    else if (key == "elevation_ssp_depth") c.elevation.ssp_depth = list;
     else if (key == "elevation_ssp_speed") c.elevation.ssp_speed = list;
     else {
       c.dead_channels.clear();
@@ -212,6 +217,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "passive_method") p.use_sbl = value != "conventional";
   else if (set_tonal_option(p.tonal, key, value)) {}                 // tonal...: Goertzel lines and DEMON (tonal.hpp)
   else if (set_multipath_option(c.multipath_depth, key, value)) {}   // multipath_depth...: depth from multipath timing (multipath_depth.hpp)
+  else if (set_coverage_option(c.coverage, key, value)) {}           // coverage...: the coverage picture (coverage.hpp)
   else throw std::invalid_argument("unknown option " + key);
 }
 

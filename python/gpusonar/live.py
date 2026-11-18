@@ -401,6 +401,9 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
     if cfg.get("multipath_depth") is not None:          # hook: depth from multipath timing (multipath_depth.py)
         from .multipath_depth import cpp_options as multipath_options
         o["multipath_depth"] = multipath_options(cfg["multipath_depth"])
+    if cfg.get("coverage") is not None:                 # hook: the coverage picture (coverage.py)
+        from .coverage import cpp_options as coverage_options
+        o["coverage"] = dict(coverage_options(cfg["coverage"]), surface_z=float((cfg.get("elevation") or {}).get("surface_z", 0.0)))
     if cfg.get("elevation") is not None:
         from .elevation import DEFAULTS as EL
         from .elevation import normalise_ssp, profile_options
@@ -419,6 +422,7 @@ def cpp_chain_options(cfg: dict, reference: dict | None = None) -> dict:
                           "attitude_arrival": e["attitude_time"] == "arrival",
                           "attitude_rate_sigma": float(np.radians(e["attitude_rate_sigma_deg_s"])),
                           "use_gradient": e["gradient_per_s"] is not None, "gradient": float(e["gradient_per_s"] or 0.0),
+                          "ray_arcs": e["ray_method"] == "arcs",
                           "gradient_sigma": float(e["gradient_sigma_per_s"]),
                           "correct_bearing": bool(e["correct_bearing"]), "depth": bool(e["depth"]), "fold": bool(e["fold"]),
                           "classify": bool(e["classify"]), "classify_sigma": float(e["classify_sigma"]),
@@ -793,6 +797,13 @@ class LiveChain:
         if self.cfg.get("multipath_depth") is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
             from .multipath_depth import ChainStage
             self._multipath = ChainStage(self.cfg["multipath_depth"])
+        self._coverage = None                  # hook: the coverage picture, Python engine (the C++ engine runs it itself)
+        self._coverage_table = self.cfg.get("coverage") is None     # the detection-probability table is made at the first ping
+        if self.cfg.get("coverage") is not None and self.cfg["engine"] != "cpp" and self.cfg["doa"] != "sbl":
+            from .coverage import cpp_options as coverage_options
+            self._coverage = core.Coverage(dict(coverage_options(self.cfg["coverage"]), surface_z=float((self.cfg.get("elevation") or {}).get("surface_z", 0.0))))
+        if self._elevation is not None and self._elevation["ray_method"] not in ("steps", "arcs"):
+            raise ValueError(f"elevation.ray_method: {self._elevation['ray_method']!r} (steps or arcs)")
         b = self.cfg["bearings_deg"]
         self.bearings = np.radians(np.arange(b[0], b[1] + 0.5 * b[2], b[2]))
         self._writer = core.RecordWriter(recording) if recording else None
@@ -853,6 +864,13 @@ class LiveChain:
         if tap:
             tap.records("raw", [record])
         cfg = self.cfg
+        if not self._coverage_table:
+            # The probability that this chain reports an echo against its link-budget SNR, from the detector's own plan
+            # (detection_probability): made once, for the coverage picture of either engine.
+            from .coverage import pd_table
+            table = pd_table(record, {k: v for k, v in cfg.items() if k != "engine"})
+            (self._cpp.set_coverage_pd if self._cpp is not None else self._coverage.set_pd_table)(*table)
+            self._coverage_table = True
         if self._cpp is not None:
             report = json.loads(self._cpp.process(record))
             if self.resolved is None:
@@ -1096,12 +1114,47 @@ class LiveChain:
                 profile = (el_cfg["ssp"]["depth"], el_cfg["ssp"]["speed"])
             if profile is None and el_cfg["gradient_per_s"] is not None:
                 profile = elevation.gradient_profile(origin[2] - el_cfg["surface_z"], sound, float(el_cfg["gradient_per_s"]), water)
+        # hook: the water this ping's rays go through (libs/live raytrace.hpp), opt-in: the multipath depth with `rays`, the
+        # coverage picture, and the profile ensemble. One row has no elevation, but it has a ladder all the same.
+        # Mirrors the C++ chain's hook; the profile itself is assembled by the same C++ function (water_profile).
+        from .elevation import DEFAULTS as EL_DEFAULTS
+        ecfg = self._elevation if self._elevation is not None else EL_DEFAULTS
+        want_rays = (self._multipath is not None and bool(self._multipath.cfg["rays"])) or self._coverage is not None
+        ensemble_on = el_cfg is not None and el_cfg["depth"] and bool((ecfg["profile"] or {}).get("ensemble"))
+        rays_water, rays_depth = None, float(origin[2] - ecfg["surface_z"])
+        rays_bottom = ecfg["water_depth"] or record.environment.water_depth
+        rays_bottom = float(rays_bottom) if rays_bottom and np.isfinite(rays_bottom) and rays_bottom > 0.0 else float("nan")
+        if want_rays or ensemble_on:
+            from .elevation import profile_options as _profile_options
+            if ladder is None and self._ladder is not None and want_rays:
+                measured = self._ladder.absorb(record, ecfg["surface_z"]) or bool(cfg.get("sound_speed"))
+                ssp_ = ecfg["ssp"] or {"depth": [], "speed": []}
+                ladder = self._ladder.evaluate(int(record.transmit.time_ns), float(origin[0]), float(origin[1]), rays_depth,
+                                               float(record.environment.sound_speed), bool(measured), rays_bottom, ssp_["depth"], ssp_["speed"],
+                                               float(ecfg["gradient_per_s"] or 0.0), float(ecfg["gradient_sigma_per_s"]))
+            ssp_ = ecfg["ssp"] or {"depth": [], "speed": []}
+            rays_water = core.live_water_profile(_profile_options(ecfg["profile"]) if ecfg["profile"] is not None else None, ladder, ssp_["depth"],
+                                                 ssp_["speed"], ecfg["gradient_per_s"] is not None, float(ecfg["gradient_per_s"] or 0.0),
+                                                 float(ecfg["gradient_sigma_per_s"]), rays_depth, float(record.environment.sound_speed), rays_bottom)
+        arcs = el_cfg is not None and el_cfg["ray_method"] == "arcs"
+
+        def ensemble_span(level, rng, depth_m):
+            """The same arrival through every member of the profile ensemble: where the depth may lie."""
+            if rays_water is None or not rays_water["ensemble"]:
+                return {}
+            zs = [depth_m] + [ecfg["surface_z"] + core.ray_depth_arcs(rays_depth, level, rng, rays_water["depth"], member, 0.0 if np.isnan(rays_bottom) else rays_bottom)
+                              for member in rays_water["ensemble"]]
+            return {"depth_ensemble_m": [float(min(zs)), float(max(zs))]}
+
         axis = axis / max(np.linalg.norm(axis), 1e-12)
         side = 1.0 if cfg["look"] == "starboard" else -1.0
         broadside = side * np.array([-axis[1], axis[0]])
         def bend(level, rng):
             """What the angle cannot know: how the ray bent on the way. The prior alone, or what the profile's rung claims."""
             if ladder is not None and ladder["depth"]:
+                if arcs:
+                    return core.live_profile_depth_sigma(own_depth, level, rng, ladder["depth"], ladder["speed"], ladder["sigma"],
+                                                         float(el_cfg["gradient_sigma_per_s"]), water or 0.0, True)
                 return elevation.profile_depth_sigma(own_depth, level, rng, ladder["depth"], ladder["speed"], ladder["sigma"],
                                                      el_cfg["gradient_sigma_per_s"], water)
             return elevation.refraction_sigma(rng, sound, el_cfg["gradient_sigma_per_s"])
@@ -1142,7 +1195,8 @@ class LiveChain:
                                     else (image, "direct"))
                     if profile is not None:
                         # Back along the ray through the profile, not the straight line.
-                        folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], level, e.range, profile[0], profile[1], water)
+                        folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], level, e.range, profile[0], profile[1], water,
+                                                                           method=el_cfg["ray_method"])
                     # What the angle cannot know: the gradient along the path, and the water depth a bottom bounce is folded about.
                     bent = bend(level, e.range)
                     fold_sigma = 2.0 * el_cfg["water_depth_sigma_m"] if path in ("bottom", "multiple") else 0.0
@@ -1150,6 +1204,7 @@ class LiveChain:
                                     depth_refraction_sigma_m=bent, image_depth_m=image, path=path)
                     if ladder is not None:
                         extra[i]["depth_profile_source"] = ladder["rung"]
+                    extra[i].update(ensemble_span(level, e.range, folded))
                     depth, depth_sigma = image, sigma_z
                     if e.ambiguous:
                         # The track, if it has a depth already, takes the candidate that fits it.
@@ -1180,8 +1235,9 @@ class LiveChain:
                 if profile is not None:
                     # The track's straight-line depth as an arrival angle at its range, then along the ray.
                     folded = el_cfg["surface_z"] + elevation.ray_depth(origin[2] - el_cfg["surface_z"], float(np.arcsin((origin[2] - tr.depth) / slant)),
-                                                                       slant, profile[0], profile[1], water)
+                                                                       slant, profile[0], profile[1], water, method=el_cfg["ray_method"])
                 track_extra[c_.id] = {"depth_m": folded, "depth_sigma_m": sigma_z, "path": path}
+                track_extra[c_.id].update(ensemble_span(float(np.arcsin(np.clip((origin[2] - tr.depth) / slant, -1.0, 1.0))), slant, folded))
                 if ladder is not None:
                     track_extra[c_.id]["depth_profile_source"] = ladder["rung"]
                 if el_cfg["classify"] and elevation.outside_water(tr.depth, float(np.hypot(np.sqrt(tr.depth_var), bent)), water, el_cfg["surface_z"],
@@ -1214,7 +1270,9 @@ class LiveChain:
         if self._multipath is not None:        # hook: adds report members only
             self._multipath.annotate(record, report, origin, hits, local, self._origin, rows=rows,
                                      surface_z=el_cfg["surface_z"] if el_cfg is not None else 0.0,
-                                     water=water if el_cfg is not None else None, backend=self.backend)
+                                     water=water if el_cfg is not None else None, backend=self.backend, profile=rays_water)
+        if self._coverage is not None:         # hook: one member of the report line, refreshed when something changed
+            report.update(json.loads("{" + self._coverage.update(record, tuple(float(v) for v in origin), rays_bottom, rays_water) + "}"))
         if tap:
             tap.json("report", report)
         self.last = {"power": power, "ranges": ranges, "hits": hits, "classes": classes}

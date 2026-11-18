@@ -38,6 +38,7 @@
 #include <complex>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -80,7 +81,31 @@ struct MultipathOptions {
   double track_min_gain = 12.0;        ///< the accumulated gain a track's depth needs
   double track_memory_pings = 0.0;     ///< 0: all pings count alike; n: older ones fade with exp(-1 / n) per ping
   double consistency_sigma = 3.0;      ///< with a stacked-row depth: combined when they agree within this many sigma
+  /// Rays (opt-in). The predicted pattern (delays, amplitudes, which paths exist) comes from rays traced through the
+  /// profile the chain hands over each ping (the sound-speed ladder's; raytrace.hpp) instead of straight lines and
+  /// flat images. `gradient` is then not used: the profile carries it. Depths where no direct or no once-surface-
+  /// reflected path joins sonar and target are not searched, and when there is none the reason says which is missing.
+  bool rays = false;
+  std::int64_t ray_fan = 1200;         ///< rays per fan (one fan per leg and detection, read at two ranges)
+  std::int64_t ray_surface_order = 2;  ///< surface reflections per leg in the pattern when no bottom is given
+  double ray_min_amplitude = 0.02;     ///< arrivals of a leg weaker than this re its direct one are left out of the pattern
+  double ray_sigma_fan_fraction = 0.5; ///< the fans of the tilted and ensemble profiles have this share of ray_fan
+  /// A loss per surface bounce that depends on the grazing angle (a named bubble law evaluated by the configuration:
+  /// sim/surface.py through multipath_depth.cpp_options): dB at these grazing angles (rad, increasing), added to surface_loss_db.
+  std::vector<double> surface_loss_grazing, surface_loss_table_db;
 };
+
+/// The water the rays are traced through, handed over by the chain each ping (the ladder's rung, or
+/// the straight line / assumed gradient when it holds nothing).
+struct MultipathProfile {
+  std::vector<double> depth, speed;    ///< knots, m below the surface and m/s
+  std::vector<double> sigma;           ///< m/s at the knots: what the rung claims; empty: no claim (the gradient prior alone)
+  double gradient_sigma = 0.0;         ///< 1/s: the prior that caps sigma away from the vehicle (environment.hpp)
+  std::string rung;                    ///< for the report
+  std::vector<std::vector<double>> ensemble;   ///< speeds of further profiles on the same knots, all consistent with what is known
+};
+
+class RayPattern;
 
 /// One option by name, as `multipath_depth_<member>=value` (and `multipath_depth=1`: enabled). False: not one of these.
 bool set_multipath_option(MultipathOptions& o, const std::string& key, const std::string& value);
@@ -91,6 +116,7 @@ struct MultipathGeometry {
   double sound_speed = 1500.0, f_centre = 0.0, bandwidth = 0.0;
   double water_depth = 0.0;            ///< m; 0: unknown
   double slack = 0.0;                  ///< m: how far `range` may be from any one arrival (0: the options' range_slack)
+  std::shared_ptr<const RayPattern> rays{};   ///< rays through a profile (options.rays); null: flat boundaries, straight rays
 };
 
 struct MultipathEstimate {
@@ -105,6 +131,10 @@ struct MultipathEstimate {
   std::string reason;                  ///< why there is no depth: merged, no_surface_path, single_arrival, window; with a depth:
                                        ///< bottom_unmodelled, bottom_order (the pattern leaves out paths that may be there: ambiguous)
   double snr_db = kNaN;                ///< 10 log10 L_1
+  // With rays:
+  std::string profile_source;          ///< the rung the rays went through
+  double searched_lo = kNaN, searched_hi = kNaN;   ///< m: the depths searched (where a direct and a surface path exist and resolve)
+  std::vector<double> ensemble;        ///< the depth through each member of the profile ensemble, m (empty: none)
   std::vector<double> grid, envelope;  ///< the fringe envelope L(z) - L_1, for a track to add up
 };
 
@@ -130,6 +160,23 @@ std::vector<std::complex<double>> multipath_window(const PingRecord& record, dou
 /// Target depth from one beam window.
 MultipathEstimate multipath_estimate(const std::complex<double>* y, std::int64_t n, double t_first, double dt, std::int64_t n_noise,
                                      const MultipathGeometry& g, const MultipathOptions& o);
+/// The rays of one detection's fit through `profile` (options.rays): put into the geometry's `rays`.
+std::shared_ptr<const RayPattern> multipath_rays(const MultipathProfile& profile, const MultipathGeometry& g, const MultipathOptions& o);
+/// What the rays say of depth z: 1: a direct path on both legs; 2: a once-surface-reflected path on both; 3: both.
+int multipath_ray_paths(const RayPattern& rays, double z);
+/// One sigma (m) of the depth z from what the profile's rung does not know (the tilt of environment.hpp, through the rays),
+/// and the depths whose surface delay through each ensemble member equals the profile's own at z.
+double multipath_ray_sigma(const RayPattern& rays, double z);
+std::vector<double> multipath_ray_ensemble(const RayPattern& rays, double z);
+/// The two-way pattern at depth z through the rays (false: a direct or a surface path is missing there), the delay of the
+/// echo reflected at the surface both ways (NaN: missing), the deepest depth the rays cover, and the profile they went through.
+bool multipath_ray_pattern(const RayPattern& rays, double z, double t0, std::vector<double>& delay, std::vector<std::complex<double>>& amp);
+double multipath_ray_surface_delay(const RayPattern& rays, double z);
+double multipath_ray_z_hi(const RayPattern& rays);
+const MultipathProfile& multipath_ray_profile(const RayPattern& rays);
+/// dB lost at one surface reflection at a grazing angle (rad): surface_loss_db plus the table's value there.
+double multipath_surface_loss_db(const MultipathOptions& o, double grazing);
+
 /// The fit's geometry for a detection at slant range `range` from `origin`. `first_range`, `extent` (m; NaN: not known):
 /// where the detection's arrivals lie, as a merging detector reports them; the fit is then centred on that stretch and
 /// any sample of it may be the strongest arrival.
@@ -138,7 +185,8 @@ MultipathGeometry multipath_geometry(const PingRecord& record, const Vec3d& orig
 /// Target depth for one detection of a conditioned record.
 MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& origin, double bearing, double range, const MultipathOptions& o,
                                       double first_range = kNaN, double extent = kNaN, const std::vector<std::vector<std::int64_t>>& rows = {},
-                                      Backend backend = Backend::Host, int device = 0);
+                                      Backend backend = Backend::Host, int device = 0, const MultipathProfile* profile = nullptr,
+                                      MultipathGeometry* used = nullptr);
 
 struct MultipathFused {
   double depth = kNaN, sigma = kNaN;
@@ -190,6 +238,8 @@ class MultipathDepth {
   void add(std::int64_t track, const MultipathEstimate& estimate, const MultipathGeometry& g);
   MultipathEstimate track(std::int64_t id) const;
   const MultipathOptions& options() const { return opt_; }
+  /// The water for this ping's rays (options.rays); without one the stage traces through isovelocity water.
+  void set_profile(const MultipathProfile& profile) { profile_ = profile; }
 
  private:
   struct Sum {
@@ -199,6 +249,7 @@ class MultipathDepth {
     double lobe = 0.0, model = 0.0, cell = 0.0;   ///< cell: the coarsest fringe cell among the pings added, m
   };
   MultipathOptions opt_;
+  MultipathProfile profile_;
   std::map<std::int64_t, Sum> sums_;
   std::int64_t pings_ = 0;
 };

@@ -132,6 +132,10 @@ live::ProfileOptions profile_options(const py::dict& d) {
   number(d, "thermocline_gradient", o.thermocline_gradient);
   number(d, "thermocline_thickness", o.thermocline_thickness);
   number(d, "family_sigma", o.family_sigma);
+  if (d.contains("ensemble")) o.ensemble = d["ensemble"].cast<bool>();
+  if (d.contains("ensemble_gradients")) o.ensemble_gradients = d["ensemble_gradients"].cast<std::vector<double>>();
+  number(d, "ensemble_extent", o.ensemble_extent);
+  if (d.contains("ensemble_sigma_members")) o.ensemble_sigma_members = d["ensemble_sigma_members"].cast<bool>();
   if (d.contains("file") && !d["file"].is_none()) o.file = d["file"].cast<std::string>();
   if (d.contains("cast") && !d["cast"].is_none()) o.cast = d["cast"].cast<std::string>();
   if (d.contains("family") && !d["family"].is_none()) o.family = d["family"].cast<std::string>();
@@ -282,8 +286,39 @@ void bind_live(py::module_& m) {
       },
       "The two profiles a depth sigma is the half difference of: (knots, c + e, c - e) (environment.hpp).");
   m.def("live_profile_depth_sigma", &live::profile_depth_sigma, py::arg("receiver_depth"), py::arg("elevation"), py::arg("slant_range"),
-        py::arg("depth"), py::arg("speed"), py::arg("sigma"), py::arg("gradient_sigma"), py::arg("water_depth") = 0.0,
+        py::arg("depth"), py::arg("speed"), py::arg("sigma"), py::arg("gradient_sigma"), py::arg("water_depth") = 0.0, py::arg("arcs") = false,
         "One sigma of a depth traced through a profile with the given error at its knots (environment.hpp).");
+  m.def(
+      "live_water_profile",
+      [](const py::object& profile, const py::object& ladder, const std::vector<double>& ssp_depth, const std::vector<double>& ssp_speed,
+         bool use_gradient, double gradient, double gradient_sigma, double own_depth, double sound_speed, double water_depth) {
+        live::ProfileOptions po;
+        if (!profile.is_none()) po = profile_options(profile.cast<py::dict>());
+        live::LadderProfile lp;
+        if (!ladder.is_none()) {
+          const py::dict l = ladder.cast<py::dict>();
+          lp.rung = l["rung"].cast<std::string>();
+          lp.depth = l["depth"].cast<std::vector<double>>();
+          lp.speed = l["speed"].cast<std::vector<double>>();
+          lp.sigma = l["sigma"].cast<std::vector<double>>();
+          lp.bins = l["bins"].cast<std::int64_t>();
+          lp.span_lo = l["span_lo"].cast<double>();
+          lp.span_hi = l["span_hi"].cast<double>();
+        }
+        const live::MultipathProfile w = live::water_profile(po, ladder.is_none() ? nullptr : &lp, ssp_depth, ssp_speed, use_gradient, gradient,
+                                                             gradient_sigma, own_depth, sound_speed, water_depth);
+        py::dict d;
+        d["depth"] = w.depth;
+        d["speed"] = w.speed;
+        d["sigma"] = w.sigma;
+        d["gradient_sigma"] = w.gradient_sigma;
+        d["rung"] = w.rung;
+        d["ensemble"] = w.ensemble;
+        return d;
+      },
+      py::arg("profile"), py::arg("ladder"), py::arg("ssp_depth"), py::arg("ssp_speed"), py::arg("use_gradient"), py::arg("gradient"),
+      py::arg("gradient_sigma"), py::arg("own_depth"), py::arg("sound_speed"), py::arg("water_depth") = kNaN,
+      "The water a ping's rays go through from what the chain holds (coverage.hpp water_profile): {depth, speed, sigma, gradient_sigma, rung, ensemble}.");
   m.def("live_refraction_sigma", &live::refraction_sigma);
   m.def("live_blank_interval", &live::blank_interval, py::arg("record"), py::arg("t0"), py::arg("t1"), py::arg("taper") = 0.0,
         "Zero every channel between record times t0 and t1 (s after the transmit), raised-cosine edges of `taper` s (sync.hpp).");
@@ -688,6 +723,7 @@ void bind_live(py::module_& m) {
           flag("attitude_arrival", eo.attitude_arrival);
           num("attitude_rate_sigma", eo.attitude_rate_sigma);
           flag("use_gradient", eo.use_gradient);
+          flag("ray_arcs", eo.ray_arcs);
           num("gradient", eo.gradient);
           num("gradient_sigma", eo.gradient_sigma);
           num("ambiguity_db", eo.ambiguity_db);
@@ -722,6 +758,13 @@ void bind_live(py::module_& m) {
             if (!live::set_multipath_option(o.multipath_depth, key, py::str(item.second).cast<std::string>())) throw std::invalid_argument("unknown option " + key);
           }
         }
+        if (kw.contains("coverage") && !kw["coverage"].is_none()) {   // hook: flat {member: value}, as key=value
+          o.coverage.enabled = true;
+          for (const auto& item : kw["coverage"].cast<py::dict>()) {
+            const std::string key = "coverage_" + item.first.cast<std::string>();
+            if (!live::set_coverage_option(o.coverage, key, py::str(item.second).cast<std::string>())) throw std::invalid_argument("unknown option " + key);
+          }
+        }
         if (kw.contains("sync")) {
           const py::dict r = kw["sync"].cast<py::dict>();
           o.sync = true;
@@ -739,6 +782,11 @@ void bind_live(py::module_& m) {
              return json;
            },
            "Process one ping (conditioned in place); returns the report as a JSON line.")
+      .def("set_coverage_pd", [](live::LiveChain& c, const std::vector<double>& snr_db, const std::vector<double>& pd) { c.coverage().set_pd_table(snr_db, pd); },
+           "The detection probability against one row's link-budget SNR (gpusonar.live.detection_probability) for the coverage picture.")
+      .def("coverage_seen", [](live::LiveChain& c, std::size_t i, double range) { return c.coverage().seen(i, range); },
+           "Detection probability of target class i at a horizontal range at the present depth (coverage.hpp).")
+      .def("coverage_seconds", [](live::LiveChain& c) { return c.coverage().seconds(); })
       .def("detector", &live::LiveChain::detector_json,
            "The multiscale detector's plan for the last map (detector.hpp), as a JSON line; '{}' when it is not in use.")
       .def("resolved", &live::LiveChain::resolved_json,
