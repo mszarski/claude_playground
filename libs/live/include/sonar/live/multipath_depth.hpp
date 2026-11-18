@@ -135,6 +135,7 @@ struct MultipathEstimate {
   std::string profile_source;          ///< the rung the rays went through
   double searched_lo = kNaN, searched_hi = kNaN;   ///< m: the depths searched (where a direct and a surface path exist and resolve)
   std::vector<double> ensemble;        ///< the depth through each member of the profile ensemble, m (empty: none)
+  double shadow_lo = kNaN, shadow_hi = kNaN;       ///< m: the shallowest and deepest depth the direct path does not reach at this range
   std::vector<double> grid, envelope;  ///< the fringe envelope L(z) - L_1, for a track to add up
 };
 

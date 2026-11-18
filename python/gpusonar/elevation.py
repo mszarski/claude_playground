@@ -104,7 +104,8 @@ PROFILE_DEFAULTS = {
     "ensemble": None,                   # {gradients_per_s: [...], extent_m: ..., sigma_members: true}: where the vehicle has not
                                         # sampled the water, depths (and the coverage picture) are also evaluated through a small
                                         # set of profiles: the unsampled water continued with each of these gradients for extent_m
-                                        # (every pairing above and below), and the sampled part moved by its sigma each way.
+                                        # (a length or a list of lengths; every pairing above and below), and the sampled part
+                                        # moved by its sigma each way. An assumed family counts as sampled at the vehicle only.
                                         # The spread is reported (depth_ensemble_m, depth_multipath_ensemble_m,
                                         # max_range_ensemble_m). gradients_per_s and extent_m have no default
     "family": None,                     # an assumption: {kind: isothermal, gradient_per_s: ...} or {kind: mixed_layer,
@@ -163,7 +164,8 @@ def profile_options(profile: dict | None) -> dict | None:
         unknown = set(ens) - {"gradients_per_s", "extent_m", "sigma_members"}
         if unknown or ens.get("gradients_per_s") is None or ens.get("extent_m") is None:
             raise ValueError("elevation.profile.ensemble: needs gradients_per_s (a list) and extent_m; sigma_members is the only other key")
-        out.update(ensemble=True, ensemble_gradients=[float(v) for v in ens["gradients_per_s"]], ensemble_extent=float(ens["extent_m"]),
+        extents = ens["extent_m"] if isinstance(ens["extent_m"], (list, tuple)) else [ens["extent_m"]]
+        out.update(ensemble=True, ensemble_gradients=[float(v) for v in ens["gradients_per_s"]], ensemble_extents=[float(v) for v in extents],
                    ensemble_sigma_members=bool(ens.get("sigma_members", True)))
     fam = profile.get("family")
     if fam:

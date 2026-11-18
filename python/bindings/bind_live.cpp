@@ -134,7 +134,7 @@ live::ProfileOptions profile_options(const py::dict& d) {
   number(d, "family_sigma", o.family_sigma);
   if (d.contains("ensemble")) o.ensemble = d["ensemble"].cast<bool>();
   if (d.contains("ensemble_gradients")) o.ensemble_gradients = d["ensemble_gradients"].cast<std::vector<double>>();
-  number(d, "ensemble_extent", o.ensemble_extent);
+  if (d.contains("ensemble_extents")) o.ensemble_extents = d["ensemble_extents"].cast<std::vector<double>>();
   if (d.contains("ensemble_sigma_members")) o.ensemble_sigma_members = d["ensemble_sigma_members"].cast<bool>();
   if (d.contains("file") && !d["file"].is_none()) o.file = d["file"].cast<std::string>();
   if (d.contains("cast") && !d["cast"].is_none()) o.cast = d["cast"].cast<std::string>();

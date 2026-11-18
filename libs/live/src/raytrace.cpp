@@ -268,47 +268,76 @@ RayFan::RayFan(const RayProfile& profile, double z_source, const std::vector<dou
 }
 
 void RayFan::shoot(int max_bounces) {
-  ends_.resize(ranges_.size() * static_cast<std::size_t>(n_));
-  for (std::int64_t i = 0; i < n_; ++i) {
-    const auto u = static_cast<std::size_t>(i);
+  const auto n = static_cast<std::size_t>(n_);
+  ends_.resize(ranges_.size() * n);
+  for (std::size_t u = 0; u < n; ++u) {
     RayStepper ray(prof_, z_source_, launch_[u]);
-    for (std::size_t k = 0; k < ranges_.size(); ++k) ends_[k * static_cast<std::size_t>(n_) + u] = ray.to(ranges_[k], max_bounces);
+    for (std::size_t k = 0; k < ranges_.size(); ++k) ends_[k * n + u] = ray.to(ranges_[k], max_bounces);
   }
+  edges_.assign(ranges_.size(), {});
+  for (std::size_t k = 0; k < ranges_.size(); ++k) {
+    const RayEnd* e = ends_.data() + k * n;
+    for (std::size_t u = 0; u + 1 < n; ++u) {
+      if ((e[u].ok || e[u + 1].ok) && !(e[u].ok && e[u + 1].ok && e[u].n_surface == e[u + 1].n_surface && e[u].n_bottom == e[u + 1].n_bottom)) {
+        refine(k, launch_[u], e[u], launch_[u + 1], e[u + 1], max_bounces, 0);
+      }
+    }
+  }
+}
+
+// Between two rays of different histories: halve the launch angle until the parts have one history each.
+void RayFan::refine(std::size_t i_range, double launch_a, const RayEnd& a, double launch_b, const RayEnd& b, int max_bounces, int level) {
+  const bool same = a.ok && b.ok && a.n_surface == b.n_surface && a.n_bottom == b.n_bottom;
+  if (same) {
+    if (level > 0) edges_[i_range].push_back({launch_a, launch_b, a, b});
+    return;
+  }
+  if (level >= 26 || !(a.ok || b.ok)) return;
+  const double mid = 0.5 * (launch_a + launch_b);
+  const RayEnd m = RayStepper(prof_, z_source_, mid).to(ranges_[i_range], max_bounces);
+  refine(i_range, launch_a, a, mid, m, max_bounces, level + 1);
+  refine(i_range, mid, m, launch_b, b, max_bounces, level + 1);
+}
+
+void RayFan::arrival(const Segment& seg, double r, double z, std::vector<RayArrival>& out) const {
+  const RayEnd &a = seg.a, &b = seg.b;
+  const double fa = a.z - z, fb = b.z - z;
+  if (!(fa == 0.0 || fa * fb < 0.0)) return;
+  const double c_r = prof_.c(z), c_top = prof_.speed.front(), c_bot = prof_.speed.back();
+  const double slant = std::hypot(r, z - z_source_);
+  const double cap = (clip_ / slant) * (clip_ / slant);
+  const double dz = b.z - a.z;
+  const double u = dz != 0.0 ? -fa / dz : 0.0;
+  // cubic Hermite in depth: dt/dz = s / c on the wavefront
+  const double ma = a.s / prof_.c(a.z), mb = b.s / prof_.c(b.z);
+  const double u2 = u * u, u3 = u2 * u;
+  RayArrival q;
+  q.time = (2.0 * u3 - 3.0 * u2 + 1.0) * a.time + (u3 - 2.0 * u2 + u) * dz * ma + (-2.0 * u3 + 3.0 * u2) * b.time + (u3 - u2) * dz * mb;
+  const double dtheta = seg.launch_b - seg.launch_a;
+  q.launch = seg.launch_a + u * dtheta;
+  q.p = std::cos(q.launch) / c_source_;
+  q.s_end = a.s + u * (b.s - a.s);
+  const double cos_r = std::clamp(q.p * c_r, 1e-6, 1.0);                    // Snell: cos(theta) = p c
+  const double intensity = std::cos(q.launch) / (r * std::max(std::abs(dz) / dtheta, 1e-12) * cos_r);
+  q.caustic = intensity > cap;
+  q.amplitude = std::sqrt(std::min(intensity, cap) * c_r / c_source_);
+  q.grazing_surface = std::acos(std::min(q.p * c_top, 1.0));
+  q.grazing_bottom = std::acos(std::min(q.p * c_bot, 1.0));
+  q.n_surface = a.n_surface;
+  q.n_bottom = a.n_bottom;
+  out.push_back(q);
 }
 
 void RayFan::arrivals(std::size_t i_range, double z, std::vector<RayArrival>& out) const {
   const RayEnd* e = ends_.data() + i_range * static_cast<std::size_t>(n_);
   const double r = ranges_[i_range];
-  const double c_r = prof_.c(z), c_top = prof_.speed.front(), c_bot = prof_.speed.back();
-  const double slant = std::hypot(r, z - z_source_);
-  const double cap = (clip_ / slant) * (clip_ / slant);
   for (std::int64_t i = 0; i + 1 < n_; ++i) {
     const RayEnd &a = e[i], &b = e[i + 1];
     if (!(a.ok && b.ok) || a.n_surface != b.n_surface || a.n_bottom != b.n_bottom) continue;
-    const double fa = a.z - z, fb = b.z - z;
-    if (!(fa == 0.0 || fa * fb < 0.0)) continue;
-    const double dz = b.z - a.z;
-    const double u = dz != 0.0 ? -fa / dz : 0.0;
-    // cubic Hermite in depth: dt/dz = s / c on the wavefront
-    const double ma = a.s / prof_.c(a.z), mb = b.s / prof_.c(b.z);
-    const double u2 = u * u, u3 = u2 * u;
-    RayArrival q;
-    q.time = (2.0 * u3 - 3.0 * u2 + 1.0) * a.time + (u3 - 2.0 * u2 + u) * dz * ma + (-2.0 * u3 + 3.0 * u2) * b.time + (u3 - u2) * dz * mb;
     const auto ui = static_cast<std::size_t>(i);
-    const double dtheta = launch_[ui + 1] - launch_[ui];
-    q.launch = launch_[ui] + u * dtheta;
-    q.p = std::cos(q.launch) / c_source_;
-    q.s_end = a.s + u * (b.s - a.s);
-    const double cos_r = std::clamp(q.p * c_r, 1e-6, 1.0);                    // Snell: cos(theta) = p c
-    const double intensity = std::cos(q.launch) / (r * std::max(std::abs(dz) / dtheta, 1e-12) * cos_r);
-    q.caustic = intensity > cap;
-    q.amplitude = std::sqrt(std::min(intensity, cap) * c_r / c_source_);
-    q.grazing_surface = std::acos(std::min(q.p * c_top, 1.0));
-    q.grazing_bottom = std::acos(std::min(q.p * c_bot, 1.0));
-    q.n_surface = a.n_surface;
-    q.n_bottom = a.n_bottom;
-    out.push_back(q);
+    arrival({launch_[ui], launch_[ui + 1], a, b}, r, z, out);
   }
+  for (const Segment& seg : edges_[i_range]) arrival(seg, r, z, out);
 }
 
 }  // namespace sonar::live

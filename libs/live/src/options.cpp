@@ -149,7 +149,6 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
   else if (key == "elevation_profile_extrapolation_sigma_per_s") c.elevation.profile.extrapolation_sigma_per_s = v;
   else if (key == "elevation_ray_arcs") c.elevation.ray_arcs = v != 0.0;
   else if (key == "elevation_profile_ensemble") c.elevation.profile.ensemble = v != 0.0;
-  else if (key == "elevation_profile_ensemble_extent") c.elevation.profile.ensemble_extent = v;
   else if (key == "elevation_profile_ensemble_sigma_members") c.elevation.profile.ensemble_sigma_members = v != 0.0;
   else if (key == "elevation_profile_file") c.elevation.profile.file = value;
   else if (key == "elevation_profile_cast") c.elevation.profile.cast = value;
@@ -169,7 +168,8 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
       at = comma + 1;
     }
   }
-  else if (key == "dead_channels" || key == "elevation_ssp_depth" || key == "elevation_ssp_speed" || key == "elevation_profile_ensemble_gradients") {
+  else if (key == "dead_channels" || key == "elevation_ssp_depth" || key == "elevation_ssp_speed" || key == "elevation_profile_ensemble_gradients" ||
+           key == "elevation_profile_ensemble_extents") {
     // Comma-separated lists.
     std::vector<double> list;
     std::size_t at = 0;
@@ -179,6 +179,7 @@ void set_option(ChainOptions& c, PassiveOptions& p, const std::string& key, cons
       at = comma + 1;
     }
     if (key == "elevation_profile_ensemble_gradients") c.elevation.profile.ensemble_gradients = list;
+    else if (key == "elevation_profile_ensemble_extents") c.elevation.profile.ensemble_extents = list;
     else if (key == "elevation_ssp_depth") c.elevation.ssp_depth = list;
     else if (key == "elevation_ssp_speed") c.elevation.ssp_speed = list;
     else {

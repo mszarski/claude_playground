@@ -382,6 +382,8 @@ void profile_ensemble(const ProfileOptions& o, const LadderProfile& ladder, doub
   } else if (std::isfinite(ladder.span_lo) && std::isfinite(ladder.span_hi)) {
     lo = ladder.span_lo;
     hi = ladder.span_hi;
+  } else if (ladder.rung.compare(0, 6, "family") == 0) {
+    lo = hi = own;                                   // an assumed shape is not a sample: only the vehicle's own sound speed is
   }
   if (s.size() != d.size()) s.assign(d.size(), kNoClaim);
   auto interp = [&](const std::vector<double>& y, double z) {
@@ -390,15 +392,19 @@ void profile_ensemble(const ProfileOptions& o, const LadderProfile& ladder, doub
     const auto k = static_cast<std::size_t>(std::upper_bound(d.begin(), d.end(), z) - d.begin());
     return y[k - 1] + (z - d[k - 1]) / (d[k] - d[k - 1]) * (y[k] - y[k - 1]);
   };
-  const double extent = std::max(o.ensemble_extent, 0.0);
   std::vector<double> all = d;
-  for (double z : {own, lo, hi, lo - extent, hi + extent}) {
+  for (double z : {own, lo, hi}) {
     if (z > d.front() && z < d.back()) all.push_back(z);
+  }
+  for (double extent : o.ensemble_extents) {
+    for (double z : {lo - extent, hi + extent}) {
+      if (extent > 0.0 && z > d.front() && z < d.back()) all.push_back(z);
+    }
   }
   std::sort(all.begin(), all.end());
   all.erase(std::unique(all.begin(), all.end(), [](double a, double b) { return std::abs(a - b) < 1e-6; }), all.end());
   knots = all;
-  auto member = [&](double tilt, double g_above, double g_below) {
+  auto member = [&](double tilt, double g_above, double g_below, double extent) {
     std::vector<double> out(knots.size());
     for (std::size_t i = 0; i < knots.size(); ++i) {
       const double z = knots[i];
@@ -412,21 +418,22 @@ void profile_ensemble(const ProfileOptions& o, const LadderProfile& ladder, doub
     }
     return out;
   };
-  speeds.push_back(member(0.0, gradient, gradient));
+  speeds.push_back(member(0.0, gradient, gradient, 0.0));
   const bool outside = lo > d.front() + 1e-6 || hi < d.back() - 1e-6;
-  if (outside && extent > 0.0) {
+  for (double extent : o.ensemble_extents) {
+    if (!outside || !(extent > 0.0)) continue;
     for (double ga : o.ensemble_gradients) {
       for (double gb : o.ensemble_gradients) {
         if (ga == gradient && gb == gradient) continue;
         if (!(lo > d.front() + 1e-6) && ga != o.ensemble_gradients.front()) continue;   // nothing above: one pass
         if (!(hi < d.back() - 1e-6) && gb != o.ensemble_gradients.front()) continue;
-        speeds.push_back(member(0.0, ga, gb));
+        speeds.push_back(member(0.0, ga, gb, extent));
       }
     }
   }
   if (o.ensemble_sigma_members && lo < hi) {
-    speeds.push_back(member(1.0, gradient, gradient));
-    speeds.push_back(member(-1.0, gradient, gradient));
+    speeds.push_back(member(1.0, gradient, gradient, 0.0));
+    speeds.push_back(member(-1.0, gradient, gradient, 0.0));
   }
 }
 

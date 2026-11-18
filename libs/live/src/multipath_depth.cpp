@@ -501,6 +501,21 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
   est.ambiguous = !rivals.empty();
   if (rivals.size() > 4) rivals.resize(4);
   est.alternatives = rivals;
+  if (g.rays) {
+    // Depths the direct path does not reach at this range: a target there is heard by other paths only, which the
+    // pattern of a depth that is reached may fit. The depth is then one explanation among others, and the report says so.
+    const double top = multipath_ray_z_hi(*g.rays);
+    for (int i = 0; i < 257; ++i) {
+      const double z = top * (i + 0.5) / 257.0;
+      if (multipath_ray_paths(*g.rays, z) & 1) continue;
+      if (!std::isfinite(est.shadow_lo)) est.shadow_lo = z;
+      est.shadow_hi = z;
+    }
+    if (std::isfinite(est.shadow_lo)) {
+      est.ambiguous = true;
+      est.reason = "shadow";
+    }
+  }
   // Paths the pattern leaves out but the water may hold: the depth is then one explanation among others.
   if (g.water_depth > 0.0 && !o.bottom) {
     const double z_mid = 0.5 * (g.array_depth + g.projector_depth);
@@ -748,6 +763,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
     }
     if (!e.profile_source.empty()) s << ", \"multipath_profile_source\": \"" << e.profile_source << "\"";
     if (std::isfinite(e.searched_lo)) s << ", \"multipath_searched_m\": [" << e.searched_lo << ", " << e.searched_hi << "]";
+    if (std::isfinite(e.shadow_lo)) s << ", \"multipath_shadow_m\": [" << e.shadow_lo << ", " << e.shadow_hi << "]";
     s << ", \"multipath_gain\": ";
     num(s, e.gain);
   };

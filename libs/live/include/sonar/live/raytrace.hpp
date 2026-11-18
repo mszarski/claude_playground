@@ -25,7 +25,9 @@
 // slowness vector: dt/dz = s / c (s at the ray's end), dt/dr = p. So between two neighbouring rays
 // that straddle a depth the arrival there has, by a cubic Hermite polynomial in z, a travel time good
 // to far below a carrier period, a launch angle (linear), and the spreading of the tube between the
-// two rays: I(r) / I(1 m) = cos(theta_0) / (r |dz / dtheta_0| cos(theta_r)). At a caustic
+// two rays: I(r) / I(1 m) = cos(theta_0) / (r |dz / dtheta_0| cos(theta_r)). Where two neighbours have
+// different histories (one has reflected and the other not) the launch angle between them is halved
+// until each part has one history, so a sheet reaches the boundary it ends on. At a caustic
 // dz / dtheta_0 -> 0: the amplitude is clipped at `caustic_clip` times the spherical value and the
 // arrival is marked; no caustic phase is applied.
 #pragma once
@@ -140,8 +142,15 @@ class RayFan {
 
  private:
   RayProfile prof_;
+  struct Segment {
+    double launch_a, launch_b;
+    RayEnd a, b;
+  };
   void shoot(int max_bounces);
+  void refine(std::size_t i_range, double launch_a, const RayEnd& a, double launch_b, const RayEnd& b, int max_bounces, int level);
+  void arrival(const Segment& seg, double r, double z, std::vector<RayArrival>& out) const;
   double z_source_, c_source_, clip_;
+  std::vector<std::vector<Segment>> edges_;   ///< [range]: the parts of a sheet between a fan ray and the boundary the sheet ends on
   std::int64_t n_;
   std::vector<double> ranges_, launch_;
   std::vector<RayEnd> ends_;             ///< [range][ray]

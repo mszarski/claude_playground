@@ -124,11 +124,12 @@ struct ProfileOptions {
   /// linear sigma understates what is not known (a thermocline is not a tilt). A small, deterministic set of profiles
   /// consistent with what is known is traced instead and the spread reported: the sampled part moved by its stated
   /// sigma, and the water outside it continued with each of `ensemble_gradients` (1/s, in place of the assumed
-  /// gradient) for `ensemble_extent` metres, parallel to the rung's own profile beyond. No default for either: they
-  /// say what water is thought possible here.
+  /// gradient: the member differs from the rung's own profile by that difference in gradient) for `ensemble_extent`
+  /// metres, parallel to the rung's profile beyond. An assumed family counts as sampled at the vehicle only. No
+  /// default for either number: they say what water is thought possible here.
   bool ensemble = false;
   std::vector<double> ensemble_gradients;  ///< 1/s: the gradients the unsampled water may have (two or more spanning the range)
-  double ensemble_extent = 0.0;            ///< m: how far beyond the sampled depths such a gradient may run
+  std::vector<double> ensemble_extents;    ///< m: how far beyond the sampled depths such a gradient may run (one or more lengths)
   bool ensemble_sigma_members = true;      ///< two more members: the rung's profile tilted by its sigma each way
 };
 

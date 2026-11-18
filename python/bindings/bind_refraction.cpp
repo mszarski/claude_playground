@@ -96,6 +96,7 @@ py::dict estimate_dict(const live::MultipathEstimate& e) {
   d["profile_source"] = e.profile_source;
   d["searched"] = py::make_tuple(e.searched_lo, e.searched_hi);
   d["ensemble"] = e.ensemble;
+  d["shadow"] = py::make_tuple(e.shadow_lo, e.shadow_hi);
   d["grid"] = py::array_t<double>(static_cast<py::ssize_t>(e.grid.size()), e.grid.data());
   d["envelope"] = py::array_t<double>(static_cast<py::ssize_t>(e.envelope.size()), e.envelope.data());
   return d;
