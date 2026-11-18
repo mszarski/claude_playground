@@ -104,3 +104,8 @@ trial:                           # the water the simulated trials are in: placeh
   pulse_s: 1.0                   # the long-range scenarios use a 1 s pulse for the signal (0.1 s in the sonar file)
   roll_deg: 2.0                  # the frame's tilt
   seed: 22
+
+# What the build is planned against (tools/popoto_depth_planner.py; they change no generated sonar or deployment file).
+# Every target strength, depth, speed, water and operating depth limit in these two files is an ASSUMED PLACEHOLDER.
+targets: reference_classes        # configs/builds/targets/reference_classes.yaml: ship, xl_auv, large_submerged
+environments: illustrative        # configs/builds/environments/illustrative.yaml

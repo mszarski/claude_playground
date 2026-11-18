@@ -98,3 +98,8 @@ trial:                           # the water the simulated trials are in: placeh
   roll_rate_deg_s: 1.5
   speed_m_s: 1.5
   seed: 23
+
+# What the build is planned against (tools/popoto_depth_planner.py; they change no generated sonar or deployment file).
+# Every target strength, depth, speed, water and operating depth limit in these two files is an ASSUMED PLACEHOLDER.
+targets: reference_classes        # configs/builds/targets/reference_classes.yaml: ship, xl_auv, large_submerged
+environments: illustrative        # configs/builds/environments/illustrative.yaml
