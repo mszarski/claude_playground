@@ -46,7 +46,7 @@ sync:
   reference: {f_start_hz: 20.0e3, f_stop_hz: 28.0e3, duration_s: 4.0e-3, level_v: 2.0e-3, lead_s: 5.0e-3, tail_s: 10.0e-3}
 
 projector:
-  source_level_db: 185.0
+  source_level_db_rms: 185.0     # an RMS level, dB re 1 uPa at 1 m
   band_hz: [9000.0, 13000.0]
   waveform: {type: lfm, duration_s: 0.05, window_alpha: 0.1}
   position_m: [0.0, 0.0, 2.0]    # hung 2 m below the frame

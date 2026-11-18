@@ -87,7 +87,11 @@ def receiver_positions(geo: dict, indices) -> np.ndarray:
     return np.array([[geo["range"], 0.0, geo["top_depth"] + geo["spacing"] * int(i)] for i in indices])
 
 
-def flat_provider(geo: dict, max_order: int = 3):
+def flat_provider(geo: dict, max_order: int | None = None):
+    """Straight-ray images: three bounces at 60 and 200 m; twelve at 1 km, where the measured response
+    runs on for 15 ms and paths with up to a dozen bounces carry it (docs/PHYSICS_NOTES.md Sec. 21.4)."""
+    if max_order is None:
+        max_order = 3 if geo["range"] < 500.0 else 12
     return ImageSourceProvider(ASSUMED["sound_speed"], surface_z=0.0, bottom_z=geo["depth"], max_order=max_order, bottom=ASSUMED["bottom"])
 
 
@@ -201,15 +205,21 @@ def analyse(ch: cr.TimeVaryingChannel, groups: list, *, search: int = 5, max_tai
 # -- the model in the measurement's form ---------------------------------------------------------------
 
 def simulate(geo: dict, rx: np.ndarray, *, wind: float, options: dict, seed: int, like: cr.TimeVaryingChannel, floor: float,
-             direct_level: float, bubbles: bool = False, estimator: float | None = None, lead: float = 3e-3) -> cr.TimeVaryingChannel:
+             direct_level: float, bubbles: bool = False, estimator: float | None = None, lead: float = 3e-3,
+             rms_height: float | None = None, tap_shape: float | None = None) -> cr.TimeVaryingChannel:
     import warnings
     surface = {"wind_speed": float(wind)}
     if bubbles:
-        surface["bubble_loss_db"] = {"model": "hall_novarini"}
+        surface["bubble_loss_db"] = {"model": "apl_1994"}
         warnings.filterwarnings("ignore", message="bubble_loss_db")    # the law's own caveat above 10 kHz: see the report
     # Many taps and many sinusoids per tap: a record of the model is then as ergodic as the sea is
     # (with the defaults, 6 taps of 8 lines, one seed's Doppler spectrum is a handful of lines).
-    prov = wrap(flat_provider(geo), dict({"surface": surface, "taps": 24, "doppler_lines": 48, "seed": int(seed)}, **options), frequency=like.fc)
+    if rms_height is not None:
+        surface["rms_height"] = float(rms_height)                        # in place of the wind law's
+    cfg = dict({"surface": surface, "taps": 24, "doppler_lines": 48, "seed": int(seed)}, **options)
+    if tap_shape is not None and np.isfinite(tap_shape):
+        cfg["tap_shape"] = float(tap_shape)
+    prov = wrap(flat_provider(geo), cfg, frequency=like.fc)
     ch = cr.model_channel(prov, [0.0, 0.0, geo["source_depth"]], rx, n_time=like.n_time, fs_time=like.fs_time, fs_delay=like.fs_delay,
                           n_delay=like.n_delay, fc=like.fc, bandwidth=STATED["symbol_rate"], lead=lead)
     if estimator:
@@ -278,33 +288,68 @@ def synthetic_measured(system: int, n_receivers: int, wind: float = 5.0, n_time:
     return ch, geo, rx
 
 
-def run(sites: list, seeds: int = 3, log=print) -> dict:
+def run(sites: list, seeds: int = 3, log=print, extra: bool = True) -> dict:
     """sites: [(label, recording, channel, geo, rx)]. The first site of each recording must be the
-    60 m one: its first surface arrival fixes the wind."""
+    60 m one: its first surface arrival fixes the wind.
+
+    Option sets A, C, B use ONE fitted number per recording (the wind). With `extra`, two more:
+      D = A with the surface's rms height fitted as well, to the coherent share of the first
+          surface arrival at 200 m (closed form exp(-Gamma^2)): TWO fitted numbers;
+      E = D with a K-type tap texture (`tap_shape`) fitted to the scintillation index of the first
+          surface arrival at 60 m: THREE fitted numbers.
+    Rows that a number was fitted to are marked; the others are predictions."""
     c = ASSUMED["sound_speed"]
-    out = {"stated": STATED, "assumed": ASSUMED, "free_parameters": 1, "sites": []}   # one per recording
-    wind = {}
-    for label, recording, ch, geo, rx in sites:
+    out = {"stated": STATED, "assumed": ASSUMED, "free_parameters": {"A": 1, "C": 1, "B": 1, "D": 2, "E": 3}, "sites": []}   # per recording
+    wind, height, shape = {}, {}, {}
+    first = []
+    for label, recording, ch, geo, rx in sites:                          # the measurements, and what is fitted to them
         groups = arrival_groups(geo, rx, STATED["symbol_rate"], window=(ch.n_delay - 60) / ch.fs_delay)
         meas = analyse(ch, groups)
         site = {"label": label, "recording": recording, "range": geo["range"], "groups": [], "estimator_bandwidth_hz": ch.estimator_bandwidth(),
                 "floor_db_re_direct": 10.0 * np.log10(meas["_floor"] / meas["_direct_level"]), "duration_s": ch.duration, "receivers": int(ch.n_receivers)}
+        s_group = next((g for g in groups if g["name"] == "S"), None)
         if recording not in wind:
-            s = next(g for g in groups if g["name"] == "S")
-            wind[recording] = fit_wind(meas["S"]["doppler_rms"][0], s["members"][0]["grazing"], ch.fc, c)
-            lo = fit_wind(meas["S"]["doppler_rms"][0] - 2 * meas["S"]["doppler_rms"][1], s["members"][0]["grazing"], ch.fc, c)
+            wind[recording] = fit_wind(meas["S"]["doppler_rms"][0], s_group["members"][0]["grazing"], ch.fc, c)
+            lo = fit_wind(meas["S"]["doppler_rms"][0] - 2 * meas["S"]["doppler_rms"][1], s_group["members"][0]["grazing"], ch.fc, c)
             site["wind_fit"] = {"wind_speed": wind[recording], "from": "rms Doppler width of S at this range", "two_sigma": wind[recording] - lo}
             log(f"{label}: wind fitted to the Doppler width of S: {wind[recording]:.2f} +- {wind[recording] - lo:.2f} m/s (2 sigma)")
+        elif extra and recording not in height and s_group is not None and geo["range"] < 500.0:
+            share = meas["S"]["coherent_arrival"][0]
+            if np.isfinite(share) and 0.01 < share < 0.95:
+                height[recording] = float(np.sqrt(np.log(1.0 / share)) / (4.0 * np.pi * ch.fc / c * np.sin(s_group["members"][0]["grazing"])))
+                site["height_fit"] = {"rms_height": height[recording], "from": "coherent share of S at this range"}
+                log(f"{label}: rms height fitted to the coherent share of S: {height[recording]:.3f} m "
+                    f"(wind law: {acoustics.rms_wave_height(wind[recording]):.3f} m)")
+        first.append((site, groups, meas))
+    for (label, recording, ch, geo, rx), (site, groups, meas) in zip(sites, first):
         u = wind[recording]
+        h = height.get(recording)
         site["wind_speed"] = u
         site["surface"] = {"rms_height": acoustics.rms_wave_height(u), "mean_square_slope": acoustics.mean_square_slope(u),
                            "rms_vertical_speed": acoustics.rms_surface_vertical_speed(u)}
+        if h is not None:
+            site["fitted_rms_height"] = h
         sims = {}
-        for key, opts, bub in (("A", OPTIONS["A"], False), ("C", OPTIONS["C"], False), ("B", OPTIONS["B"], False), ("A+bubbles", OPTIONS["A"], True)):
+        plan = [("A", OPTIONS["A"], {}), ("C", OPTIONS["C"], {}), ("B", OPTIONS["B"], {}), ("A+bubbles", OPTIONS["A"], {"bubbles": True})]
+        if extra and h is not None:
+            plan.append(("D", OPTIONS["A"], {"rms_height": h}))
+            plan.append(("E", OPTIONS["A"], {"rms_height": h, "tap_shape": "fit"}))
+        for key, opts, more in plan:
+            more = dict(more)
+            if more.get("tap_shape") == "fit":
+                if recording not in shape:
+                    # Texture common to an arrival's taps: SI = (1 + 1/nu)(1 + SI_Gaussian) - 1, SI_Gaussian from D.
+                    si_meas, si_model = meas["S"]["scintillation"][0], sims["D"]["S"]["scintillation"][0]
+                    ratio = (1.0 + si_meas) / (1.0 + si_model) - 1.0
+                    shape[recording] = float(1.0 / ratio) if (np.isfinite(ratio) and ratio > 0.02) else float("inf")
+                    site["shape_fit"] = {"tap_shape": shape[recording], "from": "scintillation index of S at this range"}
+                    log(f"{label}: tap_shape fitted to the scintillation index of S: {shape[recording]:.2f}")
+                more["tap_shape"] = shape[recording]
+                site["tap_shape"] = shape[recording]
             runs = []
-            for seed in range(1 if bub else seeds):                     # bubbles change levels only: one seed
+            for seed in range(1 if more.get("bubbles") else seeds):      # bubbles change levels only: one seed
                 mc = simulate(geo, rx, wind=u, options=opts, seed=seed, like=ch, floor=meas["_floor"], direct_level=meas["_direct_level"],
-                              bubbles=bub, estimator=ch.estimator_bandwidth())
+                              estimator=ch.estimator_bandwidth(), **more)
                 runs.append(analyse(mc, groups, quarters=False))
                 if seed == 0 and key in ("A", "B"):
                     site.setdefault("_model", {})[key] = mc
@@ -338,6 +383,17 @@ def verdict(meas, model, metric: str = "") -> str:
     return "in" if abs(m - s) <= tol else "OUT"
 
 
+def fitted_row(site: dict, arrival: str, metric: str, key: str) -> bool:
+    """Was this row what a number of option set `key` was fitted to? (Then it is no prediction.)"""
+    if arrival != "S":
+        return False
+    if "wind_fit" in site and metric == "doppler_rms":
+        return True
+    if key in ("D", "E") and "height_fit" in site and metric in ("coherent_arrival", "coherent"):
+        return True
+    return key == "E" and "shape_fit" in site and metric == "scintillation"
+
+
 def fmt(pair, digits=2) -> str:
     v, s = pair
     if not np.isfinite(v):
@@ -349,14 +405,14 @@ ROWS = [  # metric, heading, which model runs to show, digits
     ("delay_ms", "delay after direct (ms)", ("A",), 3),
     ("level_db", "level re whole channel (dB)", ("A",), 1),
     ("level_db", "the same with bubble loss", ("A+bubbles",), 1),
-    ("coherent_arrival", "coherent share, arrival and tail", ("A", "C"), 3),
-    ("coherent", "coherent share, at the peak", ("A", "C"), 3),
-    ("scintillation", "scintillation index", ("A", "C"), 2),
-    ("doppler_rms", "Doppler rms width (Hz)", ("A", "B"), 2),
+    ("coherent_arrival", "coherent share, arrival and tail", ("A", "C", "D"), 3),
+    ("coherent", "coherent share, at the peak", ("A", "C", "D"), 3),
+    ("scintillation", "scintillation index", ("A", "C", "D", "E"), 2),
+    ("doppler_rms", "Doppler rms width (Hz)", ("A", "B", "D"), 2),
     ("doppler_w50", "Doppler 50 % half width (Hz)", ("A", "B"), 2),
     ("doppler_shape", "Doppler shape w90/w50", ("A", "B"), 2),
     ("coherence_time_ms", "coherence time (ms)", ("A", "B"), 0),
-    ("decay_ms", "tail decay time (ms)", ("A", "C", "B"), 3),
+    ("decay_ms", "tail decay time (ms)", ("A", "C", "B", "D"), 3),
     ("mean_excess_ms", "tail mean excess delay (ms)", ("A", "C", "B"), 3),
 ]
 
@@ -366,15 +422,19 @@ def markdown(result: dict) -> str:
              "A: gaussian Doppler spectrum, facet decay time, bounces convolved. C: gaussian, rule_of_thumb, convolve (the suite's defaults).",
              "B: lorentzian, rule_of_thumb, sum (SST-style). One free parameter per recording (wind speed), fitted to the row marked FIT;",
              "every other row is a prediction. +- on the measured column: standard error from the four quarters of the record; on the model",
-             "columns: spread of one record from seed to seed. `in`/`OUT`: within twice the larger of the two, plus the resolution.", ""]
+             "columns: spread of one record from seed to seed. `in`/`OUT`: within twice the larger of the two, plus the resolution.",
+             "D: A with the rms height fitted too (to the coherent share of S at 200 m): two fitted numbers. E: D with a K-type tap texture",
+             "fitted to the scintillation index of S at 60 m: three fitted numbers. Rows a number was fitted to are marked FIT.", ""]
     for site in result["sites"]:
         s = site["surface"]
         lines += [f"## {site['label']}: {site['range']:.0f} m, wind {site['wind_speed']:.2f} m/s"
                   + (" (fitted here)" if "wind_fit" in site else " (from the 60 m file of the same recording)"),
                   f"rms height {s['rms_height']:.3f} m, mean-square slope {s['mean_square_slope']:.4f}, rms vertical speed {s['rms_vertical_speed']:.3f} m/s; "
                   f"estimator bandwidth {site['estimator_bandwidth_hz']:.1f} Hz; floor {site['floor_db_re_direct']:.1f} dB per delay bin re the whole channel; "
-                  f"{site['receivers']} receivers, {site['duration_s']:.0f} s", "",
-                  "| arrival | quantity | measured | A | | C | | B | |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+                  f"{site['receivers']} receivers, {site['duration_s']:.0f} s"
+                  + (f"; D, E: rms height {site['fitted_rms_height']:.3f} m" if "fitted_rms_height" in site else "")
+                  + (f"; E: tap_shape {site['tap_shape']:.2f}" if "tap_shape" in site else ""), "",
+                  "| arrival | quantity | measured | A | | C | | B | | D | | E | |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
         for g in site["groups"]:
             if not np.isfinite(g["measured"]["level_db"][0]) or g["measured"]["level_db"][0] < site["floor_db_re_direct"] + 8.0:
                 continue
@@ -384,10 +444,11 @@ def markdown(result: dict) -> str:
                 meas = g["measured"][metric]
                 tag = " FIT" if ("wind_fit" in site and g["name"] == "S" and metric == "doppler_rms") else ""
                 cells = []
-                for slot in ("A", "C", "B"):
+                for slot in ("A", "C", "B", "D", "E"):
                     key = "A+bubbles" if (slot == "A" and runs == ("A+bubbles",)) else slot
                     if key in runs and key in g["model"]:
-                        cells += [fmt(g["model"][key][metric], digits), "fit" if (tag and slot == "A") else verdict(meas, g["model"][key][metric], metric)]
+                        fitted = fitted_row(site, g["name"], metric, slot)
+                        cells += [fmt(g["model"][key][metric], digits), "fit" if fitted else verdict(meas, g["model"][key][metric], metric)]
                     else:
                         cells += ["", ""]
                 lines.append(f"| {g['name']} | {heading}{tag} | {fmt(meas, digits)} | " + " | ".join(cells) + " |")
@@ -410,7 +471,7 @@ def summary(result: dict) -> dict:
                 for g in site["groups"]:
                     if g["n_surface"] == 0 or not np.isfinite(g["measured"]["level_db"][0]) or g["measured"]["level_db"][0] < site["floor_db_re_direct"] + 8.0:
                         continue
-                    if ("wind_fit" in site and g["name"] == "S" and metric == "doppler_rms") or key not in g["model"]:
+                    if key not in g["model"] or fitted_row(site, g["name"], metric, key[0]):
                         continue
                     v = verdict(g["measured"][metric], g["model"][key][metric], metric)
                     n_in += v == "in"

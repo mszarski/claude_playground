@@ -49,6 +49,8 @@ SCHEMA = {
         "usable_span_m": ("num", "m", False, "length the rows may take (the rest is margin, fairing, projector)", "integration notes", "defaults to span_m"),
         "usable_height_m": ("num", "m", False, "height the rows may take", "integration notes", "defaults to height_m"),
         "depth_m": ("num", "m", False, "static only: the depth the frame hangs or stands at", "trial plan", "static: must be given (it is the typed-in pose)"),
+        "max_depth_m": ("num", "m", False, "deepest the platform operates: the depth planner searches own depths no deeper, and it is the depth rating required of hydrophones, cables, connectors, housings and the projector",
+                        "the platform's depth rating / the owner", "leave it out: the planner then uses each environment's limits (300 m when it has none: a placeholder) and the parts list has no rating"),
     },
     "array": {
         "module": ("str", "", False, "a row module under configs/builds/modules: a named row design (count, pitch, hydrophone, boards a row) that several builds share; fields given here win", "the project's row design", "leave out and give count and pitch_m"),
@@ -97,7 +99,7 @@ SCHEMA = {
     "projector": {
         "model": ("str", "", False, "part name", "datasheet title", F),
         "amplifier": ("str", "", False, "power amplifier part name", "datasheet title", F),
-        "source_level_db": ("num", "dB re 1 uPa at 1 m", True, "source level in the band", "datasheet: TVR x drive voltage, or SL", "must be given: the link budget needs it; flag it assumed"),
+        "source_level_db_rms": ("num", "dB re 1 uPa at 1 m, rms", True, "source level in the band as an RMS pressure level (the usual datasheet convention; a peak figure is 3 dB higher for a tone)", "datasheet: TVR x rms drive voltage, or SL", "must be given: the link budget needs it; flag it assumed"),
         "band_hz": ("vec2", "Hz", True, "transmitted band", "datasheet: usable band; waveform design", "must be given"),
         "waveform": ("map", "", True, "{type: lfm | cw, duration_s, window_alpha}", "waveform design", "must be given"),
         "position_m": ("vec3", "m", True, "body frame [along, out, down] from the array's centre", "integration drawing", "must be given: a placeholder is allowed if flagged assumed"),
@@ -138,9 +140,13 @@ SCHEMA = {
         "taps_dir": ("str", "", False, "directory for the stage taps of the first pings", "", "/data/sonar/taps"),
         "taps_pings": ("int", "", False, "pings tapped", "", "2"),
         "capacity_gb": ("num", "GB", False, "size of the recording volume", "computer's specification", F),
+        "record": (("raw", "decimated"), "", False, "what the recording holds. raw: every sample of every board, the synchronisation reference included (everything can be redone; the chain decimates when compute.option says so). "
+                   "decimated: the receiver decimates as blocks arrive (`source.decimate`) and only the band is kept: the reference and everything outside the band are gone for good; for storage-limited runs",
+                   "the trial plan", "raw: the safe default during trials"),
     },
     "compute": {
-        "option": (("decimate_first_cpu", "gpu", "cpu"), "", False, "how real time is reached at the boards' full rate", "", "both prepared: the parts list shows each"),
+        "option": (("decimate_first_cpu", "gpu", "cpu"), "", False, "how real time is reached at the boards' full rate. decimate_first_cpu: the chain converts to baseband and decimates first (`chain.decimate`), on a CPU. "
+                   "gpu: the map and the elevation search on a GPU. cpu: the chain as it is", "", "two or more rows: gpu (decimate-first on a CPU is slower than the ping interval over the full window); one row: decimate_first_cpu"),
         "unit": ("str", "", False, "part name of the computer", "datasheet title", F),
         "engine": (("python", "cpp"), "", False, "which engine tools/sonar_live.py runs (the standalone C++ program's command is always generated)", "", "python"),
         "backend": (("auto", "host", "cuda"), "", False, "kernels on the CPU or the GPU", "", "auto"),
@@ -168,8 +174,16 @@ SCHEMA = {
 }
 TOP = {"build": "name of the build: file names follow it", "title": "one line for headings", "stage": "label of the stage of a staged plan",
        "base_sonar": "a shipped sonar file the generated one extends (only what differs is written)",
-       "names": "{sonar, deploy}: file names when they must differ from the build's name"}
+       "names": "{sonar, deploy}: file names when they must differ from the build's name",
+       "targets": "target classes the build is planned against: a list ({name, target_strength_db or cylinder, depth_m, speed_m_s, status, note}) or the name of a file under configs/builds/targets/ "
+                  "(gpusonar.target_classes.FIELDS)",
+       "environments": "waters the build is planned in: a list ({name, water_depth_m, bottom, wind_speed_m_s or sea_state, rms_wave_height_m, bubble_model, profile, own_depth_limits_m, ...}) or the name of a file "
+                       "under configs/builds/environments/ (gpusonar.depthplan.ENVIRONMENT_FIELDS)"}
 ROW_WORDS = {2: "two_rows", 3: "three_rows", 4: "four_rows"}
+# Thresholds of the chain typed here for the long-range array (2 m cells, 100 m guard, 300 m training, tracker and classifier
+# gates). The chain is being changed to derive them from the sonar's band and pulse; when that is merged this dictionary should
+# shrink to `bearings_deg` and `look`, and a build's own values go in `operation.chain` (overrides only). Used in one place:
+# `chain_config`.
 DEFAULT_CHAIN = {
     "bearings_deg": [-60.0, 60.0, 0.5], "look": "starboard", "range_cell_m": 2.0,
     "cfar": {"pfa": 1.0e-5, "guard_m": 100.0, "train_m": 300.0}, "min_snr_db": 9.0,
@@ -296,7 +310,9 @@ def validate(spec: dict) -> list[Issue]:
                     elif sec.get(name) is None:
                         err(f"{section}.confirmed", f"{name!r} is marked confirmed but has no value")
                 continue
-            if key not in fields:
+            if section == "projector" and key == "source_level_db":
+                err("projector.source_level_db", "renamed projector.source_level_db_rms: source levels are RMS levels (dB re 1 uPa at 1 m). If the figure you hold is a peak level, subtract 3 dB")
+            elif key not in fields:
                 err(f"{section}.{key}", f"unknown field; fields are {', '.join(fields)}")
             elif v is not None and not _kind_ok(fields[key][0], v) and not (section == "operation" and key == "range_m" and isinstance(v, list) and len(v) == 2):
                 kind = fields[key][0]
@@ -305,6 +321,18 @@ def validate(spec: dict) -> list[Issue]:
         for key, f in fields.items():
             if f[2] and sec.get(key) is None:
                 err(f"{section}.{key}", f"missing: {f[3]}" + (f" ({f[1]})" if f[1] else "") + f". If unknown: {f[5]}")
+    # target classes and environments (planning inputs: they change no generated sonar or deployment file)
+    from . import depthplan, target_classes
+    for key, load_items, find_problems in (("targets", target_classes.load, target_classes.problems), ("environments", depthplan.load_environments, depthplan.environment_problems)):
+        if spec.get(key) is None:
+            continue
+        try:
+            items = load_items(spec[key]) if isinstance(spec[key], (str, list)) else spec[key]
+        except FileNotFoundError as exc:
+            err(key, str(exc))
+            continue
+        for where, msg in find_problems(items):
+            err(where, msg)
     if any(i.level == "error" for i in out):
         return out
 
@@ -431,8 +459,8 @@ def validate(spec: dict) -> list[Issue]:
         err("projector.waveform", "give {type: lfm | cw, duration_s: ...}")
         return out
     pulse = float(wf["duration_s"])
-    if not 120.0 < float(pj["source_level_db"]) < 240.0:
-        warn("projector.source_level_db", f"{pj['source_level_db']} dB re 1 uPa at 1 m is outside anything usual (150 to 230)")
+    if not 120.0 < float(pj["source_level_db_rms"]) < 240.0:
+        warn("projector.source_level_db_rms", f"{pj['source_level_db_rms']} dB re 1 uPa at 1 m is outside anything usual (150 to 230)")
     pos = np.asarray(pj["position_m"], dtype=float)
     if abs(pos[0]) > float(p["span_m"]) / 2 + 1e-9 or abs(pos[2]) > float(p["height_m"]) / 2 + 1e-9:
         warn("projector.position_m", f"{[float(x) for x in pos]} is outside the platform's face ({p['span_m']:g} m x {p['height_m']:g} m about the array's centre): hung apart?")
@@ -463,6 +491,13 @@ def validate(spec: dict) -> list[Issue]:
         return out
     if r0 is not None and float(r0) < blind - 1e-6:
         warn("operation.range_m", f"the window opens at {float(r0):g} m but the array cannot listen while it transmits: nothing inside {blind:g} m ({pulse:g} s pulse) is usable")
+    if p.get("max_depth_m") is not None:
+        if float(p["max_depth_m"]) <= 0:
+            err("platform.max_depth_m", "a depth in metres below the surface")
+        elif p.get("depth_m") is not None and float(p["depth_m"]) > float(p["max_depth_m"]):
+            err("platform.depth_m", f"the frame hangs at {p['depth_m']:g} m, deeper than the platform's limit ({p['max_depth_m']:g} m)")
+        elif float(tr["own_depth_m"]) > float(p["max_depth_m"]):
+            err("trial.own_depth_m", f"the trial runs the array at {tr['own_depth_m']:g} m, deeper than the platform's limit ({p['max_depth_m']:g} m)")
     if p["kind"] == "static":
         if p.get("depth_m") is None and get(spec, "navigation", "static_pose") is None and not get(spec, "navigation", "tilt_sensor", False):
             err("platform.depth_m", "a static platform needs the depth it hangs at (or navigation.static_pose, or a tilt sensor)")
@@ -498,6 +533,26 @@ def validate(spec: dict) -> list[Issue]:
     if count > 64:
         warn("array.count", f"{count} hydrophones in one row: the sparse Bayesian bearing solver of the active chain (doa: sbl) takes at most 64 channels in a row and raises an error for more, on the CPU too; "
                             "bearings from the map (doa: map, the default) are unaffected")
+    cpu = cpu_seconds_per_ping(spec)
+    if cpu and compute_option(spec) != "gpu":
+        took = cpu["decimate_first"] if compute_option(spec) == "decimate_first_cpu" else cpu["as_it_is"]
+        if took > d["ping_interval_s"]:
+            warn("compute.option", f"{compute_option(spec)}: measured {took:.1f} s a ping for {rows} row(s) on a CPU (docs/design/popoto_stage2.json, window {cpu['window_m'][0]:g}-{cpu['window_m'][1]:g} m) against "
+                                   f"{d['ping_interval_s']:.1f} s between pings: not real time. The plan for two or more rows over the full window is a GPU (compute.option: gpu); "
+                                   "a GPU has not been timed on a full-length ping either")
+    if recording_mode(spec) == "decimated":
+        warn("storage.record", "decimated: the recording will not hold the synchronisation reference or anything outside the band; nothing recorded this way can be re-synchronised or re-filtered later. Raw is the default for trials")
+    for cls in target_classes_of(spec, resolve=False):
+        if cls.get("status", "assumed" if cls.get("target_strength_db") is not None else "model") != "confirmed":
+            warn(f"targets.{cls['name']}", "its target strength is " + ("a placeholder nobody vouches for (status: assumed)" if cls.get("target_strength_db") is not None else
+                                                                        "the model figure of a bare rigid cylinder (status: model)") + ": every reach and depth planned against it is conditional on it")
+    for env in environments_of(spec):
+        if env.get("illustrative", True):
+            warn(f"environments.{env['name']}", "an illustrative environment, not a measured one: the planned depths hold for it only")
+        if env.get("own_depth_limits_m") is None and p.get("max_depth_m") is None:
+            warn(f"environments.{env['name']}.own_depth_limits_m", "no operating depth limits given: the planner uses 5 to 300 m, a placeholder")
+        if p["kind"] == "static" and p.get("depth_m") is not None and env.get("water_depth_m") is not None and float(p["depth_m"]) >= float(env["water_depth_m"]):
+            warn(f"environments.{env['name']}.water_depth_m", f"the frame hangs at {p['depth_m']:g} m, below this environment's bottom ({env['water_depth_m']:g} m)")
     if rows * count > 64:
         warn("array.rows", f"{rows * count} channels in {rows} rows: passive listening must run with the elevation option (elevation=1, as the generated listen.options has it), which solves on rows. "
                            "Without it every channel is taken as one line: the bearings are wrong for stacked rows and the sparse Bayesian kernels (a GPU backend, or kernels=True) raise an error above 64 channels")
@@ -510,6 +565,23 @@ def check(spec: dict) -> list[Issue]:
     if any(i.level == "error" for i in issues):
         raise SpecError(issues)
     return issues
+
+
+# --- planning inputs: target classes and environments ---------------------------------------------------
+
+def target_classes_of(spec: dict, resolve: bool = True, range_m: float = 12000.0) -> list:
+    """The spec's target classes (`targets:`), resolved (target strength range, the cylinder's figures) unless told not to."""
+    from . import target_classes
+    classes = target_classes.load(spec.get("targets"))
+    if not resolve or not classes:
+        return classes
+    f_lo, f_hi = (float(x) for x in spec["projector"]["band_hz"])
+    return target_classes.resolve(classes, f_lo, f_hi, range_m, float(get(spec, "sound_speed", "nominal_m_s", 1500.0)))
+
+
+def environments_of(spec: dict) -> list:
+    from . import depthplan
+    return depthplan.load_environments(spec.get("environments"))
 
 
 # --- geometry and wiring ------------------------------------------------------------------------------
@@ -604,7 +676,7 @@ def sonar_config(spec: dict) -> dict:
     f_lo, f_hi = (float(x) for x in pj["band_hz"])
     transmit = {"kind": "point", "lever_arm": [float(x) if float(x) != int(float(x)) else int(float(x)) for x in pj["position_m"]],
                 "waveform": {"type": wf.get("type", "lfm"), "f_start": f_lo, "f_stop": f_hi, "duration": float(wf["duration_s"]),
-                             "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db": float(pj["source_level_db"])}}
+                             "window_alpha": float(wf.get("window_alpha", 0.1)), "source_level_db": float(pj["source_level_db_rms"])}}
     boards = board_table(spec)
     receive: dict = {"kind": "real", "sample_rate": float(b["sample_rate_hz"]), "adc_bits": int(b["adc_bits"]), "adc_full_scale": adc_full_scale(spec),
                      "sensitivity_db": float(h["sensitivity_db"]), "gain_db": float(b.get("gain_db") or 0.0) + float(h.get("preamp_gain_db") or 0.0)}
@@ -616,7 +688,7 @@ def sonar_config(spec: dict) -> dict:
     else:
         receive["boards"] = [{"first": x["first"], "count": x["count"]} for x in boards]
     platform = {"name": p.get("name", spec["build"]), "kind": p["kind"], "span_m": float(p["span_m"]), "height_m": float(p["height_m"])}
-    for key in ("usable_span_m", "usable_height_m"):
+    for key in ("usable_span_m", "usable_height_m", "max_depth_m"):
         if p.get(key) is not None:
             platform[key] = float(p[key])
     if rows > 1:
@@ -641,14 +713,14 @@ def sonar_config(spec: dict) -> dict:
         "navigation": {k: v for k, v in (spec.get("navigation") or {}).items() if k in ("unit", "adapter", "rate_hz", "timestamp_sigma_s", "tilt_sensor") and v is not None},
         "sound_speed": {"rung": get(spec, "sound_speed", "rung", "gradient_prior")},
         "water_depth": {"source": get(spec, "water_depth", "source", "unknown")},
-        "compute": {k: v for k, v in (spec.get("compute") or {}).items() if k in ("option", "unit") and v is not None},
-        "storage": {k: v for k, v in (spec.get("storage") or {}).items() if k == "capacity_gb" and v is not None},
+        "compute": {"option": compute_option(spec), **{k: v for k, v in (spec.get("compute") or {}).items() if k == "unit" and v is not None}},
+        "storage": {"record": recording_mode(spec), **{k: v for k, v in (spec.get("storage") or {}).items() if k == "capacity_gb" and v is not None}},
     }
     if scheme == "shared_reference":
         hardware["sync"]["reference_level_v"] = float(ref["level_v"])
     hardware = {k: v for k, v in hardware.items() if v}
     flags: list[str] = []
-    for key in ("span_m", "height_m", "usable_span_m", "usable_height_m", "depth_m"):
+    for key in ("span_m", "height_m", "usable_span_m", "usable_height_m", "depth_m", "max_depth_m"):
         if p.get(key) is not None:
             _flag(spec, flags, "platform", key, f"platform.{key}")
     _flag(spec, flags, "array", "pitch_m" if a.get("pitch_m") is not None else "positions_m", "array.pitch")
@@ -664,7 +736,7 @@ def sonar_config(spec: dict) -> dict:
     if not (status(spec, "boards", "input_full_scale_vpp") == "confirmed" or status(spec, "boards", "adc_full_scale_v") == "confirmed"):
         flags.append("receive.adc_full_scale")
     _flag(spec, flags, "operation", "range_m", "receive.window")
-    tx_keys = [("source_level_db", "transmit.waveform.source_level_db"), ("band_hz", "transmit.waveform.f_start"), ("waveform", "transmit.waveform.duration"),
+    tx_keys = [("source_level_db_rms", "transmit.waveform.source_level_db"), ("band_hz", "transmit.waveform.f_start"), ("waveform", "transmit.waveform.duration"),
                ("position_m", "transmit.lever_arm")]
     if all(status(spec, "projector", k) != "confirmed" for k, _ in tx_keys) and status(spec, "projector", "model") != "confirmed":
         flags.append("transmit")
@@ -694,6 +766,26 @@ def clocks_config(spec: dict) -> dict:
             "unconfirmed": ["receive.boards", "receive.reference"]}
 
 
+def compute_option(spec: dict) -> str:
+    """`compute.option`, or its default: a GPU for two or more rows, decimate-first on a CPU for one (the owner's decision on the
+    stage-2 timings: docs/design/popoto_stage2.json)."""
+    return get(spec, "compute", "option", "gpu" if int(spec["array"]["rows"]) > 1 else "decimate_first_cpu")
+
+
+def recording_mode(spec: dict) -> str:
+    return get(spec, "storage", "record", "raw")
+
+
+def cpu_seconds_per_ping(spec: dict) -> dict | None:
+    """Measured seconds per ping of the chain on a CPU for this build's row count, from docs/design/popoto_stage2.json (full window,
+    the boards' rate): {decimate_first, as_it_is, window_m}. None when the build is not one of the measured ones (rows of 32 at the
+    measured sample rate): nothing is extrapolated."""
+    t = (measured_timings().get("stage2") or {}).get("decimation", {}).get("timing", {}).get("host", {}).get(str(int(spec["array"]["rows"])))
+    if not t or int(spec["array"]["count"]) * int(spec["array"]["rows"]) != t.get("channels") or float(spec["boards"]["sample_rate_hz"]) != t.get("sample_rate_hz"):
+        return None
+    return {"decimate_first": float(t["chain_decimate_first"]["seconds"]), "as_it_is": float(t["chain_full_rate"]["seconds"]), "window_m": t.get("window_m")}
+
+
 def needs_sync(spec: dict) -> bool:
     return get(spec, "sync", "scheme", "none" if spec["boards"].get("shared_clock") else "shared_reference") == "shared_reference" and len(board_table(spec)) > 1
 
@@ -716,6 +808,8 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
     for key in ("engine", "backend"):
         if get(spec, "compute", key) is not None:
             chain[key] = spec["compute"][key]
+    if compute_option(spec) == "decimate_first_cpu" and recording_mode(spec) == "raw":
+        chain["decimate"] = {}                              # the recording holds the raw ping; the chain decimates (docs/DEPLOYMENT.md, Stage 2)
     if get(spec, "sound_speed", "rung") == "typed":
         chain["sound_speed"] = float(spec["sound_speed"]["value_m_s"])
     if rows > 1:
@@ -723,6 +817,13 @@ def chain_config(spec: dict, sync: bool | None = None) -> dict:
         el: dict = {"sector_deg": [-30.0, 30.0, 0.25]}
         if rows == 2:
             el["sector_from_depth"] = {"bounces": 1, "margin_deg": 1.0}
+            # Two rows cannot tell which of several elevation angles an echo came from. The chain (live.py, `correct_bearing`) places a
+            # detection at range x the horizontal part of the PICKED angle's direction, also when the pick is flagged ambiguous: a wrong
+            # pick of 25 degrees moves the detection 1.1 km in at 12 km and the track breaks (measured: tools/popoto_12km_study.py --classes).
+            # So with two rows the position stays the row's own (range and cone bearing), as one row gives it; the cone correction it gives
+            # up is under 0.01 degree within a few degrees of level. Drop this line when the chain applies the correction only to
+            # unambiguous elevations.
+            el["correct_bearing"] = False
         el["attitude_time"] = get(spec, "navigation", "attitude_time", "arrival" if (not static or nav_tilt) else "transmit")
         el["attitude_rate_sigma_deg_s"] = float(get(spec, "navigation", "attitude_rate_sigma_deg_s", 0.5))
         el["roll_sigma_deg"] = float(get(spec, "navigation", "roll_sigma_deg", 1.0 if static else 0.2))
@@ -746,6 +847,8 @@ def deploy_config(spec: dict) -> dict:
     net, sto = spec.get("network") or {}, spec.get("storage") or {}
     sonar = names(spec)["sonar"] + ("_clocks" if needs_sync(spec) else "")
     cfg: dict = {"source": {"type": "flank_udp", "sonar": sonar, "host": "0.0.0.0", "port": int(net.get("stream_port", 5700)), "timeout": 30.0}}
+    if recording_mode(spec) == "decimated":
+        cfg["source"]["decimate"] = {}                      # the receiver decimates as blocks arrive: the recording holds decimated pings only
     if static and not get(spec, "navigation", "tilt_sensor", False):
         pose = get(spec, "navigation", "static_pose") or {"x": 0.0, "y": 0.0, "z": float(p.get("depth_m") or 0.0), "roll": 0.0, "pitch": 0.0, "yaw": 0.0}
         cfg["nav"] = {"static": {k: float(v) for k, v in pose.items()}}
@@ -863,6 +966,17 @@ def scenario_configs(spec: dict) -> dict:
                       "pings": {"count": 8, "interval": 4.0}, "scene": [points(t_pass, label="mover", velocity=[3.0, 0.0, 0.0])],
                       "absorption": "ainslie_mccolm", "receiver": copy.deepcopy(noise), "seed": seed + 3,
                       "truth": {"targets": [t_pass], "speed_m_s": 3.0, "check_depth": False}}
+    # a submerged mover of the spec's first submerged target class, at speed: tracked with NO sound-speed profile knowledge.
+    # A dive for a profile is optional: it must never be needed to detect, track or classify (the owner).
+    sub = next((cl for cl in target_classes_of(spec, resolve=False) if float(cl["depth_m"][0]) >= 10.0), None)
+    if sub is not None:
+        z_sub = float(min(0.5 * (float(sub["depth_m"][0]) + float(sub["depth_m"][1])), depth - 5.0))
+        v_sub = float(min((sub.get("speed_m_s") or [0.0, 3.0])[1], 4.0))             # the class's top speed, at most 4 m/s so that it stays inside the short window
+        t_sub = [-40.0, float(sign * near), z_sub]
+        out["submerged"] = copy.deepcopy(out["passing"])
+        out["submerged"].update(name=f"{spec['build']}_submerged", scene=[points(t_sub, label=str(sub["name"]), velocity=[v_sub, 0.0, 0.0])], seed=seed + 5,
+                                truth={"targets": [t_sub], "speed_m_s": v_sub, "heading_deg": 0.0, "depth_m": z_sub, "class": sub["name"], "check_depth": False,
+                                       "profile_knowledge": "none"})
     # passive: two radiating sources, the sonar silent.
     src = [[float(np.round(near * np.sin(np.radians(bb)), 1)), float(np.round(sign * near * np.cos(np.radians(bb)), 1)), z] for bb, z in ((-20.0, depths[0]), (12.0, depths[-1]))]
     out["passive"] = {"name": f"{spec['build']}_passive", "sonar": sonar, "fidelity": "free_field",
@@ -1067,7 +1181,9 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
         "pings_per_hour": 3600.0 / interval,
         "rate_channel_bit_s": fs * bits, "rate_board_bit_s": inputs * fs * bits, "rate_total_bit_s": n * fs * bits,
         "stream_bytes_per_ping": n * n_samples * int(np.ceil(bits / 8)), "record_bytes_per_ping": n * n_samples * 4,
-        "record_bytes_per_hour": n * n_samples * 4 * 3600.0 / interval, "stream_bytes_per_hour_continuous": n * fs * int(np.ceil(bits / 8)) * 3600.0,
+        "record_bytes_per_hour": n * n_samples * 4 * 3600.0 / interval,
+        "recording_mode": (hw.get("storage") or {}).get("record", "raw"), "decimation_factor": _decimation_factor(fs, f_lo, f_hi),
+        "record_bytes_per_hour_decimated": n * int(np.ceil(n_samples / _decimation_factor(fs, f_lo, f_hi))) * 8 * 3600.0 / interval, "stream_bytes_per_hour_continuous": n * fs * int(np.ceil(bits / 8)) * 3600.0,
         "cables": {"assumed_board_position_m": board_pos.tolist(), "slack_m": slack, "shortest_m": float(runs.min()), "longest_m": float(runs.max()),
                    "mean_m": float(runs.mean()), "total_m": float(runs.sum()), "reference_cables": len(boards) if ref or (hw.get("sync") or {}).get("scheme") == "shared_reference" else 0,
                    "per_row_total_m": [float(runs[row_of == i].sum()) for i in range(len(heights))]},
@@ -1078,9 +1194,16 @@ def describe(sonar_cfg: dict, clocks_cfg: dict | None = None, deploy_cfg: dict |
         "far_field_m": 2.0 * (per_row[0] * pitch) ** 2 / lam,
         "unconfirmed": list(cfg.get("unconfirmed", [])) + [f for f in (clocks_cfg or {}).get("unconfirmed", [])],
     }
+    out["record_bytes_per_hour_chosen"] = out["record_bytes_per_hour_decimated"] if out["recording_mode"] == "decimated" else out["record_bytes_per_hour"]
     if ref:
         out["reference_times_s"] = [t_open + float(ref["lead"]), t_close - float(ref["tail"]) - float(ref["duration"])]
     return out
+
+
+def _decimation_factor(fs: float, f_lo: float, f_hi: float) -> int:
+    """The decimate-first stage's default factor (libs/live decimate.hpp defaults: the band plus a quarter of its width each side,
+    sampled twice over): 17 for 4 to 6 kHz at 102.4 kHz, as docs/design/popoto_stage2.json has it (a test holds the two together)."""
+    return max(int(fs // (2.0 * 1.5 * (f_hi - f_lo))), 1)
 
 
 def describe_shipped(sonar_name: str, deploy_name: str | None = None) -> dict:
@@ -1145,20 +1268,32 @@ def rows_detection_gain_db(rows: int, pfa: float = 1e-5, pd: float = 0.5) -> flo
     return float(needed(1) - needed(rows))
 
 
-def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0), roll_sigma_deg: float | None = None,
-                gradient_sigma: float | None = None) -> dict:
-    """Expected performance of a build from its derived numbers `d` (describe / derive): the link budget of
-    docs/DESIGN.md Sec. 5 (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at
-    `wind` m/s) with the row's gain against isotropic noise, and the elevation bounds of the stacked rows.
-    The same arithmetic as tools/popoto_elevation_study.py, for any geometry and band
-    (tests/python/test_buildspec.py holds the two together on the shipped stages)."""
+def budget(d: dict, wind: float = 5.0, target_strength_db: float = 0.0):
+    """(SonarEquation, gains) of a build: the link budget of docs/DESIGN.md Sec. 5 for the summed map of its rows
+    (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at `wind` m/s, the row's gain
+    against isotropic noise plus the rows' detection gain). `eq.snr(r)` is the free-field SNR at the map."""
     from .sim.noise import wenz_spectrum_db
     from .sonar_equation import SonarEquation
     c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
     n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
     noise = float(wenz_spectrum_db(np.array([fc]), wind, 0.5)[0])
-    di = directivity_db(n, pitch, fc, c)
-    g_rows = rows_detection_gain_db(rows)
+    di, g_rows = directivity_db(n, pitch, fc, c), rows_detection_gain_db(rows)
+    eq = SonarEquation(d["source_level_db"], fc, f_hi - f_lo, d["pulse_s"], n, noise, target_strength_db=target_strength_db, temperature=12.0, depth=50.0,
+                       absorption_model="ainslie_mccolm", array_gain_db=di + g_rows)
+    return eq, {"noise_spectrum_db": noise, "gain_isotropic_noise_db": di, "rows_detection_gain_db": g_rows, "wind_speed_m_s": float(wind)}
+
+
+def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0), roll_sigma_deg: float | None = None,
+                gradient_sigma: float | None = None, environment: dict | None = None, own_depth_m: float | None = None, classes: list | None = None) -> dict:
+    """Expected performance of a build from its derived numbers `d` (describe / derive): the link budget of
+    docs/DESIGN.md Sec. 5 (spherical spreading, Ainslie-McColm absorption at 12 C and 50 m, ambient noise at
+    `wind` m/s) with the row's gain against isotropic noise, and the elevation bounds of the stacked rows.
+    The same arithmetic as tools/popoto_elevation_study.py, for any geometry and band
+    (tests/python/test_buildspec.py holds the two together on the shipped stages)."""
+    c, (f_lo, f_hi), fc = d["sound_speed"], d["band_hz"], d["centre_hz"]
+    n, pitch, rows = d["per_row"][0], d["pitch_m"], d["rows"]
+    _, g = budget(d, wind)
+    noise, di, g_rows = g["noise_spectrum_db"], g["gain_isotropic_noise_db"], g["rows_detection_gain_db"]
     out = {"assumptions": f"spherical spreading, Ainslie-McColm absorption (12 C, 50 m), ambient noise at {wind:g} m/s wind, 13 dB at the map for detection, "
                           "target strengths +25 dB (ship) and +5 dB (small)",
            "noise_spectrum_db": noise, "beamwidth_deg": d["beamwidth_deg"], "gain_isotropic_noise_db": di, "gain_uncorrelated_noise_db": float(10 * np.log10(n)),
@@ -1166,8 +1301,7 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
            "grating_lobe_free_steering_deg": float(np.degrees(np.arcsin(min(c / f_hi / pitch - 1.0, 1.0)))) if c / f_hi / pitch > 1.0 else 0.0}
     snr = {}
     for key, ts in (("ship", 25.0), ("small", 5.0)):
-        eq = SonarEquation(d["source_level_db"], fc, f_hi - f_lo, d["pulse_s"], n, noise, target_strength_db=ts, temperature=12.0, depth=50.0,
-                           absorption_model="ainslie_mccolm", array_gain_db=di + g_rows)
+        eq, _ = budget(d, wind, ts)
         out[f"reach_{key}_m"] = float(eq.detection_range(13.0))
         snr[key] = {str(r): float(eq.snr(r)) - g_rows for r in ranges}
     out["row_snr_db"] = snr
@@ -1179,19 +1313,55 @@ def performance(d: dict, wind: float = 5.0, ranges=(500.0, 1000.0, 3000.0, 6000.
         grad = float(dep.get("gradient_sigma_per_s", 0.05) if gradient_sigma is None else gradient_sigma)
         out["elevation"] = {k: el[k] for k in ("baseline_m", "repeat_spacing_deg", "unambiguous_half_sector_deg", "highest_repeat_db", "sigma_deg", "clock_us_for_error",
                                                "clock_error_deg", "deg_per_us", "deg_per_mm_out", "two_rows_one_answer_beyond_m")}
-        budget = {}
+        depth_budget = {}
         for r in ranges:
             s = snr["ship"][str(r)]
             if s < 10.0:
-                budget[str(r)] = None
+                depth_budget[str(r)] = None
                 continue
             sig = float(elev.sin_elevation_sigma(np.repeat(el["heights_m"], n), 10.0 ** (min(s, 40.0) / 10.0) / n, f_lo, f_hi, c))
             parts = {"from_noise_m": r * sig, "from_roll_m": r * np.radians(roll), "from_gradient_m": r * r * grad / (2.0 * c)}
-            budget[str(r)] = {**{k: float(v) for k, v in parts.items()}, "total_m": float(np.sqrt(sum(v * v for v in parts.values())))}
-        out["depth_sigma_ship_m"] = budget
+            depth_budget[str(r)] = {**{k: float(v) for k, v in parts.items()}, "total_m": float(np.sqrt(sum(v * v for v in parts.values())))}
+        out["depth_sigma_ship_m"] = depth_budget
         out["depth_budget_inputs"] = {"roll_sigma_deg": roll, "gradient_sigma_per_s": grad}
         out["multipath_note"] = ("not in any sigma: in a shallow channel an echo that bounced once arrives within the pulse's range sidelobes of the direct one and pulls the "
                                  "elevation by tenths of a degree (docs/DESIGN.md Sec. 3)")
+    if environment is not None:
+        out["surface"] = surface_term(d, environment, own_depth_m, classes, ranges)
+    return out
+
+
+def surface_term(d: dict, environment: dict, own_depth_m: float | None = None, classes: list | None = None, ranges=(500.0, 1000.0, 3000.0, 6000.0, 12000.0),
+                 threshold_db: float = 13.0) -> dict:
+    """What the free-field figures of `performance` leave out, for one environment (depthplan.ENVIRONMENT_FIELDS) and one
+    own depth (default: the shallowest allowed): the two-way propagation factor of gpusonar.lloyd (surface image, roughness,
+    bubble loss, the band; the bottom's images when the environment has one) at each range, and the SNR and margin with it.
+    `classes` (resolved target classes): one entry each, worst over the class's depths, at the low end of its target
+    strength. Without classes: the reference ship (+25 dB) at 4 m, the popoto_12km scenario's."""
+    from . import depthplan
+    own = float(depthplan.own_depth_grid(environment, max_depth=(d.get("platform") or {}).get("max_depth_m"))[0] if own_depth_m is None else own_depth_m)
+    eq, _ = budget(d, depthplan.wind_of(environment))
+    rr = np.asarray([r for r in ranges if r > d["blind_range_m"]], dtype=float)
+    f_lo, f_hi = d["band_hz"]
+    items = [dict(c) for c in (classes or [])] or [{"name": "ship", "ts_db": [25.0, 25.0], "depth_m": [4.0, 4.0]}]
+    out = {"environment": environment.get("name"), "own_depth_m": own, "wind_speed_m_s": depthplan.wind_of(environment), "rms_wave_height_m": depthplan.surface_of(environment).height(),
+           "threshold_db": threshold_db, "ranges_m": rr.tolist(), "classes": {}}
+    for c in items:
+        lo, hi = c["depth_m"]
+        if environment.get("water_depth_m") is not None:
+            hi = min(hi, float(environment["water_depth_m"]) - 1.0)
+            if lo > hi:
+                continue
+        zt = np.unique(np.linspace(lo, hi, 9))
+        fac = depthplan.factor(environment, f_lo, f_hi, [own], zt, rr, float(d["projector_m"][2]), eq.absorption_db_per_m())
+        out["method"] = fac["method"]
+        worst = fac["peak_db"][0].min(axis=0)
+        free = np.asarray(eq.snr(rr)) + c["ts_db"][0]
+        def by_range(v):
+            return {str(float(r)): float(x) for r, x in zip(rr, v)}
+        out["classes"][c["name"]] = {"ts_db": c["ts_db"][0], "depth_m": [float(lo), float(hi)], "factor_db": by_range(worst),
+                                     "factor_narrowband_db": by_range(fac["narrowband_db"][0].min(axis=0)), "factor_energy_db": by_range(fac["energy_db"][0].min(axis=0)),
+                                     "snr_free_field_db": by_range(free), "snr_db": by_range(free + worst), "margin_db": by_range(free + worst - threshold_db)}
     return out
 
 

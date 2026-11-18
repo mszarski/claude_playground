@@ -48,7 +48,7 @@ def jammed():
 
 @pytest.mark.parametrize("window", ["rect", "hann", "hamming"])
 def test_farfield_matches_numpy(jammed, window):
-    want = flank.farfield_beamform(jammed.copy(), BEARINGS, window=window)
+    want = flank.farfield_beamform(jammed.copy(), BEARINGS, window=window, engine="numpy")
     got = beam_map(core.farfield_beamform_cpp(jammed.copy(), list(BEARINGS), window))
     assert got.data.shape == want.data.shape == (81, jammed.samples.n_samples) and got.data.dtype == np.complex64
     # Both work in single precision; they differ in the order of the sums and in the FFT.
@@ -65,7 +65,7 @@ def test_farfield_conditions_a_raw_record_like_numpy_does():
     _, rec = scene_ping([(2040.0, 12.0)], [10.0], noise_db=50.0, seed=3)
     a, b = rec.copy(), rec.copy()
     assert not a.samples.is_complex()
-    want = flank.farfield_beamform(a, BEARINGS)
+    want = flank.farfield_beamform(a, BEARINGS, engine="numpy")
     got = beam_map(core.farfield_beamform_cpp(b, list(BEARINGS)))
     assert b.samples.is_complex() and json.loads(b.metadata.extra_json)["gpusonar"]["compressed"]
     assert worst(got.data, want.data) < 1e-5
@@ -86,7 +86,7 @@ def test_farfield_matches_numpy_on_another_array(layout):
     rec = simulate_ping(sonar, make_pose(), Scene().add_points([1500.0 * np.array([np.sin(b), np.cos(b), 0.0])]),
                         environment={"sound_speed": C}, absorption_model="none", adc=False)
     bearings = np.radians(np.linspace(-60.0, 60.0, 241))
-    want = flank.farfield_beamform(rec.copy(), bearings, window="hann")
+    want = flank.farfield_beamform(rec.copy(), bearings, window="hann", engine="numpy")
     got = beam_map(core.farfield_beamform_cpp(rec.copy(), list(bearings), "hann"))
     assert worst(got.data, want.data) < 1e-5
     ib, _ = np.unravel_index(np.argmax(np.abs(got.data)), got.data.shape)
@@ -98,7 +98,7 @@ def test_farfield_matches_numpy_on_another_array(layout):
 @pytest.mark.parametrize("kw", [{}, {"n_subbands": 12, "loading": 0.1, "block": 200, "guard_blocks": 2}])
 def test_mvdr_matches_numpy(jammed, kw):
     """Default settings, and ones where the last block is short and the guard is wider."""
-    want = flank.mvdr_beamform(jammed.copy(), BEARINGS, **kw)
+    want = flank.mvdr_beamform(jammed.copy(), BEARINGS, engine="numpy", **kw)
     got = beam_map(core.mvdr_beamform_cpp(jammed.copy(), list(BEARINGS), **kw))
     assert got.data.shape == want.data.shape
     # Looser than the conventional beamformer: the weights come from inverting covariances that

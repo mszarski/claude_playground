@@ -36,12 +36,43 @@ def old_perturbation(ti, ts, phi, rho, nu, delta, w2, gamma2, **_):
     return b1s**2 * np.abs(a) ** 2 * (w2 / q**gamma2)
 
 
-def test_default_is_the_perturbation_model_unchanged():
+def test_the_perturbation_model_is_unchanged_and_the_default_is_small_slope():
+    """`perturbation` was the default until D-86 and still gives the earlier numbers exactly when
+    named; with no model named the result is the small-slope one."""
     ti, ts, phi = np.radians([5.0, 20.0, 35.0, 60.0]), np.radians([15.0, 20.0, 50.0, 10.0]), np.radians([180.0, 180.0, 40.0, 110.0])
     want = old_perturbation(ti, ts, phi, **SAND)
-    assert np.array_equal(bottom.roughness_strength(ti, ts, F, C, azimuth=phi, **SAND), want)
+    assert np.array_equal(bottom.roughness_strength(ti, ts, F, C, azimuth=phi, roughness_model="perturbation", **SAND), want)
     assert np.array_equal(rough("perturbation", ti, ts, phi), want)
-    assert np.array_equal(bottom.strength(ti, ts, F, C, azimuth=phi, **SAND), want + bottom.volume_strength(ti, ts, F, C, **SAND))
+    assert np.array_equal(bottom.strength(ti, ts, F, C, azimuth=phi, roughness_model="perturbation", **SAND),
+                          want + bottom.volume_strength(ti, ts, F, C, **SAND))
+    assert bottom.DEFAULT_ROUGHNESS_MODEL == "small_slope"
+    default = bottom.roughness_strength(ti, ts, F, C, azimuth=phi, **SAND)
+    assert np.array_equal(default, rough("small_slope", ti, ts, phi))
+    assert np.array_equal(bottom.strength(ti, ts, F, C, azimuth=phi, **SAND), default + bottom.volume_strength(ti, ts, F, C, **SAND))
+    assert np.allclose(default, want, rtol=0.1) and not np.array_equal(default, want)       # these angles: within 6 % (most towards forward scatter)
+
+
+def test_the_default_is_finite_and_kirchhoff_at_normal_incidence_where_perturbation_diverges():
+    """The reason for D-86, as numbers: backscatter at normal incidence (the specular direction)."""
+    g = np.array([0.5 * np.pi])
+    default = bottom.roughness_strength(g, g, F, C, **SAND)
+    assert np.isfinite(default).all() and np.allclose(default, rough("kirchhoff", g, g), rtol=1e-9)
+    assert rough("perturbation", g, g)[0] > 1e20 * default[0]
+
+
+def test_outside_the_structure_function_range_the_default_falls_back_to_perturbation_and_says_so():
+    g = np.radians([10.0, 30.0])
+    par = dict(SAND, gamma2=4.5)
+    bottom._warned_no_small_slope = False
+    with pytest.warns(UserWarning, match="perturbation theory is used instead"):
+        got = bottom.roughness_strength(g, g, F, C, **par)
+    assert np.array_equal(got, bottom.roughness_strength(g, g, F, C, roughness_model="perturbation", **par))
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")                                   # once
+        bottom.roughness_strength(g, g, F, C, **par)
+    with pytest.raises(ValueError, match="2 < gamma2 < 4"):
+        bottom.roughness_strength(g, g, F, C, roughness_model="small_slope", **par)
     with pytest.raises(ValueError, match="roughness_model"):
         rough("lambert", 0.3, 0.3)
 
@@ -250,10 +281,14 @@ def test_scenario_item_takes_a_named_sediment_and_a_roughness_model():
     with pytest.warns(UserWarning, match="unconfirmed"):
         named = ping({"sediment": "placeholder_sand"})
     assert np.array_equal(named, explicit)                                        # the table gives the same ping
-    assert np.array_equal(ping(dict(SAND, roughness_model="perturbation")), explicit)
+    assert np.array_equal(ping(dict(SAND, roughness_model="small_slope")), explicit)          # the default (D-86)
+    old = ping(dict(SAND, roughness_model="perturbation"))                        # the default before it, still there by name
+    assert not np.array_equal(old, explicit) and (np.abs(old) ** 2).mean() == pytest.approx((np.abs(explicit) ** 2).mean(), rel=0.02)
     with pytest.warns(UserWarning, match="unconfirmed"):
-        louder = ping({"sediment": "placeholder_sand", "w2": 4 * SAND["w2"], "sigma2": 0.0})   # the item's own values win
-    assert (np.abs(louder) ** 2).mean() / (np.abs(ping(dict(SAND, sigma2=0.0))) ** 2).mean() == pytest.approx(4.0, rel=1e-6)
+        louder = ping({"sediment": "placeholder_sand", "w2": 4 * SAND["w2"], "sigma2": 0.0,
+                       "roughness_model": "perturbation"})                        # the item's own values win; perturbation is linear in w2
+    assert ((np.abs(louder) ** 2).mean() / (np.abs(ping(dict(SAND, sigma2=0.0, roughness_model="perturbation"))) ** 2).mean()
+            == pytest.approx(4.0, rel=1e-6))
     combined = ping(dict(SAND, roughness_model="combined"))
     ratio = (np.abs(combined) ** 2).mean() / (np.abs(explicit) ** 2).mean()
     assert 0.8 < ratio < 2.0 and not np.array_equal(combined, explicit)           # same order, not the same model

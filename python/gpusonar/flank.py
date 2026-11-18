@@ -55,13 +55,40 @@ def steering_delays(record, bearings_rad) -> np.ndarray:
     return (u @ offsets.T) / record.environment.sound_speed
 
 
-def farfield_beamform(record, bearings_rad, window: str = "rect") -> BeamMap:
+def _beamform_engine(engine, name: str) -> str:
+    """Which implementation of a far-field beamformer runs: "cpp" (libs/live beamform, on the
+    host threads or on the CUDA device) when the extension has it, else "numpy". The NumPy
+    code below is the reference the C++ one is tested against."""
+    if engine not in (None, "cpp", "numpy"):
+        raise ValueError(f"unknown beamformer engine {engine!r}: use 'cpp' or 'numpy'")
+    built = hasattr(core, name)
+    if engine == "cpp" and not built:
+        raise RuntimeError(f"this build of the extension has no {name}")
+    return "cpp" if (engine or ("cpp" if built else "numpy")) == "cpp" else "numpy"
+
+
+def _cpp_backend(backend) -> dict:
+    """Keyword arguments that hand a backend to a C++ beamformer (builds before the beamformers
+    had backends take none and run on the host)."""
+    if backend is None or not getattr(core, "BEAMFORM_BACKENDS", False):
+        return {}
+    return {"backend": backend}
+
+
+def farfield_beamform(record, bearings_rad, window: str = "rect", engine: str | None = None, backend=None) -> BeamMap:
     """Conventional far-field beamformer on a prepared (baseband, compressed) record.
 
     B(u, f) = sum_n w_n X_n(f) exp(-j 2 pi (f + fc) p_n . u / c): each channel is delayed
     by its plane-wave lead, exactly (a phase ramp over frequency), and summed. The output
     time axis is the two-way delay to the array centre.
+
+    `engine`: "cpp" (the default when the extension has it) runs the C++ beamformer, on the
+    host threads or, with `backend=core.Backend.Cuda`, on the device; "numpy" runs the
+    reference code below (host only). They agree to single-precision rounding.
     """
+    if _beamform_engine(engine, "farfield_beamform_cpp") == "cpp" and window in ("rect", "hann", "hamming"):
+        return BeamMap(**core.farfield_beamform_cpp(record, [float(b) for b in np.asarray(bearings_rad, dtype=float)],
+                                                    window, **_cpp_backend(backend)))
     prepare([record])
     x = record.samples.array
     fs, fc = record.samples.sample_rate, record.samples.center_frequency
@@ -113,7 +140,7 @@ def blank_transmit(record, guard: float = 0.0, taper: float = 0.0) -> None:
 
 
 def mvdr_beamform(record, bearings_rad, n_subbands: int = 32, loading: float = 3e-2,
-                  block: int = 256, guard_blocks: int = 1) -> BeamMap:
+                  block: int = 256, guard_blocks: int = 1, engine: str | None = None, backend=None) -> BeamMap:
     """Adaptive (minimum-variance distortionless-response) beamformer.
 
     The band is split into `n_subbands` sub-bands, narrow against c / aperture so that one
@@ -137,7 +164,21 @@ def mvdr_beamform(record, bearings_rad, n_subbands: int = 32, loading: float = 3
     snapshots to estimate an N x N covariance from, so in plain white noise MVDR is a few
     dB worse than the conventional beamformer; more sub-bands model the array better but
     leave fewer snapshots each.
+
+    `engine` and `backend` as in `farfield_beamform`: the C++ beamformer by default (host
+    threads, or the CUDA device), the NumPy code below as the reference.
     """
+    if _beamform_engine(engine, "mvdr_beamform_cpp") == "cpp":
+        try:
+            return BeamMap(**core.mvdr_beamform_cpp(record, [float(b) for b in np.asarray(bearings_rad, dtype=float)],
+                                                    n_subbands=int(n_subbands), loading=float(loading), block=int(block),
+                                                    guard_blocks=int(guard_blocks), **_cpp_backend(backend)))
+        except ValueError as e:                                  # the same refusals, in the words of this function
+            raise ValueError(str(e).replace("mvdr_beamform: ", "")) from None
+        except RuntimeError as e:
+            if "singular" not in str(e):
+                raise
+            raise np.linalg.LinAlgError(str(e).replace("mvdr_beamform: ", "")) from None   # what NumPy's solve raises
     prepare([record])
     x = record.samples.array
     fs, fc = record.samples.sample_rate, record.samples.center_frequency

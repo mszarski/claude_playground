@@ -484,7 +484,7 @@ def pursuit(reverb_pings: int = 3) -> dict:
 
     # -- does time spreading matter here? -----------------------------------------------------------
     wind = float(load_scenario_config(PURSUIT)["reverberation"][0]["wind_speed"])
-    spread = _quiet_run(PURSUIT, {**NO_NOISE, "reverberation": [], "time_spread": {"surface": {"wind_speed": wind}}})
+    spread = _quiet_run(PURSUIT, {**NO_NOISE, "reverberation": [], "time_spread": {"surface": {"wind_speed": wind}, "decay_time": "rule_of_thumb"}})
     ys = samples_of(spread)[0]
     later = (t >= clean_until + 0.004) & (t < clean_until + 0.004 + 2.0 * pulse)
     out["time_spreading"] = {
@@ -640,18 +640,24 @@ def asiaex_runs(many: int = 200, seeds: int = 40, doppler_pings: int = 800) -> d
     surface_only = {"propagation": {"bottom_z": None}}
     bottom_only = {"propagation": {"surface_z": None}, "pings": {"count": 1}}
     fast = {"pings": {"count": int(doppler_pings), "interval": 0.05}}
+    # TR 0702's own rules are what this reproduction compares with, so they are named: the
+    # suite's defaults have since moved to `decay_time: facet` (D-85), `multi_bounce: convolve`
+    # (D-82) and `doppler_spectrum: gaussian` (D-84).
+    def run(overrides):
+        return _quiet_run(ASIAEX, {**overrides, "time_spread": {"decay_time": "rule_of_thumb", **overrides.get("time_spread", {})}})
+
     return dict(
         flat=_quiet_run(ASIAEX, {"time_spread": None}),
-        spread=_quiet_run(ASIAEX, {"time_spread": {"multi_bounce": "sum"}}),                                        # 20 pings, as in TR 0702
-        convolve=_quiet_run(ASIAEX, {"time_spread": {"multi_bounce": "convolve"}}),
-        sum_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "sum"}}),
-        convolve_many=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "convolve"}}),
-        surface_many=_quiet_run(ASIAEX, {**surface_only, "pings": {"count": int(many)}}),
-        surface_fast=_quiet_run(ASIAEX, {**surface_only, **fast, "time_spread": {"doppler_spectrum": "lorentzian"}}),
-        surface_fast_gaussian=_quiet_run(ASIAEX, {**surface_only, **fast, "time_spread": {"doppler_spectrum": "gaussian"}}),
-        rough_sum=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "sum"}}),
-        rough_convolve=_quiet_run(ASIAEX, {"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "convolve"}}),
-        bottom_seeds=[_quiet_run(ASIAEX, {**bottom_only, "time_spread": {"seed": 1000 + k}}) for k in range(int(seeds))])
+        spread=run({"time_spread": {"multi_bounce": "sum"}}),                                                       # 20 pings, as in TR 0702
+        convolve=run({"time_spread": {"multi_bounce": "convolve"}}),
+        sum_many=run({"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "sum"}}),
+        convolve_many=run({"pings": {"count": int(many)}, "time_spread": {"multi_bounce": "convolve"}}),
+        surface_many=run({**surface_only, "pings": {"count": int(many)}}),
+        surface_fast=run({**surface_only, **fast, "time_spread": {"doppler_spectrum": "lorentzian"}}),
+        surface_fast_gaussian=run({**surface_only, **fast, "time_spread": {"doppler_spectrum": "gaussian"}}),
+        rough_sum=run({"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "sum"}}),
+        rough_convolve=run({"pings": {"count": int(many)}, "time_spread": {**BOTH_ROUGH, "multi_bounce": "convolve"}}),
+        bottom_seeds=[run({**bottom_only, "time_spread": {"seed": 1000 + k}}) for k in range(int(seeds))])
 
 
 def coherence_time(rho, lag_times) -> float:

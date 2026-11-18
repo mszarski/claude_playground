@@ -1,0 +1,2252 @@
+{
+ "build": "popoto_face_3x32",
+ "source_level_db": 197.0,
+ "duty": 0.055762081784386616,
+ "depth_required_m": 500.0,
+ "amplifiers": [
+  {
+   "model": "Instruments Inc. L2",
+   "kind": "linear class AB, with output transformer (taps)",
+   "url": "https://instrumentsinc.com/amplifier-and-sensor-specs",
+   "where": "page text, 'Linear' section (the tables are images on another host, not read)",
+   "limit_va": 650.0,
+   "limit_w": null,
+   "volts": null,
+   "rating": "650 VA for a 1 s burst at 10 % duty; 260 VA continuous; into any power factor",
+   "band": "400 Hz-40 kHz pulsed, to 100 kHz continuous",
+   "supply": "single-phase AC mains",
+   "eff": null,
+   "size": "19 in rack, 3U, or bench; mass not in the text",
+   "mute": "not stated",
+   "housing": "rack or bench"
+  },
+  {
+   "model": "Instruments Inc. L6",
+   "kind": "linear class AB, with output transformer (taps)",
+   "url": "https://instrumentsinc.com/amplifier-and-sensor-specs",
+   "where": "page text, 'Linear' section",
+   "limit_va": 2000.0,
+   "limit_w": null,
+   "volts": null,
+   "rating": "2000 VA for a 1 s burst at 10 % duty; 800 VA continuous; into any power factor",
+   "band": "120 Hz-25 kHz pulsed, to 70 kHz continuous",
+   "supply": "single-phase AC mains",
+   "eff": null,
+   "size": "19 in rack, 8U; mass not in the text",
+   "mute": "not stated",
+   "housing": "rack or bench"
+  },
+  {
+   "model": "Neptune PA1",
+   "kind": "class D, differential output",
+   "url": "https://www.neptune-sonar.co.uk/pdf/2022_neptune_sonar_catalogue.pdf",
+   "where": "catalogue pp. F5-F6 (with the MB1 matching transformer, p. F1)",
+   "limit_va": 300.0,
+   "limit_w": 300.0,
+   "volts": 150.0,
+   "rating": "up to 300 W; output 150 V rms / 2 A absolute maximum; pulse and duty not stated",
+   "band": "5 Hz-250 kHz",
+   "supply": "80-260 V AC",
+   "eff": null,
+   "size": "2U 19 in rack or hard case; mass not stated",
+   "mute": "mute input (manual switch or contact closure) that 'shuts down all class D switching'; 'complete silence when receiving'",
+   "housing": "rack or hard case"
+  },
+  {
+   "model": "Benthowave BII5062",
+   "kind": "linear, arbitrary waveform; needs a step-up transformer (BII6014)",
+   "url": "https://www.benthowave.com/products/Specs/BII5060DataSheet.pdf",
+   "where": "pp. 1-3 ratings and specification tables",
+   "limit_va": null,
+   "limit_w": 315.0,
+   "volts": null,
+   "rating": "315 W rms at +48 V DC; 20 A peak output; continuous signals allowed",
+   "band": "135 Hz-40 kHz (-3 dB)",
+   "supply": "DC, up to +60 V; 14.2 A at maximum power",
+   "eff": 0.64,
+   "size": "board 140 x 95 x 47 mm, 0.4 kg",
+   "mute": "stand-by logic input; output enable time 3 us; 104 mA quiescent",
+   "housing": "board; 'Not waterproof. Always use the device in Dry Air'"
+  },
+  {
+   "model": "Benthowave BII5160",
+   "kind": "linear, with step-up, for low-frequency transducers",
+   "url": "https://www.benthowave.com/products/Specs/BII5160Datasheet.pdf",
+   "where": "specification table",
+   "limit_va": null,
+   "limit_w": 208.0,
+   "volts": 441.0,
+   "rating": "208 W rms; output up to (2 Vs - 10) x 14.5 V peak-to-peak (441 V rms at 48 V)",
+   "band": "100 Hz-20 kHz",
+   "supply": "DC, up to +60 V",
+   "eff": 0.64,
+   "size": "portable case 0.28 x 0.26 x 0.18 m, 5.0-5.2 kg",
+   "mute": "shut-down state (24 mA against 59 mA active)",
+   "housing": "portable case"
+  },
+  {
+   "model": "AE Techron 7224",
+   "kind": "linear, DC-coupled, four-quadrant",
+   "url": "https://aetechron.com/wp-content/uploads/2024/08/7224-Datasheet-05-27-2026.pdf",
+   "where": "pp. 1-2",
+   "limit_va": 900.0,
+   "limit_w": 900.0,
+   "volts": 112.0,
+   "rating": "900 W rms to 20 kHz; 158 V peak; 'stable when driving highly capacitive loads'",
+   "band": "DC-300 kHz small signal; rated power to 40 kHz",
+   "supply": "single-phase 120 V AC, 20 A (230 V model)",
+   "eff": null,
+   "size": "2U 19 in, 3.5 x 19 x 22.75 in, 20.9 kg; forced air 180 CFM",
+   "mute": "remote 'Force to Standby'; voltage and current monitors; residual noise 0.3 mV (10 Hz-80 kHz)",
+   "housing": "rack or bench"
+  },
+  {
+   "model": "AE Techron 8504",
+   "kind": "switch-mode, DC-50 kHz",
+   "url": "https://aetechron.com/wp-content/uploads/2024/08/8500-Series-Datasheet-06-02-2026.pdf",
+   "where": "pp. 1-3",
+   "limit_va": 4000.0,
+   "limit_w": 4000.0,
+   "volts": 260.0,
+   "rating": "4 kW; 0-260 V rms; 80 A rms; 'up to 5X rated power when driving reactive loads'",
+   "band": "DC-50 kHz",
+   "supply": "AC mains (230 V 10 A to 60 V 60 A input options listed)",
+   "eff": 0.85,
+   "size": "5.25 x 19 x 25.3 in, 38.1 kg; internal fans",
+   "mute": "not read",
+   "housing": "rack"
+  }
+ ],
+ "chains": [
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Instruments Inc. L2",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Instruments Inc. L6",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Neptune PA1",
+   "level_db": [
+    196.11215119054478,
+    197.0,
+    196.27121254719663
+   ],
+   "per_frequency": [
+    {
+     "level_db": 196.11215119054478,
+     "volts": 302.41794610679744,
+     "watts": 237.78719673138005,
+     "va": 300.0,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 196.27121254719663,
+     "volts": 308.00702882410224,
+     "watts": 284.60498941515414,
+     "va": 300.0,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Benthowave BII5062",
+   "level_db": [
+    197.0,
+    197.0,
+    196.71189299069937
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": 575.0772160896827
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": 395.5295336175028
+    },
+    {
+     "level_db": 196.71189299069937,
+     "volts": 324.03703492039295,
+     "watts": 315.0,
+     "va": 332.0391543176798,
+     "supply_w": 518.8111786213747
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Benthowave BII5160",
+   "level_db": [
+    195.53089986991944,
+    196.25640654140557,
+    194.909420802431
+   ],
+   "per_frequency": [
+    {
+     "level_db": 195.53089986991944,
+     "volts": 282.84271247461896,
+     "watts": 208.0,
+     "va": 262.4195114697076,
+     "supply_w": 410.03048667141803
+    },
+    {
+     "level_db": 196.25640654140557,
+     "volts": 307.4824459143229,
+     "watts": 208.0,
+     "va": 213.30426799246573,
+     "supply_w": 333.2879187382277
+    },
+    {
+     "level_db": 194.909420802431,
+     "volts": 263.3122354417533,
+     "watts": 207.99999999999997,
+     "va": 219.25125110500758,
+     "supply_w": 342.58007985157434
+    }
+   ],
+   "transformer": false
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "AE Techron 7224",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "AE Techron 8504",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": 343.2056448453063
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": 290.40477640756694
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": 396.0065132830458
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Instruments Inc. L2",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Instruments Inc. L6",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Neptune PA1",
+   "level_db": [
+    196.56540180433956,
+    197.0,
+    194.0484486000851
+   ],
+   "per_frequency": [
+    {
+     "level_db": 196.56540180433956,
+     "volts": 159.6871942267131,
+     "watts": 300.0,
+     "va": 300.0,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 194.0484486000851,
+     "volts": 168.81943016134133,
+     "watts": 300.0,
+     "va": 300.0,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Benthowave BII5062",
+   "level_db": [
+    196.77729479503893,
+    197.0,
+    194.2603415907845
+   ],
+   "per_frequency": [
+    {
+     "level_db": 196.77729479503893,
+     "volts": 163.63068171953572,
+     "watts": 315.0,
+     "va": 315.0,
+     "supply_w": 492.1875
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": 412.1605539697964
+    },
+    {
+     "level_db": 194.2603415907845,
+     "volts": 172.98843892006192,
+     "watts": 315.0,
+     "va": 315.0,
+     "supply_w": 492.1875
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Benthowave BII5160",
+   "level_db": [
+    194.97482260677054,
+    195.9681693591559,
+    192.45786940251608
+   ],
+   "per_frequency": [
+    {
+     "level_db": 194.97482260677054,
+     "volts": 132.9661611087573,
+     "watts": 208.0,
+     "va": 208.0,
+     "supply_w": 325.0
+    },
+    {
+     "level_db": 195.9681693591559,
+     "volts": 198.79637823662685,
+     "watts": 208.0,
+     "va": 208.0,
+     "supply_w": 325.0
+    },
+    {
+     "level_db": 192.45786940251608,
+     "volts": 140.57026712644463,
+     "watts": 208.00000000000003,
+     "va": 208.00000000000003,
+     "supply_w": 325.00000000000006
+    }
+   ],
+   "transformer": false
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "AE Techron 7224",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "AE Techron 8504",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": 390.08760294317716
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": 310.3326524007879
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": 696.3979259323208
+    }
+   ],
+   "transformer": false
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Instruments Inc. L2",
+   "level_db": [
+    196.29118932066476,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 190.27058940738513,
+     "volts": 580.1355380435019,
+     "watts": 235.59006975071642,
+     "va": 649.9999999999999,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Instruments Inc. L6",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Neptune PA1",
+   "level_db": [
+    192.9332683014328,
+    196.81846880399962,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 186.91266838815318,
+     "volts": 394.1244878506654,
+     "watts": 108.7338783464845,
+     "va": 299.99999999999994,
+     "supply_w": null
+    },
+    {
+     "level_db": 190.79786889072,
+     "volts": 388.94970330081213,
+     "watts": 166.41005886756878,
+     "va": 300.0,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Benthowave BII5062",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": 1201.3635246377612
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": 491.08242489903125
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": 362.7099625766272
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Benthowave BII5160",
+   "level_db": [
+    195.75025286276468,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 189.72965294948506,
+     "volts": 545.1081150953976,
+     "watts": 208.00000000000003,
+     "va": 573.8781780703168,
+     "supply_w": 896.68465323487
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": 491.08242489903125
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": 362.7099625766272
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "AE Techron 7224",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "AE Techron 8504",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": 327.85296398523275
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": 205.10382490673246
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": 177.73064637094114
+    }
+   ],
+   "transformer": true
+  }
+ ],
+ "candidates": [
+  {
+   "model": "Neptune T335",
+   "type": "Tonpilz piston with internal tuning network, directional",
+   "url": "https://www.neptune-sonar.co.uk/downloads/3aced3db-b5b4-4f6e-8dd1-d0ed3e1bcbd6/T335.pdf",
+   "where": "catalogue pp. B27-B28: specification table; Transmit Sensitivity, Admittance and Beam Pattern graphs",
+   "resonance": "3.5 / 7.0 kHz",
+   "band": "3-8 kHz",
+   "tvr": [
+    146.5,
+    146.5,
+    146.5
+   ],
+   "tvr_sheet": "146 dB re 1 uPa/V at 1 m",
+   "drive": [
+    [
+     750.0,
+     0.01
+    ],
+    [
+     400.0,
+     0.1
+    ],
+    [
+     100.0,
+     1.0
+    ]
+   ],
+   "g_ms": [
+    2.6,
+    2.2,
+    3.0
+   ],
+   "b_ms": [
+    -2.0,
+    0.5,
+    1.0
+   ],
+   "impedance": "160 ohm nominal",
+   "pattern": "piston",
+   "beam": "conical; at 5 kHz about -3 dB at +/-45 deg",
+   "to_side_db": [
+    -9.5,
+    -12.0,
+    -14.0
+   ],
+   "efficiency": null,
+   "depth_m": 600.0,
+   "depth_words": "Operating Depth 600 m",
+   "size": "183 x 183 mm flange, 257 mm long, body dia. 120 mm",
+   "mass": "11.4 kg air / 6.7 kg water",
+   "area_m2": 0.018145839167134643,
+   "cav": null,
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated",
+   "note": "the product page prints '46 dB' for the transmit sensitivity (a typo); the data sheet says 146 dB",
+   "computed": {
+    "model": "Neptune T335",
+    "type": "Tonpilz piston with internal tuning network, directional",
+    "url": "https://www.neptune-sonar.co.uk/downloads/3aced3db-b5b4-4f6e-8dd1-d0ed3e1bcbd6/T335.pdf",
+    "where": "catalogue pp. B27-B28: specification table; Transmit Sensitivity, Admittance and Beam Pattern graphs",
+    "rated_volts_rms": [
+     400.0,
+     400.0,
+     400.0
+    ],
+    "level_at_rated_db": [
+     198.54119982655925,
+     198.54119982655925,
+     198.54119982655925
+    ],
+    "meets_level_across_band": true,
+    "short_by_db": 0.0,
+    "units_for_level": 1,
+    "depth_rating_m": 600.0,
+    "depth_ok": true,
+    "depth_margin": 1.2,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       334.9654391578276,
+       334.9654391578276,
+       334.9654391578276
+      ],
+      "within_rating": true,
+      "watts": [
+       291.72479811851036,
+       246.84405994643188,
+       336.60553629058893
+      ],
+      "volt_amperes": [
+       368.0494182973969,
+       253.13890151520184,
+       354.8133892335753
+      ]
+     },
+     "194": {
+      "volts_rms": [
+       237.13737056616552,
+       237.13737056616552,
+       237.13737056616552
+      ],
+      "within_rating": true,
+      "watts": [
+       146.20874454949075,
+       123.7150915418768,
+       168.70239755710472
+      ],
+      "volt_amperes": [
+       184.4616697945992,
+       126.86998577385057,
+       177.82794100389228
+      ]
+     },
+     "191": {
+      "volts_rms": [
+       167.88040181225605,
+       167.88040181225605,
+       167.88040181225605
+      ],
+      "within_rating": true,
+      "watts": [
+       73.27795621287582,
+       62.00442448781801,
+       84.55148793793363
+      ],
+      "volt_amperes": [
+       92.44983399462258,
+       63.58561720032759,
+       89.12509381337458
+      ]
+     }
+    },
+    "cavitation_anchor": null,
+    "cavitation_bound_db": {
+     "5": 192.10147706306077,
+     "10": 194.61367719730475,
+     "30": 200.65437638546646,
+     "100": 209.45379653613952,
+     "200": 215.073799298668,
+     "500": 222.78306185082954
+    },
+    "direct_worst_db": 12.625413176711724,
+    "direct_reduction_db": -9.5,
+    "direct_how": "piston facing out from the face; the rows are 90 deg off its axis (worst frequency read from the sheet's pattern)"
+   }
+  },
+  {
+   "model": "Massa TR-1075A",
+   "type": "Tonpilz piston, parallel-tuned with transformer, directional",
+   "url": "https://www.massa.com/wp-content/uploads/2023/03/TR-1075-Datasheet-230327.pdf",
+   "where": "pp. 1-3: text, tuning chart, Nominal Response Curves (TVR and impedance magnitude)",
+   "resonance": "3.5 kHz untuned; tuned for 0 deg phase at 4 kHz",
+   "band": "2.5-10 kHz",
+   "tvr": [
+    152.5,
+    150.0,
+    149.5
+   ],
+   "tvr_sheet": "curve only",
+   "power": [
+    [
+     600.0,
+     0.3
+    ],
+    [
+     200.0,
+     1.0
+    ]
+   ],
+   "z_ohm": [
+    85.0,
+    190.0,
+    95.0
+   ],
+   "impedance": "100 ohm at 4 kHz nominal",
+   "pattern": "piston",
+   "beam": "80 deg conical beam angle; piston half a wavelength across at 4 kHz",
+   "to_side_db": [
+    null,
+    null,
+    null
+   ],
+   "efficiency": null,
+   "depth_m": 600.0,
+   "depth_words": "Maximum Operating Depth is 600 meters",
+   "size": "7.25 in (184 mm) square flange, about 8.6 in (218 mm) long",
+   "mass": "25 lb (11.3 kg) in air; in water not stated",
+   "area_m2": 0.027759112687119412,
+   "cav": [
+    null,
+    null,
+    600.0,
+    30.0
+   ],
+   "cav2": [
+    null,
+    null,
+    200.0,
+    9.0
+   ],
+   "convention": "not stated (power in watts; curves 'dB re 1 uPa/1V @ 1m')",
+   "pulse_max": "not stated",
+   "note": "volts from watts assume a resistive load (V = sqrt(P |Z|)); the phase is given only at 4 kHz. Minimum depths 'approximately 30 and 100 feet' for 200 and 600 W",
+   "computed": {
+    "model": "Massa TR-1075A",
+    "type": "Tonpilz piston, parallel-tuned with transformer, directional",
+    "url": "https://www.massa.com/wp-content/uploads/2023/03/TR-1075-Datasheet-230327.pdf",
+    "where": "pp. 1-3: text, tuning chart, Nominal Response Curves (TVR and impedance magnitude)",
+    "rated_volts_rms": [
+     225.8317958127243,
+     337.63886032268266,
+     238.74672772626644
+    ],
+    "level_at_rated_db": [
+     199.57570176097937,
+     200.56904851336472,
+     197.0587485567249
+    ],
+    "meets_level_across_band": true,
+    "short_by_db": 0.0,
+    "units_for_level": 1,
+    "depth_rating_m": 600.0,
+    "depth_ok": true,
+    "depth_margin": 1.2,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       167.88040181225605,
+       223.872113856834,
+       237.13737056616552
+      ],
+      "within_rating": true,
+      "volt_amperes": [
+       331.57446250170057,
+       263.7827545406697,
+       591.9382370424727
+      ]
+     },
+     "194": {
+      "volts_rms": [
+       118.85022274370189,
+       158.48931924611142,
+       167.88040181225605
+      ],
+      "within_rating": true,
+      "volt_amperes": [
+       166.1808876026771,
+       132.20454902682013,
+       296.67188750152155
+      ]
+     },
+     "191": {
+      "volts_rms": [
+       84.13951416451951,
+       112.2018454301963,
+       118.85022274370189
+      ],
+      "within_rating": true,
+      "volt_amperes": [
+       83.28773933931035,
+       66.25923219969296,
+       148.68816259186897
+      ]
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 192.01614919095903,
+     "10": 194.528349325203,
+     "30": 200.56904851336472,
+     "100": 209.36846866403778,
+     "200": 214.98847142656624,
+     "500": 222.6977339787278
+    },
+    "least_depth_for_level_maker_m": 16.5531592918958,
+    "cavitation_anchor": {
+     "level_db": 200.56904851336472,
+     "depth_m": 30.0
+    },
+    "cavitation_bound_db": {
+     "5": 193.9477622894389,
+     "10": 196.4599624236829,
+     "30": 202.50066161184463,
+     "100": 211.30008176251766,
+     "200": 216.92008452504612,
+     "500": 224.62934707720768
+    },
+    "bound_minus_maker_db": 1.9316130984799145,
+    "direct_worst_db": 22.125413176711724,
+    "direct_reduction_db": 0.0,
+    "direct_how": "no reduction taken: the sheet gives no response at 90 deg in this band"
+   }
+  },
+  {
+   "model": "Massa TR-1075D",
+   "type": "Tonpilz piston, series-tuned with shunt resistor (lower Q)",
+   "url": "https://www.massa.com/wp-content/uploads/2023/03/TR-1075-Datasheet-230327.pdf",
+   "where": "pp. 2-3",
+   "resonance": "tuned at 3.5 kHz",
+   "band": "2.5-10 kHz",
+   "tvr": [
+    147.5,
+    146.5,
+    148.5
+   ],
+   "tvr_sheet": "curve only",
+   "power": [
+    [
+     1000.0,
+     0.3
+    ],
+    [
+     335.0,
+     1.0
+    ]
+   ],
+   "z_ohm": [
+    280.0,
+    390.0,
+    210.0
+   ],
+   "impedance": "200 ohm at 3.5 kHz nominal",
+   "pattern": "piston",
+   "beam": "80 deg conical beam angle",
+   "to_side_db": [
+    null,
+    null,
+    null
+   ],
+   "efficiency": null,
+   "depth_m": 600.0,
+   "depth_words": "Maximum Operating Depth is 600 meters",
+   "size": "as TR-1075A",
+   "mass": "25 lb (11.3 kg) in air",
+   "area_m2": 0.027759112687119412,
+   "cav": [
+    null,
+    null,
+    600.0,
+    30.0
+   ],
+   "convention": "not stated",
+   "pulse_max": "not stated",
+   "note": "part of the input power is dissipated in the shunt resistor; the cavitation depths are quoted for the family at 200 and 600 W",
+   "computed": {
+    "model": "Massa TR-1075D",
+    "type": "Tonpilz piston, series-tuned with shunt resistor (lower Q)",
+    "url": "https://www.massa.com/wp-content/uploads/2023/03/TR-1075-Datasheet-230327.pdf",
+    "where": "pp. 2-3",
+    "rated_volts_rms": [
+     529.1502622129182,
+     624.4997998398399,
+     458.257569495584
+    ],
+    "level_at_rated_db": [
+     201.97158031342218,
+     202.410646070265,
+     201.72219294733918
+    ],
+    "meets_level_across_band": true,
+    "short_by_db": 0.0,
+    "units_for_level": 1,
+    "depth_rating_m": 600.0,
+    "depth_ok": true,
+    "depth_margin": 1.2,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       298.538261891796,
+       334.9654391578276,
+       266.0725059798809
+      ],
+      "within_rating": true,
+      "volt_amperes": [
+       318.30390647633783,
+       287.69703956460586,
+       337.11704018292255
+      ]
+     },
+     "194": {
+      "volts_rms": [
+       211.34890398366477,
+       237.13737056616552,
+       188.36490894898
+      ],
+      "within_rating": true,
+      "volt_amperes": [
+       159.52985433962982,
+       144.19008338214078,
+       168.958756777893
+      ]
+     },
+     "191": {
+      "volts_rms": [
+       149.6235656094433,
+       167.88040181225605,
+       133.3521432163324
+      ],
+      "within_rating": true,
+      "volt_amperes": [
+       79.95432637744065,
+       72.26622900678089,
+       84.67997190661536
+      ]
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 191.63925925169573,
+     "10": 194.15145938593972,
+     "30": 200.19215857410143,
+     "100": 208.99157872477448,
+     "200": 214.61158148730294,
+     "500": 222.3208440394645
+    },
+    "least_depth_for_level_maker_m": 17.72660088433286,
+    "cavitation_anchor": {
+     "level_db": 200.19215857410143,
+     "depth_m": 30.0
+    },
+    "cavitation_bound_db": {
+     "5": 193.9477622894389,
+     "10": 196.4599624236829,
+     "30": 202.50066161184463,
+     "100": 211.30008176251766,
+     "200": 216.92008452504612,
+     "500": 224.62934707720768
+    },
+    "bound_minus_maker_db": 2.3085030377432076,
+    "direct_worst_db": 22.125413176711724,
+    "direct_reduction_db": 0.0,
+    "direct_how": "no reduction taken: the sheet gives no response at 90 deg in this band"
+   }
+  },
+  {
+   "model": "Neptune T296",
+   "type": "piston projector, directional",
+   "url": "https://www.neptune-sonar.co.uk/downloads/8682c070-8807-4d6c-bc6c-a37dcb3d849e/T296.pdf",
+   "where": "catalogue pp. B19-B20",
+   "resonance": "1.7 kHz",
+   "band": "1-6 kHz",
+   "tvr": [
+    139.5,
+    142.0,
+    137.5
+   ],
+   "tvr_sheet": "142 dB re 1 uPa/V at 1 m",
+   "drive": [
+    [
+     750.0,
+     0.1
+    ],
+    [
+     350.0,
+     1.0
+    ]
+   ],
+   "impedance": "400 ohm nominal",
+   "pattern": "piston",
+   "beam": "conical; patterns given at 1.7 and 3.5 kHz only",
+   "to_side_db": [
+    null,
+    null,
+    null
+   ],
+   "efficiency": null,
+   "depth_m": 600.0,
+   "depth_words": "Operating Depth 600 m",
+   "size": "260 x 260 mm flange, 418 mm long, face dia. 264 mm",
+   "mass": "27.1 kg air / 12.2 kg water",
+   "area_m2": 0.05473911039614856,
+   "cav": null,
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated",
+   "note": "the band ends at 6 kHz",
+   "computed": {
+    "model": "Neptune T296",
+    "type": "piston projector, directional",
+    "url": "https://www.neptune-sonar.co.uk/downloads/8682c070-8807-4d6c-bc6c-a37dcb3d849e/T296.pdf",
+    "where": "catalogue pp. B19-B20",
+    "rated_volts_rms": [
+     750.0,
+     750.0,
+     750.0
+    ],
+    "level_at_rated_db": [
+     197.001225267834,
+     199.501225267834,
+     195.001225267834
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 1.998774732165998,
+    "units_for_level": 2,
+    "depth_rating_m": 600.0,
+    "depth_ok": true,
+    "depth_margin": 1.2,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       749.8942093324558,
+       562.341325190349,
+       944.0608762859235
+      ],
+      "within_rating": false
+     },
+     "194": {
+      "volts_rms": [
+       530.8844442309885,
+       398.1071705534973,
+       668.3439175686149
+      ],
+      "within_rating": true
+     },
+     "191": {
+      "volts_rms": [
+       375.8374042884443,
+       281.8382931264455,
+       473.15125896148027
+      ],
+      "within_rating": true
+     }
+    },
+    "cavitation_anchor": null,
+    "cavitation_bound_db": {
+     "5": 196.89668384156192,
+     "10": 199.40888397580594,
+     "30": 205.44958316396765,
+     "100": 214.2490033146407,
+     "200": 219.86900607716916,
+     "500": 227.57826862933072
+    },
+    "direct_worst_db": 22.125413176711724,
+    "direct_reduction_db": 0.0,
+    "direct_how": "no reduction taken: the sheet gives no response at 90 deg in this band"
+   }
+  },
+  {
+   "model": "Neptune T170",
+   "type": "free-flooded ring",
+   "url": "https://www.neptune-sonar.co.uk/downloads/b76a71d6-dd89-48b1-8026-63b45c5761d3/T170.pdf",
+   "where": "catalogue pp. B23-B24",
+   "resonance": "6 kHz",
+   "band": "4-8 kHz",
+   "tvr": [
+    135.0,
+    139.0,
+    140.0
+   ],
+   "tvr_sheet": "140 dB re 1 uPa/V at 1 m",
+   "drive": [
+    [
+     750.0,
+     0.1
+    ],
+    [
+     250.0,
+     1.0
+    ]
+   ],
+   "g_ms": [
+    0.7,
+    1.1,
+    1.2
+   ],
+   "b_ms": [
+    1.8,
+    1.65,
+    1.4
+   ],
+   "impedance": "68 nF at 1 kHz with 10 m of cable",
+   "pattern": "toroid",
+   "beam": "omni +/-2 dB around the axis; toroidal, nulls on the axis (patterns at 4 and 6 kHz)",
+   "efficiency": null,
+   "depth_m": null,
+   "depth_words": "Operating Depth Unlimited",
+   "size": "ring 191 mm outside, 121 mm inside diameter, 85 mm high",
+   "mass": "4.7 kg air / 2.6 kg water with 10 m of cable",
+   "area_m2": 0.11762122895040186,
+   "cav": [
+    null,
+    750.0,
+    null,
+    10.0
+   ],
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated",
+   "note": "'750 Vrms (Minimum 10m depth)' is on the PDF, not on the web page",
+   "computed": {
+    "model": "Neptune T170",
+    "type": "free-flooded ring",
+    "url": "https://www.neptune-sonar.co.uk/downloads/b76a71d6-dd89-48b1-8026-63b45c5761d3/T170.pdf",
+    "where": "catalogue pp. B23-B24",
+    "rated_volts_rms": [
+     750.0,
+     750.0,
+     750.0
+    ],
+    "level_at_rated_db": [
+     192.501225267834,
+     196.501225267834,
+     197.501225267834
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 4.498774732165998,
+    "units_for_level": 2,
+    "depth_rating_m": Infinity,
+    "depth_ok": true,
+    "depth_margin": Infinity,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       1258.9254117941675,
+       794.3282347242813,
+       707.945784384138
+      ],
+      "within_rating": false,
+      "watts": [
+       1109.42523472278,
+       694.0530789282121,
+       601.4246803527269
+      ],
+      "volt_amperes": [
+       3060.937175038185,
+       1251.221981984662,
+       924.143596370855
+      ]
+     },
+     "194": {
+      "volts_rms": [
+       891.2509381337459,
+       562.341325190349,
+       501.18723362727246
+      ],
+      "within_rating": false,
+      "watts": [
+       556.0297643069975,
+       347.85054261852173,
+       301.42637178114984
+      ],
+      "volt_amperes": [
+       1534.1026350642662,
+       627.0964838045259,
+       463.1689725394675
+      ]
+     },
+     "191": {
+      "volts_rms": [
+       630.957344480193,
+       398.1071705534973,
+       354.8133892335753
+      ],
+      "within_rating": true,
+      "watts": [
+       278.67501938744783,
+       174.33825117072257,
+       151.07104941529997
+      ],
+      "volt_amperes": [
+       768.8726557681671,
+       314.29275193538,
+       232.1343760490414
+      ]
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 194.98902513359002,
+     "10": 197.501225267834,
+     "30": 203.5419244559957,
+     "100": 212.34134460666877,
+     "200": 217.96134736919723,
+     "500": 225.6706099213588
+    },
+    "least_depth_for_level_maker_m": 8.88372637889736,
+    "cavitation_anchor": {
+     "level_db": 197.501225267834,
+     "depth_m": 10.0
+    },
+    "cavitation_bound_db": {
+     "5": 200.21856361810563,
+     "10": 202.73076375234962,
+     "30": 208.7714629405113,
+     "100": 217.57088309118438,
+     "200": 223.1908858537128,
+     "500": 230.9001484058744
+    },
+    "bound_minus_maker_db": 5.229538484515615,
+    "direct_worst_db": 13.620651102266368,
+    "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
+    "direct_reduction_db": -8.504762074445356
+   }
+  },
+  {
+   "model": "GeoSpectrum M27-450",
+   "type": "free-flooded ring",
+   "url": "https://geospectrum.ca/wp-content/uploads/2022/05/SP-M27-450-R0.pdf",
+   "where": "pp. 1-2: characteristics table; Figures 1 (TVR), 2 (admittance), 3 (beam), 4 (dimensions)",
+   "resonance": "4250 Hz",
+   "band": "curve 2.5-6.5 kHz",
+   "tvr": [
+    136.0,
+    135.0,
+    134.0
+   ],
+   "tvr_sheet": "138 dB re 1 uPa/V at 1 m at resonance",
+   "drive": [
+    [
+     600.0,
+     null
+    ]
+   ],
+   "g_ms": [
+    0.35,
+    0.12,
+    0.2
+   ],
+   "b_ms": [
+    1.8,
+    2.0,
+    2.5
+   ],
+   "impedance": "60 nF",
+   "pattern": "toroid",
+   "beam": "toroidal (pattern at 4.25 kHz)",
+   "efficiency": null,
+   "depth_m": 6000.0,
+   "depth_words": "Maximum Operating Depth 6000 Meters",
+   "size": "dia. 6.5 in (165 mm) flange, 5.9 in body, 2.71 in bore, 6.7 in (170 mm) high",
+   "mass": "5 kg in air; in water not stated",
+   "area_m2": 0.09425720438565457,
+   "cav": [
+    193.0,
+    null,
+    null,
+    30.0
+   ],
+   "max_spl": 193.0,
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated; duty not stated",
+   "note": "'Cavitation Depth at 193 dB re uPa @ 1 m: 30 Meters'",
+   "computed": {
+    "model": "GeoSpectrum M27-450",
+    "type": "free-flooded ring",
+    "url": "https://geospectrum.ca/wp-content/uploads/2022/05/SP-M27-450-R0.pdf",
+    "where": "pp. 1-2: characteristics table; Figures 1 (TVR), 2 (admittance), 3 (beam), 4 (dimensions)",
+    "rated_volts_rms": [
+     600.0,
+     600.0,
+     600.0
+    ],
+    "level_at_rated_db": [
+     191.56302500767288,
+     190.56302500767288,
+     189.56302500767288
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 7.436974992327123,
+    "units_for_level": 3,
+    "depth_rating_m": 6000.0,
+    "depth_ok": true,
+    "depth_margin": 12.0,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       1122.018454301963,
+       1258.9254117941675,
+       1412.537544622754
+      ],
+      "within_rating": false,
+      "watts": [
+       440.6238941279581,
+       190.18718309533372,
+       399.0524629937758
+      ],
+      "volt_amperes": [
+       2308.506738056115,
+       3175.486874583498,
+       5004.092427984814
+      ]
+     },
+     "194": {
+      "volts_rms": [
+       794.3282347242813,
+       891.2509381337459,
+       1000.0
+      ],
+      "within_rating": false,
+      "watts": [
+       220.8350705680675,
+       95.31938816691385,
+       200.0
+      ],
+      "volt_amperes": [
+       1156.9941058562626,
+       1591.5134820922165,
+       2507.9872407968905
+      ]
+     },
+     "191": {
+      "volts_rms": [
+       562.341325190349,
+       630.957344480193,
+       707.945784384138
+      ],
+      "within_rating": false,
+      "watts": [
+       110.67971810589326,
+       47.77286046641963,
+       100.2374467254545
+      ],
+      "volt_amperes": [
+       579.8706752371601,
+       797.6462393703041,
+       1256.9711871874897
+      ]
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 184.4471006775943,
+     "10": 186.9593008118383,
+     "30": 193.0,
+     "100": 201.79942015067306,
+     "200": 207.41942291320152,
+     "500": 215.12868546536308
+    },
+    "least_depth_for_level_maker_m": 53.341776932823834,
+    "cavitation_anchor": {
+     "level_db": 193.0,
+     "depth_m": 30.0
+    },
+    "cavitation_bound_db": {
+     "5": 199.2568520374102,
+     "10": 201.7690521716542,
+     "30": 207.8097513598159,
+     "100": 216.60917151048895,
+     "200": 222.2291742730174,
+     "500": 229.93843682517897
+    },
+    "bound_minus_maker_db": 14.809751359815891,
+    "direct_worst_db": 13.620651102266368,
+    "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
+    "direct_reduction_db": -8.504762074445356
+   }
+  },
+  {
+   "model": "Neptune T160",
+   "type": "free-flooded ring",
+   "url": "https://www.neptune-sonar.co.uk/downloads/8df0fff1-08ad-40c2-a577-90a755c087ca/T160.pdf",
+   "where": "catalogue pp. B21-B22",
+   "resonance": "2.8 kHz",
+   "band": "2.5-6 kHz",
+   "tvr": [
+    133.5,
+    134.0,
+    130.0
+   ],
+   "tvr_sheet": "134 dB re 1 uPa/V at 1 m",
+   "drive": [
+    [
+     750.0,
+     0.1
+    ],
+    [
+     250.0,
+     1.0
+    ]
+   ],
+   "impedance": "38 nF at 1 kHz with 10 m of cable",
+   "pattern": "toroid",
+   "beam": "toroidal; lobed at 6 kHz",
+   "efficiency": null,
+   "depth_m": null,
+   "depth_words": "Operating Depth Unlimited",
+   "size": "ring 234 mm outside, 160 mm inside diameter, 106 mm high",
+   "mass": "5.7 kg air / 2.6 kg water with 10 m of cable",
+   "area_m2": 0.17700361328855613,
+   "cav": [
+    null,
+    750.0,
+    null,
+    10.0
+   ],
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated",
+   "note": "",
+   "computed": {
+    "model": "Neptune T160",
+    "type": "free-flooded ring",
+    "url": "https://www.neptune-sonar.co.uk/downloads/8df0fff1-08ad-40c2-a577-90a755c087ca/T160.pdf",
+    "where": "catalogue pp. B21-B22",
+    "rated_volts_rms": [
+     750.0,
+     750.0,
+     750.0
+    ],
+    "level_at_rated_db": [
+     191.001225267834,
+     191.501225267834,
+     187.501225267834
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 9.498774732165998,
+    "units_for_level": 3,
+    "depth_rating_m": Infinity,
+    "depth_ok": true,
+    "depth_margin": Infinity,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       1496.235656094433,
+       1412.537544622754,
+       2238.72113856834
+      ],
+      "within_rating": false
+     },
+     "194": {
+      "volts_rms": [
+       1059.2537251772887,
+       1000.0,
+       1584.893192461114
+      ],
+      "within_rating": false
+     },
+     "191": {
+      "volts_rms": [
+       749.8942093324558,
+       707.945784384138,
+       1122.018454301963
+      ],
+      "within_rating": false
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 188.98902513359002,
+     "10": 191.501225267834,
+     "30": 197.5419244559957,
+     "100": 206.34134460666877,
+     "200": 211.96134736919723,
+     "500": 219.6706099213588
+    },
+    "least_depth_for_level_maker_m": 27.58618424388207,
+    "cavitation_anchor": {
+     "level_db": 191.501225267834,
+     "depth_m": 10.0
+    },
+    "cavitation_bound_db": {
+     "5": 201.9935278103513,
+     "10": 204.50572794459532,
+     "30": 210.546427132757,
+     "100": 219.34584728343006,
+     "200": 224.96585004595852,
+     "500": 232.67511259812008
+    },
+    "bound_minus_maker_db": 13.00450267676132,
+    "direct_worst_db": 13.620651102266368,
+    "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
+    "direct_reduction_db": -8.504762074445356
+   }
+  },
+  {
+   "model": "GeoSpectrum M21-070-5000",
+   "type": "flexural disc (bender)",
+   "url": "https://geospectrum.ca/wp-content/uploads/2022/05/SP-M21-070-5000-R1.pdf",
+   "where": "pp. 1-2: characteristics table; Figures 1 (TVR), 2 (admittance), 3-4 (beams), 5 (dimensions)",
+   "resonance": "5 kHz",
+   "band": "1-10 kHz transmitting range",
+   "tvr": [
+    126.0,
+    136.5,
+    131.0
+   ],
+   "tvr_sheet": "137 dB re 1 uPa/V at 1 m maximum",
+   "drive": [
+    [
+     600.0,
+     null
+    ]
+   ],
+   "g_ms": [
+    0.03,
+    0.43,
+    0.05
+   ],
+   "b_ms": [
+    0.9,
+    1.1,
+    1.2
+   ],
+   "impedance": "35 nF",
+   "pattern": "omni",
+   "beam": "omnidirectional at resonance",
+   "efficiency": null,
+   "depth_m": 700.0,
+   "depth_words": "Maximum Operating Depth 700 Meters",
+   "size": "disc dia. 80 mm, 25 mm thick",
+   "mass": "0.6 kg",
+   "area_m2": 0.010053096491487338,
+   "cav": [
+    190.0,
+    null,
+    null,
+    25.0
+   ],
+   "max_spl": 190.0,
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated; duty not stated",
+   "note": "'Cavitation Depth at 190 dB re uPa @1m: 25 Meters'. Sharp: about 0.85 kHz wide at -3 dB",
+   "computed": {
+    "model": "GeoSpectrum M21-070-5000",
+    "type": "flexural disc (bender)",
+    "url": "https://geospectrum.ca/wp-content/uploads/2022/05/SP-M21-070-5000-R1.pdf",
+    "where": "pp. 1-2: characteristics table; Figures 1 (TVR), 2 (admittance), 3-4 (beams), 5 (dimensions)",
+    "rated_volts_rms": [
+     600.0,
+     600.0,
+     600.0
+    ],
+    "level_at_rated_db": [
+     181.56302500767288,
+     192.06302500767288,
+     186.56302500767288
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 15.436974992327123,
+    "units_for_level": 6,
+    "depth_rating_m": 700.0,
+    "depth_ok": true,
+    "depth_margin": 1.4,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       3548.133892335753,
+       1059.2537251772887,
+       1995.2623149688789
+      ],
+      "within_rating": false,
+      "watts": [
+       377.6776235382498,
+       482.46793534984414,
+       199.0535852767485
+      ],
+      "volt_amperes": [
+       11336.621585669669,
+       1325.169821914038,
+       4781.431198004581
+      ]
+     },
+     "194": {
+      "volts_rms": [
+       2511.88643150958,
+       749.8942093324558,
+       1412.537544622754
+      ],
+      "within_rating": false,
+      "watts": [
+       189.28720334405793,
+       241.80676983185015,
+       99.76311574844395
+      ],
+      "volt_amperes": [
+       5681.770011201006,
+       664.1581971314421,
+       2396.3922749070516
+      ]
+     },
+     "191": {
+      "volts_rms": [
+       1778.2794100389228,
+       530.8844442309885,
+       1000.0
+      ],
+      "within_rating": false,
+      "watts": [
+       94.86832980505139,
+       121.19046604437159,
+       50.0
+      ],
+      "volt_amperes": [
+       2847.6305940202287,
+       332.8676095111842,
+       1201.0412149464314
+      ]
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 182.60980809614784,
+     "10": 185.12200823039183,
+     "30": 191.16270741855354,
+     "100": 199.9621275692266,
+     "200": 205.58213033175505,
+     "500": 213.29139288391661
+    },
+    "least_depth_for_level_maker_m": 68.2409797513342,
+    "cavitation_anchor": {
+     "level_db": 190.0,
+     "depth_m": 25.0
+    },
+    "cavitation_bound_db": {
+     "5": 189.53670500064402,
+     "10": 192.048905134888,
+     "30": 198.08960432304968,
+     "100": 206.88902447372277,
+     "200": 212.50902723625123,
+     "500": 220.2182897884128
+    },
+    "bound_minus_maker_db": 6.926896904496175,
+    "direct_worst_db": 22.125413176711724,
+    "direct_reduction_db": 0.0,
+    "direct_how": "no reduction taken: omnidirectional"
+   }
+  },
+  {
+   "model": "Neptune T420",
+   "type": "small piston projector",
+   "url": "https://www.neptune-sonar.co.uk/downloads/fbeb4025-8243-4084-b976-7a59740bfbfa/T420.pdf",
+   "where": "catalogue pp. B29-B30",
+   "resonance": "5 kHz",
+   "band": "4.5-14 kHz",
+   "tvr": [
+    115.0,
+    126.5,
+    124.0
+   ],
+   "tvr_sheet": "126 dB re 1 uPa/V at 1 m",
+   "drive": [
+    [
+     2000.0,
+     0.1
+    ],
+    [
+     600.0,
+     1.0
+    ]
+   ],
+   "impedance": "20 kohm nominal",
+   "pattern": "piston",
+   "beam": "at 5 kHz about -7 dB at 90 deg, -5 dB behind",
+   "to_side_db": [
+    null,
+    -7.0,
+    null
+   ],
+   "efficiency": null,
+   "depth_m": 600.0,
+   "depth_words": "Operating Depth 600 m",
+   "size": "102 x 102 mm flange, 165 mm long",
+   "mass": "3.8 kg air / 2.1 kg water",
+   "area_m2": 0.005026548245743669,
+   "cav": [
+    null,
+    2000.0,
+    null,
+    20.0
+   ],
+   "convention": "drive in V rms; level convention not stated",
+   "pulse_max": "not stated",
+   "note": "'2,000 Vrms (Minimum 20m depth)'",
+   "computed": {
+    "model": "Neptune T420",
+    "type": "small piston projector",
+    "url": "https://www.neptune-sonar.co.uk/downloads/fbeb4025-8243-4084-b976-7a59740bfbfa/T420.pdf",
+    "where": "catalogue pp. B29-B30",
+    "rated_volts_rms": [
+     2000.0,
+     2000.0,
+     2000.0
+    ],
+    "level_at_rated_db": [
+     181.02059991327963,
+     192.52059991327963,
+     190.02059991327963
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 15.979400086720375,
+    "units_for_level": 7,
+    "depth_rating_m": 600.0,
+    "depth_ok": true,
+    "depth_margin": 1.2,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       12589.254117941662,
+       3349.654391578276,
+       4466.835921509631
+      ],
+      "within_rating": false
+     },
+     "194": {
+      "volts_rms": [
+       8912.509381337459,
+       2371.373705661655,
+       3162.2776601683795
+      ],
+      "within_rating": false
+     },
+     "191": {
+      "volts_rms": [
+       6309.57344480193,
+       1678.8040181225606,
+       2238.72113856834
+      ],
+      "within_rating": false
+     }
+    },
+    "cavitation_maker_db": {
+     "5": 186.47316991488407,
+     "10": 188.98537004912805,
+     "30": 195.02606923728976,
+     "100": 203.82548938796282,
+     "200": 209.44549215049128,
+     "500": 217.15475470265284
+    },
+    "least_depth_for_level_maker_m": 40.182569562135946,
+    "cavitation_anchor": {
+     "level_db": 192.52059991327963,
+     "depth_m": 20.0
+    },
+    "cavitation_bound_db": {
+     "5": 186.5264050440042,
+     "10": 189.0386051782482,
+     "30": 195.07930436640987,
+     "100": 203.87872451708296,
+     "200": 209.49872727961142,
+     "500": 217.20798983177298
+    },
+    "bound_minus_maker_db": 0.05323512912013939,
+    "direct_worst_db": 15.125413176711724,
+    "direct_reduction_db": -7.0,
+    "direct_how": "piston facing out from the face; the rows are 90 deg off its axis (worst frequency read from the sheet's pattern)"
+   }
+  },
+  {
+   "model": "Benthowave BII7594",
+   "type": "free-flooded ring, multi-resonance",
+   "url": "https://www.benthowave.com/products/Specs/BII7590Datasheet.pdf",
+   "where": "pp. 1-2 specification table; p. 6 TVR graph",
+   "resonance": "4, 7.5, 11 kHz",
+   "band": "1-30 kHz (series)",
+   "tvr": [
+    130.0,
+    117.0,
+    118.0
+   ],
+   "tvr_sheet": "graph",
+   "drive": [
+    [
+     400.0,
+     0.2
+    ]
+   ],
+   "impedance": "115 nF; power factor 0.36 at fs",
+   "pattern": "toroid",
+   "beam": "omnidirectional to toroidal",
+   "efficiency": "0.9 +/-5 % at fs",
+   "depth_m": 500.0,
+   "depth_words": "Operating Depth <= 500 m",
+   "size": "dia. 114 x 90 mm",
+   "mass": ">= 1.2 kg in air",
+   "area_m2": 0.051572385001330046,
+   "cav": null,
+   "convention": "'SL = 20*logVi + TVR ... Vi in Vrms'",
+   "pulse_max": "30 s at 480 W, duty <= 20 %",
+   "note": "the TVR swings 13 dB between 4 and 5.5 kHz; the maker says the series 'is not designed for underwater acoustic detection'",
+   "computed": {
+    "model": "Benthowave BII7594",
+    "type": "free-flooded ring, multi-resonance",
+    "url": "https://www.benthowave.com/products/Specs/BII7590Datasheet.pdf",
+    "where": "pp. 1-2 specification table; p. 6 TVR graph",
+    "rated_volts_rms": [
+     400.0,
+     400.0,
+     400.0
+    ],
+    "level_at_rated_db": [
+     182.04119982655925,
+     169.04119982655925,
+     170.04119982655925
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 27.95880017344075,
+    "units_for_level": 25,
+    "depth_rating_m": 500.0,
+    "depth_ok": true,
+    "depth_margin": 1.0,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       2238.72113856834,
+       10000.0,
+       8912.509381337459
+      ],
+      "within_rating": false
+     },
+     "194": {
+      "volts_rms": [
+       1584.893192461114,
+       7079.457843841381,
+       6309.57344480193
+      ],
+      "within_rating": false
+     },
+     "191": {
+      "volts_rms": [
+       1122.018454301963,
+       5011.872336272725,
+       4466.835921509631
+      ],
+      "within_rating": false
+     }
+    },
+    "cavitation_anchor": null,
+    "cavitation_bound_db": {
+     "5": 196.63787865176215,
+     "10": 199.15007878600616,
+     "30": 205.19077797416787,
+     "100": 213.99019812484093,
+     "200": 219.6102008873694,
+     "500": 227.31946343953095
+    },
+    "direct_worst_db": 13.620651102266368,
+    "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
+    "direct_reduction_db": -8.504762074445356
+   }
+  },
+  {
+   "model": "Benthowave BII7596",
+   "type": "free-flooded ring, multi-resonance",
+   "url": "https://www.benthowave.com/products/Specs/BII7590Datasheet.pdf",
+   "where": "pp. 1-2 specification table; p. 8 TVR and admittance graphs",
+   "resonance": "3.5 and 6.5 kHz",
+   "band": "1-30 kHz (series)",
+   "tvr": [
+    131.0,
+    124.0,
+    130.0
+   ],
+   "tvr_sheet": "graph",
+   "drive": [
+    [
+     600.0,
+     0.4
+    ]
+   ],
+   "impedance": "69 nF; power factor 0.38 at fs",
+   "pattern": "toroid",
+   "beam": "omnidirectional to toroidal",
+   "efficiency": "0.9 +/-5 % at fs",
+   "depth_m": 300.0,
+   "depth_words": "Operating Depth <= 300 m",
+   "size": "dia. 168 x 115 mm",
+   "mass": ">= 2.2 kg in air",
+   "area_m2": 0.0971129121077677,
+   "cav": null,
+   "convention": "'SL = 20*logVi + TVR ... Vi in Vrms'",
+   "pulse_max": "200 s at 600 W, duty <= 40 %",
+   "note": "ripple of +/-4 dB across the band, cable-length dependent",
+   "computed": {
+    "model": "Benthowave BII7596",
+    "type": "free-flooded ring, multi-resonance",
+    "url": "https://www.benthowave.com/products/Specs/BII7590Datasheet.pdf",
+    "where": "pp. 1-2 specification table; p. 8 TVR and admittance graphs",
+    "rated_volts_rms": [
+     600.0,
+     600.0,
+     600.0
+    ],
+    "level_at_rated_db": [
+     186.56302500767288,
+     179.56302500767288,
+     185.56302500767288
+    ],
+    "meets_level_across_band": false,
+    "short_by_db": 17.436974992327123,
+    "units_for_level": 8,
+    "depth_rating_m": 300.0,
+    "depth_ok": false,
+    "depth_margin": 0.6,
+    "drive_for": {
+     "197": {
+      "volts_rms": [
+       1995.2623149688789,
+       4466.835921509631,
+       2238.72113856834
+      ],
+      "within_rating": false
+     },
+     "194": {
+      "volts_rms": [
+       1412.537544622754,
+       3162.2776601683795,
+       1584.893192461114
+      ],
+      "within_rating": false
+     },
+     "191": {
+      "volts_rms": [
+       1000.0,
+       2238.72113856834,
+       1122.018454301963
+      ],
+      "within_rating": false
+     }
+    },
+    "cavitation_anchor": null,
+    "cavitation_bound_db": {
+     "5": 199.38647626479894,
+     "10": 201.89867639904293,
+     "30": 207.93937558720464,
+     "100": 216.7387957378777,
+     "200": 222.35879850040615,
+     "500": 230.0680610525677
+    },
+    "direct_worst_db": 13.620651102266368,
+    "direct_how": "ring axis along the face, pointing at the rows (sin pattern, floor -20 dB; far-field pattern applied in the near field)",
+    "direct_reduction_db": -8.504762074445356
+   }
+  }
+ ]
+}

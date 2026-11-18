@@ -36,7 +36,8 @@ hardware:
   sync: {scheme: shared_reference, elevation_error_deg: 0.05, reference_level_v: 0.002}
   sound_speed: {rung: gradient_prior}
   water_depth: {source: typed}
-  compute: {option: decimate_first_cpu}
+  compute: {option: gpu}
+  storage: {record: raw}
 unconfirmed: [platform.span_m, platform.height_m, platform.usable_span_m, platform.depth_m, array.layouts.two_rows.rows, platform.row_baseline_m, receive.window,
   hardware.hydrophone.model, hardware.hydrophone.noise_db, hardware.hydrophone.band_hz, hardware.boards.overload_damage_vpp, hardware.boards.gain_switchable, hardware.projector.model,
   hardware.projector.amplifier, hardware.projector.blanking_after_s, hardware.navigation.unit, hardware.navigation.rate_hz, hardware.navigation.timestamp_sigma_s,

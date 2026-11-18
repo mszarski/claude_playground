@@ -12,6 +12,7 @@
 
 #include "sonar/sim/paths.hpp"
 #include "sonar/sim/reverb.hpp"
+#include "sonar/sim/reverb_batched.hpp"
 #include "vec_caster.hpp"
 
 namespace py = pybind11;
@@ -405,7 +406,9 @@ void bind_simcpp(py::module_& m) {
                                     double time0, double center_frequency, double sound_speed,
                                     std::int64_t n_azimuth, std::int64_t decimation, const Vec3d& velocity,
                                     Backend backend, int device, const std::optional<ArrD>& direction,
-                                    const std::optional<ArrD>& doppler) {
+                                    const std::optional<ArrD>& doppler,
+                                    const std::optional<py::array_t<std::int64_t, py::array::c_style | py::array::forcecast>>& rows,
+                                    bool batched, bool total_from_host, bool total_to_host) {
         const sim::ReverbPower power = reverb_power(coarse, density, direction, doppler);
         require_points(offsets, "offsets");
         const py::ssize_t n_channels = offsets.shape(0);
@@ -417,44 +420,91 @@ void bind_simcpp(py::module_& m) {
           throw std::invalid_argument("normals must have shape [sectors, 2, n_low]");
         }
         if (pulse.ndim() != 1) throw std::invalid_argument("pulse must be one-dimensional");
-        const sim::ReverbParams p = reverb_params(sample_rate, 0, 0.0, time0, center_frequency, sound_speed, n_azimuth,
-                                                  decimation, n_low, velocity, false, false);
+        if (rows && (rows->ndim() != 1 || rows->shape(0) != normals.shape(0))) {
+          throw std::invalid_argument("rows must have one entry per sector of normals");
+        }
+        sim::ReverbParams p = reverb_params(sample_rate, 0, 0.0, time0, center_frequency, sound_speed, n_azimuth,
+                                            decimation, n_low, velocity, false, false);
+        p.batched = batched;
+        p.total_from_host = total_from_host;
+        p.total_to_host = total_to_host;
         auto* data = reinterpret_cast<float*>(total.mutable_data());
+        const std::int64_t* row_data = rows ? rows->data() : nullptr;
         py::gil_scoped_release release;
         sim::reverb_accumulate(backend, p, power, first, normals.data(), normals.shape(0), pulse.data(), pulse.shape(0),
-                               offsets.data(), n_channels, data, device);
+                               offsets.data(), n_channels, data, device, row_data);
       },
       py::arg("total").noconvert(), py::arg("coarse"), py::arg("density"), py::arg("first"), py::arg("normals"),
       py::arg("pulse"), py::arg("offsets"), py::arg("sample_rate"), py::arg("time0"), py::arg("center_frequency"),
       py::arg("sound_speed"), py::arg("n_azimuth"), py::arg("decimation"), py::arg("velocity") = Vec3d{},
       py::arg("backend") = Backend::Host, py::arg("device") = 0, py::arg("direction") = py::none(),
-      py::arg("doppler") = py::none(),
+      py::arg("doppler") = py::none(), py::arg("rows") = py::none(), py::arg("batched") = false,
+      py::arg("total_from_host") = true, py::arg("total_to_host") = true,
       "Add a run of azimuth sectors of scattering-function reverberation into `total` (complex64 [channels, n_low], "
       "in place), from the power density [rows, len(coarse)]: `normals` [sectors, 2, n_low] are standard normal "
       "deviates for the sectors with power starting at the `first`-th. With `direction` [rows, 3] and `doppler` "
-      "[rows], each row is a component with that arrival direction and frequency shift instead of an azimuth sector.");
+      "[rows], each row is a component with that arrival direction and frequency shift instead of an azimuth sector.\n"
+      "`rows` [sectors] names the sector (the row, for components) of each entry of `normals`, so that the sectors "
+      "with power are not searched for in every call (`first` is then not used). The CUDA backend runs the batched "
+      "formulation (transforms, Doppler shifts and steering on the device); `batched=True` runs that formulation on "
+      "the host. In the batched formulation `total_from_host=False` continues from the spectrum the previous call left "
+      "on the backend with `total_to_host=False` (the array is then stale until a call brings it back): a "
+      "generator call that adds its sectors in runs moves the spectrum to the device once and back once.");
+  // What this build's reverberation generator can do (python/gpusonar/sim/reverb.py).
+  m.attr("SIM_REVERB_COMPONENTS") = true;   // rows with their own direction and Doppler shift
+  m.attr("SIM_REVERB_ROWS") = true;         // sim_reverb_accumulate(rows=...)
+  m.attr("SIM_REVERB_BATCHED") = true;      // the batched formulation; sim_reverb_finish on a backend
+
+  m.def(
+      "sim_reverb_profile",
+      [](bool reset) {
+        const sim::ReverbProfile p = sim::reverb_profile();
+        if (reset) sim::reverb_profile_reset();
+        py::dict d;
+        d["shape"] = p.shape;
+        d["upload"] = p.upload;
+        d["shift"] = p.shift;
+        d["transform"] = p.transform;
+        d["pulse"] = p.pulse;
+        d["product"] = p.product;
+        d["steer"] = p.steer;
+        d["download"] = p.download;
+        d["finish"] = p.finish;
+        d["active"] = p.active;
+        d["calls"] = p.calls;
+        d["components"] = p.components;
+        return d;
+      },
+      py::arg("reset") = false,
+      "Seconds spent in each step of the reverberation generator since the last reset, with the number of calls of "
+      "sim_reverb_accumulate and of components. Batched formulation: shape (host), upload, shift, transform, pulse, "
+      "product, steer, download; reference host code: transform (the per-sector transforms on the CPU threads), "
+      "steer; both: active (finding the sectors with power, when `rows` is not passed) and finish.");
 
   m.def(
       "sim_reverb_finish",
       [reverb_params](const ArrTotal& total, double sample_rate, std::int64_t n_samples, double start_time,
                       double time0, double center_frequency, std::int64_t decimation, bool carrier,
-                      bool real_output) -> py::array {
+                      bool real_output, Backend backend, int device, bool batched) -> py::array {
         if (total.ndim() != 2) throw std::invalid_argument("total must have shape [channels, n_low]");
         const py::ssize_t n_channels = total.shape(0);
-        const sim::ReverbParams p = reverb_params(sample_rate, n_samples, start_time, time0, center_frequency,
-                                                  kSoundSpeedNotUsed, 1, decimation, total.shape(1), Vec3d{}, carrier,
-                                                  real_output);
+        sim::ReverbParams p = reverb_params(sample_rate, n_samples, start_time, time0, center_frequency,
+                                            kSoundSpeedNotUsed, 1, decimation, total.shape(1), Vec3d{}, carrier,
+                                            real_output);
+        p.batched = batched;
         const std::vector<py::ssize_t> shape{n_channels, static_cast<py::ssize_t>(n_samples)};
         py::array out = real_output ? py::array(py::array_t<float>(shape)) : py::array(py::array_t<std::complex<float>>(shape));
         auto* data = static_cast<float*>(out.mutable_data());
         {
           py::gil_scoped_release release;
-          sim::reverb_finish(p, reinterpret_cast<const float*>(total.data()), n_channels, data);
+          sim::reverb_finish(p, reinterpret_cast<const float*>(total.data()), n_channels, data, backend, device);
         }
         return out;
       },
       py::arg("total"), py::arg("sample_rate"), py::arg("n_samples"), py::arg("start_time"), py::arg("time0"),
       py::arg("center_frequency"), py::arg("decimation"), py::arg("carrier") = false, py::arg("real_output") = false,
+      py::arg("backend") = Backend::Host, py::arg("device") = 0, py::arg("batched") = false,
       "The reverberation of every channel in the record's window from the accumulated spectrum: [channels, "
-      "n_samples] complex64, or float32 with real_output.");
+      "n_samples] complex64, or float32 with real_output. On the CUDA backend the interpolation to the record's rate "
+      "runs on the device; `batched=True` runs the device's formulation on the host.");
 }

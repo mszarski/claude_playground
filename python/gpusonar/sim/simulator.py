@@ -156,14 +156,16 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
         alpha = float(acoustics.absorption(fc, env.get("temperature", 10.0), env.get("salinity", 35.0),
                                            env.get("depth", 0.0), env.get("ph", 8.0), absorption_model))
         strength = None
-        if item.get("model", "lambert") == "chapman_harris":
-            strength = reverb.chapman_harris_strength(float(item["wind_speed"]), fc)
-        elif item.get("model") in ("kraus_surface", "searay_bottom"):
-            # Empirical high-frequency laws (sim/surface.py): {model: kraus_surface, wind_speed}
-            # for the surface, {model: searay_bottom, bottom_type: mud|sand|gravel|rock} for the bottom.
+        if item.get("model", "lambert") in ("chapman_harris", "kraus_surface"):
+            # Empirical surface laws: {model: chapman_harris | kraus_surface, wind_speed[, cap:
+            # bubble_saturation]}. Without `cap` the law is unchanged and a warning is given once
+            # where it lies above the bubble layer's saturation level (sim/surface.py, D-87).
             from . import surface as surface_model
-            strength = (surface_model.kraus_surface_strength(float(item["wind_speed"]), fc) if item["model"] == "kraus_surface"
-                        else surface_model.searay_bottom_strength(fc, item["bottom_type"]))
+            strength = surface_model.empirical_surface_strength(item["model"], float(item["wind_speed"]), fc, item.get("cap"))
+        elif item.get("model") == "searay_bottom":
+            # Empirical bottom law by type (sim/surface.py): {model: searay_bottom, bottom_type: mud|sand|gravel|rock}.
+            from . import surface as surface_model
+            strength = surface_model.searay_bottom_strength(fc, item["bottom_type"])
         elif item.get("model") == "bubble_layer_surface":
             # {model: bubble_layer_surface, wind_speed, extinction: apl_1994 | hall_novarini}: the
             # bubble-layer and facet terms of the published high-frequency surface model (sim/surface.py).
@@ -174,7 +176,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             # {model: fluid_sediment, boundary_z, rho, nu, delta, w2, gamma2, sigma2}: interface
             # roughness and sediment volume scattering (sim/bottom.py) in place of Lambert's law.
             # Optional: sediment (a name in configs/sediments.yaml; the item's own values win),
-            # roughness_model (perturbation | kirchhoff | small_slope | composite | combined),
+            # roughness_model (small_slope, the default since D-86 | perturbation | kirchhoff |
+            # composite | combined),
             # small_scale_kh.
             from . import bottom as bottom_model
             keys = ("rho", "nu", "delta", "w2", "gamma2", "sigma2")
@@ -198,6 +201,17 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             item = dict(item, boundary_z=0.5 * (top + bottom))
         elif item.get("model", "lambert") != "lambert":
             raise ValueError(f"unknown reverberation model {item['model']!r}")
+        elif "sediment" in item and "mu_db" not in item:
+            # {boundary_z, sediment: rock | pebbles}: Lambert's law with the measured parameter
+            # of a table entry that is not a fluid sediment (configs/sediments.yaml, D-88).
+            from . import bottom as bottom_model
+            item = dict(item, mu_db=bottom_model.named_lambert_mu_db(item["sediment"], item.get("sediment_file")))
+        elif "mu_db" not in item:
+            # A Lambert boundary with nothing said about its strength: -29 dB, the low-frequency
+            # deep-water value (bottom.DEFAULT_LAMBERT_MU_DB, D-89; -27 dB before); warns once at
+            # 10 kHz and above.
+            from . import bottom as bottom_model
+            item = dict(item, mu_db=bottom_model.default_lambert_mu_db(fc))
         # `offset_db` moves the boundary's strength up or down whatever its model: what
         # calibration against a real log adjusts (gpusonar/simcal.py).
         offset = float(item.get("offset_db", 0.0))
@@ -215,7 +229,7 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             part = reverb_specular.boundary_part(item, provider, fc, env.get("sound_speed", 1500.0))
             if part is not None:
                 if strength is None:
-                    mu = 10.0 ** ((float(item.get("mu_db", -27.0)) + offset) / 10.0)
+                    mu = 10.0 ** ((float(item["mu_db"]) + offset) / 10.0)        # a Lambert item: mu_db is set above
                     strength = lambda g_in, g_out: mu * np.sin(g_in) * np.sin(g_out)   # noqa: E731
                 strength = reverb_specular.exclude(strength, part)
         # New keys, all optional (sim/reverb.py, sim/reverb_bistatic.py): `geometry: bistatic`
@@ -256,7 +270,8 @@ def simulate_ping(sonar: SonarModel, pose: "core.Pose", scene: Scene, *,
             extra["bottom_bounces"] = str(item["bottom_bounces"])
         if item.get("scatterer_motion") is not None:
             extra["scatterer_motion"] = dict(item["scatterer_motion"])
-        reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]), float(item.get("mu_db", -27.0)) + offset,
+        reverb.add_reverberation(record, getattr(provider, "reverberation_provider", provider), float(item["boundary_z"]),
+                                 float(item.get("mu_db", -29.0)) + offset,     # used for Lambert items only (set above); others pass `strength`
                                  rng or np.random.default_rng(), n_azimuth=item.get("n_azimuth"),
                                  strength=strength,
                                  absorption_db_per_m=alpha, max_range=item.get("max_range"), backend=backend,

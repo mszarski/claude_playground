@@ -1129,3 +1129,136 @@ being extended to the repository's other sites. The owner chose to switch ("Yes 
 Gaussian"). Consequence: realisations of runs with time spreading change (the spectrum also
 sets the ping-to-ping fading). The decay-time rule is not changed: the same data do not
 settle it.
+
+### D-85 Time spreading: the decay time defaults to the facet rule
+
+`time_spread.decay_time` now defaults to `facet` (mean excess delay
+mss (1 + sin^2 g) t1 t2 / (t1 + t2), with the shape Gaussian facet slopes give);
+`rule_of_thumb` (TR 0702's 2 mss t1 t2 / (t1 + t2), one exponential) stays selectable.
+Evidence: the measured channels of `PHYSICS_NOTES.md` Sec. 21 (21.4 for the three
+recordings): 27 surface arrivals at the SPACE'08 site, 12.5 kHz, three recordings in two
+sea states, one fitted number per recording (the wind). Measured decay time over model:
+median 0.47 for the rule of thumb (about twice too long) against 0.99 for `facet`; above
+12 degrees of grazing 0.75 against 1.28, below it 0.28 against 0.59. Limits: one site, one
+band; the scatter is a factor 5 per arrival for `facet` (3 for the rule), so the median is
+supported and a single arrival is not; neither rule is supported in detail. The two rules
+agree at normal incidence and differ by a factor two at low grazing angles. The owner was
+shown the recommendation and answered "Take your recommendations".
+Consequence: runs with `time_spread` and no `decay_time` key get tails up to half as long
+(shipped: `sst_asiaex`, `flank_sst_shallow`; `flank_sst_spread` already names `facet`).
+The comparison with TR 0702 (`tools/sst_validation.py`) names `rule_of_thumb`, as it names
+`multi_bounce: sum` and `doppler_spectrum: lorentzian`: that report's rule is what it tests.
+D-84's last sentence ("the decay-time rule is not changed") is superseded by this entry.
+
+### D-86 Bottom roughness scattering defaults to the small-slope approximation
+
+`roughness_model` of the fluid-sediment bottom model (`sim/bottom.py`: reverberation items,
+sediment seafloors, `sediment_fit`, the study and fit tools) now defaults to `small_slope`;
+`perturbation` stays selectable and is unchanged. Evidence is the literature pass
+(`PHYSICS_NOTES.md` Sec. 23.2, `REFERENCES.md`), not a measurement of ours: the lowest-order
+small-slope result is what current work uses; against boundary-element solutions it is valid
+wherever first-order perturbation theory is, and beyond (Olson, J. Acoust. Soc. Am. 160,
+1918, 2026, hdl 10945/76181: "PT is accurate whenever SSA(2) is accurate"); it equals the
+perturbation result for small relief and the Kirchhoff result in the specular direction
+(our tests), where perturbation theory with a power-law spectrum diverges. Limits: that
+comparison is for one-dimensional surfaces and backscatter; no data of ours decide between
+the two. The owner was shown the recommendation and answered "Take your recommendations".
+Consequence, measured on the shipped cases: below 60 degrees of grazing the backscattering
+strength changes by 0.0 to +0.3 dB; at 75 degrees by +0.0 to +0.6 dB; at 85 degrees by
++0.3, -2.8 and -3.3 dB (placeholder sand at 8 kHz, medium sand at 20 kHz, placeholder
+sand at 300 kHz), and at 90 degrees it is finite (+17, -1, -2 dB) where the perturbation
+result is not. In records: `sst_sediment_reverb` +0.07 dB (grazing 8 to 53 degrees),
+`fls_glints_on_sediment` unchanged to 0.00 dB (difference -82 dB re the record); in
+`flank_sst_shallow` and `flank_sst_spread` the first 0.2 s of the record, where the long
+pulse's return from the bottom below the sonar (normal incidence) still arrives, falls by
+6 to 8 dB (record energy -6.5 dB) and the rest is unchanged to 0.00 dB: that part of the
+old records came from the diverging perturbation result as sampled by the angle grid.
+Cost: 1.3 times the perturbation evaluation (a cached table; 0.21 s against 0.16 s for
+200 000 angle pairs), nothing measurable in scenario run time, so no further tabulation.
+`sim/sediment_fit.py` and `tools/fit_sediment.py` keep naming `perturbation` as their own
+default: a fit records its model in the row it writes, its tests assert what first-order
+theory can and cannot separate, and with a free exponent the small-slope table would be
+rebuilt at every step; `--roughness-model small_slope` is there for data above 60 degrees. The small-slope result needs 2 < gamma2 < 4; outside that range, with no
+model named, the perturbation result is used and a warning says so. Sediment seafloors now
+pass `roughness_model` and `small_scale_kh` on, so the earlier amplitudes stay selectable
+there too (they were not before, because there was nothing to select).
+
+### D-87 Surface backscatter: the bubble-layer model in its band, a warning and an opt-in cap outside it
+
+In 12 to 70 kHz and 3 to 15 m/s, `bubble_layer_surface` is the model to use: it is the only
+one here whose source states a comparison with data (+-5 dB; Gallaudet 2001, pp. 124-125,
+`PHYSICS_NOTES.md` Sec. 23.3). The owner was shown the recommendation and answered "Take
+your recommendations". What that changes:
+- No code default: a reverberation item without `model` is a Lambert boundary, so every
+  surface item names its law. There was nothing to flip.
+- No shipped scenario was switched, because none has a surface item in that band: the
+  surface items are at 5 to 9.9 kHz (flank, long-range Popoto, `sst_pursuit`) and at 120 to
+  330 kHz (FLS); the `popoto_8` trials at 27.5 kHz have no surface item. Switching the ones
+  outside the band would be an extrapolation of the bubble model, so they keep their law.
+- `chapman_harris` and `kraus_surface` are unchanged and now warn, once per law, when used
+  at 12 kHz or above where they exceed the level a saturated bubble layer returns
+  (delta_r sin t / (8 pi delta)) at 10 degrees of grazing. Computed crossing frequencies
+  for 3 / 5 / 6 / 8 / 10 / 15 m/s: Chapman-Harris 416 / 127 / 84 / 43 / 26 / 10 kHz; Kraus
+  never / 511 / 223 / 74 / 36 / 12 kHz. Shipped scenarios that now warn (records
+  unchanged): `fls_170k_traffic`, `fls_170k_transit` (+1.8 dB above the level),
+  `fls_330k_transit` (+5.9 dB). `fls_120k_*` is 0.4 dB below it.
+- `cap: bubble_saturation` on such an item (opt-in) takes the smaller of the law and that
+  level.
+Limits: literature only. The level is the thick-layer limit of the bubble term, not its
+maximum (the term itself peaks 3.7 dB above it at an optical depth of 0.6 along the ray,
+e.g. -25.4 dB against -29.1 dB at 27.5 kHz, 10 m/s, 10 degrees), and it says nothing about
+facets near normal incidence. Above 70 kHz nothing that could be opened validates any of
+the three models; the warning says so.
+
+### D-88 Rock: the measured Lambert value by name; the type law warns
+
+The type law `searay_bottom` with `bottom_type: rock` gives -16.9 / -7.2 / -3.2 dB at
+10 / 20 / 45 degrees at every frequency. The brightest Lambert surface energy conservation
+allows (mu = 1 / pi, -4.97 dB) gives -20.2 / -14.3 / -8.0 dB, so the law is above the bound
+by up to 7.5 dB between 10 and 45 degrees (the literature pass found the same of the
+handbook's own rock curve, arXiv:1601.06078, introduction). Measured rock is described by
+Lambert fits of mu = -23 to -10 dB (`configs/sediments.yaml`, `rock`: -16 dB, our choice of
+the middle of the published range). The owner was shown the recommendation to move
+scenarios that use the type law for rock to that value and answered "Take your
+recommendations". Done: the reverberation item `{boundary_z, sediment: rock}` (Lambert's
+law with the table's value; `pebbles` likewise, flagged unconfirmed), and
+`searay_bottom: rock` warns once that it exceeds the bound and names the alternative; the
+law itself is unchanged for whoever names it. Scenarios changed: none. No shipped scenario
+uses `searay_bottom` at all (the scene items of type `rocks` are objects with their own
+`mu_db`, not this law). For anyone who moves, the level falls by 14.3 / 18.1 / 15.8 dB at
+10 / 20 / 45 degrees. Limits: literature only; -16 dB is a representative value inside a
+13 dB range of site fits, and smooth abraded rock is lower and not Lambertian.
+
+### D-89 The default Lambert parameter is -29 dB, and says what it is
+
+A reverberation boundary that gives neither `mu_db` nor a model nor a sediment now gets
+-29 dB (`bottom.DEFAULT_LAMBERT_MU_DB`); it was -27 dB, written from memory as "the
+Mackenzie value". The one open print found says -29 dB: Muggleworth, MS thesis, Naval
+Postgraduate School 1994, hdl 10945/28529, p. 34, quoting Mackenzie (1961) for deep water
+at 530 and 1030 Hz and 20 to 60 degrees. The owner was shown the recommendation and
+answered "Take your recommendations". Limits: one secondary print; Mackenzie's paper was
+not opened; and either number is a low-frequency deep-water value, not one for a sonar at
+tens or hundreds of kHz (measured sands at 45 degrees and 100 kHz and above are near
+-25 dB, mu about -22 dB). So the definition cites the print and says to name a sediment
+instead, and the bare default warns once when used at 10 kHz or above. Same default in
+`reverb_bistatic.directional_power` and `reverb_relief.directional_power`.
+Consequence: a boundary that relied on the default is 2.0 dB lower. No shipped scenario
+did: all 21 Lambert boundaries in `configs/scenarios` give `mu_db` (-27.0 in 18 of them,
+by choice of their authors, unchanged). `tools/design_report.py` and `DESIGN.md` state
+"-27 dB Lambert" as an assumed seabed for the SAS cell: an explicit assumption, not this
+default, left as it is.
+
+### D-90 `medium_sand` keeps its source's volume parameter
+
+`configs/sediments.yaml`, `medium_sand`: `sigma2` stays 0.001, the value its source
+tabulates for that sediment (arXiv:1809.08459, Table 1: -20.0 dB/m volume scattering
+strength at 10.0 dB/m of attenuation). The grain-size rule (Snellen et al. 2011, Table II;
+2013) gives 0.002 for everything coarser than 5.5 phi, and the same arXiv table agrees
+with the rule for very fine silt, so the difference is real and known; nothing read says
+which number the handbook holds for medium sand. The owner was shown the choice and
+answered "Take your recommendations": the recommendation was to keep the tabulated value,
+because a value printed for the sediment itself in a cited source outranks a general
+rule. No number changes. Cost of the choice: the row sits 0 to 2.5 dB below its
+neighbours' trend (most at 6 kHz and 45 degrees). The row's provenance and note now say
+so; `sigma2: 0.002` beside the name gives the rule's value. Limit: literature only, one
+print; a second print of the table would settle it (`REFERENCES.md` wanted list).

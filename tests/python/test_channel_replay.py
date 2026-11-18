@@ -367,7 +367,7 @@ def test_validation_procedure_recovers_a_known_wind_and_tells_the_options_apart(
     ch, geo, rx = tool.synthetic_measured(1, 3, wind=5.0, n_time=1740)
     result = tool.run([("synthetic_1", 0, ch, geo, rx)], seeds=2, log=lambda *_: None)
     site = result["sites"][0]
-    assert result["free_parameters"] == 1
+    assert result["free_parameters"]["A"] == 1 and result["free_parameters"]["E"] == 3
     assert site["wind_fit"]["wind_speed"] == pytest.approx(5.0, rel=0.15)
     groups = {g["name"]: g for g in site["groups"]}
     first = site["groups"][0]                                  # the direct path, with the bottom bounce 0.29 ms behind it
@@ -481,3 +481,87 @@ def test_purple_doppler_width_grows_with_frequency_inside_the_band():
 def test_validation_tool_says_what_is_missing_without_data(tmp_path, capsys):
     assert _tool().main(["--data", str(tmp_path)]) == 2
     assert "fetch_channels.py" in capsys.readouterr().out
+
+
+# -- Watermark (FFI): tests that need no geometry ---------------------------------------------------------------
+
+_WM = os.environ.get("GPUSONAR_WATERMARK_DIR", "")
+
+
+def _watermark_tool():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("channel_watermark", pathlib.Path(__file__).resolve().parents[2] / "tools" / "channel_watermark.py")
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    return tool
+
+
+def test_wave_frequency_is_what_the_model_keeps_constant_across_arrivals():
+    """c = exp(-(chi h)^2), s = (chi v / 2 pi) / sqrt(1 - c)  =>  s sqrt((1 - c) / ln(1/c)) = v / (2 pi h)
+    for every chi (grazing angle, bounces, frequency)."""
+    h, v = 0.08, 0.25
+    chi = np.array([2.0, 6.0, 12.0, 25.0])
+    c = np.exp(-(chi * h) ** 2)
+    s = chi * v / (2.0 * np.pi) / np.sqrt(1.0 - c)
+    assert np.allclose(cr.wave_frequency(c, s), v / (2.0 * np.pi * h))
+    assert np.all(np.isnan(cr.wave_frequency([0.0, 1.0, 1.2], [1.0, 1.0, 1.0])))
+    # ... and our model does keep it: two surface arrivals of one sea at different grazing angles.
+    out = []
+    for rng in (150.0, 300.0):
+        inner = ImageSourceProvider(C0, surface_z=0.0, bottom_z=None, max_order=1)
+        prov = wrap(inner, {"surface": {"wind_speed": 4.0}, "taps": 24, "doppler_lines": 48, "coherence_length": 0.01, "seed": 2,
+                            "doppler_spectrum": "gaussian", "decay_time": "facet"}, frequency=FC)
+        rx = np.array([[rng, 0.0, ZR + 0.05 * i] for i in range(8)])
+        ch, rays = cr.model_channel(prov, [0.0, 0.0, ZS], rx, n_time=2400, fs_time=FS_T, fs_delay=FS_D, n_delay=128, fc=FC, bandwidth=BW,
+                                    lead=2e-3, return_rays=True)
+        vals = []
+        for m in range(8):
+            tau, _ = _surface_arrival(rays, m)
+            st = cr.arrival_statistics(ch, m, int(round(tau * FS_D)), half_width=1, tail_bins=40)
+            vals.append(cr.wave_frequency(st["coherent_fraction_arrival"], st["doppler"]["rms"]))
+        out.append(float(np.mean(vals)))
+    want = acoustics.rms_surface_vertical_speed(4.0) / (2.0 * np.pi * acoustics.rms_wave_height(4.0))
+    assert out[0] == pytest.approx(want, rel=0.25) and out[1] == pytest.approx(want, rel=0.25)
+
+
+def test_watermark_loader_and_tool_on_synthetic_soundings(tmp_path, capsys):
+    """Channel files in the Watermark layout made from arrivals that obey the model's link between
+    coherent share and Doppler width (wave frequency 0.5 Hz): the tool reads them, finds the wave
+    frequency, and the invariant scatters less than the raw widths."""
+    from scipy.io import savemat
+    tool = _watermark_tool()
+    f0 = 0.5
+    folder = tmp_path / "Watermark" / "input" / "channels" / "NOF1" / "mat"
+    folder.mkdir(parents=True)
+    shares = [0.8, 0.5, 0.2, 0.07]
+    for i in range(3):
+        paths = [{"delay": 2e-3 * (k + 1), "amplitude": np.sqrt(c), "incoherent": 1.0 - c, "doppler_width": f0 * np.sqrt(np.log(1.0 / c) / (1.0 - c))}
+                 for k, c in enumerate(shares)]
+        ch = cr.synthetic_channel(paths, n_time=1200, fs_time=7.8125, fs_delay=16000.0, n_delay=256, fc=14e3, bandwidth=8000.0, noise=1e-4, seed=i)
+        savemat(folder / f"NOF1_{i + 1:03d}.mat", {"h": ch.h[:, 0, :], "fs_t": 7.8125, "fs_tau": 16000.0, "fc": 14000, "V0": 0.06})
+    one = cr.load_watermark(str(folder / "NOF1_001.mat"))
+    assert one.h.shape == (1200, 1, 256) and one.fc == 14e3 and one.fs_time == 7.8125 and one.meta["V0"] == 0.06
+    assert tool.main(["--data", str(tmp_path), "--figures", str(tmp_path), "--out", str(tmp_path / "w.md")]) == 0
+    text = capsys.readouterr().out
+    assert "| NOF1 | 14 kHz |" in text and (tmp_path / "channel_validation_watermark.png").stat().st_size > 10_000
+    res = tool.summarise("NOF1", [tool.analyse(cr.load_watermark(str(f))) for f in tool.files(tmp_path, "NOF1")])
+    assert res["partial_soundings"] == 3
+    assert res["wave_frequency_median"] == pytest.approx(f0, rel=0.2)
+    assert res["invariant_scatter"] < res["width_scatter"] and res["rank_correlation_width_share"] < -0.5
+    assert tool.main(["--data", str(tmp_path / "nothing")]) == 2
+
+
+@pytest.mark.skipif(not (_WM and _watermark_tool().files(pathlib.Path(_WM), "NCS1")),
+                    reason="Watermark channels not available (tools/fetch_channels.py <dir> --watermark, GPUSONAR_WATERMARK_DIR)")
+def test_watermark_ncs1_scattered_arrivals_are_gaussian_like():
+    """Norwegian shelf, 14 kHz, a correlative sounder (no tracking filter): the arrivals are fully
+    scattered, their Doppler spectra have the Gaussian's shape, and their level fluctuates like a
+    complex Gaussian's (scintillation index about 1, not the 1.1 to 4.8 of SPACE'08 at 60 m)."""
+    tool = _watermark_tool()
+    rows = [r for f in tool.files(pathlib.Path(_WM), "NCS1")[:6] for r in tool.analyse(cr.load_watermark(str(f)))]
+    rough = [r for r in rows if r["coherent"] < 0.05]
+    assert len(rough) > 40
+    assert 2.0 < np.median([r["shape"] for r in rough]) < 3.0
+    assert 0.7 < np.median([r["scintillation"] for r in rough]) < 1.15
+    ratio = np.mean([r["band_ratio"] for r in rough])
+    assert 1.05 < ratio < 1.3                                  # wider in the upper half of the band; proportional would be 1.24
