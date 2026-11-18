@@ -141,6 +141,11 @@ def main() -> None:
         for u in args.wind:
             print(row(f"Chapman-Harris, {u:g} m/s", acoustics.chapman_harris_db(g, u, f_hz)))
             print(row(f"Kraus empirical, {u:g} m/s", surface.kraus_surface_db(g, u, f_hz)))
+            # The published bubble-layer and facet terms (Gallaudet 2001, eqs. (8), (10)); stated range 12-70 kHz.
+            print(row(f"bubble layer, apl_1994, {u:g}", surface.bubble_layer_surface_db(g, u, f_hz, c)))
+            print(row(f"bubble layer, hall_nov., {u:g}", surface.bubble_layer_surface_db(g, u, f_hz, c, "hall_novarini")))
+        print(row("bubble saturation level", 10 * np.log10(surface.BUBBLE_RERADIATION_DAMPING * np.sin(np.maximum(g, surface.MIN_GRAZING))
+                                                          / (8 * np.pi * surface.bubble_damping_constant(f_hz)))))
 
     # Published measurements, as numbers in a paper's text (not read off figures). One set was
     # found in an open source: rock outcrops at 100 kHz. Olson, Lyons and Saebo, "Measurements of
