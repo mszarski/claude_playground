@@ -5,9 +5,45 @@ for forward-looking sonar (FLS), synthetic aperture sonar (SAS) and a long-range
 array. Every mode runs through the same record format, the same time-domain
 backprojection kernel, the same config system and the same simulator.
 
-**State: early.** Milestones 1 to 10 of 13 are done, 12 and 13 are partly done, and the CUDA backend has
-been run and benchmarked on rented GPUs (not yet on a DGX Spark or Jetson); see [`docs/STATUS.md`](docs/STATUS.md)
-for what exists, what is next, and what has only been compiled and never run on a GPU.
+**State of the project.** Everything here is software, simulation and analysis: no sonar
+described in it is built, and nothing has run on a vehicle, on the Popoto boards, on a DGX
+Spark, a Jetson or Sensor Bridge hardware. Milestones 1 to 10 of 13 are done on the CPU and
+the CUDA backend has been run and benchmarked on rented GPUs. The long-range design is
+honest about where it stands: one long row at 197 dB is 1.0 dB short of detection at 12 km
+on the chain's own detector, depth at range is limited by what is known of the sound-speed
+profile, and one generated build fails one of its self-tests. The full CPU suite and a GPU
+job have not yet been rerun on the present tree. [`docs/STATUS.md`](docs/STATUS.md) says
+what works, how each part was checked, and lists what is open or known to be wrong;
+[`docs/RESULTS.md`](docs/RESULTS.md) has the numbers.
+
+## What is in it
+
+- **One record format** (HDF5, schema 1.0.0) between every source and every stage, with
+  taps after any stage that are themselves sources.
+- **Imaging**: time-domain backprojection for forward-looking sonar, stripmap and rail
+  SAS, and 3D near-field imaging of buried objects; conditioning, pulse compression,
+  motion estimation from the data (Ceres), ray culling, sessions that keep samples on the
+  device.
+- **A long-range chain for a towed or hull-mounted line array** (`libs/live`, in C++ and
+  mirrored in Python): board synchronisation, beamforming (backprojection, far-field,
+  MVDR, sparse Bayesian bearings), a detector with a stated false-alarm budget, tracking,
+  classification, a report per ping. For two or three stacked rows: elevation and depth.
+  Depth from the timing of the surface echo. Rays through the sound-speed profile the
+  vehicle holds. A coverage picture (where it can and cannot detect). Passive bearings
+  and tonal analysis (Goertzel lines, DEMON). The same program runs on a simulation, a
+  recording, an emulated board over UDP, and as Holoscan operators.
+- **A simulator** with four propagation tiers (free field, image source, sediment
+  interface, eigenrays from Bellhop run as a separate program), reverberation from bottom,
+  surface and volume, time, angle and frequency spreading of bounce paths, targets and
+  specular shapes, one-way sources, noise with a spectrum and array coherence, the
+  projector's direct sound and receiver overload, a basin's late reverberation, and sound
+  speed that changes with range. Checked against APL-UW TR 0702 section by section and
+  against three sets of measured channel soundings.
+- **Designs traced to config files**: 120, 170 and 330 kHz forward-looking sonars, a
+  MINSAS-class SAS, and a 4 to 6 kHz long-range array on Popoto boards as a staged build
+  (a one-row prototype, a static frame, the vehicle's face with one to three rows), with
+  link budgets, a depth planner, projector requirements, parts lists and checklists
+  generated from each build's spec.
 
 The repository also holds the older `trajectory_classifier` Python package, which is
 unrelated to the sonar suite.
@@ -32,8 +68,31 @@ cmake --build build && sudo cmake --install build
 Without it the suite still builds; motion estimation is left out and its tests skip.
 
 ```bash
-tools/test.sh            # configure, build, run GoogleTest and pytest
+tools/test.sh            # configure, build, run GoogleTest and pytest (the whole suite)
 ```
+
+The whole Python suite takes a long time on a small machine and needs several GB of
+memory. To run parts of it:
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSONAR_ENABLE_CUDA=OFF && cmake --build build -j3
+ctest --test-dir build -E pytest --output-on-failure        # the C++ tests only
+PYTHONPATH=python python3 -m pytest tests/python/test_detector.py -q      # one Python file
+GPUSONAR_SIM_ENGINE=numpy PYTHONPATH=python python3 -m pytest tests/python/test_sim.py -q   # the NumPy reference engine
+```
+
+Tests that need something external skip without it. The switches:
+
+| Variable | What it enables |
+| --- | --- |
+| `GPUSONAR_BELLHOP=/path/to/bellhop.exe` | the `eigenray` tier: every `flank_*`, `popoto_*`, `fjord_*` and `ssp_*` scenario that names Bellhop, and their tests (`tools/build_oracles.sh` builds it) |
+| `GPUSONAR_KRAKEN_DIR` | the rays-against-normal-modes cross-check |
+| `GPUSONAR_PICMUS_DIR` | the PICMUS ultrasound benchmark (`tools/fetch_picmus.py`) |
+| `GPUSONAR_UACR_DIR`, `GPUSONAR_WATERMARK_DIR`, `GPUSONAR_SMARTOCEAN` | the measured channel data sets (`tools/fetch_channels.py`; not in the repository, see `docs/OPEN_SOURCE.md` 3.13) |
+| `GPUSONAR_SIM_ENGINE=numpy` or `cpp` | which simulator engine the tests use |
+
+On a GPU machine `tools/gpu_job.sh` builds with CUDA and runs the suite and the
+benchmarks (`GPUSONAR_JOB=benchall` for the table of every stage).
 
 - The CUDA backend is built when a CUDA compiler is found. Force it with
   `SONAR_CMAKE_ARGS=-DSONAR_ENABLE_CUDA=ON` or turn it off with `=OFF`.
@@ -66,12 +125,38 @@ tools/calibrate_sim.py fls --log dive.h5 --scenario fls_120k_transit            
 tools/gallery.py --backend host --quick                     # the same, thinned
 ```
 
+The long-range array's design and study tools (each writes a committed file under
+`docs/design/` or `docs/figures/`, named in `docs/RESULTS.md`):
+
+```bash
+tools/build_from_spec.py configs/builds/popoto_face_3x32.yaml --validate   # a build spec: sonar and deployment files, self-tests, checklists
+tools/build_from_spec.py --check-shipped                    # the generated files in the repository match their specs
+tools/parts_list.py                                         # docs/design/popoto_parts.md
+tools/popoto_depth_planner.py --shipped                     # own depth against detection margin
+tools/projector_requirements.py; tools/projector_candidates.py   # what the projector must do; listed candidates against it
+tools/direct_sound_study.py                                 # the projector's direct sound at every hydrophone
+tools/popoto_12km_study.py                                  # the 12 km design point through the chain (needs Bellhop)
+tools/coverage_map.py --build popoto_face_1x32 --environment shelf_100m_sand --own-depth 50   # where a build can detect
+tools/multipath_depth_study.py; tools/refraction_depth_study.py --bellhop   # depth from the surface echo; depth against profile knowledge
+tools/ssp_range_study.py; tools/fjord_rehearsal.py          # water that changes with range; a trial in fjord-type water
+tools/nav_adapter.py --help                                 # a vendor's navigation stream to the chain's datagrams
+tools/tonal_range_study.py                                  # passive detection range of a tonal (model figures)
+tools/gpu_benchmark_all.py --backend host                   # every stage with a CUDA backend, timed (the CUDA column on a GPU)
+```
+
+Simulator validation and fitting: `tools/sst_validation.py` (against TR 0702),
+`tools/channel_validation.py`, `channel_watermark.py`, `channel_smartocean.py` (against
+measured channels), `tools/basin_reverberation_fit.py`, `tools/fit_noise.py`,
+`tools/fit_sediment.py`, `tools/boundary_models_study.py`, `tools/timespread_study.py`,
+`tools/coherent_phase_study.py`, `tools/decay_time_sensitivity.py`.
+
 The host backend uses every core (OpenMP). Per-scenario times on four cores are in
 `docs/SCENARIOS.md`; all 26 gallery scenarios take about an hour in total, the 120 kHz transit 77 s and the
-flank patrol eleven minutes (72 before the kernel rework).
+flank patrol eleven minutes (72 before the kernel rework). Those times and the gallery's
+numbers were measured before the latest changes of levels, noise and defaults.
 
-Without Bellhop the
-long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everything else runs.
+Without Bellhop the scenarios at the `eigenray` tier (most of `flank_*`, `popoto_*`,
+`fjord_*`, `ssp_*`) and their tests are skipped; everything else runs.
 
 ## Layout
 
@@ -79,16 +164,23 @@ long-range scenarios (`flank_*`, `popoto_*`) and their tests are skipped; everyt
 | --- | --- |
 | `libs/core` | ping record, geometry (ASASIN Eq. 2), directivity, slab allocator, host/CUDA `parallel_for` |
 | `libs/io` | HDF5 container reader and writer, validator |
-| `libs/sim` | simulator synthesis kernel |
-| `libs/dsp` | baseband conversion, pulse compression, calibration, TVG, whitening, DRC |
+| `libs/sim` | simulator kernels: echo synthesis, path pairing, reverberation (also batched for the device) |
+| `libs/dsp` | baseband conversion, pulse compression, calibration, TVG, whitening, DRC, FFT, host and device executors |
 | `libs/recon` | the backprojection kernel (host and CUDA from one source) |
 | `libs/motion` | Ceres solve of ASASIN Eq. 8 (sway and heave) |
-| `libs/{detect,holoscan_ops}` | not started |
-| `third_party/` | vendored pocketfft (BSD-3) |
-| `python/gpusonar` | bindings and the Python layer: sources, configs, simulator scenes, SAS and volume imaging, flank beamforming, detection, tracking, calibration, sync, sonar equation |
-| `configs/` | named sonars and scenarios (YAML) |
+| `libs/detect` | CFAR kernel (host and CUDA); the detector's statistics (tails and thresholds of sums of exponentials) |
+| `libs/live` | the long-range chain: board stream, navigation, synchronisation, beamformers, detector, elevation, multipath depth, ray code, coverage, sound-speed ladder, tonal analysis, tracking, report |
+| `libs/holoscan_ops` | Holoscan operators in C++ around the live library (`-DSONAR_BUILD_HOLOSCAN=ON`) |
+| `apps/` | `sonar_live` (the chain as a standalone program) and `sonar_live_holoscan` |
+| `third_party/` | vendored pocketfft (BSD-3); patches applied to separately built third-party trees |
+| `python/gpusonar` | bindings and the Python layer: sources, configs, the environment schema, the live chain's Python engine, flank beamforming, detection, tracking, elevation, ray tracing, coverage, link budget and build specs, depth planning, calibration, sync, tonal analysis |
+| `python/gpusonar/sim` | the simulator: scenes, targets, propagation providers (including Bellhop as an external process), reverberation, time spreading, boundary models, noise, one-way sources, receiver overload, basin reverberation, channel replay |
+| `configs/sonars`, `configs/scenarios` | named sonars and the 75 scenarios (`docs/SCENARIOS.md` lists every one) |
+| `configs/environments`, `configs/sediments.yaml` | named sites and sediments |
+| `configs/builds`, `configs/deploy`, `configs/nav`, `configs/chains` | build specs of the staged Popoto array, deployment files (generated and hand-written), navigation adapter mappings, processing chains |
+| `tools/` | study, design, validation and benchmark programs (listed above) |
 | `tests/cpp`, `tests/python` | GoogleTest and pytest suites |
-| `docs/` | notes, decisions, record format, status |
+| `docs/` | documents (below); `docs/design/` and `docs/figures/` hold generated tables, JSON and figures; `docs/benchmarks/` the GPU timings |
 
 ## Realistic scenes for every mode
 
@@ -109,20 +201,27 @@ Reproduce them with `tools/gallery.py` (needs `matplotlib`; `--quick` thins the 
 
 ## Documents
 
+Start with the first three.
+
+- [`docs/STATUS.md`](docs/STATUS.md): what works, how it was checked, what is open or known wrong, the owner's open questions.
+- [`docs/RESULTS.md`](docs/RESULTS.md): measured numbers against theory, references and benchmarks, each with the command or file that produces it.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md): every choice made where the paper, the brief or a reference is silent, with its reason (A-01 onward, D-01 to D-132).
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): how the pieces fit, what runs on a GPU, and how to capture, inspect and re-inject data at every stage.
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): the Popoto array on a vehicle: one program, one YAML file, what the vehicle must provide, what is unconfirmed.
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): the long-range array on a vehicle: one program, one YAML file, what the vehicle must provide, the staged build, refraction in operation, the detector, a checklist for a trial in a fjord or harbour, what is unconfirmed.
+- [`docs/REFERENCE_DESIGN.md`](docs/REFERENCE_DESIGN.md): how to go from a build spec to hardware, step by step, with every field of the spec.
+- [`docs/DESIGN.md`](docs/DESIGN.md): the sonar designs, generated from the config files: requirements and where each is met, arrays and beams, timing, link budgets, the 12 km design point, diagrams.
+- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): every key of the sonar, scenario, environment and deployment files; units and conventions.
+- [`docs/SCENARIOS.md`](docs/SCENARIOS.md): the realistic scenes of every mode with figures and numbers, and a list of every scenario file.
+- [`docs/PHYSICS_NOTES.md`](docs/PHYSICS_NOTES.md): SST (APL-UW TR 0702) section by section, and the derivations behind the simulator's and the chain's models (Secs. 12 to 28).
+- [`docs/REFERENCES.md`](docs/REFERENCES.md): every source behind a formula, table or constant, how it was reached and how far it is confirmed.
+- [`docs/OPEN_SOURCE.md`](docs/OPEN_SOURCE.md): open-source projects and data sets checked or used, licences, roles.
+- [`docs/ORG_ARL_SURVEY.md`](docs/ORG_ARL_SURVEY.md): what the org-arl repositories (arlpy and its Julia successors) hold, item by item.
+- [`docs/HARDCODED_AUDIT.md`](docs/HARDCODED_AUDIT.md): an audit of hard-coded assumptions and what was done about each.
 - [`docs/SIM_CALIBRATION.md`](docs/SIM_CALIBRATION.md): fitting the simulator to a real FLS log or a SAS image.
-- [`docs/DESIGN.md`](docs/DESIGN.md): the sonar designs, generated from the config files: requirements and where each is met, arrays and beams, timing, link budgets, diagrams.
-- [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md): every key of the sonar and scenario files.
-- [`docs/SCENARIOS.md`](docs/SCENARIOS.md): the realistic scenes of every mode, with figures, numbers and CPU run times; the target, spreading and TR 0702 validation scenarios.
-- [`docs/PHYSICS_NOTES.md`](docs/PHYSICS_NOTES.md): SST (APL-UW TR 0702) section by section, and the derivations behind the simulator's propagation, reverberation, target and boundary models.
-- [`docs/STATUS.md`](docs/STATUS.md): progress, open questions, deviations.
-- [`docs/RESULTS.md`](docs/RESULTS.md): measured numbers against theory and benchmarks.
-- [`docs/PAPER_NOTES.md`](docs/PAPER_NOTES.md): the ASASIN paper, equation by equation, with its gaps.
-- [`docs/DECISIONS.md`](docs/DECISIONS.md): every choice made where the paper or brief is silent.
-- [`docs/HOLOSCAN_NOTES.md`](docs/HOLOSCAN_NOTES.md): how the NVIDIA ultrasound reference acquires data.
-- [`docs/OPEN_SOURCE.md`](docs/OPEN_SOURCE.md): open-source projects checked, licences, proposed roles.
 - [`docs/RECORD_FORMAT.md`](docs/RECORD_FORMAT.md): the ping record container and the WAV sidecar.
+- [`docs/PAPER_NOTES.md`](docs/PAPER_NOTES.md): the ASASIN paper, equation by equation, with its gaps.
+- [`docs/HOLOSCAN_NOTES.md`](docs/HOLOSCAN_NOTES.md): how the NVIDIA ultrasound reference acquires data.
+- [`docs/JETSON.md`](docs/JETSON.md): build notes for Jetson (untested).
 
 ## Simulate and image a forward-looking sonar ping
 
@@ -208,7 +307,7 @@ boundary reverberation by the scattering-function method, and under
 
 ```yaml
 propagation:
-  environment: {depth: 100.0, sound_speed: 1500.0, bottom_speed: 1600.0, bottom_density: 1.8, bottom_attenuation: 0.5}
+  environment: {depth: 100.0, sound_speed: 1500.0, bottom_speed: 1600.0, bottom_density: 1.8, bottom_attenuation: 0.5}   # older spellings, still accepted; see CONFIGURATION.md, "Environment"
   frequency: 8000.0
   max_range: 10500
   max_arrivals: 80          # too few drops echo energy: see docs/RESULTS.md
@@ -241,15 +340,35 @@ The simulator also has, all opt-in and all listed key by key in `docs/CONFIGURAT
 - sampled transmit pulses: LFM, HFM, stepped FM, Barker and m-sequence codes, or samples
   from a file (`transmit.waveform: {type: sampled, ...}`).
 
-`tools/sst_validation.py` checks these against TR 0702 section by section
-(`docs/figures/sst_validation.md`). What to know before relying on them
-(`docs/STATUS.md`, "Simulator limits so far"): they were tested file by file on the CPU,
-and the full suite and a GPU job with them merged were running, with no result yet, when
-this was written; the CUDA side of sampled-pulse synthesis is written and unverified
-(on the host it runs in the C++ kernel, about 3 times the analytic kernel's time with
-beams in the one case timed); the wind-speed bubble-loss law is an upper estimate above
-10 kHz; and the boundary models are open-literature substitutes for a handbook (APL-UW
-TR 9407) that was not read.
+Added since: one-way sources and passive captures (`sources:`, `pings.transmit: false`);
+one environment per site (`environment:` naming a file in `configs/environments/`);
+source levels stated as RMS (`transmit.waveform.source_level_db_rms`); the projector's
+direct sound and a receiver that overloads (`transmit.direct_path`, `receive.overload`);
+noise fitted to a recording; a basin's late reverberation (`basin_reverberation:`); sound
+speed that changes with range (`environment.profiles_by_range`).
+
+`tools/sst_validation.py` checks the models against TR 0702 section by section
+(`docs/figures/sst_validation.md`), and `tools/channel_validation.py` against measured
+channels. What to know before relying on them (`docs/STATUS.md`): the boundary models are
+open-literature substitutes for a handbook (APL-UW TR 9407) that was not read; no measured
+data set settles the decay time of a rough bounce's tail; the bubble-loss law has no
+stated range of validity; water that changes with range is rings about the sonar; and
+many shipped shallow-water scenarios state far fewer bounces than their energy would
+justify.
+
+## The long-range array from a build spec
+
+```bash
+tools/build_from_spec.py configs/builds/popoto_static_3x32.yaml --validate
+tools/sonar_live.py configs/deploy/popoto_static_3row.yaml --scenario popoto_static_trial_3row --out run/ --engine cpp
+```
+
+A build spec (`configs/builds/*.yaml`) states the array, the boards, the projector, the
+platform and the operation; the sonar file, the deployment file, a parts list, diagrams
+and checklists are generated from it, and seven self-tests run the generated chain on
+simulated pings. `docs/REFERENCE_DESIGN.md` walks through it; `docs/DEPLOYMENT.md` says
+what each report field means. The link budget's threshold is the chain's own detector's
+(`docs/DECISIONS.md` D-117), so margins and the chain agree to about half a dB.
 
 ## Run a whole chain from one YAML file
 
@@ -267,8 +386,10 @@ lists the stages. GeoTIFF output needs `pip install rasterio pyproj`.
 (`PingSourceOp`, `ConditionOp`, `FanImageOp`, `DetectOp`, `DisplayPrepOp`) and
 `FanPipeline` composes them. Needs the Holoscan SDK (`pip install holoscan-cu12` on a
 CUDA 12 machine); see `tests/python/test_holoscan.py` for pipelines fed by the simulator
-and by file replay. Capture from the ultrasound rig and the flank board is not connected
-yet (`docs/STATUS.md`).
+and by file replay. The C++ operators (`libs/holoscan_ops`, `build/bin/sonar_live_holoscan`)
+wrap the long-range chain. Both ran on rented GPUs with Holoscan SDK 4.6.0, fed by the
+simulator, by replay and by an emulated board over UDP; no capture hardware has been
+connected (`docs/STATUS.md`).
 
 ## Reading recorded data
 
