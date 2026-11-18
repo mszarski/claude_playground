@@ -74,10 +74,13 @@ struct ElevationOptions {
   bool sector_from_rays = false;
   double sector_rays_bounces = 2.0, sector_rays_margin = 0.017453292519943295, sector_rays_max_depth = 500.0;
   std::vector<double> sector_ray_depth, sector_ray_speed;   ///< the profile, set by the chain each ping
-  /// "arcs" (opt-in): depth_m and its refraction sigma by the chain's one ray calculation (raytrace.hpp: closed-form
-  /// arcs layer by layer, the same rays the multipath depth and the coverage picture use). false: the stepped Snell
-  /// ray of ray_depth below, as before (the two agree to about 2 m; outputs stay as they were).
-  bool ray_arcs = false;
+  /// true (the default; `elevation.ray_method: arcs`): depth_m and its refraction sigma by the chain's one ray
+  /// calculation (raytrace.hpp: closed-form arcs layer by layer, the same rays the multipath depth and the coverage
+  /// picture use). false (`ray_method: steps`, `elevation_ray_arcs=0`): the stepped Snell ray of ray_depth below, the
+  /// default before. The two agree to under 1 m out to 12 km in the deployed gradient prior and to a few metres in
+  /// strongly refracting water at long range; a ray launched exactly level into water that bends it down is left
+  /// level by the stepped ray and bent by the arcs.
+  bool ray_arcs = true;
   /// Opt-in: the depth sigma says so when echoes the rows cannot tell apart share the range resolution cell
   /// (multipath_depth_limit below): `depth_sigma_m` gains the term, and the report names it. Paths of at most
   /// `multipath_sigma_bounces` boundary reflections a leg, target depths to `multipath_sigma_max_depth` or the bottom.

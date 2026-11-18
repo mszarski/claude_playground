@@ -82,9 +82,10 @@ DEFAULTS = {
     "ssp": None,                        # {depth: [m...], speed: [m/s...]}: depth_m by a ray traced through this profile
                                         # instead of the straight line (which is wrong by s^2 g / 2c in a gradient g).
                                         # Also a table [[depth, speed], ...], or {file: profile.csv} (two columns)
-    "ray_method": "steps",              # how depth_m is traced back through a profile: "steps" (Snell's law in small steps, as
-                                        # always) or "arcs" (closed-form arcs layer by layer: the chain's one ray calculation,
-                                        # libs/live raytrace.hpp, shared with multipath_depth.rays and chain.coverage)
+    "ray_method": "arcs",               # how depth_m is traced back through a profile: "arcs" (the default: closed-form arcs
+                                        # layer by layer, the chain's one ray calculation, libs/live raytrace.hpp, shared with
+                                        # multipath_depth.rays and chain.coverage) or "steps" (Snell's law in small steps: the
+                                        # default before, still selectable by name)
     "profile": None,                    # the sound-speed ladder: {} or {ladder: [...], built: {...}, supplied: {...},
                                         # family: {...}} (PROFILE_DEFAULTS below). None: as before
     "roll_sigma_deg": 0.0,              # the navigation's roll accuracy, added to the elevation sigma

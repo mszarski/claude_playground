@@ -11,6 +11,8 @@
 
 #include "sonar/live/chain.hpp"
 #include "sonar/live/elevation.hpp"
+#include "sonar/live/options.hpp"
+#include "sonar/live/raytrace.hpp"
 
 using namespace sonar;        // NOLINT(google-build-using-namespace)
 using namespace sonar::live;  // NOLINT(google-build-using-namespace)
@@ -293,6 +295,24 @@ TEST(Depth, SigmaTermsThatDoNotComeFromNoise) {
   const double g = 0.05, own = 100.0;
   const double z = ray_depth(own, -2.0 * kDeg, 3000.0, {0.0, 10100.0}, {1500.0 - g * own, 1500.0 + g * 10000.0});
   EXPECT_NEAR(z - (own + 3000.0 * std::sin(2.0 * kDeg)), -3000.0 * 3000.0 * g / 3000.0, 6.0);
+}
+
+TEST(Depth, TheArcsAreTheDefaultRayAndTheSteppedRayIsSelectable) {
+  // Change C: elevation.ray_method defaults to arcs (ray_arcs); elevation_ray_arcs=0 gives the stepped ray back.
+  EXPECT_TRUE(ElevationOptions{}.ray_arcs);
+  ChainOptions chain;
+  PassiveOptions passive;
+  EXPECT_TRUE(chain.elevation.ray_arcs);
+  set_option(chain, passive, "elevation_ray_arcs", "0");
+  EXPECT_FALSE(chain.elevation.ray_arcs);
+  set_option(chain, passive, "elevation_ray_arcs", "1");
+  EXPECT_TRUE(chain.elevation.ray_arcs);
+  // The deployed gradient prior, 3 km: range^2 g / 2c above the straight line, to 0.1 m by the arcs and 0.3 m by steps.
+  const double g = 0.017, own = 100.0, range = 3000.0;
+  const std::vector<double> depth{0.0, 6000.0}, speed{1500.0 - g * own, 1500.0 + g * (6000.0 - own)};
+  const double want = own + range * std::sin(2.0 * kDeg) - range * range * g / 3000.0;
+  EXPECT_NEAR(ray_depth_arcs(own, -2.0 * kDeg, range, depth, speed, 0.0), want, 0.1);
+  EXPECT_NEAR(ray_depth(own, -2.0 * kDeg, range, depth, speed), want, 0.3);
 }
 
 TEST(Tracker, ChoosesAmongAnAmbiguousDetectionsCandidates) {

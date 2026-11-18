@@ -164,6 +164,29 @@ def test_one_row_chain_with_rays_on_both_engines_changes_nothing_else():
             assert x["depth_multipath_sigma_m"] == pytest.approx(y["depth_multipath_sigma_m"], rel=0.05, abs=0.02)
 
 
+def test_the_arcs_are_the_default_ray_and_the_stepped_ray_is_selectable_by_name():
+    """Change C: `elevation.ray_method` defaults to `arcs` in the Python chain and in the options handed to the C++
+    chain; `steps` is still there by name, and anything else is refused."""
+    from gpusonar import elevation as elevation_
+    from gpusonar.live import cpp_chain_options
+    assert elevation_.DEFAULTS["ray_method"] == "arcs"
+    assert cpp_chain_options({"elevation": {}})["elevation"]["ray_arcs"] is True
+    assert cpp_chain_options({"elevation": {"ray_method": "steps"}})["elevation"]["ray_arcs"] is False
+    with pytest.raises(ValueError, match="ray_method"):
+        LiveChain({"engine": "python", "backend": "host", "elevation": {"ray_method": "euler"}})
+    # the two rays in the deployed gradient prior: the closed form (range^2 g / 2c above the straight line) to 0.1 m by
+    # the arcs and to 0.3 m by the stepped ray, 3 km out
+    g, own, c0, rng, th = 0.017, 100.0, 1500.0, 3000.0, np.radians(-2.0)
+    d, c = [0.0, 6000.0], [c0 - g * own, c0 + g * (6000.0 - own)]
+    want = own - rng * np.sin(th) - rng**2 * g / (2.0 * c0)
+    assert elevation_.ray_depth(own, th, rng, d, c, method="arcs") == pytest.approx(want, abs=0.1)
+    assert elevation_.ray_depth(own, th, rng, d, c, method="steps") == pytest.approx(want, abs=0.3)
+    # a ray launched exactly level into water that bends it down: the arcs bend it (r^2 |g| / 2c below), the stepped ray leaves it level
+    d, c = [0.0, 6000.0], [c0 + g * own, c0 - g * (6000.0 - own)]
+    assert elevation_.ray_depth(own, 0.0, rng, d, c, method="arcs") == pytest.approx(own + rng**2 * g / (2.0 * c0), abs=0.1)
+    assert elevation_.ray_depth(own, 0.0, rng, d, c, method="steps") == pytest.approx(own, abs=1.0)
+
+
 def test_two_rows_arcs_and_ensemble_on_both_engines():
     """Two stacked rows at 6 km with an assumed gradient: the depth by the arcs is the stepped ray's within 2 m and the
     rest of the line is unchanged; with the ensemble every depth also carries the span over its profiles; the engines agree."""
@@ -174,9 +197,17 @@ def test_two_rows_arcs_and_ensemble_on_both_engines():
     out = {}
     for engine in ("cpp", "python"):
         runs = {}
-        for key, cfg in (("steps", el), ("arcs", dict(el, ray_method="arcs")), ("ensemble", dict(el, ray_method="arcs", profile=dict(el["profile"], ensemble=ens)))):
+        # change C: `arcs` is the default now, so the stepped ray is asked for by name
+        for key, cfg in (("steps", dict(el, ray_method="steps")), ("arcs", dict(el, ray_method="arcs")), ("ensemble", dict(el, ray_method="arcs", profile=dict(el["profile"], ensemble=ens)))):
             with LiveChain(dict(base, engine=engine, elevation=cfg, multipath_depth={"rays": True} if key == "ensemble" else None)) as chain:
                 runs[key] = chain.run([r.copy() for r in records])
+        # change C: with no `ray_method` the chain traces the arcs, on both engines
+        with LiveChain(dict(base, engine=engine, elevation=el)) as chain:
+            default = chain.run([r.copy() for r in records])
+        timing = ("processing_seconds", "stage_seconds", "timing")
+        strip = lambda reports: [{k: v for k, v in r.items() if k not in timing} for r in reports]            # noqa: E731
+        assert [r["detections"] for r in strip(default)] == [r["detections"] for r in strip(runs["arcs"])], engine
+        assert [r["tracks"] for r in strip(default)] == [r["tracks"] for r in strip(runs["arcs"])], engine
         seen = 0
         for a, b, c in zip(runs["steps"], runs["arcs"], runs["ensemble"]):
             for x, y, z in zip(a["detections"], b["detections"], c["detections"]):

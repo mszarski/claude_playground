@@ -512,13 +512,14 @@ core); 0.50 against 0.54 s per ping on the 12 km test window with one detection.
 
 ### Rays through the profile the vehicle holds (`multipath_depth.rays`, `elevation.ray_method: arcs`)
 
-Both depths can come from one ray calculation through whatever the sound-speed ladder holds this ping. Switch it on
-with the ladder:
+Both depths can come from one ray calculation through whatever the sound-speed ladder holds this ping. The stacked
+rows' depth does so by default (`elevation.ray_method: arcs`; `steps` is the stepped ray of before); the multipath
+depth with `rays: true`. Switch it on with the ladder:
 
 ```yaml
 chain:
   elevation:
-    ray_method: arcs
+    ray_method: arcs                 # the default, stated here for the reader
     profile:
       built: {sample_sigma_m_s: <the sound-speed sensor's accuracy>}
       ensemble: {gradients_per_s: [<the gradients the unsampled water may have>], extent_m: [<how far they may run>]}
