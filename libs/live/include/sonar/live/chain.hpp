@@ -103,6 +103,7 @@ struct ReportDetection {
   std::vector<double> elevation_alternatives_deg{};  ///< the other candidate lobes, when ambiguous
   double depth_refraction_sigma_m = 0.0;             ///< the part of depth_sigma_m that is the unknown gradient
   bool bearing_corrected = false;
+  bool bearing_uncorrected = false;                  ///< correction asked for, elevation ambiguous: the row's bearing and the slant range kept
   double cone_bearing_deg = 0.0;                     ///< what the line array alone reported
   bool has_depth = false;
   double depth_m = 0.0, depth_sigma_m = 0.0, image_depth_m = 0.0;

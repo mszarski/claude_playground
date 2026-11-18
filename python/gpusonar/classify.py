@@ -120,7 +120,9 @@ def classify_tracks(tracks: list[Track], *, min_speed: float = 0.5, static_speed
         order = sorted(out, key=lambda c: -(c.mean_snr_db if np.isfinite(c.mean_snr_db) else -np.inf))
         for i, weak in enumerate(order):
             for strong in order[:i]:
-                if strong.kind == "multipath":
+                # Only a track that is itself classed as an object explains another as its echo: not an echo, and
+                # not a track still uncertain (a weaker track beside an unproven one is not thereby explained away).
+                if strong.kind not in ("mover", "static", "line"):
                     continue
                 excess = polar[weak.id][0] - polar[strong.id][0]
                 same_bearing = abs(np.angle(np.exp(1j * (polar[weak.id][1] - polar[strong.id][1])))) <= multipath["bearing"]

@@ -465,7 +465,11 @@ Report LiveChain::process(PingRecord& record) {
       d.elevation_sigma_deg = e.sigma / kDeg;
       d.elevation_quality = e.quality;
       d.elevation_ambiguous = e.ambiguous;
-      if (eo.correct_bearing) {
+      // An ambiguous elevation is one of several candidates, and which is picked changes from ping to ping: placing
+      // the detection by it would move it by the range times the difference between their cosines (a kilometre at
+      // 12 km) and break its track. The row's own bearing and the slant range are kept then, and the report says so.
+      d.bearing_uncorrected = eo.correct_bearing && e.ambiguous;
+      if (eo.correct_bearing && !e.ambiguous) {
         // The line array gave the cone angle; with the elevation the horizontal bearing follows.
         px = f.origin.x - origin_.x + e.range * u.x;
         py = f.origin.y - origin_.y + e.range * u.y;
@@ -580,6 +584,7 @@ std::string Report::json_part(std::size_t det_first, std::size_t det_last, std::
           s << "]";
         }
         if (d.bearing_corrected) s << ", \"cone_bearing_deg\": " << d.cone_bearing_deg;
+        if (d.bearing_uncorrected) s << ", \"bearing_corrected\": false";
         if (d.has_depth) {
           s << ", \"depth_m\": " << d.depth_m << ", \"depth_sigma_m\": " << d.depth_sigma_m << ", \"depth_refraction_sigma_m\": "
             << d.depth_refraction_sigma_m << ", \"image_depth_m\": "

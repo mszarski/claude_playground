@@ -831,11 +831,16 @@ class LiveChain:
                 level = float(np.arcsin(np.clip(-u[2], -1.0, 1.0)))       # elevation above the horizontal, roll and pitch applied
                 extra[i] = {"elevation_deg": float(np.degrees(level)), "elevation_sigma_deg": float(np.degrees(e.sigma)),
                             "elevation_quality": e.quality, "elevation_ambiguous": e.ambiguous}
-                if el_cfg["correct_bearing"]:
+                if el_cfg["correct_bearing"] and not e.ambiguous:
                     # The line array gave the cone angle; with the elevation the horizontal bearing follows.
                     p = origin[:2] - self._origin[:2] + e.range * u[:2]
                     extra[i].update(cone_bearing_deg=float(np.degrees(h.bearing)),
                                     bearing_deg=float(np.degrees(np.arctan2(u[:2] @ axis, u[:2] @ broadside))))
+                elif el_cfg["correct_bearing"]:
+                    # An ambiguous elevation is one of several candidates, and which is picked changes from ping to ping:
+                    # placing the detection by it would move it by the range times the difference between their cosines
+                    # (a kilometre at 12 km) and break its track. The row's own bearing and the slant range are kept, and said.
+                    extra[i]["bearing_corrected"] = False
                 if e.ambiguous and e.alternatives:
                     extra[i]["elevation_alternatives_deg"] = [float(np.degrees(np.arcsin(np.clip(-w[2], -1.0, 1.0)))) for w in e.alternatives]
                 if el_cfg["depth"]:
