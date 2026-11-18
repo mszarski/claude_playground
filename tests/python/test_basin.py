@@ -445,3 +445,33 @@ def test_every_variant_of_the_fjord_rehearsal_tool_loads_and_names_what_it_overr
                 assert not named
             if name == "fjord as shipped":
                 assert (noise["wind_speed"], noise["shipping"], noise["statistics"]["model"]) == (1.9, 0.0, "k")
+
+
+def test_the_fjord_rehearsal_scores_a_detection_by_the_ranges_it_covers():
+    """The chain's detector reports an echo and the basin's tail behind it as ONE detection at their energy-weighted
+    range. For the two-row static array at 2.6 km that range is 63 m behind the target: a window of 30 m before to 60 m
+    behind about the detection's range scored a 44 dB detection of the target as "behind" it and the target as not
+    detected on four pings of four. The detection's first arrival and extent decide; a detection that begins 100 m behind
+    the target is still not the target's."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[2] / "tools" / "fjord_rehearsal.py"
+    spec = importlib.util.spec_from_file_location("fjord_rehearsal", path)
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    cfg = {"scene": [{"positions": [[300.0, 2583.0, 20.0]]}]}                      # 2600.5 m from the origin, 6.62 degrees
+    rng, brg = float(np.hypot(300.0, 2583.0)), float(np.degrees(np.arctan2(300.0, 2583.0)))
+
+    def report(dets, tracks=()):
+        return {"ownship_xyz": [0.0, 0.0, 20.0], "detections": dets, "tracks": list(tracks)}
+
+    merged = {"range_m": rng + 63.3, "bearing_deg": brg - 0.17, "snr_db": 44.4, "first_range_m": rng + 1.5, "extent_m": 118.0}
+    later = {"range_m": rng + 160.0, "bearing_deg": brg, "snr_db": 20.0, "first_range_m": rng + 100.0, "extent_m": 90.0}
+    point = {"range_m": rng + 75.0, "bearing_deg": brg, "snr_db": 15.0}            # no extent: a point, 75 m behind
+    away = {"range_m": rng + 20.0, "bearing_deg": brg + 40.0, "snr_db": 30.0, "first_range_m": rng + 19.0, "extent_m": 2.0}
+    out = tool.score(cfg, [report([merged, later, point, away], [{"range_m": rng + 63.0, "bearing_deg": brg}]), report([later, away])], rows=1)
+    first, second = out["per_ping"]
+    assert first["detected"] and first["snr_db"] == 44.4 and first["range_error_m"] == pytest.approx(63.3) and first["first_range_error_m"] == pytest.approx(1.5)
+    assert (first["behind_target"], first["elsewhere"]) == (2, 1) and first["tracks_off_target"] == 0      # the track at the merged detection's range is the target's
+    assert not second["detected"] and (second["behind_target"], second["elsewhere"]) == (1, 1)
+    assert out["pings_detected"] == 1 and out["track_confirmed_at_ping"] == 1
