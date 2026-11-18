@@ -275,6 +275,20 @@ NAVIGATION = {
 }
 
 
+# Option (ii), a GPU: what is measured, copied from docs/benchmarks/gpu_benchmark_all_l4.md (group "live", engine cpp,
+# doa map, backprojection), and what is not.
+GPU = {
+    "source": "docs/benchmarks/gpu_benchmark_all_l4.md (NVIDIA L4; host AMD EPYC 7R13, 8 threads; commit 15f1121, before the 1.5 m geometry)",
+    "case": "scenario-size pings: 15,467 complex samples a channel, 241 bearings, popoto_long_range[_2row|_3row] with the deployment files' chains",
+    "seconds_per_ping": {"host": {"1": 0.1454, "2": 0.2953, "3": 0.4429}, "cuda": {"1": 0.0097, "2": 0.0212, "3": 0.0310}},
+    "speed_up": {"1": 15.0, "2": 14.0, "3": 14.3},
+    "not_measured": ["a full-length ping (0.5 to 13 km) at the boards' rate on a GPU, with or without the decimate-first stage",
+                     "the 1.5 m row geometry on a GPU", "a Jetson or any embedded GPU",
+                     "MVDR and far-field beamformers on a GPU (no CUDA path in that table)"],
+    "command": "PYTHONPATH=python python3 tools/popoto_elevation_bench.py --full-rate --backend cuda   # writes decimation.timing.cuda here",
+}
+
+
 def attitude_rate_table():
     """Worst error of linear interpolation between attitude samples, for a few roll motions and output rates."""
     out = {}
@@ -316,6 +330,7 @@ def main():
     print("BLANKING: minimum range (m) against recovery time (s)")
     for pulse, row in R["blanking"]["pulses"].items():
         print(f"  pulse {pulse} s: " + ", ".join(f"{k}: {v:.0f}" for k, v in row.items()))
+    R["gpu"] = GPU
     R["navigation"] = dict(NAVIGATION, attitude_interpolation_error_deg=attitude_rate_table())
     print("NAVIGATION: worst attitude interpolation error (deg) by output rate (Hz)")
     for k, row in R["navigation"]["attitude_interpolation_error_deg"].items():

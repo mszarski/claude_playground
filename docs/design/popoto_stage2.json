@@ -1472,15 +1472,19 @@
             500.0,
             13000.0
           ],
-          "simulate_seconds": 1.8807718710013432,
+          "simulate_seconds": 1.6723638960029348,
           "load_average_before": [
-            15.45703125,
-            17.6240234375,
-            18.87158203125
+            9.47509765625,
+            14.13525390625,
+            17.2587890625
           ],
           "backend": "host",
           "chain_full_rate": {
-            "seconds": 20.70708561,
+            "seconds": 13.27541034,
+            "all_seconds": [
+              14.449247,
+              13.27541034
+            ],
             "detections": 4,
             "strongest": {
               "range_m": 6044.891749,
@@ -1489,7 +1493,11 @@
             }
           },
           "chain_decimate_first": {
-            "seconds": 18.23010695,
+            "seconds": 13.10831681,
+            "all_seconds": [
+              13.10831681,
+              13.92097116
+            ],
             "detections": 3,
             "strongest": {
               "range_m": 6044.891775,
@@ -1498,7 +1506,11 @@
             }
           },
           "chain_decimate_first_factor_25": {
-            "seconds": 13.57884502,
+            "seconds": 7.223414732,
+            "all_seconds": [
+              10.65623483,
+              7.223414732
+            ],
             "detections": 1,
             "strongest": {
               "range_m": 6044.893205,
@@ -1506,9 +1518,13 @@
               "snr_db": 80.67260639
             }
           },
-          "stage_whole_ping_seconds": 0.6904918979998911,
+          "stage_whole_ping_seconds": 0.600767158997769,
           "chain_on_decimated_records": {
-            "seconds": 11.00731056,
+            "seconds": 6.618624333,
+            "all_seconds": [
+              6.618624333,
+              7.615135126
+            ],
             "detections": 3,
             "strongest": {
               "range_m": 6044.891775,
@@ -1523,19 +1539,221 @@
           "decimated_samples_per_channel": 106416,
           "raw_bytes_in_memory": 231560576,
           "decimated_bytes_in_memory": 27242496,
-          "stage_streaming_seconds_per_second_of_stream": 0.02906368800177006,
+          "stage_streaming_seconds_per_second_of_stream": 0.028183876998809865,
           "stage_streaming_block_samples": 128,
           "recording_raw_bytes": 231587712,
-          "recording_raw_write_seconds": 0.06319637400156353,
+          "recording_raw_write_seconds": 0.05928497499553487,
           "recording_decimated_bytes": 27269632,
-          "recording_decimated_write_seconds": 0.020147267998254392,
+          "recording_decimated_write_seconds": 0.01667145899409661,
           "load_average_after": [
-            15.001953125,
-            17.1611328125,
-            18.63134765625
+            9.34130859375,
+            13.03173828125,
+            16.5849609375
           ]
         },
-        "cpu_threads": 4
+        "cpu_threads": 4,
+        "2": {
+          "channels": 64,
+          "boards": 8,
+          "board_clocks": false,
+          "samples_per_channel": 1809067,
+          "sample_rate_hz": 102400.0,
+          "window_m": [
+            500.0,
+            13000.0
+          ],
+          "simulate_seconds": 3.243952614000591,
+          "load_average_before": [
+            8.99365234375,
+            12.89794921875,
+            16.5224609375
+          ],
+          "backend": "host",
+          "chain_full_rate": {
+            "seconds": 25.17746942,
+            "all_seconds": [
+              25.17746942,
+              31.20288402
+            ],
+            "detections": 5,
+            "strongest": {
+              "range_m": 6044.898182,
+              "bearing_deg": 7.034276815,
+              "snr_db": 80.72891605,
+              "depth_m": 9.834042961
+            }
+          },
+          "chain_decimate_first": {
+            "seconds": 22.90608024,
+            "all_seconds": [
+              22.90608024,
+              26.19369287
+            ],
+            "detections": 3,
+            "strongest": {
+              "range_m": 6044.89823,
+              "bearing_deg": 7.035355198,
+              "snr_db": 80.72594284,
+              "depth_m": 9.833969318
+            }
+          },
+          "chain_decimate_first_factor_25": {
+            "seconds": 19.12792754,
+            "all_seconds": [
+              22.69888051,
+              19.12792754
+            ],
+            "detections": 1,
+            "strongest": {
+              "range_m": 6044.900611,
+              "bearing_deg": 7.067977523,
+              "snr_db": 80.73518815,
+              "depth_m": 9.834027939
+            }
+          },
+          "stage_whole_ping_seconds": 0.977632829999493,
+          "chain_on_decimated_records": {
+            "seconds": 15.93621838,
+            "all_seconds": [
+              15.93621838,
+              21.63012263
+            ],
+            "detections": 3,
+            "strongest": {
+              "range_m": 6044.89823,
+              "bearing_deg": 7.035355198,
+              "snr_db": 80.72594284,
+              "depth_m": 9.833969318
+            }
+          },
+          "factor": 17,
+          "output_rate_hz": 6023.529411764706,
+          "taps": 171,
+          "latency_ms": 0.830078125,
+          "decimated_samples_per_channel": 106416,
+          "raw_bytes_in_memory": 463121152,
+          "decimated_bytes_in_memory": 54484992,
+          "stage_streaming_seconds_per_second_of_stream": 0.08067360150016611,
+          "stage_streaming_block_samples": 64,
+          "recording_raw_bytes": 463150768,
+          "recording_raw_write_seconds": 0.12462638299621176,
+          "recording_decimated_bytes": 54514608,
+          "recording_decimated_write_seconds": 0.014359458000399172,
+          "load_average_after": [
+            10.298828125,
+            11.81396484375,
+            15.4287109375
+          ]
+        },
+        "3": {
+          "channels": 96,
+          "boards": 12,
+          "board_clocks": false,
+          "samples_per_channel": 1809067,
+          "sample_rate_hz": 102400.0,
+          "window_m": [
+            500.0,
+            13000.0
+          ],
+          "simulate_seconds": 5.645711903998745,
+          "load_average_before": [
+            10.35498046875,
+            11.80029296875,
+            15.40478515625
+          ],
+          "backend": "host",
+          "chain_full_rate": {
+            "seconds": 53.75065073,
+            "all_seconds": [
+              58.49861303,
+              53.75065073
+            ],
+            "detections": 5,
+            "strongest": {
+              "range_m": 6044.898154,
+              "bearing_deg": 7.034257172,
+              "snr_db": 80.74350662,
+              "depth_m": 9.924208965
+            }
+          },
+          "chain_decimate_first": {
+            "seconds": 44.18366039,
+            "all_seconds": [
+              44.18366039,
+              54.72283919
+            ],
+            "detections": 3,
+            "strongest": {
+              "range_m": 6044.898202,
+              "bearing_deg": 7.03533238,
+              "snr_db": 80.74135249,
+              "depth_m": 9.968534873
+            }
+          },
+          "chain_decimate_first_factor_25": {
+            "seconds": 47.7894741,
+            "all_seconds": [
+              51.30835262,
+              47.7894741
+            ],
+            "detections": 1,
+            "strongest": {
+              "range_m": 6044.900585,
+              "bearing_deg": 7.067953673,
+              "snr_db": 80.75225684,
+              "depth_m": 9.924208006
+            }
+          },
+          "stage_whole_ping_seconds": 2.919764252001187,
+          "chain_on_decimated_records": {
+            "seconds": 53.90436437,
+            "all_seconds": [
+              54.45785088,
+              53.90436437
+            ],
+            "detections": 3,
+            "strongest": {
+              "range_m": 6044.898202,
+              "bearing_deg": 7.03533238,
+              "snr_db": 80.74135249,
+              "depth_m": 9.968534873
+            }
+          },
+          "factor": 17,
+          "output_rate_hz": 6023.529411764706,
+          "taps": 171,
+          "latency_ms": 0.830078125,
+          "decimated_samples_per_channel": 106416,
+          "raw_bytes_in_memory": 694681728,
+          "decimated_bytes_in_memory": 81727488,
+          "stage_streaming_seconds_per_second_of_stream": 0.11677919100111467,
+          "stage_streaming_block_samples": 42,
+          "recording_raw_bytes": 694715816,
+          "recording_raw_write_seconds": 0.22890335300326115,
+          "recording_decimated_bytes": 81761576,
+          "recording_decimated_write_seconds": 0.0520885990044917,
+          "load_average_after": [
+            15.35986328125,
+            13.38720703125,
+            14.7021484375
+          ]
+        },
+        "conditioning_only": {
+          "what": "baseband conversion and pulse compression of one full-length ping (recon.prepare, host), from the raw ping and through the decimate-first stage; shorter of two runs",
+          "rows": {
+            "1": {
+              "raw_seconds": 4.715674847000628,
+              "decimate_first_seconds": 1.2671276269975351,
+              "load_average": 14.134765625
+            },
+            "3": {
+              "raw_seconds": 11.852620657999068,
+              "decimate_first_seconds": 3.1487639199986006,
+              "load_average": 14.12255859375
+            }
+          }
+        },
+        "note": "measured on a shared machine with a load average of 9 to 17 on 4 threads: runs of one configuration differed by up to 30%; each figure is the shorter of two runs; read the ratios before the seconds"
       }
     }
   },
@@ -1625,5 +1843,33 @@
         "100.0": 4.93480220054468e-05
       }
     }
+  },
+  "gpu": {
+    "source": "docs/benchmarks/gpu_benchmark_all_l4.md (NVIDIA L4; host AMD EPYC 7R13, 8 threads; commit 15f1121, before the 1.5 m geometry)",
+    "case": "scenario-size pings: 15,467 complex samples a channel, 241 bearings, popoto_long_range[_2row|_3row] with the deployment files' chains",
+    "seconds_per_ping": {
+      "host": {
+        "1": 0.1454,
+        "2": 0.2953,
+        "3": 0.4429
+      },
+      "cuda": {
+        "1": 0.0097,
+        "2": 0.0212,
+        "3": 0.031
+      }
+    },
+    "speed_up": {
+      "1": 15.0,
+      "2": 14.0,
+      "3": 14.3
+    },
+    "not_measured": [
+      "a full-length ping (0.5 to 13 km) at the boards' rate on a GPU, with or without the decimate-first stage",
+      "the 1.5 m row geometry on a GPU",
+      "a Jetson or any embedded GPU",
+      "MVDR and far-field beamformers on a GPU (no CUDA path in that table)"
+    ],
+    "command": "PYTHONPATH=python python3 tools/popoto_elevation_bench.py --full-rate --backend cuda   # writes decimation.timing.cuda here"
   }
 }

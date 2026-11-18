@@ -21,7 +21,7 @@ struct Reference {
   /// A burst whose correlation quality is below this, or that sits in clipped samples, is not used
   /// (the projector's direct sound can saturate the inputs while the first burst is sent): the board is
   /// then timed from its other burst alone, without a drift, and flagged; with neither it is left as it
-  /// is, flagged, and the ping is not ok. 0: every burst is used as found (as before).
+  /// is, flagged. Either way the ping is not ok. 0: every burst is used as found (as before).
   double min_quality = 0.0;
   double clip_level = 0.0;               ///< V: |sample| at or above 0.98 of this is clipped; 0: not checked
 };

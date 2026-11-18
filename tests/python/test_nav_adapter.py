@@ -329,3 +329,26 @@ def test_chain_fed_through_the_adapter_equals_the_chain_fed_directly(engine):
     # What the datagrams carried reached the estimate: the unit's own roll sigma, the water depth from the Doppler log
     # (the depth of the target is its own depth; the bounded sector needs the water depth to be there at all).
     assert best["elevation_sigma_deg"] >= np.degrees(0.0004) and best["depth_m"] == pytest.approx(20.0 + 0.25 * 4.0 + 25.0, abs=1.5)
+
+
+def test_pings_before_the_first_fix_and_after_the_last_take_the_nearest_fix_in_both_receivers():
+    """Outside the fixes' time span the nearest fix is held. (A fix now holds 22 values, the pose 9 of them: copying a
+    whole fix into the pose once overran the stack here.)"""
+    fixes, t0 = fixes_of_a_dive(n=60)                                       # 3 s of fixes
+    py_nav, cpp_nav = NavListener(**NAV), core.NavigationCpp({"water_depth": dict(NAV["water_depth"], from_altitude=True)})
+    empty = blank_record(t0, t=1.0)
+    assert py_nav.at(empty.transmit.time_ns) is None and cpp_nav.apply(empty) is False       # no fix yet: said, not guessed
+    for fix in fixes:
+        py_nav.push(fix)
+        cpp_nav.push(json.dumps(fix))
+    for t, want in ((-5.0, fixes[0]), (60.0, fixes[-1]), (1.5, None)):
+        rec = blank_record(t0, t=t)
+        assert cpp_nav.apply(rec) is True
+        pos, rpy, vel = py_nav.at(rec.transmit.time_ns)
+        pose = rec.geometry.rx_pose
+        assert np.allclose(pose.position, pos, atol=1e-9) and np.allclose(pose.rpy, rpy, atol=1e-12) and np.allclose(pose.velocity, vel, atol=1e-12)
+        if want is not None:
+            assert np.allclose(pose.position, [want["x"], want["y"], want["z"]]) and pose.rpy[0] == pytest.approx(want["roll"])
+            assert rec.environment.sound_speed == pytest.approx(want["sound_speed"]) == py_nav.extras(rec.transmit.time_ns)[0]
+            assert rec.environment.water_depth == pytest.approx(100.0)
+        assert rec.geometry.tx_pose.position == pose.position

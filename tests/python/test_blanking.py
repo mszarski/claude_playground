@@ -249,3 +249,25 @@ def test_listening_blanks_around_the_transmits_the_blocks_mark(loud):
         assert xa[inside].max() > 1.0 and xb[inside].max() < 1e-3    # volts at the rail without; nothing with
         later = since > until + taper + 0.005
         assert np.allclose(xa[later], xb[later], atol=1e-6 if decimate is None else 1e-4)
+
+
+def test_blanking_on_the_simulators_own_overload_model():
+    """The same with the simulator doing the clipping: the projector's direct sound (transmit.direct_path) into a
+    front end that clips at the ADC's full scale, stays on the rail and recovers (receive.overload; the values are
+    illustrative, as everywhere in this file)."""
+    model = SonarModel.load("popoto_testauv_1row", {"receive": {"window": {"range": [50.0, 600.0]},
+                                                               "overload": {"adc": {"dead_time": 0.01, "recovery_tau": 0.003}}},
+                                                   "transmit": {"direct_path": True}})
+    rec = simulate_ping(model, make_pose(position=(0.0, 0.0, 10.0)), Scene().add_points([list(TARGET)], target_strength_db=10.0),
+                        environment={"sound_speed": C}, noise_rms=2e-6, rng=np.random.default_rng(0))
+    x = np.abs(np.asarray(rec.samples.array))
+    rail = rec.metadata.adc_full_scale
+    assert not rec.samples.is_complex() and x.max() >= 0.99 * rail                # the inputs did clip
+    for engine in ("cpp", "python"):
+        plain, _, _ = run(rec, engine)
+        blanked, _, _ = run(rec, engine, blanking=BLANK)
+        min_range = blanked["blanking"]["min_range_m"]
+        assert any(d["range_m"] < min_range for d in plain["detections"])         # the pulse itself, "detected"
+        real = [d for d in blanked["detections"] if abs(d["range_m"] - 404.8) < 5.0]
+        assert len(real) == 1 and all(d["range_m"] >= min_range for d in blanked["detections"])
+        assert len(blanked["detections"]) <= len(plain["detections"]) - 1

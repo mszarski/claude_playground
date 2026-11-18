@@ -118,11 +118,15 @@ def full_rate_case(rows, backend, clocks=False, window=(500.0, 13000.0)):
         o = dict(options, backend=want)
         if decimate is not None:
             o["decimate"] = decimate
-        chain = core.LiveChainCpp(o)
-        r = (record or rec).copy()
-        report = json.loads(chain.process(r))
+        seconds = []
+        for _ in range(2):                                     # the shorter of two runs: the machine is shared
+            chain = core.LiveChainCpp(o)
+            r = (record or rec).copy()
+            report = json.loads(chain.process(r))
+            seconds.append(report["processing_seconds"])
+            del r, chain
         best = max(report["detections"], key=lambda d: d["snr_db"]) if report["detections"] else None
-        return {"seconds": report["processing_seconds"], "detections": len(report["detections"]),
+        return {"seconds": min(seconds), "all_seconds": seconds, "detections": len(report["detections"]),
                 "strongest": {k: best[k] for k in ("range_m", "bearing_deg", "snr_db", "depth_m") if k in best} if best else None}
 
     out["chain_full_rate"] = chain_time()
