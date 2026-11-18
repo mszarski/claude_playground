@@ -3,6 +3,836 @@
  "source_level_db": 197.0,
  "duty": 0.055762081784386616,
  "depth_required_m": 500.0,
+ "amplifiers": [
+  {
+   "model": "Instruments Inc. L2",
+   "kind": "linear class AB, with output transformer (taps)",
+   "url": "https://instrumentsinc.com/amplifier-and-sensor-specs",
+   "where": "page text, 'Linear' section (the tables are images on another host, not read)",
+   "limit_va": 650.0,
+   "limit_w": null,
+   "volts": null,
+   "rating": "650 VA for a 1 s burst at 10 % duty; 260 VA continuous; into any power factor",
+   "band": "400 Hz-40 kHz pulsed, to 100 kHz continuous",
+   "supply": "single-phase AC mains",
+   "eff": null,
+   "size": "19 in rack, 3U, or bench; mass not in the text",
+   "mute": "not stated",
+   "housing": "rack or bench"
+  },
+  {
+   "model": "Instruments Inc. L6",
+   "kind": "linear class AB, with output transformer (taps)",
+   "url": "https://instrumentsinc.com/amplifier-and-sensor-specs",
+   "where": "page text, 'Linear' section",
+   "limit_va": 2000.0,
+   "limit_w": null,
+   "volts": null,
+   "rating": "2000 VA for a 1 s burst at 10 % duty; 800 VA continuous; into any power factor",
+   "band": "120 Hz-25 kHz pulsed, to 70 kHz continuous",
+   "supply": "single-phase AC mains",
+   "eff": null,
+   "size": "19 in rack, 8U; mass not in the text",
+   "mute": "not stated",
+   "housing": "rack or bench"
+  },
+  {
+   "model": "Neptune PA1",
+   "kind": "class D, differential output",
+   "url": "https://www.neptune-sonar.co.uk/pdf/2022_neptune_sonar_catalogue.pdf",
+   "where": "catalogue pp. F5-F6 (with the MB1 matching transformer, p. F1)",
+   "limit_va": 300.0,
+   "limit_w": 300.0,
+   "volts": 150.0,
+   "rating": "up to 300 W; output 150 V rms / 2 A absolute maximum; pulse and duty not stated",
+   "band": "5 Hz-250 kHz",
+   "supply": "80-260 V AC",
+   "eff": null,
+   "size": "2U 19 in rack or hard case; mass not stated",
+   "mute": "mute input (manual switch or contact closure) that 'shuts down all class D switching'; 'complete silence when receiving'",
+   "housing": "rack or hard case"
+  },
+  {
+   "model": "Benthowave BII5062",
+   "kind": "linear, arbitrary waveform; needs a step-up transformer (BII6014)",
+   "url": "https://www.benthowave.com/products/Specs/BII5060DataSheet.pdf",
+   "where": "pp. 1-3 ratings and specification tables",
+   "limit_va": null,
+   "limit_w": 315.0,
+   "volts": null,
+   "rating": "315 W rms at +48 V DC; 20 A peak output; continuous signals allowed",
+   "band": "135 Hz-40 kHz (-3 dB)",
+   "supply": "DC, up to +60 V; 14.2 A at maximum power",
+   "eff": 0.64,
+   "size": "board 140 x 95 x 47 mm, 0.4 kg",
+   "mute": "stand-by logic input; output enable time 3 us; 104 mA quiescent",
+   "housing": "board; 'Not waterproof. Always use the device in Dry Air'"
+  },
+  {
+   "model": "Benthowave BII5160",
+   "kind": "linear, with step-up, for low-frequency transducers",
+   "url": "https://www.benthowave.com/products/Specs/BII5160Datasheet.pdf",
+   "where": "specification table",
+   "limit_va": null,
+   "limit_w": 208.0,
+   "volts": 441.0,
+   "rating": "208 W rms; output up to (2 Vs - 10) x 14.5 V peak-to-peak (441 V rms at 48 V)",
+   "band": "100 Hz-20 kHz",
+   "supply": "DC, up to +60 V",
+   "eff": 0.64,
+   "size": "portable case 0.28 x 0.26 x 0.18 m, 5.0-5.2 kg",
+   "mute": "shut-down state (24 mA against 59 mA active)",
+   "housing": "portable case"
+  },
+  {
+   "model": "AE Techron 7224",
+   "kind": "linear, DC-coupled, four-quadrant",
+   "url": "https://aetechron.com/wp-content/uploads/2024/08/7224-Datasheet-05-27-2026.pdf",
+   "where": "pp. 1-2",
+   "limit_va": 900.0,
+   "limit_w": 900.0,
+   "volts": 112.0,
+   "rating": "900 W rms to 20 kHz; 158 V peak; 'stable when driving highly capacitive loads'",
+   "band": "DC-300 kHz small signal; rated power to 40 kHz",
+   "supply": "single-phase 120 V AC, 20 A (230 V model)",
+   "eff": null,
+   "size": "2U 19 in, 3.5 x 19 x 22.75 in, 20.9 kg; forced air 180 CFM",
+   "mute": "remote 'Force to Standby'; voltage and current monitors; residual noise 0.3 mV (10 Hz-80 kHz)",
+   "housing": "rack or bench"
+  },
+  {
+   "model": "AE Techron 8504",
+   "kind": "switch-mode, DC-50 kHz",
+   "url": "https://aetechron.com/wp-content/uploads/2024/08/8500-Series-Datasheet-06-02-2026.pdf",
+   "where": "pp. 1-3",
+   "limit_va": 4000.0,
+   "limit_w": 4000.0,
+   "volts": 260.0,
+   "rating": "4 kW; 0-260 V rms; 80 A rms; 'up to 5X rated power when driving reactive loads'",
+   "band": "DC-50 kHz",
+   "supply": "AC mains (230 V 10 A to 60 V 60 A input options listed)",
+   "eff": 0.85,
+   "size": "5.25 x 19 x 25.3 in, 38.1 kg; internal fans",
+   "mute": "not read",
+   "housing": "rack"
+  }
+ ],
+ "chains": [
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Instruments Inc. L2",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Instruments Inc. L6",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Neptune PA1",
+   "level_db": [
+    196.11215119054478,
+    197.0,
+    196.27121254719663
+   ],
+   "per_frequency": [
+    {
+     "level_db": 196.11215119054478,
+     "volts": 302.41794610679744,
+     "watts": 237.78719673138005,
+     "va": 300.0,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 196.27121254719663,
+     "volts": 308.00702882410224,
+     "watts": 284.60498941515414,
+     "va": 300.0,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Benthowave BII5062",
+   "level_db": [
+    197.0,
+    197.0,
+    196.71189299069937
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": 575.0772160896827
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": 395.5295336175028
+    },
+    {
+     "level_db": 196.71189299069937,
+     "volts": 324.03703492039295,
+     "watts": 315.0,
+     "va": 332.0391543176798,
+     "supply_w": 518.8111786213747
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "Benthowave BII5160",
+   "level_db": [
+    195.53089986991944,
+    196.25640654140557,
+    194.909420802431
+   ],
+   "per_frequency": [
+    {
+     "level_db": 195.53089986991944,
+     "volts": 282.84271247461896,
+     "watts": 208.0,
+     "va": 262.4195114697076,
+     "supply_w": 410.03048667141803
+    },
+    {
+     "level_db": 196.25640654140557,
+     "volts": 307.4824459143229,
+     "watts": 208.0,
+     "va": 213.30426799246573,
+     "supply_w": 333.2879187382277
+    },
+    {
+     "level_db": 194.909420802431,
+     "volts": 263.3122354417533,
+     "watts": 207.99999999999997,
+     "va": 219.25125110500758,
+     "supply_w": 342.58007985157434
+    }
+   ],
+   "transformer": false
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "AE Techron 7224",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T335",
+   "units": 1,
+   "amplifier": "AE Techron 8504",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 291.72479811851036,
+     "va": 368.0494182973969,
+     "supply_w": 343.2056448453063
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 246.84405994643188,
+     "va": 253.13890151520184,
+     "supply_w": 290.40477640756694
+    },
+    {
+     "level_db": 197.0,
+     "volts": 334.9654391578276,
+     "watts": 336.60553629058893,
+     "va": 354.8133892335753,
+     "supply_w": 396.0065132830458
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Instruments Inc. L2",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Instruments Inc. L6",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Neptune PA1",
+   "level_db": [
+    196.56540180433956,
+    197.0,
+    194.0484486000851
+   ],
+   "per_frequency": [
+    {
+     "level_db": 196.56540180433956,
+     "volts": 159.6871942267131,
+     "watts": 300.0,
+     "va": 300.0,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 194.0484486000851,
+     "volts": 168.81943016134133,
+     "watts": 300.0,
+     "va": 300.0,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Benthowave BII5062",
+   "level_db": [
+    196.77729479503893,
+    197.0,
+    194.2603415907845
+   ],
+   "per_frequency": [
+    {
+     "level_db": 196.77729479503893,
+     "volts": 163.63068171953572,
+     "watts": 315.0,
+     "va": 315.0,
+     "supply_w": 492.1875
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": 412.1605539697964
+    },
+    {
+     "level_db": 194.2603415907845,
+     "volts": 172.98843892006192,
+     "watts": 315.0,
+     "va": 315.0,
+     "supply_w": 492.1875
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "Benthowave BII5160",
+   "level_db": [
+    194.97482260677054,
+    195.9681693591559,
+    192.45786940251608
+   ],
+   "per_frequency": [
+    {
+     "level_db": 194.97482260677054,
+     "volts": 132.9661611087573,
+     "watts": 208.0,
+     "va": 208.0,
+     "supply_w": 325.0
+    },
+    {
+     "level_db": 195.9681693591559,
+     "volts": 198.79637823662685,
+     "watts": 208.0,
+     "va": 208.0,
+     "supply_w": 325.0
+    },
+    {
+     "level_db": 192.45786940251608,
+     "volts": 140.57026712644463,
+     "watts": 208.00000000000003,
+     "va": 208.00000000000003,
+     "supply_w": 325.00000000000006
+    }
+   ],
+   "transformer": false
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "AE Techron 7224",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": null
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Massa TR-1075A",
+   "units": 1,
+   "amplifier": "AE Techron 8504",
+   "level_db": [
+    197.0,
+    197.0,
+    197.0
+   ],
+   "per_frequency": [
+    {
+     "level_db": 197.0,
+     "volts": 167.88040181225605,
+     "watts": 331.57446250170057,
+     "va": 331.57446250170057,
+     "supply_w": 390.08760294317716
+    },
+    {
+     "level_db": 197.0,
+     "volts": 223.872113856834,
+     "watts": 263.7827545406697,
+     "va": 263.7827545406697,
+     "supply_w": 310.3326524007879
+    },
+    {
+     "level_db": 197.0,
+     "volts": 237.13737056616552,
+     "watts": 591.9382370424727,
+     "va": 591.9382370424727,
+     "supply_w": 696.3979259323208
+    }
+   ],
+   "transformer": false
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Instruments Inc. L2",
+   "level_db": [
+    196.29118932066476,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 190.27058940738513,
+     "volts": 580.1355380435019,
+     "watts": 235.59006975071642,
+     "va": 649.9999999999999,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Instruments Inc. L6",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Neptune PA1",
+   "level_db": [
+    192.9332683014328,
+    196.81846880399962,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 186.91266838815318,
+     "volts": 394.1244878506654,
+     "watts": 108.7338783464845,
+     "va": 299.99999999999994,
+     "supply_w": null
+    },
+    {
+     "level_db": 190.79786889072,
+     "volts": 388.94970330081213,
+     "watts": 166.41005886756878,
+     "va": 300.0,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Benthowave BII5062",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": 1201.3635246377612
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": 491.08242489903125
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": 362.7099625766272
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "Benthowave BII5160",
+   "level_db": [
+    195.75025286276468,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 189.72965294948506,
+     "volts": 545.1081150953976,
+     "watts": 208.00000000000003,
+     "va": 573.8781780703168,
+     "supply_w": 896.68465323487
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": 491.08242489903125
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": 362.7099625766272
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "AE Techron 7224",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": null
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": null
+    }
+   ],
+   "transformer": true
+  },
+  {
+   "projector": "Neptune T170",
+   "units": 2,
+   "amplifier": "AE Techron 8504",
+   "level_db": [
+    197.02059991327963,
+    197.02059991327963,
+    197.02059991327963
+   ],
+   "per_frequency": [
+    {
+     "level_db": 191.0,
+     "volts": 630.957344480193,
+     "watts": 278.67501938744783,
+     "va": 768.8726557681671,
+     "supply_w": 327.85296398523275
+    },
+    {
+     "level_db": 191.0,
+     "volts": 398.1071705534973,
+     "watts": 174.33825117072257,
+     "va": 314.29275193538,
+     "supply_w": 205.10382490673246
+    },
+    {
+     "level_db": 191.0,
+     "volts": 354.8133892335753,
+     "watts": 151.07104941529997,
+     "va": 232.1343760490414,
+     "supply_w": 177.73064637094114
+    }
+   ],
+   "transformer": true
+  }
+ ],
  "candidates": [
   {
    "model": "Neptune T335",

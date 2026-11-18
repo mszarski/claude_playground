@@ -122,6 +122,69 @@ CANDIDATES = [
 ]
 
 
+II = "https://instrumentsinc.com/amplifier-and-sensor-specs"
+# Power amplifiers, from the makers' public pages and sheets (opened 2026-11-18). limit_va: volt-amperes the sheet allows in a
+# 1 s burst; limit_w: real power where the sheet rates watts; volts: largest output V rms as the sheet states it (None: by
+# transformer tap, not stated in text). supply: what the sheet assumes. eff: efficiency into a resistive load (None: not stated).
+AMPLIFIERS = [
+    {"model": "Instruments Inc. L2", "kind": "linear class AB, with output transformer (taps)", "url": II, "where": "page text, 'Linear' section (the tables are images on another host, not read)",
+     "limit_va": 650.0, "limit_w": None, "volts": None, "rating": "650 VA for a 1 s burst at 10 % duty; 260 VA continuous; into any power factor",
+     "band": "400 Hz-40 kHz pulsed, to 100 kHz continuous", "supply": "single-phase AC mains", "eff": None, "size": "19 in rack, 3U, or bench; mass not in the text",
+     "mute": "not stated", "housing": "rack or bench"},
+    {"model": "Instruments Inc. L6", "kind": "linear class AB, with output transformer (taps)", "url": II, "where": "page text, 'Linear' section",
+     "limit_va": 2000.0, "limit_w": None, "volts": None, "rating": "2000 VA for a 1 s burst at 10 % duty; 800 VA continuous; into any power factor",
+     "band": "120 Hz-25 kHz pulsed, to 70 kHz continuous", "supply": "single-phase AC mains", "eff": None, "size": "19 in rack, 8U; mass not in the text",
+     "mute": "not stated", "housing": "rack or bench"},
+    {"model": "Neptune PA1", "kind": "class D, differential output", "url": "https://www.neptune-sonar.co.uk/pdf/2022_neptune_sonar_catalogue.pdf", "where": "catalogue pp. F5-F6 (with the MB1 matching transformer, p. F1)",
+     "limit_va": 300.0, "limit_w": 300.0, "volts": 150.0, "rating": "up to 300 W; output 150 V rms / 2 A absolute maximum; pulse and duty not stated",
+     "band": "5 Hz-250 kHz", "supply": "80-260 V AC", "eff": None, "size": "2U 19 in rack or hard case; mass not stated",
+     "mute": "mute input (manual switch or contact closure) that 'shuts down all class D switching'; 'complete silence when receiving'", "housing": "rack or hard case"},
+    {"model": "Benthowave BII5062", "kind": "linear, arbitrary waveform; needs a step-up transformer (BII6014)", "url": BW + "BII5060DataSheet.pdf", "where": "pp. 1-3 ratings and specification tables",
+     "limit_va": None, "limit_w": 315.0, "volts": None, "rating": "315 W rms at +48 V DC; 20 A peak output; continuous signals allowed",
+     "band": "135 Hz-40 kHz (-3 dB)", "supply": "DC, up to +60 V; 14.2 A at maximum power", "eff": 0.64, "size": "board 140 x 95 x 47 mm, 0.4 kg",
+     "mute": "stand-by logic input; output enable time 3 us; 104 mA quiescent", "housing": "board; 'Not waterproof. Always use the device in Dry Air'"},
+    {"model": "Benthowave BII5160", "kind": "linear, with step-up, for low-frequency transducers", "url": BW + "BII5160Datasheet.pdf", "where": "specification table",
+     "limit_va": None, "limit_w": 208.0, "volts": 441.0, "rating": "208 W rms; output up to (2 Vs - 10) x 14.5 V peak-to-peak (441 V rms at 48 V)",
+     "band": "100 Hz-20 kHz", "supply": "DC, up to +60 V", "eff": 0.64, "size": "portable case 0.28 x 0.26 x 0.18 m, 5.0-5.2 kg",
+     "mute": "shut-down state (24 mA against 59 mA active)", "housing": "portable case"},
+    {"model": "AE Techron 7224", "kind": "linear, DC-coupled, four-quadrant", "url": "https://aetechron.com/wp-content/uploads/2024/08/7224-Datasheet-05-27-2026.pdf", "where": "pp. 1-2",
+     "limit_va": 900.0, "limit_w": 900.0, "volts": 112.0, "rating": "900 W rms to 20 kHz; 158 V peak; 'stable when driving highly capacitive loads'",
+     "band": "DC-300 kHz small signal; rated power to 40 kHz", "supply": "single-phase 120 V AC, 20 A (230 V model)", "eff": None, "size": "2U 19 in, 3.5 x 19 x 22.75 in, 20.9 kg; forced air 180 CFM",
+     "mute": "remote 'Force to Standby'; voltage and current monitors; residual noise 0.3 mV (10 Hz-80 kHz)", "housing": "rack or bench"},
+    {"model": "AE Techron 8504", "kind": "switch-mode, DC-50 kHz", "url": "https://aetechron.com/wp-content/uploads/2024/08/8500-Series-Datasheet-06-02-2026.pdf", "where": "pp. 1-3",
+     "limit_va": 4000.0, "limit_w": 4000.0, "volts": 260.0, "rating": "4 kW; 0-260 V rms; 80 A rms; 'up to 5X rated power when driving reactive loads'",
+     "band": "DC-50 kHz", "supply": "AC mains (230 V 10 A to 60 V 60 A input options listed)", "eff": 0.85, "size": "5.25 x 19 x 25.3 in, 38.1 kg; internal fans",
+     "mute": "not read", "housing": "rack"},
+]
+
+
+def chain(c: dict, a: dict, level: float) -> dict:
+    """Level a projector reaches across the band on an amplifier: the projector's volts, watts and volt-amperes for `level`
+    against the amplifier's limits; a shortfall in watts or VA lowers the level by 10 log10 of the ratio. An output voltage
+    below the need is covered by a transformer (noted, not computed)."""
+    out = []
+    for i in range(3):
+        v = 10.0 ** ((level - c["tvr"][i]) / 20.0)
+        if "g_ms" in c:
+            w, va = v * v * c["g_ms"][i] * 1e-3, v * v * math.hypot(c["g_ms"][i], c["b_ms"][i]) * 1e-3
+        else:
+            va = v * v / c["z_ohm"][i]
+            w = va
+        short = 0.0
+        if a["limit_va"]:
+            short = max(short, 10.0 * math.log10(va / a["limit_va"]))
+        if a["limit_w"]:
+            short = max(short, 10.0 * math.log10(w / a["limit_w"]))
+        short = max(short, 0.0)
+        scale = 10.0 ** (-short / 10.0)
+        supply = None
+        if a["eff"]:
+            pf = w / va if a["kind"].startswith("linear") else 1.0
+            supply = w * scale / (a["eff"] * pf)
+        out.append({"level_db": level - short, "volts": v * math.sqrt(scale), "watts": w * scale, "va": va * scale, "supply_w": supply})
+    return {"per_frequency": out, "transformer": a["volts"] is None or a["volts"] < max(o["volts"] for o in out)}
+
+
 def pressure_ratio_db(h: float, h_ref: float) -> float:
     return 20.0 * math.log10(pr.cavitation_pressure_pa(h) / pr.cavitation_pressure_pa(h_ref))
 
@@ -240,10 +303,31 @@ def main():
                     + [f"{r['least_depth_for_level_maker_m']:.0f} m" if an else "—", f"{r['bound_minus_maker_db']:.1f} dB" if an else "—"])
     pr.table(["Model", "Wet radiating area (from the drawing)", "Maker's statement"] + [f"at {h:g} m: maker / bound (dB)" for h in a.depths]
              + [f"Least depth for {sl:g} dB (maker)", "Bound above the maker"], rows)
+    print("**Amplifiers read** (makers' pages and sheets):\n")
+    pr.table(["Amplifier", "Kind", "Rating", "Band", "Supply the sheet assumes", "Size, mass", "Mute or gating", "Form"],
+             [[x["model"], x["kind"], x["rating"], x["band"], x["supply"], x["size"], x["mute"], x["housing"]] for x in AMPLIFIERS])
+    interval, pulse = d["ping_interval_s"], d["pulse_s"]
+    by = {c["model"]: c for c in CANDIDATES}
+    cases = [("Neptune T335", sl, 1), ("Massa TR-1075A", sl, 1), ("Neptune T170", sl - 6.0, 2)]
+    print(f"**Projector on amplifier** (level across 4 / 5 / 6 kHz when the amplifier's watts or volt-amperes run out before {sl:g} dB; "
+          "supply power in the pulse where the sheet gives an efficiency, for a linear stage divided by the load's power factor):\n")
+    rows, chains = [], []
+    for name, level, n in cases:
+        for x in AMPLIFIERS:
+            ch = chain(by[name], x, level)
+            pf_ = ch["per_frequency"]
+            sup = [o["supply_w"] for o in pf_]
+            got = [o["level_db"] + 20.0 * math.log10(n) for o in pf_]
+            rows.append([(f"{n} x " if n > 1 else "") + name + (" (one amplifier each)" if n > 1 else ""), x["model"], f3(got), f3([o["volts"] for o in pf_], "{:.0f}") + " V",
+                         f3([o["va"] for o in pf_], "{:.0f}") + " VA", "yes" if ch["transformer"] else "no",
+                         (f3([n * v for v in sup], "{:.0f}") + " W") if sup[0] else "not stated",
+                         (f"{n * min(sup) * pulse / interval:.0f}–{n * max(sup) * pulse / interval:.0f} Wh") if sup[0] else "—"])
+            chains.append({"projector": name, "units": n, "amplifier": x["model"], "level_db": got, "per_frequency": pf_, "transformer": ch["transformer"]})
+    pr.table(["Projector", "Amplifier", "Level at 4 / 5 / 6 kHz (dB)", "Volts at the projector", "Volt-amperes each", "Step-up transformer needed", "From the supply in the pulse", "Per hour of pinging"], rows)
     if not a.no_json:
         dest = ROOT / "docs" / "design" / "projector_candidates.json"
         dest.write_text(json.dumps({"build": a.build, "source_level_db": sl, "duty": duty, "depth_required_m": a.depth_required,
-                                    "candidates": [{**{k: (None if isinstance(v, float) and math.isinf(v) else v) for k, v in c.items()}, "computed": r} for c, r in zip(CANDIDATES, res)]},
+                                    "amplifiers": AMPLIFIERS, "chains": chains, "candidates": [{**{k: (None if isinstance(v, float) and math.isinf(v) else v) for k, v in c.items()}, "computed": r} for c, r in zip(CANDIDATES, res)]},
                                    indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))
         print(f"wrote {dest.relative_to(ROOT)}", file=sys.stderr)
 
