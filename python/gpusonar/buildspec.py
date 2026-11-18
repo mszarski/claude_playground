@@ -950,6 +950,17 @@ def scenario_configs(spec: dict) -> dict:
                       "pings": {"count": 8, "interval": 4.0}, "scene": [points(t_pass, label="mover", velocity=[3.0, 0.0, 0.0])],
                       "absorption": "ainslie_mccolm", "receiver": copy.deepcopy(noise), "seed": seed + 3,
                       "truth": {"targets": [t_pass], "speed_m_s": 3.0, "check_depth": False}}
+    # a submerged mover of the spec's first submerged target class, at speed: tracked with NO sound-speed profile knowledge.
+    # A dive for a profile is optional: it must never be needed to detect, track or classify (the owner).
+    sub = next((cl for cl in target_classes_of(spec, resolve=False) if float(cl["depth_m"][0]) >= 10.0), None)
+    if sub is not None:
+        z_sub = float(min(0.5 * (float(sub["depth_m"][0]) + float(sub["depth_m"][1])), depth - 5.0))
+        v_sub = float(min((sub.get("speed_m_s") or [0.0, 3.0])[1], 4.0))             # the class's top speed, at most 4 m/s so that it stays inside the short window
+        t_sub = [-40.0, float(sign * near), z_sub]
+        out["submerged"] = copy.deepcopy(out["passing"])
+        out["submerged"].update(name=f"{spec['build']}_submerged", scene=[points(t_sub, label=str(sub["name"]), velocity=[v_sub, 0.0, 0.0])], seed=seed + 5,
+                                truth={"targets": [t_sub], "speed_m_s": v_sub, "heading_deg": 0.0, "depth_m": z_sub, "class": sub["name"], "check_depth": False,
+                                       "profile_knowledge": "none"})
     # passive: two radiating sources, the sonar silent.
     src = [[float(np.round(near * np.sin(np.radians(bb)), 1)), float(np.round(sign * near * np.cos(np.radians(bb)), 1)), z] for bb, z in ((-20.0, depths[0]), (12.0, depths[-1]))]
     out["passive"] = {"name": f"{spec['build']}_passive", "sonar": sonar, "fidelity": "free_field",

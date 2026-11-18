@@ -43,12 +43,15 @@ sys.path.insert(0, str(ROOT / "tools"))
 from gpusonar import buildspec as bs  # noqa: E402
 from gpusonar import config  # noqa: E402
 
-KINDS = ("free", "shallow", "rehearsal", "passing", "passive", "stream")
+KINDS = ("free", "shallow", "rehearsal", "passing", "submerged", "passive", "stream")
 CRITERIA = {
     "free": "every target: range within 3 m, bearing within 1 deg, in both engines; three or more rows: depth within 3 m + 0.3% of range; two rows: the true elevation within 0.5 deg of the reported one or of a listed candidate",
     "shallow": "the target: range within 6 m (a detection is a cluster of the direct echo and its first bounces), bearing within 1 deg; rows: depth within 3 m + range x sin(0.7 deg) (the multipath allowance) when the report gives one elevation, else the truth among the candidates",
     "rehearsal": "the boards synchronise (ok, worst residual under 1 us) when the build has board clocks; range within 6 m, bearing within 1 deg; rows: depth as in shallow, with the attitude the platform had",
     "passing": "at least one track of kind mover, speed within 1 m/s of the truth, in both engines",
+    "submerged": "a submerged mover of the spec's first submerged target class, with NO sound-speed profile and no water depth given to the chain (the deployment file's gradient prior only): "
+                 "a track of kind mover, speed within 1 m/s and heading within 15 degrees of the truth; with rows, any depth the track reports has the true depth inside two of its sigmas, "
+                 "and the track exists even when every detection lists several possible elevations. Skipped when the spec names no submerged target class",
     "passive": "both sources within 1 deg of their bearings in at least 80% of the frames, on the Eigen path and on the kernel path (a row of more than 64: the kernels refuse, skipped and said so)",
     "stream": "both assemblers and the UDP loopback return every sample within half a count; no sample lost",
 }
@@ -321,6 +324,38 @@ def self_test(spec: dict, out: Path, kinds=KINDS, engines=("python", "cpp"), log
                                 worst = max(worst, max(abs(a - b) for a, b in zip(got, want)))
                         res[label] = {"frames": len(frames), "frames_with_both_within_1_deg": good, "worst_error_deg": worst}
                         ok = ok and len(frames) > 0 and good >= 0.8 * len(frames)
+                    res["ok"] = bool(ok)
+                elif kind == "submerged" and kind not in scenarios:
+                    res["skipped"] = "the spec names no target class deeper than 10 m (targets:)"
+                    res["ok"] = True
+                elif kind == "submerged":
+                    sc = scenarios[kind]
+                    truth = sc.pop("truth")
+                    records = run_scenario(sc).records
+                    chain = bs.chain_config(spec, sync=False)                            # as deployed: no profile; and here no water depth either
+                    chain.pop("engine", None)
+                    chain["tracker"] = dict(chain["tracker"], confirm_hits=2)
+                    if chain.get("elevation"):
+                        chain["elevation"] = dict(chain["elevation"], water_depth=None)
+                        chain["elevation"].pop("sector_from_depth", None)
+                    ok = True
+                    for engine in engines:
+                        reports = _run(records, chain, engine)
+                        last = reports[-1]
+                        movers = [t for t in last["tracks"] if t["kind"] == "mover"]
+                        e = {"tracks": sorted(t["kind"] for t in last["tracks"]), "mover_speed_m_s": [t["speed_m_s"] for t in movers],
+                             "mover_heading_deg": [float(np.degrees(np.arctan2(t.get("vy", 0.0), t["vx"]))) for t in movers],
+                             "depth_m": [t.get("depth_m") for t in movers], "depth_sigma_m": [t.get("depth_sigma_m") for t in movers],
+                             "depth_profile_source": [t.get("depth_profile_source") for t in movers],
+                             "detections_with_several_possible_elevations": sum(1 for r in reports for dd in r["detections"] if dd.get("elevation_alternatives_deg")),
+                             "first_ping_with_a_track": next((i + 1 for i, r in enumerate(reports) if r["tracks"]), None)}
+                        good = [t for t in movers if abs(t["speed_m_s"] - truth["speed_m_s"]) <= 1.0
+                                and abs(np.degrees(np.angle(np.exp(1j * (np.arctan2(t.get("vy", 0.0), t["vx"]) - np.radians(truth["heading_deg"])))))) <= 15.0]
+                        honest = all(t.get("depth_m") is None or not t.get("depth_sigma_m") or abs(t["depth_m"] - truth["depth_m"]) <= 2.0 * t["depth_sigma_m"] for t in good)
+                        e["true_depth_within_two_sigma"] = bool(honest)
+                        e["ok"] = bool(good) and honest
+                        res[engine] = e
+                        ok = ok and e["ok"]
                     res["ok"] = bool(ok)
                 else:
                     sc = scenarios[kind]
