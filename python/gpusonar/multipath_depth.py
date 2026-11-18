@@ -14,8 +14,12 @@ and straight rays (NumPy reference of libs/live multipath_depth.hpp; docs/PHYSIC
                 tau(z_p) + tau(z_a)          mu_tx mu_rx                 surface both ways
                 (z_p = z_a, mu = -1: the triplet +1, -2, +1 at 0, tau, 2 tau)
 
-so the target's depth z_t follows from the delays, the range and the sonar's own depth. Neither the elevation angle
-nor (to first order) the sound-speed profile comes into it. The estimator does not pick arrivals: for every
+so the target's depth z_t follows from the delays, the range and the sonar's own depth, without the elevation angle.
+The sound-speed profile does come into it: a mean gradient g bends both paths and, to first order, stretches the
+surface echo's delay by 1 + r^2 g / (2 c (z_own + z_t)) (3% at 1 km, 30% at 3 km for 50 m and 120 m in isothermal
+water). An assumed gradient is taken out (`gradient_per_s`) and what is not known of it goes into the sigma
+(`gradient_sigma_per_s`), as for the elevation depth, which the same gradient moves by r^2 g / 2c: the multipath depth is
+the less sensitive of the two by z_t / (z_own + z_t), not insensitive. The estimator does not pick arrivals: for every
 candidate depth it predicts the whole pattern (delays, amplitudes, signs, and the carrier phase 2 pi fc tau of each
 arrival) and correlates it with the compressed beam output around the detection,
 
@@ -83,7 +87,12 @@ DEFAULTS = {
     "water_depth": None,             # m; None: the record's environment.water_depth (navigation's, else unknown)
     "surface_z": 0.0,                # z of the sea surface in the navigation's frame
     "own_depth_sigma_m": 0.0,        # the navigation's depth accuracy
-    "model_sigma_fraction": 0.0,     # relative error of the flat, straight-ray delays (refraction): sigma gains depth x this
+    "model_sigma_fraction": 0.0,     # further relative error of the delays' model: sigma gains depth x this
+    # Refraction: a mean vertical sound-speed gradient g bends both paths, and to first order the surface echo's delay
+    # grows by the factor 1 + r^2 g / (2 c (z_own + z_t)) (docs/PHYSICS_NOTES.md; tools/multipath_depth_study.py).
+    "gradient_per_s": None,          # assumed mean gradient (1/s; 0.017: isothermal water): taken out of the depth. None: not
+    "gradient_sigma_per_s": None,    # how well it is known: sigma gains z_t r^2 x this / (2 c (z_own + z_t)). None: the prior
+                                     # the elevation depth uses (elevation.gradient_sigma_per_s)
     "track": {"gate_m": 60.0,        # a detection within this of a track's position is that track's
               "step_m": 0.5,         # depth step of a track's accumulated likelihood
               "min_gain": 12.0,      # the accumulated gain a track's depth needs
@@ -110,7 +119,8 @@ class Geometry:
 class Estimate:
     valid: bool = False
     depth: float = float("nan")      # m below the surface
-    sigma: float = float("nan")      # m, one sigma
+    sigma: float = float("nan")      # m, one sigma, everything
+    refraction_sigma: float = 0.0    # m: the part of sigma that is the unknown gradient (the same in every ping)
     gain: float = float("nan")       # L(depth) - L_1
     arrivals: int = 0                # arrivals of the pattern at that depth
     method: str = "none"             # "delay" (arrivals resolved), "ripple" (interference across the band), "none"
@@ -151,7 +161,8 @@ def cpp_options(cfg: dict | None) -> dict:
          "surface_loss_db": float(s["loss_db"]), "surface_min_amplitude": float(s["min_amplitude"]), "bottom_order": int(c["bottom_order"]),
          "bottom_grazing_limit_deg": float(c["bottom_grazing_limit_deg"]),
          "water_depth": float(c["water_depth"] or 0.0), "surface_z": float(c["surface_z"]), "own_depth_sigma": float(c["own_depth_sigma_m"]),
-         "model_sigma_fraction": float(c["model_sigma_fraction"]), "track_gate": float(t["gate_m"]), "track_step": float(t["step_m"]),
+         "model_sigma_fraction": float(c["model_sigma_fraction"]), "gradient": float(c["gradient_per_s"] or 0.0),
+         "gradient_sigma": gradient_sigma(c), "track_gate": float(t["gate_m"]), "track_step": float(t["step_m"]),
          "track_min_gain": float(t["min_gain"]), "track_memory_pings": float(t["memory_pings"] or 0.0),
          "consistency_sigma": float(c["fuse"]["consistency_sigma"])}
     if c["min_snr_db"] is not None:
@@ -160,6 +171,25 @@ def cpp_options(cfg: dict | None) -> dict:
         b = c["bottom"]
         o.update(bottom=1, bottom_speed=float(b["speed"]), bottom_density=float(b["density"]), bottom_attenuation=float(b.get("attenuation", 0.0)))
     return o
+
+
+def gradient_sigma(cfg: dict) -> float:
+    """`gradient_sigma_per_s`, or the elevation depth's prior when it is not given."""
+    if cfg.get("gradient_sigma_per_s") is not None:
+        return float(cfg["gradient_sigma_per_s"])
+    from .elevation import DEFAULTS as EL
+    return float(EL["gradient_sigma_per_s"])
+
+
+def refraction(flat_depth: float, g: "Geometry", cfg: dict):
+    """(depth, sigma): the depth whose surface delay in the assumed mean gradient equals the flat formula's at `flat_depth`
+    (z (1 + K / (z_own + z)) = z_flat, K = r^2 g / 2c), and what the gradient's uncertainty leaves of it, m."""
+    own = 0.5 * (g.array_depth + g.projector_depth)
+    bend = g.range_m**2 / (2.0 * g.sound_speed)
+    k = bend * float(cfg.get("gradient_per_s") or 0.0)
+    b = own + k - flat_depth
+    depth = flat_depth if k == 0.0 else 0.5 * (-b + np.sqrt(b * b + 4.0 * flat_depth * own))
+    return float(depth), float(depth * bend * abs(gradient_sigma(cfg)) / (own + depth))
 
 
 def geometry_dict(g: "Geometry") -> dict:
@@ -194,6 +224,7 @@ class ChainStage:
                     item[key] = float(value)
             if d.get("depth_m") is not None:
                 item.update(depth=float(d["depth_m"]) - surface_z, depth_sigma=float(d["depth_sigma_m"]),
+                            depth_refraction_sigma=float(d.get("depth_refraction_sigma_m", 0.0)),
                             depth_alternatives=[float(fold_depth(z, water, surface_z)[0]) - surface_z for z in (m.depth_alternatives or [])])
             mh.append(item)
         mt = []
@@ -454,20 +485,21 @@ def estimate(y, t_rel, n_noise: int, g: Geometry, cfg: dict) -> Estimate:
         return est
     cell = float(grid[1] - grid[0]) if len(grid) > 1 else 0.0
     est.valid = True
-    est.depth = float(at[b])
-    est.sigma = float(np.sqrt(sigma**2 + cell**2 / 12.0 + model_sigma(est.depth, g, cfg) ** 2))
+    flat_depth = float(at[b])
     # resolved: each leg's surface echo stands 1 / B clear of the direct one
-    est.method = "delay" if float(surface_delay(est.depth, g)) * g.bandwidth >= 4.0 else "ripple"
+    est.method = "delay" if float(surface_delay(flat_depth, g)) * g.bandwidth >= 4.0 else "ripple"
+    est.depth, est.refraction_sigma = refraction(flat_depth, g, cfg)
+    est.sigma = float(np.sqrt(sigma**2 + cell**2 / 12.0 + model_sigma(est.depth, g, cfg) ** 2 + est.refraction_sigma**2))
     est.ambiguous = bool(rivals)
     est.alternatives = tuple(rivals[:4])
     # Paths the pattern leaves out but the water may hold: the depth is then one explanation among others.
     if g.water_depth and cfg["bottom"] is None:
         z_mid = 0.5 * (g.array_depth + g.projector_depth)
-        if np.degrees(np.arctan2(2.0 * g.water_depth - z_mid - est.depth, g.range_m)) < float(cfg["bottom_grazing_limit_deg"]):
+        if np.degrees(np.arctan2(2.0 * g.water_depth - z_mid - flat_depth, g.range_m)) < float(cfg["bottom_grazing_limit_deg"]):
             est.ambiguous, est.reason = True, "bottom_unmodelled"
     elif g.water_depth:
         more = dict(cfg, bottom_order=int(cfg["bottom_order"]) + 1)
-        d2, a2 = pattern(est.depth, 2.0 * g.range_m / g.sound_speed, g, more)
+        d2, a2 = pattern(flat_depth, 2.0 * g.range_m / g.sound_speed, g, more)
         legs, had = 1 + 2 * more["bottom_order"], 1 + 2 * int(cfg["bottom_order"])
         fresh = np.zeros(legs, dtype=bool)
         fresh[[had // 2 + 1, legs - 1]] = True                    # legs come as d, s.., b..: the last of each run is the new order
@@ -525,7 +557,8 @@ class TrackDepth:
         self.fade = 1.0 if not t["memory_pings"] else float(np.exp(-1.0 / float(t["memory_pings"])))
         self.cfg = cfg
         self.lobe = 0.0
-        self.model = 0.0
+        self.geometry = None
+        self.cell = 0.0                      # the coarsest fringe cell among the pings added, m
 
     def add(self, est: Estimate, g: Geometry) -> None:
         if len(est.grid) < 2:
@@ -542,8 +575,9 @@ class TrackDepth:
             value = np.where(np.isfinite(low), low, 0.0)
         self.total = self.fade * self.total + value
         self.pings += 1
+        self.cell = max(self.cell, cell)
         self.lobe = envelope_lobe(float(self.grid[int(np.argmax(self.total))]), g)
-        self.model = model_sigma(float(self.grid[int(np.argmax(self.total))]), g, self.cfg)
+        self.geometry = g
 
     def result(self) -> Estimate:
         est = Estimate(arrivals=self.pings)
@@ -555,8 +589,12 @@ class TrackDepth:
         if est.gain < float(self.cfg["track"]["min_gain"]):
             est.reason = "single_arrival"
             return est
-        est.valid, est.depth = True, float(self.grid[b])
-        est.sigma = float(np.sqrt(sigma**2 + self.step**2 / 4.0 + self.model**2))    # half a cell: the fringe is not resolved along a track
+        est.valid = True
+        est.depth, est.refraction_sigma = refraction(float(self.grid[b]), self.geometry, self.cfg)
+        # half a cell of the track's grid, and the pings' own fringe cell (the envelope has no finer structure); the
+        # gradient's part does not average down over pings
+        est.sigma = float(np.sqrt(sigma**2 + self.step**2 / 4.0 + self.cell**2 / 12.0 + model_sigma(est.depth, self.geometry, self.cfg) ** 2
+                                  + est.refraction_sigma**2))
         est.ambiguous, est.alternatives = bool(rivals), tuple(rivals[:4])
         est.method = "track"
         return est
@@ -564,10 +602,13 @@ class TrackDepth:
 
 # --- with a stacked-row depth ---------------------------------------------------------------------------------------------
 
-def fuse(depth_mp: float, sigma_mp: float, depth_el: float, sigma_el: float, alternatives=(), consistency_sigma: float = 3.0) -> dict:
+def fuse(depth_mp: float, sigma_mp: float, depth_el: float, sigma_el: float, alternatives=(), consistency_sigma: float = 3.0,
+         refraction_mp: float = 0.0, refraction_el: float = 0.0) -> dict:
     """The multipath depth with the depth from the rows' elevation. `alternatives`: the depths of the other candidate
     elevations (two rows give several). The candidate nearest the multipath depth is taken; when it agrees with it
-    within `consistency_sigma` sigma the two are combined by inverse variance, else both stand and `consistent` is False.
+    within `consistency_sigma` sigma the two are combined, else both stand and `consistent` is False. `refraction_*`: the
+    parts of the two sigmas that are the unknown gradient: one error in both, so only the rest is averaged down by
+    inverse variance and the gradient's part is carried through with the weights.
     {depth, sigma, consistent, selected (index into [depth_el, *alternatives])}."""
     cands = [float(depth_el)] + [float(a) for a in alternatives]
     k = int(np.argmin([abs(c - depth_mp) for c in cands]))
@@ -575,8 +616,11 @@ def fuse(depth_mp: float, sigma_mp: float, depth_el: float, sigma_el: float, alt
     ok = abs(d - depth_mp) <= consistency_sigma * float(np.hypot(sigma_mp, sigma_el))
     if not ok:
         return {"depth": float(depth_mp), "sigma": float(sigma_mp), "consistent": False, "selected": k}
-    w1, w2 = 1.0 / sigma_mp**2, 1.0 / sigma_el**2
-    return {"depth": float((w1 * depth_mp + w2 * d) / (w1 + w2)), "sigma": float(1.0 / np.sqrt(w1 + w2)), "consistent": True, "selected": k}
+    s1 = np.sqrt(max(sigma_mp**2 - refraction_mp**2, 1e-12))
+    s2 = np.sqrt(max(sigma_el**2 - refraction_el**2, 1e-12))
+    w1, w2 = 1.0 / s1**2, 1.0 / s2**2
+    common = (w1 * refraction_mp + w2 * refraction_el) / (w1 + w2)
+    return {"depth": float((w1 * depth_mp + w2 * d) / (w1 + w2)), "sigma": float(np.sqrt(1.0 / (w1 + w2) + common**2)), "consistent": True, "selected": k}
 
 
 # --- a bound --------------------------------------------------------------------------------------------------------------

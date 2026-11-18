@@ -42,6 +42,7 @@ py::dict estimate_dict(const live::MultipathEstimate& e) {
   d["valid"] = e.valid;
   d["depth"] = e.depth;
   d["sigma"] = e.sigma;
+  d["refraction_sigma"] = e.refraction_sigma;
   d["gain"] = e.gain;
   d["arrivals"] = e.arrivals;
   d["method"] = e.method;
@@ -109,15 +110,24 @@ void bind_refraction(py::module_& m) {
       py::arg("extent") = kNaN, py::arg("rows") = std::vector<std::vector<std::int64_t>>{}, py::arg("backend") = Backend::Host,
       "Target depth for one detection of a conditioned record.");
   m.def("live_multipath_fuse",
-        [](double depth_mp, double sigma_mp, double depth_el, double sigma_el, const std::vector<double>& alternatives, double consistency_sigma) {
-          const live::MultipathFused f = live::multipath_fuse(depth_mp, sigma_mp, depth_el, sigma_el, alternatives, consistency_sigma);
+        [](double depth_mp, double sigma_mp, double depth_el, double sigma_el, const std::vector<double>& alternatives, double consistency_sigma,
+           double refraction_mp, double refraction_el) {
+          const live::MultipathFused f =
+              live::multipath_fuse(depth_mp, sigma_mp, depth_el, sigma_el, alternatives, consistency_sigma, refraction_mp, refraction_el);
           py::dict d;
           d["depth"] = f.depth;
           d["sigma"] = f.sigma;
           d["consistent"] = f.consistent;
           d["selected"] = f.selected;
           return d;
-        });
+        },
+        py::arg("depth_mp"), py::arg("sigma_mp"), py::arg("depth_el"), py::arg("sigma_el"), py::arg("alternatives") = std::vector<double>{},
+        py::arg("consistency_sigma") = 3.0, py::arg("refraction_mp") = 0.0, py::arg("refraction_el") = 0.0);
+  m.def("live_multipath_refraction", [](double flat_depth, const py::dict& geometry, const py::dict& options) {
+    double depth = 0.0, sigma = 0.0;
+    live::multipath_refraction(flat_depth, multipath_geometry(geometry), multipath_options(options), depth, sigma);
+    return py::make_tuple(depth, sigma);
+  });
 
   py::class_<live::MultipathDepth>(m, "MultipathDepth")
       .def(py::init([](const py::dict& options) { return live::MultipathDepth(multipath_options(options)); }), py::arg("options") = py::dict(),
@@ -141,6 +151,7 @@ void bind_refraction(py::module_& m) {
                 x.has_depth = true;
                 x.depth = h["depth"].cast<double>();
                 x.depth_sigma = h["depth_sigma"].cast<double>();
+                if (h.contains("depth_refraction_sigma")) x.depth_refraction_sigma = h["depth_refraction_sigma"].cast<double>();
                 if (h.contains("depth_alternatives")) x.depth_alternatives = h["depth_alternatives"].cast<std::vector<double>>();
               }
               mh.push_back(x);

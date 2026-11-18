@@ -650,7 +650,7 @@ Report LiveChain::process(PingRecord& record) {
     for (std::size_t i = 0; i < hits.size(); ++i) {
       const ReportDetection& d = rep.detections[i];
       mh[i] = {hits[i].range, hits[i].bearing, hits[i].first_range, hits[i].extent, local[i].range * std::sin(local[i].bearing),
-               local[i].range * std::cos(local[i].bearing), hits[i].snr_db, d.has_depth, d.depth_m - eo.surface_z, d.depth_sigma_m, {}};
+               local[i].range * std::cos(local[i].bearing), hits[i].snr_db, d.has_depth, d.depth_m - eo.surface_z, d.depth_sigma_m, d.depth_refraction_sigma_m, {}};
       for (double z : local[i].depth_alternatives) mh[i].depth_alternatives.push_back(fold_depth(z, water, eo.surface_z).first - eo.surface_z);
     }
     std::vector<MultipathTrack> mt;

@@ -20,6 +20,8 @@ from gpusonar.sim import run_scenario
 
 core = gs.core
 SAND = {"speed": 1650.0, "density": 1.9, "attenuation": 0.8}     # the popoto_12km scenario's bottom
+KNOWN = {"gradient_sigma_per_s": 0.0}                            # the simulated water is isovelocity and taken as known: the sigma tested
+                                                                 # is the fit's own (the gradient prior has its own test below)
 
 
 def scenario(own, target, rng, ts=25.0, seed=3, sonar="popoto_long_range", half=600.0, surface=True, bottom_z=None, spread=None, scene=None,
@@ -52,7 +54,7 @@ def prepared(cfg):
 def detect(cfg, own, target, rng, opts=None, offset=1.0):
     """The C++ stage's estimate for the target of `scenario`, asked for at its slant range plus `offset` m."""
     rec, origin = prepared(cfg)
-    return core.live_multipath_detection(rec, tuple(origin), 0.0, float(np.hypot(rng, target - own)) + offset, mp.cpp_options(opts or {}))
+    return core.live_multipath_detection(rec, tuple(origin), 0.0, float(np.hypot(rng, target - own)) + offset, mp.cpp_options(dict(KNOWN, **(opts or {}))))
 
 
 GEOM = mp.Geometry(range_m=12000.0, array_depth=225.0, projector_depth=225.0, sound_speed=1500.0, f_centre=5000.0, bandwidth=2000.0)
@@ -63,7 +65,7 @@ GEOM = mp.Geometry(range_m=12000.0, array_depth=225.0, projector_depth=225.0, so
 def test_pattern_is_the_triplet_with_the_textbook_delay():
     """Projector and array at one depth, flat surface: +1, -2 (two coincident one-leg echoes), +1 at 0, tau, 2 tau with
     tau = 2 z z_t / (r c) to first order (3.75 ms at 12 km for 225 m and 150 m) and exactly the image geometry."""
-    cfg = mp.options({})
+    cfg = mp.options(KNOWN)
     delay, amp = mp.pattern(150.0, 2.0 * 12000.0 / 1500.0, GEOM, cfg)
     r_h = np.sqrt(12000.0**2 - 75.0**2)
     exact = (np.hypot(r_h, 375.0) - np.hypot(r_h, 75.0)) / 1500.0
@@ -103,8 +105,8 @@ def test_cpp_pattern_grid_and_roughness_are_the_reference():
 def test_cpp_stage_is_the_numpy_reference(own, target, rng, ts):
     rec, origin = prepared(scenario(own, target, rng, ts=ts))
     slant = float(np.hypot(rng, target - own)) + 1.0
-    ref = mp.estimate_detection(rec, origin, 0.0, slant, mp.options({}))
-    got = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, mp.cpp_options({}))
+    ref = mp.estimate_detection(rec, origin, 0.0, slant, mp.options(KNOWN))
+    got = core.live_multipath_detection(rec, tuple(origin), 0.0, slant, mp.cpp_options(KNOWN))
     assert ref.valid and got["valid"] and got["method"] == ref.method
     assert got["depth"] == pytest.approx(ref.depth, abs=1e-6) and got["sigma"] == pytest.approx(ref.sigma, rel=1e-6)
     assert np.allclose(got["envelope"], ref.envelope, atol=1e-5 * max(1.0, ref.gain)) and np.allclose(got["grid"], ref.grid, atol=1e-9)
@@ -142,7 +144,7 @@ def test_the_detection_may_sit_on_any_arrival_or_come_with_its_extent():
     rec, origin = prepared(scenario(own, target, rng, ts=18.0))
     slant = float(np.hypot(rng, target - own))
     later = 2.0 * own * target / rng                          # extra path of one leg by the surface, m
-    o = mp.cpp_options({})
+    o = mp.cpp_options(KNOWN)
     depths = [core.live_multipath_detection(rec, tuple(origin), 0.0, slant + off, o)["depth"] for off in (0.0, 0.5 * later, later)]
     depths.append(core.live_multipath_detection(rec, tuple(origin), 0.0, slant + 0.7 * later, o, first_range=slant - 1.0, extent=later + 2.0)["depth"])
     assert depths == pytest.approx([target] * 4, abs=0.5)
@@ -195,7 +197,7 @@ def test_reasons_when_it_cannot_work():
     assert not d["valid"] and d["reason"] == "merged"
     # target too shallow: its depth is above the shallowest the band can resolve, 3 r c / (4 B z_own) = 30 m here
     g = mp.Geometry(**{**GEOM.__dict__})
-    grid, _, _ = mp.depth_grid(g, mp.options({}))
+    grid, _, _ = mp.depth_grid(g, mp.options(KNOWN))
     assert grid[0] == pytest.approx(3.0 * 12000.0 * 1500.0 / (4.0 * 2000.0 * 225.0), rel=0.02)
     d = detect(scenario(225.0, 5.0, 12000.0, ts=45.0), 225.0, 5.0, 12000.0)
     assert not d["valid"] and d["reason"] == "single_arrival"
@@ -209,12 +211,44 @@ def test_reasons_when_it_cannot_work():
         mp.options({"no_such_key": 1})
 
 
+def test_refraction_first_order_against_the_ray_code():
+    """In water with a constant gradient g the surface echo's delay is the flat one times 1 + r^2 g / (2 c (z_own + z_t)) to
+    first order: against the closed-form ray code over 1 to 3 km in isothermal water (g = 0.017 /s). Taken out with
+    `gradient_per_s`, the flat formula's depth comes back to truth; left in, it is the bias; and the gradient prior
+    (the elevation depth's 0.05 /s unless told) is in the reported sigma, in both implementations."""
+    from gpusonar import raytrace
+    g_iso, own = 0.017, 50.0
+    prof = raytrace.Profile([0.0, 3000.0], [1500.0, 1500.0 + g_iso * 3000.0])
+    c_own = float(prof.c(own))
+    for target, rng, tol in ((120.0, 1000.0, 0.004), (120.0, 2000.0, 0.02), (120.0, 3000.0, 0.05), (60.0, 1000.0, 0.01), (20.0, 1000.0, 0.02)):
+        tau = raytrace.surface_delay(prof, own, target, rng)
+        flat = (np.hypot(rng, target + own) - np.hypot(rng, target - own)) / c_own
+        first = rng**2 * g_iso / (2.0 * c_own * (own + target))
+        assert tau / flat - 1.0 == pytest.approx(first, abs=tol)
+        geo = mp.Geometry(range_m=rng, array_depth=own, projector_depth=own, sound_speed=c_own, f_centre=5000.0, bandwidth=2000.0)
+        z_flat = raytrace.flat_depth_from_delay(tau, own, rng, c_own)
+        z, _ = mp.refraction(z_flat, geo, mp.options({"gradient_per_s": g_iso}))
+        assert abs(z - target) <= max(3.0 * tol, 0.01) * target and abs(z - target) < 0.35 * abs(z_flat - target) + 0.3
+        # the prior: sigma = z r^2 sigma_g / (2 c (z_own + z)), and the C++ function is the same
+        z0, sigma = mp.refraction(target, geo, mp.options({}))
+        assert z0 == target and sigma == pytest.approx(target * rng**2 * 0.05 / (2.0 * c_own * (own + target)))
+        assert core.live_multipath_refraction(z_flat, mp.geometry_dict(geo), mp.cpp_options({"gradient_per_s": g_iso})) == pytest.approx((z, mp.refraction(z_flat, geo, mp.options({"gradient_per_s": g_iso}))[1]))
+    # through the stage: the default sigma carries the prior (12 km, 225 m and 150 m: hundreds of metres), told-known water does not
+    d = detect(scenario(225.0, 150.0, 12000.0, ts=30.0), 225.0, 150.0, 12000.0, {"gradient_sigma_per_s": None})
+    assert d["valid"] and d["refraction_sigma"] == pytest.approx(150.0 * d["refraction_sigma"] / d["refraction_sigma"] * 12000.0**2 * 0.05 / (2.0 * 1500.0 * 375.0), rel=0.02)
+    assert d["sigma"] >= d["refraction_sigma"] > 900.0
+    # with the rows' depth: the gradient is one error in both, it is not averaged down
+    f = mp.fuse(150.0, 60.0, 156.0, 80.0, refraction_mp=59.0, refraction_el=79.0)
+    assert f["consistent"] and 59.0 < f["sigma"] < 80.0
+    assert core.live_multipath_fuse(150.0, 60.0, 156.0, 80.0, [], 3.0, 59.0, 79.0)["sigma"] == pytest.approx(f["sigma"])
+
+
 # --- noise, single arrivals, and the bound --------------------------------------------------------------------------------
 
 def test_false_depth_rate_on_noise_and_on_single_arrival_echoes():
     """No surface (free field): one arrival, at detection-level and at high SNR, at 12, 3 and 1 km; and no target at all.
     With `min_gain` 12 a depth is reported for none of the echoes and for at most one window of noise in forty."""
-    o = mp.cpp_options({})
+    o = mp.cpp_options(KNOWN)
     false_echo = false_noise = 0
     for own, rng, levels in ((225.0, 12000.0, (27.0, 36.0, 46.0)), (225.0, 3000.0, (5.0, 20.0)), (50.0, 1000.0, (-10.0, 10.0))):
         for ts in levels:
@@ -243,7 +277,7 @@ def test_error_against_the_cramer_rao_bound():
         snr.append(d["snr_db"])
     # the strongest sample is the coincident pair, 6 dB above the direct arrival
     g = mp.Geometry(range_m=float(np.hypot(rng, 75.0)), array_depth=own, projector_depth=own + 1.5, sound_speed=1500.0, f_centre=5000.0, bandwidth=2000.0)
-    bound = mp.depth_bound(target, g, mp.options({}), 10.0 ** ((np.mean(snr) - 6.0) / 10.0))
+    bound = mp.depth_bound(target, g, mp.options(KNOWN), 10.0 ** ((np.mean(snr) - 6.0) / 10.0))
     scatter = float(np.std(errors))
     assert bound < 0.05                                            # centimetres: the carrier phase of a mirror
     assert scatter < 4.0 * bound + 0.02                            # within the depth grid's step of the bound
@@ -269,9 +303,9 @@ def test_sigma_covers_the_error_near_the_threshold():
 
 def test_a_track_adds_up_pings_that_are_each_too_weak():
     own, target, rng = 225.0, 150.0, 12000.0
-    stage = core.MultipathDepth(mp.cpp_options({}))
-    o = mp.cpp_options({})
-    cfg = mp.options({})
+    stage = core.MultipathDepth(mp.cpp_options(KNOWN))
+    o = mp.cpp_options(KNOWN)
+    cfg = mp.options(KNOWN)
     single = 0
     for seed in range(8):
         rec, origin = prepared(scenario(own, target, rng, ts=19.0, seed=1500 + seed))
@@ -286,7 +320,7 @@ def test_a_track_adds_up_pings_that_are_each_too_weak():
     assert not stage.track(8)["valid"]
     # the Python reference's accumulator is the same sum
     ref = mp.TrackDepth(cfg)
-    stage2 = core.MultipathDepth(mp.cpp_options({}))
+    stage2 = core.MultipathDepth(mp.cpp_options(KNOWN))
     for seed in range(3):
         rec, origin = prepared(scenario(own, target, rng, ts=26.0, seed=1600 + seed))
         slant = float(np.hypot(rng, target - own)) + 1.0
@@ -330,7 +364,7 @@ def chain_scenario(range_m, ts_db, sonar_rows=1, pings=4):
     return cfg
 
 
-NEW = ("depth_multipath_m", "depth_multipath_sigma_m", "multipath_arrivals", "multipath_method", "multipath_gain", "multipath_reason",
+NEW = ("depth_multipath_m", "depth_multipath_sigma_m", "depth_multipath_refraction_sigma_m", "multipath_arrivals", "multipath_method", "multipath_gain", "multipath_reason",
        "multipath_pings", "multipath_ambiguous", "multipath_alternatives_m", "multipath_note", "depth_fused_m", "depth_fused_sigma_m",
        "depth_consistent", "elevation_selected")
 
@@ -355,7 +389,7 @@ def test_chain_reports_depth_on_both_engines_and_changes_nothing_else(range_m, t
     for engine in ("cpp", "python"):
         with LiveChain(dict(base, engine=engine)) as chain:
             plain = chain.run([r.copy() for r in records])
-        with LiveChain(dict(base, engine=engine, multipath_depth={})) as chain:
+        with LiveChain(dict(base, engine=engine, multipath_depth=dict(KNOWN))) as chain:
             got[engine] = chain.run([r.copy() for r in records])
         for a, b in zip(plain, got[engine]):
             assert not any(k in d for d in a["detections"] + a["tracks"] for k in NEW)
@@ -384,7 +418,7 @@ def test_two_rows_multipath_depth_selects_the_elevation():
     records = run_scenario(chain_scenario(6000.0, 18.0, sonar_rows=2)).records
     for engine in ("cpp", "python"):
         with LiveChain({"bearings_deg": [-60.0, 60.0, 0.5], "backend": "host", "engine": engine, "elevation": {"correct_bearing": False},
-                        "multipath_depth": {}}) as chain:
+                        "multipath_depth": dict(KNOWN)}) as chain:
             reps = chain.run([r.copy() for r in records])
         seen = 0
         for rep in reps:
@@ -394,7 +428,7 @@ def test_two_rows_multipath_depth_selects_the_elevation():
                 assert d["depth_multipath_m"] == pytest.approx(150.0, abs=1.5)
                 if d.get("depth_consistent"):
                     seen += 1
-                    assert abs(d["depth_fused_m"] - 150.0) < 3.0 and d["depth_fused_sigma_m"] <= d["depth_multipath_sigma_m"]
+                    assert abs(d["depth_fused_m"] - 150.0) < 3.0 and d["depth_fused_sigma_m"] < 1.0     # the rows add their gradient prior, weighted
                     if "elevation_selected" in d:
                         cands = [d["elevation_deg"]] + d.get("elevation_alternatives_deg", [])
                         true = np.degrees(np.arcsin((225.0 - 150.0) / d["range_m"]))

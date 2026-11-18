@@ -69,7 +69,12 @@ struct MultipathOptions {
   double water_depth = 0.0;            ///< m; 0: the record's environment.water_depth (navigation's, else unknown)
   double surface_z = 0.0;              ///< z of the sea surface in the navigation's frame
   double own_depth_sigma = 0.0;        ///< m: the navigation's depth accuracy
-  double model_sigma_fraction = 0.0;   ///< relative error of the flat, straight-ray delays: sigma gains depth x this
+  double model_sigma_fraction = 0.0;   ///< further relative error of the delays' model: sigma gains depth x this
+  /// Refraction. A mean vertical sound-speed gradient g bends both paths; to first order the surface echo's delay grows
+  /// by the factor 1 + r^2 g / (2 c (z_own + z_t)). `gradient` (1/s; 0: none) takes that out of the depth; what is not
+  /// known of it, `gradient_sigma` (1/s), goes into the sigma as z_t r^2 gradient_sigma / (2 c (z_own + z_t)).
+  /// The default is the prior the elevation depth uses (elevation.gradient_sigma_per_s, a placeholder).
+  double gradient = 0.0, gradient_sigma = 0.05;
   double track_gate = 60.0;            ///< m: a detection within this of a track's position is that track's
   double track_step = 0.5;             ///< m: depth step of a track's accumulated likelihood
   double track_min_gain = 12.0;        ///< the accumulated gain a track's depth needs
@@ -90,7 +95,8 @@ struct MultipathGeometry {
 
 struct MultipathEstimate {
   bool valid = false;
-  double depth = kNaN, sigma = kNaN;   ///< m below the surface
+  double depth = kNaN, sigma = kNaN;   ///< m below the surface; sigma is everything
+  double refraction_sigma = 0.0;       ///< m: the part of sigma that is the unknown gradient (common to every ping, and to the elevation depth)
   double gain = kNaN;                  ///< L(depth) - L_1
   std::int64_t arrivals = 0;           ///< arrivals of the pattern at that depth (a track: pings added up)
   std::string method = "none";         ///< "delay", "ripple", "track", "none"
@@ -142,8 +148,13 @@ struct MultipathFused {
 /// The multipath depth with a depth from the rows' elevation and the depths of its other candidates:
 /// the candidate nearest the multipath depth is taken; within `consistency_sigma` the two are combined
 /// by inverse variance, else the multipath depth stands and `consistent` is false.
+/// `refraction_mp`, `refraction_el`: the parts of the two sigmas that are the unknown gradient; they are one error, not two,
+/// so only the rest is averaged down and the gradient's part is carried through with the weights.
 MultipathFused multipath_fuse(double depth_mp, double sigma_mp, double depth_el, double sigma_el, const std::vector<double>& alternatives,
-                              double consistency_sigma);
+                              double consistency_sigma, double refraction_mp = 0.0, double refraction_el = 0.0);
+/// The first-order refraction correction: the depth whose surface delay in a mean gradient equals the flat formula's at
+/// `flat_depth`, and one sigma of what the gradient's uncertainty leaves (m).
+void multipath_refraction(double flat_depth, const MultipathGeometry& g, const MultipathOptions& o, double& depth, double& sigma);
 
 /// What the chain hands over for each detection and each track of a ping.
 struct MultipathHit {
@@ -153,7 +164,7 @@ struct MultipathHit {
   double x = 0.0, y = 0.0;             ///< where the tracker has it (its own frame)
   double snr_db = 0.0;
   bool has_depth = false;              ///< a depth from the rows' elevation, m below the surface, with its sigma
-  double depth = 0.0, depth_sigma = 0.0;
+  double depth = 0.0, depth_sigma = 0.0, depth_refraction_sigma = 0.0;
   std::vector<double> depth_alternatives;   ///< depths (below the surface, folded into the water) of the other candidate elevations
 };
 struct MultipathTrack {
@@ -184,7 +195,8 @@ class MultipathDepth {
   struct Sum {
     std::vector<double> total;
     std::int64_t pings = 0, last_ping = 0;
-    double lobe = 0.0, model = 0.0;
+    MultipathGeometry geometry;                     ///< of the last ping added
+    double lobe = 0.0, model = 0.0, cell = 0.0;   ///< cell: the coarsest fringe cell among the pings added, m
   };
   MultipathOptions opt_;
   std::map<std::int64_t, Sum> sums_;

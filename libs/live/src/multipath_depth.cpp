@@ -184,6 +184,8 @@ bool set_multipath_option(MultipathOptions& o, const std::string& key, const std
   else if (k == "surface_z") o.surface_z = v;
   else if (k == "own_depth_sigma") o.own_depth_sigma = v;
   else if (k == "model_sigma_fraction") o.model_sigma_fraction = v;
+  else if (k == "gradient") o.gradient = v;
+  else if (k == "gradient_sigma") o.gradient_sigma = v;
   else if (k == "track_gate") o.track_gate = v;
   else if (k == "track_step") o.track_step = v;
   else if (k == "track_min_gain") o.track_min_gain = v;
@@ -191,6 +193,15 @@ bool set_multipath_option(MultipathOptions& o, const std::string& key, const std
   else if (k == "consistency_sigma") o.consistency_sigma = v;
   else return false;
   return true;
+}
+
+void multipath_refraction(double flat_depth, const MultipathGeometry& g, const MultipathOptions& o, double& depth, double& sigma) {
+  const double own = 0.5 * (g.array_depth + g.projector_depth);
+  const double bend = g.range * g.range / (2.0 * g.sound_speed);          // r^2 / 2c: metres per unit gradient
+  // z (1 + K / (z_own + z)) = z_flat, K = bend x gradient
+  const double k = bend * o.gradient, b = own + k - flat_depth;
+  depth = k == 0.0 ? flat_depth : 0.5 * (-b + std::sqrt(b * b + 4.0 * flat_depth * own));
+  sigma = depth * bend * std::abs(o.gradient_sigma) / (own + depth);
 }
 
 void multipath_pattern(double z, double t0, const MultipathGeometry& g, const MultipathOptions& o, std::vector<double>& delay,
@@ -418,17 +429,18 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
   }
   const double cell = cells > 1 ? est.grid[1] - est.grid[0] : 0.0;
   est.valid = true;
-  est.depth = at[b];
+  est.method = multipath_surface_delay(at[b], g) * g.bandwidth >= 4.0 ? "delay" : "ripple";
+  const double flat_depth = at[b];
+  multipath_refraction(flat_depth, g, o, est.depth, est.refraction_sigma);
   const double msig = model_sigma(est.depth, g, o);
-  est.sigma = std::sqrt(sigma * sigma + cell * cell / 12.0 + msig * msig);
-  est.method = multipath_surface_delay(est.depth, g) * g.bandwidth >= 4.0 ? "delay" : "ripple";
+  est.sigma = std::sqrt(sigma * sigma + cell * cell / 12.0 + msig * msig + est.refraction_sigma * est.refraction_sigma);
   est.ambiguous = !rivals.empty();
   if (rivals.size() > 4) rivals.resize(4);
   est.alternatives = rivals;
   // Paths the pattern leaves out but the water may hold: the depth is then one explanation among others.
   if (g.water_depth > 0.0 && !o.bottom) {
     const double z_mid = 0.5 * (g.array_depth + g.projector_depth);
-    const double grazing = std::atan2(2.0 * g.water_depth - z_mid - est.depth, g.range) * 180.0 / kPi;
+    const double grazing = std::atan2(2.0 * g.water_depth - z_mid - flat_depth, g.range) * 180.0 / kPi;
     if (grazing < o.bottom_grazing_limit_deg) {
       est.ambiguous = true;
       est.reason = "bottom_unmodelled";
@@ -438,7 +450,7 @@ MultipathEstimate multipath_estimate(const cd* y, std::int64_t n, double t_first
     more.bottom_order = o.bottom_order + 1;
     std::vector<double> d2;
     std::vector<cd> a2;
-    multipath_pattern(est.depth, t_det, g, more, d2, a2);
+    multipath_pattern(flat_depth, t_det, g, more, d2, a2);
     const auto legs = static_cast<std::size_t>(1 + 2 * more.bottom_order), had = static_cast<std::size_t>(1 + 2 * o.bottom_order);
     double left_out = 0.0;      // the strongest two-way arrival with a leg of order + 1 (legs come as d, s.., b..)
     for (std::size_t j = 0; j < legs; ++j) {
@@ -499,7 +511,7 @@ MultipathEstimate multipath_detection(const PingRecord& record, const Vec3d& ori
 }
 
 MultipathFused multipath_fuse(double depth_mp, double sigma_mp, double depth_el, double sigma_el, const std::vector<double>& alternatives,
-                              double consistency_sigma) {
+                              double consistency_sigma, double refraction_mp, double refraction_el) {
   MultipathFused out;
   double d = depth_el;
   for (std::size_t k = 0; k < alternatives.size(); ++k) {
@@ -514,9 +526,14 @@ MultipathFused multipath_fuse(double depth_mp, double sigma_mp, double depth_el,
     out.sigma = sigma_mp;
     return out;
   }
-  const double w1 = 1.0 / (sigma_mp * sigma_mp), w2 = 1.0 / (sigma_el * sigma_el);
+  // Only what differs between the two is averaged down; the gradient's part is one error in both.
+  const double floor = 1e-6;
+  const double s1 = std::sqrt(std::max(sigma_mp * sigma_mp - refraction_mp * refraction_mp, floor * floor));
+  const double s2 = std::sqrt(std::max(sigma_el * sigma_el - refraction_el * refraction_el, floor * floor));
+  const double w1 = 1.0 / (s1 * s1), w2 = 1.0 / (s2 * s2);
   out.depth = (w1 * depth_mp + w2 * d) / (w1 + w2);
-  out.sigma = 1.0 / std::sqrt(w1 + w2);
+  const double common = (w1 * refraction_mp + w2 * refraction_el) / (w1 + w2);
+  out.sigma = std::sqrt(1.0 / (w1 + w2) + common * common);
   return out;
 }
 
@@ -554,10 +571,11 @@ void MultipathDepth::add(std::int64_t track, const MultipathEstimate& est, const
     if (sum.total[k] > sum.total[b]) b = k;
   }
   ++sum.pings;
+  sum.cell = std::max(sum.cell, cell);
   sum.last_ping = pings_;
   const double z = step * (static_cast<double>(b) + 0.5);
   sum.lobe = envelope_lobe(z, g);
-  sum.model = model_sigma(z, g, opt_);
+  sum.geometry = g;
 }
 
 MultipathEstimate MultipathDepth::track(std::int64_t id) const {
@@ -576,8 +594,12 @@ MultipathEstimate MultipathDepth::track(std::int64_t id) const {
   if (est.gain < opt_.track_min_gain) return est;
   est.reason.clear();
   est.valid = true;
-  est.depth = grid[b];
-  est.sigma = std::sqrt(sigma * sigma + opt_.track_step * opt_.track_step / 4.0 + sum.model * sum.model);   // half a cell
+  multipath_refraction(grid[b], sum.geometry, opt_, est.depth, est.refraction_sigma);
+  const double msig = model_sigma(est.depth, sum.geometry, opt_);
+  // half a cell of the track's grid, and the ping's own fringe cell (the envelope has no finer structure); the gradient's
+  // part does not average down over pings
+  est.sigma = std::sqrt(sigma * sigma + opt_.track_step * opt_.track_step / 4.0 + sum.cell * sum.cell / 12.0 + msig * msig +
+                        est.refraction_sigma * est.refraction_sigma);
   est.ambiguous = !rivals.empty();
   if (rivals.size() > 4) rivals.resize(4);
   est.alternatives = rivals;
@@ -602,10 +624,10 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
   if (static_cast<std::int64_t>(order.size()) > opt_.max_detections) order.resize(static_cast<std::size_t>(std::max<std::int64_t>(opt_.max_detections, 0)));
   std::vector<MultipathEstimate> ests(hits.size());
   std::vector<char> done(hits.size(), 0);
-  auto fused = [&](std::ostringstream& s, const MultipathEstimate& e, bool has, double depth, double depth_sigma, const std::vector<double>& alts,
-                   bool select) {
+  auto fused = [&](std::ostringstream& s, const MultipathEstimate& e, bool has, double depth, double depth_sigma, double depth_refraction,
+                   const std::vector<double>& alts, bool select) {
     if (!e.valid || !has || !(depth_sigma > 0.0)) return;
-    const MultipathFused f = multipath_fuse(e.depth, e.sigma, depth, depth_sigma, alts, opt_.consistency_sigma);
+    const MultipathFused f = multipath_fuse(e.depth, e.sigma, depth, depth_sigma, alts, opt_.consistency_sigma, e.refraction_sigma, depth_refraction);
     s << ", \"depth_fused_m\": " << f.depth << ", \"depth_fused_sigma_m\": " << f.sigma << ", \"depth_consistent\": " << (f.consistent ? "true" : "false");
     if (select && !alts.empty()) s << ", \"elevation_selected\": " << f.selected;
   };
@@ -613,7 +635,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
     s << "\"depth_multipath_m\": ";
     num(s, e.valid ? e.depth : kNaN);
     if (e.valid) {
-      s << ", \"depth_multipath_sigma_m\": " << e.sigma << (is_track ? ", \"multipath_pings\": " : ", \"multipath_arrivals\": ") << e.arrivals
+      s << ", \"depth_multipath_sigma_m\": " << e.sigma << ", \"depth_multipath_refraction_sigma_m\": " << e.refraction_sigma << (is_track ? ", \"multipath_pings\": " : ", \"multipath_arrivals\": ") << e.arrivals
         << ", \"multipath_method\": \"" << e.method << "\"";
       if (e.ambiguous) {
         s << ", \"multipath_ambiguous\": true, \"multipath_alternatives_m\": [";
@@ -635,7 +657,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
     std::ostringstream s;
     s << std::setprecision(10);
     members(s, ests[i], false);
-    fused(s, ests[i], h.has_depth, h.depth, h.depth_sigma, h.depth_alternatives, true);
+    fused(s, ests[i], h.has_depth, h.depth, h.depth_sigma, h.depth_refraction_sigma, h.depth_alternatives, true);
     out.detections[i] = s.str();
   }
   // Each track takes the nearest examined detection inside its gate; its envelope goes into the track's sum.
@@ -661,7 +683,7 @@ MultipathReport MultipathDepth::process(const PingRecord& record, const Vec3d& o
     std::ostringstream s;
     s << std::setprecision(10);
     members(s, e, true);
-    fused(s, e, t.has_depth, t.depth, t.depth_sigma, {}, false);
+    fused(s, e, t.has_depth, t.depth, t.depth_sigma, 0.0, {}, false);
     out.tracks[q] = s.str();
   }
   // Sums of tracks that have not been reported for a while are dropped.
