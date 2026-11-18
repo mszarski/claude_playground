@@ -48,6 +48,7 @@ PingRecord array_record(std::int64_t per_row, double pitch, const std::vector<do
     for (std::int64_t e = 0; e < per_row; ++e) {
       Element el;
       el.lever_arm = Vec3d{(static_cast<double>(e) - 0.5 * static_cast<double>(per_row - 1)) * pitch, 0.0, -z};
+      el.boresight = Vec3d{0.0, 1.0, 0.0};       // stated: the record has no default
       r.geometry.rx.push_back(el);
     }
   }

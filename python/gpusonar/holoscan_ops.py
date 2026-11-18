@@ -115,8 +115,13 @@ class FanImageOp(Operator):
 class DetectOp(Operator):
     """CFAR detection and clustering on a range x bearing image."""
 
-    def __init__(self, fragment, *args, pfa: float = 1e-6, guard: int = 4, train: int = 32, **kwargs):
-        self._pfa, self._guard, self._train = pfa, guard, train
+    def __init__(self, fragment, *args, pfa: float | None = None, guard: int | None = None, train: int | None = None, **kwargs):
+        # One default for the image detector, the library's (libs/detect CfarOptions: 1e-4, 4 guard and 32 training
+        # cells, for a map sampled at about its range resolution; core.cfar_window gives the cells for another map).
+        # This operator used to say 1e-6 by itself. The live chain's own setting is `chain.cfar.pfa` (1e-5).
+        self._pfa = core.CFAR_DEFAULT_PFA if pfa is None else pfa
+        self._guard = core.CFAR_DEFAULT_GUARD if guard is None else guard
+        self._train = core.CFAR_DEFAULT_TRAIN if train is None else train
         super().__init__(fragment, *args, **kwargs)
 
     def setup(self, spec: OperatorSpec):
