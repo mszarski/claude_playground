@@ -228,6 +228,9 @@ def test_batched_mvdr_refuses_a_record_without_signal(jammed):
     for batched in (False, True):
         with pytest.raises(RuntimeError, match="singular|positive"):
             core.mvdr_beamform_cpp(rec.copy(), list(BEARINGS), loading=0.0, batched=batched)
+    for engine in ("numpy", "cpp"):                        # the Python stage: NumPy's exception on either engine
+        with pytest.raises(np.linalg.LinAlgError):
+            flank.mvdr_beamform(rec.copy(), BEARINGS, loading=0.0, engine=engine)
 
 
 def test_python_beamformers_use_the_cpp_ones_and_keep_numpy_as_reference(jammed):

@@ -105,3 +105,23 @@ def test_a_chunk_that_cannot_be_lined_up_falls_back_to_the_plain_call(monkeypatc
     pn.standard_normal(rng, out, threads=4)
     assert pn.stats["not_lined_up"] == before + 1
     assert np.array_equal(out, want) and rng.bit_generator.state == state
+
+
+def test_a_forked_child_draws_too():
+    """A child process inherits the pool object without its threads; it must make its own."""
+    import multiprocessing as mp
+    if "fork" not in mp.get_all_start_methods():
+        pytest.skip("no fork on this platform")
+    rng = np.random.default_rng(3)
+    pn.standard_normal(rng, np.empty(1 << 21), threads=2)             # the parent has a pool now
+    want, _, _ = reference(4, (1 << 21,))
+    ctx = mp.get_context("fork")
+    with ctx.Pool(1) as pool:
+        got = pool.apply_async(_child_draw, (4, 1 << 21)).get(timeout=120)
+    assert np.array_equal(got, want)
+
+
+def _child_draw(seed, n):
+    out = np.empty(n)
+    pn.standard_normal(np.random.default_rng(seed), out, threads=2)
+    return out

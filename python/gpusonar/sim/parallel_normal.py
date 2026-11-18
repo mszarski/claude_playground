@@ -48,7 +48,7 @@ PROBE_AT, PROBE = 64, 8       # the run of true deviates looked for in the next 
 MASK = (1 << 128) - 1
 
 _measured = {}                # bit generator class -> (multiplier, mean draws per deviate)
-_pool, _pool_threads = None, 0
+_pool, _pool_threads, _pool_pid = None, 0, 0
 # How the calls went: on threads, by the plain call because the input did not qualify, or by
 # the plain call because a chunk could not be lined up (should not happen).
 stats = {"parallel": 0, "plain": 0, "not_lined_up": 0}
@@ -125,7 +125,7 @@ def standard_normal(rng: np.random.Generator, out: np.ndarray, threads: int | No
     """Fill `out` (float64, C-contiguous) with the deviates `rng.standard_normal(out=out)` would
     give, leaving `rng` in the state that call would leave it in; drawn on `threads` threads
     (default: the CPUs this process may use) when there are enough of them to be worth it."""
-    global _pool, _pool_threads
+    global _pool, _pool_threads, _pool_pid
     n = out.size
     threads = min(threads_available() if threads is None else int(threads), 32, n // MIN_CHUNK)
     bit_generator = rng.bit_generator
@@ -153,8 +153,10 @@ def standard_normal(rng: np.random.Generator, out: np.ndarray, threads: int | No
         jump = max(int(firsts[c] * per_deviate) - SLACK, 0) if c else 0
         return _jumped(bit_generator, start, jump).standard_normal(counts[c] + (MARGIN if c else PROBE_AT + PROBE))
 
-    if _pool is None or _pool_threads < threads:
-        _pool, _pool_threads = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="gpusonar-normal"), threads
+    if _pool is None or _pool_threads < threads or _pool_pid != os.getpid():
+        # (A forked child has the parent's pool object but none of its threads.)
+        _pool = ThreadPoolExecutor(max_workers=threads, thread_name_prefix="gpusonar-normal")
+        _pool_threads, _pool_pid = threads, os.getpid()
     buffers = list(_pool.map(draw, range(len(firsts))))
     # Where each chunk is in step with the true sequence: buffers[c][offsets[c] + i] is the
     # i-th deviate of chunk c for i >= PROBE_AT (chunk 0: for every i).

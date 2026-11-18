@@ -175,6 +175,10 @@ def mvdr_beamform(record, bearings_rad, n_subbands: int = 32, loading: float = 3
                                                     guard_blocks=int(guard_blocks), **_cpp_backend(backend)))
         except ValueError as e:                                  # the same refusals, in the words of this function
             raise ValueError(str(e).replace("mvdr_beamform: ", "")) from None
+        except RuntimeError as e:
+            if "singular" not in str(e):
+                raise
+            raise np.linalg.LinAlgError(str(e).replace("mvdr_beamform: ", "")) from None   # what NumPy's solve raises
     prepare([record])
     x = record.samples.array
     fs, fc = record.samples.sample_rate, record.samples.center_frequency
