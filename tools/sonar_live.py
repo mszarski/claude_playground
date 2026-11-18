@@ -78,6 +78,10 @@ def export_template(cfg: dict, path: str) -> str:
     # Decimate first: in the receiver (source.decimate: the recording holds decimated pings) or in the chain
     # (chain.decimate: the recording holds raw pings).
     from gpusonar.live import WATER_DEPTH_DEFAULTS, decimate_options
+    blanking = o.pop("blanking", None)
+    if blanking is not None:
+        o["blanking"] = 1
+        o.update({f"blanking_{k}": v for k, v in blanking.items()})
     dec = o.pop("decimate", None)
     streaming = decimate_options(src.get("decimate"))
     if streaming is not None or dec is not None:
